@@ -1,4 +1,4 @@
-import { getKV } from './_lib/kv.js';
+import { getKV, listAllKeys } from './_lib/kv.js';
 import {
     parseAuthHeader, hashPassword, verifyPassword, signToken,
     isPlatformAdmin, isClinicAdmin, isAdmin, isLegacyPasswordHash,
@@ -1415,6 +1415,7 @@ export async function onRequest(context) {
                     source: clinic.source || null,
                     adminUsername: admin ? admin.username : '-',
                     adminName: admin ? admin.name : '-',
+                    adminPhone: admin ? (admin.phone || '') : '',
                     doctorCount,
                     userCount: users ? users.length : 0,
                     createdAt: clinic.createdAt
@@ -1530,7 +1531,7 @@ export async function onRequest(context) {
             }
 
             const body = await context.request.json().catch(() => ({}));
-            const { clinicId, status, name, adminUsername, adminName, adminPassword, renewDays, edition } = body;
+            const { clinicId, status, name, adminUsername, adminName, adminPassword, adminPhone, renewDays, edition } = body;
             if (!clinicId) {
                 return json({ success: false, error: '缺少诊所ID' }, 400);
             }
@@ -1651,7 +1652,7 @@ export async function onRequest(context) {
             // 更新管理员信息（如果有提供）
             // ★ 2026-08-20 修复：必须按登录账号（adminUsername）精确定位，不能按"第一个 clinic_admin"
             //   否则多管理员诊所会误改其他账号密码（用户 13398628212 因此反复改密码仍 401）
-            if (adminUsername || adminName || adminPassword) {
+            if (adminUsername || adminName || adminPassword || adminPhone) {
                 const users = (await kv.get(`clinic:${clinicId}:users`, 'json')) || [];
 
                 // 1) 优先按 adminUsername 精确定位（username 或 phone 匹配）
@@ -1676,6 +1677,44 @@ export async function onRequest(context) {
                     if (adminName && adminName !== users[adminIdx].name) {
                         changes.push(`adminName: ${users[adminIdx].name} → ${adminName}`);
                         users[adminIdx].name = adminName.trim();
+                    }
+                    // ★ 2026-08-23 修改管理员手机号（平台后台诊所列表）
+                    //   - 11位手机号格式校验 + 全局唯一校验（username/phone 双匹配 + 激活占位）
+                    //   - 同步迁移激活占位键 admin_phone:{old} → admin_phone:{new}
+                    if (adminPhone !== undefined) {
+                        const newPhone = String(adminPhone).trim();
+                        const oldPhone = users[adminIdx].phone || '';
+                        if (newPhone !== oldPhone) {
+                            if (!/^1[3-9]\d{9}$/.test(newPhone)) {
+                                return json({ success: false, error: '请输入正确的11位手机号' }, 400);
+                            }
+                            const taker = await findUserForLogin(kv, newPhone);
+                            if (taker && taker.user && taker.user.username !== users[adminIdx].username) {
+                                return json({ success: false, error: '该手机号已被其他账号使用（' + taker.user.username + '），请更换' }, 409);
+                            }
+                            // 激活申请占位检查：新手机号已有占用（进行中/已激活）则拒绝，
+                            //   除非占位申请本身属于当前这位管理员（改回自己的号）
+                            const occ = await findPhoneOccupancy(kv, newPhone);
+                            if (occ && occ.occupied && occ.detail) {
+                                const occUsername = occ.detail.username || occ.detail.adminUsername || '';
+                                if (occUsername !== users[adminIdx].username) {
+                                    const occHint = occ.kind === 'pending_activation'
+                                        ? '存在进行中的激活申请，请先处理'
+                                        : '已通过激活开通（账号 ' + (occUsername || '未知') + '），请直接使用该账号';
+                                    return json({ success: false, error: '该手机号' + occHint }, 409);
+                                }
+                            }
+                            // 迁移激活占位键（旧手机号占位 → 新手机号），保持激活索引一致
+                            if (oldPhone) {
+                                const occOld = await kv.get('admin_phone:' + oldPhone, 'json').catch(() => null);
+                                if (occOld) {
+                                    await kv.put('admin_phone:' + newPhone, JSON.stringify(occOld));
+                                    await kv.delete('admin_phone:' + oldPhone);
+                                }
+                            }
+                            changes.push(`adminPhone: ${oldPhone || '(空)'} → ${newPhone}`);
+                            users[adminIdx].phone = newPhone;
+                        }
                     }
                     if (adminPassword) {
                         if (adminPassword.length < 8) {
@@ -1708,6 +1747,114 @@ export async function onRequest(context) {
             }
 
             return json({ success: true, clinic: clinics[clinicIdx] });
+        }
+
+        // ===== 删除诊所 POST /users?clinic=delete =====
+        // ★ 2026-08-23 平台后台诊所列表新增"删除诊所"（高危操作）：
+        //   安全闸门（三级防误删）：
+        //     1) 仅 platform_admin 可调用
+        //     2) confirmName 必须与诊所名称完全一致（防点错行）
+        //     3) confirmPassword 管理员密码复核（与收费动作同一校验链路）+ reason 必填留痕
+        //   删除范围（物理删除，不可恢复）：
+        //     - system:clinics 数组中的诊所条目
+        //     - clinic:{id}:users（全部账号）
+        //     - clinic:{id}:prescriptions / prescriptions_trash（处方与回收站）
+        //     - clinic:{id}:medicines / formulas（药材库/验方）
+        //     - clinic:{id}:prescription_seq:* / clinic:{id}:seq:*（处方序号，前缀扫描）
+        //     - user_devices:{username}（各账号设备绑定）
+        //     - admin_phone:{phone}（各账号手机号激活占位，释放号码允许重新注册）
+        //   保留：audit_log:{clinicId}:*（审计日志合规留痕，删除动作本身另行记录）
+        if (method === 'POST' && url.searchParams.get('clinic') === 'delete') {
+            const currentUser = await parseAuthHeader(context.request, context.env);
+            if (!currentUser || !isPlatformAdmin(currentUser)) {
+                return json({ success: false, error: '仅平台总管理员可删除诊所' }, 403);
+            }
+
+            const body = await context.request.json().catch(() => ({}));
+            const { clinicId, confirmName, confirmPassword, reason } = body;
+            if (!clinicId) {
+                return json({ success: false, error: '缺少诊所ID' }, 400);
+            }
+            const reasonText = String(reason || '').trim();
+            if (reasonText.length < 2) {
+                return json({ success: false, error: '请填写删除原因（至少2个字符），将记入操作日志' }, 400);
+            }
+            if (!confirmPassword) {
+                return json({ success: false, error: '删除操作需输入管理员密码复核' }, 401);
+            }
+
+            const clinics = (await kv.get(KV_SYSTEM_CLINICS, 'json')) || [];
+            const clinicIdx = clinics.findIndex(c => c.id === clinicId);
+            if (clinicIdx === -1) {
+                return json({ success: false, error: '诊所不存在' }, 404);
+            }
+            const clinic = clinics[clinicIdx];
+
+            // 名称复核：必须与诊所名称完全一致
+            if (String(confirmName || '').trim() !== clinic.name) {
+                return json({ success: false, error: '诊所名称复核不一致，请输入完整诊所名称「' + clinic.name + '」以确认' }, 400);
+            }
+
+            // 管理员密码复核（与收费动作同一校验链路）
+            const adminsArr = (await kv.get(KV_SYSTEM_PLATFORM_ADMINS, 'json')) || [];
+            const me = adminsArr.find(a => a.username === currentUser.username);
+            const meOk = me && me.passwordHash && me.salt &&
+                (await verifyPassword(String(confirmPassword), me.passwordHash, me.salt));
+            if (!meOk) {
+                await writeAuditLog(kv, clinicId, currentUser.username, ROLE_PLATFORM_ADMIN,
+                    'delete_clinic_confirm_failed', `clinic=${clinic.name}`, context.request, { reason: reasonText });
+                return json({ success: false, error: '管理员密码复核失败，请重新输入' }, 403);
+            }
+
+            // ---- 执行删除 ----
+            const deletedKeys = [];
+            const users = (await kv.get(`clinic:${clinicId}:users`, 'json')) || [];
+
+            // 1) 诊所业务数据
+            const businessKeys = [
+                `clinic:${clinicId}:users`,
+                `clinic:${clinicId}:prescriptions`,
+                `clinic:${clinicId}:prescriptions_trash`,
+                `clinic:${clinicId}:medicines`,
+                `clinic:${clinicId}:formulas`
+            ];
+            // 处方序号键（按前缀扫描，含每日序号）
+            const seqKeys = await listAllKeys(kv, `clinic:${clinicId}:prescription_seq`);
+            const userSeqKeys = await listAllKeys(kv, `clinic:${clinicId}:seq`);
+            // 2) 账号衍生数据：设备绑定 + 手机号激活占位
+            const accountKeys = [];
+            for (const u of users) {
+                if (u.username) accountKeys.push('user_devices:' + u.username);
+                if (u.phone) accountKeys.push('admin_phone:' + u.phone);
+            }
+
+            for (const k of [...businessKeys, ...seqKeys, ...userSeqKeys, ...accountKeys]) {
+                try {
+                    await kv.delete(k);
+                    deletedKeys.push(k);
+                } catch (e) { /* 单键删除失败不阻断整体，最终留痕 */ }
+            }
+
+            // 3) system:clinics 移除条目（最后移除，前面失败可重试且诊所仍可登录管理）
+            clinics.splice(clinicIdx, 1);
+            await kv.put(KV_SYSTEM_CLINICS, JSON.stringify(clinics));
+
+            // 审计日志（删除留痕，含删除原因与清理键清单）
+            await writeAuditLog(kv, clinicId, currentUser.username, ROLE_PLATFORM_ADMIN, 'delete_clinic', `clinic=${clinic.name}`, context.request, {
+                reason: reasonText,
+                deletedUserCount: users.length,
+                deletedKeys: deletedKeys.length,
+                deletedKeyList: deletedKeys.slice(0, 50),
+                source: 'platform-admin'
+            });
+
+            return json({
+                success: true,
+                message: `诊所「${clinic.name}」已删除（账号 ${users.length} 个，清理数据键 ${deletedKeys.length} 个）`,
+                deletedClinic: { id: clinic.id, name: clinic.name },
+                deletedUserCount: users.length,
+                deletedKeyCount: deletedKeys.length
+            });
         }
 
         // ===== GET 用户列表 =====

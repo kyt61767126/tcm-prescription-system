@@ -1138,6 +1138,10 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                 <label>诊所名称 *</label>
                 <input type="text" id="editClinicNameInput">
             </div>
+            <div class="form-group">
+                <label>管理员手机号（11位，可登录/找回密码，修改需全局唯一）</label>
+                <input type="text" id="editClinicPhoneInput" maxlength="11" placeholder="如：13800138000">
+            </div>
         </div>
         <div style="margin-top:8px;font-size:12px;color:#909399;line-height:1.8;">
             管理员账号 / 姓名 / 密码属账号操作，已统一收口到「用户管理」：<br>
@@ -1146,6 +1150,35 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
         <div style="margin-top:12px;text-align:right;">
             <button class="btn" onclick="closeClinicEditModal()">取消</button>
             <button class="btn btn-success" onclick="submitClinicEdit()">保存修改</button>
+        </div>
+    </div>
+</div>
+
+<!-- ★ 2026-08-23 删除诊所弹窗：三级防误删（名称复核 + 原因 + 管理员密码复核） -->
+<div id="clinicDeleteModal" class="modal-overlay">
+    <div class="modal-box" style="max-width:520px;">
+        <span class="modal-close" onclick="closeClinicDeleteModal()">&times;</span>
+        <h3 style="color:#e74c3c;">⚠ 删除诊所（高危操作）</h3>
+        <div id="clinicDeleteModalAlert" class="alert"></div>
+        <div class="fee-summary" id="clinicDeleteSummary"></div>
+        <div class="form-group">
+            <label>诊所名称复核 *（请输入完整诊所名称确认删除对象）</label>
+            <input type="text" id="deleteClinicConfirmName" placeholder="请输入完整诊所名称">
+        </div>
+        <div class="form-group">
+            <label>删除原因 *（至少2字符，记入操作日志）</label>
+            <textarea id="deleteClinicReason" rows="3" placeholder="如：客户注销 / 重复注册需清理" style="width:100%;padding:8px 12px;border:1px solid #dcdfe6;border-radius:4px;font-size:14px;resize:vertical;font-family:inherit;"></textarea>
+        </div>
+        <div class="form-group">
+            <label>管理员密码复核 *</label>
+            <input type="password" id="deleteClinicConfirmPassword" placeholder="输入您的登录密码进行复核" autocomplete="current-password">
+        </div>
+        <div style="margin-top:4px;font-size:12px;color:#e74c3c;line-height:1.7;">
+            删除后不可恢复：该诊所全部账号、处方数据、药材库、设备绑定将被物理清除，手机号释放后可重新注册。
+        </div>
+        <div style="margin-top:12px;text-align:right;">
+            <button class="btn" onclick="closeClinicDeleteModal()">取消</button>
+            <button class="btn btn-danger" id="clinicDeleteSubmitBtn" onclick="submitClinicDelete()">🗑 确认删除</button>
         </div>
     </div>
 </div>
@@ -2950,19 +2983,25 @@ async function loadClinicsList() {
                     ? '<button class="btn btn-sm btn-info" onclick="toggleClinicStatus(\'' + c.id + '\',\'test\')">设为待审核</button>'
                     : '';
                 const editBtn = '<button class="btn btn-sm" onclick="openClinicEditModal(\'' + c.id + '\')">编辑</button>';
+                // ★ 2026-08-23 删除诊所按钮（高危，红色，进入三级防误删弹窗）
+                const deleteBtn = '<button class="btn btn-sm btn-danger" onclick="openClinicDeleteModal(\'' + c.id + '\')">删除</button>';
                 const created = c.createdAt ? new Date(c.createdAt).toLocaleString('zh-CN') : '-';
                 const srcTag = c.source === 'self-register' ? ' <span style="font-size:11px;color:#3498db;">自助注册</span>' : '';
                 // 管理员账号可点击 → 跳用户管理并定位该账号（账号操作统一收口到用户管理）
                 const adminLink = c.adminUsername
                     ? '<a href="javascript:void(0)" onclick="jumpToUser(\'' + escapeHtml(c.adminUsername) + '\')" style="color:#3498db;text-decoration:underline;" title="到用户管理处理该账号">' + escapeHtml(c.adminUsername) + '</a>'
                     : '-';
+                // ★ 2026-08-23 管理员手机号显示（可在编辑弹窗修改）
+                const adminPhoneText = c.adminPhone
+                    ? ' | 手机: <strong>' + escapeHtml(c.adminPhone) + '</strong>'
+                    : ' | 手机: -';
                 return '<div style="padding:12px;border-bottom:1px solid #ebeef5;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">' +
                     '<div style="flex:1;min-width:200px;">' +
                         '<div style="font-weight:600;color:#2c3e50;">' + escapeHtml(c.name) + ' ' + statusBadge + srcTag + '</div>' +
-                        '<div style="font-size:12px;color:#909399;margin-top:4px;">ID: ' + escapeHtml(c.id) + ' | 管理员: <strong>' + adminLink + '</strong>（' + escapeHtml(c.adminName || '-') + '）| 医师: ' + c.doctorCount + ' | 总账号: ' + c.userCount + ' | 创建: ' + escapeHtml(created) + '</div>' +
+                        '<div style="font-size:12px;color:#909399;margin-top:4px;">ID: ' + escapeHtml(c.id) + ' | 管理员: <strong>' + adminLink + '</strong>（' + escapeHtml(c.adminName || '-') + '）' + adminPhoneText + ' | 医师: ' + c.doctorCount + ' | 总账号: ' + c.userCount + ' | 创建: ' + escapeHtml(created) + '</div>' +
                         '<div style="font-size:12px;color:#909399;margin-top:2px;">有效期: ' + expiryHtml + '</div>' +
                     '</div>' +
-                    '<div style="white-space:nowrap;">' + editBtn + ' ' + testBtn + ' ' + toggleBtn + ' ' + renewBtn + '</div>' +
+                    '<div style="white-space:nowrap;">' + editBtn + ' ' + testBtn + ' ' + toggleBtn + ' ' + renewBtn + ' ' + deleteBtn + '</div>' +
                 '</div>';
             }).join('');
         } else {
@@ -3436,6 +3475,8 @@ function openClinicEditModal(clinicId) {
         '<div><strong>ID：</strong>' + escapeHtml(clinic.id) + '　<strong>当前状态：</strong>' + escapeHtml(clinic.status) + '　<strong>到期：</strong>' + clinicExpiryHtml(clinic) + '</div>' +
         '<div style="font-size:12px;">管理员：<strong>' + escapeHtml(clinic.adminUsername || '-') + '</strong>（' + escapeHtml(clinic.adminName || '-') + '）</div>';
     document.getElementById('editClinicNameInput').value = clinic.name || '';
+    // ★ 2026-08-23 回填管理员手机号（可修改，留空则不改动该字段需传当前值）
+    document.getElementById('editClinicPhoneInput').value = clinic.adminPhone || '';
     // 跳转链接绑定该诊所的管理员账号
     const jump = document.getElementById('clinicEditJumpUser');
     if (jump) jump.dataset.u = clinic.adminUsername || '';
@@ -3450,9 +3491,23 @@ function closeClinicEditModal() {
 async function submitClinicEdit() {
     const name = document.getElementById('editClinicNameInput').value.trim();
     if (!name) { showAlert('clinicEditModalAlert', '诊所名称不能为空', 'error'); return; }
-    // 只更新诊所名称；账号字段已收口到用户管理（后端无 adminUsername/adminName/adminPassword 时不触碰用户表）
+    // ★ 2026-08-23 支持修改管理员手机号：仅传名称+手机号；账号字段已收口到用户管理
+    const phone = document.getElementById('editClinicPhoneInput').value.trim();
+    const clinic = findClinicById(_editClinicId) || {};
+    if (phone !== (clinic.adminPhone || '')) {
+        if (!phone) {
+            showAlert('clinicEditModalAlert', '手机号不能清空（如需更换请输入新的11位手机号）', 'error');
+            return;
+        }
+        if (!/^1[3-9]\d{9}$/.test(phone)) {
+            showAlert('clinicEditModalAlert', '手机号格式不正确（需11位，1开头第二位3-9）', 'error');
+            return;
+        }
+    }
+    // 手机号未变化时不传 adminPhone（避免后端空值覆盖）；变化时传新值
     const body = { clinicId: findClinicById4Edit(), name };
-    const ok = await doClinicUpdate(body, '诊所名称已更新', 'clinicEditModalAlert');
+    if (phone !== (clinic.adminPhone || '')) body.adminPhone = phone;
+    const ok = await doClinicUpdate(body, '诊所信息已更新' + (body.adminPhone !== undefined ? '（手机号：' + (phone || '清空') + '）' : ''), 'clinicEditModalAlert');
     if (ok) {
         closeClinicEditModal();
         loadClinicsList();
@@ -3462,6 +3517,71 @@ async function submitClinicEdit() {
 // 编辑弹窗保存时从 DOM 上下文找回 clinicId（打开时缓存在 summary）
 let _editClinicId = null;
 function findClinicById4Edit() { return _editClinicId; }
+
+// ---- ★ 2026-08-23 删除诊所弹窗（三级防误删：名称复核 + 原因 + 管理员密码复核）----
+let _deleteClinicCtx = null;
+function openClinicDeleteModal(clinicId) {
+    const clinic = findClinicById(clinicId);
+    if (!clinic) { showAlert('clinicAlert', '诊所数据未加载，请刷新后重试', 'error'); return; }
+    _deleteClinicCtx = clinic;
+    document.getElementById('clinicDeleteSummary').innerHTML =
+        '<div><strong>诊所：</strong>' + escapeHtml(clinic.name) + '</div>' +
+        '<div style="font-size:12px;">ID: ' + escapeHtml(clinic.id) + ' | 管理员: ' + escapeHtml(clinic.adminUsername || '-') + ' | 总账号: ' + clinic.userCount + ' 个 | 医师: ' + clinic.doctorCount + ' 个</div>' +
+        '<div class="warn" style="margin-top:4px;">⚠ 物理删除不可恢复：全部账号、处方、药材库、设备绑定、手机号占位将被清除。</div>';
+    document.getElementById('deleteClinicConfirmName').value = '';
+    document.getElementById('deleteClinicReason').value = '';
+    document.getElementById('deleteClinicConfirmPassword').value = '';
+    document.getElementById('clinicDeleteModalAlert').className = 'alert';
+    document.getElementById('clinicDeleteModal').classList.add('show');
+    setTimeout(() => document.getElementById('deleteClinicConfirmName').focus(), 100);
+}
+
+function closeClinicDeleteModal() {
+    document.getElementById('clinicDeleteModal').classList.remove('show');
+    _deleteClinicCtx = null;
+}
+
+async function submitClinicDelete() {
+    if (!_deleteClinicCtx) return;
+    const clinic = _deleteClinicCtx;
+    const confirmName = document.getElementById('deleteClinicConfirmName').value.trim();
+    const reason = document.getElementById('deleteClinicReason').value.trim();
+    const confirmPassword = document.getElementById('deleteClinicConfirmPassword').value;
+    // 前端预校验（后端有同款校验，双保险）
+    if (confirmName !== clinic.name) {
+        showAlert('clinicDeleteModalAlert', '诊所名称复核不一致，请输入完整名称「' + clinic.name + '」', 'error');
+        return;
+    }
+    if (reason.length < 2) { showAlert('clinicDeleteModalAlert', '请填写删除原因（至少2字符）', 'error'); return; }
+    if (!confirmPassword) { showAlert('clinicDeleteModalAlert', '请输入管理员密码复核', 'error'); return; }
+    const btn = document.getElementById('clinicDeleteSubmitBtn');
+    btn.disabled = true;
+    try {
+        const res = await fetch(API_BASE + '/users?clinic=delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ clinicId: clinic.id, confirmName, confirmPassword, reason })
+        });
+        const data = await res.json();
+        if (data.success) {
+            closeClinicDeleteModal();
+            showAlert('clinicAlert', data.message || '诊所已删除', 'success');
+            loadClinicsList();
+            loadTodoCenter();
+        } else {
+            if (res.status === 401) {
+                showAlert('mainAlert', '登录已过期，请重新登录', 'error');
+                setTimeout(doLogout, 1500);
+            } else {
+                showAlert('clinicDeleteModalAlert', data.error || '删除失败', 'error');
+            }
+        }
+    } catch (e) {
+        showAlert('clinicDeleteModalAlert', '网络错误：' + e.message, 'error');
+    } finally {
+        btn.disabled = false;
+    }
+}
 
 // ---- 通用 clinic=update 提交 ----
 async function doClinicUpdate(body, successMsg, alertId) {
