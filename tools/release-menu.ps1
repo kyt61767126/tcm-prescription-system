@@ -409,6 +409,13 @@ while ($true) {
                 Write-Host ""
                 Write-Host "[ERROR] 单版本打包失败，退出码: $rc1（详见上方日志）" -ForegroundColor Red
             }
+            # ★ 2026-08-23 四轮复核修复：Invoke-SinglePack 直链子 bat（绕过 one-click-pack），
+            #   打包完成后需手动调 SideEffectCollect 收纳 versionCode/version 副作用
+            #   （与 [4] 经 AutoMode 自带收纳保持一致；[5] 发布不打包无需收纳）
+            $packPs1 = "$script:RootDir\tools\one-click-pack.ps1"
+            if (Test-Path $packPs1) {
+                & powershell -NoProfile -ExecutionPolicy Bypass -File $packPs1 -CollectSideEffectsOnly -AutoCommit 2>&1 | ForEach-Object { Write-Host $_ }
+            }
             Write-Host ""
             pause
         }
@@ -444,6 +451,12 @@ while ($true) {
             if ($rc3 -ne 0) {
                 Write-Host ""
                 Write-Host "[ERROR] 打包+发布+验证 流程失败，退出码: $rc3（详见上方日志）" -ForegroundColor Red
+            }
+            # ★ 2026-08-23 四轮复核修复：Step1 打包同样产生副作用，打包成功与否均列示收纳
+            #   （FullFlow走 Invoke-SinglePack 或 Invoke-Pack-AutoMode 3）
+            $packPs1 = "$script:RootDir\tools\one-click-pack.ps1"
+            if (Test-Path $packPs1) {
+                & powershell -NoProfile -ExecutionPolicy Bypass -File $packPs1 -CollectSideEffectsOnly -AutoCommit 2>&1 | ForEach-Object { Write-Host $_ }
             }
             Write-Host ""
             pause

@@ -433,8 +433,31 @@ function Show-PickVersionMenu {
         Write-Host "  [0] 返回主菜单"
         $choice = Read-Host "请选择"
         switch ($choice) {
-            "1" { $null = Build-Cloud -Target $Mode; return }
-            "2" { $null = Build-Offline -Version "dingzhi" -Target $Mode; return }
+            # ★ 2026-08-23 四轮复核修复：原 $null=Build-XXX 同时吞掉①失败退出码(打包失败用户
+            #   看不到任何失败提示)②不调用 SideEffectCollect(versionCode/version 副作用
+            #   不被收纳, 回到主菜单后也不再展示, 与 [1][2][3] 行为不一致)
+            "1" {
+                $prc = Build-Cloud -Target $Mode
+                if ($prc -is [array]) { $prc = [int]$prc[-1] }
+                if ($prc -ne 0) {
+                    Write-Host ""
+                    Write-Host "[ERROR] 云端$modeLabel打包失败，退出码: $prc（详见上方日志）" -ForegroundColor Red
+                    pause
+                }
+                Invoke-PackSideEffectCollect -Commit:$AutoCommit
+                return
+            }
+            "2" {
+                $prc = Build-Offline -Version "dingzhi" -Target $Mode
+                if ($prc -is [array]) { $prc = [int]$prc[-1] }
+                if ($prc -ne 0) {
+                    Write-Host ""
+                    Write-Host "[ERROR] 本地$modeLabel打包失败，退出码: $prc（详见上方日志）" -ForegroundColor Red
+                    pause
+                }
+                Invoke-PackSideEffectCollect -Commit:$AutoCommit
+                return
+            }
             "0" { return }
         }
     }
