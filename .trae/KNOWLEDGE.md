@@ -753,6 +753,12 @@
 - **副本同步**：`app:show-activate` 监听器在 offline.js/cloud.js 双源头 + 11 副本同步；云端APP 无 Java 启动校验（云端无试用规范），Java 改动仅限离线APP。
 - **生效方式**：离线APP必须重新打 APK（Java 层改动）；云端网页/URL加载APP 推送即生效（弹窗升级）；云端桌面可选重打。
 
+### 2.71 【登录框诊所名竞态根治】auth-core syncLoginClinicName 升级 localStorage 优先（提交 3969ac34，2026-08-23）
+- **复查发现**：2.69 修复后各端两处同步（初始化+保存）已齐全，但 auth-core.js 的 `syncLoginClinicName()`（startLicenseCheck 时触发）仅用 `CONFIG.clinicName`——与 index.html 内嵌同步（localStorage 优先）**优先级不一致**。DOMContentLoaded 回调按注册顺序执行，任何时序变化都可能让 auth-core 的 CONFIG-only 值覆盖用户基础设置保存的诊所名。
+- **根治原则（双写一致性）**：**同一显示元素有多个写入方时，所有写入方必须用完全相同的取值优先级**——`localStorage['local_clinicName'] > CONFIG.clinicName`。这样无论执行顺序如何，最终值恒一致，时序竞态从根上消除。
+- **APP 端元素差异**：APP 端（assets/public/index.html）登录框诊所名条是 `.clinic-info-name` 类选择器（非 `loginClinicName` id），auth-core 升级时一并同步该元素作兜底（相同优先级，值一致）。
+- **生效方式**：云端网页/URL加载APP 推送即生效；assets打包APP/双端桌面需重新打包。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
