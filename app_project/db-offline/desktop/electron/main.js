@@ -12,7 +12,7 @@
 //    - dom-ready 时注入 video-recorder.js 模块
 //    - CSP 增加 media-src 'self' blob: 允许视频预览
 // ============================================================================
-const { app, BrowserWindow, ipcMain, session, dialog, shell, safeStorage } = require('electron');
+const { app, BrowserWindow, ipcMain, session, dialog, shell, safeStorage, net } = require('electron');
 const path = require('path');
 const fs = require('fs').promises;
 const fse = require('fs-extra');
@@ -961,6 +961,95 @@ async function injectVideoRecorder(win) {
     }
 }
 
+// ============================================================================
+//  ★ 方案A 轻量更新提示（2026-08-23）：启动静默检查官网 latest.json
+//  - 登录页 dom-ready 1.5s 后主进程 net.fetch 静默检查（绕过渲染层 CSP/缓存）
+//  - 官网版本 > 本地 app.getVersion() 才提示（三段式比较，宁可漏检不可误报）
+//  - 提示方式：登录窗增高 40px + 顶部黄色横幅，点击跳官网下载页手动覆盖安装
+//  - 无自动下载/自动安装；网络失败/解析失败/格式异常一律静默跳过（离线版无感）
+// ============================================================================
+const UPDATE_CHECK_URL = 'https://tcm-prescription-system.pages.dev/updates/dingzhi/latest.json';
+const UPDATE_DOWNLOAD_URL = 'https://tcm-prescription-system.pages.dev/download';
+const UPDATE_BANNER_EXTRA_HEIGHT = 40;
+
+// 三段式版本号比较：仅当远程版本严格大于本地版本才提示
+function isNewerRemoteVersion(remote, local) {
+    if (!remote || !local) return false;
+    const r = String(remote).split('.');
+    const l = String(local).split('.');
+    for (let i = 0; i < 3; i++) {
+        const rv = parseInt(r[i], 10) || 0;
+        const lv = parseInt(l[i], 10) || 0;
+        if (rv > lv) return true;
+        if (rv < lv) return false;
+    }
+    return false;
+}
+
+async function checkForUpdateAndNotify(win) {
+    try {
+        const res = await net.fetch(UPDATE_CHECK_URL, { signal: AbortSignal.timeout(8000) });
+        if (!res.ok) {
+            console.log('[update] 检查跳过: HTTP ' + res.status);
+            return;
+        }
+        const latest = await res.json();
+        const localVer = app.getVersion();
+        const remoteVer = latest && latest.version;
+        // 版本号白名单校验：防止 latest.json 被篡改后向 executeJavaScript 注入任意代码
+        if (!/^[0-9A-Za-z.\-+]+$/.test(String(remoteVer || ''))) {
+            console.log('[update] 检查跳过: 官网版本号格式异常');
+            return;
+        }
+        if (!isNewerRemoteVersion(remoteVer, localVer)) {
+            console.log('[update] 已是最新版本 v' + localVer);
+            return;
+        }
+        console.log('[update] 发现新版本 v' + remoteVer + '（当前 v' + localVer + '），注入登录页横幅');
+        injectUpdateBanner(win, remoteVer);
+    } catch (e) {
+        // 离线/超时/DNS 失败：静默跳过（宁可漏检不可误报，不打扰离线使用）
+        console.log('[update] 检查跳过（网络不可用或超时）: ' + (e && e.message));
+    }
+}
+
+function injectUpdateBanner(win, newVersion) {
+    if (!win || win.isDestroyed()) return;
+    try {
+        // 窗口增高 40px 并重新居中，为顶部横幅腾出空间（不遮挡居中的登录卡片）
+        win.setSize(260, 430 + UPDATE_BANNER_EXTRA_HEIGHT);
+        win.center();
+        const bannerCode = `
+            (function() {
+                if (document.getElementById('__updateBanner')) return;
+                var b = document.createElement('div');
+                b.id = '__updateBanner';
+                b.style.cssText = 'position:fixed;top:0;left:0;right:0;height:32px;z-index:99999;'
+                    + 'display:flex;align-items:center;justify-content:center;gap:6px;'
+                    + 'background:linear-gradient(135deg,#fff8e1 0%,#ffecb3 100%);'
+                    + 'border-bottom:1px solid #f0c040;font-size:11px;color:#7a5c00;'
+                    + 'font-family:"Microsoft YaHei",sans-serif;';
+                var label = document.createElement('span');
+                label.textContent = '🆕 新版 v' + ${JSON.stringify(String(newVersion))};
+                var link = document.createElement('span');
+                link.textContent = '立即下载';
+                link.style.cssText = 'color:#1565c0;font-weight:bold;text-decoration:underline;cursor:pointer;';
+                link.addEventListener('click', function() {
+                    window.open(${JSON.stringify(UPDATE_DOWNLOAD_URL)});
+                });
+                b.appendChild(label);
+                b.appendChild(link);
+                document.body.appendChild(b);
+            })();
+        `;
+        win.webContents.executeJavaScript(bannerCode).catch(function(e) {
+            console.warn('[update] 横幅注入失败:', e && e.message);
+        });
+    } catch (e) {
+        console.warn('[update] 横幅注入异常:', e && e.message);
+    }
+}
+
 function createLoginWindow() {
     if (loginWindow && !loginWindow.isDestroyed()) {
         focusWindow(loginWindow);
@@ -985,6 +1074,15 @@ function createLoginWindow() {
 
     // ★ P1-A6：DevTools 反调试（仅打包环境生效）
     installDevToolsGuard(loginWindow.webContents);
+
+    // ★ 方案A：更新横幅「立即下载」点击 → 拦截 window.open → 系统浏览器打开官网下载页
+    loginWindow.webContents.setWindowOpenHandler(({ url }) => {
+        if (url.startsWith('file://') || url.startsWith('http://localhost')) {
+            return { action: 'deny' };
+        }
+        shell.openExternal(url);
+        return { action: 'deny' };
+    });
 
     loginWindow.loadFile(path.join(__dirname, 'login.html'));
 
@@ -1019,6 +1117,13 @@ function createLoginWindow() {
             console.warn('[login] executeJavaScript failed:', e.message);
             loginWindow.show();
         });
+
+        // ★ 方案A：登录页首帧直出完成后再静默检查更新（延迟 1.5s，不与首屏渲染竞争）
+        setTimeout(() => {
+            if (loginWindow && !loginWindow.isDestroyed()) {
+                checkForUpdateAndNotify(loginWindow);
+            }
+        }, 1500);
     });
 
     loginWindow.on('ready-to-show', () => {
