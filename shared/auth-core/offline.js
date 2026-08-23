@@ -3484,6 +3484,37 @@
             //   此调用在 localStorage 写入，配合 restartApp 改 app.quit() 优雅退出确保落盘。
             setCloudActivationDone();
             hideActivateLoginEntry();
+
+            // ★ 2026-08-24 关键修复：无条件把"管理员激活提交的手机号/密码/姓名"同步到前端本地用户表
+            //   根因：离线系(APP/桌面)登录校验 getUsers() 只读 localStorage.local_systemUsers；
+            //   Java/Electron installAdminLicense 只是把手机号账号写入本地 config，WebView 登录页面读不到 → 登录必然失败。
+            //   无论是否有本地安装桥、无论是否成功写入本地 license，本同步都必须执行（形成完整闭环）。
+            //   对应 KNOWLEDGE §2.1 已有教训：onAdminActivated 必须无条件同步手机号账号。
+            try {
+                if (typeof window.addLocalActivationUser === 'function') {
+                    const uPhone = (state.phone || '').trim();
+                    const uName = (state.adminName || '').trim();
+                    // ★ 密码固定传 'admin'：后端 provisionCloudAccount 统一哈希为'admin'，
+                    //   normalizeActivationPassword 还会把所有手机号账号重置成 admin；
+                    //   激活弹窗里的"自定义密码"仅为 UI 选项，不被真正落地（见弹窗提示文案）。
+                    //   这里避免 state.password（用户自设值）写入，导致本地用户表密码与后端不一致 → 登录必然失败。
+                    window.addLocalActivationUser({
+                        username: uPhone || uName,
+                        phone: uPhone,
+                        password: 'admin',
+                        name: uName || uPhone || '管理员',
+                        role: 'admin',
+                        clinicName: (state.clinicName || '').trim()
+                    });
+                    console.log('[LicenseCheck] onAdminActivated: 账号同步到localStorage用户表',
+                                'username=', uPhone || uName, 'phone=', uPhone, 'password=admin(固定)');
+                } else {
+                    console.warn('[LicenseCheck] onAdminActivated: window.addLocalActivationUser 未定义，手机号账号未同步到前端用户表！可能导致登录失败。');
+                }
+            } catch (e) {
+                console.error('[LicenseCheck] onAdminActivated: addLocalActivationUser 异常:', e);
+            }
+
             const license = r.license || '';
             const phone = state.phone;
             const descEl = document.getElementById('adminSuccessDesc');

@@ -1398,19 +1398,41 @@ let currentUser = null;
         // ★ 供 auth-core 管理员激活成功后，把手机号登录账号同步到前端用户表
         // 根因：JAVA 激活把账号写入 filesDir(config.json)，而 WebView 页面读的是 assets 静态 config.json，
         // 登录 getUsers() 读 localStorage，读不到手机号账号 → 需在此显式补入，登录才能成功
+        // ★ 2026-08-24 修复：已存在的账号要 UPDATE（密码/姓名/phone/role），不是直接跳过；
+        //   并写入 phone 字段（登录校验支持 username===user.phone 匹配手机号登录）。
+        //   历史原因：此前仅 list.push(username 相同则 return)，导致本地已有但密码错的账号永不会被纠正，最终激活成功却登录失败。
         window.addLocalActivationUser = function(u) {
             try {
                 if (!u || !u.username) return;
                 const list = getUsers();
                 if (!Array.isArray(list)) return;
-                if (list.some(x => x && x.username === u.username)) return;
-                list.push({
-                    username: u.username,
-                    password: u.password || 'admin',
-                    name: u.name || u.username,
-                    role: u.role || 'admin'
-                });
+                const uname = String(u.username);
+                const phone = u.phone ? String(u.phone) : '';
+                const pwd = u.password || 'admin';
+                const name = u.name || uname;
+                const role = u.role || 'admin';
+                // 按 username OR phone 找现有记录：找到则更新（保证密码/姓名永远是最新激活提交的）
+                let idx = list.findIndex(x => x && (x.username === uname || (phone && String(x.phone || '') === phone)));
+                if (idx >= 0) {
+                    const old = list[idx] || {};
+                    list[idx] = Object.assign({}, old, {
+                        username: uname, // username 以新提交的为准（支持 phone 字段查找命中时合并到新账号）
+                        phone: phone || old.phone || '',
+                        password: pwd,  // 密码必须覆盖成最新激活值
+                        name: name || old.name,
+                        role: role || old.role
+                    });
+                } else {
+                    list.push({
+                        username: uname,
+                        phone: phone,
+                        password: pwd,
+                        name: name,
+                        role: role
+                    });
+                }
                 saveUsers(list);
+                console.log('[addLocalActivationUser] 已同步用户:', uname, 'phone:', phone, 'idx:', idx, 'password:', pwd === 'admin' ? 'admin(固定)' : '自定义');
             } catch (e) { console.warn('addLocalActivationUser:', e); }
         };
 

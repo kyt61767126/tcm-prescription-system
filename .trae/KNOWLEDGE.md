@@ -86,6 +86,32 @@
 
 ## 2. 2026-08-20 关键经验（含 root cause + 举一反三）
 
+### 2.19 离线APP标准版"管理员激活→审核通过→返回登录→用户名密码错误"根治（提交待定）
+- 现象：用户在离线APP标准版走"管理员激活"，填写诊所/姓名/手机号，提交申请；管理员在后台审核通过生成激活码（截图：请求编号REQ-OMT6EPWVN-D490，王杰中医诊所）；客户端轮询到 activated 状态，弹出"审核通过即将重启"；APP重启后回到登录框，用手机号 + 自设密码或默认 admin 登录，始终提示"手机号/用户名或密码错误"（第1560行 errorDiv），激活成功却登不进去。
+- 根因（4层叠加，KNOWLEDGE §2.1 曾有教训这次又漏两个点）：
+  1. `onAdminActivated(r, requestId)` 函数里**根本没调用 `window.addLocalActivationUser`**！→ 管理员激活成功后，手机号账号从未同步到前端登录表（localStorage.local_systemUsers）。Java/Electron 的 `installAdminLicense` 只把手机号写到本地 `config.json`，WebView 登录校验的 `getUsers()` 是只读 localStorage 的，读不到那个账号。
+  2. 就算碰巧调用过一次，`addLocalActivationUser` 的旧实现是 `if (list.some(x => x.username === u.username)) return;` **找到同名账号就直接跳过**，不会 UPDATE 密码/姓名 → 已有的空账号或错误密码账号永远不会被纠正。
+  3. 旧 `addLocalActivationUser` 只写 `{ username, password, name, role }` **不写 `phone` 字段**，但登录校验第1475-1477行是按 `u.username === loginUsername && u.phone === loginUsername` 双字段查。如果用户表里的旧账号是 username=phone 但没 phone 字段，其实能对上；但如果是别的迁移路径留下的 username≠phone 却只填了 phone，就会找不到用户。
+  4. **本地用户表密码和后端归一化密码不一致**：`state.password` 是用户在激活弹窗自设的自定义密码（弹窗提示"云端登录密码固定为admin，自定义密码不生效"但仍允许输入），但后端 `provisionCloudAccount`（admin-account.js:44）和 `normalizeActivationPassword`（admin-account.js:139）**把所有手机号账号都强制哈希成 `admin`**。如果 auth-core 把 state.password（自设值）写入本地用户表 → 登录输入 admin 当然密码不匹配。
+- 修复（成套5处，必须一起，缺一不可）：
+  | # | 文件 | 位置 | 改动 |
+  |---|---|---|---|
+  | 1 | `shared/auth-core/offline.js` | `onAdminActivated` 最开头（setCloudActivationDone 之后） | 无条件 `window.addLocalActivationUser({username, phone, password:'admin', name, role:'admin', clinicName})`，密码固定传 `'admin'` 与后端归一化对齐；phone 与 username 都填手机号；无论是否成功 installAdminLicense 都执行；try-catch 包好避免异常中断后续流程 |
+  | 2 | `app_project/db-offline/index-app.html`（APP打包模板） | `window.addLocalActivationUser` | 旧逻辑：username 命中直接 return。新逻辑：按 `username OR phone` 找现有记录 → 找到就 **UPDATE password/phone/name/role**（密码强制覆盖最新激活值），找不到才 push 新对象 → 确保旧错账号能被纠正。新增 phone 字段写入和 console.log 诊断日志 |
+  | 3 | `app_project/db-offline/desktop/index.html`（离线桌面模板） | `window.addLocalActivationUser` | 同步 #2 同样的 UPSERT 改造 |
+  | 4 | `app_project/db-offline/app/app/src/main/assets/public/index.html`（离线APP资产） | `window.addLocalActivationUser` | 同步 #2 同样的 UPSERT 改造（实际运行时WebView加载的就是这份） |
+  | 5 | `sync-auth-core.ps1` 同步 | 3 份 auth-core | offline.js 修改后自动同步到 desktop auth-core / desktop electron auth-core / APP assets auth-core |
+- 验证方法（必做闭环）：
+  1. 离线APP清除本地数据（或重装）：确认 local_systemUsers 初始只有 admin 默认账号
+  2. 启动到试用到期弹窗，选管理员激活→标准版→填写手机号1339862812→提交申请→管理员后台通过
+  3. 客户端收到 activated：F12/console 能看到 `[addLocalActivationUser] 已同步用户: 133xxxx phone: 133xxxx idx: -1 password: admin(固定)`
+  4. APP自动重启，返回登录框 → 用 手机号 + 密码 `admin` 登录 → **必须成功进入主界面**
+  5. 故意重复上述流程（模拟二次激活申请） → 第二次日志显示 `idx >= 0` 走 UPDATE 分支 → 再登录仍然成功
+- 生效：
+  - 离线APP = **必须重打 APK** `db-offline/build-app.bat` → 重装（修改同时涉及 assets/auth-core.js + assets/index.html，都是APK内置资源）
+  - 离线桌面版 = **必须重打 exe** `db-offline/desktop/build.bat` → 重装（修改同时涉及 auth-core.js + index.html，是 Electron 渲染资源）
+  - 云端各端 = 不受影响（云端无管理员激活本地账号同步问题）
+
 ### 2.18 离线APP试用到期"弹窗风暴"无法完成激活（提交 fe181f7d）
 - 现象：试用到期后，不停地弹出"该设备试用次数已达上限"提示，激活窗口打开了还叠加 alert，用户根本无法在激活窗口里填写完成就被新弹窗打断。
 - 根因（多源头并行触发，缺一不可）：
