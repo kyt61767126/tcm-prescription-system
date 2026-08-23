@@ -730,6 +730,15 @@
 - **验证**：改完后必须跑 check-interface.bat（确认 6 个主界面基线 0 CHANGED）+ verify-packaging.ps1 62 OK。
 - **生效方式**：桌面版 activate-window.html 在 electron/ 子目录，需重新打包 exe 才会进入 asar 生效；不从 URL 加载，不能指望 Cloudflare Pages 推送。
 
+### 2.68 【三Tab填写信息互通】"基础信息填一遍三Tab共享"实现范式（提交 f3b0ee59，2026-08-23）
+- **用户信号识别**：用户说"填写的基础信息三个选项同时可以用"——翻译为：三Tab(管理员激活/激活码激活/工单申请)切换时，诊所名/姓名/电话自动带出。**核心原则=宁漏填不误覆盖**：只给目标字段为空时赋值，绝不覆盖用户在各Tab手动填的不同值（场景：用户想在Tab1填自己诊所、在Tab3工单填朋友诊所代申请）。
+- **APP 端与桌面端结构差异 = 实现方案不同**（必须分两套写，不可生搬硬套）：
+  - APP 端 auth-core.js：Tab2激活码面板**无独立基础信息字段**（仅有激活码输入+机器ID），三Tab实际是 Tab1(form) ↔ Tab3(ticket 叠加层) 两部分共享字段。实现=①切Tab点击时 syncSharedFieldsFrom('admin'/'ticket') ②工单叠加层 cleanup 前回填 Tab1（工单关闭后不丢值）。Tab2 激活码是"纯输码面板"，不参与互通，保持简洁体验。
+  - 桌面版 activate-window.html：**三Tab均有独立基础信息字段**（adminClinicName/codeClinicName/ticketClinicName + 姓名/电话 × 3 Tab 共9个字段）。实现=在 switchTab 切Tab前 `syncSharedFieldsFrom(state.mode)` 用当前正离开的 Tab 作为源，同步到另外两个Tab。切 Tab 顺序 admin→ticket→code→ticket→admin 都能正确累积。
+- **字段映射速查**：admin 前缀=Tab1 / code 前缀=Tab2 / ticket 前缀 + Contact=Tab3 / (无前缀)=激活码弹窗的 codeClinicName/codeAdminName/codePhone。
+- **95% 实现 + 5% 验证的坑**：HTML 的 `<script>` 内嵌 JS 不能用 `node --check`（会报 ERR_UNKNOWN_FILE_EXTENSION），不能因此跳过语法验证——必须逐函数肉眼校对括号/逗号匹配，或用浏览器 DevTools 打开。对 activate-window.html 这类非 check-interface 基线文件的唯一验收=**门禁62 + 基线6 OK**。
+- **生效方式**：APP端（URL加载）推送即生效；离线/云端APP（assets打包）需重打 APK；桌面端需重新打包 exe（activate-window.html 进asar）。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
