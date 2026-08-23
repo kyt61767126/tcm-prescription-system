@@ -92,7 +92,15 @@ function Invoke-SinglePack {
 
     # 离线版使用 config.json 默认值（XXX中医诊所/XXX医生），跳过配置编辑窗口
     # 设置 SKIP_CONFIG=1，使桌面 build.bat 与 APP build-app.bat 整轮跳过后台配置编辑
-    if ($Version -ne "cloud") { $env:SKIP_CONFIG = "1" }
+    # ★ 2026-08-23 三轮复核修复：SKIP_CONFIG 环境变量泄漏——菜单会话中先打本地版再打
+    #   云端版时，残留变量导致云端版 build-app.bat 的 edit-config -AutoConfirm 配置
+    #   同步被跳过（本函数对云端不做 Step1 同步，子进程 AutoConfirm 是唯一同步途径）。
+    #   云端版进入时显式清除（对齐 pack.ps1:963 的清理模式）。
+    if ($Version -ne "cloud") {
+        $env:SKIP_CONFIG = "1"
+    } else {
+        Remove-Item Env:\SKIP_CONFIG -ErrorAction SilentlyContinue
+    }
 
     # 离线版同步默认配置（跳过交互编辑）
     if ($Version -ne "cloud" -and ($Mode -eq "all" -or $Mode -eq "app")) {

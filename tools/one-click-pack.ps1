@@ -531,13 +531,15 @@ while ($true) {
     Write-Host "  - 耗时统计会在结束时显示"
     Write-Host "  - ★ 仅打包不上传; 如需发布到下载页/GitHub Release 请运行 一键发布.bat" -ForegroundColor Yellow
     Write-Host "--------------------------------------------"
-    $choice = Read-Host "请选择 [0-7]"
+    $choice = Read-Host "请选择 [0-3, 5-7]"
     switch ($choice) {
         "1" { $null = Build-Cloud -Target "all"; Invoke-PackSideEffectCollect -Commit:$AutoCommit }
         "2" { $null = Build-Offline -Version "dingzhi" -Target "all"; Invoke-PackSideEffectCollect -Commit:$AutoCommit }
         "3" { $null = Build-All; Invoke-PackSideEffectCollect -Commit:$AutoCommit }
-        "5" { Show-PickVersionMenu -Mode "desktop" }
-        "6" { Show-PickVersionMenu -Mode "app" }
+        # ★ 2026-08-23 三轮复核修复：[5][6] 单独打包同样产生 versionCode/package.json 副作用，
+        #   补 SideEffectCollect 与 [1][2][3] 行为一致（否则单独打包的副作用靠人工提交易遗漏）
+        "5" { Show-PickVersionMenu -Mode "desktop"; Invoke-PackSideEffectCollect -Commit:$AutoCommit }
+        "6" { Show-PickVersionMenu -Mode "app"; Invoke-PackSideEffectCollect -Commit:$AutoCommit }
         "7" { Show-StandaloneUsage }
         "0" { exit 0 }
         default { Write-Host "无效选择，请重试" -ForegroundColor Red; Start-Sleep -Seconds 1 }
