@@ -1,4 +1,4 @@
-﻿// ============================================================================
+// ============================================================================
 // auth-core.js — 登录认证共享核心模块
 // 统一密码加密、存储抽象、登录调度、记住用户名、会话管理、权限解析
 // 消除 14+ 文件中的登录逻辑重复
@@ -2896,6 +2896,12 @@
                         '<div style="font-size:24px;">🏨</div><div style="font-size:14px;font-weight:bold;margin-top:2px;color:#333;">机构版</div><div style="font-size:11px;color:#909399;">多人机构 · 多用户管理</div>' +
                     '</div>' +
                 '</div>' +
+                // ★ 2026-08-23 简化：版本选择页直达链接——手里已有激活码/想留言申请的用户跳过版本选择
+                //   （版本仅 Tab1 管理员激活申请需要，Tab2 输码/Tab3 工单不消费该字段，原流程强制选择属冗余步骤）
+                '<div style="display:flex;justify-content:space-between;gap:8px;margin-top:14px;font-size:12px;">' +
+                    '<span id="adminSkipToCode" style="color:#26a69a;cursor:pointer;-webkit-tap-highlight-color:transparent;">已有激活码？直接输入 →</span>' +
+                    '<span id="adminSkipToTicket" style="color:#07c160;cursor:pointer;-webkit-tap-highlight-color:transparent;">留言申请激活码 →</span>' +
+                '</div>' +
             '</div>' +
 
             // ★ 2026-08-23 三Tab（对齐桌面 activate-window）：版本选择后显示 Tab 栏
@@ -3097,6 +3103,7 @@
             document.getElementById(id).addEventListener('click', function() {
                 const ed = this.getAttribute('data-edition');
                 state.edition = ed;
+                state.editionChosen = true;
                 document.getElementById('editionPersonal').style.borderColor = (ed === 'personal' ? '#26a69a' : '#ddd');
                 document.getElementById('editionPersonal').style.background = (ed === 'personal' ? '#26a69a' : '#fff');
                 document.getElementById('editionInstitution').style.borderColor = (ed === 'institution' ? '#26a69a' : '#ddd');
@@ -3108,7 +3115,20 @@
 
         // ★ 2026-08-23 三Tab切换（对齐桌面 activate-window：管理员激活/激活码激活/工单申请）
         document.getElementById('adminTabBtnAdmin').addEventListener('click', function() {
+            // ★ 2026-08-23 简化：从直达链接进入（跳过版本选择）时，Tab1 管理激活申请需版本信息，
+            //   未选择版本则回到第一步让用户选择（避免以默认机构版提交非本意的申请）
+            if (!state.editionChosen) { show('adminStepEdition'); return; }
             show('adminStepForm'); setActiveTab('admin');
+        });
+        // ★ 2026-08-23 简化：版本选择页直达链接（跳过版本选择，复用 Tab 切换逻辑）
+        var skipCodeLink = document.getElementById('adminSkipToCode');
+        if (skipCodeLink) skipCodeLink.addEventListener('click', function() {
+            show('adminTabCode'); setActiveTab('code');
+            setTimeout(function() { var i = document.getElementById('adminCodeInput'); if (i) i.focus(); }, 200);
+        });
+        var skipTicketLink = document.getElementById('adminSkipToTicket');
+        if (skipTicketLink) skipTicketLink.addEventListener('click', function() {
+            showTicketFormModal(machineId, (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.clinicName) || '');
         });
         document.getElementById('adminTabBtnCode').addEventListener('click', function() {
             show('adminTabCode'); setActiveTab('code');
