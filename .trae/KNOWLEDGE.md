@@ -709,6 +709,14 @@
 - **验证**：工作区 `git status --porcelain` 无未提交变更；`verify-packaging.ps1` 62 OK / 0 FAIL / 0 WARN。
 - **沉淀原则**：即使本轮无代码变更，也应记录"干净轮"结论，避免未来重复审查同一区域；同时标记 2.62/2.63 的修复已覆盖到此轮边界，无冲突。
 
+### 2.65 【离线APP激活流程统一云端格式】cloud.js 激活升级同步到 offline.js（提交 1ead65e0，2026-08-23）
+- **问题定位法**：用户要求"离线APP激活统一按云端格式流程"时，不要凭印象改代码——先 `git diff --no-index` 对比双端 auth-core.js 副本，立即暴露离线版落后云端的 12 个功能块（227 行差异），全部是 2026-08-22/23 云端激活流程升级（三Tab管理员激活弹窗/激活码激活面板/用户名注册/入口收敛）未同步。
+- **双源同步安全流程（防 2026-08 覆盖事故重演）**：项目 auth-core.js 是双源架构（`shared/auth-core/offline.js`→3离线目标 / `cloud.js`→8云端目标），sync-auth-core.ps1 头注释明确记录过"cloud 覆盖 offline 静默删除试用逻辑"的历史事故。同步前必须验证：①`Select-String` 统计 trial/heartbeat 关键词匹配数双源一致（4/27）；②diff 中无任何 `+` 行含离线特有内容；③云端新代码是否内含离线分支（本次激活码提交逻辑明确写了"离线 APP（有本地激活桥）：走主进程 submit"）。三重验证通过才能整文件同步。
+- **同步执行**：`Copy-Item cloud.js offline.js` → 跑 `sync-auth-core.ps1`（分发 3 离线目标）→ `-VerifyOnly` 确认 11 副本同步。**永远不要手动直接改 11 个副本中的任何一个**——只改 shared 源再跑同步脚本。
+- **Java 层桥验证**：三Tab激活码面板在离线APP依赖 `electronAPI.activate` 桥（MainActivity.java 644-651行），show/submit/getMachineId/installAdminLicense/restart 全具备；JS 2参 submit(code,user) 与桥 3参签名（password 默认 'admin'）兼容，Java 层零改动。
+- **界面保护合规**：入口收敛（hideStaticActivateEntry 隐藏静态按钮）是运行时 `style.display='none'` 注入，不改 HTML 结构；改后跑 check-interface.bat 验证 6 OK / 0 CHANGED。
+- **生效方式**：离线APP需重新打包APK、离线桌面版需重新打包exe；云端各端无改动无需操作；已激活用户 license.dat 保留激活状态不受影响。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
