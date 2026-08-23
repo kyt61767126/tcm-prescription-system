@@ -759,6 +759,13 @@
 - **APP 端元素差异**：APP 端（assets/public/index.html）登录框诊所名条是 `.clinic-info-name` 类选择器（非 `loginClinicName` id），auth-core 升级时一并同步该元素作兜底（相同优先级，值一致）。
 - **生效方式**：云端网页/URL加载APP 推送即生效；assets打包APP/双端桌面需重新打包。
 
+### 2.72 【发布范围与打包范围对齐】publish-release.js 增加产物类型维度（提交 ff1743c5，2026-08-23）
+- **缺陷模式（类型信息在链路中丢失）**：打包环节有 Mode（desktop/app/all）选择，发布环节 Invoke-Publish 只传版本维度 --target（cloud/dingzhi）→ scanFiles 按版本收集**该版本全部产物**（APK + dist/ 现存所有 exe）。用户只打包 APP 却发布出 75MB 旧桌面 exe——exe 不是本次打包的，是扫描到 dist/ 上次构建旧产物照样上传。
+- **修复模式（正交维度组合）**：publish-release.js 新增 `--artifact=`（app/desktop/all 默认 all 向后兼容），与 `--target=`（版本维度）正交：APK 收集条件 `artifact !== 'desktop'`，exe 收集条件 `artifact !== 'app'`。release-menu：Invoke-Publish 加 -Mode 透传；菜单[2] 增加发布范围选择（Show-PackModeMenu 复用 + ScopeTitle 参数）；FullFlow Step2 透传打包时选的 Mode（Version=all 时发布保持全部产物）。
+- **连带确认无需修改**：auto-publish.js 传 --target=apk/exe 本身就是类型语义；verify-release.js 验证 manifest 中本次实际上传的 URL，自动适配。
+- **Edit 工具丢 BOM 的连锁假象识别**：Edit 中文 .ps1 后 ParseFile 报 20 个"语法错误"（Unexpected token '}' / string missing terminator / [1][2][3] token 等，位置看似随机）→ **先查头三字节**（`23 20 72` = 无 BOM），按 GBK 误读 UTF-8 中文所致，恢复 BOM 后语法即 OK。不要按报错位置去改代码。
+- **生效方式**：纯脚本变更，各端无需操作；一键发布.bat 直接生效。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
