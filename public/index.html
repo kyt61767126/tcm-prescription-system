@@ -6399,6 +6399,9 @@ let currentUser = null;
             if (id === 'analyticsModal') refreshAnalytics();
             if (id === 'settingsModal') {
                 document.getElementById('defaultDoctor').value = document.getElementById('doctorName').value;
+                // ★ 2026-08-23 授权状态即时刷新：打开基础设置时按登录态刷新授权区（统一入口，覆盖F1/按钮/APP所有打开方式）
+                //   未登录="云端版登录即可使用"；已登录="✅ 已激活（机构版/标准版）剩余X天"（auth-core.js）
+                try { if (typeof window.updateLicenseStatusText === 'function') window.updateLicenseStatusText(); } catch (_) {}
                 // APP 端隐藏备份/恢复/清除数据按钮（user_profile.md 规范）
                 if (window.AndroidNative) {
                     document.querySelectorAll('button[onclick="exportData()"], button[onclick="importData()"], button[onclick="clearAllData()"]').forEach(function(btn) { btn.style.display = 'none'; });

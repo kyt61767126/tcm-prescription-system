@@ -1204,7 +1204,9 @@ export async function onRequest(context) {
                 success: true,
                 token,
                 user: sanitizeUser(user, clinicId, clinicName, clinicStatus, clinicEdition),
-                device: deviceSummary
+                device: deviceSummary,
+                // ★ 2026-08-23 云端APP F1基础设置-授权状态：返回诊所到期时间（前端显示"已激活（版本）剩余X天"）
+                clinicExpiresAt: clinicExpiresAt || null
             }, 200, context.request);
         }
 
