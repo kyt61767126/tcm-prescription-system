@@ -68,10 +68,10 @@
     "provenance": {
         "schemaVersion": 1,
         "repo": "https://github.com/kyt61767126/tcm-prescription-system.git",
-        "commit": "6ab7562298ee",
+        "commit": "d24200933718",
         "ref": "main",
         "builder": "kyt61767126",
-        "builtAt": "2026-08-23T22:26:00.750Z",
+        "builtAt": "2026-08-23T22:52:23.729Z",
         "buildTool": "publish-release.js@v24.16.0",
         "releaseTag": "v2026.08.24"
     },
@@ -82,7 +82,7 @@
             "url": "/downloads/惠康中医-本地.apk",
             "releaseUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.08.24/huikang-dingzhi.apk",
             "size": 2851785,
-            "updateTime": "2026-08-23T22:26:00.306Z",
+            "updateTime": "2026-08-23T22:52:23.077Z",
             "fileName": "惠康中医-本地.apk",
             "releaseFileName": "huikang-dingzhi.apk",
             "releaseTag": "v2026.08.24"
