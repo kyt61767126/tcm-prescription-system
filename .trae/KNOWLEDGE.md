@@ -739,6 +739,13 @@
 - **95% 实现 + 5% 验证的坑**：HTML 的 `<script>` 内嵌 JS 不能用 `node --check`（会报 ERR_UNKNOWN_FILE_EXTENSION），不能因此跳过语法验证——必须逐函数肉眼校对括号/逗号匹配，或用浏览器 DevTools 打开。对 activate-window.html 这类非 check-interface 基线文件的唯一验收=**门禁62 + 基线6 OK**。
 - **生效方式**：APP端（URL加载）推送即生效；离线/云端APP（assets打包）需重打 APK；桌面端需重新打包 exe（activate-window.html 进asar）。
 
+### 2.69 【登录框诊所名显示条全局统一】"默认显示基础设置-诊所名称"规范落地（提交 5ca2b656，2026-08-23）
+- **全局排查方法**：登录框诊所名条有**两种 DOM id**——网页/APP/桌面 index.html 内嵌登录框用 `loginClinicName`；双端桌面独立登录页 login.html 用 `clinicName`（`KEY_CLINIC_NAME='local_clinicName'`）。排查时必须两种 id 都 grep，漏一种就漏一端。
+- **数据链统一规范（全端一致）**：`localStorage['local_clinicName']`（基础设置保存值）> `CONFIG.clinicName`（打包/云端配置）> HTML 硬编码兜底（"本能堂中医诊所"）。**登录框诊所名条 = 基础设置保存的诊所名称**，保存后立即同步、初始化时读取同步。
+- **修复模式（3 个 index.html × 2 处）**：在 `clinicNameVal` 计算行后插入 `loginClinicName.textContent = clinicNameVal`（初始化）+ `saveSettings()` 内保存后同步。public/index.html 与 site-admin/index.html 2026-08-17 已做过（参考范本），根目录/离线桌面/云端桌面三个副本漏做——**多副本项目典型病：某次修复只落在部分副本，后续同类需求须全副本 grep 验证**。
+- **git autocrlf 噪音识别**：`git status` 显示 12 个 bat M + `git diff --numstat` 全 0 + `git -c core.autocrlf=false diff` 内容 0 行 = 纯行尾显示噪音（仓库 LF 存储 + 工作区 CRLF），非实际变更，不提交不恢复，忽略即可。
+- **生效方式**：云端网页推送即生效；URL加载APP推送即生效；assets打包APP/双端桌面需重新打包。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
