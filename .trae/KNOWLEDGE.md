@@ -86,6 +86,32 @@
 
 ## 2. 2026-08-20 关键经验（含 root cause + 举一反三）
 
+### 2.18 离线APP试用到期"弹窗风暴"无法完成激活（提交 fe181f7d）
+- 现象：试用到期后，不停地弹出"该设备试用次数已达上限"提示，激活窗口打开了还叠加 alert，用户根本无法在激活窗口里填写完成就被新弹窗打断。
+- 根因（多源头并行触发，缺一不可）：
+  1. `fallbackTimer`（每5秒检查）条件只判断了 `__licenseExpired && !__licenseActivating`，**没有检测激活窗口 DOM 是否已渲染**。APP 端 `activate.show()` → 触发 `app:show-activate` 事件 → 注入 HTML 模态，这个过程中 `adminActivateOverlay` 元素存在 ≠ `__licenseActivating=true`，中间窗口可能被定时再次弹。
+  2. `openAdminActivate` 函数**入口处没设置 `__licenseActivating=true`**，导致 fallbackTimer 误认为激活流程未开始，直接放行再次弹窗。
+  3. `app:show-activate` 事件监听里**先把 `__licenseActivating=false` 重置再调用 openAdminActivate**，人为打开了一个 fallbackTimer 可穿透的窗口期。
+  4. APP 端 `showExpireAlertAndActivate` 里先 `alert(msg)` 阻塞等用户点确定，再拉起 activate.show() → **alert弹窗 + HTML模态激活窗口 形成嵌套叠加**，视觉上就是"不停弹"。
+  5. `checkLicenseAndShowActivate` 和 `fallbackTimer` 在启动初期可能**并发竞态**同时调用 `showExpireAlertAndActivate`，单次调用标志也只是 IIFE 内变量没形成有效防抖。
+- 修复（6 处改动，必须成套）：
+  | # | 位置 | 改动 |
+  |---|---|---|
+  | 1 | `startFallbackCheck` 的 setInterval 条件 | 增加 `document.getElementById('adminActivateOverlay')` DOM 存在性检测，激活窗口只要打开了（overlay 已注入）就不再重弹 |
+  | 2 | `global.openAdminActivate` 函数第一行 | 立即 `global.__licenseActivating = true` |
+  | 3 | `showExpireAlertAndActivate` APP端分支 | 移除 `alert(msg)`，直接拉起激活窗口（激活窗口HTML自身内含到期提示，无需再 alert 一次） |
+  | 4 | `showAdminActivateModal` 的 `cleanup()` | 窗口关闭时 `global.__licenseActivating = false` 复位，使关闭后的重新弹窗能正常触发 |
+  | 5 | `app:show-activate` 事件监听 | 删除"先 `__licenseActivating=false` 再 open"的反模式；直接 openAdminActivate（open 内部已负责设置=true） |
+  | 6 | `showExpireAlertAndActivate` 入口 | 新增 `__showExpireAlertRunning` 3秒防抖，阻止 checkLicense+fallbackTimer 并发竞态重复触发 |
+- 举一反三：
+  - 以后所有"定时轮询 + 事件触发 + 主动调用"三路都能走到的函数，**都要有 DOM存在性 + 标志位 + 运行时防抖**三层防御，不能只靠单一标志位。
+  - `__licenseActivating` 只代表"函数执行中"语义，不代表"窗口已显示"语义；**模态窗口是否真的打开只能靠 DOM id 判断**（最可靠的同步证据）。
+  - 事件监听器里不要做"先 reset 标志位再调用对方函数"的动作：要么调用方直接保证标志位正确，要么被调函数入口自己设，中间的窗口期就是 bug 滋生温床。
+- 生效：
+  - 离线APP=**必须重打 APK** `db-offline/build-app.bat` → 重装；
+  - 离线桌面版(标准版/机构版)=**必须重打 exe** `build.bat` → 重装；
+  - 云端各端=不受影响（云端无试用期概念）。
+
 ### 2.1 离线系"管理员激活后手机号登不进去" 最终根因（提交 cf28e711）
 - 现象：重装新 APK、走完管理员激活(密码留空)、用 手机号+admin 登录仍报"手机或密码错误"。
 - 根因：`addLocalActivationUser` 只在 index-app.html 定义，且 `onAdminActivated` 只在 `installAdminLicense` 成功分支调用；离线桌面用 desktop/index.html 未定义它；license 空/写 license 抛异常走 else/catch 分支同步也不执行 → local_systemUsers 里没有手机号账号 → 登录必然失败。
