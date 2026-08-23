@@ -86,7 +86,7 @@
 
 ## 2. 2026-08-20 关键经验（含 root cause + 举一反三）
 
-### 2.19 离线APP标准版"管理员激活→审核通过→返回登录→用户名密码错误"根治（提交待定）
+### 2.19 离线APP标准版"管理员激活→审核通过→返回登录→用户名密码错误"根治（提交 6e774c34）
 - 现象：用户在离线APP标准版走"管理员激活"，填写诊所/姓名/手机号，提交申请；管理员在后台审核通过生成激活码（截图：请求编号REQ-OMT6EPWVN-D490，王杰中医诊所）；客户端轮询到 activated 状态，弹出"审核通过即将重启"；APP重启后回到登录框，用手机号 + 自设密码或默认 admin 登录，始终提示"手机号/用户名或密码错误"（第1560行 errorDiv），激活成功却登不进去。
 - 根因（4层叠加，KNOWLEDGE §2.1 曾有教训这次又漏两个点）：
   1. `onAdminActivated(r, requestId)` 函数里**根本没调用 `window.addLocalActivationUser`**！→ 管理员激活成功后，手机号账号从未同步到前端登录表（localStorage.local_systemUsers）。Java/Electron 的 `installAdminLicense` 只把手机号写到本地 `config.json`，WebView 登录校验的 `getUsers()` 是只读 localStorage 的，读不到那个账号。
