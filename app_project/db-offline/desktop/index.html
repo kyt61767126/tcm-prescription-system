@@ -3767,6 +3767,9 @@ let currentUser = null;
             const clinicDoctorVal = localStorage.getItem('local_clinicDoctor') || CONFIG.doctorName;
             document.getElementById('clinicName').value = clinicNameVal;
             document.getElementById('clinicNameDisplay').textContent = clinicNameVal;
+            // ★ 2026-08-23 统一：登录框诊所名条跟随基础设置（对齐 public/index.html 既有行为）
+            const initLoginClinicEl = document.getElementById('loginClinicName');
+            if (initLoginClinicEl) initLoginClinicEl.textContent = clinicNameVal;
             document.getElementById('defaultRegFee').value = regFeeVal;
             document.getElementById('defaultDose').value = doseVal;
             const regFeeEl = document.getElementById('registrationFee');
@@ -5726,6 +5729,11 @@ let currentUser = null;
             
             document.getElementById('doctorName').value = document.getElementById('defaultDoctor').value;
             document.getElementById('clinicNameDisplay').textContent = document.getElementById('clinicName').value;
+            // ★ 2026-08-23 统一：保存后同步登录框诊所名条（对齐 public/index.html 既有行为）
+            const savedLoginClinicEl = document.getElementById('loginClinicName');
+            if (savedLoginClinicEl && document.getElementById('clinicName').value) {
+                savedLoginClinicEl.textContent = document.getElementById('clinicName').value;
+            }
             // ★ 2026-08-03 同步：保存医师姓名后，立即更新当前用户显示
             const newDoctorName = document.getElementById('defaultDoctor').value;
             document.getElementById('userDisplayName').textContent = newDoctorName || (currentUser ? currentUser.name : '');
