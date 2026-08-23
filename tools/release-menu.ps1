@@ -1,4 +1,4 @@
-﻿# release-menu.ps1 - 交互式发布菜单（支持选择单个版本发布）
+# release-menu.ps1 - 交互式发布菜单（支持选择单个版本发布）
 # 用 PowerShell 替代 release-all.bat，避免 .bat 中文 GBK 编码问题
 # 支持选择单个版本（云端/定制/个人 × 桌面/APP/全部）进行发布
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -73,8 +73,14 @@ function Invoke-SinglePack {
     Write-Host "  开始: $startTime" -ForegroundColor Cyan
     Write-Host "========================================" -ForegroundColor Cyan
 
+    # ★ 2026-08-23 修复：dingzhi（本地版）目录映射缺失
+    #   原代码仅映射 cloud→db-yunduan，选"本地版"时拼成不存在的 db-dingzhi，
+    #   导致 [ERROR] 版本目录不存在，打包流程中止。
+    #   实际本地版目录为 app_project\db-offline（下有 pack-desktop.bat/build-app.bat/edit-config.ps1，
+    #   与 db-yunduan 调用接口一致，见 db-offline\build-app.bat 头注释）。
     $verDir = "$script:RootDir\app_project\db-$Version"
-    if ($Version -eq "cloud") { $verDir = "$script:RootDir\app_project\db-yunduan" }
+    if ($Version -eq "cloud")   { $verDir = "$script:RootDir\app_project\db-yunduan" }
+    if ($Version -eq "dingzhi") { $verDir = "$script:RootDir\app_project\db-offline" }
 
     if (-not (Test-Path $verDir)) {
         Write-Host "[ERROR] 版本目录不存在: $verDir" -ForegroundColor Red
