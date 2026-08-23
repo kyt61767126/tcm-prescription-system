@@ -746,6 +746,13 @@
 - **git autocrlf 噪音识别**：`git status` 显示 12 个 bat M + `git diff --numstat` 全 0 + `git -c core.autocrlf=false diff` 内容 0 行 = 纯行尾显示噪音（仓库 LF 存储 + 工作区 CRLF），非实际变更，不提交不恢复，忽略即可。
 - **生效方式**：云端网页推送即生效；URL加载APP推送即生效；assets打包APP/双端桌面需重新打包。
 
+### 2.70 【离线APP试用超限死路修复】Java层阻断弹窗增加"前往激活"入口（提交 06735b96，2026-08-23）
+- **问题定位法**：用户描述弹窗文本"授权校验失败/试用次数已达上限"——先 grep 弹窗文本关键词找到**真正源头**（MainActivity.java Java 层 AlertDialog），不要只查 JS 层。离线APP 是"Java 启动校验（Layer 2）+ JS 层 checkLicenseAndShowActivate（双保险）"两层，**Java 层在校验失败时 showFatalLicenseErrorAndExit 只有退出按钮**，用户被锁死在 WebView 外，JS 层激活流程根本没机会运行。
+- **修复模式（Java 放行 + JS 承接）**：① 抽取 `continueStartupAfterLicenseCheck()`（权限申请→configureWebView→页面加载）供正常启动与放行共用；② 新增 `showLicenseErrorWithActivateChoice()` 双按钮（前往激活=放行/退出=原行为）；③ JS 层 `'app:show-activate'` 监听升级为优先 `openAdminActivate()` 三Tab弹窗（管理员激活/激活码/工单三通道），回退旧版单码弹窗。放行后链路：WebView 加载→electronAPI 桥注入→2秒后 license.validate 失效→alert→activate.show()→事件→三Tab弹窗。
+- **安全边界（关键设计）**：只有**正常业务拒绝**（试用超限/过期/未激活）给激活入口；**代码篡改（verifyJsIntegrity 失败）与校验异常保持致命退出**——不给破解者放行入口，不扩大攻击面（宁漏检不误报）。
+- **副本同步**：`app:show-activate` 监听器在 offline.js/cloud.js 双源头 + 11 副本同步；云端APP 无 Java 启动校验（云端无试用规范），Java 改动仅限离线APP。
+- **生效方式**：离线APP必须重新打 APK（Java 层改动）；云端网页/URL加载APP 推送即生效（弹窗升级）；云端桌面可选重打。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
