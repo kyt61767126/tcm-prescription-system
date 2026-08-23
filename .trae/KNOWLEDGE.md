@@ -86,6 +86,27 @@
 
 ## 2. 2026-08-20 关键经验（含 root cause + 举一反三）
 
+### 2.20 离线APP"激活成功却登录失败"二次修正：密码语义混淆+启动自愈通道（提交 0e02058d）
+- 现象：§2.19 修复（6e774c34）后客户实测**仍失败**——离线APP标准版，管理员激活审核通过、license 安装成功（登录框已显示正确诊所名），用 手机号13398628212 + **自设密码admin123** 登录仍报"手机号/用户名或密码错误"。
+- 根因（在 §2.19 四层之上再补两层）：
+  1. **§2.19 修复引入的新错误：本地用户表密码固定写 'admin'**。理由是"后端 normalizeActivationPassword 归一化为 admin"——但那是**云端账号**的密码语义！离线APP登录是**纯本地校验**（localStorage.local_systemUsers 明文/PBKDF2兼容比对），根本不查云端API。用户在激活弹窗自设 admin123，Java 层 installAdminLicense 也把 admin123 写进 config.json，本地表却存 admin → 输 admin123 必然失败。
+  2. **localStorage 与 Java config.json 永久脱节，无纠错通道**：Java 层 installAdminLicense 第8步 syncCreateActivationUser 把账号（含用户自设密码）写进 filesDir/config.json 的 users 数组，但前端 JS 桥没有读取该数组的方法 → 已激活设备重启后（onAdminActivated 不会再触发），localStorage 里的错误密码**永远无法被纠正**。
+- 修复（4处成套，提交 0e02058d）：
+  | # | 文件 | 改动 |
+  |---|---|---|
+  | 1 | `shared/auth-core/offline.js` onAdminActivated | 密码按**有无本地安装桥**区分：有桥(离线APP)=`state.password || 'admin'`（与Java层config一致）；无桥(云端APP，登录走云端API)=`'admin'`固定（后端归一化） |
+  | 2 | `LicenseManager.java` | 新增公开方法 `getActivationUsers()`：读 config.json 的 users 数组返回给前端 |
+  | 3 | `MainActivity.java` | JS桥 `activate.getActivationUsers` + native case 分发（只读接口，低风险） |
+  | 4 | `shared/auth-core/offline.js` startLicenseCheck 开头 | **启动自愈**：调用 getActivationUsers 把 config 账号 UPSERT 进 localStorage（历史错密码账号被强制纠正；无此桥的端自动跳过，不影响云端/桌面） |
+- 举一反三（重要教训）：
+  - **"密码固定 admin"只适用于云端账号（后端归一化语义）；离线本地账号必须尊重用户自设值**。同一个字段在"本地校验"和"云端校验"两种链路下语义完全不同，修复时必须先确认登录走哪条链路！
+  - **跨存储双写（Java config.json ↔ WebView localStorage）必须有反向同步通道**，否则一旦一侧写错/丢失，没有任何自愈机会。凡是"激活/注册写入A存储、登录读取B存储"的设计，启动时都应有 B←A 的 UPSERT 兜底。
+  - 修复后仍失败时，优先让用户提供**实际输入的密码值**（本例 admin123 一出现立刻暴露"密码语义混淆"根因），而不是继续盲改代码。
+- 生效：
+  - 离线APP = **必须重打 APK**（Java 层 MainActivity/LicenseManager + assets/auth-core.js 均改动）`db-offline/build-app.bat`
+  - 离线桌面版 = 重打 exe（auth-core.js 改动，无桥分支密码仍为 admin，弹窗提示文案一致，行为不变）
+  - 云端各端 = 不受影响
+
 ### 2.19 离线APP标准版"管理员激活→审核通过→返回登录→用户名密码错误"根治（提交 6e774c34）
 - 现象：用户在离线APP标准版走"管理员激活"，填写诊所/姓名/手机号，提交申请；管理员在后台审核通过生成激活码（截图：请求编号REQ-OMT6EPWVN-D490，王杰中医诊所）；客户端轮询到 activated 状态，弹出"审核通过即将重启"；APP重启后回到登录框，用手机号 + 自设密码或默认 admin 登录，始终提示"手机号/用户名或密码错误"（第1560行 errorDiv），激活成功却登不进去。
 - 根因（4层叠加，KNOWLEDGE §2.1 曾有教训这次又漏两个点）：
