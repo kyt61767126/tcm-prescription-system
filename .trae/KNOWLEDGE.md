@@ -675,6 +675,14 @@
 - **已知无害瑕疵**：延迟展开模式下 if 块内 echo 的孤立 `!`（如 `failed!`）会被 cmd 吃掉显示为 `failed`——仅影响错误提示少个感叹号，逻辑无损，不值得为它冒 bat 转义风险。
 - **生效方式**：仅打包/发布脚本变更，无运行时代码。已安装的网页/桌面/APP 各端均无需操作；下次打包自动使用新逻辑（签名终验链生效 + 失败正确报错），一键打包/一键发布直接双击即生效。
 
+### 2.61 【打包链路二轮复核】build-pack 失败续跑 + release-menu 六处退出码丢弃（提交 ebdeaeff，2026-08-23）
+- **缺陷1（失败续跑）**：双端 build-pack.bat 的 `call :check_node || call :finalize 1 "..."` 模式——finalize 内是 `exit /b`，只返回到 `||` 表达式处，**脚本继续向下执行**！前置检查失败后锁已被释放，却继续走 sync-auth-core → 构建全流程，依赖下游碰巧失败才返回错误码，且存在"锁已释放却还在构建"的并发窗口。共 16 处（云端 8 + 离线 8：check_node×3/check_java×2/check_file×3 每端）。修复=全部改为 `call :check_xxx` + `if errorlevel 1 ( call :finalize ... & goto :eof )` 块模式。
+- **缺陷2（help 不释放锁）**：`:mode_help` 直接 `goto :eof`，acquire 的锁残留（自愈兜底但违反"谁持有谁释放"）。云端版还缺 NO_PAUSE pause（手动双击闪退、与离线版不一致）。修复=help 末尾手动 release + 云端补 pause 对齐。
+- **缺陷3（六处退出码丢弃）**：release-menu.ps1 上轮只修了菜单[4]，[1][2][3][5][6][7]仍用 `| Out-Null`——单版本打包/发布/全流程/智能发布/验证/合规检查失败全部静默。统一改捕获 $rcN + 防御性数组取末元素 + 红字报错。
+- **cmd 语义实测结论（重要，可复用）**：①`call :sub || xxx` 的 `||` 对 call 返回值判断**可靠**（Test 1-4 全过：子程序 exit /b 1 触发、exit /b 0 不触发、嵌套 call 链正确传播、`|| call :finalize` 正确调用）——问题不在 `||` 本身，而在 finalize 的 exit /b **不会终止脚本**只返回调用行；②`$LASTEXITCODE` 在 `cmd /c ... | ForEach-Object` 管道后仍正确（管道仅含一个外部命令，cmdlet 不污染）；③Edit 工具改 .bat **必然引入 bare LF**（本轮 16 处修改产生 32 处 LF），中文 bat 改完必须跑 `fix-bat-crlf.ps1`（项目自愈脚本）再验证 bareLF=0。
+- **锁残留判定经验**：desktop build.bat 失败路径 `exit /b 1` 不释放锁 = **设计内自愈**（锁记录 caller cmd PID，进程退出 PID 死亡 → 下次 acquire stale takeover，本轮实测"Stale lock taken over (alive=False)"验证有效；45min 超时是第二保险）。build-pack.bat 链条中锁由入口 acquire + reentrant 同 PID 放行 + :finalize 统一释放。**不要**为 34 处 desktop build.bat 失败路径加 goto build_fail——自愈兜底已够，大改风险 > 收益。
+- **生效方式**：仅打包/发布脚本变更，无运行时代码。已安装各端无需操作；一键打包/一键发布直接双击生效，前置检查失败时立即终止并释放锁，失败红字报错。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
