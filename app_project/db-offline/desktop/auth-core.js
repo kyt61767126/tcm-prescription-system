@@ -2270,9 +2270,20 @@
     // ★ 2026-08-19 修复：该同步不依赖 isApp，任何环境下都执行（配置品牌展示与是否 App 无关）
     function syncLoginClinicName() {
         try {
+            // ★ 2026-08-23 统一规范：基础设置保存的 local_clinicName 优先（与 index.html 内嵌同步逻辑一致）。
+            //   原实现仅用 CONFIG.clinicName：本函数在 DOMContentLoaded 触发，若晚于 index.html 内嵌同步执行，
+            //   会把用户基础设置保存的诊所名覆盖回打包 CONFIG 值（登录框显示条全局统一规范要求
+            //   "默认显示操作界面-基础设置-诊所名称"，localStorage 永远最高优先）
+            let saved = null;
+            try { saved = localStorage.getItem('local_clinicName'); } catch (_) {}
+            const cc = saved || ((typeof CONFIG !== 'undefined' && CONFIG.clinicName) ? CONFIG.clinicName : '');
+            if (!cc) return;
             const lc = document.getElementById('loginClinicName');
-            const cc = (typeof CONFIG !== 'undefined' && CONFIG.clinicName) ? CONFIG.clinicName : '';
-            if (lc && cc) lc.textContent = cc;
+            if (lc) lc.textContent = cc;
+            // APP 端（assets/public/index.html）登录框诊所名条为 .clinic-info-name 类选择器，一并同步兜底
+            // （与 index.html 内嵌 IIFE 相同优先级，值一致无覆盖风险）
+            const appEl = document.querySelector('.clinic-info-name');
+            if (appEl) appEl.textContent = cc;
         } catch (e) {}
     }
 
