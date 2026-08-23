@@ -1496,6 +1496,7 @@
     // ★ 全局 License 状态标志
     global.__licenseExpired = false;       // License 是否已失效
     global.__licenseActivating = false;    // 是否正在激活流程中（防止重复弹窗）
+    let __showExpireAlertRunning = false;  // showExpireAlertAndActivate 执行中防抖
 
     // 上次失败的消息（用于兜底弹窗显示）
     let lastFailMessage = '授权已失效，请激活';
@@ -1640,6 +1641,11 @@
     // 桌面版：优先用 showExpireAlert 一体化 IPC（main process 中 dialog + showActivateWindow）
     // APP 端：showExpireAlert 不存在，回退到 alert + activate.show()
     async function showExpireAlertAndActivate(msg) {
+        // 防抖：并发调用（如 fallbackTimer + checkLicense 同时触发）只执行一次
+        if (__showExpireAlertRunning) return;
+        __showExpireAlertRunning = true;
+        // 3秒后自动重置（仅防止竞态窗口内的重复触发，不影响用户关闭窗口后的重新弹窗）
+        setTimeout(() => { __showExpireAlertRunning = false; }, 3000);
         global.__licenseActivating = true;
 
         // ★ 桌面版优先：一体化 IPC（解决渲染进程 alert 阻塞导致 activate.show 不执行的问题）
@@ -1655,10 +1661,8 @@
             }
         }
 
-        // ★ APP 端或回退：先 alert 显示到期信息，关闭后 activate.show()
-        try {
-            alert(msg);
-        } catch (e) { /* alert 不可用时忽略 */ }
+        // ★ APP 端或回退：直接拉起激活窗口（移除alert，避免嵌套弹窗阻断激活流程）
+        // 注意：激活窗口自身（HTML模态）内部已包含到期提示与激活指引，无需额外alert
 
         // 自动拉起激活码输入窗口
         if (global.electronAPI && global.electronAPI.activate &&
@@ -1685,7 +1689,8 @@
         if (fallbackTimer) clearInterval(fallbackTimer);
         fallbackTimer = setInterval(async () => {
             // 只在 license 已失效且不在激活流程中时检查
-            if (!global.__licenseExpired || global.__licenseActivating) return;
+            // 同时检查激活窗口DOM是否已存在，防止激活窗口打开期间重复弹窗
+            if (!global.__licenseExpired || global.__licenseActivating || document.getElementById('adminActivateOverlay')) return;
 
             console.log('[LicenseCheck] 兜底检查：license 失效，重新弹激活窗口');
             await showExpireAlertAndActivate(lastFailMessage);
@@ -2088,7 +2093,8 @@
     if (typeof global.addEventListener === 'function') {
         global.addEventListener('app:show-activate', function () {
             if (typeof global.openAdminActivate === 'function') {
-                global.__licenseActivating = false;
+                // 注意：openAdminActivate 内部已设置 __licenseActivating = true
+                // 不在此处先重置为 false，避免 fallbackTimer 窗口期误触发弹窗
                 global.openAdminActivate();
             } else {
                 showActivateDialog();
@@ -2864,6 +2870,8 @@
     }
 
     global.openAdminActivate = async function () {
+        // 设置激活中标志，抑制fallbackTimer和其他弹窗源
+        global.__licenseActivating = true;
         try {
             // 兼容离线(有 activate 本地桥)与云端APP(无本地激活桥)：
             // 管理员激活是"提交申请->管理员审批->云端创建账号"，云端为 SaaS，无需本地激活桥即可完成
@@ -3117,6 +3125,8 @@
         function cleanup() {
             if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
             if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+            // 激活窗口关闭后，重置激活中标志，允许fallbackTimer下次重新触发
+            global.__licenseActivating = false;
         }
 
         function showFieldErr(elId, hintEl, msg) {
