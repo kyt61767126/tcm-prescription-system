@@ -299,7 +299,7 @@ function Invoke-FullFlow {
     if ($Version -eq "all") {
         Write-Host ""
         Write-Host "========================================" -ForegroundColor Cyan
-        Write-Host "  [1/3] 打包全部版本 (one-click-pack.ps1)" -ForegroundColor Cyan
+        Write-Host "  [1/3] 打包全部版本 (云端+本地，自动执行)" -ForegroundColor Cyan
         Write-Host "========================================" -ForegroundColor Cyan
         $rc = Invoke-Pack -Target "all"
     } else {
@@ -428,7 +428,13 @@ while ($true) {
             Write-Host "========================================" -ForegroundColor Cyan
             Write-Host "  [1/1] 打包全部版本 (one-click-pack.ps1)" -ForegroundColor Cyan
             Write-Host "========================================" -ForegroundColor Cyan
-            Invoke-Pack -Target "all" | Out-Null
+            # ★ 2026-08-23 复核修复：原 | Out-Null 丢弃退出码，打包失败也静默无提示
+            $rc4 = Invoke-Pack -Target "all"
+            if ($rc4 -is [array]) { $rc4 = [int]$rc4[-1] }
+            if ($rc4 -ne 0) {
+                Write-Host ""
+                Write-Host "[ERROR] 打包全部版本失败，退出码: $rc4（详见上方日志）" -ForegroundColor Red
+            }
             Write-Host ""
             pause
         }

@@ -254,7 +254,7 @@ function Build-Cloud {
             Write-Host ""
             Write-Host "[ERROR] 云端桌面打包失败，退出码: $rc" -ForegroundColor Red
             pause
-            return
+            return $rc
         }
     }
 
@@ -270,7 +270,7 @@ function Build-Cloud {
             Write-Host ""
             Write-Host "[ERROR] 云端APP打包失败，退出码: $rc" -ForegroundColor Red
             pause
-            return
+            return $rc
         }
     }
 
@@ -285,6 +285,8 @@ function Build-Cloud {
     Show-LatestApk -Dir "$script:RootDir\app_project\db-yunduan" -GradleFile "$script:RootDir\app_project\db-yunduan\cloud_app\app\build.gradle" -Label "云端APP"
     Write-Host "========================================" -ForegroundColor Green
     pause
+    # ★ 2026-08-23 复核修复：成功路径显式返回0（供 Build-All/-AutoMode 聚合退出码）
+    return 0
 }
 
 # ============ Offline Build ============
@@ -345,7 +347,7 @@ function Build-Offline {
             Write-Host ""
             Write-Host "[ERROR] 离线$verLabel 桌面打包失败，退出码: $rc" -ForegroundColor Red
             pause
-            return
+            return $rc
         }
     }
 
@@ -362,7 +364,7 @@ function Build-Offline {
             Write-Host ""
             Write-Host "[ERROR] 离线$verLabel APP打包失败，退出码: $rc" -ForegroundColor Red
             pause
-            return
+            return $rc
         }
     }
 
@@ -377,6 +379,8 @@ function Build-Offline {
     Show-LatestApk -Dir "$script:RootDir\app_project\db-offline" -GradleFile "$script:RootDir\app_project\db-offline\app\app\build.gradle" -Label "离线APP"
     Write-Host "========================================" -ForegroundColor Green
     pause
+    # ★ 2026-08-23 复核修复：成功路径显式返回0（供 Build-All/-AutoMode 聚合退出码）
+    return 0
 }
 
 # ============ Build All ============
@@ -386,16 +390,32 @@ function Build-All {
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host "  全部2个版本打包开始: $allStart" -ForegroundColor Cyan
     Write-Host "========================================" -ForegroundColor Cyan
-    Build-Cloud -Target "all"
-    Build-Offline -Version "dingzhi" -Target "all"
+    # ★ 2026-08-23 复核修复：捕获各版本退出码（云端失败仍继续打本地版，但最终聚合上报）
+    $rcCloud = Build-Cloud -Target "all"
+    $rcOffline = Build-Offline -Version "dingzhi" -Target "all"
+    # 防御性取值（若返回值被子进程输出意外污染成数组，取末元素=真实退出码）
+    if ($rcCloud -is [array])   { $rcCloud = [int]$rcCloud[-1] }
+    if ($rcOffline -is [array]) { $rcOffline = [int]$rcOffline[-1] }
+    if (-not $rcCloud)   { $rcCloud = 0 }
+    if (-not $rcOffline) { $rcOffline = 0 }
     $allEnd = Get-TimeStamp
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Green
-    Write-Host "  全部2个版本打包完成！" -ForegroundColor Green
-    Write-Host "  开始: $allStart" -ForegroundColor Green
-    Write-Host "  结束: $allEnd" -ForegroundColor Green
+    if ($rcCloud -ne 0 -or $rcOffline -ne 0) {
+        Write-Host "  全部2个版本打包结束（含失败项！）: $allEnd" -ForegroundColor Yellow
+        if ($rcCloud -ne 0)   { Write-Host "  - 云端版打包失败，退出码: $rcCloud" -ForegroundColor Red }
+        if ($rcOffline -ne 0) { Write-Host "  - 本地版打包失败，退出码: $rcOffline" -ForegroundColor Red }
+    } else {
+        Write-Host "  全部2个版本打包完成！" -ForegroundColor Green
+        Write-Host "  开始: $allStart" -ForegroundColor Green
+        Write-Host "  结束: $allEnd" -ForegroundColor Green
+    }
     Write-Host "========================================" -ForegroundColor Green
     pause
+    # 聚合退出码：任一版本失败即非0（供 -AutoMode / release-menu Invoke-Pack 判断成败）
+    if ($rcCloud -ne 0)   { return [int]$rcCloud }
+    if ($rcOffline -ne 0) { return [int]$rcOffline }
+    return 0
 }
 
 # ============ Pick Version Menu ============
@@ -413,8 +433,8 @@ function Show-PickVersionMenu {
         Write-Host "  [0] 返回主菜单"
         $choice = Read-Host "请选择"
         switch ($choice) {
-            "1" { Build-Cloud -Target $Mode; return }
-            "2" { Build-Offline -Version "dingzhi" -Target $Mode; return }
+            "1" { $null = Build-Cloud -Target $Mode; return }
+            "2" { $null = Build-Offline -Version "dingzhi" -Target $Mode; return }
             "0" { return }
         }
     }
@@ -452,10 +472,31 @@ if ($CollectSideEffectsOnly) {
 
 # 自动模式：跳过菜单直接执行对应打包，全部完成后提示结果并自动退出（不返回菜单）
 if ($AutoMode) {
+    # ★ 2026-08-23 复核修复：携带真实退出码退出（原先恒 exit 0，
+    #   release-menu Invoke-Pack / Invoke-FullFlow 无法感知打包失败）
+    #   防御性取值：返回值若被子进程输出污染成数组，取末元素=真实退出码
     switch ($AutoMode) {
-        "1" { Build-Cloud -Target "all"; Invoke-PackSideEffectCollect -Commit:$AutoCommit; exit 0 }
-        "2" { Build-Offline -Version "dingzhi" -Target "all"; Invoke-PackSideEffectCollect -Commit:$AutoCommit; exit 0 }
-        "3" { Build-All; Invoke-PackSideEffectCollect -Commit:$AutoCommit; exit 0 }
+        "1" {
+            $rc = Build-Cloud -Target "all"
+            if ($rc -is [array]) { $rc = [int]$rc[-1] }
+            if (-not $rc) { $rc = 0 }
+            Invoke-PackSideEffectCollect -Commit:$AutoCommit
+            exit $rc
+        }
+        "2" {
+            $rc = Build-Offline -Version "dingzhi" -Target "all"
+            if ($rc -is [array]) { $rc = [int]$rc[-1] }
+            if (-not $rc) { $rc = 0 }
+            Invoke-PackSideEffectCollect -Commit:$AutoCommit
+            exit $rc
+        }
+        "3" {
+            $rc = Build-All
+            if ($rc -is [array]) { $rc = [int]$rc[-1] }
+            if (-not $rc) { $rc = 0 }
+            Invoke-PackSideEffectCollect -Commit:$AutoCommit
+            exit $rc
+        }
         default {
             Write-Host "[ERROR] 无效自动模式: $AutoMode（应为 1=云端 2=本地 3=全部）" -ForegroundColor Red
             exit 1
@@ -492,9 +533,9 @@ while ($true) {
     Write-Host "--------------------------------------------"
     $choice = Read-Host "请选择 [0-7]"
     switch ($choice) {
-        "1" { Build-Cloud -Target "all"; Invoke-PackSideEffectCollect -Commit:$AutoCommit }
-        "2" { Build-Offline -Version "dingzhi" -Target "all"; Invoke-PackSideEffectCollect -Commit:$AutoCommit }
-        "3" { Build-All; Invoke-PackSideEffectCollect -Commit:$AutoCommit }
+        "1" { $null = Build-Cloud -Target "all"; Invoke-PackSideEffectCollect -Commit:$AutoCommit }
+        "2" { $null = Build-Offline -Version "dingzhi" -Target "all"; Invoke-PackSideEffectCollect -Commit:$AutoCommit }
+        "3" { $null = Build-All; Invoke-PackSideEffectCollect -Commit:$AutoCommit }
         "5" { Show-PickVersionMenu -Mode "desktop" }
         "6" { Show-PickVersionMenu -Mode "app" }
         "7" { Show-StandaloneUsage }

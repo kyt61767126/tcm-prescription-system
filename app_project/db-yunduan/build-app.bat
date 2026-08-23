@@ -68,8 +68,7 @@ if defined SKIP_CONFIG (
     powershell -ExecutionPolicy Bypass -File "%~dp0edit-config.ps1" -AutoConfirm
     if errorlevel 1 (
         powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] edit-config.ps1 execution failed, aborting build'"
-        if not defined NO_PAUSE pause
-        exit /b 1
+        goto build_fail
     )
 )
 echo.
@@ -87,16 +86,14 @@ echo [1/10] Check environment (JDK/Gradle/signing/capacitor)...
 if defined JAVA_HOME (
     if not exist "%JAVA_HOME%\bin\java.exe" (
         echo [ERROR] JAVA_HOME points to invalid path: %JAVA_HOME%
-        if not defined NO_PAUSE pause
-        exit /b 1
+        goto build_fail
     )
     echo       JAVA_HOME: %JAVA_HOME%
 ) else (
     java -version >nul 2>&1
     if errorlevel 1 (
         echo [ERROR] Java not found. Install JDK 17+ and set JAVA_HOME or add java to PATH
-        if not defined NO_PAUSE pause
-        exit /b 1
+        goto build_fail
     )
     echo       Java: found in PATH
 )
@@ -133,8 +130,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "%CLOUD_DIR%\..\..\tools\gen
 if errorlevel 1 (
     if defined STRICT_MODE (
         echo   [ERROR] 严格模式签名哈希刷新失败，终止打包（防止签名哈希不匹配被拦截）
-        if not defined NO_PAUSE pause
-        exit /b 1
+        goto build_fail
     )
     echo   [WARN] 签名哈希刷新失败，使用当前已编译哈希继续（不影响构建）
 )
@@ -303,10 +299,22 @@ REM   2) APK 实际证书 SHA-256 必须 == SecurityGuard.java 注入的 EXPECTE
 REM      （防哈希漂移：注入后 keystore 变更/签名配置错误时，运行时签名校验会拒绝启动，
 REM        打包期提前拦截，绝不让"启动即闪退"的 APK 流出）
 echo Verifying APK signature (v2/v3 + cert hash consistency)...
+REM ★ 2026-08-23 复核修复：apksigner 发现链（本机 ANDROID_HOME 未设置，原单一来源
+REM   发现恒失败→签名验证被静默跳过，防破解终验成死代码）
+REM   顺序: ANDROID_HOME → ANDROID_SDK_ROOT → local.properties(sdk.dir, gradle实际所用) → C:\Android\Sdk 兜底
 set "APKSIGNER="
-if exist "%ANDROID_HOME%\build-tools" (
-    for /f "delims=" %%d in ('dir /b /ad "%ANDROID_HOME%\build-tools" ^| sort /r') do (
-        if not defined APKSIGNER if exist "%ANDROID_HOME%\build-tools\%%d\apksigner.bat" set "APKSIGNER=%ANDROID_HOME%\build-tools\%%d\apksigner.bat"
+set "SDK_ROOT="
+set "SDK_RAW="
+set "SDK_CAND="
+if defined ANDROID_HOME if exist "%ANDROID_HOME%\build-tools" set "SDK_ROOT=%ANDROID_HOME%"
+if not defined SDK_ROOT if defined ANDROID_SDK_ROOT if exist "%ANDROID_SDK_ROOT%\build-tools" set "SDK_ROOT=%ANDROID_SDK_ROOT%"
+if not defined SDK_ROOT if exist "local.properties" for /f "usebackq tokens=2 delims==" %%s in (`findstr /b /i "sdk.dir=" local.properties 2^>nul`) do set "SDK_RAW=%%s"
+if defined SDK_RAW set "SDK_CAND=%SDK_RAW:\\=\%"
+if defined SDK_CAND if exist "%SDK_CAND%\build-tools" set "SDK_ROOT=%SDK_CAND%"
+if not defined SDK_ROOT if exist "C:\Android\Sdk\build-tools" set "SDK_ROOT=C:\Android\Sdk"
+if defined SDK_ROOT (
+    for /f "delims=" %%d in ('dir /b /ad "%SDK_ROOT%\build-tools" ^| sort /r') do (
+        if not defined APKSIGNER if exist "%SDK_ROOT%\build-tools\%%d\apksigner.bat" set "APKSIGNER=%SDK_ROOT%\build-tools\%%d\apksigner.bat"
     )
 )
 if defined APKSIGNER (
@@ -316,20 +324,18 @@ if defined APKSIGNER (
         type "!SIGN_OUT!"
         echo [ERROR] APK signature verification failed!
         del "!SIGN_OUT!" 2>nul
-        if not defined NO_PAUSE pause
-        exit /b 1
+        goto build_fail
     )
     findstr /i "verified warning error" "!SIGN_OUT!"
     del "!SIGN_OUT!" 2>nul
     powershell -NoProfile -ExecutionPolicy Bypass -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; $out = & '%APKSIGNER%' verify --print-certs '%APK_FILE%' 2>&1 | Out-String; if($out -notmatch 'certificate SHA-256 digest:\s*([0-9a-fA-F:]+)'){ Write-Host '[ERROR] Cannot extract APK cert SHA-256 from apksigner output'; exit 1 }; $apkHash = ($matches[1] -replace ':','').ToLower(); $guard = Get-Content '%CLOUD_DIR%\cloud_app\app\src\main\java\com\tcm\prescription\SecurityGuard.java' -Raw -Encoding UTF8; $injected=''; if($guard -match 'EXPECTED_SIGN_HASH\s*=\s*\x22([0-9a-fA-F]{64})\x22'){ $injected=$matches[1].ToLower() }; if(-not $injected){ Write-Host '[ERROR] EXPECTED_SIGN_HASH not found in SecurityGuard.java'; exit 1 }; if($apkHash -ne $injected){ Write-Host ('[ERROR] Cert hash mismatch! APK='+$apkHash); Write-Host ('       Injected='+$injected); Write-Host '       APK will self-exit at runtime (signature check). Aborting build.'; exit 1 }; Write-Host ('[OK] APK cert SHA-256 == SecurityGuard.EXPECTED_SIGN_HASH ('+$apkHash.Substring(0,16)+'...)')"
     if errorlevel 1 (
         echo [ERROR] APK certificate hash consistency check failed!
-        if not defined NO_PAUSE pause
-        exit /b 1
+        goto build_fail
     )
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] APK signature verification passed (v2/v3 + cert hash)'"
 ) else (
-    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] apksigner not found, skipping signature verification'"
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] apksigner not found (ANDROID_HOME / ANDROID_SDK_ROOT / local.properties sdk.dir / C:\Android\Sdk all failed), skipping signature verification'"
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Set ANDROID_HOME to enable signature verification'"
 )
 echo.
@@ -396,3 +402,12 @@ endlocal
 REM ★ [BUILD-LOCK 2026-08-23] Release global build mutex
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\tools\build-lock.ps1" release -LockPath "%~dp0..\..\.build.lock" -Owner "cloud-app"
 exit /b 0
+
+REM ★ 2026-08-23 复核修复：cmd 已知怪癖——双层嵌套块内 exit /b 在被 cmd /c 直调时丢失进程退出码
+REM   （实测返回0），release-menu 直调本脚本时构建失败会被误判成功。嵌套失败路径统一 goto 本标签，
+REM   在顶层上下文退出保证退出码正确传播；同时释放构建锁（防失败构建残留锁阻塞下次构建）。
+:build_fail
+if not defined NO_PAUSE pause
+endlocal
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\tools\build-lock.ps1" release -LockPath "%~dp0..\..\.build.lock" -Owner "cloud-app"
+exit /b 1
