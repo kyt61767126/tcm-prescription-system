@@ -946,6 +946,15 @@
 - **用户确认**：登录成功后登录框快速关闭进入操作界面为正常行为，无需延迟关闭。
 - **生效方式**：双端桌面版均需重新 build.bat 打包 exe 重装；云端网页版/APP 不受影响（未改 public/）。
 
+### 2.76 【一键打包dist时间戳未更新 + 增量检测误判 + git幻影改动】（提交 9033aa0c，2026-08-24）
+- **用户现象**：一键打包完成离线/云端桌面后，dist 仍显示老打包时间。
+- **排查关键 = 时间线对齐**：`git log --format="%h %ci %s"` 拿提交时刻，与 `dist\*.exe` 的 LastWriteTime 对比——产物时间 > 源码提交时间即包含该优化。本例：11:11 登录框提交 → 离线 1.0.102 (11:18) ✓ → 云端 1.2.138 由 AI 补打 (11:51) ✓。
+- **增量检测双误判修复（build-skip.ps1）**：①APP 端 sources 含 desktop 全目录，electron 主进程/登录窗改动被误判为 APP 需重打（浪费）→ 新增 `excludes=@('.../desktop/electron')`；②云端桌面那次漏打的根因是构建链未实际执行，已通过直接运行 `db-yunduan/pack-desktop.bat` 补打并验证。
+- **验收门死锁修复（pack-gate.ps1 P3）**：并行会话给 .bat 引入 LF 行尾 → 门禁 [P3] 阻断 → 修 bat → 再跑门禁 → 又阻断（改文件的 Edit 工具再剥行尾）死循环。修复：LF 行尾改【自动修复】（孤立 0x0A 前插 0x0D 字节级确定性修复）而非阻断。
+- **git 幻影改动识别与消除**：全局 `core.autocrlf=true` 与仓库 `.gitattributes` eol=crlf 冲突，5 个 .bat 永久显示 `M` 但 `git diff --ignore-cr-at-eol` 内容零差异。消除：`git add --renormalize <files>`（renormalize 后与 HEAD 一致则 status 自动清空，无需提交）。
+- **验证**：pack-gate preflight 4/4 通过（ps1语法34/BOM34/bat CRLF23/编码67 OK）。
+- **生效方式**：纯构建工具链变更，四端均无需重新打包/重装；下次一键打包自动生效。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
