@@ -151,13 +151,29 @@ if ($Check) {
 }
 
 if ($Record) {
-    # 安全约束：只允许在"源码干净"时记录基线——防止把"源码有未提交改动"的状态固化成基线导致后续漏打
+    # 安全约束1：只允许在"源码干净"时记录基线——防止把"源码有未提交改动"的状态固化成基线导致后续漏打
     $dirty = Get-DirtySources $def.sources
     if ($dirty.Count -gt 0) {
         Write-Host "[WARN] $Unit 工作区有未提交源码改动，拒绝记录基线(请先提交):"
         foreach ($d in ($dirty | Select-Object -First 8)) { Write-Host "        $d" }
         exit 1
     }
+    # 安全约束2：产物新鲜度防线——产物文件修改时间必须 >= 源路径最后一次提交时间，
+    #   否则说明产物是旧源码构建的（比最新源码还老），记录该基线会导致下次误 SKIP 发旧版本
+    try {
+        $lastCommit = & git -C $root log -1 --format=%ci -- @($def.sources) 2>$null
+        if ($LASTEXITCODE -eq 0 -and $lastCommit) {
+            $lastCommitTime = [DateTime]::Parse(($lastCommit | Select-Object -First 1).ToString().Trim())
+            $artifactPath = if ($def.kind -eq 'apk') { Join-Path $root $def.artifact } else { Join-Path $root $def.artifactDir }
+            $artifactTime = (Get-Item -LiteralPath $artifactPath -ErrorAction Stop).LastWriteTime
+            # 容差30分钟：副作用AutoCommit(versionCode bump等)提交时间晚于产物生成时间（全量打包收纳需时），
+            # 旧产物通常早数小时/数天，30分钟容差既放过正常流程又能拦住过期产物
+            if ($artifactTime -lt $lastCommitTime.AddMinutes(-30)) {
+                Write-Host "[WARN] $Unit 产物($($artifactTime.ToString('MM-dd HH:mm')))早于源码最后提交($($lastCommitTime.ToString('MM-dd HH:mm')))，产物疑似过期，拒绝记录基线(请重新打包)"
+                exit 1
+            }
+        }
+    } catch { Write-Host "[WARN] $Unit 产物新鲜度检查异常(跳过该检查继续记录): $_" }
     $fp = Get-ArtifactFingerprint $def
     if (-not $fp) { Write-Host "[ERROR] $Unit 产物缺失，拒绝记录基线"; exit 1 }
     $head = Get-HeadCommit
