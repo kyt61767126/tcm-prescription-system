@@ -45,6 +45,7 @@ $unitDefs = @{
 #   config.json      : edit-config.ps1 每次打包同步默认配置到 Capacitor/桌面
 #   build.gradle     : APP 打包 versionCode/versionName 递增（SideEffectCollect AutoCommit）
 #   package.json     : 桌面打包 version 递增（SideEffectCollect autoPatterns）
+#   build-meta.json  : 桌面打包自动写入版本+构建时间戳（2026-08-24：曾因漏排除导致云端基线拒绝记录）
 #   hash-manifest.json / public/downloads/ : 发布阶段产物，非源码
 #   注意：手改 build.gradle/package.json 后请删除 .build-cache/build-state.json 强制全量重打
 $sideEffectPatterns = @(
@@ -55,6 +56,7 @@ $sideEffectPatterns = @(
     '^app_project/db-offline/app(/app)?/build\.gradle$',
     '^app_project/db-yunduan/cloud_app(/app)?/build\.gradle$',
     '^app_project/db-(offline/desktop|yunduan/cloud_desktop)/package\.json$',
+    '^app_project/db-(offline/desktop|yunduan/cloud_desktop)/build-meta\.json$',
     '^public/hash-manifest\.json$',
     '^public/downloads/'
 )
