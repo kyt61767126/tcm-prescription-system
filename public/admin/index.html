@@ -3729,6 +3729,7 @@ function renderUsersTable() {
               '<button class="btn btn-sm" onclick="toggleUserStatus(\'' + escapeHtml(u.username) + '\',' + (u.disabled !== true) + ')">' + (u.disabled === true ? '✅ 启用' : '🚫 停用') + '</button>' +
               '<button class="btn btn-sm" onclick="cycleUserRole(\'' + escapeHtml(u.username) + '\')">🔁 角色</button>' +
               '<button class="btn btn-sm" onclick="openDeviceQuotaModal(\'' + escapeHtml(u.username) + '\')">📱 设备配额</button>' +
+              '<button class="btn btn-sm btn-danger" onclick="deleteUserAccount(\'' + escapeHtml(u.username) + '\')">🗑 删除</button>' +
               '</div>';
         return '<tr' + (u.disabled === true ? ' style="opacity:0.6;"' : '') + '>' +
             '<td class="code">' + escapeHtml(u.username) + '</td>' +
@@ -3899,6 +3900,36 @@ async function toggleUserStatus(username, disable) {
             loadUsersList();
         } else {
             showAlert('userAlert', data.error || '操作失败', 'error');
+        }
+    } catch (e) {
+        showAlert('userAlert', '网络错误：' + e.message, 'error');
+    }
+}
+
+// ---- ★ 2026-08-24 删除用户（后端 POST /users?action=delete-user，云端处方数据保留）----
+async function deleteUserAccount(username) {
+    const u = _usersCache.find(x => x.username === username);
+    if (!u) { showAlert('userAlert', '用户数据未加载，请刷新后重试', 'error'); return; }
+    // 双重确认（后端另有保护：不可删自己/平台管理员/诊所最后一名管理员）
+    if (!confirm('确定删除账号「' + username + '」（' + (u.name || '-') + (u.clinicName ? ' · ' + u.clinicName : '') + '）？\n\n删除后该账号立即下线且无法登录；其云端处方数据保留。')) return;
+    if (!confirm('⚠ 最后确认：删除操作不可恢复，是否继续？')) return;
+    try {
+        const res = await fetch(API_BASE + '/users?action=delete-user', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ username })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showAlert('userAlert', data.message || '用户已删除', 'success');
+            loadUsersList();
+        } else {
+            if (res.status === 401) {
+                showAlert('mainAlert', '登录已过期，请重新登录', 'error');
+                setTimeout(doLogout, 1500);
+            } else {
+                showAlert('userAlert', data.error || '删除失败', 'error');
+            }
         }
     } catch (e) {
         showAlert('userAlert', '网络错误：' + e.message, 'error');
