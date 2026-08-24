@@ -1484,11 +1484,17 @@ let currentUser = null;
                 }
                 
                 const users = getUsers();
-                // ★ 标准版：允许用 CONFIG.doctorName（本能堂）登录，实际匹配第一个用户
+                // ★ 标准版：允许用 CONFIG.doctorName（医师姓名）登录，实际匹配激活账号
                 const isPersonal = (CONFIG.edition === 'personal');
                 let loginUsername = username;
                 if (isPersonal && CONFIG.doctorName && username === CONFIG.doctorName) {
-                    loginUsername = users[0] ? users[0].username : 'admin';
+                    // ★ 2026-08-24 修复：旧逻辑固定匹配 users[0]，但激活账号是 addLocalActivationUser
+                    //   push 到表尾的（users[0]=内置默认admin，出厂密码=admin），用户用自设密码
+                    //   （如 admin123）登录必然失败。改为优先映射"实际激活账号"：
+                    //   ① 有 phone 字段的账号（管理员激活必写 phone）→ ② 非内置 admin 的账号 → ③ users[0]
+                    const activated = users.find(u => u && u.phone && String(u.phone).trim() !== '')
+                                   || users.find(u => u && u.username !== 'admin');
+                    loginUsername = activated ? activated.username : (users[0] ? users[0].username : 'admin');
                 }
                 // 使用 AuthCore.verifyPassword 支持 PBKDF2 + 旧 SHA-256 + 明文兼容
                 // ★ 支持手机号/用户名双模式登录：先按 username 查找，再按 phone 字段查找
