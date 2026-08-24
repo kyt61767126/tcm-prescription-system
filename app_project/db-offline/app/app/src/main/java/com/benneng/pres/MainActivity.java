@@ -1,10 +1,12 @@
 package com.benneng.pres;
 
 import android.Manifest;
+import android.content.ContentUris;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Build;
@@ -47,6 +49,7 @@ import com.getcapacitor.BridgeActivity;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
@@ -58,6 +61,9 @@ public class MainActivity extends BridgeActivity {
     private static final String TAG = "TCM_Prescription";
     // 离线APP：本地 assets 页面路径
     private static final String LOCAL_ASSET_URL = "file:///android_asset/public/index.html";
+    // ★ 2026-08-24 重装数据安全：备份文件公共目录名（Downloads/中医处方系统/，
+    //   卸载APP不清除公共下载目录，重装后凭此目录备份可恢复全部数据）
+    private static final String BACKUP_SUB_DIR = "中医处方系统";
     private static final int REQ_CAMERA = 1003;
     private static final int REQ_STORAGE = 1001;
     // ★ WebView 就绪轮询（参考云端APP）：BridgeActivity 初始化时 WebView 可能未就绪
@@ -650,7 +656,9 @@ public class MainActivity extends BridgeActivity {
             "    getUserData: function(key) { return new Promise(function(resolve){ try { var v = localStorage.getItem(key); resolve(v ? JSON.parse(v) : null); } catch(e){ resolve(null); } }); }," +
             "    loginSuccess: function(user) { return new Promise(function(resolve){ try { localStorage.setItem('currentUser', JSON.stringify(user)); resolve(true); } catch(e){ resolve(false); } }); }," +
             "    getCurrentUser: function() { return new Promise(function(resolve){ try { var v = localStorage.getItem('currentUser'); resolve(v ? JSON.parse(v) : null); } catch(e){ resolve(null); } }); }," +
-            "    saveBackupFile: function(filename, content) { return callNativeAsync('saveBackupFile', {jsonStr: content, fileName: filename}); }," +
+            "    saveBackupFile: function(jsonStr, fileName) { return callNativeAsync('saveBackupFile', {jsonStr: jsonStr, fileName: fileName}); }," +
+            "    listBackupFiles: function() { return callNativeAsync('listBackupFiles', {}); }," +
+            "    readBackupFile: function(fileName) { return callNativeAsync('readBackupFile', {fileName: fileName}); }," +
             "    readFileAsBase64: function(filePath) {" +
             "      return new Promise(function(resolve, reject){" +
             "        try {" +
@@ -1028,6 +1036,11 @@ public class MainActivity extends BridgeActivity {
                     case "saveBackupFile":
                         return saveBackupFile(args.optString("jsonStr", ""),
                                 args.optString("fileName", "")).toString();
+                    // ★ 2026-08-24 重装数据安全：列出/读取公共下载目录的备份文件（卸载重装后恢复数据）
+                    case "listBackupFiles":
+                        return listBackupFiles().toString();
+                    case "readBackupFile":
+                        return readBackupFile(args.optString("fileName", "")).toString();
                     case "findMediaFiles":
                         return findMediaFiles(args.optString("patientName", ""),
                                 args.optString("prescriptionNo", ""),
@@ -1501,6 +1514,124 @@ public class MainActivity extends BridgeActivity {
                 }
             } catch (Exception e) {
                 Log.e(TAG, "saveBackupFile 失败", e);
+                return fail(e.getMessage());
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // ★ 2026-08-24 重装数据安全：列出公共 Downloads/中医处方系统/ 下的备份文件
+        //   （按修改时间倒序，最多 20 个；APP 卸载重装后本地数据清空，
+        //    凭每日自动备份到公共目录的文件可完整恢复）
+        // ------------------------------------------------------------------
+        private JSONObject listBackupFiles() {
+            try {
+                java.util.List<JSONObject> files = new java.util.ArrayList<>();
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    String selection = MediaStore.Downloads.RELATIVE_PATH + " LIKE ?";
+                    String[] selectionArgs = new String[]{
+                            Environment.DIRECTORY_DOWNLOADS + "/" + BACKUP_SUB_DIR + "/%"};
+                    String sortOrder = MediaStore.Downloads.DATE_MODIFIED + " DESC";
+                    try (Cursor cursor = getContentResolver().query(
+                            MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                            new String[]{
+                                    MediaStore.Downloads.DISPLAY_NAME,
+                                    MediaStore.Downloads.DATE_MODIFIED,
+                                    MediaStore.Downloads.SIZE},
+                            selection, selectionArgs, sortOrder)) {
+                        if (cursor != null) {
+                            int shown = 0;
+                            while (cursor.moveToNext() && shown < 20) {
+                                String name = cursor.getString(0);
+                                if (name == null || !name.endsWith(".json")) continue;
+                                JSONObject f = new JSONObject();
+                                f.put("fileName", name);
+                                f.put("lastModified", cursor.getLong(1) * 1000L);
+                                f.put("size", cursor.getLong(2));
+                                files.add(f);
+                                shown++;
+                            }
+                        }
+                    }
+                } else {
+                    File dir = new File(Environment.getExternalStoragePublicDirectory(
+                            Environment.DIRECTORY_DOWNLOADS), BACKUP_SUB_DIR);
+                    File[] list = dir.listFiles();
+                    if (list != null) {
+                        java.util.Arrays.sort(list, (a, b) -> Long.compare(b.lastModified(), a.lastModified()));
+                        for (int i = 0; i < list.length && files.size() < 20; i++) {
+                            File f = list[i];
+                            if (!f.isFile() || !f.getName().endsWith(".json")) continue;
+                            JSONObject o = new JSONObject();
+                            o.put("fileName", f.getName());
+                            o.put("lastModified", f.lastModified());
+                            o.put("size", f.length());
+                            files.add(o);
+                        }
+                    }
+                }
+                JSONObject r = new JSONObject();
+                r.put("success", true);
+                r.put("files", new JSONArray(files));
+                return r;
+            } catch (Exception e) {
+                Log.e(TAG, "listBackupFiles 失败", e);
+                return fail(e.getMessage());
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // ★ 2026-08-24 重装数据安全：读取指定备份文件内容
+        //   （白名单：仅 Downloads/中医处方系统/ 下 .json，防任意文件读取）
+        // ------------------------------------------------------------------
+        private JSONObject readBackupFile(String fileName) {
+            try {
+                String safeName = sanitize(fileName);
+                if (!safeName.endsWith(".json") || safeName.contains("/")) {
+                    return fail("非法备份文件名");
+                }
+                byte[] content;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    String selection = MediaStore.Downloads.RELATIVE_PATH + " LIKE ? AND "
+                            + MediaStore.Downloads.DISPLAY_NAME + " = ?";
+                    String[] args = new String[]{
+                            Environment.DIRECTORY_DOWNLOADS + "/" + BACKUP_SUB_DIR + "/%", safeName};
+                    try (Cursor cursor = getContentResolver().query(
+                            MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                            new String[]{MediaStore.Downloads._ID},
+                            selection, args, null)) {
+                        if (cursor == null || !cursor.moveToFirst()) {
+                            return fail("备份文件不存在: " + safeName);
+                        }
+                        Uri uri = ContentUris.withAppendedId(
+                                MediaStore.Downloads.EXTERNAL_CONTENT_URI, cursor.getLong(0));
+                        try (InputStream is = getContentResolver().openInputStream(uri)) {
+                            if (is == null) return fail("无法打开备份文件");
+                            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                            byte[] buf = new byte[8192];
+                            int len;
+                            while ((len = is.read(buf)) > 0) baos.write(buf, 0, len);
+                            content = baos.toByteArray();
+                        }
+                    }
+                } else {
+                    File dir = new File(Environment.getExternalStoragePublicDirectory(
+                            Environment.DIRECTORY_DOWNLOADS), BACKUP_SUB_DIR);
+                    File file = new File(dir, safeName);
+                    if (!file.exists()) return fail("备份文件不存在: " + safeName);
+                    try (InputStream fis = new java.io.FileInputStream(file)) {
+                        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                        byte[] buf = new byte[8192];
+                        int len;
+                        while ((len = fis.read(buf)) > 0) baos.write(buf, 0, len);
+                        content = baos.toByteArray();
+                    }
+                }
+                JSONObject r = new JSONObject();
+                r.put("success", true);
+                r.put("json", new String(content, "UTF-8"));
+                return r;
+            } catch (Exception e) {
+                Log.e(TAG, "readBackupFile 失败", e);
                 return fail(e.getMessage());
             }
         }

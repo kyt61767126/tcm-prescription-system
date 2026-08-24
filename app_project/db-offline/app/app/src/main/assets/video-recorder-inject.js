@@ -145,6 +145,23 @@
                     } catch (e) { resolve({ success: false, error: String(e) }); }
                 });
             },
+            // ★ 2026-08-24 重装数据安全：列出/读取公共下载目录备份（卸载重装后恢复数据）
+            listBackupFiles: function () {
+                return new Promise(function (resolve) {
+                    try {
+                        var r = callNative('listBackupFiles', '{}');
+                        resolve(r);
+                    } catch (e) { resolve({ success: false, error: String(e), files: [] }); }
+                });
+            },
+            readBackupFile: function (fileName) {
+                return new Promise(function (resolve) {
+                    try {
+                        var r = callNative('readBackupFile', JSON.stringify({ fileName: fileName }));
+                        resolve(r);
+                    } catch (e) { resolve({ success: false, error: String(e) }); }
+                });
+            },
             savePrescriptionImage: function (imageData, fileName) {
                 return new Promise(function (resolve) {
                     try {
@@ -351,6 +368,9 @@
             oldAPI.deleteFile = newAPI.deleteFile;
             oldAPI.renameMediaFiles = newAPI.renameMediaFiles;
             oldAPI.getVideoDirectory = newAPI.getVideoDirectory;
+            oldAPI.saveBackupFile = newAPI.saveBackupFile;
+            oldAPI.listBackupFiles = newAPI.listBackupFiles;
+            oldAPI.readBackupFile = newAPI.readBackupFile;
             oldAPI.__videoRecorderEnhanced = true;
             // 恢复旧对象为 electronAPI
             window.electronAPI = oldAPI;
