@@ -975,6 +975,16 @@
 - **验证**：内联脚本 3 块语法 OK；check-interface 6/6 OK；pack-app.bat 严格模式打包通过（预检 7 OK/0 FAIL/0 WARN，签名 v2/v3+cert hash 通过，APK 内 index.html 内容哈希校验一致，APK 2.7MB 输出 db-offline 根目录）。
 - **生效方式**：离线APP=重装新版 惠康中医-本地.apk 后，重装/换机场景在 统计分析→数据管理→恢复数据 还原；其它三端无需任何操作（本就安全）。
 
+### 2.80 【中断发布的续作 SOP】v2026.08.24 二次发布（提交 70c1c2cf，2026-08-24）
+- **背景**：用户在一键发布 shell 中误触鼠标右键粘贴剪贴板日志导致发布中断。产物已打好（云端桌面1.2.141 + 离线桌面1.0.104 + 云端APP vCode220 + 离线APP vCode153），但未上传。
+- **续作三步（AI 可直接代跑，等价于一键发布菜单的"全部版本+全部产物"）**：
+  1. `git add` 全部显示 modified 的 bat/ps1（多为 stat 缓存幻影，add 后即清；有实改则作副作用收纳提交）——必须做，否则 publish 内 `git pull --rebase` 因脏工作区失败；
+  2. `node tools/auto-update-downloads.js all --confirm`：把各 gradle 输出的新 APK 复制进 public/downloads/ 并更新 hash-manifest（不加 --push）；
+  3. `node tools/publish-release.js v2026.08.24 --confirm --push`：内置合规门禁→上传 6 产物→改写 latest.json→commit+push 触发 Cloudflare 部署。
+- **当日二次发布语义**：versionTag 同日已存在（今晨已发 v2026.08.24）→ 复用同一 Release，同名 asset（APK、latest.json 指向的 exe）覆盖为新版本，不同版本号 exe 作为历史资产并存，无需新建 tag。
+- **验证清单**：`gh release view v2026.08.24 --json assets` 出现新版本号资产；线上 `/updates/cloud/latest.json`=1.2.141、`/updates/local/latest.json`=1.0.104；`/downloads/*.apk` HTTP 200。
+- **生效方式**：云端网页版/URL加载APP 自动生效；云端桌面版=下载重装 Setup 1.2.141（旧版启动会自动弹更新横幅）；离线桌面版=下载重装 1.0.104；两端 APP=官网下载重装（云端 vCode220、本地 vCode153）。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
