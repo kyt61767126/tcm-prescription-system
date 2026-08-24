@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Edit clinic configuration for cloud TCM APP/Desktop builds.
 .DESCRIPTION
@@ -191,8 +191,16 @@ function Sync-ConfigToCapacitor {
     $destPath = Join-Path $capPublicDir 'config.json'
     try {
         $srcContent = [System.IO.File]::ReadAllText($configPath, $utf8NoBom)
-        [System.IO.File]::WriteAllText($destPath, $srcContent, $utf8NoBom)
-        Write-Host "  [OK] config.json synced to Capacitor public/" -ForegroundColor Green
+        # ★ 2026-08-24 幂等同步：内容一致时不写文件（避免每次打包都产生无意义 dirty diff，
+        #   配合 tools/build-skip.ps1 打包增量检测：config.json 无真实变化 → 工作区干净 → 可跳过重复打包）
+        $dstContent = $null
+        if (Test-Path $destPath) { $dstContent = [System.IO.File]::ReadAllText($destPath, $utf8NoBom) }
+        if ($dstContent -eq $srcContent) {
+            Write-Host "  [SKIP] config.json 已一致，无需同步" -ForegroundColor DarkGray
+        } else {
+            [System.IO.File]::WriteAllText($destPath, $srcContent, $utf8NoBom)
+            Write-Host "  [OK] config.json synced to Capacitor public/" -ForegroundColor Green
+        }
     } catch {
         Write-Host "  [WARN] Failed to sync config.json to Capacitor: $_" -ForegroundColor Yellow
     }

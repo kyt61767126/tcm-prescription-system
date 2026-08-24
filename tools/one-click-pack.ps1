@@ -1,4 +1,4 @@
-﻿# one-click-pack.ps1 - One-click packaging tool for all 4 versions
+# one-click-pack.ps1 - One-click packaging tool for all 4 versions
 # All Chinese menu logic moved here from 一键打包.bat to avoid cmd GBK encoding issues
 # .ps1 with BOM can correctly handle UTF-8 Chinese display
 param(
@@ -33,6 +33,30 @@ if ($probe) { $script:RootDir = $probe }
 
 # Set NO_PAUSE=1 so child build.bat / build-app.bat don't pause at end
 $env:NO_PAUSE = '1'
+
+# ★ 2026-08-24 打包增量检测（tools/build-skip.ps1）：
+#   本次会话实际执行了打包的单元（SKIP 的不计入），副作用 AutoCommit 后统一记录基线
+$script:BuiltUnits = @()
+# 检查某端是否可跳过打包（指纹=git HEAD+源码干净+产物哈希 三者一致 → true）
+function Test-BuildSkip([string]$unit) {
+    if ($env:NO_BUILD_SKIP -eq '1') { return $false }
+    $skipTool = Join-Path $PSScriptRoot 'build-skip.ps1'
+    if (-not (Test-Path $skipTool)) { return $false }
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $skipTool -Check -Unit $unit 2>&1 | ForEach-Object { Write-Host "  $_" }
+    return ($LASTEXITCODE -eq 0)
+}
+# 记录本次已打包单元的基线（供下次 Check 跳过）。必须在"打包成功+副作用AutoCommit后"调用（HEAD 才稳定）
+function Record-BuiltUnits {
+    if (-not $script:BuiltUnits -or $script:BuiltUnits.Count -eq 0) { return }
+    $skipTool = Join-Path $PSScriptRoot 'build-skip.ps1'
+    if (-not (Test-Path $skipTool)) { return }
+    Write-Host ""
+    Write-Host "--- 打包增量基线记录 ---" -ForegroundColor Cyan
+    foreach ($u in $script:BuiltUnits) {
+        & powershell -NoProfile -ExecutionPolicy Bypass -File $skipTool -Record -Unit $u 2>&1 | ForEach-Object { Write-Host "  $_" }
+    }
+    $script:BuiltUnits = @()
+}
 
 # ★ [SELF-HEAL 2026-08-23] Fix LF line endings in ALL downstream build .bat files
 # BEFORE invoking them. This script calls build-pack.bat directly (bypassing
@@ -249,12 +273,18 @@ function Build-Cloud {
         } else {
             Write-Host "[Step 1/1] 打包云端桌面 exe..." -ForegroundColor Yellow
         }
-        $rc = Invoke-BatFile "$script:RootDir\app_project\db-yunduan\pack-desktop.bat" "$script:RootDir\app_project\db-yunduan" "cloud desktop build"
-        if ($rc -ne 0) {
-            Write-Host ""
-            Write-Host "[ERROR] 云端桌面打包失败，退出码: $rc" -ForegroundColor Red
-            pause
-            return $rc
+        # ★ 2026-08-24 增量检测：源码与产物指纹一致则跳过重复打包
+        if (Test-BuildSkip 'cloud-desktop') {
+            Write-Host "  [SKIP] 云端桌面产物已是最新，跳过打包" -ForegroundColor Green
+        } else {
+            $rc = Invoke-BatFile "$script:RootDir\app_project\db-yunduan\pack-desktop.bat" "$script:RootDir\app_project\db-yunduan" "cloud desktop build"
+            if ($rc -ne 0) {
+                Write-Host ""
+                Write-Host "[ERROR] 云端桌面打包失败，退出码: $rc" -ForegroundColor Red
+                pause
+                return $rc
+            }
+            $script:BuiltUnits += 'cloud-desktop'
         }
     }
 
@@ -265,12 +295,18 @@ function Build-Cloud {
         } else {
             Write-Host "[Step 2/2] 打包云端手机 APP (严格模式)..." -ForegroundColor Yellow
         }
-        $rc = Invoke-BatFile "$script:RootDir\app_project\db-yunduan\build-pack.bat" "$script:RootDir\app_project\db-yunduan" "cloud app build" "app-strict"
-        if ($rc -ne 0) {
-            Write-Host ""
-            Write-Host "[ERROR] 云端APP打包失败，退出码: $rc" -ForegroundColor Red
-            pause
-            return $rc
+        # ★ 2026-08-24 增量检测：源码与产物指纹一致则跳过重复打包
+        if (Test-BuildSkip 'cloud-app') {
+            Write-Host "  [SKIP] 云端APP产物已是最新，跳过打包" -ForegroundColor Green
+        } else {
+            $rc = Invoke-BatFile "$script:RootDir\app_project\db-yunduan\build-pack.bat" "$script:RootDir\app_project\db-yunduan" "cloud app build" "app-strict"
+            if ($rc -ne 0) {
+                Write-Host ""
+                Write-Host "[ERROR] 云端APP打包失败，退出码: $rc" -ForegroundColor Red
+                pause
+                return $rc
+            }
+            $script:BuiltUnits += 'cloud-app'
         }
     }
 
@@ -342,12 +378,18 @@ function Build-Offline {
         } else {
             Write-Host "[Step 1/1] 打包离线$verLabel 桌面 exe..." -ForegroundColor Yellow
         }
-        $rc = Invoke-BatFile "$verDir\pack-desktop.bat" $verDir "offline $verLabel desktop build"
-        if ($rc -ne 0) {
-            Write-Host ""
-            Write-Host "[ERROR] 离线$verLabel 桌面打包失败，退出码: $rc" -ForegroundColor Red
-            pause
-            return $rc
+        # ★ 2026-08-24 增量检测：源码与产物指纹一致则跳过重复打包
+        if (Test-BuildSkip 'local-desktop') {
+            Write-Host "  [SKIP] 本地桌面产物已是最新，跳过打包" -ForegroundColor Green
+        } else {
+            $rc = Invoke-BatFile "$verDir\pack-desktop.bat" $verDir "offline $verLabel desktop build"
+            if ($rc -ne 0) {
+                Write-Host ""
+                Write-Host "[ERROR] 离线$verLabel 桌面打包失败，退出码: $rc" -ForegroundColor Red
+                pause
+                return $rc
+            }
+            $script:BuiltUnits += 'local-desktop'
         }
     }
 
@@ -359,12 +401,18 @@ function Build-Offline {
         } else {
             Write-Host "[Step 2/2] 打包离线${verLabel} 手机 APP (严格模式)..." -ForegroundColor Yellow
         }
-        $rc = Invoke-BatFile "$verDir\build-pack.bat" $verDir "offline $verLabel app build" "app-strict"
-        if ($rc -ne 0) {
-            Write-Host ""
-            Write-Host "[ERROR] 离线$verLabel APP打包失败，退出码: $rc" -ForegroundColor Red
-            pause
-            return $rc
+        # ★ 2026-08-24 增量检测：源码与产物指纹一致则跳过重复打包
+        if (Test-BuildSkip 'local-app') {
+            Write-Host "  [SKIP] 本地APP产物已是最新，跳过打包" -ForegroundColor Green
+        } else {
+            $rc = Invoke-BatFile "$verDir\build-pack.bat" $verDir "offline $verLabel app build" "app-strict"
+            if ($rc -ne 0) {
+                Write-Host ""
+                Write-Host "[ERROR] 离线$verLabel APP打包失败，退出码: $rc" -ForegroundColor Red
+                pause
+                return $rc
+            }
+            $script:BuiltUnits += 'local-app'
         }
     }
 
@@ -444,7 +492,7 @@ function Show-PickVersionMenu {
                     Write-Host "[ERROR] 云端$modeLabel打包失败，退出码: $prc（详见上方日志）" -ForegroundColor Red
                     pause
                 }
-                Invoke-PackSideEffectCollect -Commit:$AutoCommit
+                Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits
                 return
             }
             "2" {
@@ -455,7 +503,7 @@ function Show-PickVersionMenu {
                     Write-Host "[ERROR] 本地$modeLabel打包失败，退出码: $prc（详见上方日志）" -ForegroundColor Red
                     pause
                 }
-                Invoke-PackSideEffectCollect -Commit:$AutoCommit
+                Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits
                 return
             }
             "0" { return }
@@ -489,7 +537,7 @@ $menuStart = Get-TimeStamp
 
 # P1-B: 仅执行打包副作用收纳（预览/测试用，不打包）
 if ($CollectSideEffectsOnly) {
-    Invoke-PackSideEffectCollect -Commit:$AutoCommit -DryRun:$DryRun
+    Invoke-PackSideEffectCollect -Commit:$AutoCommit -DryRun:$DryRun; Record-BuiltUnits
     exit 0
 }
 
@@ -503,21 +551,21 @@ if ($AutoMode) {
             $rc = Build-Cloud -Target "all"
             if ($rc -is [array]) { $rc = [int]$rc[-1] }
             if (-not $rc) { $rc = 0 }
-            Invoke-PackSideEffectCollect -Commit:$AutoCommit
+            Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits
             exit $rc
         }
         "2" {
             $rc = Build-Offline -Version "dingzhi" -Target "all"
             if ($rc -is [array]) { $rc = [int]$rc[-1] }
             if (-not $rc) { $rc = 0 }
-            Invoke-PackSideEffectCollect -Commit:$AutoCommit
+            Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits
             exit $rc
         }
         "3" {
             $rc = Build-All
             if ($rc -is [array]) { $rc = [int]$rc[-1] }
             if (-not $rc) { $rc = 0 }
-            Invoke-PackSideEffectCollect -Commit:$AutoCommit
+            Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits
             exit $rc
         }
         default {
@@ -556,13 +604,13 @@ while ($true) {
     Write-Host "--------------------------------------------"
     $choice = Read-Host "请选择 [0-3, 5-7]"
     switch ($choice) {
-        "1" { $null = Build-Cloud -Target "all"; Invoke-PackSideEffectCollect -Commit:$AutoCommit }
-        "2" { $null = Build-Offline -Version "dingzhi" -Target "all"; Invoke-PackSideEffectCollect -Commit:$AutoCommit }
-        "3" { $null = Build-All; Invoke-PackSideEffectCollect -Commit:$AutoCommit }
+        "1" { $null = Build-Cloud -Target "all"; Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits }
+        "2" { $null = Build-Offline -Version "dingzhi" -Target "all"; Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits }
+        "3" { $null = Build-All; Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits }
         # ★ 2026-08-23 三轮复核修复：[5][6] 单独打包同样产生 versionCode/package.json 副作用，
         #   补 SideEffectCollect 与 [1][2][3] 行为一致（否则单独打包的副作用靠人工提交易遗漏）
-        "5" { Show-PickVersionMenu -Mode "desktop"; Invoke-PackSideEffectCollect -Commit:$AutoCommit }
-        "6" { Show-PickVersionMenu -Mode "app"; Invoke-PackSideEffectCollect -Commit:$AutoCommit }
+        "5" { Show-PickVersionMenu -Mode "desktop"; Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits }
+        "6" { Show-PickVersionMenu -Mode "app"; Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits }
         "7" { Show-StandaloneUsage }
         "0" { exit 0 }
         default { Write-Host "无效选择，请重试" -ForegroundColor Red; Start-Sleep -Seconds 1 }

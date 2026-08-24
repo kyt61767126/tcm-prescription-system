@@ -25,6 +25,12 @@ build_new/
 # 构建互斥锁（tools/build-lock.ps1，运行时产物）
 .build.lock
 
+# 打包增量检测基线（tools/build-skip.ps1，运行时产物，不入库）
+.build-cache/
+
+# tools 临时工作目录（图标处理等一次性脚本遗留）
+tools/_tmp/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

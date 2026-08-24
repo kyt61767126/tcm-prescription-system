@@ -1,4 +1,4 @@
-﻿# release-menu.ps1 - 交互式发布菜单（支持选择单个版本发布）
+# release-menu.ps1 - 交互式发布菜单（支持选择单个版本发布）
 # 用 PowerShell 替代 release-all.bat，避免 .bat 中文 GBK 编码问题
 # 支持选择单个版本（云端/定制/个人 × 桌面/APP/全部）进行发布
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -11,6 +11,28 @@ if (-not (Test-Path "$script:RootDir\tools\publish-release.js")) {
 }
 
 $env:NO_PAUSE = '1'
+
+# ★ 2026-08-24 打包增量检测（tools/build-skip.ps1）：
+#   源码自上次打包后未变化+产物完好 → 跳过重复打包；打包成功且副作用AutoCommit后记录基线
+$script:BuiltUnits = @()
+function Test-BuildSkip([string]$unit) {
+    if ($env:NO_BUILD_SKIP -eq '1') { return $false }
+    $skipTool = Join-Path $PSScriptRoot 'build-skip.ps1'
+    if (-not (Test-Path $skipTool)) { return $false }
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $skipTool -Check -Unit $unit 2>&1 | ForEach-Object { Write-Host "  $_" }
+    return ($LASTEXITCODE -eq 0)
+}
+function Record-BuiltUnits {
+    if (-not $script:BuiltUnits -or $script:BuiltUnits.Count -eq 0) { return }
+    $skipTool = Join-Path $PSScriptRoot 'build-skip.ps1'
+    if (-not (Test-Path $skipTool)) { return }
+    Write-Host ""
+    Write-Host "--- 打包增量基线记录 ---" -ForegroundColor Cyan
+    foreach ($u in $script:BuiltUnits) {
+        & powershell -NoProfile -ExecutionPolicy Bypass -File $skipTool -Record -Unit $u 2>&1 | ForEach-Object { Write-Host "  $_" }
+    }
+    $script:BuiltUnits = @()
+}
 
 # ★ [SELF-HEAL 2026-08-23] Fix LF line endings in ALL downstream build .bat files
 # BEFORE invoking them. This script calls build-app.bat directly (bypassing
@@ -126,11 +148,18 @@ function Invoke-SinglePack {
         Write-Host "[桌面] 打包 $verLabel 桌面 exe..." -ForegroundColor Yellow
         $desktopBat = "$verDir\pack-desktop.bat"
         if (Test-Path $desktopBat) {
-            & cmd /c "$desktopBat" 2>&1 | ForEach-Object { Write-Host $_ }
-            $rc = $LASTEXITCODE
-            if ($rc -ne 0) {
-                Write-Host "[ERROR] $verLabel 桌面打包失败，退出码: $rc" -ForegroundColor Red
-                return $rc
+            # ★ 2026-08-24 增量检测：源码与产物指纹一致则跳过重复打包
+            $skipUnit = if ($Version -eq "cloud") { 'cloud-desktop' } else { 'local-desktop' }
+            if (Test-BuildSkip $skipUnit) {
+                Write-Host "  [SKIP] $verLabel 桌面产物已是最新，跳过打包" -ForegroundColor Green
+            } else {
+                & cmd /c "$desktopBat" 2>&1 | ForEach-Object { Write-Host $_ }
+                $rc = $LASTEXITCODE
+                if ($rc -ne 0) {
+                    Write-Host "[ERROR] $verLabel 桌面打包失败，退出码: $rc" -ForegroundColor Red
+                    return $rc
+                }
+                $script:BuiltUnits += $skipUnit
             }
         } else {
             Write-Host "[WARN] 未找到桌面打包脚本: $desktopBat" -ForegroundColor Yellow
@@ -142,12 +171,19 @@ function Invoke-SinglePack {
         Write-Host "[APP] 打包 $verLabel 手机 APP (严格模式)..." -ForegroundColor Yellow
         $appBat = "$verDir\build-app.bat"
         if (Test-Path $appBat) {
-            # 与 one-click-pack.ps1 的 app-strict 一致，APP 统一走严格模式（签名哈希+Java混淆+签名校验）
-            & cmd /c "$appBat standard" 2>&1 | ForEach-Object { Write-Host $_ }
-            $rc = $LASTEXITCODE
-            if ($rc -ne 0) {
-                Write-Host "[ERROR] $verLabel APP打包失败，退出码: $rc" -ForegroundColor Red
-                return $rc
+            # ★ 2026-08-24 增量检测：源码与产物指纹一致则跳过重复打包
+            $skipUnit2 = if ($Version -eq "cloud") { 'cloud-app' } else { 'local-app' }
+            if (Test-BuildSkip $skipUnit2) {
+                Write-Host "  [SKIP] $verLabel APP产物已是最新，跳过打包" -ForegroundColor Green
+            } else {
+                # 与 one-click-pack.ps1 的 app-strict 一致，APP 统一走严格模式（签名哈希+Java混淆+签名校验）
+                & cmd /c "$appBat standard" 2>&1 | ForEach-Object { Write-Host $_ }
+                $rc = $LASTEXITCODE
+                if ($rc -ne 0) {
+                    Write-Host "[ERROR] $verLabel APP打包失败，退出码: $rc" -ForegroundColor Red
+                    return $rc
+                }
+                $script:BuiltUnits += $skipUnit2
             }
         } else {
             Write-Host "[WARN] 未找到APP打包脚本: $appBat" -ForegroundColor Yellow
@@ -410,6 +446,7 @@ while ($true) {
     Write-Host "  说明:" -ForegroundColor DarkGray
     Write-Host "  - [1][2][3] 先选版本(云端/定制/个人/全部)" -ForegroundColor DarkGray
     Write-Host "  - [1][2][3] 还需选范围(桌面/APP/全部)，发布范围决定上传哪些产物" -ForegroundColor DarkGray
+    Write-Host "  - ★增量打包: 源码无变化的端自动跳过打包(只打包有改动的端)" -ForegroundColor DarkGray
     Write-Host "  - 发布使用 publish-release.js 上传到 GitHub Release" -ForegroundColor DarkGray
     Write-Host "  - git push 后 Cloudflare Pages 自动部署下载页" -ForegroundColor DarkGray
     Write-Host "  - ★必守HARD规则: 发布前自动跑合规检查，未通过禁止上传" -ForegroundColor Yellow
@@ -436,6 +473,8 @@ while ($true) {
             if (Test-Path $packPs1) {
                 & powershell -NoProfile -ExecutionPolicy Bypass -File $packPs1 -CollectSideEffectsOnly -AutoCommit 2>&1 | ForEach-Object { Write-Host $_ }
             }
+            # ★ 2026-08-24 打包增量基线记录（必须在副作用 AutoCommit 之后，HEAD 才稳定）
+            Record-BuiltUnits
             Write-Host ""
             pause
         }
@@ -482,6 +521,9 @@ while ($true) {
             if (Test-Path $packPs1) {
                 & powershell -NoProfile -ExecutionPolicy Bypass -File $packPs1 -CollectSideEffectsOnly -AutoCommit 2>&1 | ForEach-Object { Write-Host $_ }
             }
+            # ★ 2026-08-24 打包增量基线记录（必须在副作用 AutoCommit 之后，HEAD 才稳定；
+            #   Version=all 走子进程 one-click-pack -AutoMode 3 已在内部记录，本处 BuiltUnits 为空自动跳过）
+            Record-BuiltUnits
             Write-Host ""
             pause
         }
