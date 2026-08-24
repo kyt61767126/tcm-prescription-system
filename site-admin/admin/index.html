@@ -548,7 +548,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                             <th>角色</th>
                             <th>手机号</th>
                             <th>所属诊所</th>
-                            <th>允许模式</th>
+                            <th>版本类型</th>
                             <th>状态</th>
                             <th>创建时间</th>
                             <th>操作</th>
@@ -3691,6 +3691,18 @@ function renderUsersTable() {
         return;
     }
     tbody.innerHTML = list.map(u => {
+        // ★ 2026-08-23 版本类型列（替代历史遗留"允许模式"列——该字段后端登录无任何拦截、
+        //   本地版账号存设备本地不经云端，"云端+本地"显示纯属误导。改按诊所实际版本显示）
+        const editionTagHtml = (function () {
+            if (u.role === 'platform_admin') return '<span style="color:#c0c4cc;">—</span>';
+            const map = {
+                cloud_clinic: '<span class="tag tag-pro">云端机构版</span>',
+                cloud_personal: '<span class="tag tag-personal">云端标准版</span>',
+                offline_clinic: '<span class="tag tag-trial">离线机构版</span>',
+                offline_personal: '<span class="tag tag-trial">离线标准版</span>'
+            };
+            return map[u.clinicEdition] || '<span class="tag tag-trial">未设置</span>';
+        })();
         const roleTag = u.role === 'platform_admin'
             ? '<span class="tag tag-pro">' + roleNames[u.role] + '</span>'
             : (u.role === 'clinic_admin'
@@ -3724,7 +3736,7 @@ function renderUsersTable() {
             '<td>' + roleTag + '</td>' +
             '<td>' + escapeHtml(u.phone || '-') + '</td>' +
             '<td>' + clinicHtml + '</td>' +
-            '<td style="white-space:nowrap;">' + escapeHtml(({ both: '云端+本地', cloud: '仅云端', local: '仅本地' })[u.allowedMode] || u.allowedMode || '-') + '</td>' +
+            '<td style="white-space:nowrap;">' + editionTagHtml(u) + '</td>' +
             '<td>' + statusHtml + '</td>' +
             '<td style="white-space:nowrap;">' + escapeHtml(created) + '</td>' +
             '<td>' + actions + '</td>' +

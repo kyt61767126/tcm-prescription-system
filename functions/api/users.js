@@ -435,7 +435,9 @@ async function getAllClinicUsers(kv) {
         const users = await kv.get(`clinic:${clinic.id}:users`, 'json');
         if (users && Array.isArray(users)) {
             users.forEach(u => {
-                result.push(sanitizeUser(u, clinic.id, clinic.name));
+                // ★ 2026-08-23 修复：补传 clinic.status / clinic.edition，用户管理列表才能显示
+                //   真实版本类型（云端机构版/云端标准版）与诊所待审核徽章（原漏传导致全部兜底 active/cloud_clinic）
+                result.push(sanitizeUser(u, clinic.id, clinic.name, clinic.status, clinic.edition));
             });
         }
     }
