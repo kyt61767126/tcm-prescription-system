@@ -137,7 +137,26 @@ if ($Check) {
 
     $head = Get-HeadCommit
     if (-not $head)                     { Write-Host "[BUILD] 无法读取 git HEAD"; exit 1 }
-    if ($head -ne $rec.commit)          { Write-Host "[BUILD] $Unit 源码有新提交(基线 $($rec.commit.Substring(0,8)) → 当前 $($head.Substring(0,8)))"; exit 1 }
+    # ★ 比对"源路径是否有新提交"而非全局 HEAD：其他路径(tools/文档)的新提交不影响本端产物内容。
+    #   取基线后源路径的全部变更文件，再套用副作用排除正则（与工作区检查同一套），
+    #   剩余非空 = 真实源码变化 → 重打；副作用提交(versionCode bump/hash-manifest)不算。
+    $changedFiles = @()
+    try {
+        $changedFiles = @(& git -C $root -c core.quotepath=false log "$($rec.commit)..$head" --name-only --pretty=format: -- @($def.sources) 2>$null) |
+                        ForEach-Object { $_.ToString().Trim().Trim('"') } | Where-Object { $_ }
+        if ($LASTEXITCODE -ne 0) { Write-Host "[BUILD] 无法比较源码提交历史"; exit 1 }
+    } catch { Write-Host "[BUILD] 比较源码提交历史异常"; exit 1 }
+    $realChanges = @()
+    foreach ($f in $changedFiles) {
+        $isSide = $false
+        foreach ($pat in $sideEffectPatterns) { if ($f -match $pat) { $isSide = $true; break } }
+        if (-not $isSide) { $realChanges += $f }
+    }
+    if ($realChanges.Count -gt 0) {
+        Write-Host "[BUILD] $Unit 源码有新提交(基线 $($rec.commit.Substring(0,8)) 后 $($realChanges.Count) 个文件变化):"
+        foreach ($f in ($realChanges | Select-Object -First 6)) { Write-Host "        $f" }
+        exit 1
+    }
 
     $dirty = Get-DirtySources $def.sources
     if ($dirty.Count -gt 0) {
