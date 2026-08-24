@@ -1585,6 +1585,22 @@ let currentUser = null;
                 }
                 
                 if (user) {
+                    // ★ 2026-08-24 内置 admin 账号仅试用期有效，激活后失效（用户需求：admin/admin 只对试用期内有效）
+                    //   判据：isBuiltinDefaultAdmin（username=admin 且密码仍是出厂默认哈希=未改密）+ license 已正式激活
+                    //   （type=licensed/personal/pro，非 trial）。改过密码的 admin 视为实际在用账户，不受影响。
+                    //   无 license 桥（云端网页）不拦截。
+                    if (typeof isBuiltinDefaultAdmin === 'function' && isBuiltinDefaultAdmin(user)
+                        && window.electronAPI && window.electronAPI.license
+                        && typeof window.electronAPI.license.getStatus === 'function') {
+                        try {
+                            const st = await window.electronAPI.license.getStatus();
+                            if (st && st.valid && String(st.type || st.licenseType || '') !== 'trial') {
+                                errorDiv.textContent = '试用期已结束，内置账号已失效，请使用激活时设置的手机号账号登录';
+                                errorDiv.style.display = 'block';
+                                return;
+                            }
+                        } catch (e) { console.warn('内置admin激活后失效检查异常(放行):', e); }
+                    }
                     // 密码自动升级：旧格式（SHA-256/明文）→ PBKDF2
                     try {
                         if (window.AuthCore && AuthCore.upgradePasswordIfNeeded) {
