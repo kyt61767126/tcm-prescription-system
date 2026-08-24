@@ -86,6 +86,33 @@
 
 ## 2. 2026-08-20 关键经验（含 root cause + 举一反三）
 
+### 2.22 内置admin/admin账号仅试用期有效：激活后登录自动失效（提交 ec2b417b）
+- 需求：激活后，试用期的 admin/admin 隐藏或失效，只对试用期内有效（安全收紧：防止激活后内置弱口令账号继续可登）。
+- 实现要点（3份离线 index.html 成套，handleLogin 内 `if (user)` 分支最前）：
+  ```js
+  if (isBuiltinDefaultAdmin(user)                              // 判据1：内置admin未改密
+      && window.electronAPI?.license?.getStatus) {              // 有license桥(离线端)
+      const st = await electronAPI.license.getStatus();
+      if (st && st.valid && String(st.type||st.licenseType||'') !== 'trial') {  // 判据2：已正式激活
+          errorDiv.textContent = '试用期已结束，内置账号已失效，请使用激活时设置的手机号账号登录';
+          return; // 拒登
+      }
+  }
+  ```
+- 关键复用：
+  - `isBuiltinDefaultAdmin(user)`（UserStore 已有，KNOWLEDGE 2.36 配套）= username=admin 且密码仍是出厂默认哈希。**改过密码的 admin 不拦**（视为实际在用账户）。
+  - `license.getStatus()` 两端返回结构一致：`{valid, type: 'trial'|'licensed', licenseType}`——APP 端 LicenseManager.java 与桌面端 license-manager.js 均在顶层返回 `type` 字段。判"已激活"=`valid && type!=='trial'`。
+- 行为矩阵：
+  | 场景 | admin/admin | 结果 |
+  |---|---|---|
+  | 试用期内 | 可登录 | 正常试用 |
+  | 激活后(admin未改密) | 拒登 | 提示用手机号账号 |
+  | 激活后(admin已改密) | 可登录 | 实际在用账户 |
+  | 云端网页(无license桥) | 不拦截 | 注册制无此账号 |
+- 设计原则（与 project_memory 安全原则一致）：**宁漏检不误报**——getStatus 异常时放行（console.warn），绝不因检测异常把正常用户锁死；无 license 桥的环境直接跳过。
+- 与 2.36 的关系：2.36 只在"用户管理列表"隐藏内置 admin（显示层）；本条补齐"登录校验"拦截（行为层），双保险。
+- 生效：离线APP=重打APK（assets/index.html）；离线桌面=重打exe；云端不受影响。
+
 ### 2.21 标准版"医师名登录"映射错账号：users[0]是内置admin非激活账号（提交 15cceffc）
 - 现象（§2.20 修复后客户继续实测）：手机号+admin123 已能登录 ✓；退出后登录框预填医师名（标准版设计=CONFIG.doctorName）；用户改医师名"王杰"→重启→登录框预填"王杰"→输 admin123 →仍报"用户名或密码错误"。
 - 根因：
