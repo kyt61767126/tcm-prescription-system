@@ -1058,7 +1058,10 @@ function createLoginWindow() {
 
     loginWindow = new BrowserWindow({
         width: 260,
-        height: 430,
+        // ★ 2026-08-24 登录框内容高度修复：登录成功瞬间（绿色提示+版本三元组展开）内容达 ~531px，
+        //   原 430px 窗口（内容区 ~399px）上下各裁切 ~66px → 顶部标题被裁、诊所名条视觉错位"不居中"。
+        //   575px（内容区 ~544px）实测完整显示且上下留白均衡（各 ~7px），诊所名条居中。（与云端桌面版全局统一）
+        height: 575,
         resizable: false,
         autoHideMenuBar: true,
         center: true,

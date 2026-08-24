@@ -201,13 +201,17 @@
             metaTextLine2 = shortBuildTime ? ('Build ' + shortBuildTime) : '';
         }
         var metaHtml = metaTextLine1 ?
-            ('<br><span style="font-size:9px;color:#888;font-weight:normal;line-height:1.3;">' +
+            ('<br><span style="font-size:10px;color:rgba(255,255,255,0.95);font-weight:normal;line-height:1.3;">' +
              metaTextLine1 + (metaTextLine2 ? ('<br>' + metaTextLine2) : '') +
              '</span>') : '';
 
         // ★ 挂载点1：原有 header-section 内的 .version-tag
         var tag = document.querySelector('.version-tag');
         if (tag) {
+            // ★ 2026-08-24 版本标签内容居中修复（与云端桌面版全局统一）：药丸宽度由最宽元数据行撑开，
+            //   默认 text-align:start 使首行【离线标准版】靠左，视觉不居中；
+            //   版本三元组同步改白色 10px（原 9px #888 灰叠紫色渐变看不清楚）
+            tag.style.textAlign = 'center';
             if (!_loggedIn && !forceShow) {
                 tag.innerHTML = '【登录后显示版本】' + metaHtml;
             } else {
@@ -231,18 +235,19 @@
                 bottomTag.id = 'loginVersionTagBottom';
                 bottomTag.style.marginTop = '3px';
                 bottomTag.style.marginBottom = '2px';
-                bottomTag.style.fontSize = '9px';
-                bottomTag.style.color = '#999';
+                bottomTag.style.fontSize = '10px';
+                bottomTag.style.color = '#666';
                 bottomTag.style.textAlign = 'center';
                 bottomTag.style.fontWeight = '600';
                 bottomTag.style.lineHeight = '1.25';
                 bottomTag.style.letterSpacing = '0.1px';
+                bottomTag.style.wordBreak = 'keep-all';
                 security.parentNode.insertBefore(bottomTag, security.nextSibling);
             }
             if (metaTextLine1) {
                 bottomTag.innerHTML =
-                    '<div style="font-size:9px;line-height:1.25;">' + metaTextLine1 + '</div>' +
-                    (metaTextLine2 ? '<div style="font-size:9px;line-height:1.25;color:#aab;">' + metaTextLine2 + '</div>' : '');
+                    '<div style="font-size:10px;line-height:1.25;">' + metaTextLine1 + '</div>' +
+                    (metaTextLine2 ? '<div style="font-size:10px;line-height:1.25;color:#888;">' + metaTextLine2 + '</div>' : '');
             } else {
                 bottomTag.textContent = '【开发模式：未找到 build-meta.json】';
             }
