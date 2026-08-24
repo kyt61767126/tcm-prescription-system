@@ -869,6 +869,13 @@ let currentUser = null;
                 // ★ 刀3：未激活新客户首帧注入"📋 管理员激活"入口（与auth-core.js同一HTML/id，防重复）
                 (function() {
                     try {
+                        // ★ 2026-08-24 注册入口收敛：注册入口仅保留在桌面程序/APP，纯网页浏览器不注入。
+                        //   云端APP加载远程URL（capacitor.config server.url），与网页同一份文件，
+                        //   运行时靠 window.Capacitor 区分；android_asset 兜底离线包；Electron UA 兜底桌面副本。
+                        var __isClientEnv = (typeof window.Capacitor !== 'undefined') ||
+                            (location.href.indexOf('android_asset') >= 0) ||
+                            ((navigator.userAgent || '').indexOf('Electron') >= 0);
+                        if (!__isClientEnv) return; // 纯网页端：无注册入口（请下载桌面版/APP注册）
                         var _done = false;
                         try { _done = localStorage.getItem('auth:activationDone') === '1'; } catch(_) {}
                         if (_done) return; // 已激活：无入口（最终态）

@@ -1700,7 +1700,8 @@
         try {
             if (!global.electronAPI || !global.electronAPI.activate) {
                 // ★ 云端SaaS：无本地授权桥（无机器码/无需激活码），引导登录或管理员激活
-                await showHtmlAlert('🌐 云端版无需激活码\n\n直接登录即可使用。\n如需申请登录账号，请返回登录页点击「📋 管理员激活」。');
+                // ★ 2026-08-24 注册入口收敛：网页端登录页已无注册入口，引导下载客户端注册
+                await showHtmlAlert('🌐 云端版无需激活码\n\n直接登录即可使用。\n如需申请登录账号，请使用桌面版或手机APP，在登录页点击「📋 管理员激活」（网页端不支持注册）。');
                 global.__licenseActivating = false;
                 return;
             }
@@ -2312,6 +2313,13 @@
             if (!overlay) return;
             // ★ 2026-08-22 冗余入口收敛：隐藏静态"注册诊所 / 激活申请"与"管理台登录"按钮（仅保留动态"注册开通"）
             hideStaticActivateEntry();
+            // ★ 2026-08-24 注册入口收敛：注册入口仅保留在桌面程序/APP，纯网页浏览器不注入。
+            //   桌面=electronAPI；云端APP加载远程URL与网页同文件，靠 window.Capacitor 区分；
+            //   android_asset 兜底（离线assets加载）。诊所名同步/静态按钮隐藏与注册无关，仍正常执行。
+            const __isClientEnv = !!(global.electronAPI) ||
+                (typeof global.Capacitor !== 'undefined') ||
+                (global.location && String(global.location.href).indexOf('android_asset') >= 0);
+            if (!__isClientEnv) return; // 纯网页端：无注册入口（请下载桌面版/APP注册）
             // ★ 2026-08-20 注册完成后自动隐藏：已登录/已注册过则不再显示"注册开通"入口
             if (isCloudActivationDone()) return;
             // ★ 2026-08-22 兜底（对齐桌面版 injectAdminActivateEntry 双条件）：
