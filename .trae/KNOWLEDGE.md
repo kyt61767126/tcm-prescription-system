@@ -86,6 +86,17 @@
 
 ## 2. 2026-08-20 关键经验（含 root cause + 举一反三）
 
+### 2.24 ps1 丢 UTF-8 BOM → PowerShell 5.1 按 GBK 解析炸解析器（提交 0b289424）
+- 现象：一键发布.bat 启动即崩，release-menu.ps1 大量"意外的标记}"错误且中文全乱码（鎵撳寘=打包的 GBK 乱读）。
+- 根因：**AI 的 Edit 工具写文件会剥 UTF-8 BOM**（§2.23 增量改造波及 4 个 ps1）。PowerShell 5.1 对无 BOM 文件按系统默认 GBK 读；GBK 双字节序列会把 UTF-8 中文后跟的引号吞掉 → 字符串边界错乱 → 连锁解析错（连注释里 `ScopeTitle:` 都被当代码，报"变量引用无效"）。
+- 修复与防复发：
+  1. 项目自带 `tools/fix-ps1-bom.ps1` 全量补 BOM（本次 29 OK / 4 fixed）；**AI 每次编辑 .ps1 后必须跑一遍**或入口 bat 自愈。
+  2. 一键发布.bat/一键打包.bat self-heal 段已各加一步 BOM 自愈（`fix-ps1-bom.ps1 | findstr /C:"[FIX]" /C:"Summary:"` 静默，只有修复时可见）。
+  3. Edit 引入的 bat 新行是 LF，必须用 `fix-bat-crlf.ps1` 恢复 CRLF（bat 双击闪退风险）。
+- 验证手段：PowerShell 5.1 下 `PSParser::Tokenize((Get-Content $f -Raw),[ref]$errs)`；故意剥 BOM→跑自愈→`[FIX] BOM added`→BOM=True 闭环。
+- 连环坑（commit message 也炸）：PowerShell 双引号字符串里 `$name:`（如写注释引用 `$ScopeTitle:`）= 非法变量引用，外层命令直接解析失败——提交信息含 `$xxx:` 时必须用单引号 here-string `@'...'@` 包裹。
+- 判别速查：错误输出中文乱码 + "意外的标记}"多点爆发 + 注释行报变量错 = 编码问题不是语法问题，先查 BOM 再查代码。
+
 ### 2.23 一键发布/一键打包增量检测：源码无变化的端自动跳过打包（提交 0364501f/6eeb814b/8e60d348）
 - 需求：已是新版无需再打包，只对未更新程序打包，只发布最新版本。原状：发布端 auto-publish.js 已有 hash-manifest 智能检测，但打包端无增量检测（每次全量打包）。
 - 核心工具 `tools/build-skip.ps1`（4单元：cloud-desktop/cloud-app/local-desktop/local-app）：
