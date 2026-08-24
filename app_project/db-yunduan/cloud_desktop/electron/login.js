@@ -229,33 +229,9 @@
             }
         }
 
-        // ★ 挂载点2：登录框底部 .login-security 下方（激活后简化登录页必显示，窗口 260 窄场景主用）
-        //    两行格式 + 小字号 + 窄间距，确保 260px 宽不被裁切。
-        var security = document.querySelector('.login-security');
-        if (security) {
-            var bottomTag = document.getElementById('loginVersionTagBottom');
-            if (!bottomTag) {
-                bottomTag = document.createElement('div');
-                bottomTag.id = 'loginVersionTagBottom';
-                bottomTag.style.marginTop = '3px';
-                bottomTag.style.marginBottom = '2px';
-                bottomTag.style.fontSize = '10px';
-                bottomTag.style.color = '#666';
-                bottomTag.style.textAlign = 'center';
-                bottomTag.style.fontWeight = '600';
-                bottomTag.style.lineHeight = '1.25';
-                bottomTag.style.letterSpacing = '0.1px';
-                bottomTag.style.wordBreak = 'keep-all';
-                security.parentNode.insertBefore(bottomTag, security.nextSibling);
-            }
-            if (metaTextLine1) {
-                bottomTag.innerHTML =
-                    '<div style="font-size:10px;line-height:1.25;">' + metaTextLine1 + '</div>' +
-                    (metaTextLine2 ? '<div style="font-size:10px;line-height:1.25;color:#888;">' + metaTextLine2 + '</div>' : '');
-            } else {
-                bottomTag.textContent = '【开发模式：未找到 build-meta.json】';
-            }
-        }
+        // ★ 2026-08-24 去除底部重复版本号：原「挂载点2」（.login-security 下方三元组）
+        //    与顶部 .version-tag 药丸内容完全重复，用户确认冗余 → 删除。
+        //    版本三元组（Vx.x.xx | Build 时间 | Arch 水印）唯一显示位 = 顶部药丸挂载点1。
     }
 
     let _users = [];
