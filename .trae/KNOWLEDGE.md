@@ -927,6 +927,25 @@
 - **Edit 工具丢 BOM 的连锁假象识别**：Edit 中文 .ps1 后 ParseFile 报 20 个"语法错误"（Unexpected token '}' / string missing terminator / [1][2][3] token 等，位置看似随机）→ **先查头三字节**（`23 20 72` = 无 BOM），按 GBK 误读 UTF-8 中文所致，恢复 BOM 后语法即 OK。不要按报错位置去改代码。
 - **生效方式**：纯脚本变更，各端无需操作；一键发布.bat 直接生效。
 
+### 2.73 【离线APP试用到期弹窗风暴修复】shared/auth-core/offline.js（提交 fe181f7d，2026-08-24）
+- **根因**：fallbackTimer（5秒轮询）未检查激活窗口DOM是否存在、openAdminActivate未设置__licenseActivating=true、事件监听先重置标志位再调用、APP端alert+模态叠加、checkLicense与fallbackTimer并发竞态，5个因素叠加导致弹窗不停弹出。
+- **修复**：①fallbackTimer条件新增DOM检测；②openAdminActivate首行设置__licenseActivating=true；③APP端移除alert(msg)避免嵌套；④关闭窗口时复位标志位；⑤事件监听取消先reset后open；⑥入口加3秒防抖。
+- **生效方式**：离线桌面版需重新运行db-offline/desktop/build.bat打包新exe并重装；离线APP需重新运行db-offline/build-app.bat打包新惠康中医-本地.apk并重装。
+
+### 2.74 【内置admin/admin账号激活后失效】index.html内联脚本（提交 ec2b417b，2026-08-24）
+- **根因**：激活后内置admin账号未失效，导致用户可能误登旧账号。
+- **修复**：登录校验通过后增加双判据拦截（isBuiltinDefaultAdmin(user)且license.getStatus()为正式激活），拒登并提示使用激活手机号账号。
+- **行为矩阵**：试用期内可登录，激活后未改密拒登，激活后已改密可登录，云端各端不拦截。
+- **生效方式**：离线APP需覆盖安装新惠康中医-本地.apk；离线桌面版需重新build.bat打包exe。
+
+### 2.75 【登录框版本标签显示优化】文字居中+版本号清晰化+窗口高度修复（提交 cb41684e，2026-08-24）
+- **缺陷模式（药丸标签内容不居中）**：版本标签【云端标准版】是"药丸"容器（圆角背景），宽度由最宽元数据行（`V1.2.x · Arch 2.26`）撑开，默认 `text-align:start` 使首行【云端标准版】靠左 ~22px 视觉不居中。**容器宽度≠内容宽度时，居中必须显式设置 text-align:center**。
+- **可读性**：版本三元组原 9px #888 灰叠紫色渐变底对比度不足看不清 → 改白色 10px（rgba(255,255,255,0.95)）；底部标签 9px/#999 → 10px/#666。
+- **窗口高度根因**：登录成功瞬间（绿色提示+版本三元组展开）内容达 ~531px，原 430px 窗口（内容区 ~399px）上下各裁切 ~66px → 顶部标题被裁、内容条视觉错位"不居中"。**诊断"不居中"先量内容实际高度 vs 窗口高度，溢出裁切会产生假性错位**。修复：430 → 575（内容区 ~544px，上下留白均衡）。
+- **两端全局统一**：cloud_desktop 与 db-offline/desktop 的 login.js（3处样式：metaHtml三元组/挂载点1居中/挂载点2底部标签）+ main.js 窗口高度同步修改；login.js 是逻辑文件不违反界面保护铁律（check-interface 6/6 OK）。
+- **用户确认**：登录成功后登录框快速关闭进入操作界面为正常行为，无需延迟关闭。
+- **生效方式**：双端桌面版均需重新 build.bat 打包 exe 重装；云端网页版/APP 不受影响（未改 public/）。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
