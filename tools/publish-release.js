@@ -743,6 +743,15 @@ function main() {
         }
     }
 
+    // ★ 2026-08-24 修复：dingzhi→local manifest 双 key 同步
+    //   download.html 本地桌面卡读 manifest['local'].exe/portable（2026-08-23 dingzhi→local
+    //   改名时改了读取端），但发布工具的 APP_CONFIG 内部 key 一直是 'dingzhi'，只写
+    //   dingzhi key 导致 local key 停在旧版本（下载页显示旧版 1.0.103 而实际已 1.0.104）。
+    //   修复：每次发布把 dingzhi 镜像到 local，两个 key 永远一致，新旧消费者都正确。
+    if (manifest.dingzhi) {
+        manifest.local = JSON.parse(JSON.stringify(manifest.dingzhi));
+    }
+
     // ★ P0-[5.2] Release Provenance：顶层写入发布来源声明（仓库/commit/构建者/时间/工具）
     manifest.provenance = getProvenance({ releaseTag: versionTag });
 

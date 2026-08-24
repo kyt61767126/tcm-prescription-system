@@ -985,6 +985,15 @@
 - **验证清单**：`gh release view v2026.08.24 --json assets` 出现新版本号资产；线上 `/updates/cloud/latest.json`=1.2.141、`/updates/local/latest.json`=1.0.104；`/downloads/*.apk` HTTP 200。
 - **生效方式**：云端网页版/URL加载APP 自动生效；云端桌面版=下载重装 Setup 1.2.141（旧版启动会自动弹更新横幅）；离线桌面版=下载重装 1.0.104；两端 APP=官网下载重装（云端 vCode220、本地 vCode153）。
 
+### 2.81 【一键发布选项4失败三连根因】latest.json 未排除 + stat 幻影脏 + manifest 双 key 断裂（2026-08-24）
+- **现象**：发布 v2026.08.24 后运行 一键发布.bat 选 [4] 打包全部，四端全被误判需重打（产物却未更新），流程异常。三处独立缺陷叠加：
+- **根因1（build-skip.ps1）**：`public/updates/*/latest.json` 不在 sideEffectPatterns 排除列表。cloud-desktop/cloud-app 的 sources 含 `public`，发布提交写 latest.json 后两端必判"源码有新提交"强制重打。修复：排除正则加 `^public/updates/`。
+- **根因2（build-skip.ps1 Get-DirtySources）**：入口 self-heal 脚本（fix-bat-crlf/fix-ps1-bom）重写 bat/ps1（内容不变仅 mtime 变）→ git status 持续报 modified（eol 属性+stat 缓存幻影，git diff 却为空）→ local 两端误判"工作区脏"。修复：status 报告的已跟踪文件逐个 `git diff --quiet HEAD -- <path>` 内容级复核，exit 0=幻影忽略；untracked(??) 无 HEAD 可比仍直接算脏（防漏检）。
+- **根因3（publish-release.js / auto-update-downloads.js）**：hash-manifest.json 存在 `dingzhi` 与 `local` 双 key——8-23 改名时 download.html 读取端改成了 `local`，但发布工具 APP_CONFIG 内部 key 仍是 `dingzhi` 只写 dingzhi → `local.exe/portable` 永远停在改名当天版本（下载页"本地桌面版"显示旧 1.0.103 而实际已 1.0.104）。修复：两个工具写 manifest 后把 dingzhi 深拷贝镜像到 local（双 key 永远一致，新旧消费者都正确）。
+- **验证**：4 单元 Check 全 SKIP；`one-click-pack.ps1 -AutoMode 3`（选项4等价）验收门 4/4 + 四端 SKIP 6 秒 exit 0；node --check 两个 js OK；verify-release 9/9。
+- **教训**：①发布链路（写 manifest/latest.json 的脚本）与打包增量检测（读 git 历史的脚本）必须互相感知——发布产物路径要进副作用排除；②git status 的 eol 属性幻影只能靠内容级 diff 复核，不能只看 porcelain 输出；③"改名"类重构必须 grep 全部读写两端，读端改名写端没改 = 慢性数据断裂（本次 local key 断了一天才被发现）。
+- **生效方式**：纯工具链变更，四端无需重新打包/重装；push 后 Cloudflare Pages 部署，下载页"本地桌面版"恢复显示 1.0.104。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）

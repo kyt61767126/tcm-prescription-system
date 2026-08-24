@@ -176,6 +176,12 @@ function updateDownloads(target) {
         return false;
     }
 
+    // ★ 2026-08-24 修复：dingzhi→local manifest 双 key 同步（download.html 读 local，
+    //   只写 dingzhi 会让 local key 停在旧版；与 publish-release.js 保持同一镜像逻辑）
+    if (manifest.dingzhi) {
+        manifest.local = JSON.parse(JSON.stringify(manifest.dingzhi));
+    }
+
     // ★ P0-[5.2] Release Provenance：顶层写入发布来源声明（仓库/commit/构建者/时间/工具）
     manifest.provenance = getProvenance({ releaseTag: '' });
 

@@ -46,7 +46,10 @@ $unitDefs = @{
 #   build.gradle     : APP 打包 versionCode/versionName 递增（SideEffectCollect AutoCommit）
 #   package.json     : 桌面打包 version 递增（SideEffectCollect autoPatterns）
 #   build-meta.json  : 桌面打包自动写入版本+构建时间戳（2026-08-24：曾因漏排除导致云端基线拒绝记录）
-#   hash-manifest.json / public/downloads/ : 发布阶段产物，非源码
+#   hash-manifest.json / public/downloads/ / public/updates/ : 发布阶段产物，非源码
+#   ★ 2026-08-24 修复：public/updates/*/latest.json 是发布时 publish-release.js 写的
+#     自动更新元数据（cloud-desktop/cloud-app 的 sources 含 public），不排除会导致
+#     每次发布后云端两端必被误判"源码有新提交"而强制无谓重打（version 无谓递增）。
 #   注意：手改 build.gradle/package.json 后请删除 .build-cache/build-state.json 强制全量重打
 $sideEffectPatterns = @(
     '^app_project/db-offline/app/app/src/main/assets/public/config\.json$',
@@ -58,7 +61,8 @@ $sideEffectPatterns = @(
     '^app_project/db-(offline/desktop|yunduan/cloud_desktop)/package\.json$',
     '^app_project/db-(offline/desktop|yunduan/cloud_desktop)/build-meta\.json$',
     '^public/hash-manifest\.json$',
-    '^public/downloads/'
+    '^public/downloads/',
+    '^public/updates/'
 )
 
 # ---------- 工具函数 ----------
@@ -111,6 +115,7 @@ function Get-DirtySources($def) {
     $dirty = @()
     foreach ($ln in $lines) {
         if (-not $ln -or $ln.Length -lt 4) { continue }
+        $xy = $ln.Substring(0, 2)
         $path = $ln.Substring(3).Trim()
         if ($path.StartsWith('"') -and $path.EndsWith('"')) { $path = $path.Substring(1, $path.Length - 2) }
         # git status 对非 ASCII 路径输出带引号的八进制转义（如 public/downloads/惠康中医-云端.apk），
@@ -118,7 +123,16 @@ function Get-DirtySources($def) {
         $isSideEffect = $false
         $pathNoQuote = $path.Trim('"')
         foreach ($pat in $sideEffectPatterns) { if ($pathNoQuote -match $pat) { $isSideEffect = $true; break } }
-        if (-not $isSideEffect) { $dirty += $path }
+        if ($isSideEffect) { continue }
+        # ★ 2026-08-24 修复：stat 幻影复核——入口 self-heal 脚本(fix-bat-crlf/fix-ps1-bom)
+        #   重写 bat/ps1（内容不变仅 mtime 变）会让 git status 持续报 modified（eol 属性 +
+        #   stat 缓存过期），git diff 却为空。对"已跟踪且非新增"文件用内容级 diff 复核：
+        #   与 HEAD 无真实差异 = 幻影，不算脏；untracked(??) 无 HEAD 可比，直接算脏。
+        if ($xy -notmatch '\?') {
+            & git -C $root diff --quiet HEAD -- $path 2>$null
+            if ($LASTEXITCODE -eq 0) { continue }
+        }
+        $dirty += $path
     }
     return ,$dirty
 }

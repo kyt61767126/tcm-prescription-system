@@ -457,7 +457,7 @@ while ($true) {
     Write-Host "  [0] 退出"
     Write-Host ""
     Write-Host "  说明:" -ForegroundColor DarkGray
-    Write-Host "  - [1][2][3] 先选版本(云端/定制/个人/全部)" -ForegroundColor DarkGray
+    Write-Host "  - [1][2][3] 先选版本(云端/本地/全部)" -ForegroundColor DarkGray
     Write-Host "  - [1][2][3] 还需选范围(桌面/APP/全部)，发布范围决定上传哪些产物" -ForegroundColor DarkGray
     Write-Host "  - ★增量打包: 源码无变化的端自动跳过打包(只打包有改动的端)" -ForegroundColor DarkGray
     Write-Host "  - 发布使用 publish-release.js 上传到 GitHub Release" -ForegroundColor DarkGray
