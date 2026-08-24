@@ -955,6 +955,26 @@
 - **验证**：pack-gate preflight 4/4 通过（ps1语法34/BOM34/bat CRLF23/编码67 OK）。
 - **生效方式**：纯构建工具链变更，四端均无需重新打包/重装；下次一键打包自动生效。
 
+### 2.77 【诊所删除+改管理员手机号+“允许模式”列改“版本类型”】users.js + admin双副本（提交 ab06e66e/47851ea8，2026-08-24）
+- **“允许模式”列误导结论**：allowedMode 是历史遗留字段，后端登录闸门（users.js 诊所禁用/停用/待审核/到期）对它无任何拦截；本地版账号存设备本地不经云端KV，不会出现在平台后台——显示“云端+本地”纯属误导。
+- **真bug**：getAllClinicUsers 漏传 clinic.status/clinic.edition 给 sanitizeUser，用户列表拿不到真实版本类型与“待审核”徽章。
+- **删除诊所**：POST /users?clinic=delete 三级防误删（platform_admin + confirmName 诊所名完全一致 + confirmPassword 当前登录管理员密码复核 + reason≥2字符留痕）；物理清理 clinic:{id}:users/prescriptions/prescriptions_trash/medicines/formulas + 前缀扫描 prescription_seq:*/seq:* + user_devices + admin_phone 释放；audit_log 合规保留。**密码复核=当前登录平台管理员自己的登录密码**。
+- **改手机号**：clinic=update 新增 adminPhone（11位校验+全局唯一+admin_phone 占位键迁移）。
+- **坑**：public/admin/index.html 是 site-admin 部署副本，改完必须 Copy-Item 同步。
+- **生效方式**：仅云端网页版自动部署，无需重打包任何端。
+
+### 2.78 【用户管理操作列新增删除按钮】复用 delete-user 接口（提交 1e030434，2026-08-24）
+- 前端两次确认弹窗（账号信息+不可恢复警示）+ 后端双保险（禁删自己/平台总管理员/诊所最后一名管理员），删除后撤销全部登录token并入审计日志；云端处方数据保留不级联删除。
+- 修复连带 bug：editionTagHtml 是 IIFE 产出的字符串，调用处误当函数 editionTagHtml(u) → “is not a function”。
+- **生效方式**：云端网页版推送GitHub自动部署，强制刷新即可；桌面/APP无需操作。
+
+### 2.79 【四端重装数据安全核查+离线APP公共目录备份恢复】MainActivity.java + index-app.html（提交 62926a06+本次，2026-08-24）
+- **核查结论**：云端桌面/云端APP/云端网页=数据存云端KV，重装登录即恢复，安全；离线桌面=数据在 userData（%APPDATA%），NSIS 卸载不删该目录，覆盖安装/卸载重装均自动恢复，安全；**离线APP=原唯一风险端**（数据全在 app 私有目录，卸载即清空且无恢复手段）。
+- **修复设计（离线APP）**：①每日自动备份改写公共 Downloads/中医处方系统/（MediaStore，卸载不清除），格式与手动备份一致并新增账号表 local_systemUsers + 基础设置（诊所名/医师/诊疗费/默认剂数）+HMAC 签名；②新增 listBackupFiles/readBackupFile 原生接口（MediaStore 查询+白名单仅 Downloads/中医处方系统/ 下 .json 防任意文件读取）；③importData APP 端走原生链路（WebView 无文件选择器）：列出备份（最新在前）→ prompt 序号选择 → 读取恢复；file 导入与原生恢复共用 applyImportData（恢复账号表+设置，原账号密码可直接登录）；④全新安装（本地无数据）时 统计分析→数据管理 显示“恢复数据”按钮，已有数据维持隐藏规范不变。
+- **坑**：cleanupOldBackups 只清 IndexedDB/listAutoBackups，不碰公共目录备份（重装保险，宁可累积不删）；Electron shim saveBackupFile 参数顺序（filename/content）曾在基础 shim 中颠倒，已修正。
+- **验证**：内联脚本 3 块语法 OK；check-interface 6/6 OK；pack-app.bat 严格模式打包通过（预检 7 OK/0 FAIL/0 WARN，签名 v2/v3+cert hash 通过，APK 内 index.html 内容哈希校验一致，APK 2.7MB 输出 db-offline 根目录）。
+- **生效方式**：离线APP=重装新版 惠康中医-本地.apk 后，重装/换机场景在 统计分析→数据管理→恢复数据 还原；其它三端无需任何操作（本就安全）。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）

@@ -5559,6 +5559,17 @@ let currentUser = null;
                     document.querySelectorAll('button[onclick="exportData()"], button[onclick="importData()"], button[onclick="clearAllData()"]').forEach(function(btn) { btn.style.display = 'none'; });
                 }
             }
+            // ★ 2026-08-24 重装数据安全（APP端）：卸载重装后本地数据为空时，
+            //   在统计分析→数据管理 显示"恢复数据"按钮，从公共下载目录备份完整还原
+            //   （已有数据时维持原规范保持隐藏，界面不变）
+            if (id === 'analyticsModal' && window.AndroidNative) {
+                let hasUsers = false;
+                try { hasUsers = (JSON.parse(localStorage.getItem('local_systemUsers') || '[]')).length > 0; } catch (e) {}
+                const hasData = hasUsers || (typeof medicines !== 'undefined' && medicines.length > 0) || (typeof prescriptionHistory !== 'undefined' && prescriptionHistory.length > 0);
+                document.querySelectorAll('button[onclick="importData()"]').forEach(function(btn) {
+                    btn.style.display = hasData ? 'none' : '';
+                });
+            }
         }
 
         function closeModal(id) {
@@ -5709,6 +5720,21 @@ let currentUser = null;
                 const ts = now.toISOString();
                 const pad = n => String(n).padStart(2, '0');
                 const fileName = `backup_${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.json`;
+
+                // ★ 2026-08-24 重装数据安全（APP端）：每日自动备份写公共下载目录
+                //   Downloads/中医处方系统/（卸载重装不清除），格式与手动备份一致
+                //   （含账号表+基础设置），重装后在 统计分析→数据管理→恢复数据 可完整还原
+                if (typeof window !== 'undefined' && window.AndroidNative && window.electronAPI && window.electronAPI.saveBackupFile) {
+                    try {
+                        const fullData = await buildFullBackupData(fileName);
+                        const result = await window.electronAPI.saveBackupFile(JSON.stringify(fullData, null, 2), fileName);
+                        if (result && result.success) return true;
+                        console.warn('[Backup] 公共目录备份失败，回退 IndexedDB:', result && result.error);
+                    } catch (e) {
+                        console.warn('[Backup] 公共目录备份异常，回退 IndexedDB:', e);
+                    }
+                }
+
                 const data = {
                     timestamp: ts,
                     version: 'P1-1',
@@ -5733,6 +5759,57 @@ let currentUser = null;
                 console.warn('[Backup] 保存备份文件失败:', e);
                 return false;
             }
+        }
+
+        // ★ 2026-08-24 构建完整备份数据（含账号表+基础设置，供手动备份与APP每日自动备份共用）
+        async function buildFullBackupData(fileName) {
+            const now = new Date();
+            const dateStr = now.toLocaleDateString('zh-CN').replace(/\//g, '-');
+            const timeStr = now.toTimeString().slice(0, 8);
+            const userObj = typeof currentUser !== 'undefined' ? currentUser : null;
+            const clinicName = document.getElementById('clinicName')?.value
+                || localStorage.getItem('local_clinicName') || '未知诊所';
+            const doctorName = document.getElementById('defaultDoctor')?.value
+                || localStorage.getItem('local_clinicDoctor') || '未知医师';
+            const data = {
+                exportInfo: {
+                    version: '惠康中医-离线版',
+                    versionCode: 'V1.0.0',
+                    versionType: '本地',
+                    exportTime: now.toLocaleString('zh-CN'),
+                    exportTimeUTC: now.toISOString(),
+                    exportDate: dateStr,
+                    exportTimeOnly: timeStr,
+                    exportUser: userObj?.name || userObj?.username || '自动备份',
+                    clinicName: clinicName,
+                    doctorName: doctorName,
+                    exportType: 'full',
+                    formatVersion: '1.1',
+                    fileName: fileName || '',
+                    dataStatistics: {
+                        medicinesCount: (medicines || []).length,
+                        formulasCount: (formulas || []).length,
+                        prescriptionCount: (prescriptionHistory || []).length
+                    }
+                },
+                medicines: medicines || [],
+                formulas: formulas || [],
+                prescriptionHistory: prescriptionHistory || [],
+                // ★ 重装数据安全：账号表与基础设置一并备份，卸载重装后可完整还原
+                users: (() => { try { return JSON.parse(localStorage.getItem('local_systemUsers') || '[]'); } catch (e) { return []; } })(),
+                settings: {
+                    clinicName: localStorage.getItem('local_clinicName') || '',
+                    clinicDoctor: localStorage.getItem('local_clinicDoctor') || '',
+                    defaultRegFee: localStorage.getItem('local_defaultRegFee') || '0',
+                    defaultDose: localStorage.getItem('local_defaultDose') || '7'
+                }
+            };
+            // HMAC 签名（与手动备份同规则）
+            try {
+                const hmac = await computeBackupHmac(JSON.stringify(data));
+                if (hmac) data._hmac = hmac;
+            } catch (e) { console.warn('[Backup] HMAC计算失败:', e); }
+            return data;
         }
 
         function saveBackupToIndexedDB(fileName, data) {
@@ -5957,7 +6034,15 @@ let currentUser = null;
                 },
                 medicines: medicines,
                 formulas: formulas,
-                prescriptionHistory: prescriptionHistory
+                prescriptionHistory: prescriptionHistory,
+                // ★ 2026-08-24 重装数据安全：手动备份也带上账号表+基础设置（换机/重装可完整还原）
+                users: (() => { try { return JSON.parse(localStorage.getItem('local_systemUsers') || '[]'); } catch (e) { return []; } })(),
+                settings: {
+                    clinicName: localStorage.getItem('local_clinicName') || '',
+                    clinicDoctor: localStorage.getItem('local_clinicDoctor') || '',
+                    defaultRegFee: localStorage.getItem('local_defaultRegFee') || '0',
+                    defaultDose: localStorage.getItem('local_defaultDose') || '7'
+                }
             };
             
             // 计算备份文件 HMAC 签名（基于紧凑 JSON，避免格式化影响）
@@ -5994,6 +6079,12 @@ let currentUser = null;
         }
 
         function importData() {
+            // ★ 2026-08-24 重装数据安全（APP端）：WebView 无文件选择器，
+            //   走原生读取公共下载目录（Downloads/中医处方系统/）的每日自动备份
+            if (typeof window !== 'undefined' && window.AndroidNative && window.electronAPI && window.electronAPI.listBackupFiles) {
+                importDataFromNative().catch(e => alert('恢复失败：' + (e && e.message ? e.message : e)));
+                return;
+            }
             const input = document.createElement('input');
             input.type = 'file';
             input.accept = '.json';
@@ -6005,56 +6096,7 @@ let currentUser = null;
                 reader.onload = async function(event) {
                     try {
                         const data = JSON.parse(event.target.result);
-
-                        // 验证 HMAC 签名（如果有）
-                        if (data._hmac) {
-                            const savedHmac = data._hmac;
-                            delete data._hmac;
-                            const computedHmac = await computeBackupHmac(JSON.stringify(data));
-                            if (savedHmac !== computedHmac) {
-                                if (!confirm('备份文件签名验证失败，文件可能已被篡改或损坏。\n是否仍要继续导入？')) {
-                                    alert('已取消导入。');
-                                    return;
-                                }
-                            }
-                        }
-                        if (data.medicines) medicines = data.medicines;
-                        if (data.formulas) formulas = data.formulas;
-
-                        if (data.prescriptionHistory && data.prescriptionHistory.length > 0) {
-                            // P7: 合并到 prescriptions store（按 id 去重，归属当前用户确保导入后可见）
-                            const allPrescriptions = await getAllPrescriptionsFromDB();
-                            const existingIds = new Set(allPrescriptions.map(p => p.id));
-                            const currentUsername = currentUser?.username || '';
-                            const newRecords = [];
-                            data.prescriptionHistory.forEach(p => {
-                                if (!existingIds.has(p.id)) {
-                                    p.createdBy = currentUsername;
-                                    newRecords.push(p);
-                                }
-                            });
-                            if (newRecords.length > 0) {
-                                await saveAllPrescriptionsToDB(newRecords).catch(e => {
-                                    console.error('导入处方到 prescriptions store 失败:', e);
-                                });
-                            }
-                        }
-
-                        localStorage.setItem('local_medicines', JSON.stringify(medicines));
-                        localStorage.setItem('local_formulas', JSON.stringify(formulas));
-
-                        // 重新加载当前用户处方（保持权限过滤一致）
-                        prescriptionHistory = await getAllUserPrescriptions(
-                            currentUser && currentUser.role !== 'admin' ? currentUser.username : null
-                        );
-
-                        buildMedicineMap();
-                        refreshAnalytics();
-                        renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
-                        // 统计输入框：按登入用户累计历史处方计数（管理员统计全部、普通用户统计自己的）
-                        const clinicYear = String(new Date().getFullYear()).slice(-2);
-                        document.getElementById('clinicNo').value = clinicYear + String(prescriptionHistory.length).padStart(6, '0');
-                        alert('数据导入成功！');
+                        await applyImportData(data);
                     } catch (error) {
                         alert('导入失败：文件格式不正确');
                     }
@@ -6062,6 +6104,107 @@ let currentUser = null;
                 reader.readAsText(file);
             };
             input.click();
+        }
+
+        // ★ 2026-08-24 APP端：从公共下载目录恢复（卸载重装后的数据还原入口）
+        async function importDataFromNative() {
+            const r = await window.electronAPI.listBackupFiles();
+            if (!r || !r.success || !Array.isArray(r.files) || r.files.length === 0) {
+                alert('未找到备份文件。\n\n备份保存在手机「下载/中医处方系统/」目录（每日自动备份）。\n若目录为空，说明本机无自动备份记录。');
+                return;
+            }
+            let msg = '找到 ' + r.files.length + ' 个备份（最新在前）：';
+            r.files.slice(0, 5).forEach((f, i) => {
+                const d = f.lastModified ? new Date(f.lastModified).toLocaleString('zh-CN') : '未知时间';
+                msg += '\n' + (i + 1) + '. ' + d + '（' + (f.size ? (f.size / 1024).toFixed(1) + 'KB' : '-') + '）';
+            });
+            const input = prompt(msg + '\n\n输入序号选择要恢复的备份（1=最新，默认1）：', '1');
+            if (input === null) return;
+            let idx = parseInt(input, 10);
+            if (isNaN(idx) || idx < 1 || idx > r.files.length) idx = 1;
+            const target = r.files[idx - 1];
+            const rr = await window.electronAPI.readBackupFile(target.fileName);
+            if (!rr || !rr.success) {
+                alert('读取备份失败：' + (rr && rr.error ? rr.error : '未知错误'));
+                return;
+            }
+            const data = JSON.parse(rr.json);
+            await applyImportData(data);
+        }
+
+        // ★ 2026-08-24 统一恢复逻辑（file导入 / APP原生恢复共用）
+        async function applyImportData(data) {
+            try {
+                // 验证 HMAC 签名（如果有）
+                if (data._hmac) {
+                    const savedHmac = data._hmac;
+                    delete data._hmac;
+                    const computedHmac = await computeBackupHmac(JSON.stringify(data));
+                    if (savedHmac !== computedHmac) {
+                        if (!confirm('备份文件签名验证失败，文件可能已被篡改或损坏。\n是否仍要继续导入？')) {
+                            alert('已取消导入。');
+                            return;
+                        }
+                    }
+                }
+                if (data.medicines) medicines = data.medicines;
+                if (data.formulas) formulas = data.formulas;
+
+                // ★ 2026-08-24 重装数据安全：恢复账号表（重装后原账号密码可直接登录）
+                let usersRestored = false;
+                if (Array.isArray(data.users) && data.users.length > 0) {
+                    localStorage.setItem('local_systemUsers', JSON.stringify(data.users));
+                    usersRestored = true;
+                }
+                // ★ 2026-08-24 恢复基础设置（诊所名/医师/诊疗费/默认剂数）
+                let settingsRestored = false;
+                if (data.settings && typeof data.settings === 'object') {
+                    if (data.settings.clinicName) { localStorage.setItem('local_clinicName', data.settings.clinicName); settingsRestored = true; }
+                    if (data.settings.clinicDoctor) { localStorage.setItem('local_clinicDoctor', data.settings.clinicDoctor); settingsRestored = true; }
+                    if (data.settings.defaultRegFee !== undefined && data.settings.defaultRegFee !== '') { localStorage.setItem('local_defaultRegFee', String(data.settings.defaultRegFee)); settingsRestored = true; }
+                    if (data.settings.defaultDose !== undefined && data.settings.defaultDose !== '') { localStorage.setItem('local_defaultDose', String(data.settings.defaultDose)); settingsRestored = true; }
+                }
+
+                if (data.prescriptionHistory && data.prescriptionHistory.length > 0) {
+                    // P7: 合并到 prescriptions store（按 id 去重，归属当前用户确保导入后可见）
+                    const allPrescriptions = await getAllPrescriptionsFromDB();
+                    const existingIds = new Set(allPrescriptions.map(p => p.id));
+                    const currentUsername = currentUser?.username || '';
+                    const newRecords = [];
+                    data.prescriptionHistory.forEach(p => {
+                        if (!existingIds.has(p.id)) {
+                            p.createdBy = currentUsername;
+                            newRecords.push(p);
+                        }
+                    });
+                    if (newRecords.length > 0) {
+                        await saveAllPrescriptionsToDB(newRecords).catch(e => {
+                            console.error('导入处方到 prescriptions store 失败:', e);
+                        });
+                    }
+                }
+
+                localStorage.setItem('local_medicines', JSON.stringify(medicines));
+                localStorage.setItem('local_formulas', JSON.stringify(formulas));
+
+                // 重新加载当前用户处方（保持权限过滤一致）
+                prescriptionHistory = await getAllUserPrescriptions(
+                    currentUser && currentUser.role !== 'admin' ? currentUser.username : null
+                );
+
+                buildMedicineMap();
+                refreshAnalytics();
+                renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
+                // 统计输入框：按登入用户累计历史处方计数（管理员统计全部、普通用户统计自己的）
+                const clinicYear = String(new Date().getFullYear()).slice(-2);
+                document.getElementById('clinicNo').value = clinicYear + String(prescriptionHistory.length).padStart(6, '0');
+                let msg = '数据导入成功！';
+                if (usersRestored) msg += '\n\n✓ 账号已随备份恢复，可用原账号密码登录。';
+                if (settingsRestored) msg += '\n✓ 基础设置（诊所名/医师等）已恢复。';
+                alert(msg);
+            } catch (error) {
+                alert('导入失败：文件格式不正确');
+            }
         }
 
         function clearAllData() {
