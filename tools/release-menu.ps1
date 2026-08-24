@@ -12,6 +12,19 @@ if (-not (Test-Path "$script:RootDir\tools\publish-release.js")) {
 
 $env:NO_PAUSE = '1'
 
+# ★ 2026-08-24 打包验收门（tools/pack-gate.ps1）：语法/BOM/CRLF/编码 四道快检，
+#   任一失败直接阻断（历史事故：本文件 BOM 丢失被 GBK 误读解析崩 / 打包链脚本语法错无人发现）
+$gateToolRm = Join-Path $PSScriptRoot 'pack-gate.ps1'
+if (Test-Path $gateToolRm) {
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $gateToolRm -Mode preflight
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host ""
+        Write-Host "[FATAL] 打包验收门未通过，发布/打包中止。请修复上述问题后重试。" -ForegroundColor Red
+        pause
+        exit 1
+    }
+}
+
 # ★ 2026-08-24 打包增量检测（tools/build-skip.ps1）：
 #   源码自上次打包后未变化+产物完好 → 跳过重复打包；打包成功且副作用AutoCommit后记录基线
 $script:BuiltUnits = @()

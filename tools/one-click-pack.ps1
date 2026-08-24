@@ -37,6 +37,19 @@ $env:NO_PAUSE = '1'
 # ★ 2026-08-24 打包增量检测（tools/build-skip.ps1）：
 #   本次会话实际执行了打包的单元（SKIP 的不计入），副作用 AutoCommit 后统一记录基线
 $script:BuiltUnits = @()
+
+# ★ 2026-08-24 打包验收门（tools/pack-gate.ps1）：语法/BOM/CRLF/编码 四道快检，
+#   任一失败直接阻断（历史事故：release-menu.ps1 BOM丢失解析崩 / 双重替换语法错无人发现）
+$gateTool = Join-Path $PSScriptRoot 'pack-gate.ps1'
+if (Test-Path $gateTool) {
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $gateTool -Mode preflight
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host ""
+        Write-Host "[FATAL] 打包验收门未通过，打包中止。请修复上述问题后重试。" -ForegroundColor Red
+        if (-not $env:NO_PAUSE) { pause }
+        exit 1
+    }
+}
 # 检查某端是否可跳过打包（指纹=git HEAD+源码干净+产物哈希 三者一致 → true）
 function Test-BuildSkip([string]$unit) {
     if ($env:NO_BUILD_SKIP -eq '1') { return $false }

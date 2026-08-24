@@ -14,6 +14,7 @@ $ok = 0
 $ps1Files = @()
 $ps1Files += Get-ChildItem -Path 'app_project' -Recurse -Filter '*.ps1' -File -ErrorAction SilentlyContinue
 $ps1Files += Get-ChildItem -Path 'tools' -Recurse -Filter '*.ps1' -File -ErrorAction SilentlyContinue
+$ps1Files += Get-ChildItem -Path 'software_copyright' -Recurse -Filter '*.ps1' -File -ErrorAction SilentlyContinue
 $ps1Files += Get-ChildItem -Path '.' -Filter '*.ps1' -File -ErrorAction SilentlyContinue
 $ps1Files = $ps1Files | Where-Object { $_.FullName -notmatch '\\node_modules\\' }
 

@@ -1,4 +1,4 @@
-# Generate Source Code Document for Software Copyright Registration
+﻿# Generate Source Code Document for Software Copyright Registration
 # Software: Huikang TCM Clinic Management System V1.0.0
 # Copyright Owner: Gaobeidian Huikangtang TCM Clinic Co., Ltd.
 #
