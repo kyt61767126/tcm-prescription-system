@@ -86,6 +86,22 @@
 
 ## 2. 2026-08-20 关键经验（含 root cause + 举一反三）
 
+### 2.25 打包验收门 pack-gate.ps1：历次打包事故固化为一道阻断门（提交 0143d674）
+- 需求：反复出现的打包问题如何杜绝？兜底验收 + 记录在案。
+- 设计：`tools/pack-gate.ps1` 统一验收门，事故→检查项一一映射（每项都有真实事故背书）：
+  | 检查项 | 拦截的事故 |
+  |---|---|
+  | [P1] ps1 语法全检（git 跟踪 ps1 全量 AST 解析） | release-menu.ps1 双重替换语法错（无工具拦截，靠人工发现） |
+  | [P2] ps1 BOM 全检 | Edit 剥 BOM → PS5.1 GBK 误读解析崩（§2.24） |
+  | [P3] bat CRLF 全检（字节级 LF 扫描） | Edit 引入 LF → bat 双击闪退 |
+  | [P4] verify-packaging（index.html 禁 BOM/bat 编码/gradle） | 白屏/乱码类 |
+  | [F1] compliance-check 9 项（full 模式） | 版本回滚/副本漂移/界面破坏/IPC 不一致/AUTH_SECRET 回归 |
+- 接线：one-click-pack.ps1 / release-menu.ps1 启动处硬门禁（失败 exit 1 阻断）；根目录 `打包验收.bat` = 用户双击全检入口（纯 ASCII 内容）。保险丝 `NO_PACK_GATE=1`。
+- 防线分层（当前完整图景）：入口 bat self-heal（fix-bat-crlf+fix-ps1-bom 自动修）→ pack-gate 门禁（阻断+报处置路径）→ ensure-build-env（构建环境 8 步，4 构建入口已接）→ compliance-check（发布合规 9 项，publish-release.js 已接）→ build-skip 增量指纹。
+- 拦截实测（4 项全过）：剥 BOM→三重拦截；注入语法错→精确报行号；bat 转 LF→报计数；干净→放行。
+- **AI 强制协议**：本项目内每次编辑 ps1/bat/构建链文件后，必须跑 `powershell -File tools\pack-gate.ps1`（preflight 秒级）；发布前 full 模式。Write/Edit 工具必剥 ps1 的 BOM，写完必须 fix-ps1-bom.ps1 补回——门禁会抓，但别依赖门禁兜底，养成写完即补的习惯。
+- 顺手发现并修复：software_copyright/generate-source-doc.ps1 缺 BOM（fix-ps1-bom.ps1 原不扫该目录，已扩范围）——门禁首跑即抓到存量问题，证明价值。
+
 ### 2.24 ps1 丢 UTF-8 BOM → PowerShell 5.1 按 GBK 解析炸解析器（提交 0b289424）
 - 现象：一键发布.bat 启动即崩，release-menu.ps1 大量"意外的标记}"错误且中文全乱码（鎵撳寘=打包的 GBK 乱读）。
 - 根因：**AI 的 Edit 工具写文件会剥 UTF-8 BOM**（§2.23 增量改造波及 4 个 ps1）。PowerShell 5.1 对无 BOM 文件按系统默认 GBK 读；GBK 双字节序列会把 UTF-8 中文后跟的引号吞掉 → 字符串边界错乱 → 连锁解析错（连注释里 `ScopeTitle:` 都被当代码，报"变量引用无效"）。
