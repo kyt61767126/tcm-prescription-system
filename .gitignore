@@ -31,6 +31,10 @@ build_new/
 # tools 临时工作目录（图标处理等一次性脚本遗留）
 tools/_tmp/
 
+# e2e 浏览器测试临时产物（截图/运行时文件）
+app_project/db-yunduan/cloud_desktop/e2e/.tmp/
+step_*.png
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
