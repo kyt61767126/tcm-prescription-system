@@ -6,7 +6,7 @@
 # 历次事故 → 检查项映射：
 #   [P1] ps1 语法全检   ← 2026-08-24 release-menu.ps1 双重替换语法错/BOM丢失连锁解析错
 #   [P2] ps1 BOM 全检   ← 2026-08-24 Edit剥BOM → PowerShell5.1按GBK读 → 中文乱码解析崩
-#   [P3] bat CRLF 全检  ← Edit引入LF行尾 → bat双击闪退
+#   [P3] bat CRLF 检查+自动修复 ← Edit/并行会话引入LF行尾 → 双击闪退（自动修复防死锁）
 #   [P4] 编码完整性     ← verify-packaging.ps1（index.html禁BOM/bat编码/gradle禁BOM）
 #   [F1] 合规9项编排    ← compliance-check.ps1（版本一致性/副本一致性/界面基线/IPC/
 #                          AUTH_SECRET/桌面JS完整性/硬编码扫描/shared分发一致）
@@ -84,11 +84,15 @@ foreach ($f in $ps1Files) {
 if ($bomFail -eq 0) { Add-Pass ("ps1 BOM: {0} 个文件全部齐备" -f $ps1Files.Count) }
 
 # ---------------------------------------------------------------------------
-# [P3] bat CRLF 全检（LF 行尾 → 双击闪退；扫描 git 跟踪的所有 .bat）
+# [P3] bat CRLF 检查+自动修复（LF 行尾 → 双击闪退；扫描 git 跟踪的所有 .bat）
+#      ★ 2026-08-24 死锁修复：LF 行尾【自动修复】而非阻断。入口 bat 的 self-heal
+#        只覆盖硬编码清单（8个构建bat），并行会话/IDE 触碰清单外 .bat（如 pack-app.bat）
+#        会导致验收门 P3 永久拦截所有打包（死锁）。字节级 LF→CRLF 是确定性安全操作。
 # ---------------------------------------------------------------------------
 Write-Host ""
-Write-Host "[P3] bat CRLF 全检..." -ForegroundColor Cyan
+Write-Host "[P3] bat CRLF 检查（LF 自动修复）..." -ForegroundColor Cyan
 $batFiles = @(& git -c core.quotepath=false ls-files -- '*.bat' 2>$null) | Where-Object { $_ }
+$crlfFixed = 0
 $crlfFail = 0
 foreach ($f in $batFiles) {
     $full = Join-Path $root ($f -replace '/', '\')
@@ -100,9 +104,25 @@ foreach ($f in $batFiles) {
             if ($i -eq 0 -or $bytes[$i-1] -ne 0x0D) { $lone++ }
         }
     }
-    if ($lone -gt 0) { Add-Fail ("LF 行尾 x${lone}: $f （运行 tools\fix-bat-crlf.ps1 修复）"); $crlfFail++ }
+    if ($lone -gt 0) {
+        # 字节级确定性修复：孤立 0x0A 前插 0x0D，其余字节原样（编码无影响）
+        try {
+            $out = New-Object System.Collections.Generic.List[byte]
+            for ($i = 0; $i -lt $bytes.Length; $i++) {
+                if ($bytes[$i] -eq 0x0A -and ($i -eq 0 -or $bytes[$i-1] -ne 0x0D)) { $out.Add([byte]0x0D) }
+                $out.Add($bytes[$i])
+            }
+            [System.IO.File]::WriteAllBytes($full, $out.ToArray())
+            $crlfFixed++
+            Write-Host ("  [FIXED] LF 行尾 x${lone} 已自动修复: $f") -ForegroundColor Yellow
+        } catch {
+            Add-Fail ("LF 行尾 x${lone} 且自动修复失败: $f ($($_.Exception.Message))")
+            $crlfFail++
+        }
+    }
 }
-if ($crlfFail -eq 0) { Add-Pass ("bat CRLF: {0} 个文件全部正常" -f $batFiles.Count) }
+if ($crlfFail -eq 0 -and $crlfFixed -eq 0) { Add-Pass ("bat CRLF: {0} 个文件全部正常" -f $batFiles.Count) }
+elseif ($crlfFail -eq 0) { Add-Pass ("bat CRLF: {0} 个文件检查完毕，{1} 个 LF 已自动修复" -f $batFiles.Count, $crlfFixed) }
 
 # ---------------------------------------------------------------------------
 # [P4] 编码完整性（verify-packaging.ps1：index.html 禁 BOM/bat 编码/gradle 禁 BOM）

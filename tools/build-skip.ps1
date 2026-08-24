@@ -24,15 +24,21 @@ $stateFile = Join-Path $stateDir 'build-state.json'
 
 # ---------- 单元定义 ----------
 #   sources 只含"决定产物内容"的源路径（tools/ 构建脚本不影响产物内容，不入列，避免改工具就误重打）
+#   excludes 排除"路径在 sources 内但该端产物不消费"的子目录：
+#     APP 构建会同步 desktop 的 config.json/vendor（build-app.bat 引用），但【不】消费 desktop/electron
+#     —— electron 主进程/登录窗改动只影响桌面端，不应触发 APP 重打
+#     （2026-08-24 误判实测：11:11 桌面登录框修复被误判为 local-app/cloud-app 需重打）
 $unitDefs = @{
     'cloud-desktop' = @{ kind='exe'; artifactDir='app_project\db-yunduan\cloud_desktop\dist'; label='云端桌面exe';
                          sources=@('app_project/db-yunduan/cloud_desktop','public','shared') }
     'cloud-app'     = @{ kind='apk'; artifact='app_project\db-yunduan\惠康中医-云端.apk'; label='云端APP';
-                         sources=@('app_project/db-yunduan','public','shared') }
+                         sources=@('app_project/db-yunduan','public','shared');
+                         excludes=@('app_project/db-yunduan/cloud_desktop/electron') }
     'local-desktop' = @{ kind='exe'; artifactDir='app_project\db-offline\desktop\dist'; label='本地桌面exe';
                          sources=@('app_project/db-offline/desktop','shared') }
     'local-app'     = @{ kind='apk'; artifact='app_project\db-offline\惠康中医-本地.apk'; label='本地APP';
-                         sources=@('app_project/db-offline','shared') }
+                         sources=@('app_project/db-offline','shared');
+                         excludes=@('app_project/db-offline/desktop/electron') }
 }
 
 # ---------- 打包流程自身会改写的被跟踪文件（不算"源码变化"，正则匹配 status 路径）----------
@@ -85,12 +91,19 @@ function Get-HeadCommit {
         return ($h | Select-Object -First 1).ToString().Trim()
     } catch { return $null }
 }
+# 组装 git pathspec：sources + excludes（:(exclude)path 语法，git status/log 通用）
+function Get-SourceSpec($def) {
+    $spec = @($def.sources)
+    if ($def.excludes) { foreach ($e in $def.excludes) { $spec += ":(exclude)$e" } }
+    return ,$spec
+}
 # 源路径工作区是否有未提交改动（排除副作用文件后）
-function Get-DirtySources($sources) {
+function Get-DirtySources($def) {
+    $spec = Get-SourceSpec $def
     $lines = @()
     try {
         # -c core.quotepath=false: 中文路径原样输出（默认八进制转义，可读性差）
-        $lines = @(& git -C $root -c core.quotepath=false status --porcelain -- @sources 2>$null)
+        $lines = @(& git -C $root -c core.quotepath=false status --porcelain -- @spec 2>$null)
         if ($LASTEXITCODE -ne 0) { return @('<git-status-failed>') }
     } catch { return @('<git-status-exception>') }
     $dirty = @()
@@ -138,11 +151,12 @@ if ($Check) {
     $head = Get-HeadCommit
     if (-not $head)                     { Write-Host "[BUILD] 无法读取 git HEAD"; exit 1 }
     # ★ 比对"源路径是否有新提交"而非全局 HEAD：其他路径(tools/文档)的新提交不影响本端产物内容。
-    #   取基线后源路径的全部变更文件，再套用副作用排除正则（与工作区检查同一套），
+    #   取基线后源路径的全部变更文件（含 excludes 排除），再套用副作用排除正则（与工作区检查同一套），
     #   剩余非空 = 真实源码变化 → 重打；副作用提交(versionCode bump/hash-manifest)不算。
+    $specArgs = Get-SourceSpec $def
     $changedFiles = @()
     try {
-        $changedFiles = @(& git -C $root -c core.quotepath=false log "$($rec.commit)..$head" --name-only --pretty=format: -- @($def.sources) 2>$null) |
+        $changedFiles = @(& git -C $root -c core.quotepath=false log "$($rec.commit)..$head" --name-only --pretty=format: -- @specArgs 2>$null) |
                         ForEach-Object { $_.ToString().Trim().Trim('"') } | Where-Object { $_ }
         if ($LASTEXITCODE -ne 0) { Write-Host "[BUILD] 无法比较源码提交历史"; exit 1 }
     } catch { Write-Host "[BUILD] 比较源码提交历史异常"; exit 1 }
@@ -158,7 +172,7 @@ if ($Check) {
         exit 1
     }
 
-    $dirty = Get-DirtySources $def.sources
+    $dirty = Get-DirtySources $def
     if ($dirty.Count -gt 0) {
         Write-Host "[BUILD] $Unit 工作区有未提交源码改动:"
         foreach ($d in ($dirty | Select-Object -First 8)) { Write-Host "        $d" }
@@ -171,7 +185,7 @@ if ($Check) {
 
 if ($Record) {
     # 安全约束1：只允许在"源码干净"时记录基线——防止把"源码有未提交改动"的状态固化成基线导致后续漏打
-    $dirty = Get-DirtySources $def.sources
+    $dirty = Get-DirtySources $def
     if ($dirty.Count -gt 0) {
         Write-Host "[WARN] $Unit 工作区有未提交源码改动，拒绝记录基线(请先提交):"
         foreach ($d in ($dirty | Select-Object -First 8)) { Write-Host "        $d" }
@@ -180,7 +194,7 @@ if ($Record) {
     # 安全约束2：产物新鲜度防线——产物文件修改时间必须 >= 源路径最后一次提交时间，
     #   否则说明产物是旧源码构建的（比最新源码还老），记录该基线会导致下次误 SKIP 发旧版本
     try {
-        $lastCommit = & git -C $root log -1 --format=%ci -- @($def.sources) 2>$null
+        $lastCommit = & git -C $root log -1 --format=%ci -- @(Get-SourceSpec $def) 2>$null
         if ($LASTEXITCODE -eq 0 -and $lastCommit) {
             $lastCommitTime = [DateTime]::Parse(($lastCommit | Select-Object -First 1).ToString().Trim())
             $artifactPath = if ($def.kind -eq 'apk') { Join-Path $root $def.artifact } else { Join-Path $root $def.artifactDir }
