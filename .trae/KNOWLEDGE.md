@@ -1,4 +1,4 @@
-﻿# 惠康中医项目 · 共享经验知识库（PROJECT KNOWLEDGE）
+# 惠康中医项目 · 共享经验知识库（PROJECT KNOWLEDGE）
 
 > 本项目**跨 work 账户共享的"统一大脑"**。任何账户打开本项目，第一步先 Read 本文件。
 > 最后更新：2026-08-21
@@ -85,6 +85,23 @@
 ---
 
 ## 2. 2026-08-20 关键经验（含 root cause + 举一反三）
+
+### 2.21 标准版"医师名登录"映射错账号：users[0]是内置admin非激活账号（提交 15cceffc）
+- 现象（§2.20 修复后客户继续实测）：手机号+admin123 已能登录 ✓；退出后登录框预填医师名（标准版设计=CONFIG.doctorName）；用户改医师名"王杰"→重启→登录框预填"王杰"→输 admin123 →仍报"用户名或密码错误"。
+- 根因：
+  1. 标准版有"医师名登录"兼容分支（`username === CONFIG.doctorName` 时映射到实际账号），但映射目标写死 `users[0]`。
+  2. **激活账号是 `addLocalActivationUser` push 到表尾的**——`users[0]` 是内置默认 admin（username=admin，出厂密码哈希=admin），用户自设密码（admin123）必然不匹配。
+  3. **离线桌面版连兼容分支都没有**：登录框预填医师名（desktop/index.html L1694-1697），但 handleLogin 只按 username/phone 匹配 → 医师名登录必失败。
+- 修复（3处成套，提交 15cceffc）：
+  | # | 文件 | 改动 |
+  |---|---|---|
+  | 1 | `db-offline/index-app.html` + APP assets `index.html` | 兼容分支映射目标改为：① 有 phone 字段的账号（管理员激活必写 phone）→ ② 非内置 admin 的账号 → ③ users[0] 兜底 |
+  | 2 | `db-offline/desktop/index.html` | 新增同样兼容分支（注意：`const username` 不可重赋值，引入独立 `loginUsername` 变量；try-catch 隔离防影响原流程） |
+- 举一反三：
+  - **"匹配第一个用户"类兼容逻辑在多账号场景下是隐雷**：账号数组顺序=创建顺序，内置账号在前、激活/注册账号 append 在后。凡按位置（users[0]）取账号的逻辑，必须先确认业务语义是"内置账号"还是"实际使用账号"，改用字段判据（phone/role/非默认密码）定位。
+  - **预填值与校验字段必须闭环**：登录框预填什么值，校验就必须能匹配该值（预填医师名→校验需支持医师名映射；否则预填就是给用户挖坑）。桌面端缺分支正是不闭环的实例。
+  - HTML 内联脚本语法检查技巧：`new Function(scriptContent)` 逐段检查；script 含 `import`/模块语法的存量误报要用 `git show HEAD:` 基线对比排除。
+- 生效：离线APP=重打APK（assets/index.html）；离线桌面=重打exe；云端不受影响。
 
 ### 2.20 离线APP"激活成功却登录失败"二次修正：密码语义混淆+启动自愈通道（提交 0e02058d）
 - 现象：§2.19 修复（6e774c34）后客户实测**仍失败**——离线APP标准版，管理员激活审核通过、license 安装成功（登录框已显示正确诊所名），用 手机号13398628212 + **自设密码admin123** 登录仍报"手机号/用户名或密码错误"。
