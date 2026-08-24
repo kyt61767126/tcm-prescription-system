@@ -470,6 +470,29 @@ while ($true) {
             # 仅打包 - 单个版本
             $version = Show-VersionMenu -Action "pack"
             if ($version -eq "") { break }
+            # ★ 2026-08-24 修复：选"全部2个版本"原误入 Invoke-SinglePack，拼出不存在的
+            #   db-all 目录直接 [ERROR] 中止（菜单[2][3]均正确处理了 all，唯独本处遗漏）。
+            #   改走 Invoke-Pack（one-click-pack -AutoMode 3 双端全量），行为与菜单[4]
+            #   及 Invoke-FullFlow 的 all 分支保持一致；all 为全量打包，无需再选范围。
+            if ($version -eq "all") {
+                $rcA = Invoke-Pack -Target "all"
+                if ($rcA -is [array]) { $rcA = [int]$rcA[-1] }
+                if ($rcA -ne 0) {
+                    Write-Host ""
+                    Write-Host "[ERROR] 打包全部版本失败，退出码: $rcA（详见上方日志）" -ForegroundColor Red
+                }
+                # all 走子进程 one-click-pack -AutoMode 3（内部不带 -AutoCommit），
+                # 打包副作用由本进程统一收纳提交（与菜单[3] all 分支之后的处理一致）
+                $packPs1A = "$script:RootDir\tools\one-click-pack.ps1"
+                if (Test-Path $packPs1A) {
+                    & powershell -NoProfile -ExecutionPolicy Bypass -File $packPs1A -CollectSideEffectsOnly -AutoCommit 2>&1 | ForEach-Object { Write-Host $_ }
+                }
+                # Version=all 子进程已在内部记录基线，本处 BuiltUnits 为空自动跳过
+                Record-BuiltUnits
+                Write-Host ""
+                pause
+                break
+            }
             $mode = Show-PackModeMenu
             if ($mode -eq "") { break }
             # ★ 2026-08-23 复核修复：原 | Out-Null 丢弃退出码，失败静默无提示
