@@ -86,6 +86,23 @@
 
 ## 2. 2026-08-20 关键经验（含 root cause + 举一反三）
 
+### 2.23 一键发布/一键打包增量检测：源码无变化的端自动跳过打包（提交 0364501f/6eeb814b/8e60d348）
+- 需求：已是新版无需再打包，只对未更新程序打包，只发布最新版本。原状：发布端 auto-publish.js 已有 hash-manifest 智能检测，但打包端无增量检测（每次全量打包）。
+- 核心工具 `tools/build-skip.ps1`（4单元：cloud-desktop/cloud-app/local-desktop/local-app）：
+  - **Check**（退出码0=可跳过）：三要素全一致才 SKIP ①产物sha256==基线（APK单文件/dist全部exe聚合哈希）②基线后源路径无真实源码变更提交（git log 基线..HEAD --name-only -- 源路径，套副作用排除正则）③源路径工作区干净（同样套排除正则）
+  - **Record**：仅打包成功+副作用AutoCommit后调用（HEAD稳定）。安全约束：①拒绝记录脏工作区基线 ②**产物新鲜度防线**——产物mtime必须>=源码最后提交-30min容差，过期产物拒绝记录（防手动Record旧产物导致误SKIP发旧版本）
+  - 保险丝：`NO_BUILD_SKIP=1` 强制全量重打；任何检测异常一律 BUILD（宁多打不漏打）
+- 副作用排除正则（status 与 git log 同一套）：config.json×4（edit-config同步）、build.gradle×4（versionCode bump）、desktop package.json（版本递增）、hash-manifest.json、public/downloads/。**edit-config.ps1×2 已幂等化**（config.json 内容一致不写），消除每次打包的必现 dirty diff。
+- 源路径定义（只含决定产物内容的路径，tools/构建脚本不入列）：local-app=db-offline+shared；local-desktop=db-offline/desktop+shared；cloud-app=db-yunduan+public+shared；cloud-desktop=cloud_desktop+public+shared。
+- 接入点：one-click-pack.ps1 Build-Cloud/Build-Offline 各打包段前 Check + `$script:BuiltUnits` 收集，全部 11 处 SideEffectCollect 调用点后 `Record-BuiltUnits`；release-menu.ps1 Invoke-SinglePack（菜单[1][3]）同样接入，case 1/3 AutoCommit 后 Record。基线存 `.build-cache/build-state.json`（已 gitignore）。
+- 关键教训：
+  - **跨进程副作用时序**：Record 必须在"副作用AutoCommit之后"（versionCode bump 提交会前进 HEAD），否则基线秒失效。release-menu 调 one-click-pack 是子进程，$script:BuiltUnits 不跨进程，两脚本各自内嵌 Check/Record。
+  - **手动 Record 旧产物是严重事故源**（本次实测暴露）：旧产物+新源码=基线把过期产物标记为最新→下次SKIP发旧版本。新鲜度防线（mtime vs 源码最后提交）是必要兜底。
+  - **判定粒度用"源路径变更文件"而非全局HEAD**：全局HEAD比对会把无关提交（tools/文档）误判为需重打；且副作用提交（bump）在源路径内必须套排除正则，否则每次打包互相 invalidate。
+  - replace_all 接行尾追加时注意长串包含短串：`X -A` 替换后 `X -A -B` 里的 `X -A` 再次命中产生 `X -A; Y -A -B; Y` 双重替换错误（本次 L540 实际发生，需先长后短并复查）。
+- 使用注意：手改 build.gradle/package.json 后需删 `.build-cache/build-state.json` 强制全量；首次使用无基线全量打包一次即自动建立基线。
+- 生效：纯工具链改动，直接运行 一键发布.bat/一键打包.bat 即生效，无需重打任何端产物。
+
 ### 2.22 内置admin/admin账号仅试用期有效：激活后登录自动失效（提交 ec2b417b）
 - 需求：激活后，试用期的 admin/admin 隐藏或失效，只对试用期内有效（安全收紧：防止激活后内置弱口令账号继续可登）。
 - 实现要点（3份离线 index.html 成套，handleLogin 内 `if (user)` 分支最前）：
