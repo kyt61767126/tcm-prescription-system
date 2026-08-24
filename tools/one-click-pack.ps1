@@ -1,4 +1,4 @@
-# one-click-pack.ps1 - One-click packaging tool for all 4 versions
+﻿# one-click-pack.ps1 - One-click packaging tool for all 4 versions
 # All Chinese menu logic moved here from 一键打包.bat to avoid cmd GBK encoding issues
 # .ps1 with BOM can correctly handle UTF-8 Chinese display
 param(

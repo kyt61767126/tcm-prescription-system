@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Edit clinic configuration for offline TCM APP/Desktop builds.
 .DESCRIPTION

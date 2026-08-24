@@ -18,6 +18,12 @@ REM directly (bypassing pack-* entries). Fix all downstream .bat BEFORE parsing.
 REM This entry bat is ASCII-only so it is immune to line-ending corruption.
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\fix-bat-crlf.ps1" "%~dp0app_project\db-yunduan\pack-desktop.bat" "%~dp0app_project\db-yunduan\build-pack.bat" "%~dp0app_project\db-yunduan\build-app.bat" "%~dp0app_project\db-yunduan\cloud_desktop\build.bat" "%~dp0app_project\db-offline\pack-desktop.bat" "%~dp0app_project\db-offline\build-pack.bat" "%~dp0app_project\db-offline\app\build-app.bat" "%~dp0app_project\db-offline\desktop\build.bat"
 
+echo [one-click-pack] Self-heal: ensure UTF-8 BOM in .ps1 files...
+REM [SELF-HEAL 2026-08-24] IDE edits may strip UTF-8 BOM from .ps1 files; PowerShell 5.1
+REM then reads them as GBK, corrupting Chinese text and breaking string parsing.
+REM fix-ps1-bom.ps1 rescans ALL .ps1 and re-adds BOM silently (only FIX lines shown).
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\fix-ps1-bom.ps1" | findstr /C:"[FIX]" /C:"Summary:"
+
 REM Launch one-click-pack.ps1 (forward args: 1=cloud 2=offline 3=all, auto mode no pause)
 REM NOTE [BUILD-LOCK 2026-08-23]: concurrent builds are serialized by
 REM tools\build-lock.ps1 inside build-pack.bat/build.bat/build-app.bat.

@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Edit clinic configuration for cloud TCM APP/Desktop builds.
 .DESCRIPTION
