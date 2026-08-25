@@ -1015,6 +1015,20 @@
 - **坑**：① 诊断 API 登录 wgj 复现 403 时，单设备互斥会把用户正在用的会话顶下线（需提醒重新登录）；② `public/updates/dingzhi/` 是 2026-08-23 dingzhi→local 改名的死目录（所有消费者已读 `updates/local/`），停留旧版本号极易误导排查——已删除（提交 e505129a）；③ publish-release.js 最后 `git pull --rebase` 会被工作区脏文件（build-meta.json）卡住，报错后手动 `git add + commit + push` 即可。
 - **生效方式**：云端网页推送即生效；云端桌面 1.2.145 / 云端APP versionCode 226 / 本地桌面 1.0.108 / 本地APP versionCode 156 需重装（已发布 v2026.08.25，latest.json 与 APK 链接已线上验证）。
 
+### 2.84 【一期方案】管理员/用户体系统一性——诊所归属落地 + 角色收口 + 10/10 门禁（提交 46e4948b，2026-08-25）
+- **背景**：系统梳理发现三个结构性问题（详见 2.83 前的梳理报告）：①云端登录落地 local_systemUsers 不记诊所归属（残留账号根源）；②AuthCore.isAdmin/isClinicAdmin 已建好但业务代码大量手写复合散判绕过；③五份 index.html 副本手工同步。一期方案落地前两者。
+- **改动**（8 文件 +124/-75，合规 13 项全过）：
+  1. **诊所归属落地**：三端云端登录落地写入 `clinicId/clinicName`（无诊所概念的本地账号留空不过滤）。
+  2. **renderUserList 归属过滤**：本机缓存列表只显示当前登录诊所的账号（其他诊所历史登录残留不再显示，数据保留不删）——从机制上根治"列表混入其他诊所账号"。
+  3. **handleDeleteUser 本机预检**：删除前查本地记录 clinicId，归属其他诊所的直接走"仅删本机"确认（不调云端挨 403；老数据无 clinicId 仍走云端 403 crossClinic 兜底——见 2.83）。
+  4. **角色收口 69 处**：六份 index.html（public/cloud_desktop/cloud_app/offline desktop/offline app/根 index.html）手写多角色复合散判全部改为 `AuthCore.isAdmin/isClinicAdmin` 调用。顺带修复真实漏判：处方数据加载层只认 `role === 'admin'`，clinic_admin/platform_admin 登录被当普通用户只加载自己处方（云端走 db-adapter 未暴露，本地 IndexedDB 路径受影响）。
+  5. **合规门禁 10/10**：`tools/verify-role-centralized.ps1` 扫描六份 index.html 的复合散判（'admin' 在前的 ===/!== 双角色及以上模式），出现即 FAIL 禁止发布。刻意豁免：单角色判断（离线版/option/显示分支合法）、显示文案分支（'clinic_admin' || 'admin' 顺序）、导出字段 `role !== 'admin'`（语义待定，二期处理）。
+- **血泪教训：同一文件多个 Edit 禁止并行调用**！本次 4 个 replace_all 并行执行，各自基于旧快照写全文件互相覆盖——批次1/3/6"成功"但结果丢失。KNOWLEDGE 早有此教训（版本显示"并行 Edit 可能静默失败"），本次重蹈。**正确姿势：同文件 Edit 严格串行，每批后 Grep 验证生效**（幂等替换可安全重跑）。
+- **JS 语法验证法**：`node -e` + vm.Script 编译六份 index.html 全部内联 script 块（不执行只查语法）。注意：模板字符串含 `</script>` 会截断正则提取块产生误报（HEAD 版本同报 'Unexpected identifier' 属既有误报，非本次引入）——对比 HEAD 同样输出即可判定。
+- **二期遗留**（未做）：用户管理逻辑抽 shared/user-admin.js 五端统一；离线↔云端角色映射表（admin→clinic_admin）；编辑弹窗角色下拉按登录角色动态生成；导出字段 `role !== 'admin'` 语义确认。
+- **追加修复（同日）**：离线APP 5 处散判收口当时只改了产物 `assets/public/index.html`，`build-app.bat` L106 会用源模板 `index-app.html` 覆盖产物 → 打包后改动回滚（再次验证 2.72 的"必须改 index-app.html"铁律）。已对源模板补齐 5 处收口（canManage 兜底×2 / 唯一管理员锁死 isAdmin / 标准版角色纠正 isClinicAdmin / 处方过滤 isClinicAdmin），模板与产物 MD5 一致，门禁 10/10 复验通过。
+- **生效方式**：云端网页推送即生效；四端重打包（云端桌面 1.2.146 / 云端APP 227 / 本地桌面 1.0.109 / 本地APP 157）后新登录的账号才落地 clinicId——**存量老数据无 clinicId，仍靠列表过滤前的云端 403 兜底，重新登录一次该账号即补全归属**。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
