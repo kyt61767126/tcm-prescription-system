@@ -85,7 +85,10 @@ wmic process where "ExecutablePath like '%%db-offline%%desktop%%' or ExecutableP
 REM Use PowerShell Get-Process (path-based exact match, ASCII safe) - kills processes from dist/build_output dirs
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Get-Process | Where-Object { try { $_.Path -like '*db-offline\desktop\dist*' -or $_.Path -like '*db-offline\desktop\build_output*' } catch { $false } } | Stop-Process -Force -ErrorAction SilentlyContinue" 2>nul
 REM wait 2s for handles to be released by AV/minifilter
-timeout /t 2 /nobreak >nul
+REM ★ 2026-08-25 timeout.exe 依赖控制台 stdin，在 stdin 被重定向的环境（一键打包/代理管道/CI）
+REM   会立即报错退出 "ERROR: Input redirection is not supported" 且等待失效。
+REM   改用 ping 延时（n 个包约 n-1 秒），不依赖 stdin，任何环境等价生效。
+ping -n 3 127.0.0.1 >nul
 echo [OK] Leftover processes cleaned
 echo.
 
@@ -208,7 +211,8 @@ set "BUILD_RC=%errorlevel%"
 if not "%BUILD_RC%"=="0" (
     echo.
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] Phase 1 (--dir) failed, retry in 3s...'"
-    timeout /t 3 /nobreak >nul
+    REM ★ 2026-08-25 timeout→ping：stdin 重定向环境 timeout 立即报错退出（等待失效）
+ping -n 4 127.0.0.1 >nul
     set "TEMP=%CD%\tmp"
     set "TMP=%CD%\tmp"
     node "node_modules\electron-builder\cli.js" --win --dir --config.directories.output="%OUTPUT_DIR%"
@@ -281,7 +285,8 @@ set NODE_TLS_REJECT_UNAUTHORIZED=
 if not "%BUILD_RC%"=="0" (
     echo.
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] Phase 3 (--prepackaged) failed, retry in 3s...'"
-    timeout /t 3 /nobreak >nul
+    REM ★ 2026-08-25 timeout→ping：stdin 重定向环境 timeout 立即报错退出（等待失效）
+ping -n 4 127.0.0.1 >nul
     set NODE_TLS_REJECT_UNAUTHORIZED=0
     set "TEMP=%CD%\tmp"
     set "TMP=%CD%\tmp"

@@ -82,7 +82,10 @@ taskkill /F /IM "electron.exe" >nul 2>&1
 wmic process where "ExecutablePath like '%%db-yunduan%%cloud_desktop%%' or ExecutablePath like '%%惠康%%'" call Terminate >nul 2>&1
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Get-Process | Where-Object { try { $_.Path -like '*db-yunduan/cloud_desktop*dist*' } catch { $false } } | Stop-Process -Force -ErrorAction SilentlyContinue" 2>nul
 REM wait 2s for handles to be released (AV/minifilter scan)
-timeout /t 2 /nobreak >nul
+REM ★ 2026-08-25 timeout.exe 依赖控制台 stdin，在 stdin 被重定向的环境（一键打包/代理管道/CI）
+REM   会立即报错退出 "ERROR: Input redirection is not supported" 且等待失效。
+REM   改用 ping 延时（n 个包约 n-1 秒），不依赖 stdin，任何环境等价生效。
+ping -n 3 127.0.0.1 >nul
 echo [OK] Leftover processes cleaned
 echo.
 
@@ -256,7 +259,7 @@ if not "%BUILD_RC%"=="0" (
     ) else (
         echo.
         powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] First electron-builder failed, retry in 3s...'"
-        timeout /t 3 /nobreak >nul
+        ping -n 4 127.0.0.1 >nul
         set "TEMP=%CD%\tmp"
         set "TMP=%CD%\tmp"
         node "node_modules\electron-builder\cli.js" --win --prepackaged "%WIN_UNPACKED_PATH%" --config.directories.output="%OUTPUT_DIR%"
