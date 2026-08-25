@@ -393,6 +393,35 @@ function Invoke-FullFlow {
     Write-Host ""
     Write-Host "[OK] 打包完成" -ForegroundColor Green
 
+    # ★ 2026-08-25 更新检测：读取 one-click-pack 写入的 .build-cache/last-run.json
+    #   built 空 = 四端全部 SKIP（无源码更新）→ 自动跳过发布与验证
+    #   部分更新 → 显示明细提示后继续发布（产物已是最新的一并幂等覆盖，无副作用）
+    $builtUnits = $null
+    $stateFile = "$script:RootDir\.build-cache\last-run.json"
+    if (Test-Path $stateFile) {
+        try { $builtUnits = (Get-Content $stateFile -Raw -Encoding UTF8 | ConvertFrom-Json).built } catch { $builtUnits = $null }
+    }
+    if ($Version -eq "all" -and $null -ne $builtUnits) {
+        $builtArr = @($builtUnits)
+        $allUnitLabels = @{ 'cloud-desktop' = '云端桌面'; 'cloud-app' = '云端APP'; 'local-desktop' = '本地桌面'; 'local-app' = '本地APP' }
+        if ($builtArr.Count -eq 0) {
+            Write-Host ""
+            Write-Host "========================================" -ForegroundColor Yellow
+            Write-Host "  [提示] 没有检测到任何源码更新" -ForegroundColor Yellow
+            Write-Host "  四端产物均已是最新，自动跳过发布与验证" -ForegroundColor Yellow
+            Write-Host "  （上一次发布即为最新版本，无需重复上传）" -ForegroundColor DarkGray
+            Write-Host "  强制重新打包: 设 NO_BUILD_SKIP=1 后重跑" -ForegroundColor DarkGray
+            Write-Host "========================================" -ForegroundColor Yellow
+            return 0
+        }
+        if ($builtArr.Count -lt 4) {
+            $builtNames = ($builtArr | ForEach-Object { $allUnitLabels[$_] }) -join '、'
+            $skippedNames = (@('cloud-desktop','cloud-app','local-desktop','local-app') | Where-Object { $builtArr -notcontains $_ } | ForEach-Object { $allUnitLabels[$_] }) -join '、'
+            Write-Host ""
+            Write-Host "[提示] 本次更新 $($builtArr.Count) 端（$builtNames），跳过 $(4-$builtArr.Count) 端（$skippedNames）已是最新" -ForegroundColor Yellow
+        }
+    }
+
     # Step 2: 发布
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Cyan
@@ -460,6 +489,7 @@ while ($true) {
     Write-Host "  - [1][2][3] 先选版本(云端/本地/全部)" -ForegroundColor DarkGray
     Write-Host "  - [1][2][3] 还需选范围(桌面/APP/全部)，发布范围决定上传哪些产物" -ForegroundColor DarkGray
     Write-Host "  - ★增量打包: 源码无变化的端自动跳过打包(只打包有改动的端)" -ForegroundColor DarkGray
+    Write-Host "  - ★更新提示: 四端均无更新时[3]自动跳过发布；部分更新显示明细" -ForegroundColor DarkGray
     Write-Host "  - 发布使用 publish-release.js 上传到 GitHub Release" -ForegroundColor DarkGray
     Write-Host "  - git push 后 Cloudflare Pages 自动部署下载页" -ForegroundColor DarkGray
     Write-Host "  - ★必守HARD规则: 发布前自动跑合规检查，未通过禁止上传" -ForegroundColor Yellow

@@ -60,6 +60,17 @@ function Test-BuildSkip([string]$unit) {
 }
 # 记录本次已打包单元的基线（供下次 Check 跳过）。必须在"打包成功+副作用AutoCommit后"调用（HEAD 才稳定）
 function Record-BuiltUnits {
+    # ★ 2026-08-25 更新摘要状态：写入 .build-cache/last-run.json（built 数组，空=全部SKIP无更新），
+    #   release-menu.ps1 Invoke-FullFlow 读取后实现"无更新自动跳过发布 / 部分更新明细提示"
+    $stateDir = Join-Path $script:RootDir '.build-cache'
+    if (-not (Test-Path $stateDir)) { New-Item -ItemType Directory -Path $stateDir -Force | Out-Null }
+    $stateFile = Join-Path $stateDir 'last-run.json'
+    try {
+        $payload = @{ time = (Get-TimeStamp); built = @($script:BuiltUnits) }
+        ConvertTo-Json -InputObject $payload | Out-File -FilePath $stateFile -Encoding utf8
+    } catch {
+        Write-Host "  [WARN] 更新摘要状态写入失败(不影响打包): $_" -ForegroundColor Yellow
+    }
     if (-not $script:BuiltUnits -or $script:BuiltUnits.Count -eq 0) { return }
     $skipTool = Join-Path $PSScriptRoot 'build-skip.ps1'
     if (-not (Test-Path $skipTool)) { return }
@@ -471,6 +482,24 @@ function Build-All {
         Write-Host "  结束: $allEnd" -ForegroundColor Green
     }
     Write-Host "========================================" -ForegroundColor Green
+    # ★ 2026-08-25 更新摘要：本次实际重打的端 vs 增量跳过的端（BuiltUnits 此时未被 Record 清空）
+    $allUnits = @('cloud-desktop','cloud-app','local-desktop','local-app')
+    $unitLabel = @{ 'cloud-desktop' = '云端桌面'; 'cloud-app' = '云端APP'; 'local-desktop' = '本地桌面'; 'local-app' = '本地APP' }
+    $built = @($script:BuiltUnits)
+    $skipped = @($allUnits | Where-Object { $built -notcontains $_ })
+    Write-Host ""
+    if ($built.Count -eq 0) {
+        Write-Host "  [提示] 没有检测到源码更新：四端产物均已是最新，无需重新打包/上传" -ForegroundColor Yellow
+    } else {
+        $builtNames = ($built | ForEach-Object { $unitLabel[$_] }) -join '、'
+        if ($skipped.Count -gt 0) {
+            $skippedNames = ($skipped | ForEach-Object { $unitLabel[$_] }) -join '、'
+            Write-Host "  [提示] 部分更新：本次重打 $($built.Count) 端（$builtNames）" -ForegroundColor Yellow
+            Write-Host "         跳过 $($skipped.Count) 端（$skippedNames）产物已是最新" -ForegroundColor Yellow
+        } else {
+            Write-Host "  [提示] 四端全部重新打包（$builtNames）" -ForegroundColor Yellow
+        }
+    }
     # ★ 2026-08-25 取消成功路径确认回车（全局自动完成；失败路径 pause 保留）
     # 聚合退出码：任一版本失败即非0（供 -AutoMode / release-menu Invoke-Pack 判断成败）
     if ($rcCloud -ne 0)   { return [int]$rcCloud }
