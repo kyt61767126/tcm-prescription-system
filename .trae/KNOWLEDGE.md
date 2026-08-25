@@ -1037,6 +1037,8 @@
   3. **调用点收口 24 处**：加载层 ternary×12 → `UserAdmin.prescriptionFilterUser(currentUser)`；云端 renderUserList 过滤+角色文案+跨诊所预检；离线守卫×10（view/delete guard、canManage 兜底、删除后刷新、启动加载）→ `AuthCore.isAdmin`；离线编辑弹窗 option selected 与导出 userRoleDisplay 两处方言同步。
 - **三期·门禁强化**：`verify-role-centralized.ps1` 从单一复合模式扩为三规则——A 复合散判 / B `currentUser.role ===/!== 'admin'` 单判 / C `.role !== 'admin' ?` 加载层三元；纯注释行跳过（标记块文档注释含示例代码属合法引用，宁漏检不可误报）。六文件非注释命中必须为 0。
 - **验证**：标记块一致性 7×2 ALL PASS；合规检查 13 项全过（含强化后 10/10 门禁）；check-interface 基线 6 OK；USER-ADMIN 块 `new Function` 语法 OK×5；UserAdmin 语义冒烟 17 项 PASS（node 沙箱）。
+- **发布（v2026.08.25 三次发布）**：四端全量重打（云端桌面 1.2.147 / 本地桌面 1.0.110 / 云端APP versionCode 228 / 本地APP versionCode 159），产物逐一验证 USER-ADMIN 块（exe 读 app.asar、APK 按 zip 读 assets/public/index.html 均命中）；publish-release.js --confirm --push 上传 6 产物 + latest.json 更新，verify-release.js 9/9 URL 通过。
+- **生效方式**：云端网页版/云端APP在线资源→push 已部署即时生效；云端桌面→下载 1.2.147 重装（或 Setup 自动更新）；本地桌面→重装 1.0.110；两端 APP→卸载重装新 APK（versionCode 228/159）。
 
 ---
 
