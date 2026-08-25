@@ -159,18 +159,38 @@ function main() {
             }
             walk(base);
 
-            // 通配转正则(支持 **、*)。** 表示零或多个路径段(自带结尾 /)，* 表示单段任意名。
-            const parts = glob.split('/');
-            let re = '^';
-            for (let i = 0; i < parts.length; i++) {
-                const p = parts[i];
-                if (p === '**') { re += '(?:[^/]+/)*'; }
-                else {
-                    if (i > 0) re += '/';
-                    re += (p === '*') ? '[^/]*' : p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            // 通配转正则(支持 **、*)。** 表示零或多个路径段，* 表示单段任意名。
+            // ★ 2026-08-26 修复：旧实现按段拼接时，'**' 后跟的字面量段会带上 '/' 前缀，
+            //   且 '**' 自带结尾 '/'——两处分隔符叠加/缺失，导致 '**/node_modules/x/**/*'
+            //   生成的正则永远匹配不到任何相对路径（better-sqlite3/fs-extra 误报"无命中"）。
+            //   正确语义（与 electron-builder/minimatch 对齐）：
+            //     '**/x'  匹配 'x' 和 'a/x'；'a/**/b' 匹配 'a/b' 和 'a/x/b'；'a/**' 匹配 'a/...'。
+            //   实现要点：'**'（非末段）生成 '(?:[^/]+/)*' 并吞掉其右侧 '/' 分隔符，
+            //   因此其后一段不再补 '/'；其余段间正常补 '/'。
+            function globToRegexSrc(g) {
+                const parts = g.split('/');
+                let re = '^';
+                let prevDouble = false;
+                for (let i = 0; i < parts.length; i++) {
+                    const p = parts[i];
+                    if (p === '**') {
+                        const isLast = (i === parts.length - 1);
+                        if (isLast) {
+                            re += (i > 0 ? '/' : '') + '.*';
+                        } else {
+                            if (i > 0 && !prevDouble) re += '/';
+                            re += '(?:[^/]+/)*';
+                        }
+                        prevDouble = !isLast;
+                    } else {
+                        if (i > 0 && !prevDouble) re += '/';
+                        re += (p === '*') ? '[^/]*' : p.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
+                        prevDouble = false;
+                    }
                 }
+                return re + '$';
             }
-            re += '$';
+            const re = globToRegexSrc(glob);
             return files.filter(function (r) { return new RegExp(re).test(r); });
         }
 

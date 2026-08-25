@@ -88,10 +88,8 @@ $LicenseTargets = @(
         'app_project/db-offline/app/app/src/main/assets/public/license'
 )
 
-# Group 5: electron/hot-update.js targets (3 offline electron/)
-$HotUpdateTargets = @(
-        'app_project/db-offline/desktop/electron'
-)
+# Group 5: electron/hot-update.js —— 2026-08-26 移除（源文件 shared/electron/hot-update.js
+#   已不存在，全仓库无代码引用，仅剩本死配置每次跑出 "[WARN] Source not found" 红字）
 
 # Group 6: res/xml files (3 XML)
 $ResXmlFiles = @(
@@ -271,11 +269,6 @@ Write-Host ""
 
 # Group 4: license files -> 10 targets
 $result = Sync-Group -GroupName 'License (3 files -> 10 dirs)' -Files $LicenseFiles -Targets $LicenseTargets -VerifyOnly $VerifyOnly
-if (-not $result) { $allInSync = $false }
-Write-Host ""
-
-# Group 5: hot-update.js -> 3 offline electron/
-$result = Sync-Group -GroupName 'hot-update.js -> 3 offline electron/' -Files @('electron/hot-update.js') -Targets $HotUpdateTargets -VerifyOnly $VerifyOnly
 if (-not $result) { $allInSync = $false }
 Write-Host ""
 

@@ -1040,6 +1040,15 @@
 - **发布（v2026.08.25 三次发布）**：四端全量重打（云端桌面 1.2.147 / 本地桌面 1.0.110 / 云端APP versionCode 228 / 本地APP versionCode 159），产物逐一验证 USER-ADMIN 块（exe 读 app.asar、APK 按 zip 读 assets/public/index.html 均命中）；publish-release.js --confirm --push 上传 6 产物 + latest.json 更新，verify-release.js 9/9 URL 通过。
 - **生效方式**：云端网页版/云端APP在线资源→push 已部署即时生效；云端桌面→下载 1.2.147 重装（或 Setup 自动更新）；本地桌面→重装 1.0.110；两端 APP→卸载重装新 APK（versionCode 228/159）。
 
+### 2.86【打包链红字清零】三处常态化 WARN 根治（2026-08-26）
+- **背景**：每次打包/发布/验证必出的 3 类 WARN 红字（实际一切正常，纯属工具误报/死配置），违反"失败要有为什么"原则且淹没真警告。
+- **修复 1（pre-build-check.js glob bug）**：build.files 磁盘存在性校验的通配转正则实现错误——按段拼接时 `**` 自带结尾 `/` 且下一段又补 `/`，双重叠加导致 `**/node_modules/x/**/*` 生成的正则**永远匹配不到任何相对路径**（better-sqlite3/fs-extra 每次误报"无命中"）。重写为分段构建法：`**`（非末段）生成 `(?:[^/]+/)*` 并吞掉右侧 `/` 分隔符，其后一段不再补 `/`；末段 `**` → `/.*`。语义与 minimatch 对齐（`**/x`≡`x`和`a/x`；`a/**/b`≡`a/b`和`a/x/y/b`），17 项单测全过。修复后 better-sqlite3→30 项、fs-extra→415 项正确命中。
+- **修复 2（verify-release.js curl 参数）**：GitHub Release URL 校验的 curl 命令带 `-o NUL`，把 `-I`（HEAD）的**响应头也写进了 NUL**，导致每次解析不到 Content-Length、4 条 WARN 跳过 size 校验（size 校验形同虚设！）。去掉 `-o NUL` 后 HEAD 响应头输出到 stdout，302 链最后一跳的 Content-Length 正确解析，size 校验真正生效（81695914 与 manifest 一致）。
+- **修复 3（sync-all.ps1 死配置）**：Group 5 hot-update.js——源文件 shared/electron/hot-update.js 已不存在、全仓库无代码引用，仅剩死配置每次跑出 `[WARN] Source not found`。整组移除（含 $HotUpdateTargets 定义与 Group 5 调用块）。
+- **保留的 WARN（正确设计勿删）**：build-skip（未提交改动/产物过期）、pack.ps1（video-recorder 缺失/签名缺失/混淆失败）、pre-flight-check（.bak 残留）、check-interface（界面变更）——均为真实异常才触发的保护性提示。
+- **验证**：合规检查 13/13 通过且 0 WARN 行；verify-release 9/9 通过 0 WARN（size 校验首次真实生效）；pack-gate 预检 4/4 放行；ps1 语法 35 文件/BOM 35 文件全过。
+- **生效方式**：纯 tools/ 脚本优化，无需任何端重新打包；下次一键打包/发布/验证即享受无红字输出。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）

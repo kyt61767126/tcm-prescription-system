@@ -133,7 +133,9 @@ function verifyWithCurl(url, timeoutMs) {
         '-s',                       // 静默模式
         '--ssl-no-revoke',          // 跳过证书吊销检查
         '-L',                       // 自动跟随重定向
-        '-o', 'NUL',                // 丢弃 body
+        // ★ 2026-08-26 修复：去掉 '-o NUL'——它会把 -I 的响应头也写入 NUL，
+        //   导致解析不到 Content-Length（每次发布必出 4 条 WARN 跳过 size 校验）。
+        //   HEAD 请求无 body，响应头直接输出到 stdout 供下方解析。
         '-w', '\n%{http_code}\n%{size_download}',  // 输出状态码和下载大小
         '--max-time', String(Math.ceil(timeoutMs / 1000)),
         '-I',                       // HEAD 请求（GitHub Release 支持）
