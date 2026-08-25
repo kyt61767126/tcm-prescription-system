@@ -307,12 +307,20 @@ try {
         },
 
         // 是否可以查看所有处方（管理员可查看全部，普通用户只能查看自己的）
+        // ★ 2026-08-25 前台收费：cashier 与管理员一样可读全所处方（收费工作台数据源）
         canViewAllPrescriptions(user) {
+            // ★ 标准版强制守护：单用户版本不显示处方查阅/收费入口
+            if (this._isStandardEditionForced()) return false;
             if (!user) return false;
             if (global.AuthCore && global.AuthCore.isClinicAdmin) {
-                return global.AuthCore.isClinicAdmin(user);
+                return global.AuthCore.isClinicAdmin(user) || global.AuthCore.isCashier(user);
             }
-            return user.role === 'admin' || user.role === 'clinic_admin';
+            return user.role === 'admin' || user.role === 'clinic_admin' || user.role === 'cashier';
+        },
+
+        // 是否可以执行收费动作（管理员 + 前台收费）
+        canChargePrescriptions(user) {
+            return this.canViewAllPrescriptions(user);
         },
 
         // 应用运行页权限控制
@@ -374,7 +382,8 @@ try {
                         cpb.style.visibility = canChg ? 'visible' : 'hidden';
                     }
                     if (cpr) {
-                        var canCpr = this.shouldShowUserManage(global.currentUser);
+                        // ★ 2026-08-25 前台收费：处方查阅按钮对 cashier 也可见（收费工作台入口）
+                        var canCpr = this.canViewAllPrescriptions(global.currentUser);
                         cpr.style.display = canCpr ? 'block' : 'none';
                         cpr.style.visibility = canCpr ? 'visible' : 'hidden';
                     }
