@@ -883,7 +883,7 @@ let currentUser = null;
                         if (typeof CONFIG !== 'undefined' && CONFIG && Array.isArray(CONFIG.users)) {
                             for (var _j = 0; _j < CONFIG.users.length; _j++) {
                                 var _u3 = CONFIG.users[_j];
-                                if (_u3 && (_u3.role === 'admin' || _u3.role === 'clinic_admin' || _u3.role === 'platform_admin')) return;
+                                if (_u3 && (AuthCore.isAdmin(_u3))) return;
                             }
                         }
                         if (document.getElementById('activateLoginEntry')) return; // 已注入
@@ -1590,8 +1590,10 @@ let currentUser = null;
                                     cu.name = user.name || cu.name;
                                     cu.role = user.role || cu.role || 'user';
                                     cu._cloudRoleSynced = true;
+                                    cu.clinicId = user.clinicId || cu.clinicId || '';
+                                    cu.clinicName = user.clinicName || cu.clinicName || '';
                                 } else {
-                                    allUsers.push({ username: _uname, phone: _phone, password: '', name: user.name || _uname, role: user.role || 'user', _cloudRoleSynced: true, createdAt: new Date().toISOString() });
+                                    allUsers.push({ username: _uname, phone: _phone, password: '', name: user.name || _uname, role: user.role || 'user', _cloudRoleSynced: true, clinicId: user.clinicId || '', clinicName: user.clinicName || '', createdAt: new Date().toISOString() });
                                 }
                                 saveUsers(allUsers);
                             } catch (_) {}
@@ -2491,10 +2493,10 @@ let currentUser = null;
                 try {
                     canManage = (window.Permission && Permission.shouldShowUserManage)
                         ? !!Permission.shouldShowUserManage(currentUser)
-                        : (currentUser.role === 'admin' || currentUser.role === 'clinic_admin');
+                        : (AuthCore.isClinicAdmin(currentUser));
                 } catch (permErr) {
                     console.error('[showUserManageModal] 权限校验抛异常，按admin兜底:', permErr);
-                    canManage = !!(currentUser && (currentUser.role === 'admin' || currentUser.role === 'clinic_admin'));
+                    canManage = !!(currentUser && (AuthCore.isClinicAdmin(currentUser)));
                 }
                 if (!canManage) {
                     alert('只有管理员可以管理用户');
@@ -2526,7 +2528,13 @@ let currentUser = null;
         function renderUserList() {
             try {
                 // ★ 2026-08-22 "唯一管理员"设计：用户管理列表隐藏内置默认 admin，只显示注册管理员 + 普通用户
-                const users = getUsers().filter(u => !isBuiltinDefaultAdmin(u));
+                // ★ 2026-08-25 一期方案·诊所归属过滤：云端登录落地的账号已记录 clinicId，
+                //   其他诊所的历史登录残留不再显示（数据保留，仅本机列表过滤）
+                const _curClinicId = (currentUser && currentUser.clinicId) || '';
+                const users = getUsers().filter(u => !isBuiltinDefaultAdmin(u)).filter(u => {
+                    if (!u.clinicId || !_curClinicId) return true; // 无归属信息（本地账号/老数据）不过滤
+                    return u.clinicId === _curClinicId;
+                });
                 const listDiv = document.getElementById('userList');
                 if (!listDiv) { throw new Error('用户列表容器 userList DOM 不存在'); }
                 if (!Array.isArray(users)) { throw new Error('用户数据格式错误（非数组）: ' + typeof users); }
@@ -2574,7 +2582,7 @@ let currentUser = null;
                 '<select id="editUserRole" style="width:100%;padding:5px;" disabled>' +
                 '<option value="user"' + (user.role === 'user' ? ' selected' : '') + '>普通用户</option>' +
                 '<option value="cashier"' + (user.role === 'cashier' ? ' selected' : '') + '>前台收费</option>' +
-                '<option value="admin"' + ((user.role === 'admin' || user.role === 'clinic_admin' || user.role === 'platform_admin') ? ' selected' : '') + '>管理员</option>' +
+                '<option value="admin"' + ((AuthCore.isAdmin(user)) ? ' selected' : '') + '>管理员</option>' +
                 '</select></div>' +
                 '<div class="form-group" style="margin-top:10px;"><label>用户类型</label>' +
                 '<select id="editUserType" style="width:100%;padding:5px;">' +
@@ -2628,7 +2636,7 @@ let currentUser = null;
                 users[userIndex].username = newUsername;
                 users[userIndex].name = newName;
                 // ★ 唯一管理员锁死：编辑时禁止把普通用户改成管理员（仅已注册管理员/内置admin可保留原角色）
-                users[userIndex].role = (users[userIndex].role === 'admin' || users[userIndex].role === 'clinic_admin' || users[userIndex].role === 'platform_admin') ? users[userIndex].role : 'user';
+                users[userIndex].role = (AuthCore.isAdmin(users[userIndex])) ? users[userIndex].role : 'user';
                 users[userIndex].userType = newUserType;
                 if (newPassword.trim()) {
                     users[userIndex].password = await hashPassword(newPassword.trim());
@@ -2781,7 +2789,7 @@ let currentUser = null;
 
         async function handleViewUserPrescriptions(username) {
             // 权限检查：普通用户只能查看自己的处方，管理员可以查看所有用户的处方
-            if (currentUser && currentUser.role !== 'admin' && currentUser.role !== 'clinic_admin' && currentUser.role !== 'platform_admin' && currentUser.username !== username) {
+            if (currentUser && !AuthCore.isAdmin(currentUser) && currentUser.username !== username) {
                 alert('您没有权限查看其他用户的处方！');
                 return;
             }
@@ -2871,7 +2879,7 @@ let currentUser = null;
 
         async function handleDeleteUser(username) {
             // P1-7 安全修复：内层权限校验，防止 DevTools 绕过
-            if (!currentUser || (currentUser.role !== 'admin' && currentUser.role !== 'clinic_admin' && currentUser.role !== 'platform_admin')) {
+            if (!currentUser || (!AuthCore.isAdmin(currentUser))) {
                 alert('无权限：仅管理员可删除用户');
                 return;
             }
@@ -2882,6 +2890,11 @@ let currentUser = null;
             }
             if (!await confirm('确定删除该用户？删除后该用户的所有处方数据也将被删除！')) return;
 
+            // ★ 2026-08-25 一期方案·本机预检：本地缓存归属其他诊所的记录直接仅删本机（不调云端挨403）
+            const _localTarget = getUsers().find(u => u.username === username);
+            if (_localTarget && _localTarget.clinicId && currentUser && currentUser.clinicId && _localTarget.clinicId !== currentUser.clinicId) {
+                if (!await confirm('该账号是其他诊所（' + (_localTarget.clinicName || _localTarget.clinicId) + '）账号在本机的缓存，云端账户不受影响。\n是否仅删除本机列表中的这条记录？')) return;
+            } else {
             // ★ 云端账户先删云端（云端拒绝则阻断；网络失败询问是否仅删本地）
             const cloudDel = await deleteUserOnCloud(username);
             if (cloudDel.blocked) {
@@ -2896,6 +2909,7 @@ let currentUser = null;
             if (cloudDel.failed) {
                 if (!await confirm('云端删除失败（' + cloudDel.error + '）。\n仍要仅删除本地记录吗？该云端账户下次登录可能重新出现。')) return;
             }
+            } // ★ 2026-08-25 一期方案·else 闭合（本机跨诊所分支跳过云端删除直接走本地清理）
 
             // P7: 从 prescriptions store 批量删除该用户的处方
             const userPrescriptions = await getAllPrescriptionsFromDB();
@@ -2909,7 +2923,7 @@ let currentUser = null;
             saveUsers(users);
 
             // 刷新处方历史列表
-            if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'clinic_admin' || currentUser.role === 'platform_admin')) {
+            if (currentUser && (AuthCore.isAdmin(currentUser))) {
                 prescriptionHistory = await getAllUserPrescriptions();
             }
 
@@ -3016,7 +3030,7 @@ let currentUser = null;
 
                 // C) 强制纠正角色（admin/clinic_admin → user，标准版永久单用户）
                 try {
-                    if (window.currentUser && (currentUser.role === 'admin' || currentUser.role === 'clinic_admin')) {
+                    if (window.currentUser && (AuthCore.isClinicAdmin(currentUser))) {
                         currentUser.role = 'user';
                     }
                 } catch (_) {}
@@ -3065,9 +3079,9 @@ let currentUser = null;
                 const changePwdBtn = document.getElementById('changePwdBtn');
                 const autoStartSection = document.getElementById('autoStartSection');
 
-                const canManage = (window.Permission && Permission.shouldShowUserManage) ? Permission.shouldShowUserManage(currentUser) : (currentUser.role === 'admin');
+                const canManage = (window.Permission && Permission.shouldShowUserManage) ? Permission.shouldShowUserManage(currentUser) : !!(window.AuthCore && AuthCore.isAdmin(currentUser));
                 const canChangePwd = (window.Permission && Permission.shouldShowChangePwd) ? Permission.shouldShowChangePwd(currentUser) : true;
-                const canAutoStart = (window.Permission && Permission.shouldShowAutoStart) ? Permission.shouldShowAutoStart(currentUser) : (currentUser.role === 'admin');
+                const canAutoStart = (window.Permission && Permission.shouldShowAutoStart) ? Permission.shouldShowAutoStart(currentUser) : !!(window.AuthCore && AuthCore.isAdmin(currentUser));
 
                 if (userManageBtn) userManageBtn.style.display = canManage ? 'block' : 'none';
                 if (changePwdBtn) changePwdBtn.style.display = canChangePwd ? 'block' : 'none';
@@ -3096,7 +3110,7 @@ let currentUser = null;
             const changePwdText = '🔐 修改密码';
 
             // 管理员显示"账户"，普通用户显示"改密"（APP和桌面一致）
-            const canManage = (window.Permission && Permission.shouldShowUserManage) ? Permission.shouldShowUserManage(currentUser) : (currentUser.role === 'admin');
+            const canManage = (window.Permission && Permission.shouldShowUserManage) ? Permission.shouldShowUserManage(currentUser) : !!(window.AuthCore && AuthCore.isAdmin(currentUser));
             // ★ 2026-08-25 前台收费角色：底部按钮变为"前台收费"入口（移动端 top-tabs 隐藏，收费工作台唯一入口）
             if (isCashierUserNow()) {
                 btn2.innerHTML = '💰 收费';
@@ -3460,7 +3474,7 @@ let currentUser = null;
             // 根据用户权限加载处方数据（try/catch + 超时保护，防止 IndexedDB 挂起导致 defaultMedicines 不被赋值）
             try {
                 const loadPrescriptions = async () => {
-                    if (currentUser && currentUser.role === 'admin') {
+                    if (currentUser && window.AuthCore && AuthCore.isAdmin(currentUser)) {
                         return await getAllUserPrescriptions();
                     } else {
                         return await getAllUserPrescriptions(currentUser?.username || '');
@@ -5009,7 +5023,7 @@ let currentUser = null;
             if (!currentUser) return prescriptions;
             if (window.AuthCore && AuthCore.isAdmin && AuthCore.isAdmin(currentUser)) return prescriptions;
             var role = (currentUser.role || '').toLowerCase();
-            if (role === 'admin' || role === 'clinic_admin') return prescriptions;
+            if (AuthCore.isClinicAdmin({ role: role })) return prescriptions;
             var filtered = prescriptions.filter(function(p) { return p.createdBy === currentUser.username; });
             // ★安全修复（2026-08-21）：普通用户仅能查看本人处方（createdBy === username）。
             // "历史处方消失"由服务端按用户隔离 + 本机缓存按用户归并解决；
@@ -6402,7 +6416,7 @@ let currentUser = null;
         function canChargePrescriptionsNow() {
             if (!currentUser) return false;
             if (window.Permission && Permission.canChargePrescriptions) return Permission.canChargePrescriptions(currentUser);
-            return isCashierUserNow() || currentUser.role === 'admin' || currentUser.role === 'clinic_admin';
+            return isCashierUserNow() || AuthCore.isClinicAdmin(currentUser);
         }
 
         async function showClinicPrescriptions() {
@@ -6991,7 +7005,7 @@ let currentUser = null;
             }
             
             const exportUserName = userObj?.name || userObj?.username || '未知用户';
-            const userRoleDisplay = (userObj && (userObj.role === 'admin' || userObj.role === 'clinic_admin' || userObj.role === 'platform_admin')) ? '管理员' : '普通用户';
+            const userRoleDisplay = (userObj && (AuthCore.isAdmin(userObj))) ? '管理员' : '普通用户';
             
             const fileName = `本地_${exportUserName}_${dateStr}_${timeStr}.json`;
             

@@ -158,6 +158,13 @@ Invoke-Check -Name "9/9 认证密钥安全门禁(AUTH_SECRET)" -ArgsList @(
     (Join-Path $scriptDir 'verify-auth-secret.ps1')
 )
 
+# --- 10 角色判断收口门禁（防多角色复合散判回潮，须用 AuthCore.isAdmin/isClinicAdmin） ---
+# 【一期方案 2026-08-25】管理员/用户体系统一性：业务 index.html 禁止手写
+#   role === 'admin' || role === 'clinic_admin' [|| platform_admin] 复合散判
+Invoke-Check -Name "10/10 角色判断收口门禁" -ArgsList @(
+    (Join-Path $scriptDir 'verify-role-centralized.ps1')
+)
+
 # ============================ 汇总 ============================
 Write-Host ""
 Write-Host "============================================" -ForegroundColor Cyan
