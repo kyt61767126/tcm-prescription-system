@@ -554,6 +554,12 @@
         return user.role === 'platform_admin';
     }
 
+    // ★ 2026-08-25 前台收费角色：只读全所处方 + 收费动作，不可开方/改方/管用户
+    function isCashier(user) {
+        if (!user) return false;
+        return user.role === 'cashier';
+    }
+
     function buildAuthPayload(user) {
         if (!user) return null;
         // Unicode 安全包装（中文用户名兼容）：encodeURIComponent → unescape → btoa
@@ -1353,6 +1359,7 @@
         isAdmin,
         isClinicAdmin,
         isPlatformAdmin,
+        isCashier,
         buildAuthPayload,
 
         // 会话管理

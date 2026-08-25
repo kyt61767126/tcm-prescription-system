@@ -1,4 +1,4 @@
-import { parseAuthHeader, isPlatformAdmin, isClinicAdmin, isAdmin } from './_lib/auth.js';
+import { parseAuthHeader, isPlatformAdmin, isClinicAdmin, isAdmin, isCashier } from './_lib/auth.js';
 import { getKV } from './_lib/kv.js';
 
 // P1-6 安全增强：CORS 白名单（与 users.js 一致）
@@ -156,7 +156,8 @@ export async function onRequest(context) {
 
             // 按角色筛选
             let filtered = prescriptions;
-            if (!isAdmin(currentUser)) {
+            // ★ 2026-08-25 前台收费：cashier 与管理员一样可读全所处方（收费工作台数据源）
+            if (!isAdmin(currentUser) && !isCashier(currentUser)) {
                 filtered = prescriptions.filter(p => p.createdBy === currentUser.username);
             }
 
@@ -188,6 +189,52 @@ export async function onRequest(context) {
 
         // POST - 保存处方或恢复处方
         if (method === 'POST') {
+            // ★ 2026-08-25 前台收费动作：POST ?action=mark-paid  body: { id, payMethod }
+            //   仅 cashier/admin 可调；状态单向 unpaid→paid（退款走管理员后续流程）；
+            //   幂等：已收费直接返回成功，重复点击不报错。
+            if (url.searchParams.get('action') === 'mark-paid') {
+                if (!isAdmin(currentUser) && !isCashier(currentUser)) {
+                    return json({ success: false, error: '无收费权限：仅管理员或前台收费账号可执行收费' }, 403, context.request);
+                }
+                const body = await context.request.json().catch(() => ({}));
+                const pid = body.id;
+                if (pid === undefined || pid === null || pid === '') {
+                    return json({ success: false, error: '缺少处方ID' }, 400, context.request);
+                }
+                const PAY_METHODS = ['现金', '微信', '支付宝', '刷卡', '其他'];
+                let payMethod = String(body.payMethod || '').trim();
+                if (!PAY_METHODS.includes(payMethod)) payMethod = '其他';
+
+                let prescriptions = (await kv.get(KV_PRESCRIPTIONS, 'json')) || [];
+                const idx = prescriptions.findIndex(p => String(p.id) === String(pid));
+                if (idx === -1) {
+                    return json({ success: false, error: '处方不存在' }, 404, context.request);
+                }
+                const target = prescriptions[idx];
+                if (target.feeStatus === 'paid') {
+                    return json({ success: true, data: target, message: '该处方已收费，无需重复操作' });
+                }
+                const nowIso = getBeijingTime().toISOString();
+                target.feeStatus = 'paid';
+                target.paidAt = nowIso;
+                target.paidBy = currentUser.username;
+                target.paidByName = (body.paidByName || currentUser.username);
+                target.payMethod = payMethod;
+                prescriptions[idx] = target;
+                await kv.put(KV_PRESCRIPTIONS, JSON.stringify(prescriptions));
+
+                await writeAuditLog(kv, targetClinicId, currentUser.username, currentUser.role,
+                    'mark_paid', String(pid), context.request,
+                    { payMethod, amount: target.totalAmount, patientName: target.patientName || '' });
+
+                return json({ success: true, data: target, message: '收费成功' });
+            }
+
+            // ★ 2026-08-25 前台收费角色禁开方：cashier 不能保存/恢复处方（防绕过前端界面）
+            if (isCashier(currentUser)) {
+                return json({ success: false, error: '前台收费账号无开方权限，请使用医师账号登录' }, 403, context.request);
+            }
+
             // 恢复处方：POST ?restore=true&id=xxx
             if (url.searchParams.get('restore') === 'true') {
                 const prescriptionId = url.searchParams.get('id');

@@ -3,7 +3,7 @@ import {
     parseAuthHeader, hashPassword, verifyPassword, signToken,
     isPlatformAdmin, isClinicAdmin, isAdmin, isLegacyPasswordHash,
     revokeAllUserTokens, writeUserSession, clearUserSession, getUserSession,
-    ROLE_PLATFORM_ADMIN, ROLE_CLINIC_ADMIN, ROLE_DOCTOR,
+    ROLE_PLATFORM_ADMIN, ROLE_CLINIC_ADMIN, ROLE_DOCTOR, ROLE_CASHIER,
     KV_SYSTEM_CLINICS, KV_SYSTEM_PLATFORM_ADMINS,
     findPhoneOccupancy
 } from './_lib/auth.js';
@@ -502,6 +502,78 @@ export async function onRequest(context) {
             });
         }
 
+        // ===== 诊所管理员云端建号 POST /users?action=add-clinic-user =====
+        // ★ 2026-08-25 新增（前台收费一期配套）：机构版诊所管理员在客户端"用户管理"添加
+        //   医师/前台账号时同步建到云端 KV——此前新账号只落本机 localStorage，
+        //   其他设备（尤其前台收费机）无法登录该账号。
+        //   仅允许 doctor/cashier 两种角色（禁止借本接口创建管理员）；
+        //   用户名全局唯一校验 + 审计日志。
+        if (method === 'POST' && url.searchParams.get('action') === 'add-clinic-user') {
+            const authUser = await parseAuthHeader(context.request, context.env);
+            if (!authUser || !isClinicAdmin(authUser)) {
+                return json({ success: false, error: '未授权：仅诊所管理员可添加账号' }, 401, context.request);
+            }
+            if (!authUser.clinicId) {
+                return json({ success: false, error: '缺少诊所信息' }, 400, context.request);
+            }
+
+            const body = await context.request.json().catch(() => ({}));
+            const username = String(body.username || '').trim();
+            const password = String(body.password || '');
+            const name = String(body.name || '').trim();
+            const role = (body.role === ROLE_CASHIER) ? ROLE_CASHIER : ROLE_DOCTOR;
+
+            if (!username || !password || !name) {
+                return json({ success: false, error: '请填写登录账号、密码和姓名' }, 400, context.request);
+            }
+            if (/[\u4e00-\u9fa5]/.test(username)) {
+                return json({ success: false, error: '登录账号不能使用中文' }, 400, context.request);
+            }
+            if (username.length < 2 || username.length > 30) {
+                return json({ success: false, error: '登录账号长度需 2-30 字符' }, 400, context.request);
+            }
+            if (password.length < 6) {
+                return json({ success: false, error: '密码至少 6 位' }, 400, context.request);
+            }
+            if (!/^[\u4e00-\u9fa5]{2,}$/.test(name)) {
+                return json({ success: false, error: '姓名必须为中文（至少2个汉字）' }, 400, context.request);
+            }
+
+            // 全局唯一：跨诊所 username/phone + platform_admins 全查
+            const existing = await findUserForLogin(kv, username);
+            if (existing && existing.user) {
+                return json({ success: false, error: '该登录账号已被占用' }, 409, context.request);
+            }
+            const phoneOccupancy = await findPhoneOccupancy(kv, username);
+            if (phoneOccupancy && phoneOccupancy.user) {
+                return json({ success: false, error: '该账号与已有手机号冲突' }, 409, context.request);
+            }
+
+            const { passwordHash, salt } = await hashPassword(password);
+            const now = getNowISO();
+            const clinicUsers = (await kv.get(`clinic:${authUser.clinicId}:users`, 'json')) || [];
+            clinicUsers.push({
+                username: username,
+                name: name,
+                role: role,
+                passwordHash: passwordHash,
+                salt: salt,
+                allowedMode: 'both',
+                cloudEnabled: true,
+                allowSavePrescription: (role !== ROLE_CASHIER),
+                userType: 'production',
+                createdAt: now,
+                updatedAt: now
+            });
+            await kv.put(`clinic:${authUser.clinicId}:users`, JSON.stringify(clinicUsers));
+
+            await writeAuditLog(kv, authUser.clinicId, authUser.username, authUser.role,
+                'add_clinic_user', username, context.request,
+                { newRole: role, newName: name });
+
+            return json({ success: true, username: username, role: role, message: '云端账号创建成功' });
+        }
+
         // ===== 统一账号救援：解锁 / 重置密码 POST /users?action=reset-password =====
         // ★ 2026-08-20 合并：原 action=unlock 与 action=reset-password 两个接口合并为一个统一操作。
         //   body.password 留空 = 仅解锁（清除登录失败计数/锁定，无需等 TTL）；
@@ -609,8 +681,8 @@ export async function onRequest(context) {
             if (disabled !== undefined && typeof disabled !== 'boolean') {
                 return json({ success: false, error: 'disabled 参数无效（须为布尔值）' }, 400, context.request);
             }
-            if (role !== undefined && ![ROLE_CLINIC_ADMIN, ROLE_DOCTOR].includes(role)) {
-                return json({ success: false, error: '角色仅允许设置为 诊所管理员/医师' }, 400, context.request);
+            if (role !== undefined && ![ROLE_CLINIC_ADMIN, ROLE_DOCTOR, ROLE_CASHIER].includes(role)) {
+                return json({ success: false, error: '角色仅允许设置为 诊所管理员/医师/前台收费' }, 400, context.request);
             }
 
             const found = await findUserForLogin(kv, targetUsername);
@@ -1112,7 +1184,7 @@ export async function onRequest(context) {
             }
 
             // 用户角色是否有效
-            if (!user.role || !['platform_admin', 'clinic_admin', 'doctor'].includes(user.role)) {
+            if (!user.role || !['platform_admin', 'clinic_admin', 'doctor', 'cashier'].includes(user.role)) {
                 console.error('[登录失败] 用户角色无效:', username, user.role);
                 return json({
                     success: false,

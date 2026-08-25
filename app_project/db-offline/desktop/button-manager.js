@@ -89,7 +89,21 @@
                 canChangePwd = true;
             }
         } catch(_) {}
-        return { canManage: !!canManage, canChangePwd: !!canChangePwd, isInst: isInst, isPersonal: isPersonal };
+        // ★ 2026-08-25 前台收费角色：处方查阅（收费工作台入口）对 cashier 也可见
+        var canViewAll = false;
+        try {
+            if (global.Permission && typeof Permission.canViewAllPrescriptions === 'function') {
+                canViewAll = Permission.canViewAllPrescriptions(user);
+            }
+        } catch(_) {}
+        if (!canViewAll) {
+            try {
+                canViewAll = !!(!isPersonal && user && (user.role === 'admin' || user.role === 'clinic_admin' || user.role === 'cashier'));
+            } catch(_) {}
+        } else if (isPersonal) {
+            canViewAll = false;
+        }
+        return { canManage: !!canManage, canChangePwd: !!canChangePwd, canViewAll: !!canViewAll, isInst: isInst, isPersonal: isPersonal };
     }
 
     function __getEdition() {
@@ -112,7 +126,7 @@
         var _archWatermark = 'Arch 2.26 | editionNormalize | instAdminAssert | roleDowngradeGuard';
         if (umb) { umb.style.display = p.canManage ? 'block' : 'none'; umb.style.visibility = p.canManage ? 'visible' : 'hidden'; umb.setAttribute('title', (umb.getAttribute('title') ? umb.getAttribute('title').split(' || ')[0] + ' || ' : '') + _archWatermark); }
         if (cpb) { cpb.style.display = p.canChangePwd ? 'block' : 'none'; cpb.style.visibility = p.canChangePwd ? 'visible' : 'hidden'; cpb.setAttribute('title', (cpb.getAttribute('title') ? cpb.getAttribute('title').split(' || ')[0] + ' || ' : '') + _archWatermark); }
-        if (cpr) { cpr.style.display = p.canManage ? 'block' : 'none'; cpr.style.visibility = p.canManage ? 'visible' : 'hidden'; cpr.setAttribute('title', (cpr.getAttribute('title') ? cpr.getAttribute('title').split(' || ')[0] + ' || ' : '') + _archWatermark); }
+        if (cpr) { cpr.style.display = p.canViewAll ? 'block' : 'none'; cpr.style.visibility = p.canViewAll ? 'visible' : 'hidden'; cpr.setAttribute('title', (cpr.getAttribute('title') ? cpr.getAttribute('title').split(' || ')[0] + ' || ' : '') + _archWatermark); }
         // 移动端按钮 btn2（【用户管理】→ 改密码在移动端是改密图标，无移动端时无此按钮）
         try {
             var btn2 = document.getElementById('mobileBtn2');

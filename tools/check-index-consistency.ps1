@@ -57,7 +57,15 @@ $markers = @(
     'mobileActionBar',              # 移动端快捷操作栏容器
     'openRecordingOverlay',         # 底部按钮：录像
     'openPhotoOverlay',             # 底部按钮：拍照
-    'showChangePwdModal'            # 底部按钮：改密
+    'showChangePwdModal',           # 底部按钮：改密
+    # ── 前台收费工作台（2026-08-25）────────────────────────────────────
+    # 规范：cashier 角色只读全所处方 + mark-paid 收费动作，三端云端副本必须同步
+    'isCashierUserNow',             # 前台收费角色判定
+    'fetchClinicPrescriptionsFromCloud', # 云端全所处方拉取（收费数据源）
+    'viewClinicPrescriptionDetail', # 处方详情分流（前台只读弹窗）
+    'showChargeModal',              # 收费确认弹窗（支付方式选择）
+    'markPrescriptionPaid',         # 收费动作（POST mark-paid 云端记账）
+    'addClinicUserOnCloud'          # 云端建号（新账号多设备即用）
 )
 
 $sourcePath = Join-Path $root $Source

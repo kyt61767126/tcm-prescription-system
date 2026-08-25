@@ -16,6 +16,7 @@ import { getKV } from './kv.js';
 export const ROLE_PLATFORM_ADMIN = 'platform_admin';
 export const ROLE_CLINIC_ADMIN = 'clinic_admin';
 export const ROLE_DOCTOR = 'doctor';
+export const ROLE_CASHIER = 'cashier';
 
 export const KV_SYSTEM_CLINICS = 'system:clinics';
 export const KV_SYSTEM_PLATFORM_ADMINS = 'system:platform_admins';
@@ -435,6 +436,11 @@ export function isClinicAdmin(user) {
 
 export function isDoctor(user) {
     return !!(user && user.role === ROLE_DOCTOR);
+}
+
+// ★ 2026-08-25 前台收费角色：只读全所处方 + 收费动作，不可开方/改方/管用户
+export function isCashier(user) {
+    return !!(user && user.role === ROLE_CASHIER);
 }
 
 export function isAdmin(user) {
