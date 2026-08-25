@@ -2245,6 +2245,27 @@
         return null;
     }
 
+    // ★★★ 2026-08-25 管理员激活按钮状态（全局统一规范）：
+    //   激活有效期内（剩余 > 7 天，或 -1 永久授权）→ 按钮灰色只读（无需激活）
+    //   剩余 ≤ 7 天（临期提醒续费）/ 未激活 / 已过期 / 试用 / 无到期信息 → 按钮正常颜色可点击
+    function setAdminActivateBtnState(daysLeft) {
+        const btn = document.getElementById('adminActivateSettingsBtn');
+        if (!btn) return;
+        const inValidPeriod = (typeof daysLeft === 'number' && !isNaN(daysLeft)) &&
+            (daysLeft === -1 || daysLeft > 7);
+        if (inValidPeriod) {
+            btn.disabled = true;
+            btn.style.background = '#b0bec5';
+            btn.style.cursor = 'not-allowed';
+            btn.title = '激活有效期内无需激活';
+        } else {
+            btn.disabled = false;
+            btn.style.background = '#26a69a';
+            btn.style.cursor = 'pointer';
+            btn.title = '';
+        }
+    }
+
     // ★★★ 2026-08-25 全局统一授权状态：云端账号授权状态文案（参考离线版格式）
     //   已登录 → "✅ 已激活（机构版/标准版）<br>剩余 X 天"
     //   版本判定 clinicEdition（cloud_clinic→机构版 / cloud_personal→标准版），缺省回退 CONFIG.edition
@@ -2258,11 +2279,14 @@
         const isStd = ['personal', 'cloud_personal', 'offline_personal', 'standard', 'clinic_standard'].indexOf(eLow) >= 0;
         const planLabel = ed ? (isStd ? '标准版' : '机构版') : '';
         let html = '✅ 已激活' + (planLabel ? '（' + planLabel + '）' : '');
+        // ★ 2026-08-25 按钮状态：有效期内（>7天）灰色只读；≤7天/过期恢复正常色提醒续费
+        let daysLeftForBtn = null;
         const expRaw = cu.clinicExpiresAt;
         if (expRaw) {
             const ms = new Date(expRaw).getTime();
             if (!isNaN(ms)) {
                 const days = Math.ceil((ms - Date.now()) / (24 * 60 * 60 * 1000));
+                daysLeftForBtn = days;
                 if (days > 0) {
                     html += '<br>剩余 <b style="color:#4caf50;">' + days + '</b> 天';
                 } else {
@@ -2270,6 +2294,7 @@
                 }
             }
         }
+        setAdminActivateBtnState(daysLeftForBtn);
         return html;
     }
 
@@ -2299,6 +2324,8 @@
             if (!global.electronAPI || !global.electronAPI.license ||
                 typeof global.electronAPI.license.getStatus !== 'function') {
                 el.innerHTML = '🌐 <b style="color:#2196f3;">云端版</b><br><span style="color:#666;">登录即可使用，无需激活</span>';
+                // 未登录云端版：保留按钮正常色（可申请激活/注册账号）
+                setAdminActivateBtnState(null);
                 return;
             }
             const status = await global.electronAPI.license.getStatus();
@@ -2316,6 +2343,8 @@
                     } else {
                         el.innerHTML = '⚠️ <span style="color:#ff9800;">试用期已过期</span><br><span style="color:red;">请激活后使用</span>';
                     }
+                    // 试用期（最长7天）与过期：按钮正常色（需要激活）
+                    setAdminActivateBtnState(null);
                 } else if (licenseType === 'licensed' || licenseType === 'personal' || licenseType === 'pro') {
                     // 已激活（正式 license）
                     const planLabel = licenseType === 'personal' ? '标准版' :
@@ -2325,15 +2354,20 @@
                         html += '<br>剩余 <b style="color:#4caf50;">' + remainingDays + '</b> 天';
                     }
                     el.innerHTML = html;
+                    // 正式授权：>7天或永久(-1)灰色只读；≤7天恢复正常色提醒续费
+                    setAdminActivateBtnState(hasDays ? remainingDays : null);
                 } else {
                     // 未知类型，显示通用已激活
                     el.innerHTML = '✅ 已激活' +
                         (hasDays && remainingDays > 0 ? '<br>剩余 ' + remainingDays + ' 天' : '');
+                    setAdminActivateBtnState(hasDays ? remainingDays : null);
                 }
             } else {
                 el.innerHTML = '❌ 未激活<br><span style="color:red;">' +
                     ((status && status.message) ? status.message : '请激活后使用') +
                     '</span>';
+                // 未激活：按钮正常色（需要激活）
+                setAdminActivateBtnState(null);
             }
         } catch (e) {
             el.textContent = '状态获取失败: ' + (e && e.message ? e.message : '未知错误');

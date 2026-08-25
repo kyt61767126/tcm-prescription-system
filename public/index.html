@@ -704,10 +704,22 @@ window.APP_MODE = 'auto';
 // ★修复：消除登录界面闪现（已登录时立即隐藏 loginOverlay，避免 adjustResize 重排时闪现）
 // ★ 修复 2026-07-28：APP 端启动时主动清除所有登录态（纵深防御），确保每次打开都必须手动登录
 // 使用 location.href 检测 APP（此时 electronAPI 尚未注入，无法用 isAndroidAPP）
+// ★★ 2026-08-25 修复"打开后先闪操作界面再弹登入框"：
+//   ①云端APP（Capacitor 壳远程加载，非 android_asset）此前漏判——残留 isLoggedIn 先隐藏
+//     登入框露出操作界面，随后 checkLoginStatus 又无条件弹回登入框造成闪现 → 纳入强制清登录态
+//   ②Electron 桌面版不再信任 localStorage.isLoggedIn 同步隐藏登入框——改由主进程 dom-ready
+//     注入 + checkLoginStatus 的 Electron 分支（均校验 currentLoggedInUser）负责隐藏，
+//     localStorage 残留假登录态不再导致窗口先露操作界面
+//   ③网页版：会话保持附带 8 小时超时判断（超时先清态，直接显示登入框，不再先进后弹）
 try {
     var __isAPP = location.href.indexOf('android_asset') >= 0;
-    if (__isAPP) {
-        // APP 端：清除所有登录态，不隐藏登录界面
+    // ★ 原生 APP 壳特征：MainActivity 注入 AndroidNative / AndroidAppExit JS 接口
+    //   （离线APP android_asset 加载 + 云端APP 远程URL加载都注入，网页/桌面版没有）
+    var __isNativeAppShell = (typeof window.AndroidNative !== 'undefined') || (typeof window.AndroidAppExit !== 'undefined');
+    var __isCloudAPP = !__isAPP && __isNativeAppShell;
+    var __isDesktop = !!(window.electronAPI && window.electronAPI.isElectron);
+    if (__isAPP || __isCloudAPP) {
+        // APP 端（离线内嵌 + 云端Capacitor远程加载）：清除所有登录态，不隐藏登录界面
         localStorage.removeItem('isLoggedIn');
         localStorage.removeItem('currentUser');
         localStorage.removeItem('user_login_data');
@@ -716,9 +728,27 @@ try {
         localStorage.removeItem('auth:loginData');
         localStorage.removeItem('cloud_isLoggedIn');
         localStorage.removeItem('cloud_currentUser');
+    } else if (__isDesktop) {
+        // 桌面版：loginOverlay 保持默认显示，由主进程 dom-ready 注入隐藏（登录态经主进程校验）
     } else if (localStorage.getItem('isLoggedIn') === 'true') {
-        var __lo = document.getElementById('loginOverlay');
-        if (__lo) __lo.style.display = 'none';
+        // 网页版：8 小时内有效会话直接进操作界面（会话保持）；超时先清登录态
+        var __sessOK = true;
+        try {
+            var __ld = localStorage.getItem('user_login_data');
+            if (__ld) {
+                var __lt = JSON.parse(__ld).loginTime;
+                if (__lt && Date.now() - __lt > 8 * 60 * 60 * 1000) {
+                    __sessOK = false;
+                    localStorage.removeItem('isLoggedIn');
+                    localStorage.removeItem('currentUser');
+                    localStorage.removeItem('user_login_data');
+                }
+            }
+        } catch(e) {}
+        if (__sessOK) {
+            var __lo = document.getElementById('loginOverlay');
+            if (__lo) __lo.style.display = 'none';
+        }
     }
 } catch(e) {}
 if (window.Permission) {
@@ -3127,15 +3157,21 @@ let currentUser = null;
         async function checkLoginStatus() {
             // ★ 纵深防御 2026-07-28：APP 端启动时再次清除登录态
             // 防止早期内联脚本和 AuthCore 迁移遗漏，确保每次打开都必须手动登录
+            // ★★ 2026-08-25：云端APP（Capacitor 壳远程加载）与离线APP 统一强制每次登录
             try {
                 if (location.href.indexOf('android_asset') >= 0 ||
-                    (window.electronAPI && window.electronAPI.isAndroidAPP)) {
+                    (window.electronAPI && window.electronAPI.isAndroidAPP) ||
+                    (location.href.indexOf('android_asset') < 0 &&
+                     (typeof window.AndroidNative !== 'undefined' || typeof window.AndroidAppExit !== 'undefined') &&
+                     !(window.electronAPI && window.electronAPI.isElectron))) {
                     localStorage.removeItem('isLoggedIn');
                     localStorage.removeItem('currentUser');
                     localStorage.removeItem('user_login_data');
                     localStorage.removeItem('auth:isLoggedIn');
                     localStorage.removeItem('auth:currentUser');
                     localStorage.removeItem('auth:loginData');
+                    localStorage.removeItem('cloud_isLoggedIn');
+                    localStorage.removeItem('cloud_currentUser');
                 }
             } catch(e) {}
 
@@ -3162,6 +3198,31 @@ let currentUser = null;
                     }
                 } catch(e) {
                     console.error('Electron自动登录失败:', e);
+                }
+            }
+
+            // ★★ 2026-08-25 修复"打开后先闪操作界面再弹登入框"：
+            //   非 Electron 环境（网页版）存在有效登录态时直接恢复会话进入操作界面，
+            //   而不是先露出操作界面（同步脚本已隐藏登入框）再被下方弹回登入框。
+            //   （云端APP/离线APP 已在上方强制清登录态，走不到这里）
+            if (!window.electronAPI || !window.electronAPI.isElectron) {
+                try {
+                    const _storedUser = localStorage.getItem('currentUser');
+                    if (localStorage.getItem('isLoggedIn') === 'true' && _storedUser) {
+                        const _webUser = JSON.parse(_storedUser);
+                        if (_webUser && (_webUser.username || _webUser.name)) {
+                            currentUser = _webUser;
+                            document.getElementById('loginOverlay').style.display = 'none';
+                            const _mc = document.querySelector('.main-container');
+                            if (_mc) _mc.style.display = 'flex';
+                            updateUserDisplay();
+                            await loadData();
+                            refreshUserInterface();
+                            return;
+                        }
+                    }
+                } catch(e) {
+                    console.error('网页会话恢复失败:', e);
                 }
             }
 
