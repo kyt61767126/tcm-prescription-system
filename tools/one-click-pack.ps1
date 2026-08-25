@@ -333,8 +333,8 @@ function Build-Cloud {
     Show-LatestExe -Dir "$script:RootDir\app_project\db-yunduan\cloud_desktop\dist" -Label "云端桌面"
     Show-LatestApk -Dir "$script:RootDir\app_project\db-yunduan" -GradleFile "$script:RootDir\app_project\db-yunduan\cloud_app\app\build.gradle" -Label "云端APP"
     Write-Host "========================================" -ForegroundColor Green
-    pause
-    # ★ 2026-08-23 复核修复：成功路径显式返回0（供 Build-All/-AutoMode 聚合退出码）
+    # ★ 2026-08-25 全局取消成功路径确认回车：云端+本地 / 全部版本组合打包自动连续执行，
+    #   全程无需人工回车；失败路径的 pause 保留（错误信息必须停留屏幕供人工排查）
     return 0
 }
 
@@ -439,8 +439,7 @@ function Build-Offline {
     Show-LatestExe -Dir "$script:RootDir\app_project\db-offline\desktop\dist" -Label "离线桌面"
     Show-LatestApk -Dir "$script:RootDir\app_project\db-offline" -GradleFile "$script:RootDir\app_project\db-offline\app\app\build.gradle" -Label "离线APP"
     Write-Host "========================================" -ForegroundColor Green
-    pause
-    # ★ 2026-08-23 复核修复：成功路径显式返回0（供 Build-All/-AutoMode 聚合退出码）
+    # ★ 2026-08-25 全局取消成功路径确认回车（同 Build-Cloud，组合打包自动连续执行）
     return 0
 }
 
@@ -472,7 +471,7 @@ function Build-All {
         Write-Host "  结束: $allEnd" -ForegroundColor Green
     }
     Write-Host "========================================" -ForegroundColor Green
-    pause
+    # ★ 2026-08-25 取消成功路径确认回车（全局自动完成；失败路径 pause 保留）
     # 聚合退出码：任一版本失败即非0（供 -AutoMode / release-menu Invoke-Pack 判断成败）
     if ($rcCloud -ne 0)   { return [int]$rcCloud }
     if ($rcOffline -ne 0) { return [int]$rcOffline }
