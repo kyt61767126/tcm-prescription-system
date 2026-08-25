@@ -194,9 +194,19 @@ export async function onRequest(context) {
             });
         }
 
+        // ★ v4 新增：多设备授权校验
+        // 1. 获取已绑定设备列表（兼容旧 record.machineId 单值字段）
+        // ★ 2026-08-25 顺序调整：设备列表上移——同设备重激活判定需先于诊所名校验
+        //   （卸载重装场景 machineId 不变，设备已在绑定列表，无需再向客户索要诊所名）
+        const devices = getDevices(record);
+        const maxDevices = getMaxDevices(record);
+        const existingDevice = devices.find(d => d.machineId === machineId);
+
         // ★ v3 新增：诊所名绑定校验
         // 仅当激活码生成时已绑定 clinicName 时才校验（向后兼容旧激活码）
-        if (record.clinicName) {
+        // ★ 2026-08-25：同设备重激活（existingDevice 命中）自动跳过诊所名校验——
+        //   license 始终按 record.clinicName 生成，重装客户只需重输激活码即可恢复
+        if (record.clinicName && !existingDevice) {
             if (!clinicName || clinicName.trim() === '') {
                 return json({
                     success: false,
@@ -211,12 +221,6 @@ export async function onRequest(context) {
                 }, 403);
             }
         }
-
-        // ★ v4 新增：多设备授权校验
-        // 1. 获取已绑定设备列表（兼容旧 record.machineId 单值字段）
-        const devices = getDevices(record);
-        const maxDevices = getMaxDevices(record);
-        const existingDevice = devices.find(d => d.machineId === machineId);
 
         if (record.status === 'used' && !existingDevice) {
             // 新设备激活：检查是否还有配额
