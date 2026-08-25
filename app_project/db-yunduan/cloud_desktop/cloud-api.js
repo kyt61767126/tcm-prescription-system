@@ -74,8 +74,19 @@ window.cloudFetch = async function(url, options = {}) {
                 };
             }
             // ★ 2026-08-23 非401 HTTP错误附带status字段（调用方可按404/400/403分支处理）
-            const httpErr = new Error('HTTP error! status: ' + response.status);
+            // ★ 2026-08-25 错误详情透传：解析响应体 error 字段（如"无权删除其他诊所的用户"），
+            //   附到异常 message/serverError 上供调用方展示真实原因——否则用户只看到
+            //   "HTTP error! status:403" 黑盒，真实拒绝原因被吞（跨诊所删除被拒排查教训）。
+            let serverError = null;
+            try {
+                const _p = JSON.parse(errorText.replace(/^\uFEFF/, '').trim());
+                if (_p && _p.error) serverError = _p.error;
+            } catch (_) {}
+            const httpErr = new Error(serverError
+                ? (serverError + '（HTTP ' + response.status + '）')
+                : ('HTTP error! status: ' + response.status));
             httpErr.status = response.status;
+            httpErr.serverError = serverError;
             throw httpErr;
         }
 

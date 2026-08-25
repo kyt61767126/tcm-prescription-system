@@ -2431,9 +2431,21 @@ let currentUser = null;
                 }
                 if (resp && resp.success) return { ok: true };
                 if (resp && resp.status === 404) return { ok: true, notFound: true }; // 云端无此账号=本地账户，正常
-                if (resp && (resp.status === 400 || resp.status === 403)) return { blocked: true, error: resp.error || ('HTTP ' + resp.status) };
+                if (resp && (resp.status === 400 || resp.status === 403)) {
+                    // ★ 2026-08-25 跨诊所残留账号：本机列表混入其他诊所账号（历史登录落地），
+                    //   云端安全规则禁止跨诊所删除——标记 crossClinic 允许仅清本机记录
+                    if ((resp.error || '').indexOf('其他诊所') !== -1) {
+                        return { blocked: true, crossClinic: true, error: resp.error };
+                    }
+                    return { blocked: true, error: resp.error || ('HTTP ' + resp.status) };
+                }
                 return { failed: true, error: (resp && resp.error) || ('HTTP ' + (resp && resp.status) || '网络异常') };
             } catch (e) {
+                // ★ 2026-08-25 同上：cloudFetch 抛错路径（serverError 已透传）同样识别跨诊所
+                const _svErr = (e && e.serverError) || '';
+                if (e && e.status === 403 && _svErr.indexOf('其他诊所') !== -1) {
+                    return { blocked: true, crossClinic: true, error: _svErr };
+                }
                 return { failed: true, error: e && e.message ? e.message : String(e) };
             }
         }
@@ -2454,8 +2466,13 @@ let currentUser = null;
             // ★ 云端账户先删云端（云端拒绝则阻断；网络失败询问是否仅删本地）
             const cloudDel = await deleteUserOnCloud(username);
             if (cloudDel.blocked) {
-                alert('云端删除被拒绝：' + cloudDel.error + '\n未删除本地记录。');
-                return;
+                // ★ 2026-08-25 跨诊所残留：云端账户属其他诊所受保护不可删，本机记录可单独清理
+                if (cloudDel.crossClinic) {
+                    if (!await confirm('该账号属于其他诊所（' + cloudDel.error + '），云端账户不受影响。\n是否仅删除本机列表中的这条记录？')) return;
+                } else {
+                    alert('云端删除被拒绝：' + cloudDel.error + '\n未删除本地记录。');
+                    return;
+                }
             }
             if (cloudDel.failed) {
                 if (!await confirm('云端删除失败（' + cloudDel.error + '）。\n仍要仅删除本地记录吗？该云端账户下次登录可能重新出现。')) return;
