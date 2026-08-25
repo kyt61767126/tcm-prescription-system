@@ -1029,6 +1029,15 @@
 - **追加修复（同日）**：离线APP 5 处散判收口当时只改了产物 `assets/public/index.html`，`build-app.bat` L106 会用源模板 `index-app.html` 覆盖产物 → 打包后改动回滚（再次验证 2.72 的"必须改 index-app.html"铁律）。已对源模板补齐 5 处收口（canManage 兜底×2 / 唯一管理员锁死 isAdmin / 标准版角色纠正 isClinicAdmin / 处方过滤 isClinicAdmin），模板与产物 MD5 一致，门禁 10/10 复验通过。
 - **生效方式**：云端网页推送即生效；四端已重打包发布 v2026.08.25 二次（云端桌面 1.2.146 / 云端APP versionCode 227 / 本地桌面 1.0.109 / 本地APP versionCode 158——157 打包被模板回滚作废重打），latest.json/hash-manifest/Release 资产均已线上验证。新登录的账号才落地 clinicId——**存量老数据无 clinicId，仍靠列表过滤前的云端 403 兜底，重新登录一次该账号即补全归属**。
 
+### 2.85【二期+三期】用户管理共享块 + 权限方言终收口（2026-08-25）
+- **背景**：一期把复合散判收口到 AuthCore 后仍遗留——①处方加载层/导出层的 `currentUser.role !== 'admin'` 单角色散判（云端 clinic_admin 被当普通用户只载自己处方的同类隐患）；②renderUserList 诊所过滤、跨诊所预检、角色文案在六份 index.html 手工复制（漂移温床——离线版 handleViewUserPrescriptions 仍散判而云端已 AuthCore 即实证）。
+- **二期·UserAdmin 共享块**：
+  1. **权威源** `shared/user-admin.js`：`ROLE_LABELS`（admin≡clinic_admin→管理员 的角色映射表）+ `roleLabel/listVisibleUsers/isCrossClinicLocalRecord/prescriptionFilterUser/isAdminLevel`，纯逻辑零 DOM，AuthCore 可选依赖（未加载退化本地比较）。
+  2. **分发机制**：复用 T3 标记块——`tools/sync-shared-blocks.cjs` 重构为多模块架构（MODULES 清单：USER-STORE + USER-ADMIN），USER-ADMIN 块插在 USER-STORE-END 行后，七份 index.html 一键注入，`--check` 纳入 copy-consistency 硬闸。**新增共享逻辑勿再手抄副本，登记 MODULES 即可**。
+  3. **调用点收口 24 处**：加载层 ternary×12 → `UserAdmin.prescriptionFilterUser(currentUser)`；云端 renderUserList 过滤+角色文案+跨诊所预检；离线守卫×10（view/delete guard、canManage 兜底、删除后刷新、启动加载）→ `AuthCore.isAdmin`；离线编辑弹窗 option selected 与导出 userRoleDisplay 两处方言同步。
+- **三期·门禁强化**：`verify-role-centralized.ps1` 从单一复合模式扩为三规则——A 复合散判 / B `currentUser.role ===/!== 'admin'` 单判 / C `.role !== 'admin' ?` 加载层三元；纯注释行跳过（标记块文档注释含示例代码属合法引用，宁漏检不可误报）。六文件非注释命中必须为 0。
+- **验证**：标记块一致性 7×2 ALL PASS；合规检查 13 项全过（含强化后 10/10 门禁）；check-interface 基线 6 OK；USER-ADMIN 块 `new Function` 语法 OK×5；UserAdmin 语义冒烟 17 项 PASS（node 沙箱）。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
