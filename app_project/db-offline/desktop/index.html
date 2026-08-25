@@ -1523,10 +1523,13 @@ let currentUser = null;
                 let idx = list.findIndex(x => x && (x.username === uname || (phone && String(x.phone || '') === phone)));
                 if (idx >= 0) {
                     const old = list[idx] || {};
+                    // ★ 2026-08-25 与离线APP同源修复：本地密码已是哈希（用户改过密码）时，
+                    //   激活写入的明文旧密码（如默认 admin）不得覆盖用户已改的密码
+                    const keepLocalPwd = isPasswordHashed(old.password || '') && !isPasswordHashed(pwd);
                     list[idx] = Object.assign({}, old, {
                         username: uname,
                         phone: phone || old.phone || '',
-                        password: pwd,
+                        password: keepLocalPwd ? old.password : pwd,
                         name: name || old.name,
                         role: role || old.role
                     });

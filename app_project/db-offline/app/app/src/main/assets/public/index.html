@@ -1415,10 +1415,14 @@ let currentUser = null;
                 let idx = list.findIndex(x => x && (x.username === uname || (phone && String(x.phone || '') === phone)));
                 if (idx >= 0) {
                     const old = list[idx] || {};
+                    // ★ 2026-08-25 修复改密被启动自愈覆盖：本地密码已是哈希（用户改过密码）时，
+                    //   config.json 里激活时写入的明文旧密码（如默认 admin）不得覆盖用户已改的密码；
+                    //   否则每次 APP 启动登录自愈都会把新密码打回 admin（"修改不了密码"的根因）
+                    const keepLocalPwd = isPasswordHashed(old.password || '') && !isPasswordHashed(pwd);
                     list[idx] = Object.assign({}, old, {
                         username: uname, // username 以新提交的为准（支持 phone 字段查找命中时合并到新账号）
                         phone: phone || old.phone || '',
-                        password: pwd,  // 密码必须覆盖成最新激活值
+                        password: keepLocalPwd ? old.password : pwd, // 仅本地未改密时才按激活值覆盖
                         name: name || old.name,
                         role: role || old.role
                     });
