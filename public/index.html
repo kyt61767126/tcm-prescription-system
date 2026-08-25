@@ -1614,11 +1614,18 @@ let currentUser = null;
                             document.querySelector('.main-container').style.display = 'flex';
                             updateUserDisplay();
                             hideLoginError();
-                            if (user.name) {
+                            // ★ 2026-08-25 修复：登录时优先使用本用户在基础设置保存过的医师姓名
+                            //   （saveSettings 写入 local_clinicDoctor_<username>），保存过的新名字
+                            //   不再被云端旧姓名顶回；未保存过才用登录用户姓名，并回写全局键保持回显一致
+                            let _savedDoctorName = '';
+                            try { _savedDoctorName = (localStorage.getItem('local_clinicDoctor_' + (user.username || '')) || '').trim(); } catch (e) {}
+                            if (!_savedDoctorName && user.name) _savedDoctorName = user.name;
+                            if (_savedDoctorName) {
                                 const _ddEl = document.getElementById('defaultDoctor');
-                                if (_ddEl) _ddEl.value = user.name;
+                                if (_ddEl) _ddEl.value = _savedDoctorName;
                                 const _dnEl = document.getElementById('doctorName');
-                                if (_dnEl) _dnEl.value = user.name;
+                                if (_dnEl) _dnEl.value = _savedDoctorName;
+                                try { localStorage.setItem('local_clinicDoctor', _savedDoctorName); } catch (e) {}
                             }
                             try { await loadData(); } catch(e) { console.warn('loadData失败:', e); }
                             refreshUserInterface();
@@ -1726,14 +1733,18 @@ let currentUser = null;
                     updateUserDisplay();
                     hideLoginError();
 
-                    // 登录后自动设置医师姓名为登录用户的姓名
-                    const doctorNameInput = document.getElementById('doctorName');
-                    if (doctorNameInput) {
-                        doctorNameInput.value = user.name || '';
-                    }
-                    const defaultDoctorInput = document.getElementById('defaultDoctor');
-                    if (defaultDoctorInput) {
-                        defaultDoctorInput.value = user.name || '';
+                    // ★ 2026-08-25 修复：登录时优先使用本用户在基础设置保存过的医师姓名。
+                    //   原先无条件用登录用户姓名（user.name）覆盖 doctorName/defaultDoctor，
+                    //   且不落盘——用户改好保存的新名字重新登录后被旧名顶回，处方签一直显示旧名。
+                    let _savedDoctor = '';
+                    try { _savedDoctor = (localStorage.getItem('local_clinicDoctor_' + (user.username || '')) || '').trim(); } catch (e) {}
+                    if (!_savedDoctor && user.name) _savedDoctor = user.name;
+                    if (_savedDoctor) {
+                        const doctorNameInput = document.getElementById('doctorName');
+                        if (doctorNameInput) doctorNameInput.value = _savedDoctor;
+                        const defaultDoctorInput = document.getElementById('defaultDoctor');
+                        if (defaultDoctorInput) defaultDoctorInput.value = _savedDoctor;
+                        try { localStorage.setItem('local_clinicDoctor', _savedDoctor); } catch (e) {}
                     }
 
                     await loadData();
@@ -2640,7 +2651,18 @@ let currentUser = null;
                 if (currentUser && currentUser.username === originalUsername) {
                     currentUser = users[userIndex];
                     localStorage.setItem('local_currentUser', JSON.stringify(currentUser));
+                    // ★ 2026-08-25 同步：编辑当前用户医师姓名后，全局医师姓名与处方签立即跟随。
+                    //   原先只改用户表，local_clinicDoctor/医师输入框/处方签仍显示旧名。
+                    try {
+                        localStorage.setItem('local_clinicDoctor', newName);
+                        localStorage.setItem('local_clinicDoctor_' + newUsername, newName);
+                    } catch (e) {}
+                    const _editDnEl = document.getElementById('doctorName');
+                    if (_editDnEl) _editDnEl.value = newName;
+                    const _editDdEl = document.getElementById('defaultDoctor');
+                    if (_editDdEl) _editDdEl.value = newName;
                     updateUserDisplay();
+                    if (typeof updatePrescriptionPaper === 'function') updatePrescriptionPaper();
                 }
 
                 if (newUsername !== originalUsername) {
@@ -6311,6 +6333,13 @@ let currentUser = null;
         function saveSettings() {
             localStorage.setItem('local_clinicName', document.getElementById('clinicName').value);
             localStorage.setItem('local_clinicDoctor', document.getElementById('defaultDoctor').value);
+            // ★ 2026-08-25 修复：按登录用户另存一份专属医师姓名（local_clinicDoctor_<username>），
+            //   登录时优先读取该用户保存值，避免机构版多医师互相覆盖串名
+            try {
+                if (currentUser && currentUser.username) {
+                    localStorage.setItem('local_clinicDoctor_' + currentUser.username, document.getElementById('defaultDoctor').value);
+                }
+            } catch (e) {}
             localStorage.setItem('local_defaultRegFee', document.getElementById('defaultRegFee').value || '0');
             localStorage.setItem('local_defaultDose', document.getElementById('defaultDose').value || '7');
             
@@ -6324,6 +6353,9 @@ let currentUser = null;
             
             document.getElementById('doctorName').value = document.getElementById('defaultDoctor').value;
             document.getElementById('clinicNameDisplay').textContent = document.getElementById('clinicName').value;
+            // ★ 2026-08-25 修复：保存医师姓名后立即刷新处方签（此前 paperDoctor 不更新，
+            //   处方签/打印签名一直显示旧名）；打印处方取自同一 DOM，同步生效
+            if (typeof updatePrescriptionPaper === 'function') updatePrescriptionPaper();
             // ★ 2026-08-17 举一反三：保存诊所名后同步登录框诊所名（登出/重登时跟随最新设置）
             const _loginClinicEl = document.getElementById('loginClinicName');
             if (_loginClinicEl && document.getElementById('clinicName').value) {
