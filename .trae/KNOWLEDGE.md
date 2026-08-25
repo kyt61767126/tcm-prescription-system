@@ -1027,7 +1027,7 @@
 - **JS 语法验证法**：`node -e` + vm.Script 编译六份 index.html 全部内联 script 块（不执行只查语法）。注意：模板字符串含 `</script>` 会截断正则提取块产生误报（HEAD 版本同报 'Unexpected identifier' 属既有误报，非本次引入）——对比 HEAD 同样输出即可判定。
 - **二期遗留**（未做）：用户管理逻辑抽 shared/user-admin.js 五端统一；离线↔云端角色映射表（admin→clinic_admin）；编辑弹窗角色下拉按登录角色动态生成；导出字段 `role !== 'admin'` 语义确认。
 - **追加修复（同日）**：离线APP 5 处散判收口当时只改了产物 `assets/public/index.html`，`build-app.bat` L106 会用源模板 `index-app.html` 覆盖产物 → 打包后改动回滚（再次验证 2.72 的"必须改 index-app.html"铁律）。已对源模板补齐 5 处收口（canManage 兜底×2 / 唯一管理员锁死 isAdmin / 标准版角色纠正 isClinicAdmin / 处方过滤 isClinicAdmin），模板与产物 MD5 一致，门禁 10/10 复验通过。
-- **生效方式**：云端网页推送即生效；四端重打包（云端桌面 1.2.146 / 云端APP 227 / 本地桌面 1.0.109 / 本地APP 157）后新登录的账号才落地 clinicId——**存量老数据无 clinicId，仍靠列表过滤前的云端 403 兜底，重新登录一次该账号即补全归属**。
+- **生效方式**：云端网页推送即生效；四端已重打包发布 v2026.08.25 二次（云端桌面 1.2.146 / 云端APP versionCode 227 / 本地桌面 1.0.109 / 本地APP versionCode 158——157 打包被模板回滚作废重打），latest.json/hash-manifest/Release 资产均已线上验证。新登录的账号才落地 clinicId——**存量老数据无 clinicId，仍靠列表过滤前的云端 403 兜底，重新登录一次该账号即补全归属**。
 
 ---
 
