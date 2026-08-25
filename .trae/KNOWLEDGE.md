@@ -1004,6 +1004,17 @@
 - **注意**：改 ps1 后必须跑 `fix-ps1-bom.ps1`（Edit 工具写文件会丢 BOM → GBK 乱码解析崩，验收门 P1/P2 会拦）。管道模拟菜单测试时 stdin 耗尽后主菜单会无限重绘（Read-Host EOF 特性），真实交互不受影响；测试用完记得 StopCommand。
 - **生效方式**：纯工具链变更，四端无需重新打包/重装。
 
+### 2.83 【跨诊所删除403】错误透传 + 本机残留清理（提交 e3affea6，2026-08-25）
+- **案例**：用户管理删"王桂杰(13398628212)"报 `云端删除被拒绝:HTTP error! status:403`。API 复现发现真实原因是 `无权删除其他诊所的用户`——该账号云端属于另一家诊所（王杰中医诊所，唯一管理员），wgj 是惠康堂的管理员，跨诊所删除被安全规则正确拦截；且本机列表里它只是历史登录落地的残留记录（13398628756 更是云端不存在的纯本地账号）。
+- **根因**：① `cloudFetch` 非401错误一律抛 `HTTP error! status:xxx`，响应体里的 `error` 字段（真实原因）被吞；② deleteUserOnCloud 的 blocked 分支硬阻断，本机残留记录无清理路径（网络失败的 failed 分支反而有"仅删本地"选项）。
+- **修复**：
+  1. `shared/cloud-api.js`（7副本同步）：非401错误解析响应体 JSON 的 error 字段，附到 `httpErr.message`（如"无权删除其他诊所的用户（HTTP 403）"）和 `httpErr.serverError`。
+  2. `deleteUserOnCloud`（public + cloud_desktop + cloud_app 三份 index.html）：403 且错误含"其他诊所" → 返回 `{blocked:true, crossClinic:true}`（resp 分支和 catch 分支都识别）。
+  3. `handleDeleteUser`：crossClinic → confirm"该账号属于其他诊所（云端账户不受影响）。是否仅删除本机列表中的这条记录？"后仅删本地；其余 blocked 场景（平台管理员/最后一名管理员）仍硬阻断——最后管理员保护是有意设计，本机删了云端还会同步回来。
+- **排查工具**：`GET /api/users?diagnose={username}&key={DIAGNOSE_KEY}` 可查账号云端归属（诊所/角色/同诊所用户清单），默认 key 见 functions/api/users.js（`DIAGNOSE_KEY` 环境变量兜底）。
+- **坑**：① 诊断 API 登录 wgj 复现 403 时，单设备互斥会把用户正在用的会话顶下线（需提醒重新登录）；② `public/updates/dingzhi/` 是 2026-08-23 dingzhi→local 改名的死目录（所有消费者已读 `updates/local/`），停留旧版本号极易误导排查——已删除（提交 e505129a）；③ publish-release.js 最后 `git pull --rebase` 会被工作区脏文件（build-meta.json）卡住，报错后手动 `git add + commit + push` 即可。
+- **生效方式**：云端网页推送即生效；云端桌面 1.2.145 / 云端APP versionCode 226 / 本地桌面 1.0.108 / 本地APP versionCode 156 需重装（已发布 v2026.08.25，latest.json 与 APK 链接已线上验证）。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
