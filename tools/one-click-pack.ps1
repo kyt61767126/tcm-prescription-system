@@ -491,8 +491,9 @@ function Show-PickVersionMenu {
         Write-Host "========================================" -ForegroundColor Cyan
         Write-Host "  [1] 云端版"
         Write-Host "  [2] 本地版"
+        Write-Host "  [3] 云端+本地"
         Write-Host "  [0] 返回主菜单"
-        $choice = Read-Host "请选择"
+        $choice = Read-Host "请选择 [0-3]"
         switch ($choice) {
             # ★ 2026-08-23 四轮复核修复：原 $null=Build-XXX 同时吞掉①失败退出码(打包失败用户
             #   看不到任何失败提示)②不调用 SideEffectCollect(versionCode/version 副作用
@@ -514,6 +515,27 @@ function Show-PickVersionMenu {
                 if ($prc -ne 0) {
                     Write-Host ""
                     Write-Host "[ERROR] 本地$modeLabel打包失败，退出码: $prc（详见上方日志）" -ForegroundColor Red
+                    pause
+                }
+                Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits
+                return
+            }
+            # ★ 云端+本地 组合：先云端后本地，云端失败仍继续打本地（与 Build-All 聚合策略一致）
+            "3" {
+                $rcCloud = Build-Cloud -Target $Mode
+                if ($rcCloud -is [array]) { $rcCloud = [int]$rcCloud[-1] }
+                if (-not $rcCloud) { $rcCloud = 0 }
+                $rcOffline = Build-Offline -Version "dingzhi" -Target $Mode
+                if ($rcOffline -is [array]) { $rcOffline = [int]$rcOffline[-1] }
+                if (-not $rcOffline) { $rcOffline = 0 }
+                if ($rcCloud -ne 0) {
+                    Write-Host ""
+                    Write-Host "[ERROR] 云端$modeLabel打包失败，退出码: $rcCloud（详见上方日志）" -ForegroundColor Red
+                    pause
+                }
+                if ($rcOffline -ne 0) {
+                    Write-Host ""
+                    Write-Host "[ERROR] 本地$modeLabel打包失败，退出码: $rcOffline（详见上方日志）" -ForegroundColor Red
                     pause
                 }
                 Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits
