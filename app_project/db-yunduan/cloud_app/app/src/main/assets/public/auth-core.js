@@ -739,7 +739,10 @@
                 // ★ P0 修复：保留 API 返回的 token，附加到 user 对象
                 // buildAuthHeader(user) 依赖 user.token 构造 Bearer header
                 // 丢弃 token 会导致后续 API 请求回退到 Basic auth，云端返回 401 触发自动登出
-                return { success: true, user: { ...data.user, token: data.token } };
+                // ★ 2026-08-25 全局统一授权状态：保留顶层 clinicExpiresAt（诊所授权到期时间），
+                //   login() 存 auth:currentUser 时随 user 持久化，供基础设置授权区
+                //   显示"✅ 已激活（版本）剩余 X 天"（与离线版格式统一）
+                return { success: true, user: { ...data.user, token: data.token, clinicExpiresAt: data.clinicExpiresAt || null } };
             } catch (e) {
                 console.error('云端登录失败:', e);
                 // ★ 离线登录缓存：网络错误时尝试离线登录
@@ -2170,17 +2173,18 @@
         const section = document.createElement('div');
         section.id = 'licenseStatusSection';
         section.style.cssText = 'margin-top:15px;padding:10px;border:1px solid #ddd;border-radius:6px;background:#f9f9f9;';
+        // ★ 2026-08-25 全局统一授权状态（参考离线版格式）：云端版（网页/APP/桌面）一律注入
+        //   「📋 管理员激活」按钮——云端账号已登录时用于续费/升级申请（openAdminActivate
+        //   多步骤弹窗），桌面版优先走主进程激活窗口三Tab；无 license 桥不等于无激活入口
         section.innerHTML =
             '<div style="font-weight:bold;margin-bottom:8px;color:#333;">🔐 授权状态</div>' +
             '<div id="licenseStatusText" style="font-size:13px;color:#666;margin-bottom:10px;">加载中...</div>' +
-            (hasLicenseApi
-                ? '<button class="action-btn" id="adminActivateSettingsBtn" style="background:#26a69a;color:white;width:100%;padding:8px;font-size:14px;border:none;border-radius:4px;cursor:pointer;">📋 管理员激活</button>'
-                : '');
+            '<button class="action-btn" id="adminActivateSettingsBtn" style="background:#26a69a;color:white;width:100%;padding:8px;font-size:14px;border:none;border-radius:4px;cursor:pointer;">📋 管理员激活</button>';
 
         modalBody.appendChild(section);
 
-        // 仅在有 license API 时绑定按钮事件
-        if (hasLicenseApi) {
+        // ★ 2026-08-25 绑定条件由 hasLicenseApi 扩大为无条件（云端版统一入口）
+        {
             // ★ 2026-08-19 管理员激活：原登录框入口已收敛到基础设置授权区；取消「立即激活」按钮，仅保留「管理员激活」（用户要求 2026-08-20）
             const adminBtn = section.querySelector('#adminActivateSettingsBtn');
             if (adminBtn) {
@@ -2202,7 +2206,7 @@
                 });
             }
             // ★ 2026-08-20 双入口合并：底部静态「激活软件/管理员激活」按钮与授权区「管理员激活」功能重复 → 隐藏静态按钮，授权区为唯一入口
-            // （不动 index.html DOM；无 license 桥的纯网页环境不注入本按钮，静态按钮保留兜底）
+            // （不动 index.html DOM；无 license 桥的纯网页环境本来就不渲染该静态按钮，查询不到自动跳过）
             try {
                 const legacyBtn = modalBody.querySelector('button[onclick*="openActivationFromSettings"]');
                 if (legacyBtn) legacyBtn.style.display = 'none';
@@ -2213,8 +2217,67 @@
         updateLicenseStatusText();
     }
 
+    // ★★★ 2026-08-25 全局统一授权状态：读取当前云端登录用户（多 key 兜底）
+    //   auth:currentUser   — AuthCore.login 写入（StorageAdapter，网页 localStorage / APP Capacitor Preferences）
+    //   currentUser        — index.html handleLogin 写入（网页/桌面 localStorage）
+    //   user_login_data    — { user, loginTime } 结构（handleLogin 本地表登录+补拉云端 token）
+    //   cloud_currentUser  — handleLogin 云端登录直存
+    async function readCloudLoginUser() {
+        // 1) StorageAdapter（APP 端原生存储优先）
+        try {
+            const raw = await StorageAdapter.getItem('auth:currentUser');
+            if (raw) {
+                const u = JSON.parse(raw);
+                if (u && (u.username || u.name || u.token)) return u;
+            }
+        } catch (e) { }
+        // 2) localStorage 直读兜底
+        const keys = ['currentUser', 'cloud_currentUser', 'user_login_data', 'local_currentUser'];
+        for (let i = 0; i < keys.length; i++) {
+            try {
+                const raw = global.localStorage.getItem(keys[i]);
+                if (!raw) continue;
+                const d = JSON.parse(raw);
+                const u = (d && d.user) ? d.user : d;
+                if (u && (u.username || u.name || u.token)) return u;
+            } catch (e) { }
+        }
+        return null;
+    }
+
+    // ★★★ 2026-08-25 全局统一授权状态：云端账号授权状态文案（参考离线版格式）
+    //   已登录 → "✅ 已激活（机构版/标准版）<br>剩余 X 天"
+    //   版本判定 clinicEdition（cloud_clinic→机构版 / cloud_personal→标准版），缺省回退 CONFIG.edition
+    //   剩余天数由 clinicExpiresAt 计算（云端登录接口顶层返回，cloudAdapter 已保留）
+    async function getCloudAccountLicenseHtml() {
+        const cu = await readCloudLoginUser();
+        if (!cu) return null;
+        let ed = String(cu.clinicEdition || cu.edition || '');
+        if (!ed && typeof CONFIG !== 'undefined' && CONFIG && CONFIG.edition) ed = String(CONFIG.edition);
+        const eLow = ed.toLowerCase();
+        const isStd = ['personal', 'cloud_personal', 'offline_personal', 'standard', 'clinic_standard'].indexOf(eLow) >= 0;
+        const planLabel = ed ? (isStd ? '标准版' : '机构版') : '';
+        let html = '✅ 已激活' + (planLabel ? '（' + planLabel + '）' : '');
+        const expRaw = cu.clinicExpiresAt;
+        if (expRaw) {
+            const ms = new Date(expRaw).getTime();
+            if (!isNaN(ms)) {
+                const days = Math.ceil((ms - Date.now()) / (24 * 60 * 60 * 1000));
+                if (days > 0) {
+                    html += '<br>剩余 <b style="color:#4caf50;">' + days + '</b> 天';
+                } else {
+                    html += '<br><span style="color:red;">授权已到期，请联系管理员续费</span>';
+                }
+            }
+        }
+        return html;
+    }
+
     // ★ 异步获取并显示 license 状态
-    // 云端环境：显示"🌐 云端版，登录即可使用"
+    // ★★★ 2026-08-25 全局统一授权状态（参考离线版格式，云端三端一致）：
+    //   优先级 1：云端账号已登录 → "✅ 已激活（机构版/标准版）+ 剩余 X 天"（账号授权，云端登录即激活）
+    //   优先级 2：云端桌面版本地 license（激活码）→ 原状态（试用/已激活/未激活）
+    //   优先级 3：未登录且无 license 桥 → "🌐 云端版，登录即可使用"
     // 离线环境：根据 licenseType 区分 trial(试用期) / licensed(已激活)
     //   - trial + remainingDays>0 → 试用期剩余 X 天
     //   - trial + remainingDays<=0 → 试用期已过期
@@ -2224,6 +2287,14 @@
         if (!el) return;
 
         try {
+            // ★★★ 2026-08-25 云端账号授权优先：登录云端账号即视为已激活，
+            //   显示与离线版统一的格式（用户要求"全局统一 授权状态 参考离线"）
+            const cloudHtml = await getCloudAccountLicenseHtml();
+            if (cloudHtml) {
+                el.innerHTML = cloudHtml;
+                return;
+            }
+
             // ★ 云端环境：无 electronAPI.license → 显示云端版提示
             if (!global.electronAPI || !global.electronAPI.license ||
                 typeof global.electronAPI.license.getStatus !== 'function') {
@@ -2268,6 +2339,11 @@
             el.textContent = '状态获取失败: ' + (e && e.message ? e.message : '未知错误');
         }
     }
+
+    // ★ 2026-08-25 全局统一授权状态：暴露到 window——index.html 打开基础设置时
+    //   调用 window.updateLicenseStatusText() 即时刷新授权区（此前该调用因未暴露
+    //   一直静默失效，授权区只在首次注入时渲染一次，登录态变化后不刷新）
+    global.updateLicenseStatusText = updateLicenseStatusText;
 
     // ★ 向登录界面（loginOverlay）运行时注入"注册 / 激活"入口（registerEntry 元素）
     // 目的：首次注册用户无需登录即可在登录页找到"设置诊所信息 / 立即激活"入口

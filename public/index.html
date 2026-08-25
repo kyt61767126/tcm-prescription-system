@@ -1695,6 +1695,10 @@ let currentUser = null;
                                 }
                                 if (cloudUser.clinicId && !user.clinicId) user.clinicId = cloudUser.clinicId;
                                 if (cloudUser.name && !user.name) user.name = cloudUser.name;
+                                // ★ 2026-08-25 全局统一授权状态：合并云端授权字段（版本+到期时间），
+                                //   基础设置授权区显示"✅ 已激活（版本）剩余 X 天"（与离线格式统一）
+                                if (cloudUser.clinicEdition && !user.clinicEdition) user.clinicEdition = cloudUser.clinicEdition;
+                                if (cloudUser.clinicExpiresAt && !user.clinicExpiresAt) user.clinicExpiresAt = cloudUser.clinicExpiresAt;
                                 user._cloudRoleSynced = true;
                                 // 回写本地用户表：下次登录直接携带正确 role，无需再补拉
                                 try {

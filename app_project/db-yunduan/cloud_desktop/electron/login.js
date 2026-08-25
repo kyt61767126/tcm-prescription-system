@@ -391,7 +391,10 @@
                             // ★ 2026-08-23 携带服务端权威 clinicEdition，供下方版本匹配逻辑判定账户版本
                             clinicEdition: _cloudAuth.clinicEdition || '',
                             edition: _cloudAuth.edition || '',
-                            clinicName: _cloudAuth.clinicName || ''
+                            clinicName: _cloudAuth.clinicName || '',
+                            // ★ 2026-08-25 全局统一授权状态：携带诊所授权到期时间，
+                            //   主界面基础设置授权区显示"✅ 已激活（版本）剩余 X 天"（与离线格式统一）
+                            clinicExpiresAt: _cloudAuth.clinicExpiresAt || null
                         };
                     } else {
                         // ★ 诊断：记录云端认证返回的具体错误，供排查
@@ -484,6 +487,9 @@
                         user.cloud_token = rescue.user.token;
                         if (!user.name) user.name = rescue.user.name || '';
                         if (!user.role) user.role = rescue.user.role || 'user';
+                        // ★ 2026-08-25 全局统一授权状态：补拉时合并授权字段（版本+到期时间）
+                        if (!user.clinicEdition && rescue.user.clinicEdition) user.clinicEdition = rescue.user.clinicEdition;
+                        if (!user.clinicExpiresAt && rescue.user.clinicExpiresAt) user.clinicExpiresAt = rescue.user.clinicExpiresAt;
                         console.log('[login] ✅ 登录成功，已补拉云端token，历史处方将走云端API');
                     } else {
                         console.warn('[login] ⚠️ 登录成功但云端补拉token失败' + (rescue && rescue.error ? (':' + rescue.error) : ''));
@@ -499,7 +505,11 @@
                 username: user.username,
                 name: user.name,
                 role: user.role || 'user',
-                token: user.token || ''
+                token: user.token || '',
+                // ★ 2026-08-25 全局统一授权状态：持久化授权字段，主界面基础设置
+                //   授权区显示"✅ 已激活（机构版/标准版）剩余 X 天"（与离线版格式统一）
+                clinicEdition: user.clinicEdition || '',
+                clinicExpiresAt: user.clinicExpiresAt || null
             };
             const userDataStr = JSON.stringify(userData);
             const loginDataStr = JSON.stringify({ loginTime: Date.now(), username: user.username });
