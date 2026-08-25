@@ -79,27 +79,57 @@ function formatBeijingDateYYMMDD(date) {
     return year + month + day;
 }
 
-// 生成处方编号（诊所全局每日统一，YYMMDD + 2位序号）
-async function generatePrescriptionNo(kv, clinicId, username) {
-    const now = getBeijingTime();
-    const yymmdd = formatBeijingDateYYMMDD(now);
-    const seqKey = `clinic:${clinicId}:prescription_seq:${yymmdd}`;
-    const userSeqKey = `clinic:${clinicId}:seq:${username}:daily:${yymmdd}`;
-
-    let seq = parseInt(await kv.get(seqKey) || '0', 10);
-    seq += 1;
-    await kv.put(seqKey, seq.toString());
-    await kv.put(userSeqKey, seq.toString());
-
-    return yymmdd + String(seq).padStart(2, '0');
+// ★ 2026-08-25 编号重复修复：从编号提取当天序号（仅识别 yymmdd 前缀的合法编号）
+function extractDaySeq(no, yymmdd) {
+    if (!no || typeof no !== 'string' || !no.startsWith(yymmdd)) return 0;
+    const tail = no.slice(yymmdd.length);
+    if (!/^\d{1,6}$/.test(tail)) return 0;
+    return parseInt(tail, 10);
 }
 
-// 预览下一个编号（不递增）
-async function peekNextPrescriptionNo(kv, clinicId) {
+// 当天列表最大序号（KV 计数器因最终一致性落后时兜底）
+function maxDaySeqInList(list, yymmdd) {
+    let max = 0;
+    for (const p of list) {
+        const s = Math.max(
+            extractDaySeq(p && p.outpatientNo, yymmdd),
+            extractDaySeq(p && p.prescriptionNo, yymmdd)
+        );
+        if (s > max) max = s;
+    }
+    return max;
+}
+
+// 生成处方编号（诊所全局每日统一，YYMMDD + 2位序号）
+// ★ 2026-08-25 原子性强化：序号 = max(KV计数器, 当天列表最大序号) 后递增。
+//   KV 为最终一致存储，跨边缘节点计数器可能落后（多设备同时在线时曾导致两处方同号 26082504），
+//   列表扫描兜底保证计数器落后时不重号；批量保存循环内串行递增，单请求内天然不冲突。
+async function allocatePrescriptionNos(kv, clinicId, list, count, yymmddStr) {
     const now = getBeijingTime();
-    const yymmdd = formatBeijingDateYYMMDD(now);
+    const yymmdd = yymmddStr || formatBeijingDateYYMMDD(now);
+    const seqKey = `clinic:${clinicId}:prescription_seq:${yymmdd}`;
+
+    let seq = parseInt(await kv.get(seqKey) || '0', 10);
+    const listMax = maxDaySeqInList(list || [], yymmdd);
+    if (listMax > seq) seq = listMax;
+
+    const nos = [];
+    for (let i = 0; i < count; i++) {
+        seq += 1;
+        nos.push(yymmdd + String(seq).padStart(2, '0'));
+    }
+    await kv.put(seqKey, String(seq));
+    return nos;
+}
+
+// 预览下一个编号（不递增）★ 同样加列表兜底，保证预览与实际分配一致
+async function peekNextPrescriptionNo(kv, clinicId, list, yymmddStr) {
+    const now = getBeijingTime();
+    const yymmdd = yymmddStr || formatBeijingDateYYMMDD(now);
     const seqKey = `clinic:${clinicId}:prescription_seq:${yymmdd}`;
     let seq = parseInt(await kv.get(seqKey) || '0', 10);
+    const listMax = maxDaySeqInList(list || [], yymmdd);
+    if (listMax > seq) seq = listMax;
     seq += 1;
     return yymmdd + String(seq).padStart(2, '0');
 }
@@ -288,8 +318,13 @@ export async function onRequest(context) {
             let prescriptionList = Array.isArray(body.prescription) ? body.prescription : [body.prescription];
             const savedPrescriptions = [];
 
+            // ★ 2026-08-25 多设备同时在线修复：先拆分"更新已有/新建"两批，新建统一在
+            //   写回前基于重读的最新列表分配编号，杜绝并发覆盖与重号（原实现整列表读改写，
+            //   两设备同时保存时后写覆盖先写，且编号计数器落后导致两处方同号 26082504）
+            const updatedExisting = [];
+            const newOnes = [];
+
             for (const p of prescriptionList) {
-                // 检查处方是否已存在（按id匹配）
                 const existingIdx = prescriptions.findIndex(x => x.id.toString() === (p.id || '').toString());
                 if (existingIdx >= 0) {
                     // 已存在：保留原编号和创建者，合并新字段（如mediaFiles）
@@ -307,13 +342,26 @@ export async function onRequest(context) {
                         isAdmin: existing.isAdmin,
                         updatedAt: nowIso
                     };
+                    updatedExisting.push(newPrescription);
                     savedPrescriptions.push(newPrescription);
                 } else {
-                    // 不存在：生成新编号
-                    const outpatientNo = await generatePrescriptionNo(kv, targetClinicId, currentUser.username);
+                    newOnes.push(p);
+                }
+            }
+
+            // 新建：写回前重读最新列表（捕捉窗口期其他设备保存的处方），
+            // 基于最新列表分配编号，并与最新列表按 id 合并写回（他人新增不丢）
+            if (newOnes.length > 0) {
+                const fresh = (await kv.get(KV_PRESCRIPTIONS, 'json')) || [];
+                const nos = await allocatePrescriptionNos(kv, targetClinicId, fresh, newOnes.length);
+                const newSaved = [];
+
+                newOnes.forEach((p, i) => {
+                    const outpatientNo = nos[i];
                     const newPrescription = {
                         ...p,
-                        id: p.id || Date.now(),
+                        // 兜底 id：时间戳+序号+随机后缀，防多设备同毫秒保存 id 撞车互相覆盖
+                        id: p.id || (Date.now() + '_' + i + '_' + Math.random().toString(36).slice(2, 8)),
                         prescriptionNo: outpatientNo,
                         outpatientNo: outpatientNo,
                         createdAt: p.createdAt || nowIso,
@@ -323,16 +371,23 @@ export async function onRequest(context) {
                         userRole: p.userRole || currentUser.role,
                         isAdmin: p.isAdmin !== undefined ? p.isAdmin : currentUser.isAdmin
                     };
+                    newSaved.push(newPrescription);
                     savedPrescriptions.push(newPrescription);
+                });
+
+                // ★ 按 id 合并：以最新列表为底，本请求的更新与新增覆盖同 id 项，
+                //   其他设备窗口期新增的处方（不在本请求集合内）原样保留
+                const idMap = new Map();
+                fresh.forEach(p => idMap.set(String(p.id), p));
+                for (const p of updatedExisting) idMap.set(String(p.id), p);
+                for (const p of newSaved) idMap.set(String(p.id), p);
+                prescriptions = Array.from(idMap.values());
+            } else {
+                for (const p of updatedExisting) {
+                    const idx = prescriptions.findIndex(x => x.id.toString() === String(p.id));
+                    if (idx >= 0) prescriptions[idx] = p;
                 }
             }
-
-            // 合并并去重
-            const idMap = new Map();
-            [...prescriptions, ...savedPrescriptions].forEach(p => {
-                idMap.set(p.id, p);
-            });
-            prescriptions = Array.from(idMap.values());
 
             // P1-4 排序一致性：保存后按 createdAt 倒序排序
             prescriptions.sort((a, b) => {
@@ -346,7 +401,7 @@ export async function onRequest(context) {
 
             await kv.put(KV_PRESCRIPTIONS, JSON.stringify(prescriptions));
 
-            const nextPrescriptionNo = await peekNextPrescriptionNo(kv, targetClinicId);
+            const nextPrescriptionNo = await peekNextPrescriptionNo(kv, targetClinicId, prescriptions);
 
             return json({
                 success: true,
