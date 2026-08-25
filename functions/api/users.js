@@ -1292,6 +1292,27 @@ export async function onRequest(context) {
             return json({ success: false, error: '该端点已废弃，请使用 change-password 或联系管理员重置' }, 410);
         }
 
+        // ===== 获取当前登录用户资料 GET /users?action=get-profile =====
+        // ★ 2026-08-25 全局统一授权状态：Bearer token 鉴权（免密），返回 user + clinicExpiresAt。
+        //   供前端基础设置-授权状态静默刷新：登录缓存缺 clinicExpiresAt 的旧客户端自愈
+        //   （网页版会话恢复不重新登录也能显示"剩余 X 天"）；管理员调整诊所授权时长后
+        //   前端缓存过期可重新拉取，无需用户重新登录。
+        if (method === 'GET' && url.searchParams.get('action') === 'get-profile') {
+            const authUser = await parseAuthHeader(context.request, context.env);
+            if (!authUser) {
+                return json({ success: false, error: '未登录或登录已失效' }, 401, context.request);
+            }
+            const found = await findUserForLogin(kv, authUser.username);
+            if (!found || !found.user) {
+                return json({ success: false, error: '用户不存在' }, 404, context.request);
+            }
+            return json({
+                success: true,
+                user: sanitizeUser(found.user, found.clinicId, found.clinicName, found.clinicStatus, found.clinicEdition),
+                clinicExpiresAt: found.clinicExpiresAt || null
+            }, 200, context.request);
+        }
+
         // ===== 设备管理：查看本人已绑定设备 GET /users?action=list-devices =====
         // ★ 2026-08-21 账号级设备授权配套：管理员自助查看 2 台授权设备（脱敏展示）
         if (method === 'GET' && url.searchParams.get('action') === 'list-devices') {

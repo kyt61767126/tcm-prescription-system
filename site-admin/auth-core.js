@@ -2266,6 +2266,58 @@
         }
     }
 
+    // ★★★ 2026-08-25 旧缓存自愈：免密拉取云端用户资料（GET /users?action=get-profile，Bearer token）。
+    //   场景：登录缓存缺 clinicExpiresAt（部署前的旧登录数据，网页版会话恢复不重新登录）→
+    //   基础设置授权区打开时静默拉取补齐并写回本地缓存，无需用户重新登录。
+    //   24 小时节流：拉取无结果（如平台管理员无到期时间）不重复打接口。
+    let __lastProfileFetchAt = 0;
+    async function refreshCloudProfile(cu) {
+        try {
+            const now = Date.now();
+            if (now - __lastProfileFetchAt < 24 * 60 * 60 * 1000) return false;
+            __lastProfileFetchAt = now;
+            if (!cu || !cu.token) return false;
+            if (typeof CLOUD_API_BASE === 'undefined' || !CLOUD_API_BASE) return false;
+            const fetchFn = global.cloudFetch || global.fetch;
+            const resp = await fetchFn(CLOUD_API_BASE + '/users?action=get-profile', {
+                headers: { 'Authorization': 'Bearer ' + cu.token, 'Content-Type': 'application/json' }
+            });
+            const data = (resp && typeof resp.json === 'function') ? await resp.json() : resp;
+            if (data && data.success && data.user) {
+                if (data.user.clinicEdition && !cu.clinicEdition) cu.clinicEdition = data.user.clinicEdition;
+                if (data.clinicExpiresAt && !cu.clinicExpiresAt) cu.clinicExpiresAt = data.clinicExpiresAt;
+                // 写回本地缓存（存在才更新，同用户才合并），下次打开不再拉取
+                const patch = function (target) {
+                    if (target && target.username === cu.username) {
+                        if (!target.clinicEdition && cu.clinicEdition) target.clinicEdition = cu.clinicEdition;
+                        if (!target.clinicExpiresAt && cu.clinicExpiresAt) target.clinicExpiresAt = cu.clinicExpiresAt;
+                        return true;
+                    }
+                    return false;
+                };
+                try {
+                    const raw = await StorageAdapter.getItem('auth:currentUser');
+                    if (raw) {
+                        const d = JSON.parse(raw);
+                        if (patch(d)) await StorageAdapter.setItem('auth:currentUser', JSON.stringify(d));
+                    }
+                } catch (e) { }
+                const lsKeys = ['currentUser', 'cloud_currentUser', 'user_login_data'];
+                for (let i = 0; i < lsKeys.length; i++) {
+                    try {
+                        const raw = global.localStorage.getItem(lsKeys[i]);
+                        if (!raw) continue;
+                        const d = JSON.parse(raw);
+                        const target = (d && d.user) ? d.user : d;
+                        if (patch(target)) global.localStorage.setItem(lsKeys[i], JSON.stringify(d));
+                    } catch (e) { }
+                }
+                return true;
+            }
+        } catch (e) { }
+        return false;
+    }
+
     // ★★★ 2026-08-25 全局统一授权状态：云端账号授权状态文案（参考离线版格式）
     //   已登录 → "✅ 已激活（机构版/标准版）<br>剩余 X 天"
     //   版本判定 clinicEdition（cloud_clinic→机构版 / cloud_personal→标准版），缺省回退 CONFIG.edition
@@ -2273,6 +2325,11 @@
     async function getCloudAccountLicenseHtml() {
         const cu = await readCloudLoginUser();
         if (!cu) return null;
+        // ★ 2026-08-25 旧缓存自愈：登录缓存缺 clinicExpiresAt 时免密拉取补齐
+        //   （网页版会话恢复不重新登录 / 云端APP 旧版本缓存，打开授权区即自愈）
+        if (!cu.clinicExpiresAt) {
+            await refreshCloudProfile(cu);
+        }
         let ed = String(cu.clinicEdition || cu.edition || '');
         if (!ed && typeof CONFIG !== 'undefined' && CONFIG && CONFIG.edition) ed = String(CONFIG.edition);
         const eLow = ed.toLowerCase();
