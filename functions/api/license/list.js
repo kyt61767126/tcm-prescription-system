@@ -6,7 +6,7 @@
 //  查询参数：
 //    status=unused|used|expired|disabled   按状态过滤（可选）
 //    type=trial|personal|pro               按类型过滤（可选）
-//    q=张三                                 按用户名/激活码搜索（可选）
+//    q=张三                                 按用户名/激活码/备注/机器码搜索（可选，机器码支持完整或前8位）
 //
 //  认证：Bearer token（platform_admin）
 //
@@ -94,7 +94,11 @@ export async function onRequest(context) {
                 (r.code && r.code.toLowerCase().includes(lowerQ)) ||
                 (r.user && r.user.toLowerCase().includes(lowerQ)) ||
                 (r.username && r.username.toLowerCase().includes(lowerQ)) ||
-                (r.note && r.note.toLowerCase().includes(lowerQ))
+                (r.note && r.note.toLowerCase().includes(lowerQ)) ||
+                // ★ 2026-08-25 按机器码反查激活码：匹配旧 machineId 单值 + v4 devices 数组
+                //   （此处 r 为 sanitize 前原始记录，含完整 32 位机器码；子串匹配，输入前 8 位亦可命中）
+                (r.machineId && r.machineId.toLowerCase().includes(lowerQ)) ||
+                (Array.isArray(r.devices) && r.devices.some(d => d.machineId && d.machineId.toLowerCase().includes(lowerQ)))
             );
         }
 
