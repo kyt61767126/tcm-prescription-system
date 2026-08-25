@@ -1089,7 +1089,8 @@ export async function onRequest(context) {
                     found = await findUserForLogin(kv, username);
                 }
             }
-            const { user, clinicId, clinicName, clinicStatus, clinicEdition, clinicExpiresAt } = found || {};
+            // ★ 2026-08-25 clinicExpiresAt 用 let：授权自愈（下方）可能补写默认365天后赋新值
+            let { user, clinicId, clinicName, clinicStatus, clinicEdition, clinicExpiresAt } = found || {};
 
             // ★ P1-6 防登录枚举：无论用户是否存在，统一走相同的密码验证流程并返回一致响应，
             //   防止攻击者通过错误码/错误消息/响应时间差异探测有效用户名。
@@ -1224,6 +1225,29 @@ export async function onRequest(context) {
 
             // P1-1：登录成功，清除失败计数
             await clearLoginFailures(kv, username);
+
+            // ★★★ 2026-08-25 授权状态存量自愈：诊所从未设置有效期（早期平台管理员
+            //   直接创建的诊所缺 expiresAt 字段）→ 登录时补写默认 365 天并回写 KV。
+            //   仅补"从未设置"（null/空），已过期不自动续（过期=管理员停权手段，
+            //   由有效期闸门拦截，语义不变）。补写后本次登录响应即带正确的
+            //   clinicExpiresAt，三端授权状态显示"剩余 X 天"。
+            if (clinicId && !clinicExpiresAt) {
+                try {
+                    const clinics = (await kv.get(KV_SYSTEM_CLINICS, 'json')) || [];
+                    const idx = clinics.findIndex(c => c && c.id === clinicId);
+                    if (idx >= 0 && !clinics[idx].expiresAt) {
+                        const newExp = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
+                        clinics[idx].expiresAt = newExp;
+                        clinics[idx].updatedAt = getNowISO();
+                        await kv.put(KV_SYSTEM_CLINICS, JSON.stringify(clinics));
+                        clinicExpiresAt = newExp;
+                        console.log('[授权自愈] 诊所无有效期，已补写默认365天:', clinicName, newExp.slice(0, 10));
+                        await writeAuditLog(kv, clinicId, user.username, user.role, 'license_autofix_365d', 'auth', context.request, { expiresAt: newExp });
+                    }
+                } catch (healErr) {
+                    console.error('[授权自愈] 补写有效期失败（不影响登录）:', healErr.message);
+                }
+            }
 
             // ★ P1-A fail-closed：AUTH_SECRET 未配置时 signToken 抛错，转成可行动提示
             let token;
@@ -1580,7 +1604,11 @@ export async function onRequest(context) {
                 createdAt: now,
                 updatedAt: now,
                 edition: targetEdition,   // ★ 显式写入版本类型
-                source: 'platform-admin'
+                source: 'platform-admin',
+                // ★ 2026-08-25 授权状态全局统一：创建即写入默认 365 天有效期（与管理台
+                //   审核 test→active 转正策略一致，见 update-clinic 分支）——
+                //   缺 expiresAt 会导致登录接口返回 null，前端授权状态无"剩余 X 天"
+                expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
             };
 
             const adminUser = {

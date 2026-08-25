@@ -2278,11 +2278,23 @@
             __lastProfileFetchAt = now;
             if (!cu || !cu.token) return false;
             if (typeof CLOUD_API_BASE === 'undefined' || !CLOUD_API_BASE) return false;
-            const fetchFn = global.cloudFetch || global.fetch;
-            const resp = await fetchFn(CLOUD_API_BASE + '/users?action=get-profile', {
-                headers: { 'Authorization': 'Bearer ' + cu.token, 'Content-Type': 'application/json' }
-            });
-            const data = (resp && typeof resp.json === 'function') ? await resp.json() : resp;
+            // ★ 2026-08-25 必须用原生 fetch：cloudFetch 的 401 分支会触发全局登出+弹登录框
+            //   （单设备互斥被顶下线的旧 token 调 get-profile 返回 401 时，自愈会误踢用户）。
+            //   自愈是静默兜底，失败就返回 false，不产生任何界面副作用。
+            const controller = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+            const timer = controller ? setTimeout(function () { try { controller.abort(); } catch (e) {} }, 10000) : null;
+            let data = null;
+            try {
+                const resp = await global.fetch(CLOUD_API_BASE + '/users?action=get-profile', {
+                    headers: { 'Authorization': 'Bearer ' + cu.token, 'Content-Type': 'application/json' },
+                    cache: 'no-cache',
+                    signal: controller ? controller.signal : undefined
+                });
+                const text = await resp.text();
+                data = JSON.parse(text.replace(/^\uFEFF/, '').trim());
+            } finally {
+                if (timer) clearTimeout(timer);
+            }
             if (data && data.success && data.user) {
                 if (data.user.clinicEdition && !cu.clinicEdition) cu.clinicEdition = data.user.clinicEdition;
                 if (data.clinicExpiresAt && !cu.clinicExpiresAt) cu.clinicExpiresAt = data.clinicExpiresAt;
