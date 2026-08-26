@@ -379,17 +379,20 @@ async function buildLicenseData(record, options = {}) {
     const maxPrescriptions = record.maxPrescriptions !== undefined ? record.maxPrescriptions : config.maxPrescriptions;
     const features = record.features || config.features;
 
-    // 计算到期时间
+    // ★ 2026-08-26 激活有效期起算规则：同一设备每次激活 = 从【激活当天】起算完整
+    //   record.days 天（未指定则默认 365 天），不再直接沿用码生成/续费时写入的固定
+    //   expiresAt（旧逻辑"固定日期码"的到期日与激活日无关，用户激活后实际可用
+    //   时间 < 365 天，被反馈为"从第一天开始算"）。
+    //   record.expiresAt 保留两个用途：①激活码使用期限（validate.js 过期校验）
+    //   ②续费叠加保底——若续费写入的到期日晚于本次起算值，取续费值（保持续费效果）。
     let expiresAt;
+    const baseDays = (record.days && record.days > 0) ? record.days : 365;
+    expiresAt = new Date(Date.now() + baseDays * 24 * 60 * 60 * 1000).toISOString();
     if (record.expiresAt) {
-        // 已指定到期时间，直接使用
-        expiresAt = new Date(record.expiresAt).toISOString();
-    } else if (record.days && record.days > 0) {
-        // 按天数计算（从激活时刻开始）
-        expiresAt = new Date(Date.now() + record.days * 24 * 60 * 60 * 1000).toISOString();
-    } else {
-        // 默认 1 年
-        expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
+        const renewExp = new Date(record.expiresAt);
+        if (!isNaN(renewExp.getTime()) && renewExp.getTime() > Date.now() + baseDays * 24 * 60 * 60 * 1000) {
+            expiresAt = renewExp.toISOString();  // 续费叠加效果保底（取更晚者）
+        }
     }
 
     const data = {
