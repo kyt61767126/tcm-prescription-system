@@ -1595,6 +1595,12 @@ export async function onRequest(context) {
                 return json({ success: false, error: '参数不完整' }, 400, context.request);
             }
 
+            // ★ 2026-08-26 支持同时修改登录用户名（标准版改密弹窗选填"新用户名"）：
+            //   body.newUsername 可选。一次调用完成改密+改名——若前端分两次调 set-username
+            //   会先撤销 token，导致紧随的 change-password 401。校验/唯一/phone保底/
+            //   设备迁移逻辑与 set-username 端点一致。
+            const newUsername = body.newUsername ? String(body.newUsername).trim() : '';
+
             const currentUser = await parseAuthHeader(context.request, context.env);
             if (!currentUser || currentUser.username !== username) {
                 return json({ success: false, error: '只能修改自己的密码' }, 403, context.request);
@@ -1612,13 +1618,52 @@ export async function onRequest(context) {
                 return json({ success: false, error: '原密码错误' }, 401, context.request);
             }
 
+            // ★ 用户名校验+改名（选填）：放在写 KV 之前，校验失败则整体 400/409（密码也未改）
+            let usernameChanged = false;
+            if (newUsername && newUsername !== username) {
+                if (/[\u4e00-\u9fa5]/.test(newUsername)) {
+                    return json({ success: false, error: '新用户名不能使用中文，请使用英文或拼音' }, 400, context.request);
+                }
+                if (!/^[A-Za-z0-9_-]+$/.test(newUsername)) {
+                    return json({ success: false, error: '用户名仅允许英文/数字/下划线/连字符' }, 400, context.request);
+                }
+                if (newUsername.length < 2 || newUsername.length > 30) {
+                    return json({ success: false, error: '用户名长度需 2-30 字符' }, 400, context.request);
+                }
+                if (/^1[3-9]\d{9}$/.test(newUsername)) {
+                    return json({ success: false, error: '新用户名不能是手机号格式（请使用英文或拼音）' }, 400, context.request);
+                }
+                const existing = await findUserForLogin(kv, newUsername);
+                if (existing && existing.user && existing.user.username !== username) {
+                    return json({ success: false, error: '该用户名已被占用，请换一个' }, 409, context.request);
+                }
+                const phoneOccupancy = await findPhoneOccupancy(kv, newUsername);
+                if (phoneOccupancy && phoneOccupancy.user) {
+                    return json({ success: false, error: '该用户名与已有手机号冲突，请换一个' }, 409, context.request);
+                }
+                // 保手机号登录：原 username 是手机号且 phone 为空 → 先落 phone
+                if (/^1[3-9]\d{9}$/.test(username) && !found.user.phone) {
+                    found.user.phone = username;
+                }
+                // 迁移设备绑定记录
+                try {
+                    const devRecord = await kv.get(KV_USER_DEVICES_PREFIX + username, 'json');
+                    if (devRecord) {
+                        await kv.put(KV_USER_DEVICES_PREFIX + newUsername, JSON.stringify(devRecord));
+                        await kv.delete(KV_USER_DEVICES_PREFIX + username);
+                    }
+                } catch (e) { console.warn('[change-password+rename] 设备绑定迁移失败:', e); }
+                found.user.username = newUsername;
+                usernameChanged = true;
+            }
+
             // 更新密码
             const { passwordHash, salt } = await hashPassword(newPassword);
             found.user.passwordHash = passwordHash;
             found.user.salt = salt;
             found.user.updatedAt = getNowISO();
 
-            // 保存回 KV
+            // 保存回 KV（findIndex 用旧 username 定位；found.user.username 可能已是新名）
             if (found.clinicId) {
                 const users = await kv.get(`clinic:${found.clinicId}:users`, 'json');
                 const idx = users.findIndex(u => u.username === username);
@@ -1636,11 +1681,18 @@ export async function onRequest(context) {
                 }
             }
 
-            // P1-3：撤销该用户所有 Token，强制重新登录
+            // P1-3：撤销该用户所有 Token，强制重新登录（按旧 username 撤销——token 均以旧名签发）
             await revokeAllUserTokens(kv, username);
-            await writeAuditLog(kv, found.clinicId, username, found.user.role, 'change_password_success', 'self', context.request);
+            await writeAuditLog(kv, found.clinicId, username, found.user.role, 'change_password_success',
+                usernameChanged ? (username + ' -> ' + newUsername) : 'self', context.request);
 
-            return json({ success: true, message: '密码修改成功，请使用新密码重新登录' }, 200, context.request);
+            return json({
+                success: true,
+                username: usernameChanged ? newUsername : username,
+                message: usernameChanged
+                    ? '密码与登录用户名修改成功，请使用新用户名重新登录'
+                    : '密码修改成功，请使用新密码重新登录'
+            }, 200, context.request);
         }
 
         // ===== 诊所列表 GET /users?clinics=true =====

@@ -2477,10 +2477,37 @@ let currentUser = null;
             updatePrescriptionPaper();
         }
 
+        // ★ 2026-08-26 标准版改用户名：运行时向修改密码弹窗注入"新用户名（选填）"输入行
+        //   （位于"确认新密码"下方，复用 .form-group 样式，HTML/CSS 零改动，不碰界面基线）
+        (function injectUsernameField() {
+            function inject() {
+                try {
+                    const body = document.querySelector('#changePwdModal .modal-body');
+                    if (!body || document.getElementById('newUsernameField')) return;
+                    const div = document.createElement('div');
+                    div.className = 'form-group';
+                    const label = document.createElement('label');
+                    label.textContent = '新用户名（选填，留空不修改）';
+                    const input = document.createElement('input');
+                    input.type = 'text';
+                    input.id = 'newUsernameField';
+                    input.placeholder = '登录用户名（英文或拼音），如 wangguijie';
+                    input.autocomplete = 'off';
+                    div.appendChild(label);
+                    div.appendChild(input);
+                    body.appendChild(div);
+                } catch (e) { console.warn('[改用户名] 输入框注入失败:', e); }
+            }
+            if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', inject);
+            else inject();
+        })();
+
         function showChangePwdModal() {
             document.getElementById('oldPwd').value = '';
             document.getElementById('newPwd').value = '';
             document.getElementById('confirmNewPwd').value = '';
+            const _nu = document.getElementById('newUsernameField');
+            if (_nu) _nu.value = '';
             document.getElementById('changePwdModal').style.display = 'flex';
         }
 
@@ -2500,6 +2527,20 @@ let currentUser = null;
                     return;
                 }
 
+                // ★ 2026-08-26 新用户名（选填）：改密弹窗注入字段，云端模式随 change-password
+                //   一次提交（后端同步改密+改名，避免两次调用间 token 被撤销）；本地模式本地改名
+                let _newUsername = '';
+                const _nuField = document.getElementById('newUsernameField');
+                if (_nuField) _newUsername = String(_nuField.value || '').trim();
+                if (_newUsername && _newUsername !== currentUser.username) {
+                    if (/[\u4e00-\u9fa5]/.test(_newUsername)) { alert('新用户名不能使用中文，请使用英文或拼音！'); return; }
+                    if (!/^[A-Za-z0-9_-]+$/.test(_newUsername)) { alert('用户名仅允许英文/数字/下划线/连字符！'); return; }
+                    if (_newUsername.length < 2 || _newUsername.length > 30) { alert('用户名长度需 2-30 字符！'); return; }
+                    if (/^1[3-9]\d{9}$/.test(_newUsername)) { alert('新用户名不能是手机号格式（请使用英文或拼音）！'); return; }
+                } else {
+                    _newUsername = ''; // 与当前用户名相同视为不修改
+                }
+
                 // ★ 2026-08-19 云端改密走云端API（云端账号由后台审批开通，存于云端 KV；
                 //   前端本地 user 表不含该账号，旧逻辑只改本地 → 报"用户不存在"，且云端密码永不生效）。
                 //   API 校验原密码并写入云端，成功后撤销 token，强制用新密码重新登录。
@@ -2515,12 +2556,15 @@ let currentUser = null;
                         const cloudResp = await fetch(window.CLOUD_API_BASE + '/users?action=change-password', {
                             method: 'POST',
                             headers: { 'Authorization': 'Bearer ' + cloudToken, 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ username: cloudUsername, oldPassword: oldPwd, newPassword: newPwd })
+                            body: JSON.stringify({ username: cloudUsername, oldPassword: oldPwd, newPassword: newPwd, newUsername: _newUsername || undefined })
                         });
                         if (cloudResp.status === 401) { alert('原密码错误'); return; }
                         if (cloudResp.status === 403) { alert('只能修改自己的密码'); return; }
+                        if (cloudResp.status === 409) { const _e409 = await cloudResp.json().catch(() => ({})); alert(_e409.error || '该用户名已被占用，请换一个'); return; }
                         if (cloudResp.ok) {
-                            alert('密码修改成功！请使用新密码重新登录。');
+                            alert(_newUsername
+                                ? '修改成功！\n\n新登录用户名：' + _newUsername + '\n手机号登录不受影响。\n\n请使用新用户名（或手机号）+ 新密码重新登录。'
+                                : '密码修改成功！请使用新密码重新登录。');
                             closeModal('changePwdModal');
                             try { const _KEYS = ['currentUser','isLoggedIn','user_login_data','auth:isLoggedIn','auth:currentUser','auth:loginData','cloud_isLoggedIn','cloud_currentUser','authToken']; for (const _k of _KEYS) localStorage.removeItem(_k); } catch(e) {}
                             currentUser = null;
@@ -2595,12 +2639,29 @@ let currentUser = null;
                     return;
                 }
 
+                // ★ 2026-08-26 本地改名（离线/本地回退分支）：唯一性校验后与密码一起保存
+                let _usernameChanged = false;
+                if (_newUsername) {
+                    if (users.some(u => u.username === _newUsername && u.username !== currentUser.username)) {
+                        alert('该用户名已被其他账号占用，请换一个！');
+                        return;
+                    }
+                    // 保手机号登录：原 username 是手机号且 phone 为空 → 先落 phone
+                    if (/^1[3-9]\d{9}$/.test(users[userIndex].username) && !users[userIndex].phone) {
+                        users[userIndex].phone = users[userIndex].username;
+                    }
+                    users[userIndex].username = _newUsername;
+                    _usernameChanged = true;
+                }
+
                 users[userIndex].password = await hashPassword(newPwd);
                 saveUsers(users);
                 currentUser = users[userIndex];
                 localStorage.setItem('local_currentUser', JSON.stringify(currentUser));
 
-                alert('密码修改成功！');
+                alert(_usernameChanged
+                    ? '修改成功！\n\n新登录用户名：' + _newUsername + '\n\n下次登录请使用新用户名（或原手机号）。'
+                    : '密码修改成功！');
                 closeModal('changePwdModal');
                 // 修复历史处方消失：修改密码后重新加载处方数据
                 // 之前 prescriptionHistory 可能为空（loadData 超时或后台重编号竞态），导致历史处方消失
