@@ -1907,10 +1907,38 @@ let currentUser = null;
             updatePrescriptionPaper();
         }
 
+        // ★ 2026-08-26 标准版改用户名：运行时向修改密码弹窗注入"新用户名（选填）"输入行
+        //   （位于"确认新密码"下方，复用 .form-group 样式，HTML/CSS 零改动，不碰界面基线）
+        //   移植自离线桌面版 index.html（2026-08-26 补齐离线APP：打包以 index-app.html 为源，此前漏移植）
+        (function injectUsernameField() {
+            function inject() {
+                try {
+                    const body = document.querySelector('#changePwdModal .modal-body');
+                    if (!body || document.getElementById('newUsernameField')) return;
+                    const div = document.createElement('div');
+                    div.className = 'form-group';
+                    const label = document.createElement('label');
+                    label.textContent = '新用户名（选填，留空不修改）';
+                    const input = document.createElement('input');
+                    input.type = 'text';
+                    input.id = 'newUsernameField';
+                    input.placeholder = '登录用户名（英文或拼音），如 wangguijie';
+                    input.autocomplete = 'off';
+                    div.appendChild(label);
+                    div.appendChild(input);
+                    body.appendChild(div);
+                } catch (e) { console.warn('[改用户名] 输入框注入失败:', e); }
+            }
+            if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', inject);
+            else inject();
+        })();
+
         function showChangePwdModal() {
             document.getElementById('oldPwd').value = '';
             document.getElementById('newPwd').value = '';
             document.getElementById('confirmNewPwd').value = '';
+            const _nu = document.getElementById('newUsernameField');
+            if (_nu) _nu.value = '';
             document.getElementById('changePwdModal').style.display = 'flex';
         }
 
@@ -1920,37 +1948,55 @@ let currentUser = null;
                 const newPwd = document.getElementById('newPwd').value;
                 const confirmNewPwd = document.getElementById('confirmNewPwd').value;
 
-                if (!oldPwd || !newPwd || !confirmNewPwd) {
-                    alert('请填写所有字段');
+                // ★ 2026-08-26 只改用户名：填了新用户名时密码三项可全留空（原密码不变）
+                let _newUsername = '';
+                const _nuField = document.getElementById('newUsernameField');
+                if (_nuField) _newUsername = String(_nuField.value || '').trim();
+                if (_newUsername && _newUsername === currentUser.username) _newUsername = '';
+                const _pwdChange = !!(oldPwd && newPwd && confirmNewPwd);
+                if (!_newUsername && !_pwdChange) {
+                    alert('请填写所有字段！\n\n提示：只修改用户名时，填"新用户名"，密码三项留空即可。');
                     return;
                 }
-
-                if (newPwd !== confirmNewPwd) {
+                if (!_pwdChange && (oldPwd || newPwd || confirmNewPwd)) {
+                    alert('密码三项请全部填写（或全部留空 = 只修改用户名）');
+                    return;
+                }
+                if (_pwdChange && newPwd !== confirmNewPwd) {
                     alert('新密码两次输入不一致');
                     return;
                 }
 
                 const users = getUsers();
-                const userIndex = users.findIndex(u =>u.username === currentUser.username);
+                // ★ 2026-08-26 自愈：本地副本已被改名（username=新名+phone=旧号）而登录的是
+                //   旧号/手机号时，按 phone 兜底定位，避免"用户不存在"卡死改名/改密
+                let userIndex = users.findIndex(u =>u.username === currentUser.username);
+                if (userIndex === -1 && currentUser.username) {
+                    userIndex = users.findIndex(u => u.phone && String(u.phone) === String(currentUser.username));
+                }
 
                 if (userIndex === -1) {
                     alert('用户不存在');
                     return;
                 }
 
-                // 使用与 login.js 完全一致的密码校验逻辑（hashPassword 直接比较 + 明文兼容）
-                // 不依赖 AuthCore.verifyPassword（混淆后行为可能与源码不一致）
-                const storedPwd = users[userIndex].password || '';
-                const isHash = /^[a-f0-9]{64}$/.test(storedPwd);
-                let verified = false;
-                try {
-                    if (isHash) {
-                        verified = (storedPwd === await hashPassword(oldPwd));
-                    } else {
-                        verified = (storedPwd === oldPwd);
-                    }
-                } catch(e) { console.warn('密码校验异常:', e); }
-                if (!verified) {
+                // ★ 2026-08-26 只改用户名（密码三项留空）时跳过密码校验，原密码保持不变
+                let _verified = true;
+                if (_pwdChange) {
+                    // 使用与 login.js 完全一致的密码校验逻辑（hashPassword 直接比较 + 明文兼容）
+                    // 不依赖 AuthCore.verifyPassword（混淆后行为可能与源码不一致）
+                    const storedPwd = users[userIndex].password || '';
+                    const isHash = /^[a-f0-9]{64}$/.test(storedPwd);
+                    _verified = false;
+                    try {
+                        if (isHash) {
+                            _verified = (storedPwd === await hashPassword(oldPwd));
+                        } else {
+                            _verified = (storedPwd === oldPwd);
+                        }
+                    } catch(e) { console.warn('密码校验异常:', e); }
+                }
+                if (!_verified) {
                     // 校验失败：可能是用户忘记之前修改的密码，提供重置为 admin 的选项
                     const reset = confirm('原密码错误！\n\n是否重置密码为默认值 admin？\n（重置后可用 admin 登录，再修改为新密码）');
                     if (reset) {
@@ -1971,12 +2017,34 @@ let currentUser = null;
                     return;
                 }
 
-                users[userIndex].password = await hashPassword(newPwd);
+                // ★ 2026-08-26 新用户名：本地改名（唯一校验+保手机号登录）——_newUsername 已在函数开头读取
+                if (_newUsername) {
+                    if (/[\u4e00-\u9fa5]/.test(_newUsername)) { alert('新用户名不能使用中文，请使用英文或拼音！'); return; }
+                    if (!/^[A-Za-z0-9_-]+$/.test(_newUsername)) { alert('用户名仅允许英文/数字/下划线/连字符！'); return; }
+                    if (_newUsername.length < 2 || _newUsername.length > 30) { alert('用户名长度需 2-30 字符！'); return; }
+                    if (/^1[3-9]\d{9}$/.test(_newUsername)) { alert('新用户名不能是手机号格式（请使用英文或拼音）！'); return; }
+                    if (users.some((u, i) => u.username === _newUsername && i !== userIndex)) {
+                        alert('该用户名已被其他账号占用，请换一个！');
+                        return;
+                    }
+                    // 保手机号登录：原 username 是手机号且 phone 为空 → 先落 phone
+                    if (/^1[3-9]\d{9}$/.test(users[userIndex].username) && !users[userIndex].phone) {
+                        users[userIndex].phone = users[userIndex].username;
+                    }
+                    users[userIndex].username = _newUsername;
+                }
+
+                // ★ 只改用户名时密码保持原值
+                if (_pwdChange) {
+                    users[userIndex].password = await hashPassword(newPwd);
+                }
                 saveUsers(users);
                 currentUser = users[userIndex];
                 localStorage.setItem('local_currentUser', JSON.stringify(currentUser));
 
-                alert('密码修改成功！');
+                alert(_newUsername
+                    ? '修改成功！\n\n新登录用户名：' + _newUsername + '\n\n下次登录请使用新用户名（或原手机号）。' + (_pwdChange ? '' : '\n（密码未修改）')
+                    : '密码修改成功！');
                 closeModal('changePwdModal');
                 // 修复历史处方消失：修改密码后重新加载处方数据
                 // 之前 prescriptionHistory 可能为空（loadData 超时或后台重编号竞态），导致历史处方消失
