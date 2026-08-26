@@ -2170,7 +2170,8 @@ let currentUser = null;
                     return;
                 }
 
-                renderUserList();
+                // ★ 2026-08-26 云端权威列表：打开用户管理先拉云端本诊所用户（根治本机残留混入）
+                refreshUserManageList();
                 try { document.getElementById('newUserUsername').value = ''; } catch(_){}
                 try { document.getElementById('newUserPassword').value = ''; } catch(_){}
                 try { document.getElementById('newUserName').value = ''; } catch(_){}
@@ -2192,12 +2193,73 @@ let currentUser = null;
             }
         }
 
-        function renderUserList() {
+        // ★ 2026-08-26 云端权威用户列表（修复存量残留绕过归属过滤）：
+        //   根因——历史登录落地的本机缓存（如纯本地账号/其他诊所账号）无 clinicId，
+        //   listVisibleUsers 按"无归属信息不过滤"原则放行 → 列表混入"多个管理员"残留。
+        //   修复——云端版用户管理以云端 GET /users（clinic_admin 返回本诊所权威列表）为准渲染；
+        //   云端不可用（离线/网络故障）才回退本地过滤列表。本地表仅作缓存/离线容错。
+        async function fetchCloudClinicUsers() {
             try {
+                let token = (currentUser && (currentUser.token || currentUser.cloud_token)) || '';
+                if (!token) { try { const _au = JSON.parse(localStorage.getItem('auth:currentUser') || '{}'); token = _au.token || ''; } catch (e) {} }
+                if (!token || typeof window.CLOUD_API_BASE === 'undefined' || !window.CLOUD_API_BASE) return null;
+                const resp = await cloudFetch(window.CLOUD_API_BASE + '/users', {
+                    method: 'GET',
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (resp && resp.success && Array.isArray(resp.data)) return resp.data;
+                return null;
+            } catch (e) {
+                console.warn('[fetchCloudClinicUsers] 拉取云端用户列表失败（回退本地列表）:', e);
+                return null;
+            }
+        }
+
+        // 云端权威列表合并回本地表：补全 clinicId/clinicName/role/userType（保留本地 password，
+        // 离线登录能力不变）——本地记录同步"治愈"，此后本地过滤路径也自然正确
+        function upsertCloudUsersToLocal(cloudUsers) {
+            try {
+                if (!Array.isArray(cloudUsers) || cloudUsers.length === 0) return;
+                const allUsers = getUsers();
+                let changed = false;
+                cloudUsers.forEach(cu => {
+                    if (!cu || !cu.username) return;
+                    const local = allUsers.find(u => u.username === cu.username);
+                    if (local) {
+                        if (cu.clinicId && !local.clinicId) { local.clinicId = cu.clinicId; changed = true; }
+                        if (cu.clinicName && !local.clinicName) { local.clinicName = cu.clinicName; changed = true; }
+                        if (cu.role && local.role !== cu.role) { local.role = cu.role; changed = true; }
+                        if (cu.userType && local.userType !== cu.userType) { local.userType = cu.userType; changed = true; }
+                    } else {
+                        allUsers.push({ username: cu.username, phone: cu.phone || '', password: '', name: cu.name || cu.username, role: cu.role || 'user', userType: cu.userType || 'production', clinicId: cu.clinicId || '', clinicName: cu.clinicName || '', _cloudRoleSynced: true, createdAt: new Date().toISOString() });
+                        changed = true;
+                    }
+                });
+                if (changed) saveUsers(allUsers);
+            } catch (e) { console.warn('[upsertCloudUsersToLocal] 合并本地表失败:', e); }
+        }
+
+        // 用户管理列表刷新统一入口：云端权威优先，失败回退本地过滤
+        async function refreshUserManageList() {
+            const cloudUsers = await fetchCloudClinicUsers();
+            if (Array.isArray(cloudUsers)) {
+                upsertCloudUsersToLocal(cloudUsers);
+                renderUserList(cloudUsers);
+            } else {
+                renderUserList();
+            }
+        }
+
+        function renderUserList(cloudUsers) {
+            try {
+                // ★ 2026-08-26：传入云端权威列表时直接渲染（根治本机残留混入）；
+                //   未传（离线/网络故障回退）时走本地缓存过滤：
                 // ★ 2026-08-22 "唯一管理员"设计：用户管理列表隐藏内置默认 admin
                 // ★ 2026-08-25 一期方案·诊所归属过滤：云端登录落地的账号已记录 clinicId，
                 //   其他诊所的历史登录残留不再显示（数据保留，仅本机列表过滤）
-                const users = UserAdmin.listVisibleUsers(getUsers(), currentUser);
+                const users = Array.isArray(cloudUsers)
+                    ? cloudUsers
+                    : UserAdmin.listVisibleUsers(getUsers(), currentUser);
                 const listDiv = document.getElementById('userList');
                 if (!listDiv) { throw new Error('用户列表容器 userList DOM 不存在'); }
                 if (!Array.isArray(users)) { throw new Error('用户数据格式错误（非数组）: ' + typeof users); }
@@ -2337,7 +2399,7 @@ let currentUser = null;
 
                 document.getElementById('editUserModal').remove();
                 document.getElementById('userManageModal').style.display = 'flex';
-                renderUserList();
+                refreshUserManageList();
                 alert('✅ 用户信息修改成功！');
             } catch (e) {
                 console.error('编辑用户失败:', e);
@@ -2416,7 +2478,7 @@ let currentUser = null;
             });
 
             saveUsers(users);
-            renderUserList();
+            refreshUserManageList();
             document.getElementById('newUserUsername').value = '';
             document.getElementById('newUserPassword').value = '';
             document.getElementById('newUserName').value = '';
@@ -2595,7 +2657,7 @@ let currentUser = null;
                 prescriptionHistory = await getAllUserPrescriptions();
             }
 
-            renderUserList();
+            refreshUserManageList();
             alert('用户删除成功！');
         }
 
