@@ -1092,6 +1092,18 @@ export async function onRequest(context) {
             // ★ 2026-08-25 clinicExpiresAt 用 let：授权自愈（下方）可能补写默认365天后赋新值
             let { user, clinicId, clinicName, clinicStatus, clinicEdition, clinicExpiresAt } = found || {};
 
+            // ★ 2026-08-26 锁定归一化：锁定 key 统一用解析出的权威 username——
+            //   手机号/用户名交替输错累计到同一账号，杜绝换输入串绕过锁定。
+            //   入口处按原始串的锁定检查保留（覆盖用户不存在场景的暴力尝试）；
+            //   用户解析出来且与输入串不同时，再按权威账号补检一次锁定。
+            const lockKey = (found && found.user && found.user.username) ? found.user.username : username;
+            if (found && found.user && lockKey !== username) {
+                const canonicalLocked = await checkLoginLocked(kv, lockKey);
+                if (canonicalLocked) {
+                    return json({ success: false, error: '尝试次数过多，账户暂时锁定，请稍后再试', code: 'ACCOUNT_LOCKED' }, 423, context.request);
+                }
+            }
+
             // ★ P1-6 防登录枚举：无论用户是否存在，统一走相同的密码验证流程并返回一致响应，
             //   防止攻击者通过错误码/错误消息/响应时间差异探测有效用户名。
             //   - 用户不存在或数据不完整：用哑哈希执行等代价 PBKDF2 验证后返回 WRONG_PASSWORD
@@ -1107,7 +1119,7 @@ export async function onRequest(context) {
             if (!ok) {
                 // 服务端日志与审计仍区分场景（便于安全追溯），但对客户端响应完全一致
                 console.error('[登录失败]', userFound ? '密码错误:' : '用户不存在或凭据无效:', username);
-                const failCount = await recordLoginFailure(kv, username);
+                const failCount = await recordLoginFailure(kv, lockKey);
                 await writeAuditLog(
                     kv,
                     clinicId || null,
@@ -1224,7 +1236,11 @@ export async function onRequest(context) {
             }
 
             // P1-1：登录成功，清除失败计数
-            await clearLoginFailures(kv, username);
+            // ★ 2026-08-26 锁定归一化：清权威账号 + 原始输入串两份计数（兼容历史分裂计数残留）
+            await clearLoginFailures(kv, lockKey);
+            if (lockKey !== username) {
+                await clearLoginFailures(kv, username);
+            }
 
             // ★★★ 2026-08-25 授权状态存量自愈：诊所从未设置有效期（早期平台管理员
             //   直接创建的诊所缺 expiresAt 字段）→ 登录时补写默认 365 天并回写 KV。

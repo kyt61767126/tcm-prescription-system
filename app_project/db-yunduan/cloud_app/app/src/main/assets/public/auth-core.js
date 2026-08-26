@@ -870,10 +870,6 @@
         return {
             async authenticate(username, password) {
                 try {
-                    // ★ 优化3：检查账号是否被锁定
-                    const lockMsg = LoginLockout.checkLocked(username);
-                    if (lockMsg) return { success: false, error: lockMsg };
-
                     const users = typeof getUsersFn === 'function' ? await getUsersFn() : getUsersFn;
                     if (!Array.isArray(users)) {
                         return { success: false, error: '用户数据加载失败' };
@@ -886,13 +882,20 @@
                     if (!user) {
                         return { success: false, error: '用户不存在' };
                     }
+                    // ★ 2026-08-26 锁定归一化：锁定 key 统一用解析出的权威 username——
+                    //   手机号/用户名交替输错累计到同一账号，杜绝换输入串绕过锁定
+                    const lockKey = user.username || username;
+                    // ★ 优化3：检查账号是否被锁定（按权威账号检查）
+                    const lockMsg = LoginLockout.checkLocked(lockKey);
+                    if (lockMsg) return { success: false, error: lockMsg };
                     const pwdOk = await verifyPassword(password, user.password || '');
                     if (!pwdOk) {
-                        // ★ 优化3：密码错误计数+1，5次后锁定30分钟
-                        return { success: false, error: LoginLockout.recordFailure(username) };
+                        // ★ 优化3：密码错误计数+1，5次后锁定30分钟（记在权威账号上）
+                        return { success: false, error: LoginLockout.recordFailure(lockKey) };
                     }
-                    // 登录成功，清零错误计数
-                    LoginLockout.recordSuccess(username);
+                    // 登录成功，清零错误计数（权威账号 + 原始输入串都清，兼容历史分裂计数残留）
+                    LoginLockout.recordSuccess(lockKey);
+                    if (lockKey !== username) LoginLockout.recordSuccess(username);
                     // 不返回密码
                     const { password: _, ...safeUser } = user;
                     return { success: true, user: safeUser };
@@ -909,10 +912,6 @@
         return {
             async authenticate(username, password) {
                 try {
-                    // ★ 优化3：检查账号是否被锁定
-                    const lockMsg = LoginLockout.checkLocked(username);
-                    if (lockMsg) return { success: false, error: lockMsg };
-
                     const user = typeof getUserFn === 'function' ? await getUserFn() : getUserFn;
                     if (!user) {
                         return { success: false, error: '用户信息加载失败' };
@@ -922,13 +921,20 @@
                     if (!usernameMatch) {
                         return { success: false, error: '用户不存在' };
                     }
+                    // ★ 2026-08-26 锁定归一化：锁定 key 统一用权威 username——
+                    //   手机号/用户名交替输错累计到同一账号，杜绝换输入串绕过锁定
+                    const lockKey = user.username || username;
+                    // ★ 优化3：检查账号是否被锁定（按权威账号检查）
+                    const lockMsg = LoginLockout.checkLocked(lockKey);
+                    if (lockMsg) return { success: false, error: lockMsg };
                     const pwdOk = await verifyPassword(password, user.password || '');
                     if (!pwdOk) {
-                        // ★ 优化3：密码错误计数+1，5次后锁定30分钟
-                        return { success: false, error: LoginLockout.recordFailure(username) };
+                        // ★ 优化3：密码错误计数+1，5次后锁定30分钟（记在权威账号上）
+                        return { success: false, error: LoginLockout.recordFailure(lockKey) };
                     }
-                    // 登录成功，清零错误计数
-                    LoginLockout.recordSuccess(username);
+                    // 登录成功，清零错误计数（权威账号 + 原始输入串都清，兼容历史分裂计数残留）
+                    LoginLockout.recordSuccess(lockKey);
+                    if (lockKey !== username) LoginLockout.recordSuccess(username);
                     const { password: _, ...safeUser } = user;
                     return { success: true, user: safeUser };
                 } catch (e) {
