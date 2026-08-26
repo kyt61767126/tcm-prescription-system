@@ -232,14 +232,27 @@ public class MainActivity extends BridgeActivity {
     //   「退出」    → 与原 showFatalLicenseErrorAndExit 行为一致（结束进程）
     //   安全边界：仅正常业务拒绝走此路径；代码篡改/校验异常仍走致命退出（不扩大攻击面）
     private void showLicenseErrorWithActivateChoice(String message) {
+        final String msg = (message == null || message.isEmpty()) ? "授权校验失败" : message;
         mainHandler.post(() -> {
             try {
                 new androidx.appcompat.app.AlertDialog.Builder(this)
                         .setTitle("授权提示")
-                        .setMessage((message == null || message.isEmpty() ? "授权校验失败" : message)
+                        .setMessage(msg
                                 + "\n\n您可以选择前往激活：已持有激活码可直接输入；"
-                                + "无激活码可在激活窗口提交申请，管理员在线审批后自动完成激活。")
+                                + "无激活码可在激活窗口提交申请，管理员在线审批后自动完成激活。"
+                                + "\n\n官网：tcm-prescription-system.pages.dev")
                         .setCancelable(false)
+                        // ★ 2026-08-26 覆盖安装提示加官网入口：浏览器打开官网（购买激活码/下载/联系客服），
+                        //   关闭浏览器回到 APP 后重新弹出本对话框，流程不断链
+                        .setNeutralButton("🌐 访问官网", (d, w) -> {
+                            try {
+                                startActivity(new android.content.Intent(android.content.Intent.ACTION_VIEW,
+                                        android.net.Uri.parse("https://tcm-prescription-system.pages.dev")));
+                            } catch (Exception e) {
+                                Log.w(TAG, "[StartupCheck] 打开官网失败", e);
+                            }
+                            showLicenseErrorWithActivateChoice(msg);
+                        })
                         .setPositiveButton("前往激活", (d, w) -> {
                             Log.i(TAG, "[StartupCheck] 用户选择前往激活，放行启动流程");
                             continueStartupAfterLicenseCheck();

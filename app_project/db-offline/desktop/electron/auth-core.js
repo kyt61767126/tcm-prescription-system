@@ -1761,6 +1761,17 @@
                     user = localStorage.getItem('auth:rememberedUsername') || '';
                 }
             } catch (e) {}
+            // ★ 2026-08-26 重装激活登录修复：激活弹窗填写的手机号即登录账号。
+            //   APP端：Java activateLicense 解析"姓名/手机号"（正则提取 1[3-9] 开头 11 位数字），第3参=password；
+            //   桌面端：preload submit 签名为 (code, user, clinicName, phone, password)，手机号走独立 phone 参数。
+            //   故按端区分组装与传参，避免密码被桌面端误当 clinicName。
+            const actPhone = (modalResult.phone || '').trim();
+            const actPwd = modalResult.password || '';
+            const isDesktopAct = global.electronAPI && global.electronAPI.activate &&
+                typeof global.electronAPI.activate.showExpireAlert === 'function';
+            if (actPhone && !isDesktopAct) {
+                user = user ? (user.replace(/[/\-\s]+$/, '').trim() + '/' + actPhone) : actPhone;
+            }
 
             // ★ 激活码前端格式校验（减少无效网络请求）
             const codeTrim = modalResult.code.trim();
@@ -1772,7 +1783,10 @@
                 return;
             }
 
-            const result = await global.electronAPI.activate.submit(codeTrim, user);
+            // ★ 按端区分传参：APP端 submit(code, user, password)；桌面端 submit(code, user, clinicName, phone, password)
+            const result = isDesktopAct
+                ? await global.electronAPI.activate.submit(codeTrim, user, '', actPhone, actPwd)
+                : await global.electronAPI.activate.submit(codeTrim, user, actPwd);
             if (result && result.success) {
                 global.__licenseExpired = false;
                 global.__licenseActivating = false;
@@ -1788,7 +1802,12 @@
                     await StorageAdapter.removeItem('license:lastHeartbeat');
                     await StorageAdapter.removeItem('license:offlineStart');
                 } catch(e) { console.warn('[Heartbeat] 存储 license code 失败:', e); }
-                showHtmlAlert('✅ 激活成功！\n' + (result.message || '') + '\n\n点击确定后应用将重启');
+                // ★ 2026-08-26 重装激活登录修复：成功提示明确展示登录账号+密码，用户不再猜
+                showHtmlAlert('✅ 激活成功！\n' + (result.message || '') +
+                    (actPhone ? ('\n\n📱 登录账号：' + actPhone +
+                                 '\n🔑 登录密码：' + (actPwd ? actPwd : 'admin（默认）') +
+                                 '\n\n请牢记以上账号密码，登录后可在设置中修改密码。') : '') +
+                    '\n\n点击确定后应用将重启');
                 global.electronAPI.activate.restart();
             } else {
                 // ★ 错误分类提示（网络错误/激活码错误/绑定错误）
@@ -1928,6 +1947,16 @@
                 'style="width:100%;padding:14px 16px;font-size:16px;font-family:monospace;border:2px solid #ddd;border-radius:8px;letter-spacing:2px;outline:none;transition:border-color 0.2s;margin-bottom:14px;box-sizing:border-box;" ' +
                 'placeholder="请输入激活码" autocomplete="new-password" data-lpignore="true" />' +
 
+                // ★ 2026-08-26 重装激活登录修复：手机号即登录账号；密码选填（默认 admin）
+                '<div style="font-size:12px;color:#666;margin-bottom:6px;">📱 手机号（激活后作为登录账号）<span style="color:#e53935;">*</span></div>' +
+                '<input type="tel" id="activatePhoneInput" ' +
+                'style="width:100%;padding:12px 14px;font-size:16px;border:2px solid #ddd;border-radius:8px;outline:none;margin-bottom:12px;box-sizing:border-box;" ' +
+                'placeholder="请输入手机号" maxlength="11" autocomplete="off" data-lpignore="true" />' +
+                '<div style="font-size:12px;color:#666;margin-bottom:6px;">🔑 登录密码（选填，默认 admin）</div>' +
+                '<input type="password" id="activatePwdInput" ' +
+                'style="width:100%;padding:12px 14px;font-size:16px;border:2px solid #ddd;border-radius:8px;outline:none;margin-bottom:14px;box-sizing:border-box;" ' +
+                'placeholder="请输入登录密码（留空则为 admin）" maxlength="32" autocomplete="new-password" data-lpignore="true" />' +
+
                 // loading 提示（默认隐藏）
                 '<div id="activateLoadingBox" style="display:none;text-align:center;padding:10px;margin-bottom:14px;">' +
                     '<div style="display:inline-block;width:20px;height:20px;border:2px solid #ddd;border-top-color:#667eea;border-radius:50%;animation:activateSpin 0.8s linear infinite;vertical-align:middle;margin-right:8px;"></div>' +
@@ -1977,6 +2006,8 @@
             const copyMachineIdBtn = card.querySelector('#copyMachineIdBtn');
             const loadingBox = card.querySelector('#activateLoadingBox');
             const copyContactBtns = card.querySelectorAll('.copyContactBtn');
+            const phoneInput = card.querySelector('#activatePhoneInput');
+            const pwdInput = card.querySelector('#activatePwdInput');
 
             // ★ 移除 cancelAutofill 调用：cancelAutofill 反而触发 Autofill 凭据提示弹窗
             // ("本能中医处方系统"大图标窗口)
@@ -2033,9 +2064,19 @@
 
             function submitCode() {
                 const val = input.value;
+                // ★ 2026-08-26 重装激活登录修复：激活时即设定手机号（登录账号）+密码，
+                //   避免重装后账号密码被静默重置为默认 admin、用户不知情无法登录
+                const phoneVal = phoneInput ? phoneInput.value.trim() : '';
+                const pwdVal = pwdInput ? pwdInput.value : '';
                 // ★ 显示 loading 状态（不立即关闭弹窗，让用户看到正在处理）
                 // 仅当有输入时才显示 loading
                 if (val && val.trim()) {
+                    // 手机号必填校验（登录账号=手机号）
+                    if (!/^1[3-9]\d{9}$/.test(phoneVal)) {
+                        try { alert('请填写正确的手机号（11位）。\n激活后使用「手机号 + 密码」登录。'); } catch (e) {}
+                        if (phoneInput) phoneInput.focus();
+                        return;
+                    }
                     submitBtn.disabled = true;
                     cancelBtn.disabled = true;
                     input.disabled = true;
@@ -2044,7 +2085,7 @@
                     // 延迟一帧让 loading 显示后再 resolve（主流程异步处理）
                     setTimeout(function() {
                         cleanup();
-                        resolve({ code: val, cancelled: false });
+                        resolve({ code: val, phone: phoneVal, password: pwdVal, cancelled: false });
                     }, 100);
                 } else {
                     // 空输入直接关闭
