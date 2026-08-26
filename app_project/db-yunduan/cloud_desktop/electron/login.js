@@ -254,8 +254,7 @@
         if (usernameToFill) {
             input.value = usernameToFill;
             localStorage.setItem(KEY_REMEMBER_USER, usernameToFill);
-            // 绿色成功反馈：提示用户账号已预填
-            showGreenHint(`✓ 账号已预填：${usernameToFill}，请输入密码登录`);
+            // ★ 2026-08-26 防信息泄露：取消"账号已预填"绿色提示（不在登入框暴露账号）
             // 自动聚焦到密码框
             setTimeout(() => {
                 const pwd = $('loginPassword');

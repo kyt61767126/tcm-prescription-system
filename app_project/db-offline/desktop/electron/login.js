@@ -257,11 +257,9 @@
             // 新装试用默认（未记住用户 + 单账户 admin）→ 密码框默认 admin，便于直接试用
             const isTrialDefault = !rememberedUser && users.length === 1;
             try { const dnEl = document.getElementById('loginDoctorName'); if (dnEl) dnEl.style.display = 'none'; } catch (e) {}
+            // ★ 2026-08-26 防信息泄露：取消"账号已预填"绿色提示（不在登入框暴露账号/医师姓名/默认密码）
             if (isTrialDefault && usernameToFill === 'admin') {
                 try { const pwdEl = $('loginPassword'); if (pwdEl && !pwdEl.value) pwdEl.value = 'admin'; } catch (e) {}
-                showGreenHint(`✓ 账号已预填：${usernameToFill}${doctorName ? '（医师：' + doctorName + '）' : ''}，密码默认 admin，可直接登录`);
-            } else {
-                showGreenHint(`✓ 账号已预填：${usernameToFill}${doctorName ? '（医师：' + doctorName + '）' : ''}，请输入密码登录`);
             }
             // 自动聚焦到密码框
             setTimeout(() => {
