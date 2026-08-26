@@ -165,10 +165,37 @@ public class LicenseManager {
     // ★ P1-9 代码完整性校验：检测关键 JS 文件是否被篡改
     private static final String PREF_KEY_JS_INTEGRITY_HASH = "js_integrity_baseline";
 
-    // ★ APK 签名校验（防反编译重打包）
-    // 留空则不校验；填入发布签名的 SHA-256 指纹（小写无冒号）后启用
-    // 获取方式：keytool -printcert -jarfile your.apk （取 SHA256: 后的值，去冒号转小写）
-private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b71e8d3c1643dfa68deb2c2a3ed385e27779a4601b7b54e";
+    // ★ APK 签名校验（防反编译重打包）★ P1-2 签名哈希碎片化存储
+    // 明文 64 位哈希不再以单一字符串常量出现（防 smali/strings 静态搜索定位后篡改）：
+    //   拆 4 片×16 hex 字符，每片先按位移 shift 做十六进制替换（(d+shift)%16），再整体反序存储；
+    //   运行时由 expectedApkSignatureSha256() 重组比对。由 generate-sign-hash.ps1 自动注入。
+    //   四片全空 = 未注入（开发阶段跳过校验，与旧版"留空则不校验"语义一致）；
+    //   部分为空/含非 hex 字符 = 注入残缺或被篡改，重组结果必不匹配（fail-closed）。
+private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e839c26d", "18b6016d5f5e10b9", "7de404a9fd32000b" };
+    private static final int[] SIGN_FRAGMENT_SHIFTS = { 5, 11, 3, 9 };
+
+    private static volatile String sExpectedApkSignature = null;
+
+    /** ★ P1-2：运行时重组碎片得到期望签名 SHA-256（静态缓存；格式非法时返回不可能匹配的占位串） */
+    private static String expectedApkSignatureSha256() {
+        if (sExpectedApkSignature != null) return sExpectedApkSignature;
+        StringBuilder sb = new StringBuilder(64);
+        boolean valid = true;
+        for (int i = 0; i < SIGN_FRAGMENTS.length && valid; i++) {
+            String frag = SIGN_FRAGMENTS[i];
+            if (frag == null || frag.isEmpty()) continue;  // 空片跳过：全空=未配置，部分空=重组不完整必失败
+            if (i >= SIGN_FRAGMENT_SHIFTS.length) { valid = false; break; }
+            int shift = SIGN_FRAGMENT_SHIFTS[i];
+            for (int j = frag.length() - 1; j >= 0; j--) {   // 反序还原
+                int d = Character.digit(frag.charAt(j), 16);
+                if (d < 0) { valid = false; break; }         // 非 hex 字符=被篡改
+                sb.append(Character.forDigit((d - shift + 16) % 16, 16));
+            }
+        }
+        sExpectedApkSignature = valid ? sb.toString() : "#invalid-fragment#";
+        if (!valid) Log.e(TAG, "签名哈希碎片格式非法（疑似被篡改），按校验失败处理");
+        return sExpectedApkSignature;
+    }
 
     // ★ 安全检测开关（root/debugger 检测）
     private static final boolean ENABLE_ROOT_CHECK = true;
@@ -588,7 +615,7 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
     }
 
     public boolean verifyApkSignature() {
-        if (EXPECTED_APK_SIGNATURE_SHA256 == null || EXPECTED_APK_SIGNATURE_SHA256.isEmpty()) {
+        if (expectedApkSignatureSha256().isEmpty()) {
             // 未配置预期签名，跳过校验（开发阶段）
             lastIntegrityState = INTEGRITY_OK;
             return true;
@@ -609,7 +636,7 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
             boolean nativePass = true;
             for (android.content.pm.Signature sig : signatures) {
                 if (!NativeGuard.verifyApkSignature(
-                        sig.toByteArray(), EXPECTED_APK_SIGNATURE_SHA256)) {
+                        sig.toByteArray(), expectedApkSignatureSha256())) {
                     nativePass = false;
                     break;
                 }
@@ -621,7 +648,7 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
             if (!nativePass && !javaPass) {
                 lastIntegrityState = INTEGRITY_FAIL;
                 Log.e(TAG, "APK 签名校验：native/Java 双路一致失败（真篡改）expected=" +
-                        EXPECTED_APK_SIGNATURE_SHA256);
+                        expectedApkSignatureSha256());
                 return false;
             }
             // ★ P1-1：双路分叉。同一输入+同算法+同常量，正常情况下不可能分叉；
@@ -648,10 +675,10 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
                 sb.append(String.format("%02x", b));
             }
             String fingerprint = sb.toString();
-            if (EXPECTED_APK_SIGNATURE_SHA256.equalsIgnoreCase(fingerprint)) {
+            if (expectedApkSignatureSha256().equalsIgnoreCase(fingerprint)) {
                 return true;
             }
-            Log.e(TAG, "APK 签名校验：Java 指纹不匹配 expected=" + EXPECTED_APK_SIGNATURE_SHA256 +
+            Log.e(TAG, "APK 签名校验：Java 指纹不匹配 expected=" + expectedApkSignatureSha256() +
                     " actual=" + fingerprint);
         }
         return false;

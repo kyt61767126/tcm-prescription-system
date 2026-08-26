@@ -160,10 +160,38 @@ Write-Host "  目标文件: $($guardFile.FullName)"
 $content = Get-Content $guardFile.FullName -Raw -Encoding UTF8
 $updated = $false
 
-# ★ 正则加行首锚定（?m）+ 可选空白，避免匹配到注释行（如 // private static final...）
-# 之前无锚定可能匹配到被注释掉的占位符，导致替换注释行破坏代码语法
-$signPattern = '(?m)^\s*private static final String ' + $placeholder + ' = "[^"]*";'
-$signReplacement = 'private static final String ' + $placeholder + ' = "' + $signSha256 + '";'
+# ★ P1-2（2026-08-26）签名哈希碎片化注入：明文 64 位哈希不再写入单一字符串常量
+#   （防 smali/strings 静态搜索定位后篡改）。拆 4 片×16 hex 字符，每片先按位移
+#   shift 做十六进制替换（(d+shift)%16），再整体反序存储；运行时由 Java 端
+#   expectedApkSignatureSha256() / expectedSignHash() 重组比对（逻辑严格互逆）。
+$shifts = @(5, 11, 3, 9)
+$fragments = @()
+for ($i = 0; $i -lt 4; $i++) {
+    $frag = $signSha256.Substring($i * 16, 16)
+    $shifted = -join ($frag.ToCharArray() | ForEach-Object {
+        '{0:x}' -f (([Convert]::ToInt32($_.ToString(), 16) + $shifts[$i]) % 16)
+    })
+    $rev = $shifted.ToCharArray(); [array]::Reverse($rev)
+    $fragments += (-join $rev)
+}
+
+# 自检：逆向重组必须还原出原始哈希（防脚本与 Java 逻辑不一致流出坏包）
+$roundTrip = ''
+for ($i = 0; $i -lt 4; $i++) {
+    $rev = $fragments[$i].ToCharArray(); [array]::Reverse($rev)
+    $shifted = -join $rev
+    $roundTrip += -join ($shifted.ToCharArray() | ForEach-Object {
+        '{0:x}' -f (([Convert]::ToInt32($_.ToString(), 16) - $shifts[$i] + 16) % 16)
+    })
+}
+if ($roundTrip -ne $signSha256) {
+    Write-Host "  [错误] 碎片化自检失败（重组=$roundTrip 原始=$signSha256）"
+    exit 1
+}
+
+# 正则加行首锚定（?m）+ 可选空白，避免匹配到注释行
+$signPattern = '(?m)^\s*private static final String\[\] SIGN_FRAGMENTS = \{[^}]*\};'
+$signReplacement = 'private static final String[] SIGN_FRAGMENTS = { "' + ($fragments -join '", "') + '" };'
 if ($content -match $signPattern) {
     $newContent = $content -replace $signPattern, $signReplacement
     if ($newContent -ne $content) {
@@ -173,14 +201,14 @@ if ($content -match $signPattern) {
         Write-Host "  [OK] 已备份原文件: $(Split-Path $bakPath -Leaf)"
         $content = $newContent
         $updated = $true
-        Write-Host "  [OK] $placeholder = $signSha256"
+        Write-Host "  [OK] $placeholder 碎片化注入完成（4 片 x 16 hex，明文哈希不再出现于源码）"
     } else {
         # ★ 2026-08-23 优化：哈希已一致属正常幂等（上次已注入，本次校验通过），
         #   原按[警告]黄色显示，用户误以为打包过程出错。改为[OK]绿色正常提示。
-        Write-Host "  [OK] 哈希已与当前值一致（$placeholder 校验通过，无需更新）" -ForegroundColor Green
+        Write-Host "  [OK] 哈希已与当前值一致（$placeholder 碎片校验通过，无需更新）" -ForegroundColor Green
     }
 } else {
-    Write-Host "  [警告] 未找到 $placeholder 占位符（可能已被修改过格式）"
+    Write-Host "  [警告] 未找到 SIGN_FRAGMENTS 碎片占位符（源码可能还是旧明文格式，请拉取最新代码）"
 }
 
 if ($updated) {

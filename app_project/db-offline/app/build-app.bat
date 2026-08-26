@@ -380,8 +380,9 @@ if defined SDK_ROOT (
 if defined APKSIGNER (
     REM ★ 2026-08-23 防破解增强：修复原管道校验漏洞（apksigner 失败输出含 ERROR 行时
     REM   findstr 反而匹配成功→失败被放行），改用临时文件保留真实退出码；
-    REM   并新增 APK 实际证书 SHA-256 == LicenseManager 注入哈希 一致性终验
-    REM   （防哈希漂移：注入后 keystore 变更/签名配置错误时，运行时校验会拒绝启动，
+    REM   并新增 APK 实际证书 SHA-256 == LicenseManager 碎片化注入哈希 一致性终验
+    REM   （P1-2 碎片化存储：明文哈希不再出现于源码；校验工具重组 SIGN_FRAGMENTS 后比对。
+    REM     防哈希漂移：注入后 keystore 变更/签名配置错误时，运行时校验会拒绝启动，
     REM     打包期提前拦截，绝不让"启动即闪退"的 APK 流出）
     set "SIGN_OUT=%TEMP%\apksign_verify_%RANDOM%.txt"
     call "%APKSIGNER%" verify --verbose "%APK_FILE%" > "!SIGN_OUT!" 2>&1
@@ -393,7 +394,7 @@ if defined APKSIGNER (
     )
     findstr /i "verified warning error" "!SIGN_OUT!"
     del "!SIGN_OUT!" 2>nul
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; $out = & '%APKSIGNER%' verify --print-certs '%APK_FILE%' 2>&1 | Out-String; if($out -notmatch 'certificate SHA-256 digest:\s*([0-9a-fA-F:]+)'){ Write-Host '[ERROR] Cannot extract APK cert SHA-256 from apksigner output'; exit 1 }; $apkHash = ($matches[1] -replace ':','').ToLower(); $guard = Get-Content '%CD%\app\src\main\java\com\benneng\pres\LicenseManager.java' -Raw -Encoding UTF8; $injected=''; if($guard -match 'EXPECTED_APK_SIGNATURE_SHA256\s*=\s*\x22([0-9a-fA-F]{64})\x22'){ $injected=$matches[1].ToLower() }; if(-not $injected){ Write-Host '[ERROR] EXPECTED_APK_SIGNATURE_SHA256 not found in LicenseManager.java'; exit 1 }; if($apkHash -ne $injected){ Write-Host ('[ERROR] Cert hash mismatch! APK='+$apkHash); Write-Host ('       Injected='+$injected); Write-Host '       APK will self-exit at runtime (signature check). Aborting build.'; exit 1 }; Write-Host ('[OK] APK cert SHA-256 == LicenseManager.EXPECTED_APK_SIGNATURE_SHA256 ('+$apkHash.Substring(0,16)+'...)')"
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\..\tools\verify-apk-sign-hash.ps1" -ApkFile "%APK_FILE%" -Apksigner "%APKSIGNER%" -JavaFile "%CD%\app\src\main\java\com\benneng\pres\LicenseManager.java" -OldConstantName EXPECTED_APK_SIGNATURE_SHA256
     if errorlevel 1 (
         powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] APK certificate hash consistency check failed!'"
         goto build_fail

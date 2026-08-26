@@ -28,11 +28,37 @@ public class SecurityGuard {
 
     private static final String TAG = "SecurityGuard";
 
-    // ★ APK 签名校验（防反编译重打包）
-    // 留空则跳过校验；填入发布签名的 SHA-256 指纹（小写无冒号）后启用
-    // 获取方式：keytool -printcert -jarfile your.apk （取 SHA256: 后的值，去冒号转小写）
-    // 由 generate-sign-hash.ps1 自动注入
-private static final String EXPECTED_SIGN_HASH = "e5b2e4b3aac9de292b71e8d3c1643dfa68deb2c2a3ed385e27779a4601b7b54e";
+    // ★ APK 签名校验（防反编译重打包）★ P1-2 签名哈希碎片化存储
+    // 明文 64 位哈希不再以单一字符串常量出现（防 smali/strings 静态搜索定位后篡改）：
+    //   拆 4 片×16 hex 字符，每片先按位移 shift 做十六进制替换（(d+shift)%16），再整体反序存储；
+    //   运行时由 expectedSignHash() 重组比对。由 generate-sign-hash.ps1 自动注入。
+    //   四片全空 = 未注入（跳过校验，与旧版"留空则跳过"语义一致）；
+    //   部分为空/含非 hex 字符 = 注入残缺或被篡改，重组结果必不匹配（fail-closed）。
+private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e839c26d", "18b6016d5f5e10b9", "7de404a9fd32000b" };
+    private static final int[] SIGN_FRAGMENT_SHIFTS = { 5, 11, 3, 9 };
+
+    private static volatile String sExpectedSignHash = null;
+
+    /** ★ P1-2：运行时重组碎片得到期望签名 SHA-256（静态缓存；格式非法时返回不可能匹配的占位串） */
+    private static String expectedSignHash() {
+        if (sExpectedSignHash != null) return sExpectedSignHash;
+        StringBuilder sb = new StringBuilder(64);
+        boolean valid = true;
+        for (int i = 0; i < SIGN_FRAGMENTS.length && valid; i++) {
+            String frag = SIGN_FRAGMENTS[i];
+            if (frag == null || frag.isEmpty()) continue;  // 空片跳过：全空=未配置，部分空=重组不完整必失败
+            if (i >= SIGN_FRAGMENT_SHIFTS.length) { valid = false; break; }
+            int shift = SIGN_FRAGMENT_SHIFTS[i];
+            for (int j = frag.length() - 1; j >= 0; j--) {   // 反序还原
+                int d = Character.digit(frag.charAt(j), 16);
+                if (d < 0) { valid = false; break; }         // 非 hex 字符=被篡改
+                sb.append(Character.forDigit((d - shift + 16) % 16, 16));
+            }
+        }
+        sExpectedSignHash = valid ? sb.toString() : "#invalid-fragment#";
+        if (!valid) Log.e(TAG, "签名哈希碎片格式非法（疑似被篡改），按校验失败处理");
+        return sExpectedSignHash;
+    }
 
     // ★ 安全检测开关
     private static final boolean ENABLE_ROOT_CHECK = true;
@@ -57,7 +83,7 @@ private static final String EXPECTED_SIGN_HASH = "e5b2e4b3aac9de292b71e8d3c1643d
             Log.w(TAG, "安全检测：检测到调试器特征（仅记录日志，不阻塞运行）");
         }
         // 3. APK 签名校验
-        if (ENABLE_SIGNATURE_CHECK && !EXPECTED_SIGN_HASH.isEmpty()) {
+        if (ENABLE_SIGNATURE_CHECK && !expectedSignHash().isEmpty()) {
             if (!verifyApkSignature(activity)) {
                 Log.w(TAG, "安全检测：APK 签名校验失败，退出 APP");
                 toastAndExit(activity, "APK 签名校验失败，请从官方渠道下载");
@@ -448,7 +474,7 @@ private static final String EXPECTED_SIGN_HASH = "e5b2e4b3aac9de292b71e8d3c1643d
     }
 
     /**
-     * APK 签名校验：比对当前 APK 签名的 SHA-256 与 EXPECTED_SIGN_HASH
+     * APK 签名校验：比对当前 APK 签名的 SHA-256 与重组后的期望哈希（P1-2 碎片化存储）
      * P0-NDK（2026-08-17）：签名校验最易被逆向的关键逻辑（SHA-256 + 常量时间比对）
      *                     优先下沉到 libsecurityguard.so 原生层；.so 不可用时回退 Java 实现。
      * P1-A5 升级：优先使用 GET_SIGNING_CERTIFICATES（API 28+）支持 v2/v3 签名方案，
@@ -460,7 +486,7 @@ private static final String EXPECTED_SIGN_HASH = "e5b2e4b3aac9de292b71e8d3c1643d
      *   阻断路径一致）。
      */
     public static boolean verifyApkSignature(Context context) {
-        if (EXPECTED_SIGN_HASH.isEmpty()) {
+        if (expectedSignHash().isEmpty()) {
             // 留空时跳过校验（开发阶段）
             return true;
         }
@@ -481,11 +507,11 @@ private static final String EXPECTED_SIGN_HASH = "e5b2e4b3aac9de292b71e8d3c1643d
                     sb.append(String.format("%02x", b));
                 }
                 String currentHash = sb.toString();
-                if (EXPECTED_SIGN_HASH.equalsIgnoreCase(currentHash)) {
+                if (expectedSignHash().equalsIgnoreCase(currentHash)) {
                     javaPass = true;
                     break;
                 }
-                Log.w(TAG, "签名校验：(Java) 指纹不匹配 expected=" + EXPECTED_SIGN_HASH +
+                Log.w(TAG, "签名校验：(Java) 指纹不匹配 expected=" + expectedSignHash() +
                         " current=" + currentHash);
             }
 
@@ -495,11 +521,11 @@ private static final String EXPECTED_SIGN_HASH = "e5b2e4b3aac9de292b71e8d3c1643d
             }
             boolean nativePass = false;
             for (Signature sig : signatures) {
-                if (NativeGuard.verifyApkSignature(sig.toByteArray(), EXPECTED_SIGN_HASH)) {
+                if (NativeGuard.verifyApkSignature(sig.toByteArray(), expectedSignHash())) {
                     nativePass = true;
                     break;
                 }
-                Log.w(TAG, "签名校验：NDK 指纹不匹配 expected=" + EXPECTED_SIGN_HASH);
+                Log.w(TAG, "签名校验：NDK 指纹不匹配 expected=" + expectedSignHash());
             }
             if (nativePass && javaPass) {
                 return true;

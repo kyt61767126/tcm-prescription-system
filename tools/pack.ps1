@@ -1059,7 +1059,7 @@ function Enable-StrictMode {
     Write-Host ""
     Write-Host "  流程:"
     Write-Host "    1. 从最新 APK 提取签名 SHA-256"
-    Write-Host "    2. 注入到 LicenseManager.java (EXPECTED_APK_SIGNATURE_SHA256)"
+    Write-Host "    2. 碎片化注入到 LicenseManager.java (SIGN_FRAGMENTS, P1-2 防静态搜索)"
     Write-Host "    3. 重新打包 APK 启用签名严格模式"
     Write-Host ""
 
