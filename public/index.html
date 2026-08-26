@@ -2808,6 +2808,27 @@ let currentUser = null;
                     return;
                 }
 
+                // ★ 2026-08-26 设置登录用户名：云端账号改用户名必须先同步云端成功再本地保存——
+                //   手机号激活的账号（username=手机号）改英文/拼音用户名后，用户名+手机号都可登录
+                if (newUsername !== originalUsername) {
+                    const isCloudAccount = !!(window.Permission && Permission.isCloud && Permission.isCloud());
+                    if (isCloudAccount) {
+                        const syncRes = await setCloudUsername(originalUsername, newUsername);
+                        if (syncRes.blocked) {
+                            alert('❌ 登录用户名修改被拒绝：\n' + syncRes.error + '\n\n本次修改未保存。');
+                            return;
+                        }
+                        if (syncRes.failed) {
+                            alert('⚠ 云端连接失败，登录用户名暂未修改：\n' + (syncRes.error || '') + '\n\n请检查网络后重试（本地未保存，避免本地与云端不一致）。');
+                            return;
+                        }
+                        // 云端改名成功 → 本地继续保存；若改的是自己，token 已失效需重新登录
+                        if (currentUser && currentUser.username === originalUsername) {
+                            alert('✅ 登录用户名设置成功！\n\n新用户名：' + newUsername + '\n手机号登录不受影响。\n\n⚠ 请退出登录，使用新用户名（或手机号）重新登录。');
+                        }
+                    }
+                }
+
                 const users = getUsers();
                 if (newUsername !== originalUsername) {
                     const exists = users.find(u => u.username === newUsername);
@@ -2958,6 +2979,32 @@ let currentUser = null;
             if (isCloudMode && cloudSyncFlag === 'ok') addMsg += '\n\n云端账号已同步创建，其他设备可直接登录。';
             if (isCloudMode && cloudSyncFlag === 'failed') addMsg += '\n\n⚠ 云端账号创建失败（网络原因），本机可登录，其他设备暂不可用，请检查网络后重试。';
             alert(addMsg);
+        }
+
+        // ★ 2026-08-26 设置登录用户名：云端账号改用户名同步云端
+        //   返回 {ok}=成功 / {skipped}=无token非云端环境 / {blocked,error}=云端明确拒绝 /
+        //   {failed,error}=网络等异常
+        async function setCloudUsername(originalUsername, newUsername) {
+            try {
+                let token = (currentUser && (currentUser.token || currentUser.cloud_token)) || '';
+                if (!token) { try { const _au = JSON.parse(localStorage.getItem('auth:currentUser') || '{}'); token = _au.token || ''; } catch (e) {} }
+                if (!token) return { skipped: true };
+                if (typeof window.CLOUD_API_BASE === 'undefined' || !window.CLOUD_API_BASE) return { skipped: true };
+                const resp = await cloudFetch(window.CLOUD_API_BASE + '/users?action=set-username', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + token },
+                    body: JSON.stringify({ originalUsername: originalUsername, newUsername: newUsername })
+                });
+                if (resp && resp.success) return { ok: true, phone: resp.phone || '' };
+                if (resp && resp.requireAuth) {
+                    return { blocked: true, error: resp.error || '登录已失效，请重新登录后再修改' };
+                }
+                // 云端明确拒绝（占用/校验失败/无权限）→ 409/400/403
+                if (resp && resp.error) return { blocked: true, error: resp.error };
+                return { failed: true, error: '云端响应异常' };
+            } catch (e) {
+                return { failed: true, error: e.message || '网络错误' };
+            }
         }
 
         // ★ 2026-08-25 云端建号：机构版管理员添加账号时同步创建云端账号

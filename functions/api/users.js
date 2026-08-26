@@ -574,6 +574,124 @@ export async function onRequest(context) {
             return json({ success: true, username: username, role: role, message: '云端账号创建成功' });
         }
 
+        // ===== 设置登录用户名 POST /users?action=set-username =====
+        // ★ 2026-08-26 新增（手机号激活账号补用户名登录）：手机号注册激活的管理员
+        //   username=手机号，为其提供"同一账号设置英文/拼音用户名"能力——
+        //   改名后 username=新用户名、phone 字段保持手机号 → 用户名+手机号都可登录。
+        //   权限：本人可改自己；诊所管理员可改本诊所用户；平台管理员仅可改自己。
+        //   安全：新用户名全局唯一校验（所有诊所+platform_admins+激活占位）；
+        //   原 username 为手机号且 phone 字段为空时，先把手机号落 phone（保手机号登录不丢）；
+        //   迁移设备绑定记录；撤销全部旧 token（token 绑定旧 username，改名后需重新登录）。
+        if (method === 'POST' && url.searchParams.get('action') === 'set-username') {
+            const authUser = await parseAuthHeader(context.request, context.env);
+            if (!authUser) {
+                return json({ success: false, error: '未授权：请先登录' }, 401, context.request);
+            }
+
+            const body = await context.request.json().catch(() => ({}));
+            const originalUsername = String(body.originalUsername || '').trim();
+            const newUsername = String(body.newUsername || '').trim();
+
+            if (!originalUsername || !newUsername) {
+                return json({ success: false, error: '缺少原账号或新用户名' }, 400, context.request);
+            }
+            if (originalUsername === newUsername) {
+                return json({ success: false, error: '新用户名与当前登录账号相同，无需修改' }, 400, context.request);
+            }
+            if (/[\u4e00-\u9fa5]/.test(newUsername)) {
+                return json({ success: false, error: '用户名不能使用中文，请使用英文或拼音' }, 400, context.request);
+            }
+            if (!/^[A-Za-z0-9_-]+$/.test(newUsername)) {
+                return json({ success: false, error: '用户名仅允许英文/数字/下划线/连字符' }, 400, context.request);
+            }
+            if (newUsername.length < 2 || newUsername.length > 30) {
+                return json({ success: false, error: '用户名长度需 2-30 字符' }, 400, context.request);
+            }
+            if (/^1[3-9]\d{9}$/.test(newUsername)) {
+                return json({ success: false, error: '新用户名不能是手机号格式（请使用英文或拼音）' }, 400, context.request);
+            }
+
+            // 全局唯一：跨诊所 username/phone + platform_admins + 激活占位全查
+            const existing = await findUserForLogin(kv, newUsername);
+            if (existing && existing.user) {
+                return json({ success: false, error: '该用户名已被占用（' + (existing.clinicName || '其他账号') + '），请换一个' }, 409, context.request);
+            }
+            const phoneOccupancy = await findPhoneOccupancy(kv, newUsername);
+            if (phoneOccupancy && phoneOccupancy.user) {
+                return json({ success: false, error: '该用户名与已有手机号冲突，请换一个' }, 409, context.request);
+            }
+
+            // 定位目标用户：诊所用户（本诊所）→ platform_admins
+            const isSelf = (authUser.username === originalUsername);
+            const isAdminOper = isClinicAdmin(authUser) || authUser.role === ROLE_PLATFORM_ADMIN;
+
+            let target = null;        // { user, store: 'clinic'|'platform', clinicId }
+            if (authUser.clinicId) {
+                const clinicUsers = (await kv.get(`clinic:${authUser.clinicId}:users`, 'json')) || [];
+                const idx = clinicUsers.findIndex(u => u && u.username === originalUsername);
+                if (idx !== -1) target = { user: clinicUsers[idx], store: 'clinic', clinicId: authUser.clinicId, list: clinicUsers, idx };
+            }
+            if (!target) {
+                const admins = (await kv.get(KV_SYSTEM_PLATFORM_ADMINS, 'json')) || [];
+                const idx = admins.findIndex(u => u && u.username === originalUsername);
+                if (idx !== -1) target = { user: admins[idx], store: 'platform', list: admins, idx };
+            }
+
+            if (!target) {
+                return json({ success: false, error: '未找到该账号（仅可修改本诊所账号）' }, 404, context.request);
+            }
+            // 权限：本人 OR 诊所管理员改本诊所账号；平台管理员仅可改自己（防止跨诊所误操作）
+            const allowed = isSelf || (isClinicAdmin(authUser) && target.store === 'clinic');
+            if (!allowed) {
+                return json({ success: false, error: '无权限修改该账号的登录用户名' }, 403, context.request);
+            }
+
+            const now = getNowISO();
+            const oldUsername = target.user.username;
+
+            // ★ 保手机号登录能力：原 username 是手机号且 phone 为空 → 先落 phone 字段
+            if (/^1[3-9]\d{9}$/.test(oldUsername) && !target.user.phone) {
+                target.user.phone = oldUsername;
+            }
+
+            // 执行改名
+            target.user.username = newUsername;
+            target.user.updatedAt = now;
+            if (target.store === 'clinic') {
+                target.list[target.idx] = target.user;
+                await kv.put(`clinic:${target.clinicId}:users`, JSON.stringify(target.list));
+            } else {
+                target.list[target.idx] = target.user;
+                await kv.put(KV_SYSTEM_PLATFORM_ADMINS, JSON.stringify(target.list));
+            }
+
+            // ★ 迁移设备绑定记录 user_devices:{old} → {new}（2台设备上限判定不能失联）
+            try {
+                const devRecord = await kv.get(KV_USER_DEVICES_PREFIX + oldUsername, 'json');
+                if (devRecord) {
+                    await kv.put(KV_USER_DEVICES_PREFIX + newUsername, JSON.stringify(devRecord));
+                    await kv.delete(KV_USER_DEVICES_PREFIX + oldUsername);
+                }
+            } catch (e) { console.warn('[set-username] 设备绑定迁移失败（不影响改名）:', e); }
+
+            // ★ token 绑定旧 username：撤销旧账号全部 token + 清 session → 所有端需重新登录
+            try {
+                await revokeAllUserTokens(kv, oldUsername);
+                await clearUserSession(kv, oldUsername);
+            } catch (e) { console.warn('[set-username] 旧 token 撤销失败:', e); }
+
+            await writeAuditLog(kv, target.clinicId || null, authUser.username, authUser.role,
+                'set_username', oldUsername + ' -> ' + newUsername, context.request,
+                { originalUsername: oldUsername, newUsername: newUsername, self: isSelf });
+
+            return json({
+                success: true,
+                username: newUsername,
+                phone: target.user.phone || '',
+                message: '登录用户名设置成功，请退出并使用新用户名重新登录（手机号登录不受影响）'
+            });
+        }
+
         // ===== 统一账号救援：解锁 / 重置密码 POST /users?action=reset-password =====
         // ★ 2026-08-20 合并：原 action=unlock 与 action=reset-password 两个接口合并为一个统一操作。
         //   body.password 留空 = 仅解锁（清除登录失败计数/锁定，无需等 TTL）；
