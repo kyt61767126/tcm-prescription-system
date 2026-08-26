@@ -2377,6 +2377,55 @@ ipcMain.handle('user:change-password', async (event, { username, oldPassword, ne
     }
 });
 
+// ===== 🔧 2026-08-26 设置登录用户名：同步 config.json（登录端权威源） =====
+// 背景：登录窗合并 config.json（优先）+ localStorage。改名若只写 localStorage，
+// config 里旧账号仍有效（改名后旧号还能登=漏洞），且新账号密码取自可能过期的
+// 本地副本（双源漂移 → "密码错误"误报）。此 IPC 保证 config.json 与本地一致：
+//   - 按 oldUsername 或 phone 定位 config 账户（兼容改名后旧号回登的自愈场景）
+//   - phone 保底：旧 username 是手机号且 phone 为空 → 先落 phone（保手机号登录）
+//   - newPassword 可选：一并同步新密码（改密+改名同填时），保持双源密码一致
+//   - 若 config 无该账户（纯本地账号）→ no-op 返回 synced:false（本地已保存，非错误）
+ipcMain.handle('user:rename-username', async (event, { oldUsername, newUsername, newPassword }) => {
+    try {
+        if (!oldUsername || !newUsername) return { success: false, error: '缺少原账号或新用户名' };
+        const configPath = getWritableConfigPath();
+        if (await fse.pathExists(configPath)) {
+            const config = await fse.readJson(configPath);
+            if (config && Array.isArray(config.users)) {
+                let userIdx = config.users.findIndex(u => u && u.username === oldUsername);
+                if (userIdx === -1) {
+                    userIdx = config.users.findIndex(u => u && u.phone && String(u.phone) === String(oldUsername));
+                }
+                if (userIdx !== -1) {
+                    const u = config.users[userIdx];
+                    // phone 保底：原 username 是手机号且 phone 为空 → 先落 phone
+                    if (/^1[3-9]\d{9}$/.test(String(u.username)) && !u.phone) {
+                        u.phone = String(u.username);
+                    }
+                    u.username = newUsername;
+                    if (newPassword) {
+                        const { passwordHash, salt } = await hashPassword(newPassword);
+                        u.password = passwordHash;
+                        u.passwordHash = passwordHash;
+                        u.salt = salt;
+                    }
+                    u.updatedAt = new Date().toISOString();
+                    // 签名保护：signConfig(config) 直接修改原对象（勿赋值返回值，循环引用）
+                    licenseManager.signConfig(config);
+                    await fse.writeJson(configPath, config, { spaces: 2 });
+                    console.log('[User] rename synced to config.json:', oldUsername, '->', newUsername);
+                    return { success: true, synced: true };
+                }
+                return { success: true, synced: false };
+            }
+        }
+        return { success: true, synced: false };
+    } catch (e) {
+        console.error('[User] rename-username failed:', e);
+        return { success: false, error: String(e) };
+    }
+});
+
 // ===== 添加用户（注册管理员账户） =====
 ipcMain.handle('user:add', async (event, { username, password, name, role }) => {
     try {

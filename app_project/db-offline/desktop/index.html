@@ -2028,8 +2028,14 @@ let currentUser = null;
                     return;
                 }
 
+                const _oldLoginName = currentUser.username; // ★ 登录名快照（config 同步用，自愈场景=旧号/手机号）
                 const users = getUsers();
-                const userIndex = users.findIndex(u =>u.username === currentUser.username);
+                // ★ 2026-08-26 自愈：本地副本已被改名（username=新名+phone=旧号）而登录的是
+                //   旧号/手机号时，按 phone 兜底定位，避免"用户不存在"卡死改名/改密
+                let userIndex = users.findIndex(u =>u.username === currentUser.username);
+                if (userIndex === -1 && currentUser.username) {
+                    userIndex = users.findIndex(u => u.phone && String(u.phone) === String(currentUser.username));
+                }
 
                 if (userIndex === -1) {
                     alert('用户不存在');
@@ -2051,6 +2057,21 @@ let currentUser = null;
                             _verified = (storedPwd === oldPwd);
                         }
                     } catch(e) { console.warn('密码校验异常:', e); }
+                    // ★ 双源漂移自愈：本地副本密码过期时，回退用 config.json（登录端权威源）
+                    //   里当前账号的密码校验；通过则本次改密会把新密码写回本地+config，治愈漂移
+                    if (!_verified && window.electronAPI && window.electronAPI.getAppConfig) {
+                        try {
+                            const _cfg = await window.electronAPI.getAppConfig();
+                            const _cfgUsers = (_cfg && Array.isArray(_cfg.users)) ? _cfg.users : [];
+                            const _cu = _cfgUsers.find(u => u && (u.username === currentUser.username || (u.phone && String(u.phone) === String(currentUser.username))));
+                            if (_cu && _cu.password) {
+                                const _cpwd = String(_cu.password);
+                                const _chash = /^[a-f0-9]{64}$/.test(_cpwd);
+                                _verified = _chash ? (_cpwd === await hashPassword(oldPwd)) : (_cpwd === oldPwd);
+                                if (_verified) console.log('[改密] 本地副本密码过期，已按 config.json 校验通过（将回写治愈）');
+                            }
+                        } catch(e) { console.warn('config 密码兜底校验失败:', e); }
+                    }
                 }
                 if (!_verified) {
                     // 校验失败：可能是用户忘记之前修改的密码，提供重置为 admin 的选项
@@ -2079,7 +2100,7 @@ let currentUser = null;
                     if (!/^[A-Za-z0-9_-]+$/.test(_newUsername)) { alert('用户名仅允许英文/数字/下划线/连字符！'); return; }
                     if (_newUsername.length < 2 || _newUsername.length > 30) { alert('用户名长度需 2-30 字符！'); return; }
                     if (/^1[3-9]\d{9}$/.test(_newUsername)) { alert('新用户名不能是手机号格式（请使用英文或拼音）！'); return; }
-                    if (users.some(u => u.username === _newUsername && u.username !== currentUser.username)) {
+                    if (users.some((u, i) => u.username === _newUsername && i !== userIndex)) {
                         alert('该用户名已被其他账号占用，请换一个！');
                         return;
                     }
@@ -2095,6 +2116,23 @@ let currentUser = null;
                     users[userIndex].password = await hashPassword(newPwd);
                 }
                 saveUsers(users);
+                // ★ 2026-08-26 双源同步：改名/改密同步 config.json（登录端权威源），
+                //   杜绝"config 旧账号仍有效 + 本地新账号密码过期"的漂移；非 Electron 环境跳过
+                if (_newUsername || _pwdChange) {
+                    try {
+                        if (window.electronAPI && window.electronAPI.renameUser) {
+                            // oldUsername 用登录名（自愈场景=旧号/手机号，正常场景=旧用户名）
+                            const _rn = await window.electronAPI.renameUser({
+                                oldUsername: _oldLoginName,
+                                newUsername: _newUsername || users[userIndex].username,
+                                newPassword: _pwdChange ? newPwd : undefined
+                            });
+                            if (_rn && _rn.success === false) {
+                                console.warn('[改名] config.json 同步失败（本地已保存）:', _rn.error);
+                            }
+                        }
+                    } catch (e) { console.warn('[改名] config.json 同步异常（本地已保存）:', e); }
+                }
                 currentUser = users[userIndex];
                 localStorage.setItem('local_currentUser', JSON.stringify(currentUser));
 

@@ -46,6 +46,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     deleteFile: (filePath) =>
         ipcRenderer.invoke('delete-file', filePath),
 
+    // ★ 2026-08-26 设置登录用户名：同步 config.json（登录端权威源，防双源漂移）
+    renameUser: (payload) =>
+        ipcRenderer.invoke('user:rename-username', payload),
+
     // 用户数据持久化
     saveUserData: (key, data) => ipcRenderer.invoke('save-user-data', key, data),
     getUserData: (key) => ipcRenderer.invoke('get-user-data', key),
