@@ -2517,28 +2517,29 @@ let currentUser = null;
                 const newPwd = document.getElementById('newPwd').value;
                 const confirmNewPwd = document.getElementById('confirmNewPwd').value;
 
-                if (!oldPwd || !newPwd || !confirmNewPwd) {
-                    alert('请填写所有字段');
-                    return;
-                }
-
-                if (newPwd !== confirmNewPwd) {
-                    alert('新密码两次输入不一致');
-                    return;
-                }
-
-                // ★ 2026-08-26 新用户名（选填）：改密弹窗注入字段，云端模式随 change-password
-                //   一次提交（后端同步改密+改名，避免两次调用间 token 被撤销）；本地模式本地改名
+                // ★ 2026-08-26 只改用户名：填了新用户名时密码三项可全留空（原密码不变）
                 let _newUsername = '';
                 const _nuField = document.getElementById('newUsernameField');
                 if (_nuField) _newUsername = String(_nuField.value || '').trim();
-                if (_newUsername && _newUsername !== currentUser.username) {
+                if (_newUsername && _newUsername === currentUser.username) _newUsername = '';
+                const _pwdChange = !!(oldPwd && newPwd && confirmNewPwd);
+                if (!_newUsername && !_pwdChange) {
+                    alert('请填写所有字段！\n\n提示：只修改用户名时，填"新用户名"，密码三项留空即可。');
+                    return;
+                }
+                if (!_pwdChange && (oldPwd || newPwd || confirmNewPwd)) {
+                    alert('密码三项请全部填写（或全部留空 = 只修改用户名）');
+                    return;
+                }
+                if (_pwdChange && newPwd !== confirmNewPwd) {
+                    alert('新密码两次输入不一致');
+                    return;
+                }
+                if (_newUsername) {
                     if (/[\u4e00-\u9fa5]/.test(_newUsername)) { alert('新用户名不能使用中文，请使用英文或拼音！'); return; }
                     if (!/^[A-Za-z0-9_-]+$/.test(_newUsername)) { alert('用户名仅允许英文/数字/下划线/连字符！'); return; }
                     if (_newUsername.length < 2 || _newUsername.length > 30) { alert('用户名长度需 2-30 字符！'); return; }
                     if (/^1[3-9]\d{9}$/.test(_newUsername)) { alert('新用户名不能是手机号格式（请使用英文或拼音）！'); return; }
-                } else {
-                    _newUsername = ''; // 与当前用户名相同视为不修改
                 }
 
                 // ★ 2026-08-19 云端改密走云端API（云端账号由后台审批开通，存于云端 KV；
@@ -2551,6 +2552,22 @@ let currentUser = null;
                 if (!cloudToken) { try { const _c = JSON.parse(localStorage.getItem('auth:currentUser') || '{}'); cloudToken = _c.token || ''; } catch(e) {} }
                 if (!cloudToken) { try { const _c = JSON.parse(localStorage.getItem('currentUser') || '{}'); cloudToken = _c.token || ''; } catch(e) {} }
                 if (!cloudToken) { try { cloudToken = localStorage.getItem('authToken') || ''; } catch(e) {} }
+                // ★ 2026-08-26 只改用户名（密码留空）：云端账号走 set-username（token 认证），
+                //   成功后 token 被撤销 → 提示重新登录；绝不回退本地改名（避免本地云端分裂）
+                if (isCloudMode && cloudUsername && cloudToken && _newUsername && !_pwdChange) {
+                    const syncRes = await setCloudUsername(cloudUsername, _newUsername);
+                    if (syncRes.blocked) { alert('❌ 用户名修改被拒绝：\n' + (syncRes.error || '') + '\n\n本次修改未保存。'); return; }
+                    if (syncRes.failed) { alert('⚠ 云端连接失败，用户名未修改：\n' + (syncRes.error || '') + '\n\n请检查网络后重试。'); return; }
+                    alert('✅ 登录用户名修改成功！\n\n新用户名：' + _newUsername + '\n手机号登录不受影响。\n\n请退出并使用新用户名（或手机号）重新登录。');
+                    closeModal('changePwdModal');
+                    try { const _KEYS = ['currentUser','isLoggedIn','user_login_data','auth:isLoggedIn','auth:currentUser','auth:loginData','cloud_isLoggedIn','cloud_currentUser','authToken']; for (const _k of _KEYS) localStorage.removeItem(_k); } catch(e) {}
+                    currentUser = null;
+                    const _ov2 = document.getElementById('loginOverlay'); if (_ov2) _ov2.style.display = 'flex';
+                    const _mc2 = document.querySelector('.main-container'); if (_mc2) _mc2.style.display = 'none';
+                    const _lp2 = document.getElementById('loginPassword'); if (_lp2) _lp2.value = '';
+                    return;
+                }
+
                 if (isCloudMode && cloudUsername && cloudToken) {
                     try {
                         const cloudResp = await fetch(window.CLOUD_API_BASE + '/users?action=change-password', {
@@ -2606,19 +2623,23 @@ let currentUser = null;
                     return;
                 }
 
-                // 使用与 login.js 完全一致的密码校验逻辑（hashPassword 直接比较 + 明文兼容）
-                // 不依赖 AuthCore.verifyPassword（混淆后行为可能与源码不一致）
-                const storedPwd = users[userIndex].password || '';
-                const isHash = /^[a-f0-9]{64}$/.test(storedPwd);
-                let verified = false;
-                try {
-                    if (isHash) {
-                        verified = (storedPwd === await hashPassword(oldPwd));
-                    } else {
-                        verified = (storedPwd === oldPwd);
-                    }
-                } catch(e) { console.warn('密码校验异常:', e); }
-                if (!verified) {
+                // ★ 2026-08-26 只改用户名（密码三项留空）时跳过密码校验，原密码保持不变
+                let _verified = true;
+                if (_pwdChange) {
+                    // 使用与 login.js 完全一致的密码校验逻辑（hashPassword 直接比较 + 明文兼容）
+                    // 不依赖 AuthCore.verifyPassword（混淆后行为可能与源码不一致）
+                    const storedPwd = users[userIndex].password || '';
+                    const isHash = /^[a-f0-9]{64}$/.test(storedPwd);
+                    _verified = false;
+                    try {
+                        if (isHash) {
+                            _verified = (storedPwd === await hashPassword(oldPwd));
+                        } else {
+                            _verified = (storedPwd === oldPwd);
+                        }
+                    } catch(e) { console.warn('密码校验异常:', e); }
+                }
+                if (!_verified) {
                     // 校验失败：可能是用户忘记之前修改的密码，提供重置为 admin 的选项
                     const reset = confirm('原密码错误！\n\n是否重置密码为默认值 admin？\n（重置后可用 admin 登录，再修改为新密码）');
                     if (reset) {
@@ -2654,13 +2675,16 @@ let currentUser = null;
                     _usernameChanged = true;
                 }
 
-                users[userIndex].password = await hashPassword(newPwd);
+                // ★ 只改用户名时密码保持原值
+                if (_pwdChange) {
+                    users[userIndex].password = await hashPassword(newPwd);
+                }
                 saveUsers(users);
                 currentUser = users[userIndex];
                 localStorage.setItem('local_currentUser', JSON.stringify(currentUser));
 
                 alert(_usernameChanged
-                    ? '修改成功！\n\n新登录用户名：' + _newUsername + '\n\n下次登录请使用新用户名（或原手机号）。'
+                    ? '修改成功！\n\n新登录用户名：' + _newUsername + '\n\n下次登录请使用新用户名（或原手机号）。' + (_pwdChange ? '' : '\n（密码未修改）')
                     : '密码修改成功！');
                 closeModal('changePwdModal');
                 // 修复历史处方消失：修改密码后重新加载处方数据
