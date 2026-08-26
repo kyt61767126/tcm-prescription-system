@@ -1125,6 +1125,15 @@
 - **验证**：三文件 JS 语法与 HEAD 字节一致（1 报错为模板字符串截断既有误报）；角色收口门禁 OK；标记块一致性 7×2 ALL PASS；check-interface 6 OK；upsert 语义冒烟 7/7（角色纠正/clinicId补全/密码保留/新号落地/残留数据保留不删/渲染列表不含两类残留）。用户实测：云端管理员问题完美修复。
 - **生效方式**：云端网页版/云端APP→push 已部署即时生效；云端桌面版→需重打 exe（本次由用户重启机器后手动打包安装完成）；用户端无需清除任何本地数据，打开用户管理即自动拉云端权威列表。
 
+### 2.96【登录安全】锁定计数归一化——手机号/用户名交替输错不再绕过锁定（提交 92bfdfd1，2026-08-26）
+- **背景**：全局登录梳理确认"手机号或用户名二者都可登录"四端早已全量支持（后端 findUserForLogin + 前端各入口 username→phone 双找，2.33 起），真正缺口在**锁定计数分裂**：前端 LoginLockout / 后端 login_fail 都以用户输入的原始串为 key——同一账号用手机号+用户名交替输错，计数分裂在两个 key 下各自达不到 5 次上限，"错 5 次锁 30 分钟"被放宽成"换着输无限试"（冒烟复现：交替输错 8 次不锁定）。
+- **修复原则**：**计数 key 必须用解析出的权威 username，绝不用用户输入串**（与 2.95 "归属判定口径与记录产生方一致"同一条设计原则）。前后端一致：
+  - auth-core 双源（cloud.js/offline.js）createLocalAdapter + createSingleUserAdapter：改为"先解析用户→lockKey=user.username→按 lockKey 检锁/计错/清零"；成功时清权威账号+原始输入串两份（兼容历史分裂残留）；用户不存在仍按原始串计数（防不存在账号爆破）。
+  - 后端 users.js 登录端点：findUserForLogin 后按 lockKey 补检锁定 + recordLoginFailure(lockKey) + 成功清两份；入口原始串检查保留（覆盖用户不存在场景），P1-6 防枚举哑验证语义不变。
+- **验证**：node --check ×4；sync-auth-core -VerifyOnly 11/11；语义冒烟 5/5（旧漏洞复现/新逻辑交替 5 次锁定/锁定记权威 username/换用户名登录同样被锁/成功两份全清）；check-interface 6 OK。
+- **坑**：auth-core 权威源是 **shared/auth-core/{cloud,offline}.js 双源**（sync-auth-core.ps1 分发），shared/auth-core.js 只是 cloud 的根镜像——直接改根镜像会被 sync 覆盖，必须改双源再跑同步脚本。
+- **生效方式**：云端网页版+后端+云端APP（auth-core 走线上）→push 自动部署即生效；云桌面/本地桌面→需重打 exe；离线APP→需重打 APK。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
