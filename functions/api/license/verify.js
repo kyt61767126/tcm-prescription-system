@@ -33,7 +33,7 @@
 //    - ★ P0 修复：真实查询 KV 验证 license 是否存在/有效（不再假验证）
 // ============================================================================
 
-import { getDevices } from './_lib/license-core.js';
+import { getDevices, reportUsage } from './_lib/license-core.js';
 import { getKV } from '../_lib/kv.js';
 
 const VERIFY_RATE_LIMIT_PER_MIN = 10;
@@ -257,11 +257,28 @@ export async function onRequestPost({ request, env }) {
             await kv.put(logKey, JSON.stringify(logData), { expirationTtl: 30 * 24 * 60 * 60 });
         }
 
+        // ★ P2-3 计数上链对账：在线验证时核对本地处方计数与云端高水位
+        //   本地计数 < 云端高水位 → 疑似本地清零/篡改（reportUsage 内落 count_rollback 审计日志）
+        //   字段可选（旧客户端不带 → 不对账，宁可漏检不可误报）
+        let usageInfo = null;
+        if (body.rxCount !== undefined && body.rxCount !== null && resolvedCode) {
+            try {
+                usageInfo = await reportUsage(kv, resolvedCode, {
+                    rxCount: body.rxCount,
+                    rxMonth: body.rxMonth,
+                    machineId: machineId,
+                    ip: clientIP,
+                    source: 'verify'
+                });
+            } catch (e) { console.warn('[verify] 计数对账失败:', e.message); }
+        }
+
         // 返回验证成功（已通过真实校验）
         return new Response(JSON.stringify({
             success: true,
             message: '在线验证成功，授权有效',
-            verifyTime: verifyTime
+            verifyTime: verifyTime,
+            usage: usageInfo ? { month: usageInfo.month, cloudCount: usageInfo.high } : undefined
         }), { status: 200, headers: corsHeaders(request) });
 
     } catch (e) {

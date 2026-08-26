@@ -1529,11 +1529,25 @@
 
             console.log('[Heartbeat] 开始心跳验证...');
 
+            // ★ P2-3 计数上链：附带当月处方计数（云端高水位跟踪 + 本地清零对账）
+            //   Electron 桌面版经 IPC 获取；APP/网页端无 electronAPI.license 时跳过（不影响心跳本身）
+            let rxCount = null, rxMonth = null;
+            try {
+                if (global.electronAPI && global.electronAPI.license &&
+                    typeof global.electronAPI.license.getPrescriptionStatus === 'function') {
+                    const st = await global.electronAPI.license.getPrescriptionStatus();
+                    if (st && typeof st.current === 'number' && typeof st.month === 'string') {
+                        rxCount = st.current;
+                        rxMonth = st.month;
+                    }
+                }
+            } catch (e) { /* 计数获取失败不影响心跳 */ }
+
             // 调用心跳接口
             const response = await fetch('https://tcm-prescription-system.pages.dev/api/license/heartbeat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ code: licenseCode, machineId: machineId })
+                body: JSON.stringify({ code: licenseCode, machineId: machineId, rxCount: rxCount, rxMonth: rxMonth })
             });
 
             if (!response.ok) {

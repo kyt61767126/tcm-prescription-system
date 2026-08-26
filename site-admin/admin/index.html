@@ -293,6 +293,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
             <button class="tab-btn" data-tab="Users" onclick="switchTab('Users')">👥 用户管理</button>
             <button class="tab-btn" data-tab="TestMachine" onclick="switchTab('TestMachine')">🖥 测试机管理</button>
             <button class="tab-btn" data-tab="DeviceVersion" onclick="switchTab('DeviceVersion')">🔓 设备绑定</button>
+            <button class="tab-btn" data-tab="Risk" onclick="switchTab('Risk')">🚨 风控告警</button>
             <button class="tab-btn" data-tab="Logs" onclick="switchTab('Logs')">📜 操作日志</button>
         </div>
 
@@ -611,6 +612,62 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                 <div id="deviceVersionListBody" class="card-list">
                     <div class="empty">加载中...</div>
                 </div>
+            </div>
+        </div>
+
+        <!-- ★ P2-1 风控告警标签页：心跳/验证日志集中分析，识别盗版特征 -->
+        <div id="tabRisk" class="tab-content">
+            <div id="riskAlert" class="alert"></div>
+            <h2>风控告警（心跳/验证日志集中分析）</h2>
+            <p style="color:#606266;font-size:13px;line-height:1.8;">
+                对全部激活码的<b>操作日志、心跳记录、计数上报、完整性标记</b>做集中扫描，识别以下盗版特征：<br>
+                <b>多 IP 并发使用</b>（同一激活码 24 小时内跨 IP）、<b>激活后长期离线</b>（&gt;90 天无心跳）、
+                <b>处方计数回拨</b>（本地清零绕过月度配额）、<b>客户端完整性异常</b>（疑似 hook/篡改）。<br>
+                <span style="color:#909399;">原则：宁可漏检不可误报。中危项（多 IP 无并发/长期离线）可能是合法换网换机，仅供参考。</span>
+            </p>
+            <div class="stats" id="riskStatsBox">
+                <div class="stat-card disabled"><div class="num" id="riskConcurrent" style="color:#e74c3c;">0</div><div class="label">多 IP 并发（高危）</div></div>
+                <div class="stat-card expired"><div class="num" id="riskTamper" style="color:#e74c3c;">0</div><div class="label">计数回拨（高危）</div></div>
+                <div class="stat-card disabled"><div class="num" id="riskIntegrity" style="color:#e74c3c;">0</div><div class="label">完整性异常（高危）</div></div>
+                <div class="stat-card expired"><div class="num" id="riskMultiIp" style="color:#f39c12;">0</div><div class="label">多 IP 无并发（中危）</div></div>
+                <div class="stat-card expired"><div class="num" id="riskOffline" style="color:#f39c12;">0</div><div class="label">长期离线 90 天+（中危）</div></div>
+                <div class="stat-card"><div class="num" id="riskTotalLicenses">0</div><div class="label">扫描激活码总数</div></div>
+            </div>
+            <div class="filter-bar">
+                <select id="riskSeverityFilter" onchange="renderRiskAlerts()" style="min-width:120px;">
+                    <option value="">全部级别</option>
+                    <option value="high">仅高危</option>
+                    <option value="medium">仅中危</option>
+                </select>
+                <select id="riskTypeFilter" onchange="renderRiskAlerts()" style="min-width:150px;">
+                    <option value="">全部类型</option>
+                    <option value="multi_ip_concurrent">多 IP 并发使用</option>
+                    <option value="count_tamper">处方计数回拨</option>
+                    <option value="integrity">客户端完整性异常</option>
+                    <option value="multi_ip_30d">多 IP 使用（无并发）</option>
+                    <option value="offline_90d">激活后长期离线</option>
+                </select>
+                <button class="btn btn-sm btn-primary" onclick="loadRiskAlerts()">🔄 重新扫描</button>
+            </div>
+            <div style="margin-bottom:8px;font-size:12px;color:#909399;" id="riskSummary"></div>
+            <div class="table-box">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>类型</th>
+                            <th>级别</th>
+                            <th>激活码</th>
+                            <th>诊所/用户</th>
+                            <th>授权状态</th>
+                            <th>详情</th>
+                            <th>涉及 IP</th>
+                            <th>最近时间</th>
+                        </tr>
+                    </thead>
+                    <tbody id="riskListBody">
+                        <tr><td colspan="8" class="empty">点击「重新扫描」分析风控告警</td></tr>
+                    </tbody>
+                </table>
             </div>
         </div>
 
@@ -2375,6 +2432,7 @@ function switchTab(tabName) {
     else if (tabName === 'AdminActivate') loadAdminActivateList();
     else if (tabName === 'TestMachine') loadTestMachines();
     else if (tabName === 'DeviceVersion') loadDeviceBindings();
+    else if (tabName === 'Risk') loadRiskAlerts();
     else if (tabName === 'Logs') { /* 查询按钮触发，不自动拉 */ }
 }
 
@@ -3975,6 +4033,94 @@ function fmtEndTag(productClass, clientClass) {
     const label = (prod + (prod && cli ? '·' : '') + cli) || (prod || cli);
     if (!label) return '';
     return '<span class="tag tag-cloud">📟 ' + escapeHtml(label) + '</span>';
+}
+
+// ============================================================================
+// ★ P2-1 风控告警：心跳/验证日志集中分析（后端 /license/admin-risk）
+//   识别：多IP并发 / 激活后长期离线90天+ / 计数回拨 / 客户端完整性异常
+// ============================================================================
+let _riskAlertsCache = [];
+
+async function loadRiskAlerts() {
+    const el = document.getElementById('riskListBody');
+    if (!el) return;
+    el.innerHTML = '<tr><td colspan="8" class="loading">扫描中（分析全部激活码日志，稍候）...</td></tr>';
+    try {
+        const res = await fetch(API_BASE + '/license/admin-risk', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ action: 'scan' })
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || '扫描失败');
+        _riskAlertsCache = data.alerts || [];
+        const s = data.stats || {};
+        const setNum = function (id, v) {
+            const n = document.getElementById(id);
+            if (n) n.textContent = String(v);
+        };
+        setNum('riskConcurrent', s.multiIpConcurrent || 0);
+        setNum('riskTamper', s.countTamper || 0);
+        setNum('riskIntegrity', s.integrityFlags || 0);
+        setNum('riskMultiIp', s.multiIp30d || 0);
+        setNum('riskOffline', s.offline90d || 0);
+        setNum('riskTotalLicenses', s.licenses || 0);
+        document.getElementById('riskSummary').textContent =
+            '扫描时间：' + (data.scannedAt ? new Date(data.scannedAt).toLocaleString() : '-') +
+            '，共 ' + _riskAlertsCache.length + ' 条告警（高危 ' +
+            _riskAlertsCache.filter(a => a.severity === 'high').length + ' 条）';
+        const alertEl = document.getElementById('riskAlert');
+        if (alertEl) alertEl.style.display = 'none';
+        renderRiskAlerts();
+    } catch (e) {
+        el.innerHTML = '';
+        showAlert('riskAlert', '风控扫描失败：' + e.message, 'error');
+    }
+}
+
+function renderRiskAlerts() {
+    const el = document.getElementById('riskListBody');
+    if (!el) return;
+    const sevFilter = (document.getElementById('riskSeverityFilter') || {}).value || '';
+    const typeFilter = (document.getElementById('riskTypeFilter') || {}).value || '';
+    const list = _riskAlertsCache.filter(a =>
+        (!sevFilter || a.severity === sevFilter) && (!typeFilter || a.type === typeFilter));
+
+    if (list.length === 0) {
+        el.innerHTML = '<tr><td colspan="8" class="empty">' +
+            (_riskAlertsCache.length === 0 ? '暂无风控告警' : '当前筛选条件下无告警') + '</td></tr>';
+        return;
+    }
+
+    const statusNames = { unused: '未使用', used: '已激活', expired: '已过期', disabled: '已禁用' };
+    const typeBadge = function (a) {
+        const cls = a.severity === 'high' ? 'tag-disabled' : 'tag-expired';
+        return '<span class="tag ' + cls + '">' + escapeHtml(a.typeLabel || a.type) + '</span>';
+    };
+    const sevBadge = a.severity === 'high'
+        ? '<span class="tag tag-disabled">高危</span>'
+        : '<span class="tag tag-expired">中危</span>';
+
+    el.innerHTML = list.map(function (a) {
+        const ips = (a.ips || []).map(function (ip) { return escapeHtml(ip); }).join('<br>');
+        const usage = a.usage
+            ? '<br><span style="font-size:11px;color:#909399;">计数上报：' +
+              (a.usage.lastCount !== null ? a.usage.lastCount : '-') + '（' + escapeHtml(a.usage.lastMonth || '-') + '，' +
+              escapeHtml(a.usage.lastSource || '-') + '）｜累计回拨 ' + (a.usage.rollbackEvents || 0) + ' 次</span>'
+            : '';
+        return '<tr>' +
+            '<td>' + typeBadge(a) + '</td>' +
+            '<td>' + sevBadge + '</td>' +
+            '<td style="font-family:Courier New,monospace;font-size:12px;">' +
+                (a.code ? escapeHtml(a.code) : '<span style="color:#909399;">（设备级）</span>') +
+                (a.machineId ? '<br><span style="font-size:11px;color:#909399;">机器 ' + escapeHtml(String(a.machineId).substring(0, 12)) + '…</span>' : '') + '</td>' +
+            '<td>' + escapeHtml(a.clinicName || '-') + '<br><span style="font-size:11px;color:#909399;">' + escapeHtml(a.user || '-') + '</span></td>' +
+            '<td>' + (a.status ? '<span class="tag tag-' + a.status + '">' + (statusNames[a.status] || a.status) + '</span>' : '-') + '</td>' +
+            '<td style="font-size:12px;max-width:320px;">' + escapeHtml(a.detail || '') + usage + '</td>' +
+            '<td style="font-size:12px;">' + (ips || '-') + '</td>' +
+            '<td style="font-size:12px;">' + (a.lastSeen ? new Date(a.lastSeen).toLocaleString() : '-') + '</td>' +
+            '</tr>';
+    }).join('');
 }
 
 // ===== 设备版本绑定管理 =====

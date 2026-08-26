@@ -1,0 +1,26 @@
+[
+  {
+    "time": "2026-08-26T01:13:15.550Z",
+    "commit": "54ff5498",
+    "obfuscatorConfig": "same-as-tools/obfuscate.js",
+    "variants": [
+      {
+        "variant": "offline",
+        "checks": 27,
+        "diffs": 0,
+        "elapsedMs": 882,
+        "pass": true,
+        "diffDetail": []
+      },
+      {
+        "variant": "cloud",
+        "checks": 27,
+        "diffs": 0,
+        "elapsedMs": 707,
+        "pass": true,
+        "diffDetail": []
+      }
+    ],
+    "pass": true
+  }
+]

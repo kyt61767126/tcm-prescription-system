@@ -32,7 +32,7 @@
 
 import {
     getKV, getLicense, updateLicense, checkRateLimit, getDevices, getMaxDevices, appendLicenseLog,
-    setDeviceVersion, getDeviceVersion
+    setDeviceVersion, getDeviceVersion, reportUsage
 } from './_lib/license-core.js';
 
 // ★ P2 安全修复：收紧 CORS，仅允许合法 Origin
@@ -233,11 +233,27 @@ export async function onRequest(context) {
             } catch(e) {}
         }
 
+        // ★ P2-3 计数上链：心跳随报当月处方计数（高水位跟踪 + 回拨对账）
+        //   字段可选（旧客户端不带 → 不处理，宁可漏检不可误报）
+        let usageInfo = null;
+        if (body.rxCount !== undefined && body.rxCount !== null) {
+            try {
+                usageInfo = await reportUsage(kv, code, {
+                    rxCount: body.rxCount,
+                    rxMonth: body.rxMonth,
+                    machineId: machineId,
+                    ip: ip,
+                    source: 'heartbeat'
+                });
+            } catch (e) { console.warn('[Heartbeat] 计数上报失败:', e.message); }
+        }
+
         return json({
             success: true, valid: true, action: 'ok',
             expiresAt: record.expiresAt || null,
             daysRemaining,
-            serverTime
+            serverTime,
+            usage: usageInfo ? { month: usageInfo.month, cloudCount: usageInfo.high } : undefined
         });
 
     } catch (error) {

@@ -827,6 +827,87 @@ async function deleteLicenseLogs(kv, code) {
 }
 
 // ============================================================================
+//  ★ P2-3 计数上链：处方计数高水位跟踪 + 回拨（本地篡改）对账
+//  KV key: usage:{code}，值为 JSON：
+//    {
+//      months: { "2026-08": 45 },          // 每月高水位计数（只增不减）
+//      lastReport: { month, count, time, ip, machineId, source },
+//      rollbackEvents: 0                    // 累计回拨（疑似本地清零/篡改）次数
+//    }
+//  规则（宁可漏检不可误报）：
+//    - 高水位按【服务器月份】记键（防攻击者改本地时钟伪造月份绕过）
+//    - 客户端上报月份 ≠ 服务器当月（月界时钟偏差）→ 只记录 lastReport，不对账
+//    - 上报计数 > 同月高水位 → 更新高水位（正常增长）
+//    - 上报计数 < 同月高水位 → 疑似本地清零，记 count_rollback 操作日志并累加
+//    - 月份只保留最近 6 个月，防 KV 无限膨胀
+//  调用方：heartbeat.js（心跳随报）/ verify.js（在线验证对账）/ admin-risk.js（展示）
+// ============================================================================
+const KV_USAGE_PREFIX = 'usage:';
+const USAGE_KEEP_MONTHS = 6;
+
+async function reportUsage(kv, code, report) {
+    if (!kv || !code || !report) return null;
+    const count = Number(report.rxCount);
+    if (!Number.isFinite(count) || count < 0) return null;  // 未上报/非法值不处理
+    const serverMonth = new Date().toISOString().substring(0, 7);
+    const clientMonth = (typeof report.rxMonth === 'string' && /^\d{4}-\d{2}$/.test(report.rxMonth))
+        ? report.rxMonth : null;
+    const key = KV_USAGE_PREFIX + code;
+    try {
+        const data = (await kv.get(key, 'json')) || { months: {}, lastReport: null, rollbackEvents: 0 };
+        if (!data.months || typeof data.months !== 'object') data.months = {};
+        let rollback = false;
+        let high = Number(data.months[serverMonth]) || 0;
+        if (clientMonth && clientMonth !== serverMonth) {
+            // 月界时钟偏差：不更新高水位、不对账（防误报），仅记录
+        } else if (count > high) {
+            data.months[serverMonth] = count;
+            high = count;
+        } else if (count < high) {
+            rollback = true;
+            data.rollbackEvents = (Number(data.rollbackEvents) || 0) + 1;
+        }
+        data.lastReport = {
+            month: clientMonth || serverMonth,
+            count: count,
+            time: new Date().toISOString(),
+            ip: report.ip || 'unknown',
+            machineId: report.machineId ? String(report.machineId).substring(0, 8) + '...' : null,
+            source: report.source || 'unknown'
+        };
+        // 只保留最近 N 个月（monthKey 字典序 = 时间序）
+        const monthKeys = Object.keys(data.months).sort();
+        while (monthKeys.length > USAGE_KEEP_MONTHS) {
+            delete data.months[monthKeys.shift()];
+        }
+        await kv.put(key, JSON.stringify(data));
+        if (rollback) {
+            // 疑似本地清零/篡改：落审计日志（admin-risk 风控页可见）
+            await appendLicenseLog(kv, code, {
+                action: 'count_rollback',
+                ip: report.ip || 'unknown',
+                detail: '本地计数:' + count + ' 云端高水位:' + high + ' month:' + serverMonth +
+                        ' source:' + (report.source || 'unknown')
+            });
+        }
+        return { rollback: rollback, high: high, count: count, month: serverMonth };
+    } catch (e) {
+        console.warn('[Usage] 计数上报失败:', e.message);
+        return null;
+    }
+}
+
+// 读取某激活码的 usage 记录（admin-risk 风控展示用）
+async function getUsage(kv, code) {
+    if (!kv || !code) return null;
+    try {
+        return await kv.get(KV_USAGE_PREFIX + code, 'json');
+    } catch (e) {
+        return null;
+    }
+}
+
+// ============================================================================
 //  速率限制（简单 KV 实现，防止暴力破解）
 // ============================================================================
 // 记录 IP 的校验请求次数
@@ -895,6 +976,9 @@ export {
     appendLicenseLog,  // 追加激活码操作日志
     getLicenseLogs,    // 查询激活码操作日志
     deleteLicenseLogs, // 删除激活码日志（删激活码时调用）
+    // ★ P2-3 新增：计数上链（处方计数高水位 + 回拨对账）
+    reportUsage,       // 心跳/在线验证时上报计数并检测本地篡改
+    getUsage,          // 读取计数上报记录（风控展示）
     // ★ 任务2 新增：ECDSA P-256 非对称签名
     ecdsaSign,              // 用 ECDSA 私钥签名消息
     generateSignatureV5,    // 生成 v5 签名（ECDSA P-256）

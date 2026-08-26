@@ -1083,6 +1083,28 @@
 - **坑**：cloud_app assets/public 不在 sync-all.ps1 BusinessJsTargets 内（云端APP 线上加载 public/，assets 仅兜底快照），改 security-guard 需手动补齐该副本保持一致。
 - **生效方式**：云端网页版推 GitHub 自动部署即生效；云桌面/本地桌面需重打 exe；离线APP 需重打 APK（assets 内 security-guard.js 更新）；云端APP 线上自动生效（assets 兜底副本已同步，下次打包自然带上）。
 
+### 2.91【防破解P2-1】心跳风控可视化——管理后台风控告警页（2026-08-26）
+- **背景**：心跳/验证/审计数据早已落 KV（license_log:{code} 含 IP、integrity_flag:{mid}、usage:{code}），但管理后台缺集中展示，盗版特征无人能看到。
+- **实现**：新端点 `functions/api/license/admin-risk.js`（POST /api/license/admin-risk，platform_admin）扫描全部激活码，识别 5 类特征：①多IP并发（近30天不同IP记录时间差<24h，高危）②多IP无并发（中危，可能合法换网）③激活后长期离线>90天（限 status=used 且未过期，中危）④计数回拨 count_tamper（高危）⑤integrity_flag 完整性异常（高危）。管理后台 site-admin/admin/index.html 新增"🚨 风控告警"tab（统计卡+级别/类型筛选+告警表格，复用 tag-disabled/tag-expired 样式）。
+- **关键设计**：并发判定=日志按时间排序后相邻两条不同IP且差<24h；宁可漏检不可误报（中危项明确标注"仅供参考"）；KV 读成本=每码 1 次 license_log get（无告警不读 usage）。
+- **生效方式**：纯 functions + site-admin 改动，推 GitHub 自动部署即生效（管理后台刷新可见新 tab）。
+
+### 2.92【防破解P2-2】auth-core.js 受控混淆试点（tools/authcore-pilot.js，2026-08-26）
+- **背景**：auth-core.js 是"明文红线"（obfuscate.js MODULE_FILES 有意排除，历史 stringArray charAt bug 教训）。为将来解除红线积累稳定性数据。
+- **实现**：`node tools/authcore-pilot.js` —— 对 shared/auth-core/offline.js + cloud.js 的【内存副本】用与 obfuscate.js 完全相同的混淆配置（含 IIFE 包裹），在 Node VM 沙箱（localStorage/crypto.subtle/TextEncoder 等桩）分别跑 27 项功能回归（登录 login+createSingleUserAdapter、改密原语 hashPassword/verifyPassword、masterKey 派生盐、备份 encryptUsers/decryptUsers+encryptPassword 往返、记住用户名、用户名/密码强度校验、离线登录缓存），原版 vs 混淆版结果逐项 JSON 比对必须完全一致；结果追加 tools/authcore-pilot-results.json（保留最近100次）。
+- **首次运行**：offline/cloud 双版本 27 项检查 0 差异，PASS。**本试点不改变正式打包行为（auth-core 正式包仍明文）**。
+- **解除红线前提**：多次试点 PASS + 内部版本真机全功能回归（登录/改密/激活/备份）通过后，才可将 auth-core.js 加入 MODULE_FILES。
+- **生效方式**：纯试点工具，无端生效问题；正式包行为不变。
+
+### 2.93【防破解P2-3】计数上链——处方计数随心跳上报+在线验证对账（2026-08-26）
+- **背景**：离线版月度处方配额（试用版30张/月）纯本地计数（AES+HMAC 防文件篡改但删文件重装可绕过），云端无对账。
+- **实现**：
+  - 服务端 license-core.js 新增 `reportUsage(kv, code, {rxCount, rxMonth, machineId, ip, source})`：KV `usage:{code}` 存 {months 高水位, lastReport, rollbackEvents}。高水位按【服务器月份】记键（防改本地时钟伪造月份）；客户端月份≠服务器月（月界时钟偏差）只记录不对账防误报；上报<同月高水位 → count_rollback 审计日志（风控页高危告警）；月份只留6个月防膨胀。
+  - heartbeat.js / verify.js 均接入（字段可选，旧客户端不带 → 不处理）；响应附 usage:{month, cloudCount}。
+  - 客户端 shared/auth-core/offline.js performHeartbeatCheck 经 electronAPI.license.getPrescriptionStatus() IPC 取当月计数随心跳上报（preload.js:122 / main.js:1469 桥已存在）；APP/网页端无 electronAPI 自动跳过。
+- **验证**：reportUsage 状态机 15/15 单测通过（增长/回拨/相等/跨月防误报/非法值/裁剪/隔离）。
+- **生效方式**：服务端推 GitHub 自动部署即生效；离线桌面版需重打 exe（新版 auth-core 心跳才带计数）；云端 APP 线上自动生效；离线 APP 需重打 APK（但其心跳走 Java verify 路径，JS 心跳计数上报仅桌面版生效——Java verifyOnline 的 rxCount 上报留作后续）。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
