@@ -275,18 +275,25 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
     private final Context context;
     private final String packageName;
     private final String versionName;
+    // ★ 2026-08-26 完整性基线误报修复：versionName 恒为 "1.0.0" 从不变化，
+    //   覆盖安装新版（auth-core.js 已改）后旧基线不匹配 → 误报"文件被篡改"。
+    //   基线 key 改用 versionCode（每次重打包必递增），升级自动重建基线。
+    private final long versionCode;
 
     public LicenseManager(Context context) {
         this.context = context;
         this.packageName = context.getPackageName();
         String version = "1.0";
+        long code = 0;
         try {
             PackageInfo pi = context.getPackageManager().getPackageInfo(packageName, 0);
             if (pi != null && pi.versionName != null) version = pi.versionName;
+            if (pi != null) code = pi.versionCode;
         } catch (PackageManager.NameNotFoundException e) {
             Log.w(TAG, "无法获取版本号，使用默认 1.0");
         }
         this.versionName = version;
+        this.versionCode = code;
     }
 
     // ========================================================================
@@ -2772,11 +2779,13 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
             String currentHash = sha256Hex(combined.toString().getBytes(StandardCharsets.UTF_8));
 
             SharedPreferences prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-            // ★ 版本化基线：版本号变化时自动重建基线，避免升级后完整性校验误报
-            String baseline = prefs.getString(PREF_KEY_JS_INTEGRITY_HASH + "_v" + versionName, "");
+            // ★ 版本化基线（2026-08-26 修复）：改用 versionCode（versionName 恒为 1.0.0 不变，
+            //   曾导致覆盖安装新版 auth-core.js 后旧基线不匹配 → 误报"文件被篡改"）
+            String baselineKey = PREF_KEY_JS_INTEGRITY_HASH + "_vc" + versionCode;
+            String baseline = prefs.getString(baselineKey, "");
 
             if (baseline.isEmpty()) {
-                prefs.edit().putString(PREF_KEY_JS_INTEGRITY_HASH + "_v" + versionName, currentHash).apply();
+                prefs.edit().putString(baselineKey, currentHash).apply();
                 Log.i(TAG, "[Integrity] 首次运行，已建立完整性基线");
                 return true;
             }

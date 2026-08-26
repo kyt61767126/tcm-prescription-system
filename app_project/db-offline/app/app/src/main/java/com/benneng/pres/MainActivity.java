@@ -207,13 +207,24 @@ public class MainActivity extends BridgeActivity {
     }
 
     // 显示致命 License 错误对话框并退出 APP
+    // ★ 2026-08-26 篡改提示加官网入口：用户误报时可在官网重新下载/联系客服（不改变校验逻辑，安全边界不变）
     private void showFatalLicenseErrorAndExit(String message) {
+        final String msg = message;
         mainHandler.post(() -> {
             try {
                 new androidx.appcompat.app.AlertDialog.Builder(this)
                         .setTitle("授权校验失败")
-                        .setMessage(message)
+                        .setMessage(msg + "\n\n官网：tcm-prescription-system.pages.dev")
                         .setCancelable(false)
+                        .setNeutralButton("🌐 访问官网", (d, w) -> {
+                            try {
+                                startActivity(new android.content.Intent(android.content.Intent.ACTION_VIEW,
+                                        android.net.Uri.parse("https://tcm-prescription-system.pages.dev")));
+                            } catch (Exception e) {
+                                Log.w(TAG, "[StartupCheck] 打开官网失败", e);
+                            }
+                            showFatalLicenseErrorAndExit(msg);
+                        })
                         .setPositiveButton("退出", (d, w) -> {
                             finishAffinity();
                             android.os.Process.killProcess(android.os.Process.myPid());
