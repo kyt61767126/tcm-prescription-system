@@ -379,18 +379,21 @@ async function buildLicenseData(record, options = {}) {
     const maxPrescriptions = record.maxPrescriptions !== undefined ? record.maxPrescriptions : config.maxPrescriptions;
     const features = record.features || config.features;
 
-    // ★ 2026-08-26 激活有效期起算规则：同一设备每次激活 = 从【激活当天】起算完整
-    //   record.days 天（未指定则默认 365 天），不再直接沿用码生成/续费时写入的固定
-    //   expiresAt（旧逻辑"固定日期码"的到期日与激活日无关，用户激活后实际可用
-    //   时间 < 365 天，被反馈为"从第一天开始算"）。
-    //   record.expiresAt 保留两个用途：①激活码使用期限（validate.js 过期校验）
-    //   ②续费叠加保底——若续费写入的到期日晚于本次起算值，取续费值（保持续费效果）。
+    // ★ 2026-08-26 激活有效期锚定规则（用户定版）：到期时间 =【首次激活时间 + record.days(默认365)】。
+    //   不管软件问题/设备问题导致重新激活（同码同设备重激活、换机激活），到期时间一律不变
+    //   （防止卸载重装反复"续命"）。firstActivatedAt 首次激活时由 validate.js 写入；
+    //   存量旧记录无该字段时回退 activatedAt（尽力而为）。
+    //   record.expiresAt 保留用途：①激活码使用期限（validate.js 过期校验）
+    //   ②续费叠加保底（若晚于锚定到期日，取续费值，保持续费效果）。
     let expiresAt;
     const baseDays = (record.days && record.days > 0) ? record.days : 365;
-    expiresAt = new Date(Date.now() + baseDays * 24 * 60 * 60 * 1000).toISOString();
+    let anchorMs = record.firstActivatedAt ? new Date(record.firstActivatedAt).getTime() : NaN;
+    if (isNaN(anchorMs)) anchorMs = record.activatedAt ? new Date(record.activatedAt).getTime() : NaN;
+    if (isNaN(anchorMs)) anchorMs = Date.now();
+    expiresAt = new Date(anchorMs + baseDays * 24 * 60 * 60 * 1000).toISOString();
     if (record.expiresAt) {
         const renewExp = new Date(record.expiresAt);
-        if (!isNaN(renewExp.getTime()) && renewExp.getTime() > Date.now() + baseDays * 24 * 60 * 60 * 1000) {
+        if (!isNaN(renewExp.getTime()) && renewExp.getTime() > new Date(expiresAt).getTime()) {
             expiresAt = renewExp.toISOString();  // 续费叠加效果保底（取更晚者）
         }
     }

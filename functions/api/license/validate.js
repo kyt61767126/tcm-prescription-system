@@ -301,6 +301,11 @@ export async function onRequest(context) {
             activatedIp: ip,
             user: licenseUser
         };
+        // ★ 2026-08-26 有效期锚定：首次激活时间只写一次（后续重激活/换机激活不变），
+        //   buildLicenseData 用 firstActivatedAt + days 计算固定到期时间
+        if (!record.firstActivatedAt) {
+            updates.firstActivatedAt = getNowISO();
+        }
         // ★ v3 新增：首次激活时记录 clinicName（已使用重激活时不变更）
         if (record.clinicName && !record.activatedClinicName) {
             updates.activatedClinicName = record.clinicName;
