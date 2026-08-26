@@ -453,6 +453,11 @@ private static final String EXPECTED_SIGN_HASH = "e5b2e4b3aac9de292b71e8d3c1643d
      *                     优先下沉到 libsecurityguard.so 原生层；.so 不可用时回退 Java 实现。
      * P1-A5 升级：优先使用 GET_SIGNING_CERTIFICATES（API 28+）支持 v2/v3 签名方案，
      *            旧版本回退到 GET_SIGNATURES（仅支持 v1）
+     * ★ P1-1（2026-08-26）：native/Java 双路交叉校验——
+     *   同一输入+同算法+同常量，双路结果必然一致；分叉 = 安全层被 hook/替换
+     *   （如 stub 掉 .so 恒返回通过）。云端APP为在线瘦客户端，无本地 license 可仲裁，
+     *   分叉时客户端自身已不可信 → 按签名失败处理（Toast+Exit，与其唯一允许的
+     *   阻断路径一致）。
      */
     public static boolean verifyApkSignature(Context context) {
         if (EXPECTED_SIGN_HASH.isEmpty()) {
@@ -466,18 +471,8 @@ private static final String EXPECTED_SIGN_HASH = "e5b2e4b3aac9de292b71e8d3c1643d
                 return false;
             }
 
-            // ★ P0-NDK：优先走 NDK 原生 SHA-256 + 常量时间比对
-            if (NativeGuard.isAvailable()) {
-                for (Signature sig : signatures) {
-                    if (NativeGuard.verifyApkSignature(sig.toByteArray(), EXPECTED_SIGN_HASH)) {
-                        return true;
-                    }
-                    Log.w(TAG, "签名校验：NDK 指纹不匹配 expected=" + EXPECTED_SIGN_HASH);
-                }
-                return false;
-            }
-
-            // 回退：原 Java 实现（native 不可用时降级，绝不闪退）
+            // Java 路：计算 SHA-256 指纹比对（原回退实现，双路交叉时始终执行）
+            boolean javaPass = false;
             MessageDigest md = MessageDigest.getInstance("SHA-256");
             for (Signature sig : signatures) {
                 byte[] hash = md.digest(sig.toByteArray());
@@ -487,11 +482,34 @@ private static final String EXPECTED_SIGN_HASH = "e5b2e4b3aac9de292b71e8d3c1643d
                 }
                 String currentHash = sb.toString();
                 if (EXPECTED_SIGN_HASH.equalsIgnoreCase(currentHash)) {
-                    return true;
+                    javaPass = true;
+                    break;
                 }
                 Log.w(TAG, "签名校验：(Java) 指纹不匹配 expected=" + EXPECTED_SIGN_HASH +
                         " current=" + currentHash);
             }
+
+            // ★ P0-NDK：native 可用时与 Java 双路交叉；不可用时回退 Java，绝不闪退
+            if (!NativeGuard.isAvailable()) {
+                return javaPass;
+            }
+            boolean nativePass = false;
+            for (Signature sig : signatures) {
+                if (NativeGuard.verifyApkSignature(sig.toByteArray(), EXPECTED_SIGN_HASH)) {
+                    nativePass = true;
+                    break;
+                }
+                Log.w(TAG, "签名校验：NDK 指纹不匹配 expected=" + EXPECTED_SIGN_HASH);
+            }
+            if (nativePass && javaPass) {
+                return true;
+            }
+            if (!nativePass && !javaPass) {
+                return false; // 双路一致失败（真篡改）
+            }
+            // ★ P1-1：双路分叉（安全层疑似被 hook）→ 客户端不可信，按签名失败处理
+            Log.e(TAG, "签名校验：native=" + nativePass + " java=" + javaPass +
+                    " 结果不一致（安全层疑似被 hook），拒绝运行");
             return false;
         } catch (Exception e) {
             Log.e(TAG, "签名校验异常", e);

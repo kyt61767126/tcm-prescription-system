@@ -567,52 +567,133 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
     //  ★ 安全检测：APK 签名校验（防反编译重打包）
     //  P1-A5 升级：优先使用 GET_SIGNING_CERTIFICATES（API 28+）支持 v2/v3 签名方案，
     //             旧版本回退到 GET_SIGNATURES（仅支持 v1）
+    //  ★ P1-1（2026-08-26）：native/Java 双路交叉校验 + 完整性状态参与业务决策
+    //    - 双路一致通过 → 放行（INTEGRITY_OK）
+    //    - 双路一致失败 → 真篡改，拒绝（INTEGRITY_FAIL，原有行为）
+    //    - native 不可用 → 仅 Java 校验（INTEGRITY_NATIVE_UNAVAILABLE，原有降级）
+    //    - ★ 双路结果分叉 → 安全层被 hook/替换（stub .so 恒真 / hook Java 比对），
+    //      本地结论不可信 → 走云端验证仲裁（arbitrateIntegrityViaCloud）
     // ========================================================================
+    // 完整性状态常量（verifyOnline 上报服务端审计用）
+    public static final int INTEGRITY_OK = 0;                  // 双路一致通过
+    public static final int INTEGRITY_NATIVE_UNAVAILABLE = 1;  // .so 缺失，仅 Java 校验通过
+    public static final int INTEGRITY_INCONSISTENT = 2;        // native/Java 分叉（疑似 hook）
+    public static final int INTEGRITY_FAIL = 3;                // 双路一致失败（真篡改）
+
+    private volatile int lastIntegrityState = INTEGRITY_OK;
+
+    /** 最近一次签名校验的完整性状态（供业务决策/云端上报审计） */
+    public int getLastIntegrityState() {
+        return lastIntegrityState;
+    }
+
     public boolean verifyApkSignature() {
         if (EXPECTED_APK_SIGNATURE_SHA256 == null || EXPECTED_APK_SIGNATURE_SHA256.isEmpty()) {
             // 未配置预期签名，跳过校验（开发阶段）
+            lastIntegrityState = INTEGRITY_OK;
             return true;
         }
         try {
             android.content.pm.Signature[] signatures = getApkSignatures();
             if (signatures == null || signatures.length == 0) {
                 Log.e(TAG, "APK 签名校验：未找到签名");
+                lastIntegrityState = INTEGRITY_FAIL;
                 return false;
             }
-            // ★ P0-NDK：优先走 NDK 原生校验（SHA-256+常量时间比对下沉到 .so）
-            //   native 不可用时回退到下方 Java 实现，绝不因 .so 加载失败闪退
-            if (NativeGuard.isAvailable()) {
-                boolean nativeAllPass = true;
-                for (android.content.pm.Signature sig : signatures) {
-                    if (!NativeGuard.verifyApkSignature(
-                            sig.toByteArray(), EXPECTED_APK_SIGNATURE_SHA256)) {
-                        nativeAllPass = false;
-                        break;
-                    }
-                }
-                if (nativeAllPass) {
-                    return true;
-                }
-                Log.e(TAG, "APK 签名校验：NDK 指纹不匹配 expected=" + EXPECTED_APK_SIGNATURE_SHA256);
-                return false;
+            boolean javaPass = javaVerifyApkSignature(signatures);
+            // ★ P0-NDK：native 可用时与 Java 双路交叉校验；不可用时回退 Java，绝不闪退
+            if (!NativeGuard.isAvailable()) {
+                lastIntegrityState = javaPass ? INTEGRITY_NATIVE_UNAVAILABLE : INTEGRITY_FAIL;
+                return javaPass;
             }
+            boolean nativePass = true;
             for (android.content.pm.Signature sig : signatures) {
-                MessageDigest md = MessageDigest.getInstance("SHA-256");
-                byte[] digest = md.digest(sig.toByteArray());
-                StringBuilder sb = new StringBuilder();
-                for (byte b : digest) {
-                    sb.append(String.format("%02x", b));
+                if (!NativeGuard.verifyApkSignature(
+                        sig.toByteArray(), EXPECTED_APK_SIGNATURE_SHA256)) {
+                    nativePass = false;
+                    break;
                 }
-                String fingerprint = sb.toString();
-                if (EXPECTED_APK_SIGNATURE_SHA256.equalsIgnoreCase(fingerprint)) {
-                    return true;
-                }
-                Log.e(TAG, "APK 签名校验：指纹不匹配 expected=" + EXPECTED_APK_SIGNATURE_SHA256 +
-                        " actual=" + fingerprint);
             }
-            return false;
+            if (nativePass && javaPass) {
+                lastIntegrityState = INTEGRITY_OK;
+                return true;
+            }
+            if (!nativePass && !javaPass) {
+                lastIntegrityState = INTEGRITY_FAIL;
+                Log.e(TAG, "APK 签名校验：native/Java 双路一致失败（真篡改）expected=" +
+                        EXPECTED_APK_SIGNATURE_SHA256);
+                return false;
+            }
+            // ★ P1-1：双路分叉。同一输入+同算法+同常量，正常情况下不可能分叉；
+            //   分叉说明其中一路被 hook/替换，本地结论不可信 → 云端 license verify 仲裁
+            //   （服务端真实查 KV 激活码记录+设备绑定，本地伪造无法通过）。
+            lastIntegrityState = INTEGRITY_INCONSISTENT;
+            Log.e(TAG, "APK 签名校验：native=" + nativePass + " java=" + javaPass +
+                    " 结果不一致（安全层疑似被 hook），转云端仲裁");
+            return arbitrateIntegrityViaCloud();
         } catch (Exception e) {
             Log.e(TAG, "APK 签名校验异常", e);
+            lastIntegrityState = INTEGRITY_FAIL;
+            return false;
+        }
+    }
+
+    /** Java 路签名校验：对签名证书数组逐一计算 SHA-256 与期望指纹比对（从原方法抽出） */
+    private boolean javaVerifyApkSignature(android.content.pm.Signature[] signatures) throws Exception {
+        for (android.content.pm.Signature sig : signatures) {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] digest = md.digest(sig.toByteArray());
+            StringBuilder sb = new StringBuilder();
+            for (byte b : digest) {
+                sb.append(String.format("%02x", b));
+            }
+            String fingerprint = sb.toString();
+            if (EXPECTED_APK_SIGNATURE_SHA256.equalsIgnoreCase(fingerprint)) {
+                return true;
+            }
+            Log.e(TAG, "APK 签名校验：Java 指纹不匹配 expected=" + EXPECTED_APK_SIGNATURE_SHA256 +
+                    " actual=" + fingerprint);
+        }
+        return false;
+    }
+
+    /**
+     * ★ P1-1：完整性不一致时的云端仲裁（"不一致走云端验证"）。
+     * 网络 IO 放后台线程（validateLicense 可能在主线程被调用，直接联网会
+     * NetworkOnMainThreadException），当前线程 CountDownLatch 有界等待 4s。
+     *  - 云端可达且 license/设备有效 → 放行（服务端 verify 日志已记录该设备行为，可追溯撤销）
+     *  - 云端返回无效 / 超时 → 拒绝
+     * 红线评估：正常用户双路对同一输入结果必然一致，不会进入本分支，
+     *           fail-closed 不误伤正常用户（"宁可漏检不可误报"针对的是正常路径误报）。
+     */
+    private boolean arbitrateIntegrityViaCloud() {
+        try {
+            final java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
+            final java.util.concurrent.atomic.AtomicBoolean verdict =
+                    new java.util.concurrent.atomic.AtomicBoolean(false);
+            final String mid = getMachineId();
+            Thread t = new Thread(() -> {
+                try {
+                    JSONObject r = verifyOnline(mid);
+                    verdict.set(r != null && r.optBoolean("success", false));
+                } catch (Exception e) {
+                    Log.w(TAG, "完整性云端仲裁请求异常: " + e.getMessage());
+                    verdict.set(false);
+                } finally {
+                    latch.countDown();
+                }
+            }, "integrity-arbitration");
+            t.setDaemon(true);
+            t.start();
+            boolean got = latch.await(4, java.util.concurrent.TimeUnit.SECONDS);
+            boolean ok = got && verdict.get();
+            Log.i(TAG, "完整性云端仲裁结果: " + ok + (got ? "" : "（4s 超时）"));
+            return ok;
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            return false;
+        } catch (Exception e) {
+            Log.e(TAG, "完整性云端仲裁异常", e);
             return false;
         }
     }
@@ -2298,6 +2379,8 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
             reqBody.put("codeHash", codeHash);
             reqBody.put("user", license.optString("user", ""));
             reqBody.put("expiresAt", license.optString("expiresAt", ""));
+            // ★ P1-1：上报客户端完整性状态（0=正常 1=native不可用 2=不一致 3=失败），仅服务端审计用
+            reqBody.put("integrityState", lastIntegrityState);
 
             try (OutputStream os = conn.getOutputStream()) {
                 os.write(reqBody.toString().getBytes(StandardCharsets.UTF_8));
@@ -2750,8 +2833,14 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
             if (isDebuggerAttached()) {
                 Log.w(TAG, "检测到调试器特征（仅记录日志，不阻塞运行）");
             }
-            // ★ 安全检测 3：APK 签名校验（防反编译重打包）
+            // ★ 安全检测 3：APK 签名校验（防反编译重打包，P1-1：双路交叉+云端仲裁）
             if (!verifyApkSignature()) {
+                if (getLastIntegrityState() == INTEGRITY_INCONSISTENT) {
+                    // 双路分叉且云端仲裁未通过（无效授权/超时/网络不可达）
+                    return failValidation(
+                            "安全校验异常，云端验证未通过。\n请检查网络后重启，或从官方渠道重新下载安装。",
+                            "integrity_inconsistent");
+                }
                 return failValidation(
                         "APK 签名校验失败，软件可能被篡改。\n请从官方渠道重新下载安装。",
                         "signature_mismatch");
