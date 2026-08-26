@@ -1079,6 +1079,7 @@
   - **自愈**：强信号消失 90s 自动复位（防持续误报困死正常用户，任何误报最多影响 90 秒）；
   - 安装时机：DOMContentLoaded+1.5s（主脚本先于 DOMContentLoaded 执行完，全局函数已就位），失败重试 10 次×3s 兜底。
 - **验证**：Node 桩测试 29/29 通过（确认防抖/等级推进/自愈/契约兼容/幂等）；8 处副本字节级一致（sync-all 6 目标 + cloud_app assets 手动补齐）；check-interface 6/6 OK。
+- **asar 内容验证坑（2026-08-26 打包实操）**：验证 asar 内 security-guard.js 是否新版时，**本地桌面版**因 build.bat 的 `obfuscate.js --target=dingzhi` 会改写模块级变量名（`RECOVERY_MS` 搜不到）而保留方法/属性名（`_installBusinessGuards`/`getDegradeLevel` 能搜到）——**用方法名做特征串，勿用变量名**，否则会误判"旧版"。云端桌面版不混淆，特征串全可搜。
 - **坑**：cloud_app assets/public 不在 sync-all.ps1 BusinessJsTargets 内（云端APP 线上加载 public/，assets 仅兜底快照），改 security-guard 需手动补齐该副本保持一致。
 - **生效方式**：云端网页版推 GitHub 自动部署即生效；云桌面/本地桌面需重打 exe；离线APP 需重打 APK（assets 内 security-guard.js 更新）；云端APP 线上自动生效（assets 兜底副本已同步，下次打包自然带上）。
 
