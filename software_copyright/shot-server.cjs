@@ -122,6 +122,17 @@ ${SEED_CORE_JS}
   var st = 'login';
   try { st = new URLSearchParams(location.search).get('st') || 'login'; } catch(e){ __mark('sterr'); }
   __mark('st=' + st);
+  // 演示专用顶部标题条（仅截图用注入，保证每张截图顶部完整显示软件全称+版本号）
+  // 必须在 st===login 提前返回之前注入，否则登录态截图无标题条（2026-08-27 修复）
+  try {
+    var bar = document.createElement('div');
+    bar.id = '__sysbar';
+    bar.style.cssText = 'position:fixed;top:0;left:0;right:0;height:32px;background:linear-gradient(90deg,#1a237e,#303f9f);color:#fff;font:700 14px/32px "Microsoft YaHei","SimHei",sans-serif;text-align:center;letter-spacing:2px;z-index:2147483647;box-shadow:0 1px 4px rgba(0,0,0,.3);';
+    bar.textContent = '惠康中医诊所管理系统 V1.0.0';
+    (document.body || document.documentElement).appendChild(bar);
+    if (document.body) { document.body.style.paddingTop = '32px'; }
+    __mark('bar');
+  } catch(e){ __mark('barerr'); }
   if (st === 'login') return;
   try { __seedLS(); __mark('seeded'); } catch(e) { __mark('seederr:' + (e && e.message)); }
   function __setVal(id, v){
@@ -205,16 +216,6 @@ ${SEED_CORE_JS}
   __mark('reg');
   if (document.readyState === 'complete') { setTimeout(__forceLogin, 1500); __mark('sched-complete'); }
   else { window.addEventListener('load', function(){ __mark('loadev'); setTimeout(__forceLogin, 1500); }); __mark('sched-load'); }
-  // 演示专用顶部标题条（仅截图用注入，保证每张截图顶部完整显示软件全称+版本号）
-  try {
-    var bar = document.createElement('div');
-    bar.id = '__sysbar';
-    bar.style.cssText = 'position:fixed;top:0;left:0;right:0;height:32px;background:linear-gradient(90deg,#1a237e,#303f9f);color:#fff;font:700 14px/32px "Microsoft YaHei","SimHei",sans-serif;text-align:center;letter-spacing:2px;z-index:2147483647;box-shadow:0 1px 4px rgba(0,0,0,.3);';
-    bar.textContent = '惠康中医诊所管理系统 V1.0.0';
-    document.body.appendChild(bar);
-    document.body.style.paddingTop = '32px';
-    __mark('bar');
-  } catch(e){ __mark('barerr'); }
 })();
 </script>`;
 

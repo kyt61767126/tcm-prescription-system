@@ -21,6 +21,8 @@ function buildHtml(tocPages) {
   // 截图与架构图加 class（便于统一控制打印尺寸）
   html = html.replace(/<img src="screenshots\/arch-diagram\.png"/, '<img class="arch" src="screenshots/arch-diagram.png"');
   html = html.replace(/<img ([^>]*?)src="screenshots\/shot/g, '<img class="shot" $1src="screenshots/shot');
+  // 图片路径改为绝对 file:// URI（HTML 写到 _build/ 子目录，相对路径会解析到 _build/screenshots/ 导致图片全部加载失败，2026-08-27 修复）
+  html = html.replace(/src="screenshots\//g, 'src="file:///' + SC.replace(/\\/g, '/') + '/screenshots/');
   // 目录页码回填
   if (tocPages) {
     for (const [title, page] of Object.entries(tocPages)) {
