@@ -1142,6 +1142,13 @@
 - **坑**：Edit 工具替换函数签名行时把 addClinicUserOnCloud 声明删了（old_string 含声明 new_string 漏写）——大段注释+函数头的编辑必须核对上下文行完整性。
 - **生效方式**：后端+云端网页版→push 自动部署；云端APP→在线资源即生效；云端桌面版→需重打 exe；离线版不涉及。
 
+### 2.98【标准版】修改密码弹窗注入"新用户名"选填项——单用户版也能改登录用户名（提交 d1114bc0，2026-08-26）
+- **背景**：标准版（单用户模式）只有修改密码弹窗、无用户管理 → 无编辑用户名入口。用户确认在"确认新密码"下方加"新用户名（选填，留空不修改）"输入行。
+- **实现要点**：①**界面保护新招**：运行时 JS 注入输入行（复用 .form-group 样式），HTML/CSS 零改动，check-interface 基线通过（模式同"舌脉体征快捷录入"）——给弹窗加字段的默认首选方案；②**后端 change-password 增强**：body.newUsername 可选，一次调用改密+改名——不能分两次调（set-username 成功会撤销 token，紧随的 change-password 必 401）；校验失败整体 400/409 密码也不改；**保存段坑：findIndex 必须用旧 username 定位、users[idx] 写入新名对象**；token 按旧名撤销；③phone 保底：原 username 是手机号且 phone 空 → 先落 phone 再改名（与 2.97 一致）。
+- **改动范围**：后端 users.js + 云端三端（change-password 带newUsername/409处理/成功提示）+ 离线双端（纯本地改名：格式+本地唯一+phone保底）。
+- **验证**：语法 5 端与 HEAD 一致；冒烟 7/7；check-interface 通过。
+- **生效方式**：后端+云端网页版→push 即生效；云端APP→在线资源即生效；云桌面→需重打 exe；离线桌面→需重打 exe；离线APP→需重打 APK。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
