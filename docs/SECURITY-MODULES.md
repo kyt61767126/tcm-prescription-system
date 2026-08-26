@@ -65,10 +65,15 @@
 
 | # | 防护措施 | 实现位置 | 强度 | 说明 |
 |---|---------|---------|------|------|
-| 1 | **反调试检测** | `security-guard.js` _startAntiDebug() | 弱 | debugger 语句 + 时间差检测，仅记录日志 |
-| 2 | **DevTools 窗口尺寸检测** | `security-guard.js` | 弱 | window 尺寸差判断 |
-| 3 | **完整性校验** | `security-guard.js` _checkIntegrity() | 弱 | exe/APK 自校验 |
-| 4 | **可关闭机制** | `localStorage.securityGuardDisabled` | - | 临时关闭，便于调试 |
+| 1 | **反调试检测（强信号）** | `security-guard.js` _startAntiDebug() 方法1 | 中 | debugger 时间差检测，连续 2 次才确认（防 GC 抖动误报），唯一可触发降级的信号 |
+| 2 | **DevTools 窗口尺寸检测（弱信号）** | `security-guard.js` _startAntiDebug() 方法2 | 弱 | 仅记录日志，永不参与降级（浏览器缩放/部分 WebView 误报率高） |
+| 3 | **延迟静默降级（P1-3）** | `security-guard.js` _installBusinessGuards() | 中 | 持续调试 ≥5min 关键业务随机延迟 0.8~2.2s；≥10min 拒绝执行（通用话术"操作超时"）；强信号消失 90s 自愈复位 |
+| 4 | **完整性校验** | `security-guard.js` _checkIntegrity() | 弱 | exe/APK 自校验 |
+| 5 | **降级包装目标** | `savePrescription` / `handleLogin` / `loadData` | - | 全局函数运行时包装（`__sgWrapped` 防重入）；前两者拒绝时提示，loadData 静默拒绝 |
+
+> ★ P1-3 设计原则（宁可漏检不可误报）：只有 debugger 时间差强信号（DevTools/调试器附加必现暂停）才计入降级；
+> 尺寸差信号因缩放/WebView 误报率高被降级为纯记录。自愈机制确保任何误报最多影响 90 秒。
+> 旧 `localStorage.securityGuardDisabled` 关闭开关已移除，仅 URL 含 `?debug` 且本地文件协议可关闭（开发调试用）。
 
 ---
 

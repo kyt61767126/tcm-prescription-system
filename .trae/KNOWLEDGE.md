@@ -1058,6 +1058,30 @@
 - **坑**：①PowerShell 提交多行 commit message 不能用 bash heredoc（`cat <<EOF` 语法错误），改用 `git commit -F 文件`；②PowerShell 5.1 读无 BOM 的 .ps1 按 ANSI 解析，ps1 文件必须纯 ASCII（中文注释会乱码导致语法错误）；③hosts 文件把 github.com 映射到 127.0.0.1（ICUBE 代理环境），git push 直连失败属网络环境问题，等待恢复重试即可。
 - **生效方式**：云端API需在 Cloudflare Pages 后台用 `tools/secrets/` 新私钥更新 LICENSE_SIGN_PRIVATE_KEY / LICENSE_SIGN_ED25519_PRIVATE_KEY / LICENSE_MASTER_KEY 三环境变量并重新部署（★不更新则新公钥客户端验签失败 fallback HMAC）；云桌面重打 exe(1.2.148 已含)；本地桌面重打 exe(1.0.111 已含)；云端APP license 走服务端无需重打；离线APP需重打 APK（Java 新公钥+masterKey 校验已就位未打包）。旧 license 兼容：验签失败自动 fallback HMAC 链路。
 
+### 2.88【防破解P1-1】native 校验结果参与业务决策——双路分叉云端仲裁（提交 91d55b9f，2026-08-26）
+- **背景**：APK native 层签名校验结果此前只写日志不参与决策，攻击者 hook Java 层即可无视。
+- **离线 APP**（LicenseManager.java）：native/Java 双路校验不一致时不再立即失败，改走云端验证仲裁（离线环境无网则记审计日志），防 native 层误报阻断正常用户（红线：宁可漏检不可误报）。
+- **云端 APP**（SecurityGuard.java）：双路不一致立即失败（云端 APP 依赖服务端，无仲裁必要，从严）。
+- **生效方式**：两端均需重新打包 APK（离线APP 重打 惠康中医-本地.apk；云端APP 重打 惠康中医-云端.apk）；云端网页版/桌面版不涉及。
+
+### 2.89【防破解P1-2】签名哈希碎片化存储（提交 850325be，2026-08-26）
+- **背景**：APK 签名 SHA256 明文常量在 Java 源码中，反编译 DEX 字符串池直接可见，攻击者可定位篡改。
+- **实现**：64 位 hex 哈希拆 4 段×16 字符，shift+reverse 变换后分散为独立常量；tools/generate-sign-hash.ps1 注入、tools/verify-apk-sign-hash.ps1 构建时对最终 APK 证书哈希 vs Java 碎片常量做一致性校验；两端 build-app.bat（db-offline/app、db-yunduan）接入该校验门禁。
+- **生效方式**：离线APP 重打 惠康中医-本地.apk；云端APP 重打 惠康中医-云端.apk（构建时哈希门禁自动生效）。
+
+### 2.90【防破解P1-3】JS 反调试延迟静默降级（shared/security-guard.js，2026-08-26）
+- **背景**：原 JS 反调试只 console.warn 记录，检测到 DevTools 调试对攻击者零成本；但直接强退又会误伤正常用户。
+- **实现**（宁可漏检不可误报）：
+  - 强信号=debugger 时间差（DevTools/调试器附加必现暂停），**连续 2 次才确认**（防单次 GC 抖动误报）；
+  - 弱信号=DevTools 尺寸差**降级为纯记录**（浏览器缩放 outerWidth 不随 zoom 变化 + 部分 Android WebView 天然差值>160px，误报率高，永不参与降级决策）；
+  - 一级降级（持续调试≥5min）：包装 `savePrescription`/`handleLogin`/`loadData`（`__sgWrapped` 防重入幂等），随机延迟 0.8~2.2s 后正常执行、返回值透传；
+  - 二级降级（≥10min）：拒绝执行，返回 `Promise<undefined>` 与原函数早退契约完全兼容；用户操作给通用话术"操作超时，请稍后重试"（60s 节流），loadData 静默拒绝；
+  - **自愈**：强信号消失 90s 自动复位（防持续误报困死正常用户，任何误报最多影响 90 秒）；
+  - 安装时机：DOMContentLoaded+1.5s（主脚本先于 DOMContentLoaded 执行完，全局函数已就位），失败重试 10 次×3s 兜底。
+- **验证**：Node 桩测试 29/29 通过（确认防抖/等级推进/自愈/契约兼容/幂等）；8 处副本字节级一致（sync-all 6 目标 + cloud_app assets 手动补齐）；check-interface 6/6 OK。
+- **坑**：cloud_app assets/public 不在 sync-all.ps1 BusinessJsTargets 内（云端APP 线上加载 public/，assets 仅兜底快照），改 security-guard 需手动补齐该副本保持一致。
+- **生效方式**：云端网页版推 GitHub 自动部署即生效；云桌面/本地桌面需重打 exe；离线APP 需重打 APK（assets 内 security-guard.js 更新）；云端APP 线上自动生效（assets 兜底副本已同步，下次打包自然带上）。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
