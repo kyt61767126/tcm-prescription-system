@@ -1595,14 +1595,18 @@ let currentUser = null;
                 // ★ 支持手机号/用户名双模式登录：先按 username 查找，再按 phone 字段查找
                 let user = null;
                 let matchedIdentifier = loginUsername;
+                // ★ 2026-08-26 重装激活登录修复：记录"账号命中但密码不对"，用于精准提示
+                let accountMatchedButPwdWrong = false;
                 for (const u of users) {
                     if (u.username !== loginUsername && String(u.phone || '') !== loginUsername) continue;
                     matchedIdentifier = (u.username === loginUsername) ? u.username : (u.phone || loginUsername);
                     if (window.AuthCore && AuthCore.verifyPassword) {
                         if (await AuthCore.verifyPassword(password, u.password || '', matchedIdentifier)) { user = u; break; }
+                        accountMatchedButPwdWrong = true;
                     } else {
                         const hashedPwd = await hashPassword(password);
                         if (u.password === hashedPwd) { user = u; break; }
+                        accountMatchedButPwdWrong = true;
                     }
                 }
                 
@@ -1696,7 +1700,11 @@ let currentUser = null;
                         } catch (outer) { console.warn('登录兜底定时器启动失败（非致命）:', outer); }
                     }
                 } else {
-                    errorDiv.textContent = '手机号/用户名或密码错误';
+                    // ★ 2026-08-26 重装激活登录修复：账号正确但密码错误时，提示激活时的初始密码规则，
+                    //   避免重装重新激活后用户用旧密码反复尝试被锁
+                    errorDiv.textContent = accountMatchedButPwdWrong
+                        ? '密码错误。若为卸载重装后重新激活，密码为激活时设置的密码（未设置则默认 admin）'
+                        : '手机号/用户名或密码错误';
                     errorDiv.style.display = 'block';
                 }
             } catch (e) {
