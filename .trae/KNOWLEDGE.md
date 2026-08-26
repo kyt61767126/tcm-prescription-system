@@ -1161,6 +1161,14 @@
 - **验证**：node --check OK；check-interface 基线一致。
 - **生效方式**：离线桌面/云桌面→需重打 exe；其余端不涉及。
 
+### 2.101【严重】离线桌面改名后登录"密码错误"——config.json 双源漂移（提交 65fd2dae/V1.0.117，2026-08-26）
+- **现象**：改名 wgj 后 wgj/旧密码登录报"用户名密码错误"，但旧账号 13398627188/旧密码正常（V1.0.116）。
+- **根因（双源数据漂移）**：登录窗 login.js `getUsers` 合并 **config.json（优先不覆盖）+ localStorage**；而 index.html UserStore **只读写 localStorage**。改名只改了 localStorage → ①config 里旧账号原样保留（改名后旧号还能登=安全漏洞）；②localStorage 的 wgj 条目密码是过期副本（历史上改密从未同步过 config.json）→ 新账号密码校验必失败。
+- **修复**（db-offline/desktop 三文件）：①main.js 新增 IPC `user:rename-username`（按旧名/phone 定位 config 账户，phone保底+改名+可选密码同步+signConfig 重签名；config 无该账户→synced:false no-op）；②preload 暴露 `electronAPI.renameUser`；③index.html：`_oldLoginName` 登录名快照；userIndex **phone 兜底自愈**（登录旧号而本地已改名时按 phone 定位，避免"用户不存在"）；占用检查**按索引排除**；保存段改名/改密均调 IPC 双源同步；本地密码校验失败时**回退 config.json 密码验证**（漂移自愈——通过即回写双源）。
+- **用户机器恢复路径**：装 V1.0.117 → 旧号登录 → 修改密码（原密码+新密码+用户名 wgj）→ 保存即治愈 → wgj/新密码、手机号/新密码均可登。
+- **坑**：①asar 植入检查用中文关键词时，**自己写的注释也会命中**（"取消'账号已预填'"注释含关键词）——要用"实际调用模式"（如 `showGreenHint(\`✓ 账号已预填`）检查；②PowerShell 内嵌 node -e 带反引号/引号嵌套必炸，写成临时 .js 文件执行再删。
+- **生效方式**：离线桌面→已打 V1.0.117 Setup；其余端不涉及（云端走服务端、APP 无 config.json 合并）。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
