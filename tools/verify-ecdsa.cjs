@@ -15,8 +15,8 @@ const API_BASE = 'https://tcm-prescription-system.pages.dev';
 // 与客户端 license-manager.js / LicenseManager.java 嵌入的公钥完全一致
 const ECDSA_PUBLIC_KEY_PEM =
     '-----BEGIN PUBLIC KEY-----\n' +
-    'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEXqspDCFxlyS9wH0Kyb/fR9sqOeAG\n' +
-    'DurLP5B6cwCvAhMF8Lvlzv9nnvdEWdY0+GytTCUsXWrBbDDgLrOufN1NNw==\n' +
+    'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEq+n38Pe0t0cDjNyoXTgXAyofbl01\n' +
+    'sbaJBMVtUy6+MGwbFCo+YBY+mrmyRBweSL/e1bj9qsUHawEsR9B7PzYSBA==\n' +
     '-----END PUBLIC KEY-----';
 
 // 与云端 license-core.js generateSignatureV5 完全一致的签名内容构造

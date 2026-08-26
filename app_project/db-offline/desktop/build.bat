@@ -186,7 +186,10 @@ set ELECTRON_MIRROR=https://registry.npmmirror.com/-/binary/electron/
 set ELECTRON_BUILDER_BINARIES_MIRROR=https://registry.npmmirror.com/-/binary/electron-builder-binaries/
 REM better-sqlite3 prebuild-install GitHub Releases SSL
 REM TLS prebuild-install electron ABI
-REM pfx package.json certificateFile
+REM ★ P0-3（2026-08-26）：禁用 electron-builder 自动签名——它会在 rcedit 后、
+REM   Phase 2 .bnzc 重算前签名，Phase 2 重写 .bnzc 会作废签名（时机错误）。
+REM   签名统一由 [8.2/9]/[8.95/9] 在 .bnzc 嵌入之后用 tools/sign-exe.ps1 显式执行。
+set CSC_IDENTITY_AUTO_DISCOVERY=false
 
 REM TEMP tmp/ C: /
 set "PREV_TEMP=%TEMP%"
@@ -277,6 +280,29 @@ if exist "%SAFE_BACKED_ASAR%" (
 )
 echo.
 
+REM ★ [8.2/9] P0-3（2026-08-26）Authenticode 代码签名（铁律：必须在 .bnzc 嵌入之后）
+REM   .bnzc 哈希已排除 CheckSum/安全目录项/证书表（shared/pe-guard.cjs P0-3 改造），
+REM   签名不改其余任何字节 → 签名与 .bnzc 两路校验共存。sign-exe.ps1 -VerifyBnzc
+REM   会在签名后立即复验 .bnzc，失配即失败（防"签完哈希坏"的产物交付）。
+echo [8.2/9] Sign main exe (Authenticode, after .bnzc embed)...
+for %%A in ("%MAIN_EXE%") do set "MAIN_EXE_NAME=%%~nxA"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\..\tools\sign-exe.ps1" -ExePath "%MAIN_EXE%" -VerifyBnzc
+set "SIGN_RC=%errorlevel%"
+if "%SIGN_RC%"=="1" (
+    set NODE_TLS_REJECT_UNAUTHORIZED=
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] 主 exe 签名失败（或签名后 .bnzc 失配）- build aborted'"
+    node "%~dp0..\..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
+    if not defined NO_PAUSE pause
+    exit /b 1
+)
+if "%SIGN_RC%"=="0" (
+    copy /Y "%MAIN_EXE%" "%BACKUP_ASAR_DIR%\real_main.exe" >nul
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '  [OK] 已签名主 exe 备份到: %BACKUP_ASAR_DIR%\real_main.exe'"
+) else (
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] 证书材料缺失，本次主 exe 未签名（不阻断，与 P0-3 之前状态一致）'"
+)
+echo.
+
 echo Running electron-builder --prepackaged (nsis + portable)...
 node "node_modules\electron-builder\cli.js" --win --prepackaged "%OUTPUT_DIR%/win-unpacked" --config.directories.output="%OUTPUT_DIR%"
 set "BUILD_RC=%errorlevel%"
@@ -331,6 +357,20 @@ if exist "%SAFE_BACKED_ASAR%" (
 )
 echo.
 
+REM ★ [8.85/9] P0-3（2026-08-26）：恢复主 exe 为"已签名+.bnzc"真包（与 asar 恢复同款铁闸）。
+REM   electron-builder --prepackaged consolidation 可能用缓存重建 output 内
+REM   win-unpacked 主 exe（未签名/无 .bnzc），这里强制用 [8.2/9] 的备份覆盖。
+if exist "%BACKUP_ASAR_DIR%\real_main.exe" (
+    if exist "%OUTPUT_DIR%\win-unpacked\%MAIN_EXE_NAME%" del /f /q "%OUTPUT_DIR%\win-unpacked\%MAIN_EXE_NAME%" 2>nul
+    copy /Y "%BACKUP_ASAR_DIR%\real_main.exe" "%OUTPUT_DIR%\win-unpacked\%MAIN_EXE_NAME%" >nul
+    if exist "%OUTPUT_DIR%\win-unpacked\%MAIN_EXE_NAME%" (
+        powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '  [OK] 主 exe 已恢复为已签名+.bnzc 真包'"
+    ) else (
+        powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] 主 exe 恢复失败（8.95 终验将复验 .bnzc）'"
+    )
+)
+echo.
+
 REM TEMP
 set "TEMP=%PREV_TEMP%"
 set "TMP=%PREV_TMP%"
@@ -377,6 +417,36 @@ if errorlevel 1 (
 )
 echo [OK] Original code restored
 echo.
+
+REM ★ [8.95/9] P0-3（2026-08-26）终验 + 安装包签名：
+REM   ① output 主 exe 复验 .bnzc（防 consolidation 偷换且 8.85 恢复失败，红线中止）
+REM   ② 签名安装包（Setup/portable exe；主 exe 已随包携带签名）
+if exist "%BACKUP_ASAR_DIR%\real_main.exe" (
+    if exist "%OUTPUT_DIR%\win-unpacked\%MAIN_EXE_NAME%" (
+        node "%~dp0..\..\..\tools\pe-zone-sign.cjs" verify "%OUTPUT_DIR%\win-unpacked\%MAIN_EXE_NAME%"
+        if errorlevel 1 (
+            powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] output 主 exe .bnzc 失配（可能被 consolidation 偷换）- build aborted'"
+            if not defined NO_PAUSE pause
+            exit /b 1
+        )
+    )
+)
+echo [8.95/9] Sign installers (Setup / portable exe)...
+set "SIGN_FAIL=0"
+for %%f in ("%OUTPUT_DIR%\*.exe") do (
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\..\tools\sign-exe.ps1" -ExePath "%%f"
+    if errorlevel 1 (
+        if not errorlevel 2 set "SIGN_FAIL=1"
+    )
+)
+if "%SIGN_FAIL%"=="1" (
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] 安装包签名失败 - build aborted'"
+    if not defined NO_PAUSE pause
+    exit /b 1
+)
+echo [OK] Installers signed
+echo.
+
 REM 2026-08-19 POST-BUILD CONSOLIDATION: if we used build_output_<ts> fallback dir (dist was locked)
 REM   now try to move results back to dist so user always finds deliverable in dist/ (project convention)
 REM   Do NOT fail build if move fails (dist might still be locked); just report and keep alt dir.

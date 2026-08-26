@@ -65,8 +65,8 @@ public class LicenseManager {
     // 公钥只能验签不能签发，即使被反编译提取也无法伪造 license
     private static final String ECDSA_VERIFY_PUBLIC_KEY_PEM =
             "-----BEGIN PUBLIC KEY-----\n" +
-            "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEXqspDCFxlyS9wH0Kyb/fR9sqOeAG\n" +
-            "DurLP5B6cwCvAhMF8Lvlzv9nnvdEWdY0+GytTCUsXWrBbDDgLrOufN1NNw==\n" +
+            "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEq+n38Pe0t0cDjNyoXTgXAyofbl01\n" +
+            "sbaJBMVtUy6+MGwbFCo+YBY+mrmyRBweSL/e1bj9qsUHawEsR9B7PzYSBA==\n" +
             "-----END PUBLIC KEY-----";
 
     // ★ P1-[5.1][5.3] 新增：Ed25519 验签公钥（原始 32 字节 hex，RFC 8032）
@@ -74,7 +74,7 @@ public class LicenseManager {
     // 公钥只能验签不能签发，即使被反编译提取也无法伪造 license
     // 注意：minSdk=24 不支持 Android 原生 EdDSA（需 API 33+），故用下方纯 Java 实现（Ed25519 类）
     private static final String ED25519_VERIFY_PUBLIC_KEY_HEX =
-            "f1b58e1d305ebdb856743fff7e400e60ec96ca0207f7b414aa5284673a221f33";
+            "22c2cdffeeeb8831c6423f0600905e53d92e4865e054489462abd396b6cfdabc";
 
     // ★ v3 新增：config.json 完整性签名密钥（与桌面版 license-manager.js / edit-config.ps1 完全一致）
     private static final String CONFIG_SIGN_KEY = "bnzc_config_sign_key_v1_2026";
@@ -1315,6 +1315,38 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
         return hmacSha256WithKey(content, getEffectiveHmacKey());
     }
 
+    // ★ P0-2 加固（2026-08-26）：masterKey 一致性校验（防替换/删除 masterKey 的降级攻击）
+    // 背景：masterKey 不参与 v5/v6/v7 非对称签名内容（云端在签名后添加），单靠非对称验签
+    //      无法发现 masterKey 被篡改。攻击者替换/删除 masterKey 后可控制客户端派生密钥
+    //      （HMAC/CONFIG_SIGN），进而伪造 config.json 完整性签名。
+    // 修复：非对称验签通过后，用 license 当前 masterKey 派生密钥重算 v3/v2 HMAC，
+    //      必须与云端下发的 signature 一致（与桌面版 license-manager.js verifyMasterKeyConsistency 对齐）：
+    //      - masterKey 被替换 → 派生密钥变化 → HMAC 不匹配 → 拒绝
+    //      - masterKey 被删除 → fallback 硬编码密钥 → 与云端 masterKey 派生密钥不匹配 → 拒绝
+    //      - 正常 license（云端配置 masterKey）→ 派生一致 → 通过
+    //      - 云端未配置 masterKey 时签发的 license（无该字段，HMAC 为硬编码密钥所签）→ 通过（向后兼容）
+    // ★ 红线：宁可漏检不可误报。校验异常时放行（仅记日志），绝不阻塞正常用户。
+    private boolean verifyMasterKeyConsistency(JSONObject data) {
+        try {
+            String sig = data.optString("signature", "");
+            if (sig == null || sig.isEmpty()) return true;
+            // setLicenseDataContext(data) 已缓存 masterKey，generateSignatureV3/V2 自动用派生密钥
+            if (data.has("clinicName") && data.has("machineId") && data.has("licenseBinding")) {
+                String expectedV3 = generateSignatureV3(data);
+                if (sig.equalsIgnoreCase(expectedV3)) return true;
+            }
+            String expectedV2 = generateSignature(data);
+            if (sig.equalsIgnoreCase(expectedV2)) return true;
+            Log.w(TAG, "masterKey 一致性校验失败（masterKey 疑似被篡改/删除），拒绝该 license");
+            setLicenseDataContext(null);
+            return false;
+        } catch (Exception e) {
+            // 异常按放行处理（宁可漏检不可误报）
+            Log.w(TAG, "masterKey 一致性校验异常（放行）: " + e.getMessage());
+            return true;
+        }
+    }
+
     // 签名验证（先 v5 ECDSA，再 v3，再 v2，最后 v1 向后兼容）
     private boolean verifySignature(JSONObject data) {
         String sig = data.optString("signature", "");
@@ -1334,7 +1366,9 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
         if (data.has("signatureV7") && ED25519_VERIFY_PUBLIC_KEY_HEX != null
                 && !ED25519_VERIFY_PUBLIC_KEY_HEX.isEmpty()) {
             if (verifyEd25519SignatureV7(data)) {
-                return true;
+                // ★ P0-2 加固（2026-08-26）：非对称验签通过后还需校验 masterKey 一致性
+                //（masterKey 不参与 v7 签名内容，防替换/删除 masterKey 的降级攻击，见方法注释）
+                return verifyMasterKeyConsistency(data);
             }
             Log.w(TAG, "v7 Ed25519 验签失败，拒绝该 license（fail-closed）");
             setLicenseDataContext(null);
@@ -1348,7 +1382,8 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
         if (data.has("signatureV6") && ECDSA_VERIFY_PUBLIC_KEY_PEM != null
                 && !ECDSA_VERIFY_PUBLIC_KEY_PEM.isEmpty()) {
             if (verifyECDSASignatureV6(data)) {
-                return true;
+                // ★ P0-2 加固（2026-08-26）：同上，masterKey 一致性校验
+                return verifyMasterKeyConsistency(data);
             }
             Log.w(TAG, "v6 ECDSA 验签失败，拒绝该 license（fail-closed）");
             setLicenseDataContext(null);
@@ -1360,7 +1395,8 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
         if (data.has("signatureV5") && ECDSA_VERIFY_PUBLIC_KEY_PEM != null
                 && !ECDSA_VERIFY_PUBLIC_KEY_PEM.isEmpty()) {
             if (verifyECDSASignature(data)) {
-                return true;
+                // ★ P0-2 加固（2026-08-26）：同上，masterKey 一致性校验
+                return verifyMasterKeyConsistency(data);
             }
             Log.w(TAG, "v5 ECDSA 验签失败，降级为 HMAC");
         }

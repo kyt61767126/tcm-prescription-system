@@ -28,8 +28,8 @@ const TIME_TAMPER_THRESHOLD = 24 * 60 * 60 * 1000;           // 时间回拨阈�
 //   3. 公钥（-----BEGIN PUBLIC KEY----- 整段）填入此常量
 //   4. 重新打包 exe
 const ECDSA_VERIFY_PUBLIC_KEY_PEM = `-----BEGIN PUBLIC KEY-----
-MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEXqspDCFxlyS9wH0Kyb/fR9sqOeAG
-DurLP5B6cwCvAhMF8Lvlzv9nnvdEWdY0+GytTCUsXWrBbDDgLrOufN1NNw==
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEq+n38Pe0t0cDjNyoXTgXAyofbl01
+sbaJBMVtUy6+MGwbFCo+YBY+mrmyRBweSL/e1bj9qsUHawEsR9B7PzYSBA==
 -----END PUBLIC KEY-----`;
 
 // ★ P1-[5.1][5.3] 新增：Ed25519 验签公钥（PEM SPKI 格式）
@@ -41,7 +41,7 @@ DurLP5B6cwCvAhMF8Lvlzv9nnvdEWdY0+GytTCUsXWrBbDDgLrOufN1NNw==
 //   3. 公钥（-----BEGIN PUBLIC KEY----- 整段）填入此常量
 //   4. 重新打包 exe
 const ED25519_VERIFY_PUBLIC_KEY_PEM = `-----BEGIN PUBLIC KEY-----
-MCowBQYDK2VwAyEA8bWOHTBevbhWdD//fkAOYOyWygIH97QUqlKEZzoiHzM=
+MCowBQYDK2VwAyEAIsLN/+7riDHGQj8GAJBeU9kuSGXgVEiUYqvTlrbP2rw=
 -----END PUBLIC KEY-----`;
 
 const TRIAL_KEY = 'bnzc_trial_key_v1';
@@ -714,6 +714,39 @@ function generateSignatureV1(data) {
     return crypto.createHmac('sha256', getEffectiveHmacKey()).update(content).digest('hex');
 }
 
+// ★ P0-2 加固（2026-08-26）：masterKey 一致性校验（防替换/删除 masterKey 的降级攻击）
+// 背景：masterKey 不参与 v5/v6/v7 非对称签名内容（云端在签名后添加），单靠非对称验签
+//      无法发现 masterKey 被篡改。攻击者替换/删除 masterKey 后可控制客户端派生密钥
+//      （HMAC/CONFIG_SIGN），进而伪造 config.json 完整性签名。
+// 修复：非对称验签通过后，用 license 当前 masterKey 派生密钥重算 v3/v2 HMAC，
+//      必须与云端下发的 data.signature 一致：
+//      - masterKey 被替换 → 派生密钥变化 → HMAC 不匹配 → 拒绝
+//      - masterKey 被删除 → fallback 硬编码密钥 → 与云端 masterKey 派生密钥不匹配 → 拒绝
+//      - 正常 license（云端配置 masterKey）→ 派生一致 → 通过
+//      - 云端未配置 masterKey 时签发的 license（无该字段，HMAC 为硬编码密钥所签）→ 通过（向后兼容）
+// ★ 红线：宁可漏检不可误报。校验异常时放行（仅记日志），绝不阻塞正常用户。
+function verifyMasterKeyConsistency(data) {
+    try {
+        const sigBuf = Buffer.from(data.signature, 'hex');
+        // setLicenseDataContext(data) 已缓存 masterKey，generateSignatureV3/V2 自动用派生密钥
+        const expectedV3 = Buffer.from(generateSignatureV3(data), 'hex');
+        if (sigBuf.length === expectedV3.length && crypto.timingSafeEqual(sigBuf, expectedV3)) {
+            return true;
+        }
+        const expectedV2 = Buffer.from(generateSignature(data), 'hex');
+        if (sigBuf.length === expectedV2.length && crypto.timingSafeEqual(sigBuf, expectedV2)) {
+            return true;
+        }
+        console.warn('[License] masterKey 一致性校验失败（masterKey 疑似被篡改/删除），拒绝该 license');
+        setLicenseDataContext(null);
+        return false;
+    } catch (e) {
+        // 异常按放行处理（宁可漏检不可误报）
+        console.warn('[License] masterKey 一致性校验异常（放行）:', e.message);
+        return true;
+    }
+}
+
 function verifySignature(data) {
     if (!data.signature) return false;
 
@@ -732,7 +765,9 @@ function verifySignature(data) {
     // 旧版 license（无 signatureV7 字段）不受影响，继续走 v6/v5/HMAC 链路。
     if (data.signatureV7 && ED25519_VERIFY_PUBLIC_KEY_PEM) {
         if (verifyEd25519SignatureV7(data)) {
-            return true;
+            // ★ P0-2 加固（2026-08-26）：非对称验签通过后还需校验 masterKey 一致性
+            //（masterKey 不参与 v7 签名内容，防替换/删除 masterKey 的降级攻击，见函数注释）
+            return verifyMasterKeyConsistency(data);
         }
         console.warn('[License] v7 Ed25519 验签失败，拒绝该 license（fail-closed）');
         setLicenseDataContext(null);
@@ -746,7 +781,8 @@ function verifySignature(data) {
     // 旧版 license（无 signatureV6 字段）不受影响，继续走 v5/HMAC 链路。
     if (data.signatureV6 && ECDSA_VERIFY_PUBLIC_KEY_PEM) {
         if (verifyECDSASignatureV6(data)) {
-            return true;
+            // ★ P0-2 加固（2026-08-26）：同上，masterKey 一致性校验
+            return verifyMasterKeyConsistency(data);
         }
         console.warn('[License] v6 ECDSA 验签失败，拒绝该 license（fail-closed）');
         setLicenseDataContext(null);
@@ -761,7 +797,8 @@ function verifySignature(data) {
     //   验签保护形同虚设。旧版 license（无 signatureV5 字段）不受影响。
     if (data.signatureV5 && ECDSA_VERIFY_PUBLIC_KEY_PEM) {
         if (verifyECDSASignature(data)) {
-            return true;
+            // ★ P0-2 加固（2026-08-26）：同上，masterKey 一致性校验
+            return verifyMasterKeyConsistency(data);
         }
         console.warn('[License] v5 ECDSA 验签失败，拒绝该 license（fail-closed）');
         setLicenseDataContext(null);

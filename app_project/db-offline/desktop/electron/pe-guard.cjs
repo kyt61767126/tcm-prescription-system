@@ -14,9 +14,9 @@
 //  兼容性：
 //    - 无 `.bnzc` 区段 → verifyZone 返回 present:false（旧版 exe / 开发环境），
 //      调用方按"未嵌入"处理，不告警不阻断。
-//    - 只追加区段不改动既有区段数据，不影响 Windows 加载；若未来接入正式代码
-//      签名，追加区段会破坏 Authenticode，因此本工具应在签名之前调用（当前
-//      exe 未签名，无冲突）。
+//    - 只追加区段不改动既有区段数据，不影响 Windows 加载。
+//    - ★ P0-3（2026-08-26）：哈希已排除 Authenticode 影响区（CheckSum/安全目录
+//      项/证书表），与代码签名共存：先 embed 后 sign，两路校验互不破坏。
 //
 //  纯 Node 实现（fs/crypto），无 electron 依赖，可同时被打包工具与主进程 require。
 // ============================================================================
@@ -99,19 +99,66 @@ function parsePe(buf) {
 }
 
 // ---------------------------------------------------------------------------
-// 哈希：排除 .bnzc 区段自身的文件 SHA-256
+// 哈希：排除 .bnzc 区段自身 + Authenticode 签名影响区后的文件 SHA-256
 // ---------------------------------------------------------------------------
+// ★ 2026-08-26 P0-3 改造：与 Authenticode 代码签名共存。
+//   签名（Set-AuthenticodeSignature / signtool）只改动三处：
+//     1. Optional Header 的 CheckSum 字段（optOff+64，4 字节）
+//     2. Data Directory[4] 安全目录项（RVA+Size，8 字节）
+//     3. 文件末尾追加的证书表（WinCertificate blob）
+//   哈希排除上述区域后："先 embed .bnzc 后签名"两者共存互不破坏——
+//   签名不改其余任何字节 → .bnzc 哈希保持有效；签名摘要覆盖 .bnzc →
+//   篡改 .bnzc 或任意字节会同时破坏两路校验。
+//   ★ 顺序铁律：embed 必须在签名之前（签名后再 embed 会改写 .bnzc 内容作废签名）。
+//   ★ 兼容性：哈希定义变更后，旧版工具 verify 旧产物可能报 mismatch（旧 exe
+//     内嵌的是旧定义哈希）；运行时校验用 exe 自带副本，不受影响。
+function getAuthenticodeExcludedRanges(buf, pe) {
+    const ranges = [];
+    // 1. CheckSum 字段（PE32/PE32+ 均在 optOff+64）
+    ranges.push([pe.optOff + 64, pe.optOff + 68]);
+    // 2. 安全目录项 + 证书表（Data Directory index 4 = Certificate Table）
+    try {
+        const numRvaOff = pe.isPe32Plus ? pe.optOff + 108 : pe.optOff + 92;
+        const dataDirOff = pe.isPe32Plus ? pe.optOff + 112 : pe.optOff + 96;
+        if (numRvaOff + 4 <= pe.headerSize) {
+            const numRva = buf.readUInt32LE(numRvaOff);
+            if (numRva > 4) {
+                const secDirOff = dataDirOff + 4 * 8;
+                ranges.push([secDirOff, secDirOff + 8]);
+                // 证书表 RVA 字段实为文件偏移；范围必须落在文件内
+                const certOff = buf.readUInt32LE(secDirOff);
+                const certSize = buf.readUInt32LE(secDirOff + 4);
+                if (certOff > 0 && certSize > 0 && certOff + certSize <= buf.length) {
+                    ranges.push([certOff, certOff + certSize]);
+                }
+            }
+        }
+    } catch (e) {
+        // 解析失败按"无证书"处理：只排除 .bnzc（与旧版行为一致）
+    }
+    return ranges;
+}
+
 function hashExcludingZone(buf, pe, zone) {
     const h = crypto.createHash('sha256');
-    if (!zone) {
-        h.update(buf);
-        return h.digest('hex');
+    const ranges = [];
+    if (zone && zone.rawSize > 0 && zone.rawPtr >= 0) {
+        ranges.push([zone.rawPtr, zone.rawPtr + zone.rawSize]);
     }
-    const ptr = zone.rawPtr;
-    const size = zone.rawSize;
-    if (ptr > 0) h.update(buf.subarray(0, ptr));
-    const end = ptr + size;
-    if (end < buf.length) h.update(buf.subarray(end));
+    if (pe) {
+        for (const r of getAuthenticodeExcludedRanges(buf, pe)) ranges.push(r);
+    }
+    ranges.sort((a, b) => a[0] - b[0]);
+    let pos = 0;
+    for (const range of ranges) {
+        const start = range[0];
+        const end = range[1];
+        if (start >= buf.length || end <= pos) continue;
+        const s = start > pos ? start : pos;
+        if (s > pos) h.update(buf.subarray(pos, s));
+        if (end > pos) pos = end;
+    }
+    if (pos < buf.length) h.update(buf.subarray(pos));
     return h.digest('hex');
 }
 

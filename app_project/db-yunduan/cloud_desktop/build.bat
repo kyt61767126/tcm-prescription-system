@@ -238,7 +238,43 @@ if exist "%SAFE_BACKED_ASAR%" (
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] asar 备份失败（可能路径不对），将尝试直接用 REAL_WIN_UNPACKED_PATH'"
     set "SAFE_BACKED_ASAR=%REAL_WIN_UNPACKED_PATH%\resources\app.asar"
 )
-REM pfx package.json certificateFile
+REM ★ P0-3（2026-08-26）：禁用 electron-builder 自动签名（时机错误——它会在
+REM   .bnzc 嵌入前签名，签名后 embed 会作废签名）。签名统一由下方 [8.05/9]
+REM   在 prepare-win-unpacked 已嵌 .bnzc 之后用 tools/sign-exe.ps1 显式执行。
+set CSC_IDENTITY_AUTO_DISCOVERY=false
+
+REM ★ [8.05/9] P0-3（2026-08-26）Authenticode 代码签名（铁律：必须在 .bnzc 嵌入之后）
+REM   prepare-win-unpacked.js 已对主 exe 嵌入 .bnzc（rcedit 之后）；.bnzc 哈希已排除
+REM   CheckSum/安全目录项/证书表（shared/pe-guard.cjs P0-3 改造），签名不改其余
+REM   任何字节 → 签名与 .bnzc 两路校验共存。sign-exe.ps1 -VerifyBnzc 签名后立即
+REM   复验 .bnzc，失配即失败（防"签完哈希坏"的产物交付）。
+echo [8.05/9] Sign main exe (Authenticode, after .bnzc embed)...
+set "CLOUD_MAIN_EXE="
+for %%f in ("%REAL_WIN_UNPACKED_PATH%\*.exe") do set "CLOUD_MAIN_EXE=%%f"
+if not "%CLOUD_MAIN_EXE%"=="" (
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\..\tools\sign-exe.ps1" -ExePath "%CLOUD_MAIN_EXE%" -VerifyBnzc
+) else (
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] win-unpacked 未找到主 exe，跳过签名'"
+)
+set "SIGN_RC=%errorlevel%"
+if "%SIGN_RC%"=="1" (
+    set NODE_TLS_REJECT_UNAUTHORIZED=
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] 主 exe 签名失败（或签名后 .bnzc 失配）- build aborted'"
+    node "%~dp0..\..\..\tools\obfuscate.js" restore --target=cloud >nul 2>&1
+    if not defined NO_PAUSE pause
+    exit /b 1
+)
+if "%SIGN_RC%"=="2" (
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] 证书材料缺失，本次主 exe 未签名（不阻断，与 P0-3 之前状态一致）'"
+)
+if "%SIGN_RC%"=="0" (
+    if not "%CLOUD_MAIN_EXE%"=="" (
+        copy /Y "%CLOUD_MAIN_EXE%" "%BACKUP_ASAR_DIR%\real_main.exe" >nul
+        for %%A in ("%CLOUD_MAIN_EXE%") do set "CLOUD_MAIN_EXE_NAME=%%~nxA"
+        powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '  [OK] 已签名主 exe 备份到: %BACKUP_ASAR_DIR%\real_main.exe'"
+    )
+)
+echo.
 set "PREV_TEMP=%TEMP%"
 set "PREV_TMP=%TMP%"
 if not exist "tmp" mkdir tmp
@@ -354,11 +390,53 @@ if exist "%SAFE_BACKED_ASAR%" (
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] 安全备份 asar 不存在：%SAFE_BACKED_ASAR%'"
 )
 
+REM ★ [8.85/9] P0-3（2026-08-26）：恢复主 exe 为"已签名+.bnzc"真包（与 asar 恢复同款铁闸）。
+REM   electron-builder --prepackaged consolidation 可能用缓存重建 output 内
+REM   win-unpacked 主 exe（未签名/无 .bnzc），这里强制用 [8.05/9] 的备份覆盖。
+if exist "%BACKUP_ASAR_DIR%\real_main.exe" (
+    if exist "%OUTPUT_DIR%\win-unpacked\%CLOUD_MAIN_EXE_NAME%" del /f /q "%OUTPUT_DIR%\win-unpacked\%CLOUD_MAIN_EXE_NAME%" 2>nul
+    copy /Y "%BACKUP_ASAR_DIR%\real_main.exe" "%OUTPUT_DIR%\win-unpacked\%CLOUD_MAIN_EXE_NAME%" >nul
+    if exist "%OUTPUT_DIR%\win-unpacked\%CLOUD_MAIN_EXE_NAME%" (
+        powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '  [OK] 主 exe 已恢复为已签名+.bnzc 真包'"
+    ) else (
+        powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] 主 exe 恢复失败（8.95 终验将复验 .bnzc）'"
+    )
+)
+
 REM ★ 同步覆盖 build-audit.json（从 dist/build-audit.json → output 根）
 if exist "dist\build-audit.json" (
     copy /Y "dist\build-audit.json" "%OUTPUT_DIR%\build-audit.json" >nul 2>&1
     echo   [OK] build-audit.json 同步到 output
 )
+
+REM ★ [8.95/9] P0-3（2026-08-26）终验 + 安装包签名：
+REM   ① output 主 exe 复验 .bnzc（防 consolidation 偷换且 8.85 恢复失败，红线中止）
+REM   ② 签名安装包（Setup/portable exe；主 exe 已随包携带签名）
+if exist "%BACKUP_ASAR_DIR%\real_main.exe" (
+    if exist "%OUTPUT_DIR%\win-unpacked\%CLOUD_MAIN_EXE_NAME%" (
+        node "%~dp0..\..\..\tools\pe-zone-sign.cjs" verify "%OUTPUT_DIR%\win-unpacked\%CLOUD_MAIN_EXE_NAME%"
+        if errorlevel 1 (
+            powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] output 主 exe .bnzc 失配（可能被 consolidation 偷换）- build aborted'"
+            if not defined NO_PAUSE pause
+            exit /b 1
+        )
+    )
+)
+echo [8.95/9] Sign installers (Setup / portable exe)...
+set "SIGN_FAIL=0"
+for %%f in ("%OUTPUT_DIR%\*.exe") do (
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\..\tools\sign-exe.ps1" -ExePath "%%f"
+    if errorlevel 1 (
+        if not errorlevel 2 set "SIGN_FAIL=1"
+    )
+)
+if "%SIGN_FAIL%"=="1" (
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] 安装包签名失败 - build aborted'"
+    if not defined NO_PAUSE pause
+    exit /b 1
+)
+echo [OK] Installers signed
+echo.
 
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[9/9] Verify artifacts & finish...'"
 

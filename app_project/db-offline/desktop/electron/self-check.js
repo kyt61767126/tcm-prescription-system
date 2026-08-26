@@ -5,10 +5,11 @@
 //       不允许正常用户闪退"的硬性红线。
 //  → 仅在 app.isPackaged（正式打包）时执行；开发环境直接跳过。
 //  → 用 PowerShell Get-AuthenticodeSignature 读取当前 exe(process.execPath) 的
-//    签名状态：Valid(签名有效) / NotSigned(未签名) / HashMismatch(哈希失配=被篡改)。
-//  → 预留签名位：EXPECTED_EXE_SIGNER_THUMBPRINT 默认留空（发布库未配置签名私钥，
-//    exe 处于未签名态，符合预期）。未来接入代码签名后，把发布证书的 SHA1 指纹
-//    填入该常量，即可从"仅记录状态"升级为"指纹比对（被重新签名会告警）"。
+//    签名状态：Valid(已入信任根) / UnknownError(自签未入信任根，预期) /
+//    NotSigned(未签名) / HashMismatch(哈希失配=被篡改)。
+//  → P0-3（2026-08-26）：已接入自签发布证书（tools/certs/惠康中医-codesign.pfx，
+//    CN=惠康中医软件, O=本能堂中医诊所, C=CN，有效期至 2031-08-26），指纹比对
+//    生效：指纹匹配即通过；未签名/被重新签名/哈希失配均 WARN（仅记录不阻断）。
 //
 //  说明：本模块为主进程 require 模块，位于 electron/**/*，打包自动包含，
 //  无需改动 package.json 的 build.files。
@@ -19,8 +20,9 @@ const { execFile } = require('child_process');
 // P1-[3.1] 第二路：PE .bnzc 完整性区段校验（shared/pe-guard.cjs，经 sync-all 同步）
 const peGuard = require('./pe-guard.cjs');
 
-// ★ 预留：发布代码签名的证书指纹（大写 SHA1）。当前未签名，留空则不比对。
-const EXPECTED_EXE_SIGNER_THUMBPRINT = '';
+// ★ P0-3（2026-08-26）：发布代码签名证书指纹（大写 SHA1，自签证书
+//   tools/certs/惠康中医-codesign.pfx，由 build.bat 在 .bnzc 嵌入后签名）。
+const EXPECTED_EXE_SIGNER_THUMBPRINT = 'E9D0B883BC0CCFF4A46525EAEB43446B18ABA3C6';
 
 let initialized = false;
 
@@ -70,17 +72,17 @@ function runSelfCheck() {
                 if (info.Thumbprint) detail += '，指纹=' + info.Thumbprint;
 
                 const expectedUp = EXPECTED_EXE_SIGNER_THUMBPRINT.toUpperCase();
-                if (status === 'Valid' && EXPECTED_EXE_SIGNER_THUMBPRINT &&
-                        info.Thumbprint && info.Thumbprint.toUpperCase() !== expectedUp) {
-                    log('WARN', 'exe 已签名但指纹与发布证书不符，可能被重新签名/重打包。' + detail);
-                } else if (status === 'Valid') {
-                    log('debug', 'exe 签名有效，自校验通过。' + detail);
-                } else if (status === 'HashMismatch') {
+                if (status === 'HashMismatch') {
+                    // 哈希失配优先判定：签名后字节被改，即使指纹匹配也是被篡改
                     log('WARN', 'exe 签名哈希失配，文件可能在签名后被篡改/重打包。' + detail);
+                } else if (info.Thumbprint && info.Thumbprint.toUpperCase() === expectedUp) {
+                    // 指纹匹配发布证书：Valid（证书已入信任根）或 UnknownError
+                    // （自签证书未入信任根的预期状态）均视为通过
+                    log('debug', 'exe 签名指纹匹配发布证书（自签），自校验通过。' + detail);
                 } else if (status === 'NotSigned') {
-                    log('debug', 'exe 未签名（当前发布未配置签名私钥，符合预期）。' + detail);
+                    log('WARN', 'exe 未签名（发布产物应带自签证书签名），可能被剥签名/重打包。' + detail);
                 } else {
-                    log('warn', '签名状态未知：' + detail);
+                    log('WARN', 'exe 已签名但指纹与发布证书不符，可能被重新签名/重打包。' + detail);
                 }
             } catch (e) {
                 log('warn', '解析签名检测结果失败（非致命）: ' + e.message);

@@ -89,6 +89,11 @@ tools/.eb-cache/
 signing.properties
 **/signing.properties
 **/cert-password.txt
+# 非对称签发私钥目录（ECDSA/Ed25519 私钥，云端 Cloudflare Secrets 用的源文件）
+tools/secrets/
+# Ed25519/ECDSA 私钥 PEM（防止其他位置散落的私钥文件误入库）
+*LICENSE_SIGN*PRIVATE*.pem
+**/*LICENSE_SIGN*PRIVATE*.pem
 
 # Capacitor / Android 构建产物（覆盖根目录和子项目）
 android/app/build/
