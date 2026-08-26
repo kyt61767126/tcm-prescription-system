@@ -1179,6 +1179,7 @@
   4. MainActivity showLicenseErrorWithActivateChoice 加中性按钮"🌐 访问官网"（Intent.ACTION_VIEW，返回后重弹对话框流程不断链）；
   5. index-app.html 登录失败精准提示：账号命中但密码错 → "密码错误。若为卸载重装后重新激活，密码为激活时设置的密码（未设置则默认 admin）"。
 - **★ 大坑（重要教训）**：**APP assets/public/index.html 不是源文件**！app/build-app.bat L106 打包时 `copy /Y index-app.html → assets/public/index.html` 会覆盖手改——改了 assets 版修改会静默丢失（本次第一次打包即踩：APK 内检测不到新代码，源文件被覆盖回旧版）。**APP 登录页改动必须改 db-offline/index-app.html**。auth-core.js 无覆盖（直接文件），MainActivity 直接编译。
+- **★ 连锁坑（2.102b，提交 3a03c154）**：同日"修改密码弹窗注入新用户名编辑项"功能只加到 desktop/index.html 和 cloud_app，**漏移植 index-app.html** → 离线APP 缺该功能。教训：**凡是加到 desktop/index.html 的功能，必须同步检查 index-app.html 是否也需要移植**（两文件同源分叉维护，diff 检查一次即知）。已整块移植（injectUsernameField + 只改用户名密码留空 + 唯一性/格式校验 + 保手机号登录 + phone 兜底自愈），electronAPI.renameUser 同步块不移植（APP 无 electronAPI）。
 - **验证**：node --check 4 副本一致（md5 70696ce050）；check-interface 6 OK；APK 三层验证（ZipFile 解 classes.dex/assets）——dex 含"访问官网"+URL、auth-core 含 activatePhoneInput/按端区分传参、index.html 含 accountMatchedButPwdWrong，全部打入；严格模式打包 2:41。
 - **PowerShell 坑复用**：APK 验证脚本含中文字符串时 .ps1 无 BOM 被 GBK 读→中文搜索必 false（假阴性），改用 node .cjs 脚本验证（UTF-8 无歧义）；且项目 package.json "type":"module"，验证脚本必须 .cjs 后缀。
 - **生效方式**：离线APP→重打 APK versionCode 162（惠康中医-本地.apk）覆盖安装生效；离线桌面版→auth-core 已同步，下次打包生效；云端版不涉及（云端无需激活码，账号在服务端重装不丢）。
