@@ -1650,8 +1650,10 @@ let currentUser = null;
                     };
                     localStorage.setItem('user_login_data', JSON.stringify(loginData));
                     
-                    // ★ 标准版：记住的用户名显示为 CONFIG.doctorName（本能堂），而非 admin
-                    const displayName = isPersonal ? (CONFIG.doctorName || username) : username;
+                    // ★ 标准版：记住的用户名 = 真实登录账号（wgj/手机号），不再显示医师姓名——
+                    //   与桌面版一致（防信息泄露 + 避免"显示王杰却不知账号是什么"的困惑）；
+                    //   医师姓名仍可手动输入登录（映射特性保留）
+                    const displayName = isPersonal ? (loginUsername || username) : username;
                     saveRememberedUser(displayName);
                     
                     document.getElementById('loginOverlay').style.display = 'none';
@@ -1752,11 +1754,26 @@ let currentUser = null;
                     overlay.style.display = 'flex';
                     if (typeof loadRememberedUsers === 'function') try { loadRememberedUsers(); } catch(_) {}
                     try {
-                        if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.edition === 'personal' && CONFIG.doctorName) {
+                        if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.edition === 'personal') {
                             const inp = document.getElementById('loginUsername');
-                            if (inp) inp.value = CONFIG.doctorName;
+                            if (inp) {
+                                // ★ 2026-08-26 显示真实账号：优先上次登录保存的账号；旧数据存的是
+                                //   医师姓名（映射别名）时自愈替换为实际激活账号，回退医师名
+                                let _last = '';
+                                try { const _arr = JSON.parse(localStorage.getItem('local_rememberedUsers') || '[]'); if (Array.isArray(_arr) && _arr.length) _last = String(_arr[0]); } catch(_) {}
+                                if (!_last) _last = localStorage.getItem('local_rememberedUsername') || '';
+                                if (_last && _last === CONFIG.doctorName) {
+                                    const _us = (typeof getUsers === 'function') ? getUsers() : [];
+                                    const _act = _us.find(u => u && u.phone && String(u.phone).trim() !== '') || _us.find(u => u && u.username !== 'admin');
+                                    if (_act && _act.username && _act.username !== _last) {
+                                        _last = _act.username;
+                                        try { localStorage.setItem('local_rememberedUsername', _last); } catch(_) {}
+                                    }
+                                }
+                                inp.value = _last || CONFIG.doctorName || '';
+                            }
                         }
-                    } catch(_) {}
+                    } catch (_) {}
                     if (typeof showToast === 'function') try { showToast('已退出登录'); } catch(_) {}
                 }
             } catch (e) {
@@ -2568,11 +2585,22 @@ let currentUser = null;
 
         async function loadRememberedUsers() {
             try {
-                // ★ 标准版：单用户，用户名固定显示 CONFIG.doctorName，跳过记住用户名逻辑
+                // ★ 标准版：单用户，显示真实登录账号（旧数据存医师名时自愈替换），回退医师名
                 if (CONFIG.edition === 'personal') {
                     const userInput = document.getElementById('loginUsername');
-                    if (userInput && CONFIG.doctorName) {
-                        userInput.value = CONFIG.doctorName;
+                    if (userInput) {
+                        let _last = '';
+                        try { const _arr = JSON.parse(localStorage.getItem('local_rememberedUsers') || '[]'); if (Array.isArray(_arr) && _arr.length) _last = String(_arr[0]); } catch(_) {}
+                        if (!_last) _last = localStorage.getItem('local_rememberedUsername') || '';
+                        if (_last && _last === CONFIG.doctorName) {
+                            const _us = getUsers();
+                            const _act = _us.find(u => u && u.phone && String(u.phone).trim() !== '') || _us.find(u => u && u.username !== 'admin');
+                            if (_act && _act.username && _act.username !== _last) {
+                                _last = _act.username;
+                                try { localStorage.setItem('local_rememberedUsername', _last); } catch(_) {}
+                            }
+                        }
+                        userInput.value = _last || CONFIG.doctorName || '';
                     }
                     return;
                 }
