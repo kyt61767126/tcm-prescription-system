@@ -1134,6 +1134,14 @@
 - **坑**：auth-core 权威源是 **shared/auth-core/{cloud,offline}.js 双源**（sync-auth-core.ps1 分发），shared/auth-core.js 只是 cloud 的根镜像——直接改根镜像会被 sync 覆盖，必须改双源再跑同步脚本。
 - **生效方式**：云端网页版+后端+云端APP（auth-core 走线上）→push 自动部署即生效；云桌面/本地桌面→需重打 exe；离线APP→需重打 APK。
 
+### 2.97【新功能】设置登录用户名——手机号激活账号用户名+手机号双登录（提交 da3c4eb0，2026-08-26）
+- **背景**：手机号注册激活的管理员 username=手机号，想给同一账号加英文/拼音用户名。此前不可行：后端锁死"登录账号不可改"（users.js 保全局唯一）；本地编辑弹窗改名不同步云端（改完新名反而登录不了，是坑）；"新建用户"变通因医师姓名唯一限制无法给同一人建二号。
+- **实现**：后端 `POST /users?action=set-username`（token 认证；本人或本诊所 clinic_admin；新用户名 2-30 位英文/数字/下划线/连字符、禁中文、禁手机号格式；全局唯一校验含激活占位）。**关键设计**：①原 username 是手机号且 phone 为空 → 先落 phone 再改名 → username=新名+phone=手机号双登录（findUserForLogin 双匹配天然支持）；②迁移 user_devices:{old}→{new}（2台设备上限不失联）；③token 绑定旧 username（payload.u/session/version key）→ 撤销旧 token+清 session，改名后所有端重新登录（不换发 token，链路最简）。前端三端 confirmEditUser：云端账号改名**先云端后本地**——blocked/failed 均中止不本地保存（杜绝本地云端分裂）。
+- **操作路径**：用户管理→编辑→改"登录用户（英文或拼音）"→保存→退出→新用户名或手机号登录。
+- **验证**：三端语法与 HEAD 一致；校验冒烟 9/9；check-interface 6 OK。
+- **坑**：Edit 工具替换函数签名行时把 addClinicUserOnCloud 声明删了（old_string 含声明 new_string 漏写）——大段注释+函数头的编辑必须核对上下文行完整性。
+- **生效方式**：后端+云端网页版→push 自动部署；云端APP→在线资源即生效；云端桌面版→需重打 exe；离线版不涉及。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
