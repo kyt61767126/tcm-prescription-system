@@ -1183,6 +1183,14 @@
 - **PowerShell 坑复用**：APK 验证脚本含中文字符串时 .ps1 无 BOM 被 GBK 读→中文搜索必 false（假阴性），改用 node .cjs 脚本验证（UTF-8 无歧义）；且项目 package.json "type":"module"，验证脚本必须 .cjs 后缀。
 - **生效方式**：离线APP→重打 APK versionCode 162（惠康中医-本地.apk）覆盖安装生效；离线桌面版→auth-core 已同步，下次打包生效；云端版不涉及（云端无需激活码，账号在服务端重装不丢）。
 
+### 2.103【修复】离线APP覆盖安装误报"文件被篡改"——完整性基线key用versionName恒不变（提交 26ed441a，versionCode 163，2026-08-26）
+- **现象**：用户覆盖安装 versionCode 162 新 APK（含修改过的 auth-core.js）→ 启动弹"检测到关键代码文件已被篡改，软件无法启动。请从官方渠道重新下载安装。"且无官网入口。
+- **根因**：LicenseManager.verifyJsIntegrity 的完整性基线 key = `PREF_KEY_JS_INTEGRITY_HASH+"_v"+versionName`，而 build.gradle 的 **versionName 恒为 "1.0.0" 从不变化**！覆盖安装不清 SharedPreferences → 旧基线（旧版 auth-core.js 哈希）比对新版文件必然失败 → 误报。注释声称"版本号变化时自动重建基线"但 versionName 永远不变，逻辑形同虚设。违反"宁可漏检不可误报"红线。
+- **修复**：①LicenseManager 构造新增 versionCode 字段（PackageInfo.versionCode），基线 key 改 `"_vc"+versionCode`——**versionCode 每次重打包必递增**（打包脚本自动 +1），升级自动重建基线；同版本内篡改仍拦截（保护不降级）。②showFatalLicenseErrorAndExit（致命对话框）加"🌐 访问官网"中性按钮+正文官网地址，误报用户可官网重下/联系客服。
+- **坑**：篡改提示（showFatalLicenseErrorAndExit）与授权提示（showLicenseErrorWithActivateChoice）是两个对话框——上次只给后者加了官网按钮，用户看到的恰是前者。**加官网入口必须覆盖所有致命/拦截类对话框**。
+- **验证**：APK dex 搜索 `_vc`/`访问官网`/官网URL 全部打入；严格模式 2:47。打包尾部 "TRAE Sandbox Error: hit restricted C:\Android\Sdk\.knownPackages" 为已知无害报错（产物正常）。
+- **生效方式**：覆盖安装 db-offline/惠康中医-本地.apk（versionCode 163），首次启动自动按新 versionCode 重建基线，不再误报。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
