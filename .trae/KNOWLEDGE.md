@@ -1049,6 +1049,15 @@
 - **验证**：合规检查 13/13 通过且 0 WARN 行；verify-release 9/9 通过 0 WARN（size 校验首次真实生效）；pack-gate 预检 4/4 放行；ps1 语法 35 文件/BOM 35 文件全过。
 - **生效方式**：纯 tools/ 脚本优化，无需任何端重新打包；下次一键打包/发布/验证即享受无红字输出。
 
+### 2.87【防破解P0三项】ECDSA/Ed25519密钥轮换 + masterKey一致性校验 + exe Authenticode签名（提交 7ad3c0ac，2026-08-26）
+- **背景**：防破解评估发现体系级弱点——非对称密钥长期未轮换、masterKey 可被替换降级攻击、exe 无代码签名。
+- **P0-2 密钥轮换**：全部 ECDSA P-256 + Ed25519 密钥对重新生成，私钥存 `tools/secrets/`（已 gitignore：`tools/secrets/` + `*LICENSE_SIGN*PRIVATE*.pem` 双保险），6 端公钥同步：shared/license + 离线桌面(electron/license 两份) + 离线APP(JS+Java) + 云桌面。验证工具 tools/verify-ecdsa.cjs 公钥同步更新。
+- **P0-2 masterKey 降级攻击修复**：新增 `verifyMasterKeyConsistency`（JS+Java 双端对齐）——非对称验签通过后用 license 当前 masterKey 派生密钥重算 v3/v2 HMAC 比对云端下发 signature，防替换/删除 masterKey 后伪造 config.json 签名。异常放行仅记日志（红线：宁可漏检不可误报）。
+- **P0-3 exe 签名与 .bnzc 共存**：pe-guard.cjs 哈希排除三处签名影响区（CheckSum optOff+64 / 安全目录项 DataDir[4] / 证书表 blob），实现"先嵌 .bnzc 后签名"两路校验互不破坏。新增 tools/sign-exe.ps1（自签证书 CN=惠康中医软件，指纹 E9D0B883BC0CCFF4A46525EAEB43446B18ABA3C6，有效期至 2031-08-26）；双端 build.bat 流程：禁用 electron-builder 自动签名(CSC_IDENTITY_AUTO_DISCOVERY=false) → [8.2/8.05] 主 exe 签名+复验 .bnzc → [8.85] 恢复真包防 consolidation 偷换 → [8.95] 终验+安装包签名。self-check.js 运行时指纹比对（HashMismatch 优先判定）。
+- **验证**：双端 6 个 exe（主 exe + Setup + portable）全部带正确指纹（UnknownError=自签未入信任根属预期）；.bnzc verify match:true；pe-guard 三副本哈希一致。
+- **坑**：①PowerShell 提交多行 commit message 不能用 bash heredoc（`cat <<EOF` 语法错误），改用 `git commit -F 文件`；②PowerShell 5.1 读无 BOM 的 .ps1 按 ANSI 解析，ps1 文件必须纯 ASCII（中文注释会乱码导致语法错误）；③hosts 文件把 github.com 映射到 127.0.0.1（ICUBE 代理环境），git push 直连失败属网络环境问题，等待恢复重试即可。
+- **生效方式**：云端API需在 Cloudflare Pages 后台用 `tools/secrets/` 新私钥更新 LICENSE_SIGN_PRIVATE_KEY / LICENSE_SIGN_ED25519_PRIVATE_KEY / LICENSE_MASTER_KEY 三环境变量并重新部署（★不更新则新公钥客户端验签失败 fallback HMAC）；云桌面重打 exe(1.2.148 已含)；本地桌面重打 exe(1.0.111 已含)；云端APP license 走服务端无需重打；离线APP需重打 APK（Java 新公钥+masterKey 校验已就位未打包）。旧 license 兼容：验签失败自动 fallback HMAC 链路。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
