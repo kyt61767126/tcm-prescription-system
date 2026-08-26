@@ -68,6 +68,7 @@
 ### 1.5 多副本同步纪律
 - `auth-core.js` 有 **9 处副本**（public/shared/site-admin/cloud_desktop/db-offline 各端），改挂载/调用必须保证全部副本一致。
 - `cloud-api.js` 有 **8 处位置** 需同步；APP 版 cloud-api.js 必须含 `typeof window._cloudReachable === 'undefined'` 防御性初始化。
+- **index.html 功能双源纪律（2026-08-26 新增）**：离线系 `desktop/index.html` 与 `index-app.html`（APP 真实源文件）同源分叉维护——**凡给 desktop/index.html 加功能，必须同步判断 index-app.html 是否需要移植**。已上线 drift-guard 防呆：`tools/diff-index-app.cjs` 对比两文件函数集+功能标记，build-app.bat 在 copy index-app.html 前自动调用（--quiet 模式），**新增缺失函数/标记差异会打 WARN**（基线 tools/.drift-baseline.json 固化已知合理差异；桌面特有确认后 `node tools/diff-index-app.cjs --update-baseline` 更新）。
 - 全局变量一律 `window.xxx` 访问；跨脚本/跨 IIFE 调用一律 `typeof fn === 'function' && fn(...)` / `global.fn && global.fn()` 防御式写法。
 - 改云端 APP 界面必须在 `public/` 改并推 GitHub（APP 是 WebView 壳，内容取自线上 public/）；改 APK 内 assets/public 无效。
 

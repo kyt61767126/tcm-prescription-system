@@ -1,0 +1,25 @@
+{
+  "missing": [
+    "enableMediaButtons",
+    "filterClinicPrescriptions",
+    "loadBuildMeta",
+    "loadClinicPrescriptionList",
+    "loadHistoryById",
+    "renderClinicPrescriptionList",
+    "showBnzcActivationNotice",
+    "showClinicPrescriptions",
+    "tryNext"
+  ],
+  "markers": [
+    {
+      "marker": "renameUser",
+      "desktop": true,
+      "app": false
+    },
+    {
+      "marker": "accountMatchedButPwdWrong",
+      "desktop": false,
+      "app": true
+    }
+  ]
+}

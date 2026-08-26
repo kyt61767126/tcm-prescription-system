@@ -103,6 +103,13 @@ if exist "..\desktop\config.json" (
  if errorlevel 1 ( echo [] config.json ) else ( echo [OK] config.json )
 ) else ( echo [SKIP] config.json )
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[2/5] Sync APP index.html (5-button top menu)...'"
+rem ===== drift-guard: desktop/index.html vs index-app.html feature drift detection =====
+rem 2026-08-26: user admin "edit username" feature was added to desktop/index.html but
+rem never ported to index-app.html (the real APP source), silently lost after packaging.
+rem This check prints a diff summary of function-name sets before every APK build so
+rem any future "desktop-only" feature is caught at build time. Non-blocking (WARN only)
+rem because the two files legitimately diverge (Electron-only vs APP-only functions).
+call node "%~dp0..\..\..\tools\diff-index-app.cjs" --quiet
 copy /Y "..\index-app.html" "%ANDROID_PUBLIC%\index.html" >nul
 if errorlevel 1 (
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] Failed to sync APP index.html'"
