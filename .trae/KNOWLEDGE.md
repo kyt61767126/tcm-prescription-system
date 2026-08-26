@@ -1169,6 +1169,20 @@
 - **坑**：①asar 植入检查用中文关键词时，**自己写的注释也会命中**（"取消'账号已预填'"注释含关键词）——要用"实际调用模式"（如 `showGreenHint(\`✓ 账号已预填`）检查；②PowerShell 内嵌 node -e 带反引号/引号嵌套必炸，写成临时 .js 文件执行再删。
 - **生效方式**：离线桌面→已打 V1.0.117 Setup；其余端不涉及（云端走服务端、APP 无 config.json 合并）。
 
+### 2.102【修复】离线APP卸载重装激活后原账号无法登录——激活即设定手机号+密码；授权提示加官网入口（提交 a02dc3eb/3d9b3f64，versionCode 162，2026-08-26）
+- **现象**：①覆盖安装弹"授权提示"对话框（前往激活/退出）无官网入口；②卸载重装→重新激活→原账号 13398628212/admin123 无法登录，激活弹窗自动生成的账号（密码被静默重置为 admin）才能登——用户完全不知道登录账号密码是什么。
+- **根因（问题②核心）**：激活码路径 JS 只调 `activate.submit(code, user)`，user 取 CONFIG.doctorName/记住的用户名（重装后为空/默认），Java 层 `syncCreateActivationUser` 密码参数空 → 默认 "admin" 静默落库。用户旧密码（admin123）随卸载清空，新密码 admin 无人告知。原账号本地数据（localStorage/Preferences）随卸载物理删除，无法恢复（离线版无云端备份，属预期）。
+- **修复**（auth-core.js 离线组 4 副本 md5 一致同步 + MainActivity.java + index-app.html）：
+  1. showActivateModal 新增"📱手机号（登录账号，必填 1[3-9]\d{9}）+🔑登录密码（选填默认 admin）"输入框，resolve 扩展 {code, phone, password}；
+  2. **按端区分传参（关键坑）**：APP 桥 submit 第3参=password（MainActivity L697），桌面 preload submit 第3参=clinicName（preload L144）——签名不一致！必须 `isDesktop ? submit(code,user,'',phone,pwd) : submit(code,user,pwd)`，否则密码被桌面端误当 clinicName 传云端；
+  3. APP 端 user 组装为 "姓名/手机号"（Java 正则提取手机号做 loginUsername）；激活成功提示明确展示"登录账号+登录密码"；
+  4. MainActivity showLicenseErrorWithActivateChoice 加中性按钮"🌐 访问官网"（Intent.ACTION_VIEW，返回后重弹对话框流程不断链）；
+  5. index-app.html 登录失败精准提示：账号命中但密码错 → "密码错误。若为卸载重装后重新激活，密码为激活时设置的密码（未设置则默认 admin）"。
+- **★ 大坑（重要教训）**：**APP assets/public/index.html 不是源文件**！app/build-app.bat L106 打包时 `copy /Y index-app.html → assets/public/index.html` 会覆盖手改——改了 assets 版修改会静默丢失（本次第一次打包即踩：APK 内检测不到新代码，源文件被覆盖回旧版）。**APP 登录页改动必须改 db-offline/index-app.html**。auth-core.js 无覆盖（直接文件），MainActivity 直接编译。
+- **验证**：node --check 4 副本一致（md5 70696ce050）；check-interface 6 OK；APK 三层验证（ZipFile 解 classes.dex/assets）——dex 含"访问官网"+URL、auth-core 含 activatePhoneInput/按端区分传参、index.html 含 accountMatchedButPwdWrong，全部打入；严格模式打包 2:41。
+- **PowerShell 坑复用**：APK 验证脚本含中文字符串时 .ps1 无 BOM 被 GBK 读→中文搜索必 false（假阴性），改用 node .cjs 脚本验证（UTF-8 无歧义）；且项目 package.json "type":"module"，验证脚本必须 .cjs 后缀。
+- **生效方式**：离线APP→重打 APK versionCode 162（惠康中医-本地.apk）覆盖安装生效；离线桌面版→auth-core 已同步，下次打包生效；云端版不涉及（云端无需激活码，账号在服务端重装不丢）。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
