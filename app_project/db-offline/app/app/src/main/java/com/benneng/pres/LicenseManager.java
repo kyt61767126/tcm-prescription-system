@@ -76,6 +76,33 @@ public class LicenseManager {
     private static final String ED25519_VERIFY_PUBLIC_KEY_HEX =
             "22c2cdffeeeb8831c6423f0600905e53d92e4865e054489462abd396b6cfdabc";
 
+    // ★ 密钥轮换兼容（2026-08-26 修复）：轮换前的旧公钥（P0-2 于 2026-08-26 轮换全部非对称密钥对）
+    // 背景：轮换密钥后，客户端若只内置新公钥，存量用户 license（轮换前旧私钥签发的
+    //      signatureV5/V6/V7）在新版 APK 上验签必然失败 → fail-closed → 误报
+    //      "授权文件已损坏或被篡改"（违反"宁可漏检不可误报"红线）。
+    // 修复：v5/v6/v7 验签按【新公钥 → 旧公钥】顺序尝试，任一通过即放行：
+    //   - 轮换后签发的 license → 新公钥验过 ✓
+    //   - 轮换前签发的存量 license → 旧公钥验过 ✓
+    //   - 篡改的 license → 两个公钥都验不过 → 仍 fail-closed 拒绝（非对称保护不降级）
+    // ⚠️ 下次密钥轮换时：把当前主公钥常量的值挪到 legacy 常量，再生成新密钥对填入主常量。
+    // ⚠️ 移除时机：存量 license 全部过期/重新激活后（建议保留 ≥1 个授权周期）。
+    private static final String LEGACY_ECDSA_VERIFY_PUBLIC_KEY_PEM =
+            "-----BEGIN PUBLIC KEY-----\n" +
+            "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEXqspDCFxlyS9wH0Kyb/fR9sqOeAG\n" +
+            "DurLP5B6cwCvAhMF8Lvlzv9nnvdEWdY0+GytTCUsXWrBbDDgLrOufN1NNw==\n" +
+            "-----END PUBLIC KEY-----";
+
+    private static final String LEGACY_ED25519_VERIFY_PUBLIC_KEY_HEX =
+            "f1b58e1d305ebdb856743fff7e400e60ec96ca0207f7b414aa5284673a221f33";
+
+    // ★ 密钥轮换兼容：验签公钥列表（新→旧依次尝试）
+    private static final String[] ECDSA_VERIFY_PUBLIC_KEYS = {
+            ECDSA_VERIFY_PUBLIC_KEY_PEM, LEGACY_ECDSA_VERIFY_PUBLIC_KEY_PEM
+    };
+    private static final String[] ED25519_VERIFY_PUBLIC_KEYS = {
+            ED25519_VERIFY_PUBLIC_KEY_HEX, LEGACY_ED25519_VERIFY_PUBLIC_KEY_HEX
+    };
+
     // ★ v3 新增：config.json 完整性签名密钥（与桌面版 license-manager.js / edit-config.ps1 完全一致）
     private static final String CONFIG_SIGN_KEY = "bnzc_config_sign_key_v1_2026";
 
@@ -1543,6 +1570,26 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
         return false;
     }
 
+    // ★ 密钥轮换兼容（2026-08-26 修复）：用指定 ECDSA 公钥 PEM 验签（v5/v6 共用）
+    private boolean verifyEcdsaWithPem(String pem, String content, byte[] derSig) {
+        try {
+            String b64 = pem
+                    .replace("-----BEGIN PUBLIC KEY-----", "")
+                    .replace("-----END PUBLIC KEY-----", "")
+                    .replaceAll("\\s+", "");
+            byte[] pubKeyBytes = Base64.decode(b64, Base64.DEFAULT);
+            X509EncodedKeySpec keySpec = new X509EncodedKeySpec(pubKeyBytes);
+            KeyFactory kf = KeyFactory.getInstance("EC");
+            PublicKey publicKey = kf.generatePublic(keySpec);
+            Signature sig = Signature.getInstance("SHA256withECDSA");
+            sig.initVerify(publicKey);
+            sig.update(content.getBytes(StandardCharsets.UTF_8));
+            return sig.verify(derSig);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     // ★ v5 新增：ECDSA P-256 非对称验签（与桌面版 license-manager.js verifyECDSASignature 一致）
     // 云端用私钥签，客户端用公钥验；即使公钥被提取也无法伪造签名
     // 签名内容与 v3 一致（user|type|issuedAt|expiresAt|maxPrescriptions|features|clinicName|machineId|licenseBinding）
@@ -1561,20 +1608,12 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
             if (rawSig == null || rawSig.length != 64) return false;
             byte[] derSig = ecdsaRawToDer(rawSig);
             if (derSig == null) return false;
-            // 3. 解析公钥 PEM（去头尾与空白后 Base64 解码）
-            String b64 = ECDSA_VERIFY_PUBLIC_KEY_PEM
-                    .replace("-----BEGIN PUBLIC KEY-----", "")
-                    .replace("-----END PUBLIC KEY-----", "")
-                    .replaceAll("\\s+", "");
-            byte[] pubKeyBytes = Base64.decode(b64, Base64.DEFAULT);
-            X509EncodedKeySpec keySpec = new X509EncodedKeySpec(pubKeyBytes);
-            KeyFactory kf = KeyFactory.getInstance("EC");
-            PublicKey publicKey = kf.generatePublic(keySpec);
-            // 4. 验签
-            Signature sig = Signature.getInstance("SHA256withECDSA");
-            sig.initVerify(publicKey);
-            sig.update(content.getBytes(StandardCharsets.UTF_8));
-            return sig.verify(derSig);
+            // 3. ★ 密钥轮换兼容：新公钥 → 旧公钥依次尝试（任一通过即放行）
+            for (String pem : ECDSA_VERIFY_PUBLIC_KEYS) {
+                if (pem == null || pem.isEmpty()) continue;
+                if (verifyEcdsaWithPem(pem, content, derSig)) return true;
+            }
+            return false;
         } catch (Exception e) {
             Log.w(TAG, "v5 ECDSA 验签异常: " + e.getMessage());
             return false;
@@ -1599,20 +1638,12 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
             if (rawSig == null || rawSig.length != 64) return false;
             byte[] derSig = ecdsaRawToDer(rawSig);
             if (derSig == null) return false;
-            // 3. 解析公钥 PEM（去头尾与空白后 Base64 解码）
-            String b64 = ECDSA_VERIFY_PUBLIC_KEY_PEM
-                    .replace("-----BEGIN PUBLIC KEY-----", "")
-                    .replace("-----END PUBLIC KEY-----", "")
-                    .replaceAll("\\s+", "");
-            byte[] pubKeyBytes = Base64.decode(b64, Base64.DEFAULT);
-            X509EncodedKeySpec keySpec = new X509EncodedKeySpec(pubKeyBytes);
-            KeyFactory kf = KeyFactory.getInstance("EC");
-            PublicKey publicKey = kf.generatePublic(keySpec);
-            // 4. 验签
-            Signature sig = Signature.getInstance("SHA256withECDSA");
-            sig.initVerify(publicKey);
-            sig.update(content.getBytes(StandardCharsets.UTF_8));
-            return sig.verify(derSig);
+            // 3. ★ 密钥轮换兼容：新公钥 → 旧公钥依次尝试（任一通过即放行）
+            for (String pem : ECDSA_VERIFY_PUBLIC_KEYS) {
+                if (pem == null || pem.isEmpty()) continue;
+                if (verifyEcdsaWithPem(pem, content, derSig)) return true;
+            }
+            return false;
         } catch (Exception e) {
             Log.w(TAG, "v6 ECDSA 验签异常: " + e.getMessage());
             return false;
@@ -1633,14 +1664,17 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
             String content = buildSignatureContent(data, true, true)
                     + "|" + String.valueOf(data.optLong("sigSerial", 0))
                     + "|" + data.optString("sigNonce", "");
-            // 2. 公钥 hex → 32 字节
-            byte[] pubKey = hexToBytes(ED25519_VERIFY_PUBLIC_KEY_HEX);
-            if (pubKey == null || pubKey.length != 32) return false;
-            // 3. 签名 hex → 64 字节
+            // 2. 签名 hex → 64 字节
             byte[] sigBytes = hexToBytes(sigV7);
             if (sigBytes == null || sigBytes.length != 64) return false;
-            // 4. Ed25519 验签（纯 Java RFC 8032）
-            return Ed25519.verify(pubKey, content.getBytes(StandardCharsets.UTF_8), sigBytes);
+            // 3. ★ 密钥轮换兼容：新公钥 → 旧公钥依次尝试（任一通过即放行）
+            for (String hex : ED25519_VERIFY_PUBLIC_KEYS) {
+                if (hex == null || hex.isEmpty()) continue;
+                byte[] pubKey = hexToBytes(hex);
+                if (pubKey == null || pubKey.length != 32) continue;
+                if (Ed25519.verify(pubKey, content.getBytes(StandardCharsets.UTF_8), sigBytes)) return true;
+            }
+            return false;
         } catch (Exception e) {
             Log.w(TAG, "v7 Ed25519 验签异常: " + e.getMessage());
             return false;

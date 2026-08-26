@@ -1105,6 +1105,14 @@
 - **验证**：reportUsage 状态机 15/15 单测通过（增长/回拨/相等/跨月防误报/非法值/裁剪/隔离）。
 - **生效方式**：服务端推 GitHub 自动部署即生效；离线桌面版需重打 exe（新版 auth-core 心跳才带计数）；云端 APP 线上自动生效；离线 APP 需重打 APK（但其心跳走 Java verify 路径，JS 心跳计数上报仅桌面版生效——Java verifyOnline 的 rxCount 上报留作后续）。
 
+### 2.94【紧急修复】密钥轮换双公钥兼容——存量 license 误报"授权文件已损坏或被篡改"（2026-08-26）
+- **现象**：P0-2 密钥轮换（2.87/7ad3c0ac）重打 exe 后，轮换前激活的桌面版弹"授权文件已损坏或被篡改，请联系客服重新激活"，存量激活用户全部被挡在门外。
+- **根因**：轮换只更新了客户端公钥常量，但 v5/v6/v7 验签是 fail-closed（第三轮终检 P1 修复 2026-08-16 改的）——存量 license 的 signatureV5/V6/V7 是**旧私钥**签的，新公钥必然验不过 → 直接拒绝。7ad3c0ac 提交说明里写的"旧 license 兼容：v5/v6/v7 验签失败自动 fallback HMAC 链路"与实际代码不符（代码无 fallback），属于提交说明误述。
+- **修复**：双公钥兼容——新增 LEGACY_ECDSA/ED25519 公钥常量（轮换前的旧公钥，公钥本身可安全内嵌），v5/v6/v7 验签按【新公钥 → 旧公钥】依次尝试，任一通过即放行；两个都验不过仍 fail-closed 拒绝（非对称保护不降级，攻击者无旧私钥仍无法伪造）。改动 6 处：shared/license/license-manager.js（源头）+ 4 份 JS 副本（离线桌面×2 / 离线APP assets / 云桌面）字节级同步 + LicenseManager.java（新增 verifyEcdsaWithPem 共用辅助 + 双数组遍历）。
+- **验证**：Node VM 沙箱单测 12/12 通过（新私钥签发 v7/v6/v5 ✓ / 旧私钥存量 license 验过 ✓（核心）/ 纯 HMAC 旧格式 ✓ / 篡改拒绝 ✓ / 第三方私钥伪造拒绝 ✓ / 4 个公钥常量全部可解析 ✓）；check-interface 6/6 OK。测试要点：构造 license 必须带 `signature`（HMAC）字段，verifySignature 首行 `if (!data.signature) return false` + masterKey 一致性校验都依赖它。
+- **红线复盘**：这是"宁可漏检不可误报"红线的典型违例——密钥轮换属预防性轮换（非密钥泄露），轮换方案设计时就该做存量兼容（双公钥宽限期是密钥轮换标准做法）。**下次密钥轮换 SOP**：把当前主公钥值挪到 LEGACY_* 常量，再生成新密钥对填主常量；存量 license 全部过期后再移除 legacy（建议保留 ≥1 个授权周期）。
+- **生效方式**：云端桌面版/离线桌面版需重打 exe（license-manager.js 打进 asar）；离线 APP 需重打 APK（Java 层 + assets JS 层）；云端 APP license 校验走服务端无需重打；云端网页版不涉及（无本地 license 验签）。用户机器上已被误报的 license.dat 无需删除，重打后的新版可直接验过。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）

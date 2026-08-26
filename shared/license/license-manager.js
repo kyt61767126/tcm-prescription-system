@@ -44,6 +44,38 @@ const ED25519_VERIFY_PUBLIC_KEY_PEM = `-----BEGIN PUBLIC KEY-----
 MCowBQYDK2VwAyEAIsLN/+7riDHGQj8GAJBeU9kuSGXgVEiUYqvTlrbP2rw=
 -----END PUBLIC KEY-----`;
 
+// ★ 密钥轮换兼容（2026-08-26 修复）：轮换前的旧公钥（P0-2 于 2026-08-26 轮换全部非对称密钥对）
+// 背景：轮换密钥后，客户端若只内置新公钥，存量用户 license（轮换前旧私钥签发的
+//      signatureV5/V6/V7）在新版 exe 上验签必然失败 → fail-closed → 误报
+//      "授权文件已损坏或被篡改"，把所有存量激活用户挡在门外（违反"宁可漏检不可误报"红线）。
+// 修复：v5/v6/v7 验签按【新公钥 → 旧公钥】顺序尝试，任一通过即放行：
+//   - 轮换后签发的 license → 新公钥验过 ✓
+//   - 轮换前签发的存量 license → 旧公钥验过 ✓
+//   - 篡改的 license → 两个公钥都验不过 → 仍 fail-closed 拒绝（非对称保护不降级）
+// ⚠️ 下次密钥轮换时：把当前 ECDSA_VERIFY_PUBLIC_KEY_PEM / ED25519_VERIFY_PUBLIC_KEY_PEM
+//    的值挪到这两个 legacy 常量，再生成新密钥对填入主常量（三公钥以内可依次追加）。
+// ⚠️ 移除时机：存量 license 全部过期/重新激活后（建议保留 ≥1 个授权周期）。
+const LEGACY_ECDSA_VERIFY_PUBLIC_KEY_PEM = `-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEXqspDCFxlyS9wH0Kyb/fR9sqOeAG
+DurLP5B6cwCvAhMF8Lvlzv9nnvdEWdY0+GytTCUsXWrBbDDgLrOufN1NNw==
+-----END PUBLIC KEY-----`;
+
+const LEGACY_ED25519_VERIFY_PUBLIC_KEY_PEM = `-----BEGIN PUBLIC KEY-----
+MCowBQYDK2VwAyEA8bWOHTBevbhWdD//fkAOYOyWygIH97QUqlKEZzoiHzM=
+-----END PUBLIC KEY-----`;
+
+// ECDSA 验签公钥列表（新→旧依次尝试）
+const ECDSA_VERIFY_PUBLIC_KEYS = [
+    ECDSA_VERIFY_PUBLIC_KEY_PEM,
+    LEGACY_ECDSA_VERIFY_PUBLIC_KEY_PEM
+].filter(Boolean);
+
+// Ed25519 验签公钥列表（新→旧依次尝试）
+const ED25519_VERIFY_PUBLIC_KEYS = [
+    ED25519_VERIFY_PUBLIC_KEY_PEM,
+    LEGACY_ED25519_VERIFY_PUBLIC_KEY_PEM
+].filter(Boolean);
+
 const TRIAL_KEY = 'bnzc_trial_key_v1';
 const LASTRUN_KEY = 'bnzc_lastrun_key_v1';
 
@@ -895,10 +927,14 @@ function verifyECDSASignature(data) {
         const s = rawSigBytes.slice(32, 64);
         const derSig = encodeEcdsaSigToDER(r, s);
 
-        const verify = crypto.createVerify('SHA256');
-        verify.update(content);
-        verify.end();
-        return verify.verify(ECDSA_VERIFY_PUBLIC_KEY_PEM, derSig);
+        // ★ 密钥轮换兼容：新公钥 → 旧公钥依次尝试（任一通过即放行）
+        for (const pem of ECDSA_VERIFY_PUBLIC_KEYS) {
+            const verify = crypto.createVerify('SHA256');
+            verify.update(content);
+            verify.end();
+            if (verify.verify(pem, derSig)) return true;
+        }
+        return false;
     } catch (e) {
         console.warn('[License] v5 ECDSA 验签异常:', e.message);
         return false;
@@ -934,10 +970,14 @@ function verifyECDSASignatureV6(data) {
         const s = rawSigBytes.slice(32, 64);
         const derSig = encodeEcdsaSigToDER(r, s);
 
-        const verify = crypto.createVerify('SHA256');
-        verify.update(content);
-        verify.end();
-        return verify.verify(ECDSA_VERIFY_PUBLIC_KEY_PEM, derSig);
+        // ★ 密钥轮换兼容：新公钥 → 旧公钥依次尝试（任一通过即放行）
+        for (const pem of ECDSA_VERIFY_PUBLIC_KEYS) {
+            const verify = crypto.createVerify('SHA256');
+            verify.update(content);
+            verify.end();
+            if (verify.verify(pem, derSig)) return true;
+        }
+        return false;
     } catch (e) {
         console.warn('[License] v6 ECDSA 验签异常:', e.message);
         return false;
@@ -998,7 +1038,11 @@ function verifyEd25519SignatureV7(data) {
         }
 
         // Ed25519：crypto.verify 的算法参数传 null（算法自带 SHA-512 预哈希）
-        return crypto.verify(null, Buffer.from(content, 'utf8'), ED25519_VERIFY_PUBLIC_KEY_PEM, sigBytes);
+        // ★ 密钥轮换兼容：新公钥 → 旧公钥依次尝试（任一通过即放行）
+        for (const pem of ED25519_VERIFY_PUBLIC_KEYS) {
+            if (crypto.verify(null, Buffer.from(content, 'utf8'), pem, sigBytes)) return true;
+        }
+        return false;
     } catch (e) {
         console.warn('[License] v7 Ed25519 验签异常:', e.message);
         return false;
