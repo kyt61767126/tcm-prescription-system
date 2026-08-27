@@ -189,23 +189,20 @@
     function applyEditionTag(config, forceShow) {
         _configForTag = config || _configForTag;
 
-        // ★ 铁闸4：有 buildMeta 时，登录前也显示"待登录提示+三元组"（自证真伪）
-        //   注意：登录窗口仅 260×400，必须换行紧凑显示避免被裁切
+        // ★ 2026-08-26 简洁版本显示：仅第一行 Vx.x.xx · Arch（Build 时间内部保留，方便升级优化，但不对外展示）
         var shortBuildTime = '';
         var metaTextLine1 = '';
-        var metaTextLine2 = '';
         if (_buildMeta) {
-            // 压缩时间格式：Build 2026/8/21 09:15（去掉秒，节省 ~4 字符宽度）
+            // 内部保留：构建时间仍可用于版本对比/升级判定
             var bt = _buildMeta.buildTimeLocal || '';
             var m = bt.match(/(\d{4}\/\d{1,2}\/\d{1,2})\s+(\d{1,2}:\d{1,2})/);
             shortBuildTime = m ? (m[1] + ' ' + m[2]) : bt;
-            // 分两行：第一行版本 + Arch（最关键的真伪标识），第二行 Build 时间
+            // 对外仅展示：版本 + Arch
             metaTextLine1 = 'V' + _buildMeta.version + ' · ' + (_buildMeta.archMarker || '');
-            metaTextLine2 = shortBuildTime ? ('Build ' + shortBuildTime) : '';
         }
         var metaHtml = metaTextLine1 ?
             ('<br><span style="font-size:10px;color:rgba(255,255,255,0.95);font-weight:normal;line-height:1.3;">' +
-             metaTextLine1 + (metaTextLine2 ? ('<br>' + metaTextLine2) : '') +
+             metaTextLine1 +
              '</span>') : '';
 
         // ★ 挂载点1：原有 header-section 内的 .version-tag（云端标准登录页使用，窗口足够宽时显示）
@@ -824,19 +821,10 @@
             if (hint) hint.style.display = 'none';
 
             if (hasAdminUser(config)) {
-                // 已有管理员 → 显示轻量提示（手机号登录），但避免与其他入口重复堆叠
+                // ★ 2026-08-26 登录框洁净：取消💡蓝色提示框（用户要求取消红框），保持隐藏
                 console.log('[FirstRun] 已有管理员账户，使用手机号+密码登录');
                 if (hint) {
-                    hint.innerHTML = '💡 请用激活时填写的手机号和密码登录';
-                    hint.style.display = 'block';
-                    hint.style.fontSize = '12px';
-                    hint.style.marginTop = '4px';
-                    hint.style.padding = '4px 8px';
-                    hint.style.background = '#f0f7ff';
-                    hint.style.borderRadius = '4px';
-                    hint.style.border = '1px solid #bfdbfe';
-                    hint.style.color = '#1e40af';
-                    setTimeout(() => { if (hint) hint.style.display = 'none'; }, 8000);
+                    hint.style.display = 'none';
                 }
                 return;
             }
