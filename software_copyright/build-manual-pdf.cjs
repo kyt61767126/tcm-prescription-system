@@ -8,7 +8,7 @@ const puppeteer = require('puppeteer-core');
 const SC = __dirname;
 const MD = path.join(SC, '软件说明书.md');
 const BUILD = path.join(SC, '_build');
-const OUT = path.join(SC, '惠康中医诊所管理系统V1.0.0_软件说明书_定稿.pdf');
+const OUT = path.join(SC, '惠康中医诊所管理系统V1.0.0_软件说明书_最终定稿.pdf');
 const EDGE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
 
 // A4: 210x297mm；边距 上22 下20 左18 右18（96dpi: 1mm=3.7795px）
@@ -52,7 +52,7 @@ function buildHtml(tocPages) {
   hr { border: none; border-top: 1px solid #bbb; margin: 10px 0; }
   img.shot { display: block; margin: 6px auto; width: 14.8cm; max-width: 100%; page-break-inside: avoid; }
   img.shot[src*="mobile_app"] { width: 8.5cm; }
-  img.shot[src*="print_preview"] { width: 11.5cm; }
+  img.shot[src*="case_history"] { width: 8.5cm; }
   img.arch { display: block; margin: 8px auto; width: 15.6cm; max-width: 100%; page-break-inside: avoid; }
   blockquote img.shot, blockquote img.arch { page-break-inside: avoid; }
 </style></head><body>
