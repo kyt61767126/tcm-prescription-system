@@ -1511,8 +1511,12 @@ let currentUser = null;
                     //   config.json 里激活时写入的明文旧密码（如默认 admin）不得覆盖用户已改的密码；
                     //   否则每次 APP 启动登录自愈都会把新密码打回 admin（"修改不了密码"的根因）
                     const keepLocalPwd = isPasswordHashed(old.password || '') && !isPasswordHashed(pwd);
+                    // ★ 2026-08-27 修复改名回滚：启动自愈/激活同步按 phone 命中已改名账号时，
+                    //   本地 username 已被用户改为自定义名（≠激活账号名且非手机号）→ 保留本地改名，
+                    //   不得打回激活时的手机号（否则每次重启改名被回滚，"新用户名+新密码无法登录"）
+                    const keepLocalName = !!(old.username && old.username !== uname && !/^1[3-9]\d{9}$/.test(old.username));
                     list[idx] = Object.assign({}, old, {
-                        username: uname, // username 以新提交的为准（支持 phone 字段查找命中时合并到新账号）
+                        username: keepLocalName ? old.username : uname, // 尊重用户改名；未改名时以新提交的为准
                         phone: phone || old.phone || '',
                         password: keepLocalPwd ? old.password : pwd, // 仅本地未改密时才按激活值覆盖
                         name: name || old.name,
@@ -2018,6 +2022,16 @@ let currentUser = null;
                             _verified = (storedPwd === await hashPassword(oldPwd));
                         } else {
                             _verified = (storedPwd === oldPwd);
+                        }
+                        // ★ 2026-08-27 全局统一：原密码校验增加 AuthCore 兜底（用户名盐增强哈希+手机号盐回退），
+                        //   覆盖"密码以手机号/旧用户名为盐的增强哈希"存储的历史账号，正确的原密码不再被判错，
+                        //   避免误导用户走"重置为admin"（重置会覆盖整个本地用户表，改名/改密全部丢失）。
+                        if (!_verified && isHash && window.AuthCore && AuthCore.verifyPassword) {
+                            const _vu = users[userIndex] || {};
+                            _verified = await AuthCore.verifyPassword(oldPwd, storedPwd, _vu.username || '');
+                            if (!_verified && _vu.phone && String(_vu.phone) !== String(_vu.username || '')) {
+                                _verified = await AuthCore.verifyPassword(oldPwd, storedPwd, _vu.phone);
+                            }
                         }
                     } catch(e) { console.warn('密码校验异常:', e); }
                 }

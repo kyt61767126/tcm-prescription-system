@@ -2604,6 +2604,16 @@ let currentUser = null;
                         } else {
                             _verified = (storedPwd === oldPwd);
                         }
+                        // ★ 2026-08-27 全局统一：原密码校验增加 AuthCore 兜底（用户名盐增强哈希+手机号盐回退），
+                        //   覆盖"密码以手机号/旧用户名为盐的增强哈希"存储的历史账号，正确的原密码不再被判错，
+                        //   避免误导用户走"重置为admin"（重置会覆盖整个本地用户表，改名/改密全部丢失）。
+                        if (!_verified && isHash && window.AuthCore && AuthCore.verifyPassword) {
+                            const _vu = users[userIndex] || {};
+                            _verified = await AuthCore.verifyPassword(oldPwd, storedPwd, _vu.username || '');
+                            if (!_verified && _vu.phone && String(_vu.phone) !== String(_vu.username || '')) {
+                                _verified = await AuthCore.verifyPassword(oldPwd, storedPwd, _vu.phone);
+                            }
+                        }
                     } catch(e) { console.warn('密码校验异常:', e); }
                 }
                 if (!_verified) {
