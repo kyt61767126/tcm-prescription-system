@@ -1199,6 +1199,16 @@
 - **验证**：APK dex 搜索 `_vc`/`访问官网`/官网URL 全部打入；严格模式 2:47。打包尾部 "TRAE Sandbox Error: hit restricted C:\Android\Sdk\.knownPackages" 为已知无害报错（产物正常）。
 - **生效方式**：覆盖安装 db-offline/惠康中医-本地.apk（versionCode 163），首次启动自动按新 versionCode 重建基线，不再误报。
 
+### 2.107【优化】一键发布菜单重构 + 增量发布——打包与发布关系统一（提交 7b510a41/46df4e36/cd9c95a6，2026-08-28）
+- **背景**：一键发布.bat 原 8 个菜单项功能重叠、命名不清；打包与发布相对独立；发布按类型全量重传未变化产物。
+- **重构（release-menu.ps1，8项→6项）**：[1]一键全流程(打包+发布+验证) / [2]仅打包(不上传,"全部"路径自动收纳副作用) / [3]智能发布(仅上传有变化产物) / [4]指定发布(选版本范围全量上传,补传修复用) / [5]验证发布结果 / [6]合规检查。全流程 Version=all 走 auto-publish.js --publish。
+- **增量发布**：publish-release.js 新增 `--changed-only`——与 hash-manifest.json 比对 sha256，未变化产物 SKIP；auto-publish.js 透传该参数。本次实测：6 产物中 2 个 APK 无变化跳过，仅上传 4 个 exe（省约 14MB×重传）。
+- **发布边界（铁律不变）**："智能发布"=自动检测变化+人工触发；"指定发布"=人工选范围全量上传；打包产物禁止自动上传，必须 --confirm 人工确认。
+- **合规 5/8 修复——print-utils.js 双源**：eb0e7b2c 确认离线版打印预览标题带全称是有意保留项，但 sync-all.ps1 单源无豁免 → 参照 auth-core.js 先例拆双源：`shared/print-utils.js`(云端短标题→4云端目录) + `shared/print-utils-offline.js`(全称→2离线目录,分发时重命名)。Sync-Group 新增 `-TargetLeafName` 参数支持源/目标不同名。
+- **合规 8/8 修复**：549ae2c3(V1.0.137 登录页视觉对齐)晚于旧基线 → generate-interface-lock.ps1 重建。
+- **坑**：①Edit 编辑 .ps1 必剥 BOM（再次踩），fix-ps1-bom.ps1 一键修复；②PowerShell 无 heredoc，git commit 长中文信息用 `-F 文件` 方式；③publish-release.js 自动 push 阶段 `git pull --rebase` 偶发网络失败但 Release 已创建——只需手动 `git add manifest/updates + commit + push` 补推，勿重复发布。
+- **生效方式**：纯工具链改动（tools/*.ps1、tools/*.js），各端产品无需重新打包；已发布 Release v2026.08.28-0723（云端 1.2.158 / 本地 1.0.139），verify-release.js 9/9 URL 全过，下载页自动部署。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
