@@ -1601,14 +1601,7 @@ let currentUser = null;
                     if (u.username !== loginUsername && String(u.phone || '') !== loginUsername) continue;
                     matchedIdentifier = (u.username === loginUsername) ? u.username : (u.phone || loginUsername);
                     if (window.AuthCore && AuthCore.verifyPassword) {
-                        let _ok = await AuthCore.verifyPassword(password, u.password || '', matchedIdentifier);
-                        // ★ 2026-08-27 改名兼容：手机号账号改名为英文/拼音后，其原密码可能是以旧手机号为盐的
-                        //   增强哈希。用新用户名加盐失败时，回退用该用户 phone（=旧手机号）再次加盐校验，
-                        //   使"新用户名+原密码"也能正常登录，避免改名后锁号。
-                        if (!_ok && String(u.phone || '') && String(u.phone || '') !== matchedIdentifier) {
-                            _ok = await AuthCore.verifyPassword(password, u.password || '', u.phone);
-                        }
-                        if (_ok) { user = u; break; }
+                        if (await AuthCore.verifyPassword(password, u.password || '', matchedIdentifier)) { user = u; break; }
                         accountMatchedButPwdWrong = true;
                     } else {
                         const hashedPwd = await hashPassword(password);
