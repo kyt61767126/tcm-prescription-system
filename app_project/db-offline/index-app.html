@@ -747,7 +747,8 @@ let currentUser = null;
             if (et) et.textContent = '【' + label + '】';
             var tv = document.getElementById('topVersionTag');
             if (tv) tv.textContent = '【' + label + '】';
-            document.title = '惠康中医诊所管理系统 V1.0.0'; // ★ 2026-08-27 软著规范：窗口标题统一为软件全称（禁止简写）
+            // ★ 2026-08-27 与云端/离线桌面端对齐：标题 = 惠康中医 + 部署版本（APP无标题栏，此值仅用于任务切换器等系统场景）
+            document.title = '惠康中医-' + label;
             console.log('%c惠康中医' + label + ' V1.0.0', 'color:#667eea;font-size:14px;font-weight:bold');
             // ★★★ 2026-08-17 【根治刀2-B】每次标签变动后强制 enforce（防止 applyEditionTags 后标签变标准版但按钮没同步）
             if (typeof enforceStandardEditionButtons === 'function') {
