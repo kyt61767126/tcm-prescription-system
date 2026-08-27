@@ -225,7 +225,7 @@ function showActivateWindow(parentWindow) {
         minimizable: false,
         maximizable: false,
         autoHideMenuBar: true,
-        title: '软件激活',
+        title: '惠康中医诊所管理系统 V1.0.0-软件激活',
         alwaysOnTop: true,              // ★ 强制置顶（含锁屏之上）
         show: false,                    // ★ 先隐藏，ready-to-show后再show（防白屏闪烁）
         webPreferences: {

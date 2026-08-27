@@ -20,7 +20,7 @@
             const paperWidth = isLandscape ? '210mm' : '148mm';
             const paperHeight = isLandscape ? '148mm' : '210mm';
 
-            return `<!DOCTYPE html><html><head><title>打印处方</title><meta name="viewport" content="width=device-width, initial-scale=1.0"><style>
+            return `<!DOCTYPE html><html><head><title>惠康中医诊所管理系统 V1.0.0-打印预览</title><meta name="viewport" content="width=device-width, initial-scale=1.0"><style>
 @page { size: ${pageSize}; margin: 0; }
 body { font-family: 'SimSun', '宋体', serif; width: ${paperWidth}; padding: 0; margin: 0 auto; display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; line-height: 1.8; -webkit-print-color-adjust: exact; print-color-adjust: exact; color: #000; }
 .prescription-paper { width: ${paperWidth}; height: ${paperHeight}; padding: 28mm 15mm 20mm; margin: 0 auto; box-sizing: border-box; }
@@ -103,7 +103,7 @@ body { font-family: 'SimSun', '宋体', serif; width: ${paperWidth}; padding: 0;
             const rows = medicines.map((m, i) =>
                 `<tr><td>${i + 1}</td><td>${m.name || ''}</td><td>${m.code || ''}</td><td>${m.unit || ''}</td><td>${m.price || ''}</td></tr>`
             ).join('');
-            return `<!DOCTYPE html><html><head><title>药材清单</title><style>
+            return `<!DOCTYPE html><html><head><title>惠康中医诊所管理系统 V1.0.0-药材清单打印预览</title><style>
 @page { size: A4; margin: 10mm; }
 body { font-family: SimSun, serif; }
 h2 { text-align: center; }

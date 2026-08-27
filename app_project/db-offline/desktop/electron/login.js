@@ -189,20 +189,18 @@
     function applyEditionTag(config, forceShow) {
         _configForTag = config || _configForTag;
 
-        // ★ 铁闸4：两行紧凑格式（离线窗口同样 260 宽，单行会换行裁切）
+        // ★ 2026-08-26 简洁版本显示：仅第一行 Vx.x.xx · Arch（Build 时间内部保留，方便升级优化，但不对外展示）
         var shortBuildTime = '';
         var metaTextLine1 = '';
-        var metaTextLine2 = '';
         if (_buildMeta) {
             var bt = _buildMeta.buildTimeLocal || '';
             var m = bt.match(/(\d{4}\/\d{1,2}\/\d{1,2})\s+(\d{1,2}:\d{1,2})/);
-            shortBuildTime = m ? (m[1] + ' ' + m[2]) : bt;
+            shortBuildTime = m ? (m[1] + ' ' + m[2]) : bt; // 内部保留：构建时间仍可用于对比/升级判定
             metaTextLine1 = 'V' + _buildMeta.version + ' · ' + (_buildMeta.archMarker || '');
-            metaTextLine2 = shortBuildTime ? ('Build ' + shortBuildTime) : '';
         }
         var metaHtml = metaTextLine1 ?
             ('<br><span style="font-size:10px;color:rgba(255,255,255,0.95);font-weight:normal;line-height:1.3;">' +
-             metaTextLine1 + (metaTextLine2 ? ('<br>' + metaTextLine2) : '') +
+             metaTextLine1 +
              '</span>') : '';
 
         // ★ 挂载点1：原有 header-section 内的 .version-tag
@@ -234,6 +232,8 @@
     let _users = [];
 
     function initLoginInput(config) {
+        // ★ 2026-08-27 已恢复：软著截图期间的"跳过预填"临时 return 已移除（其副作用导致
+        //   密码框不自动聚焦→readonly 不移除→E2E fill 超时红线删包）
         const input = $('loginUsername');
         const users = getUsers(config);
         _users = users;
@@ -710,19 +710,10 @@
             }
             if (hasAdminUser(config)) {
                 console.log('[FirstRun] 已有管理员账户，跳过向导，使用手机号+密码登录');
-                // ★ 提示用户用手机号登录
+                // ★ 2026-08-26 登录框洁净：取消💡蓝色提示框（用户要求取消红框），保持隐藏
                 const hint = document.getElementById('clinicSetupHint');
                 if (hint) {
-                    hint.innerHTML = '💡 请用激活时填写的手机号和密码登录';
-                    hint.style.display = 'block';
-                    hint.style.fontSize = '12px';
-                    hint.style.marginTop = '4px';
-                    hint.style.padding = '4px 8px';
-                    hint.style.background = '#f0f7ff';
-                    hint.style.borderRadius = '4px';
-                    hint.style.border = '1px solid #bfdbfe';
-                    hint.style.color = '#1e40af';
-                    setTimeout(() => { if (hint) hint.style.display = 'none'; }, 8000);
+                    hint.style.display = 'none';
                 }
             }
         } catch (e) {
