@@ -8,6 +8,7 @@
 //   node tools/publish-release.js --target=apk --confirm      # 只上传 APK
 //   node tools/publish-release.js --target=exe --confirm      # 只上传 exe
 //   node tools/publish-release.js --dry-run                   # 预演不实际上传
+//   node tools/publish-release.js --changed-only --confirm    # 增量发布：仅上传 hash 有变化的产物
 //   node tools/publish-release.js --no-push                   # 上传但不 git push（默认本来就不 push）
 //   node tools/publish-release.js --skip-compliance           # 跳过发布前合规检查（人工强漂，慎用）
 //
@@ -452,6 +453,7 @@ function main() {
     let doPush = false;
     let confirmed = false;
     let skipCompliance = false;
+    let changedOnly = false;
 
     for (const arg of args) {
         if (arg.startsWith('--target=')) {
@@ -460,6 +462,11 @@ function main() {
             // ★ 2026-08-23 新增：产物类型维度（app=仅APK / desktop=仅exe / all=全部）
             //   与 --target（版本维度 cloud/dingzhi）正交组合
             artifact = arg.substring('--artifact='.length);
+        } else if (arg === '--changed-only') {
+            // ★ 2026-08-28 新增：增量发布过滤。与 hash-manifest.json 比对 sha256，
+            //   一致的产物跳过上传（配合 auto-publish 实现真正的"只传有变化的产物"）。
+            //   未变化产物的 manifest 记录与 Release asset URL 保持有效，不受影响。
+            changedOnly = true;
         } else if (arg === '--dry-run') {
             dryRun = true;
         } else if (arg === '--push') {
@@ -515,7 +522,7 @@ function main() {
 
     // 3. 扫描文件
     console.log('[3/6] 扫描要上传的文件 (target=' + target + ', artifact=' + artifact + ')...');
-    const files = scanFiles(target, artifact);
+    let files = scanFiles(target, artifact);
     if (files.length === 0) {
         console.error('[ERROR] 没有找到可上传的文件');
         console.error('  APK 位置: public/downloads/*.apk');
@@ -528,6 +535,36 @@ function main() {
         console.log('    - [' + f.appKey + '] ' + f.type + ': ' + f.name + ' (' + formatSize(f.size) + ', v' + f.version + ')');
     }
     console.log();
+
+    // ★ 2026-08-28 增量发布过滤（--changed-only）：与已发布 manifest 比对 sha256，
+    //   一致的产物跳过上传。未变化产物不重传（省 5-10 分钟/75MB 文件），
+    //   其 manifest 记录与 Release asset URL 继续有效（本次不触碰）。
+    if (changedOnly) {
+        let manifestForFilter = {};
+        try {
+            manifestForFilter = JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf8'));
+        } catch (e) {
+            console.warn('  [WARN] 读取 manifest 失败，按全量发布处理');
+        }
+        const beforeCount = files.length;
+        files = files.filter(f => {
+            const recorded = manifestForFilter[f.appKey] && manifestForFilter[f.appKey][f.type];
+            if (recorded && recorded.sha256 && recorded.sha256.toLowerCase() === f.sha256.toLowerCase()) {
+                console.log('    [SKIP] [' + f.appKey + '] ' + f.name + ' (hash 未变化，跳过上传)');
+                return false;
+            }
+            return true;
+        });
+        if (files.length === 0) {
+            console.log('  [OK] 所有产物均与已发布版本一致，无需上传');
+            process.exit(0);
+        }
+        console.log('  [增量] ' + (beforeCount - files.length) + ' 个未变化跳过，本次上传 ' + files.length + ' 个:');
+        for (const f of files) {
+            console.log('    - [' + f.appKey + '] ' + f.type + ': ' + f.name + ' (' + formatSize(f.size) + ')');
+        }
+        console.log();
+    }
 
     if (dryRun) {
         console.log('[DRY-RUN] 预演模式，不实际上传');

@@ -5,7 +5,7 @@
 // 用法：
 //   node tools/auto-publish.js                   # 只检查所有 exe+apk 是否有变化（不发布）
 //   node tools/auto-publish.js --check           # 只检查不发布（预览有哪些需要更新）
-//   node tools/auto-publish.js --publish         # 人工确认合规合格后，手动发布有变化的产物
+//   node tools/auto-publish.js --publish         # 人工确认合规合格后，手动发布有变化的产物（仅上传变化文件）
 //   node tools/auto-publish.js --publish --force # 强制发布（即使没有变化）
 //   node tools/auto-publish.js --target=exe      # 只检查 exe
 //   node tools/auto-publish.js --target=apk      # 只检查 apk
@@ -244,7 +244,9 @@ function main() {
     console.log('  变更文件数: ' + changes.length);
     console.log();
 
-    const publishArgs = ['tools/publish-release.js', '--target=' + publishTarget, '--confirm', '--push', versionTag];
+    // ★ 2026-08-28 增量发布：透传 --changed-only，publish-release.js 与 manifest 比对
+    //   sha256 后仅上传有变化的产物（原先按类型全量上传，未变化版本的同类型产物也被重传）
+    const publishArgs = ['tools/publish-release.js', '--target=' + publishTarget, '--confirm', '--push', '--changed-only', versionTag];
     console.log('  执行命令: node ' + publishArgs.join(' '));
     console.log('--------------------------------------------');
 

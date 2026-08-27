@@ -425,13 +425,24 @@ function Invoke-FullFlow {
     # Step 2: 发布
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Cyan
-    Write-Host "  [2/3] 发布 (publish-release.js)" -ForegroundColor Cyan
+    Write-Host "  [2/3] 发布" -ForegroundColor Cyan
     Write-Host "========================================" -ForegroundColor Cyan
-    # ★ 2026-08-23 修复：透传 Mode（产物类型维度）。原只传版本维度，
-    #   用户选"本地版-APP"打包后发布时旧桌面 exe 也被一并上传。
-    #   注意：Version=all 走 one-click-pack 全量打包（含双端），发布保持全部产物。
-    $publishMode = if ($Version -eq "all") { "all" } else { $Mode }
-    $rc = Invoke-Publish -Target $Version -Mode $publishMode
+    # ★ 2026-08-28 优化打包与发布的关系：Version=all 走智能发布（auto-publish.js
+    #   比对 hash 仅上传有变化的产物，publish-release.js --changed-only 过滤），
+    #   替代原全量发布——增量打包常只有部分端更新，全量发布会把无变化产物也重传
+    #   （75MB×N，每个 5-10 分钟，纯浪费）。单版本保持指定发布（透传版本+范围，
+    #   用户意图明确）。★ 2026-08-23 修复（保留）：单版本透传 Mode（产物类型维度）。
+    if ($Version -eq "all") {
+        $autoPublishJs = "$script:RootDir\tools\auto-publish.js"
+        if (Test-Path $autoPublishJs) {
+            Write-Host "  智能发布: 仅上传有变化的产物 (auto-publish.js --publish)" -ForegroundColor Cyan
+            $rc = Invoke-NodeScript -ScriptPath $autoPublishJs -Arguments @('--publish')
+        } else {
+            $rc = Invoke-Publish -Target "all" -Mode "all"
+        }
+    } else {
+        $rc = Invoke-Publish -Target $Version -Mode $Mode
+    }
     if ($rc -ne 0) {
         Write-Host ""
         Write-Host "[ERROR] 发布失败，流程中止" -ForegroundColor Red
@@ -476,34 +487,34 @@ while ($true) {
     Write-Host "  当前: $menuStart" -ForegroundColor Cyan
     Write-Host "============================================" -ForegroundColor Cyan
     Write-Host ""
-    Write-Host "  [1] 仅打包 - 选择单个版本"
-    Write-Host "  [2] 仅发布 - 选择单个版本 (已打包好)"
-    Write-Host "  [3] 打包 + 发布 + 验证 - 选择单个版本 (推荐)"
-    Write-Host "  [4] 打包全部版本 (云端+本地，自动执行)"
-    Write-Host "  [5] 发布全部版本 (auto-publish.js 智能检测)"
-    Write-Host "  [6] 验证发布结果 (verify-release.js)"
-    Write-Host "  [7] 合规检查 (compliance-check，发布前必跑)"
+    Write-Host "  [1] 一键全流程: 打包 + 发布 + 验证 (推荐日常)"
+    Write-Host "  [2] 仅打包 - 选版本和范围 (不上传)"
+    Write-Host "  [3] 智能发布 - 仅上传有变化的产物 (已打包好时用)"
+    Write-Host "  [4] 指定发布 - 选版本和范围全量上传 (补传/修复用)"
+    Write-Host "  [5] 验证发布结果 (verify-release.js)"
+    Write-Host "  [6] 合规检查 (compliance-check，发布前可自查)"
     Write-Host "  [0] 退出"
     Write-Host ""
     Write-Host "  说明:" -ForegroundColor DarkGray
-    Write-Host "  - [1][2][3] 先选版本(云端/本地/全部)" -ForegroundColor DarkGray
-    Write-Host "  - [1][2][3] 还需选范围(桌面/APP/全部)，发布范围决定上传哪些产物" -ForegroundColor DarkGray
-    Write-Host "  - ★增量打包: 源码无变化的端自动跳过打包(只打包有改动的端)" -ForegroundColor DarkGray
-    Write-Host "  - ★更新提示: 四端均无更新时[3]自动跳过发布；部分更新显示明细" -ForegroundColor DarkGray
-    Write-Host "  - 发布使用 publish-release.js 上传到 GitHub Release" -ForegroundColor DarkGray
+    Write-Host "  - [1] 全流程: 增量打包(无改动端自动跳过) → 副作用自动收纳 → 智能发布 → 验证" -ForegroundColor DarkGray
+    Write-Host "  - [2] 仅打包: 先选版本(云端/本地/全部)，单版本再选范围(桌面/APP/全部)" -ForegroundColor DarkGray
+    Write-Host "  - 发布双通道: [3]智能发布=比对hash仅上传变化产物(推荐日常)" -ForegroundColor DarkGray
+    Write-Host "               [4]指定发布=全量上传所选版本+范围产物(补传/修复)" -ForegroundColor DarkGray
+    Write-Host "  - ★发布规范: 所有发布均为人工确认发布(菜单手动触发+内置合规门禁)" -ForegroundColor Yellow
+    Write-Host "    系统绝不自动上传产物到官方下载网站(必守HARD规则)" -ForegroundColor Yellow
     Write-Host "  - git push 后 Cloudflare Pages 自动部署下载页" -ForegroundColor DarkGray
-    Write-Host "  - ★必守HARD规则: 发布前自动跑合规检查，未通过禁止上传" -ForegroundColor Yellow
     Write-Host "--------------------------------------------"
-    $choice = Read-Host "请选择 [0-7]"
+    $choice = Read-Host "请选择 [0-6]"
     switch ($choice) {
-        "1" {
-            # 仅打包 - 单个版本
+        "2" {
+            # 仅打包 - 选版本和范围 (选"全部"= 全量打包，原[4]打包全部已并入本项)
             $version = Show-VersionMenu -Action "pack"
             if ($version -eq "") { break }
             # ★ 2026-08-24 修复：选"全部2个版本"原误入 Invoke-SinglePack，拼出不存在的
-            #   db-all 目录直接 [ERROR] 中止（菜单[2][3]均正确处理了 all，唯独本处遗漏）。
-            #   改走 Invoke-Pack（one-click-pack -AutoMode 3 双端全量），行为与菜单[4]
-            #   及 Invoke-FullFlow 的 all 分支保持一致；all 为全量打包，无需再选范围。
+            #   db-all 目录直接 [ERROR] 中止。改走 Invoke-Pack（one-click-pack -AutoMode 3
+            #   双端全量），与 Invoke-FullFlow 的 all 分支保持一致；all 为全量打包，无需再选范围。
+            # ★ 2026-08-28 合并原菜单[4]：all 路径已含副作用 AutoCommit 收纳，
+            #   修复原[4]打包全部后副作用滞留工作区的问题（P1）。
             if ($version -eq "all") {
                 $rcA = Invoke-Pack -Target "all"
                 if ($rcA -is [array]) { $rcA = [int]$rcA[-1] }
@@ -512,7 +523,7 @@ while ($true) {
                     Write-Host "[ERROR] 打包全部版本失败，退出码: $rcA（详见上方日志）" -ForegroundColor Red
                 }
                 # all 走子进程 one-click-pack -AutoMode 3（内部不带 -AutoCommit），
-                # 打包副作用由本进程统一收纳提交（与菜单[3] all 分支之后的处理一致）
+                # 打包副作用由本进程统一收纳提交（与菜单[1] all 分支之后的处理一致）
                 $packPs1A = "$script:RootDir\tools\one-click-pack.ps1"
                 if (Test-Path $packPs1A) {
                     & powershell -NoProfile -ExecutionPolicy Bypass -File $packPs1A -CollectSideEffectsOnly -AutoCommit 2>&1 | ForEach-Object { Write-Host $_ }
@@ -534,7 +545,7 @@ while ($true) {
             }
             # ★ 2026-08-23 四轮复核修复：Invoke-SinglePack 直链子 bat（绕过 one-click-pack），
             #   打包完成后需手动调 SideEffectCollect 收纳 versionCode/version 副作用
-            #   （与 [4] 经 AutoMode 自带收纳保持一致；[5] 发布不打包无需收纳）
+            #   （[3][4] 发布不打包，无需收纳）
             $packPs1 = "$script:RootDir\tools\one-click-pack.ps1"
             if (Test-Path $packPs1) {
                 & powershell -NoProfile -ExecutionPolicy Bypass -File $packPs1 -CollectSideEffectsOnly -AutoCommit 2>&1 | ForEach-Object { Write-Host $_ }
@@ -544,8 +555,9 @@ while ($true) {
             Write-Host ""
             pause
         }
-        "2" {
-            # 仅发布 - 单个版本
+        "4" {
+            # 指定发布 - 选版本和范围全量上传（补传/修复用；与[3]智能发布的区别：
+            #   不论产物是否有变化，所选版本+范围的全部产物一律重新上传）
             $version = Show-VersionMenu -Action "publish"
             if ($version -eq "") { break }
             # ★ 2026-08-23 修复：发布也需选范围（桌面/APP/全部）。原实现只选版本，
@@ -562,14 +574,14 @@ while ($true) {
             Write-Host ""
             Write-Host "--------------------------------------------"
             Write-Host "  下一步指引:" -ForegroundColor Yellow
-            Write-Host "  - 建议运行 [6] 验证 URL"
+            Write-Host "  - 建议运行 [5] 验证 URL"
             Write-Host "  - 下载页: https://tcm-prescription-system.pages.dev/download"
             Write-Host "  - Release: https://github.com/kyt61767126/tcm-prescription-system/releases"
             Write-Host "--------------------------------------------"
             pause
         }
-        "3" {
-            # 打包+发布+验证 - 单个版本
+        "1" {
+            # 一键全流程: 打包 + 发布 + 验证 (推荐日常，可选全部/云端/本地)
             $version = Show-VersionMenu -Action "full"
             if ($version -eq "") { break }
             $mode = Show-PackModeMenu
@@ -593,30 +605,15 @@ while ($true) {
             Write-Host ""
             pause
         }
-        "4" {
-            # 打包全部
-            Write-Host ""
-            Write-Host "========================================" -ForegroundColor Cyan
-            Write-Host "  [1/1] 打包全部版本 (one-click-pack.ps1)" -ForegroundColor Cyan
-            Write-Host "========================================" -ForegroundColor Cyan
-            # ★ 2026-08-23 复核修复：原 | Out-Null 丢弃退出码，打包失败也静默无提示
-            $rc4 = Invoke-Pack -Target "all"
-            if ($rc4 -is [array]) { $rc4 = [int]$rc4[-1] }
-            if ($rc4 -ne 0) {
-                Write-Host ""
-                Write-Host "[ERROR] 打包全部版本失败，退出码: $rc4（详见上方日志）" -ForegroundColor Red
-            }
-            Write-Host ""
-            pause
-        }
-        "5" {
-            # 发布全部（智能检测，手动 --publish；内置合规门禁）
+        "3" {
+            # 智能发布 - 仅上传有变化的产物（auto-publish.js --publish；内置合规门禁）
+            #   "智能"= 自动比对 hash 检测变化，上传动作仍由本菜单人工触发（HARD规则）
             $autoPublish = "$script:RootDir\tools\auto-publish.js"
             if (Test-Path $autoPublish) {
                 Write-Host ""
                 Write-Host "========================================" -ForegroundColor Cyan
                 Write-Host "  智能发布 (auto-publish.js --publish)" -ForegroundColor Cyan
-                Write-Host "  仅发布有变化的端；发布前自动跑合规检查" -ForegroundColor Cyan
+                Write-Host "  仅上传有变化的产物；发布前自动跑合规检查" -ForegroundColor Cyan
                 Write-Host "========================================" -ForegroundColor Cyan
                 # ★ 2026-08-23 复核修复：原 | Out-Null 丢弃退出码，失败静默无提示
                 $rc5 = Invoke-NodeScript -ScriptPath $autoPublish -Arguments @('--publish')
@@ -636,14 +633,14 @@ while ($true) {
             Write-Host ""
             Write-Host "--------------------------------------------"
             Write-Host "  下一步指引:" -ForegroundColor Yellow
-            Write-Host "  - 建议运行 [6] 验证 URL"
+            Write-Host "  - 建议运行 [5] 验证 URL"
             Write-Host "  - 下载页: https://tcm-prescription-system.pages.dev/download"
             Write-Host "  - Release: https://github.com/kyt61767126/tcm-prescription-system/releases"
             Write-Host "--------------------------------------------"
             pause
         }
-        "6" {
-            # 验证
+        "5" {
+            # 验证发布结果
             # ★ 2026-08-23 复核修复：原 | Out-Null 丢弃退出码，失败静默无提示
             $rc6 = Invoke-Verify
             if ($rc6 -is [array]) { $rc6 = [int]$rc6[-1] }
@@ -654,8 +651,8 @@ while ($true) {
             Write-Host ""
             pause
         }
-        "7" {
-            # 合规检查
+        "6" {
+            # 合规检查（发布前可自查；发布流程内也自动跑）
             # ★ 2026-08-23 复核修复：原 | Out-Null 丢弃退出码，失败静默无提示
             $rc7 = Invoke-ComplianceCheck
             if ($rc7 -is [array]) { $rc7 = [int]$rc7[-1] }
