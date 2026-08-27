@@ -39,6 +39,13 @@ $SharedDir = Join-Path $ProjectRoot 'shared'
 #   removing trial-enforced-standard-edition logic.
 #   auth-core.js is now managed ONLY by tools/sync-auth-core.ps1
 #   (dual fact source: shared/auth-core/offline.js + cloud.js).
+# ★ 2026-08-28: print-utils.js REMOVED from this group (same dual-source
+#   pattern as auth-core.js). Offline copies intentionally keep the full
+#   product title (惠康中医诊所管理系统 V1.0.0-打印预览/药材清单打印预览,
+#   per commit eb0e7b2c "软著申请后恢复" 有意保留项), while cloud copies use
+#   the short title (打印处方/药材清单). Now managed by Group 1b/1c below:
+#     cloud  -> shared/print-utils.js        (unchanged, short title)
+#     offline-> shared/print-utils-offline.js(full product title)
 $BusinessJsFiles = @(
     'db-adapter.js',
     'debug-logger.js',
@@ -48,7 +55,6 @@ $BusinessJsFiles = @(
     'performance-utils.js',
     'permission.js',
     'prescription-core.js',
-    'print-utils.js',
     'security-guard.js'
 )
 
@@ -60,6 +66,21 @@ $BusinessJsTargets = @(
     'app_project/db-yunduan/cloud_desktop/electron',
                 'app_project/db-offline/desktop',
         'app_project/db-offline/app/app/src/main/assets/public'
+)
+
+# Group 1b: print-utils.js (cloud version, short title) -> 4 cloud dirs
+$PrintUtilsCloudTargets = @(
+    'public',
+    'public/electron',
+    'app_project/db-yunduan/cloud_desktop',
+    'app_project/db-yunduan/cloud_desktop/electron'
+)
+
+# Group 1c: print-utils-offline.js (full product title) -> 2 offline dirs
+#   Source file: shared/print-utils-offline.js -> distributed AS print-utils.js
+$PrintUtilsOfflineTargets = @(
+    'app_project/db-offline/desktop',
+    'app_project/db-offline/app/app/src/main/assets/public'
 )
 
 # Group 2: permission.js extra targets (3 offline electron/, beyond Group 1)
@@ -205,7 +226,8 @@ function Sync-Group {
         [string]$GroupName,
         [string[]]$Files,
         [string[]]$Targets,
-        [bool]$VerifyOnly
+        [bool]$VerifyOnly,
+        [string]$TargetLeafName = ''   # ★ 2026-08-28: optional rename, e.g. print-utils-offline.js -> print-utils.js
     )
 
     Write-Host "--- [$GroupName] ---" -ForegroundColor Cyan
@@ -217,6 +239,7 @@ function Sync-Group {
     foreach ($file in $Files) {
         $srcPath = Join-Path $SharedDir $file
         $fileName = Split-Path $file -Leaf
+        if ($TargetLeafName) { $fileName = $TargetLeafName }
 
         foreach ($target in $Targets) {
             $totalChecked++
@@ -254,6 +277,16 @@ $allInSync = $true
 
 # Group 1: 9 business JS -> directories (auth-core.js managed by sync-auth-core.ps1)
 $result = Sync-Group -GroupName 'Business JS (9 files -> dirs)' -Files $BusinessJsFiles -Targets $BusinessJsTargets -VerifyOnly $VerifyOnly
+if (-not $result) { $allInSync = $false }
+Write-Host ""
+
+# Group 1b: print-utils.js cloud version -> 4 cloud dirs (★ 2026-08-28 dual-source)
+$result = Sync-Group -GroupName 'print-utils.js cloud (short title -> 4 cloud dirs)' -Files @('print-utils.js') -Targets $PrintUtilsCloudTargets -VerifyOnly $VerifyOnly
+if (-not $result) { $allInSync = $false }
+Write-Host ""
+
+# Group 1c: print-utils-offline.js -> 2 offline dirs AS print-utils.js (★ 2026-08-28 dual-source)
+$result = Sync-Group -GroupName 'print-utils.js offline (full title -> 2 offline dirs)' -Files @('print-utils-offline.js') -Targets $PrintUtilsOfflineTargets -VerifyOnly $VerifyOnly -TargetLeafName 'print-utils.js'
 if (-not $result) { $allInSync = $false }
 Write-Host ""
 
