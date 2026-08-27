@@ -814,7 +814,9 @@ let currentUser = null;
             }
             var et = document.getElementById('editionTag');
             if (et) et.textContent = '【' + label + '】';
-            document.title = '惠康中医诊所管理系统 V1.0.0'; // ★ 2026-08-27 软著规范：窗口标题统一为软件全称（禁止简写）
+            // ★ 2026-08-27 与云端对齐：主窗口标题 = 惠康中医 + 部署版本（离线机构版/离线标准版）
+            //   原软著截图期间统一为全称"惠康中医诊所管理系统 V1.0.0"，现恢复动态版本展示
+            document.title = '惠康中医-' + label;
             var logText = '惠康中医' + label + ' V1.0.0' +
                 (_buildMeta ? ('  |  构建: ' + metaTextLine1 + (metaTextLine2 ? (' | ' + metaTextLine2) : '')) : '');
             console.log('%c' + logText, 'color:#667eea;font-size:14px;font-weight:bold');
