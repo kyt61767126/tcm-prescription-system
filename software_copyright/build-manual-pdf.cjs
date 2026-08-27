@@ -52,7 +52,6 @@ function buildHtml(tocPages) {
   hr { border: none; border-top: 1px solid #bbb; margin: 10px 0; }
   img.shot { display: block; margin: 6px auto; width: 14.8cm; max-width: 100%; page-break-inside: avoid; }
   img.shot[src*="mobile_app"] { width: 8.5cm; }
-  img.shot[src*="case_history"] { width: 8.5cm; }
   img.arch { display: block; margin: 8px auto; width: 15.6cm; max-width: 100%; page-break-inside: avoid; }
   blockquote img.shot, blockquote img.arch { page-break-inside: avoid; }
 </style></head><body>
