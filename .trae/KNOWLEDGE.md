@@ -1,7 +1,7 @@
 # 惠康中医项目 · 共享经验知识库（PROJECT KNOWLEDGE）
 
 > 本项目**跨 work 账户共享的"统一大脑"**。任何账户打开本项目，第一步先 Read 本文件。
-> 最后更新：2026-08-21
+> 最后更新：2026-08-28
 > 配套脚本：`学习经验.bat`（灌入本地记忆实现自动学习）、`同步推送经验.bat`（优化完推回共享库）
 
 ---
@@ -1208,6 +1208,13 @@
 - **合规 8/8 修复**：549ae2c3(V1.0.137 登录页视觉对齐)晚于旧基线 → generate-interface-lock.ps1 重建。
 - **坑**：①Edit 编辑 .ps1 必剥 BOM（再次踩），fix-ps1-bom.ps1 一键修复；②PowerShell 无 heredoc，git commit 长中文信息用 `-F 文件` 方式；③publish-release.js 自动 push 阶段 `git pull --rebase` 偶发网络失败但 Release 已创建——只需手动 `git add manifest/updates + commit + push` 补推，勿重复发布。
 - **生效方式**：纯工具链改动（tools/*.ps1、tools/*.js），各端产品无需重新打包；已发布 Release v2026.08.28-0723（云端 1.2.158 / 本地 1.0.139），verify-release.js 9/9 URL 全过，下载页自动部署。
+- **★ 发布流程实录（v2026.08.28-0723 全链路，后续发布参照）**：
+  1. **打包副作用收纳**：打包完成后 versionCode/version/build-meta.json 等 4 个副作用文件由 one-click-pack.ps1 `-CollectSideEffectsOnly -AutoCommit` 自动收纳提交，工作区不滞留变更；
+  2. **智能发布**：`node tools/auto-publish.js --publish` → 扫描 6 产物 → 比对 hash-manifest.json → 2 个 APK 无变化自动跳过、4 个 exe（云端 Setup+便携 / 本地 Setup+便携）需发布；
+  3. **合规门禁（发布前只读检查，FAIL 即阻断）**：首轮 2 项失败（5/8 print-utils 单源误报 / 8/8 界面基线过期）→ 修复后复检 **13/13 全过** 才放行；
+  4. **上传**：`gh api` 创建 Release（v2026.08.28-0723）→ curl.exe 流式上传 4 个 exe（纯英文名 huikang-{app}[-setup]-{ver}.exe，中文文件名会被过滤）→ 自动更新 hash-manifest.json + updates/{key}/latest.json（双 key：cloud/dingzhi 各含 url+portableUrl）；
+  5. **推送**：自动 git commit manifest/updates → push 触发 Cloudflare Pages 下载页部署；若 push 阶段 `git pull --rebase` 网络失败，Release 已创建，**只需手动补推 manifest/updates，勿重复发布**（本次即遇到，已补推）；
+  6. **发布后验证**：`node tools/verify-release.js` 校验全部产物 URL → 9/9 通过。
 
 ---
 
