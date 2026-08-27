@@ -1057,7 +1057,8 @@ function createLoginWindow() {
     }
 
     loginWindow = new BrowserWindow({
-        width: 218,
+        // ★ 2026-08-27 软著截图：加宽使标题栏【惠康中医诊所管理系统 V1.0.0】完整显示（218px时被截断为"惠康..."）
+        width: 380,
         // ★ 2026-08-26 上下留白减少2/3：窗口从450→330，留白从各~90px缩到各~30px
         height: 330,
         resizable: false,
