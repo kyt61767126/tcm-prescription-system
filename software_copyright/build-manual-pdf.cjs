@@ -8,7 +8,7 @@ const puppeteer = require('puppeteer-core');
 const SC = __dirname;
 const MD = path.join(SC, '软件说明书.md');
 const BUILD = path.join(SC, '_build');
-const OUT = path.join(SC, '惠康中医诊所管理系统V1.0.0_软件说明书.pdf');
+const OUT = path.join(SC, '惠康中医诊所管理系统V1.0.0_软件说明书_定稿.pdf');
 const EDGE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
 
 // A4: 210x297mm；边距 上22 下20 左18 右18（96dpi: 1mm=3.7795px）
