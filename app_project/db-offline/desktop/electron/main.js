@@ -1057,9 +1057,10 @@ function createLoginWindow() {
     }
 
     loginWindow = new BrowserWindow({
-        // ★ 2026-08-26 上下留白减少2/3：窗口从450→330，留白从各~90px缩到各~30px
-        width: 218,
-        height: 330,
+        // ★ 2026-08-28 登录窗口修复：218×330 太小，报错/激活提示展开后内容溢出显示不完全
+        //   宽度 218→260（报错文案"该账户属于【机构版】..."一行能放下），高度 dom-ready 后按内容自适应
+        width: 260,
+        height: 420,
         resizable: false,
         autoHideMenuBar: true,
         center: true,
@@ -1071,6 +1072,20 @@ function createLoginWindow() {
             nodeIntegration: false,
             partition: SESSION_PARTITION
         }
+    });
+
+    // ★ 2026-08-28 登录窗口高度自适应：dom-ready 后按页面实际内容高度调整（含报错/激活提示/多账户下拉场景），
+    //   上限 480px 防止异常内容把窗口撑爆；下限 420px 保证基础表单完整显示。
+    loginWindow.webContents.on('dom-ready', () => {
+        try {
+            loginWindow.webContents.executeJavaScript('Math.ceil(document.body.scrollHeight)').then(h => {
+                const target = Math.min(Math.max(Number(h) || 420, 420), 480);
+                const current = loginWindow.getBounds();
+                if (Math.abs(current.height - target) > 4) {
+                    loginWindow.setBounds({ x: current.x, y: current.y, width: 260, height: target });
+                }
+            }).catch(() => {});
+        } catch (e) { /* 自适应失败保持 420 */ }
     });
 
     // ★ P1-A6：DevTools 反调试（仅打包环境生效）

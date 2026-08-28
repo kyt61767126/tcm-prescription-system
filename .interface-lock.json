@@ -1,5 +1,5 @@
 ﻿{
-    "generated_at":  "2026-08-28 08:26:38 +08:00",
+    "generated_at":  "2026-08-28 11:37:51 +08:00",
     "description":  "Interface structure fingerprint. SHA256 of HTML body (before first \u003cscript\u003e). Changes to \u003cscript\u003e blocks do NOT affect fingerprint.",
     "files":  {
                   "app_project/db-yunduan/cloud_desktop/index.html":  {
@@ -15,16 +15,16 @@
                                                                     "html_length":  24984
                                                                 },
                   "app_project/db-yunduan/cloud_desktop/electron/login.html":  {
-                                                                                   "sha256":  "9b15b96591396f6c5f05e25a8998fcadf4d08130a3b5d239ffb0742fe1a7cd65",
-                                                                                   "html_length":  5435
+                                                                                   "sha256":  "5e7efd5d496196bd55e53148d9c29a41aab691ac6bdccac8adb598bf0f3c4588",
+                                                                                   "html_length":  5422
                                                                                },
                   "public/electron/login.html":  {
                                                      "sha256":  "f6789a61f63dc0c7ddc02db94bbcae7422b0529ce356d17d0aadc57defab6ca8",
                                                      "html_length":  1794
                                                  },
                   "app_project/db-offline/desktop/electron/login.html":  {
-                                                                             "sha256":  "dacfe266b0d0a87baaf50d6786eb86d9ecbdcfd50a11924114e90a91985d92c4",
-                                                                             "html_length":  5541
+                                                                             "sha256":  "45f72c0c4924fed5a2f7172a82212b3d30082b3ed34f4ee9f64af049f058c525",
+                                                                             "html_length":  5528
                                                                          }
               }
 }
