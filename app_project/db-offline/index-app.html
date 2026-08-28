@@ -5244,6 +5244,21 @@ let currentUser = null;
             }
         }
 
+        // ★ 2026-08-28 修复历史处方确认弹窗误报：加载历史后患者名/诊断被程序自动填充，
+        //   再点另一条历史时被误判为"未保存的编辑"而每次都弹确认框。
+        //   方案：基线快照对比——历史加载完成后记录当前内容为基线，
+        //   仅当用户真实改动过（当前快照≠基线）才弹窗；基线为 null（未加载过历史）时保持原保护。
+        function _presSnapshot() {
+            try {
+                return JSON.stringify({
+                    n: document.getElementById('patientName').value.trim(),
+                    d: document.getElementById('diagnosis').value.trim(),
+                    i: (prescriptionItems || []).filter(it => it && it.name).map(it => (it.name||'') + ':' + (it.dosage||'') + ':' + (it.total||'')).join('|')
+                });
+            } catch (_) { return ''; }
+        }
+        function _updatePresBaseline() { try { window._presBaseline = _presSnapshot(); } catch (_) {} }
+
         async function loadHistory(id) {
             const record = prescriptionHistory.find(p =>p.id === id);
             if (!record) return;
@@ -5251,7 +5266,10 @@ let currentUser = null;
             const _curName = document.getElementById('patientName').value.trim();
             const _curDiag = document.getElementById('diagnosis').value.trim();
             const _hasItems = prescriptionItems && prescriptionItems.some(item => item.name);
-            if ((_curName || _curDiag || _hasItems) && !confirm('当前有未保存的内容，加载历史处方将覆盖。是否继续？')) {
+            // ★ 2026-08-28：仅当用户真实改动过（当前快照≠最近加载基线）才弹窗，
+            //   程序自动填充的内容（如刚加载过的历史处方）不再误报
+            const _dirty = (window._presBaseline === undefined || window._presBaseline === null) || (_presSnapshot() !== window._presBaseline);
+            if ((_curName || _curDiag || _hasItems) && _dirty && !confirm('当前有未保存的内容，加载历史处方将覆盖。是否继续？')) {
                 return;
             }
             document.getElementById('patientName').value = record.patientName;
@@ -5295,6 +5313,8 @@ let currentUser = null;
             if (_doctorNameEl) _doctorNameEl.value = record.doctorName || '';
             updatePrescriptionPaper();
             document.getElementById('paperDate').textContent = (record.date || '').replace(/-/g, '/');
+            // ★ 2026-08-28：历史加载完成，更新基线快照（连续浏览历史处方不再误弹确认框）
+            _updatePresBaseline();
         }
 
         function loadLastHistory() {
