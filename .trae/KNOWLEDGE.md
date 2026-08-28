@@ -1199,6 +1199,13 @@
 - **验证**：APK dex 搜索 `_vc`/`访问官网`/官网URL 全部打入；严格模式 2:47。打包尾部 "TRAE Sandbox Error: hit restricted C:\Android\Sdk\.knownPackages" 为已知无害报错（产物正常）。
 - **生效方式**：覆盖安装 db-offline/惠康中医-本地.apk（versionCode 163），首次启动自动按新 versionCode 重建基线，不再误报。
 
+### 2.108【优化】全局登录框统一——以云端网页版为基准三端对齐（提交 6f41355e，2026-08-28）
+- **统一范围（用户确认三项）**：①版本标签策略统一——各端登录框版本标签全部隐藏（元素保留、JS 逻辑不破坏、仅视觉隐藏 style="display:none;"），版本登录成功后主界面顶栏显示（沿用 2026-08-23 云端定版）；②诊所名卡片样式统一——桌面双版 login.html 与离线系三份 index.html 的粉红渐变(#fff5f5/#8b0000)统一为基准版设计语言（accent浅底 rgba(102,126,234,0.08)+accent色文字 #667eea+细边框）；③多账户下拉统一——桌面双版 login.html 新增 usernameDropdownBtn/Menu（按桌面小窗等比缩放），login.js 新增 renderUsernameDropdown/toggleUsernameDropdown 并挂 window，数据源 getUsers()（config+localStorage 合并）。
+- **多副本覆盖清单（共9文件）**：db-offline/desktop/electron/login.html+login.js、db-yunduan/cloud_desktop/electron/login.html+login.js、public/electron/login.html（线上分发副本，仅版本标签隐藏——其结构是旧版select式，多账户功能本就等价）、根 index.html、db-offline/desktop/index.html、db-offline/index-app.html、.interface-lock.json（基线重建）。
+- **注意**：离线APP的 assets/public/index.html 打包时由 index-app.html 拷贝生成（源目录当前无此文件），改源文件即可；云端网页版 public/index.html 本身就是基准，未改动。
+- **验证**：check-interface.bat 基线前 6/6 OK → 修改后 4 WARN（全部为本次有意变更）→ generate-interface-lock.ps1 重建基线 → 6/6 OK；login.js 双版 node --check 通过；diff-index-app.cjs --quiet 无 WARN。
+- **生效方式**：云端网页版 push GitHub 自动部署；云端APP 在线加载 public/ 无需重打；云端桌面版/离线桌面版需重新 build.bat 打包 exe；离线APP 需重打惠康中医-本地.apk。
+
 ### 2.107【优化】一键发布菜单重构 + 增量发布——打包与发布关系统一（提交 7b510a41/46df4e36/cd9c95a6，2026-08-28）
 - **背景**：一键发布.bat 原 8 个菜单项功能重叠、命名不清；打包与发布相对独立；发布按类型全量重传未变化产物。
 - **重构（release-menu.ps1，8项→6项）**：[1]一键全流程(打包+发布+验证) / [2]仅打包(不上传,"全部"路径自动收纳副作用) / [3]智能发布(仅上传有变化产物) / [4]指定发布(选版本范围全量上传,补传修复用) / [5]验证发布结果 / [6]合规检查。全流程 Version=all 走 auto-publish.js --publish。
