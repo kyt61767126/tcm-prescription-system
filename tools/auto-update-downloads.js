@@ -87,6 +87,47 @@ function readVersionFromGradle(appDir) {
     return '';
 }
 
+// ★ 2026-08-28 版本更新提示修复：从 APK 产物本身提取 versionName/versionCode（真源），
+//   防止 build.gradle 与实际打包产物不一致（如打包后又改了 gradle 未重打包）导致
+//   APP 端更新横幅误报/漏报。aapt 不可用时回退 build.gradle。
+function readVersionFromApk(apkFile, appDir) {
+    const result = { version: '', versionCode: 0 };
+    // aapt 候选路径：LOCALAPPDATA 与常见 SDK 目录（取最新 build-tools）
+    const sdkRoots = [
+        process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'Android', 'Sdk') : null,
+        process.env.ANDROID_HOME || null,
+        'C:\\Android\\Sdk', 'D:\\Android\\Sdk'
+    ].filter(Boolean);
+    const aaptCandidates = [];
+    for (const root of sdkRoots) {
+        const btDir = path.join(root, 'build-tools');
+        try {
+            if (!fs.existsSync(btDir)) continue;
+            fs.readdirSync(btDir)
+                .filter(d => /^\d/.test(d))
+                .sort((a, b) => parseInt(b) - parseInt(a))
+                .forEach(d => aaptCandidates.push(path.join(btDir, d, 'aapt.exe')));
+        } catch (e) { /* 忽略不可读目录 */ }
+    }
+    for (const aapt of aaptCandidates) {
+        try {
+            if (!fs.existsSync(aapt)) continue;
+            const badging = execSync('"' + aapt + '" dump badging "' + apkFile + '"', {
+                encoding: 'utf8', timeout: 30000, windowsHide: true
+            });
+            // 示例: package: name='com.tcm.prescription' versionCode='231' versionName='1.0.0'
+            const m = badging.match(/versionCode='(\d+)'/);
+            const nm = badging.match(/versionName='([^']*)'/);
+            if (m) result.versionCode = parseInt(m[1], 10);
+            if (nm) result.version = nm[1];
+            if (result.versionCode > 0) return result;
+        } catch (e) { /* 该 aapt 不可用，尝试下一个 */ }
+    }
+    // 回退：build.gradle（versionName 优先 versionCode）
+    result.version = readVersionFromGradle(appDir);
+    return result;
+}
+
 function updateDownloads(target) {
     console.log('[auto-update] 检查下载页面更新...');
 
@@ -154,12 +195,15 @@ function updateDownloads(target) {
         // 计算 SHA-256
         const sha256 = calculateSHA256(destPath);
         const size = getFileSize(destPath);
-        const version = readVersionFromGradle(config.appDir);
+        // ★ 版本信息从 APK 产物提取（真源），aapt 不可用回退 build.gradle
+        const ver = readVersionFromApk(destPath, config.appDir);
+        const version = ver.version || readVersionFromGradle(config.appDir);
 
         // 更新 manifest
         if (!manifest[key]) manifest[key] = {};
         manifest[key].apk = {
             version: version,
+            versionCode: ver.versionCode > 0 ? ver.versionCode : undefined,
             sha256: sha256,
             url: '/downloads/' + config.outputName,
             size: size,

@@ -649,12 +649,30 @@ public class MainActivity extends BridgeActivity {
                 }
                 String remoteVer = apk.optString("version", "");
                 String localVer = "";
+                int remoteCode = apk.optInt("versionCode", 0);
+                int localCode = 0;
                 try {
-                    localVer = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+                    android.content.pm.PackageInfo pi = getPackageManager().getPackageInfo(getPackageName(), 0);
+                    localVer = pi.versionName;
+                    localCode = android.os.Build.VERSION.SDK_INT >= 28
+                            ? (int) pi.getLongVersionCode() : pi.versionCode;
                 } catch (Exception ignored) {}
                 // 版本号白名单校验：防止 manifest 被篡改后向页面注入任意代码
                 if (remoteVer.isEmpty() || !remoteVer.matches("[0-9A-Za-z.\\-+]+")) {
                     Log.d(TAG, "[update] 检查跳过: 官网版本号格式异常");
+                    return;
+                }
+                // ★ 2026-08-28 修复：versionName 软著固定 1.0.0 永不变化，改用 versionCode（每次发版递增）比较；
+                //   旧 manifest 无 versionCode 字段时回退 versionName 三段式比较（兼容，宁可漏检不可误报）
+                if (remoteCode > 0) {
+                    if (remoteCode <= localCode) {
+                        Log.d(TAG, "[update] 已是最新版本 v" + localVer + " build " + localCode);
+                        return;
+                    }
+                    String displayVer = remoteVer.isEmpty()
+                            ? ("Build " + remoteCode) : (remoteVer + " Build " + remoteCode);
+                    Log.i(TAG, "[update] 发现新版本 v" + displayVer + "（当前 v" + localVer + " build " + localCode + "），注入登录页横幅");
+                    injectUpdateBanner(webView, displayVer);
                     return;
                 }
                 if (!isNewerRemoteVersion(remoteVer, localVer)) {
