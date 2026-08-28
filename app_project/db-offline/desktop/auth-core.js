@@ -2448,6 +2448,8 @@
                         html += '<br>剩余 <b style="color:#4caf50;">' + remainingDays + '</b> 天';
                     }
                     el.innerHTML = html;
+                    // ★ 2026-08-28 推广奖励：老用户邀请码展示——已激活用户在授权状态区显示专属邀请码+进度
+                    loadInviteInfo(el);
                     // ★ 2026-08-25 全局统一：正式授权 >7天或永久(-1) → 灰色只读；≤7天恢复正常色提醒续费
                     setAdminActivateBtnState(hasDays ? remainingDays : null);
                 } else {
@@ -2465,6 +2467,61 @@
             }
         } catch (e) {
             el.textContent = '状态获取失败: ' + (e && e.message ? e.message : '未知错误');
+        }
+    }
+
+    // ★ 2026-08-28 推广奖励：老用户邀请码展示
+    //   已激活用户在「基础设置 → 授权状态」区显示专属邀请码 + 邀请进度 + 累计奖励，
+    //   点击邀请码复制。数据来源 POST /api/license/invite（凭本地 license:code 查询）。
+    //   断网/接口异常静默跳过，不影响授权状态正常显示。
+    async function loadInviteInfo(el) {
+        try {
+            const old = document.getElementById('inviteInfoBox');
+            if (old && old.parentNode) old.parentNode.removeChild(old);
+            const code = await StorageAdapter.getItem('license:code');
+            if (!code || String(code).trim().length < 4) return;
+            const r = await fetch(CLOUD_API_BASE + '/license/invite', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code: String(code).trim() })
+            });
+            const d = await r.json().catch(() => null);
+            if (!d || !d.success || !d.inviteCode) return;
+            const cnt = d.inviteCount || 0, max = d.maxInvitees || 4, days = d.rewardDays || 0;
+            const box = document.createElement('div');
+            box.id = 'inviteInfoBox';
+            box.style.cssText = 'margin-top:8px;padding-top:8px;border-top:1px dashed #ddd;font-size:12px;color:#555;line-height:1.7;';
+            box.innerHTML =
+                '🎁 我的邀请码：<b id="myInviteCodeEl" title="点击复制" ' +
+                'style="color:#26a69a;font-family:monospace;letter-spacing:1px;font-size:14px;cursor:pointer;user-select:all;">' +
+                String(d.inviteCode) + '</b>' +
+                '<br>已邀请 <b>' + cnt + '</b>/' + max + ' 人 · 累计奖励 <b style="color:#4caf50;">+' + days + '</b> 天' +
+                (cnt < max
+                    ? '<br><span style="color:#999;font-size:11px;">好友激活时填您的邀请码，双方得奖励天数</span>'
+                    : '<br><span style="color:#4caf50;font-size:11px;">🎉 邀请奖励已封顶，感谢推荐！</span>');
+            el.appendChild(box);
+            const codeEl = document.getElementById('myInviteCodeEl');
+            if (codeEl) {
+                codeEl.addEventListener('click', function (ev) {
+                    const txt = (ev.target.textContent || '').trim();
+                    try {
+                        if (navigator.clipboard && navigator.clipboard.writeText) {
+                            navigator.clipboard.writeText(txt);
+                        } else {
+                            const ta = document.createElement('textarea');
+                            ta.value = txt; document.body.appendChild(ta);
+                            ta.select(); document.execCommand('copy');
+                            document.body.removeChild(ta);
+                        }
+                        alert('邀请码已复制：' + txt);
+                    } catch (_) {
+                        alert('复制失败，请手动记录：' + txt);
+                    }
+                });
+            }
+        } catch (e) {
+            // 静默失败：断网或服务暂不可用不影响授权状态显示
+            console.warn('[Invite] 邀请信息加载失败:', e && e.message);
         }
     }
 
