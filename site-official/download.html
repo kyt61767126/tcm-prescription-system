@@ -2821,10 +2821,26 @@
                         hashEl.textContent = data.sha256;
                         hashEl.classList.remove('pending');
                         const dlEl = document.getElementById('dl-' + key);
-                    if (dlEl && data.url) {
-                        dlEl.setAttribute('href', absDownloadUrl(data.url));
-                        dlEl.classList.remove('disabled');
+                        if (dlEl && data.url) {
+                            dlEl.setAttribute('href', absDownloadUrl(data.url));
+                            dlEl.classList.remove('disabled');
+                        }
                     }
+                    // ★ 2026-08-28 修复：APP 卡「版本/发布日期/更新说明/更新时间」统一取
+                    //   hash-manifest.json 对应 apk 节点，不再复用桌面端 latest.json（
+                    //   APP card 原配置 jsonUrl 指向 updates/{channel}/latest.json，导致
+                    //   版本/发布日期显示桌面 exe 的版本号，与 APK 实际打包信息不一致）。
+                    if (data) {
+                        const verEl = document.getElementById('ver-' + key);
+                        if (verEl && data.version) verEl.textContent = 'v' + data.version;
+                        const dateEl = document.getElementById('date-' + key);
+                        if (dateEl && data.updateTime) {
+                            try {
+                                const d = new Date(data.updateTime);
+                                const pad = n => String(n).padStart(2, '0');
+                                dateEl.textContent = d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
+                            } catch(e) { /* 保留默认 */ }
+                        }
                     }
                     // 显示更新时间（精确到小时）
                     const mtimeEl = document.getElementById('mtime-' + key);
