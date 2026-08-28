@@ -168,9 +168,9 @@
         .version-features { font-size: 10px; color: rgba(255,255,255,0.85); text-align: center; line-height: 1.4; margin-top: 4px; }
         .main-content { position: relative; z-index: 1; padding: 24px 20px; }
         .login-box { background: white; border-radius: 12px; padding: 22px 18px; box-shadow: 0 8px 25px var(--login-accent-light); border: 1px solid rgba(0,0,0,0.05); }
-        /* ★ 2026-08-28 APP 统一：登录字段与云端APP截图一致（label 在左、输入框在右，row 布局） */
-        .login-field { margin-bottom: 16px; display: flex; flex-direction: row; align-items: center; gap: 8px; }
-        .login-field label { min-width: 84px; width: 84px; font-size: 12px; line-height: 1.2; font-weight: bold; color: #555; text-align: right; flex-shrink: 0; white-space: nowrap; }
+        /* ★ 2026-08-28 APP 统一：登录字段分2行显示（label 第一行、输入框第二行整行） */
+        .login-field { margin-bottom: 16px; display: flex; flex-direction: column; align-items: stretch; gap: 5px; }
+        .login-field label { font-size: 12px; line-height: 1.2; font-weight: bold; color: #555; text-align: left; flex-shrink: 0; }
         .login-field input, .login-field select { width: 100%; padding: 11px 12px; border: 2px solid #e5e7eb; border-radius: 10px; font-size: 13px; background: #f8f9fa; transition: all 0.25s ease; }
         .login-field input:disabled, .login-field select:disabled { opacity: 0.65; cursor: not-allowed; background: #f0f0f0; }
         .login-field input:focus, .login-field select:focus { border-color: var(--login-accent); outline: none; box-shadow: 0 0 0 3px var(--login-accent-light); background: white; }
@@ -536,9 +536,9 @@
             .version-tag { font-size: 13px; padding: 3px 14px; }
             .main-content { padding: 28px 22px; }
             .login-box { padding: 26px 22px; }
-            /* ★ 2026-08-28 480px 移动端：row 布局（label 左、input 右），label 92px 单行不折 */
-            .login-field { flex-direction: row; align-items: center; gap: 10px; margin-bottom: 22px; }
-            .login-field label { min-width: 92px; width: 92px; font-size: 14px; text-align: right; flex-shrink: 0; white-space: nowrap; line-height: 1.2; }
+            /* ★ 2026-08-28 APP 统一：480px 移动端分2行布局（label 第一行、输入框第二行） */
+            .login-field { flex-direction: column; align-items: stretch; gap: 6px; margin-bottom: 22px; }
+            .login-field label { font-size: 14px; text-align: left; flex-shrink: 0; line-height: 1.2; }
             .login-field input, .login-field select { width: 100%; padding: 13px 14px; font-size: 15px; border-radius: 12px; }
             .username-input-wrapper { flex: 1; }
             .username-input-wrapper input { width: 100%; padding-right: 36px; box-sizing: border-box; }
@@ -643,9 +643,9 @@
             .system-title { font-size: 16px; }
             .version-tag { font-size: 11px; }
             .login-box { padding: 15px 12px; }
-            /* ★ 2026-08-28 360px 超窄屏：row 布局（label 左、input 右），label 82px + 11px 字距收紧 保证「手机号/用户名:」单行 */
-            .login-field { flex-direction: row; align-items: center; gap: 6px; margin-bottom: 12px; }
-            .login-field label { min-width: 82px; width: 82px; font-size: 11px; text-align: right; flex-shrink: 0; white-space: nowrap; line-height: 1.2; letter-spacing: -0.2px; }
+            /* ★ 2026-08-28 APP 统一：360px 超窄屏分2行布局（label 第一行、输入框第二行） */
+            .login-field { flex-direction: column; align-items: stretch; gap: 4px; margin-bottom: 12px; }
+            .login-field label { font-size: 11px; text-align: left; flex-shrink: 0; line-height: 1.2; }
             .login-field input, .login-field select { width: 100%; padding: 8px 10px; font-size: 13px; }
             .login-buttons { gap: 12px; margin-top: 15px; }
             .login-btn { padding: 8px 18px; min-width: 70px; font-size: 13px; }
