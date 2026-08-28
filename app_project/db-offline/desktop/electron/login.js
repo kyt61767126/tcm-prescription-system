@@ -209,6 +209,7 @@
             // ★ 2026-08-24 版本标签内容居中修复（与云端桌面版全局统一）：药丸宽度由最宽元数据行撑开，
             //   默认 text-align:start 使首行【离线标准版】靠左，视觉不居中；
             //   版本三元组同步改白色 10px（原 9px #888 灰叠紫色渐变看不清楚）
+            tag.style.display = 'inline-block';
             tag.style.textAlign = 'center';
             if (!_loggedIn && !forceShow) {
                 tag.innerHTML = '【登录后显示版本】' + metaHtml;
@@ -253,6 +254,18 @@
         }
         if (rememberedUser && !LEGACY_USERNAMES.includes(rememberedUser)) {
             usernameToFill = rememberedUser;
+            // ★ 2026-08-28 下拉按钮显示闭环：预填来自单键（旧版遗留）但数组键为空时，
+            //   自动反向迁移写入 local_rememberedUsers[0]，保证下拉 ▼(N) 立即显示
+            try {
+                const arr = JSON.parse(localStorage.getItem('local_rememberedUsers') || '[]');
+                if (!Array.isArray(arr) || arr.length === 0) {
+                    localStorage.setItem('local_rememberedUsers', JSON.stringify([rememberedUser]));
+                } else if (!arr.some(x => String(x).toLowerCase() === rememberedUser.toLowerCase())) {
+                    arr.unshift(rememberedUser);
+                    if (arr.length > 5) arr.length = 5;
+                    localStorage.setItem('local_rememberedUsers', JSON.stringify(arr));
+                }
+            } catch (_) { /* 迁移失败不阻断预填 */ }
         } else if (users.length === 1 && users[0].username) {
             // ★ 刚激活成功：只有一个管理员账户时自动预填（一键激活场景）
             usernameToFill = users[0].username;

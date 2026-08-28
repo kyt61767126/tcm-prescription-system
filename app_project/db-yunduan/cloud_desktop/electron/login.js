@@ -208,6 +208,9 @@
         // ★ 挂载点1：原有 header-section 内的 .version-tag（云端标准登录页使用，窗口足够宽时显示）
         var tag = document.querySelector('.version-tag');
         if (tag) {
+            // ★ 2026-08-28 显示闭环：login.html 初始 style=display:none 时，只写innerHTML看不到
+            //   此处显式 display=inline-block 保证内容可见（登录前=待登录提示+三元组，登录后=真实版本）
+            tag.style.display = 'inline-block';
             // ★ 2026-08-24 版本标签内容居中修复：药丸宽度由最宽元数据行撑开，
             //   默认 text-align:start 使首行【云端标准版】靠左 ~22px，视觉不居中；
             //   版本三元组同步改白色 10px（原 9px #888 灰叠紫色渐变看不清楚）
@@ -253,6 +256,19 @@
         }
         if (rememberedUser && !LEGACY_USERNAMES.includes(rememberedUser)) {
             usernameToFill = rememberedUser;
+            // ★ 2026-08-28 下拉按钮显示闭环：预填来自单键（旧版遗留）但数组键为空时，
+            //   自动反向迁移写入 local_rememberedUsers[0]，保证下拉 ▼(N) 立即显示
+            //   （否则 merged.length=0 → style.display='none'，用户观感"按钮消失"）
+            try {
+                const arr = JSON.parse(localStorage.getItem('local_rememberedUsers') || '[]');
+                if (!Array.isArray(arr) || arr.length === 0) {
+                    localStorage.setItem('local_rememberedUsers', JSON.stringify([rememberedUser]));
+                } else if (!arr.some(x => String(x).toLowerCase() === rememberedUser.toLowerCase())) {
+                    arr.unshift(rememberedUser);
+                    if (arr.length > 5) arr.length = 5;
+                    localStorage.setItem('local_rememberedUsers', JSON.stringify(arr));
+                }
+            } catch (_) { /* 迁移失败不阻断预填 */ }
         } else if (users.length === 1 && users[0].username) {
             // ★ 刚激活成功：只有一个管理员账户时自动预填（一键激活场景）
             usernameToFill = users[0].username;
