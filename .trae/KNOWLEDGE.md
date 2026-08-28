@@ -1214,6 +1214,22 @@
 - **注意**：退出=关闭页面语义仅 public/index.html（云端网页/APP）；登录框"取消"按钮同受益（exitApp 兜底）。教训：**loading 态管理必须成功/失败路径全覆盖**，成功路径隐藏容器 ≠ 状态复位，容器再显示时残留状态会暴露。
 - **生效方式**：push GitHub 自动部署；云端APP 在线加载自动生效；桌面/离线端未改动无需重打。
 
+### 2.116【修复V3·终极】下拉按钮最终消除不显示+红框空白根除+登录框宽度减小（提交 05fba82a 出包 V1.2.166，2026-08-28）
+- **现象（V1.2.165仍残留）**：用户截图实证①用户名框zsy有预填但右侧依然无▼下拉；②版本药丸与诊所卡片间、安全登录提示与版权间红框仍有大面积留白；③窗口偏宽。
+- **根因（经验926241+978466教训）**：
+  1. 下拉不显示：此前所有修复都是"渲染函数里设置display=flex/inline-flex"，但仍失败有两可能——A.HTML行内写了 `style="display:none;"` 覆盖CSS；B.merged构建前有代码抛异常（哪怕外层有catch，return前的display设置没跑到）。**"隐藏式默认值依赖JS去打开"是最大的不可见风险**。
+  2. 红框空白：V1.2.165只把justify-content从center改flex-start，但`.main-content`仍保留`flex:1`占剩余高度，footer是flex-shrink:0贴底→login-box不撑满，中间必然留白。**不是对齐问题，是flex:1把空白撑出来的。**
+  3. 窗口尺寸：之前260宽基准是给长报错设计，240也能放下且更紧凑。
+- **修复（桌面两端6文件同步，两端login HTML/CSS/JS+main.js 6处同步，check-interface 6/6 OK）**：
+  **①下拉DOM级四保险（彻底杜绝隐藏）**：
+  - CSS 把 `.username-dropdown-btn display:none → inline-flex`（默认可见）
+  - HTML 删除按钮上的 `style="display:none;"` 行内覆盖
+  - `renderUsernameDropdown` 重构：`try{数据构建} catch{记录} finally{三层兜底}`：finally先补输入框当前值进merged→即使仍空也至少`display+▼`→catch所有异常后裸写display
+  - `DOMContentLoaded` 最后新增 `window.load` + `setTimeout(250ms)` 两次兜底重渲染（覆盖DOMReady时序延迟）
+  **②红框空白根除**：`.main-content flex:1 → flex:0 1 auto`（不再占剩余高度），配合BrowserWindow min-height 420→340，高度随内容自然收缩贴footer；同时header/footer/padding再减1-2px。
+  **③宽度收敛**：BrowserWindow width 260→240；min下限340/max上限460。
+- **生效方式**：云端桌面版 V1.2.166 已出包；离线桌面版下次打包自动带上。
+
 ### 2.115【修复】下拉按钮仍不显示+红框空白压缩到最小（提交 4d64f6e3 出包 V1.2.165，2026-08-28）
 - **现象**：用户V1.2.164截图仍无▼下拉按钮（且用户名已预填wgj）；头部版本药丸与诊所卡片之间、登录框与footer之间两条红框空白大。
 - **根因**（下拉不显示=经验926241教训：控件存在但条件链未覆盖）：renderUsernameDropdown 显示条件仅依赖 `local_rememberedUsers` 数组键+config.users；initLoginInput 写数组时用 try/catch 但 localStorage 在 Electron 个别持久化路径下可能写失败（静默）→ merged.length=0 → 按钮隐藏。数据迁移只能覆盖"正常路径"，覆盖不了"持久化失败"。
