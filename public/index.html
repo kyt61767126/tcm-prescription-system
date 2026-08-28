@@ -3432,8 +3432,9 @@ let currentUser = null;
 
         function updateUserDisplay() {
             if (currentUser) {
-                // ★ 2026-08-03 同步：当前用户显示医师姓名（localStorage优先），与基础设置保持一致
-                const displayName = localStorage.getItem('local_clinicDoctor') || currentUser.name;
+                // ★ 2026-08-28 机构版多用户修复：顶部显示当前登录用户名（普通用户登录不得显示管理员名）
+                //   旧逻辑 local_clinicDoctor 优先是单用户时代设计；与离线APP统一：currentUser.name 优先，空时回退诊所医师名
+                const displayName = currentUser.name || localStorage.getItem('local_clinicDoctor') || currentUser.username;
                 document.getElementById('userDisplayName').textContent = displayName;
                 const userManageBtn = document.getElementById('userManageBtn');
                 const changePwdBtn = document.getElementById('changePwdBtn');
