@@ -1199,6 +1199,13 @@
 - **验证**：APK dex 搜索 `_vc`/`访问官网`/官网URL 全部打入；严格模式 2:47。打包尾部 "TRAE Sandbox Error: hit restricted C:\Android\Sdk\.knownPackages" 为已知无害报错（产物正常）。
 - **生效方式**：覆盖安装 db-offline/惠康中医-本地.apk（versionCode 163），首次启动自动按新 versionCode 重建基线，不再误报。
 
+### 2.109【修复】云端网页版退出登录同步关闭网页标签 + 登录按钮"登录中..."卡死（提交 9a0ed9d8，2026-08-28）
+- **现象**：①退出登录后停留在登录界面（账号 wgJ 预填暴露）；②登录按钮卡"登录中..."且输入框被禁用（用户截图铁证）。
+- **根因**：①handleLogout 只清态显示登录框，纯网页环境无关闭动作（window.close 被浏览器拦截）；②handleLogin 两条**成功路径**（云端登录成功 return / 本地登录成功）都漏调 setLoginLoading(false)，仅失败路径复位——登录成功后按钮停在 loading 态，下次显示登录框时卡死。
+- **修复**：①handleLogout 清态后 toast"正在关闭页面"+250ms 走 exitApp 全平台关闭链，不再停留登录界面（顺带不再预填用户名）；②exitApp 末尾纯网页兜底：仅当**完全无原生退出桥**时 window.close() 后 400ms 检测未关则 location.replace('about:blank') 清空页面等效关闭（有原生桥环境即使桥异常也保持旧行为，防 APP 白屏误伤）；③两条登录成功路径补 setLoginLoading(false)。
+- **注意**：退出=关闭页面语义仅 public/index.html（云端网页/APP）；登录框"取消"按钮同受益（exitApp 兜底）。教训：**loading 态管理必须成功/失败路径全覆盖**，成功路径隐藏容器 ≠ 状态复位，容器再显示时残留状态会暴露。
+- **生效方式**：push GitHub 自动部署；云端APP 在线加载自动生效；桌面/离线端未改动无需重打。
+
 ### 2.108【优化】全局登录框统一——以云端网页版为基准三端对齐（提交 6f41355e，2026-08-28）
 - **统一范围（用户确认三项）**：①版本标签策略统一——各端登录框版本标签全部隐藏（元素保留、JS 逻辑不破坏、仅视觉隐藏 style="display:none;"），版本登录成功后主界面顶栏显示（沿用 2026-08-23 云端定版）；②诊所名卡片样式统一——桌面双版 login.html 与离线系三份 index.html 的粉红渐变(#fff5f5/#8b0000)统一为基准版设计语言（accent浅底 rgba(102,126,234,0.08)+accent色文字 #667eea+细边框）；③多账户下拉统一——桌面双版 login.html 新增 usernameDropdownBtn/Menu（按桌面小窗等比缩放），login.js 新增 renderUsernameDropdown/toggleUsernameDropdown 并挂 window，数据源 getUsers()（config+localStorage 合并）。
 - **多副本覆盖清单（共9文件）**：db-offline/desktop/electron/login.html+login.js、db-yunduan/cloud_desktop/electron/login.html+login.js、public/electron/login.html（线上分发副本，仅版本标签隐藏——其结构是旧版select式，多账户功能本就等价）、根 index.html、db-offline/desktop/index.html、db-offline/index-app.html、.interface-lock.json（基线重建）。
