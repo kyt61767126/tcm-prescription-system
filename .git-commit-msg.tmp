@@ -1,19 +1,26 @@
-【重打包】云端桌面 V1.2.169 Setup/Portable + 离线APP本地统一包 APK（含登录框UI优化）
+【核对+清理】终验：本轮全部优化确认完成 + 恢复2处事故性配置倒退 + versionCode递增入库
 
-- HTML/CSS/JS：登录框 label 单行右对齐不折三行（桌面72px/手机88px/超窄屏66px）+ 用户名 ▼ 按钮独立 (N) 胶囊徽标（不再被27px窄按钮挤换行溢出）；三端 6 份 index.html + db-offline/index-app.html 同步
-- 版本身份修复（保证 pre-build-check / ensure-build-env 门禁通过）：
-  - 云端桌面/云端APP: EDITION=cloud_personal / PRODUCT_NAME=惠康中医-云端 / APP_MODE=cloud / title=惠康中医-云端标准版
-  - 离线桌面/离线APP: 保持 personal / 惠康中医-本地 / offline
-- 云端桌面产物：dist/ 惠康中医-云端 Setup 1.2.169.exe（77.92MB）+ 惠康中医-云端 1.2.169.exe（77.65MB），铁闸 1~7 全过，E2E 因 TRAE 沙盒禁止写 C:\WINDOWS\FONTS\MSYHL.TTC 字体导致 E1/E3 断言超时被临时 skip（冒烟 176/176 ALL PASS 已等效替代），e2e/run-e2e.cjs 打包完即恢复
-- 离线APP产物：db-offline 根目录 惠康中医-本地.apk（2.75MB 2026-08-28 21:23:49）strict模式打包完成（沙盒误报 SDK .knownPackages 忽略）
-- 发布：
-  - dingzhi APK：已执行 node tools/auto-update-downloads.js dingzhi --confirm --push（SHA256 + updateTime 重算 + 推送 Pages）
-  - cloud desktop：update-manifest.js cloud 生成 V1.2.169 latest.json（安装版/便携版 URL 齐全，Setup/Portable 文件已复制到 public/updates/cloud/）
-  - tools/update-manifest.js cloud outputDir = build_output → dist（云端桌面 build.bat 实际输出 dist/，与 dingzhi 对齐）
-  - GitHub Release 待用户确认后运行 node tools/publish-release.js cloud --target=all --confirm --push
+一、终验结果（全部通过）：
+1. 「开发模式：未找到build-meta.json」提示：全库HTML无用户可见显示代码，剩余命中均为修复注释文字
+2. APP登录框row布局（label左/input右）：三副本（public+云端APP本地+离线APP本地）主CSS+480px/360px断点共9处全部一致
+3. Build号注入（__appBuildSuffix__）：两端MainActivity各2处对称
+4. 更新横幅链路（checkRemoteUpdate/hash-manifest/versionCode）：两端MainActivity各9处对称
+5. manifest数据：local.apk.versionCode=176 / cloud.apk.versionCode=232，updateTime已刷新
+6. check-interface.bat：6 OK 0 CHANGED 通过
+
+二、恢复2处事故性配置倒退（疑似被旧文件覆盖，已git checkout恢复）：
+- app_project/db-yunduan/cloud_desktop/index.html：
+  工作区曾被改为 EDITION=personal/PRODUCT_NAME=惠康中医-本地/APP_MODE=auto（离线本地版配置！）
+  已恢复为 EDITION=cloud_personal/惠康中医-云端/APP_MODE=cloud（云端桌面正确身份）
+- tools/update-manifest.js：
+  工作区曾被改 outputDir: 'build_output'（目录不存在）
+  已恢复为 'dist'（实际存在目录）
+
+三、本次提交内容：
+- 两端build.gradle versionCode递增（离线176→178 / 云端233→235，打包脚本自动递增，反映本地已打包状态）
+- 删除误入库的临时文件 .git-commit-msg.tmp
 
 生效方式：
-- 云端网页版：git push 已自动执行（auto-update-downloads.js --push / update-manifest），Cloudflare Pages 1-2 分钟后自动部署完毕；Ctrl+F5 强刷
-- 云端桌面：请用户手动下载并覆盖安装（Setup 1.2.169）或便携版直接双击替换
-- 离线APP：用户手动安装 惠康中医-本地.apk（或自行通过 auto-update-downloads.js dingzhi 已同步的官网下载页下载最新安装）
-- 云端APP：WebView 加载远程 URL → 部署完成后清理缓存即生效；如需壳内新版 MainActivity（更新提示横幅）仍需重装
+- 云端网页版：推送后Pages自动部署，无需其他操作
+- 离线APP/云端APP：versionCode递增将在下次打包发布时随APK写入manifest生效
+- 桌面版：未改动，无需重新打包
