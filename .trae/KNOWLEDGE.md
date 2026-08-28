@@ -1214,6 +1214,12 @@
 - **注意**：退出=关闭页面语义仅 public/index.html（云端网页/APP）；登录框"取消"按钮同受益（exitApp 兜底）。教训：**loading 态管理必须成功/失败路径全覆盖**，成功路径隐藏容器 ≠ 状态复位，容器再显示时残留状态会暴露。
 - **生效方式**：push GitHub 自动部署；云端APP 在线加载自动生效；桌面/离线端未改动无需重打。
 
+### 2.110【修复】云端桌面登录框"没记住用户名"——存输入框原文而非解析后账户名（提交 a085e92b，2026-08-28）
+- **根因**：桌面版 login.js 登录成功保存 `user.username`（云端 AuthCore.login 解析后的账户名），而手机号登录时用户输入的是手机号——回填值与输入不一致，观感即"没记住用户名"。云端网页版 `saveRememberedUser`（public/index.html L2075）保存的是**输入框原文**+`local_rememberedUsers` 最近5账户数组。
+- **修复（cloud_desktop 与 db-offline/desktop 两份 login.js 同步）**：①新增 `saveRememberedUsername(username)`：保存输入框原文到 KEY_REMEMBER_USER + 维护 local_rememberedUsers 数组（去重置顶、上限5、网页版同款）；②`initLoginInput` 单键缺失/遗留账号时从数组兜底取最近一个；③`renderUsernameDropdown` 改为合并"最近登录账户在前+本机 config 账户在后"去重显示。全部纯 JS 逻辑文件修改，login.html 界面零改动。
+- **排查经验**：桌面端"记住用户名"类问题，先对比网页版保存的是"输入框原文（username 变量）"还是"解析后账户名（user.username）"——手机号/用户名双模式登录端最易踩此坑。桌面两端 loginWindow 与 mainWindow 均 loadFile→file:// 同源 + persist:tcm-prescription-dingzhi 同分区，localStorage 共享无需担心跨窗口丢失（本次排查确认无 clearStorage、dom-ready 注入仅改密码框）。
+- **生效方式**：云端桌面版需重打 exe 后生效；离线桌面版需重打 exe；云端网页版/云端APP/离线APP 不涉及。
+
 ### 2.109【优化】软件操作界面6模块跨端统一——媒体兜底/重装备份/优先药品置顶（提交 af956b86，2026-08-28）
 - **梳理方法（可复用）**：写临时 node 脚本对 5 端 index.html 提取同名函数体（正则"function NAME("到下个 function）规范化后做 MD5 哈希对比 + 双向行级 diff，快速定位逻辑分叉（工具用完即删，勿入库）。本次覆盖 6 模块：信息输入框/药物栏/处方签/历史录像拍照/数据导出/药品管理。
 - **已统一项（本次无需改）**：savePrescription 校验、renderMedicineList、exportMedicinesToExcel/ToCSV、exportPrescriptionsToExcel 5端字节级一致；renderHistoryList 排序一致；tombstone 渲染兜底为合理差异（离线端 deletedRxIds 无写入方，删除=物理+回收站）。
