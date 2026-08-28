@@ -150,3 +150,5 @@ LICENSE_MASTER_KEY*
 *LICENSE_MASTER_KEY*
 # Cloudflare 密钥配置文件（含敏感信息，绝不入库）
 Cloudflare*LICENSE_MASTER_KEY*
+
+.git-commit-msg.tmp
