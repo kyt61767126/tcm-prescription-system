@@ -763,6 +763,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
 
         <div id="approveForm">
             <h2 style="margin-top:0;">通过审核 · 生成激活码</h2>
+            <div id="approveAutoTypeHint" style="display:none;background:#f0f9eb;border:1px solid #c2e7b0;color:#529b2e;border-radius:6px;padding:8px 12px;font-size:13px;margin-bottom:12px;"></div>
             <div class="gen-row">
                 <div class="form-group">
                     <label>版本类型 *</label>
@@ -2760,9 +2761,18 @@ function openAdminApproveModal(requestId) {
     if (versionDisplay) {
         versionDisplay.innerHTML = versionInfo || '-';
     }
-    // 重置表单
-    document.getElementById('approveType').value = 'personal';
-    document.getElementById('approveMaxDevices').value = '1';
+    // ★ 重置表单 + 按客户申请的版本自动选取激活类型（管理员只需核对确认）
+    const reqEdition = String(req.edition || '').toLowerCase();
+    const isPro = reqEdition === 'institution' || reqEdition === 'pro' || String(req.edition || '').includes('机构');
+    document.getElementById('approveType').value = isPro ? 'pro' : 'personal';
+    document.getElementById('approveMaxDevices').value = isPro ? '5' : '1';
+    const autoHint = document.getElementById('approveAutoTypeHint');
+    if (autoHint) {
+        autoHint.textContent = isPro
+            ? '✅ 已按客户申请（机构版）自动选取，请核对后确认'
+            : '✅ 已按客户申请（标准版）自动选取，请核对后确认';
+        autoHint.style.display = 'block';
+    }
     document.getElementById('approveDays').value = '365';
     document.getElementById('approveExpiresAt').value = '';
     document.getElementById('approveNote').value = '';
