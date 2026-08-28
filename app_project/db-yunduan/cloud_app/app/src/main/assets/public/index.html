@@ -168,12 +168,9 @@
         .version-features { font-size: 10px; color: rgba(255,255,255,0.85); text-align: center; line-height: 1.4; margin-top: 4px; }
         .main-content { position: relative; z-index: 1; padding: 24px 20px; }
         .login-box { background: white; border-radius: 12px; padding: 22px 18px; box-shadow: 0 8px 25px var(--login-accent-light); border: 1px solid rgba(0,0,0,0.05); }
-        .login-field { margin-bottom: 16px; display: flex; flex-direction: row; align-items: center; gap: 8px; }
-        /* ★ 2026-08-28 登录框 label 统一布局（对齐桌面 electron/login.html 行式 且 避免小屏手机 label 被挤成三行）：
-             - 桌面/宽屏：label 单行 右对齐，固定 72px（"手机号/用户名:" 6 字正好单行）；
-             - 移动端 max-width:480px：覆盖为更宽 88px + 字号 13px 保持单行。
-             - 使用 text-wrap:balance + min-width 双重保险，防止旧浏览器兼容问题再次换行。 */
-        .login-field label { min-width: 72px; width: 72px; font-size: 12px; line-height: 1.2; font-weight: bold; color: #555; text-align: right; flex-shrink: 0; white-space: nowrap; overflow: visible; text-overflow: clip; }
+        /* ★ 2026-08-28 全局统一：登录字段与桌面版 login.html 同款布局（label 在上、输入框整行在下） */
+        .login-field { margin-bottom: 16px; display: flex; flex-direction: column; align-items: stretch; gap: 5px; }
+        .login-field label { font-size: 12px; line-height: 1.2; font-weight: bold; color: #555; text-align: left; flex-shrink: 0; }
         .login-field input, .login-field select { width: 100%; padding: 11px 12px; border: 2px solid #e5e7eb; border-radius: 10px; font-size: 13px; background: #f8f9fa; transition: all 0.25s ease; }
         .login-field input:disabled, .login-field select:disabled { opacity: 0.65; cursor: not-allowed; background: #f0f0f0; }
         .login-field input:focus, .login-field select:focus { border-color: var(--login-accent); outline: none; box-shadow: 0 0 0 3px var(--login-accent-light); background: white; }
@@ -544,10 +541,9 @@
             .version-tag { font-size: 13px; padding: 3px 14px; }
             .main-content { padding: 28px 22px; }
             .login-box { padding: 26px 22px; }
-            .login-field { flex-direction: row; align-items: center; gap: 10px; margin-bottom: 22px; }
-            /* ★ 2026-08-28 移动端登录框 label 不换行：88px 宽度容纳「手机号/用户名:」整行，不挤成三行；
-                 与桌面端风格一致（单行右对齐），下拉按钮 (N) 徽标不再偏出输入框。 */
-            .login-field label { min-width: 88px; width: 88px; font-size: 13px; text-align: right; flex-shrink: 0; white-space: nowrap; line-height: 1.2; }
+            /* ★ 2026-08-28 全局统一：label 在上、输入框整行在下（同桌面版），不再需要固定宽度防换行 */
+            .login-field { flex-direction: column; align-items: stretch; gap: 6px; margin-bottom: 22px; }
+            .login-field label { font-size: 13px; text-align: left; flex-shrink: 0; line-height: 1.2; }
             .login-field input, .login-field select { width: 100%; padding: 13px 14px; font-size: 15px; border-radius: 12px; }
             .username-input-wrapper { flex: 1; }
             .username-input-wrapper input { width: 100%; padding-right: 36px; box-sizing: border-box; }
@@ -652,11 +648,9 @@
             .system-title { font-size: 16px; }
             .version-tag { font-size: 11px; }
             .login-box { padding: 15px 12px; }
-            .login-field { flex-direction: row; align-items: center; gap: 6px; margin-bottom: 12px; }
-            /* ★ 2026-08-28 超窄屏（≤280px）登录框仍保留单行 label（不折三行）：
-                 72px 压缩到 66px 也能单行容纳「手机号/用户名:」6 字（12px 汉字约 12*7=84px？超窄屏会略微挤→但比换行成三行更美观，
-                 退而求其次：允许略缩小到 11px 字号 + 68px 宽度，保证观感。 */
-            .login-field label { min-width: 66px; width: 66px; font-size: 11px; text-align: right; flex-shrink: 0; white-space: nowrap; line-height: 1.2; letter-spacing: -0.2px; }
+            /* ★ 2026-08-28 全局统一：label 在上、输入框整行在下（同桌面版），超窄屏也无需固定宽度 */
+            .login-field { flex-direction: column; align-items: stretch; gap: 4px; margin-bottom: 12px; }
+            .login-field label { font-size: 11px; text-align: left; flex-shrink: 0; line-height: 1.2; }
             .login-field input, .login-field select { width: 100%; padding: 8px 10px; font-size: 13px; }
             .login-buttons { gap: 12px; margin-top: 15px; }
             .login-btn { padding: 8px 18px; min-width: 70px; font-size: 13px; }
@@ -709,11 +703,12 @@
 <script src="electron/video-recorder.js?v=20260817d"></script>
 <script>
 // 提前设置 EDITION，避免 Permission.init() 在 CONFIG 定义之前执行导致 _edition 错误
-// ★ 2026-08-28 版本身份（云端APP/云端 Webview 共享源）：EDITION=cloud_personal / PRODUCT_NAME=惠康中医-云端 / APP_MODE=cloud
-window.EDITION = 'cloud_personal';
-window.PRODUCT_NAME = '惠康中医-云端';
-// ★v2.0 统一架构：云端 APP/Webview 强制走云端
-window.APP_MODE = 'cloud';
+// ★★★ 2026-08-17 【Setup 1.0.38 根治刀1-A】：惠康中医-本地 = 永久离线标准版（personal），绝不再用 clinic_custom 默认值！
+window.EDITION = 'personal';
+window.PRODUCT_NAME = '惠康中医-本地';
+// ★v2.0 统一架构：声明 APP_MODE（offline/cloud/auto），供 db-adapter.js 自动检测
+// auto=自动检测：已加载 cloud-api.js 且 CLOUD_API_BASE 存在则走云端，否则走离线
+window.APP_MODE = 'auto';
 // ★修复：消除登录界面闪现（已登录时立即隐藏 loginOverlay，避免 adjustResize 重排时闪现）
 // ★ 修复 2026-07-28：APP 端启动时主动清除所有登录态（纵深防御），确保每次打开都必须手动登录
 // 使用 location.href 检测 APP（此时 electronAPI 尚未注入，无法用 isAndroidAPP）

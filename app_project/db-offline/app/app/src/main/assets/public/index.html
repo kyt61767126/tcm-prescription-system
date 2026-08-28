@@ -130,10 +130,9 @@
         .version-tag { font-size: 12px; font-weight: bold; color: rgba(255,255,255,0.9); background: rgba(255,255,255,0.2); padding: 2px 8px; border-radius: 10px; }
         .main-content { position: relative; z-index: 1; padding: 24px 18px; }
         .login-box { background: white; border-radius: 10px; padding: 20px 15px; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.15); border: 1px solid rgba(102, 126, 234, 0.2); }
-        .login-field { margin-bottom: 18px; display: flex; flex-direction: row; align-items: center; gap: 6px; }
-        /* ★ 2026-08-28 登录框 label 统一布局（对齐桌面 electron/login.html + APP 截图）：
-             固定 72px 宽度，单行右对齐，防止小屏手机被挤成三行。 */
-        .login-field label { min-width: 72px; width: 72px; font-size: 12px; line-height: 1.2; font-weight: bold; color: #555; text-align: right; flex-shrink: 0; white-space: nowrap; }
+        /* ★ 2026-08-28 全局统一：登录字段与桌面版 login.html 同款布局（label 在上、输入框整行在下） */
+        .login-field { margin-bottom: 18px; display: flex; flex-direction: column; align-items: stretch; gap: 5px; }
+        .login-field label { font-size: 12px; line-height: 1.2; font-weight: bold; color: #555; text-align: left; flex-shrink: 0; }
         .login-field input, .login-field select { width: 100%; padding: 10px 9px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 13px; background: #fafafa; transition: all 0.2s; }
         .login-field input:focus, .login-field select:focus { border-color: #667eea; outline: none; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); background: white; }
         .username-input-wrapper { position: relative; flex: 1; }
@@ -484,9 +483,9 @@
             .version-tag { font-size: 13px; }
             .main-content { padding: 28px 20px; }
             .login-box { padding: 24px; }
-            .login-field { flex-direction: row; align-items: center; gap: 8px; margin-bottom: 22px; }
-            /* ★ 2026-08-28 移动端登录框 label 不换行：88px 宽度容纳「手机号/用户名:」整行 */
-            .login-field label { min-width: 88px; width: 88px; font-size: 13px; text-align: right; flex-shrink: 0; white-space: nowrap; line-height: 1.2; }
+            /* ★ 2026-08-28 全局统一：label 在上、输入框整行在下（同桌面版），不再需要固定宽度防换行 */
+            .login-field { flex-direction: column; align-items: stretch; gap: 6px; margin-bottom: 22px; }
+            .login-field label { font-size: 13px; text-align: left; flex-shrink: 0; line-height: 1.2; }
             .login-field input, .login-field select { width: 100%; padding: 12px 14px; font-size: 14px; border-radius: 8px; }
             .username-input-wrapper { flex: 1; }
             .username-input-wrapper input { width: 100%; padding-right: 34px; box-sizing: border-box; }
@@ -584,9 +583,9 @@
             .system-title { font-size: 16px; }
             .version-tag { font-size: 11px; }
             .login-box { padding: 15px 12px; }
-            .login-field { flex-direction: row; align-items: center; gap: 6px; margin-bottom: 12px; }
-            /* ★ 2026-08-28 超窄屏登录框 label 仍单行不折：66px 宽度 + 11px 字号 + 字母间距收紧 */
-            .login-field label { min-width: 66px; width: 66px; font-size: 11px; text-align: right; flex-shrink: 0; white-space: nowrap; line-height: 1.2; letter-spacing: -0.2px; }
+            /* ★ 2026-08-28 全局统一：label 在上、输入框整行在下（同桌面版），超窄屏也无需固定宽度 */
+            .login-field { flex-direction: column; align-items: stretch; gap: 4px; margin-bottom: 12px; }
+            .login-field label { font-size: 11px; text-align: left; flex-shrink: 0; line-height: 1.2; }
             .login-field input, .login-field select { width: 100%; padding: 8px 10px; font-size: 13px; }
             .login-buttons { gap: 12px; margin-top: 15px; }
             .login-btn { padding: 8px 18px; min-width: 70px; font-size: 13px; }
