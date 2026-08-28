@@ -1138,6 +1138,7 @@
             <button class="tab-btn" data-tab="web">🌐 网页端</button>
             <button class="tab-btn" data-tab="register">📝 注册开通</button>
             <button class="tab-btn" data-tab="purchase">🔑 购买激活码</button>
+            <button class="tab-btn" data-tab="promo">🎁 邀请奖励</button>
             <button class="tab-btn" data-tab="install">📋 安装说明</button>
             <button class="tab-btn" data-tab="compare">⚖️ 版本对比</button>
             <button class="tab-btn" data-tab="faq">❓ 常见问题</button>
@@ -1506,6 +1507,17 @@
                     <div style="margin-top:10px;padding:8px 12px;background:#fef3c7;border-radius:6px;border:1px solid #fbbf24;font-size:12px;color:#78350f;">
                         <strong>💡 提示：</strong>管理员激活模式下，<strong>手机号就是登录账号</strong>，初始密码默认 <strong>admin</strong>（登入后请立即修改）。请妥善保管！
                     </div>
+                    <!-- 真实界面示意 -->
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;margin-top:12px;">
+                        <figure style="margin:0;background:white;border-radius:8px;padding:8px;border:1px solid #d1fae5;">
+                            <img src="images/register-fill.jpg" alt="管理员激活·填写信息界面" style="width:100%;border-radius:6px;border:1px solid #e5e7eb;" onerror="this.parentElement.style.display='none';">
+                            <figcaption style="font-size:11px;color:#64748b;text-align:center;margin-top:6px;">📝 第2~3步：激活窗口「📋 管理员激活」填写信息（真实界面）</figcaption>
+                        </figure>
+                        <figure style="margin:0;background:white;border-radius:8px;padding:8px;border:1px solid #d1fae5;">
+                            <img src="images/register-waiting.jpg" alt="等待管理员审核界面" style="width:100%;border-radius:6px;border:1px solid #e5e7eb;" onerror="this.parentElement.style.display='none';">
+                            <figcaption style="font-size:11px;color:#64748b;text-align:center;margin-top:6px;">⏳ 第4步：提交后自动进入「等待管理员激活」界面（真实界面）</figcaption>
+                        </figure>
+                    </div>
                 </div>
                 <div class="btn-group" style="margin-top:12px;">
                     <a href="#" class="download-btn" onclick="switchTab('mobile'); return false;">📱 前往下载APP</a>
@@ -1592,6 +1604,17 @@
                 <div style="font-size:13px;color:#78350f;line-height:1.7;">
                     试用期结束后需输入<strong>授权激活码</strong>才能继续使用。请按以下步骤操作：
                     选择版本 → 生成订单号 → 扫码加客服 → 发送订单号 → 客服生成激活码 → 输入激活。
+                </div>
+            </div>
+
+            <div class="card featured" style="margin-bottom:16px;border:2px solid #f59e0b;">
+                <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:4px 0;">
+                    <span style="font-size:28px;">🎁</span>
+                    <div style="flex:1;min-width:220px;">
+                        <div style="font-weight:bold;color:#92400e;">买前先看：已有好友在用？填 TA 的邀请码激活，立得 +30 天！</div>
+                        <div style="font-size:12px;color:#b45309;margin-top:2px;">购买激活码后，激活时填好友邀请码，双方都得奖励；您激活后也有专属邀请码，邀请好友最多 +360 天</div>
+                    </div>
+                    <a href="#" class="download-btn" style="background:linear-gradient(135deg,#f59e0b,#d97706);text-decoration:none;" onclick="switchTab('promo'); return false;">🎁 查看邀请奖励</a>
                 </div>
             </div>
 
@@ -1755,6 +1778,135 @@
             </div>
         </div>
 
+        <!-- ============ Tab: 邀请奖励（推广方案） ============ -->
+        <div class="tab-content" id="tab-promo">
+            <div class="section-title">
+                <span>🎁 邀请好友 · 双方得奖励</span>
+                <span class="sub">激活用户专属 · 奖励自动到账</span>
+            </div>
+
+            <!-- 推广海报 -->
+            <div class="card featured" style="margin-bottom:16px;border:2px solid #f59e0b;">
+                <div class="card-title">
+                    <span class="icon">📢</span>
+                    邀请好友 得使用天数
+                    <span class="badge hot">推荐</span>
+                </div>
+                <div style="text-align:center;margin:12px 0;">
+                    <img src="images/promo-poster.jpg" alt="邀请好友得奖励推广海报" style="max-width:420px;width:100%;border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,0.15);" onerror="this.style.display='none';document.getElementById('promoPosterFallback').style.display='block';">
+                    <div id="promoPosterFallback" style="display:none;background:linear-gradient(135deg,#fef3c7,#fde68a);border-radius:12px;padding:28px 16px;max-width:420px;margin:0 auto;">
+                        <div style="font-size:24px;font-weight:bold;color:#92400e;">🎁 邀好友 · 得奖励</div>
+                        <div style="font-size:15px;color:#78350f;margin-top:10px;line-height:1.8;">邀 1 人 +90 天，封顶 4 人 +360 天<br>好友激活立得 +30 天</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 奖励规则 -->
+            <div class="card trial-card" style="margin-bottom:16px;">
+                <div class="card-title">
+                    <span class="icon">🏆</span>
+                    奖励规则
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:10px;">
+                    <div style="background:#eff6ff;border:2px solid #3b82f6;border-radius:10px;padding:14px;text-align:center;">
+                        <div style="font-size:13px;color:#1e40af;font-weight:600;">邀请 1 人</div>
+                        <div style="font-size:26px;font-weight:bold;color:#1d4ed8;margin:4px 0;">+90天</div>
+                        <div style="font-size:11px;color:#64748b;">好友 +30天</div>
+                    </div>
+                    <div style="background:#eff6ff;border:2px solid #3b82f6;border-radius:10px;padding:14px;text-align:center;">
+                        <div style="font-size:13px;color:#1e40af;font-weight:600;">邀请 2 人</div>
+                        <div style="font-size:26px;font-weight:bold;color:#1d4ed8;margin:4px 0;">+180天</div>
+                        <div style="font-size:11px;color:#64748b;">好友各 +30天</div>
+                    </div>
+                    <div style="background:#eff6ff;border:2px solid #3b82f6;border-radius:10px;padding:14px;text-align:center;">
+                        <div style="font-size:13px;color:#1e40af;font-weight:600;">邀请 3 人</div>
+                        <div style="font-size:26px;font-weight:bold;color:#1d4ed8;margin:4px 0;">+270天</div>
+                        <div style="font-size:11px;color:#64748b;">好友各 +30天</div>
+                    </div>
+                    <div style="background:#fef3c7;border:2px solid #f59e0b;border-radius:10px;padding:14px;text-align:center;position:relative;">
+                        <span style="position:absolute;top:-10px;right:10px;background:#ef4444;color:white;font-size:10px;border-radius:10px;padding:2px 8px;">封顶</span>
+                        <div style="font-size:13px;color:#92400e;font-weight:600;">邀请 4 人</div>
+                        <div style="font-size:26px;font-weight:bold;color:#b45309;margin:4px 0;">+360天</div>
+                        <div style="font-size:11px;color:#64748b;">好友各 +30天</div>
+                    </div>
+                </div>
+                <div class="notice" style="margin-top:12px;">
+                    <span class="icon">💡</span>
+                    <div>
+                        <strong>规则说明：</strong><br>
+                        • 每成功邀请 1 位好友<strong>付费激活</strong>，您 +90 天使用期（试用激活不计奖励）<br>
+                        • 好友在激活时填写您的邀请码，好友本人立即 +30 天<br>
+                        • 奖励自动记账，软件下次在线验证或重新激活一次（同码同设备免费）即生效延期<br>
+                        • 有效期从<strong>首次激活日</strong>起算（365天+奖励天数），重装软件、换电脑不重算
+                    </div>
+                </div>
+            </div>
+
+            <!-- 操作步骤（图文） -->
+            <div class="card featured" style="margin-bottom:16px;border:2px solid #10b981;">
+                <div class="card-title">
+                    <span class="icon">🚀</span>
+                    三步拿到奖励（附软件真实界面）
+                </div>
+                <div style="background:#ecfdf5;border-radius:8px;padding:12px;margin-top:10px;">
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;">
+                        <div style="background:white;border-radius:10px;padding:12px;border:1px solid #d1fae5;">
+                            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                                <div style="background:#10b981;color:white;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;">1</div>
+                                <div style="font-weight:600;color:#065f46;">激活时填好友邀请码</div>
+                            </div>
+                            <img src="images/promo-step2.jpg" alt="激活窗口填写邀请码" style="width:100%;border-radius:8px;border:1px solid #e5e7eb;" onerror="this.style.display='none';">
+                            <div style="font-size:12px;color:#64748b;line-height:1.6;margin-top:8px;">打开软件激活窗口 → 填写激活码 → 在「邀请码」一栏填入好友的邀请码（没有可留空）→ 立即激活，您 +30 天</div>
+                        </div>
+                        <div style="background:white;border-radius:10px;padding:12px;border:1px solid #d1fae5;">
+                            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                                <div style="background:#3b82f6;color:white;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;">2</div>
+                                <div style="font-weight:600;color:#1e40af;">领取您的专属邀请码</div>
+                            </div>
+                            <img src="images/promo-step4.jpg" alt="激活成功显示专属邀请码" style="width:100%;border-radius:8px;border:1px solid #e5e7eb;" onerror="this.style.display='none';">
+                            <div style="font-size:12px;color:#64748b;line-height:1.6;margin-top:8px;">激活成功页显示您的<strong>专属邀请码</strong>（如 86NSWG）——把它保存好，这就是您邀请好友的凭证</div>
+                        </div>
+                        <div style="background:white;border-radius:10px;padding:12px;border:1px solid #d1fae5;">
+                            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                                <div style="background:#f59e0b;color:white;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;">3</div>
+                                <div style="font-weight:600;color:#92400e;">转发邀请码给好友</div>
+                            </div>
+                            <div style="background:#f0fdf4;border:1px dashed #86efac;border-radius:8px;padding:10px;font-size:12px;color:#166534;line-height:1.8;">
+                                💬 <strong>转发话术（复制即用）：</strong><br>「我用的这个开方软件不错，激活时填我的邀请码 <strong>86NSWG</strong>，你多得 30 天使用期，我也有奖励，双赢！」
+                            </div>
+                            <div style="font-size:12px;color:#64748b;line-height:1.6;margin-top:8px;">好友按第一、二步操作激活成功后，奖励自动到账；邀请 1/2/3/4 人分别 +90/180/270/360 天</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 常见问题 -->
+            <div class="card">
+                <div class="card-title">
+                    <span class="icon">❓</span>
+                    邀请奖励常见问题
+                </div>
+                <div style="padding:14px;line-height:1.8;font-size:13px;color:#64748b;">
+                    <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;">
+                        <div style="background:#f59e0b;color:white;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0;margin-top:2px;">Q</div>
+                        <div><strong style="color:#374151;">我的邀请码在哪里？</strong><br>激活成功页会显示；也可在软件内查看授权信息。每个激活用户自动分配一个专属邀请码。</div>
+                    </div>
+                    <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;">
+                        <div style="background:#f59e0b;color:white;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0;margin-top:2px;">Q</div>
+                        <div><strong style="color:#374151;">奖励什么时候到账？</strong><br>好友付费激活成功立即记账；您的软件下次在线验证或用原激活码重新激活一次（免费、不限次数）即生效延期。</div>
+                    </div>
+                    <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;">
+                        <div style="background:#f59e0b;color:white;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0;margin-top:2px;">Q</div>
+                        <div><strong style="color:#374151;">试用激活算邀请成功吗？</strong><br>不算。好友需付费激活（购买激活码）才计入邀请奖励；试用期不影响好友正常使用。</div>
+                    </div>
+                    <div style="display:flex;align-items:flex-start;gap:10px;">
+                        <div style="background:#f59e0b;color:white;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0;margin-top:2px;">Q</div>
+                        <div><strong style="color:#374151;">邀请人数有上限吗？</strong><br>奖励计满 4 人封顶（累计 +360 天）；第 5 位起好友仍可正常激活（好友本人仍得 +30 天），不再累计您的奖励。</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- ============ Tab: 安装说明 ============ -->
         <div class="tab-content" id="tab-install">
             <div class="section-title">
@@ -1893,8 +2045,19 @@
                     <li>扫码加客服微信，发送订单号 + 设备识别码 + 诊所信息</li>
                     <li>付款后客服为您生成对应的"<strong>授权激活码</strong>"</li>
                     <li>将激活码粘贴到激活提示框中，点击"激活"按钮</li>
-                    <li>激活成功后即可无限制使用（各版本功能差异见"版本对比"）</li>
-                </ol>
+                <li>激活成功后即可无限制使用（各版本功能差异见"版本对比"）</li>
+            </ol>
+            <!-- 激活界面示意 -->
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;margin-top:12px;">
+                <figure style="margin:0;background:#f8fafc;border-radius:8px;padding:8px;border:1px solid #e2e8f0;">
+                    <img src="images/promo-step2.jpg" alt="激活码激活·填写界面" style="width:100%;border-radius:6px;border:1px solid #e5e7eb;" onerror="this.parentElement.style.display='none';">
+                    <figcaption style="font-size:11px;color:#64748b;text-align:center;margin-top:6px;">🔑 激活窗口「激活码激活」填写激活信息（邀请码选填，填好友码双方得奖励）</figcaption>
+                </figure>
+                <figure style="margin:0;background:#f8fafc;border-radius:8px;padding:8px;border:1px solid #e2e8f0;">
+                    <img src="images/promo-step4.jpg" alt="激活成功界面" style="width:100%;border-radius:6px;border:1px solid #e5e7eb;" onerror="this.parentElement.style.display='none';">
+                    <figcaption style="font-size:11px;color:#64748b;text-align:center;margin-top:6px;">🎉 激活成功页显示专属邀请码，可邀请好友得使用天数</figcaption>
+                </figure>
+            </div>
             </div>
             <div class="card">
                 <div class="card-title"><span class="icon">☁️</span>云端标准版/机构版账户开通流程</div>
