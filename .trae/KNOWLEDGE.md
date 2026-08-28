@@ -1214,6 +1214,14 @@
 - **注意**：退出=关闭页面语义仅 public/index.html（云端网页/APP）；登录框"取消"按钮同受益（exitApp 兜底）。教训：**loading 态管理必须成功/失败路径全覆盖**，成功路径隐藏容器 ≠ 状态复位，容器再显示时残留状态会暴露。
 - **生效方式**：push GitHub 自动部署；云端APP 在线加载自动生效；桌面/离线端未改动无需重打。
 
+### 2.111【修复】机构版多用户顶部显示管理员名——updateUserDisplay 显示名优先级反转（提交 ed346257+1cbec9ce 出包V1.2.161，2026-08-28）
+- **现象**：普通用户赵水云登录云端桌面，顶部 userDisplayName 显示管理员（王桂杰）名。**上轮"记住用户名"修复 a085e92b 未打包（用户用的还是 8-27 的 V1.2.157 旧包）——这也是"依旧没记住"的原因，非修复无效。**
+- **根因**：`updateUserDisplay()` 的 displayName = `local_clinicDoctor || currentUser.name`——clinicDoctor（诊所医师名=管理员）优先，是 2026-08-03 单用户时代设计；机构版多用户下普通登录者永远显示诊所医师名。**离线APP 一直是对的**（直接 currentUser.name），桌面/网页/云端APP 4 副本+根目录源共 5 处同款旧逻辑。
+- **修复（5 文件同款）**：`currentUser.name || localStorage.getItem('local_clinicDoctor') || currentUser.username`——登录用户名优先、空时回退诊所医师名、再回退账户名。处方签医师名仍用 clinicDoctor（另处逻辑）不受影响。
+- **验证**：check-interface 6/6 OK；打包 V1.2.161（7 道铁闸全过 + E2E 3/3），exe 位于 cloud_desktop/dist。
+- **教训**：**桌面端"修复了但用户说没效果"→ 第一反应查用户手上 exe 的版本/打包日期是否包含该修复提交**（git log -S 关键字定位修复提交日期 vs 出包日期），不要先怀疑代码。多用户机构版下一切"优先取 clinicDoctor/单一医师"的旧设计都是潜在显示错乱点。
+- **生效方式**：云端桌面版安装 V1.2.161 exe（含记住用户名+顶部显示两项修复）；云端网页版/云端APP 推 GitHub 自动部署即时生效；离线桌面版 1.0.140 下次打包带上。
+
 ### 2.110【修复】云端桌面登录框"没记住用户名"——存输入框原文而非解析后账户名（提交 a085e92b，2026-08-28）
 - **根因**：桌面版 login.js 登录成功保存 `user.username`（云端 AuthCore.login 解析后的账户名），而手机号登录时用户输入的是手机号——回填值与输入不一致，观感即"没记住用户名"。云端网页版 `saveRememberedUser`（public/index.html L2075）保存的是**输入框原文**+`local_rememberedUsers` 最近5账户数组。
 - **修复（cloud_desktop 与 db-offline/desktop 两份 login.js 同步）**：①新增 `saveRememberedUsername(username)`：保存输入框原文到 KEY_REMEMBER_USER + 维护 local_rememberedUsers 数组（去重置顶、上限5、网页版同款）；②`initLoginInput` 单键缺失/遗留账号时从数组兜底取最近一个；③`renderUsernameDropdown` 改为合并"最近登录账户在前+本机 config 账户在后"去重显示。全部纯 JS 逻辑文件修改，login.html 界面零改动。
