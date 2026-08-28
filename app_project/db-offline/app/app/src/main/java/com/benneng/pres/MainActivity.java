@@ -77,6 +77,15 @@ public class MainActivity extends BridgeActivity {
     // ★ 修复 2026-07-27：NativeBridge 实例引用，用于 onDestroy 时清理会话资源
     private NativeBridge nativeBridge = null;
 
+    // ★ 2026-08-28 方案A 轻量更新提示（与云端APP/桌面端 main.js 同构）：启动后台静默检查官网 hash-manifest.json
+    //   - 官网 APK version > 本地 versionName 才提示（三段式比较，宁可漏检不可误报）
+    //   - 提示方式：登录页顶部黄色横幅（✕ 可关闭 / 点击页面其他区域自动收起 / 30秒自动消失）
+    //   - 点击「立即下载」→ 系统浏览器打开官网下载页，手动下载覆盖安装（无自动下载/自动安装）
+    //   - 网络失败/解析失败/格式异常一律静默跳过，不影响离线使用
+    private static final String UPDATE_MANIFEST_URL = "https://tcm-prescription-system.pages.dev/hash-manifest.json";
+    private static final String UPDATE_DOWNLOAD_URL = "https://tcm-prescription-system.pages.dev/download";
+    private boolean apkUpdateCheckStarted = false;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         // ★ 全局崩溃捕获：任何未捕获异常写入 crash_logs 目录，便于排查闪退原因
@@ -518,6 +527,16 @@ public class MainActivity extends BridgeActivity {
                 if ("content".equals(scheme)) {
                     return false; // 允许 ContentProvider
                 }
+                // ★ 2026-08-28 方案A：更新横幅「立即下载」→ 系统浏览器打开官网下载页
+                //   （严格 URL 精确匹配白名单，不放宽任何其他外部导航）
+                if (UPDATE_DOWNLOAD_URL.equals(request.getUrl().toString())) {
+                    try {
+                        startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(UPDATE_DOWNLOAD_URL)));
+                    } catch (Exception e) {
+                        Log.w("MainActivity", "打开官网下载页失败: " + e.getMessage());
+                    }
+                    return true;
+                }
                 // ★ 一键联系微信客服：放行 weixin:// 协议，尝试唤起微信客户端
                 // 安全策略：仅 weixin:// 单一 scheme 白名单，Intent 由系统解析（无微信则静默失败，不影响 APP）
                 if ("weixin".equals(scheme)) {
@@ -587,6 +606,144 @@ public class MainActivity extends BridgeActivity {
                 }
             }
         });
+
+        // ★ 2026-08-28 方案A：启动后台静默检查新版 APK（WebView 未就绪时 configureWebView 会重试，防重入）
+        if (!apkUpdateCheckStarted) {
+            apkUpdateCheckStarted = true;
+            startApkUpdateCheck(webView);
+        }
+    }
+
+    /**
+     * ★ 2026-08-28 方案A 轻量更新提示：后台线程静默拉取官网 hash-manifest.json，
+     *   官网 APK 版本 > 本地 versionName 时向登录页注入黄色横幅（离线读 local.apk.version，兜底 dingzhi）。
+     *   网络失败/解析失败/格式异常一律静默跳过（宁可漏检不可误报，不影响离线使用）。
+     */
+    private void startApkUpdateCheck(final WebView webView) {
+        new Thread(() -> {
+            java.net.HttpURLConnection conn = null;
+            try {
+                Thread.sleep(2000); // 延迟2秒：等登录页首帧稳定，不与首屏渲染竞争
+                conn = (java.net.HttpURLConnection) new java.net.URL(UPDATE_MANIFEST_URL).openConnection();
+                conn.setConnectTimeout(6000);
+                conn.setReadTimeout(6000);
+                conn.setRequestProperty("Cache-Control", "no-cache");
+                if (conn.getResponseCode() != 200) {
+                    Log.d(TAG, "[update] 检查跳过: HTTP " + conn.getResponseCode());
+                    return;
+                }
+                java.io.InputStream in = conn.getInputStream();
+                java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+                byte[] buf = new byte[4096];
+                int n;
+                while ((n = in.read(buf)) > 0) bos.write(buf, 0, n);
+                in.close();
+                JSONObject manifest = new JSONObject(bos.toString("UTF-8"));
+                // download.html 读 local key；兼容旧字段 dingzhi（auto-update-downloads.js 双 key 镜像）
+                JSONObject channel = manifest.optJSONObject("local");
+                if (channel == null) channel = manifest.optJSONObject("dingzhi");
+                JSONObject apk = channel != null ? channel.optJSONObject("apk") : null;
+                if (apk == null) {
+                    Log.d(TAG, "[update] 检查跳过: manifest 无 local/dingzhi apk 节点");
+                    return;
+                }
+                String remoteVer = apk.optString("version", "");
+                String localVer = "";
+                try {
+                    localVer = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+                } catch (Exception ignored) {}
+                // 版本号白名单校验：防止 manifest 被篡改后向页面注入任意代码
+                if (remoteVer.isEmpty() || !remoteVer.matches("[0-9A-Za-z.\\-+]+")) {
+                    Log.d(TAG, "[update] 检查跳过: 官网版本号格式异常");
+                    return;
+                }
+                if (!isNewerRemoteVersion(remoteVer, localVer)) {
+                    Log.d(TAG, "[update] 已是最新版本 v" + localVer);
+                    return;
+                }
+                Log.i(TAG, "[update] 发现新版本 v" + remoteVer + "（当前 v" + localVer + "），注入登录页横幅");
+                injectUpdateBanner(webView, remoteVer);
+            } catch (Throwable t) {
+                // 离线/超时/DNS 失败：静默跳过
+                Log.d(TAG, "[update] 检查跳过（网络不可用或超时）");
+            } finally {
+                if (conn != null) try { conn.disconnect(); } catch (Exception ignored) {}
+            }
+        }, "apk-update-check").start();
+    }
+
+    // 三段式版本号比较：仅当远程版本严格大于本地版本才提示（宁可漏检不可误报）
+    private boolean isNewerRemoteVersion(String remote, String local) {
+        if (remote == null || remote.isEmpty() || local == null || local.isEmpty()) return false;
+        String[] r = remote.split("\\.");
+        String[] l = local.split("\\.");
+        for (int i = 0; i < 3; i++) {
+            int rv = i < r.length ? parseVersionDigits(r[i]) : 0;
+            int lv = i < l.length ? parseVersionDigits(l[i]) : 0;
+            if (rv > lv) return true;
+            if (rv < lv) return false;
+        }
+        return false;
+    }
+
+    private int parseVersionDigits(String s) {
+        String d = s.replaceAll("[^0-9]", "");
+        if (d.isEmpty()) return 0;
+        try { return Integer.parseInt(d); } catch (Exception e) { return 0; }
+    }
+
+    /**
+     * ★ 2026-08-28 方案A：向登录页注入黄色更新横幅（与云端APP/桌面端 injectUpdateBanner 同构）。
+     *   - 横幅 fixed 顶部 + 占位 spacer 下推正文，不遮挡登录框
+     *   - ✕ 关闭 / 点击页面其他区域自动收起 / 30秒自动消失（SPA 常驻页面，避免长期挡住顶栏）
+     */
+    private void injectUpdateBanner(final WebView webView, String newVersion) {
+        if (webView == null) return;
+        try {
+            final String ver = newVersion.replace("'", "").replace("\"", "").replace("\\", "");
+            String bannerCode = "(function(){" +
+                "if(!document.body||document.getElementById('__updateBanner'))return;" +
+                "function __removeUpdateBanner(){" +
+                "var b=document.getElementById('__updateBanner');if(b)b.remove();" +
+                "var s=document.getElementById('__updateBannerSpacer');if(s)s.remove();" +
+                "if(window.__bannerOutsideClick)document.removeEventListener('click',window.__bannerOutsideClick,true);" +
+                "}" +
+                "window.__bannerOutsideClick=function(e){" +
+                "var b=document.getElementById('__updateBanner');" +
+                "if(b&&!b.contains(e.target))__removeUpdateBanner();" +
+                "};" +
+                "document.addEventListener('click',window.__bannerOutsideClick,true);" +
+                "setTimeout(function(){__removeUpdateBanner();},30000);" +
+                "var s=document.createElement('div');" +
+                "s.id='__updateBannerSpacer';" +
+                "s.style.cssText='height:34px;';" +
+                "document.body.insertBefore(s,document.body.firstChild);" +
+                "var b=document.createElement('div');" +
+                "b.id='__updateBanner';" +
+                "b.style.cssText='position:fixed;top:0;left:0;right:0;height:34px;z-index:99999;display:flex;align-items:center;justify-content:center;gap:6px;background:linear-gradient(135deg,#fff8e1 0%,#ffecb3 100%);border-bottom:1px solid #f0c040;font-size:12px;color:#7a5c00;font-family:sans-serif;-webkit-tap-highlight-color:transparent;';" +
+                "var label=document.createElement('span');" +
+                "label.textContent='\\uD83E\\uDE96 新版 v" + ver + " 已发布';" +
+                "var link=document.createElement('span');" +
+                "link.textContent='立即下载';" +
+                "link.style.cssText='color:#1565c0;font-weight:bold;text-decoration:underline;';" +
+                "link.addEventListener('click',function(ev){" +
+                "ev.stopPropagation();" +
+                "location.href='" + UPDATE_DOWNLOAD_URL + "';" +
+                "});" +
+                "var close=document.createElement('span');" +
+                "close.textContent='\\u2715';" +
+                "close.style.cssText='position:absolute;right:10px;top:0;bottom:0;display:flex;align-items:center;color:#9a7b00;padding:0 8px;';" +
+                "close.addEventListener('click',function(ev){" +
+                "ev.stopPropagation();" +
+                "__removeUpdateBanner();" +
+                "});" +
+                "b.appendChild(label);b.appendChild(link);b.appendChild(close);" +
+                "document.body.appendChild(b);" +
+                "})();";
+            mainHandler.post(() -> webView.evaluateJavascript(bannerCode, null));
+        } catch (Exception e) {
+            Log.w(TAG, "[update] 横幅注入失败: " + e.getMessage());
+        }
     }
 
     /**
