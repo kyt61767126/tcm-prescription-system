@@ -1214,6 +1214,13 @@
 - **注意**：退出=关闭页面语义仅 public/index.html（云端网页/APP）；登录框"取消"按钮同受益（exitApp 兜底）。教训：**loading 态管理必须成功/失败路径全覆盖**，成功路径隐藏容器 ≠ 状态复位，容器再显示时残留状态会暴露。
 - **生效方式**：push GitHub 自动部署；云端APP 在线加载自动生效；桌面/离线端未改动无需重打。
 
+### 2.109【优化】软件操作界面6模块跨端统一——媒体兜底/重装备份/优先药品置顶（提交 af956b86，2026-08-28）
+- **梳理方法（可复用）**：写临时 node 脚本对 5 端 index.html 提取同名函数体（正则"function NAME("到下个 function）规范化后做 MD5 哈希对比 + 双向行级 diff，快速定位逻辑分叉（工具用完即删，勿入库）。本次覆盖 6 模块：信息输入框/药物栏/处方签/历史录像拍照/数据导出/药品管理。
+- **已统一项（本次无需改）**：savePrescription 校验、renderMedicineList、exportMedicinesToExcel/ToCSV、exportPrescriptionsToExcel 5端字节级一致；renderHistoryList 排序一致；tombstone 渲染兜底为合理差异（离线端 deletedRxIds 无写入方，删除=物理+回收站）。
+- **本次统一三项（6文件：public/根目录/offdesk/clouddesk/cloudapp assets）**：①**viewMediaFiles 媒体元数据兜底**（移植 web 版：扫描未找到时用 collectAndUpdateMediaFiles 写入的 rec.mediaFiles 兜底显示+诊断信息）到离线桌面/云端桌面/根目录源；②**collectAndUpdateMediaFiles 补 path 字段**（桌面端 Electron findMediaFiles 返回带 path，兜底过滤 `!!m.path` 必需，否则兜底恒空）；③**exportData 重装数据安全**（备份带 local_systemUsers+4项基础设置）+ importData 恢复闭环，从离线APP移植到离线桌面版+根目录源；④**priority_use 优先使用药品**（★标记+黄色背景#fff8e1+置顶排序）从离线APP移植到网页/云端APP/两桌面端/根目录源（云端 medicines API 与 site-admin 早已支持该字段，属功能分叉非新功能）。
+- **验证方法（可复用）**：整文件 script 提取+new Function 编译会误报（HEAD 版本同样报"Unexpected identifier"），正确做法是只提取修改过的函数体包 `new Function('async function _wrap_(){...}')` 编译——16/16 通过；check-interface 6/6 OK；diff-index-app.cjs --quiet 无 WARN。
+- **生效方式**：云端网页版/云端APP 推 GitHub 自动部署即时生效；云端桌面版需重打 exe；离线桌面版需重打 exe；离线APP 不涉及（三项均以其为基准）无需重打。
+
 ### 2.108【优化】全局登录框统一——以云端网页版为基准三端对齐（提交 6f41355e，2026-08-28）
 - **统一范围（用户确认三项）**：①版本标签策略统一——各端登录框版本标签全部隐藏（元素保留、JS 逻辑不破坏、仅视觉隐藏 style="display:none;"），版本登录成功后主界面顶栏显示（沿用 2026-08-23 云端定版）；②诊所名卡片样式统一——桌面双版 login.html 与离线系三份 index.html 的粉红渐变(#fff5f5/#8b0000)统一为基准版设计语言（accent浅底 rgba(102,126,234,0.08)+accent色文字 #667eea+细边框）；③多账户下拉统一——桌面双版 login.html 新增 usernameDropdownBtn/Menu（按桌面小窗等比缩放），login.js 新增 renderUsernameDropdown/toggleUsernameDropdown 并挂 window，数据源 getUsers()（config+localStorage 合并）。
 - **多副本覆盖清单（共9文件）**：db-offline/desktop/electron/login.html+login.js、db-yunduan/cloud_desktop/electron/login.html+login.js、public/electron/login.html（线上分发副本，仅版本标签隐藏——其结构是旧版select式，多账户功能本就等价）、根 index.html、db-offline/desktop/index.html、db-offline/index-app.html、.interface-lock.json（基线重建）。
