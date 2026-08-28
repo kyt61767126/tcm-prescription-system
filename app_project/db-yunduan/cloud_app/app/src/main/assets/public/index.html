@@ -709,12 +709,11 @@
 <script src="electron/video-recorder.js?v=20260817d"></script>
 <script>
 // 提前设置 EDITION，避免 Permission.init() 在 CONFIG 定义之前执行导致 _edition 错误
-// ★★★ 2026-08-17 【Setup 1.0.38 根治刀1-A】：惠康中医-本地 = 永久离线标准版（personal），绝不再用 clinic_custom 默认值！
-window.EDITION = 'personal';
-window.PRODUCT_NAME = '惠康中医-本地';
-// ★v2.0 统一架构：声明 APP_MODE（offline/cloud/auto），供 db-adapter.js 自动检测
-// auto=自动检测：已加载 cloud-api.js 且 CLOUD_API_BASE 存在则走云端，否则走离线
-window.APP_MODE = 'auto';
+// ★ 2026-08-28 版本身份（云端APP/云端 Webview 共享源）：EDITION=cloud_personal / PRODUCT_NAME=惠康中医-云端 / APP_MODE=cloud
+window.EDITION = 'cloud_personal';
+window.PRODUCT_NAME = '惠康中医-云端';
+// ★v2.0 统一架构：云端 APP/Webview 强制走云端
+window.APP_MODE = 'cloud';
 // ★修复：消除登录界面闪现（已登录时立即隐藏 loginOverlay，避免 adjustResize 重排时闪现）
 // ★ 修复 2026-07-28：APP 端启动时主动清除所有登录态（纵深防御），确保每次打开都必须手动登录
 // 使用 location.href 检测 APP（此时 electronAPI 尚未注入，无法用 isAndroidAPP）

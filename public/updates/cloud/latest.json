@@ -1,10 +1,9 @@
-{
-    "version": "1.2.167",
-    "releaseDate": "2026-08-28",
-    "releaseNotes": "✨ 新增:\n  - 官网下载站：新增「邀请奖励」推广Tab + 注册/激活步骤添加真实界面示意图\n  - feat(login): 全局登录框统一——版本标签策略/诊所名卡片样式/多账户下拉三端对齐\n  - feat(release): 一键发布菜单重构 + 增量发布——打包与发布关系统一梳理\n🐛 修复:\n  - 文档：推广奖励方案模拟测试报告（58/58通过，含测试场景/结果/修正点，供团队汇报）\n  - 经验沉淀：2.117 推广奖励用量监控实施+APP端邀请码请求体bug修复+工作区遗留物清理\n  - 经验沉淀：2.116 登录框V3终极修复V1.2.166\n  - 经验沉淀：2.114 登录框显示闭环双bug修复（版本号+下拉按钮V1.2.164）\n  - 经验沉淀：2.112 登录窗口尺寸修复+误导文案清理（V1.2.162）\n  - 云端桌面版出包V1.2.162：登录窗口260宽+420高自适应修复\n  - 经验沉淀：2.111 机构版多用户顶部显示修复+V1.2.161出包（旧包不含修复的教训）\n  - 离线桌面版本号联动递增至1.0.140（updateUserDisplay修复待下次打包交付）\n  - 云端桌面版出包V1.2.161：修复顶部用户名显示+登录框记住用户名（上轮a085e92b首次随包交付）\n  - 修复机构版多用户顶部显示错名字：updateUserDisplay改为当前登录用户名优先\n🔒 安全:\n  - 【安全加固】激活后禁用试用默认账户 admin/admin 登录（离线标准版/机构版后门）\n  - 【安全优化】实名信息防护：注册手机号/医师名不记忆，只保留通用用户名（拼音/称呼）\n📋 其他:\n  - 离线版收尾：APP versionCode 173 / 桌面 1.0.142 + 登录诊所名卡片统一样式 + 推广海报源文件入库\n  - 管理后台：审核弹窗按客户申请版本自动选取激活类型\n  - 补充：图文指南step3截图（重命名绕开gitignore密码规则）\n  - 文档：推广奖励操作图文指南（4张真实激活窗口界面截图，含邀请码填写/成功页展示/奖励规则速查）\n  - 【推广奖励】用量监控纳入实施：三端激活链路邀请码全通+管理台用量监控Tab+邀请进度列\n  - 云端桌面版出包V1.2.166：宽240+空白+下拉四保险\n  - 登录框V3：BrowserWindow宽240下限340+空白根除+下拉按钮DOM级四保险\n  - 经验沉淀：2.115 下拉按钮三保险+红框空白压缩V1.2.165\n  - 云端桌面版出包V1.2.165：登录框空白压缩+下拉按钮三保险显示\n  - 登录框压缩红框空白+下拉按钮三保险显示（有预填即显）",
-    "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.08.28-1849/huikang-cloud-setup-1.2.167.exe",
-    "portableUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.08.28-1849/huikang-cloud-1.2.167.exe",
-    "forceUpdate": false,
-    "minVersion": "1.0.0",
-    "rolloutPercentage": 100
+﻿{
+    "version":  "1.2.169",
+    "releaseDate":  "2026-08-28",
+    "releaseNotes":  "登录框优化（账号标签单行不换行/用户名下拉N徽标独立胶囊/三端版本号源统一）",
+    "url":  "https://tcm-prescription-system.pages.dev/updates/cloud/%E6%83%A0%E5%BA%B7%E4%B8%AD%E5%8C%BB-%E4%BA%91%E7%AB%AF%20Setup%201.2.169.exe",
+    "portableUrl":  "https://tcm-prescription-system.pages.dev/updates/cloud/%E6%83%A0%E5%BA%B7%E4%B8%AD%E5%8C%BB-%E4%BA%91%E7%AB%AF%201.2.169.exe",
+    "forceUpdate":  false,
+    "minVersion":  "1.0.0"
 }

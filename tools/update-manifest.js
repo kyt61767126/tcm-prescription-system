@@ -35,7 +35,7 @@ const CHANNEL_CONFIG = {
     cloud: {
         dir: 'app_project/db-yunduan/cloud_desktop',
         productName: '惠康中医-云端',
-        outputDir: 'build_output'
+        outputDir: 'dist'
     }
 };
 
