@@ -3071,7 +3071,7 @@ let currentUser = null;
                         console.warn('AuthCore.loadRememberedUsers 失败，回退到 localStorage:', e);
                     }
                 }
-                // 回退：从 localStorage 读取
+                // 回退：从 localStorage 读取（★ 实名防护：读时过滤手机号/姓名/邮箱）
                 const localList = localStorage.getItem('local_rememberedUsers');
                 if (localList) {
                     try {
@@ -3082,7 +3082,12 @@ let currentUser = null;
                         } else if (typeof parsed === 'string') {
                             usernames = [parsed];
                         }
-                        const stringUsernames = usernames.map(u => String(u).trim()).filter(u => u && !LEGACY_REMEMBERED.includes(u));
+                        const stringUsernames = usernames.map(u => String(u).trim()).filter(u => u && !LEGACY_REMEMBERED.includes(u) && _isGenericLoginName(u));
+                        if (stringUsernames.length !== usernames.length) {
+                            if (stringUsernames.length > 0) localStorage.setItem('local_rememberedUsers', JSON.stringify(stringUsernames));
+                            else localStorage.removeItem('local_rememberedUsers');
+                            console.log('[login] 已清理 local_rememberedUsers 实名项:', usernames.length, '->', stringUsernames.length);
+                        }
                         if (stringUsernames.length > 0) {
                             renderRememberedUsers(stringUsernames);
                             document.getElementById('loginUsername').value = stringUsernames[0];
@@ -3094,14 +3099,31 @@ let currentUser = null;
                 }
                 const localUsername = localStorage.getItem('local_rememberedUsername');
                 if (localUsername) {
-                    const singleList = [localUsername];
-                    renderRememberedUsers(singleList);
-                    document.getElementById('loginUsername').value = localUsername;
-                    localStorage.setItem('local_rememberedUsers', JSON.stringify(singleList));
+                    // ★ 实名防护：单键为实名（手机号/姓名/邮箱）→ 立即删除，不显示不预填
+                    if (!_isGenericLoginName(localUsername)) {
+                        localStorage.removeItem('local_rememberedUsername');
+                        console.log('[login] 已清理 local_rememberedUsername 实名单键');
+                    } else {
+                        const singleList = [localUsername];
+                        renderRememberedUsers(singleList);
+                        document.getElementById('loginUsername').value = localUsername;
+                        localStorage.setItem('local_rememberedUsers', JSON.stringify(singleList));
+                    }
                 }
             } catch (e) {
                 console.warn('loadRememberedUsers error:', e);
             }
+        }
+
+        // ★ 2026-08-28 实名防护（页面层）：登录框下拉/预填只允许通用用户名
+        //   禁止显示/记忆：手机号（含10位以上连续数字，含拼音+手机号混合）、≥2连续汉字真实姓名、邮箱
+        function _isGenericLoginName(s) {
+            s = String(s == null ? '' : s).trim();
+            if (!s) return false;
+            if (/\d{10,}/.test(s)) return false;
+            if (/[\u4e00-\u9fa5]{2,}/.test(s)) return false;
+            if (s.indexOf('@') >= 0) return false;
+            return true;
         }
 
         function renderRememberedUsers(usernames) {
@@ -3119,16 +3141,11 @@ let currentUser = null;
             btn.textContent = '▼(' + usernames.length + ')';
             menu.innerHTML = '';
 
-            // 构建 username → name 映射，下拉菜单显示中文医师姓名
-            const users = getUsers();
-            const nameMap = {};
-            users.forEach(u => { nameMap[u.username] = u.name || u.username; });
-
+            // ★ 实名防护：下拉只显示用户名本身，禁止映射显示账户 name（真实医师姓名）
             usernames.forEach(username => {
                 const item = document.createElement('div');
-                const displayName = nameMap[username] || (typeof username === 'object' ? (username.name || username.username) : username);
                 const loginValue = typeof username === 'object' ? username.username : username;
-                item.textContent = displayName;
+                item.textContent = loginValue;
                 item.addEventListener('click', function(e) {
                     e.stopPropagation();
                     document.getElementById('loginUsername').value = loginValue;
@@ -3161,10 +3178,17 @@ let currentUser = null;
         });
 
         async function saveRememberedUser(username) {
-            if (window.AuthCore) { try { await AuthCore.saveRememberedUser(username); const r = await AuthCore.loadRememberedUsers(); if (typeof renderRememberedUsers === 'function') renderRememberedUsers(r); if (Array.isArray(r) && r.length > 0) { localStorage.setItem('local_rememberedUsers', JSON.stringify(r)); localStorage.setItem('local_rememberedUsername', String(username).trim()); } return; } catch(e) { console.warn('AuthCore.saveRememberedUser 失败，回退到 localStorage:', e); } }
+            // ★ 实名防护（页面层）：手机号/真实姓名/邮箱一律不写入预填键（登录功能不受影响）
+            const _inputIsGeneric = _isGenericLoginName(username);
+            if (window.AuthCore) { try { await AuthCore.saveRememberedUser(username); const r = await AuthCore.loadRememberedUsers(); if (typeof renderRememberedUsers === 'function') renderRememberedUsers(r); if (Array.isArray(r) && r.length > 0) { localStorage.setItem('local_rememberedUsers', JSON.stringify(r)); if (_inputIsGeneric) localStorage.setItem('local_rememberedUsername', String(username).trim()); else localStorage.removeItem('local_rememberedUsername'); } return; } catch(e) { console.warn('AuthCore.saveRememberedUser 失败，回退到 localStorage:', e); } }
             try {
                 const cleanUsername = String(username).trim();
                 if (!cleanUsername) return;
+                // ★ 实名防护：非通用用户名（手机号/姓名/邮箱）不记忆，直接清理后返回
+                if (!_isGenericLoginName(cleanUsername)) {
+                    localStorage.removeItem('local_rememberedUsername');
+                    return;
+                }
 
                 let remembered = [];
                 const localList = localStorage.getItem('local_rememberedUsers');
@@ -3190,7 +3214,7 @@ let currentUser = null;
                 renderRememberedUsers(remembered);
             } catch (e) {
                 console.warn('保存记住的用户名失败:', e);
-                localStorage.setItem('local_rememberedUsername', String(username).trim());
+                if (_inputIsGeneric) localStorage.setItem('local_rememberedUsername', String(username).trim());
             }
         }
 

@@ -3280,7 +3280,7 @@ if (window.Permission) {
                         console.warn('AuthCore.loadRememberedUsers 失败，回退到 asyncStorage:', e);
                     }
                 }
-                // 回退：从 asyncStorage 读取
+                // 回退：从 asyncStorage 读取（★ 实名防护：读时过滤手机号/姓名/邮箱）
                 const localList = await asyncStorage.get('cloud_rememberedUsers');
                 if (localList) {
                     try {
@@ -3294,7 +3294,11 @@ if (window.Permission) {
                         const stringUsernames = usernames.map(u => {
                             if (typeof u === 'object' && u !== null) return String(u.username || '').trim();
                             return String(u).trim();
-                        }).filter(u => u);
+                        }).filter(u => u && _isGenericLoginName(u));
+                        if (stringUsernames.length !== usernames.length) {
+                            await asyncStorage.set('cloud_rememberedUsers', JSON.stringify(stringUsernames));
+                            console.log('[login] 已清理 cloud_rememberedUsers 实名项:', usernames.length, '->', stringUsernames.length);
+                        }
                         if (stringUsernames.length > 0) {
                             renderRememberedUsers(stringUsernames);
                             document.getElementById('loginUsername').value = stringUsernames[0];
@@ -3306,14 +3310,32 @@ if (window.Permission) {
                 }
                 const localUsername = await asyncStorage.get('cloud_rememberedUsername');
                 if (localUsername) {
-                    const singleList = [localUsername];
-                    renderRememberedUsers(singleList);
-                    document.getElementById('loginUsername').value = localUsername;
-                    await asyncStorage.set('cloud_rememberedUsers', JSON.stringify(singleList));
+                    // ★ 实名防护：单键为实名（手机号/姓名/邮箱）→ 立即清除，不显示不预填
+                    if (!_isGenericLoginName(localUsername)) {
+                        await asyncStorage.set('cloud_rememberedUsername', '');
+                        try { localStorage.removeItem('cloud_rememberedUsername'); } catch(_) {}
+                        console.log('[login] 已清理 cloud_rememberedUsername 实名单键');
+                    } else {
+                        const singleList = [localUsername];
+                        renderRememberedUsers(singleList);
+                        document.getElementById('loginUsername').value = localUsername;
+                        await asyncStorage.set('cloud_rememberedUsers', JSON.stringify(singleList));
+                    }
                 }
             } catch (e) {
                 console.warn('loadRememberedUsers error:', e);
             }
+        }
+
+        // ★ 2026-08-28 实名防护（页面层）：登录框下拉/预填只允许通用用户名
+        //   禁止显示/记忆：手机号（含10位以上连续数字，含拼音+手机号混合）、≥2连续汉字真实姓名、邮箱
+        function _isGenericLoginName(s) {
+            s = String(s == null ? '' : s).trim();
+            if (!s) return false;
+            if (/\d{10,}/.test(s)) return false;
+            if (/[\u4e00-\u9fa5]{2,}/.test(s)) return false;
+            if (s.indexOf('@') >= 0) return false;
+            return true;
         }
 
         function renderRememberedUsers(usernames) {
@@ -3331,20 +3353,12 @@ if (window.Permission) {
             btn.textContent = '▼(' + usernames.length + ')';
             menu.innerHTML = '';
 
-            // 读取用户名→姓名映射（用于显示中文医师姓名）
-            let nameMap = {};
-            try {
-                const raw = localStorage.getItem('cloud_rememberedUserNames');
-                if (raw) nameMap = JSON.parse(raw) || {};
-            } catch (e) {}
-
+            // ★ 实名防护：下拉只显示用户名本身，禁止映射显示账户 name（真实医师姓名）
             usernames.forEach(entry => {
                 const item = document.createElement('div');
                 // 兼容旧格式（纯字符串）和新格式（{username, name}对象）
                 const loginValue = typeof entry === 'object' ? entry.username : String(entry).trim();
-                const objName = typeof entry === 'object' ? (entry.name || entry.username) : null;
-                const displayName = objName || nameMap[loginValue] || loginValue;
-                item.textContent = displayName;
+                item.textContent = loginValue;
                 item.addEventListener('click', function(e) {
                     e.stopPropagation();
                     document.getElementById('loginUsername').value = loginValue;
@@ -3377,26 +3391,20 @@ if (window.Permission) {
         });
 
         async function saveRememberedUser(username, displayName) {
+            // ★ 实名防护（页面层）：手机号/真实姓名/邮箱一律不写入预填键（登录功能不受影响）
+            const _inputIsGeneric = _isGenericLoginName(username);
             try {
                 await AuthCore.saveRememberedUser(username);
                 const remembered = await AuthCore.loadRememberedUsers();
-                await asyncStorage.set('cloud_rememberedUsername', String(username).trim());
+                if (_inputIsGeneric) await asyncStorage.set('cloud_rememberedUsername', String(username).trim());
+                else { await asyncStorage.set('cloud_rememberedUsername', ''); try { localStorage.removeItem('cloud_rememberedUsername'); } catch(_) {} }
                 await asyncStorage.set('cloud_rememberedUsers', JSON.stringify(remembered));
-                // 维护用户名→姓名映射，用于下拉菜单显示中文医师姓名
-                if (displayName) {
-                    try {
-                        const cleanName = String(displayName).trim();
-                        let nameMap = {};
-                        const raw = localStorage.getItem('cloud_rememberedUserNames');
-                        if (raw) nameMap = JSON.parse(raw) || {};
-                        nameMap[String(username).trim()] = cleanName;
-                        localStorage.setItem('cloud_rememberedUserNames', JSON.stringify(nameMap));
-                    } catch (e) {}
-                }
+                // ★ 实名防护：不再维护用户名→姓名映射（原 cloud_rememberedUserNames 存真实医师姓名），并清理历史遗留数据
+                try { localStorage.removeItem('cloud_rememberedUserNames'); } catch (e) {}
                 renderRememberedUsers(remembered);
             } catch (e) {
                 console.warn('保存记住的用户名失败:', e);
-                await asyncStorage.set('cloud_rememberedUsername', String(username).trim());
+                if (_inputIsGeneric) await asyncStorage.set('cloud_rememberedUsername', String(username).trim());
             }
         }
 
