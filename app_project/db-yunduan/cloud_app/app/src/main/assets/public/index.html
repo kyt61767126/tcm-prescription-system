@@ -178,11 +178,7 @@
         .username-input-wrapper input { width: 100%; padding-right: 30px; box-sizing: border-box; }
         .username-dropdown-btn { position: absolute; right: 0; top: 0; bottom: 0; width: 27px; padding: 0; border: 2px solid #e5e7eb; border-left: none; border-radius: 0 10px 10px 0; background: linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 100%); color: #666; font-size: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 10; transition: all 0.2s; overflow: visible; }
         .username-dropdown-btn:hover { background: linear-gradient(135deg, #e8e8e8 0%, #d0d0d0 100%); }
-        /* ★ 2026-08-28 用户名下拉数量徽标 (N)：独立胶囊，贴于按钮右下外侧，与截图「▼(1)」形态一致；
-             - 不再与 ▼ 同一 text 节点→不再被 27px 按钮挤成两行；
-             - 数字 1~2 位自适应胶囊宽度；浅色背景与边框，不抢输入框视觉重心；
-             - 父级 overflow:visible 保证贴到输入框外不被裁切（旧 overflow:hidden 已移除）。 */
-        .username-dropdown-count { position: absolute; right: -34px; top: 50%; transform: translateY(-50%); display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 24px; padding: 0 6px; box-sizing: border-box; background: linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 100%); border: 2px solid #e5e7eb; border-radius: 0 8px 8px 0; color: #555; font-size: 11px; font-weight: 700; line-height: 1; white-space: nowrap; }
+        /* ★ 2026-08-29 废除 .username-dropdown-count 外飘胶囊（(N) 显示在输入框外），▼(N) 统一为按钮文本 */
         .username-dropdown-menu { position: absolute; z-index: 100; display: none; background: white; border: 2px solid var(--login-accent); border-radius: 10px; top: calc(100% + 4px); left: 0; right: 0; box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12); max-height: 150px; overflow-y: auto; }
         .username-dropdown-menu.show { display: block; }
         .username-dropdown-menu div { padding: 10px 12px; font-size: 12px; color: #333; cursor: pointer; transition: background 0.2s; }
@@ -2060,13 +2056,10 @@ let currentUser = null;
             }
 
             btn.style.display = 'flex';
-            // ★ 2026-08-28 APP 登录框用户名下拉按钮统一形态：
-            //   - ▼ + 独立 (N) 数量徽标（对齐用户截图「▼(1)」两元素：▼ 按钮右方 与 (1) 灰色胶囊徽标），
-            //   - 旧版 textContent='▼(N)' 在按钮宽度=27px 时被挤成多行，数量徽标溢出到输入框外部，
-            //   - 改 innerHTML：▼ 图标文本 + <span class="username-dropdown-count">(N)</span> 胶囊徽标，
-            //     用 CSS 绝对定位贴到按钮右外侧，与桌面/网页同款形态保持一致。
+            // ★ 2026-08-29 对齐云端布局：▼(N) 直接作为按钮文本（按钮内部显示），
+            //   废除外飘胶囊徽标（position:absolute; right:-34px 导致 (N) 显示在输入框外部）。
             var count = usernames.length;
-            btn.innerHTML = '▼<span class="username-dropdown-count">(' + count + ')</span>';
+            btn.textContent = '▼(' + count + ')';
             menu.innerHTML = '';
 
             // ★ 实名防护：下拉只显示用户名本身，禁止映射显示账户 name（真实医师姓名）

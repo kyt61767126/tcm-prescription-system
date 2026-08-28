@@ -2537,8 +2537,41 @@
         try {
             const old = document.getElementById('inviteInfoBox');
             if (old && old.parentNode) old.parentNode.removeChild(old);
-            const code = await StorageAdapter.getItem('license:code');
-            if (!code || String(code).trim().length < 4) return;
+            // ★ 三来源取码（APP端激活码可能只存于 Java 层/StorageAdapter 未初始化）：
+            //   1) StorageAdapter（标准来源，弹窗激活成功后写入）
+            //   2) localStorage 直读（StorageAdapter 异常/未初始化兜底）
+            //   3) electronAPI.license.getActivationRecord()（APP端 Java 激活记录，
+            //      LicenseManager 激活成功时写入明文 code——旧记录无此字段则空）
+            let code = '';
+            try { code = await StorageAdapter.getItem('license:code'); } catch (_) {}
+            if (!code) {
+                try {
+                    const ls = (typeof global !== 'undefined' && global.localStorage) ||
+                               (typeof window !== 'undefined' ? window.localStorage : null);
+                    if (ls) code = ls.getItem('license:code');
+                } catch (_) {}
+            }
+            if (!code && global.electronAPI && global.electronAPI.license &&
+                typeof global.electronAPI.license.getActivationRecord === 'function') {
+                try {
+                    const rec = await global.electronAPI.license.getActivationRecord();
+                    if (rec && rec.code) {
+                        code = String(rec.code).trim();
+                        // 自愈回写标准存储，下次直接命中来源1
+                        try { await StorageAdapter.setItem('license:code', code); } catch (_) {}
+                    }
+                } catch (_) {}
+            }
+            if (!code || String(code).trim().length < 4) {
+                // ★ 可视提示（不再静默）：无本地激活码（管理员激活/旧版本激活/存储丢失）
+                const nb = document.createElement('div');
+                nb.id = 'inviteInfoBox';
+                nb.style.cssText = 'margin-top:8px;padding-top:8px;border-top:1px dashed #ddd;font-size:11px;color:#aaa;line-height:1.6;';
+                nb.textContent = '🎁 邀请码需联网验证本地激活码，当前未找到激活码记录' +
+                    '（管理员激活或旧版本激活无码）。输码激活的用户可在激活窗口重新输入一次原激活码自动恢复。';
+                el.appendChild(nb);
+                return;
+            }
             const r = await fetch(API_BASE + '/license/invite', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

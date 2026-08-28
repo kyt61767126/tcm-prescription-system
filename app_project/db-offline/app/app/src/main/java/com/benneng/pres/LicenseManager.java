@@ -3365,6 +3365,10 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
                 for (byte b : hash) sb.append(String.format("%02x", b));
                 JSONObject ar = new JSONObject();
                 ar.put("codeHash", sb.toString());
+                // ★ 2026-08-29 推广奖励：补存明文激活码（激活记录文件本身已 AES 加密，
+                //   风险与桌面版 localStorage 存明文同级）。用途：renderer 的 loadInviteInfo
+                //   三来源取码兜底（getActivationRecord 桥接透出），查询专属邀请码。
+                ar.put("code", code.trim());
                 ar.put("activateTime", System.currentTimeMillis());
                 ar.put("machineId", machineId != null ? machineId : "");
                 writeActivationRecord(ar);
