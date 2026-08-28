@@ -3188,9 +3188,11 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
 
     // ★ 2026-08-26 推广奖励：8 参重载，透传好友邀请码（选填）→ 服务端发奖
     //   （邀请人+90天封顶4人360天，本机+30天）
+    // ★ 2026-08-29 重装/换机自愈：phone 随激活请求提交服务端做手机号身份核验
+    //   （核验通过自动恢复原激活绑定信息，无需重填诊所名）
     public JSONObject activateOnline(String code, String machineId, String user, String clinicName,
                                      String password, String loginUsername, String phone, String inviteCode) {
-        JSONObject result = activateOnline(code, machineId, user, clinicName, inviteCode);
+        JSONObject result = activateOnline(code, machineId, user, clinicName, inviteCode, phone);
         if (result != null && result.optBoolean("success", false)) {
             // 创建/确保登录账号：使用用户名/手机号 + 默认密码 admin，登入后用户自行修改密码
             try {
@@ -3210,6 +3212,13 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
 
     // ★ 2026-08-26 推广奖励：5 参实现，inviteCode（好友邀请码）随激活请求提交
     public JSONObject activateOnline(String code, String machineId, String user, String clinicName, String inviteCode) {
+        return activateOnline(code, machineId, user, clinicName, inviteCode, null);
+    }
+
+    // ★ 2026-08-29 重装/换机自愈：6 参实现，phone 随激活请求提交 →
+    //   服务端手机号身份核验通过后自动恢复原激活绑定信息（原诊所名/原账号）
+    public JSONObject activateOnline(String code, String machineId, String user, String clinicName,
+                                     String inviteCode, String phone) {
         HttpURLConnection conn = null;
         try {
             // ★ 激活码失败限速检查（防暴力尝试）
@@ -3238,6 +3247,11 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
             // ★ 2026-08-28 推广奖励：提交好友邀请码（选填）→ 服务端发奖
             if (inviteCode != null && !inviteCode.trim().isEmpty()) {
                 reqBody.put("inviteCode", inviteCode.trim());
+            }
+            // ★ 2026-08-29 重装/换机自愈：提交手机号 → 服务端手机号身份核验
+            //   （与原激活绑定的手机号一致时自动恢复原激活信息，跳过诊所名严格匹配）
+            if (phone != null && phone.trim().matches("1[3-9]\\d{9}")) {
+                reqBody.put("phone", phone.trim());
             }
 
             try (OutputStream os = conn.getOutputStream()) {

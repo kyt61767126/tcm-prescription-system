@@ -1607,6 +1607,11 @@
     global.__licenseActivating = false;    // 是否正在激活流程中（防止重复弹窗）
     let __showExpireAlertRunning = false;  // showExpireAlertAndActivate 执行中防抖
 
+    // ★ 2026-08-29 License API 基址：本 IIFE 作用域内无外层 CLOUD_API_BASE，
+    //   从 AuthCore 导出取（心跳硬编码 URL 的统一收口，修复 loadInviteInfo 引用未定义变量）
+    const API_BASE = (global.AuthCore && global.AuthCore.CLOUD_API_BASE) ||
+        'https://tcm-prescription-system.pages.dev/api';
+
     // 上次失败的消息（用于兜底弹窗显示）
     let lastFailMessage = '授权已失效，请激活';
 
@@ -2010,6 +2015,23 @@
     // 关键防护：输入框添加 autocomplete="off" + data-lpignore="true" + onfocus 取消 Autofill
     // 阻止 Android Autofill 弹出旧应用凭据提示（"本能中医处方系统"大图标窗口）
     // ★ 优化客户使用流程：紫色主题、步骤指引、机器ID复制、联系客服、诊所名展示、loading
+    // ★ 2026-08-29 已激活用户重装自愈：凭「原激活码 + 本机 machineId」查询原激活信息
+    //   仅当本机已在激活码绑定设备列表时服务端才返回信息（安全边界在服务端）。
+    //   返回 { bound, phone, name, clinicName } 或 null（网络失败/未绑定/接口异常）
+    function lookupBoundActivationInfo(code, machineId) {
+        return new Promise(function (resolve) {
+            try {
+                fetch(API_BASE + '/license/lookup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code: String(code || '').trim(), machineId: String(machineId || '') })
+                }).then(function (r) { return r.json(); }).then(function (d) {
+                    resolve((d && d.success && d.bound) ? d : null);
+                }).catch(function () { resolve(null); });
+            } catch (e) { resolve(null); }
+        });
+    }
+
     function showActivateModal(machineId, clinicName) {
         return new Promise(function(resolve) {
             const overlay = document.createElement('div');
@@ -2068,6 +2090,9 @@
                 '<input type="text" id="activateCodeInput" ' +
                 'style="width:100%;padding:14px 16px;font-size:16px;font-family:monospace;border:2px solid #ddd;border-radius:8px;letter-spacing:2px;outline:none;transition:border-color 0.2s;margin-bottom:14px;box-sizing:border-box;" ' +
                 'placeholder="请输入激活码" autocomplete="new-password" data-lpignore="true" />' +
+
+                // ★ 2026-08-29 重装自愈提示条（默认隐藏）：识别到本机原激活信息后显示
+                '<div id="autoFillHint" style="display:none;background:#e8f5e9;border:1px solid #a5d6a7;border-radius:8px;padding:8px 10px;font-size:12px;color:#2e7d32;line-height:1.6;margin-bottom:12px;"></div>' +
 
                 // ★ 2026-08-26 重装激活登录修复：手机号即登录账号；密码选填（默认 admin）
                 '<div style="font-size:12px;color:#666;margin-bottom:6px;">📱 手机号（激活后作为登录账号）<span style="color:#e53935;">*</span></div>' +
@@ -2137,6 +2162,7 @@
             const copyContactBtns = card.querySelectorAll('.copyContactBtn');
             const phoneInput = card.querySelector('#activatePhoneInput');
             const pwdInput = card.querySelector('#activatePwdInput');
+            const autoFillHint = card.querySelector('#autoFillHint');
 
             // ★ 移除 cancelAutofill 调用：cancelAutofill 反而触发 Autofill 凭据提示弹窗
             // ("本能中医处方系统"大图标窗口)
@@ -2149,6 +2175,27 @@
             // 自动聚焦输入框
             // ★ 延迟 350ms 聚焦：等键盘完全收起后再聚焦，避免"键盘消失再次出现"的视觉跳动
             setTimeout(function() { input.focus(); }, 350);
+
+            // ★ 2026-08-29 已激活用户重装自愈：激活码输入完成（失焦）后自动识别本机原激活信息
+            //   服务端仅对已绑定设备返回信息 → 自动填写原手机号，用户只需点击"立即激活"
+            input.addEventListener('change', async function() {
+                const c = (input.value || '').trim();
+                if (!/^BNZC-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/.test(c)) {
+                    if (autoFillHint) autoFillHint.style.display = 'none';
+                    return;
+                }
+                const d = await lookupBoundActivationInfo(c, machineId);
+                if (!d) return; // 未绑定/网络异常：静默，按新激活流程手动填写
+                if (autoFillHint) {
+                    autoFillHint.innerHTML = '✅ 已自动识别本机原激活信息' +
+                        (d.clinicName ? '（' + d.clinicName + '）' : '') +
+                        '<br>原手机号已自动填写，点击「立即激活」即可一键恢复';
+                    autoFillHint.style.display = 'block';
+                }
+                if (phoneInput && !phoneInput.value.trim() && d.phone) {
+                    phoneInput.value = d.phone;
+                }
+            });
 
             // 机器ID复制按钮
             copyMachineIdBtn.addEventListener('click', async function() {
@@ -2191,11 +2238,11 @@
                 if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
             }
 
-            function submitCode() {
+            async function submitCode() {
                 const val = input.value;
                 // ★ 2026-08-26 重装激活登录修复：激活时即设定手机号（登录账号）+密码，
                 //   避免重装后账号密码被静默重置为默认 admin、用户不知情无法登录
-                const phoneVal = phoneInput ? phoneInput.value.trim() : '';
+                let phoneVal = phoneInput ? phoneInput.value.trim() : '';
                 const pwdVal = pwdInput ? pwdInput.value : '';
                 // ★ 2026-08-28 推广奖励：读取邀请码（选填）
                 const inviteInputEl = card.querySelector('#activateInviteInput');
@@ -2204,10 +2251,22 @@
                 // 仅当有输入时才显示 loading
                 if (val && val.trim()) {
                     // 手机号必填校验（登录账号=手机号）
+                    // ★ 2026-08-29 重装自愈：未填手机号时先联网识别本机原激活信息，
+                    //   识别成功自动补填并继续激活（用户只输激活码即可，"直接输入一键恢复"）
                     if (!/^1[3-9]\d{9}$/.test(phoneVal)) {
-                        try { alert('请填写正确的手机号（11位）。\n激活后使用「手机号 + 密码」登录。'); } catch (e) {}
-                        if (phoneInput) phoneInput.focus();
-                        return;
+                        const d = await lookupBoundActivationInfo(val.trim(), machineId);
+                        if (d && d.phone) {
+                            phoneVal = d.phone;
+                            if (phoneInput) phoneInput.value = d.phone;
+                            if (autoFillHint) {
+                                autoFillHint.innerHTML = '✅ 已自动识别本机原激活信息，正在恢复...';
+                                autoFillHint.style.display = 'block';
+                            }
+                        } else {
+                            try { alert('请填写正确的手机号（11位）。\n激活后使用「手机号 + 密码」登录。'); } catch (e) {}
+                            if (phoneInput) phoneInput.focus();
+                            return;
+                        }
                     }
                     submitBtn.disabled = true;
                     cancelBtn.disabled = true;
@@ -2480,7 +2539,7 @@
             if (old && old.parentNode) old.parentNode.removeChild(old);
             const code = await StorageAdapter.getItem('license:code');
             if (!code || String(code).trim().length < 4) return;
-            const r = await fetch(CLOUD_API_BASE + '/license/invite', {
+            const r = await fetch(API_BASE + '/license/invite', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ code: String(code).trim() })

@@ -124,6 +124,14 @@ export async function onRequest(context) {
         const body = await context.request.json().catch(() => ({}));
         const { code, machineId, user, clinicName, productClass, clientClass, inviteCode, phone } = body;
 
+        // ★ 2026-08-29 已激活用户重装/换机自愈：手机号身份核验
+        //   客户端提交的 user（可能为"姓名/手机号"或纯姓名）与 phone 字段中提取手机号，
+        //   与激活码原绑定 user 中的手机号一致 → 视为原激活本人，自动恢复原激活信息：
+        //   ① 跳过诊所名严格匹配（自动沿用原绑定 clinicName，无需用户重填）
+        //   ② 换机解绑二次校验放行（原逻辑要求 user 字符串全等，"张三/138..." vs "138..." 会误拦）
+        const phoneOf = (s) => { const m = String(s || '').match(/1[3-9]\d{9}/); return m ? m[0] : ''; };
+        const clientPhone = phoneOf(user) || ((typeof phone === 'string' && /^1[3-9]\d{9}$/.test(phone.trim())) ? phone.trim() : '');
+
         // 参数校验
         if (!code) {
             return json({ success: false, error: '请提供激活码' }, 400);
@@ -204,11 +212,18 @@ export async function onRequest(context) {
         const maxDevices = getMaxDevices(record);
         const existingDevice = devices.find(d => d.machineId === machineId);
 
+        // ★ 2026-08-29 手机号身份核验：客户端手机号与激活码原绑定手机号一致
+        //   → 原激活本人（换机/重装场景），自动恢复原激活信息，跳过严格匹配
+        const recordPhone = phoneOf(record.user || record.username || '');
+        const phoneVerified = !!(clientPhone && recordPhone && clientPhone === recordPhone);
+
         // ★ v3 新增：诊所名绑定校验
         // 仅当激活码生成时已绑定 clinicName 时才校验（向后兼容旧激活码）
         // ★ 2026-08-25：同设备重激活（existingDevice 命中）自动跳过诊所名校验——
         //   license 始终按 record.clinicName 生成，重装客户只需重输激活码即可恢复
-        if (record.clinicName && !existingDevice) {
+        // ★ 2026-08-29：手机号核验通过（phoneVerified）同样跳过——原激活本人换机时
+        //   无需重填诊所名，服务端自动沿用原绑定 clinicName（"自动填写原激活信息"）
+        if (record.clinicName && !existingDevice && !phoneVerified) {
             if (!clinicName || clinicName.trim() === '') {
                 return json({
                     success: false,
@@ -230,8 +245,11 @@ export async function onRequest(context) {
                 // ★ P1 修复：换机解绑二次校验
                 // 仅当新设备的 user 与 license 原始绑定 user 一致时才允许自动解绑
                 // 防止攻击者获取激活码后在未知机器上激活挤掉合法用户
+                // ★ 2026-08-29：user 全等比对升级为「手机号比对」——原激活本人重装/换机时
+                //   user 字符串形态不同（"张三/138..." vs "138..."）会被误拦要求联系客服；
+                //   手机号一致即视为本人（手机号=登录账号，仅本人知晓）
                 const originalUser = record.user || record.username || '';
-                if (user && originalUser && user !== originalUser) {
+                if (user && originalUser && user !== originalUser && !phoneVerified) {
                     await appendLicenseLog(kv, code, {
                         action: 'unbind-denied',
                         time: new Date().toISOString(),
