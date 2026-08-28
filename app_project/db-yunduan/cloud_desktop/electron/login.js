@@ -558,12 +558,18 @@
                         (user.role === 'platform_admin');
                 }
                 if (machineIsInstitution !== accountIsInstitution) {
-                    if (machineIsInstitution) {
-                        showError('⚠️ 该账户属于【标准版】，不能登录【机构版】电脑。请使用机构版账户登录，或在标准版电脑上使用该账户。');
-                    } else {
-                        showError('⚠️ 该账户属于【机构版】，不能登录【标准版】电脑。请使用标准版账户登录，或在机构版电脑上使用该账户。');
+                    // ★ 2026-08-28 设计重构（覆盖 8-18"一台设备一版本"拦截式隔离，按实际使用场景重定）：
+                    //   登录=身份认证，授权=功能控制。版本防线收敛为两道真正有效的闸：
+                    //   ①本机功能（用户管理等）由本机激活码决定——permission.js 按 config.edition、
+                    //     enforceEditionBinding 校正逻辑不变，未激活机构版者本地功能不解锁；
+                    //   ②云端数据由服务端按账户 clinicEdition/角色鉴权——本地无授权拿不到机构数据。
+                    //   版本不匹配不再阻断登录：机构账户上标准版授权电脑 → 放行+降级说明（基础功能可用，
+                    //   机构专属功能需本机激活机构版）；反向（标准账户上机构版电脑）为功能子集，静默放行。
+                    if (accountIsInstitution && !machineIsInstitution) {
+                        user._editionNote = '。提示：本机为标准版授权，机构版专属功能不可用，可点下方"激活"升级机构版';
                     }
-                    return;
+                    console.warn('[login] 账户/本机版本不匹配，按新规范放行登录（功能按本机授权降级）:',
+                        'machine=', machineEdition, 'account=', accountEdition || user.role);
                 }
             } catch (e) { console.warn('[login] 版本匹配校验失败:', e); }
 
@@ -645,7 +651,7 @@
                 _loggedIn = true;
                 applyEditionTag(_configForTag);
                 // ★ 绿色成功反馈：登录成功提示
-                showGreenHint(`✓ 登录成功！欢迎 ${user.name || user.username}，正在进入系统...`);
+                showGreenHint(`✓ 登录成功！欢迎 ${user.name || user.username}，正在进入系统...${user._editionNote || ''}`);
                 await window.electronAPI.loginSuccess(userData);
             }
         } catch (e) {
