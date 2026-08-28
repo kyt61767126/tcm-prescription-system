@@ -509,6 +509,11 @@ h1 { color: #2c3e50; font-size: 18px; margin-bottom: 3px; }
                 <input type="text" id="codePhone" placeholder="如：13800138000" autocomplete="off" inputmode="numeric" maxlength="11">
                 <div class="field-hint" id="codePhoneHint">💡 11位手机号为登录账号，默认密码 admin（登入后请自行修改）</div>
             </div>
+            <div class="form-group">
+                <label>邀请码 <span style="font-size:11px;color:#909399;font-weight:normal;">（选填，好友推荐）</span></label>
+                <input type="text" id="codeInviteCode" placeholder="如：7K3F9Q（没有可留空）" autocomplete="off" spellcheck="false" maxlength="10" style="font-family:'Courier New',monospace;letter-spacing:1px;text-transform:uppercase;">
+                <div class="field-hint">🎁 填好友邀请码激活，双方都得奖励（邀请人+90天，您+30天）</div>
+            </div>
             <button class="btn" id="codeToStep2Btn">下一步：确认密码（可留空=默认 admin）→</button>
         </div>
 
@@ -1270,7 +1275,9 @@ document.getElementById('codeSubmitBtn').addEventListener('click', async () => {
             codeState.clinicName,
             codeState.phone,
             pwd,
-            codeState.edition || 'institution'
+            codeState.edition || 'institution',
+            // ★ 2026-08-26 推广奖励：好友邀请码（选填）透传服务端
+            (document.getElementById('codeInviteCode') ? document.getElementById('codeInviteCode').value : '').trim() || ''
         );
         if (result.success) {
             document.getElementById('codeActivateStatus').textContent = '激活成功，正在重启...';

@@ -257,6 +257,20 @@ export async function onRequestPost({ request, env }) {
             await kv.put(logKey, JSON.stringify(logData), { expirationTtl: 30 * 24 * 60 * 60 });
         }
 
+        // ★ 2026-08-26 推广奖励自动下推（纯增量字段，旧客户端忽略不影响）：
+        //   serverExpiresAt = 服务端权威到期日（含邀请奖励天数）。若客户端本地 license.dat
+        //   的 expiresAt 早于此值（说明邀请奖励已到账未生效），新客户端可提示重新激活
+        //   （同码同设备重激活免费）以领取延长的有效期；serverInviteCode 供展示邀请进度。
+        let serverExpiresAt;
+        try {
+            const baseDays = (licenseRecord.days && licenseRecord.days > 0) ? licenseRecord.days : 365;
+            const rewardDays = (licenseRecord.rewardDays && licenseRecord.rewardDays > 0) ? licenseRecord.rewardDays : 0;
+            let anchorMs = licenseRecord.firstActivatedAt ? new Date(licenseRecord.firstActivatedAt).getTime() : NaN;
+            if (isNaN(anchorMs)) anchorMs = licenseRecord.activatedAt ? new Date(licenseRecord.activatedAt).getTime() : NaN;
+            if (isNaN(anchorMs)) anchorMs = now;
+            serverExpiresAt = new Date(anchorMs + (baseDays + rewardDays) * 24 * 60 * 60 * 1000).toISOString();
+        } catch (eCalc) { serverExpiresAt = undefined; }
+
         // ★ P2-3 计数上链对账：在线验证时核对本地处方计数与云端高水位
         //   本地计数 < 云端高水位 → 疑似本地清零/篡改（reportUsage 内落 count_rollback 审计日志）
         //   字段可选（旧客户端不带 → 不对账，宁可漏检不可误报）
@@ -278,6 +292,14 @@ export async function onRequestPost({ request, env }) {
             success: true,
             message: '在线验证成功，授权有效',
             verifyTime: verifyTime,
+            // ★ 2026-08-26 推广奖励下推（增量字段）
+            serverExpiresAt: serverExpiresAt,
+            serverInviteInfo: licenseRecord.inviteCode ? {
+                inviteCode: licenseRecord.inviteCode,
+                inviteCount: licenseRecord.inviteCount || 0,
+                maxInvitees: 4,
+                rewardDays: licenseRecord.rewardDays || 0
+            } : undefined,
             usage: usageInfo ? { month: usageInfo.month, cloudCount: usageInfo.high } : undefined
         }), { status: 200, headers: corsHeaders(request) });
 

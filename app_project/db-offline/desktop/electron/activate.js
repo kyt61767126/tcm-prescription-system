@@ -77,13 +77,17 @@ function loadClientConfig() {
 // ★ v3 新增：clinicName 参数，传给云端做诊所名绑定校验
 // ★ 修复：license.dat 写入失败时友好提示 + 自动 fallback 到 userData 目录
 // ★ 优化：Promise.race 双保险超时，解决 Electron 28 中 AbortController 可能不生效导致 fetch 卡死几十分钟的问题
-async function activateOnline(code, machineId, user, clinicName, phone, password, edition) {
+async function activateOnline(code, machineId, user, clinicName, phone, password, edition, inviteCode) {
     try {
         const body = { code, machineId };
         if (user) body.user = user;
         // ★ v3 新增：提交 clinicName（如填写）
         if (clinicName) body.clinicName = clinicName;
         if (phone) body.phone = phone;
+        // ★ 2026-08-26 推广奖励：好友邀请码（选填）——邀请人+90天（封顶4人360天），本机+30天
+        if (inviteCode && /^[A-Za-z0-9]{4,10}$/.test(String(inviteCode).trim())) {
+            body.inviteCode = String(inviteCode).trim().toUpperCase();
+        }
 
         // ★ 优化：Promise.race 实现可靠超时
         // 原问题：Electron 28 中 AbortController.abort() 可能不中断 fetch，导致卡死几十分钟

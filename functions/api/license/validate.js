@@ -36,7 +36,9 @@ import {
     buildLicenseData, encodeLicenseBase64, checkRateLimit,
     checkCodeRateLimit,  // ★ P0-1 激活码级短时频控
     getDevices, getMaxDevices, appendLicenseLog,
-    checkDeviceVersion, setDeviceVersion, versionOf
+    checkDeviceVersion, setDeviceVersion, versionOf,
+    ensureInviteCode, applyInviteReward, findLicenseByInviteCode,
+    INVITE_BONUS_DAYS_INVITEE, INVITE_MAX_INVITEES
 } from './_lib/license-core.js';
 
 // ★ P2 安全修复：收紧 CORS，仅允许合法 Origin
@@ -120,7 +122,7 @@ export async function onRequest(context) {
         }
 
         const body = await context.request.json().catch(() => ({}));
-        const { code, machineId, user, clinicName, productClass, clientClass } = body;
+        const { code, machineId, user, clinicName, productClass, clientClass, inviteCode, phone } = body;
 
         // 参数校验
         if (!code) {
@@ -271,11 +273,52 @@ export async function onRequest(context) {
         // 覆盖 user（如果客户端提供了）
         const licenseUser = user || record.user || record.username || 'user';
 
+        // ★ 2026-08-26 推广奖励：邀请码处理（可选字段，不影响既有激活流程）
+        //  仅【新设备首次付费激活】且携带邀请码时发奖：邀请人 +90 天（封顶4人360天），
+        //  被邀请人 +30 天。防刷条件见 license-core.applyInviteReward。
+        let inviteResult = { granted: false };
+        let inviteeBonusDays = 0;
+        let invitedByCode = null;
+        if (inviteCode && typeof inviteCode === 'string' && /^[A-Za-z0-9]{4,10}$/.test(inviteCode.trim())
+            && !existingDevice && record.type !== 'trial') {
+            inviteResult = await applyInviteReward(kv, {
+                inviteCode: inviteCode.trim(),
+                inviteeCode: code,
+                inviteeRecord: record,
+                machineId: machineId,
+                phone: (typeof phone === 'string' ? phone : ''),
+                ip: ip
+            });
+            if (inviteResult.granted) {
+                inviteeBonusDays = INVITE_BONUS_DAYS_INVITEE;   // 被邀请人 +30 天
+                const inviter = await findLicenseByInviteCode(kv, inviteCode.trim());
+                invitedByCode = inviter ? inviter.inviteCode : null;
+            } else {
+                // 发奖被拒仅记审计日志，不阻断激活（宁可漏发不可误伤）
+                await appendLicenseLog(kv, code, {
+                    action: 'invite-reward-denied',
+                    time: new Date().toISOString(),
+                    ip: ip,
+                    operator: licenseUser,
+                    detail: `邀请码=${String(inviteCode).trim()} 拒绝原因=${inviteResult.reason || 'unknown'}`
+                });
+            }
+        }
+
+        // ★ 给本激活码生成专属邀请码（幂等：已有沿用）——激活成功者即具备邀请资格
+        const recordWithInvite = await ensureInviteCode(kv, record);
+
         // 生成 license 数据
         // ★ v3 新增：将 clinicName + machineId + licenseBinding 传给 buildLicenseData
         // 仅当激活码已绑定诊所名时才启用 v3 签名（含绑定字段）
         // ★ v4 新增：将 maxDevices + devicesCount 传给 buildLicenseData（仅显示用，不参与签名）
-        const licenseRecord = { ...record, user: licenseUser };
+        // ★ 推广奖励：合并邀请码 + 被邀奖励天数（被邀请人 +30 天本次签发即生效）
+        const licenseRecord = {
+            ...record,
+            inviteCode: recordWithInvite.inviteCode,
+            rewardDays: (record.rewardDays || 0) + inviteeBonusDays,
+            user: licenseUser
+        };
         const licenseOptions = {};
         if (record.clinicName) {
             licenseOptions.clinicName = record.clinicName;
@@ -305,6 +348,14 @@ export async function onRequest(context) {
         //   buildLicenseData 用 firstActivatedAt + days 计算固定到期时间
         if (!record.firstActivatedAt) {
             updates.firstActivatedAt = getNowISO();
+        }
+        // ★ 推广奖励：持久化邀请码 / 被邀奖励天数 / 邀请人标识（幂等）
+        if (recordWithInvite.inviteCode && recordWithInvite.inviteCode !== record.inviteCode) {
+            updates.inviteCode = recordWithInvite.inviteCode;
+        }
+        if (inviteeBonusDays > 0) {
+            updates.rewardDays = (record.rewardDays || 0) + inviteeBonusDays;
+            updates.invitedBy = invitedByCode;
         }
         // ★ v3 新增：首次激活时记录 clinicName（已使用重激活时不变更）
         if (record.clinicName && !record.activatedClinicName) {
@@ -366,6 +417,15 @@ export async function onRequest(context) {
         return json({
             success: true,
             license: licenseBase64,
+            // ★ 2026-08-26 推广奖励信息（激活成功页展示：专属邀请码 + 阶梯进度 + 本次奖励）
+            inviteInfo: {
+                inviteCode: recordWithInvite.inviteCode || null,
+                inviteCount: record.inviteCount || 0,                    // 已成功邀请人数
+                maxInvitees: INVITE_MAX_INVITEES,                        // 封顶 4 人
+                rewardDays: (record.rewardDays || 0) + inviteeBonusDays, // 累计奖励天数
+                inviteeBonusDays: inviteeBonusDays,                      // 本次作为被邀请人所得（30）
+                invitedBy: invitedByCode                                 // 本次激活使用的邀请人码
+            },
             licenseInfo: {
                 user: licenseData.user,
                 type: licenseData.type,

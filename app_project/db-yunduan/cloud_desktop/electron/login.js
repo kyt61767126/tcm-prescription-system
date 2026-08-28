@@ -18,6 +18,30 @@
     // ★ 管理员用户名校验规则：4-20位字母/数字/下划线
     const ADMIN_USERNAME_REGEX = /^[a-zA-Z][a-zA-Z0-9_]{3,19}$/;
 
+    // ★ 2026-08-28 实名信息防护：判定一个"记忆候选"是否为"通用用户名"
+    //   实名内容（真实手机号/真实医师名）一律不记忆；仅允许"拼音/英文/通用称呼类"用户名记忆到下拉/预填。
+    //   判定规则（白名单模式，宁可不记不误记）：
+    //   1) 排除 10~15 位纯数字（中国大陆/通用手机号长度区间）→ 视为真实手机号
+    //   2) 排除 含 ≥2 个连续汉字（≥2字中文=大概率医师名/真实姓名）→ 视为实名
+    //   3) 排除 含 "@"（邮箱不记，属于个人实名标识）
+    //   4) 其他（英文/拼音/数字混合/通用称呼如 张大夫/zhangsan/wgj/zsy 等）→ 允许记忆
+    //   说明：注册时用户用手机号/真实姓名注册，登录可用；但记忆下拉/预填一律换用"通用用户名（拼音/张大夫）"
+    function isGenericUsername(candidate) {
+        try {
+            const s = String(candidate || '').trim();
+            if (!s) return false;
+            if (LEGACY_USERNAMES.includes(s)) return false;
+            // 1) 纯数字 10~15 位 → 手机号
+            if (/^\d{10,15}$/.test(s)) return false;
+            // 2) 含≥2个连续汉字 → 真实姓名
+            if (/[\u4e00-\u9fa5]{2,}/.test(s)) return false;
+            // 3) 邮箱 → 视为实名标识
+            if (s.indexOf('@') >= 0) return false;
+            // 其余通用用户名（英文/拼音/数字混合/单字中文称呼如"李"） → 允许记忆
+            return true;
+        } catch (_) { return false; }
+    }
+
     const PASSWORD_SALT = 'bnzc_prescription_salt_v1';
     async function hashPassword(password) {
         if (window.AuthCore) return AuthCore.hashPassword(password);
@@ -241,24 +265,40 @@
         const users = getUsers(config);
         _users = users;
         
-        // ★ 云端机构版：预填上次用户名（手机号），显示绿色提示
+        // ★ 云端机构版：预填上次用户名（仅通用用户名）
         let usernameToFill = null;
         let rememberedUser = localStorage.getItem(KEY_REMEMBER_USER);
-        // ★ 2026-08-28 与网页版统一兜底：单键缺失/为遗留账号时，从记住的账户数组取最近一个
+        // ★ 2026-08-28 实名防护：单键若为手机号/真实姓名/邮箱 → 立即删除并置空（绝不预填实名）
+        if (rememberedUser && !isGenericUsername(rememberedUser)) {
+            try { localStorage.removeItem(KEY_REMEMBER_USER); } catch (_) {}
+            rememberedUser = null;
+        }
+        // ★ 2026-08-28 与网页版统一兜底：单键缺失/为遗留账号时，从记住的账户数组取最近一个（仅通用用户名）
         if (!rememberedUser || LEGACY_USERNAMES.includes(rememberedUser)) {
             try {
                 const arr = JSON.parse(localStorage.getItem('local_rememberedUsers') || '[]');
                 if (Array.isArray(arr) && arr.length > 0) {
-                    const first = String(arr[0] || '').trim();
-                    if (first && !LEGACY_USERNAMES.includes(first)) rememberedUser = first;
+                    // ★ 实名防护：遍历数组找第一个通用用户名（老版本可能混入实名）
+                    for (let i = 0; i < arr.length; i++) {
+                        const first = String(arr[i] || '').trim();
+                        if (first && !LEGACY_USERNAMES.includes(first) && isGenericUsername(first)) {
+                            rememberedUser = first;
+                            break;
+                        }
+                    }
+                    // ★ 同步清理数组中的实名项（下次渲染下拉不泄露）
+                    const cleaned = arr.filter(x => isGenericUsername(x));
+                    if (cleaned.length !== arr.length) {
+                        localStorage.setItem('local_rememberedUsers', JSON.stringify(cleaned));
+                    }
                 }
             } catch (e) { /* 忽略解析异常 */ }
         }
-        if (rememberedUser && !LEGACY_USERNAMES.includes(rememberedUser)) {
+        if (rememberedUser && !LEGACY_USERNAMES.includes(rememberedUser) && isGenericUsername(rememberedUser)) {
             usernameToFill = rememberedUser;
             // ★ 2026-08-28 下拉按钮显示闭环：预填来自单键（旧版遗留）但数组键为空时，
             //   自动反向迁移写入 local_rememberedUsers[0]，保证下拉 ▼(N) 立即显示
-            //   （否则 merged.length=0 → style.display='none'，用户观感"按钮消失"）
+            //   ★ 实名防护：仅通用用户名才反向迁移（实名已在前面过滤掉）
             try {
                 const arr = JSON.parse(localStorage.getItem('local_rememberedUsers') || '[]');
                 if (!Array.isArray(arr) || arr.length === 0) {
@@ -269,13 +309,14 @@
                     localStorage.setItem('local_rememberedUsers', JSON.stringify(arr));
                 }
             } catch (_) { /* 迁移失败不阻断预填 */ }
-        } else if (users.length === 1 && users[0].username) {
-            // ★ 刚激活成功：只有一个管理员账户时自动预填（一键激活场景）
+        } else if (users.length === 1 && users[0].username && isGenericUsername(users[0].username)) {
+            // ★ 刚激活成功：只有一个管理员账户时自动预填（一键激活场景，且账户是通用用户名才预填）
             usernameToFill = users[0].username;
         }
         
-        if (usernameToFill) {
+        if (usernameToFill && isGenericUsername(usernameToFill)) {
             input.value = usernameToFill;
+            // ★ 2026-08-28 实名防护：只在通用用户名时写入单键；不写入则下次不预填也不泄露
             localStorage.setItem(KEY_REMEMBER_USER, usernameToFill);
             // ★ 2026-08-26 防信息泄露：取消"账号已预填"绿色提示（不在登入框暴露账号）
             // 自动聚焦到密码框
@@ -283,6 +324,11 @@
                 const pwd = $('loginPassword');
                 if (pwd) pwd.focus();
             }, 200);
+        } else {
+            // ★ 实名兜底：任何情况只要不是通用用户名就清空预填记忆键（安全）
+            try { localStorage.removeItem(KEY_REMEMBER_USER); } catch (_) {}
+            input.value = '';
+            setTimeout(() => { input.focus(); }, 200);
         }
 
         // ★ 2026-08-28 全局统一：渲染多账户下拉切换（与网页/APP端 renderRememberedUsers 同款）
@@ -291,53 +337,69 @@
 
     // ★ 2026-08-28 全局统一：桌面版登录框多账户下拉切换（与网页/APP端体验一致）
     //   2026-08-28 与网页版统一：下拉 = 最近登录账户（remembered，原样手机号/用户名）+ 本机注册账户，去重合并
+    // ★ 2026-08-28 实名防护：所有 merged 构建入口全链路 + 显示文本 均应用 isGenericUsername
+    //   真实手机号/医师名 → 一律从下拉中剔除；登录逻辑不受影响（用户可手动输入任何形式的凭证登录）
     function renderUsernameDropdown(users) {
         const btn = document.getElementById('usernameDropdownBtn');
         const menu = document.getElementById('usernameDropdownMenu');
         const input = document.getElementById('loginUsername');
         if (!btn || !menu) return;
-        // ★ 2026-08-28 DOM级保险1：无论数据结果如何，先保证按钮可见
-        //   （历史上 merged 构建任何环节异常/静默失败都会导致按钮恒隐藏）
         let merged = [];
         try {
             const list = (Array.isArray(users) && users.length > 0) ? users : _users;
             try {
                 const arr = JSON.parse(localStorage.getItem('local_rememberedUsers') || '[]');
                 if (Array.isArray(arr)) {
+                    // 清理历史写入的实名项（安全迁移）
+                    let cleaned = null;
                     arr.forEach(u => {
                         const s = String(u || '').trim();
-                        if (s && !LEGACY_USERNAMES.includes(s) && !merged.some(m => String(m.username).toLowerCase() === s.toLowerCase())) {
+                        // ★ 实名防护：仅通用用户名纳入下拉
+                        if (s && isGenericUsername(s) && !LEGACY_USERNAMES.includes(s) &&
+                            !merged.some(m => String(m.username).toLowerCase() === s.toLowerCase())) {
                             merged.push({ username: s });
+                        } else if (s && !isGenericUsername(s)) {
+                            if (!cleaned) cleaned = arr.slice();
+                            const idx = cleaned.indexOf(u);
+                            if (idx >= 0) cleaned.splice(idx, 1);
                         }
                     });
+                    if (cleaned && cleaned.length !== arr.length) {
+                        localStorage.setItem('local_rememberedUsers', JSON.stringify(cleaned));
+                    }
                 }
             } catch (e) { /* 忽略解析异常 */ }
+            // ★ 实名防护：config.users 仅当 username 本身是通用用户名时才纳入下拉
+            //   （真实姓名/手机号作为 username 注册的账户，其对应下拉项不展示；用户仍可手动输入登录）
             (Array.isArray(list) ? list : []).forEach(u => {
-                if (u && u.username && !merged.some(m => String(m.username).toLowerCase() === String(u.username).toLowerCase())) {
-                    merged.push(u);
-                }
+                if (!u || !u.username) return;
+                const uname = String(u.username || '').trim();
+                if (!isGenericUsername(uname)) return;
+                if (merged.some(m => String(m.username).toLowerCase() === uname.toLowerCase())) return;
+                merged.push(u);
             });
-            // ★ 双保险兜底：输入框当前值有内容就纳入下拉
+            // ★ 双保险兜底：输入框当前值有内容就纳入下拉（仅通用用户名；实名绝不进入下拉）
             if (input) {
                 const currentVal = String(input.value || '').trim();
-                if (currentVal && !LEGACY_USERNAMES.includes(currentVal) &&
+                if (currentVal && isGenericUsername(currentVal) && !LEGACY_USERNAMES.includes(currentVal) &&
                     !merged.some(m => String(m.username).toLowerCase() === currentVal.toLowerCase())) {
                     merged.unshift({ username: currentVal });
                 }
             }
         } catch (e) {
-            console.warn('[login] renderUsernameDropdown 数据构建异常，退化为仅用输入框值:', e && e.message || e);
+            console.warn('[login] renderUsernameDropdown 数据构建异常:', e && e.message || e);
         } finally {
-            // ★ DOM级保险2：finally 无论如何都要显示按钮；若 merged 为空但输入框有值，补兜底
             try {
                 if (merged.length === 0 && input) {
                     const v = String(input.value || '').trim();
-                    if (v && !LEGACY_USERNAMES.includes(v)) merged.push({ username: v });
+                    // ★ 实名防护：finally 兜底也只加通用用户名（输入框有手机号不显示，避免从这条链泄出）
+                    if (v && isGenericUsername(v) && !LEGACY_USERNAMES.includes(v)) merged.push({ username: v });
                 }
                 if (merged.length === 0) {
-                    // 确实没有任何用户名 → 只显示▼（不显示N），让用户感知功能入口存在
                     btn.style.display = 'inline-flex';
                     btn.textContent = '▼';
+                    menu.innerHTML = '';
+                    menu.classList.remove('show');
                 } else {
                     btn.style.display = 'inline-flex';
                     btn.textContent = '▼(' + merged.length + ')';
@@ -345,7 +407,11 @@
                     merged.forEach(u => {
                         if (!u || !u.username) return;
                         const item = document.createElement('div');
-                        item.textContent = u.displayName || u.name || u.username;
+                        // ★ 实名防护：显示文本也只采用"通用用户名"字段；displayName/name如为医师实名→回退
+                        let label = u.username;
+                        const dn = u.displayName || u.name || '';
+                        if (dn && isGenericDisplayNameSafe(dn)) label = dn;
+                        item.textContent = label;
                         item.addEventListener('click', function (e) {
                             e.stopPropagation();
                             const inputEl = document.getElementById('loginUsername');
@@ -358,10 +424,23 @@
                     });
                 }
             } catch (ee) {
-                // 终极保险：catch所有分支异常后直接display+▼文字
                 try { btn.style.display = 'inline-flex'; btn.textContent = '▼'; } catch (_) {}
             }
         }
+    }
+
+    // ★ 2026-08-28 实名防护：判定 config.displayName 用于下拉显示文本时是否安全
+    //   （避免 displayName="王桂杰" 这种真实医师名从下拉显示文本泄出）
+    function isGenericDisplayNameSafe(displayName) {
+        try {
+            const s = String(displayName || '').trim();
+            if (!s) return false;
+            // 显示文本同 username 实名判定规则：≥2汉字/10-15位纯数字/@ → 视为实名，不安全
+            if (/^\d{10,15}$/.test(s)) return false;
+            if (/[\u4e00-\u9fa5]{2,}/.test(s)) return false;
+            if (s.indexOf('@') >= 0) return false;
+            return true;
+        } catch (_) { return false; }
     }
 
     function toggleUsernameDropdown() {
@@ -378,14 +457,31 @@
     });
     
     // ★ 2026-08-28 与云端网页版统一：记住用户名（输入框原文 + 最近5个账户数组，网页版 saveRememberedUser 同款）
+    // ★ 2026-08-28 实名防护：只有 isGenericUsername 判定为"通用用户名"才写入记忆；真实手机号/医师名/邮箱一律
+    //   清空单键 + 不写入数组，从源头阻断实名信息出现在下拉/预填。登录逻辑不受影响（用户随时可手动输入手机号/姓名登录）。
     function saveRememberedUsername(username) {
         try {
             const cleanUsername = String(username || '').trim();
             if (!cleanUsername) return;
+            // ★ 实名防护第一关：若为手机号/真实姓名/邮箱 → 立即删除记忆键、不写数组，只保留手动登录能力
+            if (!isGenericUsername(cleanUsername)) {
+                try {
+                    localStorage.removeItem(KEY_REMEMBER_USER);
+                    const arr = JSON.parse(localStorage.getItem('local_rememberedUsers') || '[]');
+                    if (Array.isArray(arr)) {
+                        const filtered = arr.filter(x => isGenericUsername(x));
+                        localStorage.setItem('local_rememberedUsers', JSON.stringify(filtered));
+                    }
+                } catch (_) { /* 清理失败不阻断登录 */ }
+                // 刷新下拉（清理掉实名项）
+                if (typeof renderUsernameDropdown === 'function') renderUsernameDropdown();
+                return;
+            }
             let remembered = [];
             try {
                 const parsed = JSON.parse(localStorage.getItem('local_rememberedUsers') || '[]');
-                if (Array.isArray(parsed)) remembered = parsed.filter(u => typeof u === 'string');
+                // ★ 读取数组时同步清理历史实名项（防止老版本已写入的实名泄露）
+                if (Array.isArray(parsed)) remembered = parsed.filter(u => typeof u === 'string' && isGenericUsername(u));
             } catch (e) { /* 解析失败视为空列表 */ }
             remembered = remembered.filter(u => String(u).toLowerCase() !== cleanUsername.toLowerCase());
             remembered.unshift(cleanUsername);
@@ -395,7 +491,11 @@
             // 刷新下拉列表（含本机账户合并）
             if (typeof renderUsernameDropdown === 'function') renderUsernameDropdown();
         } catch (e) {
-            try { localStorage.setItem(KEY_REMEMBER_USER, String(username || '').trim()); } catch (_) {}
+            // ★ 异常路径也清理实名键（安全兜底优先）
+            try {
+                const v = String(username || '').trim();
+                if (v && !isGenericUsername(v)) localStorage.removeItem(KEY_REMEMBER_USER);
+            } catch (_) {}
         }
     }
 

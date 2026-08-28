@@ -385,12 +385,15 @@ async function buildLicenseData(record, options = {}) {
     //   存量旧记录无该字段时回退 activatedAt（尽力而为）。
     //   record.expiresAt 保留用途：①激活码使用期限（validate.js 过期校验）
     //   ②续费叠加保底（若晚于锚定到期日，取续费值，保持续费效果）。
+    // ★ 2026-08-26 推广奖励：record.rewardDays（邀请奖励累计天数）直接叠加到期日，
+    //   与锚定规则正交——锚定防"重装续命"，rewardDays 是平台主动发放的合法延期。
     let expiresAt;
     const baseDays = (record.days && record.days > 0) ? record.days : 365;
+    const rewardDays = (record.rewardDays && record.rewardDays > 0) ? record.rewardDays : 0;
     let anchorMs = record.firstActivatedAt ? new Date(record.firstActivatedAt).getTime() : NaN;
     if (isNaN(anchorMs)) anchorMs = record.activatedAt ? new Date(record.activatedAt).getTime() : NaN;
     if (isNaN(anchorMs)) anchorMs = Date.now();
-    expiresAt = new Date(anchorMs + baseDays * 24 * 60 * 60 * 1000).toISOString();
+    expiresAt = new Date(anchorMs + (baseDays + rewardDays) * 24 * 60 * 60 * 1000).toISOString();
     if (record.expiresAt) {
         const renewExp = new Date(record.expiresAt);
         if (!isNaN(renewExp.getTime()) && renewExp.getTime() > new Date(expiresAt).getTime()) {
@@ -833,6 +836,131 @@ async function deleteLicenseLogs(kv, code) {
 }
 
 // ============================================================================
+//  ★ 2026-08-26 推广奖励（邀请激活阶梯奖励）
+//  规则（用户定版）：邀请人每成功邀请 1 人付费激活 → +90 天，累计封顶 4 人/360 天；
+//  被邀请人首次付费激活填邀请码 → +30 天试用期延长。
+//  防刷硬条件（缺一发奖即拒绝）：
+//    ①被邀激活码必须非 trial（付费激活才计）
+//    ②被邀 machineId ≠ 邀请人任何已绑设备（防自邀/换机自刷）
+//    ③被邀 machineId 未出现在邀请人 inviteRewardLog（防重复计同一设备）
+//    ④邀请人 inviteCount < 4（封顶）
+// ============================================================================
+const INVITE_REWARD_DAYS_PER_PERSON = 90;   // 邀请人每人奖励天数
+const INVITE_MAX_INVITEES = 4;              // 封顶人数（4×90=360天）
+const INVITE_BONUS_DAYS_INVITEE = 30;       // 被邀请人奖励天数
+const INVITE_CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';  // 去易混淆字符（I/L/O/0/1）
+
+// 生成 6 位邀请码（如 7K3F9Q）
+function generateInviteCode() {
+    const bytes = crypto.getRandomValues(new Uint8Array(6));
+    let code = '';
+    for (let i = 0; i < 6; i++) {
+        code += INVITE_CODE_CHARS[bytes[i] % INVITE_CODE_CHARS.length];
+    }
+    return code;
+}
+
+// 确保激活码记录上有邀请码（首次激活时生成，幂等：已有则沿用）
+async function ensureInviteCode(kv, record) {
+    if (!kv || !record || !record.code) return record;
+    if (record.inviteCode) return record;
+    // 邀请码全局唯一：冲突时重生成（最多3次，仍冲突直接带前缀兜底）
+    for (let i = 0; i < 3; i++) {
+        const candidate = generateInviteCode();
+        const existing = await findLicenseByInviteCode(kv, candidate);
+        if (!existing) {
+            await updateLicense(kv, record.code, { inviteCode: candidate });
+            return { ...record, inviteCode: candidate };
+        }
+    }
+    const fallback = (record.code || 'X').replace(/[^A-Z0-9]/g, '').substring(0, 6).padEnd(6, 'X');
+    await updateLicense(kv, record.code, { inviteCode: fallback });
+    return { ...record, inviteCode: fallback };
+}
+
+// 按邀请码查找激活码记录（扫全量 license 记录，量级百级以内，KV 读额度充足）
+async function findLicenseByInviteCode(kv, inviteCode) {
+    if (!kv || !inviteCode) return null;
+    const code = String(inviteCode).trim().toUpperCase();
+    const records = await listLicenses(kv);
+    return records.find(r => r.inviteCode && String(r.inviteCode).toUpperCase() === code) || null;
+}
+
+// 发放邀请奖励（validate.js 激活成功时调用）
+// 返回 { granted: true, inviterCount, rewardDays, inviteeBonusDays } 或 { granted: false, reason }
+async function applyInviteReward(kv, { inviteCode, inviteeCode, inviteeRecord, machineId, phone, ip }) {
+    try {
+        if (!kv || !inviteCode || !inviteeRecord || !machineId) {
+            return { granted: false, reason: '参数缺失' };
+        }
+        // ①付费激活才计（trial 试用不计）
+        if (inviteeRecord.type === 'trial') {
+            return { granted: false, reason: '试用激活不计入邀请奖励' };
+        }
+        const inviter = await findLicenseByInviteCode(kv, inviteCode);
+        if (!inviter) {
+            return { granted: false, reason: '邀请码无效' };
+        }
+        // 邀请人自己已激活的设备不能再被邀（防自邀）
+        const inviterDevices = getDevices(inviter);
+        if (inviterDevices.some(d => d.machineId === machineId)) {
+            return { granted: false, reason: '不能自己邀请自己' };
+        }
+        // ②封顶检查
+        const inviteCount = inviter.inviteCount || 0;
+        if (inviteCount >= INVITE_MAX_INVITEES) {
+            return { granted: false, reason: '邀请奖励已达上限（4人/360天）' };
+        }
+        // ③同一设备不重复计
+        const rewardLog = Array.isArray(inviter.inviteRewardLog) ? inviter.inviteRewardLog : [];
+        if (rewardLog.some(e => e && e.machineId === machineId)) {
+            return { granted: false, reason: '该设备已计入邀请奖励' };
+        }
+        // ④防环：被邀人不能反过来是邀请人的邀请人（A邀B后B再邀A）
+        if (inviter.invitedBy && inviteeRecord.inviteCode &&
+            String(inviter.invitedBy).toUpperCase() === String(inviteeRecord.inviteCode).toUpperCase()) {
+            return { granted: false, reason: '不能相互邀请套奖励' };
+        }
+
+        // === 发奖：邀请人 +90 天 ===
+        const newCount = inviteCount + 1;
+        const newRewardDays = Math.min((inviter.rewardDays || 0) + INVITE_REWARD_DAYS_PER_PERSON,
+            INVITE_MAX_INVITEES * INVITE_REWARD_DAYS_PER_PERSON);
+        rewardLog.push({
+            machineId: machineId,
+            phone: phone || '',
+            inviteeCode: inviteeCode || '',
+            time: new Date().toISOString(),
+            rewardDays: INVITE_REWARD_DAYS_PER_PERSON,
+            ip: ip || 'unknown'
+        });
+        await updateLicense(kv, inviter.code, {
+            inviteCount: newCount,
+            rewardDays: newRewardDays,
+            inviteRewardLog: rewardLog
+        });
+        // 审计日志（邀请人码）
+        await appendLicenseLog(kv, inviter.code, {
+            action: 'invite-reward',
+            time: new Date().toISOString(),
+            ip: ip || 'unknown',
+            operator: inviter.user || inviter.username || 'unknown',
+            detail: `邀请第${newCount}人成功(${(machineId || '').substring(0, 8)}...)，+${INVITE_REWARD_DAYS_PER_PERSON}天，累计${newRewardDays}天`
+        });
+        return {
+            granted: true,
+            inviterCount: newCount,
+            rewardDays: newRewardDays,
+            inviteeBonusDays: INVITE_BONUS_DAYS_INVITEE
+        };
+    } catch (e) {
+        // 发奖失败不阻断激活主流程（宁漏发不误伤）
+        console.warn('[InviteReward] 发放失败:', e.message);
+        return { granted: false, reason: '服务器错误' };
+    }
+}
+
+// ============================================================================
 //  ★ P2-3 计数上链：处方计数高水位跟踪 + 回拨（本地篡改）对账
 //  KV key: usage:{code}，值为 JSON：
 //    {
@@ -985,6 +1113,14 @@ export {
     // ★ P2-3 新增：计数上链（处方计数高水位 + 回拨对账）
     reportUsage,       // 心跳/在线验证时上报计数并检测本地篡改
     getUsage,          // 读取计数上报记录（风控展示）
+    // ★ 2026-08-26 新增：推广奖励（邀请激活阶梯奖励 90天/人 封顶4人360天）
+    INVITE_REWARD_DAYS_PER_PERSON,   // 邀请人每人奖励天数（90）
+    INVITE_MAX_INVITEES,             // 封顶人数（4）
+    INVITE_BONUS_DAYS_INVITEE,       // 被邀请人奖励天数（30）
+    generateInviteCode,              // 生成6位邀请码
+    ensureInviteCode,                // 确保激活码记录有邀请码（幂等）
+    findLicenseByInviteCode,         // 按邀请码查激活码记录
+    applyInviteReward,               // 发放邀请奖励（validate 激活成功时调用）
     // ★ 任务2 新增：ECDSA P-256 非对称签名
     ecdsaSign,              // 用 ECDSA 私钥签名消息
     generateSignatureV5,    // 生成 v5 签名（ECDSA P-256）

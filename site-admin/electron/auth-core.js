@@ -1190,9 +1190,40 @@
 
     // ==================== 记住用户名层 ====================
 
+    // ★ 2026-08-28 实名信息防护：判定"通用用户名"（非手机号/汉字姓名/邮箱）
+    //   白名单模式：宁可不记不误记，实名一律不写入下拉/预填
+    function _isGenericUsername(candidate) {
+        try {
+            const s = String(candidate || '').trim();
+            if (!s) return false;
+            if (/^\d{10,15}$/.test(s)) return false;
+            if (/[\u4e00-\u9fa5]{2,}/.test(s)) return false;
+            if (s.indexOf('@') >= 0) return false;
+            return true;
+        } catch (_) { return false; }
+    }
+
     async function saveRememberedUser(username) {
         const cleanUsername = String(username).trim();
         if (!cleanUsername) return;
+        // ★ 2026-08-28 实名防护：真实手机号/医师名/邮箱 → 立即删除记忆键，不写入数组
+        //   （登录功能不受影响，用户任何时候可手动输入手机号/姓名登录）
+        if (!_isGenericUsername(cleanUsername)) {
+            try {
+                const stored = await StorageAdapter.getItem('auth:rememberedUsers');
+                let remembered = [];
+                if (stored) { try { remembered = JSON.parse(stored); } catch (_) {} }
+                if (!Array.isArray(remembered)) remembered = [];
+                const filtered = remembered.filter(u => _isGenericUsername(u));
+                await StorageAdapter.setItem('auth:rememberedUsers', JSON.stringify(filtered));
+                await StorageAdapter.removeItem('auth:rememberedUsername');
+                // 兼容老键同步清理
+                await StorageAdapter.removeItem('cloud_rememberedUsername');
+                await StorageAdapter.removeItem('local_rememberedUsername');
+                await StorageAdapter.removeItem('rememberedUsername');
+            } catch (_) { /* 清理失败不阻断登录 */ }
+            return;
+        }
 
         let remembered = [];
         try {
@@ -1200,6 +1231,8 @@
             if (stored) remembered = JSON.parse(stored);
             if (!Array.isArray(remembered)) remembered = [];
         } catch (e) { remembered = []; }
+        // ★ 读时同步清理历史实名项（老版本可能写入的实名不再保留）
+        remembered = remembered.filter(u => _isGenericUsername(u));
 
         remembered = remembered.filter(u => String(u).toLowerCase() !== cleanUsername.toLowerCase());
         remembered.unshift(cleanUsername);
@@ -1223,12 +1256,28 @@
             if (stored) {
                 try {
                     const arr = JSON.parse(stored);
-                    if (Array.isArray(arr) && arr.length > 0) return arr;
+                    if (Array.isArray(arr) && arr.length > 0) {
+                        // ★ 2026-08-28 实名防护：读时过滤历史实名项（只返回通用用户名）
+                        const g = arr.filter(u => _isGenericUsername(u));
+                        if (g.length !== arr.length) await StorageAdapter.setItem('auth:rememberedUsers', JSON.stringify(g));
+                        if (g.length > 0) return g;
+                    }
                 } catch (e) { /* 忽略解析错误 */ }
             }
 
             const oldSingle = single || cloudOld || localOld || legacyOld;
-            return oldSingle ? [oldSingle] : [];
+            // ★ 实名防护：单键若为实名→立即删除并返回空
+            if (oldSingle) {
+                if (_isGenericUsername(oldSingle)) return [oldSingle];
+                // 清理历史遗留实名单键
+                try {
+                    await StorageAdapter.removeItem('auth:rememberedUsername');
+                    await StorageAdapter.removeItem('cloud_rememberedUsername');
+                    await StorageAdapter.removeItem('local_rememberedUsername');
+                    await StorageAdapter.removeItem('rememberedUsername');
+                } catch (_) {}
+            }
+            return [];
         } catch (e) { /* 忽略 */ }
         return [];
     }
