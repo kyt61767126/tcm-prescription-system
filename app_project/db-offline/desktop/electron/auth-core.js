@@ -2545,7 +2545,18 @@
                 body: JSON.stringify({ code: String(code).trim() })
             });
             const d = await r.json().catch(() => null);
-            if (!d || !d.success || !d.inviteCode) return;
+            if (!d || !d.success || !d.inviteCode) {
+                // ★ 可诊断性：激活码存在但查询失败（网络异常/服务暂不可用/激活码记录缺失）
+                //   显示灰色小提示而非完全静默，便于用户和排查区分失败原因
+                const hb = document.createElement('div');
+                hb.id = 'inviteInfoBox';
+                hb.style.cssText = 'margin-top:8px;padding-top:8px;border-top:1px dashed #ddd;font-size:11px;color:#aaa;line-height:1.6;';
+                hb.textContent = '🎁 邀请码加载失败（' +
+                    ((d && d.error) ? d.error : '网络异常') +
+                    '），联网后重新打开本页重试';
+                el.appendChild(hb);
+                return;
+            }
             const cnt = d.inviteCount || 0, max = d.maxInvitees || 4, days = d.rewardDays || 0;
             const box = document.createElement('div');
             box.id = 'inviteInfoBox';
