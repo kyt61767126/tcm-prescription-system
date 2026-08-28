@@ -1816,6 +1816,14 @@
             //   故按端区分组装与传参，避免密码被桌面端误当 clinicName。
             const actPhone = (modalResult.phone || '').trim();
             const actPwd = modalResult.password || '';
+            // ★ 2026-08-28 推广奖励：邀请码（选填，格式校验 4~10 位字母数字）
+            const actInvite = (modalResult.inviteCode || '').trim().toUpperCase();
+            if (actInvite && !/^[A-Z0-9]{4,10}$/.test(actInvite)) {
+                await showHtmlAlert('邀请码格式不正确\n\n应为 4~10 位字母或数字（如 7K3F9Q）。\n若没有邀请码，请留空后重新提交。');
+                global.__licenseActivating = false;
+                showActivateDialog();
+                return;
+            }
             const isDesktopAct = global.electronAPI && global.electronAPI.activate &&
                 typeof global.electronAPI.activate.showExpireAlert === 'function';
             if (actPhone && !isDesktopAct) {
@@ -1832,10 +1840,10 @@
                 return;
             }
 
-            // ★ 按端区分传参：APP端 submit(code, user, password)；桌面端 submit(code, user, clinicName, phone, password)
+            // ★ 按端区分传参：APP端 submit(code, user, password, inviteCode)；桌面端 submit(code, user, clinicName, phone, password, edition, inviteCode)
             const result = isDesktopAct
-                ? await global.electronAPI.activate.submit(codeTrim, user, '', actPhone, actPwd)
-                : await global.electronAPI.activate.submit(codeTrim, user, actPwd);
+                ? await global.electronAPI.activate.submit(codeTrim, user, '', actPhone, actPwd, undefined, actInvite)
+                : await global.electronAPI.activate.submit(codeTrim, user, actPwd, actInvite);
             if (result && result.success) {
                 global.__licenseExpired = false;
                 global.__licenseActivating = false;
@@ -1851,11 +1859,22 @@
                     await StorageAdapter.removeItem('license:lastHeartbeat');
                     await StorageAdapter.removeItem('license:offlineStart');
                 } catch(e) { console.warn('[Heartbeat] 存储 license code 失败:', e); }
+                // ★ 2026-08-28 推广奖励：激活成功页展示专属邀请码 + 阶梯进度 + 本次奖励
+                let inviteMsg = '';
+                const iv = result.inviteInfo;
+                if (iv && iv.inviteCode) {
+                    inviteMsg = '\n\n🎁 您的专属邀请码：' + iv.inviteCode +
+                        (iv.inviteeBonusDays > 0 ? ('\n好友邀请奖励已到账：+' + iv.inviteeBonusDays + '天') : '') +
+                        '\n已成功邀请 ' + (iv.inviteCount || 0) + '/' + (iv.maxInvitees || 4) +
+                        ' 人，累计奖励 ' + (iv.rewardDays || 0) + '天' +
+                        '\n（每邀1人+90天，封顶4人+360天）';
+                }
                 // ★ 2026-08-26 重装激活登录修复：成功提示明确展示登录账号+密码，用户不再猜
                 showHtmlAlert('✅ 激活成功！\n' + (result.message || '') +
                     (actPhone ? ('\n\n📱 登录账号：' + actPhone +
                                  '\n🔑 登录密码：' + (actPwd ? actPwd : 'admin（默认）') +
                                  '\n\n请牢记以上账号密码，登录后可在设置中修改密码。') : '') +
+                    inviteMsg +
                     '\n\n点击确定后应用将重启');
                 global.electronAPI.activate.restart();
             } else {
@@ -2003,8 +2022,15 @@
                 'placeholder="请输入手机号" maxlength="11" autocomplete="off" data-lpignore="true" />' +
                 '<div style="font-size:12px;color:#666;margin-bottom:6px;">🔑 登录密码（选填，默认 admin）</div>' +
                 '<input type="password" id="activatePwdInput" ' +
-                'style="width:100%;padding:12px 14px;font-size:16px;border:2px solid #ddd;border-radius:8px;outline:none;margin-bottom:14px;box-sizing:border-box;" ' +
+                'style="width:100%;padding:12px 14px;font-size:16px;border:2px solid #ddd;border-radius:8px;outline:none;margin-bottom:12px;box-sizing:border-box;" ' +
                 'placeholder="请输入登录密码（留空则为 admin）" maxlength="32" autocomplete="new-password" data-lpignore="true" />' +
+
+                // ★ 2026-08-28 推广奖励：邀请码（选填，填好友邀请码双方得奖励天数）
+                '<div style="font-size:12px;color:#666;margin-bottom:6px;">🎁 邀请码（选填，好友推荐）</div>' +
+                '<input type="text" id="activateInviteInput" ' +
+                'style="width:100%;padding:12px 14px;font-size:16px;border:2px solid #ddd;border-radius:8px;outline:none;margin-bottom:6px;box-sizing:border-box;font-family:monospace;letter-spacing:1px;text-transform:uppercase;" ' +
+                'placeholder="如：7K3F9Q（没有可留空）" maxlength="10" autocomplete="off" data-lpignore="true" />' +
+                '<div style="font-size:11px;color:#999;margin-bottom:14px;">填好友邀请码激活，双方都得奖励（好友+90天，您+30天）</div>' +
 
                 // loading 提示（默认隐藏）
                 '<div id="activateLoadingBox" style="display:none;text-align:center;padding:10px;margin-bottom:14px;">' +
@@ -2117,6 +2143,9 @@
                 //   避免重装后账号密码被静默重置为默认 admin、用户不知情无法登录
                 const phoneVal = phoneInput ? phoneInput.value.trim() : '';
                 const pwdVal = pwdInput ? pwdInput.value : '';
+                // ★ 2026-08-28 推广奖励：读取邀请码（选填）
+                const inviteInputEl = card.querySelector('#activateInviteInput');
+                const inviteVal = inviteInputEl ? inviteInputEl.value.trim().toUpperCase() : '';
                 // ★ 显示 loading 状态（不立即关闭弹窗，让用户看到正在处理）
                 // 仅当有输入时才显示 loading
                 if (val && val.trim()) {
@@ -2134,7 +2163,7 @@
                     // 延迟一帧让 loading 显示后再 resolve（主流程异步处理）
                     setTimeout(function() {
                         cleanup();
-                        resolve({ code: val, phone: phoneVal, password: pwdVal, cancelled: false });
+                        resolve({ code: val, phone: phoneVal, password: pwdVal, inviteCode: inviteVal, cancelled: false });
                     }, 100);
                 } else {
                     // 空输入直接关闭

@@ -1079,11 +1079,19 @@ async function saveAndRestart(license, phone) {
     }
 }
 
-function showSuccess(phone, isCodeMode) {
+function showSuccess(phone, isCodeMode, inviteInfo) {
     document.getElementById('successPhone').textContent = phone || state.phone || codeState.phone;
-    document.getElementById('successDesc').innerHTML = isCodeMode
+    let descHtml = isCodeMode
         ? '激活码验证成功<br>软件即将自动重启，请使用手机号登录<br>密码为默认 admin（登入后请自行修改）'
         : '管理员已通过您的激活申请<br>软件即将自动重启，请使用手机号登录<br>密码为默认 admin（登入后请自行修改）';
+    // ★ 2026-08-28 推广奖励：成功页展示专属邀请码 + 阶梯进度 + 本次奖励
+    if (inviteInfo && inviteInfo.inviteCode) {
+        descHtml += '<br><br>🎁 您的专属邀请码：<b style="color:#667eea;letter-spacing:1px;">' + inviteInfo.inviteCode + '</b>' +
+            (inviteInfo.inviteeBonusDays > 0 ? '<br>好友邀请奖励已到账：+' + inviteInfo.inviteeBonusDays + '天' : '') +
+            '<br><span style="font-size:12px;color:#888;">已邀请 ' + (inviteInfo.inviteCount || 0) + '/' + (inviteInfo.maxInvitees || 4) +
+            ' 人，累计奖励 ' + (inviteInfo.rewardDays || 0) + ' 天（每邀1人+90天，封顶4人+360天）</span>';
+    }
+    document.getElementById('successDesc').innerHTML = descHtml;
     showAdminPanel('success');
     // Auto restart in 3s
     let secs = 3;
@@ -1284,7 +1292,7 @@ document.getElementById('codeSubmitBtn').addEventListener('click', async () => {
             // 显示成功界面（复用admin的success面板）
             document.getElementById('tab-admin').classList.add('active');
             document.getElementById('tab-code').classList.remove('active');
-            showSuccess(codeState.phone, true);
+            showSuccess(codeState.phone, true, result.inviteInfo);
         } else {
             showGlobalError(result.error || '激活失败，请检查激活码');
             showCodePanel('codeStep2');

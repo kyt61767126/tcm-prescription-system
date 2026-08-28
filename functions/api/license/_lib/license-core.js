@@ -583,7 +583,12 @@ function sanitizeRecord(record) {
             clinicName: d.clinicName || null,
             productClass: d.productClass || null,   // ★ 端形态：cloud云端/offline离线
             clientClass: d.clientClass || null      // ★ 客户端形态：desktop桌面/app
-        }))
+        })),
+        // ★ 2026-08-26 推广奖励字段（管理台邀请进度展示）
+        inviteCode: record.inviteCode || null,        // 专属邀请码
+        inviteCount: record.inviteCount || 0,         // 已成功邀请人数
+        rewardDays: record.rewardDays || 0,           // 累计奖励天数
+        invitedBy: record.invitedBy || null           // 由谁的邀请码邀请（被邀记录）
     };
 }
 

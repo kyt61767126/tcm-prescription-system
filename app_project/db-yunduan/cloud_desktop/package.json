@@ -1,6 +1,6 @@
 {
     "name": "tcm-prescription-cloud",
-    "version": "1.2.166",
+    "version": "1.2.167",
     "description": "惠康中医-云端",
     "main": "electron/main.js",
     "scripts": {

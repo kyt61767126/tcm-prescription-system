@@ -718,7 +718,7 @@ public class MainActivity extends BridgeActivity {
             "    }," +
             "activate: {" +
             "      show: function(){ return new Promise(function(resolve){ try { window.dispatchEvent(new CustomEvent('app:show-activate')); resolve({success:true}); } catch(e){ resolve({success:false,error:String(e)}); } }); }," +
-            "      submit: function(code, user, password){ return callNativeAsync('activateLicense', {code: code, user: user||'', password: password||'admin'}); }," +
+            "      submit: function(code, user, password, inviteCode){ return callNativeAsync('activateLicense', {code: code, user: user||'', password: password||'admin', inviteCode: inviteCode||''}); }," +
             "      getMachineId: function(){ return callNativeAsync('getMachineId', {}); }," +
             "      installAdminLicense: function(args){ return callNativeAsync('installAdminLicense', {licenseBase64: (args&&args.license)||'', user: (args&&args.adminName)||(args&&args.user)||'', clinicName: (args&&args.clinicName)||'', password: (args&&args.password)||'admin', loginUsername: (args&&args.phone)||'', phone: (args&&args.phone)||''}); }," +
             "      getActivationUsers: function(){ return callNativeAsync('getActivationUsers', {}); }," +
@@ -1097,9 +1097,11 @@ public class MainActivity extends BridgeActivity {
                     case "validateLicense":
                         return validateLicense().toString();
                     case "activateLicense":
+                        // ★ 2026-08-26 推广奖励：增加 inviteCode（好友邀请码，选填）
                         return activateLicense(args.optString("code", ""),
                                 args.optString("user", ""),
-                                args.optString("password", "admin")).toString();
+                                args.optString("password", "admin"),
+                                args.optString("inviteCode", "")).toString();
                     case "installAdminLicense":
                         // ★ 管理员激活：安装后端审批已生成的 license（无需网络校验激活码）
                         return installAdminLicense(
@@ -1849,7 +1851,7 @@ public class MainActivity extends BridgeActivity {
             catch (Exception e) { return fail(e.getMessage()); }
         }
 
-        private JSONObject activateLicense(String code, String user, String password) {
+        private JSONObject activateLicense(String code, String user, String password, String inviteCode) {
             try {
                 String machineId = getLM().getMachineId();
                 // ★ 解析"姓名/手机号"：手机号作为登录账号，姓名作为显示名
@@ -1864,7 +1866,8 @@ public class MainActivity extends BridgeActivity {
                 String name = (phoneStart >= 0) ? raw.substring(0, phoneStart) : raw;
                 name = name.replaceAll("[/\\-\\s]+$", "").trim();
                 String loginUsername = phone.isEmpty() ? raw : phone;
-                JSONObject result = getLM().activateOnline(code, machineId, name, "", password, loginUsername, phone);
+                // ★ 2026-08-26 推广奖励：透传好友邀请码（选填）→ 服务端发奖（邀请人+90天，本机+30天）
+                JSONObject result = getLM().activateOnline(code, machineId, name, "", password, loginUsername, phone, inviteCode);
                 // ★ 修复 2026-07-27：激活成功后立即验证 license.dat 是否可正确读取
                 // 这样可以在激活时就发现问题，而不是等用户重启后才发现问题
                 if (result != null && result.optBoolean("success", false)) {

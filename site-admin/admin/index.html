@@ -295,6 +295,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
             <button class="tab-btn" data-tab="DeviceVersion" onclick="switchTab('DeviceVersion')">🔓 设备绑定</button>
             <button class="tab-btn" data-tab="Risk" onclick="switchTab('Risk')">🚨 风控告警</button>
             <button class="tab-btn" data-tab="Logs" onclick="switchTab('Logs')">📜 操作日志</button>
+            <button class="tab-btn" data-tab="Usage" onclick="switchTab('Usage')">📊 用量监控</button>
         </div>
 
         <!-- ★ P0-1 待办中心标签页 -->
@@ -471,12 +472,13 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                         <th>到期时间</th>
                         <th>机器ID / 设备</th>
                         <th>诊所名</th>
+                        <th>邀请进度</th>
                         <th>备注</th>
                         <th>操作</th>
                     </tr>
                 </thead>
                 <tbody id="listBody">
-                    <tr><td colspan="11" class="loading">加载中...</td></tr>
+                    <tr><td colspan="12" class="loading">加载中...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -707,6 +709,49 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                 </table>
             </div>
             <p style="margin-top:12px;color:#909399;font-size:12px;">说明：日志保留 90 天，单次查询跨度 ≤31 天。登录/收费复核/审核通过/续费/改密/启停/解锁等关键动作均有记录。</p>
+        </div>
+
+        <!-- ★ 2026-08-28 用量监控标签页（云端 KV 免费额度预警 + 推广奖励观察） -->
+        <div id="tabUsage" class="tab-content">
+            <div id="usageAlert" class="alert"></div>
+            <h2>云端用量监控（KV 免费额度预警）</h2>
+            <p style="color:#606266;font-size:13px;line-height:1.8;">
+                扫描全部云端诊所的处方存储占用与离线激活码记录，对照 <b>Cloudflare KV 免费额度</b>（存储 1GB / 写入 1000次/天 / 单值 25MB）提前预警付费时机。<br>
+                <span style="color:#909399;">数据源全部来自现有 KV 键，扫描本身零写入、零新增采集。写入额度按每活跃诊所约 30 写/天估算，风险线约 33 家诊所。</span>
+            </p>
+            <div class="filter-bar">
+                <button class="btn btn-sm btn-primary" onclick="loadUsageMonitor()">🔄 立即扫描</button>
+                <span id="usageScannedAt" style="font-size:12px;color:#909399;margin-left:8px;"></span>
+            </div>
+            <div class="stats" id="usageStatsBox">
+                <div class="stat-card"><div class="num" id="usageClinicCount">-</div><div class="label">云端诊所数</div></div>
+                <div class="stat-card"><div class="num" id="usageStorageMB">-</div><div class="label">存储估算 / 1GB 免费</div></div>
+                <div class="stat-card"><div class="num" id="usageStoragePct">-</div><div class="label">存储占用比例</div></div>
+                <div class="stat-card"><div class="num" id="usageWriteWarn" style="color:#f39c12;">-</div><div class="label">写入风险线（家诊所）</div></div>
+                <div class="stat-card"><div class="num" id="usageLicenseCount">-</div><div class="label">激活码总数</div></div>
+                <div class="stat-card"><div class="num" id="usageInvitees" style="color:#e65100;">-</div><div class="label">累计邀请成功人次</div></div>
+                <div class="stat-card"><div class="num" id="usageRewardDays" style="color:#e65100;">-</div><div class="label">累计发放奖励天数</div></div>
+            </div>
+            <div id="usageRiskBox" style="margin:12px 0;"></div>
+            <h2 style="margin-top:16px;">各诊所存储明细（按占用降序）</h2>
+            <div class="table-box">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>诊所</th>
+                            <th>处方数</th>
+                            <th>垃圾箱</th>
+                            <th>占用 KB</th>
+                            <th>占比</th>
+                            <th>标记</th>
+                        </tr>
+                    </thead>
+                    <tbody id="usageClinicBody">
+                        <tr><td colspan="6" class="empty">点击「立即扫描」查看云端用量</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p style="margin-top:12px;color:#909399;font-size:12px;">提示：处方块接近单值 25MB 上限时会标红预警，建议引导该诊所归档历史处方；存储超 50% 时建议规划迁移 R2（对象存储，免费 10GB）或升级 Workers 付费版（$5/月）。</p>
         </div>
 
         <!-- ★ 管理员激活审核标签页 -->
@@ -1972,7 +2017,7 @@ function renderStats(stats) {
 function renderList(records) {
     const tbody = document.getElementById('listBody');
     if (!records || records.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="11" class="empty">暂无激活码</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="12" class="empty">暂无激活码</td></tr>';
         return;
     }
     const typeNames = { trial: '试用版', personal: '标准版', pro: '机构版' };
@@ -1995,6 +2040,17 @@ function renderList(records) {
 
         // ★ v3 新增：诊所名显示
         const clinicCell = r.clinicName ? '<span style="color:#8e44ad;">' + escapeHtml(r.clinicName) + '</span>' : '-';
+
+        // ★ 2026-08-28 推广奖励：邀请进度（邀请码 + 已邀人数/封顶 + 累计奖励天数）
+        let inviteCell = '-';
+        if (r.inviteCode) {
+            const cntColor = (r.inviteCount > 0) ? '#e65100' : '#909399';
+            inviteCell = '<div style="font-family:Courier New,monospace;font-weight:600;color:#667eea;">' + escapeHtml(r.inviteCode) + '</div>' +
+                '<div style="font-size:11px;color:' + cntColor + ';">已邀 ' + (r.inviteCount || 0) + '/' + (r.maxInvitees || 4) +
+                ' · 奖励 ' + (r.rewardDays || 0) + '天</div>';
+        } else if (r.invitedBy) {
+            inviteCell = '<span style="font-size:11px;color:#909399;">由 ' + escapeHtml(r.invitedBy) + ' 邀请</span>';
+        }
 
         let actions = '<button class="btn btn-sm" onclick="copyCode(\'' + r.code + '\')">复制</button>';
         actions += '<button class="btn btn-sm btn-primary" onclick="quickGenLinkFromCode(\'' + r.code + '\')" title="生成一键激活链接">🔗 链接</button>';
@@ -2021,6 +2077,7 @@ function renderList(records) {
             '<td>' + expiresAt + '</td>' +
             '<td>' + machineCell + '</td>' +
             '<td>' + clinicCell + '</td>' +
+            '<td>' + inviteCell + '</td>' +
             '<td>' + escapeHtml(r.note || '-') + '</td>' +
             '<td style="white-space:nowrap;">' + actions + '</td>' +
             '</tr>';
@@ -2434,6 +2491,75 @@ function switchTab(tabName) {
     else if (tabName === 'DeviceVersion') loadDeviceBindings();
     else if (tabName === 'Risk') loadRiskAlerts();
     else if (tabName === 'Logs') { /* 查询按钮触发，不自动拉 */ }
+    else if (tabName === 'Usage') loadUsageMonitor();
+}
+
+// ============================================================================
+// ★ 2026-08-28 用量监控：云端 KV 免费额度预警 + 推广奖励观察（admin-usage API）
+// ============================================================================
+async function loadUsageMonitor() {
+    const tbody = document.getElementById('usageClinicBody');
+    tbody.innerHTML = '<tr><td colspan="6" class="loading">扫描中...</td></tr>';
+    document.getElementById('usageScannedAt').textContent = '';
+    try {
+        const res = await fetch(API_BASE + '/license/admin-usage', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ action: 'scan' })
+        });
+        const data = await res.json();
+        if (!data.success) {
+            if (res.status === 403) {
+                showAlert('usageAlert', '登录已过期，请重新登录', 'error');
+                setTimeout(doLogout, 1500);
+            } else {
+                tbody.innerHTML = '<tr><td colspan="6" class="empty">' + escapeHtml(data.error || '扫描失败') + '</td></tr>';
+            }
+            return;
+        }
+        const c = data.cloud || {};
+        const l = data.license || {};
+        document.getElementById('usageClinicCount').textContent = c.clinicCount || 0;
+        document.getElementById('usageStorageMB').textContent = (c.totalSizeMB || '0') + ' MB';
+        document.getElementById('usageStoragePct').textContent = (c.storagePct || '0') + '%';
+        document.getElementById('usageWriteWarn').textContent = (c.writeWarnClinics || 33) + ' 家';
+        document.getElementById('usageLicenseCount').textContent = l.total || 0;
+        document.getElementById('usageInvitees').textContent = l.invitees || 0;
+        document.getElementById('usageRewardDays').textContent = (l.rewardDaysTotal || 0) + ' 天';
+        document.getElementById('usageScannedAt').textContent = '扫描于 ' + new Date(data.scannedAt).toLocaleString('zh-CN');
+
+        // 风险提示
+        const risks = Array.isArray(data.risks) ? data.risks : [];
+        document.getElementById('usageRiskBox').innerHTML = risks.map(r => {
+            const color = r.level === 'high' ? '#e74c3c' : (r.level === 'warn' ? '#f39c12' : '#27ae60');
+            const icon = r.level === 'high' ? '🔴' : (r.level === 'warn' ? '🟡' : '🟢');
+            return '<div style="padding:8px 12px;border-radius:6px;background:#fdf6ec;border-left:3px solid ' + color + ';margin-bottom:6px;font-size:13px;color:#606266;">' + icon + ' ' + escapeHtml(r.text) + '</div>';
+        }).join('');
+
+        // 诊所明细表
+        const clinics = Array.isArray(c.clinics) ? c.clinics : [];
+        if (clinics.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" class="empty">暂无云端诊所数据</td></tr>';
+        } else {
+            const totalKB = c.totalSizeKB || 1;
+            tbody.innerHTML = clinics.map(cl => {
+                const pct = totalKB > 0 ? (cl.sizeKB / totalKB * 100).toFixed(1) : '0';
+                const flag = cl.sizeKB > 15 * 1024
+                    ? '<span class="tag tag-expired">接近25MB上限</span>'
+                    : (cl.largest ? '<span class="tag tag-used">最大块</span>' : '-');
+                return '<tr>' +
+                    '<td>' + escapeHtml(cl.clinicName || cl.clinicId) + '</td>' +
+                    '<td>' + (cl.prescriptions >= 0 ? cl.prescriptions : '解析失败') + '</td>' +
+                    '<td>' + (cl.trash >= 0 ? cl.trash : '解析失败') + '</td>' +
+                    '<td>' + (cl.sizeKB || 0) + '</td>' +
+                    '<td>' + pct + '%</td>' +
+                    '<td>' + flag + '</td>' +
+                    '</tr>';
+            }).join('');
+        }
+    } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty">网络错误：' + escapeHtml(e.message) + '</td></tr>';
+    }
 }
 
 // ============================================================================

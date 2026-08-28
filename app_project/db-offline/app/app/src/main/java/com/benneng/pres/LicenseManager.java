@@ -3183,7 +3183,14 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
     //   该 7 参重载在激活成功后，自动创建登录账号（手机号为登录账号，密码可留空=admin）
     public JSONObject activateOnline(String code, String machineId, String user, String clinicName,
                                      String password, String loginUsername, String phone) {
-        JSONObject result = activateOnline(code, machineId, user, clinicName);
+        return activateOnline(code, machineId, user, clinicName, password, loginUsername, phone, null);
+    }
+
+    // ★ 2026-08-26 推广奖励：8 参重载，透传好友邀请码（选填）→ 服务端发奖
+    //   （邀请人+90天封顶4人360天，本机+30天）
+    public JSONObject activateOnline(String code, String machineId, String user, String clinicName,
+                                     String password, String loginUsername, String phone, String inviteCode) {
+        JSONObject result = activateOnline(code, machineId, user, clinicName, inviteCode);
         if (result != null && result.optBoolean("success", false)) {
             // 创建/确保登录账号：使用用户名/手机号 + 默认密码 admin，登入后用户自行修改密码
             try {
@@ -3198,6 +3205,11 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
     }
 
     public JSONObject activateOnline(String code, String machineId, String user, String clinicName) {
+        return activateOnline(code, machineId, user, clinicName, null);
+    }
+
+    // ★ 2026-08-26 推广奖励：5 参实现，inviteCode（好友邀请码）随激活请求提交
+    public JSONObject activateOnline(String code, String machineId, String user, String clinicName, String inviteCode) {
         HttpURLConnection conn = null;
         try {
             // ★ 激活码失败限速检查（防暴力尝试）
@@ -3222,6 +3234,10 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
             // ★ v3 新增：提交 clinicName（如填写）
             if (clinicName != null && !clinicName.isEmpty()) {
                 reqBody.put("clinicName", clinicName);
+            }
+            // ★ 2026-08-28 推广奖励：提交好友邀请码（选填）→ 服务端发奖
+            if (inviteCode != null && !inviteCode.trim().isEmpty()) {
+                reqBody.put("inviteCode", inviteCode.trim());
             }
 
             try (OutputStream os = conn.getOutputStream()) {
@@ -3350,6 +3366,8 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
             if (respJson.has("type")) r.put("type", respJson.get("type"));
             if (respJson.has("expiresAt")) r.put("expiresAt", respJson.get("expiresAt"));
             if (respJson.has("user")) r.put("user", respJson.get("user"));
+            // ★ 2026-08-28 推广奖励：透传邀请信息（专属邀请码+进度+奖励天数，供激活成功页展示）
+            if (respJson.has("inviteInfo")) r.put("inviteInfo", respJson.get("inviteInfo"));
             return r;
         } catch (java.net.SocketTimeoutException e) {
             Log.e(TAG, "激活超时", e);

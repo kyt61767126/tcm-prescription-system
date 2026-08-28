@@ -134,6 +134,8 @@ async function activateOnline(code, machineId, user, clinicName, phone, password
         return {
             success: true,
             licenseInfo: data.licenseInfo,
+            // ★ 2026-08-28 推广奖励：透传邀请信息（专属邀请码+进度+奖励天数，供成功页展示）
+            inviteInfo: data.inviteInfo || null,
             message: '激活成功',
             licensePath: installResult.path
         };
