@@ -895,7 +895,7 @@ public class MainActivity extends BridgeActivity {
             "      show: function(){ return new Promise(function(resolve){ try { window.dispatchEvent(new CustomEvent('app:show-activate')); resolve({success:true}); } catch(e){ resolve({success:false,error:String(e)}); } }); }," +
             "      submit: function(code, user, password, inviteCode){ return callNativeAsync('activateLicense', {code: code, user: user||'', password: password||'admin', inviteCode: inviteCode||''}); }," +
             "      getMachineId: function(){ return callNativeAsync('getMachineId', {}); }," +
-            "      installAdminLicense: function(args){ return callNativeAsync('installAdminLicense', {licenseBase64: (args&&args.license)||'', user: (args&&args.adminName)||(args&&args.user)||'', clinicName: (args&&args.clinicName)||'', password: (args&&args.password)||'admin', loginUsername: (args&&args.phone)||'', phone: (args&&args.phone)||''}); }," +
+            "      installAdminLicense: function(args){ return callNativeAsync('installAdminLicense', {licenseBase64: (args&&args.license)||'', user: (args&&args.adminName)||(args&&args.user)||'', clinicName: (args&&args.clinicName)||'', password: (args&&args.password)||'admin', loginUsername: (args&&args.phone)||'', phone: (args&&args.phone)||'', licenseCode: (args&&args.licenseCode)||''}); }," +
             "      getActivationUsers: function(){ return callNativeAsync('getActivationUsers', {}); }," +
             "      close: function(){ return Promise.resolve({success:true}); }," +
             "      restart: function(){ return callNativeAsync('appRestart', {}); }" +
@@ -1313,13 +1313,16 @@ public class MainActivity extends BridgeActivity {
                                 args.optString("inviteCode", "")).toString();
                     case "installAdminLicense":
                         // ★ 管理员激活：安装后端审批已生成的 license（无需网络校验激活码）
+                        //   licenseCode：2026-08-29 邀请码自愈——服务端返回的真实激活码，
+                        //   写入激活记录供 loadInviteInfo 第3来源读取
                         return installAdminLicense(
                                 args.optString("licenseBase64", ""),
                                 args.optString("user", args.optString("adminName", "")),
                                 args.optString("clinicName", ""),
                                 args.optString("password", "admin"),
                                 args.optString("loginUsername", args.optString("phone", "")),
-                                args.optString("phone", "")).toString();
+                                args.optString("phone", ""),
+                                args.optString("licenseCode", "")).toString();
                     case "getMachineId":
                         return getMachineIdJson().toString();
                     case "verifyOnline":
@@ -2097,12 +2100,15 @@ public class MainActivity extends BridgeActivity {
         }
 
         // ★ 管理员激活：安装后端审批已生成的 license（复用 LicenseManager.installAdminLicense）
+        //   licenseCode：2026-08-29 邀请码自愈——服务端返回的真实激活码，透传 LicenseManager 写激活记录
         private JSONObject installAdminLicense(String licenseBase64, String user, String clinicName,
-                                               String password, String loginUsername, String phone) {
+                                               String password, String loginUsername, String phone,
+                                               String licenseCode) {
             try {
                 String machineId = getLM().getMachineId();
                 JSONObject result = getLM().installAdminLicense(
-                        licenseBase64, machineId, user, clinicName, password, loginUsername, phone);
+                        licenseBase64, machineId, user, clinicName, password, loginUsername, phone,
+                        licenseCode == null ? "" : licenseCode);
                 if (result != null && result.optBoolean("success", false)) {
                     // 与 activateLicense 一致：激活后立即验证 license 是否可读
                     JSONObject verify = getLM().validateLicense(machineId);

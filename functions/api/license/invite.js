@@ -6,10 +6,15 @@
 //  用途：已激活用户查询自己的专属邀请码、邀请进度、累计奖励天数
 //        （客户端激活成功页 / 授权状态区展示）
 //
-//  请求体：
+//  请求体（二选一）：
 //    {
 //      "code": "BNZC-XXXX-XXXX-XXXX-XXXX"   // 激活码（激活后客户端本地持有）
 //    }
+//    {
+//      "machineId": "abc123..."              // ★ 兜底：管理员激活/旧版本激活本地无码，
+//    }                                        //   凭本机 machineId 查 device_version 绑定
+//                                            //   记录找回 licenseCode（不泄露码本身，
+//                                            //   返回体不含 code 字段）
 //
 //  返回（成功）：
 //    {
@@ -30,7 +35,7 @@
 // ============================================================================
 
 import {
-    getKV, getLicense, checkRateLimit,
+    getKV, getLicense, checkRateLimit, getDeviceVersion,
     ensureInviteCode,
     INVITE_REWARD_DAYS_PER_PERSON, INVITE_MAX_INVITEES
 } from './_lib/license-core.js';
@@ -79,9 +84,21 @@ export async function onRequestPost({ request, env }) {
         }
 
         const body = await request.json().catch(() => ({}));
-        const code = (body && body.code && typeof body.code === 'string') ? body.code.trim().toUpperCase() : '';
+        let code = (body && body.code && typeof body.code === 'string') ? body.code.trim().toUpperCase() : '';
+
+        // ★ 兜底：无本地激活码（管理员激活/旧版本激活），凭 machineId 找回绑定记录的 licenseCode。
+        //   安全边界：machineId 为设备指纹（激活/心跳时上报），device_version 记录仅本机绑定时才存在；
+        //   返回体不含 code 字段，不泄露激活码本身。
         if (!code) {
-            return json(request, { success: false, error: '缺少激活码参数' }, 400);
+            const mid = (body && body.machineId && typeof body.machineId === 'string') ? body.machineId.trim() : '';
+            if (!mid) {
+                return json(request, { success: false, error: '缺少激活码参数' }, 400);
+            }
+            const binding = await getDeviceVersion(kv, mid);
+            code = (binding && binding.licenseCode) ? String(binding.licenseCode).trim().toUpperCase() : '';
+            if (!code) {
+                return json(request, { success: false, error: '本机未找到激活绑定记录' }, 404);
+            }
         }
 
         const record = await getLicense(kv, code);

@@ -3411,7 +3411,7 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
     //  ========================================================================
     public JSONObject installAdminLicense(String licenseBase64, String machineId, String user,
                                           String clinicName, String password,
-                                          String loginUsername, String phone) {
+                                          String loginUsername, String phone, String licenseCode) {
         try {
             if (licenseBase64 == null || licenseBase64.isEmpty()) {
                 return failResult("服务器返回的 license 数据为空");
@@ -3490,10 +3490,26 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
                 Log.w(TAG, "管理员激活初始化验证状态失败(不影响激活)", ve);
             }
 
-            // 7. 保存激活记录（管理员激活无激活码，codeHash 留空，用于追溯）
+            // 7. 保存激活记录（★ 2026-08-29 邀请码自愈：服务端 admin-status 已返回真实激活码
+            //    licenseInfo.licenseCode，此处存明文 code + codeHash，供 loadInviteInfo
+            //    第3来源（getActivationRecord）读取；旧版本激活无码则留空，由 machineId 联网兜底）
             try {
                 JSONObject ar = new JSONObject();
-                ar.put("codeHash", "");
+                String code = (licenseCode == null ? "" : licenseCode.trim());
+                if (!code.isEmpty()) {
+                    try {
+                        MessageDigest md = MessageDigest.getInstance("SHA-256");
+                        byte[] hash = md.digest(code.getBytes(StandardCharsets.UTF_8));
+                        StringBuilder sb = new StringBuilder();
+                        for (byte b : hash) sb.append(String.format("%02x", b));
+                        ar.put("codeHash", sb.toString());
+                    } catch (Exception he) {
+                        ar.put("codeHash", "");
+                    }
+                    ar.put("code", code);
+                } else {
+                    ar.put("codeHash", "");
+                }
                 ar.put("adminActivated", true);
                 ar.put("activateTime", System.currentTimeMillis());
                 ar.put("machineId", mid);

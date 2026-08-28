@@ -2563,12 +2563,44 @@
                 } catch (_) {}
             }
             if (!code || String(code).trim().length < 4) {
-                // ★ 可视提示（不再静默）：无本地激活码（管理员激活/旧版本激活/存储丢失）
+                // ★ 4) machineId 联网找回（存量管理员激活/旧版本激活设备本地无码）：
+                //    服务端凭 device_version:{machineId} 绑定记录查回邀请信息（不返回码本身），
+                //    每次打开授权状态时自动执行，无需用户干预。
+                try {
+                    let mid = '';
+                    try {
+                        if (global.electronAPI && global.electronAPI.license &&
+                            typeof global.electronAPI.license.getMachineId === 'function') {
+                            const m = await global.electronAPI.license.getMachineId();
+                            mid = (m && m.machineId) ? String(m.machineId) : String(m || '');
+                        }
+                    } catch (_) {}
+                    if (!mid && global.electronAPI && global.electronAPI.activate &&
+                        typeof global.electronAPI.activate.getMachineId === 'function') {
+                        try {
+                            const m = await global.electronAPI.activate.getMachineId();
+                            mid = (m && m.machineId) ? String(m.machineId) : String(m || '');
+                        } catch (_) {}
+                    }
+                    if (mid && String(mid).trim().length >= 8) {
+                        const mr = await fetch(API_BASE + '/license/invite', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ machineId: String(mid).trim() })
+                        });
+                        const md = await mr.json().catch(() => null);
+                        if (md && md.success && md.inviteCode) {
+                            renderInviteCard(el, md);
+                            return;
+                        }
+                    }
+                } catch (_) {}
+                // ★ 可视提示（不再静默）：无本地激活码且联网找回失败（断网/无绑定记录）
                 const nb = document.createElement('div');
                 nb.id = 'inviteInfoBox';
                 nb.style.cssText = 'margin-top:8px;padding-top:8px;border-top:1px dashed #ddd;font-size:11px;color:#aaa;line-height:1.6;';
-                nb.textContent = '🎁 邀请码需联网验证本地激活码，当前未找到激活码记录' +
-                    '（管理员激活或旧版本激活无码）。输码激活的用户可在激活窗口重新输入一次原激活码自动恢复。';
+                nb.textContent = '🎁 邀请码需联网验证授权，当前未找到激活记录' +
+                    '（可能断网或旧版本激活）。请联网后重新打开本页自动恢复；输码激活的用户也可在激活窗口重新输入一次原激活码恢复。';
                 el.appendChild(nb);
                 return;
             }
@@ -2590,41 +2622,46 @@
                 el.appendChild(hb);
                 return;
             }
-            const cnt = d.inviteCount || 0, max = d.maxInvitees || 4, days = d.rewardDays || 0;
-            const box = document.createElement('div');
-            box.id = 'inviteInfoBox';
-            box.style.cssText = 'margin-top:8px;padding-top:8px;border-top:1px dashed #ddd;font-size:12px;color:#555;line-height:1.7;';
-            box.innerHTML =
-                '🎁 我的邀请码：<b id="myInviteCodeEl" title="点击复制" ' +
-                'style="color:#26a69a;font-family:monospace;letter-spacing:1px;font-size:14px;cursor:pointer;user-select:all;">' +
-                String(d.inviteCode) + '</b>' +
-                '<br>已邀请 <b>' + cnt + '</b>/' + max + ' 人 · 累计奖励 <b style="color:#4caf50;">+' + days + '</b> 天' +
-                (cnt < max
-                    ? '<br><span style="color:#999;font-size:11px;">好友激活时填您的邀请码，双方得奖励天数</span>'
-                    : '<br><span style="color:#4caf50;font-size:11px;">🎉 邀请奖励已封顶，感谢推荐！</span>');
-            el.appendChild(box);
-            const codeEl = document.getElementById('myInviteCodeEl');
-            if (codeEl) {
-                codeEl.addEventListener('click', function (ev) {
-                    const txt = (ev.target.textContent || '').trim();
-                    try {
-                        if (navigator.clipboard && navigator.clipboard.writeText) {
-                            navigator.clipboard.writeText(txt);
-                        } else {
-                            const ta = document.createElement('textarea');
-                            ta.value = txt; document.body.appendChild(ta);
-                            ta.select(); document.execCommand('copy');
-                            document.body.removeChild(ta);
-                        }
-                        alert('邀请码已复制：' + txt);
-                    } catch (_) {
-                        alert('复制失败，请手动记录：' + txt);
-                    }
-                });
-            }
+            renderInviteCard(el, d);
         } catch (e) {
             // 静默失败：断网或服务暂不可用不影响授权状态显示
             console.warn('[Invite] 邀请信息加载失败:', e && e.message);
+        }
+    }
+
+    // ★ 2026-08-29 邀请码卡片渲染（码查询/machineId 找回两路径共用）
+    function renderInviteCard(el, d) {
+        const cnt = d.inviteCount || 0, max = d.maxInvitees || 4, days = d.rewardDays || 0;
+        const box = document.createElement('div');
+        box.id = 'inviteInfoBox';
+        box.style.cssText = 'margin-top:8px;padding-top:8px;border-top:1px dashed #ddd;font-size:12px;color:#555;line-height:1.7;';
+        box.innerHTML =
+            '🎁 我的邀请码：<b id="myInviteCodeEl" title="点击复制" ' +
+            'style="color:#26a69a;font-family:monospace;letter-spacing:1px;font-size:14px;cursor:pointer;user-select:all;">' +
+            String(d.inviteCode) + '</b>' +
+            '<br>已邀请 <b>' + cnt + '</b>/' + max + ' 人 · 累计奖励 <b style="color:#4caf50;">+' + days + '</b> 天' +
+            (cnt < max
+                ? '<br><span style="color:#999;font-size:11px;">好友激活时填您的邀请码，双方得奖励天数</span>'
+                : '<br><span style="color:#4caf50;font-size:11px;">🎉 邀请奖励已封顶，感谢推荐！</span>');
+        el.appendChild(box);
+        const codeEl = document.getElementById('myInviteCodeEl');
+        if (codeEl) {
+            codeEl.addEventListener('click', function (ev) {
+                const txt = (ev.target.textContent || '').trim();
+                try {
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(txt);
+                    } else {
+                        const ta = document.createElement('textarea');
+                        ta.value = txt; document.body.appendChild(ta);
+                        ta.select(); document.execCommand('copy');
+                        document.body.removeChild(ta);
+                    }
+                    alert('邀请码已复制：' + txt);
+                } catch (_) {
+                    alert('复制失败，请手动记录：' + txt);
+                }
+            });
         }
     }
 
@@ -3909,6 +3946,25 @@
 
             const license = r.license || '';
             const phone = state.phone;
+            // ★ 2026-08-29 邀请码自愈：管理员激活时服务端已返回真实激活码（admin-status
+            //   licenseInfo.licenseCode，admin-approve 生成并绑定本机），此处必须存入本地，
+            //   否则 loadInviteInfo 三来源取码全空 → 邀请码卡片永远显示"未找到激活码记录"。
+            const adminLicenseCode = (r.licenseInfo && r.licenseInfo.licenseCode) ?
+                String(r.licenseInfo.licenseCode).trim() : '';
+            if (adminLicenseCode && adminLicenseCode.length >= 4) {
+                try {
+                    await StorageAdapter.setItem('license:code', adminLicenseCode);
+                    if (global.electronAPI && global.electronAPI.license &&
+                        typeof global.electronAPI.license.getMachineId === 'function') {
+                        const mid = await global.electronAPI.license.getMachineId();
+                        if (mid) await StorageAdapter.setItem('license:machineId', String(mid));
+                    }
+                    await StorageAdapter.removeItem('license:lastHeartbeat');
+                    await StorageAdapter.removeItem('license:offlineStart');
+                } catch (ce) {
+                    console.warn('[LicenseCheck] 管理员激活存储激活码失败(不影响激活):', ce);
+                }
+            }
             const descEl = document.getElementById('adminSuccessDesc');
             document.getElementById('adminSuccessPhone').textContent = phone;
             // 离线 APP：本地安装 license + 重启；云端 APP（无 installAdminLicense）：账号已在云端创建，提示登录
@@ -3920,7 +3976,8 @@
                         adminName: state.adminName,
                         clinicName: state.clinicName,
                         password: state.password || 'admin',
-                        phone: phone
+                        phone: phone,
+                        licenseCode: adminLicenseCode
                     });
                     if (inst && inst.success) {
                         descEl.innerHTML = '管理员已通过您的激活申请<br>软件即将重启，请使用手机号登录';
