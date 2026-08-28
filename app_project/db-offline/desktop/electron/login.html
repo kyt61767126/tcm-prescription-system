@@ -65,11 +65,12 @@
             flex: 0 1 auto;
             border: 1px solid #f0f0f0;
         }
+        /* ★ 2026-08-28 全局统一：诊所名卡片与云端网页版基准同款设计语言（accent浅底+accent色文字+细边框） */
         .clinic-info {
             text-align: center;
             padding: 6px;
-            background: linear-gradient(135deg, #fff5f5 0%, #ffeaea 100%);
-            border: none;
+            background: rgba(102, 126, 234, 0.08);
+            border: 1px solid rgba(102, 126, 234, 0.15);
             border-radius: 4px;
             margin-bottom: 6px;
             cursor: pointer;
@@ -84,7 +85,7 @@
         .clinic-name {
             font-size: 10px;
             font-weight: bold;
-            color: #8b0000;
+            color: #667eea;
             word-break: break-all;
         }
         .trial-bar {
@@ -179,6 +180,15 @@
             color: #999;
             flex-shrink: 0;
         }
+        /* ★ 2026-08-28 全局统一：多账户下拉切换（与网页/APP端同款设计，按桌面小窗等比缩放） */
+        .username-input-wrapper { position: relative; flex: 1; }
+        .username-input-wrapper input { width: 100%; padding-right: 28px; box-sizing: border-box; }
+        .username-dropdown-btn { position: absolute; right: 0; top: 0; bottom: 0; width: 24px; padding: 0; border: 2px solid #e0e0e0; border-left: none; border-radius: 0 4px 4px 0; background: linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 100%); color: #666; font-size: 8px; cursor: pointer; display: none; align-items: center; justify-content: center; z-index: 10; }
+        .username-dropdown-btn:hover { background: linear-gradient(135deg, #e8e8e8 0%, #d0d0d0 100%); }
+        .username-dropdown-menu { position: absolute; z-index: 100; display: none; background: white; border: 2px solid #667eea; border-radius: 4px; top: calc(100% + 3px); left: 0; right: 0; box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12); max-height: 120px; overflow-y: auto; }
+        .username-dropdown-menu.show { display: block; }
+        .username-dropdown-menu div { padding: 6px 8px; font-size: 10px; color: #333; cursor: pointer; }
+        .username-dropdown-menu div:hover { background: #667eea; color: white; }
         .password-input-wrapper { position: relative; flex: 1; }
         .password-input-wrapper input { width: 100%; padding-right: 34px; box-sizing: border-box; }
         .password-toggle-btn { position: absolute; right: 3px; top: 50%; transform: translateY(-50%); width: 26px; height: 26px; border: none; background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #999; font-size: 13px; border-radius: 4px; user-select: none; -webkit-tap-highlight-color: transparent; }
@@ -300,7 +310,8 @@
         <div class="bg-decoration"></div>
         <div class="header-section">
             <span class="system-title">惠康中医诊所管理系统</span>
-            <span class="version-tag" id="loginVersionTag">【离线标准版 · 登录后显示版本】</span>
+            <!-- ★ 2026-08-28 全局统一（与云端网页/APP端 2026-08-23 定版一致）：登录框不显示版本标签，版本在登录成功后主界面顶栏显示。元素保留（applyEditionTag 逻辑不破坏），仅视觉隐藏 -->
+            <span class="version-tag" id="loginVersionTag" style="display:none;">【离线标准版 · 登录后显示版本】</span>
         </div>
         <div class="main-content">
             <div class="login-box">
@@ -310,7 +321,12 @@
                 </div>
                 <div class="login-field">
                     <label>手机号/用户名</label>
-                    <input type="text" id="loginUsername" placeholder="请输入手机号或用户名" autocomplete="off">
+                    <!-- ★ 2026-08-28 全局统一：桌面版登录框增加多账户下拉切换（与网页/APP端 usernameDropdownBtn 同款） -->
+                    <div class="username-input-wrapper">
+                        <input type="text" id="loginUsername" placeholder="请输入手机号或用户名" autocomplete="off">
+                        <button type="button" id="usernameDropdownBtn" class="username-dropdown-btn" onclick="toggleUsernameDropdown()" style="display:none;" title="切换已注册用户">▼</button>
+                        <div id="usernameDropdownMenu" class="username-dropdown-menu"></div>
+                    </div>
                     <div id="loginDoctorName" style="font-size:9px;color:#667eea;display:none;"></div>
                 </div>
                 <div class="login-field">

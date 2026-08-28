@@ -267,7 +267,54 @@
                 if (pwd) pwd.focus();
             }, 200);
         }
+
+        // ★ 2026-08-28 全局统一：渲染多账户下拉切换（与网页/APP端 renderRememberedUsers 同款）
+        renderUsernameDropdown(users);
     }
+
+    // ★ 2026-08-28 全局统一：桌面版登录框多账户下拉切换（与网页/APP端体验一致）
+    function renderUsernameDropdown(users) {
+        const btn = document.getElementById('usernameDropdownBtn');
+        const menu = document.getElementById('usernameDropdownMenu');
+        if (!btn || !menu) return;
+        const list = (Array.isArray(users) && users.length > 0) ? users : _users;
+        if (!Array.isArray(list) || list.length === 0) {
+            btn.style.display = 'none';
+            menu.style.display = 'none';
+            menu.classList.remove('show');
+            return;
+        }
+        btn.style.display = 'flex';
+        btn.textContent = '▼(' + list.length + ')';
+        menu.innerHTML = '';
+        list.forEach(u => {
+            if (!u || !u.username) return;
+            const item = document.createElement('div');
+            item.textContent = u.displayName || u.name || u.username;
+            item.addEventListener('click', function (e) {
+                e.stopPropagation();
+                const input = $('loginUsername');
+                if (input) input.value = u.username;
+                const pwd = $('loginPassword');
+                if (pwd) { pwd.value = ''; pwd.focus(); }
+                menu.classList.remove('show');
+            });
+            menu.appendChild(item);
+        });
+    }
+
+    function toggleUsernameDropdown() {
+        const menu = document.getElementById('usernameDropdownMenu');
+        if (menu) menu.classList.toggle('show');
+    }
+
+    document.addEventListener('click', function (e) {
+        const menu = document.getElementById('usernameDropdownMenu');
+        const btn = document.getElementById('usernameDropdownBtn');
+        if (menu && btn && !menu.contains(e.target) && !btn.contains(e.target)) {
+            menu.classList.remove('show');
+        }
+    });
     
     // ★ 绿色成功反馈（账号预填/激活成功提示）
     function showGreenHint(msg) {
@@ -1033,6 +1080,8 @@
     // login.js 使用 IIFE 包装，内部函数默认无法被 HTML onclick 访问
     window.openFirstRunWizard = openFirstRunWizard;
     window.openActivationWindow = openActivationWindow;
+    // ★ 2026-08-28 全局统一：多账户下拉切换（与网页/APP端 toggleUsernameDropdown 同名同行为）
+    window.toggleUsernameDropdown = toggleUsernameDropdown;
     window.wizardPrev = wizardPrev;
     window.wizardSkip = wizardSkip;
     window.wizardNext = wizardNext;
