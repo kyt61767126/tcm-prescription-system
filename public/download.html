@@ -2885,14 +2885,19 @@
             const dlEl = document.getElementById('dl-' + key);
             const dlPortableEl = document.getElementById('dl-' + key + '-portable');
 
-            if (verEl) verEl.textContent = 'v' + data.version;
-            if (dateEl) dateEl.textContent = data.releaseDate || '-';
-            if (notesEl) notesEl.textContent = data.releaseNotes || '-';
+            // APP 类型卡片（cloud-app / local app）的「版本/发布日期/更新说明」由
+            //   hash-manifest.json 对应 apk 节点提供（避免与 latest.json 桌面版版本号混淆，
+            //   并消除两个异步 fetch 之间的竞态覆盖）。此处只写桌面卡相关字段。
+            const isAppCard = key === 'cloud-app' || (versions[key] && versions[key].type === 'app');
+            if (!isAppCard) {
+                if (verEl) verEl.textContent = 'v' + data.version;
+                if (dateEl) dateEl.textContent = data.releaseDate || '-';
+                if (notesEl) notesEl.textContent = data.releaseNotes || '-';
+            }
 
             // APP 类型卡片（cloud-app/dingzhi）的下载 URL 由 hash-manifest.json 提供（APK 链接）
             // latest.json 的 url/portableUrl 是桌面 exe 链接，不能用于 APP 卡片，否则会把 APK 按钮指向桌面 exe
             if (key === 'cloud-app') return;
-            const isAppCard = versions[key] && versions[key].type === 'app';
             if (isAppCard) return;
 
             if (data.url && dlEl) {
