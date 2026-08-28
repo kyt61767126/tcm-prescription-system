@@ -4993,6 +4993,10 @@ let currentUser = null;
                 filtered = filtered.filter(m => !existingNames.has(m.name));
 
                 filtered.sort((a, b) => {
+                    // ★ 优先使用药品置顶（与离线APP统一）
+                    const aPriority = a.priority_use ? 1 : 0;
+                    const bPriority = b.priority_use ? 1 : 0;
+                    if (aPriority !== bPriority) return bPriority - aPriority;
                     const aFreq = medicineFrequency[a.name] || 0;
                     const bFreq = medicineFrequency[b.name] || 0;
                     if (aFreq !== bFreq) return bFreq - aFreq;
@@ -5011,8 +5015,9 @@ let currentUser = null;
                         const safeCode = (m.code || '').replace(/[<>\"\'&]/g, '');
                         const safePrice = parseFloat(m.price) || 0;
                         const showDosage = m.dosage !== undefined && m.dosage !== null && m.dosage !== '' ? parseInt(m.dosage) : 'undefined';
-                        return `<div class="search-item ${i === selectedSearchIndex ? 'selected' : ''}"
-                                onclick="selectMedicine(${currentEditIndex},'${safeName}','${safeCode}',${safePrice})">${safeName} [${safeCode}] - ${showDosage === 'undefined' ? '?' : showDosage + (m.unit || 'g')}</div>`;
+                        const priorityMark = m.priority_use ? '<span style="color:#e65100;font-weight:bold;" title="优先使用">★</span> ' : '';
+                        return `<div class="search-item ${i === selectedSearchIndex ? 'selected' : ''}" ${m.priority_use ? 'style="background:#fff8e1;"' : ''}
+                                onclick="selectMedicine(${currentEditIndex},'${safeName}','${safeCode}',${safePrice})">${priorityMark}${safeName} [${safeCode}] - ${showDosage === 'undefined' ? '?' : showDosage + (m.unit || 'g')}</div>`;
                     }).join('');
                     dropdown.style.display = 'block';
                     // ★ 自适应位置：下方空间不足时自动翻到输入框上方显示（修复遮挡）

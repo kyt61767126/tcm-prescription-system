@@ -4419,6 +4419,10 @@ let currentUser = null;
                 filtered = filtered.filter(m => !existingNames.has(m.name));
 
                 filtered.sort((a, b) => {
+                    // ★ 优先使用药品置顶（与离线APP统一）
+                    const aPriority = a.priority_use ? 1 : 0;
+                    const bPriority = b.priority_use ? 1 : 0;
+                    if (aPriority !== bPriority) return bPriority - aPriority;
                     const aFreq = medicineFrequency[a.name] || 0;
                     const bFreq = medicineFrequency[b.name] || 0;
                     if (aFreq !== bFreq) return bFreq - aFreq;
@@ -4437,8 +4441,9 @@ let currentUser = null;
                         const safeCode = (m.code || '').replace(/[<>\"\'&]/g, '');
                         const safePrice = parseFloat(m.price) || 0;
                         const showDosage = m.dosage !== undefined && m.dosage !== null && m.dosage !== '' ? parseInt(m.dosage) : 'undefined';
-                        return `<div class="search-item ${i === selectedSearchIndex ? 'selected' : ''}"
-                                onclick="selectMedicine(${currentEditIndex},'${safeName}','${safeCode}',${safePrice})">${safeName} [${safeCode}] - ${showDosage === 'undefined' ? '?' : showDosage + (m.unit || 'g')}</div>`;
+                        const priorityMark = m.priority_use ? '<span style="color:#e65100;font-weight:bold;" title="优先使用">★</span> ' : '';
+                        return `<div class="search-item ${i === selectedSearchIndex ? 'selected' : ''}" ${m.priority_use ? 'style="background:#fff8e1;"' : ''}
+                                onclick="selectMedicine(${currentEditIndex},'${safeName}','${safeCode}',${safePrice})">${priorityMark}${safeName} [${safeCode}] - ${showDosage === 'undefined' ? '?' : showDosage + (m.unit || 'g')}</div>`;
                     }).join('');
                     dropdown.style.display = 'block';
                     // ★ 自适应位置：下方空间不足时自动翻到输入框上方显示（修复遮挡）
@@ -4870,7 +4875,8 @@ let currentUser = null;
                         name: f.name,
                         type: f.type || (f.name.includes('video') ? 'video' : 'image'),
                         size: f.size || 0,
-                        lastModified: f.lastModified || ''
+                        lastModified: f.lastModified || '',
+                        path: f.path || ''
                     }));
                     const updatedRecord = { ...savedRecord, mediaFiles };
                     await savePrescriptionToDB(updatedRecord);
@@ -4900,7 +4906,29 @@ let currentUser = null;
             try {
                 const result = await searchFn(patientName, prescriptionNo, createdAt || '');
                 if (!result.success || !result.files || result.files.length === 0) {
-                    content.innerHTML = '<div style="text-align:center;padding:20px;color:#999;">未找到相关拍照或录像文件</div>';
+                    // ★ 兜底（与网页/APP端统一）：原生扫描未找到时，使用处方记录中保存的媒体文件元数据（collectAndUpdateMediaFiles 写入）
+                    // 覆盖场景：文件名绑定异常/扫描遗漏，但保存处方时已成功收集过文件列表
+                    let fallbackFiles = [];
+                    try {
+                        const rec = prescriptionHistory.find(p => p.patientName === patientName && String(p.prescriptionNo || '') === String(prescriptionNo || ''));
+                        if (rec && Array.isArray(rec.mediaFiles) && rec.mediaFiles.length > 0) {
+                            // APP端必须有本地path才能读取文件；网页端用无path元数据或http地址
+                            fallbackFiles = rec.mediaFiles.filter(m => isWeb ? (!m.path || m.path.startsWith('http')) : !!m.path);
+                        }
+                    } catch (e) { /* 忽略兜底查询异常 */ }
+                    if (fallbackFiles.length > 0) {
+                        window.__currentMediaFiles = fallbackFiles;
+                        window.__currentMediaIndex = 0;
+                        window.__mediaIsWeb = isWeb;
+                        renderMediaViewerSingle(0);
+                        return;
+                    }
+                    // 显示诊断信息（扫描目录与文件样例），便于定位"文件已保存但查不到"类问题
+                    let diagHtml = '<div style="text-align:center;padding:20px;color:#999;">未找到相关拍照或录像文件</div>';
+                    if (result && result.debug) {
+                        diagHtml += '<div style="text-align:left;padding:8px 12px;font-size:10px;color:#bbb;word-break:break-all;max-height:120px;overflow:auto;border-top:1px dashed #555;">' + escapeHtml(String(result.debug)).replace(/\n/g, '<br>') + '</div>';
+                    }
+                    content.innerHTML = diagHtml;
                     return;
                 }
                 const sorted = result.files.sort((a,b) => {
@@ -6479,7 +6507,15 @@ let currentUser = null;
                 },
                 medicines: medicines,
                 formulas: formulas,
-                prescriptionHistory: prescriptionHistory
+                prescriptionHistory: prescriptionHistory,
+                // ★ 2026-08-28 重装数据安全（与离线APP统一）：手动备份也带上账号表+基础设置（换机/重装可完整还原）
+                users: (() => { try { return JSON.parse(localStorage.getItem('local_systemUsers') || '[]'); } catch (e) { return []; } })(),
+                settings: {
+                    clinicName: localStorage.getItem('local_clinicName') || '',
+                    clinicDoctor: localStorage.getItem('local_clinicDoctor') || '',
+                    defaultRegFee: localStorage.getItem('local_defaultRegFee') || '0',
+                    defaultDose: localStorage.getItem('local_defaultDose') || '7'
+                }
             };
             
             // 计算备份文件 HMAC 签名（基于紧凑 JSON，避免格式化影响）
@@ -6542,6 +6578,18 @@ let currentUser = null;
                         }
                         if (data.medicines) medicines = data.medicines;
                         if (data.formulas) formulas = data.formulas;
+
+                        // ★ 2026-08-28 重装数据安全（与离线APP统一）：恢复账号表（重装后原账号密码可直接登录）
+                        if (Array.isArray(data.users) && data.users.length > 0) {
+                            localStorage.setItem('local_systemUsers', JSON.stringify(data.users));
+                        }
+                        // ★ 2026-08-28 恢复基础设置（诊所名/医师/诊疗费/默认剂数）
+                        if (data.settings && typeof data.settings === 'object') {
+                            if (data.settings.clinicName) { localStorage.setItem('local_clinicName', data.settings.clinicName); }
+                            if (data.settings.clinicDoctor) { localStorage.setItem('local_clinicDoctor', data.settings.clinicDoctor); }
+                            if (data.settings.defaultRegFee !== undefined && data.settings.defaultRegFee !== '') { localStorage.setItem('local_defaultRegFee', String(data.settings.defaultRegFee)); }
+                            if (data.settings.defaultDose !== undefined && data.settings.defaultDose !== '') { localStorage.setItem('local_defaultDose', String(data.settings.defaultDose)); }
+                        }
 
                         if (data.prescriptionHistory && data.prescriptionHistory.length > 0) {
                             // P7: 合并到 prescriptions store（按 id 去重，归属当前用户确保导入后可见）
