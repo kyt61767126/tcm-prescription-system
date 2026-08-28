@@ -1221,6 +1221,14 @@
 - **验证**：check-interface.bat 基线前 6/6 OK → 修改后 4 WARN（全部为本次有意变更）→ generate-interface-lock.ps1 重建基线 → 6/6 OK；login.js 双版 node --check 通过；diff-index-app.cjs --quiet 无 WARN。
 - **生效方式**：云端网页版 push GitHub 自动部署；云端APP 在线加载 public/ 无需重打；云端桌面版/离线桌面版需重新 build.bat 打包 exe；离线APP 需重打惠康中医-本地.apk。
 
+### 2.108【优化】全局操作功能模块跨端统一——离线APP顶栏文案/顺序对齐（提交 cdd78788，2026-08-28）
+- **梳理结论（5端对比）**：全局操作（top-tabs/mobileNav/mobileActionBar/弹窗）以 public/index.html 为基准，各端结构基本一致；差异分两类——①合理版本差异不动（cashier角色仅云端机构版、cloud-api仅云端、激活入口按版本注入、手机端 btn2 显示"改密"短文案 vs 桌面"修改密码"、离线APP左侧栏无清空/保存按钮由底部快捷栏承担）；②需统一的不一致项。
+- **本次统一（仅 index-app.html + assets/public/index.html 打包副本，各4处）**：①顶部tab【统计分析】→【数据统计】+ 统计弹窗标题；②showHelp 功能列表 ✓ 数据统计；③统计加载失败 alert 文案；④【修改密码】tab 从【退出登录】之后移至【系统帮助】之前（与其他端顺序一致：…userManageBtn→changePwdBtn→系统帮助→退出登录）。
+- **铁律执行**：用户明确"手机端按钮布局完美不要乱修改"——mobileNav/mobileActionBar/左侧栏/CSS 零改动；"处方查阅"不移植（离线APP=personal 标准版，enforceStandardEditionButtons 无条件强制隐藏 clinicPrescriptionBtn，移植约150行本地函数链也是死代码）。
+- **验证**：check-interface.bat 6/6 OK；node tools/diff-index-app.cjs --quiet 无 WARN；Grep 验证 8 处编辑全部生效。
+- **坑**：PowerShell 环境 RunCommand 不支持 bash heredoc（`$(cat <<'EOF')`），多行 commit message 用多个 `-m` 参数替代。
+- **生效方式**：离线APP需重打惠康中医-本地.apk 后安装生效；云端网页版/APP/桌面版不涉及。
+
 ### 2.107【优化】一键发布菜单重构 + 增量发布——打包与发布关系统一（提交 7b510a41/46df4e36/cd9c95a6，2026-08-28）
 - **背景**：一键发布.bat 原 8 个菜单项功能重叠、命名不清；打包与发布相对独立；发布按类型全量重传未变化产物。
 - **重构（release-menu.ps1，8项→6项）**：[1]一键全流程(打包+发布+验证) / [2]仅打包(不上传,"全部"路径自动收纳副作用) / [3]智能发布(仅上传有变化产物) / [4]指定发布(选版本范围全量上传,补传修复用) / [5]验证发布结果 / [6]合规检查。全流程 Version=all 走 auto-publish.js --publish。
