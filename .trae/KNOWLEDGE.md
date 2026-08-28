@@ -1214,6 +1214,16 @@
 - **注意**：退出=关闭页面语义仅 public/index.html（云端网页/APP）；登录框"取消"按钮同受益（exitApp 兜底）。教训：**loading 态管理必须成功/失败路径全覆盖**，成功路径隐藏容器 ≠ 状态复位，容器再显示时残留状态会暴露。
 - **生效方式**：push GitHub 自动部署；云端APP 在线加载自动生效；桌面/离线端未改动无需重打。
 
+### 2.115【修复】下拉按钮仍不显示+红框空白压缩到最小（提交 4d64f6e3 出包 V1.2.165，2026-08-28）
+- **现象**：用户V1.2.164截图仍无▼下拉按钮（且用户名已预填wgj）；头部版本药丸与诊所卡片之间、登录框与footer之间两条红框空白大。
+- **根因**（下拉不显示=经验926241教训：控件存在但条件链未覆盖）：renderUsernameDropdown 显示条件仅依赖 `local_rememberedUsers` 数组键+config.users；initLoginInput 写数组时用 try/catch 但 localStorage 在 Electron 个别持久化路径下可能写失败（静默）→ merged.length=0 → 按钮隐藏。数据迁移只能覆盖"正常路径"，覆盖不了"持久化失败"。
+- **修复策略（三保险）**：renderUsernameDropdown 最终兜底 =**读取DOM输入框当前值**（wgj等已预填内容），若有效则自动纳入下拉列表 merged。这是最后一道不靠任何存储的保险——只要用户看到预填就必然有下拉按钮。前两道保险（saveRememberedUser 数组写入 + initLoginInput 反向迁移）保留。
+- **空白压缩（两端login.html同步，仅改CSS数值/padding/flex justify，DOM零改动 check-interface 6/6 OK）**：
+  - header padding 8/6→6/4；main-content padding 8→3/6、justify-content center→flex-start 贴头不居中撑开、gap:0；
+  - login-box padding 10/12→6/10/4、margin:0；
+  - footer 5/10→3/10/1；copyright margin-top 4→1 + padding 0/0/3。
+- **生效方式**：云端桌面版 V1.2.165 已出包；离线桌面版下次打包带上。
+
 ### 2.114【修复·显示闭环】登录框版本号+下拉按钮"写了但不可见"双bug（提交 da2d87be 出包 V1.2.164，2026-08-28）
 - **现象**：用户连续两次反馈云端V1.2.163登录框无版本号、用户名框右侧无▼下拉按钮，截图实证两功能确实缺失；但代码逻辑、asar内函数均存在。
 - **根因**（均为"写了看不到"的显示链路断裂，非功能缺失）：
