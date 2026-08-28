@@ -856,6 +856,48 @@
     };
     global.AuditLog = AuditLog;
 
+    // ★ 2026-08-28 安全加固：激活后禁用试用默认账户 admin/admin（离线标准版/机构版激活后门）
+    //   规则：username==='admin' 精确值（仅试用默认账户，自定义 admin_xxx 简码放行） 且 系统已激活 → 拒绝
+    //   激活判定双通道：① Electron 主进程 license.getStatus() valid===true && type!=='trial'；② Storage/localStorage 中 license:code 长度>=4（已写入激活码）
+    //   注：调用方务必放在密码校验通过之后再调用，避免通过错误信息差枚举账户是否存在
+    async function _blockTrialAdminAfterLicensed(user) {
+        try {
+            if (!user) return false;
+            if (String(user.username || '').trim() !== 'admin') return false;
+            let licensed = false;
+            try {
+                const api = global.electronAPI || (typeof window !== 'undefined' ? window.electronAPI : null);
+                if (api && api.license && typeof api.license.getStatus === 'function') {
+                    const st = await api.license.getStatus();
+                    if (st && st.valid === true) {
+                        const t = String(st.licenseType || st.type || '');
+                        if (t && t !== 'trial') licensed = true;
+                    }
+                }
+            } catch (_) {}
+            if (!licensed) {
+                try {
+                    if (typeof StorageAdapter !== 'undefined' && StorageAdapter &&
+                        typeof StorageAdapter.getItem === 'function') {
+                        const c = await StorageAdapter.getItem('license:code');
+                        if (c && String(c).trim().length >= 4) licensed = true;
+                    }
+                } catch (_) {}
+            }
+            if (!licensed) {
+                try {
+                    const ls = (typeof global !== 'undefined' && global.localStorage) ||
+                               (typeof window !== 'undefined' ? window.localStorage : null);
+                    if (ls) {
+                        const c = ls.getItem('license:code');
+                        if (c && String(c).trim().length >= 4) licensed = true;
+                    }
+                } catch (_) {}
+            }
+            return licensed;
+        } catch (_) { return false; }
+    }
+
     // 离线适配器工厂
     function createLocalAdapter(getUsersFn) {
         return {
@@ -883,6 +925,12 @@
                     if (!pwdOk) {
                         // ★ 优化3：密码错误计数+1，5次后锁定30分钟（记在权威账号上）
                         return { success: false, error: LoginLockout.recordFailure(lockKey) };
+                    }
+                    // ★ 2026-08-28 安全加固：激活后禁用试用默认账户 admin/admin（离线激活后门）
+                    //   放在密码通过之后：避免通过错误信息差判断 admin 账户是否真实存在
+                    const blocked = await _blockTrialAdminAfterLicensed(user);
+                    if (blocked) {
+                        return { success: false, error: '🔒 系统已激活，试用默认账户 admin/admin 已禁用。请使用激活时注册的管理员手机号或自定义账户登录。' };
                     }
                     // 登录成功，清零错误计数（权威账号 + 原始输入串都清，兼容历史分裂计数残留）
                     LoginLockout.recordSuccess(lockKey);
@@ -922,6 +970,12 @@
                     if (!pwdOk) {
                         // ★ 优化3：密码错误计数+1，5次后锁定30分钟（记在权威账号上）
                         return { success: false, error: LoginLockout.recordFailure(lockKey) };
+                    }
+                    // ★ 2026-08-28 安全加固：激活后禁用试用默认账户 admin/admin（离线激活后门）
+                    //   放在密码通过之后：避免通过错误信息差判断 admin 账户是否真实存在
+                    const blocked = await _blockTrialAdminAfterLicensed(user);
+                    if (blocked) {
+                        return { success: false, error: '🔒 系统已激活，试用默认账户 admin/admin 已禁用。请使用激活时注册的管理员手机号或自定义账户登录。' };
                     }
                     // 登录成功，清零错误计数（权威账号 + 原始输入串都清，兼容历史分裂计数残留）
                     LoginLockout.recordSuccess(lockKey);

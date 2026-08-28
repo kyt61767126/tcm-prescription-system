@@ -564,6 +564,37 @@
         }
     }
 
+    // ★ 2026-08-28 安全加固：激活后禁用试用默认账户 admin/admin（离线标准版/机构版激活后门）
+    //   规则：username==='admin' 精确值（仅试用默认账户，自定义 admin_xxx 简码放行） 且 系统已激活 → 拒绝
+    //   激活判定双通道（防 Electron/APP/WebView 差异）：① electronAPI.license.getStatus valid 且 licenseType!=='trial'；② localStorage 有已写入的激活码
+    async function _blockedAdminAfterActivation(user) {
+        try {
+            if (!user) return false;
+            if (String(user.username || '').trim() !== 'admin') return false;
+            let licensed = false;
+            try {
+                const api = window.electronAPI;
+                if (api && api.license && typeof api.license.getStatus === 'function') {
+                    const st = await api.license.getStatus();
+                    if (st && st.valid === true) {
+                        const t = String(st.licenseType || st.type || '');
+                        if (t && t !== 'trial') licensed = true;
+                    }
+                }
+            } catch (_) {}
+            if (!licensed) {
+                try {
+                    const ls = window.localStorage;
+                    if (ls) {
+                        const c = ls.getItem('license:code');
+                        if (c && String(c).trim().length >= 4) licensed = true;
+                    }
+                } catch (_) {}
+            }
+            return licensed;
+        } catch (_) { return false; }
+    }
+
     async function handleLogin() {
         clearError();
         hideGreenHint();
@@ -658,6 +689,14 @@
                     showError(msg);
                     return;
                 }
+            }
+
+            // ★ 2026-08-28 安全加固：激活后禁用试用默认账户 admin/admin
+            //   放在密码通过之后：攻击者无法通过错误信息差判断 admin 账户是否真实存在
+            const _blocked = await _blockedAdminAfterActivation(user);
+            if (_blocked) {
+                showError('🔒 系统已激活，试用默认账户 admin/admin 已禁用。请使用激活时注册的管理员手机号或自定义账户登录。');
+                return;
             }
 
             // ★ 严格版本匹配（安全隔离）：账户版本必须与电脑激活版本一致
