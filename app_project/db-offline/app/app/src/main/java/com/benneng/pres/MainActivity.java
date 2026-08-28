@@ -996,7 +996,7 @@ public class MainActivity extends BridgeActivity {
      * 注意：状态栏已由 Android 主题处理（windowTranslucentStatus=false + statusBarColor），
      * WebView 内容从状态栏下方开始，不再注入 padding-top，避免顶部出现双重空白。
      */
-    private void injectLayoutFixScript(WebView webView) {
+    private void injectLayoutFixScript(final WebView webView) {
         String js = "(function() {" +
             "  if (window._layoutFixInjected) return;" +
             "  window._layoutFixInjected = true;" +
@@ -1009,6 +1009,40 @@ public class MainActivity extends BridgeActivity {
             "  document.head.appendChild(style);" +
             "})();";
         webView.evaluateJavascript(js, null);
+
+        // ★ 2026-08-28 版本号显示：登录页底部「微信号: hktzy1688 | 版本: V1.0.0」追加 Build 号（versionCode）
+        //   → 用户看到 V1.0.0 Build 177，不再只有不变的软著固定 V1.0.0，便于确认新版本覆盖安装生效。
+        //   三次尝试（0/600/1500ms）应对 assets DOM 就绪时机差异。
+        try {
+            android.content.pm.PackageInfo pi = getPackageManager().getPackageInfo(getPackageName(), 0);
+            String vn = pi.versionName;
+            int vc = android.os.Build.VERSION.SDK_INT >= 28 ? (int) pi.getLongVersionCode() : pi.versionCode;
+            if (vn == null) vn = "1.0.0";
+            final String suffix = " | 版本: V" + vn + " Build " + vc;
+            final String vSuffix = " V" + vn + " Build " + vc;
+            final String tagSuffix = " Build " + vc;
+            final String js2 = "(function(){" +
+                "  if (window.__appBuildSuffix__) return;" +
+                "  window.__appBuildSuffix__ = true;" +
+                "  try {" +
+                "    var t = document.querySelector('title');" +
+                "    if (t && t.textContent.indexOf('Build') === -1) { t.textContent += '" + vSuffix + "'; }" +
+                "    var v1 = document.querySelector('.login-footer');" +
+                "    if (v1) {" +
+                "      v1.textContent = v1.textContent.replace(/(\\|\\s*版本:\\s*V[0-9.]+)/,'$1" + tagSuffix + "');" +
+                "      if (v1.textContent.indexOf('Build') === -1) v1.textContent += '" + suffix + "';" +
+                "    }" +
+                "    var v2 = document.querySelector('.version-tag');" +
+                "    if (v2 && v2.textContent && v2.textContent.indexOf('Build') === -1) {" +
+                "      var vh = v2.innerHTML; if (!vh) vh = v2.textContent;" +
+                "      v2.innerHTML = vh.replace(/(V[0-9.]+)/, '$1" + tagSuffix + "');" +
+                "    }" +
+                "  } catch(e) {}" +
+                "})();";
+            runOnUiThread(() -> webView.evaluateJavascript(js2, null));
+            runOnUiThread(() -> webView.postDelayed(() -> webView.evaluateJavascript(js2, null), 600));
+            runOnUiThread(() -> webView.postDelayed(() -> webView.evaluateJavascript(js2, null), 1500));
+        } catch (Exception ignored) {}
     }
 
     /**
