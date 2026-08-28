@@ -1735,6 +1735,9 @@ let currentUser = null;
                             const loginData = { user: user, loginTime: Date.now() };
                             localStorage.setItem('user_login_data', JSON.stringify(loginData));
                             saveRememberedUser(username);
+                            // ★ 2026-08-28 修复：登录成功路径漏调 setLoginLoading(false)，
+                            //   导致退出登录后登录框按钮残留"登录中..."且输入框被禁用
+                            setLoginLoading(false);
                             document.getElementById('loginOverlay').style.display = 'none';
                             document.querySelector('.main-container').style.display = 'flex';
                             updateUserDisplay();
@@ -1855,8 +1858,9 @@ let currentUser = null;
                     };
                     localStorage.setItem('user_login_data', JSON.stringify(loginData));
                     saveRememberedUser(username);
-                    
-                    
+                    // ★ 2026-08-28 修复：登录成功路径漏调 setLoginLoading(false)，
+                    //   导致退出登录后登录框按钮残留"登录中..."且输入框被禁用
+                    setLoginLoading(false);
                     document.getElementById('loginOverlay').style.display = 'none';
                     document.querySelector('.main-container').style.display = 'flex';
                     updateUserDisplay();
@@ -2326,15 +2330,12 @@ let currentUser = null;
                         setTimeout(() => { if (typeof exitApp === 'function') try { exitApp(); } catch(_) {} }, 250);
                         return;
                     }
+                    // ★ 2026-08-28 用户要求：退出登录时同步关闭登录界面网页标签（云端网页版）
+                    //   不再停留在登录界面（防止账号预填/界面被他人操作），先显示遮罩兜底，
+                    //   250ms 后走 exitApp 全平台关闭链（APP关APP/桌面关窗口/纯网页关标签）
                     overlay.style.display = 'flex';
-                    if (typeof loadRememberedUsers === 'function') try { loadRememberedUsers(); } catch(_) {}
-                    try {
-                        if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.edition === 'personal' && CONFIG.doctorName) {
-                            const inp = document.getElementById('loginUsername');
-                            if (inp) inp.value = CONFIG.doctorName;
-                        }
-                    } catch(_) {}
-                    if (typeof showToast === 'function') try { showToast('已退出登录'); } catch(_) {}
+                    if (typeof showToast === 'function') try { showToast('已退出登录，正在关闭页面...'); } catch(_) {}
+                    setTimeout(() => { if (typeof exitApp === 'function') try { exitApp(); } catch(_) {} }, 250);
                 }
             } catch (e) {
                 console.error('[handleLogout] 兜底异常:', e);
@@ -2367,7 +2368,17 @@ let currentUser = null;
                 if (window.electronAPI && typeof window.electronAPI.quitApp === 'function') {
                     try { window.electronAPI.quitApp(); return; } catch(_) {}
                 }
+                // ★ 2026-08-28 纯网页兜底：浏览器对非脚本打开的标签会拦截 window.close()。
+                //   仅当完全无原生退出桥（纯浏览器环境）时，用 about:blank 清空页面等效关闭标签，
+                //   防止退出登录后残留登录界面（含账号预填）被他人操作；
+                //   有原生桥的环境（APP/桌面）已在上方分支 return，即使桥调用异常也保持旧行为不误伤。
+                var __noNativeExitBridge = !(window.AndroidAppExit || window.AndroidNative || (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) || window.electronAPI);
                 try { window.close(); } catch(_) {}
+                if (__noNativeExitBridge) {
+                    setTimeout(function () {
+                        try { if (!window.closed) window.location.replace('about:blank'); } catch(_) {}
+                    }, 400);
+                }
             } catch (e) {
                 console.error('[exitApp] 兜底异常:', e);
             }
