@@ -300,6 +300,7 @@
     function renderUsernameDropdown(users) {
         const btn = document.getElementById('usernameDropdownBtn');
         const menu = document.getElementById('usernameDropdownMenu');
+        const input = document.getElementById('loginUsername');
         if (!btn || !menu) return;
         const list = (Array.isArray(users) && users.length > 0) ? users : _users;
         // ★ 合并：记住的最近登录账户（localStorage，与网页版同源）在前，本机 config 账户在后
@@ -320,6 +321,15 @@
                 merged.push(u);
             }
         });
+        // ★ 2026-08-28 下拉显示双保险：若输入框已有预填内容（单键迁移、或任何来源），
+        //   把该用户名也纳入列表，杜绝"有预填但无下拉"
+        if (input) {
+            const currentVal = String(input.value || '').trim();
+            if (currentVal && !LEGACY_USERNAMES.includes(currentVal) &&
+                !merged.some(m => String(m.username).toLowerCase() === currentVal.toLowerCase())) {
+                merged.unshift({ username: currentVal });
+            }
+        }
         if (merged.length === 0) {
             btn.style.display = 'none';
             menu.style.display = 'none';
@@ -335,8 +345,8 @@
             item.textContent = u.displayName || u.name || u.username;
             item.addEventListener('click', function (e) {
                 e.stopPropagation();
-                const input = $('loginUsername');
-                if (input) input.value = u.username;
+                const inputEl = $('loginUsername');
+                if (inputEl) inputEl.value = u.username;
                 const pwd = $('loginPassword');
                 if (pwd) { pwd.value = ''; pwd.focus(); }
                 menu.classList.remove('show');
