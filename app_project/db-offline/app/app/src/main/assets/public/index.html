@@ -825,7 +825,9 @@ let currentUser = null;
                         '<div style="font-size:9px;line-height:1.25;">' + metaTextLine1 + '</div>' +
                         (metaTextLine2 ? '<div style="font-size:9px;line-height:1.25;color:#aab;">' + metaTextLine2 + '</div>' : '');
                 } else {
-                    bottomTag.textContent = '【开发模式：未找到 build-meta.json】';
+                    // ★ 2026-08-28 APP/H5 通常没有构建期 build-meta.json（纯静态托管/APK打包assets）。
+                    //   不显示"开发模式"字样吓用户——全局静默隐藏。
+                    bottomTag.style.display = 'none';
                 }
             }
             var et = document.getElementById('editionTag');
