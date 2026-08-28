@@ -240,7 +240,17 @@
         
         // ★ 云端机构版：预填上次用户名（手机号），显示绿色提示
         let usernameToFill = null;
-        const rememberedUser = localStorage.getItem(KEY_REMEMBER_USER);
+        let rememberedUser = localStorage.getItem(KEY_REMEMBER_USER);
+        // ★ 2026-08-28 与网页版统一兜底：单键缺失/为遗留账号时，从记住的账户数组取最近一个
+        if (!rememberedUser || LEGACY_USERNAMES.includes(rememberedUser)) {
+            try {
+                const arr = JSON.parse(localStorage.getItem('local_rememberedUsers') || '[]');
+                if (Array.isArray(arr) && arr.length > 0) {
+                    const first = String(arr[0] || '').trim();
+                    if (first && !LEGACY_USERNAMES.includes(first)) rememberedUser = first;
+                }
+            } catch (e) { /* 忽略解析异常 */ }
+        }
         if (rememberedUser && !LEGACY_USERNAMES.includes(rememberedUser)) {
             usernameToFill = rememberedUser;
         } else if (users.length === 1 && users[0].username) {
@@ -264,21 +274,40 @@
     }
 
     // ★ 2026-08-28 全局统一：桌面版登录框多账户下拉切换（与网页/APP端体验一致）
+    //   2026-08-28 与网页版统一：下拉 = 最近登录账户（remembered，原样手机号/用户名）+ 本机注册账户，去重合并
     function renderUsernameDropdown(users) {
         const btn = document.getElementById('usernameDropdownBtn');
         const menu = document.getElementById('usernameDropdownMenu');
         if (!btn || !menu) return;
         const list = (Array.isArray(users) && users.length > 0) ? users : _users;
-        if (!Array.isArray(list) || list.length === 0) {
+        // ★ 合并：记住的最近登录账户（localStorage，与网页版同源）在前，本机 config 账户在后
+        let merged = [];
+        try {
+            const arr = JSON.parse(localStorage.getItem('local_rememberedUsers') || '[]');
+            if (Array.isArray(arr)) {
+                arr.forEach(u => {
+                    const s = String(u || '').trim();
+                    if (s && !LEGACY_USERNAMES.includes(s) && !merged.some(m => String(m.username).toLowerCase() === s.toLowerCase())) {
+                        merged.push({ username: s });
+                    }
+                });
+            }
+        } catch (e) { /* 忽略解析异常 */ }
+        (Array.isArray(list) ? list : []).forEach(u => {
+            if (u && u.username && !merged.some(m => String(m.username).toLowerCase() === String(u.username).toLowerCase())) {
+                merged.push(u);
+            }
+        });
+        if (merged.length === 0) {
             btn.style.display = 'none';
             menu.style.display = 'none';
             menu.classList.remove('show');
             return;
         }
         btn.style.display = 'flex';
-        btn.textContent = '▼(' + list.length + ')';
+        btn.textContent = '▼(' + merged.length + ')';
         menu.innerHTML = '';
-        list.forEach(u => {
+        merged.forEach(u => {
             if (!u || !u.username) return;
             const item = document.createElement('div');
             item.textContent = u.displayName || u.name || u.username;
@@ -307,6 +336,28 @@
         }
     });
     
+    // ★ 2026-08-28 与云端网页版统一：记住用户名（输入框原文 + 最近5个账户数组，网页版 saveRememberedUser 同款）
+    function saveRememberedUsername(username) {
+        try {
+            const cleanUsername = String(username || '').trim();
+            if (!cleanUsername) return;
+            let remembered = [];
+            try {
+                const parsed = JSON.parse(localStorage.getItem('local_rememberedUsers') || '[]');
+                if (Array.isArray(parsed)) remembered = parsed.filter(u => typeof u === 'string');
+            } catch (e) { /* 解析失败视为空列表 */ }
+            remembered = remembered.filter(u => String(u).toLowerCase() !== cleanUsername.toLowerCase());
+            remembered.unshift(cleanUsername);
+            if (remembered.length > 5) remembered = remembered.slice(0, 5);
+            localStorage.setItem(KEY_REMEMBER_USER, cleanUsername);
+            localStorage.setItem('local_rememberedUsers', JSON.stringify(remembered));
+            // 刷新下拉列表（含本机账户合并）
+            if (typeof renderUsernameDropdown === 'function') renderUsernameDropdown();
+        } catch (e) {
+            try { localStorage.setItem(KEY_REMEMBER_USER, String(username || '').trim()); } catch (_) {}
+        }
+    }
+
     // ★ 绿色成功反馈（账号预填/激活成功提示）
     function showGreenHint(msg) {
         let el = document.getElementById('loginGreenHint');
@@ -569,8 +620,10 @@
             localStorage.setItem('currentUser', userDataStr);
             localStorage.setItem('isLoggedIn', 'true');
 
-            // ★ 统一规范：始终记住最近登录的用户名（密码仍需每次手动输入）
-            localStorage.setItem(KEY_REMEMBER_USER, user.username);
+            // ★ 2026-08-28 与云端网页版统一：记住登录时输入的用户名（原文回填）
+            //   旧逻辑存 user.username（云端解析后的账户名）——手机号登录时回填的不是
+            //   用户输入的值，造成"没记住用户名"观感；网页版 saveRememberedUser 存输入框原文。
+            saveRememberedUsername(username);
 
             // P3-3: 移除"记住密码"功能（2026-08-08，规则5：每次手动输密码）
             // 清除历史遗留的记住密码，强制用户每次手动输入
