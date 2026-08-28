@@ -169,14 +169,23 @@
         .main-content { position: relative; z-index: 1; padding: 24px 20px; }
         .login-box { background: white; border-radius: 12px; padding: 22px 18px; box-shadow: 0 8px 25px var(--login-accent-light); border: 1px solid rgba(0,0,0,0.05); }
         .login-field { margin-bottom: 16px; display: flex; flex-direction: row; align-items: center; gap: 8px; }
-        .login-field label { width: 36px; font-size: 12px; font-weight: bold; color: #555; text-align: right; flex-shrink: 0; }
+        /* ★ 2026-08-28 登录框 label 统一布局（对齐桌面 electron/login.html 行式 且 避免小屏手机 label 被挤成三行）：
+             - 桌面/宽屏：label 单行 右对齐，固定 72px（"手机号/用户名:" 6 字正好单行）；
+             - 移动端 max-width:480px：覆盖为更宽 88px + 字号 13px 保持单行。
+             - 使用 text-wrap:balance + min-width 双重保险，防止旧浏览器兼容问题再次换行。 */
+        .login-field label { min-width: 72px; width: 72px; font-size: 12px; line-height: 1.2; font-weight: bold; color: #555; text-align: right; flex-shrink: 0; white-space: nowrap; overflow: visible; text-overflow: clip; }
         .login-field input, .login-field select { width: 100%; padding: 11px 12px; border: 2px solid #e5e7eb; border-radius: 10px; font-size: 13px; background: #f8f9fa; transition: all 0.25s ease; }
         .login-field input:disabled, .login-field select:disabled { opacity: 0.65; cursor: not-allowed; background: #f0f0f0; }
         .login-field input:focus, .login-field select:focus { border-color: var(--login-accent); outline: none; box-shadow: 0 0 0 3px var(--login-accent-light); background: white; }
         .username-input-wrapper { position: relative; flex: 1; }
         .username-input-wrapper input { width: 100%; padding-right: 30px; box-sizing: border-box; }
-        .username-dropdown-btn { position: absolute; right: 0; top: 0; bottom: 0; width: 27px; padding: 0; border: 2px solid #e5e7eb; border-left: none; border-radius: 0 10px 10px 0; background: linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 100%); color: #666; font-size: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 10; transition: all 0.2s; }
+        .username-dropdown-btn { position: absolute; right: 0; top: 0; bottom: 0; width: 27px; padding: 0; border: 2px solid #e5e7eb; border-left: none; border-radius: 0 10px 10px 0; background: linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 100%); color: #666; font-size: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 10; transition: all 0.2s; overflow: visible; }
         .username-dropdown-btn:hover { background: linear-gradient(135deg, #e8e8e8 0%, #d0d0d0 100%); }
+        /* ★ 2026-08-28 用户名下拉数量徽标 (N)：独立胶囊，贴于按钮右下外侧，与截图「▼(1)」形态一致；
+             - 不再与 ▼ 同一 text 节点→不再被 27px 按钮挤成两行；
+             - 数字 1~2 位自适应胶囊宽度；浅色背景与边框，不抢输入框视觉重心；
+             - 父级 overflow:visible 保证贴到输入框外不被裁切（旧 overflow:hidden 已移除）。 */
+        .username-dropdown-count { position: absolute; right: -34px; top: 50%; transform: translateY(-50%); display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 24px; padding: 0 6px; box-sizing: border-box; background: linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 100%); border: 2px solid #e5e7eb; border-radius: 0 8px 8px 0; color: #555; font-size: 11px; font-weight: 700; line-height: 1; white-space: nowrap; }
         .username-dropdown-menu { position: absolute; z-index: 100; display: none; background: white; border: 2px solid var(--login-accent); border-radius: 10px; top: calc(100% + 4px); left: 0; right: 0; box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12); max-height: 150px; overflow-y: auto; }
         .username-dropdown-menu.show { display: block; }
         .username-dropdown-menu div { padding: 10px 12px; font-size: 12px; color: #333; cursor: pointer; transition: background 0.2s; }
@@ -536,7 +545,9 @@
             .main-content { padding: 28px 22px; }
             .login-box { padding: 26px 22px; }
             .login-field { flex-direction: row; align-items: center; gap: 10px; margin-bottom: 22px; }
-            .login-field label { width: 40px; font-size: 14px; text-align: right; flex-shrink: 0; }
+            /* ★ 2026-08-28 移动端登录框 label 不换行：88px 宽度容纳「手机号/用户名:」整行，不挤成三行；
+                 与桌面端风格一致（单行右对齐），下拉按钮 (N) 徽标不再偏出输入框。 */
+            .login-field label { min-width: 88px; width: 88px; font-size: 13px; text-align: right; flex-shrink: 0; white-space: nowrap; line-height: 1.2; }
             .login-field input, .login-field select { width: 100%; padding: 13px 14px; font-size: 15px; border-radius: 12px; }
             .username-input-wrapper { flex: 1; }
             .username-input-wrapper input { width: 100%; padding-right: 36px; box-sizing: border-box; }
@@ -642,7 +653,10 @@
             .version-tag { font-size: 11px; }
             .login-box { padding: 15px 12px; }
             .login-field { flex-direction: row; align-items: center; gap: 6px; margin-bottom: 12px; }
-            .login-field label { width: 38px; font-size: 12px; text-align: right; flex-shrink: 0; }
+            /* ★ 2026-08-28 超窄屏（≤280px）登录框仍保留单行 label（不折三行）：
+                 72px 压缩到 66px 也能单行容纳「手机号/用户名:」6 字（12px 汉字约 12*7=84px？超窄屏会略微挤→但比换行成三行更美观，
+                 退而求其次：允许略缩小到 11px 字号 + 68px 宽度，保证观感。 */
+            .login-field label { min-width: 66px; width: 66px; font-size: 11px; text-align: right; flex-shrink: 0; white-space: nowrap; line-height: 1.2; letter-spacing: -0.2px; }
             .login-field input, .login-field select { width: 100%; padding: 8px 10px; font-size: 13px; }
             .login-buttons { gap: 12px; margin-top: 15px; }
             .login-btn { padding: 8px 18px; min-width: 70px; font-size: 13px; }
@@ -704,10 +718,23 @@ window.APP_MODE = 'auto';
 // ★修复：消除登录界面闪现（已登录时立即隐藏 loginOverlay，避免 adjustResize 重排时闪现）
 // ★ 修复 2026-07-28：APP 端启动时主动清除所有登录态（纵深防御），确保每次打开都必须手动登录
 // 使用 location.href 检测 APP（此时 electronAPI 尚未注入，无法用 isAndroidAPP）
+// ★★ 2026-08-25 修复"打开后先闪操作界面再弹登入框"：
+//   ①云端APP（Capacitor 壳远程加载，非 android_asset）此前漏判——残留 isLoggedIn 先隐藏
+//     登入框露出操作界面，随后 checkLoginStatus 又无条件弹回登入框造成闪现 → 纳入强制清登录态
+//   ②Electron 桌面版不再信任 localStorage.isLoggedIn 同步隐藏登入框——改由主进程 dom-ready
+//     注入 + checkLoginStatus 的 Electron 分支（均校验 currentLoggedInUser）负责隐藏，
+//     localStorage 残留假登录态不再导致窗口先露操作界面
+//   ③网页版：与 APP 统一强制每次手动登录（用户要求"云端网页不要自动登入"，2026-08-25）——
+//     清除所有登录态，登入框保持显示，不恢复会话、不先进后弹
 try {
     var __isAPP = location.href.indexOf('android_asset') >= 0;
-    if (__isAPP) {
-        // APP 端：清除所有登录态，不隐藏登录界面
+    // ★ 原生 APP 壳特征：MainActivity 注入 AndroidNative / AndroidAppExit JS 接口
+    //   （离线APP android_asset 加载 + 云端APP 远程URL加载都注入，网页/桌面版没有）
+    var __isNativeAppShell = (typeof window.AndroidNative !== 'undefined') || (typeof window.AndroidAppExit !== 'undefined');
+    var __isCloudAPP = !__isAPP && __isNativeAppShell;
+    var __isDesktop = !!(window.electronAPI && window.electronAPI.isElectron);
+    if (__isAPP || __isCloudAPP) {
+        // APP 端（离线内嵌 + 云端Capacitor远程加载）：清除所有登录态，不隐藏登录界面
         localStorage.removeItem('isLoggedIn');
         localStorage.removeItem('currentUser');
         localStorage.removeItem('user_login_data');
@@ -716,9 +743,21 @@ try {
         localStorage.removeItem('auth:loginData');
         localStorage.removeItem('cloud_isLoggedIn');
         localStorage.removeItem('cloud_currentUser');
-    } else if (localStorage.getItem('isLoggedIn') === 'true') {
-        var __lo = document.getElementById('loginOverlay');
-        if (__lo) __lo.style.display = 'none';
+    } else if (__isDesktop) {
+        // 桌面版：loginOverlay 保持默认显示，由主进程 dom-ready 注入隐藏（登录态经主进程校验）
+    } else {
+        // ★★ 2026-08-25 网页版：强制每次手动登录（用户要求"云端网页不要自动登入"）——
+        //   与 APP 端统一：清除所有登录态，loginOverlay 保持显示；
+        //   记住的用户名（local_rememberedUsers/local_rememberedUsername）不受影响，
+        //   密码永远手动输入；设备指纹（auth:deviceMachineId）保留不影响设备绑定
+        localStorage.removeItem('isLoggedIn');
+        localStorage.removeItem('currentUser');
+        localStorage.removeItem('user_login_data');
+        localStorage.removeItem('auth:isLoggedIn');
+        localStorage.removeItem('auth:currentUser');
+        localStorage.removeItem('auth:loginData');
+        localStorage.removeItem('cloud_isLoggedIn');
+        localStorage.removeItem('cloud_currentUser');
     }
 } catch(e) {}
 if (window.Permission) {
@@ -1711,15 +1750,25 @@ let currentUser = null;
                             const loginData = { user: user, loginTime: Date.now() };
                             localStorage.setItem('user_login_data', JSON.stringify(loginData));
                             saveRememberedUser(username);
+                            // ★ 2026-08-28 修复：登录成功路径漏调 setLoginLoading(false)，
+                            //   导致退出登录后登录框按钮残留"登录中..."且输入框被禁用
+                            setLoginLoading(false);
                             document.getElementById('loginOverlay').style.display = 'none';
                             document.querySelector('.main-container').style.display = 'flex';
                             updateUserDisplay();
                             hideLoginError();
-                            if (user.name) {
+                            // ★ 2026-08-25 修复：登录时优先使用本用户在基础设置保存过的医师姓名
+                            //   （saveSettings 写入 local_clinicDoctor_<username>），保存过的新名字
+                            //   不再被云端旧姓名顶回；未保存过才用登录用户姓名，并回写全局键保持回显一致
+                            let _savedDoctorName = '';
+                            try { _savedDoctorName = (localStorage.getItem('local_clinicDoctor_' + (user.username || '')) || '').trim(); } catch (e) {}
+                            if (!_savedDoctorName && user.name) _savedDoctorName = user.name;
+                            if (_savedDoctorName) {
                                 const _ddEl = document.getElementById('defaultDoctor');
-                                if (_ddEl) _ddEl.value = user.name;
+                                if (_ddEl) _ddEl.value = _savedDoctorName;
                                 const _dnEl = document.getElementById('doctorName');
-                                if (_dnEl) _dnEl.value = user.name;
+                                if (_dnEl) _dnEl.value = _savedDoctorName;
+                                try { localStorage.setItem('local_clinicDoctor', _savedDoctorName); } catch (e) {}
                             }
                             try { await loadData(); } catch(e) { console.warn('loadData失败:', e); }
                             refreshUserInterface();
@@ -1789,6 +1838,10 @@ let currentUser = null;
                                 }
                                 if (cloudUser.clinicId && !user.clinicId) user.clinicId = cloudUser.clinicId;
                                 if (cloudUser.name && !user.name) user.name = cloudUser.name;
+                                // ★ 2026-08-25 全局统一授权状态：合并云端授权字段（版本+到期时间），
+                                //   基础设置授权区显示"✅ 已激活（版本）剩余 X 天"（与离线格式统一）
+                                if (cloudUser.clinicEdition && !user.clinicEdition) user.clinicEdition = cloudUser.clinicEdition;
+                                if (cloudUser.clinicExpiresAt && !user.clinicExpiresAt) user.clinicExpiresAt = cloudUser.clinicExpiresAt;
                                 user._cloudRoleSynced = true;
                                 // 回写本地用户表：下次登录直接携带正确 role，无需再补拉
                                 try {
@@ -1820,21 +1873,26 @@ let currentUser = null;
                     };
                     localStorage.setItem('user_login_data', JSON.stringify(loginData));
                     saveRememberedUser(username);
-                    
-                    
+                    // ★ 2026-08-28 修复：登录成功路径漏调 setLoginLoading(false)，
+                    //   导致退出登录后登录框按钮残留"登录中..."且输入框被禁用
+                    setLoginLoading(false);
                     document.getElementById('loginOverlay').style.display = 'none';
                     document.querySelector('.main-container').style.display = 'flex';
                     updateUserDisplay();
                     hideLoginError();
 
-                    // 登录后自动设置医师姓名为登录用户的姓名
-                    const doctorNameInput = document.getElementById('doctorName');
-                    if (doctorNameInput) {
-                        doctorNameInput.value = user.name || '';
-                    }
-                    const defaultDoctorInput = document.getElementById('defaultDoctor');
-                    if (defaultDoctorInput) {
-                        defaultDoctorInput.value = user.name || '';
+                    // ★ 2026-08-25 修复：登录时优先使用本用户在基础设置保存过的医师姓名。
+                    //   原先无条件用登录用户姓名（user.name）覆盖 doctorName/defaultDoctor，
+                    //   且不落盘——用户改好保存的新名字重新登录后被旧名顶回，处方签一直显示旧名。
+                    let _savedDoctor = '';
+                    try { _savedDoctor = (localStorage.getItem('local_clinicDoctor_' + (user.username || '')) || '').trim(); } catch (e) {}
+                    if (!_savedDoctor && user.name) _savedDoctor = user.name;
+                    if (_savedDoctor) {
+                        const doctorNameInput = document.getElementById('doctorName');
+                        if (doctorNameInput) doctorNameInput.value = _savedDoctor;
+                        const defaultDoctorInput = document.getElementById('defaultDoctor');
+                        if (defaultDoctorInput) defaultDoctorInput.value = _savedDoctor;
+                        try { localStorage.setItem('local_clinicDoctor', _savedDoctor); } catch (e) {}
                     }
 
                     await loadData();
@@ -2008,7 +2066,13 @@ let currentUser = null;
             }
 
             btn.style.display = 'flex';
-            btn.textContent = '▼(' + usernames.length + ')';
+            // ★ 2026-08-28 APP 登录框用户名下拉按钮统一形态：
+            //   - ▼ + 独立 (N) 数量徽标（对齐用户截图「▼(1)」两元素：▼ 按钮右方 与 (1) 灰色胶囊徽标），
+            //   - 旧版 textContent='▼(N)' 在按钮宽度=27px 时被挤成多行，数量徽标溢出到输入框外部，
+            //   - 改 innerHTML：▼ 图标文本 + <span class="username-dropdown-count">(N)</span> 胶囊徽标，
+            //     用 CSS 绝对定位贴到按钮右外侧，与桌面/网页同款形态保持一致。
+            var count = usernames.length;
+            btn.innerHTML = '▼<span class="username-dropdown-count">(' + count + ')</span>';
             menu.innerHTML = '';
 
             // ★ 实名防护：下拉只显示用户名本身，禁止映射显示账户 name（真实医师姓名）
@@ -2311,15 +2375,12 @@ let currentUser = null;
                         setTimeout(() => { if (typeof exitApp === 'function') try { exitApp(); } catch(_) {} }, 250);
                         return;
                     }
+                    // ★ 2026-08-28 用户要求：退出登录时同步关闭登录界面网页标签（云端网页版）
+                    //   不再停留在登录界面（防止账号预填/界面被他人操作），先显示遮罩兜底，
+                    //   250ms 后走 exitApp 全平台关闭链（APP关APP/桌面关窗口/纯网页关标签）
                     overlay.style.display = 'flex';
-                    if (typeof loadRememberedUsers === 'function') try { loadRememberedUsers(); } catch(_) {}
-                    try {
-                        if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.edition === 'personal' && CONFIG.doctorName) {
-                            const inp = document.getElementById('loginUsername');
-                            if (inp) inp.value = CONFIG.doctorName;
-                        }
-                    } catch(_) {}
-                    if (typeof showToast === 'function') try { showToast('已退出登录'); } catch(_) {}
+                    if (typeof showToast === 'function') try { showToast('已退出登录，正在关闭页面...'); } catch(_) {}
+                    setTimeout(() => { if (typeof exitApp === 'function') try { exitApp(); } catch(_) {} }, 250);
                 }
             } catch (e) {
                 console.error('[handleLogout] 兜底异常:', e);
@@ -2352,7 +2413,17 @@ let currentUser = null;
                 if (window.electronAPI && typeof window.electronAPI.quitApp === 'function') {
                     try { window.electronAPI.quitApp(); return; } catch(_) {}
                 }
+                // ★ 2026-08-28 纯网页兜底：浏览器对非脚本打开的标签会拦截 window.close()。
+                //   仅当完全无原生退出桥（纯浏览器环境）时，用 about:blank 清空页面等效关闭标签，
+                //   防止退出登录后残留登录界面（含账号预填）被他人操作；
+                //   有原生桥的环境（APP/桌面）已在上方分支 return，即使桥调用异常也保持旧行为不误伤。
+                var __noNativeExitBridge = !(window.AndroidAppExit || window.AndroidNative || (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) || window.electronAPI);
                 try { window.close(); } catch(_) {}
+                if (__noNativeExitBridge) {
+                    setTimeout(function () {
+                        try { if (!window.closed) window.location.replace('about:blank'); } catch(_) {}
+                    }, 400);
+                }
             } catch (e) {
                 console.error('[exitApp] 兜底异常:', e);
             }
@@ -2945,7 +3016,18 @@ let currentUser = null;
                 if (currentUser && currentUser.username === originalUsername) {
                     currentUser = users[userIndex];
                     localStorage.setItem('local_currentUser', JSON.stringify(currentUser));
+                    // ★ 2026-08-25 同步：编辑当前用户医师姓名后，全局医师姓名与处方签立即跟随。
+                    //   原先只改用户表，local_clinicDoctor/医师输入框/处方签仍显示旧名。
+                    try {
+                        localStorage.setItem('local_clinicDoctor', newName);
+                        localStorage.setItem('local_clinicDoctor_' + newUsername, newName);
+                    } catch (e) {}
+                    const _editDnEl = document.getElementById('doctorName');
+                    if (_editDnEl) _editDnEl.value = newName;
+                    const _editDdEl = document.getElementById('defaultDoctor');
+                    if (_editDdEl) _editDdEl.value = newName;
                     updateUserDisplay();
+                    if (typeof updatePrescriptionPaper === 'function') updatePrescriptionPaper();
                 }
 
                 if (newUsername !== originalUsername) {
@@ -3456,20 +3538,23 @@ let currentUser = null;
         async function checkLoginStatus() {
             // ★ 纵深防御 2026-07-28：APP 端启动时再次清除登录态
             // 防止早期内联脚本和 AuthCore 迁移遗漏，确保每次打开都必须手动登录
+            // ★★ 2026-08-25 全端统一"每次打开必须手动登录"（用户要求"云端网页不要自动登入"）：
+            //   非 Electron 桌面环境（网页版 + 离线APP + 云端APP）一律清除所有登录态；
+            //   桌面版登录态由主进程 currentLoggedInUser 校验（下方 Electron 分支），不在清除范围
             try {
-                if (location.href.indexOf('android_asset') >= 0 ||
-                    (window.electronAPI && window.electronAPI.isAndroidAPP)) {
+                if (!(window.electronAPI && window.electronAPI.isElectron)) {
                     localStorage.removeItem('isLoggedIn');
                     localStorage.removeItem('currentUser');
                     localStorage.removeItem('user_login_data');
                     localStorage.removeItem('auth:isLoggedIn');
                     localStorage.removeItem('auth:currentUser');
                     localStorage.removeItem('auth:loginData');
+                    localStorage.removeItem('cloud_isLoggedIn');
+                    localStorage.removeItem('cloud_currentUser');
                 }
             } catch(e) {}
 
             if (window.AuthCore) { try { await AuthCore.checkSession(); } catch(e) {} }
-            const SESSION_TIMEOUT_MS = 8 * 60 * 60 * 1000; try { const _ld = localStorage.getItem('user_login_data'); if (_ld) { const _lt = JSON.parse(_ld).loginTime; if (_lt && Date.now() - _lt > SESSION_TIMEOUT_MS) { localStorage.removeItem('currentUser'); localStorage.removeItem('user_login_data'); localStorage.removeItem('isLoggedIn'); } } } catch(e) {}
 
             // Electron 桌面版：检查是否已通过 login.html 登录，自动登录跳过第二次登录界面
             // ★ 修复 2026-07-27：APP 端禁止自动登录（用户要求每次打开都必须输入用户名和密码）
@@ -3493,6 +3578,10 @@ let currentUser = null;
                     console.error('Electron自动登录失败:', e);
                 }
             }
+
+            // ★★ 2026-08-25 网页版不再恢复会话（用户要求"云端网页不要自动登入"）：
+            //   非 Electron 环境登录态已在上方全部清除，直接显示登入框，每次手动登录。
+            //   （原会话恢复分支是自动登入的来源，已移除）
 
             document.getElementById('loginPassword').value = '';
             document.getElementById('loginOverlay').style.display = 'flex';
@@ -6691,6 +6780,13 @@ let currentUser = null;
         function saveSettings() {
             localStorage.setItem('local_clinicName', document.getElementById('clinicName').value);
             localStorage.setItem('local_clinicDoctor', document.getElementById('defaultDoctor').value);
+            // ★ 2026-08-25 修复：按登录用户另存一份专属医师姓名（local_clinicDoctor_<username>），
+            //   登录时优先读取该用户保存值，避免机构版多医师互相覆盖串名
+            try {
+                if (currentUser && currentUser.username) {
+                    localStorage.setItem('local_clinicDoctor_' + currentUser.username, document.getElementById('defaultDoctor').value);
+                }
+            } catch (e) {}
             localStorage.setItem('local_defaultRegFee', document.getElementById('defaultRegFee').value || '0');
             localStorage.setItem('local_defaultDose', document.getElementById('defaultDose').value || '7');
             
@@ -6704,6 +6800,9 @@ let currentUser = null;
             
             document.getElementById('doctorName').value = document.getElementById('defaultDoctor').value;
             document.getElementById('clinicNameDisplay').textContent = document.getElementById('clinicName').value;
+            // ★ 2026-08-25 修复：保存医师姓名后立即刷新处方签（此前 paperDoctor 不更新，
+            //   处方签/打印签名一直显示旧名）；打印处方取自同一 DOM，同步生效
+            if (typeof updatePrescriptionPaper === 'function') updatePrescriptionPaper();
             // ★ 2026-08-17 举一反三：保存诊所名后同步登录框诊所名（登出/重登时跟随最新设置）
             const _loginClinicEl = document.getElementById('loginClinicName');
             if (_loginClinicEl && document.getElementById('clinicName').value) {

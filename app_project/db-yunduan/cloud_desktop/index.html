@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob: data:; font-src 'self' data:; connect-src 'self' https://tcm-prescription-system.pages.dev https://*.pages.dev; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests; worker-src 'self' blob:"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><title>惠康中医-云端标准版</title><style>* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob: data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests; worker-src 'self' blob:"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><title>惠康中医-云端标准版</title><style>* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         input[type="number"]::-webkit-inner-spin-button,
         input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         input[type="number"] { -moz-appearance: textfield; }
@@ -13,6 +13,42 @@
             --shadow: 3px 3px 10px rgba(0,0,0,0.3);
             --touch-min-height: 44px;
             --mobile-font-size: 16px;
+            /* ★ 2026-08-23 根治三屏闪-刀1：默认主题 = 蓝色标准版（云端统一版默认标准版）。
+               原"默认紫色机构版+JS加edition-standard切蓝"在JS/网络慢时首帧必出紫色（图片1）。
+               现在默认即蓝，机构版才需要JS加 edition-org 类切紫 → 首帧必蓝，不依赖任何JS。 */
+            --login-primary: #0ea5e9;
+            --login-secondary: #06b6d4;
+            --login-gradient: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
+            --login-header-gradient: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
+            --login-accent: #0ea5e9;
+            --login-accent-light: rgba(14, 165, 233, 0.1);
+            --login-btn-gradient: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
+            --login-version-label: '标准版';
+            --login-version-icon: '🏥';
+        }
+        /* ★ 2026-08-23 根治三屏闪-刀1：机构版改为显式类切换紫色（原为默认值，现反转） */
+        :root.edition-org {
+            --login-primary: #6366f1;
+            --login-secondary: #8b5cf6;
+            --login-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            --login-header-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            --login-accent: #6366f1;
+            --login-accent-light: rgba(99, 102, 241, 0.1);
+            --login-btn-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            --login-version-label: '机构版';
+            --login-version-icon: '🏛️';
+        }
+        /* 标准版主题（与默认值相同，保留兼容旧逻辑 add('edition-standard') 的调用方） */
+        :root.edition-standard {
+            --login-primary: #0ea5e9;
+            --login-secondary: #06b6d4;
+            --login-gradient: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
+            --login-header-gradient: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
+            --login-accent: #0ea5e9;
+            --login-accent-light: rgba(14, 165, 233, 0.1);
+            --login-btn-gradient: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
+            --login-version-label: '标准版';
+            --login-version-icon: '🏥';
         }
         
         @page { size: A5; margin: 0; }
@@ -122,49 +158,74 @@
         .modal-body { flex: 1; overflow: auto; padding: 15px; background: white; }
         .modal-footer { padding: 10px 15px; background: #e0e0e0; display: flex; justify-content: flex-end; gap: 10px; border-top: 2px solid #808080; }
         .close-btn { font-size: 24px; cursor: pointer; line-height: 1; }
-        .login-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; visibility: visible; justify-content: center; align-items: center; z-index: 9999; }
-        .login-container { width: 240px; background: rgba(255, 255, 255, 0.95); border-radius: 12px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3); overflow: hidden; position: relative; }
-        .bg-decoration { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 400"%3E%3Cdefs%3E%3Cpattern id="grid" x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse"%3E%3Cpath d="M 24 0 L 0 0 0 24" fill="none" stroke="rgba(102,126,234,0.08)" stroke-width="1"/%3E%3C/pattern%3E%3C/defs%3E%3Crect fill="url(%23grid)" width="320" height="400"/%3E%3C/svg%3E'); pointer-events: none; z-index: 0; }
-        .header-section { position: relative; z-index: 1; padding: 20px 18px; display: flex; flex-direction: column; align-items: center; gap: 8px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
-        .system-title { font-size: 18px; font-weight: bold; color: white; text-shadow: 0 2px 4px rgba(0,0,0,0.2); letter-spacing: 2px; }
-        .version-tag { font-size: 12px; font-weight: bold; color: rgba(255,255,255,0.9); background: rgba(255,255,255,0.2); padding: 2px 8px; border-radius: 10px; }
-        /* ★ 2026-08-23 简洁统一（与云端APP一致）：登录框不显示版本标签（header胶囊+底部三元组），
-           版本在登录成功后操作界面顶栏显示；仅视觉隐藏，applyEditionTags 写入逻辑不破坏 */
-        .login-overlay .version-tag, .login-overlay #loginVersionTagBottom { display: none; }
-        .main-content { position: relative; z-index: 1; padding: 24px 18px; }
-        .login-box { background: white; border-radius: 10px; padding: 20px 15px; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.15); border: 1px solid rgba(102, 126, 234, 0.2); }
-        .login-field { margin-bottom: 18px; display: flex; flex-direction: row; align-items: center; gap: 6px; }
-        .login-field label { width: 36px; font-size: 12px; font-weight: bold; color: #555; text-align: right; flex-shrink: 0; }
-        .login-field input, .login-field select { width: 100%; padding: 10px 9px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 13px; background: #fafafa; transition: all 0.2s; }
-        .login-field input:focus, .login-field select:focus { border-color: #667eea; outline: none; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); background: white; }
+        .login-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--login-gradient); display: flex; visibility: visible; justify-content: center; align-items: center; z-index: 9999; }
+        .login-container { width: 240px; background: rgba(255, 255, 255, 0.97); border-radius: 16px; box-shadow: 0 25px 70px rgba(0, 0, 0, 0.35); overflow: hidden; position: relative; backdrop-filter: blur(10px); }
+        .bg-decoration { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 400"%3E%3Cdefs%3E%3Cpattern id="grid" x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse"%3E%3Cpath d="M 24 0 L 0 0 0 24" fill="none" stroke="%236366f1" stroke-width="0.5" opacity="0.1"/%3E%3C/pattern%3E%3C/defs%3E%3Crect fill="url(%23grid)" width="320" height="400"/%3E%3C/svg%3E'); pointer-events: none; z-index: 0; opacity: 0.5; }
+        .header-section { position: relative; z-index: 1; padding: 24px 20px; display: flex; flex-direction: column; align-items: center; gap: 10px; background: var(--login-header-gradient); }
+        .login-logo { width: 48px; height: 48px; background: rgba(255,255,255,0.2); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 28px; backdrop-filter: blur(5px); }
+        .system-title { font-size: 18px; font-weight: bold; color: white; text-shadow: 0 2px 4px rgba(0,0,0,0.2); letter-spacing: 2px; text-align: center; }
+        .version-tag { font-size: 12px; font-weight: bold; color: rgba(255,255,255,0.95); background: rgba(255,255,255,0.25); padding: 3px 12px; border-radius: 12px; backdrop-filter: blur(5px); }
+        .version-features { font-size: 10px; color: rgba(255,255,255,0.85); text-align: center; line-height: 1.4; margin-top: 4px; }
+        .main-content { position: relative; z-index: 1; padding: 24px 20px; }
+        .login-box { background: white; border-radius: 12px; padding: 22px 18px; box-shadow: 0 8px 25px var(--login-accent-light); border: 1px solid rgba(0,0,0,0.05); }
+        .login-field { margin-bottom: 16px; display: flex; flex-direction: row; align-items: center; gap: 8px; }
+        /* ★ 2026-08-28 登录框 label 统一布局（对齐桌面 electron/login.html 行式 且 避免小屏手机 label 被挤成三行）：
+             - 桌面/宽屏：label 单行 右对齐，固定 72px（"手机号/用户名:" 6 字正好单行）；
+             - 移动端 max-width:480px：覆盖为更宽 88px + 字号 13px 保持单行。
+             - 使用 text-wrap:balance + min-width 双重保险，防止旧浏览器兼容问题再次换行。 */
+        .login-field label { min-width: 72px; width: 72px; font-size: 12px; line-height: 1.2; font-weight: bold; color: #555; text-align: right; flex-shrink: 0; white-space: nowrap; overflow: visible; text-overflow: clip; }
+        .login-field input, .login-field select { width: 100%; padding: 11px 12px; border: 2px solid #e5e7eb; border-radius: 10px; font-size: 13px; background: #f8f9fa; transition: all 0.25s ease; }
+        .login-field input:disabled, .login-field select:disabled { opacity: 0.65; cursor: not-allowed; background: #f0f0f0; }
+        .login-field input:focus, .login-field select:focus { border-color: var(--login-accent); outline: none; box-shadow: 0 0 0 3px var(--login-accent-light); background: white; }
         .username-input-wrapper { position: relative; flex: 1; }
         .username-input-wrapper input { width: 100%; padding-right: 30px; box-sizing: border-box; }
-        .username-dropdown-btn { position: absolute; right: 0; top: 0; bottom: 0; width: 27px; padding: 0; border: 2px solid #e0e0e0; border-left: none; border-radius: 0 8px 8px 0; background: linear-gradient(135deg, #f5f5f5 0%, #e0e0e0 100%); color: #666; font-size: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 10; transition: all 0.2s; }
+        .username-dropdown-btn { position: absolute; right: 0; top: 0; bottom: 0; width: 27px; padding: 0; border: 2px solid #e5e7eb; border-left: none; border-radius: 0 10px 10px 0; background: linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 100%); color: #666; font-size: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 10; transition: all 0.2s; overflow: visible; }
         .username-dropdown-btn:hover { background: linear-gradient(135deg, #e8e8e8 0%, #d0d0d0 100%); }
-        .username-dropdown-menu { position: absolute; z-index: 100; display: none; background: white; border: 2px solid #667eea; border-radius: 8px; top: calc(100% + 4px); left: 0; right: 0; box-shadow: 0 8px 20px rgba(102, 126, 234, 0.25); max-height: 150px; overflow-y: auto; }
+        /* ★ 2026-08-28 用户名下拉数量徽标 (N)：独立胶囊，贴于按钮右下外侧，与截图「▼(1)」形态一致；
+             - 不再与 ▼ 同一 text 节点→不再被 27px 按钮挤成两行；
+             - 数字 1~2 位自适应胶囊宽度；浅色背景与边框，不抢输入框视觉重心；
+             - 父级 overflow:visible 保证贴到输入框外不被裁切（旧 overflow:hidden 已移除）。 */
+        .username-dropdown-count { position: absolute; right: -34px; top: 50%; transform: translateY(-50%); display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 24px; padding: 0 6px; box-sizing: border-box; background: linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 100%); border: 2px solid #e5e7eb; border-radius: 0 8px 8px 0; color: #555; font-size: 11px; font-weight: 700; line-height: 1; white-space: nowrap; }
+        .username-dropdown-menu { position: absolute; z-index: 100; display: none; background: white; border: 2px solid var(--login-accent); border-radius: 10px; top: calc(100% + 4px); left: 0; right: 0; box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12); max-height: 150px; overflow-y: auto; }
         .username-dropdown-menu.show { display: block; }
-        .username-dropdown-menu div { padding: 10px 11px; font-size: 12px; color: #333; cursor: pointer; transition: background 0.2s; }
-        .username-dropdown-menu div:hover { background: #667eea; color: white; }
-        .login-buttons { display: flex; gap: 9px; }
-        .login-btn { flex: 1; padding: 10px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; border: none; border-radius: 8px; font-size: 13px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4); transition: all 0.2s; }
-        .login-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(102, 126, 234, 0.5); }
-        .login-btn.cancel { background: linear-gradient(135deg, #e0e0e0 0%, #bdbdbd 100%); color: #555; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); }
-        .login-btn.cancel:hover { box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15); }
-        .password-input-wrapper { position: relative; flex: 1; }
-        .password-input-wrapper input { width: 100%; padding-right: 38px; box-sizing: border-box; transition: border-color 0.2s; }
-        .password-toggle-btn { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 30px; height: 30px; border: none; background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #999; font-size: 15px; border-radius: 6px; transition: all 0.25s ease; user-select: none; -webkit-tap-highlight-color: transparent; }
-        .password-toggle-btn:hover { background: #f0f0f0; color: #667eea; transform: translateY(-50%) scale(1.08); }
-        .password-toggle-btn:active { transform: translateY(-50%) scale(0.95); }
-        .password-toggle-btn.visible { color: #667eea; background: rgba(102,126,234,0.1); }
-        .password-toggle-btn:focus-visible { outline: 2px solid #667eea; outline-offset: 2px; }
-        .login-footer { text-align: center; margin-top: 12px; font-size: 10px; color: #999; }
+        .username-dropdown-menu div { padding: 10px 12px; font-size: 12px; color: #333; cursor: pointer; transition: background 0.2s; }
+        .username-dropdown-menu div:hover { background: var(--login-accent); color: white; }
+        .login-buttons { display: flex; gap: 10px; }
+        .login-btn { flex: 1; padding: 11px; background: var(--login-btn-gradient); color: #fff; border: none; border-radius: 10px; font-size: 13px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 15px rgba(99, 102, 241, 0.35); transition: all 0.25s ease; position: relative; overflow: hidden; }
+        .login-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(99, 102, 241, 0.45); }
+        .login-btn:active:not(:disabled) { transform: translateY(0); }
+        .login-btn:disabled { opacity: 0.7; cursor: not-allowed; }
+        .login-btn.cancel { background: linear-gradient(135deg, #f5f5f5 0%, #e0e0e0 100%); color: #666; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); }
+        .login-btn.cancel:hover:not(:disabled) { box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12); }
+        .login-btn.loading { position: relative; padding-right: 42px; pointer-events: none; opacity: 0.92; }
+        .login-btn.loading::after { content: ''; position: absolute; right: 14px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; border: 2.5px solid rgba(255,255,255,0.35); border-top-color: #fff; border-radius: 50%; animation: spin 0.65s linear infinite; }
+        @keyframes spin { from { transform: translateY(-50%) rotate(0deg); } to { transform: translateY(-50%) rotate(360deg); } }
+        .login-footer { text-align: center; margin-top: 14px; font-size: 11px; color: #999; }
+        .login-footer a { color: var(--login-accent); text-decoration: none; }
+        .login-footer a:hover { text-decoration: underline; }
         .login-security { display: flex; align-items: center; justify-content: center; gap: 4px; margin-top: 8px; font-size: 10px; color: #aaa; }
         .login-security-icon { color: #22c55e; }
+        .login-error { color: #dc2626; font-size: 12px; text-align: center; margin-top: 12px; padding: 10px 12px; background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%); border-radius: 10px; border: 1px solid #fecaca; display: none; line-height: 1.5; box-shadow: 0 2px 8px rgba(220, 38, 38, 0.1); position: relative; overflow: hidden; }
+        .login-error.show { display: block; animation: shakeFadeIn 0.45s ease; }
+        @keyframes shakeFadeIn { 0% { opacity: 0; transform: translateY(-6px) translateX(0); } 15% { opacity: 1; } 30% { transform: translateX(-6px); } 50% { transform: translateX(5px); } 70% { transform: translateX(-3px); } 85% { transform: translateX(3px); } 100% { transform: translateX(0) translateY(0); opacity: 1; } }
+        .clinic-info { text-align: center; padding: 10px 12px; background: var(--login-accent-light); border: 1px solid rgba(0,0,0,0.05); border-radius: 10px; margin-bottom: 18px; }
+        .clinic-info-name { font-size: 14px; font-weight: bold; color: var(--login-accent); }
+        .password-input-wrapper { position: relative; flex: 1; }
+        .password-input-wrapper input { width: 100%; padding-right: 38px; box-sizing: border-box; transition: border-color 0.25s ease, box-shadow 0.25s ease; }
+        .password-toggle-btn { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 30px; height: 30px; border: none; background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #999; font-size: 15px; border-radius: 6px; transition: all 0.25s ease; user-select: none; -webkit-tap-highlight-color: transparent; }
+        .password-toggle-btn:hover { background: #f0f0f0; color: var(--login-accent); transform: translateY(-50%) scale(1.08); }
+        .password-toggle-btn:active { transform: translateY(-50%) scale(0.95); }
+        .password-toggle-btn.visible { color: var(--login-accent); background: var(--login-accent-light); }
+        .password-toggle-btn:focus-visible { outline: 2px solid var(--login-accent); outline-offset: 2px; }
+        .version-selector { display: flex; gap: 8px; margin-bottom: 16px; }
+        .version-option { flex: 1; padding: 10px; border: 2px solid #e5e7eb; border-radius: 10px; cursor: pointer; text-align: center; transition: all 0.25s; background: #f8f9fa; }
+        .version-option:hover { border-color: var(--login-accent); background: var(--login-accent-light); }
+        .version-option.active { border-color: var(--login-accent); background: var(--login-accent-light); }
+        .version-option-icon { font-size: 20px; display: block; margin-bottom: 4px; }
+        .version-option-label { font-size: 11px; font-weight: bold; color: #333; }
+        .version-option-desc { font-size: 9px; color: #888; margin-top: 2px; }
         .copyright { text-align: center; margin-top: 12px; font-size: 10px; color: #bbb; }
         .copyright-version { text-align: center; font-size: 10px; color: #ccc; margin-top: 4px; }
-        .login-error { color: #dc2626; font-size: 11px; text-align: center; margin-top: 12px; padding: 8px; background: #fff5f5; border-radius: 4px; border: 1px solid #fcc; display: none; }
-        .clinic-info { text-align: center; padding: 12px; background: linear-gradient(135deg, #fff5f5 0%, #ffeaea 100%); border: 1px solid #ffcccc; border-radius: 6px; margin-bottom: 20px; }
-        .clinic-info-name { font-size: 14px; font-weight: bold; color: #8b0000; }
         .login-links a:hover { text-decoration: underline; }
         .user-modal-content { width: 400px; }
         .form-group { margin: 15px 0; text-align: left; }
@@ -476,21 +537,31 @@
         
         /* 小屏手机登录框放大 */
         @media screen and (max-width: 480px) {
-            .login-container { width: 90%; max-width: 360px; }
-            .header-section { padding: 24px 20px; }
+            .login-container { width: 92%; max-width: 380px; border-radius: 18px; }
+            .header-section { padding: 28px 22px; }
+            .login-logo { width: 52px; height: 52px; font-size: 30px; }
             .system-title { font-size: 20px; letter-spacing: 2px; }
-            .version-tag { font-size: 13px; }
-            .main-content { padding: 28px 20px; }
-            .login-box { padding: 24px; }
-            .login-field { flex-direction: row; align-items: center; gap: 8px; margin-bottom: 22px; }
-            .login-field label { width: 40px; font-size: 14px; text-align: right; flex-shrink: 0; }
-            .login-field input, .login-field select { width: 100%; padding: 12px 14px; font-size: 14px; border-radius: 8px; }
+            .version-tag { font-size: 13px; padding: 3px 14px; }
+            .main-content { padding: 28px 22px; }
+            .login-box { padding: 26px 22px; }
+            .login-field { flex-direction: row; align-items: center; gap: 10px; margin-bottom: 22px; }
+            /* ★ 2026-08-28 移动端登录框 label 不换行：88px 宽度容纳「手机号/用户名:」整行，不挤成三行；
+                 与桌面端风格一致（单行右对齐），下拉按钮 (N) 徽标不再偏出输入框。 */
+            .login-field label { min-width: 88px; width: 88px; font-size: 13px; text-align: right; flex-shrink: 0; white-space: nowrap; line-height: 1.2; }
+            .login-field input, .login-field select { width: 100%; padding: 13px 14px; font-size: 15px; border-radius: 12px; }
             .username-input-wrapper { flex: 1; }
-            .username-input-wrapper input { width: 100%; padding-right: 34px; box-sizing: border-box; }
-            .login-buttons { gap: 15px; }
-            .login-btn { padding: 12px; font-size: 14px; border-radius: 8px; }
+            .username-input-wrapper input { width: 100%; padding-right: 36px; box-sizing: border-box; }
+            .password-input-wrapper input { width: 100%; padding-right: 40px; box-sizing: border-box; }
+            .login-buttons { gap: 12px; }
+            .login-btn { padding: 13px; font-size: 15px; border-radius: 12px; }
             .login-footer { font-size: 12px; margin-top: 15px; }
-            .login-error { font-size: 12px; padding: 10px; border-radius: 6px; }
+            .login-error { font-size: 13px; padding: 12px; border-radius: 10px; }
+            .version-features { font-size: 11px; }
+            .version-selector { gap: 10px; }
+            .version-option { padding: 12px 8px; }
+            .version-option-icon { font-size: 22px; }
+            .version-option-label { font-size: 12px; }
+            .version-option-desc { font-size: 10px; }
         }
         
         /* 小屏手机优化 */
@@ -582,7 +653,10 @@
             .version-tag { font-size: 11px; }
             .login-box { padding: 15px 12px; }
             .login-field { flex-direction: row; align-items: center; gap: 6px; margin-bottom: 12px; }
-            .login-field label { width: 38px; font-size: 12px; text-align: right; flex-shrink: 0; }
+            /* ★ 2026-08-28 超窄屏（≤280px）登录框仍保留单行 label（不折三行）：
+                 72px 压缩到 66px 也能单行容纳「手机号/用户名:」6 字（12px 汉字约 12*7=84px？超窄屏会略微挤→但比换行成三行更美观，
+                 退而求其次：允许略缩小到 11px 字号 + 68px 宽度，保证观感。 */
+            .login-field label { min-width: 66px; width: 66px; font-size: 11px; text-align: right; flex-shrink: 0; white-space: nowrap; line-height: 1.2; letter-spacing: -0.2px; }
             .login-field input, .login-field select { width: 100%; padding: 8px 10px; font-size: 13px; }
             .login-buttons { gap: 12px; margin-top: 15px; }
             .login-btn { padding: 8px 18px; min-width: 70px; font-size: 13px; }
@@ -624,75 +698,43 @@
             }
         }
         </style><!-- xlsx 库按需加载：首次使用 Excel 导入时由 loadXlsxLibrary() 动态加载 vendor/xlsx.full.min.js；未放置时 Excel 导入功能不可用，其他功能不受影响 -->
-</head><body><div id="loginOverlay" class="login-overlay" style="display: flex;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="system-title">惠康中医诊所管理系统</div><div class="version-tag" id="loginVersionTag">【云端 · 登录后显示版本】</div></div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name" id="loginClinicName">本能堂中医诊所</div></div><div class="login-field"><label>手机号/用户名:</label><div class="username-input-wrapper"><input type="text" id="loginUsername" placeholder="请输入手机号或用户名" onkeypress="if(event.key==='Enter')document.getElementById('loginPassword').focus()"><button id="usernameDropdownBtn" class="username-dropdown-btn" onclick="toggleUsernameDropdown()" style="display:none;">▼</button><div id="usernameDropdownMenu" class="username-dropdown-menu"></div></div></div><div class="login-field"><label>密码:</label><div class="password-input-wrapper"><input type="password" id="loginPassword" autocomplete="new-password" onkeypress="if(event.key==='Enter')handleLogin()"><button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility()" title="显示/隐藏密码">👁️</button></div></div><div class="login-buttons"><button class="login-btn" id="loginBtn" onclick="handleLogin()">确定</button><button class="login-btn cancel" onclick="exitApp()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-security"><span class="login-security-icon">🛡️</span><span>安全登录 · 数据加密保护</span></div><div style="display:flex;gap:8px;margin-top:10px;"><button style="flex:1;padding:9px;font-size:13px;border:1px solid #26a69a;background:#fff;color:#00796b;border-radius:6px;cursor:pointer;font-weight:600;" onclick="if(typeof openAdminActivate==='function')openAdminActivate();else alert('激活入口加载中，请稍候')">📝 注册诊所 / 激活申请</button><button style="flex:1;padding:9px;font-size:13px;border:1px solid #1976d2;background:#fff;color:#0d47a1;border-radius:6px;cursor:pointer;font-weight:600;" onclick="window.location.href='admin/index.html'">🔔 管理台登录</button></div><div class="login-footer">微信号: hktzy1688 | 版本: V1.0.0</div><div class="copyright">© 2026 惠康中医 · 保留所有权利</div></div></div></div></div><div id="changePwdModal" class="modal"><div class="modal-content user-modal-content"><div class="modal-header"><span>修改密码</span><span class="close-btn" onclick="closeModal('changePwdModal')">&times;</span></div><div class="modal-body"><div class="form-group"><label>原密码</label><input type="password" id="oldPwd" placeholder="请输入原密码"></div><div class="form-group"><label>新密码</label><input type="password" id="newPwd" placeholder="请输入新密码"></div><div class="form-group"><label>确认新密码</label><input type="password" id="confirmNewPwd" placeholder="请再次输入新密码"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('changePwdModal')">取消</button><button class="action-btn primary" onclick="handleChangePassword()">修改</button></div></div></div><div id="userManageModal" class="modal"><div class="modal-content user-modal-content"><div class="modal-header"><span>用户管理</span><span class="close-btn" onclick="closeModal('userManageModal')">&times;</span></div><div class="modal-body"><div id="userList" class="user-list"></div><div class="form-group" style="margin-top:15px;"><label>添加新用户</label><input type="text" id="newUserUsername" placeholder="登录账号，建议英文或拼音"><input type="password" id="newUserPassword" placeholder="密码" style="margin-top:5px;"><input type="text" id="newUserName" placeholder="医师姓名（必填，中文真实姓名）" style="margin-top:5px;"><select id="newUserRole" style="margin-top:5px;width:100%;padding:5px;"><option value="user">普通用户</option><option value="cashier">前台收费（机构版）</option><option value="admin">管理员</option></select><select id="newUserType" style="margin-top:5px;width:100%;padding:5px;"><option value="production">正式用户</option><option value="test">测试用户</option></select></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('userManageModal')">关闭</button><button class="action-btn primary" onclick="handleAddUser()">添加用户</button></div></div></div><div class="top-tabs"><div class="tab-item" onclick="showModal('settingsModal')">【基础设置】</div><div class="tab-item" onclick="showModal('caseModal')">【病例管理】</div><div class="tab-item" onclick="showModal('medicineModal')">【药品管理】</div><div class="tab-item" onclick="showModal('formulaModal')">【验方设置】</div><div class="tab-item" onclick="showModal('analyticsModal')">【数据统计】</div><div class="tab-item" id="userManageBtn" onclick="showUserManageModal()" style="display:none;">【用户管理】</div><div class="tab-item" id="changePwdBtn" style="display:none;" onclick="showChangePwdModal()">【修改密码】</div><div class="tab-item" id="clinicPrescriptionBtn" onclick="showClinicPrescriptions()" style="display:none;background:#e8f5e9;color:#2e7d32;border-color:#4caf50;">【处方查阅】</div><div class="tab-item" onclick="showHelp()">【系统帮助】</div><div class="tab-item" style="background:#ffdddd;color:#8b0000;" onclick="handleLogout()">【退出登录】</div><div class="tab-hint">当前用户:<span style="color:#008000;font-weight:bold;" id="userDisplayName"></span>|<span style="color:#008000;font-weight:bold;" id="editionTag">【云端标准版】</span></div></div><div class="main-container"><div class="left-panel"><div class="top-tabs-left"><div class="tab-left-item active" style="flex:1;text-align:center;">填资料</div><button class="action-btn" onclick="saveAsFormula()" style="flex:1;padding:2px 8px;font-size:12px;">存验方</button><button class="action-btn" onclick="printPrescription('portrait')" style="flex:1;padding:2px 8px;font-size:12px;">纵向打印</button><button class="action-btn" onclick="printPrescription('landscape')" style="flex:1;padding:2px 8px;font-size:12px;">横向打印</button><button class="action-btn" onclick="clearPrescription()" style="flex:1;padding:2px 8px;font-size:12px;background:#f44336;color:white;">清空</button><button class="action-btn primary" onclick="savePrescription()" style="flex:1;padding:2px 8px;font-size:12px;font-weight:bold;">保存</button></div><div class="patient-section"><div class="patient-row"><span class="patient-label">门诊</span><input type="text" id="prescriptionNo" class="patient-input name-input" readonly><span class="patient-label">性别</span><select id="patientGender" class="patient-input x-small" onclick="toggleGender()" onchange="markGenderManual();updatePrescriptionPaper()"><option value="男">男</option><option value="女">女</option></select><span class="patient-label">日期</span><input type="text" id="visitDate" class="patient-input small" readonly></div><div class="patient-row"><span class="patient-label">姓名</span><input type="text" id="patientName" class="patient-input name-input" onkeyup="searchPatientsQuick(event);updatePrescriptionPaper();smartMatchGender(this.value)" onfocus="showSideHistory()" autocomplete="off"><span class="patient-label">年龄</span><input type="text" id="patientAge" class="patient-input x-small" onkeyup="updatePrescriptionPaper()"><span class="patient-label">电话</span><input type="text" id="patientPhone" class="patient-input small"></div><div class="patient-row"><span class="patient-label">统计</span><input type="text" id="clinicNo" class="patient-input xx-small" readonly><span class="patient-label">住址</span><input type="text" id="patientAddress" class="patient-input" style="flex: 1.2;"></div></div><div class="symptom-section"><div class="history-tabs"><div class="history-tab active">病史症状</div><div class="history-tab">修改病史</div></div><textarea id="medicalHistory" class="symptom-textarea" onkeyup="updatePrescriptionPaper()"></textarea></div><div class="diagnosis-section"><div class="patient-row"><span class="patient-label">诊断</span><input type="text" id="diagnosis" class="patient-input" style="flex: 1; min-width: 60px;" onkeyup="updatePrescriptionPaper()"><span class="patient-label">剂数</span><input type="number" id="doseCountInput3" value="7" style="width:50px;padding:3px;font-size:14px;text-align:center;" oninput="syncDoseInputs('doseCountInput3')"><span style="font-size:13px;margin-right:8px;">剂</span><span class="patient-label">医师</span><input type="text" id="doctorName" class="patient-input x-small" onkeyup="updatePrescriptionPaper()" style="width: 55px; min-width: 55px;"></div></div><div class="action-buttons-section"><div style="display:flex;justify-content:flex-start;align-items:center;gap:8px;padding:3px 5px;overflow-x:auto;"><span style="font-size:11px;white-space:nowrap;">每剂:<span id="perDosePrice2" style="color:red;font-weight:bold;">0.00</span>元</span><span style="font-size:11px;white-space:nowrap;">药费:<span id="totalPrice2" style="color:red;font-weight:bold;">0.00</span>元</span><span style="font-size:11px;white-space:nowrap;">诊疗<input type="number" id="registrationFee2" value="0" style="width:45px;padding:2px;font-size:12px;" oninput="syncRegistrationFee('registrationFee2')">元</span><span style="font-size:12px;font-weight:bold;white-space:nowrap;">总计:<span id="grandTotal2" style="color:red;font-weight:bold;">0.00</span>元</span></div></div><div class="medicine-section"><div style="background:#d0d0d0;padding:3px 8px;font-size:10px;border-bottom:1px solid #808080;">提示: 在简码栏输入简码，在药名栏输入药名</div><div class="medicine-table-container"><table class="medicine-table" id="prescriptionTable"><thead><tr><th style="width:25px;">#</th><th style="width:45px;">简码</th><th style="width:90px;">药物</th><th style="width:40px;">数量</th><th style="width:30px;">单位</th><th style="width:40px;">单价</th><th style="width:45px;">合计</th><th style="width:30px;">删</th></tr></thead><tbody id="prescriptionBody"></tbody></table></div><div class="medicine-search-dropdown" id="medicineSearchDropdown"></div></div></div><div class="center-panel"><div class="prescription-paper" id="prescriptionPaper"><div class="clinic-name" id="clinicNameDisplay">本能堂中医诊所</div><div class="prescription-title">处 方 笺</div><div class="prescription-info"><div>姓名:<span id="paperName"></span></div><div>性别:<span id="paperGender"></span></div><div>年龄:<span id="paperAge"></span>岁</div><div>科别:中医科</div><div>门诊号:<span id="paperClinicNo"></span></div><div>日期:<span id="paperDate"></span></div></div><div style="margin-bottom:8px; line-height:1.5;"><span>病史症状:<span id="paperMedicalHistory"></span></span><div style="border-bottom:1px solid #000; margin-top:8px;"></div></div><div style="margin-bottom:3px;"><span>诊断:<span id="paperDiagnosis"></span></span><div style="border-bottom:1px solid #000; margin-top:2px;"></div></div><div class="prescription-grid" style="margin-top:3px;"><div class="prescription-line" style="border-bottom:1px solid #000; display:flex; justify-content:space-between; align-items:center;"><div class="rp-mark">RP</div><div></div><div class="dose-count"><span id="paperDoseCount">7</span>剂</div></div><div id="prescriptionLines"></div></div><div class="prescription-footer" style="margin-top:3px;"><div class="usage-text">用法：水煎服，每日 1 剂，早晚分温服，忌生冷辛辣</div><div class="signature-grid" style="grid-template-columns: 1fr 1fr 1fr;"><div class="signature-item">医师: <span id="paperDoctor"></span></div><div class="signature-item">金额:</div><div class="signature-item">审核:</div></div><div class="signature-grid" style="grid-template-columns: 1fr 1fr 1fr; margin-top:4px;"><div class="signature-item">调配:</div><div class="signature-item">核对:</div><div class="signature-item">发药:</div></div></div></div></div><div class="right-panel"><div class="history-header"><span>处方历史</span><div style="display:flex;gap:16px;align-items:center;padding-right:4px;"><button class="history-refresh-btn" onclick="refreshHistory()" title="刷新历史处方" style="font-size:16px;padding:8px 10px;min-width:40px;min-height:36px;">🔄</button><button id="photoCaptureBtn" class="video-rec-btn" onclick="event.preventDefault();if(window.openPhotoOverlay)window.openPhotoOverlay();else alert('拍照功能加载中')" style="background:none;border:none;color:white;font-size:16px;cursor:pointer;padding:8px 10px;min-width:40px;min-height:36px;" title="拍照">📷</button><button id="videoRecBtn" class="video-rec-btn" onclick="event.preventDefault();if(window.openRecordingOverlay)window.openRecordingOverlay();else alert('录像功能加载中')" style="background:none;border:none;color:white;font-size:16px;cursor:pointer;padding:8px 10px;min-width:40px;min-height:36px;" title="录像">🎥</button><button onclick="showRecycleBin()" style="background:none;border:none;color:white;font-size:16px;cursor:pointer;padding:8px 10px;min-width:40px;min-height:36px;" title="回收站">🗑️</button></div></div><div class="history-list" id="historyList"><div style="text-align:center;color:#999;padding:20px;font-size:11px;">请输入患者姓名</div></div></div></div><div class="bottom-bar"></div><!-- 移动端底部导航 --><div class="mobile-nav" id="mobileNav"><div class="mobile-nav-items"><div class="mobile-nav-item active" onclick="switchMobileTab('prescription')"><span class="mobile-nav-icon">📝</span><span>门诊</span></div><div class="mobile-nav-item" onclick="switchMobileTab('history')"><span class="mobile-nav-icon">📋</span><span>历史</span></div><div class="mobile-nav-item" onclick="switchMobileTab('preview')"><span class="mobile-nav-icon">📄</span><span>预览</span></div><div class="mobile-nav-item" onclick="showModal('medicineModal')"><span class="mobile-nav-icon">💊</span><span>药品</span></div><div class="mobile-nav-item" onclick="showModal('settingsModal')"><span class="mobile-nav-icon">⚙️</span><span>设置</span></div><div class="mobile-nav-item" onclick="if(typeof exitAppWithLogout==='function')exitAppWithLogout();else if(typeof handleLogout==='function')handleLogout();" style="color:var(--danger-color);"><span class="mobile-nav-icon">🚪</span><span>退出</span></div></div></div><!-- 移动端快捷操作栏 --><div class="mobile-action-bar" id="mobileActionBar"><div class="action-buttons"><button class="action-btn" style="flex:1;" onclick="if(window.openRecordingOverlay)window.openRecordingOverlay();else alert('录像功能加载中，请稍候')">🎥 录像</button><button class="action-btn" style="flex:1;" onclick="if(window.openPhotoOverlay)window.openPhotoOverlay();else alert('拍照功能加载中，请稍候')">📷 拍照</button><button class="action-btn primary" style="flex:1;" onclick="savePrescription()">💾 保存</button><button class="action-btn" style="flex:1;" onclick="clearPrescription()">🗑️ 清空</button><button class="action-btn" style="flex:1;" id="mobileActionBtn2" onclick="showChangePwdModal()">🔐 改密</button></div></div><div class="modal" id="settingsModal"><div class="modal-content"><div class="modal-header"><h3>F1 基础设置</h3><span class="close-btn" onclick="closeModal('settingsModal')">&times;</span></div><div class="modal-body"><div style="margin-bottom:12px;"><label>诊所名称:</label><input type="text" id="clinicName" style="width:100%;padding:6px;margin-top:4px;"></div><div style="margin-bottom:12px;"><label>医师姓名:</label><input type="text" id="defaultDoctor" style="width:100%;padding:6px;margin-top:4px;"></div><div style="margin-bottom:12px;"><label>诊疗费:</label><input type="number" id="defaultRegFee" style="width:100%;padding:6px;margin-top:4px;"></div><div style="margin-bottom:12px;"><label>默认剂数:</label><input type="number" id="defaultDose" style="width:100%;padding:6px;margin-top:4px;"></div><div id="autoStartSection" style="margin-bottom:12px;display:none;"><label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="autoStart" style="width:18px;height:18px;">开机自动启动（仅管理员）</label><div style="font-size:11px;color:#666;margin-top:4px;">勾选后，系统将在电脑开机时自动启动</div></div><div style="margin-top:12px;padding-top:12px;border-top:1px solid #eee;"><button class="action-btn primary" onclick="openActivationFromSettings()" style="width:100%;">🔑 激活软件 / 管理员激活</button></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('settingsModal')">取消</button><button class="action-btn primary" onclick="saveSettings()">保存</button></div></div></div><div class="modal" id="syndromeModal"><div class="modal-content"><div class="modal-header"><h3>Alt+1 中医辨证选方</h3><span class="close-btn" onclick="closeModal('syndromeModal')">&times;</span></div><div class="modal-body"><div id="syndromeList" style="display:flex;flex-direction:column;gap:8px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('syndromeModal')">关闭</button></div></div></div><div class="modal" id="medicineModal"><div class="modal-content"><div class="modal-header"><h3>F2 药品管理</h3><span class="close-btn" onclick="closeModal('medicineModal')">&times;</span></div><div class="modal-body"><div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;"><input type="text" id="medicineSearch" placeholder="搜索药品" style="flex:1;min-width:150px;padding:6px;" oninput="renderMedicineListDebounced()"><button class="action-btn" onclick="showAddMedicineForm()">新增药品</button><button class="action-btn" onclick="exportMedicines()">导出药品</button><button class="action-btn" onclick="document.getElementById('importMedicineFile').click()">导入药品</button><button class="action-btn" style="background:#ff6b6b;color:white;" onclick="clearMedicineLibrary()">清空药物库</button><input type="file" id="importMedicineFile" accept=".csv,.json,.xlsx,.xls" style="display:none;" onchange="importMedicines(event)"></div><div id="medicineList" style="overflow:auto;max-height:350px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('medicineModal')">关闭</button></div></div></div><div class="modal" id="formulaModal"><div class="modal-content"><div class="modal-header"><h3>F3 验方设置</h3><span class="close-btn" onclick="closeModal('formulaModal')">&times;</span></div><div class="modal-body"><div style="margin-bottom:12px;display:flex;gap:8px;"><input type="text" id="formulaSearch" placeholder="搜索验方" style="flex:1;padding:6px;"><button class="action-btn" onclick="showAddFormulaForm()">新增验方</button></div><div id="formulaList" style="overflow:auto;max-height:350px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('formulaModal')">关闭</button></div></div></div><div class="modal" id="caseModal"><div class="modal-content"><div class="modal-header"><h3>病例管理</h3><span class="close-btn" onclick="closeModal('caseModal')">&times;</span></div><div class="modal-body"><div style="margin-bottom:12px;padding:10px;background:#f0f0f0;"><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;"><input type="text" id="caseNameSearch" placeholder="患者姓名"><input type="date" id="caseDateStart"><input type="date" id="caseDateEnd"></div><div style="margin-top:8px;display:flex;gap:8px;"><button class="action-btn" onclick="searchCases()">搜索</button><button class="action-btn" onclick="resetCaseSearch()">重置</button></div></div><div id="caseList" style="overflow:auto;max-height:350px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('caseModal')">关闭</button></div></div></div><div class="modal" id="clinicPrescriptionModal"><div class="modal-content" style="max-width:900px;width:95%;max-height:90vh;"><div class="modal-header"><h3>📋 处方查阅</h3><span class="close-btn" onclick="closeModal('clinicPrescriptionModal')">&times;</span></div><div class="modal-body"><div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;"><input type="text" id="filterText" placeholder="搜索姓名/门诊号/诊断" oninput="filterClinicPrescriptions()" style="flex:1;min-width:150px;padding:6px;"><select id="filterDoctor" onchange="filterClinicPrescriptions()" style="padding:6px;"><option value="">全部医师</option></select><button class="action-btn" onclick="loadClinicPrescriptionList()">🔄 刷新</button></div><div id="clinicPrescriptionStats" style="margin-bottom:10px;font-size:12px;color:#666;"></div><div id="clinicPrescriptionList" style="overflow:auto;max-height:400px;border:1px solid #ddd;border-radius:4px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('clinicPrescriptionModal')">关闭</button></div></div></div><div class="modal" id="analyticsModal"><div class="modal-content" style="max-width:1100px;width:95%;max-height:90vh;"><div class="modal-header"><h3>📊 数据统计</h3><span class="close-btn" onclick="closeModal('analyticsModal')">&times;</span></div><div class="modal-body"><div style="display:flex;gap:15px;flex-wrap:wrap;margin-bottom:15px;"><div><label>统计范围:</label><select id="analyticsRange" onchange="refreshAnalytics()"><option value="today">今日</option><option value="week">本周</option><option value="month" selected>本月</option><option value="quarter">本季度</option><option value="year">本年</option><option value="all">全部</option></select></div><div><label>就诊次数筛选:</label><select id="visitCountFilter" onchange="refreshAnalytics()"><option value="all">全部</option><option value="1">1诊</option><option value="2">2诊</option><option value="3">3诊</option><option value="4">4诊及以上</option></select></div><div><label>排序:</label><select id="analyticsSort" onchange="refreshAnalytics()"><option value="visitCount-desc">就诊次数(降序)</option><option value="visitCount-asc">就诊次数(升序)</option><option value="lastVisit-desc">最近就诊(降序)</option><option value="lastVisit-asc">最近就诊(升序)</option></select></div><button class="action-btn" onclick="refreshAnalytics()" style="margin-top:20px;">🔄 刷新数据</button></div><div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:20px;"><div style="background:#e8f5e9;border:1px solid #4caf50;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#4caf50;" id="statTotalPatients">-</div><div style="font-size:12px;color:#666;">总就诊人数</div></div><div style="background:#fff3e0;border:1px solid #ff9800;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#ff9800;" id="statNewPatients">-</div><div style="font-size:12px;color:#666;">初诊人数</div></div><div style="background:#e3f2fd;border:1px solid #2196f3;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#2196f3;" id="statReturnPatients">-</div><div style="font-size:12px;color:#666;">复诊人数</div></div><div style="background:#fce4ec;border:1px solid #e91e63;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#e91e63;" id="statReturnRate">-</div><div style="font-size:12px;color:#666;">复诊率</div></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:20px;"><div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><h4 style="margin-bottom:12px;color:#333;">📈 就诊趋势</h4><canvas id="visitTrendChart" height="200"></canvas></div><div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><h4 style="margin-bottom:12px;color:#333;">🩺 病种分布</h4><canvas id="diseaseChart" height="200"></canvas></div></div><div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><h4 style="color:#333;">💊 常用药材 Top 10</h4><button class="action-btn" onclick="exportStats()" style="font-size:12px;padding:4px 8px;">导出报表</button></div><canvas id="medicineChart" height="200"></canvas></div><div style="margin-top:20px;background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><h4 style="margin-bottom:12px;color:#333;">👥 患者就诊列表</h4><div style="max-height:300px;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f5f5f5;"><th style="border:1px solid #ddd;padding:8px;text-align:left;">患者姓名</th><th style="border:1px solid #ddd;padding:8px;text-align:center;">就诊次数</th><th style="border:1px solid #ddd;padding:8px;text-align:center;">初诊日期</th><th style="border:1px solid #ddd;padding:8px;text-align:center;">最近就诊</th><th style="border:1px solid #ddd;padding:8px;text-align:center;">操作</th></tr></thead><tbody id="patientVisitList"><tr><td colspan="5" style="text-align:center;padding:20px;color:#999;">暂无数据</td></tr></tbody></table></div></div><div style="margin-top:20px;background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><h4 style="margin-bottom:12px;color:#333;">📅 月度统计报表</h4><div style="max-height:250px;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f5f5f5;"><th style="border:1px solid #ddd;padding:6px;text-align:center;">月份</th><th style="border:1px solid #ddd;padding:6px;text-align:center;">门诊人次</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">总收入</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">总诊疗费</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">总成本</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">总利润</th><th style="border:1px solid #ddd;padding:6px;text-align:center;">总剂数</th></tr></thead><tbody id="monthlyStatsTable"><tr><td colspan="7" style="text-align:center;padding:20px;color:#999;">暂无数据</td></tr></tbody></table></div></div></div><div style="margin-top:20px;padding-top:15px;border-top:2px solid #008000;"><h4 style="margin-bottom:10px;">🗄️ 数据管理</h4><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="action-btn" onclick="exportData()" style="background:#4CAF50;color:white;">💾 一键备份</button><button class="action-btn" onclick="importData()" style="background:#2196F3;color:white;">📂 恢复数据</button><button class="action-btn" onclick="clearAllData()" style="background:#f44336;color:white;">🗑️ 清空数据</button></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('analyticsModal')">关闭</button></div></div></div><script src="auth-core.js"></script><script src="permission.js"></script><script src="normalize-config.js"></script><script src="debug-logger.js"></script><script src="print-utils.js"></script><script src="medicine-dict.js"></script><script src="symptom-dict.js"></script><!-- 舌脉体征快捷录入（运行时注入，HTML结构零改动） --><!-- ★ 已移除 db-adapter.js 引用：避免与 index.html 的 openDB(DB_VERSION=3) 版本冲突导致IndexedDB操作失败 --><!-- <script src="db-adapter.js"></script> --><!-- ★ 2026-08-23 根因修复：加载 cloud-api.js（定义 window.CLOUD_API_BASE / window.cloudFetch）。此前桌面版从未加载该模块，导致：①处方保存/删除云端同步在 CLOUD_API_BASE 未定义守卫处静默跳过（桌面操作从未到达云端）；②deleteUserOnCloud 恒 skipped；③改密 isCloudMode 恒 false；④cloudFetch 未定义使历史处方读取 ReferenceError 回落本地缓存（login_debug 实证：getAllUserPrescriptions_err "cloudFetch is not defined"）。与 public/index.html、云端APP 保持一致 --><script src="cloud-api.js"></script><script src="performance-utils.js"></script><script src="prescription-core.js"></script><script src="patient-archive.js"></script>
+</head><body><div id="loginOverlay" class="login-overlay" style="display: flex;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="system-title">惠康中医诊所管理系统</div><!-- ★ 2026-08-23 简洁统一（用户要求）：登录框不显示版本标签，版本在登录成功后操作界面顶栏显示（topVersionTag）。
+     元素保留（applyEditionTags/applyLoginTheme 等逻辑不破坏），仅视觉隐藏 -->
+<div class="version-tag" id="loginVersionTag" style="display:none;">【云端标准版】</div></div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name" id="loginClinicName">本能堂中医诊所</div></div><div class="login-field"><label>手机号/用户名:</label><div class="username-input-wrapper"><input type="text" id="loginUsername" placeholder="请输入手机号或用户名" onkeypress="if(event.key==='Enter')document.getElementById('loginPassword').focus()"><button id="usernameDropdownBtn" class="username-dropdown-btn" onclick="toggleUsernameDropdown()" style="display:none;">▼</button><div id="usernameDropdownMenu" class="username-dropdown-menu"></div></div></div><div class="login-field"><label>密码:</label><div class="password-input-wrapper"><input type="password" id="loginPassword" autocomplete="new-password" onkeypress="if(event.key==='Enter')handleLogin()"><button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility()" title="显示/隐藏密码">👁️</button></div></div><div class="login-buttons"><button class="login-btn" id="loginBtn" onclick="handleLogin()">确定</button><button class="login-btn cancel" onclick="exitApp()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-security"><span class="login-security-icon">🛡️</span><span>安全登录 · 数据加密保护</span></div><!-- ★ 2026-08-23 根治三屏闪-刀2：静态"注册诊所/管理台登录"按钮容器默认隐藏（原display:flex首帧可见→图片1的按钮来源）。
+     未激活新客户的激活入口由首帧优化脚本注入"📋 管理员激活"（与auth-core.js同一HTML/id，防重复注入），已激活客户无入口 -->
+<div id="staticEntryRow" style="display:none;gap:8px;margin-top:10px;"><button style="flex:1;padding:9px;font-size:13px;border:1px solid #26a69a;background:#fff;color:#00796b;border-radius:6px;cursor:pointer;font-weight:600;" onclick="if(typeof openAdminActivate==='function')openAdminActivate();else alert('激活入口加载中，请稍候')">📝 注册诊所 / 激活申请</button><button style="flex:1;padding:9px;font-size:13px;border:1px solid #1976d2;background:#fff;color:#0d47a1;border-radius:6px;cursor:pointer;font-weight:600;" onclick="window.location.href='admin/index.html'">🔔 管理台登录</button></div><div class="login-footer">微信号: hktzy1688 | 版本: V1.0.0</div><div class="copyright">© 2026 惠康中医 · 保留所有权利</div></div></div></div></div><div id="changePwdModal" class="modal"><div class="modal-content user-modal-content"><div class="modal-header"><span>修改密码</span><span class="close-btn" onclick="closeModal('changePwdModal')">&times;</span></div><div class="modal-body"><div class="form-group"><label>原密码</label><input type="password" id="oldPwd" placeholder="请输入原密码"></div><div class="form-group"><label>新密码</label><input type="password" id="newPwd" placeholder="请输入新密码"></div><div class="form-group"><label>确认新密码</label><input type="password" id="confirmNewPwd" placeholder="请再次输入新密码"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('changePwdModal')">取消</button><button class="action-btn primary" onclick="handleChangePassword()">修改</button></div></div></div><div id="userManageModal" class="modal"><div class="modal-content user-modal-content"><div class="modal-header"><span>用户管理</span><span class="close-btn" onclick="closeModal('userManageModal')">&times;</span></div><div class="modal-body"><div id="userList" class="user-list"></div><div class="form-group" style="margin-top:15px;"><label>添加新用户</label><input type="text" id="newUserUsername" placeholder="登录账号，建议英文或拼音"><input type="password" id="newUserPassword" placeholder="密码" style="margin-top:5px;"><input type="text" id="newUserName" placeholder="医师姓名（必填，中文真实姓名）" style="margin-top:5px;"><select id="newUserRole" style="margin-top:5px;width:100%;padding:5px;"><option value="user">普通用户</option><option value="cashier">前台收费（机构版）</option><option value="admin">管理员</option></select><select id="newUserType" style="margin-top:5px;width:100%;padding:5px;"><option value="production">正式用户</option><option value="test">测试用户</option></select></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('userManageModal')">关闭</button><button class="action-btn primary" onclick="handleAddUser()">添加用户</button></div></div></div><div class="top-tabs"><div class="tab-item" onclick="showModal('settingsModal')">【基础设置】</div><div class="tab-item" onclick="showModal('caseModal')">【病例管理】</div><div class="tab-item" onclick="showModal('medicineModal')">【药品管理】</div><div class="tab-item" onclick="showModal('formulaModal')">【验方设置】</div><div class="tab-item" onclick="showModal('analyticsModal')">【数据统计】</div><div class="tab-item" id="userManageBtn" onclick="showUserManageModal()" style="display:none;">【用户管理】</div><div class="tab-item" id="changePwdBtn" style="display:none;" onclick="showChangePwdModal()">【修改密码】</div><div class="tab-item" id="clinicPrescriptionBtn" onclick="showClinicPrescriptions()" style="display:none;background:#e8f5e9;color:#2e7d32;border-color:#4caf50;">【处方查阅】</div><div class="tab-item" onclick="showHelp()">【系统帮助】</div><div class="tab-item" style="background:#ffdddd;color:#8b0000;" onclick="handleLogout()">【退出登录】</div><div class="tab-hint">当前用户:<span style="color:#008000;font-weight:bold;" id="userDisplayName"></span>|<span style="color:#008000;font-weight:bold;" id="topVersionTag"></span></div></div><div class="main-container"><div class="left-panel"><div class="top-tabs-left"><div class="tab-left-item active" style="flex:1;text-align:center;">填资料</div><button class="action-btn" onclick="saveAsFormula()" style="flex:1;padding:2px 8px;font-size:12px;">存验方</button><button class="action-btn" onclick="printPrescription('portrait')" style="flex:1;padding:2px 8px;font-size:12px;">纵向打印</button><button class="action-btn" onclick="printPrescription('landscape')" style="flex:1;padding:2px 8px;font-size:12px;">横向打印</button><button class="action-btn" onclick="clearPrescription()" style="flex:1;padding:2px 8px;font-size:12px;background:#f44336;color:white;">清空</button><button class="action-btn primary" onclick="savePrescription()" style="flex:1;padding:2px 8px;font-size:12px;font-weight:bold;">保存</button></div><div class="patient-section"><div class="patient-row"><span class="patient-label">门诊</span><input type="text" id="prescriptionNo" class="patient-input name-input" readonly><span class="patient-label">性别</span><select id="patientGender" class="patient-input x-small" onclick="toggleGender()" onchange="markGenderManual();updatePrescriptionPaper()"><option value="男">男</option><option value="女">女</option></select><span class="patient-label">日期</span><input type="text" id="visitDate" class="patient-input small" readonly></div><div class="patient-row"><span class="patient-label">姓名</span><input type="text" id="patientName" class="patient-input name-input" onkeyup="searchPatientsQuick(event);updatePrescriptionPaper();smartMatchGender(this.value)" onfocus="showSideHistory()" autocomplete="off"><span class="patient-label">年龄</span><input type="text" id="patientAge" class="patient-input x-small" onkeyup="updatePrescriptionPaper()"><span class="patient-label">电话</span><input type="text" id="patientPhone" class="patient-input small"></div><div class="patient-row"><span class="patient-label">统计</span><input type="text" id="clinicNo" class="patient-input xx-small" readonly><span class="patient-label">住址</span><input type="text" id="patientAddress" class="patient-input" style="flex: 1.2;"></div></div><div class="symptom-section"><div class="history-tabs"><div class="history-tab active">病史症状</div><div class="history-tab">修改病史</div></div><textarea id="medicalHistory" class="symptom-textarea" onkeyup="updatePrescriptionPaper()"></textarea></div><div class="diagnosis-section"><div class="patient-row"><span class="patient-label">诊断</span><input type="text" id="diagnosis" class="patient-input" style="flex: 1; min-width: 60px;" onkeyup="updatePrescriptionPaper()"><span class="patient-label">剂数</span><input type="number" id="doseCountInput3" value="7" style="width:50px;padding:3px;font-size:14px;text-align:center;" oninput="syncDoseInputs('doseCountInput3')"><span style="font-size:13px;margin-right:8px;">剂</span><span class="patient-label">医师</span><input type="text" id="doctorName" class="patient-input x-small" onkeyup="updatePrescriptionPaper()" style="width: 55px; min-width: 55px;"></div></div><div class="action-buttons-section"><div style="display:flex;justify-content:flex-start;align-items:center;gap:8px;padding:3px 5px;overflow-x:auto;"><span style="font-size:11px;white-space:nowrap;">每剂:<span id="perDosePrice2" style="color:red;font-weight:bold;">0.00</span>元</span><span style="font-size:11px;white-space:nowrap;">药费:<span id="totalPrice2" style="color:red;font-weight:bold;">0.00</span>元</span><span style="font-size:11px;white-space:nowrap;">诊疗<input type="number" id="registrationFee2" value="0" style="width:45px;padding:2px;font-size:12px;" oninput="syncRegistrationFee('registrationFee2')">元</span><span style="font-size:12px;font-weight:bold;white-space:nowrap;">总计:<span id="grandTotal2" style="color:red;font-weight:bold;">0.00</span>元</span></div></div><div class="medicine-section"><div style="background:#d0d0d0;padding:3px 8px;font-size:10px;border-bottom:1px solid #808080;">提示: 在简码栏输入简码，在药名栏输入药名</div><div class="medicine-table-container"><table class="medicine-table" id="prescriptionTable"><thead><tr><th style="width:25px;">#</th><th style="width:45px;">简码</th><th style="width:90px;">药物</th><th style="width:40px;">数量</th><th style="width:30px;">单位</th><th style="width:40px;">单价</th><th style="width:45px;">合计</th><th style="width:30px;">删</th></tr></thead><tbody id="prescriptionBody"></tbody></table></div><div class="medicine-search-dropdown" id="medicineSearchDropdown"></div></div></div><div class="center-panel"><div class="prescription-paper" id="prescriptionPaper"><div class="clinic-name" id="clinicNameDisplay">本能堂中医诊所</div><div class="prescription-title">处 方 笺</div><div class="prescription-info"><div>姓名:<span id="paperName"></span></div><div>性别:<span id="paperGender"></span></div><div>年龄:<span id="paperAge"></span>岁</div><div>科别:中医科</div><div>门诊号:<span id="paperClinicNo"></span></div><div>日期:<span id="paperDate"></span></div></div><div style="margin-bottom:8px; line-height:1.5;"><span>病史症状:<span id="paperMedicalHistory"></span></span><div style="border-bottom:1px solid #000; margin-top:8px;"></div></div><div style="margin-bottom:3px;"><span>诊断:<span id="paperDiagnosis"></span></span><div style="border-bottom:1px solid #000; margin-top:2px;"></div></div><div class="prescription-grid" style="margin-top:3px;"><div class="prescription-line" style="border-bottom:1px solid #000; display:flex; justify-content:space-between; align-items:center;"><div class="rp-mark">RP</div><div></div><div class="dose-count"><span id="paperDoseCount">7</span>剂</div></div><div id="prescriptionLines"></div></div><div class="prescription-footer" style="margin-top:3px;"><div class="usage-text">用法：水煎服，每日 1 剂，早晚分温服，忌生冷辛辣</div><div class="signature-grid" style="grid-template-columns: 1fr 1fr 1fr;"><div class="signature-item">医师: <span id="paperDoctor"></span></div><div class="signature-item">金额:</div><div class="signature-item">审核:</div></div><div class="signature-grid" style="grid-template-columns: 1fr 1fr 1fr; margin-top:4px;"><div class="signature-item">调配:</div><div class="signature-item">核对:</div><div class="signature-item">发药:</div></div></div></div></div><div class="right-panel"><div class="history-header"><span>处方历史</span><div style="display:flex;gap:16px;align-items:center;padding-right:4px;"><button class="history-refresh-btn" onclick="refreshHistory()" title="刷新历史处方" style="font-size:16px;padding:8px 10px;min-width:40px;min-height:36px;">🔄</button><button id="photoCaptureBtn" class="video-rec-btn" onclick="event.preventDefault();if(window.openPhotoOverlay)window.openPhotoOverlay();else alert('拍照功能加载中')" style="background:none;border:none;color:white;font-size:16px;cursor:pointer;padding:8px 10px;min-width:40px;min-height:36px;" title="拍照">📷</button><button id="videoRecBtn" class="video-rec-btn" onclick="event.preventDefault();if(window.openRecordingOverlay)window.openRecordingOverlay();else alert('录像功能加载中')" style="background:none;border:none;color:white;font-size:16px;cursor:pointer;padding:8px 10px;min-width:40px;min-height:36px;" title="录像">🎥</button><button onclick="showRecycleBin()" style="background:none;border:none;color:white;font-size:16px;cursor:pointer;padding:8px 10px;min-width:40px;min-height:36px;" title="回收站">🗑️</button></div></div><div class="history-list" id="historyList"><div style="text-align:center;color:#999;padding:20px;font-size:11px;">请输入患者姓名</div></div></div></div><div class="bottom-bar"></div><!-- 移动端底部导航 --><div class="mobile-nav" id="mobileNav"><div class="mobile-nav-items"><div class="mobile-nav-item active" onclick="switchMobileTab('prescription')"><span class="mobile-nav-icon">📝</span><span>门诊</span></div><div class="mobile-nav-item" onclick="switchMobileTab('history')"><span class="mobile-nav-icon">📋</span><span>历史</span></div><div class="mobile-nav-item" onclick="switchMobileTab('preview')"><span class="mobile-nav-icon">📄</span><span>预览</span></div><div class="mobile-nav-item" onclick="showModal('medicineModal')"><span class="mobile-nav-icon">💊</span><span>药品</span></div><div class="mobile-nav-item" onclick="showModal('settingsModal')"><span class="mobile-nav-icon">⚙️</span><span>设置</span></div><div class="mobile-nav-item" onclick="if(typeof exitAppWithLogout==='function')exitAppWithLogout();else if(typeof handleLogout==='function')handleLogout();" style="color:var(--danger-color);"><span class="mobile-nav-icon">🚪</span><span>退出</span></div></div></div><!-- 移动端快捷操作栏 --><div class="mobile-action-bar" id="mobileActionBar"><div class="action-buttons"><button class="action-btn" style="flex:1;" onclick="if(window.openRecordingOverlay)window.openRecordingOverlay();else alert('录像功能加载中，请稍候')">🎥 录像</button><button class="action-btn" style="flex:1;" onclick="if(window.openPhotoOverlay)window.openPhotoOverlay();else alert('拍照功能加载中，请稍候')">📷 拍照</button><button class="action-btn primary" style="flex:1;" onclick="savePrescription()">💾 保存</button><button class="action-btn" style="flex:1;" onclick="clearPrescription()">🗑️ 清空</button><button class="action-btn" style="flex:1;" id="mobileActionBtn2" onclick="showChangePwdModal()">🔐 改密</button></div></div><div class="modal" id="settingsModal"><div class="modal-content"><div class="modal-header"><h3>F1 基础设置</h3><span class="close-btn" onclick="closeModal('settingsModal')">&times;</span></div><div class="modal-body"><div style="margin-bottom:12px;"><label>诊所名称:</label><input type="text" id="clinicName" style="width:100%;padding:6px;margin-top:4px;"></div><div style="margin-bottom:12px;"><label>医师姓名:</label><input type="text" id="defaultDoctor" style="width:100%;padding:6px;margin-top:4px;"></div><div style="margin-bottom:12px;"><label>诊疗费:</label><input type="number" id="defaultRegFee" style="width:100%;padding:6px;margin-top:4px;"></div><div style="margin-bottom:12px;"><label>默认剂数:</label><input type="number" id="defaultDose" style="width:100%;padding:6px;margin-top:4px;"></div><div id="autoStartSection" style="margin-bottom:12px;display:none;"><label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="autoStart" style="width:18px;height:18px;">开机自动启动（仅管理员）</label><div style="font-size:11px;color:#666;margin-top:4px;">勾选后，系统将在电脑开机时自动启动</div></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('settingsModal')">取消</button><button class="action-btn primary" onclick="saveSettings()">保存</button></div></div></div><div class="modal" id="syndromeModal"><div class="modal-content"><div class="modal-header"><h3>Alt+1 中医辨证选方</h3><span class="close-btn" onclick="closeModal('syndromeModal')">&times;</span></div><div class="modal-body"><div id="syndromeList" style="display:flex;flex-direction:column;gap:8px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('syndromeModal')">关闭</button></div></div></div><div class="modal" id="medicineModal"><div class="modal-content"><div class="modal-header"><h3>F2 药品管理</h3><span class="close-btn" onclick="closeModal('medicineModal')">&times;</span></div><div class="modal-body"><div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;"><input type="text" id="medicineSearch" placeholder="搜索药品" style="flex:1;min-width:150px;padding:6px;" oninput="renderMedicineListDebounced()"><button class="action-btn" onclick="showAddMedicineForm()">新增药品</button><button class="action-btn" onclick="exportMedicines()">导出药品</button><button class="action-btn" onclick="document.getElementById('importMedicineFile').click()">导入药品</button><button class="action-btn" style="background:#ff6b6b;color:white;" onclick="clearMedicineLibrary()">清空药物库</button><input type="file" id="importMedicineFile" accept=".csv,.json,.xlsx,.xls" style="display:none;" onchange="importMedicines(event)"></div><div id="medicineList" style="overflow:auto;max-height:350px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('medicineModal')">关闭</button></div></div></div><div class="modal" id="formulaModal"><div class="modal-content"><div class="modal-header"><h3>F3 验方设置</h3><span class="close-btn" onclick="closeModal('formulaModal')">&times;</span></div><div class="modal-body"><div style="margin-bottom:12px;display:flex;gap:8px;"><input type="text" id="formulaSearch" placeholder="搜索验方" style="flex:1;padding:6px;"><button class="action-btn" onclick="showAddFormulaForm()">新增验方</button></div><div id="formulaList" style="overflow:auto;max-height:350px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('formulaModal')">关闭</button></div></div></div><div class="modal" id="caseModal"><div class="modal-content"><div class="modal-header"><h3>病例管理</h3><span class="close-btn" onclick="closeModal('caseModal')">&times;</span></div><div class="modal-body"><div style="margin-bottom:12px;padding:10px;background:#f0f0f0;"><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;"><input type="text" id="caseNameSearch" placeholder="患者姓名"><input type="date" id="caseDateStart"><input type="date" id="caseDateEnd"></div><div style="margin-top:8px;display:flex;gap:8px;"><button class="action-btn" onclick="searchCases()">搜索</button><button class="action-btn" onclick="resetCaseSearch()">重置</button></div></div><div id="caseList" style="overflow:auto;max-height:350px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('caseModal')">关闭</button></div></div></div><div class="modal" id="clinicPrescriptionModal"><div class="modal-content" style="max-width:900px;width:95%;max-height:90vh;"><div class="modal-header"><h3>📋 处方查阅</h3><span class="close-btn" onclick="closeModal('clinicPrescriptionModal')">&times;</span></div><div class="modal-body"><div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;"><input type="text" id="filterText" placeholder="搜索姓名/门诊号/诊断" oninput="filterClinicPrescriptions()" style="flex:1;min-width:150px;padding:6px;"><select id="filterDoctor" onchange="filterClinicPrescriptions()" style="padding:6px;"><option value="">全部医师</option></select><button class="action-btn" onclick="loadClinicPrescriptionList()">🔄 刷新</button></div><div id="clinicPrescriptionStats" style="margin-bottom:10px;font-size:12px;color:#666;"></div><div id="clinicPrescriptionList" style="overflow:auto;max-height:400px;border:1px solid #ddd;border-radius:4px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('clinicPrescriptionModal')">关闭</button></div></div></div><div class="modal" id="analyticsModal"><div class="modal-content" style="max-width:1100px;width:95%;max-height:90vh;"><div class="modal-header"><h3>📊 数据统计</h3><span class="close-btn" onclick="closeModal('analyticsModal')">&times;</span></div><div class="modal-body"><div style="display:flex;gap:15px;flex-wrap:wrap;margin-bottom:15px;"><div><label>统计范围:</label><select id="analyticsRange" onchange="refreshAnalytics()"><option value="today">今日</option><option value="week">本周</option><option value="month" selected>本月</option><option value="quarter">本季度</option><option value="year">本年</option><option value="all">全部</option></select></div><div><label>就诊次数筛选:</label><select id="visitCountFilter" onchange="refreshAnalytics()"><option value="all">全部</option><option value="1">1诊</option><option value="2">2诊</option><option value="3">3诊</option><option value="4">4诊及以上</option></select></div><div><label>排序:</label><select id="analyticsSort" onchange="refreshAnalytics()"><option value="visitCount-desc">就诊次数(降序)</option><option value="visitCount-asc">就诊次数(升序)</option><option value="lastVisit-desc">最近就诊(降序)</option><option value="lastVisit-asc">最近就诊(升序)</option></select></div><button class="action-btn" onclick="refreshAnalytics()" style="margin-top:20px;">🔄 刷新数据</button></div><div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:20px;"><div style="background:#e8f5e9;border:1px solid #4caf50;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#4caf50;" id="statTotalPatients">-</div><div style="font-size:12px;color:#666;">总就诊人数</div></div><div style="background:#fff3e0;border:1px solid #ff9800;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#ff9800;" id="statNewPatients">-</div><div style="font-size:12px;color:#666;">初诊人数</div></div><div style="background:#e3f2fd;border:1px solid #2196f3;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#2196f3;" id="statReturnPatients">-</div><div style="font-size:12px;color:#666;">复诊人数</div></div><div style="background:#fce4ec;border:1px solid #e91e63;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#e91e63;" id="statReturnRate">-</div><div style="font-size:12px;color:#666;">复诊率</div></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:20px;"><div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><h4 style="margin-bottom:12px;color:#333;">📈 就诊趋势</h4><canvas id="visitTrendChart" height="200"></canvas></div><div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><h4 style="margin-bottom:12px;color:#333;">🩺 病种分布</h4><canvas id="diseaseChart" height="200"></canvas></div></div><div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><h4 style="color:#333;">💊 常用药材 Top 10</h4><button class="action-btn" onclick="exportStats()" style="font-size:12px;padding:4px 8px;">导出报表</button></div><canvas id="medicineChart" height="200"></canvas></div><div style="margin-top:20px;background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><h4 style="margin-bottom:12px;color:#333;">👥 患者就诊列表</h4><div style="max-height:300px;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f5f5f5;"><th style="border:1px solid #ddd;padding:8px;text-align:left;">患者姓名</th><th style="border:1px solid #ddd;padding:8px;text-align:center;">就诊次数</th><th style="border:1px solid #ddd;padding:8px;text-align:center;">初诊日期</th><th style="border:1px solid #ddd;padding:8px;text-align:center;">最近就诊</th><th style="border:1px solid #ddd;padding:8px;text-align:center;">操作</th></tr></thead><tbody id="patientVisitList"><tr><td colspan="5" style="text-align:center;padding:20px;color:#999;">暂无数据</td></tr></tbody></table></div></div><div style="margin-top:20px;background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><h4 style="margin-bottom:12px;color:#333;">📅 月度统计报表</h4><div style="max-height:250px;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f5f5f5;"><th style="border:1px solid #ddd;padding:6px;text-align:center;">月份</th><th style="border:1px solid #ddd;padding:6px;text-align:center;">门诊人次</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">总收入</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">总诊疗费</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">总成本</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">总利润</th><th style="border:1px solid #ddd;padding:6px;text-align:center;">总剂数</th></tr></thead><tbody id="monthlyStatsTable"><tr><td colspan="7" style="text-align:center;padding:20px;color:#999;">暂无数据</td></tr></tbody></table></div></div></div><div style="margin-top:20px;padding-top:15px;border-top:2px solid #008000;"><h4 style="margin-bottom:10px;">🗄️ 数据管理</h4><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="action-btn" onclick="exportData()" style="background:#4CAF50;color:white;">💾 一键备份</button><button class="action-btn" onclick="importData()" style="background:#2196F3;color:white;">📂 恢复数据</button><button class="action-btn" onclick="clearAllData()" style="background:#f44336;color:white;">🗑️ 清空数据</button></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('analyticsModal')">关闭</button></div></div></div><script src="auth-core.js?cv=20260820b"></script><script src="permission.js?cv=20260820b"></script><script src="normalize-config.js?cv=20260820b"></script><script src="debug-logger.js"></script><script src="print-utils.js"></script><script src="medicine-dict.js"></script><script src="symptom-dict.js"></script><!-- 舌脉体征快捷录入（运行时注入，HTML结构零改动） --><!-- ★ 已移除 db-adapter.js 引用：避免与 index.html 的 openDB(DB_VERSION=3) 版本冲突导致IndexedDB操作失败 --><!-- <script src="db-adapter.js"></script> --><script src="cloud-api.js"></script><script src="performance-utils.js"></script><script src="prescription-core.js"></script><script src="patient-archive.js"></script>
 <script src="security-guard.js"></script>
 <!-- ★ 双重保障：通过 <script> 标签加载 video-recorder.js，防止 main.js injectVideoRecorder 注入失败 -->
 <!-- IIFE 有 window.__videoRecorderInjected 防重复检查，不会与 main.js 注入冲突 -->
-<script src="electron/video-recorder.js"></script>
+<script src="electron/video-recorder.js?v=20260817d"></script>
 <script>
 // 提前设置 EDITION，避免 Permission.init() 在 CONFIG 定义之前执行导致 _edition 错误
-// 动态版本标签：优先取 CONFIG.versionLabel（Setup权威值），否则从 config.edition 读取
-function getEditionTag() {
-    if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.versionLabel) {
-        // ★ 云端桌面强制"云端"前缀：云端产品的版本标签必须带"云端"前缀，
-        //   无论 CONFIG.appMode 是否赋值（config.json 未打包时 appMode 不会进入 CONFIG），
-        //   只要标签缺失"云端"前缀就按 edition 推断并纠正为 云端标准版/云端机构版。
-        var _raw = String(CONFIG.versionLabel);
-        if (_raw.indexOf('云端') < 0 && _raw.indexOf('离线') < 0) {
-            var _instArr = ['institution', 'clinic_custom', 'cloud', 'clinic', 'cloud_clinic', 'offline_clinic'];
-            var _isInst = _instArr.indexOf(String(CONFIG.edition || '')) >= 0;
-            var _fixedLabel = _isInst ? '云端机构版' : '云端标准版';
-            CONFIG.versionLabel = _fixedLabel;
-            return _fixedLabel;
-        }
-        return CONFIG.versionLabel;
-    }
-    var e = (typeof CONFIG !== 'undefined' && CONFIG.edition) || window.EDITION || 'cloud_personal';
-    var inst = ['clinic_custom', 'cloud', 'clinic', 'cloud_clinic', 'offline_clinic'].indexOf(e) >= 0;
-    return inst ? '云端机构版' : '云端标准版';
-}
-// 切换密码可见性（统一登录框规范）
-window.togglePasswordVisibility = function() {
-    const pwdInput = document.getElementById('loginPassword');
-    const toggleBtn = document.querySelector('.password-toggle-btn');
-    if (!pwdInput) return;
-    if (pwdInput.type === 'password') {
-        pwdInput.type = 'text';
-        if (toggleBtn) {
-            toggleBtn.textContent = '🙈';
-            toggleBtn.classList.add('visible');
-        }
-    } else {
-        pwdInput.type = 'password';
-        if (toggleBtn) {
-            toggleBtn.textContent = '👁️';
-            toggleBtn.classList.remove('visible');
-        }
-    }
-};
-// ★ 2026-08-19 基础设置底部激活入口：调用桌面主进程打开激活窗口（登录框已收敛该入口）
-window.openActivationFromSettings = function() {
-    if (window.electronAPI && window.electronAPI.license && window.electronAPI.license.show) {
-        window.electronAPI.license.show();
-    } else if (window.electronAPI && window.electronAPI.showActivationWindow) {
-        window.electronAPI.showActivationWindow();
-    } else {
-        alert('激活功能需在桌面版中使用（当前环境不支持打开激活窗口）。');
-    }
-};
-// ★★★ 2026-08-18 【云端桌面修复】：本文件是云端桌面版，必须声明为云端标准版，绝不用离线"本地"硬编码！
-window.EDITION = 'cloud_personal';
-window.PRODUCT_NAME = '惠康中医-云端';
+// ★★★ 2026-08-17 【Setup 1.0.38 根治刀1-A】：惠康中医-本地 = 永久离线标准版（personal），绝不再用 clinic_custom 默认值！
+window.EDITION = 'personal';
+window.PRODUCT_NAME = '惠康中医-本地';
 // ★v2.0 统一架构：声明 APP_MODE（offline/cloud/auto），供 db-adapter.js 自动检测
 // auto=自动检测：已加载 cloud-api.js 且 CLOUD_API_BASE 存在则走云端，否则走离线
-window.APP_MODE = 'cloud';
+window.APP_MODE = 'auto';
 // ★修复：消除登录界面闪现（已登录时立即隐藏 loginOverlay，避免 adjustResize 重排时闪现）
 // ★ 修复 2026-07-28：APP 端启动时主动清除所有登录态（纵深防御），确保每次打开都必须手动登录
 // 使用 location.href 检测 APP（此时 electronAPI 尚未注入，无法用 isAndroidAPP）
+// ★★ 2026-08-25 修复"打开后先闪操作界面再弹登入框"：
+//   ①云端APP（Capacitor 壳远程加载，非 android_asset）此前漏判——残留 isLoggedIn 先隐藏
+//     登入框露出操作界面，随后 checkLoginStatus 又无条件弹回登入框造成闪现 → 纳入强制清登录态
+//   ②Electron 桌面版不再信任 localStorage.isLoggedIn 同步隐藏登入框——改由主进程 dom-ready
+//     注入 + checkLoginStatus 的 Electron 分支（均校验 currentLoggedInUser）负责隐藏，
+//     localStorage 残留假登录态不再导致窗口先露操作界面
+//   ③网页版：与 APP 统一强制每次手动登录（用户要求"云端网页不要自动登入"，2026-08-25）——
+//     清除所有登录态，登入框保持显示，不恢复会话、不先进后弹
 try {
     var __isAPP = location.href.indexOf('android_asset') >= 0;
-    if (__isAPP) {
-        // APP 端：清除所有登录态，不隐藏登录界面
+    // ★ 原生 APP 壳特征：MainActivity 注入 AndroidNative / AndroidAppExit JS 接口
+    //   （离线APP android_asset 加载 + 云端APP 远程URL加载都注入，网页/桌面版没有）
+    var __isNativeAppShell = (typeof window.AndroidNative !== 'undefined') || (typeof window.AndroidAppExit !== 'undefined');
+    var __isCloudAPP = !__isAPP && __isNativeAppShell;
+    var __isDesktop = !!(window.electronAPI && window.electronAPI.isElectron);
+    if (__isAPP || __isCloudAPP) {
+        // APP 端（离线内嵌 + 云端Capacitor远程加载）：清除所有登录态，不隐藏登录界面
         localStorage.removeItem('isLoggedIn');
         localStorage.removeItem('currentUser');
         localStorage.removeItem('user_login_data');
@@ -701,9 +743,21 @@ try {
         localStorage.removeItem('auth:loginData');
         localStorage.removeItem('cloud_isLoggedIn');
         localStorage.removeItem('cloud_currentUser');
-    } else if (localStorage.getItem('isLoggedIn') === 'true') {
-        var __lo = document.getElementById('loginOverlay');
-        if (__lo) __lo.style.display = 'none';
+    } else if (__isDesktop) {
+        // 桌面版：loginOverlay 保持默认显示，由主进程 dom-ready 注入隐藏（登录态经主进程校验）
+    } else {
+        // ★★ 2026-08-25 网页版：强制每次手动登录（用户要求"云端网页不要自动登入"）——
+        //   与 APP 端统一：清除所有登录态，loginOverlay 保持显示；
+        //   记住的用户名（local_rememberedUsers/local_rememberedUsername）不受影响，
+        //   密码永远手动输入；设备指纹（auth:deviceMachineId）保留不影响设备绑定
+        localStorage.removeItem('isLoggedIn');
+        localStorage.removeItem('currentUser');
+        localStorage.removeItem('user_login_data');
+        localStorage.removeItem('auth:isLoggedIn');
+        localStorage.removeItem('auth:currentUser');
+        localStorage.removeItem('auth:loginData');
+        localStorage.removeItem('cloud_isLoggedIn');
+        localStorage.removeItem('cloud_currentUser');
     }
 } catch(e) {}
 if (window.Permission) {
@@ -773,189 +827,130 @@ let currentUser = null;
             } catch(e) {
                 console.warn('[CONFIG] 加载 config.json 失败:', e.message);
             }
-        })();
-
-        window.__APP_VERSION__ = '2026-08-19-v1';
-
-        // ★ 铁闸4（2026-08-21 全局推广至主界面登录遮罩层 + 登录后顶栏）：自证真伪三元组
-        //   index.html 在 asar 根 = /index.html，build-meta.json 在 /build-meta.json，所以 ./build-meta.json 优先
-        let _buildMeta = null;
-        function loadBuildMeta() {
-            var tryPaths = ['./build-meta.json', '/build-meta.json', './electron/../build-meta.json'];
-            var tryIdx = 0;
-            function tryNext() {
-                if (tryIdx >= tryPaths.length) return;
-                var p = tryPaths[tryIdx++];
-                try {
-                    fetch(p, { cache: 'no-store' })
-                        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-                        .then(function (m) {
-                            _buildMeta = m;
-                            try { applyEditionTags(); } catch (_) {}
-                        })
-                        .catch(function () { tryNext(); });
-                } catch (e) { tryNext(); }
-            }
-            tryNext();
-        }
-
-        // 版本标签统一显示：V1.0.0（软著统一号）+ 铁闸4三元组（构建版本·Arch水印·Build时间=真伪自证）
-        function applyEditionTags() {
-            var label = getEditionTag();
-            // ★ 铁闸4两行紧凑三元组（适配 260~360px 窄登录框，不被裁切）
-            var shortBuildTime = '';
-            var metaTextLine1 = '';
-            var metaTextLine2 = '';
-            if (_buildMeta) {
-                var bt = _buildMeta.buildTimeLocal || '';
-                var m_bt = bt.match(/(\d{4}\/\d{1,2}\/\d{1,2})\s+(\d{1,2}:\d{1,2})/);
-                shortBuildTime = m_bt ? (m_bt[1] + ' ' + m_bt[2]) : bt;
-                metaTextLine1 = 'V' + _buildMeta.version + ' · ' + (_buildMeta.archMarker || '');
-                metaTextLine2 = shortBuildTime ? ('Build ' + shortBuildTime) : '';
-            }
-            var metaHtml = metaTextLine1 ?
-                ('<br><span style="font-size:9px;color:rgba(255,255,255,0.85);font-weight:normal;line-height:1.3;">' +
-                 metaTextLine1 + (metaTextLine2 ? ('<br>' + metaTextLine2) : '') +
-                 '</span>') : '';
-
-            // ★ 挂载点1：.version-tag（紫色header内，登录遮罩层显示）
-            var tag = document.querySelector('.version-tag');
-            // ★ 2026-08-23 登录前也展示真实版本标签（不再"登录后显示版本"占位符）
-            //   权威链：getEditionTag() → CONFIG.versionLabel → CONFIG.edition → Permission._edition → __APP_EDITION__ → EDITION
-            //   确保未登录时也能让用户明确知道当前是机构版还是标准版
-            if (tag) {
-                tag.innerHTML = '【' + label + '】' + metaHtml;
-            }
-            // ★ 挂载点2：.login-security 下方（激活后简化登录框必显示，防止 header-section 被隐藏时三元组丢失）
-            var security = document.querySelector('.login-security');
-            if (security) {
-                var bottomTag = document.getElementById('loginVersionTagBottom');
-                if (!bottomTag) {
-                    bottomTag = document.createElement('div');
-                    bottomTag.id = 'loginVersionTagBottom';
-                    bottomTag.style.marginTop = '3px';
-                    bottomTag.style.marginBottom = '2px';
-                    bottomTag.style.fontSize = '9px';
-                    bottomTag.style.color = '#999';
-                    bottomTag.style.textAlign = 'center';
-                    bottomTag.style.fontWeight = '600';
-                    bottomTag.style.lineHeight = '1.25';
-                    bottomTag.style.letterSpacing = '0.1px';
-                    security.parentNode.insertBefore(bottomTag, security.nextSibling);
-                }
-                if (metaTextLine1) {
-                    bottomTag.innerHTML =
-                        '<div style="font-size:9px;line-height:1.25;">' + metaTextLine1 + '</div>' +
-                        (metaTextLine2 ? '<div style="font-size:9px;line-height:1.25;color:#aab;">' + metaTextLine2 + '</div>' : '');
-                } else {
-                    // ★ 2026-08-23 无构建时 build-meta.json 是正常情况（如网页端静态托管 / APP WebView）。
-                    //   不显示"开发模式"字样吓用户，静默隐藏。用户版本身份靠上方 .version-tag 展示。
-                    bottomTag.style.display = 'none';
-                }
-            }
-            var et = document.getElementById('editionTag');
-            if (et) et.textContent = '【' + label + '】';
-            document.title = '惠康中医-' + label;
-            var logText = '惠康中医' + label + ' V1.0.0' +
-                (_buildMeta ? ('  |  构建: ' + metaTextLine1 + (metaTextLine2 ? (' | ' + metaTextLine2) : '')) : '');
-            console.log('%c' + logText, 'color:#667eea;font-size:14px;font-weight:bold');
-            // ★★★ 2026-08-17 【根治刀2-B】每次标签变动后强制 enforce（防止 applyEditionTags 后标签变标准版但按钮没同步）
-            if (typeof enforceStandardEditionButtons === 'function') {
-                enforceStandardEditionButtons('after-applyEditionTags');
-            }
-        }
-        applyEditionTags();
-        loadBuildMeta(); // ★ 铁闸4：主动拉取 build-meta.json 显示三元组（未登录也可见）
-
-        // ★ 2026-08-18 登录成功后按部署权威 edition 刷新版本标签（云端标准版/云端机构版）
-        //   云端版版本按部署配置区分（网页版=标准版、桌面版config.json=机构版），user 对象无 edition 字段
-        window.refreshVersionTags = function(forceEdition) {
+            // ★★★ 2026-08-23 【根治三屏闪 v2 + 登录框简洁统一】★★★
+            //   配合三处前置改动：
+            //   ①CSS默认主题=蓝色标准版（机构版才需 edition-org 类切紫）→ 首帧必蓝，不依赖JS/网络；
+            //   ②静态"注册诊所/管理台登录"按钮容器 HTML 默认 display:none；
+            //   ③登录框版本标签视觉隐藏（版本在登录成功后操作界面顶栏 topVersionTag 显示）。
+            //   本段在 config.json 同步加载后立即执行（DOM解析期，早于DOMContentLoaded）：
+            //   a) 机构版加 edition-org 切紫 / 标准版确保默认蓝；
+            //   b) 诊所名/用户名回填；
+            //   c) ★未激活新客户：首帧直接注入"📋 管理员激活"入口（与 auth-core.js
+            //      injectActivateLinkIntoLogin 完全相同的 HTML/id/插入位置；auth-core 有
+            //      getElementById('activateLoginEntry') 防重复检查，不会二次注入）
+            //      → 新客户首帧即最终态（蓝色 + 注册激活入口）；
+            //   d) ★已激活客户：无入口 → 首帧即最终态（蓝色 + 无入口）；
+            //   e) window.__firstFrameReady__ = true（云端APP原生遮罩轮询此信号才揭幕）。
             try {
-                var ed = forceEdition ? String(forceEdition) : '';
-                // ★★ 2026-08-20 fallback 链顺序修复：CONFIG.edition（getAppConfig 已同步 userData 权威值）
-                //   必须排在 Permission._edition（页面加载时静态快照）之前——旧顺序会让登录时
-                //   Permission._edition 的旧值（cloud_personal）反向覆盖已同步的机构版值（clinic 等），
-                //   随后 updateUserDisplay-tail 的 enforce 按标准版强制执行 → 机构版管理员看到【修改密码】。
-                if (!ed && typeof CONFIG !== 'undefined' && CONFIG && CONFIG.edition) ed = String(CONFIG.edition || '');
-                if (!ed && window.Permission && Permission._edition) ed = String(Permission._edition);
-                if (!ed) ed = String(window.EDITION || '');
-                if (typeof CONFIG !== 'undefined' && CONFIG && ed) CONFIG.edition = ed;
-                if (typeof CONFIG !== 'undefined' && CONFIG && ed) {
-                    var instArr = ['clinic_custom', 'cloud', 'clinic', 'cloud_clinic', 'offline_clinic', 'institution'];
-                    var isInst = instArr.indexOf(String(ed)) >= 0;
-                    CONFIG.versionLabel = isInst ? '云端机构版' : '云端标准版';
+                var _root = document.documentElement;
+                var _isStd = false;
+                if (typeof window.isStandardEdition === 'function') _isStd = window.isStandardEdition((CONFIG && CONFIG.edition) || '');
+                else _isStd = !!(CONFIG && (CONFIG.versionLabel && CONFIG.versionLabel.indexOf('标准') >= 0 || CONFIG.edition && String(CONFIG.edition).indexOf('personal') >= 0 || CONFIG.edition === 'standard'));
+                if (_root) {
+                    // ★ 刀1反转：默认蓝（CSS :root 即标准版），机构版才加 edition-org 切紫
+                    if (_isStd) { _root.classList.remove('edition-org'); _root.classList.add('edition-standard'); }
+                    else { _root.classList.add('edition-org'); _root.classList.remove('edition-standard'); }
                 }
-                if (typeof applyEditionTags === 'function') applyEditionTags();
-                if (ed && typeof window.applyLoginTheme === 'function') window.applyLoginTheme(ed);
-            } catch (e) { console.warn('refreshVersionTags失败:', e); }
-        };
-
-        // ★ 异步加载 userData 中的 config.json（覆盖 asar 模板默认值，修复激活后版本标签不更新的问题）
-        // ★★★ 2026-08-17 【根治刀1-D】：去掉 if (cfg.edition !== CONFIG.edition) 的外层包裹；
-        //   Object.assign(CONFIG, cfg) 全字段同步；applyEditionTags() 必执行 + enforce 必执行；catch里也 enforce
-        (function() {
-            if (window.electronAPI && window.electronAPI.getAppConfig) {
-                // ★★★ 2026-08-20 【Setup 1.2.81 竞态根治】userData 权威配置就绪 Promise 挂全局。
-                //   根因：checkLoginStatus 自动登录（loginWindow 登录后主窗口启动）常在本回调返回前执行
-                //   updateUserDisplay，此时 CONFIG.edition 仍是 asar config.json 的 'cloud_personal'
-                //   （不在机构版豁免列表）→ DOM 锚点判据命中 → 【用户管理】被强制隐藏 + role 内存降级；
-                //   本回调返回后标签纠正为"云端机构版"但无人再刷新按钮 → 永远显示【修改密码】。
-                //   修复：自动登录路径 await 此 Promise（带 800ms 超时兜底），保证判定用权威 edition。
-                window.__appConfigReady = Promise.race([
-                    window.electronAPI.getAppConfig(),
-                    new Promise(function(resolve){ setTimeout(function(){ resolve(null); }, 800); })
-                ]);
-                window.__appConfigReady.then(function(r) {
-                    if (r && r.success && r.config) {
-                        var cfg = r.config;
-                        // ★ T2 入口关卡（2026-08-21）：净化后再入 CONFIG（users 非数组/edition 别名在此拦截）
-                        try { cfg = window.__normalizeIncomingConfig(cfg, 'getAppConfig'); } catch (_) {}
-                        // ★ 全字段 Object.assign + 逐个字段兜底（不再漏 productName/versionLabel/maxUsers）
-                        try { Object.assign(CONFIG, cfg); } catch (_) {}
-                        if (cfg.clinicName) CONFIG.clinicName = cfg.clinicName;
-                        if (cfg.doctorName) CONFIG.doctorName = cfg.doctorName;
-                        if (cfg.edition) CONFIG.edition = cfg.edition;
-                        if (Array.isArray(cfg.users)) CONFIG.users = cfg.users;
-                        if (cfg.configIssuedAt) CONFIG.configIssuedAt = cfg.configIssuedAt;
-                        if (cfg.productName) CONFIG.productName = cfg.productName;
-                        if (cfg.versionLabel) CONFIG.versionLabel = cfg.versionLabel;
-                        if (cfg.maxUsers !== undefined && cfg.maxUsers !== null) CONFIG.maxUsers = cfg.maxUsers;
-                        // ★ 必执行 applyEditionTags（不再受 edition 变化条件限制）
-                        applyEditionTags();
-                        // ★ enforce 必执行（双重保障，applyEditionTags 内部已经调用一次）
-                        if (typeof enforceStandardEditionButtons === 'function') {
-                            enforceStandardEditionButtons('after-getAppConfig-sync');
-                        }
-                        // ★★★ 2026-08-20 【Setup 1.2.81 竞态自愈】权威 edition 就位后，若用户已登录（自动登录
-                        //   抢跑场景）则重刷一次按钮显示——修复"按钮停留在强制标准版状态无人恢复"的残留。
-                        try {
-                            var _healEd = String(CONFIG.edition || '');
-                            var _healInst = ['clinic_custom','cloud','clinic','cloud_clinic','offline_clinic','institution'].indexOf(_healEd) >= 0;
-                            if (_healInst && typeof currentUser !== 'undefined' && currentUser && currentUser.username && typeof updateUserDisplay === 'function') {
-                                // 机构版身份：若此前竞态窗口把内存 role 降级过，从本地登录数据恢复权威值
-                                try {
-                                    if (!AuthCore.isClinicAdmin(currentUser)) {
-                                        var _lu = null;
-                                        try { _lu = JSON.parse(localStorage.getItem('user_login_data') || 'null'); } catch(_) {}
-                                        var _srcRole = _lu && _lu.user && (AuthCore.isClinicAdmin(_lu.user)) ? _lu.user.role : '';
-                                        if (_srcRole) { console.log('[CONFIG] 竞态自愈：恢复 role', currentUser.role, '->', _srcRole); currentUser.role = _srcRole; }
-                                    }
-                                } catch(_) {}
-                                setTimeout(function(){ try { updateUserDisplay(); } catch(_) {} }, 0);
+                // 版本标签数据同步（登录框标签已视觉隐藏；仍写textContent供逻辑读取，title显示真实版本）
+                var _tag = document.getElementById('loginVersionTag');
+                var _lbl = (CONFIG && CONFIG.versionLabel) || (_isStd ? '云端标准版' : '云端机构版');
+                if (_tag) _tag.textContent = '【' + _lbl + '】';
+                document.title = '惠康中医-' + _lbl;
+                // 写诊所名：local_clinicName 优先，次选 CONFIG.clinicName
+                var _cn = document.getElementById('loginClinicName');
+                if (_cn) {
+                    var _lsCN = null;
+                    try { _lsCN = localStorage.getItem('local_clinicName'); } catch(_) {}
+                    _cn.textContent = _lsCN || (CONFIG && CONFIG.clinicName) || '本能堂中医诊所';
+                }
+                // 写处方笺诊所名显示（登出后预览正确）
+                var _cnD = document.getElementById('clinicNameDisplay');
+                if (_cnD) {
+                    var _lsCN2 = null;
+                    try { _lsCN2 = localStorage.getItem('local_clinicName'); } catch(_) {}
+                    _cnD.textContent = _lsCN2 || (CONFIG && CONFIG.clinicName) || '本能堂中医诊所';
+                }
+                // 用户名回填：从localStorage记住的最近账号（★ 实名防护：只回填通用用户名，禁止手机号/姓名/邮箱）
+                var _gnOK = function(s){ s=String(s==null?'':s).trim(); if(!s) return false; if(/\d{10,}/.test(s)) return false; if(/[\u4e00-\u9fa5]{2,}/.test(s)) return false; if(s.indexOf('@')>=0) return false; return true; };
+                try {
+                    var _u = document.getElementById('loginUsername');
+                    if (_u) {
+                        var _raw = localStorage.getItem('local_rememberedUsers') || localStorage.getItem('local_rememberedUsername');
+                        if (_raw) {
+                            try {
+                                var _arr = JSON.parse(_raw);
+                                if (Array.isArray(_arr) && _arr.length) { var _f = _arr.filter(function(x){ return _gnOK(x); }); _u.value = _f.length ? String(_f[0]) : ''; }
+                                else _u.value = _gnOK(_raw) ? _raw : '';
+                            } catch(_) {
+                                if (typeof _raw === 'string' && _raw.length <= 40 && _gnOK(_raw)) _u.value = _raw;
                             }
-                        } catch(_) {}
-                        console.log('[CONFIG] 已从 userData 同步配置（全字段），edition=', CONFIG.edition, 'product=', CONFIG.productName);
+                        }
                     }
-                }).catch(function(e) {
-                    console.warn('[CONFIG] 异步加载 userData 配置失败:', e.message);
-                    // ★ catch 里也 enforce（IPC失败不影响版本按钮强制对齐）
-                    if (typeof enforceStandardEditionButtons === 'function') {
-                        enforceStandardEditionButtons('after-getAppConfig-CATCH-' + String(e.message || 'error'));
+                    // 设置页同步 clinicName/doctorName 展示（避免首次打开空框）
+                    if (CONFIG) {
+                        var _cf = document.getElementById('clinicName');
+                        if (_cf && !_cf.value) _cf.value = CONFIG.clinicName || '';
+                        var _df = document.getElementById('defaultDoctor');
+                        if (_df && !_df.value) _df.value = CONFIG.doctorName || '';
                     }
-                });
+                } catch(_) {}
+                // 静态"注册诊所/管理台登录"按钮兜底隐藏（容器HTML已默认display:none，此处双保险）
+                (function() {
+                    var _lb = document.querySelector('.login-box');
+                    if (!_lb) return;
+                    var _bs = _lb.querySelectorAll('button');
+                    for (var _i = 0; _i < _bs.length; _i++) {
+                        var _t = _bs[_i].textContent || '';
+                        if (_t.indexOf('注册诊所') >= 0 || _t.indexOf('管理台登录') >= 0) {
+                            _bs[_i].style.display = 'none';
+                        }
+                    }
+                })();
+                // ★ 刀3：未激活新客户首帧注入"📋 管理员激活"入口（与auth-core.js同一HTML/id，防重复）
+                (function() {
+                    try {
+                        // ★ 2026-08-24 注册入口收敛：注册入口仅保留在桌面程序/APP，纯网页浏览器不注入。
+                        //   云端APP加载远程URL（capacitor.config server.url），与网页同一份文件，
+                        //   运行时靠 window.Capacitor 区分；android_asset 兜底离线包；Electron UA 兜底桌面副本。
+                        var __isClientEnv = (typeof window.Capacitor !== 'undefined') ||
+                            (location.href.indexOf('android_asset') >= 0) ||
+                            ((navigator.userAgent || '').indexOf('Electron') >= 0);
+                        if (!__isClientEnv) return; // 纯网页端：无注册入口（请下载桌面版/APP注册）
+                        var _done = false;
+                        try { _done = localStorage.getItem('auth:activationDone') === '1'; } catch(_) {}
+                        if (_done) return; // 已激活：无入口（最终态）
+                        // config已有管理员账户=注册已完成（与auth-core兜底一致，即使localStorage标记丢失）
+                        if (typeof CONFIG !== 'undefined' && CONFIG && Array.isArray(CONFIG.users)) {
+                            for (var _j = 0; _j < CONFIG.users.length; _j++) {
+                                var _u3 = CONFIG.users[_j];
+                                if (_u3 && (AuthCore.isAdmin(_u3))) return;
+                            }
+                        }
+                        if (document.getElementById('activateLoginEntry')) return; // 已注入
+                        var _overlay = document.getElementById('loginOverlay');
+                        if (!_overlay) return;
+                        var _container = _overlay.querySelector('.login-buttons');
+                        if (!_container) return;
+                        var _entry = document.createElement('div');
+                        _entry.id = 'activateLoginEntry';
+                        _entry.style.cssText = 'margin-top:12px;padding:0 4px;';
+                        _entry.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;gap:6px;padding:12px 0;border-radius:8px;background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);color:#fff;cursor:pointer;font-size:14px;font-weight:bold;text-align:center;-webkit-tap-highlight-color:transparent;" onclick="if(window.openAdminActivate){window.openAdminActivate();}">📋 管理员激活</div>';
+                        _container.parentNode.insertBefore(_entry, _container.nextSibling);
+                    } catch(_) {}
+                })();
+                // ★ 云端APP原生遮罩揭幕信号：登录框最终态已就绪
+                window.__firstFrameReady__ = true;
+            } catch(__e) {
+                // 首帧优化失败不致命：退回原流程，但必须仍发揭幕信号（防APP遮罩等不到信号超时）
+                window.__firstFrameReady__ = true;
+                try { console.warn('[首帧优化] 跳过:', __e.message); } catch(_) {}
             }
         })();
-        // END 版本标签
+
+        // ★ 2026-08-17 v3：补丁③ 退出语义终极对齐（底部退出图标=单击立即关APP）
+        //   应用内 EXPECTED_APP_VERSION 必须与此字符串完全一致，否则启动清 HTTP 缓存
+        // ★ 2026-08-19 v1：缓存版本号升级，强制云端APP启动清理旧缓存（修复 setCloudActivationDone is not defined）
+        window.__APP_VERSION__ = '2026-08-19-v1';
 
         const IS_ELECTRON = !!(window.electronAPI && window.electronAPI.isElectron);
 
@@ -1625,15 +1620,69 @@ let currentUser = null;
         })().catch(e => console.error('密码迁移失败:', e));
 
 
+        let _loginErrorTimer = null;
+        function showLoginError(message) {
+            const errorDiv = document.getElementById('loginError');
+            if (!errorDiv) return;
+            if (_loginErrorTimer) { clearTimeout(_loginErrorTimer); _loginErrorTimer = null; }
+            errorDiv.classList.remove('show');
+            errorDiv.style.display = 'none';
+            errorDiv.textContent = message;
+            void errorDiv.offsetWidth;
+            errorDiv.style.display = 'block';
+            errorDiv.classList.add('show');
+            _loginErrorTimer = setTimeout(() => {
+                errorDiv.classList.remove('show');
+                setTimeout(() => { errorDiv.style.display = 'none'; }, 450);
+                _loginErrorTimer = null;
+            }, 3500);
+            const passwordInput = document.getElementById('loginPassword');
+            if (passwordInput && document.activeElement !== passwordInput) {
+                passwordInput.focus();
+                passwordInput.select();
+            }
+        }
+        function setLoginLoading(isLoading) {
+            const loginBtn = document.getElementById('loginBtn');
+            const usernameInput = document.getElementById('loginUsername');
+            const passwordInput = document.getElementById('loginPassword');
+            if (!loginBtn) return;
+            if (isLoading) {
+                loginBtn.classList.add('loading');
+                loginBtn.disabled = true;
+                loginBtn.textContent = '登录中...';
+                if (usernameInput) usernameInput.disabled = true;
+                if (passwordInput) passwordInput.disabled = true;
+            } else {
+                loginBtn.classList.remove('loading');
+                loginBtn.disabled = false;
+                loginBtn.textContent = '确定';
+                if (usernameInput) usernameInput.disabled = false;
+                if (passwordInput) passwordInput.disabled = false;
+            }
+        }
+        function hideLoginError() {
+            const errorDiv = document.getElementById('loginError');
+            if (!errorDiv) return;
+            if (_loginErrorTimer) { clearTimeout(_loginErrorTimer); _loginErrorTimer = null; }
+            errorDiv.classList.remove('show');
+            errorDiv.style.display = 'none';
+        }
+
         async function handleLogin() {
             try {
+                const loginBtn = document.getElementById('loginBtn');
+                if (loginBtn && loginBtn.classList.contains('loading')) return;
+                
                 const username = document.getElementById('loginUsername').value.trim();
                 const password = document.getElementById('loginPassword').value;
-                const errorDiv = document.getElementById('loginError');
+                
+                setLoginLoading(true);
+                hideLoginError();
                 
                 if (!username || !password) {
-                    errorDiv.textContent = '请输入手机号/用户名和密码';
-                    errorDiv.style.display = 'block';
+                    showLoginError('请输入手机号/用户名和密码');
+                    setLoginLoading(false);
                     return;
                 }
                 
@@ -1660,19 +1709,15 @@ let currentUser = null;
                     }
                 }
                 
-                // ★★★ 2026-08-20 【底层重构：云端身份权威登录】云端版三端统一架构（cloud_desktop/cloud_app/public）：
-                //   云端 API 优先——本地表未匹配时直接云端登录，成功即以云端 user（权威 role/clinicId/token）
-                //   作为登录身份并落地本地缓存。根治"本地表 role 与云端不同步 → 机构版管理员【用户管理】
-                //   按钮缺失"这一类问题：role 永远来自云端，本地表降级为缓存/离线容错，不再是身份权威。
-                //   云端失败（网络不可用/云端无此账号的旧本地账号）不阻断，回退下方本地表校验——零回归。
-                var _lastCloudLoginError = '';
+                // ★ 云端登录回退：本地用户未匹配时，尝试云端 API 登录
                 if (!user && window.AuthCore && AuthCore.login && typeof window.CLOUD_API_BASE !== 'undefined') {
                     try {
                         const cloudResult = await AuthCore.login(username, password, { adapter: AuthCore.cloudAdapter });
-                        if (cloudResult && cloudResult.success && cloudResult.user && cloudResult.user.token) {
+                        if (cloudResult && cloudResult.success && cloudResult.user) {
                             user = cloudResult.user;
-                            user._cloudRoleSynced = true; // 云端权威身份，无需再补拉
-                            // 云端账号落地本地表（role=云端权威值；password 留空=本地永不通路径，后续登录始终云端权威）
+                            user._cloudRoleSynced = true; // ★ 2026-08-20 云端权威身份，无需再走本地补拉
+                            // ★ 2026-08-20 云端账号落地本地表（role=云端权威值；password 留空=本地永不通路径，
+                            //   后续登录始终云端权威——与 cloud_desktop/cloud_app 三端统一"云端身份权威登录"架构）
                             try {
                                 const allUsers = getUsers();
                                 const _uname = user.username || username;
@@ -1690,16 +1735,60 @@ let currentUser = null;
                                 }
                                 saveUsers(allUsers);
                             } catch (_) {}
-                            console.log('[handleLogin] ✅ 云端权威登录成功，role=' + (user.role || '') + '，已落地本地缓存');
+                            // 云端登录成功，缓存用户信息到本地（含 token）
+                            currentUser = user;
+                            const userData = JSON.stringify(user);
+                            localStorage.setItem('cloud_currentUser', userData);
+                            localStorage.setItem('cloud_isLoggedIn', 'true');
+                            localStorage.setItem('currentUser', userData);
+                            localStorage.setItem('isLoggedIn', 'true');
+                            sessionStorage.setItem('currentUser', userData);
+                            sessionStorage.setItem('isLoggedIn', 'true');
+                            if (user.clinicName) {
+                                localStorage.setItem('global_clinicName', user.clinicName);
+                            }
+                            const loginData = { user: user, loginTime: Date.now() };
+                            localStorage.setItem('user_login_data', JSON.stringify(loginData));
+                            saveRememberedUser(username);
+                            // ★ 2026-08-28 修复：登录成功路径漏调 setLoginLoading(false)，
+                            //   导致退出登录后登录框按钮残留"登录中..."且输入框被禁用
+                            setLoginLoading(false);
+                            document.getElementById('loginOverlay').style.display = 'none';
+                            document.querySelector('.main-container').style.display = 'flex';
+                            updateUserDisplay();
+                            hideLoginError();
+                            // ★ 2026-08-25 修复：登录时优先使用本用户在基础设置保存过的医师姓名
+                            //   （saveSettings 写入 local_clinicDoctor_<username>），保存过的新名字
+                            //   不再被云端旧姓名顶回；未保存过才用登录用户姓名，并回写全局键保持回显一致
+                            let _savedDoctorName = '';
+                            try { _savedDoctorName = (localStorage.getItem('local_clinicDoctor_' + (user.username || '')) || '').trim(); } catch (e) {}
+                            if (!_savedDoctorName && user.name) _savedDoctorName = user.name;
+                            if (_savedDoctorName) {
+                                const _ddEl = document.getElementById('defaultDoctor');
+                                if (_ddEl) _ddEl.value = _savedDoctorName;
+                                const _dnEl = document.getElementById('doctorName');
+                                if (_dnEl) _dnEl.value = _savedDoctorName;
+                                try { localStorage.setItem('local_clinicDoctor', _savedDoctorName); } catch (e) {}
+                            }
+                            try { await loadData(); } catch(e) { console.warn('loadData失败:', e); }
+                            refreshUserInterface();
+                            if (typeof window.refreshVersionTags === 'function') window.refreshVersionTags((user && user.edition) ? user.edition : undefined);
+                            if (typeof updatePrescriptionPaper === 'function') updatePrescriptionPaper();
+                            if (window.electronAPI && window.electronAPI.loginSuccess) {
+                                try { await window.electronAPI.loginSuccess(user); } catch (e) {}
+                            }
+                            return;
                         } else if (cloudResult && !cloudResult.success) {
-                            _lastCloudLoginError = String(cloudResult.error || '');
-                            console.warn('[handleLogin] 云端登录未成功（回退本地表校验）:', _lastCloudLoginError);
+                            showLoginError(cloudResult.error || '手机号/用户名或密码错误');
+                            setLoginLoading(false);
+                            return;
                         }
                     } catch (cloudErr) {
-                        console.warn('[handleLogin] 云端登录异常（回退本地表校验）:', cloudErr);
+                        console.warn('云端登录异常:', cloudErr);
+                        // 云端异常不阻断，继续走本地登录逻辑
                     }
                 }
-
+                
                 if (user) {
                     // 密码自动升级：旧格式（SHA-256/明文）→ PBKDF2
                     try {
@@ -1716,9 +1805,9 @@ let currentUser = null;
                         }
                     } catch (e) { console.warn('密码升级失败:', e); }
 
-                    // ★ 2026-08-20 历史处方修复（与云端APP/网页一致）：本地登录成功后若缺少云端 token，
+                    // ★ 2026-08-20 历史处方修复（与云端APP本地端一致）：本地登录成功后若缺少云端 token，
                     //   额外调云端 AuthCore.login 换取 token 写入 localStorage，保证读处方能拉到云端数据
-                    // ★★ 2026-08-20 角色权威修复：云端桌面登录=纯本地表校验，本地表 role 常为默认值，
+                    // ★★ 2026-08-20 角色权威修复：云端桌面/网页登录=纯本地表校验，本地表 role 常为默认值，
                     //   机构版管理员（clinic_admin）被误判普通用户 → 【用户管理】按钮缺失。
                     //   补拉成功时用云端权威 role/clinicId 覆盖并回写本地表；_cloudRoleSynced 标记保证
                     //   每账号仅首次多一次调用（规避重复登录计数锁定风险），此后回到"无token才补拉"节奏。
@@ -1749,6 +1838,10 @@ let currentUser = null;
                                 }
                                 if (cloudUser.clinicId && !user.clinicId) user.clinicId = cloudUser.clinicId;
                                 if (cloudUser.name && !user.name) user.name = cloudUser.name;
+                                // ★ 2026-08-25 全局统一授权状态：合并云端授权字段（版本+到期时间），
+                                //   基础设置授权区显示"✅ 已激活（版本）剩余 X 天"（与离线格式统一）
+                                if (cloudUser.clinicEdition && !user.clinicEdition) user.clinicEdition = cloudUser.clinicEdition;
+                                if (cloudUser.clinicExpiresAt && !user.clinicExpiresAt) user.clinicExpiresAt = cloudUser.clinicExpiresAt;
                                 user._cloudRoleSynced = true;
                                 // 回写本地用户表：下次登录直接携带正确 role，无需再补拉
                                 try {
@@ -1779,28 +1872,35 @@ let currentUser = null;
                         loginTime: Date.now()
                     };
                     localStorage.setItem('user_login_data', JSON.stringify(loginData));
-                    
                     saveRememberedUser(username);
-                    
+                    // ★ 2026-08-28 修复：登录成功路径漏调 setLoginLoading(false)，
+                    //   导致退出登录后登录框按钮残留"登录中..."且输入框被禁用
+                    setLoginLoading(false);
                     document.getElementById('loginOverlay').style.display = 'none';
                     document.querySelector('.main-container').style.display = 'flex';
                     updateUserDisplay();
-                    errorDiv.style.display = 'none';
+                    hideLoginError();
 
-                    // 登录后自动设置医师姓名为登录用户的姓名
-                    const doctorNameInput = document.getElementById('doctorName');
-                    if (doctorNameInput) {
-                        doctorNameInput.value = user.name || '';
-                    }
-                    const defaultDoctorInput = document.getElementById('defaultDoctor');
-                    if (defaultDoctorInput) {
-                        defaultDoctorInput.value = user.name || '';
+                    // ★ 2026-08-25 修复：登录时优先使用本用户在基础设置保存过的医师姓名。
+                    //   原先无条件用登录用户姓名（user.name）覆盖 doctorName/defaultDoctor，
+                    //   且不落盘——用户改好保存的新名字重新登录后被旧名顶回，处方签一直显示旧名。
+                    let _savedDoctor = '';
+                    try { _savedDoctor = (localStorage.getItem('local_clinicDoctor_' + (user.username || '')) || '').trim(); } catch (e) {}
+                    if (!_savedDoctor && user.name) _savedDoctor = user.name;
+                    if (_savedDoctor) {
+                        const doctorNameInput = document.getElementById('doctorName');
+                        if (doctorNameInput) doctorNameInput.value = _savedDoctor;
+                        const defaultDoctorInput = document.getElementById('defaultDoctor');
+                        if (defaultDoctorInput) defaultDoctorInput.value = _savedDoctor;
+                        try { localStorage.setItem('local_clinicDoctor', _savedDoctor); } catch (e) {}
                     }
 
                     await loadData();
                     refreshUserInterface();
                     if (typeof window.refreshVersionTags === 'function') window.refreshVersionTags((user && user.edition) ? user.edition : undefined);
                     if (typeof updatePrescriptionPaper === 'function') updatePrescriptionPaper();
+
+                    
 
                     // 通知主进程放大窗口
                     if (window.electronAPI && window.electronAPI.loginSuccess) {
@@ -1811,9 +1911,6 @@ let currentUser = null;
                         }
                     }
 
-                    // ★★★ 2026-08-17 第三重终极兜底：登录成功后【立即 + 4次延迟】强制对齐标准版按钮
-                    //  防任何异步流程（loadData / refreshUserInterface / Permission.init / enforceEditionBinding 回调/重绘定时器）
-                    //  在后续时刻把按钮改回机构版。连续执行：0ms / 500ms / 1500ms / 3000ms
                     if (typeof enforceStandardEditionButtons === 'function') {
                         try {
                             enforceStandardEditionButtons('after-login-success');
@@ -1829,16 +1926,419 @@ let currentUser = null;
                         } catch (outer) { console.warn('登录兜底定时器启动失败（非致命）:', outer); }
                     }
                 } else {
-                    // ★ 2026-08-20 云端返回的账号状态类错误（锁定/禁用/到期）优先展示，比通用错误更有指导性
-                    errorDiv.textContent = (/锁定|禁用|到期/.test(_lastCloudLoginError)) ? _lastCloudLoginError : '手机号/用户名或密码错误';
-                    errorDiv.style.display = 'block';
+                    showLoginError('手机号/用户名或密码错误');
+                    setLoginLoading(false);
                 }
             } catch (e) {
                 console.error('登录失败:', e);
-                const errorDiv = document.getElementById('loginError');
-                errorDiv.textContent = '登录失败: ' + (e.message || '未知错误');
-                errorDiv.style.display = 'block';
+                showLoginError('登录失败: ' + (e.message || '未知错误'));
+                setLoginLoading(false);
             }
+        }
+
+        // 切换密码可见性
+        window.togglePasswordVisibility = function() {
+            const pwdInput = document.getElementById('loginPassword');
+            const toggleBtn = document.querySelector('.password-toggle-btn');
+            if (!pwdInput) return;
+            if (pwdInput.type === 'password') {
+                pwdInput.type = 'text';
+                if (toggleBtn) {
+                    toggleBtn.textContent = '🙈';
+                    toggleBtn.classList.add('visible');
+                }
+            } else {
+                pwdInput.type = 'password';
+                if (toggleBtn) {
+                    toggleBtn.textContent = '👁️';
+                    toggleBtn.classList.remove('visible');
+                }
+            }
+        };
+
+        // ★★★ 记住用户名（与离线APP/桌面副本行为统一）：登录成功保存，打开登录框回填，下拉快速选择
+        async function loadRememberedUsers() {
+            try {
+                const LEGACY_REMEMBERED = ['doctor1', 'doctor2', '张医生', '李医生', '张大夫', 'hkt'];
+                try {
+                    const raw = localStorage.getItem('local_rememberedUsers');
+                    if (raw) {
+                        const parsed = JSON.parse(raw);
+                        const arr = Array.isArray(parsed) ? parsed : [parsed];
+                        const filtered = arr.map(u => String(u).trim()).filter(u => u && !LEGACY_REMEMBERED.includes(u));
+                        if (filtered.length !== arr.length) {
+                            if (filtered.length > 0) {
+                                localStorage.setItem('local_rememberedUsers', JSON.stringify(filtered));
+                            } else {
+                                localStorage.removeItem('local_rememberedUsers');
+                            }
+                            console.log('[login] 已清理 local_rememberedUsers 历史遗留:', arr.length, '->', filtered.length);
+                        }
+                    }
+                    const rememberedSingle = localStorage.getItem('local_rememberedUsername');
+                    if (rememberedSingle && LEGACY_REMEMBERED.includes(rememberedSingle)) {
+                        localStorage.removeItem('local_rememberedUsername');
+                        console.log('[login] 已清理 local_rememberedUsername 历史遗留:', rememberedSingle);
+                    }
+                } catch(e) { console.warn('[login] 清理 rememberedUsers 失败:', e); }
+                // 优先使用 AuthCore（统一存储适配器）
+                if (window.AuthCore && AuthCore.loadRememberedUsers) {
+                    try {
+                        const authList = await AuthCore.loadRememberedUsers();
+                        if (Array.isArray(authList) && authList.length > 0) {
+                            const stringUsernames = authList.map(u => String(u).trim()).filter(u => u && !LEGACY_REMEMBERED.includes(u));
+                            if (stringUsernames.length > 0) {
+                                renderRememberedUsers(stringUsernames);
+                                document.getElementById('loginUsername').value = stringUsernames[0];
+                                localStorage.setItem('local_rememberedUsers', JSON.stringify(stringUsernames));
+                                localStorage.setItem('local_rememberedUsername', stringUsernames[0]);
+                                return;
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('AuthCore.loadRememberedUsers 失败，回退到 localStorage:', e);
+                    }
+                }
+                // 回退：从 localStorage 读取（★ 实名防护：读时过滤手机号/姓名/邮箱）
+                const localList = localStorage.getItem('local_rememberedUsers');
+                if (localList) {
+                    try {
+                        const parsed = JSON.parse(localList);
+                        let usernames = [];
+                        if (Array.isArray(parsed)) {
+                            usernames = parsed;
+                        } else if (typeof parsed === 'string') {
+                            usernames = [parsed];
+                        }
+                        const stringUsernames = usernames.map(u => String(u).trim()).filter(u => u && !LEGACY_REMEMBERED.includes(u) && _isGenericLoginName(u));
+                        if (stringUsernames.length !== usernames.length) {
+                            if (stringUsernames.length > 0) localStorage.setItem('local_rememberedUsers', JSON.stringify(stringUsernames));
+                            else localStorage.removeItem('local_rememberedUsers');
+                            console.log('[login] 已清理 local_rememberedUsers 实名项:', usernames.length, '->', stringUsernames.length);
+                        }
+                        if (stringUsernames.length > 0) {
+                            renderRememberedUsers(stringUsernames);
+                            document.getElementById('loginUsername').value = stringUsernames[0];
+                            return;
+                        }
+                    } catch (e) {
+                        console.warn('解析本地记住的用户名失败:', e);
+                    }
+                }
+                const localUsername = localStorage.getItem('local_rememberedUsername');
+                if (localUsername) {
+                    // ★ 实名防护：单键为实名（手机号/姓名/邮箱）→ 立即删除，不显示不预填
+                    if (!_isGenericLoginName(localUsername)) {
+                        localStorage.removeItem('local_rememberedUsername');
+                        console.log('[login] 已清理 local_rememberedUsername 实名单键');
+                    } else {
+                        const singleList = [localUsername];
+                        renderRememberedUsers(singleList);
+                        document.getElementById('loginUsername').value = localUsername;
+                        localStorage.setItem('local_rememberedUsers', JSON.stringify(singleList));
+                    }
+                }
+            } catch (e) {
+                console.warn('loadRememberedUsers error:', e);
+            }
+        }
+
+        // ★ 2026-08-28 实名防护（页面层）：登录框下拉/预填只允许通用用户名
+        //   禁止显示/记忆：手机号（含10位以上连续数字，含拼音+手机号混合）、≥2连续汉字真实姓名、邮箱
+        function _isGenericLoginName(s) {
+            s = String(s == null ? '' : s).trim();
+            if (!s) return false;
+            if (/\d{10,}/.test(s)) return false;
+            if (/[\u4e00-\u9fa5]{2,}/.test(s)) return false;
+            if (s.indexOf('@') >= 0) return false;
+            return true;
+        }
+
+        function renderRememberedUsers(usernames) {
+            const btn = document.getElementById('usernameDropdownBtn');
+            const menu = document.getElementById('usernameDropdownMenu');
+            if (!btn || !menu) return;
+
+            if (usernames.length === 0) {
+                btn.style.display = 'none';
+                menu.style.display = 'none';
+                return;
+            }
+
+            btn.style.display = 'flex';
+            // ★ 2026-08-28 APP 登录框用户名下拉按钮统一形态：
+            //   - ▼ + 独立 (N) 数量徽标（对齐用户截图「▼(1)」两元素：▼ 按钮右方 与 (1) 灰色胶囊徽标），
+            //   - 旧版 textContent='▼(N)' 在按钮宽度=27px 时被挤成多行，数量徽标溢出到输入框外部，
+            //   - 改 innerHTML：▼ 图标文本 + <span class="username-dropdown-count">(N)</span> 胶囊徽标，
+            //     用 CSS 绝对定位贴到按钮右外侧，与桌面/网页同款形态保持一致。
+            var count = usernames.length;
+            btn.innerHTML = '▼<span class="username-dropdown-count">(' + count + ')</span>';
+            menu.innerHTML = '';
+
+            // ★ 实名防护：下拉只显示用户名本身，禁止映射显示账户 name（真实医师姓名）
+            usernames.forEach(username => {
+                const item = document.createElement('div');
+                const loginValue = typeof username === 'object' ? username.username : username;
+                item.textContent = loginValue;
+                item.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    document.getElementById('loginUsername').value = loginValue;
+                    document.getElementById('loginPassword').focus();
+                    menu.classList.remove('show');
+                });
+                menu.appendChild(item);
+            });
+
+            btn.onclick = function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                menu.classList.toggle('show');
+            };
+        }
+
+        function toggleUsernameDropdown() {
+            const menu = document.getElementById('usernameDropdownMenu');
+            if (menu) {
+                menu.classList.toggle('show');
+            }
+        }
+
+        document.addEventListener('click', function(e) {
+            const menu = document.getElementById('usernameDropdownMenu');
+            const btn = document.getElementById('usernameDropdownBtn');
+            if (menu && btn && !menu.contains(e.target) && !btn.contains(e.target)) {
+                menu.classList.remove('show');
+            }
+        });
+
+        async function saveRememberedUser(username) {
+            // ★ 实名防护（页面层）：手机号/真实姓名/邮箱一律不写入预填键（登录功能不受影响）
+            const _inputIsGeneric = _isGenericLoginName(username);
+            if (window.AuthCore) { try { await AuthCore.saveRememberedUser(username); const r = await AuthCore.loadRememberedUsers(); if (typeof renderRememberedUsers === 'function') renderRememberedUsers(r); if (Array.isArray(r) && r.length > 0) { localStorage.setItem('local_rememberedUsers', JSON.stringify(r)); if (_inputIsGeneric) localStorage.setItem('local_rememberedUsername', String(username).trim()); else localStorage.removeItem('local_rememberedUsername'); } return; } catch(e) { console.warn('AuthCore.saveRememberedUser 失败，回退到 localStorage:', e); } }
+            try {
+                const cleanUsername = String(username).trim();
+                if (!cleanUsername) return;
+                // ★ 实名防护：非通用用户名（手机号/姓名/邮箱）不记忆，直接清理后返回
+                if (!_isGenericLoginName(cleanUsername)) {
+                    localStorage.removeItem('local_rememberedUsername');
+                    return;
+                }
+
+                let remembered = [];
+                const localList = localStorage.getItem('local_rememberedUsers');
+                if (localList) {
+                    try {
+                        const parsed = JSON.parse(localList);
+                        if (Array.isArray(parsed)) {
+                            remembered = parsed;
+                        } else if (typeof parsed === 'string') {
+                            remembered = [parsed];
+                        }
+                    } catch (e) {
+                        console.warn('解析本地记住的用户名失败:', e);
+                    }
+                }
+
+                remembered = remembered.filter(u => String(u).toLowerCase() !== cleanUsername.toLowerCase());
+                remembered.unshift(cleanUsername);
+                if (remembered.length > 5) remembered = remembered.slice(0, 5);
+
+                localStorage.setItem('local_rememberedUsername', cleanUsername);
+                localStorage.setItem('local_rememberedUsers', JSON.stringify(remembered));
+                renderRememberedUsers(remembered);
+            } catch (e) {
+                console.warn('保存记住的用户名失败:', e);
+                if (_inputIsGeneric) localStorage.setItem('local_rememberedUsername', String(username).trim());
+            }
+        }
+
+        // 云端版本分类：根据实际注册的 edition 判断标准版/机构版
+        // 标准版（个人/单用户）：personal / cloud_personal / offline_personal / standard / clinic_standard
+        // 机构版（多用户）：clinic_custom / cloud / clinic / cloud_clinic / offline_clinic / institution
+        window.isStandardEdition = function(edition) {
+            const e = String(edition || '').toLowerCase();
+            return ['personal', 'cloud_personal', 'offline_personal', 'standard', 'clinic_standard'].indexOf(e) >= 0;
+        };
+        // 云端版本标签：根据实际注册 edition 返回"云端标准版/云端机构版"
+        window.getCloudEditionTag = function() {
+            var e = (typeof CONFIG !== 'undefined' && CONFIG.edition) || window.EDITION || 'clinic_custom';
+            return window.isStandardEdition(e) ? '云端标准版' : '云端机构版';
+        };
+
+        // ★★★ 2026-08-17 【根治刀2-B：统一版本标签函数】：优先取 CONFIG.versionLabel（Setup 发下来的权威值）
+        function getEditionTag() {
+            if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.versionLabel) return CONFIG.versionLabel;
+            // 兼容云端版：若有 getCloudEditionTag 则优先用它（否则 fallback 老逻辑）
+            if (typeof window.getCloudEditionTag === 'function') return window.getCloudEditionTag();
+            var e = '';
+            if (typeof CONFIG !== 'undefined' && CONFIG) e = String(CONFIG.edition || '');
+            if (!e) e = String(window.EDITION || '');
+            if (typeof window.isStandardEdition === 'function' && window.isStandardEdition(e)) return '云端标准版';
+            if (e === 'personal' || e === 'offline_personal') return '离线标准版';
+            if (e === 'cloud_personal' || e === 'clinic_standard') return '云端标准版';
+            return '云端机构版';
+        }
+
+        // ★ 铁闸4（2026-08-21 全局推广至H5/APP内嵌登录遮罩层）：自证真伪三元组
+        //   注意：H5/APP端通常没有构建时生成的 build-meta.json，fetch失败会显示「开发模式：未找到...」
+        let _buildMeta = null;
+        function loadBuildMeta() {
+            var tryPaths = ['./build-meta.json', '/build-meta.json', './electron/../build-meta.json'];
+            var tryIdx = 0;
+            function tryNext() {
+                if (tryIdx >= tryPaths.length) return;
+                var p = tryPaths[tryIdx++];
+                try {
+                    fetch(p, { cache: 'no-store' })
+                        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+                        .then(function (m) {
+                            _buildMeta = m;
+                            try { applyEditionTags(); } catch (_) {}
+                        })
+                        .catch(function () { tryNext(); });
+                } catch (e) { tryNext(); }
+            }
+            tryNext();
+        }
+
+        function applyEditionTags() {
+            var label = getEditionTag();
+            // ★ 铁闸4两行紧凑三元组（适配 260~360px 窄登录框，不被裁切）
+            var shortBuildTime = '';
+            var metaTextLine1 = '';
+            var metaTextLine2 = '';
+            if (_buildMeta) {
+                var bt = _buildMeta.buildTimeLocal || '';
+                var m_bt = bt.match(/(\d{4}\/\d{1,2}\/\d{1,2})\s+(\d{1,2}:\d{1,2})/);
+                shortBuildTime = m_bt ? (m_bt[1] + ' ' + m_bt[2]) : bt;
+                metaTextLine1 = 'V' + _buildMeta.version + ' · ' + (_buildMeta.archMarker || '');
+                metaTextLine2 = shortBuildTime ? ('Build ' + shortBuildTime) : '';
+            }
+            var metaHtml = metaTextLine1 ?
+                ('<br><span style="font-size:9px;color:rgba(255,255,255,0.85);font-weight:normal;line-height:1.3;">' +
+                 metaTextLine1 + (metaTextLine2 ? ('<br>' + metaTextLine2) : '') +
+                 '</span>') : '';
+
+            // ★ 挂载点1：.version-tag（紫色header内，登录遮罩层显示）
+            var tag = document.querySelector('.version-tag');
+            // ★ 2026-08-23 登录前也展示真实版本标签（不再"登录后显示版本"占位符）
+            //   权威链：getEditionTag() → CONFIG.versionLabel → CONFIG.edition → Permission._edition → __APP_EDITION__ → EDITION
+            //   确保未登录时也能让用户明确知道当前是机构版还是标准版
+            if (tag) {
+                tag.innerHTML = '【' + label + '】' + metaHtml;
+            }
+            // ★ 挂载点2：.login-security 下方（激活后简化登录框必显示，防止 header-section 被隐藏时丢失）
+            var security = document.querySelector('.login-security');
+            if (security) {
+                var bottomTag = document.getElementById('loginVersionTagBottom');
+                if (!bottomTag) {
+                    bottomTag = document.createElement('div');
+                    bottomTag.id = 'loginVersionTagBottom';
+                    bottomTag.style.marginTop = '3px';
+                    bottomTag.style.marginBottom = '2px';
+                    bottomTag.style.fontSize = '9px';
+                    bottomTag.style.color = '#999';
+                    bottomTag.style.textAlign = 'center';
+                    bottomTag.style.fontWeight = '600';
+                    bottomTag.style.lineHeight = '1.25';
+                    bottomTag.style.letterSpacing = '0.1px';
+                    security.parentNode.insertBefore(bottomTag, security.nextSibling);
+                }
+                if (metaTextLine1) {
+                    bottomTag.innerHTML =
+                        '<div style="font-size:9px;line-height:1.25;">' + metaTextLine1 + '</div>' +
+                        (metaTextLine2 ? '<div style="font-size:9px;line-height:1.25;color:#aab;">' + metaTextLine2 + '</div>' : '');
+                } else {
+                    // ★ 2026-08-23 H5/APP 端通常没有构建时 build-meta.json（纯静态托管）。
+                    //   不显示"开发模式"字样吓用户，静默留空。用户版本身份靠上方 .version-tag 展示。
+                    bottomTag.style.display = 'none';
+                }
+            }
+            var tv = document.getElementById('topVersionTag');
+            if (tv) tv.textContent = '【' + label + '】';
+            var et = document.getElementById('editionTag');
+            if (et) et.textContent = '【' + label + '】';
+            document.title = '惠康中医-' + label;
+            var logText = '惠康中医' + label + ' V1.0.0' +
+                (_buildMeta ? ('  |  构建: ' + metaTextLine1 + (metaTextLine2 ? (' | ' + metaTextLine2) : '')) : '');
+            console.log('%c' + logText, 'color:#667eea;font-size:14px;font-weight:bold');
+            // ★★★ 2026-08-17 【根治刀2-B】每次标签变动后强制 enforce（防止 applyEditionTags 后标签变标准版但按钮没同步）
+            if (typeof enforceStandardEditionButtons === 'function') {
+                enforceStandardEditionButtons('after-applyEditionTags');
+            }
+        }
+        // ★ 2026-08-18 登录成功后按部署权威 edition 刷新版本标签（云端标准版/云端机构版）
+        //   云端版版本按部署配置区分（网页版=标准版、桌面版config.json=机构版），user 对象无 edition 字段
+        window.refreshVersionTags = function(forceEdition) {
+            try {
+                var ed = forceEdition ? String(forceEdition) : '';
+                // ★★ 2026-08-20 fallback 链顺序修复：CONFIG.edition（getAppConfig 已同步权威值）
+                //   排在 Permission._edition（静态快照）之前，防止旧值反向覆盖已同步的机构版值
+                //   → enforce 按标准版强制 → 机构版管理员看到【修改密码】。
+                if (!ed && typeof CONFIG !== 'undefined' && CONFIG && CONFIG.edition) ed = String(CONFIG.edition || '');
+                if (!ed && window.Permission && Permission._edition) ed = String(Permission._edition);
+                if (!ed) ed = String(window.EDITION || '');
+                if (typeof CONFIG !== 'undefined' && CONFIG && ed) CONFIG.edition = ed;
+                if (typeof CONFIG !== 'undefined' && CONFIG && ed) {
+                    var instArr = ['clinic_custom', 'cloud', 'clinic', 'cloud_clinic', 'offline_clinic', 'institution'];
+                    var isInst = instArr.indexOf(String(ed)) >= 0;
+                    CONFIG.versionLabel = isInst ? '云端机构版' : '云端标准版';
+                }
+                if (typeof applyEditionTags === 'function') applyEditionTags();
+                if (ed && typeof window.applyLoginTheme === 'function') window.applyLoginTheme(ed);
+            } catch (e) { console.warn('refreshVersionTags失败:', e); }
+        };
+        // 根据版本切换登录界面主题
+        window.applyLoginTheme = function(edition) {
+            const root = document.documentElement;
+            const tagEl = document.getElementById('loginVersionTag');
+            // ★ 2026-08-19 登录前(overlay 可见)不写登录框标签文本，保留「待登录」提示；仅登录后(overlay 隐藏)写入真实版本
+            const _loEl = document.getElementById('loginOverlay');
+            const _applyText = !( _loEl && _loEl.style.display !== 'none');
+
+            if (window.isStandardEdition(edition)) {
+                // ★ 2026-08-23 根治三屏闪-刀1：默认已蓝（CSS :root），标准版仅需移除机构版类
+                root.classList.remove('edition-org');
+                root.classList.add('edition-standard');
+                if (tagEl && _applyText) tagEl.textContent = '【云端标准版】';
+            } else {
+                // 机构版：加 edition-org 切紫色（默认是蓝色标准版）
+                root.classList.add('edition-org');
+                root.classList.remove('edition-standard');
+                if (tagEl && _applyText) tagEl.textContent = '【云端机构版】';
+            }
+        };
+
+        // 版本标签统一显示 V1.0.0（按实际注册版本动态），置于分类函数定义之后执行
+        // ★ 2026-08-17 【根治刀2-B】：调用统一的 applyEditionTags()（内部会自动 enforce）
+        (function() { applyEditionTags(); })();
+        try { loadBuildMeta(); } catch(_) {} // ★ 铁闸4：主动拉取 build-meta.json 显示三元组（未登录也可见）
+
+        // 初始化登录界面
+        window.initLoginUI = function() {
+            try {
+                const edition = (CONFIG && CONFIG.edition) || 'institution';
+                window.applyLoginTheme(edition);
+                
+                // 更新诊所名称：用户基础设置保存的 local_clinicName 优先，无则用 CONFIG 动态默认
+                // ★ 2026-08-17 举一反三：登录框必须跟随基础设置，禁止只回显 CONFIG 默认值
+                const clinicNameEl2 = document.getElementById('loginClinicName');
+                const _savedClinicName = localStorage.getItem('local_clinicName');
+                if (clinicNameEl2 && (_savedClinicName || (CONFIG && CONFIG.clinicName))) {
+                    clinicNameEl2.textContent = _savedClinicName || CONFIG.clinicName;
+                }
+                // 记住用户名：回填最近登录账号 + 下拉快速选择（与离线/桌面副本行为统一）
+                if (typeof loadRememberedUsers === 'function') try { loadRememberedUsers(); } catch(_) {}
+            } catch(e) {
+                console.warn('初始化登录界面失败:', e);
+            }
+        };
+
+        // 页面加载后初始化
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', window.initLoginUI);
+        } else {
+            window.initLoginUI();
         }
 
                 window.handleLogout = async function() {
@@ -1875,15 +2375,12 @@ let currentUser = null;
                         setTimeout(() => { if (typeof exitApp === 'function') try { exitApp(); } catch(_) {} }, 250);
                         return;
                     }
+                    // ★ 2026-08-28 用户要求：退出登录时同步关闭登录界面网页标签（云端网页版）
+                    //   不再停留在登录界面（防止账号预填/界面被他人操作），先显示遮罩兜底，
+                    //   250ms 后走 exitApp 全平台关闭链（APP关APP/桌面关窗口/纯网页关标签）
                     overlay.style.display = 'flex';
-                    if (typeof loadRememberedUsers === 'function') try { loadRememberedUsers(); } catch(_) {}
-                    try {
-                        if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.edition === 'personal' && CONFIG.doctorName) {
-                            const inp = document.getElementById('loginUsername');
-                            if (inp) inp.value = CONFIG.doctorName;
-                        }
-                    } catch(_) {}
-                    if (typeof showToast === 'function') try { showToast('已退出登录'); } catch(_) {}
+                    if (typeof showToast === 'function') try { showToast('已退出登录，正在关闭页面...'); } catch(_) {}
+                    setTimeout(() => { if (typeof exitApp === 'function') try { exitApp(); } catch(_) {} }, 250);
                 }
             } catch (e) {
                 console.error('[handleLogout] 兜底异常:', e);
@@ -1916,7 +2413,17 @@ let currentUser = null;
                 if (window.electronAPI && typeof window.electronAPI.quitApp === 'function') {
                     try { window.electronAPI.quitApp(); return; } catch(_) {}
                 }
+                // ★ 2026-08-28 纯网页兜底：浏览器对非脚本打开的标签会拦截 window.close()。
+                //   仅当完全无原生退出桥（纯浏览器环境）时，用 about:blank 清空页面等效关闭标签，
+                //   防止退出登录后残留登录界面（含账号预填）被他人操作；
+                //   有原生桥的环境（APP/桌面）已在上方分支 return，即使桥调用异常也保持旧行为不误伤。
+                var __noNativeExitBridge = !(window.AndroidAppExit || window.AndroidNative || (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) || window.electronAPI);
                 try { window.close(); } catch(_) {}
+                if (__noNativeExitBridge) {
+                    setTimeout(function () {
+                        try { if (!window.closed) window.location.replace('about:blank'); } catch(_) {}
+                    }, 400);
+                }
             } catch (e) {
                 console.error('[exitApp] 兜底异常:', e);
             }
@@ -2159,7 +2666,20 @@ let currentUser = null;
                 }
 
                 const users = getUsers();
-                const userIndex = users.findIndex(u =>u.username === currentUser.username);
+                let userIndex = users.findIndex(u =>u.username === currentUser.username || (u.phone && String(u.phone) === currentUser.username));
+
+                // ★ 2026-08-19 修复：已登录用户不在本地用户表时，不再直接报"用户不存在"。
+                //   云端账号由后台审批开通（账号存云端 KV，本地 user 表可能不含该登录账号），
+                //   已登录用户理应能修改自己密码 → 把 currentUser 合并进本地表再继续（保留原校验）。
+                if (userIndex === -1 && currentUser && currentUser.username) {
+                    users.push({
+                        username: currentUser.username,
+                        password: currentUser.password || currentUser.passwordHash || '',
+                        name: currentUser.name || currentUser.username,
+                        role: currentUser.role || 'user'
+                    });
+                    userIndex = users.length - 1;
+                }
 
                 if (userIndex === -1) {
                     alert('用户不存在');
@@ -2356,7 +2876,7 @@ let currentUser = null;
             try {
                 // ★ 2026-08-26：传入云端权威列表时直接渲染（根治本机残留混入）；
                 //   未传（离线/网络故障回退）时走本地缓存过滤：
-                // ★ 2026-08-22 "唯一管理员"设计：用户管理列表隐藏内置默认 admin
+                // ★ 2026-08-22 "唯一管理员"设计：用户管理列表隐藏内置默认 admin，只显示注册管理员 + 普通用户
                 // ★ 2026-08-25 一期方案·诊所归属过滤：云端登录落地的账号已记录 clinicId，
                 //   其他诊所的历史登录残留不再显示（数据保留，仅本机列表过滤）
                 const users = Array.isArray(cloudUsers)
@@ -2386,12 +2906,11 @@ let currentUser = null;
             const user = users.find(u => u.username === username);
             if (!user) return;
 
-            const currentUserType = user.userType || 'production';
-
             const existing = document.getElementById('editUserModal');
             if (existing) existing.remove();
 
-            // 离线版本无云端功能，移除"使用模式"字段
+            // ★ 优化：添加用户类型选择（正式/测试）
+            const currentUserType = user.userType || 'production';
             const modal = document.createElement('div');
             modal.id = 'editUserModal';
             modal.className = 'modal';
@@ -2497,7 +3016,18 @@ let currentUser = null;
                 if (currentUser && currentUser.username === originalUsername) {
                     currentUser = users[userIndex];
                     localStorage.setItem('local_currentUser', JSON.stringify(currentUser));
+                    // ★ 2026-08-25 同步：编辑当前用户医师姓名后，全局医师姓名与处方签立即跟随。
+                    //   原先只改用户表，local_clinicDoctor/医师输入框/处方签仍显示旧名。
+                    try {
+                        localStorage.setItem('local_clinicDoctor', newName);
+                        localStorage.setItem('local_clinicDoctor_' + newUsername, newName);
+                    } catch (e) {}
+                    const _editDnEl = document.getElementById('doctorName');
+                    if (_editDnEl) _editDnEl.value = newName;
+                    const _editDdEl = document.getElementById('defaultDoctor');
+                    if (_editDdEl) _editDdEl.value = newName;
                     updateUserDisplay();
+                    if (typeof updatePrescriptionPaper === 'function') updatePrescriptionPaper();
                 }
 
                 if (newUsername !== originalUsername) {
@@ -2513,10 +3043,6 @@ let currentUser = null;
                             localStorage.removeItem(key);
                             i--;
                         }
-                    }
-
-                    if (localStorage.getItem('local_rememberedUsername') === originalUsername) {
-                        localStorage.setItem('local_rememberedUsername', newUsername);
                     }
                 }
 
@@ -2852,17 +3378,7 @@ let currentUser = null;
                 var configProduct = (typeof CONFIG !== 'undefined') ? String((CONFIG && CONFIG.productName) || '') : '';
                 var configEdition = (typeof CONFIG !== 'undefined') ? String((CONFIG && CONFIG.edition) || '') : '';
                 var globalEdition = String(window.EDITION || '');
-                // ★★★ 2026-08-20 【Setup 1.2.81 云端保护】DOM 锚点是"惠康中医-本地（离线标准版）"专属判据，
-                //   其硬编码文案明确写"惠康中医-本地=永久离线标准版"。云端版（APP_MODE=cloud）产品形态
-                //   （标准版/机构版由 userData 激活配置决定）绝不能被该锚点误判为标准版——
-                //   曾致机构版管理员【用户管理】被强制隐藏（getAppConfig 异步返回前的竞态窗口）。
-                var isCloudProduct = false;
-                try {
-                    if (String(window.APP_MODE || '') === 'cloud') isCloudProduct = true;
-                    if (String(globalProduct) === '惠康中医-云端' || String(configProduct) === '惠康中医-云端') isCloudProduct = true;
-                    if (!isCloudProduct && window.electronAPI && window.electronAPI.isElectron && window.APP_MODE && String(window.APP_MODE) !== 'offline') isCloudProduct = true;
-                } catch(_) {}
-                var domMarker = !isCloudProduct && !!(document.getElementById('_force_standard_edition_marker_'));
+                var domMarker = !!(document.getElementById('_force_standard_edition_marker_'));
 
                 var isStandardSoft = false
                     || (tag.indexOf('标准版') >= 0)
@@ -2871,11 +3387,6 @@ let currentUser = null;
                     || (['personal', 'offline_personal'].indexOf(configEdition) >= 0)
                     || (globalEdition === 'personal' || globalEdition === 'offline_personal')
                     || domMarker;
-                // ★★★ 2026-08-20 【Setup 1.2.81 云端保护】云端产品（标准/机构形态由 userData 激活配置决定）
-                //   的按钮显隐完全走 Permission 正轨判定（shouldShowUserManage/shouldShowChangePwd），
-                //   软判据（标签文本/edition 中间态/asar 默认 cloud_personal/DOM 锚点）一律不作数——
-                //   消除 getAppConfig 异步返回前竞态窗口内的一切误强制。
-                if (isCloudProduct) isStandardSoft = false;
 
                 // ★ 2026-08-18 云端机构版保护：部署配置明确为机构版时，禁止被软判据（含 DOM 锚点）误判为标准版。
                 //   仅离线桌面权威模式（IS_DESKTOP_LOCAL=true）可强制；云端版（网页/APP_MODE=cloud）机构版配置一律放行。
@@ -2966,7 +3477,7 @@ let currentUser = null;
 
         function updateUserDisplay() {
             if (currentUser) {
-                // ★ 2026-08-28 机构版多用户修复：顶部显示当前登录用户名（赵水云登录不得显示管理员名）
+                // ★ 2026-08-28 机构版多用户修复：顶部显示当前登录用户名（普通用户登录不得显示管理员名）
                 //   旧逻辑 local_clinicDoctor 优先是单用户时代设计；与离线APP统一：currentUser.name 优先，空时回退诊所医师名
                 const displayName = currentUser.name || localStorage.getItem('local_clinicDoctor') || currentUser.username;
                 document.getElementById('userDisplayName').textContent = displayName;
@@ -2990,7 +3501,9 @@ let currentUser = null;
                 // 更新移动端底部按钮
                 updateMobileActionButtons();
 
-                if (typeof enforceStandardEditionButtons==='function') enforceStandardEditionButtons('updateUserDisplay-tail');
+                if (typeof enforceStandardEditionButtons === 'function') {
+                    enforceStandardEditionButtons('updateUserDisplay-tail');
+                }
             }
         }
 
@@ -3017,238 +3530,36 @@ let currentUser = null;
                 btn2.onclick = function() { showChangePwdModal(); };
             }
             btn2.style.display = '';
-            if (typeof enforceStandardEditionButtons==='function') enforceStandardEditionButtons('updateMobileActionButtons-tail');
-        }
-
-        // 自动填充记住的用户名
-        function initRememberedCredentials() {
-            loadRememberedUsers();
-        }
-
-        async function loadRememberedUsers() {
-            try {
-                // ★ 启动时主动清理 local_rememberedUsers/local_rememberedUsername 中的历史遗留值
-                // 历史遗留账号（doctor1/doctor2/张医生/李医生）需从记住的用户列表中清除
-                const LEGACY_REMEMBERED = ['doctor1', 'doctor2', '张医生', '李医生', '张大夫', 'hkt'];
-                try {
-                    const raw = localStorage.getItem('local_rememberedUsers');
-                    if (raw) {
-                        const parsed = JSON.parse(raw);
-                        const arr = Array.isArray(parsed) ? parsed : [parsed];
-                        const filtered = arr.map(u => String(u).trim()).filter(u => u && !LEGACY_REMEMBERED.includes(u));
-                        if (filtered.length !== arr.length) {
-                            if (filtered.length > 0) {
-                                localStorage.setItem('local_rememberedUsers', JSON.stringify(filtered));
-                            } else {
-                                localStorage.removeItem('local_rememberedUsers');
-                            }
-                            console.log('[login] 已清理 local_rememberedUsers 历史遗留:', arr.length, '->', filtered.length);
-                        }
-                    }
-                    const rememberedSingle = localStorage.getItem('local_rememberedUsername');
-                    if (rememberedSingle && LEGACY_REMEMBERED.includes(rememberedSingle)) {
-                        localStorage.removeItem('local_rememberedUsername');
-                        console.log('[login] 已清理 local_rememberedUsername 历史遗留:', rememberedSingle);
-                    }
-                } catch(e) { console.warn('[login] 清理 rememberedUsers 失败:', e); }
-                // 优先使用 AuthCore（统一存储适配器）
-                if (window.AuthCore && AuthCore.loadRememberedUsers) {
-                    try {
-                        const authList = await AuthCore.loadRememberedUsers();
-                        if (Array.isArray(authList) && authList.length > 0) {
-                            // ★ 过滤历史遗留账号（doctor1/doctor2/张医生/李医生等）
-                            const stringUsernames = authList.map(u => String(u).trim()).filter(u => u && !LEGACY_REMEMBERED.includes(u));
-                            if (stringUsernames.length > 0) {
-                                renderRememberedUsers(stringUsernames);
-                                document.getElementById('loginUsername').value = stringUsernames[0];
-                                // 同步到 localStorage 作为备份
-                                localStorage.setItem('local_rememberedUsers', JSON.stringify(stringUsernames));
-                                localStorage.setItem('local_rememberedUsername', stringUsernames[0]);
-                                return;
-                            }
-                        }
-                    } catch (e) {
-                        console.warn('AuthCore.loadRememberedUsers 失败，回退到 localStorage:', e);
-                    }
-                }
-                // 回退：从 localStorage 读取（★ 实名防护：读时过滤手机号/姓名/邮箱）
-                const localList = localStorage.getItem('local_rememberedUsers');
-                if (localList) {
-                    try {
-                        const parsed = JSON.parse(localList);
-                        let usernames = [];
-                        if (Array.isArray(parsed)) {
-                            usernames = parsed;
-                        } else if (typeof parsed === 'string') {
-                            usernames = [parsed];
-                        }
-                        const stringUsernames = usernames.map(u => String(u).trim()).filter(u => u && !LEGACY_REMEMBERED.includes(u) && _isGenericLoginName(u));
-                        if (stringUsernames.length !== usernames.length) {
-                            if (stringUsernames.length > 0) localStorage.setItem('local_rememberedUsers', JSON.stringify(stringUsernames));
-                            else localStorage.removeItem('local_rememberedUsers');
-                            console.log('[login] 已清理 local_rememberedUsers 实名项:', usernames.length, '->', stringUsernames.length);
-                        }
-                        if (stringUsernames.length > 0) {
-                            renderRememberedUsers(stringUsernames);
-                            document.getElementById('loginUsername').value = stringUsernames[0];
-                            return;
-                        }
-                    } catch (e) {
-                        console.warn('解析本地记住的用户名失败:', e);
-                    }
-                }
-                const localUsername = localStorage.getItem('local_rememberedUsername');
-                if (localUsername) {
-                    // ★ 实名防护：单键为实名（手机号/姓名/邮箱）→ 立即删除，不显示不预填
-                    if (!_isGenericLoginName(localUsername)) {
-                        localStorage.removeItem('local_rememberedUsername');
-                        console.log('[login] 已清理 local_rememberedUsername 实名单键');
-                    } else {
-                        const singleList = [localUsername];
-                        renderRememberedUsers(singleList);
-                        document.getElementById('loginUsername').value = localUsername;
-                        localStorage.setItem('local_rememberedUsers', JSON.stringify(singleList));
-                    }
-                }
-            } catch (e) {
-                console.warn('loadRememberedUsers error:', e);
-            }
-        }
-
-        // ★ 2026-08-28 实名防护（页面层）：登录框下拉/预填只允许通用用户名
-        //   禁止显示/记忆：手机号（含10位以上连续数字，含拼音+手机号混合）、≥2连续汉字真实姓名、邮箱
-        function _isGenericLoginName(s) {
-            s = String(s == null ? '' : s).trim();
-            if (!s) return false;
-            if (/\d{10,}/.test(s)) return false;
-            if (/[\u4e00-\u9fa5]{2,}/.test(s)) return false;
-            if (s.indexOf('@') >= 0) return false;
-            return true;
-        }
-
-        function renderRememberedUsers(usernames) {
-            const btn = document.getElementById('usernameDropdownBtn');
-            const menu = document.getElementById('usernameDropdownMenu');
-            if (!btn || !menu) return;
-
-            if (usernames.length === 0) {
-                btn.style.display = 'none';
-                menu.style.display = 'none';
-                return;
-            }
-
-            btn.style.display = 'flex';
-            btn.textContent = '▼(' + usernames.length + ')';
-            menu.innerHTML = '';
-
-            // ★ 实名防护：下拉只显示用户名本身，禁止映射显示账户 name（真实医师姓名）
-            usernames.forEach(username => {
-                const item = document.createElement('div');
-                const loginValue = typeof username === 'object' ? username.username : username;
-                item.textContent = loginValue;
-                item.addEventListener('click', function(e) {
-                    e.stopPropagation();
-                    document.getElementById('loginUsername').value = loginValue;
-                    document.getElementById('loginPassword').focus();
-                    menu.classList.remove('show');
-                });
-                menu.appendChild(item);
-            });
-
-            btn.onclick = function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                menu.classList.toggle('show');
-            };
-        }
-
-        function toggleUsernameDropdown() {
-            const menu = document.getElementById('usernameDropdownMenu');
-            if (menu) {
-                menu.classList.toggle('show');
-            }
-        }
-
-        document.addEventListener('click', function(e) {
-            const menu = document.getElementById('usernameDropdownMenu');
-            const btn = document.getElementById('usernameDropdownBtn');
-            if (menu && btn && !menu.contains(e.target) && !btn.contains(e.target)) {
-                menu.classList.remove('show');
-            }
-        });
-
-        async function saveRememberedUser(username) {
-            // ★ 实名防护（页面层）：手机号/真实姓名/邮箱一律不写入预填键（登录功能不受影响）
-            const _inputIsGeneric = _isGenericLoginName(username);
-            if (window.AuthCore) { try { await AuthCore.saveRememberedUser(username); const r = await AuthCore.loadRememberedUsers(); if (typeof renderRememberedUsers === 'function') renderRememberedUsers(r); if (Array.isArray(r) && r.length > 0) { localStorage.setItem('local_rememberedUsers', JSON.stringify(r)); if (_inputIsGeneric) localStorage.setItem('local_rememberedUsername', String(username).trim()); else localStorage.removeItem('local_rememberedUsername'); } return; } catch(e) { console.warn('AuthCore.saveRememberedUser 失败，回退到 localStorage:', e); } }
-            try {
-                const cleanUsername = String(username).trim();
-                if (!cleanUsername) return;
-                // ★ 实名防护：非通用用户名（手机号/姓名/邮箱）不记忆，直接清理后返回
-                if (!_isGenericLoginName(cleanUsername)) {
-                    localStorage.removeItem('local_rememberedUsername');
-                    return;
-                }
-
-                let remembered = [];
-                const localList = localStorage.getItem('local_rememberedUsers');
-                if (localList) {
-                    try {
-                        const parsed = JSON.parse(localList);
-                        if (Array.isArray(parsed)) {
-                            remembered = parsed;
-                        } else if (typeof parsed === 'string') {
-                            remembered = [parsed];
-                        }
-                    } catch (e) {
-                        console.warn('解析本地记住的用户名失败:', e);
-                    }
-                }
-
-                remembered = remembered.filter(u => String(u).toLowerCase() !== cleanUsername.toLowerCase());
-                remembered.unshift(cleanUsername);
-                if (remembered.length > 5) remembered = remembered.slice(0, 5);
-
-                localStorage.setItem('local_rememberedUsername', cleanUsername);
-                localStorage.setItem('local_rememberedUsers', JSON.stringify(remembered));
-                renderRememberedUsers(remembered);
-            } catch (e) {
-                console.warn('保存记住的用户名失败:', e);
-                if (_inputIsGeneric) localStorage.setItem('local_rememberedUsername', String(username).trim());
+            if (typeof enforceStandardEditionButtons === 'function') {
+                enforceStandardEditionButtons('updateMobileActionButtons-tail');
             }
         }
 
         async function checkLoginStatus() {
             // ★ 纵深防御 2026-07-28：APP 端启动时再次清除登录态
             // 防止早期内联脚本和 AuthCore 迁移遗漏，确保每次打开都必须手动登录
+            // ★★ 2026-08-25 全端统一"每次打开必须手动登录"（用户要求"云端网页不要自动登入"）：
+            //   非 Electron 桌面环境（网页版 + 离线APP + 云端APP）一律清除所有登录态；
+            //   桌面版登录态由主进程 currentLoggedInUser 校验（下方 Electron 分支），不在清除范围
             try {
-                if (location.href.indexOf('android_asset') >= 0 ||
-                    (window.electronAPI && window.electronAPI.isAndroidAPP)) {
+                if (!(window.electronAPI && window.electronAPI.isElectron)) {
                     localStorage.removeItem('isLoggedIn');
                     localStorage.removeItem('currentUser');
                     localStorage.removeItem('user_login_data');
                     localStorage.removeItem('auth:isLoggedIn');
                     localStorage.removeItem('auth:currentUser');
                     localStorage.removeItem('auth:loginData');
+                    localStorage.removeItem('cloud_isLoggedIn');
+                    localStorage.removeItem('cloud_currentUser');
                 }
             } catch(e) {}
 
             if (window.AuthCore) { try { await AuthCore.checkSession(); } catch(e) {} }
-            const SESSION_TIMEOUT_MS = 8 * 60 * 60 * 1000; try { const _ld = localStorage.getItem('user_login_data'); if (_ld) { const _lt = JSON.parse(_ld).loginTime; if (_lt && Date.now() - _lt > SESSION_TIMEOUT_MS) { localStorage.removeItem('currentUser'); localStorage.removeItem('user_login_data'); localStorage.removeItem('isLoggedIn'); } } } catch(e) {}
 
             // Electron 桌面版：检查是否已通过 login.html 登录，自动登录跳过第二次登录界面
             // ★ 修复 2026-07-27：APP 端禁止自动登录（用户要求每次打开都必须输入用户名和密码）
             if (window.electronAPI && window.electronAPI.isElectron && !window.electronAPI.isAndroidAPP) {
                 try {
-                    // ★★★ 2026-08-20 【Setup 1.2.81 竞态根治】自动登录前先等 userData 权威配置就绪：
-                    //   loginWindow 登录成功 → 主窗口启动 → checkLoginStatus 常跑在 getAppConfig 回调之前，
-                    //   CONFIG.edition 仍是 asar 的 'cloud_personal'（不在机构版豁免列表）→ 按钮误判为标准版。
-                    //   await __appConfigReady（800ms 超时兜底，IPC 挂死也不卡登录）后再做按钮判定。
-                    try {
-                        if (window.__appConfigReady && typeof window.__appConfigReady.then === 'function') {
-                            await window.__appConfigReady;
-                        }
-                    } catch(_) {}
                     const electronUser = await window.electronAPI.getCurrentUser();
                     if (electronUser) {
                         currentUser = electronUser;
@@ -3268,7 +3579,10 @@ let currentUser = null;
                 }
             }
 
-            await loadRememberedUsers();
+            // ★★ 2026-08-25 网页版不再恢复会话（用户要求"云端网页不要自动登入"）：
+            //   非 Electron 环境登录态已在上方全部清除，直接显示登入框，每次手动登录。
+            //   （原会话恢复分支是自动登入的来源，已移除）
+
             document.getElementById('loginPassword').value = '';
             document.getElementById('loginOverlay').style.display = 'flex';
             currentUser = null;
@@ -4343,9 +4657,6 @@ let currentUser = null;
             const clinicDoctorVal = localStorage.getItem('local_clinicDoctor') || CONFIG.doctorName;
             document.getElementById('clinicName').value = clinicNameVal;
             document.getElementById('clinicNameDisplay').textContent = clinicNameVal;
-            // ★ 2026-08-23 统一：登录框诊所名条跟随基础设置（对齐 public/index.html 既有行为）
-            const initLoginClinicEl = document.getElementById('loginClinicName');
-            if (initLoginClinicEl) initLoginClinicEl.textContent = clinicNameVal;
             document.getElementById('defaultRegFee').value = regFeeVal;
             document.getElementById('defaultDose').value = doseVal;
             const regFeeEl = document.getElementById('registrationFee');
@@ -4425,7 +4736,7 @@ let currentUser = null;
         // ★ bnzc:// 主窗口激活通知与自动激活
         async function showBnzcActivationNotice(data) {
             if (!data || !data.code) return;
-            const typeInfo = getEditionTag();
+            const typeInfo = '机构版';
             const msg = `收到一键激活链接：\n激活码：${data.code}\n${data.clinicName ? '诊所：' + data.clinicName + '\n' : ''}${data.user ? '用户：' + data.user + '\n' : ''}\n\n是否现在激活？`;
             if (confirm(msg)) {
                 try {
@@ -5218,7 +5529,7 @@ let currentUser = null;
             try {
                 const result = await searchFn(patientName, prescriptionNo, createdAt || '');
                 if (!result.success || !result.files || result.files.length === 0) {
-                    // ★ 兜底（与网页/APP端统一）：原生扫描未找到时，使用处方记录中保存的媒体文件元数据（collectAndUpdateMediaFiles 写入）
+                    // ★ 兜底：原生扫描未找到时，使用处方记录中保存的媒体文件元数据（collectAndUpdateMediaFiles 写入）
                     // 覆盖场景：文件名绑定异常/扫描遗漏，但保存处方时已成功收集过文件列表
                     let fallbackFiles = [];
                     try {
@@ -6425,6 +6736,21 @@ let currentUser = null;
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
+                // ★ 网页版：处方签图片同时存入 IndexedDB，否则历史处方的"处方签"查不到/不显示
+                //（照片/录像由 video-recorder.js 入库，处方签此前仅走下载分支，未入库）
+                if (typeof window.addMediaFileWeb === 'function') {
+                    window.addMediaFileWeb({
+                        patientName: (record.patientName || '未知'),
+                        prescriptionNo: prescriptionNo,
+                        createdAt: record.createdAt || new Date().toISOString(),
+                        timestamp: Date.now(),
+                        name: fileName,
+                        type: 'image',
+                        blob: null,
+                        dataUrl: imageData,
+                        size: 0
+                    }).catch(function(e) { console.warn('处方签存IndexedDB失败:', e); });
+                }
             }
         }
 
@@ -6437,6 +6763,9 @@ let currentUser = null;
             if (id === 'analyticsModal') refreshAnalytics();
             if (id === 'settingsModal') {
                 document.getElementById('defaultDoctor').value = document.getElementById('doctorName').value;
+                // ★ 2026-08-23 授权状态即时刷新：打开基础设置时按登录态刷新授权区（统一入口，覆盖F1/按钮/APP所有打开方式）
+                //   未登录="云端版登录即可使用"；已登录="✅ 已激活（机构版/标准版）剩余X天"（auth-core.js）
+                try { if (typeof window.updateLicenseStatusText === 'function') window.updateLicenseStatusText(); } catch (_) {}
                 // APP 端隐藏备份/恢复/清除数据按钮（user_profile.md 规范）
                 if (window.AndroidNative) {
                     document.querySelectorAll('button[onclick="exportData()"], button[onclick="importData()"], button[onclick="clearAllData()"]').forEach(function(btn) { btn.style.display = 'none'; });
@@ -6451,6 +6780,13 @@ let currentUser = null;
         function saveSettings() {
             localStorage.setItem('local_clinicName', document.getElementById('clinicName').value);
             localStorage.setItem('local_clinicDoctor', document.getElementById('defaultDoctor').value);
+            // ★ 2026-08-25 修复：按登录用户另存一份专属医师姓名（local_clinicDoctor_<username>），
+            //   登录时优先读取该用户保存值，避免机构版多医师互相覆盖串名
+            try {
+                if (currentUser && currentUser.username) {
+                    localStorage.setItem('local_clinicDoctor_' + currentUser.username, document.getElementById('defaultDoctor').value);
+                }
+            } catch (e) {}
             localStorage.setItem('local_defaultRegFee', document.getElementById('defaultRegFee').value || '0');
             localStorage.setItem('local_defaultDose', document.getElementById('defaultDose').value || '7');
             
@@ -6464,10 +6800,13 @@ let currentUser = null;
             
             document.getElementById('doctorName').value = document.getElementById('defaultDoctor').value;
             document.getElementById('clinicNameDisplay').textContent = document.getElementById('clinicName').value;
-            // ★ 2026-08-23 统一：保存后同步登录框诊所名条（对齐 public/index.html 既有行为）
-            const savedLoginClinicEl = document.getElementById('loginClinicName');
-            if (savedLoginClinicEl && document.getElementById('clinicName').value) {
-                savedLoginClinicEl.textContent = document.getElementById('clinicName').value;
+            // ★ 2026-08-25 修复：保存医师姓名后立即刷新处方签（此前 paperDoctor 不更新，
+            //   处方签/打印签名一直显示旧名）；打印处方取自同一 DOM，同步生效
+            if (typeof updatePrescriptionPaper === 'function') updatePrescriptionPaper();
+            // ★ 2026-08-17 举一反三：保存诊所名后同步登录框诊所名（登出/重登时跟随最新设置）
+            const _loginClinicEl = document.getElementById('loginClinicName');
+            if (_loginClinicEl && document.getElementById('clinicName').value) {
+                _loginClinicEl.textContent = document.getElementById('clinicName').value;
             }
             // ★ 2026-08-03 同步：保存医师姓名后，立即更新当前用户显示
             const newDoctorName = document.getElementById('defaultDoctor').value;
@@ -6497,15 +6836,11 @@ let currentUser = null;
         }
 
         function showHelp() {
-            var helpLabel = getEditionTag();
-            var isInst = helpLabel.indexOf('机构') >= 0;
-            var helpDesc = isInst ? '机构版：含用户管理+修改密码' : '标准版：单用户+修改密码';
-            var helpFeature = isInst ? '✓ 用户管理（管理员）\n' : '';
-            alert('惠康中医-' + helpLabel + ' V1.0.0\n\n' +
-                  '【版本说明】' + helpDesc + '\n\n' +
+            alert('惠康中医-' + window.getCloudEditionTag() + ' V1.0.0\n\n' +
+                  '【版本说明】机构版：含用户管理+修改密码\n\n' +
                   '【功能列表】\n' +
                   '✓ 处方录入与打印\n✓ 药品管理\n✓ 验方设置\n' +
-                  '✓ 病例管理\n✓ 数据统计\n' + helpFeature +
+                  '✓ 病例管理\n✓ 数据统计\n✓ 用户管理（管理员）\n' +
                   '✓ 修改密码\n✓ 离线自动备份\n✓ Excel导出\n\n' +
                   '【快捷键】\n' +
                   'F1 - 基础设置\nF2 - 药品管理\nF3 - 验方设置\n' +
@@ -7129,7 +7464,7 @@ let currentUser = null;
             
             const data = {
                 exportInfo: {
-                    version: '惠康中医-' + getEditionTag(),
+                    version: '惠康中医-' + window.getCloudEditionTag(),
                     versionCode: 'V1.0.0',
                     versionType: '本地',
                     exportTime: now.toLocaleString('zh-CN'),
@@ -7892,21 +8227,15 @@ let currentUser = null;
                 if (!token) { try { const u = JSON.parse(localStorage.getItem('currentUser') || '{}'); token = u.token || ''; } catch(e) {} }
                 if (!token) { try { token = localStorage.getItem('authToken') || ''; } catch(e) {} }
                 if (token) {
-                    // ★ 2026-08-20 诊断：记录读处方 token 是否有值+前缀，用于排查历史不显示
-                    try { if (window.electronAPI && window.electronAPI.saveUserData) window.electronAPI.saveUserData('login_debug', JSON.stringify({ time: Date.now(), step: 'getAllUserPrescriptions_token', hasToken: !!token, tokenHead: String(token).slice(0, 24) })); } catch(e) {}
-                    // ★ 2026-08-23 修复"桌面端历史处方不及时更新"：
-                    //   1. 裸fetch无 cache:'no-cache'，Electron 可能命中 HTTP 缓存返回旧数据；
-                    //   2. 裸fetch遇401（单设备互斥：账号在其他设备登录后本机token被撤销）不处理，
-                    //      静默回落本地 IndexedDB 旧缓存 → 其他端已删除的处方在本机"复活"。
-                    //   统一改用 cloudFetch：带 no-cache；401 时自动清登录态并弹登录框，
-                    //   重新登录后即可拉到云端最新数据。
+                    // ★ 2026-08-23 修复"历史处方不及时更新"：裸fetch无 no-cache（浏览器可能命中HTTP缓存返回旧数据）；
+                    //   且遇401（单设备互斥：账号在其他设备登录后本机token被撤销）不处理，静默回落本地
+                    //   IndexedDB 旧缓存 → 其他端已删除的处方在本机"复活"。改用 cloudFetch：
+                    //   带 no-cache；401 时自动清登录态并弹登录框，重新登录后拉到云端最新数据。
                     const resp = await cloudFetch(window.CLOUD_API_BASE + '/prescriptions', {
                         method: 'GET',
                         headers: { 'Authorization': 'Bearer ' + token }
                     });
-                    // ★ 2026-08-20 诊断：记录处方拉取结果
-                    try { if (window.electronAPI && window.electronAPI.saveUserData) window.electronAPI.saveUserData('login_debug', JSON.stringify({ time: Date.now(), step: 'getAllUserPrescriptions_resp', success: !!(resp && resp.success), requireAuth: !!(resp && resp.requireAuth), count: (resp && resp.data && resp.data.length) || 0 })); } catch(e) {}
-                    // 401：cloudFetch 已清登录态并弹出登录框，这里直接返回空列表，
+                    // 401：cloudFetch 已清登录态并弹出登录框，直接返回空列表，
                     // 严禁回落本地旧缓存（否则其他端已删处方在本机"复活"）
                     if (resp && resp.requireAuth) return [];
                     if (resp && resp.success && Array.isArray(resp.data)) {
@@ -7914,8 +8243,6 @@ let currentUser = null;
                         // ★ 2026-08-23 云端响应即权威（含空数组）：此前仅 arr.length>0 才采用云端数据，
                         //   云端已删光时回落本地缓存导致旧处方残留；现在空数组同样采用并清空本地缓存
                         {
-                            // ★ 2026-08-23 回归修复：云端数据赋值（上一版本编辑时此行丢失，
-                            //   导致云端20条成功返回却从未写入allPrescriptions→清空本地DB→历史全空）
                             allPrescriptions = arr;
                             // ★ 修复"保存后刷新消失"：合并而非覆盖——保留本地已保存但云端尚未同步的处方
                             try {
@@ -7930,7 +8257,7 @@ let currentUser = null;
                                         if (filterUsername && p.createdBy !== filterUsername) return false;
                                         // ★ 2026-08-23 跨端删除修复：带服务端溯源痕迹（updatedAt/userId，
                                         //   由云端保存回写或历史云端拉取写入）的本地记录若已不在云端列表
-                                        //   = 已在其他设备删除，禁止合并回来（防止已删处方在桌面"复活"）。
+                                        //   = 已在其他设备删除，禁止合并回来（防止已删处方"复活"）。
                                         //   无痕迹 = 纯本机离线保存从未同步 → 保留（离线保存保护）。
                                         if (p.updatedAt || p.userId) return false;
                                         return true;
@@ -7950,11 +8277,7 @@ let currentUser = null;
                         }
                     }
                 }
-            } catch(e) { 
-                console.warn('[getAllUserPrescriptions] 云端API拉取失败:', e.message);
-                // ★ 2026-08-20 诊断增强：记录 fetch 失败的真实错误信息（验证 CSP/网络根因）
-                try { if (window.electronAPI && window.electronAPI.saveUserData) window.electronAPI.saveUserData('login_debug', JSON.stringify({ time: Date.now(), step: 'getAllUserPrescriptions_err', err: String(e && e.message || e) })); } catch(_e) {}
-            }
+            } catch(e) { console.warn('[getAllUserPrescriptions] 云端API拉取失败:', e.message); }
 
             // P7: 云端未返回时，从 IndexedDB prescriptions store 读取
             if (allPrescriptions.length === 0) {

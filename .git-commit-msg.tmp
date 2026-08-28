@@ -1,0 +1,12 @@
+【优化】APP登录框整体与桌面端全局统一（label布局/用户名下拉按钮形态）
+
+- CSS：登录框 label 由 36/40/38px 改为 72/88/66px 固定宽度 + white-space:nowrap → 「手机号/用户名:」单行右对齐，不再折成三行挤占输入框高度
+- CSS：.username-dropdown-btn 改为 overflow:visible；新增 .username-dropdown-count 独立胶囊徽标，贴于按钮右侧 (N) 位置（对齐截图「▼(1)」），避免 27px 窄按钮同一节点写「▼(N)」被挤成两行溢出
+- JS：renderRememberedUsers 用户名下拉按钮不再 textContent='▼(N)'，改 innerHTML='▼<span class="username-dropdown-count">(N)</span>'，与新CSS配合
+- 6副本同步：public/index.html + cloud_desktop + cloud_app/assets/public 云端一致；index.html(根) + db-offline/desktop + db-offline/app/assets/public 离线一致（离线机构版保留紫色 CSS 变量链，不破坏主题色）
+- 重建 .interface-lock.json 基线，check-interface 6/6 通过
+
+生效方式：
+- 云端网页版、云端APP（壳加载远程URL）：已提交，git push 后 Cloudflare Pages 1-2 分钟自动部署，Ctrl+F5 强刷即生效
+- 桌面版各端：若要生效需重新打包 exe（index.html 已变更）
+- APP（云端/离线）重新打包：离线APP因 assets/index.html 已改，需打新 APK；云端APP壳不改（加载远程），但也可重装最新包
