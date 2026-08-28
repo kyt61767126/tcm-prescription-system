@@ -302,57 +302,66 @@
         const menu = document.getElementById('usernameDropdownMenu');
         const input = document.getElementById('loginUsername');
         if (!btn || !menu) return;
-        const list = (Array.isArray(users) && users.length > 0) ? users : _users;
-        // ★ 合并：记住的最近登录账户（localStorage，与网页版同源）在前，本机 config 账户在后
         let merged = [];
         try {
-            const arr = JSON.parse(localStorage.getItem('local_rememberedUsers') || '[]');
-            if (Array.isArray(arr)) {
-                arr.forEach(u => {
-                    const s = String(u || '').trim();
-                    if (s && !LEGACY_USERNAMES.includes(s) && !merged.some(m => String(m.username).toLowerCase() === s.toLowerCase())) {
-                        merged.push({ username: s });
-                    }
-                });
-            }
-        } catch (e) { /* 忽略解析异常 */ }
-        (Array.isArray(list) ? list : []).forEach(u => {
-            if (u && u.username && !merged.some(m => String(m.username).toLowerCase() === String(u.username).toLowerCase())) {
-                merged.push(u);
-            }
-        });
-        // ★ 2026-08-28 下拉显示双保险：若输入框已有预填内容（单键迁移、或任何来源），
-        //   把该用户名也纳入列表，杜绝"有预填但无下拉"
-        if (input) {
-            const currentVal = String(input.value || '').trim();
-            if (currentVal && !LEGACY_USERNAMES.includes(currentVal) &&
-                !merged.some(m => String(m.username).toLowerCase() === currentVal.toLowerCase())) {
-                merged.unshift({ username: currentVal });
-            }
-        }
-        if (merged.length === 0) {
-            btn.style.display = 'none';
-            menu.style.display = 'none';
-            menu.classList.remove('show');
-            return;
-        }
-        btn.style.display = 'flex';
-        btn.textContent = '▼(' + merged.length + ')';
-        menu.innerHTML = '';
-        merged.forEach(u => {
-            if (!u || !u.username) return;
-            const item = document.createElement('div');
-            item.textContent = u.displayName || u.name || u.username;
-            item.addEventListener('click', function (e) {
-                e.stopPropagation();
-                const inputEl = $('loginUsername');
-                if (inputEl) inputEl.value = u.username;
-                const pwd = $('loginPassword');
-                if (pwd) { pwd.value = ''; pwd.focus(); }
-                menu.classList.remove('show');
+            const list = (Array.isArray(users) && users.length > 0) ? users : _users;
+            try {
+                const arr = JSON.parse(localStorage.getItem('local_rememberedUsers') || '[]');
+                if (Array.isArray(arr)) {
+                    arr.forEach(u => {
+                        const s = String(u || '').trim();
+                        if (s && !LEGACY_USERNAMES.includes(s) && !merged.some(m => String(m.username).toLowerCase() === s.toLowerCase())) {
+                            merged.push({ username: s });
+                        }
+                    });
+                }
+            } catch (e) { /* 忽略解析异常 */ }
+            (Array.isArray(list) ? list : []).forEach(u => {
+                if (u && u.username && !merged.some(m => String(m.username).toLowerCase() === String(u.username).toLowerCase())) {
+                    merged.push(u);
+                }
             });
-            menu.appendChild(item);
-        });
+            if (input) {
+                const currentVal = String(input.value || '').trim();
+                if (currentVal && !LEGACY_USERNAMES.includes(currentVal) &&
+                    !merged.some(m => String(m.username).toLowerCase() === currentVal.toLowerCase())) {
+                    merged.unshift({ username: currentVal });
+                }
+            }
+        } catch (e) {
+            console.warn('[login] renderUsernameDropdown 数据构建异常:', e && e.message || e);
+        } finally {
+            try {
+                if (merged.length === 0 && input) {
+                    const v = String(input.value || '').trim();
+                    if (v && !LEGACY_USERNAMES.includes(v)) merged.push({ username: v });
+                }
+                if (merged.length === 0) {
+                    btn.style.display = 'inline-flex';
+                    btn.textContent = '▼';
+                } else {
+                    btn.style.display = 'inline-flex';
+                    btn.textContent = '▼(' + merged.length + ')';
+                    menu.innerHTML = '';
+                    merged.forEach(u => {
+                        if (!u || !u.username) return;
+                        const item = document.createElement('div');
+                        item.textContent = u.displayName || u.name || u.username;
+                        item.addEventListener('click', function (e) {
+                            e.stopPropagation();
+                            const inputEl = document.getElementById('loginUsername');
+                            if (inputEl) inputEl.value = u.username;
+                            const pwd = document.getElementById('loginPassword');
+                            if (pwd) { pwd.value = ''; pwd.focus(); }
+                            menu.classList.remove('show');
+                        });
+                        menu.appendChild(item);
+                    });
+                }
+            } catch (ee) {
+                try { btn.style.display = 'inline-flex'; btn.textContent = '▼'; } catch (_) {}
+            }
+        }
     }
 
     // ★ 2026-08-28 与云端网页版统一：记住用户名（输入框原文 + 最近5个账户数组，网页版 saveRememberedUser 同款）
@@ -669,6 +678,18 @@
 
         // 首次启动检测：诊所名为默认值时弹出配置向导
         checkFirstRun(config);
+
+        // ★ 2026-08-28 下拉显示终极保险：load+setTimeout 再调两次（覆盖 async 时序、localStorage 初始化延迟等场景）
+        window.addEventListener('load', () => {
+            try { if (typeof renderUsernameDropdown === 'function') renderUsernameDropdown(); } catch (_) {}
+            setTimeout(() => {
+                try {
+                    if (typeof renderUsernameDropdown === 'function') renderUsernameDropdown();
+                    const btn = document.getElementById('usernameDropdownBtn');
+                    if (btn) { btn.style.display = 'inline-flex'; if (!btn.textContent.trim()) btn.textContent = '▼'; }
+                } catch (_) {}
+            }, 250);
+        });
     });
 
     // ===== bnzc:// 一键激活 =====
