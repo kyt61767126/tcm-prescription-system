@@ -1088,14 +1088,18 @@ public class MainActivity extends BridgeActivity {
         String js = "(function(){" +
             "  if (window.electronAPI && window.electronAPI.__nativeBridgeProxy) return;" +
             "  function callNative(name, args) {" +
-            "    try { return AndroidNative.invoke(name, JSON.stringify(args)); }" +
-            "    catch(e){ return JSON.stringify({success:false,error:String(e)}); }" +
+            "    try {" +
+            "      var r = AndroidNative.invoke(name, JSON.stringify(args));" +
+            "      if (r === null || r === undefined || r === '' || r === 'null') { return JSON.stringify({success:false, error:'原生桥'+name+'返回空(Java端未捕获异常)'}); }" +
+            "      return r;" +
+            "    } catch(e){ return JSON.stringify({success:false,error:String(e)}); }" +
             "  }" +
             "  function callNativeAsync(name, args) {" +
             "    return new Promise(function(resolve, reject) {" +
             "      try {" +
             "        var r = callNative(name, args);" +
             "        var obj = JSON.parse(r);" +
+            "        if (obj === null || obj === undefined) { resolve({success:false, error:'原生桥'+name+'返回空结果'}); return; }" +
             "        resolve(obj);" +
             "      } catch(e) { reject(e); }" +
             "    });" +
@@ -1421,7 +1425,9 @@ public class MainActivity extends BridgeActivity {
                     default:
                         return fail("unknown method: " + name).toString();
                 }
-            } catch (Exception e) {
+            } catch (Throwable e) {
+                // ★ 2026-08-29 一键备份修复：catch Exception 接不住 Error 级异常，
+                //   WebView 对未捕获 Throwable 返回 null 给 JS → 前端崩溃。改接 Throwable。
                 Log.e("TCM-Pres", "invoke " + name + " 失败", e);
                 return fail(e.getMessage()).toString();
             }

@@ -54,7 +54,14 @@
                     return { success: false, error: 'NativeBridge 返回无效（Java端可能抛异常）' };
                 }
                 console.log(__VR_LOG_PREFIX + ' NativeBridge.' + name + ' 返回长度:', result.length);
-                return JSON.parse(result);
+                var parsed = JSON.parse(result);
+                // ★ 2026-08-29 一键备份修复：Java 端未捕获 Throwable 时 WebView 返回字面量 "null"，
+                //   JSON.parse 后为 null —— 必须拦截，否则前端 result.success 读 null 崩溃
+                if (parsed === null || parsed === undefined) {
+                    console.error(__VR_LOG_PREFIX + ' NativeBridge.' + name + ' 解析结果为 null（Java端未捕获异常）');
+                    return { success: false, error: '原生桥 ' + name + ' 返回 null（Java端未捕获异常）' };
+                }
+                return parsed;
             } catch (e) {
                 console.error(__VR_LOG_PREFIX + ' NativeBridge.' + name + ' 调用异常:', e);
                 return { success: false, error: String(e) };

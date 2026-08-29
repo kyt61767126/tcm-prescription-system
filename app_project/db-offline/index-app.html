@@ -6619,11 +6619,30 @@ let currentUser = null;
             //   改为运行时判断 window.electronAPI（与 importData 一致）。
             if (window.electronAPI && window.electronAPI.saveBackupFile) {
                 const result = await window.electronAPI.saveBackupFile(jsonStr, fileName);
-                if (result.success) {
-                    const backupInfo = `\u5907\u4EFd\u6210\u529F\uFF01\n\n\u5907\u4EFd\u6587\u4EF6\uFF1A${result.fileName}\n\u4FDD\u5B58\u4F4D\u7F6E\uFF1A${result.filePath || 'downloads/中医处方系统/'}\n\n\u5907\u4EFd\u6570\u636E\u7EDF\u8BA1\uFF1A\n\u2022 \u836F\u54C1\u6570\u91CF\uFF1A${medicines.length} 种\n\u2022 \u9A8C\u65B9\u6570\u91CF\uFF1A${formulas.length} 个\n\u2022 \u5904\u65B9\u6570\u91CF\uFF1A${prescriptionHistory.length} 张\n\n\u6587\u4EF6\u5927\u5C0F\uFF1A${(jsonStr.length / 1024).toFixed(1)} KB\n\n\u6CE8\uFF1A\u5907\u4EFD\u4EC5\u5305\u542B\u6587\u5B57\u6570\u636E\uFF08\u836F\u54C1/\u9A8C\u65B9/\u5904\u65B9/\u8D26\u53F7/\u8BBE\u7F6E\uFF09\uFF0C\u7167\u7247\u548C\u89C6\u9891\u4E0D\u5305\u542B\u5728\u5185\u3002`;
+                // ★ 2026-08-29 null 安全：Java 桥未捕获异常时 WebView 返回 null（而非报错），
+                //   绝不让 result.success 读 null 崩溃；桥返回空时直连 AndroidNative 重试并输出诊断
+                let finalResult = (result && typeof result === 'object') ? result : null;
+                let diag = '';
+                if (!finalResult) {
+                    try {
+                        if (window.AndroidNative && typeof window.AndroidNative.invoke === 'function') {
+                            const raw = window.AndroidNative.invoke('saveBackupFile', JSON.stringify({ jsonStr: jsonStr, fileName: fileName }));
+                            diag = '直连桥返回: ' + typeof raw + '(' + (raw && raw.length ? raw.length : 0) + '字节)';
+                            if (typeof raw === 'string' && raw.length > 5 && raw !== 'null') {
+                                finalResult = JSON.parse(raw);
+                            }
+                        } else {
+                            diag = 'AndroidNative=' + typeof window.AndroidNative + ', electronAPI=' + (window.electronAPI.__videoRecorderEnhanced ? '增强版' : (window.electronAPI.__nativeBridgeProxy ? '基础版' : '未知'));
+                        }
+                    } catch (e) { diag += '; 直连异常: ' + String(e); }
+                }
+                if (finalResult && finalResult.success) {
+                    const backupInfo = `\u5907\u4EFd\u6210\u529F\uFF01\n\n\u5907\u4EFd\u6587\u4EF6\uFF1A${finalResult.fileName}\n\u4FDD\u5B58\u4F4D\u7F6E\uFF1A${finalResult.filePath || 'downloads/中医处方系统/'}\n\n\u5907\u4EFd\u6570\u636E\u7EDF\u8BA1\uFF1A\n\u2022 \u836F\u54C1\u6570\u91CF\uFF1A${medicines.length} 种\n\u2022 \u9A8C\u65B9\u6570\u91CF\uFF1A${formulas.length} 个\n\u2022 \u5904\u65B9\u6570\u91CF\uFF1A${prescriptionHistory.length} 张\n\n\u6587\u4EF6\u5927\u5C0F\uFF1A${(jsonStr.length / 1024).toFixed(1)} KB\n\n\u6CE8\uFF1A\u5907\u4EFD\u4EC5\u5305\u542B\u6587\u5B57\u6570\u636E\uFF08\u836F\u54C1/\u9A8C\u65B9/\u5904\u65B9/\u8D26\u53F7/\u8BBE\u7F6E\uFF09\uFF0C\u7167\u7247\u548C\u89C6\u9891\u4E0D\u5305\u542B\u5728\u5185\u3002`;
                     alert(backupInfo);
+                } else if (finalResult) {
+                    alert('备份失败：' + (finalResult.error || '未知错误') + (diag ? '\n诊断：' + diag : ''));
                 } else {
-                    alert('备份失败：' + (result.error || '未知错误'));
+                    alert('备份失败：原生桥返回空（Java端异常）\n诊断：' + (diag || '无') + '\n\n建议：完全退出APP（从最近任务划掉）后重新打开，再试一次。');
                 }
             } else {
                 const blob = new Blob([jsonStr], { type: 'application/json' });
