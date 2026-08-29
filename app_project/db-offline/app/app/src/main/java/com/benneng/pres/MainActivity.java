@@ -86,6 +86,27 @@ public class MainActivity extends BridgeActivity {
     private static final String UPDATE_DOWNLOAD_URL = "https://tcm-prescription-system.pages.dev/download";
     private boolean apkUpdateCheckStarted = false;
 
+    // ★ 2026-08-29 一键备份第三步：文件选择器（importData 恢复数据用）
+    private android.webkit.ValueCallback<android.net.Uri[]> mFilePathCallback;
+    private static final int REQUEST_FILE_CHOOSER = 10086;
+
+    // ★ 2026-08-29 一键备份第三步：文件选择器结果回调（onShowFileChooser 配套）
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == REQUEST_FILE_CHOOSER) {
+            if (mFilePathCallback != null) {
+                android.net.Uri[] results = null;
+                if (resultCode == RESULT_OK && data != null && data.getData() != null) {
+                    results = new android.net.Uri[]{ data.getData() };
+                }
+                mFilePathCallback.onReceiveValue(results);
+                mFilePathCallback = null;
+            }
+            return;
+        }
+        super.onActivityResult(requestCode, resultCode, data);
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         // ★ 全局崩溃捕获：任何未捕获异常写入 crash_logs 目录，便于排查闪退原因
@@ -485,6 +506,25 @@ public class MainActivity extends BridgeActivity {
                     .setNegativeButton("取消", (dialog, which) -> result.cancel())
                     .setOnCancelListener(dialog -> result.cancel())
                     .show();
+                return true;
+            }
+
+            // ★ 2026-08-29 一键备份第三步：文件选择器（importData 的 <input type=file> 在
+            //   Android WebView 需要此回调，否则点击无反应——恢复数据链路断点）
+            @Override
+            public boolean onShowFileChooser(WebView view, android.webkit.ValueCallback<android.net.Uri[]> filePathCallback, FileChooserParams fileChooserParams) {
+                if (mFilePathCallback != null) mFilePathCallback.onReceiveValue(null);
+                mFilePathCallback = filePathCallback;
+                try {
+                    Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+                    intent.addCategory(Intent.CATEGORY_OPENABLE);
+                    intent.setType("*/*");
+                    startActivityForResult(Intent.createChooser(intent, "选择备份文件"), REQUEST_FILE_CHOOSER);
+                } catch (Exception e) {
+                    Log.w(TAG, "onShowFileChooser 启动选择器失败", e);
+                    mFilePathCallback = null;
+                    return false;
+                }
                 return true;
             }
         });

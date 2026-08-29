@@ -58,6 +58,9 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.ByteArrayOutputStream;
+import android.database.Cursor;
+import android.content.ContentUris;
 
 public class MainActivity extends BridgeActivity {
 
@@ -66,6 +69,10 @@ public class MainActivity extends BridgeActivity {
     private static final String CLOUD_HOST = "tcm-prescription-system.pages.dev";
     private static final String CLOUD_URL = "https://" + CLOUD_HOST;
     private static final String TAG = "TCM_Prescription";
+    private static final String BACKUP_SUB_DIR = "中医处方系统";
+    // ★ 2026-08-29 一键备份第三步：文件选择器（importData 恢复数据用）
+    private android.webkit.ValueCallback<android.net.Uri[]> mFilePathCallback;
+    private static final int REQUEST_FILE_CHOOSER = 10086;
     // P3: 原生层期望的网页版本号，与 index.html 中 window.__APP_VERSION__ 保持同步
     // 修改云端逻辑后需同步更新此值与 index.html 中的版本号
     // ★ 2026-08-17 v3：退出按钮语义终极对齐（补丁③）单击立即关APP
@@ -101,6 +108,23 @@ public class MainActivity extends BridgeActivity {
     private static final String UPDATE_MANIFEST_URL = "https://tcm-prescription-system.pages.dev/hash-manifest.json";
     private static final String UPDATE_DOWNLOAD_URL = "https://tcm-prescription-system.pages.dev/download";
     private boolean apkUpdateCheckStarted = false;
+
+    // ★ 2026-08-29 一键备份第三步：文件选择器结果回调（onShowFileChooser 配套）
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == REQUEST_FILE_CHOOSER) {
+            if (mFilePathCallback != null) {
+                Uri[] results = null;
+                if (resultCode == RESULT_OK && data != null && data.getData() != null) {
+                    results = new Uri[]{ data.getData() };
+                }
+                mFilePathCallback.onReceiveValue(results);
+                mFilePathCallback = null;
+            }
+            return;
+        }
+        super.onActivityResult(requestCode, resultCode, data);
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -423,6 +447,25 @@ public class MainActivity extends BridgeActivity {
                     .setNegativeButton("取消", (dialog, which) -> result.cancel())
                     .setOnCancelListener(dialog -> result.cancel())
                     .show();
+                return true;
+            }
+
+            // ★ 2026-08-29 一键备份第三步：文件选择器（importData 的 <input type=file> 在
+            //   Android WebView 需要此回调，否则点击无反应——恢复数据链路断点）
+            @Override
+            public boolean onShowFileChooser(WebView view, android.webkit.ValueCallback<Uri[]> filePathCallback, FileChooserParams fileChooserParams) {
+                if (mFilePathCallback != null) mFilePathCallback.onReceiveValue(null);
+                mFilePathCallback = filePathCallback;
+                try {
+                    Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+                    intent.addCategory(Intent.CATEGORY_OPENABLE);
+                    intent.setType("*/*");
+                    startActivityForResult(Intent.createChooser(intent, "选择备份文件"), REQUEST_FILE_CHOOSER);
+                } catch (Exception e) {
+                    Log.w(TAG, "onShowFileChooser 启动选择器失败", e);
+                    mFilePathCallback = null;
+                    return false;
+                }
                 return true;
             }
 
@@ -1066,6 +1109,8 @@ public class MainActivity extends BridgeActivity {
             "    loginSuccess: function(user) { return new Promise(function(resolve){ try { localStorage.setItem('currentUser', JSON.stringify(user)); resolve(true); } catch(e){ resolve(false); } }); }," +
             "    getCurrentUser: function() { return new Promise(function(resolve){ try { var v = localStorage.getItem('currentUser'); resolve(v ? JSON.parse(v) : null); } catch(e){ resolve(null); } }); }," +
             "    saveBackupFile: function(filename, content) { return callNativeAsync('saveBackupFile', {jsonStr: content, fileName: filename}); }," +
+            "    listBackupFiles: function() { return callNativeAsync('listBackupFiles', {}); }," +
+            "    readBackupFile: function(fileName) { return callNativeAsync('readBackupFile', {fileName: fileName}); }," +
             "    readFileAsBase64: function(filePath) {" +
             "      return new Promise(function(resolve){" +
             "        try {" +
@@ -1342,6 +1387,11 @@ public class MainActivity extends BridgeActivity {
                     case "saveBackupFile":
                         return saveBackupFile(args.optString("jsonStr", ""),
                                 args.optString("fileName", "")).toString();
+                    // ★ 2026-08-29 一键备份第三步：列出/读取备份文件（importData 一键恢复）
+                    case "listBackupFiles":
+                        return listBackupFiles().toString();
+                    case "readBackupFile":
+                        return readBackupFile(args.optString("fileName", "")).toString();
                     case "findMediaFiles":
                         return findMediaFiles(args.optString("patientName", ""),
                                 args.optString("prescriptionNo", ""),
@@ -1671,7 +1721,7 @@ public class MainActivity extends BridgeActivity {
                     safeName = "backup_" + System.currentTimeMillis() + ".json";
                 }
 
-                String subDir = "中医处方系统";
+                String subDir = BACKUP_SUB_DIR;
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     ContentValues values = new ContentValues();
@@ -1716,6 +1766,124 @@ public class MainActivity extends BridgeActivity {
                 }
             } catch (Exception e) {
                 Log.e("TCM-Pres", "saveBackupFile 失败", e);
+                return fail(e.getMessage());
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // ★ 2026-08-29 一键备份第三步：列出公共 Downloads/中医处方系统/ 下的备份文件
+        //   （按修改时间倒序，最多 20 个；换机/重装后本地数据清空，凭备份文件可完整恢复）
+        //   与离线APP同名桥对齐，importData 优先走此列表（小白一键恢复）
+        // ------------------------------------------------------------------
+        private JSONObject listBackupFiles() {
+            try {
+                java.util.List<JSONObject> files = new java.util.ArrayList<>();
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    String selection = MediaStore.Downloads.RELATIVE_PATH + " LIKE ?";
+                    String[] selectionArgs = new String[]{
+                            Environment.DIRECTORY_DOWNLOADS + "/" + BACKUP_SUB_DIR + "/%"};
+                    String sortOrder = MediaStore.Downloads.DATE_MODIFIED + " DESC";
+                    try (Cursor cursor = getContentResolver().query(
+                            MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                            new String[]{
+                                    MediaStore.Downloads.DISPLAY_NAME,
+                                    MediaStore.Downloads.DATE_MODIFIED,
+                                    MediaStore.Downloads.SIZE},
+                            selection, selectionArgs, sortOrder)) {
+                        if (cursor != null) {
+                            int shown = 0;
+                            while (cursor.moveToNext() && shown < 20) {
+                                String name = cursor.getString(0);
+                                if (name == null || !name.endsWith(".json")) continue;
+                                JSONObject f = new JSONObject();
+                                f.put("fileName", name);
+                                f.put("lastModified", cursor.getLong(1) * 1000L);
+                                f.put("size", cursor.getLong(2));
+                                files.add(f);
+                                shown++;
+                            }
+                        }
+                    }
+                } else {
+                    File dir = new File(Environment.getExternalStoragePublicDirectory(
+                            Environment.DIRECTORY_DOWNLOADS), BACKUP_SUB_DIR);
+                    File[] list = dir.listFiles();
+                    if (list != null) {
+                        java.util.Arrays.sort(list, (a, b) -> Long.compare(b.lastModified(), a.lastModified()));
+                        for (int i = 0; i < list.length && files.size() < 20; i++) {
+                            File f = list[i];
+                            if (!f.isFile() || !f.getName().endsWith(".json")) continue;
+                            JSONObject o = new JSONObject();
+                            o.put("fileName", f.getName());
+                            o.put("lastModified", f.lastModified());
+                            o.put("size", f.length());
+                            files.add(o);
+                        }
+                    }
+                }
+                JSONObject r = new JSONObject();
+                r.put("success", true);
+                r.put("files", new JSONArray(files));
+                return r;
+            } catch (Exception e) {
+                Log.e("TCM-Pres", "listBackupFiles 失败", e);
+                return fail(e.getMessage());
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // ★ 2026-08-29 一键备份第三步：读取指定备份文件内容
+        //   （白名单：仅 Downloads/中医处方系统/ 下 .json，防任意文件读取）
+        // ------------------------------------------------------------------
+        private JSONObject readBackupFile(String fileName) {
+            try {
+                String safeName = sanitize(fileName);
+                if (!safeName.endsWith(".json") || safeName.contains("/")) {
+                    return fail("非法备份文件名");
+                }
+                byte[] content;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    String selection = MediaStore.Downloads.RELATIVE_PATH + " LIKE ? AND "
+                            + MediaStore.Downloads.DISPLAY_NAME + " = ?";
+                    String[] args = new String[]{
+                            Environment.DIRECTORY_DOWNLOADS + "/" + BACKUP_SUB_DIR + "/%", safeName};
+                    try (Cursor cursor = getContentResolver().query(
+                            MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                            new String[]{MediaStore.Downloads._ID},
+                            selection, args, null)) {
+                        if (cursor == null || !cursor.moveToFirst()) {
+                            return fail("备份文件不存在: " + safeName);
+                        }
+                        Uri uri = ContentUris.withAppendedId(
+                                MediaStore.Downloads.EXTERNAL_CONTENT_URI, cursor.getLong(0));
+                        try (InputStream is = getContentResolver().openInputStream(uri)) {
+                            if (is == null) return fail("无法打开备份文件");
+                            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                            byte[] buf = new byte[8192];
+                            int len;
+                            while ((len = is.read(buf)) > 0) baos.write(buf, 0, len);
+                            content = baos.toByteArray();
+                        }
+                    }
+                } else {
+                    File dir = new File(Environment.getExternalStoragePublicDirectory(
+                            Environment.DIRECTORY_DOWNLOADS), BACKUP_SUB_DIR);
+                    File file = new File(dir, safeName);
+                    if (!file.exists()) return fail("备份文件不存在: " + safeName);
+                    try (InputStream fis = new java.io.FileInputStream(file)) {
+                        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                        byte[] buf = new byte[8192];
+                        int len;
+                        while ((len = fis.read(buf)) > 0) baos.write(buf, 0, len);
+                        content = baos.toByteArray();
+                    }
+                }
+                JSONObject r = new JSONObject();
+                r.put("success", true);
+                r.put("json", new String(content, "UTF-8"));
+                return r;
+            } catch (Exception e) {
+                Log.e("TCM-Pres", "readBackupFile 失败", e);
                 return fail(e.getMessage());
             }
         }

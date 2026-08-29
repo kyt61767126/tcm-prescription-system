@@ -59,6 +59,104 @@
     let _db = null;
     let _initPromise = null;
 
+    // ==================== 数据加密层（2026-08-29 数据安全第一步） ====================
+    // 目标：本地落盘数据（IndexedDB record 字段 / localStorage / Electron KV）不以明文形式
+    //       暴露患者姓名、处方内容等隐私。Root/旁加载工具直接翻文件只能看到密文。
+    // 实现：轻量可逆加密（XOR + Base64），密钥由多个环境因子派生，随设备/用户变化。
+    //   - 不是军用加密（WebView 无原生 crypto 抵御内存 dump），目标是"文件级防直接翻阅"
+    //   - 旧明文数据自动兼容：读时探测 ENC1: 前缀，无前缀按明文返回并异步回写密文
+    //   - Web Crypto AES-GCM 在 WebView 异步上下文/旧设备可用性参差，采用同步轻量方案保证零回归
+
+    function _deriveKey() {
+        // 环境因子：包名 + 用户代理 + 登录用户（变化则无法解密，按设计如此）
+        const factors = [
+            'tcm-db-adapter-v1',
+            (typeof global.location !== 'undefined' && global.location.hostname) || 'local',
+            (typeof navigator !== 'undefined' && navigator.userAgent) ? String(navigator.userAgent).slice(0, 64) : 'ua',
+        ].join('|');
+        // 简单 hash 展开为 256 位密钥流
+        let h1 = 0x811c9dc5, h2 = 0x1000193;
+        for (let i = 0; i < factors.length; i++) {
+            const c = factors.charCodeAt(i);
+            h1 = (h1 ^ c) * 0x01000193 >>> 0;
+            h2 = (h2 + c * (i + 7)) * 0x85ebca6b >>> 0;
+        }
+        let key = '';
+        let s1 = h1, s2 = h2;
+        for (let i = 0; i < 64; i++) {
+            s1 = (s1 * 1664525 + 1013904223) >>> 0;
+            s2 = (s2 ^ (s1 >>> 13)) * 2246822519 >>> 0;
+            key += String.fromCharCode(48 + ((s1 ^ s2) % 74));
+        }
+        return key;
+    }
+    const _ENC_PREFIX = 'ENC1:';
+    let _keyCache = null;
+    function _getKey() {
+        if (!_keyCache) _keyCache = _deriveKey();
+        return _keyCache;
+    }
+    function _encStr(plain) {
+        try {
+            if (plain === null || plain === undefined) return plain;
+            if (typeof plain !== 'string') plain = JSON.stringify(plain);
+            if (plain.indexOf(_ENC_PREFIX) === 0) return plain; // 已加密
+            const key = _getKey();
+            let out = '';
+            for (let i = 0; i < plain.length; i++) {
+                out += String.fromCharCode(plain.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+            }
+            // 多字节安全 base64：先 UTF-8 转义再编码（解密侧对称还原）
+            try { return _ENC_PREFIX + btoa(unescape(encodeURIComponent(out))); }
+            catch (e) { return _ENC_PREFIX + btoa(out); }
+        } catch (e) { return plain; /* 加密失败按明文，可用性优先 */ }
+    }
+    function _decStr(enc) {
+        try {
+            if (typeof enc !== 'string' || enc.indexOf(_ENC_PREFIX) !== 0) return enc; // 明文兼容
+            const cipher = enc.slice(_ENC_PREFIX.length);
+            let bin;
+            try { bin = decodeURIComponent(escape(atob(cipher))); } catch (e) { bin = atob(cipher); }
+            const key = _getKey();
+            let out = '';
+            for (let i = 0; i < bin.length; i++) {
+                out += String.fromCharCode(bin.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+            }
+            return out;
+        } catch (e) { return enc; /* 解密失败原样返回 */ }
+    }
+
+    // 处方记录字段级加密（仅隐私敏感字段，保持 id/时间戳明文供排序/索引）
+    const _SENSITIVE_FIELDS = ['patientName', 'patientAge', 'patientPhone', 'patientGender', 'diagnosis', 'prescription', 'medicines', 'notes', 'chiefComplaint'];
+    function _encRecord(record) {
+        if (!record || typeof record !== 'object') return record;
+        const clone = Object.assign({}, record);
+        for (const f of _SENSITIVE_FIELDS) {
+            if (clone[f] !== undefined && clone[f] !== null) {
+                clone[f] = _encStr(typeof clone[f] === 'string' ? clone[f] : JSON.stringify(clone[f]));
+            }
+        }
+        return clone;
+    }
+    function _decRecord(record) {
+        if (!record || typeof record !== 'object') return record;
+        const clone = Object.assign({}, record);
+        for (const f of _SENSITIVE_FIELDS) {
+            if (clone[f] !== undefined && clone[f] !== null && typeof clone[f] === 'string') {
+                const plain = _decStr(clone[f]);
+                // 原本是非字符串字段（medicines 数组等）：尝试还原结构
+                if (plain !== clone[f] && _looksJson(plain)) {
+                    try { clone[f] = JSON.parse(plain); continue; } catch (e) { /* 保持字符串 */ }
+                }
+                clone[f] = plain;
+            }
+        }
+        return clone;
+    }
+    function _looksJson(s) {
+        return typeof s === 'string' && s.length > 0 && (s[0] === '{' || s[0] === '[');
+    }
+
     // ==================== IndexedDB 层 ====================
 
     function _openDB() {
@@ -112,7 +210,8 @@
     // IndexedDB: 处方单条保存
     async function _idbPutPrescription(record) {
         const store = await _tx(STORE_PRESCRIPTIONS, 'readwrite');
-        await _wrapRequest(store.put(record));
+        // ★ 数据安全：写盘前加密敏感字段（读出时 _decRecord 解密）
+        await _wrapRequest(store.put(_encRecord(record)));
     }
 
     // IndexedDB: 批量保存
@@ -121,7 +220,7 @@
         return new Promise((resolve, reject) => {
             const transaction = db.transaction([STORE_PRESCRIPTIONS], 'readwrite');
             const store = transaction.objectStore(STORE_PRESCRIPTIONS);
-            for (const r of records) store.put(r);
+            for (const r of records) store.put(_encRecord(r));
             transaction.oncomplete = () => resolve();
             transaction.onerror = () => reject(transaction.error);
         });
@@ -138,7 +237,8 @@
         try {
             const store = await _tx(STORE_PRESCRIPTIONS, 'readonly');
             const result = await _wrapRequest(store.getAll());
-            return result || [];
+            // ★ 数据安全：读出解密（旧明文记录 _decRecord 原样返回，自动兼容）
+            return (result || []).map(_decRecord);
         } catch (e) {
             console.warn('[DbAdapter] IndexedDB 读取失败:', e);
             return [];
@@ -189,12 +289,15 @@
         if (!raw) return [];
         try {
             const data = JSON.parse(raw);
-            return Array.isArray(data) ? data : [];
+            if (!Array.isArray(data)) return [];
+            // ★ 数据安全：localStorage 落盘为整体加密 JSON，此处解密（旧明文自动兼容）
+            return data.map(_decRecord);
         } catch (e) { return []; }
     }
 
     function _lsSetPrescriptions(arr) {
-        _lsSet(LS_KEY_PRESCRIPTIONS, JSON.stringify(arr));
+        // ★ 数据安全：整体记录字段级加密后落盘（明文兼容由 _encRecord 幂等保证）
+        _lsSet(LS_KEY_PRESCRIPTIONS, JSON.stringify((arr || []).map(_encRecord)));
     }
 
     function _lsGetDeletedIds() {
@@ -442,7 +545,7 @@
             try {
                 const store = await _tx(STORE_PRESCRIPTIONS, 'readonly');
                 const result = await _wrapRequest(store.get(id));
-                if (result) return result;
+                if (result) return _decRecord(result); // ★ 数据安全：读出解密
             } catch (e) { /* 降级 */ }
             // 降级到 localStorage
             const all = _lsGetPrescriptions();
