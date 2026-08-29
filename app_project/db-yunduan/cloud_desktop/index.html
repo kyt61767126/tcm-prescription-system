@@ -13,40 +13,40 @@
             --shadow: 3px 3px 10px rgba(0,0,0,0.3);
             --touch-min-height: 44px;
             --mobile-font-size: 16px;
-            /* ★ 2026-08-23 根治三屏闪-刀1：默认主题 = 蓝色标准版（云端统一版默认标准版）。
-               原"默认紫色机构版+JS加edition-standard切蓝"在JS/网络慢时首帧必出紫色（图片1）。
-               现在默认即蓝，机构版才需要JS加 edition-org 类切紫 → 首帧必蓝，不依赖任何JS。 */
-            --login-primary: #0ea5e9;
-            --login-secondary: #06b6d4;
-            --login-gradient: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
-            --login-header-gradient: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
-            --login-accent: #0ea5e9;
-            --login-accent-light: rgba(14, 165, 233, 0.1);
-            --login-btn-gradient: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
+            /* ★ 2026-08-29 全端统一紫色：默认主题 = 紫（#667eea 系，与桌面/离线端登录完全一致）。
+               2026-08-23"默认蓝+JS切紫"方案废弃——三处主题值（:root / edition-org / edition-standard）
+               均为同一紫色，JS 按版本切类不产生任何视觉变化，首帧恒紫，彻底无闪色。 */
+            --login-primary: #667eea;
+            --login-secondary: #764ba2;
+            --login-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --login-header-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --login-accent: #667eea;
+            --login-accent-light: rgba(102, 126, 234, 0.1);
+            --login-btn-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             --login-version-label: '标准版';
             --login-version-icon: '🏥';
         }
         /* ★ 2026-08-23 根治三屏闪-刀1：机构版改为显式类切换紫色（原为默认值，现反转） */
         :root.edition-org {
-            --login-primary: #6366f1;
-            --login-secondary: #8b5cf6;
-            --login-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-            --login-header-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-            --login-accent: #6366f1;
-            --login-accent-light: rgba(99, 102, 241, 0.1);
-            --login-btn-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            --login-primary: #667eea;
+            --login-secondary: #764ba2;
+            --login-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --login-header-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --login-accent: #667eea;
+            --login-accent-light: rgba(102, 126, 234, 0.1);
+            --login-btn-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             --login-version-label: '机构版';
             --login-version-icon: '🏛️';
         }
         /* 标准版主题（与默认值相同，保留兼容旧逻辑 add('edition-standard') 的调用方） */
         :root.edition-standard {
-            --login-primary: #0ea5e9;
-            --login-secondary: #06b6d4;
-            --login-gradient: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
-            --login-header-gradient: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
-            --login-accent: #0ea5e9;
-            --login-accent-light: rgba(14, 165, 233, 0.1);
-            --login-btn-gradient: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
+            --login-primary: #667eea;
+            --login-secondary: #764ba2;
+            --login-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --login-header-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --login-accent: #667eea;
+            --login-accent-light: rgba(102, 126, 234, 0.1);
+            --login-btn-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             --login-version-label: '标准版';
             --login-version-icon: '🏥';
         }
@@ -183,8 +183,8 @@
         .username-dropdown-menu div { padding: 10px 12px; font-size: 12px; color: #333; cursor: pointer; transition: background 0.2s; }
         .username-dropdown-menu div:hover { background: var(--login-accent); color: white; }
         .login-buttons { display: flex; gap: 10px; }
-        .login-btn { flex: 1; padding: 11px; background: var(--login-btn-gradient); color: #fff; border: none; border-radius: 10px; font-size: 13px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 15px rgba(99, 102, 241, 0.35); transition: all 0.25s ease; position: relative; overflow: hidden; }
-        .login-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(99, 102, 241, 0.45); }
+        .login-btn { flex: 1; padding: 11px; background: var(--login-btn-gradient); color: #fff; border: none; border-radius: 10px; font-size: 13px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.35); transition: all 0.25s ease; position: relative; overflow: hidden; }
+        .login-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(102, 126, 234, 0.45); }
         .login-btn:active:not(:disabled) { transform: translateY(0); }
         .login-btn:disabled { opacity: 0.7; cursor: not-allowed; }
         .login-btn.cancel { background: linear-gradient(135deg, #f5f5f5 0%, #e0e0e0 100%); color: #666; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); }
