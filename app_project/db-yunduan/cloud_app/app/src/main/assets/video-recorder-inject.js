@@ -351,6 +351,7 @@
             oldAPI.deleteFile = newAPI.deleteFile;
             oldAPI.renameMediaFiles = newAPI.renameMediaFiles;
             oldAPI.getVideoDirectory = newAPI.getVideoDirectory;
+            oldAPI.saveBackupFile = newAPI.saveBackupFile; // ★ 2026-08-29：基础 shim 参数顺序曾写反，统一覆盖为正确版
             oldAPI.__videoRecorderEnhanced = true;
             // 恢复旧对象为 electronAPI
             window.electronAPI = oldAPI;

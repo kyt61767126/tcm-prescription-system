@@ -6610,11 +6610,14 @@ let currentUser = null;
             // 生成 JSON 字符串
             const jsonStr = JSON.stringify(data, null, 2);
 
-            // 保存文件：Electron 环境用 IPC 直接写文件，浏览器用 a.click 下载
-            if (IS_ELECTRON && window.electronAPI && window.electronAPI.saveBackupFile) {
+            // 保存文件：Electron/APP 用 IPC/原生桥直接写文件，浏览器用 a.click 下载
+            // ★ 2026-08-29 修复：APP 端 electronAPI shim 在 onPageFinished 注入，const IS_ELECTRON 在页面
+            //   脚本加载时已固化为 false，导致 APP 走浏览器下载分支（离线APP点击备份无反应）。
+            //   改为运行时判断 window.electronAPI（与 importData 一致）。
+            if (window.electronAPI && window.electronAPI.saveBackupFile) {
                 const result = await window.electronAPI.saveBackupFile(jsonStr, fileName);
                 if (result.success) {
-                    const backupInfo = `\u5907\u4EFd\u6210\u529F\uFF01\n\n\u5907\u4EFd\u6587\u4EF6\uFF1A${result.fileName}\n\u4FDD\u5B58\u8DEF\u5F84\uFF1Adownloads/中医处方系统/\n\n\u5907\u4EFd\u6570\u636E\u7EDF\u8BA1\uFF1A\n\u2022 \u836F\u54C1\u6570\u91CF\uFF1A${medicines.length} 种\n\u2022 \u9A8C\u65B9\u6570\u91CF\uFF1A${formulas.length} 个\n\u2022 \u5904\u65B9\u6570\u91CF\uFF1A${prescriptionHistory.length} 张\n\n\u6587\u4EF6\u5927\u5C0F\uFF1A${(jsonStr.length / 1024).toFixed(1)} KB\n\n\u6CE8\uFF1A\u5907\u4EFD\u4EC5\u5305\u542B\u6587\u5B57\u6570\u636E\uFF08\u836F\u54C1/\u9A8C\u65B9/\u5904\u65B9/\u8D26\u53F7/\u8BBE\u7F6E\uFF09\uFF0C\u7167\u7247\u548C\u89C6\u9891\u4E0D\u5305\u542B\u5728\u5185\u3002`;
+                    const backupInfo = `\u5907\u4EFd\u6210\u529F\uFF01\n\n\u5907\u4EFd\u6587\u4EF6\uFF1A${result.fileName}\n\u4FDD\u5B58\u4F4D\u7F6E\uFF1A${result.filePath || 'downloads/中医处方系统/'}\n\n\u5907\u4EFd\u6570\u636E\u7EDF\u8BA1\uFF1A\n\u2022 \u836F\u54C1\u6570\u91CF\uFF1A${medicines.length} 种\n\u2022 \u9A8C\u65B9\u6570\u91CF\uFF1A${formulas.length} 个\n\u2022 \u5904\u65B9\u6570\u91CF\uFF1A${prescriptionHistory.length} 张\n\n\u6587\u4EF6\u5927\u5C0F\uFF1A${(jsonStr.length / 1024).toFixed(1)} KB\n\n\u6CE8\uFF1A\u5907\u4EFD\u4EC5\u5305\u542B\u6587\u5B57\u6570\u636E\uFF08\u836F\u54C1/\u9A8C\u65B9/\u5904\u65B9/\u8D26\u53F7/\u8BBE\u7F6E\uFF09\uFF0C\u7167\u7247\u548C\u89C6\u9891\u4E0D\u5305\u542B\u5728\u5185\u3002`;
                     alert(backupInfo);
                 } else {
                     alert('备份失败：' + (result.error || '未知错误'));

@@ -1108,7 +1108,7 @@ public class MainActivity extends BridgeActivity {
             "    getUserData: function(key) { return new Promise(function(resolve){ try { var v = localStorage.getItem(key); resolve(v ? JSON.parse(v) : null); } catch(e){ resolve(null); } }); }," +
             "    loginSuccess: function(user) { return new Promise(function(resolve){ try { localStorage.setItem('currentUser', JSON.stringify(user)); resolve(true); } catch(e){ resolve(false); } }); }," +
             "    getCurrentUser: function() { return new Promise(function(resolve){ try { var v = localStorage.getItem('currentUser'); resolve(v ? JSON.parse(v) : null); } catch(e){ resolve(null); } }); }," +
-            "    saveBackupFile: function(filename, content) { return callNativeAsync('saveBackupFile', {jsonStr: content, fileName: filename}); }," +
+            "    saveBackupFile: function(jsonStr, fileName) { return callNativeAsync('saveBackupFile', {jsonStr: jsonStr, fileName: fileName}); }," +
             "    listBackupFiles: function() { return callNativeAsync('listBackupFiles', {}); }," +
             "    readBackupFile: function(fileName) { return callNativeAsync('readBackupFile', {fileName: fileName}); }," +
             "    readFileAsBase64: function(filePath) {" +
