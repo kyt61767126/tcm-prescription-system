@@ -34,6 +34,21 @@ if ($probe) { $script:RootDir = $probe }
 # Set NO_PAUSE=1 so child build.bat / build-app.bat don't pause at end
 $env:NO_PAUSE = '1'
 
+# ★ 2026-08-29 打包全流程日志持久化：Start-Transcript 落盘到 .build-cache\logs\
+#   背景：build-pack.bat 失败横幅只报退出码不含根因，控制台一关根因即丢失
+#   （2026-08-29 14:37 一键打包 6→1 出现红色 === 横幅，事后无从回溯的教训）
+#   子进程 cmd/gradle 输出同控制台，全部被转录；子 bat 通过 PACK_LOG_FILE 环境变量
+#   在失败横幅处回显日志路径，实现"任何失败均可事后取证"
+$script:LogDir = Join-Path $script:RootDir '.build-cache\logs'
+if (-not (Test-Path $script:LogDir)) { New-Item -ItemType Directory -Path $script:LogDir -Force | Out-Null }
+$script:LogFile = Join-Path $script:LogDir ("pack-{0}.log" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
+$env:PACK_LOG_FILE = $script:LogFile
+try { Start-Transcript -Path $script:LogFile -ErrorAction Stop | Out-Null } catch { Write-Host "[WARN] 打包日志转录启动失败(不影响打包): $_" -ForegroundColor Yellow }
+Write-Host "[LOG] 本次打包日志: $script:LogFile" -ForegroundColor DarkGray
+# 只保留最近 20 份日志，避免无限膨胀
+Get-ChildItem $script:LogDir -Filter 'pack-*.log' -File -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTime -Descending | Select-Object -Skip 20 | Remove-Item -Force -ErrorAction SilentlyContinue
+
 # ★ 2026-08-24 打包增量检测（tools/build-skip.ps1）：
 #   本次会话实际执行了打包的单元（SKIP 的不计入），副作用 AutoCommit 后统一记录基线
 $script:BuiltUnits = @()
@@ -46,6 +61,7 @@ if (Test-Path $gateTool) {
     if ($LASTEXITCODE -ne 0) {
         Write-Host ""
         Write-Host "[FATAL] 打包验收门未通过，打包中止。请修复上述问题后重试。" -ForegroundColor Red
+        Write-Host "  完整日志: $script:LogFile" -ForegroundColor Yellow
         if (-not $env:NO_PAUSE) { pause }
         exit 1
     }
@@ -305,6 +321,7 @@ function Build-Cloud {
             if ($rc -ne 0) {
                 Write-Host ""
                 Write-Host "[ERROR] 云端桌面打包失败，退出码: $rc" -ForegroundColor Red
+                Write-Host "  完整日志: $script:LogFile" -ForegroundColor Yellow
                 pause
                 return $rc
             }
@@ -327,6 +344,7 @@ function Build-Cloud {
             if ($rc -ne 0) {
                 Write-Host ""
                 Write-Host "[ERROR] 云端APP打包失败，退出码: $rc" -ForegroundColor Red
+                Write-Host "  完整日志: $script:LogFile" -ForegroundColor Yellow
                 pause
                 return $rc
             }
@@ -410,6 +428,7 @@ function Build-Offline {
             if ($rc -ne 0) {
                 Write-Host ""
                 Write-Host "[ERROR] 离线$verLabel 桌面打包失败，退出码: $rc" -ForegroundColor Red
+                Write-Host "  完整日志: $script:LogFile" -ForegroundColor Yellow
                 pause
                 return $rc
             }
@@ -433,6 +452,7 @@ function Build-Offline {
             if ($rc -ne 0) {
                 Write-Host ""
                 Write-Host "[ERROR] 离线$verLabel APP打包失败，退出码: $rc" -ForegroundColor Red
+                Write-Host "  完整日志: $script:LogFile" -ForegroundColor Yellow
                 pause
                 return $rc
             }
@@ -476,6 +496,7 @@ function Build-All {
         Write-Host "  全部2个版本打包结束（含失败项！）: $allEnd" -ForegroundColor Yellow
         if ($rcCloud -ne 0)   { Write-Host "  - 云端版打包失败，退出码: $rcCloud" -ForegroundColor Red }
         if ($rcOffline -ne 0) { Write-Host "  - 本地版打包失败，退出码: $rcOffline" -ForegroundColor Red }
+        Write-Host "  完整日志: $script:LogFile" -ForegroundColor Yellow
     } else {
         Write-Host "  全部2个版本打包完成！" -ForegroundColor Green
         Write-Host "  开始: $allStart" -ForegroundColor Green
@@ -531,7 +552,7 @@ function Show-PickVersionMenu {
                 if ($prc -is [array]) { $prc = [int]$prc[-1] }
                 if ($prc -ne 0) {
                     Write-Host ""
-                    Write-Host "[ERROR] 云端$modeLabel打包失败，退出码: $prc（详见上方日志）" -ForegroundColor Red
+                    Write-Host "[ERROR] 云端$modeLabel打包失败，退出码: $prc（完整日志: $script:LogFile）" -ForegroundColor Red
                     pause
                 }
                 Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits
@@ -542,7 +563,7 @@ function Show-PickVersionMenu {
                 if ($prc -is [array]) { $prc = [int]$prc[-1] }
                 if ($prc -ne 0) {
                     Write-Host ""
-                    Write-Host "[ERROR] 本地$modeLabel打包失败，退出码: $prc（详见上方日志）" -ForegroundColor Red
+                    Write-Host "[ERROR] 本地$modeLabel打包失败，退出码: $prc（完整日志: $script:LogFile）" -ForegroundColor Red
                     pause
                 }
                 Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits
@@ -558,12 +579,12 @@ function Show-PickVersionMenu {
                 if (-not $rcOffline) { $rcOffline = 0 }
                 if ($rcCloud -ne 0) {
                     Write-Host ""
-                    Write-Host "[ERROR] 云端$modeLabel打包失败，退出码: $rcCloud（详见上方日志）" -ForegroundColor Red
+                    Write-Host "[ERROR] 云端$modeLabel打包失败，退出码: $rcCloud（完整日志: $script:LogFile）" -ForegroundColor Red
                     pause
                 }
                 if ($rcOffline -ne 0) {
                     Write-Host ""
-                    Write-Host "[ERROR] 本地$modeLabel打包失败，退出码: $rcOffline（详见上方日志）" -ForegroundColor Red
+                    Write-Host "[ERROR] 本地$modeLabel打包失败，退出码: $rcOffline（完整日志: $script:LogFile）" -ForegroundColor Red
                     pause
                 }
                 Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits

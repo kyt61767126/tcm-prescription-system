@@ -106,6 +106,9 @@ goto :main
 
         powershell -NoProfile -Command "Write-Host '========================================' -ForegroundColor Red"
 
+        REM ★ 2026-08-29 一键打包入口已启动全流程日志转录, 此处回显路径供事后回溯根因
+        if defined PACK_LOG_FILE powershell -NoProfile -Command "Write-Host '  完整日志: %PACK_LOG_FILE%' -ForegroundColor Yellow"
+
     ) else (
 
         powershell -NoProfile -Command "Write-Host '========================================' -ForegroundColor Yellow"
@@ -130,7 +133,10 @@ goto :main
 
     )
 
-    exit /b %EXIT_CODE%
+    REM ★ 2026-08-29 退出码修复: 原exit /b处于call子程序上下文, 返回调用者后goto :eof
+    REM   结束批处理, 进程退出码实测丢失恒0, 一键打包误判成功并把失败构建记成成功基线。
+    REM   exit不带/b直接终止cmd进程并携带退出码; 调用方末行均为exit /b收尾, 不依赖call返回。
+    exit %EXIT_CODE%
 
 
 
