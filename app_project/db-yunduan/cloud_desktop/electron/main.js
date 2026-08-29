@@ -148,7 +148,8 @@ function ensureDirWithFallback(name, { rethrow = false } = {}) {
 }
 
 function getDataDirectory() {
-    return ensureDirWithFallback('data');
+    // ★ 2026-08-29 v3 数据集中：与媒体同根（安装盘\惠康中医媒体\data），备份/换机只拷一个文件夹
+    return getCentralDataDir();
 }
 
 // ★ 获取可写的 config.json 路径（打包后 asar 只读，必须用 exe 目录或 userData）
@@ -227,6 +228,38 @@ function getAllMediaRoots() {
     try { roots.push(path.resolve(getExeDirectory(), 'downloads')); } catch(e) {}
     try { roots.push(path.resolve(app.getPath('userData'), 'downloads')); } catch(e) {}
     return Array.from(new Set(roots));
+}
+
+// ★ 2026-08-29 数据集中 v3（用户要求"所有信息都在 D 盘一处"）：
+//   处方文字数据（save-user-data 的 data/*.json）同样保存到「安装盘根目录\惠康中医媒体\data」。
+//   与媒体同根 → 备份/换机只需拷贝一个「惠康中医媒体」文件夹。
+//   - NSIS 安装版：安装盘\惠康中医媒体\data；创建失败回退 userData/data（可用性优先）
+//   - 便携版：保持 exe 同级 data（便携特性：拷目录即迁移）
+//   ★ 兼容读取：getAppDataDir（下）返回候选目录数组，读数据时旧位置仍可读（自动迁移在 whenReady）
+let _centralDataDir = null; // 缓存实际选定的数据目录（保存/迁移目标）
+function getCentralDataDir() {
+    if (_centralDataDir) return _centralDataDir;
+    if (process.env.PORTABLE_EXECUTABLE_DIR) {
+        _centralDataDir = ensureDirWithFallback('data');
+    } else {
+        try {
+            const driveRoot = path.parse(getExeDirectory()).root;
+            _centralDataDir = ensureDirWithFallback(path.join(driveRoot, '惠康中医媒体', 'data'), { rethrow: true });
+        } catch (e) {
+            console.warn('[Data] 安装盘根目录不可写，回退 userData/data:', e.message);
+            _centralDataDir = ensureDirWithFallback(path.join(app.getPath('userData'), 'data'));
+        }
+    }
+    return _centralDataDir;
+}
+
+// 数据目录候选（读取兼容：新集中目录 + 旧 exe 同级 data + 旧 userData/data）
+function getAppDataDirs() {
+    const dirs = [];
+    try { dirs.push(path.resolve(getCentralDataDir())); } catch(e) {}
+    try { dirs.push(path.resolve(getExeDirectory(), 'data')); } catch(e) {}
+    try { dirs.push(path.resolve(app.getPath('userData'), 'data')); } catch(e) {}
+    return Array.from(new Set(dirs));
 }
 
 function getCurrentMonthFolder() {
@@ -1118,6 +1151,9 @@ app.whenReady().then(async () => {
     //   用户安装后打开盘符即可看到，无需等首次拍照才创建（失败静默，运行时保存会再兜底）
     try { getDownloadsDirectory(); } catch (e) { console.warn('[Media] 启动建目录失败:', e.message); }
 
+    // ★ 2026-08-29 v3 数据集中：启动建 data 目录并自动迁移旧位置数据文件（不阻塞启动，失败静默）
+    try { await migrateLegacyDataToCentral(); } catch (e) { console.warn('[Data] 启动迁移异常:', e.message); }
+
     // ★ 首次启动时将 config.json 从 asar 复制到可写路径
     await ensureWritableConfig();
     
@@ -1856,15 +1892,52 @@ async function saveUserData(key, data) {
 async function getUserData(key) {
     try {
         if (!isSafeKey(key)) return { success: false, data: null };
-        const filePath = path.join(getDataDirectory(), key + '.json');
-        if (await fse.pathExists(filePath)) {
-            const data = await fse.readJson(filePath);
-            return { success: true, data };
+        // ★ 2026-08-29 v3 兼容读取：优先新集中目录，旧目录（exe同级/旧userData）兜底
+        const fileName = key + '.json';
+        const candidateDirs = getAppDataDirs();
+        for (const dir of candidateDirs) {
+            const filePath = path.join(dir, fileName);
+            if (await fse.pathExists(filePath)) {
+                const data = await fse.readJson(filePath);
+                return { success: true, data };
+            }
         }
         return { success: false, data: null };
     } catch (error) {
         console.error('读取用户数据失败:', error);
         return { success: false, data: null };
+    }
+}
+
+// ★ 2026-08-29 v3 存量数据自动迁移：启动时把旧位置 data/*.json 拷到新集中目录
+//   （不删除旧文件，保守起见保留双份；新写入只进新目录，旧目录自然废弃）
+async function migrateLegacyDataToCentral() {
+    try {
+        const centralDir = getCentralDataDir();
+        const legacyDirs = getAppDataDirs().filter(d => path.resolve(d) !== path.resolve(centralDir));
+        let migrated = 0;
+        for (const legacyDir of legacyDirs) {
+            if (!(await fse.pathExists(legacyDir))) continue;
+            const entries = await fse.readdir(legacyDir, { withFileTypes: true });
+            for (const entry of entries) {
+                if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
+                const src = path.join(legacyDir, entry.name);
+                const dst = path.join(centralDir, entry.name);
+                // 只在目标不存在时拷贝（新目录数据优先，不回退覆盖）
+                if (await fse.pathExists(dst)) continue;
+                try {
+                    await fse.copy(src, dst);
+                    migrated++;
+                } catch (e) { /* 单文件失败不影响整体 */ }
+            }
+        }
+        if (migrated > 0) {
+            console.log(`[Data] 已迁移 ${migrated} 个旧数据文件到集中目录: ${centralDir}`);
+        }
+        return migrated;
+    } catch (e) {
+        console.warn('[Data] 存量数据迁移失败（不影响运行）:', e.message);
+        return 0;
     }
 }
 
