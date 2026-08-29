@@ -7627,7 +7627,7 @@ let currentUser = null;
                             var fileList = result.files.slice(0, 5).map(function (f, i) {
                                 return (i + 1) + '. ' + f.fileName + ' (' + (f.size / 1024).toFixed(1) + 'KB)';
                             }).join('\n');
-                            var ok = confirm('发现 ' + result.files.length + ' 个备份文件（下载目录/中医处方系统/）\n\n' + fileList + '\n\n【确定】用最新备份恢复（第1个）\n【取消】改为手动选择文件');
+                            var ok = confirm('发现 ' + result.files.length + ' 个备份文件（备份文件夹：中医处方系统）\n\n' + fileList + '\n\n【确定】用最新备份恢复（第1个）\n【取消】改为手动选择文件');
                             if (ok) {
                                 window.electronAPI.readBackupFile(latest.fileName).then(function (r) {
                                     if (r && r.success && r.json) {
@@ -7641,7 +7641,7 @@ let currentUser = null;
                                 return;
                             }
                         } else {
-                            alert('下载目录/中医处方系统/ 中未找到备份文件。\n将打开文件选择器，请手动选择备份文件。');
+                            alert('备份文件夹（中医处方系统）中未找到备份文件。\n将打开文件选择器，请手动选择备份文件。');
                         }
                     } catch (e) {
                         console.warn('备份列表读取异常，回退文件选择器:', e);

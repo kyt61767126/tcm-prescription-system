@@ -74,6 +74,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     // 备份文件保存（绕过 Electron 下载机制，直接写文件）
     saveBackupFile: (jsonStr, fileName) => ipcRenderer.invoke('save-backup-file', jsonStr, fileName),
+    // 一键恢复：备份列表/读取（与APP端 importData 优先列表恢复对齐）
+    listBackupFiles: () => ipcRenderer.invoke('list-backup-files'),
+    readBackupFile: (fileName) => ipcRenderer.invoke('read-backup-file', fileName),
 
     // P1-1 自动备份策略：保存/列出/删除（userData/backups/ 目录）
     saveAutoBackup: (jsonStr, fileName) => ipcRenderer.invoke('save-auto-backup', jsonStr, fileName),

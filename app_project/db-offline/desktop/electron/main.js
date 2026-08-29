@@ -2731,18 +2731,66 @@ ipcMain.handle('set-auto-start', async (event, enabled) => {
     }
 });
 
-// 备份文件保存：直接写入 downloads 目录，避免 Electron 下载机制的不确定性
+// 备份文件保存：写入「惠康中医媒体\downloads\中医处方系统\」子目录（与APP端命名一致，2026-08-29）
 ipcMain.handle('save-backup-file', async (event, jsonStr, fileName) => {
     try {
         const safeName = sanitizeFileName(fileName);
         if (!safeName.endsWith('.json')) return { success: false, error: '文件名无效（仅允许 .json）' };
-        const filePath = path.join(getDownloadsDirectory(), safeName);
+        const backupDir = path.join(getDownloadsDirectory(), '中医处方系统');
+        fse.ensureDirSync(backupDir);
+        const filePath = path.join(backupDir, safeName);
         if (!isPathAllowed(filePath)) return { success: false, error: '路径不在允许的下载目录内，已拒绝' };
         await fs.writeFile(filePath, jsonStr, 'utf8');
         return { success: true, fileName: safeName, filePath };
     } catch (error) {
         console.error('保存备份文件失败:', error);
         return { success: false, error: '保存备份文件失败' };
+    }
+});
+
+// 一键恢复：列出备份文件（中医处方系统/ 子目录 + downloads 根存量，按时间倒序）
+ipcMain.handle('list-backup-files', async () => {
+    try {
+        const base = getDownloadsDirectory();
+        const dirs = [path.join(base, '中医处方系统'), base];
+        const seen = new Set();
+        const files = [];
+        for (const dir of dirs) {
+            if (!fs.existsSync(dir)) continue;
+            const entries = await fs.readdir(dir);
+            for (const name of entries) {
+                if (!name.endsWith('.json') || seen.has(name)) continue;
+                seen.add(name);
+                try {
+                    const st = await fs.stat(path.join(dir, name));
+                    if (st.isFile()) files.push({ fileName: name, size: st.size, lastModified: st.mtimeMs });
+                } catch (e) {}
+            }
+        }
+        files.sort((a, b) => b.lastModified - a.lastModified);
+        return { success: true, files: files.slice(0, 20) };
+    } catch (e) {
+        return { success: false, error: e.message };
+    }
+});
+
+// 一键恢复：按文件名读取备份内容（兼容子目录与 downloads 根存量）
+ipcMain.handle('read-backup-file', async (event, fileName) => {
+    try {
+        const safeName = sanitizeFileName(fileName);
+        if (!safeName.endsWith('.json')) return { success: false, error: '文件名无效' };
+        const base = getDownloadsDirectory();
+        const candidates = [path.join(base, '中医处方系统', safeName), path.join(base, safeName)];
+        for (const fp of candidates) {
+            if (!isPathAllowed(fp)) continue;
+            if (fs.existsSync(fp)) {
+                const json = await fs.readFile(fp, 'utf8');
+                return { success: true, json };
+            }
+        }
+        return { success: false, error: '未找到备份文件: ' + safeName };
+    } catch (e) {
+        return { success: false, error: e.message };
     }
 });
 
