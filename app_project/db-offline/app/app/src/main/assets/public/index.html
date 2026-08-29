@@ -6100,9 +6100,12 @@ let currentUser = null;
             if (id === 'analyticsModal') refreshAnalytics();
             if (id === 'settingsModal') {
                 document.getElementById('defaultDoctor').value = document.getElementById('doctorName').value;
-                // APP 端隐藏备份/恢复/清除数据按钮（user_profile.md 规范）
+                // APP 端隐藏设置弹窗内备份/恢复/清除数据按钮（user_profile.md 规范）
+                // ★ 2026-08-29 修复作用域：原 document.querySelectorAll 全文档匹配会误伤统计弹窗
+                //   🗄️数据管理 的同名按钮（用户打开过一次设置后，一键备份按钮即被隐藏，点击无反应）
                 if (window.AndroidNative) {
-                    document.querySelectorAll('button[onclick="exportData()"], button[onclick="importData()"], button[onclick="clearAllData()"]').forEach(function(btn) { btn.style.display = 'none'; });
+                    var __settingsBox = document.getElementById('settingsModal');
+                    if (__settingsBox) __settingsBox.querySelectorAll('button[onclick="exportData()"], button[onclick="importData()"], button[onclick="clearAllData()"]').forEach(function(btn) { btn.style.display = 'none'; });
                 }
             }
         }
@@ -6636,6 +6639,21 @@ let currentUser = null;
                 alert(backupInfo);
             }
         }
+
+        // ★ 2026-08-29 防静默兜底：exportData/importData 为 async，异常若未捕获则无任何提示
+        //   （用户点「一键备份」无反应即此类静默失败），必须 catch 后弹窗反馈
+        (function () {
+            var __rawExport = exportData;
+            window.exportData = async function () {
+                try { await __rawExport.apply(this, arguments); }
+                catch (e) { alert('备份失败：' + ((e && e.message) || String(e))); }
+            };
+            var __rawImport = importData;
+            window.importData = async function () {
+                try { await __rawImport.apply(this, arguments); }
+                catch (e) { alert('恢复失败：' + ((e && e.message) || String(e))); }
+            };
+        })();
 
         // ★ 2026-08-29 一键备份第三步：导入核心逻辑抽离
         //   （系统文件选择器 与 原生 readBackupFile 两条恢复路径共用）
