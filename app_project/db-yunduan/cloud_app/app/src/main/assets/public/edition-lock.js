@@ -66,6 +66,12 @@
                     // ★ 铁闸3 setter 归一化：任何写 CONFIG.edition 的代码都会自动写规范 key
                     var val = __normalizeEdition(String(v || '').trim());
                     _slot = val;
+                    // ★ 2026-08-29 运行时写同步权威插槽：Permission.init 已把 userData 权威 edition
+                    //   写入 __authoritativeEdition（getter 最优先读取）。若 setter 不同步该插槽，
+                    //   登录版本切换（auth-core CONFIG.edition=targetEd）/ 启动缓存恢复等合法运行时
+                    //   写入会被 init 时的快照永久掩盖（"写入无效"回退）。故每次 setter 写入同时
+                    //   刷新权威插槽 = 最新写入者胜出，与 getter 优先级闭环自洽。
+                    try { CONFIG.__authoritativeEdition = val; } catch(_) {}
                     // 三写同步，保持向后兼容
                     try { global.EDITION = val; } catch(_) {}
                     try { if (global.Permission) global.Permission._edition = val; } catch(_) {}

@@ -268,6 +268,49 @@ async function killApp(app) {
     }
 }
 
+// ★ 2026-08-29 失败现场深挖：对当前所有窗口做只读快照（edition 三源/权限状态/按钮/登录态/URL）
+async function mainWinDiagSnapshot(app) {
+    const lines = [];
+    try {
+        const wins = app.windows();
+        for (const w of wins) {
+            const url = w.url();
+            if (url.indexOf('index.html') < 0) continue;
+            const s = await w.evaluate(() => {
+                const g = (id) => {
+                    const el = document.getElementById(id);
+                    return el ? String(el.style.display) : 'missing';
+                };
+                let editionInfo = {};
+                try {
+                    editionInfo = {
+                        CONFIG_edition: (typeof CONFIG !== 'undefined' && CONFIG) ? String(CONFIG.edition) : 'no-CONFIG',
+                        window_EDITION: String(window.EDITION || ''),
+                        Permission_edition: (window.Permission && Permission._edition !== undefined) ? String(Permission._edition) : 'no-Permission',
+                        Permission_current: (window.Permission && Permission._currentEdition) ? String(Permission._currentEdition()) : 'n/a',
+                        Permission_isInst: (window.Permission && Permission.isInstitutional) ? !!Permission.isInstitutional() : 'n/a',
+                        Permission_shouldShowUserManage: (window.Permission && Permission.shouldShowUserManage) ? String(Permission.shouldShowUserManage(window.currentUser || {})) : 'n/a',
+                    };
+                } catch (e) { editionInfo = { err: String(e.message || e) }; }
+                return {
+                    ...editionInfo,
+                    currentUser: window.currentUser ? JSON.stringify({ username: window.currentUser.username, role: window.currentUser.role, clinicEdition: window.currentUser.clinicEdition || '' }) : 'null',
+                    userManageBtn: g('userManageBtn'),
+                    changePwdBtn: g('changePwdBtn'),
+                    loginOverlay: g('loginOverlay'),
+                    mainContainer: (document.querySelector('.main-container') || {}).style ? String(document.querySelector('.main-container').style.display) : 'n/a',
+                };
+            });
+            lines.push(`[diag] url=${url}`);
+            for (const k of Object.keys(s)) lines.push(`[diag]   ${k} = ${s[k]}`);
+        }
+        if (!lines.length) lines.push('[diag] 无 index.html 窗口存活（应用可能已退出/重载中）');
+    } catch (e) {
+        lines.push(`[diag] 快照异常: ${e.message}`);
+    }
+    return lines;
+}
+
 async function runCase({ _electron }, c, target) {
     log(`──── ${c.id}：${c.name}`);
     const userData = prepareUserdata(c.id, c.config);
@@ -302,8 +345,16 @@ async function runCase({ _electron }, c, target) {
     } catch (e) {
         // 失败时dump最近 console 辅助定位
         if (consoleBuf.length) {
-            log(`${c.id} 失败，最近 console（最多15条）：`);
-            for (const l of consoleBuf.slice(-15)) log('    ' + l);
+            log(`${c.id} 失败，最近 console（最多50条）：`);
+            for (const l of consoleBuf.slice(-50)) log('    ' + l);
+        }
+        // ★ 2026-08-29 失败现场深挖：edition/权限/按钮/登录态 一键快照（只读，不改变被测行为）
+        try {
+            const snap = await mainWinDiagSnapshot(app);
+            log(`${c.id} 失败现场快照:`);
+            for (const line of snap) log('    ' + line);
+        } catch (diagErr) {
+            log(`${c.id} 失败现场快照获取失败: ${diagErr.message}`);
         }
         log(`──── ${c.id} FAIL: ${e.message}`);
         return { id: c.id, ok: false, err: e.message };

@@ -371,6 +371,21 @@ if exist "%BACKUP_ASAR_DIR%\real_main.exe" (
 )
 echo.
 
+REM ★ [8.86/9]（2026-08-29）Electron 运行时完整性铁闸：
+REM   electron-builder --prepackaged 在 fallback 目录（dist 锁定场景）会重建一份
+REM   win-unpacked，其中只有主 exe+resources，不含任何运行时（icudtl.dat/*.dll/*.pak/locales），
+REM   E2E/双击启动直接报 "Invalid file descriptor to ICU data" 崩溃（云端版 2026-08-29 实测根因）。
+REM   此处从 node_modules\electron\dist 幂等补齐（缺才复制），补齐后 icudtl.dat 仍缺失则红线中止。
+echo [8.86/9] Ensure Electron runtime files in output/win-unpacked...
+if not exist "%OUTPUT_DIR%\win-unpacked" mkdir "%OUTPUT_DIR%\win-unpacked" 2>nul
+powershell -NoProfile -ExecutionPolicy Bypass -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; $dst='%OUTPUT_DIR%\win-unpacked'; $src='node_modules\electron\dist'; $need=@('icudtl.dat','resources.pak','chrome_100_percent.pak','chrome_200_percent.pak','snapshot_blob.bin','v8_context_snapshot.bin','d3dcompiler_47.dll','ffmpeg.dll','libEGL.dll','libGLESv2.dll','vk_swiftshader.dll','vk_swiftshader_icd.json','vulkan-1.dll','version'); $fixed=@(); foreach($f in $need){ if(-not (Test-Path (Join-Path $dst $f))){ Copy-Item (Join-Path $src $f) (Join-Path $dst $f) -Force; $fixed+=$f } }; if(-not (Test-Path (Join-Path $dst 'locales'))){ if(Test-Path (Join-Path $src 'locales')){ Copy-Item (Join-Path $src 'locales') (Join-Path $dst 'locales') -Recurse -Force; $fixed+='locales\' } }; if($fixed.Count){ Write-Host ('  [OK] 补齐运行时文件: ' + ($fixed -join ', ')) } else { Write-Host '  [OK] 运行时文件完整，无需补齐' }; if(-not (Test-Path (Join-Path $dst 'icudtl.dat'))){ Write-Host '[ERROR] icudtl.dat 补齐后仍缺失 - build aborted'; exit 1 }"
+if errorlevel 1 (
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] Electron 运行时补齐失败 - build aborted'"
+    if not defined NO_PAUSE pause
+    exit /b 1
+)
+echo.
+
 REM TEMP
 set "TEMP=%PREV_TEMP%"
 set "TMP=%PREV_TMP%"

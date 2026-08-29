@@ -36,6 +36,20 @@ try {
                     const result = await global.electronAPI.getAppConfig();
                     // Electron IPC 返回 { success, config } 格式
                     this._config = (result && result.config) ? result.config : (result || {});
+                    // ★★★ 2026-08-29 【E2E E1 失败根因修复】激活 edition-lock 的 __authoritativeEdition 权威插槽。
+                    //   userData config.json（getAppConfig 读取，主进程合并出厂默认）才是机器级权威 edition；
+                    //   asar 内 config.json 只是出厂默认（cloud_personal），index.html 硬编码 window.EDITION
+                    //   同样只是出厂默认。edition-lock.js 的 getter 最优先读取 __authoritativeEdition，
+                    //   其设计注释写明"由 electronAPI.getAppConfig 回写激活"——但此前全仓库无写入者，
+                    //   插槽永远为空 → getter 恒回落出厂默认 → 机构版机器（userData=cloud_clinic）启动后
+                    //   被 asar 默认值反向打成 cloud_personal → 用户管理按钮消失（E1/E3 超时根因）。
+                    //   现在补上这个写入端：userData 权威值一经读取即入插槽，getter/所有谓词自动归一。
+                    try {
+                        if (typeof CONFIG !== 'undefined' && CONFIG &&
+                            result && result.config && result.config.edition) {
+                            CONFIG.__authoritativeEdition = String(result.config.edition);
+                        }
+                    } catch (_) { /* CONFIG 尚未定义（极端时序）时跳过，回落旧逻辑 */ }
                 } else if (typeof CONFIG !== 'undefined' && CONFIG) {
                     // 离线版内嵌的 CONFIG 对象
                     this._config = CONFIG;
