@@ -312,6 +312,8 @@ h1 { color: #2c3e50; font-size: 18px; margin-bottom: 3px; }
 }
 
 </style>
+<!-- ★ 官网付款导引二维码库（从官网 CDN 加载，失败自动降级为链接文本，不影响激活流程） -->
+<script src="https://tcm-prescription-system.pages.dev/qrcode.min.js" onerror="window.__qrLoadFailed=true"></script>
 </head>
 <body>
 <div class="container">
@@ -439,6 +441,16 @@ h1 { color: #2c3e50; font-size: 18px; margin-bottom: 3px; }
                     <div>📞 联系电话：<b id="savedPhone">--</b></div>
                 </div>
                 <div class="status-text" id="waitStatus">正在等待管理员审核...</div>
+                <!-- ★ 官网快速付费导引：扫码直达官网购买页（自动携带本机设备识别码） -->
+                <div id="payGuideBox" style="margin-top:14px;background:linear-gradient(135deg,#fff7ed 0%,#ffedd5 100%);border:1px solid #fdba74;border-radius:10px;padding:14px;text-align:center;">
+                    <div style="font-weight:700;color:#9a3412;font-size:14px;">💳 加速激活：官网在线付款</div>
+                    <div style="font-size:12px;color:#78350f;margin-top:4px;line-height:1.7;">用手机扫描下方二维码直达官网购买页<br>设备识别码<b>已自动携带</b>，付款后管理员核对即自动激活本软件</div>
+                    <div id="payGuideQr" style="width:150px;height:150px;margin:10px auto 6px;background:#fff;padding:6px;border-radius:8px;border:1px solid #fdba74;"></div>
+                    <div id="payGuideFallback" style="display:none;font-size:12px;color:#78350f;line-height:1.8;">
+                        浏览器打开：<b id="payGuideUrlText" style="word-break:break-all;"></b><br>
+                        <button id="payGuideCopyBtn" style="border:none;padding:4px 14px;border-radius:5px;font-size:12px;cursor:pointer;background:#ea580c;color:#fff;font-weight:600;margin-top:4px;">📋 复制购买链接</button>
+                    </div>
+                </div>
                 <div style="font-size:11px;color:#909399;margin-top:10px;line-height:1.5;">
                     💡 关闭窗口不影响审核<br>重新打开将自动恢复状态
                 </div>
@@ -609,6 +621,12 @@ h1 { color: #2c3e50; font-size: 18px; margin-bottom: 3px; }
                     <div>📞 联系电话：<b id="ticketSavedPhone">--</b></div>
                 </div>
                 <div class="status-text" style="background:#fff;color:#2e7d32;">⏳ 请耐心等待管理员审批（工作时间内通常 1 小时内处理）</div>
+                <!-- ★ 官网快速付费导引（工单提交后同样适用） -->
+                <div style="margin-top:10px;background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:10px;font-size:12px;color:#78350f;line-height:1.7;text-align:center;">
+                    💳 <b>不想等？官网在线付款立即激活</b><br>
+                    <span id="ticketPayUrl" style="word-break:break-all;"></span><br>
+                    <button id="ticketPayCopyBtn" style="border:none;padding:4px 14px;border-radius:5px;font-size:12px;cursor:pointer;background:#ea580c;color:#fff;font-weight:600;margin-top:4px;">📋 复制购买链接（手机浏览器打开）</button>
+                </div>
                 <button class="btn btn-secondary" id="ticketNewBtn" style="margin-top:10px;">提交新工单 / 返回</button>
             </div>
         </div>
@@ -816,7 +834,7 @@ function hideGlobalError() {
         }
         // 自动切换到管理员激活tab
         switchTab('admin');
-        const r = await window.electronAPI.activate.checkAdminStatus(saved.requestId);
+        const r = await window.electronAPI.activate.checkAdminStatus(saved.requestId, params.get('machineId') || '');
         if (r.success && r.status === 'activated') {
             await saveAndRestart(r.license, saved.phone);
             showSuccess(saved.phone);
@@ -1030,15 +1048,59 @@ document.getElementById('password2').addEventListener('keydown', e => {
 });
 
 // ============ Waiting + polling (admin) ============
+// ★ 官网快速付费导引：二维码指向官网购买页（携带本机 machineId 自动预填）
+const PAY_GUIDE_BASE = 'https://tcm-prescription-system.pages.dev/download.html?mid=';
+let _payGuideInited = false;
+function initPayGuide() {
+    if (_payGuideInited) return;
+    _payGuideInited = true;
+    const mid = params.get('machineId') || '';
+    const url = PAY_GUIDE_BASE + encodeURIComponent(mid);
+    const urlText = document.getElementById('payGuideUrlText');
+    if (urlText) urlText.textContent = url;
+    const qrBox = document.getElementById('payGuideQr');
+    if (qrBox && typeof QRCode !== 'undefined') {
+        try {
+            new QRCode(qrBox, { text: url, width: 136, height: 136, correctLevel: QRCode.CorrectLevel.M });
+        } catch (e) {
+            qrBox.style.display = 'none';
+            document.getElementById('payGuideFallback').style.display = 'block';
+        }
+    } else {
+        // QR 库加载失败（离线等场景）降级为链接文本
+        if (qrBox) qrBox.style.display = 'none';
+        const fb = document.getElementById('payGuideFallback');
+        if (fb) fb.style.display = 'block';
+    }
+    const copyBtn = document.getElementById('payGuideCopyBtn');
+    if (copyBtn) {
+        copyBtn.addEventListener('click', () => {
+            navigator.clipboard.writeText(url).then(() => {
+                copyBtn.textContent = '✅ 已复制';
+                setTimeout(() => { copyBtn.textContent = '📋 复制购买链接'; }, 1500);
+            }).catch(() => {
+                const ta = document.createElement('textarea');
+                ta.value = url; document.body.appendChild(ta); ta.select();
+                try { document.execCommand('copy'); copyBtn.textContent = '✅ 已复制';
+                    setTimeout(() => { copyBtn.textContent = '📋 复制购买链接'; }, 1500);
+                } catch (e2) {}
+                document.body.removeChild(ta);
+            });
+        });
+    }
+}
+
 function showWaiting(requestId, savedAt) {
     document.getElementById('requestNo').textContent = requestId;
     document.getElementById('submitTime').textContent = savedAt ? new Date(savedAt).toLocaleString('zh-CN') : new Date().toLocaleString('zh-CN');
     document.getElementById('savedPhone').textContent = state.phone;
+    initPayGuide();
     showAdminPanel('waiting');
 }
 
 function startPolling(requestId) {
     const statusEl = document.getElementById('waitStatus');
+    const pollMid = params.get('machineId') || '';
     let count = 0;
     const msgs = ['正在等待管理员审核...', '管理员正在处理您的请求...', '正在验证您的信息...', '即将完成激活...'];
     _pollTimer = setInterval(async () => {
@@ -1046,7 +1108,7 @@ function startPolling(requestId) {
         statusEl.textContent = msgs[Math.min(Math.floor(count / 3), msgs.length - 1)] +
             (count > 3 ? `（已等待 ${Math.floor(count * 5 / 60)} 分钟）` : '');
         try {
-            const r = await window.electronAPI.activate.checkAdminStatus(requestId);
+            const r = await window.electronAPI.activate.checkAdminStatus(requestId, pollMid);
             if (r.success && r.status === 'activated') {
                 clearInterval(_pollTimer); _pollTimer = null;
                 const ok = await saveAndRestart(r.license, state.phone);
@@ -1306,6 +1368,27 @@ document.getElementById('codeSubmitBtn').addEventListener('click', async () => {
 });
 
 // ============ 一键联系微信客服（复制微信号 + 唤起微信 + 指引） ============
+// ★ 工单成功面板：官网购买链接复制
+(function bindTicketPayCopy() {
+    const btn = document.getElementById('ticketPayCopyBtn');
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+        const url = document.getElementById('ticketPayUrl').textContent || '';
+        if (!url) return;
+        navigator.clipboard.writeText(url).then(() => {
+            btn.textContent = '✅ 已复制，请发送到手机浏览器打开';
+            setTimeout(() => { btn.textContent = '📋 复制购买链接（手机浏览器打开）'; }, 2000);
+        }).catch(() => {
+            const ta = document.createElement('textarea');
+            ta.value = url; document.body.appendChild(ta); ta.select();
+            try { document.execCommand('copy'); btn.textContent = '✅ 已复制，请发送到手机浏览器打开';
+                setTimeout(() => { btn.textContent = '📋 复制购买链接（手机浏览器打开）'; }, 2000);
+            } catch (e2) {}
+            document.body.removeChild(ta);
+        });
+    });
+})();
+
 function contactSupport() {
     const wx = 'hktzy1688';
     // 1) 复制微信号（clipboard API 优先，execCommand 兜底）
@@ -1431,6 +1514,9 @@ document.getElementById('ticketSubmitBtn').addEventListener('click', async () =>
             document.getElementById('ticketNoDisplay').textContent = result.ticketNo || '--';
             document.getElementById('ticketSubmitTime').textContent = new Date().toLocaleString('zh-CN');
             document.getElementById('ticketSavedPhone').textContent = contactPhone || contactWechat || '--';
+            // ★ 官网付费导引：填充购买链接（携带本机 machineId）
+            const payUrl = PAY_GUIDE_BASE + encodeURIComponent(params.get('machineId') || '');
+            document.getElementById('ticketPayUrl').textContent = payUrl;
             showTicketPanel('ticketSuccess');
         } else {
             showGlobalError((result && result.error) || '工单提交失败，请稍后重试');

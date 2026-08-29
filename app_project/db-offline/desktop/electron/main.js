@@ -1698,10 +1698,10 @@ ipcMain.handle('license:submit-ticket', async (event, payload) => {
     }
 });
 
-// ★ 管理员一键激活 - 检查激活状态
-ipcMain.handle('license:check-admin-status', async (event, requestId) => {
+// ★ 管理员一键激活 - 检查激活状态（machineId 可选：官网订单付费激活兜底检测）
+ipcMain.handle('license:check-admin-status', async (event, requestId, machineId) => {
     try {
-        const result = await activateManager.checkAdminStatus(requestId);
+        const result = await activateManager.checkAdminStatus(requestId, machineId);
         return result;
     } catch (e) {
         console.error('[IPC] check-admin-status 异常:', e);

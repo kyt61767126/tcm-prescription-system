@@ -85,6 +85,12 @@ export async function onRequest(context) {
 
         const url = new URL(context.request.url);
         const requestId = url.searchParams.get('requestId');
+        // ★ 2026-08-30 可选 machineId：官网订单付费导引闭环。
+        //   客户可能在客户端提交激活申请后，又通过官网订单付款购买（官网下单会生成新的
+        //   requestId 记录），管理员激活的是官网订单记录。此时客户端轮询自己的旧
+        //   requestId 永远 pending。带 machineId 兜底扫描：找到同设备已激活的记录
+        //   即返回 activated，客户端自动完成激活（license 绑定的就是该 machineId）。
+        const machineIdParam = url.searchParams.get('machineId') || '';
 
         if (!requestId) {
             return json({ success: false, error: '缺少 requestId 参数' }, 400, origin);
@@ -95,9 +101,27 @@ export async function onRequest(context) {
             return json({ success: false, error: 'requestId 格式错误' }, 400, origin);
         }
 
-        const record = await kv.get(KV_ADMIN_REQ_PREFIX + requestId, 'json');
+        let record = await kv.get(KV_ADMIN_REQ_PREFIX + requestId, 'json');
         if (!record) {
             return json({ success: false, error: '请求不存在或已失效' }, 404, origin);
+        }
+
+        // ★ machineId 兜底：自己的请求未激活时，扫描最近记录找同设备已激活的官网订单
+        if (machineIdParam && record.status !== 'activated') {
+            try {
+                const index = (await kv.get('admin_req_index', 'json')) || [];
+                for (const rid of index.slice(0, 200)) {
+                    if (rid === requestId) continue;
+                    const rec = await kv.get(KV_ADMIN_REQ_PREFIX + rid, 'json');
+                    if (rec && rec.machineId === machineIdParam && rec.status === 'activated') {
+                        record = rec;
+                        console.log('[AdminStatus] machineId 兜底命中:', rid);
+                        break;
+                    }
+                }
+            } catch (e) {
+                console.warn('[AdminStatus] machineId 兜底扫描失败（忽略）:', e.message);
+            }
         }
 
         // 根据状态返回不同结构

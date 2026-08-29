@@ -3347,6 +3347,15 @@
         document.addEventListener('DOMContentLoaded', function() {
             setTimeout(generateUpdateQRCode, 500);
             verifyPayQr();
+            // ★ 客户端激活窗口跳转导引：?mid= 设备识别码自动预填并直达购买区
+            try {
+                const mid = new URLSearchParams(window.location.search).get('mid');
+                if (mid) {
+                    const el = document.getElementById('custMachineId');
+                    if (el) { el.value = mid; el.readOnly = true; el.style.background = '#f9fafb'; updateOrderSummary(); }
+                    if (typeof switchToPurchase === 'function') setTimeout(switchToPurchase, 200);
+                }
+            } catch (e) {}
         });
     </script>
 </body>

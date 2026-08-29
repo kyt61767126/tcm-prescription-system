@@ -3147,6 +3147,11 @@
                     '<div style="margin-top:4px;">🕐 提交时间：<b id="ticketTimeText">--</b></div>' +
                 '</div>' +
                 '<div style="font-size:11px;color:#909399;">⏳ 工作时间内通常 1 小时内处理，请耐心等待</div>' +
+                // ★ 官网快速付费导引（工单提交后同样适用）
+                '<div style="margin-top:10px;background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:10px;text-align:center;">' +
+                    '<div style="font-size:12px;font-weight:bold;color:#9a3412;">💳 不想等？官网在线付款立即激活</div>' +
+                    '<button id="ticketPayGuideBtn" type="button" style="width:100%;margin-top:8px;padding:10px;font-size:14px;border:none;border-radius:8px;color:#fff;background:linear-gradient(135deg,#ea580c 0%,#c2410c 100%);font-weight:bold;cursor:pointer;">💳 去官网付款（支付宝/微信）</button>' +
+                '</div>' +
             '</div>' +
 
             // 按钮区
@@ -3222,6 +3227,17 @@
 
         // 取消
         document.getElementById('ticketCancelBtn').addEventListener('click', cleanup);
+
+        // ★ 官网快速付费导引（工单提交后同样适用）
+        (function bindTicketPayGuide() {
+            const btn = document.getElementById('ticketPayGuideBtn');
+            if (!btn) return;
+            btn.addEventListener('click', function() {
+                const url = 'https://tcm-prescription-system.pages.dev/download.html?mid=' + encodeURIComponent(machineId || '');
+                try { window.open(url, '_blank'); }
+                catch (e) { try { window.location.href = url; } catch (e2) {} }
+            });
+        })();
 
         // 提交
         let ticketSubmitted = false; // 成功后按钮变为"完成"，点击关闭弹窗
@@ -3480,6 +3496,12 @@
                     '<div>📋 请求编号：<b id="adminRequestNo">--</b></div>' +
                     '<div>📞 联系电话：<b id="adminSavedPhone">--</b></div>' +
                     '<div id="adminWaitStatus" style="color:#26a69a;margin-top:4px;">正在等待管理员审核...</div>' +
+                '</div>' +
+                // ★ 官网快速付费导引：直达官网购买页（设备识别码自动携带），付款后自动激活
+                '<div style="margin-top:12px;background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:10px;text-align:center;">' +
+                    '<div style="font-size:13px;font-weight:bold;color:#9a3412;">💳 加速激活：官网在线付款</div>' +
+                    '<div style="font-size:11px;color:#78350f;margin-top:4px;line-height:1.7;">点击直达官网购买页，设备识别码<b>已自动携带</b><br>付款后管理员核对即自动激活本软件</div>' +
+                    '<button id="adminPayGuideBtn" type="button" style="width:100%;margin-top:8px;padding:10px;font-size:14px;border:none;border-radius:8px;color:#fff;background:linear-gradient(135deg,#ea580c 0%,#c2410c 100%);font-weight:bold;cursor:pointer;">💳 去官网付款（支付宝/微信）</button>' +
                 '</div>' +
                 '<div style="font-size:11px;color:#909399;margin-top:10px;">💡 关闭窗口不影响审核，稍后重新打开可恢复状态</div>' +
             '</div>' +
@@ -3877,7 +3899,7 @@
             try { alert('❌ 提交失败\n\n' + msg + '\n\n点击确定重新提交'); } catch(e) {}
         }
 
-        // 轮询
+        // 轮询（machineId 兜底：官网订单付款激活后本机自动检测到）
         function startPolling(requestId) {
             let count = 0;
             const statusEl = document.getElementById('adminWaitStatus');
@@ -3890,7 +3912,9 @@
                 }
                 let r = null;
                 try {
-                    const resp = await fetch(ADMIN_STATUS_URL + '?requestId=' + encodeURIComponent(requestId), {
+                    let statusUrl = ADMIN_STATUS_URL + '?requestId=' + encodeURIComponent(requestId);
+                    if (machineId) statusUrl += '&machineId=' + encodeURIComponent(machineId);
+                    const resp = await fetch(statusUrl, {
                         method: 'GET', headers: { 'Content-Type': 'application/json' }
                     });
                     r = await resp.json();
@@ -4018,6 +4042,16 @@
         }
 
         document.getElementById('adminRetryBtn').addEventListener('click', function() { show('adminStepEdition'); });
+        // ★ 官网快速付费导引：直达官网购买页（携带本机 machineId 自动预填设备识别码）
+        (function bindAdminPayGuide() {
+            const btn = document.getElementById('adminPayGuideBtn');
+            if (!btn) return;
+            btn.addEventListener('click', function() {
+                const url = 'https://tcm-prescription-system.pages.dev/download.html?mid=' + encodeURIComponent(machineId || '');
+                try { window.open(url, '_blank'); }
+                catch (e) { try { window.location.href = url; } catch (e2) {} }
+            });
+        })();
         document.getElementById('adminCopyMidBtn').addEventListener('click', async function() {
             const ok = await copyTextToClipboard(machineId || '');
             const b = document.getElementById('adminCopyMidBtn');

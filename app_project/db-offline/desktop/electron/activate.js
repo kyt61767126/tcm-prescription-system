@@ -516,10 +516,11 @@ async function submitAdminRequest(data) {
     }
 }
 
-// ★ 管理员激活状态轮询
-async function checkAdminStatus(requestId) {
+// ★ 管理员激活状态轮询（machineId 可选：官网订单付费激活兜底检测）
+async function checkAdminStatus(requestId, machineId) {
     try {
-        const url = `https://tcm-prescription-system.pages.dev/api/license/admin-status?requestId=${encodeURIComponent(requestId)}`;
+        let url = `https://tcm-prescription-system.pages.dev/api/license/admin-status?requestId=${encodeURIComponent(requestId)}`;
+        if (machineId) url += `&machineId=${encodeURIComponent(machineId)}`;
         
         const fetchPromise = async () => {
             const controller = new AbortController();
