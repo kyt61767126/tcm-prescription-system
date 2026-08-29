@@ -2148,6 +2148,9 @@ let currentUser = null;
             return window.isStandardEdition(e) ? '云端标准版' : '云端机构版';
         };
 
+        // ★ 2026-08-29 P0-2 版本号单一数据源：本文件所有版本号输出统一引用此常量，升版本只改这一行
+        window.APP_VERSION = 'V1.0.0';
+
         // ★★★ 2026-08-17 【根治刀2-B：统一版本标签函数】：优先取 CONFIG.versionLabel（Setup 发下来的权威值）
         function getEditionTag() {
             if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.versionLabel) return CONFIG.versionLabel;
@@ -2242,7 +2245,7 @@ let currentUser = null;
             var et = document.getElementById('editionTag');
             if (et) et.textContent = '【' + label + '】';
             document.title = '惠康中医-' + label;
-            var logText = '惠康中医' + label + ' V1.0.0' +
+            var logText = '惠康中医' + label + ' ' + window.APP_VERSION +
                 (_buildMeta ? ('  |  构建: ' + metaTextLine1 + (metaTextLine2 ? (' | ' + metaTextLine2) : '')) : '');
             console.log('%c' + logText, 'color:#667eea;font-size:14px;font-weight:bold');
             // ★★★ 2026-08-17 【根治刀2-B】每次标签变动后强制 enforce（防止 applyEditionTags 后标签变标准版但按钮没同步）
@@ -6819,7 +6822,7 @@ let currentUser = null;
         }
 
         function showHelp() {
-            alert('惠康中医-' + window.getCloudEditionTag() + ' V1.0.0\n\n' +
+            alert('惠康中医-' + window.getCloudEditionTag() + ' ' + window.APP_VERSION + '\n\n' +
                   '【版本说明】机构版：含用户管理+修改密码\n\n' +
                   '【功能列表】\n' +
                   '✓ 处方录入与打印\n✓ 药品管理\n✓ 验方设置\n' +
@@ -7448,7 +7451,7 @@ let currentUser = null;
             const data = {
                 exportInfo: {
                     version: '惠康中医-' + window.getCloudEditionTag(),
-                    versionCode: 'V1.0.0',
+                    versionCode: window.APP_VERSION,
                     versionType: '本地',
                     exportTime: now.toLocaleString('zh-CN'),
                     exportTimeUTC: now.toISOString(),

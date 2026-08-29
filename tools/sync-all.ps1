@@ -83,6 +83,25 @@ $PrintUtilsOfflineTargets = @(
     'app_project/db-offline/app/app/src/main/assets/public'
 )
 
+# Group 1e: UI logic (button-manager.js, edition-lock.js) -> 5 dirs
+#   ★ 2026-08-29: 这两个文件此前在 shared/ 中却未纳入任何同步分组（伪权威源），
+#     依赖手工复制到各端副本。经 SHA256 摸底全端当前一致（无本地化差异），
+#     现正式纳管。目标不含各端 electron/ 子目录：index.html 均从根目录
+#     （或 APP assets/public）加载这两个文件，electron/ 下无引用无副本，
+#     不制造冗余文件。
+$UiLogicFiles = @(
+    'button-manager.js',
+    'edition-lock.js'
+)
+
+$UiLogicTargets = @(
+    'public',
+    'app_project/db-yunduan/cloud_desktop',
+    'app_project/db-offline/desktop',
+    'app_project/db-offline/app/app/src/main/assets/public',
+    'app_project/db-yunduan/cloud_app/app/src/main/assets/public'
+)
+
 # Group 2: permission.js extra targets (3 offline electron/, beyond Group 1)
 $PermissionExtraTargets = @(
         'app_project/db-offline/desktop/electron'
@@ -287,6 +306,11 @@ Write-Host ""
 
 # Group 1c: print-utils-offline.js -> 2 offline dirs AS print-utils.js (★ 2026-08-28 dual-source)
 $result = Sync-Group -GroupName 'print-utils.js offline (full title -> 2 offline dirs)' -Files @('print-utils-offline.js') -Targets $PrintUtilsOfflineTargets -VerifyOnly $VerifyOnly -TargetLeafName 'print-utils.js'
+if (-not $result) { $allInSync = $false }
+Write-Host ""
+
+# Group 1e: UI logic (button-manager.js, edition-lock.js) -> 5 dirs (★ 2026-08-29 纳管伪权威源)
+$result = Sync-Group -GroupName 'UI logic (2 files -> 5 dirs)' -Files $UiLogicFiles -Targets $UiLogicTargets -VerifyOnly $VerifyOnly
 if (-not $result) { $allInSync = $false }
 Write-Host ""
 
