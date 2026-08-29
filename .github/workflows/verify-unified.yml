@@ -1,0 +1,64 @@
+name: Verify Unified Modules
+
+# ★ P2-6 校验闭环 (2026-08-29)：界面基础代码三重防线入 CI
+#   ① check-interface.ps1   —— 界面 body DOM 结构 vs .interface-lock.json 基线
+#   ② sync-all.ps1 -VerifyOnly —— shared/ JS 权威源 vs 各端副本一致性
+#   ③ html-sync-check.ps1   —— 云端 index.html 权威源 vs 云桌面/云APP 副本
+#                               + 桌面 login.html 双版漂移
+#   任一失败即 fail，让副本漂移在推送时立刻可见（不再依赖人工记忆检查清单）。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    # 排除 sync-shared-modules 自动提交触发的循环（其自身已有同步职责）
+    if: github.actor != 'github-actions[bot]'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # check-interface.ps1 需要 git log 判断基线新鲜度
+
+      - name: 1/3 Interface structure baseline check
+        shell: pwsh
+        run: |
+          ./tools/check-interface.ps1
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::界面 DOM 结构与基线不一致。若为预期界面改动，请运行 generate-interface-lock.ps1 重建基线并连同页面一起提交；否则 git checkout 还原页面。"
+            exit 1
+          }
+
+      - name: 2/3 shared modules sync verify
+        shell: pwsh
+        run: |
+          ./tools/sync-all.ps1 -VerifyOnly
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::shared/ 权威源与各端副本不一致。请先在本地修改 shared/ 权威源后运行 tools/sync-all.ps1 同步，再提交。"
+            exit 1
+          }
+
+      - name: 3/3 HTML copies drift check
+        shell: pwsh
+        run: |
+          ./tools/html-sync-check.ps1
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::云端 index.html 副本或桌面 login.html 双版发生漂移。修复方式：以权威源(public/index.html 或 cloud_desktop login.html)为准回改副本，或先改权威源再同步。"
+            exit 1
+          }
+
+      - name: Summary
+        shell: bash
+        run: |
+          echo "### 校验结果" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ 界面基线 / shared JS 同步 / HTML 副本 三重校验全部通过" >> $GITHUB_STEP_SUMMARY
