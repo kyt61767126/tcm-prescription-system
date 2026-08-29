@@ -5770,8 +5770,10 @@ let currentUser = null;
                     } else {
                         // 显示具体错误原因 + 重试按钮，便于定位问题
                         var errMsg = (result && result.error) ? result.error : '未知错误';
+                        // ★ 2026-08-29 ENOENT 友好提示：文件不存在多为重装/清理/换机导致本地媒体丢失
+                        var isEnoent = String(errMsg).indexOf('ENOENT') >= 0;
                         view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">' +
-                            '加载失败: ' + escapeHtml(String(errMsg)) + '<br/>' +
+                            (isEnoent ? '文件已不存在（可能因重装、清理或换机丢失）' : '加载失败: ' + escapeHtml(String(errMsg))) + '<br/>' +
                             '<button onclick="loadMediaSingleFile(' + idx + ')" ' +
                             'style="margin-top:8px;padding:6px 14px;font-size:13px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;">🔄 重试</button>' +
                             '</div>';

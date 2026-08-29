@@ -359,7 +359,23 @@ async function registerTrialWithServer() {
 }
 
 function getDownloadsDirectory() {
-    return ensureDirWithFallback('downloads');
+    // ★ 2026-08-29 修复重装丢媒体：NSIS 安装版媒体保存到 userData/downloads（%APPDATA%，重装不清除）。
+    // 旧版保存在安装目录（exe 同级 downloads），重装/覆盖安装时安装器清空目录 → 照片视频全部物理丢失
+    // （查看时报 ENOENT）。便携版（PORTABLE_EXECUTABLE_DIR）保持 exe 同级——便携特性：拷目录即迁移。
+    if (process.env.PORTABLE_EXECUTABLE_DIR) {
+        return ensureDirWithFallback('downloads');
+    }
+    return ensureDirWithFallback(path.join(app.getPath('userData'), 'downloads'));
+}
+
+// ★ 全部媒体根目录（读取/扫描兼容两代位置）：
+//   新位置 userData/downloads + 旧位置 exe 同级 downloads（存量用户未重装的旧文件仍可查可读）
+function getAllMediaRoots() {
+    const roots = [];
+    try { roots.push(path.resolve(getDownloadsDirectory())); } catch(e) {}
+    try { roots.push(path.resolve(getExeDirectory(), 'downloads')); } catch(e) {}
+    try { roots.push(path.resolve(app.getPath('userData'), 'downloads')); } catch(e) {}
+    return Array.from(new Set(roots));
 }
 
 function getCurrentMonthFolder() {
@@ -389,11 +405,10 @@ function sanitizeFileName(fileName) {
     return base || `file_${Date.now()}.webm`;
 }
 
-// ★ 路径白名单校验：仅允许访问 downloads 目录及其子目录下的文件
+// ★ 路径白名单校验：仅允许访问媒体根目录（userData/downloads 新位置 + exe 同级旧位置）下的文件
 function getAllowedRoots() {
     const roots = new Set();
-    try { roots.add(path.resolve(getDownloadsDirectory())); } catch(e) {}
-    try { roots.add(path.resolve(app.getPath('userData'), 'downloads')); } catch(e) {}
+    getAllMediaRoots().forEach(r => roots.add(r));
     return Array.from(roots);
 }
 
@@ -467,13 +482,15 @@ async function renameMediaFiles(oldPatientName, newPatientName, oldNo, newNo) {
         // 支持两种命名格式：姓名_编号 和 编号_姓名
         const oldPrefixes = [`${cleanOldName}_${cleanOldNo}`, `${cleanOldNo}_${cleanOldName}`];
         const newPrefixes = [`${cleanNewName}_${cleanNewNo}`, `${cleanNewNo}_${cleanNewName}`];
-        const downloadsDir = getDownloadsDirectory();
+        // ★ 2026-08-29 扫描全部媒体根目录（新 userData/downloads + 旧 exe 同级 downloads）
         let renamed = 0;
         let monthDirs = [];
-        try {
-            const entries = await fs.readdir(downloadsDir, { withFileTypes: true });
-            monthDirs = entries.filter(e => e.isDirectory()).map(e => path.join(downloadsDir, e.name));
-        } catch (e) { /* downloads目录可能不存在 */ }
+        for (const mediaRoot of getAllMediaRoots()) {
+            try {
+                const entries = await fs.readdir(mediaRoot, { withFileTypes: true });
+                monthDirs.push(...entries.filter(e => e.isDirectory()).map(e => path.join(mediaRoot, e.name)));
+            } catch (e) { /* 该媒体根目录可能不存在 */ }
+        }
         for (const monthDir of monthDirs) {
             let fileEntries = [];
             try {
@@ -1861,7 +1878,6 @@ ipcMain.handle('find-media-files', async (event, patientName, prescriptionNo, cr
         const sanitizeStr = s => (s || '').trim().replace(/[\/\\:*?"<>|]/g, '_').replace(/ /g, '');
         const cleanName = sanitizeStr(patientName);
         const identifier = sanitizeStr(prescriptionNo || '');
-        const downloadsDir = getDownloadsDirectory();
         const files = [];
         const foundPaths = new Set();
         const prefix1 = `${cleanName}_${identifier}`;
@@ -1879,11 +1895,14 @@ ipcMain.handle('find-media-files', async (event, patientName, prescriptionNo, cr
             } catch (e) { /* 忽略解析失败 */ }
         }
 
+        // ★ 2026-08-29 扫描全部媒体根目录（新 userData/downloads + 旧 exe 同级 downloads）
         let monthDirs = [];
-        try {
-            const entries = await fs.readdir(downloadsDir, { withFileTypes: true });
-            monthDirs = entries.filter(e => e.isDirectory()).map(e => path.join(downloadsDir, e.name));
-        } catch (e) { /* downloads目录可能不存在 */ }
+        for (const mediaRoot of getAllMediaRoots()) {
+            try {
+                const entries = await fs.readdir(mediaRoot, { withFileTypes: true });
+                monthDirs.push(...entries.filter(e => e.isDirectory()).map(e => path.join(mediaRoot, e.name)));
+            } catch (e) { /* 该媒体根目录可能不存在 */ }
+        }
         for (const monthDir of monthDirs) {
             let fileEntries = [];
             try {
