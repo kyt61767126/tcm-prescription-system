@@ -1603,7 +1603,7 @@
                 </div>
                 <div style="font-size:13px;color:#78350f;line-height:1.7;">
                     试用期结束后需输入<strong>授权激活码</strong>才能继续使用。请按以下步骤操作：
-                    选择版本 → 生成订单号 → 扫码加客服 → 发送订单号 → 客服生成激活码 → 输入激活。<br>
+                    选择版本 → 填写信息提交订单 → 扫码支付（支付宝/微信）→ 确认付款 → 后台核对激活 → 本页领取激活码。<br>
                     <strong>⚠️ 激活码按端授权：</strong>桌面端激活码仅限桌面端使用，手机端激活码仅限手机端使用；如需桌面端+手机端双端使用，需分别购买两端激活。
                 </div>
             </div>
@@ -1630,15 +1630,25 @@
                         </div>
                     </div>
                     <div class="version-pick" id="versionPick">
-                        <div class="version-pick-item" data-version="local" data-price="标准版￥99/年 或 机构版￥299/年">
-                            <div class="name">🏥 本地统一包（离线）</div>
-                            <div class="desc">完全离线，单机数据主权；标准版/机构版由激活码决定</div>
-                            <div class="price">标准版 ￥99<small>/年·单用户</small>｜机构版 ￥299<small>/年·3-5普通用户</small></div>
+                        <div class="version-pick-item" data-version="local" data-edition="personal" data-price="￥99/年">
+                            <div class="name">🏥 本地标准版（离线）</div>
+                            <div class="desc">完全离线，单机数据主权 · 单用户</div>
+                            <div class="price">￥99 <small>/ 年 · 单用户</small></div>
                         </div>
-                        <div class="version-pick-item" data-version="cloud" data-price="标准版￥199/年 或 机构版￥399/年">
-                            <div class="name">☁️ 云端统一包（云端）</div>
-                            <div class="desc">云端同步多端协作；标准版/机构版由激活码决定</div>
-                            <div class="price">标准版 ￥199<small>/年·单用户</small>｜机构版 ￥399<small>/年·3-5普通用户</small></div>
+                        <div class="version-pick-item" data-version="local" data-edition="pro" data-price="￥299/年">
+                            <div class="name">🏥 本地机构版（离线）</div>
+                            <div class="desc">完全离线，多医师协作 · 3-5普通用户</div>
+                            <div class="price">￥299 <small>/ 年 · 3-5普通用户</small></div>
+                        </div>
+                        <div class="version-pick-item" data-version="cloud" data-edition="personal" data-price="￥199/年">
+                            <div class="name">☁️ 云端标准版（云端）</div>
+                            <div class="desc">云端同步多端协作 · 单用户</div>
+                            <div class="price">￥199 <small>/ 年 · 单用户</small></div>
+                        </div>
+                        <div class="version-pick-item" data-version="cloud" data-edition="pro" data-price="￥399/年">
+                            <div class="name">☁️ 云端机构版（云端）</div>
+                            <div class="desc">云端同步多端协作 · 3-5普通用户</div>
+                            <div class="price">￥399 <small>/ 年 · 3-5普通用户</small></div>
                         </div>
                     </div>
                     <div class="step-nav">
@@ -1647,13 +1657,13 @@
                     </div>
                 </div>
 
-                <!-- Step 2: 生成订单号 + 填写客户信息 -->
+                <!-- Step 2: 生成订单号 + 填写客户信息 + 提交订单 -->
                 <div class="purchase-step" data-step="2">
                     <div class="step-header">
                         <div class="step-num">2</div>
                         <div>
-                            <div class="step-title">生成订单号并填写信息</div>
-                            <div class="step-desc">请如实填写以下信息，生成订单后一键复制发给客服</div>
+                            <div class="step-title">填写信息并提交订单</div>
+                            <div class="step-desc">请如实填写以下信息，提交后即可扫码付款</div>
                         </div>
                     </div>
                     <div class="order-box">
@@ -1699,81 +1709,124 @@
                     </div>
                     <!-- ★ 结构化订单汇总文本 -->
                     <div class="order-summary">
-                        <div class="summary-label">📋 订单汇总（请完整复制发送给客服）</div>
+                        <div class="summary-label">📋 订单汇总（如需客服协助可复制发送）</div>
                         <textarea id="orderSummaryText" readonly onclick="this.select()"></textarea>
                         <button class="copy-btn" onclick="copyOrderSummary()" style="margin-top:6px;">📋 一键复制订单信息</button>
-                        <div class="summary-tip">提示：上方文本框包含订单号、版本、金额、您的信息和设备识别码，客服收到后可快速生成激活码。</div>
+                        <div class="summary-tip">提示：订单提交后即可扫码付款（支付宝/微信均可），付款确认并经管理员核对后，激活码在本页自动显示，无需等待客服回传。</div>
                     </div>
                     <div class="step-nav">
                         <button class="prev" onclick="goStep(1)">← 上一步</button>
-                        <button class="next" id="step2Next" onclick="goStep(3)">下一步：扫码加客服 →</button>
+                        <button class="next" id="step2Next" onclick="submitOrder()">下一步：提交订单，扫码付款 →</button>
                     </div>
                 </div>
 
-                <!-- Step 3: 扫码加客服 -->
+                <!-- Step 3: 扫码支付 -->
                 <div class="purchase-step" data-step="3">
                     <div class="step-header">
                         <div class="step-num">3</div>
                         <div>
-                            <div class="step-title">扫码加客服微信</div>
-                            <div class="step-desc">扫描下方二维码添加客服，发送订单号</div>
+                            <div class="step-title">扫码支付（支付宝 / 微信）</div>
+                            <div class="step-desc">扫描下方收款码付款，付款时请备注订单号</div>
                         </div>
                     </div>
-                    <div class="contact-box">
-                        <div id="qrcodeContainer" class="qrcode-container"></div>
-                        <div class="contact-wechat">
-                            客服微信：
-                            <span class="wx-id" onclick="copyText(this)" title="点击复制">hktzy1688</span>
+                    <div class="order-box">
+                        <div class="label">本次应付金额</div>
+                        <div class="value" id="payAmountDisplay">-</div>
+                        <div style="font-size:12px;color:#9ca3af;margin-top:4px;">付款时请在备注中填写订单号后 6 位，方便快速核对</div>
+                    </div>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-top:14px;">
+                        <div style="text-align:center;padding:14px;border:1px solid #e5e7eb;border-radius:10px;background:#fff;">
+                            <div style="font-weight:700;margin-bottom:8px;">💙 支付宝</div>
+                            <img src="images/pay-alipay.png" alt="支付宝收款码" style="width:180px;height:180px;border-radius:8px;border:1px solid #e5e7eb;"
+                                 onerror="this.style.display='none';document.getElementById('alipayFallback').style.display='flex';">
+                            <div id="alipayFallback" style="display:none;width:180px;height:180px;margin:0 auto;border:2px dashed #d1d5db;border-radius:8px;flex-direction:column;align-items:center;justify-content:center;font-size:12px;color:#9ca3af;padding:10px;text-align:center;">
+                                收款码图片待上传<br>（images/pay-alipay.png）
+                            </div>
+                            <div style="font-size:12px;color:#6b7280;margin-top:6px;">支付宝扫码付款</div>
+                        </div>
+                        <div style="text-align:center;padding:14px;border:1px solid #e5e7eb;border-radius:10px;background:#fff;">
+                            <div style="font-weight:700;margin-bottom:8px;">💚 微信支付</div>
+                            <img src="images/pay-wechat.png" alt="微信收款码" style="width:180px;height:180px;border-radius:8px;border:1px solid #e5e7eb;"
+                                 onerror="this.style.display='none';document.getElementById('wechatFallback').style.display='flex';">
+                            <div id="wechatFallback" style="display:none;width:180px;height:180px;margin:0 auto;border:2px dashed #d1d5db;border-radius:8px;flex-direction:column;align-items:center;justify-content:center;font-size:12px;color:#9ca3af;padding:10px;text-align:center;">
+                                收款码图片待上传<br>（images/pay-wechat.png）
+                            </div>
+                            <div style="font-size:12px;color:#6b7280;margin-top:6px;">微信扫码付款</div>
                         </div>
                     </div>
-                    <div class="notice notice-warning">
-                        <span class="icon">📋</span>
+                    <div class="notice notice-warning" style="margin-top:14px;">
+                        <span class="icon">⚠️</span>
                         <div>
-                            <strong>请向客服发送：</strong><br>
-                            ① 上一步"一键复制订单信息"的全部内容（含订单号+您的信息+设备识别码）<br>
-                            ② 付款截图（付款后发送）
+                            <strong>付款遇到问题？</strong>可扫码加客服微信协助处理：
+                            <div class="contact-box" style="margin-top:10px;">
+                                <div id="qrcodeContainer" class="qrcode-container"></div>
+                                <div class="contact-wechat">
+                                    客服微信：
+                                    <span class="wx-id" onclick="copyText(this)" title="点击复制">hktzy1688</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <div class="step-nav">
                         <button class="prev" onclick="goStep(2)">← 上一步</button>
-                        <button class="next" onclick="goStep(4)">下一步：付款并领取激活码 →</button>
+                        <button class="next" onclick="goStep(4)">下一步：填写付款确认 →</button>
                     </div>
                 </div>
 
-                <!-- Step 4: 付款并领取 -->
+                <!-- Step 4: 付款确认 + 领取激活码 -->
                 <div class="purchase-step" data-step="4">
                     <div class="step-header">
                         <div class="step-num">4</div>
                         <div>
-                            <div class="step-title">付款并领取激活码</div>
-                            <div class="step-desc">向客服微信付款后，等待客服生成激活码</div>
+                            <div class="step-title">付款确认，领取激活码</div>
+                            <div class="step-desc">付款后填写转账单号，管理员核对通过后本页自动显示激活码</div>
                         </div>
                     </div>
-                    <div class="flow-guide">
-                        <strong>📌 操作指引：</strong>
-                        <ol>
-                            <li>在客服微信中完成付款（金额见订单号展示）</li>
-                            <li>将订单号 + 付款截图 + 设备识别码发送给客服</li>
-                            <li>客服核对后为您生成专属激活码</li>
-                            <li>客服将激活码回传给您（通常 5-30 分钟内）</li>
-                            <li>在软件"激活授权"弹窗中粘贴激活码，点击"激活"按钮</li>
-                        </ol>
+                    <div class="order-box">
+                        <div class="label">您的订单号（再次复制）</div>
+                        <div class="value" id="orderNumberRepeat">-</div>
+                        <button class="copy-btn" onclick="copyOrder()">📋 复制订单号</button>
                     </div>
-                    <div class="notice notice-success">
+                    <!-- ★ 付款确认表单 -->
+                    <div class="cust-form" id="payConfirmForm" style="margin-top:14px;">
+                        <div class="form-item">
+                            <label>支付方式 <span class="req">*</span></label>
+                            <select id="payMethodSel" style="width:100%;padding:9px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;">
+                                <option value="alipay">支付宝</option>
+                                <option value="wechat">微信支付</option>
+                            </select>
+                        </div>
+                        <div class="form-item">
+                            <label>转账单号后 6 位 <span class="req">*</span></label>
+                            <input type="text" id="payTxnInput" placeholder="支付宝/微信账单详情中的单号后6位" maxlength="6" style="text-transform:uppercase;" oninput="this.value=this.value.replace(/[^A-Za-z0-9]/g,'').toUpperCase()">
+                            <div style="font-size:11px;color:#9ca3af;margin-top:3px;">💡 支付宝：账单详情→订单号；微信：账单→转账单号。填最后6位即可</div>
+                        </div>
+                    </div>
+                    <button class="copy-btn" id="payConfirmBtn" onclick="submitPayConfirm()" style="width:100%;margin-top:10px;padding:12px;font-size:15px;background:linear-gradient(135deg,#07c160,#059669);color:#fff;border:none;border-radius:8px;cursor:pointer;">✅ 提交付款确认</button>
+                    <!-- ★ 激活状态查询区 -->
+                    <div id="orderStatusBox" style="display:none;margin-top:14px;padding:14px;border:1px solid #e5e7eb;border-radius:10px;background:#f9fafb;">
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+                            <strong>📦 订单激活状态</strong>
+                            <button class="copy-btn" style="padding:4px 10px;font-size:12px;" onclick="queryOrderStatus(true)">🔄 刷新状态</button>
+                        </div>
+                        <div id="orderStatusText" style="margin-top:10px;font-size:14px;line-height:1.8;">查询中...</div>
+                        <div id="licenseCodeBox" style="display:none;margin-top:10px;padding:12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;text-align:center;">
+                            <div style="font-size:12px;color:#16a34a;margin-bottom:6px;">🎉 激活成功！您的专属激活码：</div>
+                            <div id="licenseCodeText" style="font-family:Courier New,monospace;font-size:18px;font-weight:700;color:#15803d;letter-spacing:1px;word-break:break-all;"></div>
+                            <button class="copy-btn" style="margin-top:8px;" onclick="copyLicenseCode()">📋 复制激活码</button>
+                            <div style="font-size:12px;color:#6b7280;margin-top:8px;line-height:1.6;">请将激活码粘贴到软件"激活授权"弹窗中，点击"激活"按钮完成激活。</div>
+                        </div>
+                    </div>
+                    <div class="notice notice-success" style="margin-top:14px;">
                         <span class="icon">✅</span>
                         <div>
                             <strong>激活成功后：</strong>软件将无限制使用，所有功能解锁。<br>
                             <strong>注意事项：</strong>激活码绑定当前设备，更换设备需重新购买或联系客服迁移。
                         </div>
                     </div>
-                    <div class="order-box" style="margin-top:14px;">
-                        <div class="label">您的订单号（再次复制）</div>
-                        <div class="value" id="orderNumberRepeat">-</div>
-                        <button class="copy-btn" onclick="copyOrder()">📋 复制订单号</button>
-                    </div>
                     <div class="step-nav">
                         <button class="prev" onclick="goStep(3)">← 上一步</button>
-                        <button class="next" onclick="resetPurchase()">🔄 重新生成订单</button>
+                        <button class="next" onclick="resetPurchase()">🔄 重新下单</button>
                     </div>
                 </div>
             </div>
@@ -2579,10 +2632,11 @@
         }
 
         // =====================================================================
-        // 6. 购买激活码流程
+        // 6. 购买激活码流程（官网订单：提交 → 扫码支付 → 付款确认 → 领取激活码）
         // =====================================================================
         let selectedVersion = null;
         let orderInfo = { number: '', version: '', price: '', time: '' };
+        let _orderStatusTimer = null;  // 激活状态轮询定时器
 
         // 版本选择
         document.querySelectorAll('.version-pick-item').forEach(item => {
@@ -2591,6 +2645,7 @@
                 item.classList.add('selected');
                 selectedVersion = {
                     key: item.dataset.version,
+                    edition: item.dataset.edition,
                     name: item.querySelector('.name').textContent,
                     price: item.dataset.price
                 };
@@ -2625,6 +2680,8 @@
             document.getElementById('orderPrice').textContent = orderInfo.price;
             document.getElementById('orderTime').textContent = orderInfo.time;
             document.getElementById('orderNumberRepeat').textContent = orderInfo.number;
+            const payAmount = document.getElementById('payAmountDisplay');
+            if (payAmount) payAmount.textContent = orderInfo.price;
             updateOrderSummary();  // 生成订单后立即更新汇总文本
         }
 
@@ -2678,7 +2735,7 @@
             lines.push('设备识别码：' + (machineId || '【未填写】'));
             if (note) lines.push('备注：' + note);
             lines.push('─────────────────────');
-            lines.push('付款截图：付款后在此发送');
+            lines.push('付款方式：支付宝/微信扫码（见下一步）');
             lines.push('═══════════════════════');
 
             document.getElementById('orderSummaryText').value = lines.join('\n');
@@ -2721,6 +2778,178 @@
             } else { fallback(); }
         }
 
+        // ★★★ 官网订单闭环：提交订单 → 付款确认 → 状态轮询 → 领取激活码 ★★★
+
+        // Step 2 → Step 3: 提交订单到服务端
+        async function submitOrder() {
+            const name = (document.getElementById('custName').value || '').trim();
+            const phone = (document.getElementById('custPhone').value || '').trim();
+            const wechat = (document.getElementById('custWechat').value || '').trim();
+            const machineId = (document.getElementById('custMachineId').value || '').trim();
+            const note = (document.getElementById('custNote').value || '').trim();
+            if (!name || !phone || !machineId) {
+                showToast('请先填写必填项：姓名/诊所名称、联系电话、设备识别码');
+                return;
+            }
+            if (!/^1[3-9]\d{9}$/.test(phone)) {
+                showToast('请输入正确的 11 位手机号');
+                return;
+            }
+            const btn = document.getElementById('step2Next');
+            btn.disabled = true;
+            btn.textContent = '提交中...';
+            try {
+                const res = await fetch(BASE + '/api/license/order-submit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        orderNo: orderInfo.number,
+                        productKey: selectedVersion.key,
+                        edition: selectedVersion.edition,
+                        price: orderInfo.price,
+                        clinicName: name,
+                        adminName: name,
+                        phone: phone,
+                        wechat: wechat,
+                        machineId: machineId,
+                        note: note
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('订单提交成功，请扫码付款');
+                    goStep(3);
+                } else {
+                    showToast(data.error || '订单提交失败，请稍后重试');
+                }
+            } catch (e) {
+                showToast('网络错误，请检查网络后重试');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '下一步：提交订单，扫码付款 →';
+            }
+        }
+
+        // Step 4: 提交付款确认（支付方式 + 转账单号后6位）
+        async function submitPayConfirm() {
+            const payMethod = document.getElementById('payMethodSel').value;
+            const txn = (document.getElementById('payTxnInput').value || '').trim();
+            if (!/^[A-Za-z0-9]{6}$/.test(txn)) {
+                showToast('请填写转账单号后 6 位（数字或字母）');
+                return;
+            }
+            const phone = (document.getElementById('custPhone').value || '').trim();
+            if (!/^1[3-9]\d{9}$/.test(phone)) {
+                showToast('订单手机号缺失，请返回上一步重新填写');
+                return;
+            }
+            const btn = document.getElementById('payConfirmBtn');
+            btn.disabled = true;
+            btn.textContent = '提交中...';
+            try {
+                const res = await fetch(BASE + '/api/license/order-paid', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        orderNo: orderInfo.number,
+                        phone: phone,
+                        payMethod: payMethod,
+                        txnLast6: txn.toUpperCase()
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('付款信息已提交，管理员核对中');
+                    document.getElementById('orderStatusBox').style.display = 'block';
+                    queryOrderStatus();
+                    startOrderStatusPolling();
+                } else {
+                    showToast(data.error || '提交失败，请稍后重试');
+                }
+            } catch (e) {
+                showToast('网络错误，请检查网络后重试');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '✅ 提交付款确认';
+            }
+        }
+
+        // 订单激活状态查询（activated 后停止轮询）
+        async function queryOrderStatus(manual) {
+            if (!orderInfo.number) return;
+            const phone = (document.getElementById('custPhone').value || '').trim();
+            const textEl = document.getElementById('orderStatusText');
+            try {
+                const res = await fetch(BASE + '/api/license/order-status?orderNo=' +
+                    encodeURIComponent(orderInfo.number) + '&phone=' + encodeURIComponent(phone));
+                const data = await res.json();
+                if (!data.success) {
+                    textEl.textContent = '❌ ' + (data.error || '查询失败');
+                    return;
+                }
+                renderOrderStatus(data);
+                if (data.status === 'activated' || data.status === 'rejected') {
+                    stopOrderStatusPolling();
+                }
+            } catch (e) {
+                if (manual) showToast('网络错误，请稍后重试');
+                else textEl.textContent = '网络波动，稍后自动重试...';
+            }
+        }
+
+        function renderOrderStatus(data) {
+            const textEl = document.getElementById('orderStatusText');
+            const codeBox = document.getElementById('licenseCodeBox');
+            codeBox.style.display = 'none';
+            let html = '';
+            const payName = data.payMethod === 'alipay' ? '支付宝' : (data.payMethod === 'wechat' ? '微信' : '');
+            if (data.status === 'pending_payment') {
+                html = '⏳ <strong>待付款</strong>：订单已提交，请返回上一步扫码完成付款。';
+            } else if (data.status === 'pending') {
+                html = '🔎 <strong>管理员核对中</strong>：已收到付款信息' +
+                    (payName ? '（' + payName + '，转账单号尾号 ' + String(data.payTxnLast6 || '') + '）' : '') +
+                    '，管理员在收款账单中核对到账后立即为您激活，通常 5-30 分钟内完成。<br>本页每 30 秒自动刷新，您也可以点击右上角"刷新状态"。';
+            } else if (data.status === 'activated') {
+                html = '🎉 <strong>已激活</strong>：您的专属激活码已生成（见下方），请复制并粘贴到软件"激活授权"弹窗中。';
+                document.getElementById('licenseCodeText').textContent = data.licenseCode || '';
+                codeBox.style.display = 'block';
+            } else if (data.status === 'rejected') {
+                html = '❌ <strong>已拒绝</strong>：' + (data.rejectReason || '请联系客服处理') + '。<br>如有疑问请联系客服微信 hktzy1688。';
+            } else {
+                html = '⏳ 当前状态：' + data.status;
+            }
+            textEl.innerHTML = html;
+        }
+
+        function startOrderStatusPolling() {
+            stopOrderStatusPolling();
+            _orderStatusTimer = setInterval(() => queryOrderStatus(false), 30000);
+        }
+
+        function stopOrderStatusPolling() {
+            if (_orderStatusTimer) {
+                clearInterval(_orderStatusTimer);
+                _orderStatusTimer = null;
+            }
+        }
+
+        function copyLicenseCode() {
+            const text = document.getElementById('licenseCodeText').textContent;
+            if (!text) return;
+            const fallback = () => {
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                document.body.appendChild(ta);
+                ta.select();
+                try { document.execCommand('copy'); } catch(e) {}
+                document.body.removeChild(ta);
+                showToast('激活码已复制');
+            };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(() => showToast('激活码已复制')).catch(fallback);
+            } else { fallback(); }
+        }
+
         function goStep(n) {
             document.querySelectorAll('.purchase-step').forEach(s => s.classList.remove('active'));
             document.querySelector('.purchase-step[data-step="' + n + '"]').classList.add('active');
@@ -2729,6 +2958,7 @@
 
         function resetPurchase() {
             selectedVersion = null;
+            stopOrderStatusPolling();
             document.querySelectorAll('.version-pick-item').forEach(i => i.classList.remove('selected'));
             document.getElementById('step1Next').disabled = true;
             orderInfo = { number: '', version: '', price: '', time: '' };
@@ -2737,6 +2967,13 @@
                 const el = document.getElementById(id);
                 if (el) el.value = '';
             });
+            // ★ 重置付款确认与状态区
+            const txnInput = document.getElementById('payTxnInput');
+            if (txnInput) txnInput.value = '';
+            const statusBox = document.getElementById('orderStatusBox');
+            if (statusBox) statusBox.style.display = 'none';
+            const codeBox = document.getElementById('licenseCodeBox');
+            if (codeBox) codeBox.style.display = 'none';
             updateOrderSummary();
             goStep(1);
             showToast('已重置，请重新选择版本');

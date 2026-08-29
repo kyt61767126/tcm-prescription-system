@@ -57,7 +57,14 @@ function maskRecord(record) {
         appMode: record.appMode || '',
         versionLabel: record.versionLabel || '',
         // ★ 环境标记：test=测试环境，production=正式环境
-        env: record.env || 'production'
+        env: record.env || 'production',
+        // ★ 官网订单扩展字段（后台核对付款信息用）
+        orderSource: record.orderSource || '',
+        orderNo: record.orderNo || '',
+        orderPrice: record.orderPrice || '',
+        payMethod: record.payMethod || '',
+        payTxnLast6: record.payTxnLast6 || '',
+        paidAt: record.paidAt || null
     };
 }
 
