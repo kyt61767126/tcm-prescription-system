@@ -1273,12 +1273,21 @@ let currentUser = null;
         async function getUserItem(key) {
             const storageKey = currentUser ? 'local_web_user_' + currentUser.username + '_' + key : 'local_web_unauthenticated_' + key;
             
-            if (IS_ELECTRON) {
-                const result = await window.electronAPI.getUserData(storageKey);
-                if (result.success && result.data !== null) {
-                    return JSON.stringify(result.data);
+            // ★ 2026-08-29 备份崩溃修复：exportData 一开始就 await getUserItem，
+            //   此处裸读 result.success 在两种情况下抛 TypeError（被防静默包装弹
+            //   「备份失败:Cannot read properties of null (reading 'success')」）：
+            //   ① 桌面 IPC getUserData 返回 {success,data}，APP shim 却返回裸值或 null（格式不匹配，
+            //     localStorage 无该 key 时 resolve(null)）；
+            //   ② 桥异常/返回空。修复：null 安全 + try/catch + 运行时判断，失败一律回退 localStorage。
+            if (IS_ELECTRON && window.electronAPI && typeof window.electronAPI.getUserData === 'function') {
+                try {
+                    const result = await window.electronAPI.getUserData(storageKey);
+                    if (result && result.success && result.data !== null) {
+                        return JSON.stringify(result.data);
+                    }
+                } catch (e) {
+                    console.error('getUserData 桥调用失败，回退 localStorage:', e);
                 }
-                return localStorage.getItem(storageKey);
             }
             return localStorage.getItem(storageKey);
         }
