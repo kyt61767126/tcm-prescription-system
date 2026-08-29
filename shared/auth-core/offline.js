@@ -2533,6 +2533,27 @@
     //   已激活用户在「基础设置 → 授权状态」区显示专属邀请码 + 邀请进度 + 累计奖励，
     //   点击邀请码复制。数据来源 POST /api/license/invite（凭本地 license:code 查询）。
     //   断网/接口异常静默跳过，不影响授权状态正常显示。
+    // ★ 2026-08-29 桌面版 CORS 修复：渲染进程从 file:// 直连云端 API 会被 CORS 拦截
+    //   （Origin: null 不在服务端白名单），桌面版优先走主进程 IPC 代理 fetch；
+    //   APP（http://localhost 在白名单）/ 网页版直连。
+    async function postInviteQuery(bodyData) {
+        if (global.electronAPI && global.electronAPI.license &&
+            typeof global.electronAPI.license.queryInvite === 'function') {
+            try {
+                const r = await global.electronAPI.license.queryInvite(bodyData);
+                if (r && typeof r === 'object') return r;
+            } catch (_) {}
+        }
+        try {
+            const r = await fetch(API_BASE + '/license/invite', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(bodyData)
+            });
+            return await r.json().catch(() => null);
+        } catch (_) { return null; }
+    }
+
     async function loadInviteInfo(el) {
         try {
             const old = document.getElementById('inviteInfoBox');
@@ -2583,12 +2604,7 @@
                         } catch (_) {}
                     }
                     if (mid && String(mid).trim().length >= 8) {
-                        const mr = await fetch(API_BASE + '/license/invite', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ machineId: String(mid).trim() })
-                        });
-                        const md = await mr.json().catch(() => null);
+                        const md = await postInviteQuery({ machineId: String(mid).trim() });
                         if (md && md.success && md.inviteCode) {
                             renderInviteCard(el, md);
                             return;
@@ -2604,12 +2620,7 @@
                 el.appendChild(nb);
                 return;
             }
-            const r = await fetch(API_BASE + '/license/invite', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ code: String(code).trim() })
-            });
-            const d = await r.json().catch(() => null);
+            const d = await postInviteQuery({ code: String(code).trim() });
             if (!d || !d.success || !d.inviteCode) {
                 // ★ 可诊断性：激活码存在但查询失败（网络异常/服务暂不可用/激活码记录缺失）
                 //   显示灰色小提示而非完全静默，便于用户和排查区分失败原因

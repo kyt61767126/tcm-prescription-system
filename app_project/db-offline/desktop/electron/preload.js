@@ -129,7 +129,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
         getFeatureStatus: () => ipcRenderer.invoke('license:get-feature-status'),
         // ★ 试用期配置（测试用，0=立即过期，默认 7）
         setTrialDays: (days) => ipcRenderer.invoke('license:set-trial-days', days),
-        getTrialDays: () => ipcRenderer.invoke('license:get-trial-days')
+        getTrialDays: () => ipcRenderer.invoke('license:get-trial-days'),
+        // ★ 2026-08-29 邀请码查询：主进程代理 fetch（渲染进程 file:// 直连云端被 CORS 拦截）
+        queryInvite: (payload) => ipcRenderer.invoke('license:query-invite', payload)
     },
 
     // ★ 激活码激活窗口（云端激活系统，第3周任务）

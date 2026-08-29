@@ -1593,6 +1593,16 @@ ipcMain.handle('license:get-machine-id', () => {
     }
 });
 
+// ★ 2026-08-29 邀请码查询 - 主进程代理 fetch（渲染进程 file:// 直连被 CORS 拦截）
+ipcMain.handle('license:query-invite', async (event, data) => {
+    try {
+        return await activateManager.queryInvite(data);
+    } catch (e) {
+        console.error('[IPC] query-invite 异常:', e);
+        return { success: false, error: e && e.message };
+    }
+});
+
 // ★ 管理员一键激活 - 提交激活请求到平台
 ipcMain.handle('license:submit-admin-request', async (event, data) => {
     try {

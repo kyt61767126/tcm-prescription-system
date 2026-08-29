@@ -614,6 +614,30 @@ async function startTrial() {
     }
 }
 
+// ★ 2026-08-29 邀请码查询（主进程代理 fetch）
+//   渲染进程从 file:// 直连云端 API 会被 CORS 拦截（Origin: null 不在白名单），
+//   管理员激活等流程均走主进程 fetch；邀请码查询同样必须经此代理。
+async function queryInvite(data) {
+    try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 8000);
+        try {
+            const response = await fetch('https://tcm-prescription-system.pages.dev/api/license/invite', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data || {}),
+                signal: controller.signal
+            });
+            return await response.json();
+        } finally {
+            clearTimeout(timeout);
+        }
+    } catch (e) {
+        console.warn('[Invite] 主进程代理查询失败:', e.message);
+        return { success: false, error: e.message };
+    }
+}
+
 // ★ 取消管理员激活请求
 async function cancelAdminRequest(requestId) {
     try {
@@ -642,6 +666,7 @@ module.exports = {
     submitAdminRequest,
     checkAdminStatus,
     saveLicense,
+    queryInvite,
     cancelAdminRequest,
     saveAdminRequestId,
     loadAdminAccountPhone,
