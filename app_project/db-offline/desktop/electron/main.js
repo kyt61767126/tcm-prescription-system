@@ -359,20 +359,33 @@ async function registerTrialWithServer() {
 }
 
 function getDownloadsDirectory() {
-    // ★ 2026-08-29 修复重装丢媒体：NSIS 安装版媒体保存到 userData/downloads（%APPDATA%，重装不清除）。
-    // 旧版保存在安装目录（exe 同级 downloads），重装/覆盖安装时安装器清空目录 → 照片视频全部物理丢失
-    // （查看时报 ENOENT）。便携版（PORTABLE_EXECUTABLE_DIR）保持 exe 同级——便携特性：拷目录即迁移。
+    // ★ 2026-08-29 修复重装丢媒体（v2 按用户要求改安装盘）：媒体保存到「安装盘根目录\惠康中医媒体\downloads」。
+    //   演进史：v0 存安装目录（重装软件被 NSIS 清空 → 照片丢失）；v1 存 %APPDATA%（防住重装软件，
+    //   但重装系统格 C 盘会丢）；v2 存安装盘根目录专属文件夹（重装软件✅不丢 + 重装C系统✅不丢 + 打开盘符即见易备份）。
+    //   创建失败（如无权限）自动回退 %APPDATA%（保证可用性优先）。
+    //   便携版（PORTABLE_EXECUTABLE_DIR）保持 exe 同级——便携特性：拷目录即迁移。
     if (process.env.PORTABLE_EXECUTABLE_DIR) {
         return ensureDirWithFallback('downloads');
     }
-    return ensureDirWithFallback(path.join(app.getPath('userData'), 'downloads'));
+    try {
+        const exeDir = getExeDirectory();
+        const driveRoot = path.parse(exeDir).root; // 如 D:\
+        return ensureDirWithFallback(path.join(driveRoot, '惠康中医媒体', 'downloads'), { rethrow: true });
+    } catch (e) {
+        console.warn('[Media] 安装盘根目录不可写，回退 userData/downloads:', e.message);
+        return ensureDirWithFallback(path.join(app.getPath('userData'), 'downloads'));
+    }
 }
 
-// ★ 全部媒体根目录（读取/扫描兼容两代位置）：
-//   新位置 userData/downloads + 旧位置 exe 同级 downloads（存量用户未重装的旧文件仍可查可读）
+// ★ 全部媒体根目录（读取/扫描兼容历代位置）：
+//   v2 安装盘\惠康中医媒体\downloads + v1 userData/downloads + v0 exe 同级 downloads（存量旧文件仍可查可读）
 function getAllMediaRoots() {
     const roots = [];
     try { roots.push(path.resolve(getDownloadsDirectory())); } catch(e) {}
+    try {
+        const driveRoot = path.parse(getExeDirectory()).root;
+        roots.push(path.resolve(driveRoot, '惠康中医媒体', 'downloads'));
+    } catch(e) {}
     try { roots.push(path.resolve(getExeDirectory(), 'downloads')); } catch(e) {}
     try { roots.push(path.resolve(app.getPath('userData'), 'downloads')); } catch(e) {}
     return Array.from(new Set(roots));
@@ -1259,6 +1272,10 @@ async function verifyCodeIntegrity() {
 app.whenReady().then(async () => {
     // ★ P0-③ exe 签名/完整性自校验（非阻塞，仅记录，不影响启动流程）
     selfCheck.runSelfCheck();
+
+    // ★ 2026-08-29 启动即建媒体专属文件夹（安装盘根目录\惠康中医媒体\downloads），
+    //   用户安装后打开盘符即可看到，无需等首次拍照才创建（失败静默，运行时保存会再兜底）
+    try { getDownloadsDirectory(); } catch (e) { console.warn('[Media] 启动建目录失败:', e.message); }
 
     // ★ 首次启动时将 config.json 从 asar 复制到可写路径
     await ensureWritableConfig();
