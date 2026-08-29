@@ -1724,17 +1724,16 @@ public class MainActivity extends BridgeActivity {
         // 工具方法
         // ------------------------------------------------------------------
         private File getImageDir() {
+            // ★ 2026-08-29 数据安全 v2：统一存应用专属目录（getExternalFilesDir）——
+            //   Android 10+ 本来就在专属目录；Android 9- 原存公共 Pictures（相册可见、其他APP可扫到
+            //   患者照片，隐私风险），现统一改专属目录。旧公共目录文件仍通过 getAllMediaDirs() 白名单可读。
+            //   注意：专属目录卸载即清空，数据保留依赖备份功能（下一轮实现一键备份）。
             File dir;
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                File external = getExternalFilesDir(Environment.DIRECTORY_PICTURES);
-                File newDir = new File(external, "惠康中医处方");
-                File oldDir = new File(external, "本能中医处方");
-                dir = (newDir.exists() || !oldDir.exists()) ? newDir : oldDir;
+            File external = getExternalFilesDir(Environment.DIRECTORY_PICTURES);
+            if (external != null) {
+                dir = new File(external, "惠康中医处方");
             } else {
-                File pictures = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
-                File newDir = new File(pictures, "惠康中医处方");
-                File oldDir = new File(pictures, "本能中医处方");
-                dir = (newDir.exists() || !oldDir.exists()) ? newDir : oldDir;
+                dir = new File(getFilesDir(), "prescription_images");
             }
             if (!dir.exists() && !dir.mkdirs()) {
                 dir = new File(getFilesDir(), "prescription_images");
@@ -1744,17 +1743,13 @@ public class MainActivity extends BridgeActivity {
         }
 
         private File getVideoDir() {
+            // ★ 2026-08-29 数据安全 v2：同 getImageDir 统一应用专属目录
             File dir;
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                File external = getExternalFilesDir(Environment.DIRECTORY_MOVIES);
-                File newDir = new File(external, "惠康中医处方");
-                File oldDir = new File(external, "本能中医处方");
-                dir = (newDir.exists() || !oldDir.exists()) ? newDir : oldDir;
+            File external = getExternalFilesDir(Environment.DIRECTORY_MOVIES);
+            if (external != null) {
+                dir = new File(external, "惠康中医处方");
             } else {
-                File movies = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES);
-                File newDir = new File(movies, "惠康中医处方");
-                File oldDir = new File(movies, "本能中医处方");
-                dir = (newDir.exists() || !oldDir.exists()) ? newDir : oldDir;
+                dir = new File(getFilesDir(), "prescription_videos");
             }
             if (!dir.exists() && !dir.mkdirs()) {
                 dir = new File(getFilesDir(), "prescription_videos");
@@ -1765,6 +1760,8 @@ public class MainActivity extends BridgeActivity {
 
         // getImageDir() 只返回一个目录，导致另一个目录下的文件无法通过白名单校验
         // 遍历所有可能的媒体目录（新旧目录都扫描），与离线APP一致
+        // ★ 2026-08-29 v2：白名单固定为四类候选（不按 SDK 分支）——专属目录新旧名 + 旧公共目录新旧名
+        //   （Android 10+ 旧公共目录遗留文件、Android 9- 老版本保存的公共目录文件，都仍可读）
         private java.util.List<File> getAllMediaDirs() {
             java.util.List<File> dirs = new java.util.ArrayList<>();
             File imgDir = getImageDir();
@@ -1772,36 +1769,31 @@ public class MainActivity extends BridgeActivity {
             if (imgDir != null) dirs.add(imgDir);
             if (vidDir != null) dirs.add(vidDir);
             try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    File extPic = getExternalFilesDir(Environment.DIRECTORY_PICTURES);
-                    File extMov = getExternalFilesDir(Environment.DIRECTORY_MOVIES);
-                    if (extPic != null) {
-                        File newImg = new File(extPic, "惠康中医处方");
-                        File oldImg = new File(extPic, "本能中医处方");
-                        if (!dirs.contains(newImg)) dirs.add(newImg);
-                        if (!dirs.contains(oldImg)) dirs.add(oldImg);
-                    }
-                    if (extMov != null) {
-                        File newVid = new File(extMov, "惠康中医处方");
-                        File oldVid = new File(extMov, "本能中医处方");
-                        if (!dirs.contains(newVid)) dirs.add(newVid);
-                        if (!dirs.contains(oldVid)) dirs.add(oldVid);
-                    }
-                } else {
-                    File picDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
-                    File movDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES);
-                    if (picDir != null) {
-                        File newImg = new File(picDir, "惠康中医处方");
-                        File oldImg = new File(picDir, "本能中医处方");
-                        if (!dirs.contains(newImg)) dirs.add(newImg);
-                        if (!dirs.contains(oldImg)) dirs.add(oldImg);
-                    }
-                    if (movDir != null) {
-                        File newVid = new File(movDir, "惠康中医处方");
-                        File oldVid = new File(movDir, "本能中医处方");
-                        if (!dirs.contains(newVid)) dirs.add(newVid);
-                        if (!dirs.contains(oldVid)) dirs.add(oldVid);
-                    }
+                // 应用专属目录（当前写入位置 + 旧命名"本能中医处方"遗留文件）
+                File extPic = getExternalFilesDir(Environment.DIRECTORY_PICTURES);
+                File extMov = getExternalFilesDir(Environment.DIRECTORY_MOVIES);
+                if (extPic != null) {
+                    File oldImg = new File(extPic, "本能中医处方");
+                    if (!dirs.contains(oldImg)) dirs.add(oldImg);
+                }
+                if (extMov != null) {
+                    File oldVid = new File(extMov, "本能中医处方");
+                    if (!dirs.contains(oldVid)) dirs.add(oldVid);
+                }
+                // 旧公共目录（Android 9- 老版本写入 + 部分设备迁移遗留），仅读取不写入
+                File picDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
+                File movDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES);
+                if (picDir != null) {
+                    File newImg = new File(picDir, "惠康中医处方");
+                    File oldImg = new File(picDir, "本能中医处方");
+                    if (!dirs.contains(newImg)) dirs.add(newImg);
+                    if (!dirs.contains(oldImg)) dirs.add(oldImg);
+                }
+                if (movDir != null) {
+                    File newVid = new File(movDir, "惠康中医处方");
+                    File oldVid = new File(movDir, "本能中医处方");
+                    if (!dirs.contains(newVid)) dirs.add(newVid);
+                    if (!dirs.contains(oldVid)) dirs.add(oldVid);
                 }
             } catch (Exception e) {
                 Log.e("TCM-Pres", "getAllMediaDirs 异常", e);
