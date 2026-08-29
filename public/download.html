@@ -1749,7 +1749,7 @@
                     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-top:14px;">
                         <div style="text-align:center;padding:14px;border:1px solid #e5e7eb;border-radius:10px;background:#fff;">
                             <div style="font-weight:700;margin-bottom:8px;">💙 支付宝</div>
-                            <img src="images/pay-alipay.png" alt="支付宝收款码" style="width:180px;height:180px;border-radius:8px;border:1px solid #e5e7eb;"
+                            <img id="alipayQrImg" src="images/pay-alipay.png" alt="支付宝收款码" style="width:180px;height:180px;border-radius:8px;border:1px solid #e5e7eb;"
                                  onerror="this.style.display='none';document.getElementById('alipayFallback').style.display='flex';">
                             <div id="alipayFallback" style="display:none;width:180px;height:180px;margin:0 auto;border:2px dashed #d1d5db;border-radius:8px;flex-direction:column;align-items:center;justify-content:center;font-size:12px;color:#9ca3af;padding:10px;text-align:center;">
                                 收款码图片待上传<br>（images/pay-alipay.png）
@@ -1758,13 +1758,20 @@
                         </div>
                         <div style="text-align:center;padding:14px;border:1px solid #e5e7eb;border-radius:10px;background:#fff;">
                             <div style="font-weight:700;margin-bottom:8px;">💚 微信支付</div>
-                            <img src="images/pay-wechat.png" alt="微信收款码" style="width:180px;height:180px;border-radius:8px;border:1px solid #e5e7eb;"
+                            <img id="wechatQrImg" src="images/pay-wechat.png" alt="微信收款码" style="width:180px;height:180px;border-radius:8px;border:1px solid #e5e7eb;"
                                  onerror="this.style.display='none';document.getElementById('wechatFallback').style.display='flex';">
                             <div id="wechatFallback" style="display:none;width:180px;height:180px;margin:0 auto;border:2px dashed #d1d5db;border-radius:8px;flex-direction:column;align-items:center;justify-content:center;font-size:12px;color:#9ca3af;padding:10px;text-align:center;">
                                 收款码图片待上传<br>（images/pay-wechat.png）
                             </div>
                             <div style="font-size:12px;color:#6b7280;margin-top:6px;">微信扫码付款</div>
                         </div>
+                    </div>
+                    <!-- ★ 收款码防替代校验状态 -->
+                    <div id="payQrStatus" style="text-align:center;font-size:12px;color:#9ca3af;margin-top:12px;">🔒 正在校验收款码完整性...</div>
+                    <div id="payQrTamperWarn" style="display:none;margin-top:12px;padding:12px 14px;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;color:#b91c1c;font-size:13px;line-height:1.8;">
+                        <strong>⛔ 安全警告：收款码校验失败</strong><br>
+                        检测到收款码图片与官方发布版本不一致，为保障您的资金安全，已停止展示收款码。<br>
+                        请<strong>勿通过任何渠道付款</strong>，并截图此页面联系客服微信 <strong>hktzy1688</strong> 核实。
                     </div>
                     <div class="notice notice-warning" style="margin-top:14px;">
                         <span class="icon">⚠️</span>
@@ -1781,7 +1788,7 @@
                     </div>
                     <div class="step-nav">
                         <button class="prev" onclick="goStep(2)">← 上一步</button>
-                        <button class="next" onclick="goStep(4)">下一步：填写付款确认 →</button>
+                        <button class="next" onclick="payQrNext()">下一步：填写付款确认 →</button>
                     </div>
                 </div>
 
@@ -2977,6 +2984,66 @@
             } else { fallback(); }
         }
 
+        // ★ 收款码防替代校验（SHA-256 哈希锁定）
+        // 更换收款码图片时必须同步更新哈希：两份 download.html 的 PAY_QR_PINS + tools/verify-payqr.cjs
+        const PAY_QR_PINS = {
+            alipay: { file: 'images/pay-alipay.png', hash: 'C7CE3852C83C822FD4452E7F1B1E9F36642699BA50766B94EB008397150CBA18' },
+            wechat: { file: 'images/pay-wechat.png', hash: 'BB002EACDA8AF6FB88FC3EBC9C76B101DB644CA9F0D04772660087210F649EF8' }
+        };
+        let payQrState = 'pending'; // pending / ok / fail / skip
+
+        async function verifyPayQr() {
+            if (payQrState !== 'pending') return;
+            const statusEl = document.getElementById('payQrStatus');
+            // 非安全上下文（http 本地调试）无 crypto.subtle，跳过校验不拦截
+            if (!window.isSecureContext || !crypto.subtle) {
+                payQrState = 'skip';
+                if (statusEl) statusEl.style.display = 'none';
+                return;
+            }
+            try {
+                for (const key of Object.keys(PAY_QR_PINS)) {
+                    const pin = PAY_QR_PINS[key];
+                    const resp = await fetch(pin.file + '?v=' + Date.now(), { cache: 'no-store' });
+                    if (!resp.ok) throw new Error('network');
+                    const buf = await resp.arrayBuffer();
+                    const digest = await crypto.subtle.digest('SHA-256', buf);
+                    const hash = Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
+                    if (hash !== pin.hash) throw new Error('mismatch:' + pin.file);
+                }
+                payQrState = 'ok';
+                if (statusEl) {
+                    statusEl.textContent = '🔒 收款码完整性校验通过（SHA-256 验证）';
+                    statusEl.style.cssText = 'text-align:center;font-size:12px;color:#059669;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:6px;padding:6px 10px;margin-top:12px;';
+                }
+            } catch (e) {
+                if (String(e && e.message || e).indexOf('mismatch') === 0) {
+                    // ★ 哈希不匹配 = 收款码被替换，立即拦截展示
+                    payQrState = 'fail';
+                    ['alipayQrImg', 'wechatQrImg'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+                    ['alipayFallback', 'wechatFallback'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+                    const warn = document.getElementById('payQrTamperWarn');
+                    if (warn) warn.style.display = 'block';
+                    if (statusEl) {
+                        statusEl.textContent = '⛔ 收款码完整性校验失败，已停止展示收款码';
+                        statusEl.style.cssText = 'text-align:center;font-size:12px;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:6px 10px;margin-top:12px;';
+                    }
+                } else {
+                    // 网络原因无法校验，不拦截正常用户
+                    payQrState = 'skip';
+                    if (statusEl) statusEl.style.display = 'none';
+                }
+            }
+        }
+
+        function payQrNext() {
+            if (payQrState === 'fail') {
+                alert('⛔ 收款码完整性校验失败！\n\n收款码可能已被篡改，请勿付款。\n请截图本页面并联系客服微信 hktzy1688 核实。');
+                return;
+            }
+            goStep(4);
+        }
+
         function goStep(n) {
             document.querySelectorAll('.purchase-step').forEach(s => s.classList.remove('active'));
             document.querySelector('.purchase-step[data-step="' + n + '"]').classList.add('active');
@@ -3279,6 +3346,7 @@
 
         document.addEventListener('DOMContentLoaded', function() {
             setTimeout(generateUpdateQRCode, 500);
+            verifyPayQr();
         });
     </script>
 </body>
