@@ -1680,7 +1680,7 @@ let currentUser = null;
                     return;
                 }
                 
-                const users = getUsers();
+                let users = getUsers();
                 // ★ 2026-08-24 标准版兼容：允许用 CONFIG.doctorName（医师姓名，登录框默认预填值）登录。
                 //   APP 端早有此分支；桌面端此前缺失 → 预填医师名+密码登录必然"用户名或密码错误"。
                 //   映射规则与 APP 端一致：优先"实际激活账号"（有 phone 的/非内置 admin 的），而非 users[0]
@@ -1696,6 +1696,38 @@ let currentUser = null;
                 } catch (e) { console.warn('医师名登录兼容分支异常(不影响原流程):', e); }
                 // 使用 AuthCore.verifyPassword 支持 PBKDF2 + 旧 SHA-256 + 明文兼容
                 // ★ 支持手机号/用户名双模式登录：先按 username 查找，再按 phone 字段查找
+                // ★ 2026-08-30 登录兜底自愈：启动自愈（startLicenseCheck）依赖 2 秒延迟+桥注入时序，
+                //   WebView 桥静默返回 null 时账号没进 localStorage（激活成功却登录不上）。
+                //   登录时若按输入找不到账号，直接从 config（Java getActivationUsers）拉取激活账号
+                //   补入 localStorage 后重新匹配——不依赖启动时序，桥坏了也只需再试一次。
+                try {
+                    if (window.electronAPI && window.electronAPI.activate &&
+                        typeof window.electronAPI.activate.getActivationUsers === 'function' &&
+                        typeof window.addLocalActivationUser === 'function') {
+                        var __hasMatch = users.some(function (u) {
+                            return u && (u.username === loginUsername || String(u.phone || '') === loginUsername);
+                        });
+                        if (!__hasMatch) {
+                            var __res = await window.electronAPI.activate.getActivationUsers();
+                            if (__res && __res.success && Array.isArray(__res.users) && __res.users.length > 0) {
+                                __res.users.forEach(function (u) {
+                                    if (!u || !u.username) return;
+                                    try {
+                                        window.addLocalActivationUser({
+                                            username: String(u.username),
+                                            phone: u.phone ? String(u.phone) : '',
+                                            password: u.password || 'admin',
+                                            name: u.name || u.username,
+                                            role: u.role || 'admin'
+                                        });
+                                    } catch (e) {}
+                                });
+                                users = getUsers();
+                                console.log('[LoginSelfHeal] 登录时已从 config 补入激活账号');
+                            }
+                        }
+                    }
+                } catch (e) { console.warn('[LoginSelfHeal] 登录兜底自愈异常(不影响登录):', e); }
                 let user = null;
                 for (const u of users) {
                     if (u.username !== loginUsername && String(u.phone || '') !== loginUsername) continue;

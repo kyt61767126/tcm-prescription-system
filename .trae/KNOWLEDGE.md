@@ -141,7 +141,9 @@
 
 * JS 桥三层防御：Java invoke() 必须 catch(Throwable)；shim 层拦截 null/'null'/''；前端 result null 安全。WebView 桥异常表现为「返回 null」而非 JS 异常。
 
-* ★ 2026-08-30 重装激活登录失败双坑（用户实测 13398628212/admin123 失败）：①备份导出 users 恒为 []——`JSON.parse(localStorage.getItem('local_systemUsers'))` 读的是 XORv1 加密串必抛异常，「备份含账号表」从未真正生效；修复=先 simpleDecrypt 再 parse（4 处离线系 index.html）。②重装自愈只自动填手机号不填密码，密码栏留空被静默写成 admin；修复=auth-core 激活提交前密码留空弹 confirm 明确告知。排查铁律：用户"激活后登录不上"先让 TA 试 admin。
+* ★ 2026-08-30 重装激活登录失败双坑（用户实测 13398628212/admin123 失败）：①备份导出 users 恒为 \[]——`JSON.parse(localStorage.getItem('local_systemUsers'))` 读的是 XORv1 加密串必抛异常，「备份含账号表」从未真正生效；修复=先 simpleDecrypt 再 parse（4 处离线系 index.html）。②重装自愈只自动填手机号不填密码，密码栏留空被静默写成 admin；修复=auth-core 激活提交前密码留空弹 confirm 明确告知。排查铁律：用户"激活后登录不上"先让 TA 试 admin。
+
+* ★ 2026-08-30 登录兜底自愈（双坑修复后用户仍登录失败追加）：启动自愈（startLicenseCheck 2 秒延迟）依赖桥注入时序，WebView 桥静默返回 null 时激活账号没进 localStorage。handleLogin 增加兜底：按输入找不到账号时直接调 getActivationUsers 从 config 拉激活账号补入再匹配（4 处离线系 index.html，标记 LoginSelfHeal）。教训：**凡依赖启动时序+异步桥的自愈，必须在用户操作路径上再做一层同步兜底**。
 
 ## 7. 官网付费与激活闭环（2026-08-30 全链路现行）
 
