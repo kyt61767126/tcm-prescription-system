@@ -3242,7 +3242,11 @@
             const btn = document.getElementById('ticketPayGuideBtn');
             if (!btn) return;
             btn.addEventListener('click', function() {
-                const url = 'https://tcm-prescription-system.pages.dev/download.html?mid=' + encodeURIComponent(machineId || '');
+                // ★ 2026-08-30 携带版本意图：官网购买页自动选中对应版本直接显示价格，
+                //   客户无需再选版本，填信息付款即可（离线系恒 local，edition 分 personal/pro）
+                var __edParam = (editionIntent === 'institution') ? 'local-pro' : (editionIntent === 'personal' ? 'local-personal' : '');
+                const url = 'https://tcm-prescription-system.pages.dev/download.html?mid=' + encodeURIComponent(machineId || '')
+                    + (__edParam ? ('&ed=' + __edParam) : '');
                 // ★ 2026-08-30 修复APP点击无反应：WebView 未开启多窗口，window.open 静默返回
                 //   null（不抛异常，原 fallback 永不触发）→ 按钮点了没反应、无法付款。
                 //   APP 端优先走原生桥 openExternalUrl（Java 严格白名单仅放行官网购买页）；
@@ -4066,7 +4070,11 @@
             const btn = document.getElementById('adminPayGuideBtn');
             if (!btn) return;
             btn.addEventListener('click', function() {
-                const url = 'https://tcm-prescription-system.pages.dev/download.html?mid=' + encodeURIComponent(machineId || '');
+                // ★ 2026-08-30 携带版本意图：官网购买页自动选中对应版本直接显示价格，
+                //   客户无需再选版本，填信息付款即可（离线系恒 local，edition 分 personal/pro）
+                var __edParam = (editionIntent === 'institution') ? 'local-pro' : (editionIntent === 'personal' ? 'local-personal' : '');
+                const url = 'https://tcm-prescription-system.pages.dev/download.html?mid=' + encodeURIComponent(machineId || '')
+                    + (__edParam ? ('&ed=' + __edParam) : '');
                 // ★ 2026-08-30 修复APP点击无反应：WebView 未开启多窗口，window.open 静默返回
                 //   null（不抛异常，原 fallback 永不触发）→ 按钮点了没反应、无法付款。
                 //   APP 端优先走原生桥 openExternalUrl（Java 严格白名单仅放行官网购买页）；

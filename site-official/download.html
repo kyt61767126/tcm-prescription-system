@@ -3220,6 +3220,32 @@
                     if (typeof switchToPurchase === 'function') setTimeout(switchToPurchase, 200);
                 }
             } catch (e) {}
+            // ★ 2026-08-30 版本意图直通：?ed=local-personal/local-pro/cloud-personal/cloud-pro
+            //   客户端导引携带版本 → 自动选中对应版本并直接进入下单步骤（显示版本价格），
+            //   客户无需再选版本，填信息完成支付即可。
+            try {
+                const __ed = new URLSearchParams(window.location.search).get('ed');
+                if (__ed) {
+                    const __map = {
+                        'local-personal': { version: 'local', edition: 'personal' },
+                        'local-pro':      { version: 'local', edition: 'pro' },
+                        'cloud-personal': { version: 'cloud', edition: 'personal' },
+                        'cloud-pro':      { version: 'cloud', edition: 'pro' }
+                    };
+                    const __target = __map[String(__ed).toLowerCase()];
+                    if (__target) {
+                        setTimeout(function() {
+                            const __item = document.querySelector('.version-pick-item[data-version="' + __target.version + '"][data-edition="' + __target.edition + '"]');
+                            if (__item && !__item.classList.contains('selected')) {
+                                __item.click();
+                                // 选中后直接进入下一步（生成订单+展示价格）
+                                const __next = document.getElementById('step1Next');
+                                if (__next && !__next.disabled) __next.click();
+                            }
+                        }, 300);
+                    }
+                }
+            } catch (e) {}
         });
     </script>
 </body>
