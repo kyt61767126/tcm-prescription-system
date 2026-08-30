@@ -1410,6 +1410,11 @@ public class MainActivity extends BridgeActivity {
                             System.exit(0);
                         });
                         return ok().toString();
+                    case "openExternalUrl":
+                        // ★ 2026-08-30 修复「去官网付款」点击无反应：WebView 未开启多窗口，
+                        //   JS window.open 静默返回 null（不抛异常，fallback 永不触发）。
+                        //   激活等待界面/工单成功面板的付款导引改走本桥，严格白名单仅放行官网购买页。
+                        return openExternalUrl(args.optString("url", "")).toString();
                     default:
                         return fail("unknown method: " + name).toString();
                 }
@@ -2452,6 +2457,33 @@ public class MainActivity extends BridgeActivity {
 
         private void showToast(final String message) {
             runOnUiThread(() -> android.widget.Toast.makeText(MainActivity.this, message, android.widget.Toast.LENGTH_SHORT).show());
+        }
+
+        // ★ 2026-08-30 官网付款导引：系统浏览器打开官网购买页（严格白名单）。
+        //   JS window.open 在 WebView（未开多窗口）静默失败 → 走本桥。仅放行
+        //   https://tcm-prescription-system.pages.dev/download.html 前缀（含 ?mid= 参数）。
+        private JSONObject openExternalUrl(String url) {
+            try {
+                String u = (url == null) ? "" : url.trim();
+                final String ALLOWED_PREFIX = "https://tcm-prescription-system.pages.dev/download.html";
+                if (!u.startsWith(ALLOWED_PREFIX)) {
+                    Log.w(TAG, "[openExternalUrl] 拒绝非白名单URL: " + u);
+                    return fail("url not allowed");
+                }
+                mainHandler.post(() -> {
+                    try {
+                        startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(u)));
+                        Log.d(TAG, "[openExternalUrl] 已调起系统浏览器: " + u);
+                    } catch (Exception e) {
+                        Log.w(TAG, "[openExternalUrl] 打开失败", e);
+                    }
+                });
+                JSONObject r = new JSONObject();
+                r.put("success", true);
+                return r;
+            } catch (Exception e) {
+                return fail(e.getMessage());
+            }
         }
 
         private JSONObject findMediaFiles(String patientName, String prescriptionNo, String createdAt) {

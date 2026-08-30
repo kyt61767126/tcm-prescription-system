@@ -3243,6 +3243,16 @@
             if (!btn) return;
             btn.addEventListener('click', function() {
                 const url = 'https://tcm-prescription-system.pages.dev/download.html?mid=' + encodeURIComponent(machineId || '');
+                // ★ 2026-08-30 修复APP点击无反应：WebView 未开启多窗口，window.open 静默返回
+                //   null（不抛异常，原 fallback 永不触发）→ 按钮点了没反应、无法付款。
+                //   APP 端优先走原生桥 openExternalUrl（Java 严格白名单仅放行官网购买页）；
+                //   桥不存在/失败回退 window.open（桌面 Electron 正常行为）。
+                try {
+                    if (window.AndroidNative && typeof window.AndroidNative.invoke === 'function') {
+                        var __r = window.AndroidNative.invoke('openExternalUrl', JSON.stringify({ url: url }));
+                        if (__r) { try { var __j = JSON.parse(__r); if (__j && __j.success) return; } catch (e) {} }
+                    }
+                } catch (e) {}
                 try { window.open(url, '_blank'); }
                 catch (e) { try { window.location.href = url; } catch (e2) {} }
             });
@@ -4057,6 +4067,16 @@
             if (!btn) return;
             btn.addEventListener('click', function() {
                 const url = 'https://tcm-prescription-system.pages.dev/download.html?mid=' + encodeURIComponent(machineId || '');
+                // ★ 2026-08-30 修复APP点击无反应：WebView 未开启多窗口，window.open 静默返回
+                //   null（不抛异常，原 fallback 永不触发）→ 按钮点了没反应、无法付款。
+                //   APP 端优先走原生桥 openExternalUrl（Java 严格白名单仅放行官网购买页）；
+                //   桥不存在/失败回退 window.open（桌面 Electron 正常行为）。
+                try {
+                    if (window.AndroidNative && typeof window.AndroidNative.invoke === 'function') {
+                        var __r = window.AndroidNative.invoke('openExternalUrl', JSON.stringify({ url: url }));
+                        if (__r) { try { var __j = JSON.parse(__r); if (__j && __j.success) return; } catch (e) {} }
+                    }
+                } catch (e) {}
                 try { window.open(url, '_blank'); }
                 catch (e) { try { window.location.href = url; } catch (e2) {} }
             });
