@@ -12,7 +12,7 @@
 //      "type": "personal",              // personal / pro（必填）
 //      "days": 365,                     // 有效天数（与 expiresAt 二选一，默认 365）
 //      "expiresAt": "2027-12-31",       // 到期日期（与 days 二选一）
-//      "maxDevices": 1,                 // 最大设备数（可选，默认 1）
+//      "maxDevices": 1,                 // 最大设备数（可选，默认 pro=5 台 / personal=2 台）
 //      "maxPrescriptions": 0,           // 覆盖默认处方限制（可选）
 //      "features": ["backup"],          // 覆盖默认功能列表（可选）
 //      "note": "审核备注"               // 备注（可选）
@@ -158,8 +158,11 @@ export async function onRequest(context) {
             return json({ success: false, error: deviceCheck.error }, 403);
         }
 
-        // 校验 maxDevices（★ 2026-08-21 云端产品策略：一个管理员默认授权 2 台设备——桌面+APP）
-        let parsedMaxDevices = 2;
+        // 校验 maxDevices
+        // ★ 2026-08-21 云端产品策略：个人版一个管理员默认授权 2 台设备（桌面+APP）
+        // ★ 2026-08-30 机构版策略：type=pro 默认 5 台（机构安装 3-5 台电脑共用一码），
+        //   服务端兜底——即使调用方（管理后台/API 直调）漏传 maxDevices 也不会少发
+        let parsedMaxDevices = (type === 'pro') ? 5 : 2;
         if (maxDevices !== undefined && maxDevices !== null) {
             parsedMaxDevices = parseInt(maxDevices, 10);
             if (isNaN(parsedMaxDevices) || parsedMaxDevices < 1 || parsedMaxDevices > 10) {

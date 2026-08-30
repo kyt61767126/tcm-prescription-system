@@ -11,7 +11,7 @@
 //      "type": "pro",                     // 可选：pro/personal，默认按工单 edition 映射
 //      "days": 365,                       // 可选：有效天数（默认 365）
 //      "expiresAt": "2027-12-31",         // 可选：到期日期（与 days 二选一）
-//      "maxDevices": 2                    // 可选：默认 2（云端产品策略）
+//      "maxDevices": 2                    // 可选：默认 pro=5 台（机构 3-5 台共用一码）/ personal=2 台
 //    }
 //
 //  返回：{ success: true, code: "BNZC-...", license: "base64..." }
@@ -138,8 +138,10 @@ export async function onRequest(context) {
             return json({ success: false, error: deviceCheck.error }, 403);
         }
 
-        // ★ 云端产品策略：一个管理员默认授权 2 台设备（桌面+APP）
-        let parsedMaxDevices = 2;
+        // ★ 云端产品策略：个人版一个管理员默认授权 2 台设备（桌面+APP）
+        // ★ 2026-08-30 机构版策略：type=pro 默认 5 台（机构安装 3-5 台电脑共用一码），
+        //   工单审批页只传 ticketNo 不传 maxDevices，服务端必须按 type 兜底
+        let parsedMaxDevices = (type === 'pro') ? 5 : 2;
         if (body.maxDevices !== undefined && body.maxDevices !== null) {
             parsedMaxDevices = parseInt(body.maxDevices, 10);
             if (isNaN(parsedMaxDevices) || parsedMaxDevices < 1 || parsedMaxDevices > 10) {

@@ -120,7 +120,7 @@ tr:hover{background:#f9fafc}
     var no=btn.getAttribute('data-no'), act=btn.getAttribute('data-action');
     try{
       if(act==='approve'){
-        if(!confirm('确认通过工单 '+no+'？将自动生成激活码（默认365天/2台设备）并开通云端账号。')) return;
+        if(!confirm('确认通过工单 '+no+'？将自动生成激活码（默认365天；机构版5台设备/标准版2台设备）并开通云端账号。')) return;
         var r=await fetch(APPR,{method:'POST',headers:authHeaders({'Content-Type':'application/json'}),credentials:'same-origin',body:JSON.stringify({ticketNo:no})});
         var d=await r.json();
         alert(d.success
