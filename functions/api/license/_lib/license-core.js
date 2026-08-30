@@ -478,8 +478,14 @@ async function buildLicenseData(record, options = {}) {
         const ed25519PrivateKey = getEd25519PrivateKeyPem(options.context);
         if (ed25519PrivateKey) {
             try {
-                const serial = await getNextSerial(options.kv, record.code);
-                const nonce = randomHexBytes(16);
+                // ★ 修复（2026-08-30 端到端验证发现）：复用 v6 已写入的 serial/nonce，
+                //   禁止重新生成。原实现重复调用 getNextSerial/randomHexBytes 后
+                //   覆盖 data.sigSerial/sigNonce，导致 license 下发的防重放字段
+                //   与 signatureV6 实签值失配 → v6 验签必然失败（客户端因 v7 优先
+                //   才未暴露；若 Ed25519 私钥缺失降级 v6 时将 fail-closed 全拒）。
+                const serial = (data.sigSerial !== undefined && data.sigSerial !== null)
+                    ? data.sigSerial : await getNextSerial(options.kv, record.code);
+                const nonce = data.sigNonce || randomHexBytes(16);
                 data.signatureV7 = await generateSignatureV7(data, ed25519PrivateKey, serial, nonce);
                 data.sigKId = 'v7-001';
                 data.sigSerial = serial;
