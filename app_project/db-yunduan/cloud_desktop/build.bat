@@ -223,6 +223,65 @@ set "REAL_WIN_UNPACKED_PATH=%WIN_UNPACKED_PATH%"
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Using prepackaged path: %REAL_WIN_UNPACKED_PATH%'"
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '  (此目录中 asar 已通过 prepare-win-unpacked GATE-KEEPER 硬校验)'"
 
+REM ★★ [8.01/9] 上架加固 P1-3（2026-08-30）：E2E 提前到 fuse 写入之前 ★★
+REM   Playwright E2E 依赖 --inspect=0 建立 Node inspector 连接，fuse 关闭
+REM   Inspect 参数后 E2E 永久超时（实锤复现）。
+REM   顺序铁律：E2E(未fuse) → fuse → .bnzc 重嵌(覆盖fuse后字节) → 签名 → NSIS。
+echo [8.01/9] E2E regression pre-fuse - 3 fixed cases on real win-unpacked...
+if not exist "node_modules\playwright" (
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] playwright 未安装，自动安装（一次性）...'"
+    call npm i -D playwright --no-fund --no-audit
+)
+node "e2e\run-e2e.cjs" --dir "%REAL_WIN_UNPACKED_PATH%"
+set "E2E_RC=%errorlevel%"
+if not "%E2E_RC%"=="0" (
+    set NODE_TLS_REJECT_UNAUTHORIZED=
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] E2E 回归失败（pre-fuse）- build aborted'"
+    del /q "%REAL_WIN_UNPACKED_PATH%\e2e-enabled.marker" >nul 2>&1
+    node "%~dp0..\..\..\tools\obfuscate.js" restore --target=cloud >nul 2>&1
+    if not defined NO_PAUSE pause
+    exit /b 1
+)
+echo [OK] E2E 3/3 PASS pre-fuse - 用户管理按钮链路真实可点
+echo.
+
+REM ★ [8.02/9] 上架加固 P1-3（2026-08-30）：Electron Fuses 写入（二进制级关调试注入后门）
+set "CLOUD_MAIN_EXE="
+for %%f in ("%REAL_WIN_UNPACKED_PATH%\*.exe") do set "CLOUD_MAIN_EXE=%%f"
+if "%CLOUD_MAIN_EXE%"=="" (
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] win-unpacked 未找到主 exe（fuse 写入前）- build aborted'"
+    node "%~dp0..\..\..\tools\obfuscate.js" restore --target=cloud >nul 2>&1
+    if not defined NO_PAUSE pause
+    exit /b 1
+)
+node "%~dp0..\..\..\tools\flip-electron-fuses.cjs" flip "%CLOUD_MAIN_EXE%" --fuses-dir "%CD%"
+if errorlevel 1 (
+    set NODE_TLS_REJECT_UNAUTHORIZED=
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] Electron Fuses 写入失败 - build aborted'"
+    node "%~dp0..\..\..\tools\obfuscate.js" restore --target=cloud >nul 2>&1
+    if not defined NO_PAUSE pause
+    exit /b 1
+)
+echo [OK] Electron Fuses applied - RunAsNode/Inspect/NODE_OPTIONS=off, OnlyLoadAppFromAsar=on
+echo.
+
+REM ★ [8.03/9] P1-3：fuse 翻转改了 exe 字节 → .bnzc 幂等重嵌（覆盖 fuse 后哈希）并复验
+node "%~dp0..\..\..\tools\pe-zone-sign.cjs" embed "%CLOUD_MAIN_EXE%"
+if errorlevel 1 (
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] .bnzc 重嵌失败 - build aborted'"
+    node "%~dp0..\..\..\tools\obfuscate.js" restore --target=cloud >nul 2>&1
+    if not defined NO_PAUSE pause
+    exit /b 1
+)
+node "%~dp0..\..\..\tools\pe-zone-sign.cjs" verify "%CLOUD_MAIN_EXE%"
+if errorlevel 1 (
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] .bnzc verify gate failed - build aborted'"
+    node "%~dp0..\..\..\tools\obfuscate.js" restore --target=cloud >nul 2>&1
+    if not defined NO_PAUSE pause
+    exit /b 1
+)
+echo [OK] .bnzc re-embedded and verified on fused exe - fuses + .bnzc 双保护
+
 REM ★★ 关键防御：consolidation 会清空 dist 下所有子目录（包括 win-unpacked.时间戳），
 REM    这里立即把真 asar 备份到项目根的 _backup_asar\（不会被任何步骤清理），
 REM    后续 Iron Gate Fixup 和 Final IRON GATE 都从这个备份读取，杜绝被误删。
@@ -499,31 +558,35 @@ for %%A in ("%EXE_FILE%") do (
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] %%~nxA  %%~zA bytes'"
 )
 
-REM ★ [9.5/9] T4 e2e 端到端回归（2026-08-21）：对 dist\win-unpacked 真实产物跑 3 条固定用例
-REM   E1 机构版管理员点开【用户管理】弹窗 / E2 标准版按钮权限矩阵 / E3 毒数据注入非静默
-REM   机制：run-e2e.cjs 在 win-unpacked 内临时写 e2e-enabled.marker（跑完即删）；
-REM         NSIS Setup 在本步骤【之前】已打包完成，产物永不携带 marker → 生产包远程调试防护不受影响。
-echo [9.5/9] E2E regression — 3 fixed cases on real win-unpacked...
-if not exist "node_modules\playwright" (
-    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] playwright 未安装，自动安装（一次性）...'"
-    call npm i -D playwright --no-fund --no-audit
+REM ★ [9.5/9] 上架加固 P1-3（2026-08-30）：最终 fused exe 复核 fuse 状态 + 冒烟启动
+REM   E2E 已提前到 [8.01/9]（fuse 写入前，Playwright 需要 --inspect）；此处对
+REM   最终交付 exe 复核 fuse 字节未被 consolidation 偷换，并按铁律
+REM   「PE 区段嵌入类修改必须实际启动被嵌入的 exe」做无调试参数真实启动。
+echo [9.5/9] Fuse check + smoke launch on final fused exe...
+if "%CLOUD_MAIN_EXE_NAME%"=="" (
+    for %%f in ("%OUTPUT_DIR%\win-unpacked\*.exe") do set "CLOUD_MAIN_EXE_NAME=%%~nxA"
 )
-REM ★ 2026-08-23：--dir 显式传真实产物目录（consolidation 后可能仍是 build_output_* fallback）。
-REM   run-e2e.cjs 在 --dir 模式下找不到主 exe 会红线失败（绝不静默兜底 dev electron），
-REM   杜绝嵌套/半删除场景下"E2E 测旧残留 exe"的假绿灯。
-node "e2e\run-e2e.cjs" --dir "%OUTPUT_DIR%\win-unpacked"
-set "E2E_RC=%errorlevel%"
-if not "%E2E_RC%"=="0" (
-    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] E2E 回归失败，红线删除所有 exe，杜绝带病交付'"
-    del /q "%OUTPUT_DIR%\*.exe" >nul 2>&1
-    del /q "dist\*.exe" >nul 2>&1
-    del /q "%OUTPUT_DIR%\win-unpacked\e2e-enabled.marker" >nul 2>&1
-    del /q "dist\win-unpacked\e2e-enabled.marker" >nul 2>&1
-    node "%~dp0..\..\..\tools\obfuscate.js" restore --target=cloud >nul 2>&1
+if not exist "%OUTPUT_DIR%\win-unpacked\%CLOUD_MAIN_EXE_NAME%" (
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] win-unpacked 主 exe 缺失，无法复核 fuse - build aborted'"
     if not defined NO_PAUSE pause
     exit /b 1
 )
-echo [OK] E2E 3/3 PASS - 用户管理按钮链路真实可点
+node "%~dp0..\..\..\tools\flip-electron-fuses.cjs" check "%OUTPUT_DIR%\win-unpacked\%CLOUD_MAIN_EXE_NAME%" --fuses-dir "%CD%"
+if errorlevel 1 (
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] 最终 exe fuse 校验失败（可能被 consolidation 偷换）- build aborted'"
+    if not defined NO_PAUSE pause
+    exit /b 1
+)
+node "%~dp0..\..\..\tools\smoke-launch.cjs" "%OUTPUT_DIR%\win-unpacked\%CLOUD_MAIN_EXE_NAME%"
+if errorlevel 1 (
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] 最终 exe 冒烟启动失败，红线删除所有 exe，杜绝带病交付'"
+    del /q "%OUTPUT_DIR%\*.exe" >nul 2>&1
+    del /q "dist\*.exe" >nul 2>&1
+    del /q "%OUTPUT_DIR%\win-unpacked\e2e-enabled.marker" >nul 2>&1
+    if not defined NO_PAUSE pause
+    exit /b 1
+)
+echo [OK] Smoke launch PASS - fused exe 无调试参数真实启动成功，P1-3 全链生效
 
 REM ★ [9.7/9] P4 交付核对单自动生成（2026-08-21）：一页纸聚合三元组+产物哈希+关卡清单+安装自检三步+生效方式
 REM   只读聚合不改动产物；生成失败仅 WARN 不阻断交付（产物已过全部铁闸）

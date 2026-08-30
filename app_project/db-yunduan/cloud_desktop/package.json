@@ -1,6 +1,6 @@
 {
     "name": "tcm-prescription-cloud",
-    "version": "1.2.184",
+    "version": "1.2.186",
     "description": "惠康中医-云端",
     "main": "electron/main.js",
     "scripts": {
@@ -14,6 +14,7 @@
     "license": "MIT",
     "devDependencies": {
         "@electron/asar": "^4.2.1",
+        "@electron/fuses": "^2.1.3",
         "archiver": "^7.0.1",
         "asarmor": "^3.0.2",
         "electron": "^35.0.0",

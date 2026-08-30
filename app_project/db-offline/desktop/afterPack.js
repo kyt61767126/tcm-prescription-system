@@ -10,6 +10,13 @@
  *      激进混淆导致桌面版 main.js 在 Electron 主进程中 require/crypto
  *      调用失败，程序静默崩溃无法打开。
  *
+ * ★ Electron Fuses（2026-08-30 P1-3）不在本钩子写入：Playwright E2E 依赖
+ *   --inspect=0 建立 Node inspector 连接（coreBundle.js waitForLine
+ *   'Debugger listening on'），EnableNodeCliInspectArguments=false 会灭掉
+ *   inspector → E2E 永久超时（实锤复现）。fuse 统一由 build.bat 在
+ *   【E2E 之后、.bnzc 嵌入之前】用 tools/flip-electron-fuses.cjs 写入，
+ *   顺序铁律：E2E(未fuse) → fuse → .bnzc(覆盖fuse后字节) → 签名 → NSIS。
+ *
  * 文档：https://github.com/sleeyax/asarmor
  */
 

@@ -204,8 +204,19 @@ async function main() {
       console.error(`  [WARN] exe 图标嵌入失败（不影响打包）: ${e.message}`);
     }
 
+    // ★ Electron Fuses（2026-08-30 P1-3）不在此处写入：
+    //   Playwright E2E 依赖 --inspect=0 建立 Node inspector 连接（waitForLine
+    //   'Debugger listening on'），EnableNodeCliInspectArguments=false 会灭掉
+    //   inspector → E2E 永久超时（实锤复现）。fuse 统一由 build.bat 在
+    //   【E2E 之后、.bnzc 重嵌之前】用 tools/flip-electron-fuses.cjs 写入，
+    //   随后 pe-zone-sign embed 幂等重嵌 .bnzc 覆盖 fuse 后字节。
+    //   注意：不可启用 EnableEmbeddedAsarIntegrityValidation —— asarmor bloat 改写
+    //   asar 头，与官方 asar 完整性校验互斥（头哈希必失配 → 启动失败）。
+
     // ★ P1-[3.1] 嵌入 PE 自定义完整性区段 .bnzc（EXE 签名自校验第二路）
     // 必须在 rcedit 图标嵌入之后执行（rcedit 会改动 exe 字节，先 embed 会被破坏）
+    // 此处嵌入的哈希会被后续 fuse 写入作废，build.bat 在 fuse 之后用
+    // pe-zone-sign embed 幂等重嵌校正（与离线版 afterPack→build.bat 同款模式）。
     try {
       const peGuard = require('../shared/pe-guard.cjs');
       const r = peGuard.embedZone(productExe);
