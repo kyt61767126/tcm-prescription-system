@@ -143,8 +143,6 @@
 
 * ★ 2026-08-30 重装激活登录失败双坑（用户实测 13398628212/admin123 失败）：①备份导出 users 恒为 \[]——`JSON.parse(localStorage.getItem('local_systemUsers'))` 读的是 XORv1 加密串必抛异常，「备份含账号表」从未真正生效；修复=先 simpleDecrypt 再 parse（4 处离线系 index.html）。②重装自愈只自动填手机号不填密码，密码栏留空被静默写成 admin；修复=auth-core 激活提交前密码留空弹 confirm 明确告知。排查铁律：用户"激活后登录不上"先让 TA 试 admin。
 
-* ★ 2026-08-30 登录兜底自愈（双坑修复后用户仍登录失败追加）：启动自愈（startLicenseCheck 2 秒延迟）依赖桥注入时序，WebView 桥静默返回 null 时激活账号没进 localStorage。handleLogin 增加兜底：按输入找不到账号时直接调 getActivationUsers 从 config 拉激活账号补入再匹配（4 处离线系 index.html，标记 LoginSelfHeal）。教训：**凡依赖启动时序+异步桥的自愈，必须在用户操作路径上再做一层同步兜底**。
-
 ## 7. 官网付费与激活闭环（2026-08-30 全链路现行）
 
 **价格体系（年费订阅，双端独立授权）**：本地标准版 99 元/年（单用户）、本地机构版 299 元/年（3-5 用户）、云端标准版 199 元/年（单用户）、云端机构版 399 元/年（3-5 用户）。桌面/手机激活码独立授权，双端使用需分别购买。试用：免费 7 天，admin/admin 登入，限离线桌面/APP，云端无试用；**内置 admin/admin 仅试用期有效，激活后自动失效**。

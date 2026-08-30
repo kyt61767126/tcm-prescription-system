@@ -1716,6 +1716,7 @@ let currentUser = null;
                         });
                         if (!__hasMatch) {
                             var __res = await window.electronAPI.activate.getActivationUsers();
+                            window.__loginHealDiag = __res ? ('桥OK' + (__res.success ? '成功' : '失败') + (Array.isArray(__res.users) ? __res.users.length + '个' : '')) : '桥返回null';
                             if (__res && __res.success && Array.isArray(__res.users) && __res.users.length > 0) {
                                 __res.users.forEach(function (u) {
                                     if (!u || !u.username) return;
@@ -1842,7 +1843,21 @@ let currentUser = null;
                         } catch (outer) { console.warn('登录兜底定时器启动失败（非致命）:', outer); }
                     }
                 } else {
-                    errorDiv.textContent = '手机号/用户名或密码错误';
+                    // ★ 2026-08-30 登录失败诊断：屏幕直接显示本地账号与密码格式（远程排查激活后登录失败）
+                    var __diag = '';
+                    try {
+                        var __names = users.map(function (u) {
+                            return (u && u.username ? u.username : '?') + (u && u.phone ? '(' + String(u.phone).slice(0, 3) + '****' + String(u.phone).slice(-4) + ')' : '');
+                        }).join('、');
+                        var __pwd = users.map(function (u) {
+                            var p = (u && u.password) ? String(u.password) : '';
+                            return (p.length === 64 && /^[a-f0-9]{64}$/.test(p)) ? '哈希' : ('明文' + p.length + '字');
+                        }).join('、');
+                        var __heal = (window.__loginHealDiag ? ('；自愈:' + window.__loginHealDiag) : '');
+                        __diag = '\n诊断:本地' + users.length + '个账号[' + __names + ']密码[' + __pwd + ']' + __heal;
+                        console.warn('[LoginDiag]' + __diag);
+                    } catch (e) {}
+                    errorDiv.textContent = '手机号/用户名或密码错误' + __diag;
                     errorDiv.style.display = 'block';
                 }
             } catch (e) {
