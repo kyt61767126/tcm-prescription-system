@@ -37,6 +37,10 @@ const TARGET_FUSES = {
     EnableNodeCliInspectArguments: false,
     EnableNodeOptionsEnvironmentVariable: false,
     OnlyLoadAppFromAsar: true,
+    // P1-2（2026-08-30）：启动时校验 app.asar 头哈希（期望值 = exe PE 资源 ElectronAsar）
+    // ★ 前置条件：flip 之前必须已跑 tools/embed-asar-integrity.cjs 嵌入资源，
+    //   否则 fuse 开而资源缺 → Electron 启动即 FATAL（archive_win.cc FindResource）。
+    EnableEmbeddedAsarIntegrityValidation: true,
 };
 
 function loadFusesApi(explicitDir) {
@@ -109,6 +113,7 @@ async function main() {
             [FuseV1Options.EnableNodeCliInspectArguments]: false,
             [FuseV1Options.EnableNodeOptionsEnvironmentVariable]: false,
             [FuseV1Options.OnlyLoadAppFromAsar]: true,
+            [FuseV1Options.EnableEmbeddedAsarIntegrityValidation]: true,
         };
         await api.flipFuses(exe, cfg);
         console.log('[fuses] 写入完成，回读复核:');
@@ -119,7 +124,7 @@ async function main() {
     const wire = await api.getCurrentFuseWire(exe);
     const allOk = assertTargetStates(wire, FuseV1Options);
     if (allOk) {
-        console.log(`[fuses] ${cmd === 'flip' ? '写入并复核通过' : '校验通过'} ✓ (RunAsNode=off Inspect=off NODE_OPTIONS=off OnlyLoadAppFromAsar=on)`);
+        console.log(`[fuses] ${cmd === 'flip' ? '写入并复核通过' : '校验通过'} ✓ (RunAsNode=off Inspect=off NODE_OPTIONS=off OnlyLoadAppFromAsar=on AsarIntegrity=on)`);
     } else {
         console.error(`[fuses][ERROR] ${cmd === 'flip' ? '写入后复核不通过' : '校验不通过'}（阻断打包，宁可不发不可带后门发）`);
         process.exit(1);

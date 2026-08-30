@@ -266,6 +266,23 @@ if not "%E2E_RC%"=="0" (
 echo [OK] E2E 3/3 PASS pre-fuse - 离线登录/试用期降级/UserStore 兜底真实可点
 echo.
 
+REM ★ [7.85/9] 上架加固 P1-2（2026-08-30）：ASAR 完整性资源嵌入（必须在 flip 之前）
+REM   把 app.asar 头哈希嵌入主 exe PE 资源（type=Integrity/name=ElectronAsar），
+REM   随后 [7.9/9] flip 开启 EnableEmbeddedAsarIntegrityValidation fuse
+REM   → 运行时 asar 头被篡改即 FATAL 拒启（实测篡改 1 字节 131ms 崩溃）。
+REM   顺序铁律：embed(本步) → fuse → .bnzc → 签名 → NSIS；fuse 开而资源缺 = 启动即崩。
+echo [7.85/9] P1-2 ASAR integrity resource embed (pre-fuse)...
+node "%~dp0..\..\..\tools\embed-asar-integrity.cjs" "%MAIN_EXE%" "%OUTPUT_DIR%\win-unpacked\resources\app.asar"
+if errorlevel 1 (
+    set NODE_TLS_REJECT_UNAUTHORIZED=
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] ASAR 完整性资源嵌入失败 - build aborted'"
+    node "%~dp0..\..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
+    if not defined NO_PAUSE pause
+    exit /b 1
+)
+echo [OK] ASAR integrity resource embedded + readback verified
+echo.
+
 REM ★ [7.9/9] 上架加固 P1-3（2026-08-30）：Electron Fuses 写入（二进制级关调试注入后门）
 node "%~dp0..\..\..\tools\flip-electron-fuses.cjs" flip "%MAIN_EXE%" --fuses-dir "%CD%"
 if errorlevel 1 (

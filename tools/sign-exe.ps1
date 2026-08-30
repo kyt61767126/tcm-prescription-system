@@ -19,6 +19,13 @@
 #    -VerifyBnzc  after signing, run node tools\pe-zone-sign.cjs verify on
 #                 each signed file; exit 1 if the .bnzc hash broke (rc=1/3).
 #                 rc=2 (no .bnzc zone, e.g. embed was skipped) is a WARN only.
+#    -TimestampServer  Timestamp server URL (P1-1, 2026-08-30). Formal-CA-cert
+#                 scenario: stamps the signature so it stays valid after the
+#                 certificate expires. Empty (default) = offline-friendly, no
+#                 timestamp (self-signed cert does not need one). Env fallback:
+#                 SIGN_TIMESTAMP_SERVER. Common servers:
+#                   http://timestamp.digicert.com
+#                   http://timestamp.sectigo.com
 #
 #  Exit codes:
 #    0 = all files signed OK (or nothing to sign)
@@ -31,7 +38,10 @@
 #      Get-AuthenticodeSignature returns UnknownError (untrusted root) - this
 #      is EXPECTED. Success here = signer certificate embedded + no
 #      HashMismatch. Runtime fingerprint check lives in self-check.js.
-#    - No timestamp server (offline-friendly). Cert expires 2031-08-26.
+#    - Default: no timestamp server (offline-friendly; self-signed cert
+#      expires 2031-08-26). Pass -TimestampServer with a formal CA cert.
+#      Timestamp failure degrades to signing WITHOUT timestamp (WARN, not
+#      abort) - never break a build over a flaky timestamp server.
 #    - This file must stay ASCII-only: Windows PowerShell 5.1 reads .ps1
 #      without BOM as ANSI, non-ASCII literals would be garbled.
 # ============================================================================
@@ -39,8 +49,12 @@
 param(
     [Parameter(Mandatory = $true)]
     [string[]]$ExePath,
-    [switch]$VerifyBnzc
+    [switch]$VerifyBnzc,
+    [string]$TimestampServer = ''
 )
+
+# P1-1: env fallback so formal-cert builds can enable timestamping globally
+if (-not $TimestampServer) { $TimestampServer = $env:SIGN_TIMESTAMP_SERVER }
 
 $ErrorActionPreference = 'Stop'
 try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}
@@ -85,12 +99,29 @@ foreach ($p in $ExePath) {
         continue
     }
     foreach ($f in $files) {
-        try {
-            $sig = Set-AuthenticodeSignature -FilePath $f.FullName -Certificate $cert -HashAlgorithm SHA256
-        } catch {
-            Write-Host ('[SIGN][ERROR] ' + $f.FullName + ' : ' + $_.Exception.Message) -ForegroundColor Red
-            $failed = $true
-            continue
+        $sig = $null
+        if ($TimestampServer) {
+            # P1-1: formal cert -> timestamp the signature (survives cert expiry).
+            # PS 5.1 does NOT throw on timestamp failure - it returns a result
+            # object with null SignerCertificate, so detect that and retry bare.
+            try {
+                $sig = Set-AuthenticodeSignature -FilePath $f.FullName -Certificate $cert -HashAlgorithm SHA256 -TimestampServer $TimestampServer
+            } catch {
+                $sig = $null
+            }
+            if ($null -eq $sig -or $null -eq $sig.SignerCertificate) {
+                Write-Host ('[SIGN][WARN] timestamp server failed (' + $TimestampServer + '), retrying WITHOUT timestamp') -ForegroundColor Yellow
+                $sig = $null
+            }
+        }
+        if ($null -eq $sig) {
+            try {
+                $sig = Set-AuthenticodeSignature -FilePath $f.FullName -Certificate $cert -HashAlgorithm SHA256
+            } catch {
+                Write-Host ('[SIGN][ERROR] ' + $f.FullName + ' : ' + $_.Exception.Message) -ForegroundColor Red
+                $failed = $true
+                continue
+            }
         }
         if ($null -eq $sig -or $null -eq $sig.SignerCertificate) {
             Write-Host ('[SIGN][ERROR] ' + $f.FullName + ' signature not applied (SignerCertificate is null)') -ForegroundColor Red
@@ -105,7 +136,16 @@ foreach ($p in $ExePath) {
         # Self-signed without trusted root -> status UnknownError is expected.
         $statusNote = ''
         if ($sig.Status -ne 'Valid') { $statusNote = ' (self-signed, untrusted root = expected)' }
-        Write-Host ('[SIGN][OK] ' + $f.Name + ' thumbprint=' + $sig.SignerCertificate.Thumbprint + ' status=' + $sig.Status + $statusNote)
+        $tsNote = ''
+        if ($TimestampServer) {
+            if ($null -ne $sig.TimeStamperCertificate) {
+                $tsNote = ' timestamped=' + $sig.TimeStamperCertificate.Thumbprint
+            } else {
+                $tsNote = ' NOT-TIMESTAMPED'
+                Write-Host ('[SIGN][WARN] ' + $f.Name + ' timestamp missing though -TimestampServer was requested (signature expires with cert)') -ForegroundColor Yellow
+            }
+        }
+        Write-Host ('[SIGN][OK] ' + $f.Name + ' thumbprint=' + $sig.SignerCertificate.Thumbprint + ' status=' + $sig.Status + $statusNote + $tsNote)
         $signedCount++
 
         if ($VerifyBnzc -and (Test-Path $peZoneSign)) {
