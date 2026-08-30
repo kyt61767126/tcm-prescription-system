@@ -6544,7 +6544,9 @@ let currentUser = null;
                 formulas: formulas,
                 prescriptionHistory: prescriptionHistory,
                 // ★ 2026-08-28 重装数据安全（与离线APP统一）：手动备份也带上账号表+基础设置（换机/重装可完整还原）
-                users: (() => { try { return JSON.parse(localStorage.getItem('local_systemUsers') || '[]'); } catch (e) { return []; } })(),
+                // ★ 2026-08-30 修复：local_systemUsers 是 XORv1 加密串，直接 JSON.parse 必抛异常
+                //   → 备份 users 恒为 []（重装恢复救不回原账号密码）。先 simpleDecrypt 再 parse。
+                users: (() => { try { var __raw = localStorage.getItem('local_systemUsers') || '[]'; var __dec = (typeof simpleDecrypt === 'function') ? simpleDecrypt(__raw) : __raw; var __arr = JSON.parse(__dec); return Array.isArray(__arr) ? __arr : []; } catch (e) { return []; } })(),
                 settings: {
                     clinicName: localStorage.getItem('local_clinicName') || '',
                     clinicDoctor: localStorage.getItem('local_clinicDoctor') || '',

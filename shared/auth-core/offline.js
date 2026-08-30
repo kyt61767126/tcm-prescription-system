@@ -2268,6 +2268,15 @@
                             return;
                         }
                     }
+                    // ★ 2026-08-30 修复：密码留空被静默重置为 admin，重装一键恢复后用户用原密码登录失败
+                    //   （自愈只自动填手机号不填密码）。提交前明确告知，杜绝"激活成功却登录不上"的困惑。
+                    if (!pwdVal) {
+                        const goOn = confirm('未填写登录密码。\n\n激活后登录密码将为默认 admin。\n（登录后可在「修改密码」中改回原密码）\n\n【确定】继续激活\n【取消】返回填写密码');
+                        if (!goOn) {
+                            if (pwdInput) pwdInput.focus();
+                            return;
+                        }
+                    }
                     submitBtn.disabled = true;
                     cancelBtn.disabled = true;
                     input.disabled = true;
