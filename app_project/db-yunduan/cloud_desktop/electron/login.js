@@ -1054,11 +1054,16 @@
         }
     }
 
-    // ★ 2026-08-20 注册审核制：登录框注入"注册开通"入口（云端三端一致），调用 auth-core 的 openCloudRegister
-    //   手机号即账号 + 自设密码，注册即时建号，管理员审核通过后即可登录
+    // ★ 2026-08-30 注册激活付款全端统一：登录框入口改为"📋 管理员激活"，
+    //   与云端APP（public/index.html 首帧注入）/离线APP（auth-core offline 注入）同款同文案，
+    //   调用 auth-core(cloud.js) 的 openAdminActivate 多步骤弹窗：
+    //   版本选择 → 三Tab（管理员激活申请/激活码激活/工单申请）→ 工单面板含"去官网付款"导引，
+    //   官网购买页自动携带设备识别码+版本意图（?mid=&ed=），付款确认后 admin-status machineId
+    //   兜底自动激活，客户端轮询自助领码——注册→付款→激活一站闭环。
+    //   （原 openCloudRegister 一页式注册无付款导引，客户注册后不知去哪付款，已弃用为登录框入口）
     function injectAdminActivateEntry(config) {
         try {
-            if (!window.openCloudRegister) return; // auth-core(cloud.js) 未提供则跳过
+            if (!window.openAdminActivate && !window.openCloudRegister) return; // auth-core 未提供则跳过
             // ★ 2026-08-20 注册完成后自动隐藏
             try {
                 if (window.localStorage && window.localStorage.getItem('auth:activationDone') === '1') return;
@@ -1075,15 +1080,16 @@
             const entry = document.createElement('div');
             entry.id = 'activateLoginEntry';
             entry.style.cssText = 'margin-top:12px;padding:0 4px;';
+            // ★ openAdminActivate 优先（全端统一多步骤弹窗）；极旧 auth-core 兜底 openCloudRegister
             entry.innerHTML =
-                '<div style="display:flex;align-items:center;justify-content:center;gap:6px;padding:10px 0;border-radius:7px;background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);color:#fff;cursor:pointer;font-size:12px;font-weight:bold;text-align:center;-webkit-tap-highlight-color:transparent;" onclick="if(window.openCloudRegister){window.openCloudRegister();}">📝 注册开通</div>';
+                '<div style="display:flex;align-items:center;justify-content:center;gap:6px;padding:10px 0;border-radius:7px;background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);color:#fff;cursor:pointer;font-size:12px;font-weight:bold;text-align:center;-webkit-tap-highlight-color:transparent;" onclick="if(window.openAdminActivate){window.openAdminActivate();}else if(window.openCloudRegister){window.openCloudRegister();}">📋 管理员激活</div>';
             container.parentNode.insertBefore(entry, container.nextSibling);
             // 隐藏原有极简激活提示（避免重复入口）
             const wrap = document.getElementById('activateHintWrap');
             if (wrap) wrap.style.display = 'none';
-            console.log('[login] 登录框已注入 注册开通 入口');
+            console.log('[login] 登录框已注入 管理员激活 入口');
         } catch (e) {
-            console.warn('[login] 注入 注册开通 入口失败:', e);
+            console.warn('[login] 注入 管理员激活 入口失败:', e);
         }
     }
 

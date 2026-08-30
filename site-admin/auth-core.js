@@ -3289,6 +3289,14 @@
                     '<div>📞 联系电话：<b id="adminSavedPhone">--</b></div>' +
                     '<div id="adminWaitStatus" style="color:#26a69a;margin-top:4px;">正在等待管理员审核...</div>' +
                 '</div>' +
+                // ★ 2026-08-30 官网快速付费导引（对齐 offline.js adminWaiting 同款）：
+                //   提交激活申请后无需干等，直达官网购买页（设备识别码+版本意图自动携带），
+                //   付款确认后 admin-status machineId 兜底自动激活，客户端轮询自助领码。
+                '<div style="margin-top:12px;background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:10px;text-align:center;">' +
+                    '<div style="font-size:13px;font-weight:bold;color:#9a3412;">💳 加速激活：官网在线付款</div>' +
+                    '<div style="font-size:11px;color:#78350f;margin-top:4px;line-height:1.7;">点击直达官网购买页，设备识别码<b>已自动携带</b><br>付款后管理员核对即自动激活本账号</div>' +
+                    '<button id="adminPayGuideBtn" type="button" style="width:100%;margin-top:8px;padding:10px;font-size:14px;border:none;border-radius:8px;color:#fff;background:linear-gradient(135deg,#ea580c 0%,#c2410c 100%);font-weight:bold;cursor:pointer;">💳 去官网付款（支付宝/微信）</button>' +
+                '</div>' +
                 '<div style="font-size:11px;color:#909399;margin-top:10px;">💡 关闭窗口不影响审核，稍后重新打开可恢复状态</div>' +
             '</div>' +
 
@@ -3767,6 +3775,16 @@
         }
 
         document.getElementById('adminRetryBtn').addEventListener('click', function() { show('adminStepEdition'); });
+        // ★ 2026-08-30 官网快速付费导引（adminWaiting 等待面板，对齐 offline.js bindAdminPayGuide）：
+        //   云端版本映射 institution→cloud-pro / personal→cloud-personal；
+        //   APP 端优先原生桥 openExternalUrl（Java 白名单仅放行官网购买页），桌面回退 window.open。
+        (function bindAdminPayGuide() {
+            const btn = document.getElementById('adminPayGuideBtn');
+            if (!btn) return;
+            btn.addEventListener('click', function() {
+                openOfficialPayUrl(machineId, state.edition);
+            });
+        })();
         document.getElementById('adminCopyMidBtn').addEventListener('click', async function() {
             const ok = await copyTextToClipboard(machineId || '');
             const b = document.getElementById('adminCopyMidBtn');
