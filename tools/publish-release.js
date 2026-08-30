@@ -52,12 +52,15 @@ const APP_CONFIG = {
         gradlePath: path.join(PROJECT_ROOT, 'app_project', 'db-yunduan', 'cloud_app', 'app', 'build.gradle'),
         distDir: path.join(PROJECT_ROOT, 'app_project', 'db-yunduan', 'cloud_desktop', 'dist'),
         latestJsonPath: path.join(PROJECT_ROOT, 'public', 'updates', 'cloud', 'latest.json'),
+        // ★ 2026-08-30 同步 auto-publish.js 修复：APK 构建产物在项目根，扫描优先于 public/downloads
+        apkRootDir: path.join(PROJECT_ROOT, 'app_project', 'db-yunduan'),
     },
     'dingzhi': {
         apkName: '惠康中医-本地.apk',
         gradlePath: path.join(PROJECT_ROOT, 'app_project', 'db-offline', 'app', 'app', 'build.gradle'),
         distDir: path.join(PROJECT_ROOT, 'app_project', 'db-offline', 'desktop', 'dist'),
         latestJsonPath: path.join(PROJECT_ROOT, 'public', 'updates', 'local', 'latest.json'),
+        apkRootDir: path.join(PROJECT_ROOT, 'app_project', 'db-offline'),
     },
 };
 
@@ -178,15 +181,24 @@ function scanFiles(target, artifact) {
         const config = APP_CONFIG[key];
         if (!config) continue;
 
-        // APK（位于 public/downloads/）
+        // APK（★ 2026-08-30 优先扫项目根构建产物，不存在才回退 public/downloads/；
+        //   fromBuild=true 的文件在确认发布后同步复制进 public/downloads/，与
+        //   auto-publish.js 同源同逻辑，消除"单版本发布路径上传旧 APK"的隐患）
         if ((target === 'all' || target === 'apk' || target === key) && artifact !== 'desktop') {
             if (config.apkName) {
-                const apkPath = path.join(DOWNLOADS_DIR, config.apkName);
-                if (fs.existsSync(apkPath)) {
+                const downloadsApkPath = path.join(DOWNLOADS_DIR, config.apkName);
+                const buildApkPath = config.apkRootDir
+                    ? path.join(config.apkRootDir, config.apkName)
+                    : null;
+                const apkPath = (buildApkPath && fs.existsSync(buildApkPath))
+                    ? buildApkPath
+                    : (fs.existsSync(downloadsApkPath) ? downloadsApkPath : null);
+                if (apkPath) {
                     files.push({
                         appKey: key,
                         type: 'apk',
                         path: apkPath,
+                        fromBuild: apkPath === buildApkPath,
                         name: config.apkName,
                         size: getFileSize(apkPath),
                         sha256: calculateSHA256(apkPath),
@@ -635,6 +647,27 @@ function main() {
         console.log('\n  [WARN] 已按 --skip-compliance 跳过发布前合规检查（人工强漂，需自担风险）\n');
     }
 
+    // ★ 2026-08-30 上传前置：把项目根新构建 APK 同步进 public/downloads/
+    //   （manifest 的 Cloudflare 下载源 + Cloudflare Pages 部署源）。仅在人工确认
+    //   --confirm 且合规检查通过后执行——预演/未确认模式绝不写 public/，遵守
+    //   "打包产物禁止自动上传官方下载网站"规范。复制后校验 sha256 一致。
+    for (const f of files) {
+        if (f.type === 'apk' && f.fromBuild) {
+            const dst = path.join(DOWNLOADS_DIR, f.name);
+            try {
+                fs.mkdirSync(DOWNLOADS_DIR, { recursive: true });
+                fs.copyFileSync(f.path, dst);
+                const dstSha = calculateSHA256(dst).toLowerCase();
+                if (dstSha !== f.sha256.toLowerCase()) throw new Error('复制后 sha256 不一致: ' + f.name);
+                console.log('  [OK] 已同步新 APK 到 public/downloads/: ' + f.name + ' (' + formatSize(f.size) + ')');
+            } catch (e) {
+                console.error('  [ERROR] 同步 APK 失败: ' + f.name + ' - ' + e.message);
+                cleanupReleaseTmp();
+                process.exit(1);
+            }
+        }
+    }
+
     // 5. 创建/复用 Release 并上传文件（用 GitHub API + curl.exe）
     console.log('[5/6] 上传文件到 GitHub Release...');
     console.log('  (使用纯英文文件名 huikang-{app}[-setup]-{ver}.exe，避免中文被过滤)');
@@ -852,7 +885,11 @@ function main() {
             const status = execSync('git status --porcelain', { cwd: PROJECT_ROOT, encoding: 'utf8' });
             if (status.trim()) {
                 execSync('git commit -m "chore(release): 发布 ' + versionTag + ' 到 GitHub Release"', { cwd: PROJECT_ROOT, stdio: 'ignore' });
-                execSync('git pull --rebase origin main', { cwd: PROJECT_ROOT, stdio: 'ignore' });
+                // ★ 2026-08-30 修复推送失败（今日实测）：rebase 拒绝脏工作区——
+                //   本地常有未暂存的源码改动（build.gradle/tools 等），git pull --rebase
+                //   直接抛 "cannot rebase: You have unstaged changes"。
+                //   --autostash 自动暂存→rebase→恢复，工作区改动零丢失。
+                execSync('git pull --rebase --autostash origin main', { cwd: PROJECT_ROOT, stdio: 'ignore' });
                 execSync('git push origin main', { cwd: PROJECT_ROOT, stdio: 'ignore' });
                 console.log('  [OK] 推送成功！Cloudflare Pages 将在 1-2 分钟内自动部署\n');
             } else {

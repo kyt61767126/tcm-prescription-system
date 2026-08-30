@@ -141,7 +141,9 @@ function updateDownloads(target) {
         for (const key of targets) {
             const config = APP_CONFIG[key];
             if (!config) continue;
-            const apkFile = findApkFile(config.apkDir);
+            // ★ 2026-08-30 与 --confirm 同源：项目根正式产物优先
+            const rootApk = path.join(config.appDir, config.outputName);
+            const apkFile = fs.existsSync(rootApk) ? rootApk : findApkFile(config.apkDir);
             if (apkFile) {
                 const sizeMB = (getFileSize(apkFile) / 1024 / 1024).toFixed(1);
                 console.log('  [待发布] ' + key + ': ' + config.outputName + ' (' + sizeMB + 'MB)');
@@ -180,11 +182,24 @@ function updateDownloads(target) {
             continue;
         }
 
-        // 查找APK文件
-        const apkFile = findApkFile(config.apkDir);
+        // ★ 2026-08-30 修复源不一致（举一反三 auto-publish.js 同款坑）：
+        //   原只从 gradle 输出目录（build/outputs/apk/release）复制——打包中途失败
+        //   会残留半成品 gradle 输出，或与项目根已验收产物不一致（两个入口两个源）。
+        //   现优先取项目根 build-app.bat 的正式产物（含文件名+大小校验的最终副本），
+        //   不存在才回退 gradle 输出目录。
+        const rootApk = path.join(config.appDir, config.outputName);
+        const gradleApk = findApkFile(config.apkDir);
+        const apkFile = fs.existsSync(rootApk) ? rootApk : gradleApk;
         if (!apkFile) {
             console.log('  [SKIP] ' + key + ' APK 未找到');
             continue;
+        }
+        if (fs.existsSync(rootApk) && gradleApk) {
+            const rootSha = calculateSHA256(rootApk).toLowerCase();
+            const gradleSha = calculateSHA256(gradleApk).toLowerCase();
+            if (rootSha !== gradleSha) {
+                console.warn('  [WARN] ' + key + ': 项目根产物与 gradle 输出 sha 不一致，以项目根为准（gradle 输出可能是半成品）');
+            }
         }
 
         // 复制到 downloads 目录
