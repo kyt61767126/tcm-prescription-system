@@ -1243,7 +1243,11 @@ let currentUser = null;
                 case 'prescription':
                     leftPanel.style.display = 'flex';
                     leftPanel.style.flexDirection = 'column';
-                    
+                    // ★ 2026-08-30 修复底部快捷栏永久消失：上方统一设了内联 display='none'，
+                    //   而 CSS 媒体查询的 display:block 无 !important 压不过内联样式——
+                    //   点过导航/返回键切走再切回后快捷栏（录像/拍照/保存/清空/改密）不再显示。
+                    //   回门诊 tab 时清空内联样式交还 CSS 控制（桌面端 CSS 默认 display:none 不受影响）。
+                    if (mobileActionBar) mobileActionBar.style.display = '';
                     break;
                 case 'history':
                     // 检查是否有历史病历，没有则不显示
@@ -1729,6 +1733,26 @@ let currentUser = null;
                         }
                     }
                 } catch (e) { console.warn('[LoginSelfHeal] 登录兜底自愈异常(不影响登录):', e); }
+                // ★ 2026-08-30 账号映射兜底：Tab2「激活码直接激活」路径 submit(code, user) 只传
+                //   CONFIG.doctorName（可能是出厂默认"XXX"），Java 建的账号 username=医师名、无 phone
+                //   字段 → 用户输手机号永远找不到账号。个人标准版下输入未命中任何账号时，映射到
+                //   实际激活账号（有 phone 优先，否则非内置 admin），密码照常校验。
+                try {
+                    if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.edition === 'personal') {
+                        var __hit = users.some(function (u) {
+                            return u && (u.username === loginUsername || String(u.phone || '') === loginUsername);
+                        });
+                        if (!__hit && users.length > 0) {
+                            var __act = users.find(function (u) { return u && u.phone && String(u.phone).trim() !== ''; }) ||
+                                        users.find(function (u) { return u && u.username !== 'admin'; });
+                            if (__act) {
+                                loginUsername = String(__act.username);
+                                window.__loginHealDiag = (window.__loginHealDiag || '') + '|映射到' + loginUsername;
+                                console.log('[LoginSelfHeal] 输入未命中，已映射到激活账号 ' + loginUsername);
+                            }
+                        }
+                    }
+                } catch (e) { console.warn('[LoginSelfHeal] 账号映射兜底异常(不影响登录):', e); }
                 let user = null;
                 for (const u of users) {
                     if (u.username !== loginUsername && String(u.phone || '') !== loginUsername) continue;
