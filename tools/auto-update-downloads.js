@@ -29,21 +29,21 @@ const PROJECT_ROOT = path.resolve(__dirname, '..');
 const DOWNLOADS_DIR = path.join(PROJECT_ROOT, 'public', 'downloads');
 const MANIFEST_PATH = path.join(PROJECT_ROOT, 'public', 'hash-manifest.json');
 const { getProvenance } = require('./provenance');  // 发布来源声明（P0-[5.2]）
+// ★ 2026-08-30 架构收口：APK 定位统一引用 artifact-locate.js 单一权威模块
+const { locateApk } = require('./artifact-locate');
 
-// 各APP的APK搜索路径和产品名称
+// 各APP的产品名称与版本读取路径（APK 文件定位已收口 artifact-locate.js）
 // appDir: 项目根目录（包含 app/ 子目录），用于读取 build.gradle 版本号
 // 统一安装包：标准版/机构版由运行时激活码决定（合并 8 包 → 4 包）
 const APP_CONFIG = {
     'dingzhi': {
         // 离线统一包
-        apkDir: path.join(PROJECT_ROOT, 'app_project', 'db-offline', 'app', 'app', 'build', 'outputs', 'apk', 'release'),
         appDir: path.join(PROJECT_ROOT, 'app_project', 'db-offline'),
         outputName: '惠康中医-本地.apk',
         configPath: path.join(PROJECT_ROOT, 'app_project', 'db-offline', 'desktop', 'config.json')
     },
     'cloud': {
         // 云端统一包
-        apkDir: path.join(PROJECT_ROOT, 'app_project', 'db-yunduan', 'cloud_app', 'app', 'build', 'outputs', 'apk', 'release'),
         appDir: path.join(PROJECT_ROOT, 'app_project', 'db-yunduan', 'cloud_app'),
         outputName: '惠康中医-云端.apk',
         configPath: null
@@ -58,14 +58,6 @@ function calculateSHA256(filePath) {
 
 function getFileSize(filePath) {
     return fs.statSync(filePath).size;
-}
-
-function findApkFile(dir) {
-    if (!fs.existsSync(dir)) return null;
-    const files = fs.readdirSync(dir).filter(f => f.endsWith('.apk'));
-    if (files.length === 0) return null;
-    const signed = files.find(f => !f.includes('unsigned'));
-    return path.join(dir, signed || files[0]);
 }
 
 function readVersionFromGradle(appDir) {
@@ -141,11 +133,11 @@ function updateDownloads(target) {
         for (const key of targets) {
             const config = APP_CONFIG[key];
             if (!config) continue;
-            // ★ 2026-08-30 与 --confirm 同源：项目根正式产物优先
-            const rootApk = path.join(config.appDir, config.outputName);
-            const apkFile = fs.existsSync(rootApk) ? rootApk : findApkFile(config.apkDir);
-            if (apkFile) {
-                const sizeMB = (getFileSize(apkFile) / 1024 / 1024).toFixed(1);
+            // ★ 2026-08-30 与 --confirm 同源：统一走 artifact-locate.js（项目根产物优先）
+            const loc = locateApk(key);
+            for (const w of (loc.warnings || [])) console.warn('  [WARN] ' + w);
+            if (loc.found) {
+                const sizeMB = (getFileSize(loc.path) / 1024 / 1024).toFixed(1);
                 console.log('  [待发布] ' + key + ': ' + config.outputName + ' (' + sizeMB + 'MB)');
             } else {
                 console.log('  [SKIP] ' + key + ': 未找到 APK');
@@ -182,25 +174,18 @@ function updateDownloads(target) {
             continue;
         }
 
-        // ★ 2026-08-30 修复源不一致（举一反三 auto-publish.js 同款坑）：
-        //   原只从 gradle 输出目录（build/outputs/apk/release）复制——打包中途失败
-        //   会残留半成品 gradle 输出，或与项目根已验收产物不一致（两个入口两个源）。
-        //   现优先取项目根 build-app.bat 的正式产物（含文件名+大小校验的最终副本），
-        //   不存在才回退 gradle 输出目录。
-        const rootApk = path.join(config.appDir, config.outputName);
-        const gradleApk = findApkFile(config.apkDir);
-        const apkFile = fs.existsSync(rootApk) ? rootApk : gradleApk;
-        if (!apkFile) {
+        // ★ 2026-08-30 架构收口：定位逻辑统一走 artifact-locate.js（项目根正式产物
+        //   优先 → gradle 输出回退 → public/downloads 旧包），与 auto-publish/
+        //   publish-release 同一权威源；源不一致/半成品嫌疑由模块 WARN 透出。
+        const loc = locateApk(key);
+        for (const w of (loc.warnings || [])) {
+            console.warn('  [WARN] ' + w);
+        }
+        if (!loc.found) {
             console.log('  [SKIP] ' + key + ' APK 未找到');
             continue;
         }
-        if (fs.existsSync(rootApk) && gradleApk) {
-            const rootSha = calculateSHA256(rootApk).toLowerCase();
-            const gradleSha = calculateSHA256(gradleApk).toLowerCase();
-            if (rootSha !== gradleSha) {
-                console.warn('  [WARN] ' + key + ': 项目根产物与 gradle 输出 sha 不一致，以项目根为准（gradle 输出可能是半成品）');
-            }
-        }
+        const apkFile = loc.path;
 
         // 复制到 downloads 目录
         const destPath = path.join(DOWNLOADS_DIR, config.outputName);

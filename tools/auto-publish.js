@@ -34,25 +34,10 @@ const { spawnSync } = require('child_process');
 
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const MANIFEST_PATH = path.join(PROJECT_ROOT, 'public', 'hash-manifest.json');
-const DOWNLOADS_DIR = path.join(PROJECT_ROOT, 'public', 'downloads');
-
-const APP_CONFIG = {
-    'cloud': {
-        apkName: '惠康中医-云端.apk',
-        gradlePath: path.join(PROJECT_ROOT, 'app_project', 'db-yunduan', 'cloud_app', 'app', 'build.gradle'),
-        distDir: path.join(PROJECT_ROOT, 'app_project', 'db-yunduan', 'cloud_desktop', 'dist'),
-        // ★ 2026-08-30 修复"新 APK 无法发布"：打包产物 APK 按规范输出到项目根目录，
-        //   而本工具原只扫描 public/downloads/（旧 APK）→ 比对恒"无变化"。
-        //   现以项目根构建产物为优先扫描源，发布时同步到 public/downloads/。
-        apkRootDir: path.join(PROJECT_ROOT, 'app_project', 'db-yunduan'),
-    },
-    'dingzhi': {
-        apkName: '惠康中医-本地.apk',
-        gradlePath: path.join(PROJECT_ROOT, 'app_project', 'db-offline', 'app', 'app', 'build.gradle'),
-        distDir: path.join(PROJECT_ROOT, 'app_project', 'db-offline', 'desktop', 'dist'),
-        apkRootDir: path.join(PROJECT_ROOT, 'app_project', 'db-offline'),
-    },
-};
+// ★ 2026-08-30 架构收口：产物路径/定位逻辑统一引用 artifact-locate.js 单一权威模块，
+//   本工具不再自维护 APP_CONFIG（历史上三工具三份路径配置各自演化，是"新 APK
+//   无法发布"事故的架构根因）。exe 的 distDir 亦取自模块。
+const { APPS: APP_CONFIG, locateApk, syncApkToDownloads } = require('./artifact-locate');
 
 function calculateSHA256(filePath) {
     const buffer = fs.readFileSync(filePath);
@@ -75,27 +60,24 @@ function scanLocalFiles(target) {
     for (const key of appKeys) {
         const config = APP_CONFIG[key];
 
-        // APK
+        // APK（★ 2026-08-30 定位逻辑收口 artifact-locate.js：项目根产物优先，
+        //   回退 gradle 输出/public/downloads 旧包；fromBuild=true 在 --publish 阶段同步）
         if (target === 'all' || target === 'apk') {
             if (config.apkName) {
-                // ★ 2026-08-30 优先扫项目根构建产物（build-app.bat 输出处），
-                //   不存在才回退 public/downloads/（旧版已发布产物）。
-                //   fromBuild=true 的文件在 --publish 阶段同步复制进 public/downloads/。
-                const buildApkPath = config.apkRootDir
-                    ? path.join(config.apkRootDir, config.apkName)
-                    : path.join(DOWNLOADS_DIR, config.apkName);
-                const apkPath = fs.existsSync(buildApkPath)
-                    ? buildApkPath
-                    : path.join(DOWNLOADS_DIR, config.apkName);
-                if (fs.existsSync(apkPath)) {
+                const loc = locateApk(key);
+                // 陈旧源守卫：透出模块返回的 WARN（半成品嫌疑/产物缺失）
+                for (const w of (loc.warnings || [])) {
+                    console.warn('  [WARN] ' + w);
+                }
+                if (loc.found) {
                     files.push({
                         appKey: key,
                         type: 'apk',
-                        path: apkPath,
-                        fromBuild: apkPath === buildApkPath && apkPath !== path.join(DOWNLOADS_DIR, config.apkName),
+                        path: loc.path,
+                        fromBuild: loc.fromBuild,
                         name: config.apkName,
-                        size: getFileSize(apkPath),
-                        sha256: calculateSHA256(apkPath).toLowerCase(),
+                        size: getFileSize(loc.path),
+                        sha256: calculateSHA256(loc.path).toLowerCase(),
                     });
                 }
             }
@@ -262,17 +244,14 @@ function main() {
     //   （publish-release.js 从该目录上传 + Cloudflare Pages 下载源）。
     //   仅在 --publish 人工确认阶段执行——check 模式绝不落盘，遵守
     //   "打包产物禁止自动上传官方下载网站"规范。
+    //   同步逻辑收口 artifact-locate.js（带 sha256 校验）。
     for (const f of changes) {
         if (f.type === 'apk' && f.fromBuild) {
-            const dst = path.join(DOWNLOADS_DIR, f.name);
-            try {
-                fs.mkdirSync(DOWNLOADS_DIR, { recursive: true });
-                fs.copyFileSync(f.path, dst);
-                const dstSha = calculateSHA256(dst).toLowerCase();
-                if (dstSha !== f.sha256) throw new Error('复制后 sha256 不一致: ' + f.name);
-                console.log('  [OK] 已同步新 APK 到 public/downloads/: ' + f.name + ' (' + formatSize(f.size) + ')');
-            } catch (e) {
-                console.error('  [ERROR] 同步 APK 失败: ' + f.name + ' - ' + e.message);
+            const r = syncApkToDownloads(f);
+            if (r.ok) {
+                console.log('  [OK] ' + r.message + ' (' + formatSize(f.size) + ')');
+            } else {
+                console.error('  [ERROR] ' + r.message);
                 process.exit(1);
             }
         }

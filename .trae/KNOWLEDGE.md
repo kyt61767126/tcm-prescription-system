@@ -47,7 +47,8 @@
 
 * 改 index.html JS 后必查三处：`html-sync-check.ps1`（副本漂移）、`sync-all.ps1 -VerifyOnly`（shared 组）、index-app.html 打包源与副本 diff。
 
-* CI 三重校验闭环（`.github/workflows/verify-unified.yml`：check-interface → sync-all -VerifyOnly → html-sync-check），推送红灯即漏同步。红灯修复：界面改动→重建基线一并提交；shared 改动→本地 sync-all 后提交；HTML 副本→以权威源回改。
+- CI 三重校验闭环（`.github/workflows/verify-unified.yml`：check-interface → sync-all -VerifyOnly → html-sync-check），推送红灯即漏同步。红灯修复：界面改动→重建基线一并提交；shared 改动→本地 sync-all 后提交；HTML 副本→以权威源回改。
+- ★ 2026-08-30 发布链路收口 `tools/artifact-locate.js`（单一权威模块）：产物路径配置/APK 定位（项目根产物优先→gradle 输出回退→public/downloads 旧包）/fromBuild 标记/同步 downloads（带 sha 校验）只有这一份；auto-publish.js、publish-release.js、auto-update-downloads.js 三工具全部 require 引用，**禁止再自维护产物路径配置**（历史三工具三份路径各自演化=发布事故架构根因）。自检命令 `node tools/artifact-locate.js --check`（源不一致/半成品嫌疑 WARN+exit 1）。
 
 * 批量 replace\_all 后必须 Grep 验证字面量归零（并行 Edit 会静默失败）。
 
