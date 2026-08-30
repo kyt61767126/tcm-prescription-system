@@ -312,6 +312,9 @@ h1 { color: #2c3e50; font-size: 18px; margin-bottom: 3px; }
 }
 
 </style>
+<!-- ★ 2026-08-30 官网付款导引二维码库（从官网 CDN 加载，失败自动降级为链接文本，不影响激活流程）。
+     activate-window 用 defaultSession（installCSP 只装 sharedSession），无 CSP 拦截远程脚本。 -->
+<script src="https://tcm-prescription-system.pages.dev/qrcode.min.js" onerror="window.__qrLoadFailed=true"></script>
 </head>
 <body>
 <div class="container">
@@ -433,6 +436,19 @@ h1 { color: #2c3e50; font-size: 18px; margin-bottom: 3px; }
                     <div>📞 联系电话：<b id="savedPhone">--</b></div>
                 </div>
                 <div class="status-text" id="waitStatus">正在等待管理员审核...</div>
+                <!-- ★ 2026-08-30 官网快速付费导引（对齐离线桌面 activate-window 同款）：
+                     扫码/浏览器直达官网购买页（自动携带本机设备识别码+云端版本意图），
+                     付款确认后 admin-status machineId 兜底自动激活，客户端 5 秒轮询自助领码 -->
+                <div id="payGuideBox" style="margin-top:14px;background:linear-gradient(135deg,#fff7ed 0%,#ffedd5 100%);border:1px solid #fdba74;border-radius:10px;padding:14px;text-align:center;">
+                    <div style="font-weight:700;color:#9a3412;font-size:14px;">💳 加速激活：官网在线付款</div>
+                    <div style="font-size:12px;color:#78350f;margin-top:4px;line-height:1.7;">用手机扫描下方二维码直达官网购买页<br>设备识别码<b>已自动携带</b>，付款后管理员核对即自动激活本软件</div>
+                    <div id="payGuideQr" style="width:150px;height:150px;margin:10px auto 6px;background:#fff;padding:6px;border-radius:8px;border:1px solid #fdba74;"></div>
+                    <div id="payGuideFallback" style="display:none;font-size:12px;color:#78350f;line-height:1.8;">
+                        浏览器打开：<b id="payGuideUrlText" style="word-break:break-all;"></b><br>
+                        <button id="payGuideCopyBtn" style="border:none;padding:4px 14px;border-radius:5px;font-size:12px;cursor:pointer;background:#ea580c;color:#fff;font-weight:600;margin-top:4px;">📋 复制购买链接</button>
+                    </div>
+                    <button id="payGuideOpenBtn" style="border:none;padding:6px 18px;border-radius:6px;font-size:12px;cursor:pointer;background:linear-gradient(135deg,#ea580c 0%,#c2410c 100%);color:#fff;font-weight:600;margin-top:6px;">🌐 浏览器打开购买页</button>
+                </div>
                 <div style="font-size:11px;color:#909399;margin-top:10px;line-height:1.5;">
                     💡 关闭窗口不影响审核<br>重新打开将自动恢复状态
                 </div>
@@ -596,6 +612,13 @@ h1 { color: #2c3e50; font-size: 18px; margin-bottom: 3px; }
                     <div>📞 联系电话：<b id="ticketSavedPhone">--</b></div>
                 </div>
                 <div class="status-text" style="background:#fff;color:#2e7d32;">⏳ 请耐心等待管理员审批（工作时间内通常 1 小时内处理）</div>
+                <!-- ★ 2026-08-30 工单成功面板官网付款导引（对齐离线桌面同款） -->
+                <div style="margin-top:12px;background:linear-gradient(135deg,#fff7ed 0%,#ffedd5 100%);border:1px solid #fdba74;border-radius:10px;padding:12px;text-align:center;">
+                    💳 <b>不想等？官网在线付款立即激活</b><br>
+                    <div style="font-size:12px;color:#78350f;margin-top:4px;line-height:1.7;">付款后管理员核对即自动激活，无需等待工单审批</div>
+                    <button id="ticketPayOpenBtn" style="border:none;padding:6px 18px;border-radius:6px;font-size:12px;cursor:pointer;background:linear-gradient(135deg,#ea580c 0%,#c2410c 100%);color:#fff;font-weight:600;margin-top:6px;">🌐 浏览器打开购买页</button>
+                    <button id="ticketPayCopyBtn" style="border:none;padding:4px 14px;border-radius:5px;font-size:12px;cursor:pointer;background:#ea580c;color:#fff;font-weight:600;margin-top:4px;">📋 复制购买链接（手机浏览器打开）</button>
+                </div>
                 <button class="btn btn-secondary" id="ticketNewBtn" style="margin-top:10px;">提交新工单 / 返回</button>
             </div>
         </div>
@@ -1014,10 +1037,82 @@ document.getElementById('password2').addEventListener('keydown', e => {
 });
 
 // ============ Waiting + polling (admin) ============
+// ★ 2026-08-30 官网快速付费导引（对齐离线桌面 activate-window 同款）：
+//   二维码/浏览器打开指向官网购买页（携带本机 machineId + 云端版本意图自动预填）。
+//   window.open 走 activateWindow 的 setWindowOpenHandler（https:// → shell.openExternal 系统浏览器）。
+const PAY_GUIDE_BASE = 'https://tcm-prescription-system.pages.dev/download.html?mid=';
+let _payGuideInited = false;
+function payGuideUrl() {
+    const mid = params.get('machineId') || '';
+    // state.edition: 'institution'→cloud-pro(机构版) / 其他→cloud-personal(标准版)，与官网 ed 参数一致
+    const ed = (state.edition === 'institution') ? 'cloud-pro' : 'cloud-personal';
+    return PAY_GUIDE_BASE + encodeURIComponent(mid) + '&ed=' + ed;
+}
+function initPayGuide() {
+    if (_payGuideInited) return;
+    _payGuideInited = true;
+    const url = payGuideUrl();
+    const urlText = document.getElementById('payGuideUrlText');
+    if (urlText) urlText.textContent = url;
+    const qrBox = document.getElementById('payGuideQr');
+    if (qrBox && typeof QRCode !== 'undefined') {
+        try {
+            new QRCode(qrBox, { text: url, width: 136, height: 136, correctLevel: QRCode.CorrectLevel.M });
+        } catch (e) {
+            qrBox.style.display = 'none';
+            document.getElementById('payGuideFallback').style.display = 'block';
+        }
+    } else {
+        // QR 库加载失败（断网等场景）降级为链接文本
+        if (qrBox) qrBox.style.display = 'none';
+        const fb = document.getElementById('payGuideFallback');
+        if (fb) fb.style.display = 'block';
+    }
+    const copyBtn = document.getElementById('payGuideCopyBtn');
+    if (copyBtn) {
+        copyBtn.addEventListener('click', () => {
+            navigator.clipboard.writeText(url).then(() => {
+                copyBtn.textContent = '✅ 已复制';
+                setTimeout(() => { copyBtn.textContent = '📋 复制购买链接'; }, 1500);
+            }).catch(() => {
+                const ta = document.createElement('textarea');
+                ta.value = url; document.body.appendChild(ta); ta.select();
+                try { document.execCommand('copy'); copyBtn.textContent = '✅ 已复制';
+                    setTimeout(() => { copyBtn.textContent = '📋 复制购买链接'; }, 1500);
+                } catch (e2) {}
+                document.body.removeChild(ta);
+            });
+        });
+    }
+    const openBtn = document.getElementById('payGuideOpenBtn');
+    if (openBtn) {
+        openBtn.addEventListener('click', () => { window.open(url, '_blank'); });
+    }
+    // 工单成功面板付款导引按钮
+    const tOpenBtn = document.getElementById('ticketPayOpenBtn');
+    if (tOpenBtn) tOpenBtn.addEventListener('click', () => { window.open(url, '_blank'); });
+    const tCopyBtn = document.getElementById('ticketPayCopyBtn');
+    if (tCopyBtn) {
+        tCopyBtn.addEventListener('click', () => {
+            navigator.clipboard.writeText(url).then(() => {
+                tCopyBtn.textContent = '✅ 已复制';
+                setTimeout(() => { tCopyBtn.textContent = '📋 复制购买链接（手机浏览器打开）'; }, 2000);
+            }).catch(() => {
+                const ta = document.createElement('textarea');
+                ta.value = url; document.body.appendChild(ta); ta.select();
+                try { document.execCommand('copy'); tCopyBtn.textContent = '✅ 已复制';
+                    setTimeout(() => { tCopyBtn.textContent = '📋 复制购买链接（手机浏览器打开）'; }, 2000);
+                } catch (e2) {}
+                document.body.removeChild(ta);
+            });
+        });
+    }
+}
 function showWaiting(requestId, savedAt) {
     document.getElementById('requestNo').textContent = requestId;
     document.getElementById('submitTime').textContent = savedAt ? new Date(savedAt).toLocaleString('zh-CN') : new Date().toLocaleString('zh-CN');
     document.getElementById('savedPhone').textContent = state.phone;
+    initPayGuide();
     showAdminPanel('waiting');
 }
 
@@ -1401,6 +1496,7 @@ document.getElementById('ticketSubmitBtn').addEventListener('click', async () =>
             document.getElementById('ticketNoDisplay').textContent = result.ticketNo || '--';
             document.getElementById('ticketSubmitTime').textContent = new Date().toLocaleString('zh-CN');
             document.getElementById('ticketSavedPhone').textContent = contactPhone || contactWechat || '--';
+            initPayGuide(); // ★ 2026-08-30 工单成功面板付款导引按钮绑定（与 adminWaiting 共用）
             showTicketPanel('ticketSuccess');
         } else {
             showGlobalError((result && result.error) || '工单提交失败，请稍后重试');

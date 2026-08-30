@@ -30,7 +30,8 @@ const ALLOWED_ORIGINS = [
 ];
 
 function corsHeaders(origin) {
-    const allowedOrigin = (origin && ALLOWED_ORIGINS.includes(origin)) ? origin : 'https://tcm-prescription-system.pages.dev';
+    // ★ 2026-08-30 CORS 回退对齐 users.js 先例：file:// 客户端（Origin: null，如离线APP WebView）放行
+    const allowedOrigin = (origin && ALLOWED_ORIGINS.includes(origin)) ? origin : 'null';
     return {
         'Access-Control-Allow-Origin': allowedOrigin,
         'Vary': 'Origin',

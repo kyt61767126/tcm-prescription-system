@@ -3888,18 +3888,29 @@
             };
             // ★ password 不上传云端，仅本地安装时创建登录账号使用
             try {
-                const controller = new AbortController();
-                const t = setTimeout(function(){ try { controller.abort(); } catch(e){} }, 12000);
+                // ★ 2026-08-30 桌面版 CORS 铁律分流（KNOWLEDGE 第 8 章）：
+                //   桌面 Electron 渲染进程为 file://（Origin: null），直连 fetch 云端 API 被
+                //   CORS 拦截（静默 TypeError → 报"网络错误"）。离线桌面 preload 已有
+                //   activate.submitAdminRequest IPC（主进程 fetch，无 CORS，且持久化 requestId）。
+                //   离线APP（file:///android_asset，无 electronAPI）走 fetch——服务端 CORS 回退
+                //   已对齐 users.js 放行 Origin: null。
                 let res;
-                try {
-                    const r = await fetch(ADMIN_SUBMIT_URL, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload),
-                        signal: controller.signal
-                    });
-                    res = await r.json();
-                } finally { clearTimeout(t); }
+                if (global.electronAPI && global.electronAPI.activate &&
+                    typeof global.electronAPI.activate.submitAdminRequest === 'function') {
+                    res = await global.electronAPI.activate.submitAdminRequest(payload);
+                } else {
+                    const controller = new AbortController();
+                    const t = setTimeout(function(){ try { controller.abort(); } catch(e){} }, 12000);
+                    try {
+                        const r = await fetch(ADMIN_SUBMIT_URL, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload),
+                            signal: controller.signal
+                        });
+                        res = await r.json();
+                    } finally { clearTimeout(t); }
+                }
 
                 if (res && res.success) {
                     document.getElementById('adminRequestNo').textContent = res.requestId;
@@ -3935,12 +3946,20 @@
                 }
                 let r = null;
                 try {
-                    let statusUrl = ADMIN_STATUS_URL + '?requestId=' + encodeURIComponent(requestId);
-                    if (machineId) statusUrl += '&machineId=' + encodeURIComponent(machineId);
-                    const resp = await fetch(statusUrl, {
-                        method: 'GET', headers: { 'Content-Type': 'application/json' }
-                    });
-                    r = await resp.json();
+                    // ★ 2026-08-30 桌面版 CORS 铁律分流：Electron 走 IPC checkAdminStatus(requestId, machineId)
+                    //   （离线桌面主进程 fetch，双参含 machineId 官网订单兜底）；离线APP 走直连 fetch
+                    //   （服务端 CORS 回退已放行 Origin: null）。
+                    if (global.electronAPI && global.electronAPI.activate &&
+                        typeof global.electronAPI.activate.checkAdminStatus === 'function') {
+                        r = await global.electronAPI.activate.checkAdminStatus(requestId, machineId || '');
+                    } else {
+                        let statusUrl = ADMIN_STATUS_URL + '?requestId=' + encodeURIComponent(requestId);
+                        if (machineId) statusUrl += '&machineId=' + encodeURIComponent(machineId);
+                        const resp = await fetch(statusUrl, {
+                            method: 'GET', headers: { 'Content-Type': 'application/json' }
+                        });
+                        r = await resp.json();
+                    }
                 } catch (err) { console.warn('[LicenseCheck] admin-status 网络错误:', err); }
                 if (r && r.success && r.status === 'activated') {
                     clearInterval(pollTimer); pollTimer = null;

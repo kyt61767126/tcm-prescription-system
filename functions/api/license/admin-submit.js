@@ -74,7 +74,10 @@ let _currentRequest = null;
 
 function corsHeaders() {
     const origin = _currentRequest ? (_currentRequest.headers.get('Origin') || '') : '';
-    const allowedOrigin = (origin && ALLOWED_ORIGINS.includes(origin)) ? origin : 'https://tcm-prescription-system.pages.dev';
+    // ★ 2026-08-30 CORS 回退对齐 users.js 先例：未知 Origin（含 file:// 客户端的 Origin: null，
+    //   如离线APP WebView）回退 'null' 放行。激活申请/状态为公开注册链路（requestId 服务端随机签发，
+    //   仅提交者持有，且接口自带 IP 限流），放行 null 与 users.js 登录接口同基线。
+    const allowedOrigin = (origin && ALLOWED_ORIGINS.includes(origin)) ? origin : 'null';
     return {
         'Access-Control-Allow-Origin': allowedOrigin,
         'Vary': 'Origin',
