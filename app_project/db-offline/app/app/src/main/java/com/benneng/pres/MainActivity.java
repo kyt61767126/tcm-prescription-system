@@ -1060,6 +1060,13 @@ public class MainActivity extends BridgeActivity {
         // ★ 2026-08-28 版本号显示：登录页底部「微信号: hktzy1688 | 版本: V1.0.0」追加 Build 号（versionCode）
         //   → 用户看到 V1.0.0 Build 177，不再只有不变的软著固定 V1.0.0，便于确认新版本覆盖安装生效。
         //   三次尝试（0/600/1500ms）应对 assets DOM 就绪时机差异。
+        // ★ 2026-08-30 修复首次/二次打开版本号不一致（竞态）：
+        //   ①去掉 __appBuildSuffix__ 提前 return 守卫——首次 0ms 注入时 DOM 可能未就绪，
+        //     守卫却已置位，导致 600/1500ms 重试全部短路，Build 号丢失（第二次打开才正常）；
+        //     各挂载点自带 indexOf('Build') 检查，天然幂等，去掉守卫不会重复追加。
+        //   ②注入 window.__APP_BUILD__ 并主动调 applyEditionTags() 重渲染——
+        //     页面侧 applyEditionTags 重写 .version-tag/document.title 时会拼接该变量，
+        //     不再被"事后正则追加"竞态抹掉。
         try {
             android.content.pm.PackageInfo pi = getPackageManager().getPackageInfo(getPackageName(), 0);
             String vn = pi.versionName;
@@ -1069,9 +1076,9 @@ public class MainActivity extends BridgeActivity {
             final String vSuffix = " V" + vn + " Build " + vc;
             final String tagSuffix = " Build " + vc;
             final String js2 = "(function(){" +
-                "  if (window.__appBuildSuffix__) return;" +
-                "  window.__appBuildSuffix__ = true;" +
                 "  try {" +
+                "    window.__APP_BUILD__ = 'Build " + vc + "';" +
+                "    if (typeof applyEditionTags === 'function') { try { applyEditionTags(); } catch(e0) {} }" +
                 "    var t = document.querySelector('title');" +
                 "    if (t && t.textContent.indexOf('Build') === -1) { t.textContent += '" + vSuffix + "'; }" +
                 "    var v1 = document.querySelector('.login-footer');" +

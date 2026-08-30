@@ -805,7 +805,11 @@ let currentUser = null;
                 } else {
                     // ★ 2026-08-28 优化：登录页直接显示版本号（原「登录后显示版本」占位无信息量）；
                     //   MainActivity 注入会追加 Build 号 → 【离线机构版】V1.0.0 Build NNN
-                    tag.innerHTML = '【' + label + '】 ' + window.APP_VERSION + metaHtml;
+                    // ★ 2026-08-30 修复首开/二开版本号不一致：本函数重写 innerHTML 会抹掉 Java 事后
+                    //   注入的 Build 号（竞态），现直接拼接 window.__APP_BUILD__（MainActivity 注入），
+                    //   重渲染多少次 Build 号都不丢。
+                    tag.innerHTML = '【' + label + '】 ' + window.APP_VERSION +
+                        (window.__APP_BUILD__ ? (' ' + window.__APP_BUILD__) : '') + metaHtml;
                 }
             }
             // ★ 挂载点2：.login-security 下方（激活后简化登录框必显示，防止 header-section 被隐藏时丢失）
@@ -839,7 +843,9 @@ let currentUser = null;
             if (et) et.textContent = '【' + label + '】';
             // ★ 2026-08-27 与云端对齐：主窗口标题 = 惠康中医 + 部署版本（离线机构版/离线标准版）
             //   原软著截图期间统一为全称"惠康中医诊所管理系统 V1.0.0"，现恢复动态版本展示
-            document.title = '惠康中医-' + label;
+            // ★ 2026-08-30 同竞态修复：标题拼接 __APP_BUILD__，防 applyEditionTags 重写抹掉 Build 号
+            document.title = '惠康中医-' + label +
+                (window.__APP_BUILD__ ? (' ' + window.__APP_BUILD__) : '');
             var logText = '惠康中医' + label + ' ' + window.APP_VERSION +
                 (_buildMeta ? ('  |  构建: ' + metaTextLine1 + (metaTextLine2 ? (' | ' + metaTextLine2) : '')) : '');
             console.log('%c' + logText, 'color:#667eea;font-size:14px;font-weight:bold');

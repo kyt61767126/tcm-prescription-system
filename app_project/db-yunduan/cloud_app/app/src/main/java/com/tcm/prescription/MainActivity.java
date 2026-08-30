@@ -943,9 +943,9 @@ public class MainActivity extends BridgeActivity {
             final String vSuffix = " V" + vn + " Build " + vc;
             final String tagSuffix = " Build " + vc;
             final String js2 = "(function(){" +
-                "  if (window.__appBuildSuffix__) return;" +
-                "  window.__appBuildSuffix__ = true;" +
                 "  try {" +
+                "    window.__APP_BUILD__ = 'Build " + vc + "';" +
+                "    if (typeof applyEditionTags === 'function') { try { applyEditionTags(); } catch(e0) {} }" +
                 "    var t = document.querySelector('title');" +
                 "    if (t && t.textContent.indexOf('Build') === -1) { t.textContent += '" + vSuffix + "'; }" +
                 "    var v1 = document.querySelector('.login-footer');" +
