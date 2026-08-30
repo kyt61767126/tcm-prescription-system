@@ -6646,7 +6646,25 @@ let currentUser = null;
                     } catch (e) { diag += '; 直连异常: ' + String(e); }
                 }
                 if (finalResult && finalResult.success) {
-                    const backupInfo = `\u5907\u4EFd\u6210\u529F\uFF01\n\n\u5907\u4EFd\u6587\u4EF6\uFF1A${finalResult.fileName}\n\u4FDD\u5B58\u4F4D\u7F6E\uFF1A${finalResult.filePath || 'downloads/中医处方系统/'}\n\n\u5907\u4EFd\u6570\u636E\u7EDF\u8BA1\uFF1A\n\u2022 \u836F\u54C1\u6570\u91CF\uFF1A${medicines.length} 种\n\u2022 \u9A8C\u65B9\u6570\u91CF\uFF1A${formulas.length} 个\n\u2022 \u5904\u65B9\u6570\u91CF\uFF1A${prescriptionHistory.length} 张\n\n\u6587\u4EF6\u5927\u5C0F\uFF1A${(jsonStr.length / 1024).toFixed(1)} KB\n\n\u6CE8\uFF1A\u5907\u4EFD\u4EC5\u5305\u542B\u6587\u5B57\u6570\u636E\uFF08\u836F\u54C1/\u9A8C\u65B9/\u5904\u65B9/\u8D26\u53F7/\u8BBE\u7F6E\uFF09\uFF0C\u7167\u7247\u548C\u89C6\u9891\u4E0D\u5305\u542B\u5728\u5185\u3002`;
+                    // ★ 2026-08-30 照片视频备份：媒体文件复制到公共 Downloads/中医处方系统/media/
+                    let mediaInfo = '';
+                    try {
+                        if (window.electronAPI && typeof window.electronAPI.backupMedia === 'function') {
+                            const mr = await window.electronAPI.backupMedia();
+                            if (mr && mr.success) {
+                                const mc = mr.copied || 0;
+                                const mb = mr.totalBytes || 0;
+                                if (mc > 0) {
+                                    mediaInfo = '\n\n照片视频备份：成功复制 ' + mc + ' 个文件（' + (mb / 1024 / 1024).toFixed(1) + ' MB）\n保存位置：downloads/中医处方系统/media/';
+                                } else {
+                                    mediaInfo = '\n\n照片视频备份：已是最新（' + (mr.skipped || 0) + ' 个文件已存在）';
+                                }
+                            } else {
+                                mediaInfo = '\n\n照片视频备份：跳过（' + ((mr && mr.error) || '失败') + '）';
+                            }
+                        }
+                    } catch (e) { mediaInfo = '\n\n照片视频备份：跳过（' + String(e) + '）'; }
+                    const backupInfo = `\u5907\u4EFd\u6210\u529F\uFF01\n\n\u5907\u4EFd\u6587\u4EF6\uFF1A${finalResult.fileName}\n\u4FDD\u5B58\u4F4D\u7F6E\uFF1A${finalResult.filePath || 'downloads/中医处方系统/'}\n\n\u5907\u4EFd\u6570\u636E\u7EDF\u8BA1\uFF1A\n\u2022 \u836F\u54C1\u6570\u91CF\uFF1A${medicines.length} 种\n\u2022 \u9A8C\u65B9\u6570\u91CF\uFF1A${formulas.length} 个\n\u2022 \u5904\u65B9\u6570\u91CF\uFF1A${prescriptionHistory.length} 张\n\n\u6587\u4EF6\u5927\u5C0F\uFF1A${(jsonStr.length / 1024).toFixed(1)} KB${mediaInfo}`;
                     alert(backupInfo);
                 } else if (finalResult) {
                     alert('备份失败：' + (finalResult.error || '未知错误') + (diag ? '\n诊断：' + diag : ''));
@@ -6749,7 +6767,24 @@ let currentUser = null;
                 // 统计输入框：按登入用户累计历史处方计数（管理员统计全部、普通用户统计自己的）
                 const clinicYear = String(new Date().getFullYear()).slice(-2);
                 document.getElementById('clinicNo').value = clinicYear + String(prescriptionHistory.length).padStart(6, '0');
-                alert('数据导入成功！');
+                // ★ 2026-08-30 照片视频恢复：从公共 Downloads/中医处方系统/media/ 复制回 APP 媒体目录
+                //   （重装后一键恢复照片视频；浏览器/无桥环境自动跳过）
+                let restoreMediaInfo = '';
+                try {
+                    if (window.electronAPI && typeof window.electronAPI.restoreMedia === 'function') {
+                        const mr = await window.electronAPI.restoreMedia();
+                        if (mr && mr.success) {
+                            if ((mr.restored || 0) > 0) {
+                                restoreMediaInfo = '\n照片视频恢复：成功恢复 ' + mr.restored + ' 个文件';
+                            } else {
+                                restoreMediaInfo = '\n照片视频恢复：' + (mr.message || '无新文件需要恢复');
+                            }
+                        } else {
+                            restoreMediaInfo = '\n照片视频恢复：跳过（' + ((mr && mr.error) || '失败') + '）';
+                        }
+                    }
+                } catch (e) { restoreMediaInfo = '\n照片视频恢复：跳过（' + String(e) + '）'; }
+                alert('数据导入成功！' + restoreMediaInfo);
             } catch (error) {
                 alert('导入失败：文件格式不正确');
             }

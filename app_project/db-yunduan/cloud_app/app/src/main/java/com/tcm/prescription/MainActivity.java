@@ -55,6 +55,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -1115,6 +1116,8 @@ public class MainActivity extends BridgeActivity {
             "    saveBackupFile: function(jsonStr, fileName) { return callNativeAsync('saveBackupFile', {jsonStr: jsonStr, fileName: fileName}); }," +
             "    listBackupFiles: function() { return callNativeAsync('listBackupFiles', {}); }," +
             "    readBackupFile: function(fileName) { return callNativeAsync('readBackupFile', {fileName: fileName}); }," +
+            "    backupMedia: function() { return callNativeAsync('backupMedia', {}); }," +
+            "    restoreMedia: function() { return callNativeAsync('restoreMedia', {}); }," +
             "    readFileAsBase64: function(filePath) {" +
             "      return new Promise(function(resolve){" +
             "        try {" +
@@ -1396,6 +1399,11 @@ public class MainActivity extends BridgeActivity {
                         return listBackupFiles().toString();
                     case "readBackupFile":
                         return readBackupFile(args.optString("fileName", "")).toString();
+                    // ★ 2026-08-30 照片视频备份：复制到公共 Downloads/中医处方系统/media/
+                    case "backupMedia":
+                        return backupMedia().toString();
+                    case "restoreMedia":
+                        return restoreMedia().toString();
                     case "findMediaFiles":
                         return findMediaFiles(args.optString("patientName", ""),
                                 args.optString("prescriptionNo", ""),
@@ -1892,6 +1900,184 @@ public class MainActivity extends BridgeActivity {
                 Log.e("TCM-Pres", "readBackupFile 失败", e);
                 return fail(e.getMessage());
             }
+        }
+
+        // ------------------------------------------------------------------
+        // ★ 2026-08-30 照片视频备份：媒体文件复制到公共 Downloads/中医处方系统/media/
+        //   按月份子目录结构复制（YYYY-MM/文件名），跳过已备份（同名同大小）文件，
+        //   纯二进制流复制不转 base64，避免大视频内存溢出（卸载重装不丢照片视频）
+        // ------------------------------------------------------------------
+        private JSONObject backupMedia() {
+            try {
+                int copied = 0;
+                int skipped = 0;
+                long totalBytes = 0;
+                java.util.Set<String> done = new java.util.HashSet<>();
+                for (File root : getAllMediaDirs()) {
+                    if (root == null || !root.isDirectory()) continue;
+                    File[] children = root.listFiles();
+                    if (children == null) continue;
+                    for (File child : children) {
+                        if (child.isDirectory()) {
+                            File[] monthFiles = child.listFiles();
+                            if (monthFiles == null) continue;
+                            for (File f : monthFiles) {
+                                if (!f.isFile()) continue;
+                                int r = copyMediaFileToBackup(f, child.getName() + "/" + f.getName(), done);
+                                if (r == 1) { copied++; totalBytes += f.length(); }
+                                else if (r == 0) skipped++;
+                            }
+                        } else if (child.isFile()) {
+                            int r = copyMediaFileToBackup(child,
+                                    getCurrentMonthFolder() + "/" + child.getName(), done);
+                            if (r == 1) { copied++; totalBytes += child.length(); }
+                            else if (r == 0) skipped++;
+                        }
+                    }
+                }
+                JSONObject r = new JSONObject();
+                r.put("success", true);
+                r.put("copied", copied);
+                r.put("skipped", skipped);
+                r.put("totalBytes", totalBytes);
+                return r;
+            } catch (Exception e) {
+                Log.e("TCM-Pres", "backupMedia 失败", e);
+                return fail(e.getMessage());
+            }
+        }
+
+        // 返回 1=已复制 0=已存在跳过 -1=失败
+        private int copyMediaFileToBackup(File src, String relPath, java.util.Set<String> done) {
+            try {
+                if (!done.add(relPath)) return 0; // 同名文件在其它目录已处理过
+                String fileName = src.getName();
+                String relDir = relPath.substring(0, relPath.length() - fileName.length());
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    if (mediaFileExistsInDownloads(relDir, fileName, src.length())) return 0;
+                    ContentValues values = new ContentValues();
+                    values.put(MediaStore.Downloads.DISPLAY_NAME, fileName);
+                    values.put(MediaStore.Downloads.MIME_TYPE, mimeForFile(fileName));
+                    values.put(MediaStore.Downloads.RELATIVE_PATH,
+                            Environment.DIRECTORY_DOWNLOADS + "/" + BACKUP_SUB_DIR + "/media/" + relDir);
+                    Uri uri = getContentResolver().insert(
+                            MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+                    if (uri == null) return -1;
+                    try (InputStream is = new FileInputStream(src);
+                         OutputStream os = getContentResolver().openOutputStream(uri)) {
+                        if (os == null) return -1;
+                        byte[] buf = new byte[32768];
+                        int len;
+                        while ((len = is.read(buf)) > 0) os.write(buf, 0, len);
+                        os.flush();
+                    }
+                    return 1;
+                } else {
+                    File dir = new File(new File(new File(
+                            Environment.getExternalStoragePublicDirectory(
+                                    Environment.DIRECTORY_DOWNLOADS), BACKUP_SUB_DIR), "media"), relDir);
+                    if (!dir.exists() && !dir.mkdirs()) return -1;
+                    File dst = new File(dir, fileName);
+                    if (dst.exists() && dst.length() == src.length()) return 0;
+                    try (InputStream is = new FileInputStream(src);
+                         OutputStream os = new FileOutputStream(dst)) {
+                        byte[] buf = new byte[32768];
+                        int len;
+                        while ((len = is.read(buf)) > 0) os.write(buf, 0, len);
+                        os.flush();
+                    }
+                    return 1;
+                }
+            } catch (Exception e) {
+                Log.e("TCM-Pres", "copyMediaFileToBackup 失败: " + relPath, e);
+                return -1;
+            }
+        }
+
+        // 检查公共 Downloads/中医处方系统/media/relDir 下是否已存在同名同大小文件
+        private boolean mediaFileExistsInDownloads(String relDir, String fileName, long size) {
+            try {
+                String selection = MediaStore.Downloads.RELATIVE_PATH + " = ? AND "
+                        + MediaStore.Downloads.DISPLAY_NAME + " = ?";
+                String[] args = new String[]{
+                        Environment.DIRECTORY_DOWNLOADS + "/" + BACKUP_SUB_DIR + "/media/" + relDir,
+                        fileName};
+                try (Cursor c = getContentResolver().query(
+                        MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                        new String[]{MediaStore.Downloads.SIZE}, selection, args, null)) {
+                    if (c != null && c.moveToFirst()) {
+                        return c.getLong(0) == size;
+                    }
+                }
+            } catch (Exception e) {
+                Log.e("TCM-Pres", "mediaFileExistsInDownloads 异常", e);
+            }
+            return false;
+        }
+
+        // ------------------------------------------------------------------
+        // ★ 2026-08-30 照片视频恢复：从公共 Downloads/中医处方系统/media/ 复制回
+        //   应用专属目录（getImageDir()/YYYY-MM/），重装后一键恢复照片视频
+        // ------------------------------------------------------------------
+        private JSONObject restoreMedia() {
+            try {
+                int restored = 0;
+                int skipped = 0;
+                File mediaRoot = new File(Environment.getExternalStoragePublicDirectory(
+                        Environment.DIRECTORY_DOWNLOADS), BACKUP_SUB_DIR + "/media");
+                if (!mediaRoot.isDirectory()) {
+                    JSONObject r = new JSONObject();
+                    r.put("success", true);
+                    r.put("restored", 0);
+                    r.put("skipped", 0);
+                    r.put("message", "备份中无媒体文件");
+                    return r;
+                }
+                File[] monthDirs = mediaRoot.listFiles();
+                if (monthDirs != null) {
+                    for (File md : monthDirs) {
+                        if (!md.isDirectory()) continue;
+                        File[] files = md.listFiles();
+                        if (files == null) continue;
+                        for (File f : files) {
+                            if (!f.isFile()) continue;
+                            // ★ 2026-08-30 按扩展名路由恢复目录：视频→视频目录，其余→图片目录
+                            //   （备份时照片/视频统一进 Downloads/中医处方系统/media/YYYY-MM/，恢复时还原到各自目录）
+                            boolean isVideo = f.getName().endsWith(".webm") || f.getName().endsWith(".mp4");
+                            File base = isVideo ? getVideoDir() : getImageDir();
+                            if (base == null) continue;
+                            File targetDir = new File(base, md.getName());
+                            if (!targetDir.exists() && !targetDir.mkdirs()) continue;
+                            File dst = new File(targetDir, f.getName());
+                            if (dst.exists() && dst.length() == f.length()) { skipped++; continue; }
+                            try (InputStream is = new FileInputStream(f);
+                                 OutputStream os = new FileOutputStream(dst)) {
+                                byte[] buf = new byte[32768];
+                                int len;
+                                while ((len = is.read(buf)) > 0) os.write(buf, 0, len);
+                                os.flush();
+                            }
+                            restored++;
+                        }
+                    }
+                }
+                JSONObject r = new JSONObject();
+                r.put("success", true);
+                r.put("restored", restored);
+                r.put("skipped", skipped);
+                return r;
+            } catch (Exception e) {
+                Log.e("TCM-Pres", "restoreMedia 失败", e);
+                return fail(e.getMessage());
+            }
+        }
+
+        private String mimeForFile(String name) {
+            if (name.endsWith(".mp4")) return "video/mp4";
+            if (name.endsWith(".webm")) return "video/webm";
+            if (name.endsWith(".jpg") || name.endsWith(".jpeg")) return "image/jpeg";
+            if (name.endsWith(".png")) return "image/png";
+            return "application/octet-stream";
         }
 
         // ------------------------------------------------------------------
