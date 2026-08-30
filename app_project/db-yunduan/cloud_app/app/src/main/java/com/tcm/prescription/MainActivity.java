@@ -1430,6 +1430,12 @@ public class MainActivity extends BridgeActivity {
                     case "printPrescription":
                         return printPrescription(args.optString("html", ""),
                                 args.optString("orientation", "portrait")).toString();
+                    // ★ 2026-08-30 官网付款导引（云端APP移植）：激活窗口/工单面板的
+                    //   「去官网付款」按钮走系统浏览器打开官网购买页。
+                    //   云端 WebView 未开多窗口，window.open 静默返回 null；且非官网域
+                    //   导航会被 shouldOverrideUrlLoading 反钓鱼拦截 → 桥是唯一可靠通路。
+                    case "openExternalUrl":
+                        return openExternalUrl(args.optString("url", "")).toString();
                     default:
                         return fail("unknown method: " + name).toString();
                 }
@@ -1492,6 +1498,36 @@ public class MainActivity extends BridgeActivity {
                 return r;
             } catch (Exception e) {
                 Log.e("TCM-Pres", "savePrescriptionImage 失败", e);
+                return fail(e.getMessage());
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // ★ 2026-08-30 官网付款导引：系统浏览器打开官网购买页（严格白名单）。
+        //   JS window.open 在 WebView（未开多窗口）静默失败，且非官网域导航会被
+        //   shouldOverrideUrlLoading 反钓鱼拦截 → 走本桥。仅放行
+        //   https://tcm-prescription-system.pages.dev/download.html 前缀（含 ?mid=&ed= 参数）。
+        // ------------------------------------------------------------------
+        private JSONObject openExternalUrl(String url) {
+            try {
+                String u = (url == null) ? "" : url.trim();
+                final String ALLOWED_PREFIX = "https://tcm-prescription-system.pages.dev/download.html";
+                if (!u.startsWith(ALLOWED_PREFIX)) {
+                    Log.w("TCM-Pres", "[openExternalUrl] 拒绝非白名单URL: " + u);
+                    return fail("url not allowed");
+                }
+                mainHandler.post(() -> {
+                    try {
+                        startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(u)));
+                        Log.d("TCM-Pres", "[openExternalUrl] 已调起系统浏览器: " + u);
+                    } catch (Exception e) {
+                        Log.w("TCM-Pres", "[openExternalUrl] 打开失败", e);
+                    }
+                });
+                JSONObject r = new JSONObject();
+                r.put("success", true);
+                return r;
+            } catch (Exception e) {
                 return fail(e.getMessage());
             }
         }

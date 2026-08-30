@@ -1856,6 +1856,28 @@
         }
     }
 
+    // ★ 2026-08-30 官网付款导引（云端系：云端APP + 云端桌面通用）
+    //   与离线系同款闭环：携带设备识别码 + 版本意图 → 官网购买页自动预填锁定 +
+    //   自动选中对应版本直接显示价格，客户填信息付款即可。
+    //   云端版本映射：institution→cloud-pro（云端机构版），personal→cloud-personal（云端标准版）。
+    //   APP 端优先走原生桥 openExternalUrl（云端 WebView 未开多窗口，window.open
+    //   静默返回 null 且非官网域导航会被反钓鱼拦截弹回首页——桥是唯一可靠通路）；
+    //   桥不存在回退 window.open（云端桌面 Electron / 网页正常行为）。
+    function openOfficialPayUrl(machineId, editionIntent) {
+        var edParam = (editionIntent === 'institution') ? 'cloud-pro'
+                    : (editionIntent === 'personal' ? 'cloud-personal' : '');
+        var url = 'https://tcm-prescription-system.pages.dev/download.html?mid=' + encodeURIComponent(machineId || '')
+            + (edParam ? ('&ed=' + edParam) : '');
+        try {
+            if (window.AndroidNative && typeof window.AndroidNative.invoke === 'function') {
+                var r = window.AndroidNative.invoke('openExternalUrl', JSON.stringify({ url: url }));
+                if (r) { try { var j = JSON.parse(r); if (j && j.success) return; } catch (e) {} }
+            }
+        } catch (e) {}
+        try { window.open(url, '_blank'); }
+        catch (e) { try { window.location.href = url; } catch (e2) {} }
+    }
+
     // ★ HTML 模态弹窗（替代 prompt()）
     // 创建全屏遮罩 + 居中卡片，包含激活码输入框，完全由 JS/CSS 控制
     // 关键防护：输入框添加 autocomplete="off" + data-lpignore="true" + onfocus 取消 Autofill
@@ -1929,8 +1951,10 @@
                 // 官网购买引导 + 联系客服区（合并优化）
                 '<div style="background:#fff8e1;border-radius:8px;padding:10px;margin-bottom:16px;">' +
                     '<div style="font-size:12px;font-weight:bold;color:#e65100;margin-bottom:6px;">🎫 获取激活码</div>' +
-                    // 官网购买按钮
-                    '<a href="https://tcm-prescription-system.pages.dev/download" target="_blank" style="display:block;text-align:center;padding:10px;margin-bottom:8px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;text-decoration:none;border-radius:8px;font-size:13px;font-weight:bold;">🌐 前往官网购买激活码</a>' +
+                    // 官网购买按钮（★ 2026-08-30 升级：a 标签在云端APP WebView 内 target=_blank
+                    //   不可靠且无版本参数——改按钮走 openOfficialPayUrl 桥接导引，
+                    //   自动带机器码+版本意图，官网直接显示版本价格）
+                    '<button id="cloudActivatePayGuideBtn" type="button" style="display:block;width:100%;text-align:center;padding:10px;margin-bottom:8px;background:linear-gradient(135deg,#ea580c 0%,#c2410c 100%);color:white;border:none;border-radius:8px;font-size:13px;font-weight:bold;cursor:pointer;">💳 去官网付款（支付宝/微信）</button>' +
                     '<div style="font-size:11px;color:#999;text-align:center;margin-bottom:8px;">官网"购买激活码"Tab 可一键生成订单信息</div>' +
                     // ★ 规则3：激活工单在线申请入口（管理员在后台工单审批页一键审批发码）
                     '<button id="ticketApplyBtn" style="display:block;width:100%;padding:10px;margin-bottom:4px;background:linear-gradient(135deg,#07c160 0%,#06ad56 100%);color:white;border:none;border-radius:8px;font-size:13px;font-weight:bold;cursor:pointer;">📩 提交激活工单（在线申请）</button>' +
@@ -1994,6 +2018,20 @@
             if (ticketApplyBtn) {
                 ticketApplyBtn.addEventListener('click', function() {
                     showTicketFormModal(machineId, clinicName);
+                });
+            }
+
+            // ★ 2026-08-30 官网付款导引（云端版）：桥接打开官网购买页，自动带机器码+版本意图
+            const cloudPayGuideBtn = card.querySelector('#cloudActivatePayGuideBtn');
+            if (cloudPayGuideBtn) {
+                cloudPayGuideBtn.addEventListener('click', function() {
+                    var intent = '';
+                    try {
+                        var ed = String(CONFIG.edition || '').toLowerCase();
+                        if (['institution', 'cloud_institution', 'cloud_clinic', 'clinic', 'org'].indexOf(ed) >= 0) intent = 'institution';
+                        else intent = 'personal';
+                    } catch (e) { intent = 'personal'; }
+                    openOfficialPayUrl(machineId, intent);
                 });
             }
 
@@ -2906,6 +2944,9 @@
                     '<div>📋 工单编号：<b id="ticketNoText" style="font-family:monospace;color:#07c160;">--</b></div>' +
                     '<div style="margin-top:4px;">🕐 提交时间：<b id="ticketTimeText">--</b></div>' +
                 '</div>' +
+                // ★ 2026-08-30 官网付款导引：客户可不等审批，直接官网扫码付款
+                //   （付款确认后 30 秒轮询自助领码，管理员核对一键激活）
+                '<button id="cloudTicketPayGuideBtn" type="button" style="width:100%;margin-bottom:8px;padding:10px;font-size:14px;border:none;border-radius:8px;color:#fff;background:linear-gradient(135deg,#ea580c 0%,#c2410c 100%);font-weight:bold;cursor:pointer;">💳 去官网付款（支付宝/微信）</button>' +
                 '<div style="font-size:11px;color:#909399;">⏳ 工作时间内通常 1 小时内处理，请耐心等待</div>' +
             '</div>' +
 
@@ -2979,6 +3020,15 @@
                 hint.style.color = '#07c160';
             }
         });
+
+        // ★ 2026-08-30 官网付款导引（工单成功面板）：桥接打开官网购买页，
+        //   自动带机器码+版本意图（editionIntent 已在本函数开头归一化）
+        var cloudTicketPayGuideBtn = document.getElementById('cloudTicketPayGuideBtn');
+        if (cloudTicketPayGuideBtn) {
+            cloudTicketPayGuideBtn.addEventListener('click', function() {
+                openOfficialPayUrl(machineId, editionIntent);
+            });
+        }
 
         // 取消
         document.getElementById('ticketCancelBtn').addEventListener('click', cleanup);
