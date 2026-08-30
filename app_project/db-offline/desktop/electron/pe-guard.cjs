@@ -11,6 +11,15 @@
 //        "排除该区段后的文件哈希"比对，不一致即判定被篡改。
 //    攻击者直接改 exe 任意字节会导致重算哈希不匹配；重复 embed 幂等（原地更新）。
 //
+//  ★ P2-1（2026-08-30）ver=2 双哈希：payload 同时携带 app.asar 全文件 SHA-256。
+//    动机：Electron fuse EnableEmbeddedAsarIntegrityValidation 只校验 asar 头
+//    （archive_win.cc 只哈希 header JSON），等长篡改 asar 内文件内容（如把试用
+//    天数 7 改 7000）头不变 → fuse 检测不到。ver=2 把 asar 全文件哈希也存进
+//    .bnzc，运行时 self-check 重算比对，失配阻断（这是桌面端首个强阻断项，
+//    正常用户无合法触发场景——asar 为只读资源，管线内三重门禁兜底）。
+//    兼容：ver=1 旧区段仍可读（asarSha256hex:null，调用方跳过 asar 校验）；
+//    update 模式下旧 rawSize(512 对齐) 足够容纳 192 字节 payload，布局不变。
+//
 //  兼容性：
 //    - 无 `.bnzc` 区段 → verifyZone 返回 present:false（旧版 exe / 开发环境），
 //      调用方按"未嵌入"处理，不告警不阻断。
@@ -29,10 +38,14 @@ const crypto = require('crypto');
 // .bnzc 区段固定参数
 const SECTION_NAME = '.bnzc';
 const ZONE_MAGIC = 'BNZC';
-const ZONE_VER = 1;
-// 区段数据载荷长度：magic(4) + ver(1) + reserved(3) + sha256hex(64) + 填充 = 128
-const ZONE_DATA_LEN = 128;
+const ZONE_VER = 2;
+// 区段数据载荷长度：magic(4) + ver(1) + reserved(3) + exeSha(64) + asarSha(64) + 填充 = 192
+const ZONE_DATA_LEN = 192;
+const ZONE_DATA_LEN_V1 = 128; // ver=1 旧载荷长度（读取兼容）
 const SHA256_HEX_LEN = 64;
+const EXE_SHA_OFFSET = 8;
+const ASAR_SHA_OFFSET = 72;
+const EMPTY_SHA_HEX = '0'.repeat(SHA256_HEX_LEN);
 
 function align(n, a) {
     if (!a || a <= 0) return n;
@@ -165,24 +178,61 @@ function hashExcludingZone(buf, pe, zone) {
 // ---------------------------------------------------------------------------
 // .bnzc 载荷读写
 // ---------------------------------------------------------------------------
-function buildZonePayload(sha256hex) {
+function buildZonePayload(sha256hex, asarSha256hex) {
     if (!/^[0-9a-fA-F]{64}$/.test(sha256hex)) throw new Error('Invalid sha256 hex');
+    const asarHex = asarSha256hex ? String(asarSha256hex).toLowerCase() : EMPTY_SHA_HEX;
+    if (!/^[0-9a-f]{64}$/.test(asarHex)) throw new Error('Invalid asar sha256 hex');
     const p = Buffer.alloc(ZONE_DATA_LEN, 0);
     p.write(ZONE_MAGIC, 0, 4, 'ascii');
     p.writeUInt8(ZONE_VER, 4);
-    p.write(sha256hex.toLowerCase(), 8, SHA256_HEX_LEN, 'ascii');
+    p.write(sha256hex.toLowerCase(), EXE_SHA_OFFSET, SHA256_HEX_LEN, 'ascii');
+    p.write(asarHex, ASAR_SHA_OFFSET, SHA256_HEX_LEN, 'ascii');
     return p;
 }
 
 function readZonePayload(buf, pe, zone) {
-    if (!zone || zone.rawSize < ZONE_DATA_LEN) return null;
-    const p = Buffer.alloc(ZONE_DATA_LEN);
-    buf.copy(p, 0, zone.rawPtr, zone.rawPtr + ZONE_DATA_LEN);
-    if (p.toString('ascii', 0, 4) !== ZONE_MAGIC) return null;
+    if (!zone || zone.rawSize < ZONE_DATA_LEN_V1) return null;
+    // 先按 ver=1 长度探底，再按 ver 决定实际读取长度（ver=1 旧区段兼容）
+    const probe = Buffer.alloc(ZONE_DATA_LEN_V1);
+    buf.copy(probe, 0, zone.rawPtr, zone.rawPtr + ZONE_DATA_LEN_V1);
+    if (probe.toString('ascii', 0, 4) !== ZONE_MAGIC) return null;
+    const ver = probe.readUInt8(4);
+    if (ver >= 2) {
+        if (zone.rawSize < ZONE_DATA_LEN) return null;
+        const p = Buffer.alloc(ZONE_DATA_LEN);
+        buf.copy(p, 0, zone.rawPtr, zone.rawPtr + ZONE_DATA_LEN);
+        const asarHex = p.toString('ascii', ASAR_SHA_OFFSET, ASAR_SHA_OFFSET + SHA256_HEX_LEN);
+        return {
+            ver,
+            sha256hex: p.toString('ascii', EXE_SHA_OFFSET, EXE_SHA_OFFSET + SHA256_HEX_LEN),
+            asarSha256hex: asarHex === EMPTY_SHA_HEX ? null : asarHex
+        };
+    }
+    // ver=1（或未知低版本）：只有 exe 哈希
     return {
-        ver: p.readUInt8(4),
-        sha256hex: p.toString('ascii', 8, 8 + SHA256_HEX_LEN)
+        ver,
+        sha256hex: probe.toString('ascii', EXE_SHA_OFFSET, EXE_SHA_OFFSET + SHA256_HEX_LEN),
+        asarSha256hex: null
     };
+}
+
+// ---------------------------------------------------------------------------
+// 文件 SHA-256（流式，供 asar 全文件哈希使用；16MB 级文件毫秒级）
+// ---------------------------------------------------------------------------
+function sha256File(filePath) {
+    return new Promise((resolve, reject) => {
+        const h = crypto.createHash('sha256');
+        const stream = fs.createReadStream(filePath, { highWaterMark: 1 << 20 });
+        stream.on('data', (chunk) => h.update(chunk));
+        stream.on('error', reject);
+        stream.on('end', () => resolve(h.digest('hex').toLowerCase()));
+    });
+}
+
+function sha256FileSync(filePath) {
+    const h = crypto.createHash('sha256');
+    h.update(fs.readFileSync(filePath));
+    return h.digest('hex').toLowerCase();
 }
 
 // ---------------------------------------------------------------------------
@@ -308,9 +358,18 @@ function validateLayout(buf, pe) {
  *
  * 两遍法：先追加/复用占位区段固定文件布局，再在该布局下计算"排除区段自身"
  * 的哈希，最后原地写入 payload——保证 embed 前后排除区段哈希一致。
- * @returns {{mode:'embed'|'update', sha256hex:string, exePath:string}}
+ *
+ * P2-1：传入 asarPath 时（打包终版 embed，asar 必须已定稿——本函数之后的
+ * 管线步骤不得再改 app.asar，否则运行时校验失配），把 asar 全文件 SHA-256
+ * 一并写入 ver=2 payload。不传则 asar 字段为空（调用方跳过 asar 校验）。
+ * @returns {{mode:'embed'|'update', sha256hex:string, asarSha256hex:?string, exePath:string}}
  */
-function embedZone(exePath) {
+function embedZone(exePath, asarPath) {
+    let asarSha256hex = null;
+    if (asarPath) {
+        if (!fs.existsSync(asarPath)) throw new Error('asar file not found: ' + asarPath);
+        asarSha256hex = sha256FileSync(asarPath);
+    }
     const orig = fs.readFileSync(exePath);
     const pe = parsePe(orig);
     const existing = pe.sections.find((s) => s.name === SECTION_NAME);
@@ -330,7 +389,7 @@ function embedZone(exePath) {
     const pe2 = parsePe(base);
     const zone2 = pe2.sections.find((s) => s.name === SECTION_NAME);
     const sha256hex = hashExcludingZone(base, pe2, zone2);
-    const payload = buildZonePayload(sha256hex);
+    const payload = buildZonePayload(sha256hex, asarSha256hex);
 
     // 原地写入 payload（布局不变）
     if (!zone2 || zone2.rawPtr < 0 || zone2.rawSize < payload.length) {
@@ -348,19 +407,25 @@ function embedZone(exePath) {
     if (!check.present || !check.match) {
         throw new Error('self-verify failed after embed: ' + JSON.stringify(check));
     }
+    if (asarSha256hex && check.asarSha256hex !== asarSha256hex) {
+        throw new Error('asar hash round-trip failed after embed');
+    }
     const finalBuf = fs.readFileSync(exePath);
     const finalPe = parsePe(finalBuf);
     const layoutProblems = validateLayout(finalBuf, finalPe);
     if (layoutProblems.length > 0) {
         throw new Error('PE layout invalid after embed (exe would not load): ' + layoutProblems.join('; '));
     }
-    return { mode, sha256hex, exePath };
+    return { mode, sha256hex, asarSha256hex, exePath };
 }
 
 /**
  * 校验 exe 的 .bnzc 区段完整性（不抛错，返回状态对象）。
  * @returns {{present:boolean, status:'ok'|'no-zone'|'bad-zone'|'mismatch'|'error',
- *            stored?:string, actual?:string, match?:boolean, error?:string}}
+ *            stored?:string, actual?:string, match?:boolean,
+ *            ver?:number, asarSha256hex:?string, error?:string}}
+ *  asarSha256hex：ver=2 且嵌入了 asar 哈希时非空（调用方据此决定是否校验 asar
+ *  文件本身；本函数不读 asar 文件——exe 校验与 asar 校验解耦）。
  */
 function verifyZone(exePath) {
     try {
@@ -377,7 +442,9 @@ function verifyZone(exePath) {
             status: match ? 'ok' : 'mismatch',
             stored: stored.sha256hex,
             actual,
-            match
+            match,
+            ver: stored.ver,
+            asarSha256hex: stored.asarSha256hex || null
         };
     } catch (e) {
         return { present: false, status: 'error', error: e.message };
@@ -401,16 +468,21 @@ function inspectZone(exePath) {
         rawSize: zone.rawSize,
         characteristics: zone.characteristics,
         ver: stored ? stored.ver : null,
-        sha256hex: stored ? stored.sha256hex : null
+        sha256hex: stored ? stored.sha256hex : null,
+        asarSha256hex: stored ? stored.asarSha256hex : null
     };
 }
 
 module.exports = {
     SECTION_NAME,
     ZONE_DATA_LEN,
+    ZONE_DATA_LEN_V1,
+    ZONE_VER,
     parsePe,
     hashExcludingZone,
     validateLayout,
+    sha256File,
+    sha256FileSync,
     embedZone,
     verifyZone,
     inspectZone

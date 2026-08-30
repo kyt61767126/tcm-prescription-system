@@ -283,21 +283,25 @@ echo [OK] Electron Fuses applied - RunAsNode/Inspect/NODE_OPTIONS=off, OnlyLoadA
 echo.
 
 REM ★ [8.03/9] P1-3：fuse 翻转改了 exe 字节 → .bnzc 幂等重嵌（覆盖 fuse 后哈希）并复验
-node "%~dp0..\..\..\tools\pe-zone-sign.cjs" embed "%CLOUD_MAIN_EXE%"
+REM ★ P2-1（2026-08-30）：终版 embed 传入 asar → .bnzc ver=2 携带 asar 全文件哈希，
+REM   运行时 self-check 重算比对，失配弹窗退出（堵 fuse 只验头的等长内容篡改洞）。
+REM   ★ 时序要求：本步之后不得再改 app.asar（本步与备份之间无人改，
+REM   Fixup 恢复的正是这份备份）——改 asar 相关管线必须重排到本步之前。
+node "%~dp0..\..\..\tools\pe-zone-sign.cjs" embed "%CLOUD_MAIN_EXE%" "%REAL_WIN_UNPACKED_PATH%\resources\app.asar"
 if errorlevel 1 (
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] .bnzc 重嵌失败 - build aborted'"
     node "%~dp0..\..\..\tools\obfuscate.js" restore --target=cloud >nul 2>&1
     if not defined NO_PAUSE pause
     exit /b 1
 )
-node "%~dp0..\..\..\tools\pe-zone-sign.cjs" verify "%CLOUD_MAIN_EXE%"
+node "%~dp0..\..\..\tools\pe-zone-sign.cjs" verify "%CLOUD_MAIN_EXE%" "%REAL_WIN_UNPACKED_PATH%\resources\app.asar"
 if errorlevel 1 (
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] .bnzc verify gate failed - build aborted'"
     node "%~dp0..\..\..\tools\obfuscate.js" restore --target=cloud >nul 2>&1
     if not defined NO_PAUSE pause
     exit /b 1
 )
-echo [OK] .bnzc re-embedded and verified on fused exe - fuses + .bnzc 双保护
+echo [OK] .bnzc re-embedded and verified on fused exe - fuses + .bnzc + asar-content 三重保护
 
 REM ★★ 关键防御：consolidation 会清空 dist 下所有子目录（包括 win-unpacked.时间戳），
 REM    这里立即把真 asar 备份到项目根的 _backup_asar\（不会被任何步骤清理），
@@ -505,7 +509,7 @@ REM   ① output 主 exe 复验 .bnzc（防 consolidation 偷换且 8.85 恢复�
 REM   ② 签名安装包（Setup/portable exe；主 exe 已随包携带签名）
 if exist "%BACKUP_ASAR_DIR%\real_main.exe" (
     if exist "%OUTPUT_DIR%\win-unpacked\%CLOUD_MAIN_EXE_NAME%" (
-        node "%~dp0..\..\..\tools\pe-zone-sign.cjs" verify "%OUTPUT_DIR%\win-unpacked\%CLOUD_MAIN_EXE_NAME%"
+        node "%~dp0..\..\..\tools\pe-zone-sign.cjs" verify "%OUTPUT_DIR%\win-unpacked\%CLOUD_MAIN_EXE_NAME%" "%OUTPUT_DIR%\win-unpacked\resources\app.asar"
         if errorlevel 1 (
             powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] output 主 exe .bnzc 失配（可能被 consolidation 偷换）- build aborted'"
             if not defined NO_PAUSE pause

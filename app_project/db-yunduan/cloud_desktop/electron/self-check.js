@@ -15,8 +15,13 @@
 //  无需改动 package.json 的 build.files。
 // ============================================================================
 
-const { app } = require('electron');
+const { app, dialog } = require('electron');
 const { execFile } = require('child_process');
+const path = require('path');
+const crypto = require('crypto');
+// original-fs：未 patch 的原生 fs（避开 Electron asar 路径拦截，直接读 app.asar 磁盘文件）
+let rawFs = null;
+try { rawFs = require('original-fs'); } catch (e) { rawFs = require('fs'); }
 // P1-[3.1] 第二路：PE .bnzc 完整性区段校验（shared/pe-guard.cjs，经 sync-all 同步）
 const peGuard = require('./pe-guard.cjs');
 
@@ -99,7 +104,7 @@ function runSelfCheck() {
  * 校验主 exe 的 .bnzc 完整性区段（第二路，不依赖证书）。
  * 非阻塞：任何异常/未知状态仅记录，不弹窗、不退出。
  *  - 无区段（旧版/开发环境）→ 记录 debug 后跳过
- *  - 区段哈希一致 → 通过
+ *  - 区段哈希一致 → 通过；ver=2 且带 asar 哈希 → 追加 asar 全文件校验（P2-1）
  *  - 区段哈希失配 → WARN（exe 可能被篡改）
  */
 function runPeZoneCheck() {
@@ -117,6 +122,9 @@ function runPeZoneCheck() {
     }
     if (r.status === 'ok') {
         log('debug', 'PE 完整性自校验通过（.bnzc 区段哈希一致）。');
+        if (r.asarSha256hex) {
+            runAsarIntegrityCheck(r.asarSha256hex);
+        }
     } else if (r.status === 'bad-zone') {
         log('WARN', 'exe 的 .bnzc 区段格式异常，完整性无法确认。');
     } else if (r.status === 'mismatch') {
@@ -124,6 +132,58 @@ function runPeZoneCheck() {
     } else {
         log('warn', 'PE 完整性校验未知状态: ' + r.status);
     }
+}
+
+/**
+ * ★ P2-1（2026-08-30）ASAR 全文件内容完整性校验（第三路，强阻断）。
+ *
+ * 动机：Electron fuse EnableEmbeddedAsarIntegrityValidation 只校验 asar 头，
+ * 等长篡改 asar 内文件内容（如改试用天数/激活判断）头不变，fuse 检测不到。
+ * .bnzc ver=2 携带打包时定稿的 asar 全文件 SHA-256，此处重算比对。
+ *
+ * 策略（与 .bnzc exe 校验的 WARN-only 不同，本项为强阻断）：
+ *  - 失配 → showErrorBox + app.exit(1)。正常用户无合法触发场景：
+ *    app.asar 是只读资源，安装/便携版均原样落盘；打包管线三重门禁
+ *    （pe-zone-sign verify asar / final-verify / smoke-launch）确保发布
+ *    产物嵌入哈希与实际 asar 一致，误报在发布前即被拦截。
+ *  - 读取失败/路径缺失 → WARN 不阻断（防非常规布局误伤，宁可漏检不可误报）。
+ */
+function runAsarIntegrityCheck(expectedAsarSha) {
+    if (!app.isPackaged) return;
+    const asarPath = path.join(path.dirname(process.execPath), 'resources', 'app.asar');
+    const h = crypto.createHash('sha256');
+    let stream;
+    try {
+        stream = rawFs.createReadStream(asarPath, { highWaterMark: 1 << 20 });
+    } catch (e) {
+        log('warn', 'ASAR 完整性校验启动失败（非致命）: ' + e.message);
+        return;
+    }
+    stream.on('error', (e) => {
+        log('warn', 'ASAR 完整性校验读取失败（非致命）: ' + (e && e.message ? e.message : e));
+    });
+    stream.on('data', (chunk) => h.update(chunk));
+    stream.on('end', () => {
+        let actual;
+        try {
+            actual = h.digest('hex');
+        } catch (e) {
+            log('warn', 'ASAR 完整性校验摘要失败（非致命）: ' + e.message);
+            return;
+        }
+        if (actual === expectedAsarSha) {
+            log('debug', 'ASAR 全文件完整性校验通过（.bnzc ver=2，内容级防篡改生效）。');
+        } else {
+            log('WARN', 'ASAR 内容校验失配：存储=' + expectedAsarSha + ' 实际=' + actual + '，即将退出。');
+            try {
+                dialog.showErrorBox(
+                    '文件完整性校验失败',
+                    '程序文件已被修改或损坏，为保障数据安全程序即将退出。\n\n请从官方渠道重新下载安装包并重新安装。'
+                );
+            } catch (e) { /* 弹窗失败不拦截退出 */ }
+            app.exit(1);
+        }
+    });
 }
 
 module.exports = { runSelfCheck, EXPECTED_EXE_SIGNER_THUMBPRINT };

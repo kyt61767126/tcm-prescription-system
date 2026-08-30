@@ -296,7 +296,11 @@ echo [OK] Electron Fuses applied - RunAsNode/Inspect/NODE_OPTIONS=off, OnlyLoadA
 echo.
 
 echo Running final .bnzc integrity embed (post-fuse, post-rcedit)...
-node "%~dp0..\..\..\tools\pe-zone-sign.cjs" embed "%MAIN_EXE%"
+REM ★ P2-1（2026-08-30）：终版 embed 传入 asar → .bnzc ver=2 携带 asar 全文件哈希，
+REM   运行时 self-check 重算比对，失配弹窗退出（堵 fuse 只验头的等长内容篡改洞）。
+REM   ★ 时序要求：本步之后不得再改 app.asar（本步与 [8.0/9] 备份之间无人改，
+REM   Fixup 恢复的正是这份备份）——改 asar 相关管线必须重排到本步之前。
+node "%~dp0..\..\..\tools\pe-zone-sign.cjs" embed "%MAIN_EXE%" "%OUTPUT_DIR%\win-unpacked\resources\app.asar"
 if errorlevel 1 (
     set NODE_TLS_REJECT_UNAUTHORIZED=
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] .bnzc final embed failed - build aborted'"
@@ -304,7 +308,7 @@ if errorlevel 1 (
     if not defined NO_PAUSE pause
     exit /b 1
 )
-node "%~dp0..\..\..\tools\pe-zone-sign.cjs" verify "%MAIN_EXE%"
+node "%~dp0..\..\..\tools\pe-zone-sign.cjs" verify "%MAIN_EXE%" "%OUTPUT_DIR%\win-unpacked\resources\app.asar"
 if errorlevel 1 (
     set NODE_TLS_REJECT_UNAUTHORIZED=
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] .bnzc verify gate failed - build aborted'"
@@ -312,7 +316,7 @@ if errorlevel 1 (
     if not defined NO_PAUSE pause
     exit /b 1
 )
-echo [OK] .bnzc embedded and verified on final exe - fuses + .bnzc 双保护
+echo [OK] .bnzc embedded and verified on final exe - fuses + .bnzc + asar-content 三重保护
 echo.
 
 REM ★★ 铁闸6-A（B2 2026-08-21 同步自云端根治方案）：asar安全备份
@@ -491,7 +495,7 @@ REM   ① output 主 exe 复验 .bnzc（防 consolidation 偷换且 8.85 恢复�
 REM   ② 签名安装包（Setup/portable exe；主 exe 已随包携带签名）
 if exist "%BACKUP_ASAR_DIR%\real_main.exe" (
     if exist "%OUTPUT_DIR%\win-unpacked\%MAIN_EXE_NAME%" (
-        node "%~dp0..\..\..\tools\pe-zone-sign.cjs" verify "%OUTPUT_DIR%\win-unpacked\%MAIN_EXE_NAME%"
+        node "%~dp0..\..\..\tools\pe-zone-sign.cjs" verify "%OUTPUT_DIR%\win-unpacked\%MAIN_EXE_NAME%" "%OUTPUT_DIR%\win-unpacked\resources\app.asar"
         if errorlevel 1 (
             powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] output 主 exe .bnzc 失配（可能被 consolidation 偷换）- build aborted'"
             if not defined NO_PAUSE pause
