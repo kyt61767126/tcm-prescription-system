@@ -579,6 +579,15 @@ function createMainWindow() {
         return { action: 'deny' };
     });
 
+    // ★ 安全（P3-1 最终加固）：主框架导航防护——仅允许应用自身 file:// 页面，
+    //   阻断渲染进程被诱导整页跳转到远程地址（远程页面会继承 preload API 面）
+    mainWindow.webContents.on('will-navigate', (event, url) => {
+        if (!url.startsWith('file://')) {
+            event.preventDefault();
+            console.warn('[安全] 已阻断主窗口整页导航到非本地地址:', url);
+        }
+    });
+
     mainWindow.on('closed', () => {
         mainWindow = null;
     });
@@ -1001,6 +1010,14 @@ function createLoginWindow() {
         }
         shell.openExternal(url);
         return { action: 'deny' };
+    });
+
+    // ★ 安全（P3-1 最终加固）：登录窗口主框架导航防护——仅允许应用自身 file:// 页面
+    loginWindow.webContents.on('will-navigate', (event, url) => {
+        if (!url.startsWith('file://')) {
+            event.preventDefault();
+            console.warn('[安全] 已阻断登录窗口整页导航到非本地地址:', url);
+        }
     });
 
     loginWindow.loadFile(path.join(__dirname, 'login.html'));

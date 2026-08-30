@@ -253,6 +253,15 @@ function showActivateWindow(parentWindow) {
         return { action: 'deny' };
     });
 
+    // ★ 安全（P3-1 最终加固）：激活窗口主框架导航防护——仅允许应用自身 file:// 页面
+    //   （激活窗口含 CDN 二维码脚本等远程资源，防被诱导整页跳转钓鱼页）
+    activateWindow.webContents.on('will-navigate', (event, url) => {
+        if (!url.startsWith('file://')) {
+            event.preventDefault();
+            console.warn('[安全] 已阻断激活窗口整页导航到非本地地址:', url);
+        }
+    });
+
     // 加载激活窗口 HTML，通过 URL 参数传递机器 ID
     const htmlPath = path.join(__dirname, 'activate-window.html');
     activateWindow.loadFile(htmlPath, { query: { machineId: machineId } });
