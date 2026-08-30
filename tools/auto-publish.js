@@ -41,11 +41,16 @@ const APP_CONFIG = {
         apkName: '惠康中医-云端.apk',
         gradlePath: path.join(PROJECT_ROOT, 'app_project', 'db-yunduan', 'cloud_app', 'app', 'build.gradle'),
         distDir: path.join(PROJECT_ROOT, 'app_project', 'db-yunduan', 'cloud_desktop', 'dist'),
+        // ★ 2026-08-30 修复"新 APK 无法发布"：打包产物 APK 按规范输出到项目根目录，
+        //   而本工具原只扫描 public/downloads/（旧 APK）→ 比对恒"无变化"。
+        //   现以项目根构建产物为优先扫描源，发布时同步到 public/downloads/。
+        apkRootDir: path.join(PROJECT_ROOT, 'app_project', 'db-yunduan'),
     },
     'dingzhi': {
         apkName: '惠康中医-本地.apk',
         gradlePath: path.join(PROJECT_ROOT, 'app_project', 'db-offline', 'app', 'app', 'build.gradle'),
         distDir: path.join(PROJECT_ROOT, 'app_project', 'db-offline', 'desktop', 'dist'),
+        apkRootDir: path.join(PROJECT_ROOT, 'app_project', 'db-offline'),
     },
 };
 
@@ -73,12 +78,21 @@ function scanLocalFiles(target) {
         // APK
         if (target === 'all' || target === 'apk') {
             if (config.apkName) {
-                const apkPath = path.join(DOWNLOADS_DIR, config.apkName);
+                // ★ 2026-08-30 优先扫项目根构建产物（build-app.bat 输出处），
+                //   不存在才回退 public/downloads/（旧版已发布产物）。
+                //   fromBuild=true 的文件在 --publish 阶段同步复制进 public/downloads/。
+                const buildApkPath = config.apkRootDir
+                    ? path.join(config.apkRootDir, config.apkName)
+                    : path.join(DOWNLOADS_DIR, config.apkName);
+                const apkPath = fs.existsSync(buildApkPath)
+                    ? buildApkPath
+                    : path.join(DOWNLOADS_DIR, config.apkName);
                 if (fs.existsSync(apkPath)) {
                     files.push({
                         appKey: key,
                         type: 'apk',
                         path: apkPath,
+                        fromBuild: apkPath === buildApkPath && apkPath !== path.join(DOWNLOADS_DIR, config.apkName),
                         name: config.apkName,
                         size: getFileSize(apkPath),
                         sha256: calculateSHA256(apkPath).toLowerCase(),
@@ -243,6 +257,26 @@ function main() {
     console.log('  target: ' + publishTarget);
     console.log('  变更文件数: ' + changes.length);
     console.log();
+
+    // ★ 2026-08-30 发布前置：把项目根新构建 APK 同步进 public/downloads/
+    //   （publish-release.js 从该目录上传 + Cloudflare Pages 下载源）。
+    //   仅在 --publish 人工确认阶段执行——check 模式绝不落盘，遵守
+    //   "打包产物禁止自动上传官方下载网站"规范。
+    for (const f of changes) {
+        if (f.type === 'apk' && f.fromBuild) {
+            const dst = path.join(DOWNLOADS_DIR, f.name);
+            try {
+                fs.mkdirSync(DOWNLOADS_DIR, { recursive: true });
+                fs.copyFileSync(f.path, dst);
+                const dstSha = calculateSHA256(dst).toLowerCase();
+                if (dstSha !== f.sha256) throw new Error('复制后 sha256 不一致: ' + f.name);
+                console.log('  [OK] 已同步新 APK 到 public/downloads/: ' + f.name + ' (' + formatSize(f.size) + ')');
+            } catch (e) {
+                console.error('  [ERROR] 同步 APK 失败: ' + f.name + ' - ' + e.message);
+                process.exit(1);
+            }
+        }
+    }
 
     // ★ 2026-08-28 增量发布：透传 --changed-only，publish-release.js 与 manifest 比对
     //   sha256 后仅上传有变化的产物（原先按类型全量上传，未变化版本的同类型产物也被重传）
