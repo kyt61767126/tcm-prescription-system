@@ -934,6 +934,10 @@ public class MainActivity extends BridgeActivity {
         // ★ 2026-08-28 版本号显示：登录页底部「微信号: hktzy1688 | 版本: V1.0.0」追加 Build 号（versionCode）
         //   → 用户看到 V1.0.0 Build 233，不再只有不变的软著固定 V1.0.0，便于确认新版本覆盖安装生效。
         //   三次尝试（0/600/1500ms）应对远程页面 DOM 异步就绪。
+        // ★ 2026-08-31 修复登录页 footer 重复追加 Build 号（用户实报"Build 255 Build 255..."）：
+        //   onPageFinished 每次触发都注入 js2×3，而 .login-footer 的正则 replace 捕获组
+        //   不含已拼的 Build，每跑一次就再拼一个 → 累积多个 Build。footer 分支必须带
+        //   indexOf('Build')===-1 幂等守卫（与其他挂载点一致）。
         try {
             android.content.pm.PackageInfo pi = getPackageManager().getPackageInfo(getPackageName(), 0);
             String vn = pi.versionName;
@@ -949,7 +953,7 @@ public class MainActivity extends BridgeActivity {
                 "    var t = document.querySelector('title');" +
                 "    if (t && t.textContent.indexOf('Build') === -1) { t.textContent += '" + vSuffix + "'; }" +
                 "    var v1 = document.querySelector('.login-footer');" +
-                "    if (v1) {" +
+                "    if (v1 && v1.textContent.indexOf('Build') === -1) {" +
                 "      v1.textContent = v1.textContent.replace(/(\\|\\s*版本:\\s*V[0-9.]+)/,'$1" + tagSuffix + "');" +
                 "      if (v1.textContent.indexOf('Build') === -1) v1.textContent += '" + suffix + "';" +
                 "    }" +

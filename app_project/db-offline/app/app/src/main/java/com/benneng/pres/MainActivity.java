@@ -1062,8 +1062,12 @@ public class MainActivity extends BridgeActivity {
         //   三次尝试（0/600/1500ms）应对 assets DOM 就绪时机差异。
         // ★ 2026-08-30 修复首次/二次打开版本号不一致（竞态）：
         //   ①去掉 __appBuildSuffix__ 提前 return 守卫——首次 0ms 注入时 DOM 可能未就绪，
-        //     守卫却已置位，导致 600/1500ms 重试全部短路，Build 号丢失（第二次打开才正常）；
-        //     各挂载点自带 indexOf('Build') 检查，天然幂等，去掉守卫不会重复追加。
+        //     守卫却已置位，导致 600/1500ms 重试全部短路，Build 号丢失（第二次打开才正常）。
+        // ★ 2026-08-31 修复登录页 footer 重复追加 Build 号（用户实报"Build 203 Build 203..."）：
+        //   onPageFinished 每次触发都注入 js2×3（0/600/1500ms），而 .login-footer 的正则
+        //   replace(/(\|\s*版本:\s*V[0-9.]+)/,'$1 Build N') 捕获组不含已拼的 Build，
+        //   每跑一次就再拼一个 → 页面重载/多次 onPageFinished 后累积 3~5 个。
+        //   footer 分支必须与其他挂载点一样带 indexOf('Build')===-1 幂等守卫。
         //   ②注入 window.__APP_BUILD__ 并主动调 applyEditionTags() 重渲染——
         //     页面侧 applyEditionTags 重写 .version-tag/document.title 时会拼接该变量，
         //     不再被"事后正则追加"竞态抹掉。
@@ -1082,7 +1086,7 @@ public class MainActivity extends BridgeActivity {
                 "    var t = document.querySelector('title');" +
                 "    if (t && t.textContent.indexOf('Build') === -1) { t.textContent += '" + vSuffix + "'; }" +
                 "    var v1 = document.querySelector('.login-footer');" +
-                "    if (v1) {" +
+                "    if (v1 && v1.textContent.indexOf('Build') === -1) {" +
                 "      v1.textContent = v1.textContent.replace(/(\\|\\s*版本:\\s*V[0-9.]+)/,'$1" + tagSuffix + "');" +
                 "      if (v1.textContent.indexOf('Build') === -1) v1.textContent += '" + suffix + "';" +
                 "    }" +

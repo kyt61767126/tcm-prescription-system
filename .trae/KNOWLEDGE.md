@@ -85,6 +85,8 @@
 
 * 离线APP改版本必须同步改 index-app.html 打包源；MainActivity Build 号注入匹配运行时 DOM 文本（V\[0-9.]+ 正则），与源码运行时拼接兼容。
 
+- ★ 2026-08-31 登录页 footer 重复拼接 Build 号（用户实报"V1.0.0 Build 203 Build 203 Build 203..."）：双 APP MainActivity js2 里 `.login-footer` 的正则 `replace(/(\|\s*版本:\s*V[0-9.]+)/,'$1 Build N')` **无幂等守卫**——捕获组 `V[0-9.]+` 不含已拼上的 Build，js2 每次执行（onPageFinished 每触发一次就注入 0/600/1500ms ×3，页面重载再 ×3）就再拼一个，累积 3~5 个；而 `<title>`/`.version-tag` 分支本就有 `indexOf('Build')===-1` 守卫所以不重复。修复=footer 分支补同款守卫（离线 com.benneng.pres + 云端 com.tcm.prescription 两份 MainActivity）。铁律：**"往 DOM 文本追加后缀"的注入语句，每一条都必须自带"已含目标后缀则跳过"的幂等守卫（或每次从常量整段重写）——重试型注入脚本里逐条核对，别信注释里"天然幂等"的笼统结论**。
+
 * 打包产品命名：惠康中医+版本（如惠康中医本地）；安装后登录界面显示「惠康中医诊所管理系统」。
 
 * 打印/照片/视频文件命名包含门诊号（处方编号\_患者姓名），排列顺序为处方签图片、面诊照片、诊疗视频。
@@ -165,14 +167,6 @@
 * ★ 2026-08-30 底部快捷栏永久消失（用户实报）：switchMobileTab 统一设内联 `mobileActionBar.style.display='none'`，而 CSS 媒体查询 `display:block` 无 !important 压不过内联——点导航/按返回键切走再回门诊后快捷栏（录像/拍照/保存/清空/改密）消失。修复=case 'prescription' 清空内联样式交还 CSS。铁律：**JS 设过的内联 display:none 要恢复必须显式清空（style.display=''），别指望无 !important 的 CSS 规则接管**。
 
 * ★ 2026-08-31 桌面版一键恢复双故障（用户实测云桌面：备份成功、目录 9 个 json，恢复却报"未找到"+选择器打不开）：①**fs.promises 没有 existsSync**——main.js 顶部 `const fs = require('fs').promises`，而 list-backup-files/read-backup-file 调 `fs.existsSync` 抛 TypeError → handler catch 返回 success:false → 前端 else 误报"未找到备份文件"；save-backup-file 恰用 fse.ensureDirSync 不触发 → "备份成功却找不到"隐蔽分裂。修复=`require('fs').existsSync`（云/离桌面 main.js 各 2 处）。铁律：**fs.promises 只覆盖 promise 化 API（readdir/stat/readFile/writeFile✓），existsSync/accessSync 等同步族不存在，混用静默炸 handler**；后端 handler 返回 {success:false,error} 时前端文案必须显示 error（否则异常被伪装成"无文件"）。②**alert 后 input.click() 打不开文件选择器**——alert 已替换为主进程原生同步 dialog（阻塞 renderer 主线程）→ 用户激活丢失 → Chromium 静默拒绝 FileChooser（需 user activation）。修复=新增 open-backup-picker IPC（主进程 dialog.showOpenDialog + 读文件返回 json，无激活限制），preload 暴露 openBackupPicker，6 份 index.html importDataByFilePicker Electron 环境优先走 IPC，浏览器/APP 路径不变。铁律：**渲染层弹过 alert/confirm（原生同步 dialog）后再触发 input.click() 一律不可靠，桌面版文件选择必须走主进程 dialog IPC**。云桌面命名前缀=「本地\_」（cloud\_desktop index.html exportData fileName 规则），别拿前缀区分是哪个端写的备份。
-
-* ★ 2026-08-31 APP 卸载丢媒体备份提醒（用户需求"卸载时弹提醒"）：**Android 硬限制——应用被卸载瞬间收不到任何系统回调，所有 APP 均无法在卸载时弹窗**，别再尝试。等效方案已上线：启动 5 秒后 checkMediaBackupRisk() 检测专属目录媒体数，有未双写/未备份的弹 confirm 警告一键备份，`lastMediaWarnDate` 每天最多提醒一次。Java getMediaStats 桥（离线/云端 MainActivity，遍历 getAllMediaDirs 计数）；JS AndroidNative 直连 + null/空串防御；6 份 index.html 同步；桌面/网页无桥静默跳过。铁律：**"卸载前保护"类需求一律做成启动时风险检测，防打扰基准优先文件系统实测（backCount）而非 localStorage（重装即丢、易漂移）**。
-
-* ★ 2026-08-31 APP 媒体一劳永逸定稿（用户选方案 A 即时双写）：**保存即备份**——savePrescriptionImage / saveVideoFile / commitMediaSession 三个 Java 保存出口各追加 syncToPublicBackup(file)（复用 copyMediaFileToBackup 的 MediaStore 双写+同名同大小去重，失败仅 Log.w 不打断保存）；getMediaStats 增 backCount（公共 Download/中医处方系统/media/ 计数，10+ MediaStore RELATIVE\_PATH LIKE 查询 / 9- countFilesRecursive 递归）；JS checkMediaBackupRisk 改 count vs backCount **自洽比对**（旧 APK 无 backCount 字段兜底回落 lastMediaBackupCount，向后兼容）。代价=存储×2（用户知悉）。铁律：**"保存即备份"双写必须挂在 Java 保存出口（渲染层入口多且演化快），失败静默（宁可漏备份不可打断开方）**。
-
-* ★ 2026-08-31 打包脚本 git renormalize 会回退未提交的 KNOWLEDGE.md 工作区改动（本轮实锤：条目已 commit 后又被离线 build 的步骤1回退，git 仓库完好、工作区丢失；且工作区回退后下一次 Edit+commit 会把回退状态固化=误删条目，本轮二次实锤）。铁律：**KNOWLEDGE.md 改完立即 commit；build-app.bat 运行前确认工作区 KNOWLEDGE 无未提交改动；每次改 KNOWLEDGE 前先 git diff 核对工作区与 HEAD 一致，发现 M 先 git checkout 恢复再动手**。
-
-* ★ 2026-08-31 APP 文字数据零丢失收口（退场备份）：媒体=即时双写之外，文字数据此前靠每日首启备份（当天处方要等下次启动才进备份，有时间差缺口）。已堵住：MainActivity **onStop()**（切后台/退出）evaluateJavascript 触发 `window.__bgAutoBackup()`；JS 层节流 120s（lastBgBackupTs）+ 脏检查签名（`处方数:药材数` lastBgBackupSig 无变化零开销跳过，拍照切后台不误触发）→ 复用 saveLocalBackupToFile 写公共目录；全程静默。**APP 数据安全全景定稿：媒体=保存即双写，文字=每日启动备份+切后台退场备份，重装=登录→恢复数据→备份列表一键恢复**。铁律：退场类钩子挂 Android 生命周期（onStop 而非 onPause——拍照/相机 intent 也会触发 onPause，onStop 只在 APP 真正不可见时触发）+ JS 层必须节流+脏检查防文件洪水。
 
 ## 7. 官网付费与激活闭环（2026-08-30 全链路现行）
 
