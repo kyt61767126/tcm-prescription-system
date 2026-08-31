@@ -18,7 +18,10 @@ dist_*/
 *.local
 
 # Electron 构建输出目录（避免锁定问题改用 build_output）
+# ★ build_output_*/：带时间戳变体（如 build_output_20260829_063608/）——打包中断残留，
+#   未忽略会被 build-skip 基线记录误判"未提交源码改动"拒绝记录基线（2026-08-31 实测）
 build_output/
+build_output_*/
 build_output_old_*/
 build_new/
 
