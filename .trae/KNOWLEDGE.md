@@ -105,7 +105,7 @@
 
 * 桌面版打包前必须检查所有桌面版 package.json 的 build.files 是否包含新增脚本文件（cloud\_desktop/cloud\_desktop\_geren/db-offline desktop/db-offline/desktop\_geren），漏了=exe 缺脚本函数未定义。
 
-* ★ 2026-08-31 源码落定门（1.2.194 事故根因防呆，架构级补缺）：用户在 AI 修改源码进行中双击打包 → exe 静默装走"当时磁盘状态"（实测缺当日修复）；而现有全部铁闸只验「产物内部一致」（版本/标记/签名/asar/fuse/E2E），无一验「打包起点是否落定」——装走旧代码时门禁全绿。修复=三层布防：①`ensure-build-env.ps1` Step 1.5（唯一咽喉，4 端 build 必经）；②`release-menu.ps1` Invoke-SinglePack 前置（发布链路开始就查，避免白跑几分钟才被下游拦，发布后续步骤浪费更明显）；③`one-click-pack.ps1` AutoMode 前置（一键打包/发布的"全部打包"入口）。三处同源逻辑：git 工作区有未提交修改→FAIL 红线阻断+列文件+指引；白名单 package.json/build-meta.json（打包自身版本 bump，连续二次打包必脏）+未跟踪 ??（dist 等产物）；保险丝 ALLOW\_DIRTY\_BUILD=1。铁律：**用户在 AI 修改过程中打包是真实高频场景（小白用户不懂"改完再打"），打包链路必须显式防御"源码未落定"状态，不能指望用户自觉**；判断产物是否含某修复仍以 asar 搜功能级标记为准（见上条）。
+* ★ 2026-08-31 源码落定门（1.2.194 事故根因防呆，架构级补缺）：用户在 AI 修改源码进行中双击打包 → exe 静默装走"当时磁盘状态"（实测缺当日修复）；而现有全部铁闸只验「产物内部一致」（版本/标记/签名/asar/fuse/E2E），无一验「打包起点是否落定」——装走旧代码时门禁全绿。**布防已收敛为单一权威源 `tools/source-settled.ps1`**（Get-SourceSettledBlockers，三处 dot-source 调用：①ensure-build-env Step 1.5（4 端 build 唯一咽喉）②release-menu Invoke-SinglePack 前置（发布开始即拦）③one-click-pack AutoMode 前置）。白名单：package.json/build-meta.json（桌面版版本 bump）+ 未跟踪 ??（产物）+ **build.gradle 纯 versionCode/versionName 行变化**（APP 版 bump，行级 diff 精判——build.gradle 其余内容是真实源码，整文件放行会开洞）；保险丝 ALLOW\_DIRTY\_BUILD=1。铁律：①**用户在 AI 修改过程中打包是真实高频场景，打包链路必须显式防御"源码未落定"，不能指望用户自觉**；②**门禁逻辑禁止内联复制多份**——首版 3 副本上线次日 build.gradle versionCode 误拦（白名单 3 处要同步修），当天收敛单源（同 artifact-locate.js 教训：副本演化=事故根因）；③判断产物是否含某修复仍以 asar 搜功能级标记为准（见上条）。
 
 * 桌面版问题排查先运行 build.bat 确认打包成功（pre-build-check.js 能发现 build.files 缺失），再查代码逻辑，勿盲目改 index.html/main.js 注入。
 

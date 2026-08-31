@@ -200,10 +200,16 @@ if ($SkipRenormalizeGit) {
 #   是否落定"——本门补齐这一环：git 工作区存在未提交修改 = 打包会装走
 #   无法追溯的中间状态 → FAIL 阻断。
 #   白名单（不拦）：package.json / build-meta.json（打包自身 bump 版本会改，
-#   连续二次打包必脏属正常）；未跟踪文件 ??（dist/build_output 等产物）。
+#   连续二次打包必脏属正常）；未跟踪文件 ??（dist/build_output 等产物）；
+#   build.gradle 纯 versionCode/versionName 行变化（APP 打包自身 bump）。
 #   保险丝：ALLOW_DIRTY_BUILD=1 降级 WARN（确要打包未提交状态时自负其责）。
 # ----------------------------------------------------------------------------
 Register-Step 1.5 "源码落定门 (未提交修改检测 → 杜绝打包半成品代码)"
+
+# ★ 2026-08-31 收敛为单一权威源：检测逻辑在 tools/source-settled.ps1
+#   （本门 + release-menu + one-click-pack 三处共用；白名单含 build.gradle
+#   versionCode/versionName 纯版本递增——APP 打包自身 bump 误拦事故修复）
+. (Join-Path $PSScriptRoot 'source-settled.ps1')
 
 if ($env:ALLOW_DIRTY_BUILD -eq '1') {
     Add-StepWarning 1.5 "ALLOW_DIRTY_BUILD=1 保险丝生效，跳过未提交修改检测（紧急/自负其责用途）"
@@ -212,19 +218,7 @@ if ($env:ALLOW_DIRTY_BUILD -eq '1') {
     Add-StepWarning 1.5 ".git 不存在（非仓库环境），跳过源码落定检测"
     Finish-Step 1.5 $true
 } else {
-    Push-Location $RepoRoot
-    $rawStatus = @(& git -c core.quotepath=false status --porcelain 2>$null) | Where-Object { $_ }
-    Pop-Location
-    $blockers = New-Object System.Collections.ArrayList
-    foreach ($line in $rawStatus) {
-        if ($line.Length -lt 4) { continue }
-        $status2 = $line.Substring(0, 2)
-        $path    = $line.Substring(3).Trim('"')
-        if ($status2 -eq '??') { continue }                       # 未跟踪产物不拦
-        $base = Split-Path $path -Leaf
-        if ($base -eq 'package.json' -or $base -eq 'build-meta.json') { continue }  # 打包自身版本 bump
-        [void]$blockers.Add(("{0}  {1}" -f $status2.Trim(), $path))
-    }
+    $blockers = @(Get-SourceSettledBlockers -RepoRoot $RepoRoot)
     if ($blockers.Count -gt 0) {
         Add-StepFailure 1.5 ("检测到 {0} 个未提交的源码修改 —— 现在打包会把『半成品』代码装进安装包" -f $blockers.Count)
         Write-Host "  ── 2026-08-31 事故防呆门：当日 1.2.194 打包静默缺当日修复的根因 ──" -ForegroundColor Yellow
