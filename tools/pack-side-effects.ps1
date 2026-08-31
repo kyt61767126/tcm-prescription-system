@@ -21,7 +21,18 @@
 $script:PackSideEffectExactNames = @(
     'package.json',      # 桌面版版本号递增（bump-version.ps1）
     'build-meta.json',   # 桌面版打包元数据（build.bat 重写）
-    'hash-manifest.json' # 产物哈希清单（打包/发布链路重写；2026-08-31 补）
+    'hash-manifest.json' # 产物哈希清单（打包/发布链路重写）
+)
+
+# ★ 2026-08-31（晚）发布链路产物路径前缀（首次真实发布实战暴露的盲区）：
+#   publish-release.js 发布时同步复制 APK 到 public/downloads/ 并重写
+#   public/updates/*/latest.json（触发 Cloudflare 部署的官网产物文件）——
+#   它们是发布工具自身写入的副作用，不是 AI 半成品；首次 --push 被落定门
+#   误拦（同 build.gradle versionCode 同构事故：工具写产物→白名单盲区）。
+#   前缀整目录放行（该目录按设计入库供官网部署，人工不会在其中改源码）。
+$script:PackSideEffectDirPrefixes = @(
+    '^public/downloads/',
+    '^public/updates/'
 )
 
 # 特殊副作用（行级精判）：build.gradle 是真实源码（签名/混淆/NDK 配置），
@@ -50,6 +61,9 @@ function Test-IsPackSideEffect {
     )
     $base = Split-Path $GitPath -Leaf
     if ($script:PackSideEffectExactNames -contains $base) { return $true }
+    foreach ($pfx in $script:PackSideEffectDirPrefixes) {
+        if ($GitPath -match $pfx) { return $true }
+    }
 
     if ($GitPath -match $script:PackSideEffectGradleRegex) {
         if ($null -eq $DiffLines) { return $false }   # 无 diff 信息从严：拦

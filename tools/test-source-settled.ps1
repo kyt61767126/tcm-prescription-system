@@ -39,6 +39,9 @@ Check 'A6 gradle 纯版本行副作用'    (Test-IsPackSideEffect -GitPath 'app_
 Check 'A7 gradle 混源码行拦截'      (-not (Test-IsPackSideEffect -GitPath 'app_project/db-yunduan/cloud_app/app/build.gradle' -DiffLines @('-        versionCode 256','+        minSdkVersion 24')))
 Check 'A8 gradle 签名配置拦截'      (-not (Test-IsPackSideEffect -GitPath 'app_project/db-yunduan/cloud_app/app/build.gradle' -DiffLines @('-            enableV1Signing true','+            enableV1Signing false')))
 Check 'A9 非 app_project 的 gradle 拦截' (-not (Test-IsPackSideEffect -GitPath 'other/build.gradle' -DiffLines @('- versionCode 1','+ versionCode 2')))
+Check 'A14 官网下载产物放行（发布复制 APK）'  (Test-IsPackSideEffect -GitPath 'public/downloads/惠康中医-云端.apk')
+Check 'A15 官网更新清单放行（latest.json）'   (Test-IsPackSideEffect -GitPath 'public/updates/local/latest.json')
+Check 'A16 public 源码目录不误放'            (-not (Test-IsPackSideEffect -GitPath 'public/js/main.js'))
 
 Write-Host "=== A2. 产物形态黑名单（build_output 残留事故回归，build-skip.ps1）==="
 # 复刻 2026-08-31 事故：?? 未跟踪的 build_output_时间戳/ 变体不算源码脏。
