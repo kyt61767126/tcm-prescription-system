@@ -3297,18 +3297,22 @@
             a.click();
             document.body.removeChild(a);
         }
-        // ★ 2026-08-31 v2：断点续传下载器（根因修复）
-        //   75MB 包经 CF 代理仍需 60s+，链路抖动时浏览器原生下载中断且无法续传，
-        //   直接报"网络中断无法连接"。改用 fetch 流式下载 + Range 断点恢复：
-        //   中断后自动从已下载字节处续传（最多 8 次，指数退避），
-        //   全部完成后 Blob 保存。下载期间按钮显示实时进度。
+        // ★ 2026-08-31 v3：断点续传下载器（根治"网络中断/卡死"）
+        //   75MB 包经 CF 代理需 60s+，弱网下两类故障：
+        //   ① 连接报错断开 → v2 已用 Range 断点恢复
+        //   ② 连接静默挂起（无数据也无报错，fetch 读流无内置超时）→ 进度永久卡死
+        //   v3 加读流看门狗：15s 无新数据强制断开并从断点续传；
+        //   重试 30 次、退避封顶 5s。完成后 Blob 保存，按钮实时显示进度。
         function robustDownload(url, fileName, btn, onDone) {
             var received = 0;          // 已下载字节
             var total = 0;             // 总大小（从 Content-Range/Content-Length 获取）
             var retries = 0;
-            var maxRetries = 8;
+            var maxRetries = 30;
             var chunks = [];
             var originalText = btn ? btn.innerHTML : '';
+            var watchdogTimer = null;
+            var controller = null;
+            var STALL_TIMEOUT = 15000; // 15s 无数据视为挂起
 
             function progressText() {
                 var pct = total > 0 ? Math.floor(received / total * 100) : 0;
@@ -3327,10 +3331,27 @@
             function delay(ms) {
                 return new Promise(function(res) { setTimeout(res, ms); });
             }
+            function backoff() {
+                return Math.min(1000 * retries, 5000);
+            }
+            function clearWatchdog() {
+                if (watchdogTimer) { clearTimeout(watchdogTimer); watchdogTimer = null; }
+            }
+            function feedWatchdog() {
+                // 每收到一段数据重置看门狗；超时未喂 → abort 当前连接触发续传
+                clearWatchdog();
+                watchdogTimer = setTimeout(function() {
+                    if (controller) {
+                        try { controller.abort(); } catch (e) {}
+                    }
+                }, STALL_TIMEOUT);
+            }
             function attempt() {
+                controller = new AbortController();
                 var headers = {};
                 if (received > 0) headers['Range'] = 'bytes=' + received + '-';
-                fetch(url, { headers: headers, cache: 'no-store' })
+                feedWatchdog();
+                fetch(url, { headers: headers, cache: 'no-store', signal: controller.signal })
                     .then(function(resp) {
                         if (resp.status !== 200 && resp.status !== 206) {
                             throw new Error('HTTP ' + resp.status);
@@ -3349,9 +3370,9 @@
                             chunks = [];
                             received = 0;
                         }
-                        retries = 0; // 连接建立成功，重置重试计数
                         var reader = resp.body.getReader();
                         function pump() {
+                            feedWatchdog();
                             return reader.read().then(function(r) {
                                 if (r.done) return finish();
                                 chunks.push(r.value);
@@ -3360,24 +3381,20 @@
                                 return pump();
                             });
                         }
-                        return pump().catch(function(err) {
-                            // 读流中断 → 断点续传重试
-                            if (retries < maxRetries) {
-                                retries++;
-                                return delay(800 * retries).then(attempt);
-                            }
-                            throw err;
-                        });
+                        return pump();
                     })
                     .catch(function(err) {
+                        clearWatchdog();
+                        // 挂起/报错/中断 → 断点续传重试
                         if (retries < maxRetries) {
                             retries++;
-                            return delay(800 * retries).then(attempt);
+                            return delay(backoff()).then(attempt);
                         }
                         fail('下载多次中断，请检查网络后重试');
                     });
             }
             function finish() {
+                clearWatchdog();
                 // 字节数校验：不完整则续传
                 if (total > 0 && received < total) {
                     if (retries < maxRetries) {
