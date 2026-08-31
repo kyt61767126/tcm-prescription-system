@@ -3161,116 +3161,197 @@
             a.click();
             document.body.removeChild(a);
         }
-        // ★ 2026-08-31 v3：断点续传下载器（根治"网络中断/卡死"）
-        //   75MB 包经 CF 代理需 60s+，弱网下两类故障：
-        //   ① 连接报错断开 → v2 已用 Range 断点恢复
-        //   ② 连接静默挂起（无数据也无报错，fetch 读流无内置超时）→ 进度永久卡死
-        //   v3 加读流看门狗：15s 无新数据强制断开并从断点续传；
-        //   重试 30 次、退避封顶 5s。完成后 Blob 保存，按钮实时显示进度。
+        // ★ 2026-08-31 v4：并行分片下载器（提速 3-4 倍）+ 看门狗 + 断点续传
+        //   CF 代理单连接实测仅 ~1.25MB/s（CF→GitHub 单流带宽限制），
+        //   v4 把文件切成 4 段用 4 个连接并行下载（每段独立 Range/重试/看门狗），
+        //   弱网防护同 v3：15s 读流看门狗 + 断点续传 + 指数退避封顶 5s。
+        //   服务器不支持分片 Range 时自动回退单流模式。
         function robustDownload(url, fileName, btn, onDone) {
-            var received = 0;          // 已下载字节
-            var total = 0;             // 总大小（从 Content-Range/Content-Length 获取）
-            var retries = 0;
-            var maxRetries = 30;
-            var chunks = [];
+            var PARALLEL = 6;                    // 并行连接数（跨境丢包链路多流提升明显）
+            var MIN_PARALLEL_SIZE = 8 * 1048576; // 小于 8MB 不值得并行
+            var SEG_RETRIES = 15;                // 每段重试次数
+            var STALL_TIMEOUT = 15000;           // 15s 无数据视为挂起
             var originalText = btn ? btn.innerHTML : '';
-            var watchdogTimer = null;
-            var controller = null;
-            var STALL_TIMEOUT = 15000; // 15s 无数据视为挂起
+            var startedAt = 0;
+            var receivedTotal = 0;
+            var total = 0;
+            var lastUi = 0;
 
-            function progressText() {
-                var pct = total > 0 ? Math.floor(received / total * 100) : 0;
-                var mb = (received / 1048576).toFixed(1);
-                var tmb = total > 0 ? (total / 1048576).toFixed(1) + 'MB' : '?';
-                return '⬇ ' + pct + '%（' + mb + '/' + tmb + '）';
+            function delay(ms) {
+                return new Promise(function(res) { setTimeout(res, ms); });
             }
-            function updateBtn() {
-                if (btn) btn.innerHTML = '<span class="icon">⬇</span>' + progressText();
+            function updateBtn(force) {
+                if (!btn) return;
+                var now = Date.now();
+                if (!force && now - lastUi < 200) return; // 节流 5次/秒
+                lastUi = now;
+                var pct = total > 0 ? Math.floor(receivedTotal / total * 100) : 0;
+                var mb = (receivedTotal / 1048576).toFixed(1);
+                var tmb = total > 0 ? (total / 1048576).toFixed(1) + 'MB' : '?';
+                var secs = (now - startedAt) / 1000;
+                var speed = secs > 1 ? ' ' + (receivedTotal / 1048576 / secs).toFixed(1) + 'MB/s' : '';
+                btn.innerHTML = '<span class="icon">⬇</span>' + pct + '%（' + mb + '/' + tmb + speed + '）';
             }
             function fail(msg) {
                 if (btn) { btn.classList.remove('pending'); btn.innerHTML = originalText; }
                 showToast(msg || '下载失败，请稍后重试');
                 if (onDone) onDone(false);
             }
-            function delay(ms) {
-                return new Promise(function(res) { setTimeout(res, ms); });
+            function makeWatchdog() {
+                var wd = { timer: null, controller: null };
+                wd.clear = function() { if (wd.timer) { clearTimeout(wd.timer); wd.timer = null; } };
+                wd.feed = function() {
+                    wd.clear();
+                    wd.timer = setTimeout(function() {
+                        if (wd.controller) { try { wd.controller.abort(); } catch (e) {} }
+                    }, STALL_TIMEOUT);
+                };
+                return wd;
             }
-            function backoff() {
-                return Math.min(1000 * retries, 5000);
+            function backoffMs(n) { return Math.min(1000 * n, 5000); }
+
+            // ---- 单流模式（小文件 / 服务器不支持分片 Range）----
+            function singleStream(u) {
+                var received = 0, chunks = [], retries = 0;
+                var wd = makeWatchdog();
+                function attempt() {
+                    wd.controller = new AbortController();
+                    var headers = {};
+                    if (received > 0) headers['Range'] = 'bytes=' + received + '-';
+                    wd.feed();
+                    return fetch(u, { headers: headers, cache: 'no-store', signal: wd.controller.signal })
+                        .then(function(resp) {
+                            if (resp.status !== 200 && resp.status !== 206) throw new Error('HTTP ' + resp.status);
+                            if (resp.status === 200 && received > 0) { chunks = []; received = 0; }
+                            var reader = resp.body.getReader();
+                            function pump() {
+                                wd.feed();
+                                return reader.read().then(function(r) {
+                                    if (r.done) return;
+                                    chunks.push(r.value);
+                                    received += r.value.length;
+                                    receivedTotal = received;
+                                    updateBtn();
+                                    return pump();
+                                });
+                            }
+                            return pump();
+                        })
+                        .catch(function(err) {
+                            wd.clear();
+                            if (retries++ < SEG_RETRIES) return delay(backoffMs(retries)).then(attempt);
+                            throw err;
+                        })
+                        .then(function() {
+                            wd.clear();
+                            if (total > 0 && received < total) {
+                                if (retries++ < SEG_RETRIES) return attempt();
+                                throw new Error('incomplete');
+                            }
+                            return new Blob(chunks, { type: 'application/octet-stream' });
+                        });
+                }
+                return attempt();
             }
-            function clearWatchdog() {
-                if (watchdogTimer) { clearTimeout(watchdogTimer); watchdogTimer = null; }
+
+            // ---- 分片下载：[start, end] 闭区间，返回 Uint8Array ----
+            function fetchSegment(u, start, end) {
+                var received = 0, chunks = [], retries = 0;
+                var expected = end - start + 1;
+                var wd = makeWatchdog();
+                function attempt() {
+                    wd.controller = new AbortController();
+                    var headers = { 'Range': 'bytes=' + (start + received) + '-' + end };
+                    wd.feed();
+                    return fetch(u, { headers: headers, cache: 'no-store', signal: wd.controller.signal })
+                        .then(function(resp) {
+                            if (resp.status !== 200 && resp.status !== 206) throw new Error('HTTP ' + resp.status);
+                            // 分片模式下服务器忽略 Range 返回 200 全量 → 并行不可用
+                            if (resp.status === 200) throw { parallelUnsupported: true };
+                            var reader = resp.body.getReader();
+                            function pump() {
+                                wd.feed();
+                                return reader.read().then(function(r) {
+                                    if (r.done) return;
+                                    chunks.push(r.value);
+                                    received += r.value.length;
+                                    receivedTotal += r.value.length;
+                                    updateBtn();
+                                    return pump();
+                                });
+                            }
+                            return pump();
+                        })
+                        .catch(function(err) {
+                            wd.clear();
+                            if (err && err.parallelUnsupported) throw err;
+                            if (retries++ < SEG_RETRIES) return delay(backoffMs(retries)).then(attempt);
+                            throw err;
+                        })
+                        .then(function() {
+                            wd.clear();
+                            if (received < expected) {
+                                if (retries++ < SEG_RETRIES) return attempt();
+                                throw new Error('segment incomplete');
+                            }
+                            var out = new Uint8Array(expected);
+                            var off = 0;
+                            for (var i = 0; i < chunks.length; i++) {
+                                out.set(chunks[i], off);
+                                off += chunks[i].length;
+                            }
+                            return out;
+                        });
+                }
+                return attempt();
             }
-            function feedWatchdog() {
-                // 每收到一段数据重置看门狗；超时未喂 → abort 当前连接触发续传
-                clearWatchdog();
-                watchdogTimer = setTimeout(function() {
-                    if (controller) {
-                        try { controller.abort(); } catch (e) {}
-                    }
-                }, STALL_TIMEOUT);
+
+            // ---- 并行编排：4 段同时下载，全部完成后按序拼接 ----
+            function parallelDownload(u) {
+                var segSize = Math.ceil(total / PARALLEL);
+                var segs = [];
+                for (var i = 0; i < PARALLEL; i++) {
+                    var s = i * segSize;
+                    var e = Math.min(s + segSize - 1, total - 1);
+                    if (s > e) break;
+                    segs.push(fetchSegment(u, s, e));
+                }
+                return Promise.all(segs).then(function(arrays) {
+                    return new Blob(arrays, { type: 'application/octet-stream' });
+                });
             }
-            function attempt() {
-                controller = new AbortController();
-                var headers = {};
-                if (received > 0) headers['Range'] = 'bytes=' + received + '-';
-                feedWatchdog();
-                fetch(url, { headers: headers, cache: 'no-store', signal: controller.signal })
+
+            // ---- 探测总大小与 Range 支持度 ----
+            function probe() {
+                return fetch(url, { headers: { 'Range': 'bytes=0-0' }, cache: 'no-store' })
                     .then(function(resp) {
-                        if (resp.status !== 200 && resp.status !== 206) {
-                            throw new Error('HTTP ' + resp.status);
-                        }
-                        // 从 Content-Range（续传/总长）或 Content-Length（首次）解析总大小
+                        var info = { total: 0, ranges: false };
                         var cr = resp.headers.get('Content-Range');
-                        if (cr && cr.indexOf('/') > 0) {
+                        try { if (resp.body) resp.body.cancel(); } catch (e) {}
+                        if (resp.status === 206 && cr && cr.indexOf('/') > 0) {
                             var t = parseInt(cr.split('/')[1], 10);
-                            if (t > 0) total = t;
-                        } else if (received === 0) {
+                            if (t > 0) { info.total = t; info.ranges = true; }
+                        }
+                        if (!info.total) {
                             var cl = parseInt(resp.headers.get('Content-Length'), 10);
-                            if (cl > 0) total = cl;
+                            if (cl > 0) info.total = cl;
                         }
-                        // 服务器不支持续传（发了 Range 仍回 200）→ 从头下载
-                        if (resp.status === 200 && received > 0) {
-                            chunks = [];
-                            received = 0;
-                        }
-                        var reader = resp.body.getReader();
-                        function pump() {
-                            feedWatchdog();
-                            return reader.read().then(function(r) {
-                                if (r.done) return finish();
-                                chunks.push(r.value);
-                                received += r.value.length;
-                                updateBtn();
-                                return pump();
-                            });
-                        }
-                        return pump();
-                    })
-                    .catch(function(err) {
-                        clearWatchdog();
-                        // 挂起/报错/中断 → 断点续传重试
-                        if (retries < maxRetries) {
-                            retries++;
-                            return delay(backoff()).then(attempt);
-                        }
-                        fail('下载多次中断，请检查网络后重试');
+                        return info;
                     });
             }
-            function finish() {
-                clearWatchdog();
-                // 字节数校验：不完整则续传
-                if (total > 0 && received < total) {
-                    if (retries < maxRetries) {
-                        retries++;
-                        attempt();
-                        return;
-                    }
-                    fail('下载不完整（' + (received / 1048576).toFixed(1) + '/' + (total / 1048576).toFixed(1) + 'MB），请重试');
-                    return;
+            function probeWithRetry() {
+                var n = 0;
+                function go() {
+                    return probe().catch(function(e) {
+                        if (n++ < 3) return delay(1000).then(go);
+                        throw e;
+                    });
                 }
+                return go();
+            }
+
+            function saveBlob(blob) {
                 try {
-                    var blob = new Blob(chunks, { type: 'application/octet-stream' });
                     var blobUrl = URL.createObjectURL(blob);
                     var a = document.createElement('a');
                     a.href = blobUrl;
@@ -3289,8 +3370,29 @@
                     fail('保存文件失败：' + e.message);
                 }
             }
-            if (btn) { btn.classList.add('pending'); updateBtn(); }
-            attempt();
+
+            if (btn) btn.classList.add('pending');
+            startedAt = Date.now();
+            updateBtn(true);
+            probeWithRetry()
+                .then(function(info) {
+                    total = info.total || 0;
+                    updateBtn(true);
+                    if (info.ranges && total >= MIN_PARALLEL_SIZE) return parallelDownload(url);
+                    return singleStream(url);
+                })
+                .catch(function(err) {
+                    if (err && err.parallelUnsupported) {
+                        // 服务器不支持分片 Range → 回退单流
+                        receivedTotal = 0;
+                        return singleStream(url);
+                    }
+                    throw err;
+                })
+                .then(saveBlob)
+                .catch(function() {
+                    fail('下载多次中断，请检查网络后重试');
+                });
         }
         function safeDownload(url, btn) {
             if (!url || url === '#') {
