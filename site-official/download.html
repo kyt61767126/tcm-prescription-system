@@ -3404,14 +3404,18 @@
             // 下载前确认：显示程序名称，用户点击确定后才开始下载
             var confirmMsg = '即将开始下载：\n\n【 ' + displayName + ' 】\n';
             if (fileName) confirmMsg += '文件名：' + fileName + '\n';
-            confirmMsg += '\n下载完成后请核对文件名与 SHA-256 校验值，\n再运行安装。是否开始下载？';
+            confirmMsg += '\n提示：浏览器可能提示"通常不会下载此文件"，\n这是对未签名 exe 的常规安全提醒，点击"保留"即可。';
+            confirmMsg += '\n\n下载完成后请核对文件名与 SHA-256 校验值，\n再运行安装。是否开始下载？';
             if (!window.confirm(confirmMsg)) return;
             // ★ GitHub 直连国内极慢（实测 0.14MB/s，75MB 包常被浏览器中断报"网络问题"）
             //   → 优先走同域 Cloudflare 加速代理 /api/dl（用户→CF边缘→GitHub），
             //     用断点续传下载器（中断自动恢复），代理彻底失败才回退 GitHub 直连
             if (url.indexOf('https://github.com/') === 0 && url.indexOf('/releases/download/') > 0) {
                 var proxyUrl = '/api/dl?f=' + encodeURIComponent(url);
-                var dlName = fileName || downloadFileNameFromUrl(proxyUrl) || url.split('/').pop();
+                // ★ 保存文件名用友好中文名（惠康中医-云端 安装版 1.2.195.exe），
+                //   避免用户看到 huikang-cloud-setup-xxx.exe 不知道是什么程序
+                var ext = /\.(exe|apk)$/i.test(fileName) ? fileName.replace(/^.*\./, '.') : '';
+                var dlName = displayName + ext;
                 robustDownload(proxyUrl, dlName, btn, function(ok) {
                     if (!ok) {
                         showToast('加速通道失败，尝试 GitHub 直连（速度可能较慢）');
