@@ -1,5 +1,9 @@
 @echo off
 setlocal enabledelayedexpansion
+REM [FIX 2026-08-31] switch console to UTF-8 (align with one-click-publish.bat):
+REM downstream node tools/rollback.js emits UTF-8 Chinese; default GBK codepage
+REM rendered rollback version lists as mojibake.
+chcp 65001 >nul
 
 echo ============================================
 echo Huikang TCM - Emergency Rollback Tool
