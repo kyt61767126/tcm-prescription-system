@@ -247,6 +247,8 @@
 
 * ★ 2026-08-31 浏览器"通常不会下载 xxx.exe"提示：Chrome/Edge 对**未代码签名 exe** 的信誉拦截（新文件+下载量少必触发），非文件损坏（SHA-256 已验证一致）。缓解措施：① 保存文件名用友好中文名（惠康中医-云端 安装版 x.x.x.exe，经 `a.download` 指定）；② 下载确认框预告知用户此提示属常规安全提醒、点"保留"即可。**根治唯一方案：购买代码签名证书（OV 几百元/年需积累信誉；EV 需公司约 2000+/年可立即消除 SmartScreen 警告）**。另注意：KNOWLEDGE.md 工作区副本多次被外部进程静默回退，编辑前先 `git checkout -- .trae/KNOWLEDGE.md` 恢复最新版本。
 
+* ★ 2026-08-31 开放前官网安全审查（40+ Pages Functions 全面审计）结论：**唯一高危已修**——admin-status.js（无需登录）的 machineId 兜底扫描命中他人已激活记录时会执行 normalizeActivationPassword（受害者手机号下所有云端账号密码重置为 admin → 接管账号）；修复=兜底命中的记录只返回 license（license 绑定真实 machineId，攻击者本机验签必失败无泄露），provisionCloudAccount/normalizeActivationPassword 仅自己 requestId 的受信链路执行。**其余全部确认安全**：users.js 登录渐进锁定（5次起阶梯锁/封顶1h）+ IP 限流 10/min + 防枚举哑哈希、dl.js 严格域名白名单（无 SSRF/开放代理）、lookup.js machineId 绑定校验+码级/IP 级双限流、admin-* 管理接口 platform_admin 强制鉴权、ticket/trial IP 限流、处方 API 按创建者过滤水平越权、静态文件（config.json/wrangler.toml/文档）无敏感泄露、_headers 安全头齐全。铁律：**①凡"客户端提交的标识参数"（machineId/phone/requestId）用于跨记录匹配时，命中的他人记录只能做"无副作用读取"，凡有写副作用（重置密码/开通账号）的调用必须限定"参数持有者本人记录"路径；②KV 里 login_fail:{username} 键的 TTL 与锁定时长是两回事（TTL 24h 保计数、锁定看次数阶梯）**。
+
 ## 11. 后续路线图（2026-08-31 定，试用观察期三步走）
 
 * **第一步（当前）**：进入 1-2 周正常看诊观察期，不刻意测试——真实使用是最好的验收。
