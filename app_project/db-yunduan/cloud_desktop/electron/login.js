@@ -654,6 +654,9 @@
                             role: _cloudAuth.role || 'user',
                             password: _cloudAuth.password || '',
                             token: _cloudAuth.token || '',
+                            // ★ 2026-08-31 补 clinicId：服务端登录响应 sanitizeUser 本就返回 clinicId，
+                            //   此前漏带 → currentUser.clinicId 空 → 用户管理本地回退的诊所归属过滤失效
+                            clinicId: _cloudAuth.clinicId || '',
                             // ★ 2026-08-23 携带服务端权威 clinicEdition，供下方版本匹配逻辑判定账户版本
                             clinicEdition: _cloudAuth.clinicEdition || '',
                             edition: _cloudAuth.edition || '',
@@ -770,6 +773,9 @@
                         // ★ 2026-08-25 全局统一授权状态：补拉时合并授权字段（版本+到期时间）
                         if (!user.clinicEdition && rescue.user.clinicEdition) user.clinicEdition = rescue.user.clinicEdition;
                         if (!user.clinicExpiresAt && rescue.user.clinicExpiresAt) user.clinicExpiresAt = rescue.user.clinicExpiresAt;
+                        // ★ 2026-08-31 补拉时合并 clinicId（本地分支登录的 user 无诊所归属 →
+                        //   用户管理本地回退的归属过滤一直失效的根因之一）
+                        if (!user.clinicId && rescue.user.clinicId) user.clinicId = rescue.user.clinicId;
                         console.log('[login] ✅ 登录成功，已补拉云端token，历史处方将走云端API');
                     } else {
                         console.warn('[login] ⚠️ 登录成功但云端补拉token失败' + (rescue && rescue.error ? (':' + rescue.error) : ''));
@@ -789,7 +795,9 @@
                 // ★ 2026-08-25 全局统一授权状态：持久化授权字段，主界面基础设置
                 //   授权区显示"✅ 已激活（机构版/标准版）剩余 X 天"（与离线版格式统一）
                 clinicEdition: user.clinicEdition || '',
-                clinicExpiresAt: user.clinicExpiresAt || null
+                clinicExpiresAt: user.clinicExpiresAt || null,
+                // ★ 2026-08-31 持久化 clinicId：主界面用户管理本地回退的诊所归属过滤依赖
+                clinicId: user.clinicId || ''
             };
             const userDataStr = JSON.stringify(userData);
             const loginDataStr = JSON.stringify({ loginTime: Date.now(), username: user.username });
