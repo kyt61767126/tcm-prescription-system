@@ -608,6 +608,25 @@
             .action-btn { padding: 4px 6px; font-size: 10px; min-height: 32px; }
             .medicine-table { font-size: 11px; }
             .medicine-table input { font-size: 11px; }
+            /* ★ 2026-08-31 上架前审计修复：360px 档处方表格 8 列 min-width 合计 365px+边框=366px
+               超容器 6px 触发横向滚动（Playwright 多机型实测实锤）。紧凑列宽合计 330px，
+               药物列弹性吸收剩余宽度，确保"表格固定边框内不横向滚动、列完整显示"铁律。 */
+            .medicine-table th[style*="width:25px"],
+            .medicine-table td:first-child { width: 26px; min-width: 26px; }
+            .medicine-table th:nth-child(2),
+            .medicine-table td:nth-child(2) { width: 44px; min-width: 44px; }
+            .medicine-table th:nth-child(3),
+            .medicine-table td:nth-child(3) { min-width: 70px; }
+            .medicine-table th:nth-child(4),
+            .medicine-table td:nth-child(4) { width: 40px; min-width: 40px; }
+            .medicine-table th:nth-child(5),
+            .medicine-table td:nth-child(5) { width: 32px; min-width: 32px; }
+            .medicine-table th:nth-child(6),
+            .medicine-table td:nth-child(6) { width: 42px; min-width: 42px; }
+            .medicine-table th:nth-child(7),
+            .medicine-table td:nth-child(7) { width: 46px; min-width: 46px; }
+            .medicine-table th:nth-child(8),
+            .medicine-table td:nth-child(8) { width: 30px; min-width: 30px; }
             .mobile-action-bar .action-btn { min-height: 36px; font-size: 11px; padding: 4px 2px; }
         }
 
