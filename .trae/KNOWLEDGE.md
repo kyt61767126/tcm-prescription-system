@@ -105,6 +105,8 @@
 
 * 桌面版打包前必须检查所有桌面版 package.json 的 build.files 是否包含新增脚本文件（cloud\_desktop/cloud\_desktop\_geren/db-offline desktop/db-offline/desktop\_geren），漏了=exe 缺脚本函数未定义。
 
+* ★ 2026-08-31 源码落定门（1.2.194 事故根因防呆，架构级补缺）：用户在 AI 修改源码进行中双击打包 → exe 静默装走"当时磁盘状态"（实测缺当日修复）；而现有全部铁闸只验「产物内部一致」（版本/标记/签名/asar/fuse/E2E），无一验「打包起点是否落定」——装走旧代码时门禁全绿。修复=`ensure-build-env.ps1` 新增 Step 1.5（唯一咽喉，4 端打包全经过）：git 工作区有未提交修改→FAIL 红线阻断+列文件+三指引；白名单 package.json/build-meta.json（打包自身版本 bump，连续二次打包必脏）+未跟踪 ??；保险丝 ALLOW\_DIRTY\_BUILD=1。铁律：**用户在 AI 修改过程中打包是真实高频场景（小白用户不懂"改完再打"），打包链路必须显式防御"源码未落定"状态，不能指望用户自觉**；判断产物是否含某修复仍以 asar 搜功能级标记为准（见上条）。
+
 * 桌面版问题排查先运行 build.bat 确认打包成功（pre-build-check.js 能发现 build.files 缺失），再查代码逻辑，勿盲目改 index.html/main.js 注入。
 
 * 打包增量跳过（build-skip 指纹）可能误判「已是最新」→ 打包后必须解包 grep 验证关键修复标记；可疑时 `NO_BUILD_SKIP=1` 强制重打。
