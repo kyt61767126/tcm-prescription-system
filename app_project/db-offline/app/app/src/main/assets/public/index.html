@@ -6462,6 +6462,21 @@ let currentUser = null;
             }
         }
 
+        // ★ 2026-08-31 一劳永逸数据安全（退场备份）：Java onStop（切后台/退出）触发，堵住
+        //   "当天数据要等次日启动才备份"的缺口。节流 120 秒 + 脏检查（处方数/药材数无变化
+        //   则零开销跳过，拍照切后台不会误触发）；全程静默，失败仅记日志不打扰用户。
+        window.__bgAutoBackup = async function () {
+            try {
+                var lastTs = parseInt(localStorage.getItem('lastBgBackupTs') || '0', 10) || 0;
+                if (Date.now() - lastTs < 120000) return;  // 节流：2 分钟内不重复
+                var sig = String((prescriptionHistory || []).length) + ':' + String((medicines || []).length);
+                if (localStorage.getItem('lastBgBackupSig') === sig) return;  // 无新增零开销
+                localStorage.setItem('lastBgBackupTs', String(Date.now()));
+                localStorage.setItem('lastBgBackupSig', sig);
+                await saveLocalBackupToFile();
+            } catch (e) { console.warn('[Backup] 退场备份失败(静默):', e); }
+        };
+
         async function saveLocalBackupToFile() {
             try {
                 const now = new Date();

@@ -1195,6 +1195,22 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
+    // ★ 2026-08-31 一劳永逸数据安全（退场备份）：APP 切后台/退出时触发 JS 层静默备份
+    //   （__bgAutoBackup 内含节流+脏检查，无新增数据时零开销；失败仅记日志不打扰用户）
+    @Override
+    public void onStop() {
+        super.onStop();
+        try {
+            WebView webView = this.getBridge().getWebView();
+            if (webView != null) {
+                webView.evaluateJavascript(
+                    "if (typeof window.__bgAutoBackup === 'function') { window.__bgAutoBackup(); }", null);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "onStop 退场备份触发失败（静默）: " + e.getMessage());
+        }
+    }
+
     @Override
     public void onBackPressed() {
         WebView webView = this.getBridge().getWebView();
