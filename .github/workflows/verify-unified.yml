@@ -11,6 +11,12 @@ name: Verify Unified Modules
 #     类重复拼接复发：壳注入串/注入型 JS 资产里的 textContent += / innerHTML +=
 #     / 正则 replace 动态后缀追加，新增即 fail，基线 tools/.injection-baseline.json）。
 
+# ★ 2026-08-31 升级为五重防线：
+#   ⑤ test-source-settled.ps1 —— 源码落定门单测（防白名单漏项误拦用户打包 /
+#     白名单开洞放进半成品代码回归；build.gradle versionCode / hash-manifest
+#     误拦事故的回归守护）。
+#     顺带守护其依赖链：pack-side-effects.ps1（副作用清单单一权威源）。
+
 on:
   push:
     branches: [main]
@@ -31,9 +37,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # check-interface.ps1 需要 git log 判断基线新鲜度
+          fetch-depth: 0   # check-interface.ps1 需要 git log 判断基线新鲜度；test-source-settled 需要 git diff
 
-      - name: 1/4 Interface structure baseline check
+      - name: 1/5 Interface structure baseline check
         shell: pwsh
         run: |
           ./tools/check-interface.ps1
@@ -42,7 +48,7 @@ jobs:
             exit 1
           }
 
-      - name: 2/4 shared modules sync verify
+      - name: 2/5 shared modules sync verify
         shell: pwsh
         run: |
           ./tools/sync-all.ps1 -VerifyOnly
@@ -51,7 +57,7 @@ jobs:
             exit 1
           }
 
-      - name: 3/4 HTML copies drift check
+      - name: 3/5 HTML copies drift check
         shell: pwsh
         run: |
           ./tools/html-sync-check.ps1
@@ -60,11 +66,20 @@ jobs:
             exit 1
           }
 
-      - name: 4/4 Injection idempotency check
+      - name: 4/5 Injection idempotency check
         shell: bash
         run: |
           node tools/check-injection-idempotency.cjs || {
             echo "::error::注入脚本存在未收录的非幂等 DOM 追加语句（Build 号重复拼接同类 bug）。请改为整段重写或补 indexOf 守卫；确属带守卫的合法兜底，审查后运行 --update-baseline 收录基线。"
+            exit 1
+          }
+
+      - name: 5/5 Source-settled gate unit tests
+        shell: pwsh
+        run: |
+          ./tools/test-source-settled.ps1
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::源码落定门单测失败：白名单可能漏项（新增打包副作用未登记 tools/pack-side-effects.ps1 → 用户打包被误拦）或开洞（放行了真实源码 → 半成品风险）。"
             exit 1
           }
 
@@ -73,4 +88,4 @@ jobs:
         run: |
           echo "### 校验结果" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "✅ 界面基线 / shared JS 同步 / HTML 副本 / 注入幂等性 四重校验全部通过" >> $GITHUB_STEP_SUMMARY
+          echo "✅ 界面基线 / shared JS 同步 / HTML 副本 / 注入幂等性 / 源码落定门单测 五重校验全部通过" >> $GITHUB_STEP_SUMMARY

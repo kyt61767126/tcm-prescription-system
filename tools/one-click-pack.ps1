@@ -207,12 +207,12 @@ function Invoke-PackSideEffectCollect {
         return
     }
     # 确定性副作用（打包自动递增/重写）：仅这些允许自动收纳
-    $autoPatterns = @(
-        '^app_project/.+/build\.gradle$',       # APP versionCode 递增
-        '^app_project/.+/package\.json$',       # 桌面版本号递增
-        '^public/hash-manifest\.json$',         # 产物哈希清单
-        '^app_project/.+/hash-manifest\.json$'  # 产物哈希清单副本(若有)
-    )
+    # ★ 2026-08-31 收敛为单一权威源：与源码落定门共用 tools/pack-side-effects.ps1
+    #   （此前两份清单各自维护：门禁漏 hash-manifest.json 必再误拦——举一反三收口）
+    if (-not (Get-Command Get-PackSideEffectAutoPatterns -ErrorAction SilentlyContinue)) {
+        . (Join-Path $PSScriptRoot 'pack-side-effects.ps1')
+    }
+    $autoPatterns = @(Get-PackSideEffectAutoPatterns)
     # 可能含手工改动的文件：只列出，绝不自动收纳
     $manualPatterns = @(
         '^app_project/.+/index\.html$',
