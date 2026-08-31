@@ -1483,6 +1483,9 @@ public class MainActivity extends BridgeActivity {
                     fos.flush();
                 }
                 notifyMediaScanner(file);
+                // ★ 2026-08-31 一劳永逸数据安全（即时双写）：保存成功当场复制一份到公共
+                //   Download/中医处方系统/media/，卸载/重装天然不丢（失败静默，不影响主保存）
+                syncToPublicBackup(file);
 
                 JSONObject r = new JSONObject();
                 r.put("success", true);
@@ -1575,6 +1578,9 @@ public class MainActivity extends BridgeActivity {
                     fos.flush();
                 }
                 notifyMediaScanner(file);
+                // ★ 2026-08-31 一劳永逸数据安全（即时双写）：保存成功当场复制一份到公共
+                //   Download/中医处方系统/media/，卸载/重装天然不丢（失败静默，不影响主保存）
+                syncToPublicBackup(file);
 
                 JSONObject r = new JSONObject();
                 r.put("success", true);
@@ -1735,6 +1741,9 @@ public class MainActivity extends BridgeActivity {
                 }
 
                 notifyMediaScanner(targetFile);
+                // ★ 2026-08-31 一劳永逸数据安全（即时双写）：拍照/录像提交成功当场复制一份到公共
+                //   Download/中医处方系统/media/，卸载/重装天然不丢（失败静默，不影响主保存）
+                syncToPublicBackup(targetFile);
                 Log.d(TAG, "commitMediaSession 成功: " + targetFile.getAbsolutePath() + ", size=" + targetFile.length());
 
                 JSONObject r = new JSONObject();
@@ -1976,6 +1985,8 @@ public class MainActivity extends BridgeActivity {
                 r.put("success", true);
                 r.put("count", count);
                 r.put("totalBytes", totalBytes);
+                // ★ 2026-08-31 公共目录已备份数（count==backCount 即全部已双写，提醒不再触发）
+                r.put("backCount", countBackupMediaFiles());
                 return r;
             } catch (Exception e) {
                 try {
@@ -2030,6 +2041,55 @@ public class MainActivity extends BridgeActivity {
         }
 
         // 返回 1=已复制 0=已存在跳过 -1=失败
+        // ★ 2026-08-31 即时双写：媒体保存到专属目录成功后，当场复制一份到公共
+        //   Download/中医处方系统/media/（复用 copyMediaFileToBackup 的去重逻辑）。
+        //   任何失败仅记日志（宁可漏备份不可打断正常保存——安全铁律）。
+        private void syncToPublicBackup(File f) {
+            try {
+                if (f == null || !f.isFile()) return;
+                int r = copyMediaFileToBackup(f, getCurrentMonthFolder() + "/" + f.getName(), new java.util.HashSet<>());
+                Log.d(TAG, "syncToPublicBackup: " + f.getName() + " -> " + r);
+            } catch (Exception e) {
+                Log.w(TAG, "syncToPublicBackup 失败(静默): " + e.getMessage());
+            }
+        }
+
+        // ★ 2026-08-31 统计公共 Download/中医处方系统/media/ 已备份文件数（备份提醒自洽比对）
+        private int countBackupMediaFiles() {
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    String selection = MediaStore.Downloads.RELATIVE_PATH + " LIKE ?";
+                    String[] args = new String[]{
+                            Environment.DIRECTORY_DOWNLOADS + "/" + BACKUP_SUB_DIR + "/media/%"};
+                    try (Cursor c = getContentResolver().query(
+                            MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                            new String[]{MediaStore.Downloads.DISPLAY_NAME}, selection, args, null)) {
+                        return c == null ? 0 : c.getCount();
+                    }
+                } else {
+                    File base = new File(new File(
+                            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                            BACKUP_SUB_DIR), "media");
+                    return countFilesRecursive(base);
+                }
+            } catch (Exception e) {
+                Log.w(TAG, "countBackupMediaFiles 异常: " + e.getMessage());
+                return 0;
+            }
+        }
+
+        private int countFilesRecursive(File dir) {
+            if (dir == null || !dir.isDirectory()) return 0;
+            int n = 0;
+            File[] children = dir.listFiles();
+            if (children == null) return 0;
+            for (File c : children) {
+                if (c.isDirectory()) n += countFilesRecursive(c);
+                else if (c.isFile()) n++;
+            }
+            return n;
+        }
+
         private int copyMediaFileToBackup(File src, String relPath, java.util.Set<String> done) {
             try {
                 if (!done.add(relPath)) return 0; // 同名文件在其它目录已处理过

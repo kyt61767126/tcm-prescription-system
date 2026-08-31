@@ -6435,9 +6435,11 @@ let currentUser = null;
                 var today = new Date().toLocaleDateString('sv-SE');
                 if (localStorage.getItem('lastMediaWarnDate') === today) return;  // 每天最多提醒一次
                 var lastCount = parseInt(localStorage.getItem('lastMediaBackupCount') || '0', 10) || 0;
-                if (stats.count <= lastCount) return;  // 已全部备份
+                // ★ 2026-08-31 即时双写上线后改为与公共目录已备份数比对（自洽：count==backCount 即全部双写）
+                var backCount = (typeof stats.backCount === 'number') ? stats.backCount : lastCount;
+                if (stats.count <= backCount) return;  // 专属目录文件已全部双写/备份
                 localStorage.setItem('lastMediaWarnDate', today);
-                var unbacked = stats.count - lastCount;
+                var unbacked = stats.count - backCount;
                 var ok = confirm('⚠ 备份提醒\n\n检测到 ' + unbacked + ' 个照片/视频尚未备份到手机公共目录。\n卸载或重装 APP 将丢失这些文件（文字数据可恢复，不受影响）。\n\n【确定】立即备份　【取消】以后再说');
                 if (ok) { exportData(); }
             } catch (e) { console.warn('[MediaBackup] 风险提醒失败:', e); }
