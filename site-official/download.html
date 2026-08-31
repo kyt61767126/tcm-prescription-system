@@ -3164,8 +3164,30 @@
             confirmMsg += '\n下载完成后请核对文件名与 SHA-256 校验值，\n再运行安装。是否开始下载？';
             if (!window.confirm(confirmMsg)) return;
             showToast('正在下载：' + displayName + (fileName ? '\n' + fileName : ''));
+            // ★ GitHub 直连国内极慢（实测 0.14MB/s，75MB 包常被浏览器中断报"网络问题"）
+            //   → 优先走同域 Cloudflare 加速代理 /api/dl（用户→CF边缘→GitHub），
+            //     代理不可用时自动回退 GitHub 直连
             if (url.indexOf('https://github.com/') === 0 && url.indexOf('/releases/download/') > 0) {
-                window.location.href = url;
+                var proxyUrl = '/api/dl?f=' + encodeURIComponent(url);
+                var originalText = btn.innerHTML;
+                btn.innerHTML = '<span class="icon">⏳</span>正在验证...';
+                btn.classList.add('pending');
+                fetch(proxyUrl, { method: 'HEAD', cache: 'no-cache' })
+                    .then(function(resp) {
+                        btn.classList.remove('pending');
+                        btn.innerHTML = originalText;
+                        if (resp.ok) {
+                            window.location.href = proxyUrl;
+                        } else {
+                            showToast('加速通道暂不可用，已切换 GitHub 直连（速度可能较慢）');
+                            window.location.href = url;
+                        }
+                    })
+                    .catch(function() {
+                        btn.classList.remove('pending');
+                        btn.innerHTML = originalText;
+                        window.location.href = url;
+                    });
                 return;
             }
             var originalText = btn.innerHTML;
