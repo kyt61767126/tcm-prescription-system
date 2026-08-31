@@ -1936,7 +1936,7 @@
                     <li>修改默认密码为自定义密码，确保账户安全</li>
                     <li>根据需要配置药材库、处方模板、图片保存位置等</li>
                     <li>开始录入处方：选择患者 → 添加药材 → 调整剂量 → 保存处方</li>
-                    <li>定期使用"<strong>设置 → 数据备份</strong>"导出数据到安全位置</li>
+                    <li>数据备份已全自动（详见下方「💾 数据备份与恢复指南」），无需手动导出</li>
                 </ol>
                 <div class="step-title" style="margin-top:10px;">☁️ 云端统一包</div>
                 <ol class="install-steps">
@@ -2005,6 +2005,34 @@
                     <li>管理员审核通过（工作时间通常1小时内），手机号即为登录账号；审核通过前登录会提示"待审核"，属正常流程，请耐心等待</li>
                     <li>下载云端 APP/桌面版，使用<strong>注册手机号 + 初始密码 admin</strong>登录，登入后请立即修改密码</li>
                     <li>多设备（手机/桌面/网页）可同时在线，数据云端实时同步</li>
+                </ol>
+            </div>
+            <div class="card">
+                <div class="card-title"><span class="icon">💾</span>数据备份与恢复指南（数据永不丢失）</div>
+                <p style="font-size:13px;color:var(--text-secondary);margin:6px 0 10px;line-height:1.6;">
+                    💡 系统已内置<strong>全自动备份机制</strong>，正常使用情况下您<strong>无需手动备份</strong>。以下说明供卸载重装、重装系统、更换设备时参考。
+                </p>
+                <div class="step-title" style="margin-top:6px;">📱 手机 APP：全自动双保险</div>
+                <ol class="install-steps">
+                    <li><strong>处方文字数据</strong>：每天首次打开 APP 自动备份一次 + 切后台/退出时自动备份，文件存到手机「内部存储/Download/中医处方系统/」</li>
+                    <li><strong>照片/录像/处方签</strong>：保存成功的瞬间自动复制一份到「Download/中医处方系统/media/年-月/」，双份存储</li>
+                    <li>以上全部自动完成；如检测到个别文件未及时备份，APP 启动时会提醒您一键补备</li>
+                </ol>
+                <div class="step-title" style="margin-top:10px;">📱 APP 卸载重装 / 换手机：数据恢复步骤</div>
+                <ol class="install-steps">
+                    <li>正常使用情况下可直接卸载重装（自动备份已完成，无需提前操作）</li>
+                    <li>重新安装 APP 并登录，进入「<strong>统计 → 🗄️数据管理 → 恢复数据</strong>」</li>
+                    <li>选择「<strong>备份列表一键恢复</strong>」，选中最新备份文件，文字数据 + 照片视频自动全部恢复</li>
+                    <li>离线版恢复时<strong>账号也一并恢复</strong>，重装后原账号密码直接登录；云端版账号在服务器，登录即同步，无需恢复</li>
+                    <li>换手机：先用文件管理器把旧手机「Download/中医处方系统/」整个文件夹拷到新手机同位置，再按上述步骤恢复</li>
+                </ol>
+                <div class="step-title" style="margin-top:10px;">💻 桌面版：数据存独立文件夹，重装软件/系统都不丢</div>
+                <ol class="install-steps">
+                    <li>处方数据存「<strong>安装盘\惠康中医媒体\</strong>」文件夹（data/ 文字数据 + downloads/年-月/ 照片视频），与软件安装目录分离</li>
+                    <li><strong>重装软件、覆盖升级、重装 C 盘系统均不影响数据</strong>；重装后登录，数据自动读取原目录</li>
+                    <li>误删数据或想恢复到某天：登录后「<strong>设置 → 恢复数据</strong>」从备份列表一键恢复（备份文件在「惠康中医媒体\downloads\中医处方系统\」）</li>
+                    <li>换电脑：把「<strong>惠康中医媒体</strong>」整个文件夹拷到新电脑相同位置（如 D 盘根目录），安装软件后数据原样恢复</li>
+                    <li>建议定期把「惠康中医媒体」文件夹拷贝到 U 盘/移动硬盘做异地备份，防范硬盘物理损坏</li>
                 </ol>
             </div>
             <div class="card">
@@ -2119,7 +2147,7 @@
                             <tr><td>普通用户权限</td><td>本地</td><td>本地</td><td>本地（离线）</td><td>本地（离线）</td></tr>
                             <tr><td>数据备份</td><td class="yes">✅</td><td class="yes">✅</td><td class="yes">✅</td><td class="yes">✅</td></tr>
                             <tr><td>统计分析</td><td class="yes">✅</td><td class="yes">✅</td><td class="yes">✅</td><td class="yes">✅</td></tr>
-                            <tr><td>多设备登入</td><td class="no">❌ 仅单机</td><td class="no">❌ 仅单机</td><td class="no">❌ 仅单设备</td><td class="yes">✅ 云端同步</td></tr>
+                            <tr><td>多设备登入</td><td>一码多机（3-5台，数据各自独立）</td><td class="no">❌ 仅单机</td><td class="no">❌ 仅单设备</td><td class="yes">✅ 云端同步</td></tr>
                             <tr><td>联网要求</td><td>完全离线</td><td>完全离线</td><td>需联网</td><td>需联网</td></tr>
                             <tr style="background:rgba(7,193,96,0.06);"><td style="font-weight:700;">建议零售价</td><td style="font-weight:700;color:#07c160;">￥299/年</td><td style="font-weight:700;color:#07c160;">￥99/年</td><td style="font-weight:700;color:#07c160;">￥199/年</td><td style="font-weight:700;color:#07c160;">￥399/年</td></tr>
                             <tr><td>授权方式</td><td>年费订阅</td><td>年费订阅</td><td>年费订阅</td><td>年费订阅</td></tr>
@@ -2131,6 +2159,38 @@
                 <p style="font-size:12px;color:var(--text-secondary);margin-top:12px;line-height:1.6;">
                     💡 <strong>选择建议：</strong>个人医生选<strong>离线标准版</strong>；固定诊所（多医师，单机使用）选<strong>离线机构版</strong>；需要云端协作选<strong>云端标准版</strong>；需多设备协作与用户管理选<strong>云端机构版</strong>。<br>
                     💰 <strong>订阅说明：</strong>所有版本均为年费订阅，订阅期内免费更新维护。激活码按端授权：桌面端激活桌面使用，手机端激活手机端使用；如需双端使用，需分别购买两端激活。
+                </p>
+            </div>
+            <div class="card">
+                <div class="card-title"><span class="icon">🏥</span>机构版使用说明（激活设备数与用户管理）</div>
+                <div class="info-row">
+                    <span class="info-label">激活设备数</span>
+                    <span class="info-value">一个机构版激活码可授权 <strong>3-5 台设备</strong>（默认 5 台）。同一激活码在多台电脑/手机上分别激活即可，无需重复购买</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">标准版对比</span>
+                    <span class="info-value">标准版激活码仅授权 <strong>1 台设备</strong>，适合个人单机使用</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">用户账号</span>
+                    <span class="info-value">每台设备的管理员可在「<strong>用户管理</strong>」中添加普通用户账号（建议 3-5 个医师账号，管理员账号唯一且不可变更角色）</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">离线机构版</span>
+                    <span class="info-value">各台设备数据<strong>各自独立</strong>保存在本机（适合同一诊所多台电脑各自记账）</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">云端机构版</span>
+                    <span class="info-value">账号和数据都在云端服务器，<strong>任意设备登录自动同步</strong>（适合多设备协作共享处方数据）</span>
+                </div>
+                <div class="step-title" style="margin-top:10px;">🔄 机构版换新设备：无需联系客服</div>
+                <ol class="install-steps">
+                    <li>新设备安装软件后，直接输入<strong>原激活码</strong>激活（需填写原激活手机号核验身份）</li>
+                    <li>系统自动替换最久未使用的旧设备授权，新设备即刻可用（设备总数不变）</li>
+                    <li>如遇设备额度已满等特殊情况，联系客服微信 hktzy1688 处理</li>
+                </ol>
+                <p style="font-size:12px;color:var(--text-secondary);margin-top:10px;line-height:1.6;">
+                    ⚠️ <strong>注意：</strong>同一台设备只能绑定一个版本（标准版或机构版二选一）；桌面端与手机端激活码独立授权，双端使用需分别购买。
                 </p>
             </div>
         </div>
@@ -2204,8 +2264,9 @@
                 </div>
                 <div class="faq-answer">
                     <div class="faq-answer-inner">
-                        <strong>不能直接使用</strong>。激活码绑定当前设备，更换设备后需要重新购买或联系客服迁移。<br>
-                        请联系客服微信（hktzy1688），提供原激活码 + 新设备识别码，客服会评估是否可以免费迁移（通常硬件故障可免费迁移一次）。
+                        <strong>机构版：</strong><strong>可以直接换机</strong>。机构版激活码授权 3-5 台设备（默认 5 台），新设备直接输入原激活码激活（填写原激活手机号核验身份），系统自动替换最久未使用的旧设备授权，新设备即刻可用，无需联系客服。<br><br>
+                        <strong>标准版：</strong>激活码绑定单台设备，更换设备请联系客服微信（hktzy1688），提供原激活码 + 新设备识别码，客服会评估是否可以免费迁移（通常硬件故障可免费迁移一次）。<br><br>
+                        💡 重装系统/卸载重装（同一台设备）不消耗设备额度，凭原激活码 + 原手机号即可自动恢复激活。
                     </div>
                 </div>
             </div>
@@ -2262,9 +2323,59 @@
                 </div>
                 <div class="faq-answer">
                     <div class="faq-answer-inner">
-                        <strong>离线版：</strong>数据完全存储在本地设备，不会上传云端。请定期使用"设置 → 数据备份"导出数据到安全位置。<br>
-                        <strong>云端机构版：</strong>数据云端+本地双存储，实时同步，多设备共享。<br>
-                        <strong>建议：</strong>无论哪个版本，都建议定期备份重要数据。
+                        <strong>手机 APP：</strong>全自动双保险——处方文字数据每天自动备份 + 切后台时自动备份；照片/录像/处方签保存瞬间自动双份存储到手机公共目录（Download/中医处方系统/）。<strong>无需手动备份</strong>，卸载重装、换手机都可完整恢复。<br>
+                        <strong>桌面版：</strong>数据存「安装盘\惠康中医媒体\」独立文件夹，重装软件、覆盖升级、重装 C 盘系统均不影响数据；换电脑拷贝该文件夹即可迁移。<br>
+                        <strong>云端版：</strong>数据云端+本地双存储，实时同步，多设备共享。<br>
+                        <strong>详细操作说明</strong>请查看「<a href="#" onclick="switchTab('install'); return false;" style="color:#2563eb;">📋 安装说明</a>」Tab 的「💾 数据备份与恢复指南」。
+                    </div>
+                </div>
+            </div>
+            <div class="faq-item">
+                <div class="faq-question" onclick="toggleFaq(this)">
+                    <span>🔄 卸载重装 APP / 换手机后，数据怎么恢复？</span>
+                    <span class="arrow">▼</span>
+                </div>
+                <div class="faq-answer">
+                    <div class="faq-answer-inner">
+                        <strong>卸载重装（同一部手机）：</strong><br>
+                        1. 重新安装 APP 并登录<br>
+                        2. 进入「统计 → 🗄️数据管理 → 恢复数据」<br>
+                        3. 选择「备份列表一键恢复」，选中最新备份文件即可——文字数据 + 照片视频自动全部恢复，离线版连账号密码也一并恢复（原账号直接登录）<br><br>
+                        <strong>换手机：</strong><br>
+                        1. 用文件管理器把旧手机「Download/中医处方系统/」整个文件夹拷到新手机同位置<br>
+                        2. 新手机安装 APP 后按上面同样步骤恢复即可<br><br>
+                        💡 云端版无需恢复操作：账号数据在云端服务器，登录即自动同步。
+                    </div>
+                </div>
+            </div>
+            <div class="faq-item">
+                <div class="faq-question" onclick="toggleFaq(this)">
+                    <span>💻 重装电脑系统，桌面版数据会丢吗？</span>
+                    <span class="arrow">▼</span>
+                </div>
+                <div class="faq-answer">
+                    <div class="faq-answer-inner">
+                        <strong>不会丢。</strong>桌面版数据存放在「<strong>安装盘\惠康中医媒体\</strong>」独立文件夹（与软件安装目录、C 盘系统分离）：<br>
+                        • 重装软件 / 覆盖升级 / 重装 C 盘系统：数据原样保留，装好软件登录即读取<br>
+                        • 重装系统时只要不格式化数据所在盘（如 D 盘），数据不受任何影响<br>
+                        • 换电脑：把「惠康中医媒体」整个文件夹拷到新电脑相同盘符根目录，安装软件后数据原样恢复<br>
+                        • 误删数据：「设置 → 恢复数据」从备份列表一键恢复<br><br>
+                        💡 唯一无法防范的是硬盘物理损坏，建议定期把「惠康中医媒体」文件夹拷贝到 U 盘/移动硬盘做异地备份。
+                    </div>
+                </div>
+            </div>
+            <div class="faq-item">
+                <div class="faq-question" onclick="toggleFaq(this)">
+                    <span>🏥 机构版激活码能用几台设备？能建几个用户账号？</span>
+                    <span class="arrow">▼</span>
+                </div>
+                <div class="faq-answer">
+                    <div class="faq-answer-inner">
+                        <strong>激活设备数：</strong>一个机构版激活码（离线机构版/云端机构版）可授权 <strong>3-5 台设备</strong>（默认 5 台），同一激活码在多台电脑/手机上分别激活即可，无需重复购买。标准版激活码仅授权 1 台设备。<br><br>
+                        <strong>用户账号：</strong>每台设备的管理员可在「用户管理」中添加普通用户账号（建议 3-5 个医师账号）供医师登录使用，管理员账号唯一。<br><br>
+                        <strong>离线机构版 vs 云端机构版：</strong>离线版各台设备数据各自独立保存在本机；云端版账号数据都在服务器，任意设备登录自动同步。<br><br>
+                        <strong>换新设备：</strong>直接用原激活码在新设备激活（填写原激活手机号核验），系统自动替换最久未使用的旧设备授权，无需联系客服。<br><br>
+                        <strong>详细说明</strong>请查看「<a href="#" onclick="switchTab('compare'); return false;" style="color:#2563eb;">⚖️ 版本对比</a>」Tab 的「🏥 机构版使用说明」。
                     </div>
                 </div>
             </div>
