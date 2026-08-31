@@ -12,6 +12,10 @@
       "location": "https://admin.huikangzy.com/admin/:splat"
     },
     {
+      "pathname": "/api/dl*",
+      "status": 200
+    },
+    {
       "pathname": "/api/*",
       "status": 301,
       "location": "https://admin.huikangzy.com/api/:splat"

@@ -3151,6 +3151,16 @@
                 return decodeURIComponent(segs[segs.length - 1] || '');
             } catch (e) { return ''; }
         }
+        // ★ 2026-08-31 修复：隐藏 <a> 元素触发下载，不导航当前页面
+        //   避免浏览器因页面导航被 Content-Disposition:attachment 中断而误报"网络中断"
+        function triggerDownload(url) {
+            var a = document.createElement('a');
+            a.href = url;
+            a.style.display = 'none';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
         function safeDownload(url, btn) {
             if (!url || url === '#') {
                 showToast('安装包尚未上传，请联系客服获取');
@@ -3177,16 +3187,16 @@
                         btn.classList.remove('pending');
                         btn.innerHTML = originalText;
                         if (resp.ok) {
-                            window.location.href = proxyUrl;
+                            triggerDownload(proxyUrl);
                         } else {
                             showToast('加速通道暂不可用，已切换 GitHub 直连（速度可能较慢）');
-                            window.location.href = url;
+                            triggerDownload(url);
                         }
                     })
                     .catch(function() {
                         btn.classList.remove('pending');
                         btn.innerHTML = originalText;
-                        window.location.href = url;
+                        triggerDownload(url);
                     });
                 return;
             }
@@ -3199,7 +3209,7 @@
                     btn.classList.remove('pending');
                     btn.innerHTML = originalText;
                     if (resp.ok) {
-                        window.location.href = url;
+                        triggerDownload(url);
                     } else {
                         showToast('安装包尚未上传（HTTP ' + resp.status + '）\n请联系客服获取');
                     }
