@@ -53,8 +53,6 @@
 
 - ★ 2026-08-31 发布产物命名规范（用户明确要求）：本地版 GitHub Release 上传名统一英文 **huikang-local\[-setup]-x.x.x.exe / huikang-local.apk**（与云端 huikang-cloud 对仗），**禁止拼音 dingzhi 对外展示**。实现：publish-release.js prepareUploadFile 内 UPLOAD\_NAME\_KEY={dingzhi:'local'} 映射——内部 APP\_CONFIG key 'dingzhi' 不动（manifest dingzhi→local 双 key 镜像依赖），只映射上传文件名。GitHub 资产改名用 `gh api -X PATCH repos/{o}/{r}/releases/assets/{id} -f name=新名`（v2026.08.31 已改 3 个：setup/便携/apk；旧 1.0.158 两个保留原名防断链）；hash-manifest.json + updates/local/latest.json 的 URL 同步替换；桌面 electron-updater 读 latest.json url 自动跟随。官网 download.html（两份镜像）同轮新增：①safeDownload 下载确认机制——下载前 confirm 弹窗显示程序友好名（downloadFileDisplayName 把 huikang-local-setup-1.0.159.exe → 惠康中医-本地 安装版 1.0.159，兼容旧 dingzhi 名），确认后才开始下载+toast 显示"正在下载：程序名"；②APP 安装风险提示块——向客户说明无风险+提示原因（非商店渠道分发的 APP 系统一律提示，不代表检测到病毒）+处理方式（仍然安装）；③桌面步骤补"浏览器下载完成弹保留/放弃时选保留"。
 
-- ★ 2026-08-31 官网下载加速代理（修复"无法下载-网络问题"）：国内直连 GitHub Release 实测仅 **0.14MB/s**（release-assets.githubusercontent.com 被限速），75MB 安装包必被浏览器中断。新增 `functions/api/dl.js`（同域 Cloudflare 下载代理，用户→CF边缘→GitHub 实测 **2.93MB/s，21 倍**）：①仅放行本仓库 releases/download/ 资产（ASSET\_RE 白名单，防开放代理滥用）；②流式透传+Content-Disposition 保留真实文件名+Content-Length 透传（浏览器可显示进度）；③HEAD/GET/OPTIONS 全支持（safeDownload 探测用）。safeDownload 逻辑：GitHub URL 先 HEAD 探测 `/api/dl?f=编码后URL`，通→location.href 走代理，不通→toast 提示并回退 GitHub 直连。完整性兜底：代理下载实测 SHA-256 与 manifest 一致。铁律：**凡国内用户下载 GitHub 资产（官网分发/桌面自动更新），必须走 /api/dl 同域代理或同等加速通道；用户报"无法下载/网络问题"先测 GitHub 直连速度再查代码**。
-
 * 批量 replace\_all 后必须 Grep 验证字面量归零（并行 Edit 会静默失败）。
 
 * 全局变量一律 `window.xxx` 访问；跨脚本/跨 IIFE 调用一律 `typeof fn === 'function' && fn(...)` 防御式写法。
