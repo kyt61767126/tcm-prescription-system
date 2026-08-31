@@ -237,11 +237,13 @@
 
 * 图片二维码验证：jsQR + PowerShell System.Drawing LockBits 提取 RGBA（GDI+ 是 BGRA 需转序）。
 
-* ★ 2026-08-31 下载页"网络中断"误报根因：window.location.href = url 导航当前页面到下载 URL，浏览器页面加载被 Content-Disposition: attachment 中断后误报"网络错误"。修复：创建隐藏 <a> 元素（document.createElement('a')）并程序化 .click() 触发下载，不导航当前页面。铁律：**触发下载禁止用 window.location.href，必须用隐藏 <a> 元素触发，避免浏览器页面导航中断误报**。
+* ★ 2026-08-31 下载页"网络中断"误报根因：window\.location.href = url 导航当前页面到下载 URL，浏览器页面加载被 Content-Disposition: attachment 中断后误报"网络错误"。修复：创建隐藏 <a> 元素（document.createElement('a')）并程序化 .click() 触发下载，不导航当前页面。铁律：**触发下载禁止用 window\.location.href，必须用隐藏** **<a>** **元素触发，避免浏览器页面导航中断误报**。
 
-* ★ 2026-08-31 v2 下载"网络中断"真正根因：`/api/dl` 代理**丢弃客户端 Range 头**（请求 1MB 切片却返回 200 + 完整 78MB），浏览器下载 75MB 中断后**无法断点续传**，链路抖动（用户↔CF↔GitHub 任一环）直接报"网络中断无法连接"。修复双层：① 服务端 dl.js 透传 Range 头到上游，206 + Content-Range 原样透传 + `Access-Control-Expose-Headers`；② 前端 robustDownload 下载器（fetch 流式 + Range 断点恢复，中断自动重试 8 次指数退避，完成后 Blob 保存，按钮显示进度）。铁律：**大文件下载代理必须透传 Range 支持断点续传；前端大文件下载必须用流式下载器自动续传，禁止裸 `<a>`/location.href 一次成型**。
+* ★ 2026-08-31 v2 下载"网络中断"真正根因：`/api/dl` 代理**丢弃客户端 Range 头**（请求 1MB 切片却返回 200 + 完整 78MB），浏览器下载 75MB 中断后**无法断点续传**，链路抖动（用户↔CF↔GitHub 任一环）直接报"网络中断无法连接"。修复双层：① 服务端 dl.js 透传 Range 头到上游，206 + Content-Range 原样透传 + `Access-Control-Expose-Headers`；② 前端 robustDownload 下载器（fetch 流式 + Range 断点恢复，中断自动重试 8 次指数退避，完成后 Blob 保存，按钮显示进度）。铁律：**大文件下载代理必须透传 Range 支持断点续传；前端大文件下载必须用流式下载器自动续传，禁止裸** **`<a>`/location.href 一次成型**。
 
 * ★ 2026-08-31 v3 下载"进度卡死 0%"根因：fetch ReadableStream **读流无内置超时**，弱网下连接静默挂起（无数据也无报错）时 `reader.read()` 永久等待，v2 下载器进度永久停在 0.4MB 且不触发重试（用户实测截图证实）。修复：**读流看门狗**——每段数据到达重置 15s 定时器，超时未喂则 `AbortController.abort()` 强制断开自动断点续传；重试上限提至 30 次、退避封顶 5s。铁律：**前端流式读取必须配看门狗（数据到达重置定时器 + 超时 abort），fetch 读流挂起不报错，没有看门狗就永远卡死**。
+
+* ★ 2026-08-31 v4 下载提速实测结论：瓶颈在**中国→CF 海外边缘跨境带宽**（per-IP 整体受限，非单连接）。实测同机：GitHub 直连并行 0.06MB/s ≪ CF 代理单流 0.85MB/s < CF 代理 8 路并行 1.08MB/s。CF 代理是最快路线（比直连快 15 倍），多连接在丢包链路下提升明显（健康链路仅 +27%）。v4 方案：6 路并行分片（每段独立 Range/重试/看门狗）+ 按钮实时速度显示 + UI 节流 5 次/秒 + 分片 Range 不支持自动回退单流。铁律：**跨境大文件下载用多连接并行分片 + 断点续传 + 看门狗三件套；想再快只能上国内 CDN（需 ICP 备案付费），代码层面已到物理上限**。
 
 ## 11. 后续路线图（2026-08-31 定，试用观察期三步走）
 
