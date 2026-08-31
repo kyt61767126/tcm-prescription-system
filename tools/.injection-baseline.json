@@ -1,0 +1,17 @@
+{
+  "_comment": [
+    "注入脚本幂等性基线：每个条目 = 文件::命中行（trim 后全文）。",
+    "新增命中必须先改为幂等写法（整段重写 / indexOf 守卫），确属带守卫的合法兜底才收录。",
+    "收录时请在同目录提交说明里注明守卫位置。源码变更导致条目消失时必须同步重建本基线。"
+  ],
+  "entries": [
+    "app_project/db-offline/app/app/src/main/java/com/benneng/pres/MainActivity.java::\"      if (v1.textContent.indexOf('Build') === -1) v1.textContent += '\" + suffix + \"';\" +",
+    "app_project/db-offline/app/app/src/main/java/com/benneng/pres/MainActivity.java::\"      v1.textContent = v1.textContent.replace(/(\\\\|\\\\s*版本:\\\\s*V[0-9.]+)/,'$1\" + tagSuffix + \"');\" +",
+    "app_project/db-offline/app/app/src/main/java/com/benneng/pres/MainActivity.java::\"      v2.innerHTML = vh.replace(/(V[0-9.]+)/, '$1\" + tagSuffix + \"');\" +",
+    "app_project/db-offline/app/app/src/main/java/com/benneng/pres/MainActivity.java::\"    if (t && t.textContent.indexOf('Build') === -1) { t.textContent += '\" + vSuffix + \"'; }\" +",
+    "app_project/db-yunduan/cloud_app/app/src/main/java/com/tcm/prescription/MainActivity.java::\"      if (v1.textContent.indexOf('Build') === -1) v1.textContent += '\" + suffix + \"';\" +",
+    "app_project/db-yunduan/cloud_app/app/src/main/java/com/tcm/prescription/MainActivity.java::\"      v1.textContent = v1.textContent.replace(/(\\\\|\\\\s*版本:\\\\s*V[0-9.]+)/,'$1\" + tagSuffix + \"');\" +",
+    "app_project/db-yunduan/cloud_app/app/src/main/java/com/tcm/prescription/MainActivity.java::\"      v2.innerHTML = vh.replace(/(V[0-9.]+)/, '$1\" + tagSuffix + \"');\" +",
+    "app_project/db-yunduan/cloud_app/app/src/main/java/com/tcm/prescription/MainActivity.java::\"    if (t && t.textContent.indexOf('Build') === -1) { t.textContent += '\" + vSuffix + \"'; }\" +"
+  ]
+}

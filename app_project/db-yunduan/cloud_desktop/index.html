@@ -2249,11 +2249,21 @@ let currentUser = null;
                     bottomTag.style.display = 'none';
                 }
             }
+            // ★ 挂载点3：.login-footer（微信号/版本行）——版本显示单一写者收口（2026-08-31）
+            //   Build 号唯一数据源 window.__APP_BUILD__（云端APP 壳 MainActivity 注入；
+            //   网页/云桌面恒为 undefined → 渲染结果与静态文本一致）。整段重写天然幂等，
+            //   杜绝注入脚本"事后正则追加"式重复拼接 Build 号（用户实报 Build 255 ×3）。
+            var lf = document.querySelector('.login-footer');
+            if (lf) {
+                lf.textContent = '微信号: hktzy1688 | 版本: ' + (window.APP_VERSION || 'V1.0.0') +
+                    (window.__APP_BUILD__ ? (' ' + window.__APP_BUILD__) : '');
+            }
             var tv = document.getElementById('topVersionTag');
             if (tv) tv.textContent = '【' + label + '】';
             var et = document.getElementById('editionTag');
             if (et) et.textContent = '【' + label + '】';
-            document.title = '惠康中医-' + label;
+            document.title = '惠康中医-' + label +
+                (window.__APP_BUILD__ ? (' ' + window.__APP_BUILD__) : '');
             var logText = '惠康中医' + label + ' ' + window.APP_VERSION +
                 (_buildMeta ? ('  |  构建: ' + metaTextLine1 + (metaTextLine2 ? (' | ' + metaTextLine2) : '')) : '');
             console.log('%c' + logText, 'color:#667eea;font-size:14px;font-weight:bold');

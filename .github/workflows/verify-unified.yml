@@ -6,6 +6,10 @@ name: Verify Unified Modules
 #   ③ html-sync-check.ps1   —— 云端 index.html 权威源 vs 云桌面/云APP 副本
 #                               + 桌面 login.html 双版漂移
 #   任一失败即 fail，让副本漂移在推送时立刻可见（不再依赖人工记忆检查清单）。
+# ★ 2026-08-31 升级为四重防线：
+#   ④ check-injection-idempotency.cjs —— 注入脚本幂等性门（防"Build 203 Build 203..."
+#     类重复拼接复发：壳注入串/注入型 JS 资产里的 textContent += / innerHTML +=
+#     / 正则 replace 动态后缀追加，新增即 fail，基线 tools/.injection-baseline.json）。
 
 on:
   push:
@@ -29,7 +33,7 @@ jobs:
         with:
           fetch-depth: 0   # check-interface.ps1 需要 git log 判断基线新鲜度
 
-      - name: 1/3 Interface structure baseline check
+      - name: 1/4 Interface structure baseline check
         shell: pwsh
         run: |
           ./tools/check-interface.ps1
@@ -38,7 +42,7 @@ jobs:
             exit 1
           }
 
-      - name: 2/3 shared modules sync verify
+      - name: 2/4 shared modules sync verify
         shell: pwsh
         run: |
           ./tools/sync-all.ps1 -VerifyOnly
@@ -47,7 +51,7 @@ jobs:
             exit 1
           }
 
-      - name: 3/3 HTML copies drift check
+      - name: 3/4 HTML copies drift check
         shell: pwsh
         run: |
           ./tools/html-sync-check.ps1
@@ -56,9 +60,17 @@ jobs:
             exit 1
           }
 
+      - name: 4/4 Injection idempotency check
+        shell: bash
+        run: |
+          node tools/check-injection-idempotency.cjs || {
+            echo "::error::注入脚本存在未收录的非幂等 DOM 追加语句（Build 号重复拼接同类 bug）。请改为整段重写或补 indexOf 守卫；确属带守卫的合法兜底，审查后运行 --update-baseline 收录基线。"
+            exit 1
+          }
+
       - name: Summary
         shell: bash
         run: |
           echo "### 校验结果" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "✅ 界面基线 / shared JS 同步 / HTML 副本 三重校验全部通过" >> $GITHUB_STEP_SUMMARY
+          echo "✅ 界面基线 / shared JS 同步 / HTML 副本 / 注入幂等性 四重校验全部通过" >> $GITHUB_STEP_SUMMARY
