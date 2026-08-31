@@ -2854,6 +2854,8 @@ let currentUser = null;
                     headers: { 'Authorization': 'Bearer ' + token }
                 });
                 if (resp && resp.success && Array.isArray(resp.data)) return resp.data;
+                // ★ 2026-08-31 诊断：云端拒绝/异常时记录原因（401=token 过期需重登，网络错误=离线回退）
+                console.warn('[fetchCloudClinicUsers] 云端列表不可用:', (resp && (resp.error || resp.status)) || '网络异常', '→ 回退本地列表');
                 return null;
             } catch (e) {
                 console.warn('[fetchCloudClinicUsers] 拉取云端用户列表失败（回退本地列表）:', e);
@@ -2940,14 +2942,50 @@ let currentUser = null;
             } catch (e) { console.warn('[purgeGhostAdminsFromLocal] 清洗失败:', e); }
         }
 
+        // ★ 2026-08-31 保底：当前登录账号不在本地表（网页端新浏览器/APP 本地表仅幽灵残留）→
+        //   写入本地表——用户管理回退渲染永远至少显示"自己"，修复过滤后"暂无用户"误报；
+        //   已存在时补全归属 clinicId（老数据缺失），与 upsertCloudUsersToLocal 行为一致。
+        function ensureCurrentUserInLocal() {
+            try {
+                let me = currentUser;
+                if (!me || !me.username) { try { me = JSON.parse(localStorage.getItem('auth:currentUser') || 'null'); } catch (e) { me = null; } }
+                if (!me || !me.username) return;
+                const allUsers = getUsers();
+                const local = allUsers.find(u => u && u.username === me.username);
+                if (local) {
+                    let changed = false;
+                    if (me.clinicId && !local.clinicId) { local.clinicId = me.clinicId; changed = true; }
+                    if (me.name && !local.name) { local.name = me.name; changed = true; }
+                    if (me.role && !local.role) { local.role = me.role; changed = true; }
+                    if (changed) saveUsers(allUsers);
+                    return;
+                }
+                allUsers.push({
+                    username: me.username,
+                    phone: me.phone || '',
+                    password: me.password || '',
+                    name: me.name || me.username,
+                    role: me.role || 'user',
+                    userType: me.userType || 'production',
+                    clinicId: me.clinicId || '',
+                    clinicName: me.clinicName || '',
+                    createdAt: new Date().toISOString()
+                });
+                saveUsers(allUsers);
+            } catch (e) { console.warn('[ensureCurrentUserInLocal] 失败:', e); }
+        }
+
         // 用户管理列表刷新统一入口：云端权威优先，失败回退本地过滤
         async function refreshUserManageList() {
             const cloudUsers = await fetchCloudClinicUsers();
-            if (Array.isArray(cloudUsers)) {
+            // ★ 2026-08-31 空列表视为不可信（服务端对管理员级恒返回非空：诊所至少含管理员本人），
+            //   按回退处理——doctor 找不到自己等边缘异常不再导致"暂无用户"
+            if (Array.isArray(cloudUsers) && cloudUsers.length > 0) {
                 upsertCloudUsersToLocal(cloudUsers);
                 purgeGhostAdminsFromLocal(cloudUsers);
                 renderUserList(cloudUsers);
             } else {
+                if (Array.isArray(cloudUsers)) console.warn('[refreshUserManageList] 云端返回空列表（可疑），按回退本地处理');
                 renderUserList();
             }
         }
@@ -2961,7 +2999,11 @@ let currentUser = null;
                 //   其他诊所的历史登录残留不再显示（数据保留，仅本机列表过滤）
                 const users = Array.isArray(cloudUsers)
                     ? cloudUsers
-                    : filterGhostAdmins(UserAdmin.listVisibleUsers(getUsers(), currentUser), currentUser);
+                    : (function () {
+                        // ★ 2026-08-31 回退前保底：当前登录账号落本地表，至少显示"自己"
+                        ensureCurrentUserInLocal();
+                        return filterGhostAdmins(UserAdmin.listVisibleUsers(getUsers(), currentUser), currentUser);
+                    })();
                 const listDiv = document.getElementById('userList');
                 if (!listDiv) { throw new Error('用户列表容器 userList DOM 不存在'); }
                 if (!Array.isArray(users)) { throw new Error('用户数据格式错误（非数组）: ' + typeof users); }
