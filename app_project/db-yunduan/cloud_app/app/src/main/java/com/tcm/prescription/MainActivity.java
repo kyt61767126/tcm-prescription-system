@@ -1404,6 +1404,9 @@ public class MainActivity extends BridgeActivity {
                         return backupMedia().toString();
                     case "restoreMedia":
                         return restoreMedia().toString();
+                    // ★ 2026-08-31 卸载丢媒体风险提醒：统计专属目录媒体文件数（前端据此弹备份警告）
+                    case "getMediaStats":
+                        return getMediaStats().toString();
                     case "findMediaFiles":
                         return findMediaFiles(args.optString("patientName", ""),
                                 args.optString("prescriptionNo", ""),
@@ -1943,6 +1946,46 @@ public class MainActivity extends BridgeActivity {
         //   按月份子目录结构复制（YYYY-MM/文件名），跳过已备份（同名同大小）文件，
         //   纯二进制流复制不转 base64，避免大视频内存溢出（卸载重装不丢照片视频）
         // ------------------------------------------------------------------
+        // ★ 2026-08-31 卸载丢媒体风险提醒：统计应用专属媒体目录文件数/总大小。
+        //   Android 系统不允许应用在"被卸载瞬间"弹窗（收不到任何回调），等效方案是
+        //   前端启动时调本接口，检测"未备份媒体数"超阈值即弹备份警告（卸载将丢失）。
+        private JSONObject getMediaStats() {
+            try {
+                int count = 0;
+                long totalBytes = 0;
+                for (File root : getAllMediaDirs()) {
+                    if (root == null || !root.isDirectory()) continue;
+                    File[] children = root.listFiles();
+                    if (children == null) continue;
+                    for (File child : children) {
+                        if (child.isDirectory()) {
+                            File[] monthFiles = child.listFiles();
+                            if (monthFiles == null) continue;
+                            for (File f : monthFiles) {
+                                if (f.isFile()) { count++; totalBytes += f.length(); }
+                            }
+                        } else if (child.isFile()) {
+                            count++; totalBytes += child.length();
+                        }
+                    }
+                }
+                JSONObject r = new JSONObject();
+                r.put("success", true);
+                r.put("count", count);
+                r.put("totalBytes", totalBytes);
+                return r;
+            } catch (Exception e) {
+                try {
+                    JSONObject r = new JSONObject();
+                    r.put("success", false);
+                    r.put("error", String.valueOf(e.getMessage()));
+                    return r;
+                } catch (Exception ignore) {
+                    return null;
+                }
+            }
+        }
+
         private JSONObject backupMedia() {
             try {
                 int copied = 0;

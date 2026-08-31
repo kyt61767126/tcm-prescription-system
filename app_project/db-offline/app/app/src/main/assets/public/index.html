@@ -4225,6 +4225,8 @@ let currentUser = null;
             updatePrescriptionPaper();
             // P1-1 每日首次启动自动备份（异步，不阻塞 UI）
             dailyAutoBackup().catch(e => console.warn('[Backup] dailyAutoBackup error:', e));
+            // ★ 2026-08-31 卸载丢媒体备份提醒：延迟 5 秒（避开启动/登录流程，每天最多弹一次）
+            setTimeout(function () { checkMediaBackupRisk(); }, 5000);
             
             // ★ bnzc:// 一键激活：检查是否有待激活数据
             if (IS_ELECTRON && window.electronAPI && window.electronAPI.bnzcGetPendingActivation) {
@@ -6408,6 +6410,39 @@ let currentUser = null;
             saveLocalBackupToFile().catch(e => console.warn('[Backup] 文件备份失败:', e));
         }
 
+        // ★ 2026-08-31 卸载丢媒体备份提醒（APP 端）：Android 系统不允许应用在"被卸载瞬间"弹窗
+        //   （收不到任何系统回调，所有 Android 应用均无法拦截卸载），等效方案：启动 5 秒后检测
+        //   专属目录未备份照片视频数，有新增即弹备份警告（卸载/重装将丢失），每天最多提醒一次；
+        //   桌面版/网页版媒体存盘上/浏览器下载天生安全，桥不存在时静默跳过。
+        function getMediaStatsViaBridge() {
+            return new Promise(function (resolve) {
+                try {
+                    if (!window.AndroidNative || typeof window.AndroidNative.invoke !== 'function') { resolve(null); return; }
+                    var raw = window.AndroidNative.invoke('getMediaStats', '{}');
+                    if (typeof raw === 'string' && raw.length > 5 && raw !== 'null') {
+                        resolve(JSON.parse(raw));
+                    } else {
+                        resolve(null);
+                    }
+                } catch (e) { resolve(null); }
+            });
+        }
+
+        async function checkMediaBackupRisk() {
+            try {
+                var stats = await getMediaStatsViaBridge();
+                if (!stats || !stats.success || !stats.count || stats.count < 1) return;
+                var today = new Date().toLocaleDateString('sv-SE');
+                if (localStorage.getItem('lastMediaWarnDate') === today) return;  // 每天最多提醒一次
+                var lastCount = parseInt(localStorage.getItem('lastMediaBackupCount') || '0', 10) || 0;
+                if (stats.count <= lastCount) return;  // 已全部备份
+                localStorage.setItem('lastMediaWarnDate', today);
+                var unbacked = stats.count - lastCount;
+                var ok = confirm('⚠ 备份提醒\n\n检测到 ' + unbacked + ' 个照片/视频尚未备份到手机公共目录。\n卸载或重装 APP 将丢失这些文件（文字数据可恢复，不受影响）。\n\n【确定】立即备份　【取消】以后再说');
+                if (ok) { exportData(); }
+            } catch (e) { console.warn('[MediaBackup] 风险提醒失败:', e); }
+        }
+
         // P1-1 自动备份策略升级：每日首次启动触发；保留 7天+4周+12月
         async function dailyAutoBackup() {
             try {
@@ -6731,6 +6766,8 @@ let currentUser = null;
                         if (window.electronAPI && typeof window.electronAPI.backupMedia === 'function') {
                             const mr = await window.electronAPI.backupMedia();
                             if (mr && mr.success) {
+                                // ★ 2026-08-31 更新已备份媒体基准数（卸载丢媒体提醒的比对依据）
+                                try { getMediaStatsViaBridge().then(function (s) { if (s && s.success) localStorage.setItem('lastMediaBackupCount', String(s.count)); }); } catch (e) {}
                                 const mc = mr.copied || 0;
                                 const mb = mr.totalBytes || 0;
                                 if (mc > 0) {
