@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob: data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests; worker-src 'self' blob:"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><title>惠康中医-云端标准版</title><style>* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob: data:; font-src 'self' data:; connect-src 'self' https://tcm-prescription-system.pages.dev https://*.pages.dev; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests; worker-src 'self' blob:"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><title>惠康中医-云端标准版</title><style>* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         input[type="number"]::-webkit-inner-spin-button,
         input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         input[type="number"] { -moz-appearance: textfield; }
@@ -3008,12 +3008,10 @@ let currentUser = null;
                 if (!listDiv) { throw new Error('用户列表容器 userList DOM 不存在'); }
                 if (!Array.isArray(users)) { throw new Error('用户数据格式错误（非数组）: ' + typeof users); }
                 let html = '';
+                // ★ 2026-08-31 用户要求上架前取消「正式/测试用户」区分：列表徽章不再显示，
+                //   数据层 userType 保留（恒 production，历史 test 值不再展示、编辑时归一）
                 users.forEach(user =>{
-                    const isTest = user.userType === 'test';
-                    const userTypeBadge = isTest 
-                        ? '<span style="color:#f39c12;font-size:11px;margin-left:5px;">[测试]</span>' 
-                        : '<span style="color:#27ae60;font-size:11px;margin-left:5px;">[正式]</span>';
-                    html += `<div class="user-item"><div class="user-item-info"><div class="user-item-name">${escapeHtml(user.name)} (${escapeHtml(user.username)})${userTypeBadge}</div><div class="user-item-role">${UserAdmin.roleLabel(user)}</div></div><div class="user-item-actions"><button class="user-item-btn btn-primary" onclick="handleViewUserPrescriptions('${escapeJs(user.username)}')">查看处方</button><button class="user-item-btn btn-primary" onclick="handleEditUser('${escapeJs(user.username)}')">编辑</button>${user.username !== 'admin' ? '<button class="user-item-btn btn-danger" onclick="handleDeleteUser(\'' + escapeJs(user.username) + '\')">删除</button>' : ''}</div></div>`;
+                    html += `<div class="user-item"><div class="user-item-info"><div class="user-item-name">${escapeHtml(user.name)} (${escapeHtml(user.username)})</div><div class="user-item-role">${UserAdmin.roleLabel(user)}</div></div><div class="user-item-actions"><button class="user-item-btn btn-primary" onclick="handleViewUserPrescriptions('${escapeJs(user.username)}')">查看处方</button><button class="user-item-btn btn-primary" onclick="handleEditUser('${escapeJs(user.username)}')">编辑</button>${user.username !== 'admin' ? '<button class="user-item-btn btn-danger" onclick="handleDeleteUser(\'' + escapeJs(user.username) + '\')">删除</button>' : ''}</div></div>`;
                 });
 
                 listDiv.innerHTML = html || '暂无用户';
@@ -3031,8 +3029,7 @@ let currentUser = null;
             const existing = document.getElementById('editUserModal');
             if (existing) existing.remove();
 
-            // ★ 优化：添加用户类型选择（正式/测试）
-            const currentUserType = user.userType || 'production';
+            // ★ 2026-08-31 用户要求上架前取消「正式/测试用户」区分：编辑弹窗移除「用户类型」下拉
             const modal = document.createElement('div');
             modal.id = 'editUserModal';
             modal.className = 'modal';
@@ -3053,11 +3050,6 @@ let currentUser = null;
                 '<option value="cashier"' + (user.role === 'cashier' ? ' selected' : '') + '>前台收费</option>' +
                 '<option value="admin"' + ((AuthCore.isAdmin(user)) ? ' selected' : '') + '>管理员</option>' +
                 '</select></div>' +
-                '<div class="form-group" style="margin-top:10px;"><label>用户类型</label>' +
-                '<select id="editUserType" style="width:100%;padding:5px;">' +
-                '<option value="production"' + (currentUserType === 'production' ? ' selected' : '') + '>正式用户</option>' +
-                '<option value="test"' + (currentUserType === 'test' ? ' selected' : '') + '>测试用户</option>' +
-                '</select></div>' +
                 '</div>' +
                 '<div class="modal-footer">' +
                 '<button class="action-btn" onclick="document.getElementById(\'editUserModal\').remove(); document.getElementById(\'userManageModal\').style.display=\'flex\';">取消</button>' +
@@ -3074,7 +3066,8 @@ let currentUser = null;
                 const newName = document.getElementById('editUserName').value.trim();
                 const newPassword = document.getElementById('editUserPassword').value;
                 // 角色由"唯一管理员锁死"逻辑统一控制（editUserRole 下拉为只读展示，不允许修改角色）
-                const newUserType = document.getElementById('editUserType').value || 'production';
+                // ★ 2026-08-31 取消正式/测试区分：userType 恒为 production（editUserType 下拉已移除）
+                const newUserType = 'production';
 
                 if (!newUsername) { alert('用户名不能为空'); return; }
                 if (!newName) { alert('名称不能为空'); return; }
@@ -3178,6 +3171,26 @@ let currentUser = null;
             }
         }
 
+        // ★ 2026-08-31 上架前取消「正式/测试用户」区分：newUserType 下拉为静态 HTML（界面基线
+        //   保护范围），运行时 JS 注入隐藏（HTML DOM 零改动，沿用 __replaceTopClearWithStats 模式）；
+        //   数据层 userType 恒为 production，历史 test 值仅不再展示、编辑保存时自动归一。
+        (function hideUserTypeSelect() {
+            try {
+                var nt = document.getElementById('newUserType');
+                if (nt) nt.style.display = 'none';
+            } catch (e) { console.warn('[hideUserTypeSelect] 隐藏用户类型下拉失败:', e); }
+        })();
+
+        // ★ 2026-08-31 上架前取消「正式/测试用户」区分：newUserType 下拉为静态 HTML（界面基线
+        //   保护范围），运行时 JS 注入隐藏（HTML DOM 零改动，沿用 __replaceTopClearWithStats 模式）；
+        //   数据层 userType 恒为 production，历史 test 值仅不再展示、编辑保存时自动归一。
+        (function hideUserTypeSelect() {
+            try {
+                var nt = document.getElementById('newUserType');
+                if (nt) nt.style.display = 'none';
+            } catch (e) { console.warn('[hideUserTypeSelect] 隐藏用户类型下拉失败:', e); }
+        })();
+
         async function handleAddUser() {
             // 权限检查：仅管理员可添加用户
             if (!currentUser) {
@@ -3219,7 +3232,8 @@ let currentUser = null;
             const newRoleSelect = document.getElementById('newUserRole');
             const selectedRoleVal = newRoleSelect ? (newRoleSelect.value || 'user') : 'user';
             const newRole = (selectedRoleVal === 'cashier') ? 'cashier' : 'user';
-            const newUserType = document.getElementById('newUserType').value || 'production';
+            // ★ 2026-08-31 取消正式/测试区分：userType 恒为 production
+            const newUserType = 'production';
 
             // ★ 2026-08-25 云端机构版建号：先创建云端账号（前台收费机等其他设备立即可登录）
             const isCloudMode = !!(window.Permission && Permission.isCloud && Permission.isCloud());
@@ -3253,7 +3267,8 @@ let currentUser = null;
             document.getElementById('newUserUsername').value = '';
             document.getElementById('newUserPassword').value = '';
             document.getElementById('newUserName').value = '';
-            document.getElementById('newUserType').value = 'production';
+            // ★ 2026-08-31 取消正式/测试区分：newUserType 下拉已隐藏，重置做防御性判空
+            var _ntReset = document.getElementById('newUserType'); if (_ntReset) _ntReset.value = 'production';
             const roleText = (newRole === 'cashier') ? '前台收费' : '医师';
             let addMsg = '用户添加成功！\n\n账号：' + username + '\n姓名：' + name + '\n角色：' + roleText;
             if (isCloudMode && cloudSyncFlag === 'ok') addMsg += '\n\n云端账号已同步创建，其他设备可直接登录。';

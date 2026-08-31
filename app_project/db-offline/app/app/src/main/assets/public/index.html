@@ -2364,12 +2364,10 @@ let currentUser = null;
                 if (!listDiv) { throw new Error('用户列表容器 userList DOM 不存在'); }
                 if (!Array.isArray(users)) { throw new Error('用户数据格式错误（非数组）: ' + typeof users); }
                 let html = '';
+                // ★ 2026-08-31 用户要求上架前取消「正式/测试用户」区分：列表徽章不再显示，
+                //   数据层 userType 保留（恒 production，历史 test 值不再展示、编辑时归一）
                 users.forEach(user =>{
-                    const isTest = user.userType === 'test';
-                    const userTypeBadge = isTest 
-                        ? '<span style="color:#f39c12;font-size:11px;margin-left:5px;">[测试]</span>' 
-                        : '<span style="color:#27ae60;font-size:11px;margin-left:5px;">[正式]</span>';
-                    html += `<div class="user-item"><div class="user-item-info"><div class="user-item-name">${escapeHtml(user.name)} (${escapeHtml(user.username)})${userTypeBadge}</div><div class="user-item-role">${UserAdmin.roleLabel(user)}</div></div><div class="user-item-actions"><button class="user-item-btn btn-primary" onclick="handleViewUserPrescriptions('${escapeJs(user.username)}')">查看处方</button><button class="user-item-btn btn-primary" onclick="handleEditUser('${escapeJs(user.username)}')">编辑</button>${user.username !== 'admin' ? '<button class="user-item-btn btn-danger" onclick="handleDeleteUser(\'' + escapeJs(user.username) + '\')">删除</button>' : ''}</div></div>`;
+                    html += `<div class="user-item"><div class="user-item-info"><div class="user-item-name">${escapeHtml(user.name)} (${escapeHtml(user.username)})</div><div class="user-item-role">${UserAdmin.roleLabel(user)}</div></div><div class="user-item-actions"><button class="user-item-btn btn-primary" onclick="handleViewUserPrescriptions('${escapeJs(user.username)}')">查看处方</button><button class="user-item-btn btn-primary" onclick="handleEditUser('${escapeJs(user.username)}')">编辑</button>${user.username !== 'admin' ? '<button class="user-item-btn btn-danger" onclick="handleDeleteUser(\'' + escapeJs(user.username) + '\')">删除</button>' : ''}</div></div>`;
                 });
 
                 listDiv.innerHTML = html || '暂无用户';
@@ -2383,8 +2381,6 @@ let currentUser = null;
             const users = getUsers();
             const user = users.find(u => u.username === username);
             if (!user) return;
-
-            const currentUserType = user.userType || 'production';
 
             const existing = document.getElementById('editUserModal');
             if (existing) existing.remove();
@@ -2409,11 +2405,6 @@ let currentUser = null;
                 '<option value="user"' + (user.role === 'user' ? ' selected' : '') + '>普通用户</option>' +
                 '<option value="admin"' + ((AuthCore.isAdmin(user)) ? ' selected' : '') + '>管理员</option>' +
                 '</select></div>' +
-                '<div class="form-group" style="margin-top:10px;"><label>用户类型</label>' +
-                '<select id="editUserType" style="width:100%;padding:5px;">' +
-                '<option value="production"' + (currentUserType === 'production' ? ' selected' : '') + '>正式用户</option>' +
-                '<option value="test"' + (currentUserType === 'test' ? ' selected' : '') + '>测试用户</option>' +
-                '</select></div>' +
                 '</div>' +
                 '<div class="modal-footer">' +
                 '<button class="action-btn" onclick="document.getElementById(\'editUserModal\').remove(); document.getElementById(\'userManageModal\').style.display=\'flex\';">取消</button>' +
@@ -2430,7 +2421,8 @@ let currentUser = null;
                 const newName = document.getElementById('editUserName').value.trim();
                 const newPassword = document.getElementById('editUserPassword').value;
                 // 角色由"唯一管理员锁死"逻辑统一控制（editUserRole 下拉为只读展示，不允许修改角色）
-                const newUserType = document.getElementById('editUserType').value || 'production';
+                // ★ 2026-08-31 取消正式/测试区分：userType 恒为 production（editUserType 下拉已移除）
+                const newUserType = 'production';
 
                 if (!newUsername) { alert('用户名不能为空'); return; }
                 if (!newName) { alert('名称不能为空'); return; }
@@ -2506,6 +2498,16 @@ let currentUser = null;
             }
         }
 
+        // ★ 2026-08-31 上架前取消「正式/测试用户」区分：newUserType 下拉为静态 HTML（界面基线
+        //   保护范围），运行时 JS 注入隐藏（HTML DOM 零改动，沿用 __replaceTopClearWithStats 模式）；
+        //   数据层 userType 恒为 production，历史 test 值仅不再展示、编辑保存时自动归一。
+        (function hideUserTypeSelect() {
+            try {
+                var nt = document.getElementById('newUserType');
+                if (nt) nt.style.display = 'none';
+            } catch (e) { console.warn('[hideUserTypeSelect] 隐藏用户类型下拉失败:', e); }
+        })();
+
         async function handleAddUser() {
             // 权限检查：仅管理员可添加用户
             if (!currentUser) {
@@ -2544,7 +2546,8 @@ let currentUser = null;
             }
 
             const newRole = 'user'; // ★ 唯一管理员锁死：新添加用户固定为普通用户，禁止改成管理员
-            const newUserType = document.getElementById('newUserType').value || 'production';
+            // ★ 2026-08-31 取消正式/测试区分：userType 恒为 production
+            const newUserType = 'production';
             users.push({
                 username: username,
                 password: await hashPassword(password),
@@ -2560,7 +2563,8 @@ let currentUser = null;
             document.getElementById('newUserUsername').value = '';
             document.getElementById('newUserPassword').value = '';
             document.getElementById('newUserName').value = '';
-            document.getElementById('newUserType').value = 'production';
+            // ★ 2026-08-31 取消正式/测试区分：newUserType 下拉已隐藏，重置做防御性判空
+            var _ntReset = document.getElementById('newUserType'); if (_ntReset) _ntReset.value = 'production';
             alert('用户添加成功！');
         }
 
