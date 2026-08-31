@@ -168,6 +168,10 @@
 
 * ★ 2026-08-31 APP 卸载丢媒体备份提醒（用户需求"卸载时弹提醒"）：**Android 硬限制——应用被卸载瞬间收不到任何系统回调，所有 APP 均无法在卸载时弹窗**，别再尝试。等效方案已上线：启动 5 秒后 checkMediaBackupRisk() 检测专属目录媒体数 vs localStorage `lastMediaBackupCount` 基准（exportData 媒体备份成功后刷新），有新增弹 confirm 警告一键备份，`lastMediaWarnDate` 每天最多提醒一次。Java getMediaStats 桥（离线/云端 MainActivity，遍历 getAllMediaDirs 计数）；JS AndroidNative 直连 + null/空串防御；6 份 index.html 同步；桌面/网页无桥静默跳过。铁律：**"卸载前保护"类需求一律做成启动时风险检测，比对基准放 localStorage、备份成功即刷新基准防重复打扰**。
 
+* ★ 2026-08-31 APP 媒体一劳永逸定稿（用户选方案 A 即时双写）：**保存即备份**——savePrescriptionImage / saveVideoFile / commitMediaSession 三个 Java 保存出口各追加 syncToPublicBackup(file)（复用 copyMediaFileToBackup 的 MediaStore 双写+同名同大小去重，失败仅 Log.w 不打断保存）；getMediaStats 增 backCount（公共 Download/中医处方系统/media/ 计数，10+ MediaStore RELATIVE\_PATH LIKE 查询 / 9- countFilesRecursive 递归）；JS checkMediaBackupRisk 改 count vs backCount **自洽比对**（旧 APK 无 backCount 字段兜底回落 lastMediaBackupCount，向后兼容）。代价=存储×2（用户知悉）。铁律：**"保存即备份"双写必须挂在 Java 保存出口（渲染层入口多且演化快），失败静默（宁可漏备份不可打断开方）**；防打扰基准优先文件系统实测（backCount）而非 localStorage（重装即丢、易漂移）。
+
+* ★ 2026-08-31 打包脚本 git renormalize 会回退未提交的 KNOWLEDGE.md 工作区改动（本轮实锤：条目已 commit 后又被 09:29 离线 build 的步骤1回退，git 仓库完好、工作区丢失）。铁律：**KNOWLEDGE.md 改完立即 commit；build-app.bat 运行前确认工作区 KNOWLEDGE 无未提交改动，或打包后 git status 发现 M 时先 git checkout 恢复再核对是否丢条目**。
+
 ## 7. 官网付费与激活闭环（2026-08-30 全链路现行）
 
 **价格体系（年费订阅，双端独立授权）**：本地标准版 99 元/年（单用户）、本地机构版 299 元/年（3-5 用户）、云端标准版 199 元/年（单用户）、云端机构版 399 元/年（3-5 用户）。桌面/手机激活码独立授权，双端使用需分别购买。试用：免费 7 天，admin/admin 登入，限离线桌面/APP，云端无试用；**内置 admin/admin 仅试用期有效，激活后自动失效**。
