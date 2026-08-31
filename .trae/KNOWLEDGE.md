@@ -239,6 +239,8 @@
 
 * ★ 2026-08-31 下载页"网络中断"误报根因：window.location.href = url 导航当前页面到下载 URL，浏览器页面加载被 Content-Disposition: attachment 中断后误报"网络错误"。修复：创建隐藏 <a> 元素（document.createElement('a')）并程序化 .click() 触发下载，不导航当前页面。铁律：**触发下载禁止用 window.location.href，必须用隐藏 <a> 元素触发，避免浏览器页面导航中断误报**。
 
+* ★ 2026-08-31 v2 下载"网络中断"真正根因：`/api/dl` 代理**丢弃客户端 Range 头**（请求 1MB 切片却返回 200 + 完整 78MB），浏览器下载 75MB 中断后**无法断点续传**，链路抖动（用户↔CF↔GitHub 任一环）直接报"网络中断无法连接"。修复双层：① 服务端 dl.js 透传 Range 头到上游，206 + Content-Range 原样透传 + `Access-Control-Expose-Headers`；② 前端 robustDownload 下载器（fetch 流式 + Range 断点恢复，中断自动重试 8 次指数退避，完成后 Blob 保存，按钮显示进度）。铁律：**大文件下载代理必须透传 Range 支持断点续传；前端大文件下载必须用流式下载器自动续传，禁止裸 `<a>`/location.href 一次成型**。
+
 ## 11. 后续路线图（2026-08-31 定，试用观察期三步走）
 
 * **第一步（当前）**：进入 1-2 周正常看诊观察期，不刻意测试——真实使用是最好的验收。
