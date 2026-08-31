@@ -166,6 +166,8 @@
 
 * ★ 2026-08-31 桌面版一键恢复双故障（用户实测云桌面：备份成功、目录 9 个 json，恢复却报"未找到"+选择器打不开）：①**fs.promises 没有 existsSync**——main.js 顶部 `const fs = require('fs').promises`，而 list-backup-files/read-backup-file 调 `fs.existsSync` 抛 TypeError → handler catch 返回 success:false → 前端 else 误报"未找到备份文件"；save-backup-file 恰用 fse.ensureDirSync 不触发 → "备份成功却找不到"隐蔽分裂。修复=`require('fs').existsSync`（云/离桌面 main.js 各 2 处）。铁律：**fs.promises 只覆盖 promise 化 API（readdir/stat/readFile/writeFile✓），existsSync/accessSync 等同步族不存在，混用静默炸 handler**；后端 handler 返回 {success:false,error} 时前端文案必须显示 error（否则异常被伪装成"无文件"）。②**alert 后 input.click() 打不开文件选择器**——alert 已替换为主进程原生同步 dialog（阻塞 renderer 主线程）→ 用户激活丢失 → Chromium 静默拒绝 FileChooser（需 user activation）。修复=新增 open-backup-picker IPC（主进程 dialog.showOpenDialog + 读文件返回 json，无激活限制），preload 暴露 openBackupPicker，6 份 index.html importDataByFilePicker Electron 环境优先走 IPC，浏览器/APP 路径不变。铁律：**渲染层弹过 alert/confirm（原生同步 dialog）后再触发 input.click() 一律不可靠，桌面版文件选择必须走主进程 dialog IPC**。云桌面命名前缀=「本地\_」（cloud\_desktop index.html exportData fileName 规则），别拿前缀区分是哪个端写的备份。
 
+* ★ 2026-08-31 APP 卸载丢媒体备份提醒（用户需求"卸载时弹提醒"）：**Android 硬限制——应用被卸载瞬间收不到任何系统回调，所有 APP 均无法在卸载时弹窗**，别再尝试。等效方案已上线：启动 5 秒后 checkMediaBackupRisk() 检测专属目录媒体数 vs localStorage `lastMediaBackupCount` 基准（exportData 媒体备份成功后刷新），有新增弹 confirm 警告一键备份，`lastMediaWarnDate` 每天最多提醒一次。Java getMediaStats 桥（离线/云端 MainActivity，遍历 getAllMediaDirs 计数）；JS AndroidNative 直连 + null/空串防御；6 份 index.html 同步；桌面/网页无桥静默跳过。铁律：**"卸载前保护"类需求一律做成启动时风险检测，比对基准放 localStorage、备份成功即刷新基准防重复打扰**。
+
 ## 7. 官网付费与激活闭环（2026-08-30 全链路现行）
 
 **价格体系（年费订阅，双端独立授权）**：本地标准版 99 元/年（单用户）、本地机构版 299 元/年（3-5 用户）、云端标准版 199 元/年（单用户）、云端机构版 399 元/年（3-5 用户）。桌面/手机激活码独立授权，双端使用需分别购买。试用：免费 7 天，admin/admin 登入，限离线桌面/APP，云端无试用；**内置 admin/admin 仅试用期有效，激活后自动失效**。
