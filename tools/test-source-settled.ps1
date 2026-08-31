@@ -40,6 +40,24 @@ Check 'A7 gradle 混源码行拦截'      (-not (Test-IsPackSideEffect -GitPath 
 Check 'A8 gradle 签名配置拦截'      (-not (Test-IsPackSideEffect -GitPath 'app_project/db-yunduan/cloud_app/app/build.gradle' -DiffLines @('-            enableV1Signing true','+            enableV1Signing false')))
 Check 'A9 非 app_project 的 gradle 拦截' (-not (Test-IsPackSideEffect -GitPath 'other/build.gradle' -DiffLines @('- versionCode 1','+ versionCode 2')))
 
+Write-Host "=== A2. 产物形态黑名单（build_output 残留事故回归，build-skip.ps1）==="
+# 复刻 2026-08-31 事故：?? 未跟踪的 build_output_时间戳/ 变体不算源码脏。
+# 从 build-skip.ps1 源文本解析真实 $productShapePatterns（不自测自）。
+$bs = Get-Content (Join-Path $PSScriptRoot 'build-skip.ps1') -Raw
+Check 'A10 build-skip 含产物形态黑名单' ($bs -match 'productShapePatterns')
+$patBlock = [regex]::Match($bs, '\$productShapePatterns\s*=\s*@\((?s)(.*?)\)').Groups[1].Value
+$realPatterns = @([regex]::Matches($patBlock, "'([^']+)'") | ForEach-Object { $_.Groups[1].Value })
+Check 'A11 解析出 ≥4 条真实模式' ($realPatterns.Count -ge 4)
+$productShapes = @('build_output_20260829_063608', '_backup_asar', 'win-unpacked', 'dist_old_1', 'dist_new')
+$shapeAll = $true
+foreach ($s in $productShapes) {
+    $hit = $false
+    foreach ($p in $realPatterns) { if ($s -match $p) { $hit = $true; break } }
+    if (-not $hit) { $shapeAll = $false; Write-Host "    miss: $s" }
+}
+Check 'A12 五类产物形态全部命中真实模式' $shapeAll
+Check 'A13 源文件不误命中（index.html）' (-not ($realPatterns | Where-Object { 'public' -match $_ }))
+
 Write-Host "=== B. 差值集成断言（真实文件改动 → blockers 差值）==="
 $BG = 'app_project/db-yunduan/cloud_app/app/build.gradle'
 $PJ = 'app_project/db-yunduan/cloud_desktop/package.json'
@@ -67,6 +85,26 @@ EditFile $PJ '"version": "([\d.]+)"' '"version": "9.9.9"'
 $r = @(Get-SourceSettledBlockers).Count
 Check 'B5 副作用组合（版本+元数据）+0' ($r -eq $base)
 Restore $BG; Restore $PJ
+
+Write-Host "=== C. Node/CI 出口（source-settled.ps1 -Assert，发布链路前置）==="
+# B6：人为制造源码改动 → Assert 必须 exit 1 + SOURCE_NOT_SETTLED 输出
+EditFile $SRC '(\S)$' "`$1`n// assert-test"
+$ss = Join-Path $PSScriptRoot 'source-settled.ps1'
+$out = & powershell -NoProfile -ExecutionPolicy Bypass -File $ss -Assert 2>&1
+$code = $LASTEXITCODE
+Check 'B6 源码脏 → Assert exit 1 + 标记' ($code -eq 1 -and (($out | Out-String) -match 'SOURCE_NOT_SETTLED'))
+Restore $SRC
+$base2 = @(Get-SourceSettledBlockers).Count
+if ($base2 -eq 0) {
+    # 仅干净树可测（CI 检出即干净必跑；本地开发树脏时 SKIP 防假失败）
+    EditFile $BG 'versionCode (\d+)' 'versionCode 9997'
+    $out2 = & powershell -NoProfile -ExecutionPolicy Bypass -File $ss -Assert 2>&1
+    $c2 = $LASTEXITCODE
+    Restore $BG
+    Check 'B7 副作用文件 → Assert 放行（exit 0）' ($c2 -eq 0 -and (($out2 | Out-String) -match 'SOURCE_SETTLED=OK'))
+} else {
+    Write-Host "  [SKIP] B7 需干净树（本地开发树脏时跳过，CI 必跑）" -ForegroundColor Yellow
+}
 
 Write-Host ""
 Write-Host ("RESULT: {0} pass / {1} fail" -f $pass, $fail)

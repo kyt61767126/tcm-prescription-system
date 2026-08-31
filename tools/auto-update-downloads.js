@@ -257,6 +257,18 @@ function pushToGitHub() {
     try {
         console.log('[auto-update] (--push) 提交并推送到 GitHub...');
 
+        // ★ 2026-08-31 源码落定前置（同 publish-release.js，权威源 source-settled.ps1 -Assert）：
+        //   未落定 = 中止推送，绝不带着半成品 commit（status 含 ?? 恒非空的误 commit 缺陷收口）
+        const assertScript = path.join(__dirname, 'source-settled.ps1');
+        try {
+            execSync('powershell -NoProfile -ExecutionPolicy Bypass -File "' + assertScript + '" -Assert',
+                { cwd: PROJECT_ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+        } catch (e) {
+            console.error('[auto-update] [ERROR] 源码未落定，中止推送（先 commit 再发布；强推：ALLOW_DIRTY_BUILD=1）：');
+            console.error('[auto-update] ' + ((e.stdout || '') + (e.stderr || e.message || '')).trim().split('\n').join('\n[auto-update] '));
+            return;
+        }
+
         // 添加文件
         execSync('git add public/downloads/ public/hash-manifest.json', { cwd: PROJECT_ROOT, stdio: 'ignore' });
 

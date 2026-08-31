@@ -103,6 +103,17 @@ function Get-SourceSpec($def) {
     if ($def.excludes) { foreach ($e in $def.excludes) { $spec += ":(exclude)$e" } }
     return ,$spec
 }
+# ★ 2026-08-31 产物形态黑名单（build_output 残留事故举一反三）：
+#   未跟踪(??)的"构建产物形态"目录/文件不算源码脏——按设计新增源码应触发重打，
+#   但打包中断残留的产物目录（win-unpacked/dist 等）既非源码也不会被产物构建消费，
+#   之前仅靠 .gitignore 兜底（时间戳变体漏网 → 基线拒绝记录误报）。
+#   此处按 basename/形态正则双保险：.gitignore 漏登记新变体时不再误报。
+$productShapePatterns = @(
+    '^build_output',            # Electron 备用输出目录（含时间戳变体）
+    '^_backup_asar',
+    '^win-unpacked$',
+    '^dist[^/]*$'               # dist / dist_new / dist_old_* / dist_v*
+)
 # 源路径工作区是否有未提交改动（排除副作用文件后）
 function Get-DirtySources($def) {
     $spec = Get-SourceSpec $def
@@ -124,6 +135,13 @@ function Get-DirtySources($def) {
         $pathNoQuote = $path.Trim('"')
         foreach ($pat in $sideEffectPatterns) { if ($pathNoQuote -match $pat) { $isSideEffect = $true; break } }
         if ($isSideEffect) { continue }
+        # ★ 2026-08-31：未跟踪的产物形态目录不算源码脏（.gitignore 漏网兜底，双保险）
+        if ($xy -match '\?') {
+            $top = ($pathNoQuote -split '/')[0]
+            $isProduct = $false
+            foreach ($pat in $productShapePatterns) { if ($top -match $pat) { $isProduct = $true; break } }
+            if ($isProduct) { continue }
+        }
         # ★ 2026-08-24 修复：stat 幻影复核——入口 self-heal 脚本(fix-bat-crlf/fix-ps1-bom)
         #   重写 bat/ps1（内容不变仅 mtime 变）会让 git status 持续报 modified（eol 属性 +
         #   stat 缓存过期），git diff 却为空。对"已跟踪且非新增"文件用内容级 diff 复核：

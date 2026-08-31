@@ -21,6 +21,11 @@
 # 保险丝：ALLOW_DIRTY_BUILD=1（由调用方检查，本函数不管）
 # 非仓库环境（无 .git）：返回空（放行，不误拦）
 # ============================================================================
+param(
+    [string]$RepoRoot = '',
+    [switch]$Assert   # Node/CI 出口模式：未落定 exit 1
+)
+
 . (Join-Path $PSScriptRoot 'pack-side-effects.ps1')
 
 function Get-SourceSettledBlockers {
@@ -46,4 +51,18 @@ function Get-SourceSettledBlockers {
         [void]$blockers.Add(("{0}  {1}" -f $status2.Trim(), $path))
     }
     return @($blockers)
+}
+
+# Node/CI 出口：-Assert 模式——有未落定修改时输出明细并 exit 1（供发布链路
+# publish-release.js / auto-update-downloads.js commit 前前置检查）。
+if ($Assert) {
+    if ($env:ALLOW_DIRTY_BUILD -eq '1') { Write-Output 'SOURCE_SETTLED=FUSE'; exit 0 }
+    $b = @(Get-SourceSettledBlockers)
+    if ($b.Count -gt 0) {
+        Write-Output ("SOURCE_NOT_SETTLED=" + $b.Count)
+        $b | ForEach-Object { Write-Output $_ }
+        exit 1
+    }
+    Write-Output 'SOURCE_SETTLED=OK'
+    exit 0
 }

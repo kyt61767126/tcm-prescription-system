@@ -859,7 +859,30 @@ function main() {
 
     // 7. git commit + push（触发 Cloudflare Pages 部署）— 默认不 push，需 --push 手动开启
     if (doPush) {
-        console.log('提交并推送到 GitHub（--push 手动确认）...');
+        // ★ 2026-08-31 源码落定前置（1.2.194 事故镜像防呆）：commit 前用权威源
+        //   tools/source-settled.ps1 -Assert 检查工作区。此前 git add 指定路径后
+        //   用全局 status 判空：?? 未跟踪文件使其恒非空 → 半成品/无关改动可能
+        //   被 git commit -m 一并提交（staged 混入）→ 发布出无法追溯的状态。
+        //   未落定 = 中止推送并提示，绝不带着半成品 push。
+        const assertScript = path.join(__dirname, 'source-settled.ps1');
+        let settled = true, settleDetail = '';
+        try {
+            settleDetail = execSync(
+                'powershell -NoProfile -ExecutionPolicy Bypass -File "' + assertScript + '" -Assert',
+                { cwd: PROJECT_ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }
+            );
+        } catch (e) {
+            settled = false;
+            settleDetail = (e.stdout || '') + (e.stderr || e.message || '');
+        }
+        if (!settled) {
+            console.error('  [ERROR] 源码未落定：工作区存在未提交的源码修改（AI 修改中/手动改未提交），');
+            console.error('  带着半成品 commit + push 会发布无法追溯的状态，已中止。明细：');
+            console.error('  ' + settleDetail.trim().split('\n').join('\n  '));
+            console.error('  处理：先 commit 落定再发布；确要强推：环境变量 ALLOW_DIRTY_BUILD=1（自负其责）。');
+            return;
+        }
+        console.log('  [OK] 源码已落定，允许提交推送');
         try {
             execSync('git add public/hash-manifest.json public/downloads/ public/updates/ .gitignore', { cwd: PROJECT_ROOT, stdio: 'ignore' });
             const status = execSync('git status --porcelain', { cwd: PROJECT_ROOT, encoding: 'utf8' });
