@@ -6808,7 +6808,7 @@ let currentUser = null;
                                 return;
                             }
                         } else {
-                            alert('备份目录（惠康中医媒体\\downloads\\中医处方系统\\）中未找到备份文件。\n将打开文件选择器，请手动选择备份文件。');
+                            alert('备份目录（惠康中医媒体\\downloads\\中医处方系统\\）中未找到备份文件' + (result && result.error ? '（原因：' + result.error + '）' : '') + '。\n将打开文件选择器，请手动选择备份文件。');
                         }
                     } catch (e) {
                         console.warn('备份列表读取异常，回退文件选择器:', e);
@@ -6824,6 +6824,21 @@ let currentUser = null;
 
         // 系统文件选择器路径（兜底）
         function importDataByFilePicker() {
+            // ★ 2026-08-31 桌面版兜底修复：alert（已被替换为原生同步 dialog，阻塞 renderer）后
+            //   用户激活丢失，<input type=file> 的 click() 被 Chromium 静默拒绝（用户看不到选择器）。
+            //   Electron 环境优先走主进程原生 open-backup-picker IPC（无用户激活限制）。
+            if (window.electronAPI && typeof window.electronAPI.openBackupPicker === 'function') {
+                window.electronAPI.openBackupPicker().then(function (r) {
+                    if (r && r.success && r.json) {
+                        importDataFromJson(r.json);
+                    } else if (r && r.error) {
+                        alert('读取备份失败：' + r.error);
+                    }
+                }).catch(function (e) {
+                    alert('读取备份失败：' + (e && e.message ? e.message : '未知错误'));
+                });
+                return;
+            }
             const input = document.createElement('input');
             input.type = 'file';
             input.accept = '.json';

@@ -2399,7 +2399,10 @@ ipcMain.handle('list-backup-files', async () => {
         const seen = new Set();
         const files = [];
         for (const dir of dirs) {
-            if (!fs.existsSync(dir)) continue;
+            // ★ 2026-08-31 修复：顶部 fs=require('fs').promises 没有 existsSync，
+            //   原 fs.existsSync 抛 TypeError → 整个 handler catch 返回 success:false
+            //   → 前端误报"未找到备份文件"（备份明明写入成功）。必须用同步版 require('fs')。
+            if (!require('fs').existsSync(dir)) continue;
             const entries = await fs.readdir(dir);
             for (const name of entries) {
                 if (!name.endsWith('.json') || seen.has(name)) continue;
@@ -2426,12 +2429,39 @@ ipcMain.handle('read-backup-file', async (event, fileName) => {
         const candidates = [path.join(base, '中医处方系统', safeName), path.join(base, safeName)];
         for (const fp of candidates) {
             if (!isPathAllowed(fp)) continue;
-            if (fs.existsSync(fp)) {
+            // ★ 2026-08-31 修复：fs(promises) 无 existsSync（同 list-backup-files）
+            if (require('fs').existsSync(fp)) {
                 const json = await fs.readFile(fp, 'utf8');
                 return { success: true, json };
             }
         }
         return { success: false, error: '未找到备份文件: ' + safeName };
+    } catch (e) {
+        return { success: false, error: e.message };
+    }
+});
+
+// ★ 2026-08-31 一键恢复兜底：原生文件选择对话框 + 直接读取备份内容
+//   根因：alert 已被替换为原生同步 dialog（阻塞 renderer 主线程）→ 用户激活丢失 →
+//   渲染层 input.click() 的 FileChooser 被 Chromium 静默拒绝（用户"看不到文件选择器"）。
+//   主进程 dialog.showOpenDialog 无用户激活限制，是最可靠的兜底通道。
+ipcMain.handle('open-backup-picker', async () => {
+    try {
+        let win = null;
+        try { win = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0] || null; } catch (e) {}
+        const base = getDownloadsDirectory();
+        const result = await dialog.showOpenDialog(win, {
+            title: '选择备份文件（.json）',
+            defaultPath: path.join(base, '中医处方系统'),
+            filters: [{ name: '备份 JSON', extensions: ['json'] }],
+            properties: ['openFile']
+        });
+        if (!result || result.canceled || !result.filePaths || result.filePaths.length === 0) {
+            return { success: false, canceled: true };
+        }
+        const fp = result.filePaths[0];
+        const json = await fs.readFile(fp, 'utf8');
+        return { success: true, json, fileName: path.basename(fp) };
     } catch (e) {
         return { success: false, error: e.message };
     }

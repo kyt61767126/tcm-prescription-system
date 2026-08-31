@@ -73,6 +73,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // 一键恢复：备份列表/读取（与APP端 importData 优先列表恢复对齐）
     listBackupFiles: () => ipcRenderer.invoke('list-backup-files'),
     readBackupFile: (fileName) => ipcRenderer.invoke('read-backup-file', fileName),
+    // ★ 2026-08-31 兜底文件选择：主进程原生 dialog（渲染层 input.click 因用户激活丢失打不开）
+    openBackupPicker: () => ipcRenderer.invoke('open-backup-picker'),
 
     // P1-1 自动备份策略：保存/列出/删除（userData/backups/ 目录）
     saveAutoBackup: (jsonStr, fileName) => ipcRenderer.invoke('save-auto-backup', jsonStr, fileName),
