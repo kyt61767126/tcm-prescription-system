@@ -193,6 +193,55 @@ if ($SkipRenormalizeGit) {
 }
 
 # ----------------------------------------------------------------------------
+# [Step 1.5] 源码落定门（★ 2026-08-31 事故根因防呆：杜绝打包半成品代码）
+#   事故复盘：用户在 AI 修改源码进行中双击打包 → exe 静默装走"当时磁盘状态"
+#   （1.2.194 实测缺当日 CSP/userType 修复）。现有全部铁闸只验"产物内部
+#   一致"（版本号/架构标记/签名/asar 完整性），没有任何一环验"打包起点
+#   是否落定"——本门补齐这一环：git 工作区存在未提交修改 = 打包会装走
+#   无法追溯的中间状态 → FAIL 阻断。
+#   白名单（不拦）：package.json / build-meta.json（打包自身 bump 版本会改，
+#   连续二次打包必脏属正常）；未跟踪文件 ??（dist/build_output 等产物）。
+#   保险丝：ALLOW_DIRTY_BUILD=1 降级 WARN（确要打包未提交状态时自负其责）。
+# ----------------------------------------------------------------------------
+Register-Step 1.5 "源码落定门 (未提交修改检测 → 杜绝打包半成品代码)"
+
+if ($env:ALLOW_DIRTY_BUILD -eq '1') {
+    Add-StepWarning 1.5 "ALLOW_DIRTY_BUILD=1 保险丝生效，跳过未提交修改检测（紧急/自负其责用途）"
+    Finish-Step 1.5 $true
+} elseif (-not (Test-Path -LiteralPath $gitDir)) {
+    Add-StepWarning 1.5 ".git 不存在（非仓库环境），跳过源码落定检测"
+    Finish-Step 1.5 $true
+} else {
+    Push-Location $RepoRoot
+    $rawStatus = @(& git -c core.quotepath=false status --porcelain 2>$null) | Where-Object { $_ }
+    Pop-Location
+    $blockers = New-Object System.Collections.ArrayList
+    foreach ($line in $rawStatus) {
+        if ($line.Length -lt 4) { continue }
+        $status2 = $line.Substring(0, 2)
+        $path    = $line.Substring(3).Trim('"')
+        if ($status2 -eq '??') { continue }                       # 未跟踪产物不拦
+        $base = Split-Path $path -Leaf
+        if ($base -eq 'package.json' -or $base -eq 'build-meta.json') { continue }  # 打包自身版本 bump
+        [void]$blockers.Add(("{0}  {1}" -f $status2.Trim(), $path))
+    }
+    if ($blockers.Count -gt 0) {
+        Add-StepFailure 1.5 ("检测到 {0} 个未提交的源码修改 —— 现在打包会把『半成品』代码装进安装包" -f $blockers.Count)
+        Write-Host "  ── 2026-08-31 事故防呆门：当日 1.2.194 打包静默缺当日修复的根因 ──" -ForegroundColor Yellow
+        $blockers | Select-Object -First 20 | ForEach-Object { Write-Host ("    " + $_) -ForegroundColor Yellow }
+        if ($blockers.Count -gt 20) { Write-Host ("    ... 其余 {0} 个文件" -f ($blockers.Count - 20)) -ForegroundColor Yellow }
+        Write-Host "  正确做法（按序选一）：" -ForegroundColor Yellow
+        Write-Host "    ① AI 还在修改中 → 等它改完并 commit 后重新打包（推荐）" -ForegroundColor Yellow
+        Write-Host "    ② 自己手动改的 → git add -A ; git commit -m '...' 后再打包" -ForegroundColor Yellow
+        Write-Host "    ③ 确认就要打包当前状态 → set ALLOW_DIRTY_BUILD=1 后重跑（产物不可追溯）" -ForegroundColor Yellow
+        Finish-Step 1.5 $false
+    } else {
+        Write-MsgOk "源码已落定：无未提交修改（版本文件/未跟踪产物除外），打包起点可信"
+        Finish-Step 1.5 $true
+    }
+}
+
+# ----------------------------------------------------------------------------
 # [Step 2] UTF-8 BOM 修复（1:1 等价 fix-ps1-bom + verify-packaging Check 1/2/4）
 #   规则：
 #     .ps1 必须有 BOM（缺则修复，-SkipBomFix 时 FAIL）
@@ -596,6 +645,7 @@ if ($script:TotalFail -gt 0) {
     Write-Host ""
     Write-Host "---- 快速修复指引 (按步骤对应原单跑入口) ----" -ForegroundColor Yellow
     Write-Host "  Step 1 LF/CRLF 假改动:  git -C '$RepoRoot' add -u --renormalize  (不提交，仅刷新 index)；然后 git reset --mixed HEAD 清空 staged"
+    Write-Host "  Step 1.5 源码未落定:  等 AI 改完并 commit 后重打包；或 git add -A ; git commit ；确要打未提交状态：set ALLOW_DIRTY_BUILD=1"
     Write-Host "  Step 2 BOM 问题    :  powershell -File tools/fix-ps1-bom.ps1  (对 .ps1 补 BOM)；.html/.gradle 缺 BOM 改为无 BOM UTF-8 保存"
     Write-Host "  Step 3 .bat 编码   :  UTF-8 .bat 文件顶部必须有 chcp 65001 >nul ；否则改存为 GBK/ANSI"
     Write-Host "  Step 4 版本门禁    :  单跑 verify-no-hardcoded-clinic.ps1 / verify-version-display.ps1 / verify-app-version-consistency.ps1 -Target <cloud|offline>"
