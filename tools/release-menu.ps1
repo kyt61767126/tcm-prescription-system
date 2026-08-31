@@ -125,6 +125,28 @@ function Invoke-SinglePack {
         return 1
     }
 
+    # ★ 2026-08-31 源码落定门前置（1.2.194 事故防呆，与 ensure-build-env Step 1.5 同源）：
+    #   发布链路在"开始打包"前先查 git 工作区——有未提交的源码修改立即中止，
+    #   杜绝两件事：①白跑几分钟打包才被下游 ensure-build-env 门禁拦住（发布流程
+    #   还有后续步骤，浪费更明显）；②发布出"无法追溯版本"的产物。
+    #   白名单与 Step 1.5 一致：package.json/build-meta.json（版本 bump）+ 未跟踪 ??。
+    #   保险丝：ALLOW_DIRTY_BUILD=1 跳过。
+    if ($env:ALLOW_DIRTY_BUILD -ne '1') {
+        $dirty = @(& git -c core.quotepath=false status --porcelain 2>$null) | Where-Object { $_ } | ForEach-Object {
+            if ($_.Length -ge 4 -and $_.Substring(0,2) -ne '??') {
+                $p = $_.Substring(3).Trim('"')
+                $base = Split-Path $p -Leaf
+                if ($base -ne 'package.json' -and $base -ne 'build-meta.json') { $_ }
+            }
+        }
+        if ($dirty) {
+            Write-Host "[ERROR] 源码未落定：检测到 $($dirty.Count) 个未提交修改，发布中止（先 commit 再发布）" -ForegroundColor Red
+            Write-Host "  （1.2.194 事故防呆：AI 修改中打包=装走半成品代码）" -ForegroundColor Yellow
+            $dirty | Select-Object -First 10 | ForEach-Object { Write-Host "    $_" -ForegroundColor Yellow }
+            return 1
+        }
+    }
+
     # 离线版使用 config.json 默认值（XXX中医诊所/XXX医生），跳过配置编辑窗口
     # 设置 SKIP_CONFIG=1，使桌面 build.bat 与 APP build-app.bat 整轮跳过后台配置编辑
     # ★ 2026-08-23 三轮复核修复：SKIP_CONFIG 环境变量泄漏——菜单会话中先打本地版再打

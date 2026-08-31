@@ -627,6 +627,25 @@ if ($CollectSideEffectsOnly) {
 
 # 自动模式：跳过菜单直接执行对应打包，全部完成后提示结果并自动退出（不返回菜单）
 if ($AutoMode) {
+    # ★ 2026-08-31 源码落定门前置（1.2.194 事故防呆，与 ensure-build-env Step 1.5 同源）：
+    #   打包开始前查 git 工作区，有未提交源码修改（白名单外的）立即中止——
+    #   避免白跑几分钟才被下游 ensure-build-env 门禁拦住。
+    #   白名单：package.json/build-meta.json（版本 bump）+ 未跟踪 ??；保险丝 ALLOW_DIRTY_BUILD=1。
+    if ($env:ALLOW_DIRTY_BUILD -ne '1') {
+        $dirty = @(& git -c core.quotepath=false status --porcelain 2>$null) | Where-Object { $_ } | ForEach-Object {
+            if ($_.Length -ge 4 -and $_.Substring(0,2) -ne '??') {
+                $p = $_.Substring(3).Trim('"')
+                $base = Split-Path $p -Leaf
+                if ($base -ne 'package.json' -and $base -ne 'build-meta.json') { $_ }
+            }
+        }
+        if ($dirty) {
+            Write-Host "[ERROR] 源码未落定：检测到 $($dirty.Count) 个未提交修改，打包中止（先 commit 再打包）" -ForegroundColor Red
+            Write-Host "  （1.2.194 事故防呆：AI 修改中打包=装走半成品代码）" -ForegroundColor Yellow
+            $dirty | Select-Object -First 10 | ForEach-Object { Write-Host "    $_" -ForegroundColor Yellow }
+            exit 1
+        }
+    }
     # ★ 2026-08-23 复核修复：携带真实退出码退出（原先恒 exit 0，
     #   release-menu Invoke-Pack / Invoke-FullFlow 无法感知打包失败）
     #   防御性取值：返回值若被子进程输出污染成数组，取末元素=真实退出码
