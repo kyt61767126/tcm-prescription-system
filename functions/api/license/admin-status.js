@@ -108,6 +108,12 @@ export async function onRequest(context) {
         }
 
         // ★ machineId 兜底：自己的请求未激活时，扫描最近记录找同设备已激活的官网订单
+        // ★ 安全修复（2026-08-31 开放前审查）：machineId 是客户端任意提交的参数（不可信），
+        //   兜底命中【他人】记录时，仅返回 license（license 绑定真实 machineId，攻击者
+        //   自己的机器验签必失败，无泄露风险）；必须跳过 provisionCloudAccount 与
+        //   normalizeActivationPassword——否则攻击者提交自己的 requestId + 冒用受害者
+        //   machineId，即可触发受害者手机号下全部账号密码被重置为默认 admin（接管账号）。
+        let viaMachineIdFallback = false;
         if (machineIdParam && record.status !== 'activated') {
             try {
                 const index = (await kv.get('admin_req_index', 'json')) || [];
@@ -116,7 +122,8 @@ export async function onRequest(context) {
                     const rec = await kv.get(KV_ADMIN_REQ_PREFIX + rid, 'json');
                     if (rec && rec.machineId === machineIdParam && rec.status === 'activated') {
                         record = rec;
-                        console.log('[AdminStatus] machineId 兜底命中:', rid);
+                        viaMachineIdFallback = true;
+                        console.log('[AdminStatus] machineId 兜底命中:', rid, '(仅返回license，跳过账号操作)');
                         break;
                     }
                 }
@@ -135,17 +142,22 @@ export async function onRequest(context) {
             // admin-approve 的自动开通仅在审核通过那一刻执行；若当时该修复尚未部署，
             // 该请求就没有云端账号，客户端用手机号登录会 401。这里每次轮询 activated
             // 时都尝试补开（幂等，已存在则跳过），让历史激活直接可登录。
-            try {
-                await provisionCloudAccount(kv, record);
-            } catch (e) {
-                console.warn('[AdminStatus] 云端账号补开失败（不影响license读取）:', e.message);
-            }
-            // ★ 2026-08-20 激活密码归一化：该手机号下既有旧账号若密码非 admin，
-            //   重置为默认 admin，杜绝老账号旧密码导致登录 401。requestId 持有者才可到此。
-            try {
-                await normalizeActivationPassword(kv, record);
-            } catch (e) {
-                console.warn('[AdminStatus] 激活密码归一化失败（不影响license读取）:', e.message);
+            // ★ 安全修复（2026-08-31）：machineId 兜底命中的他人记录跳过账号补开/密码
+            //   归一化（machineId 参数不可信，见上方兜底扫描处注释），仅自己的
+            //   requestId 走受信链路。
+            if (!viaMachineIdFallback) {
+                try {
+                    await provisionCloudAccount(kv, record);
+                } catch (e) {
+                    console.warn('[AdminStatus] 云端账号补开失败（不影响license读取）:', e.message);
+                }
+                // ★ 2026-08-20 激活密码归一化：该手机号下既有旧账号若密码非 admin，
+                //   重置为默认 admin，杜绝老账号旧密码导致登录 401。requestId 持有者才可到此。
+                try {
+                    await normalizeActivationPassword(kv, record);
+                } catch (e) {
+                    console.warn('[AdminStatus] 激活密码归一化失败（不影响license读取）:', e.message);
+                }
             }
             // ★ 关键：客户端检查 status === 'activated' 时会取 result.license 写入 license.dat
             return json({
