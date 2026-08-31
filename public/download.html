@@ -3297,6 +3297,120 @@
             a.click();
             document.body.removeChild(a);
         }
+        // ★ 2026-08-31 v2：断点续传下载器（根因修复）
+        //   75MB 包经 CF 代理仍需 60s+，链路抖动时浏览器原生下载中断且无法续传，
+        //   直接报"网络中断无法连接"。改用 fetch 流式下载 + Range 断点恢复：
+        //   中断后自动从已下载字节处续传（最多 8 次，指数退避），
+        //   全部完成后 Blob 保存。下载期间按钮显示实时进度。
+        function robustDownload(url, fileName, btn, onDone) {
+            var received = 0;          // 已下载字节
+            var total = 0;             // 总大小（从 Content-Range/Content-Length 获取）
+            var retries = 0;
+            var maxRetries = 8;
+            var chunks = [];
+            var originalText = btn ? btn.innerHTML : '';
+
+            function progressText() {
+                var pct = total > 0 ? Math.floor(received / total * 100) : 0;
+                var mb = (received / 1048576).toFixed(1);
+                var tmb = total > 0 ? (total / 1048576).toFixed(1) + 'MB' : '?';
+                return '⬇ ' + pct + '%（' + mb + '/' + tmb + '）';
+            }
+            function updateBtn() {
+                if (btn) btn.innerHTML = '<span class="icon">⬇</span>' + progressText();
+            }
+            function fail(msg) {
+                if (btn) { btn.classList.remove('pending'); btn.innerHTML = originalText; }
+                showToast(msg || '下载失败，请稍后重试');
+                if (onDone) onDone(false);
+            }
+            function delay(ms) {
+                return new Promise(function(res) { setTimeout(res, ms); });
+            }
+            function attempt() {
+                var headers = {};
+                if (received > 0) headers['Range'] = 'bytes=' + received + '-';
+                fetch(url, { headers: headers, cache: 'no-store' })
+                    .then(function(resp) {
+                        if (resp.status !== 200 && resp.status !== 206) {
+                            throw new Error('HTTP ' + resp.status);
+                        }
+                        // 从 Content-Range（续传/总长）或 Content-Length（首次）解析总大小
+                        var cr = resp.headers.get('Content-Range');
+                        if (cr && cr.indexOf('/') > 0) {
+                            var t = parseInt(cr.split('/')[1], 10);
+                            if (t > 0) total = t;
+                        } else if (received === 0) {
+                            var cl = parseInt(resp.headers.get('Content-Length'), 10);
+                            if (cl > 0) total = cl;
+                        }
+                        // 服务器不支持续传（发了 Range 仍回 200）→ 从头下载
+                        if (resp.status === 200 && received > 0) {
+                            chunks = [];
+                            received = 0;
+                        }
+                        retries = 0; // 连接建立成功，重置重试计数
+                        var reader = resp.body.getReader();
+                        function pump() {
+                            return reader.read().then(function(r) {
+                                if (r.done) return finish();
+                                chunks.push(r.value);
+                                received += r.value.length;
+                                updateBtn();
+                                return pump();
+                            });
+                        }
+                        return pump().catch(function(err) {
+                            // 读流中断 → 断点续传重试
+                            if (retries < maxRetries) {
+                                retries++;
+                                return delay(800 * retries).then(attempt);
+                            }
+                            throw err;
+                        });
+                    })
+                    .catch(function(err) {
+                        if (retries < maxRetries) {
+                            retries++;
+                            return delay(800 * retries).then(attempt);
+                        }
+                        fail('下载多次中断，请检查网络后重试');
+                    });
+            }
+            function finish() {
+                // 字节数校验：不完整则续传
+                if (total > 0 && received < total) {
+                    if (retries < maxRetries) {
+                        retries++;
+                        attempt();
+                        return;
+                    }
+                    fail('下载不完整（' + (received / 1048576).toFixed(1) + '/' + (total / 1048576).toFixed(1) + 'MB），请重试');
+                    return;
+                }
+                try {
+                    var blob = new Blob(chunks, { type: 'application/octet-stream' });
+                    var blobUrl = URL.createObjectURL(blob);
+                    var a = document.createElement('a');
+                    a.href = blobUrl;
+                    a.download = fileName || '';
+                    a.style.display = 'none';
+                    document.body.appendChild(a);
+                    a.click();
+                    setTimeout(function() {
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(blobUrl);
+                    }, 30000);
+                    if (btn) { btn.classList.remove('pending'); btn.innerHTML = originalText; }
+                    showToast('下载完成：' + (fileName || '安装包') + '\n请核对 SHA-256 后再运行安装');
+                    if (onDone) onDone(true);
+                } catch (e) {
+                    fail('保存文件失败：' + e.message);
+                }
+            }
+            if (btn) { btn.classList.add('pending'); updateBtn(); }
+            attempt();
+        }
         function safeDownload(url, btn) {
             if (!url || url === '#') {
                 showToast('安装包尚未上传，请联系客服获取');
@@ -3309,33 +3423,21 @@
             if (fileName) confirmMsg += '文件名：' + fileName + '\n';
             confirmMsg += '\n下载完成后请核对文件名与 SHA-256 校验值，\n再运行安装。是否开始下载？';
             if (!window.confirm(confirmMsg)) return;
-            showToast('正在下载：' + displayName + (fileName ? '\n' + fileName : ''));
             // ★ GitHub 直连国内极慢（实测 0.14MB/s，75MB 包常被浏览器中断报"网络问题"）
             //   → 优先走同域 Cloudflare 加速代理 /api/dl（用户→CF边缘→GitHub），
-            //     代理不可用时自动回退 GitHub 直连
+            //     用断点续传下载器（中断自动恢复），代理彻底失败才回退 GitHub 直连
             if (url.indexOf('https://github.com/') === 0 && url.indexOf('/releases/download/') > 0) {
                 var proxyUrl = '/api/dl?f=' + encodeURIComponent(url);
-                var originalText = btn.innerHTML;
-                btn.innerHTML = '<span class="icon">⏳</span>正在验证...';
-                btn.classList.add('pending');
-                fetch(proxyUrl, { method: 'HEAD', cache: 'no-cache' })
-                    .then(function(resp) {
-                        btn.classList.remove('pending');
-                        btn.innerHTML = originalText;
-                        if (resp.ok) {
-                            triggerDownload(proxyUrl);
-                        } else {
-                            showToast('加速通道暂不可用，已切换 GitHub 直连（速度可能较慢）');
-                            triggerDownload(url);
-                        }
-                    })
-                    .catch(function() {
-                        btn.classList.remove('pending');
-                        btn.innerHTML = originalText;
-                        triggerDownload(url);
-                    });
+                var dlName = fileName || downloadFileNameFromUrl(proxyUrl) || url.split('/').pop();
+                robustDownload(proxyUrl, dlName, btn, function(ok) {
+                    if (!ok) {
+                        showToast('加速通道失败，尝试 GitHub 直连（速度可能较慢）');
+                        robustDownload(url, dlName, btn);
+                    }
+                });
                 return;
             }
+            // 非 GitHub 直链（官网自有静态文件等）：HEAD 验证后隐藏 <a> 触发
             var originalText = btn.innerHTML;
             btn.innerHTML = '<span class="icon">⏳</span>正在验证...';
             btn.classList.add('pending');
