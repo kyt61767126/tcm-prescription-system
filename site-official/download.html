@@ -1874,6 +1874,12 @@
                         <li>安装完成后打开 APP，按下方对应版本的登录方式登录</li>
                         <li>如遇"安装包损坏"提示，请重新下载并核对 SHA-256 校验值</li>
                     </ol>
+                    <div style="margin-top:10px;padding:10px 12px;background:#fff7ed;border:1px solid #fdba74;border-radius:8px;font-size:12px;color:#9a3412;line-height:1.8;">
+<strong>⚠️ APP 安装风险提示说明（请放心，本软件无风险）：</strong><br>
+                        <strong>为什么会出现提示：</strong>本 APP 未上架应用商店（自官网直接分发），手机系统对<strong>所有非商店渠道</strong>安装的 APP 一律弹出<strong>「安装未知应用」「高风险应用」</strong>等提示——这是手机厂商的系统机制，<strong>并不代表检测到病毒或安全问题</strong>，本软件经安全检测无任何风险。<br>
+                        <strong>如何处理：</strong>确认安装包从本官网下载后，直接选择<strong>「仍然安装 / 信任该应用」</strong>即可正常完成安装。<br>
+                        <strong>安全建议：</strong>请仅从本官网页面下载，安装前核对页面显示的 SHA-256 校验值一致；切勿安装第三方网盘、聊天群转发等来历不明的安装包。
+                    </div>
                     <div class="step-title" style="margin-top:10px;">☁️ 云端统一包登录方式</div>
                     <ol class="install-steps">
                         <li>激活窗口选择「📋 管理员激活」Tab 自助提交申请（填写诊所名称、姓名、手机号），审核通过即可使用，或联系客服开通</li>
@@ -1894,7 +1900,8 @@
                     <div class="card-title"><span class="icon">💻</span>Windows 桌面版安装步骤</div>
                     <div class="step-title" style="margin-top:6px;">安装版（推荐）</div>
                     <ol class="install-steps">
-                        <li>切换到"<strong>桌面端</strong>"Tab，下载"安装版"exe 文件</li>
+                        <li>切换到"<strong>桌面端</strong>"Tab，下载"安装版"exe 文件（下载前页面会显示程序名称，请确认后开始下载）</li>
+                        <li>浏览器下载完成时如弹出<strong>「保留 / 放弃」</strong>等确认询问，请点击<strong>「保留」</strong>完成下载</li>
                         <li>双击运行安装程序（如提示 SmartScreen，点击"仍要运行"）</li>
                         <li>按安装向导提示完成安装（建议安装到默认路径）</li>
                         <li>安装完成后从桌面快捷方式"惠康中医"启动</li>
@@ -3122,11 +3129,41 @@
         };
 
         // 安全下载：先验证文件存在再跳转
+        // ★ 2026-08-31 下载确认机制：下载前弹确认框显示程序名称（用户知情后才开始下载），
+        //   下载开始后 toast 显示"正在下载：程序名"，直到浏览器接管下载。
+        function downloadFileDisplayName(name) {
+            if (!name) return '安装程序';
+            var m = name.match(/^huikang-(local|cloud|dingzhi)(-setup)?-(\d+\.\d+\.\d+)\.exe$/i);
+            if (m) {
+                var ed = m[1].toLowerCase() === 'cloud' ? '云端' : '本地';
+                return '惠康中医-' + ed + (m[2] ? ' 安装版 ' : ' 便携版 ') + m[3];
+            }
+            var a = name.match(/^huikang-(local|cloud|dingzhi)\.apk$/i);
+            if (a) return '惠康中医-' + (a[1].toLowerCase() === 'cloud' ? '云端' : '本地') + ' APP 安装包（APK）';
+            if (/^惠康中医/.test(name)) return name.replace(/\.(exe|apk)$/i, '');
+            return name;
+        }
+        function downloadFileNameFromUrl(url) {
+            if (!url) return '';
+            try {
+                var u = url.split('?')[0].split('#')[0];
+                var segs = u.split('/');
+                return decodeURIComponent(segs[segs.length - 1] || '');
+            } catch (e) { return ''; }
+        }
         function safeDownload(url, btn) {
             if (!url || url === '#') {
                 showToast('安装包尚未上传，请联系客服获取');
                 return;
             }
+            var fileName = downloadFileNameFromUrl(url);
+            var displayName = downloadFileDisplayName(fileName);
+            // 下载前确认：显示程序名称，用户点击确定后才开始下载
+            var confirmMsg = '即将开始下载：\n\n【 ' + displayName + ' 】\n';
+            if (fileName) confirmMsg += '文件名：' + fileName + '\n';
+            confirmMsg += '\n下载完成后请核对文件名与 SHA-256 校验值，\n再运行安装。是否开始下载？';
+            if (!window.confirm(confirmMsg)) return;
+            showToast('正在下载：' + displayName + (fileName ? '\n' + fileName : ''));
             if (url.indexOf('https://github.com/') === 0 && url.indexOf('/releases/download/') > 0) {
                 window.location.href = url;
                 return;

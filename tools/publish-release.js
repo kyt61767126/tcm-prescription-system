@@ -115,6 +115,11 @@ function getRepoInfo() {
 //   上传文件名: huikang-cloud-setup-1.2.0.exe
 //   原文件名: 惠康中医-云端.apk
 //   上传文件名: huikang-cloud.apk
+// ★ 2026-08-31 命名规范：本地版统一英文 local（禁止拼音 dingzhi），
+//   与云端 cloud 对仗：huikang-local-setup-x.x.x.exe / huikang-local.apk。
+//   内部 APP_CONFIG key 'dingzhi' 保留不动（manifest 双 key 镜像依赖），
+//   仅对外上传文件名做映射。
+const UPLOAD_NAME_KEY = { dingzhi: 'local' };
 function prepareUploadFile(originalPath, originalName, appKey, type) {
     const RELEASE_TMP_DIR = path.join(PROJECT_ROOT, 'tools', '.release-tmp');
     if (!fs.existsSync(RELEASE_TMP_DIR)) {
@@ -122,16 +127,17 @@ function prepareUploadFile(originalPath, originalName, appKey, type) {
     }
 
     // GitHub Release asset 名不支持中文字符（会被过滤成 -.-.x.x.x.exe）
-    // 统一用 huikang-{appKey}[-setup]-{version}.exe 或 huikang-{appKey}.apk
+    // 统一用 huikang-{nameKey}[-setup]-{version}.exe 或 huikang-{nameKey}.apk
+    const nameKey = UPLOAD_NAME_KEY[appKey] || appKey;
     let safeName;
     if (type === 'apk') {
-        safeName = `huikang-${appKey}.apk`;
+        safeName = `huikang-${nameKey}.apk`;
     } else {
         // exe/portable: 从原文件名提取版本号
         const versionMatch = originalName.match(/(\d+\.\d+\.\d+)/);
         const version = versionMatch ? versionMatch[1] : '0.0.0';
         const isSetup = /\bSetup\b/.test(originalName);
-        safeName = `huikang-${appKey}${isSetup ? '-setup' : ''}-${version}.exe`;
+        safeName = `huikang-${nameKey}${isSetup ? '-setup' : ''}-${version}.exe`;
     }
 
     const tmpPath = path.join(RELEASE_TMP_DIR, safeName);
