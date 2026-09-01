@@ -10,6 +10,9 @@
 //   node tools/auto-publish.js --target=exe      # 只检查 exe
 //   node tools/auto-publish.js --target=apk      # 只检查 apk
 //
+// 退出码：0=发布成功（或 check 无变更）；2=check 模式发现待发布变更；
+//         3=--publish 无变更（官网已是最新，未上传）；1=失败
+//
 // 工作原理：
 //   1. 扫描本地所有 exe（各项目 dist/）和 apk（public/downloads/）
 //   2. 计算每个文件的 sha256
@@ -223,6 +226,8 @@ function main() {
 
     if (changes.length === 0 && !force) {
         // ★ 2026-09-01 无变更提示明确化：官网与本地产物完全一致，非失败。
+        //   退出码 3 = "无需发布"专用码（区别于 0=发布成功）：菜单层据此显示
+        //   "官网已是最新"而非"发布成功"，杜绝"没传任何东西却报成功+将部署"的误导。
         console.log('[3/3] 所有文件都是最新，无需发布');
         console.log('\n============================================');
         console.log('  无需发布：官网已是最新版本');
@@ -231,7 +236,7 @@ function main() {
         console.log('  下载页: https://tcm-prescription-system.pages.dev/download');
         console.log('  （如确需强制重新上传，加 --force --publish 参数）');
         console.log('============================================\n');
-        process.exit(0);
+        process.exit(3);
     }
 
     // 调用 publish-release.js 发布

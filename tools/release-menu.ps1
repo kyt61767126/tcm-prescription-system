@@ -483,12 +483,21 @@ function Invoke-FullFlow {
         if (Test-Path $autoPublishJs) {
             Write-Host "  智能发布: 仅上传有变化的产物 (auto-publish.js --publish)" -ForegroundColor Cyan
             $rc = Invoke-NodeScript -ScriptPath $autoPublishJs -Arguments @('--publish')
+            # ★ 2026-09-01 退出码 3 = 无需发布（官网已是最新）——视为成功继续验证，
+            #   但提示明确"未上传"，不再显示笼统的"发布完成"。
+            if ($rc -is [array]) { $rc = [int]$rc[-1] }
+            if ($rc -eq 3) {
+                Write-Host ""
+                Write-Host "[OK] 官网已是最新版本，本次未上传任何文件" -ForegroundColor Cyan
+                $rc = 0
+            }
         } else {
             $rc = Invoke-Publish -Target "all" -Mode "all"
         }
     } else {
         $rc = Invoke-Publish -Target $Version -Mode $Mode
     }
+    if ($rc -is [array]) { $rc = [int]$rc[-1] }
     if ($rc -ne 0) {
         Write-Host ""
         Write-Host "[ERROR] 发布失败，流程中止" -ForegroundColor Red
@@ -664,7 +673,18 @@ while ($true) {
                 if ($rc5 -is [array]) { $rc5 = [int]$rc5[-1] }
                 # ★ 2026-09-01 统一结果汇总（明确中文提示；auto-publish.js 内部已列
                 #   上传产物清单，此处菜单层给成败大字块兜底）
-                Show-PublishResult -ExitCode $rc5 -Label "智能发布（仅上传有变化的产物）"
+                #   退出码 3 = 无需发布（官网已是最新）——显示信息块而非"发布成功"，
+                #   杜绝"没传任何东西却报成功+Cloudflare 将部署"的误导。
+                if ($rc5 -eq 3) {
+                    Write-Host ""
+                    Write-Host "========================================" -ForegroundColor Cyan
+                    Write-Host "  [无需发布] 官网已是最新版本" -ForegroundColor Cyan
+                    Write-Host "========================================" -ForegroundColor Cyan
+                    Write-Host "  本地产物与官网 hash 完全一致，未上传任何文件"
+                    Write-Host "  下载页: https://tcm-prescription-system.pages.dev/download"
+                } else {
+                    Show-PublishResult -ExitCode $rc5 -Label "智能发布（仅上传有变化的产物）"
+                }
             } else {
                 $rc5 = Invoke-Publish -Target "all"
                 if ($rc5 -is [array]) { $rc5 = [int]$rc5[-1] }
