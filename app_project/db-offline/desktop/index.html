@@ -100,8 +100,10 @@
         .prescription-info > div:nth-child(5) { grid-column: 3 / 5; }
         .prescription-info > div:nth-child(6) { grid-column: 5 / 7; }
         .prescription-grid { border-top: 1px solid #000; border-bottom: 1px solid #000; min-height: 200px; }
-        .prescription-grid-inner { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px; }
-        .prescription-line { padding: 6px 2px; font-size: 15px; text-align: center; font-weight: 500; color: #000; display: flex; justify-content: center; align-items: center; white-space: nowrap; overflow: visible; }
+        .prescription-grid-inner { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; }
+        .prescription-line { padding: 6px 8px; font-size: 14px; text-align: center; font-weight: 500; color: #000; line-height: 1.45; border-left: 1px dashed #e6e6e6; }
+        .prescription-line:first-child,
+        .prescription-line:nth-child(4n+1) { border-left: none; }
         .rp-mark { font-size: 22px; font-weight: bold; font-style: italic; color: #000; font-family: 'Times New Roman', serif; }
         .dose-count { text-align: right; font-size: 15px; color: #000; font-weight: bold; font-family: 'Times New Roman', serif; }
         .prescription-footer { margin-top: 8px; padding-top: 4px; border-top: none; font-size: 14px; color: #000; }
@@ -297,7 +299,7 @@
             .prescription-info { font-size: 12px; gap: 1px 2px; margin-bottom: 6px; padding-bottom: 3px; }
             .prescription-grid { min-height: 80px; padding: 3px 0; }
             .prescription-grid-inner { gap: 1px 3px; }
-            .prescription-line { padding: 3px 1px; font-size: 13px; }
+            .prescription-line { padding: 4px 6px; font-size: 12.5px; }
             .rp-mark { font-size: 20px; }
             .dose-count { font-size: 13px; }
             .prescription-footer { margin-top: 6px; padding-top: 3px; font-size: 12px; }
@@ -513,7 +515,7 @@
             .prescription-info { font-size: 11px; gap: 1px 2px; margin-bottom: 4px; padding-bottom: 2px; }
             .prescription-grid { min-height: 60px; padding: 2px 0; }
             .prescription-grid-inner { gap: 1px 2px; }
-            .prescription-line { padding: 2px 1px; font-size: 11px; }
+            .prescription-line { padding: 3px 4px; font-size: 10.5px; line-height: 1.4; }
             .rp-mark { font-size: 17px; }
             .dose-count { font-size: 11px; }
             .prescription-footer { margin-top: 4px; padding-top: 2px; font-size: 10px; }
@@ -579,7 +581,7 @@
             .medicine-table { font-size: 12px; }
             .medicine-table th { font-size: 11px; padding: 4px; }
             .medicine-table input { font-size: 12px; padding: 4px; }
-            .prescription-line { padding: 2px 1px; font-size: 11px; }
+            .prescription-line { padding: 3px 5px; font-size: 10.5px; line-height: 1.4; }
             .prescription-info { font-size: 12px; }
         }
 
@@ -5771,8 +5773,10 @@ let currentUser = null;
         .prescription-info > div:nth-child(5) { grid-column: 3 / 5; }
         .prescription-info > div:nth-child(6) { grid-column: 5 / 7; }
         .prescription-grid { border-top: 1px solid #000; border-bottom: 1px solid #000; min-height: 200px; margin-top: 8px; }
-        .prescription-grid-inner { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px; }
-        .prescription-line { padding: 5px 2px; font-size: 11.25pt; text-align: center; font-weight: 500; color: #000; display: flex; justify-content: center; align-items: center; white-space: nowrap; }
+        .prescription-grid-inner { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; }
+        .prescription-line { padding: 5px 1.5mm; font-size: 10.5pt; text-align: center; font-weight: 500; color: #000; line-height: 1.4; border-left: 0.5pt dashed #999; }
+        .prescription-line:first-child,
+        .prescription-line:nth-child(4n+1) { border-left: none; }
         .rp-mark { font-size: 16.5pt; font-weight: bold; font-style: italic; color: #000; font-family: 'Times New Roman', serif; }
         .dose-count { text-align: right; font-size: 11.25pt; color: #000; font-weight: bold; font-family: 'Times New Roman', serif; }
         .prescription-footer { margin-top: 8px; padding-top: 4px; border-top: none; font-size: 10.5pt; color: #000; }
