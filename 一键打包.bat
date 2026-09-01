@@ -28,7 +28,13 @@ REM Launch one-click-pack.ps1 (forward args: 1=cloud 2=offline 3=all, auto mode 
 REM NOTE [BUILD-LOCK 2026-08-23]: concurrent builds are serialized by
 REM tools\build-lock.ps1 inside build-pack.bat/build.bat/build-app.bat.
 REM If another build is running, the child build aborts with a clear message.
-powershell -NoProfile -ExecutionPolicy Bypass -File "%PACK_PS1%" %*
+REM [2026-09-01] Always append -AutoCommit: auto collect+commit+push packaging
+REM side effects (versionCode/version bumps) after build, so they never pile up
+REM uncommitted and block the source-settled gate on the next build.
+REM Opt out by setting NO_AUTOCOMMIT=1 (side effects listed for manual commit).
+set "EXTRA_ARGS=-AutoCommit"
+if defined NO_AUTOCOMMIT set "EXTRA_ARGS="
+powershell -NoProfile -ExecutionPolicy Bypass -File "%PACK_PS1%" %* %EXTRA_ARGS%
 set "EXIT_CODE=%errorlevel%"
 
 if %EXIT_CODE% neq 0 (
