@@ -896,7 +896,9 @@
         input.addEventListener('input',_onInput);input.addEventListener('focus',_onInput);input.addEventListener('keydown',_onKey);
         input.addEventListener('blur',function(){setTimeout(_hideDD,150);});
         document.addEventListener('scroll',function(){if(_ddEl&&_ddEl.style.display!=='none')_posDD();},true);
-        window.addEventListener('resize',function(){if(_ddEl&&_ddEl.style.display!=='none')_posDD();});
+        // ★ 2026-09-01 冒烟沙箱兼容：smoke-runtime 的 window 桩无 addEventListener（document 桩有），
+        //   无 DOM 环境下加载不得抛错（S7 红线），resize 监听降级为可选。
+        try { window.addEventListener('resize',function(){if(_ddEl&&_ddEl.style.display!=='none')_posDD();}); } catch(_) {}
         document.addEventListener('mousedown',function(e){
             if(!_ddEl||_ddEl.style.display==='none')return;
             if(e.target===_ddEl||(_ddEl.contains&&_ddEl.contains(e.target)))return;
