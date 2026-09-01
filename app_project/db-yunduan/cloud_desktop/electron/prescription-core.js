@@ -59,7 +59,7 @@
 
     // 创建空药品对象（与各端 createEmptyMedicine 一致）
     function createEmptyMedicine() {
-        return { code: '', name: '', dosage: '', unit: 'g', price: '', total: '' };
+        return { code: '', name: '', dosage: '', unit: 'g', price: '', total: '', jianfa: '' };
     }
 
     // 计算单味药合计金额
@@ -125,6 +125,7 @@
             dosage: item.dosage || '',
             unit: item.unit || 'g',
             price: parseFloat(item.price) || 0,
+            jianfa: item.jianfa || '',
             total: parseFloat(item.total) || calculateItemTotal(item.price, item.dosage)
         }));
 

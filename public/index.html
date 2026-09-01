@@ -3935,7 +3935,7 @@ let currentUser = null;
         }
         
         function createEmptyMedicine() {
-            return {code:'', name:'', dosage:'', unit:'g', price:'', total:''};
+            return {code:'', name:'', dosage:'', unit:'g', price:'', total:'', jianfa:''};
         }
 
         function escapeHtml(str) {
@@ -5283,6 +5283,8 @@ let currentUser = null;
             const __medSafePrice = isNaN(parseFloat(price)) ? 0 : parseFloat(price);
             prescriptionItems[index].price = __medSafePrice.toFixed(2);
             prescriptionItems[index].dosage = actualDosage;
+            // 带入药库预设的煎煮方法（方案A）
+            prescriptionItems[index].jianfa = (medicine && medicine.jianfa) || '普通煎';
             prescriptionItems[index].total = (__medSafePrice * actualDosage).toFixed(2);
             if (index >= prescriptionItems.length - 3) addEmptyRow();
             DOM_CACHE.init();
@@ -5403,7 +5405,7 @@ let currentUser = null;
 
             let html = '<div class="prescription-grid-inner">';
             items.forEach(item =>{
-                html += `<div class="prescription-line"><span>${escapeHtml(item.name)}${escapeHtml(item.dosage)}${escapeHtml(item.unit)}</span></div>`;
+                html += `<div class="prescription-line"><span>${escapeHtml(item.name)}${escapeHtml(item.dosage)}${escapeHtml(item.unit)}${item.jianfa && item.jianfa !== '普通煎' ? '（'+escapeHtml(item.jianfa)+'）' : ''}</span></div>`;
             });
             html += '</div>';
             linesDiv.innerHTML = html;
@@ -6317,6 +6319,7 @@ let currentUser = null;
                 price: (function(){ const v = parseFloat(item.price); return isFinite(v) ? v : 0; })(),
                 unit: item.unit || 'g',
                 dosage: (function(){ const v = parseFloat(item.dosage); return isFinite(v) && v > 0 ? v : 10; })(),
+                jianfa: item.jianfa || '普通煎',
                 total: (function(){ const v = parseFloat(item.total); return isFinite(v) ? v : 0; })()
             }));
             while (prescriptionItems.length< 15) addEmptyRow();
@@ -8012,6 +8015,7 @@ let currentUser = null;
                     dosage: c.dosage,
                     unit: c.unit || med?.unit || 'g',
                     price: c.price || med?.price || 0,
+                    jianfa: (c.jianfa) || (med && med.jianfa) || '普通煎',
                     total: ((c.price || med?.price || 0) * c.dosage).toFixed(2)
                 };
             });
@@ -8039,7 +8043,7 @@ let currentUser = null;
 
             list.innerHTML = filteredMedicines.map((m,i) => {
                 const idx = medicines.indexOf(m);
-                return `<div style="display:flex;justify-content:space-between;padding:8px;border-bottom:1px solid #d0d0d0;"><div style="flex:1;"><div style="font-weight:bold;">${escapeHtml(m.name)}</div><div style="font-size:11px;color:#666;">简码：${escapeHtml(m.code)} | 进价：${formatPrice(m.costPrice)}元 | 单价：${formatPrice(m.price)}元/${escapeHtml(m.unit)}</div><div style="font-size:10px;color:#999;">用量：${m.dosage || '10'}${escapeHtml(m.unit)} | 库存：${m.stock || '0'}</div></div><div style="display:flex;gap:4px;"><button class="small-btn" onclick="editMedicine(${idx})">编辑</button><button class="small-btn" onclick="deleteMedicine(${idx})">删除</button></div></div>`;
+                return `<div style="display:flex;justify-content:space-between;padding:8px;border-bottom:1px solid #d0d0d0;"><div style="flex:1;"><div style="font-weight:bold;">${escapeHtml(m.name)}</div><div style="font-size:11px;color:#666;">简码：${escapeHtml(m.code)} | 进价：${formatPrice(m.costPrice)}元 | 单价：${formatPrice(m.price)}元/${escapeHtml(m.unit)}</div><div style="font-size:10px;color:#999;">用量：${m.dosage || '10'}${escapeHtml(m.unit)} | 库存：${m.stock || '0'} | 煎法：${escapeHtml(m.jianfa || '普通煎')}</div></div><div style="display:flex;gap:4px;"><button class="small-btn" onclick="editMedicine(${idx})">编辑</button><button class="small-btn" onclick="deleteMedicine(${idx})">删除</button></div></div>`;
             }).join('');
 
             if (filteredMedicines.length === 0) {
@@ -8061,6 +8065,9 @@ let currentUser = null;
         }
 
         let editingMedicineIndex = -1;
+
+        // ★ 中药特殊煎煮方法清单（方案A：药库预设）——单味药特殊煎煮法 + 默认普通煎
+        window.JIANFA_OPTIONS = ['普通煎', '先煎', '后下', '包煎', '烊化', '另煎', '冲服', '煎汤代水', '兑服'];
 
         function editMedicine(index) {
             editingMedicineIndex = index;
@@ -8090,6 +8097,7 @@ let currentUser = null;
                     '<div style="display:flex;gap:10px;"><div style="flex:1;"><label style="display:block;margin-bottom:4px;font-weight:bold;">单位</label><input type="text" id="medEditUnit" style="width:100%;padding:8px;border:1px solid #888;border-radius:4px;" placeholder="g" value="g"></div>' +
                     '<div style="flex:1;"><label style="display:block;margin-bottom:4px;font-weight:bold;">常用用量</label><input type="number" id="medEditDosage" style="width:100%;padding:8px;border:1px solid #888;border-radius:4px;" placeholder="10" value="10"></div></div>' +
                     '<div><label style="display:block;margin-bottom:4px;font-weight:bold;">库存数量</label><input type="number" id="medEditStock" style="width:100%;padding:8px;border:1px solid #888;border-radius:4px;" placeholder="0" value="0"></div>' +
+                    '<div><label style="display:block;margin-bottom:4px;font-weight:bold;">煎煮方法</label><select id="medEditJianfa" style="width:100%;padding:8px;border:1px solid #888;border-radius:4px;">' + (window.JIANFA_OPTIONS || ['普通煎']).map(function(o){ return '<option value="' + o + '">' + (o === '普通煎' ? o + '（默认）' : o) + '</option>'; }).join('') + '</select></div>' +
                     '</div></div>' +
                     '<div class="modal-footer"><button class="action-btn" onclick="closeMedicineEditModal()">取消</button><button class="action-btn primary" onclick="saveMedicineEdit()">保存</button></div>' +
                     '</div>';
@@ -8103,6 +8111,7 @@ let currentUser = null;
             document.getElementById('medEditUnit').value = m ? (m.unit || 'g') : 'g';
             document.getElementById('medEditDosage').value = m ? (m.dosage || 10) : 10;
             document.getElementById('medEditStock').value = m ? (m.stock || 0) : 0;
+            document.getElementById('medEditJianfa').value = m ? (m.jianfa || '普通煎') : '普通煎';
             modal.style.display = 'flex';
         }
 
@@ -8122,7 +8131,8 @@ let currentUser = null;
             const unit = document.getElementById('medEditUnit').value.trim() || 'g';
             const dosage = parseFloat(document.getElementById('medEditDosage').value) || 10;
             const stock = parseInt(document.getElementById('medEditStock').value) || 0;
-            const data = {name, code, costPrice, price, unit, dosage, stock};
+            const jianfa = document.getElementById('medEditJianfa').value || '普通煎';
+            const data = {name, code, costPrice, price, unit, dosage, stock, jianfa};
             if (editingMedicineIndex >= 0) {
                 medicines[editingMedicineIndex] = data;
             } else {
