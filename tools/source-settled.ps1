@@ -30,11 +30,29 @@
 # 非仓库环境（无 .git）：返回空（放行，不误拦）
 # ============================================================================
 param(
-    [string]$RepoRoot = '',
+    # ★ 2026-09-01 修复：本文件被 ensure-build-env 等 dot-source 时，param 默认值
+    #   会写进调用方作用域——原名 $RepoRoot 把 ensure-build-env.ps1 的同名变量
+    #   覆盖成 ''，导致 Step 1.5 崩溃（Join-Path 空串）。参数名必须带前缀防碰撞。
+    [string]$SettledRepoRoot = '',
     [switch]$Assert   # Node/CI 出口模式：未落定 exit 1
 )
 
 . (Join-Path $PSScriptRoot 'pack-side-effects.ps1')
+
+# ★ 2026-09-01 修复（PS 5.1 地雷）：调用方 $ErrorActionPreference='Stop' 时，
+#   native 命令（git）stderr 经 2>$null 重定向会把首行 stderr（如 CRLF warning）
+#   升级为 terminating NativeCommandError，直接炸掉门禁。所有 git 调用统一走
+#   本助手：临时降 EAP=Continue，stderr 静默丢弃，返回 stdout 行数组。
+function Invoke-GitQuiet {
+    param([string]$RepoRoot, [string[]]$GitArgs)
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        return @(& git -C $RepoRoot @GitArgs 2>$null) | Where-Object { $_ }
+    } finally {
+        $ErrorActionPreference = $prevEap
+    }
+}
 
 # 快照回退自动愈合清单：.trae/ 经验与规则文档（git 为唯一权威源，追加式维护）
 $script:SnapshotRevertAutoRestore = @(
@@ -50,7 +68,7 @@ $script:SnapshotRevertAutoRestore = @(
 # numstat 行格式：<增行数>TAB<删行数>TAB<路径>；二进制为 -TAB- 不匹配（按普通 blocker 处理）。
 function Test-IsSnapshotRevert {
     param([string]$RepoRoot, [string]$Path)
-    $numstat = @(& git -C $RepoRoot diff HEAD --numstat -- $Path 2>$null) | Where-Object { $_ }
+    $numstat = Invoke-GitQuiet -RepoRoot $RepoRoot -GitArgs @('diff', 'HEAD', '--numstat', '--', $Path)
     foreach ($ns in $numstat) {
         if ($ns -match '^(\d+)\t(\d+)\t') {
             return ([int]$Matches[1] -eq 0 -and [int]$Matches[2] -gt 0)
@@ -65,7 +83,7 @@ function Get-SourceSettledBlockers {
     $blockers = New-Object System.Collections.ArrayList
     if (-not (Test-Path -LiteralPath (Join-Path $RepoRoot '.git'))) { return @($blockers) }
 
-    $raw = @(& git -C $RepoRoot -c core.quotepath=false status --porcelain 2>$null) | Where-Object { $_ }
+    $raw = Invoke-GitQuiet -RepoRoot $RepoRoot -GitArgs @('-c', 'core.quotepath=false', 'status', '--porcelain')
     foreach ($line in $raw) {
         if ($line.Length -lt 4) { continue }
         $status2 = $line.Substring(0, 2)
@@ -75,14 +93,14 @@ function Get-SourceSettledBlockers {
         # build.gradle 需要 diff 行做精判；其余副作用整文件判定
         $diff = $null
         if ($path -match 'build\.gradle$') {
-            $diff = @(& git -C $RepoRoot diff HEAD -- $path 2>$null)
+            $diff = Invoke-GitQuiet -RepoRoot $RepoRoot -GitArgs @('diff', 'HEAD', '--', $path)
         }
         if (Test-IsPackSideEffect -GitPath $path -DiffLines $diff) { continue }
 
         # ★ 会话快照回退自动愈合（详见文件头注释）：纯删除 diff = 旧快照覆盖签名
         if (Test-IsSnapshotRevert -RepoRoot $RepoRoot -Path $path) {
             if ($script:SnapshotRevertAutoRestore -contains $path) {
-                & git -C $RepoRoot checkout HEAD -- $path 2>$null
+                Invoke-GitQuiet -RepoRoot $RepoRoot -GitArgs @('checkout', 'HEAD', '--', $path) | Out-Null
                 if ($LASTEXITCODE -eq 0) {
                     Write-Host "[自愈] $path 疑似被会话快照静默回退（纯删除 diff），已自动从 HEAD 恢复" -ForegroundColor Yellow
                     continue
