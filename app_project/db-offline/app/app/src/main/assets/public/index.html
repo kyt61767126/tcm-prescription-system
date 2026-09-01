@@ -5622,6 +5622,46 @@ let currentUser = null;
             showRecycleBin();
         }
 
+        // ★ 2026-09-01 同日覆盖配套：被覆盖的当天重复处方静默归档进回收站（可恢复）。
+        //   与手动删除路径一致（IndexedDB 回收站 + localStorage 回收站 + 云端软删除 + 删除标记），
+        //   但不弹确认框、不扣减试用计数；用户可从回收站恢复。
+        async function silentArchiveDupRx(d) {
+            if (!d || d.id === undefined || d.id === null) return;
+            try {
+                const trashRecord = Object.assign({}, d, {
+                    deletedAt: new Date().toISOString(),
+                    deletedBy: (typeof currentUser !== 'undefined' && currentUser?.username) || 'unknown',
+                    _archivedReason: 'same_day_overwrite'
+                });
+                try {
+                    const database = await openDB();
+                    await new Promise((resolve, reject) => {
+                        const tx = database.transaction(['prescriptions_trash'], 'readwrite');
+                        const req = tx.objectStore('prescriptions_trash').put(trashRecord);
+                        req.onsuccess = () => resolve();
+                        req.onerror = () => reject(req.error);
+                        tx.onabort = () => reject(tx.error || new Error('事务被中止'));
+                    });
+                } catch (e) { console.warn('[同日覆盖] 写入IndexedDB回收站失败:', e); }
+                try {
+                    const rbKey = 'recycleBin_' + (currentUser ? currentUser.username : 'default');
+                    const bin = JSON.parse(localStorage.getItem(rbKey) || '[]');
+                    if (!bin.some(r => r.id === d.id)) {
+                        bin.unshift(trashRecord);
+                        if (bin.length > 50) bin.splice(50);
+                        localStorage.setItem(rbKey, JSON.stringify(bin));
+                    }
+                } catch(e) { console.warn('[同日覆盖] 写入localStorage回收站失败:', e); }
+                await deletePrescriptionFromDB(d.id);
+                addDeletedRxId(d.id);
+                try { deletePrescriptionFromCloud(d.id); } catch (e) { console.warn('[同日覆盖] 云端软删除同步失败:', e); }
+                prescriptionHistory = prescriptionHistory.filter(p => p.id !== d.id);
+                try { if (window.AuditLog) AuditLog.record('archive_duplicate_rx', (d.patientName || '') + ' [' + (d.prescriptionNo || '') + '] 同日覆盖自动归档'); } catch(e) {}
+            } catch (e) {
+                console.warn('[同日覆盖] 重复处方归档失败:', e);
+            }
+        }
+
         function deleteFromRecycleBin(id) {
             if (!confirm('彻底删除后无法恢复，确定吗？')) return;
             const bin = getRecycleBin();
@@ -5927,7 +5967,34 @@ let currentUser = null;
             // 3. 序号 + 1，不足两位前置补 0
             // 4. 拼接完整编号（YYMMDD + 两位序号）
             // 5. 将当日最新序号回写存入 global_max_serial 持久保存
-            const newPrescriptionNo = await generatePrescriptionNoForSave();
+            // ★ 2026-09-01 同日同患者覆盖规则：同一患者当天只保留一张处方，
+            //   修改后再次保存自动覆盖当天处方，编号沿用当天首张编号，不递增序号。
+            //   匹配：患者姓名相同 + 当天（date 或编号前缀）+ 同一开方医师；
+            //   历史遗留无 createdBy 的本地记录视为本人记录。
+            const _meName = (currentUser && currentUser.username) || '';
+            const _isTodayRx = function(p) {
+                if (!p) return false;
+                if ((p.patientName || '').trim() !== name.trim()) return false;
+                const sameDay = (p.date === currentDate) ||
+                    (p.prescriptionNo && String(p.prescriptionNo).indexOf(datePrefix) === 0) ||
+                    (p.outpatientNo && String(p.outpatientNo).indexOf(datePrefix) === 0);
+                if (!sameDay) return false;
+                if (p.createdBy && _meName && p.createdBy !== _meName) return false;
+                return true;
+            };
+            const todayMatches = prescriptionHistory.filter(_isTodayRx)
+                .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+            const todayExisting = todayMatches[0] || null;
+            // 当天同患者的其余重复处方（覆盖成功后静默归档进回收站，可恢复）
+            const todayDupes = todayMatches.slice(1);
+
+            // 覆盖当天处方：沿用原编号（不递增序号）；否则分配新编号
+            let newPrescriptionNo;
+            if (todayExisting) {
+                newPrescriptionNo = todayExisting.prescriptionNo || todayExisting.outpatientNo || todayExisting.clinicNo;
+            } else {
+                newPrescriptionNo = await generatePrescriptionNoForSave();
+            }
             
             document.getElementById('visitDate').value = currentDate;
             document.getElementById('paperDate').textContent = currentDate;
@@ -5954,9 +6021,12 @@ let currentUser = null;
             const updatedMedicineTotal = updatedItems.reduce((sum, item) => sum + (parseFloat(item.total) || 0), 0);
             const updatedTotalAmount = updatedMedicineTotal * doseCount + (parseFloat(document.getElementById('registrationFee2')?.value || document.getElementById('registrationFee')?.value || '0') || 0);
             
-            const record = {
-                id: Date.now(),
+            // ★ 2026-09-01 覆盖当天处方时：以旧记录为底（保留 id/编号/创建时间/创建者/媒体文件/收费状态），
+            //   新内容字段覆盖之；云端按 id 合并同样保留原编号。
+            const record = Object.assign({}, todayExisting, {
+                id: todayExisting ? todayExisting.id : Date.now(),
                 prescriptionNo: newPrescriptionNo,
+                outpatientNo: newPrescriptionNo,
                 date: currentDate,
                 patientName: name,
                 patientGender: document.getElementById('patientGender').value,
@@ -5971,10 +6041,13 @@ let currentUser = null;
                 totalAmount: updatedTotalAmount,
                 registrationFee: parseFloat(document.getElementById('registrationFee2')?.value || '0') || 0,
                 // 新增字段
-                createdAt: now.getTime(), // 生成时间戳
-                createdBy: currentUser?.username || '', // 登录用户名
-                createdByName: currentUser?.name || '' // 登录用户姓名
-            };
+                createdAt: todayExisting ? (todayExisting.createdAt || now.getTime()) : now.getTime(), // 生成时间戳（覆盖时保留首建时间）
+                createdBy: todayExisting ? (todayExisting.createdBy || currentUser?.username || '') : (currentUser?.username || ''), // 登录用户名
+                createdByName: todayExisting ? (todayExisting.createdByName || currentUser?.name || '') : (currentUser?.name || ''), // 登录用户姓名
+                updatedAt: now.getTime(), // 覆盖更新时间戳
+                updatedBy: currentUser?.username || '',
+                updatedByName: currentUser?.name || ''
+            });
             
             // P7: 单条保存到 prescriptions store（O(1) 增量写入，替代全量重写）
             // ★ 优化2：处方保存事务包装，确保数据一致性
@@ -5987,12 +6060,19 @@ let currentUser = null;
             }
 
             // 更新内存数组（会话内查询源，按权限保持一致）
-            prescriptionHistory.unshift(record);
-            if (prescriptionHistory.length > 100000) prescriptionHistory = prescriptionHistory.slice(0, 100000);
-            // ★ 优化3：审计日志 - 处方保存成功
-            try { if (window.AuditLog) AuditLog.record('save_prescription', (record.patientName || '') + ' [' + (record.prescriptionNo || '') + '] ' + (record.items || []).length + '味药'); } catch(e) {}
-            // ★ v2: 处方计数+1（试用版限制检查）
-            if (window.electronAPI && window.electronAPI.license && window.electronAPI.license.incrementPrescription) {
+            // ★ 2026-09-01 覆盖当天处方：同 id 原位替换，不新增；否则头部插入
+            if (todayExisting) {
+                const _existIdx = prescriptionHistory.findIndex(p => p.id === record.id);
+                if (_existIdx >= 0) prescriptionHistory[_existIdx] = record;
+                else prescriptionHistory.unshift(record);
+            } else {
+                prescriptionHistory.unshift(record);
+                if (prescriptionHistory.length > 100000) prescriptionHistory = prescriptionHistory.slice(0, 100000);
+            }
+            // ★ 优化3：审计日志 - 处方保存成功（覆盖更新单独标注）
+            try { if (window.AuditLog) AuditLog.record('save_prescription', (record.patientName || '') + ' [' + (record.prescriptionNo || '') + '] ' + (record.items || []).length + '味药' + (todayExisting ? '（同日覆盖更新）' : '')); } catch(e) {}
+            // ★ v2: 处方计数+1（试用版限制检查）——覆盖当天处方不算新开方，不递增计数
+            if (!todayExisting && window.electronAPI && window.electronAPI.license && window.electronAPI.license.incrementPrescription) {
                 try { await window.electronAPI.license.incrementPrescription(); } catch(e) { console.warn('[License] 处方计数+1失败:', e); }
             }
             
@@ -6012,13 +6092,23 @@ let currentUser = null;
             clearTimeout(__autoUnlockRx);
             window.__savingRxBusy = false;
             try { clearPrescription(); } catch (e) { console.warn('清空表单失败:', e); }
-            try { showToast('处方保存成功：' + newPrescriptionNo); } catch (e) {}
+            try { showToast(todayExisting ? ('处方已更新（覆盖当天原处方）：' + newPrescriptionNo) : ('处方保存成功：' + newPrescriptionNo)); } catch (e) {}
 
             // ★ 优化：辅助操作异步化，不阻塞用户操作
             // 生成处方签图片(canvas.toDataURL同步耗时)、收集媒体文件(扫描目录)、更新药品频次、自动备份(JSON.stringify同步耗时)、刷新历史列表
             // 全部放到 setTimeout(0) 中，让 UI 先渲染清空表单+成功提示
             setTimeout(function() {
                 try { savePrescriptionAsImage(record, newPrescriptionNo); } catch (e) { console.warn('生成处方图片失败:', e); }
+                // ★ 2026-09-01 同日覆盖：把当天同患者的旧重复处方静默归档进回收站（可恢复，不弹确认、不扣试用计数）
+                if (todayDupes && todayDupes.length) {
+                    (function() {
+                        Promise.all(todayDupes.map(function(d) { return silentArchiveDupRx(d); }))
+                            .then(function() {
+                                try { renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15)); } catch(e) {}
+                            })
+                            .catch(function() {});
+                    })();
+                }
                 // 保存处方后，把最近拍照录像的文件绑定到当前患者姓名（支持先拍照后录入姓名的流程）
                 try {
                     var oldMediaName = window.__lastUsedMediaPatientName || localStorage.getItem('lastUsedMediaPatientName') || '';
