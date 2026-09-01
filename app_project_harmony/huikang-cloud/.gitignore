@@ -10,3 +10,5 @@
 /.clang-tidy
 **/.test
 /.appanalyzer
+# 签名材料（私钥/证书/Profile/口令），严禁入库
+/sign-materials

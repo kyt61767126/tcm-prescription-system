@@ -368,3 +368,56 @@ node "D:\Program Files\Huawei\DevEco Studio\tools\hvigor\bin\hvigorw.js" --mode 
 
 * 【P1-6 待办】Week2 实现 readFileAsBase64/deleteFile 时必须加调用来源校验（controller.getUrl() host 严格比对云端，非云端返回 permission denied），防 XSS 读写沙箱。
 
+### Week2（2026-09-01 已闭环编译）：22 方法全实现
+
+**沙箱目录布局**（「沙箱+Picker」铁律）：
+
+* 媒体：`{filesDir}/惠康中医媒体/YYYY-MM/`（图片视频同目录）
+
+* 备份 JSON：`{filesDir}/backups/`（一键恢复链路完整：listBackupFiles 时间倒序取 20 个 → readBackupFile）
+
+* 媒体备份副本：`{filesDir}/媒体备份/YYYY-MM/`（backupMedia 目标；重装后失效，跨安装迁移 Week3 评估文件选择器导入）
+
+* saveBackupFile 成功后异步唤起系统分享（sendData + uri 授权 flag），用户可选「保存到文件」导出公共目录
+
+**鸿蒙 API 落地经验**：
+
+* fs 全同步 API 可用：`listFileSync/mkdirSync(path,true)/openSync(path,fs.OpenMode.x).fd/readSync(fd,buf)/writeSync(fd,bytes)/statSync/moveFileSync/renameSync/unlinkSync/copyFileSync/accessSync`
+
+* `new util.Base64Helper().encodeToStringSync(u8)/decodeSync(str)`（注意 new，不是 util.createSync）
+
+* `fileUri.getUriFromPath(path)` → `file://` URI；跨应用打开用 want `action:'ohos.want.action.viewData', uri, type: mime, flags:0x1`（FLAG\_AUTH\_READ\_URI\_PERMISSION 临时授权读，系统应用才能读沙箱文件）
+
+* 打印：**print.print(files, context) 不支持 .html**（仅 pdf/图片/office/txt/xml，且需 ohos.permission.PRINT 权限）→ Week2 降级方案：HTML 写 cacheDir/print 临时文件 + viewData(text/html) 调系统应用打开；Week3 真机验证后评估 PrintDocumentAdapter+PDF
+
+* readSync 返回实际读取字节数，须 `new Uint8Array(buf).slice(0, read)` 精确切片再 base64
+
+* ArkTS：`Array<Record<string,Object>>` 赋给 `Record<string,Object>` 字段用 `arr as Object` 编译可过；fs 同步函数会触发 "Function may throw exceptions" WARN（可接受）
+
+* 版本号：`bundleManager.getBundleInfoForSelfSync(BundleFlag.GET_BUNDLE_INFO_DEFAULT).versionName/versionCode` 动态注入，防硬编码漂移
+
+* 桥需持有 webview\.WebviewController 做 P1-6 来源校验（`controller.getUrl()` host 严格比对）+ 路径白名单 normalizePath 消 `../`
+
+**P1-6 已实现**：readFileAsBase64/deleteFile 入口校验 isCallerAllowed（云端 host）+ isMediaPathAllowed（媒体/媒体备份目录前缀）；openFile/startReadSession 仅路径白名单。
+
+**Week2 Seed-2.1-Pro 独立审查修复（2026-09-01，22 桥全实现 + 编译复通过 BUILD SUCCESSFUL）**：
+
+* 【安全核对结论·照抄】安卓 isSensitiveOperation 仅含 `readFileAsBase64`/`deleteFile` 两个 → 鸿蒙 invoke 入口仅这两 case 加 isCallerAllowed（host 正则严格相等，fail-closed）；startReadSession/openFile 不加来源校验、改路径白名单（对齐安卓注释：避免 WebView URL 短暂变化误拦截）；路径白名单 = 沙箱媒体目录 + 媒体备份目录，normalizePath 后必须 `startsWith(root + '/')`，防 `../` 逃逸。
+* 【对齐】敏感操作参数/返回字段逐字核对安卓：saveVideoFile 返回 success/filePath/directory/fileName；getMediaStats 返回 success/count/totalBytes/backCount；renameMediaFiles 参数 oldPatientName/newPatientName（均 fallback patientName）/oldNo/newNo；分片 256KB/片。
+* 【功能修复】printPrescription 的 **orientation 参数曾被丢弃**（安卓 portrait/landscape 对应 A5 纵/横向）→ 补回参数并向 HTML 注入 `@page{size:A5 landscape|portrait;margin:0}`，降级 viewData 打开浏览器/WPS 打印时纸张方向生效（对齐安卓 PrintAttributes ISO_A5/NO_MARGINS）。
+* 【返回值修复】saveBackupFile 的 filePath 禁止塞中文提示尾巴（前端可能展示）→ 返回干净沙箱路径；导出引导走分享面板本身。
+* 【IO 坑】**鸿蒙 fs.readSync 到文件尾返回 0（安卓 FileInputStream.read 返回 -1）**，readNextChunk 必须 `read <= 0` 判 EOF，只判 `<0` 会死循环发空片。
+* 【资源泄漏】readSessions/mediaSessions 两个 Map 加上限 32：超限关闭最旧会话（read 关 fd、media 删 cacheDir 临时文件），防前端异常未 close 导致 fd/临时文件泄漏；readTextFile 的 closeSync 必须放 finally。
+* 【容错】所有递归扫描/重命名/统计函数（scanDirByNameOnly/scanDirWithPrefixes/scanDirByNameAndTime/countFilesRecursive/renameFilesInDir）循环体内 statSync 单文件 try/catch 跳过——对齐安卓 listFiles 容错，单个坏文件不得拖垮整批扫描。ArkTS 对 fs 同步 API 报 "Function may throw exceptions" 是保守 WARN，try/catch 包住后仍报，不阻断构建，可忽略。
+* 【教训·防复发】会话压缩恢复后旧快照曾静默覆盖 KNOWLEDGE.md，导致 Week2 章节丢失并误提交（commit 28bcb9c0）；**铁律：每次会话恢复后先 git status + git diff 核对关键文档行数，发现 KNOWLEDGE.md 被旧快照覆盖立即 `git checkout <上一个含新内容的commit> -- .trae/KNOWLEDGE.md` 字节级恢复**。
+* 【Week3 真机验证项】① backupMedia/restoreMedia 沙箱内复制，卸载即丢（安卓双写公共 Download/中医处方系统/media/），媒体持久化需评估 SaveButton/批量分享导出，saveBackupFile 已用 sendData 分享导出 JSON（uri 沙箱 fileUri + flags 0x1 授读，失败静默不影响主保存）；② printHtml 降级 viewData，PDF/无边距真机效果待验；③ isCallerAllowed 在桥代理线程调 getUrl() 的运行时表现待验（catch fail-closed 已兜底）；④ 'ohos.want.action.sendData'/'viewData' 为系统隐式 action 字符串常量，编译不校验，真机接收方兼容性待验。
+
+**发布签名材料（2026-09-01 本地已生成，等实名认证审核通过）**：
+
+* 材料目录 `app_project_harmony/huikang-cloud/sign-materials/`（已 gitignore，**私钥/口令严禁入库**；口令在本地 `口令备忘.txt`，KNOWLEDGE 不记录）：`huikang-cloud.p12`（RSA2048 密钥库，alias=huikang-cloud）+ `huikang-cloud.csr`（968B，上传 AGC 用）。
+* 生成命令（工具 `sdk/default/openharmony/toolchains/lib/hap-sign-tool.jar`，用 DevEco 自带 jbr java 25 运行）：
+  `generate-keypair -keyAlias huikang-cloud -keyPwd <口令> -keyAlg RSA -keySize 2048 -keystoreFile <p12路径> -keystorePwd <口令>`
+  `generate-csr -keyAlias huikang-cloud -keyPwd <口令> -subject "CN=huikang-tcm, OU=huikang, O=huikang, C=CN" -signAlg SHA256withRSA -keystoreFile <p12> -keystorePwd <口令> -outFile <csr路径>`
+* **前置卡点**：AGC 一切签名操作（发布证书/Profile/DevEco 自动签名）都要求开发者实名认证。实名认证入口 URL：`https://developer.huawei.com/consumer/cn/verified/authentication-review?type=1`（AGC 头像菜单"去认证"链接在下拉里、自动化点击坐标常被拦截，直接给这个 URL 最稳）；个人认证=姓名+身份证+手机人脸识别，审核 1-2 个工作日，邮件通知。2026-09-01 已提交，审核中。
+* **认证通过后续做（一次性）**：① AGC「用户与权限 > 证书管理」新增**发布证书**，上传 huikang-cloud.csr → 下载 .cer 放 sign-materials/；② AGC「我的项目」创建项目+添加 **HarmonyOS 应用**（包名必须 com.tcm.prescription）；③ 「Profile 管理」新建**发布 Profile**（选应用+证书）→ 下载 .p7b 放 sign-materials/；④ 填 build-profile.json5 的 app.signingConfigs（material: certpath=.cer / profile=.p7b / storeFile=.p12 + storePassword/keyPassword/keyAlias/signAlg=SHA256withRSA/storeType=PKCS12），products.default 引用该 signingConfig；⑤ hvigorw assembleHap 出**已签名** HAP（产物从 entry-default-unsigned.hap 变为 signed）。
+* 经验：hap-sign-tool 的 generate-keypair **没有** -validity 参数（老教程有，现版本报错），照 -h 实际 usage 走；密码一旦生成不可回溯，必须落本地备忘；签名报错优先用 hap-sign-tool sign-app 直接暴露材料格式问题，不要先怀疑设备。
