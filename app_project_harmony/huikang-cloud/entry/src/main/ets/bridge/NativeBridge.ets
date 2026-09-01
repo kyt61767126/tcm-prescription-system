@@ -143,7 +143,7 @@ export class NativeBridge {
 
         // ---------- 打印 ----------
         case 'printPrescription':
-          return this.printHtml(optStr(args, 'html'));
+          return this.printHtml(optStr(args, 'html'), optStr(args, 'orientation'));
 
         // ---------- 官网付款导引 ----------
         case 'openExternalUrl':
@@ -161,15 +161,25 @@ export class NativeBridge {
   }
 
   /**
-   * printHtml：安卓端为"调起系统打印"入口。
+   * printHtml：安卓端为"调起系统打印"入口（orientation: portrait/landscape，A5 纸张）。
    * 鸿蒙 print.print 不支持 .html（仅 pdf/图片/office/txt/xml），
-   * Week2 降级：HTML 写临时文件 + viewData 调系统应用打开（浏览器/WPS 可打印/另存）。
+   * Week2 降级：HTML 注入 @page 方向样式后写临时文件 + viewData 调系统应用打开
+   *   （浏览器/WPS 打开后用户点打印，@page size 控制 A5 纵/横向，对齐安卓纸张设置）。
    * Week3 真机验证后评估 PrintDocumentAdapter + PDF 渲染方案。
    */
-  printHtml(html: string): string {
+  printHtml(html: string, orientation: string = 'portrait'): string {
     try {
       if (!html || html.length === 0) {
         return failJson('打印内容为空');
+      }
+      const isLandscape: boolean = orientation === 'landscape';
+      // 注入 @page 规则：A5 + 纵/横向 + 无边距（对齐安卓 PrintAttributes ISO_A5/NO_MARGINS）
+      const pageCss: string = `<style>@page{size:A5 ${isLandscape ? 'landscape' : 'portrait'};margin:0;}</style>`;
+      let htmlWithCss: string = html;
+      if (htmlWithCss.toLowerCase().includes('</head>')) {
+        htmlWithCss = htmlWithCss.replace(/<\/head>/i, `${pageCss}</head>`);
+      } else {
+        htmlWithCss = pageCss + htmlWithCss;
       }
       const stamp: string = formatTime(new Date());
       const fileName: string = `惠康中医处方_${stamp}.html`;
@@ -178,7 +188,7 @@ export class NativeBridge {
       const path: string = `${dir}/${fileName}`;
       const fd: number = fs.openSync(path, fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE
         | fs.OpenMode.TRUNC).fd;
-      fs.writeSync(fd, html);
+      fs.writeSync(fd, htmlWithCss);
       fs.closeSync(fd);
 
       const uri: string = fileUri.getUriFromPath(path);
@@ -293,6 +303,21 @@ export class NativeBridge {
       }
       const info: MediaSessionInfo = new MediaSessionInfo();
       info.tempPath = tempPath;
+      // 会话上限保护：前端异常未 commit/abort 时防临时文件堆积（清理最旧会话）
+      if (this.mediaSessions.size >= 32) {
+        const oldestKey: string | undefined = this.mediaSessions.keys().next().value;
+        if (oldestKey !== undefined) {
+          const stale: MediaSessionInfo | undefined = this.mediaSessions.get(oldestKey);
+          if (stale !== undefined) {
+            try {
+              if (fs.accessSync(stale.tempPath)) {
+                fs.unlinkSync(stale.tempPath);
+              }
+            } catch (e) { /* 忽略清理异常 */ }
+          }
+          this.mediaSessions.delete(oldestKey);
+        }
+      }
       this.mediaSessions.set(sessionId, info);
       const r: Record<string, Object> = {
         'success': true,
@@ -471,7 +496,7 @@ export class NativeBridge {
       const r: Record<string, Object> = {
         'success': true,
         'fileName': safeName,
-        'filePath': `${dir}/${safeName}（已弹出分享，可选「保存到文件」导出）`
+        'filePath': `${dir}/${safeName}`
       };
       return JSON.stringify(r);
     } catch (e) {
@@ -835,6 +860,13 @@ export class NativeBridge {
       info.readOffset = 0;
       info.mimeType = mimeForFile(filePath);
       const sessionId: string = `read_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+      // 会话上限保护：前端异常未 close 时防 fd 泄漏（超出关闭最旧会话）
+      if (this.readSessions.size >= 32) {
+        const oldestKey: string | undefined = this.readSessions.keys().next().value;
+        if (oldestKey !== undefined) {
+          this.closeReadSession(oldestKey);
+        }
+      }
       this.readSessions.set(sessionId, info);
       const r: Record<string, Object> = {
         'success': true,
@@ -863,7 +895,8 @@ export class NativeBridge {
     try {
       const buf: ArrayBuffer = new ArrayBuffer(READ_CHUNK_SIZE);
       const read: number = fs.readSync(info.fd, buf);
-      if (read < 0) {
+      // 鸿蒙 readSync 到文件尾返回 0（安卓 FileInputStream.read 返回 -1），统一按 EOF 处理
+      if (read <= 0) {
         const r: Record<string, Object> = {
           'success': true,
           'chunk': '',
@@ -1041,8 +1074,11 @@ function readTextFile(path: string): string {
   const size: number = fs.statSync(path).size;
   const buf: ArrayBuffer = new ArrayBuffer(size);
   const fd: number = fs.openSync(path, fs.OpenMode.READ_ONLY).fd;
-  fs.readSync(fd, buf);
-  fs.closeSync(fd);
+  try {
+    fs.readSync(fd, buf);
+  } finally {
+    fs.closeSync(fd); // 防 readSync 异常时 fd 泄漏
+  }
   const decoder: util.TextDecoder = util.TextDecoder.create('utf-8');
   return decoder.decodeToString(new Uint8Array(buf));
 }
@@ -1111,7 +1147,12 @@ function countFilesRecursive(dir: string): number {
   const children: string[] = listFilesSafe(dir);
   for (const child of children) {
     const p: string = `${dir}/${child}`;
-    const st: fs.Stat = fs.statSync(p);
+    let st: fs.Stat;
+    try {
+      st = fs.statSync(p); // 单文件损坏/竞态时跳过
+    } catch (e) {
+      continue;
+    }
     if (st.isDirectory()) {
       n += countFilesRecursive(p);
     } else if (st.isFile()) {
@@ -1149,7 +1190,12 @@ function scanDirWithPrefixes(dir: string, prefix1: string, prefix2: string,
   const children: string[] = listFilesSafe(dir);
   for (const child of children) {
     const p: string = `${dir}/${child}`;
-    const st: fs.Stat = fs.statSync(p);
+    let st: fs.Stat;
+    try {
+      st = fs.statSync(p); // 单文件损坏/竞态时跳过
+    } catch (e) {
+      continue;
+    }
     if (st.isDirectory()) {
       scanDirWithPrefixes(p, prefix1, prefix2, files, foundPaths);
       continue;
@@ -1177,7 +1223,12 @@ function scanDirByNameAndTime(dir: string, patientName: string, startTime: numbe
   const children: string[] = listFilesSafe(dir);
   for (const child of children) {
     const p: string = `${dir}/${child}`;
-    const st: fs.Stat = fs.statSync(p);
+    let st: fs.Stat;
+    try {
+      st = fs.statSync(p); // 单文件损坏/竞态时跳过
+    } catch (e) {
+      continue;
+    }
     if (st.isDirectory()) {
       scanDirByNameAndTime(p, patientName, startTime, endTime, files, foundPaths);
       continue;
@@ -1212,7 +1263,12 @@ function scanDirByNameOnly(dir: string, keyword: string,
   const children: string[] = listFilesSafe(dir);
   for (const child of children) {
     const p: string = `${dir}/${child}`;
-    const st: fs.Stat = fs.statSync(p);
+    let st: fs.Stat;
+    try {
+      st = fs.statSync(p); // 单文件损坏/竞态时跳过，不影响整批扫描（对齐安卓 listFiles 容错）
+    } catch (e) {
+      continue;
+    }
     if (st.isDirectory()) {
       scanDirByNameOnly(p, keyword, files, foundPaths);
       continue;
@@ -1242,7 +1298,12 @@ function renameFilesInDir(dir: string, oldPrefix: string, newPrefix: string,
   const children: string[] = listFilesSafe(dir);
   for (const child of children) {
     const p: string = `${dir}/${child}`;
-    const st: fs.Stat = fs.statSync(p);
+    let st: fs.Stat;
+    try {
+      st = fs.statSync(p); // 单文件损坏/竞态时跳过，不影响整批重命名
+    } catch (e) {
+      continue;
+    }
     if (st.isDirectory()) {
       count += renameFilesInDir(p, oldPrefix, newPrefix, renamedFiles);
       continue;
