@@ -1,0 +1,9 @@
+{
+  "name": "entry",
+  "version": "1.0.0",
+  "description": "惠康中医云端版 entry 模块（HarmonyOS NEXT）",
+  "main": "",
+  "author": "",
+  "license": "",
+  "dependencies": {}
+}

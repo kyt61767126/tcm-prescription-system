@@ -30,6 +30,7 @@
 * ★ 2026-09-01 模型调度铁律（GLM-5.3 专属补贴 0.4x 版 · 本平台内置无 Flash，仅 GLM-5.3 四折）—— 禁止 Auto Mode 自动切模型，严格按「一句话决策法」手动选：
 
   **① 一句话决策法（小白必背，不要查表）：**
+
   ```
   ▸ 我要做【方案/决策/工期/评估/代码审查】→ Seed-2.1-Pro（强制）；决策完再让 GLM-5.3 过一遍（几乎免费的交叉意见，0.4x≈1×积分当量）
   ▸ 我要做【写代码/改代码/修 Bug】→ 一律 GLM-5.3（0.4x 补贴）。同 Seed-Code 价位（≈1×基准），但 Terminal-Bench 3.0 28.3 分（前代 4.6 分），DeepSWE 66.9 > DeepSeek V4-Pro 62.7，CyberGym 安全第一
@@ -42,17 +43,18 @@
   **② 三段式分工流程（省 40% 积分 + 质量不降）：** 扫（Turbo 批量拉清单）→ 策（Pro 做方案决策）→ 实（GLM-5.3 写代码）。禁止把「扫清单+做决策+写代码」全堆给 Seed-2.1-Pro 一把梭。
 
   **③ 9 大场景详细模型矩阵（含积分当量对比，基准=Seed-Code=1×）：**
-  | # | 场景 | 推荐模型 | 积分当量 | 高效/稳定/经济 | 备注 |
-  |---|---|---|---|---|---|
-  | 1 | 🧭 战略决策（可行性/工期/方案/风险评估/上架策略） | Seed-2.1-Pro 强制 + GLM-5.3 交叉二意见 | 2.5× + 1× | 中文业务语境最贴合 + 跨领域HLE补充 | 决策错=100×返工，Pro 一次写对最省钱 |
-  | 2 | 🔍 批量扫描提取（6份index差异/8处版本号/桥方法清单） | Seed-2.1-Turbo 专属 | ≈0.8× | 提取专用 | 仅输出结构化列表，不做判断 |
-  | 3 | 💻 简单代码修改（<200行 版本号/文案/脚本/按钮） | Seed-Code 或 GLM-5.3（同价位任选） | 1× / 1× | GLM一次写对率更高（少返工更省） | 小白用户直接选 GLM 更省心 |
-  | 4 | 💻 中等实现（200-1000行 下载器/漏洞修复/桥方法翻译） | **GLM-5.3（主推荐）** + Pro 审查 | 1× | 同价位旗舰写中型代码 | 中等任务返工率降低 50% |
-  | 5 | 🔐 高复杂度后端/安全链路（HUKS/License验签/激活Bridge/云授权） | **GLM-5.3（主推荐）** ｜ DeepSeek V4-Flash（谷时高缓存命中>70%备选） | 1× / ≈0.6× | CyberGym 安全基因 + DeepSWE 66.9 修复率第一 | 安全链路贵 0.4× 换安全升一档极划算 |
-  | 6 | 🆘 深层疑难Bug/大重构（白屏/加密错/数据损坏/架构变） | **DeepSeek V4-Pro（第一）** + GLM-5.3 双核交叉定位 | 3× + 1× | V4-Pro竞技编程最强；GLM补安全视角 | 双核交叉省 2-3 轮反复排查，远大于增加的1× |
-  | 7 | ✅ 代码独立审查（每轮强制） | **Seed-2.1-Pro 日常强制** + 高风险修改后追加 GLM-5.3 二查 + **月底强制 GLM-5.3 全库漏洞扫描** | 2.5× ×N + 1××N追加 + ≈0.8×/月 | **最值的一环**：Pro审查+GLM月扫=避 admin-status 级漏洞≈省50-100单位修复+客户损失 | 独立新轮次新开Pro，不可顺手写代码模型自审 |
-  | 8 | 📝 文案/合规文档 | 隐私政策→Seed-2.1-Pro；其他文案→GLM-5.3 | 2.5× / 1× | Pro合规严谨，GLM文案流畅同价 | |
-  | 9 | 🎨 视觉/多模态（当前无GLM-5V） | 截图转文字描述 + Seed/GLM 纯文本理解 | 1× | | 等平台后续支持多模态模型再补 |
+
+  | # | 场景                                          | 推荐模型                                                                  | 积分当量                       | 高效/稳定/经济                                                  | 备注                       |
+  | - | ------------------------------------------- | --------------------------------------------------------------------- | -------------------------- | --------------------------------------------------------- | ------------------------ |
+  | 1 | 🧭 战略决策（可行性/工期/方案/风险评估/上架策略）                | Seed-2.1-Pro 强制 + GLM-5.3 交叉二意见                                       | 2.5× + 1×                  | 中文业务语境最贴合 + 跨领域HLE补充                                      | 决策错=100×返工，Pro 一次写对最省钱   |
+  | 2 | 🔍 批量扫描提取（6份index差异/8处版本号/桥方法清单）            | Seed-2.1-Turbo 专属                                                     | ≈0.8×                      | 提取专用                                                      | 仅输出结构化列表，不做判断            |
+  | 3 | 💻 简单代码修改（<200行 版本号/文案/脚本/按钮）               | Seed-Code 或 GLM-5.3（同价位任选）                                            | 1× / 1×                    | GLM一次写对率更高（少返工更省）                                         | 小白用户直接选 GLM 更省心          |
+  | 4 | 💻 中等实现（200-1000行 下载器/漏洞修复/桥方法翻译）           | **GLM-5.3（主推荐）** + Pro 审查                                             | 1×                         | 同价位旗舰写中型代码                                                | 中等任务返工率降低 50%            |
+  | 5 | 🔐 高复杂度后端/安全链路（HUKS/License验签/激活Bridge/云授权） | **GLM-5.3（主推荐）** ｜ DeepSeek V4-Flash（谷时高缓存命中>70%备选）                   | 1× / ≈0.6×                 | CyberGym 安全基因 + DeepSWE 66.9 修复率第一                        | 安全链路贵 0.4× 换安全升一档极划算     |
+  | 6 | 🆘 深层疑难Bug/大重构（白屏/加密错/数据损坏/架构变）             | **DeepSeek V4-Pro（第一）** + GLM-5.3 双核交叉定位                              | 3× + 1×                    | V4-Pro竞技编程最强；GLM补安全视角                                     | 双核交叉省 2-3 轮反复排查，远大于增加的1× |
+  | 7 | ✅ 代码独立审查（每轮强制）                              | **Seed-2.1-Pro 日常强制** + 高风险修改后追加 GLM-5.3 二查 + **月底强制 GLM-5.3 全库漏洞扫描** | 2.5× ×N + 1××N追加 + ≈0.8×/月 | **最值的一环**：Pro审查+GLM月扫=避 admin-status 级漏洞≈省50-100单位修复+客户损失 | 独立新轮次新开Pro，不可顺手写代码模型自审   |
+  | 8 | 📝 文案/合规文档                                  | 隐私政策→Seed-2.1-Pro；其他文案→GLM-5.3                                        | 2.5× / 1×                  | Pro合规严谨，GLM文案流畅同价                                         | <br />                   |
+  | 9 | 🎨 视觉/多模态（当前无GLM-5V）                        | 截图转文字描述 + Seed/GLM 纯文本理解                                              | 1×                         | <br />                                                    | 等平台后续支持多模态模型再补           |
 
   **④ 经济性&鸿蒙B方案预算参考：** GLM-5.3 0.4x补贴后≈1×（和Seed-Code同价位，能力对标原价 2.5× 档）。鸿蒙B方案开发 5 周周期全量积分预算：原 68 单位 → 新 57.8 单位（显省 15%），含返工率降低隐性收益合计省 30-40%；月底 GLM 全库扫从「建议」升格「强制必做」（≈0.8单位，白捡 CyberGym 全球第一挖洞能力）。
   **⑤ 强制合规：** 每轮代码修改完成 → 切回 Seed-2.1-Pro 独立审查（不可自审自己写的代码）；改完立即跑 check-interface.bat 验界面保护；月度 GLM 全库漏洞扫纳入 §1 必查与 §9 安全防破解联动清单。
@@ -312,4 +314,31 @@
 * 录像功能命令行开关（use-fake-ui-for-media-stream/enable-media-stream/allow-file-access-from-files）已废弃，权限在 main.js 用原生 Electron API 授予。
 
 * 登录框记住密码功能不存在：永远需要输入用户名和密码登录。注册时真实手机号/医师姓名不记忆，仅记忆通用用户名。
+
+## 14. 鸿蒙 NEXT 适配（2026-09-01 Week1 已闭环编译）
+
+**环境（已装好，勿重复安装）**：DevEco Studio 26.0 安装于 `D:\Program Files\Huawei\DevEco Studio`（内置 SDK HarmonyOS 26.0.0/API 26 + hvigor 6.26.4 + ohpm + node v24）；IDE 配置目录在 `%LOCALAPPDATA%\Huawei\DevEcoStudio26.0`。
+
+**工程铁律（零改动保障）**：鸿蒙全部代码独立在 `app_project_harmony/`，安卓工程只读（`tools/copy-assets.cjs` 字节级拷贝 assets/public + video-recorder-inject.js → rawfile，图标 → AppScope/entry media；`shared-inject/` 存放从安卓 Java 逐字提取的 4 个注入脚本 → rawfile/inject/）。**禁止改安卓工程任何文件**。
+
+**双包结构**：`huikang-cloud`（bundleName com.tcm.prescription，加载 https://tcm-prescription-system.pages.dev）+ `huikang-offline`（待建，加载 rawfile 本地页）。云端版桥 22 个 invoke 方法 + printHtml + exit，全部从安卓 MainActivity switch 分支逐一对齐。
+
+**命令行编译（免开 IDE，已验证成功）**：
+```powershell
+$env:DEVECO_SDK_HOME = "D:\Program Files\Huawei\DevEco Studio\sdk"
+$env:NODE_HOME = "D:\Program Files\Huawei\DevEco Studio\tools\node"; $env:PATH = "$env:NODE_HOME;$env:PATH"
+cd app_project_harmony\huikang-cloud
+node "D:\Program Files\Huawei\DevEco Studio\tools\hvigor\bin\hvigorw.js" --mode module -p product=default assembleHap --no-daemon
+```
+产物：`entry/build/default/outputs/default/entry-default-unsigned.hap`（签名待 Week3 AGC 证书）。
+
+**ArkTS API 与安卓/直觉的坑（编译踩过的，直接照抄）**：
+* Web 事件名是 `onAlert/onConfirm/onPrompt`（不是 onJsAlert/onJsConfirm/onJsPrompt）、`onShowFileSelector`（不是 onShowFileChooser）、`onConsole`（回调必须 return boolean）。
+* `JsResult`：确认 `handleConfirm()` / 取消 `handleCancel()` / **prompt 输入值 `handlePromptConfirm(v)`**（handleConfirm 不收参数）；OnPromptEvent 默认值字段是 `event.value`（不是 defaultValue）。
+* WebviewController 执行 JS 是 `runJavaScript`（不是安卓 evaluateJavascript 的 runScript）。
+* picker.DocumentViewPicker 选项是 `maxSelectNumber`（不是 maxNumber）；`getHostContext()` 返回可空需守卫。
+* `LoadingProgress().size(48)` 非法，须 `.width(48).height(48)`；arkts-no-any-unknown 严禁 any/unknown，JSON 参数用 `Record<string, Object>` + optStr 辅助取值。
+* getContext(this) 已弃用但可用（仅 WARN）；桥的 UI 操作（startAbility/terminateSelf）须 setTimeout 包裹回主线程。
+
+**Week1 桥实现状态**：✅ openExternalUrl（白名单同安卓）/ getVideoDirectory / __exitApp；⏳ 其余 19 方法骨架返回"鸿蒙版开发中"提示（真机可 alert 验证桥已通）。Week2 待办：媒体保存（沙箱+Picker）、备份恢复、打印（Print Kit）、分片读取、getMachineId 生成规则确认。
 

@@ -1,0 +1,12 @@
+{
+  "clinicName": "XXX中医诊所",
+  "doctorName": "XXX",
+  "edition": "cloud_personal",
+  "appMode": "cloud",
+  "maxUsers": 1,
+  "productName": "惠康中医-云端",
+  "versionLabel": "云端标准版",
+  "users": [],
+  "configIssuedAt": "2026-08-18T13:00:00.000Z",
+  "configSignature": "9e5b0c8409c9a3a2a99e8d55226a3810b5f6a9a17b4ee8931bc12a6a8dd501bc"
+}

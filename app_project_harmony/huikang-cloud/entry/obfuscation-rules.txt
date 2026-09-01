@@ -1,0 +1,8 @@
+# 混淆规则（当前保持关闭，与安卓离线版"稳定优先"策略一致）
+# 说明：release 构建已在 entry/build-profile.json5 中将 enable 置为 false。
+# 待上架前（B 方案 Week3）再评估开启，需配合真机回归验证。
+
+# -enable-property-obfuscation
+# -enable-toplevel-obfuscation
+# -enable-filename-obfuscation
+# -enable-export-obfuscation
