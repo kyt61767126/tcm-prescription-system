@@ -101,7 +101,8 @@
         .prescription-info > div:nth-child(6) { grid-column: 5 / 7; }
         .prescription-grid { border-top: 1px solid #000; border-bottom: 1px solid #000; min-height: 200px; }
         .prescription-grid-inner { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 2px; }
-        .prescription-line { padding: 5px 0; font-size: 15px; text-align: center; justify-content: center; align-items: center; font-weight: 500; color: #000; }
+        .prescription-line { padding: 5px 0; font-size: 15px; text-align: center; font-weight: 500; color: #000; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 2px; line-height: 1.35; }
+        .prescription-jianfa { font-size: 12px; font-weight: normal; color: #b71c1c; letter-spacing: 1px; white-space: nowrap; }
         .rp-mark { font-size: 22px; font-weight: bold; font-style: italic; color: #000; font-family: 'Times New Roman', serif; }
         .dose-count { text-align: right; font-size: 15px; color: #000; font-weight: bold; font-family: 'Times New Roman', serif; }
         .prescription-footer { margin-top: 8px; padding-top: 4px; border-top: none; font-size: 14px; color: #000; }
@@ -298,6 +299,7 @@
             .prescription-grid { min-height: 80px; padding: 3px 0; }
             .prescription-grid-inner { gap: 1px 3px; }
             .prescription-line { padding: 2px 0; font-size: 13px; }
+            .prescription-jianfa { font-size: 10.5px; }
             .rp-mark { font-size: 20px; }
             .dose-count { font-size: 13px; }
             .prescription-footer { margin-top: 6px; padding-top: 3px; font-size: 12px; }
@@ -514,6 +516,7 @@
             .prescription-grid { min-height: 60px; padding: 2px 0; }
             .prescription-grid-inner { gap: 1px 2px; }
             .prescription-line { padding: 1px 0; font-size: 11px; }
+            .prescription-jianfa { font-size: 9px; }
             .rp-mark { font-size: 17px; }
             .dose-count { font-size: 11px; }
             .prescription-footer { margin-top: 4px; padding-top: 2px; font-size: 10px; }
@@ -580,6 +583,7 @@
             .medicine-table th { font-size: 11px; padding: 4px; }
             .medicine-table input { font-size: 12px; padding: 4px; }
             .prescription-line { font-size: 12px; }
+            .prescription-jianfa { font-size: 10px; }
             .prescription-info { font-size: 12px; }
         }
 
@@ -4754,7 +4758,8 @@ let currentUser = null;
 
             let html = '<div class="prescription-grid-inner">';
             items.forEach(item =>{
-                html += `<div class="prescription-line"><span>${escapeHtml(item.name)}${escapeHtml(item.dosage)}${escapeHtml(item.unit)}${item.jianfa && item.jianfa !== '普通煎' ? '（'+escapeHtml(item.jianfa)+'）' : ''}</span></div>`;
+                const hasJianfa = item.jianfa && item.jianfa !== '普通煎';
+                html += `<div class="prescription-line"><span>${escapeHtml(item.name)}${escapeHtml(item.dosage)}${escapeHtml(item.unit)}</span>${hasJianfa ? '<span class="prescription-jianfa">' + escapeHtml(item.jianfa) + '</span>' : ''}</div>`;
             });
             html += '</div>';
             linesDiv.innerHTML = html;
@@ -5772,7 +5777,8 @@ let currentUser = null;
         .prescription-info > div:nth-child(6) { grid-column: 5 / 7; }
         .prescription-grid { border-top: 1px solid #000; border-bottom: 1px solid #000; min-height: 200px; margin-top: 8px; }
         .prescription-grid-inner { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 2px; }
-        .prescription-line { padding: 5px 0; font-size: 11.25pt; text-align: center; font-weight: 500; color: #000; }
+        .prescription-line { padding: 5px 0; font-size: 11.25pt; text-align: center; font-weight: 500; color: #000; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 2px; line-height: 1.35; }
+        .prescription-jianfa { font-size: 8.5pt; font-weight: normal; color: #000; letter-spacing: 1px; white-space: nowrap; }
         .rp-mark { font-size: 16.5pt; font-weight: bold; font-style: italic; color: #000; font-family: 'Times New Roman', serif; }
         .dose-count { text-align: right; font-size: 11.25pt; color: #000; font-weight: bold; font-family: 'Times New Roman', serif; }
         .prescription-footer { margin-top: 8px; padding-top: 4px; border-top: none; font-size: 10.5pt; color: #000; }
