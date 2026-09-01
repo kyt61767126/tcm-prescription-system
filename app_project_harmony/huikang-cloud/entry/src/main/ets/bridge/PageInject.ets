@@ -18,7 +18,7 @@
  * 由 tools/copy-assets.cjs 拷贝到 rawfile/inject/（安卓工程零改动）。
  */
 import { webview } from '@kit.ArkWeb';
-import { common } from '@kit.AbilityKit';
+import { common, bundleManager } from '@kit.AbilityKit';
 import { util } from '@kit.ArkTS';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 
@@ -69,10 +69,8 @@ export class PageInject {
   onPageEnd(): void {
     // 1) 状态栏高度（鸿蒙默认内容从状态栏下方开始，置 0，Week2 真机校准）
     this.runScript('window.__STATUS_BAR_HEIGHT__ = 0;');
-    // 2) 版本信息（供 cloud-layout-fix.js 使用；发版需与 AppScope/app.json5 同步，Week2 改 bundleManager 动态读取）
-    this.runScript(
-      'window.__HK_APP_VERSION__ = \'1.0.0\'; window.__HK_APP_CODE__ = 1000000;'
-    );
+    // 2) 版本信息（动态读取 bundleInfo，与 AppScope/app.json5 自动同步，防硬编码漂移）
+    this.runScript(this.buildVersionScript());
     // 3) anti-autofill（安卓 onPageFinished 也注入一次，见 MainActivity line 563）
     this.injectFile(INJECT_AUTOCOMPLETE);
     // 4) electronAPI shim（立即）
@@ -106,6 +104,20 @@ export class PageInject {
     this.readScript(name).then((js: string) => {
       this.runScript(js);
     });
+  }
+
+  /** 版本信息注入脚本（bundleManager 动态读取，对齐安卓 BuildConfig） */
+  private buildVersionScript(): string {
+    try {
+      const info: bundleManager.BundleInfo =
+        bundleManager.getBundleInfoForSelfSync(bundleManager.BundleFlag.GET_BUNDLE_INFO_DEFAULT);
+      const vn: string = info.versionName ?? '1.0.0';
+      const vc: number = info.versionCode ?? 1000000;
+      return `window.__HK_APP_VERSION__ = '${vn}'; window.__HK_APP_CODE__ = ${vc};`;
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, '读取 bundleInfo 失败: %{public}s', JSON.stringify(e));
+      return 'window.__HK_APP_VERSION__ = \'1.0.0\'; window.__HK_APP_CODE__ = 1000000;';
+    }
   }
 
   // ==================================================================

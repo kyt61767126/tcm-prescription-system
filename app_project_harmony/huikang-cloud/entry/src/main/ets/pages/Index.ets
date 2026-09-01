@@ -46,7 +46,7 @@ function isCloudUrl(rawUrl: string): boolean {
 @Component
 struct Index {
   controller: webview.WebviewController = new webview.WebviewController();
-  bridge: NativeBridge = new NativeBridge(getContext(this) as common.UIAbilityContext);
+  bridge: NativeBridge = new NativeBridge(getContext(this) as common.UIAbilityContext, this.controller);
   inject: PageInject = new PageInject(getContext(this) as common.UIAbilityContext, this.controller);
 
   /** 启动加载遮罩（对齐安卓"揭幕后不再出现"，防三屏闪） */

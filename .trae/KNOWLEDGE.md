@@ -321,34 +321,81 @@
 
 **工程铁律（零改动保障）**：鸿蒙全部代码独立在 `app_project_harmony/`，安卓工程只读（`tools/copy-assets.cjs` 字节级拷贝 assets/public + video-recorder-inject.js → rawfile，图标 → AppScope/entry media；`shared-inject/` 存放从安卓 Java 逐字提取的 4 个注入脚本 → rawfile/inject/）。**禁止改安卓工程任何文件**。
 
-**双包结构**：`huikang-cloud`（bundleName com.tcm.prescription，加载 https://tcm-prescription-system.pages.dev）+ `huikang-offline`（待建，加载 rawfile 本地页）。云端版桥 22 个 invoke 方法 + printHtml + exit，全部从安卓 MainActivity switch 分支逐一对齐。
+**双包结构**：`huikang-cloud`（bundleName com.tcm.prescription，加载 <https://tcm-prescription-system.pages.dev）+> `huikang-offline`（待建，加载 rawfile 本地页）。云端版桥 22 个 invoke 方法 + printHtml + exit，全部从安卓 MainActivity switch 分支逐一对齐。
 
 **命令行编译（免开 IDE，已验证成功）**：
+
 ```powershell
 $env:DEVECO_SDK_HOME = "D:\Program Files\Huawei\DevEco Studio\sdk"
 $env:NODE_HOME = "D:\Program Files\Huawei\DevEco Studio\tools\node"; $env:PATH = "$env:NODE_HOME;$env:PATH"
 cd app_project_harmony\huikang-cloud
 node "D:\Program Files\Huawei\DevEco Studio\tools\hvigor\bin\hvigorw.js" --mode module -p product=default assembleHap --no-daemon
 ```
+
 产物：`entry/build/default/outputs/default/entry-default-unsigned.hap`（签名待 Week3 AGC 证书）。
 
 **ArkTS API 与安卓/直觉的坑（编译踩过的，直接照抄）**：
+
 * Web 事件名是 `onAlert/onConfirm/onPrompt`（不是 onJsAlert/onJsConfirm/onJsPrompt）、`onShowFileSelector`（不是 onShowFileChooser）、`onConsole`（回调必须 return boolean）。
-* `JsResult`：确认 `handleConfirm()` / 取消 `handleCancel()` / **prompt 输入值 `handlePromptConfirm(v)`**（handleConfirm 不收参数）；OnPromptEvent 默认值字段是 `event.value`（不是 defaultValue）。
+
+* `JsResult`：确认 `handleConfirm()` / 取消 `handleCancel()` / **prompt 输入值** **`handlePromptConfirm(v)`**（handleConfirm 不收参数）；OnPromptEvent 默认值字段是 `event.value`（不是 defaultValue）。
+
 * WebviewController 执行 JS 是 `runJavaScript`（不是安卓 evaluateJavascript 的 runScript）。
+
 * picker.DocumentViewPicker 选项是 `maxSelectNumber`（不是 maxNumber）；`getHostContext()` 返回可空需守卫。
+
 * `LoadingProgress().size(48)` 非法，须 `.width(48).height(48)`；arkts-no-any-unknown 严禁 any/unknown，JSON 参数用 `Record<string, Object>` + optStr 辅助取值。
+
 * getContext(this) 已弃用但可用（仅 WARN）；桥的 UI 操作（startAbility/terminateSelf）须 setTimeout 包裹回主线程。
 
-**Week1 桥实现状态**：✅ openExternalUrl（白名单同安卓）/ getVideoDirectory（返回前 mkdirSync 递归建目录）/ __exitApp；⏳ 其余 19 方法骨架返回"鸿蒙版开发中"提示（真机可 alert 验证桥已通）。Week2 待办：媒体保存（沙箱+Picker）、备份恢复、打印（Print Kit）、分片读取、版本号改 bundleManager 动态读取、__STATUS_BAR_HEIGHT__ 真机校准。
+**Week1 桥实现状态**：✅ openExternalUrl（白名单同安卓）/ getVideoDirectory（返回前 mkdirSync 递归建目录）/ \_\_exitApp；⏳ 其余 19 方法骨架返回"鸿蒙版开发中"提示（真机可 alert 验证桥已通）。Week2 待办：媒体保存（沙箱+Picker）、备份恢复、打印（Print Kit）、分片读取、版本号改 bundleManager 动态读取、__STATUS\_BAR\_HEIGHT__ 真机校准。
 
 **Week1 Seed-2.1-Pro 独立审查修复（2026-09-01，编译复通过）**：
-* 【安全】URL 白名单**禁止 startsWith 前缀匹配**——`tcm-prescription-system.pages.dev.evil.com` 可绕过；用正则 `^https://([^/?#:]+)` 取 host 与 CLOUD_HOST 严格相等（对齐安卓 Uri.parse().getHost()）。
+
+* 【安全】URL 白名单**禁止 startsWith 前缀匹配**——`tcm-prescription-system.pages.dev.evil.com` 可绕过；用正则 `^https://([^/?#:]+)` 取 host 与 CLOUD\_HOST 严格相等（对齐安卓 Uri.parse().getHost()）。
+
 * 【功能】鸿蒙 onLoadIntercept 对**所有请求**（img/script/css/xhr）回调，与安卓 shouldOverrideUrlLoading（仅框架导航）不同；必须 `event.data.isMainFrame()` 判断，非主框架一律放行，否则误杀第三方子资源导致页面残缺。
+
 * 【安全】SSL 错误必须显式 `onSslErrorEventReceive → event.handler.handleCancel()`（对齐安卓 onReceivedSslError 一律 cancel，防 MITM）；HTTP 5xx 用 onHttpErrorReceive（主框架 >=500 弹重试）。
+
 * 【对齐】anti-autofill 脚本安卓 onPageStarted + onPageFinished **各注入一次**，勿漏 onPageEnd。
+
 * 【竞态】rawfile 脚本预加载是异步的，注入点必须 `readScript(name).then(js => runJavaScript(js))`，不能同步读缓存（页面加载快于读盘时注入丢失）。
-* 【UI】自定义弹窗子卡片必须加 `.onClick(()=>{})` 消费事件，否则点卡片空白冒泡到遮罩误关闭；onBackPress 退出复用 bridge.__exitApp()（桥构造时已持 context，避免 getHostContext() 空指针）。
+
+* 【UI】自定义弹窗子卡片必须加 `.onClick(()=>{})` 消费事件，否则点卡片空白冒泡到遮罩误关闭；onBackPress 退出复用 bridge.\_\_exitApp()（桥构造时已持 context，避免 getHostContext() 空指针）。
+
 * 【桥清单核对结论】云端版 invoke 共 **22 个 case**（savePrescriptionImage/saveVideoFile/startMediaSession/appendMediaChunk/commitMediaSession/getVideoDirectory/saveBackupFile/listBackupFiles/readBackupFile/backupMedia/restoreMedia/getMediaStats/findMediaFiles/openFile/readFileAsBase64/startReadSession/readNextChunk/closeReadSession/renameMediaFiles/deleteFile/printPrescription/openExternalUrl）；showToast/getMachineId/getAppVersion/checkAppVersion/updateApp 是**离线版**方法，云端版不要加。
+
 * 【P1-6 待办】Week2 实现 readFileAsBase64/deleteFile 时必须加调用来源校验（controller.getUrl() host 严格比对云端，非云端返回 permission denied），防 XSS 读写沙箱。
 
+### Week2（2026-09-01 已闭环编译）：22 方法全实现
+
+**沙箱目录布局**（「沙箱+Picker」铁律）：
+
+* 媒体：`{filesDir}/惠康中医媒体/YYYY-MM/`（图片视频同目录）
+
+* 备份 JSON：`{filesDir}/backups/`（一键恢复链路完整：listBackupFiles 时间倒序取 20 个 → readBackupFile）
+
+* 媒体备份副本：`{filesDir}/媒体备份/YYYY-MM/`（backupMedia 目标；重装后失效，跨安装迁移 Week3 评估文件选择器导入）
+
+* saveBackupFile 成功后异步唤起系统分享（sendData + uri 授权 flag），用户可选「保存到文件」导出公共目录
+
+**鸿蒙 API 落地经验**：
+
+* fs 全同步 API 可用：`listFileSync/mkdirSync(path,true)/openSync(path,fs.OpenMode.x).fd/readSync(fd,buf)/writeSync(fd,bytes)/statSync/moveFileSync/renameSync/unlinkSync/copyFileSync/accessSync`
+
+* `new util.Base64Helper().encodeToStringSync(u8)/decodeSync(str)`（注意 new，不是 util.createSync）
+
+* `fileUri.getUriFromPath(path)` → `file://` URI；跨应用打开用 want `action:'ohos.want.action.viewData', uri, type: mime, flags:0x1`（FLAG\_AUTH\_READ\_URI\_PERMISSION 临时授权读，系统应用才能读沙箱文件）
+
+* 打印：**print.print(files, context) 不支持 .html**（仅 pdf/图片/office/txt/xml，且需 ohos.permission.PRINT 权限）→ Week2 降级方案：HTML 写 cacheDir/print 临时文件 + viewData(text/html) 调系统应用打开；Week3 真机验证后评估 PrintDocumentAdapter+PDF
+
+* readSync 返回实际读取字节数，须 `new Uint8Array(buf).slice(0, read)` 精确切片再 base64
+
+* ArkTS：`Array<Record<string,Object>>` 赋给 `Record<string,Object>` 字段用 `arr as Object` 编译可过；fs 同步函数会触发 "Function may throw exceptions" WARN（可接受）
+
+* 版本号：`bundleManager.getBundleInfoForSelfSync(BundleFlag.GET_BUNDLE_INFO_DEFAULT).versionName/versionCode` 动态注入，防硬编码漂移
+
+* 桥需持有 webview\.WebviewController 做 P1-6 来源校验（`controller.getUrl()` host 严格比对）+ 路径白名单 normalizePath 消 `../`
+
+**P1-6 已实现**：readFileAsBase64/deleteFile 入口校验 isCallerAllowed（云端 host）+ isMediaPathAllowed（媒体/媒体备份目录前缀）；openFile/startReadSession 仅路径白名单。
