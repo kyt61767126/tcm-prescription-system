@@ -44,12 +44,22 @@ try {
                     //   插槽永远为空 → getter 恒回落出厂默认 → 机构版机器（userData=cloud_clinic）启动后
                     //   被 asar 默认值反向打成 cloud_personal → 用户管理按钮消失（E1/E3 超时根因）。
                     //   现在补上这个写入端：userData 权威值一经读取即入插槽，getter/所有谓词自动归一。
+                    // ★★★ 2026-09-01 【第三轮：时序竞态根治】index.html 在解析期(:778)即调用
+                    //   Permission.init()，而 const CONFIG 到(:810)才声明——IPC 回调若落在两者
+                    //   之间，CONFIG 处于 TDZ（typeof 亦抛 ReferenceError 被 catch 静默吞掉）→
+                    //   写入被跳过 → asar 出厂默认(cloud_personal)经(:834)同步XHR反向覆盖 →
+                    //   机构版按钮消失（E1 偶发超时 / E3 时序有利又 PASS 的竞态根源）。
+                    //   修复：无条件先暂存到 Permission 实例（permission.js 必然先于内嵌脚本
+                    //   执行，实例已存在），edition-lock getter 优先级2读取此暂存兜底；
+                    //   CONFIG 可用时再同步写 __authoritativeEdition（getter 优先级1）。
                     try {
-                        if (typeof CONFIG !== 'undefined' && CONFIG &&
-                            result && result.config && result.config.edition) {
-                            CONFIG.__authoritativeEdition = String(result.config.edition);
+                        if (result && result.config && result.config.edition) {
+                            this._authoritativeEdition = String(result.config.edition);
+                            if (typeof CONFIG !== 'undefined' && CONFIG) {
+                                CONFIG.__authoritativeEdition = String(result.config.edition);
+                            }
                         }
-                    } catch (_) { /* CONFIG 尚未定义（极端时序）时跳过，回落旧逻辑 */ }
+                    } catch (_) { /* 极端时序跳过，getter 兜底读取 Permission 实例暂存 */ }
                 } else if (typeof CONFIG !== 'undefined' && CONFIG) {
                     // 离线版内嵌的 CONFIG 对象
                     this._config = CONFIG;

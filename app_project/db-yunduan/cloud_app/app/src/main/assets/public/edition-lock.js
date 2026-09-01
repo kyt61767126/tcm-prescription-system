@@ -57,6 +57,12 @@
                     var v = '';
                     // 1. 优先返回权威插槽（由 electronAPI.getAppConfig 回写 __authoritativeEdition 激活）
                     try { if (CONFIG.__authoritativeEdition) v = String(CONFIG.__authoritativeEdition); } catch(_) {}
+                    // ★ 2026-09-01 时序竞态兜底（E1 偶发超时第三轮修复）：Permission.init() 的
+                    //   IPC 回调早于 index.html 内嵌 const CONFIG 声明落地时，CONFIG 处于 TDZ，
+                    //   权威 edition 改暂存于 Permission 实例（permission.js 先于内嵌脚本加载，
+                    //   实例必然存在）。插槽为空时由此兜底，userData 权威值不再被 asar 出厂
+                    //   默认(cloud_personal)经同步XHR反向掩盖 → 机构版用户管理按钮不再消失。
+                    try { if (!v && global.Permission && global.Permission._authoritativeEdition) v = String(global.Permission._authoritativeEdition); } catch(_) {}
                     // 2. 否则回落到存储槽
                     if (!v) v = String(_slot || '');
                     // ★ 铁闸3 getter 兜底：绕过 setter 直写 __authoritativeEdition 的值也要归一化
