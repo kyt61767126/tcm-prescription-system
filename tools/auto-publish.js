@@ -215,12 +215,22 @@ function main() {
         } else {
             console.log('  所有文件都是最新，无需发布');
         }
-        process.exit(checkOnly || changes.length > 0 ? 2 : 0);
+        // ★ 2026-09-01 修复运算符优先级 bug：原 checkOnly || changes.length > 0 ? 2 : 0
+        //   被解析为 (checkOnly || ...) ? 2 : 0——check 模式即使无变更也退出码 2，
+        //   调用方误判"有待发布变更"。正确语义：有变更=2（待发布），无变更=0（最新）。
+        process.exit(changes.length > 0 ? 2 : 0);
     }
 
     if (changes.length === 0 && !force) {
+        // ★ 2026-09-01 无变更提示明确化：官网与本地产物完全一致，非失败。
         console.log('[3/3] 所有文件都是最新，无需发布');
-        console.log('  （如需强制重新发布，加 --force --publish 参数）');
+        console.log('\n============================================');
+        console.log('  无需发布：官网已是最新版本');
+        console.log('============================================');
+        console.log('  本地产物与官网 hash 完全一致（' + unchanged.length + ' 个文件比对通过）');
+        console.log('  下载页: https://tcm-prescription-system.pages.dev/download');
+        console.log('  （如确需强制重新上传，加 --force --publish 参数）');
+        console.log('============================================\n');
         process.exit(0);
     }
 
@@ -271,12 +281,27 @@ function main() {
 
     console.log('--------------------------------------------');
     if (result.status === 0) {
-        console.log('\n[OK] 自动发布完成！');
+        // ★ 2026-09-01 结果汇总增强：列明本次上传产物清单 + URL + 生效提示，
+        //   用户无需回翻上游日志即可确认"发布了什么、去哪里看"。
+        console.log('\n============================================');
+        console.log('  发布成功！');
+        console.log('============================================');
+        console.log('  版本号: ' + versionTag);
+        console.log('  本次上传 ' + changes.length + ' 个产物:');
+        for (const f of changes) {
+            console.log('    - ' + f.name + ' (' + formatSize(f.size) + ')');
+        }
         console.log('  Release: https://github.com/kyt61767126/tcm-prescription-system/releases/tag/' + versionTag);
         console.log('  下载页: https://tcm-prescription-system.pages.dev/download');
+        console.log('  Cloudflare Pages 将在 1-2 分钟内自动部署下载页');
+        console.log('============================================\n');
     } else {
-        console.error('\n[ERROR] 发布失败，退出码: ' + result.status);
-        console.error('  可手动运行: node ' + publishArgs.join(' '));
+        console.error('\n============================================');
+        console.error('  发布失败，退出码: ' + result.status);
+        console.error('============================================');
+        console.error('  当前状态与补救方法见上方 [ERROR] 明细');
+        console.error('  手动重试: node ' + publishArgs.join(' '));
+        console.error('============================================\n');
         process.exit(result.status || 1);
     }
 }

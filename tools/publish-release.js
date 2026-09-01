@@ -886,9 +886,20 @@ function main() {
             console.error('  带着半成品 commit + push 会发布无法追溯的状态，已中止。明细：');
             console.error('  ' + settleDetail.trim().split('\n').join('\n  '));
             console.error('  处理：先 commit 落定再发布；确要强推：环境变量 ALLOW_DIRTY_BUILD=1（自负其责）。');
-            return;
+            // ★ 2026-09-01 修复假成功（P0）：原 return 使 main() 正常结束 → 退出码 0 →
+            //   上游 auto-publish.js / release-menu.ps1 误报"发布成功"。实际此刻仅
+            //   GitHub Release 已上传、下载页未部署（未 push），必须以失败退出。
+            console.error('\n============================================');
+            console.error('  发布失败：源码未落定，已中止推送！');
+            console.error('============================================');
+            console.error('  当前状态: 产物已上传 GitHub Release，但下载页未部署（未 git push）');
+            console.error('  修复方法: 先提交工作区改动，然后重新发布');
+            console.error('    git add -A && git commit -m "..." && git push');
+            console.error('    然后重跑发布（产物 hash 未变，智能发布会自动补部署）\n');
+            process.exit(1);
         }
         console.log('  [OK] 源码已落定，允许提交推送');
+        let gitFailed = false;
         try {
             execSync('git add public/hash-manifest.json public/downloads/ public/updates/ .gitignore', { cwd: PROJECT_ROOT, stdio: 'ignore' });
             const status = execSync('git status --porcelain', { cwd: PROJECT_ROOT, encoding: 'utf8' });
@@ -905,16 +916,33 @@ function main() {
                 console.log('  [SKIP] 没有变更需要提交\n');
             }
         } catch (e) {
+            gitFailed = true;
             console.error('  [ERROR] Git 操作失败:', e.message);
-            console.error('  请手动执行: git add public/hash-manifest.json public/updates/ && git commit && git push');
+        }
+        // ★ 2026-09-01 修复假成功（P0）：原 catch 后继续打印"发布成功！"且退出码 0。
+        //   实际此刻产物已上传 Release，但下载页配置（latest.json/hash-manifest）未 push，
+        //   用户下载到的仍是旧版 → 必须以失败退出并给出精确的补救命令。
+        if (gitFailed) {
+            console.error('\n============================================');
+            console.error('  发布失败：Git 推送环节失败！');
+            console.error('============================================');
+            console.error('  当前状态: 产物已上传 GitHub Release，但下载页未部署（未 git push）');
+            console.error('  修复方法: 手动执行以下 3 条命令完成部署（产物无需重传）:');
+            console.error('    git add public/hash-manifest.json public/downloads/ public/updates/');
+            console.error('    git commit -m "chore(release): 发布 ' + versionTag + '"');
+            console.error('    git push origin main');
+            console.error('  推送后 Cloudflare Pages 将在 1-2 分钟内自动部署下载页\n');
+            process.exit(1);
         }
     }
 
     console.log('============================================');
     console.log('  发布成功！');
     console.log('============================================');
+    console.log('  版本: ' + versionTag);
     console.log('\nRelease 页面: https://github.com/' + repoInfo.owner + '/' + repoInfo.repo + '/releases/tag/' + versionTag);
-    console.log('下载页面: https://tcm-prescription-system.pages.dev/download\n');
+    console.log('下载页面: https://tcm-prescription-system.pages.dev/download');
+    console.log(doPush ? '下载页部署: 已推送，Cloudflare Pages 将在 1-2 分钟内自动生效\n' : '（提示: 未带 --push，下载页未部署，仅上传了 Release）\n');
 }
 
 main();

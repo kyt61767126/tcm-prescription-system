@@ -321,6 +321,34 @@ function Invoke-ComplianceCheck {
     }
 }
 
+# ============ 统一发布结果汇总（明确中文提示）============
+# ★ 2026-09-01 新增：发布环节结束后统一输出成败大字块 + 产物入口 + 生效提示，
+#   替代原先"只有下一步指引、成败要回翻日志"的弱提示。
+function Show-PublishResult {
+    param(
+        [int]$ExitCode,
+        [string]$Label = "发布"
+    )
+    Write-Host ""
+    if ($ExitCode -eq 0) {
+        Write-Host "========================================" -ForegroundColor Green
+        Write-Host "  [发布成功] $Label" -ForegroundColor Green
+        Write-Host "========================================" -ForegroundColor Green
+        Write-Host "  下载页: https://tcm-prescription-system.pages.dev/download"
+        Write-Host "  Release: https://github.com/kyt61767126/tcm-prescription-system/releases"
+        Write-Host "  Cloudflare Pages 将在 1-2 分钟内自动部署下载页" -ForegroundColor Yellow
+    } else {
+        Write-Host "========================================" -ForegroundColor Red
+        Write-Host "  [发布失败] $Label （退出码: $ExitCode）" -ForegroundColor Red
+        Write-Host "========================================" -ForegroundColor Red
+        Write-Host "  完整原因与补救方法见上方 [ERROR] 明细块；常见原因:"
+        Write-Host "  - 网络超时（上传 75MB exe 需 5-10 分钟，可重跑恢复）"
+        Write-Host "  - 源码未落定（先 commit 再发布）"
+        Write-Host "  - 合规检查未通过（按提示修复后重试）"
+        Write-Host "  重跑入口: 本菜单 [3] 智能发布（产物 hash 未变会自动续传）"
+    }
+}
+
 # ============ 显示版本选择菜单 ============
 function Show-VersionMenu {
     param(
@@ -585,10 +613,8 @@ while ($true) {
             # ★ 2026-08-23 复核修复：原 | Out-Null 丢弃退出码，失败静默无提示
             $rc2 = Invoke-Publish -Target $version -Mode $mode2
             if ($rc2 -is [array]) { $rc2 = [int]$rc2[-1] }
-            if ($rc2 -ne 0) {
-                Write-Host ""
-                Write-Host "[ERROR] 发布失败，退出码: $rc2（详见上方日志）" -ForegroundColor Red
-            }
+            # ★ 2026-09-01 统一结果汇总（明确中文提示）
+            Show-PublishResult -ExitCode $rc2 -Label "指定发布（$version / $mode2）"
             Write-Host ""
             Write-Host "--------------------------------------------"
             Write-Host "  下一步指引:" -ForegroundColor Yellow
@@ -636,17 +662,13 @@ while ($true) {
                 # ★ 2026-08-23 复核修复：原 | Out-Null 丢弃退出码，失败静默无提示
                 $rc5 = Invoke-NodeScript -ScriptPath $autoPublish -Arguments @('--publish')
                 if ($rc5 -is [array]) { $rc5 = [int]$rc5[-1] }
-                if ($rc5 -ne 0) {
-                    Write-Host ""
-                    Write-Host "[ERROR] 智能发布失败，退出码: $rc5（详见上方日志）" -ForegroundColor Red
-                }
+                # ★ 2026-09-01 统一结果汇总（明确中文提示；auto-publish.js 内部已列
+                #   上传产物清单，此处菜单层给成败大字块兜底）
+                Show-PublishResult -ExitCode $rc5 -Label "智能发布（仅上传有变化的产物）"
             } else {
                 $rc5 = Invoke-Publish -Target "all"
                 if ($rc5 -is [array]) { $rc5 = [int]$rc5[-1] }
-                if ($rc5 -ne 0) {
-                    Write-Host ""
-                    Write-Host "[ERROR] 发布全部版本失败，退出码: $rc5（详见上方日志）" -ForegroundColor Red
-                }
+                Show-PublishResult -ExitCode $rc5 -Label "发布全部版本"
             }
             Write-Host ""
             Write-Host "--------------------------------------------"
