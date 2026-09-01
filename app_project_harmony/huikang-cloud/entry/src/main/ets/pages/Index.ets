@@ -23,13 +23,23 @@ const TAG: string = 'HuikangCloudIndex';
 
 /** 云端域名（与安卓 CLOUD_HOST 一致） */
 const CLOUD_URL: string = 'https://tcm-prescription-system.pages.dev';
-const CLOUD_HOST_PREFIX: string = 'https://tcm-prescription-system.pages.dev';
+const CLOUD_HOST: string = 'tcm-prescription-system.pages.dev';
 /** 官网下载页（与安卓 UPDATE_DOWNLOAD_URL 一致，转系统浏览器打开） */
 const UPDATE_DOWNLOAD_URL: string = 'https://tcm-prescription-system.pages.dev/download';
 
-function isCloudUrl(url: string): boolean {
-  // 与安卓 isCloudUrl 的 host 严格校验语义一致（前缀匹配整段 host）
-  return url.startsWith(CLOUD_HOST_PREFIX);
+/**
+ * host 严格校验（对齐安卓 isCloudUrl：Uri.parse(url).getHost() 与 CLOUD_HOST 精确相等）。
+ * 禁止用 URL 字符串 startsWith——那会被 tcm-prescription-system.pages.dev.evil.com 类钓鱼域绕过。
+ */
+function isCloudUrl(rawUrl: string): boolean {
+  if (!rawUrl) {
+    return false;
+  }
+  const m: RegExpExecArray | null = /^https:\/\/([^/?#:]+)/i.exec(rawUrl);
+  if (!m) {
+    return false;
+  }
+  return m[1].toLowerCase() === CLOUD_HOST;
 }
 
 @Entry
@@ -42,6 +52,9 @@ struct Index {
   /** 启动加载遮罩（对齐安卓"揭幕后不再出现"，防三屏闪） */
   @State showLoading: boolean = true;
   private loadingDone: boolean = false;
+
+  /** 网络错误重试框防重（一次失败只弹一个，重试后重置） */
+  private errorDialogShown: boolean = false;
 
   /** JS prompt 输入弹窗状态（编辑弹窗自动保留原账号信息） */
   @State showPrompt: boolean = false;
@@ -67,6 +80,30 @@ struct Index {
     }
     this.loadingDone = true;
     this.showLoading = false;
+  }
+
+  /** 主框架加载失败重试框（网络错误与 HTTP 5xx 共用，带防重） */
+  private showRetryDialog(): void {
+    if (this.errorDialogShown) {
+      return;
+    }
+    this.errorDialogShown = true;
+    this.getUIContext().showAlertDialog({
+      message: '网络连接失败，请检查网络后重试',
+      primaryButton: {
+        value: '重试',
+        action: () => {
+          this.errorDialogShown = false;
+          try {
+            this.controller.refresh();
+          } catch (e) {
+            hilog.error(DOMAIN, TAG, 'refresh 失败: %{public}s', JSON.stringify(e));
+          }
+        }
+      },
+      cancel: () => {
+      }
+    });
   }
 
   private openInBrowser(url: string): void {
@@ -102,9 +139,15 @@ struct Index {
           controller: this.controller
         })
         // 反钓鱼拦截（对齐安卓 shouldOverrideUrlLoading）
+        // 注意：鸿蒙 onLoadIntercept 对所有请求（含子资源 img/script/css/xhr）回调，
+        //   与安卓不同（安卓该回调仅框架导航触发）。故仅对主框架导航做 host 严格白名单，
+        //   子资源/iframe 一律放行，避免误杀页面引用的第三方资源导致功能缺失。
         .onLoadIntercept((event) => {
           if (!event) {
             return false;
+          }
+          if (!event.data.isMainFrame()) {
+            return false; // 非主框架请求放行
           }
           const url: string = event.data.getRequestUrl();
           if (url === UPDATE_DOWNLOAD_URL) {
@@ -115,8 +158,8 @@ struct Index {
           if (isCloudUrl(url)) {
             return false; // 允许加载
           }
-          hilog.warn(DOMAIN, TAG, '拦截非云端导航: %{public}s', url);
-          return true; // 拦截非云端导航
+          hilog.warn(DOMAIN, TAG, '拦截非云端主框架导航: %{public}s', url);
+          return true; // 拦截非云端导航，防重定向钓鱼站
         })
         .onPageBegin(() => {
           // 对齐安卓 onPageStarted：提前注入 anti-autofill + AndroidAppExit shim
@@ -204,25 +247,26 @@ struct Index {
           }
           return true;
         })
-        // 主框架网络错误 → 重试对话框（对齐安卓 showErrorPage，仅主框架）
+        // 主框架网络错误 → 重试对话框（对齐安卓 onReceivedError，仅主框架）
         .onErrorReceive((event) => {
           if (event && event.request.isMainFrame()) {
             hilog.warn(DOMAIN, TAG, '主框架加载失败: %{public}s', event.request.getRequestUrl());
-            this.getUIContext().showAlertDialog({
-              message: '网络连接失败，请检查网络后重试',
-              primaryButton: {
-                value: '重试',
-                action: () => {
-                  try {
-                    this.controller.refresh();
-                  } catch (e) {
-                    hilog.error(DOMAIN, TAG, 'refresh 失败: %{public}s', JSON.stringify(e));
-                  }
-                }
-              },
-              cancel: () => {
-              }
-            });
+            this.showRetryDialog();
+          }
+        })
+        // 主框架 HTTP 5xx → 重试对话框（对齐安卓 onReceivedHttpError）
+        .onHttpErrorReceive((event) => {
+          if (event && event.request.isMainFrame() && event.response.getResponseCode() >= 500) {
+            hilog.warn(DOMAIN, TAG, '主框架 HTTP %{public}d: %{public}s',
+              event.response.getResponseCode(), event.request.getRequestUrl());
+            this.showRetryDialog();
+          }
+        })
+        // SSL 证书错误一律取消（对齐安卓 onReceivedSslError handler.cancel()，防中间人攻击）
+        .onSslErrorEventReceive((event) => {
+          if (event) {
+            hilog.warn(DOMAIN, TAG, 'SSL 证书错误，取消加载');
+            event.handler.handleCancel();
           }
         })
 
@@ -273,6 +317,9 @@ struct Index {
           .width('82%')
           .borderRadius(12)
           .backgroundColor(Color.White)
+          // 消费卡片内部点击，阻止冒泡到遮罩（点卡片内空白不应关闭弹窗，对齐安卓 AlertDialog）
+          .onClick(() => {
+          })
         }
         .width('100%')
         .height('100%')
@@ -319,8 +366,8 @@ struct Index {
     } catch (e) {
       hilog.warn(DOMAIN, TAG, 'onBackPress 异常: %{public}s', JSON.stringify(e));
     }
-    const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    ctx.terminateSelf();
+    // 复用桥退出（构造时已持有 context，避免 getHostContext 空指针）
+    this.bridge.__exitApp();
     return true;
   }
 }

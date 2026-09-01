@@ -15,6 +15,7 @@
  *      Week2 按媒体保存/备份/打印/分片读取逐一补齐。
  */
 import { common, Want } from '@kit.AbilityKit';
+import { fileIo as fs } from '@kit.CoreFileKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 
 const DOMAIN: number = 0x0000;
@@ -33,6 +34,10 @@ export class NativeBridge {
   /** JS 桥入口：window.AndroidNative.invoke(name, JSON.stringify(args)) */
   invoke(name: string, jsonStr: string): string {
     hilog.info(DOMAIN, TAG, 'invoke: %{public}s', name);
+    // ★ P1-6 安全校验（对齐安卓 isSensitiveOperation/isCallerAllowed）：
+    //   Week2 实现 readFileAsBase64 / deleteFile 时，必须先校验当前 Web 页面 URL
+    //   为云端 host（controller.getUrl() → host 严格比对），非云端页面一律返回
+    //   {"success":false,"error":"permission denied"}，防 XSS 读写沙箱文件。
     let args: Record<string, Object> = {};
     try {
       const parsed: object = JSON.parse(jsonStr ?? '{}') as object;
@@ -107,11 +112,15 @@ export class NativeBridge {
 
   /**
    * 官网付款导引：系统浏览器打开官网购买页（严格白名单）。
-   * 语义与安卓 openExternalUrl 完全一致：仅放行 download.html 前缀（含 ?mid=&ed= 参数）。
+   * 语义与安卓 openExternalUrl 一致：仅放行 download.html 精确路径或带查询参数（?mid=&ed=）。
+   * 边界收紧：download.htmlX 之类同 host 变形路径不放行。
    */
   private openExternalUrl(url: string): string {
     const u: string = (url ?? '').trim();
-    if (!u.startsWith(ALLOWED_URL_PREFIX)) {
+    const allowed: boolean = u === ALLOWED_URL_PREFIX
+      || u.startsWith(ALLOWED_URL_PREFIX + '?')
+      || u.startsWith(ALLOWED_URL_PREFIX + '#');
+    if (!allowed) {
       hilog.warn(DOMAIN, TAG, '[openExternalUrl] 拒绝非白名单URL: %{public}s', u);
       return failJson('url not allowed');
     }
@@ -131,10 +140,16 @@ export class NativeBridge {
     return okJson();
   }
 
-  /** 媒体目录：鸿蒙沙箱内媒体目录（Week2 配合 Picker 导出可见） */
+  /** 媒体目录：鸿蒙沙箱内媒体目录（确保存在；Week2 配合 Picker 导出可见） */
   private getVideoDirectory(): string {
     try {
       const dir: string = `${this.context.filesDir}/惠康中医媒体`;
+      // 递归创建，确保 Week2 媒体写入时目录存在（对齐安卓 mkdirs）
+      try {
+        fs.mkdirSync(dir, true);
+      } catch (e) {
+        hilog.info(DOMAIN, TAG, '媒体目录已存在或创建跳过: %{public}s', JSON.stringify(e));
+      }
       const r: Record<string, Object> = {
         'success': true,
         'directory': dir

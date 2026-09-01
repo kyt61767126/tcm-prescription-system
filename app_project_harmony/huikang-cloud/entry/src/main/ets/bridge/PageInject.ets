@@ -58,7 +58,7 @@ export class PageInject {
 
   /** 对齐安卓 onPageStarted：提前注入 anti-autofill + AndroidAppExit shim */
   onPageBegin(): void {
-    this.runScript(this.readScriptSync(INJECT_AUTOCOMPLETE));
+    this.injectFile(INJECT_AUTOCOMPLETE);
     // AndroidAppExit shim：安卓为独立 JS 接口对象，鸿蒙端经 AndroidNative 代理
     this.runScript(
       'if(!window.AndroidAppExit){window.AndroidAppExit={exit:function(){AndroidNative.__exitApp();}};}'
@@ -69,31 +69,43 @@ export class PageInject {
   onPageEnd(): void {
     // 1) 状态栏高度（鸿蒙默认内容从状态栏下方开始，置 0，Week2 真机校准）
     this.runScript('window.__STATUS_BAR_HEIGHT__ = 0;');
-    // 2) 版本信息（供 cloud-layout-fix.js 使用）
+    // 2) 版本信息（供 cloud-layout-fix.js 使用；发版需与 AppScope/app.json5 同步，Week2 改 bundleManager 动态读取）
     this.runScript(
       'window.__HK_APP_VERSION__ = \'1.0.0\'; window.__HK_APP_CODE__ = 1000000;'
     );
-    // 3) electronAPI shim（立即）
-    this.runScript(this.readScriptSync(INJECT_ELECTRON_API));
-    // 4) 布局修正 + 版本号（0/600/1500ms 三次重试，脚本自带幂等守卫）
+    // 3) anti-autofill（安卓 onPageFinished 也注入一次，见 MainActivity line 563）
+    this.injectFile(INJECT_AUTOCOMPLETE);
+    // 4) electronAPI shim（立即）
+    this.injectFile(INJECT_ELECTRON_API);
+    // 5) 布局修正 + 版本号（0/600/1500ms 三次重试，脚本自带幂等守卫）
     this.injectLayoutFix();
-    // 5) APP 专属按钮（立即 + 1500ms 重试）
+    // 6) APP 专属按钮（立即 + 1500ms 重试）
     this.injectAppButtons();
     setTimeout(() => this.injectAppButtons(), 1500);
-    // 6) 录像拍照脚本（延迟 300ms，与安卓一致，避免阻塞首屏）
+    // 7) 录像拍照脚本（延迟 300ms，与安卓一致，避免阻塞首屏）
     setTimeout(() => {
-      this.runScript(this.readScriptSync(INJECT_VIDEO_RECORDER));
+      this.injectFile(INJECT_VIDEO_RECORDER);
     }, 300);
   }
 
   private injectLayoutFix(): void {
-    this.runScript(this.readScriptSync(INJECT_LAYOUT_FIX));
-    setTimeout(() => this.runScript(this.readScriptSync(INJECT_LAYOUT_FIX)), 600);
-    setTimeout(() => this.runScript(this.readScriptSync(INJECT_LAYOUT_FIX)), 1500);
+    this.injectFile(INJECT_LAYOUT_FIX);
+    setTimeout(() => this.injectFile(INJECT_LAYOUT_FIX), 600);
+    setTimeout(() => this.injectFile(INJECT_LAYOUT_FIX), 1500);
   }
 
   private injectAppButtons(): void {
-    this.runScript(this.readScriptSync(INJECT_APP_BUTTONS));
+    this.injectFile(INJECT_APP_BUTTONS);
+  }
+
+  /**
+   * 异步确保注入：脚本可能尚未预加载完成（页面加载快于 rawfile 读取），
+   * readScript 带缓存且读盘后自动注入，避免注入丢失。
+   */
+  private injectFile(name: string): void {
+    this.readScript(name).then((js: string) => {
+      this.runScript(js);
+    });
   }
 
   // ==================================================================
@@ -116,11 +128,6 @@ export class PageInject {
       this.cache.set(name, '');
       return '';
     }
-  }
-
-  private readScriptSync(name: string): string {
-    const cached: string | undefined = this.cache.get(name);
-    return cached ?? '';
   }
 
   private runScript(script: string): void {
