@@ -533,3 +533,26 @@ node "D:\Program Files\Huawei\DevEco Studio\tools\hvigor\bin\hvigorw.js" --mode 
 | 云桌面 / 离线桌面 | `app_project/db-*/desktop/`（sync-all 已同步） | 若旧 exe → 重打     | 下次 `build-app.bat` 自动纳入；源码本地打开即生效 |
 | 离线 APP     | APK 打包源                                   | 若旧 APK → 重打     | 不重打=下次打包自动纳入                      |
 
+## 16.2 处方签「病史症状」栏显示/隐藏开关（2026-09-01）
+
+**需求**：处方签（预览+打印）的「病史症状」栏可勾选显示/隐藏；**默认隐藏**，打印处方时不出该栏。
+
+**权威实现源**：`shared/prescription-core.js` 末尾追加的独立 IIFE（`__paperHistoryToggleLoaded` 防重复），HTML 零改动、运行时注入。
+
+**实现要点**：
+
+* 处方签行定位：`#paperMedicalHistory` 向上 `closest('div')`（该行 div 内含文本 span+下划分隔线，整行隐藏=栏目隐藏）。
+
+* 显示/隐藏 = 对行 div 写 `style.display=''/'none'`——**打印取** **`#prescriptionPaper.innerHTML`**（printPrescription），内联 display:none 随 innerHTML 携带进打印窗口 → 屏幕/打印所见即所得，无需改打印 HTML 模板。
+
+* 勾选框注入位置：左栏 `.symptom-section .history-tabs` 行右端（`margin-left:auto`），**不在 #prescriptionPaper 内，永不进打印**；`.history-tab` 无 JS 点击绑定，追加 label 无冲突。
+
+* 持久化：localStorage key `local_paperShowHistory`（'1'=显示，默认/其他=隐藏）。
+
+* 打印兜底：后台重试包裹 `window.printPrescription`（内联脚本后定义，本模块先加载；`__histWrapped` 防重复包裹），进打印前再 apply 一次防复位。
+
+* 导出 API：`window.PaperHistoryToggle = { isShown, setShown, apply }`。
+
+**同步注意**：prescription-core.js 在 sync-all 之外的脱管副本（cloud\_app assets、harmony rawfile、site-admin + site-admin/electron）改完必须手动覆盖（`Copy-Item shared\prescription-core.js`）；build/intermediates 与 .build-cache 为构建产物不用管。
+
+**坑（再次复现）**：会话恢复快照会静默回退工作区 `.trae/KNOWLEDGE.md`（本次 §16/§16.1 被吞 65 行，HEAD 仍在）——开工先 `git status`，发现 KNOWLEDGE.md 显示 M 且比 HEAD 短时，先 `git checkout -- .trae/KNOWLEDGE.md` 恢复再追加新章节。

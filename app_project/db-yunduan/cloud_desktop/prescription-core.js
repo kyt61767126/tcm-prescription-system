@@ -305,3 +305,106 @@
     global.PrescriptionCore = PrescriptionCore;
 
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
+
+// ============================================================================
+// 处方签「病史症状」栏显示/隐藏开关（2026-09-01 · 运行时注入 · HTML 零改动）
+// 需求：处方签病史症状栏可勾选显示/隐藏（localStorage 持久化）；
+//      默认隐藏 —— 屏幕预览与打印一致（打印取 #prescriptionPaper.innerHTML，
+//      本模块对行内 div 写 style.display:none，随 innerHTML 携带进打印窗口）
+// ============================================================================
+(function (global) {
+    'use strict';
+    if (global.__paperHistoryToggleLoaded) return;
+    global.__paperHistoryToggleLoaded = true;
+
+    var LS_KEY = 'local_paperShowHistory'; // '1'=显示 / 其他=隐藏（默认隐藏）
+
+    function getShow() {
+        try { return !!(global.localStorage && global.localStorage.getItem(LS_KEY) === '1'); }
+        catch (e) { return false; }
+    }
+    function setShow(v) {
+        try { if (global.localStorage) global.localStorage.setItem(LS_KEY, v ? '1' : '0'); } catch (e) {}
+    }
+
+    // 处方签上「病史症状」整行 = #paperMedicalHistory 向上最近的块级 div
+    //（该 div 内含文本 span + 下划分隔线，整行隐藏即为栏目隐藏）
+    function findRow() {
+        var s = document.getElementById('paperMedicalHistory');
+        if (!s) return null;
+        if (s.closest) return s.closest('div');
+        return s.parentElement && s.parentElement.parentElement;
+    }
+
+    // 应用显示/隐藏到处方签行 + 同步勾选框状态
+    function applyHistoryToggle() {
+        var row = findRow();
+        if (row) row.style.display = getShow() ? '' : 'none';
+        var cb = document.getElementById('paperHistoryToggle');
+        if (cb && cb.checked !== getShow()) cb.checked = getShow();
+    }
+
+    // 打印前兜底：包一层 printPrescription，进打印前再 apply 一次
+    //（防其他逻辑复位 display；printPrescription 由各端内联脚本后定义，需延迟包裹）
+    function wrapPrint() {
+        if (typeof global.printPrescription === 'function' && !global.printPrescription.__histWrapped) {
+            var orig = global.printPrescription;
+            var wrapped = function () { applyHistoryToggle(); return orig.apply(this, arguments); };
+            wrapped.__histWrapped = true;
+            global.printPrescription = wrapped;
+            return true;
+        }
+        return typeof global.printPrescription === 'function';
+    }
+
+    // 注入勾选框到左栏「病史症状」页签行右端（不在 #prescriptionPaper 内，永不进打印）
+    function injectHistoryToggle(retry) {
+        retry = retry || 0;
+        var row = findRow();
+        var tabs = document.querySelector('.symptom-section .history-tabs');
+        if (!row || !tabs) {
+            if (retry < 40) setTimeout(function () { injectHistoryToggle(retry + 1); }, 250);
+            return;
+        }
+        if (!document.getElementById('paperHistoryToggle')) {
+            var lab = document.createElement('label');
+            lab.id = 'paperHistoryToggleWrap';
+            lab.style.cssText = 'margin-left:auto;display:flex;align-items:center;gap:4px;font-size:11px;color:#555;cursor:pointer;white-space:nowrap;padding:2px 0 2px 8px;';
+            lab.title = '勾选=处方签显示病史症状栏（屏幕预览与打印一致）；默认隐藏、打印不输出';
+            var cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.id = 'paperHistoryToggle';
+            cb.style.cssText = 'width:13px;height:13px;margin:0;cursor:pointer;accent-color:#006400;';
+            var tx = document.createElement('span');
+            tx.textContent = '处方签显示病史';
+            lab.appendChild(cb);
+            lab.appendChild(tx);
+            tabs.appendChild(lab);
+            cb.addEventListener('change', function () { setShow(cb.checked); applyHistoryToggle(); });
+        }
+        applyHistoryToggle();
+    }
+
+    // 启动：勾选框/应用立即执行；printPrescription 包裹在后台重试
+    //（printPrescription 由各端内联脚本在页面加载期定义，本模块先加载）
+    function bootHistoryToggle() {
+        injectHistoryToggle(0);
+        (function wrapRetry(retry) {
+            retry = retry || 0;
+            if (wrapPrint() || retry >= 40) return;
+            setTimeout(function () { wrapRetry(retry + 1); }, 250);
+        })(0);
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', bootHistoryToggle);
+    } else {
+        bootHistoryToggle();
+    }
+
+    global.PaperHistoryToggle = {
+        isShown: getShow,
+        setShown: function (v) { setShow(!!v); applyHistoryToggle(); },
+        apply: applyHistoryToggle
+    };
+})(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
