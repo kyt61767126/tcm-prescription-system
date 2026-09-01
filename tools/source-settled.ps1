@@ -18,6 +18,14 @@
 #   build.gradle 纯 versionCode/versionName 行变化）见 pack-side-effects.ps1。
 #   未跟踪 ??（dist/build_output 产物）不拦。
 #
+# ★ 2026-09-01 会话快照回退自动愈合（历史上第 3 次复现后根治）：
+#   TRAE 会话恢复会用旧快照静默覆盖工作区已提交文件（3 次吞掉 KNOWLEDGE.md
+#   章节，2 次卡死打包门禁）。回退签名 = diff 相对 HEAD「只有删无增」。
+#   经验/规则类文档（$SnapshotRevertAutoRestore 清单，正常流程只会追加+
+#   立即 commit，不存在「未提交纯删除」的合法状态）命中签名 → 自动从
+#   HEAD 恢复并放行（git 是唯一权威源）；其余源码文件命中签名 → 仍拦截，
+#   但在 blocker 里附恢复命令提示（防止误吞有意删除的半成品代码）。
+#
 # 保险丝：ALLOW_DIRTY_BUILD=1（由调用方检查，本函数不管）
 # 非仓库环境（无 .git）：返回空（放行，不误拦）
 # ============================================================================
@@ -27,6 +35,29 @@ param(
 )
 
 . (Join-Path $PSScriptRoot 'pack-side-effects.ps1')
+
+# 快照回退自动愈合清单：.trae/ 经验与规则文档（git 为唯一权威源，追加式维护）
+$script:SnapshotRevertAutoRestore = @(
+    '.trae/KNOWLEDGE.md',
+    '.trae/decisions.md',
+    '.trae/history_bug_summary.md',
+    '.trae/project_rules.md',
+    '.trae/rules/project_rules.md',
+    '.trae/skill-optimize.md'
+)
+
+# 判定单个文件相对 HEAD 是否为「纯删除」diff（会话快照回退签名）。
+# numstat 行格式：<增行数>TAB<删行数>TAB<路径>；二进制为 -TAB- 不匹配（按普通 blocker 处理）。
+function Test-IsSnapshotRevert {
+    param([string]$RepoRoot, [string]$Path)
+    $numstat = @(& git -C $RepoRoot diff HEAD --numstat -- $Path 2>$null) | Where-Object { $_ }
+    foreach ($ns in $numstat) {
+        if ($ns -match '^(\d+)\t(\d+)\t') {
+            return ([int]$Matches[1] -eq 0 -and [int]$Matches[2] -gt 0)
+        }
+    }
+    return $false
+}
 
 function Get-SourceSettledBlockers {
     param([string]$RepoRoot = (Split-Path $PSScriptRoot -Parent))
@@ -47,6 +78,19 @@ function Get-SourceSettledBlockers {
             $diff = @(& git -C $RepoRoot diff HEAD -- $path 2>$null)
         }
         if (Test-IsPackSideEffect -GitPath $path -DiffLines $diff) { continue }
+
+        # ★ 会话快照回退自动愈合（详见文件头注释）：纯删除 diff = 旧快照覆盖签名
+        if (Test-IsSnapshotRevert -RepoRoot $RepoRoot -Path $path) {
+            if ($script:SnapshotRevertAutoRestore -contains $path) {
+                & git -C $RepoRoot checkout HEAD -- $path 2>$null
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Host "[自愈] $path 疑似被会话快照静默回退（纯删除 diff），已自动从 HEAD 恢复" -ForegroundColor Yellow
+                    continue
+                }
+            }
+            [void]$blockers.Add(("{0}  {1}  ← 疑似会话快照回退(纯删除)，若非有意修改可: git checkout HEAD -- {1}" -f $status2.Trim(), $path))
+            continue
+        }
 
         [void]$blockers.Add(("{0}  {1}" -f $status2.Trim(), $path))
     }
