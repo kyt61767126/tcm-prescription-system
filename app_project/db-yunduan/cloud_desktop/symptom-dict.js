@@ -815,8 +815,26 @@
         saveMRU(a);
     }
 
-    var DD_MAX=12,_ddEl=null,_ddList=[],_ddIndex=-1,_ddInput=null;
+    var DD_MAX=12,_ddEl=null,_ddList=[],_ddIndex=-1,_ddInput=null,_layoutInjected=false;
+    function _injectLayout(){
+        if(_layoutInjected)return;_layoutInjected=true;
+        var s=document.createElement('style');s.id='diagQuickLayout';
+        // 目标：1) 诊断框宽度扩大完美显示；2) 剂数输入框长度缩小 1/2
+        // 基线（index.html 内联）：#diagnosis flex:1 1 183px / doseCountInput3 width 42px
+        s.textContent='' +
+          '.diagnosis-section{padding:2px 6px !important;}' +
+          '.diagnosis-section .patient-row{flex-wrap:nowrap !important;gap:2px !important;margin-bottom:0 !important;align-items:center;}' +
+          '.diagnosis-section .patient-row .patient-label{width:40px !important;padding-right:4px !important;}' +
+          '.diagnosis-section .patient-row input#diagnosis{flex:1 1 380px !important;min-width:120px !important;max-width:none !important;}' +
+          '@media (max-width:1280px){.diagnosis-section .patient-row input#diagnosis{flex:1 1 260px !important;}}' +
+          '@media (max-width:1024px){.diagnosis-section .patient-row input#diagnosis{flex:1 1 200px !important;}}' +
+          '.diagnosis-section .patient-row input#doseCountInput3{flex:0 0 22px !important;width:22px !important;padding:3px 2px !important;text-align:center;}' +
+          '.diagnosis-section .patient-row input#doctorName{flex:0 0 60px !important;width:60px !important;}' +
+          '#diagQuickBtn{margin-right:12px !important;}';
+        document.head.appendChild(s);
+    }
     function ensureDD(){
+        _injectLayout();
         if(_ddEl)return;
         _ddEl=document.createElement('div');_ddEl.id='diagDropdown';
         _ddEl.style.cssText='position:absolute;z-index:99999;background:#fff;border:1px solid #808080;border-radius:3px;box-shadow:0 3px 10px rgba(0,0,0,.18);max-height:280px;overflow-y:auto;min-width:240px;font-size:13px;line-height:1.4;display:none;';
