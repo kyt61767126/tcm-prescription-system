@@ -441,13 +441,17 @@ node "D:\Program Files\Huawei\DevEco Studio\tools\hvigor\bin\hvigorw.js" --mode 
 **实现方案（方案A·药库预设）**：
 
 * 药品对象新增 `jianfa` 字段（`shared/prescription-core.js` 权威源 `createEmptyMedicine`/`buildPrescriptionRecord`）。
+
 * 煎煮方法清单常量 `JIANFA_OPTIONS`：`['普通煎','先煎','后下','包煎','烊化','另煎','冲服','煎汤代水','兑服']`，默认「普通煎（默认）」。
+
 * 全链路数据传递：药库编辑弹窗新增煎煮下拉框（`medEditJianfa`）→ 保存进药库 → 开方选中 `selectMedicine` 自动带入 → 处方笺渲染 `updatePrescriptionPaper` 若非普通煎则标 `（先煎）` → 打印 `prescriptionPaper.innerHTML` 自动带上 → 历史/验方回填保留。
 
 **同步范围（改动必查）**：
 
 * 6 份 `index.html`：权威源 `public/index.html`，其余 5 份（云桌面/云端APP/离线APP/离线桌面/index-app打包源）手动同步 R3 编辑弹窗下拉框。
+
 * prescription-core.js 走 `tools/sync-all.ps1` 分发（含 site-admin/electron/鸿蒙 rawfile 等散落副本）。
+
 * `tools/html-sync-check.ps1`（authority → cloud copy）与 `tools/check-interface.ps1` 校验必须通过。
 
 **经验**：改 index.html 时若权威源比副本多注释行会触发 html-sync-check 报 DRIFT（行错位），需把注释/赋值行同步到各副本；`medEditJianfa` 每份应出现 3 次（R3 下拉框 + 编辑填充 + 保存获取）。
@@ -455,9 +459,44 @@ node "D:\Program Files\Huawei\DevEco Studio\tools\hvigor\bin\hvigorw.js" --mode 
 **★ 2026-09-01 二期：药典规则自动匹配（免手动选择）**：
 
 * 规则表 `JIANFA_RULES` + 匹配函数 `getAutoJianfa(name)` 沉淀在 `shared/prescription-core.js`（依据 2020版《中国药典》/《中药学》教材，约 60 味：矿物贝壳先煎 / 芳香挥发后下 / 种子花粉包煎 / 胶类烊化 / 贵细另煎 / 粉末冲服 / 灶心土煎汤代水 / 姜汁兑服）。
-* 生效优先级（各端 `getEffectiveJianfa(med, name)` helper）：**药库手动设置(非普通煎) > 规则表自动匹配 > 普通煎**；支持「煅龙骨/生石膏/炒车前子」炮制前缀（长关键词包含匹配，精确命中优先）。
-* 误匹配防护：`JIANFA_EXCLUDE = ['香附','肉豆蔻']`（防"香附子"命中"附子"先煎、"肉豆蔻"命中"豆蔻"后下）；精确表已防"珍珠母→珍珠冲服"、"龟甲胶→龟甲先煎"（长键优先）。
-* 调用点 7 处/份：selectMedicine 带入、历史回填、验方回填、药库列表显示、编辑弹窗初值、medEditName oninput 自动建议（用户已手动改过不覆盖）+ helper 本身；harmony rawfile 旧版仅 4 处。
-* 坑：cloud_app assets 的 prescription-core.js **不在 sync-all.ps1 分发清单内**（上一轮 commit 漏同步导致云端APP无煎法），连同 harmony rawfile、site-admin 三份脱管副本需手动 `Copy-Item shared\prescription-core.js` 覆盖；批量改副本用临时 Node 脚本（精确替换+命中次数校验+CRLF 适配），跑完即删。
 
+* 生效优先级（各端 `getEffectiveJianfa(med, name)` helper）：**药库手动设置(非普通煎) > 规则表自动匹配 > 普通煎**；支持「煅龙骨/生石膏/炒车前子」炮制前缀（长关键词包含匹配，精确命中优先）。
+
+* 误匹配防护：`JIANFA_EXCLUDE = ['香附','肉豆蔻']`（防"香附子"命中"附子"先煎、"肉豆蔻"命中"豆蔻"后下）；精确表已防"珍珠母→珍珠冲服"、"龟甲胶→龟甲先煎"（长键优先）。
+
+* 调用点 7 处/份：selectMedicine 带入、历史回填、验方回填、药库列表显示、编辑弹窗初值、medEditName oninput 自动建议（用户已手动改过不覆盖）+ helper 本身；harmony rawfile 旧版仅 4 处。
+
+* 坑：cloud\_app assets 的 prescription-core.js **不在 sync-all.ps1 分发清单内**（上一轮 commit 漏同步导致云端APP无煎法），连同 harmony rawfile、site-admin 三份脱管副本需手动 `Copy-Item shared\prescription-core.js` 覆盖；批量改副本用临时 Node 脚本（精确替换+命中次数校验+CRLF 适配），跑完即删。
+
+**★ 2026-09-01 三期：处方笺布局定稿（4列一行+煎法小字）**：
+
+* `.prescription-grid-inner` 用 `repeat(4, minmax(0, 1fr))`；`.prescription-line` 必须 `white-space: nowrap` + 左右 padding（屏 4px / 打印 1mm）+ 列间浅灰虚线隔栏（`border-left:1px dashed #e6e6e6`，打印 `0.5pt dashed #999`），隔栏选择器 `:nth-child(4n+1)` 与列数联动（改过列数必须同步改）。
+
+* 煎法括号包 `<span class="prescription-jianfa">`，字号 `0.8em`（打印 0.82em）相对父级缩小；打印复用 `prescriptionPaper.innerHTML`，屏幕模板改了打印自动生效，打印页内联 CSS 只需补类字号。
+
+* 踩坑链：双行 flex 布局 → 网格拆断；改单行 nowrap+1fr → 列宽 25% 溢出视觉窜格；去 nowrap 允许换行 → 用户不要两行；最终定稿：**4列 + nowrap + 缩字号（屏12px/打印9.5pt）+ 虚线隔栏**。改列数/字号时屏幕基础+三档断点（768/560/380附近）+打印内联共 5 处必须同改。
+
+## 16. 处方保存·同日同患者覆盖（2026-09-01 已实现，commit ef529a04）
+
+**需求**：同一患者一天只保留一张处方；当天修改后再保存自动覆盖，处方编号不变。
+
+**实现（纯前端，服务端零改动）**：
+
+* `savePrescription()` 保存前用 `_isTodayRx(p)` 匹配当天处方：`患者姓名 trim 相同` + (`p.date===今天` 或 `prescriptionNo/outpatientNo` 以今天 YYMMDD 前缀开头) + (`!p.createdBy` 或 `createdBy===当前登录医师`，防覆盖别的医师的处方)。
+
+* 命中（`todayExisting`，取当天最新一条）：编号沿用 `todayExisting.prescriptionNo`，**不调** `generatePrescriptionNoForSave()`（不递增当日序号），**不递增**试用版处方计数；record 用 `Object.assign({}, todayExisting, {新内容字段})` 合并（保留 id/媒体文件/收费状态/userId 等），同 id 原位替换 `prescriptionHistory`。
+
+* 未命中：原逻辑新建。云端 `POST /prescriptions` 服务端本就按 `id` upsert（同 id 走 updatedExisting 分支保留编号/创建者），故 functions/api/prescriptions.js 无需改。
+
+* 当天其余重复处方（`todayDupes`）保存成功后由 `silentArchiveDupRx(d)` **静默软删除进回收站**（IndexedDB prescriptions\_trash + localStorage recycleBin + 云端 DELETE 软删 + tombstone 标记），不弹确认、不扣计数，用户可从回收站恢复；恢复链路 `restoreFromRecycleBin` 会清 tombstone。
+
+* 审计：覆盖保存记 `save_prescription ...（同日覆盖更新）`，自动归档记 `archive_duplicate_rx`；toast 区分「处方已更新（覆盖当天原处方）」/「处方保存成功」。
+
+**经验**：
+
+* 编号序号「预览」与「保存分配」是两个函数：`generatePrescriptionNo()` 只读 max+1，`generatePrescriptionNoForSave()` 会 `setGlobalMaxSerial` 递增——覆盖场景必须跳过后者。
+
+* 离线未同步过的处方首次覆盖同步到云端时，服务端按新 id 分配云端统一编号并回写（一次性换号），属既有合并逻辑，可接受。
+
+* 同名患者按姓名识别（系统无患者 ID），不同医师同天同患者各保留一张（createdBy 隔离）。
 
