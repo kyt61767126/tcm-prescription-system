@@ -468,35 +468,73 @@ node "D:\Program Files\Huawei\DevEco Studio\tools\hvigor\bin\hvigorw.js" --mode 
 
 * 坑：cloud\_app assets 的 prescription-core.js **不在 sync-all.ps1 分发清单内**（上一轮 commit 漏同步导致云端APP无煎法），连同 harmony rawfile、site-admin 三份脱管副本需手动 `Copy-Item shared\prescription-core.js` 覆盖；批量改副本用临时 Node 脚本（精确替换+命中次数校验+CRLF 适配），跑完即删。
 
-**★ 2026-09-01 三期：处方笺布局定稿（4列一行+煎法小字）**：
+## 16. 诊断快速输入（2026-09-01 已实现 · 中医诊断学+GB/T15657）
 
-* `.prescription-grid-inner` 用 `repeat(4, minmax(0, 1fr))`；`.prescription-line` 必须 `white-space: nowrap` + 左右 padding（屏 4px / 打印 1mm）+ 列间浅灰虚线隔栏（`border-left:1px dashed #e6e6e6`，打印 `0.5pt dashed #999`），隔栏选择器 `:nth-child(4n+1)` 与列数联动（改过列数必须同步改）。
+**需求**：诊断输入框根据《中医诊断学》《中医病证分类与代码》(GB/T15657) 实现快速录入，减少逐字手打，适配 APP / 云端网页 / 桌面三端。
 
-* 煎法括号包 `<span class="prescription-jianfa">`，字号 `0.8em`（打印 0.82em）相对父级缩小；打印复用 `prescriptionPaper.innerHTML`，屏幕模板改了打印自动生效，打印页内联 CSS 只需补类字号。
+**权威实现源**：`shared/symptom-dict.js`（诊断模块与症状词典 IIFE 并排，末尾 IIFE 内：DISEASE 病名约 177 项 / SYNDROMES 证型约 144 项 / COMBOS 高频组合约 286 项 + 面板/下拉/快捷键逻辑，全部运行时注入，HTML DOM 零改动。权威源经 `sync-all.ps1` 分发 6 份副本：`public/`、`public/electron/`、`app_project/db-yunduan/cloud_desktop/`、`.../cloud_desktop/electron/`、`app_project/db-offline/desktop/`、`db-offline/app/.../public/`）。
 
-* 踩坑链：双行 flex 布局 → 网格拆断；改单行 nowrap+1fr → 列宽 25% 溢出视觉窜格；去 nowrap 允许换行 → 用户不要两行；最终定稿：**4列 + nowrap + 缩字号（屏12px/打印9.5pt）+ 虚线隔栏**。改列数/字号时屏幕基础+三档断点（768/560/380附近）+打印内联共 5 处必须同改。
+**功能清单（对照用户稿 v2.0）**：
 
-## 16. 处方保存·同日同患者覆盖（2026-09-01 已实现，commit ef529a04）
+* **诊断框下拉建议（最多 12 条）**：
 
-**需求**：同一患者一天只保留一张处方；当天修改后再保存自动覆盖，处方编号不变。
+  * 索引 = 拼音简码前缀匹配 + 中文包含匹配；示例：输入 `gm` → 感冒 / 感冒（风热犯表）…；输入 `风` → 风湿痹证 / 风寒束表 …。
 
-**实现（纯前端，服务端零改动）**：
+  * 回车 / 鼠标点击 即填入；Esc 或失焦关闭；最近 12 条使用记录 localStorage 缓存，高频优先 + 最近使用（MRU）双重排序。
 
-* `savePrescription()` 保存前用 `_isTodayRx(p)` 匹配当天处方：`患者姓名 trim 相同` + (`p.date===今天` 或 `prescriptionNo/outpatientNo` 以今天 YYMMDD 前缀开头) + (`!p.createdBy` 或 `createdBy===当前登录医师`，防覆盖别的医师的处方)。
+* **诊断面板（Alt+D 唤起，也可点击诊断框右方运行时注入按钮）**：
 
-* 命中（`todayExisting`，取当天最新一条）：编号沿用 `todayExisting.prescriptionNo`，**不调** `generatePrescriptionNoForSave()`（不递增当日序号），**不递增**试用版处方计数；record 用 `Object.assign({}, todayExisting, {新内容字段})` 合并（保留 id/媒体文件/收费状态/userId 等），同 id 原位替换 `prescriptionHistory`。
+  * 三组 Tab：高频组合 / 病名分类 / 证型分类；病名、证型支持多选；组合模式三种：病名+证型（默认）/ 仅病名 / 仅证型；一键插入并自动回填到 #diagnosis。
 
-* 未命中：原逻辑新建。云端 `POST /prescriptions` 服务端本就按 `id` upsert（同 id 走 updatedExisting 分支保留编号/创建者），故 functions/api/prescriptions.js 无需改。
+  * 分类体系：病名按肺系/心系/脾胃/肝胆/肾系/气血津液/经络肢体/外科/妇科/儿科/五官科；证型按八纲/脏腑/六经/卫气营血/三焦/气血津液辨证。
 
-* 当天其余重复处方（`todayDupes`）保存成功后由 `silentArchiveDupRx(d)` **静默软删除进回收站**（IndexedDB prescriptions\_trash + localStorage recycleBin + 云端 DELETE 软删 + tombstone 标记），不弹确认、不扣计数，用户可从回收站恢复；恢复链路 `restoreFromRecycleBin` 会清 tombstone。
+* **舌脉体征（Alt+1 既有）与诊断独立区分**：舌脉面板注入到病史症状区，Alt+D 诊断面板独立注入到「诊断」标签右方，互不污染。
 
-* 审计：覆盖保存记 `save_prescription ...（同日覆盖更新）`，自动归档记 `archive_duplicate_rx`；toast 区分「处方已更新（覆盖当天原处方）」/「处方保存成功」。
+* **界面零改动纪律**：所有按钮、下拉层、面板均 DOMContentLoaded 后 JS createElement 插入，不修改 index.html `<body>` 内结构，`check-interface.ps1` 基线全绿。
 
-**经验**：
+**同步范围（改动必查）**：
 
-* 编号序号「预览」与「保存分配」是两个函数：`generatePrescriptionNo()` 只读 max+1，`generatePrescriptionNoForSave()` 会 `setGlobalMaxSerial` 递增——覆盖场景必须跳过后者。
+* 3 份内联校验：权威源 `public/index.html` 注释里**禁止出现字面量** **`<script>`**（否则自定义 script-extractor 会把 187B 注释文本误识别为内联 JS → `Unexpected identifier 'video'` 假阴性 fail，比对 HEAD 同样 fail 才能确认是旧噪声，修复方式=写成 `[script]`）。
 
-* 离线未同步过的处方首次覆盖同步到云端时，服务端按新 id 分配云端统一编号并回写（一次性换号），属既有合并逻辑，可接受。
+* symptom-dict.js 走 `tools/sync-all.ps1` 分发（Business JS 9 份组）；sync-all -VerifyOnly 必须全部 In sync。
 
-* 同名患者按姓名识别（系统无患者 ID），不同医师同天同患者各保留一张（createdBy 隔离）。
+* 7 份 index.html 中若改 #diagnosis 输入框属性（如 onkeyup 行），改完必须 `html-sync-check.ps1` + `check-index-consistency.ps1` 双绿；`Alt+D` 注入 IIFE 已在 symptom-dict 内，不用改 DOM。
+
+**数据扩展方法**：
+
+* 新增病名/证型/组合：在 symptom-dict.js 对应数组 push `{t:'诊断文本', c:'拼音简码'}`；简码建议纯小写无空格（如「风热犯肺」→ `frfp`）。
+
+* 高频组合格式=病名（证型）整句，优先填充下拉，用户选择后不再二次开面板。
+
+* 最近使用：localStorage key `diag_mru_v1`（\[{t,ts,count}]，容量 12；排序公式= `count*3 + ageDecay(ts)`）。
+
+**经验&坑**：
+
+* 下拉层定位用 `input.getBoundingClientRect()` + 动态 append 到 body，z-index 9999，避免被 modal 遮住；模态打开时自动隐藏。
+
+* 若 symptom-dict.js 在 prescription-core.js 之后加载（本项目 `<script src="symptom-dict.js">` 顺序在前面，默认先加载是对的），须把下拉建议绑定改到 `DOMContentLoaded` 守卫里再按一次 `document.getElementById('diagnosis')`，防注入时序导致 `#diagnosis === null`。
+
+* 下拉结果类型用 emoji 前缀区分：🏥 病名 / 🧭 证型 / 📋 组合 / ⏱️ 最近使用；视觉可立刻识别。
+
+* 「保存处方」与「处方自动覆盖」策略（§15 同版本已落地：同一患者同一天只保留一张，修改后同编号覆盖+历史重复进回收站）对诊断字段纯文本无影响，但导入验方/历史回填时 `#diagnosis` 的赋值必须同时触发下拉重绘（已在 symptom-dict 内 `onDiagnosisChange` 统一守卫）。
+
+## 16.1 版本号&生效方式（本次交付）
+
+**代码权威源位置**：
+
+* 诊断词典+快速输入逻辑：`shared/symptom-dict.js`（病名≈177 / 证型≈144 / 组合≈286 + 下拉+面板+Alt+D 注入；经 `sync-all.ps1` 分发至 6 份副本，sync-all -VerifyOnly 必须全 In sync）
+
+* 诊断输入框 onkeyup 保持原 `updatePrescriptionPaper()`：`public/index.html`（#diagnosis 行）
+
+* 注释字面量修复：`public/index.html` L721，`<script>` → `[script]`
+
+**生效方式&是否需要重新打包**：
+
+| 端                                       | 来源                                                   | 是否需要重做                  | 说明                                          |
+| --------------------------------------- | ---------------------------------------------------- | ----------------------- | ------------------------------------------- |
+| 云端网页（tcm-prescription-system.pages.dev） | `public/` + Pages 部署                                 | 否，git push 自动生效         | 清浏览器缓存即可看到 Alt+D 面板、下拉建议                    |
+| 云桌面                                     | `app_project/db-yunduan/cloud_desktop/`（已 sync-all）  | 若用户当前 exe 未含 → 需要重打 exe | 已 `sync-all.ps1` 同步源码，重打即可生效；不重打=下次用户手动升级覆盖 |
+| 云端APP                                   | `public/` → WebView 加载线上                             | 否                       | 同云端网页；无需重打 APK（只要网页已部署）                     |
+| 离线桌面                                    | `app_project/db-offline/desktop/`（已 sync-all）        | 若当前离线 exe 未含 → 需要重打 exe | 同云桌面；下次一键打包自动纳入                             |
+| 离线APP                                   | `app_project/db-offline/index-app.html + public` 打包源 | 若当前 APK 未含 → 需要重打 APK   | 不重打=下次打包自动纳入                                |
 
