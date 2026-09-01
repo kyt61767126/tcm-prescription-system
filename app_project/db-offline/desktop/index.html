@@ -4633,7 +4633,7 @@ let currentUser = null;
             const __medSafePrice = isNaN(parseFloat(price)) ? 0 : parseFloat(price);
             prescriptionItems[index].price = __medSafePrice.toFixed(2);
             prescriptionItems[index].dosage = actualDosage;
-            prescriptionItems[index].jianfa = (medicine && medicine.jianfa) || '普通煎';
+            prescriptionItems[index].jianfa = getEffectiveJianfa(medicine, name);
             prescriptionItems[index].total = (__medSafePrice * actualDosage).toFixed(2);
             if (index >= prescriptionItems.length - 3) addEmptyRow();
             DOM_CACHE.init();
@@ -5658,7 +5658,7 @@ let currentUser = null;
                 price: (function(){ const v = parseFloat(item.price); return isFinite(v) ? v : 0; })(),
                 unit: item.unit || 'g',
                 dosage: (function(){ const v = parseFloat(item.dosage); return isFinite(v) && v > 0 ? v : 10; })(),
-                jianfa: item.jianfa || '普通煎',
+                jianfa: getEffectiveJianfa(item, item.name),
                 total: (function(){ const v = parseFloat(item.total); return isFinite(v) ? v : 0; })()
             }));
             while (prescriptionItems.length< 15) addEmptyRow();
@@ -6976,7 +6976,7 @@ let currentUser = null;
                     dosage: c.dosage,
                     unit: c.unit || med?.unit || 'g',
                     price: c.price || med?.price || 0,
-                    jianfa: (c.jianfa) || (med && med.jianfa) || '普通煎',
+                    jianfa: getEffectiveJianfa({jianfa: (c.jianfa) || (med && med.jianfa)}, c.name),
                     total: ((c.price || med?.price || 0) * c.dosage).toFixed(2)
                 };
             });
@@ -7004,7 +7004,7 @@ let currentUser = null;
 
             list.innerHTML = filteredMedicines.map((m,i) => {
                 const idx = medicines.indexOf(m);
-                return `<div style="display:flex;justify-content:space-between;padding:8px;border-bottom:1px solid #d0d0d0;"><div style="flex:1;"><div style="font-weight:bold;">${escapeHtml(m.name)}</div><div style="font-size:11px;color:#666;">简码：${escapeHtml(m.code)} | 进价：${formatPrice(m.costPrice)}元 | 单价：${formatPrice(m.price)}元/${escapeHtml(m.unit)}</div><div style="font-size:10px;color:#999;">用量：${m.dosage || '10'}${escapeHtml(m.unit)} | 库存：${m.stock || '0'} | 煎法：${escapeHtml(m.jianfa || '普通煎')}</div></div><div style="display:flex;gap:4px;"><button class="small-btn" onclick="editMedicine(${idx})">编辑</button><button class="small-btn" onclick="deleteMedicine(${idx})">删除</button></div></div>`;
+                return `<div style="display:flex;justify-content:space-between;padding:8px;border-bottom:1px solid #d0d0d0;"><div style="flex:1;"><div style="font-weight:bold;">${escapeHtml(m.name)}</div><div style="font-size:11px;color:#666;">简码：${escapeHtml(m.code)} | 进价：${formatPrice(m.costPrice)}元 | 单价：${formatPrice(m.price)}元/${escapeHtml(m.unit)}</div><div style="font-size:10px;color:#999;">用量：${m.dosage || '10'}${escapeHtml(m.unit)} | 库存：${m.stock || '0'} | 煎法：${escapeHtml(getEffectiveJianfa(m, m.name))}</div></div><div style="display:flex;gap:4px;"><button class="small-btn" onclick="editMedicine(${idx})">编辑</button><button class="small-btn" onclick="deleteMedicine(${idx})">删除</button></div></div>`;
             }).join('');
 
             if (filteredMedicines.length === 0) {
@@ -7030,6 +7030,23 @@ let currentUser = null;
         // ★ 中药特殊煎煮方法清单（方案A：药库预设）——单味药特殊煎煮法 + 默认普通煎
         window.JIANFA_OPTIONS = ['普通煎', '先煎', '后下', '包煎', '烊化', '另煎', '冲服', '煎汤代水', '兑服'];
 
+        // ★ 生效煎法优先级：药库手动设置(非普通煎) > 药典规则表自动匹配 > 普通煎
+        //（规范依据 2020版《中国药典》/《中药学》教材，规则表见 prescription-core.js JIANFA_RULES）
+        function getEffectiveJianfa(med, name) {
+            if (med && med.jianfa && med.jianfa !== '普通煎') return med.jianfa;
+            const n = (name || (med && med.name) || '').trim();
+            const auto = (window.PrescriptionCore && PrescriptionCore.getAutoJianfa) ? PrescriptionCore.getAutoJianfa(n) : '';
+            return auto || (med && med.jianfa) || '普通煎';
+        }
+
+        // 药品编辑弹窗：输入药名时自动建议规范煎法（用户已手动改过则不覆盖）
+        function medEditNameSuggestJianfa() {
+            const sel = document.getElementById('medEditJianfa');
+            if (!sel || sel.value !== '普通煎') return;
+            const auto = getEffectiveJianfa(null, document.getElementById('medEditName').value);
+            if (auto !== '普通煎') sel.value = auto;
+        }
+
         function editMedicine(index) {
             editingMedicineIndex = index;
             const m = medicines[index];
@@ -7051,7 +7068,7 @@ let currentUser = null;
                     '<div class="modal-header"><h3 id="medicineEditTitle">编辑药品</h3><span class="close-btn" onclick="closeMedicineEditModal()">&times;</span></div>' +
                     '<div class="modal-body">' +
                     '<div style="display:flex;flex-direction:column;gap:10px;">' +
-                    '<div><label style="display:block;margin-bottom:4px;font-weight:bold;">药品名称 *</label><input type="text" id="medEditName" style="width:100%;padding:8px;border:1px solid #888;border-radius:4px;" placeholder="请输入药品名称"></div>' +
+                    '<div><label style="display:block;margin-bottom:4px;font-weight:bold;">药品名称 *</label><input type="text" id="medEditName" oninput="medEditNameSuggestJianfa()" style="width:100%;padding:8px;border:1px solid #888;border-radius:4px;" placeholder="请输入药品名称"></div>' +
                     '<div><label style="display:block;margin-bottom:4px;font-weight:bold;">简码 *</label><input type="text" id="medEditCode" style="width:100%;padding:8px;border:1px solid #888;border-radius:4px;" placeholder="请输入简码"></div>' +
                     '<div style="display:flex;gap:10px;"><div style="flex:1;"><label style="display:block;margin-bottom:4px;font-weight:bold;">进价</label><input type="number" id="medEditCostPrice" step="0.01" style="width:100%;padding:8px;border:1px solid #888;border-radius:4px;" placeholder="0.00"></div>' +
                     '<div style="flex:1;"><label style="display:block;margin-bottom:4px;font-weight:bold;">单价</label><input type="number" id="medEditPrice" step="0.01" style="width:100%;padding:8px;border:1px solid #888;border-radius:4px;" placeholder="0.00"></div></div>' +
@@ -7072,7 +7089,7 @@ let currentUser = null;
             document.getElementById('medEditUnit').value = m ? (m.unit || 'g') : 'g';
             document.getElementById('medEditDosage').value = m ? (m.dosage || 10) : 10;
             document.getElementById('medEditStock').value = m ? (m.stock || 0) : 0;
-            document.getElementById('medEditJianfa').value = m ? (m.jianfa || '普通煎') : '普通煎';
+            document.getElementById('medEditJianfa').value = m ? getEffectiveJianfa(m, m.name) : '普通煎';
             modal.style.display = 'flex';
         }
 
