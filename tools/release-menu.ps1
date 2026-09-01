@@ -349,6 +349,27 @@ function Show-PublishResult {
     }
 }
 
+# ============ 最终结果汇总（结束前明确中文提示）============
+# ★ 2026-09-01 新增：菜单动作结束后、返回菜单/暂停前，统一输出最终汇总块——
+#   产物位置 + 发布状态 + 下一步指引，用户不需回翻日志即知"结果如何、东西在哪、
+#   接下来做什么"（此前副作用收纳后直接 Press Enter，结果提示弱）。
+function Show-FinalSummary {
+    param([string]$ActionLabel = "本次操作")
+    Write-Host ""
+    Write-Host "============================================" -ForegroundColor Cyan
+    Write-Host "  $ActionLabel 已结束" -ForegroundColor Cyan
+    Write-Host "============================================" -ForegroundColor Cyan
+    Write-Host "  产物位置（本机最新打包版本）:"
+    Write-Host "    云端桌面 exe : app_project\db-yunduan\cloud_desktop\dist\"
+    Write-Host "    云端手机 APP : app_project\db-yunduan\惠康中医-云端.apk"
+    Write-Host "    离线桌面 exe : app_project\db-offline\desktop\dist\"
+    Write-Host "    离线手机 APP : app_project\db-offline\惠康中医-本地.apk"
+    Write-Host "  发布状态: 打包产物不会自动上传官网（安全规范，需人工确认）" -ForegroundColor Yellow
+    Write-Host "  如需发布 : 双击 一键发布.bat → 选 [3] 智能发布（仅上传有变化的产物）"
+    Write-Host "  下载页   : https://tcm-prescription-system.pages.dev/download"
+    Write-Host "============================================" -ForegroundColor Cyan
+}
+
 # ============ 显示版本选择菜单 ============
 function Show-VersionMenu {
     param(
@@ -607,6 +628,8 @@ while ($true) {
             }
             # ★ 2026-08-24 打包增量基线记录（必须在副作用 AutoCommit 之后，HEAD 才稳定）
             Record-BuiltUnits
+            # ★ 2026-09-01 最终结果汇总（明确中文提示）
+            Show-FinalSummary -ActionLabel "仅打包（未发布）"
             Write-Host ""
             pause
         }
@@ -655,6 +678,8 @@ while ($true) {
             # ★ 2026-08-24 打包增量基线记录（必须在副作用 AutoCommit 之后，HEAD 才稳定；
             #   Version=all 走子进程 one-click-pack -AutoMode 3 已在内部记录，本处 BuiltUnits 为空自动跳过）
             Record-BuiltUnits
+            # ★ 2026-09-01 最终结果汇总（明确中文提示）
+            Show-FinalSummary -ActionLabel "打包 + 发布 + 验证全流程"
             Write-Host ""
             pause
         }
