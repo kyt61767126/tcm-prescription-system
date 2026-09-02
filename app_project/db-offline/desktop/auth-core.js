@@ -3598,6 +3598,19 @@
                 '<button id="adminRetryBtn" style="width:100%;margin-top:16px;padding:12px;font-size:15px;border:none;border-radius:8px;color:#fff;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);cursor:pointer;font-weight:bold;">修改后重新提交</button>' +
             '</div>' +
 
+            // ★ 2026-09-02 支付前置校验配套：未完成支付（默认隐藏）
+            //   服务端 admin-submit 返回 code=PAYMENT_REQUIRED 时展示，引导官网付款
+            '<div id="adminPayRequired" style="display:none;padding:28px 16px;text-align:center;">' +
+                '<div style="font-size:34px;">💳</div>' +
+                '<div style="font-size:16px;font-weight:bold;color:#9a3412;margin-top:8px;">请完成支付</div>' +
+                '<div style="font-size:12px;color:#555;margin-top:6px;line-height:1.8;">激活前请先在官网完成付款（支付宝/微信）<br>付款后管理员核对即可自动激活本软件</div>' +
+                '<div style="margin-top:12px;background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:10px;text-align:center;">' +
+                    '<div style="font-size:11px;color:#78350f;margin-top:2px;line-height:1.7;">点击直达官网购买页，设备识别码<b>已自动携带</b></div>' +
+                    '<button id="adminPayRequiredBtn" type="button" style="width:100%;margin-top:8px;padding:10px;font-size:14px;border:none;border-radius:8px;color:#fff;background:linear-gradient(135deg,#ea580c 0%,#c2410c 100%);font-weight:bold;cursor:pointer;">💳 去官网付款（支付宝/微信）</button>' +
+                '</div>' +
+                '<button id="adminPayRequiredBackBtn" type="button" style="width:100%;margin-top:10px;padding:10px;font-size:14px;border:1px solid #ddd;border-radius:8px;color:#666;background:#fff;cursor:pointer;">← 返回上一步</button>' +
+            '</div>' +
+
             // 底部（机器ID + 客服）
             '<div style="padding:12px 16px;border-top:1px solid #eee;font-size:11px;color:#909399;">' +
                 '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;">' +
@@ -3969,7 +3982,12 @@
                 } else {
                     btn.disabled = false;
                     const msg = (res && res.error) ? res.error : '提交失败，请重试';
-                    showFormAndAlert(msg);
+                    // ★ 2026-09-02 支付前置校验：未完成支付 → 展示"请完成支付"面板引导官网付款
+                    if (res && res.code === 'PAYMENT_REQUIRED') {
+                        show('adminPayRequired');
+                    } else {
+                        showFormAndAlert(msg);
+                    }
                 }
             } catch (e) {
                 btn.disabled = false;

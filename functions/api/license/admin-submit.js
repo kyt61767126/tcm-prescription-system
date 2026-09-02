@@ -287,8 +287,11 @@ export async function onRequest(context) {
                         message: '已检测到您的付款，管理员核对到账后即可激活'
                     });
                 }
-                if (freePass) {
-                    // 白名单客户已有未付款申请 → 直接复用进入等待（免费开通通道）
+                if (freePass && occ.detail.machineId === finalMachineId) {
+                    // 白名单客户已有未付款申请（同一台机器）→ 直接复用进入等待（免费开通通道）
+                    // ★ 2026-09-02 复核加固：machineId 不一致（换机场景）不复用——旧申请
+                    //   绑定旧机器，复用会导致审核后 license 绑错机器新设备无法激活；
+                    //   换机时放行到下方创建新申请（新 machineId），管理员审核新记录即可。
                     console.log('[AdminSubmit] 白名单客户复用未付款申请进入等待:', phone, occ.detail.requestId);
                     return json({
                         success: true,
@@ -297,7 +300,7 @@ export async function onRequest(context) {
                         message: '激活请求已提交，请耐心等待管理员审核'
                     });
                 }
-                if (!isTestEnv) {
+                if (!isTestEnv && !freePass) {
                     console.log('[AdminSubmit] 存在未付款申请，拦截并引导完成支付:', phone, occ.detail.requestId);
                     return json({
                         success: false,
@@ -307,7 +310,9 @@ export async function onRequest(context) {
                 }
             }
         }
-        if (!isTestEnv) {
+        // ★ 2026-09-02 复核修复：白名单客户（freePass）跳过支付前置检查直接创建申请；
+        //   上一版此处漏写 && !freePass（并行编辑被覆盖），会导致白名单首次提交被误拦。
+        if (!isTestEnv && !freePass) {
             const paid = await findPaidOrderForPhoneOrMachine(kv, phone, finalMachineId);
             if (paid && paid.status === 'pending') {
                 console.log('[AdminSubmit] 命中已付款订单（待核对），复用进入等待:', phone, paid.requestId);
