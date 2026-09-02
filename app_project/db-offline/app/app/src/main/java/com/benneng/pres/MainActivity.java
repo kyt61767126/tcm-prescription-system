@@ -605,6 +605,13 @@ public class MainActivity extends BridgeActivity {
                 float density = getResources().getDisplayMetrics().density;
                 int cssPx = (int) (statusBarHeightPx / density);
                 view.evaluateJavascript("window.__STATUS_BAR_HEIGHT__ = " + cssPx + ";", null);
+
+                // ★★★ 2026-09-02 版本号 SSOT（离线APP 与云端APP 同机制）
+                //   从 PackageInfo 读取 versionName + versionCode，拼 V{versionName}.{versionCode}
+                //   写入 window.APP_VERSION，替换 index.html 硬编码。保证：下载页版本号
+                //   ≡ APP 内显示版本号 ≡ 系统设置应用管理版本号（三者同源永不走偏）
+                injectAppVersionSSOT(view);
+
                 injectAutocompleteOff(view);
 
                 // ★ 注入 electronAPI 桥接（离线APP特有：license/login/print 等方法）
@@ -832,6 +839,36 @@ public class MainActivity extends BridgeActivity {
     private int dpToPx(int dp) {
         float density = getResources().getDisplayMetrics().density;
         return (int) (dp * density + 0.5f);
+    }
+
+    /**
+     * ★ 2026-09-02 版本号 SSOT（离线APP）：与云端APP 同机制。
+     *   从 PackageInfo 读取 versionName + versionCode，拼为 V{versionName}.{versionCode}
+     *   注入 window.APP_VERSION，覆盖 index.html 硬编码。保证 APP 内显示的版本号
+     *   与 发布脚本 hash-manifest.json 的 local.apk.version 同源。
+     */
+    private void injectAppVersionSSOT(android.webkit.WebView webView) {
+        try {
+            android.content.pm.PackageInfo pi = getPackageManager().getPackageInfo(getPackageName(), 0);
+            String vn = pi.versionName == null ? "1.0.0" : pi.versionName;
+            int vc = android.os.Build.VERSION.SDK_INT >= 28 ? (int) pi.getLongVersionCode() : pi.versionCode;
+            String display = "V" + vn + "." + vc;
+            String esc = display.replace("'", "\\'").replace("\"", "\\\"");
+            String js = "window.APP_VERSION = '" + esc + "'; "
+                      + "window.__APP_VERSION_BUILD__ = '" + esc + "'; "
+                      + "window.__APP_VERSION_CODE__ = " + vc + "; "
+                      + "(function(){try{"
+                      + "  var f=document.getElementById('footerAppVersion');if(f)f.textContent=window.APP_VERSION;"
+                      + "  var a=document.getElementById('aboutAppVersion');if(a)a.textContent=window.APP_VERSION;"
+                      + "  document.querySelectorAll && document.querySelectorAll('[data-app-version]').forEach(function(el){"
+                      + "    el.textContent=window.APP_VERSION;"
+                      + "  });"
+                      + "}catch(_){}})();";
+            webView.evaluateJavascript(js, null);
+            android.util.Log.d("BenNeng-Pres", "[SSOT-version] 注入 " + display);
+        } catch (Exception e) {
+            android.util.Log.w("BenNeng-Pres", "[SSOT-version] 注入失败，回落 index.html 硬编码", e);
+        }
     }
 
     /**

@@ -89,6 +89,23 @@ function readVersionName(gradlePath) {
     return v;
 }
 
+// ★ 2026-09-02 版本号 SSOT：APK 的显示版本号必须是 V{versionName}.{versionCode}
+//   （如 V1.0.0.258 / V1.0.0.207）。原因：软著要求 versionName 恒 "1.0.0" 不能改，
+//   版本区分靠 versionCode 每次发版递增。用户在 APP 内查版本、下载页查版本号，
+//   都必须用同一个 VX.Y.Z.N 格式（三段 + versionCode），不能 APP 内写死 V1.0.0，
+//   也不能下载页错抄桌面 latest.json 的 1.2.xxx——否则永远对不上，客户无法查对是否是最新版本。
+//   规则：readVersionName 仅给桌面 exe 用；APK 一律走 readAppDisplayVersion。
+function readAppDisplayVersion(gradlePath) {
+    if (!fs.existsSync(gradlePath)) return 'V1.0.0.0';
+    const content = fs.readFileSync(gradlePath, 'utf8');
+    const nameM = content.match(/versionName\s+"([^"]+)"/);
+    const codeM = content.match(/versionCode\s+(\d+)/);
+    const vn = nameM ? nameM[1] : '1.0.0';
+    const vc = codeM ? codeM[1] : '0';
+    // 加 versionCode 进 hash-manifest，便于 startApkUpdateCheck 比对（2026-08-28 已加，这里显式带上）
+    return { display: 'V' + vn + '.' + vc, versionName: vn, versionCode: parseInt(vc, 10) || 0 };
+}
+
 function calculateSHA256(filePath) {
     const buffer = fs.readFileSync(filePath);
     return crypto.createHash('sha256').update(buffer).digest('hex');
@@ -184,6 +201,7 @@ function scanFiles(target, artifact) {
                     console.warn('  [WARN] ' + w);
                 }
                 if (loc.found) {
+                    const appVer = readAppDisplayVersion(config.gradlePath);
                     files.push({
                         appKey: key,
                         type: 'apk',
@@ -192,7 +210,11 @@ function scanFiles(target, artifact) {
                         name: config.apkName,
                         size: getFileSize(loc.path),
                         sha256: calculateSHA256(loc.path),
-                        version: readVersionName(config.gradlePath)
+                        // ★ SSOT：APK 版本号不再读 readVersionName（软著固定 1.0.0 无区分）
+                        //   统一 V{versionName}.{versionCode}，与 APP 内注入的 window.APP_VERSION 格式相同
+                        //   同时带 versionCode 给 manifest，startApkUpdateCheck 已有消费点
+                        version: appVer.display,
+                        versionCode: appVer.versionCode
                     });
                 }
             }
@@ -762,8 +784,11 @@ function main() {
         if (f.type === 'apk') {
             // APK：保留 Cloudflare Pages 相对路径为主源（国内 CDN 快）
             //      同时记录 GitHub Release URL 作为备份源
+            // ★ 2026-09-02 SSOT：version = V{versionName}.{versionCode} 与 APP 内 window.APP_VERSION 格式一致；
+            //   显式带 versionCode 字段，供 MainActivity.startApkUpdateCheck 做整数比较（软著要求 versionName=1.0.0 固定不变）。
             manifest[f.appKey][f.type] = {
                 version: f.version,
+                versionCode: f.versionCode || existing.versionCode || 0,
                 sha256: f.sha256,
                 url: existing.url || ('/downloads/' + f.name),
                 releaseUrl: releaseUrl,

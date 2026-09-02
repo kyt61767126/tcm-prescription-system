@@ -561,6 +561,15 @@ public class MainActivity extends BridgeActivity {
                 float density = getResources().getDisplayMetrics().density;
                 int cssPx = (int) (statusBarHeightPx / density);
                 view.evaluateJavascript("window.__STATUS_BAR_HEIGHT__ = " + cssPx + ";", null);
+
+                // ★★★ 2026-09-02 版本号 SSOT：从 PackageInfo 真实构建元信息注入 window.APP_VERSION，
+                //   彻底替换 index.html 内硬编码的 "V1.0.0"。格式 V{versionName}.{versionCode}
+                //   （如 V1.0.0.258），与 hash-manifest.json 中 cloud.apk.version / local.apk.version
+                //   发布脚本生成的格式完全一致，保证"下载页看到的版本号 == APP内关于/页脚看到的版本号
+                //   == 安卓系统设置应用管理里看到的版本号"三者同源永不走偏。
+                //   软著限制 versionName=1.0.0 固定不变，版本区分靠 versionCode 递增。
+                injectAppVersionSSOT(view);
+
                 injectAutocompleteOff(view);
 
                 // ★ 注入 electronAPI 桥接（与离线APP一致：立即注入基本API，含findMediaFiles等）
@@ -812,6 +821,40 @@ public class MainActivity extends BridgeActivity {
     private int dpToPx(int dp) {
         float density = getResources().getDisplayMetrics().density;
         return (int) (dp * density + 0.5f);
+    }
+
+    /**
+     * ★ 2026-09-02 版本号 SSOT：用 PackageManager.getPackageInfo 读取本 APK 的
+     *   versionName（软著固定 1.0.0）和 versionCode（每次发版递增），拼为
+     *   V{versionName}.{versionCode} 注入 window.APP_VERSION，覆盖 index.html
+     *   硬编码值，保证 APP 内关于弹窗/页脚/登录脚显示的版本号与 发布脚本
+     *   hash-manifest.json 中 apk.version 字段格式一致（下载页同源）。
+     */
+    private void injectAppVersionSSOT(WebView webView) {
+        try {
+            android.content.pm.PackageInfo pi = getPackageManager().getPackageInfo(getPackageName(), 0);
+            String vn = pi.versionName == null ? "1.0.0" : pi.versionName;
+            int vc = android.os.Build.VERSION.SDK_INT >= 28 ? (int) pi.getLongVersionCode() : pi.versionCode;
+            String display = "V" + vn + "." + vc;
+            String esc = display.replace("'", "\\'").replace("\"", "\\\"");
+            // 双写：APP_VERSION = 用户可见显示版本；__APP_VERSION_BUILD__ = 清缓存/升级内部比对版本号
+            String js = "window.APP_VERSION = '" + esc + "'; "
+                      + "window.__APP_VERSION_BUILD__ = '" + esc + "'; "
+                      + "window.__APP_VERSION_CODE__ = " + vc + "; "
+                      // 把登录页/关于弹窗/页脚引用 window.APP_VERSION 的 DOM 节点
+                      // 已通过 data-app-version 属性在 build 时绑定；更新页脚/登录脚显示（若已渲染）
+                      + "(function(){try{"
+                      + "  document.querySelectorAll && document.querySelectorAll('[data-app-version]').forEach(function(el){"
+                      + "    if(el.textContent.trim() !== el.dataset.appVersion) el.textContent = window.APP_VERSION;"
+                      + "  });"
+                      + "  var f=document.getElementById('footerAppVersion');if(f)f.textContent=window.APP_VERSION;"
+                      + "  var a=document.getElementById('aboutAppVersion');if(a)a.textContent=window.APP_VERSION;"
+                      + "}catch(_){}})();";
+            webView.evaluateJavascript(js, null);
+            android.util.Log.d("TCM-Pres", "[SSOT-version] 注入 " + display);
+        } catch (Exception e) {
+            android.util.Log.w("TCM-Pres", "[SSOT-version] 注入失败，回落 index.html 硬编码", e);
+        }
     }
 
     /**
