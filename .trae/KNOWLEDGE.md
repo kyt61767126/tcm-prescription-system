@@ -461,6 +461,15 @@ node "D:\Program Files\Huawei\DevEco Studio\tools\hvigor\bin\hvigorw.js" --mode 
 
 * 经验：hap-sign-tool 的 generate-keypair **没有** -validity 参数（老教程有，现版本报错），照 -h 实际 usage 走；密码一旦生成不可回溯，必须落本地备忘；签名报错优先用 hap-sign-tool sign-app 直接暴露材料格式问题，不要先怀疑设备。
 
+**Week3 里程碑：鸿蒙模拟器首跑成功（2026-09-03，惠康中医 HAP 在 HarmonyOS 7.0/API26 本地模拟器运行，登录页完整加载）**：
+
+* 【最大结论·省掉签名等待】**本地模拟器（Emulator）接受未签名 HAP**：`hdc app install entry-default-unsigned.hap` 直接 `install bundle successfully`，无需任何证书/Profile/设备注册！签名配置窗口红字也写明"模拟器上安装 HAP 可跳过签名"。**真机/云真机才必须签名**。Week3 功能验证全部可在模拟器进行，不等企业认证/发布证书。
+* 【Win11 家庭版虚拟化坑】家庭版**没有** Hyper-V 组件（dism 启用 Microsoft-Hyper-V-All 报 0x800f080c 属正常），但 DevEco 模拟器只依赖虚拟化核心——管理员 dism 启用 **VirtualMachinePlatform**（虚拟机平台）+ **HypervisorPlatform**（Windows 虚拟机监控程序平台）两个功能，**重启后**即可（BIOS VT-x 需已开，任务管理器→性能→CPU 可查）。报错码 00801001「未开启 Hyper-V」即此问题。
+* 【模拟器冷启动无反应=镜像未下载】设备管理器（工具→设备管理器→本地模拟器）列表里 Pura 90 Pro/Mate X7 等只是**设备配置模板**；操作列 ⬇ 下载图标在=系统镜像未下载（镜像在 `sdk/default/openharmony/system-image/`，约 3~6GB），下载完图标变 ▶ 才能冷启动。点「冷启动」无反应不报错就是镜像缺失。
+* 【命令行工具链】hdc 路径 `D:\Program Files\Huawei\DevEco Studio\sdk\default\openharmony\toolchains\hdc.exe`；编译需先设 `$env:DEVECO_SDK_HOME="D:\Program Files\Huawei\DevEco Studio\sdk"`（已持久化到用户环境变量，否则 hvigor 报 00303217）；编译 `hvigorw.bat assembleHap --mode module -p product=default --no-daemon`；装应用 `hdc app install <hap>`；启动 `hdc shell aa start -a EntryAbility -b com.tcm.prescription`；查设备 `hdc list targets`（模拟器为 127.0.0.1:5555，开机完成 param bootevent.boot.completed=true 才出现）；截屏 `hdc shell snapshot_display -f /data/local/tmp/x.jpeg` + `hdc file recv` 拉回。
+* 【首跑验证结果】Web 组件正常加载云端页面（pages.dev）、版本号注入生效（V1.0.0 Build 1000000，1000000 是 DevEco 默认 versionCode）、22 桥初始化无崩溃。模拟器限制：无摄像头（拍摄类桥方法测不了）、无 SIM（显示"无服务"但网络走宿主机正常）、分享面板无第三方 App 接收。
+* 【注意】DevEco 登录后团队栏显示「高碑店惠康堂中医诊所有限公司」——待与用户确认该企业主体来源（自有企业认证 or 诊所账号），关系到 B 方案上架主体一致性。
+
 ## 15. 处方签煎煮方法（2026-09-01 已实现）
 
 **需求**：按最新中药煎煮规范，处方签药物显示煎煮方法（先煎/后下/包煎/烊化等）。
