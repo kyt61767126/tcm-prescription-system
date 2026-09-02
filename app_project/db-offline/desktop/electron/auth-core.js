@@ -3091,9 +3091,16 @@
             var __w = window.open(url, '_blank');
             if (__w) return true; // 浏览器/正常多窗口环境
         } catch (e) {}
-        // Electron deny 场景：无安卓桥 + open 返回 null → setWindowOpenHandler 已
-        // shell.openExternal 打开系统浏览器（deny 时 open 返回 null 是 Electron 正常路径）
-        if (!__hasBridge) return true;
+        // open 返回 null 的三种环境区分：
+        //  · Electron 桌面（无安卓桥）：setWindowOpenHandler 已 shell.openExternal 打开
+        //    系统浏览器，deny 时返回 null 是正常路径 → 视为成功（且 will-navigate 会
+        //    拦截 location.href 外链，绝不能再走导航兜底）
+        //  · APP WebView（有桥但桥失败）：走 ③ location.href + 看门狗
+        //  · 纯浏览器弹窗被拦截（无桥非 Electron）：用户手势内 location.href 直接跳转，
+        //    购买页本就是预期目的地，当前页跳转可接受（2026-09-02 补边界）
+        var __isElectron = false;
+        try { __isElectron = navigator.userAgent.indexOf('Electron') >= 0; } catch (e3) {}
+        if (!__hasBridge && __isElectron) return true;
         // ③ 仅 APP（桥存在但桥失败）：location.href + 看门狗兜底
         try {
             var __btn = btnEl || null;

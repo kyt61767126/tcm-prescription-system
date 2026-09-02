@@ -50,7 +50,8 @@ $CloudTargets = @(
     'app_project/db-yunduan/cloud_app/app/src/main/assets/public', # cloud APP assets
     'site-admin',                                          # admin console web
     'site-admin/electron',                                 # admin console electron
-    'shared'                                               # shared/auth-core.js root mirror (canonical source for cloud variants)
+    'shared',                                              # shared/auth-core.js root mirror (canonical source for cloud variants)
+    'app_project_harmony/huikang-cloud/entry/src/main/resources/rawfile' # ★ 2026-09-02 鸿蒙云端版 rawfile（原为手工同步盲区，曾漏付款按钮兜底修复）
 )
 
 # ============================================================================

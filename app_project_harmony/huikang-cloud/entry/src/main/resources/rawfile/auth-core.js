@@ -1863,19 +1863,64 @@
     //   APP 端优先走原生桥 openExternalUrl（云端 WebView 未开多窗口，window.open
     //   静默返回 null 且非官网域导航会被反钓鱼拦截弹回首页——桥是唯一可靠通路）；
     //   桥不存在回退 window.open（云端桌面 Electron / 网页正常行为）。
-    function openOfficialPayUrl(machineId, editionIntent) {
+    // ★ 2026-09-02 付款按钮"点击无反应"根治：三层递进 + 用户可见兜底（与 offline.js
+    //   openPayUrlRobust 同构，此处保留本函数名供 3 个按钮共用调用）。
+    //   故障树：桥失败 → window.open 在 WebView 未开多窗口时**静默返回 null 且不抛
+    //   异常**（2026-08-30 修复的错误假设）→ location.href 又被 WebView 拦截器
+    //   shouldOverrideUrlLoading return true 静默吞掉 → 全链路零用户可见反馈。
+    //   修复：①检查 open 返回值；②无桥+null=Electron deny 场景（shell.openExternal
+    //   已开系统浏览器）视为成功；③仅 APP 桥失败场景走 location.href+看门狗——
+    //   1.2s 后页面未离开即判定被拦，自动复制链接+按钮文字提示，保证按钮任何
+    //   情况下"有反应"（宁降级不静默）。
+    function openOfficialPayUrl(machineId, editionIntent, btnEl) {
         var edParam = (editionIntent === 'institution') ? 'cloud-pro'
                     : (editionIntent === 'personal' ? 'cloud-personal' : '');
         var url = 'https://tcm-prescription-system.pages.dev/download.html?mid=' + encodeURIComponent(machineId || '')
             + (edParam ? ('&ed=' + edParam) : '');
+        // ① 原生桥（APP 端唯一可靠通路，Java 白名单仅放行官网购买页）
+        var __hasBridge = false;
         try {
-            if (window.AndroidNative && typeof window.AndroidNative.invoke === 'function') {
+            __hasBridge = !!(window.AndroidNative && typeof window.AndroidNative.invoke === 'function');
+            if (__hasBridge) {
                 var r = window.AndroidNative.invoke('openExternalUrl', JSON.stringify({ url: url }));
-                if (r) { try { var j = JSON.parse(r); if (j && j.success) return; } catch (e) {} }
+                if (r) { try { var j = JSON.parse(r); if (j && j.success) return true; } catch (e) {} }
             }
         } catch (e) {}
-        try { window.open(url, '_blank'); }
-        catch (e) { try { window.location.href = url; } catch (e2) {} }
+        // ② window.open：必须检查返回值——WebView 未开多窗口时静默返回 null（不抛异常）
+        try {
+            var __w = window.open(url, '_blank');
+            if (__w) return true; // 浏览器/正常多窗口环境
+        } catch (e) {}
+        // open 返回 null 的三种环境区分（与 offline.js openPayUrlRobust 同构）：
+        //  · Electron 桌面（无安卓桥）：setWindowOpenHandler 已 shell.openExternal 打开
+        //    系统浏览器，deny 返回 null 是正常路径 → 视为成功（will-navigate 会拦截
+        //    location.href 外链，绝不能再走导航兜底）
+        //  · APP WebView（有桥但桥失败）：走 ③ location.href + 看门狗
+        //  · 纯浏览器弹窗被拦截（无桥非 Electron）：用户手势内 location.href 直接跳转
+        var __isElectron = false;
+        try { __isElectron = navigator.userAgent.indexOf('Electron') >= 0; } catch (e3) {}
+        if (!__hasBridge && __isElectron) return true;
+        // ③ 仅 APP（桥存在但桥失败）：location.href + 看门狗兜底
+        try {
+            var __btn = btnEl || null;
+            var __orig = __btn ? __btn.innerHTML : '';
+            window.location.href = url;
+            setTimeout(function() {
+                try {
+                    // 页面仍在（导航被拦截器静默吞掉）且按钮还在 DOM → 给用户可见出口
+                    if (__btn && __btn.parentNode && document.getElementById(__btn.id)) {
+                        copyTextToClipboard(url).then(function(ok) {
+                            __btn.innerHTML = ok
+                                ? '✅ 购买链接已复制，请在浏览器粘贴打开'
+                                : '⚠️ 打开失败，请联系客服微信 hktzy1688';
+                            setTimeout(function() { try { __btn.innerHTML = __orig; } catch (e2) {} }, 4000);
+                        });
+                    }
+                } catch (e) {}
+            }, 1200);
+            return true;
+        } catch (e2) {}
+        return false;
     }
 
     // ★ HTML 模态弹窗（替代 prompt()）
@@ -2031,7 +2076,7 @@
                         if (['institution', 'cloud_institution', 'cloud_clinic', 'clinic', 'org'].indexOf(ed) >= 0) intent = 'institution';
                         else intent = 'personal';
                     } catch (e) { intent = 'personal'; }
-                    openOfficialPayUrl(machineId, intent);
+                    openOfficialPayUrl(machineId, intent, cloudPayGuideBtn);
                 });
             }
 
@@ -3026,7 +3071,7 @@
         var cloudTicketPayGuideBtn = document.getElementById('cloudTicketPayGuideBtn');
         if (cloudTicketPayGuideBtn) {
             cloudTicketPayGuideBtn.addEventListener('click', function() {
-                openOfficialPayUrl(machineId, editionIntent);
+                openOfficialPayUrl(machineId, editionIntent, cloudTicketPayGuideBtn);
             });
         }
 
@@ -3799,7 +3844,7 @@
             const btn = document.getElementById('adminPayGuideBtn');
             if (!btn) return;
             btn.addEventListener('click', function() {
-                openOfficialPayUrl(machineId, state.edition);
+                openOfficialPayUrl(machineId, state.edition, btn);
             });
         })();
         document.getElementById('adminCopyMidBtn').addEventListener('click', async function() {
