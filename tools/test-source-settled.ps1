@@ -91,9 +91,12 @@ Restore $BG; Restore $PJ
 
 Write-Host "=== C. Node/CI 出口（source-settled.ps1 -Assert，发布链路前置）==="
 # B6：人为制造源码改动 → Assert 必须 exit 1 + SOURCE_NOT_SETTLED 输出
+# ★ 2026-09-02 跨平台修复：子进程 shell 跟随当前宿主（CI ubuntu 只有 pwsh 无 powershell，
+#   硬编码 powershell 导致第 5 道门在 GitHub runner 上必炸——此前多轮 CI 红灯的真根因）
+$psExe = if ($PSVersionTable.PSEdition -eq 'Core') { 'pwsh' } else { 'powershell' }
 EditFile $SRC '(\S)$' "`$1`n// assert-test"
 $ss = Join-Path $PSScriptRoot 'source-settled.ps1'
-$out = & powershell -NoProfile -ExecutionPolicy Bypass -File $ss -Assert 2>&1
+$out = & $psExe -NoProfile -ExecutionPolicy Bypass -File $ss -Assert 2>&1
 $code = $LASTEXITCODE
 Check 'B6 源码脏 → Assert exit 1 + 标记' ($code -eq 1 -and (($out | Out-String) -match 'SOURCE_NOT_SETTLED'))
 Restore $SRC
@@ -101,7 +104,7 @@ $base2 = @(Get-SourceSettledBlockers).Count
 if ($base2 -eq 0) {
     # 仅干净树可测（CI 检出即干净必跑；本地开发树脏时 SKIP 防假失败）
     EditFile $BG 'versionCode (\d+)' 'versionCode 9997'
-    $out2 = & powershell -NoProfile -ExecutionPolicy Bypass -File $ss -Assert 2>&1
+    $out2 = & $psExe -NoProfile -ExecutionPolicy Bypass -File $ss -Assert 2>&1
     $c2 = $LASTEXITCODE
     Restore $BG
     Check 'B7 副作用文件 → Assert 放行（exit 0）' ($c2 -eq 0 -and (($out2 | Out-String) -match 'SOURCE_SETTLED=OK'))
