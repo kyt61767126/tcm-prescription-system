@@ -304,6 +304,8 @@
 
 * ★ 2026-09-02（夜）发布"重跑假成功不补部署"修复（v2026.09.02-2127 实测）：**事故链**=①首次发布：6 产物上传 GitHub Release 全部成功 → 步骤 6 已更新本地 manifest/downloads/latest.json → 步骤 7 源码落定门检测到工作区有未提交变更（打包副作用 build-meta.json + .trae 临时脚本）按设计中止 exit(1)——**行为正确**；②用户按提示重跑：`--changed-only` 比对的是**本地已被首次运行更新的 manifest**→6 产物全部"hash 未变化"→第 582 行 `process.exit(0)` 提前退出，**静默跳过步骤 4-7**→退出码 0 假成功，下载页永不部署（错误提示里"重跑会自动补部署"的承诺与代码行为不符）。**修复**=changed-only 全部未变化 + 带 --push 时，先 `git status --porcelain -- public/hash-manifest.json public/downloads/ public/updates/` 检测发布产物是否有未提交变更：有→走与步骤 7 同基线的补部署（源码落定门→add/commit/pull --autostash/push，失败 exit(1) 给手动命令）；无→"[OK] 发布产物均已推送" 正常完成。**铁律：①"断点续传"类工具的比对基准必须区分"远端已发布状态"vs"本地已更新未推送状态"——比对本地缓存会把中断态误判为完成态；②任何 exit(0) 提前返回路径都要问一句：流程承诺的后续步骤（部署/清理/通知）是否被跳过；③发布类脚本的三段式（上传→清单→推送）每段都要可独立重入，重跑=补齐缺失段而非只补上传段**。
 
+* ★ 2026-09-03 离线端「去官网付款」点击无反应（华为 Mate 70 实测，第 2 次"点击无反应"不同根因）：**根因=变量越界引用**——offline.js 的 showAdminActivateModal 内两个付款按钮绑定（bindAdminPayGuide/bindAdminPayRequired）复制自 showTicketFormModal，误带其局部变量 `editionIntent`；本函数作用域不存在该变量 → **点击时 ReferenceError 在 handler 第一行抛出**，openPayUrlRobust 永不执行，且异常被浏览器吞掉无任何可见反馈。修复=改用本函数的 `state.edition`。**为何三道防线全漏**：①E2E 用 test env，PAYMENT_REQUIRED 面板从不出现，按钮零覆盖；②node --check 只验语法不验作用域（未声明变量是运行时错误）；③云端版 cloud.js 用的是 `openOfficialPayUrl(machineId, state.edition, btn)` 参数传值（正确），同一功能双端实现不同导致只在离线端炸。**铁律：①复制兄弟函数的绑定代码块时，逐个核对自由变量在新作用域是否存在（尤其 state.xxx/局部缓存变量）；②双端同功能应共用同一 helper（cloud.js 的 openOfficialPayUrl 模式优于 offline.js 的内联拼接）；③"点击无反应"类症状先看 console 有无 ReferenceError——handler 第一行抛错=全程静默，与"函数逻辑错"表现完全相同但根因天差地别**。生效方式：需重打离线APP+离线桌面（云端两端无此 bug 不需要重打）。
+
 ## 11. 后续路线图（2026-08-31 定，试用观察期三步走）
 
 * **第一步（当前）**：进入 1-2 周正常看诊观察期，不刻意测试——真实使用是最好的验收。

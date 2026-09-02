@@ -4158,7 +4158,10 @@
             btn.addEventListener('click', function() {
                 // ★ 2026-09-02 改用 openPayUrlRobust（原 window.open/catch fallback 在
                 //   WebView 静默 null 场景全链路无反馈，详见函数头注释）
-                var __edParam = (editionIntent === 'institution') ? 'local-pro' : (editionIntent === 'personal' ? 'local-personal' : '');
+                // ★ 2026-09-03 修复「点击无反应」：editionIntent 是 showTicketFormModal 的
+                //   局部变量（复制代码时误带入），本函数作用域不存在 → 点击时 ReferenceError
+                //   静默中断，openPayUrlRobust 永远不执行。改用本函数的 state.edition。
+                var __edParam = (state.edition === 'institution') ? 'local-pro' : (state.edition === 'personal' ? 'local-personal' : '');
                 const url = 'https://tcm-prescription-system.pages.dev/download.html?mid=' + encodeURIComponent(machineId || '')
                     + (__edParam ? ('&ed=' + __edParam) : '');
                 openPayUrlRobust(url, btn);
@@ -4169,7 +4172,8 @@
             const btn = document.getElementById('adminPayRequiredBtn');
             if (!btn) return;
             btn.addEventListener('click', function() {
-                var __edParam = (editionIntent === 'institution') ? 'local-pro' : (editionIntent === 'personal' ? 'local-personal' : '');
+                // ★ 2026-09-03 修复「点击无反应」：同上，editionIntent 越界引用改 state.edition
+                var __edParam = (state.edition === 'institution') ? 'local-pro' : (state.edition === 'personal' ? 'local-personal' : '');
                 const url = 'https://tcm-prescription-system.pages.dev/download.html?mid=' + encodeURIComponent(machineId || '')
                     + (__edParam ? ('&ed=' + __edParam) : '');
                 openPayUrlRobust(url, btn);
