@@ -195,6 +195,33 @@ function Show-LatestExe {
     Write-Host ("  {0}: {1}  文件时间 {2}" -f $Label, $exe.Name, $ftime) -ForegroundColor Green
 }
 
+# ============ 打包结果确认块 ============
+# ★ 2026-09-01 新增：菜单[1][2][3]打包+副作用收纳完成后显示——成败大字块 +
+#   最新产物清单 + 下一步指引 + 中文暂停（按回车键返回菜单）。
+#   此前 $null = Build-... 丢弃退出码直接 Clear-Host 回菜单，成败一闪而过。
+function Show-PackResult {
+    param(
+        [string]$Label,    # 如 "云端版打包（桌面+APP）"
+        [int]$ExitCode     # Build- 函数退出码
+    )
+    Write-Host ""
+    Write-Host "============================================" -ForegroundColor $(if ($ExitCode -eq 0) { 'Green' } else { 'Red' })
+    if ($ExitCode -eq 0) {
+        Write-Host "  [打包成功] $Label" -ForegroundColor Green
+    } else {
+        Write-Host "  [打包失败] $Label （退出码: $ExitCode）" -ForegroundColor Red
+        Write-Host "  完整日志: $script:LogFile" -ForegroundColor Yellow
+    }
+    Write-Host "============================================" -ForegroundColor $(if ($ExitCode -eq 0) { 'Green' } else { 'Red' })
+    Write-Host "  最新产物:"
+    Show-LatestExe -Dir "$script:RootDir\app_project\db-yunduan\cloud_desktop\dist" -Label "  云端桌面"
+    Show-LatestApk -Dir "$script:RootDir\app_project\db-yunduan" -GradleFile "$script:RootDir\app_project\db-yunduan\cloud_app\app\build.gradle" -Label "  云端APP"
+    Show-LatestExe -Dir "$script:RootDir\app_project\db-offline\desktop\dist" -Label "  离线桌面"
+    Show-LatestApk -Dir "$script:RootDir\app_project\db-offline" -GradleFile "$script:RootDir\app_project\db-offline\app\app\build.gradle" -Label "  离线APP"
+    Write-Host "  提示: 仅打包不上传; 如需发布到官网请运行 一键发布.bat" -ForegroundColor Yellow
+    pause
+}
+
 # ============ P1-B 打包副作用收纳 ============
 # 背景：全局审查 R3——打包副作用（build.gradle versionCode / package.json version /
 #       hash-manifest.json）靠人工提交易遗漏，造成"本机有、仓库无"的基线偏差。
@@ -709,13 +736,34 @@ while ($true) {
     Write-Host "--------------------------------------------"
     $choice = Read-Host "请选择 [0-3, 5-7]"
     switch ($choice) {
-        "1" { $null = Build-Cloud -Target "all"; Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits }
-        "2" { $null = Build-Offline -Version "dingzhi" -Target "all"; Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits }
-        "3" { $null = Build-All; Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits }
+        # ★ 2026-09-01 结果确认：原 $null = Build-... 丢弃退出码且直接循环回菜单
+        #   （Clear-Host 清屏），成败一闪而过。改为捕获退出码 + 显示结果确认块
+        #   + 中文暂停（按回车键继续），确认后才返回菜单。
+        "1" {
+            $rc = Build-Cloud -Target "all"
+            if ($rc -is [array]) { $rc = [int]$rc[-1] }
+            if (-not $rc) { $rc = 0 }
+            Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits
+            Show-PackResult -Label "云端版打包（桌面+APP）" -ExitCode $rc
+        }
+        "2" {
+            $rc = Build-Offline -Version "dingzhi" -Target "all"
+            if ($rc -is [array]) { $rc = [int]$rc[-1] }
+            if (-not $rc) { $rc = 0 }
+            Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits
+            Show-PackResult -Label "本地版打包（桌面+APP）" -ExitCode $rc
+        }
+        "3" {
+            $rc = Build-All
+            if ($rc -is [array]) { $rc = [int]$rc[-1] }
+            if (-not $rc) { $rc = 0 }
+            Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits
+            Show-PackResult -Label "全部2个版本打包" -ExitCode $rc
+        }
         # ★ 2026-08-23 三轮复核修复：[5][6] 单独打包同样产生 versionCode/package.json 副作用，
         #   补 SideEffectCollect 与 [1][2][3] 行为一致（否则单独打包的副作用靠人工提交易遗漏）
-        "5" { Show-PickVersionMenu -Mode "desktop"; Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits }
-        "6" { Show-PickVersionMenu -Mode "app"; Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits }
+        "5" { Show-PickVersionMenu -Mode "desktop"; Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits; pause }
+        "6" { Show-PickVersionMenu -Mode "app"; Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits; pause }
         "7" { Show-StandaloneUsage }
         "0" { exit 0 }
         default { Write-Host "无效选择，请重试" -ForegroundColor Red; Start-Sleep -Seconds 1 }
