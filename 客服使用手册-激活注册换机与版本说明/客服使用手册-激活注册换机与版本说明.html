@@ -322,8 +322,9 @@
     <h1>客服使用手册<br>激活码 · 注册 · 换机 · 版本说明</h1>
     <div class="sub">惠康中医诊所管理系统 — 一线客服支持场景指南</div>
     <div class="meta">
-      <span><b>版本</b>：v1.0</span>
-      <span><b>更新日期</b>：2026-08-25</span>
+      <span><b>版本</b>：v1.1</span>
+      <span><b>更新日期</b>：2026-09-01</span>
+      <span><b>当前桌面版</b>：云端 1.2.199 / 离线 1.0.162</span>
       <span><b>适用对象</b>：客服 / 运营（配合管理后台使用）</span>
     </div>
   </header>
@@ -347,6 +348,7 @@
           <tr><td><a href="#a7">A7</a></td><td>改了密码，重启后又登不上 / 密码被改回去</td><td>旧版APP缺陷，换装最新APK后改密即永久生效</td></tr>
           <tr><td><a href="#a8">A8</a></td><td>授权状态显示剩余天数 / 提示授权到期</td><td>后台延期续费即可，数据不丢、无需重装</td></tr>
           <tr><td><a href="#a9">A9</a></td><td>长期没联网，提示降级为试用</td><td>联网后自动恢复，无需处理</td></tr>
+          <tr><td><a href="#a10">A10</a></td><td>机构版登录后没有「用户管理」入口（只有修改密码）</td><td>旧版本别识别缺陷，覆盖安装最新版即恢复</td></tr>
           <tr><td><a href="#b1">B1</a></td><td>云端注册后登录提示"账号已创建，管理员审核通过后即可登录"</td><td>正常流程，后台审核通过即可登录</td></tr>
           <tr><td><a href="#b2">B2</a></td><td>云端登录提示"使用授权已于 X 到期"</td><td>后台对该诊所续费即恢复</td></tr>
           <tr><td><a href="#b3">B3</a></td><td>密码错误次数过多，账户暂时锁定</td><td>稍等后再试；急件走后台用户管理处理</td></tr>
@@ -543,9 +545,20 @@ flowchart TD
         <li>提醒客户：每 90 天联网一次即可，平时开方完全不需要网络。</li>
       </ol>
     </div>
+  <div class="scene" id="a10">
+      <div class="scene-head"><span class="tag">A10</span><span class="scene-title">机构版登录后找不到「用户管理」入口（只有「修改密码」）</span></div>
+      <div class="symptom"><b>客户描述：</b>我买的是机构版（多人用），以前能进"用户管理"建账号，这次启动后只剩"修改密码"，多账号功能没了。</div>
+      <p><strong>为什么：</strong>企业版/机构版需要识别到自己是"机构版"才会显示「用户管理」。旧版本在<strong>机器级配置生效的时序</strong>上存在缺陷，某些机器启动后程序误把自己当成了标准版/个人版，导致机构版入口消失。<strong>该问题已于 2026-09-01 修复</strong>，修复只存在于新版安装包。</p>
+      <div class="label">处理步骤</div>
+      <ol>
+        <li>确认客户的安装包版本：<strong>云端桌面需 ≥ 1.2.199</strong>（离线桌面需 ≥ 1.0.162）。</li>
+        <li>版本偏旧 → 发<strong>最新版安装包</strong>，让客户<strong>覆盖安装</strong>（不要先卸载，覆盖不丢激活和数据）。</li>
+        <li>装完重新启动，「用户管理」入口即恢复；机构版的改密/账号管理统一走该入口。</li>
+      </ol>
+      <div class="callout green">版本判据：登录页右下角或"关于"页看版本号即可。离线版在安装包名里直接带版本号（如「惠康中医-本地 Setup 1.0.162.exe」）。</div>
+      <div class="script">您这是装了老版本，新版本已经把这个识别问题修好了。我发您最新安装包，直接覆盖安装就行，账号和数据都不会动，装好后用户管理入口就回来了。</div>
+    </div>
   </section>
-
-  <!-- ================= 五、云端版场景 ================= -->
   <section id="s5">
     <h2><span class="no">05</span>云端版场景处理（B 系列）</h2>
     <p>云端版的开通体系是"<strong>注册 → 管理员审核 → 按有效期使用</strong>"，没有激活码、没有机器码。客户在桌面程序或手机APP的登录页点<strong>"管理员激活"</strong>按钮（绿色带剪贴板图标）提交注册，填写诊所名、手机号、密码、管理员姓名并选择版本（标准版 / 机构版）。</p>
@@ -648,6 +661,7 @@ flowchart TD
       <li>离线APP覆盖安装不丢数据；先卸载再装会丢激活记录，<strong>永远建议覆盖安装</strong>。</li>
       <li>授权 365 天到期是正常周期，不是系统坏了；续期后数据原地恢复。</li>
       <li>云端"待审核"不是注册失败，是流程必经一步，审核后立即能用。</li>
+      <li>机构版界面判断依据是「用户管理」入口而非「修改密码」；找不到就按 A10 检查版本。</li>
       <li>让客户报机器码时，提醒激活窗口有"复制"按钮，可以发文字，不用手抄。</li>
     </ul>
     <h3>通用话术骨架</h3>
@@ -659,8 +673,70 @@ flowchart TD
     </ul>
   </section>
 
+  <!-- ================= 八、近期功能速览 ================= -->
+  <section id="s8">
+    <h2><span class="no">08</span>近期功能更新速览（客服口径）</h2>
+    <p>以下功能已随新版同步到各端。客户询问时，客服只需按下方口径正面回应即可；涉及具体操作让客户找开方界面即可，无需转后台。</p>
+
+    <div class="scene">
+      <div class="scene-head"><span class="tag">F1</span><span class="scene-title">处方签煎法自动标注（先煎 / 后下 / 包煎…）</span></div>
+      <div class="symptom"><b>客户可能问：</b>"怎么这味药后面括号里多了个（先煎）？能不能去掉？"</div>
+      <ol>
+        <li>按<strong>2020 版《中国药典》</strong>自动判读矿物贝壳类（先煎）、芳香类（后下）等煎煮方法，药库手动设置优先于自动规则。</li>
+        <li>同一味药整格单行显示，如 <code>赭石20g(先煎)</code>，煎法字号比药名略小。</li>
+        <li>客户想自定义：到<strong>药库</strong>该味药编辑弹窗里设置煎法，保存后开方自动带入。</li>
+      </ol>
+      <div class="script">这是按最新药典自动配的煎煮方法，打印在处方上给患者看煎药方式的。您要改哪味药，去药库把它选上设成"普通煎"就行。</div>
+    </div>
+
+    <div class="scene">
+      <div class="scene-head"><span class="tag">F2</span><span class="scene-title">诊断快速输入（下拉建议 + 快捷键面板）</span></div>
+      <div class="symptom"><b>客户可能问：</b>"诊断打字太慢，有没有快捷方式？"</div>
+      <ol>
+        <li>输入框内直接输入中文或<strong>拼音首字母</strong>（如打"bsjw"出"不实健忘"）即出下拉建议。</li>
+        <li>快捷键 <code>Alt + D</code> 打开诊断面板，按"高频组合 / 病名分类 / 证型分类"分 Tab 点选，支持多选组合。</li>
+        <li>常用项自动记忆，用得越多排得越靠前。</li>
+      </ol>
+    </div>
+
+    <div class="scene">
+      <div class="scene-head"><span class="tag">F3</span><span class="scene-title">处方签「病史症状」栏显示 / 隐藏开关</span></div>
+      <div class="symptom"><b>客户可能问：</b>"打印出来的处方怎么没有病史症状？以前有。"</div>
+      <ol>
+        <li>处方签下方新增<strong>勾选项</strong>，勾上则该栏显示于处方上。</li>
+        <li>默认<strong>不勾选</strong>，即打印时默认隐藏病史症状。</li>
+        <li>客户想打印显示：勾上该框再打印即可，选择会记住。</li>
+      </ol>
+      <div class="script">病史症状默认不打在处方上，是为了给患者的处方干净一点。您要打出来，处方签下面有个勾选框打上勾再打印就有了。</div>
+    </div>
+
+    <div class="scene">
+      <div class="scene-head"><span class="tag">F4</span><span class="scene-title">同患者当天处方自动覆盖（编号不变）</span></div>
+      <div class="symptom"><b>客户可能问：</b>"我昨天开的那张今天怎么找不到了 / 怎么多了一张重复的？"</div>
+      <ol>
+        <li>患者当天首次开方生成<strong>新编号</strong>；当天再改后保存，<strong>自动覆盖当天那张处方</strong>，编号不变，不产生重复单。</li>
+        <li>跨天再次开方会分配<strong>新一天编号</strong>，不会覆盖历史。</li>
+        <li>覆盖保存<strong>不占</strong>试用版每月 30 张额度。</li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ================= 九、鸿蒙端说明 ================= -->
+  <section id="s9">
+    <h2><span class="no">09</span>鸿蒙（HarmonyOS NEXT）端说明</h2>
+    <div class="callout">
+      <strong>现状：</strong>鸿蒙原生版（HarmonyOS NEXT）正处于<strong>开发与真机内测阶段</strong>，尚未上架华为应用市场，<strong>暂未对客户开放下载</strong>。当前客服可用的仍是安卓 APP 与桌面程序。
+    </div>
+    <ul>
+      <li><strong>为什么单独说明：</strong>部分华为新手机（HarmonyOS NEXT 纯血鸿蒙）<strong>不能直接安装安卓 APK</strong>，只能装 <code>.hap</code>。请您侧遇到华为手机客户报"安装包装不上/不兼容"时，先甄别其系统是否为 HarmonyOS NEXT。</li>
+      <li><strong>甄别：</strong>点开"设置 → 关于本机"，系统版本以 <strong>HarmonyOS NEXT</strong>（不兼容安卓）为记为列；HarmonyOS 4/5（兼容安卓）可正常装 APK。</li>
+      <li><strong>话术：</strong>"您这台是华为纯血鸿蒙系统，我们的鸿蒙版还在开发中没有上线，您先用安卓手机，或电脑里的桌面程序使用，完全不影响。"</li>
+      <li><strong>内部注意：</strong>鸿蒙版上线时间以内部通知为准，<strong>勿向客户承诺具体日期</strong>；如有诊所批量在纯血鸿蒙设备上，登记转后台评估。</li>
+    </ul>
+  </section>
+
   <footer>
-    惠康中医诊所管理系统 · 客服使用手册 v1.0 · 更新于 2026-08-25 · 本手册供内部客服使用，请勿外发客户；涉及客户激活码、机器码的信息按隐私数据处理。
+    惠康中医诊所管理系统 · 客服使用手册 v1.1 · 更新于 2026-09-01 · 本手册供内部客服使用，请勿外发客户；涉及客户激活码、机器码的信息按隐私数据处理。
   </footer>
 </div>
 
