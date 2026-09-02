@@ -272,6 +272,9 @@ export async function onRequest(context) {
         //      返回 code=PAYMENT_REQUIRED，客户端提示"请完成支付"并引导官网付款。
         //   env=test（测试环境/E2E 回归）放行不拦截。
         const isTestEnv = String(env || '').trim() === 'test';
+        // ★ 2026-09-02 免费开通白名单：平台管理员在后台把手机号加入 free_pass 白名单后，
+        //   该客户提交激活申请跳过支付前置校验（申请带 freePass 标记，仍需人工审核通过）。
+        const freePass = await kv.get('free_pass:' + phone, 'json').catch(() => null);
         {
             const occ = await findPhoneOccupancy(kv, phone);
             if (occ && occ.kind === 'pending_activation') {
@@ -282,6 +285,16 @@ export async function onRequest(context) {
                         status: 'pending',
                         requestId: occ.detail.requestId,
                         message: '已检测到您的付款，管理员核对到账后即可激活'
+                    });
+                }
+                if (freePass) {
+                    // 白名单客户已有未付款申请 → 直接复用进入等待（免费开通通道）
+                    console.log('[AdminSubmit] 白名单客户复用未付款申请进入等待:', phone, occ.detail.requestId);
+                    return json({
+                        success: true,
+                        status: 'pending',
+                        requestId: occ.detail.requestId,
+                        message: '激活请求已提交，请耐心等待管理员审核'
                     });
                 }
                 if (!isTestEnv) {
@@ -348,7 +361,9 @@ export async function onRequest(context) {
             appMode: (appMode || '').trim(),
             versionLabel: (versionLabel || '').trim(),
             // ★ 环境标记：test=测试环境，production=正式环境
-            env: (env || 'production').trim()
+            env: (env || 'production').trim(),
+            // ★ 2026-09-02 免费开通白名单标记：该申请经白名单通道免支付提交，后台列表显示 🎫免费
+            freePass: !!freePass
         };
 
         await kv.put(KV_ADMIN_REQ_PREFIX + requestId, JSON.stringify(record));

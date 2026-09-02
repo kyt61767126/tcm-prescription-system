@@ -64,7 +64,9 @@ function maskRecord(record) {
         orderPrice: record.orderPrice || '',
         payMethod: record.payMethod || '',
         payTxnLast6: record.payTxnLast6 || '',
-        paidAt: record.paidAt || null
+        paidAt: record.paidAt || null,
+        // ★ 2026-09-02 免费开通白名单标记（后台列表显示 🎫免费）
+        freePass: !!record.freePass
     };
 }
 

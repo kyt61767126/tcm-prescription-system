@@ -705,6 +705,32 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                 </table>
             </div>
             <p style="margin-top:12px;color:#909399;font-size:12px;">说明：客户端激活窗口选择"管理员激活"模式提交的请求会出现在此列表。点击"审核"查看客户完整信息并一键通过/拒绝。通过后客户端将在 5 秒内自动获取 license 并重启。</p>
+
+            <!-- ★ 2026-09-02 免费开通白名单：白名单内手机号提交激活申请免支付前置校验 -->
+            <h2 style="margin-top:24px;">🎫 免费开通白名单</h2>
+            <div class="filter-bar">
+                <input type="text" id="freePassPhoneInput" placeholder="手机号（11位）" style="width:160px;" maxlength="11">
+                <input type="text" id="freePassNoteInput" placeholder="备注（选填，如：老客户补偿）" style="flex:1;min-width:180px;" maxlength="100">
+                <button class="btn btn-sm btn-success" onclick="addFreePass()">➕ 加入白名单</button>
+                <button class="btn btn-sm" onclick="loadFreePassList()">刷新</button>
+            </div>
+            <div class="table-box">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>手机号</th>
+                            <th>备注</th>
+                            <th>添加时间</th>
+                            <th>操作人</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="freePassListBody">
+                        <tr><td colspan="5" class="loading">加载中...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p style="margin-top:12px;color:#909399;font-size:12px;">说明：白名单内的手机号在客户端提交"管理员激活"申请时<b>跳过支付校验</b>（申请列表带 🎫免费 标记），仍需在上方队列中人工审核通过。白名单长期有效，建议客户开通完成后及时移除。</p>
         </div>
     </div>
 </div>
@@ -2650,8 +2676,10 @@ function renderAdminActivateTable() {
         const actions = r.status === 'pending'
             ? '<div style="display:flex;gap:4px;"><button class="btn btn-sm btn-success" onclick="openAdminApproveModal(\'' + r.requestId + '\')">审核</button><button class="btn btn-sm" style="background:#ff4d4f;color:#fff;" onclick="deleteAdminActivateRequest(\'' + r.requestId + '\',\'' + escapeHtml(r.clinicName || '') + '\')" title="删除此请求">🗑</button></div>'
             : '<div style="display:flex;gap:4px;align-items:center;"><span style="color:#909399;font-size:12px;">' + escapeHtml(r.licenseCode || '已处理') + '</span><button class="btn btn-sm" style="background:#ff4d4f;color:#fff;padding:2px 6px;" onclick="deleteAdminActivateRequest(\'' + r.requestId + '\',\'' + escapeHtml(r.clinicName || '') + '\')" title="删除此请求">🗑</button></div>';
-        // ★ 版本信息渲染：区分离线/云端、机构版/标准版（官网订单加 💰 标记）
-        const versionDisplay = renderVersionInfo(r) + (r.orderSource === 'website' ? ' <span style="background:#fffbeb;border:1px solid #fcd34d;color:#92400e;border-radius:4px;padding:0 4px;font-size:11px;" title="官网订单，请核对付款信息">💰官网订单</span>' : '');
+        // ★ 版本信息渲染：区分离线/云端、机构版/标准版（官网订单加 💰 标记，白名单免费加 🎫 标记）
+        const versionDisplay = renderVersionInfo(r)
+            + (r.orderSource === 'website' ? ' <span style="background:#fffbeb;border:1px solid #fcd34d;color:#92400e;border-radius:4px;padding:0 4px;font-size:11px;" title="官网订单，请核对付款信息">💰官网订单</span>' : '')
+            + (r.freePass ? ' <span style="background:#f0fdf4;border:1px solid #86efac;color:#166534;border-radius:4px;padding:0 4px;font-size:11px;" title="免费开通白名单通道，免支付提交">🎫免费</span>' : '');
         return '<tr>' +
             '<td style="font-family:Courier New,monospace;font-size:11px;">' + escapeHtml(r.requestId) + '</td>' +
             '<td><strong>' + escapeHtml(r.clinicName || '-') + '</strong></td>' +
@@ -2691,6 +2719,105 @@ async function deleteAdminActivateRequest(requestId, clinicName) {
             loadAdminActivateList();
         } else {
             alert('❌ 删除失败：' + (data.error || '未知错误'));
+        }
+    } catch (e) {
+        alert('❌ 网络错误：' + e.message);
+    }
+}
+
+// ============================================================================
+// ★ 2026-09-02 免费开通白名单（仅平台总管理员）：list / add / remove
+//   白名单内手机号在客户端提交"管理员激活"申请时跳过支付前置校验
+// ============================================================================
+async function loadFreePassList() {
+    const tbody = document.getElementById('freePassListBody');
+    if (!tbody) return;
+    try {
+        const res = await fetch(API_BASE + '/license/free-pass', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + token
+            },
+            body: JSON.stringify({ action: 'list' })
+        });
+        const data = await res.json();
+        if (!data.success) {
+            tbody.innerHTML = '<tr><td colspan="5" class="empty">' + escapeHtml(data.error || '加载失败') + '</td></tr>';
+            return;
+        }
+        const list = data.list || [];
+        if (list.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" class="empty">暂无白名单，添加手机号后该客户可免支付提交激活申请</td></tr>';
+            return;
+        }
+        tbody.innerHTML = list.map(r => {
+            const addedTime = r.addedAt ? new Date(r.addedAt).toLocaleString('zh-CN') : '-';
+            return '<tr>' +
+                '<td><a href="tel:' + escapeHtml(r.phone) + '" style="color:#409eff;">' + escapeHtml(r.phone) + '</a></td>' +
+                '<td style="max-width:260px;word-break:break-all;font-size:12px;color:#606266;">' + escapeHtml(r.note || '-') + '</td>' +
+                '<td style="font-size:12px;white-space:nowrap;">' + escapeHtml(addedTime) + '</td>' +
+                '<td style="font-size:12px;">' + escapeHtml(r.addedBy || '-') + '</td>' +
+                '<td><button class="btn btn-sm" style="background:#ff4d4f;color:#fff;" onclick="removeFreePass(\'' + escapeHtml(r.phone) + '\')" title="移出白名单">🗑 移除</button></td>' +
+            '</tr>';
+        }).join('');
+    } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty">网络错误：' + escapeHtml(e.message) + '</td></tr>';
+    }
+}
+
+async function addFreePass() {
+    const phoneInput = document.getElementById('freePassPhoneInput');
+    const noteInput = document.getElementById('freePassNoteInput');
+    const phone = (phoneInput.value || '').trim();
+    const note = (noteInput.value || '').trim();
+    if (!/^1[3-9]\d{9}$/.test(phone)) {
+        alert('❌ 请输入正确的 11 位手机号');
+        phoneInput.focus();
+        return;
+    }
+    try {
+        const res = await fetch(API_BASE + '/license/free-pass', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + token
+            },
+            body: JSON.stringify({ action: 'add', phone, note })
+        });
+        const data = await res.json();
+        if (data.success) {
+            alert('✅ ' + (data.message || '已加入白名单') + '\n\n手机号：' + phone + '\n该客户现在可以在客户端免支付提交激活申请。');
+            phoneInput.value = '';
+            noteInput.value = '';
+            loadFreePassList();
+        } else {
+            alert('❌ 添加失败：' + (data.error || '未知错误'));
+        }
+    } catch (e) {
+        alert('❌ 网络错误：' + e.message);
+    }
+}
+
+async function removeFreePass(phone) {
+    if (!confirm('确定把该手机号移出免费开通白名单？\n\n手机号：' + phone + '\n移除后该客户提交激活申请需先在官网完成付款。')) {
+        return;
+    }
+    try {
+        const res = await fetch(API_BASE + '/license/free-pass', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + token
+            },
+            body: JSON.stringify({ action: 'remove', phone })
+        });
+        const data = await res.json();
+        if (data.success) {
+            alert('✅ 已移出白名单');
+            loadFreePassList();
+        } else {
+            alert('❌ 移除失败：' + (data.error || '未知错误'));
         }
     } catch (e) {
         alert('❌ 网络错误：' + e.message);
@@ -2780,11 +2907,12 @@ function openAdminApproveModal(requestId) {
             payInfoBox.style.display = 'none';
         }
     }
-    // ★ 版本信息显示
+    // ★ 版本信息显示（免费开通白名单申请附 🎫 标记，提示无需核对付款）
     const versionInfo = renderVersionInfo(req);
     const versionDisplay = document.getElementById('approveVersionInfo');
     if (versionDisplay) {
-        versionDisplay.innerHTML = versionInfo || '-';
+        versionDisplay.innerHTML = (versionInfo || '-')
+            + (req.freePass ? ' <span style="background:#f0fdf4;border:1px solid #86efac;color:#166534;border-radius:4px;padding:0 4px;font-size:11px;" title="免费开通白名单通道提交，无需核对付款">🎫免费开通（白名单）</span>' : '');
     }
     // ★ 重置表单 + 按客户申请的版本自动选取激活类型（管理员只需核对确认）
     const reqEdition = String(req.edition || '').toLowerCase();
