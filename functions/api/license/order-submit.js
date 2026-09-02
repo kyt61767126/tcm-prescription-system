@@ -153,12 +153,14 @@ export async function onRequest(context) {
             }
         }
 
-        // 同手机号已有未处理官网订单：拦截重复下单（避免一单多付）
+        // 同手机号已有"已付款待核对"申请：拦截重复下单（避免一单多付）
+        // ★ 2026-09-02 配合支付前置校验调整：仅拦截已付款（paidAt）的 pending；
+        //   历史遗留的"未付款"软件端申请不再阻止官网下单——客户正是要来付款的。
         {
             const idx = await kv.get('admin_phone:' + phone.trim(), 'json').catch(() => null);
             if (idx && idx.requestId) {
                 const rec = await kv.get(KV_ADMIN_REQ_PREFIX + idx.requestId, 'json').catch(() => null);
-                if (rec && rec.phone === phone.trim() && rec.status === 'pending') {
+                if (rec && rec.phone === phone.trim() && rec.status === 'pending' && rec.paidAt) {
                     return json({
                         success: false,
                         error: '该手机号已有激活申请正在审核中，请等待审核完成，勿重复下单'

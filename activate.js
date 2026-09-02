@@ -425,7 +425,8 @@ async function submitAdminRequest(data) {
                 message: '激活请求提交成功'
             };
         } else {
-            return { success: false, error: result.error || '提交失败' };
+            // ★ 2026-09-02 透传服务端错误码（code=PAYMENT_REQUIRED 时激活窗口展示"请完成支付"付款导引）
+            return { success: false, code: result.code || '', error: result.error || '提交失败' };
         }
     } catch (e) {
         console.error('[Admin] 提交激活请求失败:', e);

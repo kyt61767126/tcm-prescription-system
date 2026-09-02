@@ -3620,7 +3620,7 @@
         document.body.appendChild(overlay);
 
         function show(id, isForm) {
-            ['adminStepEdition','adminTabCode','adminStepForm','adminStepPwd','adminSubmitting','adminWaiting','adminSuccess','adminRejected'].forEach(function(pid){
+            ['adminStepEdition','adminTabCode','adminStepForm','adminStepPwd','adminSubmitting','adminWaiting','adminSuccess','adminRejected','adminPayRequired'].forEach(function(pid){
                 const el = document.getElementById(pid);
                 if (el) el.style.display = 'none';
             });
@@ -4145,6 +4145,19 @@
                     + (__edParam ? ('&ed=' + __edParam) : '');
                 openPayUrlRobust(url, btn);
             });
+        })();
+        // ★ 2026-09-02 支付前置校验配套：adminPayRequired 面板按钮绑定
+        (function bindAdminPayRequired() {
+            const btn = document.getElementById('adminPayRequiredBtn');
+            if (!btn) return;
+            btn.addEventListener('click', function() {
+                var __edParam = (editionIntent === 'institution') ? 'local-pro' : (editionIntent === 'personal' ? 'local-personal' : '');
+                const url = 'https://tcm-prescription-system.pages.dev/download.html?mid=' + encodeURIComponent(machineId || '')
+                    + (__edParam ? ('&ed=' + __edParam) : '');
+                openPayUrlRobust(url, btn);
+            });
+            const back = document.getElementById('adminPayRequiredBackBtn');
+            if (back) back.addEventListener('click', function() { show('adminStepForm'); });
         })();
         document.getElementById('adminCopyMidBtn').addEventListener('click', async function() {
             const ok = await copyTextToClipboard(machineId || '');

@@ -92,6 +92,40 @@ export async function onRequest(context) {
         await kv.put(KV_ADMIN_REQ_INDEX, JSON.stringify(newIndex));
         await kv.delete(recordKey);
 
+        // ★ 2026-09-02 修复"删除激活审核后仍无法重新提交"（用户实测反馈）：
+        //   原实现只删记录 + 请求索引，两项派生数据残留导致 findPhoneOccupancy 误判：
+        //   ① admin_phone:{phone} 仍指向已删记录；
+        //   ② 兜底扫描命中该手机号更早的历史 pending 申请（重复提交检查 2026-08-20 才
+        //      上线，之前同一手机号可能积累多条 pending）。
+        //   修复：删除时同步清理 ① order:{orderNo} 订单映射 ② 重建 admin_phone 索引
+        //   为该手机号剩余最新一条申请（无则彻底删除索引）。
+        try {
+            if (record.orderNo) {
+                await kv.delete('order:' + String(record.orderNo).trim().toUpperCase()).catch(e => {
+                    console.warn('[AdminDelete] 订单映射删除失败:', e.message);
+                });
+            }
+            if (record.phone) {
+                let latest = null;
+                for (const rid of newIndex.slice(0, 200)) {
+                    const rec = await kv.get(KV_ADMIN_REQ_PREFIX + rid, 'json').catch(() => null);
+                    if (rec && rec.phone === record.phone) { latest = rec; break; }
+                }
+                if (latest) {
+                    await kv.put('admin_phone:' + record.phone, JSON.stringify({
+                        requestId: latest.requestId,
+                        status: latest.status
+                    }));
+                    console.log('[AdminDelete] 手机号索引已重建指向:', latest.requestId, '(', latest.status, ')');
+                } else {
+                    await kv.delete('admin_phone:' + record.phone);
+                    console.log('[AdminDelete] 手机号索引已彻底清除:', record.phone);
+                }
+            }
+        } catch (e) {
+            console.warn('[AdminDelete] 手机号索引重建失败:', e.message);
+        }
+
         console.log('[AdminDelete] 请求已删除:', requestId, '诊所:', record.clinicName);
 
         return json({

@@ -1019,6 +1019,9 @@ document.getElementById('submitBtn').addEventListener('click', async () => {
         if (result.success) {
             showWaiting(result.requestId, new Date().toISOString());
             startPolling(result.requestId);
+        } else if (result.code === 'PAYMENT_REQUIRED') {
+            // ★ 2026-09-02 支付前置校验：未完成支付 → 展示"请完成支付"+官网付款导引
+            showPayRequired();
         } else {
             showGlobalError(result.error || '提交失败，请重试');
             showAdminPanel('step2');
@@ -1108,7 +1111,30 @@ function initPayGuide() {
         });
     }
 }
+// ★ 2026-09-02 支付前置校验：未完成支付 → 复用等待面板展示"请完成支付"+付款二维码导引
+//   仅运行时修改文案与显隐（不改 HTML 结构/CSS，符合界面保护约束）
+function showPayRequired() {
+    const titleEl = document.querySelector('#waiting .title');
+    if (titleEl) titleEl.textContent = '💳 请完成支付';
+    const descEl = document.querySelector('#waiting .desc');
+    if (descEl) descEl.textContent = '激活前请先在官网完成付款（支付宝/微信），付款后管理员核对即可自动激活';
+    const infoRow = document.querySelector('#waiting .info-row');
+    if (infoRow) infoRow.style.display = 'none';
+    const waitStatus = document.getElementById('waitStatus');
+    if (waitStatus) waitStatus.style.display = 'none';
+    initPayGuide();
+    showAdminPanel('waiting');
+}
 function showWaiting(requestId, savedAt) {
+    // ★ 2026-09-02 恢复被 showPayRequired 临时调整的文案/显隐（回到等待审核正常态）
+    const titleEl = document.querySelector('#waiting .title');
+    if (titleEl) titleEl.textContent = '等待管理员激活...';
+    const descEl = document.querySelector('#waiting .desc');
+    if (descEl) descEl.textContent = '激活请求已提交，请耐心等待平台管理员处理';
+    const infoRow = document.querySelector('#waiting .info-row');
+    if (infoRow) infoRow.style.display = '';
+    const waitStatus = document.getElementById('waitStatus');
+    if (waitStatus) waitStatus.style.display = '';
     document.getElementById('requestNo').textContent = requestId;
     document.getElementById('submitTime').textContent = savedAt ? new Date(savedAt).toLocaleString('zh-CN') : new Date().toLocaleString('zh-CN');
     document.getElementById('savedPhone').textContent = state.phone;

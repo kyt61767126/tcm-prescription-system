@@ -58,6 +58,28 @@ async function findActivatedRequestForPhone(kv, phone) {
     }
 }
 
+// ★ 2026-09-02 支付前置校验：查找该手机号或本设备"已完成付款"的官网订单
+//   （order-paid 确认后写入 paidAt，状态 pending=待管理员核对 / activated=已激活）。
+//   按索引最新在前扫描，命中即返回。
+//   安全注意：machineId 为客户端任意提交参数（不可信），仅凭 machineId 命中的
+//   记录严禁触发账号补开/密码归一化（防接管，对齐 admin-status 2026-08-31 修复），
+//   本函数只做只读查找，账号操作由调用方按 phone 是否一致决定。
+async function findPaidOrderForPhoneOrMachine(kv, phone, machineId) {
+    try {
+        const list = (await kv.get(KV_ADMIN_REQ_INDEX, 'json')) || [];
+        for (const rid of list.slice(0, 200)) {
+            const rec = await kv.get(KV_ADMIN_REQ_PREFIX + rid, 'json').catch(() => null);
+            if (!rec || !rec.paidAt) continue;
+            if (rec.status !== 'pending' && rec.status !== 'activated') continue;
+            if (rec.phone === phone || (machineId && rec.machineId === machineId)) return rec;
+        }
+        return null;
+    } catch (e) {
+        console.warn('[AdminSubmit] 已付款订单查找失败:', e.message);
+        return null;
+    }
+}
+
 const ALLOWED_ORIGINS = [
     'https://tcm-prescription-system.pages.dev',
     'capacitor://localhost',
@@ -242,18 +264,65 @@ export async function onRequest(context) {
             }
         }
 
-        // ★ 2026-08-20 重复激活申请拦截（一个号码只能注册一次，避免重复排队冲突）：
-        //   手机号已有"进行中"的激活申请（pending）时，不再重复创建新申请，及时提醒用户等待审核。
-        //   注意：手机号已有云端账号不在此拦截（支持"云端+本地"多端共享同一手机号的软件特点）。
+        // ★ 2026-09-02 支付前置校验（激活流程完善：没有完成支付环节无法提交）：
+        //   官网订单付款确认（order-paid）后记录带 paidAt 并进入待审队列。提交时统一判定：
+        //   ① 已有"已付款待核对"申请 → 复用该申请，客户端直接进入等待轮询；
+        //   ② 已有"未付款"的进行中申请 → 不再报"审核中"（误导），统一引导先完成支付；
+        //   ③ 无进行中申请 → 按手机号/设备维度查已付款订单，查不到则拒绝提交，
+        //      返回 code=PAYMENT_REQUIRED，客户端提示"请完成支付"并引导官网付款。
+        //   env=test（测试环境/E2E 回归）放行不拦截。
+        const isTestEnv = String(env || '').trim() === 'test';
         {
             const occ = await findPhoneOccupancy(kv, phone);
             if (occ && occ.kind === 'pending_activation') {
-                console.log('[AdminSubmit] 手机号已有待审核激活申请，拦截重复提交:', phone, occ.detail.requestId);
-                return json({
-                    success: false,
-                    error: '该手机号已有激活申请正在审核中，请耐心等待管理员审核，请勿重复提交'
-                }, 409);
+                if (occ.detail.paidAt) {
+                    console.log('[AdminSubmit] 已付款申请待核对，复用进入等待:', phone, occ.detail.requestId);
+                    return json({
+                        success: true,
+                        status: 'pending',
+                        requestId: occ.detail.requestId,
+                        message: '已检测到您的付款，管理员核对到账后即可激活'
+                    });
+                }
+                if (!isTestEnv) {
+                    console.log('[AdminSubmit] 存在未付款申请，拦截并引导完成支付:', phone, occ.detail.requestId);
+                    return json({
+                        success: false,
+                        code: 'PAYMENT_REQUIRED',
+                        error: '请完成支付：激活前请先在官网完成付款（支付宝/微信），付款后管理员核对即可自动激活'
+                    }, 409);
+                }
             }
+        }
+        if (!isTestEnv) {
+            const paid = await findPaidOrderForPhoneOrMachine(kv, phone, finalMachineId);
+            if (paid && paid.status === 'pending') {
+                console.log('[AdminSubmit] 命中已付款订单（待核对），复用进入等待:', phone, paid.requestId);
+                return json({
+                    success: true,
+                    status: 'pending',
+                    requestId: paid.requestId,
+                    message: '已检测到您的付款，管理员核对到账后即可激活'
+                });
+            }
+            if (paid && paid.status === 'activated') {
+                // ★ 仅凭 machineId 命中"他人手机号"订单时，不做账号补开/密码归一化
+                //   （machineId 不可信，防接管，对齐 admin-status 2026-08-31 修复），
+                //   只复用 requestId 让客户端轮询 admin-status 自助领取 license。
+                console.log('[AdminSubmit] 命中已付款且已激活订单，复用:', paid.requestId);
+                return json({
+                    success: true,
+                    status: 'activated',
+                    requestId: paid.requestId,
+                    message: '该设备已完成付款并激活，正在校验'
+                });
+            }
+            console.log('[AdminSubmit] 未检测到付款记录，拦截提交（请完成支付）:', phone);
+            return json({
+                success: false,
+                code: 'PAYMENT_REQUIRED',
+                error: '请完成支付：激活前请先在官网完成付款（支付宝/微信），付款后管理员核对即可自动激活'
+            }, 409);
         }
 
         // 生成请求 ID 并存储
