@@ -288,6 +288,13 @@ function normalizeClinicEdition(rawEdition, clinicStatus) {
         return 'cloud_clinic';
     }
     var x = s.toLowerCase();
+    // ★ 2026-09-02 修复：四个规范 key 自身必须先精确命中——否则 'offline_personal' 含
+    //   'personal' 被下方兜底误归一化为 cloud_personal、'offline_clinic' 含 'clinic'
+    //   被误归一化为 cloud_clinic → 管理后台用户列表"离线版全部显示为云端版"。
+    if (x === 'cloud_clinic') return 'cloud_clinic';
+    if (x === 'cloud_personal') return 'cloud_personal';
+    if (x === 'offline_clinic') return 'offline_clinic';
+    if (x === 'offline_personal') return 'offline_personal';
     if (x === 'institution' || x === 'institutional' || x === 'jigou') return 'cloud_clinic';
     if (x === 'standard') return 'cloud_personal';
     if (x === 'yj') return 'cloud_clinic';
