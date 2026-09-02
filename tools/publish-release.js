@@ -581,6 +581,58 @@ function main() {
         });
         if (files.length === 0) {
             console.log('  [OK] 所有产物均与已发布版本一致，无需上传');
+            // ★ 2026-09-02 修复"重跑假成功不补部署"（v2026.09.02-2127 实测）：
+            //   原直接 exit(0)。但上次发布若在"上传完成后、推送前"中断（如源码未
+            //   落定中止），本地 manifest/downloads/latest.json 已更新却未 push——
+            //   重跑时 changed-only 比对本地 manifest 全部命中"未变化"，静默跳过
+            //   步骤 7，下载页永不部署（退出码 0 假成功）。修复：带 --push 时检测
+            //   发布产物是否有未提交变更，有则执行与步骤 7 同基线的补部署。
+            if (doPush) {
+                let dirty = '';
+                try {
+                    dirty = execSync(
+                        'git status --porcelain -- public/hash-manifest.json public/downloads/ public/updates/',
+                        { cwd: PROJECT_ROOT, encoding: 'utf8' }
+                    );
+                } catch (e) { /* git 异常按无变更处理，走正常完成 */ }
+                if (dirty.trim()) {
+                    console.log('  [补部署] 检测到发布产物未推送（上次发布中断），执行补部署...');
+                    const assertScript = path.join(__dirname, 'source-settled.ps1');
+                    try {
+                        execSync(
+                            'powershell -NoProfile -ExecutionPolicy Bypass -File "' + assertScript + '" -Assert',
+                            { cwd: PROJECT_ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }
+                        );
+                    } catch (e) {
+                        console.error('\n============================================');
+                        console.error('  发布失败：源码未落定，已中止补部署！');
+                        console.error('============================================');
+                        console.error('  当前状态: 产物已上传 GitHub Release，但下载页未部署（未 git push）');
+                        console.error('  处理: 先提交工作区改动（git add -A && git commit），再重跑发布');
+                        process.exit(1);
+                    }
+                    try {
+                        execSync('git add public/hash-manifest.json public/downloads/ public/updates/ .gitignore', { cwd: PROJECT_ROOT, stdio: 'ignore' });
+                        const st = execSync('git status --porcelain', { cwd: PROJECT_ROOT, encoding: 'utf8' });
+                        if (st.trim()) {
+                            execSync('git commit -m "chore(release): 补部署 ' + (versionTag || '') + ' 发布产物到下载页"', { cwd: PROJECT_ROOT, stdio: 'ignore' });
+                            execSync('git pull --rebase --autostash origin main', { cwd: PROJECT_ROOT, stdio: 'ignore' });
+                            execSync('git push origin main', { cwd: PROJECT_ROOT, stdio: 'ignore' });
+                            console.log('  [OK] 补部署推送成功！Cloudflare Pages 将在 1-2 分钟内自动部署\n');
+                        } else {
+                            console.log('  [SKIP] 发布产物无待提交变更\n');
+                        }
+                    } catch (e) {
+                        console.error('  [ERROR] 补部署 Git 操作失败:', e.message);
+                        console.error('  修复方法: 手动执行:');
+                        console.error('    git add public/hash-manifest.json public/downloads/ public/updates/');
+                        console.error('    git commit -m "chore(release): 补部署" && git push origin main');
+                        process.exit(1);
+                    }
+                } else {
+                    console.log('  [OK] 发布产物均已推送，下载页无需补部署\n');
+                }
+            }
             process.exit(0);
         }
         console.log('  [增量] ' + (beforeCount - files.length) + ' 个未变化跳过，本次上传 ' + files.length + ' 个:');
