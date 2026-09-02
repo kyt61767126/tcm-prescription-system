@@ -842,29 +842,41 @@ public class MainActivity extends BridgeActivity {
     }
 
     /**
-     * ★ 2026-09-02 版本号 SSOT（离线APP）：与云端APP 同机制。
-     *   从 PackageInfo 读取 versionName + versionCode，拼为 V{versionName}.{versionCode}
-     *   注入 window.APP_VERSION，覆盖 index.html 硬编码。保证 APP 内显示的版本号
-     *   与 发布脚本 hash-manifest.json 的 local.apk.version 同源。
+     * ★ 2026-09-02 版本号 SSOT（离线APP，与云端APP同机制；合并 2026-08-28 的
+     *   __APP_BUILD__ Build 号机制，二者归一）：
+     *   用 PackageManager.getPackageInfo 读取本 APK 的 versionName（软著固定 1.0.0）
+     *   和 versionCode（每次发版递增），拼为 V{versionName}.{versionCode}（如 V1.0.0.207）
+     *   注入 window.APP_VERSION，覆盖 index.html 硬编码 'V1.0.0'。
+     *   与 hash-manifest.json 的 local.apk.version（发布脚本 readAppDisplayVersion 生成，
+     *   同格式）完全一致 → 下载页 APP 卡 / APP 内关于弹窗 / 登录页脚 三处版本号同源。
+     *   页脚由页面侧 applyEditionTags() 原生重渲染（它读取 window.APP_VERSION），
+     *   杜绝 'V1.0.0.207 Build 207' versionCode 双显与 Build 号重复拼接。
+     *   0/600/1500ms 三次幂等重试应对 assets DOM 就绪时机差异（沿承旧机制经验值）。
      */
-    private void injectAppVersionSSOT(android.webkit.WebView webView) {
+    private void injectAppVersionSSOT(final android.webkit.WebView webView) {
         try {
             android.content.pm.PackageInfo pi = getPackageManager().getPackageInfo(getPackageName(), 0);
             String vn = pi.versionName == null ? "1.0.0" : pi.versionName;
             int vc = android.os.Build.VERSION.SDK_INT >= 28 ? (int) pi.getLongVersionCode() : pi.versionCode;
-            String display = "V" + vn + "." + vc;
-            String esc = display.replace("'", "\\'").replace("\"", "\\\"");
-            String js = "window.APP_VERSION = '" + esc + "'; "
-                      + "window.__APP_VERSION_BUILD__ = '" + esc + "'; "
-                      + "window.__APP_VERSION_CODE__ = " + vc + "; "
-                      + "(function(){try{"
-                      + "  var f=document.getElementById('footerAppVersion');if(f)f.textContent=window.APP_VERSION;"
-                      + "  var a=document.getElementById('aboutAppVersion');if(a)a.textContent=window.APP_VERSION;"
-                      + "  document.querySelectorAll && document.querySelectorAll('[data-app-version]').forEach(function(el){"
-                      + "    el.textContent=window.APP_VERSION;"
-                      + "  });"
-                      + "}catch(_){}})();";
+            final String display = "V" + vn + "." + vc;
+            final String esc = display.replace("'", "\\'").replace("\"", "\\\"");
+            final String js = "(function(){try{" +
+                "window.APP_VERSION='" + esc + "';" +
+                "window.__APP_VERSION_CODE__=" + vc + ";" +
+                // 页脚/标题原生重渲染：applyEditionTags 内部读取 window.APP_VERSION 重写
+                // .login-footer（'微信号: hktzy1688 | 版本: V1.0.0.207'），天然幂等。
+                "if(typeof applyEditionTags==='function'){try{applyEditionTags();}catch(e0){}}" +
+                "else{var lf=document.querySelector('.login-footer');" +
+                "  if(lf)lf.textContent='微信号: hktzy1688 | 版本: '+window.APP_VERSION;}" +
+                // 标题追加版本号（applyEditionTags 会重置 title，必须在其后追加；幂等守卫）
+                "var t=document.title||'';" +
+                "if(t.indexOf('" + esc + "')===-1){" +
+                "  t=t.replace(/\\s*V[0-9]+(\\.[0-9]+)+\\s*$/,'');" +
+                "  document.title=t+' " + esc + "';}" +
+                "}catch(_){}})();";
             webView.evaluateJavascript(js, null);
+            webView.postDelayed(() -> webView.evaluateJavascript(js, null), 600);
+            webView.postDelayed(() -> webView.evaluateJavascript(js, null), 1500);
             android.util.Log.d("BenNeng-Pres", "[SSOT-version] 注入 " + display);
         } catch (Exception e) {
             android.util.Log.w("BenNeng-Pres", "[SSOT-version] 注入失败，回落 index.html 硬编码", e);
@@ -1094,50 +1106,11 @@ public class MainActivity extends BridgeActivity {
             "})();";
         webView.evaluateJavascript(js, null);
 
-        // ★ 2026-08-28 版本号显示：登录页底部「微信号: hktzy1688 | 版本: V1.0.0」追加 Build 号（versionCode）
-        //   → 用户看到 V1.0.0 Build 177，不再只有不变的软著固定 V1.0.0，便于确认新版本覆盖安装生效。
-        //   三次尝试（0/600/1500ms）应对 assets DOM 就绪时机差异。
-        // ★ 2026-08-30 修复首次/二次打开版本号不一致（竞态）：
-        //   ①去掉 __appBuildSuffix__ 提前 return 守卫——首次 0ms 注入时 DOM 可能未就绪，
-        //     守卫却已置位，导致 600/1500ms 重试全部短路，Build 号丢失（第二次打开才正常）。
-        // ★ 2026-08-31 修复登录页 footer 重复追加 Build 号（用户实报"Build 203 Build 203..."）：
-        //   onPageFinished 每次触发都注入 js2×3（0/600/1500ms），而 .login-footer 的正则
-        //   replace(/(\|\s*版本:\s*V[0-9.]+)/,'$1 Build N') 捕获组不含已拼的 Build，
-        //   每跑一次就再拼一个 → 页面重载/多次 onPageFinished 后累积 3~5 个。
-        //   footer 分支必须与其他挂载点一样带 indexOf('Build')===-1 幂等守卫。
-        //   ②注入 window.__APP_BUILD__ 并主动调 applyEditionTags() 重渲染——
-        //     页面侧 applyEditionTags 重写 .version-tag/document.title 时会拼接该变量，
-        //     不再被"事后正则追加"竞态抹掉。
-        try {
-            android.content.pm.PackageInfo pi = getPackageManager().getPackageInfo(getPackageName(), 0);
-            String vn = pi.versionName;
-            int vc = android.os.Build.VERSION.SDK_INT >= 28 ? (int) pi.getLongVersionCode() : pi.versionCode;
-            if (vn == null) vn = "1.0.0";
-            final String suffix = " | 版本: V" + vn + " Build " + vc;
-            final String vSuffix = " V" + vn + " Build " + vc;
-            final String tagSuffix = " Build " + vc;
-            final String js2 = "(function(){" +
-                "  try {" +
-                "    window.__APP_BUILD__ = 'Build " + vc + "';" +
-                "    if (typeof applyEditionTags === 'function') { try { applyEditionTags(); } catch(e0) {} }" +
-                "    var t = document.querySelector('title');" +
-                "    if (t && t.textContent.indexOf('Build') === -1) { t.textContent += '" + vSuffix + "'; }" +
-                "    var v1 = document.querySelector('.login-footer');" +
-                "    if (v1 && v1.textContent.indexOf('Build') === -1) {" +
-                "      v1.textContent = v1.textContent.replace(/(\\|\\s*版本:\\s*V[0-9.]+)/,'$1" + tagSuffix + "');" +
-                "      if (v1.textContent.indexOf('Build') === -1) v1.textContent += '" + suffix + "';" +
-                "    }" +
-                "    var v2 = document.querySelector('.version-tag');" +
-                "    if (v2 && v2.textContent && v2.textContent.indexOf('Build') === -1) {" +
-                "      var vh = v2.innerHTML; if (!vh) vh = v2.textContent;" +
-                "      v2.innerHTML = vh.replace(/(V[0-9.]+)/, '$1" + tagSuffix + "');" +
-                "    }" +
-                "  } catch(e) {}" +
-                "})();";
-            runOnUiThread(() -> webView.evaluateJavascript(js2, null));
-            runOnUiThread(() -> webView.postDelayed(() -> webView.evaluateJavascript(js2, null), 600));
-            runOnUiThread(() -> webView.postDelayed(() -> webView.evaluateJavascript(js2, null), 1500));
-        } catch (Exception ignored) {}
+        // ★ 2026-09-02 版本号 SSOT 收口：原 2026-08-28 的「__APP_BUILD__ Build 号追加」
+        //   机制（本函数内 js2 三连注入 + .login-footer/.version-tag/title 正则追加）
+        //   已整体并入 injectAppVersionSSOT()（onPageFinished 首位调用，V{versionName}.
+        //   {versionCode} 单一格式）。此处删除避免两机制叠加造成
+        //   「版本: V1.0.0.207 Build 207」versionCode 双显与 Build 号重复拼接。
     }
 
     /**

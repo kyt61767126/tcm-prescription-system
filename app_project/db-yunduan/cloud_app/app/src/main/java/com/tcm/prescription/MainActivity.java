@@ -824,33 +824,42 @@ public class MainActivity extends BridgeActivity {
     }
 
     /**
-     * ★ 2026-09-02 版本号 SSOT：用 PackageManager.getPackageInfo 读取本 APK 的
-     *   versionName（软著固定 1.0.0）和 versionCode（每次发版递增），拼为
-     *   V{versionName}.{versionCode} 注入 window.APP_VERSION，覆盖 index.html
-     *   硬编码值，保证 APP 内关于弹窗/页脚/登录脚显示的版本号与 发布脚本
-     *   hash-manifest.json 中 apk.version 字段格式一致（下载页同源）。
+     * ★ 2026-09-02 版本号 SSOT（合并 2026-08-28 的 __APP_BUILD__ Build 号机制，二者归一）：
+     *   用 PackageManager.getPackageInfo 读取本 APK 的 versionName（软著固定 1.0.0）
+     *   和 versionCode（每次发版递增），拼为 V{versionName}.{versionCode}（如 V1.0.0.258）
+     *   注入 window.APP_VERSION，覆盖 index.html 硬编码 'V1.0.0'。
+     *   与 hash-manifest.json 的 cloud.apk.version（发布脚本 readAppDisplayVersion 生成，
+     *   同格式）完全一致 → 下载页 APP 卡 / APP 内关于弹窗 / 登录页脚 三处版本号同源。
+     *   页脚由页面侧 applyEditionTags() 原生重渲染（它读取 window.APP_VERSION），
+     *   不再用正则事后追加（杜绝 2026-08-31 实报的 'Build 255 ×3' 重复拼接类问题，
+     *   也杜绝 'V1.0.0.258 Build 258' versionCode 双显）。
+     *   0/600/1500ms 三次幂等重试应对远程页面 DOM 异步就绪（沿承旧机制经验值）。
      */
-    private void injectAppVersionSSOT(WebView webView) {
+    private void injectAppVersionSSOT(final WebView webView) {
         try {
             android.content.pm.PackageInfo pi = getPackageManager().getPackageInfo(getPackageName(), 0);
             String vn = pi.versionName == null ? "1.0.0" : pi.versionName;
             int vc = android.os.Build.VERSION.SDK_INT >= 28 ? (int) pi.getLongVersionCode() : pi.versionCode;
-            String display = "V" + vn + "." + vc;
-            String esc = display.replace("'", "\\'").replace("\"", "\\\"");
-            // 双写：APP_VERSION = 用户可见显示版本；__APP_VERSION_BUILD__ = 清缓存/升级内部比对版本号
-            String js = "window.APP_VERSION = '" + esc + "'; "
-                      + "window.__APP_VERSION_BUILD__ = '" + esc + "'; "
-                      + "window.__APP_VERSION_CODE__ = " + vc + "; "
-                      // 把登录页/关于弹窗/页脚引用 window.APP_VERSION 的 DOM 节点
-                      // 已通过 data-app-version 属性在 build 时绑定；更新页脚/登录脚显示（若已渲染）
-                      + "(function(){try{"
-                      + "  document.querySelectorAll && document.querySelectorAll('[data-app-version]').forEach(function(el){"
-                      + "    if(el.textContent.trim() !== el.dataset.appVersion) el.textContent = window.APP_VERSION;"
-                      + "  });"
-                      + "  var f=document.getElementById('footerAppVersion');if(f)f.textContent=window.APP_VERSION;"
-                      + "  var a=document.getElementById('aboutAppVersion');if(a)a.textContent=window.APP_VERSION;"
-                      + "}catch(_){}})();";
+            final String display = "V" + vn + "." + vc;
+            final String esc = display.replace("'", "\\'").replace("\"", "\\\"");
+            final String js = "(function(){try{" +
+                "window.APP_VERSION='" + esc + "';" +
+                "window.__APP_VERSION_CODE__=" + vc + ";" +
+                // 页脚/标题原生重渲染：applyEditionTags 内部读取 window.APP_VERSION 重写
+                // .login-footer（'微信号: hktzy1688 | 版本: V1.0.0.258'），天然幂等。
+                "if(typeof applyEditionTags==='function'){try{applyEditionTags();}catch(e0){}}" +
+                "else{var lf=document.querySelector('.login-footer');" +
+                "  if(lf)lf.textContent='微信号: hktzy1688 | 版本: '+window.APP_VERSION;}" +
+                // 标题追加版本号（applyEditionTags 会重置 title 为 '惠康中医-标签'，
+                // 必须在其后追加；indexOf 守卫保证幂等，重复注入不叠加）
+                "var t=document.title||'';" +
+                "if(t.indexOf('" + esc + "')===-1){" +
+                "  t=t.replace(/\\s*V[0-9]+(\\.[0-9]+)+\\s*$/,'');" +
+                "  document.title=t+' " + esc + "';}" +
+                "}catch(_){}})();";
             webView.evaluateJavascript(js, null);
+            webView.postDelayed(() -> webView.evaluateJavascript(js, null), 600);
+            webView.postDelayed(() -> webView.evaluateJavascript(js, null), 1500);
             android.util.Log.d("TCM-Pres", "[SSOT-version] 注入 " + display);
         } catch (Exception e) {
             android.util.Log.w("TCM-Pres", "[SSOT-version] 注入失败，回落 index.html 硬编码", e);
@@ -974,43 +983,11 @@ public class MainActivity extends BridgeActivity {
             "})();";
         webView.evaluateJavascript(js, null);
 
-        // ★ 2026-08-28 版本号显示：登录页底部「微信号: hktzy1688 | 版本: V1.0.0」追加 Build 号（versionCode）
-        //   → 用户看到 V1.0.0 Build 233，不再只有不变的软著固定 V1.0.0，便于确认新版本覆盖安装生效。
-        //   三次尝试（0/600/1500ms）应对远程页面 DOM 异步就绪。
-        // ★ 2026-08-31 修复登录页 footer 重复追加 Build 号（用户实报"Build 255 Build 255..."）：
-        //   onPageFinished 每次触发都注入 js2×3，而 .login-footer 的正则 replace 捕获组
-        //   不含已拼的 Build，每跑一次就再拼一个 → 累积多个 Build。footer 分支必须带
-        //   indexOf('Build')===-1 幂等守卫（与其他挂载点一致）。
-        try {
-            android.content.pm.PackageInfo pi = getPackageManager().getPackageInfo(getPackageName(), 0);
-            String vn = pi.versionName;
-            int vc = android.os.Build.VERSION.SDK_INT >= 28 ? (int) pi.getLongVersionCode() : pi.versionCode;
-            if (vn == null) vn = "1.0.0";
-            final String suffix = " | 版本: V" + vn + " Build " + vc;
-            final String vSuffix = " V" + vn + " Build " + vc;
-            final String tagSuffix = " Build " + vc;
-            final String js2 = "(function(){" +
-                "  try {" +
-                "    window.__APP_BUILD__ = 'Build " + vc + "';" +
-                "    if (typeof applyEditionTags === 'function') { try { applyEditionTags(); } catch(e0) {} }" +
-                "    var t = document.querySelector('title');" +
-                "    if (t && t.textContent.indexOf('Build') === -1) { t.textContent += '" + vSuffix + "'; }" +
-                "    var v1 = document.querySelector('.login-footer');" +
-                "    if (v1 && v1.textContent.indexOf('Build') === -1) {" +
-                "      v1.textContent = v1.textContent.replace(/(\\|\\s*版本:\\s*V[0-9.]+)/,'$1" + tagSuffix + "');" +
-                "      if (v1.textContent.indexOf('Build') === -1) v1.textContent += '" + suffix + "';" +
-                "    }" +
-                "    var v2 = document.querySelector('.version-tag');" +
-                "    if (v2 && v2.textContent && v2.textContent.indexOf('Build') === -1) {" +
-                "      var vh = v2.innerHTML; if (!vh) vh = v2.textContent;" +
-                "      v2.innerHTML = vh.replace(/(V[0-9.]+)/, '$1" + tagSuffix + "');" +
-                "    }" +
-                "  } catch(e) {}" +
-                "})();";
-            runOnUiThread(() -> webView.evaluateJavascript(js2, null));
-            runOnUiThread(() -> webView.postDelayed(() -> webView.evaluateJavascript(js2, null), 600));
-            runOnUiThread(() -> webView.postDelayed(() -> webView.evaluateJavascript(js2, null), 1500));
-        } catch (Exception ignored) {}
+        // ★ 2026-09-02 版本号 SSOT 收口：原 2026-08-28 的「__APP_BUILD__ Build 号追加」
+        //   机制（本函数内 js2 三连注入 + .login-footer/.version-tag/title 正则追加）
+        //   已整体并入 injectAppVersionSSOT()（onPageFinished 首位调用，V{versionName}.
+        //   {versionCode} 单一格式）。此处删除避免两机制叠加造成
+        //   「版本: V1.0.0.258 Build 258」versionCode 双显与 Build 号重复拼接。
     }
 
     /**
