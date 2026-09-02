@@ -181,6 +181,13 @@ $PeGuardTargets = @(
     'app_project/db-offline/desktop/electron'
 )
 
+# Group 11: index.html 权威源 -> 云端副本（★ 2026-09-02 从手工复制升级为生成模式）
+#   历史事故：权威源改动靠手工复制到云桌面/云APP 副本，多次遗漏导致 CI 红灯、
+#   重复 IIFE 脏块累积。现由 tools/sync-html.ps1 自动生成（端配置块保留，
+#   其余全部从 public/index.html 传播）。用子进程调用：sync-html 的 exit 语义
+#   独立，不会中途终止本脚本的后续分组。
+#   （离线两端 index.html 与权威源差异过大——激活/试用整块功能——不纳入。）
+
 # ============================================================================
 # Helper: Get SHA256 hash of a file
 # ============================================================================
@@ -352,6 +359,17 @@ Write-Host ""
 # Group 10: pe-guard.cjs -> 2 electron dirs (P1-[3.1])
 $result = Sync-Group -GroupName 'pe-guard.cjs -> 2 electron dirs' -Files @('pe-guard.cjs') -Targets $PeGuardTargets -VerifyOnly $VerifyOnly
 if (-not $result) { $allInSync = $false }
+Write-Host ""
+
+# Group 11: index.html authority -> cloud copies (★ 2026-09-02 generator mode)
+Write-Host "--- [index.html authority -> cloud copies] ---" -ForegroundColor Cyan
+$syncHtmlScript = Join-Path $PSScriptRoot 'sync-html.ps1'
+$psExe = if ($IsLinux -or $IsMacOS) { 'pwsh' } else { 'powershell' }
+$syncHtmlArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $syncHtmlScript)
+if ($VerifyOnly) { $syncHtmlArgs += '-VerifyOnly' }
+# 直接调用（不接管 stdout 管道，避免子进程 UTF-8 中文输出经管道转码乱码）
+& $psExe @syncHtmlArgs
+if ($LASTEXITCODE -ne 0) { $allInSync = $false }
 Write-Host ""
 
 # ============================================================================

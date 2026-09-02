@@ -77,6 +77,10 @@
 
 * 改 index.html JS 后必查三处：`html-sync-check.ps1`（副本漂移）、`sync-all.ps1 -VerifyOnly`（shared 组）、index-app.html 打包源与副本 diff。
 
+* ★ 2026-09-02 **index.html 云端副本从手工复制升级为权威源生成模式**（`tools/sync-html.ps1`，观察期毕业）：改 `public/index.html`（权威源）→ 跑 `sync-html.ps1`（已并入 sync-all.ps1 Group 11）→ 副本自动重生成（端配置块 EDITION/PRODUCT\_NAME/APP\_MODE+身份注释原样保留，其余全部自动传播）。**禁止直接改云桌面/云APP副本**。历史事故链：手工复制时代权威源修复漏同步副本→CI 红灯；权威源累积 3 份重复 hideUserTypeSelect IIFE；注释位置漂移——且 html-sync-check 的 ±30 行窗口重对齐把前两类真实漂移掩盖成"IN SYNC"。安全设计：生成器对 EDITION/APP\_MODE 赋值行多于 1 次的结构异常直接报错拒写（宁可失败不可错写）。
+
+* ★ 2026-09-02 **git pre-push 本地拦截门**（`.githooks/pre-push`，`git config core.hooksPath .githooks` 已启用，入库共享）：push 前自动跑 html-sync-check + sync-all -VerifyOnly + 注入幂等三道秒级校验，漂移推不到 GitHub（CI 红灯从"事后发现"变"事前拦截"）。紧急绕过 `git push --no-verify`（事后必须补跑）。克隆/换机后需重跑一次 `git config core.hooksPath .githooks` 激活。
+
 - CI 三重校验闭环（2026-08-31 升级四重：`.github/workflows/verify-unified.yml`：check-interface → sync-all -VerifyOnly → html-sync-check → check-injection-idempotency 注入幂等性门），推送红灯即漏同步/漏防呆。红灯修复：界面改动→重建基线一并提交；shared 改动→本地 sync-all 后提交；HTML 副本→以权威源回改；注入幂等→改整段重写/补守卫，确属守卫兜底审查后 `--update-baseline` 收录。
 
 - ★ 2026-08-30 发布链路收口 `tools/artifact-locate.js`（单一权威模块）：产物路径配置/APK 定位（项目根产物优先→gradle 输出回退→public/downloads 旧包）/fromBuild 标记/同步 downloads（带 sha 校验）只有这一份；auto-publish.js、publish-release.js、auto-update-downloads.js 三工具全部 require 引用，**禁止再自维护产物路径配置**（历史三工具三份路径各自演化=发布事故架构根因）。自检命令 `node tools/artifact-locate.js --check`（源不一致/半成品嫌疑 WARN+exit 1）。
@@ -277,7 +281,7 @@
 
 * ★ 2026-09-01 铁闸8c 冒烟连环雷：诊断快速输入 IIFE 的 `window.addEventListener('resize')` 在 smoke-runtime 沙箱抛错——沙箱 document 桩有 addEventListener 而 **window 桩（=sb2 自身）没有**，S1-S7 连锁全挂。铁律：*shared 组件新增 IIFE 必须过* *`node tools\smoke-runtime.cjs --all`（176/176），凡 window.* API 一律 try-catch 包裹（S7 红线=无 DOM 环境加载不得抛错）；此前构建一直卡在 E2E 前置闸，冒烟闸从未被跑到——修好一道闸会暴露下一道，历史欠账在第一次全绿构建时会集中清算\*。
 
-* ★ 2026-09-01 一键发布链路假成功缺陷（P0）：publish-release.js 两处失败路径退出码均为 0——①源码未落定检查失败只 `return`（main 正常结束）；②git 推送失败 catch 后继续打印"发布成功！"。上游 auto-publish.js/release-menu.ps1 据退出码误报成功，实际下载页未部署（用户下载到旧版）。铁律：**发布/部署类脚本任何失败路径必须 process.exit(1)，且失败提示要写清"当前已到哪一步+精确补救命令"（产物已传 Release 但未 push ≠ 全部白做，给 3 条 git 命令即可续上）**。另修复：①auto-publish.js `checkOnly || x > 0 ? 2 : 0` 运算符优先级 bug（check 模式恒退 2）；②菜单[3][4]无统一成败汇总——release-menu.ps1 新增 Show-PublishResult 统一中文大字块（成败+URL+Cloudflare 生效提示），auto-publish.js 成功块列明本次上传产物明细（名称+大小）、无变更时明确"官网已是最新"。
+* ★ 2026-09-01 一键发布链路假成功缺陷（P0）：publish-release.js 两处失败路径退出码均为 0——①源码未落定检查失败只 `return`（main 正常结束）；②git 推送失败 catch 后继续打印"发布成功！"。上游 auto-publish.js/release-menu.ps1 据退出码误报成功，实际下载页未部署（用户下载到旧版）。铁律：**发布/部署类脚本任何失败路径必须 process.exit(1)，且失败提示要写清"当前已到哪一步+精确补救命令"（产物已传 Release 但未 push ≠ 全部白做，给 3 条 git 命令即可续上）**。另修复：①auto-publish.js `checkOnly || x > 0 ? 2 : 0` 运算符优先级 bug（check 模式恒退 2）；②菜单\[3]\[4]无统一成败汇总——release-menu.ps1 新增 Show-PublishResult 统一中文大字块（成败+URL+Cloudflare 生效提示），auto-publish.js 成功块列明本次上传产物明细（名称+大小）、无变更时明确"官网已是最新"。
 
 * ★ 2026-08-31 v4 下载提速实测结论：瓶颈在**中国→CF 海外边缘跨境带宽**（per-IP 整体受限，非单连接）。实测同机：GitHub 直连并行 0.06MB/s ≪ CF 代理单流 0.85MB/s < CF 代理 8 路并行 1.08MB/s。CF 代理是最快路线（比直连快 15 倍），多连接在丢包链路下提升明显（健康链路仅 +27%）。v4 方案：6 路并行分片（每段独立 Range/重试/看门狗）+ 按钮实时速度显示 + UI 节流 5 次/秒 + 分片 Range 不支持自动回退单流。**用户实机验证：v4 上线后 0.7MB/s（此前约 50KB/s，提升约 14 倍），75MB 包约 2 分钟完成**。铁律：**跨境大文件下载用多连接并行分片 + 断点续传 + 看门狗三件套；想再快只能上国内 CDN（需 ICP 备案付费），代码层面已到物理上限**。
 

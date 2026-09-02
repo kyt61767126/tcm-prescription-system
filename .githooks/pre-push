@@ -1,0 +1,40 @@
+#!/bin/sh
+# ============================================================================
+#  pre-push - 惠康中医 · 推送前统一校验门（2026-09-02 设计层杜绝副本漂移上 GitHub）
+#
+#  背景：HTML/JS 副本漂移多次推上 GitHub 后才被 CI 发现（Verify Unified
+#  Modules 红灯），修复滞后。本钩子把同样的校验搬到 push 发生之前：
+#    ① html-sync-check.ps1 —— HTML 副本漂移（含 login.html 双版监控）
+#    ② sync-all.ps1 -VerifyOnly —— shared 模块 + index.html 生成模式校验
+#    ③ check-injection-idempotency.cjs —— 运行时注入幂等基线
+#  三道门全过才允许推送（均为秒级，不拖慢日常 push）。
+#
+#  绕过方式（仅限紧急情况，事后必须补跑）：git push --no-verify
+#  启用方式（克隆后一次性）：git config core.hooksPath .githooks
+# ============================================================================
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT" || exit 1
+
+PS_EXE="powershell"
+command -v pwsh >/dev/null 2>&1 && PS_EXE="pwsh"
+
+echo "[pre-push] ① HTML 副本漂移检查..."
+"$PS_EXE" -NoProfile -ExecutionPolicy Bypass -File tools/html-sync-check.ps1 || {
+    echo "[pre-push] FAIL: HTML 副本漂移——请以 public/index.html 为权威源运行 tools/sync-html.ps1 修复后再推送"
+    exit 1
+}
+
+echo "[pre-push] ② shared 模块同步校验..."
+"$PS_EXE" -NoProfile -ExecutionPolicy Bypass -File tools/sync-all.ps1 -VerifyOnly || {
+    echo "[pre-push] FAIL: shared 模块不同步——请运行 tools/sync-all.ps1 修复后再推送"
+    exit 1
+}
+
+echo "[pre-push] ③ 注入幂等校验..."
+node tools/check-injection-idempotency.cjs || {
+    echo "[pre-push] FAIL: 运行时注入幂等基线被破坏——请检查 symptom-dict.js / prescription-core.js 的注入函数"
+    exit 1
+}
+
+echo "[pre-push] 三道校验全部通过，允许推送"
+exit 0

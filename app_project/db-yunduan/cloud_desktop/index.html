@@ -3187,16 +3187,6 @@ let currentUser = null;
             } catch (e) { console.warn('[hideUserTypeSelect] 隐藏用户类型下拉失败:', e); }
         })();
 
-        // ★ 2026-08-31 上架前取消「正式/测试用户」区分：newUserType 下拉为静态 HTML（界面基线
-        //   保护范围），运行时 JS 注入隐藏（HTML DOM 零改动，沿用 __replaceTopClearWithStats 模式）；
-        //   数据层 userType 恒为 production，历史 test 值仅不再展示、编辑保存时自动归一。
-        (function hideUserTypeSelect() {
-            try {
-                var nt = document.getElementById('newUserType');
-                if (nt) nt.style.display = 'none';
-            } catch (e) { console.warn('[hideUserTypeSelect] 隐藏用户类型下拉失败:', e); }
-        })();
-
         async function handleAddUser() {
             // 权限检查：仅管理员可添加用户
             if (!currentUser) {
@@ -6699,6 +6689,8 @@ let currentUser = null;
             // 6. 采集患者信息、药物表格全部药品数据
             // 7. 组装单条处方数据：登录用户、生成时间戳、完整处方编号、门诊号、药品列表、患者信息、保存时间
             // 使用当前药物库的最新单价重新计算金额（支持修改历史处方时按最新价格结算）
+            // ★ 2026-09-01 覆盖当天处方时：以旧记录为底（保留 id/编号/创建时间/创建者/媒体文件/收费状态），
+            //   新内容字段覆盖之；云端按 id 合并同样保留原编号。
             const updatedItems = prescriptionItems.filter(item => item.name).map(item => {
                 const latestMedicine = getMedicineByName(item.name);
                 const latestPrice = latestMedicine ? parseFloat(latestMedicine.price) || 0 : (parseFloat(item.price) || 0);
@@ -6714,8 +6706,6 @@ let currentUser = null;
             const updatedMedicineTotal = updatedItems.reduce((sum, item) => sum + (parseFloat(item.total) || 0), 0);
             const updatedTotalAmount = updatedMedicineTotal * doseCount + (parseFloat(document.getElementById('registrationFee2')?.value || document.getElementById('registrationFee')?.value || '0') || 0);
             
-            // ★ 2026-09-01 覆盖当天处方时：以旧记录为底（保留 id/编号/创建时间/创建者/媒体文件/收费状态），
-            //   新内容字段覆盖之；云端按 id 合并同样保留原编号。
             const record = Object.assign({}, todayExisting, {
                 id: todayExisting ? todayExisting.id : Date.now(),
                 prescriptionNo: newPrescriptionNo,

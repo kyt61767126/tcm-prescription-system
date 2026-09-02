@@ -3187,26 +3187,6 @@ let currentUser = null;
             } catch (e) { console.warn('[hideUserTypeSelect] 隐藏用户类型下拉失败:', e); }
         })();
 
-        // ★ 2026-08-31 上架前取消「正式/测试用户」区分：newUserType 下拉为静态 HTML（界面基线
-        //   保护范围），运行时 JS 注入隐藏（HTML DOM 零改动，沿用 __replaceTopClearWithStats 模式）；
-        //   数据层 userType 恒为 production，历史 test 值仅不再展示、编辑保存时自动归一。
-        (function hideUserTypeSelect() {
-            try {
-                var nt = document.getElementById('newUserType');
-                if (nt) nt.style.display = 'none';
-            } catch (e) { console.warn('[hideUserTypeSelect] 隐藏用户类型下拉失败:', e); }
-        })();
-
-        // ★ 2026-08-31 上架前取消「正式/测试用户」区分：newUserType 下拉为静态 HTML（界面基线
-        //   保护范围），运行时 JS 注入隐藏（HTML DOM 零改动，沿用 __replaceTopClearWithStats 模式）；
-        //   数据层 userType 恒为 production，历史 test 值仅不再展示、编辑保存时自动归一。
-        (function hideUserTypeSelect() {
-            try {
-                var nt = document.getElementById('newUserType');
-                if (nt) nt.style.display = 'none';
-            } catch (e) { console.warn('[hideUserTypeSelect] 隐藏用户类型下拉失败:', e); }
-        })();
-
         async function handleAddUser() {
             // 权限检查：仅管理员可添加用户
             if (!currentUser) {
