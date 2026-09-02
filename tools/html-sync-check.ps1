@@ -80,10 +80,20 @@ $Targets = @(
 # ★ 合法端配置差异清单：正则 -> 占位符
 #   这些行按端必然不同（版本身份/运行模式），规范化为占位符后不应产生 diff。
 #   若端配置行本身结构变化（如新增变量），仍会以 diff 形式暴露。
+# ★ 2026-09-02 规范化：HTML 注释/正文中对 <script> 标签的文字引用统一替换为 [script]。
+#   历史上为规避 XML/HTML 解析器把注释里字面 <script>...</script> 误判为真实标签，
+#   权威源注释统一改写成 [script]；部分副本（云桌面/云APP）没同步导致漂移误报。
+#   两侧规范化为同一写法后，diff 归零——属于注释文字风格差异，不影响功能。
+#   注：正则含 </ 序列，字符串变量化再入哈希表，避免解析歧义。
+$scriptOpenPattern  = '<\s*script\s*>'
+$scriptClosePattern = '<\s*/\s*script\s*>'
+
 $NormalizeRules = @(
     @{ Pattern = "window\.EDITION\s*=\s*'[^']*'";               Replace = "window.EDITION = '@@EDITION@@'" },
     @{ Pattern = "window\.PRODUCT_NAME\s*=\s*'[^']*'";          Replace = "window.PRODUCT_NAME = '@@PRODUCT_NAME@@'" },
-    @{ Pattern = "window\.APP_MODE\s*=\s*'[^']*'";              Replace = "window.APP_MODE = '@@APP_MODE@@'" }
+    @{ Pattern = "window\.APP_MODE\s*=\s*'[^']*'";              Replace = "window.APP_MODE = '@@APP_MODE@@'" },
+    @{ Pattern = $scriptOpenPattern;                            Replace = '[script]' },
+    @{ Pattern = $scriptClosePattern;                           Replace = '[/script]' }
 )
 
 # ★ 端身份注释行：整行删除（两侧块的注释文字按端不同但语义等价，
