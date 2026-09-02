@@ -12,6 +12,13 @@ if (-not (Test-Path "$script:RootDir\tools\publish-release.js")) {
 
 $env:NO_PAUSE = '1'
 
+# ★ 2026-09-01 中文暂停提示：覆盖内置 pause（英文 "Press Enter to continue..."），
+#   本脚本所有 pause 调用点自动变为中文提示，无需逐处修改。
+Remove-Item alias:pause -ErrorAction SilentlyContinue
+function global:pause {
+    $null = Read-Host '按回车键继续...'
+}
+
 # ★ 2026-08-24 打包验收门（tools/pack-gate.ps1）：语法/BOM/CRLF/编码 四道快检，
 #   任一失败直接阻断（历史事故：本文件 BOM 丢失被 GBK 误读解析崩 / 打包链脚本语法错无人发现）
 $gateToolRm = Join-Path $PSScriptRoot 'pack-gate.ps1'

@@ -20,6 +20,12 @@ if ($AutoMode) { $script:SkipPause = $true }
 if ($script:SkipPause) {
     Remove-Item alias:pause -ErrorAction SilentlyContinue
     function global:pause {}
+} else {
+    # ★ 2026-09-01 中文暂停提示：交互模式下覆盖内置 pause（英文 "Press Enter to continue..."）
+    Remove-Item alias:pause -ErrorAction SilentlyContinue
+    function global:pause {
+        $null = Read-Host '按回车键继续...'
+    }
 }
 
 # 脚本位于 <仓库根>\tools\，仓库根 = $PSScriptRoot 的上级
