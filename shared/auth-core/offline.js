@@ -3065,6 +3065,59 @@
     const ACTIVATION_TICKET_SUBMIT_URL = 'https://tcm-prescription-system.pages.dev/api/license/ticket/submit';
 
     // ============================================================================
+    // ★ 2026-09-02 付款按钮"点击无反应"根治（openPayUrlRobust 三层递进+用户可见兜底）
+    //   故障树（实测审计）：桥失败(旧包/任何异常) → window.open 在 WebView 未开多窗
+    //   口时**静默返回 null 且不抛异常**（2026-08-30 修复的错误假设：以为 open 失败
+    //   会抛异常走 location.href）→ location.href 又被 WebView 拦截器
+    //   shouldOverrideUrlLoading return true 静默吞掉 → 全链路零用户可见反馈。
+    //   修复：①检查 open **返回值**而非依赖异常；②Electron deny 场景（无桥+null）
+    //   视为成功（setWindowOpenHandler 已 shell.openExternal 打开系统浏览器）；
+    //   ③仅 APP（有桥但桥失败）走 location.href+看门狗——1.2s 后页面未离开即判定
+    //   被拦截器吞掉，自动复制购买链接+按钮文字提示，**保证按钮任何情况下"有反应"，
+    //   客户永远拿得到购买链接**（宁降级不静默）。
+    // ============================================================================
+    function openPayUrlRobust(url, btnEl) {
+        // ① 原生桥（APP 端唯一可靠通路，Java 白名单仅放行官网购买页）
+        var __hasBridge = false;
+        try {
+            __hasBridge = !!(window.AndroidNative && typeof window.AndroidNative.invoke === 'function');
+            if (__hasBridge) {
+                var __r = window.AndroidNative.invoke('openExternalUrl', JSON.stringify({ url: url }));
+                if (__r) { try { var __j = JSON.parse(__r); if (__j && __j.success) return true; } catch (e) {} }
+            }
+        } catch (e) {}
+        // ② window.open：必须检查返回值——WebView 未开多窗口时静默返回 null（不抛异常）
+        try {
+            var __w = window.open(url, '_blank');
+            if (__w) return true; // 浏览器/正常多窗口环境
+        } catch (e) {}
+        // Electron deny 场景：无安卓桥 + open 返回 null → setWindowOpenHandler 已
+        // shell.openExternal 打开系统浏览器（deny 时 open 返回 null 是 Electron 正常路径）
+        if (!__hasBridge) return true;
+        // ③ 仅 APP（桥存在但桥失败）：location.href + 看门狗兜底
+        try {
+            var __btn = btnEl || null;
+            var __orig = __btn ? __btn.innerHTML : '';
+            window.location.href = url;
+            setTimeout(function() {
+                try {
+                    // 页面仍在（导航被拦截器静默吞掉）且按钮还在 DOM → 给用户可见出口
+                    if (__btn && __btn.parentNode && document.getElementById(__btn.id)) {
+                        copyTextToClipboard(url).then(function(ok) {
+                            __btn.innerHTML = ok
+                                ? '✅ 购买链接已复制，请在浏览器粘贴打开'
+                                : '⚠️ 打开失败，请联系客服微信 hktzy1688';
+                            setTimeout(function() { try { __btn.innerHTML = __orig; } catch (e2) {} }, 4000);
+                        });
+                    }
+                } catch (e) {}
+            }, 1200);
+            return true;
+        } catch (e2) {}
+        return false;
+    }
+
+    // ============================================================================
     // ★ 规则3：激活工单申请弹窗（叠加在激活码弹窗之上，z-index 100000）
     // 客户填写联系方式 → fetch ticket/submit → 管理员在后台工单审批页一键审批发码
     // 提交成功后关闭本弹窗，回到底下的激活码输入弹窗继续输码
@@ -3242,23 +3295,12 @@
             const btn = document.getElementById('ticketPayGuideBtn');
             if (!btn) return;
             btn.addEventListener('click', function() {
-                // ★ 2026-08-30 携带版本意图：官网购买页自动选中对应版本直接显示价格，
-                //   客户无需再选版本，填信息付款即可（离线系恒 local，edition 分 personal/pro）
+                // ★ 2026-09-02 改用 openPayUrlRobust（原 window.open/catch fallback 在
+                //   WebView 静默 null 场景全链路无反馈，详见函数头注释）
                 var __edParam = (editionIntent === 'institution') ? 'local-pro' : (editionIntent === 'personal' ? 'local-personal' : '');
                 const url = 'https://tcm-prescription-system.pages.dev/download.html?mid=' + encodeURIComponent(machineId || '')
                     + (__edParam ? ('&ed=' + __edParam) : '');
-                // ★ 2026-08-30 修复APP点击无反应：WebView 未开启多窗口，window.open 静默返回
-                //   null（不抛异常，原 fallback 永不触发）→ 按钮点了没反应、无法付款。
-                //   APP 端优先走原生桥 openExternalUrl（Java 严格白名单仅放行官网购买页）；
-                //   桥不存在/失败回退 window.open（桌面 Electron 正常行为）。
-                try {
-                    if (window.AndroidNative && typeof window.AndroidNative.invoke === 'function') {
-                        var __r = window.AndroidNative.invoke('openExternalUrl', JSON.stringify({ url: url }));
-                        if (__r) { try { var __j = JSON.parse(__r); if (__j && __j.success) return; } catch (e) {} }
-                    }
-                } catch (e) {}
-                try { window.open(url, '_blank'); }
-                catch (e) { try { window.location.href = url; } catch (e2) {} }
+                openPayUrlRobust(url, btn);
             });
         })();
 
@@ -4089,23 +4131,12 @@
             const btn = document.getElementById('adminPayGuideBtn');
             if (!btn) return;
             btn.addEventListener('click', function() {
-                // ★ 2026-08-30 携带版本意图：官网购买页自动选中对应版本直接显示价格，
-                //   客户无需再选版本，填信息付款即可（离线系恒 local，edition 分 personal/pro）
+                // ★ 2026-09-02 改用 openPayUrlRobust（原 window.open/catch fallback 在
+                //   WebView 静默 null 场景全链路无反馈，详见函数头注释）
                 var __edParam = (editionIntent === 'institution') ? 'local-pro' : (editionIntent === 'personal' ? 'local-personal' : '');
                 const url = 'https://tcm-prescription-system.pages.dev/download.html?mid=' + encodeURIComponent(machineId || '')
                     + (__edParam ? ('&ed=' + __edParam) : '');
-                // ★ 2026-08-30 修复APP点击无反应：WebView 未开启多窗口，window.open 静默返回
-                //   null（不抛异常，原 fallback 永不触发）→ 按钮点了没反应、无法付款。
-                //   APP 端优先走原生桥 openExternalUrl（Java 严格白名单仅放行官网购买页）；
-                //   桥不存在/失败回退 window.open（桌面 Electron 正常行为）。
-                try {
-                    if (window.AndroidNative && typeof window.AndroidNative.invoke === 'function') {
-                        var __r = window.AndroidNative.invoke('openExternalUrl', JSON.stringify({ url: url }));
-                        if (__r) { try { var __j = JSON.parse(__r); if (__j && __j.success) return; } catch (e) {} }
-                    }
-                } catch (e) {}
-                try { window.open(url, '_blank'); }
-                catch (e) { try { window.location.href = url; } catch (e2) {} }
+                openPayUrlRobust(url, btn);
             });
         })();
         document.getElementById('adminCopyMidBtn').addEventListener('click', async function() {
