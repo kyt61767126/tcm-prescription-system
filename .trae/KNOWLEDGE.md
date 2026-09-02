@@ -291,6 +291,8 @@
 
 * ★ 2026-08-31 开放前官网安全审查（40+ Pages Functions 全面审计）结论：**唯一高危已修**——admin-status.js（无需登录）的 machineId 兜底扫描命中他人已激活记录时会执行 normalizeActivationPassword（受害者手机号下所有云端账号密码重置为 admin → 接管账号）；修复=兜底命中的记录只返回 license（license 绑定真实 machineId，攻击者本机验签必失败无泄露），provisionCloudAccount/normalizeActivationPassword 仅自己 requestId 的受信链路执行。**其余全部确认安全**：users.js 登录渐进锁定（5次起阶梯锁/封顶1h）+ IP 限流 10/min + 防枚举哑哈希、dl.js 严格域名白名单（无 SSRF/开放代理）、lookup.js machineId 绑定校验+码级/IP 级双限流、admin-\* 管理接口 platform\_admin 强制鉴权、ticket/trial IP 限流、处方 API 按创建者过滤水平越权、静态文件（config.json/wrangler.toml/文档）无敏感泄露、\_headers 安全头齐全。铁律：**①凡"客户端提交的标识参数"（machineId/phone/requestId）用于跨记录匹配时，命中的他人记录只能做"无副作用读取"，凡有写副作用（重置密码/开通账号）的调用必须限定"参数持有者本人记录"路径；②KV 里 login\_fail:{username} 键的 TTL 与锁定时长是两回事（TTL 24h 保计数、锁定看次数阶梯）**。
 
+* ★ 2026-09-02 CI「Verify Unified Modules」连续红灯根治复盘（三层叠加 → 三层防线，已连续绿灯）：**事故全貌**=①表象：副本注释 `<script>` vs 权威源 `[script]` 漂移（8-31 修复未同步副本）；②深层：权威源累积 3 份重复 hideUserTypeSelect IIFE + 注释移位，被 html-sync-check 的 ±30 行窗口重对齐**掩盖成 IN SYNC**（检查器本身有盲区）；③真根因：test-source-settled.ps1 子进程硬编码 `powershell`，ubuntu runner 只有 `pwsh` 第 5 道门必炸——本地全绿纯因 Windows 永远有 powershell。**三层防线**=①源头：sync-html.ps1 权威源生成模式（漏同步这个操作从流程中消失）；②本地：.githooks/pre-push 三道秒级校验（漂移推不到 GitHub）；③CI：pwsh 跨平台修复（5 道门恢复）。**复核 8 项全过**：端配置块身份三端各自正确、LF/无 BOM 物理特征不变、重复 IIFE 清零、五道门 RC=0、生成器幂等（连跑零改动）、CI 连续 success。方法论铁律：**①检查工具的"容错"（窗口重对齐/规范化）会把真实漂移洗成"一致"——修漂移前先审计检查器本身有没有盲区；②同症状多轮复现=多个独立根因叠加，修掉一层后必须看远端日志确认下一层（gh run view --log-failed），不能本地绿就收工**。
+
 ## 11. 后续路线图（2026-08-31 定，试用观察期三步走）
 
 * **第一步（当前）**：进入 1-2 周正常看诊观察期，不刻意测试——真实使用是最好的验收。
