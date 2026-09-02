@@ -3543,6 +3543,12 @@
             confirmMsg += '\n提示：浏览器可能提示"通常不会下载此文件"，\n这是对未签名 exe 的常规安全提醒，点击"保留"即可。';
             confirmMsg += '\n\n下载完成后请核对文件名与 SHA-256 校验值，\n再运行安装。是否开始下载？';
             if (!window.confirm(confirmMsg)) return;
+            // ★ 2026-09-02 微信内置浏览器屏蔽 APK 下载（协议层拦截，任何下载技术都绕不过）：
+            //   检测 MicroMessenger UA，引导用户右上角「···」→「在浏览器打开」后重试。
+            if (/\.(apk)$/i.test(url) && /MicroMessenger/i.test(navigator.userAgent || '')) {
+                showToast('微信内无法下载安装包\n请点右上角「···」→ 选择「在浏览器打开」后重试');
+                return;
+            }
             // ★ GitHub 直连国内极慢（实测 0.14MB/s，75MB 包常被浏览器中断报"网络问题"）
             //   → 优先走同域 Cloudflare 加速代理 /api/dl（用户→CF边缘→GitHub），
             //     用断点续传下载器（中断自动恢复），代理彻底失败才回退 GitHub 直连
@@ -3560,7 +3566,28 @@
                 });
                 return;
             }
-            // 非 GitHub 直链（官网自有静态文件等）：HEAD 验证后隐藏 <a> 触发
+            // ★ 2026-09-02 APK 手机端下载慢根治：同源静态文件（/downloads/*.apk|*.exe）
+            //   原走单流 <a> 直下——跨境链路单连接 TCP 吞吐被时延×窗口卡死（手机实测
+            //   100-300KB/s，11.5MB 云端 APK 需 1-10 分钟且常中断）。Cloudflare 静态
+            //   资源支持 Range(206)，复用 robustDownload 分段并行下载器：≥8MB 自动
+            //   6 连接并行（吞吐数倍提升），小文件走增强单流（断点续传+看门狗+进度），
+            //   按钮实时显示百分比/速度。失败自动回退传统 HEAD 验证 + <a> 直下。
+            if (/\.apk$|\.exe$/i.test(fileName || '')) {
+                var fext = fileName.replace(/^.*\./, '.');
+                var fname = displayName + fext;
+                robustDownload(url, fname, btn, function(ok) {
+                    if (!ok) {
+                        showToast('加速下载失败，尝试普通方式下载');
+                        legacyDirectDownload(url, btn);
+                    }
+                });
+                return;
+            }
+            legacyDirectDownload(url, btn);
+        }
+
+        // 传统下载路径：HEAD 验证后隐藏 <a> 触发（robustDownload 失败时的兜底回退）
+        function legacyDirectDownload(url, btn) {
             var originalText = btn.innerHTML;
             btn.innerHTML = '<span class="icon">⏳</span>正在验证...';
             btn.classList.add('pending');
@@ -3682,8 +3709,14 @@
                         hashEl.textContent = data.sha256;
                         hashEl.classList.remove('pending');
                         const dlEl = document.getElementById('dl-' + key);
-                        if (dlEl && data.url) {
-                            dlEl.setAttribute('href', absDownloadUrl(data.url));
+                        // ★ 2026-09-02 APK 手机端下载慢根治：href 优先 GitHub Release
+                        //   （safeDownload 自动套 /api/dl 同域代理 + robustDownload
+                        //   6 连接分段并行——dl.js 透传 Range(206)，GitHub 上游支持分片）。
+                        //   CF 静态 /downloads 实测返回 200 全量（不支持 Range）且跨境
+                        //   单流仅 100-300KB/s，降级为无 releaseUrl 时的回落源
+                        //   （此时 robustDownload 走增强单流：断点续传+看门狗+进度）。
+                        if (dlEl && (data.releaseUrl || data.url)) {
+                            dlEl.setAttribute('href', data.releaseUrl || absDownloadUrl(data.url));
                             dlEl.classList.remove('disabled');
                         }
                     }
