@@ -3944,8 +3944,11 @@
                 machineId: machineId || 'unknown',
                 productName: '惠康中医' + (state.edition === 'institution' ? '机构版' : '标准版'),
                 edition: state.edition,
-                appMode: 'app',
-                versionLabel: '',
+                // ★ 2026-09-03 产品模式：离线端必须标 'local'，服务端据此映射诊所 edition
+                //   为 offline_personal/offline_clinic（旧值 'app' 是载体信息非产品模式，
+                //   导致离线标准版审核后被错标 cloud_personal → 用户管理显示"网页云端标准版"）
+                appMode: 'local',
+                versionLabel: '本地' + (state.edition === 'institution' ? '机构版' : '标准版'),
                 env: 'production'
             };
             // ★ password 不上传云端，仅本地安装时创建登录账号使用

@@ -3709,8 +3709,10 @@
                 machineId: machineId || 'unknown',
                 productName: '惠康中医' + (state.edition === 'institution' ? '机构版' : '标准版'),
                 edition: state.edition,
-                appMode: 'app',
-                versionLabel: '',
+                // ★ 2026-09-03 产品模式：云端端标 'cloud'（服务端据此映射 cloud_personal/
+                //   cloud_clinic；旧值 'app' 是载体信息非产品模式，与离线端无法区分）
+                appMode: 'cloud',
+                versionLabel: '云端' + (state.edition === 'institution' ? '机构版' : '标准版'),
                 env: 'production'
             };
             // ★ password 不上传云端，仅本地安装时创建登录账号使用

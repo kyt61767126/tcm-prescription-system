@@ -19,11 +19,35 @@ import {
     KV_SYSTEM_CLINICS
 } from '../../_lib/auth.js';
 
-// 将激活 type（personal/pro）映射为云端规范 edition key
-function mapActivationTypeToEdition(type) {
+// ★ 2026-09-03 产品模式感知：激活 type（personal/pro）→ 规范 edition key
+//   必须结合产品模式（离线/云端），否则离线标准版审核通过后诊所 edition 被错写为
+//   cloud_personal（用户管理显示"网页云端标准版"，实际客户买的是 99 元本地标准版）。
+//
+// 产品模式判定（优先级从高到低）：
+//   1. record.appMode === 'local'        → 离线（官网下单 order-submit 写入）
+//   2. record.appMode === 'cloud'        → 云端（官网下单 + 云端客户端提交）
+//   3. record.appMode === 'offline'      → 离线（历史/兼容值）
+//   4. versionLabel 含 本地/离线          → 离线；含 云端 → 云端
+//   5. 兜底 cloud（保持旧行为，未知模式不改变现状）
+//
+// 旧客户端提交 appMode='app'（载体信息非产品模式）→ 走 4/5 兜底；
+// 新版客户端（2026-09-03 起）离线端发 'local'、云端端发 'cloud'。
+function resolveProductMode(record) {
+    const am = String(record && record.appMode || '').toLowerCase();
+    if (am === 'local' || am === 'offline') return 'local';
+    if (am === 'cloud') return 'cloud';
+    const vl = String(record && record.versionLabel || '');
+    if (/本地|离线/.test(vl)) return 'local';
+    if (/云端/.test(vl)) return 'cloud';
+    return 'cloud';
+}
+
+function mapActivationTypeToEdition(type, record) {
     const t = String(type || '').toLowerCase();
-    if (t === 'pro' || t === 'institution' || t === 'clinic') return 'cloud_clinic';
-    return 'cloud_personal'; // personal / standard / 未知 → 云端标准版
+    const isPro = (t === 'pro' || t === 'institution' || t === 'clinic');
+    const mode = resolveProductMode(record);
+    if (mode === 'local') return isPro ? 'offline_clinic' : 'offline_personal';
+    return isPro ? 'cloud_clinic' : 'cloud_personal';
 }
 
 // 在指定诊所下补充（或不动）账号
@@ -72,7 +96,7 @@ export async function provisionCloudAccount(kv, record) {
     //         > record.edition（前端提交时用户自选的 institution/personal，兼容老记录）
     //   两者都没有时，mapActivationTypeToEdition 内部兜底为 cloud_personal（标准版）
     const rawActivation = record.type || record.edition;
-    const targetEdition = mapActivationTypeToEdition(rawActivation);
+    const targetEdition = mapActivationTypeToEdition(rawActivation, record);
     const clinics = (await kv.get(KV_SYSTEM_CLINICS, 'json')) || [];
     let clinic = clinics.find(c => c.name === clinicName);
     let clinicsDirty = false;
