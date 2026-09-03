@@ -3305,8 +3305,11 @@
                 // ★ 2026-09-02 改用 openPayUrlRobust（原 window.open/catch fallback 在
                 //   WebView 静默 null 场景全链路无反馈，详见函数头注释）
                 var __edParam = (editionIntent === 'institution') ? 'local-pro' : (editionIntent === 'personal' ? 'local-personal' : '');
+                // ★ 2026-09-03 dp=载体（desktop/app）：官网下单沿 URL 传入 order-submit，
+                //   服务端存入激活申请，后台用户管理离线版显示"🖥️桌面·/📱APP·"
+                var __dp = (global.electronAPI && global.electronAPI.activate) ? 'desktop' : 'app';
                 const url = 'https://tcm-prescription-system.pages.dev/download.html?mid=' + encodeURIComponent(machineId || '')
-                    + (__edParam ? ('&ed=' + __edParam) : '');
+                    + (__edParam ? ('&ed=' + __edParam) : '') + '&dp=' + __dp;
                 openPayUrlRobust(url, btn);
             });
         })();
@@ -3948,6 +3951,9 @@
                 //   为 offline_personal/offline_clinic（旧值 'app' 是载体信息非产品模式，
                 //   导致离线标准版审核后被错标 cloud_personal → 用户管理显示"网页云端标准版"）
                 appMode: 'local',
+                // ★ 2026-09-03 载体标识：桌面 Electron 有 electronAPI，离线APP WebView 无。
+                //   服务端写入诊所记录，后台用户管理离线版显示"🖥️桌面·/📱APP·"载体
+                appModeCarrier: (global.electronAPI && global.electronAPI.activate) ? 'desktop' : 'app',
                 versionLabel: '本地' + (state.edition === 'institution' ? '机构版' : '标准版'),
                 env: 'production'
             };
@@ -4165,8 +4171,10 @@
                 //   局部变量（复制代码时误带入），本函数作用域不存在 → 点击时 ReferenceError
                 //   静默中断，openPayUrlRobust 永远不执行。改用本函数的 state.edition。
                 var __edParam = (state.edition === 'institution') ? 'local-pro' : (state.edition === 'personal' ? 'local-personal' : '');
+                // ★ 2026-09-03 dp=载体（desktop/app）：官网下单沿 URL 传入 order-submit
+                var __dp1 = (global.electronAPI && global.electronAPI.activate) ? 'desktop' : 'app';
                 const url = 'https://tcm-prescription-system.pages.dev/download.html?mid=' + encodeURIComponent(machineId || '')
-                    + (__edParam ? ('&ed=' + __edParam) : '');
+                    + (__edParam ? ('&ed=' + __edParam) : '') + '&dp=' + __dp1;
                 openPayUrlRobust(url, btn);
             });
         })();
@@ -4177,8 +4185,10 @@
             btn.addEventListener('click', function() {
                 // ★ 2026-09-03 修复「点击无反应」：同上，editionIntent 越界引用改 state.edition
                 var __edParam = (state.edition === 'institution') ? 'local-pro' : (state.edition === 'personal' ? 'local-personal' : '');
+                // ★ 2026-09-03 dp=载体（desktop/app）：官网下单沿 URL 传入 order-submit
+                var __dp2 = (global.electronAPI && global.electronAPI.activate) ? 'desktop' : 'app';
                 const url = 'https://tcm-prescription-system.pages.dev/download.html?mid=' + encodeURIComponent(machineId || '')
-                    + (__edParam ? ('&ed=' + __edParam) : '');
+                    + (__edParam ? ('&ed=' + __edParam) : '') + '&dp=' + __dp2;
                 openPayUrlRobust(url, btn);
             });
             const back = document.getElementById('adminPayRequiredBackBtn');

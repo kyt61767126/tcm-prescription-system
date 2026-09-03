@@ -97,6 +97,15 @@ export async function provisionCloudAccount(kv, record) {
     //   两者都没有时，mapActivationTypeToEdition 内部兜底为 cloud_personal（标准版）
     const rawActivation = record.type || record.edition;
     const targetEdition = mapActivationTypeToEdition(rawActivation, record);
+    // ★ 2026-09-03 离线版载体（desktop=离线桌面 / app=离线APP）：写入诊所记录，
+    //   后台用户管理离线版显示"🖥️桌面·离线标准版 / 📱APP·离线标准版"。
+    //   来源：record.appModeCarrier（新客户端提交 / 官网订单 dp 参数 / 复用补写）；
+    //   兜底：旧客户端 record.appMode='app' 即载体值（非产品模式）。
+    //   云端版不写（载体由 user_devices 登录绑定实时反映，比激活时点更准）。
+    const rawCarrier = String(record.appModeCarrier || '').toLowerCase();
+    const targetCarrier = (rawCarrier === 'desktop' || rawCarrier === 'app')
+        ? rawCarrier
+        : (String(record.appMode || '').toLowerCase() === 'app' ? 'app' : '');
     const clinics = (await kv.get(KV_SYSTEM_CLINICS, 'json')) || [];
     let clinic = clinics.find(c => c.name === clinicName);
     let clinicsDirty = false;
@@ -120,6 +129,13 @@ export async function provisionCloudAccount(kv, record) {
             console.log('[AdminAccount] 诊所 edition 更新:', clinicName, oldEd, '→', targetEdition,
                 '(source:', rawActivation, 'clinic.status=', clinic.status, ')');
         }
+        // ★ 2026-09-03 离线版载体写入/更新（仅离线版；有值才写，不覆盖为空）
+        if (targetEdition.indexOf('offline_') === 0 && targetCarrier && clinic.offlineCarrier !== targetCarrier) {
+            clinic.offlineCarrier = targetCarrier;
+            clinic.updatedAt = now;
+            clinicsDirty = true;
+            console.log('[AdminAccount] 诊所离线载体更新:', clinicName, '→', targetCarrier);
+        }
         if (clinicsDirty) {
             await kv.put(KV_SYSTEM_CLINICS, JSON.stringify(clinics));
         }
@@ -138,6 +154,8 @@ export async function provisionCloudAccount(kv, record) {
         updatedAt: now,
         edition: targetEdition,          // ★ 新诊所统一写入 edition
         activationType: record.type || null,
+        // ★ 2026-09-03 离线版载体（desktop/app，云端版不写）
+        offlineCarrier: (targetEdition.indexOf('offline_') === 0 && targetCarrier) ? targetCarrier : undefined,
         source: 'activation'
     };
     clinics.push(clinic);

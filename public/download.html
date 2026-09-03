@@ -2974,7 +2974,10 @@
                         phone: phone,
                         wechat: wechat,
                         machineId: machineId,
-                        note: note
+                        note: note,
+                        // ★ 2026-09-03 载体（desktop/app）：APP/桌面客户端跳转购买页时
+                        //   URL 自动携带 ?dp=；后台用户管理离线版显示"🖥️桌面·/📱APP·"
+                        dp: (new URLSearchParams(window.location.search).get('dp') || '')
                     })
                 });
                 const data = await res.json();

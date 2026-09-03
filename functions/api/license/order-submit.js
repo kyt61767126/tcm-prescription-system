@@ -115,7 +115,7 @@ export async function onRequest(context) {
 
         const body = await context.request.json().catch(() => ({}));
         const { orderNo, productKey, edition, price, clinicName, adminName,
-                phone, wechat, machineId, note } = body;
+                phone, wechat, machineId, note, dp } = body;
 
         // ===== 参数校验 =====
         if (!orderNo || typeof orderNo !== 'string' || !/^BNZC-[A-Z]{2}-\d{12}-[A-Z0-9]{4,8}$/i.test(orderNo.trim())) {
@@ -205,6 +205,10 @@ export async function onRequest(context) {
             productName: '惠康中医',
             edition: edition,            // personal / pro（后台审核弹窗按此自动预选类型）
             appMode: productKey,         // local / cloud
+            // ★ 2026-09-03 载体标识（dp：desktop=离线桌面 / app=离线APP）：购买页 URL
+            //   ?dp= 传入（客户端跳转时自动携带）；浏览器直接下单无此参数留空，
+            //   客户端提交激活申请复用订单时由 admin-submit 补写
+            appModeCarrier: (dp === 'desktop' || dp === 'app') ? dp : '',
             versionLabel: versionLabel,
             env: 'production',
             // ★ 官网订单扩展字段（后台核对付款信息用）

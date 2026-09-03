@@ -177,7 +177,7 @@ export async function onRequest(context) {
 
         const body = await context.request.json().catch(() => ({}));
         const { clinicName, adminName, phone, remark, machineId,
-                productName, edition, appMode, versionLabel, env } = body;
+                productName, edition, appMode, versionLabel, env, appModeCarrier } = body;
 
         // ★ 2026-08-22 纯网页环境（pages.dev 浏览器）无 electron / android machineId，
         //   前端传 'unknown' / '未知' / 短值时自动兜底生成 browser-xxx 临时机器ID。
@@ -316,6 +316,19 @@ export async function onRequest(context) {
             const paid = await findPaidOrderForPhoneOrMachine(kv, phone, finalMachineId);
             if (paid && paid.status === 'pending') {
                 console.log('[AdminSubmit] 命中已付款订单（待核对），复用进入等待:', phone, paid.requestId);
+                // ★ 2026-09-03 复用补写载体：官网下单创建的 record 无 appModeCarrier（浏览器
+                //   下单未知载体），客户端（桌面/APP）提交命中复用时补上，后台用户管理
+                //   离线版才能显示"🖥️桌面·/📱APP·"。仅白名单值 desktop/app，防脏数据。
+                if ((appModeCarrier === 'desktop' || appModeCarrier === 'app')) {
+                    try {
+                        const rec = await kv.get(KV_ADMIN_REQ_PREFIX + paid.requestId, 'json');
+                        if (rec && rec.appModeCarrier !== appModeCarrier) {
+                            rec.appModeCarrier = appModeCarrier;
+                            await kv.put(KV_ADMIN_REQ_PREFIX + paid.requestId, JSON.stringify(rec));
+                            console.log('[AdminSubmit] 复用订单补写载体:', paid.requestId, appModeCarrier);
+                        }
+                    } catch (e) { console.warn('[AdminSubmit] 载体补写失败（忽略）:', e.message); }
+                }
                 return json({
                     success: true,
                     status: 'pending',
@@ -364,6 +377,10 @@ export async function onRequest(context) {
             productName: (productName || '').trim(),
             edition: (edition || '').trim(),
             appMode: (appMode || '').trim(),
+            // ★ 2026-09-03 载体标识（desktop=离线桌面 / app=离线APP）：客户端提交时
+            //   electronAPI 探测；审核通过后 provisionCloudAccount 写入诊所记录，
+            //   后台用户管理离线版显示"🖥️桌面·/📱APP·"载体
+            appModeCarrier: (appModeCarrier === 'desktop' || appModeCarrier === 'app') ? appModeCarrier : '',
             versionLabel: (versionLabel || '').trim(),
             // ★ 环境标记：test=测试环境，production=正式环境
             env: (env || 'production').trim(),
