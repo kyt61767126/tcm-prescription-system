@@ -2876,6 +2876,27 @@
                 const data = await res.json();
                 if (data.success) {
                     showToast('付款信息已提交，管理员核对中');
+                    // ★ 2026-09-04 流程优化（同 public/download.html）：付款确认成功追加"回到APP等激活"提示，
+                    //   不必让客户停在官网等激活码，APP端会自动弹"激活成功请重启登录"。
+                    try {
+                        (async function() {
+                            try { await new Promise(r => setTimeout(r, 500)); } catch(e) {}
+                            try {
+                                var __wrap = document.getElementById('payFinishNoticeBox');
+                                if (!__wrap) {
+                                    __wrap = document.createElement('div');
+                                    __wrap.id = 'payFinishNoticeBox';
+                                    __wrap.style.cssText = 'margin:14px 0 4px;padding:14px 16px;background:#ecfdf5;border:1px solid #6ee7b7;border-radius:10px;color:#065f46;font-size:14px;line-height:1.7;';
+                                    var __pb = document.getElementById('payConfirmBtn');
+                                    if (__pb && __pb.parentNode) __pb.parentNode.insertBefore(__wrap, __pb.nextSibling);
+                                    else document.body.appendChild(__wrap);
+                                }
+                                __wrap.innerHTML = '✅ <strong>付款信息已登记！请回到惠康中医客户端等待管理员核对。</strong><br>' +
+                                    '核对通过后，APP/桌面版会自动弹提示"激活成功请重启登录"，<strong>无需您再回本页等激活码</strong>，也<strong>无需在激活窗口重新提交</strong>。<br>' +
+                                    '<span style="font-size:12px;color:#047857;">（您现在就可以关闭本页面，回到惠康中医 APP 即可。）</span>';
+                            } catch (_e) {}
+                        })();
+                    } catch (_ne) {}
                     document.getElementById('orderStatusBox').style.display = 'block';
                     queryOrderStatus();
                     startOrderStatusPolling();
@@ -2936,10 +2957,23 @@
                         '初始密码：<strong>admin</strong>，请登录后立即修改密码。<br>' +
                         '专属激活码（见下方）用于桌面端/APP 绑定激活，复制后粘贴到软件"激活授权"弹窗即可。';
                 } else {
-                    html = '🎉 <strong>已激活</strong>：您的专属激活码已生成（见下方），请复制并粘贴到软件"激活授权"弹窗中。';
+                    html = '🎉 <strong>已激活</strong>：您的专属激活码已生成（见下方）。<br>' +
+                        '<span style="color:#16a34a;">✅ 同时惠康中医 APP/桌面版会自动弹"激活成功请重启登录"，<strong>不用复制激活码也可以</strong>，直接回到APP即可。</span>';
                 }
                 document.getElementById('licenseCodeText').textContent = data.licenseCode || '';
                 codeBox.style.display = 'block';
+                // ★ 2026-09-04 激活成功追加"可关闭本页"提醒
+                try {
+                    var __doneHint = document.getElementById('activatedFinishBox');
+                    if (!__doneHint) {
+                        __doneHint = document.createElement('div');
+                        __doneHint.id = 'activatedFinishBox';
+                        __doneHint.style.cssText = 'margin-top:14px;padding:12px 14px;background:#f0f9ff;border:1px dashed #38bdf8;border-radius:8px;font-size:13px;color:#0369a1;line-height:1.6;';
+                        codeBox.parentNode.appendChild(__doneHint);
+                    }
+                    __doneHint.innerHTML = '💡 您现在可以 <strong>关闭这个页面</strong>，回到惠康中医 APP/桌面版即可。' +
+                        '<br>APP/桌面版会自动检测到激活状态并弹提示"请重启登录"，无需再做其他操作。';
+                } catch (_ef) {}
             } else if (data.status === 'rejected') {
                 html = '❌ <strong>已拒绝</strong>：' + (data.rejectReason || '请联系客服处理') + '。<br>如有疑问请联系客服微信 hktzy1688。';
             } else {
@@ -3629,12 +3663,41 @@
             verifyPayQr();
             // ★ 客户端激活窗口跳转导引：?mid= 设备识别码自动预填并直达购买区
             try {
-                const mid = new URLSearchParams(window.location.search).get('mid');
+                const sp = new URLSearchParams(window.location.search);
+                const mid = sp.get('mid');
                 if (mid) {
                     const el = document.getElementById('custMachineId');
                     if (el) { el.value = mid; el.readOnly = true; el.style.background = '#f9fafb'; updateOrderSummary(); }
                     if (typeof switchToPurchase === 'function') setTimeout(switchToPurchase, 200);
                 }
+                // ★ 2026-09-04 流程优化：客户端跳转携带已填表单(cn=诊所名/n=联系人/p=手机号/wx=微信/r=备注)
+                //   → 官网购买页自动回填，客户无需重复填一遍。(同时兼容 legacy clinicName/adminName/phone/wechat)
+                try {
+                    var __cn = sp.get('cn') || sp.get('clinicName') || '';
+                    var __n  = sp.get('n')  || sp.get('adminName') || '';
+                    var __p  = sp.get('p')  || sp.get('phone') || '';
+                    var __wx = sp.get('wx') || sp.get('wechat') || '';
+                    var __r  = sp.get('r')  || sp.get('remark') || sp.get('note') || '';
+                    // custName = 诊所 + 联系人合并，有诊所名优先
+                    const cnEl = document.getElementById('custName');
+                    if (cnEl && !cnEl.value.trim()) {
+                        var combined = '';
+                        if (__cn && __n) combined = (__cn.indexOf(__n) >= 0) ? __cn : (__cn + ' / ' + __n);
+                        else combined = __cn || __n;
+                        if (combined) cnEl.value = combined;
+                    }
+                    const phEl = document.getElementById('custPhone');
+                    if (phEl && /^1[3-9]\d{9}$/.test(__p)) { phEl.value = __p; phEl.dispatchEvent(new Event('input',{bubbles:true})); }
+                    const wxEl = document.getElementById('custWechat');
+                    if (wxEl && __wx && !wxEl.value.trim()) wxEl.value = __wx;
+                    const ntEl = document.getElementById('custNote');
+                    if (ntEl && __r && !ntEl.value.trim()) ntEl.value = __r;
+                    updateOrderSummary();
+                    // 若所有必填项(custName/custPhone/mid)已通过URL填完，直接goStep(2)免去客户点下一步
+                    if (mid && (cnEl && cnEl.value.trim()) && (phEl && /^1[3-9]\d{9}$/.test(phEl.value)) && typeof goStep === 'function') {
+                        setTimeout(function(){ try { goStep(2); } catch(e){} }, 800);
+                    }
+                } catch (ePref) { console.warn('表单URL预填失败:', ePref); }
             } catch (e) {}
             // ★ 2026-08-30 版本意图直通：?ed=local-personal/local-pro/cloud-personal/cloud-pro
             //   客户端导引携带版本 → 自动选中对应版本并直接进入下单步骤（显示版本价格），

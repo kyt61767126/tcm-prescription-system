@@ -3836,10 +3836,23 @@
                 // ★ 2026-09-03 载体判定修正：APP 的 Java 桥同样暴露 electronAPI.activate，
                 //   旧判据把 APP 误判成 desktop（KV 记录 appModeCarrier 错标、后台显示🖥️桌面）。
                 //   正确判据=桌面 preload 独有的 showExpireAlert。
+                // ★ 2026-09-04 流程优化：携带工单已填信息(cn=诊所名/n=联系人/p=手机号/wx=微信)
+                //   → 官网购买页自动回填表单，避免付款页面重复填写；官网 purchase flow 的
+                //   custName=诊所/联系人合并，custWechat/custNote 回填。
                 var __dp = (global.electronAPI && global.electronAPI.activate &&
                     typeof global.electronAPI.activate.showExpireAlert === 'function') ? 'desktop' : 'app';
+                var __cn = (document.getElementById('ticketClinicName') || {}).value || '';
+                var __n  = (document.getElementById('ticketContactName') || {}).value || '';
+                var __p  = (document.getElementById('ticketContactPhone') || {}).value || '';
+                var __wx = (document.getElementById('ticketContactWechat') || {}).value || '';
+                var __r  = (document.getElementById('ticketRemark') || {}).value || '';
                 const url = 'https://tcm-prescription-system.pages.dev/download.html?mid=' + encodeURIComponent(machineId || '')
-                    + (__edParam ? ('&ed=' + __edParam) : '') + '&dp=' + __dp;
+                    + (__edParam ? ('&ed=' + __edParam) : '') + '&dp=' + __dp
+                    + (__cn ? ('&cn=' + encodeURIComponent(__cn)) : '')
+                    + (__n  ? ('&n='  + encodeURIComponent(__n))  : '')
+                    + (__p  ? ('&p='  + encodeURIComponent(__p))  : '')
+                    + (__wx ? ('&wx=' + encodeURIComponent(__wx)) : '')
+                    + (__r  ? ('&r='  + encodeURIComponent(__r))  : '');
                 openPayUrlRobust(url, btn);
             });
         })();
@@ -4921,10 +4934,20 @@
                 // ★ 2026-09-03 dp=载体（desktop/app）：官网下单沿 URL 传入 order-submit
                 // ★ 2026-09-03 载体判定修正：APP Java 桥也有 electronAPI.activate，
                 //   须用桌面独有的 showExpireAlert 判定，否则 APP 被错标 desktop
+                // ★ 2026-09-04 流程优化：携带管理员激活表单已填信息(cn=诊所名/n=管理员/p=手机号/r=备注)
+                //   → 官网购买页自动回填，避免重复填；管理员激活无微信号字段，custWechat 留空。
                 var __dp1 = (global.electronAPI && global.electronAPI.activate &&
                     typeof global.electronAPI.activate.showExpireAlert === 'function') ? 'desktop' : 'app';
+                var __cn1 = (document.getElementById('adminClinicName') || {}).value || (state.clinicName || '');
+                var __n1  = (document.getElementById('adminAdminName') || {}).value || (state.adminName || '');
+                var __p1  = (document.getElementById('adminPhone') || {}).value || (state.phone || '');
+                var __r1  = (document.getElementById('adminRemark') || {}).value || (state.remark || '');
                 const url = 'https://tcm-prescription-system.pages.dev/download.html?mid=' + encodeURIComponent(machineId || '')
-                    + (__edParam ? ('&ed=' + __edParam) : '') + '&dp=' + __dp1;
+                    + (__edParam ? ('&ed=' + __edParam) : '') + '&dp=' + __dp1
+                    + (__cn1 ? ('&cn=' + encodeURIComponent(__cn1)) : '')
+                    + (__n1  ? ('&n='  + encodeURIComponent(__n1))  : '')
+                    + (__p1  ? ('&p='  + encodeURIComponent(__p1))  : '')
+                    + (__r1  ? ('&r='  + encodeURIComponent(__r1))  : '');
                 openPayUrlRobust(url, btn);
             });
         })();
@@ -4938,10 +4961,19 @@
                 // ★ 2026-09-03 dp=载体（desktop/app）：官网下单沿 URL 传入 order-submit
                 // ★ 2026-09-03 载体判定修正：APP Java 桥也有 electronAPI.activate，
                 //   须用桌面独有的 showExpireAlert 判定，否则 APP 被错标 desktop
+                // ★ 2026-09-04 流程优化：同 bindAdminPayGuide 传 cn/n/p/r → 官网回填
                 var __dp2 = (global.electronAPI && global.electronAPI.activate &&
                     typeof global.electronAPI.activate.showExpireAlert === 'function') ? 'desktop' : 'app';
+                var __cn2 = (document.getElementById('adminClinicName') || {}).value || (state.clinicName || '');
+                var __n2  = (document.getElementById('adminAdminName') || {}).value || (state.adminName || '');
+                var __p2  = (document.getElementById('adminPhone') || {}).value || (state.phone || '');
+                var __r2  = (document.getElementById('adminRemark') || {}).value || (state.remark || '');
                 const url = 'https://tcm-prescription-system.pages.dev/download.html?mid=' + encodeURIComponent(machineId || '')
-                    + (__edParam ? ('&ed=' + __edParam) : '') + '&dp=' + __dp2;
+                    + (__edParam ? ('&ed=' + __edParam) : '') + '&dp=' + __dp2
+                    + (__cn2 ? ('&cn=' + encodeURIComponent(__cn2)) : '')
+                    + (__n2  ? ('&n='  + encodeURIComponent(__n2))  : '')
+                    + (__p2  ? ('&p='  + encodeURIComponent(__p2))  : '')
+                    + (__r2  ? ('&r='  + encodeURIComponent(__r2))  : '');
                 openPayUrlRobust(url, btn);
             });
             const back = document.getElementById('adminPayRequiredBackBtn');
@@ -5128,6 +5160,46 @@
     } else {
         document.addEventListener('DOMContentLoaded', startLicenseCheck);
     }
+    // ★ 2026-09-04 需求2流程优化：前台化重查激活状态，消灭「审核通过后客户要二次提交才看到
+    //   设备已激活重启提示」。场景：① 客户在APP激活弹窗点付款→跳浏览器/微信扫码→回到APP；
+    //   ② 客户在付款页浏览器里填完关闭→登录框已打开但 resumeAdminPendingRequest 只在
+    //   页面加载时单次查（页面实际在后台未卸载→不重跑）。两处场景都让前台化触发重查。
+    //   防抖 1.5s（同一轮切前台防抖动连查），冷却 15s（避免频繁切换狂打后端）。
+    (function bindVisibilityResume() {
+        try {
+            var _lastRun = 0;
+            var _t = null;
+            function _tryResume() {
+                var now = Date.now();
+                if (now - _lastRun < 15000) return;
+                _lastRun = now;
+                resumeAdminPendingRequest();
+                // 对仍开着的激活窗口：如果它内部 Observer 还在轮询，自会在下一个 10s 周期发现；
+                // 这里不直接触发实例方法（实例在 showAdminActivateModal 局部作用域），由现有
+                // 10s 调度足够，前台化最多等 10s 就能看到"已审核通过"变化。
+            }
+            function _onVisible() {
+                try {
+                    if (document.hidden) return;
+                    if (_t) clearTimeout(_t);
+                    _t = setTimeout(_tryResume, 1500);
+                } catch (e) {}
+            }
+            document.addEventListener('visibilitychange', _onVisible);
+            // APP 特殊：WakeLock/focusin（用户点登录框任一输入）也兜底触发一次——
+            //   部分 Android WebView 前后台切换 visibilitychange 不会精准触发，登录框是唯一
+            //   客户会操作的交互入口，聚焦即意味着他"回来了等着登录"，此时查一次最靠谱。
+            try {
+                document.addEventListener('focusin', function () {
+                    if (_t) clearTimeout(_t);
+                    _t = setTimeout(_tryResume, 2500);
+                });
+            } catch (e2) {}
+            // 5 分钟兜底定时：用户一直不切换、也不点输入框（少见），每 5 分钟补查一次避免
+            //   审核通过后冷等一小时才发现。
+            setInterval(_tryResume, 5 * 60 * 1000);
+        } catch (e) { console.warn('[LicenseCheck] visibilityResume异常(不影响使用):', e); }
+    })();
 })(typeof window !== 'undefined' ? window : typeof globalThis !== 'undefined' ? globalThis : this);
 
 // ============================================================================

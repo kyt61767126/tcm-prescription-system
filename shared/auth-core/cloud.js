@@ -1975,11 +1975,29 @@
     //   已开系统浏览器）视为成功；③仅 APP 桥失败场景走 location.href+看门狗——
     //   1.2s 后页面未离开即判定被拦，自动复制链接+按钮文字提示，保证按钮任何
     //   情况下"有反应"（宁降级不静默）。
-    function openOfficialPayUrl(machineId, editionIntent, btnEl) {
+    function openOfficialPayUrl(machineId, editionIntent, btnEl, formData, dpOverride) {
         var edParam = (editionIntent === 'institution') ? 'cloud-pro'
                     : (editionIntent === 'personal' ? 'cloud-personal' : '');
+        // ★ 2026-09-03 dp=载体：云端APP/云端桌面共用本函数；沿用离线系同一判据
+        //   (桌面独有 showExpireAlert)，APP 端会错标 desktop 的老坑。
+        var __dp = '';
+        if (dpOverride) { __dp = dpOverride; }
+        else {
+            try {
+                __dp = (window.electronAPI && window.electronAPI.activate &&
+                    typeof window.electronAPI.activate.showExpireAlert === 'function') ? 'desktop' : 'app';
+            } catch (e) { __dp = 'app'; }
+        }
         var url = 'https://tcm-prescription-system.pages.dev/download.html?mid=' + encodeURIComponent(machineId || '')
-            + (edParam ? ('&ed=' + edParam) : '');
+            + (edParam ? ('&ed=' + edParam) : '') + '&dp=' + __dp;
+        // ★ 2026-09-04 流程优化：携带客户端已填表单参数（cn=诊所名/n=联系人/p=手机号/wx=微信/r=备注）
+        //   → 官网购买页自动回填，避免付款跳转后客户二次填单。
+        var fd = formData || {};
+        if (fd.cn) url += '&cn=' + encodeURIComponent(fd.cn);
+        if (fd.n)  url += '&n='  + encodeURIComponent(fd.n);
+        if (fd.p)  url += '&p='  + encodeURIComponent(fd.p);
+        if (fd.wx) url += '&wx=' + encodeURIComponent(fd.wx);
+        if (fd.r)  url += '&r='  + encodeURIComponent(fd.r);
         // ① 原生桥（APP 端唯一可靠通路，Java 白名单仅放行官网购买页）
         var __hasBridge = false;
         try {
@@ -2179,7 +2197,12 @@
                         if (['institution', 'cloud_institution', 'cloud_clinic', 'clinic', 'org'].indexOf(ed) >= 0) intent = 'institution';
                         else intent = 'personal';
                     } catch (e) { intent = 'personal'; }
-                    openOfficialPayUrl(machineId, intent, cloudPayGuideBtn);
+                    // ★ 2026-09-04 激活码弹窗付款：取工单表单/管理员激活表单填值回填
+                    var cn = (document.getElementById('ticketClinicName') || {}).value || (document.getElementById('adminClinicName') || {}).value || clinicName || '';
+                    var n  = (document.getElementById('ticketContactName') || {}).value || (document.getElementById('adminAdminName') || {}).value || CONFIG.doctorName || '';
+                    var p  = (document.getElementById('ticketContactPhone') || {}).value || (document.getElementById('adminPhone') || {}).value || '';
+                    var wx = (document.getElementById('ticketContactWechat') || {}).value || '';
+                    openOfficialPayUrl(machineId, intent, cloudPayGuideBtn, { cn: cn, n: n, p: p, wx: wx });
                 });
             }
 
@@ -3174,7 +3197,13 @@
         var cloudTicketPayGuideBtn = document.getElementById('cloudTicketPayGuideBtn');
         if (cloudTicketPayGuideBtn) {
             cloudTicketPayGuideBtn.addEventListener('click', function() {
-                openOfficialPayUrl(machineId, editionIntent, cloudTicketPayGuideBtn);
+                // ★ 2026-09-04 工单成功面板：携带工单已填表单回官网
+                var cn = (document.getElementById('ticketClinicName') || {}).value || clinicName || '';
+                var n  = (document.getElementById('ticketContactName') || {}).value || '';
+                var p  = (document.getElementById('ticketContactPhone') || {}).value || '';
+                var wx = (document.getElementById('ticketContactWechat') || {}).value || '';
+                var r  = (document.getElementById('ticketRemark') || {}).value || '';
+                openOfficialPayUrl(machineId, editionIntent, cloudTicketPayGuideBtn, { cn: cn, n: n, p: p, wx: wx, r: r });
             });
         }
 
@@ -4124,7 +4153,12 @@
             const btn = document.getElementById('adminPayGuideBtn');
             if (!btn) return;
             btn.addEventListener('click', function() {
-                openOfficialPayUrl(machineId, state.edition, btn);
+                // ★ 2026-09-04 管理员激活等待面板：携带已填表单回官网
+                var cn = (document.getElementById('adminClinicName') || {}).value || (state.clinicName || '') || clinicName || '';
+                var n  = (document.getElementById('adminAdminName') || {}).value || (state.adminName || '') || '';
+                var p  = (document.getElementById('adminPhone') || {}).value || (state.phone || '') || '';
+                var r  = (document.getElementById('adminRemark') || {}).value || (state.remark || '') || '';
+                openOfficialPayUrl(machineId, state.edition, btn, { cn: cn, n: n, p: p, r: r });
             });
         })();
         // ★ 2026-09-02 支付前置校验配套：adminPayRequired 面板按钮绑定
@@ -4132,7 +4166,12 @@
             const btn = document.getElementById('adminPayRequiredBtn');
             if (!btn) return;
             btn.addEventListener('click', function() {
-                openOfficialPayUrl(machineId, state.edition, btn);
+                // ★ 2026-09-04 同 bindAdminPayGuide 传参回官网
+                var cn = (document.getElementById('adminClinicName') || {}).value || (state.clinicName || '') || clinicName || '';
+                var n  = (document.getElementById('adminAdminName') || {}).value || (state.adminName || '') || '';
+                var p  = (document.getElementById('adminPhone') || {}).value || (state.phone || '') || '';
+                var r  = (document.getElementById('adminRemark') || {}).value || (state.remark || '') || '';
+                openOfficialPayUrl(machineId, state.edition, btn, { cn: cn, n: n, p: p, r: r });
             });
             const back = document.getElementById('adminPayRequiredBackBtn');
             if (back) back.addEventListener('click', function() { show('adminStepForm'); });
@@ -4247,6 +4286,35 @@
     } else {
         document.addEventListener('DOMContentLoaded', startLicenseCheck);
     }
+    // ★ 2026-09-04 需求2流程优化（云端端同构）：前台化/聚焦/兜底定时补查 admin-status，
+    //   消灭「审核通过后客户要二次提交才看到设备已激活」。逻辑完全对齐 offline.js。
+    (function bindVisibilityResume() {
+        try {
+            var _lastRun = 0;
+            var _t = null;
+            function _tryResume() {
+                var now = Date.now();
+                if (now - _lastRun < 15000) return;
+                _lastRun = now;
+                resumeAdminPendingRequest();
+            }
+            function _onVisible() {
+                try {
+                    if (document.hidden) return;
+                    if (_t) clearTimeout(_t);
+                    _t = setTimeout(_tryResume, 1500);
+                } catch (e) {}
+            }
+            document.addEventListener('visibilitychange', _onVisible);
+            try {
+                document.addEventListener('focusin', function () {
+                    if (_t) clearTimeout(_t);
+                    _t = setTimeout(_tryResume, 2500);
+                });
+            } catch (e2) {}
+            setInterval(_tryResume, 5 * 60 * 1000);
+        } catch (e) { console.warn('[LicenseCheck cloud] visibilityResume异常(不影响使用):', e); }
+    })();
 })(typeof window !== 'undefined' ? window : typeof globalThis !== 'undefined' ? globalThis : this);
 
 // ============================================================================
