@@ -233,6 +233,7 @@
 **激活自愈四段一致**（重装/换机）：① /api/license/lookup 凭激活码+machineId 返回原激活信息；② validate.js 手机号核验（clientPhone===recordPhone → phoneVerified 放行）；③ showActivateModal 输码 change 自动联网识别填手机号；④ Java activateOnline 透传 phone。改激活链路必须保持四段一致。
 **邀请码自愈四层一致**：onAdminActivated 存 StorageAdapter('license:code')；Java installAdminLicense 的 licenseCode 参数 JS桥→case→MainActivity→LicenseManager 四层透传；服务端 invite.js machineId 兜底；loadInviteInfo 联网找回。签名变更时四层参数必须同步。
 **购买页必填项**：设备识别码必填+实时缺失提示（step2ReqHint 红条+可折叠获取教程）。
+★ 2026-09-03 已付款客户"已激活但APP登录失败"标准化修复流程（北京源生堂案例）：现象=付款成功提示已激活，但离线APP登录报"用户名或密码错误"+后台用户管理载体显示错误（🖥️桌面·离线标准版，实际是手机APP）。根因：①旧版APK onAdminActivated 同步手机号账号到 local_systemUsers 时密码引用越界，未用用户自设密码；②旧激活记录无 appModeCarrier 字段，users.js 载体读取逻辑错从 user_devices 取值。修复（已随离线APP vV1.0.0.209 发布）：offline.js onAdminActivated 改用 `effPwd = hasInstallBridge ? (state.password || 'admin') : 'admin'`；users.js 离线版只读 `clinic.offlineCarrier`；admin-account.js 审核时从 record.appModeCarrier 写入 clinic.offlineCarrier（旧客户端兜底 record.appMode='app'）。**运维修复铁律：已付款客户出现问题先 KV 取证再动手，禁止删除数据重走流程**——激活申请记录（status=activated+licenseCode+paidAt）、`admin_phone:{手机号}` 索引、`order:{订单号}` 映射是"已付款复用→自动领码"链路的依据，后台删诊所数据并不会删这些残留，但若手动误删会导致客户重新提交时被「请完成支付」拦截。正确做法=数据补丁：wrangler kv 远端直接给 `admin_req:{id}` 补 `appModeCarrier` + 给 `system:clinics` 对应诊所补 `offlineCarrier`，客户换新APK→输手机号→系统自动识别已激活申请→自动领码→账号按新密码同步→登录成功。客户恢复口径：手机号+激活弹窗自设密码（留空默认 admin）登录。
 
 ## 8. 桌面版技术规范
 
