@@ -309,6 +309,11 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                     <div class="num" id="todoPendingActivate" style="color:#f39c12;">0</div>
                     <div class="label">待激活申请（离线管理员激活）</div>
                 </div>
+                <!-- ★ 2026-09-03 待付款订单：客户已在官网下单但未完成付款（可能卡在扫码环节），需主动电话跟进 -->
+                <div class="stat-card todo-card" style="cursor:pointer;" onclick="gotoTodoPayOrders()" title="点击查看待付款订单列表">
+                    <div class="num" id="todoPendingPayment" style="color:#b45309;">0</div>
+                    <div class="label">待付款订单（官网下单未付款）</div>
+                </div>
                 <div class="stat-card todo-card" style="cursor:pointer;" onclick="gotoTodo('Clinics')" title="点击去诊所管理续费">
                     <div class="num" id="todoExpiring" style="color:#e74c3c;">0</div>
                     <div class="label">临期/已到期（30天内+已过期）</div>
@@ -671,6 +676,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
             <div class="filter-bar">
                 <select id="adminActivateFilter" onchange="loadAdminActivateList()">
                     <option value="pending" selected>待审核（未激活）</option>
+                    <option value="pending_payment">待付款（官网下单未付款）</option>
                     <option value="activated">已通过</option>
                     <option value="rejected">已拒绝</option>
                     <option value="cancelled">已取消</option>
@@ -2438,11 +2444,21 @@ function gotoTodo(tabName) {
     switchTab(tabName);
 }
 
+// ★ 2026-09-03 待付款订单卡片 → 跳转激活审核 Tab 并切到待付款筛选
+function gotoTodoPayOrders() {
+    switchTab('AdminActivate');
+    const sel = document.getElementById('adminActivateFilter');
+    if (sel) { sel.value = 'pending_payment'; }
+    loadAdminActivateList();
+}
+
 async function refreshTodoBadges() {
     try {
-        const [clinicsRes, actRes] = await Promise.all([
+        const [clinicsRes, actRes, payRes] = await Promise.all([
             fetch(API_BASE + '/users?clinics=true', { headers: { 'Authorization': 'Bearer ' + token } }),
-            fetch(API_BASE + '/license/admin-list?status=pending&limit=500', { headers: { 'Authorization': 'Bearer ' + token } })
+            fetch(API_BASE + '/license/admin-list?status=pending&limit=500', { headers: { 'Authorization': 'Bearer ' + token } }),
+            // ★ 2026-09-03 待付款订单角标（低频轻量：limit=50 足够计数）
+            fetch(API_BASE + '/license/admin-list?status=pending_payment&limit=50', { headers: { 'Authorization': 'Bearer ' + token } })
         ]);
         const cd = await clinicsRes.json();
         const ad = await actRes.json();
@@ -2454,6 +2470,14 @@ async function refreshTodoBadges() {
         _todoPendingActivate = pendingAct;
         setTabBadge('badgeClinics', pendingReg);
         setTabBadge('badgeActivate', pendingAct);
+        // 待付款订单数（失败静默保持旧值）
+        try {
+            const pd = await payRes.json();
+            if (pd.success && typeof pd.count === 'number') {
+                const el = document.getElementById('todoPendingPayment');
+                if (el) el.textContent = pd.count;
+            }
+        } catch (e2) {}
     } catch (e) { /* 网络抖动静默 */ }
 }
 
@@ -2468,11 +2492,13 @@ async function loadTodoCenter() {
     const box = document.getElementById('trendChart');
     if (box && box.innerHTML.indexOf('加载中') === -1) box.innerHTML = '<div class="loading">加载中...</div>';
     try {
-        // 并行：诊所列表（统计+趋势）+ 激活申请（待办数+交叉提示）+ 用户列表（趋势）
-        const [clinicsRes, actRes, usersRes] = await Promise.all([
+        // 并行：诊所列表（统计+趋势）+ 激活申请（待办数+交叉提示）+ 用户列表（趋势）+ 待付款订单
+        const [clinicsRes, actRes, usersRes, payRes] = await Promise.all([
             fetch(API_BASE + '/users?clinics=true', { headers: { 'Authorization': 'Bearer ' + token } }),
             fetch(API_BASE + '/license/admin-list?status=all&limit=500', { headers: { 'Authorization': 'Bearer ' + token } }),
-            fetch(API_BASE + '/users', { headers: { 'Authorization': 'Bearer ' + token } })
+            fetch(API_BASE + '/users', { headers: { 'Authorization': 'Bearer ' + token } }),
+            // ★ 2026-09-03 待付款订单（官网下单未付款，不在 admin_req_index，需单独枚举）
+            fetch(API_BASE + '/license/admin-list?status=pending_payment&limit=50', { headers: { 'Authorization': 'Bearer ' + token } })
         ]);
         if (clinicsRes.status === 401) { showAlert('todoAlert', '登录已过期，请重新登录', 'error'); setTimeout(doLogout, 1500); return; }
         const cd = await clinicsRes.json();
@@ -2501,6 +2527,13 @@ async function loadTodoCenter() {
         set('todoPendingReg', pendingReg.length, true);
         set('todoPendingActivate', pendingActs.length, true);
         set('todoExpiring', expiring + expired, expiring + expired > 0);
+        // ★ 2026-09-03 待付款订单数（官网下单未付款，客户可能卡在扫码环节）
+        try {
+            const pd = await payRes.json();
+            if (pd.success && typeof pd.count === 'number') {
+                set('todoPendingPayment', pd.count, pd.count > 0);
+            }
+        } catch (e2) {}
         setTabBadge('badgeClinics', pendingReg.length);
         setTabBadge('badgeActivate', pendingActs.length);
 
@@ -2664,7 +2697,8 @@ function renderAdminActivateTable() {
     }
     if (list.length === 0) {
         const filter = document.getElementById('adminActivateFilter').value;
-        const emptyText = search ? '没有匹配的记录' : '暂无' + (filter === 'all' ? '' : filter) + '请求';
+        const filterLabels = { pending: '待审核', pending_payment: '待付款', activated: '已通过', rejected: '已拒绝', cancelled: '已取消', all: '' };
+        const emptyText = search ? '没有匹配的记录' : '暂无' + (filterLabels[filter] || filter) + '请求';
         tbody.innerHTML = '<tr><td colspan="11" class="empty">' + escapeHtml(emptyText) + '</td></tr>';
         return;
     }
@@ -2675,7 +2709,9 @@ function renderAdminActivateTable() {
         const phoneDisplay = r.phone ? '<a href="tel:' + escapeHtml(r.phone) + '" style="color:#409eff;">' + escapeHtml(r.phone) + '</a>' : '-';
         const actions = r.status === 'pending'
             ? '<div style="display:flex;gap:4px;"><button class="btn btn-sm btn-success" onclick="openAdminApproveModal(\'' + r.requestId + '\')">审核</button><button class="btn btn-sm" style="background:#ff4d4f;color:#fff;" onclick="deleteAdminActivateRequest(\'' + r.requestId + '\',\'' + escapeHtml(r.clinicName || '') + '\')" title="删除此请求">🗑</button></div>'
-            : '<div style="display:flex;gap:4px;align-items:center;"><span style="color:#909399;font-size:12px;">' + escapeHtml(r.licenseCode || '已处理') + '</span><button class="btn btn-sm" style="background:#ff4d4f;color:#fff;padding:2px 6px;" onclick="deleteAdminActivateRequest(\'' + r.requestId + '\',\'' + escapeHtml(r.clinicName || '') + '\')" title="删除此请求">🗑</button></div>';
+            : (r.status === 'pending_payment'
+                ? '<div style="display:flex;gap:4px;align-items:center;"><span style="color:#b45309;font-size:12px;" title="客户已在官网下单但未完成付款，可电话指导：保存收款码→微信扫一扫→相册选图">💳 未付款</span><button class="btn btn-sm" style="background:#ff4d4f;color:#fff;padding:2px 6px;" onclick="deleteAdminActivateRequest(\'' + r.requestId + '\',\'' + escapeHtml(r.clinicName || '') + '\')" title="删除此订单">🗑</button></div>'
+                : '<div style="display:flex;gap:4px;align-items:center;"><span style="color:#909399;font-size:12px;">' + escapeHtml(r.licenseCode || '已处理') + '</span><button class="btn btn-sm" style="background:#ff4d4f;color:#fff;padding:2px 6px;" onclick="deleteAdminActivateRequest(\'' + r.requestId + '\',\'' + escapeHtml(r.clinicName || '') + '\')" title="删除此请求">🗑</button></div>');
         // ★ 版本信息渲染：区分离线/云端、机构版/标准版（官网订单加 💰 标记，白名单免费加 🎫 标记）
         const versionDisplay = renderVersionInfo(r)
             + (r.orderSource === 'website' ? ' <span style="background:#fffbeb;border:1px solid #fcd34d;color:#92400e;border-radius:4px;padding:0 4px;font-size:11px;" title="官网订单，请核对付款信息">💰官网订单</span>' : '')
@@ -2827,6 +2863,7 @@ async function removeFreePass(phone) {
 function renderAdminActivateStatus(status) {
     const map = {
         pending: '<span class="tag tag-unused">待审核</span>',
+        pending_payment: '<span class="tag" style="background:#fffbeb;border:1px solid #fcd34d;color:#b45309;">待付款</span>',
         activated: '<span class="tag tag-used">已通过</span>',
         rejected: '<span class="tag tag-disabled">已拒绝</span>',
         cancelled: '<span class="tag tag-expired">已取消</span>'

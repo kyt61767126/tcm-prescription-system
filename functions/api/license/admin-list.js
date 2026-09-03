@@ -97,6 +97,46 @@ export async function onRequest(context) {
         const statusFilter = url.searchParams.get('status') || 'pending';
         const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit'), 10) || 100, 1), 500);
 
+        // ★ 2026-09-03 待付款订单可见性：官网下单未付款（pending_payment）的记录
+        //   刻意不进 admin_req_index（不应出现在待审列表），但客户卡在付款环节时
+        //   管理员需要能看到并主动跟进（如电话指导扫码）。通过 KV list 按
+        //   order: 前缀枚举订单映射 → 加载对应申请记录 → 按状态过滤。
+        //   无需新增索引，历史卡单（索引建立前的订单）立即可见。
+        if (statusFilter === 'pending_payment') {
+            const records = [];
+            try {
+                let cursor = undefined;
+                let fetched = 0;
+                // 分页枚举 order: 前缀（每页最多 1000 keys，安全上限 2000 条映射）
+                while (records.length < limit && fetched < 2000) {
+                    const listOpts = { prefix: 'order:' };
+                    if (cursor) listOpts.cursor = cursor;
+                    const page = await kv.list(listOpts);
+                    fetched += (page.keys || []).length;
+                    for (const key of (page.keys || [])) {
+                        if (records.length >= limit) break;
+                        const mapping = await kv.get(key.name, 'json').catch(() => null);
+                        if (!mapping || !mapping.requestId) continue;
+                        const record = await kv.get(KV_ADMIN_REQ_PREFIX + mapping.requestId, 'json').catch(() => null);
+                        if (!record || record.status !== 'pending_payment') continue;
+                        records.push(maskRecord(record));
+                    }
+                    if (page.list_complete || !page.cursor) break;
+                    cursor = page.cursor;
+                }
+            } catch (e) {
+                console.warn('[AdminList] 枚举待付款订单失败:', e.message);
+            }
+            // 最新提交的在前
+            records.sort((a, b) => new Date(b.submittedAt || 0) - new Date(a.submittedAt || 0));
+            return json({
+                success: true,
+                requests: records,
+                count: records.length,
+                filter: statusFilter
+            });
+        }
+
         // 读取索引
         const index = (await kv.get(KV_ADMIN_REQ_INDEX, 'json')) || [];
 

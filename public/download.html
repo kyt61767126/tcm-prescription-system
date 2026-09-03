@@ -1766,6 +1766,16 @@
                             <div style="font-size:12px;color:#6b7280;margin-top:6px;">微信扫码付款</div>
                         </div>
                     </div>
+                    <!-- ★ 2026-09-03 手机端付款指引：客户从APP跳转到本页后在同一部手机上，
+                         无法用相机扫自己屏幕；直接长按识别收款码会被微信防诈骗机制拦截
+                         （弹出安全警告页，无法进入付款）。正确路径：保存图片→扫一扫→相册选图。 -->
+                    <div id="mobilePayGuide" style="display:none;margin-top:14px;padding:14px;border:1px solid #fcd34d;border-radius:10px;background:#fffbeb;font-size:13px;line-height:2;">
+                        <strong style="color:#b45309;">📱 用手机付款的正确步骤（重要）</strong><br>
+                        ① 长按下方收款码图片 → 选择「保存图片」到相册<br>
+                        ② 打开微信 → 点右上角「+」→「扫一扫」→ 点右下角「相册」→ 选择刚保存的收款码 → 完成付款<br>
+                        ③ 回到本页填写「付款确认」（转账单号后 6 位）<br>
+                        <span style="color:#b45309;">⚠️ 直接长按识别收款码会弹出微信安全警告页（防诈骗保护），属正常现象——请务必按上面「扫一扫 → 相册」的方式付款。支付宝同理：保存收款码 → 支付宝「扫一扫」→「相册」。</span>
+                    </div>
                     <!-- ★ 收款码防替代校验状态 -->
                     <div id="payQrStatus" style="text-align:center;font-size:12px;color:#9ca3af;margin-top:12px;">🔒 正在校验收款码完整性...</div>
                     <div id="payQrTamperWarn" style="display:none;margin-top:12px;padding:12px 14px;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;color:#b91c1c;font-size:13px;line-height:1.8;">
@@ -1776,7 +1786,7 @@
                     <div class="notice notice-warning" style="margin-top:14px;">
                         <span class="icon">⚠️</span>
                         <div>
-                            <strong>付款遇到问题？</strong>可扫码加客服微信协助处理：
+                            <strong>付款遇到问题？</strong>可扫码加客服微信协助处理，也可直接微信转账给客服 <span class="wx-id" onclick="copyText(this)" title="点击复制">hktzy1688</span>（备注订单号后 6 位），然后回到本页填写付款确认：
                             <div class="contact-box" style="margin-top:10px;">
                                 <div id="qrcodeContainer" class="qrcode-container"></div>
                                 <div class="contact-wechat">
@@ -3801,6 +3811,17 @@
                     const el = document.getElementById('custMachineId');
                     if (el) { el.value = mid; el.readOnly = true; el.style.background = '#f9fafb'; updateOrderSummary(); }
                     if (typeof switchToPurchase === 'function') setTimeout(switchToPurchase, 200);
+                }
+            } catch (e) {}
+            // ★ 2026-09-03 手机端付款指引：手机 UA 或从APP携带 mid 跳转（客户在手机上打开本页，
+            //   同一部手机无法扫自己屏幕，长按识别收款码会被微信防诈骗机制拦截）时显示
+            try {
+                var __ua = navigator.userAgent || '';
+                var __isMobile = /Android|iPhone|iPad|HarmonyOS|Mobile/i.test(__ua);
+                var __fromApp = !!new URLSearchParams(window.location.search).get('mid');
+                if (__isMobile || __fromApp) {
+                    var __guide = document.getElementById('mobilePayGuide');
+                    if (__guide) __guide.style.display = 'block';
                 }
             } catch (e) {}
             // ★ 2026-08-30 版本意图直通：?ed=local-personal/local-pro/cloud-personal/cloud-pro
