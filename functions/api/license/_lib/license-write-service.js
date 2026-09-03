@@ -282,3 +282,78 @@ export async function markOrderPaid(kv, orderNo, payInfo) {
 // 修正 KV_ORDER_PREFIX：读取 order-submit.js 约定 JSON 格式，同时兼容老 text 格式
 // （order 映射读/删辅助 export）
 export const KV_ORDER_PREFIX_EXPORTED = 'order:';
+
+// ============================================================================
+// 6. 免费开通白名单（free_pass）三原子函数 — 2026-09-03 架构统一 P2 收官
+//
+//  背景：free-pass.js L113-L117 / L129-L133 原来直接写 free_pass:{phone} 与
+//    free_pass_index 两处 KV 独立维护，任何一处失败会导致"记录已加但索引无"或
+//    "索引有但记录被删"的不一致；也没有统一的 operator/addedAt 时间戳兜底。
+//
+//  铁律：free_pass:记录 / free_pass_index 的写入口，必须经过本文件三函数之一
+//    — upsertFreePass(kv, phone, {note, operator})
+//    — removeFreePass(kv, phone)
+//    — listFreePass(kv, limit=500)
+//    读端：admin-submit.js 单独 kv.get('free_pass:'+phone) 仍是合法的 (O(1) 读，
+//    不属于"写端一致性"覆盖的范畴)；admin-submit 不写 free_pass。
+// ============================================================================
+const KV_FREE_PASS_PREFIX = 'free_pass:';
+const KV_FREE_PASS_INDEX = 'free_pass_index';
+
+export async function upsertFreePass(kv, phone, opts) {
+    if (!kv || !phone || typeof kv.put !== 'function') throw new Error('[license-write-service] upsertFreePass: args');
+    const cleanPhone = String(phone).trim();
+    if (!/^1[3-9]\d{9}$/.test(cleanPhone)) throw new Error('[license-write-service] 手机号格式错误');
+    const operator = opts && opts.operator ? String(opts.operator) : 'platform_admin';
+    const note = opts ? String(opts.note || '').slice(0, 100) : '';
+    const exist = await kv.get(KV_FREE_PASS_PREFIX + cleanPhone, 'json').catch(() => null);
+    const record = {
+        phone: cleanPhone,
+        note: note || (exist ? exist.note : ''),
+        addedAt: exist && exist.addedAt ? exist.addedAt : new Date().toISOString(),
+        addedBy: exist && exist.addedBy ? exist.addedBy : operator,
+        updatedAt: new Date().toISOString()
+    };
+    await kv.put(KV_FREE_PASS_PREFIX + cleanPhone, JSON.stringify(record));
+    // 索引：不存在才 unshift 最前
+    const index = (await kv.get(KV_FREE_PASS_INDEX, 'json').catch(() => null)) || [];
+    if (!Array.isArray(index)) {
+        // 兜底：损坏的索引重建
+        await kv.put(KV_FREE_PASS_INDEX, JSON.stringify([cleanPhone]));
+    } else if (!index.includes(cleanPhone)) {
+        index.unshift(cleanPhone);
+        await kv.put(KV_FREE_PASS_INDEX, JSON.stringify(index));
+    }
+    return { record, isNew: !exist };
+}
+
+export async function removeFreePass(kv, phone) {
+    if (!kv || !phone) throw new Error('[license-write-service] removeFreePass: args');
+    const cleanPhone = String(phone).trim();
+    if (!/^1[3-9]\d{9}$/.test(cleanPhone)) throw new Error('[license-write-service] 手机号格式错误');
+    await kv.delete(KV_FREE_PASS_PREFIX + cleanPhone);
+    // 索引 filter 同步移除
+    const index = (await kv.get(KV_FREE_PASS_INDEX, 'json').catch(() => null)) || [];
+    if (Array.isArray(index) && index.includes(cleanPhone)) {
+        const newIndex = index.filter(p => p !== cleanPhone);
+        await kv.put(KV_FREE_PASS_INDEX, JSON.stringify(newIndex));
+        return { phone: cleanPhone, removedFromIndex: true };
+    }
+    return { phone: cleanPhone, removedFromIndex: false };
+}
+
+export async function listFreePass(kv, limit) {
+    if (!kv) throw new Error('[license-write-service] listFreePass: args');
+    const cap = (limit && limit > 0) ? limit : 500;
+    const phones = (await kv.get(KV_FREE_PASS_INDEX, 'json').catch(() => null)) || [];
+    const list = [];
+    if (!Array.isArray(phones)) return list;
+    for (const ph of phones.slice(0, cap)) {
+        const rec = await kv.get(KV_FREE_PASS_PREFIX + ph, 'json').catch(() => null);
+        if (rec && rec.phone) list.push(rec);
+    }
+    return list;
+}
+
+export const KV_FREE_PASS_PREFIX_EXPORTED = KV_FREE_PASS_PREFIX;
+export const KV_FREE_PASS_INDEX_EXPORTED = KV_FREE_PASS_INDEX;

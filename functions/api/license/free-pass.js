@@ -24,9 +24,9 @@
 
 import { parseAuthHeader, isPlatformAdmin } from '../_lib/auth.js';
 import { getKV } from './_lib/license-core.js';
-
-const KV_FREE_PASS_PREFIX = 'free_pass:';
-const KV_FREE_PASS_INDEX = 'free_pass_index';
+import {
+    listFreePass, upsertFreePass, removeFreePass
+} from './_lib/license-write-service.js';
 
 const ALLOWED_ORIGINS = [
     'https://tcm-prescription-system.pages.dev',
@@ -86,12 +86,8 @@ export async function onRequest(context) {
 
         // ---- 列表 ----
         if (action === 'list') {
-            const phones = (await kv.get(KV_FREE_PASS_INDEX, 'json').catch(() => null)) || [];
-            const list = [];
-            for (const ph of phones.slice(0, 500)) {
-                const rec = await kv.get(KV_FREE_PASS_PREFIX + ph, 'json').catch(() => null);
-                if (rec && rec.phone) list.push(rec);
-            }
+            // ★ 2026-09-03 (架构统一 P2 收官) 迁入 listFreePass：统一损坏索引兜底
+            const list = await listFreePass(kv, 500);
             return json({ success: true, list }, 200, origin);
         }
 
@@ -99,25 +95,20 @@ export async function onRequest(context) {
         if (action === 'add') {
             const phone = String(body.phone || '').trim();
             const note = String(body.note || '').trim().slice(0, 100);
+            // 格式校验前置：若手机号不合法，upsertFreePass 内部会抛并 500 兜底，
+            // 这里保留外层 400 给客户友好提示
             if (!/^1[3-9]\d{9}$/.test(phone)) {
                 return json({ success: false, error: '手机号格式错误（需 11 位）' }, 400, origin);
             }
-            const exist = await kv.get(KV_FREE_PASS_PREFIX + phone, 'json').catch(() => null);
-            const record = {
-                phone,
-                note: note || (exist ? exist.note : ''),
-                addedAt: exist ? exist.addedAt : new Date().toISOString(),
-                addedBy: exist ? exist.addedBy : operator,
-                updatedAt: new Date().toISOString()
-            };
-            await kv.put(KV_FREE_PASS_PREFIX + phone, JSON.stringify(record));
-            const index = (await kv.get(KV_FREE_PASS_INDEX, 'json').catch(() => null)) || [];
-            if (!index.includes(phone)) {
-                index.unshift(phone);
-                await kv.put(KV_FREE_PASS_INDEX, JSON.stringify(index));
-            }
-            console.log('[FreePass] 白名单添加:', phone, '备注:', note, '操作人:', operator);
-            return json({ success: true, message: exist ? '已更新白名单备注' : '已加入白名单', record }, 200, origin);
+            // ★ 2026-09-03 (架构统一 P2 收官) 迁入 upsertFreePass：记录+索引双写一致、
+            //   损坏索引自动重建、首次新增自动补 addedAt/addedBy
+            const { record, isNew } = await upsertFreePass(kv, phone, { note, operator });
+            console.log('[FreePass] 通过 Service 白名单:', isNew ? '新增' : '更新备注', phone, '操作人:', operator);
+            return json({
+                success: true,
+                message: isNew ? '已加入白名单' : '已更新白名单备注',
+                record
+            }, 200, origin);
         }
 
         // ---- 删除 ----
@@ -126,13 +117,10 @@ export async function onRequest(context) {
             if (!/^1[3-9]\d{9}$/.test(phone)) {
                 return json({ success: false, error: '手机号格式错误' }, 400, origin);
             }
-            await kv.delete(KV_FREE_PASS_PREFIX + phone);
-            const index = (await kv.get(KV_FREE_PASS_INDEX, 'json').catch(() => null)) || [];
-            const newIndex = index.filter(p => p !== phone);
-            if (newIndex.length !== index.length) {
-                await kv.put(KV_FREE_PASS_INDEX, JSON.stringify(newIndex));
-            }
-            console.log('[FreePass] 白名单删除:', phone, '操作人:', operator);
+            // ★ 2026-09-03 (架构统一 P2 收官) 迁入 removeFreePass：记录 delete + 索引 filter 同步
+            const rr = await removeFreePass(kv, phone);
+            console.log('[FreePass] 通过 Service 白名单删除:', phone, '操作人:', operator,
+                'indexRemoved=', rr.removedFromIndex);
             return json({ success: true, message: '已从白名单移除', phone }, 200, origin);
         }
 
