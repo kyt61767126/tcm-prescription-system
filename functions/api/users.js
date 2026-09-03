@@ -441,11 +441,24 @@ async function getAllClinicUsers(kv) {
     for (const clinic of clinics) {
         const users = await kv.get(`clinic:${clinic.id}:users`, 'json');
         if (users && Array.isArray(users)) {
-            users.forEach(u => {
+            for (const u of users) {
                 // ★ 2026-08-23 修复：补传 clinic.status / clinic.edition，用户管理列表才能显示
                 //   真实版本类型（云端机构版/云端标准版）与诊所待审核徽章（原漏传导致全部兜底 active/cloud_clinic）
-                result.push(sanitizeUser(u, clinic.id, clinic.name, clinic.status, clinic.edition));
-            });
+                const su = sanitizeUser(u, clinic.id, clinic.name, clinic.status, clinic.edition);
+                // ★ 2026-09-03 载体信息：读取账号绑定的设备（user_devices 存 desktop/app，网页版不占名额），
+                //   供后台用户管理显示具体版本"🖥️桌面·云端标准版 / 📱APP·云端机构版"。
+                //   读取失败静默跳过（列表展示非关键路径，不影响主数据）。
+                try {
+                    if (u.username) {
+                        const dev = await kv.get(KV_USER_DEVICES_PREFIX + u.username, 'json');
+                        if (dev && Array.isArray(dev.devices) && dev.devices.length) {
+                            const classes = [...new Set(dev.devices.map(d => d && d.clientClass).filter(Boolean))];
+                            if (classes.length) su.deviceClasses = classes;
+                        }
+                    }
+                } catch (e) { /* 载体读取失败按未知处理 */ }
+                result.push(su);
+            }
         }
     }
     return result;

@@ -3893,15 +3893,32 @@ function renderUsersTable() {
     tbody.innerHTML = list.map(u => {
         // ★ 2026-08-23 版本类型列（替代历史遗留"允许模式"列——该字段后端登录无任何拦截、
         //   本地版账号存设备本地不经云端，"云端+本地"显示纯属误导。改按诊所实际版本显示）
+        //   ★ 2026-09-03 显示具体版本：组合设备载体（user_devices 绑定的 desktop/app）
+        //   → "🖥️桌面·云端标准版" / "📱APP·云端机构版" / "🖥️📱双端·..." / "🌐网页·..."
+        //   云端版无设备绑定=纯网页使用；离线版账号不经云端登录、无绑定记录，不标载体。
         const editionTagHtml = (function () {
             if (u.role === 'platform_admin') return '<span style="color:#c0c4cc;">—</span>';
-            const map = {
-                cloud_clinic: '<span class="tag tag-pro">云端机构版</span>',
-                cloud_personal: '<span class="tag tag-personal">云端标准版</span>',
-                offline_clinic: '<span class="tag tag-trial">离线机构版</span>',
-                offline_personal: '<span class="tag tag-trial">离线标准版</span>'
+            const editionMap = {
+                cloud_clinic: '云端机构版',
+                cloud_personal: '云端标准版',
+                offline_clinic: '离线机构版',
+                offline_personal: '离线标准版'
             };
-            return map[u.clinicEdition] || '<span class="tag tag-trial">未设置</span>';
+            const edText = editionMap[u.clinicEdition];
+            if (!edText) return '<span class="tag tag-trial">未设置</span>';
+            const cls = Array.isArray(u.deviceClasses) ? u.deviceClasses : [];
+            let carrier = '';
+            if (cls.includes('desktop') && cls.includes('app')) carrier = '🖥️📱双端·';
+            else if (cls.includes('desktop')) carrier = '🖥️桌面·';
+            else if (cls.includes('app')) carrier = '📱APP·';
+            else if (String(u.clinicEdition).indexOf('cloud') === 0) carrier = '🌐网页·';
+            const tagClass = {
+                cloud_clinic: 'tag-pro',
+                cloud_personal: 'tag-personal',
+                offline_clinic: 'tag-trial',
+                offline_personal: 'tag-trial'
+            }[u.clinicEdition] || 'tag-trial';
+            return '<span class="tag ' + tagClass + '">' + carrier + edText + '</span>';
         })();
         const roleTag = u.role === 'platform_admin'
             ? '<span class="tag tag-pro">' + roleNames[u.role] + '</span>'
