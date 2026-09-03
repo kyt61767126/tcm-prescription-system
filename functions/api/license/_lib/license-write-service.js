@@ -147,23 +147,22 @@ export async function updateAdminRequestStatus(kv, requestId, patch) {
     if (!existing) {
         throw new Error(`[license-write-service] updateAdminRequestStatus: record ${requestId} not found`);
     }
-    // activated 分支：
-    //   - 若 existing 已有 licenseCode + licenseBase64(=admin-approve 显式 saveLicense 后写)
-    //     → skip saveLicense，只把 patch 合并回写（避免重复生成新激活码/覆盖 devices）。
-    //   - 否则（admin-submit / free-pass 复用等非 admin-approve 通道）→ saveLicense 权威生成。
+    // activated 分支：调用方（admin-approve approve）patch 自带 licenseCode+licenseBase64，
+    //   直接合并写回（license:{code} 由调用方 L216 显式 saveLicense 写入，此处不重复生成）。
     let record = existing;
     if (patch.status === 'activated') {
-        const merged = Object.assign({}, existing, patch);
-        const alreadyLicensed =
-            existing.licenseCode && existing.licenseBase64 &&
-            (!patch.licenseCode || patch.licenseCode === existing.licenseCode);
-        if (alreadyLicensed) {
-            record = Object.assign({}, merged, { updatedAt: new Date().toISOString() });
-            await kv.put(key, JSON.stringify(record));
-        } else {
-            // saveLicense 内部写 license:{code} 并回写 record.licenseCode/licenseBase64/expiresAt/maxDevices/type/days
-            record = await saveLicense(kv, merged);
-        }
+        // ★ 2026-09-03 P0 修复（admin-approve 审核通过「无反应」根因，Mate 70 第 6 案）：
+        //   原逻辑 existing 无 licenseCode（pending 记录）时走 saveLicense(kv, merged)——
+        //   但 merged 是 admin_req 记录（无 code 字段）：saveLicense 用 record.code 拼键
+        //   → 写脏键 license:undefined；且 saveLicense 无 return → record=undefined
+        //   → 下方 record.phone 抛 TypeError → admin-approve 外层 catch 返回 500，
+        //   admin_req 永远停在 pending，客户端每次点击都「无反应」（实际每次都生成了
+        //   孤儿激活码，21:38 实测 11 个孤儿码）。核实全部调用方：admin-approve approve
+        //   唯一带 status:'activated'，且 patch 自带 licenseCode+licenseBase64（调用方
+        //   L216 已显式 saveLicense），直接合并写回即可；「现场生成 license」分支是无
+        //   调用方的死代码，删除（saveLicense 期望 license 对象，喂 admin_req 记录必错）。
+        record = Object.assign({}, existing, patch, { updatedAt: new Date().toISOString() });
+        await kv.put(key, JSON.stringify(record));
     } else {
         record = Object.assign({}, existing, patch, {
             updatedAt: new Date().toISOString()

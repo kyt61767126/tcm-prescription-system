@@ -544,6 +544,8 @@ function encodeLicenseBase64(data) {
 // getKV 已统一至 ../../_lib/kv.js（P2-B），此处由顶部 import 提供并在文件尾再导出
 
 // 保存激活码到 KV
+// ★ 2026-09-03 P0 防御修复：补 return record——原无返回值，调用方拿 undefined 后
+//   继续访问 .phone 等字段会 TypeError（admin-approve「无反应」案的次生坑）
 async function saveLicense(kv, record) {
     const key = KV_LICENSE_PREFIX + record.code;
     await kv.put(key, JSON.stringify(record));
@@ -554,6 +556,7 @@ async function saveLicense(kv, record) {
         index.push(record.code);
         await kv.put(KV_LICENSE_INDEX, JSON.stringify(index));
     }
+    return record;
 }
 
 // 从 KV 读取激活码
