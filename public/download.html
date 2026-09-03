@@ -1828,6 +1828,21 @@
                             </div>
                         </div>
                         <button class="copy-btn" id="payConfirmBtnInline" onclick="submitPayConfirm('inline')" disabled style="width:100%;margin-top:14px;padding:13px;font-size:16px;background:#9ca3af;color:#fff;border:none;border-radius:10px;cursor:not-allowed;font-weight:700;opacity:0.85;transition:all .2s;">请先填写单号后6位</button>
+                        <!-- ★ 2026-09-04 免填自动匹配大按钮：99%客户不会找转账尾6位→点这个1次搞定 -->
+                        <div id="autoMatchDivInline" style="margin-top:10px;">
+                            <button type="button" onclick="submitPayConfirm('inline','AUTO')" style="width:100%;padding:15px 16px;font-size:16px;font-weight:800;background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;border:none;border-radius:10px;cursor:pointer;box-shadow:0 6px 16px rgba(37,99,235,.3);letter-spacing:0.5px;">
+                                ✅ 已付款 · <span style="text-decoration:underline;text-decoration-color:#bfdbfe;">不用填转账单号</span> · 自动匹配
+                            </button>
+                            <div style="margin-top:8px;padding:10px 12px;background:#eff6ff;border:1px dashed #93c5fd;border-radius:8px;font-size:12px;color:#1e3a8a;line-height:1.6;">
+                                💡 <strong>原理（为什么可以不填）</strong>：当前订单量每天只有几单，您的订单在微信/支付宝账单里可以通过 <strong>4 个维度 100% 锁定</strong>：<em>下单时间（±15分钟）／金额 ￥<span id="autoMatchPriceInline">—</span>／店名／手机号后4位 <span id="autoMatchPhoneInline">—</span></em>。管理员核对到 4 条同时命中就审核激活。<strong>点上面按钮 = 直接进入待审核队列，不用再回微信/支付宝翻单号</strong>。
+                            </div>
+                        </div>
+                        <script>try{
+                            var elpi=document.getElementById('autoMatchPriceInline');
+                            var elph=document.getElementById('autoMatchPhoneInline');
+                            if (elpi && window.orderInfo && window.orderInfo.price) elpi.textContent = window.orderInfo.price.replace(/^[￥￥]/,'');
+                            if (elph) { var p = (document.getElementById('custPhone') || {}).value || ''; if (/^1[3-9]\d{9}$/.test(p)) elph.textContent = p.slice(-4); else if (window.orderInfo && window.orderInfo.phone) elph.textContent = String(window.orderInfo.phone).slice(-4); }
+                        }catch(e){}</script>
                     </div>
                     <div class="step-nav">
                         <button class="prev" onclick="goStep(2)">← 上一步</button>
@@ -1869,6 +1884,21 @@
                         </div>
                     </div>
                     <button class="copy-btn" id="payConfirmBtn" onclick="submitPayConfirm()" disabled style="width:100%;margin-top:10px;padding:12px;font-size:15px;background:#9ca3af;color:#fff;border:none;border-radius:8px;cursor:not-allowed;opacity:0.85;transition:all .2s;">请先填写单号后6位</button>
+                    <!-- ★ 2026-09-04 免填自动匹配大按钮（Step4 独立表单同样入口，从Step3没点的补上） -->
+                    <div id="autoMatchDivStep4" style="margin-top:10px;">
+                        <button type="button" onclick="submitPayConfirm('step4','AUTO')" style="width:100%;padding:14px 16px;font-size:15px;font-weight:800;background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;border:none;border-radius:8px;cursor:pointer;box-shadow:0 6px 16px rgba(37,99,235,.28);">
+                            ✅ 已付款 · 不用填转账单号 · 自动匹配进入待审核
+                        </button>
+                        <div style="margin-top:8px;padding:10px 12px;background:#eff6ff;border:1px dashed #93c5fd;border-radius:8px;font-size:12px;color:#1e3a8a;line-height:1.6;">
+                            💡 <strong>原理</strong>：当前订单量每天只有几单，管理员能通过「<strong>下单时间（±15分钟）／金额 ￥<span id="autoMatchPriceStep4">—</span>／店名／手机号后4位 <span id="autoMatchPhoneStep4">—</span></strong>」4 个维度 100% 锁定您的到账记录，4 条同时命中就审核激活。点此按钮 = <strong>确认已付款</strong> + 直接进入待审核队列，不用回微信/支付宝翻单号。
+                        </div>
+                        <script>try{
+                            var elps=document.getElementById('autoMatchPriceStep4');
+                            var elphs=document.getElementById('autoMatchPhoneStep4');
+                            if (elps && window.orderInfo && window.orderInfo.price) elps.textContent = window.orderInfo.price.replace(/^[￥￥]/,'');
+                            if (elphs) { var pp = (document.getElementById('custPhone') || {}).value || ''; if (/^1[3-9]\d{9}$/.test(pp)) elphs.textContent = pp.slice(-4); else if (window.orderInfo && window.orderInfo.phone) elphs.textContent = String(window.orderInfo.phone).slice(-4); }
+                        }catch(e){}</script>
+                    </div>
                     <!-- ★ 激活状态查询区 -->
                     <div id="orderStatusBox" style="display:none;margin-top:14px;padding:14px;border:1px solid #e5e7eb;border-radius:10px;background:#f9fafb;">
                         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
@@ -3036,13 +3066,15 @@
         // ★ 2026-09-03 支持 from 参数：'inline'=Step3 内嵌表单（扫码同屏提交），
         //   'step4'=Step4 独立表单（点「下一步」后出现）。提交成功一律 goStep(4)
         //   让用户看到「管理员核对中」的状态轮询区。
-        async function submitPayConfirm(from) {
+        // ★ 2026-09-04 新增 txnOverride：传'AUTO'走服务端免填自动匹配，前端跳过6位校验
+        async function submitPayConfirm(from, txnOverride) {
             from = from || 'step4';
             const suffix = (from === 'inline') ? 'Inline' : '';
             const payMethod = document.getElementById('payMethodSel' + suffix).value;
-            const txn = (document.getElementById('payTxnInput' + suffix).value || '').trim();
-            if (!/^[A-Za-z0-9]{6}$/.test(txn)) {
-                showToast('请填写转账单号后 6 位（数字或字母）');
+            const isAuto = String(txnOverride || '').toUpperCase() === 'AUTO';
+            const txn = isAuto ? 'AUTO' : (document.getElementById('payTxnInput' + suffix).value || '').trim();
+            if (!isAuto && !/^[A-Za-z0-9]{6}$/.test(txn)) {
+                showToast('请填写转账单号后 6 位（数字或字母）；或点下面蓝色大按钮「✅已付款·自动匹配(不用填单号)」免填直接提交');
                 return;
             }
             const phone = (document.getElementById('custPhone').value || '').trim();
@@ -3050,10 +3082,15 @@
                 showToast('订单手机号缺失，请返回上一步重新填写');
                 return;
             }
+            // AUTO 模式二次确认：防止误点
+            if (isAuto) {
+                var ok = confirm('【确认自动匹配免填】\n\n您选择"不需填转账单号直接提交"，管理员将按【下单时间+金额+店名+手机号】4个维度核对您的到账。\n\n请务必确认：您已经完成扫码付款（￥' + (orderInfo && orderInfo.price || '') + '），且付款账号姓名/金额正确。\n\n确认后进入待审核队列，核对到账即激活。\n\n点击【确定】=已付款确认；【取消】=再去付款。');
+                if (!ok) return;
+            }
             const btn = document.getElementById('payConfirmBtn' + suffix);
             const originalText = btn.textContent;
             btn.disabled = true;
-            btn.textContent = '提交中...';
+            btn.textContent = isAuto ? '自动匹配提交中...' : '提交中...';
             try {
                 const res = await fetch(BASE + '/api/license/order-paid', {
                     method: 'POST',
@@ -3062,23 +3099,26 @@
                         orderNo: orderInfo.number,
                         phone: phone,
                         payMethod: payMethod,
-                        txnLast6: txn.toUpperCase()
+                        txnLast6: isAuto ? 'AUTO' : txn.toUpperCase()
                     })
                 });
                 const data = await res.json();
                 if (data.success) {
-                    showToast('付款信息已提交，管理员核对中');
+                    if (data.autoMatch) showToast('✅ 已自动匹配登记，进入待审核队列（不用再填转账单号）');
+                    else showToast('付款信息已提交，管理员核对中');
                     // 两个表单同步：Inline 填了，把值同步到 Step4，方便用户回看
+                    // AUTO 模式写入"AUTO-MATCH"方便用户肉眼确认是走免填
+                    const displayTxn = isAuto ? 'AUTO-MATCH(免填)' : txn.toUpperCase();
                     if (from === 'inline') {
                         const s4Method = document.getElementById('payMethodSel');
                         const s4Txn = document.getElementById('payTxnInput');
                         if (s4Method) s4Method.value = payMethod;
-                        if (s4Txn) s4Txn.value = txn.toUpperCase();
+                        if (s4Txn) s4Txn.value = displayTxn;
                     } else {
                         const s3Method = document.getElementById('payMethodSelInline');
                         const s3Txn = document.getElementById('payTxnInputInline');
                         if (s3Method) s3Method.value = payMethod;
-                        if (s3Txn) s3Txn.value = txn.toUpperCase();
+                        if (s3Txn) s3Txn.value = displayTxn;
                     }
                     // ★ 2026-09-04 流程优化：付款确认提交成功后提示客户返回APP，
                     //   后台核对通过→APP前台化/focus自动触发重查→弹窗"已激活请重启登录"，

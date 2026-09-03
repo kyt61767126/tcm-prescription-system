@@ -2943,8 +2943,39 @@ function openAdminApproveModal(requestId) {
             document.getElementById('approveOrderNo').textContent = req.orderNo || '-';
             document.getElementById('approveOrderPrice').textContent = req.orderPrice || '-';
             document.getElementById('approvePayMethod').textContent = req.payMethod === 'alipay' ? '支付宝' : (req.payMethod === 'wechat' ? '微信支付' : '-');
-            document.getElementById('approvePayTxn').textContent = req.payTxnLast6 || '-';
             document.getElementById('approvePaidAt').textContent = req.paidAt ? new Date(req.paidAt).toLocaleString('zh-CN') : '-';
+            // ★ 2026-09-04 AUTO-MATCH: 客户点了「免填·自动匹配」按钮，后台需用 4 维核对到账
+            //   （提交时间±15min / 金额 / 店名 / 手机号后4位），不显示"AUTO-MATCH"字面给您当尾号看
+            //   而是整行替换为醒目的黄色核对提示卡
+            const isAuto = String(req.payTxnLast6 || '').toUpperCase() === 'AUTO-MATCH';
+            const txnLine = document.getElementById('approvePayTxn').parentNode;
+            if (isAuto) {
+                if (txnLine) txnLine.style.display = 'none'; // 隐藏"转账单号后6位"那行
+                // 在核对提示行追加醒目的4维说明
+                var _hintLine = document.getElementById('approveAutoHint');
+                if (!_hintLine) {
+                    _hintLine = document.createElement('div');
+                    _hintLine.id = 'approveAutoHint';
+                    _hintLine.setAttribute('data-auto-inject', '1');
+                    payInfoBox.appendChild(_hintLine);
+                }
+                var _submittedTime = req.submittedAt ? new Date(req.submittedAt).toLocaleString('zh-CN') : '-';
+                var _phone4 = String(req.phone || '').slice(-4);
+                var _clinic  = req.clinicName || '-';
+                _hintLine.style.cssText = 'margin-top:10px;padding:10px 12px;background:#fef9c3;border:2px dashed #eab308;border-radius:8px;font-weight:700;color:#854d0e;line-height:1.8;';
+                _hintLine.innerHTML = '⚠️ 此订单客户选择了【一键自动匹配】，未填写转账单号后6位（当前客户量少不会撞单）。<br>' +
+                    '请您在<strong>' + (req.payMethod === 'wechat' ? '微信' : (req.payMethod === 'alipay' ? '支付宝' : '')) + '收款账单</strong>中按以下 4 个维度交叉核对，全部吻合即可审核通过：<br>' +
+                    '① <strong>转账时间 ≈ ' + _submittedTime + '（±15分钟）</strong> ／ ' +
+                    '② <strong>金额 = ' + (req.orderPrice || '-') + '</strong> ／ ' +
+                    '③ <strong>店名 = ' + _clinic + '</strong> ／ ' +
+                    '④ <strong>手机号后4位 = ' + _phone4 + '</strong><br>' +
+                    '<span style="font-weight:400;color:#92400e;">（4 条同时命中才放行；不吻合请拒绝申请，并告知客户微信/支付宝账单里找不到这笔转账）</span>';
+            } else {
+                if (txnLine) txnLine.style.display = '';
+                document.getElementById('approvePayTxn').textContent = req.payTxnLast6 || '-';
+                var _oldHint = document.getElementById('approveAutoHint');
+                if (_oldHint && _oldHint.getAttribute('data-auto-inject') === '1') _oldHint.remove();
+            }
             payInfoBox.style.display = 'block';
         } else {
             payInfoBox.style.display = 'none';

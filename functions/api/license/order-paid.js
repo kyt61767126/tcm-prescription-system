@@ -10,18 +10,22 @@
 //      "orderNo":   "BNZC-DZ-202608291234-ABC1XY",  // 必填
 //      "phone":     "13800138000",                  // 必填（需与下单手机号一致）
 //      "payMethod": "alipay",                       // 必填：alipay / wechat
-//      "txnLast6":  "A1B2C3"                        // 必填（转账单号后6位）
+//      "txnLast6":  "A1B2C3" | "AUTO"              // 6位单号，或"AUTO"=免输走自动匹配(后台按下单时间+金额+店名+手机号核对)
 //    }
 //
-//  返回：{ success: true, status: 'pending' }
+//  返回：{ success: true, status: 'pending', autoMatch?: true }
 //
 //  ★ 数据流：
 //    1. 校验 order:{orderNo} 映射存在，且记录 phone 与请求一致
-//    2. 记录 payMethod / payTxnLast6 / paidAt
-//    3. status: pending_payment → pending，并写入 admin_req_index
+//    2. AUTO 模式校验：客户量极少(目前<30单/天) + 金额固定(￥99/￥198) + 时间±15min
+//       下的 4 维唯一识别 (提交时间+金额+版本+手机号) 基本可 1:1 对应到账记录，
+//       写入 payTxnLast6="AUTO-MATCH" 标记，后台审核时核对侧显黄条提示
+//       「此单为免填自动匹配，请按【下单时间+金额￥xx+店名+手机号后4位】查找到账
+//       记录」，仍需人工按 4 维确认过账(安全双保险，不做自动通过)。
+//    3. 普通模式按原 txnLast6 6 位写入校验不变
+//    4. status: pending_payment → pending，并写入 admin_req_index
 //       （进入后台「管理员激活审核」待审列表）
-//    4. 后台管理员在支付宝/微信账单中核对转账单号后6位与到账金额，
-//       一键审核通过（admin-approve 自动生成激活码并立即激活）
+//    5. 后台管理员按 4 维(含转账单号或AUTO提示)核对到账金额后一键审核通过。
 // ============================================================================
 
 import { getKV, checkRateLimit } from './_lib/license-core.js';
@@ -106,9 +110,17 @@ export async function onRequest(context) {
         if (!payMethod || !['alipay', 'wechat'].includes(payMethod)) {
             return json({ success: false, error: '请选择支付方式（支付宝/微信）' }, 400);
         }
-        const txn = String(txnLast6 || '').trim();
-        if (!txn || !/^[A-Za-z0-9]{6}$/.test(txn)) {
-            return json({ success: false, error: '请填写转账单号后 6 位（数字或字母）' }, 400);
+        const txn = String(txnLast6 || '').trim().toUpperCase();
+        // ★ 2026-09-04 AUTO 免输匹配：客户点「已付款·自动匹配」按钮即提交 txn=AUTO。
+        //   格式校验: AUTO字面量跳过6位校验。订单必须是官网订单(4维在record里)——该项校验在
+        //   record读取后执行(见下record.orderSource check)。
+        //   安全双保险：后台永远人工按【下单时间+金额+店名+手机号后4位】4维核对，
+        //   不自动审核通过，AUTO仅为客户免填+进待审的快捷通道。
+        const isAutoMatch = (txn === 'AUTO');
+        if (!isAutoMatch) {
+            if (!txn || !/^[A-Za-z0-9]{6}$/.test(txn)) {
+                return json({ success: false, error: '请填写转账单号后 6 位（数字或字母）' }, 400);
+            }
         }
 
         // ===== 订单号映射校验 =====
@@ -128,6 +140,11 @@ export async function onRequest(context) {
             return json({ success: false, error: '手机号与订单不匹配，请输入下单时的手机号' }, 403);
         }
 
+        // ★ AUTO 模式仅官网订单可用(4维字段完整)
+        if (isAutoMatch && record.orderSource !== 'website') {
+            return json({ success: false, error: '当前订单不支持免填自动匹配，请手动填写转账单号后6位' }, 400);
+        }
+
         // 状态检查
         if (record.status === 'pending') {
             return json({ success: true, status: 'pending', message: '付款信息已提交，等待管理员核对' });
@@ -145,7 +162,8 @@ export async function onRequest(context) {
         // 原 L156-L169 内联写 + appendRequestIndex 内联副本 合并到 Service。
         const payInfo = {
             payMethod: payMethod,
-            payTxnLast6: txn.toUpperCase()
+            // AUTO-MATCH: 客户选择免填自动匹配，由后台按下单时间+金额+店名+手机号后4位人工核对
+            payTxnLast6: isAutoMatch ? 'AUTO-MATCH' : txn.toUpperCase()
         };
         const mr = await markOrderPaid(kv, orderKey, payInfo);
         if (!mr || !mr.paid) {
@@ -153,12 +171,16 @@ export async function onRequest(context) {
         }
 
         console.log('[OrderPaid] 通过 Service 付款确认(三索引同步):', orderKey,
-            'payMethod=', payMethod, 'txnLast6=', mr.record && mr.record.payTxnLast6);
+            'payMethod=', payMethod, 'txnLast6=', mr.record && mr.record.payTxnLast6,
+            isAutoMatch ? '(AUTO免填匹配)' : '');
 
         return json({
             success: true,
             status: 'pending',
-            message: '付款信息已提交，管理员核对到账后即可激活'
+            autoMatch: !!isAutoMatch,
+            message: isAutoMatch
+                ? '已提交自动匹配申请，管理员将按【下单时间+金额+店名+手机号】核对到账后激活（无需再填转账单号）'
+                : '付款信息已提交，管理员核对到账后即可激活'
         });
 
     } catch (error) {
