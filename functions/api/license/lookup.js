@@ -123,7 +123,9 @@ export async function onRequestPost({ request, env }) {
         }
 
         const userStr = String(record.user || record.username || '');
-        const phone = extractPhone(userStr);
+        // ★ 2026-09-03 优先读 license 记录的 phone 字段（admin-approve 生成的新记录都有；
+        //   user 字段多为诊所名不含手机号，extractPhone 解析不到会害客户端自愈拿不到手机号）
+        const phone = String(record.phone || '').trim() || extractPhone(userStr);
         const name = phone ? userStr.replace(phone, '').replace(/[/\-\s]+$/, '').trim() : userStr.trim();
 
         return json(request, {

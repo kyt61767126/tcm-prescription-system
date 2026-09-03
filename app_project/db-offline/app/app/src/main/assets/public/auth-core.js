@@ -3307,7 +3307,11 @@
                 var __edParam = (editionIntent === 'institution') ? 'local-pro' : (editionIntent === 'personal' ? 'local-personal' : '');
                 // ★ 2026-09-03 dp=载体（desktop/app）：官网下单沿 URL 传入 order-submit，
                 //   服务端存入激活申请，后台用户管理离线版显示"🖥️桌面·/📱APP·"
-                var __dp = (global.electronAPI && global.electronAPI.activate) ? 'desktop' : 'app';
+                // ★ 2026-09-03 载体判定修正：APP 的 Java 桥同样暴露 electronAPI.activate，
+                //   旧判据把 APP 误判成 desktop（KV 记录 appModeCarrier 错标、后台显示🖥️桌面）。
+                //   正确判据=桌面 preload 独有的 showExpireAlert。
+                var __dp = (global.electronAPI && global.electronAPI.activate &&
+                    typeof global.electronAPI.activate.showExpireAlert === 'function') ? 'desktop' : 'app';
                 const url = 'https://tcm-prescription-system.pages.dev/download.html?mid=' + encodeURIComponent(machineId || '')
                     + (__edParam ? ('&ed=' + __edParam) : '') + '&dp=' + __dp;
                 openPayUrlRobust(url, btn);
@@ -3795,12 +3799,61 @@
                     try {
                         user = (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.doctorName) ? CONFIG.doctorName : '';
                     } catch (e) {}
-                    res = await global.electronAPI.activate.submit(code, user);
+                    // ★ 2026-09-03 根治修复（Mate70 案例）：Tab2 输码激活必须携带手机号+密码——
+                    //   此前只传 (code, user)，Java 建的账号 username=医师名、无 phone、密码=admin
+                    //   → 客户用手机号登录必然"用户名或密码错误"（Tab1 管理员激活带 phone 正常，
+                    //   Tab2 是盲区）。手机号来源优先级：Tab1 已填（state/DOM）→ 凭码联网自愈识别。
+                    let phoneVal = (state && state.phone) ? String(state.phone).trim() : '';
+                    try {
+                        const phEl = document.getElementById('adminPhone');
+                        if (!phoneVal && phEl && phEl.value) phoneVal = String(phEl.value).trim();
+                    } catch (e) {}
+                    if (!/^1[3-9]\d{9}$/.test(phoneVal)) {
+                        // 自愈：凭码+machineId 联网识别原激活绑定手机号（自动回填）
+                        const d = await lookupBoundActivationInfo(code, machineId);
+                        if (d && d.phone) phoneVal = String(d.phone).trim();
+                    }
+                    if (!/^1[3-9]\d{9}$/.test(phoneVal)) {
+                        btn.disabled = false;
+                        btn.textContent = '🚀 立即激活';
+                        loading.style.display = 'none';
+                        hint.textContent = '⚠ 请先在「管理员激活」页填写手机号（激活后用手机号登录），再回来输码激活';
+                        hint.style.color = '#e53935';
+                        try { alert('请先在「管理员激活」页填写手机号（11位）。\n\n激活后将使用「手机号 + 密码」登录。\n填写后返回本页输入激活码即可。'); } catch (e) {}
+                        return;
+                    }
+                    const pwdVal = (state && state.password) ? String(state.password).trim() : '';
+                    // ★ 按端区分传参（对齐 activateNow）：桌面 submit(code, user, clinicName, phone, password, edition, inviteCode)
+                    //   APP submit(code, user, password, inviteCode)——手机号拼入 user 串由 Java 解析
+                    const isDesktopTab2 = !!(global.electronAPI.activate.showExpireAlert &&
+                        typeof global.electronAPI.activate.showExpireAlert === 'function');
+                    if (isDesktopTab2) {
+                        res = await global.electronAPI.activate.submit(code, user, (state && state.clinicName) || '', phoneVal, pwdVal || 'admin', undefined, '');
+                    } else {
+                        const userWithPhone = user ? (user.replace(/[/\-\s]+$/, '').trim() + '/' + phoneVal) : phoneVal;
+                        res = await global.electronAPI.activate.submit(code, userWithPhone, pwdVal || 'admin', '');
+                    }
                     if (res && res.success) {
+                        // ★ 账号同步到前端 localStorage 用户表（不依赖重启后桥自愈时序，
+                        //   与 onAdminActivated 同构：username=手机号）
+                        try {
+                            if (typeof window.addLocalActivationUser === 'function') {
+                                window.addLocalActivationUser({
+                                    username: phoneVal,
+                                    phone: phoneVal,
+                                    password: pwdVal || 'admin',
+                                    name: user || phoneVal,
+                                    role: 'admin',
+                                    clinicName: (state && state.clinicName) || ''
+                                });
+                            }
+                        } catch (e) {}
                         loading.style.display = 'none';
                         successBox.style.display = 'block';
                         document.getElementById('adminCodeSuccessDesc').innerHTML =
-                            '授权已安装到本机<br>点击确定后应用将重启，重启后即可使用';
+                            '授权已安装到本机<br>📱 登录账号：' + phoneVal +
+                            '<br>🔑 登录密码：' + (pwdVal || 'admin（默认）') +
+                            '<br>点击确定后应用将重启，请使用手机号登录';
                         btn.disabled = false;
                         btn.textContent = '🔄 重启应用';
                         btn.onclick = async function() {
@@ -3953,7 +4006,10 @@
                 appMode: 'local',
                 // ★ 2026-09-03 载体标识：桌面 Electron 有 electronAPI，离线APP WebView 无。
                 //   服务端写入诊所记录，后台用户管理离线版显示"🖥️桌面·/📱APP·"载体
-                appModeCarrier: (global.electronAPI && global.electronAPI.activate) ? 'desktop' : 'app',
+                // ★ 2026-09-03 载体判定修正：同 __dp（APP Java 桥也有 electronAPI.activate，
+                //   须用桌面独有的 showExpireAlert 判定，否则 APP 被错标 desktop）
+                appModeCarrier: (global.electronAPI && global.electronAPI.activate &&
+                    typeof global.electronAPI.activate.showExpireAlert === 'function') ? 'desktop' : 'app',
                 versionLabel: '本地' + (state.edition === 'institution' ? '机构版' : '标准版'),
                 env: 'production'
             };
@@ -4172,7 +4228,10 @@
                 //   静默中断，openPayUrlRobust 永远不执行。改用本函数的 state.edition。
                 var __edParam = (state.edition === 'institution') ? 'local-pro' : (state.edition === 'personal' ? 'local-personal' : '');
                 // ★ 2026-09-03 dp=载体（desktop/app）：官网下单沿 URL 传入 order-submit
-                var __dp1 = (global.electronAPI && global.electronAPI.activate) ? 'desktop' : 'app';
+                // ★ 2026-09-03 载体判定修正：APP Java 桥也有 electronAPI.activate，
+                //   须用桌面独有的 showExpireAlert 判定，否则 APP 被错标 desktop
+                var __dp1 = (global.electronAPI && global.electronAPI.activate &&
+                    typeof global.electronAPI.activate.showExpireAlert === 'function') ? 'desktop' : 'app';
                 const url = 'https://tcm-prescription-system.pages.dev/download.html?mid=' + encodeURIComponent(machineId || '')
                     + (__edParam ? ('&ed=' + __edParam) : '') + '&dp=' + __dp1;
                 openPayUrlRobust(url, btn);
@@ -4186,7 +4245,10 @@
                 // ★ 2026-09-03 修复「点击无反应」：同上，editionIntent 越界引用改 state.edition
                 var __edParam = (state.edition === 'institution') ? 'local-pro' : (state.edition === 'personal' ? 'local-personal' : '');
                 // ★ 2026-09-03 dp=载体（desktop/app）：官网下单沿 URL 传入 order-submit
-                var __dp2 = (global.electronAPI && global.electronAPI.activate) ? 'desktop' : 'app';
+                // ★ 2026-09-03 载体判定修正：APP Java 桥也有 electronAPI.activate，
+                //   须用桌面独有的 showExpireAlert 判定，否则 APP 被错标 desktop
+                var __dp2 = (global.electronAPI && global.electronAPI.activate &&
+                    typeof global.electronAPI.activate.showExpireAlert === 'function') ? 'desktop' : 'app';
                 const url = 'https://tcm-prescription-system.pages.dev/download.html?mid=' + encodeURIComponent(machineId || '')
                     + (__edParam ? ('&ed=' + __edParam) : '') + '&dp=' + __dp2;
                 openPayUrlRobust(url, btn);

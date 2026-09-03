@@ -183,6 +183,9 @@ export async function onRequest(context) {
         const licenseRecord = {
             code: code,
             user: record.adminName,
+            // ★ 2026-09-03 补充：激活手机号独立字段——lookup 自愈接口凭它回填手机号
+            //   （user=adminName 多为诊所名不含手机号，extractPhone 解析不到）
+            phone: record.phone || '',
             type: type,
             days: days || null,
             expiresAt: recordExpiresAt,
