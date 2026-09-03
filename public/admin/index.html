@@ -2457,27 +2457,31 @@ async function refreshTodoBadges() {
         const [clinicsRes, actRes, payRes] = await Promise.all([
             fetch(API_BASE + '/users?clinics=true', { headers: { 'Authorization': 'Bearer ' + token } }),
             fetch(API_BASE + '/license/admin-list?status=pending&limit=500', { headers: { 'Authorization': 'Bearer ' + token } }),
-            // ★ 2026-09-03 待付款订单角标（低频轻量：limit=50 足够计数）
+            // ★ 2026-09-03 待付款订单：同时为「待激活申请」角标 + 「待付款」卡片角标提供数据，
+            //   一次读取，两个用途（pending 视图默认不含 pending_payment，但客户没填「付款确认」
+            //   时订单卡在 pending_payment，待办卡必须显示，避免后台与客户认知不同步）
             fetch(API_BASE + '/license/admin-list?status=pending_payment&limit=50', { headers: { 'Authorization': 'Bearer ' + token } })
         ]);
         const cd = await clinicsRes.json();
         const ad = await actRes.json();
+        // json() 只能读一次，提前解析复用
+        let payData = null;
+        try { payData = payRes && (await payRes.json()); } catch (e) {}
         if (clinicsRes.status === 401 || actRes.status === 401) return; // 静默，具体操作时再提示重登
         const clinics = (cd.success && Array.isArray(cd.data)) ? cd.data : [];
         _clinicsCache = clinics;
         const pendingReg = clinics.filter(c => c.status === 'test').length;
-        const pendingAct = (ad.success && Array.isArray(ad.requests)) ? ad.requests.length : _todoPendingActivate;
-        _todoPendingActivate = pendingAct;
+        const pendingActCount = (ad.success && Array.isArray(ad.requests)) ? ad.requests.length : 0;
+        const payCount = (payData && payData.success && typeof payData.count === 'number') ? payData.count : 0;
+        // ★ 待激活申请数 = pending（已付款待核对）+ pending_payment（未付款）
+        //   客户以为“扫码=完成付款”没填「付款确认」→ 卡在 pending_payment，默认待审列表看不到，
+        //   角标把两种都算进去；点进 Tab 后按筛选区分。
+        const pendingActTotal = pendingActCount + payCount;
+        _todoPendingActivate = pendingActTotal;
         setTabBadge('badgeClinics', pendingReg);
-        setTabBadge('badgeActivate', pendingAct);
-        // 待付款订单数（失败静默保持旧值）
-        try {
-            const pd = await payRes.json();
-            if (pd.success && typeof pd.count === 'number') {
-                const el = document.getElementById('todoPendingPayment');
-                if (el) el.textContent = pd.count;
-            }
-        } catch (e2) {}
+        setTabBadge('badgeActivate', pendingActTotal);
+        const ppEl = document.getElementById('todoPendingPayment');
+        if (ppEl) ppEl.textContent = payCount;
     } catch (e) { /* 网络抖动静默 */ }
 }
 
@@ -2512,7 +2516,11 @@ async function loadTodoCenter() {
         // ===== 三张待办卡 =====
         const pendingReg = clinics.filter(c => c.status === 'test');
         const pendingActs = acts.filter(r => r.status === 'pending');
-        _todoPendingActivate = pendingActs.length;
+        // ★ 2026-09-03 先取 pending_payment 数，避免后续 set 调用时再 await 破坏顺序
+        let payCount = 0;
+        try { const pd = await payRes.json(); if (pd.success && typeof pd.count === 'number') payCount = pd.count; } catch (e) {}
+        const pendingActTotal = pendingActs.length + payCount;
+        _todoPendingActivate = pendingActTotal;
         const now = Date.now();
         let expiring = 0, expired = 0;
         for (const c of clinics) {
@@ -2525,17 +2533,14 @@ async function loadTodoCenter() {
             if (el) { el.textContent = v; const card = el.closest('.stat-card'); if (card) card.classList.toggle('pending-glow', !!glow && v > 0); }
         };
         set('todoPendingReg', pendingReg.length, true);
-        set('todoPendingActivate', pendingActs.length, true);
+        // ★ 2026-09-03 待激活申请= pending（已付款待核对）+ pending_payment（未付款）
+        //   客户以为“扫码=完成付款”，没填「付款确认」→ pending_payment，默认待审列表看不到，
+        //   待办卡把两种都算进去，点进 Tab 后按筛选区分。
+        set('todoPendingActivate', pendingActTotal, true);
+        set('todoPendingPayment', payCount, payCount > 0);
         set('todoExpiring', expiring + expired, expiring + expired > 0);
-        // ★ 2026-09-03 待付款订单数（官网下单未付款，客户可能卡在扫码环节）
-        try {
-            const pd = await payRes.json();
-            if (pd.success && typeof pd.count === 'number') {
-                set('todoPendingPayment', pd.count, pd.count > 0);
-            }
-        } catch (e2) {}
         setTabBadge('badgeClinics', pendingReg.length);
-        setTabBadge('badgeActivate', pendingActs.length);
+        setTabBadge('badgeActivate', pendingActTotal);
 
         // ===== 交叉提示：同一手机号既有待审核注册又有待激活申请（双轨重复）=====
         const crossWarn = document.getElementById('todoCrossWarn');
