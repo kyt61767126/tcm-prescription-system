@@ -1792,13 +1792,17 @@
                                 <option value="wechat">微信支付</option>
                             </select>
                         </div>
-                        <div class="form-item">
+                        <div class="form-item" style="position:relative;">
                             <label>转账单号后 6 位 <span class="req">*</span></label>
-                            <input type="text" id="payTxnInput" placeholder="支付宝/微信账单详情中的单号后6位" maxlength="6" style="text-transform:uppercase;" oninput="this.value=this.value.replace(/[^A-Za-z0-9]/g,'').toUpperCase()">
-                            <div style="font-size:11px;color:#9ca3af;margin-top:3px;">💡 支付宝：账单详情→订单号；微信：账单→转账单号。填最后6位即可</div>
+                            <input type="text" id="payTxnInput" placeholder="点右侧📎复制或?看教程" maxlength="6" style="text-transform:uppercase;letter-spacing:2px;font-weight:600;padding-right:86px;" oninput="onTxnInput(this, '')">
+                            <div style="position:absolute;right:0;bottom:0;display:flex;height:44px;align-items:center;">
+                                <button type="button" title="复制订单号尾6位(核对时作暂填备用)" onclick="copyOrderTail6('')" style="border:none;background:#fef3c7;color:#92400e;padding:4px 8px;font-size:12px;border-radius:6px 0 0 6px;cursor:pointer;height:100%;line-height:1;" onmouseover="this.style.background='#fde68a'" onmouseout="this.style.background='#fef3c7'">📎尾6</button>
+                                <button type="button" title="单号位置一步一步教(弹窗)" onclick="showTxnTutorial()" style="border:none;background:#dbeafe;color:#1e40af;padding:4px 8px;font-size:12px;border-radius:0 6px 6px 0;cursor:pointer;height:100%;line-height:1;border-left:1px solid #93c5fd;" onmouseover="this.style.background='#bfdbfe'" onmouseout="this.style.background='#dbeafe'">?教程</button>
+                            </div>
+                            <div style="font-size:11px;color:#9ca3af;margin-top:3px;">💡 输满6位自动点"提交确认"；回车也可直接提交</div>
                         </div>
                     </div>
-                    <button class="copy-btn" id="payConfirmBtn" onclick="submitPayConfirm()" style="width:100%;margin-top:10px;padding:12px;font-size:15px;background:linear-gradient(135deg,#07c160,#059669);color:#fff;border:none;border-radius:8px;cursor:pointer;">✅ 提交付款确认</button>
+                    <button class="copy-btn" id="payConfirmBtn" onclick="submitPayConfirm()" disabled style="width:100%;margin-top:10px;padding:12px;font-size:15px;background:#9ca3af;color:#fff;border:none;border-radius:8px;cursor:not-allowed;opacity:0.85;transition:all .2s;">请先填写单号后6位</button>
                     <!-- ★ 激活状态查询区 -->
                     <div id="orderStatusBox" style="display:none;margin-top:14px;padding:14px;border:1px solid #e5e7eb;border-radius:10px;background:#f9fafb;">
                         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
@@ -3075,6 +3079,114 @@
             document.querySelectorAll('.purchase-step').forEach(s => s.classList.remove('active'));
             document.querySelector('.purchase-step[data-step="' + n + '"]').classList.add('active');
             window.scrollTo({ top: document.querySelector('.purchase-flow').offsetTop - 80, behavior: 'smooth' });
+            // ★ 2026-09-04 Step 4 自动聚焦转账单号后6位
+            setTimeout(function() {
+                var f = null;
+                if (n === 3) f = document.getElementById('payTxnInputInline');
+                else if (n === 4) f = document.getElementById('payTxnInput');
+                if (f) { try { f.focus(); f.select(); } catch(_) {} }
+            }, 450);
+        }
+
+        // ★ 2026-09-04 转账单号后6位快速填写: 输入→过滤+大写+满6位自动提交+按钮状态联动+回车提交
+        function onTxnInput(el, suffix) {
+            el.value = (el.value || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+            var btn = document.getElementById('payConfirmBtn' + suffix);
+            var filled = /^[A-Za-z0-9]{6}$/.test(el.value);
+            if (btn) {
+                if (filled) {
+                    btn.disabled = false;
+                    btn.style.background = 'linear-gradient(135deg,#07c160,#059669)';
+                    btn.style.cursor = 'pointer';
+                    btn.style.boxShadow = '0 4px 12px rgba(16,185,129,0.25)';
+                    btn.style.opacity = '1';
+                    btn.textContent = '✅ 提交付款确认（回车提交）';
+                } else {
+                    btn.disabled = true;
+                    btn.style.background = '#9ca3af';
+                    btn.style.cursor = 'not-allowed';
+                    btn.style.boxShadow = 'none';
+                    btn.style.opacity = '0.85';
+                    btn.textContent = '请先填写单号后6位（已填 ' + el.value.length + '/6）';
+                }
+            }
+            if (filled) {
+                if (onTxnInput._t) clearTimeout(onTxnInput._t);
+                onTxnInput._t = setTimeout(function() {
+                    var _b = document.getElementById('payConfirmBtn' + suffix);
+                    if (_b && !_b.disabled && typeof submitPayConfirm === 'function') submitPayConfirm(suffix === 'Inline' ? 'inline' : '');
+                }, 600);
+            }
+        }
+        (function _bindTxnEnter() {
+            ['payTxnInput', 'payTxnInputInline'].forEach(function(id){
+                var el = document.getElementById(id);
+                if (!el) return;
+                el.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        var sfx = (id === 'payTxnInputInline') ? 'Inline' : '';
+                        var btn = document.getElementById('payConfirmBtn' + sfx);
+                        if (btn && !btn.disabled && typeof submitPayConfirm === 'function') submitPayConfirm(sfx === 'Inline' ? 'inline' : '');
+                    }
+                });
+            });
+        })();
+        function copyOrderTail6(suffix) {
+            if (!orderInfo || !orderInfo.number) { showToast('订单尚未生成'); return false; }
+            var tail = String(orderInfo.number).slice(-6);
+            var input = document.getElementById('payTxnInput' + suffix);
+            if (input) {
+                input.value = tail;
+                try { onTxnInput(input, suffix); } catch(_) {}
+                var ta = document.createElement('textarea');
+                ta.value = tail; ta.style.position='fixed'; ta.style.opacity='0';
+                document.body.appendChild(ta); ta.select();
+                var ok = false; try { ok = document.execCommand('copy'); } catch(e) {}
+                document.body.removeChild(ta);
+                showToast(ok ? ('✅ 暂填后6位：' + tail + ' (管理员核对订单号匹配)') : ('已暂填：' + tail));
+            }
+            return !!input;
+        }
+        function showTxnTutorial() {
+            var html =
+'<div style="position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;" id="_txnTutMask" onclick="if(event.target===this)this.remove()">' +
+'  <div style="max-width:420px;width:100%;background:#fff;border-radius:14px;padding:20px;box-shadow:0 20px 60px rgba(0,0,0,.25);overflow:auto;max-height:90vh;">' +
+'    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">' +
+'      <strong style="font-size:17px;color:#0f172a;">📱 转账单号后6位查找教程（3步）</strong>' +
+'      <button onclick="document.getElementById(\'_txnTutMask\').remove()" style="border:none;background:#f3f4f6;color:#374151;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:13px;">✕关闭</button>' +
+'    </div>' +
+'    <div style="border:1px solid #fef3c7;background:#fffbeb;border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:#92400e;line-height:1.6;">' +
+'      ⚠️ <strong>找不到也没关系</strong>，点输入框旁边的「📎尾6」会用<strong>本页订单号的末尾6位暂填</strong>（管理员核对时也会核对订单号，效果一样，不影响您进入待审核队列）。' +
+'    </div>' +
+'    <div style="display:flex;flex-direction:column;gap:14px;">' +
+'      <div style="border-left:4px solid #3b82f6;padding-left:12px;">' +
+'        <div style="font-weight:700;color:#1d4ed8;font-size:14px;margin-bottom:6px;">微信支付（3步）</div>' +
+'        <ol style="margin:0;padding-left:22px;font-size:13px;color:#334155;line-height:1.9;">' +
+'          <li>微信首页 点右下角「我」→「服务」</li>' +
+'          <li>点右上角「钱包」→ 顶部「账单」</li>' +
+'          <li>找到刚才那笔「转账」记录 → 点进入 → <strong>「转账单号」末尾6位</strong>（一般是数字，可能含字母）</li>' +
+'        </ol>' +
+'      </div>' +
+'      <div style="border-left:4px solid #16a34a;padding-left:12px;">' +
+'        <div style="font-weight:700;color:#15803d;font-size:14px;margin-bottom:6px;">支付宝（3步）</div>' +
+'        <ol style="margin:0;padding-left:22px;font-size:13px;color:#334155;line-height:1.9;">' +
+'          <li>支付宝首页 点右下角「我的」</li>' +
+'          <li>点「账单」</li>' +
+'          <li>找到刚才那笔转账记录 → 点进入 → <strong>「订单号」末尾6位</strong></li>' +
+'        </ol>' +
+'      </div>' +
+'    </div>' +
+'    <div style="margin-top:16px;text-align:center;">' +
+'      <button onclick="document.getElementById(\'_txnTutMask\').remove()" style="padding:10px 22px;font-size:14px;background:linear-gradient(135deg,#07c160,#059669);color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:700;">我知道了，去填单号后6位 ✓</button>' +
+'    </div>' +
+'  </div>' +
+'</div>';
+            try {
+                var mask = document.getElementById('_txnTutMask');
+                if (mask) mask.remove();
+                document.body.insertAdjacentHTML('beforeend', html);
+            } catch (e) { alert('微信：我→服务→钱包→账单→转账记录→转账单号尾6位\n支付宝：我的→账单→转账记录→订单号尾6位\n找不到点输入框旁「📎尾6」暂填。'); }
         }
 
         function resetPurchase() {
