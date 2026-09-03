@@ -3485,7 +3485,11 @@
 
         const PHONE_RE = /^1[3-9]\d{9}$/;
         let state = { edition: 'institution', phone: '', clinicName: '', adminName: '', password: '', remark: '' };
+        // ★ 2026-09-03 (架构统一 P2 客户端收敛): pollTimer/pollCount 仅保留作兼容别名，
+        //   真实调度统一委托给 ActivationObserver（showAdminActivateModal 窗口内 单例）
         let pollTimer = null;
+        let pollCount = 0;
+        let currentActivationObserver = null;
 
         const overlay = document.createElement('div');
         overlay.id = 'adminActivateOverlay';
@@ -4096,44 +4100,89 @@
                     document.getElementById('adminRequestNo').textContent = res.requestId;
                     document.getElementById('adminSavedPhone').textContent = state.phone;
                     show('adminWaiting');
-                    // ★ 2026-09-03 轮询断点续传：持久化 requestId+手机号+密码。客户官网付款时
-                    //   APP 切后台被杀/窗口关闭 → 轮询中断 → 重启后凭此自动恢复领码建号
-                    //   （此前 APP 端 requestId 仅内存，已付款客户"激活成功却登录不上"根因；
-                    //   桌面版 activate.js 早有 admin-request-id.dat 持久化，APP 端是盲区）。
-                    //   激活完成（onAdminActivated）后清除。
-                    // ★ 2026-09-03 安全修复：password 通过 encryptSensitive 加密持久化
-                    //   （electronAPI.safeStorage DPAPI 优先，退 XORv2；明文 fail-safe 不写入）。
-                    try {
-                        const encPwd = await encryptSensitive(state.password || '');
-                        if (!encPwd && (state.password || '').trim()) {
-                            console.warn('[LicenseCheck] adminReqPending 密码加密失败，仍存 requestId/phone 但不存密码（恢复时密码退默认 admin）');
-                        }
-                        StorageAdapter.setItem('license:adminReqPending', JSON.stringify({
-                            requestId: res.requestId,
-                            phone: (state.phone || '').trim(),
-                            adminName: (state.adminName || '').trim(),
-                            clinicName: (state.clinicName || '').trim(),
-                            passwordEnc: encPwd,
-                            machineId: (typeof machineId !== 'undefined' && machineId) ? String(machineId) : '',
-                            at: Date.now()
-                        }));
-                    } catch (pe) { console.warn('[LicenseCheck] adminReqPending 持久化失败(不影响提交):', pe); }
 
-                    // ★ 2026-09-03 根治激活登录失败（Mate 70 实锤）：admin-submit 短路复用
-                    //   已激活申请时服务端直下发 license+licenseInfo，此处【立即】领码，
-                    //   不再等 startPolling 首 5s setInterval 到账。原时序致命 bug：
-                    //   startPolling 调度 setInterval(5000)，首次 poll ≥ 5s 后才执行
-                    //   admin-status → activated → onAdminActivated；用户 5s 内切后台/关
-                    //   弹窗 → onAdminActivated 永远不执行 → 本地永远不建号 → 登录必然失败。
-                    if (res.status === 'activated' && res.license) {
-                        clearInterval(pollTimer); pollTimer = null;
-                        console.log('[LicenseCheck] admin-submit 已返回 activated+license，立即领码（不等 startPolling 5s 延迟）');
-                        try { await onAdminActivated(res, res.requestId); } catch (ae) {
-                            console.warn('[LicenseCheck] 立即领码异常，退回 startPolling 兜底:', ae.message);
+                    // ★ 2026-09-03 (架构统一 P2 客户端收敛): 提交成功统一走 ActivationObserver
+                    //   三通道持久化 + 0s 立即领码(shortCircuitResult) + 之后 5s 轮询兜底。
+                    //   不再各写"StorageAdapter.setItem + 立即领码 + startPolling"三段代码，
+                    //   这三段代码（offline/cloud 双份，今天算第 5 次改了）全下沉到 Observer。
+                    if (currentActivationObserver) { try { currentActivationObserver.stop(); } catch(_) {} currentActivationObserver = null; }
+                    const OBS = global.ObserveActivationStatus || (global.window && global.window.ObserveActivationStatus);
+                    const useObserverNow = !!(OBS && typeof OBS === 'function');
+                    if (!useObserverNow) {
+                        // Observer 未加载 → 走旧 3 段代码（向后兼容，下一轮可删）
+                        try {
+                            const encPwd = await encryptSensitive(state.password || '');
+                            if (!encPwd && (state.password || '').trim()) {
+                                console.warn('[LicenseCheck] adminReqPending 密码加密失败，仍存 requestId/phone 但不存密码（恢复时密码退默认 admin）');
+                            }
+                            StorageAdapter.setItem('license:adminReqPending', JSON.stringify({
+                                requestId: res.requestId,
+                                phone: (state.phone || '').trim(),
+                                adminName: (state.adminName || '').trim(),
+                                clinicName: (state.clinicName || '').trim(),
+                                passwordEnc: encPwd,
+                                machineId: (typeof machineId !== 'undefined' && machineId) ? String(machineId) : '',
+                                at: Date.now()
+                            }));
+                        } catch (pe) { console.warn('[LicenseCheck] adminReqPending 持久化失败(不影响提交):', pe); }
+                        if (res.status === 'activated' && res.license) {
+                            clearInterval(pollTimer); pollTimer = null;
+                            console.log('[LicenseCheck] admin-submit 已返回 activated+license，立即领码（不等 startPolling 5s 延迟）');
+                            try { await onAdminActivated(res, res.requestId); } catch (ae) {
+                                console.warn('[LicenseCheck] 立即领码异常，退回 startPolling 兜底:', ae.message);
+                                startPolling(res.requestId);
+                            }
+                        } else {
                             startPolling(res.requestId);
                         }
                     } else {
-                        startPolling(res.requestId);
+                        currentActivationObserver = OBS({
+                            requestId: res.requestId,
+                            machineId: typeof machineId !== 'undefined' ? machineId : '',
+                            phone: (state.phone || '').trim(),
+                            apiBase: ADMIN_STATUS_URL.replace('/admin-status', ''),
+                            shortCircuitResult: res,   // 若 res.status=activated → 0s 立即 emit activated
+                            persistPending: true,
+                            pollIntervalMs: 5000,
+                            maxPolls: 120,
+                            // adminReqPending password → observer 内部加密存三通道
+                            password: state.password || '',
+                            adminName: (state.adminName || '').trim(),
+                            clinicName: (state.clinicName || '').trim(),
+                            edition: state.edition || '',
+                            fetchAdminStatus: async function (url, params) {
+                                if (global.electronAPI && global.electronAPI.activate &&
+                                    typeof global.electronAPI.activate.checkAdminStatus === 'function') {
+                                    return global.electronAPI.activate.checkAdminStatus(params.requestId || '', params.machineId || '');
+                                }
+                                try {
+                                    const resp = await fetch(url, { method:'GET', headers:{'Content-Type':'application/json'} });
+                                    return await resp.json().catch(() => null);
+                                } catch (e) { console.warn('[activation-observer offline submit] fetch err', e); return null; }
+                            }
+                        });
+                        const statusEl = document.getElementById('adminWaitStatus');
+                        const msgs = ['正在等待管理员审核...','管理员正在处理您的请求...','正在验证您的信息...','即将完成激活...'];
+                        pollCount = 0;
+                        currentActivationObserver.on('status-change', function (s) {
+                            pollCount++;
+                            if (statusEl) statusEl.textContent = msgs[Math.min(Math.floor(pollCount/3), msgs.length-1)] +
+                                (pollCount > 3 ? '（已等待 ' + Math.floor(pollCount*5/60) + ' 分钟）' : '') +
+                                (s === 'pending_payment' ? ' [等待付款确认]' : '');
+                        });
+                        currentActivationObserver.on('activated', async function (payload) {
+                            try { await onAdminActivated(payload, payload.requestId || res.requestId); } catch (ae) {
+                                console.warn('[activation-observer offline submit] onActivated异常（仍继续轮询15s兜底）:', ae);
+                            }
+                        });
+                        currentActivationObserver.on('terminal', function (s, payload) {
+                            if (s === 'rejected') {
+                                document.getElementById('adminRejectReason').textContent = (payload && payload.reason) || '未知原因';
+                                show('adminRejected');
+                            }
+                        });
+                        currentActivationObserver.start();
+                        pollTimer = 0;  // 兼容旧代码 clearInterval(pollTimer) 安全
                     }
                 } else {
                     btn.disabled = false;
@@ -4157,46 +4206,86 @@
         }
 
         // 轮询（machineId 兜底：官网订单付款激活后本机自动检测到）
+        // ★ 2026-09-03 (架构统一 P2 客户端收敛): startPolling 兼容外壳；内部创建
+        //   ActivationObserver 统一委托：0s 立即 poll → 之后 5s 间隔 →
+        //   cancelled+有 machineId fallback 自救 → 三通道 resume/persist。
+        //   旧实现 setInterval(pollTimer) 不再直接用，observer 内部统一调度 pollCount。
         function startPolling(requestId) {
-            let count = 0;
+            if (currentActivationObserver) { try { currentActivationObserver.stop(); } catch (_) {} currentActivationObserver = null; }
             const statusEl = document.getElementById('adminWaitStatus');
             const msgs = ['正在等待管理员审核...','管理员正在处理您的请求...','正在验证您的信息...','即将完成激活...'];
-            pollTimer = setInterval(async function() {
-                count++;
-                if (statusEl) {
-                    statusEl.textContent = msgs[Math.min(Math.floor(count/3), msgs.length-1)] +
-                        (count > 3 ? '（已等待 ' + Math.floor(count*5/60) + ' 分钟）' : '');
-                }
-                let r = null;
-                try {
-                    // ★ 2026-08-30 桌面版 CORS 铁律分流：Electron 走 IPC checkAdminStatus(requestId, machineId)
-                    //   （离线桌面主进程 fetch，双参含 machineId 官网订单兜底）；离线APP 走直连 fetch
-                    //   （服务端 CORS 回退已放行 Origin: null）。
+            pollCount = 0;
+            const OBS = global.ObserveActivationStatus || (global.window && global.window.ObserveActivationStatus);
+            if (!OBS) {
+                console.warn('[LicenseCheck] ActivationObserver 未加载，退回旧 startPolling setInterval 兜底');
+                pollTimer = setInterval(async function() {
+                    pollCount++;
+                    if (statusEl) statusEl.textContent = msgs[Math.min(Math.floor(pollCount/3), msgs.length-1)] + (pollCount>3 ? '（已等待 ' + Math.floor(pollCount*5/60) + ' 分钟）' : '');
+                    let r = null;
+                    try {
+                        if (global.electronAPI && global.electronAPI.activate && typeof global.electronAPI.activate.checkAdminStatus === 'function') {
+                            r = await global.electronAPI.activate.checkAdminStatus(requestId, machineId || '');
+                        } else {
+                            let statusUrl = ADMIN_STATUS_URL + '?requestId=' + encodeURIComponent(requestId);
+                            if (machineId) statusUrl += '&machineId=' + encodeURIComponent(machineId);
+                            r = await fetch(statusUrl, {method:'GET',headers:{'Content-Type':'application/json'}}).then(resp => resp.json());
+                        }
+                    } catch (err) { console.warn('[LicenseCheck] admin-status 网络错误:', err); }
+                    if (r && r.success && r.status === 'activated') { clearInterval(pollTimer); pollTimer=null; await onAdminActivated(r, requestId); }
+                    else if (r && r.success && r.status === 'rejected') { clearInterval(pollTimer); pollTimer=null; document.getElementById('adminRejectReason').textContent = r.reason || '未知原因'; show('adminRejected'); }
+                    if (pollCount >= 120) { clearInterval(pollTimer); pollTimer=null; if (statusEl) statusEl.textContent = '⏰ 等待时间较长，管理员可能还在处理\n关闭窗口不影响审核'; }
+                }, 5000);
+                return;
+            }
+            // 新 ActivationObserver 统一委托
+            currentActivationObserver = OBS({
+                requestId: requestId,
+                machineId: typeof machineId !== 'undefined' ? machineId : '',
+                phone: (state.phone || '').trim(),
+                apiBase: ADMIN_STATUS_URL.replace('/admin-status', ''),
+                persistPending: true,
+                pollIntervalMs: 5000,
+                maxPolls: 120,
+                password: state.password || '',
+                adminName: (state.adminName || '').trim(),
+                clinicName: (state.clinicName || '').trim(),
+                // ★ KNOWLEDGE 第 8 章 desktop CORS 铁律：electron 渲染进程 file:// 走 IPC
+                fetchAdminStatus: async function (url, params) {
                     if (global.electronAPI && global.electronAPI.activate &&
                         typeof global.electronAPI.activate.checkAdminStatus === 'function') {
-                        r = await global.electronAPI.activate.checkAdminStatus(requestId, machineId || '');
-                    } else {
-                        let statusUrl = ADMIN_STATUS_URL + '?requestId=' + encodeURIComponent(requestId);
-                        if (machineId) statusUrl += '&machineId=' + encodeURIComponent(machineId);
-                        const resp = await fetch(statusUrl, {
-                            method: 'GET', headers: { 'Content-Type': 'application/json' }
-                        });
-                        r = await resp.json();
+                        return global.electronAPI.activate.checkAdminStatus(params.requestId || '', params.machineId || '');
                     }
-                } catch (err) { console.warn('[LicenseCheck] admin-status 网络错误:', err); }
-                if (r && r.success && r.status === 'activated') {
-                    clearInterval(pollTimer); pollTimer = null;
-                    await onAdminActivated(r, requestId);
-                } else if (r && r.success && r.status === 'rejected') {
-                    clearInterval(pollTimer); pollTimer = null;
-                    document.getElementById('adminRejectReason').textContent = r.reason || '未知原因';
+                    try {
+                        const resp = await fetch(url, { method:'GET', headers:{'Content-Type':'application/json'} });
+                        return await resp.json().catch(() => null);
+                    } catch (e) { console.warn('[activation-observer offline] fetch err', e); return null; }
+                }
+            });
+            currentActivationObserver.on('status-change', function (s /*, p */) {
+                pollCount++;
+                if (statusEl) {
+                    statusEl.textContent = msgs[Math.min(Math.floor(pollCount/3), msgs.length-1)] +
+                        (pollCount > 3 ? '（已等待 ' + Math.floor(pollCount*5/60) + ' 分钟）' : '') +
+                        (s === 'pending_payment' ? ' [等待付款确认]' : '');
+                }
+            });
+            currentActivationObserver.on('activated', async function (payload) {
+                try { await onAdminActivated(payload, payload.requestId || requestId); } catch (ae) {
+                    console.warn('[activation-observer offline] onActivated err', ae);
+                }
+            });
+            currentActivationObserver.on('terminal', function (s, payload) {
+                if (s === 'rejected') {
+                    document.getElementById('adminRejectReason').textContent = (payload && payload.reason) || '未知原因';
                     show('adminRejected');
                 }
-                if (count >= 120) {
-                    clearInterval(pollTimer); pollTimer = null;
-                    if (statusEl) statusEl.textContent = '⏰ 等待时间较长，管理员可能还在处理\n关闭窗口不影响审核';
-                }
-            }, 5000);
+            });
+            // Observer 启动时自动 0s 立即 poll（不再等待 setInterval 首 5s）→ 对 startPolling 传进来的
+            // requestId 也能 0s 就拉 admin-status → activated 也立即领到号
+            currentActivationObserver.start();
+            // 兼容旧代码 clearInterval(pollTimer) 的调用：使 pollTimer 指向一个伪句柄
+            // clearInterval 对非数字值不抛错（旧代码 L3727 L4129 等调用处安全）
+            pollTimer = 0;
         }
 
         async function onAdminActivated(r, requestId) {

@@ -34,6 +34,26 @@ $SourceDir = Join-Path $ProjectRoot 'shared\auth-core'
 # --- Fact sources -----------------------------------------------------------
 $OfflineSource = Join-Path $SourceDir 'offline.js'   # offline full (trial)
 $CloudSource   = Join-Path $SourceDir 'cloud.js'    # cloud (no trial)
+# 2026-09-03 ActivationObserver：客户端激活统一观察者（KNOWLEDGE 架构 P2 客户端收敛）。
+#   同步策略：把 observer 源码拼到 auth-core.js 文件头（prepend）→ 单文件
+#   全局变量 ObserveActivationStatus 可用，避免改任何 HTML <script> 引入顺序
+#   （KNOWLEDGE 铁律：禁止修改 HTML 结构/CSS）。
+$ObserverSource = Join-Path $ProjectRoot 'shared\service\activation-observer.js'
+$ObserverBanner = "/* PREPENDED activation-observer.js (see shared/service/activation-observer.js @ project root) */" + "`r`n"
+
+function New-PrependedSource {
+    param([string]$BaseSource, [string]$TmpPrefix)
+    $observerContent = [System.IO.File]::ReadAllText($ObserverSource, [System.Text.UTF8Encoding]::new($false))
+    $baseContent     = [System.IO.File]::ReadAllText($BaseSource, [System.Text.UTF8Encoding]::new($false))
+    $tmp = Join-Path $env:TEMP ($TmpPrefix + "-" + [System.IO.Path]::GetFileName($BaseSource) + "-with-observer-prepended.tmp.js")
+    $combined = $ObserverBanner + $observerContent + "`r`n`r`n" + $baseContent
+    [System.IO.File]::WriteAllText($tmp, $combined, [System.Text.UTF8Encoding]::new($false))
+    return $tmp
+}
+function Remove-PrependedTmp {
+    param([string]$TmpFile)
+    try { if ($TmpFile -and (Test-Path $TmpFile)) { Remove-Item -Path $TmpFile -Force -ErrorAction SilentlyContinue } } catch {}
+}
 
 # --- Targets (relative to project root, forward slashes for x-platform) -----
 $OfflineTargets = @(
@@ -175,13 +195,36 @@ if (-not (Test-Path $SourceDir)) {
 
 $allOk = $true
 
-$result = Sync-Group -GroupName 'OFFLINE offline.js -> 3 targets (trial edition)' -Source $OfflineSource -Targets $OfflineTargets -VerifyOnly $VerifyOnly
-if (-not $result) { $allOk = $false }
-Write-Host ""
+# ★ Prepare prepended temp sources (with activation-observer header)
+#   单文件 ObserveActivationStatus 全局生效 — 0 HTML 改动
+#   ★ VerifyOnly 模式同样构建 prepend 后的临时文件再对比（2026-09-03 交接修复：
+#     原 verify 用纯源 SHA 对比前置后目标 → 永远 DIFF → pre-push 三道校验被卡死）
+$tmpOffline = $null
+$tmpCloud   = $null
+$effectiveOffline = $OfflineSource
+$effectiveCloud   = $CloudSource
+if (Test-Path $ObserverSource) {
+    $tmpOffline = New-PrependedSource -BaseSource $OfflineSource -TmpPrefix 'offline'
+    $tmpCloud   = New-PrependedSource -BaseSource $CloudSource   -TmpPrefix 'cloud'
+    $effectiveOffline = $tmpOffline
+    $effectiveCloud   = $tmpCloud
+    Write-Host "[PREPEND] activation-observer.js -> auth-core header (0 HTML change enabled)"
+} else {
+    Write-Host "[WARN] Observer source missing at: $ObserverSource — sync without prepend (observer fallback to legacy setInterval paths)" -ForegroundColor Yellow
+}
 
-$result = Sync-Group -GroupName 'CLOUD cloud.js -> 8 targets (no trial)' -Source $CloudSource -Targets $CloudTargets -VerifyOnly $VerifyOnly
-if (-not $result) { $allOk = $false }
-Write-Host ""
+try {
+    $result = Sync-Group -GroupName 'OFFLINE offline.js -> 3 targets (trial edition)' -Source $effectiveOffline -Targets $OfflineTargets -VerifyOnly $VerifyOnly
+    if (-not $result) { $allOk = $false }
+    Write-Host ""
+
+    $result = Sync-Group -GroupName 'CLOUD cloud.js -> 8 targets (no trial)' -Source $effectiveCloud -Targets $CloudTargets -VerifyOnly $VerifyOnly
+    if (-not $result) { $allOk = $false }
+    Write-Host ""
+} finally {
+    Remove-PrependedTmp $tmpOffline
+    Remove-PrependedTmp $tmpCloud
+}
 
 # ============================================================================
 # Summary

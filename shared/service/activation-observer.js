@@ -272,17 +272,21 @@
             const q = {};
             if (requestId) q.requestId = requestId;
             if (machineId) q.machineId = machineId;
-            let data = null;
-            try {
-                const res = await fetch(this._statusUrl(q), { method: 'GET' });
-                data = await res.json().catch(() => null);
-            } catch (e) { console.warn('[activation-observer] poll fetch error', e); }
+            const doFetch = async (params) => {
+                if (typeof this.opts.fetchAdminStatus === 'function') {
+                    return this.opts.fetchAdminStatus(this._statusUrl(params), params);
+                }
+                try {
+                    const res = await fetch(this._statusUrl(params), { method: 'GET' });
+                    return await res.json().catch(() => null);
+                } catch (e) { console.warn('[activation-observer] poll fetch error', e); return null; }
+            };
+            let data = await doFetch(q);
             // 若读回来 status=cancelled 且有 phone → admin_phone 索引残留指向错记录
             // → fallback：只按 machineId 不带 requestId 重查一次（自救）
             if (data && data.success && data.status === 'cancelled' && machineId) {
                 try {
-                    const fb = await fetch(this._statusUrl({ machineId: machineId, phone: phone || '' }), { method: 'GET' });
-                    const fbData = await fb.json().catch(() => null);
+                    const fbData = await doFetch({ machineId: machineId, phone: phone || '' });
                     if (fbData && fbData.success && (fbData.status === 'activated' || fbData.status === 'pending')) {
                         data = fbData;
                     }
