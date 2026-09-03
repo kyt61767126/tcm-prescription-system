@@ -1,114 +1,114 @@
 {
     "local": {
         "apk": {
-            "version": "V1.0.0.210",
-            "versionCode": 210,
-            "sha256": "91ec7a16edd1e44b05e00ef871e97017d7e1fc6305c2c4f950bd708aa53fe8ab",
+            "version": "V1.0.0.211",
+            "versionCode": 211,
+            "sha256": "b1b1fe25bb3af70a5b6ade3bd302e981807b95dd4b8c6364ca028640f9ff4ab3",
             "url": "/downloads/惠康中医-本地.apk",
-            "releaseUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.03-0636/huikang-local.apk",
-            "size": 2921068,
-            "updateTime": "2026-09-02T22:42:27.213Z",
+            "releaseUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.03-1039/huikang-local.apk",
+            "size": 2921631,
+            "updateTime": "2026-09-03T02:51:12.050Z",
             "fileName": "惠康中医-本地.apk",
             "releaseFileName": "huikang-local.apk",
-            "releaseTag": "v2026.09.03-0636"
+            "releaseTag": "v2026.09.03-1039"
         },
         "portable": {
-            "version": "1.0.165",
-            "sha256": "81bb38c9a68decd32b44fa2924f86e0e9063d22518662394a1675a9779367ab0",
-            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.03-0636/huikang-local-1.0.165.exe",
-            "size": 78696184,
-            "updateTime": "2026-09-02T22:42:27.213Z",
-            "fileName": "惠康中医-本地 1.0.165.exe",
-            "releaseFileName": "huikang-local-1.0.165.exe",
-            "releaseTag": "v2026.09.03-0636"
+            "version": "1.0.166",
+            "sha256": "b2829444859e95c5851139a079b47ae673223a20249ff367c37065de80eef061",
+            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.03-1039/huikang-local-1.0.166.exe",
+            "size": 78695968,
+            "updateTime": "2026-09-03T02:51:12.050Z",
+            "fileName": "惠康中医-本地 1.0.166.exe",
+            "releaseFileName": "huikang-local-1.0.166.exe",
+            "releaseTag": "v2026.09.03-1039"
         },
         "exe": {
-            "version": "1.0.165",
-            "sha256": "9f3ff178693ce01935ddba087cda2c2cfa9a7aee3c6d677da38dc9dec58caea0",
-            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.03-0636/huikang-local-setup-1.0.165.exe",
-            "size": 78971136,
-            "updateTime": "2026-09-02T22:42:27.213Z",
-            "fileName": "惠康中医-本地 Setup 1.0.165.exe",
-            "releaseFileName": "huikang-local-setup-1.0.165.exe",
-            "releaseTag": "v2026.09.03-0636"
+            "version": "1.0.166",
+            "sha256": "8686318135458d1dc7a1638d437d34261a650d31d6c2eb4d517fe7aa3e6f5c4f",
+            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.03-1039/huikang-local-setup-1.0.166.exe",
+            "size": 78970848,
+            "updateTime": "2026-09-03T02:51:12.050Z",
+            "fileName": "惠康中医-本地 Setup 1.0.166.exe",
+            "releaseFileName": "huikang-local-setup-1.0.166.exe",
+            "releaseTag": "v2026.09.03-1039"
         }
     },
     "cloud": {
         "apk": {
-            "version": "V1.0.0.260",
-            "versionCode": 260,
-            "sha256": "830d0360ef462f4e25be2724a79c435ca7c48c98ac3c253607bd8204bd19edee",
+            "version": "V1.0.0.261",
+            "versionCode": 261,
+            "sha256": "ac726aa6b78a8263c3b63a1987d94cd60a8bbd426ddc5ea4f9256875951eac7f",
             "url": "/downloads/惠康中医-云端.apk",
-            "releaseUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.02-2127/huikang-cloud.apk",
-            "size": 12076578,
-            "updateTime": "2026-09-02T13:39:51.039Z",
+            "releaseUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.03-1039/huikang-cloud.apk",
+            "size": 12076481,
+            "updateTime": "2026-09-03T02:51:12.050Z",
             "fileName": "惠康中医-云端.apk",
             "releaseFileName": "huikang-cloud.apk",
-            "releaseTag": "v2026.09.02-2127"
+            "releaseTag": "v2026.09.03-1039"
         },
         "exe": {
-            "version": "1.2.202",
-            "sha256": "5a30c0f69848c46d5335e7cd83fc8ca91fd5ce12b1a60c9889763e0cd2c738ab",
-            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.02-2127/huikang-cloud-setup-1.2.202.exe",
-            "size": 81728912,
-            "updateTime": "2026-09-02T13:39:51.039Z",
-            "fileName": "惠康中医-云端 Setup 1.2.202.exe",
-            "releaseFileName": "huikang-cloud-setup-1.2.202.exe",
-            "releaseTag": "v2026.09.02-2127"
+            "version": "1.2.203",
+            "sha256": "653f1ea0e3c7e17a2b5708983b107d19fabfe4c26ebd47b44e32d9104ad35529",
+            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.03-1039/huikang-cloud-setup-1.2.203.exe",
+            "size": 81737440,
+            "updateTime": "2026-09-03T02:51:12.050Z",
+            "fileName": "惠康中医-云端 Setup 1.2.203.exe",
+            "releaseFileName": "huikang-cloud-setup-1.2.203.exe",
+            "releaseTag": "v2026.09.03-1039"
         },
         "portable": {
-            "version": "1.2.202",
-            "sha256": "c50850c93699b9e3fbe1d86e31d3f31b1c887c4b7a81b1aecd0cd7244a290ae9",
-            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.02-2127/huikang-cloud-1.2.202.exe",
-            "size": 81453976,
-            "updateTime": "2026-09-02T13:39:51.039Z",
-            "fileName": "惠康中医-云端 1.2.202.exe",
-            "releaseFileName": "huikang-cloud-1.2.202.exe",
-            "releaseTag": "v2026.09.02-2127"
+            "version": "1.2.203",
+            "sha256": "2e4d5346f0502165f12452e8616f9fc56b9735892ace9cb841a83901492915a1",
+            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.03-1039/huikang-cloud-1.2.203.exe",
+            "size": 81462504,
+            "updateTime": "2026-09-03T02:51:12.050Z",
+            "fileName": "惠康中医-云端 1.2.203.exe",
+            "releaseFileName": "huikang-cloud-1.2.203.exe",
+            "releaseTag": "v2026.09.03-1039"
         }
     },
     "provenance": {
         "schemaVersion": 1,
         "repo": "https://github.com/kyt61767126/tcm-prescription-system.git",
-        "commit": "5b2cf492e695",
+        "commit": "1b6174b21ba8",
         "ref": "main",
         "builder": "kyt61767126",
-        "builtAt": "2026-09-02T22:42:27.627Z",
+        "builtAt": "2026-09-03T02:51:12.363Z",
         "buildTool": "publish-release.js@v24.16.0",
-        "releaseTag": "v2026.09.03-0636"
+        "releaseTag": "v2026.09.03-1039"
     },
     "dingzhi": {
         "apk": {
-            "version": "V1.0.0.210",
-            "versionCode": 210,
-            "sha256": "91ec7a16edd1e44b05e00ef871e97017d7e1fc6305c2c4f950bd708aa53fe8ab",
+            "version": "V1.0.0.211",
+            "versionCode": 211,
+            "sha256": "b1b1fe25bb3af70a5b6ade3bd302e981807b95dd4b8c6364ca028640f9ff4ab3",
             "url": "/downloads/惠康中医-本地.apk",
-            "releaseUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.03-0636/huikang-local.apk",
-            "size": 2921068,
-            "updateTime": "2026-09-02T22:42:27.213Z",
+            "releaseUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.03-1039/huikang-local.apk",
+            "size": 2921631,
+            "updateTime": "2026-09-03T02:51:12.050Z",
             "fileName": "惠康中医-本地.apk",
             "releaseFileName": "huikang-local.apk",
-            "releaseTag": "v2026.09.03-0636"
+            "releaseTag": "v2026.09.03-1039"
         },
         "portable": {
-            "version": "1.0.165",
-            "sha256": "81bb38c9a68decd32b44fa2924f86e0e9063d22518662394a1675a9779367ab0",
-            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.03-0636/huikang-local-1.0.165.exe",
-            "size": 78696184,
-            "updateTime": "2026-09-02T22:42:27.213Z",
-            "fileName": "惠康中医-本地 1.0.165.exe",
-            "releaseFileName": "huikang-local-1.0.165.exe",
-            "releaseTag": "v2026.09.03-0636"
+            "version": "1.0.166",
+            "sha256": "b2829444859e95c5851139a079b47ae673223a20249ff367c37065de80eef061",
+            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.03-1039/huikang-local-1.0.166.exe",
+            "size": 78695968,
+            "updateTime": "2026-09-03T02:51:12.050Z",
+            "fileName": "惠康中医-本地 1.0.166.exe",
+            "releaseFileName": "huikang-local-1.0.166.exe",
+            "releaseTag": "v2026.09.03-1039"
         },
         "exe": {
-            "version": "1.0.165",
-            "sha256": "9f3ff178693ce01935ddba087cda2c2cfa9a7aee3c6d677da38dc9dec58caea0",
-            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.03-0636/huikang-local-setup-1.0.165.exe",
-            "size": 78971136,
-            "updateTime": "2026-09-02T22:42:27.213Z",
-            "fileName": "惠康中医-本地 Setup 1.0.165.exe",
-            "releaseFileName": "huikang-local-setup-1.0.165.exe",
-            "releaseTag": "v2026.09.03-0636"
+            "version": "1.0.166",
+            "sha256": "8686318135458d1dc7a1638d437d34261a650d31d6c2eb4d517fe7aa3e6f5c4f",
+            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.03-1039/huikang-local-setup-1.0.166.exe",
+            "size": 78970848,
+            "updateTime": "2026-09-03T02:51:12.050Z",
+            "fileName": "惠康中医-本地 Setup 1.0.166.exe",
+            "releaseFileName": "huikang-local-setup-1.0.166.exe",
+            "releaseTag": "v2026.09.03-1039"
         }
     }
 }
