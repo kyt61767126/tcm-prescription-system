@@ -1546,7 +1546,7 @@
             return { success: true, user };
         } catch (e) {
             console.error('登录异常:', e);
-            return { success: false, error: '登录失败：' + (e.message || '未知未知错误') };
+            return { success: false, error: '登录失败：' + (e.message || '未知错误') };
         }
     }
 
