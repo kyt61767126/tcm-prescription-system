@@ -3797,7 +3797,6 @@
                     document.getElementById('adminRequestNo').textContent = res.requestId;
                     document.getElementById('adminSavedPhone').textContent = state.phone;
                     show('adminWaiting');
-                    startPolling(res.requestId);
                     // ★ 2026-09-03 轮询断点续传（云端系同步）：持久化 requestId+手机号+加密密码
                     //   云端APP切后台被杀/窗口关闭→轮询中断时的领码恢复保障；桌面端 activate.js
                     //   有admin-request-id.dat持久化但云端网页/云端APP无——补平两端盲区。
@@ -3816,6 +3815,18 @@
                             at: Date.now()
                         }));
                     } catch (pe) { console.warn('[LicenseCheck] adminReqPending 持久化失败(不影响提交):', pe); }
+                    // ★ 2026-09-03 根治激活登录失败（Mate 70 实锤）：云端端同 offline.js
+                    //   admin-submit 已返回 activated+license 时立即领码，不等 startPolling 首 5s。
+                    if (res.status === 'activated' && res.license) {
+                        if (typeof pollTimer !== 'undefined' && pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+                        console.log('[LicenseCheck] 云端 admin-submit 已返回 activated+license，立即领码（不等 startPolling 5s 延迟）');
+                        try { await onAdminActivated(res, res.requestId); } catch (ae) {
+                            console.warn('[LicenseCheck] 云端立即领码异常，退回 startPolling 兜底:', ae.message);
+                            startPolling(res.requestId);
+                        }
+                    } else {
+                        startPolling(res.requestId);
+                    }
                 } else {
                     btn.disabled = false;
                     const msg = (res && res.error) ? res.error : '提交失败，请重试';

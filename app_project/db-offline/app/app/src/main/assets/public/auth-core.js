@@ -4096,7 +4096,6 @@
                     document.getElementById('adminRequestNo').textContent = res.requestId;
                     document.getElementById('adminSavedPhone').textContent = state.phone;
                     show('adminWaiting');
-                    startPolling(res.requestId);
                     // ★ 2026-09-03 轮询断点续传：持久化 requestId+手机号+密码。客户官网付款时
                     //   APP 切后台被杀/窗口关闭 → 轮询中断 → 重启后凭此自动恢复领码建号
                     //   （此前 APP 端 requestId 仅内存，已付款客户"激活成功却登录不上"根因；
@@ -4119,6 +4118,23 @@
                             at: Date.now()
                         }));
                     } catch (pe) { console.warn('[LicenseCheck] adminReqPending 持久化失败(不影响提交):', pe); }
+
+                    // ★ 2026-09-03 根治激活登录失败（Mate 70 实锤）：admin-submit 短路复用
+                    //   已激活申请时服务端直下发 license+licenseInfo，此处【立即】领码，
+                    //   不再等 startPolling 首 5s setInterval 到账。原时序致命 bug：
+                    //   startPolling 调度 setInterval(5000)，首次 poll ≥ 5s 后才执行
+                    //   admin-status → activated → onAdminActivated；用户 5s 内切后台/关
+                    //   弹窗 → onAdminActivated 永远不执行 → 本地永远不建号 → 登录必然失败。
+                    if (res.status === 'activated' && res.license) {
+                        clearInterval(pollTimer); pollTimer = null;
+                        console.log('[LicenseCheck] admin-submit 已返回 activated+license，立即领码（不等 startPolling 5s 延迟）');
+                        try { await onAdminActivated(res, res.requestId); } catch (ae) {
+                            console.warn('[LicenseCheck] 立即领码异常，退回 startPolling 兜底:', ae.message);
+                            startPolling(res.requestId);
+                        }
+                    } else {
+                        startPolling(res.requestId);
+                    }
                 } else {
                     btn.disabled = false;
                     const msg = (res && res.error) ? res.error : '提交失败，请重试';

@@ -255,11 +255,27 @@ export async function onRequest(context) {
                     console.warn('[AdminSubmit] 已激活申请密码归一化失败:', e.message);
                 }
                 console.log('[AdminSubmit] 手机号已有已激活申请，短路复用:', phone, existingActivated.requestId);
+                // ★ 2026-09-03 根治激活登录失败：客户端"重新提交激活"时服务端直接下发
+                //   license + licenseInfo(含phone)，客户端 onSubmitSuccess 立即
+                //   走 onAdminActivated 完成领码建号，不再依赖 startPolling 首 5 秒。
+                //   根因（现场实锤 Mate 70 / 15109308569，APP 212）：admin-submit 返回
+                //   success+status=activated，但 startPolling 用 setInterval(...,5000)，
+                //   首次 poll 至少 5s 后才触发；用户 5s 内切后台/关窗口 →
+                //   onAdminActivated 从未跑 → 本地从未建号 → 登录必然失败。
+                const li = {
+                    user: existingActivated.adminName || '',
+                    clinicName: existingActivated.clinicName || '',
+                    phone: existingActivated.phone || '',
+                    licenseCode: existingActivated.licenseCode || '',
+                    resolvedAt: existingActivated.resolvedAt || null
+                };
                 return json({
                     success: true,
                     status: 'activated',
                     requestId: existingActivated.requestId,
-                    message: '该手机号此前已激活，密码已重置为默认 admin，请返回登录框使用手机号登录'
+                    message: '已检测到该手机号激活授权，正在完成安装...',
+                    license: existingActivated.licenseBase64 || null,
+                    licenseInfo: li
                 });
             }
         }
@@ -339,13 +355,24 @@ export async function onRequest(context) {
             if (paid && paid.status === 'activated') {
                 // ★ 仅凭 machineId 命中"他人手机号"订单时，不做账号补开/密码归一化
                 //   （machineId 不可信，防接管，对齐 admin-status 2026-08-31 修复），
-                //   只复用 requestId 让客户端轮询 admin-status 自助领取 license。
-                console.log('[AdminSubmit] 命中已付款且已激活订单，复用:', paid.requestId);
+                //   但下发 license+licenseInfo（含手机号/激活码），客户端 submit 成功分支
+                //   检测到 status=activated 且有 license 立即执行 onAdminActivated，
+                //   不再依赖 startPolling 首 5s 不被用户打断。
+                console.log('[AdminSubmit] 命中已付款且已激活订单，复用+下发license:', paid.requestId);
+                const li2 = {
+                    user: paid.adminName || '',
+                    clinicName: paid.clinicName || '',
+                    phone: paid.phone || '',
+                    licenseCode: paid.licenseCode || '',
+                    resolvedAt: paid.resolvedAt || null
+                };
                 return json({
                     success: true,
                     status: 'activated',
                     requestId: paid.requestId,
-                    message: '该设备已完成付款并激活，正在校验'
+                    message: '已检测到该设备激活授权，正在完成安装...',
+                    license: paid.licenseBase64 || null,
+                    licenseInfo: li2
                 });
             }
             console.log('[AdminSubmit] 未检测到付款记录，拦截提交（请完成支付）:', phone);
