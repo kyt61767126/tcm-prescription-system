@@ -80,6 +80,26 @@ const ACTIVATION_CODE_GROUP_LENGTH = 4;
 const KV_LICENSE_PREFIX = 'license:';
 const KV_LICENSE_INDEX = 'system:license_index';
 
+// ——— 2026-09-03 (架构统一 P1) admin 激活索引常量：唯一副本供所有写端 API/Service 共享
+//     原 admin-submit.js / order-paid.js / admin-delete.js 各自内联一份，长度和漂移难维护
+const KV_ADMIN_REQ_INDEX = 'admin_req_index';
+
+// ——— 2026-09-03 共享 appendRequestIndex：全局 admin_req_index 入队唯一实现
+//     历史：admin-submit.js(L136) + order-paid.js(L72) 各一份内联副本，注释/大小都不一致。
+//     规则：unshift 到队首、不存在才追加、满 1000 截断队尾（后台列表不崩）。
+async function appendRequestIndex(kv, requestId) {
+    try {
+        const index = (await kv.get(KV_ADMIN_REQ_INDEX, 'json')) || [];
+        if (!index.includes(requestId)) {
+            index.unshift(requestId);
+            if (index.length > 1000) index.length = 1000;
+            await kv.put(KV_ADMIN_REQ_INDEX, JSON.stringify(index));
+        }
+    } catch (e) {
+        console.warn('[license-core appendRequestIndex] 更新失败:', e && e.message || e);
+    }
+}
+
 // ============================================================================
 //  工具函数
 // ============================================================================
@@ -1097,6 +1117,7 @@ export {
     buildLicenseData,
     encodeLicenseBase64,
     getKV,
+    appendRequestIndex,
     saveLicense,
     getLicense,
     updateLicense,

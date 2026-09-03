@@ -247,6 +247,34 @@
 
 ★ 2026-09-03（六，根治 Mate 70 / 15109308569 现场实锤时序 bug）：**客户未升级旧客户端（APP 212 等）仍可通过「管理员激活」表单重新提交实现即时恢复，不再依赖「≥ 5 秒不关窗口」**。**致命 bug = startPolling setInterval 首 5 秒延迟 + 复用已激活申请走 startPolling + 用户 5 秒内切后台/关弹窗 = onAdminActivated 永远不执行 + 本地永远无手机号账号 = 登录永远失败**（99% 激活复现客户都犯此：看见已激活就按返回/关闭/切别的应用）。**根治 3 处**：①admin-submit.js 已激活复用两条分支（findActivatedRequestForPhone 手机号命中 / findPaidOrderForPhoneOrMachine 已付款+activated 命中）直接在响应里下发完整 `license` + `licenseInfo{user,clinicName,phone,licenseCode,resolvedAt}`，不再只给 message 让客户端等轮询；②offline.js/cloud.js 提交成功分支检测 `res.status === 'activated' && res.license` 立即 `await onAdminActivated(res, requestId)`，不走 startPolling；异常才退 startPolling 5 秒兜底（旧包兼容）。③响应 message 改成操作指引「已检测到该手机号激活授权，正在完成安装...」，删除原有"密码重置为默认 admin"的误导话术（云端账号密码归一化 admin 仍在 onActivated 云端分支文本中说明，不混淆本地用户自己填的密码，本地仍用 state.password 建号）。铁律：**凡异步轮询（setInterval/setTimeout）做关键业务副作用（建号/装 license），必须在前置条件满足时（如服务端已告知 activated）立即同步执行，禁止依赖 N 秒后调度——setInterval 第一个执行永远是 T+N，这段窗口被用户操作打断就是永久 bug**；同理修复 startPolling 中 onAdminActivated 调用后下次轮询不会重复触发（已 clearInterval）幂等；服务端复用分支下发 license 安全=记录本身就绑定 machineId，下发内容和 admin-status 返回一致（admin-status 是公开接口，该 license+licenseInfo 仅下发到 phone/machineId 命中客户端+限流10次/小时，防滥用）。生效方式：服务端 admin-submit 随 push 自动部署**即刻生效（旧 APP 212 也能收益：APP 212 复用返回 activated 旧客户端仍会等 startPolling 但 poll 回来同样 onActivated；等用户 Mate 70 不操作满 5 秒也会自动装号；且新包提交立即领码）**；offline/cloud 双端 submit 立即领码随下版打包（收益更佳）。验证方式：curl 线上 admin-submit 用真实 payload → 返回 `success:true,status:activated,license:<非空>,licenseInfo.phone:15109308569`。
 
+★ 2026-09-03（七，统一全局付款→激活→登入架构收敛规范 = 盘点后落地的 P0/P1 根治铁律）
+**背景（盘点数据）**：7 个写端 API（admin-submit/order-submit/order-paid/admin-approve/admin-cancel/admin-delete/free-pass）曾各自直接写 `admin_req:` / `admin_phone:` / `admin_req_index` 三类索引键 → 典型事故：admin-cancel.js L81-L87 只改 status=cancelled **不动 admin_phone 索引** → 客户取消后用同手机号重新提交永久被短路到 cancelled 旧记录 → admin-status 永远 cancelled → 登不上。客户端 6 条独立读源（cloud/offline startPolling ×2 + submit 短路 ×2 + resumeAdminPendingRequest 仅云端有 + 双桌面 main.js IPC 签名不一致云端缺 machineId）→ 激活窗口 5s 内切后台永不领码。
+
+**架构三层收敛（唯一事实源 + 统一观察者 + IPC 对齐）**
+
+P0 立即修复（服务端随 push 自动部署，即刻生效）：
+1. 所有写端必须经过唯一写服务 `functions/api/license/_lib/license-write-service.js`：暴露 5 个原子函数 `createAdminRequest / updateAdminRequestStatus / cancelAdminRequest / deleteAdminRequest / markOrderPaid`。**禁止任何云函数直接 `KV.put/delete(admin_req: / admin_phone: / admin_req_index / order:)`。** 7 个 API 逐个迁移（本轮已迁：admin-cancel.js，下轮 order-paid/admin-approve/admin-submit/order-submit/admin-delete）。
+2. `cancelAdminRequest(kv, rid)` 内部**强制重建 admin_phone 索引**：从 admin_req_index 扫描该 phone 下最新非 cancelled 记录；无则 delete 索引。杜绝「手机号索引残留指向 cancelled」。
+
+P1 落地（服务端 + 客户端双端统一桥）：
+3. `appendRequestIndex` 工具从 admin-submit.js(L136) + order-paid.js(L72) 两份内联副本 → 下沉为 `functions/api/license/_lib/license-core.js` **唯一副本**，所有写端 import 调用。
+4. 客户端激活观察统一入口 `shared/service/activation-observer.js = ObserveActivationStatus({ requestId, machineId, phone, shortCircuitResult, persistPending })`。铁律：
+   - start() 内部**先三通道 resume**（localStorage.license:adminReqPending → IPC loadAdminRequestId → Capacitor Preferences），**再 0s 立即 poll 一次 admin-status**，然后才 setInterval(5000)。完全消除"首 5 秒窗口"。
+   - 如 submit 成功响应 `shortCircuitResult.status=activated && license` → 0s 立即 emit('activated')，不依赖轮询。
+   - admin-status 返回 cancelled 但有 machineId → 自动 machineId fallback 重查自救。
+   - 持久化 password 一律加密（ENC: safeStorage 优先，XORv2: 兜底，加密失败 fail-safe 不存明文）。
+   - activated 回调成功后调 completeAndClear() 把三通道持久化全清，避免下次重复装。
+5. 双桌面 IPC `license:check-admin-status` 签名对齐为 `(requestId, machineId)`：云端桌面 activate.js L498 与离线桌面完全一致，machineId 缺省内部取本机，返回 cancelled 自动 machineId fallback 自救。
+6. 双桌面 main.js `app.whenReady()` 启动断点续传统一：创建登录窗口前 10s 超时自检，loadAdminRequestId → checkAdminStatus(双参) → activated → safeStorage 解密 ENC:/XORv2: password → licenseManager.installLicense → 版本校正 → clearAdminRequestId，失败不阻断交渲染进程 observer 兜底（云端桌面本轮新补齐，之前完全没有）。
+
+P2 渐进迁移（下轮做，避免本轮改过大）：
+- 7 写端剩余 5 API 全迁 license-write-service；offline/cloud auth-core submit+startPolling+resume 三处收敛到 activation-observer；双 desktop login.js + public/index.html handleLogin 统一 loginWithUsernamePassword 路由。
+
+**生效方式**：服务端 license-write-service+admin-cancel 随 Pages push 自动部署（即刻生效，旧包可用）；客户端 activation-observer.js 及双桌面 main.js/activate.js 改动需桌面重打包（云端/离线）+ APP 重打包 + 鸿蒙 rawfile 同步。
+
+**验证口径**（本轮 P0 服务端已部署可 curl 验证）：
+- 造一条 pending 新申请 → 调 admin-cancel → 读 KV admin_phone:{phone} 应指向其他 pending/activated 记录或已 delete，不应仍指向被取消的 rid。
+
 ## 8. 桌面版技术规范
 
 * **桌面版云端 HTTP 必须走主进程**（file:// 直连被 CORS 拦截，Origin: null 不在白名单，fetch 静默 TypeError）：IPC 代理或 activate.js 内 fetch。APP 端 <http://localhost> 在白名单可直连。新增桌面版云端接口沿用 postInviteQuery 分流模式。

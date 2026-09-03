@@ -491,9 +491,18 @@ async function submitAdminRequest(data) {
 }
 
 // ★ 管理员激活状态轮询
-async function checkAdminStatus(requestId) {
+// ★ 2026-09-03 (架构统一 P1) IPC 签名对齐: (requestId, machineId) 双参数，
+//   与离线桌面 activate.js 保持一致；machineId 缺省时走本机 getMachineId()
+//   目的: 当 admin_phone 索引残留指向 cancelled 记录时，能按 machineId fallback
+//   扫描扫回真实 activated 记录（云端桌面之前完全没有这个兜底缺口）。
+async function checkAdminStatus(requestId, machineId) {
     try {
-        const url = `https://tcm-prescription-system.pages.dev/api/license/admin-status?requestId=${encodeURIComponent(requestId)}`;
+        const mid = machineId || getMachineId();
+        const params = new URLSearchParams();
+        if (requestId) params.set('requestId', requestId);
+        if (mid) params.set('machineId', mid);
+        const qs = params.toString();
+        const url = `https://tcm-prescription-system.pages.dev/api/license/admin-status${qs ? '?' + qs : ''}`;
         
         const fetchPromise = async () => {
             const controller = new AbortController();
@@ -515,6 +524,17 @@ async function checkAdminStatus(requestId) {
         });
 
         const result = await Promise.race([fetchPromise(), timeoutPromise]);
+
+        // ★ 如果只读回来 cancelled，说明 admin_phone 索引指错了 → 只按 machineId 再查一次自救
+        if (result && result.success && result.status === 'cancelled' && mid) {
+            try {
+                const fallbackUrl = `https://tcm-prescription-system.pages.dev/api/license/admin-status?machineId=${encodeURIComponent(mid)}`;
+                const fb = await fetch(fallbackUrl, { method: 'GET', headers: { 'Content-Type': 'application/json' } }).then(r => r.json());
+                if (fb && fb.success && (fb.status === 'activated' || fb.status === 'pending')) {
+                    return fb;
+                }
+            } catch (_) { /* ignore fallback */ }
+        }
 
         return result;
     } catch (e) {

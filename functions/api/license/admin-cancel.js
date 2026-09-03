@@ -11,6 +11,7 @@
 // ============================================================================
 
 import { getKV } from './_lib/license-core.js';
+import { cancelAdminRequest } from './_lib/license-write-service.js';
 
 const ALLOWED_ORIGINS = [
     'https://tcm-prescription-system.pages.dev',
@@ -77,16 +78,19 @@ export async function onRequest(context) {
             return json({ success: true, message: '请求不存在或已清除' }, 200, origin);
         }
 
-        // 仅 pending 状态允许取消，其他状态直接返回成功（幂等）
-        if (record.status === 'pending') {
-            record.status = 'cancelled';
-            record.resolvedAt = new Date().toISOString();
-            record.resolvedBy = 'client';
-            await kv.put(KV_ADMIN_REQ_PREFIX + requestId, JSON.stringify(record));
-            console.log('[AdminCancel] 请求已取消:', requestId);
+        // ★ 2026-09-03 P0 根治：通过 license-write-service.cancelAdminRequest 统一写入
+        //   原实现只改 admin_req.status = 'cancelled'，不维护 admin_phone 索引 +
+        //   不重建 → 同手机号重新提交永远被短路到 cancelled 旧记录 → 永登不上
+        const result = await cancelAdminRequest(kv, requestId);
+        if (result && result.cancelled) {
+            console.log('[AdminCancel] 通过 Service 取消(三索引同步):', requestId, 'rebuildPhoneIndex=true');
+        } else if (result && result.reason && result.reason.startsWith('status_not_cancellable')) {
+            console.log('[AdminCancel] 状态不可取消, 直接返回当前状态(幂等):', requestId, record.status);
+        } else if (result) {
+            console.log('[AdminCancel] Service 返回:', requestId, JSON.stringify(result));
         }
 
-        return json({ success: true, status: record.status }, 200, origin);
+        return json({ success: true, status: (result && result.record ? result.record.status : record.status) }, 200, origin);
 
     } catch (error) {
         console.error('Admin cancel error:', error);

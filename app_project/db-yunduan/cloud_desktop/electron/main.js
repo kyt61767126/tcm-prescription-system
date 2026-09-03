@@ -1247,14 +1247,80 @@ app.whenReady().then(async () => {
     });
 
     // ★ 云端版流程：未激活时先弹激活窗口，已激活直接进登录
+    // ★ 2026-09-03 (架构统一 P1) 启动断点续传补齐（离线桌面在 main.js L1453-L1515 已有，云端桌面缺，
+    //   原 admin-status 查激活无 machineId 兜底 → 漏扫）— 统一: 创建登录窗口前 10s 超时自检
     if (!_isLicensed) {
-        console.log('[Cloud] 未激活，先显示激活窗口');
-        createLoginWindow();
-        setTimeout(() => {
-            if (loginWindow && !loginWindow.isDestroyed()) {
-                activateManager.showActivateWindow(loginWindow);
+        console.log('[Cloud] 未激活，启动断点续传 10s 自检 + 再显示登录+激活窗口');
+        let _resumeDone = false;
+        const _resumeTimeout = setTimeout(() => {
+            if (_resumeDone) return;
+            console.log('[Cloud] 启动断点续传 10s 超时，直接进入登录流程（渲染进程再兜底）');
+            _resumeDone = true;
+            createLoginWindow();
+            setTimeout(() => {
+                if (loginWindow && !loginWindow.isDestroyed()) activateManager.showActivateWindow(loginWindow);
+            }, 500);
+        }, 10000);
+        try {
+            const savedReq = await activateManager.loadAdminRequestId();
+            const localMachineId = activateManager.getMachineId();
+            if (savedReq && savedReq.requestId) {
+                console.log('[Cloud] 启动断点续传命中 requestId:', savedReq.requestId, 'machineId fallback=', localMachineId ? 'YES' : 'no');
+                const statusRes = await activateManager.checkAdminStatus(savedReq.requestId, localMachineId);
+                if (statusRes && statusRes.success && statusRes.status === 'activated' && statusRes.license) {
+                    clearTimeout(_resumeTimeout);
+                    try {
+                        const edition = (savedReq.edition) ? savedReq.edition : 'cloud_personal';
+                        const doctorName = (savedReq.adminName || statusRes.licenseInfo && statusRes.licenseInfo.user || 'admin');
+                        const clinicName = (savedReq.clinicName || statusRes.licenseInfo && statusRes.licenseInfo.clinicName || '云端诊所');
+                        const phone = (savedReq.phone || statusRes.licenseInfo && statusRes.licenseInfo.phone || '');
+                        // savedReq.password 是 activation-observer 写的 ENC:/XORv2: 加密串，主进程 safeStorage 解
+                        let pwd = 'admin';
+                        if (savedReq.password && typeof savedReq.password === 'string') {
+                            try {
+                                if (savedReq.password.startsWith('ENC:')) {
+                                    const body = savedReq.password.slice(4);
+                                    if (safeStorage && safeStorage.isEncryptionAvailable()) pwd = safeStorage.decryptString(Buffer.from(body, 'base64'));
+                                } else if (savedReq.password.startsWith('XORv2:')) {
+                                    const body = savedReq.password.slice(6);
+                                    const out = Buffer.from(body, 'base64').toString('binary');
+                                    const key = 'act_observer_v1_xor_fallback_key';
+                                    let s = '';
+                                    for (let i = 0; i < out.length; i++) s += String.fromCharCode(out.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+                                    pwd = s;
+                                } else {
+                                    pwd = savedReq.password;  // 历史兼容
+                                }
+                            } catch (_) { pwd = 'admin'; }
+                        }
+                        const inst = await licenseManager.installLicense(statusRes.license, {
+                            machineId: localMachineId, doctorName, clinicName, phone, password: pwd, edition
+                        });
+                        if (inst && inst.success) {
+                            const recheck = licenseManager.validateLicense({ localMachineId });
+                            if (recheck && recheck.valid) {
+                                const bind = licenseManager.enforceEditionBinding();
+                                if (bind && bind.corrected) console.log('[Cloud] 启动断点续传版本校正', bind.edition);
+                            }
+                            activateManager.clearAdminRequestId();
+                            console.log('[Cloud] 启动断点续传成功: 自动装号+建本地账号', phone, '->', inst);
+                        } else {
+                            console.warn('[Cloud] 启动断点续传 installLicense 失败，交渲染兜底', inst);
+                        }
+                    } catch (e) {
+                        console.warn('[Cloud] 启动断点续传 activated 分支异常（不阻断）:', e.message);
+                    }
+                }
             }
-        }, 500);
+        } catch (e) { console.warn('[Cloud] 启动断点续传全局异常（不阻断）:', e.message); }
+        if (!_resumeDone) {
+            clearTimeout(_resumeTimeout);
+            _resumeDone = true;
+            createLoginWindow();
+            setTimeout(() => {
+                if (loginWindow && !loginWindow.isDestroyed()) activateManager.showActivateWindow(loginWindow);
+            }, 500);
+        }
     } else {
         createLoginWindow();
     }
@@ -1525,9 +1591,11 @@ ipcMain.handle('license:submit-ticket', async (event, payload) => {
 });
 
 // ★ 管理员一键激活 - 检查激活状态
-ipcMain.handle('license:check-admin-status', async (event, requestId) => {
+// ★ 2026-09-03 (架构统一 P1) IPC 签名对齐: (requestId, machineId) 双参数, 与离线桌面完全一致
+//   machineId 缺省时 activateManager 内部会取本机 getMachineId() 兜底（防索引指向错记录）
+ipcMain.handle('license:check-admin-status', async (event, requestId, machineId) => {
     try {
-        const result = await activateManager.checkAdminStatus(requestId);
+        const result = await activateManager.checkAdminStatus(requestId, machineId);
         return result;
     } catch (e) {
         console.error('[IPC] check-admin-status 异常:', e);
