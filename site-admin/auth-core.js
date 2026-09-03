@@ -191,6 +191,59 @@
         }
     }
 
+    // ==================== 敏感信息加密（license:adminReqPending 密码明文风险修复）
+    //   桌面优先 electronAPI.safeStorage（DPAPI/Keychain），APP 退 XOR +
+    //   btoa + 前缀标记；无桥时同样退 XOR（localStorage 不存明文密码——桌面 userData
+    //   / APP 沙箱被拿到即可直接读）。加密失败仍不持久化明文（fail-safe）。
+    //   ★ 2026-09-03 安全审查补漏：之前修复把激活弹窗自设 password 明文直接写
+    //   localStorage.license:adminReqPending = 可离线读客户密码。
+    const _SENS_SALT = 'bnzc_admin_req_sens_salt_v1';
+    function _sensXor(text, decode) {
+        if (!text) return '';
+        let result = '';
+        for (let i = 0; i < text.length; i++) {
+            result += String.fromCharCode(text.charCodeAt(i) ^ _SENS_SALT.charCodeAt(i % _SENS_SALT.length));
+        }
+        return result;
+    }
+    async function encryptSensitive(value) {
+        if (value == null || value === '') return '';
+        try {
+            const api = (global.electronAPI || {});
+            if (api && typeof api.safeStorageAvailable === 'function' &&
+                typeof api.encryptString === 'function') {
+                const ok = await api.safeStorageAvailable();
+                if (ok) {
+                    const r = await api.encryptString(String(value));
+                    if (r) return 'ENC:' + r; // electron preload 已 prefix ENC:，这里再加=安全双保险
+                }
+            }
+        } catch (e) { /* bridge 不可用，退本地 XOR */ }
+        try {
+            return 'XORv2:' + btoa(unescape(encodeURIComponent(_sensXor(String(value), false))));
+        } catch (e) { return ''; }
+    }
+    async function decryptSensitive(enc) {
+        if (!enc || typeof enc !== 'string') return '';
+        try {
+            if (enc.startsWith('ENC:')) {
+                const rest = enc.substring(4);
+                const inner = rest.startsWith('ENC:') ? rest.substring(4) : rest;
+                const api = (global.electronAPI || {});
+                if (api && typeof api.decryptString === 'function') {
+                    const r = await api.decryptString(inner);
+                    if (r) return r;
+                }
+                return ''; // safeStorage 失败，绝不尝试本地解密（加密绑定系统账号）
+            }
+            if (enc.startsWith('XORv2:')) {
+                const cipher = decodeURIComponent(escape(atob(enc.substring(6))));
+                return _sensXor(cipher, true);
+            }
+        } catch (e) { return ''; }
+        return '';
+    }
+
     // ==================== 密码加密层 ====================
 
     // 纯 JS SHA-256 降级实现（WebView 中 crypto.subtle 不可用时使用）
@@ -3745,6 +3798,24 @@
                     document.getElementById('adminSavedPhone').textContent = state.phone;
                     show('adminWaiting');
                     startPolling(res.requestId);
+                    // ★ 2026-09-03 轮询断点续传（云端系同步）：持久化 requestId+手机号+加密密码
+                    //   云端APP切后台被杀/窗口关闭→轮询中断时的领码恢复保障；桌面端 activate.js
+                    //   有admin-request-id.dat持久化但云端网页/云端APP无——补平两端盲区。
+                    try {
+                        const encPwd = await encryptSensitive(state.password || '');
+                        if (!encPwd && (state.password || '').trim()) {
+                            console.warn('[LicenseCheck] adminReqPending 密码加密失败，仍存 requestId/phone 但不存密码（恢复时密码退默认 admin）');
+                        }
+                        StorageAdapter.setItem('license:adminReqPending', JSON.stringify({
+                            requestId: res.requestId,
+                            phone: (state.phone || '').trim(),
+                            adminName: (state.adminName || '').trim(),
+                            clinicName: (state.clinicName || '').trim(),
+                            passwordEnc: encPwd,
+                            machineId: (typeof machineId !== 'undefined' && machineId) ? String(machineId) : '',
+                            at: Date.now()
+                        }));
+                    } catch (pe) { console.warn('[LicenseCheck] adminReqPending 持久化失败(不影响提交):', pe); }
                 } else {
                     btn.disabled = false;
                     const msg = (res && res.error) ? res.error : '提交失败，请重试';
@@ -3814,8 +3885,37 @@
             //   此调用在 localStorage 写入，配合 restartApp 改 app.quit() 优雅退出确保落盘。
             setCloudActivationDone();
             hideActivateLoginEntry();
+
+            // ★ 2026-09-03 恢复场景参数兜底（云端 APP/桌面断点续传场景 state 为空时建号防跳过）
+            //   云端APP虽登录走后端API，但 adminStatus 响应 licenseInfo 补 phone 可正确显示
+            //   adminSuccessPhone；桌面端 installAdminLicense 需 phone+password 正确传才能建号。
+            let _resPhone = (state.phone || '').trim();
+            let _resName = (state.adminName || '').trim();
+            let _resPwd = state.password || '';
+            let _resClinic = (state.clinicName || '').trim();
+            if (!_resPhone || !_resPwd) {
+                try {
+                    const _saved = JSON.parse((await StorageAdapter.getItem('license:adminReqPending')) || 'null');
+                    if (_saved && typeof _saved === 'object') {
+                        if (!_resPhone && _saved.phone) _resPhone = String(_saved.phone).trim();
+                        if (!_resPwd && typeof _saved.passwordEnc === 'string' && _saved.passwordEnc) {
+                            _resPwd = await decryptSensitive(_saved.passwordEnc);
+                        }
+                        if (!_resPwd && typeof _saved.password === 'string') {
+                            _resPwd = String(_saved.password); // 兼容老明文
+                        }
+                        if (!_resName && _saved.adminName) _resName = String(_saved.adminName).trim();
+                        if (!_resClinic && _saved.clinicName) _resClinic = String(_saved.clinicName).trim();
+                    }
+                } catch (se) { console.warn('[LicenseCheck] onAdminActivated 读取持久化申请失败(兜底跳过):', se); }
+            }
+            if (!_resPhone && r && r.licenseInfo && r.licenseInfo.phone) {
+                _resPhone = String(r.licenseInfo.phone).trim();
+            }
+
             const license = r.license || '';
-            const phone = state.phone;
+            const phone = _resPhone || (state.phone || '');
+            const pwd = _resPwd || 'admin';
             const descEl = document.getElementById('adminSuccessDesc');
             document.getElementById('adminSuccessPhone').textContent = phone;
             // 离线 APP：本地安装 license + 重启；云端 APP（无 installAdminLicense）：账号已在云端创建，提示登录
@@ -3824,9 +3924,9 @@
                 try {
                     const inst = await global.electronAPI.activate.installAdminLicense({
                         license: license,
-                        adminName: state.adminName,
-                        clinicName: state.clinicName,
-                        password: state.password || 'admin',
+                        adminName: _resName || state.adminName,
+                        clinicName: _resClinic || state.clinicName,
+                        password: pwd,
                         phone: phone
                     });
                     if (inst && inst.success) {
@@ -3838,6 +3938,7 @@
                                 try { global.electronAPI.activate.restart(); } catch(e){}
                             }
                         };
+                        try { StorageAdapter.removeItem('license:adminReqPending'); } catch (ce2) {}
                     } else {
                         descEl.innerHTML = '激活已通过，但本地写入失败：' + ((inst && inst.error) || '未知错误') + '<br>请将机器ID发给客服人工激活';
                         show('adminSuccess');
@@ -3848,11 +3949,16 @@
                 }
             } else {
                 // 云端 APP / 无本地安装桥：账号已在云端创建，用手机号登录即可
-                descEl.innerHTML = '管理员已通过您的激活申请<br>请返回登录框，使用手机号登录';
+                // ★ 2026-09-03 说明：云端密码由服务端 normalizeActivationPassword 归一化为 admin
+                //   （防止激活弹窗自设密码在云端与本地产生认知错位），显式告知用户。
+                descEl.innerHTML = '管理员已通过您的激活申请<br>请返回登录框，使用手机号登录' +
+                    (pwd && pwd !== 'admin' ? ('（云端默认密码 admin，激活弹窗自设密码仅本地端生效）') : '');
                 show('adminSuccess');
                 document.getElementById('adminSuccessBtn').textContent = '✅ 好的';
-                document.getElementById('adminSuccessBtn').onclick = function() { cleanup(); };
-                // ★ 2026-08-22 setCloudActivationDone/hideActivateLoginEntry 已移至本函数开头统一执行
+                document.getElementById('adminSuccessBtn').onclick = function() {
+                    try { StorageAdapter.removeItem('license:adminReqPending'); } catch (e2) {}
+                    cleanup();
+                };
             }
         }
 
@@ -3890,8 +3996,84 @@
         if (clinicName) document.getElementById('adminClinicName').value = clinicName;
     }
 
+    // ★ 2026-09-03 管理员激活断点续传（云端系）：启动时检测持久化申请是否已审核通过
+    //   并自动完成安装/收尾。与 offline.js 同构，仅云端分支 installAdminLicense 本地安装走桥，
+    //   纯网页无桥则只收尾（设激活完成标记+提示登录）。
+    async function _cloudResumeCompleteActivation(r, saved) {
+        var phone = (saved && saved.phone) ? String(saved.phone).trim() : '';
+        var rPhone = (r && r.licenseInfo && r.licenseInfo.phone) ? String(r.licenseInfo.phone).trim() : '';
+        if (!phone && rPhone) phone = rPhone;
+        var pwd = '';
+        try {
+            if (saved && typeof saved.passwordEnc === 'string' && saved.passwordEnc) {
+                pwd = await decryptSensitive(saved.passwordEnc);
+            }
+            if (!pwd && saved && typeof saved.password === 'string') pwd = String(saved.password || '');
+        } catch (e) { pwd = ''; }
+        var adminName = (saved && saved.adminName) ? String(saved.adminName || '').trim() : '';
+        var clinicName = (saved && saved.clinicName) ? String(saved.clinicName || '').trim() : '';
+        const license = (r && r.license) ? r.license : '';
+        var installed = true;
+        try { setCloudActivationDone(); } catch (e2) {}
+        try { hideActivateLoginEntry(); } catch (e2) {}
+        if (global.electronAPI && global.electronAPI.activate &&
+            typeof global.electronAPI.activate.installAdminLicense === 'function' && license) {
+            try {
+                const inst = await global.electronAPI.activate.installAdminLicense({
+                    license: license, adminName: adminName, clinicName: clinicName,
+                    password: pwd || 'admin', phone: phone
+                });
+                installed = !!(inst && inst.success);
+            } catch (e) { installed = false; }
+        }
+        try { StorageAdapter.removeItem('license:adminReqPending'); } catch (ce2) {}
+        if (!installed) {
+            try { alert('激活已通过，但本地写入失败。请打开「管理员激活」重新提交手机号即可自动完成激活。'); } catch (e) {}
+            return;
+        }
+        if (global.electronAPI && global.electronAPI.activate &&
+            typeof global.electronAPI.activate.installAdminLicense === 'function') {
+            try { alert('您的激活申请已审核通过，授权已自动安装到本机。\n\n' +
+                (phone ? ('📱 登录账号：' + phone + '\n') : '') +
+                '🔑 登录密码：' + (pwd || 'admin（默认）') + '\n\n请重启应用后使用手机号登录。'); } catch (e) {}
+        } else {
+            try { alert('您的激活申请已审核通过！\n\n' + (phone ? ('📱 登录账号：' + phone + '\n') : '') +
+                '🔑 登录密码：admin（云端默认，账号已在平台创建）\n\n请返回登录框使用手机号登录。'); } catch (e) {}
+        }
+    }
+
+    function resumeAdminPendingRequest() {
+        try {
+            StorageAdapter.getItem('license:adminReqPending').then(function (savedRaw) {
+                if (!savedRaw) return;
+                var saved = null;
+                try { saved = JSON.parse(savedRaw); } catch (e) { return; }
+                if (!saved || !saved.requestId) return;
+                var url = ADMIN_STATUS_URL + '?requestId=' + encodeURIComponent(saved.requestId);
+                if (saved.machineId) url += '&machineId=' + encodeURIComponent(saved.machineId);
+                fetch(url, { method: 'GET', headers: { 'Content-Type': 'application/json' } })
+                    .then(function (resp) { return resp.json(); })
+                    .then(function (r) {
+                        if (r && r.success && r.status === 'activated') {
+                            console.log('[LicenseCheck] 云端断点续传：激活申请已审核通过，自动收尾（requestId=' + saved.requestId + '）');
+                            _cloudResumeCompleteActivation(r, saved).catch(function (ae) {
+                                console.warn('[LicenseCheck] 云端断点续传异常:', ae);
+                            });
+                        }
+                    })
+                    .catch(function (e) {
+                        console.warn('[LicenseCheck] 云端断点续传状态查询失败(下次启动再试):', e);
+                    });
+            }).catch(function (e) { /* 忽略 */ });
+        } catch (e) {
+            console.warn('[LicenseCheck] 云端断点续传异常(不影响使用):', e);
+        }
+    }
+
     // 页面加载完成后延迟 2 秒校验 license（等待 electronAPI 注入完成）
     function startLicenseCheck() {
+        // ★ 2026-09-03 断点续传恢复（云端端补平）
+        resumeAdminPendingRequest();
         // ★ 登录框诊所名：不依赖授权检查异步链路，随授权检查启动时立即同步。
         //   避免 await checkLicenseAndShowActivate 在非 APP/弱网下阻塞或中断，导致登录框一直显示硬编码"本能堂中医诊所"
         syncLoginClinicName();

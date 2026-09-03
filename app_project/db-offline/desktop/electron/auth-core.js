@@ -191,6 +191,59 @@
         }
     }
 
+    // ==================== 敏感信息加密（license:adminReqPending 密码明文风险修复）
+    //   桌面优先 electronAPI.safeStorage（DPAPI/Keychain），APP 退 XOR +
+    //   btoa + 前缀标记；无桥时同样退 XOR（localStorage 不存明文密码——桌面 userData
+    //   / APP 沙箱被拿到即可直接读）。加密失败仍不持久化明文（fail-safe）。
+    //   ★ 2026-09-03 安全审查补漏：之前修复把激活弹窗自设 password 明文直接写
+    //   localStorage.license:adminReqPending = 可离线读客户密码。
+    const _SENS_SALT = 'bnzc_admin_req_sens_salt_v1';
+    function _sensXor(text, decode) {
+        if (!text) return '';
+        let result = '';
+        for (let i = 0; i < text.length; i++) {
+            result += String.fromCharCode(text.charCodeAt(i) ^ _SENS_SALT.charCodeAt(i % _SENS_SALT.length));
+        }
+        return result;
+    }
+    async function encryptSensitive(value) {
+        if (value == null || value === '') return '';
+        try {
+            const api = (global.electronAPI || {});
+            if (api && typeof api.safeStorageAvailable === 'function' &&
+                typeof api.encryptString === 'function') {
+                const ok = await api.safeStorageAvailable();
+                if (ok) {
+                    const r = await api.encryptString(String(value));
+                    if (r) return 'ENC:' + r; // electron preload 已 prefix ENC:，这里再加=安全双保险
+                }
+            }
+        } catch (e) { /* bridge 不可用，退本地 XOR */ }
+        try {
+            return 'XORv2:' + btoa(unescape(encodeURIComponent(_sensXor(String(value), false))));
+        } catch (e) { return ''; }
+    }
+    async function decryptSensitive(enc) {
+        if (!enc || typeof enc !== 'string') return '';
+        try {
+            if (enc.startsWith('ENC:')) {
+                const rest = enc.substring(4);
+                const inner = rest.startsWith('ENC:') ? rest.substring(4) : rest;
+                const api = (global.electronAPI || {});
+                if (api && typeof api.decryptString === 'function') {
+                    const r = await api.decryptString(inner);
+                    if (r) return r;
+                }
+                return ''; // safeStorage 失败，绝不尝试本地解密（加密绑定系统账号）
+            }
+            if (enc.startsWith('XORv2:')) {
+                const cipher = decodeURIComponent(escape(atob(enc.substring(6))));
+                return _sensXor(cipher, true);
+            }
+        } catch (e) { return ''; }
+        return '';
+    }
+
     // ==================== 密码加密层 ====================
 
     // 纯 JS SHA-256 降级实现（WebView 中 crypto.subtle 不可用时使用）
@@ -4049,13 +4102,19 @@
                     //   （此前 APP 端 requestId 仅内存，已付款客户"激活成功却登录不上"根因；
                     //   桌面版 activate.js 早有 admin-request-id.dat 持久化，APP 端是盲区）。
                     //   激活完成（onAdminActivated）后清除。
+                    // ★ 2026-09-03 安全修复：password 通过 encryptSensitive 加密持久化
+                    //   （electronAPI.safeStorage DPAPI 优先，退 XORv2；明文 fail-safe 不写入）。
                     try {
+                        const encPwd = await encryptSensitive(state.password || '');
+                        if (!encPwd && (state.password || '').trim()) {
+                            console.warn('[LicenseCheck] adminReqPending 密码加密失败，仍存 requestId/phone 但不存密码（恢复时密码退默认 admin）');
+                        }
                         StorageAdapter.setItem('license:adminReqPending', JSON.stringify({
                             requestId: res.requestId,
                             phone: (state.phone || '').trim(),
                             adminName: (state.adminName || '').trim(),
                             clinicName: (state.clinicName || '').trim(),
-                            password: state.password || '',
+                            passwordEnc: encPwd,
                             machineId: (typeof machineId !== 'undefined' && machineId) ? String(machineId) : '',
                             at: Date.now()
                         }));
@@ -4137,6 +4196,8 @@
             //   轮询断点续传/启动恢复时 state 为空会话 → 手机号/密码全空 → 建号被跳过。
             //   取值优先级：state（同会话激活窗口填的）→ 持久化 adminReqPending（提交时存的）
             //   → 服务端 r.licenseInfo.phone（admin-status 2026-09-03 起返回权威手机号）。
+            // ★ 2026-09-03 安全：持久化 password 用 passwordEnc（加密），必须 decryptSensitive；
+            //   兼容旧明文 password 字段（客户升级中间态），读取空或解密失败退 admin。
             let _resPhone = (state.phone || '').trim();
             let _resName = (state.adminName || '').trim();
             let _resPwd = state.password || '';
@@ -4146,7 +4207,12 @@
                     const _saved = JSON.parse((await StorageAdapter.getItem('license:adminReqPending')) || 'null');
                     if (_saved && typeof _saved === 'object') {
                         if (!_resPhone && _saved.phone) _resPhone = String(_saved.phone).trim();
-                        if (!_resPwd && _saved.password) _resPwd = String(_saved.password);
+                        if (!_resPwd && typeof _saved.passwordEnc === 'string' && _saved.passwordEnc) {
+                            _resPwd = await decryptSensitive(_saved.passwordEnc);
+                        }
+                        if (!_resPwd && typeof _saved.password === 'string') {
+                            _resPwd = String(_saved.password); // 兼容老明文（过渡）
+                        }
                         if (!_resName && _saved.adminName) _resName = String(_saved.adminName).trim();
                         if (!_resClinic && _saved.clinicName) _resClinic = String(_saved.clinicName).trim();
                     }
@@ -4327,7 +4393,14 @@
         var phone = (saved && saved.phone) ? String(saved.phone).trim() : '';
         var rPhone = (r && r.licenseInfo && r.licenseInfo.phone) ? String(r.licenseInfo.phone).trim() : '';
         if (!phone && rPhone) phone = rPhone;
-        var pwd = (saved && saved.password) ? String(saved.password || '') : '';
+        // ★ 2026-09-03 安全：saved.passwordEnc 加密读；兼容旧明文 saved.password；空退默认 admin
+        var pwd = '';
+        try {
+            if (saved && typeof saved.passwordEnc === 'string' && saved.passwordEnc) {
+                pwd = await decryptSensitive(saved.passwordEnc);
+            }
+            if (!pwd && saved && typeof saved.password === 'string') pwd = String(saved.password || '');
+        } catch (e) { pwd = ''; }
         var adminName = (saved && saved.adminName) ? String(saved.adminName || '').trim() : '';
         var clinicName = (saved && saved.clinicName) ? String(saved.clinicName || '').trim() : '';
         var adminLicenseCode = (r && r.licenseInfo && r.licenseInfo.licenseCode) ?

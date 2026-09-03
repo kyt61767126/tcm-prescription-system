@@ -1450,6 +1450,71 @@ app.whenReady().then(async () => {
         }
     });
 
+    // ★ 2026-09-03 启动断点续传（admin-request-id.dat 主进程检查）：
+    //   桌面独立登录窗口 login.html 不加载 auth-core，index.html 的 resumeAdminPendingRequest
+    //   只有登录成功后才跑；客户提交申请→切官网付款被切后台→轮询中断，重启后若未激活
+    //   则 showExpireAlertAndActivate 弹激活窗但用户不打开 Tab1 管理员激活表单时，
+    //   状态申请永远不被自动完成；若已激活则 admin-request-id.dat 中 phone/密码(加密)已存，
+    //   主进程直接调 licenseManager.installLicense（=写license.dat+写config.users+自签），
+    //   确保 config.json 在 createLoginWindow 前已有手机号用户（login.js getAppConfig 读到）。
+    //   password 按 activate.js 相同的 decryptSensitive（safeStorage ENC:）解密；
+    //   解密失败/空则退 admin 兜底；不阻塞启动（超时 10s）。
+    try {
+        const savedReq = activateManager.loadAdminRequestId();
+        if (savedReq && savedReq.requestId) {
+            const mid = activateManager.getMachineId() || '';
+            const _pCheck = activateManager.checkAdminStatus(savedReq.requestId, mid);
+            const _pTimeout = new Promise((resolve) => setTimeout(() => resolve(null), 10000));
+            const sr = await Promise.race([_pCheck, _pTimeout]);
+            if (sr && sr.success && sr.status === 'activated' && sr.license) {
+                try {
+                    // 解密 savedReq.password（activate.js saveAdminRequestId 已用 safeStorage 加密 ENC:）
+                    let pwd = '';
+                    try {
+                        const pe = savedReq.password || '';
+                        const { safeStorage } = require('electron');
+                        if (pe && pe.startsWith('ENC:') && safeStorage && safeStorage.isEncryptionAvailable()) {
+                            pwd = safeStorage.decryptString(Buffer.from(pe.slice(4), 'base64')) || '';
+                        }
+                    } catch (de) { console.warn('[License] 断点续传解密密码失败(退admin):', de.message); pwd = ''; }
+                    const li = sr.licenseInfo || {};
+                    const licInst = licenseManager.installLicense(sr.license, {
+                        machineId: mid,
+                        doctorName: savedReq.adminName || li.user || '',
+                        clinicName: savedReq.clinicName || li.clinicName || '',
+                        phone: savedReq.phone || li.phone || '',
+                        password: pwd || 'admin',
+                        edition: savedReq.edition || ''
+                    });
+                    if (licInst && licInst.success) {
+                        console.log('[License] 启动断点续传: 已审核通过+自动安装license+建号完成（requestId=' + savedReq.requestId + ' phone=' + (savedReq.phone || '') + '）');
+                        activateManager.clearAdminRequestId();
+                        // 重新校验 license（刚写入）
+                        const newMid = activateManager.getMachineId();
+                        const newLic = licenseManager.validateLicense({ localMachineId: newMid });
+                        if (newLic && newLic.valid) {
+                            _isLicensed = true;
+                            licenseResult = newLic;
+                            try {
+                                const b = licenseManager.enforceEditionBinding();
+                                if (b && b.success && b.corrected) console.log('[License] 断点续传后版本校正:', b.edition);
+                            } catch (be) {}
+                            if (newLic.type !== 'trial') {
+                                try { await ensureTrialStandardEdition(); } catch (te) {}
+                            }
+                        }
+                    } else {
+                        console.warn('[License] 启动断点续传installLicense失败（交给渲染进程兜底）:', licInst && licInst.error);
+                    }
+                } catch (srErr) {
+                    console.warn('[License] 启动断点续传安装失败（非致命，交给渲染进程兜底）:', srErr.message);
+                }
+            }
+        }
+    } catch (e) {
+        console.warn('[License] 启动断点续传异常（非致命，交给渲染进程）:', e.message);
+    }
+
     // ★ 离线版流程：license 有效（含试用）直接进登录；试用到期/未激活弹到期提示
     if (!_isLicensed) {
         console.log('[License] 未授权，弹出到期提示（前往激活/退出）');
