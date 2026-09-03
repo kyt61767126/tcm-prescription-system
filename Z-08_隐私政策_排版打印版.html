@@ -6,81 +6,81 @@
 <style>
     @page {
         size: A4;
-        margin: 2.54cm 2.54cm 2.54cm 2.54cm;
+        margin: 1.8cm 1.8cm 1.8cm 1.8cm;
     }
     * { box-sizing: border-box; }
     body {
         font-family: "SimSun", "宋体", serif;
-        font-size: 12pt;
-        line-height: 1.5;
+        font-size: 11pt;
+        line-height: 1.4;
         color: #000;
         background: #fff;
         margin: 0;
         padding: 0;
     }
     .page {
-        width: 21cm;
-        min-height: 29.7cm;
-        padding: 2cm 2.5cm 2cm 2.5cm;
-        margin: 0 auto;
+        width: auto;
+        min-height: auto;
+        padding: 0;
+        margin: 0;
     }
     h1.doc-title {
         font-family: "SimHei", "微软雅黑", sans-serif;
-        font-size: 22pt;
+        font-size: 18pt;
         font-weight: bold;
         text-align: center;
-        margin: 0 0 6pt 0;
+        margin: 0 0 4pt 0;
         letter-spacing: 2pt;
     }
     .meta-line {
         text-align: center;
-        font-size: 10.5pt;
+        font-size: 10pt;
         color: #333;
-        margin-bottom: 24pt;
+        margin-bottom: 14pt;
     }
-    .meta-line span { margin: 0 10pt; }
+    .meta-line span { margin: 0 8pt; }
     h2 {
         font-family: "SimHei", "微软雅黑", sans-serif;
-        font-size: 15pt;
+        font-size: 13pt;
         font-weight: bold;
-        margin-top: 22pt;
-        margin-bottom: 10pt;
-        border-bottom: 1.5pt solid #333;
-        padding-bottom: 4pt;
+        margin-top: 14pt;
+        margin-bottom: 6pt;
+        border-bottom: 1pt solid #333;
+        padding-bottom: 3pt;
         page-break-after: avoid;
     }
     h3 {
         font-family: "SimHei", "微软雅黑", sans-serif;
-        font-size: 12pt;
+        font-size: 11pt;
         font-weight: bold;
-        margin-top: 14pt;
-        margin-bottom: 6pt;
+        margin-top: 8pt;
+        margin-bottom: 4pt;
         page-break-after: avoid;
     }
     h4 {
         font-family: "SimHei", "微软雅黑", sans-serif;
-        font-size: 12pt;
+        font-size: 11pt;
         font-weight: bold;
-        margin-top: 10pt;
-        margin-bottom: 4pt;
+        margin-top: 6pt;
+        margin-bottom: 3pt;
     }
     p {
         text-indent: 2em;
-        margin: 4pt 0 6pt 0;
+        margin: 2pt 0 4pt 0;
         text-align: justify;
     }
     p.no-indent { text-indent: 0; }
     table {
         width: 100%;
         border-collapse: collapse;
-        margin: 8pt 0 10pt 0;
-        font-size: 10.5pt;
+        margin: 5pt 0 6pt 0;
+        font-size: 10pt;
     }
     table, th, td {
         border: 1pt solid #000;
     }
     th, td {
-        padding: 5pt 6pt;
+        padding: 3pt 4pt;
         text-align: left;
         vertical-align: top;
     }
@@ -93,44 +93,45 @@
     .notice-box {
         border: 1pt solid #999;
         background: #fafafa;
-        padding: 8pt 12pt;
-        margin: 10pt 0;
-        font-size: 10.5pt;
+        padding: 4pt 8pt;
+        margin: 5pt 0;
+        font-size: 10pt;
     }
-    .notice-box p { text-indent: 0; }
+    .notice-box p { text-indent: 0; margin: 1pt 0; }
     .path-box {
-        border-left: 3pt solid #333;
+        border-left: 2pt solid #333;
         background: #f8f8f8;
-        padding: 8pt 14pt;
-        margin: 8pt 0 10pt 1em;
-        font-size: 10.5pt;
-        line-height: 1.7;
+        padding: 4pt 8pt;
+        margin: 4pt 0 5pt 1em;
+        font-size: 10pt;
+        line-height: 1.5;
     }
     .sign-block {
-        margin-top: 60pt;
+        margin-top: 20pt;
         text-align: right;
-        font-size: 12pt;
-        line-height: 2;
+        font-size: 11pt;
+        line-height: 1.6;
+        break-inside: avoid;
     }
     .sign-block .stamp-area {
         display: inline-block;
-        width: 140pt;
-        height: 100pt;
+        width: 110pt;
+        height: 80pt;
         border: 1pt dashed #999;
         text-align: center;
-        line-height: 100pt;
+        line-height: 80pt;
         color: #999;
-        font-size: 10.5pt;
+        font-size: 10pt;
         margin-left: 8pt;
         vertical-align: middle;
     }
-    .toc { margin: 16pt 0 20pt 0; padding-left: 0; list-style: none; }
-    .toc li { padding: 3pt 0; font-size: 11pt; }
+    .toc { margin: 8pt 0 10pt 0; padding-left: 0; list-style: none; }
+    .toc li { padding: 1pt 0; font-size: 10.5pt; display: inline-block; margin-right: 12pt; }
     .toc li::before { content: "▌ "; color: #333; }
-    .divider { border-top: 1pt solid #ccc; margin: 20pt 0; }
+    .divider { border-top: 1pt solid #ccc; margin: 8pt 0; }
     .strong-red { color: #c00; font-weight: bold; }
-    ol, ul { margin: 4pt 0 6pt 24pt; }
-    li { margin: 2pt 0; }
+    ol, ul { margin: 2pt 0 3pt 24pt; }
+    li { margin: 1pt 0; }
 </style>
 </head>
 <body>
