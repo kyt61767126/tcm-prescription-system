@@ -618,80 +618,56 @@
                 return;
             }
 
-            // ★ 支持手机号/用户名双模式登录：先按 username 查找，再按 phone 字段查找
-            let user = _users.find(u => u.username === username);
-            if (!user) {
-                user = _users.find(u => u.phone && String(u.phone) === username);
-            }
-
-            // ★ 云端账户兼容（权威认证）：
-            //   1) 本地用户表完全找不到该账户时，必须回退云端认证；
-            //   2) 本地找到但本地密码校验失败时，仍需回退云端认证兜底——
-            //      云端注册的账户（如 wgj）在本地 localStorage/config 可能残留旧记录，
-            //      本地缓存密码与实际不一致，仅做本地校验会误报"密码错误"。
-            //   云端点认证用 AuthCore.login() 走 /users?login=true，密码以云端为准。
-            let _cloudAuth = null;
-
-            // 本地密码是否校验通过（本地无该用户时视作不通过）
-            let localPwdOk = false;
-            if (user) {
-                const storedPwd = user.password || '';
-                const isHash = /^[a-f0-9]{64}$/.test(storedPwd);
-                localPwdOk = isHash ? (storedPwd === await hashPassword(password)) : (storedPwd === password);
-            }
-
-            // 本地校验通过 → 直接用本地用户（后续版本匹配/password 走本地）
-            if (!localPwdOk) {
-                // 本地失败 → 尝试云端认证兜底
-                if (window.AuthCore && typeof AuthCore.login === 'function') {
-                    const cloudRes = await AuthCore.login(username, password);
-                    if (cloudRes && cloudRes.success && cloudRes.user) {
-                        _cloudAuth = cloudRes.user; // 含云端返回的 token
-                        // 用云端用户填充本地匹配结果（后续版本匹配/password字段判断走云端）
-                        user = {
-                            username: _cloudAuth.username,
-                            name: _cloudAuth.name || _cloudAuth.username,
-                            role: _cloudAuth.role || 'user',
-                            password: _cloudAuth.password || '',
-                            token: _cloudAuth.token || '',
-                            // ★ 2026-08-31 补 clinicId：服务端登录响应 sanitizeUser 本就返回 clinicId，
-                            //   此前漏带 → currentUser.clinicId 空 → 用户管理本地回退的诊所归属过滤失效
-                            clinicId: _cloudAuth.clinicId || '',
-                            // ★ 2026-08-23 携带服务端权威 clinicEdition，供下方版本匹配逻辑判定账户版本
-                            clinicEdition: _cloudAuth.clinicEdition || '',
-                            edition: _cloudAuth.edition || '',
-                            clinicName: _cloudAuth.clinicName || '',
-                            // ★ 2026-08-25 全局统一授权状态：携带诊所授权到期时间，
-                            //   主界面基础设置授权区显示"✅ 已激活（版本）剩余 X 天"（与离线格式统一）
-                            clinicExpiresAt: _cloudAuth.clinicExpiresAt || null
-                        };
-                    } else {
-                        // ★ 诊断：记录云端认证返回的具体错误，供排查
-                        const dbgErr = cloudRes && cloudRes.error ? String(cloudRes.error) : '未知错误';
-                        console.error('[login] 云端认证失败:', dbgErr);
-                        // 将真实错误写入 userData（save-user-data IPC）
-                        try {
-                            if (window.electronAPI && typeof window.electronAPI.saveUserData === 'function') {
-                                await window.electronAPI.saveUserData('login_debug', JSON.stringify({ time: Date.now(), error: dbgErr, ok: false }));
-                            }
-                        } catch(e) { console.warn('[login] 写入诊断日志失败:', e); }
+            // ★ P2 登录统一路由（2026-09-03）：本地表校验（username/phone 双模式 + verifyPassword
+            //   用户名盐/全局盐/明文全兼容 + 改名盐回退）与云端权威认证（本地未通过时走
+            //   /users?login=true，密码以云端为准）收敛到 AuthCore.loginWithUsernamePassword ——
+            //   与 offline login.js、双 index.html 四处同源。
+            //   云端账户兼容保留：云端注册账户在本地残留旧记录/缓存密码不一致时，由云端兜底放行。
+            const route = await AuthCore.loginWithUsernamePassword(username, password, { users: _users, cloud: true });
+            if (!route.success) {
+                // ★ 诊断：记录认证返回的具体错误，供排查（与旧云端失败路径一致）
+                const dbgErr = route.error ? String(route.error) : '未知错误';
+                console.error('[login] 云端认证失败:', dbgErr);
+                // 将真实错误写入 userData（save-user-data IPC）
+                try {
+                    if (window.electronAPI && typeof window.electronAPI.saveUserData === 'function') {
+                        await window.electronAPI.saveUserData('login_debug', JSON.stringify({ time: Date.now(), error: dbgErr, ok: false }));
                     }
-                }
-                // 本地未放行 且 云端认证也失败（密码错误/网络异常/账户不存在）
-                if (!_cloudAuth) {
-                    // ★ 诊断增强：显示具体失败原因，便于定位（不隐藏真实错误）
-                    let detailErr = '';
-                    try {
-                        const ret = await window.electronAPI.getUserData('login_debug');
-                        if (ret && ret.success && ret.data) {
-                            const dd = ret.data;
-                            detailErr = dd.error ? String(dd.error) : '';
-                        }
-                    } catch(e) {}
-                    const msg = detailErr ? ('登录失败：' + detailErr) : '手机号/用户名或密码错误';
-                    showError(msg);
-                    return;
-                }
+                } catch(e) { console.warn('[login] 写入诊断日志失败:', e); }
+                // ★ 诊断增强：显示具体失败原因，便于定位（不隐藏真实错误）
+                let detailErr = '';
+                try {
+                    const ret = await window.electronAPI.getUserData('login_debug');
+                    if (ret && ret.success && ret.data) {
+                        const dd = ret.data;
+                        detailErr = dd.error ? String(dd.error) : '';
+                    }
+                } catch(e) {}
+                const msg = detailErr ? ('登录失败：' + detailErr) : '手机号/用户名或密码错误';
+                showError(msg);
+                return;
+            }
+            let user = route.user;
+            if (route.source === 'cloud') {
+                const _cloudAuth = route.user; // 含云端返回的 token
+                // 用云端用户填充本地匹配结果（后续版本匹配/password字段判断走云端）
+                user = {
+                    username: _cloudAuth.username,
+                    name: _cloudAuth.name || _cloudAuth.username,
+                    role: _cloudAuth.role || 'user',
+                    password: _cloudAuth.password || '',
+                    token: _cloudAuth.token || '',
+                    // ★ 2026-08-31 补 clinicId：服务端登录响应 sanitizeUser 本就返回 clinicId，
+                    //   此前漏带 → currentUser.clinicId 空 → 用户管理本地回退的诊所归属过滤失效
+                    clinicId: _cloudAuth.clinicId || '',
+                    // ★ 2026-08-23 携带服务端权威 clinicEdition，供下方版本匹配逻辑判定账户版本
+                    clinicEdition: _cloudAuth.clinicEdition || '',
+                    edition: _cloudAuth.edition || '',
+                    clinicName: _cloudAuth.clinicName || '',
+                    // ★ 2026-08-25 全局统一授权状态：携带诊所授权到期时间，
+                    //   主界面基础设置授权区显示"✅ 已激活（版本）剩余 X 天"（与离线格式统一）
+                    clinicExpiresAt: _cloudAuth.clinicExpiresAt || null
+                };
             }
 
             // ★ 2026-08-28 安全加固：激活后禁用试用默认账户 admin/admin

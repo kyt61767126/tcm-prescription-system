@@ -1123,8 +1123,56 @@
             return { success: true, user };
         } catch (e) {
             console.error('登录异常:', e);
-            return { success: false, error: '登录失败：' + (e.message || '未知错误') };
+            return { success: false, error: '登录失败：' + (e.message || '未知未知错误') };
         }
+    }
+
+    // ==================== 登录统一路由（P2 收敛 2026-09-03）====================
+
+    // loginWithUsernamePassword(username, password, options) —— 四处登录入口
+    // （双桌面 login.js + 离线 desktop/index.html + 云端 public/index.html handleLogin）
+    // 统一委托的唯一路由，替代各处自写的"找用户+验密码+云端兜底"三段式：
+    //   1. 本地表校验：username/phone 双模式匹配 + verifyPassword（用户名盐增强哈希/
+    //      全局盐旧哈希/明文全兼容）+ 改名兼容（手机号账号改名后用旧手机号盐回退再校验）；
+    //   2. options.cloud=true 且本地未通过时 → 云端 /users?login=true 权威认证（AuthCore.login）。
+    // options: { users: 本地用户数组 } 或 { getUsers: 返回数组的函数 }，{ cloud: bool 默认 false }
+    // 返回统一结果 { success, user, matchedIdentifier, source: 'local'|'cloud', error }：
+    //   - source='local'  → user 为本地表原对象（调用方继续走密码升级/token 补拉等本地副作用）
+    //   - source='cloud'  → user 为云端返回（含 token；落地本地表/缓存等副作用由调用方负责）
+    //   - 云端异常不阻断：按本地未命中返回（保持离线可用，与各端旧行为一致）
+    async function loginWithUsernamePassword(username, password, options = {}) {
+        const users = (typeof options.getUsers === 'function') ? (options.getUsers() || []) : (options.users || []);
+        let user = null;
+        let matchedIdentifier = username;
+        for (const u of users) {
+            if (!u) continue;
+            if (u.username !== username && String(u.phone || '') !== username) continue;
+            matchedIdentifier = (u.username === username) ? u.username : (u.phone || username);
+            let _ok = await verifyPassword(password, u.password || '', matchedIdentifier);
+            // ★ 改名兼容：手机号账号改名为英文/拼音后，原密码可能是旧手机号加盐的增强哈希，
+            //   用新用户名加盐失败时回退用该用户 phone（=旧手机号）再次加盐校验，避免改名后锁号。
+            if (!_ok && String(u.phone || '') && String(u.phone || '') !== matchedIdentifier) {
+                _ok = await verifyPassword(password, u.password || '', u.phone);
+            }
+            if (_ok) { user = u; break; }
+        }
+        if (user) {
+            return { success: true, user: user, matchedIdentifier: matchedIdentifier, source: 'local' };
+        }
+        if (options.cloud && typeof CLOUD_API_BASE !== 'undefined' && CLOUD_API_BASE) {
+            try {
+                const cloudResult = await login(username, password, { adapter: cloudAdapter });
+                if (cloudResult && cloudResult.success && cloudResult.user) {
+                    return { success: true, user: cloudResult.user, matchedIdentifier: username, source: 'cloud' };
+                }
+                if (cloudResult && cloudResult.success === false) {
+                    return { success: false, user: null, matchedIdentifier: username, source: 'cloud', error: cloudResult.error || '手机号/用户名或密码错误' };
+                }
+            } catch (cloudErr) {
+                console.warn('[loginWithUsernamePassword] 云端认证异常(按本地结果返回):', cloudErr);
+            }
+        }
+        return { success: false, user: null, matchedIdentifier: username, source: 'local', error: '手机号/用户名或密码错误' };
     }
 
     // ==================== 退出登录 ====================
@@ -1431,6 +1479,8 @@
 
         // 登录调度
         login,
+        // 登录统一路由（P2 收敛 2026-09-03：四处登录入口唯一委托点）
+        loginWithUsernamePassword,
         logout,
 
         // 适配器工厂

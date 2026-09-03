@@ -1709,109 +1709,84 @@ let currentUser = null;
                     return;
                 }
                 
-                const users = getUsers();
-                // 使用 AuthCore.verifyPassword 支持 PBKDF2 + 旧 SHA-256 + 明文兼容
-                // ★ 支持手机号/用户名双模式登录：先按 username 查找，再按 phone 字段查找
-                let user = null;
-                let matchedIdentifier = username; // ★ 循环外声明（与云端APP一致）：供下方本地登录补拉token使用，const在循环内会因块级作用域ReferenceError
-                for (const u of users) {
-                    if (u.username !== username && String(u.phone || '') !== username) continue;
-                    matchedIdentifier = (u.username === username) ? u.username : (u.phone || username);
-                    if (window.AuthCore && AuthCore.verifyPassword) {
-                        // ★ 2026-08-27 改名兼容：手机号账号改名为英文/拼音后，其原密码可能是以旧手机号为盐的
-                        //   增强哈希。用新用户名加盐失败时，回退用该用户 phone（=旧手机号）再次加盐校验，
-                        //   使"新用户名+原密码"也能正常登录，避免改名后锁号。
-                        let _ok = await AuthCore.verifyPassword(password, u.password || '', matchedIdentifier);
-                        if (!_ok && String(u.phone || '') && String(u.phone || '') !== matchedIdentifier) {
-                            _ok = await AuthCore.verifyPassword(password, u.password || '', u.phone);
-                        }
-                        if (_ok) { user = u; break; }
-                    } else {
-                        const hashedPwd = await hashPassword(password);
-                        if (u.password === hashedPwd) { user = u; break; }
-                    }
+                // ★ P2 登录统一路由（2026-09-03）：本地表校验（username/phone 双模式 + verifyPassword
+                //   全格式兼容 + 改名盐回退）与云端权威认证（/users?login=true 兜底）收敛到
+                //   AuthCore.loginWithUsernamePassword —— 与双桌面 login.js、离线 desktop/index.html 四处同源。
+                const route = await AuthCore.loginWithUsernamePassword(username, password, { getUsers: getUsers, cloud: true });
+                if (!route.success) {
+                    showLoginError(route.error || '手机号/用户名或密码错误');
+                    setLoginLoading(false);
+                    return;
                 }
-                
-                // ★ 云端登录回退：本地用户未匹配时，尝试云端 API 登录
-                if (!user && window.AuthCore && AuthCore.login && typeof window.CLOUD_API_BASE !== 'undefined') {
+                let user = route.user;
+                const matchedIdentifier = route.matchedIdentifier || username; // 供下方本地登录补拉token使用
+                if (route.source === 'cloud') {
+                    // ★ 云端登录成功（本地表未命中）：云端权威身份落地本地表 + 缓存登录态 + UI
+                    user._cloudRoleSynced = true; // ★ 2026-08-20 云端权威身份，无需再走本地补拉
+                    // ★ 2026-08-20 云端账号落地本地表（role=云端权威值；password 留空=本地永不通路径，
+                    //   后续登录始终云端权威——与 cloud_desktop/cloud_app 三端统一"云端身份权威登录"架构）
                     try {
-                        const cloudResult = await AuthCore.login(username, password, { adapter: AuthCore.cloudAdapter });
-                        if (cloudResult && cloudResult.success && cloudResult.user) {
-                            user = cloudResult.user;
-                            user._cloudRoleSynced = true; // ★ 2026-08-20 云端权威身份，无需再走本地补拉
-                            // ★ 2026-08-20 云端账号落地本地表（role=云端权威值；password 留空=本地永不通路径，
-                            //   后续登录始终云端权威——与 cloud_desktop/cloud_app 三端统一"云端身份权威登录"架构）
-                            try {
-                                const allUsers = getUsers();
-                                const _uname = user.username || username;
-                                const cu = allUsers.find(u => u.username === _uname || String(u.phone || '') === (user.phone || username));
-                                const _phone = user.phone || (/^1[3-9]\d{9}$/.test(username) ? username : '');
-                                if (cu) {
-                                    cu.phone = _phone || cu.phone;
-                                    cu.name = user.name || cu.name;
-                                    cu.role = user.role || cu.role || 'user';
-                                    cu._cloudRoleSynced = true;
-                                    cu.clinicId = user.clinicId || cu.clinicId || '';
-                                    cu.clinicName = user.clinicName || cu.clinicName || '';
-                                } else {
-                                    allUsers.push({ username: _uname, phone: _phone, password: '', name: user.name || _uname, role: user.role || 'user', _cloudRoleSynced: true, clinicId: user.clinicId || '', clinicName: user.clinicName || '', createdAt: new Date().toISOString() });
-                                }
-                                saveUsers(allUsers);
-                            } catch (_) {}
-                            // 云端登录成功，缓存用户信息到本地（含 token）
-                            currentUser = user;
-                            const userData = JSON.stringify(user);
-                            localStorage.setItem('cloud_currentUser', userData);
-                            localStorage.setItem('cloud_isLoggedIn', 'true');
-                            localStorage.setItem('currentUser', userData);
-                            localStorage.setItem('isLoggedIn', 'true');
-                            sessionStorage.setItem('currentUser', userData);
-                            sessionStorage.setItem('isLoggedIn', 'true');
-                            if (user.clinicName) {
-                                localStorage.setItem('global_clinicName', user.clinicName);
-                            }
-                            const loginData = { user: user, loginTime: Date.now() };
-                            localStorage.setItem('user_login_data', JSON.stringify(loginData));
-                            saveRememberedUser(username);
-                            // ★ 2026-08-28 修复：登录成功路径漏调 setLoginLoading(false)，
-                            //   导致退出登录后登录框按钮残留"登录中..."且输入框被禁用
-                            setLoginLoading(false);
-                            document.getElementById('loginOverlay').style.display = 'none';
-                            document.querySelector('.main-container').style.display = 'flex';
-                            updateUserDisplay();
-                            hideLoginError();
-                            // ★ 2026-08-25 修复：登录时优先使用本用户在基础设置保存过的医师姓名
-                            //   （saveSettings 写入 local_clinicDoctor_<username>），保存过的新名字
-                            //   不再被云端旧姓名顶回；未保存过才用登录用户姓名，并回写全局键保持回显一致
-                            let _savedDoctorName = '';
-                            try { _savedDoctorName = (localStorage.getItem('local_clinicDoctor_' + (user.username || '')) || '').trim(); } catch (e) {}
-                            if (!_savedDoctorName && user.name) _savedDoctorName = user.name;
-                            if (_savedDoctorName) {
-                                const _ddEl = document.getElementById('defaultDoctor');
-                                if (_ddEl) _ddEl.value = _savedDoctorName;
-                                const _dnEl = document.getElementById('doctorName');
-                                if (_dnEl) _dnEl.value = _savedDoctorName;
-                                try { localStorage.setItem('local_clinicDoctor', _savedDoctorName); } catch (e) {}
-                            }
-                            try { await loadData(); } catch(e) { console.warn('loadData失败:', e); }
-                            refreshUserInterface();
-                            if (typeof window.refreshVersionTags === 'function') window.refreshVersionTags((user && user.edition) ? user.edition : undefined);
-                            if (typeof updatePrescriptionPaper === 'function') updatePrescriptionPaper();
-                            if (window.electronAPI && window.electronAPI.loginSuccess) {
-                                try { await window.electronAPI.loginSuccess(user); } catch (e) {}
-                            }
-                            return;
-                        } else if (cloudResult && !cloudResult.success) {
-                            showLoginError(cloudResult.error || '手机号/用户名或密码错误');
-                            setLoginLoading(false);
-                            return;
+                        const allUsers = getUsers();
+                        const _uname = user.username || username;
+                        const cu = allUsers.find(u => u.username === _uname || String(u.phone || '') === (user.phone || username));
+                        const _phone = user.phone || (/^1[3-9]\d{9}$/.test(username) ? username : '');
+                        if (cu) {
+                            cu.phone = _phone || cu.phone;
+                            cu.name = user.name || cu.name;
+                            cu.role = user.role || cu.role || 'user';
+                            cu._cloudRoleSynced = true;
+                            cu.clinicId = user.clinicId || cu.clinicId || '';
+                            cu.clinicName = user.clinicName || cu.clinicName || '';
+                        } else {
+                            allUsers.push({ username: _uname, phone: _phone, password: '', name: user.name || _uname, role: user.role || 'user', _cloudRoleSynced: true, clinicId: user.clinicId || '', clinicName: user.clinicName || '', createdAt: new Date().toISOString() });
                         }
-                    } catch (cloudErr) {
-                        console.warn('云端登录异常:', cloudErr);
-                        // 云端异常不阻断，继续走本地登录逻辑
+                        saveUsers(allUsers);
+                    } catch (_) {}
+                    // 云端登录成功，缓存用户信息到本地（含 token）
+                    currentUser = user;
+                    const userData = JSON.stringify(user);
+                    localStorage.setItem('cloud_currentUser', userData);
+                    localStorage.setItem('cloud_isLoggedIn', 'true');
+                    localStorage.setItem('currentUser', userData);
+                    localStorage.setItem('isLoggedIn', 'true');
+                    sessionStorage.setItem('currentUser', userData);
+                    sessionStorage.setItem('isLoggedIn', 'true');
+                    if (user.clinicName) {
+                        localStorage.setItem('global_clinicName', user.clinicName);
                     }
+                    const loginData = { user: user, loginTime: Date.now() };
+                    localStorage.setItem('user_login_data', JSON.stringify(loginData));
+                    saveRememberedUser(username);
+                    // ★ 2026-08-28 修复：登录成功路径漏调 setLoginLoading(false)，
+                    //   导致退出登录后登录框按钮残留"登录中..."且输入框被禁用
+                    setLoginLoading(false);
+                    document.getElementById('loginOverlay').style.display = 'none';
+                    document.querySelector('.main-container').style.display = 'flex';
+                    updateUserDisplay();
+                    hideLoginError();
+                    // ★ 2026-08-25 修复：登录时优先使用本用户在基础设置保存过的医师姓名
+                    //   （saveSettings 写入 local_clinicDoctor_<username>），保存过的新名字
+                    //   不再被云端旧姓名顶回；未保存过才用登录用户姓名，并回写全局键保持回显一致
+                    let _savedDoctorName = '';
+                    try { _savedDoctorName = (localStorage.getItem('local_clinicDoctor_' + (user.username || '')) || '').trim(); } catch (e) {}
+                    if (!_savedDoctorName && user.name) _savedDoctorName = user.name;
+                    if (_savedDoctorName) {
+                        const _ddEl = document.getElementById('defaultDoctor');
+                        if (_ddEl) _ddEl.value = _savedDoctorName;
+                        const _dnEl = document.getElementById('doctorName');
+                        if (_dnEl) _dnEl.value = _savedDoctorName;
+                        try { localStorage.setItem('local_clinicDoctor', _savedDoctorName); } catch (e) {}
+                    }
+                    try { await loadData(); } catch(e) { console.warn('loadData失败:', e); }
+                    refreshUserInterface();
+                    if (typeof window.refreshVersionTags === 'function') window.refreshVersionTags((user && user.edition) ? user.edition : undefined);
+                    if (typeof updatePrescriptionPaper === 'function') updatePrescriptionPaper();
+                    if (window.electronAPI && window.electronAPI.loginSuccess) {
+                        try { await window.electronAPI.loginSuccess(user); } catch (e) {}
+                    }
+                    return;
                 }
-                
+
                 if (user) {
                     // 密码自动升级：旧格式（SHA-256/明文）→ PBKDF2
                     try {

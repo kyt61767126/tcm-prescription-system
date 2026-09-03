@@ -601,22 +601,15 @@
                 return;
             }
 
-            // ★ 支持手机号/用户名双模式登录：先按 username 查找，再按 phone 字段查找
-            let user = _users.find(u => u.username === username);
-            if (!user) {
-                user = _users.find(u => u.phone && String(u.phone) === username);
-            }
-            if (!user) {
-                showError('手机号/用户名或密码错误');
+            // ★ P2 登录统一路由（2026-09-03）：本地表校验收敛到 AuthCore.loginWithUsernamePassword
+            //   （username/phone 双模式 + verifyPassword 用户名盐/全局盐/明文全兼容 + 改名盐回退，
+            //   与 index.html/index-app.html、云端 login.js 四处同源；离线端不走云端通道）
+            const route = await AuthCore.loginWithUsernamePassword(username, password, { users: _users });
+            if (!route.success) {
+                showError(route.error || '手机号/用户名或密码错误');
                 return;
             }
-            const storedPwd = user.password || '';
-            const isHash = /^[a-f0-9]{64}$/.test(storedPwd);
-            const pwdOk = isHash ? (storedPwd === await hashPassword(password)) : (storedPwd === password);
-            if (!pwdOk) {
-                showError('手机号/用户名或密码错误');
-                return;
-            }
+            const user = route.user;
 
             // ★ 2026-08-28 安全加固：激活后禁用试用默认账户 admin/admin
             //   放在密码通过之后：攻击者无法通过错误信息差判断 admin 账户是否真实存在
