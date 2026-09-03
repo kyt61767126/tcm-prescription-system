@@ -14,6 +14,7 @@
 
 import { parseAuthHeader, isPlatformAdmin } from '../_lib/auth.js';
 import { getKV } from './_lib/license-core.js';
+import { deleteAdminRequest } from './_lib/license-write-service.js';
 
 const ALLOWED_ORIGINS = [
     'https://tcm-prescription-system.pages.dev',
@@ -45,7 +46,6 @@ function json(data, status, origin) {
 }
 
 const KV_ADMIN_REQ_PREFIX = 'admin_req:';
-const KV_ADMIN_REQ_INDEX = 'admin_req_index';
 
 export async function onRequest(context) {
     const method = context.request.method;
@@ -87,46 +87,15 @@ export async function onRequest(context) {
             return json({ success: false, error: '请求记录不存在' }, 404, origin);
         }
 
-        const index = (await kv.get(KV_ADMIN_REQ_INDEX, 'json')) || [];
-        const newIndex = index.filter(id => id !== requestId);
-        await kv.put(KV_ADMIN_REQ_INDEX, JSON.stringify(newIndex));
-        await kv.delete(recordKey);
-
-        // ★ 2026-09-02 修复"删除激活审核后仍无法重新提交"（用户实测反馈）：
-        //   原实现只删记录 + 请求索引，两项派生数据残留导致 findPhoneOccupancy 误判：
-        //   ① admin_phone:{phone} 仍指向已删记录；
-        //   ② 兜底扫描命中该手机号更早的历史 pending 申请（重复提交检查 2026-08-20 才
-        //      上线，之前同一手机号可能积累多条 pending）。
-        //   修复：删除时同步清理 ① order:{orderNo} 订单映射 ② 重建 admin_phone 索引
-        //   为该手机号剩余最新一条申请（无则彻底删除索引）。
-        try {
-            if (record.orderNo) {
-                await kv.delete('order:' + String(record.orderNo).trim().toUpperCase()).catch(e => {
-                    console.warn('[AdminDelete] 订单映射删除失败:', e.message);
-                });
-            }
-            if (record.phone) {
-                let latest = null;
-                for (const rid of newIndex.slice(0, 200)) {
-                    const rec = await kv.get(KV_ADMIN_REQ_PREFIX + rid, 'json').catch(() => null);
-                    if (rec && rec.phone === record.phone) { latest = rec; break; }
-                }
-                if (latest) {
-                    await kv.put('admin_phone:' + record.phone, JSON.stringify({
-                        requestId: latest.requestId,
-                        status: latest.status
-                    }));
-                    console.log('[AdminDelete] 手机号索引已重建指向:', latest.requestId, '(', latest.status, ')');
-                } else {
-                    await kv.delete('admin_phone:' + record.phone);
-                    console.log('[AdminDelete] 手机号索引已彻底清除:', record.phone);
-                }
-            }
-        } catch (e) {
-            console.warn('[AdminDelete] 手机号索引重建失败:', e.message);
+        // ★ 2026-09-03 (架构统一 P2) 统一走 deleteAdminRequest 唯一写服务：
+        //   删 admin_req:{rid} + req_index(filter) + 重建 admin_phone 索引 +
+        //   删 order:{orderNo} 映射 四项原子操作一致执行；原 90-127 行内联实现
+        //   与 Service 语义完全对齐（admin-delete 09-02 修复的两条清理都被 Service 覆盖）
+        const r = await deleteAdminRequest(kv, requestId);
+        if (r && r.deleted) {
+            console.log('[AdminDelete] 通过 Service 删除(四索引同步):', requestId,
+                '诊所:', record.clinicName, 'phoneIndexRebuilt=', r.removedFromPhoneIndex);
         }
-
-        console.log('[AdminDelete] 请求已删除:', requestId, '诊所:', record.clinicName);
 
         return json({
             success: true,

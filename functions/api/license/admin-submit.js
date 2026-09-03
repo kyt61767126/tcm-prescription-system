@@ -31,6 +31,7 @@
 
 import { getKV, checkRateLimit, checkDeviceVersion } from './_lib/license-core.js';
 import { provisionCloudAccount, normalizeActivationPassword } from './_lib/admin-account.js';
+import { createAdminRequest, updateAdminRequestStatus } from './_lib/license-write-service.js';
 import { findPhoneOccupancy } from '../_lib/auth.js';
 
 // ★ 2026-08-20 查找某手机号下最近一条"已通过"的激活申请
@@ -130,21 +131,6 @@ function generateRequestId() {
 }
 
 const KV_ADMIN_REQ_PREFIX = 'admin_req:';
-const KV_ADMIN_REQ_INDEX = 'admin_req_index';
-
-// 索引维护（追加 requestId，限制最大 1000 条防止无限增长）
-async function appendRequestIndex(kv, requestId) {
-    try {
-        const index = (await kv.get(KV_ADMIN_REQ_INDEX, 'json')) || [];
-        if (!index.includes(requestId)) {
-            index.unshift(requestId);  // 新请求放最前面
-            if (index.length > 1000) index.length = 1000;
-            await kv.put(KV_ADMIN_REQ_INDEX, JSON.stringify(index));
-        }
-    } catch (e) {
-        console.warn('[AdminSubmit] 索引更新失败:', e.message);
-    }
-}
 
 export async function onRequest(context) {
     _currentRequest = context.request;
@@ -337,12 +323,9 @@ export async function onRequest(context) {
                 //   离线版才能显示"🖥️桌面·/📱APP·"。仅白名单值 desktop/app，防脏数据。
                 if ((appModeCarrier === 'desktop' || appModeCarrier === 'app')) {
                     try {
-                        const rec = await kv.get(KV_ADMIN_REQ_PREFIX + paid.requestId, 'json');
-                        if (rec && rec.appModeCarrier !== appModeCarrier) {
-                            rec.appModeCarrier = appModeCarrier;
-                            await kv.put(KV_ADMIN_REQ_PREFIX + paid.requestId, JSON.stringify(rec));
-                            console.log('[AdminSubmit] 复用订单补写载体:', paid.requestId, appModeCarrier);
-                        }
+                        // ★ 2026-09-03 P2: 复用订单补写载体走 updateAdminRequestStatus 统一索引
+                        await updateAdminRequestStatus(kv, paid.requestId, { appModeCarrier });
+                        console.log('[AdminSubmit] 复用订单补写载体(通过Service):', paid.requestId, appModeCarrier);
                     } catch (e) { console.warn('[AdminSubmit] 载体补写失败（忽略）:', e.message); }
                 }
                 return json({
@@ -385,14 +368,15 @@ export async function onRequest(context) {
 
         // 生成请求 ID 并存储
         const requestId = generateRequestId();
-        const record = {
+        const recordPayload = {
             requestId: requestId,
             clinicName: clinicName.trim(),
             adminName: adminName.trim(),
             phone: phone.trim(),
             remark: (remark || '').trim(),
             machineId: finalMachineId,
-            status: 'pending',  // pending / activated / rejected / cancelled
+            // pending / activated / rejected / cancelled
+            // createAdminRequest 默认 status=pending，可传 status 覆盖
             submittedAt: new Date().toISOString(),
             submittedIp: ip,
             resolvedAt: null,
@@ -415,18 +399,19 @@ export async function onRequest(context) {
             freePass: !!freePass
         };
 
-        await kv.put(KV_ADMIN_REQ_PREFIX + requestId, JSON.stringify(record));
-        await appendRequestIndex(kv, requestId);
-        // ★ 2026-08-20 手机号→最新激活申请索引（供登录自愈补开云端账号使用）
-        await kv.put('admin_phone:' + phone, JSON.stringify({ requestId, status: 'pending' })).catch(e => {
-            console.warn('[AdminSubmit] 手机号索引写入失败:', e.message);
-        });
+        // ★ 2026-09-03 (架构统一 P2) 统一走 createAdminRequest：
+        //   一次性写 admin_req:{rid} + admin_phone:{phone}=pending +
+        //   admin_req_index unshift（三处 KV 同步），
+        //   原 L418-L423 三处 KV.put 内联副本 3→1，彻底消除各端漂移。
+        const created = await createAdminRequest(kv, recordPayload);
 
-        console.log('[AdminSubmit] 新激活请求:', requestId, 'clinic=', clinicName, 'machineId=', finalMachineId.substring(0, 8) + '...', NEED_FALLBACK ? '(browser fallback)' : '');
+        console.log('[AdminSubmit] 新激活请求(通过Service三索引同步):', created.requestId,
+            'clinic=', clinicName, 'machineId=', finalMachineId.substring(0, 8) + '...',
+            NEED_FALLBACK ? '(browser fallback)' : '');
 
         return json({
             success: true,
-            requestId: requestId,
+            requestId: created.requestId,
             message: '激活请求已提交，请耐心等待管理员审核'
         });
 

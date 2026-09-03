@@ -81,13 +81,16 @@ async function _ensureInReqIndex(kv, requestId) {
 
 // ============================================================================
 // 1. createAdminRequest — 首次创建 admin_req 记录（Tab1 admin-submit / 官网 order-submit）
-//   - 自动写 admin_req:{requestId} + admin_phone:{phone} + admin_req_index(unshift)
+//   - 默认写 admin_req:{requestId} + admin_phone:{phone} + admin_req_index(unshift)
+//   - 官网 pending_payment 订单调 createAdminRequest(kv, payload, { skipPhoneIndex:true, skipReqIndex:true })
+//     以保持原语义：不写 phone 索引、不进后台待审列表（付款确认时 markOrderPaid 才入列）
 //   - 任何入口创建都必须走这一个函数，不允许各自内联 put
 // ============================================================================
-export async function createAdminRequest(kv, payload) {
+export async function createAdminRequest(kv, payload, options) {
     if (!kv || !payload || typeof kv.put !== 'function') {
         throw new Error('[license-write-service] createAdminRequest: kv invalid');
     }
+    const opts = options || {};
     const { requestId, phone } = payload;
     if (!requestId) throw new Error('[license-write-service] createAdminRequest: requestId required');
     if (!phone) throw new Error('[license-write-service] createAdminRequest: phone required');
@@ -98,10 +101,34 @@ export async function createAdminRequest(kv, payload) {
         { status: payload.status || 'pending' }
     );
     await kv.put(KV_ADMIN_REQ_PREFIX + requestId, JSON.stringify(record));
-    await kv.put(KV_ADMIN_PHONE_PREFIX + phone,
-        JSON.stringify({ requestId, status: record.status }));
-    await appendRequestIndex(kv, requestId);  // license-core.js 工具（unshift 入列）
+    if (!opts.skipPhoneIndex) {
+        await kv.put(KV_ADMIN_PHONE_PREFIX + phone,
+            JSON.stringify({ requestId, status: record.status }));
+    }
+    if (!opts.skipReqIndex) {
+        await appendRequestIndex(kv, requestId);  // license-core.js 工具（unshift 入列）
+    } else {
+        // 官网 pending_payment 不入列，但仍保证不与 appendRequestIndex 冲突
+        // （即不做任何操作，保持与旧 order-submit L229 注释行为一致）
+    }
     return { requestId, record };
+}
+
+// ============================================================================
+// 1b. bindOrderToRequest — 官网订单号 ↔ requestId 映射创建（唯一写入口）
+//   禁止任何云函数直接写 KV.put(order:X)：之前 order-submit 写 {requestId,phone}，
+//   其他读端必须按此 JSON 格式读；deleteAdminRequest 删除时走匹配 JSON.requestId 的
+//   一致实现（license-write-service 删除兜底逻辑已支持 JSON 兼容）。
+// ============================================================================
+export async function bindOrderToRequest(kv, orderNo, requestId, phone) {
+    if (!kv || !orderNo || !requestId) throw new Error('[license-write-service] bindOrderToRequest: args');
+    const ORDER_PREFIX = 'order:';
+    const orderKey = String(orderNo).trim().toUpperCase();
+    await kv.put(ORDER_PREFIX + orderKey, JSON.stringify({
+        requestId: String(requestId),
+        phone: phone ? String(phone) : ''
+    }));
+    return { orderKey, requestId, phone: phone || '' };
 }
 
 // ============================================================================
@@ -120,12 +147,23 @@ export async function updateAdminRequestStatus(kv, requestId, patch) {
     if (!existing) {
         throw new Error(`[license-write-service] updateAdminRequestStatus: record ${requestId} not found`);
     }
-    // activated 时先通过 license-core 的 saveLicense 授权（幂等）→ 返回 updated 记录
+    // activated 分支：
+    //   - 若 existing 已有 licenseCode + licenseBase64(=admin-approve 显式 saveLicense 后写)
+    //     → skip saveLicense，只把 patch 合并回写（避免重复生成新激活码/覆盖 devices）。
+    //   - 否则（admin-submit / free-pass 复用等非 admin-approve 通道）→ saveLicense 权威生成。
     let record = existing;
     if (patch.status === 'activated') {
         const merged = Object.assign({}, existing, patch);
-        // saveLicense 内部写 license:{code} 并回写 record.licenseCode/licenseBase64/expiresAt/maxDevices/type/days
-        record = await saveLicense(kv, merged);
+        const alreadyLicensed =
+            existing.licenseCode && existing.licenseBase64 &&
+            (!patch.licenseCode || patch.licenseCode === existing.licenseCode);
+        if (alreadyLicensed) {
+            record = Object.assign({}, merged, { updatedAt: new Date().toISOString() });
+            await kv.put(key, JSON.stringify(record));
+        } else {
+            // saveLicense 内部写 license:{code} 并回写 record.licenseCode/licenseBase64/expiresAt/maxDevices/type/days
+            record = await saveLicense(kv, merged);
+        }
     } else {
         record = Object.assign({}, existing, patch, {
             updatedAt: new Date().toISOString()

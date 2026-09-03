@@ -267,8 +267,15 @@ P1 落地（服务端 + 客户端双端统一桥）：
 5. 双桌面 IPC `license:check-admin-status` 签名对齐为 `(requestId, machineId)`：云端桌面 activate.js L498 与离线桌面完全一致，machineId 缺省内部取本机，返回 cancelled 自动 machineId fallback 自救。
 6. 双桌面 main.js `app.whenReady()` 启动断点续传统一：创建登录窗口前 10s 超时自检，loadAdminRequestId → checkAdminStatus(双参) → activated → safeStorage 解密 ENC:/XORv2: password → licenseManager.installLicense → 版本校正 → clearAdminRequestId，失败不阻断交渲染进程 observer 兜底（云端桌面本轮新补齐，之前完全没有）。
 
-P2 渐进迁移（下轮做，避免本轮改过大）：
-- 7 写端剩余 5 API 全迁 license-write-service；offline/cloud auth-core submit+startPolling+resume 三处收敛到 activation-observer；双 desktop login.js + public/index.html handleLogin 统一 loginWithUsernamePassword 路由。
+P2 渐进迁移（2026-09-03 当日推进完成前 2 条 + 7 写端 5 个剩余 API 全迁）：
+- 写端 7 API 全部收敛：admin-cancel(P0 已迁)/admin-delete/order-paid/admin-submit/order-submit/admin-approve/free-pass(下轮补) → **本轮已迁 6 个，仅剩 free-pass(小众白名单通道，下轮补)**。各 API 迁法：
+  * admin-delete → deleteAdminRequest(kv, rid) 四索引同步
+  * order-paid → markOrderPaid(kv, orderNo, {payMethod,payTxnLast6}) 入队+写 phone
+  * admin-submit pending 新申请 → createAdminRequest；复用补载体 → updateAdminRequestStatus({appModeCarrier})
+  * order-submit pending_payment 订单 → createAdminRequest(kv, payload, {skipPhoneIndex, skipReqIndex}) + bindOrderToRequest
+  * admin-approve reject/通过 → updateAdminRequestStatus(kv, rid, {status:'rejected'/'activated', ...})；**activated 去重保护 alreadyLicensed=true（admin-approve 之前已显式 saveLicense 生成 code，updateAdminRequestStatus 不重复 saveLicense 生成新码不覆盖 devices）**
+- 7 写端 free-pass、offline/cloud auth-core submit+startPolling+resume 三处收敛、双 login.js + public/index.html handleLogin 统一，留作 P2-后续阶段。
+- ★ 迁移校验铁律：每次迁完必须 node --check 所有 8 个(6API+license-core+write-service)；然后 admin-submit/admin-approve/admin-cancel/admin-delete/order-submit/order-paid 接口手工测参数校验(格式错误/403 等)返回正常，服务端不 500（import/export 路径正确=没崩 = 合格）。
 
 **生效方式**：服务端 license-write-service+admin-cancel 随 Pages push 自动部署（即刻生效，旧包可用）；客户端 activation-observer.js 及双桌面 main.js/activate.js 改动需桌面重打包（云端/离线）+ APP 重打包 + 鸿蒙 rawfile 同步。
 

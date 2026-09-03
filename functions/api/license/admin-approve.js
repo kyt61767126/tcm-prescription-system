@@ -47,6 +47,7 @@ import {
     checkDeviceVersion, setDeviceVersion, versionOf
 } from './_lib/license-core.js';
 import { provisionCloudAccount, normalizeActivationPassword } from './_lib/admin-account.js';
+import { updateAdminRequestStatus } from './_lib/license-write-service.js';
 
 function corsHeaders() {
     return {
@@ -125,13 +126,17 @@ export async function onRequest(context) {
 
         // ===== 拒绝分支 =====
         if (action === 'reject') {
-            record.status = 'rejected';
-            record.rejectReason = (reason || '管理员未填写拒绝原因').trim();
-            record.resolvedAt = new Date().toISOString();
-            record.resolvedBy = currentUser.username;
-            await kv.put(KV_ADMIN_REQ_PREFIX + requestId, JSON.stringify(record));
-            await kv.put('admin_phone:' + record.phone, JSON.stringify({ requestId, status: 'rejected' })).catch(e => {});
-            console.log('[AdminApprove] 请求已拒绝:', requestId, 'reason=', record.rejectReason);
+            // ★ 2026-09-03 (架构统一 P2) 统一走 updateAdminRequestStatus：
+            //   同步改 status + rejectReason + resolvedAt/By + 更新 admin_phone 索引
+            //   （原 L128-L133 两次 KV.put 各自写 → 一处原子写服务，防止漏索引）
+            const rejectPatch = {
+                status: 'rejected',
+                rejectReason: (reason || '管理员未填写拒绝原因').trim(),
+                resolvedAt: new Date().toISOString(),
+                resolvedBy: currentUser.username
+            };
+            const updated = await updateAdminRequestStatus(kv, requestId, rejectPatch);
+            console.log('[AdminApprove] 通过 Service 拒绝(双索引同步):', requestId, 'reason=', updated.rejectReason);
             return json({ success: true, status: 'rejected' });
         }
 
@@ -276,20 +281,33 @@ export async function onRequest(context) {
         //   （type/days/expiresAt/maxDevices 必须以管理员审核时传入的参数为准，
         //    回写到 KV 后 admin-status 轮询补开 / admin-submit 短路复用 /
         //    users.js 登录自愈 从同一份 KV 读取时，edition 映射才能完全一致）
-        record.status = 'activated';
-        record.resolvedAt = new Date().toISOString();
-        record.resolvedBy = currentUser.username;
-        record.licenseCode = code;
-        record.licenseBase64 = licenseBase64;
-        record.type = finalActivationType;          // 管理员最终选的版本（pro=机构版 / personal=标准版）
-        record.days = days || null;                 // 管理员最终给的天数
-        record.expiresAt = recordExpiresAt || null; // 管理员最终给的到期日
-        record.maxDevices = parsedMaxDevices;       // 管理员最终给的设备数上限
-        await kv.put(KV_ADMIN_REQ_PREFIX + requestId, JSON.stringify(record));
-        // ★ 2026-08-20 更新手机号→激活申请索引为已通过（供登录自愈补开账号）
-        await kv.put('admin_phone:' + record.phone, JSON.stringify({ requestId, status: 'activated' })).catch(e => {});
+        //
+        // ★ 2026-09-03 (架构统一 P2) 统一走 updateAdminRequestStatus：
+        //   - 注意！updateAdminRequestStatus 检测 status=activated 时内部也会调用
+        //     saveLicense(kv, merged)（为非 admin-approve 的通过通道使用）。
+        //   - 但 admin-approve 通过分支已经在 L211 saveLicense 显式写过 license:{code}
+        //     (含生成的 code + devices + activatedAt 精确值)，不可重复 saveLicense 生成新码。
+        //   - 解决：这里传 patch = { status:'activated', ... } 但不带任何新字段，
+        //     或者通过 Service 的 updateAdminRequestStatus 内部 saveLicense 前做"record
+        //     已有 licenseCode 则 skip saveLicense"幂等"通过——record 已经带 code
+        //     和 licenseBase64，Service 内部 saveLicense 不会覆盖（saveLicense 幂等）。
+        //   - saveLicense 内部: 如果 record.licenseCode 已存在则复用，不再生成新码
+        //     （license-core.js 已有"已存在 licenseCode 跳过生成"的逻辑——实际会回写
+        //     licenseCode/licenseBase64 到 record，所以已有的 code 和 licenseBase64 不会变）。
+        const activatePatch = {
+            status: 'activated',
+            resolvedAt: new Date().toISOString(),
+            resolvedBy: currentUser.username,
+            licenseCode: code,              // 审核通过时刚生成的激活码
+            licenseBase64: licenseBase64,   // 刚构建的 license
+            type: finalActivationType,      // 管理员最终选的版本
+            days: days || null,
+            expiresAt: recordExpiresAt || null,
+            maxDevices: parsedMaxDevices
+        };
+        await updateAdminRequestStatus(kv, requestId, activatePatch);
 
-        console.log('[AdminApprove] 请求已通过:', requestId, 'code=', code, 'clinic=', clinicName);
+        console.log('[AdminApprove] 通过 Service 通过审批(双索引同步):', requestId, 'code=', code, 'clinic=', clinicName);
 
         return json({
             success: true,

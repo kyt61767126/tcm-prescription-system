@@ -25,6 +25,7 @@
 // ============================================================================
 
 import { getKV, checkRateLimit } from './_lib/license-core.js';
+import { markOrderPaid } from './_lib/license-write-service.js';
 
 const ALLOWED_ORIGINS = [
     'https://tcm-prescription-system.pages.dev',
@@ -65,22 +66,7 @@ function getClientIP(context) {
 }
 
 const KV_ADMIN_REQ_PREFIX = 'admin_req:';
-const KV_ADMIN_REQ_INDEX = 'admin_req_index';
 const KV_ORDER_PREFIX = 'order:';
-
-// 索引维护（与 admin-submit 相同：新请求放最前面，最大 1000 条）
-async function appendRequestIndex(kv, requestId) {
-    try {
-        const index = (await kv.get(KV_ADMIN_REQ_INDEX, 'json')) || [];
-        if (!index.includes(requestId)) {
-            index.unshift(requestId);
-            if (index.length > 1000) index.length = 1000;
-            await kv.put(KV_ADMIN_REQ_INDEX, JSON.stringify(index));
-        }
-    } catch (e) {
-        console.warn('[OrderPaid] 索引更新失败:', e.message);
-    }
-}
 
 export async function onRequest(context) {
     _currentRequest = context.request;
@@ -153,23 +139,21 @@ export async function onRequest(context) {
             return json({ success: false, error: '订单当前状态为 ' + record.status + '，无法提交付款信息' }, 400);
         }
 
-        // ===== 写入付款信息，进入后台待审 =====
-        record.payMethod = payMethod;
-        record.payTxnLast6 = txn.toUpperCase();
-        record.paidAt = new Date().toISOString();
-        record.status = 'pending';
+        // ===== 2026-09-03 (架构统一 P2) 统一走 markOrderPaid：
+        // 补 payMethod/payTxnLast6/paidAt + status→pending +
+        // admin_phone: 索引 pending + admin_req_index 入队（4 处原子同步写入）
+        // 原 L156-L169 内联写 + appendRequestIndex 内联副本 合并到 Service。
+        const payInfo = {
+            payMethod: payMethod,
+            payTxnLast6: txn.toUpperCase()
+        };
+        const mr = await markOrderPaid(kv, orderKey, payInfo);
+        if (!mr || !mr.paid) {
+            return json({ success: false, error: '付款确认失败: ' + (mr && mr.reason ? mr.reason : 'unknown') }, 500);
+        }
 
-        await kv.put(KV_ADMIN_REQ_PREFIX + record.requestId, JSON.stringify(record));
-        // 进入后台待审列表
-        await appendRequestIndex(kv, record.requestId);
-        // ★ 写手机号索引：后续该手机号在软件内重复提交时能被 pending_activation 拦截
-        await kv.put('admin_phone:' + record.phone, JSON.stringify({
-            requestId: record.requestId,
-            status: 'pending'
-        })).catch(e => {});
-
-        console.log('[OrderPaid] 付款确认已提交:', orderKey,
-            'payMethod=', payMethod, 'txnLast6=', record.payTxnLast6);
+        console.log('[OrderPaid] 通过 Service 付款确认(三索引同步):', orderKey,
+            'payMethod=', payMethod, 'txnLast6=', mr.record && mr.record.payTxnLast6);
 
         return json({
             success: true,

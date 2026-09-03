@@ -35,6 +35,7 @@
 // ============================================================================
 
 import { getKV, checkRateLimit, checkDeviceVersion } from './_lib/license-core.js';
+import { createAdminRequest, bindOrderToRequest } from './_lib/license-write-service.js';
 
 const ALLOWED_ORIGINS = [
     'https://tcm-prescription-system.pages.dev',
@@ -186,7 +187,7 @@ export async function onRequest(context) {
         if (note) remarkParts.push(String(note));
         if (remarkParts.length === 0) remarkParts.push('官网订单');
 
-        const record = {
+        const recordPayload = {
             requestId: requestId,
             clinicName: clinicName.trim(),
             adminName: (adminName || clinicName).trim().slice(0, 50),
@@ -220,22 +221,24 @@ export async function onRequest(context) {
             paidAt: null
         };
 
-        await kv.put(KV_ADMIN_REQ_PREFIX + requestId, JSON.stringify(record));
-        // 订单号映射（order-paid / order-status 查询入口）
-        await kv.put(KV_ORDER_PREFIX + record.orderNo, JSON.stringify({
-            requestId: requestId,
-            phone: record.phone
-        }));
-        // ★ 不写 admin_phone 索引、不进 admin_req_index：
-        //   待付款订单不应出现在后台待审列表；付款确认（order-paid）时再入列。
+        // ★ 2026-09-03 (架构统一 P2) 统一写入口：
+        //   createAdminRequest(skipPhoneIndex, skipReqIndex) — 不写 phone 索引、不入后台
+        //     待审列表（保持旧 L229-L230 注释语义，避免破坏"不入后台"的业务预期）
+        //   bindOrderToRequest — orderNo→rid 映射（唯一写入口，防 JSON/TEXT 格式漂移）
+        //   原 L223-L228 两处 KV.put → 收敛到 Service 两次原子调用。
+        const created = await createAdminRequest(kv, recordPayload, {
+            skipPhoneIndex: true,
+            skipReqIndex: true
+        });
+        await bindOrderToRequest(kv, created.record.orderNo, created.requestId, created.record.phone);
 
-        console.log('[OrderSubmit] 官网订单已提交:', record.orderNo, 'requestId=', requestId,
-            'clinic=', clinicName, 'edition=', edition, 'product=', productKey);
+        console.log('[OrderSubmit] 官网订单(通过Service四同步写入):', created.record.orderNo,
+            'requestId=', created.requestId, 'clinic=', clinicName, 'edition=', edition, 'product=', productKey);
 
         return json({
             success: true,
-            orderNo: record.orderNo,
-            requestId: requestId,
+            orderNo: created.record.orderNo,
+            requestId: created.requestId,
             status: 'pending_payment',
             message: '订单已提交，请扫码付款'
         });
