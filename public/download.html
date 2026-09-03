@@ -1796,6 +1796,33 @@
                             </div>
                         </div>
                     </div>
+                    <!-- ★ 2026-09-03 付款确认表单直接内嵌 Step3（扫码页）：
+                         用户付完款后就在同一页面填写转账单号后6位提交，不用再点
+                        「下一步」才出现表单——彻底消除"付完款直接离开导致后台看不到"
+                         的盲区（之前有客户扫完码就退了，后台只能在 pending_payment
+                         筛选里找，默认待审列表不可见）。Step4 同样保留，提供"上一步"
+                         回看收款码和状态轮询两种入口。 -->
+                    <div class="cust-form" id="payConfirmFormInline" style="margin-top:20px;padding:16px;border:2px solid #10b981;border-radius:12px;background:linear-gradient(180deg,#ecfdf5,#ffffff);">
+                        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+                            <strong style="font-size:15px;color:#065f46;">📌 付款后请立即填写转账单号（非常重要）</strong>
+                            <span style="font-size:12px;color:#059669;">填完才能进入"管理员核对中"队列，否则后台看不到</span>
+                        </div>
+                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">
+                            <div class="form-item" style="margin:0;">
+                                <label>支付方式 <span class="req">*</span></label>
+                                <select id="payMethodSelInline" style="width:100%;padding:9px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;">
+                                    <option value="alipay">支付宝</option>
+                                    <option value="wechat">微信支付</option>
+                                </select>
+                            </div>
+                            <div class="form-item" style="margin:0;">
+                                <label>转账单号后 6 位 <span class="req">*</span></label>
+                                <input type="text" id="payTxnInputInline" placeholder="支付宝/微信账单详情的单号后6位" maxlength="6" style="text-transform:uppercase;" oninput="this.value=this.value.replace(/[^A-Za-z0-9]/g,'').toUpperCase()">
+                                <div style="font-size:11px;color:#9ca3af;margin-top:3px;">💡 支付宝：账单详情→订单号；微信：账单→转账单号</div>
+                            </div>
+                        </div>
+                        <button class="copy-btn" id="payConfirmBtnInline" onclick="submitPayConfirm('inline')" style="width:100%;margin-top:14px;padding:13px;font-size:16px;background:linear-gradient(135deg,#07c160,#059669);color:#fff;border:none;border-radius:10px;cursor:pointer;font-weight:700;box-shadow:0 4px 12px rgba(16,185,129,0.25);">✅ 提交付款确认（付款后请立刻点）</button>
+                    </div>
                     <div class="step-nav">
                         <button class="prev" onclick="goStep(2)">← 上一步</button>
                         <button class="next" onclick="payQrNext()">下一步：填写付款确认 →</button>
@@ -2995,10 +3022,15 @@
             }
         }
 
-        // Step 4: 提交付款确认（支付方式 + 转账单号后6位）
-        async function submitPayConfirm() {
-            const payMethod = document.getElementById('payMethodSel').value;
-            const txn = (document.getElementById('payTxnInput').value || '').trim();
+        // Step 4 / Step3 inline: 提交付款确认（支付方式 + 转账单号后6位）
+        // ★ 2026-09-03 支持 from 参数：'inline'=Step3 内嵌表单（扫码同屏提交），
+        //   'step4'=Step4 独立表单（点「下一步」后出现）。提交成功一律 goStep(4)
+        //   让用户看到「管理员核对中」的状态轮询区。
+        async function submitPayConfirm(from) {
+            from = from || 'step4';
+            const suffix = (from === 'inline') ? 'Inline' : '';
+            const payMethod = document.getElementById('payMethodSel' + suffix).value;
+            const txn = (document.getElementById('payTxnInput' + suffix).value || '').trim();
             if (!/^[A-Za-z0-9]{6}$/.test(txn)) {
                 showToast('请填写转账单号后 6 位（数字或字母）');
                 return;
@@ -3008,7 +3040,8 @@
                 showToast('订单手机号缺失，请返回上一步重新填写');
                 return;
             }
-            const btn = document.getElementById('payConfirmBtn');
+            const btn = document.getElementById('payConfirmBtn' + suffix);
+            const originalText = btn.textContent;
             btn.disabled = true;
             btn.textContent = '提交中...';
             try {
@@ -3025,6 +3058,19 @@
                 const data = await res.json();
                 if (data.success) {
                     showToast('付款信息已提交，管理员核对中');
+                    // 两个表单同步：Inline 填了，把值同步到 Step4，方便用户回看
+                    if (from === 'inline') {
+                        const s4Method = document.getElementById('payMethodSel');
+                        const s4Txn = document.getElementById('payTxnInput');
+                        if (s4Method) s4Method.value = payMethod;
+                        if (s4Txn) s4Txn.value = txn.toUpperCase();
+                    } else {
+                        const s3Method = document.getElementById('payMethodSelInline');
+                        const s3Txn = document.getElementById('payTxnInputInline');
+                        if (s3Method) s3Method.value = payMethod;
+                        if (s3Txn) s3Txn.value = txn.toUpperCase();
+                    }
+                    goStep(4); // 进入"订单激活状态 + 激活码"区
                     document.getElementById('orderStatusBox').style.display = 'block';
                     queryOrderStatus();
                     startOrderStatusPolling();
@@ -3035,7 +3081,7 @@
                 showToast('网络错误，请检查网络后重试');
             } finally {
                 btn.disabled = false;
-                btn.textContent = '✅ 提交付款确认';
+                btn.textContent = originalText;
             }
         }
 
