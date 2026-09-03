@@ -2926,7 +2926,18 @@
                     (payName ? '（' + payName + '，转账单号尾号 ' + String(data.payTxnLast6 || '') + '）' : '') +
                     '，管理员在收款账单中核对到账后立即为您激活，通常 5-30 分钟内完成。<br>本页每 30 秒自动刷新，您也可以点击右上角"刷新状态"。';
             } else if (data.status === 'activated') {
-                html = '🎉 <strong>已激活</strong>：您的专属激活码已生成（见下方），请复制并粘贴到软件"激活授权"弹窗中。';
+                // ★ 2026-09-03 云端版补登录指引：云端账号由管理员审核时开通（账号=手机号，
+                //   初始密码 admin），纯网页/云端APP客户无"激活弹窗"可粘贴，必须在此告知，
+                //   否则客户审核通过后不知用什么密码登录。离线版维持粘贴激活码指引。
+                const _isCloud = String(data.versionLabel || '').indexOf('云端') >= 0;
+                if (_isCloud) {
+                    html = '🎉 <strong>已开通成功</strong>：管理员已开通您的云端账号。<br>' +
+                        '登录账号：<strong>' + (data.phone || '下单时填写的手机号') + '</strong>，' +
+                        '初始密码：<strong>admin</strong>，请登录后立即修改密码。<br>' +
+                        '专属激活码（见下方）用于桌面端/APP 绑定激活，复制后粘贴到软件"激活授权"弹窗即可。';
+                } else {
+                    html = '🎉 <strong>已激活</strong>：您的专属激活码已生成（见下方），请复制并粘贴到软件"激活授权"弹窗中。';
+                }
                 document.getElementById('licenseCodeText').textContent = data.licenseCode || '';
                 codeBox.style.display = 'block';
             } else if (data.status === 'rejected') {

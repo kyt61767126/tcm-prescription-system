@@ -116,6 +116,9 @@ export async function onRequest(context) {
             success: true,
             status: record.status,
             orderNo: record.orderNo || orderNo,
+            // ★ 2026-09-03 回显手机号：领码成功面板提示"云端登录账号=手机号"用。
+            //   本接口已用手机号双因子校验（record.phone === 查询 phone），回显无泄露。
+            phone: record.phone || phone,
             versionLabel: record.versionLabel || '',
             orderPrice: record.orderPrice || '',
             payMethod: record.payMethod || null,

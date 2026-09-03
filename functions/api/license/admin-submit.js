@@ -224,11 +224,44 @@ export async function onRequest(context) {
         //   因旧账号密码不一致导致登录 401）。此时不重复排队新申请，直接复用该已激活申请：
         //   做一次密码归一化（重置为默认 admin），返回该 requestId，让客户端轮询 admin-status
         //   拿到 activated 后提示"激活成功"，从而使用 133xxxx/admin 即可登录。
-        //   安全性：仅提交表单者（持有自己手机号、经过机器ID/版本校验、限流）可触发，且只会
-        //   把这个手机号自己的账号密码重置为 admin，不构成跨号接管。重新提交也不产生重复申请。
+        //   ★ 2026-09-03 P0 安全修订：原注释"持有自己手机号即不构成接管"论证错误——手机号是
+        //   公开信息且本接口匿名无验证码，必须校验提交者 machineId 属于该激活记录绑定设备
+        //   （见下方 _isOwnerDevice），设备不匹配一律拒绝账号操作。
         {
             const existingActivated = await findActivatedRequestForPhone(kv, phone);
             if (existingActivated) {
+                // ★ 2026-09-03 P0 安全修复（匿名手机号账户接管漏洞）：
+                //   admin-submit 是匿名接口（激活前无登录态），手机号不是秘密（名片/客服/
+                //   公开渠道可得），且本接口不验证手机号持有权（无短信验证码）。原逻辑仅凭
+                //   phone 命中已激活记录就执行 normalizeActivationPassword（把该手机号下全部
+                //   云端账号密码重置为 admin）并下发 licenseBase64 —— 攻击者只要知道受害者
+                //   手机号即可匿名提交（machineId 伪造任意 ≥8 位串即可通过格式校验），随后用
+                //   "手机号 + admin" 登录接管云端诊所（处方/患者数据全泄露）。
+                //   对齐 admin-status.js viaMachineIdFallback 防护哲学（该文件 L110-L114 注释
+                //   明确描述了同一攻击）：只有"提交者设备 == 激活记录绑定设备"（=同机重装/
+                //   重装 APP，machineId 设备级不变）才是受信场景，才允许账号补开/密码归一化/
+                //   下发 license。设备不匹配（换机/冒用）不在此短路处理：换机走客服免费白名单
+                //   或后台换机解绑（既有流程），机构版多机走 Tab2 输同一激活码（validate 多机
+                //   校验自动加 devices）。
+                const _boundMachines = new Set();
+                if (existingActivated.machineId) _boundMachines.add(String(existingActivated.machineId));
+                const _boundDevs = existingActivated.devices;
+                if (Array.isArray(_boundDevs)) {
+                    for (const _bd of _boundDevs) {
+                        const _bm = (_bd && typeof _bd === 'object') ? (_bd.machineId || _bd.id || '') : _bd;
+                        if (_bm) _boundMachines.add(String(_bm));
+                    }
+                }
+                const _isOwnerDevice = !!finalMachineId && _boundMachines.has(String(finalMachineId));
+                if (!_isOwnerDevice) {
+                    console.log('[AdminSubmit] 手机号命中已激活记录但设备不匹配，跳过账号补开/密码归一化/license下发（换机或冒用）:',
+                        phone, existingActivated.requestId);
+                    return json({
+                        success: false,
+                        code: 'ALREADY_ACTIVATED_OTHER_DEVICE',
+                        error: '该手机号已在其他设备完成激活。换机或需要在多台设备使用，请联系客服微信 hktzy1688 办理。'
+                    }, 409);
+                }
                 // 若账号已被后台删除或从未建号，先补开（幂等），保证"删除后重注册"也能直接重建
                 try {
                     await provisionCloudAccount(kv, existingActivated);
