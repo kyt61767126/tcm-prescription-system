@@ -283,22 +283,20 @@ P2 渐进迁移（2026-09-03 当日完成）：
 **验证口径**（本轮 P0 服务端已部署可 curl 验证）：
 - 造一条 pending 新申请 → 调 admin-cancel → 读 KV admin_phone:{phone} 应指向其他 pending/activated 记录或已 delete，不应仍指向被取消的 rid。
 
-## 7.5 【交接记录】P2 客户端收敛进行中状态（2026-09-03 会话因积分不足中断，下一 Trae 用户从此处接手）
+## 7.5 【收官记录】P2 客户端收敛全部完成（2026-09-03，5 commit：6429939a / dde5a133 / a84ff93c / 4d774342 / 0538e2f5）
 
-### A. 已完成（本会话，含 3 个已推送 commit + 1 个待推送 commit）
+### A. 已完成（全部已推送上线）
 1. **写端 7/7 API 收敛 ✅ 已推送上线**（6429939a / dde5a133 / a84ff93c，Pages 已部署）：admin-submit / order-submit / order-paid / admin-approve / admin-cancel / admin-delete / free-pass 全部经 `functions/api/license/_lib/license-write-service.js`（8 个原子函数：createAdminRequest / bindOrderToRequest / updateAdminRequestStatus(alreadyLicensed 去重) / cancelAdminRequest / deleteAdminRequest / markOrderPaid / upsertFreePass / removeFreePass / listFreePass）。线上冒烟 6 路由 400/403 无 500 ✓。
-2. **客户端双端激活三入口委托 ActivationObserver ✅ 代码已写入、已同步、未推送**：
+2. **客户端双端激活三入口委托 ActivationObserver ✅ 已推送（4d774342）+ 浏览器运行时验证 PASS**：线上 `window.ObserveActivationStatus` 为 function、0s 首次 poll 实测通过（node --check 覆盖不了的 prepend 顺序已线上实证）：
    - `shared/auth-core/offline.js`：L3488-3492 加 pollTimer/pollCount/currentActivationObserver 变量；L4099-4186 submit 成功分支改为「Observer 存在→统一走（三通道持久化+shortCircuitResult 立即领码+5s 轮询）；Observer 未加载→退旧 3 段代码兼容」；L4163-4244 startPolling 改为 Observer 委托外壳（0s 立即 poll、machineId fallback 自救、fetchAdminStatus 走 IPC/直连分流）。resumeAdminPendingRequest 保留原实现兜底（Observer 内部也有三通道 resume）。
    - `shared/auth-core/cloud.js`：完全对称改动（L3246-3249 / L3799-3885 / L3907-3982）。
    - `shared/service/activation-observer.js`：L269-296 _pollOnce 增加 opts.fetchAdminStatus 注入点（桌面 CORS 铁律：渲染进程 file:// 必须 IPC）。
 3. **sync-auth-core.ps1 prepend 机制 ✅**：Observer 代码以文件头前置方式拼进 11 份 auth-core.js 副本（0 HTML 改动，绕开"禁止改 HTML 结构"铁律）；VerifyOnly 模式同样构建 prepend 临时文件对比（否则 pre-push 卡死）。**已运行 sync：11 副本 SYNC ✓，node --check 全 0 ✓，VerifyOnly ✓，sync-all ✓，check-interface 6 OK ✓**。
 4. `app_project/db-yunduan/cloud_desktop/electron/` activate.js（checkAdminStatus 双参+cancelled 自救）与 main.js（IPC 双参对齐+启动断点续传）在 P1 commit 已推送。
 
-### B. 下一用户待办（按优先级）
-1. **推送待提交 commit**：工作区有 offline.js / cloud.js / activation-observer.js / sync-auth-core.ps1 + 11 份 auth-core.js 副本改动。校验已全绿，直接 `git add` 相关文件 + commit + push 即可（pre-push 三道会再跑一次）。
-2. **浏览器运行时验证**（推送到 Pages 后）：打开线上登录页 → 控制台确认 `window.ObserveActivationStatus` 为 function（prepend 生效）；模拟激活提交，观察 console 出现 `[activation-observer` 前缀日志、0s 首次 poll（不再等 5s）。node --check 只能保证语法，**运行时 prepend 顺序未实测**。
-3. **P2 最后一块（cli-4）**：登录统一路由 loginWithUsernamePassword(username, password)——双桌面 login.js + public/index.html handleLogin 四处收敛（有网→users.js API 统一结果；无网→本地 config.users/local_systemUsers 唯一副本）。注意禁止改 HTML 结构/CSS，只改 JS 逻辑。
-4. **打包**：离线桌面 / 离线 APP / 云端桌面 / 云端 APP / 鸿蒙需各自重打包才会带上 Observer（云端网页随 Pages 部署即刻生效）。
+### B. P2 登录统一路由 ✅ 已完成推送（0538e2f5，2026-09-03）
+1. **loginWithUsernamePassword 四处收敛 ✅**：`shared/auth-core/cloud.js` + `offline.js` 权威源新增统一路由函数（用户名/手机号双匹配 + 密码多盐兼容验证 + cloud 选项控制云端回退）；`public/index.html` handleLogin、离线 `index-app.html`、双桌面 login.js（离线 users 本地数组 / 云端 users+cloud:true）全部改为 `AuthCore.loginWithUsernamePassword` 单点调用；鸿蒙 rawfile index.html 手工对齐。11 份 auth-core 副本经 sync-auth-core.ps1 同步（prepend Observer 保留），check-interface 6 OK + sync-all VerifyOnly 全绿 + node --check 全过 + pre-push 三道门通过。
+2. **剩余唯一待办 = 各端打包**：离线桌面 / 离线 APP / 云端桌面 / 云端 APP / 鸿蒙需各自重打包才会带上 Observer + 登录统一路由（云端网页随 Pages 部署即刻生效）。
 
 ### C. 本会话踩坑（必须传承）
 1. **★ Edit 工具改 .ps1/.bat 会剥 UTF-8 BOM**：中文注释的 UTF-8 文件无 BOM 时 Windows PowerShell 5.1 按 GBK 读 → 中文双字节吞掉后续 ASCII 括号/花括号 → "Missing closing ')' " 解析错（报错行号是误导，实际错在文件头编码）。**修法：编辑 .ps1 后立即执行**：
