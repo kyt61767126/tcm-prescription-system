@@ -167,6 +167,10 @@ export async function onRequest(context) {
                 licenseInfo: {
                     user: record.adminName,
                     clinicName: record.clinicName,
+                    // ★ 2026-09-03 补 phone：客户端轮询中断重启后恢复领码（onAdminActivated
+                    //   参数兜底）需要权威手机号；此前恢复场景 state 为空 → 建号被跳过，
+                    //   已付款客户"激活成功却登录失败"。license 绑定 machineId，泄露无风险。
+                    phone: record.phone || '',
                     licenseCode: record.licenseCode,
                     resolvedAt: record.resolvedAt
                 }

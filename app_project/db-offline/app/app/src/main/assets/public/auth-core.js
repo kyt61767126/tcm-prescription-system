@@ -4044,6 +4044,22 @@
                     document.getElementById('adminSavedPhone').textContent = state.phone;
                     show('adminWaiting');
                     startPolling(res.requestId);
+                    // ★ 2026-09-03 轮询断点续传：持久化 requestId+手机号+密码。客户官网付款时
+                    //   APP 切后台被杀/窗口关闭 → 轮询中断 → 重启后凭此自动恢复领码建号
+                    //   （此前 APP 端 requestId 仅内存，已付款客户"激活成功却登录不上"根因；
+                    //   桌面版 activate.js 早有 admin-request-id.dat 持久化，APP 端是盲区）。
+                    //   激活完成（onAdminActivated）后清除。
+                    try {
+                        StorageAdapter.setItem('license:adminReqPending', JSON.stringify({
+                            requestId: res.requestId,
+                            phone: (state.phone || '').trim(),
+                            adminName: (state.adminName || '').trim(),
+                            clinicName: (state.clinicName || '').trim(),
+                            password: state.password || '',
+                            machineId: (typeof machineId !== 'undefined' && machineId) ? String(machineId) : '',
+                            at: Date.now()
+                        }));
+                    } catch (pe) { console.warn('[LicenseCheck] adminReqPending 持久化失败(不影响提交):', pe); }
                 } else {
                     btn.disabled = false;
                     const msg = (res && res.error) ? res.error : '提交失败，请重试';
@@ -4117,6 +4133,29 @@
             setCloudActivationDone();
             hideActivateLoginEntry();
 
+            // ★ 2026-09-03 恢复场景参数兜底（已付款客户"激活付款成功却登录不上"根因修复）：
+            //   轮询断点续传/启动恢复时 state 为空会话 → 手机号/密码全空 → 建号被跳过。
+            //   取值优先级：state（同会话激活窗口填的）→ 持久化 adminReqPending（提交时存的）
+            //   → 服务端 r.licenseInfo.phone（admin-status 2026-09-03 起返回权威手机号）。
+            let _resPhone = (state.phone || '').trim();
+            let _resName = (state.adminName || '').trim();
+            let _resPwd = state.password || '';
+            let _resClinic = (state.clinicName || '').trim();
+            if (!_resPhone || !_resPwd) {
+                try {
+                    const _saved = JSON.parse((await StorageAdapter.getItem('license:adminReqPending')) || 'null');
+                    if (_saved && typeof _saved === 'object') {
+                        if (!_resPhone && _saved.phone) _resPhone = String(_saved.phone).trim();
+                        if (!_resPwd && _saved.password) _resPwd = String(_saved.password);
+                        if (!_resName && _saved.adminName) _resName = String(_saved.adminName).trim();
+                        if (!_resClinic && _saved.clinicName) _resClinic = String(_saved.clinicName).trim();
+                    }
+                } catch (se) { console.warn('[LicenseCheck] onAdminActivated 读取持久化申请失败(兜底跳过):', se); }
+            }
+            if (!_resPhone && r && r.licenseInfo && r.licenseInfo.phone) {
+                _resPhone = String(r.licenseInfo.phone).trim();
+            }
+
             // ★ 2026-08-24 关键修复：无条件把"管理员激活提交的手机号/密码/姓名"同步到前端本地用户表
             //   根因：离线系(APP/桌面)登录校验 getUsers() 只读 localStorage.local_systemUsers；
             //   Java/Electron installAdminLicense 只是把手机号账号写入本地 config，WebView 登录页面读不到 → 登录必然失败。
@@ -4130,22 +4169,26 @@
             //   仅"无本地安装桥"（云端APP，登录走云端API，后端归一化密码=admin）才固定 'admin'。
             try {
                 if (typeof window.addLocalActivationUser === 'function') {
-                    const uPhone = (state.phone || '').trim();
-                    const uName = (state.adminName || '').trim();
+                    const uPhone = _resPhone;
+                    const uName = _resName;
                     const hasInstallBridge = !!(global.electronAPI && global.electronAPI.activate &&
                         typeof global.electronAPI.activate.installAdminLicense === 'function');
-                    const effPwd = hasInstallBridge ? (state.password || 'admin') : 'admin';
-                    window.addLocalActivationUser({
-                        username: uPhone || uName,
-                        phone: uPhone,
-                        password: effPwd,
-                        name: uName || uPhone || '管理员',
-                        role: 'admin',
-                        clinicName: (state.clinicName || '').trim()
-                    });
-                    console.log('[LicenseCheck] onAdminActivated: 账号同步到localStorage用户表',
-                                'username=', uPhone || uName, 'phone=', uPhone,
-                                'password=', hasInstallBridge ? (state.password || 'admin') : 'admin(云端固定)');
+                    const effPwd = hasInstallBridge ? (_resPwd || 'admin') : 'admin';
+                    if (uPhone || uName) {
+                        window.addLocalActivationUser({
+                            username: uPhone || uName,
+                            phone: uPhone,
+                            password: effPwd,
+                            name: uName || uPhone || '管理员',
+                            role: 'admin',
+                            clinicName: _resClinic
+                        });
+                        console.log('[LicenseCheck] onAdminActivated: 账号同步到localStorage用户表',
+                                    'username=', uPhone || uName, 'phone=', uPhone, '来源=state/持久化/服务端兜底',
+                                    'password=', hasInstallBridge ? (_resPwd || 'admin') : 'admin(云端固定)');
+                    } else {
+                        console.warn('[LicenseCheck] onAdminActivated: 手机号/姓名均缺失，无法同步账号（恢复兜底也未取到 phone）');
+                    }
                 } else {
                     console.warn('[LicenseCheck] onAdminActivated: window.addLocalActivationUser 未定义，手机号账号未同步到前端用户表！可能导致登录失败。');
                 }
@@ -4154,7 +4197,7 @@
             }
 
             const license = r.license || '';
-            const phone = state.phone;
+            const phone = _resPhone || (state.phone || '');
             // ★ 2026-08-29 邀请码自愈：管理员激活时服务端已返回真实激活码（admin-status
             //   licenseInfo.licenseCode，admin-approve 生成并绑定本机），此处必须存入本地，
             //   否则 loadInviteInfo 三来源取码全空 → 邀请码卡片永远显示"未找到激活码记录"。
@@ -4180,11 +4223,13 @@
             if (global.electronAPI && global.electronAPI.activate &&
                 typeof global.electronAPI.activate.installAdminLicense === 'function' && license) {
                 try {
+                    // ★ 2026-09-03 恢复场景兜底：adminName/clinicName/password 优先 state，
+                    //   空则用持久化/服务端兜底值（_res*），确保断点续传激活也建「手机号+自设密码」账号
                     const inst = await global.electronAPI.activate.installAdminLicense({
                         license: license,
-                        adminName: state.adminName,
-                        clinicName: state.clinicName,
-                        password: state.password || 'admin',
+                        adminName: _resName || state.adminName,
+                        clinicName: _resClinic || state.clinicName,
+                        password: _resPwd || state.password || 'admin',
                         phone: phone,
                         licenseCode: adminLicenseCode
                     });
@@ -4197,6 +4242,8 @@
                                 try { global.electronAPI.activate.restart(); } catch(e){}
                             }
                         };
+                        // ★ 2026-09-03 激活领码成功：清除 adminReqPending 持久化（断点续传完成）
+                        try { StorageAdapter.removeItem('license:adminReqPending'); } catch (ce2) {}
                     } else {
                         descEl.innerHTML = '激活已通过，但本地写入失败：' + ((inst && inst.error) || '未知错误') + '<br>请将机器ID发给客服人工激活';
                         show('adminSuccess');
@@ -4269,8 +4316,118 @@
         if (clinicName) document.getElementById('adminClinicName').value = clinicName;
     }
 
+    // ★ 2026-09-03 管理员激活断点续传：启动时检测持久化申请是否已审核通过并自动完成领码。
+    //   场景：客户提交激活申请 → 去官网付款时 APP 切后台被杀/窗口关闭 → 轮询中断 →
+    //   管理员审核通过但客户端从未领码（license 未装、账号未建）→ 客户付款成功却登录失败。
+    //   恢复：读 license:adminReqPending（提交时持久化的 requestId+phone+password）→ 查询
+    //   admin-status（带 machineId 官网订单兜底）→ 已 activated 则自动装 license+建账号。
+    //   独立实现（不复用 showAdminActivateModal 内的 onAdminActivated——其弹窗 DOM 是打开
+    //   激活窗口时才注入的，重启后不存在）。
+    async function _resumeCompleteActivation(r, saved) {
+        var phone = (saved && saved.phone) ? String(saved.phone).trim() : '';
+        var rPhone = (r && r.licenseInfo && r.licenseInfo.phone) ? String(r.licenseInfo.phone).trim() : '';
+        if (!phone && rPhone) phone = rPhone;
+        var pwd = (saved && saved.password) ? String(saved.password || '') : '';
+        var adminName = (saved && saved.adminName) ? String(saved.adminName || '').trim() : '';
+        var clinicName = (saved && saved.clinicName) ? String(saved.clinicName || '').trim() : '';
+        var adminLicenseCode = (r && r.licenseInfo && r.licenseInfo.licenseCode) ?
+            String(r.licenseInfo.licenseCode).trim() : '';
+
+        // ① localStorage 建号（username=手机号，password=激活弹窗自设密码）
+        try {
+            if ((phone || adminName) && typeof global.addLocalActivationUser === 'function') {
+                global.addLocalActivationUser({
+                    username: phone || adminName,
+                    phone: phone,
+                    password: pwd || 'admin',
+                    name: adminName || phone || '管理员',
+                    role: 'admin',
+                    clinicName: clinicName
+                });
+                console.log('[LicenseCheck] 断点续传: 账号已同步到localStorage用户表 username=', phone || adminName);
+            }
+        } catch (e) { console.warn('[LicenseCheck] 断点续传建号异常:', e); }
+
+        // ② 存激活码（邀请码自愈同款）
+        if (adminLicenseCode && adminLicenseCode.length >= 4) {
+            try {
+                await StorageAdapter.setItem('license:code', adminLicenseCode);
+                await StorageAdapter.removeItem('license:lastHeartbeat');
+                await StorageAdapter.removeItem('license:offlineStart');
+            } catch (ce) { console.warn('[LicenseCheck] 断点续传存储激活码失败:', ce); }
+        }
+
+        // ③ 装 license + 建 config 账号（Java/Electron 桥）
+        var license = (r && r.license) ? r.license : '';
+        var installed = false;
+        if (global.electronAPI && global.electronAPI.activate &&
+            typeof global.electronAPI.activate.installAdminLicense === 'function' && license) {
+            try {
+                var inst = await global.electronAPI.activate.installAdminLicense({
+                    license: license,
+                    adminName: adminName,
+                    clinicName: clinicName,
+                    password: pwd || 'admin',
+                    phone: phone,
+                    licenseCode: adminLicenseCode
+                });
+                installed = !!(inst && inst.success);
+            } catch (e) {
+                console.warn('[LicenseCheck] 断点续传安装license异常:', e);
+            }
+        } else {
+            installed = true; // 云端APP：账号在云端创建，无本地安装桥
+        }
+
+        // ④ 成功收尾：清持久化 + 标记激活完成 + 提示重启/登录
+        try { setCloudActivationDone(); } catch (e2) {}
+        try { hideActivateLoginEntry(); } catch (e2) {}
+        try { await StorageAdapter.removeItem('license:adminReqPending'); } catch (ce2) {}
+        if (installed) {
+            var msg = '您的激活申请已审核通过，授权已自动安装到本机。\n\n' +
+                (phone ? ('📱 登录账号：' + phone + '\n') : '') +
+                '🔑 登录密码：' + (pwd || 'admin（默认）') + '\n\n' +
+                '请' + (global.electronAPI && global.electronAPI.activate &&
+                    typeof global.electronAPI.activate.installAdminLicense === 'function'
+                    ? '重启应用后使用手机号登录' : '返回登录框使用手机号登录') + '。';
+            try { alert(msg); } catch (e) { console.log(msg); }
+        } else {
+            try { alert('激活已通过，但本地写入失败。请打开「管理员激活」重新提交手机号即可自动完成激活。'); } catch (e) {}
+        }
+    }
+
+    function resumeAdminPendingRequest() {
+        try {
+            StorageAdapter.getItem('license:adminReqPending').then(function (savedRaw) {
+                if (!savedRaw) return;
+                var saved = null;
+                try { saved = JSON.parse(savedRaw); } catch (e) { return; }
+                if (!saved || !saved.requestId) return;
+                var url = ADMIN_STATUS_URL + '?requestId=' + encodeURIComponent(saved.requestId);
+                if (saved.machineId) url += '&machineId=' + encodeURIComponent(saved.machineId);
+                fetch(url, { method: 'GET', headers: { 'Content-Type': 'application/json' } })
+                    .then(function (resp) { return resp.json(); })
+                    .then(function (r) {
+                        if (r && r.success && r.status === 'activated') {
+                            console.log('[LicenseCheck] 断点续传：激活申请已审核通过，自动完成领码（requestId=' + saved.requestId + '）');
+                            _resumeCompleteActivation(r, saved).catch(function (ae) {
+                                console.warn('[LicenseCheck] 断点续传领码异常:', ae);
+                            });
+                        }
+                    })
+                    .catch(function (e) {
+                        console.warn('[LicenseCheck] 断点续传状态查询失败(下次启动再试):', e);
+                    });
+            }).catch(function (e) { /* StorageAdapter 读取失败忽略 */ });
+        } catch (e) {
+            console.warn('[LicenseCheck] 断点续传异常(不影响使用):', e);
+        }
+    }
+
     // 页面加载完成后延迟 2 秒校验 license（等待 electronAPI 注入完成）
     function startLicenseCheck() {
+        // ★ 2026-09-03 断点续传恢复（优先于其他自愈：先完成领码，后续桥自愈才有账号可同步）
+        resumeAdminPendingRequest();
         // ★ 2026-08-24 登录自愈：启动时从本地 config（Java installAdminLicense/activateOnline 写入的 users）
         //   UPSERT 同步到 localStorage.local_systemUsers。解决两类历史问题：
         //   ① 旧版本 onAdminActivated 未同步账号 → 激活成功却登录"用户名或密码错误"
