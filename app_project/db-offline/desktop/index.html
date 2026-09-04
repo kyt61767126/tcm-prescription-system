@@ -1682,7 +1682,18 @@ let currentUser = null;
                     // ★ 2026-08-25 与离线APP同源修复：本地密码已是哈希（用户改过密码）时，
                     //   激活写入的明文旧密码（如默认 admin）不得覆盖用户已改的密码
                     const keepLocalPwd = isPasswordHashed(old.password || '') && !isPasswordHashed(pwd);
-                    // ★ 2026-08-27 与离线APP同源修复改名回滚：按 phone 命中已改名账号时保留本地改名，
+                                        // ★ 2026-09-04 AR-双锁死：激活原始手机号账号强制覆盖（0 async，纯同步判定）
+                                        //   keepLocalPwd 的初衷是"用户在系统里手动改了用户名+改了密码"时
+                                        //   保护用户手动改过的 PBKDF2/SHA-256 哈希，不被激活弹窗默认 admin 明文打回；
+                                        //   但脏场景（客户填错密码→明文被自动 ensurePasswordsHashed 升级为错误哈希）
+                                        //   也同样命中 keepLocalPwd=true，导致"前端永远留错哈希+Java永不更新密码"
+                                        //   双锁死 → 三阶SOP全失效(清localStorage还错因为Java密码永旧)。
+                                        //   精准短路：如果最新同步来的 username 是 11 位中国手机号(即 激活原始账号 未被
+                                        //   用户手动改名为英文/拼音) → 100% 是激活/桥自愈写入的账号→永远不保留旧哈希
+                                        //   （错误脏哈希 / 正确旧哈希统一强制覆盖为桥同步来的最新明文）。
+                                        //   非手机号用户名（如 wangsir / zhangsan）→ 继续保留 keepLocalPwd（保护手改密码）
+                                        if (keepLocalPwd && typeof uname === 'string' && /^1[3-9]\d{9}$/.test(uname)) keepLocalPwd = false;
+                     // ★ 2026-08-27 与离线APP同源修复改名回滚：按 phone 命中已改名账号时保留本地改名，
                     //   不得打回激活时的手机号（否则改名被回滚，"新用户名+新密码无法登录"）
                     const keepLocalName = !!(old.username && old.username !== uname && !/^1[3-9]\d{9}$/.test(old.username));
                     list[idx] = Object.assign({}, old, {

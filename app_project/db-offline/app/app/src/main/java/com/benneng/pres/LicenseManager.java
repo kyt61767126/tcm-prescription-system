@@ -3648,21 +3648,35 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
                 users = new org.json.JSONArray();
                 cfg.put("users", users);
             }
-            boolean exists = false;
+            int existsIdx = -1;
             for (int i = 0; i < users.length(); i++) {
                 org.json.JSONObject u = users.optJSONObject(i);
-                if (u != null && username.equals(u.optString("username", ""))) { exists = true; break; }
+                if (u != null && username.equals(u.optString("username", ""))) { existsIdx = i; break; }
             }
-            if (exists) return;
-            org.json.JSONObject nu = new org.json.JSONObject();
-            nu.put("username", username);
-            if (phone != null && !phone.isEmpty()) nu.put("phone", phone);
-            // ★ 明文存储默认密码，登录时自动兼容并升级（避免 Java 端哈希与前端不一致）
-            nu.put("password", (password == null || password.isEmpty()) ? "admin" : password);
-            nu.put("name", (name == null || name.isEmpty()) ? username : name);
-            nu.put("role", "admin");
-            users.put(nu);
-            Log.i(TAG, "激活登录账号创建: username=" + username + " name=" + name);
+            final String effPwd = (password == null || password.isEmpty()) ? "admin" : password;
+            final String effName = (name == null || name.isEmpty()) ? username : name;
+            if (existsIdx >= 0) {
+                // --- 2026-09-04 AR-双锁死：UPSERT UPDATE（不再 exists=return）---
+                org.json.JSONObject u = users.optJSONObject(existsIdx);
+                if (u == null) u = new org.json.JSONObject();
+                u.put("username", username);
+                if (phone != null && !phone.isEmpty()) u.put("phone", phone);
+                else if (!u.has("phone")) u.put("phone", "");
+                u.put("password", effPwd);
+                u.put("name", effName);
+                u.put("role", "admin");
+                users.put(existsIdx, u);
+                Log.i(TAG, "激活登录账号 UPSERT 更新: username=" + username + " phone=" + phone + " name=" + effName);
+            } else {
+                org.json.JSONObject nu = new org.json.JSONObject();
+                nu.put("username", username);
+                if (phone != null && !phone.isEmpty()) nu.put("phone", phone);
+                nu.put("password", effPwd);
+                nu.put("name", effName);
+                nu.put("role", "admin");
+                users.put(nu);
+                Log.i(TAG, "激活登录账号 UPSERT 新增: username=" + username + " phone=" + phone + " name=" + effName);
+            }
             writeConfigJSON(cfg, true);
         } catch (Exception ex) {
             Log.w(TAG, "创建登录账号异常(不影响激活): " + ex.getMessage());
