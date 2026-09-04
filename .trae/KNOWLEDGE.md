@@ -483,6 +483,12 @@ P2 渐进迁移（2026-09-03 当日完成）：
 - **教训：auth-core 运行时注入凡按 `loginOverlay` 定位登录框的，都必须同时处理桌面登录窗（特征 = btnOk+loginPassword 无 overlay）——`maybePromptRegistration` 早有此双端检测，注入函数漏了**。
 - **生效方式**：离线桌面随下次重打包生效；离线 APP 不受影响（APP 壳本就有 loginOverlay 注入）；云端不受影响。
 
+**十、激活页注册信息同步三缺口修复（2026-09-04 深夜，Commit 094c449c）**：用户实测反馈"注册开通后进入管理员激活页面，未同步注册信息"。逐行审查发现预填代码（条目四）虽在但有三处缺口，全部修复于 offline.js `showAdminActivateModal`：
+- ① **密码解密竞态（根因）**：旧版 `decryptSensitive(passwordEnc).then(p => state.password = p)` 异步无等待——用户快速点「下一步」时 `state.password` 尚空 → 不满足 `state.password` 条件 → **误入密码步骤**（观感=注册信息没同步全）。修复：解密 Promise 存 `__regPwdPromise` 变量；`adminToStep2Btn` handler **async 化** + `Promise.race([解密, 1.5s超时])` 等待；条件收窄为 `__regPrefill.phone === phone`（预填手机号未被改动即注册本人），**解密失败/超时也直接提交**——已注册用户 config.json 已有注册账号+密码（铁律一 Single-Writer 保留不覆盖），`state.password` 仅兜底建号用，提交本身不依赖它。
+- ② **按钮语义**：预填后 `adminToStep2Btn.textContent` 由「下一步：确认密码（可留空=默认 admin）」改为「✅ 确认信息并提交 →」——方案B下点此直接提交，符合"确定后提交"预期；非预填场景保持原文案。
+- ③ **可见反馈**：Tab1 表单顶部插入绿色提示条「✅ 已自动同步注册开通时填写的信息（诊所名称/管理员姓名/联系电话），请核对无误后点击下方确认按钮」；`adminPhoneHint` 更新为「登录密码为注册时设置的密码」（消除"默认密码 admin"误导——方案B下注册密码才是真密码）。
+- **铁律：异步预填（解密/桥调用）必须存 Promise 让消费点可 await；纯 fire-and-forget `.then()` 赋值的字段，消费时可能还是旧值**。sync-auth-core 11 副本 IN SYNC / check-interface 6 OK。生效：离线 APP + 离线桌面需重打包；云端不受影响。
+
 ## 8. 桌面版技术规范
 
 * **登录预填来源单一化（2026-09-04 Commit f62f16c4）**：`initLoginInput` 的预填**只允许来自 localStorage 记住的用户名**（`KEY_REMEMBER_USER` / `local_rememberedUsers`），禁止直接从 `config.users` 自动预填。历史 bug：`else if users.length===1` 分支无法区分「出厂模板 admin 单账户」和「刚激活后的单管理员」，导致全新安装首次启动即预填 admin/admin。配套删除 `isTrialDefault && admin` 兜底（离线端独有）。区分手段：localStorage remembered 键在用户成功登录后才写入，全新安装天然为空 → usernameToFill = null → 空白表单。云端 login.js（无 isTrialDefault 兜底）同理需同步修改。
