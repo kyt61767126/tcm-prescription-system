@@ -620,6 +620,130 @@
     //   / APP 沙箱被拿到即可直接读）。加密失败仍不持久化明文（fail-safe）。
     //   ★ 2026-09-03 安全审查补漏：之前修复把激活弹窗自设 password 明文直接写
     //   localStorage.license:adminReqPending = 可离线读客户密码。
+    // ==================== 2026-09-04 Phase 2.2 · license:state v2 统一状态机 FSM
+    //   ★ 目标架构铁律 5（补充到 KNOWLEDGE §7）：激活流程的"客户端状态"= 单一权威入口 license:state:v2，
+    //     不再有 5 处分散读 adminReqPending / activated / approvalStatus / adminObserveStarted 等
+    //     老 key 造成状态漂移导致的"明明激活了但弹窗还在/断点续传不跑"偶发问题。
+    //   6 状态枚举：
+    //     unactivated       = 未激活（默认初始态）
+    //     pending_payment   = 客户端已提交激活申请→等待客户完成官网付款
+    //     pending_approval  = 客户已付款→等待惠康中医后台管理员审核通过
+    //     activated_installing = 审核通过(activated)→正在本地执行 installAdminLicense → 同步账号 → 提示重启
+    //     activated_ready   = 已完全激活成功（license 有效 + 本地账号同步完）
+    //     expired_disabled  = 授权过期/平台停用/客户违规停用
+    //   实现策略（缺口层最小，零回归，100% 新旧兼容）：
+    //     (1) 只新增 FSM v2 读写 key，不删除不修改旧 5 处分散代码；
+    //     (2) 启动时 migrateV1ToV2：把旧 key（license:adminReqPending / license:activatedDoneFlag
+    //         / checkLicense 结果）无损映射到 v2 单状态；
+    //     (3) setStateV2 在写 v2 同时兼容旧行为：pending 写老 adminReqPending、activated_ready
+    //         自动清老 adminReqPending → 旧代码读旧 key 仍然得到正确结果；
+    //     (4) 暴露统一只读入口 getLicenseStateV2() → 以后新诊断/新弹窗/新按钮只调这一个。
+    const _STATE_KEY_V2 = 'license:state:v2';
+    const _STATES = {
+        UNACTIVATED: 'unactivated',
+        PENDING_PAYMENT: 'pending_payment',
+        PENDING_APPROVAL: 'pending_approval',
+        ACTIVATED_INSTALLING: 'activated_installing',
+        ACTIVATED_READY: 'activated_ready',
+        EXPIRED_DISABLED: 'expired_disabled'
+    };
+    // 只读入口（对外统一）：任何新代码都读这，不用看分散的旧 key
+    async function getLicenseStateV2() {
+        try { await migrateLicenseStateV1ToV2(); } catch(_) {}
+        try {
+            const raw = await StorageAdapter.getItem(_STATE_KEY_V2);
+            if (!raw) return { state: _STATES.UNACTIVATED, meta: {} };
+            const obj = JSON.parse(raw);
+            if (!obj || !obj.state) return { state: _STATES.UNACTIVATED, meta: {} };
+            return { state: obj.state, meta: obj.meta || {}, _v2: true };
+        } catch(e) {
+            return { state: _STATES.UNACTIVATED, meta: {}, err: String(e.message || e) };
+        }
+    }
+    // 只写入口：旧代码改旧 key 时应同步调 setStateV2 保持单源一致；当前缺口层只在关键节点调用（submit成功/轮询pending/activated/installed/清数据），未来再逐步替换旧写。
+    async function setStateV2(nextState, metaOverride) {
+        if (!nextState || !Object.values(_STATES).includes(nextState)) {
+            console.warn('[FSM v2] 非法 state:', nextState);
+            return;
+        }
+        let meta = {};
+        try {
+            const prevRaw = await StorageAdapter.getItem(_STATE_KEY_V2);
+            if (prevRaw) {
+                try { meta = (JSON.parse(prevRaw) || {}).meta || {}; } catch(_) {}
+            }
+        } catch(_) {}
+        if (metaOverride && typeof metaOverride === 'object') {
+            meta = Object.assign({}, meta, metaOverride);
+        }
+        meta.transitionAt = Date.now();
+        const payload = { state: nextState, meta: meta, schema: 2 };
+        try { await StorageAdapter.setItem(_STATE_KEY_V2, JSON.stringify(payload)); }
+        catch (e) { console.warn('[FSM v2] 写入失败(不影响旧流程):', e); }
+        console.log('[FSM v2] transition:', (meta && meta.prevState ? meta.prevState + ' -> ' : '') + nextState, meta || '');
+    }
+    // 迁移：启动时执行一次（幂等可重复执行）→ 旧 key 无损映射到 v2
+    async function migrateLicenseStateV1ToV2() {
+        try {
+            const cur = await StorageAdapter.getItem(_STATE_KEY_V2);
+            if (cur && /"schema"\s*:\s*2/.test(cur)) return; // 已经是 v2 schema 2 幂等跳过
+        } catch(_) {}
+        let nextState = _STATES.UNACTIVATED;
+        let meta = { migrated: true, migratedAt: Date.now() };
+        try {
+            const req = await StorageAdapter.getItem('license:adminReqPending');
+            if (req) {
+                try {
+                    const r = JSON.parse(req);
+                    if (r && r.requestId) {
+                        // 旧 adminReqPending：如果 status=pending 就 pending_payment/pending_approval
+                        // 没有 status 字段则默认 pending_approval（因为旧版只有付款后才存）
+                        const status = String((r.status || r.adminStatus || r.paymentStatus || '')).toLowerCase();
+                        nextState = (status === 'pending_payment' || status === 'payment_pending' || /unpaid|paying|待付款/.test(status))
+                            ? _STATES.PENDING_PAYMENT
+                            : _STATES.PENDING_APPROVAL;
+                        meta.requestId = r.requestId;
+                        meta.phone = r.phone || '';
+                        meta.adminName = r.adminName || '';
+                        meta.clinicName = r.clinicName || '';
+                        meta.at = r.at || 0;
+                    }
+                } catch (parseErr) {}
+            }
+            // 如果有 activatedDoneFlag 或 license=valid（checkLicense 结果）→ activated_ready
+            try {
+                const actDone = await StorageAdapter.getItem('license:activatedDoneFlag');
+                if (actDone === '1' || actDone === 'true') nextState = _STATES.ACTIVATED_READY;
+            } catch(_) {}
+            try {
+                if (window.electronAPI && window.electronAPI.license && typeof window.electronAPI.license.getStatus === 'function') {
+                    const r = await window.electronAPI.license.getStatus();
+                    if (r && r.valid === false && /expired|disabled|停用/.test(String(r.reason || ''))) {
+                        nextState = _STATES.EXPIRED_DISABLED;
+                        meta.reason = r.reason || '';
+                    } else if (r && r.valid) {
+                        if (nextState !== _STATES.PENDING_APPROVAL && nextState !== _STATES.PENDING_PAYMENT) {
+                            nextState = _STATES.ACTIVATED_READY;
+                        }
+                    }
+                }
+            } catch(_) {}
+        } catch (e) { console.warn('[FSM v2] migrate 异常(回退 unactivated):', e); nextState = _STATES.UNACTIVATED; }
+        await setStateV2(nextState, meta);
+    }
+    // 暴露给诊断/新 UI
+    if (typeof window !== 'undefined') {
+        window.__getLicenseStateV2 = getLicenseStateV2;
+        window.__setLicenseStateV2 = setStateV2;
+        window.__LICENSE_STATES_V2 = _STATES;
+    }
+    // 第一次启动（DOMContentLoaded 触发 startLicenseCheck 之前，如果 DOMContentLoaded 已经触发就立即跑迁移）
+    try {
+        const _runMigrate = function () { setTimeout(function () { migrateLicenseStateV1ToV2().catch(function () {}); }, 0); };
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _runMigrate, { once: true });
+        else _runMigrate();
+    } catch(_) {}
+
     const _SENS_SALT = 'bnzc_admin_req_sens_salt_v1';
     function _sensXor(text, decode) {
         if (!text) return '';
@@ -1609,6 +1733,20 @@
     //   - source='cloud'  → user 为云端返回（含 token；落地本地表/缓存等副作用由调用方负责）
     //   - 云端异常不阻断：按本地未命中返回（保持离线可用，与各端旧行为一致）
     async function loginWithUsernamePassword(username, password, options = {}) {
+        // ★ 2026-09-04 Phase 1 · 铁律 4 · ReadyPromise 统一登录闸门
+        //   入口在【认证函数的最开头】全局生效：不管 HTML 表单 submit / 历史调用 / 桌面端自定义封装，
+        //   只要是 offline.js 暴露的 AuthCore.loginWithUsernamePassword 都会被同一闸门挡住。
+        //   离线 APP/桌面：等 getActivationUsers UPSERT 完成再比对用户名/密码，100% 消灭手速竞态；
+        //   无桥环境（云端 APP / 纯网页 / 未授权）：window.__activationUsersReadyPromise = Promise.resolve()
+        //   → 0 额外开销，不影响任何云端流程。
+        try {
+            if (typeof window !== 'undefined' &&
+                typeof window.__activationUsersReadyPromise !== 'undefined' &&
+                window.__activationUsersReadyPromise &&
+                typeof window.__activationUsersReadyPromise.then === 'function') {
+                await window.__activationUsersReadyPromise;
+            }
+        } catch (_) { /* 任何异常：fail-open，不阻塞登录 */ }
         const users = (typeof options.getUsers === 'function') ? (options.getUsers() || []) : (options.users || []);
         let user = null;
         let matchedIdentifier = username;
@@ -4619,6 +4757,13 @@
                                 machineId: (typeof machineId !== 'undefined' && machineId) ? String(machineId) : '',
                                 at: Date.now()
                             }));
+                            // ★ Phase 2.2 FSM v2：客户端提交申请并付款成功 → PENDING_APPROVAL
+                            try {
+                                const _st = (res.status === 'pending_payment' || /unpaid|paying|待付款/.test(String(res.status || '')))
+                                    ? _STATES.PENDING_PAYMENT
+                                    : _STATES.PENDING_APPROVAL;
+                                setStateV2(_st, { requestId: res.requestId, phone: String(state.phone || '').trim(), adminName: String(state.adminName || '').trim(), clinicName: String(state.clinicName || '').trim(), prevState: (await getLicenseStateV2()).state });
+                            } catch (_fsmerr) { console.warn('[FSM v2] setState pending err:', _fsmerr); }
                         } catch (pe) { console.warn('[LicenseCheck] adminReqPending 持久化失败(不影响提交):', pe); }
                         if (res.status === 'activated' && res.license) {
                             clearInterval(pollTimer); pollTimer = null;
@@ -5150,6 +5295,13 @@
 
     // 页面加载完成后延迟 2 秒校验 license（等待 electronAPI 注入完成）
     function startLicenseCheck() {
+        // ★ 2026-09-04 Phase 1 · 铁律 4 · ReadyPromise 同步闸门
+        //   默认 Promise.resolve()——无桥环境（云端 APP/纯网页/未授权设备）立即放行，不阻塞登录。
+        //   有桥环境（离线 APP / 离线桌面 Electron）在下面的 getActivationUsers 真实 UPSERT 完之后 resolve，
+        //   登录 submit 入口处 await __activationUsersReadyPromise 保证用户手速多快都不会早于桥账号同步。
+        if (typeof window !== 'undefined' && typeof window.__activationUsersReadyPromise === 'undefined') {
+            window.__activationUsersReadyPromise = Promise.resolve();
+        }
         // ★ 2026-09-03 断点续传恢复（优先于其他自愈：先完成领码，后续桥自愈才有账号可同步）
         resumeAdminPendingRequest();
         // ★ 2026-08-24 登录自愈：启动时从本地 config（Java installAdminLicense/activateOnline 写入的 users）
@@ -5160,7 +5312,7 @@
         try {
             if (global.electronAPI && global.electronAPI.activate &&
                 typeof global.electronAPI.activate.getActivationUsers === 'function') {
-                global.electronAPI.activate.getActivationUsers().then(function (res) {
+                const syncPromise = global.electronAPI.activate.getActivationUsers().then(function (res) {
                     if (!res || !res.success || !Array.isArray(res.users)) return;
                     if (typeof window.addLocalActivationUser !== 'function') return;
                     res.users.forEach(function (u) {
@@ -5171,14 +5323,22 @@
                                 phone: u.phone ? String(u.phone) : '',
                                 password: u.password || 'admin',
                                 name: u.name || u.username,
-                                role: u.role || 'admin'
+                                role: u.role || 'admin',
+                                // ★ Phase 1.3 双保险：Java lastPwdUpdatedAt 时间戳（Phase 1.3 同步写入）
+                                //   前端 keepLocalPwd 全面 verify 再叠加时间戳新→强制覆盖。
+                                lastPwdUpdatedAt: typeof u.lastPwdUpdatedAt === 'number' ? u.lastPwdUpdatedAt : 0,
+                                updatedAt: typeof u.updatedAt === 'number' ? u.updatedAt : 0
                             });
                         } catch (e) {}
                     });
-                    console.log('[LicenseCheck] 启动自愈: config.json 激活账号已同步到 localStorage，共', res.users.length, '个');
+                    console.log('[LicenseCheck] 启动自愈: config.json 激活账号已同步到 localStorage，共', res.users.length, '个 (ReadyPromise 已满足)');
                 }).catch(function (e) {
                     console.warn('[LicenseCheck] 启动自愈 getActivationUsers 失败(不影响使用):', e);
                 });
+                // ★ Phase 1.1 关键：Promise 真实挂到全局让登录入口 await
+                if (typeof window !== 'undefined') {
+                    window.__activationUsersReadyPromise = syncPromise.catch(function () {}); // catch 兜底防止抛错阻塞登录
+                }
             }
         } catch (e) { console.warn('[LicenseCheck] 启动自愈异常(不影响使用):', e); }
 

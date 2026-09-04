@@ -3664,7 +3664,9 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
                 else if (!u.has("phone")) u.put("phone", "");
                 u.put("password", effPwd);
                 u.put("name", effName);
-                u.put("role", "admin");
+                u.put("role", "admin");u.put("lastPwdUpdatedAt", System.currentTimeMillis());
+u.put("updatedAt", System.currentTimeMillis());
+
                 users.put(existsIdx, u);
                 Log.i(TAG, "激活登录账号 UPSERT 更新: username=" + username + " phone=" + phone + " name=" + effName);
             } else {
@@ -3673,7 +3675,9 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
                 if (phone != null && !phone.isEmpty()) nu.put("phone", phone);
                 nu.put("password", effPwd);
                 nu.put("name", effName);
-                nu.put("role", "admin");
+                nu.put("role", "admin");nu.put("lastPwdUpdatedAt", System.currentTimeMillis());
+nu.put("updatedAt", System.currentTimeMillis());
+
                 users.put(nu);
                 Log.i(TAG, "激活登录账号 UPSERT 新增: username=" + username + " phone=" + phone + " name=" + effName);
             }
