@@ -445,7 +445,9 @@ P2 渐进迁移（2026-09-03 当日完成）：
 
 **三、本轮新坑（工具链）**：① **落定门拦截未提交源码**=改完源码必须先 commit 再打包（`ALLOW_DIRTY_BUILD=1` 仅应急），流程=commit 源码→build-app.bat→auto-update-downloads --confirm→镜像 site-official→commit+push 产物；② **build-app.bat 在 ensure-build-env 阶段 `exit /b 1` 不释放构建锁**（:build_fail 才释放）——被拦后重打前必须查 `.build.lock` 属主 PID 已死再删；③ **auto-update-downloads.js 的 aapt 读中文文件名 APK 报 Illegal byte sequence → 版本回退 build.gradle 只读出 "1.0.0" 无 versionCode**（违反 V1.0.0.N SSOT）——发布后必须人工核对 manifest `apk.version` 含 versionCode，缺了手动补 `V1.0.0.N` + `versionCode: N`（本次已补 V1.0.0.216）；④ 该工具只写 public/hash-manifest.json **不镜像 site-official**——发布后手动整份 Copy-Item 镜像并哈希比对 IN SYNC；⑤ 工具重写 apk 节点会**丢 releaseUrl/releaseFileName/releaseTag**——旧 releaseUrl 指向旧版 GitHub Release 必须清（防错版分流），新 Release 建立后由发布流回填。
 
-**四、各端生效方式**：离线 APP=官网下载页已上 V1.0.0.216（Pages 自动部署，manifest 双权威源 IN SYNC，sha256 `10341e76…`，旧 releaseUrl 移除后手机端回落 CF 静态源+robustDownload 增强单流）；离线桌面=EXE 重打包中（含 else push 修复）；云端网页/官网/Functions=随 push 即刻生效；云端 APP/云端桌面=含同款修复待各自重打包；鸿蒙=随下次 HAP 编译携带。
+**四、各端生效方式**：离线 APP=官网下载页已上 V1.0.0.216（Pages 自动部署，manifest 双权威源 IN SYNC，sha256 `10341e76…`，旧 releaseUrl 移除后手机端回落 CF 静态源+robustDownload 增强单流）；离线桌面=**EXE 1.0.171 已重打包+发布完毕**（Release `v2026.09.04-1718`，全加固链通过 E2E 3/3+ASAR 完整性+fuses+.bnzc ver2 match+Authenticode 签名+冒烟 176/176，自动更新检查 `updates/local/latest.json` 已指向新 Release，桌面端启动即提示升级）；云端网页/官网/Functions=随 push 即刻生效；云端 APP/云端桌面=含同款修复待各自重打包；鸿蒙=随下次 HAP 编译携带。
+
+**五、发布闭环补坑（publish-release.js v2026.09.04-1718 实战）**：① **publish-release.js 也不镜像 site-official**——发布后 `site-official/hash-manifest.json`（桌面节点仍指旧 1.0.170 Release）与 `site-official/updates/local/latest.json` 全部落后，必须手动整份 Copy-Item 镜像（本条与三④同源：发布链两工具均只写 public，**双权威源镜像永远是发布后手动收尾动作**）；② **legacy `updates/dingzhi/latest.json` 是 2026-08-23 改名（9762ac9a dingzhi→local）前旧桌面客户端的更新源**，长期停在 1.0.142 且 portableUrl 指向已下线的 pages.dev 自托管 exe——每次桌面发布应同步更新（version/url/portableUrl 三字段指新 Release），否则旧客户端永远收不到升级提示；③ publish-release.js 用 `--target=dingzhi` 时产物定位经 artifact-locate.js 解析到 local 节点（命名收口后 key 已统一），发布日志显示 `dingzhi/latest.json` 字样实为 local 键，核对时不要被日志字样误导。
 
 ## 8. 桌面版技术规范
 

@@ -2,32 +2,35 @@
     "local": {
         "apk": {
             "version": "V1.0.0.216",
+            "versionCode": 216,
             "sha256": "10341e76f809f73eb2bd21d9c9782516238b2ccfe15418887231562cdfd26952",
             "url": "/downloads/惠康中医-本地.apk",
+            "releaseUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.04-1718/huikang-local.apk",
             "size": 2941294,
-            "updateTime": "2026-09-04T09:03:08.132Z",
+            "updateTime": "2026-09-04T09:29:53.989Z",
             "fileName": "惠康中医-本地.apk",
-            "versionCode": 216
+            "releaseFileName": "huikang-local.apk",
+            "releaseTag": "v2026.09.04-1718"
         },
         "portable": {
-            "version": "1.0.170",
-            "sha256": "2385fcfe466a05caf6315b9a70206df321a06fe379d7bafdd03e8d152f51fcac",
-            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.04-1358/huikang-local-1.0.170.exe",
-            "size": 78715920,
-            "updateTime": "2026-09-04T06:10:00.000Z",
-            "fileName": "惠康中医-本地 1.0.170.exe",
-            "releaseFileName": "huikang-local-1.0.170.exe",
-            "releaseTag": "v2026.09.04-1358"
+            "version": "1.0.171",
+            "sha256": "ed341cc90ebc730e903400c1e670b78e4b4c85df4090bc276021e4b3bb1a87cc",
+            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.04-1718/huikang-local-1.0.171.exe",
+            "size": 78687072,
+            "updateTime": "2026-09-04T09:29:53.989Z",
+            "fileName": "惠康中医-本地 1.0.171.exe",
+            "releaseFileName": "huikang-local-1.0.171.exe",
+            "releaseTag": "v2026.09.04-1718"
         },
         "exe": {
-            "version": "1.0.170",
-            "sha256": "de835d78cc81e149be4fa1345aae9958f1df182dc023db2c15feabbdddae9264",
-            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.04-1358/huikang-local-setup-1.0.170.exe",
-            "size": 78990808,
-            "updateTime": "2026-09-04T06:10:00.000Z",
-            "fileName": "惠康中医-本地 Setup 1.0.170.exe",
-            "releaseFileName": "huikang-local-setup-1.0.170.exe",
-            "releaseTag": "v2026.09.04-1358"
+            "version": "1.0.171",
+            "sha256": "03058b375ae61dd97a6c50f72368353249ca9cfd5c25e376956df3be45c15503",
+            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.04-1718/huikang-local-setup-1.0.171.exe",
+            "size": 78962032,
+            "updateTime": "2026-09-04T09:29:53.989Z",
+            "fileName": "惠康中医-本地 Setup 1.0.171.exe",
+            "releaseFileName": "huikang-local-setup-1.0.171.exe",
+            "releaseTag": "v2026.09.04-1718"
         }
     },
     "cloud": {
@@ -67,42 +70,45 @@
     "provenance": {
         "schemaVersion": 1,
         "repo": "https://github.com/kyt61767126/tcm-prescription-system.git",
-        "commit": "2adb8a07f351",
+        "commit": "f68d08a25047",
         "ref": "main",
         "builder": "kyt61767126",
-        "builtAt": "2026-09-04T09:03:08.959Z",
+        "builtAt": "2026-09-04T09:29:54.475Z",
         "buildTool": "publish-release.js@v24.16.0",
-        "releaseTag": ""
+        "releaseTag": "v2026.09.04-1718"
     },
     "dingzhi": {
         "apk": {
             "version": "V1.0.0.216",
+            "versionCode": 216,
             "sha256": "10341e76f809f73eb2bd21d9c9782516238b2ccfe15418887231562cdfd26952",
             "url": "/downloads/惠康中医-本地.apk",
+            "releaseUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.04-1718/huikang-local.apk",
             "size": 2941294,
-            "updateTime": "2026-09-04T09:03:08.132Z",
+            "updateTime": "2026-09-04T09:29:53.989Z",
             "fileName": "惠康中医-本地.apk",
-            "versionCode": 216
+            "releaseFileName": "huikang-local.apk",
+            "releaseTag": "v2026.09.04-1718"
         },
         "portable": {
-            "version": "1.0.170",
-            "sha256": "2385fcfe466a05caf6315b9a70206df321a06fe379d7bafdd03e8d152f51fcac",
-            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.04-1358/huikang-local-1.0.170.exe",
-            "size": 78715920,
-            "updateTime": "2026-09-04T06:10:00.000Z",
-            "fileName": "惠康中医-本地 1.0.170.exe",
-            "releaseFileName": "huikang-local-1.0.170.exe",
-            "releaseTag": "v2026.09.04-1358"
+            "version": "1.0.171",
+            "sha256": "ed341cc90ebc730e903400c1e670b78e4b4c85df4090bc276021e4b3bb1a87cc",
+            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.04-1718/huikang-local-1.0.171.exe",
+            "size": 78687072,
+            "updateTime": "2026-09-04T09:29:53.989Z",
+            "fileName": "惠康中医-本地 1.0.171.exe",
+            "releaseFileName": "huikang-local-1.0.171.exe",
+            "releaseTag": "v2026.09.04-1718"
         },
         "exe": {
-            "version": "1.0.170",
-            "sha256": "de835d78cc81e149be4fa1345aae9958f1df182dc023db2c15feabbdddae9264",
-            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.04-1358/huikang-local-setup-1.0.170.exe",
-            "size": 78990808,
-            "updateTime": "2026-09-04T06:10:00.000Z",
-            "fileName": "惠康中医-本地 Setup 1.0.170.exe",
-            "releaseFileName": "huikang-local-setup-1.0.170.exe",
-            "releaseTag": "v2026.09.04-1358"
+            "version": "1.0.171",
+            "sha256": "03058b375ae61dd97a6c50f72368353249ca9cfd5c25e376956df3be45c15503",
+            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.04-1718/huikang-local-setup-1.0.171.exe",
+            "size": 78962032,
+            "updateTime": "2026-09-04T09:29:53.989Z",
+            "fileName": "惠康中医-本地 Setup 1.0.171.exe",
+            "releaseFileName": "huikang-local-setup-1.0.171.exe",
+            "releaseTag": "v2026.09.04-1718"
         }
     }
 }
