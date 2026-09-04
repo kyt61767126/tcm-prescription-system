@@ -733,6 +733,32 @@ function selectEdition(edition) {
                     state.adminName = cfg.doctorName;
                     codeState.adminName = cfg.doctorName;
                 }
+                // ★ 2026-09-05 注册信息同步：电话（config 无独立电话键，注册开通时
+                //   registerLocalUser 已建 username=手机号 账号）→ 从 users 取最近的
+                //   11位手机号账号预填三个Tab，注册→激活零重复填写。
+                try {
+                    if (Array.isArray(cfg.users) && cfg.users.length) {
+                        let __regPhone = '';
+                        let __bestTs = 0;
+                        for (const u of cfg.users) {
+                            if (!u) continue;
+                            const un = String(u.username || '').trim();
+                            if (!/^1[3-9]\d{9}$/.test(un)) continue;
+                            const ts = Math.max(Number(u.updatedAt) || 0, Number(u.lastPwdUpdatedAt) || 0, Number(u.registeredAt) || 0);
+                            if (ts >= __bestTs) { __bestTs = ts; __regPhone = un; }
+                        }
+                        if (__regPhone) {
+                            const fillPhoneIfEmpty = (id) => {
+                                try { const el = document.getElementById(id); if (el && !el.value.trim()) el.value = __regPhone; } catch (e) {}
+                            };
+                            fillPhoneIfEmpty('phone');
+                            fillPhoneIfEmpty('codePhone');
+                            fillPhoneIfEmpty('ticketContactPhone');
+                            if (!state.phone) state.phone = __regPhone;
+                            if (!codeState.phone) codeState.phone = __regPhone;
+                        }
+                    }
+                } catch (pe) { console.warn('注册电话预填失败:', pe); }
             }
         }
     } catch (e) { console.warn('Theme init failed:', e); }
@@ -744,9 +770,12 @@ function syncSharedFieldsFrom(sourceTab) {
     try {
         var srcClinic = '', srcName = '', srcPhone = '';
         if (sourceTab === 'admin') {
-            srcClinic = (document.getElementById('adminClinicName').value || '').trim();
-            srcName = (document.getElementById('adminAdminName').value || '').trim();
-            srcPhone = (document.getElementById('adminPhone').value || '').trim();
+            // ★ 2026-09-05 修复 ID 错位：Tab1 实际字段为 clinicName/adminName/phone
+            //   （旧代码读写 adminClinicName/adminAdminName/adminPhone——本窗口不存在，
+            //   getElementById 返回 null 触发 try/catch 静默吞错，三Tab互相同步从未生效）
+            srcClinic = (document.getElementById('clinicName').value || '').trim();
+            srcName = (document.getElementById('adminName').value || '').trim();
+            srcPhone = (document.getElementById('phone').value || '').trim();
         } else if (sourceTab === 'ticket') {
             srcClinic = (document.getElementById('ticketClinicName').value || '').trim();
             srcName = (document.getElementById('ticketContactName').value || '').trim();
@@ -757,7 +786,7 @@ function syncSharedFieldsFrom(sourceTab) {
             srcPhone = (document.getElementById('codePhone').value || '').trim();
         }
         function fill(id, val) { if (!val) return; try { var el = document.getElementById(id); if (el && !el.value.trim()) el.value = val; } catch (e) {} }
-        if (sourceTab !== 'admin') { fill('adminClinicName', srcClinic); fill('adminAdminName', srcName); fill('adminPhone', srcPhone); }
+        if (sourceTab !== 'admin') { fill('clinicName', srcClinic); fill('adminName', srcName); fill('phone', srcPhone); }
         if (sourceTab !== 'ticket') { fill('ticketClinicName', srcClinic); fill('ticketContactName', srcName); fill('ticketContactPhone', srcPhone); }
         if (sourceTab !== 'code') { fill('codeClinicName', srcClinic); fill('codeAdminName', srcName); fill('codePhone', srcPhone); }
     } catch (e) {}

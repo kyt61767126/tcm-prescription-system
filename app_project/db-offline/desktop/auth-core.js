@@ -5719,8 +5719,16 @@
         document.getElementById('adminCloseBtn').addEventListener('click', cleanup);
         overlay.addEventListener('click', function(e) { if (e.target === overlay) cleanup(); });
 
-        // 预填诊所/医师名（config 提供时）
-        if (clinicName) document.getElementById('adminClinicName').value = clinicName;
+        // 预填诊所名（config 提供时）——★ 2026-09-05 修复：改为"仅空时兜底"。
+        //   旧版无条件覆盖，把 registrationInfo 已预填的注册诊所名冲成内存 CONFIG
+        //   出厂值（如"XXX中医诊所"），造成"诊所名称未同步而姓名/电话正常"的非对称症状。
+        try {
+            const __cc = document.getElementById('adminClinicName');
+            if (clinicName && __cc && !__cc.value.trim()) {
+                __cc.value = clinicName;
+                if (!state.clinicName) state.clinicName = clinicName;
+            }
+        } catch (ce) {}
     }
 
     // ★ 2026-09-03 管理员激活断点续传：启动时检测持久化申请是否已审核通过并自动完成领码。
