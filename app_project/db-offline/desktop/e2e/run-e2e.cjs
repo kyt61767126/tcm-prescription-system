@@ -1,5 +1,5 @@
 // ============================================================================
-// run-e2e.cjs — P3：Playwright + Electron 端到端回归·离线桌面变体（3 条固定用例）
+// run-e2e.cjs — P3：Playwright + Electron 端到端回归·离线桌面变体（5 条固定用例）
 //
 // 与云端版（cloud_desktop/e2e）的差异：离线版无云端登录，且试用期强制
 // edition=personal + 全员角色降为 user（electron/main.js ensureTrialStandardEdition），
@@ -9,6 +9,13 @@
 //                        【用户管理】必须隐藏 + 【修改密码】必须可见
 //   E3 毒数据 + UserStore 运行时 → CONFIG.users 置非数组字符串 → window.UserStore.get()
 //                        必须返回兜底数组（非空）→ 点【修改密码】弹窗仍打开（绝不静默失败）
+//   E4 方案B哈希账号登录 → config 预写注册产物（username=手机号 + 全局盐 sha256 哈希，
+//                        与 electron/main.js license:register-local-user 同构）：
+//                        错误密码必须被拒（#loginError 可见），正确明文密码经
+//                        verifyPassword 全局盐回退校验后可登录主窗口
+//   E5 方案B默认账户封锁 → 注册手机号 + 出厂 admin（哈希为原生默认口令）共存时，
+//                        admin/admin 必须被统一路由 loginWithUsernamePassword 封锁
+//                        （提示引导手机号登录，防出厂口令绕过），且注册手机号仍可正常登录
 //
 // 安全设计（配合 electron/main.js 的 e2e 旁路，与云端版 T4 同款）：
 //   - 环境变量 BNZC_E2E=1 + exe 同级 e2e-enabled.marker 才放行远程调试
@@ -24,6 +31,7 @@
 // ============================================================================
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const ROOT = path.resolve(__dirname, '..');
 const TMP_ROOT = path.join(__dirname, '.tmp');
@@ -109,6 +117,16 @@ function findWindow(app, urlPart, timeoutMs = 30000) {
 async function login(page, username, password) {
     await page.waitForSelector('#loginUsername', { timeout: 15000 });
     await page.fill('#loginUsername', username);
+    // ★ 反自动填充双保险（main.js dom-ready 注入）：密码框初始 readonly，focus 时才移除。
+    //   fill 的可编辑性检查先于 focus → 直接 fill 会 30s 死等（E1-E3 曾靠竞态侥幸通过）。
+    //   先 focus 触发移除，确认可编辑后再填。
+    try {
+        await page.focus('#loginPassword');
+        await page.waitForFunction(() => {
+            const el = document.getElementById('loginPassword');
+            return !!el && !el.hasAttribute('readonly');
+        }, null, { timeout: 5000 });
+    } catch (_) { /* 注入未跑或已移除：直接走 fill 兜底 */ }
     await page.fill('#loginPassword', password);
     await page.click('#btnOk');
 }
@@ -137,6 +155,33 @@ function baseConfig(edition, users) {
 
 // 离线版 login.js 兼容明文密码（isHash=false 时明文比对），e2e 直接写明文
 const adminUser = (n) => ({ username: n, password: E2E_PASSWORD, name: 'E2E管理员', role: 'admin' });
+
+// ============================================================================
+// ★ 2026-09-04 方案B E4/E5：注册产物哈希账号 + 默认账户封锁
+// 哈希公式与 electron/main.js hashPassword / auth-core verifyPassword 全局盐回退完全一致：
+//   sha256('bnzc_prescription_salt_v1' + password) 的 64 位 hex
+// ============================================================================
+const PASSWORD_SALT = 'bnzc_prescription_salt_v1';
+const globalSaltHash = (pwd) => crypto.createHash('sha256')
+    .update(Buffer.from(PASSWORD_SALT + pwd, 'utf8')).digest('hex');
+// 出厂默认口令哈希（= Java LicenseManager / 桌面 register-local-user 幽灵 admin 判定同款）
+const FACTORY_ADMIN_HASH = globalSaltHash('admin');
+if (FACTORY_ADMIN_HASH !== '2f1e152dfbccedc7d947d7f9d40e0790be6289309cf6904af728b3cf822c361b') {
+    console.error(`[E2E][FAIL] 出厂哈希实算不符：${FACTORY_ADMIN_HASH}（测试与产品哈希公式已分叉，须先对齐）`);
+    process.exit(1);
+}
+
+// 注册产物用户（与 electron/main.js license:register-local-user 写入 config.json 的结构同构）
+const registeredUser = (phone, pwd) => {
+    const h = globalSaltHash(pwd);
+    const now = Date.now();
+    return {
+        username: phone, phone: phone,
+        password: h, passwordHash: h, salt: PASSWORD_SALT,
+        name: 'E2E注册管理员', role: 'admin',
+        registeredAt: now, lastPwdUpdatedAt: now, createdAt: now, updatedAt: now
+    };
+};
 
 // ============================================================================
 // 用例定义（试用标准版行为）
@@ -222,6 +267,56 @@ const CASES = [
             log('E3.3 毒数据下点击，changePwdModal display:flex ✓');
         },
     },
+    {
+        id: 'E4',
+        name: '方案B哈希账号：注册产物（全局盐哈希）错误密码被拒，正确明文可登录',
+        config: baseConfig('personal', [registeredUser('13800138000', E2E_PASSWORD)]),
+        async customLogin(loginWin, h) {
+            // ① 错误密码必须被拒：#loginError 可见 = 未被放行（若被放行则主窗口出现、error 永不显示 → 超时 FAIL）
+            await h.login(loginWin, '13800138000', 'WrongPass9x');
+            await loginWin.waitForFunction(() => {
+                const el = document.getElementById('loginError');
+                return !!el && el.style.display !== 'none' && !!(el.textContent || '').trim();
+            }, null, { timeout: 10000 });
+            h.log('E4.1 错误密码被拒（loginError 可见，哈希校验未放行）✓');
+            // ② 正确明文密码 → verifyPassword 全局盐回退命中 → 主窗口
+            await h.login(loginWin, '13800138000', E2E_PASSWORD);
+        },
+        async run(mainPage) {
+            await mainPage.waitForFunction(() => {
+                const b = document.getElementById('changePwdBtn');
+                return !!b && b.style.display !== 'none';
+            }, null, { timeout: 20000 });
+            log('E4.2 注册哈希账号明文密码登录成功，【修改密码】按钮已显示 ✓');
+        },
+    },
+    {
+        id: 'E5',
+        name: '方案B默认账户封锁：admin/admin（出厂口令残留）被拒，注册手机号可正常登录',
+        config: baseConfig('personal', [
+            registeredUser('13800138001', E2E_PASSWORD),
+            { username: 'admin', password: FACTORY_ADMIN_HASH, name: '出厂默认残留', role: 'user' },
+        ]),
+        async customLogin(loginWin, h) {
+            // ① admin/admin 必须被统一路由封锁（提示含"内置默认账户已停用"= 走方案B封锁分支而非普通密码错误）
+            await h.login(loginWin, 'admin', 'admin');
+            await loginWin.waitForFunction(() => {
+                const el = document.getElementById('loginError');
+                return !!el && el.style.display !== 'none' &&
+                    (el.textContent || '').indexOf('内置默认账户已停用') >= 0;
+            }, null, { timeout: 10000 });
+            h.log('E5.1 admin/admin 已被封锁（提示引导手机号登录，出厂口令无法绕过）✓');
+            // ② 封锁不影响合法路径：注册手机号 + 哈希密码正常登录
+            await h.login(loginWin, '13800138001', E2E_PASSWORD);
+        },
+        async run(mainPage) {
+            await mainPage.waitForFunction(() => {
+                const b = document.getElementById('changePwdBtn');
+                return !!b && b.style.display !== 'none';
+            }, null, { timeout: 20000 });
+            log('E5.2 封锁不影响注册手机号正常登录，【修改密码】按钮已显示 ✓');
+        },
+    },
 ];
 
 // ============================================================================
@@ -269,7 +364,16 @@ async function runCase({ _electron }, c, target) {
 
         // 登录后主窗口出现的等待放到 run 外并行：先触发登录，再等 index.html
         const mainWinPromise = findWindow(app, 'index.html', 45000);
-        await login(loginWin, c.config.users[0].username, c.config.users[0].password);
+        // ★ 防崩溃：登录环节先行抛错时本 promise 稍后 reject，若无 handler
+        //   Node 24 会以 unhandledRejection 崩掉整个 runner（吞掉结果汇总）。
+        //   挂 no-op catch 标记已处理，await 语义不变。
+        mainWinPromise.catch(() => {});
+        // ★ E4/E5 需要多段登录（先断言拒绝/封锁，再走正确登录）：customLogin 钩子优先
+        if (typeof c.customLogin === 'function') {
+            await c.customLogin(loginWin, { login, log });
+        } else {
+            await login(loginWin, c.config.users[0].username, c.config.users[0].password);
+        }
         const mainWin = await mainWinPromise;
         log(`${c.id} 主窗口就绪，开始断言`);
         await c.run(mainWin);
@@ -292,7 +396,7 @@ async function runCase({ _electron }, c, target) {
 // 主流程
 // ============================================================================
 (async () => {
-    console.log('[E2E] ══ P3 离线桌面端到端回归（本地登录 3 条防线）══');
+    console.log('[E2E] ══ P3 离线桌面端到端回归（本地登录 5 条防线）══');
     const target = resolveTarget();
     const exePath = target.exePath;
     log(`被测目标[${target.mode}]: ${exePath}${target.launchArgs.length ? ' ' + target.launchArgs.join(' ') : ''}`);

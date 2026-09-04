@@ -1352,6 +1352,26 @@
                 await window.__activationUsersReadyPromise;
             }
         } catch (_) { /* 任何异常：fail-open，不阻塞登录 */ }
+        // ★ 2026-09-04 方案B：内置默认账户 admin/admin（出厂默认口令）全状态封锁。
+        //   统一路由是桌面 login.js / 离线 index.html / 云端 index.html 四个登录入口的
+        //   主链路——若只在 createLocalAdapter/createSingleUserAdapter 两处 authenticate 封锁，
+        //   走本路由的本地表匹配会绕过封锁（出厂哈希密码可被 verifyPassword 放行），
+        //   必须与适配器层同闸门拦截。改过密码的 admin（密码非 'admin'）不命中本条，不受影响。
+        if (String(username).trim() === 'admin' && String(password) === 'admin') {
+            let __reg = false;
+            try {
+                if (typeof global.__isLocalRegisteredAsync === 'function') __reg = await global.__isLocalRegisteredAsync();
+            } catch (_) {}
+            return {
+                success: false,
+                user: null,
+                matchedIdentifier: username,
+                source: 'local',
+                error: __reg
+                    ? '🔒 内置默认账户已停用，请使用注册的手机号登录。'
+                    : '🔒 请先完成注册后再登录（手机号即登录账号）。首次使用请点击登录框中的"注册"入口完成注册。'
+            };
+        }
         const users = (typeof options.getUsers === 'function') ? (options.getUsers() || []) : (options.users || []);
         let user = null;
         let matchedIdentifier = username;

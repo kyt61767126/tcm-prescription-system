@@ -468,6 +468,14 @@ P2 渐进迁移（2026-09-03 当日完成）：
 
 **七、发布后独立审核闭环（2026-09-04 晚，无代码改动）**：对方案B做逐文件批判性审核时曾报"P0 桌面注册账号 PBKDF2 哈希无法登录 / P1 幽灵 admin 移除失效"，**经实算复核两条均为误报，代码本就正确，禁止再"修复"**：① 桌面 [main.js L2696 hashPassword](file:///d:/trae_projects/kyt-zy/app_project/db-offline/desktop/electron/main.js#L2696) 是 `sha256('bnzc_prescription_salt_v1'+pwd)` 64 位 hex（与 auth-core [offline.js L13/L437](file:///d:/trae_projects/kyt-zy/shared/auth-core/offline.js#L437) 同盐同公式，verifyPassword L468-481 可验证），**electron 目录零 pbkdf2/sha512 命中**（user:add/改密/自愈补号同函数，格式全部一致）；② `hashPassword('admin')` 实算 = `2f1e152dfbccedc7d947d7f9d40e0790be6289309cf6904af728b3cf822c361b`，与出厂 config.json admin 哈希逐字节相等（Node 实算 match=true），幽灵移除 L2774-2780 有效；③ Node 双公式实算（node:crypto 写入 vs WebCrypto 验证）同密码哈希相等、错密码被拒。**教训：审核结论必须基于 Read 到的函数体/实算结果，Grep 输出被系统截断时必须重读，禁止凭命中印象推断哈希算法**。
 
+**八、E2E 补全 + 统一路由封锁闭环（2026-09-04 深夜，E2E 5/5 PASS）**：方案B哈希账号/默认账户封锁回归补进离线桌面 E2E（3→5 条），并补掉一个真实缺口：
+- ① **统一路由补封锁**：admin/admin 封锁原本只在两个 adapter 的 `authenticate`（L1118/L1176），但桌面 login.js / 离线 index.html 登录走 `AuthCore.loginWithUsernamePassword` 统一路由（offline.js L1340）——路由层无封锁时，残留的出厂哈希 admin 账号可被 verifyPassword 全局盐回退放行（adapter 封锁形同虚设）。已在统一路由 ReadyPromise 闸门后补同款全状态封锁（文案与 adapter 一致），E5 实证封锁生效且不影响注册手机号登录。**教训：封锁/校验存在多层入口（adapter + router）时必须逐入口堵，只堵一层=没堵**。
+- ② **E4/E5 设计**：E4 = config 预写注册产物（username=手机号 + 全局盐 sha256 哈希，与 `license:register-local-user` 写入结构同构）→ 错误密码必须 `#loginError` 可见 + 正确明文经 verifyPassword 全局盐回退可登录；E5 = 注册手机号 + 出厂 admin（`2f1e152d…` 哈希）共存 → admin/admin 必须提示"内置默认账户已停用"且手机号仍可登录。runner 内置出厂哈希实算自检（与 `2f1e152d…` 不符即 FAIL，防测试与产品哈希公式分叉）。
+- ③ **E2E readonly 竞态坑**：main.js dom-ready 注入反自动填充脚本把 `#loginPassword` 置 readonly、**focus 时才移除**；Playwright fill 的可编辑性检查先于 focus → 直接 fill 30s 死等。E1-E3 曾靠"fill 抢在 executeJavaScript 之前"的竞态侥幸通过，E4 输掉竞态才暴露。修复：login 助手先 `page.focus('#loginPassword')` + waitForFunction 等 readonly 移除再 fill。**铁律：E2E 填密码框必须先 focus 消 readonly**。
+- ④ **E2E runner 崩溃坑**：customLogin 先抛错时，并行的 `findWindow(index.html)` promise 稍后 reject 成 unhandledRejection，Node 24 默认崩掉整个 runner（结果汇总被吞）。修复：promise 创建后立即挂 `.catch(()=>{})` 标记已处理（await 语义不变）。
+- ⑤ **E2E 兜底 asar 重建法**：`_backup_asar/real_app.asar` 是正式构建产物（含混淆文件+node_modules），改 auth-core 后无需全量 build——`@electron/asar` extractAll → 覆盖两处 auth-core.js（根 + electron/）→ createPackage 回写，dev electron 兜底即可测到新代码（dist/win-unpacked 旧 exe 带 .bnzc 绑定原 asar 不可改）。
+- **生效方式**：本轮改动 = offline.js 权威源 + 3 离线 auth-core 副本 + run-e2e.cjs（check-interface 6 OK）；**离线 APP + 离线桌面随下一次重打包生效**（路由封锁属纵深防御——实际设备注册时幽灵 admin 已被物理移除，无单独发版必要）；云端不受影响（cloud.js 未改）。
+
 ## 8. 桌面版技术规范
 
 * **桌面版云端 HTTP 必须走主进程**（file:// 直连被 CORS 拦截，Origin: null 不在白名单，fetch 静默 TypeError）：IPC 代理或 activate.js 内 fetch。APP 端 <http://localhost> 在白名单可直连。新增桌面版云端接口沿用 postInviteQuery 分流模式。
