@@ -1,9 +1,10 @@
-﻿{
-    "version":  "1.2.169",
-    "releaseDate":  "2026-08-28",
-    "releaseNotes":  "登录框优化（账号标签单行不换行/用户名下拉N徽标独立胶囊/三端版本号源统一）",
-    "url":  "https://tcm-prescription-system.pages.dev/updates/cloud/%E6%83%A0%E5%BA%B7%E4%B8%AD%E5%8C%BB-%E4%BA%91%E7%AB%AF%20Setup%201.2.169.exe",
-    "portableUrl":  "https://tcm-prescription-system.pages.dev/updates/cloud/%E6%83%A0%E5%BA%B7%E4%B8%AD%E5%8C%BB-%E4%BA%91%E7%AB%AF%201.2.169.exe",
-    "forceUpdate":  false,
-    "minVersion":  "1.0.0"
+{
+  "version": "1.2.205",
+  "releaseDate": "2026-09-04",
+  "releaseNotes": "✨ 优化:\n  - 流程优化(九): 付款表单零回填+审核通过后客户端前台化/聚焦/定时三重触发自动弹激活提示\n  - 自动匹配(十一): 客户免填转账尾6位1次点击进待审核\n🐛 修复:\n  - P0修复: admin-approve审核通过「无反应」\n  - 全链路梳理+P0安全修复: admin-submit匿名手机号接管漏洞\n🔒 安全:\n  - 实名信息防护: 注册手机号/医师名不记忆\n  - 激活后禁用试用默认账户 admin/admin 登录",
+  "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.04/huikang-cloud-setup-1.2.205.exe",
+  "portableUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.04/huikang-cloud-1.2.205.exe",
+  "forceUpdate": false,
+  "minVersion": "1.0.0",
+  "rolloutPercentage": 100
 }
