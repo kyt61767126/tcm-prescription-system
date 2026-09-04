@@ -3637,6 +3637,97 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
         return r;
     }
 
+    // ★ 2026-09-04 方案B 注册前置：本地注册（先注册后激活）——离线端唯一密码写点
+    //   注册=创建手机号登录账号（明文密码与 syncCreateActivationUser 存储格式一致，
+    //   登录时前端自动兼容并升级哈希）；激活链永远不覆盖已注册密码（见 syncCreateActivationUser）。
+    public JSONObject registerLocalUser(String clinicName, String doctorName, String phone, String password) {
+        JSONObject r = new JSONObject();
+        try {
+            if (phone == null || !phone.trim().matches("^1[3-9]\\d{9}$")) {
+                r.put("success", false); r.put("error", "请输入正确的11位手机号"); return r;
+            }
+            if (password == null || password.length() < 8 || "admin".equals(password)
+                    || !password.matches(".*[a-zA-Z].*") || !password.matches(".*\\d.*")) {
+                r.put("success", false); r.put("error", "密码至少8位且须同时包含字母和数字"); return r;
+            }
+            String effPhone = phone.trim();
+            JSONObject cfg = readConfigJSON();
+            // 同步诊所名/医师名（注册即写入 config，激活时服务端信息与此对齐）
+            String effClinic = clinicName == null ? "" : clinicName.trim();
+            String effDoctor = doctorName == null ? "" : doctorName.trim();
+            if (!effClinic.isEmpty() && !effClinic.equals(cfg.optString("clinicName", ""))) {
+                cfg.put("clinicName", effClinic);
+            }
+            if (!effDoctor.isEmpty() && !effDoctor.equals(cfg.optString("doctorName", ""))) {
+                cfg.put("doctorName", effDoctor);
+            }
+            org.json.JSONArray users = cfg.optJSONArray("users");
+            if (users == null) { users = new org.json.JSONArray(); cfg.put("users", users); }
+            int existsIdx = -1;
+            for (int i = 0; i < users.length(); i++) {
+                org.json.JSONObject u = users.optJSONObject(i);
+                if (u != null && effPhone.equals(u.optString("username", ""))) { existsIdx = i; break; }
+            }
+            long now = System.currentTimeMillis();
+            String effName = effDoctor.isEmpty() ? effPhone : effDoctor;
+            if (existsIdx >= 0) {
+                org.json.JSONObject u = users.optJSONObject(existsIdx);
+                if (u == null) u = new org.json.JSONObject();
+                u.put("username", effPhone);
+                u.put("phone", effPhone);
+                u.put("password", password);
+                u.put("name", effName);
+                u.put("role", "admin");
+                if (!u.has("registeredAt")) u.put("registeredAt", now);
+                u.put("lastPwdUpdatedAt", now);
+                u.put("updatedAt", now);
+                users.put(existsIdx, u);
+                Log.i(TAG, "本地注册 UPSERT 更新: phone=" + effPhone);
+            } else {
+                org.json.JSONObject nu = new org.json.JSONObject();
+                nu.put("username", effPhone);
+                nu.put("phone", effPhone);
+                nu.put("password", password);
+                nu.put("name", effName);
+                nu.put("role", "admin");
+                nu.put("registeredAt", now);
+                nu.put("lastPwdUpdatedAt", now);
+                nu.put("updatedAt", now);
+                users.put(nu);
+                Log.i(TAG, "本地注册新增账号: phone=" + effPhone + " clinic=" + effClinic);
+            }
+            // ★ 幽灵默认账户移除：注册完成后，出厂试用 admin（密码仍为原生默认，未被用户改过）一并删除。
+            //   保守判定（宁可漏删不可误删）：username='admin' 且 password 为明文 'admin' 或出厂哈希
+            //   （sha256('bnzc_prescription_salt_v1'+'admin')，与 assets/public/config.json 出厂值一致）；
+            //   用户改过密码的真实 admin 账户保留。
+            {
+                org.json.JSONArray cleaned = new org.json.JSONArray();
+                final String defaultAdminHash = "2f1e152dfbccedc7d947d7f9d40e0790be6289309cf6904af728b3cf822c361b";
+                boolean removed = false;
+                for (int i = 0; i < users.length(); i++) {
+                    org.json.JSONObject u = users.optJSONObject(i);
+                    boolean keep = true;
+                    if (u != null && "admin".equals(u.optString("username", ""))) {
+                        String p = u.optString("password", "");
+                        if ("admin".equals(p) || defaultAdminHash.equals(p)) { keep = false; removed = true; }
+                    }
+                    if (keep) cleaned.put(u);
+                }
+                if (removed) {
+                    users = cleaned;
+                    cfg.put("users", users);
+                    Log.i(TAG, "本地注册: 已移除出厂默认试用账户 admin（原生默认口令，未被用户改过）");
+                }
+            }
+            writeConfigJSON(cfg, true);
+            r.put("success", true);
+            r.put("users", users);
+        } catch (Exception e) {
+            try { r.put("success", false); r.put("error", String.valueOf(e.getMessage())); } catch (Exception ignored) {}
+        }
+        return r;
+    }
+
     // ★ 2026-08-17 激活流程改「用户名(姓名/手机号)+默认密码admin」：
     //   激活成功后自动创建登录账号；已存在同名账号则跳过；密码明文存储，登入时前端自动兼容并升级
     private void syncCreateActivationUser(String username, String phone, String password, String name) {
@@ -3657,18 +3748,22 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
             final String effName = (name == null || name.isEmpty()) ? username : name;
             if (existsIdx >= 0) {
                 // --- 2026-09-04 AR-双锁死：UPSERT UPDATE（不再 exists=return）---
+                // ★ 2026-09-04 方案B 密码写点唯一化（取代旧"UPDATE 强制覆盖密码"条款）：
+                //   账号已存在（注册创建）时激活收尾只补 phone/name，绝不覆盖密码——
+                //   防止激活收尾把注册密码重置回 admin（Mate 70 第7案密码错位的架构级根治）。
+                //   密码仅三个写点：registerLocalUser（注册）/ 修改密码 / 账号不存在时的激活兜底建号。
                 org.json.JSONObject u = users.optJSONObject(existsIdx);
                 if (u == null) u = new org.json.JSONObject();
                 u.put("username", username);
                 if (phone != null && !phone.isEmpty()) u.put("phone", phone);
                 else if (!u.has("phone")) u.put("phone", "");
-                u.put("password", effPwd);
+                if (u.optString("password", "").isEmpty()) u.put("password", effPwd);
                 u.put("name", effName);
-                u.put("role", "admin");u.put("lastPwdUpdatedAt", System.currentTimeMillis());
+                u.put("role", "admin");
 u.put("updatedAt", System.currentTimeMillis());
 
                 users.put(existsIdx, u);
-                Log.i(TAG, "激活登录账号 UPSERT 更新: username=" + username + " phone=" + phone + " name=" + effName);
+                Log.i(TAG, "激活登录账号 UPSERT 更新(密码保留): username=" + username + " phone=" + phone + " name=" + effName);
             } else {
                 org.json.JSONObject nu = new org.json.JSONObject();
                 nu.put("username", username);

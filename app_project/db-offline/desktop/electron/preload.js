@@ -162,7 +162,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
         cancelAdminRequest: (requestId) => ipcRenderer.invoke('license:cancel-admin-request', requestId),
         // ★ requestId 本地持久化（解决轮询超时/关闭窗口后丢失状态的问题）
         loadAdminRequestId: () => ipcRenderer.invoke('license:load-admin-request-id'),
-        clearAdminRequestId: () => ipcRenderer.invoke('license:clear-admin-request-id')
+        clearAdminRequestId: () => ipcRenderer.invoke('license:clear-admin-request-id'),
+        // ★ 2026-09-04 方案B 注册前置：本地注册（手机号账号，唯一密码写点）+ 用户列表（注册检测/登录自愈）
+        registerLocalUser: (payload) => ipcRenderer.invoke('license:register-local-user', payload),
+        getActivationUsers: () => ipcRenderer.invoke('license:get-activation-users')
     },
 
     // ---------- 首次配置向导 ----------

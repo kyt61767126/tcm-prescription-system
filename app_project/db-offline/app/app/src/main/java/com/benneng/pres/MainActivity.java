@@ -993,6 +993,7 @@ public class MainActivity extends BridgeActivity {
             "      getMachineId: function(){ return callNativeAsync('getMachineId', {}); }," +
             "      installAdminLicense: function(args){ return callNativeAsync('installAdminLicense', {licenseBase64: (args&&args.license)||'', user: (args&&args.adminName)||(args&&args.user)||'', clinicName: (args&&args.clinicName)||'', password: (args&&args.password)||'admin', loginUsername: (args&&args.phone)||'', phone: (args&&args.phone)||'', licenseCode: (args&&args.licenseCode)||''}); }," +
             "      getActivationUsers: function(){ return callNativeAsync('getActivationUsers', {}); }," +
+            "      registerLocalUser: function(args){ return callNativeAsync('registerLocalUser', {clinicName: (args&&args.clinicName)||'', adminName: (args&&args.adminName)||'', phone: (args&&args.phone)||'', password: (args&&args.password)||''}); }," +
             "      close: function(){ return Promise.resolve({success:true}); }," +
             "      restart: function(){ return callNativeAsync('appRestart', {}); }" +
             "    }" +
@@ -1424,6 +1425,13 @@ public class MainActivity extends BridgeActivity {
                     case "getActivationUsers":
                         // ★ 2026-08-24 登录自愈：前端启动时同步 config.json 激活账号到 localStorage
                         return getLM().getActivationUsers().toString();
+                    case "registerLocalUser":
+                        // ★ 2026-09-04 方案B 注册前置：本地注册手机号账号（先注册后激活，唯一密码写点）
+                        return getLM().registerLocalUser(
+                                args.optString("clinicName", ""),
+                                args.optString("adminName", args.optString("doctorName", "")),
+                                args.optString("phone", ""),
+                                args.optString("password", "")).toString();
                     case "appRestart":
                         return appRestart().toString();
                     case "setTrialDays":

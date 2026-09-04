@@ -2704,6 +2704,117 @@ async function hashPassword(password) {
 }
 
 // ============================================================================
+//  ★ 2026-09-04 方案B 注册前置（先注册后激活）——离线桌面唯一密码写点
+//    注册 = 创建手机号登录账号（哈希存储，与 user:add / installLicense 同格式）；
+//    激活收尾 installLicense 仅在账号不存在时兜底建号，永不覆盖注册密码（密码写点唯一化）。
+//    注册完成同步移除出厂试用默认 admin 账户（仅未被用户改过密码的原生默认，保守判定）。
+// ============================================================================
+ipcMain.handle('license:register-local-user', async (event, payload) => {
+    try {
+        const p = payload || {};
+        const effPhone = String(p.phone || '').trim();
+        const effPwd = String(p.password || '');
+        const effClinic = String(p.clinicName || '').trim();
+        const effAdmin = String(p.adminName || p.doctorName || '').trim();
+
+        // 校验（与 APP Java LicenseManager.registerLocalUser / auth-core 注册弹窗规则一致）
+        if (!/^1[3-9]\d{9}$/.test(effPhone)) {
+            return { success: false, error: '请输入正确的11位手机号' };
+        }
+        if (effPwd.length < 8 || effPwd === 'admin' ||
+            !/[a-zA-Z]/.test(effPwd) || !/[0-9]/.test(effPwd)) {
+            return { success: false, error: '密码至少8位且须同时包含字母和数字' };
+        }
+
+        const configPath = getWritableConfigPath();
+        let config = {};
+        if (await fse.pathExists(configPath)) {
+            config = await fse.readJson(configPath);
+        }
+        if (!Array.isArray(config.users)) config.users = [];
+
+        // UPSERT 手机号账号（username=手机号；重复注册=用户明确重设密码）
+        const { passwordHash, salt } = await hashPassword(effPwd);
+        // 时间戳用数字毫秒（与 APP Java 端 System.currentTimeMillis() 一致，
+        // auth-core 启动自愈镜像按 typeof === 'number' 读取做 keepLocalPwd 时间戳排序）
+        const now = Date.now();
+        let existed = false;
+        for (let i = 0; i < config.users.length; i++) {
+            const u = config.users[i];
+            if (u && String(u.username || '') === effPhone) {
+                u.phone = effPhone;
+                u.password = passwordHash;
+                u.passwordHash = passwordHash;
+                u.salt = salt;
+                u.name = effAdmin || u.name || effPhone;
+                u.role = 'admin';
+                u.lastPwdUpdatedAt = now;
+                u.updatedAt = now;
+                existed = true;
+            }
+        }
+        if (!existed) {
+            config.users.push({
+                username: effPhone,
+                phone: effPhone,
+                password: passwordHash,
+                passwordHash: passwordHash,
+                salt: salt,
+                name: effAdmin || effPhone,
+                role: 'admin',
+                registeredAt: now,
+                lastPwdUpdatedAt: now,
+                createdAt: now,
+                updatedAt: now
+            });
+        }
+
+        // ★ 幽灵默认账户移除：已有手机号账号时，出厂试用 admin（密码仍为原生默认，未被用户改过）一并删除。
+        //   保守判定（宁可漏删不可误删）：username==='admin' 且 password 为明文 'admin' 或出厂哈希。
+        const { passwordHash: defaultAdminHash } = await hashPassword('admin');
+        config.users = config.users.filter(u => {
+            if (!u || String(u.username || '') !== 'admin') return true;
+            const pw = String(u.password || '');
+            if (pw === 'admin' || pw === defaultAdminHash) return false; // 原生默认 → 移除
+            return true; // 用户改过密码的真实 admin 账户 → 保留
+        });
+
+        // 同步诊所名/管理员名（注册即写入 config，激活时服务端信息与此对齐）
+        if (effClinic && config.clinicName !== effClinic) config.clinicName = effClinic;
+        if (effAdmin && config.doctorName !== effAdmin) config.doctorName = effAdmin;
+
+        // 签名保护（与 installLicense 同 fail-safe：未生成签名则拒绝写入，保留磁盘旧签名配置）
+        licenseManager.signConfig(config);
+        if (!config.configSignature) {
+            console.error('[Register] signConfig 未生成签名，跳过 config.json 写入');
+            return { success: false, error: '配置签名失败，注册未生效，请重试' };
+        }
+        await fse.writeJson(configPath, config, { spaces: 2 });
+        console.log('[Register] 本地注册成功:', effPhone, existed ? '(UPSERT 更新)' : '(新增)',
+            'users=' + config.users.length);
+        return { success: true, users: config.users };
+    } catch (e) {
+        console.error('[Register] register-local-user 异常:', e);
+        return { success: false, error: String(e && e.message ? e.message : e) };
+    }
+});
+
+// ★ 2026-09-04 方案B：config.json 用户列表（登录自愈/注册前置检测读取，对齐 APP getActivationUsers 桥）
+ipcMain.handle('license:get-activation-users', async () => {
+    try {
+        const configPath = getWritableConfigPath();
+        let config = {};
+        if (await fse.pathExists(configPath)) {
+            config = await fse.readJson(configPath);
+        }
+        return { success: true, users: Array.isArray(config.users) ? config.users : [] };
+    } catch (e) {
+        console.error('[Register] get-activation-users 异常:', e);
+        return { success: false, error: String(e && e.message ? e.message : e), users: [] };
+    }
+});
+
+// ============================================================================
 //  ★ bnzc:// 一键激活 — IPC 处理器
 // ============================================================================
 

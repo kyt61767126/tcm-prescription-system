@@ -1532,6 +1532,21 @@
                     if (blocked) {
                         return { success: false, error: '🔒 系统已激活，试用默认账户 admin/admin 已禁用。请使用激活时注册的管理员手机号或自定义账户登录。' };
                     }
+                    // ★ 2026-09-04 方案B 注册前置：内置默认账户 admin/admin（出厂默认口令）全状态封锁。
+                    //   未注册 → 引导先注册；已注册 → 引导手机号登录；已激活 → 上方既有规则拦截。
+                    //   （改过密码的 admin 是真实账户不受影响——密码非 'admin' 不命中本条）
+                    if (String(username).trim() === 'admin' && String(password) === 'admin') {
+                        let __reg = false;
+                        try {
+                            if (typeof global.__isLocalRegisteredAsync === 'function') __reg = await global.__isLocalRegisteredAsync();
+                        } catch (_) {}
+                        return {
+                            success: false,
+                            error: __reg
+                                ? '🔒 内置默认账户已停用，请使用注册的手机号登录。'
+                                : '🔒 请先完成注册后再登录（手机号即登录账号）。首次使用请点击登录框中的"注册"入口完成注册。'
+                        };
+                    }
                     // 登录成功，清零错误计数（权威账号 + 原始输入串都清，兼容历史分裂计数残留）
                     LoginLockout.recordSuccess(lockKey);
                     if (lockKey !== username) LoginLockout.recordSuccess(username);
@@ -1576,6 +1591,19 @@
                     const blocked = await _blockTrialAdminAfterLicensed(user);
                     if (blocked) {
                         return { success: false, error: '🔒 系统已激活，试用默认账户 admin/admin 已禁用。请使用激活时注册的管理员手机号或自定义账户登录。' };
+                    }
+                    // ★ 2026-09-04 方案B 注册前置：内置默认账户 admin/admin 全状态封锁（同 createLocalAdapter）
+                    if (String(username).trim() === 'admin' && String(password) === 'admin') {
+                        let __reg = false;
+                        try {
+                            if (typeof global.__isLocalRegisteredAsync === 'function') __reg = await global.__isLocalRegisteredAsync();
+                        } catch (_) {}
+                        return {
+                            success: false,
+                            error: __reg
+                                ? '🔒 内置默认账户已停用，请使用注册的手机号登录。'
+                                : '🔒 请先完成注册后再登录（手机号即登录账号）。首次使用请点击登录框中的"注册"入口完成注册。'
+                        };
                     }
                     // 登录成功，清零错误计数（权威账号 + 原始输入串都清，兼容历史分裂计数残留）
                     LoginLockout.recordSuccess(lockKey);
@@ -3458,17 +3486,38 @@
             // ★ 2026-08-23 对齐云端桌面管理员激活模式：登录框入口改为"📋 管理员激活"，
             //   调用 openAdminActivate 多步骤弹窗（版本选择→填写信息→设置密码→提交申请→等待管理员审批），
             //   与桌面 activate-window.html"管理员激活"流程完全一致（替换原 openCloudRegister 一页式注册开通）
+            // ★ 2026-09-04 方案B 注册前置：本地桥 + 未激活 + 未注册 设备入口改为"📝 注册开通"
+            //   （openLocalRegister 注册弹窗；注册完成由成功流程切回"管理员激活"语义）
             const container = overlay.querySelector('.login-buttons');
             if (!container) return;
 
-            const entry = document.createElement('div');
-            entry.id = 'activateLoginEntry';
-            entry.style.cssText =
-                'margin-top:12px;padding:0 4px;';
-            entry.innerHTML =
-                '<div style="display:flex;align-items:center;justify-content:center;gap:6px;padding:12px 0;border-radius:8px;background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);color:#fff;cursor:pointer;font-size:14px;font-weight:bold;text-align:center;-webkit-tap-highlight-color:transparent;" onclick="if(window.openAdminActivate){window.openAdminActivate();}">📋 管理员激活</div>';
-            container.parentNode.insertBefore(entry, container.nextSibling);
-            console.log('[LicenseCheck] 登录界面已注入 管理员激活 入口');
+            (async function injectLoginEntry() {
+                let isRegisterEntry = false;
+                try {
+                    const api = global.electronAPI || (typeof window !== 'undefined' ? window.electronAPI : null);
+                    const hasLocalBridge = !!(api && api.activate &&
+                        (typeof api.activate.getActivationUsers === 'function' ||
+                         typeof api.activate.registerLocalUser === 'function'));
+                    if (hasLocalBridge && !(await __isDeviceLicensed()) && !(await isLocalRegisteredAsync())) {
+                        isRegisterEntry = true;
+                    }
+                } catch (de) {}
+
+                const entry = document.createElement('div');
+                entry.id = 'activateLoginEntry';
+                entry.style.cssText =
+                    'margin-top:12px;padding:0 4px;';
+                if (isRegisterEntry) {
+                    entry.innerHTML =
+                        '<div style="display:flex;align-items:center;justify-content:center;gap:6px;padding:12px 0;border-radius:8px;background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);color:#fff;cursor:pointer;font-size:14px;font-weight:bold;text-align:center;-webkit-tap-highlight-color:transparent;" onclick="if(window.openLocalRegister){window.openLocalRegister();}">📝 注册开通</div>';
+                    console.log('[LicenseCheck] 登录界面已注入 注册开通 入口（方案B 注册前置）');
+                } else {
+                    entry.innerHTML =
+                        '<div style="display:flex;align-items:center;justify-content:center;gap:6px;padding:12px 0;border-radius:8px;background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);color:#fff;cursor:pointer;font-size:14px;font-weight:bold;text-align:center;-webkit-tap-highlight-color:transparent;" onclick="if(window.openAdminActivate){window.openAdminActivate();}">📋 管理员激活</div>';
+                    console.log('[LicenseCheck] 登录界面已注入 管理员激活 入口');
+                }
+                container.parentNode.insertBefore(entry, container.nextSibling);
+            })();
         } catch (e) {
             console.warn('[LicenseCheck] 注入登录 管理员激活 入口失败:', e);
         }
@@ -3730,6 +3779,338 @@
                 }
             });
         }
+    }
+
+    // ============================================================================
+    // ★ 2026-09-04 方案B 注册前置（独立注册 · 先注册后激活 · 彻底消灭 admin 默认账号）
+    //   铁律：注册 = 本地建号（唯一密码写点）→ 登录/试用 → 激活（纯 license 操作）。
+    //   激活收尾（installAdminLicense/断点续传）永不覆盖已注册密码（密码写点唯一化）。
+    //   不修改 HTML 源码，仅运行时动态注入 DOM，符合界面保护约束。
+    // ============================================================================
+
+    function getLocalRegistrationInfo() {
+        try {
+            const raw = global.localStorage && global.localStorage.getItem('license:registrationInfo');
+            if (!raw) return null;
+            const info = JSON.parse(raw);
+            return (info && info.phone) ? info : null;
+        } catch (e) { return null; }
+    }
+
+    async function saveLocalRegistrationInfo(info) {
+        try {
+            if (global.localStorage && info) {
+                global.localStorage.setItem('license:registrationInfo', JSON.stringify(info));
+            }
+        } catch (e) {}
+    }
+
+    function isLocalRegisteredSync() { return !!getLocalRegistrationInfo(); }
+
+    async function isLocalRegisteredAsync() {
+        if (isLocalRegisteredSync()) return true;
+        // 桥账号（config.json）已有手机号账号 = 注册/激活建号的持久事实（升级设备）
+        try {
+            const api = global.electronAPI || (typeof window !== 'undefined' ? window.electronAPI : null);
+            if (api && api.activate && typeof api.activate.getActivationUsers === 'function') {
+                const res = await api.activate.getActivationUsers();
+                if (res && res.success && Array.isArray(res.users)) {
+                    for (let i = 0; i < res.users.length; i++) {
+                        const u = res.users[i];
+                        if (u && ((u.phone && /^1[3-9]\d{9}$/.test(String(u.phone))) ||
+                                  /^1[3-9]\d{9}$/.test(String(u.username || '')))) return true;
+                    }
+                }
+            }
+        } catch (e) {}
+        return false;
+    }
+    // 挂 global 供 IIFE-1 登录适配器（admin/admin 封锁）跨作用域调用
+    global.__isLocalRegisteredAsync = isLocalRegisteredAsync;
+
+    async function __isDeviceLicensed() {
+        try {
+            const api = global.electronAPI || (typeof window !== 'undefined' ? window.electronAPI : null);
+            if (api && api.license && typeof api.license.getStatus === 'function') {
+                const st = await api.license.getStatus();
+                if (st && st.valid === true) {
+                    const t = String(st.licenseType || st.type || '');
+                    if (t && t !== 'trial') return true;
+                }
+            }
+        } catch (_) {}
+        try {
+            if (typeof StorageAdapter !== 'undefined' && StorageAdapter &&
+                typeof StorageAdapter.getItem === 'function') {
+                const c = await StorageAdapter.getItem('license:code');
+                if (c && String(c).trim().length >= 4) return true;
+            }
+        } catch (_) {}
+        try {
+            const ls = (typeof global !== 'undefined' && global.localStorage) ||
+                       (typeof window !== 'undefined' ? window.localStorage : null);
+            if (ls) {
+                const c = ls.getItem('license:code');
+                if (c && String(c).trim().length >= 4) return true;
+            }
+        } catch (_) {}
+        return false;
+    }
+
+    function showLocalRegisterModal() {
+        // 若已打开则忽略
+        if (document.getElementById('localRegisterOverlay')) return;
+        const PHONE_RE = /^1[3-9]\d{9}$/;
+        const INPUT_STYLE = 'width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;';
+
+        const overlay = document.createElement('div');
+        overlay.id = 'localRegisterOverlay';
+        overlay.style.cssText =
+            'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.75);z-index:100000;display:flex;align-items:center;justify-content:center;padding:16px;';
+
+        const card = document.createElement('div');
+        card.style.cssText =
+            'background:white;border-radius:14px;width:100%;max-width:400px;box-shadow:0 10px 30px rgba(0,0,0,0.3);max-height:92vh;overflow-y:auto;';
+
+        card.innerHTML =
+            // 标题（注册开通 · 绿色主题，对齐既有弹窗视觉）
+            '<div style="background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);padding:18px;border-radius:14px 14px 0 0;text-align:center;">' +
+                '<div style="font-size:19px;font-weight:bold;color:white;">📝 注册开通</div>' +
+                '<div style="font-size:12px;color:rgba(255,255,255,0.9);margin-top:4px;">惠康中医诊所管理系统 · 本地版</div>' +
+            '</div>' +
+
+            // 表单（一页式）
+            '<div id="localRegForm" style="padding:16px;">' +
+                '<div style="background:#f0f7ff;border:1px solid #d6e8ff;border-radius:8px;padding:10px;margin-bottom:14px;font-size:12px;color:#1565c0;line-height:1.7;">' +
+                    '💡 请先完成注册（<b>手机号即登录账号</b>）。<br>注册后即可登录试用 7 天，试用期内随时可激活正式版。' +
+                '</div>' +
+                '<div style="margin-bottom:12px;">' +
+                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">诊所名称 <span style="color:#e53935;">*</span></label>' +
+                    '<input type="text" id="localRegClinicName" placeholder="如：惠康中医诊所" autocomplete="off" spellcheck="false" maxlength="50" style="' + INPUT_STYLE + '">' +
+                '</div>' +
+                '<div style="margin-bottom:12px;">' +
+                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">管理员/医师姓名 <span style="color:#e53935;">*</span></label>' +
+                    '<input type="text" id="localRegAdminName" placeholder="如：王医生" autocomplete="off" spellcheck="false" maxlength="30" style="' + INPUT_STYLE + '">' +
+                '</div>' +
+                '<div style="margin-bottom:12px;">' +
+                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">手机号 <span style="color:#e53935;">*</span>（登录账号）</label>' +
+                    '<input type="text" id="localRegPhone" placeholder="如：13800138000" autocomplete="off" inputmode="numeric" maxlength="11" style="' + INPUT_STYLE + '">' +
+                    '<div id="localRegPhoneHint" style="font-size:11px;color:#909399;margin-top:4px;">💡 11位手机号，注册后用「手机号+密码」登录</div>' +
+                '</div>' +
+                '<div style="margin-bottom:12px;">' +
+                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">设置登录密码 <span style="color:#e53935;">*</span></label>' +
+                    '<input type="password" id="localRegPassword" placeholder="至少8位，须包含字母和数字" autocomplete="new-password" data-lpignore="true" maxlength="32" style="' + INPUT_STYLE + '">' +
+                '</div>' +
+                '<div style="margin-bottom:12px;">' +
+                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">确认密码 <span style="color:#e53935;">*</span></label>' +
+                    '<input type="password" id="localRegPassword2" placeholder="请再次输入登录密码" autocomplete="new-password" data-lpignore="true" maxlength="32" style="' + INPUT_STYLE + '">' +
+                '</div>' +
+                '<div id="localRegError" style="display:none;margin-bottom:12px;padding:10px 12px;border-radius:8px;background:#fdecea;color:#c0392b;font-size:13px;"></div>' +
+                '<button id="localRegSubmitBtn" style="width:100%;padding:12px;font-size:15px;border:none;border-radius:8px;color:#fff;background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);cursor:pointer;font-weight:bold;">✅ 完成注册</button>' +
+            '</div>' +
+
+            // 提交中（默认隐藏）
+            '<div id="localRegSubmitting" style="display:none;padding:40px 16px;text-align:center;">' +
+                '<div style="font-size:34px;">📡</div>' +
+                '<div style="font-size:15px;font-weight:bold;color:#333;margin-top:8px;">正在注册...</div>' +
+                '<div style="font-size:12px;color:#909399;margin-top:4px;">正在创建本地账号，请稍候</div>' +
+            '</div>' +
+
+            // 注册成功（默认隐藏）
+            '<div id="localRegSuccess" style="display:none;padding:32px 16px;text-align:center;">' +
+                '<div style="font-size:44px;">🎉</div>' +
+                '<div style="font-size:17px;font-weight:bold;color:#2c3e50;margin-top:10px;">注册成功！</div>' +
+                '<div style="font-size:13px;color:#606266;margin-top:8px;line-height:1.7;">登录账号：<b id="localRegSuccessPhone" style="color:#26a69a;"></b><br>现在可以用「手机号 + 密码」登录试用（7天）</div>' +
+                '<button id="localRegActivateBtn" style="width:100%;margin-top:16px;padding:12px;font-size:15px;border:none;border-radius:8px;color:#fff;background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);cursor:pointer;font-weight:bold;">💳 立即激活正式版</button>' +
+                '<button id="localRegLaterBtn" style="width:100%;margin-top:10px;padding:12px;font-size:15px;border:none;border-radius:8px;color:#26a69a;background:#fff;border:2px solid #26a69a;cursor:pointer;font-weight:bold;">⏳ 稍后激活，先试用</button>' +
+            '</div>';
+
+        overlay.appendChild(card);
+        document.body.appendChild(overlay);
+
+        const showError = function (msg) {
+            const el = document.getElementById('localRegError');
+            if (el) { el.textContent = msg; el.style.display = 'block'; }
+        };
+        const close = function () { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); };
+
+        // 手机号实时提示
+        const phoneInput = document.getElementById('localRegPhone');
+        if (phoneInput) {
+            phoneInput.addEventListener('input', function () {
+                const hint = document.getElementById('localRegPhoneHint');
+                if (!hint) return;
+                const v = String(this.value || '').trim();
+                if (!v) { hint.textContent = '💡 11位手机号，注册后用「手机号+密码」登录'; hint.style.color = '#909399'; }
+                else if (!PHONE_RE.test(v)) { hint.textContent = '⚠ 请输入正确的11位手机号'; hint.style.color = '#e53935'; }
+                else { hint.textContent = '✓ 手机号格式正确'; hint.style.color = '#26a69a'; }
+            });
+        }
+
+        // 成功页按钮（★ 桌面登录窗上下文适配：桌面激活窗口 + 刷新登录页重读用户列表）
+        const isDesktopLoginPage = !document.getElementById('loginOverlay') &&
+            !!(document.getElementById('btnOk') && document.getElementById('loginPassword'));
+        const reloadLoginPage = function () {
+            // 桌面登录窗 login.js 的 _users 在 DOMContentLoaded 一次性缓存，
+            // 注册写入 config.json 后必须 reload 才能让手机号账号立即可登录
+            if (!isDesktopLoginPage) return;
+            setTimeout(function () { try { window.location.reload(); } catch (e) {} }, 300);
+        };
+        const activateBtn = document.getElementById('localRegActivateBtn');
+        if (activateBtn) {
+            activateBtn.addEventListener('click', function () {
+                close();
+                try {
+                    if (isDesktopLoginPage) {
+                        // 桌面：打开桌面激活窗口（activateManager；installLicense 不覆盖注册密码）
+                        if (window.electronAPI && window.electronAPI.activate &&
+                            typeof window.electronAPI.activate.show === 'function') {
+                            window.electronAPI.activate.show();
+                        }
+                        reloadLoginPage();
+                    } else if (typeof window.openAdminActivate === 'function') {
+                        window.openAdminActivate();
+                    }
+                } catch (e) {}
+            });
+        }
+        const laterBtn = document.getElementById('localRegLaterBtn');
+        if (laterBtn) laterBtn.addEventListener('click', function () { close(); reloadLoginPage(); });
+
+        // 提交注册
+        const submitBtn = document.getElementById('localRegSubmitBtn');
+        if (submitBtn) {
+            submitBtn.addEventListener('click', async function () {
+                try {
+                    const errEl = document.getElementById('localRegError');
+                    if (errEl) errEl.style.display = 'none';
+
+                    const clinicName = String((document.getElementById('localRegClinicName') || {}).value || '').trim();
+                    const adminName = String((document.getElementById('localRegAdminName') || {}).value || '').trim();
+                    const phone = String((document.getElementById('localRegPhone') || {}).value || '').trim();
+                    const password = String((document.getElementById('localRegPassword') || {}).value || '');
+                    const password2 = String((document.getElementById('localRegPassword2') || {}).value || '');
+
+                    // 客户端校验（与 Java LicenseManager.registerLocalUser 规则一致）
+                    if (!clinicName || clinicName.length < 2) { showError('请填写诊所名称（至少2个字符）'); return; }
+                    if (!adminName) { showError('请填写管理员/医师姓名'); return; }
+                    if (!PHONE_RE.test(phone)) { showError('请输入正确的11位手机号'); return; }
+                    if (password.length < 8) { showError('密码至少8位'); return; }
+                    if (!/[a-zA-Z]/.test(password) || !/[0-9]/.test(password)) { showError('密码必须同时包含字母和数字'); return; }
+                    if (password === 'admin') { showError('密码不能使用默认口令 admin'); return; }
+                    if (password !== password2) { showError('两次输入的密码不一致'); return; }
+
+                    const api = global.electronAPI || (typeof window !== 'undefined' ? window.electronAPI : null);
+                    if (!api || !api.activate || typeof api.activate.registerLocalUser !== 'function') {
+                        showError('当前环境不支持本地注册，请升级到最新版本');
+                        return;
+                    }
+
+                    submitBtn.disabled = true;
+                    submitBtn.textContent = '正在注册...';
+                    const formEl = document.getElementById('localRegForm');
+                    const submittingEl = document.getElementById('localRegSubmitting');
+                    if (formEl) formEl.style.display = 'none';
+                    if (submittingEl) submittingEl.style.display = 'block';
+
+                    const res = await api.activate.registerLocalUser({
+                        clinicName: clinicName, adminName: adminName,
+                        phone: phone, password: password
+                    });
+
+                    if (res && res.success) {
+                        // ① localStorage 镜像（username=手机号；addLocalActivationUser 幂等 UPSERT）
+                        try {
+                            if (typeof window.addLocalActivationUser === 'function') {
+                                const __now = Date.now();
+                                window.addLocalActivationUser({
+                                    username: phone, phone: phone, password: password,
+                                    name: adminName, role: 'admin',
+                                    registeredAt: __now, lastPwdUpdatedAt: __now, updatedAt: __now
+                                });
+                            }
+                        } catch (me) { console.warn('[LicenseCheck] 注册镜像失败(桥自愈兜底):', me); }
+                        // ② 持久化注册信息（激活弹窗 Tab1/Tab2 预填 + 断点续传密码源）
+                        let passwordEnc = '';
+                        try { passwordEnc = await encryptSensitive(password) || ''; } catch (ee) {}
+                        await saveLocalRegistrationInfo({
+                            clinicName: clinicName, adminName: adminName,
+                            phone: phone, passwordEnc: passwordEnc, at: Date.now()
+                        });
+                        // ③ FSM v2 标记 registered（不改变 license 状态节点）
+                        try { await setStateV2(_STATES.UNACTIVATED, { registered: true }); } catch (fe) {}
+                        // ④ 成功页
+                        const phoneEl = document.getElementById('localRegSuccessPhone');
+                        if (phoneEl) phoneEl.textContent = phone;
+                        if (submittingEl) submittingEl.style.display = 'none';
+                        const successEl = document.getElementById('localRegSuccess');
+                        if (successEl) successEl.style.display = 'block';
+                        console.log('[LicenseCheck] 本地注册成功:', phone);
+                        // ⑤ 注册完成 → APP 登录框入口语义从「注册开通」切换为「管理员激活」（已有账号）
+                        try {
+                            const _entry = document.getElementById('activateLoginEntry');
+                            if (_entry) {
+                                _entry.innerHTML =
+                                    '<div style="display:flex;align-items:center;justify-content:center;gap:6px;padding:12px 0;border-radius:8px;background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);color:#fff;cursor:pointer;font-size:14px;font-weight:bold;text-align:center;-webkit-tap-highlight-color:transparent;" onclick="if(window.openAdminActivate){window.openAdminActivate();}">📋 管理员激活</div>';
+                            }
+                        } catch (se2) {}
+                    } else {
+                        if (submittingEl) submittingEl.style.display = 'none';
+                        if (formEl) formEl.style.display = 'block';
+                        submitBtn.disabled = false;
+                        submitBtn.textContent = '✅ 完成注册';
+                        showError((res && res.error) ? res.error : '注册失败，请稍后重试');
+                    }
+                } catch (e) {
+                    const formEl = document.getElementById('localRegForm');
+                    const submittingEl = document.getElementById('localRegSubmitting');
+                    if (submittingEl) submittingEl.style.display = 'none';
+                    if (formEl) formEl.style.display = 'block';
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = '✅ 完成注册';
+                    showError('注册失败：' + (e.message || '未知错误'));
+                }
+            });
+        }
+    }
+    global.openLocalRegister = function () {
+        try { showLocalRegisterModal(); } catch (e) { console.warn('[LicenseCheck] 打开本地注册弹窗失败:', e); }
+    };
+
+    // ★ 注册前置检测：登录上下文 + 未激活 + 未注册 → 强制先注册（弹窗置于激活弹窗之上）
+    async function maybePromptRegistration() {
+        try {
+            // 登录上下文检测（双端）：
+            //   ① 离线APP 壳 index.html：loginOverlay（登录时可见）
+            //   ② 离线桌面登录窗 login.html：无 loginOverlay，特征 = btnOk + loginPassword
+            //   其余（纯网页/云端）→ 跳过
+            const overlay = document.getElementById('loginOverlay');
+            const isDesktopLoginPage = !overlay &&
+                !!(document.getElementById('btnOk') && document.getElementById('loginPassword'));
+            if (!overlay && !isDesktopLoginPage) return;
+            // 桌面主窗口（index.html 有 loginOverlay 但已登录隐藏）不打扰
+            if (overlay && !isDesktopLoginPage) {
+                try {
+                    const d = window.getComputedStyle ? getComputedStyle(overlay).display : '';
+                    if (d === 'none') return;
+                } catch (_) {}
+            }
+            // 云端注册制已完成（云端APP同壳共用 auth-core）→ 不打扰
+            if (isCloudActivationDone()) return;
+            // 已激活的存量设备不打扰（可能无手机号账号，维持现状，铁律 1-5 不破坏）
+            if (await __isDeviceLicensed()) return;
+            // 本地桥判定：云端APP/纯网页无 getActivationUsers/registerLocalUser 桥 → 跳过
+            const api = global.electronAPI || (typeof window !== 'undefined' ? window.electronAPI : null);
+            const hasLocalBridge = !!(api && api.activate &&
+                (typeof api.activate.getActivationUsers === 'function' ||
+                 typeof api.activate.registerLocalUser === 'function'));
+            if (!hasLocalBridge) return;
+            // 已注册（标记或桥账号有手机号）→ 跳过
+            if (await isLocalRegisteredAsync()) return;
+            showLocalRegisterModal();
+            console.log('[LicenseCheck] 检测到未注册设备，已弹出注册界面（方案B 注册前置）',
+                isDesktopLoginPage ? '(桌面登录窗)' : '(APP登录界面)');
+        } catch (e) { console.warn('[LicenseCheck] 注册前置检测失败(不影响使用):', e); }
     }
 
     // ============================================================================
@@ -4659,6 +5040,35 @@
             else { hint.textContent = '✓ 密码一致'; hint.style.color = '#26a69a'; }
         });
 
+        // ★ 2026-09-04 方案B 注册前置：已注册用户 Tab1 预填（诊所名/姓名/手机号/密码）
+        //   注册时账号+密码已建好，激活只是纯 license 操作，不再重复收集。
+        let __regPrefill = null;
+        try {
+            __regPrefill = getLocalRegistrationInfo();
+            if (__regPrefill) {
+                state.clinicName = String(__regPrefill.clinicName || '');
+                state.adminName = String(__regPrefill.adminName || '');
+                state.phone = String(__regPrefill.phone || '');
+                // 密码源：注册密码（加密存 registrationInfo，弹窗打开即异步解密预置）——供
+                // installAdminLicense 断点续传兜底建号/Tab2 输码使用；config 已有账号时
+                // Java 端按"密码写点唯一化"保留注册密码不覆盖。
+                try {
+                    if (__regPrefill.passwordEnc) {
+                        decryptSensitive(__regPrefill.passwordEnc).then(function (p) {
+                            if (p) state.password = String(p);
+                        }).catch(function () {});
+                    }
+                } catch (de) {}
+                const __cn = document.getElementById('adminClinicName');
+                const __an = document.getElementById('adminAdminName');
+                const __ph = document.getElementById('adminPhone');
+                if (__cn && state.clinicName) __cn.value = state.clinicName;
+                if (__an && state.adminName) __an.value = state.adminName;
+                if (__ph && state.phone) __ph.value = state.phone;
+                console.log('[LicenseCheck] 检测到已注册，Tab1 表单已预填（手机号登录账号）');
+            }
+        } catch (re) { console.warn('[LicenseCheck] 注册预填失败(不影响激活):', re); }
+
         // 表单 → 密码
         document.getElementById('adminToStep2Btn').addEventListener('click', function() {
             const clinicName = document.getElementById('adminClinicName').value.trim();
@@ -4673,6 +5083,21 @@
             state.adminName = adminName;
             state.phone = phone;
             state.remark = remark;
+            // ★ 2026-09-04 方案B：已注册用户跳过密码步骤（账号+密码注册时已建，
+            //   激活不收密码）——直接进入提交。密码一致性由注册时校验保证。
+            if (__regPrefill && __regPrefill.phone === phone && state.password) {
+                try {
+                    // 预填两个密码框：①提交处 pwd!==admin 时校验 pwd2 一致；
+                    //   ②提交失败 showFormAndAlert 回到密码步骤时字段已就绪可直接重试
+                    const pEl = document.getElementById('adminPassword');
+                    const p2El = document.getElementById('adminPassword2');
+                    if (pEl) pEl.value = state.password;
+                    if (p2El) p2El.value = state.password;
+                } catch (e) {}
+                show('adminSubmitting');
+                document.getElementById('adminSubmitBtn').click();
+                return;
+            }
             show('adminStepPwd');
             setTimeout(function(){ var p = document.getElementById('adminPassword'); if (p) p.focus(); }, 200);
         });
@@ -5431,6 +5856,8 @@
             // ★ 2026-08-20 云端APP（无试用）：登入框骨架管理员激活入口（申请云端账号）；网页/桌面无 loginOverlay，函数内部自动跳过
             injectLicenseStatusIntoSettings();
             injectActivateLinkIntoLogin();
+            // ★ 2026-09-04 方案B 注册前置：未注册设备强制先注册（弹窗 z-index 100000 置于激活弹窗之上）
+            maybePromptRegistration();
         }, 2000);
     }
 

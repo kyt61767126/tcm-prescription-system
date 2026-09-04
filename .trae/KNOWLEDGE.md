@@ -449,6 +449,21 @@ P2 渐进迁移（2026-09-03 当日完成）：
 
 **五、发布闭环补坑（publish-release.js v2026.09.04-1718 实战）**：① **publish-release.js 也不镜像 site-official**——发布后 `site-official/hash-manifest.json`（桌面节点仍指旧 1.0.170 Release）与 `site-official/updates/local/latest.json` 全部落后，必须手动整份 Copy-Item 镜像（本条与三④同源：发布链两工具均只写 public，**双权威源镜像永远是发布后手动收尾动作**）；② **legacy `updates/dingzhi/latest.json` 是 2026-08-23 改名（9762ac9a dingzhi→local）前旧桌面客户端的更新源**，长期停在 1.0.142 且 portableUrl 指向已下线的 pages.dev 自托管 exe——每次桌面发布应同步更新（version/url/portableUrl 三字段指新 Release），否则旧客户端永远收不到升级提示；③ publish-release.js 用 `--target=dingzhi` 时产物定位经 artifact-locate.js 解析到 local 节点（命名收口后 key 已统一），发布日志显示 `dingzhi/latest.json` 字样实为 local 键，核对时不要被日志字样误导。
 
+★ 2026-09-04（十九）【方案B · 注册前置架构】离线 APP/桌面「先注册 → 后激活」彻底重构（撤销方案A"Tab1 提交即建号"，账号创建与激活彻底解耦）。**架构总纲：注册 = 本地建号（唯一密码写点）→ 试用/登录 → 激活 = 纯 license 安装（永不碰密码）**。出厂默认 admin 账号从"登录入口"降级为"待清理的幽灵数据"。
+
+**一、密码写点唯一化（取代条目十九·铁律2"激活 UPSERT 强制覆盖密码"条款——该铁律的适用前提"账号由激活流程创建"已不存在）**：
+- 密码全链路仅 **3 个合法写点**：① `registerLocalUser`（注册）② 修改密码正式接口 ③ 账号不存在时激活收尾的兜底建号（[LicenseManager.java L3754](file:///d:/trae_projects/kyt-zy/app_project/db-offline/app/app/src/main/java/com/benneng/pres/LicenseManager.java#L3754) 注释即此三写点清单）。
+- `syncCreateActivationUser` exists 分支改为**密码保留**：`if (u.optString("password","").isEmpty()) u.put("password", effPwd)`——只在空时补，绝不覆盖；且不再刷新 `lastPwdUpdatedAt`（密码没动时间戳不动）。激活收尾把注册密码重置回 admin 的"Mate 70 第7案密码错位"从架构上绝根。
+- 验收：激活链路任何位置出现"无条件写 password"=违规。
+
+**二、注册入口（auth-core 运行时注入，0 HTML 改动）**：[offline.js](file:///d:/trae_projects/kyt-zy/shared/auth-core/offline.js) `showLocalRegisterModal()`（L3437）收集诊所名/医师名/11位手机号/密码（≥8位且含字母+数字，禁用 admin）；注册信息加密存 `localStorage:license:registrationInfo`（`getLocalRegistrationInfo` L3368）；双端桥=APP Java `registerLocalUser`（LicenseManager L3643，写 config.json users[]）+ 桌面 IPC `license:register-local-user`（electron/main.js L2712，preload L167）。注册同步写入 clinicName/doctorName 到 config。**登录框入口动态切换**（`injectLoginEntry`）：本地桥 + 未激活 + 未注册 → 显示"📝 注册开通"；否则显示"管理员激活"。
+
+**三、幽灵 admin 双保险**：① **登录封锁**——两个 local adapter 的 `authenticate` 均拦截 `admin/admin`（L1118/L1176）：未注册→"请先完成注册"；已注册→"内置默认账户已停用，请使用注册的手机号登录"（改过密码的真实 admin 不受影响，密码非 'admin' 不命中）。② **注册后物理移除**——Java 端与桌面 IPC 均做保守判定（宁可漏删不可误删）：username='admin' 且 password 为明文 'admin' 或出厂哈希 `2f1e152d…`（sha256('bnzc_prescription_salt_v1'+'admin')，与 assets/public/config.json 出厂值一致）才删除。
+
+**四、激活流程适配（已注册用户零重复输入）**：激活 Tab1 表单用 `license:registrationInfo` 预填诊所名/医师名/手机号；手机号与注册一致时**跳过密码步骤**——自动填 `adminPassword`/`adminPassword2` 两个密码框后自动点 `adminSubmitBtn`（防"跳步后提交失败密码框为空"回归）。注册状态判定 `isLocalRegisteredAsync`（L3390+）双源：localStorage 注册信息 ∪ 桥 config.json 已有手机号账号（升级设备场景）。
+
+**五、门禁与生效**：本轮 8 文件改动（offline.js 权威源 + 3 份离线 auth-core 副本 + LicenseManager/MainActivity + 桌面 main.js/preload.js），门禁全绿：sync-auth-core 11 副本 IN SYNC / check-interface 6 OK / sync-all VerifyOnly 全一致 / html-sync-check IN SYNC / Gradle 编译过（仅 deprecation 提示）。**各端生效：离线 APP + 离线桌面必须重打包**（客户端逻辑）；云端网页/Functions 不受影响（cloud.js 未改）；鸿蒙 rawfile 副本随下次 HAP 编译携带。**新装机 SOP：首次启动 → 点"注册开通" → 填诊所/医师/手机号/密码 → 登录试用 → 需正式使用时走管理员激活（表单已预填，密码步骤自动跳过）**。
+
 ## 8. 桌面版技术规范
 
 * **桌面版云端 HTTP 必须走主进程**（file:// 直连被 CORS 拦截，Origin: null 不在白名单，fetch 静默 TypeError）：IPC 代理或 activate.js 内 fetch。APP 端 <http://localhost> 在白名单可直连。新增桌面版云端接口沿用 postInviteQuery 分流模式。
