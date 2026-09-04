@@ -1584,6 +1584,38 @@ document.getElementById('startTrialBtn').addEventListener('click', async () => {
         btn.textContent = original;
     }
 });
+// ============ 试用状态感知（2026-09-04） ============
+//   根因：试用已过期但激活页面仍显示"立即试用"按钮，逻辑矛盾。
+//   修复：页面加载时检查 license 状态，仅当 type='trial'（试用中）或
+//         无 type 字段（全新未启动过）时显示试用按钮；其他状态隐藏并提示。
+(async function initTrialButton() {
+    const btn = document.getElementById('startTrialBtn');
+    if (!btn) return;
+    try {
+        const status = await window.electronAPI.license.getStatus();
+        const trialType = status && status.type;
+        // 显示条件：试用中 或 未启用过试用（无 type 字段）
+        if (trialType && trialType !== 'trial') {
+            // 试用已过期 / 已正式授权 / 其他异常 → 隐藏按钮，显示提示
+            const container = btn.parentElement;
+            btn.style.display = 'none';
+            const tip = document.createElement('div');
+            tip.style.cssText = 'color:#999;font-size:13px;margin-top:4px;text-align:center;padding:10px;';
+            if (trialType === 'trial_expired') {
+                tip.innerHTML = '⚠️ 本设备试用期已结束，无法再次试用。<br>请选择上方版本后购买正式授权。';
+            } else if (trialType === 'licensed') {
+                tip.innerHTML = '✅ 本设备已激活正式授权，无需再试用。';
+            } else {
+                tip.innerHTML = '本设备当前状态不支持试用，请联系客服。';
+            }
+            if (container) container.insertBefore(tip, btn.nextSibling);
+        }
+        // trialType === 'trial' 或 undefined → 保持按钮可见（默认）
+    } catch (e) {
+        console.warn('[activate] initTrialButton failed:', e);
+        // 失败不隐藏按钮（保守策略，不让用户丢了试用入口）
+    }
+})();
 </script>
 </body>
 </html>
