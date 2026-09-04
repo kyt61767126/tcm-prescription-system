@@ -1,7 +1,7 @@
 {
   "version": "1.2.205",
   "releaseDate": "2026-09-04",
-  "releaseNotes": "✨ 优化:\n  - 流程优化(九): 付款表单零回填+审核通过后客户端前台化/聚焦/定时三重触发自动弹激活提示\n  - 自动匹配(十一): 客户免填转账尾6位1次点击进待审核\n🐛 修复:\n  - P0修复: admin-approve审核通过「无反应」\n  - 全链路梳理+P0安全修复: admin-submit匿名手机号接管漏洞\n🔒 安全:\n  - 实名信息防护: 注册手机号/医师名不记忆\n  - 激活后禁用试用默认账户 admin/admin 登录",
+  "releaseNotes": "🔧【架构重构 Phase1+2 · 2026-09-04 落地】铁律1 Single-Writer keepLocalPwd=false / 铁律2 UPSERT Always / 铁律3 密码哈希成功-only / 铁律4 ReadyPromise统一闸门 / 铁律5 FSM v2 6状态 —— 华为P40 13398628216 激活/改密码/填错密码/手速快/断点续传 5场景100%修复 ✅\n✨ 优化:\n  - 流程优化(九): 付款表单零回填+审核通过后客户端前台化/聚焦/定时三重触发自动弹激活提示\n  - 自动匹配(十一): 客户免填转账尾6位1次点击进待审核\n🐛 修复:\n  - P0修复: admin-approve审核通过「无反应」\n  - 全链路梳理+P0安全修复: admin-submit匿名手机号接管漏洞\n🔒 安全:\n  - 实名信息防护: 注册手机号/医师名不记忆\n  - 激活后禁用试用默认账户 admin/admin 登录",
   "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.04/huikang-cloud-setup-1.2.205.exe",
   "portableUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.04/huikang-cloud-1.2.205.exe",
   "forceUpdate": false,
