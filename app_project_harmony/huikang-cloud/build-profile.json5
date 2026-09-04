@@ -1,9 +1,24 @@
 {
   "app": {
-    "signingConfigs": [],
+    "signingConfigs": [
+      {
+        "name": "default",
+        "type": "HarmonyOS",
+        "material": {
+          "certpath": "C:\\Users\\61767\\.ohos\\config\\default_huikang-cloud_OsXlve8nGqRuzvD4C-zEgB-Rcz2xU8KrPRCDkEpzUHs=.cer",
+          "keyAlias": "debugKey",
+          "keyPassword": "0000001BD3EB265C3152DB560D1627311EDFAB41A9E21B12DA25FDB4F60C52AEEB0F4B5B9AF921CB922A98",
+          "profile": "C:\\Users\\61767\\.ohos\\config\\default_huikang-cloud_OsXlve8nGqRuzvD4C-zEgB-Rcz2xU8KrPRCDkEpzUHs=.p7b",
+          "signAlg": "SHA256withECDSA",
+          "storeFile": "C:\\Users\\61767\\.ohos\\config\\default_huikang-cloud_OsXlve8nGqRuzvD4C-zEgB-Rcz2xU8KrPRCDkEpzUHs=.p12",
+          "storePassword": "0000001B544FD955709ABE2B19EB68D2A9AC1C344708E0571346E211F8AA0AD3EEC961B13404CEDCC9B495"
+        }
+      }
+    ],
     "products": [
       {
         "name": "default",
+        "signingConfig": "default",
         "compatibleSdkVersion": "26.0.0",
         "runtimeOS": "HarmonyOS",
         "buildOption": {
