@@ -466,6 +466,8 @@ P2 渐进迁移（2026-09-03 当日完成）：
 
 **六、发布闭环（2026-09-04 晚，Commit b346db98 源码 + a631bdf4 Release）**：离线 APP **V1.0.0.217**（versionCode 217，解压终验 auth-core.js 三标记 + classes.dex `registerLocalUser` 桥分发全 FOUND）+ 离线桌面 **1.0.172**（Setup+便携版，全加固链：E2E 3/3 + 冒烟 176/176 + fuses + .bnzc ver2 match + Authenticode + asar 终验 4 标记 FOUND）已发布到 GitHub Release **`v2026.09.04-1907`**（合规 13/13）。发布链三坑按 §十八 SOP 处置：① aapt 中文文件名 → manifest apk.version 人工补 `V1.0.0.217`+`versionCode:217`；② legacy `updates/dingzhi/latest.json` 手动更到 1.0.172 新 Release；③ site-official 双权威源 3 文件（hash-manifest + local + dingzhi latest.json）手动镜像 IN SYNC。**客户升级方式：离线 APP 卸载重装（或覆盖安装——已激活客户 config.json 有手机号账号，不会被幽灵admin清理误伤，注册信息预填自动生效）；离线桌面启动即提示自动升级 1.0.172**。
 
+**七、发布后独立审核闭环（2026-09-04 晚，无代码改动）**：对方案B做逐文件批判性审核时曾报"P0 桌面注册账号 PBKDF2 哈希无法登录 / P1 幽灵 admin 移除失效"，**经实算复核两条均为误报，代码本就正确，禁止再"修复"**：① 桌面 [main.js L2696 hashPassword](file:///d:/trae_projects/kyt-zy/app_project/db-offline/desktop/electron/main.js#L2696) 是 `sha256('bnzc_prescription_salt_v1'+pwd)` 64 位 hex（与 auth-core [offline.js L13/L437](file:///d:/trae_projects/kyt-zy/shared/auth-core/offline.js#L437) 同盐同公式，verifyPassword L468-481 可验证），**electron 目录零 pbkdf2/sha512 命中**（user:add/改密/自愈补号同函数，格式全部一致）；② `hashPassword('admin')` 实算 = `2f1e152dfbccedc7d947d7f9d40e0790be6289309cf6904af728b3cf822c361b`，与出厂 config.json admin 哈希逐字节相等（Node 实算 match=true），幽灵移除 L2774-2780 有效；③ Node 双公式实算（node:crypto 写入 vs WebCrypto 验证）同密码哈希相等、错密码被拒。**教训：审核结论必须基于 Read 到的函数体/实算结果，Grep 输出被系统截断时必须重读，禁止凭命中印象推断哈希算法**。
+
 ## 8. 桌面版技术规范
 
 * **桌面版云端 HTTP 必须走主进程**（file:// 直连被 CORS 拦截，Origin: null 不在白名单，fetch 静默 TypeError）：IPC 代理或 activate.js 内 fetch。APP 端 <http://localhost> 在白名单可直连。新增桌面版云端接口沿用 postInviteQuery 分流模式。
