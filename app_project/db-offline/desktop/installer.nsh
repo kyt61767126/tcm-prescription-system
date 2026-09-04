@@ -40,3 +40,30 @@
   nsExec::Exec 'taskkill /f /t /im "${APP_EXECUTABLE_FILENAME}"'
   Sleep 500
 !macroend
+
+; ★ 2026-09-04 卸载时清理 userData（NSIS 默认不删 %APPDATA%，导致卸载重装后登录框仍显示旧账号）：
+;   Electron userData = $APPDATA\tcm-prescription\（config.json / localStorage / license.dat 全在里面）。
+;   便携版（免安装 exe）不走本安装器，config.json 在 exe 同目录，删 exe 自然干净，不受影响。
+;   策略：卸载完成后弹确认框——升级重装选"保留"（断点续传/处方记录/授权锚点都要留），
+;   全新安装测试或彻底清理选"删除本地数据"（删整个 userData 目录）。
+;   防句柄锁定：RMDir /r /REBOOTOK，删不掉的文件下次开机自动清理。
+!macro customUninit
+  ; Electron 的 app name（userData 目录名）必须与 package.json "name" 字段一致
+  ; ⚠ 改了 package.json name 这里必须同步改！
+  StrCpy $0 "$APPDATA\tcm-prescription"
+
+  ; 目录不存在 → 直接跳过（可能是便携版/绿色装/从未启动过）
+  IfFileExists "$0" +3
+    DetailPrint `userData 目录不存在，跳过清理`
+    Goto +8
+
+  ; 弹确认框：MB_YESNO + MB_ICONQUESTION + 默认选 NO（升级场景最常见）
+  MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 \
+    "是否同时删除本地数据？$\r$\n$\r$\n保留 = 升级重装后断点续传/处方记录/授权仍可用$\r$\n删除 = 卸载后不留任何痕迹（全新安装测试请选此项）" \
+    IDYES +2
+    Goto +6
+
+  DetailPrint `正在删除 userData: $0`
+  RMDir /r /REBOOTOK "$0"
+  DetailPrint `userData 已清理完成（被占用的文件将在下次开机后删除）`
+!macroend
