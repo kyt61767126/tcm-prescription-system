@@ -45,8 +45,11 @@ async function _rebuildPhoneIndexFor(kv, phone, skipRequestId = null) {
         if (skipRequestId && rid === skipRequestId) continue;
         const rec = await kv.get(KV_ADMIN_REQ_PREFIX + rid, 'json').catch(() => null);
         if (!rec || String(rec.phone || '') !== String(phone)) continue;
-        // 选择一个"最健康"的：activated > pending > pending_payment > rejected > cancelled
-        const weight = { activated: 5, pending: 4, pending_payment: 3, rejected: 2, cancelled: 1 }[rec.status] || 0;
+        // 选择一个"最健康"的：activated > pending ≈ pending_approval > pending_payment > rejected > cancelled
+        // ★ 2026-09-04 补 pending_approval 权重（pending 别名，状态机统一后新命名默认入口）
+        //   避免已付款待审核的记录权重=0，永不被选为 phone 索引替代（会造成同手机号新提交短路
+        //   到 cancelled/rejected 旧记录的历史问题重现）
+        const weight = { activated: 5, pending: 4, pending_approval: 4, pending_payment: 3, rejected: 2, cancelled: 1 }[rec.status] || 0;
         if (!replacement || weight > replacement.weight) {
             replacement = { weight, requestId: rid, status: rec.status };
         }
@@ -175,8 +178,8 @@ export async function updateAdminRequestStatus(kv, requestId, patch) {
         let overwrite = true;
         if (phoneIdx && phoneIdx.requestId && phoneIdx.requestId !== requestId) {
             const other = await kv.get(KV_ADMIN_REQ_PREFIX + phoneIdx.requestId, 'json').catch(() => null);
-            if (other && (other.status === 'activated' || other.status === 'pending')) {
-                overwrite = false;  // 存在有效记录，不抢索引
+            if (other && (other.status === 'activated' || other.status === 'pending' || other.status === 'pending_approval')) {
+                overwrite = false;  // 存在有效记录(激活/待审/待审别名)不抢phone索引
             }
         }
         if (overwrite) {

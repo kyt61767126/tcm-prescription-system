@@ -2515,7 +2515,10 @@ async function loadTodoCenter() {
 
         // ===== 三张待办卡 =====
         const pendingReg = clinics.filter(c => c.status === 'test');
-        const pendingActs = acts.filter(r => r.status === 'pending');
+        // ★ 2026-09-04 兼容状态别名: pending(旧命名,已付款待审核) / pending_approval(新命名统一入口)
+        //   必须跟后端 admin-list.js L151-155 口径保持一致，防止Dashboard待办卡「待激活申请」显示0
+        //   但实际"已付款pending_approval"已入列的状态不匹配漏算 → 管理员以为没申请
+        const pendingActs = acts.filter(r => r.status === 'pending' || r.status === 'pending_approval');
         // ★ 2026-09-03 先取 pending_payment 数，避免后续 set 调用时再 await 破坏顺序
         let payCount = 0;
         try { const pd = await payRes.json(); if (pd.success && typeof pd.count === 'number') payCount = pd.count; } catch (e) {}
@@ -2650,7 +2653,8 @@ async function refreshAdminActivateStats() {
         const data = await res.json();
         if (data.success && Array.isArray(data.requests)) {
             const all = data.requests;
-            const pending = all.filter(r => r.status === 'pending').length;
+            // ★ 2026-09-04 兼容状态别名 pending_approval：必须与后端 admin-list.js L154 / Dashboard 统计 L2521 三口径一致
+            const pending = all.filter(r => r.status === 'pending' || r.status === 'pending_approval').length;
             const activated = all.filter(r => r.status === 'activated').length;
             const rejected = all.filter(r => r.status === 'rejected').length;
             const cancelled = all.filter(r => r.status === 'cancelled').length;

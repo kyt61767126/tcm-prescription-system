@@ -142,18 +142,71 @@ export async function onRequest(context) {
 
         // 逐个读取请求记录
         const records = [];
+        const seen = new Set();
         for (const requestId of index) {
             if (records.length >= limit) break;
-            const record = await kv.get(KV_ADMIN_REQ_PREFIX + requestId, 'json');
+            const record = await kv.get(KV_ADMIN_REQ_PREFIX + requestId, 'json').catch(() => null);
             if (!record) continue;
-            if (statusFilter === 'all' || record.status === statusFilter) {
+            let hit = (statusFilter === 'all');
+            if (!hit && statusFilter === 'pending') {
+                // ★ 2026-09-04 兼容状态别名：pending(旧命名 已付款待审核) / pending_approval(新命名统一入口)
+                //   跟前端 L2518 统计口径保持一致，防止"已付款待审"在默认 pending 列表中消失
+                hit = (record.status === 'pending' || record.status === 'pending_approval');
+            }
+            if (!hit && record.status === statusFilter) hit = true;
+            if (hit) {
                 records.push(maskRecord(record));
+                seen.add(String(record.requestId || ''));
             }
         }
 
+        // ★ 兜底枚举（2026-09-04 已付款代办消失根因修复）：
+        //   当 statusFilter ∈ {pending, pending_payment, all} 时，除 admin_req_index 主路径外，
+        //   再按 order: 前缀扫描所有订单映射 → 加载对应 admin_req → 把"索引漏写/写入最终一致延迟/
+        //   旧版本 markOrderPaid 未入列"的孤儿记录按状态扫出来合并（与 pending_payment 分支对称）。
+        //   客户真实场景：markOrderPaid 写 status=pending 成功、但 _ensureInReqIndex 因时序/一致性未入列，
+        //   管理员后台"只看到未付款 pending_payment 但看不到已付款 pending"的 P0 直接修复。
+        if ((statusFilter === 'pending' || statusFilter === 'pending_payment' || statusFilter === 'all') && records.length < limit) {
+            try {
+                let cursor = undefined;
+                let scanned = 0;
+                while (records.length < limit && scanned < 2000) {
+                    const listOpts = { prefix: 'order:' };
+                    if (cursor) listOpts.cursor = cursor;
+                    const page = await kv.list(listOpts).catch(() => null);
+                    if (!page || !Array.isArray(page.keys)) break;
+                    scanned += page.keys.length;
+                    for (const key of page.keys) {
+                        if (records.length >= limit) break;
+                        const mapping = await kv.get(key.name, 'json').catch(() => null);
+                        if (!mapping || !mapping.requestId) continue;
+                        const rid = String(mapping.requestId);
+                        if (seen.has(rid)) continue;  // 已在主路径 records 中，避免重复
+                        const record = await kv.get(KV_ADMIN_REQ_PREFIX + rid, 'json').catch(() => null);
+                        if (!record) continue;
+                        let keep = false;
+                        if (statusFilter === 'all') keep = true;
+                        else if (statusFilter === 'pending') keep = (record.status === 'pending' || record.status === 'pending_approval');
+                        else if (statusFilter === 'pending_payment') keep = (record.status === 'pending_payment');
+                        if (keep) {
+                            records.push(maskRecord(record));
+                            seen.add(rid);
+                        }
+                    }
+                    if (page.list_complete || !page.cursor) break;
+                    cursor = page.cursor;
+                }
+            } catch (e) {
+                console.warn('[AdminList] 兜底枚举 order: 失败(不影响主路径):', e.message);
+            }
+        }
+
+        // 统一按提交时间倒序（主路径 + 兜底记录一起排序，保证最新最前）
+        records.sort((a, b) => new Date(b.submittedAt || 0) - new Date(a.submittedAt || 0));
+
         return json({
             success: true,
-            requests: records,
+            requests: records.slice(0, limit),
             count: records.length,
             filter: statusFilter
         });
