@@ -464,6 +464,8 @@ P2 渐进迁移（2026-09-03 当日完成）：
 
 **五、门禁与生效**：本轮 8 文件改动（offline.js 权威源 + 3 份离线 auth-core 副本 + LicenseManager/MainActivity + 桌面 main.js/preload.js），门禁全绿：sync-auth-core 11 副本 IN SYNC / check-interface 6 OK / sync-all VerifyOnly 全一致 / html-sync-check IN SYNC / Gradle 编译过（仅 deprecation 提示）。**各端生效：离线 APP + 离线桌面必须重打包**（客户端逻辑）；云端网页/Functions 不受影响（cloud.js 未改）；鸿蒙 rawfile 副本随下次 HAP 编译携带。**新装机 SOP：首次启动 → 点"注册开通" → 填诊所/医师/手机号/密码 → 登录试用 → 需正式使用时走管理员激活（表单已预填，密码步骤自动跳过）**。
 
+**六、发布闭环（2026-09-04 晚，Commit b346db98 源码 + a631bdf4 Release）**：离线 APP **V1.0.0.217**（versionCode 217，解压终验 auth-core.js 三标记 + classes.dex `registerLocalUser` 桥分发全 FOUND）+ 离线桌面 **1.0.172**（Setup+便携版，全加固链：E2E 3/3 + 冒烟 176/176 + fuses + .bnzc ver2 match + Authenticode + asar 终验 4 标记 FOUND）已发布到 GitHub Release **`v2026.09.04-1907`**（合规 13/13）。发布链三坑按 §十八 SOP 处置：① aapt 中文文件名 → manifest apk.version 人工补 `V1.0.0.217`+`versionCode:217`；② legacy `updates/dingzhi/latest.json` 手动更到 1.0.172 新 Release；③ site-official 双权威源 3 文件（hash-manifest + local + dingzhi latest.json）手动镜像 IN SYNC。**客户升级方式：离线 APP 卸载重装（或覆盖安装——已激活客户 config.json 有手机号账号，不会被幽灵admin清理误伤，注册信息预填自动生效）；离线桌面启动即提示自动升级 1.0.172**。
+
 ## 8. 桌面版技术规范
 
 * **桌面版云端 HTTP 必须走主进程**（file:// 直连被 CORS 拦截，Origin: null 不在白名单，fetch 静默 TypeError）：IPC 代理或 activate.js 内 fetch。APP 端 <http://localhost> 在白名单可直连。新增桌面版云端接口沿用 postInviteQuery 分流模式。

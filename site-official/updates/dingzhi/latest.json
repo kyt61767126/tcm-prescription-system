@@ -1,9 +1,9 @@
 {
-    "version": "1.0.171",
+    "version": "1.0.172",
     "releaseDate": "2026-09-04",
-    "releaseNotes": "版本更新",
-    "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.04-1718/huikang-local-setup-1.0.171.exe",
-    "portableUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.04-1718/huikang-local-1.0.171.exe",
+    "releaseNotes": "版本更新：新增注册开通入口（先注册后激活，手机号即账号），激活流程自动预填注册信息。",
+    "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.04-1907/huikang-local-setup-1.0.172.exe",
+    "portableUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.04-1907/huikang-local-1.0.172.exe",
     "forceUpdate": false,
     "minVersion": "1.0.0"
 }
