@@ -493,7 +493,13 @@ P2 渐进迁移（2026-09-03 当日完成）：
 
 * 桌面管理员激活走主进程流程（activate-window + submitAdminRequest/saveLicense IPC），不经过 auth-core onAdminActivated。
 
-* 激活窗口 activate-window\.html：QR 库从官网 CDN 加载（失败自动降级链接文本）；checkAdminStatus IPC 链（preload→main→activate.js）透传 machineId。
+
+* **激活页面状态感知（2026-09-04 Commit 2fe38576）**：activate-window.html 的"立即试用"按钮（startTrialBtn）不能写死永远可见。页面加载时必须调 window.electronAPI.license.getStatus()（底层是 licenseManager.validateLicense()），根据 	ype 字段分支：
+  - 	ype === 'trial' 或 undefined → 保持按钮可见（试用中 / 全新未启动过）
+  - 	ype === 'trial_expired' → 隐藏按钮，提示"⚠️ 试用期已结束，无法再次试用"
+  - 	ype === 'licensed' → 隐藏按钮，提示"✅ 已激活正式授权"
+  - 其他异常 type（binding_mismatch / tampered / expired / debugger / invalid / config_tampered）→ 隐藏按钮
+  根因：试用过期弹框提示"该设备已完成一次试用"，但激活页面仍显示"立即试用"按钮——UI 逻辑矛盾。* 激活窗口 activate-window\.html：QR 库从官网 CDN 加载（失败自动降级链接文本）；checkAdminStatus IPC 链（preload→main→activate.js）透传 machineId。
 
 ## 9. 安全防破解铁律
 
