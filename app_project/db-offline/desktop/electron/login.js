@@ -290,42 +290,28 @@
                     localStorage.setItem('local_rememberedUsers', JSON.stringify(arr));
                 }
             } catch (_) { /* 迁移失败不阻断预填 */ }
-        } else if (users.length === 1 && users[0].username && isGenericUsername(users[0].username)) {
-            // ★ 刚激活成功：只有一个管理员账户时自动预填（一键激活场景，且账户是通用用户名才预填）
-            usernameToFill = users[0].username;
         }
-        
-        const doctorName = (config && config.doctorName) ? String(config.doctorName) : '';
-        const isTrialDefault = !rememberedUser && users.length === 1;
+        // ★ 2026-09-04 删除 config.users 单账户自动预填 + isTrialDefault admin/admin 双预填
+        //   根因：全新安装出厂模板也有 admin 单账户，导致首次启动即预填 admin/admin（历史 bug）。
+        //   正确行为：预填仅来自 localStorage 记住的用户名（用户登录后才写入）。
+        //   激活后首次登录也不预填（用户自己注册后知道账号密码）。
+
         try { const dnEl = document.getElementById('loginDoctorName'); if (dnEl) dnEl.style.display = 'none'; } catch (e) {}
 
         if (usernameToFill && isGenericUsername(usernameToFill)) {
             input.value = usernameToFill;
             // ★ 2026-08-28 实名防护：仅通用用户名才写入单键
             localStorage.setItem(KEY_REMEMBER_USER, usernameToFill);
-            // ★ 2026-08-26 防信息泄露：取消"账号已预填"绿色提示
-            // 新装试用默认（未记住用户 + 单账户 admin）→ 密码框默认 admin，便于直接试用
-            if (isTrialDefault && usernameToFill === 'admin') {
-                try { const pwdEl = $('loginPassword'); if (pwdEl && !pwdEl.value) pwdEl.value = 'admin'; } catch (e) {}
-            }
             setTimeout(() => {
                 const pwd = $('loginPassword');
                 if (pwd) pwd.focus();
             }, 200);
         } else {
-            // ★ 实名兜底：非通用用户名清空预填记忆键
+            // ★ 实名兜底：非通用用户名/无记忆用户名 → 清空输入框，保持全新登录态
             try { localStorage.removeItem(KEY_REMEMBER_USER); } catch (_) {}
             input.value = '';
-            // 新装试用默认（未记住用户 + 单账户 admin）→ 仍填 admin 默认密码
-            if (isTrialDefault && users[0] && users[0].username === 'admin') {
-                input.value = 'admin';
-                try { const pwdEl = $('loginPassword'); if (pwdEl && !pwdEl.value) pwdEl.value = 'admin'; } catch (e) {}
-                setTimeout(() => { const pwdEl2 = $('loginPassword'); if (pwdEl2) pwdEl2.focus(); }, 200);
-            } else {
-                setTimeout(() => { input.focus(); }, 200);
-            }
+            setTimeout(() => { input.focus(); }, 200);
         }
-        void doctorName; /* 保留医师名变量引用，未来如有需要可复用 */
 
         // ★ 2026-08-28 全局统一：渲染多账户下拉切换
         renderUsernameDropdown(users);

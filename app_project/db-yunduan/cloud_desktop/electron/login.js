@@ -309,10 +309,10 @@
                     localStorage.setItem('local_rememberedUsers', JSON.stringify(arr));
                 }
             } catch (_) { /* 迁移失败不阻断预填 */ }
-        } else if (users.length === 1 && users[0].username && isGenericUsername(users[0].username)) {
-            // ★ 刚激活成功：只有一个管理员账户时自动预填（一键激活场景，且账户是通用用户名才预填）
-            usernameToFill = users[0].username;
         }
+        // ★ 2026-09-04 删除 config.users 单账户自动预填
+        //   根因：全新安装出厂模板也有 admin 单账户，导致首次启动即预填（与离线端同根因）。
+        //   正确行为：预填仅来自 localStorage 记住的用户名（用户登录后才写入）。
         
         if (usernameToFill && isGenericUsername(usernameToFill)) {
             input.value = usernameToFill;
