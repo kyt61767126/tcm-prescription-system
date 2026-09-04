@@ -32,7 +32,7 @@
 import { getKV, checkRateLimit, checkDeviceVersion } from './_lib/license-core.js';
 import { provisionCloudAccount, normalizeActivationPassword } from './_lib/admin-account.js';
 import { createAdminRequest, updateAdminRequestStatus } from './_lib/license-write-service.js';
-import { findPhoneOccupancy } from '../_lib/auth.js';
+import { findPhoneOccupancy, KV_SYSTEM_CLINICS } from '../_lib/auth.js';
 
 // ★ 2026-08-20 查找某手机号下最近一条"已通过"的激活申请
 //   - 优先手机号索引（O(1)）；索引指向 pending/rejected 时再兜底扫描请求索引
@@ -218,6 +218,28 @@ export async function onRequest(context) {
             if (!deviceCheck.ok) {
                 return json({ success: false, error: deviceCheck.error }, 403);
             }
+        }
+
+        // ★ 2026-09-04 AR-01 修复：已停用（disabled）诊所——不允许匿名重新提交激活申请。
+        //   风险等级=高；影响范围=provisionCloudAccount 已有同名诊所 status 升级语义。
+        //   若诊所 status=disabled，代表平台管理员已**人工决策停用**该诊所（违规/欠费/注销等）。
+        //   旧修复 provisionCloudAccount 的 disabled→active 升级分支会让"客户重新申请+付款→管理员
+        //   审核通过"即可绕过停用决策，让平台的停用能力形同虚设。必须在申请入口处直接拦截：
+        //   提示客户联系客服复开（正常业务流程），而不是让前台重注册一条请求去绕开护栏。
+        try {
+            const clinics = (await kv.get(KV_SYSTEM_CLINICS, 'json')) || [];
+            const sameNameClinic = Array.isArray(clinics) && clinics.find(c => c && c.name === clinicName);
+            if (sameNameClinic && sameNameClinic.status === 'disabled') {
+                console.log('[AdminSubmit] ★ 同名诊所已停用(disabled)，拒绝新申请:',
+                    clinicName, 'phone=', phone, 'machineId=', finalMachineId.substring(0, 8));
+                return json({
+                    success: false,
+                    code: 'CLINIC_DISABLED',
+                    error: '诊所「' + clinicName + '」已被停用，请联系客服微信 hktzy1688 办理复开，不要重新提交新的激活申请。'
+                }, 409);
+            }
+        } catch (de) {
+            console.warn('[AdminSubmit] 停用诊所同名检查失败(放行申请):', de && de.message);
         }
 
         // ★ 2026-08-20 已激活申请短路：该手机号此前已有"管理员审核通过"的激活申请（且可能

@@ -39,7 +39,7 @@
 // ============================================================================
 
 import {
-    parseAuthHeader, isPlatformAdmin
+    parseAuthHeader, isPlatformAdmin, KV_SYSTEM_CLINICS
 } from '../_lib/auth.js';
 import {
     getKV, saveLicense, buildLicenseData, encodeLicenseBase64,
@@ -161,6 +161,34 @@ export async function onRequest(context) {
         const deviceCheck = await checkDeviceVersion(kv, record.machineId, type);
         if (!deviceCheck.ok) {
             return json({ success: false, error: deviceCheck.error }, 403);
+        }
+
+        // ★ 2026-09-04 AR-01 修复：已停用(disabled)诊所——管理员审核通过也必须拒绝。
+        //   风险等级=高；影响范围=平台停用能力的权威性。
+        //   平台管理员把诊所 status=disabled（停用/违规/欠费/注销）→ 若客户重新走"激活申请+
+        //   付款→另一位管理员不知情点了通过"→ provisionCloudAccount disabled→active 分支
+        //   直接复开→停用护栏名存实亡。审核通过是平台停用的最后一道闸，必须在此显式拒绝，
+        //   并要求"先在后台把该诊所手动设为 test 或删除"再通过——让停用状态的反转必须经
+        //   平台管理员两次显式操作，避免误点通过。
+        try {
+            const clinics = (await kv.get(KV_SYSTEM_CLINICS, 'json')) || [];
+            const sameNameClinic = Array.isArray(clinics) && clinics.find(c => c && c.name === clinicName);
+            if (sameNameClinic && sameNameClinic.status === 'disabled') {
+                console.log('[AdminApprove] ★ 同名诊所已停用(disabled)，拒绝审核通过:',
+                    clinicName, 'requestId=', requestId, 'by=', currentUser && currentUser.username);
+                return json({
+                    success: false,
+                    code: 'CLINIC_DISABLED',
+                    error: '诊所「' + clinicName + '」状态为「已停用」，无法审核通过。\n' +
+                        '若客户确实需要复开，请先在用户管理后台把该诊所状态改为「待审核」或删除该诊所后，再在此处通过审核。'
+                }, 409);
+            }
+        } catch (de) {
+            console.warn('[AdminApprove] 停用诊所同名检查失败(拒绝通过以保安全):', de && de.message);
+            return json({
+                success: false,
+                error: '诊所停用状态检查异常，请刷新后重试：' + (de && de.message || '未知错误')
+            }, 500);
         }
 
         // 校验 maxDevices

@@ -3976,6 +3976,11 @@
         let pollTimer = null;
         let pollCount = 0;
         let currentActivationObserver = null;
+        // ★ 2026-09-04 AR-02 修复：激活成功页 setTimeout 自动重启的 cancelId
+        //   风险等级=中；影响范围=showAdminActivateModal 关闭/销毁生命周期
+        //   用户在 1.5s 窗口内点击关闭弹窗/重试另一条流程时，如果不 cancel，
+        //   setTimeout 仍会触发 electronAPI.activate.restart()——"我没点重启怎么就重启了"。
+        let __autoRestartTid = null;
 
         const overlay = document.createElement('div');
         overlay.id = 'adminActivateOverlay';
@@ -4215,6 +4220,10 @@
 
         function cleanup() {
             if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+            if (currentActivationObserver) { try { currentActivationObserver.stop(); } catch (_) {} currentActivationObserver = null; }
+            // ★ 2026-09-04 AR-02 修复：关闭弹窗时取消自动重启定时器（见 onAdminActivated
+            //   setTimeout(__restartApp, 1500)）。风险等级=中；影响范围=激活成功页 1.5s 窗口。
+            if (__autoRestartTid) { clearTimeout(__autoRestartTid); __autoRestartTid = null; }
             if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
             // 激活窗口关闭后，重置激活中标志，允许fallbackTimer下次重新触发
             global.__licenseActivating = false;
@@ -4916,7 +4925,9 @@
                         document.getElementById('adminSuccessBtn').onclick = __restartApp;
                         // ★ 2026-09-04 P0 加固：1.5s 后自动重启（小白用户激活成功后常会等界面自动跳转，
                         //   手动点"重启应用"是认知负担——自动触发消除"激活成功但忘记重启→Java层仍invalid"死循环）
-                        setTimeout(__restartApp, 1500);
+                        // ★ AR-02 修复：tid 保存到闭包变量 __autoRestartTid，cleanup() 关闭弹窗时会 cancel
+                        //   （否则用户 1.5s 窗口内点击关闭/重试另一流程，仍会触发重启→"我没点重启怎么就重启了"）
+                        __autoRestartTid = setTimeout(__restartApp, 1500);
                         // ★ 2026-09-03 激活领码成功：清除 adminReqPending 持久化（断点续传完成）
                         try { StorageAdapter.removeItem('license:adminReqPending'); } catch (ce2) {}
                     } else {
