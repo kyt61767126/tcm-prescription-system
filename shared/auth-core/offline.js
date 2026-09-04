@@ -4421,6 +4421,25 @@
                     const msg = (res && res.error) ? res.error : '提交失败，请重试';
                     // ★ 2026-09-02 支付前置校验：未完成支付 → 展示"请完成支付"面板引导官网付款
                     if (res && res.code === 'PAYMENT_REQUIRED') {
+                        // ★ 2026-09-04 P0 断点闭环：支付拦截也要持久化断点信息（无 requestId，
+                        //   仅 phone/machineId/密码）——官网订单的 requestId 客户端不持有，
+                        //   付款+管理员审核通过后切回 APP，resumeAdminPendingRequest 凭
+                        //   machineId 自救查询（admin-status machineId-only 模式）才能检测
+                        //   到已激活。否则前台化三重触发全部空转，客户重复付款也永远等不到
+                        //   激活（现场实锤 13398628215 连付 3 次仍登录失败）。
+                        try {
+                            const encPwdPr = await encryptSensitive(state.password || '');
+                            await StorageAdapter.setItem('license:adminReqPending', JSON.stringify({
+                                requestId: '',
+                                phone: (state.phone || '').trim(),
+                                adminName: (state.adminName || '').trim(),
+                                clinicName: (state.clinicName || '').trim(),
+                                passwordEnc: encPwdPr,
+                                machineId: (typeof machineId !== 'undefined' && machineId) ? String(machineId) : '',
+                                awaitingPayment: true,
+                                at: Date.now()
+                            }));
+                        } catch (pe) { console.warn('[LicenseCheck] PAYMENT_REQUIRED 断点持久化失败(不影响付款指引):', pe); }
                         show('adminPayRequired');
                     } else {
                         showFormAndAlert(msg);
@@ -4882,7 +4901,32 @@
                 if (!savedRaw) return;
                 var saved = null;
                 try { saved = JSON.parse(savedRaw); } catch (e) { return; }
-                if (!saved || !saved.requestId) return;
+                if (!saved) return;
+                // ★ 2026-09-04 machineId 自救：PAYMENT_REQUIRED 断点无 requestId（官网订单
+                //   持有），凭本机 machineId 调 admin-status 自救模式检测本设备是否已激活。
+                if (!saved.requestId) {
+                    if (!saved.machineId || String(saved.machineId).length < 8) return;
+                    // 30 天过期：从未完成付款的陈旧断点静默清理，不再无限查询
+                    if (saved.at && (Date.now() - saved.at > 30 * 24 * 3600 * 1000)) {
+                        try { StorageAdapter.removeItem('license:adminReqPending'); } catch (e2) {}
+                        return;
+                    }
+                    var murl = ADMIN_STATUS_URL + '?machineId=' + encodeURIComponent(saved.machineId);
+                    fetch(murl, { method: 'GET', headers: { 'Content-Type': 'application/json' } })
+                        .then(function (resp) { return resp.json(); })
+                        .then(function (r) {
+                            if (r && r.success && r.status === 'activated') {
+                                console.log('[LicenseCheck] machineId 自救：本设备已激活，自动完成领码');
+                                _resumeCompleteActivation(r, saved).catch(function (ae) {
+                                    console.warn('[LicenseCheck] machineId 自救领码异常:', ae);
+                                });
+                            }
+                        })
+                        .catch(function (e) {
+                            console.warn('[LicenseCheck] machineId 自救查询失败(下次前台化触发再试):', e);
+                        });
+                    return;
+                }
                 var url = ADMIN_STATUS_URL + '?requestId=' + encodeURIComponent(saved.requestId);
                 if (saved.machineId) url += '&machineId=' + encodeURIComponent(saved.machineId);
                 fetch(url, { method: 'GET', headers: { 'Content-Type': 'application/json' } })

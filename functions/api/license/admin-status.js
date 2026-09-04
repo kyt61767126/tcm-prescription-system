@@ -93,18 +93,53 @@ export async function onRequest(context) {
         //   即返回 activated，客户端自动完成激活（license 绑定的就是该 machineId）。
         const machineIdParam = url.searchParams.get('machineId') || '';
 
-        if (!requestId) {
+        let viaMachineIdFallback = false;
+        let record = null;
+        if (requestId) {
+            // 防止路径穿越：requestId 必须为字母数字+短横
+            if (!/^REQ-[A-Z0-9]+-[A-F0-9]+$/i.test(requestId)) {
+                return json({ success: false, error: 'requestId 格式错误' }, 400, origin);
+            }
+            record = await kv.get(KV_ADMIN_REQ_PREFIX + requestId, 'json');
+            if (!record) {
+                return json({ success: false, error: '请求不存在或已失效' }, 404, origin);
+            }
+        } else if (machineIdParam && machineIdParam.length >= 8) {
+            // ★ 2026-09-04 P0 machineId-only 自救查询：客户端提交被支付前置拦截
+            //   （PAYMENT_REQUIRED）时不产生 requestId——官网订单的 requestId 客户端
+            //   不持有。客户付款完成、管理员审核通过后切回 APP，前台化触发的
+            //   resumeAdminPendingRequest 无 requestId 可查 → 激活永远检测不到
+            //   （现场实锤 13398628215 重复付款 3 次仍登录失败）。
+            //   凭本机 machineId 扫描最近记录（索引最新在前）：已激活（最新优先）→
+            //   下发 license；待审（pending/pending_payment/pending_approval，最新）→
+            //   原样返回状态；无命中 → 404。
+            //   安全语义同下方兜底扫描：machineId 不可信，仅返回 license（绑定该
+            //   machineId，他机验签必失败），跳过账号补开/密码归一化。
+            try {
+                const index = (await kv.get('admin_req_index', 'json')) || [];
+                let hitPending = null;
+                for (const rid of index.slice(0, 200)) {
+                    const rec = await kv.get(KV_ADMIN_REQ_PREFIX + rid, 'json').catch(() => null);
+                    if (!rec || !rec.machineId || String(rec.machineId) !== machineIdParam) continue;
+                    if (rec.status === 'activated') {
+                        record = rec;
+                        viaMachineIdFallback = true;
+                        console.log('[AdminStatus] machineId-only 自救命中已激活:', rid, '(仅返回license，跳过账号操作)');
+                        break;
+                    }
+                    if (!hitPending && (rec.status === 'pending' || rec.status === 'pending_payment' || rec.status === 'pending_approval')) {
+                        hitPending = rec; // 记住最新待审，继续向后找更早已激活记录
+                    }
+                }
+                if (!record && hitPending) record = hitPending;
+            } catch (e) {
+                console.warn('[AdminStatus] machineId-only 自救扫描失败（忽略）:', e.message);
+            }
+            if (!record) {
+                return json({ success: false, error: '请求不存在或已失效' }, 404, origin);
+            }
+        } else {
             return json({ success: false, error: '缺少 requestId 参数' }, 400, origin);
-        }
-
-        // 防止路径穿越：requestId 必须为字母数字+短横
-        if (!/^REQ-[A-Z0-9]+-[A-F0-9]+$/i.test(requestId)) {
-            return json({ success: false, error: 'requestId 格式错误' }, 400, origin);
-        }
-
-        let record = await kv.get(KV_ADMIN_REQ_PREFIX + requestId, 'json');
-        if (!record) {
-            return json({ success: false, error: '请求不存在或已失效' }, 404, origin);
         }
 
         // ★ machineId 兜底：自己的请求未激活时，扫描最近记录找同设备已激活的官网订单
@@ -113,7 +148,6 @@ export async function onRequest(context) {
         //   自己的机器验签必失败，无泄露风险）；必须跳过 provisionCloudAccount 与
         //   normalizeActivationPassword——否则攻击者提交自己的 requestId + 冒用受害者
         //   machineId，即可触发受害者手机号下全部账号密码被重置为默认 admin（接管账号）。
-        let viaMachineIdFallback = false;
         if (machineIdParam && record.status !== 'activated') {
             try {
                 const index = (await kv.get('admin_req_index', 'json')) || [];

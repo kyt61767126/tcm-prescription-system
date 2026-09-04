@@ -3728,6 +3728,15 @@
             } else if (global && global.AndroidNative && typeof global.AndroidNative.invoke === 'function') {
                 try { machineId = global.AndroidNative.invoke('getMachineId', '{}') || ''; } catch (e) {}
             }
+            // ★ 2026-09-04 消毒：云端APP Java 桥未实现 getMachineId → invoke 返回错误
+            //   JSON 串（现场实锤 13398628216 订单 machineId 存了 {"success":false,
+            //   "error":"unknown method: getMachineId"}，设备绑定永久失真）。
+            //   machineId 只允许字母/数字/下划线/短横 8-64 位；错误串/[object Object]/
+            //   过短值一律清空 → 服务端 browser-xxx 兜底，杜绝垃圾机器ID入库。
+            try {
+                var __midS = String(machineId || '').trim();
+                if (!/^[A-Za-z0-9_-]{8,64}$/.test(__midS)) machineId = '';
+            } catch (e3) {}
             let clinicName = '';
             try {
                 if (typeof CONFIG !== 'undefined' && CONFIG.clinicName) clinicName = CONFIG.clinicName;
@@ -4390,6 +4399,24 @@
                     const msg = (res && res.error) ? res.error : '提交失败，请重试';
                     // ★ 2026-09-02 支付前置校验：未完成支付 → 展示"请完成支付"面板引导官网付款
                     if (res && res.code === 'PAYMENT_REQUIRED') {
+                        // ★ 2026-09-04 P0 断点闭环（同 offline.js）：支付拦截也持久化断点
+                        //   （无 requestId，仅 phone/machineId/密码），付款+审核通过后
+                        //   resumeAdminPendingRequest 凭 machineId 自救查询检测激活。
+                        //   云端桌面（Electron 有真实 machineId）自动完成收尾；云端APP
+                        //   桥无 machineId 时留空（走重新提交的手机号复用通道）。
+                        try {
+                            const encPwdPr = await encryptSensitive(state.password || '');
+                            await StorageAdapter.setItem('license:adminReqPending', JSON.stringify({
+                                requestId: '',
+                                phone: (state.phone || '').trim(),
+                                adminName: (state.adminName || '').trim(),
+                                clinicName: (state.clinicName || '').trim(),
+                                passwordEnc: encPwdPr,
+                                machineId: (typeof machineId !== 'undefined' && machineId) ? String(machineId) : '',
+                                awaitingPayment: true,
+                                at: Date.now()
+                            }));
+                        } catch (pe) { console.warn('[LicenseCheck] PAYMENT_REQUIRED 断点持久化失败(不影响付款指引):', pe); }
                         show('adminPayRequired');
                     } else {
                         showFormAndAlert(msg);
@@ -4664,7 +4691,32 @@
                 if (!savedRaw) return;
                 var saved = null;
                 try { saved = JSON.parse(savedRaw); } catch (e) { return; }
-                if (!saved || !saved.requestId) return;
+                if (!saved) return;
+                // ★ 2026-09-04 machineId 自救（同 offline.js）：PAYMENT_REQUIRED 断点无
+                //   requestId，凭本机 machineId 调 admin-status 自救模式检测本设备已激活。
+                if (!saved.requestId) {
+                    if (!saved.machineId || String(saved.machineId).length < 8) return;
+                    // 30 天过期：从未完成付款的陈旧断点静默清理，不再无限查询
+                    if (saved.at && (Date.now() - saved.at > 30 * 24 * 3600 * 1000)) {
+                        try { StorageAdapter.removeItem('license:adminReqPending'); } catch (e2) {}
+                        return;
+                    }
+                    var murl = ADMIN_STATUS_URL + '?machineId=' + encodeURIComponent(saved.machineId);
+                    fetch(murl, { method: 'GET', headers: { 'Content-Type': 'application/json' } })
+                        .then(function (resp) { return resp.json(); })
+                        .then(function (r) {
+                            if (r && r.success && r.status === 'activated') {
+                                console.log('[LicenseCheck] 云端 machineId 自救：本设备已激活，自动收尾');
+                                _cloudResumeCompleteActivation(r, saved).catch(function (ae) {
+                                    console.warn('[LicenseCheck] 云端 machineId 自救收尾异常:', ae);
+                                });
+                            }
+                        })
+                        .catch(function (e) {
+                            console.warn('[LicenseCheck] 云端 machineId 自救查询失败(下次前台化触发再试):', e);
+                        });
+                    return;
+                }
                 var url = ADMIN_STATUS_URL + '?requestId=' + encodeURIComponent(saved.requestId);
                 if (saved.machineId) url += '&machineId=' + encodeURIComponent(saved.machineId);
                 fetch(url, { method: 'GET', headers: { 'Content-Type': 'application/json' } })

@@ -415,6 +415,28 @@ P2 渐进迁移（2026-09-03 当日完成）：
 
 ★ 2026-09-04（十六）AR-03 缺口层纯函数 + JUnit 5 用例自动化回归（Commit 73a52991，消灭"靠手工点华为 P40 防回归"）。**缺口定位**=2026-09-04 P0 加固的 10 行自验逻辑嵌在 BridgePluginHandler 私有方法内部（深嵌 Activity，依赖 Context/LicenseManager/Android 运行时）→ 无法写 host JUnit，未来谁手滑把 success=false 改坏=编译全绿但业务又炸。**修复策略（零跨层，与 KNOWLEDGE §2.4 一致）**：① 抽纯静态类 [LicenseInstallValidator.java](file:///d:/trae_projects/kyt-zy/app_project/db-offline/app/app/src/main/java/com/benneng/pres/LicenseInstallValidator.java) → `applySelfVerify(installResult, validateResult)`，零 import android.*、零 Context、零副作用；② MainActivity 改为一行调用 `result = LicenseInstallValidator.applySelfVerify(result, verify)`；③ [build.gradle L103-107](file:///d:/trae_projects/kyt-zy/app_project/db-offline/app/app/build.gradle#L103-L107) 补 `testImplementation 'org.json:json:20240303'`（解决 android.jar 的 org.json 是 100% Stub 导致 host JUnit 抛 Method not mocked）；④写 [LicenseInstallValidatorTest.java](file:///d:/trae_projects/kyt-zy/app_project/db-offline/app/app/src/test/java/com/benneng/pres/LicenseInstallValidatorTest.java) 5 条用例覆盖 P0 全部语义分支。**JUnit 基线（已客观验证 BUILD SUCCESSFUL exit_code=0，Gradle testDebugUnitTest 结果）**：5 tests / 0 failures / 0 errors / 0 skipped（总计 0.021s）——①TC1 installOk+validateOk=原样放行；②TC2 installOk+validate invalid=success=false + verifyType/verifyDetail/error 三字段；③TC3 installOk+validate null=unknown 兜底；④TC4 installFail=短路不注入 verifyType（防止误判）；⑤TC5 installNull=不 NPE 占位。**运行命令**：`cd app_project\db-offline\app ; .\gradlew.bat testDebugUnitTest`（约 41s，二开 <10s）。**生效方式**：源码入库即可（JUnit 不在 release APK 打包范围内，release 产物零体积膨胀=策略已验证 org.json:json 仅 testImplementation 作用域）；发布/代码审查流程新增一道门：CI 可挂 testDebugUnitTest（本地已实跑 5/5 绿灯基准）。
 
+★ 2026-09-04（十七）【交接备忘 · 供下一会话/下一账户续做】13398628215 离线APP v1.0.0.215 激活后登录失败 · 修复已做未闭环 + 未提交工作区清单（本条目对应 Commit 见 git log 最新一笔）。
+
+**一、本案最新报错（2026-09-04 晚，客户装最新版 v1.0.0.215 仍失败）**：`手机号/用户名:13398628215 密码:admin123 → 手机号/用户名或密码错误 诊断:本地1个账号[admin]密码[哈希];自愈桥OK成功1个`。诊断串生成处=APP assets index.html handleLogin 失败分支（搜 `__loginHealDiag`）。
+
+**二、本轮已完成并随本 commit 入库的修复（全部已过门禁：check-interface 6 OK / auth-core 11 副本 IN SYNC / APK SHA256 与 hash-manifest.json V1.0.0.215 对齐）**：
+1. 后端 [admin-status.js](file:///d:/trae_projects/kyt-zy/functions/api/license/admin-status.js)：新增 `?machineId=` only 自救查询（无 requestId 时扫 admin_req_index 命中同 machineId 已激活记录→返回 activated+license；命中 pending 也返回状态）。
+2. [offline.js](file:///d:/trae_projects/kyt-zy/shared/auth-core/offline.js)：PAYMENT_REQUIRED 时持久化 `license:adminReqPending`（requestId 留空、含 phone/machineId/passwordEnc）+ resumeAdminPendingRequest 支持 machineId-only 自救路径（30 天有效）。**根因背景**：客户付款走官网订单（新 requestId 在官网侧），客户端旧断点轮询自己的 requestId 永远 pending → 收尾不执行 → Java config.json 从未写入手机号账号 → 桥拉到的 1 个用户=admin 默认 → 登录必败。
+3. [cloud.js](file:///d:/trae_projects/kyt-zy/shared/auth-core/cloud.js)：同步上述两处缺口 + openAdminActivate machineId 消毒（`/^[A-Za-z0-9_-]{8,64}$/` 不合格置空，防垃圾数据）。
+4. APP assets [index.html](file:///d:/trae_projects/kyt-zy/app_project/db-offline/app/app/src/main/assets/public/index.html)：addLocalActivationUser 补回 `else push` 分支（清数据重装后 UserStore.get() 返回幽灵默认[admin]，idx=-1 无 push=激活账号被静默丢弃）。
+5. 新 APK `public/downloads/惠康中医-本地.apk` = V1.0.0.215。
+
+**三、下一会话按序执行的排查（本案仍失败的 3 个疑点）**：
+1. **先验证 v1.0.0.215 APK 内是否真含修复**：`Expand-Archive` 解压 APK（改 .zip），比对 `assets/public/index.html` 是否含 `} else { const __lastT` push 分支 + `auth-core.js` 是否含 `machineId 自救` 字样。若不含=客户装的包是修复前打的 → 直接重打包发客户。
+2. **若 APK 已含修复仍失败**：让客户/真机 `adb logcat | findstr "激活登录账号 UPSERT"`——无该日志=installAdminLicense 第 8 步 syncCreateActivationUser 没执行 → 断点续传收尾链路断（继续查 resumeAdminPendingRequest 触发时机：visibilitychange/focusin/setInterval 三重触发是否生效、machineId 是否被消毒误清空）。
+3. **后端侧已核验无问题**（勿重复查）：13398628215 有 3 条已激活记录、machineId 匹配、curl 解锁路径实测 PASS。客户即时解锁 SOP=卸载重装（勾清除数据）→新包断点续传→自动领码→手机号+激活密码登录。
+
+**四、遗留未修 bug（已实锤，5 分钟工作量）**：`app_project/db-offline/desktop/index.html`（离线桌面版）的 `addLocalActivationUser`（约 L1697-1710）**仍缺 else push 分支**（Phase 1.2 改造时弄丢，只有桌面版丢了；根 index.html / index-app.html / APP assets 均完整）。修复=照抄 [index-app.html L1719-1730](file:///d:/trae_projects/kyt-zy/app_project/db-offline/index-app.html#L1719-L1730) 的 else push 块原样插入；改完跑 check-interface 门禁；同步策略按 §2 清单核对桌面版归属。
+
+**五、鸿蒙适配任务状态（§14 续）**：release 签名四件套已生成（DevEco 自动生成，`C:/Users/61767/.ohos/config/default_huikang-cloud_OsXlve8nGqF`，别名 debugKey）；release HAP `entry-default-signed.hap` 已编译签名，备份在项目根 `huikang-harmony-release-signed.hap`（**未入库，大文件**）；AGC 包名 com.tcm.prescription、App ID 已建、企业认证已过；模拟器（Pura X View）首跑登录界面正常。**下一步=真机验证 release HAP → 提交 AppGallery 审核**；截图证据在 `app_project_harmony/*.jpeg`（未入库）。注意：鸿蒙 auth-core.js 副本在本轮 sync 范围内（rawfile/auth-core.js 已同步 machineId 修复）。
+
+**六、各端生效方式（本轮 commit 后）**：云端网页/官网/Functions（admin-status machineId 自救）=push 后 Pages 自动部署即刻生效；**离线 APP 需重打包**（V1.0.0.215 APK 已随 commit 入库，若排查一判定包不含修复则必须重打 V1.0.0.216）；**离线桌面需重打包**（且先修四的 push 分支）；云端 APP/云端桌面含同款修复亦需重打包；鸿蒙随下次 HAP 编译自然携带。
+
 ## 8. 桌面版技术规范
 
 * **桌面版云端 HTTP 必须走主进程**（file:// 直连被 CORS 拦截，Origin: null 不在白名单，fetch 静默 TypeError）：IPC 代理或 activate.js 内 fetch。APP 端 <http://localhost> 在白名单可直连。新增桌面版云端接口沿用 postInviteQuery 分流模式。
