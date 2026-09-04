@@ -100,6 +100,11 @@ dependencies {
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation project(':capacitor-android')
     testImplementation "junit:junit:$junitVersion"
+    // ★ 2026-09-04 AR-03：android.jar 自带的 org.json 是 100% Stub（host 单元测试调用
+    //   就抛"Method put not mocked" RuntimeException）。为缺口层纯函数 LicenseInstallValidator
+    //   的 JUnit 提供真实的 org.json 实现（与 Android 运行期 bundled 版本 API + 受检异常
+    //   JSONException 完全对齐）。作用范围仅限 test sourceSet，release APK 打包不会带入。
+    testImplementation 'org.json:json:20240303'
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation project(':capacitor-cordova-android-plugins')

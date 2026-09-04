@@ -2480,21 +2480,18 @@ public class MainActivity extends BridgeActivity {
                         licenseBase64, machineId, user, clinicName, password, loginUsername, phone,
                         licenseCode == null ? "" : licenseCode);
                 if (result != null && result.optBoolean("success", false)) {
-                    // ★ 2026-09-04 P0 加固：安装后立即自验 license 是否可读
-                    //   原设计缺陷：自验失败时 result.success 仍为 true，只加 warning → JS 层
-                    //   进入"✅ 激活成功"分支 → 用户重启后 Java 层再次 validate 还是 invalid
-                    //   → 弹原生"前往激活"框 → 客户陷入无限循环"激活后依旧显示管理员激活"
-                    //   覆盖 result.success=false，让 JS 层走"本地写入失败"提示分支，引导用户重新走一次
+                    // ★ 2026-09-04 P0 加固 + AR-03 自动化测试：安装后立即自验 license
+                    //   核心判定抽 LicenseInstallValidator.applySelfVerify（缺口层纯函数，
+                    //   JUnit 4 用例直接覆盖，不再依赖 Android Context/LicenseManager）。
+                    //   语义：install success=true 但 validate valid=false → 覆盖 success=false，
+                    //   并写入 error/verifyType/verifyDetail 三字段 → JS 层走"本地写入失败"提示。
                     JSONObject verify = getLM().validateLicense(machineId);
-                    boolean valid = verify != null && verify.optBoolean("valid", false);
-                    if (!valid) {
-                        String verifyMsg = verify != null ? verify.optString("message", "未知") : "验证返回 null";
-                        String verifyType = verify != null ? verify.optString("type", "unknown") : "unknown";
-                        Log.e(TAG, "管理员激活后验证失败! type=" + verifyType + " msg=" + verifyMsg);
-                        result.put("success", false);
-                        result.put("error", "激活数据写入成功但验证失败: " + verifyMsg + "（type=" + verifyType + "）");
-                        result.put("verifyType", verifyType);
-                        result.put("verifyDetail", verifyMsg);
+                    result = LicenseInstallValidator.applySelfVerify(result, verify);
+                    if (result != null && !result.optBoolean("success", false)) {
+                        // 与原实现一致：自验失败写一条 Log.e（便于客服取 adb logcat 定位机型）
+                        String vt = result.optString("verifyType", "unknown");
+                        String vd = result.optString("verifyDetail", "未知");
+                        Log.e(TAG, "管理员激活后验证失败! type=" + vt + " msg=" + vd);
                         return result;
                     }
                 }
