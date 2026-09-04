@@ -612,7 +612,7 @@ function main() {
                         process.exit(1);
                     }
                     try {
-                        execSync('git add public/hash-manifest.json public/downloads/ public/updates/ .gitignore', { cwd: PROJECT_ROOT, stdio: 'ignore' });
+                        execSync('git add public/hash-manifest.json public/downloads/ public/updates/ site-official/hash-manifest.json site-official/updates/ .gitignore', { cwd: PROJECT_ROOT, stdio: 'ignore' });
                         const st = execSync('git status --porcelain', { cwd: PROJECT_ROOT, encoding: 'utf8' });
                         if (st.trim()) {
                             execSync('git commit -m "chore(release): 补部署 ' + (versionTag || '') + ' 发布产物到下载页"', { cwd: PROJECT_ROOT, stdio: 'ignore' });
@@ -914,7 +914,9 @@ function main() {
                 const vm = uploaded.file.uploadName.match(/(\d+\.\d+\.\d+)/);
                 if (vm) {
                     latest.version = vm[1];
-                    latest.releaseDate = now.substring(0, 10);
+                    // ★ 2026-09-05 修复：releaseDate 用北京日期（now 是 UTC ISO，北京时间 0-8 点
+                    //   发布会落到前一天，下载页显示错误日期）；updateTime 保留 UTC Z 格式不变
+                    latest.releaseDate = new Date(Date.now() + 8 * 3600 * 1000).toISOString().substring(0, 10);
                 }
                 // 注意：这里不写 latest.sha256！
                 // 客户端 update-notifier.js 用单个 sha256 校验实际下载文件，
@@ -933,6 +935,34 @@ function main() {
             fs.writeFileSync(info.config.latestJsonPath, JSON.stringify(latest, null, 4), 'utf8');
             console.log('  [OK] ' + key + '/latest.json: url=' + (latest.url || '-') + ', portableUrl=' + (latest.portableUrl || '-'));
         }
+    }
+
+    // ★ 2026-09-05 根治 site-official 双权威源镜像漂移（2026-09-04/09-05 连续两次发布后
+    //   镜像落后：脚本只写 public/，site-official/ 停留旧版 → Pages 双入口之一渲染
+    //   旧版本号/旧更新时间）。发布时自动镜像 public 元数据到 site-official；
+    //   镜像失败 = 发布失败（exit 1），绝不带漂移状态 push。
+    try {
+        const mirrorPairs = [
+            [path.join(PROJECT_ROOT, 'public', 'hash-manifest.json'), path.join(PROJECT_ROOT, 'site-official', 'hash-manifest.json')],
+            [path.join(PROJECT_ROOT, 'public', 'updates'), path.join(PROJECT_ROOT, 'site-official', 'updates')]
+        ];
+        let mirrored = 0;
+        for (const [msrc, mdst] of mirrorPairs) {
+            if (!fs.existsSync(msrc)) continue;
+            if (fs.statSync(msrc).isDirectory()) {
+                fs.cpSync(msrc, mdst, { recursive: true });
+            } else {
+                fs.mkdirSync(path.dirname(mdst), { recursive: true });
+                fs.copyFileSync(msrc, mdst);
+            }
+            mirrored++;
+        }
+        console.log('  [OK] site-official 双权威源镜像已同步（' + mirrored + ' 项）');
+    } catch (e) {
+        console.error('  [ERROR] site-official 镜像同步失败: ' + e.message);
+        console.error('  处理：手动镜像后重跑发布（产物 hash 未变会自动续传）：');
+        console.error('    Copy-Item public\\hash-manifest.json site-official\\ -Force; Copy-Item public\\updates site-official\\ -Recurse -Force');
+        process.exit(1);
     }
     console.log();
 
@@ -978,7 +1008,7 @@ function main() {
         console.log('  [OK] 源码已落定，允许提交推送');
         let gitFailed = false;
         try {
-            execSync('git add public/hash-manifest.json public/downloads/ public/updates/ .gitignore', { cwd: PROJECT_ROOT, stdio: 'ignore' });
+            execSync('git add public/hash-manifest.json public/downloads/ public/updates/ site-official/hash-manifest.json site-official/updates/ .gitignore', { cwd: PROJECT_ROOT, stdio: 'ignore' });
             const status = execSync('git status --porcelain', { cwd: PROJECT_ROOT, encoding: 'utf8' });
             if (status.trim()) {
                 execSync('git commit -m "chore(release): 发布 ' + versionTag + ' 到 GitHub Release"', { cwd: PROJECT_ROOT, stdio: 'ignore' });

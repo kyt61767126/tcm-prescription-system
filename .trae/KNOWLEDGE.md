@@ -506,6 +506,7 @@ P2 渐进迁移（2026-09-03 当日完成）：
 - **B. 桌面付款链接补全**：APP 端 offline.js 三处付款按钮（adminPayGuide/adminPayRequired/ticket）此前已带 `cn/n/p/wx/r/ed/dp`；桌面 activate-window.html 的 QR+复制链接+工单成功面板仍只有 mid。新增 `buildPayUrl(prefix)`：管理员Tab 读 clinicName/adminName/phone，工单Tab 读 ticket* 字段（含 wx/r）；`ed` 映射 institution→local-pro（机构版¥299）/personal→local-personal（标准版¥99），`state.edition` 未选时回落 `initTheme` 捕获的 `window.__cfgEdition`（config.edition，试用强制 personal）；`dp=desktop` 补齐后台载体标记。官网 download.html 既有全参回填+版本直选价格，零改动。
 - **同步**：offline.js→3 副本（sync-auth-core.ps1）；index-app.html→APP assets（手工 copy 对齐 build-app.bat 步骤[2/5]）；离线桌面 index.html 独立维护（不入 Group 11 云端同步链）。验证：node --check / gradle compileDebugJavaWithJavac / check-interface 6OK / sync-auth-core 11 副本 In sync。
 - 生效：离线桌面+离线 APP 需重打包；云端网页/官网/云端APP/云桌面不受影响（云端付款按钮此前已完成）。
+- **发布链两条坑（v2026.09.05 实测，均已根治入 publish-release.js）**：① `latest.releaseDate = now.substring(0,10)` 取的是 UTC ISO 日期——北京时间 0-8 点发布会写成前一天（本次 07:20 发布显示 09-04）；已改 `new Date(Date.now()+8*3600*1000).toISOString().substring(0,10)` 取北京日期，updateTime 保留 UTC Z 格式。② **site-official 双权威源镜像漂移已连续两次发生**（09-04、09-05：发布脚本只写 public/，site-official 停留旧版，hash-manifest 落后两版）——publish-release.js 原先**零处**提及 site-official；已内置镜像步骤（public/hash-manifest.json + public/updates/ 整树 cpSync → site-official/，失败 exit 1）且 git add 范围补 site-official。**铁律：新增任何"双权威源"目录必须同时登记进发布脚本的写入+git add 清单，否则镜像必然漂移**。
 
 ## 8. 桌面版技术规范
 
