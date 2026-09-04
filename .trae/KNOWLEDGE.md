@@ -489,6 +489,12 @@ P2 渐进迁移（2026-09-03 当日完成）：
 - ③ **可见反馈**：Tab1 表单顶部插入绿色提示条「✅ 已自动同步注册开通时填写的信息（诊所名称/管理员姓名/联系电话），请核对无误后点击下方确认按钮」；`adminPhoneHint` 更新为「登录密码为注册时设置的密码」（消除"默认密码 admin"误导——方案B下注册密码才是真密码）。
 - **铁律：异步预填（解密/桥调用）必须存 Promise 让消费点可 await；纯 fire-and-forget `.then()` 赋值的字段，消费时可能还是旧值**。sync-auth-core 11 副本 IN SYNC / check-interface 6 OK。生效：离线 APP + 离线桌面需重打包；云端不受影响。
 
+**十一、激活页诊所名被出厂值覆盖 + 桌面激活窗口同步补全（2026-09-05，Commit 3a0f5979）**：条目十上线后用户实测——"姓名/电话已同步但**诊所名称未同步**"（非对称症状）：
+- ① **根因（APP+桌面 auth-core）**：`showAdminActivateModal` **末尾**残留一行旧版兜底 `if (clinicName) adminClinicName.value = clinicName`——无条件覆盖，时机在 registrationInfo 预填之后；`clinicName` 参数来自 `openAdminActivate` 的 `CONFIG.clinicName`（页面启动时加载的**内存值**=出厂"XXX中医诊所"，注册走 Java/main 进程写盘**不回写内存 CONFIG**）→ 把已预填的注册诊所名冲掉；adminName/phone 无对应覆盖行 → 只有诊所名异常。修复：覆盖改"仅空时兜底"。**铁律：同一字段的多个赋值点必须按优先级"后者仅空时兜底"，且末尾兜底不得覆盖专有预填；内存 CONFIG 与磁盘 config 是两个世界，注册后内存值是旧的**。
+- ② **桌面激活窗口（activate-window.html）电话预填**：桌面原生激活窗口与 loginWindow **session 不同**（loginWindow 用 `persist:tcm-prescription-dingzhi` 分区，激活窗口默认 session）→ localStorage **不共享**，读 `license:registrationInfo` 不可行；改从 `get-app-config` 返回的 `cfg.users[]` 取最近的 11 位手机号账号（注册时 registerLocalUser 建 username=手机号）预填三 Tab 电话。诊所名/姓名原已由 config 预填（registerLocalUser 写盘+签名）。
+- ③ **syncSharedFieldsFrom ID 错位（2026-08-23 引入起从未生效的死代码）**：桌面激活窗口 Tab1 实际字段 `clinicName/adminName/phone`，旧代码读写 `adminClinicName/adminAdminName/adminPhone`（本窗口不存在 → `null.value` 抛 TypeError 被 try/catch 静默吞）→ 三 Tab 互相同步从未生效。**铁律：getElementById 链式取值 + try/catch 静默吞错 = ID 打错永远发现不了；新写 DOM 代码必须先 rg 验证 ID 存在**。
+- 生效：离线 APP + 离线桌面随重打包生效；云端不受影响。
+
 ## 8. 桌面版技术规范
 
 * **登录预填来源单一化（2026-09-04 Commit f62f16c4）**：`initLoginInput` 的预填**只允许来自 localStorage 记住的用户名**（`KEY_REMEMBER_USER` / `local_rememberedUsers`），禁止直接从 `config.users` 自动预填。历史 bug：`else if users.length===1` 分支无法区分「出厂模板 admin 单账户」和「刚激活后的单管理员」，导致全新安装首次启动即预填 admin/admin。配套删除 `isTrialDefault && admin` 兜底（离线端独有）。区分手段：localStorage remembered 键在用户成功登录后才写入，全新安装天然为空 → usernameToFill = null → 空白表单。云端 login.js（无 isTrialDefault 兜底）同理需同步修改。
