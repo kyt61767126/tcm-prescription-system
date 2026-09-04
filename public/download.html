@@ -3120,33 +3120,44 @@
                         if (s3Method) s3Method.value = payMethod;
                         if (s3Txn) s3Txn.value = displayTxn;
                     }
+                    goStep(4); // ★ 先进入 Step4，确保后续 DOM 插入一定在可见区（修复 P2-1：原插入 Step3 后被 display:none 隐藏）
                     // ★ 2026-09-04 流程优化：付款确认提交成功后提示客户返回APP，
                     //   后台核对通过→APP前台化/focus自动触发重查→弹窗"已激活请重启登录"，
                     //   客户不必停留在官网等激活码（APP 端Observer+断点续传更可靠，激活码
                     //   粘贴路径容易被限流/过期，停在官网反而会"二次提交"困扰）。
+                    // ★ P2-1 修复：提示框统一插入 Step4 顶部 orderStatusBox 之前（从 Step3
+                    //   区移除——原 Step3 inline 提交后 goStep(4) 会把 Step3 设 display:none，
+                    //   导致主流路径 99% 客户永远看不到提示）。
+                    // ★ P2-2 修复：提交成功后立即 alert 大字强提示（内嵌小绿框 + alert 双重保证）。
                     try {
-                        (async function() {
-                            try { await new Promise(r => setTimeout(r, 500)); } catch(e) {}
-                            var __hint = '✅ 付款信息已登记！请回到惠康中医客户端等待管理员核对。' +
-                                '\n\n核对通过后，APP/桌面版会自动弹提示"激活成功请重启登录"，无需您任何操作。' +
-                                '\n\n（若您是在手机上操作本页，也可直接关闭本页面，回到APP即可。）';
+                        var __wrap = document.getElementById('payFinishNoticeBox');
+                        if (!__wrap) {
+                            __wrap = document.createElement('div');
+                            __wrap.id = 'payFinishNoticeBox';
+                            __wrap.style.cssText = 'margin:0 0 14px;padding:14px 16px;background:#ecfdf5;border:2px solid #10b981;border-radius:10px;color:#065f46;font-size:15px;line-height:1.8;';
+                            var __statusBox = document.getElementById('orderStatusBox');
+                            if (__statusBox && __statusBox.parentNode) {
+                                __statusBox.parentNode.insertBefore(__wrap, __statusBox);
+                            } else {
+                                var __step4 = document.querySelector('.purchase-step[data-step="4"]');
+                                if (__step4) __step4.insertBefore(__wrap, __step4.firstChild);
+                                else document.body.appendChild(__wrap);
+                            }
+                        }
+                        __wrap.innerHTML = '✅ <strong>付款信息已登记成功！进入"管理员核对中"队列。</strong><br>' +
+                            '核对通过后，惠康中医 APP/桌面版会自动弹提示"激活成功请重启登录"，<strong>无需您再回本页等激活码</strong>，也<strong>无需在激活窗口重新提交</strong>。<br>' +
+                            '<span style="font-size:13px;color:#047857;font-weight:600;">👉 现在就可以关闭这个页面，回到惠康中医 APP/桌面版即可。</span>';
+                        // alert 强提示（小白用户会忽略 DOM 内嵌文字），守卫防多次提交重复弹
+                        if (!window.__payFinishAlertDone) {
+                            window.__payFinishAlertDone = true;
                             try {
-                                var __wrap = document.getElementById('payFinishNoticeBox');
-                                if (!__wrap) {
-                                    __wrap = document.createElement('div');
-                                    __wrap.id = 'payFinishNoticeBox';
-                                    __wrap.style.cssText = 'margin:14px 0 4px;padding:14px 16px;background:#ecfdf5;border:1px solid #6ee7b7;border-radius:10px;color:#065f46;font-size:14px;line-height:1.7;';
-                                    var __stepArea = (from === 'inline') ? document.getElementById('payConfirmFormInlineWrap') || document.getElementById('payConfirmBtnInline').parentNode : document.getElementById('payConfirmBtn').parentNode;
-                                    if (__stepArea && __stepArea.parentNode) __stepArea.parentNode.insertBefore(__wrap, __stepArea.nextSibling);
-                                    else document.body.appendChild(__wrap);
-                                }
-                                __wrap.innerHTML = '✅ <strong>付款信息已登记！请回到惠康中医客户端等待管理员核对。</strong><br>' +
-                                    '核对通过后，APP/桌面版会自动弹提示"激活成功请重启登录"，<strong>无需您再回本页等激活码</strong>，也<strong>无需在激活窗口重新提交</strong>。<br>' +
-                                    '<span style="font-size:12px;color:#047857;">（您现在就可以关闭本页面，回到惠康中医 APP 即可。）</span>';
-                            } catch (_e) {}
-                        })();
-                    } catch (_ne) {}
-                    goStep(4); // 进入"订单激活状态 + 激活码"区
+                                alert('✅ 付款信息已登记成功！\n\n已进入"管理员核对中"队列，工作时间通常 5-30 分钟内完成。\n\n👉 请【现在就关闭这个页面】，回到惠康中医 APP/桌面版。\n\n✅ 核对通过后，APP/桌面版会自动弹出"激活成功，请重启登录"的提示，按提示操作即可——无需您再回本页等待激活码，也无需在激活窗口重新提交。');
+                            } catch (_ae) {}
+                            // window.close() 只对 script-opened window 有效，APP WebView 通常无效；
+                            // 但上面 alert 已明确引导"按返回键/切回APP"，尽力而为之。
+                            try { window.close(); } catch (_ce) {}
+                        }
+                    } catch (_ne) { console.warn('付款完成提示异常:', _ne); }
                     document.getElementById('orderStatusBox').style.display = 'block';
                     queryOrderStatus();
                     startOrderStatusPolling();
@@ -3216,17 +3227,32 @@
                 codeBox.style.display = 'block';
                 // ★ 2026-09-04 激活成功后追加"可关闭本页"提醒（客户停留在官网会以为
                 //   要手动继续做什么），APP/WebView 场景引导返回。
+                // ★ P2-2 修复：激活码生成后补 alert 强提示（DOM 内嵌 + alert 双重保证），
+                //   加全局守卫 __activatedAlertDone 避免 30s 轮询每次重复弹窗。
                 try {
                     var __doneHint = document.getElementById('activatedFinishBox');
                     if (!__doneHint) {
                         __doneHint = document.createElement('div');
                         __doneHint.id = 'activatedFinishBox';
-                        __doneHint.style.cssText = 'margin-top:14px;padding:12px 14px;background:#f0f9ff;border:1px dashed #38bdf8;border-radius:8px;font-size:13px;color:#0369a1;line-height:1.6;';
+                        __doneHint.style.cssText = 'margin-top:14px;padding:14px 16px;background:#ecfeff;border:2px solid #22d3ee;border-radius:10px;font-size:15px;color:#0369a1;line-height:1.8;';
                         codeBox.parentNode.appendChild(__doneHint);
                     }
                     __doneHint.innerHTML = '💡 您现在可以 <strong>关闭这个页面</strong>，回到惠康中医 APP/桌面版即可。' +
-                        '<br>APP/桌面版会自动检测到激活状态并弹提示"请重启登录"，无需再做其他操作。';
+                        '<br>APP/桌面版会自动检测到激活状态并弹提示"激活成功，请重启登录"，无需您再做其他操作。' +
+                        (_isCloud ? ('<br>🌐 云端登录账号：<strong>' + (data.phone || '下单时填写的手机号') + '</strong>，初始密码：<strong>admin</strong>（登录后请立即修改）。') : '');
                 } catch (_ef) {}
+                // ★ P2-2 激活成功 alert 强提示：轮询 30s 一次 → 守卫确保只弹一次
+                try {
+                    if (!window.__activatedAlertDone) {
+                        window.__activatedAlertDone = true;
+                        (function() {
+                            var __msg = '🎉 激活成功！\n\n✅ 您的专属激活码已生成（本页下方可看到）。\n\n👉 现在请【关闭这个页面】，回到惠康中医 APP/桌面版。\n\n✅ APP/桌面版会自动检测到激活状态，稍后弹出"激活成功，请重启登录"提示——按提示重新登录即可使用，无需复制激活码手动粘贴。';
+                            if (_isCloud) __msg += '\n\n🌐 云端版账号信息：\n登录账号：' + (data.phone || '下单时填写的手机号') + '\n初始密码：admin（登录后请立即修改）';
+                            try { alert(__msg); } catch (_e1) {}
+                            try { window.close(); } catch (_e2) {}
+                        })();
+                    }
+                } catch (_eAlert) {}
             } else if (data.status === 'rejected') {
                 html = '❌ <strong>已拒绝</strong>：' + (data.rejectReason || '请联系客服处理') + '。<br>如有疑问请联系客服微信 hktzy1688。';
             } else {
