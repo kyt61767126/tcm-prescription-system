@@ -2386,6 +2386,13 @@
             const result = await global.electronAPI.license.validate();
             if (result && result.valid) {
                 console.log('[LicenseCheck] 授权有效:', result.message || '');
+                // ★ Phase 2.2 FSM v2 节点同步：validate 返回有效 → 非 pending_* 状态升级为 ACTIVATED_READY
+                try {
+                    const prev = await getLicenseStateV2();
+                    if (prev.state !== _STATES.PENDING_PAYMENT && prev.state !== _STATES.PENDING_APPROVAL && prev.state !== _STATES.ACTIVATED_INSTALLING) {
+                        await setStateV2(_STATES.ACTIVATED_READY, { prevState: prev.state || '', validatedAt: Date.now(), validateMessage: String(result.message || '') });
+                    }
+                } catch (_fsm) { console.warn('[FSM v2] checkLicense valid setState err:', _fsm); }
                 // ★ 兼容逻辑：授权有效时清除失效标志
                 global.__licenseExpired = false;
                 global.__licenseActivating = false;
@@ -2411,6 +2418,14 @@
             const msg = (result && result.message) ? result.message : '授权已失效，请激活';
             lastFailMessage = msg;
             console.warn('[LicenseCheck] 授权失效:', msg);
+            // ★ Phase 2.2 FSM v2 节点同步：validate 返回失效 → expired/disabled 标记为 EXPIRED_DISABLED
+            try {
+                const prev = await getLicenseStateV2();
+                const __isExpired = /expired|过期|到期|invalid|disabled|停用|注销|违规/.test(String(msg || ''));
+                if (__isExpired && prev.state !== _STATES.PENDING_PAYMENT && prev.state !== _STATES.PENDING_APPROVAL) {
+                    await setStateV2(_STATES.EXPIRED_DISABLED, { prevState: prev.state || '', expireReason: msg, expireAt: Date.now() });
+                }
+            } catch (_fsm) { console.warn('[FSM v2] checkLicense expired setState err:', _fsm); }
 
             // ★ 设置失效标志
             global.__licenseExpired = true;
@@ -4929,6 +4944,11 @@
         }
 
         async function onAdminActivated(r, requestId) {
+            // ★ Phase 2.2 FSM v2 节点同步：admin-status 轮询回调 activated → 进入本地 license 安装阶段
+            try {
+                const prev = await getLicenseStateV2();
+                await setStateV2(_STATES.ACTIVATED_INSTALLING, { prevState: prev.state || '', requestId: requestId || '', licenseMessage: r ? String(r.message || '') : '' });
+            } catch (_fsm) { console.warn('[FSM v2] onAdminActivated setState err:', _fsm); }
             // ★ 2026-08-22 修复：激活成功即统一设置标记并隐藏登录框注册入口。
             //   原实现仅"无本地安装桥"分支（云端APP）设置，桌面安装分支（installAdminLicense）
             //   漏设 → 激活成功的桌面设备重启后，登录框"📝 注册开通"按钮重现，误导已开通用户
@@ -5075,6 +5095,11 @@
                         __autoRestartTid = setTimeout(__restartApp, 1500);
                         // ★ 2026-09-03 激活领码成功：清除 adminReqPending 持久化（断点续传完成）
                         try { StorageAdapter.removeItem('license:adminReqPending'); } catch (ce2) {}
+                        // ★ Phase 2.2 FSM v2 节点同步：激活成功+本地账号同步完成 → ACTIVATED_READY
+                        try {
+                            const prev = await getLicenseStateV2();
+                            await setStateV2(_STATES.ACTIVATED_READY, { prevState: prev.state || '', activatedAt: Date.now(), requestId: requestId || '' });
+                        } catch (_fsm) { console.warn('[FSM v2] onAdminActivated ready setState err:', _fsm); }
                     } else {
                         descEl.innerHTML = '激活已通过，但本地写入失败：' + ((inst && inst.error) || '未知错误') + '<br>请将机器ID发给客服人工激活';
                         show('adminSuccess');
@@ -5252,6 +5277,15 @@
         try { setCloudActivationDone(); } catch (e2) {}
         try { hideActivateLoginEntry(); } catch (e2) {}
         try { await StorageAdapter.removeItem('license:adminReqPending'); } catch (ce2) {}
+        // ★ Phase 2.2 FSM v2 节点同步：断点续传成功收尾 → activated_installing → ready / failed → unactivated
+        try {
+            const prev = await getLicenseStateV2();
+            if (installed) {
+                await setStateV2(_STATES.ACTIVATED_READY, { prevState: prev.state || '', activatedAt: Date.now(), source: 'resumeActivation' });
+            } else if (prev.state === _STATES.ACTIVATED_INSTALLING || prev.state === _STATES.PENDING_APPROVAL) {
+                await setStateV2(_STATES.UNACTIVATED, { prevState: prev.state || '', lastError: '断点续传本地写入失败，需重新提交激活' });
+            }
+        } catch (_fsm) { console.warn('[FSM v2] resume complete setState err:', _fsm); }
         if (installed) {
             var msg = '您的激活申请已审核通过，授权已自动安装到本机。\n\n' +
                 (phone ? ('📱 登录账号：' + phone + '\n') : '') +

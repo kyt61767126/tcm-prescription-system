@@ -358,6 +358,57 @@ P2 渐进迁移（2026-09-03 当日完成）：
 
 ★ 2026-09-04（十四）离线 APP 激活成功后"重启后依旧要管理员激活"死循环加固（华为 P40，Commit 11c7cb73，P0 三级防线）。**根因链**：①Java 层 installAdminLicense 写入后自验 validateLicense 返回 invalid（license.dat 写入格式/损坏/权限/机型差异）→ 旧代码只加 warning 不影响 `result.success=true` → **Bridge 把 success=true 返回给 JS**；②JS 层走 "✅ 激活成功" 分支；③客户（或 APP 自动）重启 → Java 层冷启动再 validate 还是 invalid → 弹原生"前往激活"窗口 → 客户以为没激活 → 再激活 → 审核通过 → 回到 ①。**三层加固缺口对齐策略**（不跨层大修，按 KNOWLEDGE §2.4）：**第一层 Java 覆盖** [MainActivity.installAdminLicense](file:///d:/trae_projects/kyt-zy/app_project/db-offline/app/app/src/main/java/com/benneng/pres/MainActivity.java#L2482-L2499) 自验失败时强制 `result.put("success", false)` + 注入 error/verifyType/verifyDetail 三字段 + return；**第二层 JS 再自验** offline.js onAdminActivated 安装完成后立即 `electronAPI.license.validate()` → `ok = inst.success && selfVerified`（双层与）；**第三层自动重启兜底** → 成功页 setTimeout 1.5s 自动 restart + 按钮文案改「🔄 立即重启」，消除小白用户"激活成功忘了重启=回到 Java 层 invalid"。同步与同构：断点续传 `_resumeCompleteActivation` 同样做 JS 自验，不另写一套。**生效方式**：后端 API 无改动；客户端 auth-core offline.js 3 份离线副本已随 sync-auth-core 全同步；→ **离线 APP/离线桌面 exe 需重打包** 新包才生效（旧 APP 仍会走旧 success=true 漏覆盖路径），华为 P40 客户必须**彻底卸载重装（勾清除数据）** 清旧 license.dat 残留。
 
+## 7.6 【铁律 §7.6】离线 APP/桌面 注册→付款→激活→登录 架构永久约束（5 条铁律，Commit 140d301e + 140d301e-Patch2，Phase 1+2 架构重构）
+
+### 条目十九（架构铁律 1-5 · 下次打开项目自动遵循，不可违背）
+**铁律 1 · Single-Writer 纯镜像（用户账号源只有 Java config.json）**：
+- 权威写层=Java `LicenseManager.syncCreateActivationUser` → 写 `filesDir/config.json:users[]`（离线 APP/桌面）。
+- 前端 `localStorage:local_systemUsers` 是**纯只读镜像层**；桥 `getActivationUsers` 回调做 UPSERT 同步时，**参数 `keepLocalPwd` 永远强制设为 false**（不能"保护"用户改过的 localStorage 哈希——用户真要改密码只能通过正式"修改密码接口→写回 Java config.json"的正式路径，否则 Single-Writer 被破坏）。
+- 验收：`keepLocalPwd=true` 在任何 addLocalActivationUser 调用处=违规。
+
+**铁律 2 · UPSERT Always（exists=true 时强制覆盖写最新）**：
+- Java `syncCreateActivationUser` 命中 exists=true 时，**必须 UPSERT 强制覆盖 password/phone/name/role + lastPwdUpdatedAt + updatedAt = System.currentTimeMillis()**。绝对禁止 `if (exists) return;`（只 INSERT 不 UPDATE=永远保留客户首次自设的旧密码=断点续传后客户改的新密码永不生效=死锁三阶）。
+- 前端 UPSERT 同步时比较 `__lastT = max(桥返回时间戳, localStorage.lastPwdUpdatedAt)`；时间戳方向=新→强制覆盖（双保险，未来即使 keepLocalPwd 回归也不会乱序）。
+
+**铁律 3 · 密码哈希成功-only（失败分支 NEVER 写 hashPassword）**：
+- `ensurePasswordsHashed` 可以诊断计算哈希，但**只能用于 console 显示/调试输出**，禁止把计算出的哈希回写 `local_systemUsers[idx].password`。
+- **唯一允许写哈希的代码路径**=认证成功分支（`loginWithUsernamePassword` 成功 return 前）：`hashPassword(plain) + saveUsers(user)`；失败分支仅诊断、不写本地用户数组。
+- 验收：任何 `saveUsers(users)` 调用点在登录失败路径=违规。
+
+**铁律 4 · ReadyPromise 统一闸门（登录竞态 100% 消灭）**：
+- 启动 `startLicenseCheck` 首步挂全局 `__activationUsersReadyPromise = getActivationUsers().catch(()=>null)`（无桥环境立即 resolve）；
+- **唯一认证入口 `AuthCore.loginWithUsernamePassword` 函数最开头（第 1 行代码）** 必须 `await Promise.resolve(global.__activationUsersReadyPromise || Promise.resolve())` 闸门。
+- 所有 HTML 表单 submit / 桌面端 login.js / 旧封装全部走 `AuthCore.loginWithUsernamePassword` = 单一闸门统一挡"启动 <30ms 手速竞态=只有 admin 登不上"。
+
+**铁律 5 · FSM v2 单状态源（激活状态零漂移）**：
+- 激活状态唯一权威读=`window.__getLicenseStateV2()`、唯一写=`window.__setStateV2(nextState, meta)`（localStorage key `license:state:v2`，6 状态机：`unactivated | pending_payment | pending_approval | activated_installing | activated_ready | expired_disabled`）。
+- **旧 5 处分散读（resumeAdminPendingRequest/checkLicense/admin-status 轮询/activateModal/激活成功清 pending）永不删除**（向后兼容零回归）。
+- 所有新节点（admin-submit 成功 / onAdminActivated 开头 / onAdminActivated 成功 / _resumeCompleteActivation 收尾 / checkLicense 结果）**必须同步 setStateV2**，保证 v2 与旧分散键一致=未来新诊断只看 v2 单权威，不被旧 5 键漂移误导。
+
+### 条目二十（验收矩阵 · 5 类真实验收场景必须 100% 绿）
+**客户 13398628216 行为矩阵（架构重构前🟥🟧，现在应全🟩）**：
+| # | 场景 | 前置 | 期望结果 | 铁律守护 |
+|---|---|---|---|---|
+| A | 填错密码 N 次（错误明文自动变哈希） | 激活成功后，登录时故意填 10 次错误密码 | 桥自愈 UPSERT（从 Java config.json 读最新正确明文密码）→ keepLocalPwd=false 强制覆盖 → 输入正确明文一次登录成功 | 铁律1 + 铁律3 |
+| B | 激活弹窗/断点续传改密码（多次重激活） | 首次激活→点"重新激活/审核未通过重新提交"→**在激活窗口改设新密码**→审核通过 | Java UPSERT 覆盖 exists=true 旧密码 → 桥同步 UPSERT localStorage → ReadyPromise 闸门 → 输入新密码一次登录成功 | 铁律2 + 铁律4 |
+| C | 杀 APP 后台重开（断点续传） | 提交激活→杀 APP 后台→重开 APP | FSM v2 migrate：旧 `license:adminReqPending`→`pending_approval`（无损）→ resumeAdminPendingRequest 轮询 → 激活成功 SET_READY，可直接登录 | 铁律5 |
+| D | 用户手速竞态（启动 10ms 就点登录） | 重开 APP 立即点击登录（<30ms，桥自愈 UPSERT 回调还没到） | ReadyPromise 闸门挡在 AuthCore 认证开头 → 等 getActivationUsers Promise 完（UPSERT 同步完手机号账号）再比对密码 → 正确登录 | 铁律4 |
+| E | 卸载重装（清所有数据） | 彻底卸载重装勾清除数据→重开 APP | 断点续传读取 adminReqPending → admin-status activated → onAdminActivated SET_INSTALLING → installAdminLicense 成功 UPSERT → SET_READY → 输入激活密码一次成功（以后 A-D 场景都不会再锁死） | 铁律1+2+4+5 |
+**验收指令**：用离线 APP/桌面真机跑 5 场景，A-D 连续 3 次全部一次登录成功=通过；E 每次通过=架构闭环。
+
+### 条目廿一（FSM v2 迁移规则 · 新代码只写 setStateV2 节点）
+1. **迁移幂等**：启动 `_migrateLicenseStateV1ToV2()` 读取以下旧键无损映射——`license:adminReqPending→pending_approval`；`license:activatedDoneFlag=true→activated_ready`；`license:validateResult.invalid & expired/disabled→expired_disabled`；否则→unactivated。迁移完成后 `prevState=migrate:yes` 写 meta，后续启动 detect v2 存在直接跳过（幂等 0 副作用）。
+2. **节点同步清单（现在已补齐）**：
+   - ✅ admin-submit 成功→SET(PENDING_APPROVAL, {requestId, phone, ts})
+   - ✅ order-paid 成功（order-submit order-paid 流程）→SET(PENDING_PAYMENT, {orderId})
+   - ✅ onAdminActivated 函数开头→SET(ACTIVATED_INSTALLING, {requestId, licenseMessage})
+   - ✅ onAdminActivated 成功分支（清 adminReqPending 之后）→SET(ACTIVATED_READY, {activatedAt})
+   - ✅ _resumeCompleteActivation 收尾→installed ? SET(ACTIVATED_READY) : (INST/PENDING_APP→SET(UNACTIVATED, {lastError}))
+   - ✅ checkLicenseAndShowActivate result.valid→非 pending_*→SET(ACTIVATED_READY)；result.valid=false & expired/disabled→SET(EXPIRED_DISABLED, {expireReason})
+3. **禁止状态直接写 localStorage**：任何新代码只能 `__setStateV2(next, meta)`，不能 `StorageAdapter.setItem('license:state:v2', rawStr)`=破坏 reducer 元数据链。
+4. **向后兼容**：旧代码 `StorageAdapter.getItem('license:adminReqPending')` / old 5 处分散读**永不删除**，直到全链路（APP/桌面/鸿蒙/云端）100% 切换到 v2 ≥1 个月后才可制定删除计划。
+5. **调试入口**：开发者控制台 `window.__getLicenseStateV2()` 实时查看 state/meta；`window.__setStateV2('unactivated')`（测试迁移）。
+
 ★ 2026-09-04（十五）AR-01 停用诊所 disabled 护栏 + AR-02 激活成功页自动重启 cancelId（Commit 2a66c2f0）。**AR-01（高风险护栏）**：平台管理员手动把诊所 status=disabled（停用/违规/欠费/注销）→ 旧代码 provisionCloudAccount 的 disabled→active 分支会让"客户重走申请+付款→管理员不知情点通过→自动复开"，停用护栏名存实亡。**修复=双入口拒绝（申请入口+审核入口）+ 保留升级分支作为理论不可达兜底**：①[admin-submit.js L223-243](file:///d:/trae_projects/kyt-zy/functions/api/license/admin-submit.js#L223-L243) 客户端匿名申请前读 KV_SYSTEM_CLINICS → 同名 status=disabled → 409 CLINIC_DISABLED「联系客服 hktzy1688 复开，不要重提交新申请」；②[admin-approve.js L166-192](file:///d:/trae_projects/kyt-zy/functions/api/license/admin-approve.js#L166-L192) 管理员审核通过前同样校验 → disabled 时 409「先在后台切 status=test 或删除诊所再通过，让停用反转经平台两次显式操作」。**生效方式**：Functions 随 push Pages **自动部署即刻生效**，客户端零改动。
 
 **AR-02（中风险 cancelId）**：成功页 setTimeout(__restartApp, 1500) 无 cancelId → 用户在 1.5s 窗口内点关闭/切换另一流程 → 定时器仍会触发 restart = "我没点重启怎么就重启了"。**修复**=showAdminActivateModal 闭包加 `let __autoRestartTid = null`；cleanup() 开头补 `if (__autoRestartTid) { clearTimeout(__autoRestartTid); __autoRestartTid = null; }`（同时追加 currentActivationObserver.stop 防轮询泄漏）；onAdminActivated 成功页的 setTimeout 改为 `__autoRestartTid = setTimeout(...)`。**生效方式**：offline 3 份 auth-core 副本已同步 → **离线 APP/离线桌面 需重打包**（逻辑在客户端，旧包 cancelId 不生效）；云端不受影响。
