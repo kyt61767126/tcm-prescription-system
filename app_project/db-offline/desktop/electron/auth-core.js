@@ -3484,8 +3484,16 @@
         try {
             // 登录框诊所名无条件同步（与 App/网页/桌面环境无关）
             syncLoginClinicName();
-            const overlay = document.getElementById('loginOverlay');
-            if (!overlay) return;
+            let overlay = document.getElementById('loginOverlay');
+            // ★ 2026-09-04 方案B P3：桌面登录窗（electron/login.html）无 loginOverlay，
+            //   旧逻辑直接 return → 桌面登录框永远没有持久"注册开通"入口，用户关掉自动
+            //   注册弹窗后只能重启应用才能重开。用 btnOk+loginPassword 特征识别桌面登录页，
+            //   容器取同名 .login-buttons（与 APP 壳登录框同类名，插入位置一致）。
+            let isDesktopLoginPage = false;
+            if (!overlay) {
+                isDesktopLoginPage = !!(document.getElementById('btnOk') && document.getElementById('loginPassword'));
+                if (!isDesktopLoginPage) return;
+            }
             // ★ 2026-08-22 冗余入口收敛：隐藏静态"注册诊所 / 激活申请"与"管理台登录"按钮（仅保留动态"注册开通"）
             hideStaticActivateEntry();
             // ★ 2026-08-20 注册完成后自动隐藏：已登录/已注册过则不再显示"注册开通"入口
@@ -3508,7 +3516,11 @@
             //   与桌面 activate-window.html"管理员激活"流程完全一致（替换原 openCloudRegister 一页式注册开通）
             // ★ 2026-09-04 方案B 注册前置：本地桥 + 未激活 + 未注册 设备入口改为"📝 注册开通"
             //   （openLocalRegister 注册弹窗；注册完成由成功流程切回"管理员激活"语义）
-            const container = overlay.querySelector('.login-buttons');
+            // ★ 2026-09-04 方案B P3：容器双端解析——APP 壳在 loginOverlay 内，
+            //   桌面登录窗直接 document 查找（两页 .login-buttons 同类名）
+            const container = isDesktopLoginPage
+                ? document.querySelector('.login-buttons')
+                : overlay.querySelector('.login-buttons');
             if (!container) return;
 
             (async function injectLoginEntry() {
@@ -3523,8 +3535,13 @@
                     }
                 } catch (de) {}
 
+                // ★ 桌面登录窗已有原生激活入口（#activateLink → openActivationWindow，由 login.js
+                //   按未激活/试用到期状态显隐），仅在"未注册"时补注册按钮；已注册/已激活不注入，避免双入口
+                if (isDesktopLoginPage && !isRegisterEntry) return;
+
                 const entry = document.createElement('div');
                 entry.id = 'activateLoginEntry';
+                if (isDesktopLoginPage) entry.dataset.context = 'desktop-login';
                 entry.style.cssText =
                     'margin-top:12px;padding:0 4px;';
                 if (isRegisterEntry) {
@@ -4066,12 +4083,18 @@
                         const successEl = document.getElementById('localRegSuccess');
                         if (successEl) successEl.style.display = 'block';
                         console.log('[LicenseCheck] 本地注册成功:', phone);
-                        // ⑤ 注册完成 → APP 登录框入口语义从「注册开通」切换为「管理员激活」（已有账号）
+                        // ⑤ 注册完成 → APP 登录框入口语义从「注册开通」切换为「管理员激活」（已有账号）；
+                        //   桌面登录窗（dataset.context=desktop-login）则隐藏注册入口——激活走桌面原生
+                        //   #activateLink（openActivationWindow，login.js 按未激活状态自动显示），不双入口
                         try {
                             const _entry = document.getElementById('activateLoginEntry');
                             if (_entry) {
-                                _entry.innerHTML =
-                                    '<div style="display:flex;align-items:center;justify-content:center;gap:6px;padding:12px 0;border-radius:8px;background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);color:#fff;cursor:pointer;font-size:14px;font-weight:bold;text-align:center;-webkit-tap-highlight-color:transparent;" onclick="if(window.openAdminActivate){window.openAdminActivate();}">📋 管理员激活</div>';
+                                if (_entry.dataset && _entry.dataset.context === 'desktop-login') {
+                                    _entry.style.display = 'none';
+                                } else {
+                                    _entry.innerHTML =
+                                        '<div style="display:flex;align-items:center;justify-content:center;gap:6px;padding:12px 0;border-radius:8px;background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);color:#fff;cursor:pointer;font-size:14px;font-weight:bold;text-align:center;-webkit-tap-highlight-color:transparent;" onclick="if(window.openAdminActivate){window.openAdminActivate();}">📋 管理员激活</div>';
+                                }
                             }
                         } catch (se2) {}
                     } else {

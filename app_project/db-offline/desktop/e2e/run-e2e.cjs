@@ -1,5 +1,5 @@
 // ============================================================================
-// run-e2e.cjs — P3：Playwright + Electron 端到端回归·离线桌面变体（5 条固定用例）
+// run-e2e.cjs — P3：Playwright + Electron 端到端回归·离线桌面变体（6 条固定用例）
 //
 // 与云端版（cloud_desktop/e2e）的差异：离线版无云端登录，且试用期强制
 // edition=personal + 全员角色降为 user（electron/main.js ensureTrialStandardEdition），
@@ -16,6 +16,9 @@
 //   E5 方案B默认账户封锁 → 注册手机号 + 出厂 admin（哈希为原生默认口令）共存时，
 //                        admin/admin 必须被统一路由 loginWithUsernamePassword 封锁
 //                        （提示引导手机号登录，防出厂口令绕过），且注册手机号仍可正常登录
+//   E6 方案B桌面持久注册入口（P3回归）→ 出厂态（仅 role=user 的出厂 admin，无手机号账号）
+//                        登录窗必须注入持久"📝 注册开通"按钮；关掉自动注册弹窗后点击该按钮，
+//                        注册弹窗必须能重开（用户关弹窗后无需重启应用即可重新注册）
 //
 // 安全设计（配合 electron/main.js 的 e2e 旁路，与云端版 T4 同款）：
 //   - 环境变量 BNZC_E2E=1 + exe 同级 e2e-enabled.marker 才放行远程调试
@@ -317,6 +320,40 @@ const CASES = [
             log('E5.2 封锁不影响注册手机号正常登录，【修改密码】按钮已显示 ✓');
         },
     },
+    {
+        id: 'E6',
+        name: '方案B桌面持久注册入口（P3）：出厂态注入"注册开通"按钮，关掉自动弹窗后点击可重开',
+        // 出厂态：仅 role=user 的出厂 admin（原生默认口令哈希），无手机号账号 = 未注册
+        config: baseConfig('personal', [
+            { username: 'admin', password: FACTORY_ADMIN_HASH, name: '管理员', role: 'user' },
+        ]),
+        loginPageOnly: true,
+        async runLoginPage(loginWin, h) {
+            // ① 持久注册入口注入（startLicenseCheck 后约 2s 链路，给足 25s）
+            await loginWin.waitForFunction(() => {
+                const el = document.getElementById('activateLoginEntry');
+                return !!el && el.style.display !== 'none' &&
+                    (el.textContent || '').indexOf('注册开通') >= 0;
+            }, null, { timeout: 25000 });
+            h.log('E6.1 出厂态登录框已注入持久"📝 注册开通"入口 ✓');
+
+            // ② 关掉自动注册弹窗（maybePromptRegistration 会先弹一次），再点持久入口 → 必须能重开
+            await loginWin.evaluate(() => {
+                const m = document.getElementById('localRegisterOverlay');
+                if (m) m.remove();
+            });
+            await loginWin.evaluate(() => {
+                const el = document.getElementById('activateLoginEntry');
+                const btn = el && el.querySelector('div');
+                if (btn) btn.click();
+            });
+            await loginWin.waitForFunction(() => {
+                const m = document.getElementById('localRegisterOverlay');
+                return !!m && getComputedStyle(m).display !== 'none';
+            }, null, { timeout: 10000 });
+            h.log('E6.2 关闭自动弹窗后点击持久入口，注册弹窗可重开（无需重启应用）✓');
+        },
+    },
 ];
 
 // ============================================================================
@@ -362,6 +399,13 @@ async function runCase({ _electron }, c, target) {
         const loginWin = await findWindow(app, 'login.html', 30000);
         log(`${c.id} 登录窗口就绪`);
 
+        // ★ E6 类用例：只在登录窗断言（不登录、不等待主窗口）
+        if (c.loginPageOnly) {
+            await c.runLoginPage(loginWin, { login, log });
+            log(`──── ${c.id} PASS`);
+            return { id: c.id, ok: true };
+        }
+
         // 登录后主窗口出现的等待放到 run 外并行：先触发登录，再等 index.html
         const mainWinPromise = findWindow(app, 'index.html', 45000);
         // ★ 防崩溃：登录环节先行抛错时本 promise 稍后 reject，若无 handler
@@ -396,7 +440,7 @@ async function runCase({ _electron }, c, target) {
 // 主流程
 // ============================================================================
 (async () => {
-    console.log('[E2E] ══ P3 离线桌面端到端回归（本地登录 5 条防线）══');
+    console.log('[E2E] ══ P3 离线桌面端到端回归（本地登录 6 条防线）══');
     const target = resolveTarget();
     const exePath = target.exePath;
     log(`被测目标[${target.mode}]: ${exePath}${target.launchArgs.length ? ' ' + target.launchArgs.join(' ') : ''}`);

@@ -476,6 +476,13 @@ P2 渐进迁移（2026-09-03 当日完成）：
 - ⑤ **E2E 兜底 asar 重建法**：`_backup_asar/real_app.asar` 是正式构建产物（含混淆文件+node_modules），改 auth-core 后无需全量 build——`@electron/asar` extractAll → 覆盖两处 auth-core.js（根 + electron/）→ createPackage 回写，dev electron 兜底即可测到新代码（dist/win-unpacked 旧 exe 带 .bnzc 绑定原 asar 不可改）。
 - **生效方式**：本轮改动 = offline.js 权威源 + 3 离线 auth-core 副本 + run-e2e.cjs（check-interface 6 OK）；**离线 APP + 离线桌面随下一次重打包生效**（路由封锁属纵深防御——实际设备注册时幽灵 admin 已被物理移除，无单独发版必要）；云端不受影响（cloud.js 未改）。
 
+**九、P3 桌面持久注册入口闭环（2026-09-04 深夜，E2E 6/6 PASS）**：独立审查发现桌面登录窗（electron/login.html）无 `loginOverlay`，`injectActivateLinkIntoLogin` 旧逻辑 `if (!overlay) return` 直接早退 → 桌面登录框永远没有持久"注册开通"按钮，用户关掉 `maybePromptRegistration` 自动弹窗后只能**重启应用**才能重开注册。修复（纯运行时注入，0 HTML/CSS 改动）：
+- ① `injectActivateLinkIntoLogin` 增加桌面登录页特征识别（无 loginOverlay 但有 `btnOk`+`loginPassword`），容器双端解析（桌面 `document.querySelector('.login-buttons')`，APP 壳 `overlay.querySelector`）；桌面仅在"本地桥+未激活+未注册"时注入绿色"📝 注册开通"按钮（onclick `openLocalRegister`），已注册/已激活**不注入**——桌面原生 `#activateLink`（openActivationWindow，login.js 按未激活状态显隐）已是激活入口，避免双入口。
+- ② 注册成功后入口分流：APP 壳按钮切"📋 管理员激活"（openAdminActivate 多步弹窗）；桌面按钮（`dataset.context=desktop-login`）直接 `display:none` 隐藏（激活走桌面原生 activateLink）。
+- ③ E2E 新增 E6（`loginPageOnly` 钩子，不登录直接在登录窗断言）：出厂态 config（仅 role=user 出厂 admin、无手机号）→ 25s 内 `#activateLoginEntry` 可见且含"注册开通"；移除自动弹窗后点击按钮 → `#localRegisterOverlay` 必须重开。E6 实证通过。
+- **教训：auth-core 运行时注入凡按 `loginOverlay` 定位登录框的，都必须同时处理桌面登录窗（特征 = btnOk+loginPassword 无 overlay）——`maybePromptRegistration` 早有此双端检测，注入函数漏了**。
+- **生效方式**：离线桌面随下次重打包生效；离线 APP 不受影响（APP 壳本就有 loginOverlay 注入）；云端不受影响。
+
 ## 8. 桌面版技术规范
 
 * **桌面版云端 HTTP 必须走主进程**（file:// 直连被 CORS 拦截，Origin: null 不在白名单，fetch 静默 TypeError）：IPC 代理或 activate.js 内 fetch。APP 端 <http://localhost> 在白名单可直连。新增桌面版云端接口沿用 postInviteQuery 分流模式。
