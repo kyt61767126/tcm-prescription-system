@@ -2480,13 +2480,22 @@ public class MainActivity extends BridgeActivity {
                         licenseBase64, machineId, user, clinicName, password, loginUsername, phone,
                         licenseCode == null ? "" : licenseCode);
                 if (result != null && result.optBoolean("success", false)) {
-                    // 与 activateLicense 一致：激活后立即验证 license 是否可读
+                    // ★ 2026-09-04 P0 加固：安装后立即自验 license 是否可读
+                    //   原设计缺陷：自验失败时 result.success 仍为 true，只加 warning → JS 层
+                    //   进入"✅ 激活成功"分支 → 用户重启后 Java 层再次 validate 还是 invalid
+                    //   → 弹原生"前往激活"框 → 客户陷入无限循环"激活后依旧显示管理员激活"
+                    //   覆盖 result.success=false，让 JS 层走"本地写入失败"提示分支，引导用户重新走一次
                     JSONObject verify = getLM().validateLicense(machineId);
                     boolean valid = verify != null && verify.optBoolean("valid", false);
                     if (!valid) {
                         String verifyMsg = verify != null ? verify.optString("message", "未知") : "验证返回 null";
-                        Log.e(TAG, "管理员激活后验证失败: " + verifyMsg);
-                        result.put("warning", "激活数据写入后验证异常: " + verifyMsg);
+                        String verifyType = verify != null ? verify.optString("type", "unknown") : "unknown";
+                        Log.e(TAG, "管理员激活后验证失败! type=" + verifyType + " msg=" + verifyMsg);
+                        result.put("success", false);
+                        result.put("error", "激活数据写入成功但验证失败: " + verifyMsg + "（type=" + verifyType + "）");
+                        result.put("verifyType", verifyType);
+                        result.put("verifyDetail", verifyMsg);
+                        return result;
                     }
                 }
                 return result;

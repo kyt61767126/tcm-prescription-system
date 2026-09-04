@@ -4890,15 +4890,33 @@
                         phone: phone,
                         licenseCode: adminLicenseCode
                     });
-                    if (inst && inst.success) {
+                    // ★ 2026-09-04 P0 加固：installAdminLicense 成功后立即 JS 侧自验 license，
+                    //   防止某些机型（如华为 P40）Java 层已覆盖 success=false 但 JS 层仍走到
+                    //   这里继续显示"激活成功"的分支；自验同时覆盖 Java 桥偶发返回 success=true
+                    //   但实际 license.dat 验签失败的情况。
+                    let selfVerified = false;
+                    try {
+                        if (global.electronAPI && global.electronAPI.license &&
+                            typeof global.electronAPI.license.validate === 'function') {
+                            const v = await global.electronAPI.license.validate();
+                            selfVerified = !!(v && v.valid);
+                            if (!selfVerified) console.warn('[LicenseCheck] JS 侧自验失败:', v);
+                        }
+                    } catch (ve) { console.warn('[LicenseCheck] JS 侧自验异常:', ve); }
+                    const ok = !!(inst && inst.success && selfVerified);
+                    if (ok) {
                         descEl.innerHTML = '管理员已通过您的激活申请<br>软件即将重启，请使用手机号登录';
                         show('adminSuccess');
-                        document.getElementById('adminSuccessBtn').textContent = '🔄 重启应用';
-                        document.getElementById('adminSuccessBtn').onclick = function() {
+                        const __restartApp = function () {
                             if (global.electronAPI && global.electronAPI.activate && global.electronAPI.activate.restart) {
                                 try { global.electronAPI.activate.restart(); } catch(e){}
                             }
                         };
+                        document.getElementById('adminSuccessBtn').textContent = '🔄 立即重启';
+                        document.getElementById('adminSuccessBtn').onclick = __restartApp;
+                        // ★ 2026-09-04 P0 加固：1.5s 后自动重启（小白用户激活成功后常会等界面自动跳转，
+                        //   手动点"重启应用"是认知负担——自动触发消除"激活成功但忘记重启→Java层仍invalid"死循环）
+                        setTimeout(__restartApp, 1500);
                         // ★ 2026-09-03 激活领码成功：清除 adminReqPending 持久化（断点续传完成）
                         try { StorageAdapter.removeItem('license:adminReqPending'); } catch (ce2) {}
                     } else {
@@ -5054,7 +5072,19 @@
                     phone: phone,
                     licenseCode: adminLicenseCode
                 });
-                installed = !!(inst && inst.success);
+                // ★ 2026-09-04 P0 加固：同 onAdminActivated 双层判定
+                //   Java 层自验已覆盖 success=false（见 MainActivity.java installAdminLicense），
+                //   JS 侧再 validate() 一次兜底（某些机型桥返回 success=true 但 license 已坏）
+                var selfVerified = false;
+                try {
+                    if (global.electronAPI && global.electronAPI.license &&
+                        typeof global.electronAPI.license.validate === 'function') {
+                        var v = await global.electronAPI.license.validate();
+                        selfVerified = !!(v && v.valid);
+                        if (!selfVerified) console.warn('[LicenseCheck] 断点续传 JS 侧自验失败:', v);
+                    }
+                } catch (ve) {}
+                installed = !!(inst && inst.success && selfVerified);
             } catch (e) {
                 console.warn('[LicenseCheck] 断点续传安装license异常:', e);
             }
