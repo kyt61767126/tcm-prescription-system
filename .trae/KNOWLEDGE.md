@@ -437,6 +437,16 @@ P2 渐进迁移（2026-09-03 当日完成）：
 
 **六、各端生效方式（本轮 commit 后）**：云端网页/官网/Functions（admin-status machineId 自救）=push 后 Pages 自动部署即刻生效；**离线 APP 需重打包**（V1.0.0.215 APK 已随 commit 入库，若排查一判定包不含修复则必须重打 V1.0.0.216）；**离线桌面需重打包**（且先修四的 push 分支）；云端 APP/云端桌面含同款修复亦需重打包；鸿蒙随下次 HAP 编译自然携带。
 
+★ 2026-09-04（十八）【§十七交接闭环】排查一实锤 + 离线APP V1.0.0.216 重打包发布 + 桌面版 else push 修复（Commit `2adb8a07` 桌面修复 / `2fd44407` v216 发布）。
+
+**一、排查一结论（§十七·三.1 执行完毕）**：v1.0.0.215 APK 解压比对实锤——`assets/public/index.html` 与源码**字节级一致**（else push 分支在包），但 `assets/public/auth-core.js`（334915 字节）为**旧版**：缺 `PAYMENT_REQUIRED 断点持久化` + `resumeAdminPendingRequest machineId-only 自救` 两段核心修复（当前源码 338229 字节）。根因=APK 构建于 09-04 13:53:14，而 machineId 自救修复（765f9ac2）在其后提交，**改了源码没重打包**——客户装 v215 仍失败与此完全吻合。**v216 重打包后解压终验全过**：else push ✓ / `license:adminReqPending` ✓ / `?machineId=` 查询 ✓ / `awaitingPayment` ✓ / 30 天过期 ✓ / `_resumeCompleteActivation` ✓（已定义 L5220 + 双调用点 L5343/L5360）。**铁律重申：修复链 commit 后必须解压 APK 终验修复真在包里（字符串标记法：搜 `license:adminReqPending`、`?machineId=`、`awaitingPayment`），不能只看"commit 说包含"；检测模式注意源码是分行写法（`} else {\n const __lastT`），单行拼接串搜不到会误判**。客户 13398628215 解锁 SOP 不变：卸载重装（勾清除数据）→ 官网下载 v1.0.0.216 新包 → Tab1 重提交表单触发 PAYMENT_REQUIRED 持久化 → 切后台再切回（三重触发）→ machineId 自救自动领码 → 手机号+激活密码登录。
+
+**二、桌面版 else push 修复（§十七·四闭环）**：`app_project/db-offline/desktop/index.html` L1706 照抄 index-app.html L1719-1730 补回 else push 块（含 `__lastT` 时间戳）；门禁全绿：check-interface 6 OK / auth-core 11 副本 IN SYNC / drift-guard 无新增漂移。**根 index.html 是 2026-08-25 旧形态（有 else push 无时间戳），非缺分支——判定"缺不缺"用 `\} else \{[\s\S]{0,250}list\.push` 正则而不是裸字符串**。
+
+**三、本轮新坑（工具链）**：① **落定门拦截未提交源码**=改完源码必须先 commit 再打包（`ALLOW_DIRTY_BUILD=1` 仅应急），流程=commit 源码→build-app.bat→auto-update-downloads --confirm→镜像 site-official→commit+push 产物；② **build-app.bat 在 ensure-build-env 阶段 `exit /b 1` 不释放构建锁**（:build_fail 才释放）——被拦后重打前必须查 `.build.lock` 属主 PID 已死再删；③ **auto-update-downloads.js 的 aapt 读中文文件名 APK 报 Illegal byte sequence → 版本回退 build.gradle 只读出 "1.0.0" 无 versionCode**（违反 V1.0.0.N SSOT）——发布后必须人工核对 manifest `apk.version` 含 versionCode，缺了手动补 `V1.0.0.N` + `versionCode: N`（本次已补 V1.0.0.216）；④ 该工具只写 public/hash-manifest.json **不镜像 site-official**——发布后手动整份 Copy-Item 镜像并哈希比对 IN SYNC；⑤ 工具重写 apk 节点会**丢 releaseUrl/releaseFileName/releaseTag**——旧 releaseUrl 指向旧版 GitHub Release 必须清（防错版分流），新 Release 建立后由发布流回填。
+
+**四、各端生效方式**：离线 APP=官网下载页已上 V1.0.0.216（Pages 自动部署，manifest 双权威源 IN SYNC，sha256 `10341e76…`，旧 releaseUrl 移除后手机端回落 CF 静态源+robustDownload 增强单流）；离线桌面=EXE 重打包中（含 else push 修复）；云端网页/官网/Functions=随 push 即刻生效；云端 APP/云端桌面=含同款修复待各自重打包；鸿蒙=随下次 HAP 编译携带。
+
 ## 8. 桌面版技术规范
 
 * **桌面版云端 HTTP 必须走主进程**（file:// 直连被 CORS 拦截，Origin: null 不在白名单，fetch 静默 TypeError）：IPC 代理或 activate.js 内 fetch。APP 端 <http://localhost> 在白名单可直连。新增桌面版云端接口沿用 postInviteQuery 分流模式。
