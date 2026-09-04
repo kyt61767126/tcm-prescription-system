@@ -110,13 +110,26 @@ export async function provisionCloudAccount(kv, record) {
     let clinic = clinics.find(c => c.name === clinicName);
     let clinicsDirty = false;
 
-    // 1) 存在同名诊所 → 补齐 / 更新 edition，再补充账号
+    // 1) 存在同名诊所 → 补齐 / 更新 edition + status，再补充账号
     //   规则：
+    //     - ★ 2026-09-04 P0 修复：已有同名 clinic 漏 status 升级 → 自助注册
+    //       （status=test）经管理员激活审核通过后仍停留在 test → 登录闸门 L1319
+    //       判定 test 返回 403 PENDING_APPROVAL → 客户已激活却永远登不上。
+    //       admin-approve 审核通过语义上就是"把诊所激活"，所以无论原状态是 test
+    //       还是 disabled，一律强制升级为 active（以管理员决策为准）。
     //     - 早期遗留（clinic.edition 空）→ 补为 targetEdition
     //     - 已有 edition 但与本次 targetEdition 不一致 → **强制更新为本次 targetEdition**
     //       （以最近一次管理员审核的激活类型为准；例如第一次审错了标准版，第二次改回机构
     //        版，必须覆盖，否则诊所 edition 永远卡死为标准版）
     if (clinic) {
+        // ★ P0 强制状态升级（test/disabled → active）
+        if (clinic.status !== 'active') {
+            const oldStatus = clinic.status || '(empty)';
+            clinic.status = 'active';
+            clinic.updatedAt = now;
+            clinicsDirty = true;
+            console.log('[AdminAccount] ★ 诊所状态升级:', clinicName, oldStatus, '→ active (admin-approve)');
+        }
         const needPatchEdition = !clinic.edition || (clinic.edition !== targetEdition);
         if (needPatchEdition) {
             const oldEd = clinic.edition || '(empty)';
@@ -127,7 +140,7 @@ export async function provisionCloudAccount(kv, record) {
             else if (record.edition) clinic.activationType = record.edition;
             clinicsDirty = true;
             console.log('[AdminAccount] 诊所 edition 更新:', clinicName, oldEd, '→', targetEdition,
-                '(source:', rawActivation, 'clinic.status=', clinic.status, ')');
+                '(source:', rawActivation, ')');
         }
         // ★ 2026-09-03 离线版载体写入/更新（仅离线版；有值才写，不覆盖为空）
         if (targetEdition.indexOf('offline_') === 0 && targetCarrier && clinic.offlineCarrier !== targetCarrier) {
