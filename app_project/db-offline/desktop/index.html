@@ -1703,6 +1703,17 @@ let currentUser = null;
                         lastPwdUpdatedAt: __lastT,
                         updatedAt: __lastT
                     });
+                } else {
+                    const __lastT = Math.max(Number((u && u.lastPwdUpdatedAt) || 0), Number((u && u.updatedAt) || 0));
+                    list.push({
+                        username: uname,
+                        phone: phone,
+                        password: pwd,
+                        name: name,
+                        role: role,
+                        lastPwdUpdatedAt: __lastT,
+                        updatedAt: __lastT
+                    });
                 }
                 saveUsers(list);
                 console.log('[addLocalActivationUser] 已同步用户:', uname, 'phone:', phone, 'idx:', idx, 'password:', pwd === 'admin' ? 'admin(固定)' : '自定义');
