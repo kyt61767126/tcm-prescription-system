@@ -5,13 +5,26 @@
         "name": "default",
         "type": "HarmonyOS",
         "material": {
-          "certpath": "C:\\Users\\61767\\.ohos\\config\\default_huikang-cloud_OsXlve8nGqRuzvD4C-zEgB-Rcz2xU8KrPRCDkEpzUHs=.cer",
+          "certpath": "C:/Users/61767/.ohos/config/default_huikang-cloud_OsXlve8nGqRuzvD4C-zEgB-Rcz2xU8KrPRCDkEpzUHs=.cer",
           "keyAlias": "debugKey",
-          "keyPassword": "0000001BD3EB265C3152DB560D1627311EDFAB41A9E21B12DA25FDB4F60C52AEEB0F4B5B9AF921CB922A98",
-          "profile": "C:\\Users\\61767\\.ohos\\config\\default_huikang-cloud_OsXlve8nGqRuzvD4C-zEgB-Rcz2xU8KrPRCDkEpzUHs=.p7b",
+          "keyPassword": "0000001B8E13BD1D23793875BB92E37953A73F06961006CA1172A1DBC1F1DD1767E4323660E9646B412B22",
+          "profile": "C:/Users/61767/.ohos/config/default_huikang-cloud_OsXlve8nGqRuzvD4C-zEgB-Rcz2xU8KrPRCDkEpzUHs=.p7b",
           "signAlg": "SHA256withECDSA",
-          "storeFile": "C:\\Users\\61767\\.ohos\\config\\default_huikang-cloud_OsXlve8nGqRuzvD4C-zEgB-Rcz2xU8KrPRCDkEpzUHs=.p12",
-          "storePassword": "0000001B544FD955709ABE2B19EB68D2A9AC1C344708E0571346E211F8AA0AD3EEC961B13404CEDCC9B495"
+          "storeFile": "C:/Users/61767/.ohos/config/default_huikang-cloud_OsXlve8nGqRuzvD4C-zEgB-Rcz2xU8KrPRCDkEpzUHs=.p12",
+          "storePassword": "0000001BE6B4C6EE42DA936F0F87964270E756354A1FA0D461A3AB8B0F835D8F4ABEEE8ABE1AFFAE153AA1"
+        }
+      },
+      {
+        "name": "release",
+        "type": "HarmonyOS",
+        "material": {
+          "certpath": "C:\\Users\\61767\\.ohos\\config\\release_huikang-cloud_OsXlve8nGqRuzvD4C-zEgB-Rcz2xU8KrPRCDkEpzUHs=.cer",
+          "keyAlias": "debugKey",
+          "keyPassword": "0000001B8F027026B9EAEE0C3FA41114907B96AEA5C26925D1FCEAE31B5A242B739C3D1279E853BD035E26",
+          "profile": "C:\\Users\\61767\\.ohos\\config\\release_huikang-cloud_OsXlve8nGqRuzvD4C-zEgB-Rcz2xU8KrPRCDkEpzUHs=.p7b",
+          "signAlg": "SHA256withECDSA",
+          "storeFile": "C:\\Users\\61767\\.ohos\\config\\release_huikang-cloud_OsXlve8nGqRuzvD4C-zEgB-Rcz2xU8KrPRCDkEpzUHs=.p12",
+          "storePassword": "0000001B0C738933D0C7DD631172E6FB68F8E4FDB0B8A5518A1F4D64EDD5C6B206D8B1324DD9AFFDEFD1C5"
         }
       }
     ],
@@ -19,6 +32,19 @@
       {
         "name": "default",
         "signingConfig": "default",
+        "compatibleSdkVersion": "26.0.0",
+        "runtimeOS": "HarmonyOS",
+        "buildOption": {
+          "strictMode": {
+            "caseSensitiveCheck": true,
+            "useNormalizedOHMUrl": true
+          }
+        },
+        "targetSdkVersion": "26.0.0"
+      },
+      {
+        "name": "release",
+        "signingConfig": "release",
         "compatibleSdkVersion": "26.0.0",
         "runtimeOS": "HarmonyOS",
         "buildOption": {
@@ -47,7 +73,8 @@
         {
           "name": "default",
           "applyToProducts": [
-            "default"
+            "default",
+            "release"
           ]
         }
       ]
