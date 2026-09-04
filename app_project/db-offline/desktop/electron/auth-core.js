@@ -5085,7 +5085,14 @@
 
         // ★ 2026-09-04 方案B 注册前置：已注册用户 Tab1 预填（诊所名/姓名/手机号/密码）
         //   注册时账号+密码已建好，激活只是纯 license 操作，不再重复收集。
+        // ★ 2026-09-04 追加优化（用户反馈"激活页面未同步注册信息"）：
+        //   ① 密码解密存 Promise（__regPwdPromise），下一步点击时 await——消除
+        //      异步解密竞态（旧版解密未完成时 state.password 为空 → 误入密码步骤，
+        //      观感即"注册信息没同步全"）；
+        //   ② 预填后按钮语义改为「✅ 确认信息并提交」，顶部加同步提示条；
+        //   ③ phoneHint 更新为注册密码提示（不再是"默认密码 admin"误导）。
         let __regPrefill = null;
+        let __regPwdPromise = null;
         try {
             __regPrefill = getLocalRegistrationInfo();
             if (__regPrefill) {
@@ -5097,7 +5104,8 @@
                 // Java 端按"密码写点唯一化"保留注册密码不覆盖。
                 try {
                     if (__regPrefill.passwordEnc) {
-                        decryptSensitive(__regPrefill.passwordEnc).then(function (p) {
+                        __regPwdPromise = decryptSensitive(__regPrefill.passwordEnc);
+                        __regPwdPromise.then(function (p) {
                             if (p) state.password = String(p);
                         }).catch(function () {});
                     }
@@ -5108,12 +5116,35 @@
                 if (__cn && state.clinicName) __cn.value = state.clinicName;
                 if (__an && state.adminName) __an.value = state.adminName;
                 if (__ph && state.phone) __ph.value = state.phone;
+                // ① 顶部同步提示条（插入 Tab1 表单首部，用户明确看到"已同步"）
+                try {
+                    const __formBox = document.getElementById('adminStepForm');
+                    if (__formBox) {
+                        const __tip = document.createElement('div');
+                        __tip.style.cssText = 'background:#e8f5e9;border:1px solid #a5d6a7;border-radius:8px;padding:10px;margin-bottom:12px;font-size:12px;color:#2e7d32;line-height:1.7;';
+                        __tip.innerHTML = '✅ 已自动同步注册开通时填写的信息（诊所名称/管理员姓名/联系电话）。<br>请核对无误后，点击下方「确认信息并提交」即可。';
+                        __formBox.insertBefore(__tip, __formBox.firstChild);
+                    }
+                } catch (te) {}
+                // ② 按钮语义：预填场景下"下一步"→"确认信息并提交"（方案B：点此直接提交，
+                //    跳过密码步骤——注册时密码已建，激活不收密码）
+                try {
+                    const __btn = document.getElementById('adminToStep2Btn');
+                    if (__btn) __btn.textContent = '✅ 确认信息并提交 →';
+                } catch (be) {}
+                // ③ 手机号提示更新（注册密码已设，不再提示"默认密码 admin"）
+                try {
+                    const __hint = document.getElementById('adminPhoneHint');
+                    if (__hint) __hint.innerHTML = '💡 11位手机号为登录账号，登录密码为注册时设置的密码';
+                } catch (he) {}
                 console.log('[LicenseCheck] 检测到已注册，Tab1 表单已预填（手机号登录账号）');
             }
         } catch (re) { console.warn('[LicenseCheck] 注册预填失败(不影响激活):', re); }
 
         // 表单 → 密码
-        document.getElementById('adminToStep2Btn').addEventListener('click', function() {
+        // ★ 2026-09-04 async 化：等待注册密码解密 Promise（最长 1.5s race 兜底），
+        //   消除"解密未完成 → state.password 空 → 误入密码步骤"竞态。
+        document.getElementById('adminToStep2Btn').addEventListener('click', async function() {
             const clinicName = document.getElementById('adminClinicName').value.trim();
             const adminName = document.getElementById('adminAdminName').value.trim();
             const phone = document.getElementById('adminPhone').value.trim();
@@ -5128,15 +5159,29 @@
             state.remark = remark;
             // ★ 2026-09-04 方案B：已注册用户跳过密码步骤（账号+密码注册时已建，
             //   激活不收密码）——直接进入提交。密码一致性由注册时校验保证。
-            if (__regPrefill && __regPrefill.phone === phone && state.password) {
-                try {
+            if (__regPrefill && __regPrefill.phone === phone) {
+                // 等待注册密码解密（弹窗打开时异步启动）；解密失败/超时也不阻塞——
+                // 已注册用户 config.json 已有注册账号+密码（Single-Writer 保留不覆盖），
+                // state.password 仅兜底建号用，提交本身不依赖它。
+                if (!state.password && __regPwdPromise) {
+                    try {
+                        const __p = await Promise.race([
+                            __regPwdPromise,
+                            new Promise(function (r) { setTimeout(function () { r(null); }, 1500); })
+                        ]);
+                        if (__p) state.password = String(__p);
+                    } catch (e) {}
+                }
+                if (state.password) {
                     // 预填两个密码框：①提交处 pwd!==admin 时校验 pwd2 一致；
                     //   ②提交失败 showFormAndAlert 回到密码步骤时字段已就绪可直接重试
-                    const pEl = document.getElementById('adminPassword');
-                    const p2El = document.getElementById('adminPassword2');
-                    if (pEl) pEl.value = state.password;
-                    if (p2El) p2El.value = state.password;
-                } catch (e) {}
+                    try {
+                        const pEl = document.getElementById('adminPassword');
+                        const p2El = document.getElementById('adminPassword2');
+                        if (pEl) pEl.value = state.password;
+                        if (p2El) p2El.value = state.password;
+                    } catch (e) {}
+                }
                 show('adminSubmitting');
                 document.getElementById('adminSubmitBtn').click();
                 return;
