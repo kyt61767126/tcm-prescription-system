@@ -2478,6 +2478,16 @@
             // ★ 设置失效标志
             global.__licenseExpired = true;
 
+            // ★ 2026-09-05 试用到期只读模式：trial_expired / trial_limit_reached 不再硬阻断。
+            //   旧版 5s 循环强弹激活窗（桌面甚至启动即弹+关窗即退出），客户被锁死看不到
+            //   自己的历史数据。现改为：放行进入登录/主界面，只读横幅常驻引导激活，
+            //   开方保存由 savePrescription 守卫 + 原生 canPrescribe 双保险拦截。
+            //   正式授权过期/设备不符/校验异常仍走原硬阻断弹窗（不扩大放行面）。
+            if (result && (result.type === 'trial_expired' || result.type === 'trial_limit_reached')) {
+                enterReadOnlyMode(msg);
+                return;
+            }
+
             // ★ 如果正在激活中，不重复弹窗
             if (global.__licenseActivating) {
                 console.log('[LicenseCheck] 激活流程进行中，跳过弹窗');
@@ -2489,6 +2499,42 @@
         } catch (e) {
             console.error('[LicenseCheck] 校验异常:', e);
             global.__licenseActivating = false;
+        }
+    }
+
+    // ★ 2026-09-05 试用到期只读模式：顶部常驻横幅（JS 幂等注入，不改 HTML 结构/CSS）。
+    //   行为：①主界面（存在 patientName 开方入口）注入深红横幅+「前往激活」按钮
+    //         （按钮走 global.openAdminActivate 统一入口：版本选择+三Tab+付款导引全套）；
+    //        ②首次进入只读时自动唤起一次激活弹窗（保持 APP 原生对话框「前往激活」的
+    //          意图连续），桌面 login 小窗（240x360）除外——其已有静态激活链接；
+    //        ③登录页无 patientName 不注横幅（登录框本就有管理员激活入口）。
+    function enterReadOnlyMode(msg) {
+        global.__licenseExpired = true;
+        global.__licenseReadOnly = true;
+        console.warn('[LicenseCheck] 试用到期，进入只读模式（可查看，不可开方保存）:', msg || '');
+        try {
+            if (document.body && document.getElementById('patientName') && !document.getElementById('licenseReadOnlyBanner')) {
+                const banner = document.createElement('div');
+                banner.id = 'licenseReadOnlyBanner';
+                banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9000;background:#7f1d1d;color:#fff;font-size:13px;padding:7px 10px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.4);font-family:system-ui,-apple-system,sans-serif;line-height:1.6;';
+                banner.innerHTML = '⏰ 试用期已结束 · 只读模式（可查看，暂不能开方保存）' +
+                    '<button id="licenseReadOnlyActivateBtn" style="margin-left:8px;padding:3px 14px;border:none;border-radius:5px;background:#f59e0b;color:#fff;font-weight:600;cursor:pointer;font-size:12px;vertical-align:middle;">前往激活</button>';
+                document.body.appendChild(banner);
+                const __btn = document.getElementById('licenseReadOnlyActivateBtn');
+                if (__btn) __btn.addEventListener('click', function () {
+                    try { if (typeof global.openAdminActivate === 'function') global.openAdminActivate(); } catch (e) {}
+                });
+            }
+        } catch (e) { console.warn('[LicenseCheck] 只读横幅注入失败:', e); }
+        // 一次性自动唤起激活弹窗（桌面 login 小窗除外，避免 240x360 内塞 400px 弹窗）
+        if (!global.__readOnlyActivateShown) {
+            global.__readOnlyActivateShown = true;
+            const __isDesktopLogin = !document.getElementById('patientName') &&
+                global.electronAPI && global.electronAPI.activate &&
+                typeof global.electronAPI.activate.showExpireAlert === 'function';
+            if (!__isDesktopLogin) {
+                try { if (typeof global.openAdminActivate === 'function') global.openAdminActivate(); } catch (e) {}
+            }
         }
     }
 
@@ -2546,6 +2592,10 @@
             // 只在 license 已失效且不在激活流程中时检查
             // 同时检查激活窗口DOM是否已存在，防止激活窗口打开期间重复弹窗
             if (!global.__licenseExpired || global.__licenseActivating || document.getElementById('adminActivateOverlay')) return;
+
+            // ★ 2026-09-05 只读模式：横幅常驻引导激活，不再 5s 循环强弹激活窗
+            //   （旧版反复打断客户查看历史数据，体验差；横幅按钮随时可自主唤起）
+            if (global.__licenseReadOnly) return;
 
             console.log('[LicenseCheck] 兜底检查：license 失效，重新弹激活窗口');
             await showExpireAlertAndActivate(lastFailMessage);
@@ -2633,6 +2683,9 @@
             if (result && result.success) {
                 global.__licenseExpired = false;
                 global.__licenseActivating = false;
+                // ★ 2026-09-05 只读模式退出：激活成功立即撤横幅清标志（同页即时反馈，无需等重启）
+                global.__licenseReadOnly = false;
+                try { const __rb = document.getElementById('licenseReadOnlyBanner'); if (__rb) __rb.remove(); } catch (_) {}
                 // ★ P1-7 心跳验证：存储 license code 和 machineId 供心跳使用
                 try {
                     await StorageAdapter.setItem('license:code', codeTrim);

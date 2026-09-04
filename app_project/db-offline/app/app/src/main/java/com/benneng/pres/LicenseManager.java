@@ -3836,6 +3836,27 @@ nu.put("updatedAt", System.currentTimeMillis());
 
     public JSONObject canPrescribe() {
         try {
+            // ★ 2026-09-05 试用到期只读模式：license 无效且属试用到期族（trial_expired/
+            //   trial_limit_reached）→ 原生层直接禁开方（只读模式放行查看历史数据，
+            //   JS 层 savePrescription 守卫 + 本处双保险）。校验异常不扩大拦截面，
+            //   回落原计数逻辑（启动闸 performNativeStartupLicenseCheck 已拦截异常态）。
+            try {
+                JSONObject lic = validateLicense();
+                if (lic != null && !lic.optBoolean("valid", false)) {
+                    String lt = lic.optString("type", "");
+                    if ("trial_expired".equals(lt) || "trial_limit_reached".equals(lt)) {
+                        JSONObject ro = new JSONObject();
+                        ro.put("allowed", false);
+                        ro.put("current", 0);
+                        ro.put("max", -1);
+                        ro.put("remaining", 0);
+                        ro.put("readOnly", true);
+                        return ro;
+                    }
+                }
+            } catch (Exception ve) {
+                Log.w(TAG, "canPrescribe 试用状态检查异常(回落计数逻辑): " + ve.getMessage());
+            }
             int current = getCurrentMonthCount();
             int max = getMaxPrescriptions();
             JSONObject r = new JSONObject();

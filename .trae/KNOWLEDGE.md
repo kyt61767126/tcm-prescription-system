@@ -495,6 +495,18 @@ P2 渐进迁移（2026-09-03 当日完成）：
 - ③ **syncSharedFieldsFrom ID 错位（2026-08-23 引入起从未生效的死代码）**：桌面激活窗口 Tab1 实际字段 `clinicName/adminName/phone`，旧代码读写 `adminClinicName/adminAdminName/adminPhone`（本窗口不存在 → `null.value` 抛 TypeError 被 try/catch 静默吞）→ 三 Tab 互相同步从未生效。**铁律：getElementById 链式取值 + try/catch 静默吞错 = ID 打错永远发现不了；新写 DOM 代码必须先 rg 验证 ID 存在**。
 - 生效：离线 APP + 离线桌面随重打包生效；云端不受影响。
 
+**十二、试用到期只读模式（双端统一）+ 桌面付款链接携带注册信息/版本金额（2026-09-05）**：用户需求"试用7天到期后只读显示 + 支付转跳官网直接显示注册信息及版本对应支付金额"。
+- **A. 只读模式**：旧版试用到期=硬锁死（桌面启动即弹"前往激活/退出"、关闭激活窗直接退出应用；APP 端 5s 循环强弹激活窗打断一切操作），客户看不到自己的历史数据。新方案：`trial_expired` / `trial_limit_reached` 两类失效不再硬阻断 → 放行登录+主界面**只读模式**（可查看，禁止开方保存），顶部深红横幅常驻 +「前往激活」按钮（走 `global.openAdminActivate` 统一入口：版本选择+三Tab+付款导引全套）。四层改动：
+  - ① auth-core offline.js `checkLicenseAndShowActivate` 失效分支按 `result.type` 路由（试用族→`enterReadOnlyMode`，其余失效仍走原硬阻断弹窗，**不扩大放行面**）；`enterReadOnlyMode` 横幅幂等注入（仅存在 patientName 的主界面；登录页已有激活入口不注）+ 一次性自动唤起激活弹窗（保持 APP 原生对话框"前往激活"意图连续；桌面 login 小窗 240×360 除外）；`startFallbackCheck` 只读跳过（不再 5s 强弹）；激活码激活成功即时清横幅。
+  - ② 桌面 main.js 启动闸放行：`!_isLicensed && type∈{trial_expired,trial_limit_reached}` → `createLoginWindow()` 只读进入；正式授权过期/设备不符/校验异常仍硬阻断。APP 无需改 Java 启动闸（原"前往激活"按钮本就放行 continueStartupAfterLicenseCheck）。
+  - ③ 原生 canPrescribe 双保险：桌面 `license:can-prescribe` IPC + APP Java `canPrescribe()` 均前置 validateLicense——失效且属试用族 → `{allowed:false,max:-1,readOnly:true}`；校验异常回落原计数逻辑（启动闸已拦异常态，不扩大拦截面）。桌面额外嵌套检查 `isTrialDenied()` 标记（validateLicense 不读该标记、trial.dat 可能仍有效）。
+  - ④ 离线双源 index（desktop/index.html + index-app.html）`savePrescription` 顶部 `window.__licenseReadOnly` 守卫 + canPrescribe `readOnly` 专属提示（max=-1 时旧文案会显示"上限-1张"）。
+- **有意放行**：回收站恢复处方、媒体元数据回填（客户自身历史数据管理，非开方；付费价值在"开新方"）。
+- **铁律**：原生拦截条件必须"白名单 type 精确匹配 + 嵌套在 !valid 内"，禁止"任何 invalid 即拦"或 OR 独立判断 isTrialDenied——validateLicense 边缘误判/已激活设备残留 denied 标记会误伤付费客户；原生新增响应字段（readOnly）必须同步适配渲染层提示文案。
+- **B. 桌面付款链接补全**：APP 端 offline.js 三处付款按钮（adminPayGuide/adminPayRequired/ticket）此前已带 `cn/n/p/wx/r/ed/dp`；桌面 activate-window.html 的 QR+复制链接+工单成功面板仍只有 mid。新增 `buildPayUrl(prefix)`：管理员Tab 读 clinicName/adminName/phone，工单Tab 读 ticket* 字段（含 wx/r）；`ed` 映射 institution→local-pro（机构版¥299）/personal→local-personal（标准版¥99），`state.edition` 未选时回落 `initTheme` 捕获的 `window.__cfgEdition`（config.edition，试用强制 personal）；`dp=desktop` 补齐后台载体标记。官网 download.html 既有全参回填+版本直选价格，零改动。
+- **同步**：offline.js→3 副本（sync-auth-core.ps1）；index-app.html→APP assets（手工 copy 对齐 build-app.bat 步骤[2/5]）；离线桌面 index.html 独立维护（不入 Group 11 云端同步链）。验证：node --check / gradle compileDebugJavaWithJavac / check-interface 6OK / sync-auth-core 11 副本 In sync。
+- 生效：离线桌面+离线 APP 需重打包；云端网页/官网/云端APP/云桌面不受影响（云端付款按钮此前已完成）。
+
 ## 8. 桌面版技术规范
 
 * **登录预填来源单一化（2026-09-04 Commit f62f16c4）**：`initLoginInput` 的预填**只允许来自 localStorage 记住的用户名**（`KEY_REMEMBER_USER` / `local_rememberedUsers`），禁止直接从 `config.users` 自动预填。历史 bug：`else if users.length===1` 分支无法区分「出厂模板 admin 单账户」和「刚激活后的单管理员」，导致全新安装首次启动即预填 admin/admin。配套删除 `isTrialDefault && admin` 兜底（离线端独有）。区分手段：localStorage remembered 键在用户成功登录后才写入，全新安装天然为空 → usernameToFill = null → 空白表单。云端 login.js（无 isTrialDefault 兜底）同理需同步修改。

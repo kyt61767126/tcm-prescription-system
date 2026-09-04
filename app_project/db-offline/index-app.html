@@ -5938,11 +5938,22 @@ let currentUser = null;
                 alert('请先登录后再保存处方');
                 return;
             }
+            // ★ 2026-09-05 试用到期只读模式：只读禁止保存（auth-core enterReadOnlyMode 置位；
+            //   Java 层 canPrescribe 同步拦截 readOnly=true，双保险）
+            if (window.__licenseReadOnly) {
+                alert('试用期已结束，当前为只读模式，仅可查看历史数据。\n请点击顶部「前往激活」完成激活后继续开方。');
+                return;
+            }
             // ★ v2: 处方数量限制检查（试用版 30 张/月）
             if (window.electronAPI && window.electronAPI.license && window.electronAPI.license.canPrescribe) {
                 try {
                     const prescribeStatus = await window.electronAPI.license.canPrescribe();
                     if (!prescribeStatus.allowed) {
+                        // ★ 2026-09-05 只读模式：Java 层 readOnly 拦截给专属提示（max=-1 时旧文案会显示"上限-1张"）
+                        if (prescribeStatus.readOnly) {
+                            alert('试用期已结束，当前为只读模式，仅可查看历史数据。\n请激活后继续开方。');
+                            return;
+                        }
                         alert('本月处方数量已达上限（' + prescribeStatus.max + ' 张）。\n当前已开：' + prescribeStatus.current + ' 张\n\n请升级到标准版或专业版后继续使用。');
                         return;
                     }

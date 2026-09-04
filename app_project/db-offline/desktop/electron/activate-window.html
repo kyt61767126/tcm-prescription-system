@@ -718,6 +718,9 @@ function selectEdition(edition) {
             const r = await window.electronAPI.getAppConfig();
             if (r && r.success && r.config) {
                 const cfg = r.config;
+                // ★ 2026-09-05 捕获 config.edition 供付款链接版本直选（personal→local-personal
+                //   标准版￥99 / clinic→local-pro 机构版￥299，官网按 ed 参数直显对应金额）
+                try { window.__cfgEdition = String(cfg.edition || ''); } catch (ee) {}
                 // 预填诊所名和医师名
                 if (cfg.clinicName) {
                     document.getElementById('clinicName').value = cfg.clinicName;
@@ -1082,12 +1085,43 @@ document.getElementById('password2').addEventListener('keydown', e => {
 // ============ Waiting + polling (admin) ============
 // ★ 官网快速付费导引：二维码指向官网购买页（携带本机 machineId 自动预填）
 const PAY_GUIDE_BASE = 'https://tcm-prescription-system.pages.dev/download.html?mid=';
+// ★ 2026-09-05 付款链接携带注册信息+版本金额：官网购买页自动回填（cn=诊所名/n=联系人/
+//   p=手机号/wx=微信/r=备注）并按版本直选价格（ed=local-personal 标准版/local-pro 机构版），
+//   客户扫码/复制打开即见正确金额，零重复填写（与 APP 端 offline.js 三处付款按钮同款对齐）。
+//   prefix='ticket' 读工单Tab字段（含微信/备注），默认读管理员Tab字段（无微信字段）。
+function buildPayUrl(prefix) {
+    const g = (id) => { try { const el = document.getElementById(id); return el ? String(el.value || '').trim() : ''; } catch (e) { return ''; } };
+    let cn, n, p, wx, r;
+    if (prefix === 'ticket') {
+        cn = g('ticketClinicName') || state.clinicName || '';
+        n  = g('ticketContactName') || state.adminName || '';
+        p  = g('ticketContactPhone') || state.phone || '';
+        wx = g('ticketContactWechat');
+        r  = g('ticketRemark');
+    } else {
+        cn = g('clinicName') || state.clinicName || '';
+        n  = g('adminName') || state.adminName || '';
+        p  = g('phone') || state.phone || '';
+        wx = ''; r = '';
+    }
+    // 版本意图：表单已选 state.edition 优先；未选时回落 config.edition（试用强制 personal）
+    const __ed = (state.edition === 'institution' || (!state.edition &&
+                    (window.__cfgEdition === 'clinic' || window.__cfgEdition === 'institution')))
+        ? 'local-pro'
+        : ((state.edition === 'personal' || (!state.edition && window.__cfgEdition === 'personal')) ? 'local-personal' : '');
+    return PAY_GUIDE_BASE + encodeURIComponent(params.get('machineId') || '')
+        + (__ed ? ('&ed=' + __ed) : '') + '&dp=desktop'
+        + (cn ? ('&cn=' + encodeURIComponent(cn)) : '')
+        + (n  ? ('&n='  + encodeURIComponent(n))  : '')
+        + (p  ? ('&p='  + encodeURIComponent(p))  : '')
+        + (wx ? ('&wx=' + encodeURIComponent(wx)) : '')
+        + (r  ? ('&r='  + encodeURIComponent(r))  : '');
+}
 let _payGuideInited = false;
 function initPayGuide() {
     if (_payGuideInited) return;
     _payGuideInited = true;
-    const mid = params.get('machineId') || '';
-    const url = PAY_GUIDE_BASE + encodeURIComponent(mid);
+    const url = buildPayUrl();
     const urlText = document.getElementById('payGuideUrlText');
     if (urlText) urlText.textContent = url;
     const qrBox = document.getElementById('payGuideQr');
@@ -1570,8 +1604,8 @@ document.getElementById('ticketSubmitBtn').addEventListener('click', async () =>
             document.getElementById('ticketNoDisplay').textContent = result.ticketNo || '--';
             document.getElementById('ticketSubmitTime').textContent = new Date().toLocaleString('zh-CN');
             document.getElementById('ticketSavedPhone').textContent = contactPhone || contactWechat || '--';
-            // ★ 官网付费导引：填充购买链接（携带本机 machineId）
-            const payUrl = PAY_GUIDE_BASE + encodeURIComponent(params.get('machineId') || '');
+            // ★ 官网付费导引：填充购买链接（携带注册信息+版本金额，与付款二维码同源）
+            const payUrl = buildPayUrl('ticket');
             document.getElementById('ticketPayUrl').textContent = payUrl;
             showTicketPanel('ticketSuccess');
         } else {

@@ -1515,13 +1515,23 @@ app.whenReady().then(async () => {
         console.warn('[License] 启动断点续传异常（非致命，交给渲染进程）:', e.message);
     }
 
-    // ★ 离线版流程：license 有效（含试用）直接进登录；试用到期/未激活弹到期提示
+    // ★ 离线版流程：license 有效（含试用）直接进登录；
+    //   试用到期/试用超限 → 只读模式放行（可登录查看历史数据，渲染层横幅引导激活，
+    //     原生 canPrescribe 禁开方，savePrescription 守卫双保险）——2026-09-05；
+    //   其他失效（正式授权过期/设备不符/校验异常）→ 弹到期提示（前往激活/退出）
     if (!_isLicensed) {
-        console.log('[License] 未授权，弹出到期提示（前往激活/退出）');
-        await activateManager.showExpireAlertAndActivate(null, licenseResult.message);
-        return;
+        const __roType = licenseResult ? licenseResult.type : '';
+        if (__roType === 'trial_expired' || __roType === 'trial_limit_reached') {
+            console.log('[License] 试用到期/超限（' + __roType + '）→ 只读模式进入登录');
+            createLoginWindow();
+        } else {
+            console.log('[License] 未授权，弹出到期提示（前往激活/退出）');
+            await activateManager.showExpireAlertAndActivate(null, licenseResult.message);
+            return;
+        }
+    } else {
+        createLoginWindow();
     }
-    createLoginWindow();
 
     app.on('activate', () => {
         const allWindows = BrowserWindow.getAllWindows();
@@ -1603,6 +1613,22 @@ ipcMain.handle('license:select-offline-file', async (event) => {
 // ★ 第三轮终检 P1 修复（2026-08-16）：授权执行点异常时 fail-closed（原放行可绕过 30 张限制）
 ipcMain.handle('license:can-prescribe', () => {
     try {
+        // ★ 2026-09-05 试用到期只读模式：license 无效且属试用到期族（trial_expired/
+        //   trial_limit_reached）→ 原生层直接禁开方（只读模式放行查看但不可保存，
+        //   与渲染层 savePrescription 守卫双保险）。试用超限标记（isTrialDenied）一并
+        //   拦截——validateLicense 本身不读该标记（trial.dat 可能仍显示有效）。
+        //   校验异常不扩大拦截面，回落原计数逻辑（启动闸已拦截异常态）。
+        try {
+            const __mid = activateManager.getMachineId();
+            const __lic = licenseManager.validateLicense({ localMachineId: __mid });
+            if (__lic && !__lic.valid) {
+                const __roType = __lic.type || '';
+                if (__roType === 'trial_expired' || __roType === 'trial_limit_reached' ||
+                    (typeof isTrialDenied === 'function' && isTrialDenied())) {
+                    return { allowed: false, current: 0, max: -1, remaining: 0, readOnly: true };
+                }
+            }
+        } catch (ve) { /* 试用状态检查异常，回落计数逻辑 */ }
         return prescriptionCounter.canPrescribe();
     } catch (e) {
         console.error('[IPC] can-prescribe 异常:', e);
