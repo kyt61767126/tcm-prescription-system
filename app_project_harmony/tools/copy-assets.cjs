@@ -8,7 +8,7 @@
  *   1. 源目录（app_project/ 安卓工程）只读，物理上不写回任何字节；
  *   2. 输出仅限 app_project_harmony/ 内部；
  *   3. 拷贝为字节级原样复制，不做任何内容改写。
- * 用法：node copy-assets.cjs [cloud|offline|all]（默认 all）
+ * 用法：node copy-assets.cjs [cloud|offline|all]（默认 cloud；huikang-offline 未建时 all 会 warn 跳过）
  */
 const fs = require('fs');
 const path = require('path');
@@ -95,14 +95,36 @@ function runOne(edition) {
   console.log(`[OK] ${edition}: rawfile ${countFiles(dst)} 个文件；图标已拷贝`);
 }
 
-const target = process.argv[2] || 'all';
+/**
+ * 跑单个 edition；鸿蒙工程目录（DST 父目录）不存在时 warn 跳过，
+ * 避免 all 模式下 offline 未建直接 process.exit(1) 挂死整个脚本。
+ */
+function runOneIfReady(edition) {
+  const projDir = path.dirname(DST[edition]); // huikang-cloud 或 huikang-offline
+  if (!fs.existsSync(projDir)) {
+    console.warn(`[SKIP] ${edition} 鸿蒙工程目录不存在（${projDir}），跳过。`);
+    console.warn(`       建好后重跑：node copy-assets.cjs ${edition}`);
+    return false;
+  }
+  runOne(edition);
+  return true;
+}
+
+const target = process.argv[2] || 'cloud';
+let anyOk = false;
 if (target === 'all') {
-  runOne('cloud');
-  runOne('offline');
+  anyOk |= runOneIfReady('cloud');
+  anyOk |= runOneIfReady('offline');
+  if (!anyOk) {
+    console.error('[FAIL] cloud + offline 均无可用鸿蒙工程，全部跳过。');
+    process.exit(1);
+  }
 } else if (target === 'cloud' || target === 'offline') {
-  runOne(target);
+  if (!runOneIfReady(target)) {
+    process.exit(1);
+  }
 } else {
-  console.error('用法：node copy-assets.cjs [cloud|offline|all]');
+  console.error('用法：node copy-assets.cjs [cloud|offline|all]（默认 cloud）');
   process.exit(1);
 }
 console.log('[DONE] 源（安卓工程）未被修改（脚本只读源、只写 app_project_harmony/）。');
