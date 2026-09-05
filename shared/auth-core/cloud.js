@@ -2621,6 +2621,8 @@
             const cloudHtml = await getCloudAccountLicenseHtml();
             if (cloudHtml) {
                 el.innerHTML = cloudHtml;
+                // ★ 2026-09-05 云端邀请码卡片：已登录用户异步加载（未命中静默）
+                loadCloudInviteInfo(el);
                 return;
             }
 
@@ -2658,6 +2660,8 @@
                         html += '<br>剩余 <b style="color:#4caf50;">' + remainingDays + '</b> 天';
                     }
                     el.innerHTML = html;
+                    // ★ 2026-09-05 邀请码卡片（对齐 offline.js licensed 分支）
+                    loadCloudInviteInfo(el);
                     // 正式授权：>7天或永久(-1)灰色只读；≤7天恢复正常色提醒续费
                     setAdminActivateBtnState(hasDays ? remainingDays : null);
                 } else {
@@ -2682,6 +2686,104 @@
     //   调用 window.updateLicenseStatusText() 即时刷新授权区（此前该调用因未暴露
     //   一直静默失效，授权区只在首次注入时渲染一次，登录态变化后不刷新）
     global.updateLicenseStatusText = updateLicenseStatusText;
+
+    // ★ 2026-09-05 云端「我的邀请码」卡片：已激活/已登录用户在基础设置授权状态区
+    //   展示专属邀请码+邀请进度+累计奖励（移植离线版 loadInviteInfo 模式）。
+    //   查询凭据：①本地 license:code（云桌面激活码激活路径存有）②machineId 兜底
+    //   （管理员激活写入 device_version 绑定，invite API 凭它找回）。未命中静默跳过。
+    async function postCloudInviteQuery(bodyData) {
+        // 云桌面（file:// 渲染进程）直连 fetch 被 CORS 拦截，优先主进程 IPC 代理；
+        // 云端网页（同源）/云端APP（http://localhost 白名单）直连。
+        if (global.electronAPI && global.electronAPI.license &&
+            typeof global.electronAPI.license.queryInvite === 'function') {
+            try {
+                const r = await global.electronAPI.license.queryInvite(bodyData);
+                if (r && typeof r === 'object') return r;
+            } catch (_) {}
+        }
+        try {
+            const r = await global.fetch(CLOUD_API_BASE + '/license/invite', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(bodyData)
+            });
+            return await r.json().catch(() => null);
+        } catch (_) { return null; }
+    }
+
+    async function loadCloudInviteInfo(el) {
+        try {
+            const old = document.getElementById('inviteInfoBox');
+            if (old && old.parentNode) old.parentNode.removeChild(old);
+            // 凭据1：本地激活码（云桌面激活码激活成功后存有）
+            let code = '';
+            try { code = await StorageAdapter.getItem('license:code'); } catch (_) {}
+            if (!code) {
+                try {
+                    const ls = (typeof global !== 'undefined' && global.localStorage) ||
+                               (typeof window !== 'undefined' ? window.localStorage : null);
+                    if (ls) code = ls.getItem('license:code');
+                } catch (_) {}
+            }
+            if (code && String(code).trim().length >= 4) {
+                const d = await postCloudInviteQuery({ code: String(code).trim() });
+                if (d && d.success && d.inviteCode) {
+                    renderCloudInviteCard(el, d);
+                    return;
+                }
+            }
+            // 凭据2：machineId 兜底（管理员激活路径本地无码，凭设备绑定记录找回）
+            try {
+                const identity = await collectDeviceIdentity();
+                const mid = (identity && identity.machineId) ? String(identity.machineId).trim() : '';
+                if (mid && mid.length >= 8) {
+                    const md = await postCloudInviteQuery({ machineId: mid });
+                    if (md && md.success && md.inviteCode) {
+                        renderCloudInviteCard(el, md);
+                        return;
+                    }
+                }
+            } catch (_) {}
+            // 未命中：不显示卡片（云端登录用户未必走过激活，静默优于误导）
+        } catch (e) {
+            console.warn('[Invite] 云端邀请码加载失败:', e && e.message);
+        }
+    }
+
+    function renderCloudInviteCard(el, d) {
+        const cnt = d.inviteCount || 0, max = d.maxInvitees || 4, days = d.rewardDays || 0;
+        const box = document.createElement('div');
+        box.id = 'inviteInfoBox';
+        box.style.cssText = 'margin-top:8px;padding-top:8px;border-top:1px dashed #ddd;font-size:12px;color:#555;line-height:1.7;';
+        box.innerHTML =
+            '🎁 我的邀请码：<b id="myInviteCodeEl" title="点击复制" ' +
+            'style="color:#26a69a;font-family:monospace;letter-spacing:1px;font-size:14px;cursor:pointer;user-select:all;">' +
+            String(d.inviteCode) + '</b>' +
+            '<br>已邀请 <b>' + cnt + '</b>/' + max + ' 人 · 累计奖励 <b style="color:#4caf50;">+' + days + '</b> 天' +
+            (cnt < max
+                ? '<br><span style="color:#999;font-size:11px;">好友激活时填您的邀请码，双方得奖励天数</span>'
+                : '<br><span style="color:#4caf50;font-size:11px;">🎉 邀请奖励已封顶，感谢推荐！</span>');
+        el.appendChild(box);
+        const codeEl = document.getElementById('myInviteCodeEl');
+        if (codeEl) {
+            codeEl.addEventListener('click', function (ev) {
+                const txt = (ev.target.textContent || '').trim();
+                try {
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(txt);
+                    } else {
+                        const ta = document.createElement('textarea');
+                        ta.value = txt; document.body.appendChild(ta);
+                        ta.select(); document.execCommand('copy');
+                        document.body.removeChild(ta);
+                    }
+                    alert('邀请码已复制：' + txt);
+                } catch (_) {
+                    alert('复制失败，请手动记录：' + txt);
+                }
+            });
+        }
+    }
 
     // ★ 向登录界面（loginOverlay）运行时注入"注册 / 激活"入口（registerEntry 元素）
     // 目的：首次注册用户无需登录即可在登录页找到"设置诊所信息 / 立即激活"入口
@@ -3334,6 +3436,15 @@
                 var __midS = String(machineId || '').trim();
                 if (!/^[A-Za-z0-9_-]{8,64}$/.test(__midS)) machineId = '';
             } catch (e3) {}
+            // ★ 2026-09-05 邀请码卡片配套：网页/APP 无原生 machineId 时取本机持久化指纹
+            //   （collectDeviceIdentity 的 browser-xxx 同浏览器/设备稳定不变），激活申请与
+            //   授权区「我的邀请码」卡片凭同一 machineId 找回绑定记录，跨会话可查。
+            if (!machineId) {
+                try {
+                    const identity = await collectDeviceIdentity();
+                    if (identity && identity.machineId) machineId = identity.machineId;
+                } catch (e4) {}
+            }
             let clinicName = '';
             try {
                 if (typeof CONFIG !== 'undefined' && CONFIG.clinicName) clinicName = CONFIG.clinicName;
@@ -3450,6 +3561,13 @@
                     '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">备注（可选）</label>' +
                     '<input type="text" id="adminRemark" placeholder="如：需要几个账号" autocomplete="off" maxlength="100" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
                     '<div class="admin-field-hint" style="font-size:11px;color:#909399;margin-top:4px;">💡 机构版管理员可在系统中注册生成5个普通用户（只读权限）</div>' +
+                '</div>' +
+                // ★ 2026-09-05 管理员激活路径邀请码（对齐 offline.js）：选填，管理员审核通过时结算
+                //   （邀请人+90天/封顶4人，本机+30天），服务端 admin-submit → admin-approve 链路
+                '<div style="margin-bottom:14px;">' +
+                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">🎁 邀请码（选填，好友推荐）</label>' +
+                    '<input type="text" id="adminInviteCode" placeholder="如：7K3F9Q（没有可留空）" autocomplete="off" maxlength="10" spellcheck="false" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;font-family:monospace;letter-spacing:1px;text-transform:uppercase;">' +
+                    '<div class="admin-field-hint" id="adminInviteCodeHint" style="font-size:11px;color:#909399;margin-top:4px;">💡 填好友邀请码，管理员审核通过后双方都得奖励（好友+90天，您+30天）</div>' +
                 '</div>' +
                 '<button id="adminToStep2Btn" style="width:100%;padding:12px;font-size:15px;border:none;border-radius:8px;color:#fff;background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);cursor:pointer;font-weight:bold;">下一步：确认密码（可留空=默认 admin）→</button>' +
             '</div>' +
@@ -3841,6 +3959,14 @@
             state.adminName = adminName;
             state.phone = phone;
             state.remark = remark;
+            // ★ 2026-09-05 邀请码（选填）：收集+前端格式校验，随激活申请提交
+            const inviteCodeRaw = (document.getElementById('adminInviteCode') || {}).value || '';
+            const inviteCodeClean = String(inviteCodeRaw).trim().toUpperCase();
+            if (inviteCodeClean && !/^[A-Z0-9]{4,10}$/.test(inviteCodeClean)) {
+                showFieldErr('adminInviteCode', 'adminInviteCodeHint', '邀请码为4-10位字母或数字，没有可留空');
+                return;
+            }
+            state.inviteCode = inviteCodeClean;
             show('adminStepPwd');
             setTimeout(function(){ var p = document.getElementById('adminPassword'); if (p) p.focus(); }, 200);
         });
@@ -3877,7 +4003,9 @@
                 //   cloud_clinic；旧值 'app' 是载体信息非产品模式，与离线端无法区分）
                 appMode: 'cloud',
                 versionLabel: '云端' + (state.edition === 'institution' ? '机构版' : '标准版'),
-                env: 'production'
+                env: 'production',
+                // ★ 2026-09-05 管理员激活路径邀请码（服务端 admin-submit 接收并落库）
+                inviteCode: state.inviteCode || ''
             };
             // ★ password 不上传云端，仅本地安装时创建登录账号使用
             try {
@@ -4148,6 +4276,16 @@
             const pwd = _resPwd || 'admin';
             const descEl = document.getElementById('adminSuccessDesc');
             document.getElementById('adminSuccessPhone').textContent = phone;
+            // ★ 2026-09-05 管理员激活成功页：专属邀请码提示（r.inviteInfo 来自
+            //   admin-status activated 响应，旧后端无该字段则不展示）
+            let __cloudInviteMsg = '';
+            try {
+                const __iv = r && r.inviteInfo;
+                if (__iv && __iv.inviteCode) {
+                    __cloudInviteMsg = '<br>🎁 您的专属邀请码：<b style="font-family:monospace;letter-spacing:1px;color:#26a69a;user-select:all;">' + __iv.inviteCode + '</b>' +
+                        '<br><span style="font-size:12px;color:#888;">好友激活时填它，双方都得奖励天数</span>';
+                }
+            } catch (_) {}
             // 离线 APP：本地安装 license + 重启；云端 APP（无 installAdminLicense）：账号已在云端创建，提示登录
             if (global.electronAPI && global.electronAPI.activate &&
                 typeof global.electronAPI.activate.installAdminLicense === 'function' && license) {
@@ -4160,7 +4298,7 @@
                         phone: phone
                     });
                     if (inst && inst.success) {
-                        descEl.innerHTML = '管理员已通过您的激活申请<br>软件即将重启，请使用手机号登录';
+                        descEl.innerHTML = '管理员已通过您的激活申请<br>软件即将重启，请使用手机号登录' + __cloudInviteMsg;
                         show('adminSuccess');
                         document.getElementById('adminSuccessBtn').textContent = '🔄 重启应用';
                         document.getElementById('adminSuccessBtn').onclick = function() {
@@ -4182,6 +4320,7 @@
                 // ★ 2026-09-03 说明：云端密码由服务端 normalizeActivationPassword 归一化为 admin
                 //   （防止激活弹窗自设密码在云端与本地产生认知错位），显式告知用户。
                 descEl.innerHTML = '管理员已通过您的激活申请<br>请返回登录框，使用手机号登录' +
+                    __cloudInviteMsg +
                     (pwd && pwd !== 'admin' ? ('（云端默认密码 admin，激活弹窗自设密码仅本地端生效）') : '');
                 show('adminSuccess');
                 document.getElementById('adminSuccessBtn').textContent = '✅ 好的';

@@ -207,7 +207,21 @@ export async function onRequest(context) {
                     phone: record.phone || '',
                     licenseCode: record.licenseCode,
                     resolvedAt: record.resolvedAt
-                }
+                },
+                // ★ 2026-09-05 管理员激活路径邀请码：activated 响应带 inviteInfo
+                //   （对齐 validate.js L439 字段语义，前端 onAdminActivated 成功页展示
+                //   专属邀请码+奖励到账）。旧记录无 inviteCode 字段 → 条件展开不序列化，
+                //   前端判空跳过，向后兼容。
+                ...(record.inviteCode ? {
+                    inviteInfo: {
+                        inviteCode: record.inviteCode,
+                        inviteCount: record.inviteCount || 0,
+                        maxInvitees: 4,
+                        rewardDays: record.inviteeBonusDays || 0,
+                        inviteeBonusDays: record.inviteeBonusDays || 0,
+                        invitedBy: record.invitedBy || null
+                    }
+                } : {})
             }, 200, origin);
         }
         if (status === 'rejected') {

@@ -163,7 +163,7 @@ export async function onRequest(context) {
 
         const body = await context.request.json().catch(() => ({}));
         const { clinicName, adminName, phone, remark, machineId,
-                productName, edition, appMode, versionLabel, env, appModeCarrier } = body;
+                productName, edition, appMode, versionLabel, env, appModeCarrier, inviteCode } = body;
 
         // ★ 2026-08-22 纯网页环境（pages.dev 浏览器）无 electron / android machineId，
         //   前端传 'unknown' / '未知' / 短值时自动兜底生成 browser-xxx 临时机器ID。
@@ -208,6 +208,13 @@ export async function onRequest(context) {
         }
         if (remark && (typeof remark !== 'string' || remark.length > 500)) {
             return json({ success: false, error: '备注长度不能超过 500 字符' }, 400);
+        }
+
+        // ★ 2026-09-05 管理员激活路径补齐邀请码（选填）：格式对齐 validate.js（4~10位字母数字），
+        //   统一转大写（findLicenseByInviteCode 内部 toUpperCase 匹配）；非法 400 前端可修正重提。
+        const inviteCodeClean = (typeof inviteCode === 'string') ? inviteCode.trim().toUpperCase() : '';
+        if (inviteCodeClean && !/^[A-Z0-9]{4,10}$/.test(inviteCodeClean)) {
+            return json({ success: false, error: '邀请码格式不正确（4-10位字母或数字，没有可留空）' }, 400);
         }
 
         // ★ 设备-版本绑定校验：同一台设备只能提交一个版本
@@ -351,6 +358,15 @@ export async function onRequest(context) {
             if (occ && occ.kind === 'pending_activation') {
                 if (occ.detail.paidAt) {
                     console.log('[AdminSubmit] 已付款申请待核对，复用进入等待:', phone, occ.detail.requestId);
+                    // ★ 2026-09-05 复用补写邀请码：原记录无 inviteCode 而新提交带了 → 补写
+                    //   （走 updateAdminRequestStatus 统一写服务，参照 appModeCarrier 补写先例；
+                    //   失败仅 warn 不阻断复用——漏写损失一次奖励，不能误伤激活主流程）
+                    if (inviteCodeClean && !occ.detail.inviteCode) {
+                        try {
+                            await updateAdminRequestStatus(kv, occ.detail.requestId, { inviteCode: inviteCodeClean });
+                            console.log('[AdminSubmit] 复用申请补写邀请码:', occ.detail.requestId);
+                        } catch (e) { console.warn('[AdminSubmit] 邀请码补写失败（忽略）:', e.message); }
+                    }
                     return json({
                         success: true,
                         status: 'pending',
@@ -396,6 +412,13 @@ export async function onRequest(context) {
                         await updateAdminRequestStatus(kv, paid.requestId, { appModeCarrier });
                         console.log('[AdminSubmit] 复用订单补写载体(通过Service):', paid.requestId, appModeCarrier);
                     } catch (e) { console.warn('[AdminSubmit] 载体补写失败（忽略）:', e.message); }
+                }
+                // ★ 2026-09-05 复用补写邀请码（同上 paidAt 分支逻辑）：原记录无而新提交带了 → 补写
+                if (inviteCodeClean && !paid.inviteCode) {
+                    try {
+                        await updateAdminRequestStatus(kv, paid.requestId, { inviteCode: inviteCodeClean });
+                        console.log('[AdminSubmit] 复用订单补写邀请码:', paid.requestId);
+                    } catch (e) { console.warn('[AdminSubmit] 邀请码补写失败（忽略）:', e.message); }
                 }
                 return json({
                     success: true,
@@ -461,6 +484,8 @@ export async function onRequest(context) {
             //   electronAPI 探测；审核通过后 provisionCloudAccount 写入诊所记录，
             //   后台用户管理离线版显示"🖥️桌面·/📱APP·"载体
             appModeCarrier: (appModeCarrier === 'desktop' || appModeCarrier === 'app') ? appModeCarrier : '',
+            // ★ 2026-09-05 邀请码（选填）：管理员审核通过时结算（admin-approve applyInviteReward）
+            inviteCode: inviteCodeClean || '',
             versionLabel: (versionLabel || '').trim(),
             // ★ 环境标记：test=测试环境，production=正式环境
             env: (env || 'production').trim(),

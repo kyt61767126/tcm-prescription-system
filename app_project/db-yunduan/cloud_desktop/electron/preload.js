@@ -130,7 +130,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
         getFeatureStatus: () => ipcRenderer.invoke('license:get-feature-status'),
         // ★ 试用期配置（测试用，0=立即过期，默认 7）
         setTrialDays: (days) => ipcRenderer.invoke('license:set-trial-days', days),
-        getTrialDays: () => ipcRenderer.invoke('license:get-trial-days')
+        getTrialDays: () => ipcRenderer.invoke('license:get-trial-days'),
+        // ★ 2026-09-05 邀请码查询：主进程代理 fetch（渲染进程 file:// 直连云端被 CORS 拦截）
+        queryInvite: (payload) => ipcRenderer.invoke('license:query-invite', payload)
     },
 
     // ★ 激活码激活窗口（云端激活系统，第3周任务）
@@ -140,7 +142,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         showExpireAlert: (message) => ipcRenderer.invoke('license:show-expire-alert', message),
         // ★ v3 新增：clinicName 参数透传给云端做绑定校验
         // ★ P1优化：增加phone/password参数，激活码激活也自动创建管理员账户
-        submit: (code, user, clinicName, phone, password, edition) => ipcRenderer.invoke('license:submit-activate', code, user, clinicName, phone, password, edition),
+        // ★ 2026-09-05 推广奖励：增加inviteCode参数（选填，好友邀请码，对齐离线桌面）
+        submit: (code, user, clinicName, phone, password, edition, inviteCode) => ipcRenderer.invoke('license:submit-activate', code, user, clinicName, phone, password, edition, inviteCode),
         close: () => ipcRenderer.invoke('license:close-activate'),
         restart: () => ipcRenderer.invoke('license:restart'),
         getMachineId: () => ipcRenderer.invoke('license:get-machine-id'),

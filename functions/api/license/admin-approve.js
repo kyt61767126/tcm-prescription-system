@@ -44,7 +44,9 @@ import {
 import {
     getKV, saveLicense, buildLicenseData, encodeLicenseBase64,
     generateActivationCode, appendLicenseLog, getDevices, getMaxDevices,
-    checkDeviceVersion, setDeviceVersion, versionOf
+    checkDeviceVersion, setDeviceVersion, versionOf,
+    applyInviteReward, ensureInviteCode, findLicenseByInviteCode,
+    INVITE_BONUS_DAYS_INVITEE, INVITE_MAX_INVITEES
 } from './_lib/license-core.js';
 import { provisionCloudAccount, normalizeActivationPassword } from './_lib/admin-account.js';
 import { updateAdminRequestStatus } from './_lib/license-write-service.js';
@@ -241,7 +243,68 @@ export async function onRequest(context) {
             note: (note || record.remark || '管理员一键激活').trim()
         };
 
+        // ★ 2026-09-05 管理员激活路径邀请码结算（对齐 validate.js L293-327 推广奖励）：
+        //   申请记录带 inviteCode → 审核通过即结算（防刷 5 道校验见 license-core.applyInviteReward：
+        //   非trial/码有效/防自邀/4人上限/同设备不重复计/防互邀环）。
+        //   ★ 顺序铁律：必须先于下方 saveLicense 与 buildLicenseData——rewardDays 进 licenseRecord
+        //     后，KV 落库与 expiresAt 计算自动含 +30 天（buildLicenseData 按 baseDays+rewardDays 叠加）。
+        //   ★ 幂等防护：inviteRewardSettled 标记（写入下方 activatePatch 落 admin_req 记录）；
+        //     本分支入口"仅 pending 可审"是第一道闸，标记是纵深防御（防未来其它 activated 通道重复结算）。
+        //   ★ 结算失败/被拒不阻断审批（宁可漏发不可误伤），仅记审计日志。
+        let __inviteeBonusDays = 0;
+        let __invitedByCode = null;
+        let __inviteSettled = false;
+        const __inviteCode = (typeof record.inviteCode === 'string') ? record.inviteCode.trim().toUpperCase() : '';
+        if (__inviteCode && /^[A-Z0-9]{4,10}$/.test(__inviteCode) && !record.inviteRewardSettled) {
+            try {
+                const inviteResult = await applyInviteReward(kv, {
+                    inviteCode: __inviteCode,
+                    inviteeCode: code,
+                    inviteeRecord: licenseRecord,
+                    machineId: record.machineId,
+                    phone: record.phone || '',
+                    ip: ip
+                });
+                if (inviteResult.granted) {
+                    __inviteeBonusDays = INVITE_BONUS_DAYS_INVITEE;   // 被邀请人 +30 天
+                    const inviter = await findLicenseByInviteCode(kv, __inviteCode);
+                    __invitedByCode = inviter ? inviter.inviteCode : null;
+                    __inviteSettled = true;
+                } else {
+                    // 发奖被拒仅记审计日志，不阻断审批（对齐 validate.js）
+                    await appendLicenseLog(kv, code, {
+                        action: 'invite-reward-denied',
+                        time: new Date().toISOString(),
+                        ip: ip,
+                        operator: currentUser.username,
+                        detail: `admin-approve: 邀请码=${__inviteCode} 拒绝原因=${inviteResult.reason || 'unknown'}, requestId=${requestId}`
+                    });
+                    __inviteSettled = true;
+                }
+            } catch (ie) {
+                console.warn('[AdminApprove] 邀请码结算异常（不阻断激活）:', ie.message);
+            }
+        }
+        if (__inviteeBonusDays > 0) {
+            // rewardDays 进 licenseRecord → saveLicense 落库 + buildLicenseData expiresAt 自动 +30
+            licenseRecord.rewardDays = (licenseRecord.rewardDays || 0) + __inviteeBonusDays;
+            licenseRecord.invitedBy = __invitedByCode;
+        }
+
         await saveLicense(kv, licenseRecord);
+
+        // ★ 2026-09-05 生成专属邀请码（幂等：已有沿用）——审核通过者即具备邀请资格。
+        //   必须在 saveLicense 之后：ensureInviteCode 内部 updateLicense 要求 license:{code} 已存在。
+        //   结果回填内存 licenseRecord，供下方 buildLicenseData 与 activatePatch 使用
+        //   （对齐 validate.js：inviteCode 进 license 数据体）。
+        try {
+            const recordWithInvite = await ensureInviteCode(kv, licenseRecord);
+            if (recordWithInvite && recordWithInvite.inviteCode) {
+                licenseRecord.inviteCode = recordWithInvite.inviteCode;
+            }
+        } catch (e) {
+            console.warn('[AdminApprove] 专属邀请码生成失败（不阻断激活）:', e.message);
+        }
 
         // ★★ 2026-08-19 云端账号自动开通
         //   （解决"激活通过后，云端APP/桌面用手机号登录返回 401"）
@@ -331,7 +394,13 @@ export async function onRequest(context) {
             type: finalActivationType,      // 管理员最终选的版本
             days: days || null,
             expiresAt: recordExpiresAt || null,
-            maxDevices: parsedMaxDevices
+            maxDevices: parsedMaxDevices,
+            // ★ 2026-09-05 邀请码结算结果（admin-status activated 响应据此组 inviteInfo）：
+            //   inviteRewardSettled=true 幂等标记——任何 activated 通道不得重复结算
+            inviteCode: licenseRecord.inviteCode || null,
+            invitedBy: __invitedByCode || null,
+            inviteeBonusDays: __inviteeBonusDays || 0,
+            inviteRewardSettled: __inviteSettled || !!record.inviteRewardSettled
         };
         await updateAdminRequestStatus(kv, requestId, activatePatch);
 
@@ -349,6 +418,15 @@ export async function onRequest(context) {
                 expiresAt: licenseData.expiresAt,
                 clinicName: licenseData.clinicName,
                 maxDevices: licenseData.maxDevices || 1
+            },
+            // ★ 2026-09-05 邀请码信息（对齐 validate.js 字段语义，激活成功页展示）
+            inviteInfo: {
+                inviteCode: licenseRecord.inviteCode || null,
+                inviteCount: 0,
+                maxInvitees: INVITE_MAX_INVITEES,
+                rewardDays: (licenseRecord.rewardDays || 0),
+                inviteeBonusDays: __inviteeBonusDays || 0,
+                invitedBy: __invitedByCode || null
             }
         });
 

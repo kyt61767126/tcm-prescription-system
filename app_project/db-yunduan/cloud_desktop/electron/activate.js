@@ -77,13 +77,17 @@ function loadClientConfig() {
 // ★ v3 新增：clinicName 参数，传给云端做诊所名绑定校验
 // ★ 修复：license.dat 写入失败时友好提示 + 自动 fallback 到 userData 目录
 // ★ 优化：Promise.race 双保险超时，解决 Electron 28 中 AbortController 可能不生效导致 fetch 卡死几十分钟的问题
-async function activateOnline(code, machineId, user, clinicName, phone, password, edition) {
+async function activateOnline(code, machineId, user, clinicName, phone, password, edition, inviteCode) {
     try {
         const body = { code, machineId };
         if (user) body.user = user;
         // ★ v3 新增：提交 clinicName（如填写）
         if (clinicName) body.clinicName = clinicName;
         if (phone) body.phone = phone;
+        // ★ 2026-09-05 推广奖励：好友邀请码（选填）——邀请人+90天（封顶4人360天），本机+30天
+        if (inviteCode && /^[A-Za-z0-9]{4,10}$/.test(String(inviteCode).trim())) {
+            body.inviteCode = String(inviteCode).trim().toUpperCase();
+        }
 
         // ★ 优化：Promise.race 实现可靠超时
         // 原问题：Electron 28 中 AbortController.abort() 可能不中断 fetch，导致卡死几十分钟
@@ -440,7 +444,10 @@ async function submitAdminRequest(data) {
             edition: data.edition || clientCfg.edition,
             appMode: clientCfg.appMode,
             versionLabel: clientCfg.versionLabel,
-            env: clientCfg.env
+            env: clientCfg.env,
+            // ★ 2026-09-05 管理员激活路径邀请码（选填）：白名单透传服务端结算
+            //   （好友+90天/封顶4人，本机+30天）。不加则桌面端邀请码被静默吞掉。
+            inviteCode: (typeof data.inviteCode === 'string') ? data.inviteCode.trim().toUpperCase() : ''
             // 注意：password 不发送到云端，仅本地保存用于创建管理员账户
         };
 
@@ -606,6 +613,29 @@ async function cancelAdminRequest(requestId) {
     }
 }
 
+// ★ 2026-09-05 邀请码查询 - 主进程代理 fetch（渲染进程 file:// 直连被 CORS 拦截，
+//   对齐离线桌面 queryInvite；云端授权状态区「我的邀请码」卡片查询凭据）
+async function queryInvite(data) {
+    try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 8000);
+        try {
+            const response = await fetch('https://tcm-prescription-system.pages.dev/api/license/invite', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data || {}),
+                signal: controller.signal
+            });
+            return await response.json();
+        } finally {
+            clearTimeout(timeout);
+        }
+    } catch (e) {
+        console.warn('[Invite] 主进程代理查询失败:', e.message);
+        return { success: false, error: e.message };
+    }
+}
+
 module.exports = {
     getMachineId,
     activateOnline,
@@ -617,6 +647,7 @@ module.exports = {
     checkAdminStatus,
     saveLicense,
     cancelAdminRequest,
+    queryInvite,
     saveAdminRequestId,
     loadAdminRequestId,
     clearAdminRequestId,

@@ -476,7 +476,10 @@ async function submitAdminRequest(data) {
             edition: data.edition || clientCfg.edition,
             appMode: clientCfg.appMode,
             versionLabel: clientCfg.versionLabel,
-            env: clientCfg.env
+            env: clientCfg.env,
+            // ★ 2026-09-05 管理员激活路径邀请码（选填）：白名单透传服务端结算
+            //   （好友+90天/封顶4人，本机+30天）。不加则桌面端邀请码被静默吞掉。
+            inviteCode: (typeof data.inviteCode === 'string') ? data.inviteCode.trim().toUpperCase() : ''
             // 注意：password 不发送到云端，仅本地保存用于创建管理员账户
         };
 

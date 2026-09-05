@@ -387,6 +387,11 @@ h1 { color: #2c3e50; font-size: 18px; margin-bottom: 3px; }
                 <input type="text" id="remark" placeholder="如：需要几个账号" autocomplete="off" maxlength="100">
                 <div class="field-hint">💡 机构版管理员可在系统中注册生成5个普通用户（只读权限）</div>
             </div>
+            <div class="form-group">
+                <label>邀请码 <span style="font-size:11px;color:#909399;font-weight:normal;">（选填，好友推荐）</span></label>
+                <input type="text" id="adminInviteCode" placeholder="如：7K3F9Q（没有可留空）" autocomplete="off" spellcheck="false" maxlength="10" style="font-family:'Courier New',monospace;letter-spacing:1px;text-transform:uppercase;">
+                <div class="field-hint">🎁 填好友邀请码，管理员审核通过后双方都得奖励（好友+90天，您+30天）</div>
+            </div>
             <button class="btn" id="toStep2Btn">下一步：设置密码 →</button>
         </div>
 
@@ -516,6 +521,11 @@ h1 { color: #2c3e50; font-size: 18px; margin-bottom: 3px; }
                 <label>联系电话 <span class="req">*</span> <span style="font-size:11px;color:#909399;font-weight:normal;">（将作为登录账号）</span></label>
                 <input type="text" id="codePhone" placeholder="如：13800138000" autocomplete="off" inputmode="numeric" maxlength="11">
                 <div class="field-hint" id="codePhoneHint">💡 11位手机号，激活后用手机号+密码登录</div>
+            </div>
+            <div class="form-group">
+                <label>邀请码 <span style="font-size:11px;color:#909399;font-weight:normal;">（选填，好友推荐）</span></label>
+                <input type="text" id="codeInviteCode" placeholder="如：7K3F9Q（没有可留空）" autocomplete="off" spellcheck="false" maxlength="10" style="font-family:'Courier New',monospace;letter-spacing:1px;text-transform:uppercase;">
+                <div class="field-hint">🎁 填好友邀请码激活，双方都得奖励（邀请人+90天，您+30天）</div>
             </div>
             <button class="btn" id="codeToStep2Btn">下一步：设置密码 →</button>
         </div>
@@ -919,6 +929,14 @@ document.getElementById('toStep2Btn').addEventListener('click', () => {
     state.adminName = adminName;
     state.phone = phone;
     state.remark = remark;
+    // ★ 2026-09-05 管理员激活路径邀请码（选填）：收集+校验，随申请提交服务端结算
+    const inviteCodeRaw = (document.getElementById('adminInviteCode') || {}).value || '';
+    const inviteCodeClean = String(inviteCodeRaw).trim().toUpperCase();
+    if (inviteCodeClean && !/^[A-Z0-9]{4,10}$/.test(inviteCodeClean)) {
+        showFieldError('adminInviteCode', '邀请码为4-10位字母或数字，没有可留空');
+        return;
+    }
+    state.inviteCode = inviteCodeClean;
     updateAdminProgress(2);
     showAdminPanel('step2');
     setTimeout(() => document.getElementById('password').focus(), 200);
@@ -1014,7 +1032,9 @@ document.getElementById('submitBtn').addEventListener('click', async () => {
             password: pwd,
             remark: state.remark,
             machineId,
-            edition: state.edition || 'institution'
+            edition: state.edition || 'institution',
+            // ★ 2026-09-05 管理员激活路径邀请码（选填）：服务端审批通过时结算奖励
+            inviteCode: state.inviteCode || ''
         });
         if (result.success) {
             showWaiting(result.requestId, new Date().toISOString());
@@ -1376,7 +1396,9 @@ document.getElementById('codeSubmitBtn').addEventListener('click', async () => {
             codeState.clinicName,
             codeState.phone,
             pwd,
-            codeState.edition || 'institution'
+            codeState.edition || 'institution',
+            // ★ 2026-09-05 推广奖励：好友邀请码（选填）透传服务端（对齐离线桌面）
+            (document.getElementById('codeInviteCode') ? document.getElementById('codeInviteCode').value : '').trim() || ''
         );
         if (result.success) {
             document.getElementById('codeActivateStatus').textContent = '激活成功，正在重启...';

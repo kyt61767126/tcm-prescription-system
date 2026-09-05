@@ -1509,12 +1509,13 @@ ipcMain.handle('license:show-activate', () => {
     }
 });
 
-ipcMain.handle('license:submit-activate', async (event, code, user, clinicName, phone, password, edition) => {
+ipcMain.handle('license:submit-activate', async (event, code, user, clinicName, phone, password, edition, inviteCode) => {
     try {
         const machineId = activateManager.getMachineId();
         // ★ v3 新增：透传 clinicName 给云端做绑定校验
         // ★ P1优化：增加phone/password参数，激活码激活也自动创建管理员账户
-        const result = await activateManager.activateOnline(code, machineId, user, clinicName, phone, password, edition);
+        // ★ 2026-09-05 推广奖励：透传inviteCode（选填，好友邀请码）
+        const result = await activateManager.activateOnline(code, machineId, user, clinicName, phone, password, edition, inviteCode);
         // ★ v4 新增：激活成功后弹窗显示"已绑定 X/N 台设备"
         if (result && result.success && result.licenseInfo) {
             const info = result.licenseInfo;
@@ -1562,6 +1563,16 @@ ipcMain.handle('license:get-machine-id', () => {
     } catch (e) {
         console.error('[IPC] get-machine-id 异常:', e);
         return null;
+    }
+});
+
+// ★ 2026-09-05 邀请码查询 - 主进程代理 fetch（渲染进程 file:// 直连被 CORS 拦截，对齐离线桌面）
+ipcMain.handle('license:query-invite', async (event, data) => {
+    try {
+        return await activateManager.queryInvite(data);
+    } catch (e) {
+        console.error('[IPC] query-invite 异常:', e);
+        return { success: false, error: e && e.message };
     }
 });
 

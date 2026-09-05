@@ -4734,6 +4734,12 @@
                     '<input type="text" id="adminRemark" placeholder="如：需要几个账号" autocomplete="off" maxlength="100" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
                     '<div class="admin-field-hint" style="font-size:11px;color:#909399;margin-top:4px;">💡 机构版管理员可在系统中注册生成5个普通用户（只读权限）</div>' +
                 '</div>' +
+                // ★ 2026-09-05 管理员激活路径补齐邀请码（选填）：填好友邀请码，审核通过后双方得奖励
+                '<div style="margin-bottom:14px;">' +
+                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">🎁 邀请码（选填，好友推荐）</label>' +
+                    '<input type="text" id="adminInviteCode" placeholder="如：7K3F9Q（没有可留空）" autocomplete="off" maxlength="10" spellcheck="false" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;font-family:monospace;letter-spacing:1px;text-transform:uppercase;">' +
+                    '<div class="admin-field-hint" id="adminInviteCodeHint" style="font-size:11px;color:#909399;margin-top:4px;">💡 填好友邀请码，管理员审核通过后双方都得奖励（好友+90天，您+30天）</div>' +
+                '</div>' +
                 '<button id="adminToStep2Btn" style="width:100%;padding:12px;font-size:15px;border:none;border-radius:8px;color:#fff;background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);cursor:pointer;font-weight:bold;">下一步：确认密码（可留空=默认 admin）→</button>' +
             '</div>' +
 
@@ -5248,6 +5254,13 @@
             const adminName = document.getElementById('adminAdminName').value.trim();
             const phone = document.getElementById('adminPhone').value.trim();
             const remark = document.getElementById('adminRemark').value.trim();
+            // ★ 2026-09-05 邀请码（选填）：格式 4~10 位字母数字，非法前端拦截
+            const inviteCodeRaw = (document.getElementById('adminInviteCode') || {}).value || '';
+            const inviteCodeClean = String(inviteCodeRaw).trim().toUpperCase();
+            if (inviteCodeClean && !/^[A-Z0-9]{4,10}$/.test(inviteCodeClean)) {
+                showFieldErr('adminInviteCode', 'adminInviteCodeHint', '邀请码为4-10位字母或数字，没有可留空');
+                return;
+            }
             if (!clinicName) { showFieldErr('adminClinicName','adminClinicNameHint','请填写诊所名称'); return; }
             if (!adminName) { showFieldErr('adminAdminName','adminAdminNameHint','请填写管理员/医师姓名'); return; }
             if (!phone) { showFieldErr('adminPhone','adminPhoneHint','请填写联系电话'); return; }
@@ -5256,6 +5269,7 @@
             state.adminName = adminName;
             state.phone = phone;
             state.remark = remark;
+            state.inviteCode = inviteCodeClean;
             // ★ 2026-09-04 方案B：已注册用户跳过密码步骤（账号+密码注册时已建，
             //   激活不收密码）——直接进入提交。密码一致性由注册时校验保证。
             if (__regPrefill && __regPrefill.phone === phone) {
@@ -5314,6 +5328,8 @@
                 adminName: state.adminName,
                 phone: state.phone,
                 remark: state.remark || '',
+                // ★ 2026-09-05 邀请码（选填）：服务端存入申请记录，审核通过时结算
+                inviteCode: state.inviteCode || '',
                 machineId: machineId || 'unknown',
                 productName: '惠康中医' + (state.edition === 'institution' ? '机构版' : '标准版'),
                 edition: state.edition,
@@ -5681,6 +5697,17 @@
             }
             const descEl = document.getElementById('adminSuccessDesc');
             document.getElementById('adminSuccessPhone').textContent = phone;
+            // ★ 2026-09-05 管理员激活路径邀请码：成功页展示专属邀请码（对齐激活码Tab inviteMsg；
+            //   r.inviteInfo 来自 admin-status activated 响应，旧后端无该字段则不展示）
+            let __adminInviteMsg = '';
+            try {
+                const __iv = r && r.inviteInfo;
+                if (__iv && __iv.inviteCode) {
+                    __adminInviteMsg = '<br>🎁 您的专属邀请码：<b style="font-family:monospace;letter-spacing:1px;color:#26a69a;user-select:all;">' + __iv.inviteCode + '</b>' +
+                        (__iv.inviteeBonusDays > 0 ? ('<br>好友邀请奖励已到账：+' + __iv.inviteeBonusDays + '天') : '') +
+                        '<br><span style="color:#999;font-size:11px;">每邀1人+90天，封顶4人+360天</span>';
+                }
+            } catch (_) {}
             // 离线 APP：本地安装 license + 重启；云端 APP（无 installAdminLicense）：账号已在云端创建，提示登录
             if (global.electronAPI && global.electronAPI.activate &&
                 typeof global.electronAPI.activate.installAdminLicense === 'function' && license) {
@@ -5718,7 +5745,7 @@
 
                     const ok = !!(inst && inst.success && selfVerified);
                     if (ok) {
-                        descEl.innerHTML = '管理员已通过您的激活申请<br>软件即将重启，请使用手机号登录';
+                        descEl.innerHTML = '管理员已通过您的激活申请<br>软件即将重启，请使用手机号登录' + __adminInviteMsg;
                         show('adminSuccess');
                         const __restartApp = function () {
                             if (global.electronAPI && global.electronAPI.activate && global.electronAPI.activate.restart) {
@@ -5749,7 +5776,7 @@
                 }
             } else {
                 // 云端 APP / 无本地安装桥：账号已在云端创建，用手机号登录即可
-                descEl.innerHTML = '管理员已通过您的激活申请<br>请返回登录框，使用手机号登录';
+                descEl.innerHTML = '管理员已通过您的激活申请<br>请返回登录框，使用手机号登录' + __adminInviteMsg;
                 show('adminSuccess');
                 document.getElementById('adminSuccessBtn').textContent = '✅ 好的';
                 document.getElementById('adminSuccessBtn').onclick = function() { cleanup(); };
