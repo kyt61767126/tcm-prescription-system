@@ -2719,7 +2719,7 @@ function renderAdminActivateTable() {
         const actions = r.status === 'pending'
             ? '<div style="display:flex;gap:4px;"><button class="btn btn-sm btn-success" onclick="openAdminApproveModal(\'' + r.requestId + '\')">审核</button><button class="btn btn-sm" style="background:#ff4d4f;color:#fff;" onclick="deleteAdminActivateRequest(\'' + r.requestId + '\',\'' + escapeHtml(r.clinicName || '') + '\')" title="删除此请求">🗑</button></div>'
             : (r.status === 'pending_payment'
-                ? '<div style="display:flex;gap:4px;align-items:center;"><span style="color:#b45309;font-size:12px;" title="客户已在官网下单但未完成付款，可电话指导：保存收款码→微信扫一扫→相册选图">💳 未付款</span><button class="btn btn-sm" style="background:#ff4d4f;color:#fff;padding:2px 6px;" onclick="deleteAdminActivateRequest(\'' + r.requestId + '\',\'' + escapeHtml(r.clinicName || '') + '\')" title="删除此订单">🗑</button></div>'
+                ? '<div style="display:flex;gap:4px;align-items:center;"><span style="color:#b45309;font-size:12px;" title="客户已在官网下单但未完成付款，可电话指导：保存收款码→微信扫一扫→相册选图">💳 未付款</span><button class="btn btn-sm btn-success" style="padding:2px 6px;" onclick="confirmPayReceived(\'' + r.requestId + '\')" title="核对微信/支付宝收款账单确认到账后，标记为已付款进入待审核">✅已付款</button><button class="btn btn-sm" style="background:#ff4d4f;color:#fff;padding:2px 6px;" onclick="deleteAdminActivateRequest(\'' + r.requestId + '\',\'' + escapeHtml(r.clinicName || '') + '\')" title="删除此订单">🗑</button></div>'
                 : '<div style="display:flex;gap:4px;align-items:center;"><span style="color:#909399;font-size:12px;">' + escapeHtml(r.licenseCode || '已处理') + '</span><button class="btn btn-sm" style="background:#ff4d4f;color:#fff;padding:2px 6px;" onclick="deleteAdminActivateRequest(\'' + r.requestId + '\',\'' + escapeHtml(r.clinicName || '') + '\')" title="删除此请求">🗑</button></div>');
         // ★ 版本信息渲染：区分离线/云端、机构版/标准版（官网订单加 💰 标记，白名单免费加 🎫 标记）
         const versionDisplay = renderVersionInfo(r)
@@ -2771,6 +2771,56 @@ async function deleteAdminActivateRequest(requestId, clinicName) {
 }
 
 // ============================================================================
+// ★ 2026-09-05 管理员确认收款（仅平台总管理员）：客户扫码付款后没点官网「付款确认」
+//   → 记录停在 pending_payment。管理员在微信/支付宝收款账单核对到账（4维：时间±15min/
+//   金额/店名/手机号后4位）后点「✅已付款」→ order-confirm-paid 统一走 markOrderPaid
+//   （status→pending + 双索引同步）→ 客户端轮询/断点重试立即命中，进入正常审核闭环。
+//   确认成功后自动打开审核弹窗（付款已核对，直接走审核提交，少点一次）。
+async function confirmPayReceived(requestId) {
+    const req = _adminActivateCache.find(r => r.requestId === requestId);
+    if (!req) {
+        showAlert('adminActivateAlert', '请求记录不存在，请刷新列表', 'error');
+        return;
+    }
+    const _t = req.submittedAt ? new Date(req.submittedAt).toLocaleString('zh-CN') : '-';
+    const ok = confirm('【确认客户已付款】\n\n诊所：' + (req.clinicName || '-') +
+        '\n手机号：' + (req.phone || '-') +
+        '\n订单金额：' + (req.orderPrice || '-') +
+        '\n下单时间：' + _t + '\n\n' +
+        '请先在微信/支付宝收款账单中按 4 维核对到账：\n' +
+        '① 转账时间 ≈ ' + _t + '（±15分钟）\n' +
+        '② 金额 = ' + (req.orderPrice || '-') + '\n' +
+        '③ 店名/付款人 与诊所信息吻合\n' +
+        '④ 手机号后4位 = ' + String(req.phone || '').slice(-4) + '\n\n' +
+        '全部吻合才点【确定】→ 标记已付款并直接进入审核；\n未到账请点【取消】（可电话指导客户完成付款）。');
+    if (!ok) return;
+    try {
+        const res = await fetch(API_BASE + '/license/order-confirm-paid', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + token
+            },
+            body: JSON.stringify({ requestId })
+        });
+        const data = await res.json();
+        if (data.success) {
+            alert('✅ 已标记为已付款，进入待审核列表。\n\n即将打开审核弹窗，确认激活信息后提交即可。');
+            // 该记录已转 pending：切到「待审核」视图刷新缓存（原 pending_payment 视图已看不到它）
+            const sel = document.getElementById('adminActivateFilter');
+            if (sel && sel.value !== 'pending') sel.value = 'pending';
+            await loadAdminActivateList();
+            // 自动打开审核弹窗（付款刚核对完，直接走审核，减少操作）
+            const fresh = _adminActivateCache.find(r => r.requestId === requestId);
+            if (fresh) openAdminApproveModal(requestId);
+        } else {
+            alert('❌ 确认失败：' + (data.error || '未知错误'));
+        }
+    } catch (e) {
+        alert('❌ 网络错误：' + e.message);
+    }
+}
+
 // ★ 2026-09-02 免费开通白名单（仅平台总管理员）：list / add / remove
 //   白名单内手机号在客户端提交"管理员激活"申请时跳过支付前置校验
 // ============================================================================
@@ -2946,12 +2996,15 @@ function openAdminApproveModal(requestId) {
         if (req.orderSource === 'website' && (req.payTxnLast6 || req.orderNo)) {
             document.getElementById('approveOrderNo').textContent = req.orderNo || '-';
             document.getElementById('approveOrderPrice').textContent = req.orderPrice || '-';
-            document.getElementById('approvePayMethod').textContent = req.payMethod === 'alipay' ? '支付宝' : (req.payMethod === 'wechat' ? '微信支付' : '-');
+            document.getElementById('approvePayMethod').textContent = req.payMethod === 'alipay' ? '支付宝' : (req.payMethod === 'wechat' ? '微信支付' : (req.payMethod === 'admin-confirm' ? '管理员确认' : '-'));
             document.getElementById('approvePaidAt').textContent = req.paidAt ? new Date(req.paidAt).toLocaleString('zh-CN') : '-';
             // ★ 2026-09-04 AUTO-MATCH: 客户点了「免填·自动匹配」按钮，后台需用 4 维核对到账
             //   （提交时间±15min / 金额 / 店名 / 手机号后4位），不显示"AUTO-MATCH"字面给您当尾号看
             //   而是整行替换为醒目的黄色核对提示卡
             const isAuto = String(req.payTxnLast6 || '').toUpperCase() === 'AUTO-MATCH';
+            // ★ 2026-09-05 ADMIN-CONFIRM: 管理员在待付款列表点「✅已付款」确认过到账（4维已核对），
+            //   审核弹窗显示绿色提示，无需再次核对账单，直接确认激活信息提交
+            const isAdminConfirm = String(req.payTxnLast6 || '').toUpperCase() === 'ADMIN-CONFIRM';
             const txnLine = document.getElementById('approvePayTxn').parentNode;
             if (isAuto) {
                 if (txnLine) txnLine.style.display = 'none'; // 隐藏"转账单号后6位"那行
@@ -2974,6 +3027,21 @@ function openAdminApproveModal(requestId) {
                     '③ <strong>店名 = ' + _clinic + '</strong> ／ ' +
                     '④ <strong>手机号后4位 = ' + _phone4 + '</strong><br>' +
                     '<span style="font-weight:400;color:#92400e;">（4 条同时命中才放行；不吻合请拒绝申请，并告知客户微信/支付宝账单里找不到这笔转账）</span>';
+            } else if (isAdminConfirm) {
+                // ★ 管理员确认收款通道：隐藏尾号行，显示绿色「已核对」提示（4维在确认时已核对过）
+                if (txnLine) txnLine.style.display = 'none';
+                var _okLine = document.getElementById('approveAutoHint');
+                if (!_okLine) {
+                    _okLine = document.createElement('div');
+                    _okLine.id = 'approveAutoHint';
+                    _okLine.setAttribute('data-auto-inject', '1');
+                    payInfoBox.appendChild(_okLine);
+                }
+                _okLine.style.cssText = 'margin-top:10px;padding:10px 12px;background:#f0fdf4;border:2px solid #86efac;border-radius:8px;font-weight:700;color:#166534;line-height:1.8;';
+                _okLine.innerHTML = '✅ 此订单付款已由管理员在「待付款」列表核对确认（' +
+                    (req.paidAt ? new Date(req.paidAt).toLocaleString('zh-CN') : '-') +
+                    '），到账 4 维（时间/金额/店名/手机号）已核。<br>' +
+                    '<span style="font-weight:400;color:#15803d;">请直接核对下方激活信息（版本/天数/设备数）后提交审核。</span>';
             } else {
                 if (txnLine) txnLine.style.display = '';
                 document.getElementById('approvePayTxn').textContent = req.payTxnLast6 || '-';
