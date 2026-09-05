@@ -379,6 +379,15 @@ export async function onRequest(context) {
                     // ★ 2026-09-02 复核加固：machineId 不一致（换机场景）不复用——旧申请
                     //   绑定旧机器，复用会导致审核后 license 绑错机器新设备无法激活；
                     //   换机时放行到下方创建新申请（新 machineId），管理员审核新记录即可。
+                    // ★ 2026-09-05 P3-2 修复：白名单复用分支补写邀请码——对齐另两处复用
+                    //   分支（已付款待核对/已付款订单）的补写逻辑；此前不对称遗漏，白名单
+                    //   客户 pending 期间二次提交填写的邀请码被静默丢弃，结算时拿不到。
+                    if (inviteCodeClean && !occ.detail.inviteCode) {
+                        try {
+                            await updateAdminRequestStatus(kv, occ.detail.requestId, { inviteCode: inviteCodeClean });
+                            console.log('[AdminSubmit] 白名单复用申请补写邀请码:', occ.detail.requestId);
+                        } catch (e) { console.warn('[AdminSubmit] 邀请码补写失败（忽略）:', e.message); }
+                    }
                     console.log('[AdminSubmit] 白名单客户复用未付款申请进入等待:', phone, occ.detail.requestId);
                     return json({
                         success: true,

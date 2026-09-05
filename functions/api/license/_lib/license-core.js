@@ -950,10 +950,36 @@ async function applyInviteReward(kv, { inviteCode, inviteeCode, inviteeRecord, m
         if (rewardLog.some(e => e && e.machineId === machineId)) {
             return { granted: false, reason: '该设备已计入邀请奖励' };
         }
-        // ④防环：被邀人不能反过来是邀请人的邀请人（A邀B后B再邀A）
-        if (inviter.invitedBy && inviteeRecord.inviteCode &&
-            String(inviter.invitedBy).toUpperCase() === String(inviteeRecord.inviteCode).toUpperCase()) {
-            return { granted: false, reason: '不能相互邀请套奖励' };
+        // ④防环：A邀B后B再邀A（互邀套奖励）
+        //   ★ 2026-09-05 P3-1 修复：原逻辑仅比较 inviteeRecord.inviteCode——该字段只在
+        //   "复用旧激活码重激活"时存在（validate.js 从 KV 读出的旧记录自带），而首次激活
+        //   （validate.js 新码）与管理员激活（admin-approve 现场新构造 record，
+        //   ensureInviteCode 在结算之后才执行）均无该字段 → 原检查恒 false → 互邀环
+        //   可绕过防刷套取奖励（A邀B得90天后，B再邀A又得90天）。
+        //   新逻辑：邀请人 invitedBy 存在时——
+        //     快路径：本记录自带邀请码与 invitedBy 相同（重激活场景，保持原语义）；
+        //     兜底路径：反查 invitedBy 属主 license（findLicenseByInviteCode），属主与本
+        //     被邀人同设备/同手机号（=同一人）→ 邀请闭环，拒绝发奖。
+        //   反查失败不阻断发奖（宁漏发不误伤，对齐本函数既有异常哲学）。
+        if (inviter.invitedBy) {
+            const invitedByCode = String(inviter.invitedBy).trim().toUpperCase();
+            if (invitedByCode) {
+                if (String(inviteeRecord.inviteCode || '').trim().toUpperCase() === invitedByCode) {
+                    return { granted: false, reason: '不能相互邀请套奖励' };
+                }
+                try {
+                    const invitedByOwner = await findLicenseByInviteCode(kv, invitedByCode);
+                    if (invitedByOwner) {
+                        const sameMachine = machineId &&
+                            getDevices(invitedByOwner).some(d => d && d.machineId === machineId);
+                        const samePhone = phone && invitedByOwner.phone &&
+                            String(invitedByOwner.phone) === String(phone);
+                        if (sameMachine || samePhone) {
+                            return { granted: false, reason: '不能相互邀请套奖励' };
+                        }
+                    }
+                } catch (le) { console.warn('[InviteReward] 防环属主反查失败（放行）:', le.message); }
+            }
         }
 
         // === 发奖：邀请人 +90 天 ===
