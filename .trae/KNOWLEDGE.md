@@ -512,6 +512,12 @@ P2 渐进迁移（2026-09-03 当日完成）：
   - 后台待付款行「✅已付款」按钮：confirm 内置 4 维核对清单（时间±15min/金额/店名/手机号后4位）→ 确认后自动切待审核视图+打开审核弹窗；审核弹窗 ADMIN-CONFIRM 分支显示绿色「已核对」提示卡（免重复对账），payMethod 渲染「管理员确认」。
   - **铁律**：管理员侧任何"标记已付款"通道必须复用 markOrderPaid 统一写入口（禁止内联 KV.put 直写，防三索引漂移）；确认前置弹窗必须含 4 维核对清单（对齐 AUTO-MATCH 人工把关模型，确认付款≠审核通过）。
   - 验证：线上 403 认证门禁 ✓；markOrderPaid 写路径经 order-paid AUTO E2E PASS（REQ-0MTNM7M2S-3D69 全链路 pending_payment→pending）。后台 UI 全流程需管理员登录后人工验证（待付款列表点✅已付款→自动开审核弹窗）。
+- **D. 官网取消客户付款确认按钮 + 客户端导引文案对齐（2026-09-05，commit 85d9fd35）**：C 节后台通道就位后，客户端侧"确认已付款"环节整体退役——付款与否由管理员核对账单判定，客户零网页操作：
+  - 官网双镜像（public + site-official download.html，手工镜像）：①删 Step3 内嵌单号表单 + Step4 确认表单/AUTO 大按钮 → 换「付款完成后无需填写任何信息」指引卡（扫码→关页回软件→自动弹激活）；②状态轮询从「点确认成功」提前到「submitOrder 成功」即启动（30s），pending_payment 文案改「待核对到账」；③URL 参数齐全（客户端跳转场景）自动提交订单（`__autoOrderSubmitted` 全局防重守卫 + 失败回落手动）；④pending 状态过滤 AUTO-MATCH/ADMIN-CONFIRM 免单号模式不显示"转账单号尾号"。
+  - auth-core 双权威源（offline.js adminPayGuide/adminPayRequired + cloud.js 同位）文案统一：「付款后直接回本软件即可，无需填写任何确认信息，到账核对后自动激活（通常5-30分钟）」；sync-auth-core 11 副本同步。
+  - 遗留漂移提示：site-official 仍缺 promo Tab/真实界面示意/mobilePayGuide（09-03/09-04 历史漂移未收编，与本轮无关，保持现状）；本轮只移植付款链 6 处改动。
+  - **坑（工具链，旧教训再实锤）**：同一文件多处并行 Edit **必丢**——本轮 offline.js/cloud.js 各 3 处并行编辑每文件只存活最后 1 处（最后写入者覆盖前面编辑），Edit 工具全部报"成功"无任何报错；**同文件多改动必须串行 + 改完 rg 验证字面量归零**。
+  - 生效：官网购买页（pages.dev/download + site-official）push 后 Pages 自动部署即刻生效；离线桌面/离线 APP 的 auth-core 文案改动需重打包才进客户端（旧包客户看到旧文案不影响功能，激活链路靠 Observer 轮询不受文案影响）；云端网页/云桌面/云端 APP 的 cloud.js 副本随各自发版节奏生效。
 
 ## 8. 桌面版技术规范
 
