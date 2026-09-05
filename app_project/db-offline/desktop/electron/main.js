@@ -1828,7 +1828,19 @@ ipcMain.handle('license:save-license', async (event, licenseBase64) => {
     }
 });
 
+// ★ 2026-09-05 管理员激活 - 桌面渲染进程落盘桥（登录页 auth-core onAdminActivated 调用；
+//   此前仅 activate-window 链路走 saveLicense，登录页弹窗链路 license 从不落盘）
+ipcMain.handle('license:install-admin-license', async (event, args) => {
+    try {
+        return await activateManager.installAdminLicenseDesktop(args || {});
+    } catch (e) {
+        console.error('[IPC] install-admin-license 异常:', e);
+        return { success: false, error: e && e.message };
+    }
+});
+
 // ★ 管理员一键激活 - 取消激活请求
+
 ipcMain.handle('license:cancel-admin-request', async (event, requestId) => {
     try {
         const result = await activateManager.cancelAdminRequest(requestId);

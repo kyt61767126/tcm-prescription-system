@@ -163,8 +163,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
         // ★ requestId 本地持久化（解决轮询超时/关闭窗口后丢失状态的问题）
         loadAdminRequestId: () => ipcRenderer.invoke('license:load-admin-request-id'),
         clearAdminRequestId: () => ipcRenderer.invoke('license:clear-admin-request-id'),
+        // ★ 2026-09-05 管理员激活桌面落盘桥（对齐 APP Java 桥同名方法）：
+        //   此前桌面无 installAdminLicense → 登录页管理员激活链路 onAdminActivated
+        //   落入"云端APP"分支，license 拿到却不写 license.dat → 授权状态永远显示试用期
+        installAdminLicense: (args) => ipcRenderer.invoke('license:install-admin-license', args),
         // ★ 2026-09-04 方案B 注册前置：本地注册（手机号账号，唯一密码写点）+ 用户列表（注册检测/登录自愈）
         registerLocalUser: (payload) => ipcRenderer.invoke('license:register-local-user', payload),
+
         getActivationUsers: () => ipcRenderer.invoke('license:get-activation-users')
     },
 

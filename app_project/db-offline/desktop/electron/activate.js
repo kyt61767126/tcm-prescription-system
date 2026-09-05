@@ -606,8 +606,34 @@ async function saveLicense(licenseBase64) {
     }
 }
 
+// ★ 2026-09-05 桌面管理员激活落盘桥：渲染进程 auth-core onAdminActivated 调用
+//   （对齐 APP MainActivity.installAdminLicense 的参数签名，license=base64）。
+//   背景：桌面 preload 原无 installAdminLicense（APP Java 桥专属），登录页管理员激活
+//   链路在 onAdminActivated 落入"云端APP"分支 → license.dat 永不落盘 → 授权状态显示试用期。
+async function installAdminLicenseDesktop(a) {
+    try {
+        const license = (a && a.license) || '';
+        if (!license) return { success: false, error: 'license 为空' };
+        const inst = licenseManager.installLicense(license, {
+            doctorName: (a.adminName || a.user || '').trim(),
+            clinicName: (a.clinicName || '').trim(),
+            phone: (a.phone || '').trim(),
+            password: a.password || '',
+            edition: (a.edition || loadClientConfig().edition || 'standard')
+        });
+        if (inst && inst.success) {
+            return inst;
+        }
+        return { success: false, error: (inst && inst.error) || 'license 写入失败' };
+    } catch (e) {
+        console.error('[Admin] installAdminLicenseDesktop 异常:', e);
+        return { success: false, error: e.message };
+    }
+}
+
 // ============================================================================
 //  ★ 立即试用（2026-08-16）：不激活直接进入 7 天试用（默认标准版）
+
 //  试用默认标准版；试用已到期/被服务端锁定则返回错误
 // ============================================================================
 async function startTrial() {
@@ -677,6 +703,7 @@ module.exports = {
     submitAdminRequest,
     checkAdminStatus,
     saveLicense,
+    installAdminLicenseDesktop,
     queryInvite,
     cancelAdminRequest,
     saveAdminRequestId,
