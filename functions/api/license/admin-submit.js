@@ -397,6 +397,16 @@ export async function onRequest(context) {
                     });
                 }
                 if (!isTestEnv && !freePass) {
+                    // ★ 2026-09-06 P0 修复（邀请码丢失）：未付款 pending 申请重新提交（付款页
+                    //   返回上一步补填邀请码场景）原直接 409 拦截——本次填写的邀请码被静默
+                    //   丢弃（另三处复用分支均补写，此处不对称遗漏）。先补写再拦截，对齐
+                    //   白名单/已付款分支；失败仅 warn 不阻断。
+                    if (inviteCodeClean && !occ.detail.inviteCode) {
+                        try {
+                            await updateAdminRequestStatus(kv, occ.detail.requestId, { inviteCode: inviteCodeClean });
+                            console.log('[AdminSubmit] 未付款pending申请补写邀请码:', occ.detail.requestId);
+                        } catch (e) { console.warn('[AdminSubmit] 邀请码补写失败（忽略）:', e.message); }
+                    }
                     console.log('[AdminSubmit] 存在未付款申请，拦截并引导完成支付:', phone, occ.detail.requestId);
                     return json({
                         success: false,

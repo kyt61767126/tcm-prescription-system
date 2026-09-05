@@ -2891,6 +2891,15 @@
                     }
                     // ★ 2026-08-25 全局统一：试用期（最长7天）与过期 → 按钮正常色（需要激活）
                     setAdminActivateBtnState(null);
+                    // ★ 2026-09-06 P0 修复（激活后仍显示试用期）：heal 存量自愈原只在启动时跑
+                    //   一次，管理员审批滞后于用户登录的场景（提交付款→登录查看=trial→此时才
+                    //   审批）永远错过自愈 → 主界面一直显示试用，用户被迫手动重新激活（实测：
+                    //   13398628215 审批通过后授权区仍显示试用7天）。授权状态刷新发现本地
+                    //   trial → 节流触发自愈（60 秒一次），审批完成后首次打开授权区即自动转正。
+                    if (!updateLicenseStatusText.__healAt || Date.now() - updateLicenseStatusText.__healAt > 60000) {
+                        updateLicenseStatusText.__healAt = Date.now();
+                        try { healMissingDesktopLicenseFile(); } catch (he) { /* 自愈失败不影响显示 */ }
+                    }
                 } else if (licenseType === 'licensed' || licenseType === 'personal' || licenseType === 'pro') {
                     // 已激活（正式 license）
                     const planLabel = licenseType === 'personal' ? '标准版' :
@@ -4234,6 +4243,16 @@
 
             // 第一步：版本选择
             '<div id="adminStepEdition" style="padding:16px;">' +
+                // ★ 2026-09-06 P0 修复（邀请码入口断裂）：已注册用户「注册→立即激活→选版本→
+                //   自动提交直达付款页」跳过了管理员激活表单——表单里的邀请码输入框
+                //   （adminInviteCode）从未显示/读取，提交的申请必然不带邀请码（实测：
+                //   13398628215 填了推荐码 C4HN2G，审批通过后双方奖励均未到账）。
+                //   选版本步骤补邀请码输入，选版本时同步到表单框，自动提交链路自然携带。
+                '<div style="margin-bottom:14px;">' +
+                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">🎁 邀请码（选填，好友推荐）</label>' +
+                    '<input type="text" id="editionInviteCode" placeholder="如：7K3F9Q（没有可留空）" autocomplete="off" maxlength="10" spellcheck="false" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;font-family:monospace;letter-spacing:1px;text-transform:uppercase;">' +
+                    '<div style="font-size:11px;color:#909399;margin-top:4px;">💡 填好友邀请码，激活后双方都得奖励（好友+90天，您+30天）</div>' +
+                '</div>' +
                 '<div style="font-size:13px;font-weight:bold;color:#555;margin-bottom:8px;">请选择要激活的版本</div>' +
                 '<div style="display:flex;gap:10px;">' +
                     '<div id="editionPersonal" data-edition="personal" style="flex:1;padding:14px;border:2px solid #ddd;border-radius:10px;text-align:center;cursor:pointer;background:#26a69a;border-color:#26a69a;color:#fff;">' +
@@ -4482,6 +4501,16 @@
                 const ed = this.getAttribute('data-edition');
                 state.edition = ed;
                 state.editionChosen = true;
+                // ★ 2026-09-06 邀请码同步：选版本页填的邀请码同步到管理员激活表单框
+                //   （adminInviteCode）——已注册用户自动提交链路（adminToStep2Btn click）
+                //   读取的就是表单框值，同步后自动携带
+                try {
+                    const __edIv = document.getElementById('editionInviteCode');
+                    const __fmIv = document.getElementById('adminInviteCode');
+                    if (__edIv && __fmIv && __edIv.value && !__fmIv.value) {
+                        __fmIv.value = String(__edIv.value).trim().toUpperCase();
+                    }
+                } catch (eIv) { /* 同步失败不阻断版本选择 */ }
                 document.getElementById('editionPersonal').style.borderColor = (ed === 'personal' ? '#26a69a' : '#ddd');
                 document.getElementById('editionPersonal').style.background = (ed === 'personal' ? '#26a69a' : '#fff');
                 document.getElementById('editionInstitution').style.borderColor = (ed === 'institution' ? '#26a69a' : '#ddd');
