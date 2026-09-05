@@ -46,6 +46,7 @@ function Get-PackSideEffectAutoPatterns {
     return @(
         $script:PackSideEffectGradleRegex
         '^app_project/.+/package\.json$'
+        '^app_project/.+/build-meta\.json$'  # 2026-09-05 纳入：打包元数据（version+buildTime），与 package.json 同性质，避免每次打包后黄字提醒
         '^public/hash-manifest\.json$'
         '^app_project/.+/hash-manifest\.json$'
     )
