@@ -1832,6 +1832,15 @@ ipcMain.handle('license:save-license', async (event, licenseBase64) => {
 //   此前仅 activate-window 链路走 saveLicense，登录页弹窗链路 license 从不落盘）
 ipcMain.handle('license:install-admin-license', async (event, args) => {
     try {
+        // ★ 2026-09-05 E2E 隔离守卫：E2E 用 BNZC_E2E_DATA 临时 userData 构造出厂态/试用态，
+        //   但开发机自身在授权服务器可能有激活记录（实测本机记录"离标脑"已 activated）——
+        //   登录页 auth-core 存量自愈 heal 会查 admin-status 命中后把真实 license.dat +
+        //   管理员账号写进 E2E 临时目录，污染 E6 出厂态（__isDeviceLicensed=true → 注册
+        //   入口不注入 → 25s 超时失败）。E2E 旁路模式下拒绝落盘，保持用例状态确定性。
+        if (global.__BNZC_E2E_BYPASS === true) {
+            console.warn('[E2E] install-admin-license 已拦截（出厂态与生产授权记录隔离）');
+            return { success: false, error: 'E2E bypass: install-admin-license blocked' };
+        }
         return await activateManager.installAdminLicenseDesktop(args || {});
     } catch (e) {
         console.error('[IPC] install-admin-license 异常:', e);
