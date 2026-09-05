@@ -5565,12 +5565,17 @@
     //   场景：服务端已 activated（账号已建/激活码已存），但旧版桌面登录页链路无
     //   installAdminLicense 桥 → license.dat 从未写入 → validateLicense 永远走试用
     //   分支 → 授权状态显示"试用期有效"（与已激活事实矛盾，用户实测已激活仍显示试用 7 天）。
-    //   自愈：桌面 + 本地 trial 有效 + admin-status(machineId) 显示已激活 → 自动补装 license.dat。
+    //   自愈：桌面/离线APP + 本地 trial 有效 + admin-status(machineId) 显示已激活 → 自动补装 license.dat。
     //   成功后 validateLicense 即走 licensed 分支；失败静默（下次启动再试），不影响使用。
+    // ★ 2026-09-05 P0 修复：放开 APP 端支持（用户实测离线APP 机构版激活登录完成后
+    //   仍显示"试用有效期7天"——KV 记录 REQ-0MTO6XC7I-63AF 已 activated + license 就绪，
+    //   但付款后未等到轮询领码界面 → license.dat 未落盘；原 showExpireAlert 桌面专属闸
+    //   把离线APP 拦死无法自愈）。判定改为 installAdminLicense 桥存在（桌面+离线APP 均有，
+    //   云端APP/纯网页无此桥自动跳过）。
     function healMissingDesktopLicenseFile() {
         try {
             var ea = global.electronAPI || (global.window && global.window.electronAPI);
-            if (!ea || !ea.activate || typeof ea.activate.showExpireAlert !== 'function') return; // 仅桌面
+            if (!ea || !ea.activate) return;
             if (!ea.license || typeof ea.license.getStatus !== 'function') return;
             if (typeof ea.activate.installAdminLicense !== 'function') return;
             ea.license.getStatus().then(function (st) {
