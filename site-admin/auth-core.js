@@ -3906,7 +3906,7 @@
                 //   付款确认后 admin-status machineId 兜底自动激活，客户端轮询自助领码。
                 '<div style="margin-top:12px;background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:10px;text-align:center;">' +
                     '<div style="font-size:13px;font-weight:bold;color:#9a3412;">💳 加速激活：官网在线付款</div>' +
-                    '<div style="font-size:11px;color:#78350f;margin-top:4px;line-height:1.7;">点击直达官网购买页，设备识别码<b>已自动携带</b><br>付款后管理员核对即自动激活本账号</div>' +
+                    '<div style="font-size:11px;color:#78350f;margin-top:4px;line-height:1.7;">点击直达官网购买页，设备识别码<b>已自动携带</b>，下单信息自动填好<br>扫码付款后<b>直接回到本软件</b>即可，无需填任何信息，到账核对后自动激活（通常5-30分钟）</div>' +
                     '<button id="adminPayGuideBtn" type="button" style="width:100%;margin-top:8px;padding:10px;font-size:14px;border:none;border-radius:8px;color:#fff;background:linear-gradient(135deg,#ea580c 0%,#c2410c 100%);font-weight:bold;cursor:pointer;">💳 去官网付款（支付宝/微信）</button>' +
                 '</div>' +
                 '<div style="font-size:11px;color:#909399;margin-top:10px;">💡 关闭窗口不影响审核，稍后重新打开可恢复状态</div>' +
@@ -3937,9 +3937,9 @@
             '<div id="adminPayRequired" style="display:none;padding:28px 16px;text-align:center;">' +
                 '<div style="font-size:34px;">💳</div>' +
                 '<div style="font-size:16px;font-weight:bold;color:#9a3412;margin-top:8px;">请完成支付</div>' +
-                '<div style="font-size:12px;color:#555;margin-top:6px;line-height:1.8;">激活前请先在官网完成付款（支付宝/微信）<br>付款后管理员核对即可自动激活本软件</div>' +
+                '<div style="font-size:12px;color:#555;margin-top:6px;line-height:1.8;">激活前请先在官网完成付款（支付宝/微信）<br>扫码付款后<b>直接回到本软件</b>即可，无需填写任何确认信息</div>' +
                 '<div style="margin-top:12px;background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:10px;text-align:center;">' +
-                    '<div style="font-size:11px;color:#78350f;margin-top:2px;line-height:1.7;">点击直达官网购买页，设备识别码<b>已自动携带</b></div>' +
+                    '<div style="font-size:11px;color:#78350f;margin-top:2px;line-height:1.7;">点击直达官网购买页，设备识别码<b>已自动携带</b>，下单信息自动填好</div>' +
                     '<button id="adminPayRequiredBtn" type="button" style="width:100%;margin-top:8px;padding:10px;font-size:14px;border:none;border-radius:8px;color:#fff;background:linear-gradient(135deg,#ea580c 0%,#c2410c 100%);font-weight:bold;cursor:pointer;">💳 去官网付款（支付宝/微信）</button>' +
                 '</div>' +
                 '<button id="adminPayRequiredBackBtn" type="button" style="width:100%;margin-top:10px;padding:10px;font-size:14px;border:1px solid #ddd;border-radius:8px;color:#666;background:#fff;cursor:pointer;">← 返回上一步</button>' +

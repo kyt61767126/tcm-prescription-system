@@ -1773,7 +1773,7 @@
                         <strong style="color:#b45309;">📱 用手机付款的正确步骤（重要）</strong><br>
                         ① 长按下方收款码图片 → 选择「保存图片」到相册<br>
                         ② 打开微信 → 点右上角「+」→「扫一扫」→ 点右下角「相册」→ 选择刚保存的收款码 → 完成付款<br>
-                        ③ 回到本页填写「付款确认」（转账单号后 6 位）<br>
+                        ③ 付款后直接回到惠康中医软件等待自动激活（无需填写任何信息）<br>
                         <span style="color:#b45309;">⚠️ 直接长按识别收款码会弹出微信安全警告页（防诈骗保护），属正常现象——请务必按上面「扫一扫 → 相册」的方式付款。支付宝同理：保存收款码 → 支付宝「扫一扫」→「相册」。</span>
                     </div>
                     <!-- ★ 收款码防替代校验状态 -->
@@ -1786,7 +1786,7 @@
                     <div class="notice notice-warning" style="margin-top:14px;">
                         <span class="icon">⚠️</span>
                         <div>
-                            <strong>付款遇到问题？</strong>可扫码加客服微信协助处理，也可直接微信转账给客服 <span class="wx-id" onclick="copyText(this)" title="点击复制">hktzy1688</span>（备注订单号后 6 位），然后回到本页填写付款确认：
+                            <strong>付款遇到问题？</strong>可扫码加客服微信协助处理，也可直接微信转账给客服 <span class="wx-id" onclick="copyText(this)" title="点击复制">hktzy1688</span>（备注诊所名+手机号），付款后回到软件等待自动激活即可：
                             <div class="contact-box" style="margin-top:10px;">
                                 <div id="qrcodeContainer" class="qrcode-container"></div>
                                 <div class="contact-wechat">
@@ -1796,67 +1796,44 @@
                             </div>
                         </div>
                     </div>
-                    <!-- ★ 2026-09-03 付款确认表单直接内嵌 Step3（扫码页）：
-                         用户付完款后就在同一页面填写转账单号后6位提交，不用再点
-                        「下一步」才出现表单——彻底消除"付完款直接离开导致后台看不到"
-                         的盲区（之前有客户扫完码就退了，后台只能在 pending_payment
-                         筛选里找，默认待审列表不可见）。Step4 同样保留，提供"上一步"
-                         回看收款码和状态轮询两种入口。 -->
-                    <div class="cust-form" id="payConfirmFormInline" style="margin-top:20px;padding:16px;border:2px solid #10b981;border-radius:12px;background:linear-gradient(180deg,#ecfdf5,#ffffff);">
-                        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
-                            <strong style="font-size:15px;color:#065f46;">📌 付款后请立即填写转账单号（非常重要）</strong>
-                            <span style="font-size:12px;color:#059669;">填完才能进入"管理员核对中"队列，否则后台看不到</span>
+                    <!-- ★ 2026-09-05 流程简化：取消客户付款确认环节（单号表单+已付款按钮全删）。
+                         客户扫码付款后无需任何网页操作，直接关页回软件；管理员后台
+                        「待付款→✅已付款」核对通道（order-confirm-paid）接管状态流转，
+                         客户端 Observer/断点续传自动检测激活。彻底消除"客户不会填单号/
+                         忘了点确认导致卡在待付款"的盲区。 -->
+                    <div class="cust-form" id="payDoneGuideCard" style="margin-top:20px;padding:18px 16px;border:2px solid #10b981;border-radius:12px;background:linear-gradient(180deg,#ecfdf5,#ffffff);">
+                        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+                            <strong style="font-size:16px;color:#065f46;">✅ 付款完成后，无需填写任何信息</strong>
                         </div>
-                        <!-- ★ 2026-09-04 快速填写：扫码后默认支付方式=客户扫的那个码。Step3 在支付宝码区显示时默认支付宝，
-                             微信码区显示时默认微信(页面切Tab时动态同步payMethodSelInline)；输入框自动聚焦；满6位自动高亮按钮；回车=提交。 -->
-                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">
-                            <div class="form-item" style="margin:0;">
-                                <label>支付方式 <span class="req">*</span></label>
-                                <select id="payMethodSelInline" style="width:100%;padding:9px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;">
-                                    <option value="alipay">支付宝</option>
-                                    <option value="wechat">微信支付</option>
-                                </select>
-                            </div>
-                            <div class="form-item" style="margin:0;position:relative;">
-                                <label>转账单号后 6 位 <span class="req">*</span></label>
-                                <input type="text" id="payTxnInputInline" placeholder="点输入框右侧一键复制/教程" maxlength="6" style="text-transform:uppercase;letter-spacing:2px;font-weight:600;padding-right:86px;" oninput="onTxnInput(this, 'Inline')">
-                                <div style="position:absolute;right:0;bottom:0;display:flex;height:44px;align-items:center;">
-                                    <button type="button" title="复制订单号尾6位(核对备用)" onclick="copyOrderTail6('Inline')" style="border:none;background:#fef3c7;color:#92400e;padding:4px 8px;font-size:12px;border-radius:6px 0 0 6px;cursor:pointer;height:100%;line-height:1;" onmouseover="this.style.background='#fde68a'" onmouseout="this.style.background='#fef3c7'">📎尾6</button>
-                                    <button type="button" title="单号位置一步一步教(弹窗)" onclick="showTxnTutorial()" style="border:none;background:#dbeafe;color:#1e40af;padding:4px 8px;font-size:12px;border-radius:0 6px 6px 0;cursor:pointer;height:100%;line-height:1;border-left:1px solid #93c5fd;" onmouseover="this.style.background='#bfdbfe'" onmouseout="this.style.background='#dbeafe'">?教程</button>
-                                </div>
-                                <div style="font-size:11px;color:#9ca3af;margin-top:3px;">💡 输满6位自动提交；找不到单号→点右侧📎尾6暂填</div>
-                            </div>
+                        <div style="font-size:14px;color:#374151;line-height:2;">
+                            ① 用微信/支付宝扫上方收款码完成付款<br>
+                            ② 直接<strong>关闭本页，回到惠康中医软件</strong>即可（无需复制激活码）<br>
+                            ③ 管理员核对到账（通常 <strong>5-30 分钟</strong>）后，软件会<strong>自动弹出「激活成功，请重启登录」</strong>提示，按提示操作即可
                         </div>
-                        <button class="copy-btn" id="payConfirmBtnInline" onclick="submitPayConfirm('inline')" disabled style="width:100%;margin-top:14px;padding:13px;font-size:16px;background:#9ca3af;color:#fff;border:none;border-radius:10px;cursor:not-allowed;font-weight:700;opacity:0.85;transition:all .2s;">请先填写单号后6位</button>
-                        <!-- ★ 2026-09-04 免填自动匹配大按钮：99%客户不会找转账尾6位→点这个1次搞定 -->
-                        <div id="autoMatchDivInline" style="margin-top:10px;">
-                            <button type="button" onclick="submitPayConfirm('inline','AUTO')" style="width:100%;padding:15px 16px;font-size:16px;font-weight:800;background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;border:none;border-radius:10px;cursor:pointer;box-shadow:0 6px 16px rgba(37,99,235,.3);letter-spacing:0.5px;">
-                                ✅ 已付款 · <span style="text-decoration:underline;text-decoration-color:#bfdbfe;">不用填转账单号</span> · 自动匹配
-                            </button>
-                            <div style="margin-top:8px;padding:10px 12px;background:#eff6ff;border:1px dashed #93c5fd;border-radius:8px;font-size:12px;color:#1e3a8a;line-height:1.6;">
-                                💡 <strong>原理（为什么可以不填）</strong>：当前订单量每天只有几单，您的订单在微信/支付宝账单里可以通过 <strong>4 个维度 100% 锁定</strong>：<em>下单时间（±15分钟）／金额 ￥<span id="autoMatchPriceInline">—</span>／店名／手机号后4位 <span id="autoMatchPhoneInline">—</span></em>。管理员核对到 4 条同时命中就审核激活。<strong>点上面按钮 = 直接进入待审核队列，不用再回微信/支付宝翻单号</strong>。
-                            </div>
+                        <div style="margin-top:10px;padding:10px 12px;background:#eff6ff;border:1px dashed #93c5fd;border-radius:8px;font-size:12px;color:#1e3a8a;line-height:1.7;">
+                            💡 管理员通过「下单时间 ±15分钟 ／ 金额 ￥<span id="payGuidePriceInline">—</span> ／ 店名 ／ 手机号后4位 <span id="payGuidePhoneInline">—</span>」4 个维度核对您的到账记录，无需您提供转账单号。
                         </div>
+                        <button type="button" onclick="goStep(4)" style="width:100%;margin-top:12px;padding:12px;font-size:15px;font-weight:700;background:#fff;color:#059669;border:2px solid #059669;border-radius:10px;cursor:pointer;">我已完成付款，查看订单激活状态 →</button>
                         <script>try{
-                            var elpi=document.getElementById('autoMatchPriceInline');
-                            var elph=document.getElementById('autoMatchPhoneInline');
-                            if (elpi && window.orderInfo && window.orderInfo.price) elpi.textContent = window.orderInfo.price.replace(/^[￥￥]/,'');
-                            if (elph) { var p = (document.getElementById('custPhone') || {}).value || ''; if (/^1[3-9]\d{9}$/.test(p)) elph.textContent = p.slice(-4); else if (window.orderInfo && window.orderInfo.phone) elph.textContent = String(window.orderInfo.phone).slice(-4); }
+                            var elgp=document.getElementById('payGuidePriceInline');
+                            var elgh=document.getElementById('payGuidePhoneInline');
+                            if (elgp && window.orderInfo && window.orderInfo.price) elgp.textContent = window.orderInfo.price.replace(/^[￥￥]/,'');
+                            if (elgh) { var gp = (document.getElementById('custPhone') || {}).value || ''; if (/^1[3-9]\d{9}$/.test(gp)) elgh.textContent = gp.slice(-4); else if (window.orderInfo && window.orderInfo.phone) elgh.textContent = String(window.orderInfo.phone).slice(-4); }
                         }catch(e){}</script>
                     </div>
                     <div class="step-nav">
                         <button class="prev" onclick="goStep(2)">← 上一步</button>
-                        <button class="next" onclick="payQrNext()">下一步：填写付款确认 →</button>
+                        <button class="next" onclick="payQrNext()">我已完成付款，查看订单状态 →</button>
                     </div>
                 </div>
 
-                <!-- Step 4: 付款确认 + 领取激活码 -->
+                <!-- Step 4: 等待激活（管理员核对到账）+ 领取激活码 -->
                 <div class="purchase-step" data-step="4">
                     <div class="step-header">
                         <div class="step-num">4</div>
                         <div>
-                            <div class="step-title">付款确认，领取激活码</div>
-                            <div class="step-desc">付款后填写转账单号，管理员核对通过后本页自动显示激活码</div>
+                            <div class="step-title">等待激活，领取激活码</div>
+                            <div class="step-desc">管理员核对到账后本页自动显示激活码（通常 5-30 分钟）；您也可以直接回软件等待自动激活</div>
                         </div>
                     </div>
                     <div class="order-box">
@@ -1864,41 +1841,8 @@
                         <div class="value" id="orderNumberRepeat">-</div>
                         <button class="copy-btn" onclick="copyOrder()">📋 复制订单号</button>
                     </div>
-                    <!-- ★ 付款确认表单 -->
-                    <div class="cust-form" id="payConfirmForm" style="margin-top:14px;">
-                        <div class="form-item">
-                            <label>支付方式 <span class="req">*</span></label>
-                            <select id="payMethodSel" style="width:100%;padding:9px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;">
-                                <option value="alipay">支付宝</option>
-                                <option value="wechat">微信支付</option>
-                            </select>
-                        </div>
-                        <div class="form-item" style="position:relative;">
-                            <label>转账单号后 6 位 <span class="req">*</span></label>
-                            <input type="text" id="payTxnInput" placeholder="点右侧📎复制或?看教程" maxlength="6" style="text-transform:uppercase;letter-spacing:2px;font-weight:600;padding-right:86px;" oninput="onTxnInput(this, '')">
-                            <div style="position:absolute;right:0;bottom:0;display:flex;height:44px;align-items:center;">
-                                <button type="button" title="复制订单号尾6位(核对时作暂填备用)" onclick="copyOrderTail6('')" style="border:none;background:#fef3c7;color:#92400e;padding:4px 8px;font-size:12px;border-radius:6px 0 0 6px;cursor:pointer;height:100%;line-height:1;" onmouseover="this.style.background='#fde68a'" onmouseout="this.style.background='#fef3c7'">📎尾6</button>
-                                <button type="button" title="单号位置一步一步教(弹窗)" onclick="showTxnTutorial()" style="border:none;background:#dbeafe;color:#1e40af;padding:4px 8px;font-size:12px;border-radius:0 6px 6px 0;cursor:pointer;height:100%;line-height:1;border-left:1px solid #93c5fd;" onmouseover="this.style.background='#bfdbfe'" onmouseout="this.style.background='#dbeafe'">?教程</button>
-                            </div>
-                            <div style="font-size:11px;color:#9ca3af;margin-top:3px;">💡 输满6位自动点"提交确认"；回车也可直接提交</div>
-                        </div>
-                    </div>
-                    <button class="copy-btn" id="payConfirmBtn" onclick="submitPayConfirm()" disabled style="width:100%;margin-top:10px;padding:12px;font-size:15px;background:#9ca3af;color:#fff;border:none;border-radius:8px;cursor:not-allowed;opacity:0.85;transition:all .2s;">请先填写单号后6位</button>
-                    <!-- ★ 2026-09-04 免填自动匹配大按钮（Step4 独立表单同样入口，从Step3没点的补上） -->
-                    <div id="autoMatchDivStep4" style="margin-top:10px;">
-                        <button type="button" onclick="submitPayConfirm('step4','AUTO')" style="width:100%;padding:14px 16px;font-size:15px;font-weight:800;background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;border:none;border-radius:8px;cursor:pointer;box-shadow:0 6px 16px rgba(37,99,235,.28);">
-                            ✅ 已付款 · 不用填转账单号 · 自动匹配进入待审核
-                        </button>
-                        <div style="margin-top:8px;padding:10px 12px;background:#eff6ff;border:1px dashed #93c5fd;border-radius:8px;font-size:12px;color:#1e3a8a;line-height:1.6;">
-                            💡 <strong>原理</strong>：当前订单量每天只有几单，管理员能通过「<strong>下单时间（±15分钟）／金额 ￥<span id="autoMatchPriceStep4">—</span>／店名／手机号后4位 <span id="autoMatchPhoneStep4">—</span></strong>」4 个维度 100% 锁定您的到账记录，4 条同时命中就审核激活。点此按钮 = <strong>确认已付款</strong> + 直接进入待审核队列，不用回微信/支付宝翻单号。
-                        </div>
-                        <script>try{
-                            var elps=document.getElementById('autoMatchPriceStep4');
-                            var elphs=document.getElementById('autoMatchPhoneStep4');
-                            if (elps && window.orderInfo && window.orderInfo.price) elps.textContent = window.orderInfo.price.replace(/^[￥￥]/,'');
-                            if (elphs) { var pp = (document.getElementById('custPhone') || {}).value || ''; if (/^1[3-9]\d{9}$/.test(pp)) elphs.textContent = pp.slice(-4); else if (window.orderInfo && window.orderInfo.phone) elphs.textContent = String(window.orderInfo.phone).slice(-4); }
-                        }catch(e){}</script>
-                    </div>
+                    <!-- ★ 2026-09-05 流程简化：删除客户付款确认表单（单号+已付款按钮），
+                         状态由管理员后台「✅已付款」核对通道流转；本页保留状态自动轮询。 -->
                     <!-- ★ 激活状态查询区 -->
                     <div id="orderStatusBox" style="display:none;margin-top:14px;padding:14px;border:1px solid #e5e7eb;border-radius:10px;background:#f9fafb;">
                         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
@@ -3051,6 +2995,14 @@
                 if (data.success) {
                     showToast('订单提交成功，请扫码付款');
                     goStep(3);
+                    // ★ 2026-09-05 流程简化：取消客户付款确认按钮后，轮询从「点确认成功」
+                    //   提前到「提交订单成功」即启动——管理员后台「✅已付款」核对通过后，
+                    //   本页自动流转显示（客户停留本页也能看到）；activated/rejected 自动停。
+                    try {
+                        document.getElementById('orderStatusBox').style.display = 'block';
+                        queryOrderStatus();
+                        startOrderStatusPolling();
+                    } catch (_pe) { console.warn('订单状态轮询启动失败:', _pe); }
                 } else {
                     showToast(data.error || '订单提交失败，请稍后重试');
                 }
@@ -3200,12 +3152,18 @@
             const codeBox = document.getElementById('licenseCodeBox');
             codeBox.style.display = 'none';
             let html = '';
-            const payName = data.payMethod === 'alipay' ? '支付宝' : (data.payMethod === 'wechat' ? '微信' : '');
+            const payName = data.payMethod === 'alipay' ? '支付宝' : (data.payMethod === 'wechat' ? '微信' : (data.payMethod === 'admin-confirm' ? '管理员确认' : ''));
             if (data.status === 'pending_payment') {
-                html = '⏳ <strong>待付款</strong>：订单已提交，请返回上一步扫码完成付款。';
+                // ★ 2026-09-05 流程简化：无客户付款确认按钮——付款与否由管理员核对账单判定
+                html = '⏳ <strong>待核对到账</strong>：订单已提交。<br>' +
+                    '您扫码付款后<strong>可直接关闭本页回到惠康中医软件</strong>，管理员核对到账后（通常 5-30 分钟）软件自动弹出「激活成功，请重启登录」。<br>' +
+                    '本页每 30 秒自动刷新，您也可以点击右上角"刷新状态"。';
             } else if (data.status === 'pending') {
-                html = '🔎 <strong>管理员核对中</strong>：已收到付款信息' +
-                    (payName ? '（' + payName + '，转账单号尾号 ' + String(data.payTxnLast6 || '') + '）' : '') +
+                // ★ 2026-09-05：AUTO-MATCH / ADMIN-CONFIRM 均为免单号模式，不显示"转账单号尾号"
+                const _txn = String(data.payTxnLast6 || '');
+                const _txnPart = (payName && _txn && _txn !== 'AUTO-MATCH' && _txn !== 'ADMIN-CONFIRM')
+                    ? '（' + payName + '，转账单号尾号 ' + _txn + '）' : '';
+                html = '🔎 <strong>管理员核对中</strong>：已确认付款' + _txnPart +
                     '，管理员在收款账单中核对到账后立即为您激活，通常 5-30 分钟内完成。<br>本页每 30 秒自动刷新，您也可以点击右上角"刷新状态"。';
             } else if (data.status === 'activated') {
                 // ★ 2026-09-03 云端版补登录指引：云端账号由管理员审核时开通（账号=手机号，
@@ -3348,6 +3306,12 @@
                 return;
             }
             goStep(4);
+            // ★ 2026-09-05 流程简化：进 Step4 确保状态框可见 + 轮询在跑
+            try {
+                document.getElementById('orderStatusBox').style.display = 'block';
+                queryOrderStatus();
+                startOrderStatusPolling();
+            } catch (_) {}
         }
 
         function goStep(n) {
@@ -4138,6 +4102,20 @@
                     // 若所有必填项(custName/custPhone/mid)已通过URL填完，直接goStep(2)免去客户点下一步
                     if (mid && (cnEl && cnEl.value.trim()) && (phEl && /^1[3-9]\d{9}$/.test(phEl.value)) && typeof goStep === 'function') {
                         setTimeout(function(){ try { goStep(2); } catch(e){} }, 800);
+                        // ★ 2026-09-05 流程再简化：客户端跳转场景参数齐全 → 自动提交订单，
+                        //   客户到官网直接看到付款码（省一次手动点「提交订单」）。
+                        //   防重：__autoOrderSubmitted 全局守卫（手动提交过/已自动提交则跳过）；
+                        //   失败回落：自动提交不成功（网络/校验）时客户仍可手动点按钮。
+                        setTimeout(function(){
+                            try {
+                                if (window.__autoOrderSubmitted) return;
+                                if (typeof submitOrder !== 'function') return;
+                                var __st3 = document.querySelector('.purchase-step[data-step="3"]');
+                                if (__st3 && __st3.classList.contains('active')) return; // 已提交进入Step3
+                                window.__autoOrderSubmitted = true;
+                                submitOrder();
+                            } catch(eAuto) { console.warn('自动提交订单失败(回落手动):', eAuto); }
+                        }, 1600);
                     }
                 } catch (ePref) { console.warn('表单URL预填失败:', ePref); }
             } catch (e) {}
