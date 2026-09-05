@@ -4453,6 +4453,25 @@
                 document.getElementById('editionPersonal').style.background = (ed === 'personal' ? '#26a69a' : '#fff');
                 document.getElementById('editionInstitution').style.borderColor = (ed === 'institution' ? '#26a69a' : '#ddd');
                 document.getElementById('editionInstitution').style.background = (ed === 'institution' ? '#26a69a' : '#fff');
+                // ★ 2026-09-05 注册后直达付款（用户反馈：注册完点立即激活，管理员激活框
+                //   还要再次填写信息，不符合逻辑）：已注册用户（Tab1 已预填注册信息）选完
+                //   版本即自动提交激活申请——跳过信息确认步骤直接进付款页。注册时账号+
+                //   密码已建、申请信息=注册信息，无需再人工确认；需核对/修改时从付款页
+                //   「返回上一步」回 Tab1 表单（信息已预填可改）。预填不完整时退回原流程。
+                try {
+                    const __rg = getLocalRegistrationInfo();
+                    if (__rg && __rg.phone) {
+                        const __cnv = ((document.getElementById('adminClinicName') || {}).value || '').trim();
+                        const __anv = ((document.getElementById('adminAdminName') || {}).value || '').trim();
+                        const __phv = ((document.getElementById('adminPhone') || {}).value || '').trim();
+                        if (__cnv && __anv && __phv && PHONE_RE.test(__phv)) {
+                            // 复用「确认信息并提交」按钮链路：读 DOM 预填值→校验→
+                            // __regPrefill 匹配→自动提交（含注册密码解密等待）→付款页
+                            document.getElementById('adminToStep2Btn').click();
+                            return;
+                        }
+                    }
+                } catch (re2) { /* 读取失败退回手动表单 */ }
                 show('adminStepForm');
                 setActiveTab('admin');
             });
@@ -5237,8 +5256,16 @@
                             const v = await global.electronAPI.license.validate();
                             selfVerified = !!(v && v.valid);
                             if (!selfVerified) console.warn('[LicenseCheck] JS 侧自验失败:', v);
+                        } else if (global.electronAPI && global.electronAPI.license &&
+                            typeof global.electronAPI.license.getStatus === 'function') {
+                            // ★ 2026-09-05 桌面兼容：桌面 preload 无 license.validate（APP Java 桥专属），
+                            //   用 getStatus 自验（返回 validateLicense 全量结果，含 valid/type）
+                            const v = await global.electronAPI.license.getStatus();
+                            selfVerified = !!(v && v.valid && v.type && v.type !== 'trial');
+                            if (!selfVerified) console.warn('[LicenseCheck] JS 侧自验失败(getStatus):', v);
                         }
                     } catch (ve) { console.warn('[LicenseCheck] JS 侧自验异常:', ve); }
+
                     const ok = !!(inst && inst.success && selfVerified);
                     if (ok) {
                         descEl.innerHTML = '管理员已通过您的激活申请<br>软件即将重启，请使用手机号登录';
@@ -5534,7 +5561,52 @@
         }
     }
 
+    // ★ 2026-09-05 存量自愈：管理员激活成功但 license.dat 未落盘（旧版桌面链路缺陷）
+    //   场景：服务端已 activated（账号已建/激活码已存），但旧版桌面登录页链路无
+    //   installAdminLicense 桥 → license.dat 从未写入 → validateLicense 永远走试用
+    //   分支 → 授权状态显示"试用期有效"（与已激活事实矛盾，用户实测已激活仍显示试用 7 天）。
+    //   自愈：桌面 + 本地 trial 有效 + admin-status(machineId) 显示已激活 → 自动补装 license.dat。
+    //   成功后 validateLicense 即走 licensed 分支；失败静默（下次启动再试），不影响使用。
+    function healMissingDesktopLicenseFile() {
+        try {
+            var ea = global.electronAPI || (global.window && global.window.electronAPI);
+            if (!ea || !ea.activate || typeof ea.activate.showExpireAlert !== 'function') return; // 仅桌面
+            if (!ea.license || typeof ea.license.getStatus !== 'function') return;
+            if (typeof ea.activate.installAdminLicense !== 'function') return;
+            ea.license.getStatus().then(function (st) {
+                if (!st || !st.valid || st.type !== 'trial') return; // 已授权/异常状态不处理
+                var pMid = (typeof ea.activate.getMachineId === 'function')
+                    ? ea.activate.getMachineId() : Promise.resolve('');
+                return pMid.then(function (mid) {
+                    if (!mid || String(mid).length < 8) return;
+                    return _queryAdminStatus('', mid).then(function (r) {
+                        if (!(r && r.success && r.status === 'activated' && r.license)) return;
+                        var li = r.licenseInfo || {};
+                        console.log('[LicenseCheck] 存量自愈：服务端显示本机已激活但本地 license.dat 缺失，自动补装');
+                        return ea.activate.installAdminLicense({
+                            license: r.license,
+                            adminName: (li.user || li.adminName || '').toString(),
+                            clinicName: (li.clinicName || '').toString(),
+                            phone: (li.phone || '').toString(),
+                            password: '', // 已有账号不覆盖注册密码（installLicense 跳过已存在用户）
+                            licenseCode: (li.licenseCode || '').toString()
+                        }).then(function (inst) {
+                            if (inst && inst.success) {
+                                console.log('[LicenseCheck] 存量自愈成功：license.dat 已补装（重启后授权状态=已激活）');
+                            } else {
+                                console.warn('[LicenseCheck] 存量自愈失败:', (inst && inst.error) || '未知错误');
+                            }
+                        });
+                    });
+                });
+            }).catch(function (e) {
+                console.warn('[LicenseCheck] 存量自愈异常(不影响使用):', e);
+            });
+        } catch (e) { console.warn('[LicenseCheck] 存量自愈异常(不影响使用):', e); }
+    }
+
     // 页面加载完成后延迟 2 秒校验 license（等待 electronAPI 注入完成）
+
     function startLicenseCheck() {
         // ★ 2026-09-04 Phase 1 · 铁律 4 · ReadyPromise 同步闸门
         //   默认 Promise.resolve()——无桥环境（云端 APP/纯网页/未授权设备）立即放行，不阻塞登录。
@@ -5545,6 +5617,9 @@
         }
         // ★ 2026-09-03 断点续传恢复（优先于其他自愈：先完成领码，后续桥自愈才有账号可同步）
         resumeAdminPendingRequest();
+        // ★ 2026-09-05 存量自愈（桌面：激活成功但 license.dat 未落盘的旧缺陷场景）
+        healMissingDesktopLicenseFile();
+
         // ★ 2026-08-24 登录自愈：启动时从本地 config（Java installAdminLicense/activateOnline 写入的 users）
         //   UPSERT 同步到 localStorage.local_systemUsers。解决两类历史问题：
         //   ① 旧版本 onAdminActivated 未同步账号 → 激活成功却登录"用户名或密码错误"
