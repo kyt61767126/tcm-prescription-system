@@ -837,6 +837,27 @@
 
     // ==================== 登录调度层 ====================
 
+    // ★ 2026-09-05 P0：machineId 桥返回值归一化（heal 查询永远 miss 根因）
+    //   桌面端 activate.getMachineId()（IPC）返回纯字符串；APP 端 callNativeAsync 已
+    //   JSON.parse 返回对象 {success, machineId}。历史缺陷：调用方直接把返回值当字符串用 →
+    //   String(obj)="[object Object]"（长度15骗过 >=8 校验）→ 按 "[object Object]" 查询/上报
+    //   服务器永远 miss（存量自愈静默失败、APP 端设备互斥全体同 ID 即此根因）。
+    //   归一规则：对象取 machineId 字段；JSON 字符串先 parse 再取；纯字符串原样；
+    //   "[object Object]"/unknown/长度<8 一律返回 ""（无效，调用方走各自兜底）。
+    function normalizeMachineIdResult(r) {
+        try {
+            var v = r;
+            if (v && typeof v === "object") v = v.machineId || "";
+            if (typeof v !== "string") return "";
+            var s = v.trim();
+            if (s.indexOf("{") === 0) {
+                try { var o = JSON.parse(s); s = (o && o.machineId) ? String(o.machineId).trim() : ""; } catch (e) { return ""; }
+            }
+            if (!s || s === "[object Object]" || s === "unknown" || s.length < 8) return "";
+            return s;
+        } catch (e) { return ""; }
+    }
+
     // ★★★ 2026-08-21 设备身份采集（账号级设备授权 + 单设备在线互斥）
     //   桌面版：electronAPI.activate.getMachineId()（真实机器指纹，计入 2 台授权名额）
     //   APP 端：持久化随机指纹（Capacitor Preferences / localStorage，计入 2 台授权名额）
@@ -847,7 +868,7 @@
         try {
             if (global.electronAPI && global.electronAPI.activate &&
                 typeof global.electronAPI.activate.getMachineId === 'function') {
-                machineId = await global.electronAPI.activate.getMachineId();
+                machineId = normalizeMachineIdResult(await global.electronAPI.activate.getMachineId());
                 clientClass = 'desktop';
             } else if (global.Capacitor) {
                 clientClass = 'app';
@@ -5582,8 +5603,12 @@
                 if (!st || !st.valid || st.type !== 'trial') return; // 已授权/异常状态不处理
                 var pMid = (typeof ea.activate.getMachineId === 'function')
                     ? ea.activate.getMachineId() : Promise.resolve('');
-                return pMid.then(function (mid) {
-                    if (!mid || String(mid).length < 8) return;
+                return pMid.then(function (rawMid) {
+                    // ★ 2026-09-05 P0：APP 端桥返回对象（callNativeAsync 已 JSON.parse），
+                    //   未归一化时 String(mid)="[object Object]" 按此查询服务器永远 miss
+                    //   （用户实测：覆盖安装 v227 后仍显示试用7天，手动激活入口提交才成功）。
+                    var mid = normalizeMachineIdResult(rawMid);
+                    if (!mid) { console.warn('[LicenseCheck] 存量自愈跳过：machineId 归一化失败，桥返回：', String(rawMid)); return; }
                     return _queryAdminStatus('', mid).then(function (r) {
                         if (!(r && r.success && r.status === 'activated' && r.license)) return;
                         var li = r.licenseInfo || {};
@@ -5597,7 +5622,19 @@
                             licenseCode: (li.licenseCode || '').toString()
                         }).then(function (inst) {
                             if (inst && inst.success) {
-                                console.log('[LicenseCheck] 存量自愈成功：license.dat 已补装（重启后授权状态=已激活）');
+                                console.log('[LicenseCheck] 存量自愈成功：license.dat 已补装（打开基础设置即显示已激活，无需重启）');
+                                // ★ 对齐 onAdminActivated 心跳材料（license:code/machineId），
+                                //   否则 24h 心跳验证缺 code 反复触发在线验证
+                                try {
+                                    var __hCode = (li.licenseCode || '').toString();
+                                    if (__hCode) StorageAdapter.setItem('license:code', __hCode);
+                                    StorageAdapter.setItem('license:machineId', mid);
+                                    StorageAdapter.removeItem('license:lastHeartbeat');
+                                    StorageAdapter.removeItem('license:offlineStart');
+                                } catch (he) {}
+                                // ★ 即时刷新基础设置授权区（updateLicenseStatusText 重查 getStatus
+                                //   → Java 重读新落盘 license.dat → licensed），用户零感知转正
+                                try { injectLicenseStatusIntoSettings(); } catch (he2) {}
                             } else {
                                 console.warn('[LicenseCheck] 存量自愈失败:', (inst && inst.error) || '未知错误');
                             }
