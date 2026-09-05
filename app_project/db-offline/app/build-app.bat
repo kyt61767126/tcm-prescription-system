@@ -226,6 +226,9 @@ if errorlevel 1 (
     if not defined NO_PAUSE pause
     exit /b 1
 )
+REM 2026-09-05 fix false positive: PKCS12 header 3rd byte is length (0x0A = newline),
+REM which broke the old ASCII regex ('.' never matches newline). Judge by magic bytes:
+REM JKS = FE-ED-FE-ED, PKCS12 = ASN.1 SEQUENCE (first byte 0x30).
 echo Verifying keystore integrity...
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$ErrorActionPreference='Stop';" ^
@@ -233,8 +236,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$size=(Get-Item $jks).Length;" ^
   "if($size -lt 1000){ Write-Host '[ERROR] keystore file too small ('$size' bytes), possibly corrupted'; exit 1 };" ^
   "$bytes=[System.IO.File]::ReadAllBytes($jks);" ^
-  "$header=[System.Text.Encoding]::ASCII.GetString($bytes[0..3]);" ^
-  "if($header -notmatch '0x|....'){ Write-Host '[WARN] keystore header abnormal: '$header };" ^
+  "$magic=[BitConverter]::ToString($bytes[0..3]);" ^
+  "$isJks=($magic -eq 'FE-ED-FE-ED'); $isPkcs12=($bytes[0] -eq 0x30);" ^
+  "if($isJks){ Write-Host '[OK] keystore format: JKS' } elseif($isPkcs12){ Write-Host '[OK] keystore format: PKCS12' } else { Write-Host '[WARN] keystore header abnormal: '$magic' (expected JKS FE-ED-FE-ED or PKCS12 30-xx)' };" ^
   "Write-Host '[OK] keystore OK ('$size' bytes)'"
 if errorlevel 1 (
     if not defined NO_PAUSE pause
