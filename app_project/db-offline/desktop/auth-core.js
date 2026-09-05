@@ -4876,6 +4876,25 @@
                 document.getElementById('editionPersonal').style.background = (ed === 'personal' ? '#26a69a' : '#fff');
                 document.getElementById('editionInstitution').style.borderColor = (ed === 'institution' ? '#26a69a' : '#ddd');
                 document.getElementById('editionInstitution').style.background = (ed === 'institution' ? '#26a69a' : '#fff');
+                // ★ 2026-09-05 注册后直达付款（用户反馈：注册完点立即激活，管理员激活框
+                //   还要再次填写信息，不符合逻辑）：已注册用户（Tab1 已预填注册信息）选完
+                //   版本即自动提交激活申请——跳过信息确认步骤直接进付款页。注册时账号+
+                //   密码已建、申请信息=注册信息，无需再人工确认；需核对/修改时从付款页
+                //   「返回上一步」回 Tab1 表单（信息已预填可改）。预填不完整时退回原流程。
+                try {
+                    const __rg = getLocalRegistrationInfo();
+                    if (__rg && __rg.phone) {
+                        const __cnv = ((document.getElementById('adminClinicName') || {}).value || '').trim();
+                        const __anv = ((document.getElementById('adminAdminName') || {}).value || '').trim();
+                        const __phv = ((document.getElementById('adminPhone') || {}).value || '').trim();
+                        if (__cnv && __anv && __phv && PHONE_RE.test(__phv)) {
+                            // 复用「确认信息并提交」按钮链路：读 DOM 预填值→校验→
+                            // __regPrefill 匹配→自动提交（含注册密码解密等待）→付款页
+                            document.getElementById('adminToStep2Btn').click();
+                            return;
+                        }
+                    }
+                } catch (re2) { /* 读取失败退回手动表单 */ }
                 show('adminStepForm');
                 setActiveTab('admin');
             });
