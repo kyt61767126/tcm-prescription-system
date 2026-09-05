@@ -507,6 +507,11 @@ P2 渐进迁移（2026-09-03 当日完成）：
 - **同步**：offline.js→3 副本（sync-auth-core.ps1）；index-app.html→APP assets（手工 copy 对齐 build-app.bat 步骤[2/5]）；离线桌面 index.html 独立维护（不入 Group 11 云端同步链）。验证：node --check / gradle compileDebugJavaWithJavac / check-interface 6OK / sync-auth-core 11 副本 In sync。
 - 生效：离线桌面+离线 APP 需重打包；云端网页/官网/云端APP/云桌面不受影响（云端付款按钮此前已完成）。
 - **发布链两条坑（v2026.09.05 实测，均已根治入 publish-release.js）**：① `latest.releaseDate = now.substring(0,10)` 取的是 UTC ISO 日期——北京时间 0-8 点发布会写成前一天（本次 07:20 发布显示 09-04）；已改 `new Date(Date.now()+8*3600*1000).toISOString().substring(0,10)` 取北京日期，updateTime 保留 UTC Z 格式。② **site-official 双权威源镜像漂移已连续两次发生**（09-04、09-05：发布脚本只写 public/，site-official 停留旧版，hash-manifest 落后两版）——publish-release.js 原先**零处**提及 site-official；已内置镜像步骤（public/hash-manifest.json + public/updates/ 整树 cpSync → site-official/，失败 exit 1）且 git add 范围补 site-official。**铁律：新增任何"双权威源"目录必须同时登记进发布脚本的写入+git add 清单，否则镜像必然漂移**。
+- **C. 后台「✅已付款」管理员确认收款通道（2026-09-05，commit 67a3c504）**：客户官网下单（order-submit → pending_payment，skipPhoneIndex+skipReqIndex 双跳过）扫码真实付款，但**没点官网「已付款·自动匹配」（order-paid）**直接关页面 → 记录永远停在 pending_payment（无 paidAt/不入双索引），admin-submit 提交被 PAYMENT_REQUIRED 拦截（findPhoneOccupancy 靠 admin_phone 索引、findPaidOrderForPhoneOrMachine 靠 paidAt，双双查不到）。这是**业务正常态而非 bug**（服务端无从得知客户扫码后是否真付款，与 AUTO-MATCH 同为"声明性确认+人工核对"安全模型）。修复=后台补管理员确认入口：
+  - 新 API `order-confirm-paid.js`（platform_admin 认证）：读 admin_req:{rid} → 仅 pending_payment 且有 orderNo 可用 → 统一走 `markOrderPaid(orderNo, {payMethod:'admin-confirm', payTxnLast6:'ADMIN-CONFIRM'})`——**与客户自助 order-paid 同一条写路径**（status→pending+paidAt+admin_phone 索引+admin_req_index 入列四同步），客户端轮询/断点重试立即可见。
+  - 后台待付款行「✅已付款」按钮：confirm 内置 4 维核对清单（时间±15min/金额/店名/手机号后4位）→ 确认后自动切待审核视图+打开审核弹窗；审核弹窗 ADMIN-CONFIRM 分支显示绿色「已核对」提示卡（免重复对账），payMethod 渲染「管理员确认」。
+  - **铁律**：管理员侧任何"标记已付款"通道必须复用 markOrderPaid 统一写入口（禁止内联 KV.put 直写，防三索引漂移）；确认前置弹窗必须含 4 维核对清单（对齐 AUTO-MATCH 人工把关模型，确认付款≠审核通过）。
+  - 验证：线上 403 认证门禁 ✓；markOrderPaid 写路径经 order-paid AUTO E2E PASS（REQ-0MTNM7M2S-3D69 全链路 pending_payment→pending）。后台 UI 全流程需管理员登录后人工验证（待付款列表点✅已付款→自动开审核弹窗）。
 
 ## 8. 桌面版技术规范
 
