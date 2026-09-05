@@ -148,7 +148,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
         submitAdminRequest: (data) => ipcRenderer.invoke('license:submit-admin-request', data),
         // ★ 激活工单（规则3）：提交激活申请工单，管理员在后台工单审批页一键审批发码
         submitTicket: (payload) => ipcRenderer.invoke('license:submit-ticket', payload),
-        checkAdminStatus: (requestId) => ipcRenderer.invoke('license:check-admin-status', requestId),
+        // ★ 2026-09-05 复核修复：补齐 machineId 第二参数（对齐离线版 preload）——
+        //   缺它时渲染层 resumeAdminPendingRequest 的 machineId 自救（requestId=''）
+        //   经 IPC 后 machineId 丢失 → 服务端 400「缺少 requestId」→ 自救永远失败。
+        checkAdminStatus: (requestId, machineId) => ipcRenderer.invoke('license:check-admin-status', requestId, machineId),
         saveLicense: (licenseBase64) => ipcRenderer.invoke('license:save-license', licenseBase64),
         cancelAdminRequest: (requestId) => ipcRenderer.invoke('license:cancel-admin-request', requestId),
         // ★ requestId 本地持久化（解决轮询超时/关闭窗口后丢失状态的问题）
