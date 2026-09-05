@@ -90,6 +90,18 @@ function Get-SourceSettledBlockers {
         $path    = $line.Substring(3).Trim('"')
         if ($status2 -eq '??') { continue }
 
+        # ★ 2026-09-05 发布部署产物豁免（发布脚本自产文件，非源码）：
+        #   publish-release.js 流程 = 先写下载页文件（downloads APK / updates 清单 /
+        #   site-official 镜像）→ 落定门 Assert → 自己 git add+commit+push。未豁免时
+        #   门被脚本刚写的文件拦死（鸡生蛋，2026-09-05 v2026.09.05-1946 发布失败实证），
+        #   中断发布的残留脏文件还会卡死后续 4 端打包咽喉（同入口本函数）。
+        #   注意：只豁免落定门，不进 pack-side-effects 自动收纳清单——打包流程不自动
+        #   提交下载页产物（未经验证的包不带上 git push），下载页文件始终由发布脚本自管。
+        if ($path -match '^public/downloads/' -or
+            $path -match '^public/updates/' -or
+            $path -match '^site-official/hash-manifest\.json$' -or
+            $path -match '^site-official/updates/') { continue }
+
         # build.gradle 需要 diff 行做精判；其余副作用整文件判定
         $diff = $null
         if ($path -match 'build\.gradle$') {
