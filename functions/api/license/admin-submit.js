@@ -29,7 +29,7 @@
 //    key: admin_req_index  -> [requestId1, requestId2, ...]
 // ============================================================================
 
-import { getKV, checkRateLimit, checkDeviceVersion } from './_lib/license-core.js';
+import { getKV, checkRateLimit, checkDeviceVersion, updateLicense, getDevices, getMaxDevices, KV_LICENSE_PREFIX, buildLicenseData, encodeLicenseBase64, appendLicenseLog } from './_lib/license-core.js';
 import { provisionCloudAccount, normalizeActivationPassword } from './_lib/admin-account.js';
 import { createAdminRequest, updateAdminRequestStatus } from './_lib/license-write-service.js';
 import { findPhoneOccupancy, KV_SYSTEM_CLINICS } from '../_lib/auth.js';
@@ -276,13 +276,70 @@ export async function onRequest(context) {
                 }
                 const _isOwnerDevice = !!finalMachineId && _boundMachines.has(String(finalMachineId));
                 if (!_isOwnerDevice) {
-                    console.log('[AdminSubmit] 手机号命中已激活记录但设备不匹配，跳过账号补开/密码归一化/license下发（换机或冒用）:',
-                        phone, existingActivated.requestId);
-                    return json({
-                        success: false,
-                        code: 'ALREADY_ACTIVATED_OTHER_DEVICE',
-                        error: '该手机号已在其他设备完成激活。换机或需要在多台设备使用，请联系客服微信 hktzy1688 办理。'
-                    }, 409);
+                    // ★ 2026-09-05 换机自动解绑（与 validate.js 对齐）：
+                    //   原激活本人（手机号核验通过）换设备 → 自动解绑最旧设备允许继续激活；
+                    //   冒用他人手机号（phoneVerified=false）→ 保持 409 拒绝（防匿名接管）。
+                    //   安全前提：admin-submit 无短信验证码，手机号=登录账号，只有本人才知道。
+                    const _origPhone = existingActivated.phone || '';
+                    const _phoneVerified = _origPhone && phone && _origPhone === phone;
+                    if (_phoneVerified && existingActivated.licenseCode) {
+                        try {
+                            const _licRec = await kv.get(KV_LICENSE_PREFIX + existingActivated.licenseCode, 'json');
+                            if (_licRec) {
+                                const _devs = getDevices(_licRec);
+                                const _max = getMaxDevices(_licRec);
+                                // 设备数未达上限 → 直接添加新设备
+                                if (_devs.length < _max) {
+                                    _devs.push({ machineId: String(finalMachineId), activatedAt: new Date().toISOString() });
+                                } else {
+                                    // 达上限 → 自动解绑最旧（与 validate.js 完全一致）
+                                    const _oldest = _devs[0];
+                                    _devs.shift();
+                                    await appendLicenseLog(kv, existingActivated.licenseCode, {
+                                        action: 'admin-submit-auto-unbind',
+                                        time: new Date().toISOString(),
+                                        ip: ip, operator: 'system',
+                                        detail: `admin-submit换机自动解绑: oldest=${String(_oldest.machineId || '').substring(0,8)}... → new=${String(finalMachineId || '').substring(0,8)}...`
+                                    });
+                                    _devs.push({ machineId: String(finalMachineId), activatedAt: new Date().toISOString() });
+                                }
+                                // 回写 license KV 记录 + 重新签名 licenseBase64
+                                await updateLicense(kv, existingActivated.licenseCode, { devices: _devs });
+                                const _licData = await buildLicenseData(kv, existingActivated.licenseCode, {
+                                    clinicName: existingActivated.clinicName, machineId: finalMachineId, licenseBinding: 'clinic+user+machine',
+                                    maxDevices: _max, devicesCount: _devs.length
+                                }, context);
+                                const _newBase64 = _licData ? await encodeLicenseBase64(_licData) : null;
+                                // 更新 admin_req 记录的 licenseBase64 + devices
+                                const _updPayload = { devices: _devs };
+                                if (_newBase64) _updPayload.licenseBase64 = _newBase64;
+                                if (typeof updateAdminRequestStatus === 'function') {
+                                    await updateAdminRequestStatus(kv, existingActivated.requestId, _updPayload);
+                                } else {
+                                    await kv.put(KV_ADMIN_REQ_PREFIX + existingActivated.requestId, JSON.stringify({ ...existingActivated, ..._updPayload }));
+                                }
+                                // 继续短路复用（用更新后的 existingActivated）
+                                Object.assign(existingActivated, _updPayload);
+                                console.log('[AdminSubmit] 换机自动解绑成功，继续短路复用:', phone, existingActivated.requestId, 'devices=', _devs.length, '/', _max);
+                            }
+                        } catch (_transferErr) {
+                            console.warn('[AdminSubmit] 换机自动解绑异常（降级为联系客服）:', _transferErr.message);
+                        }
+                        // 换机成功后往下继续走；换机异常则 fallthrough 到下方拒绝
+                        if (_isOwnerDevice || existingActivated.licenseBase64) {
+                            // 换机已成功更新 existingActivated，继续走短路复用
+                            // （下面 L287-L320 的账号补开/license下发逻辑保持不变）
+                        } else {
+                            console.log('[AdminSubmit] 换机自动解绑失败，拒绝:', phone);
+                            return json({ success: false, code: 'ALREADY_ACTIVATED_OTHER_DEVICE',
+                                error: '该手机号已在其他设备完成激活。换机或需要在多台设备使用，请联系客服微信 hktzy1688 办理。' }, 409);
+                        }
+                    } else {
+                        // phoneVerified=false → 冒用他人手机号，保持拒绝（09-03 P0 安全修复不扩大放行面）
+                        console.log('[AdminSubmit] 非本人换机（phoneVerified=false），拒绝:', phone, existingActivated.requestId);
+                        return json({ success: false, code: 'ALREADY_ACTIVATED_OTHER_DEVICE',
+                            error: '该手机号已在其他设备完成激活。换机或需要在多台设备使用，请联系客服微信 hktzy1688 办理。' }, 409);
+                    }
                 }
                 // 若账号已被后台删除或从未建号，先补开（幂等），保证"删除后重注册"也能直接重建
                 try {
