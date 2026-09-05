@@ -77,6 +77,33 @@ function Test-IsSnapshotRevert {
     return $false
 }
 
+# ★ 2026-09-05 发布部署产物清单（单一权威源，落定门豁免 + publish-release.js git-add 共用）：
+#   publish-release.js 流程 = 先写下载页文件（downloads APK / updates 清单 /
+#   site-official 镜像）→ 落定门 Assert → 自己 git add+commit+push。这些文件是发布
+#   脚本自产数据（非源码），未豁免时门被脚本刚写的文件拦死（鸡生蛋，v2026.09.05-1946
+#   发布失败实证），中断残留还会卡死后续 4 端打包咽喉（同入口本文件）。
+#   新增下载页部署目录/文件只改这一处，js 端经 Get-ReleaseDeployGitAddPaths 动态获取，
+#   杜绝豁免正则与 git-add 路径两处硬编码漂移。
+#   注意：发布产物不进 pack-side-effects 自动收纳清单——打包流程不自动提交下载页产物
+#   （未经验证的包不带上 git push），下载页文件始终由发布脚本自管。
+function Get-ReleaseDeployPatterns {
+    return @(
+        '^public/downloads/'
+        '^public/updates/'
+        '^site-official/hash-manifest\.json$'
+        '^site-official/updates/'
+    )
+}
+function Get-ReleaseDeployGitAddPaths {
+    return @(
+        'public/hash-manifest.json'
+        'public/downloads/'
+        'public/updates/'
+        'site-official/hash-manifest.json'
+        'site-official/updates/'
+    )
+}
+
 function Get-SourceSettledBlockers {
     param([string]$RepoRoot = (Split-Path $PSScriptRoot -Parent))
 
@@ -90,17 +117,10 @@ function Get-SourceSettledBlockers {
         $path    = $line.Substring(3).Trim('"')
         if ($status2 -eq '??') { continue }
 
-        # ★ 2026-09-05 发布部署产物豁免（发布脚本自产文件，非源码）：
-        #   publish-release.js 流程 = 先写下载页文件（downloads APK / updates 清单 /
-        #   site-official 镜像）→ 落定门 Assert → 自己 git add+commit+push。未豁免时
-        #   门被脚本刚写的文件拦死（鸡生蛋，2026-09-05 v2026.09.05-1946 发布失败实证），
-        #   中断发布的残留脏文件还会卡死后续 4 端打包咽喉（同入口本函数）。
-        #   注意：只豁免落定门，不进 pack-side-effects 自动收纳清单——打包流程不自动
-        #   提交下载页产物（未经验证的包不带上 git push），下载页文件始终由发布脚本自管。
-        if ($path -match '^public/downloads/' -or
-            $path -match '^public/updates/' -or
-            $path -match '^site-official/hash-manifest\.json$' -or
-            $path -match '^site-official/updates/') { continue }
+        # ★ 发布部署产物豁免（发布脚本自产文件，清单见 Get-ReleaseDeployPatterns 单源）
+        $isReleaseDeploy = $false
+        foreach ($rp in (Get-ReleaseDeployPatterns)) { if ($path -match $rp) { $isReleaseDeploy = $true; break } }
+        if ($isReleaseDeploy) { continue }
 
         # build.gradle 需要 diff 行做精判；其余副作用整文件判定
         $diff = $null

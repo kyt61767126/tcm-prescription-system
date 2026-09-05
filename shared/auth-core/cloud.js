@@ -719,6 +719,23 @@
 
     // ==================== 登录调度层 ====================
 
+    // ★ 2026-09-05 machineId 桥返回值归一化（与 offline.js 同版，双源 auth-core 契约一致）：
+    //   桌面 IPC 返回纯字符串；任何对象/JSON 串/"[object Object]"/非白名单字符一律清空走兜底。
+    //   白名单：字母/数字/下划线/短横 8-64 位（sha 哈希 32-64 hex、browser- 指纹 25 位）。
+    function normalizeMachineIdResult(r) {
+        try {
+            var v = r;
+            if (v && typeof v === "object") v = v.machineId || "";
+            if (typeof v !== "string") return "";
+            var s = v.trim();
+            if (s.indexOf("{") === 0) {
+                try { var o = JSON.parse(s); s = (o && o.machineId) ? String(o.machineId).trim() : ""; } catch (e) { return ""; }
+            }
+            if (!/^[A-Za-z0-9_-]{8,64}$/.test(s)) return "";
+            return s;
+        } catch (e) { return ""; }
+    }
+
     // ★★★ 2026-08-21 设备身份采集（账号级设备授权 + 单设备在线互斥）
     //   桌面版：electronAPI.activate.getMachineId()（真实机器指纹，计入 2 台授权名额）
     //   APP 端：持久化随机指纹（Capacitor Preferences / localStorage，计入 2 台授权名额）
@@ -729,8 +746,11 @@
         try {
             if (global.electronAPI && global.electronAPI.activate &&
                 typeof global.electronAPI.activate.getMachineId === 'function') {
-                machineId = await global.electronAPI.activate.getMachineId();
-                clientClass = 'desktop';
+                // ★ 桥返回垃圾值（归一化失败）时绝不标 desktop：否则指纹兜底返回
+                //   browser-xxx + desktop 类 → 浏览器指纹被误计 2 台授权名额
+                const __mid = normalizeMachineIdResult(await global.electronAPI.activate.getMachineId());
+                if (__mid) { machineId = __mid; clientClass = 'desktop'; }
+                else if (global.Capacitor) { clientClass = 'app'; }
             } else if (global.Capacitor) {
                 clientClass = 'app';
             }
@@ -1876,8 +1896,8 @@
                     await StorageAdapter.setItem('license:code', codeTrim);
                     if (global.electronAPI && global.electronAPI.license &&
                         typeof global.electronAPI.license.getMachineId === 'function') {
-                        const mid = await global.electronAPI.license.getMachineId();
-                        if (mid) await StorageAdapter.setItem('license:machineId', String(mid));
+                        const mid = normalizeMachineIdResult(await global.electronAPI.license.getMachineId());
+                        if (mid) await StorageAdapter.setItem('license:machineId', mid);
                     }
                     // 清除旧的心跳记录，立即触发一次心跳
                     await StorageAdapter.removeItem('license:lastHeartbeat');

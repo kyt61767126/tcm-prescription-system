@@ -38,6 +38,21 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+
+// ★ 2026-09-05 单源收敛：发布部署 git-add 路径从 source-settled.ps1 的
+//   Get-ReleaseDeployGitAddPaths 动态获取（与落定门豁免正则 Get-ReleaseDeployPatterns
+//   同源），新增下载页部署目录只改 ps1 一处；获取失败回退内置列表（保发布可用性）。
+function getReleaseDeployPaths(assertScript) {
+    try {
+        const p = execSync(
+            'powershell -NoProfile -ExecutionPolicy Bypass -Command ". \'' + assertScript + '\'; (Get-ReleaseDeployGitAddPaths) -join \' \'"',
+            { cwd: PROJECT_ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }
+        ).trim();
+        if (p) return p;
+    } catch (e) { /* 回退内置列表 */ }
+    console.warn('  [WARN] 发布部署路径单源获取失败，回退内置路径列表');
+    return 'public/hash-manifest.json public/downloads/ public/updates/ site-official/hash-manifest.json site-official/updates/';
+}
 const { execSync, spawnSync } = require('child_process');
 
 const PROJECT_ROOT = path.resolve(__dirname, '..');
@@ -612,7 +627,7 @@ function main() {
                         process.exit(1);
                     }
                     try {
-                        execSync('git add public/hash-manifest.json public/downloads/ public/updates/ site-official/hash-manifest.json site-official/updates/ .gitignore', { cwd: PROJECT_ROOT, stdio: 'ignore' });
+                        execSync('git add ' + getReleaseDeployPaths(assertScript) + ' .gitignore', { cwd: PROJECT_ROOT, stdio: 'ignore' });
                         const st = execSync('git status --porcelain', { cwd: PROJECT_ROOT, encoding: 'utf8' });
                         if (st.trim()) {
                             execSync('git commit -m "chore(release): 补部署 ' + (versionTag || '') + ' 发布产物到下载页"', { cwd: PROJECT_ROOT, stdio: 'ignore' });
@@ -1008,7 +1023,7 @@ function main() {
         console.log('  [OK] 源码已落定，允许提交推送');
         let gitFailed = false;
         try {
-            execSync('git add public/hash-manifest.json public/downloads/ public/updates/ site-official/hash-manifest.json site-official/updates/ .gitignore', { cwd: PROJECT_ROOT, stdio: 'ignore' });
+            execSync('git add ' + getReleaseDeployPaths(assertScript) + ' .gitignore', { cwd: PROJECT_ROOT, stdio: 'ignore' });
             const status = execSync('git status --porcelain', { cwd: PROJECT_ROOT, encoding: 'utf8' });
             if (status.trim()) {
                 execSync('git commit -m "chore(release): 发布 ' + versionTag + ' 到 GitHub Release"', { cwd: PROJECT_ROOT, stdio: 'ignore' });
