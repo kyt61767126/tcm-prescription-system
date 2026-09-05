@@ -42,13 +42,14 @@ param(
 # ★ 2026-09-01 修复（PS 5.1 地雷）：调用方 $ErrorActionPreference='Stop' 时，
 #   native 命令（git）stderr 经 2>$null 重定向会把首行 stderr（如 CRLF warning）
 #   升级为 terminating NativeCommandError，直接炸掉门禁。所有 git 调用统一走
-#   本助手：临时降 EAP=Continue，stderr 静默丢弃，返回 stdout 行数组。
+#   本助手：临时降 EAP=Continue，stderr 合并后过滤丢弃（2>&1 只留 string 行），
+#   不产生错误流记录——PS 5.1 的 NativeCommandError 红字/transcript 记录一并消除。
 function Invoke-GitQuiet {
     param([string]$RepoRoot, [string[]]$GitArgs)
     $prevEap = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     try {
-        return @(& git -C $RepoRoot @GitArgs 2>$null) | Where-Object { $_ }
+        return @(& git -c core.quotepath=false -C $RepoRoot @GitArgs 2>&1) | Where-Object { $_ -is [string] -and $_ }
     } finally {
         $ErrorActionPreference = $prevEap
     }

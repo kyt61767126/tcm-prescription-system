@@ -238,6 +238,21 @@ function Show-PackResult {
 }
 
 # ============ P1-B 打包副作用收纳 ============
+# ★ 2026-09-06 git 输出白化：PS 5.1 把原生命令 stderr 一律渲染成红色，而 git 的正常
+#   进度（push 的 Enumerating objects 等）与提示（LF→CRLF warning）全部走 stderr——
+#   都是正常信息而非错误，红字徒增恐慌。本助手合并 stderr 后按白字（DarkGray）输出，
+#   退出码原样保留（失败分支判断不受影响）。真实失败仍由调用方 [WARN]/[ERROR] 提示。
+function Invoke-GitHost {
+    param([string[]]$GitArgs)
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $out = @(& git -c core.quotepath=false -C $script:RootDir @GitArgs 2>&1)
+        foreach ($line in $out) { if ("$line") { Write-Host "  $line" -ForegroundColor DarkGray } }
+    } finally {
+        $ErrorActionPreference = $prevEap
+    }
+}
 # 背景：全局审查 R3——打包副作用（build.gradle versionCode / package.json version /
 #       hash-manifest.json）靠人工提交易遗漏，造成"本机有、仓库无"的基线偏差。
 # 原则：宁漏检不可误报——只自动收纳确定性副作用文件；index.html 等可能含手工改动
@@ -249,7 +264,10 @@ function Invoke-PackSideEffectCollect {
     )
     Write-Host ""
     Write-Host "--- 打包副作用收纳 (P1-B) ---" -ForegroundColor Cyan
-    $raw = & git -C $script:RootDir status --short 2>$null
+    $prevEap252 = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try { $raw = @(& git -c core.quotepath=false -C $script:RootDir status --short 2>&1) | Where-Object { $_ -is [string] -and $_ } }
+    finally { $ErrorActionPreference = $prevEap252 }
     if (-not $raw) {
         Write-Host "  [OK] 工作区干净，无打包副作用" -ForegroundColor Green
         return
@@ -296,12 +314,12 @@ function Invoke-PackSideEffectCollect {
                 Write-Host "  [DryRun] 将执行: git commit -m <收纳提交信息 $($auto.Count) 个文件>" -ForegroundColor Magenta
                 Write-Host "  [DryRun] 将执行: git push" -ForegroundColor Magenta
             } else {
-                & git -C $script:RootDir add -- $auto
+                Invoke-GitHost (@('add', '--') + $auto)
                 if ($LASTEXITCODE -ne 0) { Write-Host "  [WARN] git add 失败，请人工处理" -ForegroundColor Yellow; return }
-                & git -C $script:RootDir commit -m $msg
+                Invoke-GitHost @('commit', '-m', $msg)
                 if ($LASTEXITCODE -eq 0) {
                     Write-Host "  [OK] 副作用已提交，推送中..." -ForegroundColor Green
-                    & git -C $script:RootDir push
+                    Invoke-GitHost @('push')
                     if ($LASTEXITCODE -ne 0) { Write-Host "  [WARN] push 失败，请稍后手动 git push" -ForegroundColor Yellow }
                 } else {
                     Write-Host "  [WARN] 提交失败，请人工处理" -ForegroundColor Yellow
