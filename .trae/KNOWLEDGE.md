@@ -250,7 +250,7 @@
 
 **付款后/激活成功后官网文案引导回APP**：①submitPayConfirm成功后立刻在付款区下方追加绿色提示条"✅付款信息已登记！请回到惠康中医客户端等待管理员核对。核对通过后APP/桌面版会自动弹提示，无需您再回本页等激活码，也无需在激活窗口重新提交。现在就可以关闭本页面。"（解决客户付款后留在官网等激活码的旧习惯，也是"二次提交"的根源之一）；②renderOrderStatus activated状态下①离线版文案追加绿色提示"不用复制激活码也可以，直接回到APP即可"；②在激活码面板下追加蓝色虚线框"💡您现在可以关闭这个页面，回到惠康中医APP/桌面版即可。APP/桌面版会自动检测到激活状态并弹提示"请重启登录"。"两处文案在public+site-official双份镜像同步。
 
-铁律：①跳转第三方表单必须携带已填信息，否则信息越填客户"跳过了"或填错就直接是支持成本；②所有等外部状态的流程（付款等待审核、审批等待激活）都要具备"页面生命周期不唯一"的思维：单次查询永远不够→visibility+focus+定时三重触发，否则只要页面不卸载就会出现"状态变了用户看不到"；③用户等待过程要明确告知"不用留在这里"，否则一定会等下去，等烦了就乱点=二次提交=限流=新问题（Mate70 Tab2 限流548248就是这个链路的末端）。
+铁律：①跳转第三方表单必须携带已填信息，否则信息越填客户"跳过了"或填错就直接是支持成本；②所有等外部状态的流程（付款等待审核、审批等待激活）都要具备"页面生命周期不唯一"的思维：单次查询永远不够→visibility+focus+定时三重触发，否则只要页面不卸载就会出现"状态变了用户看不到"；③用户等待过程要明确告知"不用留在这里"，否则一定会等下去，等烦了就乱点=二次提交=限流=新问题（Mate70 Tab2 限流548248就是这个链路的末端）；④**桌面端 file:// 协议下 fetch 跨域 pages.dev 会被 webSecurity 默认 CORS 静默拦截**——任何需要在桌面端查询 admin-status 的代码（resumeAdminPendingRequest / Observer / startPolling）必须优先走 Electron IPC（electronAPI.activate.checkAdminStatus），fallback 才走 fetch。Observer.fetchAdminStatus 已对齐此优先级，但 resumeAdminPendingRequest 之前漏了直接用 fetch → PAYMENT_REQUIRED 断点的 machineId 自救永远失败 → 后台已激活但客户端永远看不到（13398628212 现场实锤）。修复：offline/cloud 双权威源各新增 _queryAdminStatus 统一通道函数，IPC 优先 fetch 兜底。**此铁律对所有桌面端"从渲染进程发跨域 fetch"的场景生效，不仅限于激活链路**。
 
 同步：offline.js→3副本；cloud.js→9副本（鸿蒙rawfile同）；download.html双镜像手工一致；校验：node --check双权威源全过/interface 6OK0CHANGED/sync-all VerifyOnly In sync/注入幂等检查通过。生效方式：云端网页/官网购买页/服务端随Pages**自动部署即刻生效**；离线APP/离线桌面/云端APP/云端桌面/鸿蒙**需重打包**（参数传递和resume都在客户端auth-core内，旧版不生效）。
 
