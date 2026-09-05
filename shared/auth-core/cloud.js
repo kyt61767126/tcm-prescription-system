@@ -4262,6 +4262,18 @@
         }
     }
 
+    // ★ 2026-09-05 P0 修复：同 offline.js — resumeAdminPendingRequest 必须优先走 IPC
+    function _cloudQueryAdminStatus(requestId, machineId) {
+        var ea = global.electronAPI || (global.window && global.window.electronAPI);
+        if (ea && ea.activate && typeof ea.activate.checkAdminStatus === 'function') {
+            return ea.activate.checkAdminStatus(requestId || '', machineId || '');
+        }
+        var url = ADMIN_STATUS_URL + '?requestId=' + encodeURIComponent(requestId || '');
+        if (machineId) url += '&machineId=' + encodeURIComponent(machineId);
+        return fetch(url, { method: 'GET', headers: { 'Content-Type': 'application/json' } })
+            .then(function (resp) { return resp.json(); });
+    }
+
     function resumeAdminPendingRequest() {
         try {
             StorageAdapter.getItem('license:adminReqPending').then(function (savedRaw) {
@@ -4278,9 +4290,7 @@
                         try { StorageAdapter.removeItem('license:adminReqPending'); } catch (e2) {}
                         return;
                     }
-                    var murl = ADMIN_STATUS_URL + '?machineId=' + encodeURIComponent(saved.machineId);
-                    fetch(murl, { method: 'GET', headers: { 'Content-Type': 'application/json' } })
-                        .then(function (resp) { return resp.json(); })
+                    _cloudQueryAdminStatus('', saved.machineId)
                         .then(function (r) {
                             if (r && r.success && r.status === 'activated') {
                                 console.log('[LicenseCheck] 云端 machineId 自救：本设备已激活，自动收尾');
@@ -4294,10 +4304,7 @@
                         });
                     return;
                 }
-                var url = ADMIN_STATUS_URL + '?requestId=' + encodeURIComponent(saved.requestId);
-                if (saved.machineId) url += '&machineId=' + encodeURIComponent(saved.machineId);
-                fetch(url, { method: 'GET', headers: { 'Content-Type': 'application/json' } })
-                    .then(function (resp) { return resp.json(); })
+                _cloudQueryAdminStatus(saved.requestId, saved.machineId || '')
                     .then(function (r) {
                         if (r && r.success && r.status === 'activated') {
                             console.log('[LicenseCheck] 云端断点续传：激活申请已审核通过，自动收尾（requestId=' + saved.requestId + '）');

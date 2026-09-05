@@ -5892,6 +5892,23 @@
         }
     }
 
+    // ★ 2026-09-05 P0 修复：resumeAdminPendingRequest 必须优先走 IPC
+    //   根因：桌面端 file:// 协议 + webSecurity=true → fetch pages.dev 被 CORS 静默拦截
+    //   → machineId 自救查询永远失败 → 后台已激活但客户端永远看不到
+    //   对齐 Observer.fetchAdminStatus 的通道优先级：IPC > fetch
+    function _queryAdminStatus(requestId, machineId) {
+        // 优先 Electron IPC（桌面端 file:// 协议 fetch 被 CORS 拦截）
+        var ea = global.electronAPI || (global.window && global.window.electronAPI);
+        if (ea && ea.activate && typeof ea.activate.checkAdminStatus === 'function') {
+            return ea.activate.checkAdminStatus(requestId || '', machineId || '');
+        }
+        // 走 fetch（云端网页 / APP WebView 可用）
+        var url = ADMIN_STATUS_URL + '?requestId=' + encodeURIComponent(requestId || '');
+        if (machineId) url += '&machineId=' + encodeURIComponent(machineId);
+        return fetch(url, { method: 'GET', headers: { 'Content-Type': 'application/json' } })
+            .then(function (resp) { return resp.json(); });
+    }
+
     function resumeAdminPendingRequest() {
         try {
             StorageAdapter.getItem('license:adminReqPending').then(function (savedRaw) {
@@ -5908,9 +5925,7 @@
                         try { StorageAdapter.removeItem('license:adminReqPending'); } catch (e2) {}
                         return;
                     }
-                    var murl = ADMIN_STATUS_URL + '?machineId=' + encodeURIComponent(saved.machineId);
-                    fetch(murl, { method: 'GET', headers: { 'Content-Type': 'application/json' } })
-                        .then(function (resp) { return resp.json(); })
+                    _queryAdminStatus('', saved.machineId)
                         .then(function (r) {
                             if (r && r.success && r.status === 'activated') {
                                 console.log('[LicenseCheck] machineId 自救：本设备已激活，自动完成领码');
@@ -5924,10 +5939,7 @@
                         });
                     return;
                 }
-                var url = ADMIN_STATUS_URL + '?requestId=' + encodeURIComponent(saved.requestId);
-                if (saved.machineId) url += '&machineId=' + encodeURIComponent(saved.machineId);
-                fetch(url, { method: 'GET', headers: { 'Content-Type': 'application/json' } })
-                    .then(function (resp) { return resp.json(); })
+                _queryAdminStatus(saved.requestId, saved.machineId || '')
                     .then(function (r) {
                         if (r && r.success && r.status === 'activated') {
                             console.log('[LicenseCheck] 断点续传：激活申请已审核通过，自动完成领码（requestId=' + saved.requestId + '）');
