@@ -19,6 +19,22 @@ function global:pause {
     $null = Read-Host '按回车键继续...'
 }
 
+# ★ 2026-09-05 防僵尸菜单（15:40 事故根因架构修复）：
+#   非交互环境（stdin 被管道/重定向/自动化宿主关闭）调用交互菜单时，Read-Host 恒返回
+#   $null → switch default → 死循环 Clear-Host+Read-Host，每秒刷一屏产生 170MB+ 僵尸日志。
+#   统一菜单读入口：EOF 即明确报错退出并指引非交互入口。
+#   注意：用户直接按回车返回 ""（空串，正常重显菜单）；EOF 才是 $null，二者严格区分。
+function Read-MenuChoice([string]$Prompt) {
+    $c = Read-Host $Prompt
+    if ($null -eq $c) {
+        Write-Host ""
+        Write-Host "[FATAL] 标准输入已关闭：交互菜单在非交互环境（管道/自动化调用）中运行。" -ForegroundColor Red
+        Write-Host "  非交互发布请用: node tools\publish-release.js --confirm --push --changed-only" -ForegroundColor Yellow
+        Write-Host "  非交互打包请用: one-click-pack.ps1 -AutoMode 1|2|3 （1=云端 2=本地 3=全部）" -ForegroundColor Yellow
+        exit 1
+    }
+    return $c
+}
 # ★ 2026-08-24 打包验收门（tools/pack-gate.ps1）：语法/BOM/CRLF/编码 四道快检，
 #   任一失败直接阻断（历史事故：本文件 BOM 丢失被 GBK 误读解析崩 / 打包链脚本语法错无人发现）
 $gateToolRm = Join-Path $PSScriptRoot 'pack-gate.ps1'
@@ -399,7 +415,7 @@ function Show-VersionMenu {
         Write-Host "  [3] 全部2个版本"
         Write-Host "  [0] 返回主菜单"
         Write-Host ""
-        $choice = Read-Host "请选择 [0-3]"
+        $choice = Read-MenuChoice "请选择 [0-3]"
         switch ($choice) {
             "1" { return "cloud" }
             "2" { return "dingzhi" }
@@ -425,7 +441,7 @@ function Show-PackModeMenu {
         Write-Host "  [3] 桌面 + APP (全部)"
         Write-Host "  [0] 返回主菜单"
         Write-Host ""
-        $choice = Read-Host "请选择 [0-3]"
+        $choice = Read-MenuChoice "请选择 [0-3]"
         switch ($choice) {
             "1" { return "desktop" }
             "2" { return "app" }
@@ -587,7 +603,7 @@ while ($true) {
     Write-Host "    系统绝不自动上传产物到官方下载网站(必守HARD规则)" -ForegroundColor Yellow
     Write-Host "  - git push 后 Cloudflare Pages 自动部署下载页" -ForegroundColor DarkGray
     Write-Host "--------------------------------------------"
-    $choice = Read-Host "请选择 [0-6]"
+    $choice = Read-MenuChoice "请选择 [0-6]"
     switch ($choice) {
         "2" {
             # 仅打包 - 选版本和范围 (选"全部"= 全量打包，原[4]打包全部已并入本项)

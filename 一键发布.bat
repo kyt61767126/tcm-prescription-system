@@ -2,7 +2,7 @@
 setlocal enableextensions
 REM [FIX 2026-08-31] switch console to UTF-8 (align with one-click-pack.bat):
 REM downstream publish-release.js (node) emits UTF-8 Chinese; default GBK codepage
- rendered the final release-version summary as mojibake.
+REM rendered the final release-version summary as mojibake.
 chcp 65001 >nul
 cd /d "%~dp0"
 
@@ -17,17 +17,18 @@ if not exist "%RELEASE_PS1%" (
     exit /b 1
 )
 
-echo [one-click-publish] Self-heal: fix LF line endings in downstream build .bat files...
-REM [SELF-HEAL 2026-08-23] release-menu.ps1 invokes build-app.bat directly
-REM (bypassing pack-* entries). Fix all downstream .bat BEFORE parsing.
+REM [2026-09-05] Entry self-heal consolidated into tools\entry-selfheal.ps1 (single
+REM source shared with one-click-pack.bat): downstream .bat CRLF repair + .ps1
+REM BOM repair. New downstream build .bat only needs to be added in that ps1.
 REM This entry bat is ASCII-only so it is immune to line-ending corruption.
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\fix-bat-crlf.ps1" "%~dp0app_project\db-yunduan\pack-desktop.bat" "%~dp0app_project\db-yunduan\build-pack.bat" "%~dp0app_project\db-yunduan\build-app.bat" "%~dp0app_project\db-yunduan\cloud_desktop\build.bat" "%~dp0app_project\db-offline\pack-desktop.bat" "%~dp0app_project\db-offline\build-pack.bat" "%~dp0app_project\db-offline\app\build-app.bat" "%~dp0app_project\db-offline\desktop\build.bat"
-
-echo [one-click-publish] Self-heal: ensure UTF-8 BOM in .ps1 files...
-REM [SELF-HEAL 2026-08-24] IDE edits may strip UTF-8 BOM from .ps1 files; PowerShell 5.1
-REM then reads them as GBK, corrupting Chinese text and breaking string parsing.
-REM fix-ps1-bom.ps1 rescans ALL .ps1 and re-adds BOM silently (only FIX lines shown).
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\fix-ps1-bom.ps1" | findstr /C:"[FIX]" /C:"Summary:"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\entry-selfheal.ps1"
+set "HEAL_RC=%errorlevel%"
+if %HEAL_RC% neq 0 (
+    echo.
+    powershell -NoProfile -Command "Write-Host '[ERROR] Entry self-heal failed with code: %HEAL_RC%'"
+    if not defined NO_PAUSE pause
+    exit /b %HEAL_RC%
+)
 
 REM Launch release-menu.ps1
 REM NOTE [BUILD-LOCK 2026-08-23]: concurrent builds are serialized by
@@ -42,3 +43,5 @@ if %EXIT_CODE% neq 0 (
 )
 echo.
 if not defined NO_PAUSE pause
+REM [2026-09-05] Propagate real exit code to callers (CI / schedulers / chained flows)
+exit /b %EXIT_CODE%

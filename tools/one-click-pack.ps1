@@ -28,6 +28,21 @@ if ($script:SkipPause) {
     }
 }
 
+# ★ 2026-09-05 防僵尸菜单（15:40 事故根因架构修复）：
+#   非交互环境（stdin 被管道/重定向/自动化宿主关闭）调用交互菜单时，Read-Host 恒返回
+#   $null → switch 不匹配 → default 提示后继续循环 → Clear-Host+Read-Host 死循环，
+#   每秒刷一屏产生 170MB+ 僵尸日志。统一菜单读入口：EOF 即明确报错退出并指引非交互参数。
+#   注意：用户直接按回车返回 ""（空串，正常重显菜单）；EOF 才是 $null，二者严格区分。
+function Read-MenuChoice([string]$Prompt) {
+    $c = Read-Host $Prompt
+    if ($null -eq $c) {
+        Write-Host ""
+        Write-Host "[FATAL] 标准输入已关闭：交互菜单在非交互环境（管道/自动化调用）中运行。" -ForegroundColor Red
+        Write-Host "  非交互打包请用: one-click-pack.ps1 -AutoMode 1|2|3 （1=云端 2=本地 3=全部）" -ForegroundColor Yellow
+        exit 1
+    }
+    return $c
+}
 # 脚本位于 <仓库根>\tools\，仓库根 = $PSScriptRoot 的上级
 $script:RootDir = Split-Path $PSScriptRoot -Parent
 # 若该层无 app_project（脚本被移动/复制），向上找包含 app_project 的目录
@@ -575,7 +590,7 @@ function Show-PickVersionMenu {
         Write-Host "  [2] 本地版"
         Write-Host "  [3] 云端+本地"
         Write-Host "  [0] 返回主菜单"
-        $choice = Read-Host "请选择 [0-3]"
+        $choice = Read-MenuChoice "请选择 [0-3]"
         switch ($choice) {
             # ★ 2026-08-23 四轮复核修复：原 $null=Build-XXX 同时吞掉①失败退出码(打包失败用户
             #   看不到任何失败提示)②不调用 SideEffectCollect(versionCode/version 副作用
@@ -734,7 +749,7 @@ while ($true) {
     Write-Host "  - 耗时统计会在结束时显示"
     Write-Host "  - ★ 仅打包不上传; 如需发布到下载页/GitHub Release 请运行 一键发布.bat" -ForegroundColor Yellow
     Write-Host "--------------------------------------------"
-    $choice = Read-Host "请选择 [0-3, 5-7]"
+    $choice = Read-MenuChoice "请选择 [0-3, 5-7]"
     switch ($choice) {
         # ★ 2026-09-01 结果确认：原 $null = Build-... 丢弃退出码且直接循环回菜单
         #   （Clear-Host 清屏），成败一闪而过。改为捕获退出码 + 显示结果确认块
