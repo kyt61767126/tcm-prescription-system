@@ -105,6 +105,17 @@ function findWindow(app, urlPart, timeoutMs = 30000) {
 async function login(page, username, password) {
     await page.waitForSelector('#loginUsername', { timeout: 15000 });
     await page.fill('#loginUsername', username);
+    // ★ 反自动填充双保险（main.js dom-ready 注入）：密码框初始 readonly，focus 时才移除。
+    //   fill 的可编辑性检查先于 focus → 直接 fill 会 30s 死等（E1-E3 曾靠竞态侥幸通过，
+    //   2026-09-05 16:38 打包竞态翻转稳定复现）。同步 db-offline/desktop/e2e 同款修复：
+    //   先 focus 触发移除，确认可编辑后再填。
+    try {
+        await page.focus('#loginPassword');
+        await page.waitForFunction(() => {
+            const el = document.getElementById('loginPassword');
+            return !!el && !el.hasAttribute('readonly');
+        }, null, { timeout: 5000 });
+    } catch (_) { /* 注入未跑或已移除：直接走 fill 兜底 */ }
     await page.fill('#loginPassword', password);
     await page.click('#btnOk');
 }
