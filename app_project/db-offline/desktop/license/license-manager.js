@@ -2169,6 +2169,24 @@ function installLicense(base64Content, options = {}) {
             }
         }
 
+        // ★ 2026-09-06 P0 修复（机构版激活后仍显示【修改密码】）：装码即绑定版本。
+        //   installLicense 此前从不写 config.edition（options.edition 参数被忽略），
+        //   enforceEditionBinding 又只在启动/断点续传时调用 → 会话内激活后不重启直接
+        //   登录，edition 停留出厂 personal → 机构版【用户管理】错显为【修改密码】。
+        //   license.dat 已于步骤1落盘，此处读出并按 license.type 就地校正同一份
+        //   config（edition + 角色保证），与下方签名写盘一次成型（双写会互相覆盖，
+        //   必须在同一份 config 对象上合并后单次写盘）。
+        try {
+            const licData = readLicense(actualMachineId);
+            const bind = applyEditionBindingToConfig(licData, config);
+            if (bind.applied && bind.corrected) {
+                configChanged = true;
+                console.log('[License] 装码版本绑定: edition', bind.from, '->', bind.to);
+            }
+        } catch (be) {
+            console.warn('[License] 装码版本绑定校正失败（非致命，启动时 enforceEditionBinding 兜底）:', be.message);
+        }
+
         // 4. 签名并保存 config.json
         // ★ 第三轮终检 P2 修复：config 无签名时（重激活且内容无变化）也强制签名写入，
         //   避免 verifyConfigIntegrity fail-closed 后误拦（与 APP 端 activateOnline 对齐）
@@ -2218,72 +2236,94 @@ function installLicense(base64Content, options = {}) {
 //    （防止伪造 license.type=pro 提权 admin 角色）。
 //  返回：{ success, corrected, edition, from, to }
 // ============================================================================
+// ★ 2026-09-06 P0 修复（机构版激活后仍显示【修改密码】）核心抽离：
+//   原 enforceEditionBinding 只在【启动时/断点续传后】调用，而 installLicense 从不写
+//   config.edition → 会话内激活（登录窗管理员激活 installAdminLicenseDesktop /
+//   激活窗口 saveLicense / admin-status 轮询 BridgeInstall 三条路径）后不重启直接
+//   登录，config.edition 仍为出厂 personal → get-app-config 对机构版授权只"不强制
+//   personal"、不会主动校正为 clinic → 前端按标准版对齐 → 【修改密码】错显。
+//   现抽核心供 installLicense 装码时就地调用（装码即绑定版本，对齐 APP 端
+//   installAdminLicense 内置 normalizeEdition 的语义）。
+// 机构类 type 集合对齐 APP 端 LicenseManager（pro/institution/clinic/clinic_custom）。
+const INSTITUTIONAL_LICENSE_TYPES = ['pro', 'institution', 'clinic', 'clinic_custom'];
+
+function applyEditionBindingToConfig(license, config) {
+    if (!license || !license.type) {
+        return { skip: 'no-license' };  // 无正式 license，无需校正
+    }
+    // ★ 安全加固：仅信任验签通过的 license（防伪造 type 提权）
+    if (!verifySignature(license)) {
+        console.warn('[License] 版本绑定: license 验签失败，跳过校正');
+        return { skip: 'signature' };
+    }
+    const type = String(license.type || '').toLowerCase();
+    const isInstitution = INSTITUTIONAL_LICENSE_TYPES.includes(type);
+    if (!isInstitution && type !== 'personal' && type !== 'standard') {
+        return { skip: 'unknown-type' };  // 无法识别的版本，跳过
+    }
+    if (!config || typeof config !== 'object') {
+        return { skip: 'no-config' };
+    }
+
+    const isCloud = (config.appMode === 'cloud') ||
+                    ['cloud', 'cloud_personal', 'cloud_clinic'].includes(config.edition);
+
+    let targetEdition;
+    if (isInstitution) {
+        targetEdition = isCloud ? 'cloud_clinic' : 'clinic';
+    } else {
+        targetEdition = isCloud ? 'cloud_personal' : 'personal';
+    }
+
+    let corrected = false;
+    const from = config.edition;
+    if (config.edition !== targetEdition) {
+        config.edition = targetEdition;
+        corrected = true;
+        console.log('[License] 版本绑定校正 edition:', from, '->', targetEdition);
+    }
+
+    // ★ 2026-08-20 角色合规修复：机构版不再全员强制 admin（旧逻辑把医师也提权 → 医师登录也显示
+    //   【用户管理】，违反"机构版=管理员显示用户管理、医师不显示"规范）。机构版仅保证至少一名
+    //   管理员（防全表无 admin 锁死管理入口），其余角色保持用户管理设置；标准版仍全员 user（单用户规范）。
+    if (Array.isArray(config.users) && config.users.length > 0) {
+        if (isInstitution) {
+            const hasAdmin = config.users.some(u => u && (u.role === 'admin' || u.role === 'clinic_admin'));
+            if (!hasAdmin) {
+                const first = config.users[0];
+                console.log('[License] 版本绑定校正：机构版无管理员，提升首个用户', first.username, '-> admin');
+                first.role = 'admin';
+                corrected = true;
+            }
+        } else {
+            for (const u of config.users) {
+                if (u && u.role && u.role !== 'user') {
+                    console.log('[License] 版本绑定校正用户角色:', u.username, u.role, '-> user（标准版单用户）');
+                    u.role = 'user';
+                    corrected = true;
+                }
+            }
+        }
+    }
+
+    return { applied: true, corrected: corrected, from: from, to: config.edition };
+}
+
 function enforceEditionBinding() {
     try {
         const license = readLicense();
-        if (!license || !license.type) {
-            return { success: true, corrected: false };  // 无正式 license，无需校正
-        }
-        // ★ 安全加固：仅信任验签通过的 license（防伪造 type 提权）
-        if (!verifySignature(license)) {
-            console.warn('[License] enforceEditionBinding: license 验签失败，跳过版本校正');
-            return { success: true, corrected: false };
-        }
-        const type = String(license.type || '').toLowerCase();
-        const isInstitution = (type === 'pro' || type === 'institution');
-        if (!isInstitution && type !== 'personal' && type !== 'standard') {
-            return { success: true, corrected: false };  // 无法识别的版本，跳过
-        }
-
         const configDir = getWritableDir();
         const configPath = require('path').join(configDir, 'config.json');
         if (!fs.existsSync(configPath)) {
             return { success: true, corrected: false };
         }
         const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-
-        const isCloud = (config.appMode === 'cloud') ||
-                        ['cloud', 'cloud_personal', 'cloud_clinic'].includes(config.edition);
-
-        let targetEdition;
-        if (isInstitution) {
-            targetEdition = isCloud ? 'cloud_clinic' : 'clinic';
-        } else {
-            targetEdition = isCloud ? 'cloud_personal' : 'personal';
+        const r = applyEditionBindingToConfig(license, config);
+        if (r.skip) {
+            return { success: true, corrected: false };
         }
 
-        let corrected = false;
-        const from = config.edition;
-        if (config.edition !== targetEdition) {
-            config.edition = targetEdition;
-            corrected = true;
-            console.log('[License] 版本绑定校正 edition:', from, '->', targetEdition);
-        }
-
-        // ★ 2026-08-20 角色合规修复：机构版不再全员强制 admin（旧逻辑把医师也提权 → 医师登录也显示
-        //   【用户管理】，违反"机构版=管理员显示用户管理、医师不显示"规范）。机构版仅保证至少一名
-        //   管理员（防全表无 admin 锁死管理入口），其余角色保持用户管理设置；标准版仍全员 user（单用户规范）。
-        if (Array.isArray(config.users) && config.users.length > 0) {
-            if (isInstitution) {
-                const hasAdmin = config.users.some(u => u && (u.role === 'admin' || u.role === 'clinic_admin'));
-                if (!hasAdmin) {
-                    const first = config.users[0];
-                    console.log('[License] 版本绑定校正：机构版无管理员，提升首个用户', first.username, '-> admin');
-                    first.role = 'admin';
-                    corrected = true;
-                }
-            } else {
-                for (const u of config.users) {
-                    if (u && u.role && u.role !== 'user') {
-                        console.log('[License] 版本绑定校正用户角色:', u.username, u.role, '-> user（标准版单用户）');
-                        u.role = 'user';
-                        corrected = true;
-                    }
-                }
-            }
-        }
-
-        if (corrected) {
+        if (r.corrected) {
             signConfig(config);
             // ★ 第三轮终检 P2 修复：未生成签名则拒绝写入（与 installLicense 策略一致）
             if (!config.configSignature) {
@@ -2294,7 +2334,7 @@ function enforceEditionBinding() {
             console.log('[License] config.json 版本绑定校正完成，已重新签名');
         }
 
-        return { success: true, corrected: corrected, from: from, to: config.edition };
+        return { success: true, corrected: r.corrected, from: r.from, to: r.to };
     } catch (e) {
         console.warn('[License] enforceEditionBinding 异常（非致命）:', e.message);
         return { success: false, corrected: false, error: e.message };
