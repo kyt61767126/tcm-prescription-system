@@ -1028,6 +1028,10 @@ public class MainActivity extends BridgeActivity {
             "      installAdminLicense: function(args){ return callNativeAsync('installAdminLicense', {licenseBase64: (args&&args.license)||'', user: (args&&args.adminName)||(args&&args.user)||'', clinicName: (args&&args.clinicName)||'', password: (args&&args.password)||'admin', loginUsername: (args&&args.phone)||'', phone: (args&&args.phone)||'', licenseCode: (args&&args.licenseCode)||''}); }," +
             "      getActivationUsers: function(){ return callNativeAsync('getActivationUsers', {}); }," +
             "      registerLocalUser: function(args){ return callNativeAsync('registerLocalUser', {clinicName: (args&&args.clinicName)||'', adminName: (args&&args.adminName)||'', phone: (args&&args.phone)||'', password: (args&&args.password)||''}); }," +
+            // ★ 2026-09-06 架构重构：单一装码入口 + 流程状态持久化（详见 LicenseManager）
+            "      installLicenseFromServer: function(machineId){ return callNativeAsync('installLicenseFromServer', {machineId: machineId||''}); }," +
+            "      setActivationFlowState: function(state){ return callNativeAsync('setActivationFlowState', {json: JSON.stringify(state||{})}); }," +
+            "      getActivationFlowState: function(){ return callNativeAsync('getActivationFlowState', {}); }," +
             "      close: function(){ return Promise.resolve({success:true}); }," +
             "      restart: function(){ return callNativeAsync('appRestart', {}); }" +
             "    }" +
@@ -1466,6 +1470,17 @@ public class MainActivity extends BridgeActivity {
                                 args.optString("adminName", args.optString("doctorName", "")),
                                 args.optString("phone", ""),
                                 args.optString("password", "")).toString();
+                    case "installLicenseFromServer":
+                        // ★ 2026-09-06 架构重构：单一装码入口（JS 检测到 activated 统一调此，
+                        //   不再自行 fetch license 写盘）。同步执行（invoke 本就在桥线程），
+                        //   返回 {success,status,error?}。
+                        return getLM().installLicenseFromServerBridge(
+                                args.optString("machineId", "")).toString();
+                    case "setActivationFlowState":
+                        return getLM().setActivationFlowState(
+                                args.optString("json", "")).toString();
+                    case "getActivationFlowState":
+                        return getLM().getActivationFlowState().toString();
                     case "appRestart":
                         return appRestart().toString();
                     case "setTrialDays":

@@ -528,6 +528,141 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
         }
     }
 
+    // ========================================================================
+    //  ★ 2026-09-06 架构重构：单一装码入口（JS 显式调用）
+    //
+    //  历史病灶：JS 层 4 条装码链路（Tab1 轮询 / observer / 断点续传 / 存量自愈）
+    //  各自 fetch license 并写盘，与 Java 冷启动原生自愈三路并发、竞态写
+    //  license.dat/config.json。重构后 JS 检测到 activated 一律调本方法：
+    //    · 同步返回明确状态（installed/pending/unregistered/already_licensed/error）
+    //    · 不节流（JS 显式触发，由 sInstallLock 串行化防并发写）
+    //    · 注册门控不放松（license 恢复永不得先于注册建号）
+    //  冷启动 syncLicenseFromServer 保留为兜底（节流+静默）。
+    //
+    //  注意：本方法在桥线程同步执行（AndroidNative.invoke），含 8s 超时网络请求，
+    //  不得在 UI 线程调用（JS 桥 @JavascriptInterface 本身在 binder 线程）。
+    // ========================================================================
+    public JSONObject installLicenseFromServerBridge(String machineId) {
+        HttpURLConnection conn = null;
+        try {
+            String mid = (machineId == null || machineId.isEmpty()) ? getMachineId() : machineId;
+            if (mid == null || mid.isEmpty()) return failResult("无法获取本机设备标识");
+            if (!hasRegisteredLocalAccount()) {
+                JSONObject r = new JSONObject();
+                r.put("success", true); r.put("status", "unregistered");
+                r.put("message", "本地无注册账号，请先完成注册");
+                return r;
+            }
+            if (readLicense(mid) != null) {
+                JSONObject r = new JSONObject();
+                r.put("success", true); r.put("status", "already_licensed");
+                r.put("message", "本机授权已存在，无需重复安装");
+                return r;
+            }
+            URL url = new URL(ADMIN_STATUS_API_URL + "?machineId=" +
+                    java.net.URLEncoder.encode(mid, "UTF-8"));
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setRequestProperty("Accept", "application/json");
+            conn.setConnectTimeout(8000);
+            conn.setReadTimeout(8000);
+            int rc = conn.getResponseCode();
+            InputStream is = (rc >= 200 && rc < 400) ? conn.getInputStream() : conn.getErrorStream();
+            if (is == null) return failResult("服务器无响应（HTTP " + rc + "），请稍后重试");
+            String response = readStream(is);
+            Log.i(TAG, "[BridgeInstall] admin-status 响应: " + response);
+            JSONObject resp = new JSONObject(response);
+            if (!resp.optBoolean("success", false)) {
+                return failResult(resp.optString("error", "订单状态查询失败"));
+            }
+            String st = resp.optString("status", "");
+            if (!"activated".equals(st)) {
+                JSONObject r = new JSONObject();
+                r.put("success", true);
+                r.put("status", "pending_payment".equals(st) ? "pending_payment" : "pending");
+                r.put("message", "pending_payment".equals(st) ? "订单待付款" : "订单审核中");
+                return r;
+            }
+            String license = resp.optString("license", "");
+            if (license == null || license.isEmpty()) {
+                return failResult("服务端已激活但 license 数据为空，请联系客服");
+            }
+            JSONObject li = resp.optJSONObject("licenseInfo");
+            String user = (li != null) ? li.optString("user", "") : "";
+            String clinicName = (li != null) ? li.optString("clinicName", "") : "";
+            String phone = (li != null) ? li.optString("phone", "") : "";
+            String licenseCode = (li != null) ? li.optString("licenseCode", "") : "";
+            JSONObject inst = installAdminLicense(license, mid, user, clinicName,
+                    "", phone, phone, licenseCode);
+            if (inst != null && inst.optBoolean("success", false)) {
+                Log.i(TAG, "[BridgeInstall] 单一装码入口成功：license.dat 已落盘");
+                JSONObject r = new JSONObject();
+                r.put("success", true); r.put("status", "installed");
+                r.put("message", "激活成功");
+                return r;
+            }
+            return failResult((inst != null) ? inst.optString("error", "license 安装失败") : "license 安装失败");
+        } catch (java.net.SocketTimeoutException e) {
+            return failResult("查询超时，请检查网络后重试");
+        } catch (java.net.UnknownHostException e) {
+            return failResult("无法连接服务器，请检查网络后重试");
+        } catch (Exception e) {
+            Log.w(TAG, "[BridgeInstall] 装码异常: " + e.getMessage());
+            return failResult("装码异常：" + e.getMessage());
+        } finally {
+            if (conn != null) conn.disconnect();
+        }
+    }
+
+    // ========================================================================
+    //  ★ 2026-09-06 架构重构：激活流程状态持久化（config.json 独立字段 activationFlow）
+    //
+    //  { orderNo, requestId, status: 'pending_payment'|'pending'|..., edition,
+    //    phone, updatedAt }
+    //  独立字段不参与 configSignature 签名（签名内容仅
+    //  clinicName|doctorName|edition|configIssuedAt），故 needSign=false 写入，
+    //  完整性校验不受影响。localStorage 丢失/WebView 数据清除后流程仍可恢复。
+    // ========================================================================
+    public JSONObject setActivationFlowState(String json) {
+        try {
+            JSONObject cfg = readConfigJSON();
+            if (cfg == null) cfg = new JSONObject();
+            if (json == null || json.trim().isEmpty()) {
+                cfg.remove("activationFlow");
+            } else {
+                JSONObject state;
+                try { state = new JSONObject(json); }
+                catch (Exception pe) { return failResult("流程状态数据格式错误"); }
+                state.put("updatedAt", String.valueOf(System.currentTimeMillis()));
+                cfg.put("activationFlow", state);
+            }
+            boolean ok = writeConfigJSON(cfg, false);
+            Log.i(TAG, "[FlowState] 保存" + (ok ? "成功" : "失败") + ": " +
+                    (json == null || json.trim().isEmpty() ? "(已清除)" : json));
+            JSONObject r = new JSONObject();
+            r.put("success", ok);
+            if (!ok) r.put("error", "config.json 写入失败");
+            return r;
+        } catch (Exception e) {
+            Log.w(TAG, "[FlowState] 保存异常: " + e.getMessage());
+            return failResult("流程状态保存异常：" + e.getMessage());
+        }
+    }
+
+    public JSONObject getActivationFlowState() {
+        JSONObject r = new JSONObject();
+        try {
+            JSONObject cfg = readConfigJSON();
+            JSONObject state = (cfg != null) ? cfg.optJSONObject("activationFlow") : null;
+            r.put("success", true);
+            r.put("state", state != null ? state : new JSONObject());
+        } catch (Exception e) {
+            try { r.put("success", false); r.put("error", e.getMessage()); }
+            catch (Exception ignored) {}
+        }
+        return r;
+    }
+
     // ★ 2026-09-06 门控辅助：config.users 是否存在注册账号（用户名非内置 admin）。
     //   registerLocalUser（注册）/激活建号均以手机号为 username；全新安装仅有
     //   内置 admin（或空）→ false。作为原生领码自愈的前置门，杜绝 license 恢复

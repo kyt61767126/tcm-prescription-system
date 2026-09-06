@@ -1848,6 +1848,58 @@ ipcMain.handle('license:install-admin-license', async (event, args) => {
     }
 });
 
+// ★ 2026-09-06 架构重构：客户端直建订单（主进程 fetch 绕开渲染进程 file:// CORS）
+ipcMain.handle('license:submit-order-direct', async (event, payload) => {
+    try {
+        return await activateManager.submitOrderDirect(payload || {});
+    } catch (e) {
+        console.error('[IPC] submit-order-direct 异常:', e);
+        return { success: false, error: e && e.message };
+    }
+});
+
+// ★ 2026-09-06 架构重构：订单状态查询（order-status）
+ipcMain.handle('license:query-order-status', async (event, orderNo, phone) => {
+    try {
+        return await activateManager.queryOrderStatus(orderNo, phone);
+    } catch (e) {
+        console.error('[IPC] query-order-status 异常:', e);
+        return { success: false, error: e && e.message };
+    }
+});
+
+// ★ 2026-09-06 架构重构：单一装码入口（对齐 APP Java installLicenseFromServer）
+ipcMain.handle('license:install-from-server', async (event, machineId) => {
+    try {
+        if (global.__BNZC_E2E_BYPASS === true) {
+            return { success: false, error: 'E2E bypass: install-from-server blocked' };
+        }
+        return await activateManager.installLicenseFromServer(machineId);
+    } catch (e) {
+        console.error('[IPC] install-from-server 异常:', e);
+        return { success: false, error: e && e.message };
+    }
+});
+
+// ★ 2026-09-06 架构重构：激活流程状态持久化（activation-flow.json）
+ipcMain.handle('license:set-flow-state', async (event, state) => {
+    try {
+        return await activateManager.setActivationFlowState(state);
+    } catch (e) {
+        console.error('[IPC] set-flow-state 异常:', e);
+        return { success: false, error: e && e.message };
+    }
+});
+
+ipcMain.handle('license:get-flow-state', async () => {
+    try {
+        return await activateManager.getActivationFlowState();
+    } catch (e) {
+        console.error('[IPC] get-flow-state 异常:', e);
+        return { success: true, state: {} };
+    }
+});
+
 // ★ 管理员一键激活 - 取消激活请求
 
 ipcMain.handle('license:cancel-admin-request', async (event, requestId) => {

@@ -4275,6 +4275,92 @@
     // ★ 规则3：激活工单提交 API（客户在线申请激活码，管理员在后台工单审批页一键审批）
     const ACTIVATION_TICKET_SUBMIT_URL = 'https://tcm-prescription-system.pages.dev/api/license/ticket/submit';
 
+    // ========================================================================
+    // ★ 2026-09-06 架构重构：客户端直建订单（order-submit）+ 订单状态驱动
+    //
+    // 旧链路：弹窗提交 admin-submit（申请入后台待审）→ 付款被拦(PAYMENT_REQUIRED)
+    //   → 跳官网再填一遍表单下单 → 两条记录/字段污染/状态丢失。
+    // 新链路：弹窗内直接 order-submit 建单（active_order 幂等）→ 跳
+    //   download.html?orderNo= 恢复模式（无表单直接付款）→ order-status 轮询
+    //   驱动状态文案 → activated 后统一走桥 installLicenseFromServer 装码。
+    // 旧 admin-submit 链路完整保留为降级兜底（旧桥/桌面 IPC 未就绪/建单失败）。
+    // ========================================================================
+    const ORDER_SUBMIT_URL = 'https://tcm-prescription-system.pages.dev/api/license/order-submit';
+    const ORDER_STATUS_URL = 'https://tcm-prescription-system.pages.dev/api/license/order-status';
+    const ORDER_PRICE_MAP = { local: { personal: '￥99/年', pro: '￥299/年' } };
+
+    // 订单号：BNZC-DZ-yyyyMMddHHmm-XXXX（与官网 download.html 同构，服务端正则兼容）
+    function genOrderNo() {
+        const d = new Date();
+        const p2 = function (n) { return String(n).padStart(2, '0'); };
+        const ts = '' + d.getFullYear() + p2(d.getMonth() + 1) + p2(d.getDate()) +
+                   p2(d.getHours()) + p2(d.getMinutes());
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        let rand = '';
+        for (let i = 0; i < 4; i++) rand += chars.charAt(Math.floor(Math.random() * chars.length));
+        return 'BNZC-DZ-' + ts + '-' + rand;
+    }
+
+    // 载体判定（APP Java 桥也有 electronAPI.activate，须用桌面独有 showExpireAlert）
+    function detectCarrier() {
+        try {
+            return (global.electronAPI && global.electronAPI.activate &&
+                typeof global.electronAPI.activate.showExpireAlert === 'function') ? 'desktop' : 'app';
+        } catch (e) { return 'app'; }
+    }
+
+    // 直建订单：桌面新包走主进程 IPC（无 CORS），APP/浏览器走 fetch（服务端已放行 Origin: null）。
+    // 返回 {success,...} 或 {__fallbackLegacy:true} 表示调用方应降级 admin-submit。
+    async function postOrderDirect(orderPayload) {
+        try {
+            if (global.electronAPI && global.electronAPI.activate &&
+                typeof global.electronAPI.activate.submitOrderDirect === 'function') {
+                return await global.electronAPI.activate.submitOrderDirect(orderPayload);
+            }
+            // 桌面旧 preload（无 IPC 方法）：渲染进程 file:// fetch 被 CORS 拦 → 降级旧链路
+            if (detectCarrier() === 'desktop') return { __fallbackLegacy: true };
+            const controller = new AbortController();
+            const t = setTimeout(function () { try { controller.abort(); } catch (e) {} }, 12000);
+            try {
+                const r = await fetch(ORDER_SUBMIT_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(orderPayload),
+                    signal: controller.signal
+                });
+                return await r.json();
+            } finally { clearTimeout(t); }
+        } catch (e) {
+            console.warn('[OrderFlow] order-submit 异常（降级 admin-submit）:', e && e.message);
+            return { __fallbackLegacy: true, error: e && e.message };
+        }
+    }
+
+    // 查询订单状态：桌面新包走 IPC，其余 fetch
+    async function fetchOrderStatus(orderNo, phone) {
+        try {
+            if (global.electronAPI && global.electronAPI.activate &&
+                typeof global.electronAPI.activate.queryOrderStatus === 'function') {
+                return await global.electronAPI.activate.queryOrderStatus(orderNo, phone || '');
+            }
+            if (detectCarrier() === 'desktop') return null; // 桌面旧桥查不了（新链路也不会在旧桌面启用）
+            const qs = '?orderNo=' + encodeURIComponent(orderNo) +
+                       (phone ? ('&phone=' + encodeURIComponent(phone)) : '');
+            const controller = new AbortController();
+            const t = setTimeout(function () { try { controller.abort(); } catch (e) {} }, 10000);
+            try {
+                const r = await fetch(ORDER_STATUS_URL + qs, {
+                    method: 'GET', headers: { 'Content-Type': 'application/json' },
+                    signal: controller.signal
+                });
+                return await r.json();
+            } finally { clearTimeout(t); }
+        } catch (e) {
+            console.warn('[OrderFlow] order-status 查询异常:', e && e.message);
+            return null;
+        }
+    }
+
     // ============================================================================
     // ★ 2026-09-02 付款按钮"点击无反应"根治（openPayUrlRobust 三层递进+用户可见兜底）
     //   故障树（实测审计）：桥失败(旧包/任何异常) → window.open 在 WebView 未开多窗
@@ -4673,6 +4759,15 @@
         //   声明提前到绑定区之前，杜绝 TDZ；预填区赋值，版本选择 handler 内 await。
         let __bridgePrefillPromise = null;
 
+        // ★ 2026-09-06 架构重构：客户端直建订单流（order-submit → 付款 → 轮询 → 桥装码）
+        //   __orderFlow: { orderNo, requestId, status, phone, adminName, clinicName,
+        //                  edition:'personal'|'pro', productKey:'local', dp, at }
+        //   持久化双写：桥 config.json（activationFlow 字段，权威）+ localStorage 缓存。
+        let __orderFlow = null;
+        let __orderPollTimer = null;
+        let __orderPollCount = 0;
+        let __orderInstalling = false;
+
         const overlay = document.createElement('div');
         overlay.id = 'adminActivateOverlay';
         overlay.style.cssText =
@@ -4928,12 +5023,287 @@
         function cleanup() {
             if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
             if (currentActivationObserver) { try { currentActivationObserver.stop(); } catch (_) {} currentActivationObserver = null; }
+            stopOrderPolling();
             // ★ 2026-09-04 AR-02 修复：关闭弹窗时取消自动重启定时器（见 onAdminActivated
             //   setTimeout(__restartApp, 1500)）。风险等级=中；影响范围=激活成功页 1.5s 窗口。
             if (__autoRestartTid) { clearTimeout(__autoRestartTid); __autoRestartTid = null; }
             if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
             // 激活窗口关闭后，重置激活中标志，允许fallbackTimer下次重新触发
             global.__licenseActivating = false;
+        }
+
+        // ====================================================================
+        // ★ 2026-09-06 架构重构：订单流（直建订单 → 付款恢复链接 → 状态轮询 → 桥装码）
+        // ====================================================================
+        function stopOrderPolling() {
+            if (__orderPollTimer) { clearInterval(__orderPollTimer); __orderPollTimer = null; }
+        }
+
+        async function persistOrderFlow(flow) {
+            __orderFlow = flow;
+            try {
+                await StorageAdapter.setItem('license:activationFlowV1', JSON.stringify(flow));
+            } catch (e) { console.warn('[OrderFlow] localStorage 持久化失败(不影响):', e && e.message); }
+            try {
+                if (global.electronAPI && global.electronAPI.activate &&
+                    typeof global.electronAPI.activate.setActivationFlowState === 'function') {
+                    await global.electronAPI.activate.setActivationFlowState(flow);
+                }
+            } catch (be) { console.warn('[OrderFlow] 桥流程状态持久化失败(不影响):', be && be.message); }
+        }
+
+        async function clearOrderFlow() {
+            __orderFlow = null;
+            try { await StorageAdapter.removeItem('license:activationFlowV1'); } catch (e) {}
+            try {
+                if (global.electronAPI && global.electronAPI.activate &&
+                    typeof global.electronAPI.activate.setActivationFlowState === 'function') {
+                    await global.electronAPI.activate.setActivationFlowState(null);
+                }
+            } catch (be) {}
+        }
+
+        async function loadPersistedOrderFlow() {
+            // 桥 config.json 权威优先，localStorage 缓存兜底
+            try {
+                if (global.electronAPI && global.electronAPI.activate &&
+                    typeof global.electronAPI.activate.getActivationFlowState === 'function') {
+                    const r = await global.electronAPI.activate.getActivationFlowState();
+                    if (r && r.success && r.state && r.state.orderNo) return r.state;
+                }
+            } catch (be) {}
+            try {
+                const raw = await StorageAdapter.getItem('license:activationFlowV1');
+                const f = raw ? JSON.parse(raw) : null;
+                if (f && f.orderNo) return f;
+            } catch (e) {}
+            return null;
+        }
+
+        // 等待面板状态文案（order-status 驱动）
+        function renderOrderWaitStatus(status) {
+            const el = document.getElementById('adminWaitStatus');
+            if (!el) return;
+            if (status === 'pending_payment') {
+                el.innerHTML = '⏳ <b style="color:#c2410c;">订单待付款</b>——请点击下方「去官网付款」扫码支付';
+            } else if (status === 'pending') {
+                el.innerHTML = '✅ <b style="color:#2e7d32;">付款已收到</b>，等待管理员核对激活（通常5-30分钟）<br>请保持本窗口打开，激活将自动完成';
+            } else {
+                el.textContent = '正在同步订单状态...';
+            }
+        }
+
+        // 订单轮询：order-status 驱动文案；activated 走桥单一装码入口；rejected 显示原因
+        function startOrderPolling(flow) {
+            stopOrderPolling();
+            __orderPollCount = 0;
+            __orderPollTimer = setInterval(async function () {
+                __orderPollCount++;
+                const r = await fetchOrderStatus(flow.orderNo, flow.phone || '');
+                if (!r || !r.success) return;
+                if (r.status === 'pending_payment' || r.status === 'pending') {
+                    flow.status = r.status;
+                    renderOrderWaitStatus(r.status);
+                    return;
+                }
+                if (r.status === 'rejected') {
+                    stopOrderPolling();
+                    document.getElementById('adminRejectReason').textContent =
+                        (r.rejectReason || '订单已被拒绝，请联系客服微信 hktzy1688') +
+                        '（订单号：' + flow.orderNo + '）';
+                    show('adminRejected');
+                    return;
+                }
+                if (r.status === 'activated') {
+                    stopOrderPolling();
+                    handleOrderActivated(flow, r);
+                    return;
+                }
+                // 超 20 分钟停止前端轮询（Java 冷启动/onResume 原生自愈 + 重开弹窗恢复继续兜底）
+                if (__orderPollCount >= 240) {
+                    stopOrderPolling();
+                    const el = document.getElementById('adminWaitStatus');
+                    if (el) el.innerHTML = '⏰ 等待时间较长，管理员可能还在核对付款<br>关闭窗口不影响，稍后重新打开自动恢复';
+                }
+            }, 5000);
+        }
+
+        // activated：桥 installLicenseFromServer 单一装码入口 → onAdminActivated 收尾
+        // （账号同步/自验/成功页/重启）。桥不可用（极端旧包）时退回 observer 旧链路。
+        async function handleOrderActivated(flow, orderRes) {
+            if (__orderInstalling) return;
+            __orderInstalling = true;
+            try {
+                let bridgeInstalled = false;
+                try {
+                    if (global.electronAPI && global.electronAPI.activate &&
+                        typeof global.electronAPI.activate.installLicenseFromServer === 'function') {
+                        const res = await global.electronAPI.activate.installLicenseFromServer(machineId || '');
+                        bridgeInstalled = !!(res && res.success &&
+                            (res.status === 'installed' || res.status === 'already_licensed'));
+                        console.log('[OrderFlow] 桥装码结果:', res);
+                    }
+                } catch (be) { console.warn('[OrderFlow] 桥装码异常:', be && be.message); }
+
+                // 回填会话 state（断点续传会话可能为空），供 onAdminActivated 账号同步
+                if (flow.phone) state.phone = flow.phone;
+                if (flow.adminName) state.adminName = flow.adminName;
+                if (flow.clinicName) state.clinicName = flow.clinicName;
+                state.edition = (flow.edition === 'pro') ? 'institution' : 'personal';
+
+                if (bridgeInstalled) {
+                    await clearOrderFlow();
+                    // onAdminActivated 内部桥优先装码（已装则命中 already_licensed 快路径），
+                    // 并完成账号同步/自验/成功页/重启
+                    const fakeR = Object.assign({}, orderRes, {
+                        license: orderRes.license || '',
+                        licenseInfo: Object.assign({}, orderRes.licenseInfo || {}, {
+                            phone: flow.phone || (orderRes.licenseInfo && orderRes.licenseInfo.phone) || '',
+                            licenseCode: orderRes.licenseCode || ''
+                        })
+                    });
+                    await onAdminActivated(fakeR, flow.requestId || '');
+                } else {
+                    // 桥不可用/装码失败：启动旧 observer 链路（admin-status 取 license 直装）兜底
+                    console.warn('[OrderFlow] 桥装码未成功，退回 observer 旧链路兜底');
+                    startPolling(flow.requestId || '');
+                }
+            } finally {
+                __orderInstalling = false;
+            }
+        }
+
+        // 进入订单等待视图（建单成功/断点恢复共用）
+        function enterOrderWaiting(flow) {
+            document.getElementById('adminRequestNo').textContent = flow.orderNo;
+            document.getElementById('adminSavedPhone').textContent = flow.phone || '--';
+            show('adminWaiting');
+            renderOrderWaitStatus(flow.status || 'pending_payment');
+            startOrderPolling(flow);
+        }
+
+        // 付款链接：有订单走 ?orderNo= 恢复模式（官网无表单直接付款），否则旧 ?mid= 回填模式
+        function buildPayUrl() {
+            const dp = detectCarrier();
+            if (__orderFlow && __orderFlow.orderNo) {
+                return 'https://tcm-prescription-system.pages.dev/download.html?orderNo=' +
+                    encodeURIComponent(__orderFlow.orderNo) + '&dp=' + dp;
+            }
+            var __edParam = (state.edition === 'institution') ? 'local-pro'
+                : (state.edition === 'personal' ? 'local-personal' : '');
+            var __cn1 = (document.getElementById('adminClinicName') || {}).value || (state.clinicName || '');
+            var __n1  = (document.getElementById('adminAdminName') || {}).value || (state.adminName || '');
+            var __p1  = (document.getElementById('adminPhone') || {}).value || (state.phone || '');
+            var __r1  = (document.getElementById('adminRemark') || {}).value || (state.remark || '');
+            return 'https://tcm-prescription-system.pages.dev/download.html?mid=' + encodeURIComponent(machineId || '')
+                + (__edParam ? ('&ed=' + __edParam) : '') + '&dp=' + dp
+                + (__cn1 ? ('&cn=' + encodeURIComponent(__cn1)) : '')
+                + (__n1  ? ('&n='  + encodeURIComponent(__n1))  : '')
+                + (__p1  ? ('&p='  + encodeURIComponent(__p1))  : '')
+                + (__r1  ? ('&r='  + encodeURIComponent(__r1))  : '');
+        }
+
+        // ★ 直建订单（新链路）。成功进入订单等待视图返回 true；需降级/失败返回 false。
+        async function trySubmitDirectOrder() {
+            try {
+                const editionKey = (state.edition === 'institution') ? 'pro' : 'personal';
+                const orderNo = genOrderNo();
+                const orderPayload = {
+                    orderNo: orderNo,
+                    productKey: 'local',
+                    edition: editionKey,
+                    price: (ORDER_PRICE_MAP.local && ORDER_PRICE_MAP.local[editionKey]) || '',
+                    clinicName: state.clinicName,
+                    adminName: state.adminName,
+                    phone: state.phone,
+                    machineId: machineId || 'unknown',
+                    note: state.remark || '',
+                    inviteCode: state.inviteCode || '',
+                    dp: detectCarrier()
+                };
+                const res = await postOrderDirect(orderPayload);
+                if (!res || res.__fallbackLegacy) return false;
+                if (!res.success) {
+                    // 403 设备版本绑定/409 一号一机等业务错误：降级旧链路让 admin-submit
+                    // 给出原有交互（PAYMENT_REQUIRED/错误提示），不在这里重复报错
+                    console.warn('[OrderFlow] 直建订单未成功，降级 admin-submit:', res.error);
+                    return false;
+                }
+                const flow = {
+                    orderNo: res.orderNo || orderNo,
+                    requestId: res.requestId || '',
+                    status: res.status || 'pending_payment',
+                    phone: (state.phone || '').trim(),
+                    adminName: (state.adminName || '').trim(),
+                    clinicName: (state.clinicName || '').trim(),
+                    edition: editionKey,
+                    productKey: 'local',
+                    dp: orderPayload.dp,
+                    at: Date.now()
+                };
+                // 断点持久化（与旧链路同一份 adminReqPending，onAdminActivated 恢复读它取密码）
+                try {
+                    const encPwd = await encryptSensitive(state.password || '');
+                    await StorageAdapter.setItem('license:adminReqPending', JSON.stringify({
+                        requestId: flow.requestId,
+                        orderNo: flow.orderNo,
+                        phone: flow.phone,
+                        adminName: flow.adminName,
+                        clinicName: flow.clinicName,
+                        passwordEnc: encPwd,
+                        machineId: machineId ? String(machineId) : '',
+                        at: Date.now()
+                    }));
+                } catch (pe) { console.warn('[OrderFlow] adminReqPending 持久化失败(不影响):', pe && pe.message); }
+                await persistOrderFlow(flow);
+                // FSM v2 状态同步
+                try {
+                    await setStateV2(_STATES.PENDING_PAYMENT, {
+                        requestId: flow.requestId, phone: flow.phone,
+                        adminName: flow.adminName, clinicName: flow.clinicName,
+                        prevState: (await getLicenseStateV2()).state
+                    });
+                } catch (_fsmerr) { console.warn('[OrderFlow] FSM setState err:', _fsmerr); }
+                console.log('[OrderFlow] 直建订单成功:', flow.orderNo, 'requestId=', flow.requestId,
+                    res.idempotent ? '(幂等命中)' : '');
+                enterOrderWaiting(flow);
+                return true;
+            } catch (e) {
+                console.warn('[OrderFlow] 直建订单异常，降级 admin-submit:', e && e.message);
+                return false;
+            }
+        }
+
+        // ★ 弹窗打开时断点恢复：存在进行中订单 → 直达等待视图（杀进程/关窗/切后台后重开不丢单）
+        async function tryResumeOrderFlow() {
+            try {
+                const flow = await loadPersistedOrderFlow();
+                if (!flow || !flow.orderNo) return;
+                // 终态不清空由装码成功负责；但若本地已有 license，直接清断点
+                try {
+                    if (global.electronAPI && global.electronAPI.license &&
+                        typeof global.electronAPI.license.getStatus === 'function') {
+                        const v = await global.electronAPI.license.getStatus();
+                        if (v && v.valid && v.type && v.type !== 'trial') { await clearOrderFlow(); return; }
+                    }
+                } catch (ve) {}
+                state.edition = (flow.edition === 'pro') ? 'institution' : 'personal';
+                state.editionChosen = true;
+                if (flow.phone) state.phone = flow.phone;
+                if (flow.adminName) state.adminName = flow.adminName;
+                if (flow.clinicName) state.clinicName = flow.clinicName;
+                // 回填表单（付款页返回/用户想修改时可见）
+                try {
+                    const cn = document.getElementById('adminClinicName');
+                    const an = document.getElementById('adminAdminName');
+                    const ph = document.getElementById('adminPhone');
+                    if (cn && flow.clinicName) cn.value = flow.clinicName;
+                    if (an && flow.adminName) an.value = flow.adminName;
+                    if (ph && flow.phone) ph.value = flow.phone;
+                } catch (fe) {}
+                console.log('[OrderFlow] 断点恢复进行中订单:', flow.orderNo, 'status=', flow.status);
+                enterOrderWaiting(flow);
+            } catch (e) { console.warn('[OrderFlow] 断点恢复失败(不影响):', e && e.message); }
         }
 
         function showFieldErr(elId, hintEl, msg) {
@@ -5457,6 +5827,14 @@
             btn.disabled = true;
             show('adminSubmitting');
 
+            // ★ 2026-09-06 架构重构：优先客户端直建订单（order-submit）——
+            //   建单成功直达订单等待视图（付款链接带 orderNo 恢复模式，官网免填单）；
+            //   失败/旧桥/桌面 IPC 未就绪 → 静默降级下方 admin-submit 旧链路。
+            try {
+                const __directOk = await trySubmitDirectOrder();
+                if (__directOk) { btn.disabled = false; return; }
+            } catch (de) { console.warn('[OrderFlow] 直建订单钩子异常，走旧链路:', de && de.message); }
+
             const payload = {
                 clinicName: state.clinicName,
                 adminName: state.adminName,
@@ -5850,19 +6228,44 @@
                 }
             } catch (_) {}
             // 离线 APP：本地安装 license + 重启；云端 APP（无 installAdminLicense）：账号已在云端创建，提示登录
-            if (global.electronAPI && global.electronAPI.activate &&
-                typeof global.electronAPI.activate.installAdminLicense === 'function' && license) {
+            // ★ 2026-09-06 架构重构（T5 装码路径收敛）：桥 installLicenseFromServer 为单一
+            //   装码入口（原生查 admin-status 取 license + sInstallLock 串行落盘 + UPSERT
+            //   账号），JS 不再自行传 license 写盘；旧桥/桥失败且响应带 license 时退回直装兜底。
+            const __hasBridgeInstall = !!(global.electronAPI && global.electronAPI.activate &&
+                (typeof global.electronAPI.activate.installLicenseFromServer === 'function' ||
+                 (typeof global.electronAPI.activate.installAdminLicense === 'function' && license)));
+            if (__hasBridgeInstall) {
                 try {
-                    // ★ 2026-09-03 恢复场景兜底：adminName/clinicName/password 优先 state，
-                    //   空则用持久化/服务端兜底值（_res*），确保断点续传激活也建「手机号+自设密码」账号
-                    const inst = await global.electronAPI.activate.installAdminLicense({
-                        license: license,
-                        adminName: _resName || state.adminName,
-                        clinicName: _resClinic || state.clinicName,
-                        password: _resPwd || state.password || 'admin',
-                        phone: phone,
-                        licenseCode: adminLicenseCode
-                    });
+                    let inst = null;
+                    if (global.electronAPI.activate &&
+                        typeof global.electronAPI.activate.installLicenseFromServer === 'function') {
+                        try {
+                            const __br = await global.electronAPI.activate.installLicenseFromServer(machineId || '');
+                            if (__br && __br.success &&
+                                (__br.status === 'installed' || __br.status === 'already_licensed')) {
+                                inst = { success: true };
+                            } else {
+                                console.warn('[LicenseCheck] 桥单一装码未完成，退回直装兜底:', __br);
+                            }
+                        } catch (be) {
+                            console.warn('[LicenseCheck] 桥单一装码异常，退回直装兜底:', be && be.message);
+                        }
+                    }
+                    // 兜底：旧桥无单一入口 / 桥装失败且响应带 license → installAdminLicense 直装
+                    if (!(inst && inst.success) && license &&
+                        global.electronAPI.activate &&
+                        typeof global.electronAPI.activate.installAdminLicense === 'function') {
+                        // ★ 2026-09-03 恢复场景兜底：adminName/clinicName/password 优先 state，
+                        //   空则用持久化/服务端兜底值（_res*），确保断点续传激活也建「手机号+自设密码」账号
+                        inst = await global.electronAPI.activate.installAdminLicense({
+                            license: license,
+                            adminName: _resName || state.adminName,
+                            clinicName: _resClinic || state.clinicName,
+                            password: _resPwd || state.password || 'admin',
+                            phone: phone,
+                            licenseCode: adminLicenseCode
+                        });
+                    }
                     // ★ 2026-09-04 P0 加固：installAdminLicense 成功后立即 JS 侧自验 license，
                     //   防止某些机型（如华为 P40）Java 层已覆盖 success=false 但 JS 层仍走到
                     //   这里继续显示"激活成功"的分支；自验同时覆盖 Java 桥偶发返回 success=true
@@ -5926,35 +6329,14 @@
         }
 
         document.getElementById('adminRetryBtn').addEventListener('click', function() { show('adminStepEdition'); });
-        // ★ 官网快速付费导引：直达官网购买页（携带本机 machineId 自动预填设备识别码）
+        // ★ 官网快速付费导引：直达官网购买页。
+        //   2026-09-06 架构重构：已直建订单时走 ?orderNo= 恢复模式（官网免填单、
+        //   直接展示订单二维码付款页）；无订单时保留旧 ?mid= 自动回填模式。
         (function bindAdminPayGuide() {
             const btn = document.getElementById('adminPayGuideBtn');
             if (!btn) return;
             btn.addEventListener('click', function() {
-                // ★ 2026-09-02 改用 openPayUrlRobust（原 window.open/catch fallback 在
-                //   WebView 静默 null 场景全链路无反馈，详见函数头注释）
-                // ★ 2026-09-03 修复「点击无反应」：editionIntent 是 showTicketFormModal 的
-                //   局部变量（复制代码时误带入），本函数作用域不存在 → 点击时 ReferenceError
-                //   静默中断，openPayUrlRobust 永远不执行。改用本函数的 state.edition。
-                var __edParam = (state.edition === 'institution') ? 'local-pro' : (state.edition === 'personal' ? 'local-personal' : '');
-                // ★ 2026-09-03 dp=载体（desktop/app）：官网下单沿 URL 传入 order-submit
-                // ★ 2026-09-03 载体判定修正：APP Java 桥也有 electronAPI.activate，
-                //   须用桌面独有的 showExpireAlert 判定，否则 APP 被错标 desktop
-                // ★ 2026-09-04 流程优化：携带管理员激活表单已填信息(cn=诊所名/n=管理员/p=手机号/r=备注)
-                //   → 官网购买页自动回填，避免重复填；管理员激活无微信号字段，custWechat 留空。
-                var __dp1 = (global.electronAPI && global.electronAPI.activate &&
-                    typeof global.electronAPI.activate.showExpireAlert === 'function') ? 'desktop' : 'app';
-                var __cn1 = (document.getElementById('adminClinicName') || {}).value || (state.clinicName || '');
-                var __n1  = (document.getElementById('adminAdminName') || {}).value || (state.adminName || '');
-                var __p1  = (document.getElementById('adminPhone') || {}).value || (state.phone || '');
-                var __r1  = (document.getElementById('adminRemark') || {}).value || (state.remark || '');
-                const url = 'https://tcm-prescription-system.pages.dev/download.html?mid=' + encodeURIComponent(machineId || '')
-                    + (__edParam ? ('&ed=' + __edParam) : '') + '&dp=' + __dp1
-                    + (__cn1 ? ('&cn=' + encodeURIComponent(__cn1)) : '')
-                    + (__n1  ? ('&n='  + encodeURIComponent(__n1))  : '')
-                    + (__p1  ? ('&p='  + encodeURIComponent(__p1))  : '')
-                    + (__r1  ? ('&r='  + encodeURIComponent(__r1))  : '');
-                openPayUrlRobust(url, btn);
+                openPayUrlRobust(buildPayUrl(), btn);
             });
         })();
         // ★ 2026-09-02 支付前置校验配套：adminPayRequired 面板按钮绑定
@@ -5962,25 +6344,7 @@
             const btn = document.getElementById('adminPayRequiredBtn');
             if (!btn) return;
             btn.addEventListener('click', function() {
-                // ★ 2026-09-03 修复「点击无反应」：同上，editionIntent 越界引用改 state.edition
-                var __edParam = (state.edition === 'institution') ? 'local-pro' : (state.edition === 'personal' ? 'local-personal' : '');
-                // ★ 2026-09-03 dp=载体（desktop/app）：官网下单沿 URL 传入 order-submit
-                // ★ 2026-09-03 载体判定修正：APP Java 桥也有 electronAPI.activate，
-                //   须用桌面独有的 showExpireAlert 判定，否则 APP 被错标 desktop
-                // ★ 2026-09-04 流程优化：同 bindAdminPayGuide 传 cn/n/p/r → 官网回填
-                var __dp2 = (global.electronAPI && global.electronAPI.activate &&
-                    typeof global.electronAPI.activate.showExpireAlert === 'function') ? 'desktop' : 'app';
-                var __cn2 = (document.getElementById('adminClinicName') || {}).value || (state.clinicName || '');
-                var __n2  = (document.getElementById('adminAdminName') || {}).value || (state.adminName || '');
-                var __p2  = (document.getElementById('adminPhone') || {}).value || (state.phone || '');
-                var __r2  = (document.getElementById('adminRemark') || {}).value || (state.remark || '');
-                const url = 'https://tcm-prescription-system.pages.dev/download.html?mid=' + encodeURIComponent(machineId || '')
-                    + (__edParam ? ('&ed=' + __edParam) : '') + '&dp=' + __dp2
-                    + (__cn2 ? ('&cn=' + encodeURIComponent(__cn2)) : '')
-                    + (__n2  ? ('&n='  + encodeURIComponent(__n2))  : '')
-                    + (__p2  ? ('&p='  + encodeURIComponent(__p2))  : '')
-                    + (__r2  ? ('&r='  + encodeURIComponent(__r2))  : '');
-                openPayUrlRobust(url, btn);
+                openPayUrlRobust(buildPayUrl(), btn);
             });
             const back = document.getElementById('adminPayRequiredBackBtn');
             if (back) back.addEventListener('click', function() { show('adminStepForm'); });
@@ -6004,6 +6368,10 @@
                 if (!state.clinicName) state.clinicName = clinicName;
             }
         } catch (ce) {}
+
+        // ★ 2026-09-06 架构重构：弹窗打开即检查进行中订单（直建订单链路断点恢复）——
+        //   杀进程/关窗/切后台后重开弹窗，直达订单等待视图，绝不丢单、不重填。
+        tryResumeOrderFlow();
     }
 
     // ★ 2026-09-03 管理员激活断点续传：启动时检测持久化申请是否已审核通过并自动完成领码。
@@ -6055,19 +6423,42 @@
         }
 
         // ③ 装 license + 建 config 账号（Java/Electron 桥）
+        // ★ 2026-09-06 架构重构（T5）：桥 installLicenseFromServer 单一装码入口优先
+        //   （原生查 admin-status 取 license 落盘，不依赖 r.license 是否回传）；
+        //   旧桥/失败且 r 带 license 时退回 installAdminLicense 直装。
         var license = (r && r.license) ? r.license : '';
         var installed = false;
-        if (global.electronAPI && global.electronAPI.activate &&
-            typeof global.electronAPI.activate.installAdminLicense === 'function' && license) {
+        var __bridgeInstall = global.electronAPI && global.electronAPI.activate &&
+            typeof global.electronAPI.activate.installLicenseFromServer === 'function';
+        var __directInstall = global.electronAPI && global.electronAPI.activate &&
+            typeof global.electronAPI.activate.installAdminLicense === 'function' && license;
+        if (__bridgeInstall || __directInstall) {
             try {
-                var inst = await global.electronAPI.activate.installAdminLicense({
-                    license: license,
-                    adminName: adminName,
-                    clinicName: clinicName,
-                    password: pwd || 'admin',
-                    phone: phone,
-                    licenseCode: adminLicenseCode
-                });
+                var inst = null;
+                if (__bridgeInstall) {
+                    try {
+                        var __br = await global.electronAPI.activate.installLicenseFromServer(
+                            (saved && saved.machineId) || '');
+                        if (__br && __br.success &&
+                            (__br.status === 'installed' || __br.status === 'already_licensed')) {
+                            inst = { success: true };
+                        } else {
+                            console.warn('[LicenseCheck] 断点续传桥单一装码未完成，退回直装:', __br);
+                        }
+                    } catch (be) {
+                        console.warn('[LicenseCheck] 断点续传桥单一装码异常，退回直装:', be && be.message);
+                    }
+                }
+                if (!(inst && inst.success) && __directInstall) {
+                    inst = await global.electronAPI.activate.installAdminLicense({
+                        license: license,
+                        adminName: adminName,
+                        clinicName: clinicName,
+                        password: pwd || 'admin',
+                        phone: phone,
+                        licenseCode: adminLicenseCode
+                    });
+                }
                 // ★ 2026-09-04 P0 加固：同 onAdminActivated 双层判定
                 //   Java 层自验已覆盖 success=false（见 MainActivity.java installAdminLicense），
                 //   JS 侧再 validate() 一次兜底（某些机型桥返回 success=true 但 license 已坏）
@@ -6195,7 +6586,10 @@
             var ea = global.electronAPI || (global.window && global.window.electronAPI);
             if (!ea || !ea.activate) return;
             if (!ea.license || typeof ea.license.getStatus !== 'function') return;
-            if (typeof ea.activate.installAdminLicense !== 'function') return;
+            // ★ 2026-09-06 T5 收敛：桥 installLicenseFromServer（单一装码入口）或旧
+            //   installAdminLicense 直装，二者有其一即可自愈
+            if (typeof ea.activate.installLicenseFromServer !== 'function' &&
+                typeof ea.activate.installAdminLicense !== 'function') return;
             ea.license.getStatus().then(function (st) {
                 if (!st || !st.valid || st.type !== 'trial') return; // 已授权/异常状态不处理
                 // ★ 2026-09-06 回归修复（注册门控，与 Java syncLicenseFromServer 同族铁律）：
@@ -6217,7 +6611,24 @@
                     //   （用户实测：覆盖安装 v227 后仍显示试用7天，手动激活入口提交才成功）。
                     var mid = normalizeMachineIdResult(rawMid);
                     if (!mid) { console.warn('[LicenseCheck] 存量自愈跳过：machineId 归一化失败，桥返回：', String(rawMid)); return; }
-                    return _queryAdminStatus('', mid).then(function (r) {
+                    // ★ 2026-09-06 T5 收敛：桥 installLicenseFromServer 单一装码入口优先
+                    //   （原生查 admin-status + 落盘一体，JS 无需自取 license）；
+                    //   旧桥/未装成功再退回下方 _queryAdminStatus + 直装链路。
+                    var __bridgeHeal = (typeof ea.activate.installLicenseFromServer === 'function')
+                        ? Promise.resolve().then(function () { return ea.activate.installLicenseFromServer(mid); })
+                        : Promise.resolve(null);
+                    return __bridgeHeal.then(function (br) {
+                        if (br && br.success && (br.status === 'installed' || br.status === 'already_licensed')) {
+                            console.log('[LicenseCheck] 存量自愈成功（桥单一装码入口）:', br.status);
+                            try {
+                                StorageAdapter.setItem('license:machineId', mid);
+                                StorageAdapter.removeItem('license:lastHeartbeat');
+                                StorageAdapter.removeItem('license:offlineStart');
+                            } catch (he0) {}
+                            try { injectLicenseStatusIntoSettings(); } catch (he2) {}
+                            return;
+                        }
+                        return _queryAdminStatus('', mid).then(function (r) {
                         if (!(r && r.success && r.status === 'activated' && r.license)) return;
                         var li = r.licenseInfo || {};
                         console.log('[LicenseCheck] 存量自愈：服务端显示本机已激活但本地 license.dat 缺失，自动补装');
@@ -6247,7 +6658,8 @@
                                 console.warn('[LicenseCheck] 存量自愈失败:', (inst && inst.error) || '未知错误');
                             }
                         });
-                    });
+                        }); // _queryAdminStatus.then 闭合
+                    }); // __bridgeHeal.then 闭合（2026-09-06 T5 桥单一装码入口）
                 });
                 }); // isLocalRegisteredAsync().then 注册门控闭合
             }).catch(function (e) {

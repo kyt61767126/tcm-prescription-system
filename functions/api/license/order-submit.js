@@ -53,7 +53,10 @@ let _currentRequest = null;
 
 function corsHeaders() {
     const origin = _currentRequest ? (_currentRequest.headers.get('Origin') || '') : '';
-    const allowedOrigin = (origin && ALLOWED_ORIGINS.includes(origin)) ? origin : 'https://tcm-prescription-system.pages.dev';
+    // ★ 2026-09-06 架构重构：file:// 客户端（Origin: null，离线APP/桌面 WebView）放行，
+    //   对齐 admin-submit/admin-status——客户端直建订单不再需要绕官网表单。
+    //   非白名单浏览器源回退 'null' 与其 Origin 不匹配，浏览器侧仍被拦截（安全不降级）。
+    const allowedOrigin = (origin && ALLOWED_ORIGINS.includes(origin)) ? origin : 'null';
     return {
         'Access-Control-Allow-Origin': allowedOrigin,
         'Vary': 'Origin',
@@ -85,6 +88,11 @@ function generateRequestId() {
 
 const KV_ADMIN_REQ_PREFIX = 'admin_req:';
 const KV_ORDER_PREFIX = 'order:';
+// ★ 2026-09-06 架构重构：进行中订单索引（建单幂等用，O(1)）。
+//   待付款订单不进 admin_req_index（order-paid 后才入），故按 machineId 单列索引；
+//   惰性清理：终态/超48h/异手机号在下次下单时自动覆盖，无需 admin-approve 侧维护。
+const KV_ACTIVE_ORDER_PREFIX = 'active_order:';
+const ACTIVE_ORDER_MAX_AGE_MS = 48 * 60 * 60 * 1000;
 
 export async function onRequest(context) {
     _currentRequest = context.request;
@@ -116,7 +124,15 @@ export async function onRequest(context) {
 
         const body = await context.request.json().catch(() => ({}));
         const { orderNo, productKey, edition, price, clinicName, adminName,
-                phone, wechat, machineId, note, dp } = body;
+                phone, wechat, machineId, note, dp, inviteCode } = body;
+
+        // ★ 2026-09-06 架构重构：客户端直建订单透传邀请码（选填），
+        //   与 admin-submit 同格式校验，审核通过时结算邀请奖励。
+        const inviteCodeClean = (typeof inviteCode === 'string' && inviteCode.trim())
+            ? inviteCode.trim().toUpperCase() : '';
+        if (inviteCodeClean && !/^[A-Z0-9]{4,10}$/.test(inviteCodeClean)) {
+            return json({ success: false, error: '邀请码格式错误（4-10位字母或数字）' }, 400);
+        }
 
         // ===== 参数校验 =====
         if (!orderNo || typeof orderNo !== 'string' || !/^BNZC-[A-Z]{2}-\d{12}-[A-Z0-9]{4,8}$/i.test(orderNo.trim())) {
@@ -176,6 +192,32 @@ export async function onRequest(context) {
             return json({ success: false, error: deviceCheck.error }, 403);
         }
 
+        // ★ 2026-09-06 架构重构：建单幂等——同机同手机号存在进行中订单
+        //   （pending_payment 待付款 / pending 已付款待核）时直接返回既有订单，
+        //   防重复建单/重复占号（客户端重开弹窗、杀进程重进、网络重试均命中）。
+        //   命中条件：phone 一致 + 状态进行中 + 48h 内；否则视为失效，继续走新建。
+        {
+            const active = await kv.get(KV_ACTIVE_ORDER_PREFIX + finalMachineId, 'json').catch(() => null);
+            if (active && active.requestId) {
+                const existRec = await kv.get(KV_ADMIN_REQ_PREFIX + active.requestId, 'json').catch(() => null);
+                const existAge = existRec ? (Date.now() - new Date(existRec.submittedAt || existRec.createdAt || 0).getTime()) : Infinity;
+                if (existRec && existRec.phone === phone.trim() &&
+                    (existRec.status === 'pending_payment' || existRec.status === 'pending') &&
+                    existAge < ACTIVE_ORDER_MAX_AGE_MS) {
+                    console.log('[OrderSubmit] 幂等命中进行中订单:', existRec.orderNo,
+                        'requestId=', existRec.requestId, 'status=', existRec.status);
+                    return json({
+                        success: true,
+                        orderNo: existRec.orderNo,
+                        requestId: existRec.requestId,
+                        status: existRec.status,
+                        idempotent: true,
+                        message: existRec.status === 'pending_payment' ? '订单已创建，请扫码付款' : '付款已收到，等待管理员核对'
+                    });
+                }
+            }
+        }
+
         // ===== 生成记录 =====
         const requestId = generateRequestId();
         const now = new Date().toISOString();
@@ -212,6 +254,9 @@ export async function onRequest(context) {
             appModeCarrier: (dp === 'desktop' || dp === 'app') ? dp : '',
             versionLabel: versionLabel,
             env: 'production',
+            // ★ 2026-09-06 客户端直建订单携带邀请码（选填）：admin-approve 审核
+            //   通过时按此字段结算邀请奖励（与 admin-submit 记录同构）
+            inviteCode: inviteCodeClean,
             // ★ 官网订单扩展字段（后台核对付款信息用）
             orderSource: 'website',
             orderNo: orderNo.trim().toUpperCase(),
@@ -231,6 +276,19 @@ export async function onRequest(context) {
             skipReqIndex: true
         });
         await bindOrderToRequest(kv, created.record.orderNo, created.requestId, created.record.phone);
+
+        // ★ 2026-09-06 架构重构：写进行中订单索引（幂等查找用；失败不影响下单）
+        try {
+            await kv.put(KV_ACTIVE_ORDER_PREFIX + finalMachineId, JSON.stringify({
+                requestId: created.requestId,
+                orderNo: created.record.orderNo,
+                phone: phone.trim(),
+                status: 'pending_payment',
+                createdAt: now
+            }));
+        } catch (ae) {
+            console.warn('[OrderSubmit] active_order 索引写入失败(不影响下单):', ae.message);
+        }
 
         console.log('[OrderSubmit] 官网订单(通过Service四同步写入):', created.record.orderNo,
             'requestId=', created.requestId, 'clinic=', clinicName, 'edition=', edition, 'product=', productKey);

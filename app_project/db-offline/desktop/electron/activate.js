@@ -695,6 +695,183 @@ async function cancelAdminRequest(requestId) {
     }
 }
 
+// ============================================================================
+// ★ 2026-09-06 架构重构：桌面端对齐 APP Java 桥的 5 个方法
+//   （直建订单 / 订单状态查询 / 单一装码入口 / 流程状态持久化）
+//   渲染进程 file:// 直连云端被 CORS 拦截，所有 fetch 必须在主进程执行。
+// ============================================================================
+
+// 客户端直建订单（order-submit，主进程 fetch）
+async function submitOrderDirect(payload) {
+    try {
+        const body = Object.assign({}, payload || {}, {
+            machineId: (payload && payload.machineId) || getMachineId(),
+            dp: 'desktop'
+        });
+        const fetchPromise = async () => {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 12000);
+            try {
+                const response = await fetch('https://tcm-prescription-system.pages.dev/api/license/order-submit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                    signal: controller.signal
+                });
+                return await response.json();
+            } finally {
+                clearTimeout(timeout);
+            }
+        };
+        const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('FETCH_TIMEOUT')), 15000);
+        });
+        return await Promise.race([fetchPromise(), timeoutPromise]);
+    } catch (e) {
+        console.error('[OrderFlow] 直建订单失败:', e.message);
+        const errorMsg = e.message === 'FETCH_TIMEOUT'
+            ? '连接服务器超时，请检查网络后重试'
+            : (e.message && e.message.includes('fetch failed') ? '无法连接服务器，请检查网络连接' : e.message);
+        return { success: false, error: errorMsg };
+    }
+}
+
+// 订单状态查询（order-status，主进程 fetch）
+async function queryOrderStatus(orderNo, phone) {
+    try {
+        let url = `https://tcm-prescription-system.pages.dev/api/license/order-status?orderNo=${encodeURIComponent(orderNo || '')}`;
+        if (phone) url += `&phone=${encodeURIComponent(phone)}`;
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 10000);
+        try {
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: { 'Content-Type': 'application/json' },
+                signal: controller.signal
+            });
+            return await response.json();
+        } finally {
+            clearTimeout(timeout);
+        }
+    } catch (e) {
+        console.warn('[OrderFlow] 订单状态查询失败:', e.message);
+        return { success: false, error: e.message };
+    }
+}
+
+// 桌面注册门控（与 Java hasRegisteredLocalAccount 同族铁律）：
+// config.users 存在非内置 admin 账号才允许领码，杜绝 license 恢复劫持全新安装
+function hasRegisteredLocalAccountDesktop() {
+    try {
+        const cfgPath = path.join(licenseManager.getWritableDir(), 'config.json');
+        if (!fs.existsSync(cfgPath)) return false;
+        const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+        const users = Array.isArray(cfg.users) ? cfg.users : [];
+        return users.some(u => u && u.username && u.username !== 'admin');
+    } catch (e) {
+        return false;
+    }
+}
+
+// ★ 单一装码入口（对齐 APP LicenseManager.installLicenseFromServerBridge）：
+//   查 admin-status → activated 则 installLicense 原生落盘；状态明确返回。
+async function installLicenseFromServer(machineIdArg) {
+    try {
+        const mid = (machineIdArg && String(machineIdArg).trim()) || getMachineId();
+        if (!mid) return { success: false, error: '无法获取本机设备标识' };
+        if (!hasRegisteredLocalAccountDesktop()) {
+            return { success: true, status: 'unregistered', message: '本地无注册账号，请先完成注册' };
+        }
+        // 已授权快路径
+        try {
+            const v = licenseManager.validateLicense({ localMachineId: mid });
+            if (v && v.valid && v.type === 'licensed') {
+                return { success: true, status: 'already_licensed', message: '本机授权已存在，无需重复安装' };
+            }
+        } catch (ve) { /* 继续查询 */ }
+        const url = `https://tcm-prescription-system.pages.dev/api/license/admin-status?machineId=${encodeURIComponent(mid)}`;
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 10000);
+        let resp;
+        try {
+            const r = await fetch(url, {
+                method: 'GET',
+                headers: { 'Content-Type': 'application/json' },
+                signal: controller.signal
+            });
+            resp = await r.json();
+        } finally {
+            clearTimeout(timeout);
+        }
+        if (!resp || !resp.success) {
+            return { success: false, error: (resp && resp.error) || '订单状态查询失败' };
+        }
+        if (resp.status !== 'activated') {
+            return {
+                success: true,
+                status: resp.status === 'pending_payment' ? 'pending_payment' : 'pending',
+                message: resp.status === 'pending_payment' ? '订单待付款' : '订单审核中'
+            };
+        }
+        if (!resp.license) {
+            return { success: false, error: '服务端已激活但 license 数据为空，请联系客服' };
+        }
+        const li = resp.licenseInfo || {};
+        // password 传空：账号已存在（注册创建）时保留注册密码（与 APP/JS 自愈路径一致）
+        const inst = licenseManager.installLicense(resp.license, {
+            doctorName: li.user || li.adminName || '',
+            clinicName: li.clinicName || '',
+            phone: li.phone || '',
+            password: '',
+            edition: loadClientConfig().edition || 'standard'
+        });
+        if (inst && inst.success) {
+            console.log('[BridgeInstall] 桌面单一装码入口成功：license.dat 已落盘');
+            return { success: true, status: 'installed', message: '激活成功' };
+        }
+        return { success: false, error: (inst && inst.error) || 'license 安装失败' };
+    } catch (e) {
+        console.warn('[BridgeInstall] 桌面装码异常:', e.message);
+        const msg = (e && e.name === 'AbortError') ? '查询超时，请检查网络后重试'
+            : (e && e.message && e.message.includes('fetch failed') ? '无法连接服务器，请检查网络后重试' : ('装码异常：' + (e && e.message)));
+        return { success: false, error: msg };
+    }
+}
+
+// ★ 流程状态持久化（独立文件 activation-flow.json，不碰 config.json 签名语义）
+function getFlowStatePath() {
+    try { return path.join(licenseManager.getWritableDir(), 'activation-flow.json'); }
+    catch (e) { return path.join(app.getPath('userData'), 'activation-flow.json'); }
+}
+
+async function setActivationFlowState(state) {
+    try {
+        const p = getFlowStatePath();
+        if (state === null || state === undefined || state === '') {
+            try { if (fs.existsSync(p)) fs.unlinkSync(p); } catch (e) {}
+        } else {
+            const obj = (typeof state === 'string') ? JSON.parse(state) : state;
+            if (obj && typeof obj === 'object') obj.updatedAt = new Date().toISOString();
+            fs.writeFileSync(p, JSON.stringify(obj || {}, null, 2), 'utf8');
+        }
+        return { success: true };
+    } catch (e) {
+        console.warn('[FlowState] 保存失败:', e.message);
+        return { success: false, error: '流程状态保存失败：' + e.message };
+    }
+}
+
+async function getActivationFlowState() {
+    try {
+        const p = getFlowStatePath();
+        if (!fs.existsSync(p)) return { success: true, state: {} };
+        const state = JSON.parse(fs.readFileSync(p, 'utf8'));
+        return { success: true, state: state || {} };
+    } catch (e) {
+        return { success: true, state: {} };
+    }
+}
+
 module.exports = {
     getMachineId,
     startTrial,
@@ -713,5 +890,11 @@ module.exports = {
     loadAdminAccountPhone,
     loadAdminRequestId,
     clearAdminRequestId,
+    // ★ 2026-09-06 架构重构
+    submitOrderDirect,
+    queryOrderStatus,
+    installLicenseFromServer,
+    setActivationFlowState,
+    getActivationFlowState,
     ACTIVATE_API_URL
 };

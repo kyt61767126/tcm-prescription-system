@@ -170,7 +170,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
         // ★ 2026-09-04 方案B 注册前置：本地注册（手机号账号，唯一密码写点）+ 用户列表（注册检测/登录自愈）
         registerLocalUser: (payload) => ipcRenderer.invoke('license:register-local-user', payload),
 
-        getActivationUsers: () => ipcRenderer.invoke('license:get-activation-users')
+        getActivationUsers: () => ipcRenderer.invoke('license:get-activation-users'),
+
+        // ★ 2026-09-06 架构重构（对齐 APP Java 桥）：客户端直建订单 + 订单状态查询
+        //   （主进程 fetch，绕开渲染进程 file:// CORS）+ 单一装码入口 + 流程状态持久化
+        submitOrderDirect: (payload) => ipcRenderer.invoke('license:submit-order-direct', payload),
+        queryOrderStatus: (orderNo, phone) => ipcRenderer.invoke('license:query-order-status', orderNo, phone),
+        installLicenseFromServer: (machineId) => ipcRenderer.invoke('license:install-from-server', machineId),
+        setActivationFlowState: (state) => ipcRenderer.invoke('license:set-flow-state', state),
+        getActivationFlowState: () => ipcRenderer.invoke('license:get-flow-state')
     },
 
     // ---------- 首次配置向导 ----------
