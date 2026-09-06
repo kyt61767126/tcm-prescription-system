@@ -104,14 +104,32 @@ function readVersionFromApk(apkFile, appDir) {
     for (const aapt of aaptCandidates) {
         try {
             if (!fs.existsSync(aapt)) continue;
-            const badging = execSync('"' + aapt + '" dump badging "' + apkFile + '"', {
-                encoding: 'utf8', timeout: 30000, windowsHide: true
-            });
-            // 示例: package: name='com.tcm.prescription' versionCode='231' versionName='1.0.0'
-            const m = badging.match(/versionCode='(\d+)'/);
-            const nm = badging.match(/versionName='([^']*)'/);
-            if (m) result.versionCode = parseInt(m[1], 10);
-            if (nm) result.version = nm[1];
+            // ★ 2026-09-06 修复：中文文件名（惠康中医-本地.apk）在部分代码页下 aapt
+            //   报 "Illegal byte sequence" → 版本提取失败回退 build.gradle →
+            //   manifest 丢 versionCode/写成裸 versionName（官网版本号与 APP 不一致，
+            //   违反版本号全局统一铁律）。先复制到 ASCII 临时名再 dump。
+            let aaptTarget = apkFile;
+            let tmpCopy = null;
+            try {
+                if (/[^\x00-\x7f]/.test(apkFile)) {
+                    const os = require('os');
+                    tmpCopy = path.join(os.tmpdir(), 'aapt-ver-' + Date.now() + '.apk');
+                    fs.copyFileSync(apkFile, tmpCopy);
+                    aaptTarget = tmpCopy;
+                }
+            } catch (ce) { tmpCopy = null; aaptTarget = apkFile; }
+            try {
+                const badging = execSync('"' + aapt + '" dump badging "' + aaptTarget + '"', {
+                    encoding: 'utf8', timeout: 30000, windowsHide: true
+                });
+                // 示例: package: name='com.tcm.prescription' versionCode='231' versionName='1.0.0'
+                const m = badging.match(/versionCode='(\d+)'/);
+                const nm = badging.match(/versionName='([^']*)'/);
+                if (m) result.versionCode = parseInt(m[1], 10);
+                if (nm) result.version = nm[1];
+            } finally {
+                if (tmpCopy) { try { fs.unlinkSync(tmpCopy); } catch (ue) {} }
+            }
             if (result.versionCode > 0) return result;
         } catch (e) { /* 该 aapt 不可用，尝试下一个 */ }
     }
