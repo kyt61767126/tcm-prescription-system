@@ -24,6 +24,8 @@
 
 import { parseAuthHeader, isPlatformAdmin } from '../_lib/auth.js';
 import { getKV } from './_lib/license-core.js';
+// ★ 2026-09-07 架构防御：手机号校验收口 schema-guard 单一副本
+import { isValidPhone } from './_lib/schema-guard.js';
 import {
     listFreePass, upsertFreePass, removeFreePass
 } from './_lib/license-write-service.js';
@@ -97,7 +99,7 @@ export async function onRequest(context) {
             const note = String(body.note || '').trim().slice(0, 100);
             // 格式校验前置：若手机号不合法，upsertFreePass 内部会抛并 500 兜底，
             // 这里保留外层 400 给客户友好提示
-            if (!/^1[3-9]\d{9}$/.test(phone)) {
+            if (!isValidPhone(phone)) {
                 return json({ success: false, error: '手机号格式错误（需 11 位）' }, 400, origin);
             }
             // ★ 2026-09-03 (架构统一 P2 收官) 迁入 upsertFreePass：记录+索引双写一致、
@@ -114,7 +116,7 @@ export async function onRequest(context) {
         // ---- 删除 ----
         if (action === 'remove') {
             const phone = String(body.phone || '').trim();
-            if (!/^1[3-9]\d{9}$/.test(phone)) {
+            if (!isValidPhone(phone)) {
                 return json({ success: false, error: '手机号格式错误' }, 400, origin);
             }
             // ★ 2026-09-03 (架构统一 P2 收官) 迁入 removeFreePass：记录 delete + 索引 filter 同步

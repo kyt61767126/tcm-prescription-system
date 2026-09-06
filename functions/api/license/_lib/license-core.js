@@ -14,6 +14,9 @@
 
 // ★ P2-B 统一：KV 绑定解析改用单一事实源 _lib/kv.js（本文件 getKV 仅再导出，供既有 8 个导入方使用）
 import { getKV } from '../../_lib/kv.js';
+// ★ 2026-09-07 架构防御：machineId 等字段校验收口到 schema-guard 单一副本
+//   （原 setDeviceVersion 内联正则迁移至此；三起脏数据事故的结构性根治）
+import { isValidMachineId } from './schema-guard.js';
 
 // ★ 必须与客户端 license-manager.js 中的 LICENSE_HMAC_KEY 保持一致
 // 优先从环境变量读取（Cloudflare Secrets），硬编码作为默认值（向后兼容）
@@ -694,7 +697,7 @@ async function setDeviceVersion(kv, machineId, version, meta = {}) {
     //   等垃圾值被当 machineId 写入 device_version:{垃圾串} 脏键
     //   （2026-09-07 KV 实证 1 条残留；客户端 2026-09-05 已修，此为服务端兜底）。
     const mid = String(machineId);
-    if (!/^[A-Za-z0-9_-]{8,64}$/.test(mid) || mid === 'unknown' || mid === 'undefined') {
+    if (!isValidMachineId(mid)) {
         console.warn('[DeviceVersion] 非法 machineId 拒绝写绑定:', mid.slice(0, 60));
         return null;
     }
@@ -762,6 +765,12 @@ async function isTestMachine(kv, machineId) {
 
 async function setTestMachine(kv, machineId, note) {
     if (!kv || !machineId) return null;
+    // ★ 2026-09-07 纵深防御：core 层补格式校验（API 层已有 32hex 窄校验，
+    //   此处 schema-guard 宽底线——两层并存，宽底线+严入口是合理分层）
+    if (!isValidMachineId(String(machineId))) {
+        console.warn('[TestMachine] 非法 machineId 拒绝标记测试机:', String(machineId).slice(0, 60));
+        return null;
+    }
     const rec = { machineId: machineId, note: note || '', addedAt: new Date().toISOString() };
     await kv.put(KV_TEST_MACHINE_PREFIX + machineId, JSON.stringify(rec));
     return rec;
@@ -769,6 +778,7 @@ async function setTestMachine(kv, machineId, note) {
 
 async function removeTestMachine(kv, machineId) {
     if (!kv || !machineId) return;
+    // 解绑是清理动作：接受任意串（脏 key 也要能删），仅提示不校验
     await kv.delete(KV_TEST_MACHINE_PREFIX + machineId);
 }
 

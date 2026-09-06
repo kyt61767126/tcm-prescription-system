@@ -27,6 +27,9 @@
 // ============================================================================
 
 import { getKV, appendRequestIndex, saveLicense } from './license-core.js';
+// ★ 2026-09-07 架构防御：字段校验收口 schema-guard 单一副本（新建写路径入参
+//   走工厂校验防脏；存量 rid 维护路径保持裸前缀拼接，信任存量数据防误炸）
+import { isValidPhone, isValidOrderNo, normalizeOrderNo, kvKey } from './schema-guard.js';
 
 // —— 常量定义（与 license-core.js / 7 个 API 中各自内联副本保持一致；集中维护避免漂移）——
 export const KV_ADMIN_REQ_PREFIX = 'admin_req:';
@@ -97,6 +100,9 @@ export async function createAdminRequest(kv, payload, options) {
     const { requestId, phone } = payload;
     if (!requestId) throw new Error('[license-write-service] createAdminRequest: requestId required');
     if (!phone) throw new Error('[license-write-service] createAdminRequest: phone required');
+    // ★ 2026-09-07 新建写路径入参过 schema-guard 工厂（非法格式直接 throw，防脏键）
+    kvKey.adminReq(requestId);
+    kvKey.adminPhone(phone);
 
     const record = Object.assign(
         { createdAt: new Date().toISOString() },
@@ -125,8 +131,14 @@ export async function createAdminRequest(kv, payload, options) {
 // ============================================================================
 export async function bindOrderToRequest(kv, orderNo, requestId, phone) {
     if (!kv || !orderNo || !requestId) throw new Error('[license-write-service] bindOrderToRequest: args');
+    // ★ 2026-09-07 补零校验缺口：orderNo 过 schema-guard（此前任何字符串都能写
+    //   order:{垃圾串} 映射键；调用方 order-submit L166 虽已前置校验，服务端
+    //   兜底防直调/未来新入口漏校验）
+    if (!isValidOrderNo(orderNo)) {
+        throw new Error('[license-write-service] bindOrderToRequest: 非法订单号 ' + String(orderNo).slice(0, 40));
+    }
     const ORDER_PREFIX = 'order:';
-    const orderKey = String(orderNo).trim().toUpperCase();
+    const orderKey = normalizeOrderNo(orderNo);
     await kv.put(ORDER_PREFIX + orderKey, JSON.stringify({
         requestId: String(requestId),
         phone: phone ? String(phone) : ''
@@ -305,7 +317,7 @@ const KV_FREE_PASS_INDEX = 'free_pass_index';
 export async function upsertFreePass(kv, phone, opts) {
     if (!kv || !phone || typeof kv.put !== 'function') throw new Error('[license-write-service] upsertFreePass: args');
     const cleanPhone = String(phone).trim();
-    if (!/^1[3-9]\d{9}$/.test(cleanPhone)) throw new Error('[license-write-service] 手机号格式错误');
+    if (!isValidPhone(cleanPhone)) throw new Error('[license-write-service] 手机号格式错误');
     const operator = opts && opts.operator ? String(opts.operator) : 'platform_admin';
     const note = opts ? String(opts.note || '').slice(0, 100) : '';
     const exist = await kv.get(KV_FREE_PASS_PREFIX + cleanPhone, 'json').catch(() => null);
@@ -332,7 +344,7 @@ export async function upsertFreePass(kv, phone, opts) {
 export async function removeFreePass(kv, phone) {
     if (!kv || !phone) throw new Error('[license-write-service] removeFreePass: args');
     const cleanPhone = String(phone).trim();
-    if (!/^1[3-9]\d{9}$/.test(cleanPhone)) throw new Error('[license-write-service] 手机号格式错误');
+    if (!isValidPhone(cleanPhone)) throw new Error('[license-write-service] 手机号格式错误');
     await kv.delete(KV_FREE_PASS_PREFIX + cleanPhone);
     // 索引 filter 同步移除
     const index = (await kv.get(KV_FREE_PASS_INDEX, 'json').catch(() => null)) || [];

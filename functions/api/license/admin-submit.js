@@ -33,13 +33,15 @@ import { getKV, checkRateLimit, checkDeviceVersion } from './_lib/license-core.j
 import { provisionCloudAccount, normalizeActivationPassword } from './_lib/admin-account.js';
 import { createAdminRequest, updateAdminRequestStatus } from './_lib/license-write-service.js';
 import { findPhoneOccupancy, KV_SYSTEM_CLINICS } from '../_lib/auth.js';
+// ★ 2026-09-07 架构防御：手机号校验收口 schema-guard 单一副本
+import { isValidPhone } from './_lib/schema-guard.js';
 
 // ★ 2026-08-20 查找某手机号下最近一条"已通过"的激活申请
 //   - 优先手机号索引（O(1)）；索引指向 pending/rejected 时再兜底扫描请求索引
 //   - 只返回 status === 'activated' 的记录
 async function findActivatedRequestForPhone(kv, phone) {
     try {
-        if (!/^1[3-9]\d{9}$/.test(phone)) return null;
+        if (!isValidPhone(phone)) return null;
         const idx = await kv.get('admin_phone:' + phone, 'json');
         if (idx && idx.requestId) {
             const rec = await kv.get(KV_ADMIN_REQ_PREFIX + idx.requestId, 'json');
@@ -200,7 +202,7 @@ export async function onRequest(context) {
         if (adminName.length > 50) {
             return json({ success: false, error: '管理员姓名长度不能超过 50 字符' }, 400);
         }
-        if (!phone || !/^1[3-9]\d{9}$/.test(phone)) {
+        if (!phone || !isValidPhone(phone)) {
             return json({ success: false, error: '请填写正确的 11 位手机号' }, 400);
         }
         if (!finalMachineId || typeof finalMachineId !== 'string' || finalMachineId.length < 8) {

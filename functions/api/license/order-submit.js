@@ -36,6 +36,8 @@
 
 import { getKV, checkRateLimit, checkDeviceVersion } from './_lib/license-core.js';
 import { createAdminRequest, bindOrderToRequest } from './_lib/license-write-service.js';
+// ★ 2026-09-07 架构防御：手机号校验收口 schema-guard 单一副本
+import { isValidPhone } from './_lib/schema-guard.js';
 
 const ALLOWED_ORIGINS = [
     'https://tcm-prescription-system.pages.dev',
@@ -98,7 +100,7 @@ const KV_ORDER_PREFIX = 'order:';
 //   决策与 admin-submit L285-307 一致）。
 async function findActivatedRequestForPhone(kv, phone) {
     try {
-        if (!/^1[3-9]\d{9}$/.test(phone)) return null;
+        if (!isValidPhone(phone)) return null;
         const idx = await kv.get('admin_phone:' + phone, 'json').catch(() => null);
         if (idx && idx.requestId) {
             const rec = await kv.get(KV_ADMIN_REQ_PREFIX + idx.requestId, 'json').catch(() => null);
@@ -178,7 +180,7 @@ export async function onRequest(context) {
         if (clinicName.length > 100 || String(clinicName).includes('|')) {
             return json({ success: false, error: '姓名/诊所名称含有非法字符' }, 400);
         }
-        if (!phone || !/^1[3-9]\d{9}$/.test(String(phone).trim())) {
+        if (!phone || !isValidPhone(phone)) {
             return json({ success: false, error: '请填写正确的 11 位手机号' }, 400);
         }
         let finalMachineId = String(machineId || '').trim();
