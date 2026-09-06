@@ -634,7 +634,7 @@ P2 渐进迁移（2026-09-03 当日完成）：
 **三十一、测试机白名单机制确认 + 官网订单路径不写设备绑定（2026-09-06 当日核查，无代码改动）**：
 - **① 白名单行为（license-core.js 双保险设计）**：`checkDeviceVersion` L783 命中 `test_machine:{machineId}` 键 → 直接 `{ok:true, testMachine:true}` 跳过全部版本校验（标准/机构自由切换）；`setDeviceVersion` L691 对测试机 **early return 不落盘** device_version 绑定。`isTestMachine` 用 `kv.get(key)!==null` 判定（键存在即命中）。5 个校验点全覆盖：admin-submit(软件内申请)/order-submit(官网下单)/admin-approve(人工审核)/activate-from-ticket(工单)/validate(输码激活)。
 - **② 当前白名单状态（无需再加）**：桌面测试机 `06eded70c88eb835fee73ffe7238d3d4`（2026-09-06 23:03 加入，note"开发者测试机-桌面端全流程回归测试"）+ APP 测试机 `5784b5da162946afdeb89fdf3eebb50d`（同日 12:30 加入）。管理入口：后台 admin-test-machine API（add/remove/list）。
-- **③ 侧向发现（低优先级，未修）**：官网订单自动发码路径（order-confirm-paid/order-paid）**不调 setDeviceVersion**（rg 证实 0 引用）——绑定只在 admin-approve/validate/activate-from-ticket/heartbeat 写入。实证：9-06 晚四君子+美的两次订单激活（白名单加入前），device_version:06eded70 始终 404。对真实客户影响：纯官网订单流程"一设备一版本"只有提交时检查（无绑定=放行）、发码后不写绑定 → 同一设备可先后购买两个版本。测试机不受影响（白名单双跳）。是否收紧待产品决策。
+- **③ ~~侧向发现（低优先级，未修）~~ → 2026-09-07 更正为误判**：原判"官网订单路径不写设备绑定"不成立——order-paid/order-confirm-paid 只是**标记付款**（pending_payment→pending 入待审）不是发码点，本就不该写绑定；真正发码点 admin-approve（申请审核）/activate-from-ticket（工单）均写绑定，batch/generate 是裸码生成（等客户 validate 激活时写绑定）——链路闭环。铁证：KV 4 条真实客户绑定（示范本能医道 9-2/生命本能 9-3/北京源生堂 9-2/卢二灼 8-29 全部官网订单客户）全部存在。当时 device_version:06eded70 404 的真实原因待考（白名单不落盘/或测试数据清理时被删）。**教训：按误判去 order-paid 补绑定反而会造真 bug（付款时绑版本，审核前换版本被自己挡死）。**
 - **④ 判定口径**：测试被"一设备一版本"拦截（错误文案"该设备已激活【机构版】..."）→ 先查 `test_machine:` 白名单是否含该 machineId；非测试机需管理员 admin-device-version API 解绑或走标准版→机构版单向升级。
 
 **三十二、auth-core.js 跨 IIFE 作用域断裂——license 永不落盘总根因（2026-09-06 当日，桌面 V1.0.206）**：用户三次报"机构版激活后依旧【修改密码】"（204 产物双场景实证 PASS 仍复现），curl admin-status?machineId 实锤**服务端已 activated + license 就绪**但客户端 license.dat 从未落盘。
@@ -643,6 +643,13 @@ P2 渐进迁移（2026-09-03 当日完成）：
 - **③ 验证方法论（页面级 mock 探针，无真机/真码全逻辑验证）**：`e2e/probe-heal-gate.cjs`——Playwright(msedge channel)+file:// 加载 desktop/index.html + addInitScript 注入 Proxy 兜底 mock electronAPI（**必须显式覆盖 getStatus，否则 notImpl 返回无 type 对象导致断言假阳/假阴**），console.log/warn 拦截计数 heal 专属日志（「存量自愈」前缀）区分 heal 与授权失效自动恢复等其他装码调用方。4 场景：trial_limit_reached/trial_expired/trial 放行 + licensed 拦截，全 PASS。**探针初跑即抓到 ReferenceError（console 暴露 StorageAdapter/normalizeMachineIdResult not defined）——页面级探针带 console 捕获是"catch 吞错链路"的照妖镜**。
 - **④ 铁律**：(a) **多 IIFE 拼接文件里新增跨段调用前必须 grep 目标符号定义位置**——IIFE 内 const/function 就是私有，跨段引用必须 `global.xxx` 挂载或走导出对象（AuthCore.xxx）；(b) **catch 吞错必须留可检索日志且高危链路要配 console 捕获探针**，静默失败链路 = 永远修不完的幽灵 bug 温床；(c) 排查"服务端已激活但客户端无 license"必查三件套：curl admin-status?machineId（服务端事实）→ hk-diag.bat（客户端文件事实）→ 渲染层 console（ReferenceError 照妖镜）。
 - **⑤ 生效方式**：离线桌面 V1.0.206（auth-core 3 副本同步：云桌面 desktop/auth-core.js + desktop/electron/auth-core.js + 离线APP assets；产物 asar 修复标记 rg 实证 2/2 副本入包）。**已激活未落盘机器装 206 后：启动 2 秒内存量自愈自动领码落盘（无需重新付款/激活），登录即机构版【用户管理】**；若用户已登录则弹提示引导重登。云端APP/网页不受影响（走 cloud.js 无此闸门问题）。
+
+**三十三、setDeviceVersion 服务端 machineId 边界校验——垃圾机器ID防写兜底 + 脏键清理实证（2026-09-07，云函数 license-core.js）**：
+- **① 事故实证（比三十一③误判更真实的缺口）**：KV 存在脏键 `device_version:{"success":false,"error":"unknown method: getMachineId"}`——**真实客户王宁宁中医诊所（2026-09-04 机构版激活）**的桌面客户端 getMachineId 桥调用失败，错误 JSON 串被当 machineId 上报服务端，admin-approve 写绑定落到垃圾 key：设备实际未被有效绑定（版本约束对其失效）+ KV 被污染。客户端 2026-09-05 已修（normalizeMachineIdResult 白名单），但服务端无兜底——旧版客户端/第三方脚本仍可写垃圾。
+- **② 修复（setDeviceVersion 单点收口，全链路唯一写绑定入口）**：machineId 白名单校验 `/^[A-Za-z0-9_-]{8,64}$/` + 显式拒 `unknown`/`undefined` 字面量（与客户端 normalizeMachineIdResult 规则对齐；覆盖 32 位 hex 指纹/browser- 指纹/test-mid-/fallback_ 全部合法格式），非法值 warn 拒写不落盘。checkDeviceVersion 无需改（垃圾 mid 天然 get 不到绑定，走无绑定分支行为正确）。自测 18/18（tools/_tmp/test-machineid-guard.cjs）。脏键已删（备份 logs/kv-backup-20260906/device_version_dirty-key.json，二次复核 KV 仅剩 4 条真实客户绑定）。
+- **③ KV 特殊字符 key 操作铁律**：key 含双引号/花括号/空格时 **wrangler CLI 经 shell 转义必失真**（引号被吃、URL 编码错位 → get/delete 404 假象）——正确姿势：node 直调 wrangler JS 入口（execFileSync('node', ['C:/Users/61767/AppData/Roaming/npm/node_modules/wrangler/bin/wrangler.js', ...], {shell:false}) 参数数组直传零转义），或 bulk delete --path JSON 文件。
+- **④ 排查方法论沉淀**："某路径缺 XX 校验"类判断，**先枚举真实数据再定结论**——本轮正是靠 KV list 出 4 条真实客户绑定 + 1 条脏键，才把三十一③"流程缺口"误判纠正为"边界校验缺失"（两者修复方案完全不同：前者要在 order-paid 补写绑定=造 bug，后者只需 setDeviceVersion 单点加校验）。数据反证 > 代码推演。
+- **⑤ 生效方式**：云函数 push 即自动部署，所有走 setDeviceVersion 的路径（admin-approve/validate/activate-from-ticket/heartbeat/status）立即受保护；五端客户端无需重打包。
 
 ## 8. 桌面版技术规范
 

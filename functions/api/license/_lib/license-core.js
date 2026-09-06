@@ -687,11 +687,22 @@ async function getDeviceVersion(kv, machineId) {
 //   由客户端心跳自动上报，后台据此展示每台设备的端形态。
 async function setDeviceVersion(kv, machineId, version, meta = {}) {
     if (!kv || !machineId) return;
+    // ★ 2026-09-07 服务端边界校验：machineId 只允许字母/数字/下划线/短横 8-64 位
+    //   （与客户端 normalizeMachineIdResult 白名单一致：桌面/APP 桥为 32-64 位 hex、
+    //   browser- 指纹、fallback_x_y 同字符集）。杜绝桥返回错误 JSON 串（如
+    //   {"success":false,"error":"unknown method: getMachineId"}）或 "[object Object]"
+    //   等垃圾值被当 machineId 写入 device_version:{垃圾串} 脏键
+    //   （2026-09-07 KV 实证 1 条残留；客户端 2026-09-05 已修，此为服务端兜底）。
+    const mid = String(machineId);
+    if (!/^[A-Za-z0-9_-]{8,64}$/.test(mid) || mid === 'unknown' || mid === 'undefined') {
+        console.warn('[DeviceVersion] 非法 machineId 拒绝写绑定:', mid.slice(0, 60));
+        return null;
+    }
     // 测试机不持久化版本绑定，允许自由切换标准版/机构版
-    if (await isTestMachine(kv, machineId)) return;
-    const prev = await getDeviceVersion(kv, machineId);
+    if (await isTestMachine(kv, mid)) return;
+    const prev = await getDeviceVersion(kv, mid);
     const binding = {
-        machineId: machineId,
+        machineId: mid,
         version: version,
         licenseCode: meta.licenseCode || (prev && prev.licenseCode) || null,
         clinicName: meta.clinicName || (prev && prev.clinicName) || null,
@@ -699,7 +710,7 @@ async function setDeviceVersion(kv, machineId, version, meta = {}) {
         productClass: meta.productClass || (prev && prev.productClass) || null,
         clientClass: meta.clientClass || (prev && prev.clientClass) || null
     };
-    await kv.put(KV_DEVICE_VERSION_PREFIX + machineId, JSON.stringify(binding));
+    await kv.put(KV_DEVICE_VERSION_PREFIX + mid, JSON.stringify(binding));
     return binding;
 }
 
