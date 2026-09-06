@@ -247,73 +247,30 @@
     let _users = [];
 
     function initLoginInput(config) {
-        // ★ 2026-08-27 已恢复：软著截图期间的"跳过预填"临时 return 已移除
+        // ★ 2026-09-06 用户要求：彻底取消登录框用户名自动预填
+        //   （历次：8-27 恢复预填 → 9-04 删 config.users 单账户预填 → 9-06 彻底取消所有自动预填）
+        //   场景：测试笔记本升级新版后自动显示旧记住的用户名，不像新客户首次使用；
+        //   预填链路也多次引发"首次启动预填 admin/admin"类历史 bug。现统一：
+        //   登录框用户名永远空白+聚焦；记住的账户仅保留手动下拉切换（renderUsernameDropdown）。
         const input = $('loginUsername');
         const users = getUsers(config);
         _users = users;
-        
-        // ★ 云端机构版：预填上次用户名（仅通用用户名）
-        let usernameToFill = null;
-        let rememberedUser = localStorage.getItem(KEY_REMEMBER_USER);
-        // ★ 2026-08-28 实名防护：单键若为手机号/真实姓名/邮箱 → 立即删除并置空
-        if (rememberedUser && !isGenericUsername(rememberedUser)) {
-            try { localStorage.removeItem(KEY_REMEMBER_USER); } catch (_) {}
-            rememberedUser = null;
-        }
-        if (!rememberedUser || LEGACY_USERNAMES.includes(rememberedUser)) {
-            try {
-                const arr = JSON.parse(localStorage.getItem('local_rememberedUsers') || '[]');
-                if (Array.isArray(arr) && arr.length > 0) {
-                    for (let i = 0; i < arr.length; i++) {
-                        const first = String(arr[i] || '').trim();
-                        if (first && !LEGACY_USERNAMES.includes(first) && isGenericUsername(first)) {
-                            rememberedUser = first;
-                            break;
-                        }
-                    }
-                    const cleaned = arr.filter(x => isGenericUsername(x));
-                    if (cleaned.length !== arr.length) {
-                        localStorage.setItem('local_rememberedUsers', JSON.stringify(cleaned));
-                    }
-                }
-            } catch (e) { /* 忽略解析异常 */ }
-        }
-        if (rememberedUser && !LEGACY_USERNAMES.includes(rememberedUser) && isGenericUsername(rememberedUser)) {
-            usernameToFill = rememberedUser;
-            try {
-                const arr = JSON.parse(localStorage.getItem('local_rememberedUsers') || '[]');
-                if (!Array.isArray(arr) || arr.length === 0) {
-                    localStorage.setItem('local_rememberedUsers', JSON.stringify([rememberedUser]));
-                } else if (!arr.some(x => String(x).toLowerCase() === rememberedUser.toLowerCase())) {
-                    arr.unshift(rememberedUser);
-                    if (arr.length > 5) arr.length = 5;
-                    localStorage.setItem('local_rememberedUsers', JSON.stringify(arr));
-                }
-            } catch (_) { /* 迁移失败不阻断预填 */ }
-        }
-        // ★ 2026-09-04 删除 config.users 单账户自动预填 + isTrialDefault admin/admin 双预填
-        //   根因：全新安装出厂模板也有 admin 单账户，导致首次启动即预填 admin/admin（历史 bug）。
-        //   正确行为：预填仅来自 localStorage 记住的用户名（用户登录后才写入）。
-        //   激活后首次登录也不预填（用户自己注册后知道账号密码）。
+
+        // ★ 实名防护兜底（保留）：单键残留的实名（手机号/真实姓名/邮箱）静默清除
+        try {
+            const rememberedUser = localStorage.getItem(KEY_REMEMBER_USER);
+            if (rememberedUser && !isGenericUsername(rememberedUser)) {
+                localStorage.removeItem(KEY_REMEMBER_USER);
+            }
+        } catch (_) {}
 
         try { const dnEl = document.getElementById('loginDoctorName'); if (dnEl) dnEl.style.display = 'none'; } catch (e) {}
 
-        if (usernameToFill && isGenericUsername(usernameToFill)) {
-            input.value = usernameToFill;
-            // ★ 2026-08-28 实名防护：仅通用用户名才写入单键
-            localStorage.setItem(KEY_REMEMBER_USER, usernameToFill);
-            setTimeout(() => {
-                const pwd = $('loginPassword');
-                if (pwd) pwd.focus();
-            }, 200);
-        } else {
-            // ★ 实名兜底：非通用用户名/无记忆用户名 → 清空输入框，保持全新登录态
-            try { localStorage.removeItem(KEY_REMEMBER_USER); } catch (_) {}
-            input.value = '';
-            setTimeout(() => { input.focus(); }, 200);
-        }
+        // 登录框保持全新状态：用户名空白 + 聚焦输入
+        input.value = '';
+        setTimeout(() => { input.focus(); }, 200);
 
-        // ★ 2026-08-28 全局统一：渲染多账户下拉切换
+        // ★ 2026-08-28 全局统一：渲染多账户下拉切换（手动操作，不自动显示）
         renderUsernameDropdown(users);
     }
 
