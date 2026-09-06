@@ -8,6 +8,7 @@ import {
     findPhoneOccupancy
 } from './_lib/auth.js';
 import { provisionCloudAccount } from './license/_lib/admin-account.js';
+import { deleteAdminRequest } from './license/_lib/license-write-service.js';
 
 // ============================================================================
 // ★★★ 2026-08-21 账号级设备授权（一个云端管理员最多绑定 2 台设备：桌面/APP）
@@ -2098,6 +2099,11 @@ export async function onRequest(context) {
         //     - clinic:{id}:prescription_seq:* / clinic:{id}:seq:*（处方序号，前缀扫描）
         //     - user_devices:{username}（各账号设备绑定）
         //     - admin_phone:{phone}（各账号手机号激活占位，释放号码允许重新注册）
+        //     - ★ 2026-09-06 admin_req:{rid} 关联激活申请（clinicName/已删用户 phone 双条件
+        //       匹配，deleteAdminRequest 四索引同步：req 记录 + req_index + admin_phone 重建
+        //       + order 映射）——防登录自愈/轮询补开把已删诊所复活
+        //     - ★ 2026-09-06 user_token_version 递增 + user_session 清除 + admin_selfheal_cool
+        //       （撤销在线 token 立即踢下线；verifyToken 无用户存在性检查，须显式撤销）
         //   保留：audit_log:{clinicId}:*（审计日志合规留痕，删除动作本身另行记录）
         if (method === 'POST' && url.searchParams.get('clinic') === 'delete') {
             const currentUser = await parseAuthHeader(context.request, context.env);
@@ -2170,6 +2176,44 @@ export async function onRequest(context) {
                 } catch (e) { /* 单键删除失败不阻断整体，最终留痕 */ }
             }
 
+            // ★ 2026-09-06 P0 修复「删除诊所后客户端仍可登录」：激活申请残留导致诊所复活。
+            //   根因（三条复活链路）：
+            //     a) 登录自愈 maybeProvisionFromActivation 兜底扫描 admin_req_index，命中
+            //        activated 记录 → provisionCloudAccount 重建诊所+账号（密码重置 admin）；
+            //     b) 客户端轮询 admin-status（status=activated）每次都幂等补开，同样复活；
+            //     c) verifyToken 无用户存在性检查，已登录 token 未撤销最长 7 天有效。
+            //   修复：按 clinicName / 已删用户 phone 双条件清理关联申请记录
+            //         （deleteAdminRequest 四索引同步），并撤销全部已删账号 token + 在线 session。
+            const deletedPhones = new Set(
+                users.map(u => (u && u.phone) ? String(u.phone).trim() : '').filter(Boolean)
+            );
+            let cleanedRequests = 0;
+            try {
+                const reqIndex = (await kv.get('admin_req_index', 'json')) || [];
+                for (const rid of reqIndex.slice()) {
+                    const rec = await kv.get('admin_req:' + rid, 'json').catch(() => null);
+                    if (!rec) continue;
+                    const nameMatch = rec.clinicName && String(rec.clinicName).trim() === clinic.name;
+                    const phoneMatch = rec.phone && deletedPhones.has(String(rec.phone).trim());
+                    if (!nameMatch && !phoneMatch) continue;
+                    const r = await deleteAdminRequest(kv, rid).catch(() => null);
+                    if (r && r.deleted) cleanedRequests++;
+                }
+            } catch (e) {
+                console.warn('[DeleteClinic] 激活申请清理失败（不阻断删除）:', e.message);
+            }
+            // 撤销已删账号的 token 与在线会话（桌面/APP 立即被踢下线）
+            let revokedAccounts = 0;
+            for (const u of users) {
+                if (!u || !u.username) continue;
+                try {
+                    await revokeAllUserTokens(kv, u.username);
+                    await clearUserSession(kv, u.username);
+                    if (u.phone) await kv.delete('admin_selfheal_cool:' + u.phone).catch(() => {});
+                    revokedAccounts++;
+                } catch (e) { /* 单账号撤销失败不阻断 */ }
+            }
+
             // 3) system:clinics 移除条目（最后移除，前面失败可重试且诊所仍可登录管理）
             clinics.splice(clinicIdx, 1);
             await kv.put(KV_SYSTEM_CLINICS, JSON.stringify(clinics));
@@ -2180,15 +2224,19 @@ export async function onRequest(context) {
                 deletedUserCount: users.length,
                 deletedKeys: deletedKeys.length,
                 deletedKeyList: deletedKeys.slice(0, 50),
+                cleanedRequests: cleanedRequests,
+                revokedAccounts: revokedAccounts,
                 source: 'platform-admin'
             });
 
             return json({
                 success: true,
-                message: `诊所「${clinic.name}」已删除（账号 ${users.length} 个，清理数据键 ${deletedKeys.length} 个）`,
+                message: `诊所「${clinic.name}」已删除（账号 ${users.length} 个，清理数据键 ${deletedKeys.length} 个，关联激活申请 ${cleanedRequests} 条，撤销在线会话 ${revokedAccounts} 个）`,
                 deletedClinic: { id: clinic.id, name: clinic.name },
                 deletedUserCount: users.length,
-                deletedKeyCount: deletedKeys.length
+                deletedKeyCount: deletedKeys.length,
+                cleanedRequestCount: cleanedRequests,
+                revokedAccountCount: revokedAccounts
             });
         }
 
