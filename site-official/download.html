@@ -2825,6 +2825,20 @@
             const btn = document.getElementById('step2Next');
             btn.disabled = true;
             btn.textContent = '提交中...';
+            // ★ 2026-09-06 修复激活后显示污染：客户端（APP/桌面）跳转携带 cn=诊所名/n=联系人，
+            //   回填逻辑把它们合并为"诊所名 / 联系人"塞进 custName 单框，原提交把整串同时
+            //   作为 clinicName 和 adminName → license.user/adminName 与 clinicName 全成
+            //   拼接串 → 客户端激活后 config.doctorName/clinicName 双双被污染覆盖。
+            //   修复：当页面值与 URL 合并预期精确一致（客户端跳转且客户未改动）时，还原为
+            //   分开的 clinicName/adminName 提交；其余场景保持原行为不动（同步自 public 版）。
+            var __spO = new URLSearchParams(window.location.search);
+            var __cnO = (__spO.get('cn') || __spO.get('clinicName') || '').trim();
+            var __nO  = (__spO.get('n')  || __spO.get('adminName')  || '').trim();
+            var __clinicSubmit = name, __adminSubmit = name;
+            if (__cnO && __nO) {
+                var __combinedO = (__cnO.indexOf(__nO) >= 0) ? __cnO : (__cnO + ' / ' + __nO);
+                if (name === __combinedO) { __clinicSubmit = __cnO; __adminSubmit = __nO; }
+            }
             try {
                 const res = await fetch(BASE + '/api/license/order-submit', {
                     method: 'POST',
@@ -2834,8 +2848,8 @@
                         productKey: selectedVersion.key,
                         edition: selectedVersion.edition,
                         price: orderInfo.price,
-                        clinicName: name,
-                        adminName: name,
+                        clinicName: __clinicSubmit,
+                        adminName: __adminSubmit,
                         phone: phone,
                         wechat: wechat,
                         machineId: machineId,
