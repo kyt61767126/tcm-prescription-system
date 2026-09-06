@@ -212,6 +212,8 @@
 
 * **APP 端功能判断禁止依赖 IS\_ELECTRON 常量**（shim 在 onPageFinished 注入，顶层常量已固化为 false），必须运行时判断 `window.electronAPI && window.electronAPI.xxx`。
 
+* ★ 2026-09-06 第十一轮（机构版按钮错显·启动竞态根治）：**页面解析期（内联 IIFE 同步执行段）调 electronAPI.xxx 在安卓 APP 上必然静默跳过**——shim 在 onPageFinished 才注入，解析期 `window.electronAPI` 不存在，`if (window.electronAPI && window.electronAPI.getAppConfig)` 整段不执行 → CONFIG.edition 恒为出厂 personal → 机构版激活登录后仍被 enforceStandardEditionButtons 强制标准版对齐（错显【修改密码】）。根治=index-app.html 该 IIFE 增加 `else if (window.AndroidNative && typeof window.AndroidNative.invoke === 'function')` 分支：**同步直调 `AndroidNative.invoke('getAppConfig','{}')`（addJavascriptInterface 在 loadUrl 前注册，解析期即可用；JavaBridge 线程同步返回 JSON 字符串）**，结果同步入 CONFIG + resolve `__appConfigReady`（自动登录免 800ms 等待）。时序安全性论证（改动前必须核对）：①全部 DOM 在 body 单行（L664）先于内联脚本（L669 起）解析，同步分支执行时按钮节点已存在；②applyEditionTags/enforceStandardEditionButtons/updateUserDisplay 与 IIFE 同属一个 script 块，函数声明提升全可用；③CONFIG（const）在 IIFE 前已初始化。铁律：**安卓端启动期（解析期）需要原生能力时，唯一可靠通路是 AndroidNative.invoke 同步直调，禁止只写 electronAPI 路径等 shim；改这类启动竞态代码前必须逐一核对 DOM 解析顺序/函数声明提升/TDZ 三个时序前提**。同日审计佐证：同日 4 次成功打包 APK 内 index.html 哈希全相同（0be38f6e），证明"工作区已改但未 commit/未打包"是用户实测不生效的头号原因——**每轮修复后必须确认 修复已 commit + 打包产物哈希已变化，再交给用户测试**。
+
 * JS 桥三层防御：Java invoke() 必须 catch(Throwable)；shim 层拦截 null/'null'/''；前端 result null 安全。WebView 桥异常表现为「返回 null」而非 JS 异常。
 
 * ★ 2026-08-30 重装激活登录失败双坑（用户实测 13398628212/admin123 失败）：①备份导出 users 恒为 \[]——`JSON.parse(localStorage.getItem('local_systemUsers'))` 读的是 XORv1 加密串必抛异常，「备份含账号表」从未真正生效；修复=先 simpleDecrypt 再 parse（4 处离线系 index.html）。②重装自愈只自动填手机号不填密码，密码栏留空被静默写成 admin；修复=auth-core 激活提交前密码留空弹 confirm 明确告知。排查铁律：用户"激活后登录不上"先让 TA 试 admin。
