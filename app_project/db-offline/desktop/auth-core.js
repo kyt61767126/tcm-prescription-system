@@ -5537,7 +5537,14 @@
         });
 
         function showFormAndAlert(msg) {
-            show('adminStepPwd');
+            // ★ 2026-09-06 修复：已注册（预填）用户提交被服务端拒绝（409 一号一机跨设备 /
+            //   403 设备版本绑定等）时，原一律回退 adminStepPwd 密码步骤——方案B 后该步骤
+            //   对已注册用户已废弃（激活不收密码），用户看到密码表单误以为"又要填信息"。
+            //   已注册用户回退到版本选择步骤（自动提交的来源步骤，可换版本重试；错误原因
+            //   由 alert 明示）；未注册手动流程（改过手机号或非预填）维持原密码步骤回退。
+            try {
+                show((__regPrefill && __regPrefill.phone === state.phone) ? 'adminStepEdition' : 'adminStepPwd');
+            } catch (se) { show('adminStepPwd'); }
             try { alert('❌ 提交失败\n\n' + msg + '\n\n点击确定重新提交'); } catch(e) {}
         }
 
