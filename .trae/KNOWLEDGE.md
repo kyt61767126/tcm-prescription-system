@@ -610,6 +610,12 @@ P2 渐进迁移（2026-09-03 当日完成）：
 - **④ CDP 探针验证法（e2e/probe-register-entry.cjs + probe-noprefill.cjs）**：playwright `_electron.launch` 偶发挂起/失败（残留进程单实例锁/环境问题）时，手动 `Start-Process exe --remote-debugging-port=9333` + 写 exe 同级 e2e-enabled.marker（防破解放行远程调试的钥匙）+ `chromium.connectOverCDP` 直验打包产物 DOM——可靠替代通路。**注意 loginWindow 用 persist 分区但 BNZC_E2E_DATA 环境变量会整体重定向 userData，探针无此困扰**。
 - **⑤ 假成功陷阱（本会话实证两次）**：(a) PowerShell 后台任务 cwd 参数失效 → build.bat "not recognized" 但 exit 0 → 误判打包成功（探测的还是旧包）；(b) 源码未提交 → build.bat 落定门 FAIL 退出。**铁律：后台跑 build.bat 必须绝对路径调用 + 读输出日志确认"打包完成/Released"+ 核对产物时间戳；打包前源码必须已 commit**。
 
+**二十八、后台待付款列表双数据源 + KV 删除最终一致性 + 同机连测 license 遮蔽（2026-09-06 当日，张惠妹机构版实测排查）**：
+- **① admin-list 双路径显示机制（清理待付款测试单的新清单）**：pending_payment 状态的申请**刻意不进 admin_req_index**（index 只收待审/已审单），后台待付款列表通过 **KV list 遍历 `order:` 前缀**补充显示（客户卡付款环节时管理员需要能看到跟进）。→ 清理"待付款测试单"必须**同时删 `admin_req:{requestId}` + `order:{orderNo}` 两个 key**（只删前者：列表经 order 遍历仍显示；只删后者：申请记录残留）。已审核/已激活的单才需要动 admin_req_index。备份沿用 logs/kv-backup-20260906/。
+- **② KV 删除最终一致性复核陷阱**：wrangler 删除成功后**立即** get 复核可能仍返回旧值（读缓存/边缘延迟 1 分钟内）——本轮实证首个 key 复核 404 ✅、第二个 key 复核仍返回旧值 ❌，**60 秒后二次复核双双 404**。铁律：删除后复核返回旧值≠删除失败，禁止据此重删或 --path 覆盖写（会把旧值写回）；隔一次再复核，以第二次 404 为准。
+- **③ 用户报"修复无效"先核对时间线再查代码**：本轮用户装 249 报"机构版依旧修改密码"，代码链全查通（服务端 license type=pro ✓ / installAdminLicense→syncConfigEdition ✓ / getAppConfigBridge→validateLicense→formalInstitution ✓ / 前端 IIFE AndroidNative 同步直调+豁免 ✓，APK 解包验证 assets/public/index.html 哈希与工作区一致）——但**第十一轮前端修复首次入包=versionCode 249（21:19 打包），用户测试行为发生在 21:29，装的是否 249 无法回溯确认**（248 只有 Java 端 getAppConfig，前端解析期 electronAPI 不存在仍错显=已知旧问题）。复验口径：**完全退出 APP（点退出，非后台）→重开→登录→看顶部**；若 249 复验仍错显，用 USB 连手机跑 `adb logcat -s BenNeng-Pres` 取 getAppConfigBridge 实况再深挖。
+- **④ 同测试机连续激活的 license 遮蔽**：同一 machineId 连续两次激活（张三丰 21:00 → 张惠妹 21:29），第二次装码 `readLicense(mid)!=null → already_licensed` 短路，**设备实际生效的仍是第一次的 license**（用户名/诊所名/绑定全旧值）——「基础设置→授权状态」显示的用户名一眼判定归属。测试机要换客户重测：先清 APP 数据（卸载重装/清除应用数据），否则新激活被旧 license 遮蔽、诊所名/授权显示对不上（张三丰记录用户选择保留，未清理）。
+
 ## 8. 桌面版技术规范
 
 * **登录预填：已彻底取消（2026-09-06 Commit 2202236f，取代 9-04"来源单一化"方案）**：`initLoginInput` **不再做任何用户名自动预填**——登录框永远空白+聚焦；记住的账户仅保留**手动下拉切换**（renderUsernameDropdown，点▼选择）。演进史：8-27 恢复预填 → 9-04 收窄为"仅 localStorage 记住的用户名"（历史 bug：config.users 单账户分支无法区分出厂模板 admin，全新安装首次启动即预填 admin/admin）→ 9-06 用户实测"升级新版后自动显示旧记住的用户名，不像新客户"后**彻底取消**。理由：预填链路多次引发历史 bug + 升级安装 userData 不清导致残留展示；而手动下拉保留全部便利。
