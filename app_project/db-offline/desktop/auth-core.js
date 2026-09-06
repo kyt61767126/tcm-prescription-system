@@ -3933,7 +3933,11 @@
             if (global.localStorage && info) {
                 global.localStorage.setItem('license:registrationInfo', JSON.stringify(info));
             }
-        } catch (e) {}
+        } catch (e) {
+            // ★ 2026-09-06（第四轮回归）：原完全静默——保存失败无感知，激活弹窗预填
+            //   失效（单点故障）。告警留痕（桥 config 兜底已在弹窗侧补位）。
+            console.warn('[LicenseCheck] 注册信息持久化失败(激活预填将走桥兜底):', e);
+        }
     }
 
     function isLocalRegisteredSync() { return !!getLocalRegistrationInfo(); }
@@ -4150,6 +4154,16 @@
                     });
 
                     if (res && res.success) {
+                        // ★ 2026-09-06（第四轮回归）内存 CONFIG 同步：注册时 Java 层已把
+                        //   clinicName/doctorName 写入 config.json，但前端内存 CONFIG 是启动
+                        //   加载的旧值（出厂诊所名）。同步更新，保证激活弹窗桥兜底预填的
+                        //   clinicName 参数（openAdminActivate 传 CONFIG.clinicName）为注册值。
+                        try {
+                            if (typeof CONFIG !== 'undefined' && CONFIG) {
+                                if (clinicName) CONFIG.clinicName = clinicName;
+                                if (adminName) CONFIG.doctorName = adminName;
+                            }
+                        } catch (ce2) {}
                         // ① localStorage 镜像（username=手机号；addLocalActivationUser 幂等 UPSERT）
                         try {
                             if (typeof window.addLocalActivationUser === 'function') {
@@ -4652,6 +4666,12 @@
         //   用户在 1.5s 窗口内点击关闭弹窗/重试另一条流程时，如果不 cancel，
         //   setTimeout 仍会触发 electronAPI.activate.restart()——"我没点重启怎么就重启了"。
         let __autoRestartTid = null;
+        // ★ 2026-09-06（第四轮回归）桥兜底预填 Promise：localStorage registrationInfo 是
+        //   预填唯一数据源=单点故障（实测丢失后：选版本→自动提交条件不满足→落入信息
+        //   表单页且不流转，用户以为又要填信息）。桥 config.json（Java 持久层）users
+        //   含注册账号（username=手机号/name/明文password），作为降级数据源异步补预填。
+        //   声明提前到绑定区之前，杜绝 TDZ；预填区赋值，版本选择 handler 内 await。
+        let __bridgePrefillPromise = null;
 
         const overlay = document.createElement('div');
         overlay.id = 'adminActivateOverlay';
@@ -4925,7 +4945,7 @@
 
         // 版本选择
         ['editionPersonal','editionInstitution'].forEach(function(id) {
-            document.getElementById(id).addEventListener('click', function() {
+            document.getElementById(id).addEventListener('click', async function() {
                 const ed = this.getAttribute('data-edition');
                 state.edition = ed;
                 state.editionChosen = true;
@@ -4948,9 +4968,31 @@
                 //   版本即自动提交激活申请——跳过信息确认步骤直接进付款页。注册时账号+
                 //   密码已建、申请信息=注册信息，无需再人工确认；需核对/修改时从付款页
                 //   「返回上一步」回 Tab1 表单（信息已预填可改）。预填不完整时退回原流程。
+                // ★ 2026-09-06（第四轮回归）async 化 + 桥兜底等待：registrationInfo 丢失
+                //   （localStorage 单点故障）时等待桥 config 注册账号补预填（最长 2s），
+                //   到位后继续自动提交——不再静默落入信息表单页（用户观感"又要填信息/
+                //   卡住不流转"）。
                 try {
-                    const __rg = getLocalRegistrationInfo();
+                    let __rg = getLocalRegistrationInfo();
+                    if (!__rg && __bridgePrefillPromise) {
+                        try {
+                            const __bp = await Promise.race([
+                                __bridgePrefillPromise,
+                                new Promise(function (r) { setTimeout(function () { r(null); }, 2000); })
+                            ]);
+                            if (__bp && __bp.phone) __rg = __bp;
+                        } catch (be2) { /* 桥兜底超时/失败退回手动表单 */ }
+                    }
                     if (__rg && __rg.phone) {
+                        // 桥场景 DOM 兜底补填（预填 then 回调可能尚未完成/竞态）
+                        if (__rg.via === 'bridge') {
+                            const __cn3 = document.getElementById('adminClinicName');
+                            const __an3 = document.getElementById('adminAdminName');
+                            const __ph3 = document.getElementById('adminPhone');
+                            if (__ph3 && !__ph3.value.trim()) __ph3.value = __rg.phone;
+                            if (__an3 && !__an3.value.trim() && __rg.adminName) __an3.value = __rg.adminName;
+                            if (__cn3 && !__cn3.value.trim()) __cn3.value = String(__rg.clinicName || clinicName || '').trim();
+                        }
                         const __cnv = ((document.getElementById('adminClinicName') || {}).value || '').trim();
                         const __anv = ((document.getElementById('adminAdminName') || {}).value || '').trim();
                         const __phv = ((document.getElementById('adminPhone') || {}).value || '').trim();
@@ -4964,6 +5006,21 @@
                 } catch (re2) { /* 读取失败退回手动表单 */ }
                 show('adminStepForm');
                 setActiveTab('admin');
+                // ★ 2026-09-06（第四轮回归）诊断提示：已注册（桥确认）但自动提交条件
+                //   仍不满足（如诊所名空）时，黄条明示原因，替代静默表单（用户不知道
+                //   发生了什么/以为流程坏了）。未注册首次激活用户不显示（正常手动流程）。
+                try {
+                    if (__regPrefill && __regPrefill.phone) {
+                        const __fb = document.getElementById('adminStepForm');
+                        if (__fb && !document.getElementById('adminPrefillDiagTip')) {
+                            const __tip = document.createElement('div');
+                            __tip.id = 'adminPrefillDiagTip';
+                            __tip.style.cssText = 'background:#fff8e1;border:1px solid #ffe082;border-radius:8px;padding:10px;margin-bottom:12px;font-size:12px;color:#795548;line-height:1.7;';
+                            __tip.innerHTML = '⚠ 检测到您已注册（手机号 ' + String(__regPrefill.phone).replace(/(\d{3})\d{4}(\d{4})/, '$1****$2') + '），但部分信息未能自动同步。<br>请核对下方表单（缺项补填）后点击「确认信息并提交」即可继续。';
+                            __fb.insertBefore(__tip, __fb.firstChild);
+                        }
+                    }
+                } catch (de2) {}
             });
         });
 
@@ -5234,6 +5291,49 @@
         let __regPwdPromise = null;
         try {
             __regPrefill = getLocalRegistrationInfo();
+            if (!__regPrefill) {
+                // ★ 2026-09-06（第四轮回归）桥兜底：registrationInfo 丢失时从桥 config.json
+                //   注册账号（手机号/name/明文password）恢复预填。完成后"伪造"__regPrefill
+                //   等价结构——后续链路（adminToStep2Btn 匹配/showFormAndAlert 回退判断）
+                //   全部无感复用。clinicName 用弹窗参数（openAdminActivate 传入 CONFIG.
+                //   clinicName，注册成功回调已同步更新内存值）。
+                __bridgePrefillPromise = (async function () {
+                    try {
+                        const api = global.electronAPI || (typeof window !== 'undefined' ? window.electronAPI : null);
+                        if (api && api.activate && typeof api.activate.getActivationUsers === 'function') {
+                            const res = await api.activate.getActivationUsers();
+                            if (res && res.success && Array.isArray(res.users)) {
+                                for (let i = 0; i < res.users.length; i++) {
+                                    const u = res.users[i] || {};
+                                    const ph = String(u.phone || u.username || '').trim();
+                                    if (/^1[3-9]\d{9}$/.test(ph)) {
+                                        return { phone: ph, adminName: String(u.name || '').trim(), password: String(u.password || ''), via: 'bridge' };
+                                    }
+                                }
+                            }
+                        }
+                    } catch (e) { console.warn('[LicenseCheck] 桥兜底预填读取失败:', e); }
+                    return null;
+                })();
+                __bridgePrefillPromise.then(function (bp) {
+                    if (!bp) return;
+                    try {
+                        if (__regPrefill) return; // 期间 localStorage 已恢复，双保险
+                        __regPrefill = { phone: bp.phone, adminName: bp.adminName, clinicName: String(clinicName || ''), via: 'bridge' };
+                        state.phone = bp.phone;
+                        state.adminName = bp.adminName;
+                        state.clinicName = String(clinicName || '');
+                        if (bp.password) state.password = String(bp.password);
+                        const __cn2 = document.getElementById('adminClinicName');
+                        const __an2 = document.getElementById('adminAdminName');
+                        const __ph2 = document.getElementById('adminPhone');
+                        if (__cn2 && !__cn2.value.trim() && state.clinicName) __cn2.value = state.clinicName;
+                        if (__an2 && !__an2.value.trim() && state.adminName) __an2.value = state.adminName;
+                        if (__ph2 && !__ph2.value.trim()) __ph2.value = state.phone;
+                        console.log('[LicenseCheck] 桥兜底预填完成(注册账号):', bp.phone);
+                    } catch (be) { console.warn('[LicenseCheck] 桥兜底预填应用失败:', be); }
+                }).catch(function () {});
+            }
             if (__regPrefill) {
                 state.clinicName = String(__regPrefill.clinicName || '');
                 state.adminName = String(__regPrefill.adminName || '');
