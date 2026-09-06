@@ -14,7 +14,7 @@
 #    ③ check-injection-idempotency.cjs —— 运行时注入幂等基线
 #    ④ check-interface.ps1       —— 界面结构基线（HTML body 哈希锁）
 #    ⑤ sync-auth-core.ps1 -VerifyOnly —— auth-core 11 副本一致性（双权威源）
-#    ⑥ probe-param-matrix.cjs    —— 激活/登录链路参数完整性探针（11 断言）
+#    ⑥ probe-param-matrix.cjs    —— 激活/登录链路参数完整性探针（14 断言，含 F 组 P1 服务端收口）
 #  六道门全过才允许推送（均为秒级，不拖慢日常 push）。
 #
 #  绕过方式（仅限紧急情况，事后必须补跑）：git push --no-verify

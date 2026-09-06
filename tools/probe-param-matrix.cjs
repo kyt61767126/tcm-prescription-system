@@ -12,8 +12,11 @@
 //    shared/auth-core/offline.js（离线端：离线APP/离线桌面）
 //    shared/auth-core/cloud.js（云端端：网页/云桌面/云端APP/鸿蒙）
 //    functions/api/license/_lib/schema-guard.js（服务端，仅跨端一致性断言）
+//    functions/api/license/entitlement.js（P1-① 统一裁决端点，F 组）
+//    functions/api/license/claim.js（P1-② 统一认领门面，F 组）
 //
-//  规则来源：KNOWLEDGE 条目（Tab2盲区/断点续传/明文密码/IIFE/脏键/指纹）
+//  规则来源：KNOWLEDGE 条目（Tab2盲区/断点续传/明文密码/IIFE/脏键/指纹/
+//    条目三十六 P1 服务端收口）
 //
 //  用法：node tools/probe-param-matrix.cjs
 //  退出码：0 = 全部通过；1 = 有 FAIL（附修复指引）
@@ -27,7 +30,9 @@ const ROOT = path.resolve(__dirname, '..');
 const SRC = {
     offline: path.join(ROOT, 'shared/auth-core/offline.js'),
     cloud: path.join(ROOT, 'shared/auth-core/cloud.js'),
-    schemaGuard: path.join(ROOT, 'functions/api/license/_lib/schema-guard.js')
+    schemaGuard: path.join(ROOT, 'functions/api/license/_lib/schema-guard.js'),
+    entitlement: path.join(ROOT, 'functions/api/license/entitlement.js'),
+    claim: path.join(ROOT, 'functions/api/license/claim.js')
 };
 
 function readSrc(p) { return fs.readFileSync(p, 'utf8'); }
@@ -206,6 +211,56 @@ const RULES = [
             return missing.length === 0 ? { pass: true }
                 : { pass: false, detail: '缺失挂载：' + missing.join(', ') + ' —— IIFE-2 裸引用将 ReferenceError 被 catch 静默吞掉' };
         }
+    },
+
+    // ---------- F P1 服务端收口（条目三十六：entitlement 统一裁决 + claim 统一认领） ----------
+    {
+        id: 'F1', desc: 'entitlement.js 四态枚举唯一来源（ENTITLEMENT_STATES 冻结导出，四态齐全）',
+        source: 'KNOWLEDGE 条目三十六 P1-①：状态判定只此一份，客户端只消费不自算',
+        run: (s) => {
+            const src = s.entitlement;
+            const missing = [];
+            if (!/export const ENTITLEMENT_STATES\s*=\s*Object\.freeze\(\{/.test(src)) {
+                missing.push('Object.freeze 导出缺失');
+            } else {
+                for (const k of ['LICENSED', 'NO_LICENSE', 'LICENSE_EXPIRED', 'LICENSE_REVOKED']) {
+                    if (!new RegExp(k + "\\s*:\\s*'" + k + "'").test(src)) missing.push(k);
+                }
+            }
+            return missing.length === 0 ? { pass: true }
+                : { pass: false, detail: '缺失：' + missing.join(', ') + ' —— 四态是全项目唯一权威定义，改枚举必须先过自测 S1-S8' };
+        }
+    },
+    {
+        id: 'F2', desc: 'claim.js 统一认领门面存在（转发 validate + schema-guard 前置守门 + 400 拒绝分支）',
+        source: 'KNOWLEDGE 条目三十六 P1-②：激活入口归一，垃圾 machineId 进不了 devices',
+        run: (s) => {
+            const missing = [];
+            if (!s.claim.includes("import { onRequest as validateActivate } from './validate.js'")) missing.push('转发 validate');
+            if (!/isValidMachineId/.test(s.claim)) missing.push('schema-guard 守门');
+            if (!/status:\s*400/.test(s.claim)) missing.push('守门 400 拒绝分支');
+            return missing.length === 0 ? { pass: true }
+                : { pass: false, detail: '缺失：' + missing.join(', ') + ' —— 门面 = validate 转发 + 门口白名单，二者缺一即失去收口意义' };
+        }
+    },
+    {
+        id: 'F3', desc: 'entitlement.js 纯只读铁律（剥注释后零写调用：kv.put/kv.delete/updateLicense/saveLicense/setDeviceVersion/appendLicenseLog）',
+        source: 'KNOWLEDGE 条目三十六 P1-①：裁决幂等/可重试/无副作用，机器可查',
+        run: (s) => {
+            // 剥注释后检查，防"注释里提到写调用"假阳；URL 字符串不受影响（写调用不可能出现在其同行尾部）
+            const code = s.entitlement.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+            const hits = [];
+            const patterns = [
+                [/kv\.put\(/, 'kv.put('], [/kv\.delete\(/, 'kv.delete('],
+                [/\bupdateLicense\(/, 'updateLicense('], [/\bsaveLicense\(/, 'saveLicense('],
+                [/\bsetDeviceVersion\(/, 'setDeviceVersion('], [/\bappendLicenseLog\(/, 'appendLicenseLog(']
+            ];
+            for (const [re, label] of patterns) {
+                if (re.test(code)) hits.push(label);
+            }
+            return hits.length === 0 ? { pass: true }
+                : { pass: false, detail: '发现写调用：' + hits.join(', ') + ' —— 裁决端点绝不写 KV（端形态上报走 heartbeat），写调用会破坏幂等与可重试性' };
+        }
     }
 ];
 
@@ -222,7 +277,9 @@ function main() {
     const s = {
         offline: readSrc(SRC.offline),
         cloud: readSrc(SRC.cloud),
-        schemaGuard: readSrc(SRC.schemaGuard)
+        schemaGuard: readSrc(SRC.schemaGuard),
+        entitlement: readSrc(SRC.entitlement),
+        claim: readSrc(SRC.claim)
     };
 
     console.log('============================================');
