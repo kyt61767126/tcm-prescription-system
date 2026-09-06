@@ -3924,6 +3924,12 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
             if (users == null) users = new org.json.JSONArray();
             r.put("success", true);
             r.put("users", users);
+            // ★ 2026-09-06 第七轮修复：补 config 顶层诊所名/医师名。激活弹窗预填降级链
+            //   （localStorage registrationInfo 丢失时桥兜底）原先只取 users[].name/phone，
+            //   诊所名仅靠 WebView CONFIG.clinicName（会话旧值/空）→ 预填条件不满足 →
+            //   注册用户选版本后静默落入"填写信息"表单页（条目十七同族缺口）。
+            r.put("clinicName", cfg.optString("clinicName", ""));
+            r.put("doctorName", cfg.optString("doctorName", ""));
         } catch (Exception e) {
             try { r.put("success", false); r.put("error", String.valueOf(e.getMessage())); } catch (Exception ignored) {}
         }

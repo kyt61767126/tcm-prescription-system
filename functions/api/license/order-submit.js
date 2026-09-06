@@ -87,7 +87,35 @@ function generateRequestId() {
 }
 
 const KV_ADMIN_REQ_PREFIX = 'admin_req:';
+const KV_ADMIN_REQ_INDEX = 'admin_req_index';
 const KV_ORDER_PREFIX = 'order:';
+
+// ★ 2026-09-06 第七轮修复：手机号已激活记录查找（镜像 admin-submit 同名逻辑）。
+//   客户端直建订单场景下，已激活（同机同号）客户重走弹窗自动提交时，旧逻辑无
+//   短路 → 新建 pending_payment 订单 → 客户被引导重复付款（实测：激活后横幅入口
+//   再激活→选版本→又到支付页）。命中已激活记录时：同设备→返回 activated 由客户端
+//   走桥装码收尾；他设备→409 引导客服换机（手机号非秘密，不可自动解绑，安全
+//   决策与 admin-submit L285-307 一致）。
+async function findActivatedRequestForPhone(kv, phone) {
+    try {
+        if (!/^1[3-9]\d{9}$/.test(phone)) return null;
+        const idx = await kv.get('admin_phone:' + phone, 'json').catch(() => null);
+        if (idx && idx.requestId) {
+            const rec = await kv.get(KV_ADMIN_REQ_PREFIX + idx.requestId, 'json').catch(() => null);
+            if (rec && rec.phone === phone && rec.status === 'activated') return rec;
+        }
+        const list = (await kv.get(KV_ADMIN_REQ_INDEX, 'json').catch(() => null)) || [];
+        for (const rid of list.slice(0, 200)) {
+            const rec = await kv.get(KV_ADMIN_REQ_PREFIX + rid, 'json').catch(() => null);
+            if (rec && rec.phone === phone && rec.status === 'activated') return rec;
+            if (rec && rec.phone === phone && rec.status === 'pending') break;
+        }
+        return null;
+    } catch (e) {
+        console.warn('[OrderSubmit] 查找已激活申请失败:', e.message);
+        return null;
+    }
+}
 // ★ 2026-09-06 架构重构：进行中订单索引（建单幂等用，O(1)）。
 //   待付款订单不进 admin_req_index（order-paid 后才入），故按 machineId 单列索引；
 //   惰性清理：终态/超48h/异手机号在下次下单时自动覆盖，无需 admin-approve 侧维护。
@@ -183,6 +211,43 @@ export async function onRequest(context) {
                         error: '该手机号已有激活申请正在审核中，请等待审核完成，勿重复下单'
                     }, 409);
                 }
+            }
+        }
+
+        // ★ 2026-09-06 第七轮修复：已激活短路（在设备版本校验之前）——
+        //   同手机号+同设备已激活：绝不建新订单/绝不引导重复付款，直接返回
+        //   activated（客户端走桥 installLicenseFromServer 装码收尾，显示成功页）；
+        //   同手机号但设备不匹配：409 引导客服换机（与 admin-submit 同安全边界）。
+        {
+            const activated = await findActivatedRequestForPhone(kv, phone.trim());
+            if (activated) {
+                const _bound = new Set();
+                if (activated.machineId) _bound.add(String(activated.machineId));
+                if (Array.isArray(activated.devices)) {
+                    for (const _bd of activated.devices) {
+                        const _bm = (_bd && typeof _bd === 'object') ? (_bd.machineId || _bd.id || '') : _bd;
+                        if (_bm) _bound.add(String(_bm));
+                    }
+                }
+                if (!finalMachineId || !_bound.has(String(finalMachineId))) {
+                    console.log('[OrderSubmit] 手机号已激活但设备不匹配，拒绝换机自动下单:',
+                        phone.trim(), activated.requestId);
+                    return json({
+                        success: false,
+                        code: 'ALREADY_ACTIVATED_OTHER_DEVICE',
+                        error: '该手机号已在其他设备完成激活。换机或需要在多台设备使用，请联系客服微信 hktzy1688 办理。'
+                    }, 409);
+                }
+                console.log('[OrderSubmit] 同机同号已激活，短路复用不建新订单:',
+                    phone.trim(), activated.requestId);
+                return json({
+                    success: true,
+                    orderNo: String(activated.orderNo || orderNo).toUpperCase(),
+                    requestId: activated.requestId,
+                    status: 'activated',
+                    idempotent: true,
+                    message: '本机已激活，无需重复购买'
+                });
             }
         }
 

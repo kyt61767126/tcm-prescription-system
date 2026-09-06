@@ -4806,6 +4806,27 @@
                     console.warn('[OrderFlow] 直建订单未成功，降级 admin-submit:', res.error);
                     return false;
                 }
+                // ★ 2026-09-06 第七轮修复：服务端已激活短路（同机同号）——绝不进付款等待，
+                //   直接走桥装码收尾（实测：激活成功后同会话再点激活→选版本→又被引导付款）。
+                //   桥 installLicenseFromServer 凭 machineId 从 admin-status 取 license 落盘，
+                //   不依赖本响应携带 license。
+                if (res.status === 'activated') {
+                    const __actFlow = {
+                        orderNo: res.orderNo || orderNo,
+                        requestId: res.requestId || '',
+                        status: 'activated',
+                        phone: (state.phone || '').trim(),
+                        adminName: (state.adminName || '').trim(),
+                        clinicName: (state.clinicName || '').trim(),
+                        edition: editionKey,
+                        productKey: 'local',
+                        dp: orderPayload.dp,
+                        at: Date.now()
+                    };
+                    console.log('[OrderFlow] 服务端返回已激活短路，直接桥装码收尾:', __actFlow.requestId);
+                    await handleOrderActivated(__actFlow, res);
+                    return true;
+                }
                 const flow = {
                     orderNo: res.orderNo || orderNo,
                     requestId: res.requestId || '',
@@ -5250,11 +5271,20 @@
                         if (api && api.activate && typeof api.activate.getActivationUsers === 'function') {
                             const res = await api.activate.getActivationUsers();
                             if (res && res.success && Array.isArray(res.users)) {
+                                // ★ 2026-09-06 第七轮：诊所名取桥 config 顶层（Java getActivationUsers
+                                //   已补返回 clinicName/doctorName），WebView CONFIG 旧值仅末位兜底
+                                const __bridgeClinic = String(res.clinicName || '').trim();
                                 for (let i = 0; i < res.users.length; i++) {
                                     const u = res.users[i] || {};
                                     const ph = String(u.phone || u.username || '').trim();
                                     if (/^1[3-9]\d{9}$/.test(ph)) {
-                                        return { phone: ph, adminName: String(u.name || '').trim(), password: String(u.password || ''), via: 'bridge' };
+                                        return {
+                                            phone: ph,
+                                            adminName: String(u.name || '').trim(),
+                                            clinicName: __bridgeClinic,
+                                            password: String(u.password || ''),
+                                            via: 'bridge'
+                                        };
                                     }
                                 }
                             }
@@ -5266,10 +5296,11 @@
                     if (!bp) return;
                     try {
                         if (__regPrefill) return; // 期间 localStorage 已恢复，双保险
-                        __regPrefill = { phone: bp.phone, adminName: bp.adminName, clinicName: String(clinicName || ''), via: 'bridge' };
+                        __regPrefill = { phone: bp.phone, adminName: bp.adminName,
+                            clinicName: String(bp.clinicName || clinicName || ''), via: 'bridge' };
                         state.phone = bp.phone;
                         state.adminName = bp.adminName;
-                        state.clinicName = String(clinicName || '');
+                        state.clinicName = String(bp.clinicName || clinicName || '');
                         if (bp.password) state.password = String(bp.password);
                         const __cn2 = document.getElementById('adminClinicName');
                         const __an2 = document.getElementById('adminAdminName');
@@ -5866,6 +5897,20 @@
 
                     const ok = !!(inst && inst.success && selfVerified);
                     if (ok) {
+                        // ★ 2026-09-06 第七轮修复（实测：激活登录后顶部仍挂"试用到期·只读"
+                        //   横幅，退出重进才显示365天）：管理员激活/订单流装码成功即时退出
+                        //   只读模式——与激活码 Tab2 成功路径（L2290 一带）对齐：清失效标志
+                        //   +撤横幅+即时刷新授权区显示，不依赖重启。读侧刷新不反写流程标记
+                        //   （条目十四铁律：setCloudActivationDone 只由激活流程自身置位）。
+                        try {
+                            global.__licenseExpired = false;
+                            global.__licenseReadOnly = false;
+                            const __rb0 = document.getElementById('licenseReadOnlyBanner');
+                            if (__rb0) __rb0.remove();
+                            if (typeof window.updateLicenseStatusText === 'function') {
+                                try { window.updateLicenseStatusText(); } catch (_uf) {}
+                            }
+                        } catch (_ro) { console.warn('[LicenseCheck] 退出只读模式清理失败(不影响):', _ro && _ro.message); }
                         descEl.innerHTML = '管理员已通过您的激活申请<br>软件即将重启，请使用手机号登录' + __adminInviteMsg;
                         show('adminSuccess');
                         const __restartApp = function () {
@@ -6070,6 +6115,18 @@
             }
         } catch (_fsm) { console.warn('[FSM v2] resume complete setState err:', _fsm); }
         if (installed) {
+            // ★ 2026-09-06 第七轮修复：断点续传装码成功同样即时退出只读模式
+            //   （checkLicense 先判试用到期注入横幅后、续传才装码完成的时序下，
+            //   不清理则横幅/只读标志残留到下次重启）。
+            try {
+                global.__licenseExpired = false;
+                global.__licenseReadOnly = false;
+                const __rb1 = document.getElementById('licenseReadOnlyBanner');
+                if (__rb1) __rb1.remove();
+                if (typeof window.updateLicenseStatusText === 'function') {
+                    try { window.updateLicenseStatusText(); } catch (_uf2) {}
+                }
+            } catch (_ro2) {}
             var msg = '您的激活申请已审核通过，授权已自动安装到本机。\n\n' +
                 (phone ? ('📱 登录账号：' + phone + '\n') : '') +
                 '🔑 登录密码：' + (pwd || 'admin（默认）') + '\n\n' +

@@ -2906,7 +2906,14 @@ ipcMain.handle('license:get-activation-users', async () => {
         if (await fse.pathExists(configPath)) {
             config = await fse.readJson(configPath);
         }
-        return { success: true, users: Array.isArray(config.users) ? config.users : [] };
+        // ★ 2026-09-06 第七轮修复：补 config 顶层诊所名/医师名（对齐 APP Java
+        //   getActivationUsers），激活弹窗桥兜底预填诊所名不再依赖 WebView CONFIG 旧值
+        return {
+            success: true,
+            users: Array.isArray(config.users) ? config.users : [],
+            clinicName: String(config.clinicName || ''),
+            doctorName: String(config.doctorName || '')
+        };
     } catch (e) {
         console.error('[Register] get-activation-users 异常:', e);
         return { success: false, error: String(e && e.message ? e.message : e), users: [] };
