@@ -800,6 +800,68 @@ node "D:\Program Files\Huawei\DevEco Studio\tools\hvigor\bin\hvigorw.js" --mode 
 * 【首跑验证结果】Web 组件正常加载云端页面（pages.dev）、版本号注入生效（V1.0.0 Build 1000000，1000000 是 DevEco 默认 versionCode）、22 桥初始化无崩溃。模拟器限制：无摄像头（拍摄类桥方法测不了）、无 SIM（显示"无服务"但网络走宿主机正常）、分享面板无第三方 App 接收。
 * 【主体已确认·2026-09-03】开发者账号 = **高碑店惠康堂中医诊所有限公司**，系用户 2026-09 用诊所营业执照新做的企业实名认证（DevEco 团队栏即显示此主体，自动签名/证书均以此主体签发）。B 方案「开发者企业资质」门槛已过。**主体一致性铁律：软著著作权人、APP 备案主体、AGC 开发者三者必须同为「高碑店惠康堂中医诊所有限公司」**。【2026-09-03 已核对】① 软著申请人 = **高碑店惠康堂中医诊所有限公司**（企业名义提交，与 AGC 开发者主体一致 ✅，等下证即可，无需转让/授权书）；② 备案必须以诊所执照备案（不能用个人）；③ 诊所同时是定向发布的"企业客户"，仍需在 HEM 管理台（developer.huawei.com/business/console）用同一执照认证"企业主"角色拿 HEM ID 填回 AGC 分发名单。
 
+### B 方案工程推荐梳理（2026-09-06 定稿）
+
+**方案选型**：B 方案 = ArkWeb 远程 Web 壳 + 原生桥逐字对齐。对比其他路线（A 方案纯原生 ArkTS 重写 300+ 页、C 方案 Flutter/Tauri 跨端框架），B 方案胜出三理由：① **95% 代码复用**（前端 JS 原样跑，改前端即全端生效）；② **周期 5 周 + 预算 57.8 单位**（GLM-5.3 补贴后显省 15%，含返工率降低隐性收益省 30-40%）；③ **安卓 APP 已走同路线**，经验直接迁移，无新框架学习成本。
+
+**双包结构**：`huikang-cloud`（bundle com.tcm.prescription，加载 pages.dev）+ `huikang-offline`（待建，加载 rawfile 本地页，离线试用激活链路 + 5 个离线独有桥方法 showToast/getMachineId/getAppVersion/checkAppVersion/updateApp）。
+
+**工程结构总览**：
+```
+app_project_harmony/                      ← 鸿蒙全部代码独立，安卓只读
+├── shared-inject/ (4 脚本)               ← 从安卓 MainActivity 逐字提取
+│   ├── cloud-autocomplete-off.js
+│   ├── cloud-electron-api-shim.js
+│   ├── cloud-layout-fix.js
+│   └── cloud-app-buttons.js
+├── tools/copy-assets.cjs                 ← 字节级拷贝，零改动保障
+├── huikang-cloud/                        ✅ Week1-3 闭环
+│   ├── AppScope/app.json5                ← 包名/版本
+│   ├── sign-materials/ 🔒                ← 私钥+CSR（等认证签 .cer/.p7b）
+│   └── entry/
+│       ├── build-profile.json5           ← Stage 模型 + 混淆关闭
+│       └── src/main/
+│           ├── module.json5              ← 仅 INTERNET 权限
+│           ├── ets/
+│           │   ├── entryability/EntryAbility.ets     ✅ 40 行
+│           │   ├── pages/Index.ets                    ✅ 373 行
+│           │   └── bridge/
+│           │       ├── NativeBridge.ets               ✅ 1329 行（22 case 全实现）
+│           │       └── PageInject.ets                ✅ 155 行（7 步注入序列）
+│           └── resources/rawfile/       ✅ 安卓 assets 拷贝
+└── huikang-offline/                      ❌ 待建
+```
+
+**已完成里程碑**（2026-09-01 → 2026-09-03）：
+- ✅ Week1：编译闭环，ArkWeb + javaScriptProxy AndroidNative + 反钓鱼拦截 + 原生对话框 + 文件选择器 + 网络重试 + SSL 取消 + 返回键
+- ✅ Week2：22 invoke 方法全实现（媒体保存/分片上传/备份恢复/媒体查找/文件操作 P1-6/分片读取/打印降级），沙箱「惠康中医媒体/backups/媒体备份/」三目录
+- ✅ Week3：模拟器首跑成功（HarmonyOS 7.0/API26，未签名 HAP 直接装），云端页面完整加载 + 版本号注入 + 22 桥无崩溃，企业实名认证已提交
+
+**剩余缺口（优先级排序）**：
+
+| 优先级 | 任务 | 工期 | 依赖 |
+|--------|------|------|------|
+| **P0** | AGC 认证审核 + 签名闭环 | 1-2 工作日 | 实名认证（已提交等审核） |
+| **P1** | 真机功能验证（媒体拍照录像/分片/备份导出/打印降级/P1-6 安全链路） | 3-5 真机测试日 | 已签名 HAP |
+| **P2** | 离线版 huikang-offline 新建（DevEco 新建工程 + EntryAbility + 5 个离线独有桥 + 试用激活链路） | 1 周 | 云端版先上架跑通 |
+| **P3** | 上架发布（软著下证 + 诊所执照备案 + HEM 企业主认证 + 定向发布名单） | 2-3 周并行 | P1 真机验证过 + P0 签名完成 |
+| **P4** | 长期迭代：PrintDocumentAdapter+PDF 打印、SaveButton 媒体持久化、ArkTS 混淆开启、API27+ 适配 | 持续 | 上架后 |
+
+**鸿蒙与现有项目联动铁律**：
+- 前端资源同步：`copy-assets.cjs cloud` 从安卓 assets/public 字节级拷贝 → rawfile/；注入脚本从 shared-inject/ → rawfile/inject/；图标从安卓 mipmap → AppScope + entry media/
+- 权威源走 `sync-all.ps1` 分发的 shared JS（prescription-core/auth-core/cloud-api），鸿蒙 rawfile 随分发自动更新
+- 版本号 bundleManager.getBundleInfoForSelfSync 动态注入，**禁止硬编码漂移**
+- CSP 含 pages.dev 通配（鸿蒙 rawfile/index.html 同云端系 3 份 CSP 要求）
+- **鸿蒙工程零改动铁律**：app_project_harmony/ 代码不改安卓工程，拷贝脚本物理隔离
+
+**长期风险·鸿蒙真机必验清单**（模拟器不覆盖）：
+- 🟡 鸿蒙相机权限模型（savePrescriptionImage 调相机 → base64 → 沙箱落盘）
+- 🔴 256KB 分片在鸿蒙调用栈表现（录像分片上传 10+ 片不溢出）
+- 🟡 sendData + viewData 沙箱 URI 分享系统兼容性（备份导出）
+- 🟡 viewData(text/html) + @page A5 方向打印效果
+- 🟢 isCallerAllowed 在桥代理线程调 controller.getUrl() 安全性
+- 🟢 ArkWeb onLoadIntercept 子资源是否真的全放行（isMainFrame 守卫已加）
+
 ## 15. 处方签煎煮方法（2026-09-01 已实现）
 
 **需求**：按最新中药煎煮规范，处方签药物显示煎煮方法（先煎/后下/包煎/烊化等）。
