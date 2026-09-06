@@ -198,14 +198,16 @@ public class MainActivity extends BridgeActivity {
         // ★ 离线APP：加载本地 assets 页面（带就绪轮询，参考云端APP）
         loadLocalAssetWithRetry();
 
-        // ★ 2026-09-06 原生领码自愈：冷启动后台触发（服务端已激活+本地无license.dat
+        // ★ 2026-09-06 原生领码自愈：仅冷启动触发（服务端已激活+本地无license.dat+已注册
         //   → Java 层直接落盘，根治"激活成功后授权区仍显示试用7天"老问题——
-        //   不再依赖 JS WebView 层轮询/自愈链路存活）
+        //   不再依赖 JS WebView 层轮询/自愈链路存活。LicenseManager 内门控：本地无注册
+        //   账号(全新安装)一律跳过，绝不劫持 注册→激活 标准流程；不做 onResume 触发，
+        //   防止付款审批中途的 license 恢复与 Tab1 轮询竞态）
         triggerNativeLicenseSync();
     }
 
     // ★ 2026-09-06 原生领码自愈触发器：后台线程查服务端→落盘→WebView 刷新授权区。
-    //   LicenseManager 内部 60s 静态节流 + 已授权/未激活/断网全部静默跳过，可放心高频调用。
+    //   LicenseManager 内部 60s 静态节流 + 注册门控 + 已授权/未激活/断网全部静默跳过。
     private void triggerNativeLicenseSync() {
         new Thread(() -> {
             try {
@@ -214,8 +216,7 @@ public class MainActivity extends BridgeActivity {
                     try {
                         WebView webView = MainActivity.this.getBridge().getWebView();
                         if (webView != null) {
-                            // 授权事实驱动 UI 收敛：license 已落盘 → 立即刷新授权状态区
-                            // （updateLicenseStatusText 内 licensed 分支同时收敛登录框激活入口语义）
+                            // license 已落盘 → 刷新授权状态区（licensed 分支显示已激活+剩余天数）
                             webView.evaluateJavascript(
                                 "if (typeof window.updateLicenseStatusText === 'function') { " +
                                 "  try { window.updateLicenseStatusText(); } catch (e) {} " +
@@ -1212,12 +1213,6 @@ public class MainActivity extends BridgeActivity {
     public void onResume() {
         super.onResume();
         WebView webView = this.getBridge().getWebView();
-        // ★ 2026-09-06 原生领码自愈：用户从官网付款页/后台切回 APP 的关键时刻
-        //   （管理员可能刚审批通过）→ Java 层主动查服务端补装 license.dat（同步本身
-        //   不依赖 WebView，回调内才用；60s 节流防高频）
-        if (hasDoneFirstResume) {
-            triggerNativeLicenseSync();
-        }
         if (webView != null) {
             // ★ 优化：onCreate 已配置 WebSettings，onResume 不再重复设置
             // 重复设置 WebSettings 会触发 WebView 重新计算配置，影响恢复速度

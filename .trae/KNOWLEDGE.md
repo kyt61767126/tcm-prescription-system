@@ -529,6 +529,14 @@ P2 渐进迁移（2026-09-03 当日完成）：
 - **铁律**：①**"服务端已知状态 + 本地缺件"的修复责任必须放在原生层（Java/主进程），JS WebView 只能做快路径**——WebView 会话可被系统随时杀死，任何依赖"页面恰好在跑"的补丁必然复发；②新增 Java 调用既有方法先核对完整签名（编译器实测：installAdminLicense 8 参，loginUsername 漏传编译才暴露）；③跨实例并发保护必须用静态锁（synchronized 实例方法在 new 多实例场景形同虚设）。
 - 生效：**仅离线 APP 需重打包**（Java 改动 + auth-core 副本均在 APK 内）；离线桌面 auth-core.js 副本虽同步但桌面已有主进程自愈（09-05），下次桌面打包自然带上 B 收敛；云端系不受影响。
 
+**十四、条目十三回归事故复盘（2026-09-06 当日，注册页消失+激活后无法登入）**：用户用含条目十三改动的包实测「删数据→重新注册」，结果**注册页直接消失（直接显示管理员激活），付款激活后无法登入**——比原问题更严重。两处根因：
+- **根因1（UI 标记反写）**：条目十三的 B 改动在 `updateLicenseStatusText` licensed 分支调 `setCloudActivationDone()`——该函数置 `auth:activationDone=1`，此标记控制**注册入口显隐**。全新安装+license 被提前恢复 → 标记置位 → 注册页消失。**铁律：授权状态刷新函数（读侧）绝不能反写流程标记（写侧），UI 入口语义只允许由 注册/激活流程自身 置位**——读写职责分离，读函数只读不写。
+- **根因2（自愈未门控）**：`syncLicenseFromServer` 冷启动即跑，服务端残留本机 machineId 的**历史激活记录**（此前测试已激活）→ 全新安装冷启动直接装 license + `syncCreateActivationUser` 建号。账号不存在时它用**默认密码 admin** 建号（L3872 effPwd 默认值），而用户激活表单设的密码被「方案B 密码保护」规则跳过（账号已存在只补 phone/name 不覆盖密码）→ **密码错位 → 无法登入**。
+- **修复（三件套）**：①回滚 B 改动（licensed 分支恢复原样，4 副本同步）；②`syncLicenseFromServer` 加**注册门控** `hasRegisteredLocalAccount()`（config.users 存在非内置 admin 账号才允许领码）——注册（建号）与激活（license）是两个独立阶段，**license 恢复永远不得先于/跳过注册建号**；③移除 onResume 触发（防付款审批中途 license 恢复与 Tab1 轮询竞态），只保留冷启动触发。原目标（激活后显示 365 天）不受影响：门控通过后冷启动领码依然落盘。
+- **教训（举一反三）**：①涉及"全新安装首次流程"的自愈/恢复逻辑，必须先问：**服务器残留状态会不会劫持全新安装？**——凡"服务端状态→本地落盘"的恢复类功能，一律加"本地已初始化"门控；②`syncCreateActivationUser` 的默认密码 admin 建号是**激活表单密码错位**的历史根源（Mate 70 第7案同族），任何新调用点都必须确保账号已存在（走 UPDATE 保留密码路径）；③改 UI 显隐逻辑前必须 grep 目标标记的全部消费方（`auth:activationDone` 谁在读？读了干什么？）——本次正是漏查"注册页也消费该标记"。
+- 验证：gradle compileDebug EXIT=0；node --check 4 文件；sync-auth-core 11 副本 In sync；check-interface 6 OK 0 CHANGED；回滚标记已同步 4 文件、旧调用 0 残留。
+- 生效：仅离线 APP 需重打包。**已被坏包污染的设备修复路径**：装新包后若登录密码错位（admin/空），用「忘记密码？」重置为 admin 再改密；或直接删数据走全新注册流程（注册页已恢复）。
+
 ## 8. 桌面版技术规范
 
 * **登录预填来源单一化（2026-09-04 Commit f62f16c4）**：`initLoginInput` 的预填**只允许来自 localStorage 记住的用户名**（`KEY_REMEMBER_USER` / `local_rememberedUsers`），禁止直接从 `config.users` 自动预填。历史 bug：`else if users.length===1` 分支无法区分「出厂模板 admin 单账户」和「刚激活后的单管理员」，导致全新安装首次启动即预填 admin/admin。配套删除 `isTrialDefault && admin` 兜底（离线端独有）。区分手段：localStorage remembered 键在用户成功登录后才写入，全新安装天然为空 → usernameToFill = null → 空白表单。云端 login.js（无 isTrialDefault 兜底）同理需同步修改。

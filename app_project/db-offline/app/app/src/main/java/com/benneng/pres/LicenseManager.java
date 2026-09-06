@@ -457,6 +457,16 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
                 Log.w(TAG, "[NativeSync] machineId 为空，跳过原生领码自愈");
                 return false;
             }
+            // ★ 2026-09-06 回归修复（严重）：门控——本地必须已存在注册账号（非内置admin）
+            //   才允许原生领码。全新安装（删数据/重装）时服务端仍残留本机 machineId 的
+            //   历史激活记录，若不门控会：①冷启动直接装 license 跳过注册页；②账号不存在
+            //   时 syncCreateActivationUser 用默认密码 admin 建号，与用户激活表单密码
+            //   错位 → 付款激活后无法登入。注册（建号）与激活（license）是两个独立阶段，
+            //   license 恢复永远不得先于/跳过注册建号。
+            if (!hasRegisteredLocalAccount()) {
+                Log.d(TAG, "[NativeSync] 本地无注册账号（全新安装未注册），跳过原生领码自愈");
+                return false;
+            }
             // 已有本地 license（可解密）→ 无需同步（已授权=正常；已过期=重装同一张
             // license 无意义，走续费流程）
             if (readLicense(mid) != null) {
@@ -516,6 +526,29 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
         } finally {
             if (conn != null) conn.disconnect();
         }
+    }
+
+    // ★ 2026-09-06 门控辅助：config.users 是否存在注册账号（用户名非内置 admin）。
+    //   registerLocalUser（注册）/激活建号均以手机号为 username；全新安装仅有
+    //   内置 admin（或空）→ false。作为原生领码自愈的前置门，杜绝 license 恢复
+    //   劫持全新安装的 注册→激活 标准流程。
+    private boolean hasRegisteredLocalAccount() {
+        try {
+            JSONObject cfg = readConfigJSON();
+            if (cfg == null) return false;
+            org.json.JSONArray users = cfg.optJSONArray("users");
+            if (users == null) return false;
+            for (int i = 0; i < users.length(); i++) {
+                org.json.JSONObject u = users.optJSONObject(i);
+                if (u != null) {
+                    String uname = u.optString("username", "");
+                    if (!uname.isEmpty() && !"admin".equals(uname)) return true;
+                }
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "[NativeSync] 读注册账号失败(视为未注册): " + e.getMessage());
+        }
+        return false;
     }
 
     // ========================================================================
