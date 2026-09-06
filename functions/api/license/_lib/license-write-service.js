@@ -8,9 +8,10 @@
 //  → Mate 70 用户取消后用同手机号重新提交永远被短路到已取消的旧记录，
 //  永远登不上。
 //
-//  ★ 架构铁律：所有对 admin_req / admin_phone / admin_req_index / order
-//    的写操作必须通过本文件的 5 个原子函数，禁止任何 API 直接
-//    KV.put / KV.delete 上述四类 key。
+//  ★ 架构铁律：所有对 admin_req / admin_phone / admin_req_index / order /
+//    active_order 的写操作必须通过本文件的原子函数（2026-09-07 起 active_order
+//    收口，写域五类 key），禁止任何 API 直接 KV.put / KV.delete 上述 key。
+//    字段格式校验与 key 构造统一引用 _lib/schema-guard.js（单一副本）。
 //    （deleteAdminRequest 会同时清理 order 映射，保持双键一致性）
 //
 //  与既有 license-core.js 的关系：
@@ -296,6 +297,51 @@ export async function markOrderPaid(kv, orderNo, payInfo) {
 // 修正 KV_ORDER_PREFIX：读取 order-submit.js 约定 JSON 格式，同时兼容老 text 格式
 // （order 映射读/删辅助 export）
 export const KV_ORDER_PREFIX_EXPORTED = 'order:';
+
+// ============================================================================
+// 7. active_order 进行中订单索引三原子函数 — 2026-09-07 架构防御 B（写域全收口）
+//
+//  背景：active_order:{machineId} 是 license 域最后一块散写（order-submit L347-358
+//    直接 kv.put），前缀常量与 48h 语义也在 order-submit 内联。收口到本文件后，
+//    license 域五类 key（admin_req/admin_phone/admin_req_index/order/active_order）
+//    的写操作全部经过本 Service 或 schema-guard 校验，无散写。
+//
+//  值结构契约（与现网 order-submit L347-355 逐字段一致，改动即幂等读失配）：
+//    { requestId, orderNo, phone, status, createdAt }
+//
+//  对外 API：
+//    ACTIVE_ORDER_MAX_AGE_MS                     → 48h 语义单一副本
+//    bindActiveOrder(kv, machineId, entry)       → 写索引（kvKey 工厂校验 mid）
+//    unbindActiveOrder(kv, machineId)            → 删索引（裸前缀，清理路径要能删脏键）
+//    getActiveOrder(kv, machineId)               → 读索引（幂等查找用）
+// ============================================================================
+export const ACTIVE_ORDER_MAX_AGE_MS = 48 * 60 * 60 * 1000;
+
+export async function bindActiveOrder(kv, machineId, entry) {
+    if (!kv || !machineId || !entry) throw new Error('[license-write-service] bindActiveOrder: args');
+    // kvKey 工厂校验 machineId（非法直接 throw；调用方 order-submit 有 try/catch，
+    // 垃圾 mid 只损失索引写入，下单主流程不受影响——与原散写 L356-358 语义一致）
+    const key = kvKey.activeOrder(machineId);
+    await kv.put(key, JSON.stringify({
+        requestId: String(entry.requestId),
+        orderNo: entry.orderNo,
+        phone: entry.phone ? String(entry.phone) : '',
+        status: entry.status || 'pending_payment',
+        createdAt: entry.createdAt || new Date().toISOString()
+    }));
+    return key;
+}
+
+export async function unbindActiveOrder(kv, machineId) {
+    if (!kv || !machineId) return;
+    // 裸前缀纯 delete：清理路径必须能删脏键（垃圾 mid 的索引恰恰要能删）
+    try { await kv.delete('active_order:' + machineId); } catch (_) { /* 清理失败不阻断 */ }
+}
+
+export async function getActiveOrder(kv, machineId) {
+    if (!kv || !machineId) return null;
+    try { return await kv.get('active_order:' + machineId, 'json'); } catch (_) { return null; }
+}
 
 // ============================================================================
 // 6. 免费开通白名单（free_pass）三原子函数 — 2026-09-03 架构统一 P2 收官

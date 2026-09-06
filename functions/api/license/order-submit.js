@@ -35,7 +35,7 @@
 // ============================================================================
 
 import { getKV, checkRateLimit, checkDeviceVersion } from './_lib/license-core.js';
-import { createAdminRequest, bindOrderToRequest } from './_lib/license-write-service.js';
+import { createAdminRequest, bindOrderToRequest, bindActiveOrder, getActiveOrder, ACTIVE_ORDER_MAX_AGE_MS } from './_lib/license-write-service.js';
 // ★ 2026-09-07 架构防御：手机号校验收口 schema-guard 单一副本
 import { isValidPhone } from './_lib/schema-guard.js';
 
@@ -121,8 +121,8 @@ async function findActivatedRequestForPhone(kv, phone) {
 // ★ 2026-09-06 架构重构：进行中订单索引（建单幂等用，O(1)）。
 //   待付款订单不进 admin_req_index（order-paid 后才入），故按 machineId 单列索引；
 //   惰性清理：终态/超48h/异手机号在下次下单时自动覆盖，无需 admin-approve 侧维护。
-const KV_ACTIVE_ORDER_PREFIX = 'active_order:';
-const ACTIVE_ORDER_MAX_AGE_MS = 48 * 60 * 60 * 1000;
+//   ★ 2026-09-07 架构防御 B：索引读写收口 license-write-service 三原子函数
+//     （bindActiveOrder/getActiveOrder/unbindActiveOrder），本文件不再散写。
 
 export async function onRequest(context) {
     _currentRequest = context.request;
@@ -264,7 +264,7 @@ export async function onRequest(context) {
         //   防重复建单/重复占号（客户端重开弹窗、杀进程重进、网络重试均命中）。
         //   命中条件：phone 一致 + 状态进行中 + 48h 内；否则视为失效，继续走新建。
         {
-            const active = await kv.get(KV_ACTIVE_ORDER_PREFIX + finalMachineId, 'json').catch(() => null);
+            const active = await getActiveOrder(kv, finalMachineId);
             if (active && active.requestId) {
                 const existRec = await kv.get(KV_ADMIN_REQ_PREFIX + active.requestId, 'json').catch(() => null);
                 const existAge = existRec ? (Date.now() - new Date(existRec.submittedAt || existRec.createdAt || 0).getTime()) : Infinity;
@@ -345,14 +345,15 @@ export async function onRequest(context) {
         await bindOrderToRequest(kv, created.record.orderNo, created.requestId, created.record.phone);
 
         // ★ 2026-09-06 架构重构：写进行中订单索引（幂等查找用；失败不影响下单）
+        //   2026-09-07 架构防御 B：改走 write-service bindActiveOrder（mid 过工厂校验）
         try {
-            await kv.put(KV_ACTIVE_ORDER_PREFIX + finalMachineId, JSON.stringify({
+            await bindActiveOrder(kv, finalMachineId, {
                 requestId: created.requestId,
                 orderNo: created.record.orderNo,
                 phone: phone.trim(),
                 status: 'pending_payment',
                 createdAt: now
-            }));
+            });
         } catch (ae) {
             console.warn('[OrderSubmit] active_order 索引写入失败(不影响下单):', ae.message);
         }

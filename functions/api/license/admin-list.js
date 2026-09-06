@@ -14,6 +14,7 @@
 
 import { parseAuthHeader, isPlatformAdmin } from '../_lib/auth.js';
 import { getKV } from './_lib/license-core.js';
+import { unbindActiveOrder } from './_lib/license-write-service.js';
 
 function corsHeaders() {
     return {
@@ -58,7 +59,9 @@ async function purgeExpiredPendingPayment(kv, record, orderKey) {
         ? ('order:' + String(record.orderNo).trim().toUpperCase()) : null);
     if (ok) jobs.push(kv.delete(ok).catch(() => null));
     if (record && record.machineId) {
-        jobs.push(kv.delete('active_order:' + record.machineId).catch(() => null));
+        // ★ 2026-09-07 架构防御 B：active_order 删除走 write-service 唯一入口
+        //   （裸前缀纯 delete，清理路径要能删脏键；内部容错不抛）
+        jobs.push(unbindActiveOrder(kv, record.machineId));
     }
     await Promise.allSettled(jobs);
     console.log('[AdminList] 惰性清理过期弃单(7天未付款):', record && record.requestId, ok || '');
