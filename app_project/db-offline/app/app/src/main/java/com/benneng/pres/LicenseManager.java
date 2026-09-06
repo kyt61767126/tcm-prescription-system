@@ -258,6 +258,15 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
     private static final String VERIFY_API_URL = "https://tcm-prescription-system.pages.dev/api/license/verify";
     // ★ 2026-08-15 防重复试用：试用注册 API（硬件指纹判重）
     private static final String TRIAL_REGISTER_API_URL = "https://tcm-prescription-system.pages.dev/api/trial/register";
+    // ★ 2026-09-06 原生领码自愈：管理员激活状态查询 API（machineId 兜底查询，
+    //   服务端语义：仅返回绑定该 machineId 的 license，无账号写操作，安全边界不变）
+    private static final String ADMIN_STATUS_API_URL = "https://tcm-prescription-system.pages.dev/api/license/admin-status";
+    // ★ 2026-09-06 原生领码自愈：节流（冷启动+onResume 双触发，60s 内不重复查询）
+    private static final long NATIVE_SYNC_THROTTLE_MS = 60_000L;
+    private static volatile long sLastNativeSyncAt = 0L;
+    // ★ 2026-09-06 并发安装互斥：JS 自愈（桥线程）与 Java 原生自愈（后台线程）可能
+    //   同时调 installAdminLicense 并发写 config.json → 静态锁串行化（跨实例生效）
+    private static final Object sInstallLock = new Object();
     // ★ 试用次数阈值（与后端 MAX_TRIALS 一致）
     private static final int MAX_TRIALS = 1;   // 2026-08-16：一个设备一次试用（防卸载重装刷试用）
     private static final int ACTIVATE_TIMEOUT_MS = 15000;
@@ -407,6 +416,103 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
         } catch (Exception e) {
             Log.w(TAG, "试用注册异常（宽限允许）", e);
             return true;
+        } finally {
+            if (conn != null) conn.disconnect();
+        }
+    }
+
+    // ========================================================================
+    //  ★ 2026-09-06 原生领码自愈（架构级根治"激活成功后仍显示试用7天"老问题）
+    //
+    //  历史病灶：license.dat 的落盘完全依赖 JS WebView 层 4 条链路（Tab1 轮询 /
+    //  断点续传 resumeAdminPendingRequest / 存量自愈 healMissingDesktopLicenseFile /
+    //  手动重激），任一环节断链（WebView 切后台被杀/桥序列化异常/用户不开设置页/
+    //  审批滞后于会话）= 服务端已 activated 但本地无 license → 登录后授权区
+    //  一直显示"试用期剩余X天"，用户被迫手动重新激活。桌面端 2026-09-05 已把
+    //  自愈下沉到主进程（app.whenReady 断点续传），APP 的 Java 层一直没有对等物。
+    //
+    //  本方法 = APP 的 Java 原生兜底权威：本地无可解密 license.dat 时，凭本机
+    //  machineId 查询 admin-status（服务端仅返回绑定该机器的 license，无账号
+    //  副作用），命中已激活 → 复用 installAdminLicense 原生落盘（写 license.dat
+    //  + 删 trial + 同步 config + UPSERT 账号[密码保留]）。与 JS 层自愈并存：
+    //  JS 是快路径，Java 是每次冷启动/onResume 必跑的权威兜底，不再依赖任何
+    //  UI 会话存活。
+    //
+    //  触发点：MainActivity 冷启动（continueStartupAfterLicenseCheck）+ onResume
+    //  （用户从官网付款页切回 APP 的关键时刻）。60s 静态节流防重复。
+    //  宽容失败：网络异常/未激活/已授权 一律静默返回，绝不阻断启动。
+    // ========================================================================
+    public interface NativeSyncCallback {
+        void onLicenseInstalled();
+    }
+
+    public boolean syncLicenseFromServer(NativeSyncCallback cb) {
+        long now = System.currentTimeMillis();
+        if (now - sLastNativeSyncAt < NATIVE_SYNC_THROTTLE_MS) return false;
+        sLastNativeSyncAt = now;
+        HttpURLConnection conn = null;
+        try {
+            String mid = getMachineId();
+            if (mid == null || mid.isEmpty()) {
+                Log.w(TAG, "[NativeSync] machineId 为空，跳过原生领码自愈");
+                return false;
+            }
+            // 已有本地 license（可解密）→ 无需同步（已授权=正常；已过期=重装同一张
+            // license 无意义，走续费流程）
+            if (readLicense(mid) != null) {
+                Log.d(TAG, "[NativeSync] 本地 license.dat 已存在，跳过原生领码自愈");
+                return false;
+            }
+            URL url = new URL(ADMIN_STATUS_API_URL + "?machineId=" +
+                    java.net.URLEncoder.encode(mid, "UTF-8"));
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setRequestProperty("Accept", "application/json");
+            conn.setConnectTimeout(8000);
+            conn.setReadTimeout(8000);
+            int rc = conn.getResponseCode();
+            InputStream is = (rc >= 200 && rc < 400) ? conn.getInputStream() : conn.getErrorStream();
+            if (is == null) return false;
+            String response = readStream(is);
+            Log.i(TAG, "[NativeSync] admin-status 响应: " + response);
+            JSONObject resp = new JSONObject(response);
+            if (!resp.optBoolean("success", false)) return false;
+            if (!"activated".equals(resp.optString("status", ""))) return false;
+            String license = resp.optString("license", "");
+            if (license == null || license.isEmpty()) {
+                Log.w(TAG, "[NativeSync] 服务端已激活但 license 为空，跳过");
+                return false;
+            }
+            JSONObject li = resp.optJSONObject("licenseInfo");
+            String user = (li != null) ? li.optString("user", "") : "";
+            String clinicName = (li != null) ? li.optString("clinicName", "") : "";
+            String phone = (li != null) ? li.optString("phone", "") : "";
+            String licenseCode = (li != null) ? li.optString("licenseCode", "") : "";
+            // password 传空：账号已存在（注册创建）时 installAdminLicense UPSERT
+            // 保留原密码（2026-09-04 方案B 密码写点唯一化），不会重置注册密码；
+            // loginUsername=phone：登录账号=手机号（与 JS 自愈/激活收尾路径一致）
+            JSONObject inst = installAdminLicense(license, mid, user, clinicName,
+                    "", phone, phone, licenseCode);
+            if (inst != null && inst.optBoolean("success", false)) {
+                Log.i(TAG, "[NativeSync] 原生领码自愈成功：服务端已激活 → license.dat 已落盘");
+                if (cb != null) {
+                    try { cb.onLicenseInstalled(); } catch (Exception ce) {
+                        Log.w(TAG, "[NativeSync] 回调异常(不影响落盘): " + ce.getMessage());
+                    }
+                }
+                return true;
+            }
+            Log.w(TAG, "[NativeSync] 原生落盘失败: " + ((inst != null) ? inst.optString("error", "") : "null"));
+            return false;
+        } catch (java.net.SocketTimeoutException e) {
+            Log.w(TAG, "[NativeSync] 查询超时（静默跳过）");
+            return false;
+        } catch (java.net.UnknownHostException e) {
+            Log.w(TAG, "[NativeSync] 无法连接服务器（静默跳过）");
+            return false;
+        } catch (Exception e) {
+            Log.w(TAG, "[NativeSync] 原生领码自愈异常（静默跳过）: " + e.getMessage());
+            return false;
         } finally {
             if (conn != null) conn.disconnect();
         }
@@ -3419,6 +3525,10 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
     public JSONObject installAdminLicense(String licenseBase64, String machineId, String user,
                                           String clinicName, String password,
                                           String loginUsername, String phone, String licenseCode) {
+        // ★ 2026-09-06 并发安装互斥：JS 自愈（桥线程）与 Java 原生领码自愈（后台线程）
+        //   可能并发调用本方法（同时写 license.dat/config.json）→ 静态锁串行化；
+        //   二次安装同一张 license 幂等无害（config UPSERT 同值 no-op）
+        synchronized (sInstallLock) {
         try {
             if (licenseBase64 == null || licenseBase64.isEmpty()) {
                 return failResult("服务器返回的 license 数据为空");
@@ -3550,6 +3660,7 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
             Log.e(TAG, "管理员激活安装失败", e);
             return failResult("激活失败: " + e.getMessage());
         }
+        } // synchronized(sInstallLock)
     }
 
 

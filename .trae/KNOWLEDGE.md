@@ -520,6 +520,15 @@ P2 渐进迁移（2026-09-03 当日完成）：
   - **坑（工具链，旧教训再实锤）**：同一文件多处并行 Edit **必丢**——本轮 offline.js/cloud.js 各 3 处并行编辑每文件只存活最后 1 处（最后写入者覆盖前面编辑），Edit 工具全部报"成功"无任何报错；**同文件多改动必须串行 + 改完 rg 验证字面量归零**。
   - 生效：官网购买页（pages.dev/download + site-official）push 后 Pages 自动部署即刻生效；离线桌面/离线 APP 的 auth-core 文案改动需重打包才进客户端（旧包客户看到旧文案不影响功能，激活链路靠 Observer 轮询不受文案影响）；云端网页/云桌面/云端 APP 的 cloud.js 副本随各自发版节奏生效。
 
+**十三、APP 原生领码自愈 + 授权事实驱动 UI 收敛（2026-09-06，架构级根治"激活成功后仍显示试用7天"老问题）**：用户实测复现（注册→付款→激活→登录全正常，授权区仍显示"试用7天"，手动重新激活才显示365天）——这是 07-27/09-03/09-05/09-06 四轮补丁后**仍复发**的老问题，根因是架构缺陷而非某条链路的 bug：
+- **病灶（举一反三）**：license.dat 落盘 4 条链路（Tab1 轮询 / 断点续传 resumeAdminPendingRequest / 存量自愈 healMissingDesktopLicenseFile / 手动重激）**全部经 JS WebView 层发起**，任一环节断链（WebView 切后台被杀/桥序列化异常/审批滞后于会话/用户不开设置页）= 服务端已 activated 但本地无 license → 登录后授权区永远显示试用。桌面端 09-05(五)③ 已把自愈下沉主进程，**APP 的 Java 层一直没有对等物**——历轮补丁都在给 JS 层加触发点（visibility/focus/5min 兜底/60s 节流自愈），链路脆弱性本身未变。
+- **架构修复 A（Java 原生权威兜底）**：LicenseManager 新增 `syncLicenseFromServer(NativeSyncCallback)`——本地无可解密 license.dat 时凭本机 machineId GET admin-status（服务端仅返回绑定该机器的 license，无账号副作用，安全边界不变），命中 activated → 原生调 installAdminLicense 落盘（password 传空=UPSERT 保留注册密码；loginUsername=phone 对齐 JS 路径）。60s 静态节流；断网/未激活/已授权全静默跳过，绝不阻断启动。MainActivity 双触发：`continueStartupAfterLicenseCheck()`（冷启动）+ `onResume()` 非首次（**用户从官网付款页切回 APP 的关键时刻**）；成功回调 evaluateJavascript 调 `window.updateLicenseStatusText()` 即时刷新授权区。
+- **架构修复 B（授权事实驱动 UI 收敛）**：offline.js 权威源 `updateLicenseStatusText` **licensed 分支**新增 `setCloudActivationDone()` + `hideActivateLoginEntry()`（均幂等）——getStatus=licensed 即视为激活完成，**不论 license 由哪条链路落盘**（轮询/断点/JS自愈/Java原生/手动输码），登录框入口语义统一收敛。修复历史割裂：license 已装但登录框仍显示「管理员激活」入口（2026-08-22 同类问题的架构级收口：UI 状态跟随授权事实，不跟随激活流程回调）。
+- **并发加固**：installAdminLicense 加 `synchronized(sInstallLock)` **静态锁**（跨实例生效——MainActivity/getLM/原生同步各自 new LicenseManager，实例锁无效），串行化 JS 桥线程自愈与 Java 后台线程自愈的并发 config.json 写入。
+- 验证：gradle compileDebugJavaWithJavac EXIT=0（首版 7 参调用编译报错实测 8 参签名：loginUsername 易漏）；node --check 4 文件；sync-auth-core 11 副本 In sync；check-interface 6 OK 0 CHANGED；sync-all VerifyOnly 全绿。
+- **铁律**：①**"服务端已知状态 + 本地缺件"的修复责任必须放在原生层（Java/主进程），JS WebView 只能做快路径**——WebView 会话可被系统随时杀死，任何依赖"页面恰好在跑"的补丁必然复发；②新增 Java 调用既有方法先核对完整签名（编译器实测：installAdminLicense 8 参，loginUsername 漏传编译才暴露）；③跨实例并发保护必须用静态锁（synchronized 实例方法在 new 多实例场景形同虚设）。
+- 生效：**仅离线 APP 需重打包**（Java 改动 + auth-core 副本均在 APK 内）；离线桌面 auth-core.js 副本虽同步但桌面已有主进程自愈（09-05），下次桌面打包自然带上 B 收敛；云端系不受影响。
+
 ## 8. 桌面版技术规范
 
 * **登录预填来源单一化（2026-09-04 Commit f62f16c4）**：`initLoginInput` 的预填**只允许来自 localStorage 记住的用户名**（`KEY_REMEMBER_USER` / `local_rememberedUsers`），禁止直接从 `config.users` 自动预填。历史 bug：`else if users.length===1` 分支无法区分「出厂模板 admin 单账户」和「刚激活后的单管理员」，导致全新安装首次启动即预填 admin/admin。配套删除 `isTrialDefault && admin` 兜底（离线端独有）。区分手段：localStorage remembered 键在用户成功登录后才写入，全新安装天然为空 → usernameToFill = null → 空白表单。云端 login.js（无 isTrialDefault 兜底）同理需同步修改。

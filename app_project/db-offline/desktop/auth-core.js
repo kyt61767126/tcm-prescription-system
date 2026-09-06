@@ -3336,6 +3336,14 @@
                     loadInviteInfo(el);
                     // ★ 2026-08-25 全局统一：正式授权 >7天或永久(-1) → 灰色只读；≤7天恢复正常色提醒续费
                     setAdminActivateBtnState(hasDays ? remainingDays : null);
+                    // ★ 2026-09-06 架构级收敛（授权事实驱动 UI，不再依赖激活流程回调）：
+                    //   getStatus=licensed 即视为已激活完成——不论 license 由哪条链路
+                    //   落盘（Tab1轮询/断点续传/JS存量自愈/Java原生领码自愈/手动输码），
+                    //   统一置激活完成标记+隐藏登录框注册/激活入口（幂等：标记已置/
+                    //   入口已藏则 no-op）。修复历史割裂：license 已装但登录框仍显示
+                    //   「管理员激活」入口误导已开通用户（2026-08-22 同类问题的架构级收口）。
+                    try { setCloudActivationDone(); } catch (_acCe) {}
+                    try { hideActivateLoginEntry(); } catch (_acHe) {}
                 } else {
                     // 未知类型，显示通用已激活
                     el.innerHTML = '✅ 已激活' +
