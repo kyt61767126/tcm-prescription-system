@@ -164,3 +164,9 @@ LICENSE_MASTER_KEY*
 Cloudflare*LICENSE_MASTER_KEY*
 
 .git-commit-msg.tmp
+
+# HarmonyOS signing materials (never commit private keys)
+app_project_harmony/**/sign-materials/
+*.csr
+*.cer
+*.p7b

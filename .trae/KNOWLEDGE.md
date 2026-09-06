@@ -810,6 +810,29 @@ node "D:\Program Files\Huawei\DevEco Studio\tools\hvigor\bin\hvigorw.js" --mode 
 * 【首跑验证结果】Web 组件正常加载云端页面（pages.dev）、版本号注入生效（V1.0.0 Build 1000000，1000000 是 DevEco 默认 versionCode）、22 桥初始化无崩溃。模拟器限制：无摄像头（拍摄类桥方法测不了）、无 SIM（显示"无服务"但网络走宿主机正常）、分享面板无第三方 App 接收。
 * 【主体已确认·2026-09-03】开发者账号 = **高碑店惠康堂中医诊所有限公司**，系用户 2026-09 用诊所营业执照新做的企业实名认证（DevEco 团队栏即显示此主体，自动签名/证书均以此主体签发）。B 方案「开发者企业资质」门槛已过。**主体一致性铁律：软著著作权人、APP 备案主体、AGC 开发者三者必须同为「高碑店惠康堂中医诊所有限公司」**。【2026-09-03 已核对】① 软著申请人 = **高碑店惠康堂中医诊所有限公司**（企业名义提交，与 AGC 开发者主体一致 ✅，等下证即可，无需转让/授权书）；② 备案必须以诊所执照备案（不能用个人）；③ 诊所同时是定向发布的"企业客户"，仍需在 HEM 管理台（developer.huawei.com/business/console）用同一执照认证"企业主"角色拿 HEM ID 填回 AGC 分发名单。
 
+**P0 签名闭环里程碑（2026-09-06，企业发布签名 HAP 已出）**：
+
+* 【关键发现·算法铁律】**HarmonyOS NEXT 发布签名强制 ECC P-256 + SHA256withECDSA**，RSA2048 + SHA256withRSA 用不了（hvigor schema `signAlg` 只允许 `SHA256withECDSA`）。之前 2026-09-01 生成的 RSA p12/csr 全部废弃重生成。**先用 hap-sign-tool generate-keypair -keyAlg ECC -keySize NIST-P-256 生成密钥库 → generate-csr -signAlg SHA256withECDSA 生成 CSR → 上传 AGC 换 .cer**。
+
+* 【hvigor 密码加密门】**build-profile.json5 signingConfigs 的 storePassword/keyPassword 必须 ≥ 32 字符**（DevEco 加密格式，形如 `0000001B...` 60+ 字符），明文密码 `HkCloud2026!Sign#`（16 字符）直接报错 00303116。**绕过方案**：signingConfigs 置空 → hvigor 出 `*-unsigned.hap`（`WARN: No signingConfig found for product default` 正常）→ 手动 `hap-sign-tool sign-app -mode localSign` 签名，明文密码即可。命令模板：
+  ```
+  java -jar hap-sign-tool.jar sign-app -mode localSign `
+    -keyAlias "huikang-cloud" -keyPwd "HkCloud2026!Sign#" `
+    -appCertFile "sign-materials/huikang-cloud.cer" `
+    -profileFile "sign-materials/huikang-cloud.p7b" -profileSigned 1 `
+    -inFile "entry-default-unsigned.hap" `
+    -signAlg SHA256withECDSA `
+    -keystoreFile "sign-materials/huikang-cloud.p12" -keystorePwd "HkCloud2026!Sign#" `
+    -outFile "huikang-cloud-release-signed.hap" `
+    -compatibleVersion 26 -signCode 1 -permSign 1
+  ```
+
+* 【AGC 路径速查】AppGallery Connect → 「证书、APP ID 和 Profile」（不是 API 服务→凭证）→ 证书页点 **新增发布证书**（不是调试/测试证书）→ 上传 `.csr` → 下 `.cer`；Profile 页点 **添加** → 选应用（包名必须 `com.tcm.prescription`）→ 类型选 **发布** → 选刚下的 .cer → 下载 `.p7b`。三处命名必须对齐：证书名/Profile 名随意，但**包名**必须和 bundleName 完全一致。
+
+* 【完整产物链】`sign-materials/huikang-cloud.p12`（ECC P-256 密钥，keyAlias=huikang-cloud）+ `huikang-cloud.cer`（AGC 企业证书，2029-09-06 到期）+ `huikang-cloud.p7b`（发布 Profile，PKCS#7）→ `hvigorw assembleHap` 出 unsigned → `sign-app` 手动签 → **`惠康中医-鸿蒙云端-发布签名.hap`**（1.45MB，项目根目录已归档）。sign-app 日志 `certificate in profile: 高碑店惠康堂中医诊所有限公司, Release` + `Sign Hap success!` 确认主体+签名完整性。
+
+* 【备份文件】旧 RSA 密钥已保留 `huikang-cloud-rsa.bak` / `huikang-cloud-csr-rsa.bak`；devco-auto.* 是 DevEco 自动调试签名，留着不动；口令备忘.txt 本地留存，**绝不入库**。
+
 ### B 方案工程推荐梳理（2026-09-06 定稿）
 
 **方案选型**：B 方案 = ArkWeb 远程 Web 壳 + 原生桥逐字对齐。对比其他路线（A 方案纯原生 ArkTS 重写 300+ 页、C 方案 Flutter/Tauri 跨端框架），B 方案胜出三理由：① **95% 代码复用**（前端 JS 原样跑，改前端即全端生效）；② **周期 5 周 + 预算 57.8 单位**（GLM-5.3 补贴后显省 15%，含返工率降低隐性收益省 30-40%）；③ **安卓 APP 已走同路线**，经验直接迁移，无新框架学习成本。
