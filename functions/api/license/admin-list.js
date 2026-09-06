@@ -32,6 +32,38 @@ function json(data, status = 200) {
 const KV_ADMIN_REQ_PREFIX = 'admin_req:';
 const KV_ADMIN_REQ_INDEX = 'admin_req_index';
 
+// ★ 2026-09-06 待付款订单自动过期（修"激活审核"列表被测试单/弃单永久占据）：
+//   pending_payment 记录刻意不进 admin_req_index，仅靠 order: 映射在待付款列表展示。
+//   历史教训：联调测试单/客户弃单若无人点🗑会永远留在列表里（2026-09-06 实证：
+//   "测试诊所"混在真实客户中间，需人工清 KV）。规则：超过 7 天未付款 → 视为弃单，
+//   列表不再返回，并在读取路径惰性清理（admin_req + order: 映射 + active_order:
+//   索引三键同删，对齐 deleteAdminRequest 清理语义；清理失败不影响列表返回）。
+//   客户端 48h 后本就会另建新单（order-submit ACTIVE_ORDER_MAX_AGE_MS），7 天远超
+//   该窗口，不会误伤慢付款客户；已付款(pending)/已激活记录不受影响。
+const PENDING_PAYMENT_EXPIRE_MS = 7 * 24 * 60 * 60 * 1000;
+
+function isExpiredPendingPayment(record) {
+    if (!record || record.status !== 'pending_payment') return false;
+    const t = new Date(record.submittedAt || record.createdAt || 0).getTime();
+    return (Date.now() - t) > PENDING_PAYMENT_EXPIRE_MS;
+}
+
+// 过期弃单惰性清理：三键同删（orderKey 优先用扫描到的键，兜底 record.orderNo）
+async function purgeExpiredPendingPayment(kv, record, orderKey) {
+    const jobs = [];
+    if (record && record.requestId) {
+        jobs.push(kv.delete(KV_ADMIN_REQ_PREFIX + record.requestId).catch(() => null));
+    }
+    const ok = orderKey || (record && record.orderNo
+        ? ('order:' + String(record.orderNo).trim().toUpperCase()) : null);
+    if (ok) jobs.push(kv.delete(ok).catch(() => null));
+    if (record && record.machineId) {
+        jobs.push(kv.delete('active_order:' + record.machineId).catch(() => null));
+    }
+    await Promise.allSettled(jobs);
+    console.log('[AdminList] 惰性清理过期弃单(7天未付款):', record && record.requestId, ok || '');
+}
+
 // 脱敏：对外返回时隐藏 machineId 中间部分、电话中间 4 位
 // ★ 平台管理员后台需要完整客户信息核对身份（电话/机器ID不脱敏）
 // 此 API 仅 platform_admin 角色可访问（onRequest 入口已校验），无需脱敏
@@ -119,6 +151,11 @@ export async function onRequest(context) {
                         if (!mapping || !mapping.requestId) continue;
                         const record = await kv.get(KV_ADMIN_REQ_PREFIX + mapping.requestId, 'json').catch(() => null);
                         if (!record || record.status !== 'pending_payment') continue;
+                        // ★ 过期弃单（7天未付款）：不进列表 + 惰性清理三键
+                        if (isExpiredPendingPayment(record)) {
+                            await purgeExpiredPendingPayment(kv, record, key.name);
+                            continue;
+                        }
                         records.push(maskRecord(record));
                     }
                     if (page.list_complete || !page.cursor) break;
@@ -147,6 +184,11 @@ export async function onRequest(context) {
             if (records.length >= limit) break;
             const record = await kv.get(KV_ADMIN_REQ_PREFIX + requestId, 'json').catch(() => null);
             if (!record) continue;
+            // ★ 过期弃单（7天未付款）：all 视图同样不返回 + 惰性清理三键
+            if (isExpiredPendingPayment(record)) {
+                await purgeExpiredPendingPayment(kv, record, null);
+                continue;
+            }
             let hit = (statusFilter === 'all');
             if (!hit && statusFilter === 'pending') {
                 // ★ 2026-09-04 兼容状态别名：pending(旧命名 已付款待审核) / pending_approval(新命名统一入口)
@@ -184,6 +226,11 @@ export async function onRequest(context) {
                         if (seen.has(rid)) continue;  // 已在主路径 records 中，避免重复
                         const record = await kv.get(KV_ADMIN_REQ_PREFIX + rid, 'json').catch(() => null);
                         if (!record) continue;
+                        // ★ 过期弃单（7天未付款）：兜底枚举路径同样不返回 + 惰性清理三键
+                        if (isExpiredPendingPayment(record)) {
+                            await purgeExpiredPendingPayment(kv, record, key.name);
+                            continue;
+                        }
                         let keep = false;
                         if (statusFilter === 'all') keep = true;
                         else if (statusFilter === 'pending') keep = (record.status === 'pending' || record.status === 'pending_approval');

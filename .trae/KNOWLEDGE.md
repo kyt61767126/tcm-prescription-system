@@ -624,6 +624,13 @@ P2 渐进迁移（2026-09-03 当日完成）：
 - **⑤ 生效路径**：用户已激活机器（license.dat 已在 userData）装 V1.0.204 后**启动时 enforceEditionBinding 自动校正 edition=clinic**（无需重新激活）；新装全流程（测试重置.bat → 注册→付款→领码）则装码瞬间即绑定，免重启登录即显【用户管理】。
 - **⑥ 双场景产物实证（用户二次报"依旧标准版"后追加）**：e2e/probe-prepare-inst.cjs + probe-inst-main.cjs（场景1 全新激活）与 probe-prepare-legacy.cjs + probe-inst-legacy.cjs（场景2 旧版残留 edition=personal+已装 license → 启动自动校正磁盘 config→clinic）。**方法论：mock electron 驱动真实 installLicense 在目标 userData 落盘 license.dat+config（getMachineId 纯硬件指纹 MachineGuid+主板+CPU+hostname，Node 与 exe 同机同实现一致，不含 exe 路径——跨进程构造可行）→ BNZC_E2E=1+marker+BNZC_E2E_DATA 重定向启动 exe → CDP connectOverCDP 登录断言**。E2E 旁路（__BNZC_E2E_BYPASS=true）恰好放行 debugger 检测且拦截 install-admin-license IPC——预置落盘方式完美绕开，正好专测"已激活状态"。两场景 V1.0.204 产物全 PASS（CONFIG.edition=clinic/标签离线机构版/userManageBtn=block/磁盘 config 被启动校正）→ **产物正确，用户侧"依旧错显"= 未装新安装包（旧版 exe 数据残留下双缺陷依旧）**。铁律：**修复"用户报无效"时，先在产物上双场景（新装+旧数据升级）实证，产物 PASS 再核用户安装时间线，不盲改代码**。
 
+**三十、后台"激活审核"待付款列表被测试单/弃单永久占据——7天自动过期+惰性清理（2026-09-06 当日，云函数 admin-list.js）**：用户报"APP激活时后台出现多余测试诊所"（前晚已手工清过 KV，次晚又见同类）。
+- **① 根因（结构性的，不是单条脏数据）**：pending_payment 记录刻意不进 admin_req_index（order-submit skipReqIndex），仅靠 order: 前缀扫描可见——**没有任何过期机制**：联调测试单（ad-hoc machineId 如 test-mid-debug-日期，全库无此代码=临时脚本直连生产 API 所造）、客户弃单，只要没人点🗑就**永远留在待付款列表**。且历次手工清 KV 只删 admin_req 漏删 order:/active_order: → 堆积 11 个孤儿 order 映射 + 3 个陈旧 active_order 索引（admin-list 每次加载浪费 14 次 KV get）。
+- **② 修复（admin-list.js 三路径统一拦截，单一副本无需多端同步）**：`isExpiredPendingPayment`（pending_payment 超 7 天 = 弃单）在 ①pending_payment 专属分支 ②index 主路径(all 视图) ③order: 兜底枚举 三处统一：不返回 + `purgeExpiredPendingPayment` 惰性三键同删（admin_req + order:（扫描键优先/record.orderNo 兜底大写归一）+ active_order:{machineId}），Promise.allSettled 容错（清理失败不影响列表）。7 天阈值安全性：客户端 48h 后本就另建新单（order-submit ACTIVE_ORDER_MAX_AGE_MS 幂等失效），7 天远超该窗口不误伤慢付款；pending/activated 等已付款状态完全不受影响。逻辑自测 14/14（tools/_tmp/test-admin-list-expiry.cjs）。
+- **③ 一次性数据清理**：11 孤儿 order + 3 陈旧 active_order（含 test-mid-debug 残留索引）已删，备份 logs/kv-backup-20260906/，二次复核全 404。此后无需人工追清——过期自动消失。
+- **④ 铁律**：(a) **联调测试禁止直连生产 API 造数据**——优先本地 mock（e2e/test-install-binding.cjs 模式）；确需联调必须用 199xxx 测试号且**测完立即三键同删**（admin_req + order: + active_order:）。(b) **手工清 KV 必须三键同删**——只删 admin_req 会留孤儿 order 映射（不可见但拖慢列表且污染 order: 扫描）。(c) 后台列表类功能设计时必须内建过期/清理机制，不能依赖管理员手动🗑。
+- **⑤ 生效方式**：云函数 push 即自动部署（Cloudflare Pages），后台网页（tcm-prescription-system.pages.dev/admin）立即生效；不涉及任何客户端文件，五端均无需重打包。
+
 ## 8. 桌面版技术规范
 
 * **登录预填：已彻底取消（2026-09-06 Commit 2202236f，取代 9-04"来源单一化"方案）**：`initLoginInput` **不再做任何用户名自动预填**——登录框永远空白+聚焦；记住的账户仅保留**手动下拉切换**（renderUsernameDropdown，点▼选择）。演进史：8-27 恢复预填 → 9-04 收窄为"仅 localStorage 记住的用户名"（历史 bug：config.users 单账户分支无法区分出厂模板 admin，全新安装首次启动即预填 admin/admin）→ 9-06 用户实测"升级新版后自动显示旧记住的用户名，不像新客户"后**彻底取消**。理由：预填链路多次引发历史 bug + 升级安装 userData 不清导致残留展示；而手动下拉保留全部便利。
