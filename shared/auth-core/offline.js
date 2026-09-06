@@ -4971,24 +4971,27 @@
                             return;
                         }
                     }
-                } catch (re2) { /* 读取失败退回手动表单 */ }
+                } catch (re2) { /* 读取失败：已注册走下方封死分支，未注册退回手动表单 */ }
+                // ★ 2026-09-06（第九轮·用户指令）：已注册用户激活全程取消「管理员激活」
+                //   填信息表单（备注及输入框）——注册时信息已收集，预填链失败也不落
+                //   表单，回版本选择页 + 红条提示（重启重试/联系客服），而非让用户
+                //   重复填写。未注册用户（首次激活/存量无账号）维持手动表单。
+                if (__regPrefill && __regPrefill.phone) {
+                    show('adminStepEdition');
+                    try {
+                        const __edBox = document.getElementById('adminStepEdition');
+                        if (__edBox && !document.getElementById('adminEditionErrTip')) {
+                            const __tip = document.createElement('div');
+                            __tip.id = 'adminEditionErrTip';
+                            __tip.style.cssText = 'background:#fdecea;border:1px solid #f5c6cb;border-radius:8px;padding:10px;margin-bottom:12px;font-size:12px;color:#b71c1c;line-height:1.7;';
+                            __tip.innerHTML = '⚠ 注册信息读取失败（诊所名/姓名/手机号未同步）。<br>请完全退出 APP 重新打开后再试；仍有问题请联系客服微信 hktzy1688。';
+                            __edBox.insertBefore(__tip, __edBox.firstChild);
+                        }
+                    } catch (te2) {}
+                    return;
+                }
                 show('adminStepForm');
                 setActiveTab('admin');
-                // ★ 2026-09-06（第四轮回归）诊断提示：已注册（桥确认）但自动提交条件
-                //   仍不满足（如诊所名空）时，黄条明示原因，替代静默表单（用户不知道
-                //   发生了什么/以为流程坏了）。未注册首次激活用户不显示（正常手动流程）。
-                try {
-                    if (__regPrefill && __regPrefill.phone) {
-                        const __fb = document.getElementById('adminStepForm');
-                        if (__fb && !document.getElementById('adminPrefillDiagTip')) {
-                            const __tip = document.createElement('div');
-                            __tip.id = 'adminPrefillDiagTip';
-                            __tip.style.cssText = 'background:#fff8e1;border:1px solid #ffe082;border-radius:8px;padding:10px;margin-bottom:12px;font-size:12px;color:#795548;line-height:1.7;';
-                            __tip.innerHTML = '⚠ 检测到您已注册（手机号 ' + String(__regPrefill.phone).replace(/(\d{3})\d{4}(\d{4})/, '$1****$2') + '），但部分信息未能自动同步。<br>请核对下方表单（缺项补填）后点击「确认信息并提交」即可继续。';
-                            __fb.insertBefore(__tip, __fb.firstChild);
-                        }
-                    }
-                } catch (de2) {}
             });
         });
 
@@ -5028,6 +5031,9 @@
             // ★ 2026-08-23 简化：从直达链接进入（跳过版本选择）时，Tab1 管理激活申请需版本信息，
             //   未选择版本则回到第一步让用户选择（避免以默认机构版提交非本意的申请）
             if (!state.editionChosen) { show('adminStepEdition'); return; }
+            // ★ 2026-09-06（第九轮）：已注册用户点 Tab1 不出现填信息表单——
+            //   有进行中订单回订单等待视图，否则回版本选择（showAdminStepFormSafe 改道）
+            if (__regPrefill && __regPrefill.phone) { showAdminStepFormSafe(); return; }
             syncSharedFieldsFrom('ticket'); // 工单Tab填过的信息同步到管理员激活
             show('adminStepForm'); setActiveTab('admin');
         });
@@ -5416,7 +5422,8 @@
         });
 
         // 返回
-        document.getElementById('adminBackBtn').addEventListener('click', function() { show('adminStepForm'); });
+        // ★ 2026-09-06（第九轮）：已注册用户不回填信息表单（showAdminStepFormSafe 改道）
+        document.getElementById('adminBackBtn').addEventListener('click', function() { showAdminStepFormSafe(); });
 
         // 提交
         document.getElementById('adminSubmitBtn').addEventListener('click', async function() {
@@ -5621,6 +5628,21 @@
                 showFormAndAlert('网络错误，提交失败：' + (e && e.message || '请检查网络'));
             }
         });
+
+        // ★ 2026-09-06（第九轮·用户指令）：已注册用户激活全程取消「管理员激活」填信息
+        //   表单（备注及输入框）——注册时信息已收集。任何回退到表单的路径统一改道：
+        //   有进行中订单 → 订单等待视图（付款/审核状态）；否则 → 版本选择页。
+        //   未注册用户（首次激活/存量无账号）维持原表单。
+        function showAdminStepFormSafe() {
+            try {
+                if (__regPrefill && __regPrefill.phone) {
+                    if (__orderFlow && __orderFlow.orderNo) { enterOrderWaiting(__orderFlow); return; }
+                    show('adminStepEdition');
+                    return;
+                }
+            } catch (e) { /* 判定异常按未注册原路走表单 */ }
+            show('adminStepForm');
+        }
 
         function showFormAndAlert(msg) {
             // ★ 2026-09-06 修复：已注册（预填）用户提交被服务端拒绝（409 一号一机跨设备 /
@@ -5969,7 +5991,8 @@
                 openPayUrlRobust(buildPayUrl(), btn);
             });
             const back = document.getElementById('adminPayRequiredBackBtn');
-            if (back) back.addEventListener('click', function() { show('adminStepForm'); });
+            // ★ 2026-09-06（第九轮）：已注册用户不回填信息表单（showAdminStepFormSafe 改道）
+            if (back) back.addEventListener('click', function() { showAdminStepFormSafe(); });
         })();
         document.getElementById('adminCopyMidBtn').addEventListener('click', async function() {
             const ok = await copyTextToClipboard(machineId || '');
