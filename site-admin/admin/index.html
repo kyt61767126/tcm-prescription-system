@@ -772,7 +772,8 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
             <h2>未激活客户列表</h2>
             <div class="filter-bar">
                 <select id="adminActivateFilter" onchange="loadAdminActivateList()">
-                    <option value="pending" selected>待审核（未激活）</option>
+                    <option value="pending">待审核（未激活）</option>
+                    <option value="pending_payment" selected>待付款（官网下单未付款）</option>
                     <option value="activated">已通过</option>
                     <option value="rejected">已拒绝</option>
                     <option value="cancelled">已取消</option>
