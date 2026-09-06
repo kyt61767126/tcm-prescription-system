@@ -1934,6 +1934,41 @@ let currentUser = null;
             }
         }
 
+        // ★ 忘记密码：登录界面注入"忘记密码"链接，点击后将指定账号密码重置为 admin
+        //   场景：用户忘记激活时设置的密码无法登录。离线本地系统数据本机可访问，
+        //   重置为 admin 后用户可登录再到"修改密码"设置新密码（与改密弹窗"重置为admin"一致）。
+        //   注入式实现（HTML DOM 零改动，沿用 __replaceTopClearWithStats 模式）。
+        function injectForgotPasswordLink() {
+            try {
+                const loginBtns = document.querySelector('.login-buttons');
+                if (!loginBtns || document.getElementById('forgotPwdLink')) return;
+                const link = document.createElement('a');
+                link.id = 'forgotPwdLink';
+                link.href = 'javascript:void(0)';
+                link.textContent = '忘记密码？';
+                link.style.cssText = 'display:block;text-align:center;margin:8px 0 0;font-size:13px;color:#667eea;text-decoration:none;cursor:pointer;';
+                link.addEventListener('click', handleForgotPassword);
+                loginBtns.parentNode.insertBefore(link, loginBtns.nextSibling);
+            } catch (e) { console.warn('忘记密码链接注入失败:', e); }
+        }
+        async function handleForgotPassword() {
+            try {
+                const usernameInput = document.getElementById('loginUsername');
+                const username = usernameInput ? usernameInput.value.trim() : '';
+                if (!username) { alert('请先在"手机号/用户名"框输入要重置密码的账号'); usernameInput && usernameInput.focus(); return; }
+                if (!confirm('确定要将账号 ' + username + ' 的密码重置为 admin 吗？\n\n重置后可用 admin 登录，再到"修改密码"设置新密码。')) return;
+                const users = getUsers();
+                const idx = users.findIndex(u => u && (u.username === username || String(u.phone || '') === username));
+                if (idx < 0) { alert('未找到账号 ' + username + '，请检查输入是否正确'); return; }
+                users[idx].password = await hashPassword('admin');
+                saveUsers(users);
+                const errorDiv = document.getElementById('loginError');
+                if (errorDiv) { errorDiv.textContent = '密码已重置为 admin，请使用新密码登录'; errorDiv.style.display = 'block'; }
+                const pwdInput = document.getElementById('loginPassword');
+                if (pwdInput) { pwdInput.value = ''; pwdInput.focus(); }
+            } catch (e) { console.error('重置密码失败:', e); alert('重置密码失败: ' + (e.message || '未知错误')); }
+        }
+
                 window.handleLogout = async function() {
             try {
                 // ★ 2026-08-17 终极兜底：手机APP/云端APP底部退出按钮点击无反应 — 杜绝 6 副本不一致 + 静默抛错中断 + 重复点击视觉无变化
@@ -4184,6 +4219,7 @@ let currentUser = null;
         }
 
         async function init() {
+            injectForgotPasswordLink();
             injectRecycleBinButton();
             checkLoginStatus();
             // 不在init中调用loadData()，因为用户还没登录
