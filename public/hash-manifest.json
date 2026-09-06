@@ -1,12 +1,13 @@
 {
     "local": {
         "apk": {
-            "version": "1.0.0",
+            "version": "V1.0.0.246",
             "sha256": "7f2e568c9325a53bc159130f042fc688948fe2d468e6b3cce3b68a5ec52879dd",
             "url": "/downloads/惠康中医-本地.apk",
             "size": 2982501,
             "updateTime": "2026-09-06T11:50:30.204Z",
-            "fileName": "惠康中医-本地.apk"
+            "fileName": "惠康中医-本地.apk",
+            "versionCode": 246
         },
         "portable": {
             "version": "1.0.195",
@@ -75,12 +76,13 @@
     },
     "dingzhi": {
         "apk": {
-            "version": "1.0.0",
+            "version": "V1.0.0.246",
             "sha256": "7f2e568c9325a53bc159130f042fc688948fe2d468e6b3cce3b68a5ec52879dd",
             "url": "/downloads/惠康中医-本地.apk",
             "size": 2982501,
             "updateTime": "2026-09-06T11:50:30.204Z",
-            "fileName": "惠康中医-本地.apk"
+            "fileName": "惠康中医-本地.apk",
+            "versionCode": 246
         },
         "portable": {
             "version": "1.0.195",
