@@ -1820,7 +1820,43 @@ let currentUser = null;
                 //   离线端不走云端通道，本地表（config.users/local_systemUsers）为唯一副本。
                 const route = await AuthCore.loginWithUsernamePassword(loginUsername, password, { users: users });
                 let user = route.success ? route.user : null;
-                
+
+                // ★ 2026-09-06 第八轮修复（登录密码不匹配自愈）：账号存在但密码不匹配时
+                //   （如激活收尾 adminReqPending 丢失导致前端镜像被降级为默认 admin），
+                //   从 Java config.json 权威源重拉一次并重试——不再等冷启动 UPSERT，
+                //   激活后无需重启即可用注册密码登录。上方"账号不存在"自愈只查用户名，
+                //   密码错位场景此前无兜底。
+                if (!user && window.electronAPI && window.electronAPI.activate &&
+                    typeof window.electronAPI.activate.getActivationUsers === 'function' &&
+                    typeof window.addLocalActivationUser === 'function') {
+                    try {
+                        var __rr = await window.electronAPI.activate.getActivationUsers();
+                        if (__rr && __rr.success && Array.isArray(__rr.users) && __rr.users.length > 0) {
+                            __rr.users.forEach(function (u) {
+                                if (!u || !u.username) return;
+                                try {
+                                    window.addLocalActivationUser({
+                                        username: String(u.username),
+                                        phone: u.phone ? String(u.phone) : '',
+                                        password: u.password || 'admin',
+                                        name: u.name || u.username,
+                                        role: u.role || 'admin',
+                                        lastPwdUpdatedAt: typeof u.lastPwdUpdatedAt === 'number' ? u.lastPwdUpdatedAt : 0,
+                                        updatedAt: typeof u.updatedAt === 'number' ? u.updatedAt : 0
+                                    });
+                                } catch (e) {}
+                            });
+                            users = getUsers();
+                            var __route2 = await AuthCore.loginWithUsernamePassword(loginUsername, password, { users: users });
+                            if (__route2 && __route2.success) {
+                                user = __route2.user;
+                                window.__loginHealDiag = (window.__loginHealDiag || '') + '|密码不匹配已从config自愈';
+                                console.log('[LoginSelfHeal] 密码不匹配，已从 config.json 权威源重拉并自愈');
+                            }
+                        }
+                    } catch (e) { console.warn('[LoginSelfHeal] 密码不匹配自愈异常(不影响登录):', e); }
+                }
+
                 if (user) {
                     // ★ 2026-08-24 内置 admin 账号仅试用期有效，激活后失效（用户需求：admin/admin 只对试用期内有效）
                     //   判据：isBuiltinDefaultAdmin（username=admin 且密码仍是出厂默认哈希=未改密）+ license 已正式激活
@@ -1962,6 +1998,17 @@ let currentUser = null;
                 if (idx < 0) { alert('未找到账号 ' + username + '，请检查输入是否正确'); return; }
                 users[idx].password = await hashPassword('admin');
                 saveUsers(users);
+                // ★ 2026-09-06 第八轮修复（Single-Writer 补全）：重置密码必须回写 config.json
+                //   权威层（Java renameUserBridge / 桌面 renameUser IPC），否则下次冷启动
+                //   启动自愈 UPSERT 会把旧密码盖回 localStorage——"重置 admin 重启后失效"。
+                try {
+                    if (window.electronAPI && typeof window.electronAPI.renameUser === 'function') {
+                        const _rn = await window.electronAPI.renameUser({ oldUsername: username, newPassword: 'admin' });
+                        if (_rn && _rn.success === false) {
+                            console.warn('[忘记密码] config.json 回写失败（本地已保存）:', _rn.error);
+                        }
+                    }
+                } catch (e) { console.warn('[忘记密码] config.json 回写异常（本地已保存）:', e); }
                 const errorDiv = document.getElementById('loginError');
                 if (errorDiv) { errorDiv.textContent = '密码已重置为 admin，请使用新密码登录'; errorDiv.style.display = 'block'; }
                 const pwdInput = document.getElementById('loginPassword');
@@ -2504,6 +2551,22 @@ let currentUser = null;
                     users[userIndex].password = await hashPassword(users[userIndex].password);
                 }
                 saveUsers(users);
+                // ★ 2026-09-06 第八轮修复（Single-Writer 补全）：编辑用户（改名/改密）回写
+                //   config.json 权威层，与 handleChangePassword 的 renameUser 回写同构；
+                //   漏回写 = 下次启动 UPSERT 把旧用户名/旧密码盖回 localStorage。
+                try {
+                    if (window.electronAPI && typeof window.electronAPI.renameUser === 'function' &&
+                        (newUsername !== originalUsername || newPassword.trim())) {
+                        const _rn = await window.electronAPI.renameUser({
+                            oldUsername: originalUsername,
+                            newUsername: newUsername,
+                            newPassword: newPassword.trim() || undefined
+                        });
+                        if (_rn && _rn.success === false) {
+                            console.warn('[编辑用户] config.json 回写失败（本地已保存）:', _rn.error);
+                        }
+                    }
+                } catch (e) { console.warn('[编辑用户] config.json 回写异常（本地已保存）:', e); }
 
                 if (currentUser && currentUser.username === originalUsername) {
                     currentUser = users[userIndex];
