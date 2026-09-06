@@ -1,13 +1,21 @@
 #!/bin/sh
 # ============================================================================
-#  pre-push - 惠康中医 · 推送前统一校验门（2026-09-02 设计层杜绝副本漂移上 GitHub）
+#  pre-push - 惠康中医 · 推送前统一校验门（2026-09-02 建门，2026-09-07 P0 补强）
 #
 #  背景：HTML/JS 副本漂移多次推上 GitHub 后才被 CI 发现（Verify Unified
-#  Modules 红灯），修复滞后。本钩子把同样的校验搬到 push 发生之前：
-#    ① html-sync-check.ps1 —— HTML 副本漂移（含 login.html 双版监控）
-#    ② sync-all.ps1 -VerifyOnly —— shared 模块 + index.html 生成模式校验
+#  Modules 红灯），修复滞后。本钩子把校验搬到 push 发生之前。
+#
+#  ★ 2026-09-07 架构方案 P0 止血补强（原三道门 → 六道门）：
+#    原缺口：auth-core 11 副本（双权威源拼接产物）不在任何 push 门内——
+#    auth-core 漂移史上真实发生（条目三十二 asar 2 副本、cloud_app assets
+#    脱管）；界面结构基线与激活参数完整性同样靠自觉。
+#    ① html-sync-check.ps1       —— HTML 副本漂移（含 login.html 双版监控）
+#    ② sync-all.ps1 -VerifyOnly  —— shared 模块 + index.html 生成模式校验
 #    ③ check-injection-idempotency.cjs —— 运行时注入幂等基线
-#  三道门全过才允许推送（均为秒级，不拖慢日常 push）。
+#    ④ check-interface.ps1       —— 界面结构基线（HTML body 哈希锁）
+#    ⑤ sync-auth-core.ps1 -VerifyOnly —— auth-core 11 副本一致性（双权威源）
+#    ⑥ probe-param-matrix.cjs    —— 激活/登录链路参数完整性探针（11 断言）
+#  六道门全过才允许推送（均为秒级，不拖慢日常 push）。
 #
 #  绕过方式（仅限紧急情况，事后必须补跑）：git push --no-verify
 #  启用方式（克隆后一次性）：git config core.hooksPath .githooks
@@ -36,5 +44,23 @@ node tools/check-injection-idempotency.cjs || {
     exit 1
 }
 
-echo "[pre-push] 三道校验全部通过，允许推送"
+echo "[pre-push] ④ 界面结构基线校验..."
+"$PS_EXE" -NoProfile -ExecutionPolicy Bypass -File tools/check-interface.ps1 || {
+    echo "[pre-push] FAIL: 界面结构被改动——HTML 结构禁止修改；若为有意变更需先重生成基线（generate-interface-lock.ps1）并经用户确认"
+    exit 1
+}
+
+echo "[pre-push] ⑤ auth-core 11 副本一致性校验..."
+"$PS_EXE" -NoProfile -ExecutionPolicy Bypass -File tools/sync-auth-core.ps1 -VerifyOnly || {
+    echo "[pre-push] FAIL: auth-core 副本漂移——请改 shared/auth-core/offline.js 或 cloud.js（双权威源），再运行 tools/sync-auth-core.ps1 分发"
+    exit 1
+}
+
+echo "[pre-push] ⑥ 激活/登录参数完整性探针..."
+node tools/probe-param-matrix.cjs || {
+    echo "[pre-push] FAIL: 激活/登录链路断言未过——按探针输出的规则编号查 KNOWLEDGE 对应条目修复后重推"
+    exit 1
+}
+
+echo "[pre-push] 六道校验全部通过，允许推送"
 exit 0

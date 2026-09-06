@@ -1322,10 +1322,23 @@
             }
             return { machineId: fp, clientClass: clientClass };
         } catch (e) {
-            return {
-                machineId: 'browser-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
-                clientClass: clientClass
-            };
+            // ★ 2026-09-07 P0 指纹稳定兜底（架构方案 P0-③）：StorageAdapter 抛错
+            //   （隐私模式/Capacitor Preferences 异常/localStorage 禁用）时，旧逻辑
+            //   每次随机新指纹 → 同一设备重复登录被服务端当"新设备"，绑定表膨胀 +
+            //   DEVICE_LIMIT 误伤。三级兜底：① 裸 localStorage 直读（与主路径同 key，
+            //   StorageAdapter 恢复后无缝衔接）② 生成后尽力直写持久化 ③ 会话内存缓存
+            //   （global.__deviceFpFallback，同会话至少稳定，零存储环境不再漂移）。
+            if (!global.__deviceFpFallback || String(global.__deviceFpFallback).length < 8) {
+                let cached = '';
+                try { cached = global.localStorage ? global.localStorage.getItem(FINGERPRINT_KEY) : ''; } catch (_) {}
+                if (cached && String(cached).length >= 8) {
+                    global.__deviceFpFallback = cached;
+                } else {
+                    global.__deviceFpFallback = 'browser-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+                    try { if (global.localStorage) global.localStorage.setItem(FINGERPRINT_KEY, global.__deviceFpFallback); } catch (_) {}
+                }
+            }
+            return { machineId: global.__deviceFpFallback, clientClass: clientClass };
         }
     }
 

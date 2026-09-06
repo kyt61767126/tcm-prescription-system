@@ -661,6 +661,13 @@ P2 渐进迁移（2026-09-03 当日完成）：
 - **④ 后续新增数据类型铁律**：license 域新增 KV 前缀/key 时必须同步三件事——schema-guard 加 RE+kvKey 工厂方法、write-service 加原子写函数（禁止散写）、admin-data-audit 加 classify 判定（scan 与 clean 复用同一函数）。三缺一即留缺口。
 - **⑤ 生效方式**：云函数 push 即自动部署（无需重打包任何客户端）；后台管理页随 Cloudflare Pages 自动部署，管理员打开「激活审核」页底部即见「🩺 数据体检」。日常运维：发版前或怀疑数据异常时点一次「开始体检」，有报告勾选清理即可（历史 14 条问题键：11 孤儿 order + 3 陈旧 active_order 已实证清零）。
 
+**三十五、注册激活登录全局优化 P0 止血三件套——push 六道门 + 参数探针 + 指纹稳定兜底（2026-09-07，架构方案 P0，客户端零重打包）**：
+- **① 背景**：注册/支付/激活/登录问题反复的根因是"一个流程 N 套实现 + 副本靠人工同步 + 事故修复无防回退闸"。P0 不动业务逻辑，把三类历史事故结构性锁死。
+- **② pre-push 三道门 → 六道门**（[.githooks/pre-push](file:///d:/trae_projects/kyt-zy/.githooks/pre-push)）：原 ①HTML 副本 ②shared 模块 ③注入幂等，新增 ④check-interface（界面结构基线）⑤**sync-auth-core -VerifyOnly（auth-core 11 副本——原最危险盲区，双权威源产物不在任何门内）**⑥probe-param-matrix（见③）。任一 FAIL 即 exit 1 拒推；紧急绕过 `git push --no-verify` 事后必须补修。克隆后启用：`git config core.hooksPath .githooks`。
+- **③ [probe-param-matrix.cjs](file:///d:/trae_projects/kyt-zy/tools/probe-param-matrix.cjs) 激活/登录链路静态探针（11 断言防回退）**：A 载体判据（禁 electronAPI.activate 推 desktop / showExpireAlert≥4）B 账号创建三参数（installAdminLicense + addLocalActivationUser 每调用点必带 phone+password）C 断点续传三件套 + passwordEnc 禁明文 D machineId 白名单双源存在 + 客户端/服务端正则一致 + __deviceFpFallback 兜底标记 E IIFE 四挂载。规则=事故史快照，新增规则往 RULES 数组加一条（id+source 注明条目）。运行：`node tools/probe-param-matrix.cjs`。
+- **④ 指纹稳定三级兜底（双源 collectDeviceIdentity 最终 catch）**：原逻辑 StorageAdapter 抛错（隐私模式/Preferences 异常）时每次随机指纹 → 同设备重复登录被服务端当新设备，绑定表膨胀 + DEVICE_LIMIT 误伤。现为：①裸 localStorage 直读（与主路径同 key auth:deviceMachineId，恢复后无缝）②生成后尽力直写 ③global.__deviceFpFallback 会话内存缓存（零存储环境同会话稳定）。行为单测 `node tools/_tmp/test-fingerprint-fallback.cjs`（提取真实源码函数跑 12 场景，12/12 PASS）。
+- **⑤ 生效方式**：push 即生效（六道门约束后续所有提交）；auth-core 指纹兜底随下版本客户端自然生效（云端网页下次刷新即用），当前已装客户端不受影响。后续 P1（entitlement/claim 服务端收口）在此基础上推进。
+
 ## 8. 桌面版技术规范
 
 * **登录预填：已彻底取消（2026-09-06 Commit 2202236f，取代 9-04"来源单一化"方案）**：`initLoginInput` **不再做任何用户名自动预填**——登录框永远空白+聚焦；记住的账户仅保留**手动下拉切换**（renderUsernameDropdown，点▼选择）。演进史：8-27 恢复预填 → 9-04 收窄为"仅 localStorage 记住的用户名"（历史 bug：config.users 单账户分支无法区分出厂模板 admin，全新安装首次启动即预填 admin/admin）→ 9-06 用户实测"升级新版后自动显示旧记住的用户名，不像新客户"后**彻底取消**。理由：预填链路多次引发历史 bug + 升级安装 userData 不清导致残留展示；而手动下拉保留全部便利。
