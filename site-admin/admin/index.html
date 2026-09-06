@@ -808,6 +808,35 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                 </table>
             </div>
             <p style="margin-top:12px;color:#909399;font-size:12px;">说明：客户端激活窗口选择"管理员激活"模式提交的请求会出现在此列表。点击"审核"查看客户完整信息并一键通过/拒绝。通过后客户端将在 5 秒内自动获取 license 并重启。</p>
+
+            <!-- ★ 2026-09-07 架构防御 C：数据体检——一键扫描孤儿键/脏键/过期弃单，勾选清理（清理前自动备份） -->
+            <h2 style="margin-top:24px;">🩺 数据体检</h2>
+            <div class="filter-bar">
+                <button class="btn btn-sm btn-success" onclick="runDataAudit()">🔍 开始体检</button>
+                <span id="dataAuditStatus" style="font-size:12px;color:#909399;"></span>
+            </div>
+            <div id="dataAuditReport" style="display:none;">
+                <div class="alert" id="dataAuditSummary" style="display:none;margin-top:8px;"></div>
+                <div class="table-box" style="margin-top:8px;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width:36px;"></th>
+                                <th>问题类型</th>
+                                <th>键</th>
+                                <th>原因</th>
+                                <th>详情</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dataAuditListBody"></tbody>
+                    </table>
+                </div>
+                <div class="filter-bar" style="margin-top:8px;">
+                    <button class="btn btn-sm" onclick="toggleAuditSelectAll()">全选/取消</button>
+                    <button class="btn btn-sm btn-danger" onclick="cleanAuditSelection()">🗑 清理所选项</button>
+                </div>
+            </div>
+            <p style="margin-top:12px;color:#909399;font-size:12px;">说明：体检扫描孤儿订单映射、陈旧进行中订单索引、脏键（格式非法）、超 7 天未付款弃单、白名单索引损坏五类问题。扫描纯只读；清理前自动备份原值（保留最近 20 次），可随时联系开发者恢复。</p>
         </div>
     </div>
 </div>
@@ -2713,6 +2742,133 @@ function renderTrendChart(clinics, users) {
     });
     svg += '</svg>';
     el.innerHTML = svg;
+}
+
+// ===== ★ 2026-09-07 架构防御 C：数据体检（仅平台总管理员）=====
+//   scan 纯只读；clean 逐键重验证+自动备份（保留最近 20 次）后再删
+let auditIssues = [];   // 当前体检报告（供勾选清理）
+
+async function runDataAudit() {
+    const statusEl = document.getElementById('dataAuditStatus');
+    const reportEl = document.getElementById('dataAuditReport');
+    if (!statusEl) return;
+    statusEl.textContent = '⏳ 正在扫描 KV 存储（纯只读）...';
+    statusEl.style.color = '#909399';
+    try {
+        const res = await fetch(API_BASE + '/license/admin-data-audit', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + token
+            },
+            body: JSON.stringify({ action: 'scan' })
+        });
+        const data = await res.json();
+        if (!data.success) {
+            statusEl.textContent = '❌ ' + (data.error || '扫描失败');
+            statusEl.style.color = '#f56c6c';
+            return;
+        }
+        auditIssues = data.issues || [];
+        const total = data.summary ? data.summary.total : 0;
+        const truncatedTip = data.truncated ? '（⚠ 结果超 200 条已截断，建议先清理再复检）' : '';
+        if (total === 0) {
+            statusEl.textContent = '✅ 体检通过：未发现问题数据' + truncatedTip;
+            statusEl.style.color = '#67c23a';
+            if (reportEl) reportEl.style.display = 'none';
+            return;
+        }
+        statusEl.textContent = '扫描完成：发现 ' + total + ' 条问题' + truncatedTip;
+        statusEl.style.color = '#e6a23c';
+        renderAuditReport(data);
+        if (reportEl) reportEl.style.display = '';
+    } catch (e) {
+        statusEl.textContent = '❌ 网络错误：' + e.message;
+        statusEl.style.color = '#f56c6c';
+    }
+}
+
+function renderAuditReport(data) {
+    const tbody = document.getElementById('dataAuditListBody');
+    const summaryEl = document.getElementById('dataAuditSummary');
+    if (!tbody) return;
+    if (summaryEl) {
+        const byType = (data.summary && data.summary.byType) || {};
+        const parts = Object.keys(byType).map(t =>
+            (({ orphan_order: '孤儿订单映射', stale_active_order: '陈旧订单索引', dirty_key: '脏键',
+                expired_pending_payment: '过期弃单', free_pass_index_broken: '白名单索引损坏' })[t] || t) + ' × ' + byType[t]);
+        summaryEl.innerHTML = '⚠ 共发现 <b>' + data.summary.total + '</b> 条问题：' + parts.join('、');
+        summaryEl.style.display = '';
+        summaryEl.style.background = '#fdf6ec';
+        summaryEl.style.color = '#b45309';
+    }
+    tbody.innerHTML = auditIssues.map((it, idx) => {
+        const detail = it.detail ? escapeHtml(JSON.stringify(it.detail).slice(0, 120)) : '-';
+        return '<tr>' +
+            '<td><input type="checkbox" class="audit-item-cb" data-idx="' + idx + '" checked></td>' +
+            '<td><span class="tag" style="background:#fef0f0;color:#f56c6c;border:1px solid #fbc4c4;">' + escapeHtml(it.typeLabel || it.type) + '</span></td>' +
+            '<td style="max-width:300px;word-break:break-all;font-size:12px;font-family:monospace;">' + escapeHtml(it.key.slice(0, 80)) + '</td>' +
+            '<td style="max-width:240px;font-size:12px;color:#606266;">' + escapeHtml(it.reason || '') + '</td>' +
+            '<td style="max-width:220px;font-size:12px;color:#909399;word-break:break-all;">' + detail + '</td>' +
+        '</tr>';
+    }).join('');
+}
+
+function toggleAuditSelectAll() {
+    const cbs = document.querySelectorAll('.audit-item-cb');
+    if (cbs.length === 0) return;
+    const target = !Array.from(cbs).every(c => c.checked);
+    cbs.forEach(c => { c.checked = target; });
+}
+
+async function cleanAuditSelection() {
+    const cbs = Array.from(document.querySelectorAll('.audit-item-cb')).filter(c => c.checked);
+    if (cbs.length === 0) {
+        alert('请先勾选要清理的问题项');
+        return;
+    }
+    const items = cbs.map(c => {
+        const it = auditIssues[Number(c.dataset.idx)];
+        return it ? { key: it.key, type: it.type } : null;
+    }).filter(Boolean);
+    if (!confirm('确定清理选中的 ' + items.length + ' 条问题数据？\n\n' +
+        '· 清理前服务端会逐键重验证（状态已变化的自动跳过）\n' +
+        '· 原值自动备份（保留最近 20 次），误删可联系开发者恢复\n' +
+        '· 白名单索引损坏项为"重建"而非删除')) {
+        return;
+    }
+    const statusEl = document.getElementById('dataAuditStatus');
+    if (statusEl) { statusEl.textContent = '⏳ 正在清理（含备份）...'; statusEl.style.color = '#909399'; }
+    try {
+        const res = await fetch(API_BASE + '/license/admin-data-audit', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + token
+            },
+            body: JSON.stringify({ action: 'clean', items })
+        });
+        const data = await res.json();
+        if (!data.success) {
+            alert('❌ 清理失败：' + (data.error || '未知错误'));
+            if (statusEl) { statusEl.textContent = '❌ ' + (data.error || '清理失败'); statusEl.style.color = '#f56c6c'; }
+            return;
+        }
+        const s = data.summary || {};
+        const lines = (data.results || []).map(r => {
+            const label = ({ deleted: '✅ 已删', skipped: '⏭ 跳过', failed: '❌ 失败' })[r.result] || r.result;
+            const extra = (r.cascadeDeleted && r.cascadeDeleted.length) ? '（级联删 ' + r.cascadeDeleted.length + ' 键）' : '';
+            const reason = r.reason ? '：' + r.reason : '';
+            return label + ' ' + r.key.slice(0, 50) + extra + reason;
+        });
+        alert('清理完成：删除 ' + (s.deleted || 0) + ' / 跳过 ' + (s.skipped || 0) + ' / 失败 ' + (s.failed || 0) +
+            (data.backupKey ? '\n备份键：' + data.backupKey : '') +
+            (lines.length ? '\n\n' + lines.join('\n').slice(0, 1500) : ''));
+        runDataAudit();   // 清理后自动复检
+    } catch (e) {
+        alert('❌ 网络错误：' + e.message);
+        if (statusEl) { statusEl.textContent = '❌ 网络错误：' + e.message; statusEl.style.color = '#f56c6c'; }
+    }
 }
 
 // ===== ★ 管理员激活审核 =====

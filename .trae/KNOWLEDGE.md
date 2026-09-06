@@ -651,6 +651,16 @@ P2 渐进迁移（2026-09-03 当日完成）：
 - **④ 排查方法论沉淀**："某路径缺 XX 校验"类判断，**先枚举真实数据再定结论**——本轮正是靠 KV list 出 4 条真实客户绑定 + 1 条脏键，才把三十一③"流程缺口"误判纠正为"边界校验缺失"（两者修复方案完全不同：前者要在 order-paid 补写绑定=造 bug，后者只需 setDeviceVersion 单点加校验）。数据反证 > 代码推演。
 - **⑤ 生效方式**：云函数 push 即自动部署，所有走 setDeviceVersion 的路径（admin-approve/validate/activate-from-ticket/heartbeat/status）立即受保护；五端客户端无需重打包。
 
+**三十四、license 域三层数据防御架构——schema-guard 入口守门 + write-service 单一写者 + data-audit 自愈巡检（2026-09-07，Commit 01d88c1e/da263821/第三commit，"测试诊所"bug 举一反三根治）**：
+- **① 架构总览（写路径防脏 → 写域收口 → 存量自愈，层层递进）**：
+  - **A 层 入口守门** [schema-guard.js](file:///d:/trae_projects/kyt-zy/functions/api/license/_lib/schema-guard.js)：license 域字段校验单一来源（RE 正则：machineId/phone/orderNo/requestId/licenseCode + 显式拒 unknown/undefined 字面量）+ **kvKey 工厂**（构造任何 license 域 KV key 必须走工厂，非法 ID 直接 throw，脏 key 从源头写不进去）。已收口 5 文件：admin-submit（手机号）、free-pass（手机号）、license-core.setDeviceVersion/setTestMachine（machineId）、order-submit。
+  - **B 层 单一写者** [license-write-service.js](file:///d:/trae_projects/kyt-zy/functions/api/license/_lib/license-write-service.js)：license 域五类 key（admin_req/admin_phone/admin_req_index/order/active_order）写操作全收口，**禁止任何云函数散写 KV**。新增 active_order 三原子函数（bindActiveOrder/unbindActiveOrder/getActiveOrder + ACTIVE_ORDER_MAX_AGE_MS=48h 单一副本），消灭 order-submit 最后一块散写（L347-358 直写 kv.put）。unbind 刻意用裸前缀（清理路径必须能删垃圾 mid 的脏索引）。
+  - **C 层 自愈巡检** [admin-data-audit.js](file:///d:/trae_projects/kyt-zy/functions/api/license/admin-data-audit.js) + 双后台页「🩺 数据体检」入口（public/admin 与 site-admin/admin 激活审核页底部，等价双改）：POST /api/license/admin-data-audit，action=scan（纯只读零 put/delete）扫描五类问题——孤儿 order: 映射/陈旧 active_order: 索引/脏 key（形状非法）/过期 pending_payment（超7天弃单）/free_pass_index 损坏；action=clean 勾选清理。
+- **② clean 四重防误删铁律**：(a) 逐键重验证**复用 scan 同一 classify 函数**（禁止两套判定逻辑——判定漂移=误删事故源）；(b) 主键物理存在性门禁（已删键一律 skip，幂等关键）；(c) 清理前整批备份 `audit_backup:{ts}`（FIFO 保留 20 份，含级联键原值，误删可恢复）；(d) free_pass_index_broken 为**重建**而非删除（以实际 free_pass: 键为准）。数量保护：每前缀扫描上限 2000 键、报告上限 200 条。
+- **③ 自测基线**：tools/_tmp/test-admin-data-audit.cjs **24/24 PASS**（分类正确/零误报/scan纯只读/级联三键同删/备份完整/幂等重复clean全skip/清后scan归零/非管理员403）。运行：`node tools/_tmp/test-admin-data-audit.cjs`。
+- **④ 后续新增数据类型铁律**：license 域新增 KV 前缀/key 时必须同步三件事——schema-guard 加 RE+kvKey 工厂方法、write-service 加原子写函数（禁止散写）、admin-data-audit 加 classify 判定（scan 与 clean 复用同一函数）。三缺一即留缺口。
+- **⑤ 生效方式**：云函数 push 即自动部署（无需重打包任何客户端）；后台管理页随 Cloudflare Pages 自动部署，管理员打开「激活审核」页底部即见「🩺 数据体检」。日常运维：发版前或怀疑数据异常时点一次「开始体检」，有报告勾选清理即可（历史 14 条问题键：11 孤儿 order + 3 陈旧 active_order 已实证清零）。
+
 ## 8. 桌面版技术规范
 
 * **登录预填：已彻底取消（2026-09-06 Commit 2202236f，取代 9-04"来源单一化"方案）**：`initLoginInput` **不再做任何用户名自动预填**——登录框永远空白+聚焦；记住的账户仅保留**手动下拉切换**（renderUsernameDropdown，点▼选择）。演进史：8-27 恢复预填 → 9-04 收窄为"仅 localStorage 记住的用户名"（历史 bug：config.users 单账户分支无法区分出厂模板 admin，全新安装首次启动即预填 admin/admin）→ 9-06 用户实测"升级新版后自动显示旧记住的用户名，不像新客户"后**彻底取消**。理由：预填链路多次引发历史 bug + 升级安装 userData 不清导致残留展示；而手动下拉保留全部便利。
