@@ -2320,6 +2320,23 @@
         }
     };
 
+    // ★ 2026-09-06 P0 跨 IIFE 作用域修复（机构版激活后仍显示【修改密码】总根因）：
+    //   本 IIFE-1 内部符号 StorageAdapter / normalizeMachineIdResult / encryptSensitive /
+    //   decryptSensitive 在下方 IIFE-2（授权检查/激活弹窗/断点续传/存量自愈链路）存在
+    //   47+11 处【裸引用】——IIFE 作用域隔离导致全部 ReferenceError，且绝大多数被
+    //   try/catch 静默吞掉，造成四条链路集体无声死亡：
+    //   ① 等待页轮询领码 onAdminActivated 炸 → license.dat 不落盘
+    //   ② 断点续传 resumeAdminPendingRequest 炸 → 付款回来领不到码
+    //   ③ 存量自愈 healMissingDesktopLicenseFile 炸 → 永远无法补装 license
+    //   ④ 授权状态检查/注册/激活弹窗的本地存储读写全部静默失败
+    //   现场实锤：服务端已 activated + 机构版 license 就绪，客户端界面永远停留
+    //   标准版【修改密码】。裸标识符沿作用域链最终解析到 global，此处挂载即全文件可见
+    //   （对齐 KNOWLEDGE「全局变量一律 window.xxx 访问」铁律的根源性补齐）。
+    global.StorageAdapter = StorageAdapter;
+    global.normalizeMachineIdResult = normalizeMachineIdResult;
+    global.encryptSensitive = encryptSensitive;
+    global.decryptSensitive = decryptSensitive;
+
 })(typeof window !== 'undefined' ? window : typeof globalThis !== 'undefined' ? globalThis : this);
 
 // ============================================================================
@@ -6679,6 +6696,21 @@
     //   但付款后未等到轮询领码界面 → license.dat 未落盘；原 showExpireAlert 桌面专属闸
     //   把离线APP 拦死无法自愈）。判定改为 installAdminLicense 桥存在（桌面+离线APP 均有，
     //   云端APP/纯网页无此桥自动跳过）。
+    // ★ 2026-09-06 P0：存量自愈新装成功后的用户可感知提示——
+    //   已登录会话下 config.edition 已被装码即绑定校正为机构版，但当前界面 CONFIG
+    //   仍是旧值，必须重新登录（get-app-config 重读 config）才能显示【用户管理】。
+    //   未登录（登录页阶段触发）不打扰：用户登录时自然走新配置。
+    function __healNotifyUserInstalled() {
+        try {
+            if (typeof window !== 'undefined' && window.currentUser) {
+                setTimeout(function () {
+                    try { alert('授权安装成功！请退出当前账号并重新登录，即可启用机构版功能（用户管理等）。'); }
+                    catch (e2) {}
+                }, 300);
+            }
+        } catch (e) { /* 非致命 */ }
+    }
+
     function healMissingDesktopLicenseFile() {
         try {
             var ea = global.electronAPI || (global.window && global.window.electronAPI);
@@ -6689,7 +6721,15 @@
             if (typeof ea.activate.installLicenseFromServer !== 'function' &&
                 typeof ea.activate.installAdminLicense !== 'function') return;
             ea.license.getStatus().then(function (st) {
-                if (!st || !st.valid || st.type !== 'trial') return; // 已授权/异常状态不处理
+                // ★ 2026-09-06 P0 放宽自愈闸门：旧闸门仅 type==='trial' 放行，
+                //   trial_expired / trial_limit_reached（试用到期/服务端锁定试用）被拦——
+                //   恰是「已付款已审核、服务端 license 已签发，但客户端 license.dat 未落盘」
+                //   客户最需要自愈的场景（现场实锤：机构版 license 服务端已 activated，
+                //   客户端因 trial-denied 状态拦截永远停在标准版显示【修改密码】）。
+                //   现改为：仅已授权（licensed）跳过；其余状态均尝试自愈。
+                //   自愈是查询驱动——桥/兜底查询服务端无本机 machineId 的 activated 记录
+                //   即不落盘，对未付款/未审核设备零副作用。
+                if (!st || st.type === 'licensed') return; // 已授权不处理；其余状态均尝试自愈
                 // ★ 2026-09-06 回归修复（注册门控，与 Java syncLicenseFromServer 同族铁律）：
                 //   本地必须已存在注册账号（registrationInfo 或桥 config 手机号账号）才允许
                 //   存量自愈。全新安装（删数据/重装）时服务端仍残留本机 machineId 的历史
@@ -6724,6 +6764,7 @@
                                 StorageAdapter.removeItem('license:offlineStart');
                             } catch (he0) {}
                             try { injectLicenseStatusIntoSettings(); } catch (he2) {}
+                            if (br.status === 'installed') __healNotifyUserInstalled();
                             return;
                         }
                         return _queryAdminStatus('', mid).then(function (r) {
@@ -6752,6 +6793,7 @@
                                 // ★ 即时刷新基础设置授权区（updateLicenseStatusText 重查 getStatus
                                 //   → Java 重读新落盘 license.dat → licensed），用户零感知转正
                                 try { injectLicenseStatusIntoSettings(); } catch (he2) {}
+                                __healNotifyUserInstalled();
                             } else {
                                 console.warn('[LicenseCheck] 存量自愈失败:', (inst && inst.error) || '未知错误');
                             }
@@ -6854,6 +6896,11 @@
                 if (now - _lastRun < 15000) return;
                 _lastRun = now;
                 resumeAdminPendingRequest();
+                // ★ 2026-09-06 P0：前台化/聚焦/5分钟兜底同时触发存量自愈——付款+审核通过
+                //   后客户切回程序是领码关键时刻。断点续传依赖 localStorage 断点记录
+                //   （重装/重置会被清掉），heal 凭 machineId+本地已注册即可补装 license.dat，
+                //   双路径互补（共享 15s 冷却，防频繁切换狂打后端）。
+                try { healMissingDesktopLicenseFile(); } catch (he3) { /* 非致命 */ }
                 // 对仍开着的激活窗口：如果它内部 Observer 还在轮询，自会在下一个 10s 周期发现；
                 // 这里不直接触发实例方法（实例在 showAdminActivateModal 局部作用域），由现有
                 // 10s 调度足够，前台化最多等 10s 就能看到"已审核通过"变化。
