@@ -571,6 +571,15 @@ P2 渐进迁移（2026-09-03 当日完成）：
 - **铁律沉淀**：①Single-Writer 架构把「覆盖方向」反转成权威源→镜像后，**必须同轮审计全部反向写点**（改密/重置/编辑用户）是否都有权威层回写通道——只改读取侧不改写入侧=制造「改了白改」回归；②桥方法按消费方命名对齐：桌面 preload 有的 IPC（renameUser），安卓 MainActivity shim 必须同名同参补齐，否则前端 `typeof` 守卫静默跳过=最难排查的假同步；③「账号不存在」与「密码不匹配」是两类登录失败，自愈兜底要分别覆盖（前者查用户名、后者须重拉权威源重试）。
 - 验证：check-interface 6 OK 0 CHANGED（纯 JS/Java 逻辑，零 HTML/CSS 改动）；pre-push 三道门（html-sync + sync-all + 注入幂等）全过。生效：**离线 APP（versionCode 241）+ 离线桌面（v1.0.200）需重打包**；云端网页/云桌面/云端 APP 不受影响（无本地 config.json，renameUser 守卫自动跳过）。
 
+**二十二、云端「删除诊所后仍可登录」：激活申请残留复活诊所 + 在线 token 未撤销（2026-09-06，Commit d4dad3dc）**：平台后台删除诊所后，客户端（桌面/APP/网页）用原手机号仍能登录。根因是[users.js](file:///d:/trae_projects/kyt-zy/functions/api/users.js) 删除诊所分支的清理清单漏了两类数据，形成三条复活链路：
+- **链路 a（登录自愈复活）**：清理删了 `admin_phone:{phone}` 索引但**没删 `admin_req:{rid}` 申请记录**——登录自愈 `maybeProvisionFromActivation` 的兜底分支会扫描 `admin_req_index`，命中 activated 记录 → `provisionCloudAccount` **重建诊所（status=active）+ 账号（密码重置 admin）** → 登录成功。
+- **链路 b（轮询补开复活）**：客户端激活流程轮询 `admin-status.js`，status=activated 时每次都幂等补开 `provisionCloudAccount` + `normalizeActivationPassword`（密码归一 admin）——申请记录还在即复活。
+- **链路 c（token 不失效）**：`verifyToken` 只验签名/过期/黑名单/版本/单设备互斥，**不校验用户存在性**；删除诊所不撤销已发 token → 已登录桌面最长保持 7 天。
+- **修复**（删除诊所时三补）：①按 `clinicName` 匹配或 `phone ∈ 已删用户` 双条件扫描 `admin_req_index`，逐条调 `deleteAdminRequest`（四索引同步：req 记录 + req_index + admin_phone 重建 + order 映射）；②对每个已删账号 `revokeAllUserTokens`（递增 token_version）+ `clearUserSession`（清单设备 session）→ 已登录端**立即被踢下线**；③顺带删 `admin_selfheal_cool:{phone}` 冷却键。审计日志与返回消息补 `cleanedRequests` / `revokedAccounts` 计数。
+- **历史残留处理**（修复部署前已删除的诊所）：其 admin_req 仍残留。若用户已登录过=诊所已被复活 → 后台诊所列表**重新删除一次**（新代码全量清理）；若诊所不在列表=到「激活请求列表」按手机号找到对应申请手动删除（admin-delete 四索引同步）。
+- **铁律沉淀**：①「删除」是全生命周期操作：删一个聚合根（诊所）时必须枚举**所有指向它的旁路引用**（激活申请、索引、订单映射、在线会话 token），只删主数据不删旁路=留后门；②任何「自愈/幂等补开」逻辑都是潜在复活通道——它会忠实地把旧状态重建回来，删数据时必须先断掉自愈的**全部数据源**（主索引 + 兜底扫描索引都要清）；③无状态 token 体系的「注销」必须显式撤销（黑名单/版本递增），不能依赖数据删除的隐式失效——verifyToken 根本不看用户表。
+- 验证：node --check 语法过；纯后端 Functions 改动，零 HTML/CSS/客户端改动。生效：**push 后 Cloudflare Pages 自动部署即刻生效**，五端零更新。
+
 ## 8. 桌面版技术规范
 
 * **登录预填来源单一化（2026-09-04 Commit f62f16c4）**：`initLoginInput` 的预填**只允许来自 localStorage 记住的用户名**（`KEY_REMEMBER_USER` / `local_rememberedUsers`），禁止直接从 `config.users` 自动预填。历史 bug：`else if users.length===1` 分支无法区分「出厂模板 admin 单账户」和「刚激活后的单管理员」，导致全新安装首次启动即预填 admin/admin。配套删除 `isTrialDefault && admin` 兜底（离线端独有）。区分手段：localStorage remembered 键在用户成功登录后才写入，全新安装天然为空 → usernameToFill = null → 空白表单。云端 login.js（无 isTrialDefault 兜底）同理需同步修改。
