@@ -3310,10 +3310,17 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
                     setLicenseDataContext(licenseData); // 供 getEffectiveConfigSignKey() 使用 masterKey
                 }
                 String syncClinicName = "";
-                if (clinicName != null && !clinicName.isEmpty()) syncClinicName = clinicName;
-                if (syncClinicName.isEmpty() && licenseData != null) {
+                // ★ 2026-09-06 P0 修复（绑定校验诊所名不匹配）：同步 config.clinicName
+                //   以 license 内已签发的权威值为准优先——官网下单页「姓名/诊所名称」
+                //   单框设计，客户常把"诊所名 / 医师名"一并填入并写进申请，服务端照此
+                //   签发 license.clinicName；若以激活表单参数为准同步，config.clinicName
+                //   与 license.clinicName 不一致 → checkLicenseBinding 报"诊所名不匹配"
+                //   阻断启动。反转优先级后以 license 覆盖，激活参数仅在 license 无该
+                //   字段时兜底（旧版 license）。
+                if (licenseData != null) {
                     syncClinicName = licenseData.optString("clinicName", "");
                 }
+                if (syncClinicName.isEmpty() && clinicName != null) syncClinicName = clinicName;
                 // ② 读取当前filesDir的config并更新
                 JSONObject cfg = readConfigJSON();
                 boolean changed = false;
@@ -3443,10 +3450,17 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
                     setLicenseDataContext(licenseData); // 供 getEffectiveConfigSignKey() 使用 masterKey
                 }
                 String syncClinicName = "";
-                if (clinicName != null && !clinicName.isEmpty()) syncClinicName = clinicName;
-                if (syncClinicName.isEmpty() && licenseData != null) {
+                // ★ 2026-09-06 P0 修复（绑定校验诊所名不匹配）：同步 config.clinicName
+                //   以 license 内已签发的权威值为准优先——官网下单页「姓名/诊所名称」
+                //   单框设计，客户常把"诊所名 / 医师名"一并填入并写进申请，服务端照此
+                //   签发 license.clinicName；若以激活表单参数为准同步，config.clinicName
+                //   与 license.clinicName 不一致 → checkLicenseBinding 报"诊所名不匹配"
+                //   阻断启动。反转优先级后以 license 覆盖，激活参数仅在 license 无该
+                //   字段时兜底（旧版 license）。
+                if (licenseData != null) {
                     syncClinicName = licenseData.optString("clinicName", "");
                 }
+                if (syncClinicName.isEmpty() && clinicName != null) syncClinicName = clinicName;
                 JSONObject cfg = readConfigJSON();
                 boolean changed = false;
                 if (!syncClinicName.isEmpty() && !syncClinicName.equals(cfg.optString("clinicName", ""))) {

@@ -2108,8 +2108,24 @@ function installLicense(base64Content, options = {}) {
         let configChanged = false;
 
         // 更新诊所名
-        if (options.clinicName && config.clinicName !== options.clinicName) {
-            config.clinicName = options.clinicName;
+        // ★ 2026-09-06 P0 修复（绑定校验诊所名不匹配）：同步 config.clinicName 以 license
+        //   内已签发的权威值为准优先——官网下单页「姓名/诊所名称」单框设计，客户常把
+        //   "诊所名 / 医师名"一并填入并写进申请，服务端照此签发 license.clinicName；
+        //   若以激活表单参数（options.clinicName）为准同步，config.clinicName 与
+        //   license.clinicName 不一致 → checkLicenseBinding 报"诊所名不匹配"阻断启动。
+        //   options.clinicName 仅在 license 无该字段时兜底（旧版 license）。
+        let authoritativeClinicName = '';
+        try {
+            const licenseData = readLicense(actualMachineId);
+            if (licenseData && licenseData.clinicName) {
+                authoritativeClinicName = String(licenseData.clinicName);
+            }
+        } catch (clErr) {
+            console.warn('[License] 读取 license 诊所名失败（用激活参数兜底）:', clErr.message);
+        }
+        const effClinicName = authoritativeClinicName || options.clinicName || '';
+        if (effClinicName && config.clinicName !== effClinicName) {
+            config.clinicName = effClinicName;
             configChanged = true;
         } else if (!config.clinicName && options.doctorName) {
             // doctorName作为兜底（兼容旧调用）
