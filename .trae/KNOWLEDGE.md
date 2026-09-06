@@ -603,9 +603,16 @@ P2 渐进迁移（2026-09-03 当日完成）：
 - **修复（第十轮）**：注册成功回调（saveLocalRegistrationInfo 之后）**移除已存在的旧激活弹窗** + `global.__licenseActivating = false` 复位。用户点「立即激活」时 openAdminActivate 打开**全新弹窗**——`__regPrefill` 现场读=刚保存的注册信息，预填+顶部绿条+自动提交链全部就绪。旧弹窗只可能是版本选择页（未注册不可能有订单/轮询定时器），直接 remove 安全。
 - **铁律沉淀**：①**弹窗闭包变量=快照**——`showXxxModal` 初始化时读的数据源在弹窗存活期间不会自动刷新，任何"先开弹窗后产生数据"的时序（自动唤起+注册前置叠加）都会让闭包内数据过期；涉及弹窗间数据依赖时，**必须在数据产生点主动作废旧弹窗或刷新其闭包**；②**幂等守卫 `if (overlay exists) return` 是双刃剑**——防重复弹窗的同时也会锁死旧实例，外部数据变化后旧实例成为"僵尸状态"；③修复验证必须覆盖**所有弹窗打开时序组合**（用户主动点 vs 自动唤起 × 注册前 vs 注册后），"单路径修复"在其他时序下可能完全失效；④排障方法论：用户报"修复无效"时先问自己三个问题——包装的是新代码吗（解包验证）？走的是修复覆盖的路径吗（时序推演）？守卫依赖的状态在此时序下是否有效（闭包快照检查）？
 
+**二十七、离线桌面登录框用户名预填彻底取消 + 测试笔记本全新客户态（2026-09-06 当日，Commit 2202236f/4333304c，桌面 V1.0.203）**：用户实测反馈"安装新版后自动显示用户名，且没有注册入口无法测新客户注册支付激活登入全流程"。两条根因都指向**升级安装 userData 残留**（NSIS 覆盖安装不清 %APPDATA%\tcm-prescription：localStorage 记住用户名→预填自动显示；config.json 手机号账号/registrationInfo/activationDone 标记→注册入口被"已注册"判定拦截不注入）。
+- **① 预填彻底取消**：login.js initLoginInput 删全部预填计算，登录框永远空白+聚焦，仅保留手动下拉（详见第 8 章规范条目）。E2E E1-E5 登录链路全 PASS 无回归 + CDP 探针验证残留场景不预填。
+- **② 注册入口代码已存在勿重复开发**：桌面登录窗入口=auth-core `injectActivateLinkIntoLogin` 桌面分支（条目九），"本地桥+未激活+未注册"才注入「📝 注册开通」——全新安装链路完好（E2E E6 回归 PASS），用户笔记本看不到纯因残留。**测试笔记本模拟新客户 = 清残留，不是改代码**。
+- **③ 测试重置.bat（项目根）**：杀进程 → 删 %APPDATA%\tcm-prescription → YES 确认防误用 → 恢复全新客户态（portable 版另删 exe 旁 config.json/license*.json）。重置后启动=真新客户首装：版本选择 → 2s 自动弹注册 → 注册 → 官网付款 → 领码激活 → 手机号登录。
+- **④ CDP 探针验证法（e2e/probe-register-entry.cjs + probe-noprefill.cjs）**：playwright `_electron.launch` 偶发挂起/失败（残留进程单实例锁/环境问题）时，手动 `Start-Process exe --remote-debugging-port=9333` + 写 exe 同级 e2e-enabled.marker（防破解放行远程调试的钥匙）+ `chromium.connectOverCDP` 直验打包产物 DOM——可靠替代通路。**注意 loginWindow 用 persist 分区但 BNZC_E2E_DATA 环境变量会整体重定向 userData，探针无此困扰**。
+- **⑤ 假成功陷阱（本会话实证两次）**：(a) PowerShell 后台任务 cwd 参数失效 → build.bat "not recognized" 但 exit 0 → 误判打包成功（探测的还是旧包）；(b) 源码未提交 → build.bat 落定门 FAIL 退出。**铁律：后台跑 build.bat 必须绝对路径调用 + 读输出日志确认"打包完成/Released"+ 核对产物时间戳；打包前源码必须已 commit**。
+
 ## 8. 桌面版技术规范
 
-* **登录预填来源单一化（2026-09-04 Commit f62f16c4）**：`initLoginInput` 的预填**只允许来自 localStorage 记住的用户名**（`KEY_REMEMBER_USER` / `local_rememberedUsers`），禁止直接从 `config.users` 自动预填。历史 bug：`else if users.length===1` 分支无法区分「出厂模板 admin 单账户」和「刚激活后的单管理员」，导致全新安装首次启动即预填 admin/admin。配套删除 `isTrialDefault && admin` 兜底（离线端独有）。区分手段：localStorage remembered 键在用户成功登录后才写入，全新安装天然为空 → usernameToFill = null → 空白表单。云端 login.js（无 isTrialDefault 兜底）同理需同步修改。
+* **登录预填：已彻底取消（2026-09-06 Commit 2202236f，取代 9-04"来源单一化"方案）**：`initLoginInput` **不再做任何用户名自动预填**——登录框永远空白+聚焦；记住的账户仅保留**手动下拉切换**（renderUsernameDropdown，点▼选择）。演进史：8-27 恢复预填 → 9-04 收窄为"仅 localStorage 记住的用户名"（历史 bug：config.users 单账户分支无法区分出厂模板 admin，全新安装首次启动即预填 admin/admin）→ 9-06 用户实测"升级新版后自动显示旧记住的用户名，不像新客户"后**彻底取消**。理由：预填链路多次引发历史 bug + 升级安装 userData 不清导致残留展示；而手动下拉保留全部便利。
 
 * **桌面版云端 HTTP 必须走主进程**（file:// 直连被 CORS 拦截，Origin: null 不在白名单，fetch 静默 TypeError）：IPC 代理或 activate.js 内 fetch。APP 端 <http://localhost> 在白名单可直连。新增桌面版云端接口沿用 postInviteQuery 分流模式。
 
