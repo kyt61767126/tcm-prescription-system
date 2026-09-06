@@ -1012,6 +1012,9 @@ public class MainActivity extends BridgeActivity {
             "    startReadSession: function(filePath) { return callNativeAsync('startReadSession', {filePath: filePath}); }," +
             "    readNextChunk: function(sessionId) { return callNativeAsync('readNextChunk', {sessionId: sessionId}); }," +
             "    closeReadSession: function(sessionId) { callNative('closeReadSession', {sessionId: sessionId}); }," +
+            // ★ 2026-09-06 第八轮（Single-Writer 补全）：改密/重置/编辑用户回写 config.json 权威层
+            //   （对齐桌面 preload.js 的 electronAPI.renameUser 顶层挂载，index-app.html 三处调用）
+            "    renameUser: function(payload) { return callNativeAsync('renameUser', {oldUsername: (payload&&payload.oldUsername)||'', newUsername: (payload&&payload.newUsername)||'', newPassword: (payload&&payload.newPassword)||''}); }," +
             "    license: {" +
             "      getStatus: function() { return callNativeAsync('getLicenseStatus', {}); }," +
             "      validate: function() { return callNativeAsync('validateLicense', {}); }," +
@@ -1470,6 +1473,13 @@ public class MainActivity extends BridgeActivity {
                                 args.optString("adminName", args.optString("doctorName", "")),
                                 args.optString("phone", ""),
                                 args.optString("password", "")).toString();
+                    case "renameUser":
+                        // ★ 2026-09-06 第八轮（Single-Writer 补全）：改密/重置/编辑用户回写
+                        //   config.json 权威层（对齐桌面 user:rename-username IPC 语义）
+                        return getLM().renameUserBridge(
+                                args.optString("oldUsername", ""),
+                                args.optString("newUsername", ""),
+                                args.optString("newPassword", "")).toString();
                     case "installLicenseFromServer":
                         // ★ 2026-09-06 架构重构：单一装码入口（JS 检测到 activated 统一调此，
                         //   不再自行 fetch license 写盘）。同步执行（invoke 本就在桥线程），

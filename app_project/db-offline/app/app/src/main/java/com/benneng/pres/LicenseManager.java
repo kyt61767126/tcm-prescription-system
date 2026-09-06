@@ -4027,6 +4027,69 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
         return r;
     }
 
+    // ★ 2026-09-06 第八轮修复（Single-Writer 补全）：改密/重置/编辑用户 回写 config.json 权威层。
+    //   背景：第七轮 addLocalActivationUser 改为「Java 权威源强制覆盖 localStorage 镜像」后，
+    //   前端三个密码写点（忘记密码重置/用户管理编辑/修改密码）里只有"修改密码"接了 renameUser
+    //   桥（且 APP 端 MainActivity 未暴露该桥 = 静默空操作），忘记密码/编辑用户两处则完全没回写
+    //   ——用户改完密码，下次冷启动启动自愈 UPSERT 又把 config.json 旧密码盖回 localStorage
+    //   （"改密/重置重启后失效"）。本方法对齐桌面 electron/main.js 的 user:rename-username 语义：
+    //   - 按 username 或 phone 定位 config 账户（兼容改名后旧号回登的自愈场景）
+    //   - newUsername 空 = 只改密不改名（忘记密码重置场景）
+    //   - phone 保底：旧 username 是手机号且 phone 空 → 先落 phone（保手机号登录）
+    //   - newPassword 非空 → 明文写入（与 registerLocalUser 存储格式一致，前端登录自动兼容
+    //     并升级哈希）+ lastPwdUpdatedAt 时间戳（供前端镜像比对基线）
+    //   - config 无该账户（纯本地账号）→ no-op 返回 synced:false（本地已保存，非错误）
+    public JSONObject renameUserBridge(String oldUsername, String newUsername, String newPassword) {
+        JSONObject r = new JSONObject();
+        try {
+            if (oldUsername == null || oldUsername.trim().isEmpty()) {
+                r.put("success", false); r.put("error", "缺少原账号"); return r;
+            }
+            String oldName = oldUsername.trim();
+            String newName = (newUsername == null) ? "" : newUsername.trim();
+            String newPwd = (newPassword == null) ? "" : newPassword;
+            JSONObject cfg = readConfigJSON();
+            org.json.JSONArray users = cfg.optJSONArray("users");
+            if (users == null) { r.put("success", true); r.put("synced", false); return r; }
+            int idx = -1;
+            for (int i = 0; i < users.length(); i++) {
+                org.json.JSONObject u = users.optJSONObject(i);
+                if (u != null && oldName.equals(u.optString("username", ""))) { idx = i; break; }
+            }
+            if (idx < 0) {
+                for (int i = 0; i < users.length(); i++) {
+                    org.json.JSONObject u = users.optJSONObject(i);
+                    if (u != null && oldName.equals(u.optString("phone", ""))) { idx = i; break; }
+                }
+            }
+            if (idx < 0) { r.put("success", true); r.put("synced", false); return r; }
+            org.json.JSONObject u = users.optJSONObject(idx);
+            if (u == null) u = new org.json.JSONObject();
+            // phone 保底：原 username 是手机号且 phone 为空 → 先落 phone（保手机号登录）
+            if (oldName.matches("^1[3-9]\\d{9}$") && u.optString("phone", "").isEmpty()) {
+                u.put("phone", oldName);
+            }
+            if (!newName.isEmpty() && !newName.equals(u.optString("username", ""))) {
+                u.put("username", newName);
+            }
+            long now = System.currentTimeMillis();
+            if (!newPwd.isEmpty()) {
+                u.put("password", newPwd);
+                u.put("lastPwdUpdatedAt", now);
+            }
+            u.put("updatedAt", now);
+            users.put(idx, u);
+            writeConfigJSON(cfg, true);
+            Log.i(TAG, "renameUser 回写 config.json: " + oldName + " -> " +
+                    (newName.isEmpty() ? u.optString("username", "?") : newName) +
+                    (newPwd.isEmpty() ? "" : " (密码已同步)"));
+            r.put("success", true); r.put("synced", true);
+        } catch (Exception e) {
+            try { r.put("success", false); r.put("error", String.valueOf(e.getMessage())); } catch (Exception ignored) {}
+        }
+        return r;
+    }
+
     // ★ 2026-08-17 激活流程改「用户名(姓名/手机号)+默认密码admin」：
     //   激活成功后自动创建登录账号；已存在同名账号则跳过；密码明文存储，登入时前端自动兼容并升级
     private void syncCreateActivationUser(String username, String phone, String password, String name) {

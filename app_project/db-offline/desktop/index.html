@@ -1961,6 +1961,17 @@ let currentUser = null;
                 if (idx < 0) { alert('未找到账号 ' + username + '，请检查输入是否正确'); return; }
                 users[idx].password = await hashPassword('admin');
                 saveUsers(users);
+                // ★ 2026-09-06 第八轮修复（Single-Writer 补全）：重置密码必须回写 config.json
+                //   权威层（renameUser IPC），否则下次冷启动启动自愈 UPSERT 会把旧密码盖回
+                //   localStorage——"重置 admin 重启后失效"。
+                try {
+                    if (window.electronAPI && typeof window.electronAPI.renameUser === 'function') {
+                        const _rn = await window.electronAPI.renameUser({ oldUsername: username, newPassword: 'admin' });
+                        if (_rn && _rn.success === false) {
+                            console.warn('[忘记密码] config.json 回写失败（本地已保存）:', _rn.error);
+                        }
+                    }
+                } catch (e) { console.warn('[忘记密码] config.json 回写异常（本地已保存）:', e); }
                 const errorDiv = document.getElementById('loginError');
                 if (errorDiv) { errorDiv.textContent = '密码已重置为 admin，请使用新密码登录'; errorDiv.style.display = 'block'; }
                 const pwdInput = document.getElementById('loginPassword');
@@ -2503,6 +2514,22 @@ let currentUser = null;
                     users[userIndex].password = await hashPassword(users[userIndex].password);
                 }
                 saveUsers(users);
+                // ★ 2026-09-06 第八轮修复（Single-Writer 补全）：编辑用户（改名/改密）回写
+                //   config.json 权威层，与 handleChangePassword 的 renameUser 回写同构；
+                //   漏回写 = 下次启动 UPSERT 把旧用户名/旧密码盖回 localStorage。
+                try {
+                    if (window.electronAPI && typeof window.electronAPI.renameUser === 'function' &&
+                        (newUsername !== originalUsername || newPassword.trim())) {
+                        const _rn = await window.electronAPI.renameUser({
+                            oldUsername: originalUsername,
+                            newUsername: newUsername,
+                            newPassword: newPassword.trim() || undefined
+                        });
+                        if (_rn && _rn.success === false) {
+                            console.warn('[编辑用户] config.json 回写失败（本地已保存）:', _rn.error);
+                        }
+                    }
+                } catch (e) { console.warn('[编辑用户] config.json 回写异常（本地已保存）:', e); }
 
                 if (currentUser && currentUser.username === originalUsername) {
                     currentUser = users[userIndex];
