@@ -537,6 +537,11 @@ P2 渐进迁移（2026-09-03 当日完成）：
 - 验证：gradle compileDebug EXIT=0；node --check 4 文件；sync-auth-core 11 副本 In sync；check-interface 6 OK 0 CHANGED；回滚标记已同步 4 文件、旧调用 0 残留。
 - 生效：仅离线 APP 需重打包。**已被坏包污染的设备修复路径**：装新包后若登录密码错位（admin/空），用「忘记密码？」重置为 admin 再改密；或直接删数据走全新注册流程（注册页已恢复）。
 
+**十五、条目十四补刀：JS 存量自愈同族门控（2026-09-06 当日第二次回归）**：修复包实测仍异常（注册完成→管理员激活仍要填信息）——**条目十四只给 Java 原生领码加了注册门控，漏了 JS 层 `healMissingDesktopLicenseFile`（存量自愈）这条同族路径**：APP 启动即跑（startLicenseCheck），本地 trial + 服务端 machineId 命中 activated（坏包时期残留记录）→ **无门控直接 installAdminLicense 装 license + syncCreateActivationUser 建号（默认密码 admin）**，与 maybePromptRegistration 注册弹窗、注册提交、激活弹窗全程竞态（注册页被劫持/入口语义错乱/弹窗状态被重置）。修复：存量自愈 Promise 链头部加 `isLocalRegisteredAsync()` 门控（registrationInfo localStorage 或桥 config 手机号账号，与 Java `hasRegisteredLocalAccount` 同族铁律），未注册一律跳过。
+- **举一反三方法论沉淀**：「服务端状态→本地落盘」的恢复类功能做门控时，**必须穷举全部落盘路径**（本轮 4 条：Tab1 轮询/断点续传/JS 存量自愈/Java 原生领码——前两条天然安全因为 pending 记录只在注册后写入，后两条是服务端 machineId 主动查询、必须门控）。修复"某类路径"的架构缺陷时，grep 同族入口逐一审计，防漏。
+- 闭环验证（服务端已激活残留 + 删数据重测）：门控拦截两条自愈 → 注册纯净 → 立即激活→版本选择→自动提交 → 服务端 admin-submit 短路（同手机号+同 machineId 已 activated，L334-341）直接下发 license → onAdminActivated 激活成功页 → 不二次付款、密码不错位（账号已存在走保留密码路径）。
+- 验证：node --check 权威源+3副本；sync-auth-core 11 副本 In sync；check-interface 通过。生效：离线 APP + 离线桌面均需重打包（auth-core 副本双端都有）。
+
 ## 8. 桌面版技术规范
 
 * **登录预填来源单一化（2026-09-04 Commit f62f16c4）**：`initLoginInput` 的预填**只允许来自 localStorage 记住的用户名**（`KEY_REMEMBER_USER` / `local_rememberedUsers`），禁止直接从 `config.users` 自动预填。历史 bug：`else if users.length===1` 分支无法区分「出厂模板 admin 单账户」和「刚激活后的单管理员」，导致全新安装首次启动即预填 admin/admin。配套删除 `isTrialDefault && admin` 兜底（离线端独有）。区分手段：localStorage remembered 键在用户成功登录后才写入，全新安装天然为空 → usernameToFill = null → 空白表单。云端 login.js（无 isTrialDefault 兜底）同理需同步修改。

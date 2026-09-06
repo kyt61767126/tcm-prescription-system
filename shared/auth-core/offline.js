@@ -5668,6 +5668,17 @@
             if (typeof ea.activate.installAdminLicense !== 'function') return;
             ea.license.getStatus().then(function (st) {
                 if (!st || !st.valid || st.type !== 'trial') return; // 已授权/异常状态不处理
+                // ★ 2026-09-06 回归修复（注册门控，与 Java syncLicenseFromServer 同族铁律）：
+                //   本地必须已存在注册账号（registrationInfo 或桥 config 手机号账号）才允许
+                //   存量自愈。全新安装（删数据/重装）时服务端仍残留本机 machineId 的历史
+                //   激活记录，若不门控会抢在注册流程前自动装 license + syncCreateActivationUser
+                //   以默认密码 admin 建号 → 劫持「注册→激活」标准流程（注册页异常/激活弹窗
+                //   表现错乱/密码错位）。license 恢复永远不得先于/跳过注册建号。
+                return isLocalRegisteredAsync().then(function (__regOk) {
+                if (!__regOk) {
+                    console.log('[LicenseCheck] 存量自愈跳过：本地无注册账号（全新安装未注册），不劫持注册→激活流程');
+                    return;
+                }
                 var pMid = (typeof ea.activate.getMachineId === 'function')
                     ? ea.activate.getMachineId() : Promise.resolve('');
                 return pMid.then(function (rawMid) {
@@ -5708,6 +5719,7 @@
                         });
                     });
                 });
+                }); // isLocalRegisteredAsync().then 注册门控闭合
             }).catch(function (e) {
                 console.warn('[LicenseCheck] 存量自愈异常(不影响使用):', e);
             });
