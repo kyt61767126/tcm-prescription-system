@@ -586,6 +586,11 @@ P2 渐进迁移（2026-09-03 当日完成）：
 - **铁律沉淀**：①**桥方法清单对齐审计**：桌面 preload.js 的每个 electronAPI 方法，安卓 shim 必须同名同参——前端全靠 `if (window.electronAPI.xxx)` 守卫，缺方法=静默跳过=最难排查的假同步（与条目二十一缺口1 同族，renameUser/getAppConfig 已两次踩坑，后续新增 IPC 必须三端清单化核对）；②**返回结构也要对齐**：不能只补方法名，返回体（{success, config} 包装、defaults 值、降级语义）逐字段对齐桌面实现，否则前端消费链半途断掉；③版本显示类 bug 先查「权威配置加载链」是否完整（bridge→CONFIG→Permission._edition→enforce），不要先怀疑按钮显隐逻辑本身。
 - 验证：gradle compileReleaseJavaWithJavac EXIT=0；严格模式打包全绿（FAIL-total=0 WARN-total=0，APK 已签名输出 db-offline 根）；check-interface 6 OK 0 CHANGED；打包脚本版本门禁自动 243→244。生效：**仅离线 APP 需重装 APK（versionCode 244）**；离线桌面（preload 原有 getAppConfig）、云端网页/云桌面/云端 APP（无本地 config 权威层，L2280 仅注释提及）零影响。
 
+**二十四、已注册用户激活全程取消「管理员激活」填信息表单（2026-09-06，Commit 678a57a9）**：注册（已填诊所/医师/手机/密码）后激活，管理员激活弹窗仍出现填重复信息界面（含备注框）。前八轮修复覆盖了主链（选版本→自动提交→直达付款），但**四条回退路径仍会落 adminStepForm 表单**：①选版本后预填链失败（registrationInfo 丢失+桥兜底超时）②等待视图手动点 Tab「📋 管理员激活」③付款前置页「返回上一步」④密码页「返回」——用户实测正卡在 Tab1：提交后在等待视图点 Tab 看到预填表单，观感"又要填一遍"。
+- **修复**（[offline.js](file:///d:/trae_projects/kyt-zy/shared/auth-core/offline.js)）：新增 `showAdminStepFormSafe()`——已注册用户（__regPrefill.phone 存在）一律不进表单：有进行中订单（__orderFlow.orderNo）回订单等待视图（付款/审核状态），否则回版本选择页；三处回退入口 + 选版本预填失败分支统一改道（预填失败=版本选择页+红条提示重启重试，替代原"落表单+黄条补填"）。未注册用户（首次激活/存量无账号）维持手动表单不变。
+- **铁律沉淀**：①**"免填单"承诺必须封死全部回退路径，不能只通主链**——任何 show(表单) 调用点都要过"该用户是否已提供过信息"的守卫（grep 所有 show('adminStepForm') 逐一审计）；②"预填失败降级到表单"是反模式：已注册用户的数据源（registrationInfo+桥）双失败时，正确降级是**错误提示+重试**而非把收集过的信息再问一遍——表单对已注册用户永远是错误答案；③Tab 导航是隐藏的表单入口：等待视图的 Tab「📋 管理员激活」点击直接 show 表单，修主链不修 Tab 等于没修。
+- 验证：node --check 过；sync-auth-core 11 副本 In sync；check-interface 6 OK 0 CHANGED（纯 JS 逻辑）。生效：**离线 APP 需重打包重装（版本门禁自动+1）**；离线桌面重打包后生效；云端网页/云桌面/云端 APP 零影响（cloud.js 未改）。
+
 ## 8. 桌面版技术规范
 
 * **登录预填来源单一化（2026-09-04 Commit f62f16c4）**：`initLoginInput` 的预填**只允许来自 localStorage 记住的用户名**（`KEY_REMEMBER_USER` / `local_rememberedUsers`），禁止直接从 `config.users` 自动预填。历史 bug：`else if users.length===1` 分支无法区分「出厂模板 admin 单账户」和「刚激活后的单管理员」，导致全新安装首次启动即预填 admin/admin。配套删除 `isTrialDefault && admin` 兜底（离线端独有）。区分手段：localStorage remembered 键在用户成功登录后才写入，全新安装天然为空 → usernameToFill = null → 空白表单。云端 login.js（无 isTrialDefault 兜底）同理需同步修改。
