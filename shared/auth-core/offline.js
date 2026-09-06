@@ -3759,6 +3759,24 @@
                             clinicName: clinicName, adminName: adminName,
                             phone: phone, passwordEnc: passwordEnc, at: Date.now()
                         });
+                        // ★ 2026-09-06（第十轮）注册前自动唤起的旧激活弹窗清除：
+                        //   试用上限/到期场景 enterReadOnlyMode 在注册之前一次性唤起激活弹窗
+                        //   （闭包 __regPrefill=null、DOM 未预填），注册窗叠加其上；注册成功后
+                        //   点「立即激活」→ openAdminActivate → showAdminActivateModal 幂等守卫
+                        //   （adminActivateOverlay 已存在）直接 return 继续用旧弹窗 →
+                        //   __regPrefill 恒为 null → 第九轮守卫（Tab1/选版本/回退）全部失效
+                        //   → 选版本后自动提交条件不满足 → 仍落入「填写信息」表单。
+                        //   注册成功瞬间移除旧弹窗，用户点「立即激活」时打开全新弹窗
+                        //   （__regPrefill 现场读=刚保存的注册信息，预填+顶部绿条+自动提交链就绪）。
+                        //   旧弹窗只可能是版本选择页（未注册不可能有订单/轮询定时器），直接移除安全。
+                        try {
+                            const __oldAct = document.getElementById('adminActivateOverlay');
+                            if (__oldAct && __oldAct.parentNode) {
+                                __oldAct.parentNode.removeChild(__oldAct);
+                                console.log('[LicenseCheck] 已清除注册前自动唤起的旧激活弹窗（__regPrefill 未预填）');
+                            }
+                            global.__licenseActivating = false; // 对齐 cleanup() 复位，避免抑制后续打开
+                        } catch (oe) { console.warn('[LicenseCheck] 清除旧激活弹窗失败(不影响):', oe); }
                         // ③ FSM v2 标记 registered（不改变 license 状态节点）
                         try { await setStateV2(_STATES.UNACTIVATED, { registered: true }); } catch (fe) {}
                         // ④ 成功页
