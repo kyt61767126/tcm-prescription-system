@@ -2468,7 +2468,11 @@ ipcMain.handle('get-app-config', async () => {
                 formalValid = !!(formalCheckLic && formalCheckLic.valid);
                 if (formalValid) {
                     const lh = licenseManager.readLicense();
-                    formalInstitution = !!(lh && lh.type && ['pro', 'institution'].indexOf(String(lh.type).toLowerCase()) >= 0);
+                    // ★ 2026-09-06 机构类 type 对齐 APP 端/装码绑定核心（license-manager
+                    //   INSTITUTIONAL_LICENSE_TYPES）：pro/institution/clinic/clinic_custom。
+                    //   原仅 pro/institution 两值，服务端其他机构类码（clinic/clinic_custom）
+                    //   会被误判标准版 → 强制 personal + admin 降级 → 【用户管理】消失。
+                    formalInstitution = !!(lh && lh.type && ['pro', 'institution', 'clinic', 'clinic_custom'].indexOf(String(lh.type).toLowerCase()) >= 0);
                 }
             } catch (e) {
                 console.warn('[Config] 授权身份判定失败（保守按未授权）:', e.message);
