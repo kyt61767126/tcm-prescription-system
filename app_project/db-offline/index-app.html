@@ -924,6 +924,70 @@ let currentUser = null;
 
         // ★ 异步加载 userData 中的 config.json（覆盖 asar 模板默认值，修复激活后版本标签不更新的问题）
         (function() {
+            // ★★★ 2026-09-06 第十一轮（机构版按钮错显·启动竞态根治）：安卓 APP 的
+            //   electronAPI shim 在 onPageFinished 才注入，而本 IIFE 在页面脚本解析期
+            //   同步执行——此刻 window.electronAPI 尚不存在 → getAppConfig 从未被调用
+            //   → CONFIG.edition 停留出厂 personal → 机构版激活登录后仍被
+            //   enforceStandardEditionButtons 强制标准版对齐（错显【修改密码】）。
+            //   AndroidNative（addJavascriptInterface）页面脚本期即已可用（auth-core
+            //   同款直调模式），此分支同步直调原生桥补位；desktop 走原 electronAPI 路径不变。
+            function __applyUserDataConfig(r) {
+                if (r && r.success && r.config) {
+                    var cfg = r.config;
+                    // ★ T2 入口关卡（2026-08-21）：净化后再入 CONFIG（users 非数组/edition 别名在此拦截）
+                    try { cfg = window.__normalizeIncomingConfig(cfg, 'getAppConfig'); } catch (_) {}
+                    // ★★★ 2026-08-17 【根治刀1-D】异步 IPC 强制全字段同步（Object.assign），不再漏 productName/maxUsers！
+                    //   且不管 edition 是否变化，一律执行 applyEditionTags + enforce（上一版的 if(cfg.edition!==CONFIG.edition) 包裹直接砍掉）
+                    try { Object.assign(CONFIG, cfg); } catch(_) {
+                        // 老浏览器兜底：逐个字段复制（productName/maxUsers 必须同步！）
+                        if (cfg.edition) CONFIG.edition = cfg.edition;
+                        if (cfg.clinicName) CONFIG.clinicName = cfg.clinicName;
+                        if (cfg.doctorName) CONFIG.doctorName = cfg.doctorName;
+                        if (cfg.productName) CONFIG.productName = cfg.productName;
+                        if (cfg.maxUsers) CONFIG.maxUsers = cfg.maxUsers;
+                        if (cfg.versionLabel) CONFIG.versionLabel = cfg.versionLabel;
+                        if (Array.isArray(cfg.users)) CONFIG.users = cfg.users;
+                        if (cfg.configIssuedAt) CONFIG.configIssuedAt = cfg.configIssuedAt;
+                    }
+                    applyEditionTags();
+                    console.log('[CONFIG] 已从 userData 同步配置，版本:', CONFIG.edition, '产品:', CONFIG.productName);
+                    // ★ 强制 enforce（最关键！上一版漏了这里的 enforce，导致同步回来后按钮还是机构版行为！）
+                    if (typeof enforceStandardEditionButtons === 'function') {
+                        enforceStandardEditionButtons('after-getAppConfig-then');
+                    }
+                    // ★★★ 2026-08-21 【Setup 竞态自愈】机构版配置就绪后，恢复被竞态窗口降级的角色并刷新按钮。
+                    //   竞态窗口：自动登录 updateUserDisplay-tail enforce 在配置就绪前执行 →
+                    //   IS_DESKTOP_LOCAL 权威模式把 currentUser.role 从 admin 降级为 user 且无人恢复。
+                    //   自愈源：localStorage currentUser / user_login_data（写入早于降级发生，保留权威 role）。
+                    try {
+                        var _healEd = String(CONFIG.edition || '');
+                        var _healInst = ['clinic','offline_clinic','clinic_custom','cloud_clinic'].indexOf(_healEd) >= 0;
+                        if (_healInst && typeof currentUser !== 'undefined' && currentUser && typeof updateUserDisplay === 'function') {
+                            try {
+                                if (!AuthCore.isClinicAdmin(currentUser)) {
+                                    var _lu = null;
+                                    try { _lu = JSON.parse(localStorage.getItem('currentUser') || 'null'); } catch(_) {}
+                                    if (!_lu || !(AuthCore.isClinicAdmin(_lu))) {
+                                        try { _lu = (JSON.parse(localStorage.getItem('user_login_data') || 'null') || {}).user || null; } catch(_) {}
+                                    }
+                                    if (_lu && (AuthCore.isClinicAdmin(_lu))) {
+                                        console.log('[CONFIG] 竞态自愈：恢复 role', currentUser.role, '->', _lu.role);
+                                        currentUser.role = _lu.role;
+                                    }
+                                }
+                            } catch(_) {}
+                            setTimeout(function(){ try { updateUserDisplay(); } catch(_) {} }, 0);
+                        }
+                    } catch(_) {}
+                }
+            }
+            function __enforceAfterConfigError(e) {
+                console.warn('[CONFIG] 异步加载 userData 配置失败:', e && e.message);
+                // ★ catch 也要 enforce（IPC失败时就算 CONFIG 没变，也要强制对齐按钮！）
+                if (typeof enforceStandardEditionButtons === 'function') {
+                    enforceStandardEditionButtons('after-getAppConfig-CATCH-' + String((e && e.message) || 'error'));
+                }
+            }
             if (window.electronAPI && window.electronAPI.getAppConfig) {
                 // ★★★ 2026-08-21 【Setup 竞态根治】userData 权威配置就绪 Promise 挂全局（800ms 兜底）。
                 //   竞态场景：checkLoginStatus 自动登录早于本回调返回 → CONFIG.edition 仍为 asar 默认 personal
@@ -936,62 +1000,22 @@ let currentUser = null;
                         new Promise(function(resolve){ setTimeout(function(){ resolve(null); }, 800); })
                     ]);
                 } catch(_) {}
-                _cfgPromise.then(function(r) {
-                    if (r && r.success && r.config) {
-                        var cfg = r.config;
-                        // ★ T2 入口关卡（2026-08-21）：净化后再入 CONFIG（users 非数组/edition 别名在此拦截）
-                        try { cfg = window.__normalizeIncomingConfig(cfg, 'getAppConfig'); } catch (_) {}
-                        // ★★★ 2026-08-17 【根治刀1-D】异步 IPC 强制全字段同步（Object.assign），不再漏 productName/maxUsers！
-                        //   且不管 edition 是否变化，一律执行 applyEditionTags + enforce（上一版的 if(cfg.edition!==CONFIG.edition) 包裹直接砍掉）
-                        try { Object.assign(CONFIG, cfg); } catch(_) {
-                            // 老浏览器兜底：逐个字段复制（productName/maxUsers 必须同步！）
-                            if (cfg.edition) CONFIG.edition = cfg.edition;
-                            if (cfg.clinicName) CONFIG.clinicName = cfg.clinicName;
-                            if (cfg.doctorName) CONFIG.doctorName = cfg.doctorName;
-                            if (cfg.productName) CONFIG.productName = cfg.productName;
-                            if (cfg.maxUsers) CONFIG.maxUsers = cfg.maxUsers;
-                            if (cfg.versionLabel) CONFIG.versionLabel = cfg.versionLabel;
-                            if (Array.isArray(cfg.users)) CONFIG.users = cfg.users;
-                            if (cfg.configIssuedAt) CONFIG.configIssuedAt = cfg.configIssuedAt;
-                        }
-                        applyEditionTags();
-                        console.log('[CONFIG] 已从 userData 同步配置，版本:', CONFIG.edition, '产品:', CONFIG.productName);
-                        // ★ 强制 enforce（最关键！上一版漏了这里的 enforce，导致同步回来后按钮还是机构版行为！）
-                        if (typeof enforceStandardEditionButtons === 'function') {
-                            enforceStandardEditionButtons('after-getAppConfig-then');
-                        }
-                        // ★★★ 2026-08-21 【Setup 竞态自愈】机构版配置就绪后，恢复被竞态窗口降级的角色并刷新按钮。
-                        //   竞态窗口：自动登录 updateUserDisplay-tail enforce 在配置就绪前执行 →
-                        //   IS_DESKTOP_LOCAL 权威模式把 currentUser.role 从 admin 降级为 user 且无人恢复。
-                        //   自愈源：localStorage currentUser / user_login_data（写入早于降级发生，保留权威 role）。
-                        try {
-                            var _healEd = String(CONFIG.edition || '');
-                            var _healInst = ['clinic','offline_clinic','clinic_custom','cloud_clinic'].indexOf(_healEd) >= 0;
-                            if (_healInst && typeof currentUser !== 'undefined' && currentUser && typeof updateUserDisplay === 'function') {
-                                try {
-                                    if (!AuthCore.isClinicAdmin(currentUser)) {
-                                        var _lu = null;
-                                        try { _lu = JSON.parse(localStorage.getItem('currentUser') || 'null'); } catch(_) {}
-                                        if (!_lu || !(AuthCore.isClinicAdmin(_lu))) {
-                                            try { _lu = (JSON.parse(localStorage.getItem('user_login_data') || 'null') || {}).user || null; } catch(_) {}
-                                        }
-                                        if (_lu && (AuthCore.isClinicAdmin(_lu))) {
-                                            console.log('[CONFIG] 竞态自愈：恢复 role', currentUser.role, '->', _lu.role);
-                                            currentUser.role = _lu.role;
-                                        }
-                                    }
-                                } catch(_) {}
-                                setTimeout(function(){ try { updateUserDisplay(); } catch(_) {} }, 0);
-                            }
-                        } catch(_) {}
-                    }
-                }).catch(function(e) {
-                    console.warn('[CONFIG] 异步加载 userData 配置失败:', e.message);
-                    // ★ catch 也要 enforce（IPC失败时就算 CONFIG 没变，也要强制对齐按钮！）
-                    if (typeof enforceStandardEditionButtons === 'function') {
-                        enforceStandardEditionButtons('after-getAppConfig-CATCH-' + String(e.message || 'error'));
-                    }
-                });
+                _cfgPromise.then(__applyUserDataConfig).catch(__enforceAfterConfigError);
+            } else if (window.AndroidNative && typeof window.AndroidNative.invoke === 'function') {
+                // ★ 2026-09-06 第十一轮：安卓 APP 启动竞态分支——shim 未注入时
+                //   同步直调 AndroidNative（JavaBridge 线程执行，返回 JSON 字符串）。
+                //   结果同步就绪，__appConfigReady 直接 resolve（自动登录无 800ms 等待）。
+                try {
+                    var __rawCfg = window.AndroidNative.invoke('getAppConfig', '{}');
+                    var __cfgRes = JSON.parse(__rawCfg);
+                    try {
+                        window.__appConfigReady = Promise.resolve(__cfgRes);
+                    } catch(_) {}
+                    __applyUserDataConfig(__cfgRes);
+                } catch (__) {
+                    try { window.__appConfigReady = Promise.resolve(null); } catch(_) {}
+                    __enforceAfterConfigError(__);
+                }
             }
         })();
 
