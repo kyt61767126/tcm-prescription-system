@@ -591,6 +591,11 @@ P2 渐进迁移（2026-09-03 当日完成）：
 - **铁律沉淀**：①**"免填单"承诺必须封死全部回退路径，不能只通主链**——任何 show(表单) 调用点都要过"该用户是否已提供过信息"的守卫（grep 所有 show('adminStepForm') 逐一审计）；②"预填失败降级到表单"是反模式：已注册用户的数据源（registrationInfo+桥）双失败时，正确降级是**错误提示+重试**而非把收集过的信息再问一遍——表单对已注册用户永远是错误答案；③Tab 导航是隐藏的表单入口：等待视图的 Tab「📋 管理员激活」点击直接 show 表单，修主链不修 Tab 等于没修。
 - 验证：node --check 过；sync-auth-core 11 副本 In sync；check-interface 6 OK 0 CHANGED（纯 JS 逻辑）。生效：**离线 APP 需重打包重装（版本门禁自动+1）**；离线桌面重打包后生效；云端网页/云桌面/云端 APP 零影响（cloud.js 未改）。
 
+**二十五、同 versionCode 多次打包无法区分：用户装错批次的 APK 且无法自查（2026-09-06，Commit df9e8b19）**：第九轮修复（条目二十四）打包 246 后用户仍报"注册→激活→出现管理员激活表单"。全面排查 19:30 打包的 APK：**修复代码完整在包内**（解包 assets/public/auth-core.js：showAdminStepFormSafe 7 处+注册保存+自动提交+桥兜底链路齐全，node --check 语法过，desktop 副本与 APK 哈希一致）——排除代码与打包链路问题。
+- **根因**：versionCode 246 在同版本多次打包中不变，登录页只显示 `V1.0.0.246`（MainActivity SSOT 注入 V{versionName}.{versionCode}）——**用户微信传手机安装时无法区分装的是哪一次打包的 APK**，极大概率装的是修复前打包的旧 246（微信文件缓存/手机旧安装包）。assets/public/build-time.json 是 7-27 的死文件，无人引用。
+- **修复**：[write-apk-buildmeta.cjs](file:///d:/trae_projects/kyt-zy/tools/write-apk-buildmeta.cjs)（版本源=build.gradle，桌面版 write-build-meta.cjs 的 APP 版）+ [build-app.bat](file:///d:/trae_projects/kyt-zy/app_project/db-offline/app/build-app.bat) 打包时生成 `assets/public/build-meta.json`（V1.0.0.246 / APK 246 / Build 打包时间到秒）。页面 index-app.html loadBuildMeta() **已有** fetch ./build-meta.json 渲染逻辑（810-820 行三元组），零 HTML/JS 界面改动。用户核对登录页 Build 时间即可确认安装批次。
+- **铁律沉淀**：①**"版本号一致"≠"安装包一致"**——versionCode 只在发版时递增，同版本修复重打包后新旧 APK 显示完全相同的版本号，排查"装了新包还有旧 bug"类问题**第一步先解包 APK 验证代码字符串**（rg 关键修复标记），第二步给用户可自查的批次标识；②微信传手机装 APK 的分发链路无版本校验，用户手机端可能残留/误选旧文件——**每个对外分发的 APK 必须带"打包时间戳"级自证标识**；③打包产物验证方法论：Expand-Archive 解 APK → rg 检查关键修复标记 → node --check 语法验证 → 哈希对比中间副本，三步定位"源码有修复但包里没有/包里有但逻辑断"的分层问题。
+
 ## 8. 桌面版技术规范
 
 * **登录预填来源单一化（2026-09-04 Commit f62f16c4）**：`initLoginInput` 的预填**只允许来自 localStorage 记住的用户名**（`KEY_REMEMBER_USER` / `local_rememberedUsers`），禁止直接从 `config.users` 自动预填。历史 bug：`else if users.length===1` 分支无法区分「出厂模板 admin 单账户」和「刚激活后的单管理员」，导致全新安装首次启动即预填 admin/admin。配套删除 `isTrialDefault && admin` 兜底（离线端独有）。区分手段：localStorage remembered 键在用户成功登录后才写入，全新安装天然为空 → usernameToFill = null → 空白表单。云端 login.js（无 isTrialDefault 兜底）同理需同步修改。
