@@ -3936,6 +3936,75 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
         return r;
     }
 
+    // ========================================================================
+    // ★ 2026-09-06 机构版按钮修复：getAppConfig 桥（对齐桌面 main.js 'get-app-config'）
+    //   背景：安卓 electronAPI shim 缺 getAppConfig → index.html L927 异步加载
+    //   userData 权威 config 整段不执行 → CONFIG.edition 恒为出厂 personal →
+    //   enforceStandardEditionButtons 强制标准版对齐 → 机构版顶部错显示【修改密码】。
+    //   语义：读 filesDir config.json（fallback assets）→ 合并 defaults →
+    //   非正式机构版强制 personal + admin 降级 user（防 config 篡改）→ {success, config}
+    // ========================================================================
+    public JSONObject getAppConfigBridge() {
+        JSONObject r = new JSONObject();
+        try {
+            // defaults（与桌面 get-app-config 完全一致）
+            JSONObject merged = new JSONObject();
+            merged.put("clinicName", "本能堂中医诊所");
+            merged.put("doctorName", "本能堂");
+            merged.put("edition", "personal");
+            merged.put("productName", "惠康中医-本地");
+
+            // filesDir 权威 config 覆盖 defaults（逐键合并，cfg 优先）
+            JSONObject cfg = readConfigJSON();
+            java.util.Iterator<String> it = cfg.keys();
+            while (it.hasNext()) {
+                String k = it.next();
+                merged.put(k, cfg.opt(k));
+            }
+
+            // 授权身份判定（对齐桌面：validateLicense 有效 + license.type 机构类）
+            // 注意用 license.type 而非降级后的 licenseType —— 90 天未在线验证降级分支
+            // 仍是正式授权，桌面端同语义（readLicense().type 判定），保持一致防误伤。
+            boolean formalInstitution = false;
+            try {
+                JSONObject vr = validateLicense();
+                if (vr != null && vr.optBoolean("valid", false)) {
+                    JSONObject lic = vr.optJSONObject("license");
+                    String licType = lic != null ? lic.optString("type", "").toLowerCase().trim() : "";
+                    formalInstitution = licType.equals("pro") || licType.equals("institution")
+                            || licType.equals("clinic") || licType.equals("clinic_custom");
+                }
+            } catch (Exception ve) {
+                Log.w(TAG, "getAppConfig 授权身份判定失败（保守按非机构版）: " + ve.getMessage());
+            }
+
+            if (!formalInstitution) {
+                // 未正式授权(试用/过期/空)或非机构版 → 强制标准版 + 管理员降级
+                merged.put("edition", "personal");
+                merged.put("productName", "惠康中医-本地");
+                org.json.JSONArray users = merged.optJSONArray("users");
+                if (users != null) {
+                    for (int i = 0; i < users.length(); i++) {
+                        org.json.JSONObject u = users.optJSONObject(i);
+                        if (u != null && ("admin".equals(u.optString("role", ""))
+                                || "clinic_admin".equals(u.optString("role", "")))) {
+                            u.put("role", "user");
+                        }
+                    }
+                }
+            }
+
+            r.put("success", true);
+            r.put("config", merged);
+        } catch (Exception e) {
+            try {
+                r.put("success", false);
+                r.put("error", String.valueOf(e.getMessage()));
+            } catch (Exception ignored) {}
+        }
+        return r;
+    }
+
     // ★ 2026-09-04 方案B 注册前置：本地注册（先注册后激活）——离线端唯一密码写点
     //   注册=创建手机号登录账号（明文密码与 syncCreateActivationUser 存储格式一致，
     //   登录时前端自动兼容并升级哈希）；激活链永远不覆盖已注册密码（见 syncCreateActivationUser）。

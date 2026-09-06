@@ -1015,6 +1015,10 @@ public class MainActivity extends BridgeActivity {
             // ★ 2026-09-06 第八轮（Single-Writer 补全）：改密/重置/编辑用户回写 config.json 权威层
             //   （对齐桌面 preload.js 的 electronAPI.renameUser 顶层挂载，index-app.html 三处调用）
             "    renameUser: function(payload) { return callNativeAsync('renameUser', {oldUsername: (payload&&payload.oldUsername)||'', newUsername: (payload&&payload.newUsername)||'', newPassword: (payload&&payload.newPassword)||''}); }," +
+            // ★ 2026-09-06 机构版按钮修复：对齐桌面 preload.js getAppConfig（'get-app-config' IPC）。
+            //   index-app.html L927 靠它异步加载 filesDir 权威 config（edition），
+            //   缺失时 CONFIG.edition 恒为出厂 personal → 机构版错显【修改密码】。
+            "    getAppConfig: function() { return callNativeAsync('getAppConfig', {}); }," +
             "    license: {" +
             "      getStatus: function() { return callNativeAsync('getLicenseStatus', {}); }," +
             "      validate: function() { return callNativeAsync('validateLicense', {}); }," +
@@ -1480,6 +1484,11 @@ public class MainActivity extends BridgeActivity {
                                 args.optString("oldUsername", ""),
                                 args.optString("newUsername", ""),
                                 args.optString("newPassword", "")).toString();
+                    case "getAppConfig":
+                        // ★ 2026-09-06 机构版按钮修复：对齐桌面 'get-app-config' IPC。
+                        //   返回 userData 权威 config（含 edition），前端 L927 异步加载
+                        //   后 enforceStandardEditionButtons 才能按真实版本判定按钮。
+                        return getLM().getAppConfigBridge().toString();
                     case "installLicenseFromServer":
                         // ★ 2026-09-06 架构重构：单一装码入口（JS 检测到 activated 统一调此，
                         //   不再自行 fetch license 写盘）。同步执行（invoke 本就在桥线程），

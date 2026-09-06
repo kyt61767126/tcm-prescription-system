@@ -144,6 +144,10 @@
             isElectron: true,
             saveUserData: function (k, d) { return P({ success: true }); },
             getUserData: function (k) { return P({ success: false, data: null }); },
+            // ★ 2026-09-06 机构版按钮修复：本完整重建分支兜底也带 getAppConfig
+            //   （正常路径 MainActivity shim 已注入并保留 oldAPI，不走此处；
+            //    仅当基础 shim 未就绪被本分支重建时，保证 index.html L927 仍能加载权威 config）
+            getAppConfig: function () { return P(callNative('getAppConfig', '{}')); },
             saveBackupFile: function (jsonStr, fileName) {
                 return new Promise(function (resolve) {
                     try {
