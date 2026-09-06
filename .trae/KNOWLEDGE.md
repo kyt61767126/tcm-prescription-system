@@ -631,6 +631,12 @@ P2 渐进迁移（2026-09-03 当日完成）：
 - **④ 铁律**：(a) **联调测试禁止直连生产 API 造数据**——优先本地 mock（e2e/test-install-binding.cjs 模式）；确需联调必须用 199xxx 测试号且**测完立即三键同删**（admin_req + order: + active_order:）。(b) **手工清 KV 必须三键同删**——只删 admin_req 会留孤儿 order 映射（不可见但拖慢列表且污染 order: 扫描）。(c) 后台列表类功能设计时必须内建过期/清理机制，不能依赖管理员手动🗑。
 - **⑤ 生效方式**：云函数 push 即自动部署（Cloudflare Pages），后台网页（tcm-prescription-system.pages.dev/admin）立即生效；不涉及任何客户端文件，五端均无需重打包。
 
+**三十一、测试机白名单机制确认 + 官网订单路径不写设备绑定（2026-09-06 当日核查，无代码改动）**：
+- **① 白名单行为（license-core.js 双保险设计）**：`checkDeviceVersion` L783 命中 `test_machine:{machineId}` 键 → 直接 `{ok:true, testMachine:true}` 跳过全部版本校验（标准/机构自由切换）；`setDeviceVersion` L691 对测试机 **early return 不落盘** device_version 绑定。`isTestMachine` 用 `kv.get(key)!==null` 判定（键存在即命中）。5 个校验点全覆盖：admin-submit(软件内申请)/order-submit(官网下单)/admin-approve(人工审核)/activate-from-ticket(工单)/validate(输码激活)。
+- **② 当前白名单状态（无需再加）**：桌面测试机 `06eded70c88eb835fee73ffe7238d3d4`（2026-09-06 23:03 加入，note"开发者测试机-桌面端全流程回归测试"）+ APP 测试机 `5784b5da162946afdeb89fdf3eebb50d`（同日 12:30 加入）。管理入口：后台 admin-test-machine API（add/remove/list）。
+- **③ 侧向发现（低优先级，未修）**：官网订单自动发码路径（order-confirm-paid/order-paid）**不调 setDeviceVersion**（rg 证实 0 引用）——绑定只在 admin-approve/validate/activate-from-ticket/heartbeat 写入。实证：9-06 晚四君子+美的两次订单激活（白名单加入前），device_version:06eded70 始终 404。对真实客户影响：纯官网订单流程"一设备一版本"只有提交时检查（无绑定=放行）、发码后不写绑定 → 同一设备可先后购买两个版本。测试机不受影响（白名单双跳）。是否收紧待产品决策。
+- **④ 判定口径**：测试被"一设备一版本"拦截（错误文案"该设备已激活【机构版】..."）→ 先查 `test_machine:` 白名单是否含该 machineId；非测试机需管理员 admin-device-version API 解绑或走标准版→机构版单向升级。
+
 ## 8. 桌面版技术规范
 
 * **登录预填：已彻底取消（2026-09-06 Commit 2202236f，取代 9-04"来源单一化"方案）**：`initLoginInput` **不再做任何用户名自动预填**——登录框永远空白+聚焦；记住的账户仅保留**手动下拉切换**（renderUsernameDropdown，点▼选择）。演进史：8-27 恢复预填 → 9-04 收窄为"仅 localStorage 记住的用户名"（历史 bug：config.users 单账户分支无法区分出厂模板 admin，全新安装首次启动即预填 admin/admin）→ 9-06 用户实测"升级新版后自动显示旧记住的用户名，不像新客户"后**彻底取消**。理由：预填链路多次引发历史 bug + 升级安装 userData 不清导致残留展示；而手动下拉保留全部便利。
