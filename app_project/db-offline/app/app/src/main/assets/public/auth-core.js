@@ -3514,11 +3514,13 @@
                     }
                 } catch (_) {}
                 // ★ 可视提示（不再静默）：无本地激活码且联网找回失败（断网/无绑定记录）
+                //   ★ 2026-09-07 文案修正：旧文案"当前未找到激活记录"与上方"✅ 已激活"直接矛盾，
+                //     用户误以为激活丢失。改为仅描述邀请码获取状态，不涉及"激活记录"字眼。
                 const nb = document.createElement('div');
                 nb.id = 'inviteInfoBox';
                 nb.style.cssText = 'margin-top:8px;padding-top:8px;border-top:1px dashed #ddd;font-size:11px;color:#aaa;line-height:1.6;';
-                nb.textContent = '🎁 邀请码需联网验证授权，当前未找到激活记录' +
-                    '（可能断网或旧版本激活）。请联网后重新打开本页自动恢复；输码激活的用户也可在激活窗口重新输入一次原激活码恢复。';
+                nb.textContent = '🎁 邀请码信息需联网获取（旧版本激活的设备首次可能查不到）：' +
+                    '联网后重新打开本页自动恢复；输码激活的用户也可在激活窗口重新输入一次原激活码找回。';
                 el.appendChild(nb);
                 return;
             }

@@ -2573,6 +2573,41 @@ ipcMain.handle('get-app-config', async () => {
                     }
                     merged.productName = '惠康中医-本地';
                     console.log('[Config] 非机构版/未授权：强制标准版(personal) edition=personal。admin降级数=' + downgradedCount);
+                } else if (formalValid) {
+                    // ★★★ 2026-09-07 存量机器自愈（机构版激活后仍显示【修改密码】而非【用户管理】）：
+                    //   旧逻辑本分支只"不降级"、从不上调——2026-09-06 装码绑定修复上线前激活的
+                    //   机器，installLicense 从不写 config.edition → 磁盘 config.json 永远停留
+                    //   出厂 personal → get-app-config 原样返回 personal → 渲染层
+                    //   Permission._isStandardEditionForced()=true + enforceStandardEditionButtons
+                    //   权威模式持续强制 → 机构版管理员【用户管理】错显为【修改密码】
+                    //   （实测：授权状态已显示"已激活（机构版）剩余365天"但按钮仍是标准版）。
+                    //   修复：复用 applyEditionBindingToConfig（与装码即绑定同一核心）：
+                    //   ① edition 上调为机构版（离线 clinic / 云端 cloud_clinic）；
+                    //   ② 保证至少一名 admin（防管理入口锁死）；
+                    //   ③ 发生校正则签名后回写磁盘固化（重启/刷新不再回退）。
+                    //   注：cfg 与 merged.users 共享同一数组引用，角色提升自动同步到 merged。
+                    try {
+                        const lh = licenseManager.readLicense();
+                        if (lh) {
+                            const bind = licenseManager.applyEditionBindingToConfig(lh, cfg);
+                            if (bind.applied) {
+                                merged.edition = cfg.edition;
+                                if (bind.corrected) {
+                                    const writeCfg = { ...cfg };
+                                    licenseManager.signConfig(writeCfg);
+                                    if (writeCfg.configSignature) {
+                                        await fse.writeJson(configPath, writeCfg, { spaces: 2 });
+                                        console.log('[Config] 存量自愈：机构版 config.json 已固化 edition=' + cfg.edition +
+                                            '（from=' + (bind.from || '?') + '）');
+                                    } else {
+                                        console.warn('[Config] 存量自愈：签名失败，仅本次会话生效（磁盘未固化）');
+                                    }
+                                }
+                            }
+                        }
+                    } catch (he) {
+                        console.warn('[Config] 机构版存量自愈失败（非致命，返回值已含磁盘原值）:', he.message);
+                    }
                 }
             } catch (e) {
                 console.warn('[Config] 标准版兜底失败（非致命，保守走标准版）:', e.message);

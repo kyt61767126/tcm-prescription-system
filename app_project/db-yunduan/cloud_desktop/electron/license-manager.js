@@ -2438,6 +2438,10 @@ module.exports = {
     // ★ P0 修复：config签名 + license统一安装
     signConfig,
     installLicense,
+    // ★ 2026-09-07 导出装码绑定核心：main.js get-app-config 存量自愈调用
+    //   （旧版本激活的机器 config.edition 停留出厂 personal → 机构版【用户管理】
+    //    错显为【修改密码】；每次读配置时按 license.type 就地上调并固化磁盘）
+    applyEditionBindingToConfig,
     // ★ 第三轮终检 P1 修复：导出验签函数，供 prescription-counter / feature-guard
     //   在使用 license 字段前校验签名（堵住 readLicense 不验签的旁路）
     verifySignature

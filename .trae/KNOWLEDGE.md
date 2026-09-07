@@ -691,6 +691,14 @@ P2 渐进迁移（2026-09-03 当日完成）：
 - **⑤ 铁律沉淀**：**「读服务端 license 内容必须走 readLicense 读盘（本地加密格式），禁止 decryptLicenseContent 直解服务端纯 base64」**——服务端 license 是纯 base64、本地落盘是 ENC2 加密，两种格式两个函数不可混用；**「Java 端 type→edition 映射白名单必须以 normalizeEdition 为单一来源」**（本次 getAppConfigBridge 独立白名单漂移是第二个副本踩坑，服务端 versionOf 认 7 种 Java 认 4 种）；**「装码后 config 副产物同步（诊名/版本/角色）必须整段走读盘兜底」**——半段有兜底半段没有 = 同一函数内一半正常一半静默错写，365 天状态正常反而掩护根因。桌面版 license-manager.js 装码走 readLicense 读盘无此 bug（88314268 修复时即正确模式）。
 - **⑥ 生效方式**：仅 LicenseManager.java 单文件（Java 层），**离线APP 需重打 APK（versionCode 251）**；离线桌面/云端系/官网零影响（桌面版无此 bug，修复模式本就对齐桌面）。
 
+**三十九、离线桌面 get-app-config 存量自愈——license.dat 落盘路径 ≠ config.edition 校正路径（2026-09-07，桌面随 V1.0.208+）**：用户实测"授权状态已显示『已激活（机构版）剩余365天』，操作界面依旧【修改密码】"（条目二十九装码即绑定 + 三十二 auth-core 修复上线后仍复现）。
+- **① 根因（第 5 条 license.dat 落盘路径绕过 installLicense）**：装码即绑定（条目二十九）只收口了主进程 installLicense 一条路径；但 **① 204 前旧版激活的机器**（installLicense 旧版从不写 config.edition）与 **② 条目三十二新增的渲染层存量自愈 healMissingDesktopLicenseFile 领码落盘**——这两类机器 license.dat 落盘都不经过新版 installLicense → 磁盘 config.json 停留出厂 personal。启动时 enforceEditionBinding（main.js L1365）虽能兜底，但 heal 发生在**启动之后**的渲染层会话内，用户不重启 → 本会话 get-app-config 原样返回 personal → 渲染层 Permission._isStandardEditionForced()=true + enforceStandardEditionButtons 权威模式持续强制 → 机构版管理员【用户管理】错显【修改密码】，重启一次才能救回（用户不会重启，必报 bug）。
+- **② 修复（读配置即自愈，不依赖重启）**：main.js get-app-config 的 formalValid 分支调用 `applyEditionBindingToConfig(readLicense(), cfg)`——① edition 上调机构版；② 保证至少一名 admin（防管理入口锁死，cfg 与 merged.users 共享同一数组引用，角色提升自动同步到返回值）；③ corrected 时 signConfig 后写盘固化（重启/刷新不回退；签名失败仅本会话生效并 warn）。复用装码即绑定的同一核心，幂等（已校正则 corrected=false 不写盘）。
+- **③ 配套文案修正（auth-core offline.js）**：授权状态页"当前未找到激活记录"与上方"✅ 已激活"直接矛盾、用户误以为激活丢失 → 改为"邀请码信息需联网获取（旧版本激活的设备首次可能查不到）：联网后重新打开本页自动恢复；输码激活的用户也可在激活窗口重新输入一次原激活码找回"。**铁律：状态提示文案禁止跨状态自相矛盾——写文案时把同屏其它状态行一起读一遍**。
+- **④ 自测基线**：e2e/test-install-binding.cjs 新增用例E（11→15 断言全 PASS）：E1 旧版残留上调（personal→clinic，applied+corrected）/ E2 幂等（corrected=false 不重复写盘）/ E3 全员 user 的机构版首个用户提升 admin / E4 伪造 license 验签失败 skip=signature 不提权。
+- **⑤ 多端同步险情（本轮真实踩坑）**：license-manager 4 副本只改了 3 个，**漏 APP assets 副本**（sync-all Group 4 目标清单第 4 项）——git status 无该文件即漏。发现方法：`git hash-object` 对比工作区副本与 `git show HEAD:shared/...` 的 blob 哈希。**铁律：改 shared 权威源后必须跑 `tools/sync-all.ps1`（或逐项核对 Group 目标数），凭记忆手抄副本清单必漏**。云桌面 main.js 无 formalInstitution 分支（云端账号体系），无此 bug 无需对齐。
+- **⑥ 生效方式**：**离线桌面需重打包**（main.js + electron/license-manager.js 进 asar；随 V1.0.208+）；已激活错显机器装新版后**无需重新激活/付款，登录瞬间 get-app-config 自愈即显【用户管理】**（不依赖重启）。离线APP：license-manager APP assets 副本 + auth-core 文案已同步，随下版 APK 生效。云端网页/云端APP/云桌面不受影响（走 cloud.js 无此分支）。
+
 ## 8. 桌面版技术规范
 
 * **登录预填：已彻底取消（2026-09-06 Commit 2202236f，取代 9-04"来源单一化"方案）**：`initLoginInput` **不再做任何用户名自动预填**——登录框永远空白+聚焦；记住的账户仅保留**手动下拉切换**（renderUsernameDropdown，点▼选择）。演进史：8-27 恢复预填 → 9-04 收窄为"仅 localStorage 记住的用户名"（历史 bug：config.users 单账户分支无法区分出厂模板 admin，全新安装首次启动即预填 admin/admin）→ 9-06 用户实测"升级新版后自动显示旧记住的用户名，不像新客户"后**彻底取消**。理由：预填链路多次引发历史 bug + 升级安装 userData 不清导致残留展示；而手动下拉保留全部便利。

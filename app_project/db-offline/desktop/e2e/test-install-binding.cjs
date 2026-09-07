@@ -135,6 +135,34 @@ console.log('[用例D] enforceEditionBinding 包装行为不回归（读盘→�
     check('D2 edition 保持 clinic（license=pro）', cfg.edition === 'clinic', '实际=' + cfg.edition);
 }
 
+console.log('[用例E] 2026-09-07 存量自愈核心 applyEditionBindingToConfig（get-app-config 每次读配置时调用）');
+{
+    // E1 旧版本激活残留：license=pro + config.edition=personal → 上调 clinic
+    const lic = { user: '存量诊所', type: 'pro', issuedAt: NOW, expiresAt: EXP,
+        clinicName: '存量诊所', machineId: MID, licenseBinding: 'clinic+user+machine' };
+    lic.signature = licenseManager.generateSignatureV3(lic);
+    const cfg1 = { edition: 'personal', appMode: 'offline', users: [{ username: '13900000001', password: 'x', role: 'admin' }] };
+    const r1 = licenseManager.applyEditionBindingToConfig(lic, cfg1);
+    check('E1 旧版残留上调 clinic（applied+corrected）', r1 && r1.applied === true && r1.corrected === true && cfg1.edition === 'clinic',
+        JSON.stringify(r1) + ' edition=' + cfg1.edition);
+
+    // E2 幂等：已是 clinic → corrected=false 不重复写盘
+    const r2 = licenseManager.applyEditionBindingToConfig(lic, cfg1);
+    check('E2 幂等（corrected=false）', r2 && r2.applied === true && r2.corrected === false, JSON.stringify(r2));
+
+    // E3 全员 user 的机构版 → 首个用户提升 admin（防管理入口锁死）
+    const cfg3 = { edition: 'personal', appMode: 'offline', users: [{ username: '13900000002', password: 'x', role: 'user' }] };
+    licenseManager.applyEditionBindingToConfig(lic, cfg3);
+    check('E3 无 admin 时首个用户提升 admin', cfg3.users[0].role === 'admin', '实际=' + cfg3.users[0].role);
+
+    // E4 伪造 license（验签失败）→ skip 不校正（防提权）
+    const bad = { user: '伪', type: 'pro', licenseBinding: 'clinic+user+machine' };
+    bad.signature = 'deadbeef' + 'x'.repeat(56);
+    const cfg4 = { edition: 'personal', appMode: 'offline', users: [] };
+    const r4 = licenseManager.applyEditionBindingToConfig(bad, cfg4);
+    check('E4 验签失败 skip=signature（不提权）', r4 && r4.skip === 'signature' && cfg4.edition === 'personal', JSON.stringify(r4));
+}
+
 // 清理
 try { fs.rmSync(TMP, { recursive: true, force: true }); } catch (_) {}
 console.log('\n结果: ' + pass + ' 通过, ' + fail + ' 失败');
