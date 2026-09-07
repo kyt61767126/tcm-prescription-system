@@ -764,6 +764,11 @@ P2 渐进迁移（2026-09-03 当日完成）：
 - **修复**：bat 重置完成提示补「云端按设备识别码记忆激活记录」说明 + 彻底全新二选一（后台删激活申请+诊所 / 换电脑测试）。
 - **铁律**：a. **"本地重置"类工具永远只管本地，云端 KV 授权关系（admin_req activated 记录、device_version 绑定、license 绑定）不会随之消失**——测试"全新客户全流程"要么后台先归零该 machineId 的记录，要么换硬件；b. 排查"重置无效"先看 userData 目录 CreationTime（全新=重置生效，问题在云端恢复链路；旧=删除失败）；c. 同机多产品线（离线桌面/云端桌面）共享 machineId——一条产品线激活，另一条线打开激活窗口就会自愈装回，测试矩阵要按 machineId 规划隔离。
 
+**四十九、邀请奖励 +90 天「服务端已生效但面板仍显示剩余 365 天」——登录缓存 clinicExpiresAt 是登录时快照，奖励到账后不重登录看不到（2026-09-07，Commit 24c27481，用户问「奖励 90 天如何生效」）**：KV 实证：胡黄连（邀请人）clinic.expiresAt = 创建时间 + **455 天**（365+90 ✓），天花粉（被邀请人）+30 也已含——**奖励在服务端即时生效**（被邀请人激活完成时 applyInviteReward 延长）。但授权状态区「剩余 X 天」读 `cu.clinicExpiresAt`（登录时快照），邀请人登录发生在奖励发放**之前**→ 缓存 365 天；refreshCloudProfile 只在缓存**缺失**时补（`!cu.clinicExpiresAt` 守卫）+ 24h 节流，旧值永不更新。
+- **修复（奖励到账自愈）**：invite.js 响应新增 `clinicExpiresAt`（findClinicExpiresAtByPhone：凭 license.phone 扫 clinic:{id}:users，与发奖 extendClinicExpiryForReward 同构匹配，保证查回=发奖延长的是同一家诊所）；cloud.js 新增 `syncClinicExpiryFromInvite`——invite 拉取成功后发现缓存值 ≠ 服务端值 → 更新 auth:currentUser + localStorage 四键 → 重渲授权状态。**收敛防循环**：重渲会再次拉 invite，届时值一致即静默返回（最多 2 轮）。
+- **验证**：线上 API 实测返回 `clinicExpiresAt: 2027-12-06T12:51:48.091Z`（455 天）+ inviteCount=1/rewardDays=90 实时数据 ✓；mock KV 单测 3 场景（命中/无匹配/空 kv）全过。
+- **铁律**：a. 云端版「授权状态显示层数据源」三套：剩余天数=登录缓存 clinicExpiresAt（快照）、邀请卡片=invite 接口（实时）、心跳=entitlement 四态（只裁决不回填天数）——改有效期相关显示时先分清读的是哪一路；b. 「登录时快照」类缓存（clinicExpiresAt/edition）凡服务端会变更的（奖励/续费/升级），**刷新链路必须设计成服务端真值优先覆盖**，不能只在缺失时补；c. invite 接口凭据是激活码或 machineId（非登录态），返回 clinic 数据时匹配逻辑必须与写侧同构，防止读写不对称。
+
 ## 8. 桌面版技术规范
 
 * **登录预填：已彻底取消（2026-09-06 Commit 2202236f，取代 9-04"来源单一化"方案）**：`initLoginInput` **不再做任何用户名自动预填**——登录框永远空白+聚焦；记住的账户仅保留**手动下拉切换**（renderUsernameDropdown，点▼选择）。演进史：8-27 恢复预填 → 9-04 收窄为"仅 localStorage 记住的用户名"（历史 bug：config.users 单账户分支无法区分出厂模板 admin，全新安装首次启动即预填 admin/admin）→ 9-06 用户实测"升级新版后自动显示旧记住的用户名，不像新客户"后**彻底取消**。理由：预填链路多次引发历史 bug + 升级安装 userData 不清导致残留展示；而手动下拉保留全部便利。
