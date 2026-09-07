@@ -168,6 +168,17 @@ export async function provisionCloudAccount(kv, record) {
     // 2) 不存在 → 创建新诊所（显式带 edition 字段，统一规范）
     const clinicId = 'clinic_' + Array.from(crypto.getRandomValues(new Uint8Array(10)))
         .map(b => 'abcdefghijklmnopqrstuvwxyz0123456789'[b % 36]).join('');
+    // ★ 2026-09-07 云端诊所有效期与激活挂钩：新建诊所 expiresAt = 激活到期日 +
+    //   邀请奖励天数（被邀请人 +30）。此前诊所不写 expiresAt，靠 users.js 登录
+    //   自愈补默认 365 天（不感知激活天数/邀请奖励，管理员直填到期日也被无视）。
+    //   record.expiresAt 优先（admin-approve 预写管理员直填值），否则 days+奖励计算。
+    //   admin-approve 审核点已把 __inviteeBonusDays 预写进 record.inviteeBonusDays；
+    //   admin-status 补开点读 KV 同名字段（activatePatch 落库），两路同源。
+    const __rewardDays = Number(record.inviteeBonusDays) || 0;
+    const __clinicExpiresAt = record.expiresAt
+        ? new Date(record.expiresAt).toISOString()
+        : new Date(Date.now() +
+            ((Number(record.days) || 365) + __rewardDays) * 24 * 60 * 60 * 1000).toISOString();
     clinic = {
         id: clinicId,
         name: clinicName,
@@ -178,6 +189,7 @@ export async function provisionCloudAccount(kv, record) {
         activationType: record.type || null,
         // ★ 2026-09-03 离线版载体（desktop/app，云端版不写）
         offlineCarrier: (targetEdition.indexOf('offline_') === 0 && targetCarrier) ? targetCarrier : undefined,
+        expiresAt: __clinicExpiresAt,
         source: 'activation'
     };
     clinics.push(clinic);

@@ -28,6 +28,12 @@ const licenseManager = require('./license-manager');
 //    垃圾 machineId 门口 400 拒绝；行为与 validate 完全等价，对拍自测保证）
 const ACTIVATE_API_URL = 'https://tcm-prescription-system.pages.dev/api/license/claim';
 const ADMIN_ACTIVATE_API_URL = 'https://tcm-prescription-system.pages.dev/api/license/admin-submit';
+// ★ 2026-09-07 客户端直建订单（对齐离线桌面 orderFlow 架构重构）：
+//   弹窗内直接 order-submit 建单（含注册密码+邀请码）→ 官网 ?orderNo= 恢复模式
+//   直达付款（免重填表单）。旧链路 admin-submit → PAYMENT_REQUIRED → 跳官网重填
+//   表单下单 → 注册密码/邀请码两字段全部静默丢失（用户实测：自设密码被 admin 归一化
+//   丢弃、推荐人 +90 天从未到账——两个字段丢失的根因都是这条断链）。
+const ORDER_SUBMIT_API_URL = 'https://tcm-prescription-system.pages.dev/api/license/order-submit';
 
 // ============================================================================
 //  机器 ID 生成
@@ -504,6 +510,72 @@ async function submitAdminRequest(data) {
     }
 }
 
+// ★ 2026-09-07 客户端直建订单（对齐离线桌面 orderFlow）：弹窗内直接 order-submit
+//   建单（pending_payment）→ 客户端跳官网 ?orderNo= 恢复模式直达付款。
+//   payload 由渲染层组装（orderNo/productKey/edition/price/注册信息/密码/邀请码），
+//   主进程只做代理 fetch（渲染进程 file:// 直连被 CORS 拦截）。
+//   成功同时持久化 requestId + orderNo（断点续传：关窗重开恢复订单等待视图）。
+async function submitOrderDirect(payload) {
+    try {
+        const fetchPromise = async () => {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 12000);
+            try {
+                const response = await fetch(ORDER_SUBMIT_API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                    signal: controller.signal
+                });
+                return await response.json();
+            } finally {
+                clearTimeout(timeout);
+            }
+        };
+        const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('FETCH_TIMEOUT')), 15000);
+        });
+        const result = await Promise.race([fetchPromise(), timeoutPromise]);
+        // ★ 建单成功（含幂等命中）：持久化 requestId/phone/密码（与 submitAdminRequest
+        //   同一份存根，断点续传/装号链路零改动直接复用）+ orderNo（付款链接恢复模式）
+        if (result && result.success && result.requestId) {
+            try {
+                saveAdminRequestId(result.requestId, payload.clinicName, payload.adminName,
+                    payload.phone, payload.password, payload.edition);
+                // orderNo 附加持久化（独立小文件，与 requestId 存根解耦）
+                try {
+                    const p = path.join(licenseManager.getWritableDir(), 'order_no_pending.json');
+                    fs.writeFileSync(p, JSON.stringify({
+                        orderNo: result.orderNo || payload.orderNo || '',
+                        requestId: result.requestId,
+                        phone: (payload.phone || '').trim(),
+                        at: Date.now()
+                    }));
+                } catch (_) { /* 付款链接降级旧模式，不影响主流程 */ }
+            } catch (e) { console.warn('[OrderFlow] 直建订单持久化失败（不影响建单）:', e.message); }
+        }
+        return result;
+    } catch (e) {
+        console.error('[OrderFlow] 直建订单失败:', e);
+        let errorMsg = e.message;
+        if (e.message === 'FETCH_TIMEOUT') errorMsg = '连接服务器超时，请检查网络后重试';
+        else if (e.message && e.message.includes('fetch failed')) errorMsg = '无法连接服务器，请检查网络连接';
+        return { success: false, error: errorMsg };
+    }
+}
+
+// ★ 读取直建订单存根（激活窗口断点恢复：重开时恢复付款链接 + 订单等待视图）
+function loadPendingOrderNo() {
+    try {
+        const p = path.join(licenseManager.getWritableDir(), 'order_no_pending.json');
+        if (fs.existsSync(p)) {
+            const data = JSON.parse(fs.readFileSync(p, 'utf8'));
+            if (data && data.orderNo) return data;
+        }
+    } catch (e) { /* 忽略 */ }
+    return null;
+}
+
 // ★ 管理员激活状态轮询
 // ★ 2026-09-03 (架构统一 P1) IPC 签名对齐: (requestId, machineId) 双参数，
 //   与离线桌面 activate.js 保持一致；machineId 缺省时走本机 getMachineId()
@@ -651,6 +723,8 @@ module.exports = {
     closeActivateWindow,
     restartApp,
     submitAdminRequest,
+    submitOrderDirect,
+    loadPendingOrderNo,
     checkAdminStatus,
     saveLicense,
     cancelAdminRequest,

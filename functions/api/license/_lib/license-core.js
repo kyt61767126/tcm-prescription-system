@@ -1004,6 +1004,7 @@ async function applyInviteReward(kv, { inviteCode, inviteeCode, inviteeRecord, m
         }
 
         // === 发奖：邀请人 +90 天 ===
+
         const newCount = inviteCount + 1;
         const newRewardDays = Math.min((inviter.rewardDays || 0) + INVITE_REWARD_DAYS_PER_PERSON,
             INVITE_MAX_INVITEES * INVITE_REWARD_DAYS_PER_PERSON);
@@ -1015,11 +1016,25 @@ async function applyInviteReward(kv, { inviteCode, inviteeCode, inviteeRecord, m
             rewardDays: INVITE_REWARD_DAYS_PER_PERSON,
             ip: ip || 'unknown'
         });
+        // ★ 2026-09-07 P0（邀请人 +90 天从未生效）：rewardDays 只在 license 签发时参与
+        //   expiresAt 计算（buildLicenseData），邀请人 license 已激活、expiresAt 已固定 →
+        //   此前只写 rewardDays 不改 expiresAt = 奖励永不生效（用户实测推荐人授权天数
+        //   无变化）。修复：发奖同步延长邀请人 license.expiresAt（永久/空不动）；
+        //   云端诊所 clinicExpiresAt 同步延长见 extendClinicExpiryForReward（云端登录
+        //   用户授权显示走诊所记录，与 license 双轨）。
+        let __inviterExpiresAt = inviter.expiresAt || null;
+        if (__inviterExpiresAt) {
+            __inviterExpiresAt = new Date(new Date(__inviterExpiresAt).getTime() +
+                INVITE_REWARD_DAYS_PER_PERSON * 24 * 60 * 60 * 1000).toISOString();
+        }
         await updateLicense(kv, inviter.code, {
             inviteCount: newCount,
             rewardDays: newRewardDays,
-            inviteRewardLog: rewardLog
+            inviteRewardLog: rewardLog,
+            expiresAt: __inviterExpiresAt
         });
+        // 云端诊所（邀请人手机号属主）同步 +90 天，失败不阻断发奖
+        await extendClinicExpiryForReward(kv, inviter.phone, INVITE_REWARD_DAYS_PER_PERSON);
         // 审计日志（邀请人码）
         await appendLicenseLog(kv, inviter.code, {
             action: 'invite-reward',
@@ -1038,6 +1053,42 @@ async function applyInviteReward(kv, { inviteCode, inviteeCode, inviteeRecord, m
         // 发奖失败不阻断激活主流程（宁漏发不误伤）
         console.warn('[InviteReward] 发放失败:', e.message);
         return { granted: false, reason: '服务器错误' };
+    }
+}
+
+// ============================================================================
+//  ★ 2026-09-07 邀请奖励云端诊所同步：云端登录用户（网页/APP/云桌面）授权状态
+//    显示走 clinic.expiresAt（users.js 登录返回 clinicExpiresAt），与 license.expiresAt
+//    双轨——只延 license 不延诊所 = 云端邀请人永远看不到 +90 天（用户实测）。
+//    凭邀请人手机号扫 system:clinics + clinic:{id}:users 找属主诊所：
+//      - clinic.expiresAt 非空（有期限）→ 延长 +days 天并回写 clinics
+//      - expiresAt 空（永久/从未设置）→ 不动（永久无需延长；从未设置由登录自愈兜底）
+//    同一手机号跨多诊所的历史账号全部延长（天数是奖励非权限提升，宁多勿漏）。
+//    失败仅 warn 不阻断发奖（对齐 applyInviteReward 异常哲学）。
+//    KV key 与 functions/api/_lib/auth.js KV_SYSTEM_CLINICS 保持一致（'system:clinics'）。
+// ============================================================================
+const KV_SYSTEM_CLINICS_KEY = 'system:clinics';
+async function extendClinicExpiryForReward(kv, phone, days) {
+    try {
+        if (!kv || !phone || !days || days <= 0) return;
+        const clinics = (await kv.get(KV_SYSTEM_CLINICS_KEY, 'json')) || [];
+        let dirty = false;
+        for (const clinic of clinics) {
+            if (!clinic || !clinic.id || !clinic.expiresAt) continue;
+            const users = (await kv.get('clinic:' + clinic.id + ':users', 'json').catch(() => null)) || [];
+            const hit = users.some(u => u && (u.username === phone || u.phone === phone));
+            if (!hit) continue;
+            const newExp = new Date(new Date(clinic.expiresAt).getTime() +
+                days * 24 * 60 * 60 * 1000).toISOString();
+            clinic.expiresAt = newExp;
+            clinic.updatedAt = new Date().toISOString();
+            dirty = true;
+            console.log('[InviteReward] 云端诊所有效期延长:', clinic.name,
+                '+' + days + '天 → ' + newExp.slice(0, 10));
+        }
+        if (dirty) await kv.put(KV_SYSTEM_CLINICS_KEY, JSON.stringify(clinics));
+    } catch (e) {
+        console.warn('[InviteReward] 云端诊所有效期延长失败（不阻断发奖）:', e.message);
     }
 }
 

@@ -687,6 +687,83 @@ let codeState = { phone: '', clinicName: '', adminName: '', password: '' };
 let _pollTimer = null;
 let _restartTimer = null;
 
+// ============ 客户端直建订单（orderFlow，对齐离线桌面 2026-09-06 架构重构） ============
+// ★ 2026-09-07 旧链路断点：admin-submit → PAYMENT_REQUIRED → 跳官网重填表单下单 →
+//   注册密码/邀请码两字段全部静默丢失（用户实测：自设密码被 admin 归一化丢弃、
+//   推荐人 +90 天从未到账）。新链路：弹窗内直接 order-submit 建单（含密码+邀请码）
+//   → 官网 ?orderNo= 恢复模式直达付款（免重填）→ 付款后自动转待审 → 审核通过装码。
+//   admin-submit 旧链路完整保留为降级兜底（建单失败/业务 403/409 时自动降级）。
+let __orderFlow = null;   // { orderNo, requestId, status, phone, adminName, clinicName }
+
+// 云端价格表（与官网 download.html version-pick-item data-price 一致）
+const ORDER_PRICE_MAP = { cloud: { personal: '￥199/年', pro: '￥399/年' } };
+
+// 订单号：BNZC-CL-yyyyMMddHHmm-XXXX（与官网同构，服务端正则兼容；CL=云端）
+function genOrderNo() {
+    const d = new Date();
+    const p2 = n => String(n).padStart(2, '0');
+    const ts = '' + d.getFullYear() + p2(d.getMonth() + 1) + p2(d.getDate()) +
+               p2(d.getHours()) + p2(d.getMinutes());
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let rand = '';
+    for (let i = 0; i < 4; i++) rand += chars.charAt(Math.floor(Math.random() * chars.length));
+    return 'BNZC-CL-' + ts + '-' + rand;
+}
+
+// 直建订单：成功进入等待视图返回 true；需降级 admin-submit 返回 false
+async function trySubmitDirectOrder() {
+    try {
+        if (!window.electronAPI?.activate?.submitOrderDirect) return false; // 旧包桥未就绪 → 降级
+        const editionKey = (state.edition === 'institution') ? 'pro' : 'personal';
+        const payload = {
+            orderNo: genOrderNo(),
+            productKey: 'cloud',
+            edition: editionKey,
+            price: (ORDER_PRICE_MAP.cloud && ORDER_PRICE_MAP.cloud[editionKey]) || '',
+            clinicName: state.clinicName,
+            adminName: state.adminName,
+            phone: state.phone,
+            machineId: params.get('machineId') || 'unknown',
+            note: state.remark || '',
+            inviteCode: state.inviteCode || '',
+            dp: 'desktop',
+            // ★ 注册密码随订单落服务端（哈希后落库）——审核通过开云端账户用，
+            //   不再依赖 admin-submit 复用分支补写（断点续传链路不会重经 admin-submit）
+            password: (state.password && state.password !== 'admin') ? state.password : ''
+        };
+        const res = await window.electronAPI.activate.submitOrderDirect(payload);
+        if (!res || !res.success) {
+            // 业务错误（403 版本绑定/409 一号一机等）：降级旧链路让 admin-submit
+            // 给出原有交互（PAYMENT_REQUIRED/错误提示），不在这里重复报错
+            console.warn('[OrderFlow] 直建订单未成功，降级 admin-submit:', res && res.error);
+            return false;
+        }
+        __orderFlow = {
+            orderNo: res.orderNo || payload.orderNo,
+            requestId: res.requestId || '',
+            status: res.status || 'pending_payment',
+            phone: (state.phone || '').trim(),
+            adminName: (state.adminName || '').trim(),
+            clinicName: (state.clinicName || '').trim()
+        };
+        // 服务端已激活短路（同机同号重复提交）：直接走装码收尾
+        if (res.status === 'activated') {
+            console.log('[OrderFlow] 服务端返回已激活短路');
+            const ok = await saveAndRestart(res.license || '', state.phone);
+            if (ok) showSuccess(state.phone);
+            return true;
+        }
+        console.log('[OrderFlow] 直建订单成功:', __orderFlow.orderNo,
+            'requestId=', __orderFlow.requestId, res.idempotent ? '(幂等命中)' : '');
+        showWaiting(__orderFlow.requestId, new Date().toISOString());
+        startPolling(__orderFlow.requestId);
+        return true;
+    } catch (e) {
+        console.warn('[OrderFlow] 直建订单异常，降级 admin-submit:', e && e.message);
+        return false;
+    }
+}
+
 // ============ Edition selection ============
 function selectEdition(edition) {
     state.edition = edition;
@@ -850,12 +927,20 @@ function hideGlobalError() {
         }
         // 自动切换到管理员激活tab
         switchTab('admin');
+        // ★ 2026-09-07 直建订单存根恢复：付款链接走 ?orderNo= 恢复模式（免重填表单）
+        try {
+            const __po = await window.electronAPI.activate.loadPendingOrderNo();
+            if (__po && __po.orderNo) {
+                __orderFlow = __po;
+                // 服务端记录可能已推进（付款/审核），以 checkAdminStatus 结果为准
+            }
+        } catch (e) { /* 存根缺失走旧模式 */ }
         const r = await window.electronAPI.activate.checkAdminStatus(saved.requestId);
         if (r.success && r.status === 'activated') {
             const ok = await saveAndRestart(r.license, saved.phone);
             if (ok) showSuccess(saved.phone);
             // ★ 装号失败：saveAndRestart 已显示具体错误（showGlobalError），不再伪装成功
-        } else if (r.success && r.status === 'pending') {
+        } else if (r.success && (r.status === 'pending' || r.status === 'pending_payment')) {
             state.phone = saved.phone || '';
             state.clinicName = saved.clinicName || '';
             state.adminName = saved.adminName || '';
@@ -1039,6 +1124,12 @@ document.getElementById('submitBtn').addEventListener('click', async () => {
     document.getElementById('submitStatus').textContent = '正在提交信息...';
     try {
         const machineId = params.get('machineId') || '未知';
+        // ★ 2026-09-07 客户端直建订单优先（orderFlow）：order-submit 建单（含注册密码+
+        //   邀请码）→ 等待视图 + 官网 ?orderNo= 直达付款。旧 admin-submit 链路在
+        //   PAYMENT_REQUIRED 拦截后跳官网重填表单 → 两字段静默丢失（本轮修复根因）。
+        //   直建失败（旧包桥未就绪/业务 403/409）自动降级下方 admin-submit 旧链路。
+        const __directOk = await trySubmitDirectOrder();
+        if (__directOk) { return; }
         const result = await window.electronAPI.activate.submitAdminRequest({
             clinicName: state.clinicName,
             adminName: state.adminName,
@@ -1085,6 +1176,12 @@ let _payGuideInited = false;
 //   零重复填写。此前只带 mid+ed，注册信息不同步——用户实测官网要求重新填写注册信息。
 //   prefix='ticket' 读工单Tab字段（含微信/备注），默认读管理员Tab字段（无微信字段）。
 function payGuideUrl(prefix) {
+    // ★ 2026-09-07 直建订单恢复模式优先：有订单走 ?orderNo=（官网免填表单直达付款页，
+    //   注册信息/密码/邀请码已随订单落服务端）；无订单走旧 ?mid= 回填模式（降级链路）
+    if (__orderFlow && __orderFlow.orderNo) {
+        return 'https://tcm-prescription-system.pages.dev/download.html?orderNo=' +
+            encodeURIComponent(__orderFlow.orderNo) + '&dp=desktop';
+    }
     const mid = params.get('machineId') || '';
     // state.edition: 'institution'→cloud-pro(机构版) / 其他→cloud-personal(标准版)，与官网 ed 参数一致
     const ed = (state.edition === 'institution') ? 'cloud-pro' : 'cloud-personal';
@@ -1102,12 +1199,16 @@ function payGuideUrl(prefix) {
         p  = g('phone') || state.phone || '';
         wx = ''; r = state.remark || '';
     }
+    // ★ 2026-09-07 邀请码 iv 参数（降级链路）：官网购买页自动回填邀请码框，
+    //   降级建单（order-submit）时透传——防降级链路邀请码丢失
+    const iv = (state.inviteCode || '').trim().toUpperCase();
     return PAY_GUIDE_BASE + encodeURIComponent(mid) + '&ed=' + ed + '&dp=desktop'
         + (cn ? ('&cn=' + encodeURIComponent(cn)) : '')
         + (n  ? ('&n='  + encodeURIComponent(n))  : '')
         + (p  ? ('&p='  + encodeURIComponent(p))  : '')
         + (wx ? ('&wx=' + encodeURIComponent(wx)) : '')
-        + (r  ? ('&r='  + encodeURIComponent(r))  : '');
+        + (r  ? ('&r='  + encodeURIComponent(r))  : '')
+        + (iv ? ('&iv=' + encodeURIComponent(iv))  : '');
 }
 function initPayGuide(prefix) {
     if (_payGuideInited) return;

@@ -319,6 +319,13 @@ export async function onRequest(context) {
         //   从 KV 再读同一份 record 时，type 也是管理员最终确认的。
         const finalActivationType = type; // 'pro' 或 'personal'，L139 已做必填+枚举校验
         record.type = finalActivationType;
+        // ★ 2026-09-07 云端诊所有效期挂钩（配套 admin-account.js 新建分支）：
+        //   ① record.expiresAt = 管理员直填到期日（days 模式为 null → 诊所按 days 计算）
+        //   ② record.inviteeBonusDays = 被邀请人 +30（结算结果，provisionCloudAccount
+        //     内部新建诊所 expiresAt = 激活天数+奖励天数；activatePatch L402 同值落库，
+        //     admin-status 补开路径从 KV 读到同一字段——两路同源）。
+        record.expiresAt = recordExpiresAt || null;
+        record.inviteeBonusDays = __inviteeBonusDays || 0;
         try {
             await provisionCloudAccount(kv, record);
         } catch (e) {

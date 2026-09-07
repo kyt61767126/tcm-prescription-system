@@ -1698,6 +1698,13 @@
                             <label>微信号（选填）</label>
                             <input type="text" id="custWechat" placeholder="用于售后联系" oninput="updateOrderSummary()">
                         </div>
+                        <!-- ★ 2026-09-07 邀请码（选填）：填好友邀请码激活双方得奖励（好友+90天/您+30天），
+                             客户端跳转携带 ?iv= 自动回填；纯官网直购客户手动填写 -->
+                        <div class="form-item">
+                            <label>邀请码（选填）</label>
+                            <input type="text" id="custInviteCode" placeholder="好友推荐码，如 86NSWG" oninput="updateOrderSummary()" style="text-transform:uppercase;" maxlength="10">
+                            <div style="font-size:11px;color:#9ca3af;margin-top:3px;">🎁 填好友邀请码，激活成功双方都得奖励（好友+90天，您+30天）</div>
+                        </div>
                         <div class="form-item">
                             <label>设备识别码 <span class="req">*</span></label>
                             <input type="text" id="custMachineId" placeholder="在软件激活弹窗中复制" oninput="updateOrderSummary()">
@@ -2906,6 +2913,9 @@
             lines.push('联系电话：' + (phone || '【未填写】'));
             lines.push('微信号：' + (wechat || '无'));
             lines.push('设备识别码：' + (machineId || '【未填写】'));
+            // ★ 2026-09-07 邀请码（选填）：客服核对推荐关系用
+            const __ivSum = ((document.getElementById('custInviteCode') || {}).value || '').trim().toUpperCase();
+            if (__ivSum) lines.push('邀请码：' + __ivSum);
             if (note) lines.push('备注：' + note);
             lines.push('─────────────────────');
             lines.push('付款方式：支付宝/微信扫码（见下一步）');
@@ -2988,6 +2998,10 @@
                 if (name === __combinedO) { __clinicSubmit = __cnO; __adminSubmit = __nO; }
             }
             try {
+                // ★ 2026-09-07 邀请码（选填）：表单输入（客户端跳转 ?iv= 已自动回填），
+                //   统一转大写对齐服务端 findLicenseByInviteCode 匹配规则
+                var __ivEl = document.getElementById('custInviteCode');
+                var __iv = (__ivEl && __ivEl.value) ? String(__ivEl.value).trim().toUpperCase() : '';
                 const res = await fetch(BASE + '/api/license/order-submit', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -3002,6 +3016,8 @@
                         wechat: wechat,
                         machineId: machineId,
                         note: note,
+                        // ★ 2026-09-07 邀请码透传：审核通过时结算邀请奖励（好友+90天/您+30天）
+                        inviteCode: __iv,
                         // ★ 2026-09-03 载体（desktop/app）：APP/桌面客户端跳转购买页时
                         //   URL 自动携带 ?dp=；后台用户管理离线版显示"🖥️桌面·/📱APP·"
                         dp: (new URLSearchParams(window.location.search).get('dp') || '')
@@ -3298,8 +3314,8 @@
             document.querySelectorAll('.version-pick-item').forEach(i => i.classList.remove('selected'));
             document.getElementById('step1Next').disabled = true;
             orderInfo = { number: '', version: '', price: '', time: '' };
-            // ★ 清空客户信息表单
-            ['custName','custPhone','custWechat','custMachineId','custNote'].forEach(id => {
+            // ★ 清空客户信息表单（含 2026-09-07 新增邀请码框）
+            ['custName','custPhone','custWechat','custInviteCode','custMachineId','custNote'].forEach(id => {
                 const el = document.getElementById(id);
                 if (el) el.value = '';
             });
@@ -3954,6 +3970,11 @@
                     if (wxEl && __wx && !wxEl.value.trim()) wxEl.value = __wx;
                     const ntEl = document.getElementById('custNote');
                     if (ntEl && __r && !ntEl.value.trim()) ntEl.value = __r;
+                    // ★ 2026-09-07 邀请码回填：?iv=（客户端降级链路跳转携带）→ 自动填入
+                    //   邀请码框（大写归一），客户看不到也可手动填写；审核通过时结算奖励
+                    var __iv = (sp.get('iv') || sp.get('inviteCode') || '').trim().toUpperCase();
+                    const ivEl = document.getElementById('custInviteCode');
+                    if (ivEl && __iv && /^[A-Z0-9]{4,10}$/.test(__iv) && !ivEl.value.trim()) ivEl.value = __iv;
                     updateOrderSummary();
                     // 若所有必填项(custName/custPhone/mid)已通过URL填完，直接goStep(2)免去客户点下一步
                     if (mid && (cnEl && cnEl.value.trim()) && (phEl && /^1[3-9]\d{9}$/.test(phEl.value)) && typeof goStep === 'function') {

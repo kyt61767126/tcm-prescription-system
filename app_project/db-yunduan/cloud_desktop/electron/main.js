@@ -1587,6 +1587,28 @@ ipcMain.handle('license:submit-admin-request', async (event, data) => {
     }
 });
 
+// ★ 2026-09-07 客户端直建订单（对齐离线桌面 orderFlow）：弹窗内 order-submit 建单
+//   （含注册密码+邀请码）→ 官网 ?orderNo= 恢复模式直达付款，防两字段断链丢失
+ipcMain.handle('license:submit-order-direct', async (event, payload) => {
+    try {
+        const result = await activateManager.submitOrderDirect(payload);
+        return result;
+    } catch (e) {
+        console.error('[IPC] submit-order-direct 异常:', e);
+        return { success: false, error: e.message };
+    }
+});
+
+// ★ 2026-09-07 直建订单存根读取（激活窗口断点恢复：重开时恢复付款链接/订单等待视图）
+ipcMain.handle('license:load-pending-order-no', async () => {
+    try {
+        return activateManager.loadPendingOrderNo();
+    } catch (e) {
+        console.error('[IPC] load-pending-order-no 异常:', e);
+        return null;
+    }
+});
+
 // ★ 激活工单（规则3）：license-manager.submitActivationTicket → 云端 KV ticket → 后台工单审批页一键审批发码
 ipcMain.handle('license:submit-ticket', async (event, payload) => {
     try {

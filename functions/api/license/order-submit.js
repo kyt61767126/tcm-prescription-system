@@ -35,9 +35,13 @@
 // ============================================================================
 
 import { getKV, checkRateLimit, checkDeviceVersion } from './_lib/license-core.js';
-import { createAdminRequest, bindOrderToRequest, bindActiveOrder, getActiveOrder, ACTIVE_ORDER_MAX_AGE_MS } from './_lib/license-write-service.js';
+import { createAdminRequest, bindOrderToRequest, bindActiveOrder, getActiveOrder, updateAdminRequestStatus, ACTIVE_ORDER_MAX_AGE_MS } from './_lib/license-write-service.js';
 // ★ 2026-09-07 架构防御：手机号校验收口 schema-guard 单一副本
 import { isValidPhone } from './_lib/schema-guard.js';
+// ★ 2026-09-07 注册密码生效：客户端直建订单携带注册密码（云端桌面移植 orderFlow 后
+//   主链路改为 order-submit 直建，密码若不在此接收将永远丢失——admin-submit 复用
+//   分支补写依赖用户重开激活窗重提，实测断点续传链路不会再经过 admin-submit）
+import { hashPassword } from '../_lib/auth.js';
 
 const ALLOWED_ORIGINS = [
     'https://tcm-prescription-system.pages.dev',
@@ -154,7 +158,7 @@ export async function onRequest(context) {
 
         const body = await context.request.json().catch(() => ({}));
         const { orderNo, productKey, edition, price, clinicName, adminName,
-                phone, wechat, machineId, note, dp, inviteCode } = body;
+                phone, wechat, machineId, note, dp, inviteCode, password } = body;
 
         // ★ 2026-09-06 架构重构：客户端直建订单透传邀请码（选填），
         //   与 admin-submit 同格式校验，审核通过时结算邀请奖励。
@@ -162,6 +166,21 @@ export async function onRequest(context) {
             ? inviteCode.trim().toUpperCase() : '';
         if (inviteCodeClean && !/^[A-Z0-9]{4,10}$/.test(inviteCodeClean)) {
             return json({ success: false, error: '邀请码格式错误（4-10位字母或数字）' }, 400);
+        }
+
+        // ★ 2026-09-07 注册密码生效：客户端（云端桌面 orderFlow）直建订单时携带注册密码
+        //   （选填，格式对齐 admin-submit：8-32 位含字母数字）→ PBKDF2 哈希落库，
+        //   审核通过后 provisionCloudAccount/normalizeActivationPassword 用它开账户，
+        //   而非硬编码 admin。官网表单不下单密码（浏览器无此字段）→ 无哈希 → 旧行为。
+        //   KV 只存哈希不存明文；order-status 响应不下发（license 同级保密）。
+        let passwordCred = null;
+        const pwdRaw = (typeof password === 'string') ? password : '';
+        if (pwdRaw) {
+            if (pwdRaw.length < 8 || pwdRaw.length > 32 || !/[a-zA-Z]/.test(pwdRaw) || !/[0-9]/.test(pwdRaw)) {
+                return json({ success: false, error: '密码需 8-32 位且同时包含字母和数字' }, 400);
+            }
+            const __hashed = await hashPassword(pwdRaw);
+            passwordCred = { passwordHash: __hashed.passwordHash, salt: __hashed.salt };
         }
 
         // ===== 参数校验 =====
@@ -273,6 +292,22 @@ export async function onRequest(context) {
                     existAge < ACTIVE_ORDER_MAX_AGE_MS) {
                     console.log('[OrderSubmit] 幂等命中进行中订单:', existRec.orderNo,
                         'requestId=', existRec.requestId, 'status=', existRec.status);
+                    // ★ 2026-09-07 幂等补写（对齐 admin-submit 四处复用分支）：官网/旧客户端
+                    //   下单的既有订单缺邀请码或密码哈希而本次直建带了 → 补写后返回；
+                    //   phone 一致已校验（防接管），失败仅 warn 不阻断幂等返回。
+                    const __patch = {};
+                    if (inviteCodeClean && !existRec.inviteCode) __patch.inviteCode = inviteCodeClean;
+                    if (passwordCred && !existRec.passwordHash) {
+                        __patch.passwordHash = passwordCred.passwordHash;
+                        __patch.passwordSalt = passwordCred.salt;
+                    }
+                    if (Object.keys(__patch).length > 0) {
+                        try {
+                            await updateAdminRequestStatus(kv, existRec.requestId, __patch);
+                            console.log('[OrderSubmit] 幂等订单补写(邀请码/密码):', existRec.requestId,
+                                Object.keys(__patch).join(','));
+                        } catch (e) { console.warn('[OrderSubmit] 幂等补写失败（忽略）:', e.message); }
+                    }
                     return json({
                         success: true,
                         orderNo: existRec.orderNo,
@@ -324,6 +359,10 @@ export async function onRequest(context) {
             // ★ 2026-09-06 客户端直建订单携带邀请码（选填）：admin-approve 审核
             //   通过时按此字段结算邀请奖励（与 admin-submit 记录同构）
             inviteCode: inviteCodeClean,
+            // ★ 2026-09-07 注册密码生效：直建订单携带密码哈希（审核通过开账户用，
+            //   与 admin-submit 记录同构；官网下单无此字段 → 空串 → 默认密码 admin）
+            passwordHash: passwordCred ? passwordCred.passwordHash : '',
+            passwordSalt: passwordCred ? passwordCred.salt : '',
             // ★ 官网订单扩展字段（后台核对付款信息用）
             orderSource: 'website',
             orderNo: orderNo.trim().toUpperCase(),

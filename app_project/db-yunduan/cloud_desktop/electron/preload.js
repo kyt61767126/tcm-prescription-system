@@ -149,6 +149,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
         getMachineId: () => ipcRenderer.invoke('license:get-machine-id'),
         // ★ 管理员一键激活相关API
         submitAdminRequest: (data) => ipcRenderer.invoke('license:submit-admin-request', data),
+        // ★ 2026-09-07 客户端直建订单（orderFlow）：order-submit 建单（含注册密码+邀请码）
+        submitOrderDirect: (payload) => ipcRenderer.invoke('license:submit-order-direct', payload),
+        // ★ 直建订单存根读取（断点恢复付款链接）
+        loadPendingOrderNo: () => ipcRenderer.invoke('license:load-pending-order-no'),
         // ★ 激活工单（规则3）：提交激活申请工单，管理员在后台工单审批页一键审批发码
         submitTicket: (payload) => ipcRenderer.invoke('license:submit-ticket', payload),
         // ★ 2026-09-05 复核修复：补齐 machineId 第二参数（对齐离线版 preload）——

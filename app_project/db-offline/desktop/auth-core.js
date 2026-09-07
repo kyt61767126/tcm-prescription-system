@@ -5285,12 +5285,16 @@
             var __n1  = (document.getElementById('adminAdminName') || {}).value || (state.adminName || '');
             var __p1  = (document.getElementById('adminPhone') || {}).value || (state.phone || '');
             var __r1  = (document.getElementById('adminRemark') || {}).value || (state.remark || '');
+            // ★ 2026-09-07 邀请码 iv 参数（降级链路）：官网购买页自动回填邀请码框，
+            //   降级建单（order-submit）时透传——防降级链路邀请码丢失
+            var __iv1 = (state.inviteCode || '').trim().toUpperCase();
             return 'https://tcm-prescription-system.pages.dev/download.html?mid=' + encodeURIComponent(machineId || '')
                 + (__edParam ? ('&ed=' + __edParam) : '') + '&dp=' + dp
                 + (__cn1 ? ('&cn=' + encodeURIComponent(__cn1)) : '')
                 + (__n1  ? ('&n='  + encodeURIComponent(__n1))  : '')
                 + (__p1  ? ('&p='  + encodeURIComponent(__p1))  : '')
-                + (__r1  ? ('&r='  + encodeURIComponent(__r1))  : '');
+                + (__r1  ? ('&r='  + encodeURIComponent(__r1))  : '')
+                + (__iv1 ? ('&iv=' + encodeURIComponent(__iv1))  : '');
         }
 
         // ★ 直建订单（新链路）。成功进入订单等待视图返回 true；需降级/失败返回 false。
@@ -5309,7 +5313,12 @@
                     machineId: machineId || 'unknown',
                     note: state.remark || '',
                     inviteCode: state.inviteCode || '',
-                    dp: detectCarrier()
+                    dp: detectCarrier(),
+                    // ★ 2026-09-07 注册密码生效：直建订单携带注册密码（自定义时；默认 admin
+                    //   不传保持旧行为）→ 服务端哈希落库 → 审核通过后云端账户同步用注册
+                    //   密码（此前仅靠本地 adminReqPending 存根，云端账户永远 admin）
+                    password: (state.password && state.password !== 'admin' &&
+                        state.password.length >= 8 && state.password.length <= 32) ? state.password : ''
                 };
                 const res = await postOrderDirect(orderPayload);
                 if (!res || res.__fallbackLegacy) return false;
