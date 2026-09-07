@@ -707,6 +707,13 @@ P2 渐进迁移（2026-09-03 当日完成）：
 - **⑤ 生产实证（前后对拍）**：部署前 curl invite {machineId:06eded70} → `404 本机未找到激活绑定记录`；push 部署后 → `200 {"success":true,"inviteCode":"H69CY9"}`（与 KV BNZC-678C 记录一致）。
 - **⑥ 生效方式**：云函数 push 即 Cloudflare 自动部署，**五端客户端零改动零重打包**——用户重新打开「基础设置→授权状态」即显示"🎁 我的邀请码"卡片（联网时；断网显示提示文案）。诊断脚本：tools/_tmp/probe-license-devices.cjs（列 license 记录 devices 覆盖）/ probe-invite-bindings.cjs（列绑定 licenseCode 完整性，另发现 1 条孤儿绑定 77a6ccd7→BNZC-4HDG 的 license 记录不存在，属 admin-data-audit 范畴另案）。
 
+**四十一、云端桌面激活窗口跳官网支付要求重填注册信息——付款链接只带 mid+ed 漏 cn/n/p（2026-09-07，activate-window.html，需重打包）**：用户实测"注册激活机构版→跳官网支付→需要填写注册信息"（要求自动同步注册信息+自动选版本对应金额）。
+- **① 根因（入口矩阵排查）**：付款跳转有**两个入口**——登录框内弹窗（auth-core.js openOfficialPayUrl）与**独立激活窗口**（electron/activate-window.html payGuideUrl）。后者只带 mid+ed，**用户在激活窗口填的注册信息（state.clinicName/adminName/phone）根本没进 URL** → 官网空表单。触发路径：提交激活申请后重开软件 → main.js 启动断点续传自动弹 activate-window（L1261/1321）→ 等待面板付款引导 → 跳官网重填。离线桌面 activate-window 早已带全参（2026-09-05 buildPayUrl），云端漏同步——**两端同款文件各自维护时的参数清单漂移**。
+- **② 修复（对齐离线桌面 buildPayUrl 模式）**：payGuideUrl(prefix) 携带 cn/n/p/wx/r + dp=desktop；工单面板 initPayGuide('ticket') 读工单字段（ticketClinicName 等，含微信/备注），管理员面板默认读 clinicName/adminName/phone/remark 字段+state 兜底。
+- **③ 浏览器实测验证法（本轮新增利器）**：用 browser-use agent 打开生产 URL `download.html?mid=&ed=cloud-pro&cn=&n=&p=&dp=` 实测回填链路——custName 合并回填"诊所/联系人"、custPhone/custMachineId 回填、版本自动选中 cloud/pro（¥399/年）、订单自动提交直达 Step3 扫码付款，8/8 全 PASS。**官网端回填逻辑（2026-09-04 加的 cn/n/p 链路）本身是好的，问题全在客户端 URL 缺参**——先测服务端再改客户端，避免两头乱改。
+- **④ 付款 URL 全局统一参数规范（六端唯一标准）**：`download.html?mid=<设备识别码>&ed=<版本意图>&dp=<载体>&cn=<诊所名>&n=<联系人>&p=<手机号>&wx=<微信>&r=<备注>`。ed 映射：local-personal/local-pro（离线系）/cloud-personal/cloud-pro（云端系）；dp：desktop/app。官网行为：cn+n 合并回填 custName（提交时反拆 clinicName/adminName 防污染）、p 回填+格式校验、ed 直选版本显示价格、参数齐全自动 goStep(2)+自动提交订单（免点按钮）。离线桌面另有 orderNo 直建订单恢复模式（条目见 offline.js 2026-09-06 重构，?orderNo= 免表单直达付款页），云端桌面尚未移植——**后续统一项**。
+- **⑤ 生效方式**：**云端桌面需重打包**（activate-window.html 进 asar，随下版）；云端网页/离线系/APP 零影响（各自入口参数已齐）。
+
 ## 8. 桌面版技术规范
 
 * **登录预填：已彻底取消（2026-09-06 Commit 2202236f，取代 9-04"来源单一化"方案）**：`initLoginInput` **不再做任何用户名自动预填**——登录框永远空白+聚焦；记住的账户仅保留**手动下拉切换**（renderUsernameDropdown，点▼选择）。演进史：8-27 恢复预填 → 9-04 收窄为"仅 localStorage 记住的用户名"（历史 bug：config.users 单账户分支无法区分出厂模板 admin，全新安装首次启动即预填 admin/admin）→ 9-06 用户实测"升级新版后自动显示旧记住的用户名，不像新客户"后**彻底取消**。理由：预填链路多次引发历史 bug + 升级安装 userData 不清导致残留展示；而手动下拉保留全部便利。
