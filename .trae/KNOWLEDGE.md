@@ -758,6 +758,12 @@ P2 渐进迁移（2026-09-03 当日完成）：
 - **数据对照（用户样例逐一命中）**：云端→🌐网页·云端机构版；offlineCarrier=app→📱APP·离线机构版/标准版；desktop→🖥️桌面·离线机构版；旧数据无载体→离线标准版（无前缀）。用户贴的「HAPP·」「EAPP·」是手机复制丢 emoji 的残迹。
 - **铁律**：a. **改任何后台管理页必须 rg 确认 `public/admin` 与 `site-admin/admin` 两份同步改**——改完 `git diff --stat` 里看不到两个文件 = 漏改；b. 线上验证必须抓部署源（`Invoke-WebRequest https://.../admin/` 查 `.Contains(特征串)`），本地文件改对≠线上生效；c. site-admin 与 public/admin 的用户管理版本列样式曾长期漂移（纯文字 vs emoji）——双副本无同步脚本的页面，每次改动都要先 diff 两份现状再动手。
 
+**四十八、云端版测试重置.bat 重置后仍显示旧诊所名——本地清空≠全新客户，machineId 兜底自愈会把云端已激活记录自动装回（2026-09-07，用户实测「运行重置.bat 为什么还这样显示榆钱记」）**：
+- **现象时间线（证据：userData 目录 CreationTime 全部 20:27:11 全新生成 = bat 删除成功）**：20:27:11 启动全新 → 20:27:16 license.dat 生成 → 20:27:21 config.json 写入 clinicName=榆钱记中医诊所 → 20:27:20 自动重启（激活成功 3 秒倒计时）→ 登录界面显示榆钱记。
+- **根因链**：① machineId=硬件指纹（MachineGuid+主板+CPU，license-manager getHardwareFingerprint），**同一台电脑离线桌面版/云端桌面版/重装系统前后 machineId 恒定**；② 今早 10:35 用户在同一台电脑用离线桌面版激活了「榆钱记」（offline_clinic/desktop）；③ bat 只删 `%APPDATA%\tcm-prescription-cloud`（本地 localStorage+config+license）；④ 用户打开「📋 管理员激活」→ activate-window.html 的 autoRestore **machineId 兜底链路**（2026-09-07 断链自愈增强，admin-status machineId-only 扫描 admin_req）命中云端 activated 记录 → saveAndRestart 自动装 license+写 config.clinicName → 显示旧诊所。**这不是 bug，是防换机断链的产品设计**——测试重置要回到"全新客户"必须连云端记录一起清。
+- **修复**：bat 重置完成提示补「云端按设备识别码记忆激活记录」说明 + 彻底全新二选一（后台删激活申请+诊所 / 换电脑测试）。
+- **铁律**：a. **"本地重置"类工具永远只管本地，云端 KV 授权关系（admin_req activated 记录、device_version 绑定、license 绑定）不会随之消失**——测试"全新客户全流程"要么后台先归零该 machineId 的记录，要么换硬件；b. 排查"重置无效"先看 userData 目录 CreationTime（全新=重置生效，问题在云端恢复链路；旧=删除失败）；c. 同机多产品线（离线桌面/云端桌面）共享 machineId——一条产品线激活，另一条线打开激活窗口就会自愈装回，测试矩阵要按 machineId 规划隔离。
+
 ## 8. 桌面版技术规范
 
 * **登录预填：已彻底取消（2026-09-06 Commit 2202236f，取代 9-04"来源单一化"方案）**：`initLoginInput` **不再做任何用户名自动预填**——登录框永远空白+聚焦；记住的账户仅保留**手动下拉切换**（renderUsernameDropdown，点▼选择）。演进史：8-27 恢复预填 → 9-04 收窄为"仅 localStorage 记住的用户名"（历史 bug：config.users 单账户分支无法区分出厂模板 admin，全新安装首次启动即预填 admin/admin）→ 9-06 用户实测"升级新版后自动显示旧记住的用户名，不像新客户"后**彻底取消**。理由：预填链路多次引发历史 bug + 升级安装 userData 不清导致残留展示；而手动下拉保留全部便利。
