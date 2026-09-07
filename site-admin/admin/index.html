@@ -3036,36 +3036,40 @@ function renderAdminActivateStatus(status) {
     return map[status] || '<span class="tag">' + escapeHtml(status || '未知') + '</span>';
 }
 
-// ★ 渲染版本信息：区分离线/云端、机构版/标准版、测试/正式环境
+// ★ 2026-09-07 统一版本标签：与用户管理/诊所管理同款样式
+//   （emoji 前缀 · 产品·版本，单一 <span class="tag tag-X">），不再拆成 4 个零散 inline 标签。
+//   appMode: cloud→云端 / local|offline→离线；edition: institution|pro→机构 / personal→标准
+//   appModeCarrier: desktop→🖥️桌面 / app→📱APP / 云端无载体→🌐网页 / 离线无载体→无前缀
 function renderVersionInfo(r) {
     if (!r) return '-';
     const parts = [];
-    
-    // 1. 环境标记（env: test=测试环境，production=正式环境）
+    // 1. 环境标记（测试环境）——独立于版本标签保留
     if (r.env === 'test') {
-        parts.push('<span style="background:#fef0f0;color:#f56c6c;padding:2px 6px;border-radius:3px;font-size:11px;margin-right:4px;font-weight:bold;">🧪 测试</span>');
+        parts.push('<span class="tag tag-trial" style="font-weight:bold;">🧪 测试</span>');
     }
-    
-    // 2. 云端/离线标识（appMode: cloud / offline）
-    if (r.appMode === 'cloud') {
-        parts.push('<span style="background:#ecf5ff;color:#409eff;padding:2px 6px;border-radius:3px;font-size:11px;margin-right:4px;">云端</span>');
-    } else if (r.appMode === 'offline') {
-        parts.push('<span style="background:#f0f9eb;color:#67c23a;padding:2px 6px;border-radius:3px;font-size:11px;margin-right:4px;">离线</span>');
+    // 2. 统一版本标签
+    const isCloud = r.appMode === 'cloud';
+    const isOffline = r.appMode === 'local' || r.appMode === 'offline';
+    const isPro = r.edition === 'institution' || r.edition === 'pro';
+    const isPersonal = r.edition === 'personal';
+    let edText = '';
+    let tagClass = 'tag-trial';
+    if (isCloud && isPro) { edText = '云端机构版'; tagClass = 'tag-pro'; }
+    else if (isCloud && isPersonal) { edText = '云端标准版'; tagClass = 'tag-personal'; }
+    else if (isOffline && isPro) { edText = '离线机构版'; tagClass = 'tag-trial'; }
+    else if (isOffline && isPersonal) { edText = '离线标准版'; tagClass = 'tag-trial'; }
+    if (edText) {
+        let carrier = '';
+        if (isCloud) carrier = '🌐网页·';
+        else if (r.appModeCarrier === 'desktop') carrier = '🖥️桌面·';
+        else if (r.appModeCarrier === 'app') carrier = '📱APP·';
+        parts.push('<span class="tag ' + tagClass + '">' + carrier + edText + '</span>');
     }
-    
-    // 3. 机构版/标准版（edition: institution / personal）
-    if (r.edition === 'institution' || r.edition === 'pro') {
-        parts.push('<span style="background:#fef0f0;color:#f56c6c;padding:2px 6px;border-radius:3px;font-size:11px;">机构版</span>');
-    } else if (r.edition === 'personal') {
-        parts.push('<span style="background:#fdf6ec;color:#e6a23c;padding:2px 6px;border-radius:3px;font-size:11px;">标准版</span>');
-    }
-    
-    // 4. 版本标签（versionLabel）
+    // 3. 版本标签（versionLabel 旧字段兜底）
     if (r.versionLabel) {
         parts.push('<span style="color:#909399;font-size:11px;margin-left:4px;">' + escapeHtml(r.versionLabel) + '</span>');
     }
-    
-    return parts.length > 0 ? parts.join('') : '<span style="color:#c0c4cc;font-size:11px;">未知</span>';
+    return parts.length > 0 ? parts.join('') : '<span class="tag tag-trial">未设置</span>';
 }
 
 function toggleAdminActivateAutoRefresh() {
@@ -4344,21 +4348,6 @@ async function cycleUserRole(username) {
 }
 
 // ============================================================================
-// ★ 测试机管理 + 设备版本绑定管理（自旧版后台移植，后端 /license/admin-test-machine
-//   与 /license/admin-device-version 接口未变）
-// ============================================================================
-
-// 端形态格式化（云端/离线 × 桌面/APP）→ 中文徽章
-function fmtEndTag(productClass, clientClass) {
-    if (!productClass && !clientClass) return '';
-    const prod = productClass === 'offline' ? '离线' : (productClass === 'cloud' ? '云端' : '');
-    const cli = clientClass === 'app' ? 'APP' : (clientClass === 'desktop' ? '桌面' : '');
-    const label = (prod + (prod && cli ? '·' : '') + cli) || (prod || cli);
-    if (!label) return '';
-    return '<span class="tag tag-cloud">📟 ' + escapeHtml(label) + '</span>';
-}
-
-// ============================================================================
 // ★ P2-1 风控告警：心跳/验证日志集中分析（后端 /license/admin-risk）
 //   识别：多IP并发 / 激活后长期离线90天+ / 计数回拨 / 客户端完整性异常
 // ============================================================================
@@ -4482,9 +4471,20 @@ async function loadDeviceBindings() {
             el.innerHTML = '<div class="empty">暂无设备版本绑定</div>';
             return;
         }
-        const versionTag = function (v) {
-            const name = (v === 'institution') ? '机构版' : '标准版';
-            return '<span class="tag ' + (v === 'institution' ? 'tag-pro' : 'tag-personal') + '">' + name + '</span>';
+        // ★ 2026-09-07 统一版本标签：与用户管理同款（emoji·产品·版本，单一 tag）
+        const versionTag = function (b) {
+            const isPro = b.version === 'institution';
+            const isCloud = b.productClass === 'cloud';
+            let edText = '', tagClass = 'tag-trial';
+            if (isCloud && isPro) { edText = '云端机构版'; tagClass = 'tag-pro'; }
+            else if (isCloud && !isPro) { edText = '云端标准版'; tagClass = 'tag-personal'; }
+            else if (!isCloud && isPro) { edText = '离线机构版'; tagClass = 'tag-trial'; }
+            else { edText = '离线标准版'; tagClass = 'tag-trial'; }
+            let carrier = '';
+            if (isCloud) carrier = '🌐网页·';
+            else if (b.clientClass === 'desktop') carrier = '🖥️桌面·';
+            else if (b.clientClass === 'app') carrier = '📱APP·';
+            return '<span class="tag ' + tagClass + '">' + carrier + edText + '</span>';
         };
         el.innerHTML = bindings.map((b) => {
             const test = testSet[b.machineId];
@@ -4493,7 +4493,7 @@ async function loadDeviceBindings() {
                 '<button class="btn btn-sm" style="background:#ff4d4f;color:#fff;" onclick="unbindDeviceBinding(\'' + escapeHtml(b.machineId) + '\')">解除绑定</button>';
             return '<div class="license-card">' +
                 '<div class="license-card-top"><span class="code" style="font-size:14px;">' + escapeHtml(b.machineId || '-') + '</span>' +
-                    (b.versionLabel || b.version ? versionTag(b.version) : '') + testTag + fmtEndTag(b.productClass, b.clientClass) + '</div>' +
+                    versionTag(b) + testTag + '</div>' +
                 '<div class="license-card-meta">' +
                     '<span class="item"><b>激活码：</b>' + escapeHtml(b.licenseCode || '-') + '</span>' +
                     '<span class="item"><b>诊所：</b>' + escapeHtml(b.clinicName || '-') + '</span>' +
@@ -4508,13 +4508,23 @@ async function loadDeviceBindings() {
 }
 
 // 单台设备版本绑定 → 卡片（版本徽章 + 测试机标记复用）
+// ★ 2026-09-07 统一版本标签：与用户管理同款（emoji·产品·版本，单一 tag）
 function renderSingleDeviceBindingCard(b) {
-    const versionTag = (b.version || b.versionLabel)
-        ? '<span class="tag ' + (b.version === 'institution' ? 'tag-pro' : 'tag-personal') + '">' + escapeHtml(b.versionLabel || (b.version === 'institution' ? '机构版' : '标准版')) + '</span>'
-        : '';
+    const isPro = b.version === 'institution';
+    const isCloud = b.productClass === 'cloud';
+    let edText = '', tagClass = 'tag-trial';
+    if (isCloud && isPro) { edText = '云端机构版'; tagClass = 'tag-pro'; }
+    else if (isCloud && !isPro) { edText = '云端标准版'; tagClass = 'tag-personal'; }
+    else if (!isCloud && isPro) { edText = '离线机构版'; tagClass = 'tag-trial'; }
+    else { edText = '离线标准版'; tagClass = 'tag-trial'; }
+    let carrier = '';
+    if (isCloud) carrier = '🌐网页·';
+    else if (b.clientClass === 'desktop') carrier = '🖥️桌面·';
+    else if (b.clientClass === 'app') carrier = '📱APP·';
+    const versionTag = '<span class="tag ' + tagClass + '">' + carrier + edText + '</span>';
     const ops = '<button class="btn btn-sm" style="background:#ff4d4f;color:#fff;" onclick="unbindDeviceBinding(\'' + escapeHtml(b.machineId) + '\')">解除绑定</button>';
     return '<div class="license-card">' +
-        '<div class="license-card-top"><span class="code" style="font-size:14px;">' + escapeHtml(b.machineId || '-') + '</span>' + versionTag + fmtEndTag(b.productClass, b.clientClass) + '</div>' +
+        '<div class="license-card-top"><span class="code" style="font-size:14px;">' + escapeHtml(b.machineId || '-') + '</span>' + versionTag + '</div>' +
         '<div class="license-card-meta">' +
             '<span class="item"><b>激活码：</b>' + escapeHtml(b.licenseCode || '-') + '</span>' +
             '<span class="item"><b>诊所：</b>' + escapeHtml(b.clinicName || '-') + '</span>' +

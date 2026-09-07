@@ -90,6 +90,8 @@ function maskRecord(record) {
         productName: record.productName || '',
         edition: record.edition || '',
         appMode: record.appMode || '',
+        // ★ 2026-09-07 统一版本标签：载体（desktop/app）供前端拼「🖥️桌面·/📱APP·离线机构版」
+        appModeCarrier: record.appModeCarrier || '',
         versionLabel: record.versionLabel || '',
         // ★ 环境标记：test=测试环境，production=正式环境
         env: record.env || 'production',
