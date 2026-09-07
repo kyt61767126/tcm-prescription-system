@@ -10,7 +10,7 @@ import {
 import { provisionCloudAccount } from './license/_lib/admin-account.js';
 import { deleteAdminRequest } from './license/_lib/license-write-service.js';
 // ★ 2026-09-08 离线版设备配额反查：license 索引遍历找该诊所激活码，读其多设备绑定列表
-import { listLicenses, getDevices } from './license/_lib/license-core.js';
+import { listLicenses, getDevices, updateLicense } from './license/_lib/license-core.js';
 
 // ============================================================================
 // ★★★ 2026-08-21 账号级设备授权（一个云端管理员最多绑定 2 台设备：桌面/APP）
@@ -1636,6 +1636,34 @@ export async function onRequest(context) {
             }
             if (!Number.isInteger(maxDevices) || maxDevices < 1 || maxDevices > 100) {
                 return json({ success: false, error: '设备配额须为 1~100 的整数（99 = 不限）' }, 400, context.request);
+            }
+            // ★ 2026-09-08 离线版配额唯一源 = license.maxDevices（get 端点读 license），
+            //   若此处只写 user_devices，用户后台改配额后重开弹窗仍显示旧值（北京源生堂案例）。
+            const target = await findUserForLogin(kv, targetUsername).catch(() => null);
+            const isOffline = !!(target && target.clinicEdition && String(target.clinicEdition).indexOf('offline_') === 0);
+            if (isOffline) {
+                const clinicName = target.clinicName;
+                const licenses = await listLicenses(kv).catch(() => []);
+                let lic = null;
+                if (clinicName) {
+                    for (const l of licenses) {
+                        if (l && l.clinicName === clinicName) { lic = l; break; }
+                    }
+                }
+                if (lic && lic.code) {
+                    await updateLicense(kv, lic.code, { maxDevices }).catch(() => null);
+                    await writeAuditLog(kv, target.clinicId, authUser.username, authUser.role,
+                        'set_device_quota', targetUsername, context.request,
+                        { maxDevices, source: 'license', devicesCount: lic.devices ? lic.devices.length : 0 });
+                    return json({
+                        success: true,
+                        message: '设备配额已更新（离线版）：' + targetUsername + ' → ' + maxDevices + ' 台' + (maxDevices >= 99 ? '（不限）' : ''),
+                        username: targetUsername,
+                        maxDevices,
+                        devicesCount: lic.devices ? lic.devices.length : 0
+                    }, 200, context.request);
+                }
+                return json({ success: false, error: '未找到 ' + targetUsername + ' 对应的离线激活码，无法调整配额' }, 404, context.request);
             }
             const record = (await kv.get(KV_USER_DEVICES_PREFIX + targetUsername, 'json')) || { devices: [] };
             if (!Array.isArray(record.devices)) record.devices = [];
