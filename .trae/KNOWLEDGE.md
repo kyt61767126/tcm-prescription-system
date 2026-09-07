@@ -699,6 +699,14 @@ P2 渐进迁移（2026-09-03 当日完成）：
 - **⑤ 多端同步险情（本轮真实踩坑）**：license-manager 4 副本只改了 3 个，**漏 APP assets 副本**（sync-all Group 4 目标清单第 4 项）——git status 无该文件即漏。发现方法：`git hash-object` 对比工作区副本与 `git show HEAD:shared/...` 的 blob 哈希。**铁律：改 shared 权威源后必须跑 `tools/sync-all.ps1`（或逐项核对 Group 目标数），凭记忆手抄副本清单必漏**。云桌面 main.js 无 formalInstitution 分支（云端账号体系），无此 bug 无需对齐。
 - **⑥ 生效方式**：**离线桌面需重打包**（main.js + electron/license-manager.js 进 asar；随 V1.0.208+）；已激活错显机器装新版后**无需重新激活/付款，登录瞬间 get-app-config 自愈即显【用户管理】**（不依赖重启）。离线APP：license-manager APP assets 副本 + auth-core 文案已同步，随下版 APK 生效。云端网页/云端APP/云桌面不受影响（走 cloud.js 无此分支）。
 
+**四十、离线桌面机构版已激活但不显示邀请码——machineId 找回只查 device_version 绑定，测试机不落盘绑定（2026-09-07，云函数 invite.js，五端零重打包）**：用户实测"授权状态已激活（机构版）365天，邀请码不显示"（条目三十九同机器，前一轮文案修正未解决实质）。
+- **① 根因（三层数据源全断，KV+代码实证）**：loadInviteInfo 取码三来源全空 + machineId 找回 404——**① 本地 license:code 未存**：onAdminActivated 存码（offline.js L5925）是唯一存码点且激活时用的旧版 auth-core IIFE 断裂（条目三十二）吞掉存码；**② license.dat 结构不含 code**：buildLicenseData（license-core.js L427）字段里根本没有 code——本地 license 文件取码无门；**③ machineId 找回只查 device_version 绑定**：invite.js getDeviceVersion→binding.licenseCode，但 **setDeviceVersion 对测试机白名单 early return 不落盘**（条目三十一）——实证：桌面测试机 06eded70 机构版激活（BNZC-678C 榆钱记）后 KV 无 device_version:06eded70 键 → 找回必 404 → 邀请码永不显示。
+- **② 关键数据源发现**：license: 记录的 **devices[0].machineId 无论是否测试机都写入**（admin-approve L234 直接写申请时的 machineId，validate 同理）——这是比 device_version 更可靠的"本机激活码"数据源（status.js heartbeat 遍历正是此模式）。
+- **③ 修复（[invite.js](file:///d:/trae_projects/kyt-zy/functions/api/license/invite.js) machineId 找回加遍历 fallback）**：device_version 无 licenseCode 时（测试机/旧绑定缺字段）→ 遍历 KV_LICENSE_INDEX 按 devices[].machineId 匹配（上限 500 防退化），**多条命中取 activatedAt 最新**（测试机反复换码场景）；命中且"绑定存在但缺码"时**自愈回填** licenseCode（version 取原值防误改）；**测试机无绑定刻意不回填**——回填会为测试机新建 standard 绑定，干扰"一设备一版本"校验语义。返回体仍不含 code（安全边界不变）。
+- **④ 自测基线**：`node tools/_tmp/test-invite-fallback.cjs` **11/11 PASS**（测试机找回不回填/真机缺码回填version保留/O(1)原路径回归空索引证明不遍历/全无404/code直查小写归一/disabled 403/缺参400）。**mock KV 大坑：kv.get(key, 'json') 是 Cloudflare 语义必须返回解析后对象**——返回字符串则 getLicense 拿字符串 record，全部场景假阴（S3 原路径回归场景专抓此类 mock 失真）。
+- **⑤ 生产实证（前后对拍）**：部署前 curl invite {machineId:06eded70} → `404 本机未找到激活绑定记录`；push 部署后 → `200 {"success":true,"inviteCode":"H69CY9"}`（与 KV BNZC-678C 记录一致）。
+- **⑥ 生效方式**：云函数 push 即 Cloudflare 自动部署，**五端客户端零改动零重打包**——用户重新打开「基础设置→授权状态」即显示"🎁 我的邀请码"卡片（联网时；断网显示提示文案）。诊断脚本：tools/_tmp/probe-license-devices.cjs（列 license 记录 devices 覆盖）/ probe-invite-bindings.cjs（列绑定 licenseCode 完整性，另发现 1 条孤儿绑定 77a6ccd7→BNZC-4HDG 的 license 记录不存在，属 admin-data-audit 范畴另案）。
+
 ## 8. 桌面版技术规范
 
 * **登录预填：已彻底取消（2026-09-06 Commit 2202236f，取代 9-04"来源单一化"方案）**：`initLoginInput` **不再做任何用户名自动预填**——登录框永远空白+聚焦；记住的账户仅保留**手动下拉切换**（renderUsernameDropdown，点▼选择）。演进史：8-27 恢复预填 → 9-04 收窄为"仅 localStorage 记住的用户名"（历史 bug：config.users 单账户分支无法区分出厂模板 admin，全新安装首次启动即预填 admin/admin）→ 9-06 用户实测"升级新版后自动显示旧记住的用户名，不像新客户"后**彻底取消**。理由：预填链路多次引发历史 bug + 升级安装 userData 不清导致残留展示；而手动下拉保留全部便利。
