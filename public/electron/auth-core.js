@@ -3237,6 +3237,7 @@
                 const d = await postCloudInviteQuery({ code: String(code).trim() });
                 if (d && d.success && d.inviteCode) {
                     renderCloudInviteCard(el, d);
+                    await syncClinicExpiryFromInvite(d);
                     return;
                 }
             }
@@ -3248,6 +3249,7 @@
                     const md = await postCloudInviteQuery({ machineId: mid });
                     if (md && md.success && md.inviteCode) {
                         renderCloudInviteCard(el, md);
+                        await syncClinicExpiryFromInvite(md);
                         return;
                     }
                 }
@@ -3255,6 +3257,48 @@
             // 未命中：不显示卡片（云端登录用户未必走过激活，静默优于误导）
         } catch (e) {
             console.warn('[Invite] 云端邀请码加载失败:', e && e.message);
+        }
+    }
+
+    // ★ 2026-09-07 奖励到账自愈：invite 接口顺带返回云端诊所有效期（含奖励的最新值）。
+    //   授权状态区「剩余 X 天」读登录缓存 clinicExpiresAt（登录时快照）——邀请人奖励
+    //   到账后不重登录就看不到天数变化。此处发现缓存滞后 → 更新本地缓存（auth:currentUser
+    //   + localStorage 三键，同 refreshCloudProfile 的 patch 模式）→ 重渲授权状态。
+    //   收敛防循环：缓存更新后重渲会再次拉 invite，届时值一致即静默返回（最多 2 轮）。
+    async function syncClinicExpiryFromInvite(d) {
+        try {
+            if (!d || !d.clinicExpiresAt) return;
+            const cu = await readCloudLoginUser();
+            if (!cu || String(cu.clinicExpiresAt || '') === String(d.clinicExpiresAt)) return;
+            cu.clinicExpiresAt = d.clinicExpiresAt;
+            const patch = function (target) {
+                if (target && target.username === cu.username) {
+                    target.clinicExpiresAt = d.clinicExpiresAt;
+                    return true;
+                }
+                return false;
+            };
+            try {
+                const raw = await StorageAdapter.getItem('auth:currentUser');
+                if (raw) {
+                    const o = JSON.parse(raw);
+                    if (patch(o)) await StorageAdapter.setItem('auth:currentUser', JSON.stringify(o));
+                }
+            } catch (e) { }
+            const lsKeys = ['currentUser', 'cloud_currentUser', 'user_login_data', 'local_currentUser'];
+            for (let i = 0; i < lsKeys.length; i++) {
+                try {
+                    const raw = global.localStorage.getItem(lsKeys[i]);
+                    if (!raw) continue;
+                    const o = JSON.parse(raw);
+                    const target = (o && o.user) ? o.user : o;
+                    if (patch(target)) global.localStorage.setItem(lsKeys[i], JSON.stringify(o));
+                } catch (e) { }
+            }
+            // 缓存已更新 → 重渲授权状态（天数变为含奖励的最新值）
+            updateLicenseStatusText();
+        } catch (e) {
+            console.warn('[Invite] 诊所有效期自愈失败:', e && e.message);
         }
     }
 

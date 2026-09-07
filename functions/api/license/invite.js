@@ -69,6 +69,27 @@ function json(request, data, status = 200) {
     return new Response(JSON.stringify(data), { status, headers: corsHeaders(request) });
 }
 
+// ★ 2026-09-07 奖励到账自愈：凭手机号找属主云端诊所的 expiresAt。
+//   匹配逻辑与 license-core.js extendClinicExpiryForReward 同构（clinic:{id}:users
+//   里 username/phone 命中即属主），保证「发奖延长的诊所」与「查回的诊所」是同一家。
+//   找不到（离线版 license / 无云端诊所）返回 null，客户端字段缺省不做刷新。
+async function findClinicExpiresAtByPhone(kv, phone) {
+    try {
+        if (!kv || !phone) return null;
+        const clinics = (await kv.get('system:clinics', 'json').catch(() => null)) || [];
+        for (const clinic of clinics) {
+            if (!clinic || !clinic.id || !clinic.expiresAt) continue;
+            const users = (await kv.get('clinic:' + clinic.id + ':users', 'json').catch(() => null)) || [];
+            if (users.some(u => u && (u.username === phone || u.phone === phone))) {
+                return clinic.expiresAt || null;
+            }
+        }
+    } catch (e) {
+        console.warn('[invite] 云端诊所有效期查询失败（忽略）:', e && e.message);
+    }
+    return null;
+}
+
 export async function onRequestPost({ request, env }) {
     try {
         const kv = getKV(env);
@@ -157,6 +178,12 @@ export async function onRequestPost({ request, env }) {
             maxInvitees: INVITE_MAX_INVITEES,
             rewardDays: recordWithInvite.rewardDays || 0,
             rewardDaysPerPerson: INVITE_REWARD_DAYS_PER_PERSON,
+            // ★ 2026-09-07 奖励到账自愈：顺带返回云端诊所有效期（含已发放奖励的最新值，
+            //   匹配逻辑与 extendClinicExpiryForReward 同构——clinic:{id}:users 里
+            //   username/phone 命中即属主诊所）。客户端授权状态区的「剩余 X 天」读的是
+            //   登录缓存 clinicExpiresAt（登录时快照），邀请人奖励到账后不重登录就
+            //   看不到天数变化——凭此字段自动刷新缓存（离线版 license 无云端诊所则缺省）
+            clinicExpiresAt: await findClinicExpiresAtByPhone(kv, recordWithInvite.phone),
             history: rewardLog.map(e => ({
                 time: e.time || '',
                 rewardDays: e.rewardDays || INVITE_REWARD_DAYS_PER_PERSON,
