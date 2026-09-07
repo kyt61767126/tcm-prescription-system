@@ -736,6 +736,7 @@ P2 渐进迁移（2026-09-03 当日完成）：
 - **⑥ 铁律**：a. **"发奖励"类逻辑必须写主数据字段（expiresAt）而非只写计数字段（rewardDays）——显示层读什么字段就延长什么字段，双轨数据（license+clinic）要一次都延长**；b. **字段复用是覆盖事故温床——inviteCode 一个键承载两种语义（专属码/推荐码）必炸，新语义加新字段（invitedBy）**；c. 云桌面与离线桌面同款 activate-window 各自维护时，架构级功能（orderFlow）必须双端移植，单端实现=另一端客户字段断链。
 - **⑦ 自测**：tools/_tmp/test-orderflow-fullchain.cjs 22/22 PASS（密码哈希落库/邀请奖励真实+90天/诊所同步延长/幂等补写/字段分离/渲染层断言）。
 - **⑧ 生效方式**：服务端 Functions+官网双镜像随 push Pages **自动部署即刻生效**（含 +90 天发奖）；云桌面 orderFlow 客户端需重打 exe 下版生效；离线桌面/离线APP 需重打包下版生效。**历史已审核订单的邀请奖励不回补**——旧数据 inviteCount 涨了但 expiresAt 没延长，需新注册验证全链路。
+- **⑨ 追加（同日 Commit 9a298a5b）**：后台「莫名其妙出现测试诊所待付款单」排查——`admin_req_index` 外的孤儿记录（pending_payment 刻意不进 index，仅靠 order: 映射+active_order:{machineId} 存在，后台靠 admin-list 兜底扫描显示）。定位法：`kv key list --prefix admin_req:` 全量扫 + 与 index 比对找孤儿；来源判断对比 submittedIp（与当日测试单同 IP=自己手测官网下单填的假数据 13800138000/TEST-MID-12345）。清理三件套：admin_req:{id}+order:{orderNo}+active_order:{machineId}。顺手修真实缺口：deleteAdminRequest 补删 active_order:{machineId}（bindActiveOrder 写的派生索引原不在删除清单——残留悬挂 48h 脏键）。**铁律：识别「列表出现 index 外记录」先查兜底扫描路径（admin-list L209-240 pending/pending_payment/all 扫前 2000 键），孤儿=index 与实际键集不同步，全量 prefix 扫描是定位起点**。
 
 ## 8. 桌面版技术规范
 
