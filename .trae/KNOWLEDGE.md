@@ -714,6 +714,11 @@ P2 渐进迁移（2026-09-03 当日完成）：
 - **④ 付款 URL 全局统一参数规范（六端唯一标准）**：`download.html?mid=<设备识别码>&ed=<版本意图>&dp=<载体>&cn=<诊所名>&n=<联系人>&p=<手机号>&wx=<微信>&r=<备注>`。ed 映射：local-personal/local-pro（离线系）/cloud-personal/cloud-pro（云端系）；dp：desktop/app。官网行为：cn+n 合并回填 custName（提交时反拆 clinicName/adminName 防污染）、p 回填+格式校验、ed 直选版本显示价格、参数齐全自动 goStep(2)+自动提交订单（免点按钮）。离线桌面另有 orderNo 直建订单恢复模式（条目见 offline.js 2026-09-06 重构，?orderNo= 免表单直达付款页），云端桌面尚未移植——**后续统一项**。
 - **⑤ 生效方式**：**云端桌面需重打包**（activate-window.html 进 asar，随下版）；云端网页/离线系/APP 零影响（各自入口参数已齐）。
 
+**四十二、用户报「重装后问题依旧」必先查实际安装的 asar（版本号会撞车）+ fuse 后 exe 不可用 Playwright（2026-09-07，教训）**：云端桌面付款链接修复（条目四十一）后用户报「重新打包安装后问题依旧」。
+- **① 真相（同号撞车）**：一键打包 one-click-pack.ps1 自动递增版本号——用户 12:37 打包出 1.2.212（**那时修复尚未提交**，我 13:18 才 commit）→ 用户安装的就是它；13:18 修复提交；用户 13:25 再打包又出 1.2.212（含修复）但**没重装**。两个 1.2.212 同号不同内容，用户看登录框「V1.2.212」误以为已是新版。**铁律：用户报"重装了还不行"，第一步用桌面快捷方式解析实际安装目录 → 读 resources\app.asar 的修改时间 + grep 修复特征串**（版本号可能撞车不可信；注册表版本也可能滞后）。修复确认在 dist 产物但用户报依旧时，八成是装的旧包。
+- **② e2e 挂死 180s 之谜（勿误修）**：打包后 dist\win-unpacked 里的 exe 是 **Electron Fuses flip 之后的产物**（build.bat 8.02 二进制级关调试注入）——Playwright `_electron.launch()`（--remote-debugging-pipe）对它挂死超时属**设计使然**；build.bat 的 e2e 红线在 **pre-fuse 阶段**跑所以正常。日常手测 fuse 后 exe 用 **CDP port 探针**（e2e/probe-payurl-cdp.cjs）：`--remote-debugging-port=9222` + BNZC_E2E=1 + marker 旁路（防破解检测列表只拦 port/inspect——port 靠 marker 旁路放行），Node 24 内置 WebSocket 连 `http://127.0.0.1:9222/json` 取 webSocketDebuggerUrl → Runtime.evaluate 驱动。已验证可驱动 activate-window 完整注册链（填表→toStep2Btn→showPayRequired→读 payGuideUrlText），全参 URL 实测 PASS。
+- **③ 云端桌面注册在独立激活窗口**（main.js 未激活启动必弹 activate-window，10s 断点自检后）；离线桌面注册在登录框内弹窗（auth-core.js openAdminActivate）。两端形态不同但参数链路已统一（条目四十一参数规范）。activate-window 管理员表单**无 remark 字段**（工单 Tab 才有）——付款 URL 的 r 参数在管理员路径为空属正常。
+
 ## 8. 桌面版技术规范
 
 * **登录预填：已彻底取消（2026-09-06 Commit 2202236f，取代 9-04"来源单一化"方案）**：`initLoginInput` **不再做任何用户名自动预填**——登录框永远空白+聚焦；记住的账户仅保留**手动下拉切换**（renderUsernameDropdown，点▼选择）。演进史：8-27 恢复预填 → 9-04 收窄为"仅 localStorage 记住的用户名"（历史 bug：config.users 单账户分支无法区分出厂模板 admin，全新安装首次启动即预填 admin/admin）→ 9-06 用户实测"升级新版后自动显示旧记住的用户名，不像新客户"后**彻底取消**。理由：预填链路多次引发历史 bug + 升级安装 userData 不清导致残留展示；而手动下拉保留全部便利。
