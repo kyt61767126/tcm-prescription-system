@@ -4958,11 +4958,9 @@
                     '<input type="text" id="adminPhone" placeholder="如：13800138000" autocomplete="new-password" data-lpignore="true" inputmode="numeric" maxlength="11" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
                     '<div class="admin-field-hint" id="adminPhoneHint" style="font-size:11px;color:#909399;margin-top:4px;">💡 11位手机号为登录账号，默认密码 admin（登入后请自行修改）</div>' +
                 '</div>' +
-                '<div style="margin-bottom:14px;">' +
-                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">备注（可选）</label>' +
-                    '<input type="text" id="adminRemark" placeholder="如：需要几个账号" autocomplete="off" maxlength="100" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
-                    '<div class="admin-field-hint" style="font-size:11px;color:#909399;margin-top:4px;">💡 机构版管理员可在系统中注册生成5个普通用户（只读权限）</div>' +
-                '</div>' +
+                // ★ 2026-09-07 移除「备注（可选）」输入框（用户要求精简激活表单，红框内容取消）：
+                //   原 adminRemark 输入框 + 提示「机构版管理员可在系统中注册生成5个普通用户（只读权限）」已删。
+                //   提交逻辑改防御式取空，不影响后端（remark 字段后端可空）。
                 // ★ 2026-09-05 管理员激活路径补齐邀请码（选填）：填好友邀请码，审核通过后双方得奖励
                 '<div style="margin-bottom:14px;">' +
                     '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">🎁 邀请码（选填，好友推荐）</label>' +
@@ -5886,7 +5884,7 @@
             const clinicName = document.getElementById('adminClinicName').value.trim();
             const adminName = document.getElementById('adminAdminName').value.trim();
             const phone = document.getElementById('adminPhone').value.trim();
-            const remark = document.getElementById('adminRemark').value.trim();
+            const remark = (document.getElementById('adminRemark') || { value: '' }).value.trim();
             // ★ 2026-09-05 邀请码（选填）：格式 4~10 位字母数字，非法前端拦截
             const inviteCodeRaw = (document.getElementById('adminInviteCode') || {}).value || '';
             const inviteCodeClean = String(inviteCodeRaw).trim().toUpperCase();

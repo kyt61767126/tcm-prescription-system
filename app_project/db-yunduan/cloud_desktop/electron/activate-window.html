@@ -382,11 +382,7 @@ h1 { color: #2c3e50; font-size: 18px; margin-bottom: 3px; }
                 <input type="text" id="phone" placeholder="如：13800138000" autocomplete="off" spellcheck="false" inputmode="numeric" maxlength="11">
                 <div class="field-hint" id="phoneHint">💡 11位手机号，激活后用手机号+密码登录</div>
             </div>
-            <div class="form-group">
-                <label>备注（可选）</label>
-                <input type="text" id="remark" placeholder="如：需要几个账号" autocomplete="off" maxlength="100">
-                <div class="field-hint">💡 机构版管理员可在系统中注册生成5个普通用户（只读权限）</div>
-            </div>
+            <!-- ★ 2026-09-07 移除「备注（可选）」输入框（用户要求精简激活表单，红框内容取消） -->
             <div class="form-group">
                 <label>邀请码 <span style="font-size:11px;color:#909399;font-weight:normal;">（选填，好友推荐）</span></label>
                 <input type="text" id="adminInviteCode" placeholder="如：7K3F9Q（没有可留空）" autocomplete="off" spellcheck="false" maxlength="10" style="font-family:'Courier New',monospace;letter-spacing:1px;text-transform:uppercase;">
@@ -911,7 +907,7 @@ document.getElementById('toStep2Btn').addEventListener('click', () => {
     const clinicName = document.getElementById('clinicName').value.trim();
     const adminName = document.getElementById('adminName').value.trim();
     const phone = document.getElementById('phone').value.trim();
-    const remark = document.getElementById('remark').value.trim();
+    const remark = (document.getElementById('remark') || { value: '' }).value.trim();
 
     // Validate step 1
     let firstErr = null;
