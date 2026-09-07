@@ -819,11 +819,28 @@ function hideGlobalError() {
 }
 
 // ============ Auto restore pending request ============
+// ★ 2026-09-07 断链自愈增强（维生素诊所事故）：两处历史缺陷——
+//   ① 原逻辑装号失败（saveAndRestart 返回 false）也照常 showSuccess + 3 秒重启，
+//     用户看到"激活成功"实际 license.dat 未落盘，重启后仍未激活，陷入死循环；
+//   ② 本地申请记录（admin-request-id.dat）被取消/清理后直接 return——但服务端
+//     已 activated 且 license 绑定本机，machineId 仍可查回（admin-status 支持
+//     machineId-only 查询，仅返回已激活记录）。现无 requestId 时按 machineId 兜底。
 (async function autoRestore() {
     try {
         if (!window.electronAPI?.activate?.loadAdminRequestId) return;
         const saved = await window.electronAPI.activate.loadAdminRequestId();
-        if (!saved?.requestId) return;
+        if (!saved?.requestId) {
+            // ★ 兜底：无本地申请记录，但本机可能已激活（记录被取消等待/异常清理）
+            try {
+                const r = await window.electronAPI.activate.checkAdminStatus(null);
+                if (r && r.success && r.status === 'activated' && r.license) {
+                    const ok = await saveAndRestart(r.license, r.licenseInfo?.phone || '');
+                    if (ok) showSuccess(r.licenseInfo?.phone || '');
+                    // 失败：保留红条错误，不再自动重启
+                }
+            } catch (e) { console.warn('machineId 兜底查询失败（忽略）:', e); }
+            return;
+        }
         // 恢复版本选择
         if (saved.edition) {
             selectEdition(saved.edition);
@@ -835,8 +852,9 @@ function hideGlobalError() {
         switchTab('admin');
         const r = await window.electronAPI.activate.checkAdminStatus(saved.requestId);
         if (r.success && r.status === 'activated') {
-            await saveAndRestart(r.license, saved.phone);
-            showSuccess(saved.phone);
+            const ok = await saveAndRestart(r.license, saved.phone);
+            if (ok) showSuccess(saved.phone);
+            // ★ 装号失败：saveAndRestart 已显示具体错误（showGlobalError），不再伪装成功
         } else if (r.success && r.status === 'pending') {
             state.phone = saved.phone || '';
             state.clinicName = saved.clinicName || '';
@@ -1226,9 +1244,12 @@ async function saveAndRestart(license, phone) {
 
 function showSuccess(phone, isCodeMode) {
     document.getElementById('successPhone').textContent = phone || state.phone || codeState.phone;
+    // ★ 2026-09-07 明示初始密码：云端账户开通密码统一为 admin（归一化设计），
+    //   此前只写"手机号+密码登录"——用户输入注册时自设密码（admin123 等）必失败，
+    //   误报"无法登录"（维生素诊所事故）。登录后请及时修改密码。
     document.getElementById('successDesc').innerHTML = isCodeMode
         ? '激活码验证成功<br>软件即将自动重启，请使用手机号+密码登录'
-        : '管理员已通过您的激活申请<br>软件即将自动重启，请使用手机号+密码登录';
+        : '管理员已通过您的激活申请<br>软件即将自动重启<br>请使用 <b>手机号 + 初始密码 admin</b> 登录<br>（登录后请在基础设置中修改密码）';
     showAdminPanel('success');
     // Auto restart in 3s
     let secs = 3;
