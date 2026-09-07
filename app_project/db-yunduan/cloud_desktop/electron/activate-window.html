@@ -1061,16 +1061,40 @@ document.getElementById('password2').addEventListener('keydown', e => {
 //   window.open 走 activateWindow 的 setWindowOpenHandler（https:// → shell.openExternal 系统浏览器）。
 const PAY_GUIDE_BASE = 'https://tcm-prescription-system.pages.dev/download.html?mid=';
 let _payGuideInited = false;
-function payGuideUrl() {
+// ★ 2026-09-07 对齐离线桌面 buildPayUrl：付款链接携带注册信息+版本金额——官网购买页
+//   自动回填（cn=诊所名/n=联系人/p=手机号/wx=微信/r=备注）并按版本直选价格
+//   （ed=cloud-personal 标准版/cloud-pro 机构版），客户扫码/复制打开即见正确金额，
+//   零重复填写。此前只带 mid+ed，注册信息不同步——用户实测官网要求重新填写注册信息。
+//   prefix='ticket' 读工单Tab字段（含微信/备注），默认读管理员Tab字段（无微信字段）。
+function payGuideUrl(prefix) {
     const mid = params.get('machineId') || '';
     // state.edition: 'institution'→cloud-pro(机构版) / 其他→cloud-personal(标准版)，与官网 ed 参数一致
     const ed = (state.edition === 'institution') ? 'cloud-pro' : 'cloud-personal';
-    return PAY_GUIDE_BASE + encodeURIComponent(mid) + '&ed=' + ed;
+    const g = (id) => { try { const el = document.getElementById(id); return el ? String(el.value || '').trim() : ''; } catch (e) { return ''; } };
+    let cn, n, p, wx, r;
+    if (prefix === 'ticket') {
+        cn = g('ticketClinicName') || state.clinicName || '';
+        n  = g('ticketContactName') || state.adminName || '';
+        p  = g('ticketContactPhone') || state.phone || '';
+        wx = g('ticketContactWechat');
+        r  = g('ticketRemark');
+    } else {
+        cn = g('clinicName') || state.clinicName || '';
+        n  = g('adminName') || state.adminName || '';
+        p  = g('phone') || state.phone || '';
+        wx = ''; r = state.remark || '';
+    }
+    return PAY_GUIDE_BASE + encodeURIComponent(mid) + '&ed=' + ed + '&dp=desktop'
+        + (cn ? ('&cn=' + encodeURIComponent(cn)) : '')
+        + (n  ? ('&n='  + encodeURIComponent(n))  : '')
+        + (p  ? ('&p='  + encodeURIComponent(p))  : '')
+        + (wx ? ('&wx=' + encodeURIComponent(wx)) : '')
+        + (r  ? ('&r='  + encodeURIComponent(r))  : '');
 }
-function initPayGuide() {
+function initPayGuide(prefix) {
     if (_payGuideInited) return;
     _payGuideInited = true;
-    const url = payGuideUrl();
+    const url = payGuideUrl(prefix);
     const urlText = document.getElementById('payGuideUrlText');
     if (urlText) urlText.textContent = url;
     const qrBox = document.getElementById('payGuideQr');
@@ -1540,7 +1564,7 @@ document.getElementById('ticketSubmitBtn').addEventListener('click', async () =>
             document.getElementById('ticketNoDisplay').textContent = result.ticketNo || '--';
             document.getElementById('ticketSubmitTime').textContent = new Date().toLocaleString('zh-CN');
             document.getElementById('ticketSavedPhone').textContent = contactPhone || contactWechat || '--';
-            initPayGuide(); // ★ 2026-08-30 工单成功面板付款导引按钮绑定（与 adminWaiting 共用）
+            initPayGuide('ticket'); // ★ 2026-08-30 工单成功面板付款导引按钮绑定（与 adminWaiting 共用）；2026-09-07 传 ticket 读工单字段
             showTicketPanel('ticketSuccess');
         } else {
             showGlobalError((result && result.error) || '工单提交失败，请稍后重试');
