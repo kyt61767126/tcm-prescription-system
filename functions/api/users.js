@@ -1748,6 +1748,11 @@ export async function onRequest(context) {
                     // ★ 2026-09-07 版本类型：与 sanitizeUser 的 clinicEdition 用同一归一化，
                     //   供后台「诊所管理」列表直接展示版本类型（云端/离线 × 机构/标准）
                     edition: normalizeClinicEdition(clinic.edition, clinic.status) || null,
+                    // ★ 2026-09-07 版本载体：离线版诊所记录的 offlineCarrier（app=离线APP /
+                    //   desktop=离线桌面，激活审核时 provisionCloudAccount 写入），供后台
+                    //   诊所管理显示「APP·离线机构版 / 桌面·离线机构版」复合标签；云端版
+                    //   无此字段（载体由 user_devices 登录实时反映，诊所级默认按网页显示）
+                    offlineCarrier: clinic.offlineCarrier || null,
                     adminUsername: admin ? admin.username : '-',
                     adminName: admin ? admin.name : '-',
                     adminPhone: admin ? (admin.phone || '') : '',
