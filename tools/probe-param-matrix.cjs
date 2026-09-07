@@ -220,6 +220,37 @@ const RULES = [
                 : { pass: false, detail: '缺失挂载：' + missing.join(', ') + ' —— IIFE-2 裸引用将 ReferenceError 被 catch 静默吞掉' };
         }
     },
+    {
+        id: 'E2', desc: 'cloud.js 五个 global 挂载齐全（StorageAdapter/normalizeMachineIdResult/encryptSensitive/decryptSensitive/collectDeviceIdentity）',
+        source: 'KNOWLEDGE 条目四十六 云端漏修补齐（付款跳转只显示下载页根因）',
+        run: (s) => {
+            const missing = [];
+            for (const g of ['global.StorageAdapter =', 'global.normalizeMachineIdResult =', 'global.encryptSensitive =', 'global.decryptSensitive =', 'global.collectDeviceIdentity =']) {
+                if (!s.cloud.includes(g)) missing.push(g);
+            }
+            return missing.length === 0 ? { pass: true }
+                : { pass: false, detail: '缺失挂载：' + missing.join(', ') + ' —— cloud.js IIFE-2 裸引用 ReferenceError 被 catch 静默吞掉（orderFlow 断点不落盘→付款跳转只显示下载页 / machineId 落 unknown 被服务端 400 / 邀请码卡片死亡）' };
+        }
+    },
+    {
+        id: 'E3', desc: 'offline.js FSM v2 三挂载（getLicenseStateV2/setStateV2/_STATES）+ cloud.js IIFE-2 走 API_BASE 桥接禁裸 CLOUD_API_BASE',
+        source: 'KNOWLEDGE 条目四十六 跨 IIFE 作用域补齐（FSM v2 节点同步死亡 + 云端账号自愈死亡）',
+        run: (s) => {
+            const missing = [];
+            for (const g of ['global.getLicenseStateV2 =', 'global.setStateV2 =', 'global._STATES =']) {
+                if (!s.offline.includes(g)) missing.push('offline 缺 ' + g);
+            }
+            if (!s.cloud.includes('const API_BASE = (global.AuthCore && global.AuthCore.CLOUD_API_BASE)')) {
+                missing.push('cloud IIFE-2 API_BASE 桥接缺失');
+            } else {
+                const iife2 = s.cloud.substring(s.cloud.indexOf('// LicenseCheck'));
+                const bare = iife2.split('\n').filter(l => l.includes('CLOUD_API_BASE') && !l.trim().startsWith('//') && !l.includes('global.AuthCore'));
+                if (bare.length) missing.push('cloud IIFE-2 裸 CLOUD_API_BASE ' + bare.length + ' 行');
+            }
+            return missing.length === 0 ? { pass: true }
+                : { pass: false, detail: missing.join('；') };
+        }
+    },
 
     // ---------- F P1 服务端收口（条目三十六：entitlement 统一裁决 + claim 统一认领） ----------
     {

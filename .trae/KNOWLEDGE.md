@@ -745,6 +745,13 @@ P2 渐进迁移（2026-09-03 当日完成）：
 - **铁律**：a. **跳转链路带多参数在异构环境（APP 桥→系统浏览器→官网）逐环节都可能丢——高价值流程改"服务端建单+单参数恢复"架构，跳转只传订单号一个 key**；b. **提交处理器的成功/失败 UI 逻辑移出降级分支外复用（直建成功和旧链路成功走同一段），避免双路径行为漂移**；c. 网络错误 catch 内必须 return（原 try-catch 内 else 自然终止，移出后不 return 会穿透走成功判断）。
 - **生效方式**：云端网页版 push 后自动部署即刻生效；云桌面需重打 exe 下版（preload IPC 已就绪，线上旧包自动降级旧链路不受影响）；云端APP 需重打 APK 下版（**268 及之前版本旧链路参数丢失问题仍在**）。
 
+**四十六、cloud.js 跨 IIFE 作用域漏修——条目三十二只修了 offline.js，云端五端 orderFlow/心跳/邀请码/账号自愈集体无声死亡（2026-09-07）**：条目四十五移植 orderFlow 后继续深挖用户「付款跳转只显示下载页」，发现**更底层根本根因**：cloud.js 与 offline.js 同为多 IIFE 拼接结构，2026-09-06 P0 修复（条目三十二）只给 offline.js 挂了 4 个符号，**cloud.js 一个都没挂**——IIFE-2（LicenseCheck 段）40+ 处裸引用 `StorageAdapter/encryptSensitive/decryptSensitive/collectDeviceIdentity/normalizeMachineIdResult/CLOUD_API_BASE` 全部 ReferenceError 且被 try/catch 静默吞掉。
+- **四条死亡链路（全部无声）**：① orderFlow 直建订单 `license:orderFlow`/`license:adminReqPending` 写入炸 → 断点不落盘 → 付款回来领不到码、付款按钮读不到订单号（条目四十五的"环境丢参"之外的第二重杀手）；② `collectDeviceIdentity` 兜底炸 → machineId 落 unknown 被服务端 schema-guard 400 拒绝；③ `refreshCloudProfile` 的 `typeof CLOUD_API_BASE` 守卫永远 true → 诊所有效期自愈整体死亡；④ 邀请码卡片 machineId 找回、心跳存储读写全部静默失败。
+- **offline.js 同轮复查补挂 3 符号**：`getLicenseStateV2/setStateV2/_STATES` 在 IIFE-2 有 30+ 处裸引用全被 `catch(_fsm)` 吞——**FSM v2 节点同步自上线以来整体死亡**，授权状态机永远停在初始态。
+- **修复方式（对齐条目三十二挂载法）**：cloud.js IIFE-1 末尾挂 5 符号（StorageAdapter/normalizeMachineIdResult/encryptSensitive/decryptSensitive/collectDeviceIdentity）；CLOUD_API_BASE 特殊处理——`window.CLOUD_API_BASE` 归 cloud-api.js 所有，不双头挂载，IIFE-2 改 `const API_BASE = global.AuthCore.CLOUD_API_BASE` 桥接（对齐 offline.js L1958 同款）；offline.js 挂载块补 FSM v2 三符号。11 副本已同步。
+- **铁律**：a. **双权威源同构修复必须双源同时改——只改一源 = 另一端全体用户带病**（audit-cross-scope.js 与探针 E1 均只盯 offline.js，cloud.js 因此漏网）；b. **audit-cross-scope.js 只查 `function` 裸调用——const 对象（StorageAdapter）与 typeof 守卫静默降级均查不到，本轮新增探针 E2/E3（17→19 断言）固化双源挂载防回退**；c. try/catch 吞错链路里「功能从未生效过」比「坏了」更隐蔽，排查静态断裂优先 audit-cross-scope + 手工 IIFE 边界对照（IIFE 开闭行号见 `^\(function \(global\)`）。
+- **生效方式**：云端网页 push 后自动部署即刻生效（强刷 Ctrl+F5）；云桌面需重打 exe 下版；云端APP 需重打 APK 下版（orderFlow 断点落盘+密码/邀请码随单在 269 起才完整生效）；离线桌面/离线APP 需重打 exe/APK 下版（FSM v2 状态机同步首次真正生效）。
+
 ## 8. 桌面版技术规范
 
 * **登录预填：已彻底取消（2026-09-06 Commit 2202236f，取代 9-04"来源单一化"方案）**：`initLoginInput` **不再做任何用户名自动预填**——登录框永远空白+聚焦；记住的账户仅保留**手动下拉切换**（renderUsernameDropdown，点▼选择）。演进史：8-27 恢复预填 → 9-04 收窄为"仅 localStorage 记住的用户名"（历史 bug：config.users 单账户分支无法区分出厂模板 admin，全新安装首次启动即预填 admin/admin）→ 9-06 用户实测"升级新版后自动显示旧记住的用户名，不像新客户"后**彻底取消**。理由：预填链路多次引发历史 bug + 升级安装 userData 不清导致残留展示；而手动下拉保留全部便利。

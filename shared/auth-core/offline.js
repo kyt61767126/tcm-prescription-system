@@ -1926,6 +1926,13 @@
     global.normalizeMachineIdResult = normalizeMachineIdResult;
     global.encryptSensitive = encryptSensitive;
     global.decryptSensitive = decryptSensitive;
+    // ★ 2026-09-07 P0 补挂（FSM v2 三符号）：getLicenseStateV2 / setStateV2 / _STATES
+    //   在 IIFE-2 的 validate/激活/到期等链路存在 30+ 处裸引用（L2115/L2147/L4961
+    //   等全部被 try...catch(_fsm) 静默吞掉）——FSM v2 节点同步自上线以来整体死亡，
+    //   授权状态机永远停在初始态。挂载后裸引用沿作用域链解析到 global 生效。
+    global.getLicenseStateV2 = getLicenseStateV2;
+    global.setStateV2 = setStateV2;
+    global._STATES = _STATES;
 
 })(typeof window !== 'undefined' ? window : typeof globalThis !== 'undefined' ? globalThis : this);
 

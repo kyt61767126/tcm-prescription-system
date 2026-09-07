@@ -2047,6 +2047,22 @@
         }
     };
 
+    // ★ 2026-09-07 P0 跨 IIFE 作用域修复（补齐 offline.js 2026-09-06 同款，KNOWLEDGE 条目三十二云端漏修）：
+    //   本 IIFE-1 内部符号 StorageAdapter / normalizeMachineIdResult / encryptSensitive /
+    //   decryptSensitive / collectDeviceIdentity 在下方 IIFE-2（授权心跳/邀请码卡片/
+    //   orderFlow 直建订单/断点续传链路）存在 40+ 处【裸引用】——IIFE 作用域隔离导致
+    //   全部 ReferenceError，且绝大多数被 try/catch 静默吞掉，造成云端五端链路无声死亡：
+    //   ① orderFlow 直建订单不落盘（license:orderFlow 写入炸）→ 付款跳转只显示官网下载页
+    //   ② 断点续传读不到 license:adminReqPending → 付款回来领不到码
+    //   ③ collectDeviceIdentity 兜底炸 → machineId 落 unknown 被服务端 400 拒绝
+    //   ④ 心跳存储读写/邀请码卡片（machineId 找回绑定）全部静默失败
+    //   裸标识符沿作用域链最终解析到 global，此处挂载即全文件可见。
+    global.StorageAdapter = StorageAdapter;
+    global.normalizeMachineIdResult = normalizeMachineIdResult;
+    global.encryptSensitive = encryptSensitive;
+    global.decryptSensitive = decryptSensitive;
+    global.collectDeviceIdentity = collectDeviceIdentity;
+
 })(typeof window !== 'undefined' ? window : typeof globalThis !== 'undefined' ? globalThis : this);
 
 // ============================================================================
@@ -2074,6 +2090,13 @@
 
     // 上次失败的消息（用于兜底弹窗显示）
     let lastFailMessage = '授权已失效，请激活';
+
+    // ★ 2026-09-07 P0 跨 IIFE 作用域修复：License API 基址本 IIFE 作用域内无外层
+    //   CLOUD_API_BASE（window.CLOUD_API_BASE 归 cloud-api.js 所有，不做双头挂载），
+    //   从 AuthCore 导出取——云端账号资料自愈/邀请码查询的裸引用原为 ReferenceError
+    //   （refreshCloudProfile 的 typeof 守卫永远 true → 诊所有效期自愈整体死亡）。
+    const API_BASE = (global.AuthCore && global.AuthCore.CLOUD_API_BASE) ||
+        'https://tcm-prescription-system.pages.dev/api';
 
     // ★ P1-7 心跳验证：每 24 小时联网验证一次 License，离线超过 7 天锁定
     // 防盗破解：破解版无法通过心跳验证，7 天后自动锁定
@@ -2997,7 +3020,7 @@
             if (now - __lastProfileFetchAt < 24 * 60 * 60 * 1000) return false;
             __lastProfileFetchAt = now;
             if (!cu || !cu.token) return false;
-            if (typeof CLOUD_API_BASE === 'undefined' || !CLOUD_API_BASE) return false;
+            if (!API_BASE) return false;
             // ★ 2026-08-25 必须用原生 fetch：cloudFetch 的 401 分支会触发全局登出+弹登录框
             //   （单设备互斥被顶下线的旧 token 调 get-profile 返回 401 时，自愈会误踢用户）。
             //   自愈是静默兜底，失败就返回 false，不产生任何界面副作用。
@@ -3005,7 +3028,7 @@
             const timer = controller ? setTimeout(function () { try { controller.abort(); } catch (e) {} }, 10000) : null;
             let data = null;
             try {
-                const resp = await global.fetch(CLOUD_API_BASE + '/users?action=get-profile', {
+                const resp = await global.fetch(API_BASE + '/users?action=get-profile', {
                     headers: { 'Authorization': 'Bearer ' + cu.token, 'Content-Type': 'application/json' },
                     cache: 'no-cache',
                     signal: controller ? controller.signal : undefined
@@ -3187,7 +3210,7 @@
             } catch (_) {}
         }
         try {
-            const r = await global.fetch(CLOUD_API_BASE + '/license/invite', {
+            const r = await global.fetch(API_BASE + '/license/invite', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(bodyData)
