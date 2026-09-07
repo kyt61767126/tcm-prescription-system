@@ -1745,6 +1745,9 @@ export async function onRequest(context) {
                     status: clinic.status,
                     expiresAt: clinic.expiresAt || null,
                     source: clinic.source || null,
+                    // ★ 2026-09-07 版本类型：与 sanitizeUser 的 clinicEdition 用同一归一化，
+                    //   供后台「诊所管理」列表直接展示版本类型（云端/离线 × 机构/标准）
+                    edition: normalizeClinicEdition(clinic.edition, clinic.status) || null,
                     adminUsername: admin ? admin.username : '-',
                     adminName: admin ? admin.name : '-',
                     adminPhone: admin ? (admin.phone || '') : '',

@@ -3303,6 +3303,16 @@ async function loadClinicsList() {
                     nextStatus = 'active';
                     toggleText = '启用';
                 }
+                // ★ 2026-09-07 版本类型显示：云端/离线 × 机构/标准（复用用户管理同款标签与 map）
+                const editionTagHtml = (function () {
+                    const map = {
+                        cloud_clinic: '<span class="tag tag-pro">云端机构版</span>',
+                        cloud_personal: '<span class="tag tag-personal">云端标准版</span>',
+                        offline_clinic: '<span class="tag tag-trial">离线机构版</span>',
+                        offline_personal: '<span class="tag tag-trial">离线标准版</span>'
+                    };
+                    return (c.edition && map[c.edition]) ? map[c.edition] : '<span class="tag tag-trial">未设置</span>';
+                })();
                 // ★ 2026-08-20 有效期显示：正常诊所显示到期日与剩余天数，临近到期（≤30天）黄色提醒
                 let expiryHtml = '长期有效';
                 if (c.expiresAt) {
@@ -3338,7 +3348,7 @@ async function loadClinicsList() {
                     : ' | 手机: -';
                 return '<div style="padding:12px;border-bottom:1px solid #ebeef5;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">' +
                     '<div style="flex:1;min-width:200px;">' +
-                        '<div style="font-weight:600;color:#2c3e50;">' + escapeHtml(c.name) + ' ' + statusBadge + srcTag + '</div>' +
+                        '<div style="font-weight:600;color:#2c3e50;">' + escapeHtml(c.name) + ' ' + editionTagHtml + ' ' + statusBadge + srcTag + '</div>' +
                         '<div style="font-size:12px;color:#909399;margin-top:4px;">ID: ' + escapeHtml(c.id) + ' | 管理员: <strong>' + adminLink + '</strong>（' + escapeHtml(c.adminName || '-') + '）' + adminPhoneText + ' | 医师: ' + c.doctorCount + ' | 总账号: ' + c.userCount + ' | 创建: ' + escapeHtml(created) + '</div>' +
                         '<div style="font-size:12px;color:#909399;margin-top:2px;">有效期: ' + expiryHtml + '</div>' +
                     '</div>' +
