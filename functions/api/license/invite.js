@@ -35,8 +35,8 @@
 // ============================================================================
 
 import {
-    getKV, getLicense, checkRateLimit, getDeviceVersion,
-    ensureInviteCode,
+    getKV, getLicense, checkRateLimit, getDeviceVersion, setDeviceVersion,
+    ensureInviteCode, KV_LICENSE_INDEX,
     INVITE_REWARD_DAYS_PER_PERSON, INVITE_MAX_INVITEES
 } from './_lib/license-core.js';
 
@@ -96,6 +96,43 @@ export async function onRequestPost({ request, env }) {
             }
             const binding = await getDeviceVersion(kv, mid);
             code = (binding && binding.licenseCode) ? String(binding.licenseCode).trim().toUpperCase() : '';
+
+            // ★ 2026-09-07 fallback 遍历：device_version 无 licenseCode 的两类机器——
+            //   ① 测试机（setDeviceVersion 对白名单机器 early return 刻意不落盘绑定，
+            //     实证：桌面测试机 06eded70 机构版激活后 KV 无 device_version 键，但
+            //     license: 记录 devices[0].machineId 已写入）；
+            //   ② 旧绑定记录缺 licenseCode 字段。
+            //   → 遍历 license 索引按 devices[].machineId 找回本机激活码（status.js
+            //     heartbeat 同模式），多条命中取 activatedAt 最新（测试机反复换码场景）。
+            if (!code) {
+                const index = (await kv.get(KV_LICENSE_INDEX, 'json')) || [];
+                const scanLimit = Math.min(Array.isArray(index) ? index.length : 0, 500);
+                let best = '', bestAt = -1;
+                for (let i = 0; i < scanLimit; i++) {
+                    const c = index[i];
+                    if (!c) continue;
+                    let rec = null;
+                    try { rec = await getLicense(kv, c); } catch (_) { }
+                    if (!rec) continue;
+                    const devices = Array.isArray(rec.devices) ? rec.devices : [];
+                    if (devices.some(d => d && d.machineId === mid)) {
+                        const at = rec.activatedAt ? new Date(rec.activatedAt).getTime() : 0;
+                        if (at >= bestAt) { bestAt = at; best = String(c).trim().toUpperCase(); }
+                    }
+                }
+                if (best) {
+                    code = best;
+                    // 自愈回填：仅"绑定存在但缺 licenseCode"时回填（version 取原值防误改）。
+                    // 绑定不存在（测试机）不回填——避免为测试机新建 standard 版本绑定，
+                    // 干扰"一设备一版本"校验语义。
+                    if (binding && !binding.licenseCode) {
+                        try {
+                            await setDeviceVersion(kv, mid, binding.version || 'standard', { licenseCode: best });
+                        } catch (_) { }
+                    }
+                }
+            }
+
             if (!code) {
                 return json(request, { success: false, error: '本机未找到激活绑定记录' }, 404);
             }
