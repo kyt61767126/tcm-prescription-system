@@ -23,7 +23,10 @@ const crypto = require('crypto');
 const licenseManager = require('./license-manager');
 
 // ★ 云端激活 API URL（与 public/index.html 的 CLOUD_API_BASE 一致）
-const ACTIVATE_API_URL = 'https://tcm-prescription-system.pages.dev/api/license/validate';
+// ★ P2 服务端收口（KNOWLEDGE 条目三十七）：激活统一走 claim 门面
+//   （claim = validate 业务逻辑 + machineId schema-guard 前置守门，
+//    垃圾 machineId 门口 400 拒绝；行为与 validate 完全等价，对拍自测保证）
+const ACTIVATE_API_URL = 'https://tcm-prescription-system.pages.dev/api/license/claim';
 const ADMIN_ACTIVATE_API_URL = 'https://tcm-prescription-system.pages.dev/api/license/admin-submit';
 
 // ============================================================================
@@ -51,7 +54,7 @@ function getMachineId() {
 // ============================================================================
 //  在线激活
 // ============================================================================
-// 调用云端 validate API，返回 { success, license, licenseInfo } 或 { success: false, error }
+// 调用云端 claim API（P2 收口：validate 业务 + machineId schema-guard 守门），返回 { success, license, licenseInfo } 或 { success: false, error }
 // ★ v3 新增：clinicName 参数，传给云端做诊所名绑定校验
 // ★ 修复：license.dat 写入失败时友好提示 + 自动 fallback 到 userData 目录
 // ★ 优化：Promise.race 双保险超时，解决 Electron 28 中 AbortController 可能不生效导致 fetch 卡死几十分钟的问题

@@ -2454,6 +2454,48 @@
 
             const data = await response.json();
 
+            // ★ P2 状态裁决收口（KNOWLEDGE 条目三十七）：授权状态判定唯一来源 =
+            //   /api/license/entitlement 四态（服务端裁决，客户端只消费不自算）。
+            //   心跳调用保留仅作上报通道（处方计数上链/端形态上报）+ entitlement
+            //   不可达时的回退判定。machineId-only 查询（不带 code）= 本机授权
+            //   真值（与老 status 心跳同语义），本地 license:code 过期错位时仍能
+            //   找回本机有效绑定（P1 丢码自愈路径）。
+            let entState = null;
+            try {
+                const entResp = await fetch('https://tcm-prescription-system.pages.dev/api/license/entitlement', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ machineId: machineId })
+                });
+                if (entResp.ok) {
+                    const ent = await entResp.json();
+                    if (ent && ent.success) entState = ent.state;
+                }
+            } catch (entE) {
+                console.warn('[Heartbeat] entitlement 裁决不可达，回退心跳判定:', entE && entE.message);
+            }
+
+            if (entState === 'LICENSED') {
+                await StorageAdapter.setItem('license:lastHeartbeat', String(now));
+                await StorageAdapter.removeItem('license:offlineStart');
+                console.log('[Heartbeat] 心跳成功（entitlement=LICENSED）');
+                return;
+            }
+            if (entState) {
+                // 四态 → 用户动作映射（P2 合成规则唯一副本；NO_LICENSE 覆盖
+                // 码不存在/未激活/设备不匹配，均需在本机重新激活）
+                console.error('[Heartbeat] 授权裁决失效:', entState);
+                global.__licenseExpired = true;
+                const msg = {
+                    'LICENSE_EXPIRED': '授权已过期，请续费后激活',
+                    'LICENSE_REVOKED': '授权已被禁用，请联系客服',
+                    'NO_LICENSE': '授权信息无效，请重新激活'
+                }[entState] || '授权验证失败，请重新激活';
+                await showExpireAlertAndActivate(msg);
+                return;
+            }
+
+            // 回退（entitlement 不可达）：沿用心跳判定老语义（老接口退役前过渡期保留）
             if (data.success && data.valid && data.action === 'ok') {
                 await StorageAdapter.setItem('license:lastHeartbeat', String(now));
                 await StorageAdapter.removeItem('license:offlineStart');
@@ -5636,11 +5678,13 @@
                         return;
                     }
                 } else {
-                    // 云端 APP（无本地授权桥）：直接调云端 validate 验证激活码
+                    // 云端 APP（无本地授权桥）：直接调云端 claim 门面验证激活码
+                    // ★ P2 服务端收口（KNOWLEDGE 条目三十七）：claim = validate 业务
+                    //   + machineId schema-guard 前置守门（垃圾 machineId 门口 400）
                     const controller = new AbortController();
                     const t = setTimeout(function(){ try { controller.abort(); } catch(e){} }, 12000);
                     try {
-                        const r = await fetch('https://tcm-prescription-system.pages.dev/api/license/validate', {
+                        const r = await fetch('https://tcm-prescription-system.pages.dev/api/license/claim', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({

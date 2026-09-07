@@ -1833,44 +1833,83 @@ function getLicenseType() {
 //   1. 每 24 小时检查一次云端授权状态
 //   2. 失败时自动重试（最多 3 次，间隔 5 分钟）
 //   3. 无网络时跳过检查（不影响离线使用）
-//   4. 检测到撤销时退出应用并显示提示
+//   4. 检测到撤销/过期时退出应用并显示提示
 // ============================================================================
 const HEARTBEAT_INTERVAL = 24 * 60 * 60 * 1000; // 24 小时
 const HEARTBEAT_RETRY_INTERVAL = 5 * 60 * 1000; // 5 分钟重试
 const HEARTBEAT_MAX_RETRIES = 3;
+// ★ P2 服务端收口（KNOWLEDGE 条目三十七）：撤销检查主裁决切 /entitlement
+//   四态（服务端裁决，客户端只消费不自算）；老 status 心跳保留为 entitlement
+//   不可达时的回退（过渡期，老接口退役后删除）。
+const ENTITLEMENT_API_URL = 'https://tcm-prescription-system.pages.dev/api/license/entitlement';
 const HEARTBEAT_API_URL = 'https://tcm-prescription-system.pages.dev/api/license/status';
 
 let _heartbeatTimer = null;
 let _heartbeatRetryCount = 0;
 
-async function checkLicenseRevocation(machineId) {
-    // ★ 第三轮终检 P1 修复（2026-08-16）：Node fetch(undici) 不识别 timeout 选项，
-    //   原写法会挂起至 OS TCP 超时（可达数分钟），心跳检测被卡死。
-    //   改用 AbortController + setTimeout（与 registerTrialWithServer 相同模式）。
+// 带 15s 超时的 POST（★ 2026-08-16 P1 修复沿用：Node fetch(undici) 不识别
+//   timeout 选项，原写法会挂起至 OS TCP 超时，改用 AbortController + setTimeout）
+async function postJsonWithTimeout(url, body) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 15000);
     try {
-        const response = await fetch(HEARTBEAT_API_URL, {
+        const response = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ machineId: machineId || getMachineId() }),
+            body: JSON.stringify(body),
             signal: controller.signal
         });
-
         if (!response.ok) {
-            console.warn('[Heartbeat] 心跳检测失败:', response.status);
+            console.warn('[Heartbeat] 请求失败:', response.status, url);
             return null;
         }
-
-        const data = await response.json();
-        _heartbeatRetryCount = 0;
-        return data;
-    } catch (e) {
-        console.warn('[Heartbeat] 心跳检测异常:', e.message);
-        return null;
+        return await response.json();
     } finally {
         clearTimeout(timeoutId);
     }
+}
+
+// ★ P2-③ 撤销检查收口：返回统一四态形态 { state, reason, warning }。
+//   ① 主裁决：entitlement 四态（LICENSED/NO_LICENSE/LICENSE_EXPIRED/LICENSE_REVOKED）
+//   ② 回退：entitlement 不可达时走老 status 心跳，revoked 语义映射四态
+//   ③ 两端都不可达返回 null（交由既有重试逻辑，无网络不影响离线使用）
+//   四态 → 动作映射（heartbeatHandler 消费）：REVOKED/EXPIRED → quit；
+//   LICENSED/NO_LICENSE → 不退出（NO_LICENSE=试用/未绑定机器，对拍老接口
+//   "未找到绑定记录 revoked:false 不退出"语义，试用用户零影响）。
+async function checkLicenseRevocation(machineId) {
+    const mid = machineId || getMachineId();
+
+    // ① 主裁决：entitlement 四态
+    try {
+        const ent = await postJsonWithTimeout(ENTITLEMENT_API_URL, { machineId: mid });
+        if (ent && ent.success && ent.state) {
+            _heartbeatRetryCount = 0;
+            return { state: ent.state, reason: null, warning: null };
+        }
+        console.warn('[Heartbeat] entitlement 响应异常:', ent && ent.error);
+    } catch (e) {
+        console.warn('[Heartbeat] entitlement 裁决不可达，回退老心跳:', e.message);
+    }
+
+    // ② 回退：老 status 心跳（revoked 语义 → 四态映射）
+    try {
+        const data = await postJsonWithTimeout(HEARTBEAT_API_URL, { machineId: mid });
+        if (data) {
+            _heartbeatRetryCount = 0;
+            if (data.revoked) {
+                return {
+                    state: /过期/.test(data.reason || '') ? 'LICENSE_EXPIRED' : 'LICENSE_REVOKED',
+                    reason: data.reason || null,
+                    warning: null
+                };
+            }
+            return { state: 'LICENSED', reason: null, warning: data.warning || null };
+        }
+    } catch (e) {
+        console.warn('[Heartbeat] 老心跳检测异常:', e.message);
+    }
+
+    return null; // ③ 两端都不可达 → 既有重试逻辑接管
 }
 
 async function heartbeatHandler() {
@@ -1888,8 +1927,9 @@ async function heartbeatHandler() {
             return;
         }
 
-        if (result.revoked) {
-            console.error('[Heartbeat] 授权已被远程撤销:', result.reason || '未知原因');
+        // ★ P2-③ 四态裁决（唯一退出条件：REVOKED / EXPIRED）
+        if (result.state === 'LICENSE_REVOKED' || result.state === 'LICENSE_EXPIRED') {
+            console.error('[Heartbeat] 授权失效退出:', result.state, result.reason || '');
             app.quit();
         }
 

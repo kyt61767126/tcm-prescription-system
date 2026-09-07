@@ -6,7 +6,7 @@ package com.benneng.pres;
 //   - license.dat 校验（HMAC-SHA256 签名，v2 含 maxPrescriptions/features）
 //   - 试用模式（7 天，AES-256-CBC 加密存储）
 //   - 防时间回拨
-//   - 在线激活（HTTP POST 云端 /api/license/validate）
+//   - 在线激活（HTTP POST 云端 /api/license/claim 统一认领门面）
 //   - 处方计数（按月统计，AES-256-CBC 加密）
 //   - 机器 ID 生成（SHA256(androidId + package + version + model).substring(0,32)）
 //  安全：签名验证在 Java 层，攻击者难以通过修改 JS 绕过
@@ -253,7 +253,9 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
     private static final String CONFIG_FILE = "config.json";
 
     // 云端激活 API
-    private static final String ACTIVATE_API_URL = "https://tcm-prescription-system.pages.dev/api/license/validate";
+    // ★ P2 服务端收口（KNOWLEDGE 条目三十七）：激活统一走 claim 门面
+    //   （claim = validate 业务逻辑 + machineId schema-guard 前置守门，行为等价对拍保证）
+    private static final String ACTIVATE_API_URL = "https://tcm-prescription-system.pages.dev/api/license/claim";
     // ★ P1-1 在线验证 API（定期校验授权有效性）
     private static final String VERIFY_API_URL = "https://tcm-prescription-system.pages.dev/api/license/verify";
     // ★ 2026-08-15 防重复试用：试用注册 API（硬件指纹判重）
@@ -3444,7 +3446,7 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
     }
 
     // ========================================================================
-    //  在线激活（HTTP POST 云端 /api/license/validate）
+    //  在线激活（HTTP POST 云端 /api/license/claim 统一认领门面）
     //  请求体：{ code, machineId, user, clinicName }
     //  响应体：{ success, license: base64, message, expiresAt, type, ... }
     // ★ v3 新增：clinicName 参数传给云端做绑定校验
