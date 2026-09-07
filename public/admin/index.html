@@ -4337,15 +4337,45 @@ async function openDeviceQuotaModal(username) {
         if (!data.success) throw new Error(data.error || '查询失败');
         document.getElementById('deviceQuotaInput').value = data.maxDevices;
         const list = (data.devices && data.devices.devices) || [];
+        const max = data.maxDevices;
+        const used = data.devicesCount;
+        // 配额进度条（99=不限时显示绿色满条）
+        const unlimited = max >= 99;
+        const ratio = unlimited ? 1 : Math.min(used / max, 1);
+        const barColor = unlimited ? '#10b981'
+            : (used >= max ? '#ef4444' : (ratio >= 0.8 ? '#f59e0b' : '#3b82f6'));
+        const barPct = (ratio * 100).toFixed(0);
+        const carrierMap = { desktop: '🖥️ 桌面端', app: '📱 APP端', web: '🌐 网页端' };
+        const devicesHtml = list.length === 0
+            ? '<div style="color:#909399;margin-top:8px;padding:12px;text-align:center;background:#f9fafb;border-radius:6px;">📭 暂无已绑定设备<br><span style="font-size:11px;">该账号尚未在桌面端或 APP 端登录过</span></div>'
+            : '<div style="margin-top:8px;">' + list.map(d => {
+                const carrier = carrierMap[d.clientClass] || (d.clientClass || '未知');
+                const bound = d.boundAt ? new Date(d.boundAt).toLocaleString('zh-CN') : '-';
+                const last = d.lastSeenAt ? new Date(d.lastSeenAt).toLocaleString('zh-CN') : '-';
+                return '<div style="padding:8px 10px;margin-bottom:6px;background:#f9fafb;border-radius:6px;border:1px solid #e5e7eb;">' +
+                    '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+                        '<span style="font-weight:600;">' + carrier + '</span>' +
+                        '<code style="font-size:11px;color:#6b7280;">' + escapeHtml(d.machineId || '?') + '</code>' +
+                    '</div>' +
+                    '<div style="font-size:11px;color:#6b7280;margin-top:4px;line-height:1.6;">' +
+                        '绑定：' + bound + '<br>最后活跃：' + last +
+                    '</div>' +
+                    '</div>';
+            }).join('') + '</div>';
         document.getElementById('deviceQuotaDevices').innerHTML =
-            '<div>当前配额：<strong>' + data.maxDevices + '</strong> 台' + (data.maxDevices >= 99 ? '（不限）' : '') +
-            ' · 已绑定：<strong>' + data.devicesCount + '</strong> 台' + (data.isExempt ? ' · <span style="color:#e67e22;">豁免名单账号</span>' : '') + '</div>' +
-            (list.length === 0
-                ? '<div style="color:#909399;margin-top:4px;">暂无已绑定设备（未在桌面/APP 登录过）</div>'
-                : '<div style="margin-top:4px;">' + list.map(d =>
-                    '· ' + escapeHtml(d.machineId || '?') + '（' + escapeHtml(d.clientClass || '?') + '，' +
-                    (d.boundAt ? new Date(d.boundAt).toLocaleString('zh-CN') : '-') + '）'
-                ).join('<br>') + '</div>');
+            '<div style="margin-bottom:8px;">' +
+                '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;">' +
+                    '<span>已绑定 <strong style="color:' + barColor + ';">' + used + '</strong> / ' +
+                        (unlimited ? '<strong>不限</strong>' : '<strong>' + max + '</strong>') + ' 台' +
+                        (data.isExempt ? ' <span style="color:#e67e22;font-size:11px;">· 豁免账号</span>' : '') +
+                    '</span>' +
+                    '<span style="color:#6b7280;font-size:12px;">' + (unlimited ? '∞' : (used + '/' + max)) + '</span>' +
+                '</div>' +
+                '<div style="width:100%;height:8px;background:#e5e7eb;border-radius:4px;overflow:hidden;">' +
+                    '<div style="width:' + barPct + '%;height:100%;background:' + barColor + ';border-radius:4px;transition:width .3s;"></div>' +
+                '</div>' +
+                (used >= max && !unlimited ? '<div style="color:#ef4444;font-size:12px;margin-top:4px;">⚠️ 配额已满，新设备登录将被拒绝</div>' : '') +
+            '</div>' + devicesHtml;
     } catch (e) {
         document.getElementById('deviceQuotaDevices').innerHTML = '<span style="color:#ff4d4f;">查询失败：' + escapeHtml(e.message) + '</span>';
     }
