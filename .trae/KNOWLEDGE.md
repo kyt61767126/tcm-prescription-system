@@ -738,6 +738,13 @@ P2 渐进迁移（2026-09-03 当日完成）：
 - **⑧ 生效方式**：服务端 Functions+官网双镜像随 push Pages **自动部署即刻生效**（含 +90 天发奖）；云桌面 orderFlow 客户端需重打 exe 下版生效；离线桌面/离线APP 需重打包下版生效。**历史已审核订单的邀请奖励不回补**——旧数据 inviteCount 涨了但 expiresAt 没延长，需新注册验证全链路。
 - **⑨ 追加（同日 Commit 9a298a5b）**：后台「莫名其妙出现测试诊所待付款单」排查——`admin_req_index` 外的孤儿记录（pending_payment 刻意不进 index，仅靠 order: 映射+active_order:{machineId} 存在，后台靠 admin-list 兜底扫描显示）。定位法：`kv key list --prefix admin_req:` 全量扫 + 与 index 比对找孤儿；来源判断对比 submittedIp（与当日测试单同 IP=自己手测官网下单填的假数据 13800138000/TEST-MID-12345）。清理三件套：admin_req:{id}+order:{orderNo}+active_order:{machineId}。顺手修真实缺口：deleteAdminRequest 补删 active_order:{machineId}（bindActiveOrder 写的派生索引原不在删除清单——残留悬挂 48h 脏键）。**铁律：识别「列表出现 index 外记录」先查兜底扫描路径（admin-list L209-240 pending/pending_payment/all 扫前 2000 键），孤儿=index 与实际键集不同步，全量 prefix 扫描是定位起点**。
 
+**四十五、云端APP/云端网页 orderFlow 直建订单移植（2026-09-07，Commit 81c968f9，用户实测「手机APP云端版付款转跳后只显示官网下载页」）**：
+- **症状**：手机APP云端版（268）注册→激活→点「去官网付款」转跳后只显示官网下载页（默认手机端 tab），无购买流程。实测复现：官网带全参 URL（mid/ed/cn）行为正常（自动切购买 tab+预填+自动下单直达付款码），裸 URL 只显示下载页——**跳转参数在 APP→系统浏览器链路丢失**（源码层 openOfficialPayUrl 带全参、Java 白名单 startsWith 前缀含 query、collectDeviceIdentity 三级兜底 mid 非空，具体丢失环节在用户手机环境，无法远程定位）。
+- **根治方案 = orderFlow 直建订单移植云端系（cloud.js）**：云端APP是三端移植（离线桌面/云桌面/云端APP+网页）被漏掉的第三端——旧链路在 APP 环境跳转参数不可靠 + 注册密码/邀请码同样断链丢失（同云桌面旧病）。移植后：**弹窗内直接 order-submit 建单（同源 fetch，无跳转参数丢失问题）→ 付款 URL 只带 ?orderNo=&dp= 两个参数 → 官网 enterOrderResumeMode 凭订单号直达付款步**——即使 mid/ed/cn 全丢也无所谓，订单已在服务端，付款只是"打开订单"。
+- **实现要点（cloud.js 四处）**：①提交入口 trySubmitDirectOrder 优先（productKey=cloud、价格表 ￥199/￥399、密码+邀请码随单、Electron 走 preload submitOrderDirect IPC / 网页+APP 同源 fetch）→ 成功复用原成功路径（adminWaiting+observer 轮询），失败降级旧 admin-submit（PAYMENT_REQUIRED 交互保留）；②断点双持久化 license:adminReqPending（复用断点续传收尾）+ license:orderFlow（付款按钮读订单号）；③openOfficialPayUrl 支持 fd.orderNo 模式（URL 改 ?orderNo= 直达）；④onAdminActivated 收尾清 license:orderFlow（防已付订单号复活）。
+- **铁律**：a. **跳转链路带多参数在异构环境（APP 桥→系统浏览器→官网）逐环节都可能丢——高价值流程改"服务端建单+单参数恢复"架构，跳转只传订单号一个 key**；b. **提交处理器的成功/失败 UI 逻辑移出降级分支外复用（直建成功和旧链路成功走同一段），避免双路径行为漂移**；c. 网络错误 catch 内必须 return（原 try-catch 内 else 自然终止，移出后不 return 会穿透走成功判断）。
+- **生效方式**：云端网页版 push 后自动部署即刻生效；云桌面需重打 exe 下版（preload IPC 已就绪，线上旧包自动降级旧链路不受影响）；云端APP 需重打 APK 下版（**268 及之前版本旧链路参数丢失问题仍在**）。
+
 ## 8. 桌面版技术规范
 
 * **登录预填：已彻底取消（2026-09-06 Commit 2202236f，取代 9-04"来源单一化"方案）**：`initLoginInput` **不再做任何用户名自动预填**——登录框永远空白+聚焦；记住的账户仅保留**手动下拉切换**（renderUsernameDropdown，点▼选择）。演进史：8-27 恢复预填 → 9-04 收窄为"仅 localStorage 记住的用户名"（历史 bug：config.users 单账户分支无法区分出厂模板 admin，全新安装首次启动即预填 admin/admin）→ 9-06 用户实测"升级新版后自动显示旧记住的用户名，不像新客户"后**彻底取消**。理由：预填链路多次引发历史 bug + 升级安装 userData 不清导致残留展示；而手动下拉保留全部便利。
