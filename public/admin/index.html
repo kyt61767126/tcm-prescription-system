@@ -3454,6 +3454,28 @@ async function loadClinicsList() {
                 const deleteBtn = '<button class="btn btn-sm btn-danger" onclick="openClinicDeleteModal(\'' + c.id + '\')">删除</button>';
                 const created = c.createdAt ? new Date(c.createdAt).toLocaleString('zh-CN') : '-';
                 const srcTag = c.source === 'self-register' ? ' <span style="font-size:11px;color:#3498db;">自助注册</span>' : '';
+                // ★ 2026-09-07 版本类型显示：载体·版本复合标签（与用户管理同款样式，site-admin 等价双改）
+                //   云端版 → 🌐网页·云端机构版/标准版（诊所级载体按网页默认）
+                //   离线版 → 📱APP·/🖥️桌面·前缀（offlineCarrier），旧数据无载体 → 无前缀
+                const editionTagHtml = (function () {
+                    const map = {
+                        cloud_clinic: ['云端机构版', 'tag-pro'],
+                        cloud_personal: ['云端标准版', 'tag-personal'],
+                        offline_clinic: ['离线机构版', 'tag-trial'],
+                        offline_personal: ['离线标准版', 'tag-trial']
+                    };
+                    const pair = map[c.edition];
+                    if (!pair) return '';
+                    let prefix = '';
+                    if (c.edition.indexOf('cloud') === 0) {
+                        prefix = '🌐网页·';
+                    } else if (c.offlineCarrier === 'app') {
+                        prefix = '📱APP·';
+                    } else if (c.offlineCarrier === 'desktop') {
+                        prefix = '🖥️桌面·';
+                    }
+                    return '<span class="tag ' + pair[1] + '">' + prefix + pair[0] + '</span>';
+                })();
                 // 管理员账号可点击 → 跳用户管理并定位该账号（账号操作统一收口到用户管理）
                 const adminLink = c.adminUsername
                     ? '<a href="javascript:void(0)" onclick="jumpToUser(\'' + escapeHtml(c.adminUsername) + '\')" style="color:#3498db;text-decoration:underline;" title="到用户管理处理该账号">' + escapeHtml(c.adminUsername) + '</a>'
@@ -3464,7 +3486,7 @@ async function loadClinicsList() {
                     : ' | 手机: -';
                 return '<div style="padding:12px;border-bottom:1px solid #ebeef5;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">' +
                     '<div style="flex:1;min-width:200px;">' +
-                        '<div style="font-weight:600;color:#2c3e50;">' + escapeHtml(c.name) + ' ' + statusBadge + srcTag + '</div>' +
+                        '<div style="font-weight:600;color:#2c3e50;">' + escapeHtml(c.name) + ' ' + editionTagHtml + ' ' + statusBadge + srcTag + '</div>' +
                         '<div style="font-size:12px;color:#909399;margin-top:4px;">ID: ' + escapeHtml(c.id) + ' | 管理员: <strong>' + adminLink + '</strong>（' + escapeHtml(c.adminName || '-') + '）' + adminPhoneText + ' | 医师: ' + c.doctorCount + ' | 总账号: ' + c.userCount + ' | 创建: ' + escapeHtml(created) + '</div>' +
                         '<div style="font-size:12px;color:#909399;margin-top:2px;">有效期: ' + expiryHtml + '</div>' +
                     '</div>' +

@@ -3303,25 +3303,27 @@ async function loadClinicsList() {
                     nextStatus = 'active';
                     toggleText = '启用';
                 }
-                // ★ 2026-09-07 版本类型显示：载体·版本复合标签（对齐用户管理样式）
-                //   云端版 → 网页·云端机构版/标准版（云端载体按网页默认显示）
-                //   离线版 → APP·离线机构版/标准版、桌面·离线机构版/标准版（offlineCarrier），
-                //            旧数据无载体 → 离线机构版/离线标准版
+                // ★ 2026-09-07 版本类型显示：载体·版本复合标签（与用户管理同款样式，public/admin 等价双改）
+                //   云端版 → 🌐网页·云端机构版/标准版（诊所级载体按网页默认）
+                //   离线版 → 📱APP·/🖥️桌面·前缀（offlineCarrier），旧数据无载体 → 无前缀
                 const editionTagHtml = (function () {
                     const map = {
-                        cloud_clinic: ['网页·云端机构版', 'tag-pro'],
-                        cloud_personal: ['网页·云端标准版', 'tag-personal'],
+                        cloud_clinic: ['云端机构版', 'tag-pro'],
+                        cloud_personal: ['云端标准版', 'tag-personal'],
                         offline_clinic: ['离线机构版', 'tag-trial'],
                         offline_personal: ['离线标准版', 'tag-trial']
                     };
                     const pair = map[c.edition];
-                    if (!pair) return '<span class="tag tag-trial">未设置</span>';
-                    let label = pair[0];
-                    // 离线版带载体前缀（app/desktop），云端版固定「网页·」前缀
-                    if (c.edition.indexOf('offline_') === 0 && (c.offlineCarrier === 'app' || c.offlineCarrier === 'desktop')) {
-                        label = (c.offlineCarrier === 'app' ? 'APP·' : '桌面·') + label;
+                    if (!pair) return '';
+                    let prefix = '';
+                    if (c.edition.indexOf('cloud') === 0) {
+                        prefix = '🌐网页·';
+                    } else if (c.offlineCarrier === 'app') {
+                        prefix = '📱APP·';
+                    } else if (c.offlineCarrier === 'desktop') {
+                        prefix = '🖥️桌面·';
                     }
-                    return '<span class="tag ' + pair[1] + '">' + label + '</span>';
+                    return '<span class="tag ' + pair[1] + '">' + prefix + pair[0] + '</span>';
                 })();
                 // ★ 2026-08-20 有效期显示：正常诊所显示到期日与剩余天数，临近到期（≤30天）黄色提醒
                 let expiryHtml = '长期有效';
@@ -4054,30 +4056,33 @@ function renderUsersTable() {
     tbody.innerHTML = list.map(u => {
         // ★ 2026-08-23 版本类型列（替代历史遗留"允许模式"列——该字段后端登录无任何拦截、
         //   本地版账号存设备本地不经云端，"云端+本地"显示纯属误导。改按诊所实际版本显示）
-        // ★ 2026-09-07 版本类型列（载体·版本复合标签，对齐诊所管理样式）：
-        //   云端版 → 网页·云端机构版/标准版（无绑定设备时默认网页；有则按 deviceClasses 显示
-        //            APP/桌面，多载体用 / 分隔，如 APP/桌面·云端机构版）
-        //   离线版 → APP·离线机构版/标准版、桌面·离线机构版/标准版（deviceClasses 取自
-        //            诊所记录 offlineCarrier），无载体 → 离线机构版/离线标准版
+        // ★ 2026-09-07 版本类型列（载体·版本复合标签，对齐 public/admin 用户管理同款）：
+        //   组合设备载体（deviceClasses：云端=user_devices 绑定，离线=诊所 offlineCarrier）
+        //   → "🖥️桌面·云端标准版" / "📱APP·云端机构版" / "🖥️📱双端·..." / "🌐网页·..."
+        //   云端版无设备绑定=纯网页使用；离线版旧数据无载体 → 无前缀
         const editionTagHtml = (function () {
             if (u.role === 'platform_admin') return '<span style="color:#c0c4cc;">—</span>';
-            const map = {
-                cloud_clinic: ['云端机构版', 'tag-pro'],
-                cloud_personal: ['云端标准版', 'tag-personal'],
-                offline_clinic: ['离线机构版', 'tag-trial'],
-                offline_personal: ['离线标准版', 'tag-trial']
+            const editionMap = {
+                cloud_clinic: '云端机构版',
+                cloud_personal: '云端标准版',
+                offline_clinic: '离线机构版',
+                offline_personal: '离线标准版'
             };
-            const pair = map[u.clinicEdition];
-            if (!pair) return '<span class="tag tag-trial">未设置</span>';
-            // 载体前缀：云端默认网页；离线默认无（旧数据）
-            const classes = Array.isArray(u.deviceClasses) ? u.deviceClasses.filter(x => x === 'app' || x === 'desktop') : [];
-            let prefix = '';
-            if (u.clinicEdition.indexOf('cloud') === 0) {
-                prefix = classes.length ? classes.map(x => x === 'app' ? 'APP' : '桌面').join('/') + '·' : '网页·';
-            } else if (classes.length) {
-                prefix = classes.map(x => x === 'app' ? 'APP' : '桌面').join('/') + '·';
-            }
-            return '<span class="tag ' + pair[1] + '">' + prefix + pair[0] + '</span>';
+            const edText = editionMap[u.clinicEdition];
+            if (!edText) return '<span class="tag tag-trial">未设置</span>';
+            const cls = Array.isArray(u.deviceClasses) ? u.deviceClasses : [];
+            let carrier = '';
+            if (cls.includes('desktop') && cls.includes('app')) carrier = '🖥️📱双端·';
+            else if (cls.includes('desktop')) carrier = '🖥️桌面·';
+            else if (cls.includes('app')) carrier = '📱APP·';
+            else if (String(u.clinicEdition).indexOf('cloud') === 0) carrier = '🌐网页·';
+            const tagClass = {
+                cloud_clinic: 'tag-pro',
+                cloud_personal: 'tag-personal',
+                offline_clinic: 'tag-trial',
+                offline_personal: 'tag-trial'
+            }[u.clinicEdition] || 'tag-trial';
+            return '<span class="tag ' + tagClass + '">' + carrier + edText + '</span>';
         })();
         const roleTag = u.role === 'platform_admin'
             ? '<span class="tag tag-pro">' + roleNames[u.role] + '</span>'
