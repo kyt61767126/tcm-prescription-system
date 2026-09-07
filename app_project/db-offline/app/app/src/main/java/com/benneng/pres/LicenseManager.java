@@ -3620,8 +3620,19 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
             }
 
             // ★ 同步版本信息（edition + 用户角色）
+            // ★ 2026-09-07 P0 修复（与装码路径同族）：激活响应顶层无 type 字段
+            //   （嵌在 licenseInfo.type），原 respJson.optString("type") 恒取默认
+            //   "personal" → config.edition 被错写。修复：优先读 licenseInfo.type，
+            //   兜底读刚写盘的 license.dat（本函数上方已 writeLicenseContent）。
             try {
-                String licenseType = respJson.optString("type", "personal");
+                String licenseType = "personal";
+                JSONObject li = respJson.optJSONObject("licenseInfo");
+                if (li != null && !li.optString("type", "").trim().isEmpty()) {
+                    licenseType = li.optString("type", "personal");
+                } else {
+                    JSONObject ld = readLicense(machineId);
+                    if (ld != null) licenseType = ld.optString("type", "personal");
+                }
                 syncConfigEdition(licenseType);
             } catch (Exception edErr) {
                 Log.w(TAG, "版本同步失败(不影响激活): " + edErr.getMessage());
@@ -3760,15 +3771,28 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
             }
 
             // 5. 同步版本信息（edition + 用户角色）
+            // ★ 2026-09-07 P0 修复（机构版错显【修改密码】根因）：服务端 license 是
+            //   纯 base64（无 ENC 前缀），decryptLicenseContent 对其必返回 null →
+            //   licenseType 停留默认 "personal" → syncConfigEdition("personal") 把
+            //   config.edition 错写成 personal → 重启后 getAppConfigBridge 返回
+            //   personal → 前端 enforceStandardEditionButtons 错显【修改密码】。
+            //   修复：与第 4 步 clinicName 同步段同款 readLicense 兜底——license.dat
+            //   已在本函数第 1 步加密写盘，readLicense 走 ENC2 解密必成功。
             try {
                 String licenseType = "personal";
+                JSONObject ld = null;
                 try {
                     String jsonStr = decryptLicenseContent(licenseBase64, mid);
                     if (jsonStr != null && !jsonStr.isEmpty()) {
-                        JSONObject ld = new JSONObject(jsonStr);
-                        licenseType = ld.optString("type", "personal");
+                        ld = new JSONObject(jsonStr);
                     }
-                } catch (Exception parseEx) { /* 使用默认 */ }
+                } catch (Exception parseEx) { /* 走读盘兜底 */ }
+                if (ld == null) {
+                    ld = readLicense(mid); // 读刚写盘的 license.dat（ENC2 解密）
+                }
+                if (ld != null) {
+                    licenseType = ld.optString("type", "personal");
+                }
                 syncConfigEdition(licenseType);
             } catch (Exception edErr) {
                 Log.w(TAG, "管理员激活版本同步失败(不影响激活): " + edErr.getMessage());
@@ -3849,7 +3873,11 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
                 result.put("isInstitutional", false);
             }
             // 机构版（机构/专业）
-            else if (t.equals("pro") || t.equals("institution") || t.equals("clinic") || t.equals("clinic_custom")) {
+            // ★ 2026-09-07 白名单对齐服务端 versionOf（license-core.js 认 7 种）：
+            //   原 4 种缺 cloud_clinic/offline_clinic/institutional，服务端签发
+            //   这些值时会被误归 personal（错显【修改密码】）。
+            else if (t.equals("pro") || t.equals("institution") || t.equals("clinic") || t.equals("clinic_custom")
+                    || t.equals("cloud_clinic") || t.equals("offline_clinic") || t.equals("institutional")) {
                 result.put("edition", "clinic");
                 result.put("role", "admin");
                 result.put("isInstitutional", true);
@@ -3967,14 +3995,17 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
             // 授权身份判定（对齐桌面：validateLicense 有效 + license.type 机构类）
             // 注意用 license.type 而非降级后的 licenseType —— 90 天未在线验证降级分支
             // 仍是正式授权，桌面端同语义（readLicense().type 判定），保持一致防误伤。
+            // ★ 2026-09-07 P0 修复：判定改用 normalizeEdition(单一来源)——原独立 4 种
+            //   白名单与服务端 versionOf（7 种）漂移，license.type=offline_clinic 等
+            //   会被误判非机构版 → 强制 personal → 错显【修改密码】。
             boolean formalInstitution = false;
+            String formalLicType = "";
             try {
                 JSONObject vr = validateLicense();
                 if (vr != null && vr.optBoolean("valid", false)) {
                     JSONObject lic = vr.optJSONObject("license");
-                    String licType = lic != null ? lic.optString("type", "").toLowerCase().trim() : "";
-                    formalInstitution = licType.equals("pro") || licType.equals("institution")
-                            || licType.equals("clinic") || licType.equals("clinic_custom");
+                    formalLicType = lic != null ? lic.optString("type", "").toLowerCase().trim() : "";
+                    formalInstitution = normalizeEdition(formalLicType).optBoolean("isInstitutional", false);
                 }
             } catch (Exception ve) {
                 Log.w(TAG, "getAppConfig 授权身份判定失败（保守按非机构版）: " + ve.getMessage());
@@ -3994,6 +4025,26 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
                         }
                     }
                 }
+            } else if (!"clinic".equals(merged.optString("edition", ""))) {
+                // ★ 2026-09-07 P0 修复（存量自愈，对齐桌面 main.js 装码即绑定）：
+                //   正式机构版授权但 config.edition 错写——历史装码 bug 曾把
+                //   config.edition 错写成 personal 且用户角色被降级 user
+                //   （decryptLicenseContent 对服务端纯 base64 必 null →
+                //   syncConfigEdition("personal") 错写）。此处落盘自愈：
+                //   syncConfigEdition 内部 changed 才写（幂等），恢复 edition=clinic
+                //   + 用户角色 admin；存量设备无需重走激活，重启即恢复【用户管理】。
+                try {
+                    if (!formalLicType.isEmpty()) {
+                        syncConfigEdition(formalLicType);
+                        // 落盘已恢复（edition=clinic + users role=admin），merged 重读对齐
+                        org.json.JSONArray healedUsers = readConfigJSON().optJSONArray("users");
+                        if (healedUsers != null) merged.put("users", healedUsers);
+                    }
+                } catch (Exception healErr) {
+                    Log.w(TAG, "getAppConfig 机构版自愈落盘失败: " + healErr.getMessage());
+                }
+                merged.put("edition", "clinic");
+                Log.i(TAG, "getAppConfig: 机构版授权校正 edition → clinic（自愈，license.type=" + formalLicType + "）");
             }
 
             r.put("success", true);
