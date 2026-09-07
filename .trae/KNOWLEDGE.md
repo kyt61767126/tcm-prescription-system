@@ -769,6 +769,14 @@ P2 渐进迁移（2026-09-03 当日完成）：
 - **验证**：线上 API 实测返回 `clinicExpiresAt: 2027-12-06T12:51:48.091Z`（455 天）+ inviteCount=1/rewardDays=90 实时数据 ✓；mock KV 单测 3 场景（命中/无匹配/空 kv）全过。
 - **铁律**：a. 云端版「授权状态显示层数据源」三套：剩余天数=登录缓存 clinicExpiresAt（快照）、邀请卡片=invite 接口（实时）、心跳=entitlement 四态（只裁决不回填天数）——改有效期相关显示时先分清读的是哪一路；b. 「登录时快照」类缓存（clinicExpiresAt/edition）凡服务端会变更的（奖励/续费/升级），**刷新链路必须设计成服务端真值优先覆盖**，不能只在缺失时补；c. invite 接口凭据是激活码或 machineId（非登录态），返回 clinic 数据时匹配逻辑必须与写侧同构，防止读写不对称。
 
+**五十、离线版邀请奖励到账路径与云端版本质不同——license.dat 是签名快照，奖励记账服务端、重签发时叠加（2026-09-07，用户问「离线版本更新了吗」）**：云端版奖励显示自愈（条目四十九）不适用离线版，两边数据源根本不同：
+- **离线版剩余天数**：读本地 license.dat（激活时服务端签名的 HMAC/ECDSA 文件，含 v3→v7 防重放签名链），本地文件不随服务端奖励实时改写（签名不可客户端伪造）。
+- **奖励记账**：license-core.applyInviteReward 延长 KV record.expiresAt（续费保底值）+ rewardDays 累计字段——服务端记账，**永不清零**。
+- **奖励生效点**：buildLicenseData 每次签发按 `首次激活时间 + days(365) + rewardDays` 计算到期（锚定防重装续命，rewardDays 正交叠加，record.expiresAt 更晚则取更晚者）→ **重输激活码（claim/validate 重签发）、到期重激活、换机激活**任何一个场景都会自动把 +90 天落到新 license.dat。
+- **本轮改动**：offline.js renderInviteCard 奖励>0 时加提示「💡 奖励天数已记账，续期/重输激活码时自动叠加，不会丢失」（防用户疑惑"到账了为什么剩余天数没变"）。
+- **评估过并否决的方案**：applyInviteReward 里同步重签 licenseBase64（让 admin-status 自愈路径装到新到期日）——签发链含 v5 ECDSA/v6 防重放/v7 Ed25519 环境变量密钥（options.context），context 不穿进 applyInviteReward 时密钥派生错版本 → **重签出的 license 验签必败 → 直接污染 healMissingDesktopLicenseFile 用的 record.licenseBase64 自愈链路**（license.dat 丢失的存量客户将装上废码）。风险远大于收益（奖励不丢，只是显示滞后到下次重签发），不做。
+- **铁律**：a. 改任何「重新签发 license」的服务端逻辑，必须穿齐 options.context + options.kv（v5/v6/v7 密钥与 serial 全依赖它），缺 context 签出的码验签必败；b. licenseBase64 是多链路共享产物（admin-status 自愈、admin-approve 首发装、断点续传）——动它之前先枚举所有消费方；c. 「显示滞后但数据安全」优于「实时显示但自愈链路被污染」——离线版奖励显示滞后是签名文件架构的固有代价，不是 bug。
+
 ## 8. 桌面版技术规范
 
 * **登录预填：已彻底取消（2026-09-06 Commit 2202236f，取代 9-04"来源单一化"方案）**：`initLoginInput` **不再做任何用户名自动预填**——登录框永远空白+聚焦；记住的账户仅保留**手动下拉切换**（renderUsernameDropdown，点▼选择）。演进史：8-27 恢复预填 → 9-04 收窄为"仅 localStorage 记住的用户名"（历史 bug：config.users 单账户分支无法区分出厂模板 admin，全新安装首次启动即预填 admin/admin）→ 9-06 用户实测"升级新版后自动显示旧记住的用户名，不像新客户"后**彻底取消**。理由：预填链路多次引发历史 bug + 升级安装 userData 不清导致残留展示；而手动下拉保留全部便利。

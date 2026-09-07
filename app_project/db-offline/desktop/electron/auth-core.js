@@ -3562,6 +3562,14 @@
             'style="color:#26a69a;font-family:monospace;letter-spacing:1px;font-size:14px;cursor:pointer;user-select:all;">' +
             String(d.inviteCode) + '</b>' +
             '<br>已邀请 <b>' + cnt + '</b>/' + max + ' 人 · 累计奖励 <b style="color:#4caf50;">+' + days + '</b> 天' +
+            // ★ 2026-09-07 离线版奖励到账说明：与云端版不同，离线版剩余天数读本地
+            //   license.dat 签名文件（激活时签发快照），服务端奖励不会实时改写本地文件。
+            //   奖励天数随下次 license 重签发生效（到期重输激活码/换机重激活自动叠加，
+            //   服务端按 首次激活+365天+累计奖励天数 计算，永不清零），加提示防用户
+            //   疑惑"奖励到账了为什么剩余天数没变"。
+            (days > 0
+                ? '<br><span style="color:#999;font-size:11px;">💡 奖励天数已记账，续期/重输激活码时自动叠加，不会丢失</span>'
+                : '') +
             (cnt < max
                 ? '<br><span style="color:#999;font-size:11px;">好友激活时填您的邀请码，双方得奖励天数</span>'
                 : '<br><span style="color:#4caf50;font-size:11px;">🎉 邀请奖励已封顶，感谢推荐！</span>');
