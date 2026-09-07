@@ -727,6 +727,16 @@ P2 渐进迁移（2026-09-03 当日完成）：
 - **自测**：`tools/_tmp/test-admin-account.mjs` mock KV 12 用例全 PASS（provision 建号用注册密码/无哈希回退 admin/normalize 重置+幂等+只动目标手机号）。
 - **PowerShell curl JSON 坑**：`curl.exe -d '{"k":"v"}'` 的引号被 PS 剥落 → 服务端 body 解析空 → 误报"缺少参数"（invite.js 实测踩坑，一度误判线上未部署）。正确姿势：`$body='...'; curl -d $body` 或 `--data-raw`（PS5 仍可能剥）最稳是 `-d "@file.json"`。
 
+**四十四、邀请奖励真实到账 + 云桌面 orderFlow 直建订单（2026-09-07，Commit d52ca68f，用户实测三条根因修复）**：用户实测"①admin 登入成功自设密码无意义 ②授权面板缺邀请码 ③推荐邀请码用户 +90 天从未到账显示"。
+- **① 根因（+90 天从未到账 = 双重断链）**：a. 旧链路 admin-submit 被 PAYMENT_REQUIRED 拦截后跳官网重填表单下单——注册密码哈希和邀请码两字段全部静默丢失；b. applyInviteReward 只更新 inviteCount/rewardDays 计数字段，**从未真实延长邀请人 license.expiresAt 和云端 clinic.expiresAt**——授权面板"剩余 X 天"读的是 clinicExpiresAt（users.js 登录响应 ← clinic.expiresAt），计数涨了天数不涨。
+- **② 修复（license-core.js 发奖双轨延长）**：applyInviteReward 发奖时同步计算 inviter.expiresAt +90 天写入 license 记录；新增 extendClinicExpiryForReward(kv, phone, days) 遍历 system:clinics 找 phone 所属诊所同步延长 clinic.expiresAt（失败仅 warn 不阻断发奖）——离线版剩余天数（license.expiresAt）与云端版剩余天数（clinic.expiresAt）一次到账。**邀请人看到天数增加的触发时机=重新登录**（登录响应携带 clinicExpiresAt）。
+- **③ 修复（admin-approve 字段分离）**：activatePatch 的 inviteCode 字段原先用新客户自己的专属码覆盖了原始推荐码 → 面板显示"缺少邀请码"。改为分离两个字段：inviteCode=专属码（新客户自己的），invitedBy=原始推荐码（填了谁的码）；record 预写 expiresAt+inviteeBonusDays 供 admin-account 两路同源。
+- **④ 云桌面 orderFlow 直建订单（对齐离线桌面 2026-09-06 重构）**：activate-window.html 新增 trySubmitDirectOrder——弹窗内直接 order-submit 建单（含注册密码+邀请码，productKey=cloud），付款链接走 `?orderNo=` 恢复模式直达官网付款（免重填表单，字段不再断链）；降级链路（直建失败）付款 URL 带 iv 邀请码参数；main.js 补 submit-order-direct/load-pending-order-no IPC。离线桌面 offline.js 同步补密码透传+iv 参数（3 副本已同步）。
+- **⑤ 官网邀请码字段（public+site-official 双镜像 5 处）**：新增 custInviteCode 输入框（🎁提示文案）、?iv= URL 参数自动回填（大写归一+格式校验）、提交透传 inviteCode 到 order-submit、订单摘要显示、表单清空列表。order-submit 幂等补写：已建订单缺邀请码/密码哈希时补写（updateAdminRequestStatus）。
+- **⑥ 铁律**：a. **"发奖励"类逻辑必须写主数据字段（expiresAt）而非只写计数字段（rewardDays）——显示层读什么字段就延长什么字段，双轨数据（license+clinic）要一次都延长**；b. **字段复用是覆盖事故温床——inviteCode 一个键承载两种语义（专属码/推荐码）必炸，新语义加新字段（invitedBy）**；c. 云桌面与离线桌面同款 activate-window 各自维护时，架构级功能（orderFlow）必须双端移植，单端实现=另一端客户字段断链。
+- **⑦ 自测**：tools/_tmp/test-orderflow-fullchain.cjs 22/22 PASS（密码哈希落库/邀请奖励真实+90天/诊所同步延长/幂等补写/字段分离/渲染层断言）。
+- **⑧ 生效方式**：服务端 Functions+官网双镜像随 push Pages **自动部署即刻生效**（含 +90 天发奖）；云桌面 orderFlow 客户端需重打 exe 下版生效；离线桌面/离线APP 需重打包下版生效。**历史已审核订单的邀请奖励不回补**——旧数据 inviteCount 涨了但 expiresAt 没延长，需新注册验证全链路。
+
 ## 8. 桌面版技术规范
 
 * **登录预填：已彻底取消（2026-09-06 Commit 2202236f，取代 9-04"来源单一化"方案）**：`initLoginInput` **不再做任何用户名自动预填**——登录框永远空白+聚焦；记住的账户仅保留**手动下拉切换**（renderUsernameDropdown，点▼选择）。演进史：8-27 恢复预填 → 9-04 收窄为"仅 localStorage 记住的用户名"（历史 bug：config.users 单账户分支无法区分出厂模板 admin，全新安装首次启动即预填 admin/admin）→ 9-06 用户实测"升级新版后自动显示旧记住的用户名，不像新客户"后**彻底取消**。理由：预填链路多次引发历史 bug + 升级安装 userData 不清导致残留展示；而手动下拉保留全部便利。
