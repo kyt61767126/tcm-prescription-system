@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -200,6 +200,20 @@
             font-size: 11px;
             font-weight: 400;
             opacity: 0.75;
+        }
+        /* ★ 2026-09-08 合并下载中心：子平台分区标题（比主 section-title 略小、略淡） */
+        .section-title.merged {
+            font-size: 13px;
+            font-weight: 600;
+            margin: 16px 0 6px 0;
+            padding: 6px 10px;
+            border-left: 3px solid rgba(255,255,255,0.4);
+            background: rgba(255,255,255,0.08);
+            border-radius: var(--radius-sm);
+        }
+        .section-title.merged .sub {
+            font-size: 11px;
+            opacity: 0.65;
         }
 
         /* ============ 卡片 ============ */
@@ -1133,9 +1147,7 @@
 
         <!-- ============ Tab 导航 ============ -->
         <div class="tab-nav" id="tabNav">
-            <button class="tab-btn active" data-tab="mobile">📱 手机端</button>
-            <button class="tab-btn" data-tab="desktop">💻 桌面端</button>
-            <button class="tab-btn" data-tab="web">🌐 网页端</button>
+            <button class="tab-btn active" data-tab="download">📥 下载中心</button>
             <button class="tab-btn" data-tab="register">📝 注册开通</button>
             <button class="tab-btn" data-tab="purchase">🔑 购买激活码</button>
             <button class="tab-btn" data-tab="promo">🎁 邀请奖励</button>
@@ -1144,13 +1156,14 @@
             <button class="tab-btn" data-tab="faq">❓ 常见问题</button>
         </div>
 
-        <!-- ============ Tab: 手机端 ============ -->
-        <div class="tab-content active" id="tab-mobile">
-            <div class="section-title">
+        <!-- ============ Tab: 下载中心（手机端 + 桌面端 + 网页端 合并） ============ -->
+        <div class="tab-content active" id="tab-download">
+            <!-- === 手机端 === -->
+            <div class="section-title merged">
                 <span>📱 手机端 APP</span>
-                <span class="sub">云端统一包 · 本地统一包</span>
+                <span class="sub">云端统一包 · 本地统一包（Android）</span>
             </div>
-            <div class="grid-2">
+            <div class="grid-2 merged-grid">
             <div class="card featured" id="card-cloud-app">
                 <div class="card-title">
                     <span class="icon">☁️</span>
@@ -1269,15 +1282,14 @@
             </div>
 
             </div>
-        </div>
-
-        <!-- ============ Tab: 桌面端 ============ -->
-        <div class="tab-content" id="tab-desktop">
-            <div class="section-title">
-                <span>💻 桌面端程序</span>
-                <span class="sub">云端统一包 · 本地统一包</span>
             </div>
-            <div class="grid-2">
+
+            <!-- === 桌面端 === -->
+            <div class="section-title merged">
+                <span>💻 桌面端程序</span>
+                <span class="sub">云端统一包 · 本地统一包（Windows）</span>
+            </div>
+            <div class="grid-2 merged-grid">
             <div class="card featured" id="card-cloud-desktop">
                 <div class="card-title">
                     <span class="icon">☁️</span>
@@ -1408,11 +1420,10 @@
             </div>
 
             </div>
-        </div>
+            </div>
 
-        <!-- ============ Tab: 网页端 ============ -->
-        <div class="tab-content" id="tab-web">
-            <div class="section-title">
+            <!-- === 网页端 === -->
+            <div class="section-title merged">
                 <span>🌐 云端网页版</span>
                 <span class="sub">无需下载 · 浏览器即用</span>
             </div>
@@ -1520,7 +1531,7 @@
                     </div>
                 </div>
                 <div class="btn-group" style="margin-top:12px;">
-                    <a href="#" class="download-btn" onclick="switchTab('mobile'); return false;">📱 前往下载APP</a>
+                    <a href="#" class="download-btn" onclick="switchTab('download'); return false;">📱 前往下载APP</a>
                 </div>
             </div>
 
@@ -1535,7 +1546,7 @@
                         <div style="font-size:13px;color:#64748b;line-height:1.6;">
                             ★ 注册入口仅在<strong>桌面程序 / 手机APP</strong>登录页（「📋 管理员激活」），网页端不支持注册。<br>
                             提交申请后管理员审核通过，即可用手机号登录（工作时间通常1小时内）。<br>
-                            <a href="#" onclick="switchTab('mobile'); return false;" style="color:#2563eb;font-weight:bold;">👉 下载APP去注册</a>　<a href="#" onclick="switchTab('desktop'); return false;" style="color:#2563eb;font-weight:bold;">👉 下载桌面版去注册</a>
+                            <a href="#" onclick="switchTab('download'); return false;" style="color:#2563eb;font-weight:bold;">👉 下载APP去注册</a>　<a href="#" onclick="switchTab('download'); return false;" style="color:#2563eb;font-weight:bold;">👉 下载桌面版去注册</a>
                         </div>
                     </div>
                     <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px;">
@@ -2023,8 +2034,8 @@
                 <div class="info-row">
                     <span class="info-label">下载入口</span>
                     <span class="info-value">
-                        📱 <a href="#card-local" onclick="switchTab('mobile','card-local')">本地统一包 APK</a> ·
-                        💻 <a href="#card-local-desktop" onclick="switchTab('desktop','card-local-desktop')">本地统一包桌面版</a>
+                        📱 <a href="#card-local" onclick="switchTab('download','card-local')">本地统一包 APK</a> ·
+                        💻 <a href="#card-local-desktop" onclick="switchTab('download','card-local-desktop')">本地统一包桌面版</a>
                     </span>
                 </div>
                 <div class="info-row">
@@ -2034,9 +2045,9 @@
                 <div class="info-row">
                     <span class="info-label">下载入口</span>
                     <span class="info-value">
-                        📱 <a href="#card-cloud-app" onclick="switchTab('mobile','card-cloud-app')">云端统一包 APK</a> ·
-                        💻 <a href="#card-cloud-desktop" onclick="switchTab('desktop','card-cloud-desktop')">云端桌面版</a> ·
-                        🌐 <a href="#card-cloud-web" onclick="switchTab('web','card-cloud-web')">云端网页版</a>
+                        📱 <a href="#card-cloud-app" onclick="switchTab('download','card-cloud-app')">云端统一包 APK</a> ·
+                        💻 <a href="#card-cloud-desktop" onclick="switchTab('download','card-cloud-desktop')">云端桌面版</a> ·
+                        🌐 <a href="#card-cloud-web" onclick="switchTab('download','card-cloud-web')">云端网页版</a>
                     </span>
                 </div>
                 <p style="font-size:12px;color:var(--text-secondary);margin-top:10px;line-height:1.6;">
