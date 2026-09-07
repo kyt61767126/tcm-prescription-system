@@ -752,6 +752,12 @@ P2 渐进迁移（2026-09-03 当日完成）：
 - **铁律**：a. **双权威源同构修复必须双源同时改——只改一源 = 另一端全体用户带病**（audit-cross-scope.js 与探针 E1 均只盯 offline.js，cloud.js 因此漏网）；b. **audit-cross-scope.js 只查 `function` 裸调用——const 对象（StorageAdapter）与 typeof 守卫静默降级均查不到，本轮新增探针 E2/E3（17→19 断言）固化双源挂载防回退**；c. try/catch 吞错链路里「功能从未生效过」比「坏了」更隐蔽，排查静态断裂优先 audit-cross-scope + 手工 IIFE 边界对照（IIFE 开闭行号见 `^\(function \(global\)`）。
 - **生效方式**：云端网页 push 后自动部署即刻生效（强刷 Ctrl+F5）；云桌面需重打 exe 下版；云端APP 需重打 APK 下版（orderFlow 断点落盘+密码/邀请码随单在 269 起才完整生效）；离线桌面/离线APP 需重打 exe/APK 下版（FSM v2 状态机同步首次真正生效）。
 
+**四十七、后台管理页双副本漏改——线上 `/admin/` 用的是 public/admin/index.html，只改 site-admin = 功能从未上线（2026-09-07，Commit 647b8886，用户实测「诊所管理版本类型无显示」）**：上轮（Commit f006cd19）给诊所管理加版本类型标签，只改了 `site-admin/admin/index.html`，**漏改线上实际部署的 `public/admin/index.html`**（Pages 构建输出目录=public/）——代码「已提交已推送」但线上永远无显示，用户强刷也无效。
+- **根因**：后台是双副本架构（site-admin = 开发权威源，public/admin = 构建部署源），无自动同步脚本（auth-core 有 sync-auth-core.ps1，admin 页靠手工等价双改），条目三十四建数据体检时同步双改过，但该铁律没进探针/pre-push 门禁。
+- **修复**：public/admin/index.html 诊所管理补「载体·版本」emoji 标签（诊所名后 `editionTagHtml`）；用户管理两副本统一为同款样式（site-admin 原先是纯文字版，public 原先就是 emoji 版——🌐网页·/📱APP·/🖥️桌面·/🖥️📱双端·）。后端 users.js 诊所列表补 `offlineCarrier` 字段（离线版诊所记录的 app/desktop 载体，激活审核时 provisionCloudAccount 写入）。
+- **数据对照（用户样例逐一命中）**：云端→🌐网页·云端机构版；offlineCarrier=app→📱APP·离线机构版/标准版；desktop→🖥️桌面·离线机构版；旧数据无载体→离线标准版（无前缀）。用户贴的「HAPP·」「EAPP·」是手机复制丢 emoji 的残迹。
+- **铁律**：a. **改任何后台管理页必须 rg 确认 `public/admin` 与 `site-admin/admin` 两份同步改**——改完 `git diff --stat` 里看不到两个文件 = 漏改；b. 线上验证必须抓部署源（`Invoke-WebRequest https://.../admin/` 查 `.Contains(特征串)`），本地文件改对≠线上生效；c. site-admin 与 public/admin 的用户管理版本列样式曾长期漂移（纯文字 vs emoji）——双副本无同步脚本的页面，每次改动都要先 diff 两份现状再动手。
+
 ## 8. 桌面版技术规范
 
 * **登录预填：已彻底取消（2026-09-06 Commit 2202236f，取代 9-04"来源单一化"方案）**：`initLoginInput` **不再做任何用户名自动预填**——登录框永远空白+聚焦；记住的账户仅保留**手动下拉切换**（renderUsernameDropdown，点▼选择）。演进史：8-27 恢复预填 → 9-04 收窄为"仅 localStorage 记住的用户名"（历史 bug：config.users 单账户分支无法区分出厂模板 admin，全新安装首次启动即预填 admin/admin）→ 9-06 用户实测"升级新版后自动显示旧记住的用户名，不像新客户"后**彻底取消**。理由：预填链路多次引发历史 bug + 升级安装 userData 不清导致残留展示；而手动下拉保留全部便利。
