@@ -9,6 +9,8 @@ import {
 } from './_lib/auth.js';
 import { provisionCloudAccount } from './license/_lib/admin-account.js';
 import { deleteAdminRequest } from './license/_lib/license-write-service.js';
+// ★ 2026-09-08 离线版设备配额反查：license 索引遍历找该诊所激活码，读其多设备绑定列表
+import { listLicenses, getDevices } from './license/_lib/license-core.js';
 
 // ============================================================================
 // ★★★ 2026-08-21 账号级设备授权（一个云端管理员最多绑定 2 台设备：桌面/APP）
@@ -1553,6 +1555,9 @@ export async function onRequest(context) {
         // ===== 平台管理员：查询账号设备配额 GET /users?action=admin-get-device-quota =====
         // 用途：后台【用户管理】→「设备配额」弹窗打开时查询当前配额与已绑定设备数
         // 权限：仅平台总管理员
+        // ★ 2026-09-08 修复：离线版账号（clinicEdition 以 offline_ 开头）的设备绑定不在
+        //   user_devices，而在 license 记录（clinicName 关联）。此处按诊所反查激活码
+        //   设备列表，否则离线版永远显示"已绑定 0 台"（卢二灼案例）。
         if (method === 'GET' && url.searchParams.get('action') === 'admin-get-device-quota') {
             const authUser = await parseAuthHeader(context.request, context.env);
             if (!authUser || !isPlatformAdmin(authUser)) {
@@ -1561,6 +1566,43 @@ export async function onRequest(context) {
             const targetUsername = String(url.searchParams.get('username') || '').trim();
             if (!targetUsername) {
                 return json({ success: false, error: '请提供要查询的用户名' }, 400, context.request);
+            }
+            // 判断目标账号是否为离线版（clinicEdition 以 offline_ 开头）
+            const target = await findUserForLogin(kv, targetUsername).catch(() => null);
+            const isOffline = !!(target && target.clinicEdition && String(target.clinicEdition).indexOf('offline_') === 0);
+            if (isOffline) {
+                // —— 离线版：设备绑定在激活码 license.devices（clinicName 关联）——
+                const clinicName = target.clinicName;
+                const licenses = await listLicenses(kv).catch(() => []);
+                let lic = null;
+                if (clinicName) {
+                    for (const l of licenses) {
+                        if (l && l.clinicName === clinicName) { lic = l; break; }
+                    }
+                }
+                // 兜底：clinicName 不匹配时用手机号/user 匹配
+                if (!lic && target.user && target.user.phone) {
+                    for (const l of licenses) {
+                        const lu = l && (l.user || l.username || '');
+                        if (lu && String(lu).indexOf(String(target.user.phone)) !== -1) { lic = l; break; }
+                    }
+                }
+                const licDevices = lic ? getDevices(lic).map(d => ({
+                    machineId: d.machineId ? String(d.machineId).substring(0, 8) + '...' : null,
+                    clientClass: d.clientClass || null,
+                    productClass: d.productClass || 'offline',   // 离线版设备
+                    boundAt: d.activatedAt || d.boundAt || null   // license 用 activatedAt
+                })) : [];
+                const maxDevices = lic && lic.maxDevices && Number.isInteger(lic.maxDevices) ? lic.maxDevices
+                    : (DEVICE_LIMIT_EXEMPT_ACCOUNTS.includes(targetUsername) ? DEVICE_EXEMPT_MAX : MAX_DEVICES_PER_ACCOUNT);
+                return json({
+                    success: true,
+                    username: targetUsername,
+                    maxDevices: maxDevices,
+                    devicesCount: licDevices.length,
+                    isExempt: DEVICE_LIMIT_EXEMPT_ACCOUNTS.includes(targetUsername),
+                    devices: licDevices
+                }, 200, context.request);
             }
             const record = (await kv.get(KV_USER_DEVICES_PREFIX + targetUsername, 'json')) || { devices: [] };
             if (typeof record.maxDevices !== 'number' || !Number.isInteger(record.maxDevices) || record.maxDevices <= 0) {
