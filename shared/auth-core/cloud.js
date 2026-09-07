@@ -3686,7 +3686,7 @@
                 '<div id="adminSuccessDesc" style="font-size:13px;color:#555;margin-top:8px;line-height:1.7;"></div>' +
                 '<div style="font-size:12px;color:#333;margin-top:12px;line-height:1.9;">' +
                     '<div>✅ 登录账号：<b id="adminSuccessPhone">--</b></div>' +
-                    '<div>✅ 密码：<b style="color:#2e7d32;">（默认 admin，登入后请修改）</b></div>' +
+                    '<div>✅ 密码：<b id="adminSuccessPwd" style="color:#2e7d32;">（默认 admin，登入后请修改）</b></div>' +
                 '</div>' +
                 '<button id="adminSuccessBtn" style="width:100%;margin-top:16px;padding:12px;font-size:15px;border:none;border-radius:8px;color:#fff;background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);cursor:pointer;font-weight:bold;">✅ 关闭窗口</button>' +
             '</div>' +
@@ -4059,9 +4059,13 @@
                 versionLabel: '云端' + (state.edition === 'institution' ? '机构版' : '标准版'),
                 env: 'production',
                 // ★ 2026-09-05 管理员激活路径邀请码（服务端 admin-submit 接收并落库）
-                inviteCode: state.inviteCode || ''
+                inviteCode: state.inviteCode || '',
+                // ★ 2026-09-07 注册密码生效：自定义密码随申请上传（HTTPS，与登录同级安全），
+                //   服务端 PBKDF2 哈希落库，审核通过后开云端账户用注册密码（此前硬编码
+                //   admin，自设密码被丢弃）。留空/默认 admin 不传 → 服务端无哈希 → 默认
+                //   密码 admin（旧行为）。本地 installAdminLicense 仍用本地密码建号。
+                password: (state.password && state.password !== 'admin') ? state.password : ''
             };
-            // ★ password 不上传云端，仅本地安装时创建登录账号使用
             try {
                 // ★ 2026-08-30 桌面版 CORS 铁律分流（KNOWLEDGE 第 8 章）：
                 //   桌面 Electron 渲染进程为 file://（Origin: null），直连 fetch 云端 API 被
@@ -4330,6 +4334,9 @@
             const pwd = _resPwd || 'admin';
             const descEl = document.getElementById('adminSuccessDesc');
             document.getElementById('adminSuccessPhone').textContent = phone;
+            // ★ 2026-09-07 注册密码生效：成功页密码行按实际密码显示（自设密码 vs 默认 admin）
+            const _pwdEl = document.getElementById('adminSuccessPwd');
+            if (_pwdEl) _pwdEl.textContent = (pwd && pwd !== 'admin') ? '（您注册时设置的密码）' : '（默认 admin，登入后请修改）';
             // ★ 2026-09-05 管理员激活成功页：专属邀请码提示（r.inviteInfo 来自
             //   admin-status activated 响应，旧后端无该字段则不展示）
             let __cloudInviteMsg = '';
@@ -4371,11 +4378,13 @@
                 }
             } else {
                 // 云端 APP / 无本地安装桥：账号已在云端创建，用手机号登录即可
-                // ★ 2026-09-03 说明：云端密码由服务端 normalizeActivationPassword 归一化为 admin
-                //   （防止激活弹窗自设密码在云端与本地产生认知错位），显式告知用户。
+                // ★ 2026-09-07 注册密码生效：注册时设置的自定义密码随申请哈希落库，云端账户
+                //   开通即用注册密码（此前硬编码 admin 需要登入后修改）。留空/默认 → admin。
                 descEl.innerHTML = '管理员已通过您的激活申请<br>请返回登录框，使用手机号登录' +
                     __cloudInviteMsg +
-                    (pwd && pwd !== 'admin' ? ('（云端默认密码 admin，激活弹窗自设密码仅本地端生效）') : '');
+                    (pwd && pwd !== 'admin'
+                        ? '（密码为您注册时设置的密码）'
+                        : '（默认密码 admin，登入后请修改）');
                 show('adminSuccess');
                 document.getElementById('adminSuccessBtn').textContent = '✅ 好的';
                 document.getElementById('adminSuccessBtn').onclick = function() {

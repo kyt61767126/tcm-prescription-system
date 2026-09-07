@@ -13,7 +13,6 @@
 
 import {
     hashPassword,
-    verifyPassword,
     ROLE_CLINIC_ADMIN,
     ROLE_DOCTOR,
     KV_SYSTEM_CLINICS
@@ -56,7 +55,10 @@ function mapActivationTypeToEdition(type, record) {
 //   背景：旧逻辑每次激活通过都无条件补 clinic_admin → 两次激活=两个管理员
 //   （王桂杰+王桂双管理员事故根因）。如需更换管理员手机号，由平台管理员
 //   在后台 update-user 调整角色（clinic_admin ↔ doctor 互转）。
-async function ensureClinicUser(kv, clinicId, clinicName, phone, adminName, now) {
+// ★ 2026-09-07 注册密码生效：cred = record 的 { passwordHash, passwordSalt }
+//   （admin-submit 哈希落库）——有则开账户用注册密码；无（官网下单/工单/旧记录）
+//   则默认 admin（旧行为）。
+async function ensureClinicUser(kv, clinicId, clinicName, phone, adminName, now, cred) {
     const users = (await kv.get(`clinic:${clinicId}:users`, 'json')) || [];
     const exists = users.some(u => u.username === phone || u.phone === phone);
     if (exists) return;
@@ -64,8 +66,14 @@ async function ensureClinicUser(kv, clinicId, clinicName, phone, adminName, now)
     const hasAdmin = users.some(u => u.role === ROLE_CLINIC_ADMIN);
     const role = hasAdmin ? ROLE_DOCTOR : ROLE_CLINIC_ADMIN;
 
-    // 密码留空默认 admin（与离线端默认密码一致；激活框密码留空时的默认值）
-    const { passwordHash, salt } = await hashPassword('admin');
+    // 密码：注册密码（哈希落库）优先；留空默认 admin（与离线端默认密码一致）
+    let passwordHash, salt;
+    if (cred && cred.passwordHash && cred.passwordSalt) {
+        passwordHash = cred.passwordHash;
+        salt = cred.passwordSalt;
+    } else {
+        ({ passwordHash, salt } = await hashPassword('admin'));
+    }
     users.push({
         username: phone,
         phone: phone,
@@ -81,7 +89,8 @@ async function ensureClinicUser(kv, clinicId, clinicName, phone, adminName, now)
     });
     await kv.put(`clinic:${clinicId}:users`, JSON.stringify(users));
     console.log('[AdminAccount] 云端账号已开通:', phone, 'clinic=', clinicName, 'role=', role,
-        hasAdmin ? '(诊所已有管理员，本次开通为普通用户)' : '(首个管理员)');
+        hasAdmin ? '(诊所已有管理员，本次开通为普通用户)' : '(首个管理员)',
+        (cred && cred.passwordHash) ? '(注册密码)' : '(默认密码 admin)');
 }
 
 // 审核通过记录 → 幂等开通云端诊所 + clinic_admin 账号
@@ -152,7 +161,7 @@ export async function provisionCloudAccount(kv, record) {
         if (clinicsDirty) {
             await kv.put(KV_SYSTEM_CLINICS, JSON.stringify(clinics));
         }
-        await ensureClinicUser(kv, clinic.id, clinicName, phone, record.adminName, now);
+        await ensureClinicUser(kv, clinic.id, clinicName, phone, record.adminName, now, record);
         return true;
     }
 
@@ -174,24 +183,33 @@ export async function provisionCloudAccount(kv, record) {
     clinics.push(clinic);
     await kv.put(KV_SYSTEM_CLINICS, JSON.stringify(clinics));
 
-    await ensureClinicUser(kv, clinicId, clinicName, phone, record.adminName, now);
+    await ensureClinicUser(kv, clinicId, clinicName, phone, record.adminName, now, record);
     return true;
 }
 
 // ★ 2026-08-20 激活密码归一化：把"该激活申请手机号"下所有启用状态（非禁用诊所以外的
-//   cloudEnabled）账号的密码统一重置为默认 admin。
-// 背景：老账号可能因历史版本默认密码不同、或手机号跨诊所重复而无法用 admin 登录（401）。
+//   cloudEnabled）账号的密码统一重置为注册密码（2026-09-07 前为默认 admin）。
+// 背景：老账号可能因历史版本默认密码不同、或手机号跨诊所重复而无法用注册密码登录（401）。
 //   findUserForLogin 按诊所顺序返回第一个匹配账号，这里全量重置，保证登录端命中的那个
-//   也必然是 admin，从根上消除"登录提示 401 / 旧密码遮蔽新账号"。
+//   也必然与注册密码一致，从根上消除"登录提示 401 / 旧密码遮蔽新账号"。
+// ★ 2026-09-07 注册密码生效：record 带 passwordHash/passwordSalt（admin-submit 哈希落库）
+//   → 重置为注册密码；无（官网下单/工单/旧记录）→ 保持默认 admin（旧行为）。
 // 安全性：只在"激活通过的受信链路"（admin-approve / admin-status / admin-submit 探测到
 //   已激活申请）调用，调用方要么是持有该激活申请的客户端，要么是平台管理员。
 //   绝不能在匿名登录的自愈路径调用（否则等于任何人可用手机号重置为 admin 接管账号）。
-// 幂等：verifyPassword 已为 admin 则跳过，避免无谓写 KV。
+// 幂等：已是目标密码（哈希串一致）则跳过，避免无谓写 KV。
 export async function normalizeActivationPassword(kv, record) {
     try {
         const phone = (record && record.phone ? String(record.phone).trim() : '');
         if (!/^1[3-9]\d{9}$/.test(phone)) return { changed: false, reason: 'not_phone' };
-        const { passwordHash, salt } = await hashPassword('admin');
+        // 注册密码哈希优先；无则默认 admin
+        let passwordHash, salt;
+        if (record && record.passwordHash && record.passwordSalt) {
+            passwordHash = record.passwordHash;
+            salt = record.passwordSalt;
+        } else {
+            ({ passwordHash, salt } = await hashPassword('admin'));
+        }
 
         const clinics = (await kv.get(KV_SYSTEM_CLINICS, 'json')) || [];
         let changed = false, updated = 0;
@@ -203,11 +221,8 @@ export async function normalizeActivationPassword(kv, record) {
                 const isTarget = u && ((u.username === phone) || (u.phone === phone));
                 if (!isTarget) continue;
                 if (clinic.status === 'disabled') continue; // 禁用诊所不理会，登录优先返回启用诊所
-                // 已是 admin 则无需重置
-                try {
-                    const ok = await verifyPassword('admin', u.passwordHash, u.salt);
-                    if (ok) continue;
-                } catch (e) {}
+                // 已是目标密码（PBKDF2 含随机 salt，哈希串一致才跳过）则无需重置
+                if (u.passwordHash === passwordHash && u.salt === salt) continue;
                 u.passwordHash = passwordHash;
                 u.salt = salt;
                 u.updatedAt = new Date().toISOString();

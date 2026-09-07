@@ -450,8 +450,12 @@ async function submitAdminRequest(data) {
             env: clientCfg.env,
             // ★ 2026-09-05 管理员激活路径邀请码（选填）：白名单透传服务端结算
             //   （好友+90天/封顶4人，本机+30天）。不加则桌面端邀请码被静默吞掉。
-            inviteCode: (typeof data.inviteCode === 'string') ? data.inviteCode.trim().toUpperCase() : ''
-            // 注意：password 不发送到云端，仅本地保存用于创建管理员账户
+            inviteCode: (typeof data.inviteCode === 'string') ? data.inviteCode.trim().toUpperCase() : '',
+            // ★ 2026-09-07 注册密码生效：密码随申请上传（HTTPS 加密传输，与登录同级安全），
+            //   服务端 PBKDF2 哈希落库——审核通过后开云端账户用注册密码（此前硬编码 admin，
+            //   用户自设密码被丢弃）。本地加密存根（saveAdminRequestId）仍用于建本地账户。
+            password: (typeof data.password === 'string' && data.password.length >= 8 && data.password.length <= 32)
+                ? data.password : ''
         };
 
         const fetchPromise = async () => {

@@ -5986,9 +5986,12 @@
                 appModeCarrier: (global.electronAPI && global.electronAPI.activate &&
                     typeof global.electronAPI.activate.showExpireAlert === 'function') ? 'desktop' : 'app',
                 versionLabel: '本地' + (state.edition === 'institution' ? '机构版' : '标准版'),
-                env: 'production'
+                env: 'production',
+                // ★ 2026-09-07 注册密码生效：自定义密码随申请上传（HTTPS，与登录同级安全），
+                //   服务端 PBKDF2 哈希落库，审核通过后开通的云端账户用注册密码（此前硬编码
+                //   admin）。本地账户本来就存本地密码。留空/默认 admin 不传 → 默认密码 admin。
+                password: (state.password && state.password !== 'admin') ? state.password : ''
             };
-            // ★ password 不上传云端，仅本地安装时创建登录账号使用
             try {
                 // ★ 2026-08-30 桌面版 CORS 铁律分流（KNOWLEDGE 第 8 章）：
                 //   桌面 Electron 渲染进程为 file://（Origin: null），直连 fetch 云端 API 被

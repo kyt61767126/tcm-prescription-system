@@ -835,7 +835,7 @@ function hideGlobalError() {
                 const r = await window.electronAPI.activate.checkAdminStatus(null);
                 if (r && r.success && r.status === 'activated' && r.license) {
                     const ok = await saveAndRestart(r.license, r.licenseInfo?.phone || '');
-                    if (ok) showSuccess(r.licenseInfo?.phone || '');
+                    if (ok) showSuccess(r.licenseInfo?.phone || '', false, true);
                     // 失败：保留红条错误，不再自动重启
                 }
             } catch (e) { console.warn('machineId 兜底查询失败（忽略）:', e); }
@@ -1242,14 +1242,18 @@ async function saveAndRestart(license, phone) {
     }
 }
 
-function showSuccess(phone, isCodeMode) {
+function showSuccess(phone, isCodeMode, noLocalPwd) {
     document.getElementById('successPhone').textContent = phone || state.phone || codeState.phone;
-    // ★ 2026-09-07 明示初始密码：云端账户开通密码统一为 admin（归一化设计），
-    //   此前只写"手机号+密码登录"——用户输入注册时自设密码（admin123 等）必失败，
-    //   误报"无法登录"（维生素诊所事故）。登录后请及时修改密码。
+    // ★ 2026-09-07 注册密码生效：requestId 正常链路本地存有注册密码（本地账户=注册密码，
+    //   云端账户也随申请哈希开通注册密码）→ 提示"您设置的密码"；
+    //   noLocalPwd=true（machineId 兜底断链自愈，本地无密码存根）→ 本地账户回退 admin，
+    //   云端账户仍为注册密码（两个密码都能登录成功）→ 提示两者。
     document.getElementById('successDesc').innerHTML = isCodeMode
         ? '激活码验证成功<br>软件即将自动重启，请使用手机号+密码登录'
-        : '管理员已通过您的激活申请<br>软件即将自动重启<br>请使用 <b>手机号 + 初始密码 admin</b> 登录<br>（登录后请在基础设置中修改密码）';
+        : (noLocalPwd
+            ? '管理员已通过您的激活申请<br>软件即将自动重启<br>请使用 <b>手机号</b> 登录<br>' +
+              '密码为您<b>注册时设置的密码</b>（未设置过则为初始密码 admin）'
+            : '管理员已通过您的激活申请<br>软件即将自动重启<br>请使用 <b>手机号 + 您设置的密码</b> 登录');
     showAdminPanel('success');
     // Auto restart in 3s
     let secs = 3;

@@ -32,7 +32,7 @@
 import { getKV, checkRateLimit, checkDeviceVersion } from './_lib/license-core.js';
 import { provisionCloudAccount, normalizeActivationPassword } from './_lib/admin-account.js';
 import { createAdminRequest, updateAdminRequestStatus } from './_lib/license-write-service.js';
-import { findPhoneOccupancy, KV_SYSTEM_CLINICS } from '../_lib/auth.js';
+import { findPhoneOccupancy, hashPassword, KV_SYSTEM_CLINICS } from '../_lib/auth.js';
 // ★ 2026-09-07 架构防御：手机号校验收口 schema-guard 单一副本
 import { isValidPhone } from './_lib/schema-guard.js';
 
@@ -165,7 +165,7 @@ export async function onRequest(context) {
 
         const body = await context.request.json().catch(() => ({}));
         const { clinicName, adminName, phone, remark, machineId,
-                productName, edition, appMode, versionLabel, env, appModeCarrier, inviteCode } = body;
+                productName, edition, appMode, versionLabel, env, appModeCarrier, inviteCode, password } = body;
 
         // ★ 2026-08-22 纯网页环境（pages.dev 浏览器）无 electron / android machineId，
         //   前端传 'unknown' / '未知' / 短值时自动兜底生成 browser-xxx 临时机器ID。
@@ -217,6 +217,21 @@ export async function onRequest(context) {
         const inviteCodeClean = (typeof inviteCode === 'string') ? inviteCode.trim().toUpperCase() : '';
         if (inviteCodeClean && !/^[A-Z0-9]{4,10}$/.test(inviteCodeClean)) {
             return json({ success: false, error: '邀请码格式不正确（4-10位字母或数字，没有可留空）' }, 400);
+        }
+
+        // ★ 2026-09-07 注册密码生效（维生素诊所测试反馈：自设密码被归一化 admin 丢弃）：
+        //   客户端注册表单的密码（选填，HTTPS 传输与登录同级安全）哈希后随申请落库——
+        //   审核通过后 provisionCloudAccount/normalizeActivationPassword 用它开账户/重置，
+        //   而非硬编码 admin。不传/空/格式非法 → 无哈希 → 保持旧行为（默认密码 admin）。
+        //   KV 只存 PBKDF2 哈希不存明文；admin-status 响应不下发（license 同级保密）。
+        let passwordCred = null;
+        const pwdRaw = (typeof password === 'string') ? password : '';
+        if (pwdRaw) {
+            if (pwdRaw.length < 8 || pwdRaw.length > 32 || !/[a-zA-Z]/.test(pwdRaw) || !/[0-9]/.test(pwdRaw)) {
+                return json({ success: false, error: '密码需 8-32 位且同时包含字母和数字' }, 400);
+            }
+            const { passwordHash, salt } = await hashPassword(pwdRaw);
+            passwordCred = { passwordHash, salt };
         }
 
         // ★ 设备-版本绑定校验：同一台设备只能提交一个版本
@@ -307,6 +322,17 @@ export async function onRequest(context) {
                         error: '该手机号已在其他设备完成激活。换机或需要在多台设备使用，请联系客服微信 hktzy1688 办理。'
                     }, 409);
                 }
+                // ★ 2026-09-07 注册密码生效：本机是 owner 设备（上面已严格校验 devices
+                //   绑定）且 phone 恒匹配（existingActivated 按 phone 查出）——新提交带了
+                //   密码则先写回记录再 normalize，用户"同机重提交改密码"即时生效。
+                if (passwordCred) {
+                    try {
+                        await updateAdminRequestStatus(kv, existingActivated.requestId, {
+                            passwordHash: passwordCred.passwordHash, passwordSalt: passwordCred.salt });
+                        existingActivated.passwordHash = passwordCred.passwordHash;
+                        existingActivated.passwordSalt = passwordCred.salt;
+                    } catch (e) { console.warn('[AdminSubmit] 已激活申请密码更新失败（忽略）:', e.message); }
+                }
                 // 若账号已被后台删除或从未建号，先补开（幂等），保证"删除后重注册"也能直接重建
                 try {
                     await provisionCloudAccount(kv, existingActivated);
@@ -369,6 +395,14 @@ export async function onRequest(context) {
                             console.log('[AdminSubmit] 复用申请补写邀请码:', occ.detail.requestId);
                         } catch (e) { console.warn('[AdminSubmit] 邀请码补写失败（忽略）:', e.message); }
                     }
+                    // ★ 2026-09-07 注册密码生效：原记录（官网下单等）无密码哈希而新提交带了 → 补写
+                    if (passwordCred && occ.detail.phone === phone) {
+                        try {
+                            await updateAdminRequestStatus(kv, occ.detail.requestId, {
+                                passwordHash: passwordCred.passwordHash, passwordSalt: passwordCred.salt });
+                            console.log('[AdminSubmit] 复用申请补写注册密码哈希:', occ.detail.requestId);
+                        } catch (e) { console.warn('[AdminSubmit] 密码补写失败（忽略）:', e.message); }
+                    }
                     return json({
                         success: true,
                         status: 'pending',
@@ -390,6 +424,14 @@ export async function onRequest(context) {
                             console.log('[AdminSubmit] 白名单复用申请补写邀请码:', occ.detail.requestId);
                         } catch (e) { console.warn('[AdminSubmit] 邀请码补写失败（忽略）:', e.message); }
                     }
+                    // ★ 2026-09-07 注册密码生效：白名单复用分支补写密码（对齐另两处复用分支）
+                    if (passwordCred && occ.detail.phone === phone) {
+                        try {
+                            await updateAdminRequestStatus(kv, occ.detail.requestId, {
+                                passwordHash: passwordCred.passwordHash, passwordSalt: passwordCred.salt });
+                            console.log('[AdminSubmit] 白名单复用申请补写注册密码哈希:', occ.detail.requestId);
+                        } catch (e) { console.warn('[AdminSubmit] 密码补写失败（忽略）:', e.message); }
+                    }
                     console.log('[AdminSubmit] 白名单客户复用未付款申请进入等待:', phone, occ.detail.requestId);
                     return json({
                         success: true,
@@ -408,6 +450,14 @@ export async function onRequest(context) {
                             await updateAdminRequestStatus(kv, occ.detail.requestId, { inviteCode: inviteCodeClean });
                             console.log('[AdminSubmit] 未付款pending申请补写邀请码:', occ.detail.requestId);
                         } catch (e) { console.warn('[AdminSubmit] 邀请码补写失败（忽略）:', e.message); }
+                    }
+                    // ★ 2026-09-07 注册密码生效：未付款 pending 拦截前补写密码（付款页返回重提场景）
+                    if (passwordCred && occ.detail.phone === phone) {
+                        try {
+                            await updateAdminRequestStatus(kv, occ.detail.requestId, {
+                                passwordHash: passwordCred.passwordHash, passwordSalt: passwordCred.salt });
+                            console.log('[AdminSubmit] 未付款pending申请补写注册密码哈希:', occ.detail.requestId);
+                        } catch (e) { console.warn('[AdminSubmit] 密码补写失败（忽略）:', e.message); }
                     }
                     console.log('[AdminSubmit] 存在未付款申请，拦截并引导完成支付:', phone, occ.detail.requestId);
                     return json({
@@ -440,6 +490,16 @@ export async function onRequest(context) {
                         await updateAdminRequestStatus(kv, paid.requestId, { inviteCode: inviteCodeClean });
                         console.log('[AdminSubmit] 复用订单补写邀请码:', paid.requestId);
                     } catch (e) { console.warn('[AdminSubmit] 邀请码补写失败（忽略）:', e.message); }
+                }
+                // ★ 2026-09-07 注册密码生效：复用订单补写密码。phone 必须严格匹配——该分支
+                //   可能仅凭 machineId 命中"他人手机号"订单（machineId 不可信），此时补写
+                //   提交者的密码会导致审核后他人账户密码被改（接管），必须排除。
+                if (passwordCred && paid.phone === phone) {
+                    try {
+                        await updateAdminRequestStatus(kv, paid.requestId, {
+                            passwordHash: passwordCred.passwordHash, passwordSalt: passwordCred.salt });
+                        console.log('[AdminSubmit] 复用订单补写注册密码哈希:', paid.requestId);
+                    } catch (e) { console.warn('[AdminSubmit] 密码补写失败（忽略）:', e.message); }
                 }
                 return json({
                     success: true,
@@ -507,6 +567,9 @@ export async function onRequest(context) {
             appModeCarrier: (appModeCarrier === 'desktop' || appModeCarrier === 'app') ? appModeCarrier : '',
             // ★ 2026-09-05 邀请码（选填）：管理员审核通过时结算（admin-approve applyInviteReward）
             inviteCode: inviteCodeClean || '',
+            // ★ 2026-09-07 注册密码生效：审核通过后开账户用注册密码（而非默认 admin）
+            passwordHash: passwordCred ? passwordCred.passwordHash : '',
+            passwordSalt: passwordCred ? passwordCred.salt : '',
             versionLabel: (versionLabel || '').trim(),
             // ★ 环境标记：test=测试环境，production=正式环境
             env: (env || 'production').trim(),

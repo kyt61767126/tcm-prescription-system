@@ -720,6 +720,13 @@ P2 渐进迁移（2026-09-03 当日完成）：
 - **③ 云端桌面注册在独立激活窗口**（main.js 未激活启动必弹 activate-window，10s 断点自检后）；离线桌面注册在登录框内弹窗（auth-core.js openAdminActivate）。两端形态不同但参数链路已统一（条目四十一参数规范）。activate-window 管理员表单**无 remark 字段**（工单 Tab 才有）——付款 URL 的 r 参数在管理员路径为空属正常。
 - **④ 源码直跑验证法（免打包快速验证桌面修复，2026-09-07 实战）**：`cloud_desktop` 目录下 `node_modules\electron\dist\electron.exe .` 直启源码即可——package.json name 与安装版一致（tcm-prescription-cloud）→ userData 同为 %APPDATA%\tcm-prescription-cloud，可复用真实故障现场；getMachineId = 硬件指纹+hostname+platform（**不含 exePath**）→ dev 与打包版 machineId 一致，云端绑定不受影响。实战 35 秒验完 machineId 兜底自愈全链路：①curl 先验服务端（`admin-status?machineId=xx` 应返回 activated+license）②直跑源码 → autoRestore 自动装号（license.dat 落盘、edition/users 正确）③`sha256('bnzc_prescription_salt_v1'+密码)` 对账 config 哈希。适合"装号/启动期"逻辑验证（页面交互类仍用 ② 的 CDP 探针）。注意验完 taskkill electron.exe，防 DIPS 锁残留。
 
+**四十三、注册密码生效链路（2026-09-07，取代"云端密码归一化 admin"旧设计）**：用户实测报"admin 密码登入成功，自己注册时设定密码就没有意义了"——旧设计 ensureClinicUser 硬编码 admin + normalizeActivationPassword 全量重置 admin，注册表单密码只在本地账户生效，云端账户永远 admin。
+- **新链路**：①客户端提交申请时 password 随 body 上传（HTTPS，与登录同级安全）——云桌面 activate.js / 离线桌面 activate.js / shared cloud.js + offline.js（APP/网页）四条链路全部带上；②服务端 admin-submit 校验（8-32 位字母+数字，'admin' 默认值不上传）→ PBKDF2 哈希（`hashPassword`）落库 record.passwordHash/passwordSalt（**KV 只存哈希**，admin-status 响应不下发）；③审核通过后 ensureClinicUser 用 record 哈希开账户、normalizeActivationPassword 用 record 哈希重置（幂等对比改为哈希串一致跳过，原 verifyPassword(admin) 判定废弃）；④无哈希 record（官网下单/工单/旧记录/直建订单链路）→ 全部回退默认 admin（旧行为，存量兼容）。
+- **安全铁律**：四处复用分支（occ×3 + paid×1）补写密码必须 `rec.phone === phone` 严格匹配——findPaidOrderForPhoneOrMachine 可仅凭 machineId 命中他人订单，machineId 不可信，不匹配时补写=接管他人账户（对齐 2026-08-31 admin-status P0 决策）。existingActivated 短路分支可写（上面已验 _isOwnerDevice 设备绑定 + phone 恒匹配）。
+- **本地/云端密码双轨**：requestId 正常链路本地账户=注册密码（saveLicense 读 admin-request-id.dat 解密）✓；machineId 兜底断链路径本地无存根 → 本地账户 admin + 云端账户注册密码，**两个密码都能登录**（loginWithUsernamePassword 本地失败自动云端兜底）。showSuccess(phone, isCodeMode, noLocalPwd) 第三参区分文案。
+- **自测**：`tools/_tmp/test-admin-account.mjs` mock KV 12 用例全 PASS（provision 建号用注册密码/无哈希回退 admin/normalize 重置+幂等+只动目标手机号）。
+- **PowerShell curl JSON 坑**：`curl.exe -d '{"k":"v"}'` 的引号被 PS 剥落 → 服务端 body 解析空 → 误报"缺少参数"（invite.js 实测踩坑，一度误判线上未部署）。正确姿势：`$body='...'; curl -d $body` 或 `--data-raw`（PS5 仍可能剥）最稳是 `-d "@file.json"`。
+
 ## 8. 桌面版技术规范
 
 * **登录预填：已彻底取消（2026-09-06 Commit 2202236f，取代 9-04"来源单一化"方案）**：`initLoginInput` **不再做任何用户名自动预填**——登录框永远空白+聚焦；记住的账户仅保留**手动下拉切换**（renderUsernameDropdown，点▼选择）。演进史：8-27 恢复预填 → 9-04 收窄为"仅 localStorage 记住的用户名"（历史 bug：config.users 单账户分支无法区分出厂模板 admin，全新安装首次启动即预填 admin/admin）→ 9-06 用户实测"升级新版后自动显示旧记住的用户名，不像新客户"后**彻底取消**。理由：预填链路多次引发历史 bug + 升级安装 userData 不清导致残留展示；而手动下拉保留全部便利。
