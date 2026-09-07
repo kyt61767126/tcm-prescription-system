@@ -262,6 +262,13 @@ export async function deleteAdminRequest(kv, requestId) {
             }
         } catch (_) { /* 忽略扫描失败 */ }
     }
+    // ★ 2026-09-07 删除 active_order:{machineId} 进行中订单索引（48h TTL 派生键，
+    //   order-submit bindActiveOrder 写入指向本 requestId）——删除类接口必须清理
+    //   该记录写入过的全部 key（铁律）：残留会让同机再提交时幂等分支读到死索引
+    //   （existRec 已删→不命中→新建，旧键变脏数据悬挂 48h）。
+    try {
+        if (record.machineId) await kv.delete(kvKey.activeOrder(record.machineId));
+    } catch (_) { /* 忽略：索引清理失败不阻断删除主流程 */ }
     return { deleted: true, removedFromPhoneIndex: !!record.phone };
 }
 
