@@ -136,7 +136,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
         setTrialDays: (days) => ipcRenderer.invoke('license:set-trial-days', days),
         getTrialDays: () => ipcRenderer.invoke('license:get-trial-days'),
         // ★ 2026-08-29 邀请码查询：主进程代理 fetch（渲染进程 file:// 直连云端被 CORS 拦截）
-        queryInvite: (payload) => ipcRenderer.invoke('license:query-invite', payload)
+        queryInvite: (payload) => ipcRenderer.invoke('license:query-invite', payload),
+        // ★ 2026-09-08 注册密码直通：读注册信息（跨 session，主进程加密文件源）
+        loadRegistrationInfo: () => ipcRenderer.invoke('license:load-registration-info'),
+        // ★ 注册成功实时通知（主窗口注册 → 已开的激活窗口立即刷新直通按钮）
+        onRegistrationUpdated: (cb) => {
+            const handler = (_e, info) => { try { cb(info); } catch (err) {} };
+            ipcRenderer.on('registration:updated', handler);
+            return () => ipcRenderer.removeListener('registration:updated', handler);
+        }
     },
 
     // ★ 激活码激活窗口（云端激活系统，第3周任务）

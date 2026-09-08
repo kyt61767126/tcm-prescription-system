@@ -2930,10 +2930,51 @@ ipcMain.handle('license:register-local-user', async (event, payload) => {
         await fse.writeJson(configPath, config, { spaces: 2 });
         console.log('[Register] 本地注册成功:', effPhone, existed ? '(UPSERT 更新)' : '(新增)',
             'users=' + config.users.length);
+
+        // ★ 2026-09-08 注册密码直通（修复 localStorage 跨 session 隔离 bug）：
+        //   主窗口 partition='persist:tcm-prescription-dingzhi'，激活窗口 defaultSession，
+        //   两窗口 localStorage 物理隔离 → activate-window 读不到 registrationInfo。
+        //   改走主进程：①safeStorage(DPAPI) 加密密码落盘 userData/registration-info.json
+        //   供激活窗口重启后 IPC 读取；②broadcast 实时通知已开的激活窗口立即刷新直通按钮。
+        try {
+            let pwdEnc = '';
+            if (safeStorage.isEncryptionAvailable()) {
+                const buf = safeStorage.encryptString(effPwd);
+                if (buf && buf.length) pwdEnc = buf.toString('base64');
+            }
+            const regInfoPath = path.join(app.getPath('userData'), 'registration-info.json');
+            const regInfo = {
+                phone: effPhone,
+                clinicName: effClinic,
+                adminName: effAdmin,
+                passwordEnc: pwdEnc, // 空=safeStorage 不可用（激活窗口回退默认流程）
+                at: now
+            };
+            await fse.writeJson(regInfoPath, regInfo, { spaces: 2 });
+            // 广播到所有已开窗口（含注册前自动弹出的 activate-window）
+            const { webContents } = require('electron');
+            for (const wc of webContents.getAllWebContents()) {
+                try { wc.send('registration:updated', regInfo); } catch (e2) {}
+            }
+        } catch (re) { console.warn('[Register] 注册信息直通落盘失败(不影响注册):', re.message); }
+
         return { success: true, users: config.users };
     } catch (e) {
         console.error('[Register] register-local-user 异常:', e);
         return { success: false, error: String(e && e.message ? e.message : e) };
+    }
+});
+
+// ★ 2026-09-08 注册密码直通：激活窗口读注册信息（跨 session，localStorage 不可用）
+//   返回 userData/registration-info.json（密码为 safeStorage 加密 base64，无明文落盘）
+ipcMain.handle('license:load-registration-info', async () => {
+    try {
+        const regInfoPath = path.join(app.getPath('userData'), 'registration-info.json');
+        if (!(await fse.pathExists(regInfoPath))) return { success: true, info: null };
+        const info = await fse.readJson(regInfoPath);
+        return { success: true, info: (info && info.phone) ? info : null };
+    } catch (e) {
+        return { success: true, info: null };
     }
 });
 

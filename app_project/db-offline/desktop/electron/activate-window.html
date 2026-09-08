@@ -693,63 +693,109 @@ let codeState = { phone: '', clinicName: '', adminName: '', password: '' };
 let _pollTimer = null;
 let _restartTimer = null;
 
-// ★ 2026-09-08 注册密码直通（方案B，对齐 APP 端 offline.js 已验证实现）：
-//   注册开通时已设自定义密码（localStorage['license:registrationInfo'].passwordEnc），
-//   激活时不该再问一次密码——自动解密预置，Step1 按钮变「确认信息并提交」直接提交。
-//   数据通路：主窗口与激活窗口同为 defaultSession + file:// 同源 → localStorage 共享；
-//   ENC: 前缀走 electronAPI.decryptString（主进程 safeStorage/DPAPI），XORv2: 纯 JS 同款盐。
+// ★ 2026-09-08 注册密码直通 v2（修复跨 session 隔离 bug）：
+//   【根因】主窗口 partition='persist:tcm-prescription-dingzhi'，本窗口 defaultSession，
+//   两窗口 localStorage 物理隔离（asar 打包环境实测），且本窗口常在注册【之前】被
+//   试用提醒自动弹出 → localStorage 单源读取既拿不到也不刷新。
+//   【修复】双源读取 + 三时机刷新：
+//   ① 源A localStorage（同 session 场景兼容）+ 源B IPC loadRegistrationInfo
+//     （主进程注册时 safeStorage/DPAPI 加密落盘 userData/registration-info.json）；
+//   ② 时机1=窗口加载时；时机2=主进程 broadcast registration:updated（注册成功瞬间
+//     已开窗口立即刷新）；时机3=窗口 focus/visibilitychange（兜底）。
 let __regInfo = null;
-let __regPwdPromise = null;
-try { __regInfo = JSON.parse(localStorage.getItem('license:registrationInfo') || 'null'); } catch (e) { __regInfo = null; }
-if (__regInfo && __regInfo.passwordEnc) {
-    __regPwdPromise = (async () => {
-        const enc = String(__regInfo.passwordEnc);
-        if (enc.startsWith('ENC:')) {
-            let inner = enc.substring(4);
-            if (inner.startsWith('ENC:')) inner = inner.substring(4); // 双前缀兼容（encryptSensitive 双保险写入）
-            if (window.electronAPI && typeof window.electronAPI.decryptString === 'function') {
-                return String(await window.electronAPI.decryptString(inner) || '');
-            }
-            return ''; // safeStorage 绑定系统账号，失败不回退明文
-        }
-        if (enc.startsWith('XORv2:')) {
-            // 与 auth-core encryptSensitive XORv2 兜底同款（salt+base64+escape 逆变换）
-            const SALT = 'bnzc_admin_req_sens_salt_v1';
-            let bin; try { bin = atob(enc.substring(6)); } catch (e) { return ''; }
-            let uri; try { uri = escape(bin); } catch (e) { return ''; }
-            let cipher; try { cipher = decodeURIComponent(uri); } catch (e) { return ''; }
-            let out = '';
-            for (let i = 0; i < cipher.length; i++) out += String.fromCharCode(cipher.charCodeAt(i) ^ SALT.charCodeAt(i % SALT.length));
-            return out;
-        }
-        return '';
-    })();
-    __regPwdPromise.then((p) => {
-        if (!p) return; // 解密失败 → 维持原流程（Step2 手填/默认 admin 直通）
-        window.__regPwd = p;
-        // ① Tab1 按钮语义切换：已注册 → 一键提交（密码自动带注册密码）
-        try {
-            const btn = document.getElementById('toStep2Btn');
-            if (btn) btn.textContent = '✅ 确认信息并提交 →';
-            const qbtn = document.getElementById('quickSubmitBtn');
-            if (qbtn) qbtn.style.display = 'none'; // 注册密码优先，防误点默认 admin 造成两套密码
-            const hint = document.getElementById('phoneHint');
-            if (hint) hint.textContent = '💡 11位手机号为登录账号，登录密码为注册时设置的密码';
-        } catch (e) {}
-        // ② 兜底预填密码框（submitBtn 读 state.password，程序赋值不触发 input 事件，须手动同步）：
-        //   Tab1 Step2（竞态/审核驳回重填场景）+ Tab2 激活码路径（防留空归一 admin 与注册密码不一致）
-        try {
-            const pEl = document.getElementById('password');
-            const p2El = document.getElementById('password2');
-            if (pEl && !pEl.value) { pEl.value = p; state.password = p; }
-            if (p2El && !p2El.value) p2El.value = p;
-            const cEl = document.getElementById('codePassword');
-            const c2El = document.getElementById('codePassword2');
-            if (cEl && !cEl.value) { cEl.value = p; codeState.password = p; }
-            if (c2El && !c2El.value) c2El.value = p;
-        } catch (e) {}
-    }).catch(() => {});
+window.__regPwd = window.__regPwd || '';
+
+// 解密 passwordEnc（三种格式：ENC:/ENC:ENC: 前缀走 IPC safeStorage；XORv2: 纯 JS；裸 base64=主进程 v2 格式）
+async function __decryptRegPwd(enc) {
+    const s = String(enc || '');
+    if (!s) return '';
+    if (s.startsWith('XORv2:')) {
+        const SALT = 'bnzc_admin_req_sens_salt_v1';
+        let bin; try { bin = atob(s.substring(6)); } catch (e) { return ''; }
+        let uri; try { uri = escape(bin); } catch (e) { return ''; }
+        let cipher; try { cipher = decodeURIComponent(uri); } catch (e) { return ''; }
+        let out = '';
+        for (let i = 0; i < cipher.length; i++) out += String.fromCharCode(cipher.charCodeAt(i) ^ SALT.charCodeAt(i % SALT.length));
+        return out;
+    }
+    let body = s;
+    if (body.startsWith('ENC:')) body = body.substring(4);
+    if (body.startsWith('ENC:')) body = body.substring(4); // 双前缀兼容
+    if (window.electronAPI && typeof window.electronAPI.decryptString === 'function') {
+        try { return String(await window.electronAPI.decryptString(body) || ''); } catch (e) { return ''; }
+    }
+    return '';
 }
+
+// 应用直通状态：按钮语义切换 + 隐藏默认admin按钮 + hint + 密码框预填（含 state 手动同步）
+function __applyRegPwd(p, phone) {
+    if (!p) return;
+    window.__regPwd = p;
+    try {
+        const btn = document.getElementById('toStep2Btn');
+        if (btn) btn.textContent = '✅ 确认信息并提交 →';
+        const qbtn = document.getElementById('quickSubmitBtn');
+        if (qbtn) qbtn.style.display = 'none'; // 注册密码优先，防误点默认 admin 造成两套密码
+        const hint = document.getElementById('phoneHint');
+        if (hint) hint.textContent = '💡 11位手机号为登录账号，登录密码为注册时设置的密码';
+    } catch (e) {}
+    // 兜底预填密码框（submitBtn 读 state.password，程序赋值不触发 input 事件须手动同步）
+    try {
+        const pEl = document.getElementById('password');
+        const p2El = document.getElementById('password2');
+        if (pEl && !pEl.value) { pEl.value = p; state.password = p; }
+        if (p2El && !p2El.value) p2El.value = p;
+        const cEl = document.getElementById('codePassword');
+        const c2El = document.getElementById('codePassword2');
+        if (cEl && !cEl.value) { cEl.value = p; codeState.password = p; }
+        if (c2El && !c2El.value) c2El.value = p;
+    } catch (e) {}
+    // 手机号若空则预填注册手机号（换号激活仍可覆盖——直通条件会校验 phone 匹配）
+    try {
+        const phEl = document.getElementById('phone');
+        if (phEl && !phEl.value && phone) phEl.value = phone;
+    } catch (e) {}
+}
+
+// 双源加载注册信息 → 解密 → 应用直通（幂等，可反复调用刷新）
+async function __loadRegInfoDirect() {
+    try {
+        // 源A：localStorage（同 session 场景）
+        let info = null;
+        try { info = JSON.parse(localStorage.getItem('license:registrationInfo') || 'null'); } catch (e) { info = null; }
+        // 源B：IPC 主进程加密文件（跨 session 主战场；主进程 register-local-user 落盘）
+        if (!info && window.electronAPI && window.electronAPI.license && window.electronAPI.license.loadRegistrationInfo) {
+            try {
+                const r = await window.electronAPI.license.loadRegistrationInfo();
+                if (r && r.success && r.info) info = r.info;
+            } catch (e2) {}
+        }
+        if (!info || !info.phone) return;
+        if (!info.passwordEnc) return; // safeStorage 不可用 → 回退原流程
+        __regInfo = info;
+        const p = await __decryptRegPwd(info.passwordEnc);
+        if (p) __applyRegPwd(p, info.phone);
+    } catch (e) {}
+}
+
+// 时机1：窗口加载时
+__loadRegInfoDirect();
+// 时机2：主进程 broadcast（注册成功瞬间，已开窗口立即刷新——本窗口常先于注册被试用提醒弹出）
+try {
+    if (window.electronAPI && window.electronAPI.license && window.electronAPI.license.onRegistrationUpdated) {
+        window.electronAPI.license.onRegistrationUpdated((info) => {
+            if (info && info.phone && info.passwordEnc) {
+                __regInfo = info;
+                __decryptRegPwd(info.passwordEnc).then((p) => { if (p) __applyRegPwd(p, info.phone); }).catch(() => {});
+            }
+        });
+    }
+} catch (e) {}
+// 时机3：窗口 focus / 可见性变化兜底（broadcast 丢失场景，如注册发生时本窗口最小化）
+try {
+    window.addEventListener('focus', () => { __loadRegInfoDirect(); });
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) __loadRegInfoDirect(); });
+} catch (e) {}
 
 // ============ Edition selection ============
 function selectEdition(edition) {
@@ -1037,15 +1083,14 @@ document.getElementById('toStep2Btn').addEventListener('click', async () => {
     // ★ 2026-09-08 方案B直通：已注册用户（注册密码解密成功 + 表单手机号=注册手机号）
     //   跳过密码步骤直接提交——账号+密码注册时已建（addLocalActivationUser 幂等 UPSERT），
     //   激活不收密码。对齐 APP 端 offline.js「确认信息并提交」链路。
-    if (__regInfo && String(__regInfo.phone || '') === state.phone && __regPwdPromise) {
+    //   v2：__regPwd 由 __loadRegInfoDirect/onRegistrationUpdated/focus 三时机异步就位，
+    //   点击时若尚未就绪则现场重读（1.5s 超时回退 Step2 不阻塞）。
+    if (__regInfo && String(__regInfo.phone || '') === state.phone) {
         let regPwd = window.__regPwd || '';
         if (!regPwd) {
             try {
-                const __p = await Promise.race([
-                    __regPwdPromise,
-                    new Promise((r) => setTimeout(() => r(null), 1500))
-                ]);
-                if (__p) regPwd = String(__p);
+                await Promise.race([__loadRegInfoDirect(), new Promise((r) => setTimeout(r, 1500))]);
+                regPwd = window.__regPwd || '';
             } catch (e) {}
         }
         if (regPwd) {
