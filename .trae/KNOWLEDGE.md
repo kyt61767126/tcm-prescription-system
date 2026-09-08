@@ -792,6 +792,11 @@ P2 渐进迁移（2026-09-03 当日完成）：
 - **追加（a84c73ba）官网下载页图片尺寸整体适配**：新增 `.shot-img` 统一收窄类（display:block;width:100%;max-width:320px;margin:0 auto+边框圆角），6 张软件界面截图（register-fill/waiting、promo-step2/4×2 组）从容器全宽（桌面实测 487-500px）收窄至 320px 居中；邀请海报 420→320px（fallback 占位框同步，**又验证了「改图必须 grep 配套部件」铁律**）；收款码 200px 不动（扫码需要）。手机端容器内宽<320 基本不变（实测 289-315），自然实现"桌面紧凑、手机不变"的整体适配。**测量坑：官网图片全在非激活 Tab 内，getBoundingClientRect 恒 0——审计脚本必须遍历 7 个 Tab 逐一 click 后再量。**
 - **生效方式**：纯官网改动（public+site-official 双镜像手工同步），push 后 Cloudflare Pages 自动部署，强刷即生效，无需重打包任何端。
 
+**五十三、离线桌面激活窗口「管理员激活」注册表单精简（2026-09-08，Commit 6933a67d）**：
+- **改动**：db-offline/desktop/electron/activate-window.html Tab1 注册表单对齐云桌面已有精简模式——①Step1 去掉「（必填）」冗余标注×2（红星*已表意）+ 重复 hint×2（"必填，请填写您的诊所名称"与标签同义）；②下一步按钮「确认密码（可留空=默认 admin）→」→「设置密码 →」（默认 admin 语义保留在 Step2 标签+hint+占位符）；③Step2 密码占位符改「至少8位，含字母和数字（留空＝默认 admin）」补格式要求。
+- **铁律**：a. **.field-hint 是 showFieldError 的错误挂载点，不能删 div 只能清空初始文案**——`el.parentElement.querySelector('.field-hint')` 写校验错误，删 div 会丢错误文案（云桌面版直接删了属可接受降级，离线版保留空 div 更优，pwd2Hint 空文案是既有先例）；b. **activate-window.html 不在 6 份界面基线内可安全优化**（基线只保护 index.html×3 + login.html×3），但改完仍要跑 check-interface.bat 复核；c. **双桌面版演进不同步时以已精简版为参照对齐**，但产品语义差异要保留（离线版"可留空＝默认 admin"是真实行为，云桌面密码必填）；d. Tab2「激活码激活」仍有同款（必填）冗余（行 511-518），如需一致精简另行处理。
+- **生效方式**：离线桌面版需重新打包（build.bat）后生效；云端网页/云桌面/云端APP不受影响。
+
 ## 8. 桌面版技术规范
 
 * **登录预填：已彻底取消（2026-09-06 Commit 2202236f，取代 9-04"来源单一化"方案）**：`initLoginInput` **不再做任何用户名自动预填**——登录框永远空白+聚焦；记住的账户仅保留**手动下拉切换**（renderUsernameDropdown，点▼选择）。演进史：8-27 恢复预填 → 9-04 收窄为"仅 localStorage 记住的用户名"（历史 bug：config.users 单账户分支无法区分出厂模板 admin，全新安装首次启动即预填 admin/admin）→ 9-06 用户实测"升级新版后自动显示旧记住的用户名，不像新客户"后**彻底取消**。理由：预填链路多次引发历史 bug + 升级安装 userData 不清导致残留展示；而手动下拉保留全部便利。
