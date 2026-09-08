@@ -475,12 +475,13 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                         <th>到期时间</th>
                         <th>机器ID / 设备</th>
                         <th>诊所名</th>
+                        <th>邀请进度</th>
                         <th>备注</th>
                         <th>操作</th>
                     </tr>
                 </thead>
                 <tbody id="listBody">
-                    <tr><td colspan="11" class="loading">加载中...</td></tr>
+                    <tr><td colspan="12" class="loading">加载中...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -560,7 +561,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                         </tr>
                     </thead>
                     <tbody id="usersListBody">
-                        <tr><td colspan="8" class="loading">加载中...</td></tr>
+                        <tr><td colspan="9" class="loading">加载中...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -1968,11 +1969,11 @@ async function loadList() {
                 showAlert('mainAlert', '登录已过期，请重新登录', 'error');
                 setTimeout(doLogout, 1500);
             } else {
-                document.getElementById('listBody').innerHTML = '<tr><td colspan="10" class="empty">' + (data.error || '加载失败') + '</td></tr>';
+                document.getElementById('listBody').innerHTML = '<tr><td colspan="12" class="empty">' + (data.error || '加载失败') + '</td></tr>';
             }
         }
     } catch (e) {
-        document.getElementById('listBody').innerHTML = '<tr><td colspan="10" class="empty">网络错误：' + e.message + '</td></tr>';
+        document.getElementById('listBody').innerHTML = '<tr><td colspan="12" class="empty">网络错误：' + e.message + '</td></tr>';
     }
 }
 
@@ -1988,18 +1989,69 @@ function renderStats(stats) {
 function renderList(records) {
     const tbody = document.getElementById('listBody');
     if (!records || records.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="11" class="empty">暂无激活码</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="12" class="empty">暂无激活码</td></tr>';
         return;
     }
     const typeNames = { trial: '试用版', personal: '标准版', pro: '机构版' };
     const statusNames = { unused: '未使用', used: '已激活', expired: '已过期', disabled: '已禁用' };
 
     tbody.innerHTML = records.map(r => {
-        const typeTag = '<span class="tag tag-' + r.type + '">' + typeNames[r.type] + '</span>';
+        // ★ 2026-09-08 版本标签统一：与用户管理/诊所管理/激活审核同款复合标签
+        //   载体前缀取自绑定设备（productClass=cloud/offline + clientClass=desktop/app）：
+        //   🌐网页·云端机构版 / 🖥️桌面·离线标准版 / 📱APP·离线机构版 / 🖥️📱双端·...
+        //   未使用的激活码无设备记录 → 无前缀纯版本文字（旧样式兜底）
+        const typeTag = (function () {
+            const edText = typeNames[r.type] || r.type;
+            const devs = Array.isArray(r.devices) ? r.devices : [];
+            const hasCloud = devs.some(d => d && d.productClass === 'cloud');
+            const hasOffline = devs.some(d => d && d.productClass === 'offline');
+            if (!hasCloud && !hasOffline) {
+                return '<span class="tag tag-' + r.type + '">' + edText + '</span>';
+            }
+            if (hasCloud) {
+                // 云端版 → 🌐网页·云端{版本}（tag 样式与其他板块云端同款）
+                const tagClass = r.type === 'pro' ? 'tag-pro' : 'tag-personal';
+                return '<span class="tag ' + tagClass + '">🌐网页·云端' + edText + '</span>';
+            }
+            // 离线版 → 载体前缀（desktop/app 组合）+ 离线{版本}
+            const cls = devs.map(d => d && d.clientClass).filter(Boolean);
+            let prefix = '';
+            if (cls.includes('desktop') && cls.includes('app')) prefix = '🖥️📱双端·';
+            else if (cls.includes('desktop')) prefix = '🖥️桌面·';
+            else if (cls.includes('app')) prefix = '📱APP·';
+            return '<span class="tag tag-trial">' + prefix + '离线' + edText + '</span>';
+        })();
         const statusTag = '<span class="tag tag-' + r.status + '">' + statusNames[r.status] + '</span>';
         const issuedAt = r.issuedAt ? new Date(r.issuedAt).toLocaleString('zh-CN') : '-';
         const activatedAt = r.activatedAt ? new Date(r.activatedAt).toLocaleString('zh-CN') : '-';
-        const expiresAt = r.expiresAt ? new Date(r.expiresAt).toLocaleDateString('zh-CN') : '-';
+        // ★ 2026-09-08 到期时间统一：与诊所管理同款剩余天数提醒（≤30天黄色/已到期红色加粗）
+        let expiresCell = '-';
+        if (r.expiresAt) {
+            const exp = new Date(r.expiresAt);
+            const days = Math.ceil((exp.getTime() - Date.now()) / 86400000);
+            const dateStr = exp.toISOString().slice(0, 10);
+            if (days < 0) {
+                expiresCell = '<span style="color:#e74c3c;font-weight:bold;">已到期 ' + (-days) + ' 天</span>';
+            } else if (days <= 30) {
+                expiresCell = '<span style="color:#f39c12;font-weight:bold;">剩 ' + days + ' 天（' + dateStr + '）</span>';
+            } else {
+                expiresCell = '剩 ' + days + ' 天（' + dateStr + '）';
+            }
+        }
+        // ★ 2026-09-08 邀请进度列（与 site-admin 统一）：自有码 + 已邀/封顶 + 奖励天数；被邀记录补 ↳ 行
+        let inviteCell = '-';
+        if (r.inviteCode || r.invitedBy) {
+            const parts = [];
+            if (r.inviteCode) {
+                const cntColor = (r.inviteCount > 0) ? '#e65100' : '#909399';
+                parts.push('<div style="font-family:Courier New,monospace;font-weight:600;color:#667eea;">' + escapeHtml(r.inviteCode) + '</div>' +
+                    '<div style="font-size:11px;color:' + cntColor + ';">已邀 ' + (r.inviteCount || 0) + '/' + (r.maxInvitees || 4) + ' · 奖励 ' + (r.rewardDays || 0) + '天</div>');
+            }
+            if (r.invitedBy) {
+                parts.push('<div style="font-size:11px;color:#909399;">↳ 由 ' + escapeHtml(r.invitedBy) + ' 邀请</div>');
+            }
+            inviteCell = parts.join('');
+        }
 
         // ★ v4 新增：机器ID + 设备数显示
         const maxDev = r.maxDevices || 1;
@@ -2034,9 +2086,10 @@ function renderList(records) {
             '<td>' + statusTag + '</td>' +
             '<td>' + issuedAt + '</td>' +
             '<td>' + activatedAt + '</td>' +
-            '<td>' + expiresAt + '</td>' +
+            '<td>' + expiresCell + '</td>' +
             '<td>' + machineCell + '</td>' +
             '<td>' + clinicCell + '</td>' +
+            '<td>' + inviteCell + '</td>' +
             '<td>' + escapeHtml(r.note || '-') + '</td>' +
             '<td style="white-space:nowrap;">' + actions + '</td>' +
             '</tr>';
