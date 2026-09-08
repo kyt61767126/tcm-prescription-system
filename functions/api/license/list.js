@@ -39,12 +39,30 @@ function json(data, status = 200) {
 // ★ 2026-09-08 版本显示对齐（惰性自愈）：历史 admin-approve 审核通过的记录
 //   license.devices[].productClass/clientClass 缺失 → 激活码管理「类型」列只显
 //   纯「标准版」，与激活审核「版本」列（🖥️桌面·离线标准版）不一致。
-//   此处按 admin_req（激活审核记录，含 appMode/appModeCarrier）回填端形态：
-//     machineId → (productClass, clientClass)，回填后持久化（一次性自愈）。
-//   稳态零开销：无缺失时直接短路，不读 admin_req 索引。
+//   双数据源自愈（保证与用户管理/激活审核显示必然一致）：
+//     源A admin_req（激活审核记录）：machineId 精确匹配 → appMode/appModeCarrier 派生
+//     源B 诊所记录（system:clinics）：license.clinicName 定位诊所 → edition +
+//        offlineCarrier 派生——与用户管理版本列【同一数据源】，兜底覆盖非审核
+//        通道激活（直接发码→APP/桌面输码走 validate，无 admin_req）及索引截断遗漏
+//   回填后持久化（一次性自愈）；稳态零开销：无缺失时直接短路，零额外 KV 读。
 //   对齐 users.js 登录自愈 / admin-list 惰性清理的读路径自愈模式。
 const BACKFILL_REQ_PREFIX = 'admin_req:';
 const BACKFILL_REQ_INDEX = 'admin_req_index';
+const BACKFILL_CLINICS_KEY = 'system:clinics';
+const BACKFILL_REQ_SCAN_LIMIT = 800;   // admin_req 逐条读上限（KV 子请求保护，从最新往前取）
+
+// 源B：诊所记录 → 端形态（clinic.edition: offline_*/cloud_* + offlineCarrier: desktop/app）
+function deriveFromClinic(clinic) {
+    if (!clinic) return null;
+    const ed = String(clinic.edition || '');
+    let pc = null;
+    if (ed.indexOf('offline_') === 0) pc = 'offline';
+    else if (ed.indexOf('cloud') === 0) pc = 'cloud';
+    if (!pc) return null;
+    const oc = String(clinic.offlineCarrier || '').toLowerCase();
+    const cc = (pc === 'offline' && (oc === 'desktop' || oc === 'app')) ? oc : null;
+    return { productClass: pc, clientClass: cc };
+}
 
 async function backfillDeviceClass(kv, records) {
     // 1. 找出缺端形态的设备 machineId（仅已绑定设备的记录；未使用激活码无设备，天然跳过）
@@ -57,12 +75,13 @@ async function backfillDeviceClass(kv, records) {
     }
     if (needMid.size === 0) return;   // 稳态短路：零额外 KV 读
 
-    // 2. 扫描激活审核记录（activated 且 machineId 命中缺失集），建映射
-    //    同一设备多次激活：索引后写覆盖先写 → 最近一次审核结果生效
     const map = new Map();
+
+    // 2. 源A：扫描激活审核记录（activated 且 machineId 命中缺失集）
+    //    同一设备多次激活：索引后写覆盖先写 → 最近一次审核结果生效
     try {
         const index = (await kv.get(BACKFILL_REQ_INDEX, 'json')) || [];
-        const ids = Array.isArray(index) ? index.slice(-500) : [];
+        const ids = Array.isArray(index) ? index.slice(-BACKFILL_REQ_SCAN_LIMIT) : [];
         const reqs = await Promise.all(ids.map(id =>
             kv.get(BACKFILL_REQ_PREFIX + id, 'json').catch(() => null)));
         for (const q of reqs) {
@@ -76,11 +95,51 @@ async function backfillDeviceClass(kv, records) {
         }
     } catch (e) {
         console.warn('[ListBackfill] 扫描激活审核记录失败:', e.message);
-        return;
+    }
+
+    // 3. 源B：诊所记录兜底（源A未命中的 machineId；与用户管理显示同源）
+    const remain = new Set([...needMid].filter(mid => !map.has(mid)));
+    if (remain.size > 0) {
+        try {
+            const clinics = (await kv.get(BACKFILL_CLINICS_KEY, 'json')) || [];
+            if (Array.isArray(clinics) && clinics.length) {
+                for (const r of records) {
+                    if (!Array.isArray(r.devices) || !r.clinicName) continue;
+                    const missing = r.devices.filter(d =>
+                        d && d.machineId && !d.productClass && remain.has(d.machineId));
+                    if (!missing.length) continue;
+                    // 同名诊所定位：多条时用激活手机号匹配诊所用户筛选，无 phone/未中取最近一条
+                    let cands = clinics.filter(c => c && c.name === r.clinicName);
+                    if (!cands.length) continue;
+                    if (cands.length > 1 && r.phone) {
+                        const matched = [];
+                        for (const c of cands) {
+                            const users = await kv.get('clinic:' + c.id + ':users', 'json').catch(() => null);
+                            if (Array.isArray(users) &&
+                                users.some(u => u && (u.username === r.phone || u.phone === r.phone))) {
+                                matched.push(c);
+                            }
+                        }
+                        if (matched.length) cands = matched;
+                    }
+                    const derived = deriveFromClinic(cands[cands.length - 1]);
+                    if (derived) {
+                        for (const d of missing) {
+                            map.set(d.machineId, derived);
+                            remain.delete(d.machineId);
+                        }
+                        console.log('[ListBackfill] 诊所兜底命中:', r.clinicName,
+                            derived.productClass + '/' + (derived.clientClass || '-'));
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn('[ListBackfill] 诊所兜底扫描失败:', e.message);
+        }
     }
     if (map.size === 0) return;
 
-    // 3. 回填内存记录并持久化（updateLicense 读改写；失败不阻断列表返回）
+    // 4. 回填内存记录并持久化（updateLicense 读改写；失败不阻断列表返回）
     for (const r of records) {
         if (!Array.isArray(r.devices)) continue;
         let changed = false;
