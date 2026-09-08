@@ -693,6 +693,64 @@ let codeState = { phone: '', clinicName: '', adminName: '', password: '' };
 let _pollTimer = null;
 let _restartTimer = null;
 
+// ★ 2026-09-08 注册密码直通（方案B，对齐 APP 端 offline.js 已验证实现）：
+//   注册开通时已设自定义密码（localStorage['license:registrationInfo'].passwordEnc），
+//   激活时不该再问一次密码——自动解密预置，Step1 按钮变「确认信息并提交」直接提交。
+//   数据通路：主窗口与激活窗口同为 defaultSession + file:// 同源 → localStorage 共享；
+//   ENC: 前缀走 electronAPI.decryptString（主进程 safeStorage/DPAPI），XORv2: 纯 JS 同款盐。
+let __regInfo = null;
+let __regPwdPromise = null;
+try { __regInfo = JSON.parse(localStorage.getItem('license:registrationInfo') || 'null'); } catch (e) { __regInfo = null; }
+if (__regInfo && __regInfo.passwordEnc) {
+    __regPwdPromise = (async () => {
+        const enc = String(__regInfo.passwordEnc);
+        if (enc.startsWith('ENC:')) {
+            let inner = enc.substring(4);
+            if (inner.startsWith('ENC:')) inner = inner.substring(4); // 双前缀兼容（encryptSensitive 双保险写入）
+            if (window.electronAPI && typeof window.electronAPI.decryptString === 'function') {
+                return String(await window.electronAPI.decryptString(inner) || '');
+            }
+            return ''; // safeStorage 绑定系统账号，失败不回退明文
+        }
+        if (enc.startsWith('XORv2:')) {
+            // 与 auth-core encryptSensitive XORv2 兜底同款（salt+base64+escape 逆变换）
+            const SALT = 'bnzc_admin_req_sens_salt_v1';
+            let bin; try { bin = atob(enc.substring(6)); } catch (e) { return ''; }
+            let uri; try { uri = escape(bin); } catch (e) { return ''; }
+            let cipher; try { cipher = decodeURIComponent(uri); } catch (e) { return ''; }
+            let out = '';
+            for (let i = 0; i < cipher.length; i++) out += String.fromCharCode(cipher.charCodeAt(i) ^ SALT.charCodeAt(i % SALT.length));
+            return out;
+        }
+        return '';
+    })();
+    __regPwdPromise.then((p) => {
+        if (!p) return; // 解密失败 → 维持原流程（Step2 手填/默认 admin 直通）
+        window.__regPwd = p;
+        // ① Tab1 按钮语义切换：已注册 → 一键提交（密码自动带注册密码）
+        try {
+            const btn = document.getElementById('toStep2Btn');
+            if (btn) btn.textContent = '✅ 确认信息并提交 →';
+            const qbtn = document.getElementById('quickSubmitBtn');
+            if (qbtn) qbtn.style.display = 'none'; // 注册密码优先，防误点默认 admin 造成两套密码
+            const hint = document.getElementById('phoneHint');
+            if (hint) hint.textContent = '💡 11位手机号为登录账号，登录密码为注册时设置的密码';
+        } catch (e) {}
+        // ② 兜底预填密码框（submitBtn 读 state.password，程序赋值不触发 input 事件，须手动同步）：
+        //   Tab1 Step2（竞态/审核驳回重填场景）+ Tab2 激活码路径（防留空归一 admin 与注册密码不一致）
+        try {
+            const pEl = document.getElementById('password');
+            const p2El = document.getElementById('password2');
+            if (pEl && !pEl.value) { pEl.value = p; state.password = p; }
+            if (p2El && !p2El.value) p2El.value = p;
+            const cEl = document.getElementById('codePassword');
+            const c2El = document.getElementById('codePassword2');
+            if (cEl && !cEl.value) { cEl.value = p; codeState.password = p; }
+            if (c2El && !c2El.value) c2El.value = p;
+        } catch (e) {}
+    }).catch(() => {});
+}
+
 // ============ Edition selection ============
 function selectEdition(edition) {
     state.edition = edition;
@@ -974,8 +1032,33 @@ function collectAdminStep1() {
     return true;
 }
 
-document.getElementById('toStep2Btn').addEventListener('click', () => {
+document.getElementById('toStep2Btn').addEventListener('click', async () => {
     if (!collectAdminStep1()) return;
+    // ★ 2026-09-08 方案B直通：已注册用户（注册密码解密成功 + 表单手机号=注册手机号）
+    //   跳过密码步骤直接提交——账号+密码注册时已建（addLocalActivationUser 幂等 UPSERT），
+    //   激活不收密码。对齐 APP 端 offline.js「确认信息并提交」链路。
+    if (__regInfo && String(__regInfo.phone || '') === state.phone && __regPwdPromise) {
+        let regPwd = window.__regPwd || '';
+        if (!regPwd) {
+            try {
+                const __p = await Promise.race([
+                    __regPwdPromise,
+                    new Promise((r) => setTimeout(() => r(null), 1500))
+                ]);
+                if (__p) regPwd = String(__p);
+            } catch (e) {}
+        }
+        if (regPwd) {
+            state.password = regPwd;
+            try { // 预填两框：提交处 pwd!==admin 校验 pwd2 一致；驳回重填场景字段就绪
+                document.getElementById('password').value = regPwd;
+                document.getElementById('password2').value = regPwd;
+            } catch (e) {}
+            document.getElementById('submitBtn').click();
+            return;
+        }
+        // 解密失败/超时 → 落回普通 Step2 流程（不阻塞提交路径）
+    }
     updateAdminProgress(2);
     showAdminPanel('step2');
     setTimeout(() => document.getElementById('password').focus(), 200);
