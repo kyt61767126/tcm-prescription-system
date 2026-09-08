@@ -796,7 +796,9 @@ P2 渐进迁移（2026-09-03 当日完成）：
 - **改动**：db-offline/desktop/electron/activate-window.html Tab1 注册表单对齐云桌面已有精简模式——①Step1 去掉「（必填）」冗余标注×2（红星*已表意）+ 重复 hint×2（"必填，请填写您的诊所名称"与标签同义）；②下一步按钮「确认密码（可留空=默认 admin）→」→「设置密码 →」（默认 admin 语义保留在 Step2 标签+hint+占位符）；③Step2 密码占位符改「至少8位，含字母和数字（留空＝默认 admin）」补格式要求。
 - **铁律**：a. **.field-hint 是 showFieldError 的错误挂载点，不能删 div 只能清空初始文案**——`el.parentElement.querySelector('.field-hint')` 写校验错误，删 div 会丢错误文案（云桌面版直接删了属可接受降级，离线版保留空 div 更优，pwd2Hint 空文案是既有先例）；b. **activate-window.html 不在 6 份界面基线内可安全优化**（基线只保护 index.html×3 + login.html×3），但改完仍要跑 check-interface.bat 复核；c. **双桌面版演进不同步时以已精简版为参照对齐**，但产品语义差异要保留（离线版"可留空＝默认 admin"是真实行为，云桌面密码必填）；d. Tab2「激活码激活」仍有同款（必填）冗余（行 511-518），如需一致精简另行处理。
 - **追加（98651e4f）Tab2「激活码激活」同款精简**：①Step1 去掉（必填）×2 + 重复 hint×2（空 div 挂载点保留，空提交实测「请输入激活码」错误正常写入）；②按钮「确认密码（可留空=默认 admin）→」→「设置密码 →」；③Step2 密码占位符同 Tab1 补格式要求。激活码格式 hint/电话登录账号说明/邀请码奖励说明等有效提示保留。**至此离线版 Tab1+Tab2 注册表单均与云桌面精简模式对齐（Tab2 冗余条目 d 已清零）。**
-- **生效方式**：离线桌面版需重新打包（build.bat）后生效；云端网页/云桌面/云端APP不受影响。
+- **追加（2d942d68）官网安装说明文档更新（截图全量换新）**：注册/激活流程 4 张截图（register-fill/waiting、promo-step2/4）全部用 Playwright 从精简后的 activate-window.html 实拍替换（460px 视口×2x 高清，jpeg 92）——旧图是旧版 UI 且带自动化工具角标（#1 Snapshot / #9 Type）。**可复用截拍手法**：a. Tab1 填表直接 fill 后截 `.container`；b. 等待面板调 `showWaiting(requestId, isoTime)`（需先设 `state.phone`，QR 库从 CDN 加载需等 ~1.5s）；c. Tab2 填码后截；d. 成功面板 stub `window.electronAPI={activate:{restart(){}}}` 再调 `showSuccess(phone,true,{inviteCode,...})`（Tab2 成功复用 admin 的 #success 面板，需手动切回 tab-admin）。**语义修正：旧 promo-step2 实为 Tab1 界面，与「激活码激活」标注不符，新图改拍 Tab2（激活码+邀请码同框）一处图两用**。site-official 镜像 HTML 不引用这些截图（结构较简，images/ 只有收款码 2 张）——**镜像同步前先 grep 引用，无引用的图片不入库避免二进制污染**。文案对齐 2 处（注册流程卡片+提示框补自定义密码规则）双副本同步。
+- **生效方式（表单精简 6933a67d/98651e4f，已随 1.0.212 打包）**：离线桌面版需重新打包（build.bat）后生效；云端网页/云桌面/云端APP不受影响。
+- **生效方式（官网更新 2d942d68）**：纯官网改动（public 权威源部署，site-official 仅同步其 HTML 实际含有的文案），push 后 Cloudflare Pages 自动部署，强刷即生效，无需重打包任何端。
 
 ## 8. 桌面版技术规范
 
