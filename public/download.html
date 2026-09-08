@@ -1157,7 +1157,7 @@
         </div>
 
         <!-- ============ Tab: 下载中心（手机端 + 桌面端 + 网页端 合并） ============ -->
-        <div class="tab-content active" id="tab-download">
+        <div class="tab-content active" id="tab-download" style="display:block">
             <!-- === 手机端 === -->
             <div class="section-title merged">
                 <span>📱 手机端 APP</span>
@@ -1466,7 +1466,7 @@
         </div>
 
         <!-- ============ Tab: 注册开通 ============ -->
-        <div class="tab-content" id="tab-register">
+        <div class="tab-content" id="tab-register" style="display:none">
             <div class="section-title">
                 <span>📝 注册开通 · 标准版/机构版</span>
                 <span class="sub">客户端申请 · 管理员审核 · 一键管理</span>
@@ -1588,7 +1588,7 @@
         </div>
 
         <!-- ============ Tab: 购买激活码 ============ -->
-        <div class="tab-content" id="tab-purchase">
+        <div class="tab-content" id="tab-purchase" style="display:none">
             <div class="section-title">
                 <span>🔑 购买激活码</span>
                 <span class="sub">试用到期后 · 扫码支付 · 客服发放</span>
@@ -1878,7 +1878,7 @@
         </div>
 
         <!-- ============ Tab: 邀请奖励（推广方案） ============ -->
-        <div class="tab-content" id="tab-promo">
+        <div class="tab-content" id="tab-promo" style="display:none">
             <div class="section-title">
                 <span>🎁 邀请好友 · 双方得奖励</span>
                 <span class="sub">激活用户专属 · 奖励自动到账</span>
@@ -2007,7 +2007,7 @@
         </div>
 
         <!-- ============ Tab: 安装说明 ============ -->
-        <div class="tab-content" id="tab-install">
+        <div class="tab-content" id="tab-install" style="display:none">
             <div class="section-title">
                 <span>📋 安装说明</span>
                 <span class="sub">安装步骤 · 首次使用 · 登录指引</span>
@@ -2270,7 +2270,7 @@
         </div>
 
         <!-- ============ Tab: 版本对比 ============ -->
-        <div class="tab-content" id="tab-compare">
+        <div class="tab-content" id="tab-compare" style="display:none">
             <div class="section-title">
                 <span>⚖️ 版本对比</span>
                 <span class="sub">选择最适合您的版本</span>
@@ -2372,7 +2372,7 @@
         </div>
 
         <!-- ============ Tab: FAQ ============ -->
-        <div class="tab-content" id="tab-faq">
+        <div class="tab-content" id="tab-faq" style="display:none">
             <div class="section-title">
                 <span>❓ 常见问题</span>
                 <span class="sub">点击展开查看答案</span>
@@ -2672,9 +2672,9 @@
             btn.addEventListener('click', () => {
                 const target = btn.dataset.tab;
                 document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => { c.classList.remove('active'); c.style.display = 'none'; });
                 btn.classList.add('active');
-                document.getElementById('tab-' + target).classList.add('active');
+                const activeTab = document.getElementById('tab-' + target); activeTab.classList.add('active'); activeTab.style.display = 'block';
                 window.scrollTo({ top: 0, behavior: 'smooth' });
                 if (target === 'purchase') {
                     setTimeout(generateWechatQRCode, 100);
