@@ -596,6 +596,14 @@
             border: 1px solid #e5e7eb;
         }
 
+        /* ★ 2026-09-08 ?card= 直达高亮：软件更新横幅点击 → 直接定位对应版本卡片（呼吸光效 3s） */
+        @keyframes card-spotlight {
+            0% { box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.55); }
+            50% { box-shadow: 0 0 0 10px rgba(37, 99, 235, 0.18); }
+            100% { box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.55); }
+        }
+        .card.spotlight { animation: card-spotlight 1s ease-in-out 3; }
+
         /* ★ 2026-09-08 安装后首次使用指引：2×2 分组面板网格（手机单列见 768px 断点） */
         .guide-grid {
             display: grid;
@@ -3993,6 +4001,19 @@
             // ★ 客户端激活窗口跳转导引：?mid= 设备识别码自动预填并直达购买区
             try {
                 const sp = new URLSearchParams(window.location.search);
+                // ★ 2026-09-08 更新横幅直达：?card=卡片id → 滚动定位对应版本下载卡片 + 呼吸高亮
+                //   （软件「🆕 新版提示」点击 → 直接打开本页对应版本下载，无需用户自己找）
+                const __cardId = (sp.get('card') || '').trim();
+                if (__cardId && document.getElementById(__cardId)) {
+                    switchTab('download', __cardId);
+                    setTimeout(() => {
+                        const c = document.getElementById(__cardId);
+                        if (c) {
+                            c.classList.add('spotlight');
+                            setTimeout(() => c.classList.remove('spotlight'), 3200);
+                        }
+                    }, 400);
+                } else {
                 // ★ 2026-09-06 架构重构：?orderNo= 订单恢复模式优先（客户端直建订单后跳转，
                 //   无表单直达付款步）；无 orderNo 才走旧 mid 预填/自动下单链路（旧包兼容）。
                 const __resumeOrderNo = (sp.get('orderNo') || sp.get('o') || '').trim().toUpperCase();
@@ -4055,6 +4076,7 @@
                     }
                 } catch (ePref) { console.warn('表单URL预填失败:', ePref); }
                 }
+                } // ← ?card= 直达 else 块闭合（card 命中时跳过 orderNo/mid 链路）
             } catch (e) {}
             // ★ 2026-09-03 手机端付款指引：手机 UA 或从APP携带 mid 跳转（客户在手机上打开本页，
             //   同一部手机无法扫自己屏幕，长按识别收款码会被微信防诈骗机制拦截）时显示

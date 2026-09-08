@@ -1041,7 +1041,7 @@ async function injectVideoRecorder(win) {
 //  - 无自动下载/自动安装；网络失败/解析失败/格式异常一律静默跳过（离线版无感）
 // ============================================================================
 const UPDATE_CHECK_URL = 'https://tcm-prescription-system.pages.dev/updates/local/latest.json';
-const UPDATE_DOWNLOAD_URL = 'https://tcm-prescription-system.pages.dev/download';
+const UPDATE_DOWNLOAD_URL = 'https://tcm-prescription-system.pages.dev/download?card=card-local-desktop';
 const UPDATE_BANNER_EXTRA_HEIGHT = 40;
 
 // 三段式版本号比较：仅当远程版本严格大于本地版本才提示
