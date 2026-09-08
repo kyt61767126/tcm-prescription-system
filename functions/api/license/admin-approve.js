@@ -215,6 +215,14 @@ export async function onRequest(context) {
 
         // 1. 生成新激活码并绑定 clinicName（请求中的 machineId 作为首个设备）
         const code = generateActivationCode();
+        // ★ 2026-09-08 版本显示对齐：admin_req 的 appMode/appModeCarrier 落到
+        //   license.devices[0].productClass/clientClass——激活码管理「类型」列据此拼
+        //   「🖥️桌面·离线标准版」复合标签，与激活审核「版本」列显示完全一致
+        //   （历史缺此字段 → 已激活记录类型列只显纯「标准版」）
+        const __productClass = (record.appMode === 'cloud') ? 'cloud'
+            : ((record.appMode === 'local' || record.appMode === 'offline') ? 'offline' : null);
+        const __clientClass = (record.appModeCarrier === 'desktop' || record.appModeCarrier === 'app')
+            ? record.appModeCarrier : null;
         const licenseRecord = {
             code: code,
             user: record.adminName,
@@ -235,7 +243,9 @@ export async function onRequest(context) {
                 machineId: record.machineId,
                 activatedAt: new Date().toISOString(),
                 clinicName: clinicName,
-                activatedIp: ip
+                activatedIp: ip,
+                productClass: __productClass,   // ★ 端形态：cloud云端/offline离线
+                clientClass: __clientClass      // ★ 客户端形态：desktop桌面/app
             }],
             status: 'used',  // 直接标记为已使用（管理员已审核通过）
             maxPrescriptions: maxPrescriptions !== undefined ? maxPrescriptions : undefined,
@@ -341,10 +351,13 @@ export async function onRequest(context) {
         }
 
         // ★ 设备-版本绑定：授权成功后绑定设备版本（同一设备只能注册一个版本）
+        //   ★ 2026-09-08 端形态同步写入（设备管理-版本绑定页展示「云端/离线+桌面/APP」）
         try {
             await setDeviceVersion(kv, record.machineId, versionOf(type), {
                 licenseCode: code,
-                clinicName: clinicName
+                clinicName: clinicName,
+                productClass: __productClass || undefined,
+                clientClass: __clientClass || undefined
             });
         } catch (e) { console.warn('[DeviceVersion] 绑定失败:', e.message); }
 

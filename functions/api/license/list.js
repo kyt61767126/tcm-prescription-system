@@ -20,7 +20,7 @@
 // ============================================================================
 
 import { parseAuthHeader, isPlatformAdmin } from '../_lib/auth.js';
-import { getKV, listLicenses, sanitizeRecord } from './_lib/license-core.js';
+import { getKV, listLicenses, sanitizeRecord, updateLicense } from './_lib/license-core.js';
 
 function corsHeaders() {
     return {
@@ -34,6 +34,73 @@ function corsHeaders() {
 
 function json(data, status = 200) {
     return new Response(JSON.stringify(data), { status, headers: corsHeaders() });
+}
+
+// ★ 2026-09-08 版本显示对齐（惰性自愈）：历史 admin-approve 审核通过的记录
+//   license.devices[].productClass/clientClass 缺失 → 激活码管理「类型」列只显
+//   纯「标准版」，与激活审核「版本」列（🖥️桌面·离线标准版）不一致。
+//   此处按 admin_req（激活审核记录，含 appMode/appModeCarrier）回填端形态：
+//     machineId → (productClass, clientClass)，回填后持久化（一次性自愈）。
+//   稳态零开销：无缺失时直接短路，不读 admin_req 索引。
+//   对齐 users.js 登录自愈 / admin-list 惰性清理的读路径自愈模式。
+const BACKFILL_REQ_PREFIX = 'admin_req:';
+const BACKFILL_REQ_INDEX = 'admin_req_index';
+
+async function backfillDeviceClass(kv, records) {
+    // 1. 找出缺端形态的设备 machineId（仅已绑定设备的记录；未使用激活码无设备，天然跳过）
+    const needMid = new Set();
+    for (const r of records) {
+        if (!Array.isArray(r.devices)) continue;
+        for (const d of r.devices) {
+            if (d && d.machineId && !d.productClass) needMid.add(d.machineId);
+        }
+    }
+    if (needMid.size === 0) return;   // 稳态短路：零额外 KV 读
+
+    // 2. 扫描激活审核记录（activated 且 machineId 命中缺失集），建映射
+    //    同一设备多次激活：索引后写覆盖先写 → 最近一次审核结果生效
+    const map = new Map();
+    try {
+        const index = (await kv.get(BACKFILL_REQ_INDEX, 'json')) || [];
+        const ids = Array.isArray(index) ? index.slice(-500) : [];
+        const reqs = await Promise.all(ids.map(id =>
+            kv.get(BACKFILL_REQ_PREFIX + id, 'json').catch(() => null)));
+        for (const q of reqs) {
+            if (!q || q.status !== 'activated' || !q.machineId || !needMid.has(q.machineId)) continue;
+            const pc = (q.appMode === 'cloud') ? 'cloud'
+                : ((q.appMode === 'local' || q.appMode === 'offline') ? 'offline' : null);
+            if (!pc) continue;
+            const cc = (q.appModeCarrier === 'desktop' || q.appModeCarrier === 'app')
+                ? q.appModeCarrier : null;
+            map.set(q.machineId, { productClass: pc, clientClass: cc });
+        }
+    } catch (e) {
+        console.warn('[ListBackfill] 扫描激活审核记录失败:', e.message);
+        return;
+    }
+    if (map.size === 0) return;
+
+    // 3. 回填内存记录并持久化（updateLicense 读改写；失败不阻断列表返回）
+    for (const r of records) {
+        if (!Array.isArray(r.devices)) continue;
+        let changed = false;
+        for (const d of r.devices) {
+            if (d && d.machineId && !d.productClass && map.has(d.machineId)) {
+                const m = map.get(d.machineId);
+                d.productClass = m.productClass;
+                d.clientClass = m.clientClass;
+                changed = true;
+            }
+        }
+        if (changed && r.code) {
+            try {
+                await updateLicense(kv, r.code, { devices: r.devices });
+                console.log('[ListBackfill] 已回填端形态:', r.code);
+            } catch (e) {
+                console.warn('[ListBackfill] 回填失败:', r.code, e.message);
+            }
+        }
+    }
 }
 
 export async function onRequest(context) {
@@ -66,6 +133,9 @@ export async function onRequest(context) {
 
         // 获取所有激活码
         let records = await listLicenses(kv);
+
+        // ★ 2026-09-08 惰性回填端形态（激活码管理「类型」列与激活审核「版本」列显示对齐）
+        await backfillDeviceClass(kv, records);
 
         // 统计
         const stats = {
