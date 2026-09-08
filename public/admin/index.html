@@ -284,16 +284,16 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
 
         <div id="mainAlert" class="alert"></div>
 
-        <!-- 标签栏 -->
+        <!-- 标签栏（★ 2026-09-08 版块重组：8 Tab = 运营5 + 设备1 + 风控1 + 维护1） -->
         <div class="tab-bar">
             <button class="tab-btn active" data-tab="Todo" onclick="switchTab('Todo')">🏠 待办中心</button>
-            <button class="tab-btn" data-tab="License" onclick="switchTab('License')">📋 激活码管理</button>
             <button class="tab-btn" data-tab="AdminActivate" onclick="switchTab('AdminActivate')">🔔 激活审核<span id="badgeActivate" class="tab-badge hidden">0</span></button>
+            <button class="tab-btn" data-tab="License" onclick="switchTab('License')">📋 激活码管理</button>
             <button class="tab-btn" data-tab="Clinics" onclick="switchTab('Clinics')">🏥 诊所管理<span id="badgeClinics" class="tab-badge hidden">0</span></button>
             <button class="tab-btn" data-tab="Users" onclick="switchTab('Users')">👥 用户管理</button>
-            <button class="tab-btn" data-tab="TestMachine" onclick="switchTab('TestMachine')">🖥 测试机管理</button>
-            <button class="tab-btn" data-tab="DeviceVersion" onclick="switchTab('DeviceVersion')">🔓 设备绑定</button>
-            <button class="tab-btn" data-tab="Logs" onclick="switchTab('Logs')">📜 操作日志</button>
+            <button class="tab-btn" data-tab="Device" onclick="switchTab('Device')">🖥 设备管理</button>
+            <button class="tab-btn" data-tab="Risk" onclick="switchTab('Risk')">🚨 风控告警</button>
+            <button class="tab-btn" data-tab="System" onclick="switchTab('System')">⚙️ 系统维护</button>
         </div>
 
         <!-- ★ P0-1 待办中心标签页 -->
@@ -343,6 +343,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
 
         <!-- 激活码管理标签页（原有内容） -->
         <div id="tabLicense" class="tab-content">
+        <p style="color:#909399;font-size:13px;margin:0 0 12px;">本页管<b>激活码</b>：生成 / 查询 / 延期 / 禁用 / 导出激活文件。客户提交的开通申请请去「激活审核」处理。</p>
         <!-- 统计 -->
         <h2>统计概览</h2>
         <div class="stats" id="statsBox">
@@ -411,24 +412,29 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                     <label>最大设备数</label>
                     <input type="number" id="genMaxDevices" value="1" min="1" max="10" title="1=单机激活码；5=可激活5台设备（机构版推荐）">
                 </div>
-                <!-- ★ 售后管理字段：订单号/电话/微信，生成时拼接到备注字段，方便售后查询 -->
-                <div class="form-group">
-                    <label>订单号（售后关联）</label>
-                    <input type="text" id="genOrderNo" placeholder="如：BNZC-GR-20260730-AB12CD（可留空）">
-                </div>
-                <div class="form-group">
-                    <label>联系电话（售后）</label>
-                    <input type="tel" id="genPhone" placeholder="如：13800138000（可留空）">
-                </div>
-                <div class="form-group">
-                    <label>微信号（售后）</label>
-                    <input type="text" id="genWechat" placeholder="如：customer_wx（可留空）">
-                </div>
                 <div class="form-group">
                     <label>备注</label>
                     <input type="text" id="genNote" placeholder="如：客户A（订单号/电话/微信会自动拼接到备注前）">
                 </div>
             </div>
+            <!-- ★ 售后管理字段：订单号/电话/微信，生成时拼接到备注字段，方便售后查询（2026-09-08 折叠收纳，表单更简洁） -->
+            <details style="margin-top:4px;">
+                <summary style="cursor:pointer;font-size:13px;color:#606266;user-select:none;">📦 售后信息（选填：订单号 / 电话 / 微信，自动拼入备注）</summary>
+                <div class="gen-row" style="margin-top:8px;">
+                    <div class="form-group">
+                        <label>订单号（售后关联）</label>
+                        <input type="text" id="genOrderNo" placeholder="如：BNZC-GR-20260730-AB12CD（可留空）">
+                    </div>
+                    <div class="form-group">
+                        <label>联系电话（售后）</label>
+                        <input type="tel" id="genPhone" placeholder="如：13800138000（可留空）">
+                    </div>
+                    <div class="form-group">
+                        <label>微信号（售后）</label>
+                        <input type="text" id="genWechat" placeholder="如：customer_wx（可留空）">
+                    </div>
+                </div>
+            </details>
             <!-- ★ datalist：诊所名/医师用户名自动补全（登录后由 loadClinicNames 填充） -->
             <datalist id="clinicNameList"></datalist>
             <datalist id="clinicUserList"></datalist>
@@ -565,13 +571,14 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                     </tbody>
                 </table>
             </div>
-            <p style="margin-top:12px;color:#909399;font-size:12px;">提示：重置密码/启停/角色调整/解锁均会记入操作日志（📜 操作日志 Tab 可查）。平台总管理员不在此启停。</p>
+            <p style="margin-top:12px;color:#909399;font-size:12px;">提示：重置密码/启停/角色调整/解锁均会记入操作日志（⚙️ 系统维护 Tab 可查）。平台总管理员不在此启停。</p>
         </div>
 
-        <!-- ★ 测试机管理标签页（自旧版后台移植） -->
-        <div id="tabTestMachine" class="tab-content">
+        <!-- ★ 设备管理标签页（2026-09-08 版块重组：测试机标记 + 版本绑定解除 合并） -->
+        <div id="tabDevice" class="tab-content">
+            <p style="color:#909399;font-size:13px;margin:0 0 12px;">本页为<b>设备支持工具</b>：测试机标记（放开一机一版限制）/ 版本绑定查询解除（客户换机、降级）。操作均仅限总管理员。</p>
+            <h2>🖥 测试机标记</h2>
             <div id="testMachineAlert" class="alert"></div>
-            <h2>测试机管理</h2>
             <p style="color:#606266;font-size:13px;line-height:1.8;">
                 标记为测试机的设备<span style="color:#e67e22;font-weight:600;">仅放开"一台设备一个版本"绑定校验</span>，
                 可自由切换测试标准版/机构版的注册激活流程。<br>
@@ -598,11 +605,8 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                     </tbody>
                 </table>
             </div>
-        </div>
-        <!-- ★ 设备版本绑定管理标签页（自旧版后台移植） -->
-        <div id="tabDeviceVersion" class="tab-content">
+            <h2 style="margin-top:24px;">🔓 版本绑定查询 / 解除</h2>
             <div id="deviceVersionAlert" class="alert"></div>
-            <h2>设备版本绑定管理</h2>
             <p style="color:#606266;font-size:13px;line-height:1.8;">
                 查询/解除某台设备的<b>版本绑定</b>。解除后该设备可重新激活<b>任意版本</b>，
                 用于客户<b>换机、降级、紧急调整</b>等场景。<br>
@@ -620,10 +624,137 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
             </div>
         </div>
 
-        <!-- ★ P2-8 操作日志标签页 -->
-        <div id="tabLogs" class="tab-content">
+        <!-- ★ P2-1 风控告警标签页：心跳/验证日志集中分析，识别盗版特征（2026-09-08 版块重组自开发副本上线） -->
+        <div id="tabRisk" class="tab-content">
+            <div id="riskAlert" class="alert"></div>
+            <h2>风控告警（心跳/验证日志集中分析）</h2>
+            <p style="color:#606266;font-size:13px;line-height:1.8;">
+                对全部激活码的<b>操作日志、心跳记录、计数上报、完整性标记</b>做集中扫描，识别以下盗版特征：<br>
+                <b>多 IP 并发使用</b>（同一激活码 24 小时内跨 IP）、<b>激活后长期离线</b>（&gt;90 天无心跳）、
+                <b>处方计数回拨</b>（本地清零绕过月度配额）、<b>客户端完整性异常</b>（疑似 hook/篡改）。<br>
+                <span style="color:#909399;">原则：宁可漏检不可误报。中危项（多 IP 无并发/长期离线）可能是合法换网换机，仅供参考。</span>
+            </p>
+            <div class="stats" id="riskStatsBox">
+                <div class="stat-card disabled"><div class="num" id="riskConcurrent" style="color:#e74c3c;">0</div><div class="label">多 IP 并发（高危）</div></div>
+                <div class="stat-card expired"><div class="num" id="riskTamper" style="color:#e74c3c;">0</div><div class="label">计数回拨（高危）</div></div>
+                <div class="stat-card disabled"><div class="num" id="riskIntegrity" style="color:#e74c3c;">0</div><div class="label">完整性异常（高危）</div></div>
+                <div class="stat-card expired"><div class="num" id="riskMultiIp" style="color:#f39c12;">0</div><div class="label">多 IP 无并发（中危）</div></div>
+                <div class="stat-card expired"><div class="num" id="riskOffline" style="color:#f39c12;">0</div><div class="label">长期离线 90 天+（中危）</div></div>
+                <div class="stat-card"><div class="num" id="riskTotalLicenses">0</div><div class="label">扫描激活码总数</div></div>
+            </div>
+            <div class="filter-bar">
+                <select id="riskSeverityFilter" onchange="renderRiskAlerts()" style="min-width:120px;">
+                    <option value="">全部级别</option>
+                    <option value="high">仅高危</option>
+                    <option value="medium">仅中危</option>
+                </select>
+                <select id="riskTypeFilter" onchange="renderRiskAlerts()" style="min-width:150px;">
+                    <option value="">全部类型</option>
+                    <option value="multi_ip_concurrent">多 IP 并发使用</option>
+                    <option value="count_tamper">处方计数回拨</option>
+                    <option value="integrity">客户端完整性异常</option>
+                    <option value="multi_ip_30d">多 IP 使用（无并发）</option>
+                    <option value="offline_90d">激活后长期离线</option>
+                </select>
+                <button class="btn btn-sm btn-primary" onclick="loadRiskAlerts()">🔄 重新扫描</button>
+            </div>
+            <div style="margin-bottom:8px;font-size:12px;color:#909399;" id="riskSummary"></div>
+            <div class="table-box">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>类型</th>
+                            <th>级别</th>
+                            <th>激活码</th>
+                            <th>诊所/用户</th>
+                            <th>授权状态</th>
+                            <th>详情</th>
+                            <th>涉及 IP</th>
+                            <th>最近时间</th>
+                        </tr>
+                    </thead>
+                    <tbody id="riskListBody">
+                        <tr><td colspan="8" class="empty">点击「重新扫描」分析风控告警</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ★ 系统维护标签页（2026-09-08 版块重组：数据体检 + 用量监控 + 操作日志 合并） -->
+        <div id="tabSystem" class="tab-content">
+            <p style="color:#909399;font-size:13px;margin:0 0 12px;">本页为<b>运维工具</b>：数据体检（孤儿键/弃单扫描清理）、云端用量监控（KV 免费额度预警）、操作日志（90 天审计查询）。均按需手动触发。</p>
+
+            <h2>🩺 数据体检</h2>
+            <!-- ★ 2026-09-07 架构防御 C：一键扫描孤儿键/脏键/过期弃单，勾选清理（清理前自动备份） -->
+            <div class="filter-bar">
+                <button class="btn btn-sm btn-success" onclick="runDataAudit()">🔍 开始体检</button>
+                <span id="dataAuditStatus" style="font-size:12px;color:#909399;"></span>
+            </div>
+            <div id="dataAuditReport" style="display:none;">
+                <div class="alert" id="dataAuditSummary" style="display:none;margin-top:8px;"></div>
+                <div class="table-box" style="margin-top:8px;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width:36px;"></th>
+                                <th>问题类型</th>
+                                <th>键</th>
+                                <th>原因</th>
+                                <th>详情</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dataAuditListBody"></tbody>
+                    </table>
+                </div>
+                <div class="filter-bar" style="margin-top:8px;">
+                    <button class="btn btn-sm" onclick="toggleAuditSelectAll()">全选/取消</button>
+                    <button class="btn btn-sm btn-danger" onclick="cleanAuditSelection()">🗑 清理所选项</button>
+                </div>
+            </div>
+            <p style="margin-top:12px;color:#909399;font-size:12px;">说明：体检扫描孤儿订单映射、陈旧进行中订单索引、脏键（格式非法）、超 7 天未付款弃单、白名单索引损坏五类问题。扫描纯只读；清理前自动备份原值（保留最近 20 次），可随时联系开发者恢复。</p>
+
+            <!-- ★ 2026-08-28 用量监控（云端 KV 免费额度预警 + 推广奖励观察，2026-09-08 版块重组自开发副本上线） -->
+            <h2 style="margin-top:24px;">📊 云端用量监控（KV 免费额度预警）</h2>
+            <div id="usageAlert" class="alert"></div>
+            <p style="color:#606266;font-size:13px;line-height:1.8;">
+                扫描全部云端诊所的处方存储占用与离线激活码记录，对照 <b>Cloudflare KV 免费额度</b>（存储 1GB / 写入 1000次/天 / 单值 25MB）提前预警付费时机。<br>
+                <span style="color:#909399;">数据源全部来自现有 KV 键，扫描本身零写入、零新增采集。写入额度按每活跃诊所约 30 写/天估算，风险线约 33 家诊所。</span>
+            </p>
+            <div class="filter-bar">
+                <button class="btn btn-sm btn-primary" onclick="loadUsageMonitor()">🔄 立即扫描</button>
+                <span id="usageScannedAt" style="font-size:12px;color:#909399;margin-left:8px;"></span>
+            </div>
+            <div class="stats" id="usageStatsBox">
+                <div class="stat-card"><div class="num" id="usageClinicCount">-</div><div class="label">云端诊所数</div></div>
+                <div class="stat-card"><div class="num" id="usageStorageMB">-</div><div class="label">存储估算 / 1GB 免费</div></div>
+                <div class="stat-card"><div class="num" id="usageStoragePct">-</div><div class="label">存储占用比例</div></div>
+                <div class="stat-card"><div class="num" id="usageWriteWarn" style="color:#f39c12;">-</div><div class="label">写入风险线（家诊所）</div></div>
+                <div class="stat-card"><div class="num" id="usageLicenseCount">-</div><div class="label">激活码总数</div></div>
+                <div class="stat-card"><div class="num" id="usageInvitees" style="color:#e65100;">-</div><div class="label">累计邀请成功人次</div></div>
+                <div class="stat-card"><div class="num" id="usageRewardDays" style="color:#e65100;">-</div><div class="label">累计发放奖励天数</div></div>
+            </div>
+            <div id="usageRiskBox" style="margin:12px 0;"></div>
+            <div class="table-box">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>诊所</th>
+                            <th>处方数</th>
+                            <th>垃圾箱</th>
+                            <th>占用 KB</th>
+                            <th>占比</th>
+                            <th>标记</th>
+                        </tr>
+                    </thead>
+                    <tbody id="usageClinicBody">
+                        <tr><td colspan="6" class="empty">点击「立即扫描」查看云端用量</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p style="margin-top:12px;color:#909399;font-size:12px;">提示：处方块接近单值 25MB 上限时会标红预警，建议引导该诊所归档历史处方；存储超 50% 时建议规划迁移 R2（对象存储，免费 10GB）或升级 Workers 付费版（$5/月）。</p>
+
+            <h2 style="margin-top:24px;">📜 操作日志查询</h2>
             <div id="logsAlert" class="alert"></div>
-            <h2>操作日志查询</h2>
             <div class="filter-bar">
                 <label style="font-size:12px;color:#909399;">日期</label>
                 <input type="date" id="logDateFrom">
@@ -658,9 +789,10 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
             <p style="margin-top:12px;color:#909399;font-size:12px;">说明：日志保留 90 天，单次查询跨度 ≤31 天。登录/收费复核/审核通过/续费/改密/启停/解锁等关键动作均有记录。</p>
         </div>
 
-        <!-- ★ 管理员激活审核标签页 -->
+        <!-- ★ 管理员激活审核标签页（2026-09-08 版块重组：数据体检移至系统维护） -->
         <div id="tabAdminActivate" class="tab-content">
             <div id="adminActivateAlert" class="alert"></div>
+            <p style="color:#909399;font-size:13px;margin:0 0 12px;">本页管<b>客户开通</b>：核对付款 → 审核通过 → 客户端自动获取激活码。官网订单自动带付款信息；白名单手机号免支付提交。</p>
 
             <!-- 统计概览 -->
             <h2>激活请求统计</h2>
@@ -738,35 +870,6 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                 </table>
             </div>
             <p style="margin-top:12px;color:#909399;font-size:12px;">说明：白名单内的手机号在客户端提交"管理员激活"申请时<b>跳过支付校验</b>（申请列表带 🎫免费 标记），仍需在上方队列中人工审核通过。白名单长期有效，建议客户开通完成后及时移除。</p>
-
-            <!-- ★ 2026-09-07 架构防御 C：数据体检——一键扫描孤儿键/脏键/过期弃单，勾选清理（清理前自动备份） -->
-            <h2 style="margin-top:24px;">🩺 数据体检</h2>
-            <div class="filter-bar">
-                <button class="btn btn-sm btn-success" onclick="runDataAudit()">🔍 开始体检</button>
-                <span id="dataAuditStatus" style="font-size:12px;color:#909399;"></span>
-            </div>
-            <div id="dataAuditReport" style="display:none;">
-                <div class="alert" id="dataAuditSummary" style="display:none;margin-top:8px;"></div>
-                <div class="table-box" style="margin-top:8px;">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th style="width:36px;"></th>
-                                <th>问题类型</th>
-                                <th>键</th>
-                                <th>原因</th>
-                                <th>详情</th>
-                            </tr>
-                        </thead>
-                        <tbody id="dataAuditListBody"></tbody>
-                    </table>
-                </div>
-                <div class="filter-bar" style="margin-top:8px;">
-                    <button class="btn btn-sm" onclick="toggleAuditSelectAll()">全选/取消</button>
-                    <button class="btn btn-sm btn-danger" onclick="cleanAuditSelection()">🗑 清理所选项</button>
-                </div>
-            </div>
-            <p style="margin-top:12px;color:#909399;font-size:12px;">说明：体检扫描孤儿订单映射、陈旧进行中订单索引、脏键（格式非法）、超 7 天未付款弃单、白名单索引损坏五类问题。扫描纯只读；清理前自动备份原值（保留最近 20 次），可随时联系开发者恢复。</p>
         </div>
     </div>
 </div>
@@ -1060,24 +1163,29 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                 <label>最大设备数</label>
                 <input type="number" id="batchGenMaxDevices" value="1" min="1" max="10">
             </div>
-            <!-- ★ 售后管理字段（批量） -->
-            <div class="form-group">
-                <label>订单号（售后关联）</label>
-                <input type="text" id="batchGenOrderNo" placeholder="如：BNZC-GR-20260730-AB12CD（可留空）">
-            </div>
-            <div class="form-group">
-                <label>联系电话（售后）</label>
-                <input type="tel" id="batchGenPhone" placeholder="如：13800138000（可留空）">
-            </div>
-            <div class="form-group">
-                <label>微信号（售后）</label>
-                <input type="text" id="batchGenWechat" placeholder="如：customer_wx（可留空）">
-            </div>
             <div class="form-group">
                 <label>备注</label>
                 <input type="text" id="batchGenNote" placeholder="如：批量客户（订单号/电话/微信会自动拼接）">
             </div>
         </div>
+        <!-- ★ 售后管理字段（批量，2026-09-08 折叠收纳与主表单统一） -->
+        <details style="margin-top:4px;">
+            <summary style="cursor:pointer;font-size:13px;color:#606266;user-select:none;">📦 售后信息（选填：订单号 / 电话 / 微信，自动拼入备注）</summary>
+            <div class="gen-row" style="margin-top:8px;">
+                <div class="form-group">
+                    <label>订单号（售后关联）</label>
+                    <input type="text" id="batchGenOrderNo" placeholder="如：BNZC-GR-20260730-AB12CD（可留空）">
+                </div>
+                <div class="form-group">
+                    <label>联系电话（售后）</label>
+                    <input type="tel" id="batchGenPhone" placeholder="如：13800138000（可留空）">
+                </div>
+                <div class="form-group">
+                    <label>微信号（售后）</label>
+                    <input type="text" id="batchGenWechat" placeholder="如：customer_wx（可留空）">
+                </div>
+            </div>
+        </details>
         <div style="margin-top:12px;text-align:right;">
             <button class="btn" onclick="closeBatchGenModal()">取消</button>
             <button class="btn" onclick="syncBatchFromMain()">从主表单同步配置</button>
@@ -2493,15 +2601,173 @@ function switchTab(tabName) {
     const tabBtn = document.querySelector('.tab-btn[data-tab="' + tabName + '"]');
     if (tabContent) tabContent.classList.add('active');
     if (tabBtn) tabBtn.classList.add('active');
-    // 按需加载数据
+    // 按需加载数据（★ 2026-09-08 版块重组：Device=测试机+绑定合并；System=体检/用量/日志均手动触发）
     if (tabName === 'Todo') loadTodoCenter();
     else if (tabName === 'Clinics') loadClinicsList();
     else if (tabName === 'Users') loadUsersList();
     else if (tabName === 'License') loadList();
     else if (tabName === 'AdminActivate') loadAdminActivateList();
-    else if (tabName === 'TestMachine') loadTestMachines();
-    else if (tabName === 'DeviceVersion') loadDeviceBindings();
-    else if (tabName === 'Logs') { /* 查询按钮触发，不自动拉 */ }
+    else if (tabName === 'Device') { loadTestMachines(); loadDeviceBindings(); }
+    else if (tabName === 'Risk') loadRiskAlerts();
+    else if (tabName === 'System') { /* 体检/用量/日志均按需手动触发，不自动拉 */ }
+}
+
+// ============================================================================
+// ★ 2026-08-28 用量监控：云端 KV 免费额度预警 + 推广奖励观察（admin-usage API）
+//   2026-09-08 版块重组：自开发副本移植上线，纳入「系统维护」Tab
+// ============================================================================
+async function loadUsageMonitor() {
+    const tbody = document.getElementById('usageClinicBody');
+    tbody.innerHTML = '<tr><td colspan="6" class="loading">扫描中...</td></tr>';
+    document.getElementById('usageScannedAt').textContent = '';
+    try {
+        const res = await fetch(API_BASE + '/license/admin-usage', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ action: 'scan' })
+        });
+        const data = await res.json();
+        if (!data.success) {
+            if (res.status === 403) {
+                showAlert('usageAlert', '登录已过期，请重新登录', 'error');
+                setTimeout(doLogout, 1500);
+            } else {
+                tbody.innerHTML = '<tr><td colspan="6" class="empty">' + escapeHtml(data.error || '扫描失败') + '</td></tr>';
+            }
+            return;
+        }
+        const c = data.cloud || {};
+        const l = data.license || {};
+        document.getElementById('usageClinicCount').textContent = c.clinicCount || 0;
+        document.getElementById('usageStorageMB').textContent = (c.totalSizeMB || '0') + ' MB';
+        document.getElementById('usageStoragePct').textContent = (c.storagePct || '0') + '%';
+        document.getElementById('usageWriteWarn').textContent = (c.writeWarnClinics || 33) + ' 家';
+        document.getElementById('usageLicenseCount').textContent = l.total || 0;
+        document.getElementById('usageInvitees').textContent = l.invitees || 0;
+        document.getElementById('usageRewardDays').textContent = (l.rewardDaysTotal || 0) + ' 天';
+        document.getElementById('usageScannedAt').textContent = '扫描于 ' + new Date(data.scannedAt).toLocaleString('zh-CN');
+
+        // 风险提示
+        const risks = Array.isArray(data.risks) ? data.risks : [];
+        document.getElementById('usageRiskBox').innerHTML = risks.map(r => {
+            const color = r.level === 'high' ? '#e74c3c' : (r.level === 'warn' ? '#f39c12' : '#27ae60');
+            const icon = r.level === 'high' ? '🔴' : (r.level === 'warn' ? '🟡' : '🟢');
+            return '<div style="padding:8px 12px;border-radius:6px;background:#fdf6ec;border-left:3px solid ' + color + ';margin-bottom:6px;font-size:13px;color:#606266;">' + icon + ' ' + escapeHtml(r.text) + '</div>';
+        }).join('');
+
+        // 诊所明细表
+        const clinics = Array.isArray(c.clinics) ? c.clinics : [];
+        if (clinics.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" class="empty">暂无云端诊所数据</td></tr>';
+        } else {
+            const totalKB = c.totalSizeKB || 1;
+            tbody.innerHTML = clinics.map(cl => {
+                const pct = totalKB > 0 ? (cl.sizeKB / totalKB * 100).toFixed(1) : '0';
+                const flag = cl.sizeKB > 15 * 1024
+                    ? '<span class="tag tag-expired">接近25MB上限</span>'
+                    : (cl.largest ? '<span class="tag tag-used">最大块</span>' : '-');
+                return '<tr>' +
+                    '<td>' + escapeHtml(cl.clinicName || cl.clinicId) + '</td>' +
+                    '<td>' + (cl.prescriptions >= 0 ? cl.prescriptions : '解析失败') + '</td>' +
+                    '<td>' + (cl.trash >= 0 ? cl.trash : '解析失败') + '</td>' +
+                    '<td>' + (cl.sizeKB || 0) + '</td>' +
+                    '<td>' + pct + '%</td>' +
+                    '<td>' + flag + '</td>' +
+                    '</tr>';
+            }).join('');
+        }
+    } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty">网络错误：' + escapeHtml(e.message) + '</td></tr>';
+    }
+}
+
+// ============================================================================
+// ★ P2-1 风控告警：心跳/验证日志集中分析（后端 /license/admin-risk）
+//   识别：多IP并发 / 激活后长期离线90天+ / 计数回拨 / 客户端完整性异常
+//   2026-09-08 版块重组：自开发副本移植上线，独立「风控告警」Tab
+// ============================================================================
+let _riskAlertsCache = [];
+
+async function loadRiskAlerts() {
+    const el = document.getElementById('riskListBody');
+    if (!el) return;
+    el.innerHTML = '<tr><td colspan="8" class="loading">扫描中（分析全部激活码日志，稍候）...</td></tr>';
+    try {
+        const res = await fetch(API_BASE + '/license/admin-risk', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ action: 'scan' })
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || '扫描失败');
+        _riskAlertsCache = data.alerts || [];
+        const s = data.stats || {};
+        const setNum = function (id, v) {
+            const n = document.getElementById(id);
+            if (n) n.textContent = String(v);
+        };
+        setNum('riskConcurrent', s.multiIpConcurrent || 0);
+        setNum('riskTamper', s.countTamper || 0);
+        setNum('riskIntegrity', s.integrityFlags || 0);
+        setNum('riskMultiIp', s.multiIp30d || 0);
+        setNum('riskOffline', s.offline90d || 0);
+        setNum('riskTotalLicenses', s.licenses || 0);
+        document.getElementById('riskSummary').textContent =
+            '扫描时间：' + (data.scannedAt ? new Date(data.scannedAt).toLocaleString() : '-') +
+            '，共 ' + _riskAlertsCache.length + ' 条告警（高危 ' +
+            _riskAlertsCache.filter(a => a.severity === 'high').length + ' 条）';
+        const alertEl = document.getElementById('riskAlert');
+        if (alertEl) alertEl.style.display = 'none';
+        renderRiskAlerts();
+    } catch (e) {
+        el.innerHTML = '';
+        showAlert('riskAlert', '风控扫描失败：' + e.message, 'error');
+    }
+}
+
+function renderRiskAlerts() {
+    const el = document.getElementById('riskListBody');
+    if (!el) return;
+    const sevFilter = (document.getElementById('riskSeverityFilter') || {}).value || '';
+    const typeFilter = (document.getElementById('riskTypeFilter') || {}).value || '';
+    const list = _riskAlertsCache.filter(a =>
+        (!sevFilter || a.severity === sevFilter) && (!typeFilter || a.type === typeFilter));
+
+    if (list.length === 0) {
+        el.innerHTML = '<tr><td colspan="8" class="empty">' +
+            (_riskAlertsCache.length === 0 ? '暂无风控告警' : '当前筛选条件下无告警') + '</td></tr>';
+        return;
+    }
+
+    const statusNames = { unused: '未使用', used: '已激活', expired: '已过期', disabled: '已禁用' };
+    const typeBadge = function (a) {
+        const cls = a.severity === 'high' ? 'tag-disabled' : 'tag-expired';
+        return '<span class="tag ' + cls + '">' + escapeHtml(a.typeLabel || a.type) + '</span>';
+    };
+    const sevBadge = a.severity === 'high'
+        ? '<span class="tag tag-disabled">高危</span>'
+        : '<span class="tag tag-expired">中危</span>';
+
+    el.innerHTML = list.map(function (a) {
+        const ips = (a.ips || []).map(function (ip) { return escapeHtml(ip); }).join('<br>');
+        const usage = a.usage
+            ? '<br><span style="font-size:11px;color:#909399;">计数上报：' +
+              (a.usage.lastCount !== null ? a.usage.lastCount : '-') + '（' + escapeHtml(a.usage.lastMonth || '-') + '，' +
+              escapeHtml(a.usage.lastSource || '-') + '）｜累计回拨 ' + (a.usage.rollbackEvents || 0) + ' 次</span>'
+            : '';
+        return '<tr>' +
+            '<td>' + typeBadge(a) + '</td>' +
+            '<td>' + sevBadge(a) + '</td>' +
+            '<td style="font-family:Courier New,monospace;font-size:12px;">' +
+                (a.code ? escapeHtml(a.code) : '<span style="color:#909399;">（设备级）</span>') +
+                (a.machineId ? '<br><span style="font-size:11px;color:#909399;">机器 ' + escapeHtml(String(a.machineId).substring(0, 12)) + '…</span>' : '') + '</td>' +
+            '<td>' + escapeHtml(a.clinicName || '-') + '<br><span style="font-size:11px;color:#909399;">' + escapeHtml(a.user || '-') + '</span></td>' +
+            '<td>' + (a.status ? '<span class="tag tag-' + a.status + '">' + (statusNames[a.status] || a.status) + '</span>' : '-') + '</td>' +
+            '<td style="font-size:12px;max-width:320px;">' + escapeHtml(a.detail || '') + usage + '</td>' +
+            '<td style="font-size:12px;">' + (ips || '-') + '</td>' +
+            '<td style="font-size:12px;">' + (a.lastSeen ? new Date(a.lastSeen).toLocaleString() : '-') + '</td>' +
+            '</tr>';
+    }).join('');
 }
 
 // ============================================================================
