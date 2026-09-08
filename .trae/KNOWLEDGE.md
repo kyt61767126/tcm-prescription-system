@@ -67,6 +67,12 @@
 
 * 官网购买页只需同步 2 份：`public/download.html` ↔ `site-official/download.html`（镜像关系，HTML 和 JS 都要同步；**禁止运行 \_build\_sites.cjs**，历史漂移未收编）。
 
+* ★ 2026-09-08 **【流程铁律】客户端功能优化 → 官网说明自动同步**：每次改动客户端功能/流程/交互（四端任一），完成代码 commit 前必须「官网说明扫描 → 过时即改 → 双副本同步」一步不漏：
+  - **扫描点**（改什么查哪里）：①注册/激活/购买流程 → 官网「📝 注册开通」「📋 安装说明」Tab 流程卡片与步骤图；②更新机制 → 「🔄 桌面程序更新方案」三步说明；③账号/密码规则 → 各处「默认 admin」相关提示；④界面截图 → 若 UI 有可见变化须 Playwright 重拍（手法见条目五十三）；⑤FAQ 文字。
+  - **执行方式**：rg 关键词扫描双副本 download.html（如 `rg -n "旧流程关键词" public/download.html site-official/download.html`），命中过时表述即改；镜像版大段 JS 改动用 node 脚本写入+回读+语法三重验证（Edit 假成功历史教训）。
+  - **验证收尾**：Playwright 双副本过一遍相关 Tab（桌面 1280 + 手机 375 双档），commit 信息注明「官网说明已同步」；漏同步=官网教客户旧流程（如 2026-09-08 发现「定期访问本页面对比版本号」旧说法未随更新直达功能升级）。
+  - **生效提醒**：官网说明改动 push 即部署生效（无需打包），但对应客户端功能需各自打包后才真正可用——commit 信息必须写清两端生效方式差异。
+
 * **auth-core.js 双权威源**：`shared/auth-core/offline.js`（试用版→3 副本）+ `cloud.js`（无试用→8 副本），改副本必须回写权威源后跑 `tools/sync-auth-core.ps1`，否则打包被旧版覆盖（历史"神秘回退"根因）。
 
 * `cloud-api.js` 有 **8 处副本**需同步；APP 版 cloud-api.js 必须含 `typeof window._cloudReachable === 'undefined'` 防御性初始化。
