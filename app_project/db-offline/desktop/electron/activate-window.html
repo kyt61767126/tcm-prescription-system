@@ -394,6 +394,9 @@ h1 { color: #2c3e50; font-size: 18px; margin-bottom: 3px; }
                 <div class="field-hint">🎁 填好友邀请码，管理员审核通过后双方都得奖励（好友+90天，您+30天）</div>
             </div>
             <button class="btn" id="toStep2Btn">下一步：设置密码 →</button>
+            <!-- ★ 2026-09-08 信息预填直通：诊所名/姓名/手机号已自动回填时，无需自定义密码的用户
+                 可跳过密码步骤直接提交（密码归一为默认 admin，成功页有对应提示） -->
+            <button class="btn btn-secondary" id="quickSubmitBtn" style="margin-top:10px;background:#fff;color:#2563eb;border:1.5px dashed #93c5fd;">使用默认密码 admin 直接提交 →</button>
         </div>
 
         <!-- Step 2: 密码 -->
@@ -936,7 +939,8 @@ document.getElementById('phone').addEventListener('input', e => {
 });
 
 // Step 1 → Step 2 (admin)
-document.getElementById('toStep2Btn').addEventListener('click', () => {
+// ★ 2026-09-08 抽出 collectAdminStep1()：Step1 校验+state 收集（「下一步」与「默认密码直通提交」共用）
+function collectAdminStep1() {
     hideGlobalError();
     const clinicName = document.getElementById('clinicName').value.trim();
     const adminName = document.getElementById('adminName').value.trim();
@@ -952,7 +956,7 @@ document.getElementById('toStep2Btn').addEventListener('click', () => {
 
     if (firstErr) {
         showFieldError(firstErr.id, firstErr.msg);
-        return;
+        return false;
     }
 
     state.clinicName = clinicName;
@@ -964,12 +968,25 @@ document.getElementById('toStep2Btn').addEventListener('click', () => {
     const inviteCodeClean = String(inviteCodeRaw).trim().toUpperCase();
     if (inviteCodeClean && !/^[A-Z0-9]{4,10}$/.test(inviteCodeClean)) {
         showFieldError('adminInviteCode', '邀请码为4-10位字母或数字，没有可留空');
-        return;
+        return false;
     }
     state.inviteCode = inviteCodeClean;
+    return true;
+}
+
+document.getElementById('toStep2Btn').addEventListener('click', () => {
+    if (!collectAdminStep1()) return;
     updateAdminProgress(2);
     showAdminPanel('step2');
     setTimeout(() => document.getElementById('password').focus(), 200);
+});
+
+// ★ 2026-09-08 信息预填直通：默认密码直接提交（跳过 Step2）
+//   密码归一为 admin（submitBtn handler 内空值→admin），成功页显示「默认 admin，登入后请自行修改」
+document.getElementById('quickSubmitBtn').addEventListener('click', () => {
+    if (!collectAdminStep1()) return;
+    state.password = '';
+    document.getElementById('submitBtn').click();
 });
 
 function showFieldError(id, msg) {
