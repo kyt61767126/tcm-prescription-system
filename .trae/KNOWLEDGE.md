@@ -777,6 +777,13 @@ P2 渐进迁移（2026-09-03 当日完成）：
 - **评估过并否决的方案**：applyInviteReward 里同步重签 licenseBase64（让 admin-status 自愈路径装到新到期日）——签发链含 v5 ECDSA/v6 防重放/v7 Ed25519 环境变量密钥（options.context），context 不穿进 applyInviteReward 时密钥派生错版本 → **重签出的 license 验签必败 → 直接污染 healMissingDesktopLicenseFile 用的 record.licenseBase64 自愈链路**（license.dat 丢失的存量客户将装上废码）。风险远大于收益（奖励不丢，只是显示滞后到下次重签发），不做。
 - **铁律**：a. 改任何「重新签发 license」的服务端逻辑，必须穿齐 options.context + options.kv（v5/v6/v7 密钥与 serial 全依赖它），缺 context 签出的码验签必败；b. licenseBase64 是多链路共享产物（admin-status 自愈、admin-approve 首发装、断点续传）——动它之前先枚举所有消费方；c. 「显示滞后但数据安全」优于「实时显示但自愈链路被污染」——离线版奖励显示滞后是签名文件架构的固有代价，不是 bug。
 
+**五十一、官网下载页全 Tab 横向溢出——装饰性伪元素越界撑宽 scrollWidth，页面无任何可见越界元素（2026-09-08，Commit 8e95a830，上轮「3 下载 Tab 合并 1」任务的线上验收环节发现）**：
+- **症状**：桌面 1280px 下 scrollWidth=1716（可右滑 436px 空白），手机 375px 下 547（触摸左右晃动）；所有 Tab 都溢出（非 Tab 切换问题，与上轮修复无关的历史存量缺陷）。
+- **排查陷阱**：`getBoundingClientRect().right > vw` 遍历**找不到任何越界元素**（可见/隐藏都查了）——因为溢出源是 `.hero::before` 伪元素（JS 无法直接选中，绝对定位 left:-50%/width:200% 的装饰径向渐变，向右伸出 hero 边界 50%）。手机端 Playwright 报的「tab-btn 越界」是误报：tab-nav 本身有 overflow-x:auto 内部滚动，不外溢文档。
+- **定位方法论（scrollWidth 虚胖专用）**：二分隐藏法——page.evaluate 内逐个 `el.style.display='none'` 测 scrollWidth 是否回落到 vw，命中后递归下钻（body → .container → .hero → 无单独子元素=伪元素/文本节点，锁定 .hero::before）。比肉眼查 CSS 快且实锤。
+- **修复**：`.hero` 加 `overflow: hidden`（双副本 public+site-official 同步，同在第 53 行）。渐变透明度 0.08 且 60% 处已透明，裁剪视觉无感（截图对比确认）。Playwright 三档视口（1280/375/360）双副本 scrollWidth==clientWidth 全绿 + 7 Tab 卡片归属复测全过。
+- **铁律**：a. 「绝对定位 + 负偏移 + 200% 宽」的装饰性 ::before/::after 必须给宿主容器加 overflow:hidden——伪元素不参与 getBoundingClientRect 遍历，溢出了也查不到元素级证据；b. 诊断横向溢出时 scrollWidth 与元素矩形要同时取证，两者矛盾（scrollWidth 大但无越界元素）= 伪元素/文本节点/合力三类嫌疑；c. tab-nav 类内部滚动容器（overflow-x:auto）的子元素矩形越界不算文档溢出，别误修。
+
 ## 8. 桌面版技术规范
 
 * **登录预填：已彻底取消（2026-09-06 Commit 2202236f，取代 9-04"来源单一化"方案）**：`initLoginInput` **不再做任何用户名自动预填**——登录框永远空白+聚焦；记住的账户仅保留**手动下拉切换**（renderUsernameDropdown，点▼选择）。演进史：8-27 恢复预填 → 9-04 收窄为"仅 localStorage 记住的用户名"（历史 bug：config.users 单账户分支无法区分出厂模板 admin，全新安装首次启动即预填 admin/admin）→ 9-06 用户实测"升级新版后自动显示旧记住的用户名，不像新客户"后**彻底取消**。理由：预填链路多次引发历史 bug + 升级安装 userData 不清导致残留展示；而手动下拉保留全部便利。
