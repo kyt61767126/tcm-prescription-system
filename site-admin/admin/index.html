@@ -3066,8 +3066,15 @@ function renderVersionInfo(r) {
         parts.push('<span class="tag ' + tagClass + '">' + carrier + edText + '</span>');
     }
     // 3. 版本标签（versionLabel 旧字段兜底）
-    if (r.versionLabel) {
-        parts.push('<span style="color:#909399;font-size:11px;margin-left:4px;">' + escapeHtml(r.versionLabel) + '</span>');
+    // ★ 2026-09-08 去重：edText 已渲染统一版本标签时 versionLabel 完全冗余——
+    //   软件内激活传「本地机构版/本地标准版」与「离线机构版/离线标准版」同义；
+    //   官网订单「本地机构版（官网订单）」的「（官网订单）」与列表 💰官网订单 标记重复。
+    //   → 仅旧数据（无 appMode，edText 为空）兜底显示，且剥离「（官网订单）」后缀。
+    if (r.versionLabel && !edText) {
+        const vlClean = String(r.versionLabel).replace(/（官网订单）/g, '').trim();
+        if (vlClean) {
+            parts.push('<span style="color:#909399;font-size:11px;margin-left:4px;">' + escapeHtml(vlClean) + '</span>');
+        }
     }
     return parts.length > 0 ? parts.join('') : '<span class="tag tag-trial">未设置</span>';
 }
