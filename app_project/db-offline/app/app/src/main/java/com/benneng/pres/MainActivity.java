@@ -84,7 +84,7 @@ public class MainActivity extends BridgeActivity {
     //   - 点击「立即下载」→ 系统浏览器打开官网下载页，手动下载覆盖安装（无自动下载/自动安装）
     //   - 网络失败/解析失败/格式异常一律静默跳过，不影响离线使用
     private static final String UPDATE_MANIFEST_URL = "https://tcm-prescription-system.pages.dev/hash-manifest.json";
-    private static final String UPDATE_DOWNLOAD_URL = "https://tcm-prescription-system.pages.dev/download";
+    private static final String UPDATE_DOWNLOAD_URL = "https://tcm-prescription-system.pages.dev/download?card=card-local";
     private boolean apkUpdateCheckStarted = false;
 
     // ★ 2026-08-29 一键备份第三步：文件选择器（importData 恢复数据用）
