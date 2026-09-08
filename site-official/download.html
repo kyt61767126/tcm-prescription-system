@@ -586,6 +586,16 @@
             box-shadow: 0 2px 6px rgba(102,126,234,0.3);
         }
 
+        /* ★ 2026-09-08 官网截图整体适配：桌面过大截图统一收窄 320px 居中（手机端容器内宽<320 基本不变；收款码 200px 扫码用不收） */
+        .shot-img {
+            display: block;
+            width: 100%;
+            max-width: 320px;
+            margin: 0 auto;
+            border-radius: 6px;
+            border: 1px solid #e5e7eb;
+        }
+
         /* ★ 2026-09-08 安装后首次使用指引：2×2 分组面板网格（手机单列见 768px 断点） */
         .guide-grid {
             display: grid;
