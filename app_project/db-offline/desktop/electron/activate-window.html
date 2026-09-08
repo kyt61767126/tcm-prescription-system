@@ -1289,13 +1289,22 @@ function buildPayUrl(prefix) {
                     (window.__cfgEdition === 'clinic' || window.__cfgEdition === 'institution')))
         ? 'local-pro'
         : ((state.edition === 'personal' || (!state.edition && window.__cfgEdition === 'personal')) ? 'local-personal' : '');
+    // ★ 2026-09-08 邀请码 iv 参数（奖励丢失根因修复）：官网购买页 ?iv= 自动回填邀请码框，
+    //   订单提交时透传结算。此前付款链接不带 iv → 官网参数齐全 1.6s 自动提交订单，
+    //   用户来不及手填邀请码 → 订单无码 → 审批不结算 → 双方奖励全丢（用户实测
+    //   石菖蒲/穿心莲两单 inviteCodeSubmitted=null 实锤）。对齐 APP 端 offline.js
+    //   buildPayUrl 与云桌面 payGuideUrl 的 iv 链路。
+    //   读取链：state.inviteCode（提交时已收集）→ 版本选择页 → Step1 表单 → Tab2 输码页
+    const __ivPay = String(state.inviteCode || g('editionInviteCode') || g('adminInviteCode') || g('codeInviteCode') || '')
+        .trim().toUpperCase();
     return PAY_GUIDE_BASE + encodeURIComponent(params.get('machineId') || '')
         + (__ed ? ('&ed=' + __ed) : '') + '&dp=desktop'
         + (cn ? ('&cn=' + encodeURIComponent(cn)) : '')
         + (n  ? ('&n='  + encodeURIComponent(n))  : '')
         + (p  ? ('&p='  + encodeURIComponent(p))  : '')
         + (wx ? ('&wx=' + encodeURIComponent(wx)) : '')
-        + (r  ? ('&r='  + encodeURIComponent(r))  : '');
+        + (r  ? ('&r='  + encodeURIComponent(r))  : '')
+        + (__ivPay ? ('&iv=' + encodeURIComponent(__ivPay)) : '');
 }
 let _payGuideInited = false;
 function initPayGuide() {
