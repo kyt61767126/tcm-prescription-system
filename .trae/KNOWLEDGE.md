@@ -825,6 +825,11 @@ P2 渐进迁移（2026-09-03 当日完成）：
 - **铁律**：a. **表格加列后 colspan 散落 5+ 处必须全量 grep 核对**——静态 loading 占位/loadList 加载失败/网络错误/renderList 空态，外加双副本；本轮还揪出用户表静态占位历史遗留 8≠9 错配（表头 9 列）。核对脚本：提取全部 `<table>` 块比对 th 数与 colspan 值（node 脚本，见本轮校验法）。b. **255KB+ 大 HTML 用 Edit 工具编辑会引入两类暗伤**——UTF-8 BOM（编辑器写入引入，HEAD 无 BOM 则编辑后必须复查 `charCodeAt(0)===0xFEFF`）与残留半截片段（else-if 括号不配对导致整 script 块语法错）——大文件改完必须三查：BOM/`new Function(script块)` 语法/colspan 一致性。c. PowerShell 不支持 bash heredoc，多行 commit message 用 `git commit -F 消息文件`（用完删）。
 - **生效方式**：云端管理后台双副本随 push 触发 Cloudflare Pages 自动部署，后台页面强刷（Ctrl+F5）生效；云桌面/云APP/离线桌面/离线APP 四端不涉及，无需重打包。
 
+**五十五、管理后台版块全局重组（8 Tab 新结构）+ 双副本漂移是双向的——整体镜像才是终局修法（2026-09-08，Commit ca82bd6c）**：
+- **改动**：①版块重组 8 Tab=运营5+设备1+风控1+维护1——🖥设备管理（测试机标记+版本绑定解除合并）、⚙️系统维护（数据体检[自激活审核移出]+用量监控+操作日志合并）、激活审核聚焦（统计+待审列表+免费白名单），Tab 序按使用频率重排（待办→激活审核→激活码→诊所→用户→设备→风控→维护）；②**线上补齐 🚨风控告警 + 📊用量监控两个 Tab**（admin-risk/admin-usage API 早已部署，5c9e6bef/07b72b10 两个 commit 只写了 site-admin 副本，线上前端入口缺失）；③开发副本补齐免费白名单/待付款订单处理/审核弹窗付款核对区；④各 Tab 统一顶部灰色定位说明（"本页管 XX：…"）；⑤生成表单+批量弹窗售后字段（订单号/电话/微信）折叠为原生 `<details>`（id 不动，模板保存/恢复/清空逻辑零影响）。
+- **铁律**：a. **双副本漂移是双向的**——条目四十七只防"只改 site-admin 漏改 public"，本次实证反向漂移（site-admin 独有功能=功能做了但从未上线，更隐蔽且无报错）。**双向漂移检测法：node 对比两副本三个集合——function 名 / `id="` 元素 / `<!--` 区块注释，差集即漂移清单**（本轮 10 分钟定位全部 5 处漂移）。b. **修漂移终局手段是整体镜像**：先确认 head/style/API_BASE 全等（漂移仅限 body/JS），在权威源补齐全部功能+重组后 `writeFileSync` 整文件复制到另一副本，字节级一致一次消灭全部漂移，杜绝逐段手工对齐残留暗差。c. **大重组验证组合拳**：结构 9 项 node 校验（JS 语法/colspan×表格/事件处理器函数存在/data-tab↔tabXxx 匹配/switchTab 目标/合并 Tab 加载器/旧引用清零/getElementById 字面量目标[动态 createElement 注入的 id 需白名单]/BOM）+ 临时静态服务器 + 浏览器冒烟（**浏览器工具禁 file://，必须起 http://localhost 服务**）。d. **switchTab 合并 Tab 模式**：`else if (tabName === 'Device') { loadTestMachines(); loadDeviceBindings(); }` 顺序调两个加载器；纯手动工具 Tab 合并后保持零自动加载。e. Tab 数量守恒心法：加 2 功能 + 合 2 对低频工具 = 8 Tab 不膨胀。
+- **生效方式**：云端管理后台双副本随 push 触发 Cloudflare Pages 自动部署，后台页面强刷（Ctrl+F5）生效；云桌面/云APP/离线桌面/离线APP 四端不涉及，无需重打包。
+
 ## 8. 桌面版技术规范
 
 * **登录预填：已彻底取消（2026-09-06 Commit 2202236f，取代 9-04"来源单一化"方案）**：`initLoginInput` **不再做任何用户名自动预填**——登录框永远空白+聚焦；记住的账户仅保留**手动下拉切换**（renderUsernameDropdown，点▼选择）。演进史：8-27 恢复预填 → 9-04 收窄为"仅 localStorage 记住的用户名"（历史 bug：config.users 单账户分支无法区分出厂模板 admin，全新安装首次启动即预填 admin/admin）→ 9-06 用户实测"升级新版后自动显示旧记住的用户名，不像新客户"后**彻底取消**。理由：预填链路多次引发历史 bug + 升级安装 userData 不清导致残留展示；而手动下拉保留全部便利。
