@@ -370,17 +370,17 @@ h1 { color: #2c3e50; font-size: 18px; margin-bottom: 3px; }
             </div>
         </div>
 
-        <!-- Step 1: 基础信息 -->
+        <!-- Step 1: 基础信息（★ 2026-09-08 对齐云桌面精简模式：去掉（必填）冗余标注与重复 hint，hint 保留为空作校验错误挂载点） -->
         <div id="step1" class="slide-in">
             <div class="form-group">
-                <label>诊所名称 <span class="req">*</span> <span style="font-size:11px;color:#909399;font-weight:normal;">（必填）</span></label>
+                <label>诊所名称 <span class="req">*</span></label>
                 <input type="text" id="clinicName" placeholder="如：惠康中医诊所" autocomplete="off" spellcheck="false">
-                <div class="field-hint">💡 必填，请填写您的诊所名称</div>
+                <div class="field-hint"></div>
             </div>
             <div class="form-group">
-                <label>管理员/医师姓名 <span class="req">*</span> <span style="font-size:11px;color:#909399;font-weight:normal;">（必填）</span></label>
+                <label>管理员/医师姓名 <span class="req">*</span></label>
                 <input type="text" id="adminName" placeholder="如：王医生" autocomplete="off" spellcheck="false">
-                <div class="field-hint">💡 必填，请填写管理员/医师姓名</div>
+                <div class="field-hint"></div>
             </div>
             <div class="form-group">
                 <label>联系电话 <span class="req">*</span> <span style="font-size:11px;color:#909399;font-weight:normal;">（将作为登录账号）</span></label>
@@ -393,14 +393,14 @@ h1 { color: #2c3e50; font-size: 18px; margin-bottom: 3px; }
                 <input type="text" id="adminInviteCode" placeholder="如：7K3F9Q（没有可留空）" autocomplete="off" spellcheck="false" maxlength="10" style="font-family:'Courier New',monospace;letter-spacing:1px;text-transform:uppercase;">
                 <div class="field-hint">🎁 填好友邀请码，管理员审核通过后双方都得奖励（好友+90天，您+30天）</div>
             </div>
-            <button class="btn" id="toStep2Btn">下一步：确认密码（可留空=默认 admin）→</button>
+            <button class="btn" id="toStep2Btn">下一步：设置密码 →</button>
         </div>
 
         <!-- Step 2: 密码 -->
         <div id="step2" style="display:none;">
             <div class="form-group">
                 <label>登录密码 <span style="font-size:11px;color:#909399;font-weight:normal;">（可留空＝默认 admin）</span></label>
-                <input type="password" id="password" placeholder="留空则用默认密码 admin（登入后请修改）" autocomplete="new-password" maxlength="32">
+                <input type="password" id="password" placeholder="至少8位，含字母和数字（留空＝默认 admin）" autocomplete="new-password" maxlength="32">
                 <div class="pwd-strength" id="pwdStrength">
                     <div class="bar"></div><div class="bar"></div><div class="bar"></div>
                 </div>
