@@ -13,8 +13,9 @@
 //    不存在:     { success: false, error: "请求不存在或已失效" }
 // ============================================================================
 
-import { getKV, checkRateLimit } from './_lib/license-core.js';
+import { getKV, checkRateLimit, sniffCarrierFromUA, patchClinicCarrier, patchLicenseDeviceCarrier } from './_lib/license-core.js';
 import { provisionCloudAccount, normalizeActivationPassword } from './_lib/admin-account.js';
+import { updateAdminRequestStatus } from './_lib/license-write-service.js';
 
 const ALLOWED_ORIGINS = [
     'https://tcm-prescription-system.pages.dev',
@@ -172,6 +173,29 @@ export async function onRequest(context) {
             return json({ success: true, status: 'pending' }, 200, origin);
         }
         if (status === 'activated') {
+            // ★ 2026-09-09 载体 UA 嗅探自愈（官网订单载体缺失）：装机轮询来自真实设备，
+            //   UA 可判端形态。官网浏览器下单（dp 空）的记录 appModeCarrier 空 →
+            //   诊所缺 offlineCarrier / license.devices 缺 clientClass → 后台显示纯
+            //   「离线标准版」无📱APP/🖥️桌面前缀。此处幂等补写（只补空字段）：
+            //   ① admin_req.appModeCarrier ② license.devices[].productClass/clientClass
+            //   ③ 诊所 offlineCarrier。UA 判不出（桌面浏览器测试）静默跳过。
+            const __sniffCarrier = sniffCarrierFromUA(context.request);
+            if (__sniffCarrier && !record.appModeCarrier) {
+                try {
+                    await updateAdminRequestStatus(kv, record.requestId || requestId, { appModeCarrier: __sniffCarrier });
+                    record.appModeCarrier = __sniffCarrier;
+                    console.log('[AdminStatus] 载体嗅探补写 admin_req:', record.clinicName, '→', __sniffCarrier);
+                } catch (e) { console.warn('[AdminStatus] 载体补写失败（忽略）:', e.message); }
+                try {
+                    if (record.licenseCode) {
+                        await patchLicenseDeviceCarrier(kv, record.licenseCode,
+                            record.machineId, 'offline', __sniffCarrier);
+                    }
+                } catch (e) { /* 已在函数内 warn */ }
+                try {
+                    await patchClinicCarrier(kv, record.clinicName, __sniffCarrier);
+                } catch (e) { /* 已在函数内 warn */ }
+            }
             // ★ 2026-08-19 幂等补开：修复上线前已通过但未创建云端账号的历史激活请求
             // admin-approve 的自动开通仅在审核通过那一刻执行；若当时该修复尚未部署，
             // 该请求就没有云端账号，客户端用手机号登录会 401。这里每次轮询 activated

@@ -1203,6 +1203,80 @@ async function checkCodeRateLimit(kv, code, maxPerHour = 5) {
 }
 
 // ============================================================================
+//  ★ 2026-09-09 载体 UA 嗅探 + 幂等补写（官网订单载体缺失自愈链路）
+//    背景：官网浏览器下单（orderSource=website，dp 参数空）→ admin_req.appModeCarrier
+//    空 → 审核通过 provisionCloudAccount 建的诊所缺 offlineCarrier、license.devices
+//    缺 clientClass → 后台各模块显示纯「离线标准版」无📱APP/🖥️桌面前缀。
+//    治本：装机后客户端必然触达 admin-status 轮询 / heartbeat 心跳——请求本身来自
+//    真实设备，User-Agent 可区分端形态，服务端嗅探后幂等补写（只补空字段，永不覆盖）。
+//    零客户端改动、零重打包。
+// ============================================================================
+
+// UA → 载体（desktop/app）。仅用于客户端专用接口（admin-status/heartbeat），
+// 桌面浏览器返回 null 不判定（管理员测试场景安全兜底）。
+function sniffCarrierFromUA(request) {
+    try {
+        const ua = String((request && request.headers && request.headers.get('User-Agent')) || '');
+        if (!ua) return null;
+        if (/Electron/i.test(ua)) return 'desktop';      // Electron 主进程/渲染进程
+        if (/wv\)/i.test(ua)) return 'app';              // Android WebView（; wv) 标记）
+        if (/Dalvik|okhttp/i.test(ua)) return 'app';     // Android Java 层 HTTP
+        if (/iPhone|iPad|iPod/i.test(ua)) return 'app';  // iOS WKWebView / capacitor
+        if (/Android/i.test(ua)) return 'app';           // Android 浏览器兜底
+        return null;                                     // 桌面浏览器 → 不判定
+    } catch (e) { return null; }
+}
+
+// 幂等补写诊所载体：所有同名 + 离线版 + offlineCarrier 空的诊所补上 carrier。
+// 安全性：载体是展示层信息（无权限语义），UA 伪造最坏影响为显示标错，可接受。
+async function patchClinicCarrier(kv, clinicName, carrier) {
+    try {
+        if (!kv || !clinicName || (carrier !== 'desktop' && carrier !== 'app')) return false;
+        const clinics = (await kv.get('system:clinics', 'json')) || [];
+        if (!Array.isArray(clinics) || !clinics.length) return false;
+        let dirty = false;
+        for (const c of clinics) {
+            if (!c || c.name !== clinicName) continue;
+            if (String(c.edition || '').indexOf('offline_') === 0 && !c.offlineCarrier) {
+                c.offlineCarrier = carrier;
+                c.updatedAt = new Date().toISOString();
+                dirty = true;
+                console.log('[CarrierBackfill] 诊所载体补写:', clinicName, '→', carrier);
+            }
+        }
+        if (dirty) await kv.put('system:clinics', JSON.stringify(clinics));
+        return dirty;
+    } catch (e) {
+        console.warn('[CarrierBackfill] 诊所载体补写失败:', e.message);
+        return false;
+    }
+}
+
+// 幂等补写 license 设备端形态：devices 中 machineId 匹配且 productClass/clientClass
+// 为空的补上（只补缺失字段）。返回更新后的 devices（未变更返回 null）。
+async function patchLicenseDeviceCarrier(kv, code, machineId, productClass, clientClass) {
+    try {
+        if (!kv || !code || !machineId) return null;
+        const record = await getLicense(kv, code);
+        if (!record || !Array.isArray(record.devices)) return null;
+        let dirty = false;
+        for (const d of record.devices) {
+            if (!d || d.machineId !== machineId) continue;
+            if (!d.productClass && productClass) { d.productClass = productClass; dirty = true; }
+            if (!d.clientClass && clientClass) { d.clientClass = clientClass; dirty = true; }
+        }
+        if (!dirty) return null;
+        await updateLicense(kv, code, { devices: record.devices });
+        console.log('[CarrierBackfill] license 设备端形态补写:', code,
+            machineId.substring(0, 8) + '...', productClass + '/' + clientClass);
+        return record.devices;
+    } catch (e) {
+        console.warn('[CarrierBackfill] license 设备端形态补写失败:', e.message);
+        return null;
+    }
+}
+
+// ============================================================================
 //  导出
 // ============================================================================
 export {
@@ -1246,6 +1320,10 @@ export {
     // ★ P2-3 新增：计数上链（处方计数高水位 + 回拨对账）
     reportUsage,       // 心跳/在线验证时上报计数并检测本地篡改
     getUsage,          // 读取计数上报记录（风控展示）
+    // ★ 2026-09-09 新增：载体 UA 嗅探 + 幂等补写（官网订单载体缺失自愈）
+    sniffCarrierFromUA,        // UA → 'desktop'/'app'/null
+    patchClinicCarrier,        // 补写诊所 offlineCarrier（仅空时）
+    patchLicenseDeviceCarrier, // 补写 license 设备端形态（仅空时）
     // ★ 2026-08-26 新增：推广奖励（邀请激活阶梯奖励 90天/人 封顶4人360天）
     INVITE_REWARD_DAYS_PER_PERSON,   // 邀请人每人奖励天数（90）
     INVITE_MAX_INVITEES,             // 封顶人数（4）

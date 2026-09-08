@@ -65,12 +65,14 @@ function deriveFromClinic(clinic) {
 }
 
 async function backfillDeviceClass(kv, records) {
-    // 1. 找出缺端形态的设备 machineId（仅已绑定设备的记录；未使用激活码无设备，天然跳过）
+    // 1. 找出缺端形态的设备 machineId（productClass 或 clientClass 任一缺失；仅已绑定
+    //    设备的记录；未使用激活码无设备，天然跳过。clientClass 缺失=官网订单装机后
+    //    心跳/轮询嗅探补写尚未触达，同样需要回填）
     const needMid = new Set();
     for (const r of records) {
         if (!Array.isArray(r.devices)) continue;
         for (const d of r.devices) {
-            if (d && d.machineId && !d.productClass) needMid.add(d.machineId);
+            if (d && d.machineId && (!d.productClass || !d.clientClass)) needMid.add(d.machineId);
         }
     }
     if (needMid.size === 0) return;   // 稳态短路：零额外 KV 读
@@ -139,16 +141,16 @@ async function backfillDeviceClass(kv, records) {
     }
     if (map.size === 0) return;
 
-    // 4. 回填内存记录并持久化（updateLicense 读改写；失败不阻断列表返回）
+    // 4. 回填内存记录并持久化（merge 语义：只补缺失字段，不覆盖已有值；
+    //    updateLicense 读改写；失败不阻断列表返回）
     for (const r of records) {
         if (!Array.isArray(r.devices)) continue;
         let changed = false;
         for (const d of r.devices) {
-            if (d && d.machineId && !d.productClass && map.has(d.machineId)) {
+            if (d && d.machineId && map.has(d.machineId)) {
                 const m = map.get(d.machineId);
-                d.productClass = m.productClass;
-                d.clientClass = m.clientClass;
-                changed = true;
+                if (!d.productClass && m.productClass) { d.productClass = m.productClass; changed = true; }
+                if (!d.clientClass && m.clientClass) { d.clientClass = m.clientClass; changed = true; }
             }
         }
         if (changed && r.code) {

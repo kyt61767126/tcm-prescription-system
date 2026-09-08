@@ -32,7 +32,7 @@
 
 import {
     getKV, getLicense, updateLicense, checkRateLimit, getDevices, getMaxDevices, appendLicenseLog,
-    setDeviceVersion, getDeviceVersion, reportUsage
+    setDeviceVersion, getDeviceVersion, reportUsage, sniffCarrierFromUA, patchClinicCarrier
 } from './_lib/license-core.js';
 
 // ★ P2 安全修复：收紧 CORS，仅允许合法 Origin
@@ -178,31 +178,56 @@ export async function onRequest(context) {
         // ★ 端形态自动上报：心跳携带 productClass(cloud/offline)+clientClass(desktop/app)
         //   由客户端自动上报，同步持久化到 record.devices 与设备-版本绑定，
         //   供后台"激活码卡片/设备清单/设备绑定页"展示"云端/离线 + 桌面/APP"。
-        if (deviceMatched && (body.productClass || body.clientClass)) {
-            const pc = ((body.productClass || '').trim()) || null;
-            const cc = ((body.clientClass || '').trim()) || null;
+        //   ★ 2026-09-09 UA 嗅探兜底（官网订单载体缺失自愈）：老客户端不报端形态 →
+        //     devices[].clientClass 恒空，后台显示纯「离线标准版」无📱APP/🖥️桌面前缀。
+        //     心跳来自真实设备，UA 可判端形态。两语义严格分离：
+        //     ① 客户端显式上报 = 权威，覆盖写（原语义不变）
+        //     ② UA 嗅探兜底 = 仅补空字段，绝不覆盖已有值
+        if (deviceMatched) {
+            const repPc = ((body.productClass || '').trim()) || null;
+            const repCc = ((body.clientClass || '').trim()) || null;
             const found = devices.find(d => d.machineId === machineId);
-            if (found && (found.productClass !== pc || found.clientClass !== cc)) {
-                found.productClass = pc;
-                found.clientClass = cc;
-                try {
-                    await updateLicense(kv, code, {
-                        devices: devices,
-                        maxDevices: maxDevices
-                    });
-                } catch (e) { console.warn('[Heartbeat] 设备端形态写入失败:', e.message); }
-            }
-            try {
-                const prevBinding = await getDeviceVersion(kv, machineId);
-                if (prevBinding) {
-                    await setDeviceVersion(kv, machineId, prevBinding.version || 'standard', {
-                        productClass: pc || undefined,
-                        clientClass: cc || undefined,
-                        licenseCode: prevBinding.licenseCode || undefined,
-                        clinicName: prevBinding.clinicName || undefined
-                    });
+            if (repPc || repCc) {
+                // ① 显式上报：权威覆盖（原逻辑）
+                if (found && ((found.productClass || null) !== repPc || (found.clientClass || null) !== repCc)) {
+                    found.productClass = repPc;
+                    found.clientClass = repCc;
+                    try {
+                        await updateLicense(kv, code, { devices: devices, maxDevices: maxDevices });
+                    } catch (e) { console.warn('[Heartbeat] 设备端形态写入失败:', e.message); }
                 }
-            } catch (e) { console.warn('[Heartbeat] 设备绑定端形态更新失败:', e.message); }
+            } else if (found && (!found.productClass || !found.clientClass)) {
+                // ② 嗅探兜底：仅补空字段（心跳接口仅离线端调用，productClass 兜底 offline）
+                const sniffed = sniffCarrierFromUA(context.request);
+                if (sniffed) {
+                    let dirty = false;
+                    if (!found.clientClass) { found.clientClass = sniffed; dirty = true; }
+                    if (!found.productClass) { found.productClass = 'offline'; dirty = true; }
+                    if (dirty) {
+                        try {
+                            await updateLicense(kv, code, { devices: devices, maxDevices: maxDevices });
+                            console.log('[Heartbeat] 载体嗅探补写:', code, '→', sniffed);
+                        } catch (e) { console.warn('[Heartbeat] 嗅探补写失败:', e.message); }
+                        // 载体诊所兜底：官网订单建的诊所缺 offlineCarrier（用户管理
+                        //   版本列显示纯「离线标准版」），幂等补写（仅空时）
+                        try { await patchClinicCarrier(kv, record.clinicName, sniffed); } catch (e) { /* 内部 warn */ }
+                    }
+                }
+            }
+            // 设备-版本绑定端形态同步（上报/嗅探后的最终值）
+            if (found && (found.productClass || found.clientClass)) {
+                try {
+                    const prevBinding = await getDeviceVersion(kv, machineId);
+                    if (prevBinding) {
+                        await setDeviceVersion(kv, machineId, prevBinding.version || 'standard', {
+                            productClass: found.productClass || undefined,
+                            clientClass: found.clientClass || undefined,
+                            licenseCode: prevBinding.licenseCode || undefined,
+                            clinicName: prevBinding.clinicName || undefined
+                        });
+                    }
+                } catch (e) { console.warn('[Heartbeat] 设备绑定端形态更新失败:', e.message); }
+            }
         }
 
         // 计算剩余天数
