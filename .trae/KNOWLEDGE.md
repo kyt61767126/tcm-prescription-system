@@ -820,6 +820,11 @@ P2 渐进迁移（2026-09-03 当日完成）：
 - **生效方式（表单精简 6933a67d/98651e4f，已随 1.0.212 打包）**：离线桌面版需重新打包（build.bat）后生效；云端网页/云桌面/云端APP不受影响。
 - **生效方式（官网更新 2d942d68）**：纯官网改动（public 权威源部署，site-official 仅同步其 HTML 实际含有的文案），push 后 Cloudflare Pages 自动部署，强刷即生效，无需重打包任何端。
 
+**五十四、管理后台「激活码管理/用户管理」信息展示统一——加列必全量核对 colspan，API 有字段≠前端已渲染（2026-09-08，Commit 8a8783a9）**：
+- **改动**（public/admin + site-admin/admin 双副本同步）：①激活码管理版本标签统一为「载体·版本」复合标签（🌐网页·云端机构版/🖥️桌面·离线标准版/📱APP·离线机构版/🖥️📱双端·…，前缀取自 devices 数组 productClass+clientClass；未使用激活码无设备记录→无前缀纯文字兜底）；②到期时间升级剩余天数提醒（已到期红色加粗/≤30天橙色加粗，对齐诊所管理）；③新增「邀请进度」列（邀请码+已邀/封顶+奖励天数，被邀记录补↳行）——**sanitizeRecord 2026-08-26 起就返回 inviteCode/inviteCount/rewardDays/invitedBy，public 副本却从未渲染，「API 有字段前端没渲染」是功能缺失的隐蔽形态，对照另一副本找已实现功能是最快发现法**；maxInvitees 后端不返回，前端兜底 `||4` 与后端 INVITE_MAX_INVITEES=4 封顶一致。
+- **铁律**：a. **表格加列后 colspan 散落 5+ 处必须全量 grep 核对**——静态 loading 占位/loadList 加载失败/网络错误/renderList 空态，外加双副本；本轮还揪出用户表静态占位历史遗留 8≠9 错配（表头 9 列）。核对脚本：提取全部 `<table>` 块比对 th 数与 colspan 值（node 脚本，见本轮校验法）。b. **255KB+ 大 HTML 用 Edit 工具编辑会引入两类暗伤**——UTF-8 BOM（编辑器写入引入，HEAD 无 BOM 则编辑后必须复查 `charCodeAt(0)===0xFEFF`）与残留半截片段（else-if 括号不配对导致整 script 块语法错）——大文件改完必须三查：BOM/`new Function(script块)` 语法/colspan 一致性。c. PowerShell 不支持 bash heredoc，多行 commit message 用 `git commit -F 消息文件`（用完删）。
+- **生效方式**：云端管理后台双副本随 push 触发 Cloudflare Pages 自动部署，后台页面强刷（Ctrl+F5）生效；云桌面/云APP/离线桌面/离线APP 四端不涉及，无需重打包。
+
 ## 8. 桌面版技术规范
 
 * **登录预填：已彻底取消（2026-09-06 Commit 2202236f，取代 9-04"来源单一化"方案）**：`initLoginInput` **不再做任何用户名自动预填**——登录框永远空白+聚焦；记住的账户仅保留**手动下拉切换**（renderUsernameDropdown，点▼选择）。演进史：8-27 恢复预填 → 9-04 收窄为"仅 localStorage 记住的用户名"（历史 bug：config.users 单账户分支无法区分出厂模板 admin，全新安装首次启动即预填 admin/admin）→ 9-06 用户实测"升级新版后自动显示旧记住的用户名，不像新客户"后**彻底取消**。理由：预填链路多次引发历史 bug + 升级安装 userData 不清导致残留展示；而手动下拉保留全部便利。
