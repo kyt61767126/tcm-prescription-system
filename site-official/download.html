@@ -1783,6 +1783,24 @@
                         <div class="value" id="payAmountDisplay">-</div>
                         <div style="font-size:12px;color:#9ca3af;margin-top:4px;">付款时请在备注中填写订单号后 6 位，方便快速核对</div>
                     </div>
+                    <!-- ★ 2026-09-08 付款页邀请码补填/更正：订单已提交（pending_payment）但
+                         客户在上一步漏填或填错邀请码，可在此补填并保存（幂等重新提交订单，
+                         服务端同机同号命中幂等补写覆盖 inviteCode）。奖励结算依赖此码，
+                         QQ/微信联系客服改单前先在付款页补上更省事。 -->
+                    <div class="order-box" style="margin-top:14px;padding:12px 14px;">
+                        <div class="label">🎁 邀请码（选填，可在此补填/更正）</div>
+                        <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
+                            <input type="text" id="payInviteCode" placeholder="好友推荐码，如 86NSWG"
+                                   style="flex:1;min-width:0;padding:10px;font-size:14px;border:1px solid #d1d5db;border-radius:8px;outline:none;text-transform:uppercase;"
+                                   maxlength="10" oninput="checkInviteRewardText()">
+                            <button id="payInviteSaveBtn" type="button"
+                                    style="padding:10px 16px;font-size:14px;font-weight:600;color:#fff;background:#16a34a;border:none;border-radius:8px;cursor:pointer;white-space:nowrap;"
+                                    onclick="savePayInvite()">保存邀请码</button>
+                        </div>
+                        <div id="payInviteHint" style="font-size:11px;color:#9ca3af;margin-top:6px;">
+                            💡 填好友邀请码，激活成功双方得奖励（好友+90天，您+30天）；留空且已提交则无需操作
+                        </div>
+                    </div>
                     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-top:14px;">
                         <div style="text-align:center;padding:14px;border:1px solid #e5e7eb;border-radius:10px;background:#fff;">
                             <div style="font-weight:700;margin-bottom:8px;">💙 支付宝</div>
@@ -2961,6 +2979,72 @@
             }
         }
 
+        // ★ 2026-09-08 付款页邀请码补填/更正（同步自 public/download.html 权威源）：
+        //   复用 order-submit 幂等分支（同机同号存在进行中订单 → 返回既有订单并补写/覆盖
+        //   inviteCode），不会重复建单/扣费；与 submitOrder 区分：不进 Step3、不重启轮询。
+        async function savePayInvite() {
+            const ivEl = document.getElementById('payInviteCode');
+            const newIv = (ivEl && ivEl.value || '').trim().toUpperCase();
+            if (newIv && !/^[A-Z0-9]{4,10}$/.test(newIv)) {
+                showToast('邀请码格式错误（4-10位字母或数字）');
+                return;
+            }
+            const btn = document.getElementById('payInviteSaveBtn');
+            const hint = document.getElementById('payInviteHint');
+            if (btn) btn.disabled = true;
+            const name = (document.getElementById('custName').value || '').trim();
+            const phone = (document.getElementById('custPhone').value || '').trim();
+            const wechat = (document.getElementById('custWechat').value || '').trim();
+            const machineId = (document.getElementById('custMachineId').value || '').trim();
+            const note = (document.getElementById('custNote').value || '').trim();
+            if (!orderInfo.number || !name || !phone || !machineId) {
+                showToast('订单或必填信息缺失，请回上一步确认');
+                if (btn) btn.disabled = false;
+                return;
+            }
+            const srcIv = document.getElementById('custInviteCode');
+            if (srcIv) srcIv.value = newIv;
+            try {
+                const res = await fetch(BASE + '/api/license/order-submit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        orderNo: orderInfo.number,
+                        productKey: (selectedVersion && selectedVersion.key) ? selectedVersion.key : 'local',
+                        edition: (selectedVersion && selectedVersion.edition) ? selectedVersion.edition : 'personal',
+                        price: orderInfo.price || '',
+                        clinicName: name,
+                        adminName: name,
+                        phone, wechat, machineId, note,
+                        inviteCode: newIv,
+                        dp: (new URLSearchParams(window.location.search).get('dp') || '')
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    if (hint) { hint.textContent = '✓ 邀请码已保存生效，双方奖励将按此码结算'; hint.style.color = '#16a34a'; }
+                    showToast(newIv ? ('邀请码已保存：' + newIv) : '已清除邀请码');
+                } else {
+                    showToast(data.error || '保存失败，请稍后重试');
+                }
+            } catch (e) {
+                showToast('网络错误，邀请码保存失败');
+            } finally {
+                if (btn) btn.disabled = false;
+            }
+        }
+
+        // 付款页邀请码输入时提示奖励规则（轻量）
+        function checkInviteRewardText() {
+            const hint = document.getElementById('payInviteHint');
+            if (!hint) return;
+            const v = (document.getElementById('payInviteCode').value || '').trim();
+            const vv = v.toUpperCase();
+            if (!v) { hint.textContent = '💡 填好友邀请码，激活成功双方得奖励（好友+90天，您+30天）；留空且已提交则无需操作'; hint.style.color = '#9ca3af'; }
+            else if (vv && !/^[A-Z0-9]{4,10}$/.test(vv)) { hint.textContent = '⚠ 邀请码为 4-10 位字母或数字'; hint.style.color = '#e53935'; }
+            else { hint.textContent = '✓ 有效邀请码（大写已自动转换），点击「保存邀请码」生效'; hint.style.color = '#16a34a'; }
+        }
+
         // 订单激活状态查询（activated 后停止轮询）
         async function queryOrderStatus(manual) {
             if (!orderInfo.number) return;
@@ -3212,6 +3296,8 @@
                 const el = document.getElementById(id);
                 if (el) el.value = '';
             });
+            const piv = document.getElementById('payInviteCode');
+            if (piv) piv.value = '';
             const statusBox = document.getElementById('orderStatusBox');
             if (statusBox) statusBox.style.display = 'none';
             const codeBox = document.getElementById('licenseCodeBox');

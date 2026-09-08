@@ -295,8 +295,11 @@ export async function onRequest(context) {
                     // ★ 2026-09-07 幂等补写（对齐 admin-submit 四处复用分支）：官网/旧客户端
                     //   下单的既有订单缺邀请码或密码哈希而本次直建带了 → 补写后返回；
                     //   phone 一致已校验（防接管），失败仅 warn 不阻断幂等返回。
+                    //   ★ 2026-09-08 付款页补填：同机同号场景既存订单已带邀请码但客户在
+                    //     Step3 付款页补填/更正 → 允许覆盖（phone 已一致校验 = 订单归属人）。
+                    //     若本次 strip（inviteCodeClean 为空）表示清空（存数组兜底防历史脏数据）。
                     const __patch = {};
-                    if (inviteCodeClean && !existRec.inviteCode) __patch.inviteCode = inviteCodeClean;
+                    if (inviteCodeClean && existRec.inviteCode !== inviteCodeClean) __patch.inviteCode = inviteCodeClean;
                     if (passwordCred && !existRec.passwordHash) {
                         __patch.passwordHash = passwordCred.passwordHash;
                         __patch.passwordSalt = passwordCred.salt;
