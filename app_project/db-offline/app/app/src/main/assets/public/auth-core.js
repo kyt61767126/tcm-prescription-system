@@ -4996,8 +4996,8 @@
                 '</div>' +
                 '<div style="margin-bottom:12px;">' +
                     '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">登录密码（可留空＝默认 admin）</label>' +
-                    '<input type="password" id="adminPassword" placeholder="云端登录密码固定为 admin（自定义密码不生效）" autocomplete="new-password" data-lpignore="true" maxlength="32" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
-                    '<div class="admin-field-hint" id="adminPwdHint" style="font-size:11px;color:#e53935;margin-top:4px;">💡 云端登录密码固定为 admin，自定义密码不生效，登入后请自行修改密码</div>' +
+                    '<input type="password" id="adminPassword" placeholder="至少8位，含字母和数字（留空＝默认 admin）" autocomplete="new-password" data-lpignore="true" maxlength="32" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
+                    '<div class="admin-field-hint" id="adminPwdHint" style="font-size:11px;color:#909399;margin-top:4px;">💡 至少8位，含字母和数字；留空＝默认密码 admin（登入后可自行修改）</div>' +
                 '</div>' +
                 '<div style="margin-bottom:14px;">' +
                     '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">确认密码（自定义时需再输一次）</label>' +
@@ -5047,7 +5047,7 @@
                 '<div id="adminSuccessDesc" style="font-size:13px;color:#555;margin-top:8px;line-height:1.7;"></div>' +
                 '<div style="font-size:12px;color:#333;margin-top:12px;line-height:1.9;">' +
                     '<div>✅ 登录账号：<b id="adminSuccessPhone">--</b></div>' +
-                    '<div>✅ 密码：<b style="color:#2e7d32;">（默认 admin，登入后请修改）</b></div>' +
+                    '<div>✅ 密码：<b id="adminSuccessPwd" style="color:#2e7d32;">（默认 admin，登入后请修改）</b></div>' +
                 '</div>' +
                 '<button id="adminSuccessBtn" style="width:100%;margin-top:16px;padding:12px;font-size:15px;border:none;border-radius:8px;color:#fff;background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);cursor:pointer;font-weight:bold;">✅ 关闭窗口</button>' +
             '</div>' +
@@ -5773,13 +5773,13 @@
             const hint = document.getElementById('adminPwdHint');
             const pwd = this.value;
             if (!pwd) {
-                hint.textContent = '💡 云端登录密码固定为 admin，自定义密码不生效，登入后请自行修改密码';
-                hint.style.color = '#e53935';
+                hint.textContent = '💡 至少8位，含字母和数字；留空＝默认密码 admin';
+                hint.style.color = '#909399';
             } else if (pwd.length < 8 || !/[a-zA-Z]/.test(pwd) || !/\d/.test(pwd)) {
                 hint.textContent = '⚠ 若自定义密码，需至少8位且包含字母和数字';
                 hint.style.color = '#e53935';
             } else {
-                hint.textContent = '✓ 密码强度：' + (pwd.length >= 12 ? '强' : '中等') + '（注意：云端登录密码固定为 admin，登入后请修改）';
+                hint.textContent = '✓ 密码强度：' + (pwd.length >= 12 ? '强' : '中等');
                 hint.style.color = '#26a69a';
             }
         });
@@ -6388,6 +6388,22 @@
             }
             const descEl = document.getElementById('adminSuccessDesc');
             document.getElementById('adminSuccessPhone').textContent = phone;
+            // ★ 2026-09-08 成功页密码三态显示（对齐桌面 activate-window 同款修复）：
+            //   注册密码必填且禁止 admin，旧文案写死「默认 admin」必然误导自设密码用户
+            //   （拿 admin 登录失败）。三态：已注册→注册密码；自设→您设置的密码；否则默认 admin。
+            //   重启恢复链路 __regPrefill 重读 localStorage / state.password 由 passwordEnc 解密恢复，判断依然成立。
+            try {
+                const __pwdEl = document.getElementById('adminSuccessPwd');
+                if (__pwdEl) {
+                    if (__regPrefill && __regPrefill.phone === phone) {
+                        __pwdEl.innerHTML = '您注册时设置的密码';
+                    } else if (state.password && String(state.password).trim() && state.password !== 'admin') {
+                        __pwdEl.innerHTML = '您设置的密码';
+                    } else {
+                        __pwdEl.innerHTML = '（默认 admin，登入后请修改）';
+                    }
+                }
+            } catch (_pe) { console.warn('[LicenseCheck] 成功页密码显示失败(不影响):', _pe); }
             // ★ 2026-09-05 管理员激活路径邀请码：成功页展示专属邀请码（对齐激活码Tab inviteMsg；
             //   r.inviteInfo 来自 admin-status activated 响应，旧后端无该字段则不展示）
             let __adminInviteMsg = '';
