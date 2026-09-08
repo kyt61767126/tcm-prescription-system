@@ -74,12 +74,18 @@ Get-ChildItem $script:LogDir -Filter 'pack-*.log' -File -ErrorAction SilentlyCon
 #   本次会话实际执行了打包的单元（SKIP 的不计入），副作用 AutoCommit 后统一记录基线
 $script:BuiltUnits = @()
 
+# ★ 2026-09-08 红字降噪（单一权威源 tools/noise-reduce.ps1）：PS 5.1 host 把未捕获的
+#   子进程 stderr 一律渲染红色（小白高频误报"打包失败"）。本脚本所有子 PowerShell /
+#   cmd / node 调用统一经 Write-HostLine / Invoke-QuietProcess 渲染，stderr 转黄/白，
+#   真失败仍由 [ERROR]/[FATAL] 显式标红。
+. (Join-Path $PSScriptRoot 'noise-reduce.ps1')
+
 # ★ 2026-08-24 打包验收门（tools/pack-gate.ps1）：语法/BOM/CRLF/编码 四道快检，
 #   任一失败直接阻断（历史事故：release-menu.ps1 BOM丢失解析崩 / 双重替换语法错无人发现）
 $gateTool = Join-Path $PSScriptRoot 'pack-gate.ps1'
 if (Test-Path $gateTool) {
-    & powershell -NoProfile -ExecutionPolicy Bypass -File $gateTool -Mode preflight
-    if ($LASTEXITCODE -ne 0) {
+    $gateRc = Invoke-QuietProcess -FilePath 'powershell' -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',$gateTool,'-Mode','preflight') -Capture
+    if ($gateRc -ne 0) {
         Write-Host ""
         Write-Host "[FATAL] 打包验收门未通过，打包中止。请修复上述问题后重试。" -ForegroundColor Red
         Write-Host "  完整日志: $script:LogFile" -ForegroundColor Yellow
@@ -92,7 +98,7 @@ function Test-BuildSkip([string]$unit) {
     if ($env:NO_BUILD_SKIP -eq '1') { return $false }
     $skipTool = Join-Path $PSScriptRoot 'build-skip.ps1'
     if (-not (Test-Path $skipTool)) { return $false }
-    & powershell -NoProfile -ExecutionPolicy Bypass -File $skipTool -Check -Unit $unit 2>&1 | ForEach-Object { Write-Host "  $_" }
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $skipTool -Check -Unit $unit 2>&1 | ForEach-Object { Write-HostLine $_ -Indent '  ' }
     return ($LASTEXITCODE -eq 0)
 }
 # 记录本次已打包单元的基线（供下次 Check 跳过）。必须在"打包成功+副作用AutoCommit后"调用（HEAD 才稳定）
@@ -114,7 +120,7 @@ function Record-BuiltUnits {
     Write-Host ""
     Write-Host "--- 打包增量基线记录 ---" -ForegroundColor Cyan
     foreach ($u in $script:BuiltUnits) {
-        & powershell -NoProfile -ExecutionPolicy Bypass -File $skipTool -Record -Unit $u 2>&1 | ForEach-Object { Write-Host "  $_" }
+        & powershell -NoProfile -ExecutionPolicy Bypass -File $skipTool -Record -Unit $u 2>&1 | ForEach-Object { Write-HostLine $_ -Indent '  ' }
     }
     $script:BuiltUnits = @()
 }
@@ -135,7 +141,7 @@ if (Test-Path $fixTool) {
         'app_project\db-offline\app\build-app.bat',
         'app_project\db-offline\desktop\build.bat'
     ) | ForEach-Object { Join-Path $script:RootDir $_ }
-    & powershell -NoProfile -ExecutionPolicy Bypass -File $fixTool @buildBats
+    $null = Invoke-QuietProcess -FilePath 'powershell' -ArgumentList (@('-NoProfile','-ExecutionPolicy','Bypass','-File',$fixTool) + $buildBats) -Capture
 }
 
 # Run external .bat file and return exit code
@@ -152,13 +158,7 @@ function Invoke-BatFile {
     }
     Push-Location $WorkDir
     try {
-        & cmd /c "$BatPath $Arguments" 2>&1 | ForEach-Object {
-            if ($_ -is [System.Management.Automation.ErrorRecord]) {
-                Write-Host $_.Exception.Message -ForegroundColor Yellow
-            } else {
-                Write-Host $_
-            }
-        }
+        & cmd /c "$BatPath $Arguments" 2>&1 | ForEach-Object { Write-HostLine $_ }
         return $LASTEXITCODE
     } finally {
         Pop-Location
@@ -361,8 +361,9 @@ function Build-Cloud {
         }
         Push-Location "$script:RootDir\app_project\db-yunduan"
         try {
-            & powershell -NoProfile -ExecutionPolicy Bypass -File "edit-config.ps1" -SkipConfig
-            $rc = $LASTEXITCODE
+            # ★ 2026-09-08 改 Invoke-QuietProcess：stderr 在 cmd 层合并进 stdout（PS host 不再染红），
+            #   且根治原裸调用的 stdout 混入 Build-Cloud 返回值问题（下游 $rc -is [array] 防御仍保留）
+            $rc = Invoke-QuietProcess -FilePath 'powershell' -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path (Get-Location) 'edit-config.ps1'),'-SkipConfig') -Capture
         } finally {
             Pop-Location
         }
@@ -467,8 +468,8 @@ function Build-Offline {
         }
         Push-Location $verDir
         try {
-            & powershell -NoProfile -ExecutionPolicy Bypass -File "edit-config.ps1" -SkipConfig
-            $rc = $LASTEXITCODE
+            # ★ 2026-09-08 改 Invoke-QuietProcess（同 Build-Cloud：stderr 白化 + 返回值去污染）
+            $rc = Invoke-QuietProcess -FilePath 'powershell' -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path (Get-Location) 'edit-config.ps1'),'-SkipConfig') -Capture
         } finally {
             Pop-Location
         }

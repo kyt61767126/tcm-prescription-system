@@ -10,6 +10,12 @@ if (-not (Test-Path "$script:RootDir\tools\publish-release.js")) {
     $script:RootDir = Split-Path $PSScriptRoot -Parent
 }
 
+# ★ 2026-09-08 红字降噪（单一权威源 tools/noise-reduce.ps1）：PS 5.1 host 把未捕获的
+#   子进程 stderr 一律渲染红色（小白高频误报"发布失败"）。本脚本所有子 PowerShell /
+#   cmd / node 调用统一经 Write-HostLine / Invoke-QuietProcess 渲染，stderr 转黄/白，
+#   真失败仍由 [ERROR]/[FATAL]/发布失败横幅显式标红。
+. (Join-Path $PSScriptRoot 'noise-reduce.ps1')
+
 $env:NO_PAUSE = '1'
 
 # ★ 2026-09-01 中文暂停提示：覆盖内置 pause（英文 "Press Enter to continue..."），
@@ -39,8 +45,8 @@ function Read-MenuChoice([string]$Prompt) {
 #   任一失败直接阻断（历史事故：本文件 BOM 丢失被 GBK 误读解析崩 / 打包链脚本语法错无人发现）
 $gateToolRm = Join-Path $PSScriptRoot 'pack-gate.ps1'
 if (Test-Path $gateToolRm) {
-    & powershell -NoProfile -ExecutionPolicy Bypass -File $gateToolRm -Mode preflight
-    if ($LASTEXITCODE -ne 0) {
+    $gateRc = Invoke-QuietProcess -FilePath 'powershell' -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',$gateToolRm,'-Mode','preflight')
+    if ($gateRc -ne 0) {
         Write-Host ""
         Write-Host "[FATAL] 打包验收门未通过，发布/打包中止。请修复上述问题后重试。" -ForegroundColor Red
         pause
@@ -55,7 +61,7 @@ function Test-BuildSkip([string]$unit) {
     if ($env:NO_BUILD_SKIP -eq '1') { return $false }
     $skipTool = Join-Path $PSScriptRoot 'build-skip.ps1'
     if (-not (Test-Path $skipTool)) { return $false }
-    & powershell -NoProfile -ExecutionPolicy Bypass -File $skipTool -Check -Unit $unit 2>&1 | ForEach-Object { Write-Host "  $_" }
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $skipTool -Check -Unit $unit 2>&1 | ForEach-Object { Write-HostLine $_ -Indent '  ' }
     return ($LASTEXITCODE -eq 0)
 }
 function Record-BuiltUnits {
@@ -65,7 +71,7 @@ function Record-BuiltUnits {
     Write-Host ""
     Write-Host "--- 打包增量基线记录 ---" -ForegroundColor Cyan
     foreach ($u in $script:BuiltUnits) {
-        & powershell -NoProfile -ExecutionPolicy Bypass -File $skipTool -Record -Unit $u 2>&1 | ForEach-Object { Write-Host "  $_" }
+        & powershell -NoProfile -ExecutionPolicy Bypass -File $skipTool -Record -Unit $u 2>&1 | ForEach-Object { Write-HostLine $_ -Indent '  ' }
     }
     $script:BuiltUnits = @()
 }
@@ -86,7 +92,7 @@ if (Test-Path $fixTool) {
         'app_project\db-offline\app\build-app.bat',
         'app_project\db-offline\desktop\build.bat'
     ) | ForEach-Object { Join-Path $script:RootDir $_ }
-    & powershell -NoProfile -ExecutionPolicy Bypass -File $fixTool @buildBats
+    $null = Invoke-QuietProcess -FilePath 'powershell' -ArgumentList (@('-NoProfile','-ExecutionPolicy','Bypass','-File',$fixTool) + $buildBats)
 }
 
 function Get-TimeStamp {
@@ -104,9 +110,9 @@ function Invoke-Pack {
     # ★ 2026-08-23 优化：传 -AutoMode 3 非交互执行"全部版本"打包（云端+本地顺序构建），
     #   完成后自动返回本菜单。原直接调用会弹出 one-click-pack 的嵌套交互菜单（菜单套菜单），
     #   用户需在子菜单选完再退出才能回到发布菜单，体验混乱。
-    # ★ 2026-08-23 修复：接管道显示输出，防止子进程stdout混入函数返回值（返回值污染）
-    & powershell -NoProfile -ExecutionPolicy Bypass -File $packScript -AutoMode 3 | ForEach-Object { Write-Host $_ }
-    return $LASTEXITCODE
+    # ★ 2026-09-08 改 Invoke-QuietProcess：stdout 直连控制台不混入返回值（原管道方案颜色丢失），
+    #   stderr 在 cmd 层合并进 stdout（PS host 不再染红）
+    return Invoke-QuietProcess -FilePath 'powershell' -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',$packScript,'-AutoMode','3')
 }
 
 # ============ 单个版本打包（直接调用对应项目脚本，绕过 one-click-pack 菜单）============
@@ -184,14 +190,14 @@ function Invoke-SinglePack {
         Write-Host "[配置] 同步 $verLabel 版默认配置 (跳过编辑)..." -ForegroundColor Yellow
         Push-Location $verDir
         try {
-            # ★ 2026-08-23 修复：接管道显示输出。原裸调用时子进程stdout（edit-config的Write-Host行）
-            #   会混入 Invoke-SinglePack 的返回值，导致 return $rc 变成 [字符串数组..., 0]，
-            #   调用方 ($rc -ne 0) 对数组判真 → 打包明明成功却误报"打包失败，流程中止"。
-            & powershell -NoProfile -ExecutionPolicy Bypass -File "edit-config.ps1" -SkipConfig | ForEach-Object { Write-Host $_ }
+            # ★ 2026-08-23 修复：防子进程stdout混入返回值（返回值污染导致误报"打包失败"）。
+            # ★ 2026-09-08 改 Invoke-QuietProcess：同时白化 stderr（PS host 不再染红）。
+            #   注意：Start-Process 不更新 $LASTEXITCODE，退出码必须用返回值
+            $cfgRc = Invoke-QuietProcess -FilePath 'powershell' -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path (Get-Location) 'edit-config.ps1'),'-SkipConfig')
         } finally {
             Pop-Location
         }
-        if ($LASTEXITCODE -ne 0) {
+        if ($cfgRc -ne 0) {
             Write-Host "[WARN] 配置同步出现警告(继续打包)" -ForegroundColor Yellow
         }
     }
@@ -207,8 +213,9 @@ function Invoke-SinglePack {
             if (Test-BuildSkip $skipUnit) {
                 Write-Host "  [SKIP] $verLabel 桌面产物已是最新，跳过打包" -ForegroundColor Green
             } else {
-                & cmd /c "$desktopBat" 2>&1 | ForEach-Object { Write-Host $_ }
-                $rc = $LASTEXITCODE
+                # ★ 2026-09-08 改 Invoke-QuietProcess：stderr 在 cmd 层合并（PS host 不再染红），
+                #   子 bat 彩色输出直连控制台保留，退出码取返回值
+                $rc = Invoke-QuietProcess -FilePath $desktopBat
                 if ($rc -ne 0) {
                     Write-Host "[ERROR] $verLabel 桌面打包失败，退出码: $rc" -ForegroundColor Red
                     return $rc
@@ -231,8 +238,8 @@ function Invoke-SinglePack {
                 Write-Host "  [SKIP] $verLabel APP产物已是最新，跳过打包" -ForegroundColor Green
             } else {
                 # 与 one-click-pack.ps1 的 app-strict 一致，APP 统一走严格模式（签名哈希+Java混淆+签名校验）
-                & cmd /c "$appBat standard" 2>&1 | ForEach-Object { Write-Host $_ }
-                $rc = $LASTEXITCODE
+                # ★ 2026-09-08 改 Invoke-QuietProcess（同桌面段：stderr 白化 + 彩色直连 + 返回值即退出码）
+                $rc = Invoke-QuietProcess -FilePath $appBat -ArgumentList @('standard')
                 if ($rc -ne 0) {
                     Write-Host "[ERROR] $verLabel APP打包失败，退出码: $rc" -ForegroundColor Red
                     return $rc
@@ -293,7 +300,7 @@ function Invoke-Publish {
     return Invoke-NodeScript -ScriptPath $publishScript -Arguments $publishArgs
 }
 
-# ============ 调用 node 脚本（用 Start-Process 继承控制台，避免 stdout 缓冲）============
+# ============ 调用 node 脚本（继承控制台实时输出，避免 stdout 缓冲）============
 function Invoke-NodeScript {
     param(
         [Parameter(Mandatory=$true)][string]$ScriptPath,
@@ -301,9 +308,10 @@ function Invoke-NodeScript {
     )
     Push-Location $script:RootDir
     try {
-        $argList = @($ScriptPath) + $Arguments
-        $proc = Start-Process -FilePath "node" -ArgumentList $argList -Wait -NoNewWindow -PassThru
-        return $proc.ExitCode
+        # ★ 2026-09-08 红字降噪：node 的 stderr（console.error / git / curl 进度等）在 PS host
+        #   下渲染红色，被小白用户当成"发布失败"。经 cmd /c "node ... 2>&1" 合并进 stdout 后
+        #   由 cmd 层渲染（白色）；Start-Process 直连控制台保留实时输出与彩色。
+        return Invoke-QuietProcess -FilePath 'node' -ArgumentList (@($ScriptPath) + $Arguments)
     } finally {
         Pop-Location
     }
@@ -337,8 +345,9 @@ function Invoke-ComplianceCheck {
     Write-Host "========================================" -ForegroundColor Cyan
     Push-Location $script:RootDir
     try {
-        & powershell -NoProfile -ExecutionPolicy Bypass -File $complianceScript
-        return $LASTEXITCODE
+        # ★ 2026-09-08 改 Invoke-QuietProcess：stderr 白化（PS host 不再染红）；
+        #   Start-Process 不更新 $LASTEXITCODE，退出码用返回值
+        return Invoke-QuietProcess -FilePath 'powershell' -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',$complianceScript)
     } finally {
         Pop-Location
     }
@@ -625,7 +634,7 @@ while ($true) {
                 # 打包副作用由本进程统一收纳提交（与菜单[1] all 分支之后的处理一致）
                 $packPs1A = "$script:RootDir\tools\one-click-pack.ps1"
                 if (Test-Path $packPs1A) {
-                    & powershell -NoProfile -ExecutionPolicy Bypass -File $packPs1A -CollectSideEffectsOnly -AutoCommit 2>&1 | ForEach-Object { Write-Host $_ }
+                    $null = Invoke-QuietProcess -FilePath 'powershell' -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',$packPs1A,'-CollectSideEffectsOnly','-AutoCommit')
                 }
                 # Version=all 子进程已在内部记录基线，本处 BuiltUnits 为空自动跳过
                 Record-BuiltUnits
@@ -647,7 +656,7 @@ while ($true) {
             #   （[3][4] 发布不打包，无需收纳）
             $packPs1 = "$script:RootDir\tools\one-click-pack.ps1"
             if (Test-Path $packPs1) {
-                & powershell -NoProfile -ExecutionPolicy Bypass -File $packPs1 -CollectSideEffectsOnly -AutoCommit 2>&1 | ForEach-Object { Write-Host $_ }
+                $null = Invoke-QuietProcess -FilePath 'powershell' -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',$packPs1,'-CollectSideEffectsOnly','-AutoCommit')
             }
             # ★ 2026-08-24 打包增量基线记录（必须在副作用 AutoCommit 之后，HEAD 才稳定）
             Record-BuiltUnits
@@ -696,7 +705,7 @@ while ($true) {
             #   （FullFlow走 Invoke-SinglePack 或 Invoke-Pack-AutoMode 3）
             $packPs1 = "$script:RootDir\tools\one-click-pack.ps1"
             if (Test-Path $packPs1) {
-                & powershell -NoProfile -ExecutionPolicy Bypass -File $packPs1 -CollectSideEffectsOnly -AutoCommit 2>&1 | ForEach-Object { Write-Host $_ }
+                & powershell -NoProfile -ExecutionPolicy Bypass -File $packPs1 -CollectSideEffectsOnly -AutoCommit 2>&1 | ForEach-Object { Write-HostLine $_ }
             }
             # ★ 2026-08-24 打包增量基线记录（必须在副作用 AutoCommit 之后，HEAD 才稳定；
             #   Version=all 走子进程 one-click-pack -AutoMode 3 已在内部记录，本处 BuiltUnits 为空自动跳过）

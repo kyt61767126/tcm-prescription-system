@@ -11,7 +11,7 @@ REM Calls tools\release-menu.ps1 (pack / publish / verify menu)
 
 set "RELEASE_PS1=%~dp0tools\release-menu.ps1"
 if not exist "%RELEASE_PS1%" (
-    powershell -NoProfile -Command "Write-Host '[ERROR] release-menu.ps1 not found'"
+    powershell -NoProfile -Command "Write-Host '[ERROR] release-menu.ps1 not found' -ForegroundColor Red"
     echo   Path: %RELEASE_PS1%
     if not defined NO_PAUSE pause
     exit /b 1
@@ -25,7 +25,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\entry-selfheal.p
 set "HEAL_RC=%errorlevel%"
 if %HEAL_RC% neq 0 (
     echo.
-    powershell -NoProfile -Command "Write-Host '[ERROR] Entry self-heal failed with code: %HEAL_RC%'"
+    powershell -NoProfile -Command "Write-Host '[ERROR] Entry self-heal failed with code: %HEAL_RC%' -ForegroundColor Red"
     if not defined NO_PAUSE pause
     exit /b %HEAL_RC%
 )
@@ -39,7 +39,7 @@ set "EXIT_CODE=%errorlevel%"
 
 if %EXIT_CODE% neq 0 (
     echo.
-    powershell -NoProfile -Command "Write-Host '[ERROR] One-click publish exited with code: %EXIT_CODE%'"
+    powershell -NoProfile -Command "Write-Host '[ERROR] One-click publish exited with code: %EXIT_CODE%' -ForegroundColor Red"
 )
 echo.
 if not defined NO_PAUSE pause

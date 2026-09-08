@@ -9,6 +9,10 @@
 $ErrorActionPreference = 'Continue'
 $root = Split-Path $PSScriptRoot -Parent
 
+# ★ 2026-09-08 红字降噪（单一权威源 tools/noise-reduce.ps1）：PS 5.1 host 把未捕获的
+#   子进程 stderr 一律渲染红色。本脚本所有子 PowerShell 调用统一降噪渲染。
+. (Join-Path $PSScriptRoot 'noise-reduce.ps1')
+
 # ★ 下游构建 bat 清单（唯一权威源；两个入口 bat 共用）
 $DownstreamBuildBats = @(
     'app_project\db-yunduan\pack-desktop.bat'
@@ -30,7 +34,7 @@ if (-not (Test-Path $crlfTool)) {
 $existing = @($DownstreamBuildBats | ForEach-Object { Join-Path $root $_ } | Where-Object { Test-Path $_ })
 if ($existing.Count -gt 0) {
     Write-Host "[entry-selfheal] CRLF check: $($existing.Count) downstream .bat files"
-    & powershell -NoProfile -ExecutionPolicy Bypass -File $crlfTool @existing
+    $null = Invoke-QuietProcess -FilePath 'powershell' -ArgumentList (@('-NoProfile','-ExecutionPolicy','Bypass','-File',$crlfTool) + $existing)
 }
 
 # 2. ps1 BOM 自愈（全量扫描，仅显示 [FIX]/Summary 行）
@@ -40,7 +44,13 @@ if (-not (Test-Path $bomTool)) {
     exit 1
 }
 Write-Host "[entry-selfheal] BOM check: all .ps1 files"
-& powershell -NoProfile -ExecutionPolicy Bypass -File $bomTool |
-    Where-Object { $_ -match '\[FIX\]' -or $_ -match 'Summary:' } | ForEach-Object { Write-Host $_ }
+& powershell -NoProfile -ExecutionPolicy Bypass -File $bomTool 2>&1 | ForEach-Object {
+    # 降噪渲染：stderr 行（ErrorRecord）转黄全显（防吞真实错误）；stdout 行仅显示 [FIX]/Summary
+    if ($_ -is [System.Management.Automation.ErrorRecord]) {
+        Write-HostLine $_
+    } elseif ($_ -match '\[FIX\]' -or $_ -match 'Summary:') {
+        Write-HostLine $_
+    }
+}
 
 exit 0
