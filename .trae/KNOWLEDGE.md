@@ -784,6 +784,12 @@ P2 渐进迁移（2026-09-03 当日完成）：
 - **修复**：`.hero` 加 `overflow: hidden`（双副本 public+site-official 同步，同在第 53 行）。渐变透明度 0.08 且 60% 处已透明，裁剪视觉无感（截图对比确认）。Playwright 三档视口（1280/375/360）双副本 scrollWidth==clientWidth 全绿 + 7 Tab 卡片归属复测全过。
 - **铁律**：a. 「绝对定位 + 负偏移 + 200% 宽」的装饰性 ::before/::after 必须给宿主容器加 overflow:hidden——伪元素不参与 getBoundingClientRect 遍历，溢出了也查不到元素级证据；b. 诊断横向溢出时 scrollWidth 与元素矩形要同时取证，两者矛盾（scrollWidth 大但无越界元素）= 伪元素/文本节点/合力三类嫌疑；c. tab-nav 类内部滚动容器（overflow-x:auto）的子元素矩形越界不算文档溢出，别误修。
 
+**五十二、官网下载页说明文字全量对齐产品现状 + 手机端可读性优化（2026-09-08，Commit 13d877a8）**：
+- **文案更新 14 处（双副本）**：①默认账号「本能堂」→ admin（注册说明×2+安装步骤，补"默认医师姓名可在基础设置修改"提示）；②云端开通方式「联系开发者」→「📋 管理员激活」自助申请（对齐 2026-08-30 客户端入口统一，官网文案一直没跟上）；③「激活码按端授权」→「按设备授权」（对齐 §7 机构版一码 3-5 台产品语义，标准版 1 台/机构版 3-5 台，4 处）；④购买流程「扫码加客服微信发订单号」→「本页提交订单+扫码支付+自动领码」（对齐 order-submit/order-paid/admin-status 轮询闭环，FAQ 同步）；⑤修复"点点击"错别字。
+- **手机端字号优化（≤768px 断点内追加规则，桌面端零改动）**：hero p 11→13px、card-title 13→15px、notice/credential-box/install-steps/faq-answer 10-11→13px、faq-question→14px、step-title→15px 等小字号整体提升一档；hash 类保持 11px（长串哈希放大会破排版）。收款码图片 180→200px。Playwright 375px 实测字号达标+scrollWidth==clientWidth，1280px 桌面档 computed style 与改前一致。
+- **铁律**：a. **官网/客户端文案与产品行为的同步是独立工单**——产品语义变更（账号规则/授权模型/购买流程）上线后，官网 7 个 Tab 的说明文字必须专项盘点对齐，过时文案（如"联系开发者开通"）直接变客户支持成本；b. **改图片尺寸必须 grep 同元素配套部件**——QR 图放大到 200px 时 onerror 兜底的 fallback 占位框（180px）就是漏网之鱼，本轮 git diff 收尾复核才抓到（双副本 4 处补齐）；c. **CSS 批量追加规则后必须查重复定义**——public 副本 `.section-title .sub` 在通用块与 ★注释块各写一次（同值无害但是脏代码），批量脚本按模式追加时容易撞已有手写行；d. 隐藏元素（非激活 Tab 内）的图片布局尺寸 getBoundingClientRect 恒为 0，验证尺寸直接读 HTML width 属性源码，别信布局测量。
+- **生效方式**：纯官网改动（public+site-official 双镜像手工同步），push 后 Cloudflare Pages 自动部署，强刷即生效，无需重打包任何端。
+
 ## 8. 桌面版技术规范
 
 * **登录预填：已彻底取消（2026-09-06 Commit 2202236f，取代 9-04"来源单一化"方案）**：`initLoginInput` **不再做任何用户名自动预填**——登录框永远空白+聚焦；记住的账户仅保留**手动下拉切换**（renderUsernameDropdown，点▼选择）。演进史：8-27 恢复预填 → 9-04 收窄为"仅 localStorage 记住的用户名"（历史 bug：config.users 单账户分支无法区分出厂模板 admin，全新安装首次启动即预填 admin/admin）→ 9-06 用户实测"升级新版后自动显示旧记住的用户名，不像新客户"后**彻底取消**。理由：预填链路多次引发历史 bug + 升级安装 userData 不清导致残留展示；而手动下拉保留全部便利。
