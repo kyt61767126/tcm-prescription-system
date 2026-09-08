@@ -385,7 +385,7 @@ h1 { color: #2c3e50; font-size: 18px; margin-bottom: 3px; }
             <div class="form-group">
                 <label>联系电话 <span class="req">*</span> <span style="font-size:11px;color:#909399;font-weight:normal;">（将作为登录账号）</span></label>
                 <input type="text" id="phone" placeholder="如：13800138000" autocomplete="off" spellcheck="false" inputmode="numeric" maxlength="11">
-                <div class="field-hint" id="phoneHint">💡 11位手机号为登录账号，默认密码 admin（登入后请自行修改）</div>
+                <div class="field-hint" id="phoneHint">💡 仅支持11位中国大陆手机号</div>
             </div>
             <!-- ★ 2026-09-07 移除「备注（可选）」输入框（用户要求精简激活表单，红框内容取消） -->
             <div class="form-group">
@@ -404,7 +404,7 @@ h1 { color: #2c3e50; font-size: 18px; margin-bottom: 3px; }
                 <div class="pwd-strength" id="pwdStrength">
                     <div class="bar"></div><div class="bar"></div><div class="bar"></div>
                 </div>
-                <div class="field-hint" id="pwdHint">💡 留空则默认密码为 admin（登入后请在设置中自行修改密码）</div>
+                <div class="field-hint" id="pwdHint">💡 至少8位，含字母和数字；留空＝默认密码 admin</div>
             </div>
             <div class="form-group">
                 <label>确认密码 <span style="font-size:11px;color:#909399;font-weight:normal;">（自定义时需再输一次）</span></label>
@@ -468,7 +468,7 @@ h1 { color: #2c3e50; font-size: 18px; margin-bottom: 3px; }
                 <div class="desc" id="successDesc">管理员已通过您的激活申请<br>软件即将自动重启，请使用手机号+密码登录</div>
                 <div class="info-row">
                     <div>✅ 账号：<b id="successPhone">--</b></div>
-                    <div>✅ 密码：<b style="color:#2e7d32;">（默认 admin，登入后请自行修改）</b></div>
+                    <div>✅ 密码：<b style="color:#2e7d32;" id="successPwd">（默认 admin，登入后请自行修改）</b></div>
                 </div>
                 <div class="status-text" style="background:#fff; color:#2e7d32;" id="restartCountdown">🔄 3 秒后自动重启...</div>
                 <button class="btn btn-success" id="restartNowBtn" style="margin-top:10px;">立即重启 →</button>
@@ -520,7 +520,7 @@ h1 { color: #2c3e50; font-size: 18px; margin-bottom: 3px; }
             <div class="form-group">
                 <label>联系电话 <span class="req">*</span> <span style="font-size:11px;color:#909399;font-weight:normal;">（将作为登录账号）</span></label>
                 <input type="text" id="codePhone" placeholder="如：13800138000" autocomplete="off" inputmode="numeric" maxlength="11">
-                <div class="field-hint" id="codePhoneHint">💡 11位手机号为登录账号，默认密码 admin（登入后请自行修改）</div>
+                <div class="field-hint" id="codePhoneHint">💡 仅支持11位中国大陆手机号</div>
             </div>
             <div class="form-group">
                 <label>邀请码 <span style="font-size:11px;color:#909399;font-weight:normal;">（选填，好友推荐）</span></label>
@@ -538,7 +538,7 @@ h1 { color: #2c3e50; font-size: 18px; margin-bottom: 3px; }
                 <div class="pwd-strength" id="codePwdStrength">
                     <div class="bar"></div><div class="bar"></div><div class="bar"></div>
                 </div>
-                <div class="field-hint" id="codePwdHint">💡 留空则默认密码为 admin（登入后请在设置中自行修改密码）</div>
+                <div class="field-hint" id="codePwdHint">💡 至少8位，含字母和数字；留空＝默认密码 admin</div>
             </div>
             <div class="form-group">
                 <label>确认密码 <span style="font-size:11px;color:#909399;font-weight:normal;">（自定义时需再输一次）</span></label>
@@ -924,7 +924,7 @@ document.getElementById('phone').addEventListener('input', e => {
     state.phone = e.target.value;
     const hint = document.getElementById('phoneHint');
     if (!state.phone) {
-        hint.textContent = '💡 11位手机号为登录账号，默认密码 admin（登入后请自行修改）';
+        hint.textContent = '💡 仅支持11位中国大陆手机号';
         hint.className = 'field-hint';
     } else if (!V.PHONE_RE.test(state.phone)) {
         hint.textContent = '⚠ 请输入正确的11位手机号';
@@ -1244,9 +1244,23 @@ async function saveAndRestart(license, phone) {
 
 function showSuccess(phone, isCodeMode, inviteInfo) {
     document.getElementById('successPhone').textContent = phone || state.phone || codeState.phone;
+    // ★ 2026-09-08 注册引导文案更新：成功页密码说明按实际注册密码显示，永不误导——
+    //   自定义密码→「您设置的密码」；留空（submit 归一为 admin）→「默认 admin」；
+    //   重启恢复等待链路（内存密码丢失）→ 两可文案兜底
+    const actualPwd = (isCodeMode ? codeState.password : state.password) || '';
+    const pwdLine = document.getElementById('successPwd');
+    if (pwdLine) {
+        if (actualPwd && actualPwd !== 'admin') {
+            pwdLine.textContent = '（您注册时设置的密码）';
+        } else if (!actualPwd) {
+            pwdLine.textContent = '（您注册时设置的密码；未设置过则为默认 admin）';
+        } else {
+            pwdLine.textContent = '（默认 admin，登入后请自行修改）';
+        }
+    }
     let descHtml = isCodeMode
-        ? '激活码验证成功<br>软件即将自动重启，请使用手机号登录<br>密码为默认 admin（登入后请自行修改）'
-        : '管理员已通过您的激活申请<br>软件即将自动重启，请使用手机号登录<br>密码为默认 admin（登入后请自行修改）';
+        ? '激活码验证成功<br>软件即将自动重启，请使用手机号登录'
+        : '管理员已通过您的激活申请<br>软件即将自动重启，请使用手机号登录';
     // ★ 2026-08-28 推广奖励：成功页展示专属邀请码 + 阶梯进度 + 本次奖励
     if (inviteInfo && inviteInfo.inviteCode) {
         descHtml += '<br><br>🎁 您的专属邀请码：<b style="color:#667eea;letter-spacing:1px;">' + inviteInfo.inviteCode + '</b>' +
@@ -1325,7 +1339,7 @@ document.getElementById('codePhone').addEventListener('input', e => {
     codeState.phone = e.target.value;
     const hint = document.getElementById('codePhoneHint');
     if (!codeState.phone) {
-        hint.textContent = '💡 11位手机号，激活后用手机号+密码登录';
+        hint.textContent = '💡 仅支持11位中国大陆手机号';
         hint.className = 'field-hint';
     } else if (!V.PHONE_RE.test(codeState.phone)) {
         hint.textContent = '⚠ 请输入正确的11位手机号';
