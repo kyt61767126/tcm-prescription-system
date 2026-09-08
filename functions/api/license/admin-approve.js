@@ -405,6 +405,11 @@ export async function onRequest(context) {
             // ★ 2026-09-05 邀请码结算结果（admin-status activated 响应据此组 inviteInfo）：
             //   inviteRewardSettled=true 幂等标记——任何 activated 通道不得重复结算
             inviteCode: licenseRecord.inviteCode || null,
+            // ★ 2026-09-08 审计保留：inviteCode 回写的是被邀人自己的专属码（成功页展示用），
+            //   会覆盖用户申请时填写的邀请码，导致事后无法排查"填了码为何没结算"。
+            //   新增 inviteCodeSubmitted 保留用户原始填写值（结算依据），不动 inviteCode
+            //   的既有语义（admin-status 组 inviteInfo 读它展示专属码）。
+            inviteCodeSubmitted: (typeof record.inviteCode === 'string' && record.inviteCode.trim()) ? record.inviteCode.trim().toUpperCase() : null,
             invitedBy: __invitedByCode || null,
             inviteeBonusDays: __inviteeBonusDays || 0,
             inviteRewardSettled: __inviteSettled || !!record.inviteRewardSettled

@@ -325,6 +325,15 @@ h1 { color: #2c3e50; font-size: 18px; margin-bottom: 3px; }
 
     <!-- 版本选择器 -->
     <div class="edition-selector" id="editionSelector">
+        <!-- ★ 2026-09-08 版本选择页邀请码（选填）：对齐 auth-core 弹窗 09-06 P0 修复——
+             已注册用户「注册→立即激活→选版本→直通提交」不再经过 Step1 表单确认，
+             表单里的邀请码框（adminInviteCode）易被跳过。首屏即见填码框，选版本时
+             自动同步到表单框，直通链路自然携带（好友+90天/您+30天）。 -->
+        <div style="margin-bottom:14px;text-align:left;">
+            <label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">🎁 邀请码（选填，好友推荐）</label>
+            <input type="text" id="editionInviteCode" placeholder="如：H8AMUT（没有可留空）" autocomplete="off" maxlength="10" spellcheck="false" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;font-family:monospace;letter-spacing:1px;text-transform:uppercase;">
+            <div style="font-size:11px;color:#909399;margin-top:4px;">💡 填好友邀请码，激活后双方都得奖励（好友+90天，您+30天）</div>
+        </div>
         <div class="edition-card" data-edition="personal" onclick="selectEdition('personal')">
             <div class="edition-icon">🏥</div>
             <div class="edition-name">标准版</div>
@@ -802,6 +811,21 @@ function selectEdition(edition) {
     state.edition = edition;
     state.editionChosen = true;
     codeState.edition = edition;
+    // ★ 2026-09-08 邀请码同步：版本选择页填的邀请码同步到管理员激活表单框
+    //   （adminInviteCode）——已注册用户直通提交链路（toStep2Btn click →
+    //   collectAdminStep1）读取的就是表单框值，同步后自动携带
+    try {
+        const __edIv = document.getElementById('editionInviteCode');
+        const __fmIv = document.getElementById('adminInviteCode');
+        if (__edIv && __fmIv && __edIv.value && !__fmIv.value) {
+            __fmIv.value = String(__edIv.value).trim().toUpperCase();
+        }
+        // Tab2 激活码路径同样同步（codeInviteCode），防用户在版本页填码后走输码路径丢码
+        const __cdIv = document.getElementById('codeInviteCode');
+        if (__edIv && __cdIv && __edIv.value && !__cdIv.value) {
+            __cdIv.value = String(__edIv.value).trim().toUpperCase();
+        }
+    } catch (eIv) { /* 同步失败不阻断版本选择 */ }
     // Update card styles
     document.querySelectorAll('.edition-card').forEach(card => {
         card.classList.toggle('selected', card.dataset.edition === edition);
