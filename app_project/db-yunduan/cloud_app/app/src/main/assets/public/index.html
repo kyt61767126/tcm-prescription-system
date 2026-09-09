@@ -8639,7 +8639,7 @@ let currentUser = null;
             // ★ 渲染入口强制剔除已删除病历（tombstone 兜底），杜绝删除后再次显示
             if (typeof filterOutDeleted === 'function') list = filterOutDeleted(list);
             const listEl = document.getElementById('caseList');
-            listEl.innerHTML = list.map((p,i) =>`<div style="padding:10px;border-bottom:1px solid #d0d0d0;cursor:pointer;" onclick="loadHistory(${Number(p.id)||0})"><div style="display:flex;justify-content:space-between;"><div><div style="font-weight:bold;">${escapeHtml(p.patientName)}</div><div style="font-size:11px;color:#666;">${escapeHtml(p.date)} | ${escapeHtml(p.diagnosis || '无诊断')}</div></div><div style="text-align:right;"><div style="font-weight:bold;color:#8b0000;">¥${Number(p.totalAmount) || 0}</div><button class="small-btn" onclick="event.stopPropagation();deleteCase(${Number(p.id)||0})">删除</button></div></div></div>`).join('') || '<div style="text-align:center;padding:20px;color:#999;">暂无病历记录</div>';
+            listEl.innerHTML = list.map((p,i) =>`<div style="padding:10px;border-bottom:1px solid #d0d0d0;cursor:pointer;" onclick="loadHistory(${Number(p.id)||0})"><div style="display:flex;justify-content:space-between;"><div><div style="font-weight:bold;">${escapeHtml(p.patientName)}</div><div style="font-size:11px;color:#666;">${escapeHtml(p.date)} | ${escapeHtml(p.diagnosis || '无诊断')}</div></div><div style="text-align:right;"><div style="font-weight:bold;color:#8b0000;">¥${formatPrice(p.totalAmount) || '0.00'}</div><button class="small-btn" onclick="event.stopPropagation();deleteCase(${Number(p.id)||0})">删除</button></div></div></div>`).join('') || '<div style="text-align:center;padding:20px;color:#999;">暂无病历记录</div>';
         }
 
         function searchCases() {
