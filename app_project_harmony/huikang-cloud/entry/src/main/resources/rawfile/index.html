@@ -3019,8 +3019,10 @@ let currentUser = null;
                 '<div class="modal-header"><span>编辑用户</span>' +
                 '<span class="close-btn" onclick="document.getElementById(\'editUserModal\').remove(); document.getElementById(\'userManageModal\').style.display=\'flex\';">&times;</span></div>' +
                 '<div class="modal-body">' +
-                '<div class="form-group"><label>登录用户（英文或拼音）</label>' +
-                '<input type="text" id="editUserUsername" value="' + escapeHtml(user.username) + '" placeholder="登录账号"></div>' +
+                '<div class="form-group"><label>用户名（英文或拼音）</label>' +
+                '<input type="text" id="editUserUsername" value="' + escapeHtml(user.username) + '" placeholder="设置英文/拼音用户名，方便登录、保护隐私"></div>' +
+                '<div class="form-group" style="margin-top:10px;"><label>手机号（可用于登录，不可修改）</label>' +
+                '<input type="text" id="editUserPhone" value="' + escapeHtml(user.phone || (/^1[3-9]\\d{9}$/.test(user.username) ? user.username : '')) + '" readonly style="background:#f3f4f6;cursor:not-allowed;"></div>' +
                 '<div class="form-group" style="margin-top:10px;"><label>医师姓名</label>' +
                 '<input type="text" id="editUserName" value="' + escapeHtml(user.name) + '" placeholder="医师姓名"></div>' +
                 '<div class="form-group" style="margin-top:10px;"><label>新密码（留空则不修改）</label>' +
@@ -3096,6 +3098,12 @@ let currentUser = null;
 
                 const userIndex = users.findIndex(u => u.username === originalUsername);
                 if (userIndex === -1) { alert('用户不存在'); return; }
+
+                // ★ 2026-09-09 保手机号登录：原 username 是手机号且 phone 为空 → 先落 phone
+                //   用户把用户名从手机号改成英文/拼音后，手机号仍可作为登录凭证（保护隐私）
+                if (newUsername !== originalUsername && /^1[3-9]\d{9}$/.test(originalUsername) && !users[userIndex].phone) {
+                    users[userIndex].phone = originalUsername;
+                }
 
                 users[userIndex].username = newUsername;
                 users[userIndex].name = newName;
