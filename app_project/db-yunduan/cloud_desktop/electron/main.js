@@ -881,6 +881,34 @@ async function injectVideoRecorder(win) {
 //  - 无自动下载/自动安装；网络失败/解析失败/格式异常一律静默跳过
 // ============================================================================
 const UPDATE_CHECK_URL = 'https://tcm-prescription-system.pages.dev/updates/cloud/latest.json';
+
+// ★ 2026-09-09 下载转化统计：匿名启动心跳（管理后台「下载转化统计」数据源）。
+//   隐私设计：机器码客户端 sha256 后上报（服务端再见不到原始机器码，且二次哈希存 KV），
+//   不含 IP/手机号/任何个人信息；仅用于安装设备数去重统计。失败静默跳过，绝不影响主流程。
+const TELEMETRY_HEARTBEAT_URL = 'https://tcm-prescription-system.pages.dev/api/telemetry/heartbeat';
+
+async function sendStartupHeartbeat() {
+    try {
+        let mid = '';
+        try {
+            mid = (activateManager && activateManager.getMachineId) ? String(activateManager.getMachineId() || '') : '';
+        } catch (e) { /* 机器码获取失败则跳过本次心跳 */ }
+        if (!mid) {
+            console.log('[telemetry] 心跳跳过: 无机器码');
+            return;
+        }
+        const midHash = crypto.createHash('sha256').update('cloud-desktop:' + mid).digest('hex');
+        await net.fetch(TELEMETRY_HEARTBEAT_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ed: 'cloud-desktop', v: app.getVersion(), mid: midHash }),
+            signal: AbortSignal.timeout(6000)
+        });
+        console.log('[telemetry] 启动心跳已上报 v' + app.getVersion());
+    } catch (e) {
+        console.log('[telemetry] 心跳跳过: ' + (e.message || e));
+    }
+}
 const UPDATE_DOWNLOAD_URL = 'https://tcm-prescription-system.pages.dev/download?card=card-cloud-desktop';
 const UPDATE_BANNER_EXTRA_HEIGHT = 40;
 
@@ -1078,6 +1106,7 @@ function createLoginWindow() {
             if (loginWindow && !loginWindow.isDestroyed()) {
                 checkForUpdateAndNotify(loginWindow);
             }
+            sendStartupHeartbeat(); // ★ 匿名统计心跳（fire-and-forget，失败静默）
         }, 1500);
     });
 

@@ -653,6 +653,53 @@ public class MainActivity extends BridgeActivity {
     }
 
     /**
+     * ★ 2026-09-09 下载转化统计：匿名启动心跳（管理后台「下载转化统计」数据源）。
+     *   隐私设计：ANDROID_ID 客户端 SHA-256 后上报（服务端再见不到原始值，且二次哈希存 KV），
+     *   不含 IP/手机号/任何个人信息，仅用于安装设备数去重。无需新增任何权限
+     *   （Settings.Secure.ANDROID_ID 读取不需要权限）。失败静默跳过，绝不影响主流程。
+     */
+    private void sendStartupHeartbeat() {
+        try {
+            String androidId = android.provider.Settings.Secure.getString(
+                    getContentResolver(), android.provider.Settings.Secure.ANDROID_ID);
+            if (androidId == null || androidId.isEmpty()) {
+                Log.d(TAG, "[telemetry] 心跳跳过: 无 ANDROID_ID");
+                return;
+            }
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] digest = md.digest(("cloud-app:" + androidId).getBytes("UTF-8"));
+            StringBuilder sb = new StringBuilder();
+            for (byte b : digest) sb.append(String.format("%02x", b));
+            String midHash = sb.toString();
+            String ver = "";
+            try {
+                android.content.pm.PackageInfo pi = getPackageManager().getPackageInfo(getPackageName(), 0);
+                ver = pi.versionName + " build " + (android.os.Build.VERSION.SDK_INT >= 28
+                        ? (int) pi.getLongVersionCode() : pi.versionCode);
+            } catch (Exception ignored) {}
+            java.net.HttpURLConnection hconn = (java.net.HttpURLConnection)
+                    new java.net.URL("https://tcm-prescription-system.pages.dev/api/telemetry/heartbeat").openConnection();
+            hconn.setRequestMethod("POST");
+            hconn.setConnectTimeout(6000);
+            hconn.setReadTimeout(6000);
+            hconn.setDoOutput(true);
+            hconn.setRequestProperty("Content-Type", "application/json");
+            org.json.JSONObject body = new org.json.JSONObject();
+            body.put("ed", "cloud-app");
+            body.put("v", ver);
+            body.put("mid", midHash);
+            java.io.OutputStream os = hconn.getOutputStream();
+            os.write(body.toString().getBytes("UTF-8"));
+            os.close();
+            int code = hconn.getResponseCode();
+            hconn.disconnect();
+            Log.d(TAG, "[telemetry] 启动心跳已上报 HTTP " + code);
+        } catch (Throwable t) {
+            Log.d(TAG, "[telemetry] 心跳跳过（网络不可用或异常）");
+        }
+    }
+
+    /**
      * ★ 2026-08-28 方案A 轻量更新提示：后台线程静默拉取官网 hash-manifest.json，
      *   官网 APK 版本 > 本地 versionName 时向登录页注入黄色横幅（云端读 cloud.apk.version）。
      *   网络失败/解析失败/格式异常一律静默跳过（宁可漏检不可误报，不打扰离线使用）。
@@ -662,6 +709,7 @@ public class MainActivity extends BridgeActivity {
             java.net.HttpURLConnection conn = null;
             try {
                 Thread.sleep(2000); // 延迟2秒：等登录页首帧稳定，不与首屏渲染竞争
+                sendStartupHeartbeat(); // ★ 2026-09-09 匿名统计心跳（内部静默容错，不阻塞后续更新检查）
                 conn = (java.net.HttpURLConnection) new java.net.URL(UPDATE_MANIFEST_URL).openConnection();
                 conn.setConnectTimeout(6000);
                 conn.setReadTimeout(6000);

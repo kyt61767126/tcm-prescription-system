@@ -331,6 +331,18 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                 <div class="stat-card disabled"><div class="num" id="csExpired">0</div><div class="label">已到期</div></div>
             </div>
 
+            <h2 style="margin-top:24px;">下载转化统计 <span style="font-size:12px;color:#909399;font-weight:normal;">（安装设备自 2026-09-09 四端新版起开始积累；下载量含历史全部）</span></h2>
+            <div class="stats" id="funnelStatsBox">
+                <div class="stat-card"><div class="num" id="fnDownloads">-</div><div class="label">官网下载量（次）</div></div>
+                <div class="stat-card used"><div class="num" id="fnInstalls">-</div><div class="label">安装启动设备（台）</div></div>
+                <div class="stat-card unused"><div class="num" id="fnTrial">-</div><div class="label">试用未激活（台）</div></div>
+                <div class="stat-card"><div class="num" id="fnRequests">-</div><div class="label">提交激活申请（累计）</div></div>
+                <div class="stat-card used"><div class="num" id="fnActivated">-</div><div class="label">已激活设备（台）</div></div>
+                <div class="stat-card"><div class="num" id="fnActive7">-</div><div class="label">近7天活跃设备（台）</div></div>
+            </div>
+            <div id="funnelConversion" style="margin-top:8px;font-size:13px;color:#606266;"></div>
+            <div id="funnelEditions" style="margin-top:4px;font-size:12px;color:#909399;"></div>
+
             <h2 style="margin-top:24px;">近 14 天新增趋势</h2>
             <div class="gen-box">
                 <div id="trendChart" style="width:100%;overflow-x:auto;"><div class="loading">加载中...</div></div>
@@ -2921,10 +2933,45 @@ async function loadTodoCenter() {
 
         // ===== 近14天趋势（纯SVG柱状，无外部依赖）=====
         renderTrendChart(clinics, users);
+
+        // ===== 下载转化漏斗（fire-and-forget：失败静默，不影响后台主流程）=====
+        loadFunnelStats(token);
     } catch (e) {
         const el = document.getElementById('trendChart');
         if (el) el.innerHTML = '<div class="empty">加载失败：' + escapeHtml(e.message) + '</div>';
     }
+}
+
+// ★ 2026-09-09 下载转化统计：GET /api/stats/funnel（platform_admin）
+//   漏斗：官网下载量 → 安装启动设备 → 提交激活申请 → 已激活设备 + 转化率
+async function loadFunnelStats(token) {
+    try {
+        const res = await fetch(API_BASE + '/stats/funnel', { headers: { 'Authorization': 'Bearer ' + token } });
+        if (!res.ok) return;
+        const d = await res.json();
+        if (!d.success) return;
+        const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+        set('fnDownloads', d.downloads ? d.downloads.total : '-');
+        set('fnInstalls', d.installs ? d.installs.total : 0);
+        set('fnTrial', (d.trialNotActivated != null) ? d.trialNotActivated : 0);
+        set('fnRequests', d.activation ? d.activation.total : 0);
+        set('fnActivated', (d.activatedMachines != null) ? d.activatedMachines : 0);
+        set('fnActive7', d.installs ? d.installs.active7 : 0);
+        const conv = d.conversion || {};
+        const cEl = document.getElementById('funnelConversion');
+        if (cEl) {
+            cEl.textContent = '转化率：下载→安装 ' + (conv.downloadToInstall || 0) + '% ｜ 安装→提交申请 '
+                + (conv.installToRequest || 0) + '% ｜ 安装→激活 ' + (conv.installToActivated || 0) + '%';
+        }
+        const eEl = document.getElementById('funnelEditions');
+        if (eEl && d.installs && d.installs.byEdition) {
+            const names = { 'cloud-desktop': '云桌面', 'local-desktop': '离线桌面', 'cloud-app': '云端APP', 'local-app': '离线APP' };
+            const parts = Object.keys(names)
+                .filter(k => d.installs.byEdition[k] && d.installs.byEdition[k].total > 0)
+                .map(k => names[k] + ' ' + d.installs.byEdition[k].total + ' 台（近7天活跃 ' + d.installs.byEdition[k].active7 + '）');
+            eEl.textContent = parts.length ? ('分端安装：' + parts.join(' ｜ ')) : '分端安装：暂无数据（新版客户端上线后开始积累）';
+        }
+    } catch (e) { /* 静默：统计加载失败不影响后台使用 */ }
 }
 
 function renderTrendChart(clinics, users) {
