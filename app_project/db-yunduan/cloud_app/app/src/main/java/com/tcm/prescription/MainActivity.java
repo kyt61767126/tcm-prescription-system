@@ -112,8 +112,12 @@ public class MainActivity extends BridgeActivity {
     // ★ 2026-09-09 更新下载提速：检查更新时从 manifest 解析 APK 直链（/downloads/惠康中医-云端.apk），
     //   横幅「立即下载」直接跳直链触发系统下载器，跳过官网 download.html（242KB+JS+多JSON请求）
     //   整页加载——用户反馈"点更新跳官网比 exe 更新慢很多、卡顿"的根因即在此。
-    //   为 null（manifest 无 url 字段）时回退官网下载页。volatile：后台检查线程写 / UI 线程读。
+    // 为 null（manifest 无 url 字段）时回退官网下载页。volatile：后台检查线程写 / UI 线程读。
     private volatile String apkDirectUrl = null;
+    // ★ 2026-09-09 二次提速（点击即下）：直链配套的新版本号（通知栏标题/安装提示用）与
+    //   系统 DownloadManager 任务 ID（>0 表示下载中，防重复入队堆通知；完成/失败时复位）。
+    private volatile String apkNewVersion = "";
+    private long apkDownloadId = -1L;
 
     // ★ 2026-08-29 一键备份第三步：文件选择器结果回调（onShowFileChooser 配套）
     @Override
@@ -164,6 +168,15 @@ public class MainActivity extends BridgeActivity {
 
         // T5: 使用主线程 Looper 的 Handler，便于 onDestroy 统一清理
         mainHandler = new Handler(Looper.getMainLooper());
+
+        // ★ 2026-09-09 更新二次提速：注册 APK 下载完成广播（DownloadManager 系统保护广播，
+        //   免 EXPORTED 标志；targetSdk 34+ 对系统广播无强制要求）
+        try {
+            registerReceiver(apkDownloadReceiver,
+                    new android.content.IntentFilter(android.app.DownloadManager.ACTION_DOWNLOAD_COMPLETE));
+        } catch (Exception e) {
+            Log.w(TAG, "[update] 注册下载完成广播失败: " + e.getMessage());
+        }
 
         // Android 6.0+ 动态申请相机和麦克风权限（录像拍照功能需要）
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -514,14 +527,24 @@ public class MainActivity extends BridgeActivity {
                 String url = request.getUrl().toString();
                 // ★ 2026-08-28 方案A：更新横幅「立即下载」→ 系统浏览器打开官网下载页
                 //   （下载页与云端同 host，需在 isCloudUrl 之前精确拦截，避免 APP 内整页跳走）
-                // ★ 2026-09-09 提速：优先拦截 APK 直链（/downloads/*.apk，CF Pages 静态资源），
-                //   系统浏览器/下载器直接开始下载，跳过 download.html 整页加载（卡顿根因）。
-                //   直链含中文文件名，WebView 传入时已自动百分号编码，特征匹配不受影响。
-                if (UPDATE_DOWNLOAD_URL.equals(url) || isApkDirectUrl(url)) {
+                if (UPDATE_DOWNLOAD_URL.equals(url)) {
                     try {
                         startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
                     } catch (Exception e) {
                         Log.w(TAG, "打开官网下载页失败: " + e.getMessage());
+                    }
+                    return true;
+                }
+                // ★ 2026-09-09 二次提速（点击即下）：APK 直链（/downloads/*.apk）→ 系统 DownloadManager
+                //   应用内直下——免浏览器中转（冷启动 1-3 秒省去），点击立即开始下载，通知栏实时进度，
+                //   下载完成自动弹安装（apkDownloadReceiver）。入队异常时回退浏览器打开直链。
+                if (isApkDirectUrl(url)) {
+                    if (!startApkDownloadViaSystem(url)) {
+                        try {
+                            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+                        } catch (Exception e) {
+                            Log.w(TAG, "打开APK直链失败: " + e.getMessage());
+                        }
                     }
                     return true;
                 }
@@ -742,6 +765,8 @@ public class MainActivity extends BridgeActivity {
                 if (apkUrl.startsWith("/downloads/") && apkUrl.toLowerCase(java.util.Locale.ROOT).endsWith(".apk")
                         && !apkUrl.contains("'") && !apkUrl.contains("\"") && !apkUrl.contains("\\")) {
                     apkDirectUrl = "https://tcm-prescription-system.pages.dev" + apkUrl;
+                    // ★ 2026-09-09 二次提速：配套存版本号（系统下载通知标题用；remoteVer 已白名单校验）
+                    apkNewVersion = remoteVer;
                 }
                 try {
                     android.content.pm.PackageInfo pi = getPackageManager().getPackageInfo(getPackageName(), 0);
@@ -809,6 +834,104 @@ public class MainActivity extends BridgeActivity {
         return url != null
                 && url.startsWith("https://tcm-prescription-system.pages.dev/downloads/")
                 && url.toLowerCase(java.util.Locale.ROOT).endsWith(".apk");
+    }
+
+    // ★ 2026-09-09 二次提速：APK 下载完成广播接收器——校验任务成功后自动拉起系统安装弹窗。
+    //   失败/暂停/取消仅记日志（apkDownloadId 复位，用户可再点横幅重试），不打扰用户。
+    private final android.content.BroadcastReceiver apkDownloadReceiver = new android.content.BroadcastReceiver() {
+        @Override
+        public void onReceive(android.content.Context ctx, Intent intent) {
+            long id = intent.getLongExtra(android.app.DownloadManager.EXTRA_DOWNLOAD_ID, -1L);
+            if (id < 0 || id != apkDownloadId) return;
+            apkDownloadId = -1L;
+            try {
+                android.app.DownloadManager dm = (android.app.DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+                android.database.Cursor c = dm.query(new android.app.DownloadManager.Query().setFilterById(id));
+                if (c != null) {
+                    try {
+                        if (c.moveToFirst()) {
+                            int status = c.getInt(c.getColumnIndex(android.app.DownloadManager.COLUMN_STATUS));
+                            if (status == android.app.DownloadManager.STATUS_SUCCESSFUL) {
+                                String localUri = c.getString(c.getColumnIndex(android.app.DownloadManager.COLUMN_LOCAL_URI));
+                                promptInstallApk(localUri);
+                                return;
+                            }
+                            Log.d(TAG, "[update] APK 下载未完成(status=" + status + ")，跳过安装提示");
+                        }
+                    } finally {
+                        c.close();
+                    }
+                }
+            } catch (Exception e) {
+                Log.w(TAG, "[update] 下载完成处理异常: " + e.getMessage());
+            }
+        }
+    };
+
+    /**
+     * ★ 2026-09-09 更新二次提速（点击即下）：APK 直链 → 系统 DownloadManager 应用内直下。
+     *   - 免浏览器中转：省浏览器冷启动 1-3 秒与下载页二次确认，点击立即开始
+     *   - 系统级下载：通知栏实时进度/断点续传
+     *   - 零权限：下载到应用专属外部目录（getExternalFilesDir/Download），所有 Android 版本免存储权限
+     *   - 文件名从直链还原（含中文），白名单化防路径穿越；同版本下载中只提示不重复入队
+     *   返回 false（入队异常）时调用方回退浏览器打开直链。
+     */
+    private boolean startApkDownloadViaSystem(String url) {
+        try {
+            if (apkDownloadId > 0) {
+                Toast.makeText(this, "新版安装包正在后台下载，请留意通知栏进度", Toast.LENGTH_LONG).show();
+                return true;
+            }
+            String fileName = "huikang-update.apk";
+            try {
+                String decoded = Uri.decode(url);
+                int slash = decoded.lastIndexOf('/');
+                if (slash >= 0 && slash < decoded.length() - 1) fileName = decoded.substring(slash + 1);
+                fileName = fileName.replaceAll("[^0-9A-Za-z.\\-_\\u4e00-\\u9fa5]", "_");
+            } catch (Exception ignored) {}
+            String ver = apkNewVersion == null ? "" : apkNewVersion;
+            android.app.DownloadManager.Request req = new android.app.DownloadManager.Request(Uri.parse(url));
+            req.setTitle("惠康中医新版安装包" + (ver.isEmpty() ? "" : " v" + ver));
+            req.setDescription("下载完成后自动提示安装");
+            req.setMimeType("application/vnd.android.package-archive");
+            req.setDestinationInExternalFilesDir(this, android.os.Environment.DIRECTORY_DOWNLOADS, fileName);
+            req.setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+            req.setAllowedOverMetered(true);
+            req.setAllowedOverRoaming(true);
+            android.app.DownloadManager dm = (android.app.DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+            apkDownloadId = dm.enqueue(req);
+            Log.i(TAG, "[update] APK 开始系统下载: " + fileName + " (id=" + apkDownloadId + ")");
+            Toast.makeText(this, "新版安装包开始下载，完成后将自动弹出安装提示", Toast.LENGTH_LONG).show();
+            return true;
+        } catch (Exception e) {
+            Log.w(TAG, "[update] 系统下载器入队失败: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * ★ 2026-09-09 更新二次提速：下载完成后拉起系统安装弹窗。
+     *   应用专属目录的 LOCAL_URI 为 file://（targetSdk≥24 禁裸 file URI 安装）→
+     *   FileProvider 转 content:// 并授权读；广播上下文 startActivity 必须 NEW_TASK。
+     *   首次安装会触发系统「允许安装未知应用」一次性授权（与官网浏览器下载安装同机制）。
+     */
+    private void promptInstallApk(String localUriStr) {
+        try {
+            if (localUriStr == null || localUriStr.isEmpty()) return;
+            Uri uri = Uri.parse(localUriStr);
+            if ("file".equals(uri.getScheme())) {
+                java.io.File f = new java.io.File(uri.getPath());
+                uri = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", f);
+            }
+            Intent it = new Intent(Intent.ACTION_VIEW);
+            it.setDataAndType(uri, "application/vnd.android.package-archive");
+            it.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(it);
+            Log.i(TAG, "[update] 已拉起 APK 安装弹窗: " + localUriStr);
+        } catch (Exception e) {
+            Log.w(TAG, "[update] 拉起安装弹窗失败: " + e.getMessage());
+        }
     }
 
     /**
@@ -1419,6 +1542,8 @@ public class MainActivity extends BridgeActivity {
         if (mainHandler != null) {
             mainHandler.removeCallbacksAndMessages(null);
         }
+        // ★ 2026-09-09 更新二次提速：注销 APK 下载完成广播（系统下载继续，通知栏点击仍可安装）
+        try { unregisterReceiver(apkDownloadReceiver); } catch (Exception ignored) {}
         WebView webView = this.getBridge() != null ? this.getBridge().getWebView() : null;
         if (webView != null) {
             // 移除 JS Interface，防止持有 Activity 引用
