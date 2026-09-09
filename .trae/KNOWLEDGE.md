@@ -1309,3 +1309,17 @@ app_project_harmony/                      ← 鸿蒙全部代码独立，安卓�
 
 
 * ★ 2026-09-05 卸载器报「安装损毁: 无效的操作代码」根因根治（1.0.176~1.0.185 全中，Commit 4996430f 删除宏 + 1.0.186 重打包验证）：db-offline/desktop/installer.nsh 的 customUnInit 宏（51cbe32d 引入的"卸载时弹框清理 userData"）内 Goto +8 / Goto +6 **相对跳转越出宏边界**（宏仅 9 条指令，目标为第 12 条），跳过 FunctionEnd 落入下一个函数 un.atomicRMDir 体中段（Exch/Push/Pop 栈帧错位），隐式 Return 弹出垃圾值当返回地址 → NSIS VM 报 Invalid opcode（**点「否」保留数据或 userData 目录不存在时触发**；点「是」删除走 IDYES 正常路径不崩——所以间歇出现、难复现）。修复=整体删除该宏（清登录框遗留用户名的正确姿势=关闭软件后删除/改名 %APPDATA%\tcm-prescription，无需卸载器挂钩；且此清理目标可由应用层启动时实现）。铁律：①**自定义 NSIS 宏内跳转必须用宏内标签**（标签编译期消除，与 customInit 的 tryE/done 同模式），**禁止相对跳转 +N**——宏展开处后续指令随 electron-builder 模板版本变化，越界跳进别的函数体且编译期无法发现，运行时直接"安装损毁"；②NSIS 宏名**不区分大小写**（customUninit=customUnInit，makensis 3.0.4.1 实测），勿靠大小写区分功能，写宏名应与模板引用完全一致；③E2E 只测应用运行时不测卸载器——"卸载体验类"改动现有门禁全部覆盖不到，发布前必须人工实测一次完整卸载（重点测非默认路径：点「否」/目录不存在）；④存量用户机器上旧版卸载崩溃自救 SOP=重跑新版 Setup 覆盖安装（重写卸载器+注册表）后再卸载，或直接手动删除安装目录；⑤「安装损毁: 无效的操作代码」与中途红黄字不同，属于**真故障**（不在 145 行无害清单内），用户报此错=卸载器指令流已损坏，必须查自定义宏。
+
+## 17. 下载转化统计（2026-09-09 已实现，commit 40e54baf）
+
+**架构（四层漏斗）**：官网下载量（GitHub Release 资产 download\_count，服务端 KV 缓存 1h 防 API 限流）→ 安装启动设备（四端匿名心跳）→ 提交激活申请（admin\_req\_index 状态计数）→ 已激活设备（admin\_req activated ∪ license devices 的 machineId 并集）+ 三级转化率。
+
+**心跳链路**：四端客户端复用既有「启动检查更新」时机上报 POST /api/telemetry/heartbeat {ed, v, mid}。双桌面 main.js sendStartupHeartbeat（机器码 sha256）；双 APP MainActivity（ANDROID\_ID sha256，零新增权限）。服务端 KV `tl_dev:{ed}:{服务端二次哈希}` = {first, last, days(修剪30天), v}，限流 240/h/IP，CORS 对齐 admin-status（file:// null + capacitor 放行）。
+
+**隐私铁律**：机器码客户端先 sha256（服务端永不见原文）+ 服务端再哈希做 KV key（长度恒定 64hex 防注入）；不存 IP/手机号/任何个人信息。
+
+**读取**：GET /api/stats/funnel（platform_admin，鉴权对齐 admin-list：`await parseAuthHeader(request, env)` + `isPlatformAdmin(user)`）。管理后台首页「诊所运营统计」之后「下载转化统计」区块（6 卡 + 转化率行 + 分端明细），loadFunnelStats 静默容错。
+
+**数据口径注意**：①安装设备数从四端新版发布后才开始积累（老版本无心跳），下载量/激活申请为历史全量；②线上联调测试写入过 1 条假设备（local-desktop, v=0.0.0-test），统计里多 1 台属预期；③KV list 分页聚合在设备量大时（>数千）需关注耗时。
+
+**生效方式**：服务端 + 管理后台 push 即部署生效；四端客户端需重新打包发布后才开始积累心跳数据。
