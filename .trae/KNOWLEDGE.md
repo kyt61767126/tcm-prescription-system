@@ -231,6 +231,28 @@
 
 * 桌面：IPC save-backup-file → `惠康中医媒体\downloads\中医处方系统\` 子目录；list-backup-files/read-backup-file IPC 一键恢复（兼容存量根目录备份）。
 
+**★ 数据安全与备份全景（2026-09-09 定稿，诊所删除不再丢数据）**：
+
+**云端三层防护**：
+1. **处方软删除** → `prescriptions_trash` KV（保留10000条，可恢复）；永久删除需先入回收站，总有恢复窗口
+2. **诊所删除前自动备份** → 删除前将全部业务KV（prescriptions/trash/medicines/formulas/users/序号）备份到 `clinic_backup_{clinicId}_{timestamp}`，再物理删除
+3. **KV全量备份** → 管理员手动 `backup-kv.js`，保留5份
+
+**离线自动备份**（无需用户操作）：
+1. **每日本地备份** → 首次保存处方时触发，localStorage 保留10份
+2. **文件自动备份** → `userData/backups/backup_YYYYMMDD_HHmmss.json`，每日启动+应用退出时触发
+3. **IndexedDB备份** → 无Electron环境时回退
+4. **保留策略** → 7天内每日、4周内每周、12月内每月
+5. **手动导出** → `Downloads/中医处方系统/本地_{医师}_{时间}.json`（用户主动备份，永久保留）
+
+**恢复方式**：
+- 处方回收站：客户端 🗑️ 按钮恢复（30天内）
+- 诊所数据恢复：`POST /users?clinic=restore&backupKey=clinic_backup_{id}_{ts}&clinicId={新诊所ID}`（platform_admin）
+- KV全量恢复：`restore-kv.js`（platform_admin）
+- 离线备份恢复：客户端「导入」→ 备份列表一键恢复
+
+**铁律**：删除诊所/处方前系统自动备份，禁止任何"无备份直接物理删除"的代码路径。
+
 * **APP 端功能判断禁止依赖 IS\_ELECTRON 常量**（shim 在 onPageFinished 注入，顶层常量已固化为 false），必须运行时判断 `window.electronAPI && window.electronAPI.xxx`。
 
 * ★ 2026-09-06 第十一轮（机构版按钮错显·启动竞态根治）：**页面解析期（内联 IIFE 同步执行段）调 electronAPI.xxx 在安卓 APP 上必然静默跳过**——shim 在 onPageFinished 才注入，解析期 `window.electronAPI` 不存在，`if (window.electronAPI && window.electronAPI.getAppConfig)` 整段不执行 → CONFIG.edition 恒为出厂 personal → 机构版激活登录后仍被 enforceStandardEditionButtons 强制标准版对齐（错显【修改密码】）。根治=index-app.html 该 IIFE 增加 `else if (window.AndroidNative && typeof window.AndroidNative.invoke === 'function')` 分支：**同步直调 `AndroidNative.invoke('getAppConfig','{}')`（addJavascriptInterface 在 loadUrl 前注册，解析期即可用；JavaBridge 线程同步返回 JSON 字符串）**，结果同步入 CONFIG + resolve `__appConfigReady`（自动登录免 800ms 等待）。时序安全性论证（改动前必须核对）：①全部 DOM 在 body 单行（L664）先于内联脚本（L669 起）解析，同步分支执行时按钮节点已存在；②applyEditionTags/enforceStandardEditionButtons/updateUserDisplay 与 IIFE 同属一个 script 块，函数声明提升全可用；③CONFIG（const）在 IIFE 前已初始化。铁律：**安卓端启动期（解析期）需要原生能力时，唯一可靠通路是 AndroidNative.invoke 同步直调，禁止只写 electronAPI 路径等 shim；改这类启动竞态代码前必须逐一核对 DOM 解析顺序/函数声明提升/TDZ 三个时序前提**。同日审计佐证：同日 4 次成功打包 APK 内 index.html 哈希全相同（0be38f6e），证明"工作区已改但未 commit/未打包"是用户实测不生效的头号原因——**每轮修复后必须确认 修复已 commit + 打包产物哈希已变化，再交给用户测试**。
