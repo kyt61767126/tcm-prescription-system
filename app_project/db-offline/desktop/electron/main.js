@@ -1058,6 +1058,19 @@ function isNewerRemoteVersion(remote, local) {
     return false;
 }
 
+// ★ 2026-09-09 更新下载提速：exe 直链白名单校验（与版本号校验同构的安全原则）。
+//   latest.json 的 url 字段（GitHub Release 安装包直链，与官网下载按钮同源），
+//   必须过五道关才允许注入横幅：https / .exe 后缀 / host 白名单（官方发布源）/
+//   长度上限 / 无注入字符。任何一项不过=回退官网下载页（现状行为，向后兼容）。
+function isValidExeDownloadUrl(u) {
+    if (typeof u !== 'string' || u.length === 0 || u.length > 500) return false;
+    if (!/^https:\/\//i.test(u)) return false;
+    if (!/\.exe$/i.test(u)) return false;
+    if (!/^https:\/\/(github\.com\/|tcm-prescription-system\.pages\.dev\/)/i.test(u)) return false;
+    if (/['"\\\s<>()]/.test(u)) return false;
+    return true;
+}
+
 async function checkForUpdateAndNotify(win) {
     try {
         const res = await net.fetch(UPDATE_CHECK_URL, { signal: AbortSignal.timeout(8000) });
@@ -1078,19 +1091,25 @@ async function checkForUpdateAndNotify(win) {
             return;
         }
         console.log('[update] 发现新版本 v' + remoteVer + '（当前 v' + localVer + '），注入登录页横幅');
-        injectUpdateBanner(win, remoteVer);
+        // ★ 2026-09-09 提取 exe 安装包直链（latest.json.url，与官网下载按钮同源）：
+        //   横幅「立即下载」直跳直链自动开始下载，跳过官网整页加载+人工找按钮。
+        //   校验不过=回退官网下载页（现状行为，向后兼容）。
+        const exeUrl = isValidExeDownloadUrl(latest.url) ? latest.url : null;
+        injectUpdateBanner(win, remoteVer, exeUrl);
     } catch (e) {
         // 离线/超时/DNS 失败：静默跳过（宁可漏检不可误报，不打扰离线使用）
         console.log('[update] 检查跳过（网络不可用或超时）: ' + (e && e.message));
     }
 }
 
-function injectUpdateBanner(win, newVersion) {
+function injectUpdateBanner(win, newVersion, exeUrl) {
     if (!win || win.isDestroyed()) return;
     try {
         // 窗口增高 40px 并重新居中，为顶部横幅腾出空间（不遮挡居中的登录卡片）
         win.setSize(260, 430 + UPDATE_BANNER_EXTRA_HEIGHT);
         win.center();
+        // ★ 2026-09-09 直跳 exe 直链（白名单已校验）；无直链回退官网下载页（高亮卡片）
+        const downloadTarget = exeUrl || UPDATE_DOWNLOAD_URL;
         const bannerCode = `
             (function() {
                 if (document.getElementById('__updateBanner')) return;
@@ -1107,7 +1126,7 @@ function injectUpdateBanner(win, newVersion) {
                 link.textContent = '立即下载';
                 link.style.cssText = 'color:#1565c0;font-weight:bold;text-decoration:underline;cursor:pointer;';
                 link.addEventListener('click', function() {
-                    window.open(${JSON.stringify(UPDATE_DOWNLOAD_URL)});
+                    window.open(${JSON.stringify(downloadTarget)});
                 });
                 b.appendChild(label);
                 b.appendChild(link);
