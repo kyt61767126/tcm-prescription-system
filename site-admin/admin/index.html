@@ -817,6 +817,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                 </select>
                 <input type="text" id="adminActivateSearch" placeholder="搜索诊所名/管理员/电话/机器ID" oninput="filterAdminActivateList()" style="flex:1;min-width:200px;">
                 <button class="btn btn-sm" onclick="loadAdminActivateList()">刷新</button>
+                <button class="btn btn-sm" style="background:#7c3aed;border-color:#7c3aed;color:#fff;" onclick="adminDeviceResetFlow()" title="输入手机号/机器码/试用指纹，扫描该测试设备的全部线上记录，确认后一键清理（复用设备后台关系：申请/license/试用指纹/诊所账号/索引）">🧹 测试设备清理</button>
                 <label style="font-size:12px;color:#909399;display:flex;align-items:center;gap:4px;">
                     <input type="checkbox" id="adminActivateAutoRefresh" onchange="toggleAdminActivateAutoRefresh()"> 每10秒自动刷新
                 </label>
@@ -3116,6 +3117,75 @@ async function deleteAdminActivateRequest(requestId, clinicName) {
     } catch (e) {
         alert('❌ 网络错误：' + e.message);
     }
+}
+
+// ============================================================================
+// ★ 2026-09-09 测试设备后台一键清理（tools/device-reset.cjs 的后台界面版）
+//   流程：输入手机号/机器码/hwFp → API 演练（只扫描）→ 清单确认 → API 执行
+//   （服务端重新扫描后删除，双保险：付费客户 ⚠️ 警示 + confirm 必须显式确认）
+// ============================================================================
+async function adminDeviceResetCall(target, confirm) {
+    const res = await fetch(API_BASE + '/license/admin-device-reset', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + token
+        },
+        body: JSON.stringify({ target, confirm: !!confirm })
+    });
+    return await res.json();
+}
+
+async function adminDeviceResetFlow() {
+    const target = prompt('测试设备清理——输入手机号 / 机器码 / 64位试用指纹：\n\n（先演练扫描展示清单，确认后才删除）', '');
+    if (!target || !target.trim()) return;
+    const t = target.trim();
+
+    // 第一步：演练扫描
+    let dry;
+    try {
+        dry = await adminDeviceResetCall(t, false);
+    } catch (e) {
+        alert('❌ 网络错误：' + e.message);
+        return;
+    }
+    if (!dry.success) { alert('❌ ' + (dry.error || '扫描失败')); return; }
+    if (!dry.records || dry.records.length === 0) {
+        alert('ℹ️ ' + (dry.message || '未找到任何关联记录，该输入已是干净状态。'));
+        return;
+    }
+
+    // 第二步：清单确认（⚠️ 行 = 疑似真实客户/已付款，删前务必核实）
+    const lines = dry.records.map(r =>
+        (r.warn ? '⚠️ ' : '· ') + '[' + r.kind + '] ' + r.desc
+    );
+    const ip = dry.indexPreview || {};
+    const idxLines = [];
+    if (ip.reqIndex) idxLines.push('申请索引: ' + ip.reqIndex);
+    if (ip.licIndex) idxLines.push('license索引: ' + ip.licIndex);
+    if (ip.clinics) idxLines.push('诊所表: ' + ip.clinics);
+    const msg = '识别为：' + dry.targetKind + '\n\n将删除以下 ' + dry.records.length + ' 项记录：\n' +
+        lines.join('\n') +
+        (idxLines.length ? '\n\n索引联动：\n' + idxLines.join('\n') : '') +
+        '\n\n⚠️ 带 ⚠️ 的记录疑似真实客户/已付款，确认是测试设备才可继续！\n\n确定执行删除？（不可恢复）';
+    if (!confirm(msg)) return;
+
+    // 第三步：执行
+    let run;
+    try {
+        run = await adminDeviceResetCall(t, true);
+    } catch (e) {
+        alert('❌ 网络错误：' + e.message);
+        return;
+    }
+    if (!run.success) {
+        alert('❌ 执行失败：' + (run.error || '未知错误') + (run.verifyFailed ? '（复验失败 ' + run.verifyFailed + ' 项）' : ''));
+        return;
+    }
+    alert('✅ 后台清理完成：已删 ' + run.deleted.length + ' 项' +
+        (run.indexesUpdated && run.indexesUpdated.length ? '，索引更新 ' + run.indexesUpdated.length + ' 处' : '') +
+        '\n\n最后一步——客户端本地清理：\n· 桌面：运行 测试重置.bat\n· 手机：卸载重装 APP\n之后联网首启 = 全新客户（7 天试用）。');
+    loadAdminActivateList();
 }
 
 // ============================================================================
