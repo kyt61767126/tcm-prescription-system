@@ -45,17 +45,21 @@ function sanitizeDevices(record) {
 }
 
 // 绑定/更新设备（返回 { ok, record } 或 { ok:false, code:'DEVICE_LIMIT', record }）
-async function bindUserDevice(kv, username, machineId, clientClass, nowIso) {
+async function bindUserDevice(kv, username, machineId, clientClass, nowIso, edition) {
     // ★ 2026-08-22 特殊账户豁免：名单内账号不限制设备数量
     // ★★ 2026-08-22 配额来源：优先保留 KV 中已有 maxDevices（平台管理员后台可调整）；
     //    仅当记录无配额字段时，按豁免名单给默认值（豁免=99 实际不限，普通=2）
+    // ★ 2026-09-10 统一授权口径：机构版（cloud_clinic/offline_clinic）每账号默认 1 台
+    //    桌面/APP 设备；标准版维持 2 台（桌面+APP 各 1）；豁免名单=99 不分版本。
     const exempt = DEVICE_LIMIT_EXEMPT_ACCOUNTS.includes(username);
+    const isInstitution = edition === 'cloud_clinic' || edition === 'offline_clinic';
+    const defaultMax = exempt ? DEVICE_EXEMPT_MAX : (isInstitution ? 1 : MAX_DEVICES_PER_ACCOUNT);
     const record = (await kv.get(KV_USER_DEVICES_PREFIX + username, 'json')) || {
         devices: []
     };
     if (!Array.isArray(record.devices)) record.devices = [];
     if (typeof record.maxDevices !== 'number' || !Number.isInteger(record.maxDevices) || record.maxDevices <= 0) {
-        record.maxDevices = exempt ? DEVICE_EXEMPT_MAX : MAX_DEVICES_PER_ACCOUNT;
+        record.maxDevices = defaultMax;
     }
 
     const mid = String(machineId || '').trim();
@@ -576,6 +580,35 @@ export async function onRequest(context) {
             const phoneOccupancy = await findPhoneOccupancy(kv, username);
             if (phoneOccupancy && phoneOccupancy.user) {
                 return json({ success: false, error: '该账号与已有手机号冲突' }, 409, context.request);
+            }
+
+            // ★ 2026-09-10 统一授权口径（第1项）：机构版建号封口——
+            //   本诊所账号总数（管理员 1 + 医师/前台 N）≤ license.maxDevices，
+            //   license.maxDevices 为建号/绑设备的唯一权威上限（clinicName 关联），超了拒绝。
+            //   标准版不在此限（无 license 额度，沿用账号级 2 台）；无激活码时 fail-open。
+            const allClinics = await kv.get(KV_SYSTEM_CLINICS, 'json').catch(() => null);
+            const myClinic = (allClinics && Array.isArray(allClinics))
+                ? allClinics.find(c => c && c.id === authUser.clinicId) : null;
+            const myEdition = normalizeClinicEdition(myClinic && myClinic.edition, myClinic && myClinic.status);
+            if (myClinic && (myEdition === 'cloud_clinic' || String(myEdition || '').indexOf('offline_') === 0)) {
+                const licenses = await listLicenses(kv).catch(() => []);
+                const lic = (licenses || []).find(l => l && l.clinicName === myClinic.name) || null;
+                if (lic && lic.code) {
+                    // 唯一权威 = license.maxDevices；仅在显式为合法正整数时封口，否则 fail-open
+                    const rawMax = lic.maxDevices;
+                    const maxSeats = (Number.isInteger(rawMax) && rawMax > 0) ? rawMax : null;
+                    const existingUsers = (await kv.get(`clinic:${authUser.clinicId}:users`, 'json').catch(() => null)) || [];
+                    const seatCount = Array.isArray(existingUsers) ? existingUsers.length : 0;
+                    if (maxSeats !== null && seatCount >= maxSeats) {
+                        return json({
+                            success: false,
+                            error: '机构版座席已满（管理员 1 + 医师/前台 ' + (maxSeats - 1) + ' 个，共 ' + maxSeats + ' 席）。请先删除多余账号，或联系管理员扩充设备/座席额度',
+                            code: 'SEAT_LIMIT',
+                            seatCount: seatCount,
+                            maxSeats: maxSeats
+                        }, 409, context.request);
+                    }
+                }
             }
 
             const { passwordHash, salt } = await hashPassword(password);
@@ -1431,13 +1464,50 @@ export async function onRequest(context) {
             // P1-2：记录登录成功审计日志
             await writeAuditLog(kv, clinicId, user.username, user.role, 'login_success', 'auth', context.request);
 
-            // ★★★ 2026-08-21 账号级设备授权：桌面/APP 设备指纹计入 2 台上限
+            // ★★★ 2026-08-21 账号级设备授权：桌面/APP 设备指纹计入设备名额
             //   （网页版 clientClass=web 不占名额；旧客户端无 machineId 放行仅互斥）
+            // ★ 2026-09-10 统一授权口径：机构版（cloud_clinic）全所设备额度以
+            //   license.maxDevices 为唯一权威，登录时先做全局预检（≤N 台），
+            //   再按账号级绑定（机构版每账号 1 台 / 标准版 2 台）。网页不占。
             const nowIso = getNowISO();
             const effClientClass = ['desktop', 'app', 'web'].includes(clientClass) ? clientClass : 'web';
+            const normEdition = normalizeClinicEdition(clinicEdition, clinicStatus);
+            const midFp = String(machineId || '').trim();
+            const hasFp = midFp && midFp.length >= 8 && midFp !== 'unknown' && midFp !== 'undefined';
             let deviceSummary = null;
             if (effClientClass === 'desktop' || effClientClass === 'app') {
-                const bind = await bindUserDevice(kv, user.username, machineId, effClientClass, nowIso);
+                let globalLic = null;
+                // ① 机构版全局设备额度预检：全所 desktop/app 设备总数 ≤ license.maxDevices
+                if (normEdition === 'cloud_clinic' && clinicName && hasFp) {
+                    try {
+                        const licenses = await listLicenses(kv).catch(() => []);
+                        globalLic = (licenses || []).find(l => l && l.clinicName === clinicName) || null;
+                    } catch (e) { globalLic = null; }
+                    if (globalLic && globalLic.code) {
+                        const devs = getDevices(globalLic);
+                        // 唯一权威 = license.maxDevices；仅在显式为合法正整数时封口，否则 fail-open
+                        //   （兼容 08-29 前激活、无 maxDevices 字段的历史机构版，避免误卡成 1 台）
+                        const rawMax = globalLic.maxDevices;
+                        const maxDev = (Number.isInteger(rawMax) && rawMax > 0) ? rawMax : null;
+                        const already = devs.some(d => d && d.machineId === midFp);
+                        if (maxDev !== null && !already && devs.length >= maxDev) {
+                            await writeAuditLog(kv, clinicId, user.username, user.role, 'login_failed', 'device_limit', context.request, {
+                                machineId: midFp.substring(0, 8) + '...',
+                                clientClass: effClientClass,
+                                bound: devs.length,
+                                maxDevices: maxDev
+                            });
+                            return json({
+                                success: false,
+                                error: '该机构版最多授权 ' + maxDev + ' 台设备，当前已满。请先在其他设备上解绑，或联系管理员扩容',
+                                code: 'DEVICE_LIMIT'
+                            }, 403, context.request);
+                        }
+                    }
+                }
+
+                // ② 账号级设备绑定（机构版每账号 1 台 / 标准版每账号 2 台）
+                const bind = await bindUserDevice(kv, user.username, machineId, effClientClass, nowIso, normEdition);
                 if (!bind.ok && bind.code === 'DEVICE_LIMIT') {
                     await writeAuditLog(kv, clinicId, user.username, user.role, 'login_failed', 'device_limit', context.request, {
                         machineId: String(machineId || '').substring(0, 8) + '...',
@@ -1446,11 +1516,31 @@ export async function onRequest(context) {
                     });
                     return json({
                         success: false,
-                        error: '设备数已达上限（每个账号最多授权 2 台设备：桌面/APP）。请先在已绑定设备上解绑，或联系管理员处理',
+                        error: '设备数已达上限（机构版每账号最多 1 台、标准版 2 台：桌面/APP）。请先在已绑定设备上解绑，或联系管理员处理',
                         code: 'DEVICE_LIMIT',
                         devices: sanitizeDevices(bind.record)
                     }, 403, context.request);
                 }
+
+                // ③ 机构版新设备注册进全局设备表 license.devices（与激活层共用同一权威源）
+                if (globalLic && globalLic.code && hasFp) {
+                    try {
+                        const devs = getDevices(globalLic);
+                        const already = devs.some(d => d && d.machineId === midFp);
+                        if (!already) {
+                            await updateLicense(kv, globalLic.code, {
+                                devices: devs.concat([{
+                                    machineId: midFp,
+                                    activatedAt: nowIso,
+                                    clinicName: clinicName,
+                                    productClass: 'cloud',
+                                    clientClass: effClientClass
+                                }])
+                            }).catch(() => {});
+                        }
+                    } catch (e) { /* 全局注册失败不影响登录 */ }
+                }
+
                 deviceSummary = sanitizeDevices(bind.record);
             }
 
@@ -1567,11 +1657,13 @@ export async function onRequest(context) {
             if (!targetUsername) {
                 return json({ success: false, error: '请提供要查询的用户名' }, 400, context.request);
             }
-            // 判断目标账号是否为离线版（clinicEdition 以 offline_ 开头）
+            // ★ 2026-09-10 统一授权口径：机构版（cloud_clinic）与离线版（offline_*）的
+            //   设备额度都以 license.maxDevices / license.devices 为唯一权威（clinicName 关联）。
             const target = await findUserForLogin(kv, targetUsername).catch(() => null);
-            const isOffline = !!(target && target.clinicEdition && String(target.clinicEdition).indexOf('offline_') === 0);
-            if (isOffline) {
-                // —— 离线版：设备绑定在激活码 license.devices（clinicName 关联）——
+            const targetEdition = normalizeClinicEdition(target && target.clinicEdition, target && target.clinicStatus);
+            const isSharedQuota = targetEdition === 'cloud_clinic' || String(targetEdition || '').indexOf('offline_') === 0;
+            if (isSharedQuota) {
+                // —— 机构/离线版：设备绑定在激活码 license.devices（clinicName 关联）——
                 const clinicName = target.clinicName;
                 const licenses = await listLicenses(kv).catch(() => []);
                 let lic = null;
@@ -1590,7 +1682,7 @@ export async function onRequest(context) {
                 const licDevices = lic ? getDevices(lic).map(d => ({
                     machineId: d.machineId ? String(d.machineId).substring(0, 8) + '...' : null,
                     clientClass: d.clientClass || null,
-                    productClass: d.productClass || 'offline',   // 离线版设备
+                    productClass: d.productClass || null,   // cloud云端 / offline离线
                     boundAt: d.activatedAt || d.boundAt || null   // license 用 activatedAt
                 })) : [];
                 const maxDevices = lic && lic.maxDevices && Number.isInteger(lic.maxDevices) ? lic.maxDevices
@@ -1639,9 +1731,11 @@ export async function onRequest(context) {
             }
             // ★ 2026-09-08 离线版配额唯一源 = license.maxDevices（get 端点读 license），
             //   若此处只写 user_devices，用户后台改配额后重开弹窗仍显示旧值（北京源生堂案例）。
+            // ★ 2026-09-10 统一授权口径：cloud_clinic 机构版同样以 license.maxDevices 为唯一源。
             const target = await findUserForLogin(kv, targetUsername).catch(() => null);
-            const isOffline = !!(target && target.clinicEdition && String(target.clinicEdition).indexOf('offline_') === 0);
-            if (isOffline) {
+            const targetEdition = normalizeClinicEdition(target && target.clinicEdition, target && target.clinicStatus);
+            const isSharedQuota = targetEdition === 'cloud_clinic' || String(targetEdition || '').indexOf('offline_') === 0;
+            if (isSharedQuota) {
                 const clinicName = target.clinicName;
                 const licenses = await listLicenses(kv).catch(() => []);
                 let lic = null;
@@ -1651,19 +1745,20 @@ export async function onRequest(context) {
                     }
                 }
                 if (lic && lic.code) {
+                    const licDevicesCount = getDevices(lic).length;
                     await updateLicense(kv, lic.code, { maxDevices }).catch(() => null);
                     await writeAuditLog(kv, target.clinicId, authUser.username, authUser.role,
                         'set_device_quota', targetUsername, context.request,
-                        { maxDevices, source: 'license', devicesCount: lic.devices ? lic.devices.length : 0 });
+                        { maxDevices, source: 'license', devicesCount: licDevicesCount });
                     return json({
                         success: true,
-                        message: '设备配额已更新（离线版）：' + targetUsername + ' → ' + maxDevices + ' 台' + (maxDevices >= 99 ? '（不限）' : ''),
+                        message: '设备配额已更新（机构/离线版）：' + targetUsername + ' → ' + maxDevices + ' 台' + (maxDevices >= 99 ? '（不限）' : ''),
                         username: targetUsername,
                         maxDevices,
-                        devicesCount: lic.devices ? lic.devices.length : 0
+                        devicesCount: licDevicesCount
                     }, 200, context.request);
                 }
-                return json({ success: false, error: '未找到 ' + targetUsername + ' 对应的离线激活码，无法调整配额' }, 404, context.request);
+                return json({ success: false, error: '未找到 ' + targetUsername + ' 对应的机构/离线激活码，无法调整配额' }, 404, context.request);
             }
             const record = (await kv.get(KV_USER_DEVICES_PREFIX + targetUsername, 'json')) || { devices: [] };
             if (!Array.isArray(record.devices)) record.devices = [];
