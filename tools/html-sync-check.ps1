@@ -222,6 +222,46 @@ if ((Test-Path (Join-Path $root $LoginSrc)) -and (Test-Path (Join-Path $root $Lo
 }
 Write-Host ""
 
+# ============================================================================
+# ③ 离线APP 打包源 ↔ assets 副本 字节级一致性 (2026-09-09)
+#    build-app.bat 每次 APK 打包执行 copy /Y index-app.html -> assets/public/index.html，
+#    即 assets 是打包源的逐字节构建产物——两份在 git 中必须完全一致。
+#    事故（金额显示修复 29f9a06d 被打回旧版）：修复只改了 assets 副本、漏了打包源
+#    index-app.html → 下次打包源覆写副本 → 已提交修复在 APK 中静默回滚
+#    （¥356.0025 浮点精度 bug 复活）。漂移守卫把此类"改副本漏源/改源漏副本"
+#    在 push 时拦截，杜绝静默回滚。
+# ============================================================================
+$OfflineAppSrc = 'app_project/db-offline/index-app.html'
+$OfflineAppTgt = 'app_project/db-offline/app/app/src/main/assets/public/index.html'
+
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "  Offline APP source/assets byte-identity" -ForegroundColor Cyan
+Write-Host "  Src: $OfflineAppSrc" -ForegroundColor Cyan
+Write-Host "  Tgt: $OfflineAppTgt" -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host ""
+
+$srcFull = Join-Path $root $OfflineAppSrc
+$tgtFull = Join-Path $root $OfflineAppTgt
+if ((Test-Path $srcFull) -and (Test-Path $tgtFull)) {
+    $srcHash = (Get-FileHash $srcFull -Algorithm SHA256).Hash
+    $tgtHash = (Get-FileHash $tgtFull -Algorithm SHA256).Hash
+    if ($srcHash -eq $tgtHash) {
+        Write-Host ("[ OK ] " + $OfflineAppTgt) -ForegroundColor Green
+        Write-Host "       byte-identical with packaging source"
+    } else {
+        Write-Host ("[DRIFT] " + $OfflineAppTgt) -ForegroundColor Red
+        Write-Host "       assets 副本与打包源 index-app.html 不一致（SHA256 不同）" -ForegroundColor Yellow
+        Write-Host "       → 改动必须落在打包源 index-app.html，再 copy 到 assets；" -ForegroundColor Yellow
+        Write-Host "         直接改 assets 会在下次打包时被静默覆写回滚（2026-09-09 金额修复回滚事故）" -ForegroundColor Yellow
+        $driftFound = $true
+    }
+} else {
+    Write-Host "[MISS] offline app index.html file(s) not found" -ForegroundColor Red
+    $driftFound = $true
+}
+Write-Host ""
+
 Write-Host "========================================" -ForegroundColor Cyan
 if ($driftFound) {
     Write-Host "  RESULT: DRIFT DETECTED" -ForegroundColor Red

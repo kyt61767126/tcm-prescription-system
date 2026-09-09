@@ -90,6 +90,8 @@
   事故链：phone 修复只跑了路径1 → push 六道门全绿（当时门不含 copy-consistency）→ 云桌面打包时 copy-consistency FAIL+Auto-FIX 覆盖独立副本 → 产生未提交"源码修改"（user-store.js 是真实源码不能进副作用白名单）→ 云端APP 被源码落定门拦截。
   **铁律：改 shared/user-store.js（及 user-admin.js）后必须双跑两条同步 + `copy-consistency.cjs` 纯检查确认 5 组 42 副本全绿再 commit。** 已同步收口：pre-push 升七道门（⑦=copy-consistency）、CI verify-unified 升六重防线（⑥=copy-consistency），独立副本漂移从此 push 时拦截。
 
+* ★ 2026-09-09 **离线APP「打包源覆写回滚」铁律**（金额修复 29f9a06d 被打回旧版实锤）：`db-offline/index-app.html` 是离线APP 的**打包源**，`build-app.bat` 每次 APK 打包执行 `copy /Y index-app.html → assets/public/index.html`——assets 只是构建产物副本。事故链：金额显示修复（formatPrice）只改了 assets 副本、漏了打包源 → push 全绿（无门监控这对文件）→ 当晚打包源覆写副本 → **已提交修复在新 APK 中静默回滚**（¥356.0025 浮点 bug 复活，versionCode 261 报废重打 262）。**铁律：改离线APP 的 index.html 一律改打包源 `db-offline/index-app.html`，再 Copy-Item 到 assets；直接改 assets 必被下次打包覆写。** 已收口：html-sync-check.ps1 新增第③节「离线APP source/assets 字节级一致性」（SHA256 比对，随 pre-push ①运行），改源漏副本/改副本漏源均在 push 时拦截。同类隐患备忘：build-app.bat 还从 desktop\ 复制 config.json/vendor/共享 js 模块到 assets——共享 js 三点（shared→desktop→assets）已被 copy-consistency 链覆盖，vendor 库基本不手改，风险敞口就是 HTML 这对，已堵。
+
 * 改 index.html JS 后必查三处：`html-sync-check.ps1`（副本漂移）、`sync-all.ps1 -VerifyOnly`（shared 组）、index-app.html 打包源与副本 diff。
 
 * ★ 2026-09-02 **index.html 云端副本从手工复制升级为权威源生成模式**（`tools/sync-html.ps1`，观察期毕业）：改 `public/index.html`（权威源）→ 跑 `sync-html.ps1`（已并入 sync-all.ps1 Group 11）→ 副本自动重生成（端配置块 EDITION/PRODUCT\_NAME/APP\_MODE+身份注释原样保留，其余全部自动传播）。**禁止直接改云桌面/云APP副本**。历史事故链：手工复制时代权威源修复漏同步副本→CI 红灯；权威源累积 3 份重复 hideUserTypeSelect IIFE；注释位置漂移——且 html-sync-check 的 ±30 行窗口重对齐把前两类真实漂移掩盖成"IN SYNC"。安全设计：生成器对 EDITION/APP\_MODE 赋值行多于 1 次的结构异常直接报错拒写（宁可失败不可错写）。
