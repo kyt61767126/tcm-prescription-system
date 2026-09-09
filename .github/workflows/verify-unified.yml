@@ -17,6 +17,13 @@ name: Verify Unified Modules
 #     误拦事故的回归守护）。
 #     顺带守护其依赖链：pack-side-effects.ps1（副作用清单单一权威源）。
 
+# ★ 2026-09-09 升级为六重防线：
+#   ⑥ copy-consistency.cjs —— shared/ 独立 js 副本哈希一致性（permission/
+#     button-manager/normalize-config/edition-lock/user-store 5 组 42 副本）。
+#     缺口实锤：electron/user-store.js 独立副本不在 sync-all 校验组，push 时
+#     五重全绿，打包时才发现漂移（Auto-FIX 覆盖产生未提交修改 → 下个打包
+#     目标被源码落定门拦截）。与 pre-push ⑦ 同构收口。
+
 on:
   push:
     branches: [main]
@@ -83,9 +90,17 @@ jobs:
             exit 1
           }
 
+      - name: 6/6 Independent js copies consistency
+        shell: bash
+        run: |
+          node tools/copy-consistency.cjs || {
+            echo "::error::shared/ 独立 js 副本（electron/user-store.js、permission.js 等 5 组 42 副本）与权威源哈希不一致。请运行 node tools/copy-consistency.cjs --fix 同步后提交；USER-STORE 内联块漂移另跑 node tools/sync-shared-blocks.cjs。"
+            exit 1
+          }
+
       - name: Summary
         shell: bash
         run: |
           echo "### 校验结果" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "✅ 界面基线 / shared JS 同步 / HTML 副本 / 注入幂等性 / 源码落定门单测 五重校验全部通过" >> $GITHUB_STEP_SUMMARY
+          echo "✅ 界面基线 / shared JS 同步 / HTML 副本 / 注入幂等性 / 源码落定门单测 / 独立js副本哈希 六重校验全部通过" >> $GITHUB_STEP_SUMMARY

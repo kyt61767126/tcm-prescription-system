@@ -84,11 +84,17 @@
 
 * shared JS（db-adapter/button-manager/edition-lock 等）：改 `shared/` 权威源后跑 `sync-all.ps1`；云端APP db-adapter.js 有防御性初始化本地差异，Group 1 排除需手工维护。
 
+* ★ 2026-09-09 **user-store.js 双路径同步铁律**（2069f13d→打包被拦实锤）：`shared/user-store.js` 有**两条独立分发路径，漏一条=打包中断**：
+  1. **7 份 index.html 内联标记块**（USER-STORE block）→ `node tools/sync-shared-blocks.cjs`
+  2. **2 份独立 js 副本**（`db-offline/desktop/electron/user-store.js` + `db-yunduan/cloud_desktop/electron/user-store.js`，login.html 独立加载）→ `node tools/copy-consistency.cjs --fix`
+  事故链：phone 修复只跑了路径1 → push 六道门全绿（当时门不含 copy-consistency）→ 云桌面打包时 copy-consistency FAIL+Auto-FIX 覆盖独立副本 → 产生未提交"源码修改"（user-store.js 是真实源码不能进副作用白名单）→ 云端APP 被源码落定门拦截。
+  **铁律：改 shared/user-store.js（及 user-admin.js）后必须双跑两条同步 + `copy-consistency.cjs` 纯检查确认 5 组 42 副本全绿再 commit。** 已同步收口：pre-push 升七道门（⑦=copy-consistency）、CI verify-unified 升六重防线（⑥=copy-consistency），独立副本漂移从此 push 时拦截。
+
 * 改 index.html JS 后必查三处：`html-sync-check.ps1`（副本漂移）、`sync-all.ps1 -VerifyOnly`（shared 组）、index-app.html 打包源与副本 diff。
 
 * ★ 2026-09-02 **index.html 云端副本从手工复制升级为权威源生成模式**（`tools/sync-html.ps1`，观察期毕业）：改 `public/index.html`（权威源）→ 跑 `sync-html.ps1`（已并入 sync-all.ps1 Group 11）→ 副本自动重生成（端配置块 EDITION/PRODUCT\_NAME/APP\_MODE+身份注释原样保留，其余全部自动传播）。**禁止直接改云桌面/云APP副本**。历史事故链：手工复制时代权威源修复漏同步副本→CI 红灯；权威源累积 3 份重复 hideUserTypeSelect IIFE；注释位置漂移——且 html-sync-check 的 ±30 行窗口重对齐把前两类真实漂移掩盖成"IN SYNC"。安全设计：生成器对 EDITION/APP\_MODE 赋值行多于 1 次的结构异常直接报错拒写（宁可失败不可错写）。
 
-* ★ 2026-09-02 **git pre-push 本地拦截门**（`.githooks/pre-push`，`git config core.hooksPath .githooks` 已启用，入库共享）：push 前自动跑 html-sync-check + sync-all -VerifyOnly + 注入幂等三道秒级校验，漂移推不到 GitHub（CI 红灯从"事后发现"变"事前拦截"）。紧急绕过 `git push --no-verify`（事后必须补跑）。克隆/换机后需重跑一次 `git config core.hooksPath .githooks` 激活。
+* ★ 2026-09-02 **git pre-push 本地拦截门**（`.githooks/pre-push`，`git config core.hooksPath .githooks` 已启用，入库共享；2026-09-07 升六道、2026-09-09 升**七道**）：push 前自动跑 ①html-sync-check ②sync-all -VerifyOnly ③注入幂等 ④check-interface ⑤auth-core 11 副本 ⑥激活/登录参数探针 ⑦copy-consistency（42 独立副本哈希）七道秒级校验，漂移推不到 GitHub（CI 红灯从"事后发现"变"事前拦截"）。紧急绕过 `git push --no-verify`（事后必须补跑）。克隆/换机后需重跑一次 `git config core.hooksPath .githooks` 激活。
 
 * ★ 2026-09-02 **CI 红灯第二根因（pwsh/powershell 跨平台坑）**：`test-source-settled.ps1` 子进程硬编码 `powershell`——GitHub ubuntu runner 只有 `pwsh`，第 5 道门必炸。修复：子进程 shell 跟随宿主 `$PSVersionTable.PSEdition -eq 'Core' ? 'pwsh' : 'powershell'`。**铁律：CI 会跑的 ps1 里调用子进程 shell 一律按此判定，禁止硬编码 powershell**（Windows 专用打包链路 one-click-pack/release-menu 等不受影响）。教训：本地门禁全绿 ≠ CI 绿——本地 Windows 永远有 powershell，此类问题只在 ubuntu 暴露；红灯时先看 `gh run view --log-failed` 远端日志而非只跑本地。
 
@@ -161,6 +167,8 @@
 * ★ 2026-08-31（晚）"工作区脏检测"全链收敛+发布 commit 半成品混入收口（build\_output 残留事故举一反三）：用户一键发布成功但末段 WARN"拒绝记录基线"——根因是 8/29 打包中断残留的 `build_output_日期_时间/` 目录未被 .gitignore 覆盖（只忽略固定名 `build_output/`），被 build-skip 基线检查当"未提交源码"。**系统性排查发现全仓共 5 处独立的 git status 脏检测**，收口为：①`.gitignore` 补 `build_output_*/`（时间戳变体）；②build-skip.ps1 加**产物形态黑名单** `$productShapePatterns`（build\_output\*/\_backup\_asar/win-unpacked/dist\* 的顶层目录正则——.gitignore 漏登记新变体时的双保险，`??` 且顶层命中即不算源码脏）；③publish-release.js / auto-update-downloads.js 的 git 段加**源码落定前置**（调 source-settled.ps1 -Assert）——此前 `git add 指定路径` 后用全局 status 判非空就 commit：`??` 使 status 恒非空 → staged 半成品会被 `git commit -m` 一并提交推送（1.2.194 在发布链路的镜像变体）；④单测扩到 22 项（A10-A13 产物形态/A14-A16 官网产物放行/B6-B7 Assert 出口）。铁律：**①凡"构建产物目录"命名出现新变体（时间戳/old/new/v 后缀），必须同时登记 .gitignore 与 build-skip productShapePatterns 两处（后者是漏网兜底）；②发布链路 commit 前必须跑与打包同源的落定检查，禁止"add 指定路径+全局 status 判空"模式（?? 恒非空，必混入）；③存量残留产物目录直接删除（win-unpacked 纯产物无源码），不 git add 入库**。
 
 * ★ 2026-08-31（夜）首次真实发布实战：落定门又拦下发布工具自身产物（第 3 个白名单盲区，与 versionCode 同构）——publish-release.js `--confirm --push` 全流程（合规 8 项检查过 → Release v2026.08.31 创建+6 产物上传 → public/downloads 同步复制+latest.json 更新）最后 git 段被自家落定门拦：发布工具**刚写入**的官网产物（public/downloads/\*.apk、public/updates/\*/latest.json）被当"未提交源码修改"。修复：pack-side-effects.ps1 新增 `$PackSideEffectDirPrefixes` 路径前缀整目录放行（public/downloads/、public/updates/——该目录按设计入库供 Cloudflare 部署，人工不在其中改源码），单测 A14-A16 回归。铁律：**①副作用白名单的枚举维度有三层——basename（版本文件）+ 路径前缀（发布产物目录）+ 行级 diff（build.gradle 混合源码），新工具链落成后必须先走一次真实全流程才能暴露盲区（三个盲区全是实战炸出来的，纸面审计想不到）；②落定门防的是"AI/人改源码未提交"，凡是"工具自身在流程中写入的文件"都属副作用——给新流程接门禁时必须同步盘点该流程会写哪些路径**。
+
+* ★ 2026-09-09 **落定门第 4 类拦截源——"打包流程内嵌的同步器 Auto-FIX 源码副本"**（phone 修复 2069f13d 实战）：多目标顺序打包（云桌面→云端APP→…）中，前目标 preflight 的 copy-consistency 发现独立副本漂移 → **Auto-FIX 用权威源覆盖**（工作区产生真实源码修改）→ 后目标被源码落定门拦截（报"2 个未提交的源码修改"）。user-store.js 是真实源码**不能进副作用白名单**（开洞），正确防法=**漂移在 push 时就被七道门⑦拦住**（根因前移），打包时 copy-consistency 自然全绿、Auto-FIX 零触发。铁律：①**AI 改 shared/ 权威源后必须完成全部分发路径同步再 push**（user-store 双路径见 §2）；②**AI/后台环境跑 one-click-pack.ps1 必须带 `-AutoMode 1|2|3`**——不带参数会弹交互菜单，无 stdin 环境直接 FATAL"标准输入已关闭"（本次事故叠加项）；③顺序打包中途某目标失败时，前目标已 AutoCommit 的副作用是干净的，先 `git status` 分辨"白名单副作用（收纳）vs 真实源码修改（人工审）"再续跑。
 
 * 桌面版问题排查先运行 build.bat 确认打包成功（pre-build-check.js 能发现 build.files 缺失），再查代码逻辑，勿盲目改 index.html/main.js 注入。
 
