@@ -348,6 +348,7 @@ P2 渐进迁移（2026-09-03 当日完成）：
 ### B. P2 登录统一路由 ✅ 已完成推送（0538e2f5，2026-09-03）
 1. **loginWithUsernamePassword 四处收敛 ✅**：`shared/auth-core/cloud.js` + `offline.js` 权威源新增统一路由函数（用户名/手机号双匹配 + 密码多盐兼容验证 + cloud 选项控制云端回退）；`public/index.html` handleLogin、离线 `index-app.html`、双桌面 login.js（离线 users 本地数组 / 云端 users+cloud:true）全部改为 `AuthCore.loginWithUsernamePassword` 单点调用；鸿蒙 rawfile index.html 手工对齐。11 份 auth-core 副本经 sync-auth-core.ps1 同步（prepend Observer 保留），check-interface 6 OK + sync-all VerifyOnly 全绿 + node --check 全过 + pre-push 三道门通过。
 2. **剩余唯一待办 = 各端打包**：离线桌面 / 离线 APP / 云端桌面 / 云端 APP / 鸿蒙需各自重打包才会带上 Observer + 登录统一路由（云端网页随 Pages 部署即刻生效）。
+3. **★ 2026-09-09（2069f13d）补丁——路由收敛后仍有"上游剥字段"盲区**：用户实测离线桌面"手机号注册→改名→手机号无法登录"。根因≠统一路由（其 phone 匹配正确），而是**喂给路由的用户数组在更早一层就被剥掉了 phone**：双桌面 login.js `normalizeUser` 只保留 username/password/name/role 四字段（config 源 + localStorage 源 + 登录成功回写镜像三处全过它），shared/user-store.js `getDefaultUsers` 同病。教训：**字段保真链路审计 = 从持久化源头到认证入口逐跳检查字段是否随行**，新增"phone/别名类登录凭证"功能时，任何 `map(u => ({...精选字段}))` 的规范化函数都是嫌疑点；改名回填（8-26 修复）写对了 config.json，但登录窗读数时又把它洗掉了。修法=三处 normalize/getDefault 补 `phone: u.phone || ''` + sync-shared-blocks 同步 7 副本。桌面端密码哈希=全局盐（bnzc_prescription_salt_v1），verifyPassword 全局盐回退链天然兼容，无需动 auth-core。
 
 ### C. 本会话踩坑（必须传承）
 1. **★ Edit 工具改 .ps1/.bat 会剥 UTF-8 BOM**：中文注释的 UTF-8 文件无 BOM 时 Windows PowerShell 5.1 按 GBK 读 → 中文双字节吞掉后续 ASCII 括号/花括号 → "Missing closing ')' " 解析错（报错行号是误导，实际错在文件头编码）。**修法：编辑 .ps1 后立即执行**：
