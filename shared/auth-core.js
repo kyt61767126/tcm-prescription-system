@@ -3041,11 +3041,15 @@
             if (data && data.success && data.user) {
                 if (data.user.clinicEdition && !cu.clinicEdition) cu.clinicEdition = data.user.clinicEdition;
                 if (data.clinicExpiresAt && !cu.clinicExpiresAt) cu.clinicExpiresAt = data.clinicExpiresAt;
+                // ★ 2026-09-09 关键补齐：clinicStatus（老缓存缺此字段导致试用用户离线被误判为已激活）
+                if (data.user.clinicStatus && !cu.clinicStatus) cu.clinicStatus = data.user.clinicStatus;
+                if (data.user.userType && !cu.userType) cu.userType = data.user.userType;
                 // 写回本地缓存（存在才更新，同用户才合并），下次打开不再拉取
                 const patch = function (target) {
                     if (target && target.username === cu.username) {
                         if (!target.clinicEdition && cu.clinicEdition) target.clinicEdition = cu.clinicEdition;
                         if (!target.clinicExpiresAt && cu.clinicExpiresAt) target.clinicExpiresAt = cu.clinicExpiresAt;
+                        if (!target.clinicStatus && cu.clinicStatus) target.clinicStatus = cu.clinicStatus;
                         return true;
                     }
                     return false;
@@ -3080,6 +3084,20 @@
     async function getCloudAccountLicenseHtml() {
         const cu = await readCloudLoginUser();
         if (!cu) return null;
+        // ★ 2026-09-09 关键修复：clinicStatus === 'test'（自助注册待审核/试用用户）
+        //   绝不显示「✅ 已激活」——此前只要有云端登录缓存就无差别显示已激活，
+        //   导致试用用户离线打开也被误判为已激活（用户实测反馈）。
+        //   test 状态 → 显示「⏳ 试用期/待审核」；active 状态 → 显示已激活+剩余天数。
+        const clinicStatus = String(cu.clinicStatus || cu.status || '');
+        // 兜底：旧缓存没 clinicStatus 且没 clinicExpiresAt → 保守视为试用/未激活
+        const isLikelyInactive = !clinicStatus && !cu.clinicExpiresAt && !cu.expiresAt;
+        if (clinicStatus === 'test' || isLikelyInactive) {
+            let html = '⏳ <span style="color:#ff9800;">' + (clinicStatus === 'test' ? '试用期/待审核' : '未激活/旧缓存') + '</span>';
+            if (cu.clinicName) html += '<br><span style="color:#666;font-size:12px;">诊所：' + cu.clinicName + '</span>';
+            // 试用用户不给已激活按钮的"灰色只读"状态
+            setAdminActivateBtnState(null);
+            return html;
+        }
         // ★ 2026-08-25 旧缓存自愈：登录缓存缺 clinicExpiresAt 时免密拉取补齐
         //   （网页版会话恢复不重新登录 / 云端APP 旧版本缓存，打开授权区即自愈）
         if (!cu.clinicExpiresAt) {
