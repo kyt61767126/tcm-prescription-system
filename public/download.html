@@ -661,6 +661,80 @@
         .compare-table .yes { color: var(--success); font-weight: 600; }
         .compare-table .no { color: var(--danger); font-weight: 600; }
 
+        /* ============ UICraft: 三步快速开始 ============ */
+        /* 设计原则：arrange(呼吸感) + typeset(层次) + colorize(AAA对比度) + spatial-design(节奏统一) */
+        .quick-start-card {
+            padding: 24px 28px;
+            margin-bottom: 18px;
+            background: linear-gradient(135deg, #ede9fe 0%, #dbeafe 100%);
+            border: 1px solid #c4b5fd;
+            border-radius: 12px;
+        }
+        .quick-start-card .qs-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 32px;
+            flex-wrap: wrap;
+        }
+        .quick-start-card .qs-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: #1e1b4b;
+            letter-spacing: 0.5px;
+            white-space: nowrap;
+        }
+        .quick-start-card .qs-step {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            color: #1e293b;
+            font-size: 15px;
+            font-weight: 600;
+            text-decoration: none;
+            line-height: 1.4;
+            transition: transform 0.15s ease;
+        }
+        .quick-start-card .qs-step:hover { transform: translateY(-1px); }
+        .quick-start-card .qs-step-num {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #ffffff;
+            font-size: 16px;
+            font-weight: 700;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            box-shadow: 0 2px 8px rgba(102,126,234,0.4), inset 0 1px 0 rgba(255,255,255,0.25);
+            border: 2px solid rgba(255,255,255,0.85);
+        }
+        .quick-start-card .qs-arrow {
+            width: 0;
+            height: 0;
+            border-top: 7px solid transparent;
+            border-bottom: 7px solid transparent;
+            border-left: 12px solid #8b5cf6;
+            flex-shrink: 0;
+            user-select: none;
+        }
+        .quick-start-card .qs-highlight {
+            color: #1d4ed8;
+            font-weight: 700;
+        }
+        /* 手机端 768px 以下：单列垂直排列，箭头旋转 90° */
+        @media (max-width: 768px) {
+            .quick-start-card .qs-row { flex-direction: column; gap: 0; align-items: flex-start; }
+            .quick-start-card .qs-title { margin-bottom: 12px; }
+            .quick-start-card .qs-step { width: 100%; padding: 6px 0; }
+            .quick-start-card .qs-arrow {
+                margin: 4px auto;
+                transform: rotate(90deg);
+            }
+        }
+
         /* ============ FAQ 折叠 ============ */
         /* ★ 2026-09-09 FAQ 分组标题：16 条问题按主题分组，提升检索效率 */
         /* ★ 2026-09-09 突出显示：紫色渐变底 + 白色粗体（对齐页头/按钮主视觉），与白底问题卡形成强对比 */
@@ -1228,53 +1302,28 @@
 
         <!-- ============ Tab: 下载中心（手机端 + 桌面端 + 网页端 合并） ============ -->
         <div class="tab-content active" id="tab-download" style="display:block">
-            <!-- === 🚀 三步快速开始 === -->
-            <div class="card" style="padding:18px 20px;margin-bottom:16px;background:linear-gradient(135deg,rgba(139,92,246,0.12),rgba(59,130,246,0.10));border:1px solid rgba(139,92,246,0.25);">
-                <div style="display:flex;align-items:center;justify-content:center;gap:22px;font-size:14px;flex-wrap:wrap;">
-                    <strong style="font-size:15px;color:#1e1b4b;white-space:nowrap;">🚀 三步快速开始</strong>
+            <!-- === 🚀 三步快速开始（UICraft 级优化：arrange+typeset+colorize） === -->
+            <div class="quick-start-card">
+                <div class="qs-row">
+                    <strong class="qs-title">🚀 三步快速开始</strong>
                     <!-- 步骤 1 -->
-                    <span style="display:inline-flex;align-items:center;gap:8px;color:#1e293b;font-weight:500;">
-                        <span style="background:linear-gradient(135deg,#667eea,#764ba2);color:white;border-radius:50%;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0;box-shadow:0 2px 6px rgba(102,126,234,0.35);">1</span>
-                        选择版本<br style="display:none;" class="qs-br-m">并下载（本页下方）
+                    <span class="qs-step">
+                        <span class="qs-step-num">1</span>
+                        选择版本并下载（本页下方）
                     </span>
-                    <span style="color:#667eea;font-size:18px;font-weight:bold;user-select:none;">▶</span>
+                    <span class="qs-arrow" aria-hidden="true"></span>
                     <!-- 步骤 2 -->
-                    <a href="#" onclick="switchTab('install'); return false;" style="display:inline-flex;align-items:center;gap:8px;color:#1e293b;text-decoration:none;font-weight:500;">
-                        <span style="background:linear-gradient(135deg,#667eea,#764ba2);color:white;border-radius:50%;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0;box-shadow:0 2px 6px rgba(102,126,234,0.35);">2</span>
+                    <a href="#" onclick="switchTab('install'); return false;" class="qs-step">
+                        <span class="qs-step-num">2</span>
                         安装并登录
                     </a>
-                    <span style="color:#667eea;font-size:18px;font-weight:bold;user-select:none;">▶</span>
+                    <span class="qs-arrow" aria-hidden="true"></span>
                     <!-- 步骤 3 -->
-                    <a href="#" onclick="switchTab('register'); return false;" style="display:inline-flex;align-items:center;gap:8px;color:#1e293b;text-decoration:none;font-weight:500;">
-                        <span style="background:linear-gradient(135deg,#667eea,#764ba2);color:white;border-radius:50%;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0;box-shadow:0 2px 6px rgba(102,126,234,0.35);">3</span>
-                        开通使用<br style="display:none;" class="qs-br-m">（<span style="color:#2563eb;font-weight:700;">离线试用 admin/admin</span>）
+                    <a href="#" onclick="switchTab('register'); return false;" class="qs-step">
+                        <span class="qs-step-num">3</span>
+                        开通使用（云端注册 / <span class="qs-highlight">离线试用 admin/admin</span>）
                     </a>
                 </div>
-                <!-- 手机端：强制单列垂直箭头 -->
-                <style>
-                    @media (max-width: 768px) {
-                        #tab-download .card[style*="linear-gradient(135deg,rgba(139,92,246"] > div:first-child {
-                            flex-direction:column;
-                            gap:10px;
-                        }
-                        #tab-download .card[style*="linear-gradient(135deg,rgba(139,92,246"] > div:first-child > strong {
-                            margin-bottom:2px;
-                        }
-                        #tab-download .card[style*="linear-gradient(135deg,rgba(139,92,246"] > div:first-child > span,
-                        #tab-download .card[style*="linear-gradient(135deg,rgba(139,92,246"] > div:first-child > a {
-                            width:100%;
-                            justify-content:flex-start;
-                            padding:4px 0;
-                        }
-                        #tab-download .card[style*="linear-gradient(135deg,rgba(139,92,246"] > div:first-child > span[style*="user-select:none"] {
-                            transform:rotate(90deg);
-                            text-align:center;
-                            width:auto !important;
-                            margin:-2px 0;
-                        }
-                        .qs-br-m { display:inline !important; }
-                    }
-                </style>
             </div>
             <!-- === 手机端 === -->
             <div class="section-title merged">
