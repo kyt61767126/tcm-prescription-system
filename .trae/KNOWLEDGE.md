@@ -73,6 +73,9 @@
   - **验证收尾**：Playwright 双副本过一遍相关 Tab（桌面 1280 + 手机 375 双档），commit 信息注明「官网说明已同步」；漏同步=官网教客户旧流程（如 2026-09-08 发现「定期访问本页面对比版本号」旧说法未随更新直达功能升级）。
   - **生效提醒**：官网说明改动 push 即部署生效（无需打包），但对应客户端功能需各自打包后才真正可用——commit 信息必须写清两端生效方式差异。
 
+* ★ 2026-09-09 **官网 download.html 板块布局全局优化**（客户旅程重排 + 去冗余）：①Tab 按客户旅程重排「下载→安装→注册→购买→邀请→对比→FAQ」（site-official 无 promo Tab 属历史合法差异，保持 6 Tab 只调顺序）；②下载中心顶部加「三步快速开始」渐变指引卡（①选版本下载→②安装登录→③开通使用，switchTab 联动）；③安装说明 Tab 删 3 张与他 Tab 重复的卡（各版本概览→改为一行「相关指引」链接卡；激活流程/云端账户开通流程整卡删除），注册开通 Tab 删与 5 步向导重复的 4 步自助申请卡；④下载卡新增「文件大小」行（hash-manifest size 字节→fmtSizeMB 显示，桌面卡含安装版+便携版）；⑤releaseNotes 摘要化——20KB+ 多版本累积日志默认只显示最新版前 3 条要点（renderNotesWithToggle，点链接展开/收起）；⑥FAQ 16 条分 5 组（版本与试用/账号与激活/下载与安装/数据与恢复/购买与订阅，.faq-group-title 样式）。
+  - **教训（本次实测踩坑）**：会话中断恢复后双副本呈"半同步"状态——site-official 已调用 fmtSizeMB 却无函数定义（JS ReferenceError）、public 缺 size-cloud 行、两副本 FAQ 分组各只有 2 组且不一致。**铁律：官网双副本改动必须 Playwright 双副本双档（1280/375）验证后才允许 commit**，脚本模式存 `tools/_tmp/verify-download-page.cjs`（含 pageerror 断言/Tab 顺序/FAQ 分组语义/notes 展开交互/手机档横滚，本轮 90 断言全过）；FAQ 展开是 max-height 0.3s 过渡，断言可见性前须等 400ms。
+
 * **auth-core.js 双权威源**：`shared/auth-core/offline.js`（试用版→3 副本）+ `cloud.js`（无试用→8 副本），改副本必须回写权威源后跑 `tools/sync-auth-core.ps1`，否则打包被旧版覆盖（历史"神秘回退"根因）。
 
 * `cloud-api.js` 有 **8 处副本**需同步；APP 版 cloud-api.js 必须含 `typeof window._cloudReachable === 'undefined'` 防御性初始化。

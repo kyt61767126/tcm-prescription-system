@@ -662,6 +662,17 @@
         .compare-table .no { color: var(--danger); font-weight: 600; }
 
         /* ============ FAQ 折叠 ============ */
+        /* ★ 2026-09-09 FAQ 分组标题：16 条问题按主题分组，提升检索效率 */
+        .faq-group-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--primary-dark);
+            margin: 16px 0 8px;
+            padding: 6px 10px;
+            background: rgba(139,92,246,0.08);
+            border-left: 4px solid var(--primary);
+            border-radius: 0 6px 6px 0;
+        }
         .faq-item {
             background: white;
             border-radius: var(--radius-md);
@@ -1205,15 +1216,35 @@
         <!-- ============ Tab 导航 ============ -->
         <div class="tab-nav" id="tabNav">
             <button class="tab-btn active" data-tab="download">📥 下载中心</button>
+            <button class="tab-btn" data-tab="install">📋 安装说明</button>
             <button class="tab-btn" data-tab="register">📝 注册开通</button>
             <button class="tab-btn" data-tab="purchase">🔑 购买激活码</button>
-            <button class="tab-btn" data-tab="install">📋 安装说明</button>
             <button class="tab-btn" data-tab="compare">⚖️ 版本对比</button>
             <button class="tab-btn" data-tab="faq">❓ 常见问题</button>
         </div>
 
         <!-- ============ Tab: 下载中心（手机端 + 桌面端 + 网页端 合并） ============ -->
         <div class="tab-content active" id="tab-download" style="display:block">
+            <!-- === 🚀 三步快速开始 === -->
+            <div class="card" style="padding:14px 16px;margin-bottom:14px;background:linear-gradient(135deg,rgba(139,92,246,0.06),rgba(59,130,246,0.06));">
+                <div style="display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;justify-content:center;font-size:13px;">
+                    <strong style="font-size:14px;color:var(--text-primary);">🚀 三步快速开始：</strong>
+                    <span style="display:inline-flex;align-items:center;gap:6px;color:var(--text-primary);">
+                        <span style="background:var(--primary);color:white;border-radius:50%;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;flex-shrink:0;">1</span>
+                        选择版本并下载（本页下方）
+                    </span>
+                    <span style="color:#cbd5e1;">➜</span>
+                    <a href="#" onclick="switchTab('install'); return false;" style="display:inline-flex;align-items:center;gap:6px;color:var(--text-primary);text-decoration:none;">
+                        <span style="background:var(--primary);color:white;border-radius:50%;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;flex-shrink:0;">2</span>
+                        安装并登录
+                    </a>
+                    <span style="color:#cbd5e1;">➜</span>
+                    <a href="#" onclick="switchTab('register'); return false;" style="display:inline-flex;align-items:center;gap:6px;color:var(--text-primary);text-decoration:none;">
+                        <span style="background:var(--primary);color:white;border-radius:50%;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;flex-shrink:0;">3</span>
+                        开通使用（云端注册 / <span style="color:#2563eb;">离线试用 admin/admin</span>）
+                    </a>
+                </div>
+            </div>
             <!-- === 手机端 === -->
             <div class="section-title merged">
                 <span>📱 手机端 APP</span>
@@ -1367,6 +1398,10 @@
                         <span class="info-value date" id="mtime-cloud">-</span>
                     </div>
                     <div class="info-row">
+                        <span class="info-label">文件大小</span>
+                        <span class="info-value" id="size-cloud">-</span>
+                    </div>
+                    <div class="info-row">
                         <span class="info-label">更新说明</span>
                         <span class="info-value" id="notes-cloud">-</span>
                     </div>
@@ -1429,6 +1464,10 @@
                     <div class="info-row">
                         <span class="info-label">更新时间</span>
                         <span class="info-value date" id="mtime-local-desktop">-</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">文件大小</span>
+                        <span class="info-value" id="size-local-desktop">-</span>
                     </div>
                     <div class="info-row">
                         <span class="info-label">更新说明</span>
@@ -1590,33 +1629,7 @@
                         </div>
                     </div>
                 </div>
-            </div>
-
-            <!-- 方式一：客户端自助申请流程 -->
-            <div class="card" style="margin-bottom:16px;">
-                <div class="card-title">
-                    <span class="icon">📝</span>
-                    客户端自助申请流程（客户操作）
-                </div>
-                <div style="padding:14px;line-height:1.8;">
-<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;">
-                        <div style="background:#2563eb;color:white;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;">1</div>
-                        <div><strong>打开客户端</strong>：登录页下方点击绿色入口「📋 管理员激活」</div>
-                    </div>
-                    <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;">
-                        <div style="background:#2563eb;color:white;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;">2</div>
-                        <div><strong>填写申请信息</strong>：诊所名称、管理员/医师姓名、11位手机号（将成为登录账号）</div>
-                    </div>
-                    <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;">
-                        <div style="background:#2563eb;color:white;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;">3</div>
-                        <div><strong>提交并等待审核</strong>：显示「等待管理员激活」界面，工作时间通常 1 小时内审核通过</div>
-                    </div>
-                    <div style="display:flex;align-items:flex-start;gap:10px;">
-                        <div style="background:#2563eb;color:white;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;">4</div>
-                        <div><strong>审核通过后登录</strong>：手机号 + 初始密码 <code>admin</code> 登录，登入后请立即修改密码</div>
-                    </div>
-                </div>
-                <div class="notice notice-cloud" style="margin:0 14px 14px;">
+                <div class="notice notice-cloud" style="margin:14px 14px 0;">
                     <span class="icon">💡</span>
                     <div>
                         <strong>注册规范：</strong><br>
@@ -1923,19 +1936,13 @@
                 <span>📋 安装说明</span>
                 <span class="sub">安装步骤 · 首次使用 · 登录指引</span>
             </div>
-            <div class="card">
-                <div class="card-title"><span class="icon">📦</span>各版本概览</div>
-                <div class="info-row">
-                    <span class="info-label">本地统一包（离线）</span>
-                    <span class="info-value">完全离线，单机数据主权 · 标准版/机构版由激活码决定 · 免费试用 7 天（无需注册，admin/admin 登入即可）</span>
+            <div class="card" style="padding:12px 16px;">
+                <div style="display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--text-secondary);align-items:center;">
+                    <strong style="color:var(--text-primary);">🧭 相关指引：</strong>
+                    <a href="#" onclick="switchTab('compare'); return false;" style="color:#2563eb;">如何选择版本 → 版本对比</a>
+                    <a href="#" onclick="switchTab('purchase'); return false;" style="color:#2563eb;">激活流程 → 购买激活码</a>
+                    <a href="#" onclick="switchTab('register'); return false;" style="color:#2563eb;">云端账户开通 → 注册开通</a>
                 </div>
-                <div class="info-row">
-                    <span class="info-label">云端统一包（云端）</span>
-                    <span class="info-value">云端数据同步多设备 · 标准版/机构版由激活类型决定 · 支持自助注册开通 · 无试用版（可先用离线版体验）</span>
-                </div>
-                <p style="font-size:12px;color:var(--text-secondary);margin-top:10px;line-height:1.6;">
-                    💡 <strong>选择建议：</strong>需要多设备登入或云端协作选<strong>云端统一包</strong>；完全离线选<strong>本地统一包</strong>。标准版/机构版由激活码决定，详细功能差异请查看"<strong>版本对比</strong>"Tab。
-                </p>
             </div>
             <div class="grid-2">
                 <div class="card">
@@ -2053,18 +2060,6 @@
                 </div>
             </div>
             <div class="card">
-                <div class="card-title"><span class="icon">🔑</span>激活流程（试用到期后）</div>
-                <ol class="install-steps">
-                    <li>试用期结束后，系统会弹出"激活授权"提示框</li>
-                    <li>在提示框中复制您的"<strong>设备识别码</strong>"（每台设备唯一）</li>
-                    <li>切换到本页面"<strong>购买激活码</strong>"Tab，选择版本并填写订单信息（含设备识别码）</li>
-                    <li>提交订单后扫码支付（支付宝/微信均可，无需另发信息给客服）</li>
-                    <li>付款确认并经管理员核对后，对应的"<strong>授权激活码</strong>"在本页自动显示</li>
-                    <li>将激活码粘贴到激活提示框中，点击"激活"按钮</li>
-                    <li>激活成功后即可无限制使用（各版本功能差异见"版本对比"）</li>
-                </ol>
-            </div>
-            <div class="card">
                 <div class="card-title"><span class="icon">🔄</span>激活与换机常见问题</div>
                 <div class="info-row">
                     <span class="info-label">卸载重装</span>
@@ -2086,16 +2081,6 @@
                     <span class="info-label">长期未联网</span>
                     <span class="info-value">离线版每 90 天至少联网一次。长时间断网会临时降级为试用模式，联网打开软件后<strong>自动恢复</strong>授权，无需重新激活</span>
                 </div>
-            </div>
-            <div class="card">
-                <div class="card-title"><span class="icon">☁️</span>云端标准版/机构版账户开通流程</div>
-                <ol class="install-steps">
-                    <li>先开通离线版体验功能，确认满足需求</li>
-                    <li>在客户端登录页点击「📋 管理员激活」，填写诊所名称、姓名、手机号提交申请（密码栏可留空，初始密码统一为 <span class="cred-pair" onclick="copyText(this)">admin</span>）</li>
-                    <li>管理员审核通过（工作时间通常1小时内），手机号即为登录账号；审核通过前登录会提示"待审核"，属正常流程，请耐心等待</li>
-                    <li>获取云端 APP/桌面版，使用<strong>注册手机号 + 初始密码 admin</strong>登录，登入后请立即修改密码</li>
-                    <li>多设备（手机/桌面/网页）可同时在线，数据云端实时同步</li>
-                </ol>
             </div>
             <div class="card">
                 <div class="card-title"><span class="icon">💾</span>数据备份与恢复指南（数据永不丢失）</div>
@@ -2313,6 +2298,7 @@
                 <span>❓ 常见问题</span>
                 <span class="sub">点击展开查看答案</span>
             </div>
+            <div class="faq-group-title">🏷️ 版本与试用</div>
             <div class="faq-item">
                 <div class="faq-question" onclick="toggleFaq(this)">
                     <span>🆓 哪个版本可以免费试用？</span>
@@ -2325,6 +2311,7 @@
                     </div>
                 </div>
             </div>
+            <div class="faq-group-title">🔐 账号与激活</div>
             <div class="faq-item">
                 <div class="faq-question" onclick="toggleFaq(this)">
                     <span>📝 云端标准版/机构版如何注册开通？</span>
@@ -2395,6 +2382,7 @@
                     </div>
                 </div>
             </div>
+            <div class="faq-group-title">📥 下载与安装</div>
             <div class="faq-item">
                 <div class="faq-question" onclick="toggleFaq(this)">
                     <span>🔒 如何确认获取的文件是官方正版？</span>
@@ -2425,6 +2413,7 @@
                     </div>
                 </div>
             </div>
+            <div class="faq-group-title">💾 数据与恢复</div>
             <div class="faq-item">
                 <div class="faq-question" onclick="toggleFaq(this)">
                     <span>💾 数据安全吗？会不会丢失？</span>
@@ -2473,6 +2462,7 @@
                     </div>
                 </div>
             </div>
+            <div class="faq-group-title">💰 购买与订阅</div>
             <div class="faq-item">
                 <div class="faq-question" onclick="toggleFaq(this)">
                     <span>🏥 机构版激活码能用几台设备？能建几个用户账号？</span>
@@ -3714,6 +3704,46 @@
             });
         }
 
+        // ★ 2026-09-09 更新说明摘要化：releaseNotes 是多版本累积日志（最新在前，动辄
+        //   20KB+），全量直出会把下载卡详情撑成"版本号噪音墙"。默认仅显示最新版本
+        //   的前 3 条要点（每条截断 80 字），点击「查看完整更新日志」再展开全部。
+        function renderNotesWithToggle(notesEl, fullText) {
+            if (!notesEl) return;
+            var text = String(fullText || '-');
+            if (text === '-' || text.length < 200) { notesEl.textContent = text; return; }
+            var bullets = [];
+            var lines = text.split('\n');
+            for (var i = 0; i < lines.length && bullets.length < 3; i++) {
+                var t = lines[i].trim();
+                if (t.indexOf('- ') === 0) {
+                    var s = t.substring(2);
+                    if (s.length > 80) s = s.substring(0, 80) + '…';
+                    bullets.push(s);
+                }
+            }
+            if (!bullets.length) bullets.push(text.substring(0, 80) + '…');
+            var esc = function(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
+            var html = '<div style="display:flex;flex-direction:column;gap:2px;">';
+            bullets.forEach(function(s){ html += '<div>• ' + esc(s) + '</div>'; });
+            html += '</div>';
+            html += '<a href="javascript:void(0)" class="notes-toggle" style="display:inline-block;margin-top:4px;color:#2563eb;font-size:12px;text-decoration:underline;">查看完整更新日志 ▾</a>';
+            html += '<div class="notes-full" style="display:none;white-space:pre-wrap;margin-top:6px;padding-top:6px;border-top:1px dashed #e2e8f0;">' + esc(text) + '</div>';
+            notesEl.innerHTML = html;
+            var toggle = notesEl.querySelector('.notes-toggle');
+            var full = notesEl.querySelector('.notes-full');
+            toggle.addEventListener('click', function() {
+                var open = full.style.display !== 'none';
+                full.style.display = open ? 'none' : 'block';
+                toggle.textContent = open ? '查看完整更新日志 ▾' : '收起更新日志 ▴';
+            });
+        }
+
+        // ★ 2026-09-09 文件大小格式化：manifest 的 size 为字节数，显示为 MB（1 位小数）
+        function fmtSizeMB(bytes) {
+            if (!bytes || isNaN(bytes)) return '-';
+            return (Number(bytes) / 1024 / 1024).toFixed(1) + ' MB';
+        }
+
         function updateCard(key, data) {
             const verEl = document.getElementById('ver-' + key);
             const dateEl = document.getElementById('date-' + key);
@@ -3728,7 +3758,7 @@
             if (!isAppCard) {
                 if (verEl) verEl.textContent = 'v' + data.version;
                 if (dateEl) dateEl.textContent = data.releaseDate || '-';
-                if (notesEl) notesEl.textContent = data.releaseNotes || '-';
+                renderNotesWithToggle(notesEl, data.releaseNotes);
             }
 
             // APP 类型卡片（cloud-app/dingzhi）的下载 URL 由 hash-manifest.json 提供（APK 链接）
@@ -3824,6 +3854,11 @@
                     if (mtimeEl && data && data.updateTime) {
                         mtimeEl.textContent = fmtUpdateTime(data.updateTime);
                     }
+                    // ★ 2026-09-09 显示 APK 文件大小（manifest.apk.size 字节数）
+                    const sizeEl = document.getElementById('size-' + key);
+                    if (sizeEl && data && data.size) {
+                        sizeEl.textContent = fmtSizeMB(data.size);
+                    }
                 });
                 ['cloud', 'local-desktop'].forEach(key => {
                     const manifestKey = key === 'local-desktop' ? 'local' : key;
@@ -3832,6 +3867,13 @@
                     if (hashEl && data && data.sha256) {
                         hashEl.textContent = data.sha256;
                         hashEl.classList.remove('pending');
+                    }
+                    // ★ 2026-09-09 显示桌面版文件大小（安装版 + 便携版）
+                    const sizeEl = document.getElementById('size-' + key);
+                    const portableData0 = manifest[manifestKey] && manifest[manifestKey].portable;
+                    if (sizeEl && data && data.size) {
+                        sizeEl.textContent = '安装版 ' + fmtSizeMB(data.size)
+                            + (portableData0 && portableData0.size ? ' · 便携版 ' + fmtSizeMB(portableData0.size) : '');
                     }
                     // 显示桌面版更新时间（精确到小时）
                     const mtimeEl = document.getElementById('mtime-' + key);
