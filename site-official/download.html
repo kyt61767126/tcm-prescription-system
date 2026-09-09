@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -587,13 +587,43 @@
         }
 
         /* ★ 2026-09-08 官网截图整体适配：桌面过大截图统一收窄 320px 居中（手机端容器内宽<320 基本不变；收款码 200px 扫码用不收） */
+        /* ★ 2026-09-09 注册开通页手机截图过高优化：新增 max-height 高度帽（500px），
+             超长竖屏截图按比例缩至高度上限内，减少纵向占用；点击可放大查看原图（lightbox） */
         .shot-img {
             display: block;
-            width: 100%;
-            max-width: 320px;
+            width: auto;
+            max-width: 100%;
+            max-height: 500px;
             margin: 0 auto;
             border-radius: 6px;
             border: 1px solid #e5e7eb;
+            cursor: zoom-in;
+            transition: box-shadow .2s;
+        }
+        .shot-img:hover { box-shadow: 0 4px 14px rgba(102,126,234,.25); }
+
+        /* ★ 2026-09-09 截图点击放大 lightbox */
+        .img-lightbox {
+            position: fixed; inset: 0; z-index: 9999;
+            background: rgba(0,0,0,.82);
+            display: none; align-items: center; justify-content: center;
+            padding: 20px; cursor: zoom-out;
+        }
+        .img-lightbox.show { display: flex; }
+        .img-lightbox img {
+            max-width: 92vw; max-height: 88vh;
+            border-radius: 8px; box-shadow: 0 8px 40px rgba(0,0,0,.5);
+        }
+        .img-lightbox .lb-close {
+            position: absolute; top: 16px; right: 20px;
+            color: #fff; font-size: 32px; line-height: 1; cursor: pointer;
+            background: rgba(255,255,255,.12); border: none; border-radius: 50%;
+            width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;
+        }
+        .img-lightbox .lb-cap {
+            position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
+            color: #fff; font-size: 13px; background: rgba(0,0,0,.5); padding: 6px 14px;
+            border-radius: 20px; white-space: nowrap; max-width: 90vw; overflow: hidden; text-overflow: ellipsis;
         }
 
         /* ★ 2026-09-08 ?card= 直达高亮：软件更新横幅点击 → 直接定位对应版本卡片（呼吸光效 3s） */
@@ -1209,6 +1239,8 @@
             .version-pick-item .name { font-size: 14px; }
             .version-pick-item .desc { font-size: 12px; }
             .compare-table { font-size: 13px; }
+            /* ★ 2026-09-09 手机端截图高度帽缩小 */
+            .shot-img { max-height: 400px; }
         }
         @media (max-width: 480px) {
             .container { padding: 8px 8px 60px; }
@@ -1657,33 +1689,44 @@
                     </div>
                     <div style="counter-reset:flow;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px;margin-top:10px;">
                         <div style="background:white;border-radius:8px;padding:10px;border-left:4px solid #3b82f6;position:relative;">
-                            <div style="position:absolute;top:-8px;left:8px;background:#3b82f6;color:white;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:bold;">2</div>
+                            <div style="position:absolute;top:-8px;left:8px;background:#3b82f6;color:white;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:bold;">1</div>
                             <div style="font-weight:600;color:#1e40af;margin-bottom:4px;margin-top:8px;">🔑 选择激活方式</div>
                             <div style="font-size:12px;color:#64748b;line-height:1.5;">打开软件 → 点击「管理员激活」Tab</div>
                         </div>
                         <div style="background:white;border-radius:8px;padding:10px;border-left:4px solid #8b5cf6;position:relative;">
-                            <div style="position:absolute;top:-8px;left:8px;background:#8b5cf6;color:white;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:bold;">3</div>
+                            <div style="position:absolute;top:-8px;left:8px;background:#8b5cf6;color:white;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:bold;">2</div>
                             <div style="font-weight:600;color:#5b21b6;margin-bottom:4px;margin-top:8px;">📝 填写信息提交</div>
                             <div style="font-size:12px;color:#64748b;line-height:1.5;">诊所名、姓名、手机号 → 下一步设置密码（可留空＝默认 admin）</div>
                         </div>
                         <div style="background:white;border-radius:8px;padding:10px;border-left:4px solid #f59e0b;position:relative;">
-                            <div style="position:absolute;top:-8px;left:8px;background:#f59e0b;color:white;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:bold;">4</div>
+                            <div style="position:absolute;top:-8px;left:8px;background:#f59e0b;color:white;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:bold;">3</div>
                             <div style="font-weight:600;color:#92400e;margin-bottom:4px;margin-top:8px;">⏳ 等待审核</div>
                             <div style="font-size:12px;color:#64748b;line-height:1.5;">显示「等待管理员激活」界面，每5秒轮询一次</div>
                         </div>
                         <div style="background:white;border-radius:8px;padding:10px;border-left:4px solid #ef4444;position:relative;">
-                            <div style="position:absolute;top:-8px;left:8px;background:#ef4444;color:white;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:bold;">5</div>
+                            <div style="position:absolute;top:-8px;left:8px;background:#ef4444;color:white;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:bold;">4</div>
                             <div style="font-weight:600;color:#991b1b;margin-bottom:4px;margin-top:8px;">✅ 管理员审核</div>
                             <div style="font-size:12px;color:#64748b;line-height:1.5;">管理员审核通过 → 自动生成激活码</div>
                         </div>
                         <div style="background:white;border-radius:8px;padding:10px;border-left:4px solid #10b981;position:relative;">
-                            <div style="position:absolute;top:-8px;left:8px;background:#10b981;color:white;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:bold;">6</div>
+                            <div style="position:absolute;top:-8px;left:8px;background:#10b981;color:white;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:bold;">5</div>
                             <div style="font-weight:600;color:#065f46;margin-bottom:4px;margin-top:8px;">🎉 自动激活完成</div>
                             <div style="font-size:12px;color:#64748b;line-height:1.5;">客户端5秒内获取license → 自动重启 → 登录使用</div>
                         </div>
                     </div>
                     <div style="margin-top:10px;padding:8px 12px;background:#fef3c7;border-radius:6px;border:1px solid #fbbf24;font-size:12px;color:#78350f;">
                         <strong>💡 提示：</strong>管理员激活模式下，<strong>手机号就是登录账号</strong>，初始密码默认 <strong>admin</strong>（注册第二步也可自定义密码：至少8位、含字母和数字；登入后请立即修改）。请妥善保管！
+                    </div>
+                    <!-- 真实界面示意 -->
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;margin-top:12px;">
+                        <figure style="margin:0;background:white;border-radius:8px;padding:8px;border:1px solid #d1fae5;">
+                            <img src="images/register-fill.jpg" alt="管理员激活·填写信息界面" class="shot-img" onclick="openImgLightbox(this.src,this.alt)" onerror="this.parentElement.style.display='none';">
+                            <figcaption style="font-size:11px;color:#64748b;text-align:center;margin-top:6px;">📝 第2~3步：激活窗口「📋 管理员激活」填写信息（点击图片放大）</figcaption>
+                        </figure>
+                        <figure style="margin:0;background:white;border-radius:8px;padding:8px;border:1px solid #d1fae5;">
+                            <img src="images/register-waiting.jpg" alt="等待管理员审核界面" class="shot-img" onclick="openImgLightbox(this.src,this.alt)" onerror="this.parentElement.style.display='none';">
+                            <figcaption style="font-size:11px;color:#64748b;text-align:center;margin-top:6px;">⏳ 第4步：提交后自动进入「等待管理员激活」界面（点击图片放大）</figcaption>
+                        </figure>
                     </div>
                 </div>
             </div>
@@ -2698,6 +2741,28 @@
                 }, 150);
             }
         }
+
+        // ★ 2026-09-09 截图点击放大 lightbox
+        function openImgLightbox(src, cap) {
+            const lb = document.getElementById('imgLightbox');
+            const img = document.getElementById('imgLightboxImg');
+            const capEl = document.getElementById('imgLightboxCap');
+            if (!lb || !img) return;
+            img.src = src;
+            img.alt = cap || '';
+            if (capEl) capEl.textContent = cap || '';
+            lb.classList.add('show');
+            document.body.style.overflow = 'hidden';
+        }
+        function closeImgLightbox() {
+            const lb = document.getElementById('imgLightbox');
+            if (!lb) return;
+            lb.classList.remove('show');
+            document.body.style.overflow = '';
+        }
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeImgLightbox();
+        });
 
         // =====================================================================
         // 1.5 SHA-256 校验值折叠展开
@@ -4098,6 +4163,13 @@
             } catch (e) {}
         });
     </script>
+
+    <!-- ★ 2026-09-09 截图点击放大 lightbox -->
+    <div class="img-lightbox" id="imgLightbox" onclick="closeImgLightbox()">
+        <button class="lb-close" onclick="event.stopPropagation();closeImgLightbox()">×</button>
+        <img id="imgLightboxImg" src="" alt="">
+        <div class="lb-cap" id="imgLightboxCap"></div>
+    </div>
 </body>
 </html>
 
