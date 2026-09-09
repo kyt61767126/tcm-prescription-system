@@ -1332,3 +1332,15 @@ app_project_harmony/                      ← 鸿蒙全部代码独立，安卓�
 **数据口径注意**：①安装设备数从四端新版发布后才开始积累（老版本无心跳），下载量/激活申请为历史全量；②线上联调测试写入过 1 条假设备（local-desktop, v=0.0.0-test），统计里多 1 台属预期；③KV list 分页聚合在设备量大时（>数千）需关注耗时。
 
 **生效方式**：服务端 + 管理后台 push 即部署生效；四端客户端需重新打包发布后才开始积累心跳数据。
+
+## 18. 下载速度优化（2026-09-09 实测基线与统筹路线）
+
+**三层模型（排障先分层归因，勿在机制层空转）**：①**源**——文件托管在哪（GitHub Release / CF Pages / R2 / 国内 OSS）；②**管道**——用户到源的网络路径（大陆访问海外源的跨境链路是硬瓶颈）；③**机制**——客户端下载方式（`<a>` 直下 / robustDownload 流式断点续传 / APP DownloadManager）。**机制层已到顶**（官网 robustDownload 六连接并行+看门狗+30 次重试、APP DownloadManager 进度+自动安装均已上线），后续瓶颈全在源与管道层。
+
+**2026-09-09 实测基线（用户网络，同一时刻）**：GitHub Release 直连 = **0 B/s**（TLS 握手被重置，典型跨境干扰，历史"一直很快"属路由波动好运非稳定态）；CF Pages 静态 APK = **0.4-0.8 MB/s**（12MB 云端 APK 约 25-40 秒，此为 CF 免费版大陆访问常态天花板）；`/api/dl` CF Worker 代理（用户→CF→GitHub）= **0.5 MB/s**（206 Range 透传正常，比 GitHub 直连可靠）。**结论：三条海外路径全部 ≤1MB/s，桌面 78MB exe 至少 2-3 分钟且中断反复，APP 12MB 约 30 秒——用户感知"没变快"的根因是跨境管道，与 APP 端 DownloadManager 优化无关（其优化的是进度显示/自动安装体验）**。
+
+**下载链路现状盘点**：①官网桌面 exe 卡 = latest.json → GitHub URL → safeDownload 自动套 `/api/dl` 同域代理 + robustDownload（失败回退 GitHub 直连）；②官网 APK 卡 = hash-manifest `url` 字段 → CF Pages 同源 `/downloads/*.apk`（09-02 已根治跨域跳转问题）+ robustDownload 并行；③APP 更新 = MainActivity 从 hash-manifest 提取 `url`（白名单校验 `/downloads/` 前缀）→ DownloadManager 应用内下载；④桌面客户端更新横幅 = 直跳 exe 直链（GitHub，**未走 /api/dl 代理**——GitHub 抽风时此路径最先死）。exe 无法上 CF Pages（25MiB 单文件硬限制，78-82MB 超限）。
+
+**统筹路线（按性价比）**：**P2 国内 OSS 才是唯一真提速路径**——腾讯云 COS / 阿里云 OSS **默认域名（\*.cos.\*.myqcloud.com）无需 ICP 备案**（备案仅自定义 CDN 域名需要），大陆直连 10MB/s+，78MB exe 约 10 秒；成本约 0.5 元/GB 下行（1000 次下载×80GB≈40 元/月，对收费产品可忽略）。**P1 R2（免费）只解决可靠性不解决速度**——R2 出口流量免费 + 无 25MiB 限制，可让 exe 摆脱 GitHub 依赖（CF↔GitHub 子请求环节消除），但用户↔CF 段速度仍 ≈0.5MB/s，且 r2.dev 域大陆同样不稳（需绑自定义域走 CF 边缘）。**P3 桌面差量更新**（electron-updater blockmap）——后续版本升级只下变化块（省 60-90% 流量），首次安装仍全量。
+
+**诊断技巧**：手机切蜂窝网络（4G/5G）对比 WiFi 下载速度——运营商国际出口常优于家宽，若蜂窝明显更快即证实瓶颈在跨境链路而非服务器。测速用 `curl -r 0-5242879 <url> -o NUL -w "%{speed_download}"`（5MB Range 采样，注意 CF Pages 静态文件对 Range 返回 200 全量不返回 206，测速仍有效但断点续传语义需以 /api/dl 代理为准）。
