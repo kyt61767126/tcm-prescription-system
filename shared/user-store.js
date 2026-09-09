@@ -73,7 +73,10 @@
                         username: u.username,
                         password: u.password,
                         name: u.name,
-                        role: u.role || 'user'
+                        role: u.role || 'user',
+                        // ★ 2026-09-09 保手机号登录：CONFIG.users（桌面端=config.json 注册/激活账户）
+                        //   的 phone 必须随行，否则 localStorage 兜底路径下 phone 匹配落空（改名后手机号无法登录）
+                        phone: u.phone || ''
                     };
                 });
             } catch (e) {

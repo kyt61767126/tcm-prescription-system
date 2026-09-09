@@ -99,7 +99,10 @@
             username: u.username || '',
             password: u.password || '',
             name: u.name || u.username || '',
-            role: u.role || 'user'
+            role: u.role || 'user',
+            // ★ 2026-09-09 保手机号登录：config.json 注册/改名回填的 phone 必须随行，
+            //   否则 loginWithUsernamePassword 的 phone 匹配永远落空（改名后手机号无法登录的根因）
+            phone: u.phone || ''
         };
     }
 

@@ -109,7 +109,10 @@
             username: u.username || '',
             password: u.password || '',
             name: u.name || u.username || '',
-            role: u.role || 'user'
+            role: u.role || 'user',
+            // ★ 2026-09-09 保手机号登录：本地镜像/缓存账户的 phone 必须随行（与离线桌面同源修复），
+            //   本地优先匹配支持 phone；云端服务端本就支持 phone，此处仅消除本地匹配盲区
+            phone: u.phone || ''
         };
     }
 
