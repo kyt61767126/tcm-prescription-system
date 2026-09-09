@@ -3358,46 +3358,6 @@
         updateLicenseStatusText();
     }
 
-    // ★ 2026-09-09 到期测试手势（仅离线端）：授权状态区 3 秒内连续点击 7 次 → 试用期 0/7 天切换
-    //   用途：真实设备快速体验「试用到期」全流程（到期弹窗/只读模式/激活入口），免改系统时间、免卸载重装。
-    //   原理：electronAPI.license.setTrialDays 写入带 HMAC 签名的本地配置（APP 为 SharedPreferences），
-    //   LicenseManager / license-manager.js 校验时动态重算（0 天 → 立即过期；恢复 7 天 → 保留 startTime 重算），重启后生效。
-    //   安全：仅在 0↔7 间切换（只缩短不延长试用），不触碰 licensed 状态；桌面端 set IPC 已被 P2-7 安全移除，
-    //   调用失败时降级提示手动创建 trial-config.json 的桌面测试方法。
-    (function installTrialExpiryTestGesture() {
-        let tapCount = 0, tapTimer = null;
-        document.addEventListener('click', function (ev) {
-            try {
-                const el = document.getElementById('licenseStatusText');
-                if (!el || !el.contains(ev.target)) return;
-                if (!global.electronAPI || !global.electronAPI.license) return; // 云端/纯网页不响应
-                tapCount++;
-                clearTimeout(tapTimer);
-                tapTimer = setTimeout(function () { tapCount = 0; }, 3000);
-                if (tapCount < 7) return;
-                tapCount = 0;
-                clearTimeout(tapTimer);
-                global.electronAPI.license.getTrialDays().then(function (res) {
-                    const cur = (res && typeof res.trialDays === 'number') ? res.trialDays : 7;
-                    const toZero = (cur !== 0);
-                    const ok = confirm(toZero
-                        ? '到期测试：将试用期设为 0 天？\n\n确定后重启应用，试用立即到期\n（可体验到期弹窗与只读模式）'
-                        : '到期测试：恢复试用期 7 天？\n\n确定后重启应用，试用恢复');
-                    if (!ok) return;
-                    return global.electronAPI.license.setTrialDays(toZero ? 0 : 7).then(function (r) {
-                        alert((r && r.success)
-                            ? '✅ 已设置试用期 ' + (toZero ? '0' : '7') + ' 天，重启应用后生效'
-                            : '❌ 设置失败：' + ((r && r.error) || '未知错误'));
-                    });
-                }).catch(function (err) {
-                    alert('⚠️ 试用期快捷设置不可用（' + ((err && err.message) ? err.message : '未知错误') + '）\n\n' +
-                        '桌面端到期测试：在软件数据目录创建 trial-config.json，内容：\n{"trialDays": 0}\n' +
-                        '保存后重启软件即立即到期；删除该文件并重启即恢复。');
-                });
-            } catch (e) { /* 手势失败不影响正常功能 */ }
-        }, false);
-    })();
-
     // ★ 异步获取并显示 license 状态
     // 云端环境：显示"🌐 云端版，登录即可使用"
     // 离线环境：根据 licenseType 区分 trial(试用期) / licensed(已激活)
