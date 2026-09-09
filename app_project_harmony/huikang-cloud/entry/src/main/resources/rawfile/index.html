@@ -3022,7 +3022,7 @@ let currentUser = null;
                 '<div class="form-group"><label>用户名（英文或拼音）</label>' +
                 '<input type="text" id="editUserUsername" value="' + escapeHtml(user.username) + '" placeholder="设置英文/拼音用户名，方便登录、保护隐私"></div>' +
                 '<div class="form-group" style="margin-top:10px;"><label>手机号（可用于登录，不可修改）</label>' +
-                '<input type="text" id="editUserPhone" value="' + escapeHtml(user.phone || (/^1[3-9]\\d{9}$/.test(user.username) ? user.username : '')) + '" readonly style="background:#f3f4f6;cursor:not-allowed;"></div>' +
+                '<input type="text" id="editUserPhone" value="' + escapeHtml(user.phone || (/^1[3-9]\d{9}$/.test(user.username) ? user.username : '')) + '" readonly style="background:#f3f4f6;cursor:not-allowed;"></div>' +
                 '<div class="form-group" style="margin-top:10px;"><label>医师姓名</label>' +
                 '<input type="text" id="editUserName" value="' + escapeHtml(user.name) + '" placeholder="医师姓名"></div>' +
                 '<div class="form-group" style="margin-top:10px;"><label>新密码（留空则不修改）</label>' +
