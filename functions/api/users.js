@@ -2169,7 +2169,10 @@ export async function onRequest(context) {
         //     1) 仅 platform_admin 可调用
         //     2) confirmName 必须与诊所名称完全一致（防点错行）
         //     3) confirmPassword 管理员密码复核（与收费动作同一校验链路）+ reason 必填留痕
-        //   删除范围（物理删除，不可恢复）：
+        //   删除范围（物理删除，但删除前自动备份，可恢复）：
+        //     - ★ 2026-09-09 删除前自动备份所有业务 KV 到 clinic_backup_{clinicId}_{timestamp}
+        //       （含 prescriptions / prescriptions_trash / medicines / formulas / users / 序号等）
+        //       可通过 POST /users?clinic=restore&backupKey=xxx 恢复
         //     - system:clinics 数组中的诊所条目
         //     - clinic:{id}:users（全部账号）
         //     - clinic:{id}:prescriptions / prescriptions_trash（处方与回收站）
@@ -2247,6 +2250,32 @@ export async function onRequest(context) {
                 if (u.phone) accountKeys.push('admin_phone:' + u.phone);
             }
 
+            // ★ 数据安全：删除前自动备份诊所全部业务数据（防止误删导致永久丢失）
+            //   备份键：clinic_backup_{clinicId}_{timestamp}，包含所有即将删除的 KV 值
+            let backupKey = '';
+            try {
+                const allKeysToBackup = [...businessKeys, ...seqKeys, ...userSeqKeys, ...accountKeys];
+                const backupData = {
+                    timestamp: new Date().toISOString(),
+                    clinicId: clinicId,
+                    clinicName: clinic.name,
+                    deletedBy: currentUser.username,
+                    reason: reasonText,
+                    keys: {}
+                };
+                for (const k of allKeysToBackup) {
+                    try {
+                        const v = await kv.get(k, 'json');
+                        if (v !== null && v !== undefined) backupData.keys[k] = v;
+                    } catch (bkErr) { /* 单键读取失败不影响整体备份 */ }
+                }
+                backupKey = `clinic_backup_${clinicId}_${Date.now()}`;
+                await kv.put(backupKey, JSON.stringify(backupData));
+                console.log(`[安全] 诊所删除前已自动备份: ${backupKey}, 包含 ${Object.keys(backupData.keys).length} 个KV键`);
+            } catch (backupErr) {
+                console.error('[安全] 诊所删除前备份失败:', backupErr && backupErr.message);
+            }
+
             for (const k of [...businessKeys, ...seqKeys, ...userSeqKeys, ...accountKeys]) {
                 try {
                     await kv.delete(k);
@@ -2304,6 +2333,7 @@ export async function onRequest(context) {
                 deletedKeyList: deletedKeys.slice(0, 50),
                 cleanedRequests: cleanedRequests,
                 revokedAccounts: revokedAccounts,
+                backupKey: backupKey || null,
                 source: 'platform-admin'
             });
 
@@ -2314,7 +2344,66 @@ export async function onRequest(context) {
                 deletedUserCount: users.length,
                 deletedKeyCount: deletedKeys.length,
                 cleanedRequestCount: cleanedRequests,
-                revokedAccountCount: revokedAccounts
+                revokedAccountCount: revokedAccounts,
+                backupKey: backupKey || null,
+                backupHint: backupKey ? `数据已备份至 KV: ${backupKey}，可通过 restore-kv 或 platform_admin 恢复` : null
+            });
+        }
+
+        // ===== 恢复诊所备份 POST /users?clinic=restore&backupKey=xxx =====
+        // ★ 2026-09-09 数据安全：从 clinic_backup_{clinicId}_{timestamp} 恢复诊所全部业务数据
+        //   仅 platform_admin 可调用；恢复目标诊所需已存在（新激活的同名诊所）
+        if (method === 'POST' && url.searchParams.get('clinic') === 'restore') {
+            const currentUser = await parseAuthHeader(context.request, context.env);
+            if (!currentUser || !isPlatformAdmin(currentUser)) {
+                return json({ success: false, error: '仅平台总管理员可恢复诊所备份' }, 403);
+            }
+            const backupKey = String(url.searchParams.get('backupKey') || '').trim();
+            if (!backupKey.startsWith('clinic_backup_')) {
+                return json({ success: false, error: '无效的备份键，格式应为 clinic_backup_{clinicId}_{timestamp}' }, 400);
+            }
+            const backupRaw = await kv.get(backupKey);
+            if (!backupRaw) {
+                return json({ success: false, error: '备份不存在或已过期' }, 404);
+            }
+            let backupData;
+            try { backupData = JSON.parse(backupRaw); } catch (e) {
+                return json({ success: false, error: '备份数据解析失败' }, 500);
+            }
+            const targetClinicId = String(url.searchParams.get('clinicId') || backupData.clinicId || '').trim();
+            if (!targetClinicId) {
+                return json({ success: false, error: '缺少目标诊所ID（参数 clinicId）' }, 400);
+            }
+            // 校验目标诊所存在
+            const clinics = (await kv.get(KV_SYSTEM_CLINICS, 'json')) || [];
+            const targetClinic = clinics.find(c => c.id === targetClinicId);
+            if (!targetClinic) {
+                return json({ success: false, error: `目标诊所 ${targetClinicId} 不存在，请先激活诊所` }, 404);
+            }
+            // 恢复所有备份的 KV 键（键名中的 clinicId 替换为目标诊所ID）
+            let restored = 0, skipped = 0;
+            for (const [srcKey, value] of Object.entries(backupData.keys || {})) {
+                try {
+                    // 将备份键中的原 clinicId 替换为目标 clinicId
+                    const destKey = srcKey.replace(new RegExp(`^clinic:${backupData.clinicId}:`), `clinic:${targetClinicId}:`);
+                    await kv.put(destKey, JSON.stringify(value));
+                    restored++;
+                } catch (e) { skipped++; }
+            }
+            await writeAuditLog(kv, targetClinicId, currentUser.username, ROLE_PLATFORM_ADMIN, 'restore_clinic_backup', `from=${backupKey}`, context.request, {
+                sourceClinicId: backupData.clinicId,
+                sourceClinicName: backupData.clinicName,
+                targetClinicId: targetClinicId,
+                restoredKeys: restored,
+                skippedKeys: skipped
+            });
+            return json({
+                success: true,
+                message: `已从备份 ${backupKey} 恢复诊所「${backupData.clinicName}」数据到目标诊所「${targetClinic.name}」`,
+                restoredKeys: restored,
+                skippedKeys: skipped,
+                sourceClinic: backupData.clinicName,
+                targetClinic: targetClinic.name
             });
         }
 
