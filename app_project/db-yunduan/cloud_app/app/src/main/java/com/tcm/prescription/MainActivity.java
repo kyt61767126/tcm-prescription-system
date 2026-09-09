@@ -109,6 +109,11 @@ public class MainActivity extends BridgeActivity {
     private static final String UPDATE_MANIFEST_URL = "https://tcm-prescription-system.pages.dev/hash-manifest.json";
     private static final String UPDATE_DOWNLOAD_URL = "https://tcm-prescription-system.pages.dev/download?card=card-cloud-app";
     private boolean apkUpdateCheckStarted = false;
+    // ★ 2026-09-09 更新下载提速：检查更新时从 manifest 解析 APK 直链（/downloads/惠康中医-云端.apk），
+    //   横幅「立即下载」直接跳直链触发系统下载器，跳过官网 download.html（242KB+JS+多JSON请求）
+    //   整页加载——用户反馈"点更新跳官网比 exe 更新慢很多、卡顿"的根因即在此。
+    //   为 null（manifest 无 url 字段）时回退官网下载页。volatile：后台检查线程写 / UI 线程读。
+    private volatile String apkDirectUrl = null;
 
     // ★ 2026-08-29 一键备份第三步：文件选择器结果回调（onShowFileChooser 配套）
     @Override
@@ -509,9 +514,12 @@ public class MainActivity extends BridgeActivity {
                 String url = request.getUrl().toString();
                 // ★ 2026-08-28 方案A：更新横幅「立即下载」→ 系统浏览器打开官网下载页
                 //   （下载页与云端同 host，需在 isCloudUrl 之前精确拦截，避免 APP 内整页跳走）
-                if (UPDATE_DOWNLOAD_URL.equals(url)) {
+                // ★ 2026-09-09 提速：优先拦截 APK 直链（/downloads/*.apk，CF Pages 静态资源），
+                //   系统浏览器/下载器直接开始下载，跳过 download.html 整页加载（卡顿根因）。
+                //   直链含中文文件名，WebView 传入时已自动百分号编码，特征匹配不受影响。
+                if (UPDATE_DOWNLOAD_URL.equals(url) || isApkDirectUrl(url)) {
                     try {
-                        startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(UPDATE_DOWNLOAD_URL)));
+                        startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
                     } catch (Exception e) {
                         Log.w(TAG, "打开官网下载页失败: " + e.getMessage());
                     }
@@ -679,6 +687,14 @@ public class MainActivity extends BridgeActivity {
                 String localVer = "";
                 int remoteCode = apk.optInt("versionCode", 0);
                 int localCode = 0;
+                // ★ 2026-09-09 提取 APK 直链（仅当有新版本提示时才需要）：严格白名单校验——
+                //   必须是 "/downloads/" 开头的站内相对路径且以 ".apk" 结尾，防止 manifest 被篡改
+                //   后注入任意跳转 URL（与下方版本号白名单校验同构的安全原则）。
+                String apkUrl = apk.optString("url", "");
+                if (apkUrl.startsWith("/downloads/") && apkUrl.toLowerCase(java.util.Locale.ROOT).endsWith(".apk")
+                        && !apkUrl.contains("'") && !apkUrl.contains("\"") && !apkUrl.contains("\\")) {
+                    apkDirectUrl = "https://tcm-prescription-system.pages.dev" + apkUrl;
+                }
                 try {
                     android.content.pm.PackageInfo pi = getPackageManager().getPackageInfo(getPackageName(), 0);
                     localVer = pi.versionName;
@@ -738,6 +754,15 @@ public class MainActivity extends BridgeActivity {
         try { return Integer.parseInt(d); } catch (Exception e) { return 0; }
     }
 
+    // ★ 2026-09-09 更新下载提速：APK 直链特征匹配（官网 host + /downloads/ 路径 + .apk 后缀）。
+    //   用特征而非全串精确匹配：直链含中文文件名（惠康中医-云端.apk），
+    //   WebView 回调传入时已被百分号编码，且与 apkDirectUrl 原始拼接串可能编码形态不一致。
+    private boolean isApkDirectUrl(String url) {
+        return url != null
+                && url.startsWith("https://tcm-prescription-system.pages.dev/downloads/")
+                && url.toLowerCase(java.util.Locale.ROOT).endsWith(".apk");
+    }
+
     /**
      * ★ 2026-08-28 方案A：向登录页注入黄色更新横幅（与桌面端 injectUpdateBanner 同构）。
      *   - 横幅 fixed 顶部 + 占位 spacer 下推正文，不遮挡登录框
@@ -774,7 +799,8 @@ public class MainActivity extends BridgeActivity {
                 "link.style.cssText='color:#1565c0;font-weight:bold;text-decoration:underline;';" +
                 "link.addEventListener('click',function(ev){" +
                 "ev.stopPropagation();" +
-                "location.href='" + UPDATE_DOWNLOAD_URL + "';" +
+                // ★ 2026-09-09 直跳 APK 直链（manifest 提取，白名单已校验）；无直链回退官网下载页
+                "location.href='" + (apkDirectUrl != null ? apkDirectUrl : UPDATE_DOWNLOAD_URL) + "';" +
                 "});" +
                 "var close=document.createElement('span');" +
                 "close.textContent='\\u2715';" +
