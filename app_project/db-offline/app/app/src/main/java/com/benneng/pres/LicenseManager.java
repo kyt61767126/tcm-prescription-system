@@ -500,6 +500,13 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
             String clinicName = (li != null) ? li.optString("clinicName", "") : "";
             String phone = (li != null) ? li.optString("phone", "") : "";
             String licenseCode = (li != null) ? li.optString("licenseCode", "") : "";
+            // ★ 2026-09-09 同机同号门：license 记录手机号与本地注册账号不匹配（或缺失）
+            //   → 拦截自动装码。曾激活设备换人注册不得继承原授权；同号客户重装照常自愈。
+            String licPhone = phone == null ? "" : phone.trim();
+            if (licPhone.isEmpty() || !localAccountHasPhone(licPhone)) {
+                Log.w(TAG, "[NativeSync] 同机同号门拦截：license 手机号与本地注册账号不匹配");
+                return false;
+            }
             // password 传空：账号已存在（注册创建）时 installAdminLicense UPSERT
             // 保留原密码（2026-09-04 方案B 密码写点唯一化），不会重置注册密码；
             // loginUsername=phone：登录账号=手机号（与 JS 自愈/激活收尾路径一致）
@@ -594,6 +601,17 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
             String clinicName = (li != null) ? li.optString("clinicName", "") : "";
             String phone = (li != null) ? li.optString("phone", "") : "";
             String licenseCode = (li != null) ? li.optString("licenseCode", "") : "";
+            // ★ 2026-09-09 同机同号门：license 记录手机号与本地注册账号不匹配（或缺失）
+            //   → 拦截自动装码。曾激活设备换人注册不得继承原授权；同号客户重装照常自愈。
+            String licPhone = phone == null ? "" : phone.trim();
+            if (licPhone.isEmpty() || !localAccountHasPhone(licPhone)) {
+                Log.w(TAG, "[BridgeInstall] 同机同号门拦截：license 手机号与本地注册账号不匹配");
+                JSONObject r = new JSONObject();
+                r.put("success", true);
+                r.put("status", "phone_mismatch");
+                r.put("message", "本机历史授权属于其他账号，请使用自己的激活码激活");
+                return r;
+            }
             JSONObject inst = installAdminLicense(license, mid, user, clinicName,
                     "", phone, phone, licenseCode);
             if (inst != null && inst.optBoolean("success", false)) {
@@ -684,6 +702,34 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
             }
         } catch (Exception e) {
             Log.w(TAG, "[NativeSync] 读注册账号失败(视为未注册): " + e.getMessage());
+        }
+        return false;
+    }
+
+    // ★ 2026-09-09 同机同号门：本地注册账号（config.users）中是否存在该手机号。
+    //   自愈/machineId 自救装码此前只认 machineId 不认人——machineId 跨卸载重装
+    //   恒不变（ANDROID_ID + 恒定 versionName"1.0.0"），曾激活设备转让/换人注册
+    //   后会自动继承原授权剩余天数（现场实锤：试用测试期内离线显示已激活）。
+    //   加门：服务端 license 记录的手机号必须与本地注册账号匹配才允许自动装码；
+    //   手机号缺失或不匹配一律拦截（fail-closed），被拦客户走「原激活码+本机」
+    //   自愈通道（activateOnline 输码重装）恢复。与 offline.js __localAccountHasPhone
+    //   / activate.js localAccountHasPhoneDesktop 同族铁律。
+    private boolean localAccountHasPhone(String phone) {
+        if (phone == null || phone.trim().isEmpty()) return false;
+        String target = phone.trim();
+        try {
+            JSONObject cfg = readConfigJSON();
+            if (cfg == null) return false;
+            org.json.JSONArray users = cfg.optJSONArray("users");
+            if (users == null) return false;
+            for (int i = 0; i < users.length(); i++) {
+                org.json.JSONObject u = users.optJSONObject(i);
+                if (u == null) continue;
+                if (target.equals(u.optString("phone", "").trim())) return true;
+                if (target.equals(u.optString("username", "").trim())) return true;
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "[BridgeInstall] 同机同号门读取本地账号异常(视为不匹配): " + e.getMessage());
         }
         return false;
     }

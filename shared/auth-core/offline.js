@@ -3629,6 +3629,37 @@
     // 挂 global 供 IIFE-1 登录适配器（admin/admin 封锁）跨作用域调用
     global.__isLocalRegisteredAsync = isLocalRegisteredAsync;
 
+    // ★ 2026-09-09 同机同号门：本地注册账号中是否存在指定手机号。
+    //   自愈/machineId 自救装码此前只认 machineId 不认人——machineId 跨卸载重装
+    //   恒不变（ANDROID_ID + 恒定 versionName"1.0.0"），曾激活设备转让/换人注册
+    //   后会自动继承原授权剩余天数（现场实锤：试用测试期内离线显示已激活）。
+    //   加门：服务端 license 记录的手机号必须与本地注册账号匹配才允许自动装码；
+    //   手机号缺失或不匹配一律拦截（fail-closed），被拦客户走「原激活码+本机」
+    //   自愈通道（activateOnline 输码重装）恢复。数据源与 isLocalRegisteredAsync
+    //   同族：① license:registrationInfo（方案B 注册前置写入）② 桥 config.users。
+    async function __localAccountHasPhone(phone) {
+        const ph = String(phone || '').trim();
+        if (!ph) return false;
+        try {
+            const info = getLocalRegistrationInfo();
+            if (info && String(info.phone || '').trim() === ph) return true;
+        } catch (e) { /* 读失败走桥兜底 */ }
+        try {
+            const api = global.electronAPI || (typeof window !== 'undefined' ? window.electronAPI : null);
+            if (api && api.activate && typeof api.activate.getActivationUsers === 'function') {
+                const res = await api.activate.getActivationUsers();
+                if (res && res.success && Array.isArray(res.users)) {
+                    for (let i = 0; i < res.users.length; i++) {
+                        const u = res.users[i] || {};
+                        if (String(u.phone || '').trim() === ph ||
+                            String(u.username || '').trim() === ph) return true;
+                    }
+                }
+            }
+        } catch (e2) { /* 桥异常视为不匹配（fail-closed） */ }
+        return false;
+    }
+
     async function __isDeviceLicensed() {
         try {
             const api = global.electronAPI || (typeof window !== 'undefined' ? window.electronAPI : null);
@@ -6331,8 +6362,17 @@
                         return;
                     }
                     _queryAdminStatus('', saved.machineId)
-                        .then(function (r) {
+                        .then(async function (r) {
                             if (r && r.success && r.status === 'activated') {
+                                // ★ 2026-09-09 同机同号门：machineId 自救命中的可能是
+                                //   本机更早的他人历史记录（machineId 不可信），license
+                                //   手机号与本地注册账号不匹配 → 拦截领码（与存量自愈同门）
+                                var __msPhone = String((r.licenseInfo || {}).phone || '').trim();
+                                var __msOk = __msPhone ? await __localAccountHasPhone(__msPhone) : false;
+                                if (!__msOk) {
+                                    console.warn('[LicenseCheck] machineId 自救拦截（同机同号门）：本机历史授权属于其他账号');
+                                    return;
+                                }
                                 console.log('[LicenseCheck] machineId 自救：本设备已激活，自动完成领码');
                                 _resumeCompleteActivation(r, saved).catch(function (ae) {
                                     console.warn('[LicenseCheck] machineId 自救领码异常:', ae);
@@ -6444,9 +6484,24 @@
                             if (br.status === 'installed') __healNotifyUserInstalled();
                             return;
                         }
-                        return _queryAdminStatus('', mid).then(function (r) {
+                        // ★ 2026-09-09 同机同号门：桥拦截（license 手机号与本地注册账号
+                        //   不匹配）→ 不再降级 JS 直装（同门必拦），直接终止自愈
+                        if (br && br.success && br.status === 'phone_mismatch') {
+                            console.warn('[LicenseCheck] 存量自愈拦截（同机同号门·桥）：', br.message || '本机历史授权属于其他账号');
+                            return;
+                        }
+                        return _queryAdminStatus('', mid).then(async function (r) {
                         if (!(r && r.success && r.status === 'activated' && r.license)) return;
                         var li = r.licenseInfo || {};
+                        // ★ 2026-09-09 同机同号门（JS 直装兜底路径）：license 手机号缺失
+                        //   或与本地注册账号不匹配 → 拦截装码（防曾激活设备换人注册继承
+                        //   原授权）。被拦客户走「原激活码+本机」自愈通道恢复。
+                        var __licPhone = String(li.phone || '').trim();
+                        var __sameOwner = __licPhone ? await __localAccountHasPhone(__licPhone) : false;
+                        if (!__sameOwner) {
+                            console.warn('[LicenseCheck] 存量自愈拦截（同机同号门）：本机历史授权属于其他账号（license 手机号与本地注册不匹配）');
+                            return;
+                        }
                         console.log('[LicenseCheck] 存量自愈：服务端显示本机已激活但本地 license.dat 缺失，自动补装');
                         return ea.activate.installAdminLicense({
                             license: r.license,

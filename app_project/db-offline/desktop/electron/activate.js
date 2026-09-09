@@ -780,6 +780,26 @@ function hasRegisteredLocalAccountDesktop() {
     }
 }
 
+// ★ 2026-09-09 同机同号门：license 记录手机号必须与本地注册账号（config.users）
+//   匹配才允许自动装码（防曾激活设备转让/换人注册继承原授权；桌面 machineId 跨
+//   重装恒不变）。手机号缺失或不匹配一律拦截（fail-closed），被拦客户走「原激活
+//   码+本机」自愈（activate-window 输码）恢复。与 Java LicenseManager
+//   .localAccountHasPhone / offline.js __localAccountHasPhone 同族铁律。
+function localAccountHasPhoneDesktop(phone) {
+    try {
+        const target = String(phone || '').trim();
+        if (!target) return false;
+        const cfgPath = path.join(licenseManager.getWritableDir(), 'config.json');
+        if (!fs.existsSync(cfgPath)) return false;
+        const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+        const users = Array.isArray(cfg.users) ? cfg.users : [];
+        return users.some(u => u && (String(u.phone || '').trim() === target ||
+            String(u.username || '').trim() === target));
+    } catch (e) {
+        return false;
+    }
+}
+
 // ★ 单一装码入口（对齐 APP LicenseManager.installLicenseFromServerBridge）：
 //   查 admin-status → activated 则 installLicense 原生落盘；状态明确返回。
 async function installLicenseFromServer(machineIdArg) {
@@ -824,6 +844,13 @@ async function installLicenseFromServer(machineIdArg) {
             return { success: false, error: '服务端已激活但 license 数据为空，请联系客服' };
         }
         const li = resp.licenseInfo || {};
+        // ★ 2026-09-09 同机同号门：license 手机号缺失或与本地注册账号不匹配 →
+        //   拦截（fail-closed）。曾激活设备换人注册不得继承原授权；同号客户重装照常自愈。
+        const licPhone = String(li.phone || '').trim();
+        if (!licPhone || !localAccountHasPhoneDesktop(licPhone)) {
+            console.warn('[BridgeInstall] 同机同号门拦截：license 手机号与本地注册账号不匹配');
+            return { success: true, status: 'phone_mismatch', message: '本机历史授权属于其他账号，请使用自己的激活码激活' };
+        }
         // password 传空：账号已存在（注册创建）时保留注册密码（与 APP/JS 自愈路径一致）
         const inst = licenseManager.installLicense(resp.license, {
             doctorName: li.user || li.adminName || '',
