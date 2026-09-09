@@ -1972,61 +1972,57 @@
                 <span class="sub">激活用户专属 · 奖励自动到账</span>
             </div>
 
-            <!-- 推广海报 -->
+            <!-- 推广海报 + 奖励规则（合并优化：桌面左图右表，手机自动折行） -->
             <div class="card featured" style="margin-bottom:16px;border:2px solid #f59e0b;">
                 <div class="card-title">
                     <span class="icon">📢</span>
                     邀请好友 得使用天数
                     <span class="badge hot">推荐</span>
                 </div>
-                <div style="text-align:center;margin:12px 0;">
-                    <img src="images/promo-poster.jpg" alt="邀请好友得奖励推广海报" style="max-width:320px;width:100%;border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,0.15);" onerror="this.style.display='none';document.getElementById('promoPosterFallback').style.display='block';">
-                    <div id="promoPosterFallback" style="display:none;background:linear-gradient(135deg,#fef3c7,#fde68a);border-radius:12px;padding:28px 16px;max-width:320px;margin:0 auto;">
-                        <div style="font-size:24px;font-weight:bold;color:#92400e;">🎁 邀好友 · 得奖励</div>
-                        <div style="font-size:15px;color:#78350f;margin-top:10px;line-height:1.8;">邀 1 人 +90 天，封顶 4 人 +360 天<br>好友激活立得 +30 天</div>
+                <div style="display:grid;grid-template-columns:auto 1fr;gap:16px;margin-top:10px;">
+                    <!-- 左：推广海报 -->
+                    <div style="text-align:center;">
+                        <img src="images/promo-poster.jpg" alt="邀请好友得奖励推广海报" style="max-width:220px;width:100%;border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,0.15);" onerror="this.style.display='none';document.getElementById('promoPosterFallback').style.display='block';">
+                        <div id="promoPosterFallback" style="display:none;background:linear-gradient(135deg,#fef3c7,#fde68a);border-radius:12px;padding:20px 12px;max-width:220px;margin:0 auto;">
+                            <div style="font-size:20px;font-weight:bold;color:#92400e;">🎁 邀好友·得奖励</div>
+                            <div style="font-size:13px;color:#78350f;margin-top:8px;line-height:1.6;">邀1人+90天，封顶4人+360天<br>好友激活立得+30天</div>
+                        </div>
                     </div>
-                </div>
-            </div>
-
-            <!-- 奖励规则 -->
-            <div class="card trial-card" style="margin-bottom:16px;">
-                <div class="card-title">
-                    <span class="icon">🏆</span>
-                    奖励规则
-                </div>
-                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:10px;">
-                    <div style="background:#eff6ff;border:2px solid #3b82f6;border-radius:10px;padding:14px;text-align:center;">
-                        <div style="font-size:13px;color:#1e40af;font-weight:600;">邀请 1 人</div>
-                        <div style="font-size:26px;font-weight:bold;color:#1d4ed8;margin:4px 0;">+90天</div>
-                        <div style="font-size:11px;color:#64748b;">好友 +30天</div>
-                    </div>
-                    <div style="background:#eff6ff;border:2px solid #3b82f6;border-radius:10px;padding:14px;text-align:center;">
-                        <div style="font-size:13px;color:#1e40af;font-weight:600;">邀请 2 人</div>
-                        <div style="font-size:26px;font-weight:bold;color:#1d4ed8;margin:4px 0;">+180天</div>
-                        <div style="font-size:11px;color:#64748b;">好友各 +30天</div>
-                    </div>
-                    <div style="background:#eff6ff;border:2px solid #3b82f6;border-radius:10px;padding:14px;text-align:center;">
-                        <div style="font-size:13px;color:#1e40af;font-weight:600;">邀请 3 人</div>
-                        <div style="font-size:26px;font-weight:bold;color:#1d4ed8;margin:4px 0;">+270天</div>
-                        <div style="font-size:11px;color:#64748b;">好友各 +30天</div>
-                    </div>
-                    <div style="background:#fef3c7;border:2px solid #f59e0b;border-radius:10px;padding:14px;text-align:center;position:relative;">
-                        <span style="position:absolute;top:-10px;right:10px;background:#ef4444;color:white;font-size:10px;border-radius:10px;padding:2px 8px;">封顶</span>
-                        <div style="font-size:13px;color:#92400e;font-weight:600;">邀请 4 人</div>
-                        <div style="font-size:26px;font-weight:bold;color:#b45309;margin:4px 0;">+360天</div>
-                        <div style="font-size:11px;color:#64748b;">好友各 +30天</div>
-                    </div>
-                </div>
-                <div class="notice" style="margin-top:12px;">
-                    <span class="icon">💡</span>
+                    <!-- 右：奖励规则表 + 要点 -->
                     <div>
-                        <strong>规则说明：</strong><br>
-                        • 每成功邀请 1 位好友<strong>付费激活</strong>，您 +90 天使用期（试用激活不计奖励）<br>
-                        • 好友在激活时填写您的邀请码，好友本人立即 +30 天<br>
-                        • 奖励自动记账，软件下次在线验证或重新激活一次（同码同设备免费）即生效延期<br>
-                        • 有效期从<strong>首次激活日</strong>起算（365天+奖励天数），重装软件、换电脑不重算
+                        <div style="font-size:13px;font-weight:600;color:#1e40af;margin-bottom:8px;">🏆 奖励阶梯</div>
+                        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                            <thead>
+                                <tr style="background:#eff6ff;">
+                                    <th style="padding:6px 8px;border:1px solid #bfdbfe;text-align:left;font-weight:600;color:#1e40af;">邀请好友</th>
+                                    <th style="padding:6px 8px;border:1px solid #bfdbfe;text-align:center;font-weight:600;color:#1e40af;">您得奖励</th>
+                                    <th style="padding:6px 8px;border:1px solid #bfdbfe;text-align:center;font-weight:600;color:#1e40af;">好友得奖励</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td style="padding:6px 8px;border:1px solid #e2e8f0;">1 人</td><td style="padding:6px 8px;border:1px solid #e2e8f0;text-align:center;font-weight:700;color:#1d4ed8;">+90 天</td><td style="padding:6px 8px;border:1px solid #e2e8f0;text-align:center;color:#475569;">+30 天</td></tr>
+                                <tr style="background:#f8fafc;"><td style="padding:6px 8px;border:1px solid #e2e8f0;">2 人</td><td style="padding:6px 8px;border:1px solid #e2e8f0;text-align:center;font-weight:700;color:#1d4ed8;">+180 天</td><td style="padding:6px 8px;border:1px solid #e2e8f0;text-align:center;color:#475569;">各 +30 天</td></tr>
+                                <tr><td style="padding:6px 8px;border:1px solid #e2e8f0;">3 人</td><td style="padding:6px 8px;border:1px solid #e2e8f0;text-align:center;font-weight:700;color:#1d4ed8;">+270 天</td><td style="padding:6px 8px;border:1px solid #e2e8f0;text-align:center;color:#475569;">各 +30 天</td></tr>
+                                <tr style="background:#fffbeb;"><td style="padding:6px 8px;border:1px solid #fde68a;font-weight:600;color:#92400e;">4 人（封顶）</td><td style="padding:6px 8px;border:1px solid #fde68a;text-align:center;font-weight:700;color:#b45309;">+360 天</td><td style="padding:6px 8px;border:1px solid #fde68a;text-align:center;color:#475569;">各 +30 天</td></tr>
+                            </tbody>
+                        </table>
+                        <!-- 规则要点（横排 icon 化） -->
+                        <div style="margin-top:10px;padding:8px 10px;background:#f0f9ff;border-radius:6px;font-size:12px;line-height:1.8;color:#0369a1;">
+                            💡 <strong>要点：</strong>
+                            <span style="margin-left:6px;">① 好友需<strong>付费激活</strong>才计奖励（试用不计）</span>
+                            <span style="margin-left:10px;">② 奖励自动记账，下次在线验证即生效</span>
+                            <span style="margin-left:10px;">③ 有效期从首次激活日起算，重装不重算</span>
+                        </div>
                     </div>
                 </div>
+                <!-- 手机端强制折行（海报占满全宽） -->
+                <style>
+                    @media (max-width: 768px) {
+                        #tab-promo .card.featured:first-of-type > div:first-of-type[style*="grid-template-columns:auto"] {
+                            grid-template-columns: 1fr !important;
+                        }
+                    }
+                </style>
             </div>
 
             <!-- 操作步骤（图文） -->
