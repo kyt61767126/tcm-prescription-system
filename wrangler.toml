@@ -13,7 +13,7 @@ id = "b1ab3e4b683341958cef369fcbf94933"
 [[d1_databases]]
 binding = "DB"
 database_name = "tcm-prescriptions-db"
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_id = "e74894e3-dafc-491f-8777-d2ee9962e677"
 
 # 环境变量（Cloudflare Pages 部署时使用）
 # AUTH_TOKEN_TTL_HOURS: Bearer token 有效期（小时），默认 168（7 天）
