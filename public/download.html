@@ -4192,6 +4192,16 @@
                                 dateEl.textContent = d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
                             } catch(e) { /* 保留默认 */ }
                         }
+                        // ★ 2026-09-10 修复：APP 卡「更新说明」从 hash-manifest.json.apk.releaseNotes 读取
+                        //   （此前 manifest 缺该字段导致 APP 卡 notes 永远显示"-"，用户无法知道每次
+                        //   打包更新了什么）。releaseNotes 由 auto-update-downloads.js 写入，或通过
+                        //   手动编辑 manifest 追加（第八道门 check-manifest-version 已强制校验格式）。
+                        const notesEl = document.getElementById('notes-' + key);
+                        if (notesEl && data.releaseNotes) {
+                            renderNotesWithToggle(notesEl, String(data.releaseNotes));
+                        } else if (notesEl) {
+                            notesEl.textContent = '（待更新说明）';
+                        }
                     }
                     // 显示更新时间（精确到小时）
                     const mtimeEl = document.getElementById('mtime-' + key);

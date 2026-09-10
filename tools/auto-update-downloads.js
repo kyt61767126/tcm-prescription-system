@@ -226,6 +226,8 @@ function updateDownloads(target) {
 
         // 更新 manifest
         if (!manifest[key]) manifest[key] = {};
+        // ★ 2026-09-10 保留旧 releaseNotes（发布脚本只刷新版本号/哈希，不丢更新说明）
+        const prevNotes = manifest[key].apk && manifest[key].apk.releaseNotes;
         manifest[key].apk = {
             version: version,
             versionCode: versionCode > 0 ? versionCode : undefined,
@@ -233,7 +235,8 @@ function updateDownloads(target) {
             url: '/downloads/' + config.outputName,
             size: size,
             updateTime: now,
-            fileName: config.outputName
+            fileName: config.outputName,
+            releaseNotes: prevNotes || ''
         };
 
         console.log('  [OK] ' + key + ': SHA256=' + sha256.substring(0, 16) + '... (' + (size / 1024 / 1024).toFixed(1) + 'MB)');

@@ -6,8 +6,9 @@
             "sha256": "2a3ee4a6e3b784d69044dd4dfffd4aca065ba7f5bae050065e0f5bcfead3fd18",
             "url": "/downloads/惠康中医-本地.apk",
             "size": 2994616,
-            "updateTime": "2026-09-10T13:11:14.448Z",
-            "fileName": "惠康中医-本地.apk"
+            "updateTime": "2026-09-10T13:50:31.138Z",
+            "fileName": "惠康中医-本地.apk",
+            "releaseNotes": "📷 历史处方相册导入：\n  - 历史处方条目新增 📁 按钮，可从手机相册直接选取舌苔照片、视频文件\n  - 视频 ≤50MB、图片 ≤10MB，多选批量导入，导入后与拍照录像同库，📷🎥 查看器立即可见\n  - 文件自动按 患者名_处方号_相册 前缀命名，区分现场拍摄与相册导入\n\n📱 手机端处方界面布局优化：\n  - 剂数输入框上移至「每剂/药费/诊疗/总计」一行显示\n  - 诊断输入框与医师姓名输入框同行显示（桌面宽屏保持原样不变）\n  - 价格行紧凑单行：gap 3px + 字号 10px + space-between 均匀分布\n\n🔧 APP 内更新自动安装修复：\n  - 修复 APP 内提示更新 → 下载完成后不弹安装弹窗（Android 8+ 必需 REQUEST_INSTALL_PACKAGES 权限）\n  - 修复后点击更新 → 下载 → 自动弹系统安装页，一步到位\n  - 安装弹窗拉起失败时 Toast 明确告知文件位置与手动安装路径\n\n🔧 官网下载页版本号修复：\n  - 修复下载页 APP 卡片版本只显示 v1.0.0 不完整问题\n  - 原因：发布脚本双轨（一键发布 / 手动发布）写 manifest 格式不一致\n  - 已统一为 V{versionName}.{versionCode}（如 V1.0.0.283）\n  - 新增 pre-push 第八道门 check-manifest-version.cjs 强制校验，杜绝未来双轨漂移"
         },
         "portable": {
             "version": "1.0.223",
@@ -38,7 +39,8 @@
             "url": "/downloads/惠康中医-云端.apk",
             "size": 12113371,
             "updateTime": "2026-09-10T13:11:15.456Z",
-            "fileName": "惠康中医-云端.apk"
+            "fileName": "惠康中医-云端.apk",
+            "releaseNotes": "📷 历史处方相册导入：\n  - 历史处方条目新增 📁 按钮，可从手机相册直接选取舌苔照片、视频文件\n  - 视频 ≤50MB、图片 ≤10MB，多选批量导入，导入后与拍照录像同库，📷🎥 查看器立即可见\n  - 文件自动按 患者名_处方号_相册 前缀命名，区分现场拍摄与相册导入\n\n📱 手机端处方界面布局优化：\n  - 剂数输入框上移至「每剂/药费/诊疗/总计」一行显示\n  - 诊断输入框与医师姓名输入框同行显示（桌面宽屏保持原样不变）\n  - 价格行紧凑单行：gap 3px + 字号 10px + space-between 均匀分布\n\n🔧 APP 内更新自动安装修复：\n  - 修复 APP 内提示更新 → 下载完成后不弹安装弹窗（Android 8+ 必需 REQUEST_INSTALL_PACKAGES 权限）\n  - 修复后点击更新 → 下载 → 自动弹系统安装页，一步到位\n  - 安装弹窗拉起失败时 Toast 明确告知文件位置与手动安装路径\n\n🔧 官网下载页版本号修复：\n  - 修复下载页 APP 卡片版本只显示 v1.0.0 不完整问题\n  - 原因：发布脚本双轨（一键发布 / 手动发布）写 manifest 格式不一致\n  - 已统一为 V{versionName}.{versionCode}（如 V1.0.0.283）\n  - 新增 pre-push 第八道门 check-manifest-version.cjs 强制校验，杜绝未来双轨漂移"
         },
         "exe": {
             "version": "1.2.226",
@@ -64,10 +66,10 @@
     "provenance": {
         "schemaVersion": 1,
         "repo": "https://github.com/kyt61767126/tcm-prescription-system.git",
-        "commit": "d5a352e689f4",
+        "commit": "e78462b56044",
         "ref": "main",
         "builder": "kyt61767126",
-        "builtAt": "2026-09-10T13:11:16.104Z",
+        "builtAt": "2026-09-10T13:50:32.157Z",
         "buildTool": "publish-release.js@v24.16.0",
         "releaseTag": ""
     },
@@ -78,8 +80,9 @@
             "sha256": "2a3ee4a6e3b784d69044dd4dfffd4aca065ba7f5bae050065e0f5bcfead3fd18",
             "url": "/downloads/惠康中医-本地.apk",
             "size": 2994616,
-            "updateTime": "2026-09-10T13:11:14.448Z",
-            "fileName": "惠康中医-本地.apk"
+            "updateTime": "2026-09-10T13:50:31.138Z",
+            "fileName": "惠康中医-本地.apk",
+            "releaseNotes": "📷 历史处方相册导入：\n  - 历史处方条目新增 📁 按钮，可从手机相册直接选取舌苔照片、视频文件\n  - 视频 ≤50MB、图片 ≤10MB，多选批量导入，导入后与拍照录像同库，📷🎥 查看器立即可见\n  - 文件自动按 患者名_处方号_相册 前缀命名，区分现场拍摄与相册导入\n\n📱 手机端处方界面布局优化：\n  - 剂数输入框上移至「每剂/药费/诊疗/总计」一行显示\n  - 诊断输入框与医师姓名输入框同行显示（桌面宽屏保持原样不变）\n  - 价格行紧凑单行：gap 3px + 字号 10px + space-between 均匀分布\n\n🔧 APP 内更新自动安装修复：\n  - 修复 APP 内提示更新 → 下载完成后不弹安装弹窗（Android 8+ 必需 REQUEST_INSTALL_PACKAGES 权限）\n  - 修复后点击更新 → 下载 → 自动弹系统安装页，一步到位\n  - 安装弹窗拉起失败时 Toast 明确告知文件位置与手动安装路径\n\n🔧 官网下载页版本号修复：\n  - 修复下载页 APP 卡片版本只显示 v1.0.0 不完整问题\n  - 原因：发布脚本双轨（一键发布 / 手动发布）写 manifest 格式不一致\n  - 已统一为 V{versionName}.{versionCode}（如 V1.0.0.283）\n  - 新增 pre-push 第八道门 check-manifest-version.cjs 强制校验，杜绝未来双轨漂移"
         },
         "portable": {
             "version": "1.0.223",
