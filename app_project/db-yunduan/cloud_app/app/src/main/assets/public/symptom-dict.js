@@ -22,7 +22,7 @@
     // 1. 词典数据（纯数据，无 DOM 依赖）
     // ========================================================================
     var DICT = {
-        version: 1,
+        version: 2,
         categories: [
             // ---- 组合模板（order 0：快捷整串，追加不替换，§4.5）----
             { id: 'zh', name: '组合模板', order: 0, terms: [
@@ -832,9 +832,12 @@
           '.diagnosis-section .patient-row input#doctorName{flex:0 0 90px !important;width:90px !important;}' +
           '#diagQuickBtn{margin-right:12px !important;}' +
           '@media (max-width:768px){' +
-            '.diagnosis-section .patient-row{flex-wrap:wrap !important;row-gap:4px !important;}' +
-            '.diagnosis-section .patient-row input#diagnosis{flex:1 1 120px !important;min-width:60px !important;}' +
-            '.diagnosis-section .patient-row input#doctorName{flex:1 1 90px !important;width:auto !important;min-width:90px !important;}' +
+            // ★ 2026-09-10 剂数已移价格行（dose-desktop 隐藏），诊断行仅剩 诊断+医师，
+            //   恢复单行 nowrap（此前 wrap 是剂数同排时代防医师框被裁剪的权宜）。
+            //   诊断框弹性收缩填满剩余空间，医师框固定 84px，320px 超窄屏也放得下。
+            '.diagnosis-section .patient-row{flex-wrap:nowrap !important;gap:2px !important;}' +
+            '.diagnosis-section .patient-row input#diagnosis{flex:1 1 50px !important;min-width:50px !important;}' +
+            '.diagnosis-section .patient-row input#doctorName{flex:0 0 84px !important;width:84px !important;min-width:84px !important;}' +
             '#diagQuickBtn{margin-right:6px !important;}' +
           '}';
         document.head.appendChild(s);

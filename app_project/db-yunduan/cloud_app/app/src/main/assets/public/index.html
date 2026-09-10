@@ -297,6 +297,17 @@
             /* 显示移动端导航 */
             .mobile-nav { display: block; }
             .mobile-action-bar { display: block; }
+
+            /* ★ 2026-09-10 价格行（剂数/每剂/药费/诊疗/总计）移动端紧凑单行：
+               gap 8→3px + 字号 10px + space-between 均匀分布，360px 屏完整显示不横滚 */
+            .action-buttons-section > div {
+                gap: 3px !important;
+                padding: 3px 2px !important;
+                justify-content: space-between !important;
+                overflow-x: hidden !important;
+            }
+            .action-buttons-section > div > span { font-size: 10px !important; }
+            .action-buttons-section > div > span:last-child { font-size: 11px !important; }
             
             /* 主容器调整 */
             .main-container {
