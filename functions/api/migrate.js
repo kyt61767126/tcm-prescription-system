@@ -29,7 +29,7 @@ export async function onRequest(context) {
         return new Response(JSON.stringify({ success: false, error: 'Method not allowed' }), { status: 405, headers: getCorsHeaders() });
     }
 
-    const auth = parseAuthHeader(context.request);
+    const auth = await parseAuthHeader(context.request, context.env);
     if (!auth || !isPlatformAdmin(auth)) {
         return new Response(JSON.stringify({ success: false, error: '仅平台管理员可执行迁移' }), { status: 403, headers: getCorsHeaders() });
     }
@@ -40,10 +40,8 @@ export async function onRequest(context) {
         return new Response(JSON.stringify({ success: false, error: 'D1 未启用，请设置 USE_D1=true 并配置 DB 绑定' }), { status: 400, headers: getCorsHeaders() });
     }
 
-    const target = new URL(context.request.url).searchParams.get('target') || 'prescriptions';
-    if (target !== 'prescriptions') {
-        return new Response(JSON.stringify({ success: false, error: `不支持的迁移目标: ${target}` }), { status: 400, headers: getCorsHeaders() });
-    }
+    // target 参数可选：不传则迁移全部（处方+审计+方剂+设备+用户）
+    const target = new URL(context.request.url).searchParams.get('target') || 'all';
 
     try {
         const stats = { scanned: 0, inserted: 0, updated: 0, errors: [] };
