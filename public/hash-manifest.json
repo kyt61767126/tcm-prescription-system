@@ -1,16 +1,16 @@
 {
     "local": {
         "apk": {
-            "version": "V1.0.0.260",
-            "versionCode": 260,
-            "sha256": "00ca03e62dbbd566881314a7f88ed3189dbcfa3e4ae5a35c375d01c569f832a0",
+            "version": "V1.0.0.263",
+            "versionCode": 263,
+            "sha256": "f7ae4b2f10b95ee9afca7ad412b94a63caca0ddd1a16e779c27383d8ecd482a0",
             "url": "/downloads/惠康中医-本地.apk",
-            "releaseUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.09-1743/huikang-local.apk",
-            "size": 2991518,
-            "updateTime": "2026-09-09T09:44:56.388Z",
+            "releaseUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.10/huikang-local.apk",
+            "size": 2991184,
+            "updateTime": "2026-09-10T06:39:02.380Z",
             "fileName": "惠康中医-本地.apk",
             "releaseFileName": "huikang-local.apk",
-            "releaseTag": "v2026.09.09-1743"
+            "releaseTag": "v2026.09.10"
         },
         "portable": {
             "version": "1.0.221",
@@ -79,16 +79,16 @@
     },
     "dingzhi": {
         "apk": {
-            "version": "V1.0.0.260",
-            "versionCode": 260,
-            "sha256": "00ca03e62dbbd566881314a7f88ed3189dbcfa3e4ae5a35c375d01c569f832a0",
+            "version": "V1.0.0.263",
+            "versionCode": 263,
+            "sha256": "f7ae4b2f10b95ee9afca7ad412b94a63caca0ddd1a16e779c27383d8ecd482a0",
             "url": "/downloads/惠康中医-本地.apk",
-            "releaseUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.09-1743/huikang-local.apk",
-            "size": 2991518,
-            "updateTime": "2026-09-09T09:44:56.388Z",
+            "releaseUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.10/huikang-local.apk",
+            "size": 2991184,
+            "updateTime": "2026-09-10T06:39:02.380Z",
             "fileName": "惠康中医-本地.apk",
             "releaseFileName": "huikang-local.apk",
-            "releaseTag": "v2026.09.09-1743"
+            "releaseTag": "v2026.09.10"
         },
         "portable": {
             "version": "1.0.221",
