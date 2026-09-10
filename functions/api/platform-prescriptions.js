@@ -1,5 +1,29 @@
 import { parseAuthHeader, isPlatformAdmin, KV_SYSTEM_CLINICS } from './_lib/auth.js';
-import { getKV } from './_lib/kv.js';
+import { getKV, listAllKeys } from './_lib/kv.js';
+
+// ★ 2026-09-10 处方按日期分 key：聚合读取单个诊所的全部处方
+//   旧全量 key（clinic:{id}:prescriptions）+ 所有日期分 key（clinic:{id}:prescriptions:{yymmdd}）
+async function loadClinicPrescriptions(kv, clinicId) {
+    const byId = new Map();
+    // 旧全量 key（兼容期）
+    const legacy = await kv.get(`clinic:${clinicId}:prescriptions`, 'json').catch(() => null);
+    if (Array.isArray(legacy)) {
+        for (const p of legacy) {
+            if (p && typeof p === 'object' && p.id != null) byId.set(String(p.id), p);
+        }
+    }
+    // 日期分 key
+    const dayKeys = await listAllKeys(kv, `clinic:${clinicId}:prescriptions:`).catch(() => []);
+    for (const k of dayKeys) {
+        const arr = await kv.get(k, 'json').catch(() => null);
+        if (Array.isArray(arr)) {
+            for (const p of arr) {
+                if (p && typeof p === 'object' && p.id != null) byId.set(String(p.id), p);
+            }
+        }
+    }
+    return Array.from(byId.values());
+}
 
 // ★ P2-E 修复：CORS 白名单（替代通配符 '*'，与 users.js P1-6 模式一致）
 function getAllowedOrigins() {
@@ -81,7 +105,7 @@ export async function onRequest(context) {
             let allPrescriptions = [];
 
             for (const c of clinics) {
-                const clinicPrescriptions = (await kv.get(`clinic:${c.id}:prescriptions`, 'json')) || [];
+                const clinicPrescriptions = await loadClinicPrescriptions(kv, c.id);
                 clinicPrescriptions.forEach(p => {
                     p.clinicId = c.id;
                     p.clinicName = c.name;

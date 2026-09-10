@@ -24,6 +24,7 @@
 
 import { parseAuthHeader, isPlatformAdmin, KV_SYSTEM_CLINICS } from '../_lib/auth.js';
 import { getKV, listLicenses } from './_lib/license-core.js';
+import { listAllKeys } from '../_lib/kv.js';
 
 function corsHeaders() {
     return {
@@ -94,16 +95,30 @@ export async function onRequest(context) {
                 largest: false
             };
             try {
-                // 处方块：直接取原始字符串算字节（避免 JSON 解析大块开销）
+                // ★ 2026-09-10 处方按日期分 key：旧全量 key + 所有日期分 key 累加
+                // 旧全量 key（兼容期）
                 const rxRaw = await kv.get(`clinic:${clinic.id}:prescriptions`);
                 if (rxRaw) {
-                    entry.prescriptions = (() => {
+                    entry.prescriptions += (() => {
                         try {
                             const arr = JSON.parse(rxRaw);
                             return Array.isArray(arr) ? arr.length : 0;
                         } catch (e) { return -1; }
                     })();
-                    entry.sizeKB += Math.round(rxRaw.length * 2 / 1024);  // UTF-16 近似（JSON.stringify 后含中文）
+                    entry.sizeKB += Math.round(rxRaw.length * 2 / 1024);
+                }
+                // 日期分 key：clinic:{id}:prescriptions:{yymmdd}
+                const dayKeys = await listAllKeys(kv, `clinic:${clinic.id}:prescriptions:`).catch(() => []);
+                for (const dk of dayKeys) {
+                    const dRaw = await kv.get(dk);
+                    if (!dRaw) continue;
+                    entry.prescriptions += (() => {
+                        try {
+                            const arr = JSON.parse(dRaw);
+                            return Array.isArray(arr) ? arr.length : 0;
+                        } catch (e) { return 0; }
+                    })();
+                    entry.sizeKB += Math.round(dRaw.length * 2 / 1024);
                 }
                 const trashRaw = await kv.get(`clinic:${clinic.id}:prescriptions_trash`);
                 if (trashRaw) {

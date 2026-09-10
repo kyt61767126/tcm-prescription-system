@@ -1,5 +1,5 @@
 import { parseAuthHeader, isPlatformAdmin, isClinicAdmin, isAdmin, isCashier } from './_lib/auth.js';
-import { getKV } from './_lib/kv.js';
+import { getKV, listAllKeys } from './_lib/kv.js';
 import { writeAuditLog } from './_lib/audit-log.js';
 
 // P1-6 安全增强：CORS 白名单（与 users.js 一致）
@@ -122,6 +122,143 @@ async function peekNextPrescriptionNo(kv, clinicId, list, yymmddStr) {
     return yymmdd + String(seq).padStart(2, '0');
 }
 
+// ============================================================================
+// ★ 2026-09-10 处方按日期分 key（替代单数组全量存储）
+//
+// 背景：clinic:{id}:prescriptions 单数组存全所处方，6个月左右超 KV 25MB 上限
+//   导致保存失败；且全量读-改-写并发覆盖窗口大。
+// 方案：按日期分 key —— clinic:{id}:prescriptions:{yymmdd}，每天一个数组。
+//   - 单 key 体积 = 当天处方量（通常 <1MB），永不超限
+//   - 并发冲突范围缩小到当天
+//   - 旧全量 key 读取时兼容合并（迁移期），新数据不再写入旧 key
+// ============================================================================
+
+// 旧全量 key（兼容期读取，不再写入）
+function getLegacyPrescriptionsKey(clinicId) {
+    return `clinic:${clinicId}:prescriptions`;
+}
+
+// 单日处方 key
+function getDayPrescriptionsKey(clinicId, yymmdd) {
+    return `clinic:${clinicId}:prescriptions:${yymmdd}`;
+}
+
+// 日期 key 前缀（用于 listAllKeys 扫描所有日期分 key）
+function getDayPrescriptionsPrefix(clinicId) {
+    return `clinic:${clinicId}:prescriptions:`;
+}
+
+// 从处方对象提取 yymmdd（YYMMDD）
+// 优先级：date 字段（YYYY-MM-DD）> createdAt/updatedAt（ISO）> 当前日期兜底
+function extractYYMMDD(prescription) {
+    const dateStr = prescription && prescription.date;
+    if (dateStr && typeof dateStr === 'string') {
+        // YYYY-MM-DD → YYMMDD
+        const m = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (m) return m[1].slice(2) + m[2] + m[3];
+    }
+    const ca = prescription && (prescription.createdAt || prescription.updatedAt);
+    if (ca) {
+        const d = new Date(ca);
+        if (!isNaN(d.getTime())) {
+            // createdAt 可能是时间戳数字或 ISO 字符串，统一转北京时区 yymmdd
+            const utcMs = typeof ca === 'number' ? ca : d.getTime();
+            const bj = new Date(utcMs + 8 * 3600 * 1000);
+            return formatBeijingDateYYMMDD(bj);
+        }
+    }
+    return formatBeijingDateYYMMDD(getBeijingTime());
+}
+
+// 读取单日处方（仅日期分 key）
+async function loadDayPrescriptions(kv, clinicId, yymmdd) {
+    const key = getDayPrescriptionsKey(clinicId, yymmdd);
+    const arr = await kv.get(key, 'json').catch(() => null);
+    return Array.isArray(arr) ? arr : [];
+}
+
+// 聚合读取全所处方：扫描所有日期分 key + 旧全量 key（兼容迁移期）
+// 返回按 id 去重的合并数组（日期 key 优先于旧全量 key）
+async function loadAllPrescriptions(kv, clinicId) {
+    const byId = new Map();
+
+    // 1) 旧全量 key（兼容期，迁移完成后可移除）
+    const legacy = await kv.get(getLegacyPrescriptionsKey(clinicId), 'json').catch(() => null);
+    if (Array.isArray(legacy)) {
+        for (const p of legacy) {
+            if (p && typeof p === 'object' && p.id != null) {
+                byId.set(String(p.id), p);
+            }
+        }
+    }
+
+    // 2) 扫描所有日期分 key，覆盖旧全量中同 id 的记录
+    const prefix = getDayPrescriptionsPrefix(clinicId);
+    const dayKeys = await listAllKeys(kv, prefix).catch(() => []);
+    for (const k of dayKeys) {
+        const arr = await kv.get(k, 'json').catch(() => null);
+        if (Array.isArray(arr)) {
+            for (const p of arr) {
+                if (p && typeof p === 'object' && p.id != null) {
+                    byId.set(String(p.id), p);
+                }
+            }
+        }
+    }
+
+    return Array.from(byId.values());
+}
+
+// 按处方日期写入对应日期 key（新增或覆盖同 id 记录）
+async function upsertToDayKey(kv, clinicId, prescription) {
+    const yymmdd = extractYYMMDD(prescription);
+    const key = getDayPrescriptionsKey(clinicId, yymmdd);
+    const list = await kv.get(key, 'json').catch(() => null) || [];
+    const idx = list.findIndex(p => String(p.id) === String(prescription.id));
+    if (idx >= 0) {
+        list[idx] = prescription;
+    } else {
+        list.push(prescription);
+    }
+    await kv.put(key, JSON.stringify(list));
+    return { yymmdd, list };
+}
+
+// 从所有日期分 key + 旧全量 key 中按 id 查找并删除处方
+// 返回被删除的处方对象（找不到返回 null）
+async function deletePrescriptionById(kv, clinicId, id) {
+    const strId = String(id);
+
+    // 1) 先查日期分 key
+    const prefix = getDayPrescriptionsPrefix(clinicId);
+    const dayKeys = await listAllKeys(kv, prefix).catch(() => []);
+    for (const k of dayKeys) {
+        const list = await kv.get(k, 'json').catch(() => null);
+        if (!Array.isArray(list)) continue;
+        const idx = list.findIndex(p => String(p.id) === strId);
+        if (idx >= 0) {
+            const removed = list[idx];
+            list.splice(idx, 1);
+            await kv.put(k, JSON.stringify(list));
+            return removed;
+        }
+    }
+
+    // 2) 兜底查旧全量 key
+    const legacy = await kv.get(getLegacyPrescriptionsKey(clinicId), 'json').catch(() => null);
+    if (Array.isArray(legacy)) {
+        const idx = legacy.findIndex(p => String(p.id) === strId);
+        if (idx >= 0) {
+            const removed = legacy[idx];
+            legacy.splice(idx, 1);
+            await kv.put(getLegacyPrescriptionsKey(clinicId), JSON.stringify(legacy));
+            return removed;
+        }
+    }
+
+    return null;
+}
+
 export async function onRequest(context) {
     const url = new URL(context.request.url);
     const method = context.request.method;
@@ -151,6 +288,8 @@ export async function onRequest(context) {
 
         // platform_admin 无 clinicId，处方功能主要用于诊所用户
         const targetClinicId = clinicId || 'platform';
+        // ★ 2026-09-10 处方按日期分 key：KV_PRESCRIPTIONS 为旧全量 key（兼容期仅读取，不再写入）
+        //   新数据写入 clinic:{id}:prescriptions:{yymmdd}，读取由 loadAllPrescriptions 聚合
         const KV_PRESCRIPTIONS = `clinic:${targetClinicId}:prescriptions`;
         const KV_TRASH = `clinic:${targetClinicId}:prescriptions_trash`;
 
@@ -170,7 +309,7 @@ export async function onRequest(context) {
                 return json({ success: true, data: trash, count: trash.length, currentUsername: currentUser.username });
             }
 
-            let prescriptions = (await kv.get(KV_PRESCRIPTIONS, 'json')) || [];
+            let prescriptions = await loadAllPrescriptions(kv, targetClinicId);
 
             // 按角色筛选
             let filtered = prescriptions;
@@ -223,7 +362,7 @@ export async function onRequest(context) {
                 let payMethod = String(body.payMethod || '').trim();
                 if (!PAY_METHODS.includes(payMethod)) payMethod = '其他';
 
-                let prescriptions = (await kv.get(KV_PRESCRIPTIONS, 'json')) || [];
+                let prescriptions = await loadAllPrescriptions(kv, targetClinicId);
                 const idx = prescriptions.findIndex(p => String(p.id) === String(pid));
                 if (idx === -1) {
                     return json({ success: false, error: '处方不存在' }, 404, context.request);
@@ -239,7 +378,8 @@ export async function onRequest(context) {
                 target.paidByName = (body.paidByName || currentUser.username);
                 target.payMethod = payMethod;
                 prescriptions[idx] = target;
-                await kv.put(KV_PRESCRIPTIONS, JSON.stringify(prescriptions));
+                // ★ 2026-09-10 按日期分 key：收费更新写回对应日期 key
+                await upsertToDayKey(kv, targetClinicId, target);
 
                 await writeAuditLog(kv, targetClinicId, currentUser.username, currentUser.role,
                     'mark_paid', String(pid), context.request,
@@ -275,12 +415,8 @@ export async function onRequest(context) {
                 await kv.put(KV_TRASH, JSON.stringify(trash));
 
                 const { deletedAt, deletedBy, ...restored } = prescription;
-                let prescriptions = (await kv.get(KV_PRESCRIPTIONS, 'json')) || [];
-                const exists = prescriptions.some(p => p.id.toString() === prescriptionId.toString());
-                if (!exists) {
-                    prescriptions.push(restored);
-                }
-                await kv.put(KV_PRESCRIPTIONS, JSON.stringify(prescriptions));
+                // ★ 2026-09-10 按日期分 key：恢复时按处方日期写入对应日期 key
+                await upsertToDayKey(kv, targetClinicId, restored);
 
                 return json({ success: true, message: '处方已恢复', data: restored });
             }
@@ -299,7 +435,7 @@ export async function onRequest(context) {
                 return json({ success: false, error: 'Missing prescription data' }, 400);
             }
 
-            let prescriptions = (await kv.get(KV_PRESCRIPTIONS, 'json')) || [];
+            let prescriptions = await loadAllPrescriptions(kv, targetClinicId);
             const now = getBeijingTime();
             const nowIso = now.toISOString();
 
@@ -340,7 +476,7 @@ export async function onRequest(context) {
             // 新建：写回前重读最新列表（捕捉窗口期其他设备保存的处方），
             // 基于最新列表分配编号，并与最新列表按 id 合并写回（他人新增不丢）
             if (newOnes.length > 0) {
-                const fresh = (await kv.get(KV_PRESCRIPTIONS, 'json')) || [];
+                const fresh = await loadAllPrescriptions(kv, targetClinicId);
                 const nos = await allocatePrescriptionNos(kv, targetClinicId, fresh, newOnes.length);
                 const newSaved = [];
 
@@ -387,7 +523,10 @@ export async function onRequest(context) {
                 return noB.localeCompare(noA);
             });
 
-            await kv.put(KV_PRESCRIPTIONS, JSON.stringify(prescriptions));
+            // ★ 2026-09-10 按日期分 key：逐条写入对应日期 key（不再全量 put 单数组）
+            for (const p of savedPrescriptions) {
+                await upsertToDayKey(kv, targetClinicId, p);
+            }
 
             const nextPrescriptionNo = await peekNextPrescriptionNo(kv, targetClinicId, prescriptions);
 
@@ -436,19 +575,15 @@ export async function onRequest(context) {
             }
 
             // 软删除：移入回收站
-            let prescriptions = (await kv.get(KV_PRESCRIPTIONS, 'json')) || [];
-            const idx = prescriptions.findIndex(p => p.id.toString() === prescriptionId.toString());
-            if (idx === -1) {
+            // ★ 2026-09-10 按日期分 key：从所有日期 key 中查找并删除
+            const prescription = await deletePrescriptionById(kv, targetClinicId, prescriptionId);
+            if (!prescription) {
                 return json({ success: false, error: 'Prescription not found' }, 404, context.request);
             }
 
-            const prescription = prescriptions[idx];
             if (prescription.createdBy !== currentUser.username && !isAdmin(currentUser)) {
                 return json({ success: false, error: '无权删除此处方' }, 403, context.request);
             }
-
-            prescriptions.splice(idx, 1);
-            await kv.put(KV_PRESCRIPTIONS, JSON.stringify(prescriptions));
 
             let trash = (await kv.get(KV_TRASH, 'json')) || [];
             trash.unshift({

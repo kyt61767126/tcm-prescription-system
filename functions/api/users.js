@@ -2361,6 +2361,8 @@ export async function onRequest(context) {
                 `clinic:${clinicId}:medicines`,
                 `clinic:${clinicId}:formulas`
             ];
+            // ★ 2026-09-10 处方按日期分 key：扫描所有日期分 key 一并备份+删除
+            const prescriptionDayKeys = await listAllKeys(kv, `clinic:${clinicId}:prescriptions:`);
             // 处方序号键（按前缀扫描，含每日序号）
             const seqKeys = await listAllKeys(kv, `clinic:${clinicId}:prescription_seq`);
             const userSeqKeys = await listAllKeys(kv, `clinic:${clinicId}:seq`);
@@ -2375,7 +2377,7 @@ export async function onRequest(context) {
             //   备份键：clinic_backup_{clinicId}_{timestamp}，包含所有即将删除的 KV 值
             let backupKey = '';
             try {
-                const allKeysToBackup = [...businessKeys, ...seqKeys, ...userSeqKeys, ...accountKeys];
+                const allKeysToBackup = [...businessKeys, ...prescriptionDayKeys, ...seqKeys, ...userSeqKeys, ...accountKeys];
                 const backupData = {
                     timestamp: new Date().toISOString(),
                     clinicId: clinicId,
@@ -2397,7 +2399,7 @@ export async function onRequest(context) {
                 console.error('[安全] 诊所删除前备份失败:', backupErr && backupErr.message);
             }
 
-            for (const k of [...businessKeys, ...seqKeys, ...userSeqKeys, ...accountKeys]) {
+            for (const k of [...businessKeys, ...prescriptionDayKeys, ...seqKeys, ...userSeqKeys, ...accountKeys]) {
                 try {
                     await kv.delete(k);
                     deletedKeys.push(k);
