@@ -1,5 +1,6 @@
 import { parseAuthHeader, isPlatformAdmin, isClinicAdmin, isAdmin } from './_lib/auth.js';
 import { getKV, listAllKeys } from './_lib/kv.js';
+import { getDB, isD1Enabled } from './_lib/d1.js';
 
 // P1-6 安全增强：CORS 白名单
 function corsHeaders(request) {
@@ -29,7 +30,56 @@ function json(data, status = 200, request = null) {
     return new Response(JSON.stringify(data), { status, headers: corsHeaders(request) });
 }
 
-// ★ P2-B 统一：getKV 改用 _lib/kv.js 单一事实源（顶部 import）
+function safeJsonParse(str, fallback) {
+    try { return JSON.parse(str); } catch (e) { return fallback; }
+}
+
+// D1 行 → 方剂对象
+function d1RowToFormula(row) {
+    return {
+        id: row.id,
+        name: row.name,
+        createdBy: row.created_by,
+        items: row.items ? safeJsonParse(row.items, []) : [],
+        diagnosis: row.diagnosis,
+        usage: row.usage,
+        isPublic: row.is_public === 1,
+        extra: row.extra ? safeJsonParse(row.extra, {}) : {},
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
+    };
+}
+
+// D1 批量 upsert 方剂
+async function d1UpsertFormulas(db, clinicKey, formulas) {
+    for (const f of formulas) {
+        const id = f.id || (clinicKey + '::' + (f.createdBy || '') + '::' + (f.name || ''));
+        await db.prepare(`
+            INSERT INTO formulas (id, clinic_id, name, created_by, items, diagnosis, usage, is_public, extra, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                name=excluded.name, items=excluded.items, diagnosis=excluded.diagnosis,
+                usage=excluded.usage, is_public=excluded.is_public, extra=excluded.extra,
+                updated_at=excluded.updated_at
+        `).bind(
+            id, clinicKey,
+            f.name || '',
+            f.createdBy || '',
+            JSON.stringify(f.items || []),
+            f.diagnosis || null,
+            f.usage || null,
+            f.isPublic ? 1 : 0,
+            f.extra ? JSON.stringify(f.extra) : null,
+            f.createdAt || new Date().toISOString(),
+            f.updatedAt || new Date().toISOString()
+        ).run();
+    }
+}
+
+// D1 删除指定 owner 的全部方剂（管理员整库替换时用）
+async function d1DeleteByOwner(db, clinicKey, owner) {
+    await db.prepare(`DELETE FROM formulas WHERE clinic_id = ? AND created_by = ?`).bind(clinicKey, owner).run();
+}
 
 export async function onRequest(context) {
     const url = new URL(context.request.url);
@@ -46,22 +96,22 @@ export async function onRequest(context) {
         }
 
         const currentUser = await parseAuthHeader(context.request, context.env);
+        const d1On = isD1Enabled(context.env);
+        const db = getDB(context.env);
 
-        // 确定方剂库存储模型（★ 2026-09-10 并发加固：诊所级改「每用户独立 key」）
-        //   诊所（有 clinicId）：clinic:{clinicId}:formulas:{username} 每用户一 key，
-        //     医师写自己的 key，天然互不覆盖（不再整数组读改写）；管理员读聚合。
-        //   平台（platform_admin 无 clinicId）：维持 system:platform_formulas 单数组（仅总管理员改动、频率低）。
+        // 确定方剂库存储模型
         const isClinicScope = !!(currentUser && currentUser.clinicId);
         const isPlatformScope = !!(currentUser && isPlatformAdmin(currentUser));
         if (!isClinicScope && !isPlatformScope) {
             return json({ success: false, error: '未授权访问，请先登录' }, 401);
         }
 
+        const clinicKey = isClinicScope ? currentUser.clinicId : 'platform';
         const legacyKey = isClinicScope ? `clinic:${currentUser.clinicId}:formulas` : 'system:platform_formulas';
         const perUserPrefix = isClinicScope ? `clinic:${currentUser.clinicId}:formulas:` : null;
 
-        // 诊所级读取：聚合所有 per-user key + 旧数组 key（去重，per-user 覆盖 legacy）
-        async function readClinicFormulas() {
+        // 诊所级 KV 读取：聚合所有 per-user key + 旧数组 key
+        async function readClinicFormulasKV() {
             const byKey = new Map();
             const legacy = await kv.get(legacyKey, 'json').catch(() => null);
             if (Array.isArray(legacy)) {
@@ -69,23 +119,38 @@ export async function onRequest(context) {
                     if (f && typeof f === 'object') byKey.set((f.createdBy || '') + '::' + (f.name || ''), f);
                 }
             }
-            const keys = await listAllKeys(kv, perUserPrefix);
-            for (const k of keys) {
-                const arr = await kv.get(k, 'json').catch(() => null);
-                if (Array.isArray(arr)) {
-                    for (const f of arr) {
-                        if (f && typeof f === 'object') byKey.set((f.createdBy || '') + '::' + (f.name || ''), f);
+            if (perUserPrefix) {
+                const keys = await listAllKeys(kv, perUserPrefix);
+                for (const k of keys) {
+                    const arr = await kv.get(k, 'json').catch(() => null);
+                    if (Array.isArray(arr)) {
+                        for (const f of arr) {
+                            if (f && typeof f === 'object') byKey.set((f.createdBy || '') + '::' + (f.name || ''), f);
+                        }
                     }
                 }
             }
             return Array.from(byKey.values());
         }
 
+        // D1 读取方剂
+        async function readFormulasD1() {
+            const result = await db.prepare(`SELECT * FROM formulas WHERE clinic_id = ? ORDER BY datetime(updated_at) DESC`).bind(clinicKey).all();
+            if (!result || !result.success) return [];
+            return result.results.map(d1RowToFormula);
+        }
+
         // GET - 获取方剂库
         if (method === 'GET') {
             let formulas;
-            if (isClinicScope) {
-                formulas = await readClinicFormulas();
+            if (d1On && db) {
+                formulas = await readFormulasD1();
+                if (formulas.length === 0) {
+                    // D1 为空，回退 KV（迁移过渡期）
+                    formulas = isClinicScope ? await readClinicFormulasKV() : (await kv.get(legacyKey, 'json').catch(() => null) || []);
+                }
+            } else if (isClinicScope) {
+                formulas = await readClinicFormulasKV();
             } else {
                 formulas = await kv.get(legacyKey, 'json').catch(() => null);
                 if (!Array.isArray(formulas)) formulas = [];
@@ -93,7 +158,7 @@ export async function onRequest(context) {
             return json({ success: true, data: formulas, count: formulas.length });
         }
 
-        // POST/PUT - 保存方剂库（需要认证）
+        // POST/PUT - 保存方剂库
         if (method === 'POST' || method === 'PUT') {
             if (!currentUser) {
                 return json({ success: false, error: '未授权访问，请先登录' }, 401);
@@ -118,12 +183,23 @@ export async function onRequest(context) {
             }));
 
             let savedFormulas;
+
             if (!isClinicScope) {
-                // 平台：维持整数组替换（并发低频，暂不迁移）
+                // 平台级：D1 整库替换 + KV 备份
+                if (d1On && db) {
+                    await db.prepare(`DELETE FROM formulas WHERE clinic_id = ?`).bind(clinicKey).run();
+                    await d1UpsertFormulas(db, clinicKey, formulasWithOwner);
+                }
                 savedFormulas = formulasWithOwner;
                 await kv.put(legacyKey, JSON.stringify(savedFormulas));
             } else if (isAdmin(currentUser)) {
-                // 管理员：整库替换 → 按 createdBy 分区写各自 per-user key，删除消失的 owner key 与旧数组 key
+                // 管理员：整库替换
+                if (d1On && db) {
+                    // D1：先删后写（按 owner 分区）
+                    await db.prepare(`DELETE FROM formulas WHERE clinic_id = ?`).bind(clinicKey).run();
+                    await d1UpsertFormulas(db, clinicKey, formulasWithOwner);
+                }
+                // KV：按 createdBy 分区写各自 per-user key
                 const byOwner = new Map();
                 for (const f of formulasWithOwner) {
                     const owner = f.createdBy || currentUser.username;
@@ -138,17 +214,26 @@ export async function onRequest(context) {
                 for (const [owner, arr] of byOwner) {
                     await kv.put(perUserPrefix + owner, JSON.stringify(arr));
                 }
-                // 迁移：清掉旧整数组 key，避免读取重复
                 await kv.delete(legacyKey);
                 savedFormulas = formulasWithOwner;
             } else {
-                // 医师：只写自己的 key（仅保留 createdBy=自己的方剂），天然与其他人并发保存互不覆盖
+                // 医师：只写自己的方剂
                 const owner = currentUser.username;
                 const mine = formulasWithOwner
                     .filter(f => f.createdBy === owner)
                     .map(f => ({ ...f, createdBy: owner, updatedAt: nowIso }));
+                if (d1On && db) {
+                    // D1：先删自己的，再写
+                    await d1DeleteByOwner(db, clinicKey, owner);
+                    await d1UpsertFormulas(db, clinicKey, mine);
+                }
+                // KV：只写自己的 key
                 await kv.put(perUserPrefix + owner, JSON.stringify(mine));
-                savedFormulas = await readClinicFormulas();
+                // 返回聚合后的全所处方（管理员可见全所，医师只看到自己的）
+                savedFormulas = d1On && db ? await readFormulasD1() : await readClinicFormulasKV();
+                if (!isAdmin(currentUser)) {
+                    savedFormulas = savedFormulas.filter(f => f.createdBy === owner);
+                }
             }
 
             return json({ success: true, message: '方剂库保存成功', data: savedFormulas, count: savedFormulas.length });

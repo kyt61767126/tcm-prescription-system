@@ -62,3 +62,23 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   created_at  TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_audit_clinic_time ON audit_logs(clinic_id, created_at);
+
+-- ============================================================================
+--  P2：方剂库表（替代 KV clinic:{id}:formulas:{username} 多 key）
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS formulas (
+  id          TEXT PRIMARY KEY,
+  clinic_id   TEXT NOT NULL,           -- 诊所ID 或 'platform'
+  name        TEXT NOT NULL,
+  created_by  TEXT NOT NULL,
+  items       TEXT,                    -- JSON 药材列表
+  diagnosis   TEXT,
+  usage       TEXT,
+  is_public   INTEGER DEFAULT 0,       -- 0=私有 1=全所共享
+  extra       TEXT,                    -- JSON
+  created_at  TEXT,
+  updated_at  TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_formulas_clinic ON formulas(clinic_id);
+CREATE INDEX IF NOT EXISTS idx_formulas_user ON formulas(clinic_id, created_by);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_formulas_unique ON formulas(clinic_id, created_by, name);

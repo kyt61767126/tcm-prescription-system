@@ -169,6 +169,63 @@ export async function onRequest(context) {
         }
         stats.auditMigrated = auditMigrated;
 
+        // 4) ★ P2：迁移方剂库（从 KV clinic:{id}:formulas:{username} + system:platform_formulas 导入 D1 formulas）
+        const formulaKeys = await listAllKeys(kv, 'clinic:');
+        const platFormulas = await kv.get('system:platform_formulas', 'json').catch(() => null);
+        let formulaMigrated = 0;
+
+        // 平台方剂
+        if (Array.isArray(platFormulas)) {
+            for (const f of platFormulas) {
+                if (!f || typeof f !== 'object') continue;
+                try {
+                    const id = 'platform::' + (f.createdBy || '') + '::' + (f.name || '');
+                    await db.prepare(`
+                        INSERT INTO formulas (id, clinic_id, name, created_by, items, diagnosis, usage, is_public, extra, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(id) DO UPDATE SET name=excluded.name, items=excluded.items, updated_at=excluded.updated_at
+                    `).bind(
+                        id, 'platform', f.name || '', f.createdBy || '',
+                        JSON.stringify(f.items || []), f.diagnosis || null, f.usage || null,
+                        f.isPublic ? 1 : 0,
+                        JSON.stringify(Object.fromEntries(Object.entries(f).filter(([k]) => !['name','createdBy','items','diagnosis','usage','isPublic','createdAt','updatedAt'].includes(k)))),
+                        f.createdAt || new Date().toISOString(), f.updatedAt || new Date().toISOString()
+                    ).run();
+                    formulaMigrated++;
+                } catch (e) { stats.errors.push({ formula: f.name, error: e.message }); }
+            }
+        }
+
+        // 诊所方剂（per-user key + 旧数组 key）
+        for (const key of formulaKeys) {
+            if (!key.includes(':formulas')) continue;
+            try {
+                const arr = await kv.get(key, 'json').catch(() => null);
+                if (!Array.isArray(arr)) continue;
+                const parts = key.split(':');
+                const cid = parts[1];
+                for (const f of arr) {
+                    if (!f || typeof f !== 'object') continue;
+                    try {
+                        const id = cid + '::' + (f.createdBy || '') + '::' + (f.name || '');
+                        await db.prepare(`
+                            INSERT INTO formulas (id, clinic_id, name, created_by, items, diagnosis, usage, is_public, extra, created_at, updated_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            ON CONFLICT(id) DO UPDATE SET name=excluded.name, items=excluded.items, updated_at=excluded.updated_at
+                        `).bind(
+                            id, cid, f.name || '', f.createdBy || '',
+                            JSON.stringify(f.items || []), f.diagnosis || null, f.usage || null,
+                            f.isPublic ? 1 : 0,
+                            JSON.stringify(Object.fromEntries(Object.entries(f).filter(([k]) => !['name','createdBy','items','diagnosis','usage','isPublic','createdAt','updatedAt'].includes(k)))),
+                            f.createdAt || new Date().toISOString(), f.updatedAt || new Date().toISOString()
+                        ).run();
+                        formulaMigrated++;
+                    } catch (e) { stats.errors.push({ formula: f.name, error: e.message }); }
+                }
+            } catch (e) { stats.errors.push({ key, error: e.message }); }
+        }
+        stats.formulaMigrated = formulaMigrated;
+
         return new Response(JSON.stringify({ success: true, stats }), { status: 200, headers: getCorsHeaders() });
     } catch (e) {
         return new Response(JSON.stringify({ success: false, error: e.message }), { status: 500, headers: getCorsHeaders() });
