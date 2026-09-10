@@ -1,12 +1,12 @@
 {
     "local": {
         "apk": {
-            "version": "V1.0.0.263",
-            "versionCode": 263,
-            "sha256": "f7ae4b2f10b95ee9afca7ad412b94a63caca0ddd1a16e779c27383d8ecd482a0",
+            "version": "V1.0.0.265",
+            "versionCode": 265,
+            "sha256": "95475df60684db765a1aa706d6743cd9aa8a0fdd102e380ff25eddee811b2d9a",
             "url": "/downloads/惠康中医-本地.apk",
             "releaseUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.10/huikang-local.apk",
-            "size": 2991184,
+            "size": 2991917,
             "updateTime": "2026-09-10T06:39:02.380Z",
             "fileName": "惠康中医-本地.apk",
             "releaseFileName": "huikang-local.apk",
@@ -35,12 +35,12 @@
     },
     "cloud": {
         "apk": {
-            "version": "V1.0.0.277",
-            "versionCode": 277,
-            "sha256": "b576f035ae1e221bd02544c504778c97c2c5d989ae7f5c2d9cd34f26e04e1b35",
+            "version": "V1.0.0.279",
+            "versionCode": 279,
+            "sha256": "978e1ffeb630251b04725167259ebe16bf92b8cf41ae55f27db9afd0392292c3",
             "url": "/downloads/惠康中医-云端.apk",
             "releaseUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.10-1447/huikang-cloud.apk",
-            "size": 12097718,
+            "size": 12097330,
             "updateTime": "2026-09-10T06:50:24.350Z",
             "fileName": "惠康中医-云端.apk",
             "releaseFileName": "huikang-cloud.apk",
@@ -79,12 +79,12 @@
     },
     "dingzhi": {
         "apk": {
-            "version": "V1.0.0.263",
-            "versionCode": 263,
-            "sha256": "f7ae4b2f10b95ee9afca7ad412b94a63caca0ddd1a16e779c27383d8ecd482a0",
+            "version": "V1.0.0.265",
+            "versionCode": 265,
+            "sha256": "95475df60684db765a1aa706d6743cd9aa8a0fdd102e380ff25eddee811b2d9a",
             "url": "/downloads/惠康中医-本地.apk",
             "releaseUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.10/huikang-local.apk",
-            "size": 2991184,
+            "size": 2991917,
             "updateTime": "2026-09-10T06:39:02.380Z",
             "fileName": "惠康中医-本地.apk",
             "releaseFileName": "huikang-local.apk",
