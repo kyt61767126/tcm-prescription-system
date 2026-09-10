@@ -335,6 +335,10 @@ export async function onRequest(context) {
         //     内部新建诊所 expiresAt = 激活天数+奖励天数；activatePatch L402 同值落库，
         //     admin-status 补开路径从 KV 读到同一字段——两路同源）。
         record.expiresAt = recordExpiresAt || null;
+        // ★ 2026-09-10 修复：必须把审核时设置的 days 写入 record，否则
+        //   provisionCloudAccount 中 Number(record.days)=NaN 回退 365，
+        //   导致诊所 expiresAt 按 365 天计算而非审核设置的天数。
+        record.days = days || null;
         record.inviteeBonusDays = __inviteeBonusDays || 0;
         try {
             await provisionCloudAccount(kv, record);
