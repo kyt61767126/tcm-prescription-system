@@ -568,7 +568,7 @@ export async function onRequest(context) {
                 await upsertToDayKey(kv, targetClinicId, target);
 
                 await writeAuditLog(kv, targetClinicId, currentUser.username, currentUser.role,
-                    'mark_paid', String(pid), context.request,
+                    'mark_paid', String(pid), context,
                     { payMethod, amount: target.totalAmount, patientName: target.patientName || '' });
 
                 return json({ success: true, data: target, message: '收费成功' });
@@ -788,7 +788,7 @@ export async function onRequest(context) {
                     let trash = (await kv.get(KV_TRASH, 'json')) || [];
                     const tIdx = trash.findIndex(p => String(p.id) === String(prescriptionId));
                     if (tIdx >= 0) { trash.splice(tIdx, 1); await kv.put(KV_TRASH, JSON.stringify(trash)); }
-                    await writeAuditLog(kv, targetClinicId, currentUser.username, currentUser.role, 'prescription_permanent_delete', prescriptionId, context.request, { patientName: existing.patientName });
+                    await writeAuditLog(kv, targetClinicId, currentUser.username, currentUser.role, 'prescription_permanent_delete', prescriptionId, context, { patientName: existing.patientName });
                     return json({ success: true, message: '处方已永久删除' }, 200, context.request);
                 }
 
@@ -807,7 +807,7 @@ export async function onRequest(context) {
                 await kv.put(KV_TRASH, JSON.stringify(trash));
 
                 // P1-2：审计日志
-                await writeAuditLog(kv, targetClinicId, currentUser.username, currentUser.role, 'prescription_permanent_delete', prescriptionId, context.request, { patientName: prescription.patientName });
+                await writeAuditLog(kv, targetClinicId, currentUser.username, currentUser.role, 'prescription_permanent_delete', prescriptionId, context, { patientName: prescription.patientName });
 
                 return json({ success: true, message: '处方已永久删除' }, 200, context.request);
             }
@@ -850,7 +850,7 @@ export async function onRequest(context) {
             await kv.put(KV_TRASH, JSON.stringify(trash));
 
             // P1-2：审计日志
-            await writeAuditLog(kv, targetClinicId, currentUser.username, currentUser.role, 'prescription_soft_delete', prescriptionId, context.request, { patientName: prescription.patientName });
+            await writeAuditLog(kv, targetClinicId, currentUser.username, currentUser.role, 'prescription_soft_delete', prescriptionId, context, { patientName: prescription.patientName });
 
             return json({ success: true, message: '处方已移入回收站，可恢复', softDeleted: true }, 200, context.request);
         }

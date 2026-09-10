@@ -45,3 +45,20 @@ CREATE TABLE IF NOT EXISTS prescription_seq (
   seq       INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (clinic_id, yymmdd)
 );
+
+-- ============================================================================
+--  P1：审计日志表（替代 KV audit_log:{cid}:{date}:{ts} 多 key）
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  clinic_id   TEXT NOT NULL,
+  username    TEXT,
+  role        TEXT,
+  action      TEXT,
+  target      TEXT,
+  ip          TEXT,
+  user_agent  TEXT,
+  extra       TEXT,                    -- JSON
+  created_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_audit_clinic_time ON audit_logs(clinic_id, created_at);

@@ -128,6 +128,47 @@ export async function onRequest(context) {
             }
         }
 
+        // 3) ★ P1：迁移审计日志（从 KV audit_log:{cid}:{date}:{ts} 导入 D1 audit_logs）
+        const auditKeys = await listAllKeys(kv, 'audit_log:');
+        let auditMigrated = 0;
+        for (const key of auditKeys) {
+            try {
+                const val = await kv.get(key, 'json').catch(() => null);
+                const parts = key.split(':');
+                const cid = parts[1] || 'platform';
+                if (Array.isArray(val)) {
+                    // 旧数组格式
+                    for (const e of val) {
+                        if (!e || typeof e !== 'object') continue;
+                        await db.prepare(`
+                            INSERT INTO audit_logs (clinic_id, username, role, action, target, ip, user_agent, extra, created_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        `).bind(
+                            cid, e.username || null, e.role || null, e.action || null, e.target || null,
+                            e.ip || null, (e.userAgent || null)?.slice(0, 500),
+                            JSON.stringify(Object.fromEntries(Object.entries(e).filter(([k]) => !['timestamp','username','role','action','target','ip','userAgent'].includes(k)))),
+                            e.timestamp || new Date().toISOString()
+                        ).run();
+                        auditMigrated++;
+                    }
+                } else if (val && typeof val === 'object') {
+                    await db.prepare(`
+                        INSERT INTO audit_logs (clinic_id, username, role, action, target, ip, user_agent, extra, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    `).bind(
+                        cid, val.username || null, val.role || null, val.action || null, val.target || null,
+                        val.ip || null, (val.userAgent || null)?.slice(0, 500),
+                        JSON.stringify(Object.fromEntries(Object.entries(val).filter(([k]) => !['timestamp','username','role','action','target','ip','userAgent'].includes(k)))),
+                        val.timestamp || new Date().toISOString()
+                    ).run();
+                    auditMigrated++;
+                }
+            } catch (e) {
+                stats.errors.push({ key, error: e.message });
+            }
+        }
+        stats.auditMigrated = auditMigrated;
+
         return new Response(JSON.stringify({ success: true, stats }), { status: 200, headers: getCorsHeaders() });
     } catch (e) {
         return new Response(JSON.stringify({ success: false, error: e.message }), { status: 500, headers: getCorsHeaders() });

@@ -24,6 +24,7 @@
 // ============================================================================
 
 import { getKV, listAllKeys } from './_lib/kv.js';
+import { getDB, isD1Enabled } from './_lib/d1.js';
 import { parseAuthHeader, isPlatformAdmin } from './_lib/auth.js';
 
 // CORS（与 users.js 保持一致的白名单策略）
@@ -141,6 +142,51 @@ export async function onRequest(context) {
     const days = Math.round((Date.parse(dateTo + 'T00:00:00Z') - Date.parse(dateFrom + 'T00:00:00Z')) / 86400000) + 1;
     if (days > 31) {
         return json({ success: false, error: '日期跨度不能超过 31 天（审计日志保留 90 天，请分段查询）' }, 400, request);
+    }
+
+    // ★ P1：D1 优先读取（USE_D1=true 时走 SQL 查询，性能远优于 KV 全量扫描）
+    const db = getDB(context.env);
+    if (isD1Enabled(context.env) && db) {
+        try {
+            const conditions = ['created_at >= ? AND created_at <= ?'];
+            const params = [dateFrom + 'T00:00:00.000Z', dateTo + 'T23:59:59.999Z'];
+            if (clinicId !== 'all') {
+                conditions.push('clinic_id = ?');
+                params.push(clinicId);
+            }
+            if (username) {
+                conditions.push('LOWER(username) LIKE ?');
+                params.push('%' + username + '%');
+            }
+            if (action) {
+                conditions.push('LOWER(action) LIKE ?');
+                params.push('%' + action + '%');
+            }
+            const sql = `SELECT * FROM audit_logs WHERE ${conditions.join(' AND ')} ORDER BY created_at DESC LIMIT ?`;
+            params.push(limit);
+            const result = await db.prepare(sql).bind(...params).all();
+            const logs = (result?.results || []).map(row => normalizeEntry({
+                timestamp: row.created_at,
+                username: row.username,
+                role: row.role,
+                action: row.action,
+                target: row.target,
+                ip: row.ip,
+                userAgent: row.user_agent,
+                ...(row.extra ? JSON.parse(row.extra) : {})
+            }, row.clinic_id));
+            return json({
+                success: true,
+                dateFrom, dateTo, clinicId,
+                source: 'd1',
+                total: logs.length,
+                shown: logs.length,
+                logs
+            }, 200, request);
+        } catch (e) {
+            console.error('[audit-logs] D1 query failed, fallback to KV:', e.message);
+            // 回退到 KV
+        }
     }
 
     // ===== 构造目标键集合 =====

@@ -613,7 +613,7 @@ export async function onRequest(context) {
             await kv.put(`clinic:${authUser.clinicId}:users`, JSON.stringify(clinicUsers));
 
             await writeAuditLog(kv, authUser.clinicId, authUser.username, authUser.role,
-                'add_clinic_user', username, context.request,
+                'add_clinic_user', username, context,
                 { newRole: role, newName: name });
 
             return json({ success: true, username: username, role: role, message: '云端账号创建成功' });
@@ -726,7 +726,7 @@ export async function onRequest(context) {
             } catch (e) { console.warn('[set-username] 旧 token 撤销失败:', e); }
 
             await writeAuditLog(kv, target.clinicId || null, authUser.username, authUser.role,
-                'set_username', oldUsername + ' -> ' + newUsername, context.request,
+                'set_username', oldUsername + ' -> ' + newUsername, context,
                 { originalUsername: oldUsername, newUsername: newUsername, self: isSelf });
 
             return json({
@@ -810,7 +810,7 @@ export async function onRequest(context) {
 
             // 审计：按实际动作分别记录
             await writeAuditLog(kv, found.clinicId || null, authUser.username, authUser.role,
-                didReset ? 'reset_password' : 'unlock_account', found.user.username, context.request,
+                didReset ? 'reset_password' : 'unlock_account', found.user.username, context,
                 { targetClinicId: found.clinicId || null, targetClinicName: found.clinicName || null, wasLocked, lockCount });
 
             return json({
@@ -900,7 +900,7 @@ export async function onRequest(context) {
             }
 
             await writeAuditLog(kv, found.clinicId, authUser.username, authUser.role,
-                'update_user', target.username, context.request,
+                'update_user', target.username, context,
                 { changes: changes.join('; '), targetClinicName: found.clinicName || null });
 
             return json({
@@ -969,7 +969,7 @@ export async function onRequest(context) {
             try { await revokeAllUserTokens(kv, target.username); } catch (e) { console.error('revokeAllUserTokens error:', e); }
 
             await writeAuditLog(kv, found.clinicId, authUser.username, authUser.role,
-                'delete_user', target.username, context.request,
+                'delete_user', target.username, context,
                 { targetClinicName: found.clinicName || null, targetRole: target.role });
 
             return json({
@@ -1119,7 +1119,7 @@ export async function onRequest(context) {
                 await kv.put(bootstrapKey, String(bootstrapCount), { expirationTtl: 60 * 60 });
             }
             if (bootstrapCount > 3) {
-                await writeAuditLog(kv, null, 'anonymous', 'unknown', 'bootstrap_rate_limited', bootstrapKey, context.request);
+                await writeAuditLog(kv, null, 'anonymous', 'unknown', 'bootstrap_rate_limited', bootstrapKey, context);
                 return json({ success: false, error: '请求过于频繁，请稍后再试' }, 429);
             }
 
@@ -1175,7 +1175,7 @@ export async function onRequest(context) {
                 return json({ success: false, error: '未认证，请先以平台管理员身份登录' }, 401);
             }
             if (authUser.role !== ROLE_PLATFORM_ADMIN) {
-                await writeAuditLog(kv, null, authUser.username, authUser.role, 'reset_platform_admin_denied', username, context.request);
+                await writeAuditLog(kv, null, authUser.username, authUser.role, 'reset_platform_admin_denied', username, context);
                 return json({ success: false, error: '无权限：仅平台管理员可重置管理员密码' }, 403);
             }
 
@@ -1205,7 +1205,7 @@ export async function onRequest(context) {
 
             await kv.put(KV_SYSTEM_PLATFORM_ADMINS, JSON.stringify(existingAdmins));
             // P0-1：审计日志 + 撤销该管理员的所有旧 token
-            await writeAuditLog(kv, null, authUser.username, authUser.role, 'reset_platform_admin', username, context.request);
+            await writeAuditLog(kv, null, authUser.username, authUser.role, 'reset_platform_admin', username, context);
             try { await revokeAllUserTokens(kv, username); } catch (e) { console.error('revokeAllUserTokens error:', e); }
             return json({ success: true, message: '平台管理员密码已重置', admin: sanitizeUser(existingAdmins[adminIdx], null, null) });
         }
@@ -1290,7 +1290,7 @@ export async function onRequest(context) {
                     userFound ? (user.role || 'unknown') : 'unknown',
                     'login_failed',
                     userFound ? 'wrong_password' : 'user_not_found',
-                    context.request,
+                    context,
                     { failCount }
                 );
                 const remaining = Math.max(0, LOGIN_MAX_FAILURES - failCount);
@@ -1311,7 +1311,7 @@ export async function onRequest(context) {
             // 诊所被禁用（原在密码验证前直接返回，构成用户名枚举向量）
             if (clinicStatus === 'disabled') {
                 console.error('[登录失败] 诊所被禁用:', username, clinicName);
-                await writeAuditLog(kv, clinicId, username, user.role, 'login_failed', 'clinic_disabled', context.request, { clinicName });
+                await writeAuditLog(kv, clinicId, username, user.role, 'login_failed', 'clinic_disabled', context, { clinicName });
                 return json({
                     success: false,
                     error: '诊所已被禁用，请联系平台管理员',
@@ -1324,7 +1324,7 @@ export async function onRequest(context) {
             //   仅识别显式 true（undefined/缺省一律视为正常），宁漏检不可误报；停用即撤销其所有 token。
             if (user.disabled === true) {
                 console.error('[登录失败] 账号已被停用:', username, clinicName);
-                await writeAuditLog(kv, clinicId, username, user.role, 'login_failed', 'user_disabled', context.request, { clinicName });
+                await writeAuditLog(kv, clinicId, username, user.role, 'login_failed', 'user_disabled', context, { clinicName });
                 return json({
                     success: false,
                     error: '该账号已被平台管理员停用，如有需要请联系管理员启用',
@@ -1337,7 +1337,7 @@ export async function onRequest(context) {
             //   检查位于密码验证成功之后（P1-6：不构成用户名枚举向量）
             if (clinicStatus === 'test') {
                 console.error('[登录失败] 诊所待审核:', username, clinicName);
-                await writeAuditLog(kv, clinicId, username, user.role, 'login_failed', 'clinic_pending_approval', context.request, { clinicName });
+                await writeAuditLog(kv, clinicId, username, user.role, 'login_failed', 'clinic_pending_approval', context, { clinicName });
                 return json({
                     success: false,
                     error: '账号已创建，管理员审核通过后即可登录使用（如有疑问请联系客服）',
@@ -1350,7 +1350,7 @@ export async function onRequest(context) {
             if (clinicExpiresAt && new Date(clinicExpiresAt).getTime() < Date.now()) {
                 const expiredAt = new Date(clinicExpiresAt).toISOString().slice(0, 10);
                 console.error('[登录失败] 诊所已到期:', username, clinicName, expiredAt);
-                await writeAuditLog(kv, clinicId, username, user.role, 'login_failed', 'clinic_expired', context.request, { clinicName, expiredAt });
+                await writeAuditLog(kv, clinicId, username, user.role, 'login_failed', 'clinic_expired', context, { clinicName, expiredAt });
                 return json({
                     success: false,
                     error: '使用授权已于 ' + expiredAt + ' 到期，请联系管理员续费后登录',
@@ -1421,7 +1421,7 @@ export async function onRequest(context) {
                         await kv.put(KV_SYSTEM_CLINICS, JSON.stringify(clinics));
                         clinicExpiresAt = newExp;
                         console.log('[授权自愈] 诊所无有效期，已补写默认365天:', clinicName, newExp.slice(0, 10));
-                        await writeAuditLog(kv, clinicId, user.username, user.role, 'license_autofix_365d', 'auth', context.request, { expiresAt: newExp });
+                        await writeAuditLog(kv, clinicId, user.username, user.role, 'license_autofix_365d', 'auth', context, { expiresAt: newExp });
                     }
                 } catch (healErr) {
                     console.error('[授权自愈] 补写有效期失败（不影响登录）:', healErr.message);
@@ -1448,7 +1448,7 @@ export async function onRequest(context) {
             }
 
             // P1-2：记录登录成功审计日志
-            await writeAuditLog(kv, clinicId, user.username, user.role, 'login_success', 'auth', context.request);
+            await writeAuditLog(kv, clinicId, user.username, user.role, 'login_success', 'auth', context);
 
             // ★★★ 2026-08-21 账号级设备授权：桌面/APP 设备指纹计入设备名额
             //   （网页版 clientClass=web 不占名额；旧客户端无 machineId 放行仅互斥）
@@ -1477,7 +1477,7 @@ export async function onRequest(context) {
                         const maxDev = (Number.isInteger(rawMax) && rawMax > 0) ? rawMax : null;
                         const already = devs.some(d => d && d.machineId === midFp);
                         if (maxDev !== null && !already && devs.length >= maxDev) {
-                            await writeAuditLog(kv, clinicId, user.username, user.role, 'login_failed', 'device_limit', context.request, {
+                            await writeAuditLog(kv, clinicId, user.username, user.role, 'login_failed', 'device_limit', context, {
                                 machineId: midFp.substring(0, 8) + '...',
                                 clientClass: effClientClass,
                                 bound: devs.length,
@@ -1495,7 +1495,7 @@ export async function onRequest(context) {
                 // ② 账号级设备绑定（机构版每账号 1 台 / 标准版每账号 2 台）
                 const bind = await bindUserDevice(kv, user.username, machineId, effClientClass, nowIso, normEdition);
                 if (!bind.ok && bind.code === 'DEVICE_LIMIT') {
-                    await writeAuditLog(kv, clinicId, user.username, user.role, 'login_failed', 'device_limit', context.request, {
+                    await writeAuditLog(kv, clinicId, user.username, user.role, 'login_failed', 'device_limit', context, {
                         machineId: String(machineId || '').substring(0, 8) + '...',
                         clientClass: effClientClass,
                         bound: bind.record.devices.length
@@ -1617,7 +1617,7 @@ export async function onRequest(context) {
             }
             const removed = record.devices.splice(idx, 1)[0];
             await kv.put(KV_USER_DEVICES_PREFIX + authUser.username, JSON.stringify(record));
-            await writeAuditLog(kv, authUser.clinicId, authUser.username, authUser.role, 'device_unbind', 'auth', context.request, {
+            await writeAuditLog(kv, authUser.clinicId, authUser.username, authUser.role, 'device_unbind', 'auth', context, {
                 machineId: machineId.substring(0, 8) + '...',
                 clientClass: removed.clientClass || null
             });
@@ -1734,7 +1734,7 @@ export async function onRequest(context) {
                     const licDevicesCount = getDevices(lic).length;
                     await updateLicense(kv, lic.code, { maxDevices }).catch(() => null);
                     await writeAuditLog(kv, target.clinicId, authUser.username, authUser.role,
-                        'set_device_quota', targetUsername, context.request,
+                        'set_device_quota', targetUsername, context,
                         { maxDevices, source: 'license', devicesCount: licDevicesCount });
                     return json({
                         success: true,
@@ -1792,7 +1792,7 @@ export async function onRequest(context) {
 
             const ok = await verifyPassword(oldPassword, found.user.passwordHash, found.user.salt);
             if (!ok) {
-                await writeAuditLog(kv, found.clinicId, username, found.user.role, 'change_password_failed', 'self', context.request);
+                await writeAuditLog(kv, found.clinicId, username, found.user.role, 'change_password_failed', 'self', context);
                 return json({ success: false, error: '原密码错误' }, 401, context.request);
             }
 
@@ -2044,7 +2044,7 @@ export async function onRequest(context) {
             await kv.put(`clinic:${clinicId}:users`, JSON.stringify([adminUser]));
 
             // 审计日志
-            await writeAuditLog(kv, clinicId, currentUser.username, ROLE_PLATFORM_ADMIN, 'create_clinic', `clinic=${clinicName}`, context.request, {
+            await writeAuditLog(kv, clinicId, currentUser.username, ROLE_PLATFORM_ADMIN, 'create_clinic', `clinic=${clinicName}`, context, {
                 adminUsername,
                 adminName: adminUser.name,
                 source: 'platform-admin'
@@ -2103,7 +2103,7 @@ export async function onRequest(context) {
                     (await verifyPassword(confirmPassword, me.passwordHash, me.salt));
                 if (!meOk) {
                     await writeAuditLog(kv, clinicId, currentUser.username, ROLE_PLATFORM_ADMIN,
-                        'fee_confirm_failed', `clinic=${oldClinic.name}`, context.request, { payNote });
+                        'fee_confirm_failed', `clinic=${oldClinic.name}`, context, { payNote });
                     return json({ success: false, error: '管理员密码复核失败，请重新输入' }, 403);
                 }
                 changes.push('payNote: ' + payNote);
@@ -2275,7 +2275,7 @@ export async function onRequest(context) {
 
             // 审计日志
             if (changes.length > 0) {
-                await writeAuditLog(kv, clinicId, currentUser.username, ROLE_PLATFORM_ADMIN, 'update_clinic', `clinic=${oldClinic.name}`, context.request, {
+                await writeAuditLog(kv, clinicId, currentUser.username, ROLE_PLATFORM_ADMIN, 'update_clinic', `clinic=${oldClinic.name}`, context, {
                     changes: changes.join('; '),
                     source: 'platform-admin'
                 });
@@ -2345,7 +2345,7 @@ export async function onRequest(context) {
                 (await verifyPassword(String(confirmPassword), me.passwordHash, me.salt));
             if (!meOk) {
                 await writeAuditLog(kv, clinicId, currentUser.username, ROLE_PLATFORM_ADMIN,
-                    'delete_clinic_confirm_failed', `clinic=${clinic.name}`, context.request, { reason: reasonText });
+                    'delete_clinic_confirm_failed', `clinic=${clinic.name}`, context, { reason: reasonText });
                 return json({ success: false, error: '管理员密码复核失败，请重新输入' }, 403);
             }
 
@@ -2449,7 +2449,7 @@ export async function onRequest(context) {
             await kv.put(KV_SYSTEM_CLINICS, JSON.stringify(clinics));
 
             // 审计日志（删除留痕，含删除原因与清理键清单）
-            await writeAuditLog(kv, clinicId, currentUser.username, ROLE_PLATFORM_ADMIN, 'delete_clinic', `clinic=${clinic.name}`, context.request, {
+            await writeAuditLog(kv, clinicId, currentUser.username, ROLE_PLATFORM_ADMIN, 'delete_clinic', `clinic=${clinic.name}`, context, {
                 reason: reasonText,
                 deletedUserCount: users.length,
                 deletedKeys: deletedKeys.length,
@@ -2513,7 +2513,7 @@ export async function onRequest(context) {
                     restored++;
                 } catch (e) { skipped++; }
             }
-            await writeAuditLog(kv, targetClinicId, currentUser.username, ROLE_PLATFORM_ADMIN, 'restore_clinic_backup', `from=${backupKey}`, context.request, {
+            await writeAuditLog(kv, targetClinicId, currentUser.username, ROLE_PLATFORM_ADMIN, 'restore_clinic_backup', `from=${backupKey}`, context, {
                 sourceClinicId: backupData.clinicId,
                 sourceClinicName: backupData.clinicName,
                 targetClinicId: targetClinicId,
@@ -2742,7 +2742,7 @@ export async function onRequest(context) {
                 }));
             }
 
-            await writeAuditLog(kv, currentUser.clinicId, currentUser.username, currentUser.role, 'export_users', `count=${exportData.length}`, context.request);
+            await writeAuditLog(kv, currentUser.clinicId, currentUser.username, currentUser.role, 'export_users', `count=${exportData.length}`, context);
 
             return json({
                 success: true,
@@ -2850,7 +2850,7 @@ export async function onRequest(context) {
             const savedUsers = await processUsersForSave(normalizedUsers, existingClinicUsers);
             await kv.put(`clinic:${targetClinicId}:users`, JSON.stringify(savedUsers));
 
-            await writeAuditLog(kv, targetClinicId, currentUser.username, currentUser.role, 'import_users', `clinic=${clinic.name}, imported=${normalizedUsers.length}, skipped=${skipped.length}`, context.request);
+            await writeAuditLog(kv, targetClinicId, currentUser.username, currentUser.role, 'import_users', `clinic=${clinic.name}, imported=${normalizedUsers.length}, skipped=${skipped.length}`, context);
 
             return json({
                 success: true,
@@ -2892,7 +2892,7 @@ export async function onRequest(context) {
                 await kv.put(registerKey, String(registerCount), { expirationTtl: REGISTER_TTL });
             }
             if (registerCount > REGISTER_MAX) {
-                await writeAuditLog(kv, null, 'anonymous', 'unknown', 'register_rate_limited', registerKey, context.request);
+                await writeAuditLog(kv, null, 'anonymous', 'unknown', 'register_rate_limited', registerKey, context);
                 return json({ success: false, error: '本IP注册次数已达上限（3次/小时），请稍后再试或联系客服' }, 429, context.request);
             }
 
@@ -2995,7 +2995,7 @@ export async function onRequest(context) {
             await kv.put(`clinic:${clinicId}:users`, JSON.stringify([adminUser]));
 
             // 7. 审计日志
-            await writeAuditLog(kv, clinicId, phone, ROLE_CLINIC_ADMIN, 'register_clinic', `clinic=${clinicName}`, context.request, {
+            await writeAuditLog(kv, clinicId, phone, ROLE_CLINIC_ADMIN, 'register_clinic', `clinic=${clinicName}`, context, {
                 phone: phone,
                 source: 'self-register',
                 requestedEdition: requestedEdition
