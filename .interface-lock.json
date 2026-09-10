@@ -1,14 +1,14 @@
 ﻿{
-    "generated_at":  "2026-09-10 15:37:09 +08:00",
+    "generated_at":  "2026-09-10 19:18:23 +08:00",
     "description":  "Interface structure fingerprint. SHA256 of HTML body (before first \u003cscript\u003e). Changes to \u003cscript\u003e blocks do NOT affect fingerprint.",
     "files":  {
                   "app_project/db-yunduan/cloud_desktop/index.html":  {
-                                                                          "sha256":  "9b67b6ee77b2ab4b8e8c784b5f72267ec2fcf25ec603a2f9e1e8de615680b4d9",
-                                                                          "html_length":  25933
+                                                                          "sha256":  "957d9c81be35b19c562ce3dcd23a4ee2b178e56d77fe1dffdbe646d60a5cc656",
+                                                                          "html_length":  26230
                                                                       },
                   "public/index.html":  {
-                                            "sha256":  "9b67b6ee77b2ab4b8e8c784b5f72267ec2fcf25ec603a2f9e1e8de615680b4d9",
-                                            "html_length":  25933
+                                            "sha256":  "957d9c81be35b19c562ce3dcd23a4ee2b178e56d77fe1dffdbe646d60a5cc656",
+                                            "html_length":  26230
                                         },
                   "app_project/db-offline/desktop/index.html":  {
                                                                     "sha256":  "7f2a1bcadd798bab8a5432ff64895a2e0e2f54bce4a6b1bf62f1d9449ba847a0",
