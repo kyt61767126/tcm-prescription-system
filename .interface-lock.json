@@ -1,17 +1,17 @@
 ﻿{
-    "generated_at":  "2026-09-09 11:34:51 +08:00",
+    "generated_at":  "2026-09-10 15:37:09 +08:00",
     "description":  "Interface structure fingerprint. SHA256 of HTML body (before first \u003cscript\u003e). Changes to \u003cscript\u003e blocks do NOT affect fingerprint.",
     "files":  {
                   "app_project/db-yunduan/cloud_desktop/index.html":  {
-                                                                          "sha256":  "13396daf4513f28787caf60351071e06c6c8539ab0df5c814db52d57a4f7105e",
+                                                                          "sha256":  "9b67b6ee77b2ab4b8e8c784b5f72267ec2fcf25ec603a2f9e1e8de615680b4d9",
                                                                           "html_length":  25933
                                                                       },
                   "public/index.html":  {
-                                            "sha256":  "13396daf4513f28787caf60351071e06c6c8539ab0df5c814db52d57a4f7105e",
+                                            "sha256":  "9b67b6ee77b2ab4b8e8c784b5f72267ec2fcf25ec603a2f9e1e8de615680b4d9",
                                             "html_length":  25933
                                         },
                   "app_project/db-offline/desktop/index.html":  {
-                                                                    "sha256":  "14d13b1a9085e2ae5cc7df27d105e4c3caff08e1cb58035a8894b0c8f293dd7e",
+                                                                    "sha256":  "7f2a1bcadd798bab8a5432ff64895a2e0e2f54bce4a6b1bf62f1d9449ba847a0",
                                                                     "html_length":  25233
                                                                 },
                   "app_project/db-yunduan/cloud_desktop/electron/login.html":  {
