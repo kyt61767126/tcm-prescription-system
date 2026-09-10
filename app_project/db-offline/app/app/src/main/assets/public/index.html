@@ -5221,7 +5221,7 @@ let currentUser = null;
             const showCount = Math.min(list.length, __historyPageSize * __historyCurrentPage);
             const items = list.slice(0, showCount);
             const _rlFee = (p) => { const f = parseFloat(p.registrationFee); return isFinite(f) && f > 0 ? ' | 诊费:' + f.toFixed(2) + '元' : ''; };
-            let html = items.map((p,i) =>`<div class="history-item" onclick="loadHistory(${Number(p.id)||0})"><div style="display:flex;justify-content:space-between;align-items:center;"><div><div style="display:flex;gap:8px;align-items:center;"><div class="history-name">${escapeHtml(p.patientName)}</div><div style="font-size:10px;color:#8b0000;font-weight:bold;">[${escapeHtml(p.prescriptionNo || '')}]</div></div><div class="history-date">${escapeHtml(p.date)} - ${escapeHtml(p.diagnosis || '')}${_rlFee(p)}</div></div><button onclick="event.stopPropagation();viewMediaFiles('${escapeJs(p.patientName)}','${escapeJs(p.prescriptionNo || '')}','${escapeJs(p.createdAt || '')}')" style="background:none;border:none;font-size:14px;cursor:pointer;padding:0 2px;" title="查看拍照录像">📷🎥</button><button class="small-btn" style="background:#ffdddd;padding:2px 6px;font-size:10px;" onclick="event.stopPropagation();deleteHistory(${Number(p.id)||0})">删除</button></div></div>`).join('');
+            let html = items.map((p,i) =>`<div class="history-item" onclick="loadHistory(${Number(p.id)||0})"><div style="display:flex;justify-content:space-between;align-items:center;"><div><div style="display:flex;gap:8px;align-items:center;"><div class="history-name">${escapeHtml(p.patientName)}</div><div style="font-size:10px;color:#8b0000;font-weight:bold;">[${escapeHtml(p.prescriptionNo || '')}]</div></div><div class="history-date">${escapeHtml(p.date)} - ${escapeHtml(p.diagnosis || '')}${_rlFee(p)}</div></div><button onclick="event.stopPropagation();addMediaFromAlbum('${escapeJs(p.patientName)}','${escapeJs(p.prescriptionNo || ')}','${escapeJs(p.createdAt || ')}')" style="background:none;border:none;font-size:14px;cursor:pointer;padding:0 2px;" title="从相册添加照片视频">📁</button><button onclick="event.stopPropagation();viewMediaFiles('${escapeJs(p.patientName)}','${escapeJs(p.prescriptionNo || '')}','${escapeJs(p.createdAt || '')}')" style="background:none;border:none;font-size:14px;cursor:pointer;padding:0 2px;" title="查看拍照录像">📷🎥</button><button class="small-btn" style="background:#ffdddd;padding:2px 6px;font-size:10px;" onclick="event.stopPropagation();deleteHistory(${Number(p.id)||0})">删除</button></div></div>`).join('');
             if (!html) html = '<div style="text-align:center;color:#999;padding:20px;font-size:11px;">无历史记录</div>';
             if (list.length > showCount) {
                 html += `<div onclick="loadMoreHistory()" style="text-align:center;padding:10px;color:#1976d2;cursor:pointer;font-size:12px;border-top:1px dashed #ccc;background:#f8f9fa;">▼ 加载更多（剩余 ${list.length - showCount} 条 / 共 ${list.length} 条）</div>`;
@@ -5232,6 +5232,133 @@ let currentUser = null;
         function loadMoreHistory() {
             __historyCurrentPage++;
             __renderHistoryPage();
+        }
+
+        // ========================================================================
+        // ★ 2026-09-10 历史处方·相册导入：从手机相册/文件管理器选取已有舌苔照片、
+        //   视频文件，按现有媒体命名规则（患者名_处方编号 前缀）保存到本机媒体目录
+        //   （APP端 Pictures/Movies/惠康中医处方/YYYY-MM/，与拍照录像同库，findMediaFiles
+        //   前缀扫描直接命中 → 📷🎥 查看器可见；网页端存 IndexedDB 同库同结构）。
+        //   大文件安全：APP shim（video-recorder-inject.js）自动 base64 分片上传；
+        //   前置限制 视频≤50MB / 图片≤10MB，超限跳过并提示。
+        // ========================================================================
+        var __albumTargetCtx = null;
+
+        function addMediaFromAlbum(patientName, prescriptionNo, createdAt) {
+            if (!patientName) { showToast('处方缺少患者姓名，无法关联文件'); return; }
+            __albumTargetCtx = { patientName: patientName, prescriptionNo: prescriptionNo || '', createdAt: createdAt || '' };
+            var input = document.getElementById('albumMediaInput');
+            if (!input) {
+                input = document.createElement('input');
+                input.type = 'file';
+                input.id = 'albumMediaInput';
+                input.accept = 'image/*,video/*';
+                input.multiple = true;
+                input.style.display = 'none';
+                input.addEventListener('change', handleAlbumFilesSelected);
+                document.body.appendChild(input);
+            }
+            input.value = '';
+            input.click();
+        }
+
+        function __readFileAs(f, mode) {
+            return new Promise(function (resolve, reject) {
+                var reader = new FileReader();
+                reader.onload = function () { resolve(reader.result); };
+                reader.onerror = function () { reject(reader.error || new Error('文件读取失败')); };
+                if (mode === 'buffer') { reader.readAsArrayBuffer(f); } else { reader.readAsDataURL(f); }
+            });
+        }
+
+        async function handleAlbumFilesSelected(ev) {
+            var files = ev.target.files;
+            if (!files || files.length === 0 || !__albumTargetCtx) return;
+            var ctx = __albumTargetCtx;
+            __albumTargetCtx = null;
+            var saved = 0, failed = 0, skipped = 0;
+            showToast('正在导入 ' + files.length + ' 个文件...');
+            for (var i = 0; i < files.length; i++) {
+                var f = files[i];
+                var isVideo = (f.type || '').indexOf('video') === 0 || /\.(mp4|mov|webm|avi|3gp|mkv|m4v)$/i.test(f.name || '');
+                var maxMB = isVideo ? 50 : 10;
+                if (f.size > maxMB * 1024 * 1024) {
+                    skipped++;
+                    showToast((f.name || '文件') + ' 超过' + maxMB + 'MB限制，已跳过');
+                    continue;
+                }
+                try {
+                    var extMatch = /\.([a-z0-9]+)$/i.exec(f.name || '');
+                    var ext = extMatch ? extMatch[1].toLowerCase() : (isVideo ? 'mp4' : 'jpg');
+                    var fileName = ctx.patientName + '_' + ctx.prescriptionNo + '_album_' + Date.now() + '_' + (i + 1) + '.' + ext;
+                    var hasNative = window.electronAPI && (window.electronAPI.savePrescriptionImage || window.electronAPI.saveVideoFile);
+                    var result;
+                    if (hasNative) {
+                        if (isVideo) {
+                            result = await window.electronAPI.saveVideoFile(await __readFileAs(f, 'buffer'), fileName);
+                        } else {
+                            result = await window.electronAPI.savePrescriptionImage(await __readFileAs(f, 'url'), fileName);
+                        }
+                        if (!result || !result.success) throw new Error((result && result.error) || '保存失败');
+                    } else {
+                        // 纯网页端：写入 IndexedDB 媒体库（与 video-recorder.js 网页版同库同结构）
+                        await saveAlbumMediaToDB({
+                            patientName: ctx.patientName,
+                            prescriptionNo: ctx.prescriptionNo,
+                            createdAt: ctx.createdAt,
+                            timestamp: Date.now() + i,
+                            name: fileName,
+                            type: isVideo ? 'video' : 'image',
+                            blob: null,
+                            dataUrl: await __readFileAs(f, 'url'),
+                            size: f.size
+                        });
+                    }
+                    saved++;
+                } catch (e) {
+                    failed++;
+                    console.warn('[相册导入] 保存失败:', f && f.name, e);
+                }
+            }
+            var msg = '已添加 ' + saved + ' 个文件';
+            if (failed > 0) msg += '，' + failed + ' 个失败';
+            if (skipped > 0) msg += '，' + skipped + ' 个超限跳过';
+            showToast(msg);
+            if (saved > 0) {
+                // 刷新该处方 mediaFiles 元数据（复用现有收集机制，📷🎥 查看器立即可见）
+                var rec = prescriptionHistory.find(function (p) {
+                    return p.patientName === ctx.patientName && String(p.prescriptionNo || '') === String(ctx.prescriptionNo);
+                });
+                if (rec) { collectAndUpdateMediaFiles(rec, ctx.prescriptionNo); }
+            }
+        }
+
+        // 网页端 IndexedDB 保存（PrescriptionMediaDB / media_files，与 video-recorder.js 结构一致）
+        function saveAlbumMediaToDB(entry) {
+            return new Promise(function (resolve, reject) {
+                try {
+                    var req = indexedDB.open('PrescriptionMediaDB', 1);
+                    req.onupgradeneeded = function (e) {
+                        var db = e.target.result;
+                        if (!db.objectStoreNames.contains('media_files')) {
+                            var store = db.createObjectStore('media_files', { keyPath: 'id', autoIncrement: true });
+                            store.createIndex('patientName', 'patientName', { unique: false });
+                            store.createIndex('prescriptionNo', 'prescriptionNo', { unique: false });
+                            store.createIndex('createdAt', 'createdAt', { unique: false });
+                            store.createIndex('timestamp', 'timestamp', { unique: false });
+                        }
+                    };
+                    req.onsuccess = function (e) {
+                        try {
+                            var tx = e.target.result.transaction('media_files', 'readwrite');
+                            tx.objectStore('media_files').put(entry);
+                            tx.oncomplete = function () { resolve(true); };
+                            tx.onerror = function () { reject(tx.error); };
+                        } catch (e2) { reject(e2); }
+                    };
+                    req.onerror = function () { reject(req.error); };
+                } catch (e) { reject(e); }
+            });
         }
 
         async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
