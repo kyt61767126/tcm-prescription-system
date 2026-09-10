@@ -84,6 +84,8 @@
 
 * shared JS（db-adapter/button-manager/edition-lock 等）：改 `shared/` 权威源后跑 `sync-all.ps1`；云端APP db-adapter.js 有防御性初始化本地差异，Group 1 排除需手工维护。
 
+* ★ 2026-09-10 **symptom-dict.js 云端APP副本同步盲区**（医师框 60px 修复两轮未生效实锤）：`cloud_app/app/src/main/assets/public/symptom-dict.js` **不在 sync-all.ps1 清单、不在 build-app.bat 打包前拷贝链**（云端打包只拷 auth-core.js/permission.js/config.json），且该副本被 8-21 遗留混淆版占据（历史 obfuscate 还原漏此文件）。事故链：改 shared 权威源 → sync-all 全绿（该副本不在清单=校验不到）→ 云端APP 打包继续用旧版 → 修复静默丢失。**铁律：改 shared/symptom-dict.js 后必须手工 Copy-Item 到 `cloud_app/app/src/main/assets/public/`，并解包 APK 验证 `doctorName{flex:0 0 90px` 等特征串存在**（离线APP assets 副本在 sync-all 清单内无此问题）。同轮次发现：云端打包脚本末尾 `set /p` 交互提示在无人值守/后台调用时挂起——后台跑 pack-app.bat 必须先 `set NO_PAUSE=1`（离线/云端 build-app.bat 均已支持该开关）。
+
 * ★ 2026-09-09 **user-store.js 双路径同步铁律**（2069f13d→打包被拦实锤）：`shared/user-store.js` 有**两条独立分发路径，漏一条=打包中断**：
   1. **7 份 index.html 内联标记块**（USER-STORE block）→ `node tools/sync-shared-blocks.cjs`
   2. **2 份独立 js 副本**（`db-offline/desktop/electron/user-store.js` + `db-yunduan/cloud_desktop/electron/user-store.js`，login.html 独立加载）→ `node tools/copy-consistency.cjs --fix`
