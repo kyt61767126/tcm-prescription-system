@@ -322,6 +322,69 @@ function normalizeClinicEdition(rawEdition, clinicStatus) {
     return s;
 }
 
+// ★ P3：D1 用户行 → KV 用户对象（字段名映射）
+function d1RowToUser(row) {
+    const extra = row.extra ? (() => { try { return JSON.parse(row.extra); } catch(e) { return {}; } })() : {};
+    return {
+        username: row.username,
+        name: row.name || null,
+        role: row.role,
+        phone: row.phone || null,
+        passwordHash: row.password_hash || null,
+        salt: row.salt || null,
+        allowedMode: row.allowed_mode || 'both',
+        cloudEnabled: row.cloud_enabled === 1,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        ...extra
+    };
+}
+
+// ★ P3：从 D1 查询诊所用户（按用户名或手机号）
+async function findClinicUserD1(db, identifier) {
+    if (!db) return null;
+    const result = await db.prepare(`
+        SELECT * FROM clinic_users WHERE username = ? OR phone = ? LIMIT 1
+    `).bind(identifier, identifier).all();
+    if (result && result.success && result.results.length > 0) {
+        return d1RowToUser(result.results[0]);
+    }
+    return null;
+}
+
+// ★ P3：同步单个用户到 D1（UPSERT）
+async function syncUserToD1(db, clinicId, user) {
+    if (!db || !user || !user.username) return;
+    const now = new Date().toISOString();
+    await db.prepare(`
+        INSERT INTO clinic_users (clinic_id, username, name, role, phone, password_hash, salt, allowed_mode, cloud_enabled, extra, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(clinic_id, username) DO UPDATE SET
+            name=excluded.name, role=excluded.role, phone=excluded.phone,
+            password_hash=excluded.password_hash, salt=excluded.salt,
+            allowed_mode=excluded.allowed_mode, cloud_enabled=excluded.cloud_enabled,
+            extra=excluded.extra, updated_at=excluded.updated_at
+    `).bind(
+        clinicId, user.username,
+        user.name || null,
+        user.role || null,
+        user.phone || null,
+        user.passwordHash || user.password || null,
+        user.salt || null,
+        user.allowedMode || 'both',
+        user.cloudEnabled ? 1 : 0,
+        JSON.stringify(Object.fromEntries(Object.entries(user).filter(([k]) => !['username','name','role','phone','passwordHash','password','salt','allowedMode','cloudEnabled','createdAt','updatedAt','clinicId'].includes(k)))),
+        user.createdAt || now,
+        user.updatedAt || now
+    ).run();
+}
+
+// ★ P3：从 D1 删除用户
+async function deleteUserFromD1(db, clinicId, username) {
+    if (!db) return;
+    await db.prepare(`DELETE FROM clinic_users WHERE clinic_id = ? AND username = ?`).bind(clinicId, username).run();
+}
+
 // 隐藏密码字段，返回安全的用户对象
 // ★ 优化：添加 clinicStatus、userType、edition 字段，区分正式用户/测试用户/版本类型
 function sanitizeUser(user, clinicId, clinicName, clinicStatus, clinicEdition) {
@@ -355,14 +418,48 @@ function sanitizeUser(user, clinicId, clinicName, clinicStatus, clinicEdition) {
 //   - 成功：返回 user 信息（诊所被禁用时 clinicStatus='disabled'，由登录分支在密码验证后再拒绝）
 //   - 失败：返回 { user: null, error: { code: 'USER_NOT_FOUND', message } }
 // ★ 2026-08-22：新增返回 clinicEdition，用于前端统一设置 CONFIG.edition
-async function findUserForLogin(kv, username) {
+async function findUserForLogin(kv, username, env = null) {
     if (!username) return { user: null, error: { code: 'USER_NOT_FOUND', message: '用户不存在' } };
     const trimmed = String(username).trim();
 
     // 判断输入是否为纯手机号（11位数字），若是则优先按 phone 字段查找
     const isPhoneInput = /^1[3-9]\d{9}$/.test(trimmed);
 
-    // 1. 先查 platform_admins
+    // ★ P3：D1 优先查询诊所用户（一次 SQL 替代遍历所有诊所 KV key）
+    const d1On = isD1Enabled(env);
+    const db = d1On ? getDB(env) : null;
+    if (db) {
+        const d1User = await findClinicUserD1(db, trimmed).catch(() => null);
+        if (d1User) {
+            // 找到用户，需要从 KV 获取诊所信息（status/edition/expiresAt）
+            const clinics = await kv.get(KV_SYSTEM_CLINICS, 'json').catch(() => null);
+            const clinic = clinics?.find(c => c.id === d1User.clinicId) || null;
+            if (clinic && clinic.status !== 'disabled') {
+                return {
+                    user: d1User,
+                    clinicId: clinic.id,
+                    clinicName: clinic.name,
+                    clinicStatus: clinic.status || 'active',
+                    clinicEdition: clinic.edition || null,
+                    clinicExpiresAt: clinic.expiresAt || null,
+                    error: null
+                };
+            }
+            if (clinic && clinic.status === 'disabled') {
+                return {
+                    user: d1User,
+                    clinicId: clinic.id,
+                    clinicName: clinic.name,
+                    clinicStatus: 'disabled',
+                    clinicEdition: clinic.edition || null,
+                    clinicExpiresAt: clinic.expiresAt || null,
+                    error: null
+                };
+            }
+        }
+    }
+
+    // 1. 先查 platform_admins（仍走 KV，platform_admin 不在 clinic_users 表中）
     const platformAdmins = await kv.get(KV_SYSTEM_PLATFORM_ADMINS, 'json');
     if (platformAdmins && Array.isArray(platformAdmins)) {
         // 优先 username 匹配
@@ -405,6 +502,10 @@ async function findUserForLogin(kv, username) {
                 found = users.find(u => u.phone === trimmed);
             }
             if (found) {
+                // ★ P3：D1 回退补齐——KV 找到但 D1 没有时，同步到 D1
+                if (db) {
+                    try { await syncUserToD1(db, clinic.id, found); } catch (e) { console.error('[D1] syncUserToD1 on login fallback:', e.message); }
+                }
                 foundClinicInfo = {
                     user: found,
                     clinicId: clinic.id,
@@ -506,7 +607,7 @@ export async function onRequest(context) {
                 return json({ success: false, error: '请提供要检查的用户名' }, 400);
             }
 
-            const found = await findUserForLogin(kv, checkUsername);
+            const found = await findUserForLogin(kv, checkUsername, context.env);
             if (!found || !found.user) {
                 return json({ 
                     success: false, 
@@ -575,7 +676,7 @@ export async function onRequest(context) {
             }
 
             // 全局唯一：跨诊所 username/phone + platform_admins 全查
-            const existing = await findUserForLogin(kv, username);
+            const existing = await findUserForLogin(kv, username, context.env);
             if (existing && existing.user) {
                 return json({ success: false, error: '该登录账号已被占用' }, 409, context.request);
             }
@@ -676,7 +777,7 @@ export async function onRequest(context) {
             }
 
             // 全局唯一：跨诊所 username/phone + platform_admins + 激活占位全查
-            const existing = await findUserForLogin(kv, newUsername);
+            const existing = await findUserForLogin(kv, newUsername, context.env);
             if (existing && existing.user) {
                 return json({ success: false, error: '该用户名已被占用（' + (existing.clinicName || '其他账号') + '），请换一个' }, 409, context.request);
             }
@@ -797,7 +898,7 @@ export async function onRequest(context) {
             }
 
             // 精确定位目标用户（平台管理员或任一诊所用户）
-            const found = await findUserForLogin(kv, targetUsername);
+            const found = await findUserForLogin(kv, targetUsername, context.env);
             if (!found || !found.user) {
                 return json({ success: false, error: '用户不存在', errorCode: 'USER_NOT_FOUND' }, 404, context.request);
             }
@@ -876,7 +977,7 @@ export async function onRequest(context) {
                 return json({ success: false, error: '角色仅允许设置为 诊所管理员/医师/前台收费' }, 400, context.request);
             }
 
-            const found = await findUserForLogin(kv, targetUsername);
+            const found = await findUserForLogin(kv, targetUsername, context.env);
             if (!found || !found.user) {
                 return json({ success: false, error: '用户不存在', errorCode: 'USER_NOT_FOUND' }, 404, context.request);
             }
@@ -961,7 +1062,7 @@ export async function onRequest(context) {
                 return json({ success: false, error: '无法删除当前登录用户' }, 400, context.request);
             }
 
-            const found = await findUserForLogin(kv, targetUsername);
+            const found = await findUserForLogin(kv, targetUsername, context.env);
             if (!found || !found.user) {
                 return json({ success: false, error: '用户不存在', errorCode: 'USER_NOT_FOUND' }, 404, context.request);
             }
@@ -1271,13 +1372,13 @@ export async function onRequest(context) {
                 return json({ success: false, error: '尝试次数过多，账户暂时锁定，请稍后再试', code: 'ACCOUNT_LOCKED' }, 423, context.request);
             }
 
-            let found = await findUserForLogin(kv, username);
+            let found = await findUserForLogin(kv, username, context.env);
             // ★ 2026-08-20 登录自愈：账号未找到时，若该手机号存在管理员已通过的激活申请，
             //   自动补开云端账号并重试一次查找（解决激活通过后用户却无法登录的遗留问题）
             if (!(found && found.user)) {
                 const selfHealed = await maybeProvisionFromActivation(kv, username);
                 if (selfHealed) {
-                    found = await findUserForLogin(kv, username);
+                    found = await findUserForLogin(kv, username, context.env);
                 }
             }
             // ★ 2026-08-25 clinicExpiresAt 用 let：授权自愈（下方）可能补写默认365天后赋新值
@@ -1593,7 +1694,7 @@ export async function onRequest(context) {
             if (!authUser) {
                 return json({ success: false, error: '未登录或登录已失效' }, 401, context.request);
             }
-            const found = await findUserForLogin(kv, authUser.username);
+            const found = await findUserForLogin(kv, authUser.username, context.env);
             if (!found || !found.user) {
                 return json({ success: false, error: '用户不存在' }, 404, context.request);
             }
@@ -1681,7 +1782,7 @@ export async function onRequest(context) {
             }
             // ★ 2026-09-10 统一授权口径：机构版（cloud_clinic）与离线版（offline_*）的
             //   设备额度都以 license.maxDevices / license.devices 为唯一权威（clinicName 关联）。
-            const target = await findUserForLogin(kv, targetUsername).catch(() => null);
+            const target = await findUserForLogin(kv, targetUsername, context.env).catch(() => null);
             const targetEdition = normalizeClinicEdition(target && target.clinicEdition, target && target.clinicStatus);
             const isSharedQuota = targetEdition === 'cloud_clinic' || String(targetEdition || '').indexOf('offline_') === 0;
             if (isSharedQuota) {
@@ -1754,7 +1855,7 @@ export async function onRequest(context) {
             // ★ 2026-09-08 离线版配额唯一源 = license.maxDevices（get 端点读 license），
             //   若此处只写 user_devices，用户后台改配额后重开弹窗仍显示旧值（北京源生堂案例）。
             // ★ 2026-09-10 统一授权口径：cloud_clinic 机构版同样以 license.maxDevices 为唯一源。
-            const target = await findUserForLogin(kv, targetUsername).catch(() => null);
+            const target = await findUserForLogin(kv, targetUsername, context.env).catch(() => null);
             const targetEdition = normalizeClinicEdition(target && target.clinicEdition, target && target.clinicStatus);
             const isSharedQuota = targetEdition === 'cloud_clinic' || String(targetEdition || '').indexOf('offline_') === 0;
             if (isSharedQuota) {
@@ -1787,7 +1888,7 @@ export async function onRequest(context) {
             record.maxDevices = maxDevices;
             await kv.put(KV_USER_DEVICES_PREFIX + targetUsername, JSON.stringify(record));
 
-            const found = await findUserForLogin(kv, targetUsername).catch(() => null);
+            const found = await findUserForLogin(kv, targetUsername, context.env).catch(() => null);
             await writeAuditLog(kv, (found && found.clinicId) || null, authUser.username, authUser.role,
                 'set_device_quota', targetUsername, context.request,
                 { maxDevices, devicesCount: record.devices.length });
@@ -1821,7 +1922,7 @@ export async function onRequest(context) {
             }
 
             // 查找用户原始数据
-            const found = await findUserForLogin(kv, username);
+            const found = await findUserForLogin(kv, username, context.env);
             if (!found) {
                 return json({ success: false, error: '用户不存在' }, 404, context.request);
             }
@@ -1847,7 +1948,7 @@ export async function onRequest(context) {
                 if (/^1[3-9]\d{9}$/.test(newUsername)) {
                     return json({ success: false, error: '新用户名不能是手机号格式（请使用英文或拼音）' }, 400, context.request);
                 }
-                const existing = await findUserForLogin(kv, newUsername);
+                const existing = await findUserForLogin(kv, newUsername, context.env);
                 if (existing && existing.user && existing.user.username !== username) {
                     return json({ success: false, error: '该用户名已被占用，请换一个' }, 409, context.request);
                 }
@@ -2036,7 +2137,7 @@ export async function onRequest(context) {
             }
 
             // 检查用户名是否已存在（全局唯一，跨诊所 + platform_admins）
-            const existing = await findUserForLogin(kv, adminUsername);
+            const existing = await findUserForLogin(kv, adminUsername, context.env);
             if (existing) {
                 return json({ success: false, error: '登录账号已存在，请更换（admin_诊所简码 全局唯一）' }, 409);
             }
@@ -2267,7 +2368,7 @@ export async function onRequest(context) {
                             if (!/^1[3-9]\d{9}$/.test(newPhone)) {
                                 return json({ success: false, error: '请输入正确的11位手机号' }, 400);
                             }
-                            const taker = await findUserForLogin(kv, newPhone);
+                            const taker = await findUserForLogin(kv, newPhone, context.env);
                             if (taker && taker.user && taker.user.username !== users[adminIdx].username) {
                                 return json({ success: false, error: '该手机号已被其他账号使用（' + taker.user.username + '），请更换' }, 409);
                             }
@@ -2601,7 +2702,7 @@ export async function onRequest(context) {
             }
 
             // doctor 仅看自己
-            const found = await findUserForLogin(kv, currentUser.username);
+            const found = await findUserForLogin(kv, currentUser.username, context.env);
             if (!found) {
                 return json({ success: true, data: [] });
             }
@@ -2688,7 +2789,7 @@ export async function onRequest(context) {
             }
 
             // doctor：仅改自己密码
-            const found = await findUserForLogin(kv, currentUser.username);
+            const found = await findUserForLogin(kv, currentUser.username, context.env);
             if (!found) {
                 return json({ success: false, error: '用户不存在' }, 404);
             }
@@ -2974,14 +3075,14 @@ export async function onRequest(context) {
             }
 
             // 3. 手机号全局唯一校验（跨诊所 username/phone + platform_admins）
-            const existing = await findUserForLogin(kv, phone);
+            const existing = await findUserForLogin(kv, phone, context.env);
             if (existing && existing.user) {
                 return json({ success: false, error: '该手机号已注册，请直接登录；忘记密码请联系客服重置' }, 409, context.request);
             }
 
             // ★ 2026-08-21 用户名唯一校验：填写了用户名时，不能与其他用户的 username/phone 冲突
             if (regUsername) {
-                const unameTaken = await findUserForLogin(kv, regUsername);
+                const unameTaken = await findUserForLogin(kv, regUsername, context.env);
                 if (unameTaken && unameTaken.user) {
                     return json({ success: false, error: '该用户名已被使用，请更换或留空使用手机号登录' }, 409, context.request);
                 }
@@ -3065,7 +3166,7 @@ export async function onRequest(context) {
                 return json({ available: false, reason: '请输入正确的11位手机号' });
             }
             // 可用性检查
-            const found = await findUserForLogin(kv, phone);
+            const found = await findUserForLogin(kv, phone, context.env);
             if (found && found.user) {
                 return json({ available: false, reason: '该手机号已注册，请直接登录', error: '该手机号已注册，请直接登录', phone });
             }
