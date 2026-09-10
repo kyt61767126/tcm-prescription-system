@@ -2243,7 +2243,7 @@ export async function onRequest(context) {
             }
 
             const body = await context.request.json().catch(() => ({}));
-            const { clinicId, status, name, adminUsername, adminName, adminPassword, adminPhone, renewDays, edition } = body;
+            const { clinicId, status, name, adminUsername, adminName, adminPassword, adminPhone, renewDays, edition, expiresAt } = body;
             if (!clinicId) {
                 return json({ success: false, error: '缺少诊所ID' }, 400);
             }
@@ -2346,6 +2346,18 @@ export async function onRequest(context) {
                     changes.push(`expiresAt: ${(clinics[clinicIdx].expiresAt || '-').slice(0, 10)} → ${newExp.slice(0, 10)}（续费+${renewDays}天）`);
                     clinics[clinicIdx].expiresAt = newExp;
                 }
+            }
+            // ★ 2026-09-10 平台管理员可直接设置到期日（修正激活审核 days 异常等场景）
+            //   优先级：expiresAt 直填 > renewDays 顺延；两者都传时以 expiresAt 为准
+            if (expiresAt !== undefined && expiresAt !== null && String(expiresAt).trim()) {
+                const expStr = String(expiresAt).trim();
+                const expDate = new Date(expStr.length === 10 ? expStr + 'T23:59:59+08:00' : expStr);
+                if (isNaN(expDate.getTime())) {
+                    return json({ success: false, error: 'expiresAt 日期格式无效' }, 400);
+                }
+                const newExp = expDate.toISOString();
+                changes.push(`expiresAt: ${(oldClinic.expiresAt || '-').slice(0, 10)} → ${newExp.slice(0, 10)}（管理员直填）`);
+                clinics[clinicIdx].expiresAt = newExp;
             }
             if (name !== undefined && name !== oldClinic.name) {
                 if (!name.trim() || name.trim().length < 2 || name.trim().length > 50) {
