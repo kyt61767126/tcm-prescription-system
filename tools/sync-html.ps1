@@ -42,9 +42,10 @@ Set-Location $root
 
 # 权威源与副本清单（与 html-sync-check.ps1 保持一致；离线两端差异过大不纳入）
 $Authority = 'public/index.html'
+# ★ 云桌面跟随权威源（桌面布局，保持不变）；云端APP与桌面布局差异过大，隔离独立维护
+#   （云端APP采用手机端布局：剂数移入价格行、医师与诊断同排，2026-09-10 因与桌面差异过大退出同步）
 $Targets = @(
-    'app_project/db-yunduan/cloud_desktop/index.html',
-    'app_project/db-yunduan/cloud_app/app/src/main/assets/public/index.html'
+    'app_project/db-yunduan/cloud_desktop/index.html'
 )
 
 # 赋值行模式（用于定位端配置块；每文件必须恰好各 1 行）
