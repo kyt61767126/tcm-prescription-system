@@ -3042,8 +3042,11 @@
 
     async function loadInviteInfo(el) {
         try {
-            const old = document.getElementById('inviteInfoBox');
-            if (old && old.parentNode) old.parentNode.removeChild(old);
+            // ★ 2026-09-10 修复「多个邀请码重复渲染」：updateLicenseStatusText 为 async，
+            //   打开设置/激活回调/自愈转正等多路径并发调用时，旧实现用 getElementById 只移除
+            //   第一个卡片，其余并发调用在异步等待期间均看不到旧卡片 → 各自 append 造成重复。
+            //   改为 querySelectorAll 移除全部同名卡片，确保幂等。
+            document.querySelectorAll('#inviteInfoBox').forEach(n => { if (n.parentNode) n.parentNode.removeChild(n); });
             // ★ 三来源取码（APP端激活码可能只存于 Java 层/StorageAdapter 未初始化）：
             //   1) StorageAdapter（标准来源，弹窗激活成功后写入）
             //   2) localStorage 直读（StorageAdapter 异常/未初始化兜底）
@@ -3130,6 +3133,9 @@
 
     // ★ 2026-08-29 邀请码卡片渲染（码查询/machineId 找回两路径共用）
     function renderInviteCard(el, d) {
+        // ★ 2026-09-10 双保险：append 前再次移除所有已存在的 inviteInfoBox，
+        //   防止并发调用 renderInviteCard 导致多个卡片并存
+        document.querySelectorAll('#inviteInfoBox').forEach(n => { if (n.parentNode) n.parentNode.removeChild(n); });
         const cnt = d.inviteCount || 0, max = d.maxInvitees || 4, days = d.rewardDays || 0;
         const box = document.createElement('div');
         box.id = 'inviteInfoBox';

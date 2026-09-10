@@ -3239,8 +3239,8 @@
 
     async function loadCloudInviteInfo(el) {
         try {
-            const old = document.getElementById('inviteInfoBox');
-            if (old && old.parentNode) old.parentNode.removeChild(old);
+            // ★ 2026-09-10 修复「多个邀请码重复渲染」：并发调用时 querySelectorAll 移除全部同名卡片
+            document.querySelectorAll('#inviteInfoBox').forEach(n => { if (n.parentNode) n.parentNode.removeChild(n); });
             // 凭据1：本地激活码（云桌面激活码激活成功后存有）
             let code = '';
             try { code = await StorageAdapter.getItem('license:code'); } catch (_) {}
@@ -3321,6 +3321,8 @@
     }
 
     function renderCloudInviteCard(el, d) {
+        // ★ 2026-09-10 双保险：append 前移除所有已存在的 inviteInfoBox
+        document.querySelectorAll('#inviteInfoBox').forEach(n => { if (n.parentNode) n.parentNode.removeChild(n); });
         const cnt = d.inviteCount || 0, max = d.maxInvitees || 4, days = d.rewardDays || 0;
         const box = document.createElement('div');
         box.id = 'inviteInfoBox';
