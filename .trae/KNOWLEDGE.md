@@ -937,6 +937,31 @@ P2 渐进迁移（2026-09-03 当日完成）：
 
 * ★ 2026-08-31 v2 下载"网络中断"真正根因：`/api/dl` 代理**丢弃客户端 Range 头**（请求 1MB 切片却返回 200 + 完整 78MB），浏览器下载 75MB 中断后**无法断点续传**，链路抖动（用户↔CF↔GitHub 任一环）直接报"网络中断无法连接"。修复双层：① 服务端 dl.js 透传 Range 头到上游，206 + Content-Range 原样透传 + `Access-Control-Expose-Headers`；② 前端 robustDownload 下载器（fetch 流式 + Range 断点恢复，中断自动重试 8 次指数退避，完成后 Blob 保存，按钮显示进度）。铁律：**大文件下载代理必须透传 Range 支持断点续传；前端大文件下载必须用流式下载器自动续传，禁止裸** **`<a>`/location.href 一次成型**。
 
+## 11. D1 数据库迁移与激活审核有效期（2026-09-10）
+
+### 用户表 D1 切读（登录+用户列表）
+
+* **目标**：用户认证与列表查询从 KV 迁移到 D1，KV 保留回退兜底。
+* **改造点**（`functions/api/users.js`）：
+  - `findUserForLogin(kv, username, env)`：D1 `SELECT * FROM clinic_users WHERE clinic_id=? AND username=?` 优先，KV 回退命中时 `syncUserToD1` 补齐。
+  - `getAllClinicUsers(kv, env)`：D1 `SELECT * FROM clinic_users` 一次查全，KV 回退。
+  - clinic_admin 本诊所用户列表：D1 `WHERE clinic_id=?`，KV 回退。
+* **辅助函数**：`d1RowToUser`（D1 行→用户对象）、`findClinicUserD1`、`syncUserToD1`（UPSERT）、`deleteUserFromD1`。
+* **回退补齐**：KV 命中用户时自动写 D1，存量数据逐步迁移，无需一次性批量导入。
+* **生效方式**：服务端 Functions push 即部署，**五端零重打包**。
+
+### 激活审核 days 必须写入 record（诊所 expiresAt 回退 365 天根因）
+
+* **根因**：`admin-approve.js` 审核通过调用 `provisionCloudAccount` 前，只写了 `record.expiresAt`，**漏写 `record.days = days`**。`admin-account.js` 新建诊所时 `(Number(record.days) || 365)` → record.days=undefined→NaN→回退 365 天。
+* **修复**：`admin-approve.js` L341 补 `record.days = days || null;`，与 `record.expiresAt` 同步写入。
+* **铁律**：调用 `provisionCloudAccount` 前，`record.days` 与 `record.expiresAt` 必须同时按管理员审核参数赋值，缺一不可。
+
+### clinic=update 支持直接设置 expiresAt（平台管理员修正异常有效期）
+
+* **背景**：历史异常数据（如 days 回退 365 的诊所）无法通过 renewDays 顺延修正（只会更长）。
+* **改造**：`POST /api/users?clinic=update` 新增 `expiresAt` 参数（支持 `yyyy-mm-dd` 或 ISO 字符串），平台管理员可直接覆盖诊所到期日，优先级高于 renewDays。
+* **生效方式**：服务端 Functions push 即部署，后台诊所管理强刷生效，五端零重打包。
+
 * ★ 2026-08-31 v3 下载"进度卡死 0%"根因：fetch ReadableStream **读流无内置超时**，弱网下连接静默挂起（无数据也无报错）时 `reader.read()` 永久等待，v2 下载器进度永久停在 0.4MB 且不触发重试（用户实测截图证实）。修复：**读流看门狗**——每段数据到达重置 15s 定时器，超时未喂则 `AbortController.abort()` 强制断开自动断点续传；重试上限提至 30 次、退避封顶 5s。铁律：**前端流式读取必须配看门狗（数据到达重置定时器 + 超时 abort），fetch 读流挂起不报错，没有看门狗就永远卡死**。
 
 * ★ 2026-09-01 E2E E1 偶发超时第三轮（真根因=TDZ 时序竞态）：index.html 解析期(:778)即调用 `Permission.init()`，而 `const CONFIG` 到(:810)才声明——**IPC 回调若落在两者之间，CONFIG 处于暂时性死区（TDZ），`typeof CONFIG`** **亦抛 ReferenceError 被 catch 静默吞掉**，`__authoritativeEdition` 写入被跳过 → asar 出厂默认(cloud\_personal)经(:834)同步 XHR 反向覆盖 → 机构版用户管理按钮消失（E1 FAIL / E3 时序有利又 PASS 的"偶发"假象）。修复双端兜底：① permission.js init() **无条件先暂存权威 edition 到 Permission 实例**（`this._authoritativeEdition`，permission.js 先于内嵌脚本加载，实例必然已存在），CONFIG 可用时再写插槽；② edition-lock.js getter 优先级2读取 `Permission._authoritativeEdition` 兜底。铁律：**async init 的 IPC 回调与页面内嵌顶层 const/let 声明存在竞态——跨脚本共享的权威值必须暂存到必然先存在的载体（自身模块实例），禁止只依赖可能处于 TDZ 的全局对象；`typeof`** **对 TDZ 变量照样抛错，不是安全探测**。验证方式：E2E 竞态类问题单次通过不算数，须 dev electron + real\_app.asar（run-e2e 兜底模式 B）连跑 5 次以上；fused exe 按设计阻断 CDP，不能直接跑 Playwright E2E（超时≠业务失败）。
