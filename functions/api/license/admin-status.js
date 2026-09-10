@@ -238,11 +238,13 @@ export async function onRequest(context) {
                 }
             } catch (e) { /* 解析失败按未过期处理（不阻断既有流程） */ }
             if (__licenseExpiredAt) {
+                // 到期日按北京时间显示（UTC slice 会比实际到期日早一天，客户困惑）
+                const __expBJ = new Date(new Date(__licenseExpiredAt).getTime() + 8 * 3600e3).toISOString().slice(0, 10);
                 return json({
                     success: true,
                     status: 'license_expired',
                     expiresAt: __licenseExpiredAt,
-                    message: `授权已于 ${String(__licenseExpiredAt).slice(0, 10)} 到期，请续费后重新激活`,
+                    message: `授权已于 ${__expBJ} 到期，请续费后重新激活`,
                     licenseInfo: {
                         user: record.adminName,
                         clinicName: record.clinicName,

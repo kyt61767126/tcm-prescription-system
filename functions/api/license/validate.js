@@ -365,6 +365,8 @@ export async function onRequest(context) {
         //   客户端落盘显示"激活成功"，重启即被启动校验拦截 → "激活成功却进不去"死循环。
         const __licenseExpMs = new Date(licenseData.expiresAt).getTime();
         if (!isNaN(__licenseExpMs) && Date.now() > __licenseExpMs) {
+            // 到期日按北京时间显示（UTC slice 会比实际到期日早一天，客户困惑）
+            const __expBJ = new Date(__licenseExpMs + 8 * 3600e3).toISOString().slice(0, 10);
             await appendLicenseLog(kv, code, {
                 action: 'reactivate-denied-expired',
                 time: new Date().toISOString(),
@@ -375,7 +377,7 @@ export async function onRequest(context) {
             return json({
                 success: false,
                 code: 'LICENSE_EXPIRED',
-                error: `该授权已于 ${String(licenseData.expiresAt).slice(0, 10)} 到期，重新激活无法恢复使用。请联系客服续费。`
+                error: `该授权已于 ${__expBJ} 到期，重新激活无法恢复使用。请联系客服续费。`
             }, 403);
         }
 
