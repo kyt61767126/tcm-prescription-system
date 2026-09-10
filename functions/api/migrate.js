@@ -226,6 +226,60 @@ export async function onRequest(context) {
         }
         stats.formulaMigrated = formulaMigrated;
 
+        // 5) ★ P3：迁移设备绑定（从 KV user_devices:{username} 导入 D1 user_devices）
+        const deviceKeys = await listAllKeys(kv, 'user_devices:');
+        let deviceMigrated = 0;
+        for (const key of deviceKeys) {
+            try {
+                const val = await kv.get(key, 'json').catch(() => null);
+                if (!val || !Array.isArray(val.devices)) continue;
+                const username = key.slice('user_devices:'.length);
+                for (const d of val.devices) {
+                    if (!d || !d.machineId) continue;
+                    await db.prepare(`
+                        INSERT INTO user_devices (username, machine_id, client_class, device_name, bound_at, last_seen_at)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(username, machine_id) DO UPDATE SET
+                            client_class=excluded.client_class, last_seen_at=excluded.last_seen_at
+                    `).bind(username, d.machineId, d.clientClass || null, d.deviceName || null, d.boundAt || null, d.lastSeenAt || null).run();
+                    deviceMigrated++;
+                }
+            } catch (e) { stats.errors.push({ key, error: e.message }); }
+        }
+        stats.deviceMigrated = deviceMigrated;
+
+        // 6) ★ P3：迁移用户表（从 KV clinic:{id}:users 导入 D1 clinic_users）
+        const clinicKeys = await listAllKeys(kv, 'clinic:');
+        let userMigrated = 0;
+        for (const key of clinicKeys) {
+            if (!key.endsWith(':users')) continue;
+            try {
+                const users = await kv.get(key, 'json').catch(() => null);
+                if (!Array.isArray(users)) continue;
+                const cid = key.split(':')[1];
+                for (const u of users) {
+                    if (!u || !u.username) continue;
+                    await db.prepare(`
+                        INSERT INTO clinic_users (clinic_id, username, name, role, phone, password_hash, salt, allowed_mode, cloud_enabled, extra, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(clinic_id, username) DO UPDATE SET
+                            name=excluded.name, role=excluded.role, phone=excluded.phone,
+                            password_hash=excluded.password_hash, salt=excluded.salt,
+                            allowed_mode=excluded.allowed_mode, cloud_enabled=excluded.cloud_enabled,
+                            extra=excluded.extra, updated_at=excluded.updated_at
+                    `).bind(
+                        cid, u.username, u.name || null, u.role || null, u.phone || null,
+                        u.passwordHash || u.password || null, u.salt || null,
+                        u.allowedMode || 'both', u.cloudEnabled ? 1 : 0,
+                        JSON.stringify(Object.fromEntries(Object.entries(u).filter(([k]) => !['username','name','role','phone','passwordHash','password','salt','allowedMode','cloudEnabled','createdAt','updatedAt'].includes(k)))),
+                        u.createdAt || null, u.updatedAt || new Date().toISOString()
+                    ).run();
+                    userMigrated++;
+                }
+            } catch (e) { stats.errors.push({ key, error: e.message }); }
+        }
+        stats.userMigrated = userMigrated;
+
         return new Response(JSON.stringify({ success: true, stats }), { status: 200, headers: getCorsHeaders() });
     } catch (e) {
         return new Response(JSON.stringify({ success: false, error: e.message }), { status: 500, headers: getCorsHeaders() });

@@ -13,6 +13,8 @@ import { deleteAdminRequest } from './license/_lib/license-write-service.js';
 import { listLicenses, getDevices, updateLicense } from './license/_lib/license-core.js';
 // ★ 2026-09-10 审计日志单一事实源（并发安全，独立记录 key）
 import { writeAuditLog } from './_lib/audit-log.js';
+// ★ 2026-09-10 P3 D1 迁移：设备绑定 D1 双写
+import { getDB, isD1Enabled } from './_lib/d1.js';
 
 // ============================================================================
 // ★★★ 2026-08-21 账号级设备授权（一个云端管理员最多绑定 2 台设备：桌面/APP）
@@ -50,7 +52,7 @@ function sanitizeDevices(record) {
 }
 
 // 绑定/更新设备（返回 { ok, record } 或 { ok:false, code:'DEVICE_LIMIT', record }）
-async function bindUserDevice(kv, username, machineId, clientClass, nowIso, edition) {
+async function bindUserDevice(kv, username, machineId, clientClass, nowIso, edition, env = null) {
     // ★ 2026-08-22 特殊账户豁免：名单内账号不限制设备数量
     // ★★ 2026-08-22 配额来源：优先保留 KV 中已有 maxDevices（平台管理员后台可调整）；
     //    仅当记录无配额字段时，按豁免名单给默认值（豁免=99 实际不限，普通=2）
@@ -89,6 +91,23 @@ async function bindUserDevice(kv, username, machineId, clientClass, nowIso, edit
         });
     }
     await kv.put(KV_USER_DEVICES_PREFIX + username, JSON.stringify(record));
+    // ★ P3：D1 双写设备绑定（USE_D1=true 时同步写 D1）
+    if (env && isD1Enabled(env)) {
+        const db = getDB(env);
+        if (db) {
+            try {
+                await db.prepare(`DELETE FROM user_devices WHERE username = ?`).bind(username).run();
+                for (const d of record.devices) {
+                    await db.prepare(`
+                        INSERT INTO user_devices (username, machine_id, client_class, device_name, bound_at, last_seen_at)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(username, machine_id) DO UPDATE SET
+                            client_class=excluded.client_class, last_seen_at=excluded.last_seen_at
+                    `).bind(username, d.machineId, d.clientClass || null, d.deviceName || null, d.boundAt || nowIso, d.lastSeenAt || nowIso).run();
+                }
+            } catch (e) { console.error('[D1] bindUserDevice sync failed:', e.message); }
+        }
+    }
     return { ok: true, record };
 }
 // （end 设备授权）
@@ -716,6 +735,15 @@ export async function onRequest(context) {
                 if (devRecord) {
                     await kv.put(KV_USER_DEVICES_PREFIX + newUsername, JSON.stringify(devRecord));
                     await kv.delete(KV_USER_DEVICES_PREFIX + oldUsername);
+                    // ★ P3：D1 双写设备改名迁移
+                    if (isD1Enabled(context.env)) {
+                        const db = getDB(context.env);
+                        if (db) {
+                            try {
+                                await db.prepare(`UPDATE user_devices SET username = ? WHERE username = ?`).bind(newUsername, oldUsername).run();
+                            } catch (e) { console.error('[D1] device rename migrate failed:', e.message); }
+                        }
+                    }
                 }
             } catch (e) { console.warn('[set-username] 设备绑定迁移失败（不影响改名）:', e); }
 
@@ -1493,7 +1521,7 @@ export async function onRequest(context) {
                 }
 
                 // ② 账号级设备绑定（机构版每账号 1 台 / 标准版每账号 2 台）
-                const bind = await bindUserDevice(kv, user.username, machineId, effClientClass, nowIso, normEdition);
+                const bind = await bindUserDevice(kv, user.username, machineId, effClientClass, nowIso, normEdition, context.env);
                 if (!bind.ok && bind.code === 'DEVICE_LIMIT') {
                     await writeAuditLog(kv, clinicId, user.username, user.role, 'login_failed', 'device_limit', context, {
                         machineId: String(machineId || '').substring(0, 8) + '...',
@@ -1617,6 +1645,14 @@ export async function onRequest(context) {
             }
             const removed = record.devices.splice(idx, 1)[0];
             await kv.put(KV_USER_DEVICES_PREFIX + authUser.username, JSON.stringify(record));
+            // ★ P3：D1 双写解绑
+            if (isD1Enabled(context.env)) {
+                const db = getDB(context.env);
+                if (db) {
+                    try { await db.prepare(`DELETE FROM user_devices WHERE username = ? AND machine_id = ?`).bind(authUser.username, machineId).run(); }
+                    catch (e) { console.error('[D1] unbind-device failed:', e.message); }
+                }
+            }
             await writeAuditLog(kv, authUser.clinicId, authUser.username, authUser.role, 'device_unbind', 'auth', context, {
                 machineId: machineId.substring(0, 8) + '...',
                 clientClass: removed.clientClass || null
@@ -1829,6 +1865,14 @@ export async function onRequest(context) {
                     if (devRecord) {
                         await kv.put(KV_USER_DEVICES_PREFIX + newUsername, JSON.stringify(devRecord));
                         await kv.delete(KV_USER_DEVICES_PREFIX + username);
+                        // ★ P3：D1 双写设备改名迁移
+                        if (isD1Enabled(context.env)) {
+                            const db = getDB(context.env);
+                            if (db) {
+                                try { await db.prepare(`UPDATE user_devices SET username = ? WHERE username = ?`).bind(newUsername, username).run(); }
+                                catch (e) { console.error('[D1] device rename migrate(2) failed:', e.message); }
+                            }
+                        }
                     }
                 } catch (e) { console.warn('[change-password+rename] 设备绑定迁移失败:', e); }
                 found.user.username = newUsername;

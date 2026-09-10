@@ -82,3 +82,34 @@ CREATE TABLE IF NOT EXISTS formulas (
 CREATE INDEX IF NOT EXISTS idx_formulas_clinic ON formulas(clinic_id);
 CREATE INDEX IF NOT EXISTS idx_formulas_user ON formulas(clinic_id, created_by);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_formulas_unique ON formulas(clinic_id, created_by, name);
+
+-- ============================================================================
+--  P3：用户表 + 设备绑定表（双写积累，读取暂走 KV，验证后切读）
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS clinic_users (
+  clinic_id     TEXT NOT NULL,
+  username      TEXT NOT NULL,
+  name          TEXT,
+  role          TEXT,
+  phone         TEXT,
+  password_hash TEXT,
+  salt          TEXT,
+  allowed_mode  TEXT DEFAULT 'both',
+  cloud_enabled INTEGER DEFAULT 1,
+  extra         TEXT,                    -- JSON
+  created_at    TEXT,
+  updated_at    TEXT,
+  PRIMARY KEY (clinic_id, username)
+);
+CREATE INDEX IF NOT EXISTS idx_users_clinic ON clinic_users(clinic_id);
+
+CREATE TABLE IF NOT EXISTS user_devices (
+  username     TEXT NOT NULL,
+  machine_id   TEXT NOT NULL,
+  client_class TEXT,
+  device_name  TEXT,
+  bound_at     TEXT,
+  last_seen_at TEXT,
+  PRIMARY KEY (username, machine_id)
+);
+CREATE INDEX IF NOT EXISTS idx_devices_user ON user_devices(username);
