@@ -1,0 +1,141 @@
+// ============================================================================
+//  migrate.js — KV 处方数据迁移到 D1（平台管理员调用）
+//
+//  用法：POST /api/migrate?target=prescriptions  Header: Authorization: Bearer <platform_admin_token>
+//
+//  功能：扫描 KV 中所有 clinic:{id}:prescriptions:{yymmdd} 和旧 clinic:{id}:prescriptions，
+//        逐条 INSERT 到 D1 prescriptions 表，并同步 prescription_seq 序号。
+//  幂等：基于 id 字段 ON CONFLICT DO UPDATE，可重复执行。
+// ============================================================================
+
+import { parseAuthHeader, isPlatformAdmin } from './_lib/auth.js';
+import { getKV, listAllKeys } from './_lib/kv.js';
+import { getDB, isD1Enabled } from './_lib/d1.js';
+
+function getCorsHeaders() {
+    return {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Content-Type': 'application/json; charset=utf-8'
+    };
+}
+
+export async function onRequest(context) {
+    if (context.request.method === 'OPTIONS') {
+        return new Response(null, { status: 200, headers: getCorsHeaders() });
+    }
+    if (context.request.method !== 'POST') {
+        return new Response(JSON.stringify({ success: false, error: 'Method not allowed' }), { status: 405, headers: getCorsHeaders() });
+    }
+
+    const auth = parseAuthHeader(context.request);
+    if (!auth || !isPlatformAdmin(auth)) {
+        return new Response(JSON.stringify({ success: false, error: '仅平台管理员可执行迁移' }), { status: 403, headers: getCorsHeaders() });
+    }
+
+    const kv = getKV(context.env);
+    const db = getDB(context.env);
+    if (!isD1Enabled(context.env) || !db) {
+        return new Response(JSON.stringify({ success: false, error: 'D1 未启用，请设置 USE_D1=true 并配置 DB 绑定' }), { status: 400, headers: getCorsHeaders() });
+    }
+
+    const target = new URL(context.request.url).searchParams.get('target') || 'prescriptions';
+    if (target !== 'prescriptions') {
+        return new Response(JSON.stringify({ success: false, error: `不支持的迁移目标: ${target}` }), { status: 400, headers: getCorsHeaders() });
+    }
+
+    try {
+        const stats = { scanned: 0, inserted: 0, updated: 0, errors: [] };
+
+        // 1) 扫描所有诊所的处方 key（按日期分 key + 旧全量 key）
+        const dateKeys = await listAllKeys(kv, 'clinic:');
+        const rxKeys = dateKeys.filter(k =>
+            k.startsWith('clinic:') && k.includes(':prescriptions')
+        );
+
+        for (const key of rxKeys) {
+            try {
+                const arr = await kv.get(key, 'json').catch(() => null);
+                if (!Array.isArray(arr)) continue;
+                for (const p of arr) {
+                    if (!p || typeof p !== 'object' || !p.id) continue;
+                    stats.scanned++;
+                    try {
+                        const before = await db.prepare('SELECT id FROM prescriptions WHERE id = ?').bind(String(p.id)).first();
+                        const exists = !!before;
+                        await db.prepare(`
+                            INSERT INTO prescriptions (id, clinic_id, patient_name, doctor_name, created_by, date,
+                                prescription_no, outpatient_no, diagnosis, items, total_amount, fee_status,
+                                paid_at, paid_by, pay_method, media_files, extra, created_at, updated_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            ON CONFLICT(id) DO UPDATE SET
+                                patient_name=excluded.patient_name, doctor_name=excluded.doctor_name,
+                                date=excluded.date, prescription_no=excluded.prescription_no,
+                                outpatient_no=excluded.outpatient_no, diagnosis=excluded.diagnosis,
+                                items=excluded.items, total_amount=excluded.total_amount,
+                                fee_status=excluded.fee_status, paid_at=excluded.paid_at,
+                                paid_by=excluded.paid_by, pay_method=excluded.pay_method,
+                                media_files=excluded.media_files, extra=excluded.extra,
+                                updated_at=excluded.updated_at
+                        `).bind(
+                            String(p.id),
+                            p.clinicId || extractClinicIdFromKey(key),
+                            p.patientName || null,
+                            p.doctorName || null,
+                            p.createdBy || '',
+                            p.date || '',
+                            p.prescriptionNo || null,
+                            p.outpatientNo || null,
+                            p.diagnosis || null,
+                            JSON.stringify(p.items || []),
+                            typeof p.totalAmount === 'number' ? p.totalAmount : 0,
+                            p.feeStatus || 'unpaid',
+                            p.paidAt || null,
+                            p.paidBy || null,
+                            p.payMethod || null,
+                            p.mediaFiles ? JSON.stringify(p.mediaFiles) : null,
+                            p.extra ? JSON.stringify(p.extra) : null,
+                            p.createdAt || new Date().toISOString(),
+                            p.updatedAt || null
+                        ).run();
+                        if (exists) stats.updated++; else stats.inserted++;
+                    } catch (e) {
+                        stats.errors.push({ id: p.id, error: e.message });
+                    }
+                }
+            } catch (e) {
+                stats.errors.push({ key, error: e.message });
+            }
+        }
+
+        // 2) 同步编号计数器（从 KV clinic:{id}:prescription_seq:{yymmdd} 导入）
+        const seqKeys = await listAllKeys(kv, 'clinic:');
+        for (const key of seqKeys) {
+            if (!key.includes(':prescription_seq:')) continue;
+            try {
+                const seqVal = parseInt(await kv.get(key) || '0', 10);
+                if (!seqVal) continue;
+                const parts = key.split(':');
+                const clinicId = parts[1];
+                const yymmdd = parts[3];
+                await db.prepare(`
+                    INSERT INTO prescription_seq (clinic_id, yymmdd, seq) VALUES (?, ?, ?)
+                    ON CONFLICT(clinic_id, yymmdd) DO UPDATE SET seq = MAX(seq, excluded.seq)
+                `).bind(clinicId, yymmdd, seqVal).run();
+            } catch (e) {
+                stats.errors.push({ key, error: e.message });
+            }
+        }
+
+        return new Response(JSON.stringify({ success: true, stats }), { status: 200, headers: getCorsHeaders() });
+    } catch (e) {
+        return new Response(JSON.stringify({ success: false, error: e.message }), { status: 500, headers: getCorsHeaders() });
+    }
+}
+
+// 从 KV key 中提取 clinicId（clinic:{cid}:prescriptions:{yymmdd}）
+function extractClinicIdFromKey(key) {
+    const parts = key.split(':');
+    return parts.length >= 2 ? parts[1] : '';
+}

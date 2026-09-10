@@ -1,5 +1,6 @@
 import { parseAuthHeader, isPlatformAdmin, isClinicAdmin, isAdmin, isCashier } from './_lib/auth.js';
 import { getKV, listAllKeys } from './_lib/kv.js';
+import { getDB, isD1Enabled } from './_lib/d1.js';
 import { writeAuditLog } from './_lib/audit-log.js';
 
 // P1-6 安全增强：CORS 白名单（与 users.js 一致）
@@ -259,6 +260,168 @@ async function deletePrescriptionById(kv, clinicId, id) {
     return null;
 }
 
+// ============================================================================
+// ★ 2026-09-10 D1 处方存储层（P0 迁移）
+//
+// 策略：USE_D1=true 时
+//   - 读：D1 优先，D1 失败回退 KV
+//   - 写：D1 + KV 双写（KV 作为备份，便于回滚）
+//   - 编号：D1 prescription_seq 表事务原子递增（根治重号）
+// ============================================================================
+
+// 从 D1 读取全所处方（含软删除标记，调用方按需过滤）
+async function d1LoadPrescriptions(db, clinicId, includeDeleted = false) {
+    const sql = includeDeleted
+        ? `SELECT * FROM prescriptions WHERE clinic_id = ? ORDER BY datetime(created_at) DESC`
+        : `SELECT * FROM prescriptions WHERE clinic_id = ? AND deleted_at IS NULL ORDER BY datetime(created_at) DESC`;
+    const result = await db.prepare(sql).bind(clinicId).all();
+    if (!result || !result.success) return [];
+    return result.results.map(row => d1RowToPrescription(row));
+}
+
+// D1 行 → 处方对象（恢复 items/media_files/extra 的 JSON 解析）
+function d1RowToPrescription(row) {
+    const p = { ...row };
+    // D1 列名转 camelCase（与 KV 存储的字段名保持一致）
+    p.patientName = row.patient_name;
+    p.doctorName = row.doctor_name;
+    p.createdBy = row.created_by;
+    p.prescriptionNo = row.prescription_no;
+    p.outpatientNo = row.outpatient_no;
+    p.totalAmount = row.total_amount;
+    p.feeStatus = row.fee_status;
+    p.paidAt = row.paid_at;
+    p.paidBy = row.paid_by;
+    p.payMethod = row.pay_method;
+    p.mediaFiles = row.media_files ? safeJsonParse(row.media_files, []) : [];
+    p.items = row.items ? safeJsonParse(row.items, []) : [];
+    p.extra = row.extra ? safeJsonParse(row.extra, {}) : {};
+    p.deletedAt = row.deleted_at;
+    p.deletedBy = row.deleted_by;
+    p.clinicId = row.clinic_id;
+    // 清理 D1 原始列名
+    delete p.patient_name; delete p.doctor_name; delete p.created_by;
+    delete p.prescription_no; delete p.outpatient_no; delete p.total_amount;
+    delete p.fee_status; delete p.paid_at; delete p.paid_by; delete p.pay_method;
+    delete p.media_files; delete p.clinic_id; delete p.deleted_at; delete p.deleted_by;
+    return p;
+}
+
+function safeJsonParse(str, fallback) {
+    try { return JSON.parse(str); } catch (e) { return fallback; }
+}
+
+// 写入/更新单条处方到 D1（upsert by id）
+async function d1UpsertPrescription(db, clinicId, p) {
+    await db.prepare(`
+        INSERT INTO prescriptions (id, clinic_id, patient_name, doctor_name, created_by, date,
+            prescription_no, outpatient_no, diagnosis, items, total_amount, fee_status,
+            paid_at, paid_by, pay_method, media_files, extra, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            patient_name=excluded.patient_name, doctor_name=excluded.doctor_name,
+            date=excluded.date, prescription_no=excluded.prescription_no,
+            outpatient_no=excluded.outpatient_no, diagnosis=excluded.diagnosis,
+            items=excluded.items, total_amount=excluded.total_amount,
+            fee_status=excluded.fee_status, paid_at=excluded.paid_at,
+            paid_by=excluded.paid_by, pay_method=excluded.pay_method,
+            media_files=excluded.media_files, extra=excluded.extra,
+            updated_at=excluded.updated_at
+    `).bind(
+        String(p.id), clinicId,
+        p.patientName || null,
+        p.doctorName || null,
+        p.createdBy || '',
+        p.date || '',
+        p.prescriptionNo || null,
+        p.outpatientNo || null,
+        p.diagnosis || null,
+        JSON.stringify(p.items || []),
+        typeof p.totalAmount === 'number' ? p.totalAmount : 0,
+        p.feeStatus || 'unpaid',
+        p.paidAt || null,
+        p.paidBy || null,
+        p.payMethod || null,
+        p.mediaFiles ? JSON.stringify(p.mediaFiles) : null,
+        p.extra ? JSON.stringify(p.extra) : null,
+        p.createdAt || new Date().toISOString(),
+        p.updatedAt || null
+    ).run();
+}
+
+// D1 软删除（标记 deleted_at）
+async function d1SoftDelete(db, clinicId, id, deletedBy) {
+    const nowIso = new Date().toISOString();
+    const r = await db.prepare(
+        `UPDATE prescriptions SET deleted_at = ?, deleted_by = ? WHERE id = ? AND clinic_id = ?`
+    ).bind(nowIso, deletedBy, String(id), clinicId).run();
+    return r && r.meta && r.meta.changes > 0;
+}
+
+// D1 恢复处方（清除 deleted_at）
+async function d1Restore(db, clinicId, id) {
+    const r = await db.prepare(
+        `UPDATE prescriptions SET deleted_at = NULL, deleted_by = NULL WHERE id = ? AND clinic_id = ?`
+    ).bind(String(id), clinicId).run();
+    return r && r.meta && r.meta.changes > 0;
+}
+
+// D1 永久删除（从回收站彻底删除）
+async function d1PermanentDelete(db, clinicId, id) {
+    const r = await db.prepare(
+        `DELETE FROM prescriptions WHERE id = ? AND clinic_id = ? AND deleted_at IS NOT NULL`
+    ).bind(String(id), clinicId).run();
+    return r && r.meta && r.meta.changes > 0;
+}
+
+// D1 收费
+async function d1MarkPaid(db, clinicId, id, paidBy, paidByName, payMethod) {
+    const nowIso = new Date().toISOString();
+    const r = await db.prepare(`
+        UPDATE prescriptions SET fee_status='paid', paid_at=?, paid_by=?, pay_method=?
+        WHERE id=? AND clinic_id=? AND (fee_status IS NULL OR fee_status != 'paid')
+    `).bind(nowIso, paidBy, payMethod, String(id), clinicId).run();
+    return r && r.meta && r.meta.changes > 0;
+}
+
+// D1 按 id 查询单条处方
+async function d1GetById(db, clinicId, id) {
+    const r = await db.prepare(
+        `SELECT * FROM prescriptions WHERE id = ? AND clinic_id = ?`
+    ).bind(String(id), clinicId).first();
+    return r ? d1RowToPrescription(r) : null;
+}
+
+// D1 编号分配（事务原子递增，根治重号）
+async function d1AllocateNos(db, clinicId, count, yymmddStr) {
+    const yymmdd = yymmddStr || formatBeijingDateYYMMDD(getBeijingTime());
+    // 用事务：INSERT OR IGNORE 初始化 → UPDATE 递增 → 读取最新值
+    await db.prepare(
+        `INSERT OR IGNORE INTO prescription_seq (clinic_id, yymmdd, seq) VALUES (?, ?, 0)`
+    ).bind(clinicId, yymmdd).run();
+
+    const nos = [];
+    for (let i = 0; i < count; i++) {
+        const r = await db.prepare(`
+            UPDATE prescription_seq SET seq = seq + 1
+            WHERE clinic_id = ? AND yymmdd = ?
+            RETURNING seq
+        `).bind(clinicId, yymmdd).first();
+        const seq = r ? r.seq : (i + 1);
+        nos.push(yymmdd + String(seq).padStart(2, '0'));
+    }
+    return nos;
+}
+
+// 双写：D1 + KV（D1 失败时仅记日志，不阻断 KV 写入）
+async function dualWritePrescription(kv, db, d1On, clinicId, prescription) {
+    if (d1On && db) {
+        try { await d1UpsertPrescription(db, clinicId, prescription); }
+        catch (e) { console.error('[D1] upsert prescription failed:', e.message); }
+    }
+    await upsertToDayKey(kv, clinicId, prescription);
+}
+
 export async function onRequest(context) {
     const url = new URL(context.request.url);
     const method = context.request.method;
@@ -295,9 +458,17 @@ export async function onRequest(context) {
 
         // GET - 获取处方列表
         if (method === 'GET') {
+            const d1On = isD1Enabled(context.env);
+            const db = getDB(context.env);
             // 回收站列表
             if (url.searchParams.get('trash') === 'true') {
-                let trash = (await kv.get(KV_TRASH, 'json')) || [];
+                let trash;
+                if (d1On && db) {
+                    // D1：deleted_at IS NOT NULL
+                    trash = (await d1LoadPrescriptions(db, targetClinicId, true)).filter(p => p.deletedAt);
+                } else {
+                    trash = (await kv.get(KV_TRASH, 'json')) || [];
+                }
                 if (!currentUser.isAdmin && !isPlatformAdmin(currentUser)) {
                     trash = trash.filter(p => p.createdBy === currentUser.username);
                 }
@@ -309,7 +480,15 @@ export async function onRequest(context) {
                 return json({ success: true, data: trash, count: trash.length, currentUsername: currentUser.username });
             }
 
-            let prescriptions = await loadAllPrescriptions(kv, targetClinicId);
+            let prescriptions;
+            if (d1On && db) {
+                // ★ D1 优先读取（含 deleted_at IS NULL 过滤）
+                prescriptions = await d1LoadPrescriptions(db, targetClinicId, false);
+            }
+            if (!prescriptions || prescriptions.length === 0) {
+                // D1 为空或未启用：回退 KV
+                prescriptions = await loadAllPrescriptions(kv, targetClinicId);
+            }
 
             // 按角色筛选
             let filtered = prescriptions;
@@ -362,6 +541,9 @@ export async function onRequest(context) {
                 let payMethod = String(body.payMethod || '').trim();
                 if (!PAY_METHODS.includes(payMethod)) payMethod = '其他';
 
+                const d1On = isD1Enabled(context.env);
+                const db = getDB(context.env);
+
                 let prescriptions = await loadAllPrescriptions(kv, targetClinicId);
                 const idx = prescriptions.findIndex(p => String(p.id) === String(pid));
                 if (idx === -1) {
@@ -377,8 +559,12 @@ export async function onRequest(context) {
                 target.paidBy = currentUser.username;
                 target.paidByName = (body.paidByName || currentUser.username);
                 target.payMethod = payMethod;
-                prescriptions[idx] = target;
-                // ★ 2026-09-10 按日期分 key：收费更新写回对应日期 key
+
+                // ★ D1 双写：D1 UPDATE 收费 + KV 同步
+                if (d1On && db) {
+                    try { await d1MarkPaid(db, targetClinicId, pid, currentUser.username, body.paidByName, payMethod); }
+                    catch (e) { console.error('[D1] mark-paid failed:', e.message); }
+                }
                 await upsertToDayKey(kv, targetClinicId, target);
 
                 await writeAuditLog(kv, targetClinicId, currentUser.username, currentUser.role,
@@ -398,6 +584,31 @@ export async function onRequest(context) {
                 const prescriptionId = url.searchParams.get('id');
                 if (!prescriptionId) {
                     return json({ success: false, error: 'Missing prescription ID' }, 400);
+                }
+
+                const d1On = isD1Enabled(context.env);
+                const db = getDB(context.env);
+
+                if (d1On && db) {
+                    // ★ D1 恢复：UPDATE deleted_at=NULL
+                    const existing = await d1GetById(db, targetClinicId, prescriptionId);
+                    if (!existing || !existing.deletedAt) {
+                        return json({ success: false, error: '回收站中未找到此处方' }, 404);
+                    }
+                    if (existing.createdBy !== currentUser.username && !isAdmin(currentUser)) {
+                        return json({ success: false, error: '无权恢复此处方' }, 403);
+                    }
+                    await d1Restore(db, targetClinicId, prescriptionId);
+                    // 同步 KV
+                    const restored = { ...existing };
+                    delete restored.deletedAt;
+                    delete restored.deletedBy;
+                    await upsertToDayKey(kv, targetClinicId, restored);
+                    // 从 KV 回收站移除
+                    let trash = (await kv.get(KV_TRASH, 'json')) || [];
+                    const tIdx = trash.findIndex(p => String(p.id) === String(prescriptionId));
+                    if (tIdx >= 0) { trash.splice(tIdx, 1); await kv.put(KV_TRASH, JSON.stringify(trash)); }
+                    return json({ success: true, message: '处方已恢复', data: restored });
                 }
 
                 let trash = (await kv.get(KV_TRASH, 'json')) || [];
@@ -476,8 +687,13 @@ export async function onRequest(context) {
             // 新建：写回前重读最新列表（捕捉窗口期其他设备保存的处方），
             // 基于最新列表分配编号，并与最新列表按 id 合并写回（他人新增不丢）
             if (newOnes.length > 0) {
+                const d1On = isD1Enabled(context.env);
+                const db = getDB(context.env);
                 const fresh = await loadAllPrescriptions(kv, targetClinicId);
-                const nos = await allocatePrescriptionNos(kv, targetClinicId, fresh, newOnes.length);
+                // ★ D1 编号分配（事务原子递增，根治重号），KV 兜底用计数器
+                const nos = d1On && db
+                    ? await d1AllocateNos(db, targetClinicId, newOnes.length)
+                    : await allocatePrescriptionNos(kv, targetClinicId, fresh, newOnes.length);
                 const newSaved = [];
 
                 newOnes.forEach((p, i) => {
@@ -523,9 +739,11 @@ export async function onRequest(context) {
                 return noB.localeCompare(noA);
             });
 
-            // ★ 2026-09-10 按日期分 key：逐条写入对应日期 key（不再全量 put 单数组）
+            // ★ D1 双写：逐条写入 D1 + KV（按日期分 key）
+            const d1On = isD1Enabled(context.env);
+            const db = getDB(context.env);
             for (const p of savedPrescriptions) {
-                await upsertToDayKey(kv, targetClinicId, p);
+                await dualWritePrescription(kv, db, d1On, targetClinicId, p);
             }
 
             const nextPrescriptionNo = await peekNextPrescriptionNo(kv, targetClinicId, prescriptions);
@@ -552,8 +770,28 @@ export async function onRequest(context) {
                 return json({ success: false, error: 'Missing prescription ID' }, 400, context.request);
             }
 
+            const d1On = isD1Enabled(context.env);
+            const db = getDB(context.env);
+
             // 永久删除：从回收站彻底删除
             if (isPermanent) {
+                if (d1On && db) {
+                    const existing = await d1GetById(db, targetClinicId, prescriptionId);
+                    if (!existing || !existing.deletedAt) {
+                        return json({ success: false, error: '回收站中未找到此处方' }, 404, context.request);
+                    }
+                    if (existing.createdBy !== currentUser.username && !isAdmin(currentUser)) {
+                        return json({ success: false, error: '无权删除此处方' }, 403, context.request);
+                    }
+                    await d1PermanentDelete(db, targetClinicId, prescriptionId);
+                    // 同步 KV 回收站
+                    let trash = (await kv.get(KV_TRASH, 'json')) || [];
+                    const tIdx = trash.findIndex(p => String(p.id) === String(prescriptionId));
+                    if (tIdx >= 0) { trash.splice(tIdx, 1); await kv.put(KV_TRASH, JSON.stringify(trash)); }
+                    await writeAuditLog(kv, targetClinicId, currentUser.username, currentUser.role, 'prescription_permanent_delete', prescriptionId, context.request, { patientName: existing.patientName });
+                    return json({ success: true, message: '处方已永久删除' }, 200, context.request);
+                }
+
                 let trash = (await kv.get(KV_TRASH, 'json')) || [];
                 const idx = trash.findIndex(p => p.id.toString() === prescriptionId.toString());
                 if (idx === -1) {
@@ -575,14 +813,29 @@ export async function onRequest(context) {
             }
 
             // 软删除：移入回收站
-            // ★ 2026-09-10 按日期分 key：从所有日期 key 中查找并删除
-            const prescription = await deletePrescriptionById(kv, targetClinicId, prescriptionId);
-            if (!prescription) {
-                return json({ success: false, error: 'Prescription not found' }, 404, context.request);
-            }
-
-            if (prescription.createdBy !== currentUser.username && !isAdmin(currentUser)) {
-                return json({ success: false, error: '无权删除此处方' }, 403, context.request);
+            let prescription;
+            if (d1On && db) {
+                // ★ D1 软删除：UPDATE deleted_at
+                const existing = await d1GetById(db, targetClinicId, prescriptionId);
+                if (!existing || existing.deletedAt) {
+                    return json({ success: false, error: 'Prescription not found' }, 404, context.request);
+                }
+                if (existing.createdBy !== currentUser.username && !isAdmin(currentUser)) {
+                    return json({ success: false, error: '无权删除此处方' }, 403, context.request);
+                }
+                await d1SoftDelete(db, targetClinicId, prescriptionId, currentUser.username);
+                prescription = existing;
+                // 同步 KV：从日期 key 移除 + 加入回收站
+                await deletePrescriptionById(kv, targetClinicId, prescriptionId);
+            } else {
+                // ★ 2026-09-10 按日期分 key：从所有日期 key 中查找并删除
+                prescription = await deletePrescriptionById(kv, targetClinicId, prescriptionId);
+                if (!prescription) {
+                    return json({ success: false, error: 'Prescription not found' }, 404, context.request);
+                }
+                if (prescription.createdBy !== currentUser.username && !isAdmin(currentUser)) {
+                    return json({ success: false, error: '无权删除此处方' }, 403, context.request);
+                }
             }
 
             let trash = (await kv.get(KV_TRASH, 'json')) || [];
