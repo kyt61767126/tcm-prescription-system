@@ -20,7 +20,11 @@
 #    漏了 electron/user-store.js 独立副本 → push 六道全绿 → 打包时
 #    copy-consistency FAIL + Auto-FIX 覆盖 → 产生未提交源码修改 → 下一个
 #    打包目标（云端APP）被源码落定门拦截。独立副本漂移必须在 push 时拦截。
-#  七道门全过才允许推送（均为秒级，不拖慢日常 push）。
+#  ★ 2026-09-10 八道门补强：check-manifest-version.cjs（manifest APP 版本 SSOT）。
+#    缺口实锤：发布脚本双轨（一键 publish-release.js / 手动 auto-update-downloads.js）
+#    写同一 hash-manifest.json 格式不一致，手动轨漏拼 versionCode → 下载页 APP
+#    卡片显示 v1.0.0 不完整。版本号格式必须门禁强制，不靠脚本自觉。
+#  八道门全过才允许推送（均为秒级，不拖慢日常 push）。
 #
 #  绕过方式（仅限紧急情况，事后必须补跑）：git push --no-verify
 #  启用方式（克隆后一次性）：git config core.hooksPath .githooks
@@ -73,5 +77,16 @@ node tools/copy-consistency.cjs || {
     exit 1
 }
 
-echo "[pre-push] 七道校验全部通过，允许推送"
+# ★ 2026-09-10 八道门补强：check-manifest-version.cjs（manifest APP 版本号 SSOT 校验）。
+#   缺口实锤：publish-release.js（一键发布）与 auto-update-downloads.js（手动发布）
+#   双轨写 hash-manifest.json，手动轨曾只写裸 versionName（1.0.0）→ 下载页 APP
+#   卡片显示"v1.0.0"不完整（应为 v1.0.0.283）。本门强制 {cloud,local,dingzhi}.apk
+#   四段式 V{versionName}.{versionCode} + versionCode 同源一致 + dingzhi/local 镜像。
+echo "[pre-push] ⑧ manifest APP 版本号 SSOT 校验..."
+node tools/check-manifest-version.cjs || {
+    echo "[pre-push] FAIL: hash-manifest.json APP 版本格式不符合 SSOT——按 check-manifest-version.cjs 报错修正发布脚本（双轨写 manifest 必须同格式 V{versionName}.{versionCode}）"
+    exit 1
+}
+
+echo "[pre-push] 八道校验全部通过，允许推送"
 exit 0

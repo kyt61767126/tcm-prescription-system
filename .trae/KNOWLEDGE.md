@@ -207,6 +207,8 @@
 
 * 打包脚本 if 块内 echo 禁止未转义英文括号；Gradle daemon 模式必须一致（不混用 --no-daemon）；`.bat` 含中文必须 UTF-8 无 BOM + `chcp 65001` 且 CRLF 换行。
 
+* ★ 2026-09-10 **manifest 版本号 SSOT 双轨一致性铁律**（下载页 APP 卡片显示"v1.0.0"不完整事故，第八道门建门）：hash-manifest.json 有**两个写入方**——publish-release.js（一键发布）与 auto-update-downloads.js（手动发布），手动轨曾只写裸 versionName（"1.0.0"）而一键轨写 `V{versionName}.{versionCode}`（"V1.0.0.283"），双轨格式漂移 → 下载页 APP 卡片版本缺号（用户看不到 versionCode 无法与 APP 内 V1.0.0.283 对齐）。根治三层：①双轨统一格式 `'V' + versionName + '.' + versionCode`（auto-update-downloads.js L216-225 / publish-release.js getAndroidVersion）；②**第八道门 `tools/check-manifest-version.cjs`**（pre-push ⑧）——{cloud,local,dingzhi}.apk.version 必须 `^V\d+\.\d+\.\d+\.\d+$` 四段式、versionCode 必须与尾段同源同值、sha256/size/url/fileName/updateTime 五要素齐备、dingzhi/local 镜像一致（download.html 读 local key）；③download.html 前端兜底——version 三段式时自动拼 apk.versionCode 字段显示。**安卓 startApkUpdateCheck 用 versionCode 整数比较不受 version 字段影响，但版本显示链路（下载页/APP内/管理后台）全部依赖 SSOT 格式**。铁律：**①凡两个以上脚本写同一配置文件（manifest/lock/baseline），格式规则必须门禁强制不能靠脚本自觉——第三轨出现时门禁自动拦截；②APK 版本显示口径唯一：V{versionName}.{versionCode}（软著要求 versionName 恒 1.0.0，区分度全靠 versionCode），任何新增展示位必须从 manifest.apk.version 取值且过第八道门格式校验；③版本相关 bug 排查先查双轨写入方格式是否一致（node tools/check-manifest-version.cjs 秒级定位）**。
+
 ## 6. 数据存储布局（现行 v3，2026-08-29 定稿）
 
 **桌面版（离线/云端同布局）**：

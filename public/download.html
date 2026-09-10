@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -4172,9 +4172,16 @@
                         //   这里规范化：确保前端显示统一为 小写 v + 版本号（如 v1.0.0.258），
                         //   与 APP 内 window.APP_VERSION（V 前缀）格式对应，便于用户肉眼查对。
                         //   同时兼容旧 manifest 不带 V 前缀的回退格式。
+                        // ★ 2026-09-10 兜底防御：若 version 为三段式（漏 versionCode，
+                        //   旧 manifest / 第三轨脚本漏写），自动用 apk.versionCode 字段
+                        //   拼接为完整 v{versionName}.{versionCode}，确保显示永不缺号。
                         if (verEl && data.version) {
                             var v = String(data.version);
                             if (v.charAt(0) === 'V' || v.charAt(0) === 'v') v = v.substring(1);
+                            var segs = v.split('.');
+                            if (segs.length === 3 && data.versionCode) {
+                                v = v + '.' + data.versionCode;
+                            }
                             verEl.textContent = 'v' + v;
                         }
                         const dateEl = document.getElementById('date-' + key);

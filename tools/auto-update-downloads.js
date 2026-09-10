@@ -217,11 +217,12 @@ function updateDownloads(target) {
         const ver = readVersionFromApk(destPath, config.appDir);
         const versionName = ver.version || readVersionFromGradle(config.appDir);
         const versionCode = ver.versionCode > 0 ? ver.versionCode : 0;
-        // ★ 2026-09-10 修复：manifest.apk.version 按 SSOT 组合格式
-        //   "V{versionName}.{versionCode}" 写入（如 1.0.0.283）。此前只写裸
-        //   versionName（1.0.0），导致下载页 APP 卡片显示"版本 v1.0.0"不完整，
-        //   与 APP 内 V1.0.0.283 无法肉眼对齐。
-        const version = versionCode > 0 ? versionName + '.' + versionCode : versionName;
+        // ★ 2026-09-10 修复+举一反三对齐：manifest.apk.version 必须与一键发布
+        //   （publish-release.js getAndroidVersion）完全同格式 "V{versionName}.{versionCode}"
+        //   （如 V1.0.0.283）。此前手动发布只写裸 versionName（1.0.0），与一键发布的
+        //   V1.0.0.283 双轨不一致 → 下载页 APP 卡片显示"v1.0.0"不完整。
+        //   双轨写同一 manifest 必须字节级同格式（第八道门禁 check-manifest-version.cjs 强制）。
+        const version = versionCode > 0 ? 'V' + versionName + '.' + versionCode : versionName;
 
         // 更新 manifest
         if (!manifest[key]) manifest[key] = {};
