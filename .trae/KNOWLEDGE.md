@@ -941,6 +941,8 @@ P2 渐进迁移（2026-09-03 当日完成）：
 
 * ★ 2026-08-31 v2 下载"网络中断"真正根因：`/api/dl` 代理**丢弃客户端 Range 头**（请求 1MB 切片却返回 200 + 完整 78MB），浏览器下载 75MB 中断后**无法断点续传**，链路抖动（用户↔CF↔GitHub 任一环）直接报"网络中断无法连接"。修复双层：① 服务端 dl.js 透传 Range 头到上游，206 + Content-Range 原样透传 + `Access-Control-Expose-Headers`；② 前端 robustDownload 下载器（fetch 流式 + Range 断点恢复，中断自动重试 8 次指数退避，完成后 Blob 保存，按钮显示进度）。铁律：**大文件下载代理必须透传 Range 支持断点续传；前端大文件下载必须用流式下载器自动续传，禁止裸** **`<a>`/location.href 一次成型**。
 
+* ★ 2026-09-10 云端APP"线上更新不生效"（用户连续三轮反馈布局未变化）双重根因：**① 根因一（最致命）：云端APP通过 Capacitor server.url 加载线上 URL（tcm-prescription-system.pages.dev），不是本地 assets——只改本地 assets 副本/只打包 APK 完全无效，必须推送 GitHub 触发 CF Pages 部署线上 HTML 才生效**。验证线上是否已部署：`curl -s https://tcm-prescription-system.pages.dev/ | grep 新标记`。**② 根因二（缓存竞争窗口）：Capacitor 初始加载发生在 configureWebView（postDelayed 延迟执行）之前/并行，clearCache(true) 是异步磁盘操作，WebView 可能已命中旧 HTTP 缓存完成首帧——clearCache + no-cache 头仍不够**。根治（V283）：configureWebView 清缓存后主动 `webView.loadUrl(CLOUD_URL + "?_v=" + System.currentTimeMillis())`，URL 不同=缓存键不同=必然拉最新；onPageStarted 兜底重定向同步带时间戳。isCloudUrl 按 host 判断（L1074），带参 URL 不被反钓鱼拦截。铁律：**云端APP排查"更新不生效"必查三件事：线上 HTML 是否真已部署（curl 新标记）、APK 是否 V283+（含时间戳绕缓存）、用户是否安装了新 APK（看 APP 内版本号 V1.0.0.283）**。
+
 ## 11. D1 数据库迁移与激活审核有效期（2026-09-10）
 
 ### 用户表 D1 切读（登录+用户列表）
