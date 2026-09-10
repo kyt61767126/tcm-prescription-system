@@ -829,8 +829,14 @@
           '@media (max-width:1280px){.diagnosis-section .patient-row input#diagnosis{flex:1 1 260px !important;}}' +
           '@media (max-width:1024px){.diagnosis-section .patient-row input#diagnosis{flex:1 1 200px !important;}}' +
           '.diagnosis-section .patient-row input#doseCountInput3{flex:0 0 22px !important;width:22px !important;padding:3px 2px !important;text-align:center;}' +
-          '.diagnosis-section .patient-row input#doctorName{flex:0 0 60px !important;width:60px !important;}' +
-          '#diagQuickBtn{margin-right:12px !important;}';
+          '.diagnosis-section .patient-row input#doctorName{flex:0 0 90px !important;width:90px !important;}' +
+          '#diagQuickBtn{margin-right:12px !important;}' +
+          '@media (max-width:768px){' +
+            '.diagnosis-section .patient-row{flex-wrap:wrap !important;row-gap:4px !important;}' +
+            '.diagnosis-section .patient-row input#diagnosis{flex:1 1 120px !important;min-width:60px !important;}' +
+            '.diagnosis-section .patient-row input#doctorName{flex:1 1 90px !important;width:auto !important;min-width:90px !important;}' +
+            '#diagQuickBtn{margin-right:6px !important;}' +
+          '}';
         document.head.appendChild(s);
     }
     function ensureDD(){
