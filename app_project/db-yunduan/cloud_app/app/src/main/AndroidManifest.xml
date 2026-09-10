@@ -48,6 +48,10 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- ★ 2026-09-10 修复：应用内更新下载 APK 后无法拉起安装弹窗——Android 8.0+（API 26+）
+         通过 FileProvider + ACTION_VIEW 安装 APK 必须声明此权限，缺失时 startActivity 静默失败，
+         用户只见"下载完成"却等不到安装弹窗。声明后首次安装触发系统「允许安装未知应用」一次性授权。 -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />

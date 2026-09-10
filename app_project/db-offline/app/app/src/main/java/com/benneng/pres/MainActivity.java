@@ -985,6 +985,13 @@ public class MainActivity extends BridgeActivity {
             Log.i(TAG, "[update] 已拉起 APK 安装弹窗: " + localUriStr);
         } catch (Exception e) {
             Log.w(TAG, "[update] 拉起安装弹窗失败: " + e.getMessage());
+            // ★ 2026-09-10 降级兜底：安装弹窗拉起失败（系统拦截/未知来源授权被拒）时，
+            //   明确告知文件位置并引导手动安装，避免"下载完成却找不到安装包"。
+            try {
+                Toast.makeText(this, "自动安装未弹出：请下拉通知栏点击「惠康中医新版安装包」的"
+                    + "下载完成通知重试；或到 文件管理 → 内部存储 → Android → data → "
+                    + getPackageName() + " → files → Download 目录手动安装", Toast.LENGTH_LONG).show();
+            } catch (Exception ignored) {}
         }
     }
 
