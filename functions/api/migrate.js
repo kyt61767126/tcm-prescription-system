@@ -47,6 +47,7 @@ export async function onRequest(context) {
         const stats = { scanned: 0, inserted: 0, updated: 0, errors: [] };
 
         // 1) 扫描所有诊所的处方 key（按日期分 key + 旧全量 key）
+        if (target === 'all' || target === 'prescriptions') {
         const dateKeys = await listAllKeys(kv, 'clinic:');
         const rxKeys = dateKeys.filter(k =>
             k.startsWith('clinic:') && k.includes(':prescriptions')
@@ -106,8 +107,10 @@ export async function onRequest(context) {
                 stats.errors.push({ key, error: e.message });
             }
         }
+        } // end prescriptions
 
         // 2) 同步编号计数器（从 KV clinic:{id}:prescription_seq:{yymmdd} 导入）
+        if (target === 'all' || target === 'prescriptions') {
         const seqKeys = await listAllKeys(kv, 'clinic:');
         for (const key of seqKeys) {
             if (!key.includes(':prescription_seq:')) continue;
@@ -125,8 +128,10 @@ export async function onRequest(context) {
                 stats.errors.push({ key, error: e.message });
             }
         }
+        } // end seq
 
         // 3) ★ P1：迁移审计日志（从 KV audit_log:{cid}:{date}:{ts} 导入 D1 audit_logs）
+        if (target === 'all' || target === 'audit_logs') {
         const auditKeys = await listAllKeys(kv, 'audit_log:');
         let auditMigrated = 0;
         for (const key of auditKeys) {
@@ -166,8 +171,10 @@ export async function onRequest(context) {
             }
         }
         stats.auditMigrated = auditMigrated;
+        } // end audit_logs
 
         // 4) ★ P2：迁移方剂库（从 KV clinic:{id}:formulas:{username} + system:platform_formulas 导入 D1 formulas）
+        if (target === 'all' || target === 'formulas') {
         const formulaKeys = await listAllKeys(kv, 'clinic:');
         const platFormulas = await kv.get('system:platform_formulas', 'json').catch(() => null);
         let formulaMigrated = 0;
@@ -223,8 +230,10 @@ export async function onRequest(context) {
             } catch (e) { stats.errors.push({ key, error: e.message }); }
         }
         stats.formulaMigrated = formulaMigrated;
+        } // end formulas
 
         // 5) ★ P3：迁移设备绑定（从 KV user_devices:{username} 导入 D1 user_devices）
+        if (target === 'all' || target === 'devices') {
         const deviceKeys = await listAllKeys(kv, 'user_devices:');
         let deviceMigrated = 0;
         for (const key of deviceKeys) {
@@ -245,8 +254,10 @@ export async function onRequest(context) {
             } catch (e) { stats.errors.push({ key, error: e.message }); }
         }
         stats.deviceMigrated = deviceMigrated;
+        } // end devices
 
         // 6) ★ P3：迁移用户表（从 KV clinic:{id}:users 导入 D1 clinic_users）
+        if (target === 'all' || target === 'users') {
         const clinicKeys = await listAllKeys(kv, 'clinic:');
         let userMigrated = 0;
         for (const key of clinicKeys) {
@@ -277,6 +288,7 @@ export async function onRequest(context) {
             } catch (e) { stats.errors.push({ key, error: e.message }); }
         }
         stats.userMigrated = userMigrated;
+        } // end users
 
         return new Response(JSON.stringify({ success: true, stats }), { status: 200, headers: getCorsHeaders() });
     } catch (e) {

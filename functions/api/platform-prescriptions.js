@@ -1,5 +1,33 @@
 import { parseAuthHeader, isPlatformAdmin, KV_SYSTEM_CLINICS } from './_lib/auth.js';
 import { getKV, listAllKeys } from './_lib/kv.js';
+import { getDB, isD1Enabled } from './_lib/d1.js';
+
+// D1 行 → 处方对象
+function d1RowToPrescription(row) {
+    return {
+        id: row.id,
+        clinicId: row.clinic_id,
+        patientName: row.patient_name,
+        name: row.patient_name,
+        doctorName: row.doctor_name,
+        createdBy: row.created_by,
+        date: row.date,
+        prescriptionNo: row.prescription_no,
+        outpatientNo: row.outpatient_no,
+        diagnosis: row.diagnosis,
+        items: row.items ? JSON.parse(row.items) : [],
+        totalAmount: row.total_amount,
+        feeStatus: row.fee_status,
+        paidAt: row.paid_at,
+        paidBy: row.paid_by,
+        payMethod: row.pay_method,
+        mediaFiles: row.media_files ? JSON.parse(row.media_files) : null,
+        extra: row.extra ? JSON.parse(row.extra) : {},
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        deletedAt: row.deleted_at
+    };
+}
 
 // ★ 2026-09-10 处方按日期分 key：聚合读取单个诊所的全部处方
 //   旧全量 key（clinic:{id}:prescriptions）+ 所有日期分 key（clinic:{id}:prescriptions:{yymmdd}）
@@ -104,13 +132,29 @@ export async function onRequest(context) {
             const clinics = (await kv.get(KV_SYSTEM_CLINICS, 'json')) || [];
             let allPrescriptions = [];
 
-            for (const c of clinics) {
-                const clinicPrescriptions = await loadClinicPrescriptions(kv, c.id);
-                clinicPrescriptions.forEach(p => {
-                    p.clinicId = c.id;
-                    p.clinicName = c.name;
-                });
-                allPrescriptions = allPrescriptions.concat(clinicPrescriptions);
+            const d1On = isD1Enabled(context.env);
+            const db = getDB(context.env);
+
+            if (d1On && db) {
+                // ★ D1 优先：一次 SQL 查询所有诊所处方（替代 KV 逐诊所扫描）
+                const result = await db.prepare(`SELECT * FROM prescriptions WHERE deleted_at IS NULL ORDER BY datetime(created_at) DESC`).all();
+                if (result && result.success) {
+                    allPrescriptions = result.results.map(d1RowToPrescription);
+                    // 补充 clinicName
+                    const clinicMap = new Map(clinics.map(c => [c.id, c.name]));
+                    allPrescriptions.forEach(p => {
+                        p.clinicName = clinicMap.get(p.clinicId) || '未知诊所';
+                    });
+                }
+            } else {
+                for (const c of clinics) {
+                    const clinicPrescriptions = await loadClinicPrescriptions(kv, c.id);
+                    clinicPrescriptions.forEach(p => {
+                        p.clinicId = c.id;
+                        p.clinicName = c.name;
+                    });
+                    allPrescriptions = allPrescriptions.concat(clinicPrescriptions);
+                }
             }
 
             let filtered = allPrescriptions;

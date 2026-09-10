@@ -20,4 +20,4 @@ database_id = "e74894e3-dafc-491f-8777-d2ee9962e677"
 # USE_D1: 是否启用 D1 存储处方（true=D1优先+KV双写，false=仅KV）
 [vars]
 AUTH_TOKEN_TTL_HOURS = "8"
-USE_D1 = "false"
+USE_D1 = "true"
