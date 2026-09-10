@@ -146,27 +146,36 @@ export async function onRequest(context) {
     // ===== 构造目标键集合 =====
     const dates = enumerateDates(dateFrom, dateTo);
     const dateSet = new Set(dates);
-    let keys;
-    if (clinicId === 'all') {
-        // 全量扫描：listAllKeys 已做分页遍历（每页 1000 key），再按日期命中过滤
-        const all = await listAllKeys(kv, 'audit_log:');
-        keys = all.filter(k => dateSet.has(k.split(':').pop()));
-    } else {
-        keys = dates.map(d => `audit_log:${clinicId}:${d}`);
-    }
+    // ★ 2026-09-10 并发加固：审计日志改为独立记录 key 后，旧「按日数组 key」与新「单条 key」
+    //   两种格式并存，这里统一前缀扫描 + 按日期命中过滤。
+    //   key 格式：
+    //     audit_log:{cid}:{YYYY-MM-DD}              → 旧数组 key（parts 长度 3）
+    //     audit_log:{cid}:{YYYY-MM-DD}:{ts}-{rand}   → 新单条 key（parts 长度 4）
+    const prefix = clinicId === 'all' ? 'audit_log:' : `audit_log:${clinicId}:`;
+    const allKeys = await listAllKeys(kv, prefix);
+    const keys = allKeys.filter(k => {
+        const parts = k.split(':');
+        return parts.length >= 3 && dateSet.has(parts[2]);
+    });
 
     // ===== 分批并发读取（每批 20 键）=====
     const logs = [];
     for (let i = 0; i < keys.length; i += 20) {
         const batch = keys.slice(i, i + 20);
         const results = await Promise.all(batch.map(k => kv.get(k, 'json').catch(() => null)));
-        results.forEach((arr, idx) => {
-            if (!Array.isArray(arr)) return; // 单键缺失/损坏静默跳过
+        results.forEach((val, idx) => {
             const parts = batch[idx].split(':');
             const cid = parts[1] || 'platform';
-            for (const e of arr) {
-                if (e && typeof e === 'object') logs.push(normalizeEntry(e, cid));
+            if (Array.isArray(val)) {
+                // 旧数组格式：逐条摊平
+                for (const e of val) {
+                    if (e && typeof e === 'object') logs.push(normalizeEntry(e, cid));
+                }
+            } else if (val && typeof val === 'object') {
+                // 新单条格式
+                logs.push(normalizeEntry(val, cid));
             }
+            // 单键缺失/损坏（val 为 null / 非对象）静默跳过
         });
     }
 

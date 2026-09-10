@@ -1,5 +1,6 @@
 import { parseAuthHeader, isPlatformAdmin, isClinicAdmin, isAdmin, isCashier } from './_lib/auth.js';
 import { getKV } from './_lib/kv.js';
+import { writeAuditLog } from './_lib/audit-log.js';
 
 // P1-6 安全增强：CORS 白名单（与 users.js 一致）
 function getAllowedOrigins() {
@@ -41,28 +42,7 @@ function json(data, status = 200, request = null) {
     return new Response(JSON.stringify(data), { status, headers: corsHeaders(request) });
 }
 
-// P1-2 安全增强：操作审计日志（与 users.js 一致）
-async function writeAuditLog(kv, clinicId, username, role, action, target, request, extra = {}) {
-    try {
-        const date = new Date().toISOString().split('T')[0];
-        const key = `audit_log:${clinicId || 'platform'}:${date}`;
-        const logs = (await kv.get(key, 'json')) || [];
-        logs.push({
-            timestamp: new Date().toISOString(),
-            username,
-            role,
-            action,
-            target,
-            ip: request?.headers?.get('CF-Connecting-IP') || 'unknown',
-            userAgent: request?.headers?.get('User-Agent') || 'unknown',
-            ...extra
-        });
-        if (logs.length > 1000) logs.splice(0, logs.length - 1000);
-        await kv.put(key, JSON.stringify(logs), { expirationTtl: 90 * 24 * 60 * 60 });
-    } catch (e) {
-        console.error('writeAuditLog error:', e);
-    }
-}
+// ★ 2026-09-10 审计日志统一走 _lib/audit-log.js（顶部 import），此处不再内联副本
 
 // ★ P2-B 统一：getKV 改用 _lib/kv.js 单一事实源（顶部 import）
 
@@ -104,12 +84,20 @@ function maxDaySeqInList(list, yymmdd) {
 // ★ 2026-08-25 原子性强化：序号 = max(KV计数器, 当天列表最大序号) 后递增。
 //   KV 为最终一致存储，跨边缘节点计数器可能落后（多设备同时在线时曾导致两处方同号 26082504），
 //   列表扫描兜底保证计数器落后时不重号；批量保存循环内串行递增，单请求内天然不冲突。
+// ★ 2026-09-10 并发加固：计数读取加「带重试」——重读计数器 2 次取较大值，配合列表扫描兜底，
+//   进一步收窄多设备同时保存的重号窗口（KV 无 CAS，真正零风险需 DO/D1 根治档）。
 async function allocatePrescriptionNos(kv, clinicId, list, count, yymmddStr) {
     const now = getBeijingTime();
     const yymmdd = yymmddStr || formatBeijingDateYYMMDD(now);
     const seqKey = `clinic:${clinicId}:prescription_seq:${yymmdd}`;
 
     let seq = parseInt(await kv.get(seqKey) || '0', 10);
+    // 带重试：KV 最终一致，短时间内重读计数器，若已前进则取较大值
+    for (let attempt = 0; attempt < 2; attempt++) {
+        await new Promise(r => setTimeout(r, 20 * (attempt + 1)));
+        const recheck = parseInt(await kv.get(seqKey) || '0', 10);
+        if (recheck > seq) seq = recheck;
+    }
     const listMax = maxDaySeqInList(list || [], yymmdd);
     if (listMax > seq) seq = listMax;
 

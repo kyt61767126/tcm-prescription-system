@@ -11,7 +11,7 @@
 // 安全密钥来自环境变量 AUTH_SECRET，请在 Cloudflare Pages 后台配置。
 
 // ★ P2-B 统一：KV 绑定解析单一事实源（禁止内联解析链）
-import { getKV } from './kv.js';
+import { getKV, listAllKeys } from './kv.js';
 
 export const ROLE_PLATFORM_ADMIN = 'platform_admin';
 export const ROLE_CLINIC_ADMIN = 'clinic_admin';
@@ -239,7 +239,8 @@ export async function signToken(payload, env, ttlMs = null) {
             tokenVersion = parseInt(await kvForVer.get('user_token_version:' + payload.username) || '0', 10) || 0;
         } catch (e) { /* KV 读取失败按 v=0 继续（不影响正常登录） */ }
     }
-    const tokenPayload = { u: payload.username, r: payload.role, c: payload.clinicId || null, e: expireAt, v: tokenVersion };
+    // ★ 2026-09-10 多端会话：签名体纳入 k（clientClass），供 verifyToken 按端类型定位 session
+    const tokenPayload = { u: payload.username, r: payload.role, c: payload.clinicId || null, e: expireAt, v: tokenVersion, k: payload.clientClass || null };
     const payloadStr = JSON.stringify(tokenPayload);
     const sig = await hmacSign(payloadStr, secret);
     const fullPayload = { ...tokenPayload, s: sig };
@@ -265,9 +266,10 @@ export async function verifyToken(token, env) {
             return null;
         }
         // P0-2 修复：新 token 签名覆盖 v 字段；旧 token（无 v）按旧算法校验以保持兼容
-        const sigBody = payload.v !== undefined
-            ? { u: payload.u, r: payload.r, c: payload.c, e: payload.e, v: payload.v }
-            : { u: payload.u, r: payload.r, c: payload.c, e: payload.e };
+        // ★ 2026-09-10 多端会话：k（clientClass）同样纳入签名体；旧 token（无 k）不纳入，保持兼容
+        const sigBody = { u: payload.u, r: payload.r, c: payload.c, e: payload.e };
+        if (payload.v !== undefined) sigBody.v = payload.v;
+        if (payload.k !== undefined) sigBody.k = payload.k;
         const expectedSig = await hmacSign(JSON.stringify(sigBody), secret);
         if (expectedSig !== payload.s) return null;
 
@@ -291,15 +293,20 @@ export async function verifyToken(token, env) {
                 return null;
             }
 
-            // ★★★ 2026-08-21 单设备在线互斥：签名/黑名单均通过后，比对在线 session。
-            //   session 记录的是该账号当前唯一有效 tokenHash；本 token 不匹配
-            //   = 已有更新的登录（本设备已被顶下线）→ 立即失效。
+            // ★★★ 2026-08-21 单设备在线互斥（★ 2026-09-10 升级为按端类型多端并存）：
+            //   签名/黑名单均通过后，比对「本端类型」的在线 session。
+            //   session key = user_session:{username}:{clientClass}，仅同端类型互斥，
+            //   跨端（网页/桌面/APP）各自独立，互不顶替。
+            //   旧 token 无 k（clientClass）→ 回落读旧单 key，兼容过渡期已签发 token。
             //   KV 故障时放行（与其他校验一致的故障开放策略）。
             try {
-                const session = await kv.get(KV_USER_SESSION_PREFIX + payload.u, 'json');
+                const sessionKey = (payload.k !== undefined && payload.k)
+                    ? KV_USER_SESSION_PREFIX + payload.u + ':' + payload.k
+                    : KV_USER_SESSION_PREFIX + payload.u;
+                const session = await kv.get(sessionKey, 'json');
                 if (session && session.tokenHash && session.tokenHash !== tokenHash) {
-                    console.warn('[安全] 单设备在线互斥：旧会话已被新登录顶下线:', payload.u,
-                        '(当前在线端:', session.clientClass, '| 本token签发于更早)');
+                    console.warn('[安全] 同端在线互斥：旧会话已被新登录顶下线:', payload.u,
+                        '(当前在线端:', session.clientClass, '| 本token端:', payload.k || '(旧)');
                     return null;
                 }
             } catch (e) { /* KV 读取失败放行 */ }
@@ -338,9 +345,14 @@ export async function revokeAllUserTokens(kv, username) {
         const versionKey = 'user_token_version:' + username;
         const currentVersion = parseInt(await kv.get(versionKey) || '0', 10);
         await kv.put(versionKey, String(currentVersion + 1));
-        // ★ 2026-08-21 单设备在线：改密/撤销时同时清除在线 session，
+        // ★ 2026-08-21 单设备在线（★ 2026-09-10 多端并存）：改密/撤销时清除该账号全部端类型 session，
         //   防止 session 中残留的旧 tokenHash 遮蔽新登录（否则改密后重新登录也会被误踢）
-        try { await kv.delete(KV_USER_SESSION_PREFIX + username); } catch (e) {}
+        try {
+            const sBase = KV_USER_SESSION_PREFIX + username;
+            const sKeys = await listAllKeys(kv, sBase + ':');
+            sKeys.push(sBase);
+            await Promise.all(sKeys.map(k => kv.delete(k)));
+        } catch (e) {}
         return true;
     } catch (e) {
         console.error('revokeAllUserTokens error:', e);
@@ -359,7 +371,9 @@ export async function revokeAllUserTokens(kv, username) {
 const KV_USER_SESSION_PREFIX = 'user_session:';
 const USER_SESSION_TTL_SECONDS = 8 * 24 * 60 * 60; // 8 天
 
-// 写入当前账号唯一在线 session（新登录调用；自动顶掉旧设备）
+// 写入当前账号在线 session（新登录调用；仅顶掉「同端类型」的旧设备）
+// ★ 2026-09-10 多端并存：key = user_session:{username}:{clientClass}，
+//   跨端（网页/桌面/APP）各自独立、同端互斥。旧客户端无 clientClass 时回落单 key。
 export async function writeUserSession(kv, username, token, meta = {}) {
     if (!kv || !username || !token) return false;
     try {
@@ -370,7 +384,14 @@ export async function writeUserSession(kv, username, token, meta = {}) {
             clientClass: meta.clientClass || 'web',
             loginAt: new Date().toISOString()
         };
-        await kv.put(KV_USER_SESSION_PREFIX + username, JSON.stringify(session), { expirationTtl: USER_SESSION_TTL_SECONDS });
+        const key = meta.clientClass
+            ? KV_USER_SESSION_PREFIX + username + ':' + meta.clientClass
+            : KV_USER_SESSION_PREFIX + username;
+        await kv.put(key, JSON.stringify(session), { expirationTtl: USER_SESSION_TTL_SECONDS });
+        // ★ 迁移：新代码按端类型分 key 后，清理旧单 key 残留（避免在线聚合重复计数）
+        if (meta.clientClass) {
+            try { await kv.delete(KV_USER_SESSION_PREFIX + username); } catch (e) {}
+        }
         return true;
     } catch (e) {
         console.error('[UserSession] 写入失败:', e.message);
@@ -378,11 +399,14 @@ export async function writeUserSession(kv, username, token, meta = {}) {
     }
 }
 
-// 清除在线 session（登出调用）
+// 清除在线 session（登出调用；★ 2026-09-10 清除该账号全部端类型的 session）
 export async function clearUserSession(kv, username) {
     if (!kv || !username) return false;
     try {
-        await kv.delete(KV_USER_SESSION_PREFIX + username);
+        const base = KV_USER_SESSION_PREFIX + username;
+        const keys = await listAllKeys(kv, base + ':'); // 按端类型分的 key
+        keys.push(base); // 兼容旧单 key（可能不存在，delete 静默）
+        await Promise.all(keys.map(k => kv.delete(k)));
         return true;
     } catch (e) {
         return false;
@@ -390,10 +414,22 @@ export async function clearUserSession(kv, username) {
 }
 
 // 读取在线 session（诊断/管理端点用）
+// ★ 2026-09-10 多端并存：返回该账号 loginAt 最新的一个 session（适配按端类型分 key）
 export async function getUserSession(kv, username) {
     if (!kv || !username) return null;
     try {
-        return await kv.get(KV_USER_SESSION_PREFIX + username, 'json');
+        const base = KV_USER_SESSION_PREFIX + username;
+        const keys = await listAllKeys(kv, base + ':');
+        keys.push(base);
+        let latest = null, latestAt = '';
+        for (const k of keys) {
+            const s = await kv.get(k, 'json').catch(() => null);
+            if (s && typeof s === 'object' && (!latest || (s.loginAt || '') > latestAt)) {
+                latest = s;
+                latestAt = s.loginAt || '';
+            }
+        }
+        return latest;
     } catch (e) {
         return null;
     }

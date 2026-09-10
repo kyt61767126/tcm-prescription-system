@@ -11,6 +11,8 @@ import { provisionCloudAccount } from './license/_lib/admin-account.js';
 import { deleteAdminRequest } from './license/_lib/license-write-service.js';
 // ★ 2026-09-08 离线版设备配额反查：license 索引遍历找该诊所激活码，读其多设备绑定列表
 import { listLicenses, getDevices, updateLicense } from './license/_lib/license-core.js';
+// ★ 2026-09-10 审计日志单一事实源（并发安全，独立记录 key）
+import { writeAuditLog } from './_lib/audit-log.js';
 
 // ============================================================================
 // ★★★ 2026-08-21 账号级设备授权（一个云端管理员最多绑定 2 台设备：桌面/APP）
@@ -22,6 +24,9 @@ import { listLicenses, getDevices, updateLicense } from './license/_lib/license-
 //     - 解绑：本人在任意已登录设备调用 action=unbind-device 自助解绑
 // ============================================================================
 const KV_USER_DEVICES_PREFIX = 'user_devices:';
+// ★ 2026-09-10 在线端聚合：loginAt 距今 ≤15 分钟视为「在线」
+//   （session TTL 8 天远大于在线直觉，不能仅凭 key 存在判定在线）
+const ONLINE_ACTIVE_MS = 15 * 60 * 1000;
 const MAX_DEVICES_PER_ACCOUNT = 2;
 // 豁免账户的设备配额（99 = 实际不限，避免前端对 -1 显示异常）
 const DEVICE_EXEMPT_MAX = 99;
@@ -238,29 +243,7 @@ async function checkIpRateLimit(kv, request) {
     }
 }
 
-// P1-2 安全增强：操作审计日志
-async function writeAuditLog(kv, clinicId, username, role, action, target, request, extra = {}) {
-    try {
-        const date = new Date().toISOString().split('T')[0];
-        const key = `audit_log:${clinicId || 'platform'}:${date}`;
-        const logs = (await kv.get(key, 'json')) || [];
-        logs.push({
-            timestamp: new Date().toISOString(),
-            username,
-            role,
-            action,
-            target,
-            ip: request?.headers?.get('CF-Connecting-IP') || 'unknown',
-            userAgent: request?.headers?.get('User-Agent') || 'unknown',
-            ...extra
-        });
-        // 保留最近 1000 条
-        if (logs.length > 1000) logs.splice(0, logs.length - 1000);
-        await kv.put(key, JSON.stringify(logs), { expirationTtl: 90 * 24 * 60 * 60 }); // 保留 90 天
-    } catch (e) {
-        console.error('writeAuditLog error:', e);
-    }
-}
+// ★ 2026-09-10 审计日志统一走 _lib/audit-log.js（顶部 import），此处不再内联副本
 
 // ★ P2-B 统一：getKV 改用 _lib/kv.js 单一事实源（顶部 import）
 
@@ -1451,7 +1434,10 @@ export async function onRequest(context) {
                 token = await signToken({
                     username: user.username,
                     role: user.role,
-                    clinicId: clinicId
+                    clinicId: clinicId,
+                    // ★ 2026-09-10 多端并存：token 携带端类型（desktop/app/web），
+                    //   供 verifyToken 按端定位 session，实现跨端不互踢、同端互斥
+                    clientClass: ['desktop', 'app', 'web'].includes(clientClass) ? clientClass : 'web'
                 }, context.env);
             } catch (signErr) {
                 console.error('[P1-A] 登录 Token 签发失败:', signErr.message);
@@ -1900,10 +1886,46 @@ export async function onRequest(context) {
             }
 
             const result = [];
+
+            // ★ 2026-09-10 在线端聚合：一次列出全部 user_session 键，建 username→session 映射
+            //   （在线口径 loginAt ≤15 分钟，见下方循环内聚合）。读取失败不影响诊所列表。
+            const onlineMap = new Map();
+            try {
+                const sessKeys = await listAllKeys(kv, 'user_session:');
+                for (let i = 0; i < sessKeys.length; i += 20) {
+                    const batch = sessKeys.slice(i, i + 20);
+                    const sessVals = await Promise.all(batch.map(k => kv.get(k, 'json').catch(() => null)));
+                    sessVals.forEach((s, idx) => {
+                        if (s && typeof s === 'object') {
+                            // key 形如 user_session:{username}:{clientClass} 或旧 user_session:{username}
+                            const tail = batch[idx].slice('user_session:'.length);
+                            const uname = tail.split(':')[0];
+                            if (!onlineMap.has(uname)) onlineMap.set(uname, []);
+                            onlineMap.get(uname).push(s);
+                        }
+                    });
+                }
+            } catch (e) { /* 在线聚合读取失败按无在线处理 */ }
+
+            const nowTs = Date.now();
             for (const clinic of clinics) {
                 const users = await kv.get(`clinic:${clinic.id}:users`, 'json');
                 const admin = users && users.find(u => u.role === ROLE_CLINIC_ADMIN);
                 const doctorCount = users ? users.filter(u => u.role === ROLE_DOCTOR).length : 0;
+                // 聚合本诊所在线端：loginAt ≤15 分钟才算在线，clientClass 归并（web 及未知兜底计入网页）
+                let onlineDesktop = 0, onlineApp = 0, onlineWeb = 0;
+                for (const u of (Array.isArray(users) ? users : [])) {
+                    if (!u || !u.username) continue;
+                    const sessions = onlineMap.get(u.username) || [];
+                    for (const s of sessions) {
+                        if (!s || !s.loginAt) continue;
+                        const loginTs = Date.parse(s.loginAt);
+                        if (!Number.isFinite(loginTs) || (nowTs - loginTs) > ONLINE_ACTIVE_MS) continue;
+                        if (s.clientClass === 'desktop') onlineDesktop++;
+                        else if (s.clientClass === 'app') onlineApp++;
+                        else onlineWeb++;
+                    }
+                }
                 result.push({
                     id: clinic.id,
                     name: clinic.name,
@@ -1923,6 +1945,10 @@ export async function onRequest(context) {
                     adminPhone: admin ? (admin.phone || '') : '',
                     doctorCount,
                     userCount: users ? users.length : 0,
+                    onlineDesktop,
+                    onlineApp,
+                    onlineWeb,
+                    onlineTotal: onlineDesktop + onlineApp + onlineWeb,
                     createdAt: clinic.createdAt
                 });
             }
