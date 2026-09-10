@@ -1,12 +1,12 @@
 {
     "local": {
         "apk": {
-            "version": "V1.0.0.270",
-            "versionCode": 270,
-            "sha256": "b42416a08c25c649afdc882b5376fedc0e92f226319d101f3a4c17fbb149e662",
+            "version": "V1.0.0.271",
+            "versionCode": 271,
+            "sha256": "2a3ee4a6e3b784d69044dd4dfffd4aca065ba7f5bae050065e0f5bcfead3fd18",
             "url": "/downloads/惠康中医-本地.apk",
-            "size": 2993941,
-            "updateTime": "2026-09-10T12:46:05.372Z",
+            "size": 2994616,
+            "updateTime": "2026-09-10T13:11:14.448Z",
             "fileName": "惠康中医-本地.apk"
         },
         "portable": {
@@ -32,12 +32,12 @@
     },
     "cloud": {
         "apk": {
-            "version": "V1.0.0.283",
-            "versionCode": 283,
-            "sha256": "7f05604c4f5bb9893b2dcfe7252b15ee136703f4d2040339d26e532fbd552fa7",
+            "version": "V1.0.0.284",
+            "versionCode": 284,
+            "sha256": "e92040b5e4efd5f9a54fe589fa2202327ae7c3bdcbfa6fb16dd1a497536b59db",
             "url": "/downloads/惠康中医-云端.apk",
-            "size": 12110983,
-            "updateTime": "2026-09-10T12:46:04.038Z",
+            "size": 12113371,
+            "updateTime": "2026-09-10T13:11:15.456Z",
             "fileName": "惠康中医-云端.apk"
         },
         "exe": {
@@ -64,21 +64,21 @@
     "provenance": {
         "schemaVersion": 1,
         "repo": "https://github.com/kyt61767126/tcm-prescription-system.git",
-        "commit": "ce4efb190b90",
+        "commit": "d5a352e689f4",
         "ref": "main",
         "builder": "kyt61767126",
-        "builtAt": "2026-09-10T12:46:05.985Z",
+        "builtAt": "2026-09-10T13:11:16.104Z",
         "buildTool": "publish-release.js@v24.16.0",
         "releaseTag": ""
     },
     "dingzhi": {
         "apk": {
-            "version": "V1.0.0.270",
-            "versionCode": 270,
-            "sha256": "b42416a08c25c649afdc882b5376fedc0e92f226319d101f3a4c17fbb149e662",
+            "version": "V1.0.0.271",
+            "versionCode": 271,
+            "sha256": "2a3ee4a6e3b784d69044dd4dfffd4aca065ba7f5bae050065e0f5bcfead3fd18",
             "url": "/downloads/惠康中医-本地.apk",
-            "size": 2993941,
-            "updateTime": "2026-09-10T12:46:05.372Z",
+            "size": 2994616,
+            "updateTime": "2026-09-10T13:11:14.448Z",
             "fileName": "惠康中医-本地.apk"
         },
         "portable": {
