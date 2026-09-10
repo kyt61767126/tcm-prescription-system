@@ -543,11 +543,43 @@ async function findUserForLogin(kv, username, env = null) {
 }
 
 // 获取所有诊所的用户（用于 platform_admin）
-async function getAllClinicUsers(kv) {
+async function getAllClinicUsers(kv, env = null) {
     const clinics = await kv.get(KV_SYSTEM_CLINICS, 'json');
     if (!clinics || !Array.isArray(clinics)) return [];
 
     const result = [];
+    const d1On = isD1Enabled(env);
+    const db = d1On ? getDB(env) : null;
+
+    // ★ P3：D1 优先——一次 SQL 查询所有诊所用户（替代遍历所有诊所 KV key）
+    if (db) {
+        try {
+            const allRows = await db.prepare(`SELECT * FROM clinic_users ORDER BY clinic_id, username`).all();
+            if (allRows && allRows.success && allRows.results.length > 0) {
+                const clinicMap = new Map(clinics.map(c => [c.id, c]));
+                for (const row of allRows.results) {
+                    const clinic = clinicMap.get(row.clinic_id);
+                    if (!clinic) continue;
+                    const u = d1RowToUser(row);
+                    const su = sanitizeUser(u, clinic.id, clinic.name, clinic.status, clinic.edition);
+                    try {
+                        if (u.username && String(clinic.edition || '').indexOf('cloud') === 0) {
+                            const dev = await kv.get(KV_USER_DEVICES_PREFIX + u.username, 'json');
+                            if (dev && Array.isArray(dev.devices) && dev.devices.length) {
+                                const classes = [...new Set(dev.devices.map(d => d && d.clientClass).filter(Boolean))];
+                                if (classes.length) su.deviceClasses = classes;
+                            }
+                        }
+                    } catch (e) {}
+                    result.push(su);
+                }
+                return result;
+            }
+        } catch (e) {
+            console.error('[D1] getAllClinicUsers failed, fallback to KV:', e.message);
+        }
+    }
+
     for (const clinic of clinics) {
         const users = await kv.get(`clinic:${clinic.id}:users`, 'json');
         if (users && Array.isArray(users)) {
@@ -2685,7 +2717,7 @@ export async function onRequest(context) {
 
             if (isPlatformAdmin(currentUser)) {
                 // platform_admin 看所有用户
-                const allUsers = await getAllClinicUsers(kv);
+                const allUsers = await getAllClinicUsers(kv, context.env);
                 const admins = (await kv.get(KV_SYSTEM_PLATFORM_ADMINS, 'json')) || [];
                 const platformAdmins = admins.map(a => sanitizeUser(a, null, null));
                 return json({ success: true, data: [...platformAdmins, ...allUsers], count: platformAdmins.length + allUsers.length });
@@ -2693,10 +2725,24 @@ export async function onRequest(context) {
 
             if (isClinicAdmin(currentUser)) {
                 // clinic_admin 看本诊所用户
-                const users = (await kv.get(`clinic:${currentUser.clinicId}:users`, 'json')) || [];
                 const clinics = (await kv.get(KV_SYSTEM_CLINICS, 'json')) || [];
                 const clinic = clinics.find(c => c.id === currentUser.clinicId);
                 const clinicName = clinic ? clinic.name : null;
+
+                // ★ P3：D1 优先读取本诊所用户
+                let users = [];
+                const db = getDB(context.env);
+                if (isD1Enabled(context.env) && db) {
+                    try {
+                        const rows = await db.prepare(`SELECT * FROM clinic_users WHERE clinic_id = ? ORDER BY username`).bind(currentUser.clinicId).all();
+                        if (rows && rows.success) {
+                            users = rows.results.map(d1RowToUser);
+                        }
+                    } catch (e) { console.error('[D1] clinic users list failed:', e.message); }
+                }
+                if (!users.length) {
+                    users = (await kv.get(`clinic:${currentUser.clinicId}:users`, 'json')) || [];
+                }
                 const data = users.map(u => sanitizeUser(u, currentUser.clinicId, clinicName));
                 return json({ success: true, data, count: data.length });
             }
