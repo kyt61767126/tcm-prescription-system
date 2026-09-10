@@ -314,6 +314,14 @@
                 this._emit('terminal', s, payload);
                 this.stop();
             }
+            // ★ 2026-09-11 P0 license_expired（服务端 admin-status 新状态）：审核记录
+            //   已 activated 但签名固化的 license 已到期——服务端不再下发 license，
+            //   轮询永无 activated 结果 → 归 terminal 终止轮询，由宿主 UI 显示
+            //   "授权已过期请续费"（防"等待审核"假象无限轮询）。
+            if (s === 'license_expired') {
+                this._emit('terminal', s, payload);
+                this.stop();
+            }
         }
 
         async _tick() {
@@ -5158,6 +5166,19 @@
             }
         }
 
+        // ★ 2026-09-11 P0 license_expired：拒绝面板复用渲染——expired 时标题改"授权已过期"、
+        //   隐藏"修改后重新提交"（过期重提交必被服务端拦截，无意义）；rejected 时还原默认。
+        function renderAdminRejected(reason, isExpired) {
+            const reasonEl = document.getElementById('adminRejectReason');
+            if (reasonEl && reasonEl.previousElementSibling) {
+                reasonEl.previousElementSibling.textContent = isExpired ? '授权已过期' : '激活请求被拒绝';
+            }
+            if (reasonEl) reasonEl.textContent = reason || '未知原因';
+            const retryBtn = document.getElementById('adminRetryBtn');
+            if (retryBtn) retryBtn.style.display = isExpired ? 'none' : '';
+            show('adminRejected');
+        }
+
         // ★ 2026-08-23 三Tab：Tab 高亮切换
         function setActiveTab(tab) {
             var conf = {
@@ -6178,8 +6199,11 @@
                         });
                         currentActivationObserver.on('terminal', function (s, payload) {
                             if (s === 'rejected') {
-                                document.getElementById('adminRejectReason').textContent = (payload && payload.reason) || '未知原因';
-                                show('adminRejected');
+                                renderAdminRejected((payload && payload.reason) || '未知原因');
+                            } else if (s === 'license_expired') {
+                                renderAdminRejected(
+                                    (payload && payload.message) || '该授权已到期，重新激活无法恢复使用，请联系客服微信 hktzy1688 续费',
+                                    true);
                             }
                         });
                         currentActivationObserver.start();
@@ -6274,7 +6298,8 @@
                         }
                     } catch (err) { console.warn('[LicenseCheck] admin-status 网络错误:', err); }
                     if (r && r.success && r.status === 'activated') { clearInterval(pollTimer); pollTimer=null; await onAdminActivated(r, requestId); }
-                    else if (r && r.success && r.status === 'rejected') { clearInterval(pollTimer); pollTimer=null; document.getElementById('adminRejectReason').textContent = r.reason || '未知原因'; show('adminRejected'); }
+                    else if (r && r.success && r.status === 'rejected') { clearInterval(pollTimer); pollTimer=null; renderAdminRejected(r.reason || '未知原因'); }
+                    else if (r && r.success && r.status === 'license_expired') { clearInterval(pollTimer); pollTimer=null; renderAdminRejected(r.message || '该授权已到期，重新激活无法恢复使用，请联系客服微信 hktzy1688 续费', true); }
                     if (pollCount >= 120) { clearInterval(pollTimer); pollTimer=null; if (statusEl) statusEl.textContent = '⏰ 等待时间较长，管理员可能还在处理\n关闭窗口不影响审核'; }
                 }, 5000);
                 return;
@@ -6318,8 +6343,11 @@
             });
             currentActivationObserver.on('terminal', function (s, payload) {
                 if (s === 'rejected') {
-                    document.getElementById('adminRejectReason').textContent = (payload && payload.reason) || '未知原因';
-                    show('adminRejected');
+                    renderAdminRejected((payload && payload.reason) || '未知原因');
+                } else if (s === 'license_expired') {
+                    renderAdminRejected(
+                        (payload && payload.message) || '该授权已到期，重新激活无法恢复使用，请联系客服微信 hktzy1688 续费',
+                        true);
                 }
             });
             // Observer 启动时自动 0s 立即 poll（不再等待 setInterval 首 5s）→ 对 startPolling 传进来的

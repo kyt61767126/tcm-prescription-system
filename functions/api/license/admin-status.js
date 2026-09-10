@@ -217,6 +217,41 @@ export async function onRequest(context) {
                     console.warn('[AdminStatus] 激活密码归一化失败（不影响license读取）:', e.message);
                 }
             }
+            // ★ 2026-09-11 P0 过期 license 不下发（假激活死循环根治）：admin_req.
+            //   licenseBase64 是审核通过那一刻签名固化的文件，license 过期后本接口
+            //   仍返回 activated+license → 客户端轮询/自愈（heal/syncLicenseFromServer）
+            //   反复落盘过期 license → "激活成功却进不去"死循环（现场实锤：激活1
+            //   中医诊所 license 9-11 06:21 过期后，客户端每次自愈都装回过期文件）。
+            //   过期改返回 license_expired 状态且不带 license 字段：旧客户端不满足
+            //   status==='activated' 判定自然不落盘；新客户端（auth-core 同轮更新）
+            //   识别该状态显示"已过期请续费"。
+            let __licenseExpiredAt = null;
+            try {
+                if (record.licenseBase64) {
+                    const __bin = atob(record.licenseBase64);
+                    const __bytes = Uint8Array.from(__bin, c => c.charCodeAt(0));
+                    const __lic = JSON.parse(new TextDecoder().decode(__bytes));
+                    const __expMs = new Date(__lic.expiresAt).getTime();
+                    if (!isNaN(__expMs) && Date.now() > __expMs) {
+                        __licenseExpiredAt = __lic.expiresAt;
+                    }
+                }
+            } catch (e) { /* 解析失败按未过期处理（不阻断既有流程） */ }
+            if (__licenseExpiredAt) {
+                return json({
+                    success: true,
+                    status: 'license_expired',
+                    expiresAt: __licenseExpiredAt,
+                    message: `授权已于 ${String(__licenseExpiredAt).slice(0, 10)} 到期，请续费后重新激活`,
+                    licenseInfo: {
+                        user: record.adminName,
+                        clinicName: record.clinicName,
+                        phone: record.phone || '',
+                        licenseCode: record.licenseCode,
+                        resolvedAt: record.resolvedAt
+                    }
+                }, 200, origin);
+            }
             // ★ 关键：客户端检查 status === 'activated' 时会取 result.license 写入 license.dat
             return json({
                 success: true,

@@ -2734,17 +2734,19 @@ public class MainActivity extends BridgeActivity {
                 JSONObject result = getLM().activateOnline(code, machineId, name, "", password, loginUsername, phone, inviteCode);
                 // ★ 修复 2026-07-27：激活成功后立即验证 license.dat 是否可正确读取
                 // 这样可以在激活时就发现问题，而不是等用户重启后才发现问题
+                // ★ 2026-09-11 P0 假激活拦截（对齐 installAdminLicense 的 AR-03 加固）：
+                //   服务端历史版本对已过期授权重激活会返回 success=true + 过期 license
+                //   （已服务端根治），此处客户端纵深防御——验证失败改硬拦截 success=false，
+                //   杜绝"界面显示激活成功、重启即被授权过期弹窗拦截"的死循环
+                //   （现场实锤：激活1中医诊所 1 天测试授权过期后反复假激活成功）。
                 if (result != null && result.optBoolean("success", false)) {
                     JSONObject verify = getLM().validateLicense(machineId);
-                    boolean valid = verify != null && verify.optBoolean("valid", false);
-                    String verifyType = verify != null ? verify.optString("type", "") : "";
-                    Log.d(TAG, "激活后验证: valid=" + valid + " type=" + verifyType +
-                               " machineId=" + machineId);
-                    if (!valid) {
-                        // license.dat 写入成功但读取失败，说明加密/解密有问题
-                        String verifyMsg = verify != null ? verify.optString("message", "未知") : "验证返回 null";
-                        Log.e(TAG, "激活后验证失败: " + verifyMsg);
-                        result.put("warning", "激活数据写入后验证异常: " + verifyMsg + "（machineId=" + machineId + "）");
+                    result = LicenseInstallValidator.applySelfVerify(result, verify);
+                    if (result != null && !result.optBoolean("success", false)) {
+                        String vt = result.optString("verifyType", "unknown");
+                        String vd = result.optString("verifyDetail", "未知");
+                        Log.e(TAG, "激活码激活后验证失败! type=" + vt + " msg=" + vd);
+                        return result;
                     }
                 }
                 return result;

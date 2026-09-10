@@ -314,6 +314,14 @@
                 this._emit('terminal', s, payload);
                 this.stop();
             }
+            // ★ 2026-09-11 P0 license_expired（服务端 admin-status 新状态）：审核记录
+            //   已 activated 但签名固化的 license 已到期——服务端不再下发 license，
+            //   轮询永无 activated 结果 → 归 terminal 终止轮询，由宿主 UI 显示
+            //   "授权已过期请续费"（防"等待审核"假象无限轮询）。
+            if (s === 'license_expired') {
+                this._emit('terminal', s, payload);
+                this.stop();
+            }
         }
 
         async _tick() {

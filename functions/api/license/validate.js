@@ -337,6 +337,13 @@ export async function onRequest(context) {
             rewardDays: (record.rewardDays || 0) + inviteeBonusDays,
             user: licenseUser
         };
+        // ★ 2026-09-11 P0 锚定防漂移（续命漏洞根治）：firstActivatedAt 缺失时锚定
+        //   record.activatedAt（首次激活时间，旧值），绝不锚定"本次重激活时间"——
+        //   否则重激活两次即可把有效期锚点推到最近一次激活（anchor+days 续命）。
+        //   admin-approve 路径历史记录均无 firstActivatedAt（已同轮补写），此处兜底。
+        if (!licenseRecord.firstActivatedAt && licenseRecord.activatedAt) {
+            licenseRecord.firstActivatedAt = licenseRecord.activatedAt;
+        }
         const licenseOptions = {};
         if (record.clinicName) {
             licenseOptions.clinicName = record.clinicName;
@@ -352,20 +359,49 @@ export async function onRequest(context) {
         licenseOptions.kv = kv;
         const licenseData = await buildLicenseData(licenseRecord, licenseOptions);
 
+        // ★ 2026-09-11 P0 假激活拦截：锚定规则下重激活不延长有效期——生成的 license
+        //   已到期时必须拒绝（success=false），且不执行任何 updateLicense（不刷
+        //   activatedAt/devices）。此前过期授权重激活返回 success=true + 过期 license，
+        //   客户端落盘显示"激活成功"，重启即被启动校验拦截 → "激活成功却进不去"死循环。
+        const __licenseExpMs = new Date(licenseData.expiresAt).getTime();
+        if (!isNaN(__licenseExpMs) && Date.now() > __licenseExpMs) {
+            await appendLicenseLog(kv, code, {
+                action: 'reactivate-denied-expired',
+                time: new Date().toISOString(),
+                ip: ip,
+                operator: licenseUser,
+                detail: `license 已过期（expiresAt=${licenseData.expiresAt}），拒绝重激活（防假激活+防续命）`
+            });
+            return json({
+                success: false,
+                code: 'LICENSE_EXPIRED',
+                error: `该授权已于 ${String(licenseData.expiresAt).slice(0, 10)} 到期，重新激活无法恢复使用。请联系客服续费。`
+            }, 403);
+        }
+
         // 更新激活码记录：标记为已使用，绑定机器 ID + 诊所名
         // ★ v4 新增：如果是新设备激活，添加到 devices 数组
         const isReactivation = !!existingDevice;  // 同设备重激活 vs 新设备首次激活
+        // ★ 2026-09-11 P0 锚定防漂移：activatedAt 是 buildLicenseData 有效期锚定的
+        //   回退源（firstActivatedAt 缺失的存量记录），重激活/加设备时刷新它 =
+        //   把有效期锚点推到本次（anchor+days 续命漏洞）。仅首次激活
+        //   （record.status==='unused'）写 activatedAt；重激活审计改记 lastReactivatedAt。
+        const __isFirstActivation = (record.status === 'unused');
         const updates = {
             status: 'used',
             machineId: machineId,  // 保留旧字段（向后兼容，= devices[0].machineId）
-            activatedAt: getNowISO(),
             activatedIp: ip,
-            user: licenseUser
+            user: licenseUser,
+            ...(__isFirstActivation
+                ? { activatedAt: getNowISO() }
+                : { lastReactivatedAt: getNowISO() })
         };
         // ★ 2026-08-26 有效期锚定：首次激活时间只写一次（后续重激活/换机激活不变），
         //   buildLicenseData 用 firstActivatedAt + days 计算固定到期时间
+        // ★ 2026-09-11 同源修正：缺失时锚定旧 activatedAt（而非 now），与上方
+        //   licenseRecord 传参锚定保持一致——两处不同源会导致签发与落库锚点分裂。
         if (!record.firstActivatedAt) {
-            updates.firstActivatedAt = getNowISO();
+            updates.firstActivatedAt = record.activatedAt || getNowISO();
         }
         // ★ 推广奖励：持久化邀请码 / 被邀奖励天数 / 邀请人标识（幂等）
         if (recordWithInvite.inviteCode && recordWithInvite.inviteCode !== record.inviteCode) {

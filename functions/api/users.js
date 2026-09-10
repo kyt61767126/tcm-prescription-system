@@ -2470,7 +2470,25 @@ export async function onRequest(context) {
                 });
             }
 
-            return json({ success: true, clinic: clinics[clinicIdx] });
+            // ★ 2026-09-11 P0 双源有效期警示：离线版诊所（edition=offline_*）的离线端
+            //   可用性由签名固化的 license 决定，clinic=update 只改诊所表（云端账户/
+            //   官网登录依据）——两端数据源独立，改诊所有效期不会延长离线端 license
+            //   （现场实锤：激活1中医诊所 9-10 直填诊所到期日 9-11，license 仍 9-11
+            //   06:21 过期 → "离线APP 说过期、官网显示剩余1天"状态分裂）。
+            //   离线版续期必须走「客户重新提交申请 → 激活审核重签 license」流程。
+            let __offlineExpiryWarning = null;
+            if (/^offline_/.test(String(clinics[clinicIdx].edition || '')) &&
+                changes.some(ch => ch.startsWith('expiresAt:'))) {
+                __offlineExpiryWarning =
+                    '⚠️ 该诊所为离线版：诊所到期日已更新（仅影响云端账户/官网登录），' +
+                    '离线端 APP/桌面的授权 license 不会自动延期——离线版续期需客户重新提交激活申请并审核（重签 license）。';
+            }
+
+            return json({
+                success: true,
+                clinic: clinics[clinicIdx],
+                ...(__offlineExpiryWarning ? { warning: __offlineExpiryWarning } : {})
+            });
         }
 
         // ===== 删除诊所 POST /users?clinic=delete =====

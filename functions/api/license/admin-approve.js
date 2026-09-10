@@ -223,6 +223,7 @@ export async function onRequest(context) {
             : ((record.appMode === 'local' || record.appMode === 'offline') ? 'offline' : null);
         const __clientClass = (record.appModeCarrier === 'desktop' || record.appModeCarrier === 'app')
             ? record.appModeCarrier : null;
+        const __approveNow = new Date().toISOString();
         const licenseRecord = {
             code: code,
             user: record.adminName,
@@ -232,9 +233,15 @@ export async function onRequest(context) {
             type: type,
             days: days || null,
             expiresAt: recordExpiresAt,
-            issuedAt: new Date().toISOString(),
+            issuedAt: __approveNow,
             issuedBy: currentUser.username,
-            activatedAt: new Date().toISOString(),
+            activatedAt: __approveNow,
+            // ★ 2026-09-11 P0 锚点补写：有效期锚定规则（license-core buildLicenseData）
+            //   是 firstActivatedAt → activatedAt → now 三级回退。admin-approve 路径
+            //   此前不写 firstActivatedAt——若该码日后被激活码 Tab 重激活，validate.js
+            //   曾把 activatedAt 刷成本次时间（已同轮修复），锚点漂移 = 续命漏洞。
+            //   审核激活即首次激活，锚点显式固化。
+            firstActivatedAt: __approveNow,
             activatedIp: ip,
             machineId: record.machineId,  // 旧字段（兼容）
             clinicName: clinicName,

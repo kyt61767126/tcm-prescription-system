@@ -970,6 +970,26 @@ P2 渐进迁移（2026-09-03 当日完成）：
 * **改造**：`POST /api/users?clinic=update` 新增 `expiresAt` 参数（支持 `yyyy-mm-dd` 或 ISO 字符串），平台管理员可直接覆盖诊所到期日，优先级高于 renewDays。
 * **生效方式**：服务端 Functions push 即部署，后台诊所管理强刷生效，五端零重打包。
 
+### ★ 2026-09-11 P0 离线APP「假激活 + 双源有效期分裂」重大漏洞（授权过期仍可激活/官网可登录）
+
+* **现象全貌**（用户"激活1"实测，手机号 13800000000 / licenseCode BNZC-CYQG-HDDT-AD74-DL7S）：①离线APP提示"授权已过期"打不开，但官网用户名密码可登录，操作界面显示"已激活，剩余1天"；②APP内"前往激活"→显示"激活成功"，退出重开依旧弹"授权到期"无法登录；③审核界面默认自动选"机构版-一年"，激活天数手动改1天。
+* **根因（三条叠加）**：
+  - **双源有效期分裂**：license 按"激活时刻+days"精确时间戳过期（06:21:58），云端诊所账户按自然日 23:59:59 过期（admin-approve 两条路径各写各的）→ 同一天内存在"APP已过期、网页仍有效"的窗口，用户感知为漏洞。
+  - **假激活**：admin-status.js 的 activated 分支只看记录 status，不解码 license 文件校验 expiresAt → 过期 license 照样下发 → 客户端"前往激活"成功装回过期 license，重启即弹"授权到期"（激活成功的假象）。
+  - **validate.js 无过期拦截**：激活码重激活不检查 license 过期，且旧逻辑可刷新 activatedAt（锚定漂移=重激活续命）。
+* **修复（服务端三层 + 客户端三层纵深防御）**：
+  1. `validate.js`：重激活前解码 license 检查过期，过期返回 403 `LICENSE_EXPIRED`（"该授权已于 xx 到期，重新激活无法恢复使用，请联系客服续费"）+ 写 license_log `reactivate-denied-expired`；重激活**不刷 activatedAt**（改写 lastReactivatedAt 审计），firstActivatedAt 缺失时锚定旧 activatedAt 防漂移。
+  2. `admin-status.js`：activated 分支解码 licenseBase64 检查 expiresAt，过期返回新状态 `license_expired`（不下发 license），message 携带到期日与续费指引。
+  3. `admin-approve.js`：licenseRecord 显式写 `firstActivatedAt`（审核时刻），锚点来源统一。
+  4. `users.js` + `site-admin/admin/index.html`：离线版诊所（edition 以 offline_ 开头）改 expiresAt 时返回/展示 warning——"诊所到期日仅影响云端账户/官网登录，离线端 license 不自动延期，续期需重签 license"。
+  5. `MainActivity.java`（离线APP）：激活码激活后调 `LicenseInstallValidator.applySelfVerify`，验证失败硬拦截（success=false + verifyType/verifyDetail）。
+  6. `activation-observer.js` + `auth-core/offline.js`：observer 识别 `license_expired` 触发 terminal 停轮询；offline.js 新增 `renderAdminRejected(reason, isExpired)`——拒绝面板复用渲染，expired 时标题改"授权已过期"、隐藏"修改后重新提交"按钮；三处消费点（submit 成功/startPolling observer/旧 setInterval 兜底）全接。
+* **铁律**：
+  - **license 的 expiresAt 与诊所 clinic.expiresAt 是两个独立时间源，任何"有效期"操作（审核/续费/修改到期日）都必须同时回答两个问题：云端账户到几时？license 到几时？两者不一致时必须显式警示，禁止静默只改一边。**
+  - **下发 license 的每个出口（admin-status/validate/任何新接口）必须解码文件本体校验 expiresAt 后再下发——只信记录 status 字段=假激活；重激活类接口必须拒绝过期 license（防续命）且不得刷新首次激活锚点。**
+  - **客户端收到"激活成功"结果后必须本地自验 license 再展示成功（服务端修复与客户端自验互为纵深，任一失效仍有拦截）。**
+* **生效方式**：服务端三层（validate/admin-status/admin-approve/users）push 即部署生效（含旧版 APK 亦被保护）；客户端三层（MainActivity 自验 + observer/offline.js license_expired UI）需重打**离线APP APK**（云端两端无此路径不需要重打；离线桌面走 auth-core 副本，下次打包生效）。
+
 * ★ 2026-08-31 v3 下载"进度卡死 0%"根因：fetch ReadableStream **读流无内置超时**，弱网下连接静默挂起（无数据也无报错）时 `reader.read()` 永久等待，v2 下载器进度永久停在 0.4MB 且不触发重试（用户实测截图证实）。修复：**读流看门狗**——每段数据到达重置 15s 定时器，超时未喂则 `AbortController.abort()` 强制断开自动断点续传；重试上限提至 30 次、退避封顶 5s。铁律：**前端流式读取必须配看门狗（数据到达重置定时器 + 超时 abort），fetch 读流挂起不报错，没有看门狗就永远卡死**。
 
 * ★ 2026-09-01 E2E E1 偶发超时第三轮（真根因=TDZ 时序竞态）：index.html 解析期(:778)即调用 `Permission.init()`，而 `const CONFIG` 到(:810)才声明——**IPC 回调若落在两者之间，CONFIG 处于暂时性死区（TDZ），`typeof CONFIG`** **亦抛 ReferenceError 被 catch 静默吞掉**，`__authoritativeEdition` 写入被跳过 → asar 出厂默认(cloud\_personal)经(:834)同步 XHR 反向覆盖 → 机构版用户管理按钮消失（E1 FAIL / E3 时序有利又 PASS 的"偶发"假象）。修复双端兜底：① permission.js init() **无条件先暂存权威 edition 到 Permission 实例**（`this._authoritativeEdition`，permission.js 先于内嵌脚本加载，实例必然已存在），CONFIG 可用时再写插槽；② edition-lock.js getter 优先级2读取 `Permission._authoritativeEdition` 兜底。铁律：**async init 的 IPC 回调与页面内嵌顶层 const/let 声明存在竞态——跨脚本共享的权威值必须暂存到必然先存在的载体（自身模块实例），禁止只依赖可能处于 TDZ 的全局对象；`typeof`** **对 TDZ 变量照样抛错，不是安全探测**。验证方式：E2E 竞态类问题单次通过不算数，须 dev electron + real\_app.asar（run-e2e 兜底模式 B）连跑 5 次以上；fused exe 按设计阻断 CDP，不能直接跑 Playwright E2E（超时≠业务失败）。
