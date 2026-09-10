@@ -1,16 +1,13 @@
 {
     "local": {
         "apk": {
-            "version": "V1.0.0.267",
-            "versionCode": 267,
-            "sha256": "7eee1f13296bc05cf816fbe2fd87a8a9dff4edf3efb883e875a231ab2f18630b",
+            "version": "1.0.0",
+            "versionCode": 269,
+            "sha256": "1ab4238fbfc89e2e830c83547af959a0aee4a54e214cffb9b8d0ccd14270ac95",
             "url": "/downloads/惠康中医-本地.apk",
-            "releaseUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.10/huikang-local.apk",
-            "size": 2992194,
-            "updateTime": "2026-09-10T08:59:00.000Z",
-            "fileName": "惠康中医-本地.apk",
-            "releaseFileName": "huikang-local.apk",
-            "releaseTag": "v2026.09.10"
+            "size": 2992377,
+            "updateTime": "2026-09-10T12:06:14.213Z",
+            "fileName": "惠康中医-本地.apk"
         },
         "portable": {
             "version": "1.0.223",
@@ -67,25 +64,22 @@
     "provenance": {
         "schemaVersion": 1,
         "repo": "https://github.com/kyt61767126/tcm-prescription-system.git",
-        "commit": "f4ab889f4f2b",
+        "commit": "f6aa0aa29e61",
         "ref": "main",
         "builder": "kyt61767126",
-        "builtAt": "2026-09-10T11:37:37.330Z",
+        "builtAt": "2026-09-10T12:06:15.217Z",
         "buildTool": "publish-release.js@v24.16.0",
         "releaseTag": ""
     },
     "dingzhi": {
         "apk": {
-            "version": "V1.0.0.267",
-            "versionCode": 267,
-            "sha256": "7eee1f13296bc05cf816fbe2fd87a8a9dff4edf3efb883e875a231ab2f18630b",
+            "version": "1.0.0",
+            "versionCode": 269,
+            "sha256": "1ab4238fbfc89e2e830c83547af959a0aee4a54e214cffb9b8d0ccd14270ac95",
             "url": "/downloads/惠康中医-本地.apk",
-            "releaseUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.10/huikang-local.apk",
-            "size": 2992194,
-            "updateTime": "2026-09-10T08:59:00.000Z",
-            "fileName": "惠康中医-本地.apk",
-            "releaseFileName": "huikang-local.apk",
-            "releaseTag": "v2026.09.10"
+            "size": 2992377,
+            "updateTime": "2026-09-10T12:06:14.213Z",
+            "fileName": "惠康中医-本地.apk"
         },
         "portable": {
             "version": "1.0.223",
