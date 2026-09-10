@@ -2156,6 +2156,8 @@
     // ★ 优化客户使用流程：紫色主题、步骤指引、机器ID复制、联系客服、诊所名展示、loading
     function showActivateModal(machineId, clinicName) {
         return new Promise(function(resolve) {
+            // ★ 2026-09-10 防御：移除已存在的同 id overlay（防并发调用叠加弹窗）
+            document.querySelectorAll('#activateModalOverlay').forEach(n => n.remove());
             const overlay = document.createElement('div');
             overlay.id = 'activateModalOverlay';
             overlay.style.cssText =
@@ -2387,6 +2389,8 @@
     // ★ HTML 弹窗（替代 alert()）
     function showHtmlAlert(message) {
         return new Promise(function(resolve) {
+            // ★ 2026-09-10 防御：移除已存在的同 id overlay（防并发调用叠加弹窗）
+            document.querySelectorAll('#alertModalOverlay').forEach(n => n.remove());
             const overlay = document.createElement('div');
             overlay.id = 'alertModalOverlay';
             overlay.style.cssText =
@@ -2714,7 +2718,11 @@
     //   - trial + remainingDays>0 → 试用期剩余 X 天
     //   - trial + remainingDays<=0 → 试用期已过期
     //   - licensed → 已激活（type）+ 剩余 X 天
+    // ★ 2026-09-10 请求ID防重入：updateLicenseStatusText 为 async，并发调用时叠加渲染。
+    //   用递增 reqId 标记，await 后检查是否仍是最新请求，不是则放弃。
+    let __licenseStatusReqId = 0;
     async function updateLicenseStatusText() {
+        const myReqId = ++__licenseStatusReqId;
         const el = document.getElementById('licenseStatusText');
         if (!el) return;
 
@@ -2722,6 +2730,7 @@
             // ★★★ 2026-08-25 云端账号授权优先：登录云端账号即视为已激活，
             //   显示与离线版统一的格式（用户要求"全局统一 授权状态 参考离线"）
             const cloudHtml = await getCloudAccountLicenseHtml();
+            if (myReqId !== __licenseStatusReqId) return;
             if (cloudHtml) {
                 el.innerHTML = cloudHtml;
                 // ★ 2026-09-05 云端邀请码卡片：已登录用户异步加载（未命中静默）
@@ -2738,6 +2747,7 @@
                 return;
             }
             const status = await global.electronAPI.license.getStatus();
+            if (myReqId !== __licenseStatusReqId) return;
             if (status && status.valid) {
                 // ★ LicenseManager.java 返回字段：licenseType / type / remainingDays 都在顶层
                 //    不存在 prescriptionStatus 字段（之前代码读错位置导致走 else 显示"已激活"）

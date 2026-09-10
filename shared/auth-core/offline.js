@@ -2497,6 +2497,8 @@
 
     function showActivateModal(machineId, clinicName) {
         return new Promise(function(resolve) {
+            // ★ 2026-09-10 防御：移除已存在的同 id overlay（防并发调用叠加弹窗）
+            document.querySelectorAll('#activateModalOverlay').forEach(n => n.remove());
             const overlay = document.createElement('div');
             overlay.id = 'activateModalOverlay';
             overlay.style.cssText =
@@ -2785,6 +2787,8 @@
     // ★ HTML 弹窗（替代 alert()）
     function showHtmlAlert(message) {
         return new Promise(function(resolve) {
+            // ★ 2026-09-10 防御：移除已存在的同 id overlay（防并发调用叠加弹窗）
+            document.querySelectorAll('#alertModalOverlay').forEach(n => n.remove());
             const overlay = document.createElement('div');
             overlay.id = 'alertModalOverlay';
             overlay.style.cssText =
@@ -2941,7 +2945,13 @@
     //   - trial + remainingDays>0 → 试用期剩余 X 天
     //   - trial + remainingDays<=0 → 试用期已过期
     //   - licensed → 已激活（type）+ 剩余 X 天
+    // ★ 2026-09-10 请求ID防重入：updateLicenseStatusText 为 async，被打开设置/激活回调/
+    //   自愈转正等多路径并发调用时，旧实现会叠加渲染（如邀请码卡片重复3次）。
+    //   用递增 reqId 标记，每个 await 后检查是否仍是最新请求，不是则放弃，确保只有
+    //   最后一次调用的渲染生效。
+    let __licenseStatusReqId = 0;
     async function updateLicenseStatusText() {
+        const myReqId = ++__licenseStatusReqId;
         const el = document.getElementById('licenseStatusText');
         if (!el) return;
 
@@ -2954,6 +2964,8 @@
                 return;
             }
             const status = await global.electronAPI.license.getStatus();
+            // ★ 2026-09-10 reqId 检查：若期间有新调用，放弃本次渲染
+            if (myReqId !== __licenseStatusReqId) return;
             if (status && status.valid) {
                 // ★ LicenseManager.java 返回字段：licenseType / type / remainingDays 都在顶层
                 //    不存在 prescriptionStatus 字段（之前代码读错位置导致走 else 显示"已激活"）
