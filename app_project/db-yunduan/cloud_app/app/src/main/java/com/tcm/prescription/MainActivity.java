@@ -360,6 +360,21 @@ public class MainActivity extends BridgeActivity {
         // 配合版本检查机制：版本变更时onCreate清缓存，确保更新生效
         // 效果：版本匹配时秒开，页面有更新时自动加载最新版本
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
+
+        // ★★★ 2026-09-10 根治"线上更新但云端APP不生效"（用户连续三轮反馈布局未变化）：
+        //   仅靠 clearCache + no-cache 头仍存在缓存竞争窗口——Capacitor server.url 的初始加载
+        //   发生在 configureWebView（延迟执行）之前/并行，clearCache(true) 是异步磁盘操作，
+        //   WebView 可能已命中旧 HTTP 缓存完成首帧。此处在清缓存后主动 loadUrl 带时间戳参数，
+        //   URL 不同 = 缓存键不同 = 必然从网络拉最新页面，彻底绕过磁盘缓存。
+        //   isCloudUrl 按 host 判断（L1074），带 ?_v= 参数的 URL 仍视为云端，不会被
+        //   onPageStarted 反钓鱼重定向拦截。业务 JS 仍走 etag 304 极速缓存，性能无损。
+        //   首帧由遮罩覆盖（splashCoverUnlocked=false），双次加载用户不可见。
+        try {
+            webView.loadUrl(CLOUD_URL + "?_v=" + System.currentTimeMillis());
+            Log.d("TCM-Pres", "冷启动强制拉取最新云端页面(带时间戳绕缓存)");
+        } catch (Exception e) {
+            Log.w(TAG, "强制加载最新页面失败: " + e.getMessage());
+        }
         // 启用硬件加速，提升页面渲染性能
         webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
         settings.setDomStorageEnabled(true);
@@ -566,8 +581,9 @@ public class MainActivity extends BridgeActivity {
                 }
                 if (!urlChecked && url != null && !isCloudUrl(url)) {
                     urlChecked = true;
-                    // 立即重定向到云端URL，不延迟（不添加时间戳，允许缓存）
-                    view.loadUrl(CLOUD_URL);
+                    // 立即重定向到云端URL，不延迟
+                    // ★ 2026-09-10 与 configureWebView 一致：带时间戳绕缓存，保证拉到线上最新页面
+                    view.loadUrl(CLOUD_URL + "?_v=" + System.currentTimeMillis());
                 }
             }
 
