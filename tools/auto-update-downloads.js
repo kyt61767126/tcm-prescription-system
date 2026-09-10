@@ -215,13 +215,19 @@ function updateDownloads(target) {
         const size = getFileSize(destPath);
         // ★ 版本信息从 APK 产物提取（真源），aapt 不可用回退 build.gradle
         const ver = readVersionFromApk(destPath, config.appDir);
-        const version = ver.version || readVersionFromGradle(config.appDir);
+        const versionName = ver.version || readVersionFromGradle(config.appDir);
+        const versionCode = ver.versionCode > 0 ? ver.versionCode : 0;
+        // ★ 2026-09-10 修复：manifest.apk.version 按 SSOT 组合格式
+        //   "V{versionName}.{versionCode}" 写入（如 1.0.0.283）。此前只写裸
+        //   versionName（1.0.0），导致下载页 APP 卡片显示"版本 v1.0.0"不完整，
+        //   与 APP 内 V1.0.0.283 无法肉眼对齐。
+        const version = versionCode > 0 ? versionName + '.' + versionCode : versionName;
 
         // 更新 manifest
         if (!manifest[key]) manifest[key] = {};
         manifest[key].apk = {
             version: version,
-            versionCode: ver.versionCode > 0 ? ver.versionCode : undefined,
+            versionCode: versionCode > 0 ? versionCode : undefined,
             sha256: sha256,
             url: '/downloads/' + config.outputName,
             size: size,
