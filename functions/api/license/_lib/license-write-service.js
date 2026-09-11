@@ -27,7 +27,9 @@
 //    markOrderPaid(kv, orderNo, payInfo)            → orderNo 找到 requestId → 补 paid 字段 + 同步 phone_index + 追加 req_index(缺失)
 // ============================================================================
 
-import { getKV, appendRequestIndex, saveLicense } from './license-core.js';
+import { getKV, appendRequestIndex, saveLicense, getLicense,
+         buildLicenseData, encodeLicenseBase64,
+         getEd25519PrivateKeyPem, appendLicenseLog } from './license-core.js';
 // ★ 2026-09-07 架构防御：字段校验收口 schema-guard 单一副本（新建写路径入参
 //   走工厂校验防脏；存量 rid 维护路径保持裸前缀拼接，信任存量数据防误炸）
 import { isValidPhone, isValidOrderNo, normalizeOrderNo, kvKey } from './schema-guard.js';
@@ -201,6 +203,73 @@ export async function updateAdminRequestStatus(kv, requestId, patch) {
         }
     }
     return record;
+}
+
+// ============================================================================
+// 2.5. ensureLicenseV7 — ★ 2026-09-11 阶段1a 存量 license 重签自愈（下发出口统一升级）
+//   背景：admin_req.licenseBase64 是审核通过那一刻签名固化的文件。V7 Ed25519 上线前
+//   签发的存量文件缺 signatureV7 → 客户端只能走对称 HMAC 验签（硬编码密钥已随历史
+//   APK 泄露，可被伪造 license 绕过非对称保护）。配合客户端 HMAC_SUNSET_DATE 截断
+//   （阶段1b），本函数让存量用户联网一次即自动升级为 V7 非对称签名文件（下载即自愈）。
+//   入口铁律：所有「从 admin_req 记录下发 licenseBase64」的出口（admin-status 轮询 /
+//   admin-submit 两处短路复用）必须先过本函数，新增出口同理。
+//   幂等：已带 signatureV7 直接原样返回（零写入）；重签确定性（buildLicenseData 按
+//   firstActivatedAt 锚点+days 重算 expiresAt，与原值一致，无续命窗口）。
+//   fail-open：任何解析/重建失败返回原记录（不阻断下发，维持现状不升级）。
+// ============================================================================
+export async function ensureLicenseV7(kv, record, context) {
+    if (!kv || !record || !record.licenseBase64 || !record.licenseCode || !record.requestId) {
+        return record;
+    }
+    // 1. 解码存量文件：已带 V7 直接返回（幂等零写入）
+    try {
+        const bin = atob(record.licenseBase64);
+        const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+        const lic = JSON.parse(new TextDecoder().decode(bytes));
+        if (lic && lic.signatureV7) return record;
+    } catch (e) { /* 解析失败继续尝试重签（重签失败兜底原样返回） */ }
+    // 2. 前置守卫：Ed25519 私钥未配置不重签（重建出的文件仍无 V7，只会白写 KV）
+    //    绑定字段缺失不重签（重签会丢失/改变三因子绑定语义，宁可维持原文件）
+    if (!getEd25519PrivateKeyPem(context)) {
+        console.warn('[WriteService] ensureLicenseV7: Ed25519 私钥未配置，跳过重签自愈');
+        return record;
+    }
+    if (!record.clinicName || !record.machineId) {
+        console.warn('[WriteService] ensureLicenseV7: admin_req 缺 clinicName/machineId，跳过重签:', record.requestId);
+        return record;
+    }
+    // 3. 从 license:{code} 权威记录重建（firstActivatedAt 锚点/rewardDays/type/days 齐全）
+    const licRec = await getLicense(kv, record.licenseCode).catch(() => null);
+    if (!licRec) {
+        console.warn('[WriteService] ensureLicenseV7: license 记录不存在，跳过:', record.licenseCode);
+        return record;
+    }
+    try {
+        const devicesCount = Array.isArray(licRec.devices) ? licRec.devices.length : 1;
+        const licenseData = await buildLicenseData(licRec, {
+            clinicName: record.clinicName,
+            machineId: record.machineId,
+            licenseBinding: 'clinic+user+machine',
+            maxDevices: record.maxDevices,
+            devicesCount: devicesCount,
+            context: context
+        });
+        const newBlob = encodeLicenseBase64(licenseData);
+        // 4. 写回 admin_req 主记录（走本服务原子函数；patch 无 status 不动 phone 索引）
+        await updateAdminRequestStatus(kv, record.requestId, { licenseBase64: newBlob });
+        console.log('[WriteService] ensureLicenseV7: 已重签升级 V7 license: rid=', record.requestId, 'code=', record.licenseCode);
+        try {
+            await appendLicenseLog(kv, record.licenseCode, {
+                action: 'resign-v7-selfheal',
+                time: new Date().toISOString(),
+                detail: `存量 license 补签 V7（ensureLicenseV7），requestId=${record.requestId}`
+            });
+        } catch (e) { /* 审计日志失败不影响主流程 */ }
+        return Object.assign({}, record, { licenseBase64: newBlob });
+    } catch (e) {
+        console.warn('[WriteService] ensureLicenseV7: 重签失败，维持原文件下发:', e.message);
+        return record;
+    }
 }
 
 // ============================================================================

@@ -19,6 +19,14 @@ const LICENSE_HMAC_KEY = 'bnzc_tcm_license_key_v1_2026';
 const DEFAULT_TRIAL_DAYS = 7;                                 // 默认试用期 7 天（可通过 trial-config.json 修改，测试时设为 0）
 const TIME_TAMPER_THRESHOLD = 24 * 60 * 60 * 1000;           // 时间回拨阈值：1 天
 
+// ★ 2026-09-11 阶段1b：HMAC 对称验签日落截断（与安卓 LicenseManager.java 统一，改动必须四端同步）
+//   背景：硬编码 HMAC 密钥已随历史包泄露，攻击者可删 V5/V6/V7 字段走 HMAC 伪造 license。
+//   规则：签发时间（issuedAt）≥ 此日期 且 无任何非对称签名字段的 license 一律拒绝。
+//   服务端自 2026-08 起签发必带 V5/V6/V7，且 ensureLicenseV7 让存量联网一次即自愈升级，
+//   截断日之后"合法却只有 HMAC"的 license 不存在（除伪造）。存量旧 license（issuedAt
+//   早于截断日）照旧 HMAC 放行，180 天宽限不误伤。轮换此值需四端 + KNOWLEDGE 同步。
+const HMAC_SUNSET_DATE = '2027-03-31';
+
 // ★ 任务2 新增：ECDSA P-256 验签公钥（PEM SPKI 格式）
 // 用于验证 license 中的 signatureV5 字段（云端 ECDSA 私钥签发）
 // 默认为空：未配置时跳过 v5 验签，仅用 HMAC v4（向后兼容）
@@ -779,8 +787,16 @@ function verifyMasterKeyConsistency(data) {
     }
 }
 
+// ★ 2026-09-11 阶段1b：最近一次 verifySignature 拒绝原因（'hmac_sunset' = HMAC 日落截断）
+//   供 UI 层区分提示文案（日落在"联网验证即自愈"，与"文件损坏需重新激活"不同）
+let lastVerifyRejectReason = null;
+function getLastVerifyRejectReason() {
+    return lastVerifyRejectReason;
+}
+
 function verifySignature(data) {
     if (!data.signature) return false;
+    lastVerifyRejectReason = null;  // 每次验签重置，防陈旧标记串扰
 
     // ★ P1-3: 缓存当前 license 数据上下文，供 getEffectiveHmacKey 派生密钥使用
     // 注意：此时 license 数据尚未验签，但 masterKey 字段不参与签名内容（云端在签名后添加），
@@ -835,6 +851,22 @@ function verifySignature(data) {
         console.warn('[License] v5 ECDSA 验签失败，拒绝该 license（fail-closed）');
         setLicenseDataContext(null);
         return false;
+    }
+
+    // ★ 2026-09-11 阶段1b：HMAC 兜底日落截断——license 无任何非对称签名字段
+    //   （signatureV5/V6/V7 全缺失）且 issuedAt ≥ HMAC_SUNSET_DATE 时直接拒绝。
+    //   正版 license 自 2026-08 起签发必带非对称签名，截断日后仍"只有 HMAC"的
+    //   license 唯一来源是用泄露对称密钥伪造。存量旧 license（issuedAt 更早）
+    //   不受影响（180 天宽限 + 服务端 ensureLicenseV7 联网一次即升级 V7）。
+    if (!data.signatureV5 && !data.signatureV6 && !data.signatureV7) {
+        const issuedAtMs = Date.parse(data.issuedAt || '');
+        if (!isNaN(issuedAtMs) && issuedAtMs >= Date.parse(HMAC_SUNSET_DATE)) {
+            lastVerifyRejectReason = 'hmac_sunset';
+            console.warn('[License] license 仅含对称 HMAC 签名且签发于 ' + HMAC_SUNSET_DATE +
+                ' 之后，已拒绝（对称签名日落）。请联网完成一次在线验证以自动升级授权文件。');
+            setLicenseDataContext(null);
+            return false;
+        }
     }
 
     // ★ P1-3 新增：如果 license 含 masterKey 字段，必须使用 masterKey 派生密钥验签
@@ -2425,6 +2457,8 @@ module.exports = {
     isVirtualMachine,      // 虚拟机检测（供 main.js 调用，仅记录日志）
     // ★ 网络心跳相关
     startHeartbeat,        // 启动心跳检测
+    // ★ 2026-09-11 阶段1b：拒绝原因查询（'hmac_sunset' = HMAC 日落截断，UI 引导联网自愈）
+    getLastVerifyRejectReason,
     stopHeartbeat,         // 停止心跳检测
     checkLicenseRevocation, // 手动检查授权状态（供测试用）
     // ★ P1-3 新增：masterKey 派生密钥机制

@@ -60,6 +60,21 @@ public class LicenseManager {
     // ★ HMAC 密钥（与桌面版 license-manager.js / 云端 license-core.js 完全一致）
     private static final String LICENSE_HMAC_KEY = "bnzc_tcm_license_key_v1_2026";
 
+    // ★ 2026-09-11 阶段1b：HMAC 对称验签日落截断（与桌面 license-manager.js 统一，四端同步）
+    //   硬编码 HMAC 密钥已随历史 APK 泄露，攻击者可删 V5/V6/V7 字段走 HMAC 伪造 license。
+    //   issuedAt ≥ 此日期 且 无任何非对称签名字段 → 拒绝。服务端 2026-08 起签发必带
+    //   非对称签名，且 ensureLicenseV7 让存量联网一次即自愈升级 V7；存量旧 license
+    //   （issuedAt 更早）照旧 HMAC 放行，180 天宽限不误伤。轮换此值需四端同步。
+    private static final String HMAC_SUNSET_DATE = "2027-03-31";
+
+    // ★ 阶段1b 配套：最近一次 verifySignature 拒绝原因（"hmac_sunset" = 日落截断），
+    //   供 validateLicense 区分提示文案（联网验证即自愈 ≠ 文件损坏需重新激活）
+    private static volatile String sLastVerifyRejectReason = null;
+
+    public static String getLastVerifyRejectReason() {
+        return sLastVerifyRejectReason;
+    }
+
     // ★ v5 新增：ECDSA P-256 验签公钥（PEM SPKI 格式，与桌面版 license-manager.js 一致）
     // 用于验证 license 中 signatureV5 字段（云端 ECDSA 私钥签发）
     // 公钥只能验签不能签发，即使被反编译提取也无法伪造 license
@@ -1813,6 +1828,7 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
 
     // 签名验证（先 v5 ECDSA，再 v3，再 v2，最后 v1 向后兼容）
     private boolean verifySignature(JSONObject data) {
+        sLastVerifyRejectReason = null;  // 每次验签重置，防陈旧标记串扰
         String sig = data.optString("signature", "");
         if (sig == null || sig.isEmpty()) return false;
 
@@ -1862,7 +1878,30 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
                 // ★ P0-2 加固（2026-08-26）：同上，masterKey 一致性校验
                 return verifyMasterKeyConsistency(data);
             }
-            Log.w(TAG, "v5 ECDSA 验签失败，降级为 HMAC");
+            // ★ 2026-09-11 阶段0 对齐桌面版（桌面 2026-08-16 已改）：V5 fail-closed。
+            //   license 含 signatureV5 说明由 v5 云端签发，验签失败 = 字段被篡改后
+            //   重算了对称 HMAC（需反编译拿硬编码密钥）。降级 HMAC 会让非对称验签
+            //   保护形同虚设。存量合法 v5 license 由 LEGACY 公钥轮换链保护，无误报。
+            Log.w(TAG, "v5 ECDSA 验签失败，拒绝该 license（fail-closed，对齐桌面版）");
+            setLicenseDataContext(null);
+            return false;
+        }
+
+        // ★ 2026-09-11 阶段1b：HMAC 兜底日落截断（对齐桌面 license-manager.js）——
+        //   license 无任何非对称签名字段（V5/V6/V7 全缺失）且 issuedAt ≥ HMAC_SUNSET_DATE
+        //   时直接拒绝。正版 license 自 2026-08 起签发必带非对称签名，截断日后仍
+        //   "只有 HMAC"的 license 唯一来源是用泄露对称密钥伪造。存量旧 license
+        //   （issuedAt 更早）不受影响（180 天宽限 + 服务端 ensureLicenseV7 联网自愈）。
+        if (!data.has("signatureV5") && !data.has("signatureV6") && !data.has("signatureV7")) {
+            long issuedAtMs = parseIsoDate(data.optString("issuedAt", ""));
+            long sunsetMs = parseIsoDate(HMAC_SUNSET_DATE);
+            if (issuedAtMs > 0 && sunsetMs > 0 && issuedAtMs >= sunsetMs) {
+                sLastVerifyRejectReason = "hmac_sunset";
+                Log.w(TAG, "license 仅含对称 HMAC 签名且签发于 " + HMAC_SUNSET_DATE +
+                        " 之后，已拒绝（对称签名日落），引导联网验证自愈");
+                setLicenseDataContext(null);
+                return false;
+            }
         }
 
         // ★ P1-3 新增：若 license 含 masterKey 字段，则 generateSignatureV3/V2 会自动使用 masterKey 派生密钥
@@ -3271,6 +3310,13 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
             if (rawLicense != null) {
                 // 先用原始字段验证签名
                 if (!verifySignature(rawLicense)) {
+                    // ★ 2026-09-11 阶段1b：区分 HMAC 日落截断——联网验证一次即自愈升级
+                    //   V7 非对称签名文件，与"文件损坏需重新激活"的引导路径不同（防误删重装）
+                    if ("hmac_sunset".equals(sLastVerifyRejectReason)) {
+                        return failValidation(
+                                "授权文件格式过旧（旧版对称签名已停用），请联网完成一次在线验证，授权文件将自动升级。",
+                                "hmac_sunset");
+                    }
                     return failValidation(
                             "授权文件已损坏或被篡改，请联系客服重新激活。",
                             "tampered");

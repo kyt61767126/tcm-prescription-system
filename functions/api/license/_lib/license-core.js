@@ -1320,6 +1320,8 @@ export {
     // ★ P2-3 新增：计数上链（处方计数高水位 + 回拨对账）
     reportUsage,       // 心跳/在线验证时上报计数并检测本地篡改
     getUsage,          // 读取计数上报记录（风控展示）
+    // ★ 2026-09-11 新增：Ed25519 私钥读取导出（ensureLicenseV7 重签自愈用）
+    getEd25519PrivateKeyPem,
     // ★ 2026-09-09 新增：载体 UA 嗅探 + 幂等补写（官网订单载体缺失自愈）
     sniffCarrierFromUA,        // UA → 'desktop'/'app'/null
     patchClinicCarrier,        // 补写诊所 offlineCarrier（仅空时）

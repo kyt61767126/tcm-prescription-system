@@ -921,6 +921,8 @@ P2 渐进迁移（2026-09-03 当日完成）：
 
 * 安全优化不得破坏正常打包流程，不得导致正常用户闪退。
 
+* ★ 2026-09-11 **License 验签加固 阶段0+1**（对称 HMAC 密钥泄露收敛）：①安卓 `LicenseManager.java` V5 ECDSA 验签失败改 fail-closed 直接拒绝（原降级 HMAC=攻击者篡改后重算 HMAC 可绕过；对齐桌面 2026-08-16 修复，L1881）；②服务端 `license-write-service.js` 新增 `ensureLicenseV7(kv, record, context)`——存量 licenseBase64 无 signatureV7 时用 license:{code} 权威记录重签（锚点确定性重算、expiresAt 不漂移、幂等零写入），接入 **3 个存量下发出口**：admin-status.js activated 返回前（L262，须在过期拦截之后）、admin-submit.js 手机号短路（L350）+ 设备维度短路（L522）；validate/admin-approve/activate-from-ticket/export-license 均新鲜签发（buildLicenseData 内含 V7，license-core.js L512）无需接入；entitlement.js 不下发 license；③六端加 `HMAC_SUNSET_DATE='2027-03-31'` 截断：无 V5/V6/V7 且 issuedAt≥截断日的纯 HMAC license 一律拒绝（shared/license/license-manager.js 权威源+4 副本+Java，拒绝原因 `hmac_sunset` 提示"联网完成一次在线验证"）——存量旧文件（截断日前签发）放行保兼容，攻击者用泄露对称密钥伪造的新文件全网拒绝。**出口审计铁律：新增任何读取存量 licenseBase64 下发的路径必须过 ensureLicenseV7；rg -l licenseBase64 functions/api/license/ 全查出口是唯一可靠手段**。单测：`tools/_tmp/test-hmac-sunset.cjs` + `test-ensure-v7.mjs`（各 10 断言，Windows 坑：ESM 用 pathToFileURL 导入、CJS 加载 ESM 需先复制改 .cjs 后缀）。生效：服务端 push 即部署；客户端改动须重打包（离线APP/离线桌面 APK+exe、云桌面 exe；云端APP 读线上 public 自动跟随）。
+
 ## 10. 排查验证方法论
 
 * **报错文案会误导定位**：防静默包装只报 e.message 不报行号，「Cannot read 'success'」可能来自链路上任何一个 await——必须通读整条调用链。

@@ -15,7 +15,7 @@
 
 import { getKV, checkRateLimit, sniffCarrierFromUA, patchClinicCarrier, patchLicenseDeviceCarrier } from './_lib/license-core.js';
 import { provisionCloudAccount, normalizeActivationPassword } from './_lib/admin-account.js';
-import { updateAdminRequestStatus } from './_lib/license-write-service.js';
+import { updateAdminRequestStatus, ensureLicenseV7 } from './_lib/license-write-service.js';
 
 const ALLOWED_ORIGINS = [
     'https://tcm-prescription-system.pages.dev',
@@ -254,6 +254,12 @@ export async function onRequest(context) {
                     }
                 }, 200, origin);
             }
+            // ★ 2026-09-11 阶段1a 存量 license 重签自愈：下发出口统一升级 V7。
+            //   admin_req.licenseBase64 缺 signatureV7（V7 上线前的存量文件）时，
+            //   用 license:{code} 权威记录重签（锚点确定性重算，expiresAt 不变），
+            //   存量用户联网轮询一次即自动升级非对称签名文件。幂等：已带 V7 零写入。
+            //   必须在过期拦截之后：过期 license 不重签不下发，维持 license_expired。
+            record = await ensureLicenseV7(kv, record, context);
             // ★ 关键：客户端检查 status === 'activated' 时会取 result.license 写入 license.dat
             return json({
                 success: true,

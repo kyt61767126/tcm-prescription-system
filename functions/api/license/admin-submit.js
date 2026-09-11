@@ -31,7 +31,7 @@
 
 import { getKV, checkRateLimit, checkDeviceVersion } from './_lib/license-core.js';
 import { provisionCloudAccount, normalizeActivationPassword } from './_lib/admin-account.js';
-import { createAdminRequest, updateAdminRequestStatus } from './_lib/license-write-service.js';
+import { createAdminRequest, updateAdminRequestStatus, ensureLicenseV7 } from './_lib/license-write-service.js';
 import { findPhoneOccupancy, hashPassword, KV_SYSTEM_CLINICS } from '../_lib/auth.js';
 // ★ 2026-09-07 架构防御：手机号校验收口 schema-guard 单一副本
 import { isValidPhone } from './_lib/schema-guard.js';
@@ -274,7 +274,7 @@ export async function onRequest(context) {
         //   公开信息且本接口匿名无验证码，必须校验提交者 machineId 属于该激活记录绑定设备
         //   （见下方 _isOwnerDevice），设备不匹配一律拒绝账号操作。
         {
-            const existingActivated = await findActivatedRequestForPhone(kv, phone);
+            let existingActivated = await findActivatedRequestForPhone(kv, phone);
             if (existingActivated) {
                 // ★ 2026-09-03 P0 安全修复（匿名手机号账户接管漏洞）：
                 //   admin-submit 是匿名接口（激活前无登录态），手机号不是秘密（名片/客服/
@@ -345,6 +345,9 @@ export async function onRequest(context) {
                     console.warn('[AdminSubmit] 已激活申请密码归一化失败:', e.message);
                 }
                 console.log('[AdminSubmit] 手机号已有已激活申请，短路复用:', phone, existingActivated.requestId);
+                // ★ 2026-09-11 阶段1a 重签自愈：短路下发出口同样过 ensureLicenseV7
+                //   （对齐 admin-status 轮询出口，防出口绕过），存量 license 升级 V7。
+                existingActivated = await ensureLicenseV7(kv, existingActivated, context);
                 // ★ 2026-09-03 根治激活登录失败：客户端"重新提交激活"时服务端直接下发
                 //   license + licenseInfo(含phone)，客户端 onSubmitSuccess 立即
                 //   走 onAdminActivated 完成领码建号，不再依赖 startPolling 首 5 秒。
@@ -471,7 +474,7 @@ export async function onRequest(context) {
         // ★ 2026-09-02 复核修复：白名单客户（freePass）跳过支付前置检查直接创建申请；
         //   上一版此处漏写 && !freePass（并行编辑被覆盖），会导致白名单首次提交被误拦。
         if (!isTestEnv && !freePass) {
-            const paid = await findPaidOrderForPhoneOrMachine(kv, phone, finalMachineId);
+            let paid = await findPaidOrderForPhoneOrMachine(kv, phone, finalMachineId);
             if (paid && paid.status === 'pending') {
                 console.log('[AdminSubmit] 命中已付款订单（待核对），复用进入等待:', phone, paid.requestId);
                 // ★ 2026-09-03 复用补写载体：官网下单创建的 record 无 appModeCarrier（浏览器
@@ -515,6 +518,8 @@ export async function onRequest(context) {
                 //   检测到 status=activated 且有 license 立即执行 onAdminActivated，
                 //   不再依赖 startPolling 首 5s 不被用户打断。
                 console.log('[AdminSubmit] 命中已付款且已激活订单，复用+下发license:', paid.requestId);
+                // ★ 2026-09-11 阶段1a 重签自愈：设备维度短路下发出口同样过 ensureLicenseV7
+                paid = await ensureLicenseV7(kv, paid, context);
                 const li2 = {
                     user: paid.adminName || '',
                     clinicName: paid.clinicName || '',
