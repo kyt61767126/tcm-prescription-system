@@ -14,7 +14,8 @@
 //    ⑤ 开关：基础设置注入「启用库存管理」复选框，默认关闭——老用户升级后
 //       行为零变化；未启用时全部钩子 no-op、全部 UI 注入隐藏
 //    ⑥ 流水导出 Excel（复用页面 XLSX 库，未就绪自动降级 CSV）；批量入库导入
-//       （CSV/Excel 每行 药名,数量,备注，药名须与药品库一致，无此药跳过汇总）
+//       （CSV/Excel 每行 药名,数量,备注，药名须与药品库一致，无此药跳过汇总）；
+//       入库模板下载（预填全部药名+数量列留空，留空行导入时自动跳过）
 //
 //  数据落点（与药品库同域，均为本机存储，无服务端改动）：
 //    开关   local_stockMgmtEnabled ('true'/'false')
@@ -451,8 +452,9 @@
             '<input type="text" id="stockInNote" placeholder="如：进货 5 公斤" style="width:100%;padding:8px;border:1px solid #888;border-radius:4px;"></div>' +
             '<div style="font-size:11px;color:#909399;margin-bottom:6px;">💡 批发公斤请自行换算为克（1公斤=1000g）</div>' +
             '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' +
+            '<button class="action-btn" style="padding:4px 10px;font-size:11px;background:#2e7d32;" onclick="StockCore.downloadStockTemplate()">📄 下载模板</button>' +
             '<button class="action-btn" style="padding:4px 10px;font-size:11px;background:#1565c0;" onclick="StockCore.pickStockImportFile()">📥 从文件批量导入</button>' +
-            '<span style="font-size:11px;color:#909399;">CSV/Excel，每行：药名,数量,备注（备注可省）</span></div>';
+            '<span style="font-size:11px;color:#909399;">模板已预填全部药名，填「数量」列即可导入；留空行自动跳过</span></div>';
         var footer =
             '<button class="action-btn" onclick="StockCore.closeInjectedModal(\'stockInModal\')">取消</button>' +
             '<button class="action-btn primary" onclick="StockCore.confirmStockIn()">确定入库</button>';
@@ -575,7 +577,7 @@
                     return;
                 }
                 if (!parsed.rows.length) {
-                    alert('未解析到有效数据行\n格式：每行 药名,数量,备注（备注可省略）' + (parsed.bad.length ? '\n有 ' + parsed.bad.length + ' 行无法识别' : ''));
+                    alert('未解析到有效数据行\n格式：每行 药名,数量,备注（备注可省略）\n提示：数量列为空或非数字的行不会导入' + (parsed.bad.length ? '\n本次有 ' + parsed.bad.length + ' 行被跳过' : ''));
                     return;
                 }
                 var names = {};
@@ -593,6 +595,51 @@
         document.body.appendChild(inp);
         inp.click();
         setTimeout(function () { if (inp.parentNode) inp.parentNode.removeChild(inp); }, 60000);
+    }
+
+    // ------------------------------------------------------------------
+    //  ⑥b 入库模板下载：表头 + 全部药品库药名（数量列留空）+ 底部说明行。
+    //     防呆闭环：留空数量行解析时进 bad 自动跳过，说明行（单格无数列）同理——
+    //     模板原样导入 = 0 笔生效，用户只填「数量」列即安全导入。
+    // ------------------------------------------------------------------
+    function buildTemplateRows(meds) {
+        var rows = [['药品', '数量', '备注']];
+        (meds || []).forEach(function (m) { rows.push([m && m.name ? m.name : '', '', '']); });
+        // 说明行只占首格（无逗号），导入时数量列空 → 自动跳过
+        rows.push(['说明：数量列填入库数（单位同药品单位）；留空的行导入时自动跳过']);
+        return rows;
+    }
+    function toCsvLine(cells) {
+        return (cells || []).map(function (x) {
+            var s = String(x === undefined || x === null ? '' : x);
+            return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+        }).join(',');
+    }
+    async function downloadStockTemplate() {
+        try {
+            var meds = getMedList();
+            if (!meds.length) { toast('药品库为空，请先添加药品'); return; }
+            var rows = buildTemplateRows(meds);
+            var stamp = new Date().toLocaleDateString('zh-CN').replace(/\//g, '-');
+            if (typeof XLSX === 'undefined' && typeof loadXlsxLibrary === 'function') {
+                try { await loadXlsxLibrary(); } catch (e1) {}
+            }
+            if (typeof XLSX !== 'undefined' && XLSX.utils && XLSX.writeFile) {
+                var ws = XLSX.utils.aoa_to_sheet(rows);
+                ws['!cols'] = [{ wch: 14 }, { wch: 10 }, { wch: 30 }];
+                var wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, '入库模板');
+                XLSX.writeFile(wb, '入库模板_' + stamp + '.xlsx');
+                toast('✅ 模板已下载——填好「数量」列后，从「批量导入」导入');
+            } else {
+                var csv = '\uFEFF' + rows.map(toCsvLine).join('\r\n') + '\r\n';
+                var a = document.createElement('a');
+                a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+                a.download = '入库模板_' + stamp + '.csv';
+                a.click();
+                toast('✅ 模板已下载（CSV）——填好「数量」列后，从「批量导入」导入');
+            }
+        } catch (e) { toast('模板下载失败：' + e.message); }
     }
 
     function openLedgerDialog() {
@@ -870,6 +917,7 @@
         exportLedgerCsv: exportLedgerCsv,
         exportLedgerXlsx: exportLedgerXlsx,
         pickStockImportFile: pickStockImportFile,
+        downloadStockTemplate: downloadStockTemplate,
         // 以下供单测/调试
         _planDeduction: planDeduction,
         _commitDeduction: commitDeduction,
@@ -888,6 +936,8 @@
         _rowsFromColArrays: rowsFromColArrays,
         _parseStockImportText: parseStockImportText,
         _rowsFromArrayBuffer: rowsFromArrayBuffer,
-        _importStockBatch: importStockBatch
+        _importStockBatch: importStockBatch,
+        _buildTemplateRows: buildTemplateRows,
+        _toCsvLine: toCsvLine
     };
 })(typeof window !== 'undefined' ? window : this);

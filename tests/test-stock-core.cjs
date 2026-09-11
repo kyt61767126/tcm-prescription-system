@@ -356,6 +356,32 @@ console.log('== ⑮ 批量入库导入：执行 + 编码解码 + 文件分流 ==
   assert(threw, 'xlsx 扩展名但无 XLSX 库 → 抛 EXCEL_LIB_MISSING');
 }
 
+console.log('== ⑯ 入库模板：结构 + CSV 转义 + 下载到导入闭环 ==');
+{
+  const h = createHarness(MEDS());
+  const S = h.sandbox.StockCore;
+  const rows = S._buildTemplateRows([{ name: '麻黄' }, { name: '桂枝' }]);
+  assert(rows.length === 4 && rows[0][0] === '药品' && rows[0][1] === '数量' && rows[0][2] === '备注', '模板=表头+N药名+说明行');
+  assert(rows[1].join(',') === '麻黄,,' && rows[2].join(',') === '桂枝,,', '药名行数量/备注留空');
+  assert(rows[3].length === 1, '说明行单格（无数列→导入自动跳过）');
+  assert(S._toCsvLine(['a', 'b,c', 'd"e']) === 'a,"b,c","d""e"', 'toCsvLine：逗号/引号转义');
+  const rt = S._parseCsvRow(S._toCsvLine(['麻,黄', '有"引号"', '正常']));
+  assert(rt[0] === '麻,黄' && rt[1] === '有"引号"' && rt[2] === '正常', 'toCsvLine → parseCsvRow 往返一致');
+  // 闭环1：模板原样导入 → 0 笔生效（留空行+说明行全部跳过）
+  const csv = '\uFEFF' + rows.map(r => S._toCsvLine(r)).join('\r\n');
+  const p0 = S._parseStockImportText(csv);
+  assert(p0.rows.length === 0, '模板原样导入=0 笔生效（防呆核心）');
+  assert(p0.bad.length === 3, '2 药名行+1 说明行均进 bad 跳过');
+  // 闭环2：用户只填数量列 → 正确解析导入
+  const csv2 = csv.replace('麻黄,,', '麻黄,500,');
+  const p1 = S._parseStockImportText(csv2);
+  assert(p1.rows.length === 1 && p1.rows[0].name === '麻黄' && p1.rows[0].qty === 500, '填数量列后正确解析该行');
+  assert(p1.bad.length === 2, '其余留空行仍自动跳过');
+  // 闭环3：药名含逗号 → 转义后解析仍还原为完整药名（不拆裂）
+  const p2 = S._parseStockImportText(S._toCsvLine(['麻,黄', '500', '']));
+  assert(p2.rows.length === 1 && p2.rows[0].name === '麻,黄' && p2.rows[0].qty === 500, '药名含逗号：转义→解析还原为完整药名');
+}
+
 // 等异步断言全部落地后汇总（savePrescriptionToDB 为 async）
 setTimeout(() => {
   console.log('');
