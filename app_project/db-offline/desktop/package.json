@@ -41,6 +41,7 @@
             "db-adapter.js",
             "performance-utils.js",
             "prescription-core.js",
+            "stock-core.js",
             "patient-archive.js",
             "security-guard.js",
             "build/icon.ico",
