@@ -25,7 +25,7 @@ if %HEAL_RC% neq 0 (
     exit /b %HEAL_RC%
 )
 
-REM Launch one-click-pack.ps1 (forward args: 1=cloud 2=offline 3=all, auto mode no pause)
+REM Launch one-click-pack.ps1 (forward args: 1=cloud 2=offline 3=all 4=smart, auto mode no pause)
 REM NOTE [BUILD-LOCK 2026-08-23]: concurrent builds are serialized by
 REM tools\build-lock.ps1 inside build-pack.bat/build.bat/build-app.bat.
 REM If another build is running, the child build aborts with a clear message.

@@ -36,7 +36,7 @@ function Read-MenuChoice([string]$Prompt) {
         Write-Host ""
         Write-Host "[FATAL] 标准输入已关闭：交互菜单在非交互环境（管道/自动化调用）中运行。" -ForegroundColor Red
         Write-Host "  非交互发布请用: node tools\publish-release.js --confirm --push --changed-only" -ForegroundColor Yellow
-        Write-Host "  非交互打包请用: one-click-pack.ps1 -AutoMode 1|2|3 （1=云端 2=本地 3=全部）" -ForegroundColor Yellow
+        Write-Host "  非交互打包请用: one-click-pack.ps1 -AutoMode 1|2|3|4 （1=云端 2=本地 3=全部 4=智能）" -ForegroundColor Yellow
         exit 1
     }
     return $c

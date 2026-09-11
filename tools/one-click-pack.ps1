@@ -2,9 +2,10 @@
 # All Chinese menu logic moved here from 一键打包.bat to avoid cmd GBK encoding issues
 # .ps1 with BOM can correctly handle UTF-8 Chinese display
 param(
-    [string]$AutoMode = "",   # 非空时跳过菜单直接执行：1=云端 2=本地 3=全部，全程不暂停，完成后自动退出
+    [string]$AutoMode = "",   # 非空时跳过菜单直接执行：1=云端 2=本地 3=全部 4=智能，全程不暂停，完成后自动退出
     [switch]$AutoCommit,      # P1-B: 打包完成后自动收纳打包副作用（versionCode/version/hash-manifest 提交并推送；index.html 等其余变更仅列出待人工确认）
     [switch]$CollectSideEffectsOnly,  # P1-B: 仅执行打包副作用收纳（预览/测试用，不打包）
+    [switch]$SmartPlanOnly,   # ★ 2026-09-11 智能打包预览：仅输出四端改动检测报告，不打包（测试/预览用）
     [switch]$DryRun           # P1-B: 配合收纳逻辑，只打印将执行的 git 命令不实际执行（测试用）
 )
 
@@ -38,7 +39,7 @@ function Read-MenuChoice([string]$Prompt) {
     if ($null -eq $c) {
         Write-Host ""
         Write-Host "[FATAL] 标准输入已关闭：交互菜单在非交互环境（管道/自动化调用）中运行。" -ForegroundColor Red
-        Write-Host "  非交互打包请用: one-click-pack.ps1 -AutoMode 1|2|3 （1=云端 2=本地 3=全部）" -ForegroundColor Yellow
+        Write-Host "  非交互打包请用: one-click-pack.ps1 -AutoMode 1|2|3|4 （1=云端 2=本地 3=全部 4=智能）" -ForegroundColor Yellow
         exit 1
     }
     return $c
@@ -595,6 +596,96 @@ function Build-All {
     return 0
 }
 
+# ============ ★ 2026-09-11 智能打包（傻瓜式自动选择端） ============
+# 背景：用户"昨天已打包、今天只改了部分端"时，靠人工判断选 [1][2][3] 范围容易
+#   选大（无谓重打+版本号递增）或选漏（改动端没打）。[3] 虽有四端独立增量跳过
+#   （tools/build-skip.ps1），但跳过结果散落在流程中段，用户看不到整体计划。
+# 设计：打包前先对四端逐一跑增量检测（基线后源码提交比对+工作区+产物指纹三要素），
+#   先打印「重打/跳过」计划（含触发文件清单），只对有改动的版本组执行打包，
+#   整组无改动直接跳过该组（连配置同步都不跑）。
+function Get-SmartBuildPlan {
+    $unitList = @(
+        @{ Unit = 'cloud-desktop'; Label = '云端桌面' },
+        @{ Unit = 'cloud-app';     Label = '云端APP'  },
+        @{ Unit = 'local-desktop'; Label = '本地桌面' },
+        @{ Unit = 'local-app';     Label = '本地APP'  }
+    )
+    $skipTool = Join-Path $PSScriptRoot 'build-skip.ps1'
+    $plan = @()
+    foreach ($u in $unitList) {
+        $lines = @(); $rc = 1
+        try {
+            $lines = @(& powershell -NoProfile -ExecutionPolicy Bypass -File $skipTool -Check -Unit $u.Unit 2>&1)
+            $rc = $LASTEXITCODE
+        } catch { $rc = 1 }
+        $info = @($lines | ForEach-Object { "$_".Trim() } | Where-Object { $_ })
+        $reason = ($info | Select-Object -First 1)
+        if ($reason) { $reason = ($reason -replace '^\[(BUILD|SKIP)\]\s*\S+\s*', '') }
+        $detail = @($info | Select-Object -Skip 1 -First 3)
+        $plan += [PSCustomObject]@{
+            Unit = $u.Unit; Label = $u.Label
+            Skip = ($rc -eq 0)
+            Reason = $reason; Detail = $detail
+        }
+    }
+    return ,$plan
+}
+
+function Invoke-SmartPack {
+    param([switch]$PlanOnly)
+    Write-Host ""
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host "  智能打包 - 检测四端源码改动..." -ForegroundColor Cyan
+    Write-Host "  检测时间: $(Get-TimeStamp)" -ForegroundColor Cyan
+    Write-Host "========================================" -ForegroundColor Cyan
+    $plan = Get-SmartBuildPlan
+    $toBuild = @($plan | Where-Object { -not $_.Skip })
+    $toSkip  = @($plan | Where-Object { $_.Skip })
+    foreach ($p in $plan) {
+        if ($p.Skip) {
+            Write-Host ("  [跳过] {0} —— {1}" -f $p.Label, $p.Reason) -ForegroundColor Green
+        } else {
+            Write-Host ("  [重打] {0} —— {1}" -f $p.Label, $p.Reason) -ForegroundColor Yellow
+            foreach ($d in $p.Detail) { Write-Host "         $d" -ForegroundColor DarkYellow }
+        }
+    }
+    Write-Host ""
+    if ($toBuild.Count -eq 0) {
+        Write-Host "  [OK] 四端产物均已是最新，无需打包" -ForegroundColor Green
+        return 0
+    }
+    if ($PlanOnly) {
+        Write-Host "  [预览] 本次将重打 $($toBuild.Count) 端（-SmartPlanOnly 预览模式，未实际打包）" -ForegroundColor Yellow
+        return 0
+    }
+    $buildNames = ($toBuild | ForEach-Object { $_.Label }) -join '、'
+    Write-Host "  本次将重打 $($toBuild.Count) 端: $buildNames" -ForegroundColor Yellow
+    if ($toSkip.Count -gt 0) {
+        $skipNames = ($toSkip | ForEach-Object { $_.Label }) -join '、'
+        Write-Host "  自动跳过 $($toSkip.Count) 端: $skipNames（源码与产物均无变化）" -ForegroundColor Green
+    }
+    Write-Host ""
+    if (-not $script:SkipPause) { pause }
+    $rcCloud = 0; $rcLocal = 0
+    if (@($toBuild | Where-Object { $_.Unit -like 'cloud-*' }).Count -gt 0) {
+        $rcCloud = Build-Cloud -Target "all"
+        if ($rcCloud -is [array]) { $rcCloud = [int]$rcCloud[-1] }
+        if (-not $rcCloud) { $rcCloud = 0 }
+    } else {
+        Write-Host "  [SKIP] 云端版两端均无改动，整组跳过" -ForegroundColor Green
+    }
+    if (@($toBuild | Where-Object { $_.Unit -like 'local-*' }).Count -gt 0) {
+        $rcLocal = Build-Offline -Version "dingzhi" -Target "all"
+        if ($rcLocal -is [array]) { $rcLocal = [int]$rcLocal[-1] }
+        if (-not $rcLocal) { $rcLocal = 0 }
+    } else {
+        Write-Host "  [SKIP] 本地版两端均无改动，整组跳过" -ForegroundColor Green
+    }
+    if ($rcCloud -ne 0) { return [int]$rcCloud }
+    if ($rcLocal -ne 0) { return [int]$rcLocal }
+    return 0
+}
+
 # ============ Pick Version Menu ============
 function Show-PickVersionMenu {
     param([string]$Mode)
@@ -692,6 +783,12 @@ if ($CollectSideEffectsOnly) {
     exit 0
 }
 
+# ★ 2026-09-11 智能打包预览：仅输出四端改动检测报告即退出（不打包、不收纳副作用）
+if ($SmartPlanOnly) {
+    $null = Invoke-SmartPack -PlanOnly
+    exit 0
+}
+
 # 自动模式：跳过菜单直接执行对应打包，全部完成后提示结果并自动退出（不返回菜单）
 if ($AutoMode) {
     # ★ 2026-08-31 源码落定门前置（1.2.194 事故防呆，与 ensure-build-env Step 1.5 同源）：
@@ -734,8 +831,15 @@ if ($AutoMode) {
             Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits
             exit $rc
         }
+        "4" {
+            $rc = Invoke-SmartPack
+            if ($rc -is [array]) { $rc = [int]$rc[-1] }
+            if (-not $rc) { $rc = 0 }
+            Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits
+            exit $rc
+        }
         default {
-            Write-Host "[ERROR] 无效自动模式: $AutoMode（应为 1=云端 2=本地 3=全部）" -ForegroundColor Red
+            Write-Host "[ERROR] 无效自动模式: $AutoMode（应为 1=云端 2=本地 3=全部 4=智能）" -ForegroundColor Red
             exit 1
         }
     }
@@ -752,7 +856,8 @@ while ($true) {
     Write-Host ""
     Write-Host "  [1] 云端版 (桌面+APP)"
     Write-Host "  [2] 本地版 (桌面+APP)"
-    Write-Host "  [3] 全部2个版本 (耗时较长)"
+    Write-Host "  [3] 全部2个版本 (无改动端自动跳过)"
+    Write-Host "  [4] 智能打包 (先检测改动再打, 只打需重打的端) ★推荐" -ForegroundColor Yellow
     Write-Host "  [0] 退出"
     Write-Host ""
     Write-Host "  --- 更多选项 ---"
@@ -761,6 +866,7 @@ while ($true) {
     Write-Host "  [7] 查看各版本独立打包入口"
     Write-Host ""
     Write-Host "  菜单说明:"
+    Write-Host "  - [4] 智能打包: 自动检测四端源码改动, 只重打有改动的端 (推荐日常使用)"
     Write-Host "  - 桌面程序: 各版本目录\dist\*.exe"
     Write-Host "  - APP 输出: 各版本目录\*.apk"
     Write-Host "  - 离线版默认使用配置(XXX中医诊所/XXX)直接打包, 不弹配置编辑"
@@ -768,7 +874,7 @@ while ($true) {
     Write-Host "  - 耗时统计会在结束时显示"
     Write-Host "  - ★ 仅打包不上传; 如需发布到下载页/GitHub Release 请运行 一键发布.bat" -ForegroundColor Yellow
     Write-Host "--------------------------------------------"
-    $choice = Read-MenuChoice "请选择 [0-3, 5-7]"
+    $choice = Read-MenuChoice "请选择 [0-4, 5-7]"
     switch ($choice) {
         # ★ 2026-09-01 结果确认：原 $null = Build-... 丢弃退出码且直接循环回菜单
         #   （Clear-Host 清屏），成败一闪而过。改为捕获退出码 + 显示结果确认块
@@ -793,6 +899,13 @@ while ($true) {
             if (-not $rc) { $rc = 0 }
             Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits
             Show-PackResult -Label "全部2个版本打包" -ExitCode $rc
+        }
+        "4" {
+            $rc = Invoke-SmartPack
+            if ($rc -is [array]) { $rc = [int]$rc[-1] }
+            if (-not $rc) { $rc = 0 }
+            Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits
+            Show-PackResult -Label "智能打包（自动检测需重打的端）" -ExitCode $rc
         }
         # ★ 2026-08-23 三轮复核修复：[5][6] 单独打包同样产生 versionCode/package.json 副作用，
         #   补 SideEffectCollect 与 [1][2][3] 行为一致（否则单独打包的副作用靠人工提交易遗漏）

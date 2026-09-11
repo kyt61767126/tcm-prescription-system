@@ -110,7 +110,7 @@ function findWindow(app, urlPart, timeoutMs = 30000) {
                 const hit = wins.find(w => w.url().includes(urlPart));
                 if (hit) return resolve(hit);
             } catch (_) { /* 窗口枚举瞬断，重试 */ }
-            if (Date.now() > deadline) return reject(new Error(`等待窗口超时（含 "${urlPart}" 的页面 30s 未出现）`));
+            if (Date.now() > deadline) return reject(new Error(`等待窗口超时（含 "${urlPart}" 的页面 ${Math.round(timeoutMs / 1000)}s 未出现）`));
             setTimeout(tick, 400);
         };
         tick();
@@ -407,7 +407,9 @@ async function runCase({ _electron }, c, target) {
         }
 
         // 登录后主窗口出现的等待放到 run 外并行：先触发登录，再等 index.html
-        const mainWinPromise = findWindow(app, 'index.html', 45000);
+        // ★ 90s：打包流水线内首启 exe 会被 Defender 实时扫描拖慢（2026-09-11 08:22 E1 假失败：
+        //   同一产物事后单跑 5s 通过），45s 在高负载下不够；宁多等不可假失败（重打一次全流程 20min+）
+        const mainWinPromise = findWindow(app, 'index.html', 90000);
         // ★ 防崩溃：登录环节先行抛错时本 promise 稍后 reject，若无 handler
         //   Node 24 会以 unhandledRejection 崩掉整个 runner（吞掉结果汇总）。
         //   挂 no-op catch 标记已处理，await 语义不变。
@@ -460,7 +462,18 @@ async function runCase({ _electron }, c, target) {
 
     const results = [];
     try {
-        for (const c of todo) results.push(await runCase({ _electron }, c, target));
+        for (const c of todo) {
+            let r = await runCase({ _electron }, c, target);
+            // ★ 失败立即重试一次：打包流水线内 Defender 首扫/机器负载会造成首启假失败
+            //   （2026-09-11 08:22 E1 事故：全流程 20min 因 30s 窗口抖动中止，事后单跑 5s 通过）。
+            //   重试用全新 userData 重走完整断言，不产生假绿灯（要过就得完整过）。
+            if (!r.ok) {
+                log(`${c.id} 首次失败，重试一次（容错首启杀软扫描/负载抖动）...`);
+                r = await runCase({ _electron }, c, target);
+                if (r.ok) { r.retry = true; log(`${c.id} 重试通过 ✓`); }
+            }
+            results.push(r);
+        }
     } finally {
         // 后置：必删 marker（无论成败，不留后门）
         try { fs.rmSync(marker, { force: true }); log('marker 已清除'); } catch (_) {}
@@ -470,7 +483,7 @@ async function runCase({ _electron }, c, target) {
     // 汇总
     console.log('');
     console.log('[E2E] ══ 结果汇总 ══');
-    for (const r of results) console.log(`  ${r.ok ? 'PASS' : 'FAIL'}  ${r.id}${r.ok ? '' : ' — ' + r.err}`);
+    for (const r of results) console.log(`  ${r.ok ? 'PASS' : 'FAIL'}  ${r.id}${r.ok ? (r.retry ? ' — (第2次重试通过，首启抖动)' : '') : ' — ' + r.err}`);
     const failed = results.filter(r => !r.ok).length;
     console.log(`[E2E] ${results.length - failed}/${results.length} 通过${failed ? '，失败 ' + failed + ' 条 !!' : ' ✓'}`);
     process.exit(failed ? 1 : 0);
