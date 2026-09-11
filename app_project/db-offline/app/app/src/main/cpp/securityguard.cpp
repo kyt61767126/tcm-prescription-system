@@ -366,6 +366,11 @@ static void gf_mul(gf o, const gf a, const gf b) {   // 别名安全（内部先
         for (int j = 0; j < 16; ++j) t[i+j] += a[i] * b[j];
     for (int i = 0; i < 15; ++i) t[i] += 38 * t[i+16];   // 2^256 ≡ 38 mod p
     for (int i = 0; i < 16; ++i) o[i] = t[i];
+    // 3 次 carry 才充分规约（2^256 wrap-around 需多轮传播）。
+    // 若只 carry 1 次，limb 可能仍很大（v^6 的 limb0 可达 2^42），
+    // 累积乘法后 int64_t 溢出（UB），导致 pow22523 / ge_decompress 全错。
+    gf_carry(o);
+    gf_carry(o);
     gf_carry(o);
 }
 
@@ -561,17 +566,17 @@ static void sc_reduce512(const uint8_t h[64], uint8_t out[32]) {
             carry = nc;
         }
         // r ≥ L → r -= L
-        bool ge = false; int cmp = 0;
+        // 注意：必须用"全相等才判定等于"的语义。
+        // 原实现 cmp&&!ge 的问题：高位相等但低位更小（r < L）时 cmp 残留为 1，
+        // 且 ge=false → 误判为 r == L → 减 L 下溢。
+        bool greater = false;
+        bool allEqual = true;
         for (int j = 8; j >= 0; --j) {
             uint32_t lj = (j < 8) ? Lw[j] : 0;
-            if (r[j] > lj) { ge = true; break; }
-            if (r[j] < lj) { ge = false; break; }
-            cmp = 1;   // 到这里说明高位相等，继续比低位
+            if (r[j] > lj) { greater = true; allEqual = false; break; }
+            if (r[j] < lj) { allEqual = false; break; }
         }
-        if (cmp && !ge) {   // 全等（r == L）也需减
-            ge = true;
-        }
-        if (ge) {
+        if (greater || allEqual) {   // r ≥ L 才减
             uint32_t borrow = 0;
             for (int j = 0; j < 9; ++j) {
                 uint32_t lj = (j < 8) ? Lw[j] : 0;
