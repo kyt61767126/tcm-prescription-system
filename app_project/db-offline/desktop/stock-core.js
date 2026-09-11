@@ -13,6 +13,8 @@
 //       （药品编辑弹窗改库存数自动记"盘点调整"），localStorage 上限 3000 条
 //    ⑤ 开关：基础设置注入「启用库存管理」复选框，默认关闭——老用户升级后
 //       行为零变化；未启用时全部钩子 no-op、全部 UI 注入隐藏
+//    ⑥ 流水导出 Excel（复用页面 XLSX 库，未就绪自动降级 CSV）；批量入库导入
+//       （CSV/Excel 每行 药名,数量,备注，药名须与药品库一致，无此药跳过汇总）
 //
 //  数据落点（与药品库同域，均为本机存储，无服务端改动）：
 //    开关   local_stockMgmtEnabled ('true'/'false')
@@ -447,7 +449,10 @@
             '<input type="number" id="stockInQty" placeholder="如 500" style="width:100%;padding:8px;border:1px solid #888;border-radius:4px;"></div>' +
             '<div style="margin-bottom:6px;"><label style="display:block;font-weight:bold;margin-bottom:4px;">备注（选填）</label>' +
             '<input type="text" id="stockInNote" placeholder="如：进货 5 公斤" style="width:100%;padding:8px;border:1px solid #888;border-radius:4px;"></div>' +
-            '<div style="font-size:11px;color:#909399;">💡 批发公斤请自行换算为克（1公斤=1000g）</div>';
+            '<div style="font-size:11px;color:#909399;margin-bottom:6px;">💡 批发公斤请自行换算为克（1公斤=1000g）</div>' +
+            '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' +
+            '<button class="action-btn" style="padding:4px 10px;font-size:11px;background:#1565c0;" onclick="StockCore.pickStockImportFile()">📥 从文件批量导入</button>' +
+            '<span style="font-size:11px;color:#909399;">CSV/Excel，每行：药名,数量,备注（备注可省）</span></div>';
         var footer =
             '<button class="action-btn" onclick="StockCore.closeInjectedModal(\'stockInModal\')">取消</button>' +
             '<button class="action-btn primary" onclick="StockCore.confirmStockIn()">确定入库</button>';
@@ -466,12 +471,137 @@
         }
     }
 
+    // ------------------------------------------------------------------
+    //  ⑥a 批量入库导入：CSV/Excel → 每行 [药名,数量,备注?] → 预览确认 → 逐笔记账
+    //     （自包含解析：不依赖页面 parseCSVLine/decodeTextWithAutoEncoding，
+    //      8 副本各端行为一致；Excel 走页面 XLSX 库，未就绪提示转 CSV）
+    // ------------------------------------------------------------------
+    // CSV 单行解析（引号包裹/双引号转义/逗号分列）
+    function parseCsvRow(line) {
+        var out = [], cur = '', inQ = false;
+        for (var i = 0; i < line.length; i++) {
+            var c = line.charAt(i);
+            if (inQ) {
+                if (c === '"') {
+                    if (line.charAt(i + 1) === '"') { cur += '"'; i++; }
+                    else inQ = false;
+                } else cur += c;
+            } else if (c === '"') inQ = true;
+            else if (c === ',') { out.push(cur); cur = ''; }
+            else cur += c;
+        }
+        out.push(cur);
+        return out;
+    }
+    // 编码自动解码：BOM→UTF-8；否则严格 UTF-8（fatal）先试，非法再 GBK
+    // （fatal 必须显式开：TextDecoder 默认替换模式不抛错，GBK 文件会被静默解成乱码）
+    function decodeAuto(u8) {
+        try {
+            var s = null;
+            if (u8.length >= 3 && u8[0] === 0xEF && u8[1] === 0xBB && u8[2] === 0xBF) {
+                s = new TextDecoder('utf-8').decode(u8.subarray(3));
+            } else {
+                try { s = new TextDecoder('utf-8', { fatal: true }).decode(u8); }
+                catch (e1) { try { s = new TextDecoder('gbk').decode(u8); } catch (e2) { s = ''; } }
+            }
+            if (s && s.charCodeAt(0) === 0xFEFF) s = s.slice(1);
+            return s || '';
+        } catch (e) { return ''; }
+    }
+    // 二维列数组（CSV 行解析 / Excel sheet 行）→ {rows, bad}
+    // 首个非空行首列为「药品/名称/药名」视为表头跳过；数量非法行记 bad（行号）
+    function rowsFromColArrays(arrs) {
+        var rows = [], bad = [], firstSeen = false;
+        for (var i = 0; i < (arrs || []).length; i++) {
+            var cols = arrs[i] || [];
+            var joined = cols.join('').trim();
+            if (!joined) continue;
+            if (!firstSeen) {
+                firstSeen = true;
+                var head0 = String(cols[0] || '').trim();
+                if (head0 === '药品' || head0 === '名称' || head0 === '药名') continue;
+            }
+            var c = cols.map(function (x) { return String(x === undefined || x === null ? '' : x).trim(); });
+            var qty = parseFloat(c[1]);
+            if (!c[0] || isNaN(qty) || Math.abs(qty) < 0.01) { bad.push('第' + (i + 1) + '行'); continue; }
+            rows.push({ name: c[0], qty: qty, note: c[2] || '' });
+        }
+        return { rows: rows, bad: bad };
+    }
+    function parseStockImportText(text) {
+        var arrs = String(text || '').split(/\r?\n/).map(function (l) { return l.trim() ? parseCsvRow(l) : []; });
+        return rowsFromColArrays(arrs);
+    }
+    // ArrayBuffer → rows（按扩展名分流：xlsx/xls 走 XLSX 库，其余按 CSV 文本解码）
+    function rowsFromArrayBuffer(buf, fileName) {
+        var fn = String(fileName || '').toLowerCase();
+        if (fn.slice(-5) === '.xlsx' || fn.slice(-4) === '.xls') {
+            if (typeof XLSX === 'undefined') throw new Error('EXCEL_LIB_MISSING');
+            var wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
+            var ws = wb.Sheets[wb.SheetNames[0]];
+            return rowsFromColArrays(XLSX.utils.sheet_to_json(ws, { header: 1, raw: true }));
+        }
+        return rowsFromColArrays(String(decodeAuto(new Uint8Array(buf))).split(/\r?\n/).map(function (l) { return l.trim() ? parseCsvRow(l) : []; }));
+    }
+    // 执行批量入库：药名在库的逐笔 stockIn（改库存+记流水），无此药跳过汇总
+    function importStockBatch(rows) {
+        var ok = 0, skipped = [];
+        for (var i = 0; i < (rows || []).length; i++) {
+            var r = rows[i];
+            var exists = null;
+            var list = getMedList();
+            for (var j = 0; j < list.length; j++) { if (list[j] && list[j].name === r.name) { exists = list[j]; break; } }
+            if (!exists) { if (skipped.indexOf(r.name) < 0) skipped.push(r.name); continue; }
+            if (stockIn(r.name, r.qty, r.note || '批量导入')) ok++;
+        }
+        return { ok: ok, skipped: skipped };
+    }
+    function pickStockImportFile() {
+        if (!isEnabled()) { toast('请先在「基础设置」中启用库存管理'); return; }
+        var inp = document.createElement('input');
+        inp.type = 'file';
+        inp.accept = '.csv,.xlsx,.xls';
+        inp.style.display = 'none';
+        inp.addEventListener('change', function () {
+            var f = inp.files && inp.files[0];
+            if (!f) return;
+            var fr = new FileReader();
+            fr.onerror = function () { alert('文件读取失败，请重试'); };
+            fr.onload = function (ev) {
+                var parsed;
+                try { parsed = rowsFromArrayBuffer(ev.target.result, f.name); }
+                catch (e) {
+                    alert('Excel 解析失败（Excel 组件未就绪）：请将文件另存为 CSV 后再导入');
+                    return;
+                }
+                if (!parsed.rows.length) {
+                    alert('未解析到有效数据行\n格式：每行 药名,数量,备注（备注可省略）' + (parsed.bad.length ? '\n有 ' + parsed.bad.length + ' 行无法识别' : ''));
+                    return;
+                }
+                var names = {};
+                parsed.rows.forEach(function (r) { names[r.name] = 1; });
+                if (!confirm('共解析 ' + parsed.rows.length + ' 笔入库（涉及 ' + Object.keys(names).length + ' 种药）。\n药名须与药品库完全一致，不存在者自动跳过。\n\n确认执行批量入库？')) return;
+                var res = importStockBatch(parsed.rows);
+                var msg = '批量入库完成：成功 ' + res.ok + ' 笔';
+                if (res.skipped.length) msg += '；跳过 ' + res.skipped.length + ' 种（药品库无此药：' + res.skipped.slice(0, 5).join('、') + (res.skipped.length > 5 ? ' 等' : '') + '）';
+                closeInjectedModal('stockInModal');
+                refreshUI();
+                alert(msg);
+            };
+            fr.readAsArrayBuffer(f);
+        });
+        document.body.appendChild(inp);
+        inp.click();
+        setTimeout(function () { if (inp.parentNode) inp.parentNode.removeChild(inp); }, 60000);
+    }
+
     function openLedgerDialog() {
         if (!isEnabled()) { toast('请先在「基础设置」中启用库存管理'); return; }
         var body =
             '<div style="margin-bottom:8px;display:flex;gap:6px;">' +
             '<input type="text" id="ledgerFilter" placeholder="按药品名筛选（空=全部）" style="flex:1;padding:6px;border:1px solid #888;border-radius:4px;" oninput="StockCore.renderLedgerTable()">' +
-            '<button class="action-btn" onclick="StockCore.exportLedgerCsv()">导出CSV</button></div>' +
+            '<button class="action-btn" onclick="StockCore.exportLedgerCsv()">导出CSV</button>' +
+            '<button class="action-btn" onclick="StockCore.exportLedgerXlsx()">导出Excel</button></div>' +
             '<div id="ledgerTable" style="max-height:50vh;overflow:auto;"></div>';
         openInjectedModal('ledgerModal', '📒 库存流水（最近 300 条）', body);
         renderLedgerTable();
@@ -517,6 +647,37 @@
             a.download = '库存流水_' + new Date().toLocaleDateString('zh-CN').replace(/\//g, '-') + '.csv';
             a.click();
         } catch (e) { toast('导出失败：' + e.message); }
+    }
+    // 导出 Excel（.xlsx）：复用页面 XLSX 库（loadXlsxLibrary 按需加载），
+    // 库未放置/加载失败自动降级 CSV——与药品库 Excel 导出同款兜底，功能不因缺库而断
+    async function exportLedgerXlsx() {
+        try {
+            var rows = getLedger();
+            if (!rows.length) { toast('暂无流水可导出'); return; }
+            if (typeof XLSX === 'undefined' && typeof loadXlsxLibrary === 'function') {
+                try { await loadXlsxLibrary(); } catch (e1) {}
+            }
+            if (typeof XLSX === 'undefined' || !XLSX.utils || !XLSX.writeFile) {
+                toast('Excel 组件未就绪，已改为导出 CSV');
+                exportLedgerCsv();
+                return;
+            }
+            var aoa = [['时间', '药品', '类型', '数量', '结存', '经办人', '说明']];
+            rows.forEach(function (e) {
+                var d = new Date(e.t);
+                var ts = isNaN(d.getTime()) ? e.t : (d.toLocaleDateString('zh-CN') + ' ' + d.toTimeString().slice(0, 5));
+                aoa.push([ts, e.name, TYPE_LABEL[e.type] || e.type, e.qty, (e.stock === null || e.stock === undefined ? '' : e.stock), e.op, e.note]);
+            });
+            var ws = XLSX.utils.aoa_to_sheet(aoa);
+            ws['!cols'] = [{ wch: 16 }, { wch: 12 }, { wch: 10 }, { wch: 8 }, { wch: 8 }, { wch: 10 }, { wch: 24 }];
+            var wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, '库存流水');
+            XLSX.writeFile(wb, '库存流水_' + new Date().toLocaleDateString('zh-CN').replace(/\//g, '-') + '.xlsx');
+            toast('✅ 库存流水已导出为 Excel');
+        } catch (e) {
+            toast('Excel 导出失败，已改为导出 CSV');
+            exportLedgerCsv();
+        }
     }
 
     // ------------------------------------------------------------------
@@ -707,6 +868,8 @@
         openLedgerDialog: openLedgerDialog,
         renderLedgerTable: renderLedgerTable,
         exportLedgerCsv: exportLedgerCsv,
+        exportLedgerXlsx: exportLedgerXlsx,
+        pickStockImportFile: pickStockImportFile,
         // 以下供单测/调试
         _planDeduction: planDeduction,
         _commitDeduction: commitDeduction,
@@ -719,6 +882,12 @@
         _isLowStock: isLowStock,
         _makeEntry: makeEntry,
         _restoreFromBackup: restoreFromBackup,
-        _pushEntry: pushEntry
+        _pushEntry: pushEntry,
+        _parseCsvRow: parseCsvRow,
+        _decodeAuto: decodeAuto,
+        _rowsFromColArrays: rowsFromColArrays,
+        _parseStockImportText: parseStockImportText,
+        _rowsFromArrayBuffer: rowsFromArrayBuffer,
+        _importStockBatch: importStockBatch
     };
 })(typeof window !== 'undefined' ? window : this);

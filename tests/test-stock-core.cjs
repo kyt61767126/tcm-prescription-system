@@ -47,6 +47,7 @@ function createHarness(initialMeds) {
   const sandbox = {
     console: { log: noop, warn: noop, error: noop },
     Date, JSON, Math, isNaN, parseFloat, parseInt, String, Array, Object, Number, RegExp, Error,
+    Promise, TextDecoder, Uint8Array, ArrayBuffer,
     setTimeout: () => 0, clearTimeout: noop,
     setInterval: (fn) => { try { fn(); } catch (e) {} return 0; }, // 立即执行一次（boot 安装钩子）
     clearInterval: noop,
@@ -304,6 +305,55 @@ console.log('== ⑬ 库存红字/徽标渲染辅助 ==');
   const 麻黄 = h.getMed('麻黄');
   assert(S.dropBadge(麻黄).indexOf('#909399') >= 0, '充足库存灰徽标');
   assert(S.dropBadge({ stock: 0, dosage: 10 }) === '', '0 库存不显示徽标（噪音控制）');
+}
+
+console.log('== ⑭ 批量入库导入：解析纯函数 ==');
+{
+  const h = createHarness(MEDS());
+  const S = h.sandbox.StockCore;
+  const r1 = S._parseCsvRow('"麻,黄",500,"备注""A"""');
+  assert(r1[0] === '麻,黄' && r1[1] === '500' && r1[2] === '备注"A"', 'CSV 行解析：引号包裹/内嵌逗号/双引号转义');
+  const p1 = S._parseStockImportText('药品,数量,备注\n麻黄,500,进货5公斤\n\n桂枝,60\n\n甘草,abc\n杏仁,-30');
+  assert(p1.rows.length === 3, '表头跳过+空行忽略 → 3 有效行');
+  assert(p1.rows[0].name === '麻黄' && p1.rows[0].qty === 500 && p1.rows[0].note === '进货5公斤', '行1 药名/数量/备注');
+  assert(p1.rows[1].name === '桂枝' && p1.rows[1].note === '', '行2 备注省略');
+  assert(p1.rows[2].qty === -30, '负数=退货出库可导入');
+  assert(p1.bad.length === 1 && p1.bad[0] === '第6行', '数量非法行记 bad 行号（甘草,abc 为第 6 行）');
+  const p2 = S._parseStockImportText('麻黄,100');
+  assert(p2.rows.length === 1 && p2.rows[0].name === '麻黄', '无表头首行即数据');
+  const p3 = S._rowsFromColArrays([['名称', '数量'], ['麻黄', 500]]);
+  assert(p3.rows.length === 1 && p3.rows[0].qty === 500, 'Excel 二维数组路径：「名称」表头也识别');
+}
+
+console.log('== ⑮ 批量入库导入：执行 + 编码解码 + 文件分流 ==');
+{
+  const h = createHarness(MEDS());
+  const S = h.sandbox.StockCore;
+  S.setEnabled(true);
+  const res = S._importStockBatch([
+    { name: '麻黄', qty: 500, note: '进货' },
+    { name: '杏仁', qty: 100, note: '' },
+    { name: '桂枝', qty: -10, note: '' }
+  ]);
+  assert(res.ok === 2 && res.skipped.length === 1 && res.skipped[0] === '杏仁', '在库 2 笔成功，无此药跳过汇总');
+  assert(approx(h.getStock('麻黄'), 1500) && approx(h.getStock('桂枝'), 50), '库存正确加/减');
+  assert(h.ledgerOf('麻黄')[0].type === 'in' && h.ledgerOf('麻黄')[0].note === '进货', "流水记 'in' 含备注");
+  assert(h.ledgerOf('桂枝')[0].note === '批量导入', '无备注默认「批量导入」');
+  assert(S._decodeAuto(new Uint8Array(Buffer.from('麻黄,500', 'utf8'))) === '麻黄,500', 'UTF-8 无 BOM 正确解码');
+  const bom = Buffer.concat([Buffer.from([0xEF, 0xBB, 0xBF]), Buffer.from('麻黄,500', 'utf8')]);
+  assert(S._decodeAuto(new Uint8Array(bom)) === '麻黄,500', 'BOM 剥除后正确解码');
+  let gbkOk = false;
+  try { new TextDecoder('gbk'); gbkOk = true; } catch (e) {}
+  if (gbkOk) {
+    assert(S._decodeAuto(new Uint8Array([0xD6, 0xD0])) === '中', 'GBK 字节（D6D0=中）自动走 GBK 解码');
+  } else {
+    console.log('  [SKIP] 当前 Node 无 GBK 解码支持，跳过 GBK 断言');
+  }
+  const p = S._rowsFromArrayBuffer(Buffer.from('药品,数量,备注\n麻黄,500\n杏仁,60', 'utf8'), 'stock.csv');
+  assert(p.rows.length === 2 && p.rows[0].name === '麻黄', 'rowsFromArrayBuffer CSV 分支（Buffer 入参）');
+  let threw = false;
+  try { S._rowsFromArrayBuffer(new ArrayBuffer(8), 'x.xlsx'); } catch (e) { threw = e.message === 'EXCEL_LIB_MISSING'; }
+  assert(threw, 'xlsx 扩展名但无 XLSX 库 → 抛 EXCEL_LIB_MISSING');
 }
 
 // 等异步断言全部落地后汇总（savePrescriptionToDB 为 async）
