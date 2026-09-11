@@ -996,6 +996,13 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
 
     private volatile int lastIntegrityState = INTEGRITY_OK;
 
+    // ★ P1 验签下沉（2026-09-11）：V7 Ed25519 native/Java 双路分叉粘性标记。
+    //   同输入+同算法+同常量必然同结果，分叉 = 其中一路被 Frida hook/替换（强信号）。
+    //   进程生命周期内保持（不随后续 verifyApkSignature 覆盖 lastIntegrityState 而丢失），
+    //   verifyOnline 上报时并入 integrityState=2 → 服务端 device_block 卡死该设备在线能力
+    //   （本地零阻塞维持红线：离线场景不闪退，仅拒绝可疑 license + 上报）。
+    private static volatile boolean sEdVerifyForkDetected = false;
+
     /** 最近一次签名校验的完整性状态（供业务决策/云端上报审计） */
     public int getLastIntegrityState() {
         return lastIntegrityState;
@@ -2124,7 +2131,19 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
 
     // ★ P1-[5.1][5.3] 新增：v7 Ed25519 非对称验签（防重放）
     // 签名内容 = v5 全部字段 + sigSerial + sigNonce，与云端 generateSignatureV7 完全一致
-    // 算法：Ed25519（RFC 8032），纯 Java 实现（minSdk=24 无原生 EdDSA，见下方 Ed25519 类）
+    // 算法：Ed25519（RFC 8032），minSdk=24 无原生 EdDSA，见下方 Ed25519 纯 Java 类
+    // ★ P1 验签下沉（2026-09-11）：Java 层 Ed25519 可被 Frida hook verify 返回 true 绕过
+    //   → 验签核心数学同步下沉 libsecurityguard.so（无导出符号+XOR 脱敏），本方法升级双路：
+    //    - native 可用且自测通过 → Java/native 双路互检：
+    //        · 双路一致通过 → 放行（密钥轮换：任一公钥通过即可）
+    //        · 双路一致失败 → 尝试下一公钥，全部失败 → fail-closed（原有行为）
+    //        · ★ 双路分叉 → 其中一路被 hook/替换（stub .so 恒真 / hook Java verify），
+    //          本地结论不可信 → fail-closed 拒绝 + 粘性标记 sEdVerifyForkDetected
+    //          （verifyOnline 上报 integrityState=2，服务端 device_block 封锁在线能力）。
+    //          ※ 不走云端仲裁（与 APK 签名分叉不同）：云端 verify 只能确认 KV 授权记录
+    //            存在，无法证明本地 license 数据未被篡改——分叉场景 license 内容本身可疑，
+    //            仲裁放行 = 放过篡改数据。
+    //    - native 不可用/自测不过 → 纯 Java 单路（原有降级行为，不误伤）
     private boolean verifyEd25519SignatureV7(JSONObject data) {
         String sigV7 = data.optString("signatureV7", "");
         if (sigV7 == null || sigV7.isEmpty() ||
@@ -2139,12 +2158,35 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
             // 2. 签名 hex → 64 字节
             byte[] sigBytes = hexToBytes(sigV7);
             if (sigBytes == null || sigBytes.length != 64) return false;
-            // 3. ★ 密钥轮换兼容：新公钥 → 旧公钥依次尝试（任一通过即放行）
+            byte[] msgBytes = content.getBytes(StandardCharsets.UTF_8);
+            // 3. 双路启用前置：库可用 + native 自测（RFC 8032 向量）通过；否则纯 Java 单路
+            boolean nativeDual = NativeGuard.isAvailable() && NativeGuard.ed25519SelfTest();
+            // 4. ★ 密钥轮换兼容：新公钥 → 旧公钥依次尝试（任一双路一致通过即放行）
             for (String hex : ED25519_VERIFY_PUBLIC_KEYS) {
                 if (hex == null || hex.isEmpty()) continue;
                 byte[] pubKey = hexToBytes(hex);
                 if (pubKey == null || pubKey.length != 32) continue;
-                if (Ed25519.verify(pubKey, content.getBytes(StandardCharsets.UTF_8), sigBytes)) return true;
+                boolean javaPass = Ed25519.verify(pubKey, msgBytes, sigBytes);
+                if (!nativeDual) {
+                    if (javaPass) return true;   // 纯 Java 单路（.so 缺失/自测不过降级，原有行为）
+                    continue;
+                }
+                Boolean nativeResult = NativeGuard.tryVerifyEd25519(pubKey, msgBytes, sigBytes);
+                if (nativeResult == null) {
+                    // native 路瞬时失效（OOM/未注册等极端场景）→ 本公钥降级单路，不算分叉
+                    // （红线：宁可漏检不可误报，native 异常绝不误判 hook）
+                    if (javaPass) return true;
+                    continue;
+                }
+                if (nativeResult && javaPass) return true;    // 双路一致通过
+                if (!nativeResult && !javaPass) continue;     // 双路一致失败 → 下一公钥
+                // ★ 双路分叉：fail-closed + 粘性强信号上报
+                sEdVerifyForkDetected = true;
+                lastIntegrityState = INTEGRITY_INCONSISTENT;
+                Log.e(TAG, "v7 Ed25519 双路分叉 native=" + nativeResult + " java=" + javaPass +
+                        "（同输入同算法必同结果，疑似 hook）→ fail-closed 拒绝并上报强信号");
+                setLicenseDataContext(null);
+                return false;
             }
             return false;
         } catch (Exception e) {
@@ -2917,7 +2959,14 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
             reqBody.put("user", license.optString("user", ""));
             reqBody.put("expiresAt", license.optString("expiresAt", ""));
             // ★ P1-1：上报客户端完整性状态（0=正常 1=native不可用 2=不一致 3=失败），仅服务端审计用
-            reqBody.put("integrityState", lastIntegrityState);
+            // ★ P1 验签下沉（2026-09-11）：V7 Ed25519 双路分叉粘性标记并入——
+            //   lastIntegrityState 会被后续 verifyApkSignature 覆盖，分叉强信号以
+            //   sEdVerifyForkDetected（进程级）为准取 max 上报，触发服务端 device_block。
+            int integrityReport = lastIntegrityState;
+            if (sEdVerifyForkDetected && integrityReport < INTEGRITY_INCONSISTENT) {
+                integrityReport = INTEGRITY_INCONSISTENT;
+            }
+            reqBody.put("integrityState", integrityReport);
             // ★ 2026-09-11 P2 安全画像上报：联网时机顺带上报运行环境特征，服务端聚合判定
             //   可疑设备并卡死其在线能力（本地零阻塞维持红线）。fridaDetected/integrityState>=2
             //   为强信号（触发服务端 device_block），rooted/debugger 为弱信号（仅审计，
