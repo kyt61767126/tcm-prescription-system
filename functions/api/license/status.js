@@ -17,7 +17,8 @@ import { parseAuthHeader, isPlatformAdmin } from '../_lib/auth.js';
 import {
     getKV, getLicense, updateLicense, sanitizeRecord, KV_LICENSE_PREFIX, KV_LICENSE_INDEX,
     getDevices, getMaxDevices, appendLicenseLog, deleteLicenseLogs,
-    setDeviceVersion, getDeviceVersion, versionOf
+    setDeviceVersion, getDeviceVersion, versionOf,
+    blockDevice, getDeviceBlock, checkRateLimit
 } from './_lib/license-core.js';
 
 function corsHeaders() {
@@ -56,10 +57,39 @@ function getClientIP(context) {
 }
 
 // ★ 客户端心跳检测：根据 machineId 查询授权状态，支持远程撤销
-async function handleHeartbeat(kv, body) {
+async function handleHeartbeat(kv, body, clientIP) {
     const { machineId } = body;
     if (!machineId) {
         return json({ revoked: false, warning: '未提供 machineId' });
+    }
+
+    // ★ 2026-09-11 P2 桌面完整性闭环①：已封锁设备直接拒绝（403，不续期——与
+    //   verify.js 同语义：TTL 7 天自动解除防伪造封锁 DoS；封锁期间激活/验证/
+    //   裁决/心跳在线能力全部卡死，客服可删 device_block:{machineId} 解封）
+    const existingBlock = await getDeviceBlock(kv, machineId);
+    if (existingBlock) {
+        console.warn('[Heartbeat] 已封锁设备心跳被拒:', machineId, 'reason=', existingBlock.reason);
+        return json({ success: false, error: '设备安全校验未通过，请更换设备或联系客服处理' }, 403);
+    }
+
+    // ★ 2026-09-11 P2 桌面完整性闭环②：完整性强信号上报（桌面 exe/.bnzc 确定性
+    //   篡改证据，main.js reportDesktopIntegrity 延迟上报）→ blockDevice 封锁。
+    //   复用 verify.js P2 强信号判定语义（integrityState>=2）；弱信号/未上报/非法值
+    //   一律不动（宁可漏检不可误报）。
+    const integrityState = (
+        typeof body.integrityState === 'number' &&
+        Number.isInteger(body.integrityState) &&
+        body.integrityState >= 0 && body.integrityState <= 3
+    ) ? body.integrityState : null;
+    if (integrityState !== null && integrityState >= 2) {
+        await blockDevice(kv, machineId, {
+            reason: 'desktop_integrity_tamper',
+            user: body.user || '',
+            codeHash: body.codeHash || '',
+            ip: clientIP
+        });
+        console.warn('[Heartbeat] 桌面完整性强信号，设备已封锁:', machineId);
+        return json({ success: false, error: '设备安全校验未通过，请更换设备或联系客服处理' }, 403);
     }
 
     const index = (await kv.get(KV_LICENSE_INDEX, 'json')) || [];
@@ -145,7 +175,14 @@ export async function onRequest(context) {
             const { action, machineId } = postBody;
 
             if (!action && machineId) {
-                return handleHeartbeat(kv, postBody);
+                // ★ 2026-09-11 P2 桌面闭环：心跳通道加每 IP 限速（60/h）——本通道现承载
+                //   完整性强信号上报（可写 KV 落封锁），防伪造强信号洪水灌库；合法客户端
+                //   24h 一次 + 重试远低于限值，管理员操作走 action 分支不受影响
+                const rl = await checkRateLimit(kv, `licstatus_${getClientIP(context)}`, 60);
+                if (!rl.allowed) {
+                    return json({ success: false, error: '请求过于频繁，请稍后再试' }, 429);
+                }
+                return handleHeartbeat(kv, postBody, getClientIP(context));
             }
         }
 

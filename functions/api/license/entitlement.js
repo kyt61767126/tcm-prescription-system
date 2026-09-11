@@ -45,7 +45,7 @@
 
 import {
     getKV, getLicense, getDevices, getMaxDevices, versionOf,
-    isTestMachine, checkRateLimit, KV_LICENSE_INDEX
+    isTestMachine, checkRateLimit, KV_LICENSE_INDEX, getDeviceBlock
 } from './_lib/license-core.js';
 import { isValidMachineId } from './_lib/schema-guard.js';
 
@@ -219,6 +219,16 @@ export async function onRequest(context) {
         }
         if (!isValidMachineId(machineId)) {
             return json({ success: false, error: '机器 ID 格式错误' }, 400);
+        }
+
+        // ★ 2026-09-11 P2 桌面完整性闭环：已封锁设备裁决拒绝（403）。纯读检查
+        //   （getDeviceBlock 仅 kv.get）——本端点「纯只读」铁律（探针 F3：零写调用）
+        //   不破坏；封锁写入只在 status.js（桌面强信号上报）/ verify.js（安卓）。
+        //   被拒客户端按"裁决不可达"回退本地状态，本地使用不阻断（红线）。
+        const block = await getDeviceBlock(kv, machineId);
+        if (block) {
+            console.warn('[entitlement] 已封锁设备裁决被拒:', machineId, 'reason=', block.reason);
+            return json({ success: false, error: '设备安全校验未通过，请更换设备或联系客服处理' }, 403);
         }
 
         const result = await adjudicate(kv, machineId, code);

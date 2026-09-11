@@ -1047,6 +1047,43 @@ const UPDATE_CHECK_URL = 'https://tcm-prescription-system.pages.dev/updates/loca
 //   不含 IP/手机号/任何个人信息；仅用于安装设备数去重统计。失败静默跳过，绝不影响主流程。
 const TELEMETRY_HEARTBEAT_URL = 'https://tcm-prescription-system.pages.dev/api/telemetry/heartbeat';
 
+// ★ 2026-09-11 P1 桌面完整性上报闭环：self-check 三路校验（exe 签名/.bnzc 区段/
+//   asar 全文件）聚合为 integrityState（0-3，与安卓 verify.js 语义表对齐），启动
+//   后延迟 25s 经 status 心跳通道上报（等 PowerShell 15s 超时窗 + asar 流式哈希完成）。
+//   服务端仅对强信号（>=2 篡改证据）blockDevice 封锁在线能力；弱信号/失败仅审计。
+//   非阻塞红线：上报失败/403 一律静默，本地使用不受影响（与安卓端同语义）。
+const INTEGRITY_REPORT_URL = 'https://tcm-prescription-system.pages.dev/api/license/status';
+
+async function reportDesktopIntegrity() {
+    try {
+        if (!app.isPackaged) return;
+        const state = (selfCheck && selfCheck.getIntegrityState) ? selfCheck.getIntegrityState() : null;
+        if (typeof state !== 'number') return;
+        let mid = '';
+        try {
+            mid = (activateManager && activateManager.getMachineId) ? String(activateManager.getMachineId() || '') : '';
+        } catch (e) { /* 机器码获取失败则跳过本次上报 */ }
+        if (!mid) {
+            console.log('[IntegrityReport] 上报跳过: 无机器码');
+            return;
+        }
+        const res = await net.fetch(INTEGRITY_REPORT_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ machineId: mid, integrityState: state, productClass: 'offline', clientClass: 'desktop' }),
+            signal: AbortSignal.timeout(8000)
+        });
+        if (res.status === 403) {
+            // 设备已被封锁（或本次强信号刚触发封锁）：在线能力卡死，本地使用不阻断（红线）
+            console.warn('[IntegrityReport] 服务端拒绝（设备安全校验未通过），本地使用不受影响');
+        } else {
+            console.log('[IntegrityReport] 完整性状态已上报 state=' + state);
+        }
+    } catch (e) {
+        console.log('[IntegrityReport] 上报跳过: ' + (e.message || e));
+    }
+}
+
 async function sendStartupHeartbeat() {
     try {
         let mid = '';
@@ -1370,6 +1407,9 @@ async function verifyCodeIntegrity() {
 app.whenReady().then(async () => {
     // ★ P0-③ exe 签名/完整性自校验（非阻塞，仅记录，不影响启动流程）
     selfCheck.runSelfCheck();
+    // ★ 2026-09-11 P1 完整性上报：延迟 25s 等三路校验落定后聚合上报（篡改证据
+    //   优先于未完成——getIntegrityState 聚合逻辑保证 strong 信号不等 PowerShell）
+    setTimeout(reportDesktopIntegrity, 25000);
 
     // ★ 2026-08-29 启动即建媒体专属文件夹（安装盘根目录\惠康中医媒体\downloads），
     //   用户安装后打开盘符即可看到，无需等首次拍照才创建（失败静默，运行时保存会再兜底）

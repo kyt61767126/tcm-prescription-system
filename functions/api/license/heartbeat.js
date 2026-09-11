@@ -32,7 +32,7 @@
 
 import {
     getKV, getLicense, updateLicense, checkRateLimit, getDevices, getMaxDevices, appendLicenseLog,
-    setDeviceVersion, getDeviceVersion, reportUsage, sniffCarrierFromUA, patchClinicCarrier
+    setDeviceVersion, getDeviceVersion, reportUsage, sniffCarrierFromUA, patchClinicCarrier, getDeviceBlock
 } from './_lib/license-core.js';
 
 // ★ P2 安全修复：收紧 CORS，仅允许合法 Origin
@@ -115,6 +115,15 @@ export async function onRequest(context) {
         }
         if (!isValidCodeFormat(code)) {
             return json({ success: false, error: '激活码格式错误' }, 400);
+        }
+
+        // ★ 2026-09-11 P2 桌面完整性闭环：已封锁设备心跳拒绝（403，不续期）——
+        //   与 verify.js / status.js / entitlement.js 同语义，封锁期间在线能力全卡死；
+        //   TTL 7 天自动解除防伪造封锁 DoS，客服可删 device_block:{machineId} 解封
+        const existingBlock = await getDeviceBlock(kv, machineId);
+        if (existingBlock) {
+            console.warn('[Heartbeat] 已封锁设备心跳被拒:', machineId, 'reason=', existingBlock.reason);
+            return json({ success: false, error: '设备安全校验未通过，请更换设备或联系客服处理' }, 403);
         }
 
         const now = new Date();
