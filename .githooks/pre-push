@@ -24,7 +24,12 @@
 #    缺口实锤：发布脚本双轨（一键 publish-release.js / 手动 auto-update-downloads.js）
 #    写同一 hash-manifest.json 格式不一致，手动轨漏拼 versionCode → 下载页 APP
 #    卡片显示 v1.0.0 不完整。版本号格式必须门禁强制，不靠脚本自觉。
-#  八道门全过才允许推送（均为秒级，不拖慢日常 push）。
+#  ★ 2026-09-11 九道门补强：pre-build-check.js（桌面端 build.files 打包清单完整性）。
+#    缺口实锤：stock-core.js 新增分发时漏登记两桌面端 package.json build.files，
+#    八道门全绿推送后智能打包 Step5 才拦截（pre-build-check: Missing files），
+#    修复成本=一轮完整打包时间。新 JS 的"第三登记点"（sync-all / copy-consistency
+#    之外）必须在 push 时拦截，不能等打包时才发现。
+#  九道门全过才允许推送（均为秒级，不拖慢日常 push）。
 #
 #  绕过方式（仅限紧急情况，事后必须补跑）：git push --no-verify
 #  启用方式（克隆后一次性）：git config core.hooksPath .githooks
@@ -88,5 +93,11 @@ node tools/check-manifest-version.cjs || {
     exit 1
 }
 
-echo "[pre-push] 八道校验全部通过，允许推送"
+echo "[pre-push] ⑨ 桌面端 build.files 打包清单完整性..."
+node tools/pre-build-check.js app_project/db-offline/desktop && node tools/pre-build-check.js app_project/db-yunduan/cloud_desktop || {
+    echo "[pre-push] FAIL: 桌面端 package.json build.files 缺脚本——index.html 引用的 js 必须登记进两桌面端打包清单（在 prescription-core.js 同位置插入），修复后重推"
+    exit 1
+}
+
+echo "[pre-push] 九道校验全部通过，允许推送"
 exit 0
