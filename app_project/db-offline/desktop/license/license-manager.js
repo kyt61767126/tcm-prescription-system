@@ -1678,6 +1678,23 @@ function isVirtualMachine() {
 // ============================================================================
 //  校验主逻辑
 // ============================================================================
+
+// ★ 2026-09-12 到期时间客户可读化：ISO UTC（2026-09-10T22:21:58.727Z）原样弹给客户
+//   完全看不懂，统一格式化为北京时间 yyyy-MM-dd HH:mm（与 validate.js __expBJ、
+//   离线APP LicenseManager.formatBeijingTime 三端同语义）
+function formatExpireBeijing(isoStr) {
+    try {
+        const ms = new Date(isoStr).getTime();
+        if (isNaN(ms)) return String(isoStr || '');
+        const d = new Date(ms + 8 * 3600e3);
+        const pad = function (n) { return String(n).padStart(2, '0'); };
+        return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate()) +
+            ' ' + pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes());
+    } catch (e) {
+        return String(isoStr || '');
+    }
+}
+
 function validateLicense(options) {
     options = options || {};
     const now = Date.now();
@@ -1773,9 +1790,11 @@ function validateLicense(options) {
         }
 
         if (now > expiresAtMs) {
+            // ★ 2026-09-12 到期消息客户可读化：北京时间 + 已过期天数（原 ISO UTC 客户看不懂）
+            const __overdueDays = Math.max(1, Math.ceil((now - expiresAtMs) / (24 * 60 * 60 * 1000)));
             return {
                 valid: false,
-                message: `授权已过期。\n用户：${license.user}\n到期时间：${license.expiresAt}\n请联系客服续费。`,
+                message: `授权已过期。\n用户：${license.user}\n到期时间：${formatExpireBeijing(license.expiresAt)}（北京时间）\n已过期 ${__overdueDays} 天，请联系客服续费。`,
                 type: 'expired',
                 license: license
             };
@@ -1789,7 +1808,7 @@ function validateLicense(options) {
         const remainingDays = Math.ceil((expiresAtMs - now) / (24 * 60 * 60 * 1000));
         return {
             valid: true,
-            message: `授权有效\n用户：${license.user}\n类型：${license.type}\n到期：${license.expiresAt}\n剩余：${remainingDays} 天`,
+            message: `授权有效\n用户：${license.user}\n类型：${license.type}\n到期：${formatExpireBeijing(license.expiresAt)}\n剩余：${remainingDays} 天`,
             type: 'licensed',
             licenseType: license.type,           // v2: 版本类型
             maxPrescriptions: license.maxPrescriptions,  // v2: 处方数量限制

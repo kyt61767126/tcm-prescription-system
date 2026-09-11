@@ -6674,13 +6674,21 @@
             if (__hasBridgeInstall) {
                 try {
                     let inst = null;
+                    // ★ 2026-09-12 到期重激活防御：already_licensed 不再直接置成功——
+                    //   旧版 APP 桥只判 license.dat 文件存在（过期码照样"已授权"），
+                    //   直接信任会导致：到期客户续费重审后新码装不进 + 自验失败 →
+                    //   "激活已通过，但本地写入失败：未知错误"。改为挂标记，先落
+                    //   直装兜底（响应带 license 时覆盖重装），自验通过才补成功。
+                    let __bridgeAlready = false;
                     if (global.electronAPI.activate &&
                         typeof global.electronAPI.activate.installLicenseFromServer === 'function') {
                         try {
                             const __br = await global.electronAPI.activate.installLicenseFromServer(machineId || '');
-                            if (__br && __br.success &&
-                                (__br.status === 'installed' || __br.status === 'already_licensed')) {
+                            if (__br && __br.success && __br.status === 'installed') {
                                 inst = { success: true };
+                            } else if (__br && __br.success && __br.status === 'already_licensed') {
+                                __bridgeAlready = true;
+                                console.log('[LicenseCheck] 桥返回 already_licensed，待自验确认');
                             } else {
                                 console.warn('[LicenseCheck] 桥单一装码未完成，退回直装兜底:', __br);
                             }
@@ -6688,7 +6696,8 @@
                             console.warn('[LicenseCheck] 桥单一装码异常，退回直装兜底:', be && be.message);
                         }
                     }
-                    // 兜底：旧桥无单一入口 / 桥装失败且响应带 license → installAdminLicense 直装
+                    // 兜底：旧桥无单一入口 / 桥装失败（含 already_licensed 未确认）且
+                    // 响应带 license → installAdminLicense 直装覆盖（到期重签场景靠这里落新码）
                     if (!(inst && inst.success) && license &&
                         global.electronAPI.activate &&
                         typeof global.electronAPI.activate.installAdminLicense === 'function') {
@@ -6724,6 +6733,11 @@
                         }
                     } catch (ve) { console.warn('[LicenseCheck] JS 侧自验异常:', ve); }
 
+                    // ★ 2026-09-12 到期重激活防御：桥称 already_licensed 且无直装材料时，
+                    //   自验通过才补 inst 成功（文件存在≠有效，见上方防御注释）
+                    if (__bridgeAlready && !(inst && inst.success) && selfVerified) {
+                        inst = { success: true };
+                    }
                     const ok = !!(inst && inst.success && selfVerified);
                     if (ok) {
                         // ★ 2026-09-06 第七轮修复（实测：激活登录后顶部仍挂"试用到期·只读"
@@ -6762,11 +6776,18 @@
                             await setStateV2(_STATES.ACTIVATED_READY, { prevState: prev.state || '', activatedAt: Date.now(), requestId: requestId || '' });
                         } catch (_fsm) { console.warn('[FSM v2] onAdminActivated ready setState err:', _fsm); }
                     } else {
-                        descEl.innerHTML = '激活已通过，但本地写入失败：' + ((inst && inst.error) || '未知错误') + '<br>请将机器ID发给客服人工激活';
+                        // ★ 2026-09-12 文案明确化：区分"本机授权校验未通过（过期/失效）"
+                        //   与真正的未知异常，并给重试指引（旧文案一律"未知错误"，
+                        //   到期重激活场景客户无从下手，只能找客服人工处理）
+                        const __failReason = (inst && inst.error)
+                            || (selfVerified === false ? '本机授权校验未通过（可能已过期）' : '未知错误');
+                        descEl.innerHTML = '激活已通过，但本地写入失败：' + __failReason
+                            + '<br>请返回上一步重新提交一次；多次失败请将机器ID发给客服人工激活';
                         show('adminSuccess');
                     }
                 } catch (e) {
-                    descEl.innerHTML = '激活已通过，但本地写入失败：' + (e && e.message || '未知错误');
+                    descEl.innerHTML = '激活已通过，但本地写入失败：' + (e && e.message || '未知错误')
+                        + '<br>请返回上一步重新提交一次；多次失败请将机器ID发给客服人工激活';
                     show('adminSuccess');
                 }
             } else {
@@ -6887,13 +6908,19 @@
         if (__bridgeInstall || __directInstall) {
             try {
                 var inst = null;
+                // ★ 2026-09-12 到期重激活防御：同 onAdminActivated——already_licensed
+                //   不直接置成功（旧版 APP 桥只判文件存在），挂标记先走直装兜底，
+                //   自验通过才补成功；过期/失效码由直装覆盖重装修复
+                var __bridgeAlready = false;
                 if (__bridgeInstall) {
                     try {
                         var __br = await global.electronAPI.activate.installLicenseFromServer(
                             (saved && saved.machineId) || '');
-                        if (__br && __br.success &&
-                            (__br.status === 'installed' || __br.status === 'already_licensed')) {
+                        if (__br && __br.success && __br.status === 'installed') {
                             inst = { success: true };
+                        } else if (__br && __br.success && __br.status === 'already_licensed') {
+                            __bridgeAlready = true;
+                            console.log('[LicenseCheck] 断点续传桥返回 already_licensed，待自验确认');
                         } else {
                             console.warn('[LicenseCheck] 断点续传桥单一装码未完成，退回直装:', __br);
                         }
@@ -6923,6 +6950,9 @@
                         if (!selfVerified) console.warn('[LicenseCheck] 断点续传 JS 侧自验失败:', v);
                     }
                 } catch (ve) {}
+                if (__bridgeAlready && !(inst && inst.success) && selfVerified) {
+                    inst = { success: true };
+                }
                 installed = !!(inst && inst.success && selfVerified);
             } catch (e) {
                 console.warn('[LicenseCheck] 断点续传安装license异常:', e);
@@ -7113,8 +7143,80 @@
                     var __bridgeHeal = (typeof ea.activate.installLicenseFromServer === 'function')
                         ? Promise.resolve().then(function () { return ea.activate.installLicenseFromServer(mid); })
                         : Promise.resolve(null);
+                    // ★ 2026-09-12 提取服务端补装链路为局部函数（already_licensed 自验失效
+                    //   与桥未装成两处复用，逻辑不变）
+                    var __healQueryAndInstall = function () {
+                        return _queryAdminStatus('', mid).then(async function (r) {
+                            if (!(r && r.success && r.status === 'activated' && r.license)) return;
+                            var li = r.licenseInfo || {};
+                            // ★ 2026-09-09 同机同号门（JS 直装兜底路径）：license 手机号缺失
+                            //   或与本地注册账号不匹配 → 拦截装码（防曾激活设备换人注册继承
+                            //   原授权）。被拦客户走「原激活码+本机」自愈通道恢复。
+                            var __licPhone = String(li.phone || '').trim();
+                            var __sameOwner = __licPhone ? await __localAccountHasPhone(__licPhone) : false;
+                            if (!__sameOwner) {
+                                console.warn('[LicenseCheck] 存量自愈拦截（同机同号门）：本机历史授权属于其他账号（license 手机号与本地注册不匹配）');
+                                return;
+                            }
+                            console.log('[LicenseCheck] 存量自愈：服务端显示本机已激活但本地 license.dat 缺失，自动补装');
+                            return ea.activate.installAdminLicense({
+                                license: r.license,
+                                adminName: (li.user || li.adminName || '').toString(),
+                                clinicName: (li.clinicName || '').toString(),
+                                phone: (li.phone || '').toString(),
+                                password: '', // 已有账号不覆盖注册密码（installLicense 跳过已存在用户）
+                                licenseCode: (li.licenseCode || '').toString()
+                            }).then(function (inst) {
+                                if (inst && inst.success) {
+                                    console.log('[LicenseCheck] 存量自愈成功：license.dat 已补装（打开基础设置即显示已激活，无需重启）');
+                                    // ★ 对齐 onAdminActivated 心跳材料（license:code/machineId），
+                                    //   否则 24h 心跳验证缺 code 反复触发在线验证
+                                    try {
+                                        var __hCode = (li.licenseCode || '').toString();
+                                        if (__hCode) StorageAdapter.setItem('license:code', __hCode);
+                                        StorageAdapter.setItem('license:machineId', mid);
+                                        StorageAdapter.removeItem('license:lastHeartbeat');
+                                        StorageAdapter.removeItem('license:offlineStart');
+                                    } catch (he) {}
+                                    // ★ 即时刷新基础设置授权区（updateLicenseStatusText 重查 getStatus
+                                    //   → Java 重读新落盘 license.dat → licensed），用户零感知转正
+                                    try { injectLicenseStatusIntoSettings(); } catch (he2) {}
+                                    __healNotifyUserInstalled();
+                                } else {
+                                    console.warn('[LicenseCheck] 存量自愈失败:', (inst && inst.error) || '未知错误');
+                                }
+                            });
+                        });
+                    };
                     return __bridgeHeal.then(function (br) {
-                        if (br && br.success && (br.status === 'installed' || br.status === 'already_licensed')) {
+                        // ★ 2026-09-12 到期重激活防御：installed = 桥确认落盘新码，直接成功；
+                        //   already_licensed 仅代表桥侧本地有码文件（旧版 APP 桥只判存在，
+                        //   过期码照样返回）→ 先本地自验，有效才算自愈成功，失效
+                        //   （已过期/验签失败）继续走服务端补装链路，防止"假自愈"。
+                        if (br && br.success && br.status === 'already_licensed') {
+                            var __alrVerify = (ea.license && typeof ea.license.validate === 'function')
+                                ? Promise.resolve().then(function () { return ea.license.validate(); })
+                                : ((ea.license && typeof ea.license.getStatus === 'function')
+                                    ? Promise.resolve().then(function () { return ea.license.getStatus(); })
+                                    : Promise.resolve(null));
+                            return __alrVerify.then(function (v) {
+                                var __alrOk = !!(v && v.valid &&
+                                    (v.type === undefined || v.type !== 'trial'));
+                                if (__alrOk) {
+                                    console.log('[LicenseCheck] 存量自愈成功（already_licensed 本地自验通过）');
+                                    try {
+                                        StorageAdapter.setItem('license:machineId', mid);
+                                        StorageAdapter.removeItem('license:lastHeartbeat');
+                                        StorageAdapter.removeItem('license:offlineStart');
+                                    } catch (he0) {}
+                                    try { injectLicenseStatusIntoSettings(); } catch (he2) {}
+                                    return;
+                                }
+                                console.warn('[LicenseCheck] already_licensed 但本地自验失效（过期/损坏），转服务端补装链路');
+                                return __healQueryAndInstall();
+                            });
+                        }
+                        if (br && br.success && br.status === 'installed') {
                             console.log('[LicenseCheck] 存量自愈成功（桥单一装码入口）:', br.status);
                             try {
                                 StorageAdapter.setItem('license:machineId', mid);
@@ -7122,7 +7224,7 @@
                                 StorageAdapter.removeItem('license:offlineStart');
                             } catch (he0) {}
                             try { injectLicenseStatusIntoSettings(); } catch (he2) {}
-                            if (br.status === 'installed') __healNotifyUserInstalled();
+                            __healNotifyUserInstalled();
                             return;
                         }
                         // ★ 2026-09-09 同机同号门：桥拦截（license 手机号与本地注册账号
@@ -7131,47 +7233,7 @@
                             console.warn('[LicenseCheck] 存量自愈拦截（同机同号门·桥）：', br.message || '本机历史授权属于其他账号');
                             return;
                         }
-                        return _queryAdminStatus('', mid).then(async function (r) {
-                        if (!(r && r.success && r.status === 'activated' && r.license)) return;
-                        var li = r.licenseInfo || {};
-                        // ★ 2026-09-09 同机同号门（JS 直装兜底路径）：license 手机号缺失
-                        //   或与本地注册账号不匹配 → 拦截装码（防曾激活设备换人注册继承
-                        //   原授权）。被拦客户走「原激活码+本机」自愈通道恢复。
-                        var __licPhone = String(li.phone || '').trim();
-                        var __sameOwner = __licPhone ? await __localAccountHasPhone(__licPhone) : false;
-                        if (!__sameOwner) {
-                            console.warn('[LicenseCheck] 存量自愈拦截（同机同号门）：本机历史授权属于其他账号（license 手机号与本地注册不匹配）');
-                            return;
-                        }
-                        console.log('[LicenseCheck] 存量自愈：服务端显示本机已激活但本地 license.dat 缺失，自动补装');
-                        return ea.activate.installAdminLicense({
-                            license: r.license,
-                            adminName: (li.user || li.adminName || '').toString(),
-                            clinicName: (li.clinicName || '').toString(),
-                            phone: (li.phone || '').toString(),
-                            password: '', // 已有账号不覆盖注册密码（installLicense 跳过已存在用户）
-                            licenseCode: (li.licenseCode || '').toString()
-                        }).then(function (inst) {
-                            if (inst && inst.success) {
-                                console.log('[LicenseCheck] 存量自愈成功：license.dat 已补装（打开基础设置即显示已激活，无需重启）');
-                                // ★ 对齐 onAdminActivated 心跳材料（license:code/machineId），
-                                //   否则 24h 心跳验证缺 code 反复触发在线验证
-                                try {
-                                    var __hCode = (li.licenseCode || '').toString();
-                                    if (__hCode) StorageAdapter.setItem('license:code', __hCode);
-                                    StorageAdapter.setItem('license:machineId', mid);
-                                    StorageAdapter.removeItem('license:lastHeartbeat');
-                                    StorageAdapter.removeItem('license:offlineStart');
-                                } catch (he) {}
-                                // ★ 即时刷新基础设置授权区（updateLicenseStatusText 重查 getStatus
-                                //   → Java 重读新落盘 license.dat → licensed），用户零感知转正
-                                try { injectLicenseStatusIntoSettings(); } catch (he2) {}
-                                __healNotifyUserInstalled();
-                            } else {
-                                console.warn('[LicenseCheck] 存量自愈失败:', (inst && inst.error) || '未知错误');
-                            }
-                        });
-                        }); // _queryAdminStatus.then 闭合
+                        return __healQueryAndInstall();
                     }); // __bridgeHeal.then 闭合（2026-09-06 T5 桥单一装码入口）
                 });
                 }); // isLocalRegisteredAsync().then 注册门控闭合

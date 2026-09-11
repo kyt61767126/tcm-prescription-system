@@ -593,11 +593,30 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
                 r.put("message", "本地无注册账号，请先完成注册");
                 return r;
             }
+            // ★ 2026-09-12 P0 到期重激活修复：已授权快路径必须先验本地 license 有效性——
+            //   旧逻辑 readLicense(mid) != null（仅判 license.dat 文件存在）即返回
+            //   already_licensed，导致到期客户续费后（管理员重新审核/批量延期重签）
+            //   新 license 永远装不进来：桥拒装 → JS 侧自验旧码过期 → 客户看到
+            //   "激活已通过，但本地写入失败：未知错误"，被迫人工找客服。
+            //   对齐桌面版 electron/activate.js（先 validateLicense，valid 且
+            //   licensed 才短路）：过期/失效/验签失败一律放行，继续走服务端重装覆盖。
+            //   注意外层仍保留 readLicense 判空守卫：license.dat 缺失（存量自愈/全新
+            //   安装）时不得进 validateLicense——其试用分支会创建 trial 记录 +
+            //   registerTrialOnline 联网，属装码桥不应有的副作用。
             if (readLicense(mid) != null) {
-                JSONObject r = new JSONObject();
-                r.put("success", true); r.put("status", "already_licensed");
-                r.put("message", "本机授权已存在，无需重复安装");
-                return r;
+                try {
+                    JSONObject localCheck = validateLicense(mid);
+                    if (localCheck != null && localCheck.optBoolean("valid", false)
+                            && "licensed".equals(localCheck.optString("type", ""))) {
+                        JSONObject r = new JSONObject();
+                        r.put("success", true); r.put("status", "already_licensed");
+                        r.put("message", "本机授权已存在，无需重复安装");
+                        return r;
+                    }
+                    Log.i(TAG, "[BridgeInstall] 本地 license 存在但校验未通过（过期/失效），继续走服务端重装");
+                } catch (Exception ve) {
+                    Log.w(TAG, "[BridgeInstall] 本地授权快路径校验异常，继续走服务端查询: " + ve.getMessage());
+                }
             }
             URL url = new URL(ADMIN_STATUS_API_URL + "?machineId=" +
                     java.net.URLEncoder.encode(mid, "UTF-8"));
@@ -616,6 +635,18 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
                 return failResult(resp.optString("error", "订单状态查询失败"));
             }
             String st = resp.optString("status", "");
+            // ★ 2026-09-12 到期重激活配套：admin-status 的 license_expired（服务端
+            //   P0 修复新增态：activated 记录解码 licenseBase64 发现已过期，不下发
+            //   license）单独透传——旧逻辑把它当 pending 显示"订单审核中"纯属误导，
+            //   JS 层 renderAdminRejected 已有该状态的消费渲染（标题"授权已过期"）。
+            if ("license_expired".equals(st)) {
+                JSONObject r = new JSONObject();
+                r.put("success", true);
+                r.put("status", "license_expired");
+                r.put("message", resp.optString("message",
+                        "该授权已到期，重新激活无法恢复使用，请联系客服微信 hktzy1688 续费"));
+                return r;
+            }
             if (!"activated".equals(st)) {
                 JSONObject r = new JSONObject();
                 r.put("success", true);
@@ -3527,9 +3558,16 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
                 }
 
                 if (effectiveNow > expiresAtMs) {
+                    // ★ 2026-09-12 到期消息客户可读化：ISO UTC（2026-09-10T22:21:58.727Z）
+                    //   原样展示客户完全看不懂，改北京时间 + 已过期天数（续费预期管理）
+                    String expBJ = formatBeijingTime(expiresAtMs);
+                    long overdueDays = (long) Math.ceil(
+                            (effectiveNow - expiresAtMs) / (24.0 * 60 * 60 * 1000));
                     JSONObject r = failValidation(
                             "授权已过期。\n用户：" + license.optString("user", "") +
-                                    "\n到期时间：" + expiresAtStr + "\n请联系客服续费。",
+                                    "\n到期时间：" + (expBJ.isEmpty() ? expiresAtStr : expBJ) +
+                                    "（北京时间）" +
+                                    "\n已过期 " + Math.max(1, overdueDays) + " 天，请联系客服续费。",
                             "expired");
                     r.put("license", license);
                     return r;
@@ -3572,12 +3610,12 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
                 }
 
                 if (daysSinceVerify > ONLINE_VERIFY_PROMPT_DAYS && prescriptionsSinceVerify >= ONLINE_VERIFY_PROMPT_PRESCRIPTIONS) {
-                    // 超过7天且30张处方未验证，提示但不阻断
+                    // 提示但不阻断（到期时间同样北京时间化）
                     JSONObject r = new JSONObject();
                     r.put("valid", true);
                     r.put("message", "授权有效\n用户：" + license.optString("user", "") +
                             "\n类型：" + license.optString("type", "") +
-                            "\n到期：" + expiresAtStr +
+                            "\n到期：" + formatExpireForDisplay(expiresAtMs, expiresAtStr) +
                             "\n剩余：" + remainingDays + " 天" +
                             "\n\n⚠ 建议在线验证授权（已" + daysSinceVerify + "天未验证，" + prescriptionsSinceVerify + "张处方）");
                     r.put("type", "licensed");
@@ -3594,7 +3632,7 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
                 r.put("valid", true);
                 r.put("message", "授权有效\n用户：" + license.optString("user", "") +
                         "\n类型：" + license.optString("type", "") +
-                        "\n到期：" + expiresAtStr +
+                        "\n到期：" + formatExpireForDisplay(expiresAtMs, expiresAtStr) +
                         "\n剩余：" + remainingDays + " 天");
                 r.put("type", "licensed");
                 r.put("licenseType", license.optString("type", "personal"));
@@ -3682,6 +3720,25 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
         } catch (Exception e) {
             return new JSONObject();
         }
+    }
+
+    // ★ 2026-09-12 到期时间客户可读化：ISO UTC（2026-09-10T22:21:58.727Z）对客户
+    //   完全不可读，统一格式化为北京时间 yyyy-MM-dd HH:mm（与 validate.js __expBJ 同语义）
+    private String formatBeijingTime(long epochMs) {
+        try {
+            java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat(
+                    "yyyy-MM-dd HH:mm", java.util.Locale.CHINA);
+            sdf.setTimeZone(java.util.TimeZone.getTimeZone("GMT+8"));
+            return sdf.format(new java.util.Date(epochMs));
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    // 格式化失败时回退原始 ISO 串（宁可显示丑也不显示空）
+    private String formatExpireForDisplay(long expiresAtMs, String expiresAtStr) {
+        String bj = formatBeijingTime(expiresAtMs);
+        return bj.isEmpty() ? expiresAtStr : bj;
     }
 
     // 解析 ISO 8601 日期（如 2026-12-31T23:59:59.000Z）

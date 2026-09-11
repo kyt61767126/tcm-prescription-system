@@ -1012,6 +1012,21 @@ P2 渐进迁移（2026-09-03 当日完成）：
   - **客户端收到"激活成功"结果后必须本地自验 license 再展示成功（服务端修复与客户端自验互为纵深，任一失效仍有拦截）。**
 * **生效方式**：服务端三层（validate/admin-status/admin-approve/users）push 即部署生效（含旧版 APK 亦被保护）；客户端三层（MainActivity 自验 + observer/offline.js license_expired UI）需重打**离线APP APK**（云端两端无此路径不需要重打；离线桌面走 auth-core 副本，下次打包生效）。
 
+### ★ 2026-09-12 P0 到期重激活「本地写入失败：未知错误」根治（09-11 服务端修复的客户端配套三层）
+
+* **现象**：到期客户续费（管理员重审/重签 license）后重新激活，弹「激活已通过，但本地写入失败：未知错误」，新码永远装不进只能找客服人工；且过期提示原样显示 ISO UTC（`2026-09-10T22:21:58.727Z`）客户完全看不懂。
+* **根因（两条叠加）**：①Android 桥 `installLicenseFromServer` 快路径 `readLicense(mid)!=null`（仅判 license.dat 文件存在）即返回 already_licensed——过期码照样"已授权"拒装新码 → JS 自验发现旧码过期 → inst 不成功 → 兜底文案一律"未知错误"；②失败文案不区分"校验未通过（过期）"与"真未知异常"，时间展示不做时区格式化。
+* **修复（A+B+C，与 09-11 服务端修复互为纵深）**：
+  1. `LicenseManager.java`（离线APP）：①already_licensed 快路径先 `validateLicense`，valid 且 type=licensed 才短路；过期/失效放行走服务端重装覆盖。**保留 readLicense 判空守卫**（license.dat 缺失时不得进 validateLicense——其试用分支会创建 trial 记录+联网，属装码桥不应有副作用）。②admin-status 新态 `license_expired` 单独透传（旧逻辑当 pending 显示"订单审核中"误导，JS renderAdminRejected 已有消费渲染）。③`formatBeijingTime` 到期消息北京时间+已过期天数，valid/提示消息同样格式化（失败回退原始 ISO 串，宁丑勿空）。
+  2. `auth-core/offline.js` **三处装码点**（主装码 onAdminActivated/断点续传/存量自愈）：already_licensed 不直接置成功——挂标记，响应带 license 先走 `installAdminLicense` 直装覆盖（到期重签场景靠这里落新码），再 JS 侧自验（validate/getStatus），自验通过才补成功；存量自愈 already_licensed 自验失效转 `__healQueryAndInstall` 服务端补装。失败文案区分「本机授权校验未通过（可能已过期）」+「返回上一步重新提交；多次失败将机器ID发客服」指引。
+  3. `shared/license/license-manager.js`：`formatExpireBeijing` 北京时间+已过期天数（与 validate.js `__expBJ` 同语义），valid 消息同样显示格式化到期。
+* **铁律**：
+  - **「already_licensed/已存在」类短路返回必须先验有效性（文件存在≠有效）——否则续费重签的新码永远装不进，客户被迫人工。**
+  - **装码成功 = 桥 installed ∨（already_licensed ∧ 本地自验通过）∨ 直装成功 ∧ 自验通过；三处装码点（主流程/断点续传/自愈）防御必须同步改，漏一处=该路径"假激活/假失败"复活。**
+  - **面向客户的失败文案必须区分「校验未通过（过期/失效）」与「未知异常」并给下一步指引；时间戳展示一律北京时间格式化，禁止裸 ISO UTC。**
+* **验证**：Java 全量编译 exit 0；probe-param-matrix 19/19；copy-consistency 50/50；smoke-runtime 26/26；check-interface 6 OK；auth-core 11 副本 + shared 全组同步绿灯。
+* **生效方式**：离线APP 需重打 **APK**（Java 桥+assets 双改）；离线桌面需重打 **exe**（auth-core+license-manager 副本）；云桌面需重打 **exe**（license-manager 副本，到期消息格式化）；云端网页/云端APP 无需重打（cloud.js 未改，云端 license 由服务端裁决）；服务端本轮无改动（09-11 已修，push 即生效）。
+
 * ★ 2026-08-31 v3 下载"进度卡死 0%"根因：fetch ReadableStream **读流无内置超时**，弱网下连接静默挂起（无数据也无报错）时 `reader.read()` 永久等待，v2 下载器进度永久停在 0.4MB 且不触发重试（用户实测截图证实）。修复：**读流看门狗**——每段数据到达重置 15s 定时器，超时未喂则 `AbortController.abort()` 强制断开自动断点续传；重试上限提至 30 次、退避封顶 5s。铁律：**前端流式读取必须配看门狗（数据到达重置定时器 + 超时 abort），fetch 读流挂起不报错，没有看门狗就永远卡死**。
 
 * ★ 2026-09-01 E2E E1 偶发超时第三轮（真根因=TDZ 时序竞态）：index.html 解析期(:778)即调用 `Permission.init()`，而 `const CONFIG` 到(:810)才声明——**IPC 回调若落在两者之间，CONFIG 处于暂时性死区（TDZ），`typeof CONFIG`** **亦抛 ReferenceError 被 catch 静默吞掉**，`__authoritativeEdition` 写入被跳过 → asar 出厂默认(cloud\_personal)经(:834)同步 XHR 反向覆盖 → 机构版用户管理按钮消失（E1 FAIL / E3 时序有利又 PASS 的"偶发"假象）。修复双端兜底：① permission.js init() **无条件先暂存权威 edition 到 Permission 实例**（`this._authoritativeEdition`，permission.js 先于内嵌脚本加载，实例必然已存在），CONFIG 可用时再写插槽；② edition-lock.js getter 优先级2读取 `Permission._authoritativeEdition` 兜底。铁律：**async init 的 IPC 回调与页面内嵌顶层 const/let 声明存在竞态——跨脚本共享的权威值必须暂存到必然先存在的载体（自身模块实例），禁止只依赖可能处于 TDZ 的全局对象；`typeof`** **对 TDZ 变量照样抛错，不是安全探测**。验证方式：E2E 竞态类问题单次通过不算数，须 dev electron + real\_app.asar（run-e2e 兜底模式 B）连跑 5 次以上；fused exe 按设计阻断 CDP，不能直接跑 Playwright E2E（超时≠业务失败）。
