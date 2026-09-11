@@ -40,6 +40,7 @@ import {
     ensureInviteCode, applyInviteReward, findLicenseByInviteCode,
     INVITE_BONUS_DAYS_INVITEE, INVITE_MAX_INVITEES
 } from './_lib/license-core.js';
+import { getDeviceBlock } from './_lib/license-core.js';
 
 // ★ P2 安全修复：收紧 CORS，仅允许合法 Origin
 const ALLOWED_ORIGINS = [
@@ -152,6 +153,23 @@ export async function onRequest(context) {
                 rateLimited: true
             }, 429);
         }
+        // ★ 2026-09-11 P2 可疑设备拦截：被封锁设备（verify 上报强信号：Frida 注入/签名分叉）
+        //   一律拒绝激活——封锁锚定 machineId，攻击者换激活码也没用（在线能力卡死闭环）
+        const deviceBlock = await getDeviceBlock(kv, machineId);
+        if (deviceBlock) {
+            await appendLicenseLog(kv, code, {
+                action: 'device-blocked-activation-denied',
+                time: new Date().toISOString(),
+                ip: ip,
+                operator: user || 'unknown',
+                detail: '设备因安全信号被封锁（reason=' + deviceBlock.reason + '），拒绝激活'
+            });
+            return json({
+                success: false,
+                error: '设备安全校验未通过，请更换设备或联系客服处理'
+            }, 403);
+        }
+
         // ★ v3 新增：clinicName 长度/字符校验
         if (clinicName !== undefined && clinicName !== null && clinicName !== '') {
             if (typeof clinicName !== 'string') {

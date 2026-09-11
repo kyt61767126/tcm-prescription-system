@@ -655,6 +655,59 @@ function getMaxDevices(record) {
 }
 
 // ============================================================================
+//  ★ 2026-09-11 P2 安全画像：可疑设备封锁（verify.js 落标记 / 各下发出口拦截）
+//  机制：在线验证上报强信号（Frida 注入 / APK 签名双路分叉）→ 落 device_block 标记
+//       → 激活/轮询/验证出口一律拒绝 → 攻击者在线能力全部卡死（本地零阻塞维持红线）。
+//  KV key: device_block:{machineId}
+//  值：{ reason, machineId, user, codeHash, count, ttlDays, firstBlockedAt, lastBlockedAt, lastIp }
+//  误伤防护：①弱信号（root/调试器/模拟器）不触发封锁——正常付费用户可能 root 手机；
+//           ②TTL 7 天自动解除——审查发现"伪造封锁 DoS"攻击面：verify 无认证且
+//             machineId/fridaDetected 均为客户端提交参数，攻击者拿到他人 machineId
+//             可伪造强信号封锁真实客户设备；7 天上限把单次伪造的误伤从 180 天压到
+//             7 天（受害者自动恢复）。真实攻击设备不受影响：KV 过期后其 verify 仍带
+//             强信号 → 再次触发封锁，在线能力实质持续卡死（已封锁设备的 verify 在
+//             入口被拒、不续期，避免正常设备的常规 verify 无意续期）；
+//             持续定向伪造封锁（罕见）靠 integrity_flag 审计记录人工识别，客服解封；
+//           ③客服可删 KV 键手动解封（键名即 machineId，可直接定位）。
+// ============================================================================
+export async function blockDevice(kv, machineId, info = {}) {
+    if (!kv || !machineId) return null;
+    try {
+        const key = `device_block:${machineId}`;
+        const prev = await kv.get(key, 'json') || {};
+        const ttlDays = 7;
+        const entry = {
+            reason: info.reason || 'security_profile',
+            machineId: machineId,
+            user: info.user || prev.user || '',
+            codeHash: info.codeHash || prev.codeHash || '',
+            count: (prev.count || 0) + 1,
+            ttlDays,
+            firstBlockedAt: prev.firstBlockedAt || new Date().toISOString(),
+            lastBlockedAt: new Date().toISOString(),
+            lastIp: info.ip || prev.lastIp || ''
+        };
+        await kv.put(key, JSON.stringify(entry), { expirationTtl: ttlDays * 24 * 60 * 60 });
+        console.warn('[security] 设备已封锁:', JSON.stringify(entry));
+        return entry;
+    } catch (e) {
+        console.warn('[security] blockDevice 落标记失败(不阻断主流程):', e && e.message);
+        return null;
+    }
+}
+
+// 查询设备是否被封锁（返回封锁记录或 null；KV 异常按未封锁处理——宁可漏检不可误报）
+export async function getDeviceBlock(kv, machineId) {
+    if (!kv || !machineId) return null;
+    try {
+        return await kv.get(`device_block:${machineId}`, 'json') || null;
+    } catch (e) {
+        console.warn('[security] getDeviceBlock 查询失败(按未封锁处理):', e && e.message);
+        return null;
+    }
+}
+
+// ============================================================================
 //  ★ 设备-版本绑定（同一台设备只能注册一个版本）
 //  需求：同一台电脑/手机只能激活一个版本（标准版 OR 机构版）
 //  一旦设备绑定某版本，另一个版本的激活/提交请求将被拒绝

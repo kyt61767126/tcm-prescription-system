@@ -13,7 +13,7 @@
 //    不存在:     { success: false, error: "请求不存在或已失效" }
 // ============================================================================
 
-import { getKV, checkRateLimit, sniffCarrierFromUA, patchClinicCarrier, patchLicenseDeviceCarrier } from './_lib/license-core.js';
+import { getKV, checkRateLimit, sniffCarrierFromUA, patchClinicCarrier, patchLicenseDeviceCarrier, getDeviceBlock } from './_lib/license-core.js';
 import { provisionCloudAccount, normalizeActivationPassword } from './_lib/admin-account.js';
 import { updateAdminRequestStatus, ensureLicenseV7 } from './_lib/license-write-service.js';
 
@@ -253,6 +253,18 @@ export async function onRequest(context) {
                         resolvedAt: record.resolvedAt
                     }
                 }, 200, origin);
+            }
+            // ★ 2026-09-11 P2 可疑设备拦截：被封锁设备（verify 上报强信号：Frida 注入/签名
+            //   分叉）不下发 license——轮询激活闭环被掐断，与 validate 激活拦截形成
+            //   "换码无用"的在线能力卡死。客服可删 device_block:{machineId} 解封。
+            const __deviceBlock = await getDeviceBlock(kv, String(record.machineId || ''));
+            if (__deviceBlock) {
+                console.warn('[AdminStatus] 已封锁设备轮询，拒绝下发 license:',
+                    record.machineId, 'reason=', __deviceBlock.reason);
+                return json({
+                    success: false,
+                    error: '设备安全校验未通过，请更换设备或联系客服处理'
+                }, 403, origin);
             }
             // ★ 2026-09-11 阶段1a 存量 license 重签自愈：下发出口统一升级 V7。
             //   admin_req.licenseBase64 缺 signatureV7（V7 上线前的存量文件）时，

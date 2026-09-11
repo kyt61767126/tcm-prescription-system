@@ -29,7 +29,7 @@
 //    key: admin_req_index  -> [requestId1, requestId2, ...]
 // ============================================================================
 
-import { getKV, checkRateLimit, checkDeviceVersion } from './_lib/license-core.js';
+import { getKV, checkRateLimit, checkDeviceVersion, getDeviceBlock } from './_lib/license-core.js';
 import { provisionCloudAccount, normalizeActivationPassword } from './_lib/admin-account.js';
 import { createAdminRequest, updateAdminRequestStatus, ensureLicenseV7 } from './_lib/license-write-service.js';
 import { findPhoneOccupancy, hashPassword, KV_SYSTEM_CLINICS } from '../_lib/auth.js';
@@ -345,6 +345,14 @@ export async function onRequest(context) {
                     console.warn('[AdminSubmit] 已激活申请密码归一化失败:', e.message);
                 }
                 console.log('[AdminSubmit] 手机号已有已激活申请，短路复用:', phone, existingActivated.requestId);
+                // ★ 2026-09-11 P2 可疑设备拦截：被封锁设备不下发 license（对齐 admin-status
+                //   轮询出口/validate 激活出口，封锁锚定 machineId 换码无用）
+                const __blkPhone = await getDeviceBlock(kv, String(existingActivated.machineId || ''));
+                if (__blkPhone) {
+                    console.warn('[AdminSubmit] 已封锁设备提交，拒绝下发 license:',
+                        existingActivated.machineId, 'reason=', __blkPhone.reason);
+                    return json({ success: false, error: '设备安全校验未通过，请更换设备或联系客服处理' }, 403);
+                }
                 // ★ 2026-09-11 阶段1a 重签自愈：短路下发出口同样过 ensureLicenseV7
                 //   （对齐 admin-status 轮询出口，防出口绕过），存量 license 升级 V7。
                 existingActivated = await ensureLicenseV7(kv, existingActivated, context);
@@ -518,6 +526,14 @@ export async function onRequest(context) {
                 //   检测到 status=activated 且有 license 立即执行 onAdminActivated，
                 //   不再依赖 startPolling 首 5s 不被用户打断。
                 console.log('[AdminSubmit] 命中已付款且已激活订单，复用+下发license:', paid.requestId);
+                // ★ 2026-09-11 P2 可疑设备拦截：被封锁设备不下发 license（同手机号短路点，
+                //   四个下发出口全堵——verify/validate/admin-status/admin-submit）
+                const __blkDev = await getDeviceBlock(kv, String(paid.machineId || ''));
+                if (__blkDev) {
+                    console.warn('[AdminSubmit] 已封锁设备命中订单，拒绝下发 license:',
+                        paid.machineId, 'reason=', __blkDev.reason);
+                    return json({ success: false, error: '设备安全校验未通过，请更换设备或联系客服处理' }, 403);
+                }
                 // ★ 2026-09-11 阶段1a 重签自愈：设备维度短路下发出口同样过 ensureLicenseV7
                 paid = await ensureLicenseV7(kv, paid, context);
                 const li2 = {

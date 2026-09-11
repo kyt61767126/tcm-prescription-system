@@ -1532,6 +1532,20 @@ public class MainActivity extends BridgeActivity {
 
         @JavascriptInterface
         public void printHtml(final String html) {
+            // ★ 2026-09-11 安全审查 P0 打印门：打印是处方的最终产出出口（JS 层授权门可被
+            //   hook 绕过，IndexedDB 数据写入 Java 拦不住，但打印必经此处）——试用到期族
+            //   fail-closed 拒绝打印，掐断"白嫖产出物"。校验异常放行（红线：不误伤正常用户）。
+            try {
+                if (getLM().isTrialReadOnly()) {
+                    Log.w(TAG, "printHtml 拒绝：试用期已结束（只读模式）");
+                    Toast.makeText(MainActivity.this,
+                            "试用期已结束，当前为只读模式，无法打印处方。请完成激活后继续使用。",
+                            Toast.LENGTH_LONG).show();
+                    return;
+                }
+            } catch (Exception e) {
+                Log.w(TAG, "printHtml 授权检查异常(放行): " + e.getMessage());
+            }
             mainHandler.post(new Runnable() {
                 @Override
                 public void run() {
@@ -2841,6 +2855,17 @@ public class MainActivity extends BridgeActivity {
 
         private JSONObject incrementPrescriptionJson() {
             try {
+                // ★ 2026-09-11 安全审查 P0 计数门：处方计数是 Java 层可控执行点（数据写入在
+                //   JS 侧 IndexedDB 拦不住，但计数走此）——试用到期族拒绝计数（fail-closed，
+                //   与 canPrescribe 外层 catch 同语义；JS 层调用失败仅 warn 不中断保存，打印门兜底）。
+                if (getLM().isTrialReadOnly()) {
+                    Log.w(TAG, "incrementPrescription 拒绝：试用期已结束（只读模式）");
+                    JSONObject r = new JSONObject();
+                    r.put("success", false);
+                    r.put("error", "trial_read_only");
+                    r.put("readOnly", true);
+                    return r;
+                }
                 int count = getLM().incrementPrescription();
                 JSONObject r = new JSONObject();
                 r.put("success", true);

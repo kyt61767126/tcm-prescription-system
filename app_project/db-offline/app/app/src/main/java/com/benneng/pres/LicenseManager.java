@@ -2918,6 +2918,19 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
             reqBody.put("expiresAt", license.optString("expiresAt", ""));
             // ★ P1-1：上报客户端完整性状态（0=正常 1=native不可用 2=不一致 3=失败），仅服务端审计用
             reqBody.put("integrityState", lastIntegrityState);
+            // ★ 2026-09-11 P2 安全画像上报：联网时机顺带上报运行环境特征，服务端聚合判定
+            //   可疑设备并卡死其在线能力（本地零阻塞维持红线）。fridaDetected/integrityState>=2
+            //   为强信号（触发服务端 device_block），rooted/debugger 为弱信号（仅审计，
+            //   正常付费用户可能 root 手机，宁可漏检不可误报）。
+            try {
+                JSONObject sec = new JSONObject();
+                sec.put("rooted", isRooted());
+                sec.put("debugger", isDebuggerAttached());
+                sec.put("fridaDetected", isFridaInjected());
+                reqBody.put("securityProfile", sec);
+            } catch (Exception se) {
+                Log.w(TAG, "安全画像构造失败(不影响验证): " + se.getMessage());
+            }
 
             try (OutputStream os = conn.getOutputStream()) {
                 os.write(reqBody.toString().getBytes(StandardCharsets.UTF_8));
@@ -4522,28 +4535,41 @@ nu.put("updatedAt", System.currentTimeMillis());
         return normalized.optInt("maxPrescriptions", 0);
     }
 
+    // ★ 2026-09-11 安全审查 P0：试用到期只读检查（供 Java 执行点二次校验共用）——
+    //   JS 层授权门（__licenseReadOnly / canPrescribe 桥调用）可被 Frida hook 绕过，
+    //   打印（printHtml）与处方计数（incrementPrescription）是 Java 层可控的执行点，
+    //   在此 fail-closed 掐断"试用白嫖"的最终产出出口。校验异常不扩大拦截面（红线：
+    //   宁可漏检不可误报——异常回落 false 放行，展示层照旧 fail-open 不误伤正常用户）。
+    public boolean isTrialReadOnly() {
+        try {
+            JSONObject lic = validateLicense();
+            if (lic != null && !lic.optBoolean("valid", false)) {
+                String lt = lic.optString("type", "");
+                if ("trial_expired".equals(lt) || "trial_limit_reached".equals(lt)) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (Exception e) {
+            Log.w(TAG, "isTrialReadOnly 检查异常(放行): " + e.getMessage());
+            return false;
+        }
+    }
+
     public JSONObject canPrescribe() {
         try {
             // ★ 2026-09-05 试用到期只读模式：license 无效且属试用到期族（trial_expired/
             //   trial_limit_reached）→ 原生层直接禁开方（只读模式放行查看历史数据，
             //   JS 层 savePrescription 守卫 + 本处双保险）。校验异常不扩大拦截面，
             //   回落原计数逻辑（启动闸 performNativeStartupLicenseCheck 已拦截异常态）。
-            try {
-                JSONObject lic = validateLicense();
-                if (lic != null && !lic.optBoolean("valid", false)) {
-                    String lt = lic.optString("type", "");
-                    if ("trial_expired".equals(lt) || "trial_limit_reached".equals(lt)) {
-                        JSONObject ro = new JSONObject();
-                        ro.put("allowed", false);
-                        ro.put("current", 0);
-                        ro.put("max", -1);
-                        ro.put("remaining", 0);
-                        ro.put("readOnly", true);
-                        return ro;
-                    }
-                }
-            } catch (Exception ve) {
-                Log.w(TAG, "canPrescribe 试用状态检查异常(回落计数逻辑): " + ve.getMessage());
+            if (isTrialReadOnly()) {
+                JSONObject ro = new JSONObject();
+                ro.put("allowed", false);
+                ro.put("current", 0);
+                ro.put("max", -1);
+                ro.put("remaining", 0);
+                ro.put("readOnly", true);
+                return ro;
             }
             int current = getCurrentMonthCount();
             int max = getMaxPrescriptions();

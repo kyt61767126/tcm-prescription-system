@@ -34,6 +34,7 @@
 // ============================================================================
 
 import { getDevices, reportUsage } from './_lib/license-core.js';
+import { blockDevice, getDeviceBlock } from './_lib/license-core.js';
 import { getKV } from '../_lib/kv.js';
 
 const VERIFY_RATE_LIMIT_PER_MIN = 10;
@@ -47,8 +48,10 @@ const INTEGRITY_LABELS = {
 };
 
 // ★ P1-1：完整性异常（state>=2，疑似 hook/篡改）按设备聚合落安全标记，便于人工审查盗版线索。
-//   只审计不阻断（宁可漏检不可误报）：验证结果仍以 license 记录 + 设备绑定为准。
-async function recordIntegrityAnomaly(kv, { machineId, codeHash, user, integrityState, ip, now }) {
+//   ★ 2026-09-11 P2：升级为强信号闭环——state>=2 或 fridaDetected 直接 blockDevice 封锁，
+//   后续激活/轮询/验证出口全部拒绝（在线能力卡死，本地零阻塞维持红线）。
+//   弱信号（root/调试器/模拟器）仅并入此审计标记，不触发封锁（正常付费用户可能 root）。
+async function recordIntegrityAnomaly(kv, { machineId, codeHash, user, integrityState, ip, now, securityProfile }) {
     try {
         const key = `integrity_flag:${machineId || 'unknown'}`;
         const prev = await kv.get(key, 'json') || {};
@@ -58,6 +61,7 @@ async function recordIntegrityAnomaly(kv, { machineId, codeHash, user, integrity
             codeHash: codeHash || '',
             state: integrityState,
             stateLabel: INTEGRITY_LABELS[integrityState] || 'unknown',
+            securityProfile: securityProfile || undefined,
             count: (prev.count || 0) + 1,
             firstSeen: prev.firstSeen || new Date(now).toISOString(),
             lastSeen: new Date(now).toISOString(),
@@ -137,6 +141,14 @@ export async function onRequestPost({ request, env }) {
             ? 'not_reported'
             : (INTEGRITY_LABELS[integrityState] || 'unknown');
 
+        // ★ 2026-09-11 P2：解析安全画像（可选字段，旧客户端不带 → 全部按 false 处理）
+        const sp = (body.securityProfile && typeof body.securityProfile === 'object') ? body.securityProfile : {};
+        const securityProfile = {
+            rooted: sp.rooted === true,
+            debugger: sp.debugger === true,
+            fridaDetected: sp.fridaDetected === true
+        };
+
         // 基本参数校验
         if (!machineId || typeof machineId !== 'string') {
             return new Response(JSON.stringify({
@@ -148,9 +160,47 @@ export async function onRequestPost({ request, env }) {
         const now = Date.now();
         const verifyTime = now;
 
-        // ★ P1-1：完整性异常（疑似 hook/篡改）单独落设备级安全标记（只审计不阻断）
-        if (integrityState !== null && integrityState >= 2) {
-            await recordIntegrityAnomaly(kv, { machineId, codeHash, user, integrityState, ip: clientIP, now });
+        // ★ 2026-09-11 P2：已封锁设备直接拒绝（攻击者换激活码也没用——封锁锚定 machineId，
+        //   90 天未成功在线验证客户端自动降级试用；封锁 TTL 7 天自动解除——防伪造封锁
+        //   DoS 误伤（blockDevice 注释详述），真实攻击设备过期后再 verify 强信号即再封；
+        //   客服可删 device_block:{machineId} 解封）
+        const existingBlock = await getDeviceBlock(kv, machineId);
+        if (existingBlock) {
+            console.warn('[verify] 已封锁设备尝试验证:', machineId, 'reason=', existingBlock.reason);
+            return new Response(JSON.stringify({
+                success: false,
+                error: '设备安全校验未通过，请更换设备或联系客服处理'
+            }), { status: 403, headers: corsHeaders(request) });
+        }
+
+        // ★ P2 强信号封锁：APK 签名双路分叉/失败（state>=2）或 Frida 注入 → blockDevice。
+        //   弱信号（root/调试器）不封锁（正常付费用户可能 root，宁可漏检不可误报）。
+        const strongSignal = (integrityState !== null && integrityState >= 2) || securityProfile.fridaDetected;
+        if (strongSignal) {
+            await blockDevice(kv, machineId, {
+                reason: securityProfile.fridaDetected && (integrityState === null || integrityState < 2)
+                    ? 'frida_injected'
+                    : (securityProfile.fridaDetected ? 'frida_and_signature_divergence' : 'signature_divergence'),
+                user: user || '',
+                codeHash: codeHash || '',
+                ip: clientIP
+            });
+            // 仍落审计标记（count 聚合，便于人工审查时看历史）
+            await recordIntegrityAnomaly(kv, { machineId, codeHash, user, integrityState, ip: clientIP, now, securityProfile });
+            console.warn('[verify] 强安全信号，设备已封锁并拒绝验证:', machineId);
+            return new Response(JSON.stringify({
+                success: false,
+                error: '设备安全校验未通过，请更换设备或联系客服处理'
+            }), { status: 403, headers: corsHeaders(request) });
+        }
+
+        // ★ P2 弱信号审计（root/调试器，仅记录不封锁）：落入 integrity_flag 供人工审查
+        if (securityProfile.rooted || securityProfile.debugger) {
+            await recordIntegrityAnomaly(kv, {
+                machineId, codeHash, user,
+                integrityState: integrityState !== null ? integrityState : 0,
+                ip: clientIP, now, securityProfile
+            });
         }
 
         // ★ P0 修复：真实查询 KV 验证 license 是否存在/有效
