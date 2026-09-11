@@ -14,8 +14,16 @@ const path = require('path');
 const crypto = require('crypto');
 const { app } = require('electron');
 
-// ★ HMAC 密钥（混淆用，配合 asarmor 增加逆向难度）
-const LICENSE_HMAC_KEY = 'bnzc_tcm_license_key_v1_2026';
+// ★ 2026-09-11 阶段2 对称密钥轮换：V1 已随历史 APK/exe 泄露（可伪造本地加密文件/试用签名
+//   /HMAC license）。[0] = V2 当前生效（所有写路径默认使用）；其余 = 兼容回退（读路径遍历，
+//   读到旧密钥派生的文件后重存即自动迁移 V2）。license 验签按档位应用不同日落截断。
+//   轮换此数组需四端（shared 权威源+4 副本+Java）+ KNOWLEDGE 同步。
+const LICENSE_HMAC_KEYS = [
+    'bnzc_tcm_license_v2_94b85c319098763ecd2797ece7995ecf82aada407fce7fe4',  // V2（2026-09-11 轮换）
+    'bnzc_tcm_license_key_v1_2026'                                           // V1 legacy（已泄露，只读兼容）
+];
+// 写路径（加密/签名）默认取最新密钥；读路径遍历全部档位
+const LICENSE_HMAC_KEY = LICENSE_HMAC_KEYS[0];
 const DEFAULT_TRIAL_DAYS = 7;                                 // 默认试用期 7 天（可通过 trial-config.json 修改，测试时设为 0）
 const TIME_TAMPER_THRESHOLD = 24 * 60 * 60 * 1000;           // 时间回拨阈值：1 天
 
@@ -25,7 +33,15 @@ const TIME_TAMPER_THRESHOLD = 24 * 60 * 60 * 1000;           // 时间回拨阈�
 //   服务端自 2026-08 起签发必带 V5/V6/V7，且 ensureLicenseV7 让存量联网一次即自愈升级，
 //   截断日之后"合法却只有 HMAC"的 license 不存在（除伪造）。存量旧 license（issuedAt
 //   早于截断日）照旧 HMAC 放行，180 天宽限不误伤。轮换此值需四端 + KNOWLEDGE 同步。
+//   ★ 阶段2 语义：此值为 V2 档（最新密钥）截断日；V1 档见 LEGACY_HMAC_SUNSET_DATE。
 const HMAC_SUNSET_DATE = '2027-03-31';
+
+// ★ 2026-09-11 阶段2：V1（泄露密钥）档专用日落——V5 非对称签名 2026-07-21 上线后，服务端
+//   再无合法 HMAC-only 签发；2026-08-01（上线+10 天部署缓冲）起仍"仅 V1 HMAC"的 license
+//   唯一来源是用泄露密钥伪造。将 V1 档截断从 2027-03-31 收紧至此日，伪造窗口缩短 8 个月，
+//   存量真文件（issuedAt 必然更早）零误伤。masterKey 分支同样应用此截断（masterKey 明文随
+//   license 下发可被提取，不截断则成为绕过硬编码密钥档位的前门）。
+const LEGACY_HMAC_SUNSET_DATE = '2026-08-01';
 
 // ★ 任务2 新增：ECDSA P-256 验签公钥（PEM SPKI 格式）
 // 用于验证 license 中的 signatureV5 字段（云端 ECDSA 私钥签发）
@@ -485,30 +501,32 @@ function hkdfSha256(ikm, salt, info, keylen) {
 }
 
 // 第三层：用途密钥（域分离，info 带独立前缀防止与激活码签名链路混淆）
-function hkdfPurposeKey(machineId, purpose) {
+// ★ 阶段2：可选 ikm 参数——写路径不传（默认最新密钥 V2）；读路径按档位遍历生成候选，
+//   存量旧密钥派生的文件读取成功后重存即自动迁移 V2
+function hkdfPurposeKey(machineId, purpose, ikm) {
     const hwFp = getHardwareFingerprint();
     const salt = HKDF_SALT_PREFIX + (machineId || '') + '|' + (hwFp || '');
-    return hkdfSha256(LICENSE_HMAC_KEY, salt, HKDF_INFO_PREFIX + purpose, 32);
+    return hkdfSha256(ikm || LICENSE_HMAC_KEY, salt, HKDF_INFO_PREFIX + purpose, 32);
 }
 
 // ★ P1-[2.1] 各用途 HKDF 密钥
-function deriveLicenseKeyHkdf(machineId)     { return hkdfPurposeKey(machineId, 'license'); }
-function deriveLicenseHmacKeyHkdf(machineId) { return hkdfPurposeKey(machineId, 'license-hmac'); }
-function deriveTrialKeyHkdf(machineId)       { return hkdfPurposeKey(machineId, 'trial'); }
-function deriveLastRunKeyHkdf(machineId)     { return hkdfPurposeKey(machineId, 'lastrun'); }
+function deriveLicenseKeyHkdf(machineId, ikm)     { return hkdfPurposeKey(machineId, 'license', ikm); }
+function deriveLicenseHmacKeyHkdf(machineId, ikm) { return hkdfPurposeKey(machineId, 'license-hmac', ikm); }
+function deriveTrialKeyHkdf(machineId, ikm)       { return hkdfPurposeKey(machineId, 'trial', ikm); }
+function deriveLastRunKeyHkdf(machineId, ikm)     { return hkdfPurposeKey(machineId, 'lastrun', ikm); }
 
 // ★ P3-A 新增：派生 AES-256 密钥（含硬件指纹）
-// 新密钥 = SHA256(machineId + hardwareFingerprint + LICENSE_HMAC_KEY)
-function deriveLicenseKey(machineId) {
+// 新密钥 = SHA256(machineId + hardwareFingerprint + IKM)
+function deriveLicenseKey(machineId, ikm) {
     const hwFp = getHardwareFingerprint();
-    const combined = (machineId || '') + (hwFp || '') + LICENSE_HMAC_KEY;
+    const combined = (machineId || '') + (hwFp || '') + (ikm || LICENSE_HMAC_KEY);
     return crypto.createHash('sha256').update(combined).digest();
 }
 
 // ★ P3-A 新增：旧密钥派生（不含硬件指纹，向后兼容旧 license.dat）
-// 旧密钥 = SHA256(machineId + LICENSE_HMAC_KEY)
-function deriveLicenseKeyLegacy(machineId) {
-    const combined = (machineId || '') + LICENSE_HMAC_KEY;
+// 旧密钥 = SHA256(machineId + IKM)
+function deriveLicenseKeyLegacy(machineId, ikm) {
+    const combined = (machineId || '') + (ikm || LICENSE_HMAC_KEY);
     return crypto.createHash('sha256').update(combined).digest();
 }
 
@@ -547,9 +565,9 @@ function encryptLicenseContent(jsonStr, machineId) {
 }
 
 // ★ P3-C 新增：派生 license HMAC 密钥（独立于加密密钥，不同盐）
-function deriveLicenseHmacKey(machineId) {
+function deriveLicenseHmacKey(machineId, ikm) {
     const hwFp = getHardwareFingerprint();
-    const combined = (machineId || '') + (hwFp || '') + LICENSE_HMAC_KEY + ':hmac';
+    const combined = (machineId || '') + (hwFp || '') + (ikm || LICENSE_HMAC_KEY) + ':hmac';
     return crypto.createHash('sha256').update(combined).digest();
 }
 
@@ -564,12 +582,15 @@ function decryptLicenseContent(encryptedStr, machineId) {
         if (parts.length < 2) return null;
         const storedHmac = parts[0];
         const base64Data = parts.slice(1).join(':');
-        // 三级 HMAC 密钥候选：HKDF → 旧SHA256(含hwFp) → 最旧SHA256(无hwFp)
-        const hmacCandidates = [
-            deriveLicenseHmacKeyHkdf(machineId),
-            deriveLicenseHmacKey(machineId),
-            deriveLicenseHmacKeyLegacy(machineId)
-        ];
+        // ★ 阶段2：三级 HMAC 密钥候选 × 密钥档（HKDF → 旧SHA256含hwFp → 最旧SHA256无hwFp，V2 → V1）
+        const hmacCandidates = [];
+        for (const ikm of LICENSE_HMAC_KEYS) {
+            hmacCandidates.push(
+                deriveLicenseHmacKeyHkdf(machineId, ikm),
+                deriveLicenseHmacKey(machineId, ikm),
+                deriveLicenseHmacKeyLegacy(machineId, ikm)
+            );
+        }
         let hmacMatched = false;
         for (const hmacKey of hmacCandidates) {
             try {
@@ -584,12 +605,15 @@ function decryptLicenseContent(encryptedStr, machineId) {
             console.error('[License] HMAC 校验失败（文件可能被替换/篡改）');
             return null;
         }
-        // HMAC 校验通过，解密内容（三级密钥尝试）
-        const decryptCandidates = [
-            deriveLicenseKeyHkdf(machineId),
-            deriveLicenseKey(machineId),
-            deriveLicenseKeyLegacy(machineId)
-        ];
+        // HMAC 校验通过，解密内容（★ 阶段2：三级密钥 × 密钥档候选）
+        const decryptCandidates = [];
+        for (const ikm of LICENSE_HMAC_KEYS) {
+            decryptCandidates.push(
+                deriveLicenseKeyHkdf(machineId, ikm),
+                deriveLicenseKey(machineId, ikm),
+                deriveLicenseKeyLegacy(machineId, ikm)
+            );
+        }
         for (const key of decryptCandidates) {
             const plaintext = tryDecryptAes(base64Data, key);
             if (plaintext) return plaintext;
@@ -599,12 +623,15 @@ function decryptLicenseContent(encryptedStr, machineId) {
     // 旧 ENC1 格式 - 向后兼容
     if (encryptedStr.startsWith('ENC1:')) {
         const base64Data = encryptedStr.substring(5);
-        // 三级密钥尝试：HKDF → 旧SHA256(含hwFp) → 最旧SHA256(无hwFp)
-        const decryptCandidates = [
-            deriveLicenseKeyHkdf(machineId),
-            deriveLicenseKey(machineId),
-            deriveLicenseKeyLegacy(machineId)
-        ];
+        // ★ 阶段2：三级密钥尝试 × 密钥档（HKDF → SHA256含hwFp → SHA256无hwFp，V2 → V1）
+        const decryptCandidates = [];
+        for (const ikm of LICENSE_HMAC_KEYS) {
+            decryptCandidates.push(
+                deriveLicenseKeyHkdf(machineId, ikm),
+                deriveLicenseKey(machineId, ikm),
+                deriveLicenseKeyLegacy(machineId, ikm)
+            );
+        }
         for (const key of decryptCandidates) {
             const plaintext = tryDecryptAes(base64Data, key);
             if (plaintext) return plaintext;
@@ -615,8 +642,8 @@ function decryptLicenseContent(encryptedStr, machineId) {
 }
 
 // ★ P3-C 新增：旧 HMAC 密钥派生（不含硬件指纹，向后兼容）
-function deriveLicenseHmacKeyLegacy(machineId) {
-    const combined = (machineId || '') + LICENSE_HMAC_KEY + ':hmac';
+function deriveLicenseHmacKeyLegacy(machineId, ikm) {
+    const combined = (machineId || '') + (ikm || LICENSE_HMAC_KEY) + ':hmac';
     return crypto.createHash('sha256').update(combined).digest();
 }
 
@@ -632,28 +659,28 @@ const TRIAL_ENC_PREFIX = 'TRIAL1:';
 const LASTRUN_ENC_PREFIX = 'LASTRUN1:';
 
 // ★ P3-A 新增：派生 trial 加密密钥（含硬件指纹）
-function deriveTrialKey(machineId) {
+function deriveTrialKey(machineId, ikm) {
     const hwFp = getHardwareFingerprint();
-    const combined = (machineId || '') + (hwFp || '') + LICENSE_HMAC_KEY + ':trial';
+    const combined = (machineId || '') + (hwFp || '') + (ikm || LICENSE_HMAC_KEY) + ':trial';
     return crypto.createHash('sha256').update(combined).digest();
 }
 
 // ★ P3-A 新增：旧 trial 密钥派生（不含硬件指纹，向后兼容）
-function deriveTrialKeyLegacy(machineId) {
-    const combined = (machineId || '') + LICENSE_HMAC_KEY + ':trial';
+function deriveTrialKeyLegacy(machineId, ikm) {
+    const combined = (machineId || '') + (ikm || LICENSE_HMAC_KEY) + ':trial';
     return crypto.createHash('sha256').update(combined).digest();
 }
 
 // ★ P3-A 新增：派生 last-run 加密密钥（含硬件指纹）
-function deriveLastRunKey(machineId) {
+function deriveLastRunKey(machineId, ikm) {
     const hwFp = getHardwareFingerprint();
-    const combined = (machineId || '') + (hwFp || '') + LICENSE_HMAC_KEY + ':lastrun';
+    const combined = (machineId || '') + (hwFp || '') + (ikm || LICENSE_HMAC_KEY) + ':lastrun';
     return crypto.createHash('sha256').update(combined).digest();
 }
 
 // ★ P3-A 新增：旧 last-run 密钥派生（不含硬件指纹，向后兼容）
-function deriveLastRunKeyLegacy(machineId) {
-    const combined = (machineId || '') + LICENSE_HMAC_KEY + ':lastrun';
+function deriveLastRunKeyLegacy(machineId, ikm) {
+    const combined = (machineId || '') + (ikm || LICENSE_HMAC_KEY) + ':lastrun';
     return crypto.createHash('sha256').update(combined).digest();
 }
 
@@ -670,14 +697,18 @@ function encryptTrialContent(jsonStr, machineId) {
 
 // 解密 trial 字符串（仅处理 TRIAL1: 前缀，失败返回 null）
 // ★ P1-[2.1] 升级：三级回退（HKDF → SHA256含hwFp → SHA256无hwFp）
+// ★ 阶段2：三级回退 × 密钥档（V2 → V1）
 function decryptTrialContent(encryptedStr, machineId) {
     if (!encryptedStr || !encryptedStr.startsWith(TRIAL_ENC_PREFIX)) return null;
     const base64Data = encryptedStr.substring(TRIAL_ENC_PREFIX.length);
-    const decryptCandidates = [
-        deriveTrialKeyHkdf(machineId),
-        deriveTrialKey(machineId),
-        deriveTrialKeyLegacy(machineId)
-    ];
+    const decryptCandidates = [];
+    for (const ikm of LICENSE_HMAC_KEYS) {
+        decryptCandidates.push(
+            deriveTrialKeyHkdf(machineId, ikm),
+            deriveTrialKey(machineId, ikm),
+            deriveTrialKeyLegacy(machineId, ikm)
+        );
+    }
     for (const key of decryptCandidates) {
         const plaintext = tryDecryptAes(base64Data, key);
         if (plaintext) return plaintext;
@@ -698,14 +729,18 @@ function encryptLastRunContent(jsonStr, machineId) {
 
 // 解密 last-run 字符串（仅处理 LASTRUN1: 前缀，失败返回 null）
 // ★ P1-[2.1] 升级：三级回退（HKDF → SHA256含hwFp → SHA256无hwFp）
+// ★ 阶段2：三级回退 × 密钥档（V2 → V1）
 function decryptLastRunContent(encryptedStr, machineId) {
     if (!encryptedStr || !encryptedStr.startsWith(LASTRUN_ENC_PREFIX)) return null;
     const base64Data = encryptedStr.substring(LASTRUN_ENC_PREFIX.length);
-    const decryptCandidates = [
-        deriveLastRunKeyHkdf(machineId),
-        deriveLastRunKey(machineId),
-        deriveLastRunKeyLegacy(machineId)
-    ];
+    const decryptCandidates = [];
+    for (const ikm of LICENSE_HMAC_KEYS) {
+        decryptCandidates.push(
+            deriveLastRunKeyHkdf(machineId, ikm),
+            deriveLastRunKey(machineId, ikm),
+            deriveLastRunKeyLegacy(machineId, ikm)
+        );
+    }
     for (const key of decryptCandidates) {
         const plaintext = tryDecryptAes(base64Data, key);
         if (plaintext) return plaintext;
@@ -719,7 +754,9 @@ function decryptLastRunContent(encryptedStr, machineId) {
 //  v3: 签名包含 clinicName/machineId/licenseBinding，实现三因子绑定
 //  向后兼容：旧版 license（无 maxPrescriptions/features）用 v1 签名逻辑验证
 // ============================================================================
-function generateSignature(data) {
+// ★ 阶段2：可选 hmacKey 参数——验签处按档位传入（V2/V1）；不传则按 license masterKey
+//   派生或最新密钥（写路径/ masterKey 一致性校验语义不变）
+function generateSignature(data, hmacKey) {
     // 签名内容包含所有关键字段，任一字段被篡改都会导致签名不匹配
     const content = [
         data.user,
@@ -729,11 +766,11 @@ function generateSignature(data) {
         String(data.maxPrescriptions !== undefined ? data.maxPrescriptions : 0),
         Array.isArray(data.features) ? data.features.join(',') : ''
     ].join('|');
-    return crypto.createHmac('sha256', getEffectiveHmacKey()).update(content).digest('hex');
+    return crypto.createHmac('sha256', hmacKey || getEffectiveHmacKey()).update(content).digest('hex');
 }
 
 // ★ v3 签名：在 v2 基础上增加 clinicName/machineId/licenseBinding 三个绑定字段
-function generateSignatureV3(data) {
+function generateSignatureV3(data, hmacKey) {
     const content = [
         data.user,
         data.type,
@@ -745,13 +782,13 @@ function generateSignatureV3(data) {
         data.machineId || '',
         data.licenseBinding || ''
     ].join('|');
-    return crypto.createHmac('sha256', getEffectiveHmacKey()).update(content).digest('hex');
+    return crypto.createHmac('sha256', hmacKey || getEffectiveHmacKey()).update(content).digest('hex');
 }
 
 // v1 签名逻辑（向后兼容旧版 license）
-function generateSignatureV1(data) {
+function generateSignatureV1(data, hmacKey) {
     const content = [data.user, data.type, data.issuedAt, data.expiresAt].join('|');
-    return crypto.createHmac('sha256', getEffectiveHmacKey()).update(content).digest('hex');
+    return crypto.createHmac('sha256', hmacKey || getEffectiveHmacKey()).update(content).digest('hex');
 }
 
 // ★ P0-2 加固（2026-08-26）：masterKey 一致性校验（防替换/删除 masterKey 的降级攻击）
@@ -874,6 +911,19 @@ function verifySignature(data) {
     //   - masterKey 派生密钥验签失败 → 直接返回 false（license 已被篡改或 masterKey 不匹配）
     //   - 旧版 license（无 masterKey 字段）仍走硬编码密钥 fallback（向后兼容）
     if (data.masterKey) {
+        // ★ 阶段2：masterKey 分支同样应用 LEGACY 截断——masterKey 明文随 license 下发，
+        //   攻击者可从任意真实 license 提取后构造 HMAC-only+masterKey 伪造文件，绕过
+        //   硬编码密钥档位截断（不堵则档位收紧形同虚设）。V5 上线（2026-07-21）后服务端
+        //   签发必带 V5，更晚的"masterKey 派生 HMAC-only"文件必为伪造；无 issuedAt 不拦。
+        const __mkIssuedMs = Date.parse(data.issuedAt || '');
+        const __mkSunsetMs = Date.parse(LEGACY_HMAC_SUNSET_DATE);
+        if (!isNaN(__mkIssuedMs) && !isNaN(__mkSunsetMs) && __mkIssuedMs >= __mkSunsetMs) {
+            lastVerifyRejectReason = 'hmac_sunset';
+            console.warn('[License] license 仅含 masterKey 派生 HMAC 签名且签发于 ' + LEGACY_HMAC_SUNSET_DATE +
+                ' 之后，已拒绝（对称签名日落）。请联网完成一次在线验证以自动升级授权文件。');
+            setLicenseDataContext(null);
+            return false;
+        }
         // 已在 setLicenseDataContext(data) 中缓存 masterKey，下面 generateSignatureV3/V2 会自动派生
         const expectedV3mk = generateSignatureV3(data);
         try {
@@ -894,32 +944,50 @@ function verifySignature(data) {
         return false;
     }
 
-    // ★ v3 签名优先校验（含 clinicName/machineId/licenseBinding 时使用）— 硬编码密钥 fallback
-    if (data.clinicName !== undefined && data.machineId !== undefined && data.licenseBinding) {
-        const expectedV3 = generateSignatureV3(data);
+    // ★ 2026-09-11 阶段2：硬编码密钥分档验签（V2 全期 / V1 仅 2026-08-01 前）。
+    //   V1（泄露密钥）档应用 LEGACY_HMAC_SUNSET_DATE：V5 上线（2026-07-21）后服务端
+    //   再无合法 HMAC-only 签发，更晚的"仅 V1 HMAC"文件必为伪造；无 issuedAt 不拦。
+    //   服务端 HMAC 字段仍按现状签发（V1），新客户端主线为 V7 非对称验签，此处的
+    //   V2 档为未来服务端密钥切换预留的防御位。
+    const __fallbackIssuedMs = Date.parse(data.issuedAt || '');
+    const __fallbackSunsetMs = Date.parse(LEGACY_HMAC_SUNSET_DATE);
+    for (let ki = 0; ki < LICENSE_HMAC_KEYS.length; ki++) {
+        const ikm = LICENSE_HMAC_KEYS[ki];
+        if (ki > 0 && !isNaN(__fallbackIssuedMs) && !isNaN(__fallbackSunsetMs) &&
+            __fallbackIssuedMs >= __fallbackSunsetMs) {
+            lastVerifyRejectReason = 'hmac_sunset';  // 与 masterKey 分支截断同标记，UI 引导联网自愈
+            break;  // V1 档已日落：issuedAt ≥ 2026-08-01 的旧密钥文件不再尝试
+        }
+        // ★ v3 签名优先校验（含 clinicName/machineId/licenseBinding 时使用）— 硬编码密钥 fallback
+        if (data.clinicName !== undefined && data.machineId !== undefined && data.licenseBinding) {
+            const expectedV3 = generateSignatureV3(data, ikm);
+            try {
+                if (crypto.timingSafeEqual(Buffer.from(data.signature, 'hex'), Buffer.from(expectedV3, 'hex'))) {
+                    return true;
+                }
+            } catch (e) { /* 长度不匹配，继续尝试 v2/v1 */ }
+        }
+        // v2 签名校验
+        const expectedV2 = generateSignature(data, ikm);
         try {
-            if (crypto.timingSafeEqual(Buffer.from(data.signature, 'hex'), Buffer.from(expectedV3, 'hex'))) {
+            if (crypto.timingSafeEqual(Buffer.from(data.signature, 'hex'), Buffer.from(expectedV2, 'hex'))) {
                 return true;
             }
-        } catch (e) { /* 长度不匹配，继续尝试 v2/v1 */ }
-    }
-    // v2 签名校验
-    const expectedV2 = generateSignature(data);
-    try {
-        if (crypto.timingSafeEqual(Buffer.from(data.signature, 'hex'), Buffer.from(expectedV2, 'hex'))) {
-            return true;
+        } catch (e) { /* 长度不匹配，继续尝试 v1 */ }
+        // v1 签名向后兼容（旧版 license 无 maxPrescriptions/features 字段）
+        if (data.maxPrescriptions === undefined && !Array.isArray(data.features)) {
+            const expectedV1 = generateSignatureV1(data, ikm);
+            try {
+                if (crypto.timingSafeEqual(Buffer.from(data.signature, 'hex'), Buffer.from(expectedV1, 'hex'))) {
+                    return true;
+                }
+            } catch (e) {
+                if (data.signature === expectedV1) return true;
+            }
         }
-    } catch (e) { /* 长度不匹配，继续尝试 v1 */ }
-    // v1 签名向后兼容（旧版 license 无 maxPrescriptions/features 字段）
-    if (data.maxPrescriptions === undefined && !Array.isArray(data.features)) {
-        const expectedV1 = generateSignatureV1(data);
-        try {
-            return crypto.timingSafeEqual(Buffer.from(data.signature, 'hex'), Buffer.from(expectedV1, 'hex'));
-        } catch (e) {
-            return data.signature === expectedV1;
-        }
+        if (data.signature === expectedV2) return true;
     }
-    return data.signature === expectedV2;
+    return false;
 }
 
 // ★ 任务2 新增：ECDSA P-256 非对称验签（v5）
