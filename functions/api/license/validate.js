@@ -257,27 +257,45 @@ export async function onRequest(context) {
             }
         }
 
+        // ★ 2026-09-11 换机激活简化（客户端默认只填激活码+手机号）：
+        //   全新码首次激活且码本身无任何身份锚点（clinicName/user 均空，如纯渠道码），
+        //   客户端又未提供诊所名/姓名时，要求补齐身份信息建立授权身份（客户端收
+        //   needActivationInfo 标记后展开诊所名+姓名输入框二次提交）。旧客户端
+        //   必填这两项永不触发，行为零变化。
+        if (record.status === 'unused' && !record.clinicName && !record.user &&
+            !(clinicName && String(clinicName).trim()) && !(user && String(user).trim())) {
+            return json({
+                success: false,
+                error: '首次激活请补充诊所名称与管理员姓名，用于建立授权身份',
+                needActivationInfo: true
+            }, 400);
+        }
+
         if (record.status === 'used' && !existingDevice) {
             // 新设备激活：检查是否还有配额
             if (devices.length >= maxDevices) {
                 // ★ P1 修复：换机解绑二次校验
-                // 仅当新设备的 user 与 license 原始绑定 user 一致时才允许自动解绑
+                // 仅当有身份凭证证明是原激活本人时才允许自动解绑
                 // 防止攻击者获取激活码后在未知机器上激活挤掉合法用户
                 // ★ 2026-08-29：user 全等比对升级为「手机号比对」——原激活本人重装/换机时
                 //   user 字符串形态不同（"张三/138..." vs "138..."）会被误拦要求联系客服；
                 //   手机号一致即视为本人（手机号=登录账号，仅本人知晓）
+                // ★ 2026-09-11 收紧（换机简化配套）：原条件 user 为空时短路放行——攻击者
+                //   持码直发裸请求（不带 user）即可挤掉原设备。现要求三凭证至少其一：
+                //   手机号核验通过 / 诊所名精确匹配 / user 与原绑定全等；否则拒绝解绑
                 const originalUser = record.user || record.username || '';
-                if (user && originalUser && user !== originalUser && !phoneVerified) {
+                const clinicNameMatched = !!(record.clinicName && clinicName === record.clinicName);
+                if (!phoneVerified && !clinicNameMatched && originalUser && (!user || user !== originalUser)) {
                     await appendLicenseLog(kv, code, {
                         action: 'unbind-denied',
                         time: new Date().toISOString(),
                         ip: ip,
-                        operator: user,
-                        detail: `拒绝换机：新设备 user='${user}' 与授权 user='${originalUser}' 不一致`
+                        operator: user || '(empty)',
+                        detail: `拒绝换机：新设备无有效身份凭证（phoneVerified=${phoneVerified}, clinicNameMatched=${clinicNameMatched}, user='${user || ''}' vs '${originalUser}'）`
                     });
                     return json({
                         success: false,
-                        error: '设备数已达上限，且用户名与授权用户不匹配，请联系客服处理换机'
+                        error: '设备数已达上限。请填写与授权绑定一致的手机号（登录账号）即可自动换机；若已更换手机号，请联系客服处理'
                     }, 403);
                 }
                 // ★ 换机模式：自动解绑最旧的设备，允许新设备激活
@@ -307,7 +325,11 @@ export async function onRequest(context) {
         }
 
         // 覆盖 user（如果客户端提供了）
-        const licenseUser = user || record.user || record.username || 'user';
+        // ★ 2026-09-11 换机身份保持：手机号核验通过 = 原激活本人，沿用原绑定身份
+        //   （防 APP 重装/换机时客户端自动填的本地医师名覆盖 record.user 造成身份漂移；
+        //   手机号不匹配或新码首激活时仍以客户端提供的 user 为准）
+        const licenseUser = (phoneVerified && (record.user || record.username)) ||
+                            user || record.user || record.username || 'user';
 
         // ★ 2026-08-26 推广奖励：邀请码处理（可选字段，不影响既有激活流程）
         //  仅【新设备首次付费激活】且携带邀请码时发奖：邀请人 +90 天（封顶4人360天），

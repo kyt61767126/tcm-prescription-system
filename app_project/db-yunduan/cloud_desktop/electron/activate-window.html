@@ -505,18 +505,25 @@ h1 { color: #2c3e50; font-size: 18px; margin-bottom: 3px; }
                 <input type="text" id="activationCode" placeholder="BNZC-XXXX-XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false" style="font-family:'Courier New',monospace;letter-spacing:1px;">
                 <div class="field-hint">💡 激活码格式为 BNZC-XXXX-XXXX-XXXX-XXXX</div>
             </div>
-            <div class="form-group">
-                <label>诊所名称 <span class="req">*</span></label>
-                <input type="text" id="codeClinicName" placeholder="如：惠康中医诊所" autocomplete="off">
-            </div>
-            <div class="form-group">
-                <label>管理员/医师姓名 <span class="req">*</span></label>
-                <input type="text" id="codeAdminName" placeholder="如：王医生" autocomplete="off">
+            <!-- ★ 2026-09-11 换机激活简化：诊所名/姓名默认隐藏——换机/重装用户只需填
+                 激活码+绑定手机号，服务端手机号核验通过后自动恢复原绑定信息；新码首次
+                 激活或手机号无法核验时（needClinicName/needActivationInfo）自动展开补填 -->
+            <div id="codeIdentityFields" style="display:none;">
+                <div class="form-group">
+                    <label>诊所名称 <span class="req">*</span></label>
+                    <input type="text" id="codeClinicName" placeholder="如：惠康中医诊所" autocomplete="off">
+                    <div class="field-hint">💡 请填写与授权绑定一致的诊所名称</div>
+                </div>
+                <div class="form-group">
+                    <label>管理员/医师姓名 <span class="req">*</span></label>
+                    <input type="text" id="codeAdminName" placeholder="如：王医生" autocomplete="off">
+                    <div class="field-hint"></div>
+                </div>
             </div>
             <div class="form-group">
                 <label>联系电话 <span class="req">*</span> <span style="font-size:11px;color:#909399;font-weight:normal;">（将作为登录账号）</span></label>
                 <input type="text" id="codePhone" placeholder="如：13800138000" autocomplete="off" inputmode="numeric" maxlength="11">
-                <div class="field-hint" id="codePhoneHint">💡 11位手机号，激活后用手机号+密码登录</div>
+                <div class="field-hint" id="codePhoneHint">💡 11位手机号；换机激活填原绑定手机号可自动恢复</div>
             </div>
             <div class="form-group">
                 <label>邀请码 <span style="font-size:11px;color:#909399;font-weight:normal;">（选填，好友推荐）</span></label>
@@ -1443,12 +1450,15 @@ document.getElementById('codeToStep2Btn').addEventListener('click', () => {
     const clinicName = document.getElementById('codeClinicName').value.trim();
     const adminName = document.getElementById('codeAdminName').value.trim();
     const phone = document.getElementById('codePhone').value.trim();
+    // ★ 2026-09-11 换机激活简化：诊所名/姓名默认隐藏（换机只填激活码+手机号），
+    //   展开后才必填；隐藏时即使被跨Tab预填了值也照常提交（值非空不拦）
+    const identityNeeded = document.getElementById('codeIdentityFields').style.display !== 'none';
 
     let firstErr = null;
     if (!code) firstErr = { msg: '请输入激活码', id: 'activationCode' };
     else if (!V.CODE_RE.test(code)) firstErr = { msg: '激活码格式错误（BNZC-XXXX-XXXX-XXXX-XXXX）', id: 'activationCode' };
-    else if (!clinicName) firstErr = { msg: '请填写诊所名称', id: 'codeClinicName' };
-    else if (!adminName) firstErr = { msg: '请填写管理员/医师姓名', id: 'codeAdminName' };
+    else if (identityNeeded && !clinicName) firstErr = { msg: '请填写诊所名称', id: 'codeClinicName' };
+    else if (identityNeeded && !adminName) firstErr = { msg: '请填写管理员/医师姓名', id: 'codeAdminName' };
     else if (!phone) firstErr = { msg: '请填写联系电话', id: 'codePhone' };
     else if (!V.PHONE_RE.test(phone)) firstErr = { msg: '请输入正确的11位手机号', id: 'codePhone' };
 
@@ -1552,6 +1562,14 @@ document.getElementById('codeSubmitBtn').addEventListener('click', async () => {
             document.getElementById('tab-admin').classList.add('active');
             document.getElementById('tab-code').classList.remove('active');
             showSuccess(codeState.phone, true);
+        } else if (result.needClinicName || result.needActivationInfo) {
+            // ★ 2026-09-11 换机激活简化：服务端要求补充身份信息（新码首激活建身份 /
+            //   手机号未核验需诊所名匹配）→ 展开诊所名+姓名输入框，回到第1步补填后重新提交
+            const idf = document.getElementById('codeIdentityFields');
+            if (idf) idf.style.display = '';
+            showGlobalError(result.error || '请补充诊所信息完成激活');
+            resetCodeToStep1();
+            setTimeout(() => document.getElementById('codeClinicName').focus(), 250);
         } else {
             showGlobalError(result.error || '激活失败，请检查激活码');
             showCodePanel('codeStep2');

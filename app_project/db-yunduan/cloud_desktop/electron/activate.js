@@ -124,13 +124,31 @@ async function activateOnline(code, machineId, user, clinicName, phone, password
         const data = await Promise.race([fetchPromise(), timeoutPromise]);
 
         if (!data.success) {
-            return { success: false, error: data.error || '激活失败' };
+            // ★ 2026-09-11 换机激活简化：透传服务端渐进式表单标记（激活窗口据此展开
+            //   诊所名/姓名输入框二次提交，换机用户默认只需填激活码+手机号）
+            return {
+                success: false,
+                error: data.error || '激活失败',
+                needClinicName: !!data.needClinicName,
+                needActivationInfo: !!data.needActivationInfo
+            };
+        }
+
+        // ★ 2026-09-11 换机恢复：客户端只填手机号（诊所名/姓名字段默认隐藏）时，
+        //   从服务端返回的 licenseInfo.user（原绑定身份，如"张三/13800138000"）解析
+        //   原医师名回填本地账号显示名，诊所名由 installLicense 以 license 签发值为准
+        let effDoctorName = user || '';
+        if (!effDoctorName && data.licenseInfo && data.licenseInfo.user) {
+            const su = String(data.licenseInfo.user);
+            let parsed = su.includes('/') ? su.split('/')[0].trim() : su.trim();
+            if (/^1[3-9]\d{9}$/.test(parsed)) parsed = '';
+            effDoctorName = parsed;
         }
 
         // ★ 统一安装 License（写license+清trial+同步config+创建管理员账户 = 一行搞定）
         const installResult = licenseManager.installLicense(data.license, {
             machineId,
-            doctorName: user || '',
+            doctorName: effDoctorName,
             clinicName: clinicName || '',
             phone: phone || '',
             password: password || '',

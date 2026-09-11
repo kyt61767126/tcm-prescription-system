@@ -4126,6 +4126,27 @@
                     '<input type="text" id="adminCodeInput" placeholder="BNZC-XXXX-XXXX-XXXX-XXXX" autocomplete="new-password" data-lpignore="true" spellcheck="false" maxlength="24" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;font-family:monospace;letter-spacing:1px;text-transform:uppercase;">' +
                     '<div id="adminCodeHint" style="font-size:11px;color:#909399;margin-top:4px;">💡 激活码格式：BNZC-XXXX-XXXX-XXXX-XXXX（X 为大写字母或数字，不含 I/O/0/1）</div>' +
                 '</div>' +
+                // ★ 2026-09-11 换机激活简化（对齐 offline.js）：Tab2 加手机号——换机/
+                //   重装用户填「激活码+原绑定手机号」即可一键换机（服务端手机号核验
+                //   通过自动解绑最旧设备并恢复原绑定信息）
+                '<div style="margin-bottom:12px;">' +
+                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">绑定手机号 <span style="color:#e53935;">*</span> <span style="font-size:11px;color:#909399;font-weight:normal;">（登录账号）</span></label>' +
+                    '<input type="tel" id="adminCodePhone" placeholder="如：13800138000" autocomplete="off" data-lpignore="true" inputmode="numeric" maxlength="11" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
+                    '<div id="adminCodePhoneHint" style="font-size:11px;color:#909399;margin-top:4px;">💡 换机/重装请填原绑定手机号，可自动恢复授权</div>' +
+                '</div>' +
+                // ★ 2026-09-11 渐进式身份字段（默认隐藏）：needClinicName/
+                //   needActivationInfo 服务端标记触发展开；手机号核验通过的换机场景永不出现
+                '<div id="adminCodeIdentityFields" style="display:none;">' +
+                    '<div style="margin-bottom:12px;">' +
+                        '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">诊所名称 <span style="color:#e53935;">*</span></label>' +
+                        '<input type="text" id="adminCodeClinicName" placeholder="如：惠康中医诊所" autocomplete="off" data-lpignore="true" spellcheck="false" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
+                        '<div style="font-size:11px;color:#909399;margin-top:4px;">💡 请填写与授权绑定一致的诊所名称</div>' +
+                    '</div>' +
+                    '<div style="margin-bottom:12px;">' +
+                        '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">管理员/医师姓名 <span style="color:#e53935;">*</span></label>' +
+                        '<input type="text" id="adminCodeAdminName" placeholder="如：王医生" autocomplete="off" data-lpignore="true" spellcheck="false" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
+                    '</div>' +
+                '</div>' +
                 '<div style="font-size:11px;color:#909399;margin-bottom:14px;background:#f9f9f9;border-radius:6px;padding:8px 10px;display:flex;align-items:center;justify-content:space-between;gap:6px;">' +
                     '<span style="word-break:break-all;">🔑 机器 ID：<b style="color:#555;">' + (machineId || '未获取') + '</b></span>' +
                     '<button id="adminCodeCopyMidBtn" style="flex-shrink:0;font-size:11px;padding:4px 10px;border:1px solid #ddd;border-radius:4px;background:#fff;color:#555;cursor:pointer;">复制</button>' +
@@ -4436,19 +4457,59 @@
             successBox.style.display = 'none';
             try {
                 let res = null;
-                // 离线 APP（有本地激活桥）：走主进程 submit（validate+安装 license+重启）
+                // ★ 2026-09-11 换机激活简化（对齐 offline.js）：Tab2 统一「激活码+手机号」
+                //   极简换机——手机号来源：本页输入框 → Tab1 已填（state/DOM）
+                let phoneVal = '';
+                try {
+                    const cpEl = document.getElementById('adminCodePhone');
+                    if (cpEl && cpEl.value) phoneVal = String(cpEl.value).trim();
+                } catch (e) {}
+                if (!PHONE_RE.test(phoneVal) && state && state.phone) {
+                    phoneVal = String(state.phone).trim();
+                }
+                if (!PHONE_RE.test(phoneVal)) {
+                    try {
+                        const phEl = document.getElementById('adminPhone');
+                        if (phEl && phEl.value) phoneVal = String(phEl.value).trim();
+                    } catch (e) {}
+                }
+                if (!PHONE_RE.test(phoneVal)) {
+                    btn.disabled = false;
+                    btn.textContent = '🚀 立即激活';
+                    loading.style.display = 'none';
+                    hint.textContent = '⚠ 请在上方「绑定手机号」填写 11 位手机号（登录账号）';
+                    hint.style.color = '#e53935';
+                    try {
+                        const cpEl2 = document.getElementById('adminCodePhone');
+                        if (cpEl2) { cpEl2.style.borderColor = '#e53935'; cpEl2.focus(); }
+                    } catch (e) {}
+                    return;
+                }
+                let user = '';
+                try {
+                    user = (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.doctorName) ? CONFIG.doctorName : '';
+                } catch (e) {}
+                const pwdVal = (state && state.password) ? String(state.password).trim() : '';
+                // 渐进式身份字段（服务端 needClinicName/needActivationInfo 标记触发展开后填写）
+                let idClinicName = '', idAdminName = '';
+                try {
+                    const cnEl = document.getElementById('adminCodeClinicName');
+                    if (cnEl && cnEl.value) idClinicName = String(cnEl.value).trim();
+                    const anEl = document.getElementById('adminCodeAdminName');
+                    if (anEl && anEl.value) idAdminName = String(anEl.value).trim();
+                } catch (e) {}
+                const effUser = idAdminName || (state && state.adminName) || user || '';
+                // 云桌面（有本地激活桥，7 参签名）：走主进程 submit（validate+安装 license+重启）
                 if (global.electronAPI && global.electronAPI.activate &&
                     typeof global.electronAPI.activate.submit === 'function') {
-                    let user = '';
-                    try {
-                        user = (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.doctorName) ? CONFIG.doctorName : '';
-                    } catch (e) {}
-                    res = await global.electronAPI.activate.submit(code, user);
+                    res = await global.electronAPI.activate.submit(code, effUser || user,
+                        idClinicName || ((state && state.clinicName) || ''), phoneVal, pwdVal || 'admin', undefined, '');
                     if (res && res.success) {
                         loading.style.display = 'none';
                         successBox.style.display = 'block';
                         document.getElementById('adminCodeSuccessDesc').innerHTML =
-                            '授权已安装到本机<br>点击确定后应用将重启，重启后即可使用';
+                            '授权已安装到本机<br>📱 登录账号：' + phoneVal +
+                            '<br>点击确定后应用将重启，请使用手机号登录';
                         btn.disabled = false;
                         btn.textContent = '🔄 重启应用';
                         btn.onclick = async function() {
@@ -4464,6 +4525,9 @@
                     // 云端 APP（无本地授权桥）：直接调云端 claim 门面验证激活码
                     // ★ P2 服务端收口（KNOWLEDGE 条目三十七）：claim = validate 业务
                     //   + machineId schema-guard 前置守门（垃圾 machineId 门口 400）
+                    // ★ 2026-09-11 换机激活简化：请求体带 user/phone（本页手机号框），
+                    //   服务端手机号核验通过自动解绑换机；needClinicName/
+                    //   needActivationInfo 标记走下方通用失败段渐进式展开
                     const controller = new AbortController();
                     const t = setTimeout(function(){ try { controller.abort(); } catch(e){} }, 12000);
                     try {
@@ -4473,7 +4537,9 @@
                             body: JSON.stringify({
                                 code: code,
                                 machineId: machineId || 'unknown',
-                                clinicName: state.clinicName || '',
+                                user: effUser,
+                                clinicName: idClinicName || ((state && state.clinicName) || ''),
+                                phone: phoneVal,
                                 productClass: 'app'
                             }),
                             signal: controller.signal
@@ -4486,7 +4552,8 @@
                         const li = res.licenseInfo || {};
                         document.getElementById('adminCodeSuccessDesc').innerHTML =
                             '激活码有效，已绑定本设备' + (li.clinicName ? '（' + li.clinicName + '）' : '') + '<br>' +
-                            '云端账号开通请联系平台管理员确认<br>或使用已开通的手机号直接登录';
+                            '📱 登录账号：' + phoneVal + '<br>' +
+                            '使用该手机号 + 密码（默认 admin）登录';
                         btn.disabled = false;
                         btn.textContent = '✅ 完成';
                         return;
@@ -4496,6 +4563,23 @@
                 loading.style.display = 'none';
                 btn.disabled = false;
                 btn.textContent = '🚀 立即激活';
+                // ★ 2026-09-11 渐进式身份字段展开（对齐 offline.js）：
+                //   needClinicName/needActivationInfo → 展开诊所名+姓名输入框，补齐后重提交
+                if (res && (res.needClinicName || res.needActivationInfo)) {
+                    const idf = document.getElementById('adminCodeIdentityFields');
+                    if (idf && idf.style.display === 'none') {
+                        idf.style.display = '';
+                        try {
+                            const cnEl = document.getElementById('adminCodeClinicName');
+                            if (cnEl && !cnEl.value && state && state.clinicName) cnEl.value = state.clinicName;
+                            const anEl = document.getElementById('adminCodeAdminName');
+                            if (anEl && !anEl.value && state && state.adminName) anEl.value = state.adminName;
+                        } catch (e) {}
+                        setTimeout(function() {
+                            try { document.getElementById('adminCodeClinicName').focus(); } catch (e) {}
+                        }, 250);
+                    }
+                }
                 const errMsg = (res && res.error) ? res.error : '激活失败，请稍后重试';
                 hint.textContent = '⚠ ' + formatActivateError(errMsg).replace(/\n+/g, ' ');
                 hint.style.color = '#e53935';
@@ -4505,6 +4589,25 @@
                 btn.textContent = '🚀 立即激活';
                 hint.textContent = '⚠ 网络错误：' + ((e && e.message) ? e.message : '请检查网络连接');
                 hint.style.color = '#e53935';
+            }
+        });
+
+        // ★ 2026-09-11 Tab2 手机号实时校验（数字过滤 + 格式提示，对齐 offline.js）
+        document.getElementById('adminCodePhone').addEventListener('input', function() {
+            const v = this.value.replace(/[^\d]/g, '').slice(0, 11);
+            this.value = v;
+            this.style.borderColor = '#ddd';
+            const ph = document.getElementById('adminCodePhoneHint');
+            if (!ph) return;
+            if (!v) {
+                ph.textContent = '💡 换机/重装请填原绑定手机号，可自动恢复授权';
+                ph.style.color = '#909399';
+            } else if (!PHONE_RE.test(v)) {
+                ph.textContent = '⚠ 请输入正确的11位手机号';
+                ph.style.color = '#e53935';
+            } else {
+                ph.textContent = '✓ 手机号格式正确';
+                ph.style.color = '#26a69a';
             }
         });
 
