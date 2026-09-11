@@ -91,6 +91,22 @@ const GROUPS = [
             'app_project/db-yunduan/cloud_desktop/electron/user-store.js',
             'app_project/db-offline/desktop/electron/user-store.js'
         ]
+    },
+    {
+        // ★ 2026-09-11 药品库存核心（stock-core.js）：与 prescription-core.js 同位分发的
+        //   权威源。sync-all.ps1 BusinessJs 组只覆盖其中 6 副本（不含云端APP assets 与
+        //   鸿蒙 rawfile——symptom-dict 同款盲区），本组全量 8 副本硬校验堵漏。
+        authority: 'shared/stock-core.js',
+        copies: [
+            'public/stock-core.js',
+            'public/electron/stock-core.js',
+            'app_project/db-yunduan/cloud_desktop/stock-core.js',
+            'app_project/db-yunduan/cloud_desktop/electron/stock-core.js',
+            'app_project/db-yunduan/cloud_app/app/src/main/assets/public/stock-core.js',
+            'app_project/db-offline/desktop/stock-core.js',
+            'app_project/db-offline/app/app/src/main/assets/public/stock-core.js',
+            'app_project_harmony/huikang-cloud/entry/src/main/resources/rawfile/stock-core.js'
+        ]
     }
 ];
 

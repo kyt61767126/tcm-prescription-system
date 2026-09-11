@@ -46,6 +46,9 @@ $SharedDir = Join-Path $ProjectRoot 'shared'
 #   the short title (打印处方/药材清单). Now managed by Group 1b/1c below:
 #     cloud  -> shared/print-utils.js        (unchanged, short title)
 #     offline-> shared/print-utils-offline.js(full product title)
+# ★ 2026-09-11: stock-core.js 纳入本组（药品库存管理核心）。注意：本组目标不含
+#   云端APP assets 与鸿蒙 rawfile 两处副本（手工维护），由 copy-consistency.cjs
+#   的 stock-core 专用组全量校验（8 副本），漂移在 pre-push 第⑦道门拦截。
 $BusinessJsFiles = @(
     'db-adapter.js',
     'debug-logger.js',
@@ -55,6 +58,7 @@ $BusinessJsFiles = @(
     'performance-utils.js',
     'permission.js',
     'prescription-core.js',
+    'stock-core.js',
     'security-guard.js'
 )
 
