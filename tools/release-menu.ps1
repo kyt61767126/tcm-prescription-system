@@ -61,7 +61,7 @@ function Test-BuildSkip([string]$unit) {
     if ($env:NO_BUILD_SKIP -eq '1') { return $false }
     $skipTool = Join-Path $PSScriptRoot 'build-skip.ps1'
     if (-not (Test-Path $skipTool)) { return $false }
-    & powershell -NoProfile -ExecutionPolicy Bypass -File $skipTool -Check -Unit $unit 2>&1 | ForEach-Object { Write-HostLine $_ -Indent '  ' }
+    & $env:ComSpec /c "powershell -NoProfile -ExecutionPolicy Bypass -File $skipTool -Check -Unit $unit 2>&1" | ForEach-Object { Write-HostLine $_ -Indent '  ' }
     return ($LASTEXITCODE -eq 0)
 }
 function Record-BuiltUnits {
@@ -71,7 +71,7 @@ function Record-BuiltUnits {
     Write-Host ""
     Write-Host "--- 打包增量基线记录 ---" -ForegroundColor Cyan
     foreach ($u in $script:BuiltUnits) {
-        & powershell -NoProfile -ExecutionPolicy Bypass -File $skipTool -Record -Unit $u 2>&1 | ForEach-Object { Write-HostLine $_ -Indent '  ' }
+        & $env:ComSpec /c "powershell -NoProfile -ExecutionPolicy Bypass -File $skipTool -Record -Unit $u 2>&1" | ForEach-Object { Write-HostLine $_ -Indent '  ' }
     }
     $script:BuiltUnits = @()
 }
@@ -705,7 +705,7 @@ while ($true) {
             #   （FullFlow走 Invoke-SinglePack 或 Invoke-Pack-AutoMode 3）
             $packPs1 = "$script:RootDir\tools\one-click-pack.ps1"
             if (Test-Path $packPs1) {
-                & powershell -NoProfile -ExecutionPolicy Bypass -File $packPs1 -CollectSideEffectsOnly -AutoCommit 2>&1 | ForEach-Object { Write-HostLine $_ }
+                & $env:ComSpec /c "powershell -NoProfile -ExecutionPolicy Bypass -File $packPs1 -CollectSideEffectsOnly -AutoCommit 2>&1" | ForEach-Object { Write-HostLine $_ }
             }
             # ★ 2026-08-24 打包增量基线记录（必须在副作用 AutoCommit 之后，HEAD 才稳定；
             #   Version=all 走子进程 one-click-pack -AutoMode 3 已在内部记录，本处 BuiltUnits 为空自动跳过）

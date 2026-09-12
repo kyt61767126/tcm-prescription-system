@@ -44,7 +44,8 @@ if (-not (Test-Path $bomTool)) {
     exit 1
 }
 Write-Host "[entry-selfheal] BOM check: all .ps1 files"
-& powershell -NoProfile -ExecutionPolicy Bypass -File $bomTool 2>&1 | ForEach-Object {
+# ★ 2026-09-12 红字根治：2>&1 写进 cmd /c 命令串（PS 层 2>&1 的 ErrorRecord 真控制台仍红染）
+& $env:ComSpec /c "powershell -NoProfile -ExecutionPolicy Bypass -File $bomTool 2>&1" | ForEach-Object {
     # 降噪渲染：stderr 行（ErrorRecord）转黄全显（防吞真实错误）；stdout 行仅显示 [FIX]/Summary
     if ($_ -is [System.Management.Automation.ErrorRecord]) {
         Write-HostLine $_

@@ -8,6 +8,11 @@
 #   1) Write-HostLine：管道逐行渲染。ErrorRecord（stderr 行）转黄色降噪（内容保留可事后
 #      取证），普通行保持白色。用法：
 #        & cmd / powershell / node ... 2>&1 | ForEach-Object { Write-HostLine $_ -Indent '  ' }
+#      ★ 2026-09-12 实测补铁律：PS 层 2>&1 产生的 ErrorRecord 在真控制台（双击 .bat 弹出的
+#        窗口）仍会被 PS 5.1 host 红染——Write-HostLine 消费也拦不住（09-12 用户把 gradle
+#        WARNING 误读为打包失败）。根治只有一条：stderr 在 cmd 层合并，即把 "2>&1" 写进
+#        cmd /c 的命令串里（下述两种模式都是），PS 永远只见到纯文本行（白字）。
+#        禁止新增「& xxx 2>&1 | ForEach-Object { Write-HostLine … }」形态的 PS 层管道。
 #
 #   2) Invoke-QuietProcess：经 cmd /c "<命令> ... 2>&1" 运行子命令——stderr 在 cmd 层合并进
 #      stdout（白色渲染，PS host 不再染红）；返回真实退出码。两种模式：

@@ -99,7 +99,7 @@ function Test-BuildSkip([string]$unit) {
     if ($env:NO_BUILD_SKIP -eq '1') { return $false }
     $skipTool = Join-Path $PSScriptRoot 'build-skip.ps1'
     if (-not (Test-Path $skipTool)) { return $false }
-    & powershell -NoProfile -ExecutionPolicy Bypass -File $skipTool -Check -Unit $unit 2>&1 | ForEach-Object { Write-HostLine $_ -Indent '  ' }
+    & $env:ComSpec /c "powershell -NoProfile -ExecutionPolicy Bypass -File $skipTool -Check -Unit $unit 2>&1" | ForEach-Object { Write-HostLine $_ -Indent '  ' }
     return ($LASTEXITCODE -eq 0)
 }
 # 记录本次已打包单元的基线（供下次 Check 跳过）。必须在"打包成功+副作用AutoCommit后"调用（HEAD 才稳定）
@@ -121,7 +121,7 @@ function Record-BuiltUnits {
     Write-Host ""
     Write-Host "--- 打包增量基线记录 ---" -ForegroundColor Cyan
     foreach ($u in $script:BuiltUnits) {
-        & powershell -NoProfile -ExecutionPolicy Bypass -File $skipTool -Record -Unit $u 2>&1 | ForEach-Object { Write-HostLine $_ -Indent '  ' }
+        & $env:ComSpec /c "powershell -NoProfile -ExecutionPolicy Bypass -File $skipTool -Record -Unit $u 2>&1" | ForEach-Object { Write-HostLine $_ -Indent '  ' }
     }
     $script:BuiltUnits = @()
 }
@@ -159,7 +159,11 @@ function Invoke-BatFile {
     }
     Push-Location $WorkDir
     try {
-        & cmd /c "$BatPath $Arguments" 2>&1 | ForEach-Object { Write-HostLine $_ }
+        # ★ 2026-09-12 红字根治：stderr 必须在 cmd 层合并（"… 2>&1" 写进 cmd /c 命令串）。
+        #   PS 层 2>&1 的 ErrorRecord 在真控制台仍被 PS 5.1 host 红染（gradle WARNING/
+        #   混淆进度被误读为打包失败，09-12 用户实测误报），Write-HostLine 消费也拦不住；
+        #   cmd 层合并后 PS 只见纯文本行（白字），与 Invoke-QuietProcess -Capture 同款。
+        & $env:ComSpec /c "$BatPath $Arguments 2>&1" | ForEach-Object { Write-HostLine $_ }
         return $LASTEXITCODE
     } finally {
         Pop-Location
