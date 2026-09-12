@@ -567,6 +567,13 @@
 * **验证**：Java 全量编译 exit 0；probe-param-matrix 19/19；copy-consistency 50/50；smoke-runtime 26/26；check-interface 6 OK；auth-core 11 副本 + shared 全组同步绿灯。
 * **生效方式**：离线APP 需重打 **APK**（Java 桥+assets 双改）；离线桌面需重打 **exe**（auth-core+license-manager 副本）；云桌面需重打 **exe**（license-manager 副本，到期消息格式化）；云端网页/云端APP 无需重打（cloud.js 未改，云端 license 由服务端裁决）；服务端本轮无改动（09-11 已修，push 即生效）。
 
+### ★ 2026-09-12 双源有效期到期恢复闭环（纯运维路径，实测验证）
+
+* **场景**：离线客户续费只延了诊所表（clinic=update 收费动作），license 时间源未动 → APP 弹「授权已过期」进不去，但后台显示有效期正常（用户困惑点）。
+* **恢复三步（零代码）**：①后台「激活码 → 批量延期」，`newExpiresAt` 填诊所表同到期日；②APP（≥V278，含 A+B+C 修复）重新输入激活码——validate 重激活走 `buildLicenseData`：`record.expiresAt`（续费值）晚于「首次激活+days」锚定值时**取较晚者**，新 license 与诊所表对齐；③完全退出重启 APP 验证。
+* **实测**：激活1中医诊所（测试码 days=1 于 09-11 过期，重激活被防续命正确拦截）09-12 按此路径恢复成功，license 至 2027-09-12。
+* **待根治**：clinic=update 收费动作对 offline_* 诊所按 clinicName 反查关联激活码（复用座席反查）自动同步延期——「一处续费、两端同步」。
+
 ### 历史经验归档索引（2026-09-12 二轮梳理）
 
 * 下载提速 v1→v4 全程（含原 §10 尾部 v1/v2 两条）、发布链路假成功×2、CI 红灯复盘、E2E TDZ 竞态、铁闸冒烟连环雷、开放前安全审查、后台 edition 误判、APK 版本号 SSOT 原始过程 → **`.trae/archive/2026-08-31-09-03-misc-experiences.md`**（现行规则已收口至 §2/§5/§9/§10/§18 对应条目）
