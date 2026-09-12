@@ -661,9 +661,24 @@
         inp.type = 'file';
         inp.accept = '.csv,.xlsx,.xls';
         inp.style.display = 'none';
-        inp.addEventListener('change', function () {
+        // ★ 2026-09-12 P0 修复「Excel 组件未就绪」误报：入库导入此前从不预载 XLSX 库，
+        //   rowsFromArrayBuffer 见 typeof XLSX==='undefined' 即抛 EXCEL_LIB_MISSING——
+        //   本会话首次用 Excel 导入必然报错（药品导入/模板下载均有预载，唯此路径漏了）。
+        //   修复：选中 .xlsx/.xls 后先 loadXlsxLib（根路径/vendor 双候选链），
+        //   真加载失败（离线端未放置库文件）才提示转 CSV。
+        inp.addEventListener('change', async function () {
             var f = inp.files && inp.files[0];
             if (!f) return;
+            var fn = String(f.name || '').toLowerCase();
+            if (fn.slice(-5) === '.xlsx' || fn.slice(-4) === '.xls') {
+                if (typeof XLSX === 'undefined') {
+                    try { await loadXlsxLib(); }
+                    catch (e1) {
+                        alert('Excel 组件加载失败：请将文件另存为 CSV 后再导入');
+                        return;
+                    }
+                }
+            }
             var fr = new FileReader();
             fr.onerror = function () { alert('文件读取失败，请重试'); };
             fr.onload = function (ev) {
