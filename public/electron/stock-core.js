@@ -8,7 +8,9 @@
 //       （{v,at,items:{药名:已扣量}}），重存时只扣增量/退回减量，回收站恢复
 //       天然 no-op（标记随记录同步），彻底删除时冲回（有标记才冲，防幻影退回）
 //    ③ 库存预警：药品 m.stockThreshold（0=不预警），低于阈值红字 + 药品管理
-//       tab 红点；拾药下拉显示 [库存:N]（灰=充足 红=不足本次所需）
+//       tab 红点；拾药下拉显示 [库存:N]（灰=充足 红=不足本次所需）；
+//       「🔔 预警设置」弹窗集中批量设阈值（2026-09-12：统一阈值/仅未设置项/
+//       一键清空/搜索过滤/行内实时状态，替代逐药编辑弹窗的旧入口）
 //    ④ 出入库流水：入库登记 / 处方消耗 / 处方调整 / 删除冲回 / 盘点调整
 //       （药品编辑弹窗改库存数自动记"盘点调整"），localStorage 上限 3000 条
 //    ⑤ 开关：基础设置注入「启用库存管理」复选框，默认关闭——老用户升级后
@@ -369,6 +371,7 @@
             };
             var inBtn = mk('stockInBtn', '📥 入库', '#2e7d32', function () { openStockInDialog(); });
             var ledBtn = mk('stockLedgerBtn', '📒 库存流水', '#1565c0', function () { openLedgerDialog(); });
+            var thrBtn = mk('stockThrBtn', '🔔 预警设置', '#6a1b9a', function () { openThresholdDialog(); });
             // 分组分隔（C期）：药品库操作与库存动账入口视觉分组，避免用户选错入口
             var divider = document.createElement('span');
             divider.id = 'stockGroupDivider';
@@ -384,10 +387,12 @@
                 row.insertBefore(divider, clearBtn);
                 row.insertBefore(inBtn, clearBtn);
                 row.insertBefore(ledBtn, clearBtn);
+                row.insertBefore(thrBtn, clearBtn);
             } else {
                 row.appendChild(divider);
                 row.appendChild(inBtn);
                 row.appendChild(ledBtn);
+                row.appendChild(thrBtn);
             }
             // 未启用提示条（启用后隐藏）
             var list = document.getElementById('medicineList');
@@ -405,10 +410,12 @@
         var on = isEnabled();
         var inBtn = document.getElementById('stockInBtn');
         var ledBtn = document.getElementById('stockLedgerBtn');
+        var thrBtn = document.getElementById('stockThrBtn');
         var hint = document.getElementById('stockHintBar');
         var dv = document.getElementById('stockGroupDivider');
         if (inBtn) inBtn.style.display = on ? '' : 'none';
         if (ledBtn) ledBtn.style.display = on ? '' : 'none';
+        if (thrBtn) thrBtn.style.display = on ? '' : 'none';
         if (hint) hint.style.display = on ? 'none' : '';
         if (dv) dv.style.display = on ? 'inline-flex' : 'none';
     }
@@ -438,12 +445,12 @@
         var el = document.getElementById(id);
         if (el) el.parentNode.removeChild(el);
     }
-    function openInjectedModal(id, title, bodyHtml, footerHtml) {
+    function openInjectedModal(id, title, bodyHtml, footerHtml, maxWidth) {
         closeInjectedModal(id);
         var wrap = document.createElement('div');
         wrap.className = 'modal'; wrap.id = id;
         wrap.style.display = 'flex';
-        wrap.innerHTML = '<div class="modal-content" style="max-width:460px;width:92%;max-height:88vh;display:flex;flex-direction:column;">' +
+        wrap.innerHTML = '<div class="modal-content" style="max-width:' + (maxWidth || '460px') + ';width:92%;max-height:88vh;display:flex;flex-direction:column;">' +
             '<div class="modal-header"><h3>' + esc(title) + '</h3><span class="close-btn" onclick="StockCore.closeInjectedModal(\'' + id + '\')">&times;</span></div>' +
             '<div class="modal-body" style="overflow:auto;flex:1;">' + bodyHtml + '</div>' +
             '<div class="modal-footer">' + (footerHtml || '<button class="action-btn" onclick="StockCore.closeInjectedModal(\'' + id + '\')">关闭</button>') + '</div></div>';
@@ -486,6 +493,165 @@
             toast('已入库：' + name + ' ' + (qty > 0 ? '+' : '') + qty);
             var m = getMedLive(name);
             if (m && isLowStock(m)) toast('⚠ 注意：' + name + ' 仍低于预警阈值');
+        }
+    }
+
+    // ------------------------------------------------------------------
+    //  ⑥ 预警阈值集中设置（2026-09-12）：药品管理「预警设置」弹窗——表格化
+    //     一览全部药品库存/阈值，支持搜索过滤、统一阈值（全部/仅未设置）、
+    //     一键清空、逐行修改 + 行内实时状态，保存批量落库。
+    //     背景：原入口藏在每个药品的编辑弹窗里，逐个点开设置不可操作。
+    // ------------------------------------------------------------------
+    function thrStateOf(m, thr) {
+        var stock = parseFloat(m && m.stock) || 0;
+        if (!(thr > 0)) return { text: '未设阈值', color: '#909399' };
+        if (stock <= thr) return { text: '⚠ 低于阈值', color: '#e53935', bold: true };
+        return { text: '正常', color: '#2e7d32' };
+    }
+    function openThresholdDialog() {
+        if (!isEnabled()) { toast('请先在「基础设置」中启用库存管理'); return; }
+        var meds = getMedList();
+        if (!meds.length) { toast('药品库为空，请先添加药品'); return; }
+        var rows = meds.map(function (m) {
+            var thr = getThreshold(m) || 0;
+            var st = thrStateOf(m, thr);
+            return '<tr data-name="' + esc(m.name) + '" data-stock="' + (parseFloat(m.stock) || 0) + '">' +
+                '<td style="padding:3px 4px;">' + esc(m.name) + '</td>' +
+                '<td style="padding:3px 4px;white-space:nowrap;color:' + (thr > 0 && (parseFloat(m.stock) || 0) <= thr ? '#e53935' : '#666') + ';">' + esc(m.stock || 0) + esc(m.unit || 'g') + '</td>' +
+                '<td style="padding:3px 4px;"><input type="number" min="0" step="any" class="thr-input" data-name="' + esc(m.name) + '" value="' + thr + '" style="width:72px;padding:4px 6px;border:1px solid #888;border-radius:4px;text-align:center;"></td>' +
+                '<td class="thr-state" style="padding:3px 4px;font-size:11px;white-space:nowrap;color:' + st.color + ';' + (st.bold ? 'font-weight:bold;' : '') + '">' + st.text + '</td>' +
+                '</tr>';
+        }).join('');
+        var body =
+            '<div id="thrStatsBar" style="font-size:11px;color:#666;margin-bottom:8px;"></div>' +
+            '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px;">' +
+            '<input type="text" id="thrSearch" placeholder="🔍 搜索药名" style="flex:1;min-width:120px;padding:5px 8px;border:1px solid #888;border-radius:4px;">' +
+            '</div>' +
+            '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px;padding:6px 8px;background:#f5f5f5;border-radius:4px;">' +
+            '<span style="font-size:12px;">统一阈值：</span>' +
+            '<input type="number" min="0" step="any" id="thrBatchVal" placeholder="如 50" style="width:72px;padding:4px 6px;border:1px solid #888;border-radius:4px;text-align:center;">' +
+            '<button class="action-btn" style="padding:3px 8px;font-size:11px;background:#6a1b9a;" onclick="StockCore.applyThresholdBatch(\'all\')">应用到全部</button>' +
+            '<button class="action-btn" style="padding:3px 8px;font-size:11px;background:#8e24aa;" onclick="StockCore.applyThresholdBatch(\'empty\')">仅未设置项</button>' +
+            '<button class="action-btn" style="padding:3px 8px;font-size:11px;background:#b71c1c;" onclick="StockCore.applyThresholdBatch(\'clear\')">全部清空</button>' +
+            '</div>' +
+            '<table style="width:100%;border-collapse:collapse;font-size:12px;">' +
+            '<thead><tr style="border-bottom:2px solid #ddd;text-align:left;">' +
+            '<th style="padding:4px;">药品</th><th style="padding:4px;">当前库存</th>' +
+            '<th style="padding:4px;">预警阈值</th><th style="padding:4px;">状态</th></tr></thead>' +
+            '<tbody id="thrRows">' + rows + '</tbody></table>' +
+            '<div style="font-size:11px;color:#909399;margin-top:8px;">💡 阈值=0 表示不预警；库存 ≤ 阈值时药品列表红字、药品管理红点、保存处方时提醒</div>';
+        var footer =
+            '<button class="action-btn" onclick="StockCore.closeInjectedModal(\'stockThrModal\')">取消</button>' +
+            '<button class="action-btn primary" onclick="StockCore.confirmThresholdSave()">保存设置</button>';
+        openInjectedModal('stockThrModal', '🔔 库存预警阈值设置', body, footer, '640px');
+        // 搜索过滤（药名实时匹配，不区分大小写）
+        var searchEl = document.getElementById('thrSearch');
+        if (searchEl) {
+            searchEl.addEventListener('input', function () {
+                var kw = (searchEl.value || '').trim().toLowerCase();
+                var trs = document.querySelectorAll('#thrRows tr');
+                for (var i = 0; i < trs.length; i++) {
+                    var nm = (trs[i].getAttribute('data-name') || '').toLowerCase();
+                    trs[i].style.display = (!kw || nm.indexOf(kw) >= 0) ? '' : 'none';
+                }
+            });
+        }
+        // 逐行输入：状态列实时变色
+        var tbody = document.getElementById('thrRows');
+        if (tbody) {
+            tbody.addEventListener('input', function (ev) {
+                var inp = ev.target;
+                if (!inp || !inp.classList || !inp.classList.contains('thr-input')) return;
+                refreshThresholdRow(inp);
+                updateThresholdStats();
+            });
+        }
+        updateThresholdStats();
+    }
+    // 单行状态刷新（input → 所在 tr 的状态列）
+    function refreshThresholdRow(inp) {
+        try {
+            var tr = inp.closest('tr');
+            if (!tr) return;
+            var thr = parseFloat(inp.value); if (isNaN(thr) || thr < 0) thr = 0;
+            var stock = parseFloat(tr.getAttribute('data-stock')) || 0;
+            var st = thrStateOf({ stock: stock }, thr);
+            var cell = tr.querySelector('.thr-state');
+            if (cell) {
+                cell.textContent = st.text;
+                cell.style.color = st.color;
+                cell.style.fontWeight = st.bold ? 'bold' : 'normal';
+            }
+        } catch (e) {}
+    }
+    // 顶部统计（按当前输入框值实时汇总）
+    function updateThresholdStats() {
+        try {
+            var bar = document.getElementById('thrStatsBar');
+            var inputs = document.querySelectorAll('#thrRows .thr-input');
+            if (!bar || !inputs.length) return;
+            var set = 0, low = 0;
+            for (var i = 0; i < inputs.length; i++) {
+                var thr = parseFloat(inputs[i].value); if (isNaN(thr) || thr < 0) thr = 0;
+                var tr = inputs[i].closest('tr');
+                var stock = parseFloat(tr && tr.getAttribute('data-stock')) || 0;
+                if (thr > 0) set++;
+                if (thr > 0 && stock <= thr) low++;
+            }
+            bar.innerHTML = '共 <b>' + inputs.length + '</b> 个药品　·　已设阈值 <b style="color:#6a1b9a;">' + set + '</b> 个　·　低于预警 <b style="color:#e53935;">' + low + '</b> 个';
+        } catch (e) {}
+    }
+    // 批量应用（all=全部 / empty=仅未设置项 / clear=清空为 0）
+    function applyThresholdBatch(mode) {
+        var val = 0;
+        if (mode !== 'clear') {
+            var el = document.getElementById('thrBatchVal');
+            val = el ? (parseFloat(el.value) || 0) : 0;
+            if (isNaN(val) || val < 0) { toast('请填写有效的统一阈值'); return; }
+            if (val <= 0) { toast('统一阈值需大于 0（清空请用「全部清空」）'); return; }
+        }
+        var inputs = document.querySelectorAll('#thrRows .thr-input');
+        var n = 0;
+        for (var i = 0; i < inputs.length; i++) {
+            var cur = parseFloat(inputs[i].value); if (isNaN(cur) || cur < 0) cur = 0;
+            if (mode === 'all' || (mode === 'empty' && cur <= 0) || mode === 'clear') {
+                if (String(inputs[i].value) !== String(val)) {
+                    inputs[i].value = val;
+                    refreshThresholdRow(inputs[i]);
+                    n++;
+                }
+            }
+        }
+        updateThresholdStats();
+        if (n > 0) toast(mode === 'clear' ? '已清空 ' + n + ' 个药品的阈值（保存后生效）' : '已对 ' + n + ' 个药品应用统一阈值 ' + val + '（保存后生效）');
+    }
+    // 保存：批量写 medicines[].stockThreshold 落库 + 刷新药品列表红字与红点
+    function confirmThresholdSave() {
+        try {
+            var inputs = document.querySelectorAll('#thrRows .thr-input');
+            if (!inputs.length) { closeInjectedModal('stockThrModal'); return; }
+            var list = getMedList();
+            var byName = {};
+            for (var j = 0; j < list.length; j++) { if (list[j] && list[j].name) byName[list[j].name] = list[j]; }
+            var changed = 0, low = 0;
+            for (var i = 0; i < inputs.length; i++) {
+                var m = byName[inputs[i].getAttribute('data-name')];
+                if (!m) continue;
+                var thr = parseFloat(inputs[i].value); if (isNaN(thr) || thr < 0) thr = 0;
+                thr = round2(thr);
+                if ((getThreshold(m) || 0) !== thr) { m.stockThreshold = thr; changed++; }
+                if (thr > 0 && (parseFloat(m.stock) || 0) <= thr) low++;
+            }
+            if (changed > 0) {
+                persistList(list);
+                try { if (typeof global.renderMedicineList === 'function') global.renderMedicineList(); } catch (e0) {}
+                updateStockBadges();
+            }
+            closeInjectedModal('stockThrModal');
+            toast('预警阈值已保存：更新 ' + changed + ' 项' + (low > 0 ? '，当前 ' + low + ' 个药品低于预警' : '，库存均在阈值之上'));
+        } catch (e) {
+            console.warn('[StockCore] 预警阈值保存失败:', e);
+            toast('保存失败：' + (e && e.message ? e.message : '未知错误'));
         }
     }
 
@@ -1042,6 +1208,9 @@
         closeInjectedModal: closeInjectedModal,
         openStockInDialog: openStockInDialog,
         confirmStockIn: confirmStockIn,
+        openThresholdDialog: openThresholdDialog,
+        applyThresholdBatch: applyThresholdBatch,
+        confirmThresholdSave: confirmThresholdSave,
         openLedgerDialog: openLedgerDialog,
         renderLedgerTable: renderLedgerTable,
         exportLedgerCsv: exportLedgerCsv,
