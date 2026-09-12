@@ -517,6 +517,8 @@
 * **回退补齐**：KV 命中用户时自动写 D1，存量数据逐步迁移，无需一次性批量导入。
 * **生效方式**：服务端 Functions push 即部署，**五端零重打包**。
 
+* ★ 2026-09-12 **P0 铁律：D1 TEXT 列读回必须恢复客户端期望的 JS 类型**（处方历史「删除/加载按钮静默失效」根因）：`schema.sql` prescriptions.id 为 TEXT（upsert 绑 `String(p.id)` 入库），`d1RowToPrescription` 原样透传 `{...row}` → 客户端拿到字符串 id；而客户端全链路（`deleteHistory`/`loadHistory`/`deleteCase` 的 `find(p => p.id === id)`、按钮 onclick `Number(p.id)||0` 传参）按 KV 时代数字 id 做 `===` 严格匹配 → 字符串≠数字 → find 落空 → 静默 return，点击无任何反应。**修复：转换函数内 `纯数字串 → Number()`（`/^\d+$/.test(row.id)`），与 KV 回退路径类型对齐**。铁律：①新增 D1 表时行转换函数必须显式声明每个 id/数值列的目标类型，禁止裸 `{...row}`；②客户端 id 比较一律 `String(a) === String(b)` 归一化（新代码）；③症状特征——「按钮点了没反应且无 console 报错」优先查严格相等类型失配。生效：服务端 push 即部署（Cloudflare Pages），五端零重打包，本地 IndexedDB 缓存随下次云端拉取自动清空重写自愈。
+
 ### 激活审核 days 必须写入 record（诊所 expiresAt 回退 365 天根因）
 
 * **根因**：`admin-approve.js` 审核通过调用 `provisionCloudAccount` 前，只写了 `record.expiresAt`，**漏写 `record.days = days`**。`admin-account.js` 新建诊所时 `(Number(record.days) || 365)` → record.days=undefined→NaN→回退 365 天。

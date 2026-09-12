@@ -282,6 +282,11 @@ async function d1LoadPrescriptions(db, clinicId, includeDeleted = false) {
 // D1 行 → 处方对象（恢复 items/media_files/extra 的 JSON 解析）
 function d1RowToPrescription(row) {
     const p = { ...row };
+    // ★ 2026-09-12 P0 修复「删除/加载按钮失效」：D1 id 列为 TEXT（upsert 时 String(p.id) 入库），
+    // 原样透传会使客户端拿到字符串 id，而客户端全链路（deleteHistory/loadHistory/deleteCase 等）
+    // 均按 KV 时代数字 id 做 === 严格匹配 → 字符串≠数字 → find 落空 → 按钮静默无反应。
+    // 纯数字串（Date.now() 时间戳）恢复为 Number，与 KV 回退路径类型一致。
+    p.id = (typeof row.id === 'string' && /^\d+$/.test(row.id)) ? Number(row.id) : row.id;
     // D1 列名转 camelCase（与 KV 存储的字段名保持一致）
     p.patientName = row.patient_name;
     p.doctorName = row.doctor_name;
