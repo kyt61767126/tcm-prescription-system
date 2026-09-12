@@ -5620,6 +5620,50 @@ let currentUser = null;
             showToast('历史处方已刷新');
         }
 
+        // ★ 2026-09-12 多设备处方同步：回到前台自动静默拉取云端最新列表。
+        //   场景：同账号多设备，A 设备删除/新增处方后，B 设备切回应用（或窗口重新聚焦）
+        //   即自动同步——getAllUserPrescriptions 云端响应即权威（已删处方不再返回），
+        //   并清空重写本地 IndexedDB 缓存，B 设备列表与云端保持一致。
+        //   约束：≥60 秒节流（避免频繁切换窗口打爆 API）；列表无变化不重渲染
+        //   （不打断正在浏览的分页/搜索）；静默无 toast；失败仅 console.warn。
+        let __lastForegroundSyncAt = Date.now(); // 启动时 loadData 已拉取过一次
+        let __foregroundSyncBusy = false;
+        async function silentSyncFromCloud() {
+            if (__foregroundSyncBusy) return;
+            if (!currentUser || !window.CLOUD_API_BASE) return;
+            if (Date.now() - __lastForegroundSyncAt < 60000) return;
+            __lastForegroundSyncAt = Date.now();
+            __foregroundSyncBusy = true;
+            try {
+                const fresh = await getAllUserPrescriptions(
+                    UserAdmin.prescriptionFilterUser(currentUser)
+                );
+                if (!Array.isArray(fresh)) return;
+                const idSig = function (list) {
+                    return list.map(function (p) { return String(p.id); }).sort().join(',');
+                };
+                if (idSig(fresh) === idSig(prescriptionHistory)) return; // 无变化不打断浏览
+                prescriptionHistory = fresh;
+                const searchVal = ((document.getElementById('patientName') || {}).value || '').trim();
+                if (searchVal) {
+                    searchPatientsByName(searchVal);
+                } else {
+                    renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
+                }
+                const yr = String(new Date().getFullYear()).slice(-2);
+                document.getElementById('clinicNo').value = yr + String(prescriptionHistory.length).padStart(6, '0');
+                if (typeof refreshAnalytics === 'function') refreshAnalytics();
+            } catch (e) {
+                console.warn('[silentSyncFromCloud] 前台同步失败:', e);
+            } finally {
+                __foregroundSyncBusy = false;
+            }
+        }
+        document.addEventListener('visibilitychange', function () {
+            if (document.visibilityState === 'visible') silentSyncFromCloud();
+        });
+        window.addEventListener('focus', silentSyncFromCloud);
+
         // 权限过滤：管理员看所有，普通用户只看自己的处方
         function filterPrescriptionsByPermission(prescriptions) {
             if (!currentUser) return prescriptions;
