@@ -1159,7 +1159,15 @@ async function checkForUpdateAndNotify(win) {
         // ★ 2026-09-09 提取 exe 安装包直链（latest.json.url，与官网下载按钮同源）：
         //   横幅「立即下载」直跳直链自动开始下载，跳过官网整页加载+人工找按钮。
         //   校验不过=回退官网下载页（现状行为，向后兼容）。
-        const exeUrl = isValidExeDownloadUrl(latest.url) ? latest.url : null;
+        // ★ 2026-09-12 直链改走官网 /api/dl Cloudflare 代理：GitHub 直链大陆间歇性
+        //   卡断（实测点击后仅 ~1MB 停滞→下载失败，09-12 用户报「无法打开/自动关闭」；
+        //   官网 download.html safeDownload 早已走同款代理，注释实测直连 0.14MB/s 常中断）。
+        //   代理仅放行本仓库 Release 资产（functions/api/dl.js ASSET_RE），流式透传不改内容。
+        const exeUrl = isValidExeDownloadUrl(latest.url)
+            ? (/^https:\/\/github\.com\//i.test(latest.url)
+                ? 'https://tcm-prescription-system.pages.dev/api/dl?f=' + encodeURIComponent(latest.url)
+                : latest.url)
+            : null;
         injectUpdateBanner(win, remoteVer, exeUrl);
     } catch (e) {
         // 离线/超时/DNS 失败：静默跳过（宁可漏检不可误报，不打扰离线使用）
