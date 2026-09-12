@@ -1175,7 +1175,9 @@ let currentUser = null;
                 return new Promise((resolve, reject) => {
                     const transaction = database.transaction(['prescriptions'], 'readwrite');
                     const store = transaction.objectStore('prescriptions');
-                    const request = store.delete(id);
+                    // 2026-09-12 P0: IndexedDB key is type-sensitive; delete both number and string keys
+                    store.delete(Number(id));
+                    const request = store.delete(String(id));
                     request.onsuccess = () => resolve();
                     request.onerror = () => reject(request.error);
                     // ★修复事务挂起：abort 时必须 reject
@@ -5404,7 +5406,7 @@ let currentUser = null;
                     }));
                     const updatedRecord = { ...savedRecord, mediaFiles };
                     await savePrescriptionToDB(updatedRecord);
-                    const idx = prescriptionHistory.findIndex(p => p.id === savedRecord.id);
+                    const idx = prescriptionHistory.findIndex(p => String(p.id) === String(savedRecord.id));
                     if (idx >= 0) {
                         prescriptionHistory[idx] = updatedRecord;
                     }
@@ -5795,7 +5797,7 @@ let currentUser = null;
                 alert('请先登录后再操作');
                 return;
             }
-            const record = prescriptionHistory.find(p => p.id === id);
+            const record = prescriptionHistory.find(p => String(p.id) === String(id));
             if (!record) return;
 
             // P0-5 安全修复：添加确认弹窗，防止误删导致数据永久丢失
@@ -5827,11 +5829,11 @@ let currentUser = null;
 
             // 同时保存到 localStorage 回收站（供UI读取）
             try {
-                const record = prescriptionHistory.find(p => p.id === id);
+                const record = prescriptionHistory.find(p => String(p.id) === String(id));
                 if (record) {
                     const rbKey = 'recycleBin_' + (currentUser ? currentUser.username : 'default');
                     const bin = JSON.parse(localStorage.getItem(rbKey) || '[]');
-                    if (!bin.some(r => r.id === id)) {
+                    if (!bin.some(r => String(r.id) === String(id))) {
                         record._deletedAt = new Date().toISOString();
                         record._deletedBy = currentUser ? currentUser.username : 'unknown';
                         bin.unshift(record);
@@ -5845,7 +5847,7 @@ let currentUser = null;
             await deletePrescriptionFromDB(id);
 
             // 更新内存数组
-            prescriptionHistory = prescriptionHistory.filter(p => p.id !== id);
+            prescriptionHistory = prescriptionHistory.filter(p => String(p.id) !== String(id));
             // ★ 优化3：审计日志 - 处方删除
             try { if (window.AuditLog) AuditLog.record('delete_prescription', (record.patientName || '') + ' [' + (record.prescriptionNo || '') + ']'); } catch(e) {}
             // ★ v2: 处方计数-1（试用版限制）
@@ -5913,11 +5915,11 @@ let currentUser = null;
 
         function restoreFromRecycleBin(id) {
             const bin = getRecycleBin();
-            const record = bin.find(r => r.id === id);
+            const record = bin.find(r => String(r.id) === String(id));
             if (!record) { showToast('❌ 未找到该处方'); return; }
             delete record._deletedAt;
             delete record._deletedBy;
-            const exists = prescriptionHistory.some(p => p.id === id);
+            const exists = prescriptionHistory.some(p => String(p.id) === String(id));
             if (!exists) {
                 prescriptionHistory.unshift(record);
             }
@@ -5927,7 +5929,7 @@ let currentUser = null;
                 const newDeletedIds = deletedIds.filter(did => did !== id);
                 localStorage.setItem(delKey, JSON.stringify(newDeletedIds));
             } catch(e) { console.warn('移除删除标记失败:', e); }
-            const newBin = bin.filter(r => r.id !== id);
+            const newBin = bin.filter(r => String(r.id) !== String(id));
             saveRecycleBin(newBin);
             if (typeof savePrescriptionHistory === 'function') { savePrescriptionHistory(); }
             else if (typeof savePrescriptionToDB === 'function') { savePrescriptionToDB(record).catch(e => console.warn('恢复保存失败:', e)); }
@@ -5960,7 +5962,7 @@ let currentUser = null;
                 try {
                     const rbKey = 'recycleBin_' + (currentUser ? currentUser.username : 'default');
                     const bin = JSON.parse(localStorage.getItem(rbKey) || '[]');
-                    if (!bin.some(r => r.id === d.id)) {
+                    if (!bin.some(r => String(r.id) === String(d.id))) {
                         bin.unshift(trashRecord);
                         if (bin.length > 50) bin.splice(50);
                         localStorage.setItem(rbKey, JSON.stringify(bin));
@@ -5969,7 +5971,7 @@ let currentUser = null;
                 await deletePrescriptionFromDB(d.id);
                 addDeletedRxId(d.id);
                 try { deletePrescriptionFromCloud(d.id); } catch (e) { console.warn('[同日覆盖] 云端软删除同步失败:', e); }
-                prescriptionHistory = prescriptionHistory.filter(p => p.id !== d.id);
+                prescriptionHistory = prescriptionHistory.filter(p => String(p.id) !== String(d.id));
                 try { if (window.AuditLog) AuditLog.record('archive_duplicate_rx', (d.patientName || '') + ' [' + (d.prescriptionNo || '') + '] 同日覆盖自动归档'); } catch(e) {}
             } catch (e) {
                 console.warn('[同日覆盖] 重复处方归档失败:', e);
@@ -5979,7 +5981,7 @@ let currentUser = null;
         function deleteFromRecycleBin(id) {
             if (!confirm('彻底删除后无法恢复，确定吗？')) return;
             const bin = getRecycleBin();
-            const newBin = bin.filter(r => r.id !== id);
+            const newBin = bin.filter(r => String(r.id) !== String(id));
             saveRecycleBin(newBin);
             showToast('已彻底删除');
             showRecycleBin();
@@ -6028,7 +6030,7 @@ let currentUser = null;
         function _updatePresBaseline() { try { window._presBaseline = _presSnapshot(); } catch (_) {} }
 
         async function loadHistory(id) {
-            const record = prescriptionHistory.find(p =>p.id === id);
+            const record = prescriptionHistory.find(p => String(p.id) === String(id));
             if (!record) return;
             // ★ 优化1：检查当前是否有未保存的内容，避免被历史处方覆盖
             const _curName = document.getElementById('patientName').value.trim();
@@ -6387,7 +6389,7 @@ let currentUser = null;
             // 更新内存数组（会话内查询源，按权限保持一致）
             // ★ 2026-09-01 覆盖当天处方：同 id 原位替换，不新增；否则头部插入
             if (todayExisting) {
-                const _existIdx = prescriptionHistory.findIndex(p => p.id === record.id);
+                const _existIdx = prescriptionHistory.findIndex(p => String(p.id) === String(record.id));
                 if (_existIdx >= 0) prescriptionHistory[_existIdx] = record;
                 else prescriptionHistory.unshift(record);
             } else {
@@ -8014,14 +8016,14 @@ let currentUser = null;
 
         async function deleteCase(id) {
             if (!confirm('确定删除该病历？')) return;
-            const record = prescriptionHistory.find(p => p.id === id);
+            const record = prescriptionHistory.find(p => String(p.id) === String(id));
             if (!record) return;
 
             // P7: 单条从 prescriptions store 删除
             await deletePrescriptionFromDB(id);
 
             // 更新内存数组
-            prescriptionHistory = prescriptionHistory.filter(p => p.id !== id);
+            prescriptionHistory = prescriptionHistory.filter(p => String(p.id) !== String(id));
             // ★ 优化3：审计日志 - 病历删除
             try { if (window.AuditLog) AuditLog.record('delete_case', (record.patientName || '') + ' [' + (record.prescriptionNo || '') + ']'); } catch(e) {}
             // ★ v2: 处方计数-1（试用版限制）
