@@ -818,6 +818,8 @@
 
 **★ 2026-09-12 桌面应用内更新器（云+离线双桌面 main.js 同构落地）**：横幅「立即下载」旧链路 `window.open` → 系统浏览器单流（0.5MB/s 无进度、下完手动找文件）→ 新链路**主进程 4 连接并行分片下载**（v4 robustDownload 的 Node 版：net.fetch + Range 分片 + 每分片独立看门狗 25s + 指数退避重试 ≤6 + 数据到达即 `fsSync.writeSync(fd, buf, 0, len, offset)` 落盘）→ 横幅实时进度/速度（400ms 节流 executeJavaScript）→ 完成大小对账 → `shell.openPath` 自动开 NSIS 安装向导。**桥接技巧：横幅点击 `window.open(UPDATE_SCHEME)`（`kyt-desktop-update://start`），由登录窗口已有 `setWindowOpenHandler` 拦截该 scheme 启动下载——零 IPC/preload 改动**（scheme 不匹配注册协议直达 handler，deny 不开新窗）。失败回退官网下载页（safeDownload v4 兜底）+ 横幅「重试下载」。注意：**改动只对新版本生效**（存量旧版横幅仍是旧链路，已发布无法追补）。
 
+**★ 2026-09-12 官网下载中心 APP 卡「更新说明」缺失根治**：根因=双缺陷叠加——①下载页 APP 卡（cloud-app/local）被 `isAppCard` 跳过 `updateCard` 的 notes 渲染，hash-manifest 回调又只写版本/日期/时间/大小、从不写更新说明；②hash-manifest.json 各节点本就无 `releaseNotes` 字段，发布脚本也未写入 → APP 卡更新说明永远停在 `-`，而桌面卡从 latest.json.releaseNotes 正常显示。修复=[publish-release.js](tools/publish-release.js) 生成一次 `releaseNotes` 同时写入 hash-manifest 各节点与 latest.json（来源统一，避免重复 git log）；下载页 APP 卡从 hash-manifest apk 节点 `renderNotesWithToggle` 渲染更新说明（与版本/日期同源，消除 latest.json 异步竞态）。**教训：public/download.html 2026-09-10 已写过读取逻辑但 site-official 未同步（双源漂移）+ 缺数据源两因叠加导致长期未生效**——官网 download.html 双源（public/site-official）的下载卡渲染逻辑与 hash-manifest 元数据必须同步修改。生效方式=云端网页部署后刷新即显；云桌面/云APP/离线桌面/离线APP 无需重打包。
+
 ## 19. 后续路线图（2026-08-31 定，试用观察期三步走）
 
 * **第一步（当前）**：进入 1-2 周正常看诊观察期，不刻意测试——真实使用是最好的验收。

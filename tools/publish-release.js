@@ -841,6 +841,9 @@ function main() {
     }
 
     const now = new Date().toISOString();
+    // ★ 2026-09-12 修复：APP 卡更新说明缺失。生成一次本次发布的变更日志，
+    //   同时写入 hash-manifest.json 各节点与 latest.json（桌面卡来源归一，APP 卡也能显示）
+    const releaseNotes = generateReleaseNotes();
     const latestUpdates = {};
 
     for (const { file: f, downloadUrl } of uploadedAssets) {
@@ -863,7 +866,8 @@ function main() {
                 updateTime: now,
                 fileName: f.name,
                 releaseFileName: f.uploadName,
-                releaseTag: versionTag
+                releaseTag: versionTag,
+                releaseNotes: releaseNotes
             };
             console.log('  [OK] ' + f.appKey + '.apk → ' + (existing.url || ('/downloads/' + f.name)) + ' (backup: ' + releaseUrl + ')');
         } else {
@@ -876,7 +880,8 @@ function main() {
                 updateTime: now,
                 fileName: f.name,
                 releaseFileName: f.uploadName,
-                releaseTag: versionTag
+                releaseTag: versionTag,
+                releaseNotes: releaseNotes
             };
             console.log('  [OK] ' + f.appKey + '.' + f.type + ' → ' + releaseUrl);
 
@@ -910,8 +915,6 @@ function main() {
     // 更新 latest.json（桌面版自动更新用）
     const latestUpdateKeys = Object.keys(latestUpdates);
     if (latestUpdateKeys.length > 0) {
-        // ★ P2优化：自动生成变更日志
-        const autoNotes = generateReleaseNotes();
         for (const key of latestUpdateKeys) {
             const info = latestUpdates[key];
             if (!fs.existsSync(info.config.latestJsonPath)) continue;
@@ -939,9 +942,9 @@ function main() {
                 // 写错会误报"校验失败"并删除下载文件（宁可漏检不可误报）。
                 // 哈希展示请用 hash-manifest.json（下载页 SHA-256 栏）。
             }
-            // ★ P2优化：自动生成变更日志
-            if (autoNotes) {
-                latest.releaseNotes = autoNotes;
+            // ★ P2优化：自动生成变更日志（复用上方已生成的 releaseNotes，避免重复执行 git log）
+            if (releaseNotes) {
+                latest.releaseNotes = releaseNotes;
             }
             // 确保灰度发布字段存在（默认100%）
             if (latest.rolloutPercentage === undefined) {

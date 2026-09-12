@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -3991,6 +3991,15 @@
                                 const pad = n => String(n).padStart(2, '0');
                                 dateEl.textContent = d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
                             } catch(e) { /* 保留默认 */ }
+                        }
+                        // ★ 2026-09-12 修复：APP 卡「更新说明」缺失。此前 isAppCard 跳过
+                        //   updateCard 的 notes 渲染、hash-manifest 又只补版本/日期，导致 APP 卡
+                        //   更新说明永远停在 "-"。这里从 hash-manifest apk 节点的 releaseNotes 填充
+                        //   （发布脚本已将该字段写入），与版本/日期同源，避免 latest.json 桌面版
+                        //   说明异步竞态覆盖。
+                        const notesEl = document.getElementById('notes-' + key);
+                        if (notesEl && data.releaseNotes !== undefined) {
+                            renderNotesWithToggle(notesEl, data.releaseNotes);
                         }
                     }
                     // 显示更新时间（精确到小时）
