@@ -778,6 +778,14 @@
 
 * ★ 2026-09-05 卸载器报「安装损毁: 无效的操作代码」根因根治（1.0.176~1.0.185 全中，Commit 4996430f 删除宏 + 1.0.186 重打包验证）：db-offline/desktop/installer.nsh 的 customUnInit 宏（51cbe32d 引入的"卸载时弹框清理 userData"）内 Goto +8 / Goto +6 **相对跳转越出宏边界**（宏仅 9 条指令，目标为第 12 条），跳过 FunctionEnd 落入下一个函数 un.atomicRMDir 体中段（Exch/Push/Pop 栈帧错位），隐式 Return 弹出垃圾值当返回地址 → NSIS VM 报 Invalid opcode（**点「否」保留数据或 userData 目录不存在时触发**；点「是」删除走 IDYES 正常路径不崩——所以间歇出现、难复现）。修复=整体删除该宏（清登录框遗留用户名的正确姿势=关闭软件后删除/改名 %APPDATA%\tcm-prescription，无需卸载器挂钩；且此清理目标可由应用层启动时实现）。铁律：①**自定义 NSIS 宏内跳转必须用宏内标签**（标签编译期消除，与 customInit 的 tryE/done 同模式），**禁止相对跳转 +N**——宏展开处后续指令随 electron-builder 模板版本变化，越界跳进别的函数体且编译期无法发现，运行时直接"安装损毁"；②NSIS 宏名**不区分大小写**（customUninit=customUnInit，makensis 3.0.4.1 实测），勿靠大小写区分功能，写宏名应与模板引用完全一致；③E2E 只测应用运行时不测卸载器——"卸载体验类"改动现有门禁全部覆盖不到，发布前必须人工实测一次完整卸载（重点测非默认路径：点「否」/目录不存在）；④存量用户机器上旧版卸载崩溃自救 SOP=重跑新版 Setup 覆盖安装（重写卸载器+注册表）后再卸载，或直接手动删除安装目录；⑤「安装损毁: 无效的操作代码」与中途红黄字不同，属于**真故障**（不在 145 行无害清单内），用户报此错=卸载器指令流已损坏，必须查自定义宏。
 
+## 16.3 药品库存管理（2026-09-11 P1+P2 上线；09-12 预警集中设置）
+
+**架构（shared/stock-core.js，IIFE 注入式，8 副本同构）**：处方扣减引擎（用量×剂数，`__stockApplied` 幂等标记差值冲正）+ 出入库流水（stock\_ledger\_v1 cap 3000）+ 库存预警（`medicines[].stockThreshold`，0=不预警）+ 基础设置开关（local\_stockMgmtEnabled，默认关）。活数组直改 + localStorage 镜像 + electron saveMedicinesToDisk 三层同源；`getMedArrayLive` 按标识符直读（CSP 禁 unsafe-eval，禁 new Function/eval）。
+
+**★ 2026-09-12 预警阈值集中设置（commit 74aaa8af）**：原入口藏在每药编辑弹窗（逐个点开不可操作）→ 药品管理库存分组新增紫钮「🔔 预警设置」（`openThresholdDialog`，640px 宽表）：①全部药品表格化一览（药名/当前库存/阈值输入/状态列）+ 搜索过滤；②批量：统一阈值「应用到全部/仅未设置项/全部清空」（`applyThresholdBatch` all/empty/clear）；③行内输入实时变色 + 顶部统计（已设阈值 N 个·低于预警 M 个，按输入框值实时汇总）；④保存 `confirmThresholdSave` 批量写 stockThreshold → persistList → renderMedicineList（列表红字）+ updateStockBadges（tab 红点）→ toast 汇总。`openInjectedModal` 加第 5 参 maxWidth（默认 460px 不变，向后兼容）。药品多时表格区滚动（modal-body overflow:auto）。**生效**：云端网页部署刷新即得；云桌面线上刷新即得（重打包后离线副本永久生效）；云端APP/离线APP/离线桌面需重打包。
+
+**同步**：stock-core.js 走 sync-all.ps1 Business JS 组（6 副本）+ 手工 2 副本（cloud\_app assets、harmony rawfile）= copy-consistency.cjs 专用组全量校验 8 副本，漂移在 pre-push 第⑦道门拦截。
+
 ## 17. 下载转化统计（2026-09-09 已实现，commit 40e54baf）
 
 **架构（四层漏斗）**：官网下载量（GitHub Release 资产 download\_count，服务端 KV 缓存 1h 防 API 限流）→ 安装启动设备（四端匿名心跳）→ 提交激活申请（admin\_req\_index 状态计数）→ 已激活设备（admin\_req activated ∪ license devices 的 machineId 并集）+ 三级转化率。
