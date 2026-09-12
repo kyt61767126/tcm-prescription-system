@@ -10,7 +10,8 @@ import {
 import { provisionCloudAccount } from './license/_lib/admin-account.js';
 import { deleteAdminRequest } from './license/_lib/license-write-service.js';
 // ★ 2026-09-08 离线版设备配额反查：license 索引遍历找该诊所激活码，读其多设备绑定列表
-import { listLicenses, getDevices, updateLicense } from './license/_lib/license-core.js';
+// ★ 2026-09-12 续费同步延期：clinic=update 收费动作按 clinicName 反查同源（一处续费、两端同步）
+import { listLicenses, getDevices, updateLicense, appendLicenseLog } from './license/_lib/license-core.js';
 // ★ 2026-09-10 审计日志单一事实源（并发安全，独立记录 key）
 import { writeAuditLog } from './_lib/audit-log.js';
 // ★ 2026-09-10 P3 D1 迁移：设备绑定 D1 双写
@@ -2462,6 +2463,54 @@ export async function onRequest(context) {
                 }
             }
 
+            // ★ 2026-09-12 P0 根治「一处续费、两端同步」：离线版诊所（edition=offline_*）
+            //   续费/转正/直填写入 expiresAt 时，按 clinicName 反查关联激活码（复用座席
+            //   反查同源模式），同步把 license:{code}.expiresAt 延到诊所同一到期日；
+            //   过期码自动复活为 used（与 extend.js 同规则，disabled 管理员主动禁用不动）。
+            //   客户端恢复零操作：admin-status 轮询/自愈经 ensureLicenseRenewed 重签新
+            //   license 下发（联网即生效）；手动重输激活码（validate.js）路径同样可用。
+            //   反查用旧名：license.clinicName 是激活时绑定的名字，改名不追溯。
+            //   同步失败不阻断诊所更新（无命中/异常 → warning 提示走人工路径兜底）。
+            let __licenseSync = null;
+            const __newClinicExp = clinics[clinicIdx].expiresAt;
+            const __expChanged = __newClinicExp !== oldClinic.expiresAt;
+            if (__expChanged && /^offline_/.test(String(clinics[clinicIdx].edition || ''))) {
+                try {
+                    const licenses = await listLicenses(kv).catch(() => []);
+                    const matches = (licenses || []).filter(l =>
+                        l && l.clinicName === oldClinic.name
+                        && l.status !== 'disabled' && l.status !== 'unused');
+                    const syncedCodes = [];
+                    const newExpMs = new Date(__newClinicExp).getTime();
+                    const syncIp = context.request.headers.get('CF-Connecting-IP') ||
+                                   context.request.headers.get('X-Forwarded-For') || 'unknown';
+                    for (const lic of matches) {
+                        const updates = { expiresAt: __newClinicExp };
+                        if (!isNaN(newExpMs) && newExpMs > Date.now() && lic.status === 'expired') {
+                            updates.status = 'used';
+                        }
+                        await updateLicense(kv, lic.code, updates);
+                        try {
+                            await appendLicenseLog(kv, lic.code, {
+                                action: 'extend',
+                                time: new Date().toISOString(),
+                                ip: syncIp,
+                                operator: currentUser.username,
+                                detail: `auto-sync from clinic renewal: oldExpiresAt=${lic.expiresAt || 'null'}, newExpiresAt=${__newClinicExp}` +
+                                        (updates.status ? ', status: expired→used (auto-recovered)' : '')
+                            });
+                        } catch (e) { /* 审计日志失败不影响同步 */ }
+                        syncedCodes.push(lic.code);
+                    }
+                    if (syncedCodes.length > 0) {
+                        changes.push(`license 同步延期: ${syncedCodes.join(', ')} → ${String(__newClinicExp).slice(0, 10)}（离线版一处续费两端同步）`);
+                        __licenseSync = { synced: syncedCodes.length, codes: syncedCodes, expiresAt: String(__newClinicExp).slice(0, 10) };
+                    }
+                } catch (e) {
+                    console.warn('[clinic=update] 离线授权同步延期失败（不阻断诊所更新）:', e.message);
+                }
+            }
+
             // 审计日志
             if (changes.length > 0) {
                 await writeAuditLog(kv, clinicId, currentUser.username, ROLE_PLATFORM_ADMIN, 'update_clinic', `clinic=${oldClinic.name}`, context, {
@@ -2470,23 +2519,22 @@ export async function onRequest(context) {
                 });
             }
 
-            // ★ 2026-09-11 P0 双源有效期警示：离线版诊所（edition=offline_*）的离线端
-            //   可用性由签名固化的 license 决定，clinic=update 只改诊所表（云端账户/
-            //   官网登录依据）——两端数据源独立，改诊所有效期不会延长离线端 license
-            //   （现场实锤：激活1中医诊所 9-10 直填诊所到期日 9-11，license 仍 9-11
-            //   06:21 过期 → "离线APP 说过期、官网显示剩余1天"状态分裂）。
-            //   离线版续期必须走「客户重新提交申请 → 激活审核重签 license」流程。
+            // ★ 2026-09-11 P0 双源有效期警示（2026-09-12 升级为同步兜底提示）：
+            //   离线版续费已自动同步 license（上方同步块，响应带 licenseSync）；
+            //   仅当同步未命中（诊所无关联激活码，如纯云端误标 offline）或同步异常时，
+            //   提示管理员走人工路径兜底。
             let __offlineExpiryWarning = null;
-            if (/^offline_/.test(String(clinics[clinicIdx].edition || '')) &&
-                changes.some(ch => ch.startsWith('expiresAt:'))) {
+            if (__expChanged && /^offline_/.test(String(clinics[clinicIdx].edition || '')) && !__licenseSync) {
                 __offlineExpiryWarning =
                     '⚠️ 该诊所为离线版：诊所到期日已更新（仅影响云端账户/官网登录），' +
-                    '离线端 APP/桌面的授权 license 不会自动延期——离线版续期需客户重新提交激活申请并审核（重签 license）。';
+                    '但未找到关联激活码自动同步——如客户离线端仍提示授权过期，' +
+                    '请到「激活码」页面对客户激活码手动批量延期。';
             }
 
             return json({
                 success: true,
                 clinic: clinics[clinicIdx],
+                ...(__licenseSync ? { licenseSync: __licenseSync } : {}),
                 ...(__offlineExpiryWarning ? { warning: __offlineExpiryWarning } : {})
             });
         }

@@ -572,7 +572,11 @@
 * **场景**：离线客户续费只延了诊所表（clinic=update 收费动作），license 时间源未动 → APP 弹「授权已过期」进不去，但后台显示有效期正常（用户困惑点）。
 * **恢复三步（零代码）**：①后台「激活码 → 批量延期」，`newExpiresAt` 填诊所表同到期日；②APP（≥V278，含 A+B+C 修复）重新输入激活码——validate 重激活走 `buildLicenseData`：`record.expiresAt`（续费值）晚于「首次激活+days」锚定值时**取较晚者**，新 license 与诊所表对齐；③完全退出重启 APP 验证。
 * **实测**：激活1中医诊所（测试码 days=1 于 09-11 过期，重激活被防续命正确拦截）09-12 按此路径恢复成功，license 至 2027-09-12。
-* **待根治**：clinic=update 收费动作对 offline_* 诊所按 clinicName 反查关联激活码（复用座席反查）自动同步延期——「一处续费、两端同步」。
+* **已根治（同日）**：「一处续费、两端同步」已实现——clinic=update 收费动作对 offline_* 诊所按 clinicName 反查关联激活码（复用座席反查）自动同步延期，无需再走本节手工三步：
+  - **users.js**：expiresAt 三路径（转正自动 365 天 / renewDays 顺延 / 直填）任一变更 + `edition=offline_*` → `listLicenses` 按 `oldClinic.name` 反查（**反查用旧名**：license.clinicName 是激活时绑定的名字，改名不追溯），匹配码（排除 disabled/unused）同步 `record.expiresAt=诊所新到期日`，过期码复活为 used（extend.js 同规则）；写 license_log `action=extend` + 审计 changes 带 `license 同步延期` 条目；同步失败不阻断诊所更新（warning 兜底提示手动批量延期）。响应带 `licenseSync:{synced,codes,expiresAt}`。
+  - **admin-status.js + license-write-service.js `ensureLicenseRenewed`**：下发出口升级为「续费感知」——admin_req.licenseBase64 是审核那一刻固化文件，过期分支发现权威 `license:{code}` 已续费时**确定性重签**新文件按 activated 下发（与 ensureLicenseV7 同参数：admin_req 的 clinicName/machineId 三因子绑定；重签确定性=锚点重算取 max(锚定+days, record.expiresAt)，无续命窗口）。**客户端联网零操作自愈**（轮询/存量自愈/installLicenseFromServer 全走此出口），旧版客户端判 `status==='activated'` 同样落盘新文件，双版本兼容。
+  - **验证**：node 三文件语法 OK；check-interface 6 OK；probe-param-matrix 19/19；功能数学验证——续费后重签 expiresAt=2027-09-12（取同步值），未续费重签仍锚定过期日（防续命语义保持）。
+  - **生效方式**：纯服务端 4 文件改动，push 即部署（Cloudflare Pages 自动），五端零重打包；后台消息展示同步结果（site-admin JS 逻辑改动，强刷生效）。
 
 ### 历史经验归档索引（2026-09-12 二轮梳理）
 

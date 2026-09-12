@@ -4319,7 +4319,10 @@ async function submitFeeAction() {
                 const el = document.getElementById('clinicAlert');
                 if (el) { el.className = 'alert show alert-info'; el.textContent = (mode === 'approve' ? '审核通过，已正式开通' : '续费成功') + exp + '。' + data.warning; }
             } else {
-                showAlert('clinicAlert', (mode === 'approve' ? '审核通过，已正式开通' : '续费成功') + exp, 'success');
+                let msg = (mode === 'approve' ? '审核通过，已正式开通' : '续费成功') + exp;
+                // ★ 2026-09-12 一处续费两端同步：离线版关联激活码已自动延期，客户端联网自动生效
+                if (data.licenseSync) msg += '；离线授权已同步延期至 ' + data.licenseSync.expiresAt + '（' + data.licenseSync.synced + ' 个激活码，客户端联网自动生效）';
+                showAlert('clinicAlert', msg, 'success');
             }
             loadClinicsList();
             loadTodoCenter();
@@ -4496,7 +4499,10 @@ async function doClinicUpdate(body, successMsg, alertId) {
                 if (!alertId) loadClinicsList();
                 return true;
             }
-            showAlert(target, successMsg, 'success');
+            let msg = successMsg || '操作成功';
+            // ★ 2026-09-12 一处续费两端同步：离线版关联激活码已自动延期，客户端联网自动生效
+            if (data.licenseSync) msg += '；离线授权已同步延期至 ' + data.licenseSync.expiresAt + '（客户端联网自动生效）';
+            showAlert(target, msg, 'success');
             if (!alertId) loadClinicsList();
             return true;
         }

@@ -15,7 +15,7 @@
 
 import { getKV, checkRateLimit, sniffCarrierFromUA, patchClinicCarrier, patchLicenseDeviceCarrier, getDeviceBlock } from './_lib/license-core.js';
 import { provisionCloudAccount, normalizeActivationPassword } from './_lib/admin-account.js';
-import { updateAdminRequestStatus, ensureLicenseV7 } from './_lib/license-write-service.js';
+import { updateAdminRequestStatus, ensureLicenseV7, ensureLicenseRenewed } from './_lib/license-write-service.js';
 
 const ALLOWED_ORIGINS = [
     'https://tcm-prescription-system.pages.dev',
@@ -238,21 +238,31 @@ export async function onRequest(context) {
                 }
             } catch (e) { /* 解析失败按未过期处理（不阻断既有流程） */ }
             if (__licenseExpiredAt) {
-                // 到期日按北京时间显示（UTC slice 会比实际到期日早一天，客户困惑）
-                const __expBJ = new Date(new Date(__licenseExpiredAt).getTime() + 8 * 3600e3).toISOString().slice(0, 10);
-                return json({
-                    success: true,
-                    status: 'license_expired',
-                    expiresAt: __licenseExpiredAt,
-                    message: `授权已于 ${__expBJ} 到期，请续费后重新激活`,
-                    licenseInfo: {
-                        user: record.adminName,
-                        clinicName: record.clinicName,
-                        phone: record.phone || '',
-                        licenseCode: record.licenseCode,
-                        resolvedAt: record.resolvedAt
-                    }
-                }, 200, origin);
+                // ★ 2026-09-12 续费同步重签（一处续费、两端同步）：存量文件过期但权威
+                //   license:{code} 记录已续费（clinic=update 收费动作自动同步 expiresAt）
+                //   → 确定性重签新文件按 activated 正常下发——客户端轮询/自愈零操作恢复，
+                //   不再需要客户重输激活码（旧版客户端判定 status==='activated' 同样落盘
+                //   新文件，双版本兼容）。重签失败/权威记录未续费 → 维持 license_expired。
+                const __renewed = await ensureLicenseRenewed(kv, record, context).catch(() => null);
+                if (__renewed && __renewed.licenseBase64) {
+                    record = __renewed;
+                } else {
+                    // 到期日按北京时间显示（UTC slice 会比实际到期日早一天，客户困惑）
+                    const __expBJ = new Date(new Date(__licenseExpiredAt).getTime() + 8 * 3600e3).toISOString().slice(0, 10);
+                    return json({
+                        success: true,
+                        status: 'license_expired',
+                        expiresAt: __licenseExpiredAt,
+                        message: `授权已于 ${__expBJ} 到期，请续费后重新激活`,
+                        licenseInfo: {
+                            user: record.adminName,
+                            clinicName: record.clinicName,
+                            phone: record.phone || '',
+                            licenseCode: record.licenseCode,
+                            resolvedAt: record.resolvedAt
+                        }
+                    }, 200, origin);
+                }
             }
             // ★ 2026-09-11 P2 可疑设备拦截：被封锁设备（verify 上报强信号：Frida 注入/签名
             //   分叉）不下发 license——轮询激活闭环被掐断，与 validate 激活拦截形成

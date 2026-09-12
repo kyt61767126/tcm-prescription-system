@@ -206,6 +206,64 @@ export async function updateAdminRequestStatus(kv, requestId, patch) {
 }
 
 // ============================================================================
+// 2.6. ensureLicenseRenewed — ★ 2026-09-12 续费同步重签（「一处续费、两端同步」闭环）
+//   背景：clinic=update 收费动作已把 license:{code}.expiresAt 自动同步到诊所新到期日
+//   （users.js 同步块），但 admin_req.licenseBase64 是审核那一刻固化的旧文件——过期
+//   分支返回 license_expired 后客户端轮询/自愈拿不到新 license，客户被迫重输激活码。
+//   本函数：存量文件已过期、但权威 license 记录续费后仍有效时，确定性重签新文件写回
+//   并返回（下发出口升级为"续费感知"，客户端联网零操作恢复）。
+//   幂等：文件未过期原样返回（零写入）；重签确定性（buildLicenseData 按锚点重算
+//   expiresAt，取 max(锚定+days, record.expiresAt)，无续命窗口）。
+//   fail-open：任何失败返回 null（调用方维持 license_expired 响应，不阻断下发链路）。
+// ============================================================================
+export async function ensureLicenseRenewed(kv, record, context) {
+    if (!kv || !record || !record.licenseBase64 || !record.licenseCode || !record.requestId) return null;
+    // 1. 解码存量文件：未过期 → 无需重签（幂等零写入）
+    let storedExpMs = NaN;
+    try {
+        const bin = atob(record.licenseBase64);
+        const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+        const lic = JSON.parse(new TextDecoder().decode(bytes));
+        storedExpMs = new Date(lic.expiresAt).getTime();
+    } catch (e) { /* 解析失败按过期处理（尝试重签恢复损坏文件） */ }
+    if (!isNaN(storedExpMs) && storedExpMs > Date.now()) return record;
+    // 2. 绑定字段缺失不重签（重签会丢失三因子绑定语义，宁可维持 license_expired）
+    if (!record.clinicName || !record.machineId) return null;
+    // 3. 从 license:{code} 权威记录确定性重建（与 ensureLicenseV7 同参数）
+    const licRec = await getLicense(kv, record.licenseCode).catch(() => null);
+    if (!licRec) return null;
+    try {
+        const devicesCount = Array.isArray(licRec.devices) ? licRec.devices.length : 1;
+        const licenseData = await buildLicenseData(licRec, {
+            clinicName: record.clinicName,
+            machineId: record.machineId,
+            licenseBinding: 'clinic+user+machine',
+            maxDevices: record.maxDevices,
+            devicesCount: devicesCount,
+            context: context
+        });
+        // 4. 重算仍过期 = 权威记录未续费 → null（调用方维持 license_expired）
+        const newExpMs = new Date(licenseData.expiresAt).getTime();
+        if (isNaN(newExpMs) || newExpMs <= Date.now()) return null;
+        const newBlob = encodeLicenseBase64(licenseData);
+        // 5. 写回 admin_req 主记录（走本服务原子函数；patch 无 status 不动 phone 索引）
+        await updateAdminRequestStatus(kv, record.requestId, { licenseBase64: newBlob });
+        console.log('[WriteService] ensureLicenseRenewed: 续费重签下发: rid=', record.requestId, 'code=', record.licenseCode);
+        try {
+            await appendLicenseLog(kv, record.licenseCode, {
+                action: 'resign-renewed-sync',
+                time: new Date().toISOString(),
+                detail: `续费同步重签（ensureLicenseRenewed），requestId=${record.requestId}, newExpiresAt=${licenseData.expiresAt}`
+            });
+        } catch (e) { /* 审计日志失败不影响主流程 */ }
+        return Object.assign({}, record, { licenseBase64: newBlob });
+    } catch (e) {
+        console.warn('[WriteService] ensureLicenseRenewed: 重签失败，维持 license_expired:', e.message);
+        return null;
+    }
+}
+
+// ============================================================================
 // 2.5. ensureLicenseV7 — ★ 2026-09-11 阶段1a 存量 license 重签自愈（下发出口统一升级）
 //   背景：admin_req.licenseBase64 是审核通过那一刻签名固化的文件。V7 Ed25519 上线前
 //   签发的存量文件缺 signatureV7 → 客户端只能走对称 HMAC 验签（硬编码密钥已随历史
