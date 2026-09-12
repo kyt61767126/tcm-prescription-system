@@ -518,6 +518,7 @@
 * **生效方式**：服务端 Functions push 即部署，**五端零重打包**。
 
 * ★ 2026-09-12 **P0 铁律：D1 TEXT 列读回必须恢复客户端期望的 JS 类型**（处方历史「删除/加载按钮静默失效」根因）：`schema.sql` prescriptions.id 为 TEXT（upsert 绑 `String(p.id)` 入库），`d1RowToPrescription` 原样透传 `{...row}` → 客户端拿到字符串 id；而客户端全链路（`deleteHistory`/`loadHistory`/`deleteCase` 的 `find(p => p.id === id)`、按钮 onclick `Number(p.id)||0` 传参）按 KV 时代数字 id 做 `===` 严格匹配 → 字符串≠数字 → find 落空 → 静默 return，点击无任何反应。**修复：转换函数内 `纯数字串 → Number()`（`/^\d+$/.test(row.id)`），与 KV 回退路径类型对齐**。铁律：①新增 D1 表时行转换函数必须显式声明每个 id/数值列的目标类型，禁止裸 `{...row}`；②客户端 id 比较一律 `String(a) === String(b)` 归一化（新代码）；③症状特征——「按钮点了没反应且无 console 报错」优先查严格相等类型失配。生效：服务端 push 即部署（Cloudflare Pages），五端零重打包，本地 IndexedDB 缓存随下次云端拉取自动清空重写自愈。
+* ★ 2026-09-12 **配套二层防御（服务端修复后云端APP 仍失效的教训——多根因叠加）**：服务端 id 数字化只治新拉取数据；**本地 IndexedDB 残留的字符串 id 旧记录**（D1 迁移期写入）在会话未刷新/云端拉取回落本地的场景下仍使 `===` 失配。已落地：①**6 份 index.html 全部 id 比较归一化** `String(a)===String(b)`（deleteHistory/loadHistory/deleteCase/回收站恢复/彻底删除/同日覆盖/保存去重/媒体元数据 11 处）；②**deletePrescriptionFromDB 双键删除**（IndexedDB 键类型敏感：数字 123 ≠ 字符串 "123"，`store.delete(Number(id))` + `store.delete(String(id))` 一次删净）。**同步盲区警示：`sync-html.ps1` 只分发 cloud_desktop 一份；db-offline/desktop、db-offline APP assets、cloud APP assets、根目录 index.html 共 4 份主页面为手工维护副本**——改 public/index.html 处方逻辑时必须同步核查这 4 份（grep 关键表达式核对），鸿蒙 rawfile 由 copy-assets.cjs 从安卓 assets 拷贝自动跟进。
 
 ### 激活审核 days 必须写入 record（诊所 expiresAt 回退 365 天根因）
 
