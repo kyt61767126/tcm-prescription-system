@@ -8,16 +8,24 @@
 //  请求体：
 //    { "action": "scan" }   → 扫描全部激活码 + 完整性标记，返回风控告警列表
 //
-//  识别的盗版特征（宁可漏检不可误报）：
-//    1. multi_ip_concurrent（高）——同一激活码近 30 天内多个 IP 且存在 24 小时内
-//       跨 IP 并发使用（一码多卖/共享破解的典型特征）
-//    2. multi_ip_30d（中）——近 30 天 ≥2 个 IP 但无并发（可能合法换网/换机，仅提示）
+// 识别的盗版特征（宁可漏检不可误报）：
+//    1. multi_ip_concurrent（高）——同一激活码近 30 天 ≥2 个网络（IPv6 按 /48 前缀
+//       归并），ABAB 往复切换且 ≥2 次落在 24h 窗口内、授权支持多设备（一码多卖的
+//       典型特征；单设备授权/一次性换网/手机 WiFi↔蜂窝双栈切换不误报）
+//    2. multi_ip_30d（中）——近 30 天 ≥2 个网络但无往复并发（合法换网/换机，仅提示）
 //    3. offline_90d（中）——已激活且未过期，但距最后心跳/激活时间超 90 天无联网
 //       （"激活即离线 90 天"，疑似破解后永久断网使用）
 //    4. count_tamper（高）——近 30 天出现 count_rollback 日志（本地处方计数清零，
 //       P2-3 计数上链对账发现，疑似绕过月度配额）
 //    5. integrity（高）——integrity_flag:{machineId} 存在（客户端 native/Java 双路
 //       签名校验分叉，疑似 hook/篡改，P1-1 遗留的设备级标记）
+//
+//  过滤规则（2026-09-12 IPv6 误报根治）：
+//    - 已过期激活码整体跳过（服务已停无风控价值；expiresAt 为空按 issuedAt+days 推导）
+//    - IP 时间线仅统计客户设备流量，管理端动作（generate/extend/update 等）的
+//      管理员 IP 不参与多 IP 判定
+//    - IPv6 地址按 /48 前缀归并（运营商分配单宽带的典型粒度），避免"IPv6 时代
+//      每设备独立地址"造成海量误报
 //
 //  数据源（全部已有，无新增采集）：
 //    - license:{code}        激活码记录（lastHeartbeat/activatedAt/status/devices）
@@ -56,6 +64,92 @@ const TYPE_LABEL = {
     count_tamper: '处方计数回拨',
     integrity: '客户端完整性异常'
 };
+
+// 管理端/服务端动作：其 IP 来自管理员浏览器或服务端自愈，非客户设备流量，
+// 不参与多 IP 判定（否则每个"办公室生成+家中激活"的码都会误报中危）
+const ADMIN_ACTIONS = new Set([
+    'generate', 'scan', 'extend', 'update', 'restore',
+    'invite-reward', 'invite-reward-denied', 'resign-v7-selfheal'
+]);
+
+// --- 判定纯函数（export 供单测；Pages Functions 的额外命名导出不影响路由） ---
+
+// IPv6 按 /48 前缀归并（前 3 组），IPv4 原样；支持 :: 压缩 / %zone / v4 映射形式
+export function networkKey(ip) {
+    let s = String(ip || '').trim().toLowerCase().split('%')[0];
+    if (!s) return '';
+    const v4 = s.match(/^(?:::ffff:)?((?:\d{1,3}\.){3}\d{1,3})$/);
+    if (v4) return v4[1];
+    if (!s.includes(':')) return s;
+    try {
+        const halves = s.split('::');
+        if (halves.length > 2) return s;
+        const head = halves[0] ? halves[0].split(':').filter(Boolean) : [];
+        const tail = (halves.length === 2 && halves[1]) ? halves[1].split(':').filter(Boolean) : [];
+        const fill = Math.max(0, 8 - head.length - tail.length);
+        const groups = [...head, ...new Array(fill).fill('0'), ...tail];
+        return groups.slice(0, 3).join(':') + '::/48';
+    } catch (e) { return s; }
+}
+
+// 有效到期时间：expiresAt 优先，为空时按 issuedAt+days 推导，均无则视为未过期
+export function effectiveExpiryMs(record) {
+    const r = record || {};
+    if (r.expiresAt) {
+        const t = new Date(r.expiresAt).getTime();
+        if (!isNaN(t)) return t;
+    }
+    if (r.issuedAt && r.days) {
+        const t = new Date(r.issuedAt).getTime() + Number(r.days) * 86400000;
+        if (!isNaN(t)) return t;
+    }
+    return Infinity;
+}
+
+// 多网络使用判定（entries 已按时间升序、含 {ip,t}）：
+//   高危 = ABAB 往复（某网络 ≥2 个会话块）∧ ≥2 次相邻会话切换间隔 <24h ∧ 授权支持多设备
+//   其余多网络情形一律中危（单次换网/双栈切换/单设备授权跨网，仅供参考）
+export function classifyMultiIp(entries, multiDeviceCapable) {
+    const nets = entries.map(e => networkKey(e.ip));
+    const distinct = [...new Set(nets)];
+    if (distinct.length < 2) return null;
+
+    // 压缩连续同网络为会话块，统计每网络会话数与相邻会话切换间隔
+    const sessions = [];
+    for (let i = 0; i < entries.length; i++) {
+        const last = sessions[sessions.length - 1];
+        if (!last || last.net !== nets[i]) {
+            sessions.push({ net: nets[i], start: entries[i].t, end: entries[i].t });
+        } else if (entries[i].t > last.end) {
+            last.end = entries[i].t;
+        }
+    }
+    const sessionCount = {};
+    for (const s of sessions) sessionCount[s.net] = (sessionCount[s.net] || 0) + 1;
+    const abab = Object.values(sessionCount).some(n => n >= 2);
+    let fastSwitches = 0;
+    for (let i = 1; i < sessions.length; i++) {
+        if (sessions[i].start - sessions[i - 1].end < CONCURRENT_MS) fastSwitches++;
+    }
+
+    const firstSeen = entries.length ? new Date(entries[0].t).toISOString() : null;
+    const lastSeen = entries.length ? new Date(entries[entries.length - 1].t).toISOString() : null;
+    const rawIps = [...new Set(entries.map(e => e.ip))];
+
+    if (abab && fastSwitches >= 2 && multiDeviceCapable) {
+        return {
+            severity: 'high', nets: distinct, rawIps: rawIps, firstSeen: firstSeen, lastSeen: lastSeen,
+            detail: '近30天 ' + distinct.length + ' 个网络（IPv6 已按 /48 归并），24 小时内跨网络往复使用（ABAB），一码多卖典型特征'
+        };
+    }
+    const reason = abab
+        ? '存在网络往复但切换间隔较久或授权仅单设备（可能为换网/双栈切换，仅供参考）'
+        : '单次网络切换（可能为换网/换机，仅供参考）';
+    return {
+        severity: 'medium', nets: distinct, rawIps: rawIps, firstSeen: firstSeen, lastSeen: lastSeen,
+        detail: '近30天 ' + distinct.length + ' 个网络（IPv6 已按 /48 归并，' + reason + '）'
+    };
+}
 
 export async function onRequest(context) {
     const method = context.request.method;
@@ -103,17 +197,22 @@ export async function onRequest(context) {
             const code = record.code;
             if (!code) continue;
 
+            // --- 已过期激活码整体跳过（服务已停无风控价值，避免历史告警噪音） ---
+            if (effectiveExpiryMs(record) <= now) continue;
+
             let logs = [];
             try {
                 logs = (await kv.get('license_log:' + code, 'json')) || [];
             } catch (e) { /* 单码日志读取失败不影响整体扫描 */ }
 
-            // 近 30 天、带有效 IP 与时间的日志条目
+            // 近 30 天、带有效 IP 与时间的客户设备日志条目（排除管理端动作）
             const entries = [];
             for (const l of logs) {
                 const t = l && l.time ? Date.parse(l.time) : NaN;
                 if (isNaN(t) || now - t > SCAN_WINDOW_MS || now - t < -24 * 60 * 60 * 1000) continue;
-                if (l.ip && l.ip !== 'unknown') entries.push({ ip: l.ip, t: t, action: l.action || '' });
+                if (l.ip && l.ip !== 'unknown' && !ADMIN_ACTIONS.has(l.action)) {
+                    entries.push({ ip: l.ip, t: t, action: l.action || '' });
+                }
             }
             entries.sort((a, b) => a.t - b.t);
 
@@ -130,45 +229,30 @@ export async function onRequest(context) {
 
             let hasAlert = false;
 
-            // --- 特征 1/2：多 IP 使用 ---
-            const distinctIps = [...new Set(entries.map(e => e.ip))];
-            if (distinctIps.length >= 2) {
-                // 并发判定：排序后相邻两条不同 IP 且时间差 < 24h
-                let concurrent = false;
-                for (let i = 1; i < entries.length; i++) {
-                    if (entries[i].ip !== entries[i - 1].ip &&
-                        entries[i].t - entries[i - 1].t < CONCURRENT_MS) {
-                        concurrent = true;
-                        break;
-                    }
-                }
-                if (concurrent) {
+            // --- 特征 1/2：多网络使用（IPv6 按 /48 归并；高危及中危判定见 classifyMultiIp） ---
+            // 多设备能力：授权支持多设备（maxDevices≥2 或真实设备≥2，浏览器会话伪设备不算）
+            const realDevices = (record.devices || []).filter(d =>
+                d && d.machineId && !String(d.machineId).startsWith('browser-'));
+            const multiCapable = ((record.maxDevices || 0) >= 2) || (realDevices.length >= 2);
+            const cls = classifyMultiIp(entries, multiCapable);
+            if (cls) {
+                hasAlert = true;
+                if (cls.severity === 'high') {
                     stats.multiIpConcurrent++;
-                    hasAlert = true;
-                    alerts.push({
-                        ...base,
-                        type: 'multi_ip_concurrent',
-                        typeLabel: TYPE_LABEL.multi_ip_concurrent,
-                        severity: 'high',
-                        ips: distinctIps,
-                        firstSeen: entries[0] ? new Date(entries[0].t).toISOString() : null,
-                        lastSeen: entries.length ? new Date(entries[entries.length - 1].t).toISOString() : null,
-                        detail: '近30天 ' + distinctIps.length + ' 个 IP，存在 24 小时内跨 IP 并发使用'
-                    });
                 } else {
                     stats.multiIp30d++;
-                    hasAlert = true;
-                    alerts.push({
-                        ...base,
-                        type: 'multi_ip_30d',
-                        typeLabel: TYPE_LABEL.multi_ip_30d,
-                        severity: 'medium',
-                        ips: distinctIps,
-                        firstSeen: entries[0] ? new Date(entries[0].t).toISOString() : null,
-                        lastSeen: entries.length ? new Date(entries[entries.length - 1].t).toISOString() : null,
-                        detail: '近30天 ' + distinctIps.length + ' 个 IP（无并发，可能为换网/换机，仅供参考）'
-                    });
                 }
+                alerts.push({
+                    ...base,
+                    type: cls.severity === 'high' ? 'multi_ip_concurrent' : 'multi_ip_30d',
+                    typeLabel: cls.severity === 'high' ? TYPE_LABEL.multi_ip_concurrent : TYPE_LABEL.multi_ip_30d,
+                    severity: cls.severity,
+                    ips: cls.nets,
+                    ipsRaw: cls.rawIps,
+                    firstSeen: cls.firstSeen,
+                    lastSeen: cls.lastSeen,
+                    detail: cls.detail
+                });
             }
 
             // --- 特征 3：激活后长期离线（限定有效状态，过期/禁用码离线属正常） ---
