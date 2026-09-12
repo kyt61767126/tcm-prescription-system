@@ -7757,50 +7757,16 @@ let currentUser = null;
         }
 
         function decodeTextWithAutoEncoding(uint8Array) {
-            const len = uint8Array.length;
-            let hasUTF8BOM = false;
-            if (len >= 3 && uint8Array[0] === 0xEF && uint8Array[1] === 0xBB && uint8Array[2] === 0xBF) {
-                hasUTF8BOM = true;
-            }
-            let hasGBKPattern = false;
-            for (let i = 0; i < len - 1; i++) {
-                const byte1 = uint8Array[i];
-                const byte2 = uint8Array[i + 1];
-                if ((byte1 >= 0x81 && byte1 <= 0xFE) && (byte2 >= 0x40 && byte2 <= 0xFE && byte2 !== 0x7F)) {
-                    hasGBKPattern = true;
-                    break;
-                }
-            }
-            let text;
-            if (hasUTF8BOM) {
-                text = new TextDecoder('utf-8').decode(uint8Array.slice(3));
-            } else if (hasGBKPattern) {
-                try { text = new TextDecoder('GBK').decode(uint8Array); }
-                catch (e) { text = new TextDecoder('utf-8').decode(uint8Array); }
-            } else {
-                try { text = new TextDecoder('utf-8').decode(uint8Array); }
-                catch (e) { text = new TextDecoder('GBK').decode(uint8Array); }
-            }
-            if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
-            return text;
+            // 解析已收敛至 StockCore 权威源（2026-09-12 B期）：BOM→UTF-8 严格→GBK 自动识别
+            if (window.StockCore && typeof StockCore.decodeText === 'function') return StockCore.decodeText(uint8Array);
+            try { return new TextDecoder('utf-8').decode(uint8Array); } catch (e) { return ''; }
         }
 
-        let _xlsxLoadingPromise = null;
         function loadXlsxLibrary() {
+            // 加载器已收敛至 StockCore 权威源（2026-09-12 B期）：根路径/vendor 双候选链
+            if (window.StockCore && typeof StockCore.loadXlsxLib === 'function') return StockCore.loadXlsxLib();
             if (typeof XLSX !== 'undefined') return Promise.resolve();
-            if (window.__XLSX_MISSING__) return Promise.reject(new Error('xlsx missing'));
-            if (_xlsxLoadingPromise) return _xlsxLoadingPromise;
-            _xlsxLoadingPromise = new Promise((resolve, reject) => {
-                const s = document.createElement('script');
-                s.src = 'vendor/xlsx.full.min.js';
-                s.onload = () => resolve();
-                s.onerror = () => {
-                    window.__XLSX_MISSING__ = true;
-                    reject(new Error('xlsx load failed'));
-                };
-                document.head.appendChild(s);
-            });
-            return _xlsxLoadingPromise;
+            return Promise.reject(new Error('Excel 组件不可用（StockCore 未加载）'));
         }
 
         async function importMedicines(event) {
@@ -7968,7 +7934,7 @@ let currentUser = null;
                 medicines = [...medicines, ...importedMedicines];
                 alert(`导入成功！共导入 ${importedMedicines.length} 种药品`);
             } else if (method === 'overwrite') {
-                if (confirm('确定要覆盖现有药品库吗？导入的药品价格将完全替换现有数据！')) {
+                if (confirm('确定要覆盖现有药品库吗？导入的药品价格与库存将完全替换现有数据！未填库存列的药品库存将归零')) {
                     medicines = [...importedMedicines];
                     localStorage.removeItem('local_clearDefaultMedicines');
                     alert(`导入成功！共导入 ${importedMedicines.length} 种药品，已覆盖原有数据`);
@@ -7988,30 +7954,9 @@ let currentUser = null;
         }
         
         function parseCSVLine(line) {
-            const result = [];
-            let current = '';
-            let inQuotes = false;
-            
-            for (let i = 0; i< line.length; i++) {
-                const char = line[i];
-                const nextChar = line[i + 1];
-                
-                if (char === '"') {
-                    if (inQuotes && nextChar === '"') {
-                        current += '"';
-                        i++;
-                    } else {
-                        inQuotes = !inQuotes;
-                    }
-                } else if (char === ',' && !inQuotes) {
-                    result.push(current.trim());
-                    current = '';
-                } else {
-                    current += char;
-                }
-            }
-            result.push(current.trim());
-            return result;
+            // 解析已收敛至 StockCore 权威源（2026-09-12 B期）：引号包裹/双引号转义/逗号分列
+            if (window.StockCore && typeof StockCore.parseCsvLine === 'function') return StockCore.parseCsvLine(line).map(function (s) { return String(s).trim(); });
+            return String(line || '').split(',');
         }
 
         function renderFormulaList() {

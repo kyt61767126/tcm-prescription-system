@@ -34,7 +34,7 @@ function approx(a, b) { return Math.abs(a - b) < 0.005; }
 // ---------------------------------------------------------------------------
 //  沙箱环境：mock localStorage/document/顶层 medicines 数组 + 全局钩子函数
 // ---------------------------------------------------------------------------
-function createHarness(initialMeds) {
+function createHarness(initialMeds, opts) {
   const storage = {};
   if (initialMeds) storage['local_medicines'] = JSON.stringify(initialMeds);
   const h = {
@@ -88,6 +88,10 @@ function createHarness(initialMeds) {
   sandbox.renderMedicineList = noop;
   sandbox.importDataFromJson = async function () {};
   sandbox.saveMedicinesToDisk = () => { h.diskSaved++; };
+  // ⑬ A期：页面 executeImportMethod 模拟（包装器在 stock-core 加载时挂上）
+  if (opts && typeof opts.executeImportMethod === 'function') {
+    sandbox.executeImportMethod = opts.executeImportMethod(sandbox);
+  }
 
   // 载入 stock-core（IIFE 立即执行，boot→tryInstall 同步完成）
   vm.runInContext(STOCK_CORE, sandbox, { filename: 'stock-core.js' });
@@ -380,6 +384,94 @@ console.log('== ⑯ 入库模板：结构 + CSV 转义 + 下载到导入闭环 =
   // 闭环3：药名含逗号 → 转义后解析仍还原为完整药名（不拆裂）
   const p2 = S._parseStockImportText(S._toCsvLine(['麻,黄', '500', '']));
   assert(p2.rows.length === 1 && p2.rows[0].name === '麻,黄' && p2.rows[0].qty === 500, '药名含逗号：转义→解析还原为完整药名');
+}
+
+console.log('== ⑰ 导入药品建账（A期：executeImportMethod 快照差值记账） ==');
+{
+  // a) 追加：新药带库存 → init 记 qty=stock=期初
+  const h = createHarness(MEDS(), {
+    executeImportMethod: (sb) => function (method) {
+      sb.medicines = sb.medicines.concat([{ name: '当归', code: 'dg', unit: 'g', stock: 800 }]);
+    }
+  });
+  h.sandbox.StockCore.setEnabled(true);
+  h.sandbox.executeImportMethod('append');
+  const led = h.ledgerOf('当归');
+  assert(led.length === 1 && led[0].type === 'init', "追加新药记 'init'");
+  assert(approx(led[0].qty, 800) && approx(led[0].stock, 800), '追加：qty=结存=800');
+  assert(h.toasts.some(t => t.indexOf('导入建账') >= 0), 'toast 提示建账笔数');
+
+  // b) 合并：同名差值 + 新增期初 + 未变药零流水
+  const h2 = createHarness(MEDS(), {
+    executeImportMethod: (sb) => function (method) {
+      const idx = sb.medicines.findIndex(m => m.name === '麻黄');
+      sb.medicines[idx] = { name: '麻黄', code: 'mh', unit: 'g', stock: 700, stockThreshold: 100 };
+      sb.medicines.push({ name: '川芎', code: 'cx', unit: 'g', stock: 90 });
+    }
+  });
+  h2.sandbox.StockCore.setEnabled(true);
+  h2.sandbox.executeImportMethod('merge');
+  const mh = h2.ledgerOf('麻黄');
+  assert(mh.length === 1 && mh[0].type === 'init' && approx(mh[0].qty, -300), '合并：差值 -300');
+  assert(approx(mh[0].stock, 700), '合并：结存 700');
+  assert(h2.ledgerOf('川芎').length === 1 && approx(h2.ledgerOf('川芎')[0].qty, 90), '合并新药：期初 90');
+  assert(h2.ledgerOf('甘草').length === 0 && h2.ledgerOf('桂枝').length === 0, '库存未变药零流水');
+
+  // c) 覆盖：归零可追溯 + 移除记账（结存 null）+ 新药期初
+  const h3 = createHarness(MEDS(), {
+    executeImportMethod: (sb) => function (method) {
+      sb.medicines = [
+        { name: '麻黄', code: 'mh', unit: 'g', stock: 0 },   // 导入文件未填库存列 → 静默归零
+        { name: '新药', code: 'xy', unit: 'g', stock: 300 }
+      ];                                                     // 桂枝/甘草被覆盖移除
+    }
+  });
+  h3.sandbox.StockCore.setEnabled(true);
+  h3.sandbox.executeImportMethod('overwrite');
+  const m0 = h3.ledgerOf('麻黄');
+  assert(m0.length === 1 && approx(m0[0].qty, -1000) && approx(m0[0].stock, 0), '覆盖归零：-1000 结存 0（可追溯）');
+  const gz = h3.ledgerOf('桂枝');
+  assert(gz.length === 1 && approx(gz[0].qty, -60) && gz[0].stock === null, '覆盖移除：-60 结存 null');
+  assert(h3.ledgerOf('甘草').length === 1 && h3.ledgerOf('甘草')[0].stock === null, '甘草移除同样记账');
+  assert(h3.ledgerOf('新药').length === 1 && approx(h3.ledgerOf('新药')[0].qty, 300), '覆盖新药：期初 300');
+
+  // d) 未启用：零流水（老用户行为不变）
+  const h4 = createHarness(MEDS(), {
+    executeImportMethod: (sb) => function (method) { sb.medicines = [{ name: '新药', stock: 500 }]; }
+  });
+  h4.sandbox.executeImportMethod('overwrite');
+  assert(h4.sandbox.StockCore.getLedger().length === 0, '未启用：零流水零行为变化');
+
+  // e) 覆盖取消（confirm 拒绝）：前后无差 → 零流水
+  const h5 = createHarness(MEDS(), {
+    executeImportMethod: () => function (method) { /* 用户点了取消，零改动 */ }
+  });
+  h5.sandbox.StockCore.setEnabled(true);
+  h5.sandbox.executeImportMethod('overwrite');
+  assert(h5.sandbox.StockCore.getLedger().length === 0, '覆盖取消：零流水');
+  assert(h5.getStock('麻黄') === 1000, '覆盖取消：库存不动');
+
+  // f) 无变化导入：零流水
+  const h6 = createHarness(MEDS(), {
+    executeImportMethod: (sb) => function (method) {
+      const idx = sb.medicines.findIndex(m => m.name === '麻黄');
+      sb.medicines[idx] = { name: '麻黄', code: 'mh', unit: 'g', stock: 1000, stockThreshold: 100 };
+    }
+  });
+  h6.sandbox.StockCore.setEnabled(true);
+  h6.sandbox.executeImportMethod('merge');
+  assert(h6.sandbox.StockCore.getLedger().length === 0, '库存无变化：零流水');
+}
+
+console.log('== ⑱ B期解析原语正式 API ==');
+{
+  const h = createHarness(MEDS());
+  const S = h.sandbox.StockCore;
+  assert(S.decodeText === S._decodeAuto && S.parseCsvLine === S._parseCsvRow, '正式 API 与内部实现同源');
+  assert(typeof S.loadXlsxLib === 'function', 'loadXlsxLib 已导出（页面薄委托目标）');
+  const row = S.parseCsvLine(' 麻黄 ,500,备注');
+  assert(row[0] === ' 麻黄 ', 'parseCsvLine 底层不 trim（页面薄委托按需 map）');
+  assert(S.decodeText(new TextEncoder().encode('麻黄')) === '麻黄', 'decodeText UTF-8 直通');
 }
 
 // 等异步断言全部落地后汇总（savePrescriptionToDB 为 async）
