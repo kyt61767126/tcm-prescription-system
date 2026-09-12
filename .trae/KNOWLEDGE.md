@@ -797,6 +797,8 @@
 
 **★ 下载链路编码铁律（v1→v4 演进史已归档 `.trae/archive/2026-08-31-09-03-misc-experiences.md`）**：① 触发下载禁止 `window.location.href`（页面导航被 attachment 中断误报"网络错误"），必须隐藏 `<a>` 程序化 click；② 下载代理必须透传 Range 头（206+Content-Range+Expose-Headers），否则断点续传失效；③ 前端流式读取必须配看门狗（数据到达重置 15s 定时器、超时 AbortController.abort()——fetch 读流挂起不报错，没有看门狗永远卡死）；④ 跨境大文件 = 多连接并行分片+断点续传+看门狗三件套（v4 实测 0.7MB/s，较单流提升约 14 倍，75MB 约 2 分钟）；⑤ 优化前先实测 Range 支持度（`curl -r 0-99` 看 206 还是 200，"CF 静态资源支持分段"是危险假设）；⑥ 微信内置浏览器协议层拦截 APK MIME（技术绕不过），UA 检测 MicroMessenger → toast 引导「右上角···→在浏览器打开」；⑦ 未签名 exe 触发 SmartScreen 信誉警告属预期（根治唯一方案=购买代码签名证书：OV 需积累信誉，EV 立即消除警告），下载确认框预告知"点保留即可"。
 
+**★ 2026-09-12 桌面应用内更新器（云+离线双桌面 main.js 同构落地）**：横幅「立即下载」旧链路 `window.open` → 系统浏览器单流（0.5MB/s 无进度、下完手动找文件）→ 新链路**主进程 4 连接并行分片下载**（v4 robustDownload 的 Node 版：net.fetch + Range 分片 + 每分片独立看门狗 25s + 指数退避重试 ≤6 + 数据到达即 `fsSync.writeSync(fd, buf, 0, len, offset)` 落盘）→ 横幅实时进度/速度（400ms 节流 executeJavaScript）→ 完成大小对账 → `shell.openPath` 自动开 NSIS 安装向导。**桥接技巧：横幅点击 `window.open(UPDATE_SCHEME)`（`kyt-desktop-update://start`），由登录窗口已有 `setWindowOpenHandler` 拦截该 scheme 启动下载——零 IPC/preload 改动**（scheme 不匹配注册协议直达 handler，deny 不开新窗）。失败回退官网下载页（safeDownload v4 兜底）+ 横幅「重试下载」。注意：**改动只对新版本生效**（存量旧版横幅仍是旧链路，已发布无法追补）。
+
 ## 19. 后续路线图（2026-08-31 定，试用观察期三步走）
 
 * **第一步（当前）**：进入 1-2 周正常看诊观察期，不刻意测试——真实使用是最好的验收。
