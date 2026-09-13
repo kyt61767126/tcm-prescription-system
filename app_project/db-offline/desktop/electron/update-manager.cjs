@@ -29,10 +29,15 @@ const path = require('path');
 const fsSync = require('fs');
 
 const UPDATE_SCHEME = 'kyt-desktop-update://start';
-const UPDATE_DL_PARALLEL = 4;                 // 并行分片数（>8MB 才并行）
+// ★ 2026-09-13 v2 参数对齐官网 robustDownload v4（用户实测官网页 6 连接 ≈5MB/s
+//   15 秒下完 78MB，而桌面更新器 4 连接卡 1-2%）：6 连接 / 15 次重试 / 15s 看门狗。
+//   实测基线（同刻）：/api/dl 代理单连接 0.9MB/s（206 正常）、GitHub 直连 0B/s
+//   （TLS 吊销检查被拦）——跨境链路单流随时可能整连接停滞，重试次数与退避
+//   上限是存活关键（6 次×800ms 不够熬过 GitHub 抽风窗口）。
+const UPDATE_DL_PARALLEL = 6;                 // 并行分片数（>8MB 才并行，对齐 robustDownload）
 const UPDATE_DL_MIN_PARALLEL = 8 * 1048576;   // 小文件单流
-const UPDATE_DL_WATCHDOG_MS = 25000;          // 单分片数据停滞超时（挂死不报错必须看门狗）
-const UPDATE_DL_MAX_RETRY = 6;                // 单分片重试上限
+const UPDATE_DL_WATCHDOG_MS = 15000;          // 单分片数据停滞超时（对齐 robustDownload 15s）
+const UPDATE_DL_MAX_RETRY = 15;               // 单分片重试上限（对齐 robustDownload SEG_RETRIES）
 const UPDATE_BANNER_EXTRA_HEIGHT = 40;        // 横幅腾出的窗口增高 px
 const PROXY_BASE = 'https://tcm-prescription-system.pages.dev';
 
@@ -102,7 +107,8 @@ function createDesktopUpdateManager(opts) {
             } catch (e) {
                 attempt++;
                 if (attempt > UPDATE_DL_MAX_RETRY) throw e;
-                await new Promise(function (r) { setTimeout(r, 800 * attempt); });
+                // 退避对齐 robustDownload backoffMs：1s×n 封顶 5s（6 次×800ms 顶不过 GitHub 抽风窗口）
+                await new Promise(function (r) { setTimeout(r, Math.min(1000 * attempt, 5000)); });
             }
         }
     }
