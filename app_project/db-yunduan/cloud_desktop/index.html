@@ -5596,9 +5596,20 @@ let currentUser = null;
         function selectPatientName(name) {
             document.getElementById('patientName').value = name;
             hidePatientNameDropdown();
-            // 查找该患者最新的历史记录
-            const patientRecords = prescriptionHistory.filter(p =>p.patientName === name);
-            if (patientRecords.length >0) {
+            
+            // 找到该患者的最新记录，自动填充电话、地址、年龄
+            const patientRecords = filterPrescriptionsByPermission(prescriptionHistory).filter(p => 
+                p.patientName && p.patientName.includes(name)
+            );
+            
+            if (patientRecords.length > 0) {
+                // 按时间排序，获取最新的记录
+                patientRecords.sort((a, b) => {
+                    const timeA = new Date(a.createdAt || a.date || 0).getTime();
+                    const timeB = new Date(b.createdAt || b.date || 0).getTime();
+                    return timeB - timeA;
+                });
+                
                 const latestRecord = patientRecords[0];
                 if (latestRecord.patientAge) {
                     document.getElementById('patientAge').value = latestRecord.patientAge;
@@ -5613,7 +5624,9 @@ let currentUser = null;
                     document.getElementById('patientGender').value = latestRecord.patientGender;
                 }
             }
-            searchPatientsByName(name);
+            
+            // 触发搜索以加载该患者的历史记录
+            searchPatientsQuick({target: {value: name}});
             updatePrescriptionPaper();
         }
 
@@ -8569,6 +8582,30 @@ let currentUser = null;
             return Promise.reject(new Error('Excel 组件不可用（StockCore 未加载）'));
         }
 
+        // 解析单行药材数据（Excel/CSV 通用）：进价列(row[2])严格校验，缺失/格式错误置 null 不自动填 0
+        function parseMedicineRow(row) {
+            const medicineName = String(row[0] || '').trim();
+            if (!medicineName) return null;
+
+            // C 列(row[2])为进价 costPrice 字段，严格校验
+            const costPriceRaw = row[2];
+            const costPrice = parseFloat(costPriceRaw);
+            const hasMissingPrice = (costPriceRaw === null || costPriceRaw === undefined || costPriceRaw === '' || isNaN(costPrice));
+
+            return {
+                medicine: {
+                    name: medicineName,
+                    code: row[1] || '',
+                    costPrice: hasMissingPrice ? null : costPrice, // 进价缺失时设为 null，不自动填充 0
+                    price: parseFloat(row[3]) || 0,
+                    unit: row[4] || 'g',
+                    dosage: parseFloat(row[5]) || 10,
+                    stock: parseInt(row[6]) || 0
+                },
+                hasMissingPrice: hasMissingPrice
+            };
+        }
+
         async function importMedicines(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -8605,22 +8642,21 @@ let currentUser = null;
                         }
                         
                         let importedMedicines = [];
+                        let missingPriceMedicines = []; // 进价缺失/格式错误的药材名称列表
                         for (let i = 1; i< jsonData.length; i++) {
                             const row = jsonData[i];
                             if (row && row[0]) {
-                                importedMedicines.push({
-                                    name: row[0] || '',
-                                    code: row[1] || '',
-                                    costPrice: parseFloat(row[2]) || 0,
-                                    price: parseFloat(row[3]) || 0,
-                                    unit: row[4] || 'g',
-                                    dosage: parseFloat(row[5]) || 10,
-                                    stock: parseInt(row[6]) || 0
-                                });
+                                const result = parseMedicineRow(row);
+                                if (result) {
+                                    importedMedicines.push(result.medicine);
+                                    if (result.hasMissingPrice) {
+                                        missingPriceMedicines.push(result.medicine.name);
+                                    }
+                                }
                             }
                         }
                         
-                        processImportedMedicines(importedMedicines);
+                        processImportedMedicines(importedMedicines, missingPriceMedicines);
                     } catch (err) {
                         alert('Excel导入失败！请尝试将 Excel 另存为 CSV 格式再导入。错误信息：' + err.message);
                     }
@@ -8632,6 +8668,7 @@ let currentUser = null;
                 reader.onload = function(e) {
                     try {
                         let importedMedicines = [];
+                        let missingPriceMedicines = [];
                         const arrayBuffer = e.target.result;
                         const uint8Array = new Uint8Array(arrayBuffer);
                         let content = decodeTextWithAutoEncoding(uint8Array);
@@ -8650,15 +8687,13 @@ let currentUser = null;
                                 // 更健壮的 CSV 解析
                                 const row = parseCSVLine(line);
                                 if (row.length >= 2 && row[0]) {
-                                    importedMedicines.push({
-                                        name: row[0] || '',
-                                        code: row[1] || '',
-                                        costPrice: parseFloat(row[2]) || 0,
-                                        price: parseFloat(row[3]) || 0,
-                                        unit: row[4] || 'g',
-                                        dosage: parseFloat(row[5]) || 10,
-                                        stock: parseInt(row[6]) || 0
-                                    });
+                                    const result = parseMedicineRow(row);
+                                    if (result) {
+                                        importedMedicines.push(result.medicine);
+                                        if (result.hasMissingPrice) {
+                                            missingPriceMedicines.push(result.medicine.name);
+                                        }
+                                    }
                                 }
                             }
                         } else {
@@ -8673,10 +8708,21 @@ let currentUser = null;
                                 alert('文件格式错误！');
                                 return;
                             }
-                            importedMedicines = importData.medicines;
+                            // JSON 导入同样校验进价缺失
+                            importData.medicines.forEach(m => {
+                                const costPrice = parseFloat(m.costPrice);
+                                const hasMissingPrice = (m.costPrice === null || m.costPrice === undefined || m.costPrice === '' || isNaN(costPrice));
+                                if (hasMissingPrice) {
+                                    missingPriceMedicines.push(m.name);
+                                    m.costPrice = null;
+                                } else {
+                                    m.costPrice = costPrice;
+                                }
+                                importedMedicines.push(m);
+                            });
                         }
                         
-                        processImportedMedicines(importedMedicines);
+                        processImportedMedicines(importedMedicines, missingPriceMedicines);
                     } catch (err) {
                         alert('导入失败！文件格式错误。' + err.message);
                     }
@@ -8687,13 +8733,15 @@ let currentUser = null;
         }
         
         let pendingImportedMedicines = null;
+        let pendingMissingPriceMedicines = [];
 
-        function processImportedMedicines(importedMedicines) {
+        function processImportedMedicines(importedMedicines, missingPriceMedicines = []) {
             if (importedMedicines.length === 0) {
                 alert('没有导入任何药品！');
                 return;
             }
             pendingImportedMedicines = importedMedicines;
+            pendingMissingPriceMedicines = missingPriceMedicines;
             showImportMethodModal(importedMedicines.length);
         }
 
@@ -8728,16 +8776,24 @@ let currentUser = null;
             const modal = document.getElementById('importMethodModal');
             if (modal) modal.style.display = 'none';
             const importedMedicines = pendingImportedMedicines;
+            const missingPriceMedicines = pendingMissingPriceMedicines;
             pendingImportedMedicines = null;
+            pendingMissingPriceMedicines = [];
             if (!importedMedicines) return;
+            // 进价缺失统计（缺失药品 costPrice=null，可在编辑药品时补录，后台报表不再按 0 计成本）
+            const missingCount = missingPriceMedicines.length;
+            let statsSuffix = '';
+            if (missingCount > 0) {
+                statsSuffix = `\n进价缺失：${missingCount} 条\n异常药材名单（进价空白或格式错误）：\n${missingPriceMedicines.join('、')}`;
+            }
             if (method === 'append') {
                 medicines = [...medicines, ...importedMedicines];
-                alert(`导入成功！共导入 ${importedMedicines.length} 种药品`);
+                alert(`导入成功！共导入 ${importedMedicines.length} 种药品` + statsSuffix);
             } else if (method === 'overwrite') {
                 if (confirm('确定要覆盖现有药品库吗？导入的药品价格与库存将完全替换现有数据！未填库存列的药品库存将归零')) {
                     medicines = [...importedMedicines];
                     localStorage.removeItem('local_clearDefaultMedicines');
-                    alert(`导入成功！共导入 ${importedMedicines.length} 种药品，已覆盖原有数据`);
+                    alert(`导入成功！共导入 ${importedMedicines.length} 种药品，已覆盖原有数据` + statsSuffix);
                 } else { return; }
             } else if (method === 'merge') {
                 let addCount = 0, updateCount = 0;
@@ -8746,7 +8802,7 @@ let currentUser = null;
                     if (existIndex >= 0) { medicines[existIndex] = importMed; updateCount++; }
                     else { medicines.push(importMed); addCount++; }
                 });
-                alert(`导入完成！新增：${addCount} 种，更新：${updateCount} 种，更新的药品以导入价格为准`);
+                alert(`导入完成！新增：${addCount} 种，更新：${updateCount} 种，更新的药品以导入价格为准` + statsSuffix);
             } else { return; }
             localStorage.setItem('local_medicines', JSON.stringify(medicines));
             buildMedicineMap();
@@ -9130,23 +9186,43 @@ let currentUser = null;
             };
         }
 
-        function createChart(canvasId, type, data) {
+        function createChart(canvasId, type, data, retryCount = 0) {
             const canvas = document.getElementById(canvasId);
             if (!canvas) return null;
-            
+
             const ctx = canvas.getContext('2d');
-            
+
             const dpr = window.devicePixelRatio || 1;
             const rect = canvas.getBoundingClientRect();
+
+            if (rect.width === 0 || rect.height === 0) {
+                if (retryCount < 3) {
+                    setTimeout(() => createChart(canvasId, type, data, retryCount + 1), 100);
+                }
+                return null;
+            }
+
             canvas.width = rect.width * dpr;
             canvas.height = rect.height * dpr;
             ctx.scale(dpr, dpr);
-            
+
             const width = rect.width;
             const height = rect.height;
-            
+
             ctx.clearRect(0, 0, width, height);
-            
+
+            // 响应式参数：根据屏幕宽度调整字体和 padding，提升手机端可读性
+            const isMobile = window.innerWidth < 768;
+            const isSmall = window.innerWidth < 480;
+            const labelFont = isMobile ? '12px Arial' : '10px Arial';
+            const valueFont = isMobile ? 'bold 12px Arial' : 'bold 10px Arial';
+            const axisFont = isMobile ? '11px Arial' : '10px Arial';
+            const labelMaxLen = isMobile ? (isSmall ? 3 : 4) : 5;
+            const pieLegendFont = isMobile ? '12px Arial' : '11px Arial';
+            const pieLegendMaxLen = isMobile ? (isSmall ? 5 : 7) : 7;
+            const hBarFont = isMobile ? '11px Arial' : '11px Arial';
+            const hBarLabelMaxLen = isMobile ? (isSmall ? 3 : 4) : 7;
+
             if (type === 'bar') {
                 if (!data.labels || !data.values || data.labels.length === 0) {
                     ctx.fillStyle = '#999';
@@ -9155,28 +9231,30 @@ let currentUser = null;
                     ctx.fillText('暂无数据', width / 2, height / 2);
                     return;
                 }
-                
-                const padding = { top: 20, right: 20, bottom: 40, left: 50 };
+
+                const padding = isMobile
+                    ? { top: 18, right: 10, bottom: 32, left: 32 }
+                    : { top: 20, right: 20, bottom: 40, left: 50 };
                 const chartWidth = width - padding.left - padding.right;
                 const chartHeight = height - padding.top - padding.bottom;
-                
+
                 const maxValue = Math.max(...data.values, 1);
-                const barWidth = Math.min(chartWidth / data.labels.length * 0.7, 30);
+                const barWidth = Math.min(chartWidth / data.labels.length * 0.7, isMobile ? 36 : 30);
                 const gap = chartWidth / data.labels.length;
-                
+
                 ctx.fillStyle = '#333';
-                ctx.font = '10px Arial';
+                ctx.font = labelFont;
                 ctx.textAlign = 'center';
-                data.labels.forEach((label, i) =>{
+                data.labels.forEach((label, i) => {
                     const x = padding.left + i * gap + gap / 2;
-                    ctx.fillText(label.length >6 ? label.substring(0, 5) + '...' : label, x, height - 10);
+                    ctx.fillText(label.length > labelMaxLen + 1 ? label.substring(0, labelMaxLen) + '…' : label, x, height - 10);
                 });
-                
+
                 ctx.save();
                 ctx.translate(padding.left, padding.top + chartHeight);
                 ctx.scale(1, -1);
-                
-                data.values.forEach((value, i) =>{
+
+                data.values.forEach((value, i) => {
                     const x = i * gap + (gap - barWidth) / 2;
                     const barHeight = (value / maxValue) * chartHeight;
                     const gradient = ctx.createLinearGradient(x, 0, x, barHeight);
@@ -9188,62 +9266,65 @@ let currentUser = null;
                     ctx.lineWidth = 1;
                     ctx.strokeRect(x, 0, barWidth, barHeight);
                 });
-                
+
                 ctx.restore();
-                
+
                 ctx.fillStyle = '#333';
-                ctx.font = 'bold 10px Arial';
+                ctx.font = valueFont;
                 ctx.textAlign = 'center';
-                data.values.forEach((value, i) =>{
+                data.values.forEach((value, i) => {
                     const x = padding.left + i * gap + gap / 2;
                     const barHeight = (value / maxValue) * chartHeight;
                     ctx.fillText(value.toString(), x, padding.top + chartHeight - barHeight - 8);
                 });
-                
+
                 ctx.strokeStyle = '#ddd';
                 ctx.lineWidth = 1;
-                for (let i = 0; i<= 4; i++) {
+                for (let i = 0; i <= 4; i++) {
                     const y = padding.top + (chartHeight / 4) * i;
                     ctx.beginPath();
                     ctx.moveTo(padding.left, y);
                     ctx.lineTo(width - padding.right, y);
                     ctx.stroke();
-                    
+
                     const value = Math.round(maxValue * (1 - i / 4));
                     ctx.fillStyle = '#666';
-                    ctx.font = '10px Arial';
+                    ctx.font = axisFont;
                     ctx.textAlign = 'right';
                     ctx.fillText(value.toString(), padding.left - 5, y + 4);
                 }
-                
+
                 ctx.strokeStyle = '#ddd';
                 ctx.beginPath();
                 ctx.moveTo(padding.left, padding.top);
                 ctx.lineTo(padding.left, height - padding.bottom);
                 ctx.stroke();
-                
+
             } else if (type === 'pie') {
-                if (!data.labels || !data.values || data.labels.length === 0) {
+                if (!data.labels || !data.values || data.values.length === 0) {
                     ctx.fillStyle = '#999';
                     ctx.font = '14px Arial';
                     ctx.textAlign = 'center';
                     ctx.fillText('暂无数据', width / 2, height / 2);
                     return;
                 }
-                
-                const centerX = width / 2;
-                const centerY = height / 2;
-                const radius = Math.min(width, height) / 2 - 25;
-                
-                const total = data.values.reduce((a, b) =>a + b, 0);
+
+                // 手机端：饼图居中偏左，图例竖向排列在右侧；桌面端：保持原居中布局
+                const centerX = isMobile ? width * 0.38 : width / 2;
+                const centerY = isMobile ? height / 2 : height / 2;
+                const radius = isMobile
+                    ? Math.min(width * 0.35, height / 2) - 10
+                    : Math.min(width, height) / 2 - 20;
+
+                const total = data.values.reduce((a, b) => a + b, 0);
                 let startAngle = -Math.PI / 2;
-                
+
                 const colors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#FF6384', '#C9CBCF'];
-                
-                data.values.forEach((value, i) =>{
+
+                data.values.forEach((value, i) => {
                     const sliceAngle = (value / total) * 2 * Math.PI;
                     const color = colors[i % colors.length];
-                    
+
                     ctx.beginPath();
                     ctx.moveTo(centerX, centerY);
                     ctx.arc(centerX, centerY, radius, startAngle, startAngle + sliceAngle);
@@ -9253,32 +9334,47 @@ let currentUser = null;
                     ctx.strokeStyle = '#fff';
                     ctx.lineWidth = 2;
                     ctx.stroke();
-                    
+
                     startAngle += sliceAngle;
                 });
-                
+
                 ctx.fillStyle = '#333';
-                ctx.font = '11px Arial';
+                ctx.font = pieLegendFont;
                 ctx.textAlign = 'left';
-                let legendY = 20;
-                let legendX = 20;
-                
-                data.labels.forEach((label, i) =>{
-                    const color = colors[i % colors.length];
-                    const text = `${label.length >8 ? label.substring(0, 7) + '...' : label} (${data.values[i]})`;
-                    
-                    ctx.fillStyle = color;
-                    ctx.fillRect(legendX, legendY + i * 18, 12, 12);
-                    ctx.fillStyle = '#333';
-                    ctx.fillText(text, legendX + 18, legendY + i * 18 + 10);
-                    
-                    legendX += ctx.measureText(text).width + 25;
-                    if (legendX >width - 100) {
-                        legendX = 20;
-                        legendY += 20;
-                    }
-                });
-                
+
+                if (isMobile) {
+                    // 手机端：图例竖向排列在饼图右侧，每行一项，便于阅读
+                    const legendStartX = centerX + radius + 16;
+                    const legendStartY = Math.max(20, (height - data.labels.length * 22) / 2);
+                    data.labels.forEach((label, i) => {
+                        const color = colors[i % colors.length];
+                        const text = `${label.length > pieLegendMaxLen + 1 ? label.substring(0, pieLegendMaxLen) + '…' : label} (${data.values[i]})`;
+                        const y = legendStartY + i * 22;
+                        ctx.fillStyle = color;
+                        ctx.fillRect(legendStartX, y, 14, 14);
+                        ctx.fillStyle = '#333';
+                        ctx.fillText(text, legendStartX + 20, y + 11);
+                    });
+                } else {
+                    // 桌面端：保持原有横向布局
+                    const legendY = 20;
+                    let legendX = 20;
+                    data.labels.forEach((label, i) => {
+                        const color = colors[i % colors.length];
+                        const text = `${label.length > pieLegendMaxLen + 1 ? label.substring(0, pieLegendMaxLen) + '…' : label} (${data.values[i]})`;
+
+                        ctx.fillStyle = color;
+                        ctx.fillRect(legendX, legendY + i * 18, 12, 12);
+                        ctx.fillStyle = '#333';
+                        ctx.fillText(text, legendX + 18, legendY + i * 18 + 10);
+
+                        legendX += ctx.measureText(text).width + 25;
+                        if (legendX > width - 100) {
+                            legendX = 20;
+                        }
+                    });
+                }
+
             } else if (type === 'horizontalBar') {
                 if (!data.labels || !data.values || data.values.length === 0) {
                     ctx.fillStyle = '#999';
@@ -9287,12 +9383,6 @@ let currentUser = null;
                     ctx.fillText('暂无数据', width / 2, height / 2);
                     return;
                 }
-
-                // 响应式参数：根据屏幕宽度调整字体和 padding，提升手机端可读性
-                const isMobile = window.innerWidth < 768;
-                const isSmall = window.innerWidth < 480;
-                const hBarFont = isMobile ? '11px Arial' : '11px Arial';
-                const hBarLabelMaxLen = isMobile ? (isSmall ? 3 : 4) : 7;
 
                 // 手机端：左侧 padding 容纳药材名，右侧 padding 预留数值空间
                 const padding = isMobile
@@ -9336,6 +9426,7 @@ let currentUser = null;
                     } else {
                         const textX = padding.left + barWidth + 3;
                         if (textX + textWidth > width - 2) {
+                            // 超出右边界：改放条形内部（即使条形较短）
                             ctx.textAlign = 'right';
                             ctx.fillStyle = '#fff';
                             ctx.fillText(dosageText, padding.left + Math.max(barWidth, textWidth + 5) - 3, y + barHeight / 2 + 4);

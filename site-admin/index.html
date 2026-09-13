@@ -9403,6 +9403,7 @@ IconFile=${scriptPath}`;
 
         // 解析单行数据为药品对象，严格按列对应：C列(row[2])为进价costPrice字段
         // 返回 { medicine, hasMissingPrice } 结构，hasMissingPrice=true 表示进价缺失或格式错误
+        // >>> SYNCED-FN parseMedicineRow (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function parseMedicineRow(row) {
             const medicineName = String(row[0] || '').trim();
             if (!medicineName) return null;
@@ -9425,6 +9426,7 @@ IconFile=${scriptPath}`;
                 hasMissingPrice: hasMissingPrice
             };
         }
+        // <<< SYNCED-FN-END parseMedicineRow ===
 
         // 加载 XLSX 库（按需动态加载：881KB 不阻塞首屏，head 无静态引入；此处做存在性校验 + Electron UMD 兜底 + 动态加载三合一）
         function loadXLSX() {

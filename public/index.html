@@ -8582,6 +8582,30 @@ let currentUser = null;
             return Promise.reject(new Error('Excel 组件不可用（StockCore 未加载）'));
         }
 
+        // 解析单行药材数据（Excel/CSV 通用）：进价列(row[2])严格校验，缺失/格式错误置 null 不自动填 0
+        function parseMedicineRow(row) {
+            const medicineName = String(row[0] || '').trim();
+            if (!medicineName) return null;
+
+            // C 列(row[2])为进价 costPrice 字段，严格校验
+            const costPriceRaw = row[2];
+            const costPrice = parseFloat(costPriceRaw);
+            const hasMissingPrice = (costPriceRaw === null || costPriceRaw === undefined || costPriceRaw === '' || isNaN(costPrice));
+
+            return {
+                medicine: {
+                    name: medicineName,
+                    code: row[1] || '',
+                    costPrice: hasMissingPrice ? null : costPrice, // 进价缺失时设为 null，不自动填充 0
+                    price: parseFloat(row[3]) || 0,
+                    unit: row[4] || 'g',
+                    dosage: parseFloat(row[5]) || 10,
+                    stock: parseInt(row[6]) || 0
+                },
+                hasMissingPrice: hasMissingPrice
+            };
+        }
+
         async function importMedicines(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -8618,22 +8642,21 @@ let currentUser = null;
                         }
                         
                         let importedMedicines = [];
+                        let missingPriceMedicines = []; // 进价缺失/格式错误的药材名称列表
                         for (let i = 1; i< jsonData.length; i++) {
                             const row = jsonData[i];
                             if (row && row[0]) {
-                                importedMedicines.push({
-                                    name: row[0] || '',
-                                    code: row[1] || '',
-                                    costPrice: parseFloat(row[2]) || 0,
-                                    price: parseFloat(row[3]) || 0,
-                                    unit: row[4] || 'g',
-                                    dosage: parseFloat(row[5]) || 10,
-                                    stock: parseInt(row[6]) || 0
-                                });
+                                const result = parseMedicineRow(row);
+                                if (result) {
+                                    importedMedicines.push(result.medicine);
+                                    if (result.hasMissingPrice) {
+                                        missingPriceMedicines.push(result.medicine.name);
+                                    }
+                                }
                             }
                         }
                         
-                        processImportedMedicines(importedMedicines);
+                        processImportedMedicines(importedMedicines, missingPriceMedicines);
                     } catch (err) {
                         alert('Excel导入失败！请尝试将 Excel 另存为 CSV 格式再导入。错误信息：' + err.message);
                     }
@@ -8645,6 +8668,7 @@ let currentUser = null;
                 reader.onload = function(e) {
                     try {
                         let importedMedicines = [];
+                        let missingPriceMedicines = [];
                         const arrayBuffer = e.target.result;
                         const uint8Array = new Uint8Array(arrayBuffer);
                         let content = decodeTextWithAutoEncoding(uint8Array);
@@ -8663,15 +8687,13 @@ let currentUser = null;
                                 // 更健壮的 CSV 解析
                                 const row = parseCSVLine(line);
                                 if (row.length >= 2 && row[0]) {
-                                    importedMedicines.push({
-                                        name: row[0] || '',
-                                        code: row[1] || '',
-                                        costPrice: parseFloat(row[2]) || 0,
-                                        price: parseFloat(row[3]) || 0,
-                                        unit: row[4] || 'g',
-                                        dosage: parseFloat(row[5]) || 10,
-                                        stock: parseInt(row[6]) || 0
-                                    });
+                                    const result = parseMedicineRow(row);
+                                    if (result) {
+                                        importedMedicines.push(result.medicine);
+                                        if (result.hasMissingPrice) {
+                                            missingPriceMedicines.push(result.medicine.name);
+                                        }
+                                    }
                                 }
                             }
                         } else {
@@ -8686,10 +8708,21 @@ let currentUser = null;
                                 alert('文件格式错误！');
                                 return;
                             }
-                            importedMedicines = importData.medicines;
+                            // JSON 导入同样校验进价缺失
+                            importData.medicines.forEach(m => {
+                                const costPrice = parseFloat(m.costPrice);
+                                const hasMissingPrice = (m.costPrice === null || m.costPrice === undefined || m.costPrice === '' || isNaN(costPrice));
+                                if (hasMissingPrice) {
+                                    missingPriceMedicines.push(m.name);
+                                    m.costPrice = null;
+                                } else {
+                                    m.costPrice = costPrice;
+                                }
+                                importedMedicines.push(m);
+                            });
                         }
                         
-                        processImportedMedicines(importedMedicines);
+                        processImportedMedicines(importedMedicines, missingPriceMedicines);
                     } catch (err) {
                         alert('导入失败！文件格式错误。' + err.message);
                     }
@@ -8700,13 +8733,15 @@ let currentUser = null;
         }
         
         let pendingImportedMedicines = null;
+        let pendingMissingPriceMedicines = [];
 
-        function processImportedMedicines(importedMedicines) {
+        function processImportedMedicines(importedMedicines, missingPriceMedicines = []) {
             if (importedMedicines.length === 0) {
                 alert('没有导入任何药品！');
                 return;
             }
             pendingImportedMedicines = importedMedicines;
+            pendingMissingPriceMedicines = missingPriceMedicines;
             showImportMethodModal(importedMedicines.length);
         }
 
@@ -8741,16 +8776,24 @@ let currentUser = null;
             const modal = document.getElementById('importMethodModal');
             if (modal) modal.style.display = 'none';
             const importedMedicines = pendingImportedMedicines;
+            const missingPriceMedicines = pendingMissingPriceMedicines;
             pendingImportedMedicines = null;
+            pendingMissingPriceMedicines = [];
             if (!importedMedicines) return;
+            // 进价缺失统计（缺失药品 costPrice=null，可在编辑药品时补录，后台报表不再按 0 计成本）
+            const missingCount = missingPriceMedicines.length;
+            let statsSuffix = '';
+            if (missingCount > 0) {
+                statsSuffix = `\n进价缺失：${missingCount} 条\n异常药材名单（进价空白或格式错误）：\n${missingPriceMedicines.join('、')}`;
+            }
             if (method === 'append') {
                 medicines = [...medicines, ...importedMedicines];
-                alert(`导入成功！共导入 ${importedMedicines.length} 种药品`);
+                alert(`导入成功！共导入 ${importedMedicines.length} 种药品` + statsSuffix);
             } else if (method === 'overwrite') {
                 if (confirm('确定要覆盖现有药品库吗？导入的药品价格与库存将完全替换现有数据！未填库存列的药品库存将归零')) {
                     medicines = [...importedMedicines];
                     localStorage.removeItem('local_clearDefaultMedicines');
-                    alert(`导入成功！共导入 ${importedMedicines.length} 种药品，已覆盖原有数据`);
+                    alert(`导入成功！共导入 ${importedMedicines.length} 种药品，已覆盖原有数据` + statsSuffix);
                 } else { return; }
             } else if (method === 'merge') {
                 let addCount = 0, updateCount = 0;
@@ -8759,7 +8802,7 @@ let currentUser = null;
                     if (existIndex >= 0) { medicines[existIndex] = importMed; updateCount++; }
                     else { medicines.push(importMed); addCount++; }
                 });
-                alert(`导入完成！新增：${addCount} 种，更新：${updateCount} 种，更新的药品以导入价格为准`);
+                alert(`导入完成！新增：${addCount} 种，更新：${updateCount} 种，更新的药品以导入价格为准` + statsSuffix);
             } else { return; }
             localStorage.setItem('local_medicines', JSON.stringify(medicines));
             buildMedicineMap();

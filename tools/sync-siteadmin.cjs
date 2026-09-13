@@ -49,10 +49,15 @@ const TARGET_REL = 'site-admin/index.html';
 //   + 反向收敛第 3 轮：2 个「B 胜出」反向移植（B 功能增强版进 public 权威源
 //     后两侧同体）【createChart 响应式图表+canvas 重试 / selectPatientName
 //     模糊匹配+最新记录排序填充】，66 → 68。
-//   反向收敛存档（未移植）：importMedicines 进价校验——B 版是流程重写
-//   （showImportModePicker 自定义 modal + processImportedMedicines 云端同步
-//   闭环 + costPrice null 语义），移植需连坐替换 A 侧 showImportMethodModal
-//   交互链（界面铁律管辖区）+ null 下游兼容性未知，随 P2-B 专项推进；
+//   + 反向收敛第 4 轮（importMedicines 进价校验专项）：parseMedicineRow
+//     B 版原样移植 public（两侧规范化同体即入生成层），68 → 69。连带 A 侧
+//     能力增强（不入 SYNCED_FNS，仍 Tier C 分叉）：importMedicines 三通道
+//     （Excel/CSV/JSON）missingPriceMedicines 收集 + processImportedMedicines
+//     双参 + executeImportMethod 进价缺失统计弹窗（costPrice null 语义——
+//     A 侧下游已全兼容：回填 price*0.8 / formatPrice(null)→'' / 编辑导出
+//     ||0 兜底）。A 侧保留平台分叉：loadXlsxLibrary（StockCore 链 vs B 内联
+//     三合一 loadXLSX）+ showImportMethodModal 交互链（界面铁律管辖区）+
+//     local_medicines 存储（vs B saveMedicinesToCloud 云端闭环）。
 //   renderUserList allowedMode UI——B 依赖 toggleUserCloudMode（A 无）+
 //   async getUsers（A 是同步 UserStore.get 薄版）+ A 版有云端回退逻辑，
 //   真平台分叉（医师站 vs 管理台），永久否决。
@@ -68,7 +73,7 @@ const SYNCED_FNS = [
     'getRecycleBin', 'handleInput', 'handleKeyboard', 'handleSearchKey',
     'handleSearchKeyDown', 'handleSearchKeyPress', 'hidePatientNameDropdown', 'injectRecycleBinButton',
     'loadLastHistory', 'loadPatientHistory', 'markGenderManual', 'mediaLabelOf',
-    'mediaViewerNav', 'removeDuplicateMedicines', 'renderMediaViewerSingle', 'renderPrescriptionTable',
+    'mediaViewerNav', 'parseMedicineRow', 'removeDuplicateMedicines', 'renderMediaViewerSingle', 'renderPrescriptionTable',
     'renderRememberedUsers', 'renderSyndromeList', 'resetCaseSearch', 'safeParseJSON',
     'saveRecycleBin', 'searchCases', 'selectFormula', 'selectMedicine',
     'selectPatientName', 'selectSearchResult', 'showPatientNameDropdown', 'showRecycleBin', 'showSideHistory',
