@@ -5806,23 +5806,39 @@ let currentUser = null;
         //   语义约定：处方编号（YYMMDD+序号=录入流水）保持不变，仅改就诊日期——
         //   date（历史列表/统计页归位）+ createdAt（患者分析就诊时间线，保留原时分秒）。
         //   媒体文件按「患者名_处方编号」前缀匹配，不随日期变化，关联不受影响。
-        //   手机 WebView type=date 唤起原生日期滚轮，桌面为日历面板。
+        //   ★ 二版教训：隐藏 input(type=date) 程序化 click() 不弹日期面板（file input
+        //     是浏览器特例）——改用可见轻量模态：input 可见时用户点击原生弹面板
+        //     （手机 WebView 日期滚轮/桌面日历），Enter 提交 / Esc 取消。
         // ========================================================================
-        async function editPrescriptionDate(id) {
+        function editPrescriptionDate(id) {
             const record = prescriptionHistory.find(p => Number(p.id) === Number(id));
             if (!record) { showToast('未找到该处方'); return; }
-            let input = document.getElementById('__editRxDateInput');
-            if (input) input.remove();
-            input = document.createElement('input');
-            input.type = 'date';
-            input.id = '__editRxDateInput';
-            input.style.display = 'none';
-            input.value = String(record.date || '').slice(0, 10) || new Date().toLocaleDateString('sv-SE');
-            document.body.appendChild(input);
-            input.onchange = async function () {
+            const old = document.getElementById('__editRxDateModal');
+            if (old) old.remove();
+            const curDate = String(record.date || '').slice(0, 10) || new Date().toLocaleDateString('sv-SE');
+            const overlay = document.createElement('div');
+            overlay.id = '__editRxDateModal';
+            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99999;display:flex;align-items:center;justify-content:center;';
+            const panel = document.createElement('div');
+            panel.style.cssText = 'background:#fff;border-radius:10px;padding:18px 20px;min-width:260px;max-width:92vw;box-shadow:0 8px 30px rgba(0,0,0,.3);font-size:13px;';
+            panel.innerHTML =
+                '<div style="font-weight:bold;margin-bottom:4px;">修改处方日期</div>' +
+                '<div style="color:#8b0000;font-size:11px;margin-bottom:10px;">[' + escapeHtml(record.prescriptionNo || '') + '] ' + escapeHtml(record.patientName || '') + '（编号不变）</div>' +
+                '<input type="date" id="__editRxDateInput" value="' + curDate + '" style="width:100%;padding:8px 10px;border:1px solid #ccc;border-radius:6px;font-size:14px;box-sizing:border-box;">' +
+                '<div style="display:flex;gap:10px;margin-top:14px;justify-content:flex-end;">' +
+                '<button id="__editRxDateCancel" style="padding:7px 16px;border:1px solid #ccc;border-radius:6px;background:#f5f5f5;cursor:pointer;font-size:13px;">取消</button>' +
+                '<button id="__editRxDateOk" style="padding:7px 16px;border:none;border-radius:6px;background:#1976d2;color:#fff;cursor:pointer;font-size:13px;">确定</button>' +
+                '</div>';
+            overlay.appendChild(panel);
+            document.body.appendChild(overlay);
+            const input = panel.querySelector('#__editRxDateInput');
+            const close = () => { const m = document.getElementById('__editRxDateModal'); if (m) m.remove(); };
+            panel.querySelector('#__editRxDateCancel').onclick = close;
+            overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
+            const submit = async function () {
                 const newDate = input.value;
-                input.remove();
-                if (!newDate || newDate === String(record.date || '').slice(0, 10)) return;
+                close();
+                if (!newDate || newDate === curDate) return;
                 try {
                     // createdAt 保留原时分秒，仅换日期（患者分析时间线连续）
                     let timePart = '00:00:00';
@@ -5855,8 +5871,12 @@ let currentUser = null;
                     showToast('修改日期失败：' + (e && e.message || e));
                 }
             };
-            input.oncancel = function () { input.remove(); };
-            input.click();
+            panel.querySelector('#__editRxDateOk').onclick = submit;
+            input.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') { e.preventDefault(); submit(); }
+                else if (e.key === 'Escape') { e.preventDefault(); close(); }
+            });
+            setTimeout(function () { try { input.focus(); } catch (_) {} }, 50);
         }
 
         // ========================================================================
@@ -6687,9 +6707,11 @@ let currentUser = null;
             }
             document.getElementById('patientName').value = record.patientName;
             document.getElementById('patientGender').value = record.patientGender || '男';
-            document.getElementById('patientAge').value = record.patientAge;
-            document.getElementById('patientPhone').value = record.patientPhone;
-            document.getElementById('patientAddress').value = record.patientAddress;
+            // ★ 2026-09-14 空值兜底：旧记录年龄/电话/住址字段可能缺失（undefined），
+            //   直接赋值会把字面量 "undefined" 写进输入框并上处方签纸面
+            document.getElementById('patientAge').value = record.patientAge != null ? record.patientAge : '';
+            document.getElementById('patientPhone').value = record.patientPhone != null ? record.patientPhone : '';
+            document.getElementById('patientAddress').value = record.patientAddress != null ? record.patientAddress : '';
             document.getElementById('paperClinicNo').textContent = record.prescriptionNo || '';
             // 编号输入框永远显示最新编号，不被历史处方覆盖
             const latestPresNo = await generatePrescriptionNo();
