@@ -3744,6 +3744,23 @@ let currentUser = null;
                         document.getElementById('loginOverlay').style.display = 'none';
                         document.querySelector('.main-container').style.display = 'flex';
                         updateUserDisplay();
+                        // ★ 2026-09-13 补丁2【桌面自动登录分支漏刷版本标签·王桂杰二报】：
+                        //   云端桌面真实主流程 = login.js 登录窗 → 主进程 login-success →
+                        //   本分支自动登录（不走 handleLogin），此前从不调用 refreshVersionTags
+                        //   → 顶栏/标题停在启动帧 applyEditionTags() 读的 config.json 打包默认
+                        //   （统一包=cloud_personal 标准版）→ 机构版装机用户全程误显
+                        //   【云端标准版】而授权状态正确（读 auth:currentUser）。此处补权威
+                        //   edition（login.js 持久化的 clinicEdition），缺失回退登录缓存。
+                        if (typeof window.refreshVersionTags === 'function') {
+                            var _rvEd2 = (electronUser && (electronUser.clinicEdition || electronUser.edition)) || '';
+                            if (!_rvEd2) {
+                                try {
+                                    var _rvCu2 = JSON.parse(localStorage.getItem('auth:currentUser') || 'null');
+                                    if (_rvCu2) _rvEd2 = _rvCu2.clinicEdition || _rvCu2.edition || '';
+                                } catch (e) {}
+                            }
+                            window.refreshVersionTags(_rvEd2 || undefined);
+                        }
                         await loadData();
                         refreshUserInterface();
                         return;
