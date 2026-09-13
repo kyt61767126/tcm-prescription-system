@@ -9288,7 +9288,7 @@ IconFile=${scriptPath}`;
             };
         }
 
-        // 加载 XLSX 库（head 中已静态引入本地 xlsx.full.min.js；此函数做存在性校验 + Electron UMD 兜底挂载）
+        // 加载 XLSX 库（按需动态加载：881KB 不阻塞首屏，head 无静态引入；此处做存在性校验 + Electron UMD 兜底 + 动态加载三合一）
         function loadXLSX() {
             return new Promise((resolve, reject) => {
                 // 1) 已挂载到 window.XLSX 且有 read 方法
@@ -9334,7 +9334,7 @@ IconFile=${scriptPath}`;
             const isExcel = fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
             
             if (isExcel) {
-                // 确保 XLSX 库已加载（head 已静态引入，此处做存在性校验 + Electron UMD 兜底）
+                // 确保 XLSX 库已加载（按需：未加载时由 loadXLSX 动态加载，含 Electron UMD 兜底）
                 if (typeof window.XLSX === 'undefined' || typeof window.XLSX.read !== 'function') {
                     try {
                         await loadXLSX();
