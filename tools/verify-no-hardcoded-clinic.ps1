@@ -30,8 +30,8 @@ Write-Host "  RepoRoot: $RepoRoot"
 Write-Host "============================================"
 
 # 需扫描的运行期产品文件（用户可见三端：网页 / 桌面 / APP）
+# ★ 2026-09-13：根目录孤儿 index.html 已删除（P0-5），不再列入扫描
 $scanFiles = @(
-    'index.html',
     'public\index.html',
     'site-admin\index.html',
     'app_project\db-offline\index-app.html',

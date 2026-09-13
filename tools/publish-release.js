@@ -913,45 +913,43 @@ function main() {
     console.log('  [OK] provenance: repo=' + (manifest.provenance.repo || '-') + ' commit=' + (manifest.provenance.commit || '-') + ' builder=' + (manifest.provenance.builder || '-'));
 
     // 更新 latest.json（桌面版自动更新用）
+    // ★ 2026-09-13 SSOT 收口（P0-3）：latest.json 不再「读旧文件→改字段→写回」，
+    //   改为 hash-manifest 节点的纯投影（单一事实源派生）。根治两点：
+    //   ① 旧模式 latest.json 损坏/缺失时 catch+continue 静默跳过，桌面自动更新
+    //     停在旧版本无人知晓（与 09-12 APP 更新说明缺失同构的静默失败）；
+    //   ② version/url/portableUrl/releaseNotes 与 manifest 双源平行维护必漂移。
+    //   字段映射：version←exe节点.version（exe 优先，与桌面端 latest.url 检查语义一致）；
+    //   url←exe节点.url；portableUrl←portable节点.url；releaseNotes←exe节点.releaseNotes；
+    //   releaseDate←北京日期（UTC+8，北京时间 0-8 点发布不落前一天）。
+    //   消费端零改动：update-manager.cjs（version/url）、下载页桌面卡、rollback.js。
+    //   本次只发 APK（不发 exe/portable）的 appKey 不触发重写（latestUpdates 仅在
+    //   上传桌面产物时记录），与旧行为一致。
     const latestUpdateKeys = Object.keys(latestUpdates);
     if (latestUpdateKeys.length > 0) {
         for (const key of latestUpdateKeys) {
             const info = latestUpdates[key];
-            if (!fs.existsSync(info.config.latestJsonPath)) continue;
-            let latest = {};
-            try {
-                latest = JSON.parse(fs.readFileSync(info.config.latestJsonPath, 'utf8'));
-            } catch (e) {
-                continue;
-            }
-            if (info.exe) latest.url = info.exe;
-            if (info.portable) latest.portableUrl = info.portable;
-            // 从文件名提取版本号 "惠康中医-xxx-X.X.X.exe" → "X.X.X"
-            const uploaded = uploadedAssets.find(a => a.file.appKey === key && (a.file.type === 'exe' || a.file.type === 'portable'));
-            if (uploaded) {
-                const vm = uploaded.file.uploadName.match(/(\d+\.\d+\.\d+)/);
-                if (vm) {
-                    latest.version = vm[1];
-                    // ★ 2026-09-05 修复：releaseDate 用北京日期（now 是 UTC ISO，北京时间 0-8 点
-                    //   发布会落到前一天，下载页显示错误日期）；updateTime 保留 UTC Z 格式不变
-                    latest.releaseDate = new Date(Date.now() + 8 * 3600 * 1000).toISOString().substring(0, 10);
-                }
-                // 注意：这里不写 latest.sha256！
-                // 客户端 update-notifier.js 用单个 sha256 校验实际下载文件，
-                // 但 url(安装版) 与 portableUrl(便携版) 是两个不同文件，单一哈希无法同时匹配。
-                // 写错会误报"校验失败"并删除下载文件（宁可漏检不可误报）。
-                // 哈希展示请用 hash-manifest.json（下载页 SHA-256 栏）。
-            }
-            // ★ P2优化：自动生成变更日志（复用上方已生成的 releaseNotes，避免重复执行 git log）
-            if (releaseNotes) {
-                latest.releaseNotes = releaseNotes;
-            }
-            // 确保灰度发布字段存在（默认100%）
-            if (latest.rolloutPercentage === undefined) {
-                latest.rolloutPercentage = 100;
-            }
+            const node = manifest[key] || {};
+            const exeNode = node.exe || null;
+            const portableNode = node.portable || null;
+            if (!exeNode && !portableNode) continue;
+            const versionSource = exeNode || portableNode;
+            const latest = {
+                version: versionSource.version,
+                releaseDate: new Date(Date.now() + 8 * 3600 * 1000).toISOString().substring(0, 10),
+                releaseNotes: versionSource.releaseNotes || '',
+                url: exeNode ? exeNode.url : '',
+                portableUrl: portableNode ? portableNode.url : '',
+                forceUpdate: false,
+                minVersion: '1.0.0',
+                rolloutPercentage: 100
+            };
+            // 注意：不写 latest.sha256！
+            // url(安装版) 与 portableUrl(便携版) 是两个不同文件，单一哈希无法同时匹配。
+            // 写错会误报"校验失败"并删除下载文件（宁可漏检不可误报）。
+            // 哈希展示请用 hash-manifest.json（下载页 SHA-256 栏）。
+            fs.mkdirSync(path.dirname(info.config.latestJsonPath), { recursive: true });
             fs.writeFileSync(info.config.latestJsonPath, JSON.stringify(latest, null, 4), 'utf8');
-            console.log('  [OK] ' + key + '/latest.json: url=' + (latest.url || '-') + ', portableUrl=' + (latest.portableUrl || '-'));
+            console.log('  [OK] ' + key + '/latest.json (manifest 投影): version=' + latest.version + ', url=' + (latest.url || '-') + ', portableUrl=' + (latest.portableUrl || '-'));
         }
     }
 

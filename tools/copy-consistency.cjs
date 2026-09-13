@@ -107,6 +107,17 @@ const GROUPS = [
             'app_project/db-offline/app/app/src/main/assets/public/stock-core.js',
             'app_project_harmony/huikang-cloud/entry/src/main/resources/rawfile/stock-core.js'
         ]
+    },
+    {
+        // ★ P0-1（2026-09-13）：桌面更新器收口。云桌面/离线桌面 main.js 原各内嵌
+        //   ~200 行同构更新器（仅渠道 URL 不同），历史靠人肉双改。现抽为唯一权威源
+        //   shared/update-manager.cjs，main.js require + 工厂入参注入渠道差异。
+        //   本组 2 副本硬哈希校验，与 electron-logger.cjs / pe-guard.cjs 同位同构。
+        authority: 'shared/update-manager.cjs',
+        copies: [
+            'app_project/db-yunduan/cloud_desktop/electron/update-manager.cjs',
+            'app_project/db-offline/desktop/electron/update-manager.cjs'
+        ]
     }
 ];
 
@@ -186,7 +197,8 @@ for (var gi = 0; gi < GROUPS.length; gi++) {
     });
 }
 // ★ T3（2026-08-21）：USER-STORE 标记块一致性 —— shared/user-store.js 权威源
-//   内联到 7 份 index.html 的标记块，哈希必须与权威源生成物一致，漂移即失败
+//   内联到 6 份 index.html 的标记块，哈希必须与权威源生成物一致，漂移即失败
+//   （★ 2026-09-13：根目录孤儿 index.html 删除后由 7 份收口为 6 份）
 //   （调用点在 totalCopies 声明之后，见下方 checkUserStoreBlocks()）
 
 // DO_FIX 模式下：修正 failGroups 统计（上面对 anyCopyBad==false 且刚 FIXED 的组错误计数了）
@@ -207,7 +219,8 @@ if (DO_FIX) {
 }
 
 // ★ T3（2026-08-21）：USER-STORE 标记块一致性 —— shared/user-store.js 权威源
-//   内联到 7 份 index.html 的标记块，哈希必须与权威源生成物一致，漂移即失败
+//   内联到 6 份 index.html 的标记块，哈希必须与权威源生成物一致，漂移即失败
+//   （★ 2026-09-13：根目录孤儿 index.html 删除后由 7 份收口为 6 份）
 function checkUserStoreBlocks() {
     var sbm = require('./sync-shared-blocks.cjs');
     var ok = sbm.run(!DO_FIX); // check 模式；DO_FIX 模式下直接重新同步

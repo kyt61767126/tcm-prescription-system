@@ -1034,14 +1034,16 @@ async function injectVideoRecorder(win) {
     }
 }
 
-// ============================================================================
-//  ★ 方案A 轻量更新提示（2026-08-23）：启动静默检查官网 latest.json
-//  - 登录页 dom-ready 1.5s 后主进程 net.fetch 静默检查（绕过渲染层 CSP/缓存）
-//  - 官网版本 > 本地 app.getVersion() 才提示（三段式比较，宁可漏检不可误报）
-//  - 提示方式：登录窗增高 40px + 顶部黄色横幅，点击跳官网下载页手动覆盖安装
-//  - 无自动下载/自动安装；网络失败/解析失败/格式异常一律静默跳过（离线版无感）
-// ============================================================================
+// ★ 2026-09-13 更新器架构收口：检查/分片下载/装包逻辑全部在 update-manager.cjs
+//   （shared/ 唯一权威源 → sync-all Group 12 分发 → copy-consistency 哈希门），
+//   main.js 只保留渠道差异（检查地址 + 下载页锚点）与两个接线点：
+//   dom-ready 调 updateManager.checkForUpdate(win)；setWindowOpenHandler 调 handleWindowOpen(url)。
 const UPDATE_CHECK_URL = 'https://tcm-prescription-system.pages.dev/updates/local/latest.json';
+const UPDATE_DOWNLOAD_URL = 'https://tcm-prescription-system.pages.dev/download?card=card-local-desktop';
+const updateManager = require('./update-manager.cjs').createDesktopUpdateManager({
+    checkUrl: UPDATE_CHECK_URL,
+    downloadPageUrl: UPDATE_DOWNLOAD_URL
+});
 
 // ★ 2026-09-09 下载转化统计：匿名启动心跳（管理后台「下载转化统计」数据源）。
 //   隐私设计：机器码客户端 sha256 后上报（服务端再见不到原始机器码，且二次哈希存 KV），
@@ -1107,250 +1109,6 @@ async function sendStartupHeartbeat() {
         console.log('[telemetry] 心跳跳过: ' + (e.message || e));
     }
 }
-const UPDATE_DOWNLOAD_URL = 'https://tcm-prescription-system.pages.dev/download?card=card-local-desktop';
-const UPDATE_BANNER_EXTRA_HEIGHT = 40;
-
-// ============================================================================
-// ★ 2026-09-12 应用内更新下载器（更新速度+安装体验闭环，与云端桌面同构）
-//   旧链路：横幅点击 → window.open → 系统浏览器单流下载（实测 ~0.5MB/s，
-//   78MB 约 3 分钟，无进度、下完还要手动找文件双击安装）。
-//   新链路：横幅点击 → window.open(UPDATE_SCHEME) → setWindowOpenHandler 拦截
-//   → 主进程多连接并行分片下载（官网 v4 robustDownload 的 Node 版：每分片
-//   独立 Range / 看门狗 / 指数退避重试，跨境丢包链路多流提升明显）
-//   → 横幅实时进度+速度 → 完成自动 shell.openPath 打开安装向导。
-//   桥接零 IPC/preload 改动；exeUrl 白名单不过时点击回退官网下载页（兜底）。
-// ============================================================================
-const UPDATE_SCHEME = 'kyt-desktop-update://start';
-const UPDATE_DL_PARALLEL = 4;                 // 并行分片数（>8MB 才并行）
-const UPDATE_DL_MIN_PARALLEL = 8 * 1048576;   // 小文件单流
-const UPDATE_DL_WATCHDOG_MS = 25000;          // 单分片数据停滞超时（挂死不报错必须看门狗）
-const UPDATE_DL_MAX_RETRY = 6;                // 单分片重试上限
-let pendingUpdate = null;                     // { win, exeUrl, version }（injectUpdateBanner 时记录）
-let updateDownloading = false;
-
-function setUpdateBannerText(win, text, showLink, linkText) {
-    if (!win || win.isDestroyed()) return;
-    const code = '(function(){var b=document.getElementById(\'__updateBanner\');if(!b)return;'
-        + 'var l=b.querySelector(\'#__updateLabel\');if(l)l.textContent=' + JSON.stringify(String(text)) + ';'
-        + 'var k=b.querySelector(\'#__updateLink\');if(k){k.style.display=' + (showLink ? '\'\'' : '\'none\'') + ';'
-        + 'if(k.style.display!==\'none\')k.textContent=' + JSON.stringify(String(linkText || '立即下载')) + ';}})();';
-    win.webContents.executeJavaScript(code).catch(function () {});
-}
-
-function setUpdateBannerFill(win, pct) {
-    if (!win || win.isDestroyed()) return;
-    const code = '(function(){var f=document.getElementById(\'__updateFill\');if(f)f.style.width=\'' + Math.max(0, Math.min(100, pct)) + '%\';})();';
-    win.webContents.executeJavaScript(code).catch(function () {});
-}
-
-// 探测下载源：Range 0-0 → 206 + Content-Range 总大小；200 = 无 Range 支持按单流全量
-async function probeUpdateFile(url) {
-    const res = await net.fetch(url, { headers: { Range: 'bytes=0-0' }, signal: AbortSignal.timeout(20000) });
-    if (!res.ok) throw new Error('探测失败 HTTP ' + res.status);
-    const cr = res.headers.get('content-range');
-    try { if (res.body && res.body.cancel) res.body.cancel(); } catch (e) { /* 已取消 */ }
-    if (res.status === 206 && cr && /\/(\d+)$/.test(cr)) {
-        return { size: parseInt(cr.match(/\/(\d+)$/)[1], 10), ranged: true };
-    }
-    const cl = res.headers.get('content-length');
-    return { size: cl ? parseInt(cl, 10) : 0, ranged: false };
-}
-
-// 单分片流式落盘：数据到达即按偏移写 fd（内存占用极小），看门狗 + 指数退避重试
-async function fetchUpdateRange(url, fd, start, end, onChunk) {
-    let attempt = 0;
-    for (;;) {
-        try {
-            const ctl = new AbortController();
-            let dog = setTimeout(function () { ctl.abort(); }, UPDATE_DL_WATCHDOG_MS);
-            const feed = function () { clearTimeout(dog); dog = setTimeout(function () { ctl.abort(); }, UPDATE_DL_WATCHDOG_MS); };
-            const res = await net.fetch(url, { headers: { Range: 'bytes=' + start + '-' + end }, signal: ctl.signal });
-            if (res.status !== 206 && res.status !== 200) throw new Error('HTTP ' + res.status);
-            const reader = res.body.getReader();
-            let written = 0;
-            for (;;) {
-                const r = await reader.read();
-                if (r.done) break;
-                feed();
-                const buf = Buffer.from(r.value);
-                fsSync.writeSync(fd, buf, 0, buf.length, start + written);
-                written += buf.length;
-                onChunk(buf.length);
-            }
-            clearTimeout(dog);
-            if (written !== end - start + 1) throw new Error('分片不完整 ' + written + '/' + (end - start + 1));
-            return written;
-        } catch (e) {
-            attempt++;
-            if (attempt > UPDATE_DL_MAX_RETRY) throw e;
-            await new Promise(function (r) { setTimeout(r, 800 * attempt); });
-        }
-    }
-}
-
-async function startInAppUpdateDownload() {
-    const info = pendingUpdate;
-    if (!info || !info.exeUrl) { shell.openExternal(UPDATE_DOWNLOAD_URL); return; }
-    if (updateDownloading) return;
-    updateDownloading = true;
-    const t0 = Date.now();
-    try {
-        setUpdateBannerText(info.win, '⬇ 正在准备下载…', false);
-        const probe = await probeUpdateFile(info.exeUrl);
-        const dest = path.join(app.getPath('temp'), 'kyt-update-' + info.version + '.exe');
-        const fd = fsSync.openSync(dest, 'w');
-        let done = 0, lastUi = 0;
-        const ui = function (force) {
-            const now = Date.now();
-            if (!force && now - lastUi < 400) return;
-            lastUi = now;
-            const pct = probe.size ? Math.floor(done / probe.size * 100) : 0;
-            const speed = (now - t0) > 500 ? (done / 1048576 / ((now - t0) / 1000)) : 0;
-            setUpdateBannerText(info.win, '⬇ 下载中 ' + pct + '% · ' + speed.toFixed(1) + 'MB/s', false);
-            setUpdateBannerFill(info.win, pct);
-        };
-        const onChunk = function (n) { done += n; ui(false); };
-        if (probe.ranged && probe.size > UPDATE_DL_MIN_PARALLEL) {
-            const per = Math.ceil(probe.size / UPDATE_DL_PARALLEL);
-            await Promise.all(Array.from({ length: UPDATE_DL_PARALLEL }, function (_, i) {
-                const s = i * per, e = Math.min(probe.size - 1, s + per - 1);
-                return fetchUpdateRange(info.exeUrl, fd, s, e, onChunk);
-            }));
-        } else {
-            await fetchUpdateRange(info.exeUrl, fd, 0, Math.max(0, probe.size - 1), onChunk);
-        }
-        fsSync.closeSync(fd);
-        const real = fsSync.statSync(dest).size;
-        if (probe.size && real !== probe.size) throw new Error('大小校验失败 ' + real + '/' + probe.size);
-        console.log('[update] 应用内下载完成: ' + dest + ' (' + real + ' bytes)');
-        setUpdateBannerText(info.win, '✅ 下载完成，正在打开安装程序…', false);
-        setUpdateBannerFill(info.win, 100);
-        shell.openPath(dest);
-    } catch (e) {
-        console.warn('[update] 应用内下载失败，回退官网下载页:', e && e.message);
-        setUpdateBannerText(info.win, '❌ 下载失败，已打开官网下载页', true, '重试下载');
-        shell.openExternal(UPDATE_DOWNLOAD_URL);
-    } finally {
-        updateDownloading = false;
-    }
-}
-
-// 三段式版本号比较：仅当远程版本严格大于本地版本才提示
-function isNewerRemoteVersion(remote, local) {
-    if (!remote || !local) return false;
-    const r = String(remote).split('.');
-    const l = String(local).split('.');
-    for (let i = 0; i < 3; i++) {
-        const rv = parseInt(r[i], 10) || 0;
-        const lv = parseInt(l[i], 10) || 0;
-        if (rv > lv) return true;
-        if (rv < lv) return false;
-    }
-    return false;
-}
-
-// ★ 2026-09-09 更新下载提速：exe 直链白名单校验（与版本号校验同构的安全原则）。
-//   latest.json 的 url 字段（GitHub Release 安装包直链，与官网下载按钮同源），
-//   必须过五道关才允许注入横幅：https / .exe 后缀 / host 白名单（官方发布源）/
-//   长度上限 / 无注入字符。任何一项不过=回退官网下载页（现状行为，向后兼容）。
-function isValidExeDownloadUrl(u) {
-    if (typeof u !== 'string' || u.length === 0 || u.length > 500) return false;
-    if (!/^https:\/\//i.test(u)) return false;
-    if (!/\.exe$/i.test(u)) return false;
-    if (!/^https:\/\/(github\.com\/|tcm-prescription-system\.pages\.dev\/)/i.test(u)) return false;
-    if (/['"\\\s<>()]/.test(u)) return false;
-    return true;
-}
-
-async function checkForUpdateAndNotify(win) {
-    try {
-        const res = await net.fetch(UPDATE_CHECK_URL, { signal: AbortSignal.timeout(8000) });
-        if (!res.ok) {
-            console.log('[update] 检查跳过: HTTP ' + res.status);
-            return;
-        }
-        const latest = await res.json();
-        const localVer = app.getVersion();
-        const remoteVer = latest && latest.version;
-        // 版本号白名单校验：防止 latest.json 被篡改后向 executeJavaScript 注入任意代码
-        if (!/^[0-9A-Za-z.\-+]+$/.test(String(remoteVer || ''))) {
-            console.log('[update] 检查跳过: 官网版本号格式异常');
-            return;
-        }
-        if (!isNewerRemoteVersion(remoteVer, localVer)) {
-            console.log('[update] 已是最新版本 v' + localVer);
-            return;
-        }
-        console.log('[update] 发现新版本 v' + remoteVer + '（当前 v' + localVer + '），注入登录页横幅');
-        // ★ 2026-09-09 提取 exe 安装包直链（latest.json.url，与官网下载按钮同源）：
-        //   横幅「立即下载」直跳直链自动开始下载，跳过官网整页加载+人工找按钮。
-        //   校验不过=回退官网下载页（现状行为，向后兼容）。
-        // ★ 2026-09-12 直链改走官网 /api/dl Cloudflare 代理：GitHub 直链大陆间歇性
-        //   卡断（实测点击后仅 ~1MB 停滞→下载失败，09-12 用户报「无法打开/自动关闭」；
-        //   官网 download.html safeDownload 早已走同款代理，注释实测直连 0.14MB/s 常中断）。
-        //   代理仅放行本仓库 Release 资产（functions/api/dl.js ASSET_RE），流式透传不改内容。
-        const exeUrl = isValidExeDownloadUrl(latest.url)
-            ? (/^https:\/\/github\.com\//i.test(latest.url)
-                ? 'https://tcm-prescription-system.pages.dev/api/dl?f=' + encodeURIComponent(latest.url)
-                : latest.url)
-            : null;
-        injectUpdateBanner(win, remoteVer, exeUrl);
-    } catch (e) {
-        // 离线/超时/DNS 失败：静默跳过（宁可漏检不可误报，不打扰离线使用）
-        console.log('[update] 检查跳过（网络不可用或超时）: ' + (e && e.message));
-    }
-}
-
-function injectUpdateBanner(win, newVersion, exeUrl) {
-    if (!win || win.isDestroyed()) return;
-    try {
-        // 窗口增高 40px 并重新居中，为顶部横幅腾出空间（不遮挡居中的登录卡片）
-        win.setSize(260, 430 + UPDATE_BANNER_EXTRA_HEIGHT);
-        win.center();
-        // ★ 2026-09-12 应用内更新：横幅点击 → window.open(UPDATE_SCHEME) →
-        //   setWindowOpenHandler 拦截 → 主进程并行下载+进度+自动开安装向导。
-        //   exeUrl 白名单不过（null）时点击直接走官网下载页（safeDownload v4 兜底）。
-        pendingUpdate = { win: win, exeUrl: exeUrl || null, version: String(newVersion) };
-        const downloadTarget = exeUrl ? UPDATE_SCHEME : UPDATE_DOWNLOAD_URL;
-        const bannerCode = `
-            (function() {
-                if (document.getElementById('__updateBanner')) return;
-                var b = document.createElement('div');
-                b.id = '__updateBanner';
-                b.style.cssText = 'position:fixed;top:0;left:0;right:0;height:32px;z-index:99999;'
-                    + 'display:flex;align-items:center;justify-content:center;gap:6px;'
-                    + 'background:linear-gradient(135deg,#fff8e1 0%,#ffecb3 100%);'
-                    + 'border-bottom:1px solid #f0c040;font-size:11px;color:#7a5c00;'
-                    + 'font-family:"Microsoft YaHei",sans-serif;overflow:hidden;';
-                var fill = document.createElement('div');
-                fill.id = '__updateFill';
-                fill.style.cssText = 'position:absolute;left:0;top:0;bottom:0;width:0;'
-                    + 'background:rgba(21,101,192,0.15);transition:width .3s;';
-                b.appendChild(fill);
-                var label = document.createElement('span');
-                label.id = '__updateLabel';
-                label.textContent = '🆕 新版 v' + ${JSON.stringify(String(newVersion))};
-                label.style.cssText = 'position:relative;white-space:nowrap;';
-                var link = document.createElement('span');
-                link.id = '__updateLink';
-                link.textContent = '立即下载';
-                link.style.cssText = 'color:#1565c0;font-weight:bold;text-decoration:underline;cursor:pointer;position:relative;white-space:nowrap;';
-                link.addEventListener('click', function() {
-                    window.open(${JSON.stringify(downloadTarget)});
-                });
-                b.appendChild(label);
-                b.appendChild(link);
-                document.body.appendChild(b);
-            })();
-        `;
-        win.webContents.executeJavaScript(bannerCode).catch(function(e) {
-            console.warn('[update] 横幅注入失败:', e && e.message);
-        });
-    } catch (e) {
-        console.warn('[update] 横幅注入异常:', e && e.message);
-    }
-}
-
 function createLoginWindow() {
     if (loginWindow && !loginWindow.isDestroyed()) {
         focusWindow(loginWindow);
@@ -1394,8 +1152,7 @@ function createLoginWindow() {
     // ★ 2026-09-12 应用内更新：横幅「立即下载」→ 拦截 UPDATE_SCHEME → 主进程
     //   并行下载+进度+自动开安装向导；其余 window.open 走系统浏览器（原行为）。
     loginWindow.webContents.setWindowOpenHandler(({ url }) => {
-        if (url === UPDATE_SCHEME) {
-            startInAppUpdateDownload();
+        if (updateManager.handleWindowOpen(url)) {
             return { action: 'deny' };
         }
         if (url.startsWith('file://') || url.startsWith('http://localhost')) {
@@ -1450,7 +1207,7 @@ function createLoginWindow() {
         // ★ 方案A：登录页首帧直出完成后再静默检查更新（延迟 1.5s，不与首屏渲染竞争）
         setTimeout(() => {
             if (loginWindow && !loginWindow.isDestroyed()) {
-                checkForUpdateAndNotify(loginWindow);
+                updateManager.checkForUpdate(loginWindow);
             }
             sendStartupHeartbeat(); // ★ 匿名统计心跳（fire-and-forget，失败静默）
         }, 1500);

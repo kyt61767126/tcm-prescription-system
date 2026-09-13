@@ -3659,12 +3659,10 @@
             if (/^https?:\/\//i.test(url)) return url;
             return BASE + (url.charAt(0) === '/' ? url : '/' + url);
         }
-        const versions = {
-            'cloud': { jsonUrl: BASE + '/updates/cloud/latest.json', type: 'desktop' },
-            'cloud-app': { jsonUrl: BASE + '/updates/cloud/latest.json', type: 'app' },
-            'local-desktop': { jsonUrl: BASE + '/updates/local/latest.json', type: 'desktop' },
-            'local': { jsonUrl: BASE + '/updates/local/latest.json', type: 'app' },
-        };
+        // ★ 2026-09-13 SSOT 收口（P0-3）：删除 versions/jsonUrl → latest.json 的 fetch 链。
+        //   四张卡（云桌面/云APP/离桌面/离APP）的版本/日期/更新说明/下载链接全部单源
+        //   读 hash-manifest.json（latest.json 已改为 manifest 的纯投影，仅保留给桌面端
+        //   应用内更新器 update-manager.cjs 消费）。消除双源漂移与 APP 卡的无效 fetch。
 
         // 安全下载：先验证文件存在再跳转
         // ★ 2026-08-31 下载确认机制：下载前弹确认框显示程序名称（用户知情后才开始下载），
@@ -4067,68 +4065,10 @@
             return (Number(bytes) / 1024 / 1024).toFixed(1) + ' MB';
         }
 
-        function updateCard(key, data) {
-            const verEl = document.getElementById('ver-' + key);
-            const dateEl = document.getElementById('date-' + key);
-            const notesEl = document.getElementById('notes-' + key);
-            const dlEl = document.getElementById('dl-' + key);
-            const dlPortableEl = document.getElementById('dl-' + key + '-portable');
+        // ★ 2026-09-13 SSOT 收口（P0-3）：updateCard/loadVersion（fetch latest.json
+        //   写桌面卡）整块删除，桌面卡写入逻辑并入下方 hash-manifest 分支。
 
-            // APP 类型卡片（cloud-app / local app）的「版本/发布日期/更新说明」由
-            //   hash-manifest.json 对应 apk 节点提供（避免与 latest.json 桌面版版本号混淆，
-            //   并消除两个异步 fetch 之间的竞态覆盖）。此处只写桌面卡相关字段。
-            const isAppCard = key === 'cloud-app' || (versions[key] && versions[key].type === 'app');
-            if (!isAppCard) {
-                if (verEl) verEl.textContent = 'v' + data.version;
-                if (dateEl) dateEl.textContent = data.releaseDate || '-';
-                renderNotesWithToggle(notesEl, data.releaseNotes);
-            }
-
-            // APP 类型卡片（cloud-app/dingzhi）的下载 URL 由 hash-manifest.json 提供（APK 链接）
-            // latest.json 的 url/portableUrl 是桌面 exe 链接，不能用于 APP 卡片，否则会把 APK 按钮指向桌面 exe
-            if (key === 'cloud-app') return;
-            if (isAppCard) return;
-
-            if (data.url && dlEl) {
-                dlEl.setAttribute('href', data.url);
-                dlEl.classList.remove('disabled');
-                dlEl.textContent = dlEl.textContent.replace('暂不可用', '下载安装版（推荐）');
-            } else if (dlEl) {
-                dlEl.setAttribute('href', '#');
-                dlEl.classList.add('disabled');
-                dlEl.textContent = '暂不可用';
-            }
-
-            if (data.portableUrl && dlPortableEl) {
-                dlPortableEl.setAttribute('href', data.portableUrl);
-                dlPortableEl.classList.remove('disabled');
-                dlPortableEl.textContent = '便携版';
-            } else if (dlPortableEl) {
-                dlPortableEl.setAttribute('href', '#');
-                dlPortableEl.classList.add('disabled');
-                dlPortableEl.textContent = '暂不可用';
-            }
-        }
-
-        function loadVersion(key) {
-            const config = versions[key];
-            if (!config) return;
-            fetch(config.jsonUrl, { cache: 'no-cache' })
-                .then(r => r.json())
-                .then(data => {
-                    updateCard(key, data);
-                    bindSafeDownload();
-                })
-                .catch(err => {
-                    console.warn('加载版本信息失败:', key, err);
-                    const verEl = document.getElementById('ver-' + key);
-                    if (verEl) verEl.textContent = '加载失败';
-                });
-        }
-
-        Object.keys(versions).forEach(loadVersion);
-
-        // 加载 SHA-256 校验值
+        // 加载 SHA-256 校验值 + 四卡版本信息（hash-manifest 单一事实源）
         fetch(BASE + '/hash-manifest.json', { cache: 'no-cache' })
             .then(r => r.json())
             .then(manifest => {
@@ -4222,6 +4162,28 @@
                     if (hashEl && data && data.sha256) {
                         hashEl.textContent = data.sha256;
                         hashEl.classList.remove('pending');
+                    }
+                    // ★ 2026-09-13 SSOT 收口（P0-3）：桌面卡「版本/发布日期/更新说明」
+                    //   改读 hash-manifest.exe 节点（此前 fetch latest.json 双源易漂移）。
+                    //   发布日期 = updateTime 转 UTC+8 北京日期（与 publish-release.js
+                    //   latest.json 投影的 releaseDate 生成语义一致）。
+                    if (data) {
+                        const verEl = document.getElementById('ver-' + key);
+                        if (verEl && data.version) {
+                            verEl.textContent = 'v' + data.version;
+                        }
+                        const dateEl = document.getElementById('date-' + key);
+                        if (dateEl && data.updateTime) {
+                            try {
+                                const d = new Date(new Date(data.updateTime).getTime() + 8 * 3600 * 1000);
+                                const pad = n => String(n).padStart(2, '0');
+                                dateEl.textContent = d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate());
+                            } catch (e) { /* 保留默认 */ }
+                        }
+                        const notesEl = document.getElementById('notes-' + key);
+                        if (notesEl) {
+                            renderNotesWithToggle(notesEl, data.releaseNotes || '（待更新说明）');
+                        }
                     }
                     // ★ 2026-09-09 显示桌面版文件大小（安装版 + 便携版）
                     const sizeEl = document.getElementById('size-' + key);

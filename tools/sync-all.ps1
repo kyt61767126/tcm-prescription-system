@@ -185,6 +185,16 @@ $PeGuardTargets = @(
     'app_project/db-offline/desktop/electron'
 )
 
+# Group 12: update-manager.cjs (★ 2026-09-13 P0-1 桌面更新器架构收口) -> 2 个 electron 目录
+# 历史：云桌面/离线桌面 main.js 各内嵌 ~200 行同构更新器（仅渠道 URL 不同），
+#   靠人肉双改，09-12 /api/dl 代理修复被迫改两处。现抽为唯一权威源。
+# 配套：main.js 里 require('./update-manager.cjs')，渠道差异（updates/<cloud|local>/
+#   latest.json + 下载页 card 锚点）由 main.js 工厂入参注入，模块本体零差异。
+$UpdateManagerTargets = @(
+    'app_project/db-yunduan/cloud_desktop/electron',
+    'app_project/db-offline/desktop/electron'
+)
+
 # Group 11: index.html 权威源 -> 云端副本（★ 2026-09-02 从手工复制升级为生成模式）
 #   历史事故：权威源改动靠手工复制到云桌面/云APP 副本，多次遗漏导致 CI 红灯、
 #   重复 IIFE 脏块累积。现由 tools/sync-html.ps1 自动生成（端配置块保留，
@@ -374,6 +384,11 @@ if ($VerifyOnly) { $syncHtmlArgs += '-VerifyOnly' }
 # 直接调用（不接管 stdout 管道，避免子进程 UTF-8 中文输出经管道转码乱码）
 & $psExe @syncHtmlArgs
 if ($LASTEXITCODE -ne 0) { $allInSync = $false }
+Write-Host ""
+
+# Group 12: update-manager.cjs -> 2 electron dirs (★ 2026-09-13 P0-1)
+$result = Sync-Group -GroupName 'update-manager.cjs -> 2 electron dirs' -Files @('update-manager.cjs') -Targets $UpdateManagerTargets -VerifyOnly $VerifyOnly
+if (-not $result) { $allInSync = $false }
 Write-Host ""
 
 # ============================================================================

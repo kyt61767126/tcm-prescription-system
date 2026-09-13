@@ -84,6 +84,8 @@
 
 * shared JS（db-adapter/button-manager/edition-lock 等）：改 `shared/` 权威源后跑 `sync-all.ps1`；云端APP db-adapter.js 有防御性初始化本地差异，Group 1 排除需手工维护。
 
+* ★ 2026-09-13 **桌面更新器 update-manager.cjs 单一权威源**（P0-1 架构收口）：云桌面+离线桌面 main.js 原各内嵌 ~250 行同构更新器（仅渠道 URL 不同，历史人肉双改）——现抽为 `shared/update-manager.cjs`（createDesktopUpdateManager 工厂，checkUrl/downloadPageUrl 入参注入渠道差异，checkForUpdate + handleWindowOpen 两个接线点），双 main.js require 接线（每份 -250 行）。分发：sync-all **Group 12** → 2 个 electron 目录 + copy-consistency **新组**（2 副本硬哈希门，与 electron-logger.cjs/pe-guard.cjs 同位同构）。**铁律：①改更新逻辑只改 shared/update-manager.cjs，禁止再改两份 main.js 内嵌副本（改了会在 copy-consistency 门被拦或打包时 Auto-FIX 覆盖）；②main.js 只保留 UPDATE_CHECK_URL/UPDATE_DOWNLOAD_URL 渠道常量与两个接线点；③新增 shared/ cjs 模块必须三处登记——sync-all.ps1 加 target 组 + copy-consistency.cjs 加 GROUPS + 确认打包 build.files 覆盖（electron/**/* 默认已含）**。生效方式：云桌面/离线桌面需重打包；其他端不受影响。
+
 * shared 组件新增 IIFE 必须过 `node tools\smoke-runtime.cjs --all`（无 DOM 沙箱全量加载，凡 window.* API 一律 try-catch 包裹——S7 红线：无 DOM 环境加载不得抛错）。
 
 * ★ 2026-09-10 **symptom-dict.js 云端APP副本同步盲区**（医师框 60px 修复两轮未生效实锤）：`cloud_app/app/src/main/assets/public/symptom-dict.js` **不在 sync-all.ps1 清单、不在 build-app.bat 打包前拷贝链**（云端打包只拷 auth-core.js/permission.js/config.json），且该副本被 8-21 遗留混淆版占据（历史 obfuscate 还原漏此文件）。事故链：改 shared 权威源 → sync-all 全绿（该副本不在清单=校验不到）→ 云端APP 打包继续用旧版 → 修复静默丢失。**铁律：改 shared/symptom-dict.js 后必须手工 Copy-Item 到 `cloud_app/app/src/main/assets/public/`，并解包 APK 验证 `doctorName{flex:0 0 90px` 等特征串存在**（离线APP assets 副本在 sync-all 清单内无此问题）。同轮次发现：云端打包脚本末尾 `set /p` 交互提示在无人值守/后台调用时挂起——后台跑 pack-app.bat 必须先 `set NO_PAUSE=1`（离线/云端 build-app.bat 均已支持该开关）。
@@ -819,6 +821,14 @@
 **★ 2026-09-12 桌面应用内更新器（云+离线双桌面 main.js 同构落地）**：横幅「立即下载」旧链路 `window.open` → 系统浏览器单流（0.5MB/s 无进度、下完手动找文件）→ 新链路**主进程 4 连接并行分片下载**（v4 robustDownload 的 Node 版：net.fetch + Range 分片 + 每分片独立看门狗 25s + 指数退避重试 ≤6 + 数据到达即 `fsSync.writeSync(fd, buf, 0, len, offset)` 落盘）→ 横幅实时进度/速度（400ms 节流 executeJavaScript）→ 完成大小对账 → `shell.openPath` 自动开 NSIS 安装向导。**桥接技巧：横幅点击 `window.open(UPDATE_SCHEME)`（`kyt-desktop-update://start`），由登录窗口已有 `setWindowOpenHandler` 拦截该 scheme 启动下载——零 IPC/preload 改动**（scheme 不匹配注册协议直达 handler，deny 不开新窗）。失败回退官网下载页（safeDownload v4 兜底）+ 横幅「重试下载」。注意：**改动只对新版本生效**（存量旧版横幅仍是旧链路，已发布无法追补）。
 
 **★ 2026-09-12 官网下载中心 APP 卡「更新说明」缺失根治**：根因=双缺陷叠加——①下载页 APP 卡（cloud-app/local）被 `isAppCard` 跳过 `updateCard` 的 notes 渲染，hash-manifest 回调又只写版本/日期/时间/大小、从不写更新说明；②hash-manifest.json 各节点本就无 `releaseNotes` 字段，发布脚本也未写入 → APP 卡更新说明永远停在 `-`，而桌面卡从 latest.json.releaseNotes 正常显示。修复=[publish-release.js](tools/publish-release.js) 生成一次 `releaseNotes` 同时写入 hash-manifest 各节点与 latest.json（来源统一，避免重复 git log）；下载页 APP 卡从 hash-manifest apk 节点 `renderNotesWithToggle` 渲染更新说明（与版本/日期同源，消除 latest.json 异步竞态）。**教训：public/download.html 2026-09-10 已写过读取逻辑但 site-official 未同步（双源漂移）+ 缺数据源两因叠加导致长期未生效**——官网 download.html 双源（public/site-official）的下载卡渲染逻辑与 hash-manifest 元数据必须同步修改。生效方式=云端网页部署后刷新即显；云桌面/云APP/离线桌面/离线APP 无需重打包。
+
+**★ 2026-09-13 P0 更新模块架构收口三件套（同日完成，全部验证通过）**：
+
+- **P0-1 桌面更新器抽模块**（详见 §2 update-manager.cjs 铁律条）：双 main.js 各 -250 行，shared/update-manager.cjs 成为唯一权威源（Group 12 + copy-consistency 哈希门）。
+- **P0-3 元数据 SSOT 双收口**：①publish-release.js 的 latest.json 从「读旧文件→改字段→写回」改为 **hash-manifest 节点纯投影**（version/releaseNotes/url 全部派生自同一次生成，latest.json 沦为只读派生品，双写方格式漂移从机制上消除）；②官网 download.html 双副本**四张下载卡（cloud/cloud-app/local-desktop/local）全部改读 hash-manifest 节点**（版本/发布日期/更新说明/下载链接，桌面卡含便携版），删除 latest.json fetch 整条链路——历史漂移实锤：桌面卡 notes 走 latest.json、APP 卡走 manifest 双源并存，加上 site-official 版本号双 v 前缀 + APK 未优先 releaseUrl 两处独立漂移，同轮全部修复。**铁律：①latest.json 只能由 publish-release.js 投影生成，任何工具/页面禁止再写它或把它当数据源 fetch（读更新元数据一律走 hash-manifest.json）；②hash-manifest 是更新元数据唯一 SSOT，新增展示位（版本/日期/说明/大小/链接）必须从其节点取值**。
+- **P0-5 根目录 index.html 孤儿删除**：根 index.html 不在任何同步清单（sync-shared-blocks/verify-no-hardcoded-clinic 反把它误扫入列），与权威源漂移多年，构建链零消费——直接删除并清理两处工具引用（verify-no-hardcoded-clinic.ps1 / sync-shared-blocks.cjs）。**铁律：根目录不是网页权威源位置（权威源=public/index.html），发现游离副本必须「登记进同步链 or 删除」二选一，禁止放任第三态**。
+- **验证**：Playwright 双副本四卡渲染 ALL PASS（console 零报错、四卡版本/日期/notes/链接全渲染、latest.json 残留引用归零）+ 全量合规门禁 13/13 通过 + copy-consistency 42+2 副本全绿。
+- **生效方式**：云端网页（public+site-official download.html）push 后部署即生效；**publish-release.js 改动下一次发布时生效**（latest.json 投影 + releaseNotes 写入）；云桌面/离线桌面更新器收口需各自重打包后生效（新装/更新用户才用新更新器）；云端APP/离线APP 无改动无需重打包。
 
 ## 19. 后续路线图（2026-08-31 定，试用观察期三步走）
 

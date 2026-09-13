@@ -28,7 +28,6 @@ const ROOT = path.resolve(__dirname, '..');
 const HTML_FILES = [
     'app_project/db-yunduan/cloud_desktop/index.html',
     'app_project/db-offline/desktop/index.html',
-    'index.html',
     'public/index.html',
     'app_project/db-offline/index-app.html',
     'app_project/db-yunduan/cloud_app/app/src/main/assets/public/index.html',
