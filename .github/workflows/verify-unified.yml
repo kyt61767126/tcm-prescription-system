@@ -24,6 +24,13 @@ name: Verify Unified Modules
 #     五重全绿，打包时才发现漂移（Auto-FIX 覆盖产生未提交修改 → 下个打包
 #     目标被源码落定门拦截）。与 pre-push ⑦ 同构收口。
 
+# ★ 2026-09-13 升级为七重防线（P1-C 观察期，暂不挂 pre-push）：
+#   ⑦ diff-cross-version.cjs —— 跨版本（public 云端 ↔ 离线桌面）漂移守卫。
+#     两权威源深度分叉无生成关系，跨版本移植靠人工，本守卫三层基线兜底：
+#     Tier A 函数名单差集冻结（新增单侧函数红灯）/ Tier B 同体函数哈希
+#     （单边改动红灯——「云端修了离线漏改」主捕获器）/ Tier C 分叉白名单
+#     （新增分叉须人工确认）。观察 1-2 周误报率后升 pre-push ⑩。
+
 on:
   push:
     branches: [main]
@@ -98,9 +105,17 @@ jobs:
             exit 1
           }
 
+      - name: 7/7 Cross-version drift guard (P1-C observe mode)
+        shell: bash
+        run: |
+          node tools/diff-cross-version.cjs --quiet || {
+            echo "::error::跨版本（public 云端 ↔ 离线桌面）权威源发生未确认漂移：单侧新增函数 / 同体函数单边改动（云端修了离线漏改或反向）/ 新增分叉。请跨版本移植后提交；确属有意分叉，人工确认后运行 node tools/diff-cross-version.cjs --update-baseline 重冻结基线（Tier B→C 迁移须人工确认）。"
+            exit 1
+          }
+
       - name: Summary
         shell: bash
         run: |
           echo "### 校验结果" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "✅ 界面基线 / shared JS 同步 / HTML 副本 / 注入幂等性 / 源码落定门单测 / 独立js副本哈希 六重校验全部通过" >> $GITHUB_STEP_SUMMARY
+          echo "✅ 界面基线 / shared JS 同步 / HTML 副本 / 注入幂等性 / 源码落定门单测 / 独立js副本哈希 / 跨版本漂移 七重校验全部通过" >> $GITHUB_STEP_SUMMARY
