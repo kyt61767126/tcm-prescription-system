@@ -5194,7 +5194,7 @@ let currentUser = null;
             const showCount = Math.min(list.length, __historyPageSize * __historyCurrentPage);
             const items = list.slice(0, showCount);
             const _rlFee = (p) => { const f = parseFloat(p.registrationFee); return isFinite(f) && f > 0 ? ' | 诊费:' + f.toFixed(2) + '元' : ''; };
-            let html = items.map((p,i) =>`<div class="history-item" onclick="loadHistory(${Number(p.id)||0})"><div style="display:flex;justify-content:space-between;align-items:center;"><div><div style="display:flex;gap:8px;align-items:center;"><div class="history-name">${escapeHtml(p.patientName)}</div><div style="font-size:10px;color:#8b0000;font-weight:bold;">[${escapeHtml(p.prescriptionNo || '')}]</div></div><div class="history-date">${escapeHtml(p.date)} - ${escapeHtml(p.diagnosis || '')}${_rlFee(p)}</div></div><button onclick="event.stopPropagation();addMediaFromAlbum('${escapeJs(p.patientName)}','${escapeJs(p.prescriptionNo || '')}','${escapeJs(p.createdAt || '')}')" style="background:none;border:none;font-size:14px;cursor:pointer;padding:0 2px;" title="从相册添加照片视频">📁</button><button onclick="event.stopPropagation();viewMediaFiles('${escapeJs(p.patientName)}','${escapeJs(p.prescriptionNo || '')}','${escapeJs(p.createdAt || '')}')" style="background:none;border:none;font-size:14px;cursor:pointer;padding:0 2px;" title="查看拍照录像">📷🎥</button><button class="small-btn" style="background:#ffdddd;padding:2px 6px;font-size:10px;" onclick="event.stopPropagation();deleteHistory(${Number(p.id)||0})">删除</button></div></div>`).join('');
+            let html = items.map((p,i) =>`<div class="history-item" onclick="loadHistory(${Number(p.id)||0})"><div style="display:flex;justify-content:space-between;align-items:center;"><div><div style="display:flex;gap:8px;align-items:center;"><div class="history-name">${escapeHtml(p.patientName)}</div><div style="font-size:10px;color:#8b0000;font-weight:bold;">[${escapeHtml(p.prescriptionNo || '')}]</div></div><div class="history-date">${escapeHtml(p.date)} - ${escapeHtml(p.diagnosis || '')}${_rlFee(p)}</div></div><button onclick="event.stopPropagation();editPrescriptionDate(${Number(p.id)||0})" style="background:none;border:none;font-size:14px;cursor:pointer;padding:0 2px;" title="修改处方日期（补录历史处方）">📅</button><button onclick="event.stopPropagation();addMediaFromAlbum('${escapeJs(p.patientName)}','${escapeJs(p.prescriptionNo || '')}','${escapeJs(p.createdAt || '')}')" style="background:none;border:none;font-size:14px;cursor:pointer;padding:0 2px;" title="从相册添加照片视频">📁</button><button onclick="event.stopPropagation();viewMediaFiles('${escapeJs(p.patientName)}','${escapeJs(p.prescriptionNo || '')}','${escapeJs(p.createdAt || '')}')" style="background:none;border:none;font-size:14px;cursor:pointer;padding:0 2px;" title="查看拍照录像">📷🎥</button><button class="small-btn" style="background:#ffdddd;padding:2px 6px;font-size:10px;" onclick="event.stopPropagation();deleteHistory(${Number(p.id)||0})">删除</button></div></div>`).join('');
             if (!html) html = '<div style="text-align:center;color:#999;padding:20px;font-size:11px;">无历史记录</div>';
             if (list.length > showCount) {
                 html += `<div onclick="loadMoreHistory()" style="text-align:center;padding:10px;color:#1976d2;cursor:pointer;font-size:12px;border-top:1px dashed #ccc;background:#f8f9fa;">▼ 加载更多（剩余 ${list.length - showCount} 条 / 共 ${list.length} 条）</div>`;
@@ -5205,6 +5205,64 @@ let currentUser = null;
         function loadMoreHistory() {
             __historyCurrentPage++;
             __renderHistoryPage();
+        }
+
+        // ========================================================================
+        // ★ 2026-09-14 处方日期修改（补录历史处方）：历史条目 📅 按钮入口。
+        //   语义约定：处方编号（YYMMDD+序号=录入流水）保持不变，仅改就诊日期——
+        //   date（历史列表/统计页归位）+ createdAt（患者分析就诊时间线，保留原时分秒）。
+        //   媒体文件按「患者名_处方编号」前缀匹配，不随日期变化，关联不受影响。
+        //   手机 WebView type=date 唤起原生日期滚轮，桌面为日历面板。
+        // ========================================================================
+        async function editPrescriptionDate(id) {
+            const record = prescriptionHistory.find(p => Number(p.id) === Number(id));
+            if (!record) { showToast('未找到该处方'); return; }
+            let input = document.getElementById('__editRxDateInput');
+            if (input) input.remove();
+            input = document.createElement('input');
+            input.type = 'date';
+            input.id = '__editRxDateInput';
+            input.style.display = 'none';
+            input.value = String(record.date || '').slice(0, 10) || new Date().toLocaleDateString('sv-SE');
+            document.body.appendChild(input);
+            input.onchange = async function () {
+                const newDate = input.value;
+                input.remove();
+                if (!newDate || newDate === String(record.date || '').slice(0, 10)) return;
+                try {
+                    // createdAt 保留原时分秒，仅换日期（患者分析时间线连续）
+                    let timePart = '00:00:00';
+                    if (record.createdAt) {
+                        const d = new Date(record.createdAt);
+                        if (!isNaN(d.getTime())) {
+                            timePart = String(d.getHours()).padStart(2, '0') + ':' +
+                                       String(d.getMinutes()).padStart(2, '0') + ':' +
+                                       String(d.getSeconds()).padStart(2, '0');
+                        }
+                    }
+                    const oldDate = record.date;
+                    record.date = newDate;
+                    record.createdAt = new Date(newDate + 'T' + timePart).getTime();
+                    record.updatedAt = Date.now();
+                    record.updatedBy = (currentUser && currentUser.username) || '';
+                    record.updatedByName = (currentUser && currentUser.name) || '';
+                    try { await savePrescriptionToDB(record); }
+                    catch (e) { console.warn('[改日期] 本地保存失败:', e); showToast('日期已改但本地保存失败，请重试'); }
+                    // 云端同步非阻塞：D1 upsert date=excluded.date 会落地新日期；
+                    // createdAt 为首建语义（云端列不更新，分析页已改 date 优先，两端一致）
+                    // （离线端无 syncPrescriptionToCloud，typeof 防御自动跳过）
+                    if (typeof syncPrescriptionToCloud === 'function') {
+                        try { syncPrescriptionToCloud(record).catch(function (e) { console.warn('[改日期] 云端同步失败（本地已生效）:', e && e.message); }); } catch (e) {}
+                    }
+                    __renderHistoryPage();
+                    showToast('处方日期已改为 ' + newDate + '（原 ' + oldDate + '）');
+                } catch (e) {
+                    console.error('[改日期] 失败:', e);
+                    showToast('修改日期失败：' + (e && e.message || e));
+                }
+            };
+            input.oncancel = function () { input.remove(); };
+            input.click();
         }
 
         var __albumTargetCtx = null;
@@ -8124,7 +8182,7 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
             const sourceData = prescriptionHistory;
             
             return sourceData.filter(p =>{
-                const date = new Date(p.createdAt || p.date || 0);
+                const date = new Date(p.date || p.createdAt || 0);
                 return date >= startDate;
             });
         }
@@ -8143,7 +8201,10 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
                     });
                 }
                 const patient = patientMap.get(name);
-                const visitDate = new Date(p.createdAt || p.date || 0);
+                // ★ 2026-09-14 日期优先级反转：p.date（就诊日期，可经 editPrescriptionDate 补录修改）
+                //   优先于 createdAt（首建时间戳）；云端拉取的记录 createdAt 恒为首建值，
+                //   若其优先则补录日期在患者分析页不生效（历史列表/统计页均按 p.date 归位）
+                const visitDate = new Date(p.date || p.createdAt || 0);
                 patient.visits.push(visitDate);
                 if (!patient.firstVisit || visitDate< patient.firstVisit) {
                     patient.firstVisit = visitDate;
@@ -8206,7 +8267,7 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
             const dailyMap = new Map();
             
             filteredPrescriptions.forEach(p =>{
-                const date = new Date(p.createdAt || p.date || 0);
+                const date = new Date(p.date || p.createdAt || 0);
                 const dateStr = date.toLocaleDateString('zh-CN');
                 dailyMap.set(dateStr, (dailyMap.get(dateStr) || 0) + 1);
             });
@@ -8493,7 +8554,7 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
             const allPrescriptions = filterPrescriptionsByPermission(await getAllUserPrescriptions());
 
             allPrescriptions.forEach(p => {
-                const date = new Date(p.createdAt || p.date || 0);
+                const date = new Date(p.date || p.createdAt || 0);
                 const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 
                 if (!statsMap.has(monthKey)) {

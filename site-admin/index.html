@@ -5323,7 +5323,7 @@ if (window.Permission) {
             // 统计当天的处方数量，更新 dailyCounter
             const today = new Date().toDateString();
             const todayPrescriptions = prescriptionHistory.filter(p => {
-                const pDate = new Date(p.createdAt || p.date || 0).toDateString();
+                const pDate = new Date(p.date || p.createdAt || 0).toDateString();
                 return pDate === today;
             });
             dailyCounter = todayPrescriptions.length + 1;
@@ -9986,7 +9986,7 @@ IconFile=${scriptPath}`;
             const sourceData = prescriptionHistory;
             
             return sourceData.filter(p =>{
-                const date = new Date(p.createdAt || p.date || 0);
+                const date = new Date(p.date || p.createdAt || 0);
                 return date >= startDate;
             });
         }
@@ -10007,7 +10007,10 @@ IconFile=${scriptPath}`;
                     });
                 }
                 const patient = patientMap.get(name);
-                const visitDate = new Date(p.createdAt || p.date || 0);
+                // ★ 2026-09-14 日期优先级反转：p.date（就诊日期，可经 editPrescriptionDate 补录修改）
+                //   优先于 createdAt（首建时间戳）；云端拉取的记录 createdAt 恒为首建值，
+                //   若其优先则补录日期在患者分析页不生效（历史列表/统计页均按 p.date 归位）
+                const visitDate = new Date(p.date || p.createdAt || 0);
                 patient.visits.push(visitDate);
                 if (!patient.firstVisit || visitDate< patient.firstVisit) {
                     patient.firstVisit = visitDate;
@@ -10071,7 +10074,7 @@ IconFile=${scriptPath}`;
             const dailyMap = new Map();
             
             filteredPrescriptions.forEach(p =>{
-                const date = new Date(p.createdAt || p.date || 0);
+                const date = new Date(p.date || p.createdAt || 0);
                 const dateStr = date.toLocaleDateString('zh-CN');
                 dailyMap.set(dateStr, (dailyMap.get(dateStr) || 0) + 1);
             });
@@ -10367,9 +10370,9 @@ IconFile=${scriptPath}`;
         function analyzeMonthlyStats() {
             const statsMap = new Map();
             const allPrescriptions = prescriptionHistory;
-            
+
             allPrescriptions.forEach(p => {
-                const date = new Date(p.createdAt || p.date || 0);
+                const date = new Date(p.date || p.createdAt || 0);
                 const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
                 
                 if (!statsMap.has(monthKey)) {

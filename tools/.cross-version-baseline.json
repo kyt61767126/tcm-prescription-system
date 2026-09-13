@@ -1,5 +1,5 @@
 {
-  "frozenAt": "2026-09-13T09:42:31.144Z",
+  "frozenAt": "2026-09-13T22:50:17.710Z",
   "pair": "public/index.html <-> app_project/db-offline/desktop/index.html",
   "mode": "strict",
   "note": "Tier B→C 迁移（同体→分叉）与 Tier A/C 新增必须人工确认后重冻结；Tier C 收敛（分叉对齐）属改进，重冻结即可",
@@ -81,6 +81,7 @@
     "deleteMedicine",
     "deleteRow",
     "editMedicine",
+    "editPrescriptionDate",
     "enableMediaButtons",
     "ensurePasswordsHashed",
     "escapeJs",
