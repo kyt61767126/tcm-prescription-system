@@ -46,18 +46,23 @@ const TARGET_REL = 'site-admin/index.html';
 //   tierA onlyA 函数移植【getEffectiveJianfa / escapeJs / injectRecycleBinButton】，
 //   42 → 64；
 //   + 第 2 轮：2 个收敛【renderRememberedUsers / debounce】，64 → 66。
-//   第 2 轮结论=正向收敛饱和：剩余 Tier C 80 个里 9 个零平台标记候选中
-//   7 个为「B 胜出」（selectPatientName 模糊填充 / createChart 响应式 /
-//   importMedicines 进价校验——反向收敛候选，需 public 侧采纳后同体）或
-//   权限模型分叉（analyzeMonthlyStats / filterPrescriptionsByPermission /
-//   showClinicPrescriptions / renderUserList）。其余全部带平台标记
-//   （存储后端/编号方案/DOM 结构/分页机制/管理台专有 UI）。
+//   + 反向收敛第 3 轮：2 个「B 胜出」反向移植（B 功能增强版进 public 权威源
+//     后两侧同体）【createChart 响应式图表+canvas 重试 / selectPatientName
+//     模糊匹配+最新记录排序填充】，66 → 68。
+//   反向收敛存档（未移植）：importMedicines 进价校验——B 版是流程重写
+//   （showImportModePicker 自定义 modal + processImportedMedicines 云端同步
+//   闭环 + costPrice null 语义），移植需连坐替换 A 侧 showImportMethodModal
+//   交互链（界面铁律管辖区）+ null 下游兼容性未知，随 P2-B 专项推进；
+//   renderUserList allowedMode UI——B 依赖 toggleUserCloudMode（A 无）+
+//   async getUsers（A 是同步 UserStore.get 薄版）+ A 版有云端回退逻辑，
+//   真平台分叉（医师站 vs 管理台），永久否决。
+//   其余 Tier C 带平台标记（存储后端/编号方案/DOM 结构/分页机制）。
 //   新增条目流程：把函数移植到两侧规范化同体 → 在此登记函数名 → 跑同步。
 const SYNCED_FNS = [
     '__medicineTableFirewall', '_isGenericLoginName', 'analyzeDiseases', 'analyzeMedicines',
     'analyzePatients', 'analyzeVisitTrend', 'applyFormula', 'buildMedicineMap',
     'clearRecycleBin', 'closeMediaViewer', 'closeModal', 'computeBackupHmac',
-    'createEmptyMedicine', 'debounce', 'deleteFromRecycleBin', 'deleteRow',
+    'createChart', 'createEmptyMedicine', 'debounce', 'deleteFromRecycleBin', 'deleteRow',
     'escapeJs', 'exportMedicines', 'formatDate', 'formatPrice',
     'getEffectiveJianfa', 'getFilteredPrescriptions', 'getMedicineByName', 'getPinyinCode',
     'getRecycleBin', 'handleInput', 'handleKeyboard', 'handleSearchKey',
@@ -66,7 +71,7 @@ const SYNCED_FNS = [
     'mediaViewerNav', 'removeDuplicateMedicines', 'renderMediaViewerSingle', 'renderPrescriptionTable',
     'renderRememberedUsers', 'renderSyndromeList', 'resetCaseSearch', 'safeParseJSON',
     'saveRecycleBin', 'searchCases', 'selectFormula', 'selectMedicine',
-    'selectSearchResult', 'showPatientNameDropdown', 'showRecycleBin', 'showSideHistory',
+    'selectPatientName', 'selectSearchResult', 'showPatientNameDropdown', 'showRecycleBin', 'showSideHistory',
     'showToast', 'smartMatchGender', 'sortPrescriptionsByTimeDesc', 'startSearch',
     'switchMobileTab', 'toggleGender', 'toggleUsernameDropdown', 'tryHideSearch',
     'updateDosage', 'updateMedicineFrequency', 'updatePrescriptionPaper', 'updateSearchSelection',

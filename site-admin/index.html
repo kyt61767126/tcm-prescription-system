@@ -6759,6 +6759,7 @@ if (window.Permission) {
         }
         // <<< SYNCED-FN-END hidePatientNameDropdown ===
 
+        // >>> SYNCED-FN selectPatientName (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function selectPatientName(name) {
             document.getElementById('patientName').value = name;
             hidePatientNameDropdown();
@@ -6795,6 +6796,7 @@ if (window.Permission) {
             searchPatientsQuick({target: {value: name}});
             updatePrescriptionPaper();
         }
+        // <<< SYNCED-FN-END selectPatientName ===
 
         function filterPrescriptionsByPermission(prescriptions) {
             // 权限过滤：管理员看所有，普通用户只看自己的处方
@@ -10092,6 +10094,7 @@ IconFile=${scriptPath}`;
             return date.toLocaleString('zh-CN');
         }
 
+        // >>> SYNCED-FN createChart (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function createChart(canvasId, type, data, retryCount = 0) {
             const canvas = document.getElementById(canvasId);
             if (!canvas) return null;
@@ -10357,6 +10360,7 @@ IconFile=${scriptPath}`;
                 ctx.setLineDash([]);
             }
         }
+        // <<< SYNCED-FN-END createChart ===
 
         function analyzeMonthlyStats() {
             const statsMap = new Map();
