@@ -2164,6 +2164,7 @@ if (window.Permission) {
 
         // P5: 备份文件 HMAC 签名密钥（与 offline_project 保持一致）
         const PASSWORD_SALT = 'bnzc_prescription_salt_v1';
+        // >>> SYNCED-FN computeBackupHmac (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         async function computeBackupHmac(jsonStr) {
             try {
                 const encoder = new TextEncoder();
@@ -2171,14 +2172,14 @@ if (window.Permission) {
                 const key = await crypto.subtle.importKey(
                     'raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
                 );
-                const data = encoder.encode(jsonStr);
-                const signature = await crypto.subtle.sign('HMAC', key, data);
+                const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(jsonStr));
                 return Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, '0')).join('');
             } catch (e) {
-                console.error('计算备份 HMAC 失败:', e);
+                console.error('HMAC 计算失败:', e);
                 return '';
             }
         }
+        // <<< SYNCED-FN-END computeBackupHmac ===
 
         // 全局错误处理：防止未捕获异常导致页面白屏
         window.addEventListener('error', (e) => {
@@ -2339,6 +2340,28 @@ if (window.Permission) {
         };
         
         // 移动端标签切换
+        // >>> SYNCED-FN injectRecycleBinButton (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
+        function injectRecycleBinButton() {
+            const header = document.querySelector('.history-header');
+            if (!header) return;
+            if (header.querySelector('.recycle-bin-btn')) return;
+            // 检查是否已有静态的 showRecycleBin 按钮（避免重复注入）
+            if (header.querySelector('button[onclick*="showRecycleBin"]')) return;
+            const refreshBtn = header.querySelector('.history-refresh-btn');
+            const btn = document.createElement('button');
+            btn.className = 'recycle-bin-btn';
+            btn.innerHTML = '🗑️';
+            btn.title = '回收站';
+            btn.style.cssText = 'background:none;border:none;color:white;font-size:14px;cursor:pointer;padding:2px 6px;margin-left:4px;';
+            btn.onclick = showRecycleBin;
+            if (refreshBtn && refreshBtn.parentNode) {
+                refreshBtn.parentNode.insertBefore(btn, refreshBtn.nextSibling);
+            } else {
+                header.appendChild(btn);
+            }
+        }
+        // <<< SYNCED-FN-END injectRecycleBinButton ===
+        // >>> SYNCED-FN switchMobileTab (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function switchMobileTab(tabName) {
             const leftPanel = document.querySelector('.left-panel');
             const centerPanel = document.querySelector('.center-panel');
@@ -2347,7 +2370,7 @@ if (window.Permission) {
             const mobileActionBar = document.getElementById('mobileActionBar');
             
             // 移除所有激活状态
-            mobileNavItems.forEach(item => item.classList.remove('active'));
+            mobileNavItems.forEach(item =>item.classList.remove('active'));
             
             // 隐藏所有面板
             leftPanel.style.display = 'none';
@@ -2364,15 +2387,20 @@ if (window.Permission) {
                 case 'prescription':
                     leftPanel.style.display = 'flex';
                     leftPanel.style.flexDirection = 'column';
-                    if (mobileActionBar) {
-                        mobileActionBar.style.display = 'block';
-                    }
+                    // ★ 恢复快捷操作栏显示：内联 display='' 交还给媒体查询 CSS 控制，
+                    // 否则切回门诊 tab 后 '录像/拍照/保存/清空/改密' 按钮被永久隐藏（底部按钮缺失）
+                    if (mobileActionBar) mobileActionBar.style.display = '';
                     break;
                 case 'history':
+                    // 检查是否有历史病历，没有则不显示
+                    if (!prescriptionHistory || prescriptionHistory.length === 0) {
+                        showToast('暂无历史病历');
+                        // 保持当前标签激活状态，不切换
+                        return;
+                    }
                     rightPanel.style.display = 'flex';
                     rightPanel.style.flexDirection = 'column';
-                    // 确保渲染历史列表
-                    renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, historyDisplayCount));
+                    injectRecycleBinButton();
                     break;
                 case 'preview':
                     centerPanel.classList.add('active');
@@ -2380,12 +2408,13 @@ if (window.Permission) {
             }
             
             // 设置当前标签为激活状态
-            mobileNavItems.forEach(item => {
+            mobileNavItems.forEach(item =>{
                 if (item.getAttribute('onclick')?.includes(tabName)) {
                     item.classList.add('active');
                 }
             });
         }
+        // <<< SYNCED-FN-END switchMobileTab ===
 
         // 获取默认用户列表（支持动态添加）
         function getDefaultUsers() {
@@ -5035,6 +5064,7 @@ if (window.Permission) {
             } catch(e) { console.warn('保存到处方回收站失败:', e); }
         }
 
+        // >>> SYNCED-FN showRecycleBin (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function showRecycleBin() {
             const bin = getRecycleBin();
             const now = Date.now();
@@ -5057,11 +5087,11 @@ if (window.Permission) {
             if (validBin.length === 0) {
                 listHtml = '<p style="text-align:center;color:#999;padding:30px;">回收站为空</p>';
             } else {
-                listHtml = validBin.map(function(r) {
-                    var deletedDate = r._deletedAt ? new Date(r._deletedAt).toLocaleString('zh-CN') : '未知';
-                    var rxNo = r.prescriptionNo || r.outpatientNo || r.clinicNo || '无编号';
-                    var patientName = r.patientName || '未知患者';
-                    var rxDate = r.date || '';
+                listHtml = validBin.map(r => {
+                    const deletedDate = r._deletedAt ? new Date(r._deletedAt).toLocaleString('zh-CN') : '未知';
+                    const rxNo = r.prescriptionNo || r.outpatientNo || r.clinicNo || '无编号';
+                    const patientName = r.patientName || '未知患者';
+                    const rxDate = r.date || '';
                     return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px;border-bottom:1px solid #eee;"><div style="flex:1;"><div style="font-weight:bold;font-size:14px;">' + patientName + ' <span style="color:#999;font-size:12px;">' + rxNo + '</span></div><div style="font-size:12px;color:#666;">处方日期: ' + rxDate + ' | 删除时间: ' + deletedDate + '</div></div><div style="display:flex;gap:5px;"><button onclick="restoreFromRecycleBin(' + r.id + ')" style="background:#4CAF50;color:white;border:none;padding:6px 14px;border-radius:4px;cursor:pointer;font-size:13px;">恢复</button><button onclick="deleteFromRecycleBin(' + r.id + ')" style="background:#f44336;color:white;border:none;padding:6px 10px;border-radius:4px;cursor:pointer;font-size:13px;">彻底删除</button></div></div>';
                 }).join('');
             }
@@ -5069,6 +5099,7 @@ if (window.Permission) {
             modal.innerHTML = '<div style="background:white;border-radius:10px;padding:20px;width:90%;max-width:550px;max-height:80vh;overflow-y:auto;box-shadow:0 4px 20px rgba(0,0,0,0.2);"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;border-bottom:2px solid #4CAF50;padding-bottom:10px;"><h3 style="margin:0;color:#333;">🗑️ 处方回收站 (' + validBin.length + ')</h3><button onclick="document.getElementById(\'recycleBinModal\').style.display=\'none\'" style="background:none;border:none;font-size:24px;cursor:pointer;color:#999;">&times;</button></div><p style="font-size:12px;color:#999;margin-bottom:10px;">💡 回收站保留最近30天的删除记录，最多50条</p><div id="recycleBinList">' + listHtml + '</div>' + (validBin.length > 0 ? '<div style="text-align:center;margin-top:15px;padding-top:10px;border-top:1px solid #eee;"><button onclick="clearRecycleBin()" style="background:#f44336;color:white;border:none;padding:8px 20px;border-radius:4px;cursor:pointer;font-size:13px;">清空回收站</button></div>' : '') + '</div>';
             modal.style.display = 'flex';
         }
+        // <<< SYNCED-FN-END showRecycleBin ===
 
         function restoreFromRecycleBin(id) {
             var bin = getRecycleBin();
@@ -5095,14 +5126,16 @@ if (window.Permission) {
             showRecycleBin();
         }
 
+        // >>> SYNCED-FN deleteFromRecycleBin (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function deleteFromRecycleBin(id) {
             if (!confirm('彻底删除后无法恢复，确定吗？')) return;
-            var bin = getRecycleBin();
-            var newBin = bin.filter(function(r) { return r.id !== id; });
+            const bin = getRecycleBin();
+            const newBin = bin.filter(r => String(r.id) !== String(id));
             saveRecycleBin(newBin);
             showToast('已彻底删除');
             showRecycleBin();
         }
+        // <<< SYNCED-FN-END deleteFromRecycleBin ===
 
         // >>> SYNCED-FN clearRecycleBin (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function clearRecycleBin() {
@@ -5121,18 +5154,21 @@ if (window.Permission) {
             }, delay);
         }
         
+        // >>> SYNCED-FN createEmptyMedicine (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function createEmptyMedicine() {
-            return {code:'', name:'', dosage:'', unit:'g', price:'', total:''};
+            return {code:'', name:'', dosage:'', unit:'g', price:'', total:'', jianfa:''};
         }
+        // <<< SYNCED-FN-END createEmptyMedicine ===
 
+        // >>> SYNCED-FN safeParseJSON (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function safeParseJSON(str, defaultValue = []) {
             try {
                 return str ? JSON.parse(str) : defaultValue;
             } catch (e) {
-                console.warn('JSON解析失败:', e);
                 return defaultValue;
             }
         }
+        // <<< SYNCED-FN-END safeParseJSON ===
 
         // >>> SYNCED-FN removeDuplicateMedicines (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function removeDuplicateMedicines(arr) {
@@ -6079,6 +6115,7 @@ if (window.Permission) {
         }
 
         // 药物表格防火墙 - 防止优化导致药物栏不显示
+        // >>> SYNCED-FN __medicineTableFirewall (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function __medicineTableFirewall() {
             try {
                 if (typeof DOM_CACHE === 'undefined' || !DOM_CACHE) return;
@@ -6088,7 +6125,9 @@ if (window.Permission) {
                 if (typeof prescriptionItems === 'undefined' || !prescriptionItems || prescriptionItems.length === 0) {
                     if (typeof createEmptyMedicine === 'function') {
                         prescriptionItems = [];
-                        for (var i = 0; i < 3; i++) prescriptionItems.push(createEmptyMedicine());
+                        // 修复闪动：原 push 3 行会被 init() 清空再 push 15 行导致"先3行→18行"闪动
+                        // 改为 push 15 行，与 init() 目标行数一致，init() 检测到已15行就跳过清空（与云端一致）
+                        for (var i = 0; i < 15; i++) prescriptionItems.push(createEmptyMedicine());
                     }
                 }
                 if (prescriptionItems && prescriptionItems.length > 0 && (!tbody.innerHTML || tbody.children.length === 0)) {
@@ -6099,18 +6138,19 @@ if (window.Permission) {
                 }
             } catch(e) { console.error('[防火墙] 异常:', e); }
         }
+        // <<< SYNCED-FN-END __medicineTableFirewall ===
         setTimeout(__medicineTableFirewall, 500);
         setTimeout(__medicineTableFirewall, 2000);
         setTimeout(__medicineTableFirewall, 5000);
 
+        // >>> SYNCED-FN renderPrescriptionTable (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function renderPrescriptionTable() {
-            DOM_CACHE.init();
+            if (!DOM_CACHE.prescriptionBody) {
+                DOM_CACHE.init();
+            }
             const tbody = DOM_CACHE.prescriptionBody;
             if (!tbody) return;
-            tbody.innerHTML = prescriptionItems.map((item,index) => `
-                <tr>
-                    <td style="text-align:center;font-size:10px;color:#666;">${index + 1}</td>
-                    <td><input type="text" value="${escapeHtml(item.code)}" id="code-input-${index}"
+            tbody.innerHTML = prescriptionItems.map((item,index) =>`<tr><td style="text-align:center;font-size:10px;color:#666;">${index + 1}</td><td><input type="text" value="${escapeHtml(item.code)}" id="code-input-${index}"
                         autocomplete="off"
                         autocapitalize="off"
                         autocorrect="off"
@@ -6122,20 +6162,13 @@ if (window.Permission) {
                         onkeypress="handleSearchKeyPress(event,${index},'code')"
                         oninput="handleInput(event,${index},'code')"
                         enterkeyhint="next"
-                        style="padding:2px;text-align:left;"></td>
-                    <td><input type="text" value="${escapeHtml(item.name)}" id="name-input-${index}"
+                        style="padding:2px;text-align:left;"></td><td><input type="text" value="${escapeHtml(item.name)}" id="name-input-${index}"
                         onfocus="startSearch(event,${index},'name')"
                         onblur="tryHideSearch()"
                         onkeyup="handleSearchKey(event,${index},'name')"
-                        style="padding:2px;text-align:left;"></td>
-                    <td><input type="number" value="${item.name ? escapeHtml(item.dosage) : ''}" oninput="updateDosage(${index},this.value)" style="padding:2px;"></td>
-                    <td><input type="text" value="${item.name ? escapeHtml(item.unit) : ''}" onchange="updateUnit(${index},this.value);calculateAmount()" style="padding:2px;"></td>
-                    <td><input type="text" value="${item.name ? escapeHtml(formatPrice(item.price)) : ''}" readonly style="padding:2px;"></td>
-                    <td><input type="text" value="${item.name ? escapeHtml(formatPrice(item.total)) : ''}" readonly style="padding:2px;"></td>
-                    <td><button class="small-btn" style="padding:1px 6px;font-size:10px;background:#ffdddd;" onclick="deleteRow(${index})">删</button></td>
-                </tr>
-            `).join('');
+                        style="padding:2px;text-align:left;"></td><td><input type="number" value="${item.name ? escapeHtml(item.dosage) : ''}" oninput="updateDosage(${index},this.value)" style="padding:2px;"></td><td><input type="text" value="${item.name ? escapeHtml(item.unit) : ''}" onchange="updateUnit(${index},this.value);calculateAmount()" style="padding:2px;"></td><td><input type="text" value="${item.name ? escapeHtml(formatPrice(item.price)) : ''}" readonly style="padding:2px;"></td><td><input type="text" value="${item.name ? escapeHtml(formatPrice(item.total)) : ''}" readonly style="padding:2px;"></td><td><button class="small-btn" style="padding:1px 6px;font-size:10px;background:#ffdddd;" onclick="deleteRow(${index})">删</button></td></tr>`).join('');
         }
+        // <<< SYNCED-FN-END renderPrescriptionTable ===
 
         // >>> SYNCED-FN startSearch (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function startSearch(event, index, column) {
@@ -6144,6 +6177,7 @@ if (window.Permission) {
         }
         // <<< SYNCED-FN-END startSearch ===
 
+        // >>> SYNCED-FN handleSearchKey (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function handleSearchKey(event, index, column) {
             currentSearchColumn = column;
             const dropdown = DOM_CACHE.medicineSearchDropdown;
@@ -6161,13 +6195,15 @@ if (window.Permission) {
                 selectSearchResult();
             } else if (event.key === 'Tab') {
                 event.preventDefault();
-                if (currentEditIndex >= prescriptionItems.length - 3) addEmptyRow();
+                if (currentEditIndex >= prescriptionItems.length - 3) { addEmptyRow(); DOM_CACHE.init();
+            renderPrescriptionTable(); }
                 const nextInput = document.getElementById(`code-input-${index + 1}`);
                 if (nextInput) nextInput.focus();
             } else {
                 showSearchDropdown(event.target, event.target.value, column);
             }
         }
+        // <<< SYNCED-FN-END handleSearchKey ===
 
         // >>> SYNCED-FN handleSearchKeyDown (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function handleSearchKeyDown(event, index, column) {
@@ -6322,8 +6358,9 @@ if (window.Permission) {
         }
         // <<< SYNCED-FN-END tryHideSearch ===
 
+        // >>> SYNCED-FN selectMedicine (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function selectMedicine(index, name, code, price) {
-            const exists = prescriptionItems.some((item, i) => i !== index && item.name === name);
+            const exists = prescriptionItems.some((item, i) =>i !== index && item.name === name);
             if (exists) {
                 alert('该药物已在处方中，不能重复添加！');
                 DOM_CACHE.medicineSearchDropdown.style.display = 'none';
@@ -6338,6 +6375,8 @@ if (window.Permission) {
             const __medSafePrice = isNaN(parseFloat(price)) ? 0 : parseFloat(price);
             prescriptionItems[index].price = __medSafePrice.toFixed(2);
             prescriptionItems[index].dosage = actualDosage;
+            // 带入煎煮方法：药库手动设置优先，未设置时按药典规则自动匹配（方案A+规范自动）
+            prescriptionItems[index].jianfa = getEffectiveJianfa(medicine, name);
             prescriptionItems[index].total = (__medSafePrice * actualDosage).toFixed(2);
             if (index >= prescriptionItems.length - 3) addEmptyRow();
             DOM_CACHE.init();
@@ -6354,18 +6393,21 @@ if (window.Permission) {
             if (nextInput) nextInput.focus();
             showToast(name + ' 已添加');
         }
+        // <<< SYNCED-FN-END selectMedicine ===
 
+        // >>> SYNCED-FN showToast (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function showToast(message) {
             const toast = document.createElement('div');
             toast.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#008000;color:white;padding:10px 20px;border-radius:5px;font-size:12px;z-index:9999;opacity:0;transition:opacity 0.3s;';
             toast.textContent = message;
             document.body.appendChild(toast);
-            setTimeout(() => toast.style.opacity = '1', 10);
-            setTimeout(() => {
+            setTimeout(() =>toast.style.opacity = '1', 10);
+            setTimeout(() =>{
                 toast.style.opacity = '0';
-                setTimeout(() => toast.remove(), 300);
-            }, 1000);
+                setTimeout(() =>toast.remove(), 300);
+            }, 3000);
         }
+        // <<< SYNCED-FN-END showToast ===
 
         // >>> SYNCED-FN updateDosage (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function updateDosage(index, val) {
@@ -6472,6 +6514,7 @@ if (window.Permission) {
             if (grandTotalEl2) grandTotalEl2.textContent = total.toFixed(2);
         }
 
+        // >>> SYNCED-FN updatePrescriptionPaper (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function updatePrescriptionPaper() {
             const get = document.getElementById.bind(document);
             // 空值兜底：任一 DOM 缺失时跳过，避免单点异常导致整个处方签刷新中断
@@ -6484,19 +6527,16 @@ if (window.Permission) {
             _pp('diagnosis', 'paperDiagnosis');
             _pp('doctorName', 'paperDoctor');
             const linesDiv = get('prescriptionLines');
-            const items = prescriptionItems.filter(item => item.name);
+            const items = prescriptionItems.filter(item =>item.name);
 
             let html = '<div class="prescription-grid-inner">';
-            items.forEach(item => {
-                html += `
-                    <div class="prescription-line">
-                        <span>${escapeHtml(item.name)}${escapeHtml(item.dosage)}${escapeHtml(item.unit)}</span>
-                    </div>
-                `;
+            items.forEach(item =>{
+                html += `<div class="prescription-line"><span>${escapeHtml(item.name)}${escapeHtml(item.dosage)}${escapeHtml(item.unit)}${item.jianfa && item.jianfa !== '普通煎' ? '<span class="prescription-jianfa">（'+escapeHtml(item.jianfa)+'）</span>' : ''}</span></div>`;
             });
             html += '</div>';
             linesDiv.innerHTML = html;
         }
+        // <<< SYNCED-FN-END updatePrescriptionPaper ===
 
         // >>> SYNCED-FN getPinyinCode (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function getPinyinCode(chineseName) {
@@ -6663,6 +6703,22 @@ if (window.Permission) {
             }, 250);
         }
 
+        // >>> SYNCED-FN escapeJs (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
+        function escapeJs(str) {
+            if (!str) return '';
+            return String(str)
+                .replace(/\\/g, '\\\\')
+                .replace(/'/g, "\\'")
+                .replace(/"/g, '\\"')
+                .replace(/\n/g, '\\n')
+                .replace(/\r/g, '')
+                .replace(/</g, '\\u003c')
+                .replace(/>/g, '\\u003e')
+                .replace(/\u2028/g, '\\u2028')
+                .replace(/\u2029/g, '\\u2029');
+        }
+        // <<< SYNCED-FN-END escapeJs ===
+        // >>> SYNCED-FN showPatientNameDropdown (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function showPatientNameDropdown(patients) {
             // 移除旧的下拉框
             let dropdown = document.getElementById('patientNameDropdown');
@@ -6678,23 +6734,19 @@ if (window.Permission) {
             dropdown.id = 'patientNameDropdown';
             dropdown.style.cssText = 'position:fixed;left:' + rect.left + 'px;top:' + (rect.bottom + 2) + 'px;width:' + rect.width + 'px;background:white;border:1px solid #808080;z-index:1000;box-shadow:2px 2px 5px rgba(0,0,0,0.2);max-height:150px;overflow-y:auto;';
             
-            dropdown.innerHTML = patients.map(p => `
-                <div style="padding:8px 12px;cursor:pointer;border-bottom:1px solid #e0e0e0;font-size:14px;"
-                     onmouseover="this.style.background='#e8f5e9'"
+            dropdown.innerHTML = patients.map(p =>`<div style="padding:8px 12px;cursor:pointer;border-bottom:1px solid #e0e0e0;font-size:14px;" 
+                     onmouseover="this.style.background='#e8f5e9'" 
                      onmouseout="this.style.background='white'"
-                     onclick="selectPatientName('${escapeHtml(p.patientName)}')">
-                    <span style="font-weight:bold;">${escapeHtml(p.patientName)}</span>
-                    <span style="color:#666;font-size:12px;margin-left:8px;">${escapeHtml(p.date || '')}</span>
-                </div>
-            `).join('');
+                     onclick="selectPatientName('${escapeJs(p.patientName)}')"><span style="font-weight:bold;">${escapeHtml(p.patientName)}</span><span style="color:#666;font-size:12px;margin-left:8px;">${escapeHtml(p.date || '')}</span></div>`).join('');
             
             document.body.appendChild(dropdown);
             
             // 点击其他地方关闭下拉框
-            setTimeout(() => {
+            setTimeout(() =>{
                 document.addEventListener('click', hidePatientNameDropdown, {once: true});
             }, 100);
         }
+        // <<< SYNCED-FN-END showPatientNameDropdown ===
 
         // >>> SYNCED-FN hidePatientNameDropdown (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function hidePatientNameDropdown() {
@@ -7246,13 +7298,15 @@ if (window.Permission) {
         }
         // <<< SYNCED-FN-END loadLastHistory ===
 
+        // >>> SYNCED-FN showSideHistory (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function showSideHistory() {
             // 姓名输入框聚焦时：有历史病历才显示，没有则不显示
             if (!prescriptionHistory || prescriptionHistory.length === 0) {
                 return; // 无历史病历，不显示
             }
-            renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, historyDisplayCount));
+            renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
         }
+        // <<< SYNCED-FN-END showSideHistory ===
 
         function clearPrescription() {
             const safeSet = (id, val) => {
@@ -9064,19 +9118,25 @@ IconFile=${scriptPath}`;
             }
         }
 
+        // >>> SYNCED-FN renderSyndromeList (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function renderSyndromeList() {
             const list = document.getElementById('syndromeList');
-            list.innerHTML = formulas.map((f,i) => `
-                <div style="padding:8px;background:#f0f0f0;border-radius:3px;cursor:pointer;" onclick="selectFormula(${i})">
-                    <div style="font-weight:bold;">${escapeHtml(f.name)}</div>
-                    <div style="font-size:11px;color:#666;">功效：${escapeHtml(f.effect)} | 主治：${escapeHtml(f.indication)}</div>
-                </div>
-            `).join('');
+            list.innerHTML = formulas.map((f,i) =>`<div style="padding:8px;background:#f0f0f0;border-radius:3px;cursor:pointer;" onclick="selectFormula(${i})"><div style="font-weight:bold;">${escapeHtml(f.name)}</div><div style="font-size:11px;color:#666;">功效：${escapeHtml(f.effect)} | 主治：${escapeHtml(f.indication)}</div></div>`).join('');
         }
+        // <<< SYNCED-FN-END renderSyndromeList ===
 
+        // >>> SYNCED-FN getEffectiveJianfa (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
+        function getEffectiveJianfa(med, name) {
+            if (med && med.jianfa && med.jianfa !== '普通煎') return med.jianfa;
+            const n = (name || (med && med.name) || '').trim();
+            const auto = (window.PrescriptionCore && PrescriptionCore.getAutoJianfa) ? PrescriptionCore.getAutoJianfa(n) : '';
+            return auto || (med && med.jianfa) || '普通煎';
+        }
+        // <<< SYNCED-FN-END getEffectiveJianfa ===
+        // >>> SYNCED-FN selectFormula (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function selectFormula(index) {
             const formula = formulas[index];
-            prescriptionItems = formula.composition.map(c => {
+            prescriptionItems = formula.composition.map(c =>{
                 const med = getMedicineByName(c.name);
                 return {
                     code: med ? med.code : c.code || '',
@@ -9084,10 +9144,11 @@ IconFile=${scriptPath}`;
                     dosage: c.dosage,
                     unit: c.unit || med?.unit || 'g',
                     price: c.price || med?.price || 0,
+                    jianfa: getEffectiveJianfa({jianfa: (c.jianfa) || (med && med.jianfa)}, c.name),
                     total: ((c.price || med?.price || 0) * c.dosage).toFixed(2)
                 };
             });
-            while (prescriptionItems.length < 15) addEmptyRow();
+            while (prescriptionItems.length< 15) addEmptyRow();
             DOM_CACHE.init();
             renderPrescriptionTable();
             calculateAmount();
@@ -9095,6 +9156,7 @@ IconFile=${scriptPath}`;
             closeModal('syndromeModal');
             showToast(formula.name + ' 已添加');
         }
+        // <<< SYNCED-FN-END selectFormula ===
 
         function renderMedicineList() {
             const list = document.getElementById('medicineList');
@@ -9234,19 +9296,20 @@ IconFile=${scriptPath}`;
             saveMedicinesToCloud(medicines);
         }
 
+        // >>> SYNCED-FN exportMedicines (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function exportMedicines() {
             const headers = ['药品名称', '简码', '进价', '单价', '单位', '常用用量', '库存'];
             let csvContent = '\uFEFF' + headers.join(',') + '\n';
-            medicines.forEach(m => {
+            medicines.forEach(m =>{
                 const row = [
                     m.name || '',
                     m.code || '',
-                    (m.costPrice !== null && m.costPrice !== undefined && m.costPrice !== '') ? m.costPrice : '',
+                    m.costPrice || '0',
                     m.price || '0',
                     m.unit || 'g',
                     m.dosage || '10',
                     m.stock || '0'
-                ].map(v => `"${v}"`).join(',');
+                ].map(v =>`"${v}"`).join(',');
                 csvContent += row + '\n';
             });
             const blob = new Blob([csvContent], {type: 'text/csv;charset=utf-8'});
@@ -9258,6 +9321,7 @@ IconFile=${scriptPath}`;
             URL.revokeObjectURL(url);
             showToast('药品库已导出为Excel格式！');
         }
+        // <<< SYNCED-FN-END exportMedicines ===
 
         function clearMedicineLibrary() {
             if (!confirm('确定要完全清空所有药物吗？包括系统默认药物！此操作不可撤销！清空后请重新导入您的药物库！')) return;
@@ -9885,8 +9949,10 @@ IconFile=${scriptPath}`;
         let diseaseChart = null;
         let medicineChart = null;
 
-        function getFilteredPrescriptions() {
-            const range = document.getElementById('analyticsRange')?.value || 'month';
+        // >>> SYNCED-FN getFilteredPrescriptions (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
+        function getFilteredPrescriptions(rangeId) {
+            const elementId = rangeId || 'analyticsRange';
+            const range = document.getElementById(elementId)?.value || 'month';
             const now = new Date();
             let startDate = new Date(1970, 0, 1);
             
@@ -9900,16 +9966,23 @@ IconFile=${scriptPath}`;
                 case 'month':
                     startDate = new Date(now.getFullYear(), now.getMonth(), 1);
                     break;
+                case 'quarter':
+                    const quarter = Math.floor(now.getMonth() / 3);
+                    startDate = new Date(now.getFullYear(), quarter * 3, 1);
+                    break;
                 case 'year':
                     startDate = new Date(now.getFullYear(), 0, 1);
                     break;
             }
             
-            return prescriptionHistory.filter(p => {
+            const sourceData = prescriptionHistory;
+            
+            return sourceData.filter(p =>{
                 const date = new Date(p.createdAt || p.date || 0);
                 return date >= startDate;
             });
         }
+        // <<< SYNCED-FN-END getFilteredPrescriptions ===
 
         // >>> SYNCED-FN analyzePatients (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function analyzePatients() {
@@ -9961,26 +10034,28 @@ IconFile=${scriptPath}`;
         }
         // <<< SYNCED-FN-END analyzeDiseases ===
 
+        // >>> SYNCED-FN analyzeMedicines (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function analyzeMedicines() {
             const filteredPrescriptions = getFilteredPrescriptions();
             const medicineMap = new Map();
-
-            filteredPrescriptions.forEach(p => {
+            
+            filteredPrescriptions.forEach(p =>{
                 if (p.items && Array.isArray(p.items)) {
-                    const doseCount = parseFloat(p.doseCount) || 1;
-                    p.items.forEach(m => {
+                    p.items.forEach(m =>{
                         const name = m.name || m.medicineName || '未知';
                         const dosage = parseFloat(m.dosage) || 0;
+                        const doseCount = parseFloat(p.doseCount) || 1;
                         medicineMap.set(name, (medicineMap.get(name) || 0) + dosage * doseCount);
                     });
                 }
             });
-
+            
             return Array.from(medicineMap.entries())
-                .map(([name, totalDosage]) => ({ name, totalDosage }))
-                .sort((a, b) => b.totalDosage - a.totalDosage)
+                .map(([name, totalDosage]) =>({ name, totalDosage }))
+                .sort((a, b) =>b.totalDosage - a.totalDosage)
                 .slice(0, 10);
         }
+        // <<< SYNCED-FN-END analyzeMedicines ===
 
         // >>> SYNCED-FN analyzeVisitTrend (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function analyzeVisitTrend() {

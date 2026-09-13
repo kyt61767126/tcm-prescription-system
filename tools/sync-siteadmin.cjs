@@ -3,12 +3,13 @@
 // ★ 2026-09-13 P2-B site-admin 生成模式收口（SA 分层架构·共享层执行器）
 //
 // 架构定位（三分层，详见 KNOWLEDGE.md）：
-//   [共享层] 42 同体函数（diff-cross-version tierB）——本工具管辖：
+//   [共享层] 64 同体函数（diff-cross-version tierB，2026-09-13 渐进收敛
+//             第 1 轮后 42→64）——本工具管辖：
 //             site-admin 侧加 SYNCED-FN 标记块，内容从 public/index.html
 //             权威源按函数名机械提取、原样传播（raw 字节级）。
-//   [分叉层] 101 分叉函数——diff-cross-version siteadmin 对基线红灯守护，
+//   [分叉层] 82 分叉函数——diff-cross-version siteadmin 对基线红灯守护，
 //             人工移植收敛后（两侧规范化同体）再加入本工具 SYNCED_FNS 清单。
-//   [独有层] public 独有 116 / site-admin 独有 103——各自独立维护。
+//   [独有层] public 独有 110 / site-admin 独有 103——各自独立维护。
 //
 // 与既有工具的互锁：
 //   diff-cross-version.cjs（siteadmin 对）= 漂移探测器：public 改了共享函数
@@ -40,20 +41,29 @@ const ROOT = path.resolve(__dirname, '..');
 const AUTHORITY_REL = 'public/index.html';
 const TARGET_REL = 'site-admin/index.html';
 
-// ★ 收敛台账（= 2026-09-13 diff-cross-version tierB_sameBody 快照）：
+// ★ 收敛台账（= 2026-09-13 diff-cross-version tierB_sameBody 快照
+//   + 同日渐进收敛第 1 轮：19 个 Tier C 分叉函数人工审查收敛 + 3 个
+//   tierA onlyA 函数移植【getEffectiveJianfa / escapeJs / injectRecycleBinButton】，
+//   42 → 64。剩余 Tier C 82 个多为平台有意分叉（DataCache 缓存层 / 云端 vs
+//   本地存储后端 / DOM 结构差异），随日常修复渐进收敛，勿批量强并）：
 //   新增条目流程：把函数移植到两侧规范化同体 → 在此登记函数名 → 跑同步。
 const SYNCED_FNS = [
-    '_isGenericLoginName', 'analyzeDiseases', 'analyzePatients', 'analyzeVisitTrend',
-    'applyFormula', 'buildMedicineMap', 'clearRecycleBin', 'closeMediaViewer',
-    'closeModal', 'deleteRow', 'formatDate', 'formatPrice',
-    'getMedicineByName', 'getPinyinCode', 'getRecycleBin', 'handleInput',
-    'handleKeyboard', 'handleSearchKeyDown', 'handleSearchKeyPress', 'hidePatientNameDropdown',
-    'loadLastHistory', 'loadPatientHistory', 'markGenderManual', 'mediaLabelOf',
-    'mediaViewerNav', 'removeDuplicateMedicines', 'renderMediaViewerSingle', 'resetCaseSearch',
-    'saveRecycleBin', 'searchCases', 'selectSearchResult', 'smartMatchGender',
-    'sortPrescriptionsByTimeDesc', 'startSearch', 'toggleGender', 'toggleUsernameDropdown',
-    'tryHideSearch', 'updateDosage', 'updateMedicineFrequency', 'updateSearchSelection',
-    'updateUnit', 'wrapText',
+    '__medicineTableFirewall', '_isGenericLoginName', 'analyzeDiseases', 'analyzeMedicines',
+    'analyzePatients', 'analyzeVisitTrend', 'applyFormula', 'buildMedicineMap',
+    'clearRecycleBin', 'closeMediaViewer', 'closeModal', 'computeBackupHmac',
+    'createEmptyMedicine', 'deleteFromRecycleBin', 'deleteRow', 'escapeJs',
+    'exportMedicines', 'formatDate', 'formatPrice', 'getEffectiveJianfa',
+    'getFilteredPrescriptions', 'getMedicineByName', 'getPinyinCode', 'getRecycleBin',
+    'handleInput', 'handleKeyboard', 'handleSearchKey', 'handleSearchKeyDown',
+    'handleSearchKeyPress', 'hidePatientNameDropdown', 'injectRecycleBinButton', 'loadLastHistory',
+    'loadPatientHistory', 'markGenderManual', 'mediaLabelOf', 'mediaViewerNav',
+    'removeDuplicateMedicines', 'renderMediaViewerSingle', 'renderPrescriptionTable', 'renderSyndromeList',
+    'resetCaseSearch', 'safeParseJSON', 'saveRecycleBin', 'searchCases',
+    'selectFormula', 'selectMedicine', 'selectSearchResult', 'showPatientNameDropdown',
+    'showRecycleBin', 'showSideHistory', 'showToast', 'smartMatchGender',
+    'sortPrescriptionsByTimeDesc', 'startSearch', 'switchMobileTab', 'toggleGender',
+    'toggleUsernameDropdown', 'tryHideSearch', 'updateDosage', 'updateMedicineFrequency',
+    'updatePrescriptionPaper', 'updateSearchSelection', 'updateUnit', 'wrapText',
 ];
 
 // —— 与 diff-cross-version.cjs 完全同款 normalizeSpan（字符串感知剔空白+注释）——
