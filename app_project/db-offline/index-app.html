@@ -1856,16 +1856,16 @@ let currentUser = null;
                 } catch (e) { console.warn('[LoginSelfHeal] 账号映射兜底异常(不影响登录):', e); }
                 // ★ P2 登录统一路由（2026-09-03）：本地表校验（username/phone 双模式 + verifyPassword
                 //   PBKDF2/用户名盐/全局盐/明文全兼容 + 改名盐回退）收敛到 AuthCore.loginWithUsernamePassword
-                //   —— 与 desktop/index.html、双桌面 login.js、云端 public/index.html 四处同源；
+                //   —— 与 index-app.html / desktop/index.html、双桌面 login.js、云端 public/index.html 同源；
                 //   离线端不走云端通道，本地表（config.users/local_systemUsers）为唯一副本。
                 const route = await AuthCore.loginWithUsernamePassword(loginUsername, password, { users: users });
                 let user = route.success ? route.user : null;
 
                 // ★ 2026-09-06 第八轮修复（登录密码不匹配自愈）：账号存在但密码不匹配时
                 //   （如激活收尾 adminReqPending 丢失导致前端镜像被降级为默认 admin），
-                //   从 Java config.json 权威源重拉一次并重试——不再等冷启动 UPSERT，
-                //   激活后无需重启即可用注册密码登录。上方"账号不存在"自愈只查用户名，
-                //   密码错位场景此前无兜底。
+                //   从 config.json 权威源（APP Java 桥 / 桌面 IPC）重拉一次并重试——不再
+                //   等冷启动 UPSERT，激活后无需重启即可用注册密码登录。上方"账号不存在"
+                //   自愈只查用户名，密码错位场景此前无兜底。
                 if (!user && window.electronAPI && window.electronAPI.activate &&
                     typeof window.electronAPI.activate.getActivationUsers === 'function' &&
                     typeof window.addLocalActivationUser === 'function') {

@@ -1806,25 +1806,49 @@ let currentUser = null;
                         }
                     }
                 } catch (e) { console.warn('[LoginSelfHeal] 账号映射兜底异常(不影响登录):', e); }
-                let user = null;
-                for (const u of users) {
-                    if (u.username !== loginUsername && String(u.phone || '') !== loginUsername) continue;
-                    const matchedIdentifier = (u.username === loginUsername) ? u.username : (u.phone || loginUsername);
-                    if (window.AuthCore && AuthCore.verifyPassword) {
-                        // ★ 2026-08-27 改名兼容：手机号账号改名为英文/拼音后，其原密码可能是以旧手机号为盐的
-                        //   增强哈希。用新用户名加盐失败时，回退用该用户 phone（=旧手机号）再次加盐校验，
-                        //   使"新用户名 + 原密码"也能正常登录，避免改名后锁号。
-                        let _ok = await AuthCore.verifyPassword(password, u.password || '', matchedIdentifier);
-                        if (!_ok && String(u.phone || '') && String(u.phone || '') !== matchedIdentifier) {
-                            _ok = await AuthCore.verifyPassword(password, u.password || '', u.phone);
+                // ★ P2 登录统一路由（2026-09-03）：本地表校验（username/phone 双模式 + verifyPassword
+                //   PBKDF2/用户名盐/全局盐/明文全兼容 + 改名盐回退）收敛到 AuthCore.loginWithUsernamePassword
+                //   —— 与 index-app.html / desktop/index.html、双桌面 login.js、云端 public/index.html 同源；
+                //   离线端不走云端通道，本地表（config.users/local_systemUsers）为唯一副本。
+                const route = await AuthCore.loginWithUsernamePassword(loginUsername, password, { users: users });
+                let user = route.success ? route.user : null;
+
+                // ★ 2026-09-06 第八轮修复（登录密码不匹配自愈）：账号存在但密码不匹配时
+                //   （如激活收尾 adminReqPending 丢失导致前端镜像被降级为默认 admin），
+                //   从 config.json 权威源（APP Java 桥 / 桌面 IPC）重拉一次并重试——不再
+                //   等冷启动 UPSERT，激活后无需重启即可用注册密码登录。上方"账号不存在"
+                //   自愈只查用户名，密码错位场景此前无兜底。
+                if (!user && window.electronAPI && window.electronAPI.activate &&
+                    typeof window.electronAPI.activate.getActivationUsers === 'function' &&
+                    typeof window.addLocalActivationUser === 'function') {
+                    try {
+                        var __rr = await window.electronAPI.activate.getActivationUsers();
+                        if (__rr && __rr.success && Array.isArray(__rr.users) && __rr.users.length > 0) {
+                            __rr.users.forEach(function (u) {
+                                if (!u || !u.username) return;
+                                try {
+                                    window.addLocalActivationUser({
+                                        username: String(u.username),
+                                        phone: u.phone ? String(u.phone) : '',
+                                        password: u.password || 'admin',
+                                        name: u.name || u.username,
+                                        role: u.role || 'admin',
+                                        lastPwdUpdatedAt: typeof u.lastPwdUpdatedAt === 'number' ? u.lastPwdUpdatedAt : 0,
+                                        updatedAt: typeof u.updatedAt === 'number' ? u.updatedAt : 0
+                                    });
+                                } catch (e) {}
+                            });
+                            users = getUsers();
+                            var __route2 = await AuthCore.loginWithUsernamePassword(loginUsername, password, { users: users });
+                            if (__route2 && __route2.success) {
+                                user = __route2.user;
+                                window.__loginHealDiag = (window.__loginHealDiag || '') + '|密码不匹配已从config自愈';
+                                console.log('[LoginSelfHeal] 密码不匹配，已从 config.json 权威源重拉并自愈');
+                            }
                         }
-                        if (_ok) { user = u; break; }
-                    } else {
-                        const hashedPwd = await hashPassword(password);
-                        if (u.password === hashedPwd) { user = u; break; }
-                    }
+                    } catch (e) { console.warn('[LoginSelfHeal] 密码不匹配自愈异常(不影响登录):', e); }
                 }
-                
+
                 if (user) {
                     // ★ 2026-08-24 内置 admin 账号仅试用期有效，激活后失效（用户需求：admin/admin 只对试用期内有效）
                     //   判据：isBuiltinDefaultAdmin（username=admin 且密码仍是出厂默认哈希=未改密）+ license 已正式激活
