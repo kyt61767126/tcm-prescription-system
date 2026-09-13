@@ -2153,12 +2153,14 @@ if (window.Permission) {
             }[ch]));
         }
 
+        // >>> SYNCED-FN formatPrice (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function formatPrice(val) {
             if (val === '' || val === null || val === undefined) return '';
             const num = parseFloat(val);
             if (isNaN(num)) return '';
             return num.toFixed(2);
         }
+        // <<< SYNCED-FN-END formatPrice ===
 
         // P5: 备份文件 HMAC 签名密钥（与 offline_project 保持一致）
         const PASSWORD_SALT = 'bnzc_prescription_salt_v1';
@@ -3329,6 +3331,7 @@ if (window.Permission) {
 
         // ★ 2026-08-28 实名防护（页面层）：登录框下拉/预填只允许通用用户名
         //   禁止显示/记忆：手机号（含10位以上连续数字，含拼音+手机号混合）、≥2连续汉字真实姓名、邮箱
+        // >>> SYNCED-FN _isGenericLoginName (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function _isGenericLoginName(s) {
             s = String(s == null ? '' : s).trim();
             if (!s) return false;
@@ -3337,6 +3340,7 @@ if (window.Permission) {
             if (s.indexOf('@') >= 0) return false;
             return true;
         }
+        // <<< SYNCED-FN-END _isGenericLoginName ===
 
         function renderRememberedUsers(usernames) {
             const btn = document.getElementById('usernameDropdownBtn');
@@ -3375,12 +3379,14 @@ if (window.Permission) {
             };
         }
 
+        // >>> SYNCED-FN toggleUsernameDropdown (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function toggleUsernameDropdown() {
             const menu = document.getElementById('usernameDropdownMenu');
             if (menu) {
                 menu.classList.toggle('show');
             }
         }
+        // <<< SYNCED-FN-END toggleUsernameDropdown ===
 
         document.addEventListener('click', function(e) {
             const menu = document.getElementById('usernameDropdownMenu');
@@ -4878,10 +4884,11 @@ if (window.Permission) {
             }
         };
         
+        // >>> SYNCED-FN buildMedicineMap (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function buildMedicineMap() {
             medicineMap.clear();
             medicineCodeIndex.clear();
-            medicines.forEach(med => {
+            medicines.forEach(med =>{
                 medicineMap.set(med.name, med);
                 const code = (med.code || '').toLowerCase();
                 if (code) {
@@ -4894,10 +4901,13 @@ if (window.Permission) {
                 }
             });
         }
+        // <<< SYNCED-FN-END buildMedicineMap ===
         
+        // >>> SYNCED-FN getMedicineByName (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function getMedicineByName(name) {
             return medicineMap.get(name);
         }
+        // <<< SYNCED-FN-END getMedicineByName ===
         
         function loadMedicineFrequency() {
             try {
@@ -4912,6 +4922,7 @@ if (window.Permission) {
             localStorage.setItem('cloud_medicineFrequency', JSON.stringify(medicineFrequency));
         }
         
+        // >>> SYNCED-FN updateMedicineFrequency (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function updateMedicineFrequency(items) {
             items.forEach(item =>{
                 if (item.name) {
@@ -4920,6 +4931,7 @@ if (window.Permission) {
             });
             saveMedicineFrequency();
         }
+        // <<< SYNCED-FN-END updateMedicineFrequency ===
         
         // 格式化时间显示
         function formatHistoryTime(dateStr) {
@@ -4991,19 +5003,23 @@ if (window.Permission) {
         }
 
         // ============ 回收站功能 ============
+        // >>> SYNCED-FN getRecycleBin (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function getRecycleBin() {
             try {
                 const key = 'recycleBin_' + (currentUser ? currentUser.username : 'default');
                 return JSON.parse(localStorage.getItem(key) || '[]');
             } catch(e) { return []; }
         }
+        // <<< SYNCED-FN-END getRecycleBin ===
 
+        // >>> SYNCED-FN saveRecycleBin (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function saveRecycleBin(bin) {
             try {
                 const key = 'recycleBin_' + (currentUser ? currentUser.username : 'default');
                 localStorage.setItem(key, JSON.stringify(bin));
             } catch(e) { console.warn('保存回收站失败:', e); }
         }
+        // <<< SYNCED-FN-END saveRecycleBin ===
 
         function saveToRecycleBin(id) {
             try {
@@ -5088,12 +5104,14 @@ if (window.Permission) {
             showRecycleBin();
         }
 
+        // >>> SYNCED-FN clearRecycleBin (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function clearRecycleBin() {
             if (!confirm('清空回收站后所有已删除处方将无法恢复，确定吗？')) return;
             saveRecycleBin([]);
             showToast('回收站已清空');
             showRecycleBin();
         }
+        // <<< SYNCED-FN-END clearRecycleBin ===
         
         let saveTimeout = null;
         function debouncedSave(key, value, delay = 100) {
@@ -5116,15 +5134,17 @@ if (window.Permission) {
             }
         }
 
+        // >>> SYNCED-FN removeDuplicateMedicines (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function removeDuplicateMedicines(arr) {
             const seen = new Set();
-            return arr.filter(m => {
+            return arr.filter(m =>{
                 const key = m.name + m.code;
                 if (seen.has(key)) return false;
                 seen.add(key);
                 return true;
             });
         }
+        // <<< SYNCED-FN-END removeDuplicateMedicines ===
 
         async function loadData() {
             // 启动同步引擎（幂等，仅首次执行生效；注册 online/visibilitychange/60s 定时器）
@@ -6038,6 +6058,7 @@ if (window.Permission) {
             window.removeEventListener('beforeunload', handleBeforeUnload);
         }
 
+        // >>> SYNCED-FN handleKeyboard (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function handleKeyboard(e) {
             if (e.key === 'F1') {e.preventDefault(); showModal('settingsModal');}
             else if (e.key === 'F2') {e.preventDefault(); showModal('medicineModal');}
@@ -6049,6 +6070,7 @@ if (window.Permission) {
             else if (e.altKey && e.key === '1') {e.preventDefault(); showModal('syndromeModal');}
             else if (e.altKey && e.key === '9') {e.preventDefault(); loadLastHistory();}
         }
+        // <<< SYNCED-FN-END handleKeyboard ===
 
         function addEmptyRow() {
             prescriptionItems.push(createEmptyMedicine());
@@ -6115,10 +6137,12 @@ if (window.Permission) {
             `).join('');
         }
 
+        // >>> SYNCED-FN startSearch (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function startSearch(event, index, column) {
             currentEditIndex = index;
             currentSearchColumn = column;
         }
+        // <<< SYNCED-FN-END startSearch ===
 
         function handleSearchKey(event, index, column) {
             currentSearchColumn = column;
@@ -6145,6 +6169,7 @@ if (window.Permission) {
             }
         }
 
+        // >>> SYNCED-FN handleSearchKeyDown (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function handleSearchKeyDown(event, index, column) {
             if (event.key === 'Enter') {
                 event._handled = true;
@@ -6152,14 +6177,18 @@ if (window.Permission) {
                 selectSearchResult();
             }
         }
+        // <<< SYNCED-FN-END handleSearchKeyDown ===
 
+        // >>> SYNCED-FN handleSearchKeyPress (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function handleSearchKeyPress(event, index, column) {
             if (event.key === 'Enter') {
                 if (event._handled) return;
                 event.preventDefault();
             }
         }
+        // <<< SYNCED-FN-END handleSearchKeyPress ===
 
+        // >>> SYNCED-FN handleInput (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function handleInput(event, index, column) {
             const value = event.target.value;
             if (value.includes('\n') || value.includes('\r')) {
@@ -6169,26 +6198,31 @@ if (window.Permission) {
                     keyCode: 13,
                     which: 13,
                     target: event.target,
-                    preventDefault: () => {},
-                    stopPropagation: () => {},
+                    preventDefault: () =>{},
+                    stopPropagation: () =>{},
                     _handled: false
                 }, index, column);
             }
         }
+        // <<< SYNCED-FN-END handleInput ===
 
+        // >>> SYNCED-FN updateSearchSelection (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function updateSearchSelection() {
             const dropdown = DOM_CACHE.medicineSearchDropdown;
             const items = dropdown.querySelectorAll('.search-item');
-            items.forEach((item,i) => {
+            items.forEach((item,i) =>{
                 item.classList.toggle('selected', i === selectedSearchIndex);
             });
         }
+        // <<< SYNCED-FN-END updateSearchSelection ===
 
+        // >>> SYNCED-FN selectSearchResult (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function selectSearchResult() {
             const dropdown = DOM_CACHE.medicineSearchDropdown;
             const selected = dropdown.querySelector('.search-item.selected');
             if (selected) selected.click();
         }
+        // <<< SYNCED-FN-END selectSearchResult ===
 
         function showSearchDropdown(element, query, column) {
             const dropdown = DOM_CACHE.medicineSearchDropdown;
@@ -6281,10 +6315,12 @@ if (window.Permission) {
             }
         }
 
+        // >>> SYNCED-FN tryHideSearch (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function tryHideSearch() {
             if (hideSearchTimer) clearTimeout(hideSearchTimer);
-            hideSearchTimer = setTimeout(() => {DOM_CACHE.medicineSearchDropdown.style.display = 'none';}, 200);
+            hideSearchTimer = setTimeout(() =>{DOM_CACHE.medicineSearchDropdown.style.display = 'none';}, 200);
         }
+        // <<< SYNCED-FN-END tryHideSearch ===
 
         function selectMedicine(index, name, code, price) {
             const exists = prescriptionItems.some((item, i) => i !== index && item.name === name);
@@ -6331,6 +6367,7 @@ if (window.Permission) {
             }, 1000);
         }
 
+        // >>> SYNCED-FN updateDosage (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function updateDosage(index, val) {
             const __medDose = parseFloat(val) || 10;
             prescriptionItems[index].dosage = __medDose;
@@ -6346,20 +6383,25 @@ if (window.Permission) {
             calculateAmount();
             updatePrescriptionPaper();
         }
+        // <<< SYNCED-FN-END updateDosage ===
 
+        // >>> SYNCED-FN updateUnit (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function updateUnit(index, val) {
             prescriptionItems[index].unit = val;
             updatePrescriptionPaper();
         }
+        // <<< SYNCED-FN-END updateUnit ===
 
+        // >>> SYNCED-FN deleteRow (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function deleteRow(index) {
             prescriptionItems.splice(index, 1);
-            if (prescriptionItems.length < 15) addEmptyRow();
+            if (prescriptionItems.length< 15) addEmptyRow();
             DOM_CACHE.init();
             renderPrescriptionTable();
             calculateAmount();
             updatePrescriptionPaper();
         }
+        // <<< SYNCED-FN-END deleteRow ===
 
         function syncDoseInputs(sourceId) {
             const dose1 = document.getElementById('doseCountInput');
@@ -6456,6 +6498,7 @@ if (window.Permission) {
             linesDiv.innerHTML = html;
         }
 
+        // >>> SYNCED-FN getPinyinCode (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function getPinyinCode(chineseName) {
             const pinyinMap = {
                 '赵':'z','钱':'q','孙':'s','李':'l','周':'z','吴':'w','郑':'z','王':'w',
@@ -6525,6 +6568,7 @@ if (window.Permission) {
             }
             return code;
         }
+        // <<< SYNCED-FN-END getPinyinCode ===
 
         // 回车键跳转到下一个输入框
         function handleEnterToNext(event, nextFieldId) {
@@ -6545,6 +6589,7 @@ if (window.Permission) {
         }
         
         // 智能匹配性别：50-90年代取名常用字（各100字）+ 补充字
+        // >>> SYNCED-FN smartMatchGender (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function smartMatchGender(name) {
             if (!name) return;
             const genderSelect = document.getElementById('patientGender');
@@ -6565,20 +6610,24 @@ if (window.Permission) {
             }
             
             // 女性得分 >= 男性得分，则选女；否则选男
-            if (femaleScore >= maleScore && femaleScore > 0) {
+            if (femaleScore >= maleScore && femaleScore >0) {
                 genderSelect.value = '女';
-            } else if (maleScore > 0) {
+            } else if (maleScore >0) {
                 genderSelect.value = '男';
             }
         }
+        // <<< SYNCED-FN-END smartMatchGender ===
 
         // 标记用户手动选择过性别
+        // >>> SYNCED-FN markGenderManual (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function markGenderManual() {
             const genderSelect = document.getElementById('patientGender');
             if (genderSelect) genderSelect.dataset.manual = 'true';
         }
+        // <<< SYNCED-FN-END markGenderManual ===
 
         // 切换性别：点击时自动切换男女
+        // >>> SYNCED-FN toggleGender (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function toggleGender() {
             const genderSelect = document.getElementById('patientGender');
             if (!genderSelect) return;
@@ -6586,6 +6635,7 @@ if (window.Permission) {
             markGenderManual();
             updatePrescriptionPaper();
         }
+        // <<< SYNCED-FN-END toggleGender ===
 
         // P1-1 性能优化：搜索防抖，避免每次按键全量扫描
         let _searchPatientsQuickTimer = null;
@@ -6646,10 +6696,12 @@ if (window.Permission) {
             }, 100);
         }
 
+        // >>> SYNCED-FN hidePatientNameDropdown (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function hidePatientNameDropdown() {
             const dropdown = document.getElementById('patientNameDropdown');
             if (dropdown) dropdown.remove();
         }
+        // <<< SYNCED-FN-END hidePatientNameDropdown ===
 
         function selectPatientName(name) {
             document.getElementById('patientName').value = name;
@@ -6696,6 +6748,7 @@ if (window.Permission) {
         }
 
         // 处方按时间倒序排序（最新在前），避免多处重复实现
+        // >>> SYNCED-FN sortPrescriptionsByTimeDesc (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function sortPrescriptionsByTimeDesc(list) {
             if (!Array.isArray(list)) return list;
             return list.sort((a, b) => {
@@ -6704,6 +6757,7 @@ if (window.Permission) {
                 return timeB - timeA;
             });
         }
+        // <<< SYNCED-FN-END sortPrescriptionsByTimeDesc ===
 
         // 更新操作界面"统计"输入框（clinicNo）
         // 规则：年(2位) + 历史处方数量(6位补零)，如 26000001
@@ -6828,6 +6882,7 @@ if (window.Permission) {
             }
         }
 
+        // >>> SYNCED-FN mediaLabelOf (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function mediaLabelOf(f) {
             var label = '处方';
             if (f.name.indexOf('tongue_front') >= 0) label = '舌面图像';
@@ -6837,7 +6892,9 @@ if (window.Permission) {
             else if (f.name.indexOf('video') >= 0) label = '视频';
             return label;
         }
+        // <<< SYNCED-FN-END mediaLabelOf ===
 
+        // >>> SYNCED-FN renderMediaViewerSingle (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function renderMediaViewerSingle(idx) {
             var files = window.__currentMediaFiles;
             if (!files || !files.length) return;
@@ -6874,7 +6931,9 @@ if (window.Permission) {
             content.innerHTML = html;
             loadMediaSingleFile(idx);
         }
+        // <<< SYNCED-FN-END renderMediaViewerSingle ===
 
+        // >>> SYNCED-FN mediaViewerNav (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function mediaViewerNav(delta) {
             var files = window.__currentMediaFiles;
             if (!files || files.length <= 1) return;
@@ -6884,6 +6943,7 @@ if (window.Permission) {
             if (idx >= files.length) idx = 0;
             renderMediaViewerSingle(idx);
         }
+        // <<< SYNCED-FN-END mediaViewerNav ===
 
         function loadMediaSingleFile(idx) {
             var files = window.__currentMediaFiles;
@@ -7069,17 +7129,18 @@ if (window.Permission) {
             }
         }
 
+        // >>> SYNCED-FN closeMediaViewer (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function closeMediaViewer() {
             const overlay = document.getElementById('mediaViewerOverlay');
             if (overlay) overlay.style.display = 'none';
-            // 遍历所有活动的 Blob URL 全部 revoke（与离线APP一致）
+            // 遍历所有活动的 Blob URL 全部 revoke（彻底修复：消除全局单例竞态）
             if (window.__activeBlobUrls) {
                 Object.keys(window.__activeBlobUrls).forEach(function(id) {
                     try { URL.revokeObjectURL(window.__activeBlobUrls[id]); } catch(e) {}
                 });
                 window.__activeBlobUrls = {};
             }
-            // 兼容旧变量
+            // 兼容旧变量（已废弃，保留以防遗漏）
             if (window.__currentBlobUrl) {
                 try { URL.revokeObjectURL(window.__currentBlobUrl); } catch(e) {}
                 window.__currentBlobUrl = null;
@@ -7088,6 +7149,7 @@ if (window.Permission) {
             window.__currentMediaFiles = null;
             window.__currentMediaIndex = 0;
         }
+        // <<< SYNCED-FN-END closeMediaViewer ===
 
         // 优化13：加载更多历史处方（基于当前显示的列表，保留搜索/筛选状态）
         function loadMoreHistory() {
@@ -7173,14 +7235,16 @@ if (window.Permission) {
             }
         }
 
+        // >>> SYNCED-FN loadLastHistory (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function loadLastHistory() {
             const name = document.getElementById('patientName').value;
-            if (name && prescriptionHistory.length > 0) {
-                const matched = prescriptionHistory.find(p => p.patientName && p.patientName.includes(name));
+            if (name && prescriptionHistory.length >0) {
+                const matched = prescriptionHistory.find(p =>p.patientName && p.patientName.includes(name));
                 if (matched) {loadHistory(matched.id); return;}
             }
-            if (prescriptionHistory.length > 0) loadHistory(prescriptionHistory[0].id);
+            if (prescriptionHistory.length >0) loadHistory(prescriptionHistory[0].id);
         }
+        // <<< SYNCED-FN-END loadLastHistory ===
 
         function showSideHistory() {
             // 姓名输入框聚焦时：有历史病历才显示，没有则不显示
@@ -7504,17 +7568,18 @@ if (window.Permission) {
             }
         }
 
+        // >>> SYNCED-FN wrapText (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
             const words = text.split('');
             let line = '';
             let currentY = y;
             
-            for (let i = 0; i < words.length; i++) {
+            for (let i = 0; i< words.length; i++) {
                 const testLine = line + words[i];
                 const metrics = ctx.measureText(testLine);
                 const testWidth = metrics.width;
                 
-                if (testWidth > maxWidth && i > 0) {
+                if (testWidth >maxWidth && i >0) {
                     ctx.fillText(line, x, currentY);
                     line = words[i];
                     currentY += lineHeight;
@@ -7525,6 +7590,7 @@ if (window.Permission) {
             ctx.fillText(line, x, currentY);
             return currentY;
         }
+        // <<< SYNCED-FN-END wrapText ===
 
         function downloadPrescriptionImage() {
             // 从当前表单直接生成处方签图片，不需要保存到云端
@@ -7771,9 +7837,11 @@ if (window.Permission) {
             }
         }
 
+        // >>> SYNCED-FN closeModal (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function closeModal(id) {
             document.getElementById(id).style.display = 'none';
         }
+        // <<< SYNCED-FN-END closeModal ===
 
         async function saveSettings() {
             const newClinicName = document.getElementById('clinicName').value.trim();
@@ -9622,10 +9690,12 @@ IconFile=${scriptPath}`;
             `).join('');
         }
 
+        // >>> SYNCED-FN applyFormula (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function applyFormula(index) {
             selectFormula(index);
             closeModal('formulaModal');
         }
+        // <<< SYNCED-FN-END applyFormula ===
 
         function deleteFormula(index) {
             if (!confirm('确定删除该验方？')) return;
@@ -9664,23 +9734,27 @@ IconFile=${scriptPath}`;
             `).join('') || '<div style="text-align:center;padding:20px;color:#999;">暂无病历记录</div>';
         }
 
+        // >>> SYNCED-FN searchCases (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function searchCases() {
             const name = document.getElementById('caseNameSearch').value.toLowerCase();
             const dateStart = document.getElementById('caseDateStart').value;
             const dateEnd = document.getElementById('caseDateEnd').value;
             let filtered = prescriptionHistory;
-            if (name) filtered = filtered.filter(p => p.patientName && p.patientName.toLowerCase().includes(name));
-            if (dateStart) filtered = filtered.filter(p => p.date >= dateStart);
-            if (dateEnd) filtered = filtered.filter(p => p.date <= dateEnd);
+            if (name) filtered = filtered.filter(p =>p.patientName && p.patientName.toLowerCase().includes(name));
+            if (dateStart) filtered = filtered.filter(p =>p.date >= dateStart);
+            if (dateEnd) filtered = filtered.filter(p =>p.date<= dateEnd);
             renderCaseList(filtered);
         }
+        // <<< SYNCED-FN-END searchCases ===
 
+        // >>> SYNCED-FN resetCaseSearch (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function resetCaseSearch() {
             document.getElementById('caseNameSearch').value = '';
             document.getElementById('caseDateStart').value = '';
             document.getElementById('caseDateEnd').value = '';
             renderCaseList(prescriptionHistory);
         }
+        // <<< SYNCED-FN-END resetCaseSearch ===
 
         async function deleteCase(id) {
             if (!confirm('确定删除该病历？')) return;
@@ -9837,11 +9911,12 @@ IconFile=${scriptPath}`;
             });
         }
 
+        // >>> SYNCED-FN analyzePatients (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function analyzePatients() {
             const filteredPrescriptions = getFilteredPrescriptions();
             const patientMap = new Map();
             
-            filteredPrescriptions.forEach(p => {
+            filteredPrescriptions.forEach(p =>{
                 const name = p.patientName || '未知';
                 if (!patientMap.has(name)) {
                     patientMap.set(name, {
@@ -9853,35 +9928,38 @@ IconFile=${scriptPath}`;
                 const patient = patientMap.get(name);
                 const visitDate = new Date(p.createdAt || p.date || 0);
                 patient.visits.push(visitDate);
-                if (!patient.firstVisit || visitDate < patient.firstVisit) {
+                if (!patient.firstVisit || visitDate< patient.firstVisit) {
                     patient.firstVisit = visitDate;
                 }
-                if (!patient.lastVisit || visitDate > patient.lastVisit) {
+                if (!patient.lastVisit || visitDate >patient.lastVisit) {
                     patient.lastVisit = visitDate;
                 }
             });
             
-            return Array.from(patientMap.entries()).map(([name, data]) => ({
+            return Array.from(patientMap.entries()).map(([name, data]) =>({
                 name,
                 visitCount: data.visits.length,
                 firstVisit: data.firstVisit,
                 lastVisit: data.lastVisit
             }));
         }
+        // <<< SYNCED-FN-END analyzePatients ===
 
+        // >>> SYNCED-FN analyzeDiseases (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function analyzeDiseases() {
             const filteredPrescriptions = getFilteredPrescriptions();
             const diseaseMap = new Map();
             
-            filteredPrescriptions.forEach(p => {
+            filteredPrescriptions.forEach(p =>{
                 const diagnosis = p.diagnosis || '未诊断';
                 diseaseMap.set(diagnosis, (diseaseMap.get(diagnosis) || 0) + 1);
             });
             
             return Array.from(diseaseMap.entries())
-                .map(([name, count]) => ({ name, count }))
-                .sort((a, b) => b.count - a.count);
+                .map(([name, count]) =>({ name, count }))
+                .sort((a, b) =>b.count - a.count);
         }
+        // <<< SYNCED-FN-END analyzeDiseases ===
 
         function analyzeMedicines() {
             const filteredPrescriptions = getFilteredPrescriptions();
@@ -9904,11 +9982,12 @@ IconFile=${scriptPath}`;
                 .slice(0, 10);
         }
 
+        // >>> SYNCED-FN analyzeVisitTrend (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function analyzeVisitTrend() {
             const filteredPrescriptions = getFilteredPrescriptions();
             const dailyMap = new Map();
             
-            filteredPrescriptions.forEach(p => {
+            filteredPrescriptions.forEach(p =>{
                 const date = new Date(p.createdAt || p.date || 0);
                 const dateStr = date.toLocaleDateString('zh-CN');
                 dailyMap.set(dateStr, (dailyMap.get(dateStr) || 0) + 1);
@@ -9917,14 +9996,17 @@ IconFile=${scriptPath}`;
             const dates = Array.from(dailyMap.keys()).sort();
             return {
                 dates,
-                counts: dates.map(d => dailyMap.get(d))
+                counts: dates.map(d =>dailyMap.get(d))
             };
         }
+        // <<< SYNCED-FN-END analyzeVisitTrend ===
 
+        // >>> SYNCED-FN formatDate (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function formatDate(date) {
             if (!date) return '-';
             return date.toLocaleDateString('zh-CN');
         }
+        // <<< SYNCED-FN-END formatDate ===
 
         function formatDateTime(date) {
             if (!date) return '-';
@@ -10351,12 +10433,14 @@ IconFile=${scriptPath}`;
             }, 300);
         });
 
+        // >>> SYNCED-FN loadPatientHistory (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function loadPatientHistory(patientName) {
             closeModal('analyticsModal');
             document.getElementById('patientName').value = patientName;
             searchPatientsQuick({ key: 'Enter' });
             showSideHistory();
         }
+        // <<< SYNCED-FN-END loadPatientHistory ===
 
         function showModal(modalId) {
             document.getElementById(modalId).style.display = 'flex';

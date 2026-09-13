@@ -437,6 +437,22 @@ if ($VerifyOnly) { $syncIndexAppArgs += '--verify-only' }
 if ($LASTEXITCODE -ne 0) { $allInSync = $false }
 Write-Host ""
 
+# Group 16: site-admin 共享函数层生成器（★ 2026-09-13 P2-B site-admin 生成模式收口）
+#   public/index.html 权威源 42 同体函数 → site-admin/index.html 的
+#   SYNCED-FN 标记块原样传播（raw 字节级）。互锁分工：
+#     本组 = 共享层执行器（42 同体函数，--check 字节校验）；
+#     diff-cross-version siteadmin 对 = 分叉层探测器（Tier A/C 101 分叉函数）。
+#   此后禁止手改 site-admin 标记块内函数——只改 public/index.html 权威源，
+#   然后跑 sync-all.ps1（或单独 node tools/sync-siteadmin.cjs）。
+Write-Host "--- [site-admin shared-fn layer: public authority -> SYNCED-FN markers] ---" -ForegroundColor Cyan
+$syncSiteAdminScript = Join-Path $PSScriptRoot 'sync-siteadmin.cjs'
+$syncSiteAdminArgs = @($syncSiteAdminScript)
+if ($VerifyOnly) { $syncSiteAdminArgs += '--check' }
+# 直接调用（不接管 stdout 管道，避免子进程 UTF-8 中文输出经管道转码乱码）
+& node @syncSiteAdminArgs
+if ($LASTEXITCODE -ne 0) { $allInSync = $false }
+Write-Host ""
+
 # ============================================================================
 # Summary
 # ============================================================================

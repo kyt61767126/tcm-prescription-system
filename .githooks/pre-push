@@ -10,7 +10,8 @@
 #    auth-core 漂移史上真实发生（条目三十二 asar 2 副本、cloud_app assets
 #    脱管）；界面结构基线与激活参数完整性同样靠自觉。
 #    ① html-sync-check.ps1       —— HTML 副本漂移（含 login.html 双版监控）
-#    ② sync-all.ps1 -VerifyOnly  —— shared 模块 + index.html 生成模式校验
+#    ② sync-all.ps1 -VerifyOnly  —— shared 模块 + index.html/index-app/site-admin
+#                                  共享函数层生成模式校验（Group 16 = SYNCED-FN 标记块）
 #    ③ check-injection-idempotency.cjs —— 运行时注入幂等基线
 #    ④ check-interface.ps1       —— 界面结构基线（HTML body 哈希锁）
 #    ⑤ sync-auth-core.ps1 -VerifyOnly —— auth-core 11 副本一致性（双权威源）
