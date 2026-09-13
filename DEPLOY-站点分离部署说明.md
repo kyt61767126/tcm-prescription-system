@@ -3,6 +3,15 @@
 > 规则9 物理拆分执行完成时间：2026-08-08
 > 代码拆分：见 `site-official/`（官网）和 `site-admin/`（后台+云端APP）
 
+> ⚠️ **2026-09-13 勘误（实测 Cloudflare API + 线上抓取核实）**：本文档描述的分离拓扑与实际不符。
+> 实际现状：三个 Pages 项目（tcm-prescription-system / huikang-admin / huikang-official）
+> 的 destination_dir **全部为 `public/`**，互为完整镜像（含 functions API）；`huikangzy.com`
+> 三个自定义域名均无 DNS 解析（域名已失效），实际访问入口只有 *.pages.dev；
+> 全部客户端（桌面 CSP/更新/心跳、APP capacitor）指向 `tcm-prescription-system.pages.dev`。
+> `site-admin/` 与 `site-official/` 目录当前**不部署于任何线上端点**，为仓库内维护副本
+> （site-admin 由 P2-B 生成模式+基线门禁守护，site-official/download.html 由 SA-2 双副本门禁守护）。
+> 下文「分离方案」保留为历史设计与可选重整路径；引用本文档判定「生效方式」时以本勘误为准。
+
 ## 1. 两站点各自的构建输出根目录
 
 | 站点 | 根目录 | Pages / Nginx 指向 |
