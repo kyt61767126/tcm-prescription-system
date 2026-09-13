@@ -1,4 +1,4 @@
-﻿# ============================================================================
+# ============================================================================
 #  generate-hot-update.ps1 - Generate hot-update packages for offline apps
 #
 #  Purpose:
@@ -30,9 +30,7 @@ $AllVersions = @('dingzhi')
 $UpdateFiles = @(
     'index.html',
     'auth-core.js',
-    'db-adapter.js',
     'prescription-core.js',
-    'patient-archive.js',
     'medicine-dict.js',
     'print-utils.js',
     'performance-utils.js',

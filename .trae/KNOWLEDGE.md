@@ -94,9 +94,15 @@
 
 * ★ 2026-09-13 **离线系 index.html 生成模式**（P1-B 收口，替代旧「双源纪律」人工移植）：`index-app.html` 不再手工维护——由 `db-offline/desktop/index.html`（离线权威源）经 `tools/sync-index-app.cjs` 应用 33 条字面变换自动生成（同 buffer 双写 index-app.html + assets 副本，SHA256 自校验；`--verify-only` 漂移守卫）。**铁律：①改离线共性功能只改 desktop/index.html，APP 专属差异进 `tools/index-app-transforms.cjs` 变换表，改完跑生成器——禁止手改 index-app/assets；②工作流顺序 = 先 `sync-shared-blocks` 再跑生成器（锚点落入 USER-STORE/USER-ADMIN 标记块自动红灯，该块单独管理）；③生成器 mustReplaceOnce：每条 find 恰好命中 1 次，失配 exit 1 输出条目 id/修复指引——禁止依赖脆弱锚点；④接线上表 Group 13，pre-push ②/CI ②自动生效；build-app.bat 拷贝链不动，`diff-index-app.cjs` 降级为语义级冗余守卫（函数集对比，基线 .drift-baseline.json）。** 首次落地验收：生成后 `git status` 零改动（字节级复刻现存文件）+ 重复运行幂等；B0 已完成反向移植欠债审查（09-03 统一路由/09-06 密码自愈已移植桌面；09-11 激活码核验判 APP 专属进变换表 T15-T17）。
 
-* shared JS（db-adapter/button-manager/edition-lock 等）：改 `shared/` 权威源后跑 `sync-all.ps1`；云端APP db-adapter.js 有防御性初始化本地差异，Group 1 排除需手工维护。
+* shared JS（button-manager/edition-lock/performance-utils 等 8 个业务模块）：改 `shared/` 权威源后跑 `sync-all.ps1`。★ 2026-09-13 P2-A1：db-adapter.js / patient-archive.js 经全端触点审计（动态访问/IIFE/构建链/工具脚本 33 轮扫描）确认零消费，连同 22 份物理副本、sync-all Group 1 / obfuscate MODULE\_FILES / generate-hot-update / build-app.bat MODULES / 两桌面 package.json build.files / APP\_MODE 过期注释一并移除；官网 WAF 敏感路径黑名单与软著历史文档中的名称引用按防御/存档设计保留。
 
 * ★ 2026-09-13 **桌面更新器 update-manager.cjs 单一权威源**（P0-1 架构收口）：云桌面+离线桌面 main.js 原各内嵌 ~250 行同构更新器（仅渠道 URL 不同，历史人肉双改）——现抽为 `shared/update-manager.cjs`（createDesktopUpdateManager 工厂，checkUrl/downloadPageUrl 入参注入渠道差异，checkForUpdate + handleWindowOpen 两个接线点），双 main.js require 接线（每份 -250 行）。分发：sync-all **Group 12** → 2 个 electron 目录 + copy-consistency **新组**（2 副本硬哈希门，与 electron-logger.cjs/pe-guard.cjs 同位同构）。**铁律：①改更新逻辑只改 shared/update-manager.cjs，禁止再改两份 main.js 内嵌副本（改了会在 copy-consistency 门被拦或打包时 Auto-FIX 覆盖）；②main.js 只保留 UPDATE_CHECK_URL/UPDATE_DOWNLOAD_URL 渠道常量与两个接线点；③新增 shared/ cjs 模块必须三处登记——sync-all.ps1 加 target 组 + copy-consistency.cjs 加 GROUPS + 确认打包 build.files 覆盖（electron/**/* 默认已含）**。生效方式：云桌面/离线桌面需重打包；其他端不受影响。
+
+* ★ 2026-09-13 **P2-A 减法+安全三件套**（死重移除 + API 收缩 + escapeHtml 归一，观察期内提前执行项）：
+  1. **死模块移除**：db-adapter.js / patient-archive.js 全端 22 份物理副本删除，分发链（sync-all Group 1 / obfuscate MODULE\_FILES / generate-hot-update / build-app.bat MODULES / 两桌面 package.json build.files）同步摘除；APP\_MODE 端配置注释由「供 db-adapter.js 自动检测」改「供 button-manager/桌面身份判定消费」（html-sync-check DropLineRules 新旧双条目兼容比对）。
+  2. **prescription-core.js 收缩到真实 API 面**：全库触点审计（`PrescriptionCore\.\w+` 命名空间调用 + 动态访问 + cjs/java/ets）实锤唯一活 API = getAutoJianfa（7 份 index.html 防御式调用），原 17 个工具函数（escapeHtml/formatPrice/排序/金额/校验/构建/频率/编号等）自创建即被内联同名实现遮蔽零调用，整体删除（411→185 行）；PaperHistoryToggle 自执行特性整段保留。**同步盲区永久堵漏：site-admin×2/云端APP assets/鸿蒙 rawfile 四副本此前手工维护（stock-core/symptom-dict 同款盲区），本轮手工同步后 copy-consistency.cjs 新增 prescription-core 专用组（10 副本硬哈希），总组数 8/61 副本**。
+  3. **escapeHtml 归一（减法式）**：模块死轨删除后唯一活实现 = 各端内联版（强 5 字符 `&<>"'`，云↔离线同体由 diff-cross-version Tier B 基线第 escapeHtml 条目守护）；admin/site-admin/症状字典页均为强 5 字符版；electron main.js 确认框 3 字符弱版仅用于文本节点上下文且配套 escapeAttr——全端无转义缺口。
+  验收：sync-all 全绿 / copy-consistency 61 副本 0 失败 / smoke 157/157 / 界面基线 6 OK / 跨版本三层基线全绿 / getAutoJianfa 功能测试（炮制前缀/排除表/普通煎）通过。生效方式：云端网页 push 即生效；云桌面/离线桌面/云端APP/离线APP需各自重打包（减少包体与攻击面）；已装机设备热更后旧模块文件残留磁盘但不加载（无害）。
 
 * shared 组件新增 IIFE 必须过 `node tools\smoke-runtime.cjs --all`（无 DOM 沙箱全量加载，凡 window.* API 一律 try-catch 包裹——S7 红线：无 DOM 环境加载不得抛错）。
 
@@ -251,7 +257,7 @@
 
 * 媒体专属目录：getExternalFilesDir（卸载即清空，数据保留依赖一键备份）。
 
-* 本地数据加密：db-adapter.js 字段级 XOR+Base64（ENC1: 前缀），敏感字段写密文读明文，密钥由 hostname+userAgent 派生（换设备不可解密），旧明文自动兼容升级。**改 db-adapter.js 的 IndexedDB/localStorage 读写时必须保持 \_encRecord/\_decRecord 配对，否则读到密文。**
+* ~~本地数据加密：db-adapter.js 字段级 XOR+Base64~~ **已退役（2026-09-13 P2-A1 核实）**：db-adapter.js 连同其 \_encRecord/\_decRecord 加密在 script 标签被注释时代就已停止加载，全库零消费者，模块已整体删除；当前 IndexedDB/localStorage 处方数据为明文落盘（如需恢复静态加密属新功能决策，非回归修复）。
 
 **备份/恢复（已验证正常，2026-08-29 用户确认）**：
 

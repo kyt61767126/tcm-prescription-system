@@ -99,15 +99,14 @@ const OBFUSCATOR_CONFIG = {
 //       auth-core.js/login.js 承担登录/激活校验核心链路，为"宁可漏检不可误报、不引入
 //       任何误报/闪退风险"，仍保守保持明文不混淆（安全性损失可接受：密码哈希值存于
 //       config.json/localStorage，核心校验另有 Java/native 双保险，见 MainActivity）。
+// ★ 2026-09-13 P2-A1: db-adapter.js / patient-archive.js 已删除（零消费死模块）
 const MODULE_FILES = [
     'permission.js',
     'debug-logger.js',
     'print-utils.js',
     'medicine-dict.js',
-    'db-adapter.js',
     'performance-utils.js',
     'prescription-core.js',
-    'patient-archive.js',
     'security-guard.js'
 ];
 
@@ -216,7 +215,7 @@ function obfuscateFile(filePath, config) {
         //   数组）与 function h(a,b){...}（解码器）等声明。浏览器/WebView 中 <script> 顶层
         //   function 会挂到 window —— 同一页面加载多个混淆脚本时（index.html 依次加载
         //   permission/debug-logger/print-utils/medicine-dict/performance-utils/
-        //   prescription-core/patient-archive/security-guard），后加载的会覆盖先加载的
+        //   prescription-core/security-guard），后加载的会覆盖先加载的
         //   g/h。permission.js 的方法运行时再调用 h(0x1be) 实际拿到的是别人的解码器，
         //   用自己的索引查别人的字符串数组 → 解码乱码 → this[乱码] is not a function。
         //   症状：E2E E1/E3 点击超时、安装包运行一会自动退出（与 mangled 命名随机性

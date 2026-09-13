@@ -109,6 +109,24 @@ const GROUPS = [
         ]
     },
     {
+        // ★ 2026-09-13 P2-A3 处方签核心（prescription-core.js）：同步盲区同 stock-core
+        //   （Group 1 只盖 6 副本，site-admin×2/云端APP assets/鸿蒙 rawfile 靠手工），
+        //   本组全量 10 副本硬校验堵漏；收缩到真实 API 面（getAutoJianfa）后新增。
+        authority: 'shared/prescription-core.js',
+        copies: [
+            'public/prescription-core.js',
+            'public/electron/prescription-core.js',
+            'site-admin/prescription-core.js',
+            'site-admin/electron/prescription-core.js',
+            'app_project/db-yunduan/cloud_desktop/prescription-core.js',
+            'app_project/db-yunduan/cloud_desktop/electron/prescription-core.js',
+            'app_project/db-yunduan/cloud_app/app/src/main/assets/public/prescription-core.js',
+            'app_project/db-offline/desktop/prescription-core.js',
+            'app_project/db-offline/app/app/src/main/assets/public/prescription-core.js',
+            'app_project_harmony/huikang-cloud/entry/src/main/resources/rawfile/prescription-core.js'
+        ]
+    },
+    {
         // ★ P0-1（2026-09-13）：桌面更新器收口。云桌面/离线桌面 main.js 原各内嵌
         //   ~200 行同构更新器（仅渠道 URL 不同），历史靠人肉双改。现抽为唯一权威源
         //   shared/update-manager.cjs，main.js require + 工厂入参注入渠道差异。

@@ -125,7 +125,7 @@ if exist "..\desktop\vendor\xlsx.full.min.js" (
  if errorlevel 1 ( echo [] xlsx.full.min.js ) else ( echo [OK] xlsx.full.min.js )
 ) else ( echo [SKIP] vendor/xlsx.full.min.js )
 echo [4/5] Sync core JS modules...
-set "MODULES=auth-core.js db-adapter.js debug-logger.js medicine-dict.js patient-archive.js performance-utils.js permission.js prescription-core.js print-utils.js security-guard.js"
+set "MODULES=auth-core.js debug-logger.js medicine-dict.js performance-utils.js permission.js prescription-core.js print-utils.js security-guard.js"
 for %%m in (%MODULES%) do (
     if exist "..\desktop\%%m" (
         copy /Y "..\desktop\%%m" "%ANDROID_PUBLIC%\%%m" >nul

@@ -31,7 +31,7 @@ $SharedDir = Join-Path $ProjectRoot 'shared'
 #       (PowerShell on Windows and Linux both accept / as separator)
 # ============================================================================
 
-# Group 1: 9 business JS files (cloud + offline)
+# Group 1: 8 business JS files (cloud + offline)
 # ★ 2026-08-16: auth-core.js REMOVED from this group.
 #   Root cause of the 2026-08 drift: auth-core.js has TWO content versions
 #   (offline=trial+heartbeat / cloud=validate), and this single-source group
@@ -49,12 +49,12 @@ $SharedDir = Join-Path $ProjectRoot 'shared'
 # ★ 2026-09-11: stock-core.js 纳入本组（药品库存管理核心）。注意：本组目标不含
 #   云端APP assets 与鸿蒙 rawfile 两处副本（手工维护），由 copy-consistency.cjs
 #   的 stock-core 专用组全量校验（8 副本），漂移在 pre-push 第⑦道门拦截。
+# ★ 2026-09-13 P2-A1: db-adapter.js / patient-archive.js 已删除（全端零消费死模块，
+#   33 轮触点审计确认无任何运行时引用；历史同步/混淆/热更/打包链一并移除）。
 $BusinessJsFiles = @(
-    'db-adapter.js',
     'debug-logger.js',
     'medicine-dict.js',
     'symptom-dict.js',
-    'patient-archive.js',
     'performance-utils.js',
     'permission.js',
     'prescription-core.js',
@@ -315,8 +315,8 @@ if (-not (Test-Path $SharedDir)) {
 
 $allInSync = $true
 
-# Group 1: 9 business JS -> directories (auth-core.js managed by sync-auth-core.ps1)
-$result = Sync-Group -GroupName 'Business JS (9 files -> dirs)' -Files $BusinessJsFiles -Targets $BusinessJsTargets -VerifyOnly $VerifyOnly
+# Group 1: business JS -> directories (auth-core.js managed by sync-auth-core.ps1)
+$result = Sync-Group -GroupName "Business JS ($($BusinessJsFiles.Count) files -> dirs)" -Files $BusinessJsFiles -Targets $BusinessJsTargets -VerifyOnly $VerifyOnly
 if (-not $result) { $allInSync = $false }
 Write-Host ""
 

@@ -106,6 +106,7 @@ $DropLineRules = @(
     '// ★ 2026-08-28 版本身份（云端桌面标准版）：打包门禁 verify-version-display 严格校验：',
     '//   PRODUCT_NAME=惠康中医-云端 / EDITION=cloud_personal / APP_MODE=cloud / <title>含「云端」',
     '// ★v2.0 统一架构：声明 APP_MODE（offline/cloud/auto），供 db-adapter.js 自动检测',
+    '// ★v2.0 统一架构：声明 APP_MODE（offline/cloud/auto），供 button-manager/桌面身份判定消费',
     '// auto=自动检测：已加载 cloud-api.js 且 CLOUD_API_BASE 存在则走云端，否则走离线',
     '// ★v2.0 统一架构：声明 APP_MODE=cloud（云端桌面强制云端，不做auto探测）'
 )
