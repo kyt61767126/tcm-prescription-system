@@ -2325,12 +2325,15 @@ if (window.Permission) {
             }
         }
 
-        function debounce(func, wait) {
+        // >>> SYNCED-FN debounce (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
+        function debounce(fn, delay) {
+            let timer = null;
             return function(...args) {
-                clearTimeout(searchDebounceTimer);
-                searchDebounceTimer = setTimeout(() => func.apply(this, args), wait);
+                if (timer) clearTimeout(timer);
+                timer = setTimeout(() => { timer = null; fn.apply(this, args); }, delay);
             };
         }
+        // <<< SYNCED-FN-END debounce ===
 
         const domCache = {
             get: function(id) {
@@ -3371,6 +3374,7 @@ if (window.Permission) {
         }
         // <<< SYNCED-FN-END _isGenericLoginName ===
 
+        // >>> SYNCED-FN renderRememberedUsers (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function renderRememberedUsers(usernames) {
             const btn = document.getElementById('usernameDropdownBtn');
             const menu = document.getElementById('usernameDropdownMenu');
@@ -3387,10 +3391,9 @@ if (window.Permission) {
             menu.innerHTML = '';
 
             // ★ 实名防护：下拉只显示用户名本身，禁止映射显示账户 name（真实医师姓名）
-            usernames.forEach(entry => {
+            usernames.forEach(username => {
                 const item = document.createElement('div');
-                // 兼容旧格式（纯字符串）和新格式（{username, name}对象）
-                const loginValue = typeof entry === 'object' ? entry.username : String(entry).trim();
+                const loginValue = typeof username === 'object' ? username.username : username;
                 item.textContent = loginValue;
                 item.addEventListener('click', function(e) {
                     e.stopPropagation();
@@ -3407,6 +3410,7 @@ if (window.Permission) {
                 menu.classList.toggle('show');
             };
         }
+        // <<< SYNCED-FN-END renderRememberedUsers ===
 
         // >>> SYNCED-FN toggleUsernameDropdown (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function toggleUsernameDropdown() {
