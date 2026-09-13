@@ -1804,7 +1804,20 @@ let currentUser = null;
                     }
                     try { await loadData(); } catch(e) { console.warn('loadData失败:', e); }
                     refreshUserInterface();
-                    if (typeof window.refreshVersionTags === 'function') window.refreshVersionTags((user && user.edition) ? user.edition : undefined);
+                    // ★ 2026-09-13 修复【机构版误显标准版】：edition 来源优先级对齐 auth-core
+                    //   getCloudAccountLicenseHtml（clinicEdition 权威优先）；本地表登录跳过云端补拉
+                    //   时 user 无 edition/clinicEdition，从 auth:currentUser 登录缓存恢复
+                    //   （否则 fallback 到 config.json 打包默认 cloud_personal → 统一包误显标准版）。
+                    if (typeof window.refreshVersionTags === 'function') {
+                        var _rvEd = (user && (user.clinicEdition || user.edition)) || '';
+                        if (!_rvEd) {
+                            try {
+                                var _rvCu = JSON.parse(localStorage.getItem('auth:currentUser') || 'null');
+                                if (_rvCu) _rvEd = _rvCu.clinicEdition || _rvCu.edition || '';
+                            } catch (e) {}
+                        }
+                        window.refreshVersionTags(_rvEd || undefined);
+                    }
                     if (typeof updatePrescriptionPaper === 'function') updatePrescriptionPaper();
                     if (window.electronAPI && window.electronAPI.loginSuccess) {
                         try { await window.electronAPI.loginSuccess(user); } catch (e) {}
@@ -1873,6 +1886,10 @@ let currentUser = null;
                                     if (idx >= 0) {
                                         allUsers[idx].role = user.role;
                                         allUsers[idx]._cloudRoleSynced = true;
+                                        // ★ 2026-09-13 版本标签权威回写：clinicEdition/clinicExpiresAt 一并落本地表
+                                        //   （下次登录携带权威版本，无需依赖 auth:currentUser 缓存兜底）
+                                        if (user.clinicEdition) allUsers[idx].clinicEdition = user.clinicEdition;
+                                        if (user.clinicExpiresAt) allUsers[idx].clinicExpiresAt = user.clinicExpiresAt;
                                         saveUsers(allUsers);
                                     }
                                 } catch(_) {}
@@ -1920,7 +1937,20 @@ let currentUser = null;
 
                     await loadData();
                     refreshUserInterface();
-                    if (typeof window.refreshVersionTags === 'function') window.refreshVersionTags((user && user.edition) ? user.edition : undefined);
+                    // ★ 2026-09-13 修复【机构版误显标准版】：edition 来源优先级对齐 auth-core
+                    //   getCloudAccountLicenseHtml（clinicEdition 权威优先）；本地表登录跳过云端补拉
+                    //   时 user 无 edition/clinicEdition，从 auth:currentUser 登录缓存恢复
+                    //   （否则 fallback 到 config.json 打包默认 cloud_personal → 统一包误显标准版）。
+                    if (typeof window.refreshVersionTags === 'function') {
+                        var _rvEd = (user && (user.clinicEdition || user.edition)) || '';
+                        if (!_rvEd) {
+                            try {
+                                var _rvCu = JSON.parse(localStorage.getItem('auth:currentUser') || 'null');
+                                if (_rvCu) _rvEd = _rvCu.clinicEdition || _rvCu.edition || '';
+                            } catch (e) {}
+                        }
+                        window.refreshVersionTags(_rvEd || undefined);
+                    }
                     if (typeof updatePrescriptionPaper === 'function') updatePrescriptionPaper();
 
                     
@@ -2310,9 +2340,12 @@ let currentUser = null;
                 if (!ed) ed = String(window.EDITION || '');
                 if (typeof CONFIG !== 'undefined' && CONFIG && ed) CONFIG.edition = ed;
                 if (typeof CONFIG !== 'undefined' && CONFIG && ed) {
-                    var instArr = ['clinic_custom', 'cloud', 'clinic', 'cloud_clinic', 'offline_clinic', 'institution'];
-                    var isInst = instArr.indexOf(String(ed)) >= 0;
-                    CONFIG.versionLabel = isInst ? '云端机构版' : '云端标准版';
+                    // ★ 2026-09-13 与 auth-core getCloudAccountLicenseHtml 判定同构：isStd 白名单
+                    //   + 非标准即机构（旧 instArr 精确白名单缺 institutional/offline/single
+                    //   → 这些机构值被误标标准版）；单列表来源 auth-core 登录归一化（含 single→标准）。
+                    var _eLow = String(ed).toLowerCase();
+                    var _isStdEd = ['personal', 'cloud_personal', 'offline_personal', 'standard', 'clinic_standard', 'single'].indexOf(_eLow) >= 0;
+                    CONFIG.versionLabel = _isStdEd ? '云端标准版' : '云端机构版';
                 }
                 if (typeof applyEditionTags === 'function') applyEditionTags();
                 if (ed && typeof window.applyLoginTheme === 'function') window.applyLoginTheme(ed);
