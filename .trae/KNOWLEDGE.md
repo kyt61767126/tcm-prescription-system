@@ -61,9 +61,21 @@
 
 ## 2. 多端文件同步清单（漏同步 = 历史主因 bug，改动必查）
 
-**6 份 index.html**（改共性 JS 必须全同步，漏 1 份=该端功能缺失/回退）：
+**index.html「2 权威源 + 全自动传播链」**（★ 2026-09-13 P1 收口，替代旧「6 份手工同步」——改界面从 6 处收敛为 **2 处手改点**，其余 4 份全部生成）：
 
-1. `public/index.html`（云端权威源）2. 云桌面 electron/ 3. 云APP副本 4. 离线APP副本 5. `app_project/db-offline/index-app.html`（打包源，漏改=下次打包回退）6. 离线桌面 index.html（不属 html-sync-check 比较范围，**最易漏**）
+| 副本 | 文件 | 维护方式 |
+|---|---|---|
+| **云端权威源** | `public/index.html` | **手改点①（云系唯一手改处）** |
+| → 云桌面 | `db-yunduan/cloud_desktop/index.html` | `sync-html.ps1` 自动生成（sync-all Group 11） |
+| → 云APP assets | `db-yunduan/cloud_app/app/src/main/assets/public/index.html` | 同上（09-13 收编回链；云APP WebView 实载线上 public，本地 assets 仅打包兜底） |
+| **离线权威源** | `db-offline/desktop/index.html` | **手改点②（离线系唯一手改处）** |
+| → 离线APP 打包源 | `db-offline/index-app.html` | `sync-index-app.cjs` 应用 33 条变换表自动生成（sync-all Group 13） |
+| → 离线APP assets | `db-offline/app/app/src/main/assets/public/index.html` | 生成器同一 buffer 双写 |
+
+* **改云系共性功能**（云网页/云桌面/云APP）：只改 `public/index.html` → 跑 `sync-all.ps1`（或单跑 `sync-html.ps1`）。
+* **改离线共性功能**（离线桌面+离线APP 同改）：只改 `db-offline/desktop/index.html` → 跑 `node tools/sync-index-app.cjs`（或 sync-all.ps1，Group 13 自动含）。APP 专属差异（手机布局/Android 桥/启动竞态等 33 项）进变换表 `tools/index-app-transforms.cjs`（T01-T34 编号审定；**T22 已废弃永不复用**——escapeJs 吞参欠债条目，删除后桌面修复自动流灌）。
+* **跨版本功能移植**（云端↔离线，两产品形态深度分叉）：仍需人工双侧移植，`diff-cross-version.cjs` 三层基线守卫兜底单边漏改（CI 第 7 道：Tier A 单侧新增函数/Tier B 同体函数单边改动/Tier C 新增分叉均红灯）。
+* **禁止直接改 4 份生成副本**（云桌面/云APP assets/index-app/离线APP assets）——手改会被下次生成静默覆盖；生成器 mustReplaceOnce 硬校验保证锚点失配大声失败，不会错写。
 
 * 官网购买页只需同步 2 份：`public/download.html` ↔ `site-official/download.html`（镜像关系，HTML 和 JS 都要同步；**禁止运行 \_build\_sites.cjs**，历史漂移未收编）。
 
@@ -80,7 +92,7 @@
 
 * `cloud-api.js` 有 **8 处副本**需同步；APP 版 cloud-api.js 必须含 `typeof window._cloudReachable === 'undefined'` 防御性初始化。
 
-* **index.html 功能双源纪律**：离线系 `desktop/index.html` 与 `index-app.html` 同源分叉维护——凡给 desktop/index.html 加功能，必须同步判断 index-app.html 是否需要移植。drift-guard 防呆：`tools/diff-index-app.cjs` 对比函数集+功能标记，build-app.bat 打包前自动调用（--quiet），差异打 WARN（基线 tools/.drift-baseline.json；桌面特有确认后 `--update-baseline` 更新）。
+* ★ 2026-09-13 **离线系 index.html 生成模式**（P1-B 收口，替代旧「双源纪律」人工移植）：`index-app.html` 不再手工维护——由 `db-offline/desktop/index.html`（离线权威源）经 `tools/sync-index-app.cjs` 应用 33 条字面变换自动生成（同 buffer 双写 index-app.html + assets 副本，SHA256 自校验；`--verify-only` 漂移守卫）。**铁律：①改离线共性功能只改 desktop/index.html，APP 专属差异进 `tools/index-app-transforms.cjs` 变换表，改完跑生成器——禁止手改 index-app/assets；②工作流顺序 = 先 `sync-shared-blocks` 再跑生成器（锚点落入 USER-STORE/USER-ADMIN 标记块自动红灯，该块单独管理）；③生成器 mustReplaceOnce：每条 find 恰好命中 1 次，失配 exit 1 输出条目 id/修复指引——禁止依赖脆弱锚点；④接线上表 Group 13，pre-push ②/CI ②自动生效；build-app.bat 拷贝链不动，`diff-index-app.cjs` 降级为语义级冗余守卫（函数集对比，基线 .drift-baseline.json）。** 首次落地验收：生成后 `git status` 零改动（字节级复刻现存文件）+ 重复运行幂等；B0 已完成反向移植欠债审查（09-03 统一路由/09-06 密码自愈已移植桌面；09-11 激活码核验判 APP 专属进变换表 T15-T17）。
 
 * shared JS（db-adapter/button-manager/edition-lock 等）：改 `shared/` 权威源后跑 `sync-all.ps1`；云端APP db-adapter.js 有防御性初始化本地差异，Group 1 排除需手工维护。
 
@@ -96,11 +108,11 @@
   事故链：phone 修复只跑了路径1 → push 六道门全绿（当时门不含 copy-consistency）→ 云桌面打包时 copy-consistency FAIL+Auto-FIX 覆盖独立副本 → 产生未提交"源码修改"（user-store.js 是真实源码不能进副作用白名单）→ 云端APP 被源码落定门拦截。
   **铁律：改 shared/user-store.js（及 user-admin.js）后必须双跑两条同步 + `copy-consistency.cjs` 纯检查确认 5 组 42 副本全绿再 commit。** 已同步收口：pre-push 升七道门（⑦=copy-consistency）、CI verify-unified 升六重防线（⑥=copy-consistency），独立副本漂移从此 push 时拦截。
 
-* ★ 2026-09-09 **离线APP「打包源覆写回滚」铁律**（金额修复 29f9a06d 被打回旧版实锤）：`db-offline/index-app.html` 是离线APP 的**打包源**，`build-app.bat` 每次 APK 打包执行 `copy /Y index-app.html → assets/public/index.html`——assets 只是构建产物副本。事故链：金额显示修复（formatPrice）只改了 assets 副本、漏了打包源 → push 全绿（无门监控这对文件）→ 当晚打包源覆写副本 → **已提交修复在新 APK 中静默回滚**（¥356.0025 浮点 bug 复活，versionCode 261 报废重打 262）。**铁律：改离线APP 的 index.html 一律改打包源 `db-offline/index-app.html`，再 Copy-Item 到 assets；直接改 assets 必被下次打包覆写。** 已收口：html-sync-check.ps1 新增第③节「离线APP source/assets 字节级一致性」（SHA256 比对，随 pre-push ①运行），改源漏副本/改副本漏源均在 push 时拦截。同类隐患备忘：build-app.bat 还从 desktop\ 复制 config.json/vendor/共享 js 模块到 assets——共享 js 三点（shared→desktop→assets）已被 copy-consistency 链覆盖，vendor 库基本不手改，风险敞口就是 HTML 这对，已堵。
+* ★ 2026-09-09 **离线APP「打包源覆写回滚」铁律**（金额修复 29f9a06d 被打回旧版实锤）：`db-offline/index-app.html` 是离线APP 的**打包源**，`build-app.bat` 每次 APK 打包执行 `copy /Y index-app.html → assets/public/index.html`——assets 只是构建产物副本。事故链：金额显示修复（formatPrice）只改了 assets 副本、漏了打包源 → push 全绿（无门监控这对文件）→ 当晚打包源覆写副本 → **已提交修复在新 APK 中静默回滚**（¥356.0025 浮点 bug 复活，versionCode 261 报废重打 262）。**铁律：改离线APP 的 index.html 一律改打包源 `db-offline/index-app.html`，再 Copy-Item 到 assets；直接改 assets 必被下次打包覆写。** 已收口：html-sync-check.ps1 新增第③节「离线APP source/assets 字节级一致性」（SHA256 比对，随 pre-push ①运行），改源漏副本/改副本漏源均在 push 时拦截。同类隐患备忘：build-app.bat 还从 desktop\ 复制 config.json/vendor/共享 js 模块到 assets——共享 js 三点（shared→desktop→assets）已被 copy-consistency 链覆盖，vendor 库基本不手改，风险敞口就是 HTML 这对，已堵。**★ 2026-09-13 P1-B 后此铁律升级：index-app.html 本身也升级为生成产物（desktop 权威源 + 变换表 → sync-index-app.cjs），"改打包源"进一步上移为"改 desktop/index.html 权威源"——三级链每一级都有门禁兜底。**
 
-* ★ 2026-09-10 **手机端布局改造 + 云端APP隔离铁律**（桌面/手机布局差异 → 隔离）：操作界面把「剂数+输入框（doseCountInput3）」从诊断行移到价格行（剂数/每剂/药费/诊疗/总计一行）、「医师（doctorName）与诊断同排」——**仅手机端生效**（离线APP：`db-offline/index-app.html` 打包源 + assets；云端APP：`cloud_app/app/src/main/assets/public/index.html`；鸿蒙：`rawfile/index.html`），**桌面端保持原样（剂数仍在诊断行）**。**架构矛盾**：`public/index.html`（权威源）同时驱动云桌面+云APP，桌面/手机布局冲突无法同一源供给 → 把云APP 从 `tools/sync-html.ps1` 与 `tools/html-sync-check.ps1` 的 `$Targets` 移除，**隔离独立维护**（同离线端 index-app.html 模式）；云桌面继续跟随权威源（桌面布局）。改该类布局时：桌面/网页=只改权威源 `public/index.html` 后跑 sync-html.ps1 同步云桌面；手机=按上面三处独立改，勿改权威源（否则污染云桌面/云端网页）。
+* ★ 2026-09-10 **手机端布局改造 + 云端APP隔离铁律**（桌面/手机布局差异 → 隔离）：操作界面把「剂数+输入框（doseCountInput3）」从诊断行移到价格行（剂数/每剂/药费/诊疗/总计一行）、「医师（doctorName）与诊断同排」——**仅手机端生效**（离线APP：`db-offline/index-app.html` 打包源 + assets；云端APP：`cloud_app/app/src/main/assets/public/index.html`；鸿蒙：`rawfile/index.html`），**桌面端保持原样（剂数仍在诊断行）**。**架构矛盾**：`public/index.html`（权威源）同时驱动云桌面+云APP，桌面/手机布局冲突无法同一源供给 → 把云APP 从 `tools/sync-html.ps1` 与 `tools/html-sync-check.ps1` 的 `$Targets` 移除，**隔离独立维护**（同离线端 index-app.html 模式）；云桌面继续跟随权威源（桌面布局）。改该类布局时：桌面/网页=只改权威源 `public/index.html` 后跑 sync-html.ps1 同步云桌面；手机=按上面三处独立改，勿改权威源（否则污染云桌面/云端网页）。**★ 2026-09-13 P1-A 已解除隔离：public 权威源现含双实例响应式（冲突根源消解），云APP assets 重新纳入 sync-html.ps1 / html-sync-check.ps1 $Targets 自动生成链；云APP WebView 实载线上 public/，本地 assets 仅打包兜底，可随权威源自动传播。鸿蒙 rawfile 仍独立（搁置期）。**
 
-* 改 index.html JS 后必查三处：`html-sync-check.ps1`（副本漂移）、`sync-all.ps1 -VerifyOnly`（shared 组）、index-app.html 打包源与副本 diff。
+* 改 index.html JS 后必查（2026-09-13 P1 后新流程）：①改云系 → `sync-html.ps1` 生成 + `html-sync-check.ps1` 绿；②改离线系 → `node tools/sync-index-app.cjs` 生成 + `--verify-only` 绿；③跨版本改动 → `node tools/diff-cross-version.cjs` 三层基线绿（单边漏改红灯）；④push 前九道门自动兜底（②含 Group 11+13 生成校验）。
 
 * ★ 2026-09-02 **index.html 云端副本从手工复制升级为权威源生成模式**（`tools/sync-html.ps1`，观察期毕业）：改 `public/index.html`（权威源）→ 跑 `sync-html.ps1`（已并入 sync-all.ps1 Group 11）→ 副本自动重生成（端配置块 EDITION/PRODUCT\_NAME/APP\_MODE+身份注释原样保留，其余全部自动传播）。**禁止直接改云桌面/云APP副本**。历史事故链：手工复制时代权威源修复漏同步副本→CI 红灯；权威源累积 3 份重复 hideUserTypeSelect IIFE；注释位置漂移——且 html-sync-check 的 ±30 行窗口重对齐把前两类真实漂移掩盖成"IN SYNC"。安全设计：生成器对 EDITION/APP\_MODE 赋值行多于 1 次的结构异常直接报错拒写（宁可失败不可错写）。
 
@@ -836,4 +848,4 @@
 
 * **第二步（观察期内被动守护）**：CI 四重门（`.github/workflows/verify-unified.yml`：check-interface → sync-all -VerifyOnly → html-sync-check → check-injection-idempotency）每次推送自动校验，有漂移 GitHub 红灯提醒，按第 2 章红灯修复流程处理（界面改动→重建基线一并提交；shared 改动→本地 sync-all 后提交；HTML 副本→以权威源回改；注入幂等→改整段重写/补守卫）。观察期内**只修实报 bug，不做主动优化**，避免引入新变量。
 
-* **第三步（观察期稳定后）**：最后一步「权威源生成模式」——6 份 index.html 收口为由单一权威源生成，届时改界面真正只改一处，替代第 2 章手工 6 份同步清单（sync 脚本/CI 门届时随架构收口一并重构）。**该模式落地前，多端同步仍严格按第 2 章清单手工执行，不得提前松懈。**
+* **第三步「权威源生成模式」（★ 2026-09-13 P1 已落地）**：实测 6 份 index.html 差异结构证明「单一权威源」不可行（云端↔离线是两个产品形态 3132 行深度分叉），落地形态为 **「2 权威源 + 全自动传播链」**——`public/index.html`（云端，sync-html Group 11）+ `db-offline/desktop/index.html`（离线，sync-index-app Group 13 变换表生成），云APP assets 收编回链、escapeJs 吞参欠债流灌、`diff-cross-version.cjs` 三层基线守卫挂 CI 第 7 道兜底跨版本单边漏改。第 2 章清单同步改写为新流程；后续跨版本功能移植靠人工 + 守卫红灯兜底，观察 1-2 周误报率后升 pre-push ⑩。
