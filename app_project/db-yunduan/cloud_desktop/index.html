@@ -2216,8 +2216,25 @@ let currentUser = null;
         window.APP_VERSION = 'V1.0.0';
 
         // ★★★ 2026-08-17 【根治刀2-B：统一版本标签函数】：优先取 CONFIG.versionLabel（Setup 发下来的权威值）
+        // ★ 2026-09-13 举一反三【versionLabel/edition 不一致守卫·机构版误显三连防】：
+        //   分档唯一权威=运行时 edition（登录 clinicEdition / auth-core 缓存恢复），
+        //   versionLabel 只是打包默认 + 最后一次渲染缓存。两者会出现分歧窗口：
+        //   auth-core restoreEditionFromCache 只恢复 CONFIG.edition 不写 versionLabel
+        //   （统一包默认 云端标准版 vs 恢复后 cloud_clinic）→ 此窗口内任何
+        //   applyEditionTags 调用（含 loadBuildMeta 异步回调）都渲染错标签。
+        //   此守卫使渲染层对分歧免疫：versionLabel 与 edition 分档判定相反时，
+        //   以 edition 派生为准（对分装机版本 edition/versionLabel 本就一致，零影响）。
         function getEditionTag() {
-            if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.versionLabel) return CONFIG.versionLabel;
+            if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.versionLabel) {
+                try {
+                    if (CONFIG.edition && typeof window.isStandardEdition === 'function') {
+                        var _gLblStd = String(CONFIG.versionLabel).indexOf('标准') >= 0;
+                        var _gEdStd = window.isStandardEdition(CONFIG.edition);
+                        if (_gLblStd !== _gEdStd) return _gEdStd ? '云端标准版' : '云端机构版';
+                    }
+                } catch (_) {}
+                return CONFIG.versionLabel;
+            }
             // 兼容云端版：若有 getCloudEditionTag 则优先用它（否则 fallback 老逻辑）
             if (typeof window.getCloudEditionTag === 'function') return window.getCloudEditionTag();
             var e = '';
