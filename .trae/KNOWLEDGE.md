@@ -886,3 +886,19 @@
 * **第二步（观察期内被动守护）**：CI 四重门（`.github/workflows/verify-unified.yml`：check-interface → sync-all -VerifyOnly → html-sync-check → check-injection-idempotency）每次推送自动校验，有漂移 GitHub 红灯提醒，按第 2 章红灯修复流程处理（界面改动→重建基线一并提交；shared 改动→本地 sync-all 后提交；HTML 副本→以权威源回改；注入幂等→改整段重写/补守卫）。观察期内**只修实报 bug，不做主动优化**，避免引入新变量。
 
 * **第三步「权威源生成模式」（★ 2026-09-13 P1 已落地）**：实测 6 份 index.html 差异结构证明「单一权威源」不可行（云端↔离线是两个产品形态 3132 行深度分叉），落地形态为 **「2 权威源 + 全自动传播链」**——`public/index.html`（云端，sync-html Group 11）+ `db-offline/desktop/index.html`（离线，sync-index-app Group 13 变换表生成），云APP assets 收编回链、escapeJs 吞参欠债流灌、`diff-cross-version.cjs` 三层基线守卫挂 CI 第 7 道兜底跨版本单边漏改。第 2 章清单同步改写为新流程；后续跨版本功能移植靠人工 + 守卫红灯兜底，观察 1-2 周误报率后升 pre-push ⑩。
+
+## 20. Cloudflare Pages 三站分离部署拓扑（★ 2026-09-13 重整恢复，root_dir 方案）
+
+> 详细操作手册：`DEPLOY-站点分离部署说明.md`（顶部横幅为权威结论）。此处只沉淀铁律级结论。
+
+* **铁律 20-1（wrangler.toml 覆盖机制）**：根 `wrangler.toml` 的 `pages_build_output_dir = "public"` 会覆盖**所有** Pages 项目的 Dashboard/API destination_dir。Git 构建从 root_dir（默认仓库根）读 wrangler.toml，命中即用、Dashboard 配置全部失效。「三站互为 public 镜像」的根因不是 destination_dir 漂移，而是这个覆盖机制 + root_dir 曾被清空。改 destination_dir 无效时先查根 wrangler.toml。
+
+* **铁律 20-2（分离拓扑 = root_dir 配置）**：huikang-admin `root_dir="site-admin"`（其 wrangler.toml `pages_build_output_dir="."` 接管）；huikang-official `root_dir="site-official"` + `destination_dir="."`；主站 root_dir 空（根 wrangler.toml 主导 public）+ 根 functions。root_dir 生效后子站 /api 退场（functions 从 root_dir 下找，子站无）——已验证两个子站页面全部跨域调主域 API（`CLOUD_API_BASE`），零相对路径 /api 依赖，无功能回归。
+
+* **铁律 20-3（API PATCH 后必须真实 push 才重建）**：`PATCH /pages/projects/{name}` 改 build_config 后回读即生效，但 `POST .../deployments {ref:"main"}` 触发的部署可能重放旧构建快照、不应用新配置；必须真实 git push 触发 webhook 才走完整构建管线读新配置。
+
+* **铁律 20-4（免费计划 500 Git 构建/月配额）**：每 push 消耗 3 个构建（三项目同库 webhook）。耗尽症状：initialize 阶段 "unable to submit build job" 连续失败 + 其他项目部署卡 queued 15 分钟以上。兜底：`wrangler pages deploy <目录> --project-name=<项目> --branch=main` 直接上传（不占配额，仓库根运行自动带根 functions）。**直传前必须 `git archive --format=zip` 抽入库内容**（本地未入库 exe/apk >25MiB 会被拒收；PowerShell 管道会破坏 tar 二进制流，必须用 zip 格式落盘再解压）。
+
+* **铁律 20-5（部署验证必须看内容指纹不看状态灯）**：deploy:success ≠ 内容正确（快照重放可假绿）。最终判据：title+长度指纹（public 568270「云端标准版」/ site-admin 568691「云端」/ site-official 5634「官方网站」）+ 物理文件探针（official /auth-core.js 必须非 JS 内容——SPA fallback 返回 index.html 属正常，规则9 只要求物理不存在）。
+
+* **2026-09-13 生效记录**：commit 642ec107（删 public/wrangler.toml 死文件，防 KV/D1 id 公网暴露）+ root_dir 配置 + 三站 wrangler 直传。adminconsole 控制台双副本（licenseSync 双特性）字节级一致上线；主域 wrangler.toml 已物理移除。五端零重打包（纯站点部署变更）；主站 642ec107 的 Git 部署因配额失败但线上由直传接管对齐，下月配额恢复后 push 自动回归 Git 构建链。

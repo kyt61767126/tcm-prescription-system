@@ -3,24 +3,32 @@
 > 规则9 物理拆分执行完成时间：2026-08-08
 > 代码拆分：见 `site-official/`（官网）和 `site-admin/`（后台+云端APP）
 
-> ✅ **2026-09-13 重整分离恢复（Cloudflare API 切换 + git push 触发生效）**：此前实测发现三项目
-> destination_dir 曾全部漂移为 `public/`（互为完整镜像，违反规则9——官网域服务完整工作站+admin+API）。
-> 当日已切换回分离拓扑：**huikang-admin → `site-admin/`（后台+云端APP 站）、
-> huikang-official → `site-official/`（纯展示官网）、tcm-prescription-system → `public/`（主站，
-> 全部客户端指向不变）**。注意：`huikangzy.com` 三个自定义域名仍无 DNS 解析（域名失效），
-> 实际访问入口为 *.pages.dev；管理台控制台子页双副本（public/admin ↔ site-admin/admin）已字节级
-> 统一并挂 diff-cross-version `adminconsole` 门禁对（第 4 对）。后端 functions 统一部署自仓库根
-> `functions/`（三项目同享，KV/D1 绑定各自项目持有）；后台站页面经 CORS 跨域调用主域 API
-> （`CLOUD_API_BASE = tcm-prescription-system.pages.dev/api`，users/prescriptions 等均已带
-> OPTIONS 预检与 Access-Control 头）。
+> ✅ **2026-09-13 重整分离恢复（root_dir 方案 + wrangler 直传兜底，已全量线上验证）**：此前三项目
+> 互为完整镜像（官网域服务完整工作站+admin+API，违反规则9）。当日恢复分离拓扑并验证：
+> **huikang-admin → `site-admin/`（后台+云端APP 站）、huikang-official → `site-official/`
+> （纯展示官网）、tcm-prescription-system → `public/`（主站，全部客户端指向不变）**。
+> `huikangzy.com` 自定义域名仍无 DNS 解析（域名失效），实际入口为 *.pages.dev；管理台控制台
+> 子页双副本（public/admin ↔ site-admin/admin）字节级统一并挂 `adminconsole` 门禁对（第 4 对）。
+> 后台站页面经 CORS 跨域调用主域 API（`CLOUD_API_BASE` 指向主域，已带 OPTIONS 预检）。
 >
-> ⚠️ **切换 destination_dir 的生效方式（实测坑）**：API `PATCH /pages/projects/{name}`
-> 修改 `build_config.destination_dir` 后回读即生效，但随后用 `POST /pages/projects/{name}/deployments`
-> （body `{ref:"main"}`）触发的部署**仍按旧目录构建**（实测：official 站部署后仍提供
-> `public/` 的 auth-core.js，而 site-official/ 根本没有此文件）——API 重放部署不应用新配置。
-> 正确生效方式：**改完 destination_dir 后必须真实 git push 触发 webhook 部署**，新配置才会
-> 被构建管线读取。另注意：Cloudflare 构建系统偶发 "unable to submit build job" 临时故障，
-> 表现为 initialize 阶段 failure，删除失败部署重试即可。
+> 🔑 **根因与机制（本次实测核心结论，务必先读再动部署）**：
+> 1. **根 `wrangler.toml` 的 `pages_build_output_dir = "public"` 会覆盖所有 Pages 项目的
+>    Dashboard/API destination_dir**——这就是「三站镜像」的真正根因（不是 destination_dir
+>    漂移）。Git 集成构建在 checkout 后从 root_dir（默认仓库根）读 wrangler.toml，命中即用。
+> 2. **分离拓扑的正确配置是 root_dir，不是 destination_dir**：
+>    - huikang-admin：`root_dir="site-admin"`（`site-admin/wrangler.toml` 的
+>      `pages_build_output_dir="."` 接管输出）；
+>    - huikang-official：`root_dir="site-official"` + `destination_dir="."`；
+>    - 主站：root_dir 空 + 根 wrangler.toml（`public`），不变。
+>    root_dir 生效后 functions 从 root_dir 下查找（子站无 functions → 子站 /api 退场，
+>    页面全部跨域调主域，已验证零依赖）。API `PATCH build_config` 回读即生效。
+> 3. **Cloudflare 免费计划 Git 构建配额 500 次/月耗尽**（每 push × 3 项目 × 多次/天）：
+>    表现为主站 initialize 阶段 "unable to submit build job" 连续失败、子站部署卡
+>    queued 15 分钟以上。**兜底方案：`wrangler pages deploy <目录> --project-name=<项目>
+>    --branch=main` 直接上传**（不占 Git 构建配额，在仓库根运行会自动携带根 functions）。
+>    直传前必须用 `git archive --format=zip -o sites.zip HEAD site-xxx` 抽出**入库内容**
+>    （本地未入库的 exe/apk 超 25 MiB 会被 Pages 拒收；Git 构建不受影响因其 checkout 无此文件）。
+>    注意：直传部署同样读取 CWD 下 wrangler.toml 的绑定配置，行为与 Git 部署等价。
 
 ## 1. 两站点各自的构建输出根目录
 
