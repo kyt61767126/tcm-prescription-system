@@ -744,7 +744,7 @@
 // ★★★ 2026-08-17 【Setup 1.0.38 根治刀1-A】：惠康中医-本地 = 永久离线标准版（personal），绝不再用 clinic_custom 默认值！
 window.EDITION = 'personal';
 window.PRODUCT_NAME = '惠康中医-本地';
-// ★v2.0 统一架构：声明 APP_MODE（offline/cloud/auto），供 db-adapter.js 自动检测
+// ★v2.0 统一架构：声明 APP_MODE（offline/cloud/auto），供 button-manager/桌面身份判定消费
 // auto=自动检测：已加载 cloud-api.js 且 CLOUD_API_BASE 存在则走云端，否则走离线
 window.APP_MODE = 'auto';
 // ★修复：消除登录界面闪现（已登录时立即隐藏 loginOverlay，避免 adjustResize 重排时闪现）

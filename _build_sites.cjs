@@ -362,10 +362,11 @@ console.log('  index.html created');
 
 // ============ 5. site-admin ============
 console.log('[5/8] Build site-admin (cloud app + admin backend) ...');
+// ★ 2026-09-13 P2-A1: db-adapter.js / patient-archive.js 已删除（零消费死模块）
 const ADMIN_ALLOW_ROOT = new Set([
-  'index.html','auth-core.js','permission.js','db-adapter.js','debug-logger.js',
+  'index.html','auth-core.js','permission.js','debug-logger.js',
   'favicon.svg','hash-manifest.json','icon-192.png','icon-512.png',
-  'medicine-dict.js','patient-archive.js','performance-utils.js',
+  'medicine-dict.js','performance-utils.js',
   'prescription-core.js','print-utils.js','qr-wechat.svg','qrcode.min.js',
   'security-guard.js','video-recorder.js','wechat.html','xlsx.full.min.js',
   '_headers','_routes.json','README_DESKTOP.md','wrangler.toml',
