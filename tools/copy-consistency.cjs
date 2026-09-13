@@ -136,6 +136,16 @@ const GROUPS = [
             'app_project/db-yunduan/cloud_desktop/electron/update-manager.cjs',
             'app_project/db-offline/desktop/electron/update-manager.cjs'
         ]
+    },
+    {
+        // ★ 2026-09-13 B2-1 桌面文件域收口（与 update-manager 同位同构）：
+        //   媒体/备份/用户数据 40 项函数/IPC 从双 main.js 等体抽出，
+        //   sync-all Group 14 分发，本组 2 副本硬哈希门。
+        authority: 'shared/desktop-fs-ipc.cjs',
+        copies: [
+            'app_project/db-yunduan/cloud_desktop/electron/desktop-fs-ipc.cjs',
+            'app_project/db-offline/desktop/electron/desktop-fs-ipc.cjs'
+        ]
     }
 ];
 

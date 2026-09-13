@@ -91,8 +91,16 @@ for (const target of selectedTargets) {
     const preloadContent = fs.readFileSync(preloadPath, 'utf8');
     const mainContent = fs.readFileSync(mainPath, 'utf8');
 
+    // ★ 2026-09-13 B2-1：handler 注册已模块化（main.js + electron/*.cjs 分发副本），
+    //   合并扫描同目录 .cjs 模块（desktop-fs-ipc.cjs 等），否则抽出后误报缺注册。
+    const electronDir = path.dirname(mainPath);
+    let moduleContent = '';
+    for (const mf of fs.readdirSync(electronDir).filter(f => f.endsWith('.cjs') && f !== 'main.js')) {
+        moduleContent += '\n' + fs.readFileSync(path.join(electronDir, mf), 'utf8');
+    }
+
     const calls = extractPreloadCalls(preloadContent);
-    const handlers = extractMainHandlers(mainContent);
+    const handlers = extractMainHandlers(mainContent + '\n' + moduleContent);
 
     console.log(`\n[检查] ${target.name}`);
     console.log(`  preload.js 调用的 IPC: ${calls.size} 个`);

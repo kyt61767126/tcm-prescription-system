@@ -195,6 +195,16 @@ $UpdateManagerTargets = @(
     'app_project/db-offline/desktop/electron'
 )
 
+# Group 14: desktop-fs-ipc.cjs (★ 2026-09-13 B2-1 桌面文件域收口) -> 2 个 electron 目录
+#   媒体保存/查找/重命名、备份读写/一键恢复、用户数据落盘、路径白名单等文件域
+#   40 项函数/IPC 从双 main.js 等体抽取（原各内嵌 ~650 行，历史靠人工双刷）。
+#   配套：main.js require('./desktop-fs-ipc.cjs') 工厂入参注入 electron API，
+#   模块本体零差异；改文件域只改本权威源。
+$DesktopFsIpcTargets = @(
+    'app_project/db-yunduan/cloud_desktop/electron',
+    'app_project/db-offline/desktop/electron'
+)
+
 # Group 11: index.html 权威源 -> 云端副本（★ 2026-09-02 从手工复制升级为生成模式）
 #   历史事故：权威源改动靠手工复制到云桌面/云APP 副本，多次遗漏导致 CI 红灯、
 #   重复 IIFE 脏块累积。现由 tools/sync-html.ps1 自动生成（端配置块保留，
@@ -388,6 +398,11 @@ Write-Host ""
 
 # Group 12: update-manager.cjs -> 2 electron dirs (★ 2026-09-13 P0-1)
 $result = Sync-Group -GroupName 'update-manager.cjs -> 2 electron dirs' -Files @('update-manager.cjs') -Targets $UpdateManagerTargets -VerifyOnly $VerifyOnly
+if (-not $result) { $allInSync = $false }
+Write-Host ""
+
+# Group 14: desktop-fs-ipc.cjs -> 2 electron dirs (★ 2026-09-13 B2-1 桌面文件域收口)
+$result = Sync-Group -GroupName 'desktop-fs-ipc.cjs -> 2 electron dirs' -Files @('desktop-fs-ipc.cjs') -Targets $DesktopFsIpcTargets -VerifyOnly $VerifyOnly
 if (-not $result) { $allInSync = $false }
 Write-Host ""
 
