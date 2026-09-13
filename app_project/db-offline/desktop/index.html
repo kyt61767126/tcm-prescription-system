@@ -5534,16 +5534,26 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
                         img.style.cursor = 'grabbing'; e.preventDefault();
                     });
                     var touchState = null;
-                    img.addEventListener('touchstart', function(e) {
+                    // ★ 2026-09-14 修复【手机APP处方签无法缩放】：触控监听原挂 img 上——touch 事件
+                    //   只投递给手指起始元素，处方签是窄长图，双指捏合第二指常落在图片外黑边
+                    //   （view 上）→ img 收不到第二指 → 停在 pan 模式 → 缩放/拖动死、双击 dblclick
+                    //   手机 WebView 也不触发。改挂 view（mediaSingleView 铺满观察区且
+                    //   touch-action:none）：黑边起手的捏合/拖动全部生效，img 上事件冒泡同样命中。
+                    var _tvLastTap = 0;
+                    view.addEventListener('touchstart', function(e) {
                         if (e.touches.length === 1) {
+                            var _now = Date.now();
+                            if (_now - _tvLastTap < 300) { try { reset(); } catch(_) {} _tvLastTap = 0; }
+                            else _tvLastTap = _now;
                             touchState = {mode:'pan', sx:e.touches[0].clientX, sy:e.touches[0].clientY, startTx:tx, startTy:ty};
                         } else if (e.touches.length === 2) {
                             var dx = e.touches[0].clientX - e.touches[1].clientX;
                             var dy = e.touches[0].clientY - e.touches[1].clientY;
                             touchState = {mode:'pinch', d0:Math.hypot(dx,dy), startScale:scale};
                         }
+                        try { e.preventDefault(); } catch(_) {}
                     }, {passive:false});
-                    img.addEventListener('touchmove', function(e) {
+                    view.addEventListener('touchmove', function(e) {
                         if (!touchState) return;
                         e.preventDefault();
                         if (touchState.mode === 'pan' && e.touches.length === 1) {
@@ -5560,7 +5570,15 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
                             }
                         }
                     }, {passive:false});
-                    img.addEventListener('touchend', function() { touchState = null; });
+                    view.addEventListener('touchend', function(e) {
+                        // 双指抬一指：余指无缝转为拖动（重锚基线）；全抬才清空
+                        if (e.touches.length === 1 && touchState && touchState.mode === 'pinch') {
+                            touchState = {mode:'pan', sx:e.touches[0].clientX, sy:e.touches[0].clientY, startTx:tx, startTy:ty};
+                        } else if (e.touches.length === 0) {
+                            touchState = null;
+                        }
+                    });
+                    view.addEventListener('touchcancel', function() { touchState = null; });
                     return;
                 }
                 window.electronAPI.readFileAsBase64(f.path).then(function(result) {
@@ -5595,16 +5613,24 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
                             img.style.cursor = 'grabbing'; e.preventDefault();
                         });
                         var touchState = null;
-                        img.addEventListener('touchstart', function(e) {
+                        // ★ 2026-09-14 修复【手机APP处方签无法缩放】（同上方网页分支）：
+                        //   触控监听改挂 view——touch 事件只投递给手指起始元素，窄长图第二指
+                        //   落黑边时 img 收不到；view 铺满观察区（touch-action:none）全区域生效。
+                        var _tvLastTap = 0;
+                        view.addEventListener('touchstart', function(e) {
                             if (e.touches.length === 1) {
+                                var _now = Date.now();
+                                if (_now - _tvLastTap < 300) { try { reset(); } catch(_) {} _tvLastTap = 0; }
+                                else _tvLastTap = _now;
                                 touchState = {mode:'pan', sx:e.touches[0].clientX, sy:e.touches[0].clientY, startTx:tx, startTy:ty};
                             } else if (e.touches.length === 2) {
                                 var dx = e.touches[0].clientX - e.touches[1].clientX;
                                 var dy = e.touches[0].clientY - e.touches[1].clientY;
                                 touchState = {mode:'pinch', d0:Math.hypot(dx,dy), startScale:scale};
                             }
+                            try { e.preventDefault(); } catch(_) {}
                         }, {passive:false});
-                        img.addEventListener('touchmove', function(e) {
+                        view.addEventListener('touchmove', function(e) {
                             if (!touchState) return;
                             e.preventDefault();
                             if (touchState.mode === 'pan' && e.touches.length === 1) {
@@ -5621,7 +5647,15 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
                                 }
                             }
                         }, {passive:false});
-                        img.addEventListener('touchend', function() { touchState = null; });
+                        view.addEventListener('touchend', function(e) {
+                            // 双指抬一指：余指无缝转为拖动（重锚基线）；全抬才清空
+                            if (e.touches.length === 1 && touchState && touchState.mode === 'pinch') {
+                                touchState = {mode:'pan', sx:e.touches[0].clientX, sy:e.touches[0].clientY, startTx:tx, startTy:ty};
+                            } else if (e.touches.length === 0) {
+                                touchState = null;
+                            }
+                        });
+                        view.addEventListener('touchcancel', function() { touchState = null; });
                     } else {
                         // 显示具体错误原因 + 重试按钮，便于定位问题
                         var errMsg = (result && result.error) ? result.error : '未知错误';
