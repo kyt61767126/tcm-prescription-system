@@ -3,7 +3,7 @@
 > 规则9 物理拆分执行完成时间：2026-08-08
 > 代码拆分：见 `site-official/`（官网）和 `site-admin/`（后台+云端APP）
 
-> ✅ **2026-09-13 重整分离恢复（实测 Cloudflare API 切换 + 线上验证）**：此前实测发现三项目
+> ✅ **2026-09-13 重整分离恢复（Cloudflare API 切换 + git push 触发生效）**：此前实测发现三项目
 > destination_dir 曾全部漂移为 `public/`（互为完整镜像，违反规则9——官网域服务完整工作站+admin+API）。
 > 当日已切换回分离拓扑：**huikang-admin → `site-admin/`（后台+云端APP 站）、
 > huikang-official → `site-official/`（纯展示官网）、tcm-prescription-system → `public/`（主站，
@@ -13,6 +13,14 @@
 > `functions/`（三项目同享，KV/D1 绑定各自项目持有）；后台站页面经 CORS 跨域调用主域 API
 > （`CLOUD_API_BASE = tcm-prescription-system.pages.dev/api`，users/prescriptions 等均已带
 > OPTIONS 预检与 Access-Control 头）。
+>
+> ⚠️ **切换 destination_dir 的生效方式（实测坑）**：API `PATCH /pages/projects/{name}`
+> 修改 `build_config.destination_dir` 后回读即生效，但随后用 `POST /pages/projects/{name}/deployments`
+> （body `{ref:"main"}`）触发的部署**仍按旧目录构建**（实测：official 站部署后仍提供
+> `public/` 的 auth-core.js，而 site-official/ 根本没有此文件）——API 重放部署不应用新配置。
+> 正确生效方式：**改完 destination_dir 后必须真实 git push 触发 webhook 部署**，新配置才会
+> 被构建管线读取。另注意：Cloudflare 构建系统偶发 "unable to submit build job" 临时故障，
+> 表现为 initialize 阶段 failure，删除失败部署重试即可。
 
 ## 1. 两站点各自的构建输出根目录
 
