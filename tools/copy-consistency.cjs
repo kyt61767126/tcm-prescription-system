@@ -144,6 +144,16 @@ const GROUPS = [
             'app_project/db-yunduan/cloud_desktop/electron/desktop-fs-ipc.cjs',
             'app_project/db-offline/desktop/electron/desktop-fs-ipc.cjs'
         ]
+    },
+    {
+        // ★ 2026-09-13 B2-2 桌面窗口域收口（与 desktop-fs-ipc 同位同构）：
+        //   窗口创建/DevTools 防护/视频录制注入 6 函数从双 main.js 等体抽出，
+        //   sync-all Group 15 分发，本组 2 副本硬哈希门。
+        authority: 'shared/desktop-windows.cjs',
+        copies: [
+            'app_project/db-yunduan/cloud_desktop/electron/desktop-windows.cjs',
+            'app_project/db-offline/desktop/electron/desktop-windows.cjs'
+        ]
     }
 ];
 

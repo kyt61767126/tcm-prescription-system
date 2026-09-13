@@ -205,6 +205,18 @@ $DesktopFsIpcTargets = @(
     'app_project/db-offline/desktop/electron'
 )
 
+# Group 15: desktop-windows.cjs (★ 2026-09-13 B2-2 桌面窗口域收口) -> 2 个 electron 目录
+#   focusWindow/getSharedWebPrefs/installDevToolsGuard/injectVideoRecorder/
+#   createMainWindow/createLoginWindow 6 函数从双 main.js 等体抽取（原各内嵌
+#   ~322 行，历史靠人工双刷）。与 B2-1 的差异点——窗口域有状态：
+#   mainWindow/loginWindow/currentLoggedInUser 仍是 main.js 模块级变量，
+#   模块经访问器（get/set）读写，体外引用零改动。
+#   配套：main.js require('./desktop-windows.cjs') createDesktopWindows 工厂注入。
+$DesktopWindowsTargets = @(
+    'app_project/db-yunduan/cloud_desktop/electron',
+    'app_project/db-offline/desktop/electron'
+)
+
 # Group 11: index.html 权威源 -> 云端副本（★ 2026-09-02 从手工复制升级为生成模式）
 #   历史事故：权威源改动靠手工复制到云桌面/云APP 副本，多次遗漏导致 CI 红灯、
 #   重复 IIFE 脏块累积。现由 tools/sync-html.ps1 自动生成（端配置块保留，
@@ -403,6 +415,11 @@ Write-Host ""
 
 # Group 14: desktop-fs-ipc.cjs -> 2 electron dirs (★ 2026-09-13 B2-1 桌面文件域收口)
 $result = Sync-Group -GroupName 'desktop-fs-ipc.cjs -> 2 electron dirs' -Files @('desktop-fs-ipc.cjs') -Targets $DesktopFsIpcTargets -VerifyOnly $VerifyOnly
+if (-not $result) { $allInSync = $false }
+Write-Host ""
+
+# Group 15: desktop-windows.cjs -> 2 electron dirs (★ 2026-09-13 B2-2 桌面窗口域收口)
+$result = Sync-Group -GroupName 'desktop-windows.cjs -> 2 electron dirs' -Files @('desktop-windows.cjs') -Targets $DesktopWindowsTargets -VerifyOnly $VerifyOnly
 if (-not $result) { $allInSync = $false }
 Write-Host ""
 
