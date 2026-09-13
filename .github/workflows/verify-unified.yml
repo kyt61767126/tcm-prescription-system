@@ -105,11 +105,11 @@ jobs:
             exit 1
           }
 
-      - name: 7/7 Cross-version drift guard (P1-C + P2-B1, dual pair)
+      - name: 7/7 Cross-version drift guard (P1-C + P2-B1 + SA-2, triple pair)
         shell: bash
         run: |
           node tools/diff-cross-version.cjs --quiet || {
-            echo "::error::跨版本漂移（双对基线）：① public↔离线桌面权威源（strict）② public↔site-admin 手工双轨副本（normalized，P2-B1 新增）。检测到：单侧新增函数 / 同体函数单边改动（一侧修了另一侧漏改）/ 新增分叉。请跨版本移植后提交；确属有意分叉，人工确认后运行 node tools/diff-cross-version.cjs --update-baseline --pair <desk|siteadmin> 重冻结对应基线（Tier B→C 迁移须人工确认）。"
+            echo "::error::跨版本漂移（三对基线）：① public↔离线桌面权威源（strict）② public↔site-admin 手工双轨副本（normalized，P2-B1）③ public↔site-official 官网下载双副本（lines 全内容行集，SA-2 新增）。检测到：单侧新增函数 / 同体函数单边改动 / 新增分叉 / 单边新增或改文案。请跨版本移植/双副本同步后提交；确属有意分叉，人工确认后运行 node tools/diff-cross-version.cjs --update-baseline --pair <desk|siteadmin|download> 重冻结对应基线（Tier B→C 迁移须人工确认）。"
             exit 1
           }
 

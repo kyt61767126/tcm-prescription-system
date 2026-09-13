@@ -109,9 +109,9 @@ node tools/pre-build-check.js app_project/db-offline/desktop && node tools/pre-b
 #   刷同步，历史 4+ 次大手工提交（登录框/操作界面/中药库/实名防护）全靠自觉，
 #   单边改动静默失效风险为全库最后一个万行级盲区。本门同时守护 desk 对
 #   （public↔离线桌面，CI 第7道门同款）——本地 push 即拦截，不等 CI 发现。
-echo "[pre-push] ⑩ 跨版本漂移基线（desk + siteadmin 双对）..."
+echo "[pre-push] ⑩ 跨版本漂移基线（desk + siteadmin + download 三对）..."
 node tools/diff-cross-version.cjs --quiet || {
-    echo "[pre-push] FAIL: 跨版本权威源/手工双轨副本发生未确认漂移——单侧新增函数或同体函数单边改动；请移植到另一侧，或人工确认分叉后运行 node tools/diff-cross-version.cjs --update-baseline --pair <desk|siteadmin> 重冻结"
+    echo "[pre-push] FAIL: 跨版本权威源/手工双轨副本/官网双副本发生未确认漂移——单侧新增函数、同体函数单边改动或单边改文案；请移植/同步到另一侧，或人工确认分叉后运行 node tools/diff-cross-version.cjs --update-baseline --pair <desk|siteadmin|download> 重冻结"
     exit 1
 }
 

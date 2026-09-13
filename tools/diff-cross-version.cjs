@@ -12,6 +12,13 @@
 //                    压缩区块 / site-admin 全展开），故启用「规范化哈希」：
 //                    字符串感知剔除空白与注释后比对——注释差异也会判分叉
 //                    （入 Tier C 白名单），同体=纯逻辑一致。
+//   Pair download  —— public/download.html ↔ site-official/download.html
+//                    （SA-2 新增，2026-09-13）：官网下载页双副本手工镜像
+//                    （4359 ↔ 4167 行，~332 行合法差异：promo Tab 缺失/渠道
+//                    文案分叉），历史已实锤过漂移（09-13 修复「site-official
+//                    落后于 public」）。差异主体是 HTML 文案而非 JS 函数，
+//                    函数级三层基线盖不住 → 本对用 mode 'lines'：全内容
+//                    「规范化行多重集」差集基线，HTML+JS 全部内容漂移可捕获。
 //
 // 三层基线（每对一份 JSON，tools/.cross-version-baseline[-<id>].json）：
 //   Tier A 函数名单差集冻结 —— 仅单侧存在的函数名：
@@ -22,7 +29,12 @@
 //   Tier C 已分叉函数白名单 —— 双侧同名不同体（仅记名）：
 //        新增分叉名 → 红灯（Tier B→C 迁移须经人工确认后 --update-baseline）
 //   另有 INFO（不阻断）：Tier A 收敛（移植/删除完成）、新增同体函数
-//   （建议重冻结纳入 Tier B）、Tier C 收敛（分叉已对齐）。
+//        （建议重冻结纳入 Tier B）、Tier C 收敛（分叉已对齐）。
+//
+// lines 模式（download 对专用）：逐行 normalize（字符串感知剔空白+行/块注释；
+//   整行 HTML 注释剔除）后构建多重集，差集 = 仅单侧存在的内容行（计重复次数）：
+//   基线冻结 onlyA/onlyB 行清单 → 新差异行红灯（单边新增/改文案后旧行消失新行
+//   出现，两侧同步改则两行各自消失互不新增不报警）、基线行消失 INFO（同步收敛）。
 //
 // 用法：
 //   node tools/diff-cross-version.cjs                    检查全部对（漂移则非0）
@@ -61,6 +73,16 @@ const PAIRS = [
         fileB: 'site-admin/index.html',
         baseline: '.cross-version-baseline-siteadmin.json',
         mode: 'normalized', // 字符串感知剔空白+注释后哈希（格式根本不同）
+    },
+    {
+        // ★ 2026-09-13 SA-2 新增：官网下载页双副本镜像守护（lines 模式：
+        //   差异主体是 HTML 文案，函数级基线盖不住，改为全内容行多重集差集）
+        id: 'download',
+        label: 'public/download.html ↔ site-official 双副本镜像',
+        fileA: 'public/download.html',
+        fileB: 'site-official/download.html',
+        baseline: '.cross-version-baseline-download.json',
+        mode: 'lines',
     },
 ];
 
@@ -147,8 +169,113 @@ function extractFnSpanHashes(src, mode) {
     return spans;
 }
 
+// ---- lines 模式：规范化行多重集差集（download 对专用）----
+// 逐行处理：字符串感知剔空白+行注释；跨行块注释状态机跟踪；整行 HTML 注释剔除。
+// norm 后空行（纯空白/纯注释行）不计入。返回 Map<line, count>。
+function buildLineMultiset(src) {
+    const counts = new Map();
+    let inBlockComment = false; // JS /* */ 跨行状态
+    for (let raw of src.split('\n')) {
+        const line = raw.trim();
+        if (!line) continue;
+        // 整行 HTML 注释（<!-- ... -->）剔除
+        if (line.startsWith('<!--') && line.endsWith('-->')) continue;
+        let norm = '';
+        let i = 0;
+        while (i < line.length) {
+            if (inBlockComment) {
+                const end = line.indexOf('*/', i);
+                if (end === -1) { i = line.length; } else { inBlockComment = false; i = end + 2; }
+                continue;
+            }
+            const c = line[i];
+            if (c === "'" || c === '"') {
+                const q = c; norm += c; i++;
+                while (i < line.length && line[i] !== q) { norm += line[i]; if (line[i] === '\\') { i++; if (i < line.length) norm += line[i]; } i++; }
+                if (i < line.length) { norm += q; i++; }
+                continue;
+            }
+            if (c === '/' && line[i + 1] === '/') break; // 行注释：丢弃行尾
+            if (c === '/' && line[i + 1] === '*') { inBlockComment = true; i += 2; continue; }
+            if (/\s/.test(c)) { i++; continue; }
+            norm += c; i++;
+        }
+        if (norm) counts.set(norm, (counts.get(norm) || 0) + 1);
+    }
+    return counts;
+}
+
+// 多重集差集：A 计数 > B 计数的行（含次数）展开为数组（重复出现 count 次）
+function multisetDiff(a, b) {
+    const out = [];
+    for (const [line, ca] of a) {
+        const cb = b.get(line) || 0;
+        for (let k = 0; k < ca - cb; k++) out.push(line);
+    }
+    return out.sort();
+}
+
+function runLinesPair(pair, updateBaseline) {
+    const fileA = path.join(ROOT, pair.fileA);
+    const fileB = path.join(ROOT, pair.fileB);
+    const baseFile = path.join(__dirname, pair.baseline);
+    const srcA = fs.readFileSync(fileA, 'utf8').replace(/\r\n/g, '\n');
+    const srcB = fs.readFileSync(fileB, 'utf8').replace(/\r\n/g, '\n');
+    const aLines = buildLineMultiset(srcA);
+    const bLines = buildLineMultiset(srcB);
+    const onlyA = multisetDiff(aLines, bLines);
+    const onlyB = multisetDiff(bLines, aLines);
+
+    if (updateBaseline) {
+        const data = {
+            frozenAt: new Date().toISOString(),
+            pair: pair.fileA + ' <-> ' + pair.fileB,
+            mode: pair.mode,
+            note: '仅单侧存在的规范化内容行（含重复次数）。新差异行=红灯（单边新增/单边改文案，旧行消失+新行出现）；基线行消失=INFO（同步收敛/双侧同删）。两侧同步改（互不新增）不报警。',
+            onlyA_lines: onlyA,
+            onlyB_lines: onlyB,
+        };
+        fs.writeFileSync(baseFile, JSON.stringify(data, null, 2), 'utf8');
+        console.log('[cross-version:' + pair.id + '] 基线已冻结: tools/' + pair.baseline);
+        console.log('  仅 A 侧内容行: ' + onlyA.length + ' | 仅 B 侧内容行: ' + onlyB.length);
+        return { red: [], info: [], summary: 'frozen', counts: { onlyA: onlyA.length, onlyB: onlyB.length } };
+    }
+
+    let baseline = null;
+    try { baseline = JSON.parse(fs.readFileSync(baseFile, 'utf8')); } catch (e) {}
+
+    if (!baseline) {
+        return {
+            red: [{ tier: 'X', name: '(baseline)', why: '基线不存在——先运行 node tools/diff-cross-version.cjs --update-baseline --pair ' + pair.id + ' 冷启动冻结' }],
+            info: [], summary: 'no-baseline',
+        };
+    }
+
+    const bA = new Set(baseline.onlyA_lines || []);
+    const bB = new Set(baseline.onlyB_lines || []);
+
+    const red = [];
+    onlyA.forEach((l) => { if (!bA.has(l)) red.push({ tier: 'A', name: l.slice(0, 100), why: '新增仅 ' + pair.fileA + ' 存在的内容行（' + pair.fileB + ' 缺——单边新增/单边改文案，同步到对侧或确认合法差异后重冻结）' }); });
+    onlyB.forEach((l) => { if (!bB.has(l)) red.push({ tier: 'B', name: l.slice(0, 100), why: '新增仅 ' + pair.fileB + ' 存在的内容行（' + pair.fileA + ' 缺——单边新增/单边改文案，同步到对侧或确认合法差异后重冻结）' }); });
+
+    const info = [];
+    const curA = new Set(onlyA), curB = new Set(onlyB);
+    bA.forEach((l) => { if (!curA.has(l)) info.push('A 侧差异行消失（已同步到 B / 双侧删除）: ' + l.slice(0, 80)); });
+    bB.forEach((l) => { if (!curB.has(l)) info.push('B 侧差异行消失（已同步到 A / 双侧删除）: ' + l.slice(0, 80)); });
+
+    return {
+        red, info,
+        summary: '仅 A 侧行: ' + onlyA.length + ' | 仅 B 侧行: ' + onlyB.length +
+            '（基线: A=' + (baseline.onlyA_lines || []).length + ' B=' + (baseline.onlyB_lines || []).length + '）',
+        counts: { onlyA: onlyA.length, onlyB: onlyB.length },
+    };
+}
+
 // ---- 单对执行：返回 { red, info, summary } ----
 function runPair(pair) {
+    if (pair.mode === 'lines') {
+        return runLinesPair(pair, updateBaseline);
+    }
     const fileA = path.join(ROOT, pair.fileA);
     const fileB = path.join(ROOT, pair.fileB);
     const baseFile = path.join(__dirname, pair.baseline);

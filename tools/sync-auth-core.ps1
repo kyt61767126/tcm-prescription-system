@@ -12,6 +12,7 @@
 #        -> 3 offline targets
 #      shared/auth-core/cloud.js   (2123, validate, no trial)
 #        -> 8 cloud targets (incl. shared/auth-core.js root mirror)
+#        ★ 2026-09-13 SA-1：site-admin/electron 目标移除（第一代壳死重已删，9→8；长期口径漂移「注释8/实际9/汇总11」就此自洽）
 #
 #  Usage:
 #    powershell -File tools\sync-auth-core.ps1               # Sync
@@ -69,7 +70,6 @@ $CloudTargets = @(
     'app_project/db-yunduan/cloud_desktop/electron',       # cloud desktop electron
     'app_project/db-yunduan/cloud_app/app/src/main/assets/public', # cloud APP assets
     'site-admin',                                          # admin console web
-    'site-admin/electron',                                 # admin console electron
     'shared',                                              # shared/auth-core.js root mirror (canonical source for cloud variants)
     'app_project_harmony/huikang-cloud/entry/src/main/resources/rawfile' # ★ 2026-09-02 鸿蒙云端版 rawfile（原为手工同步盲区，曾漏付款按钮兜底修复）
 )

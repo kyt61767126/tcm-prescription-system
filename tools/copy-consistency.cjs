@@ -31,7 +31,6 @@ const GROUPS = [
             'public/permission.js',
             'public/electron/permission.js',
             'site-admin/permission.js',
-            'site-admin/electron/permission.js',
             'app_project/db-yunduan/cloud_desktop/permission.js',
             'app_project/db-yunduan/cloud_desktop/electron/permission.js',
             'app_project/db-yunduan/cloud_app/app/src/main/assets/public/permission.js',
@@ -62,7 +61,6 @@ const GROUPS = [
             'public/normalize-config.js',
             'public/electron/normalize-config.js',
             'site-admin/normalize-config.js',
-            'site-admin/electron/normalize-config.js',
             'app_project/db-yunduan/cloud_desktop/normalize-config.js',
             'app_project/db-yunduan/cloud_desktop/electron/normalize-config.js',
             'app_project/db-yunduan/cloud_app/app/src/main/assets/public/normalize-config.js',
@@ -110,14 +108,14 @@ const GROUPS = [
     },
     {
         // ★ 2026-09-13 P2-A3 处方签核心（prescription-core.js）：同步盲区同 stock-core
-        //   （Group 1 只盖 6 副本，site-admin×2/云端APP assets/鸿蒙 rawfile 靠手工），
-        //   本组全量 10 副本硬校验堵漏；收缩到真实 API 面（getAutoJianfa）后新增。
+        //   （Group 1 只盖 6 副本，site-admin/云端APP assets/鸿蒙 rawfile 靠手工），
+        //   本组全量副本硬校验堵漏；收缩到真实 API 面（getAutoJianfa）后新增。
+        //   ★ 2026-09-13 SA-1：site-admin/electron 副本移除（第一代壳死重已删）。
         authority: 'shared/prescription-core.js',
         copies: [
             'public/prescription-core.js',
             'public/electron/prescription-core.js',
             'site-admin/prescription-core.js',
-            'site-admin/electron/prescription-core.js',
             'app_project/db-yunduan/cloud_desktop/prescription-core.js',
             'app_project/db-yunduan/cloud_desktop/electron/prescription-core.js',
             'app_project/db-yunduan/cloud_app/app/src/main/assets/public/prescription-core.js',
