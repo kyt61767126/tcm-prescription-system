@@ -71,10 +71,13 @@ function Compare-Drift([System.Collections.Generic.List[string]]$srcLines, [Syst
 # 权威源
 $Authority = 'public/index.html'
 
-# 云端副本目标（观察期范围）
-# ★ 云端APP已隔离：采用手机端布局（剂数移入价格行、医师与诊断同排），与桌面权威源差异过大，不再跟随同步（2026-09-10）
+# 云端副本目标
+# ★ 2026-09-13 P1 收口：云APP assets 重新纳入监控（2026-09-10 曾因手机/桌面布局冲突隔离；
+#   现 public 权威源已含双实例响应式，冲突根源消解，且云APP WebView 实载线上 public/，
+#   本地 assets 仅打包兜底）。收编后本检查与 sync-html.ps1 生成结果交叉校验。
 $Targets = @(
-    'app_project/db-yunduan/cloud_desktop/index.html'
+    'app_project/db-yunduan/cloud_desktop/index.html',
+    'app_project/db-yunduan/cloud_app/app/src/main/assets/public/index.html'
 )
 
 # ★ 合法端配置差异清单：正则 -> 占位符
