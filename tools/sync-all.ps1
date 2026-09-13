@@ -391,6 +391,20 @@ $result = Sync-Group -GroupName 'update-manager.cjs -> 2 electron dirs' -Files @
 if (-not $result) { $allInSync = $false }
 Write-Host ""
 
+# Group 13: index-app.html 生成器（★ 2026-09-13 P1-B1 离线APP权威源生成模式收口）
+#   离线桌面权威源 → 33 条变换表 → index-app.html + assets 副本双写。
+#   防呆：工作流顺序 = 先 sync-shared-blocks（USER-STORE/USER-ADMIN 块）再跑本组；
+#   锚点落入标记块时生成器自动红灯。此后禁止手改 index-app/assets，只改
+#   desktop/index.html 权威源 + tools/index-app-transforms.cjs 变换表。
+Write-Host "--- [index-app.html authority -> offline APP copies] ---" -ForegroundColor Cyan
+$syncIndexAppScript = Join-Path $PSScriptRoot 'sync-index-app.cjs'
+$syncIndexAppArgs = @($syncIndexAppScript)
+if ($VerifyOnly) { $syncIndexAppArgs += '--verify-only' }
+# 直接调用（不接管 stdout 管道，避免子进程 UTF-8 中文输出经管道转码乱码）
+& node @syncIndexAppArgs
+if ($LASTEXITCODE -ne 0) { $allInSync = $false }
+Write-Host ""
+
 # ============================================================================
 # Summary
 # ============================================================================

@@ -4,7 +4,7 @@
 //
 //  架构（KNOWLEDGE §2「2 权威源 + 全自动传播链」）：
 //    离线桌面权威源 app_project/db-offline/desktop/index.html
-//      └─ 应用 34 条字面变换（tools/index-app-transforms.cjs）
+//      └─ 应用 33 条字面变换（tools/index-app-transforms.cjs）
 //           ├─→ app_project/db-offline/index-app.html（离线APP权威产物）
 //           └─→ app_project/db-offline/app/app/src/main/assets/public/index.html
 //                （assets 打包兜底副本；build-app.bat 原样拷贝，不再手工维护）
@@ -121,7 +121,7 @@ if (verifyOnly) {
     console.error('[sync-index-app] FAIL: ' + drift + ' 个目标存在漂移。运行 node tools/sync-index-app.cjs 重新生成。');
     process.exit(1);
   }
-  console.log('[sync-index-app] verify-only PASS: 34 条变换全部唯一命中，双目标与生成结果一致 (' + TRANSFORMS.length + ' transforms)');
+  console.log('[sync-index-app] verify-only PASS: ' + TRANSFORMS.length + ' 条变换全部唯一命中，双目标与生成结果一致');
   process.exit(0);
 }
 
