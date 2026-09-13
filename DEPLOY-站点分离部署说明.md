@@ -3,35 +3,42 @@
 > 规则9 物理拆分执行完成时间：2026-08-08
 > 代码拆分：见 `site-official/`（官网）和 `site-admin/`（后台+云端APP）
 
-> ⚠️ **2026-09-13 勘误（实测 Cloudflare API + 线上抓取核实）**：本文档描述的分离拓扑与实际不符。
-> 实际现状：三个 Pages 项目（tcm-prescription-system / huikang-admin / huikang-official）
-> 的 destination_dir **全部为 `public/`**，互为完整镜像（含 functions API）；`huikangzy.com`
-> 三个自定义域名均无 DNS 解析（域名已失效），实际访问入口只有 *.pages.dev；
-> 全部客户端（桌面 CSP/更新/心跳、APP capacitor）指向 `tcm-prescription-system.pages.dev`。
-> `site-admin/` 与 `site-official/` 目录当前**不部署于任何线上端点**，为仓库内维护副本
-> （site-admin 由 P2-B 生成模式+基线门禁守护，site-official/download.html 由 SA-2 双副本门禁守护）。
-> 下文「分离方案」保留为历史设计与可选重整路径；引用本文档判定「生效方式」时以本勘误为准。
+> ✅ **2026-09-13 重整分离恢复（实测 Cloudflare API 切换 + 线上验证）**：此前实测发现三项目
+> destination_dir 曾全部漂移为 `public/`（互为完整镜像，违反规则9——官网域服务完整工作站+admin+API）。
+> 当日已切换回分离拓扑：**huikang-admin → `site-admin/`（后台+云端APP 站）、
+> huikang-official → `site-official/`（纯展示官网）、tcm-prescription-system → `public/`（主站，
+> 全部客户端指向不变）**。注意：`huikangzy.com` 三个自定义域名仍无 DNS 解析（域名失效），
+> 实际访问入口为 *.pages.dev；管理台控制台子页双副本（public/admin ↔ site-admin/admin）已字节级
+> 统一并挂 diff-cross-version `adminconsole` 门禁对（第 4 对）。后端 functions 统一部署自仓库根
+> `functions/`（三项目同享，KV/D1 绑定各自项目持有）；后台站页面经 CORS 跨域调用主域 API
+> （`CLOUD_API_BASE = tcm-prescription-system.pages.dev/api`，users/prescriptions 等均已带
+> OPTIONS 预检与 Access-Control 头）。
 
 ## 1. 两站点各自的构建输出根目录
 
 | 站点 | 根目录 | Pages / Nginx 指向 |
 |---|---|---|
-| 官网 | `site-official/` | `/var/www/kyt-zy/site-official` 或 Cloudflare Pages 项目 `huikang-official` |
-| 后台+云端APP | `site-admin/` | `/var/www/kyt-zy/site-admin` 或 Cloudflare Pages 项目 `huikang-admin` |
+| 官网 | `site-official/` | Cloudflare Pages 项目 `huikang-official`（入口 `huikang-official.pages.dev`） |
+| 后台+云端APP | `site-admin/` | Cloudflare Pages 项目 `huikang-admin`（入口 `huikang-admin.pages.dev`） |
+| 主站（医师工作站） | `public/` | Cloudflare Pages 项目 `tcm-prescription-system`（客户端全部指向此域） |
 
 ## 2. 两个 Pages 项目（Cloudflare）
 
 ### 2.1 huikang-official（纯展示）
-- 绑定域名：`www.huikangzy.com`
+- 入口：`huikang-official.pages.dev`（自定义域名 `www.huikangzy.com` 已失效待续费重绑）
 - 构建命令：无（纯静态）
 - 输出目录：`site-official`
-- 路由/头：已经在 `site-official/_routes.json` 和 `site-official/_headers` 写好（敏感路径 /admin /api /auth-core 一律 301 跳后台域）
+- 路由/头：`site-official/_routes.json` 与 `site-official/_headers`（注意其中 `rules` 字段为
+  _redirects 风格历史设计，Pages 实际不解析——敏感路径隔离由分离拓扑本身保证：site-official/
+  目录内不含 auth-core/permission/admin 等文件，repo 根 functions 仍会部署到本项目 /api/*，
+  与切换前一致无回归）
 
 ### 2.2 huikang-admin（带鉴权）
-- 绑定域名：`admin.huikangzy.com`
+- 入口：`huikang-admin.pages.dev`（自定义域名 `admin.huikangzy.com` 已失效待续费重绑）
 - 构建命令：无（纯静态）
 - 输出目录：`site-admin`
-- 需要在 Pages 上绑定 Worker：对所有 `/admin/*` 路由加平台管理员 JWT 校验（role=platform_admin），无登录态一律跳转到 `/admin/index.html#login`
+- `/admin/*` 平台管理员 JWT 校验 Worker：**未实施**——现状与主域一致，控制台页面为客户端登录门
+  （JWT 存 localStorage），数据接口由服务端 Bearer JWT 把关；如需静态层硬门禁再立项
 
 ## 3. 自托管 Nginx
 

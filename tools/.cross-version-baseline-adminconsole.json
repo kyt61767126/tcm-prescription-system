@@ -1,0 +1,8 @@
+{
+  "frozenAt": "2026-09-13T08:17:31.572Z",
+  "pair": "public/admin/index.html <-> site-admin/admin/index.html",
+  "mode": "lines",
+  "note": "仅单侧存在的规范化内容行（含重复次数）。新差异行=红灯（单边新增/单边改文案，旧行消失+新行出现）；基线行消失=INFO（同步收敛/双侧同删）。两侧同步改（互不新增）不报警。",
+  "onlyA_lines": [],
+  "onlyB_lines": []
+}

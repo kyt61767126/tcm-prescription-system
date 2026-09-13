@@ -84,6 +84,18 @@ const PAIRS = [
         baseline: '.cross-version-baseline-download.json',
         mode: 'lines',
     },
+    {
+        // ★ 2026-09-13 重整分离部署新增：管理台控制台子页双副本（主域 /admin/ 与
+        //   后台站 site-admin/admin/ 同一份内容，字节级镜像，基线=空差集；
+        //   实锤事故：09-10 漏斗只进 public、09-11/12 license 警示只进
+        //   site-admin——双向漂移各缺一块，此后任何单边改即红灯）
+        id: 'adminconsole',
+        label: 'public/admin/index.html ↔ site-admin/admin 控制台双副本',
+        fileA: 'public/admin/index.html',
+        fileB: 'site-admin/admin/index.html',
+        baseline: '.cross-version-baseline-adminconsole.json',
+        mode: 'lines',
+    },
 ];
 
 const quiet = process.argv.includes('--quiet');
