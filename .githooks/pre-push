@@ -29,7 +29,11 @@
 #    八道门全绿推送后智能打包 Step5 才拦截（pre-build-check: Missing files），
 #    修复成本=一轮完整打包时间。新 JS 的"第三登记点"（sync-all / copy-consistency
 #    之外）必须在 push 时拦截，不能等打包时才发现。
-#  九道门全过才允许推送（均为秒级，不拖慢日常 push）。
+#  ★ 2026-09-13 十道门补强：diff-cross-version.cjs（desk + siteadmin 双对跨版本基线）。
+#    缺口实锤：site-admin/index.html 万行级手工双轨副本完全脱管（详见文末⑩注释），
+#    共面 142 函数无任何门禁覆盖，历史靠人工「8副本统一」刷同步。跨版本漂移
+#    必须在 push 时拦截——本地发现成本 = 秒级，CI 发现成本 = 修复滞后一轮。
+#  十道门全过才允许推送（均为秒级，不拖慢日常 push）。
 #
 #  绕过方式（仅限紧急情况，事后必须补跑）：git push --no-verify
 #  启用方式（克隆后一次性）：git config core.hooksPath .githooks
@@ -99,5 +103,17 @@ node tools/pre-build-check.js app_project/db-offline/desktop && node tools/pre-b
     exit 1
 }
 
-echo "[pre-push] 九道校验全部通过，允许推送"
+# ★ 2026-09-13 十道门补强：diff-cross-version.cjs 多对跨版本基线（P2-B1）。
+#   缺口实锤：site-admin/index.html（10513 行手工双轨副本）完全脱管——
+#   与 public/index.html 共面 142 函数（42 同体+101 分叉）靠人工「8副本统一」
+#   刷同步，历史 4+ 次大手工提交（登录框/操作界面/中药库/实名防护）全靠自觉，
+#   单边改动静默失效风险为全库最后一个万行级盲区。本门同时守护 desk 对
+#   （public↔离线桌面，CI 第7道门同款）——本地 push 即拦截，不等 CI 发现。
+echo "[pre-push] ⑩ 跨版本漂移基线（desk + siteadmin 双对）..."
+node tools/diff-cross-version.cjs --quiet || {
+    echo "[pre-push] FAIL: 跨版本权威源/手工双轨副本发生未确认漂移——单侧新增函数或同体函数单边改动；请移植到另一侧，或人工确认分叉后运行 node tools/diff-cross-version.cjs --update-baseline --pair <desk|siteadmin> 重冻结"
+    exit 1
+}
+
+echo "[pre-push] 十道校验全部通过，允许推送"
 exit 0
