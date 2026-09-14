@@ -4,7 +4,7 @@
 //  路由：POST /api/license/heartbeat
 //
 //  无需登录认证（客户端调用），但有以下保护：
-//    - 速率限制：每 IP 每小时 30 次（比 validate 宽松，每 24 小时调用一次）
+//    - 速率限制：每 IP 每小时 120 次（客户端 10 分钟周期上报，单台 6 次/h）
 //    - 激活码格式校验
 //    - 状态校验
 //
@@ -25,7 +25,8 @@
 //    }
 //
 //  客户端逻辑：
-//    - 每 24 小时调用一次
+//    - 每 10 分钟调用一次（★ 2026-09-14：原 24h 防破解周期缩短为 10min，
+//      同时作为后台在线统计数据源——服务端按 lastHeartbeat ≤15 分钟计在线）
 //    - 离线超过 7 天自动锁定
 //    - action != "ok" 时显示激活窗口
 // ============================================================================
@@ -99,9 +100,12 @@ export async function onRequest(context) {
             return json({ success: false, error: 'KV binding not found' }, 500);
         }
 
-        // 速率限制：每 IP 每小时 30 次
+        // 速率限制：每 IP 每小时 120 次
+        // ★ 2026-09-14 心跳周期 24h→10min（在线统计上报，users.js 按 ≤15 分钟窗口计在线）：
+        //   单台 6 次/h，多设备诊所（如 4 台 APP + 桌面共用出口 IP）原 30/h 会误 429
+        //   → 放宽至 120/h（≈20 台设备同 IP 满负荷仍有余量）
         const ip = getClientIP(context);
-        const rateOk = await checkRateLimit(kv, `hb_${ip}`, 30);
+        const rateOk = await checkRateLimit(kv, `hb_${ip}`, 120);
         if (!rateOk.allowed) {
             return json({ success: false, error: '请求过于频繁，请稍后再试' }, 429);
         }
@@ -192,36 +196,43 @@ export async function onRequest(context) {
         //     心跳来自真实设备，UA 可判端形态。两语义严格分离：
         //     ① 客户端显式上报 = 权威，覆盖写（原语义不变）
         //     ② UA 嗅探兜底 = 仅补空字段，绝不覆盖已有值
+        //   ★ 2026-09-14 在线统计（后台诊所管理「在线：🖥️桌面 X · 📱APP X」离线端归零修复）：
+        //     ① 设备级 lastHeartbeat 无条件刷新（devices[].lastHeartbeat=serverTime，
+        //        users.js 诊所聚合按 ≤15 分钟窗口计在线，区分 desktop/app 桶）
+        //     ② 顶层 lastHeartbeat 与设备变更合并为一次 updateLicense（写量评估：
+        //        客户端 10 分钟活跃上报 × 6/h/台，20 台活跃 ≈ 1.2k KV 写/天，付费额度内）
+        //     ③ heartbeat 审计日志仍 7 天一条（控写放大，与在线判定无关）
         if (deviceMatched) {
             const repPc = ((body.productClass || '').trim()) || null;
             const repCc = ((body.clientClass || '').trim()) || null;
             const found = devices.find(d => d.machineId === machineId);
+            let devicesDirty = false;
+            if (found) {
+                // ★ 在线统计数据源：设备级心跳时间戳（每次刷新，online 口径数据源）
+                found.lastHeartbeat = serverTime;
+                devicesDirty = true;
+            }
             if (repPc || repCc) {
                 // ① 显式上报：权威覆盖（原逻辑）
                 if (found && ((found.productClass || null) !== repPc || (found.clientClass || null) !== repCc)) {
                     found.productClass = repPc;
                     found.clientClass = repCc;
-                    try {
-                        await updateLicense(kv, code, { devices: devices, maxDevices: maxDevices });
-                    } catch (e) { console.warn('[Heartbeat] 设备端形态写入失败:', e.message); }
                 }
             } else if (found && (!found.productClass || !found.clientClass)) {
                 // ② 嗅探兜底：仅补空字段（心跳接口仅离线端调用，productClass 兜底 offline）
                 const sniffed = sniffCarrierFromUA(context.request);
                 if (sniffed) {
-                    let dirty = false;
-                    if (!found.clientClass) { found.clientClass = sniffed; dirty = true; }
-                    if (!found.productClass) { found.productClass = 'offline'; dirty = true; }
-                    if (dirty) {
-                        try {
-                            await updateLicense(kv, code, { devices: devices, maxDevices: maxDevices });
-                            console.log('[Heartbeat] 载体嗅探补写:', code, '→', sniffed);
-                        } catch (e) { console.warn('[Heartbeat] 嗅探补写失败:', e.message); }
-                        // 载体诊所兜底：官网订单建的诊所缺 offlineCarrier（用户管理
-                        //   版本列显示纯「离线标准版」），幂等补写（仅空时）
-                        try { await patchClinicCarrier(kv, record.clinicName, sniffed); } catch (e) { /* 内部 warn */ }
-                    }
+                    if (!found.clientClass) { found.clientClass = sniffed; }
+                    if (!found.productClass) { found.productClass = 'offline'; }
+                    // 载体诊所兜底：官网订单建的诊所缺 offlineCarrier（用户管理
+                    //   版本列显示纯「离线标准版」），幂等补写（仅空时）
+                    try { await patchClinicCarrier(kv, record.clinicName, sniffed); } catch (e) { /* 内部 warn */ }
                 }
+            }
+            if (devicesDirty) {
+                try {
+                    await updateLicense(kv, code, { devices: devices, maxDevices: maxDevices, lastHeartbeat: serverTime });
+                } catch (e) { console.warn('[Heartbeat] 设备心跳/端形态写入失败:', e.message); }
             }
             // 设备-版本绑定端形态同步（上报/嗅探后的最终值）
             if (found && (found.productClass || found.clientClass)) {

@@ -2086,6 +2086,39 @@ export async function onRequest(context) {
             } catch (e) { /* 在线聚合读取失败按无在线处理 */ }
 
             const nowTs = Date.now();
+
+            // ★ 2026-09-14 离线端在线统计（后台诊所管理「在线：🖥️桌面 X · 📱APP X」离线端归零修复）：
+            //   上方 user_session 口径只覆盖云端登录（离线端本地登录不写 user_session），
+            //   补充聚合 license.devices[].lastHeartbeat（heartbeat.js 每 10 分钟刷新）——
+            //   距今 ≤15 分钟视为在线，clientClass 分桶 desktop/app，按 clinicName 归诊所。
+            //   云端端不调用 /api/license/heartbeat（cloud.js 链路），与 user_session 口径无重叠。
+            //   读取失败不影响诊所列表（按无在线处理）。
+            const offlineOnlineMap = new Map(); // clinicName -> { desktop, app }
+            try {
+                const licKeys = await listAllKeys(kv, 'license:');
+                for (let i = 0; i < licKeys.length; i += 20) {
+                    const batch = licKeys.slice(i, i + 20);
+                    const licVals = await Promise.all(batch.map(k => kv.get(k, 'json').catch(() => null)));
+                    licVals.forEach(rec => {
+                        // 已激活 license 的 status='used'（unused/disabled/expired 不计在线——
+                        //   heartbeat.js 对这些状态提前返回，devices[].lastHeartbeat 不会刷新）
+                        if (!rec || rec.status !== 'used' || !rec.clinicName) return;
+                        for (const d of (Array.isArray(rec.devices) ? rec.devices : [])) {
+                            if (!d || !d.lastHeartbeat) continue;
+                            const hbTs = Date.parse(d.lastHeartbeat);
+                            if (!Number.isFinite(hbTs) || (nowTs - hbTs) > ONLINE_ACTIVE_MS) continue;
+                            if (!offlineOnlineMap.has(rec.clinicName)) {
+                                offlineOnlineMap.set(rec.clinicName, { desktop: 0, app: 0 });
+                            }
+                            const bucket = offlineOnlineMap.get(rec.clinicName);
+                            // 未知端形态兜底计桌面（离线端无网页形态；UA 嗅探/显式上报已覆盖绝大多数）
+                            if (d.clientClass === 'app') bucket.app++;
+                            else bucket.desktop++;
+                        }
+                    });
+                }
+            } catch (e) { /* 离线端在线聚合读取失败按无在线处理 */ }
+
             for (const clinic of clinics) {
                 const users = await kv.get(`clinic:${clinic.id}:users`, 'json');
                 const admin = users && users.find(u => u.role === ROLE_CLINIC_ADMIN);
@@ -2104,6 +2137,10 @@ export async function onRequest(context) {
                         else onlineWeb++;
                     }
                 }
+                // 离线端设备心跳在线（license.devices[].lastHeartbeat ≤15 分钟，见上方 offlineOnlineMap 构建）
+                const offOn = offlineOnlineMap.get(clinic.name) || { desktop: 0, app: 0 };
+                onlineDesktop += offOn.desktop;
+                onlineApp += offOn.app;
                 result.push({
                     id: clinic.id,
                     name: clinic.name,
