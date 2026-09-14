@@ -1259,7 +1259,10 @@
                 // ★ 2026-08-25 全局统一授权状态：保留顶层 clinicExpiresAt（诊所授权到期时间），
                 //   login() 存 auth:currentUser 时随 user 持久化，供基础设置授权区
                 //   显示"✅ 已激活（版本）剩余 X 天"（与离线版格式统一）
-                return { success: true, user: { ...data.user, token: data.token, clinicExpiresAt: data.clinicExpiresAt || null } };
+                // ★ 2026-09-15 登录提速：透传首屏处方（服务端 D1 快路径预取，
+                //   客户端 getAllUserPrescriptions 命中预取即跳过 /prescriptions GET 往返）
+                const loginPrescriptions = Array.isArray(data.prescriptions) ? data.prescriptions : null;
+                return { success: true, user: { ...data.user, token: data.token, clinicExpiresAt: data.clinicExpiresAt || null }, prescriptions: loginPrescriptions };
             } catch (e) {
                 console.error('云端登录失败:', e);
                 // ★ 离线登录缓存：网络错误时尝试离线登录
@@ -1584,7 +1587,8 @@
             // options.onSessionTimeout 可选外部回调（用于登出后跳转/刷新页面）
             startSessionMonitor(options.onSessionTimeout || null);
 
-            return { success: true, user };
+            // ★ 2026-09-15 登录提速：透传首屏处方（adapter.authenticate 预取；离线缓存登录无此字段）
+            return { success: true, user, prescriptions: result.prescriptions || null };
         } catch (e) {
             console.error('登录异常:', e);
             return { success: false, error: '登录失败：' + (e.message || '未知错误') };
@@ -1627,7 +1631,8 @@
             try {
                 const cloudResult = await login(username, password, { adapter: cloudAdapter });
                 if (cloudResult && cloudResult.success && cloudResult.user) {
-                    return { success: true, user: cloudResult.user, matchedIdentifier: username, source: 'cloud' };
+                    // ★ 2026-09-15 登录提速：透传首屏处方（服务端登录响应预取）
+                    return { success: true, user: cloudResult.user, matchedIdentifier: username, source: 'cloud', prescriptions: cloudResult.prescriptions || null };
                 }
                 if (cloudResult && cloudResult.success === false) {
                     return { success: false, user: null, matchedIdentifier: username, source: 'cloud', error: cloudResult.error || '手机号/用户名或密码错误' };

@@ -16,6 +16,8 @@ import { listLicenses, getDevices, updateLicense, appendLicenseLog } from './lic
 import { writeAuditLog } from './_lib/audit-log.js';
 // ★ 2026-09-10 P3 D1 迁移：设备绑定 D1 双写
 import { getDB, isD1Enabled } from './_lib/d1.js';
+// ★ 2026-09-15 登录提速：登录响应携带首屏处方（D1 快路径，与 writeUserSession 并行）
+import { d1LoadPrescriptions } from './_lib/prescriptions-store.js';
 
 // ============================================================================
 // ★★★ 2026-08-21 账号级设备授权（一个云端管理员最多绑定 2 台设备：桌面/APP）
@@ -1399,13 +1401,17 @@ export async function onRequest(context) {
                 return json({ success: false, error: '手机号/用户名或密码不能为空', code: 'MISSING_CREDENTIALS' }, 400, context.request);
             }
 
-            // P1-1：检查账户是否被锁定
-            const isLocked = await checkLoginLocked(kv, username);
+            // ★ 2026-09-15 登录提速：账户锁定检查与用户查找并行（原本串行两次 KV get，
+            //   各 60-300ms；二者互不依赖，并行后总延迟 = max(单次)）。IP 限流因含
+            //   计数写回（get→put 有依赖）保持独立前置不变。
+            const [isLocked, foundUser] = await Promise.all([
+                checkLoginLocked(kv, username),
+                findUserForLogin(kv, username, context.env)
+            ]);
             if (isLocked) {
                 return json({ success: false, error: '尝试次数过多，账户暂时锁定，请稍后再试', code: 'ACCOUNT_LOCKED' }, 423, context.request);
             }
-
-            let found = await findUserForLogin(kv, username, context.env);
+            let found = foundUser;
             // ★ 2026-08-20 登录自愈：账号未找到时，若该手机号存在管理员已通过的激活申请，
             //   自动补开云端账号并重试一次查找（解决激活通过后用户却无法登录的遗留问题）
             if (!(found && found.user)) {
@@ -1698,10 +1704,30 @@ export async function onRequest(context) {
 
             // ★★★ 2026-08-21 单设备在线互斥：写入当前唯一有效 session（顶掉旧设备）
             //   旧设备持有的 token 在下一次任意 API 调用时被 verifyToken 拒绝（401）
+            // ★ 2026-09-15 登录提速：session 写入与首屏处方预取并行——客户端省掉
+            //   登录后 GET /prescriptions 一次完整网络往返（~1s）。
+            //   预取仅走 D1 快路径（一次 SQL ~50ms）；D1 未启用/无数据/异常时响应不带
+            //   prescriptions 字段，客户端自动走原有 GET 流程（行为完全不变）。
+            //   处方量 > 2000 条时跳过预取（响应体积保护，客户端自行分页拉取）。
+            const prefetchLoginPrescriptions = (async () => {
+                try {
+                    const dbPf = getDB(context);
+                    if (!isD1Enabled(context) || !dbPf || !clinicId) return null;
+                    const allPres = await d1LoadPrescriptions(dbPf, clinicId, false).catch(() => null);
+                    if (!Array.isArray(allPres) || allPres.length === 0 || allPres.length > 2000) return null;
+                    // 角色过滤与 GET /prescriptions 同规则（isAdmin/isCashier 见全所，其余仅本人）
+                    const canSeeAll = isAdmin(user) || user.role === ROLE_CASHIER;
+                    return canSeeAll ? allPres : allPres.filter(p => p.createdBy === user.username);
+                } catch (e) {
+                    return null;
+                }
+            })();
             await writeUserSession(kv, user.username, token, {
                 machineId: machineId || null,
                 clientClass: effClientClass
             });
+            let loginPrescriptions = null;
+            try { loginPrescriptions = await prefetchLoginPrescriptions; } catch (e) {}
 
             return json({
                 success: true,
@@ -1709,7 +1735,9 @@ export async function onRequest(context) {
                 user: sanitizeUser(user, clinicId, clinicName, clinicStatus, clinicEdition),
                 device: deviceSummary,
                 // ★ 2026-08-23 云端APP F1基础设置-授权状态：返回诊所到期时间（前端显示"已激活（版本）剩余X天"）
-                clinicExpiresAt: clinicExpiresAt || null
+                clinicExpiresAt: clinicExpiresAt || null,
+                // ★ 2026-09-15 登录提速：首屏处方（仅 D1 快路径命中时存在；null/缺省=客户端走原 GET）
+                prescriptions: loginPrescriptions
             }, 200, context.request);
         }
 
