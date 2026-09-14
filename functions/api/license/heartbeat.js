@@ -213,10 +213,12 @@ export async function onRequest(context) {
                 devicesDirty = true;
             }
             if (repPc || repCc) {
-                // ① 显式上报：权威覆盖（原逻辑）
-                if (found && ((found.productClass || null) !== repPc || (found.clientClass || null) !== repCc)) {
-                    found.productClass = repPc;
-                    found.clientClass = repCc;
+                // ① 显式上报：权威覆盖——★ 2026-09-14 按字段覆盖：仅覆盖客户端明确上报
+                //   的字段（客户端判据不确定时省略 clientClass 只报 productClass，省略字段
+                //   绝不清空已有值——防部分上报把 devices[].clientClass 冲成 null）
+                if (found) {
+                    if (repPc && found.productClass !== repPc) { found.productClass = repPc; }
+                    if (repCc && found.clientClass !== repCc) { found.clientClass = repCc; }
                 }
             } else if (found && (!found.productClass || !found.clientClass)) {
                 // ② 嗅探兜底：仅补空字段（心跳接口仅离线端调用，productClass 兜底 offline）

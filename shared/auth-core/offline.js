@@ -2014,19 +2014,32 @@
             } catch (e) { /* 计数获取失败不影响心跳 */ }
 
             // ★ 2026-09-14 端形态显式上报（服务端权威覆盖写 devices[].productClass/clientClass）：
-            //   离线端恒 offline；Capacitor=APP，桌面独有 activate.showExpireAlert 桥=桌面
-            //   （★ 判据铁律 KNOWLEDGE 2026-09-03：electronAPI.activate 在 APP 桥同样存在，
-            //     直接推 desktop 会把 APP 误标桌面；与 collectDeviceIdentity 同口径）——
-            //   供后台在线统计 🖥️/📱 分桶显示。
-            const repClientClass = (typeof global.Capacitor !== 'undefined' && global.Capacitor) ? 'app'
-                : ((global.electronAPI && global.electronAPI.activate &&
-                    typeof global.electronAPI.activate.showExpireAlert === 'function') ? 'desktop' : 'web');
+            //   productClass 恒 offline；clientClass 仅在判据确定时上报——
+            //   APP = window.AndroidNative（MainActivity addJavascriptInterface 注册，
+            //   任何页面加载路径恒存在，含热更 file:// 页）或 Capacitor；
+            //   桌面 = 桌面独有 activate.showExpireAlert（★ 判据铁律 KNOWLEDGE 2026-09-03：
+            //   electronAPI.activate 在 APP 桥同样存在，不能直接推 desktop）。
+            //   ★ 判据不确定时【省略 clientClass 字段】绝不推 'web'——实测离线 APP WebView
+            //   无 window.Capacitor，误报 web 会权威覆盖掉已有 app 标记（后台 📱 误入 🖥️ 桶，
+            //   2026-09-14 惠康康实测事故）；服务端已同步改为按字段覆盖，省略字段不动已有值。
+            let repClientClass = null;
+            if (typeof global.AndroidNative !== 'undefined' && global.AndroidNative) {
+                repClientClass = 'app';
+            } else if (typeof global.Capacitor !== 'undefined' && global.Capacitor) {
+                repClientClass = 'app';
+            } else if (global.electronAPI && global.electronAPI.activate &&
+                       typeof global.electronAPI.activate.showExpireAlert === 'function') {
+                repClientClass = 'desktop';
+            }
 
             // 调用心跳接口
             const response = await fetch('https://tcm-prescription-system.pages.dev/api/license/heartbeat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ code: licenseCode, machineId: machineId, rxCount: rxCount, rxMonth: rxMonth, productClass: 'offline', clientClass: repClientClass })
+                body: JSON.stringify(Object.assign(
+                    { code: licenseCode, machineId: machineId, rxCount: rxCount, rxMonth: rxMonth, productClass: 'offline' },
+                    repClientClass ? { clientClass: repClientClass } : {}
+                ))
             });
 
             if (!response.ok) {
