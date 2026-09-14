@@ -2445,10 +2445,13 @@
             } catch (e) { /* 计数获取失败不影响心跳 */ }
 
             // ★ 2026-09-14 端形态显式上报（服务端权威覆盖写 devices[].productClass/clientClass）：
-            //   离线端恒 offline；Capacitor=APP，electronAPI 激活桥=桌面（与
-            //   collectDeviceIdentity 同口径）——供后台在线统计 🖥️/📱 分桶显示。
+            //   离线端恒 offline；Capacitor=APP，桌面独有 activate.showExpireAlert 桥=桌面
+            //   （★ 判据铁律 KNOWLEDGE 2026-09-03：electronAPI.activate 在 APP 桥同样存在，
+            //     直接推 desktop 会把 APP 误标桌面；与 collectDeviceIdentity 同口径）——
+            //   供后台在线统计 🖥️/📱 分桶显示。
             const repClientClass = (typeof global.Capacitor !== 'undefined' && global.Capacitor) ? 'app'
-                : ((global.electronAPI && global.electronAPI.activate) ? 'desktop' : 'web');
+                : ((global.electronAPI && global.electronAPI.activate &&
+                    typeof global.electronAPI.activate.showExpireAlert === 'function') ? 'desktop' : 'web');
 
             // 调用心跳接口
             const response = await fetch('https://tcm-prescription-system.pages.dev/api/license/heartbeat', {
