@@ -12,8 +12,8 @@
     },
     {
       "name": "auth-core.js",
-      "sha256": "b4839a2cf9d98c925dccd7627e23686028e71b6564e3229f0369bf2236d584e9",
-      "size": 471937
+      "sha256": "8362e4f0fdaca9424f85f2e5c2be898a9e3c7f21c7b684fd24b6483702baf4dc",
+      "size": 471934
     },
     {
       "name": "permission.js",
@@ -37,8 +37,8 @@
     },
     {
       "name": "medicine-dict.js",
-      "sha256": "7361a949d5b4063990553ebff38c57a6ecffe9b5a6157ec41a880534591c6dd4",
-      "size": 5317
+      "sha256": "8427c75fc49726468c5f77c790b193da2a1caca5c23f989198a8a726a868ddf2",
+      "size": 5171
     },
     {
       "name": "symptom-dict.js",
@@ -47,8 +47,8 @@
     },
     {
       "name": "performance-utils.js",
-      "sha256": "6585d30794524c4517d28f1245442236caa89555aa7b7592a8863401726db7a7",
-      "size": 22868
+      "sha256": "c4f8143accb357bd642d80348a463a819bdbd3ce55b915d490074978586e0b21",
+      "size": 22327
     },
     {
       "name": "prescription-core.js",
@@ -66,6 +66,6 @@
       "size": 881727
     }
   ],
-  "signedAt": 1789354672937,
-  "signature": "PmP5Z1hr95LVTS69YX1ebrcIXQbr5R3+24qDf2rqi3F+SBneRhqE2d9f2V0/kqQsvB70RJXfU7FKDzNl+vCyCw=="
+  "signedAt": 1789354767997,
+  "signature": "A4Ilr/sCFWwwG3zPjpqBf5TZTctrtz9NY/XIRBrbwJwkoyueU6F7kaNv5AAt7wpI3b2w/HvCzvzoWmMSQsWpDw=="
 }

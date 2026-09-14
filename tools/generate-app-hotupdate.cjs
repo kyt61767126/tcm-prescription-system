@@ -137,17 +137,28 @@ function main() {
     }
 
     // ---- 1. 逐文件哈希（源：APK 打包源 assets/public）----
+    // ★ 行尾铁律：文本文件（.js/.html/.json）CRLF→LF 规范化后再哈希/写产物。
+    //   原因：git 入库时 CRLF 会被 eol 策略转 LF，线上部署的是 LF 字节——
+    //   若按磁盘 CRLF 算哈希，version.json 与线上内容指纹不一致 → 客户端
+    //   下载后逐文件 SHA256 校验必失败（fail-closed 拒收整包）。
+    //   规范化后：磁盘产物 == git 入库 == 线上部署 == version.json 四方一致。
+    const isText = (n) => /\.(js|html|json)$/i.test(n);
+    const normalizeLf = (buf) => /\r\n/.test(buf.toString('latin1'))
+        ? Buffer.from(buf.toString('utf8').replace(/\r\n/g, '\n'), 'utf8') : buf;
     const files = [];
+    const fileBufs = new Map();
     for (const name of FILES) {
         if (!SAFE_NAME_RE.test(name) || name.includes('..') || name.startsWith('/')) {
             fail('文件名不满足 Java 白名单: ' + name);
         }
         const fp = path.join(SRC_DIR, name);
         if (!fs.existsSync(fp)) fail('源文件缺失: ' + name + '（' + fp + '）');
-        const buf = fs.readFileSync(fp);
+        let buf = fs.readFileSync(fp);
+        if (isText(name)) buf = normalizeLf(buf);
         if (buf.length === 0 || buf.length > MAX_FILE_BYTES) {
             fail('文件大小越界（1B..20MB）: ' + name + ' = ' + buf.length);
         }
+        fileBufs.set(name, buf);
         files.push({ name: name, sha256: crypto.createHash('sha256').update(buf).digest('hex'), size: buf.length });
     }
     if (files.length === 0 || files.length > MAX_FILES) fail('文件数越界（1..' + MAX_FILES + '）: ' + files.length);
@@ -174,7 +185,7 @@ function main() {
     for (const name of FILES) {
         const dst = path.join(outDir, name);
         fs.mkdirSync(path.dirname(dst), { recursive: true });
-        fs.copyFileSync(path.join(SRC_DIR, name), dst);
+        fs.writeFileSync(dst, fileBufs.get(name));   // LF 规范化后字节（与哈希一致）
     }
 
     // ---- 5. version.json（manifest 与签名一体：客户端下载验签，热目录副本供启动复验）----
