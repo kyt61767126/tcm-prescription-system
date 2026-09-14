@@ -66,9 +66,11 @@
   Cache-Control: public, max-age=31536000, immutable
 
 # 其余 JS（/electron/ 目录副本、/hot-update/** 热包产物、admin 资源等）：304 校验兜底。
-#   热包路径必须保持 max-age=0 语义——热更新客户端靠同 URL 重新验证拉取，不能 immutable。
-/*.js
-  Cache-Control: public, max-age=0, must-revalidate
+#   ★ 2026-09-14 线上实测修正：CF Pages 对未命中规则的静态资源默认即
+#   Cache-Control: public, max-age=0, must-revalidate（version.json 实证），
+#   显式 /*.js 兜底会与上方精确 immutable 规则【拼接成双 Cache-Control 头】
+#   （max-age=0 压过 max-age=31536000 → immutable 失效），故删除该兜底行——
+#   默认行为即兜底，语义不变；热包路径的 max-age=0 语义由 CF Pages 默认值保证。
 
 # 第三方库（几乎不变，体积大）：保留长缓存
 /qrcode.min.js
