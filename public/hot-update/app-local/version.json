@@ -1,14 +1,14 @@
 {
   "format": 1,
   "channel": "app-local",
-  "hotVersion": "2026.09.14-7",
+  "hotVersion": "2026.09.15-8",
   "minAppCode": 291,
   "appVersion": "1.0.0",
   "files": [
     {
       "name": "index.html",
-      "sha256": "97aff5c9e7419e3b0194a49c62b35359d5de255da1179a547f9fc65f14a8b6fb",
-      "size": 586081
+      "sha256": "5dee044a1065e3e97e41c0f9af78c222c32b611bdc37e40e54b05494a4a0cd00",
+      "size": 586418
     },
     {
       "name": "auth-core.js",
@@ -32,8 +32,8 @@
     },
     {
       "name": "print-utils.js",
-      "sha256": "8bdf9c894863e88bbd780f4d037260b0c9c2ee474b350e1901569c1a883fef52",
-      "size": 8036
+      "sha256": "c3e147b38a9c678a2b5ec6f115d05c9c70afe1be976c5686cd7dea9e086b8168",
+      "size": 8191
     },
     {
       "name": "medicine-dict.js",
@@ -66,6 +66,6 @@
       "size": 881727
     }
   ],
-  "signedAt": 1789395678896,
-  "signature": "Jw7WKtr2aSasx3ZTGz4WUdh4tqzUU0eGzhJUDPQXH9Mbw2U9Wd1DYII+tykloprF4RQUAHHve66cJLM1I8wDBQ=="
+  "signedAt": 1789425520774,
+  "signature": "N19tJQfaM19hpVL39lYntV9xjOJBW6C1DriDyoVXJuDxI4EhDeU+rdiOr5Mgpxh34NcHhuDiJdKFqYQ5HUSwAw=="
 }
