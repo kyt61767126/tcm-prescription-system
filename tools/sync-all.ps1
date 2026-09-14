@@ -77,7 +77,10 @@ $PrintUtilsCloudTargets = @(
     'public',
     'public/electron',
     'app_project/db-yunduan/cloud_desktop',
-    'app_project/db-yunduan/cloud_desktop/electron'
+    'app_project/db-yunduan/cloud_desktop/electron',
+    # ★ 2026-09-15 补缺口：云APP assets 此前漏在清单外（伪权威源漂移，旧版
+    #   min-height:100vh 一直滞留），与 UI logic 组对齐纳入
+    'app_project/db-yunduan/cloud_app/app/src/main/assets/public'
 )
 
 # Group 1c: print-utils-offline.js (full product title) -> 2 offline dirs
