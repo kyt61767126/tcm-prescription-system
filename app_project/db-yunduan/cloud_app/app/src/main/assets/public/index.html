@@ -3131,8 +3131,12 @@ let currentUser = null;
                     alert('登录账号不能使用中文，请使用英文或拼音！\n示例：zhaoyisheng 或 doctor3');
                     return;
                 }
-                // 参考云端APP：医师姓名必须为中文（至少2个汉字）
-                if (!/^[\u4e00-\u9fa5]{2,}$/.test(newName)) {
+                // ★ 医师姓名中文校验只约束"本次修改"：未改动（存量历史值如"激活1"）不阻塞
+                //   用户名/密码等其它字段保存；一旦修改，新值必须中文（至少2个汉字）
+                //   2026-09-14 修复：管理员只想改用户名（如 jlh→jihuo）却被存量
+                //   不合规医师姓名（含数字等）拦死——编辑≠新增，存量值不追溯
+                const origUser = getUsers().find(u => u.username === originalUsername);
+                if (newName !== (origUser && origUser.name) && !/^[\u4e00-\u9fa5]{2,}$/.test(newName)) {
                     alert('医师姓名必须为中文（至少2个汉字），请输入医师真实姓名');
                     return;
                 }
