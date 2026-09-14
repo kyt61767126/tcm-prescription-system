@@ -86,6 +86,8 @@ public class MainActivity extends BridgeActivity {
     private static final String UPDATE_MANIFEST_URL = "https://tcm-prescription-system.pages.dev/hash-manifest.json";
     private static final String UPDATE_DOWNLOAD_URL = "https://tcm-prescription-system.pages.dev/download?card=card-local";
     private boolean apkUpdateCheckStarted = false;
+    // ★ 2026-09-14 Phase 2a 静默热更新：防重入标记（一次生命周期只跑一轮检查）
+    private boolean hotUpdateCheckStarted = false;
     // ★ 2026-09-09 更新下载提速：检查更新时从 manifest 解析 APK 直链（/downloads/惠康中医-本地.apk），
     //   横幅「立即下载」直接跳直链触发系统下载器，跳过官网 download.html（242KB+JS+多JSON请求）
     //   整页加载——用户反馈"点更新跳官网比 exe 更新慢很多、卡顿"的根因即在此。
@@ -400,7 +402,22 @@ public class MainActivity extends BridgeActivity {
     private void loadLocalAssetWithRetry() {
         WebView webView = this.getBridge().getWebView();
         if (webView != null) {
-            webView.loadUrl(LOCAL_ASSET_URL);
+            // ★ 2026-09-14 Phase 2a 静默热更新入口：resolveEntry 复验（Ed25519 manifest
+            //   验签 + 全量文件哈希）通过 → 加载热目录 index.html（新版下次启动自动
+            //   生效）；任何失败 → 函数内部已隔离坏热目录，此处回退 assets 打包版
+            //   （APK 内打包资源永久兜底，setAllowFileAccess(true) 已覆盖 file:// 加载）
+            String url = LOCAL_ASSET_URL;
+            try {
+                File hotDir = new File(getFilesDir(), "hot-update");
+                String hotEntry = HotUpdateManager.resolveEntry(hotDir);
+                if (hotEntry != null) {
+                    url = "file://" + hotEntry;
+                    Log.i(TAG, "[hot-update] 加载热更新版入口: " + url);
+                }
+            } catch (Throwable t) {
+                Log.w(TAG, "[hot-update] 入口解析异常，回退 assets 打包版: " + t.getMessage());
+            }
+            webView.loadUrl(url);
             return;
         }
         if (webViewReadyRetries < MAX_WEBVIEW_READY_RETRIES) {
@@ -725,6 +742,68 @@ public class MainActivity extends BridgeActivity {
             apkUpdateCheckStarted = true;
             startApkUpdateCheck(webView);
         }
+
+        // ★ 2026-09-14 Phase 2a：静默热更新检查（与整包 APK 检查并行；后台增量
+        //   下载 + 原子 swap，新版就绪后下次启动自动生效，仅淡绿横幅轻提示）
+        if (!hotUpdateCheckStarted) {
+            hotUpdateCheckStarted = true;
+            startHotUpdateCheck(webView);
+        }
+    }
+
+    /**
+     * ★ 2026-09-14 Phase 2a 静默热更新检查（Ed25519 验签三道门禁，详见
+     *   HotUpdateManager 类头）：登录页稳定后后台拉 version.json → 验签 → 增量
+     *   下载 → 原子 swap 到 filesDir/hot-update/current（下次启动 loadLocalAssetWithRetry
+     *   生效）。全程静默 best-effort：无网/超时/验签失败一律跳过，绝不影响离线使用。
+     */
+    private void startHotUpdateCheck(final WebView webView) {
+        try {
+            int localAppCode = 0;
+            try {
+                android.content.pm.PackageInfo pi = getPackageManager().getPackageInfo(getPackageName(), 0);
+                localAppCode = android.os.Build.VERSION.SDK_INT >= 28
+                        ? (int) pi.getLongVersionCode() : pi.versionCode;
+            } catch (Exception ignored) {}
+            HotUpdateManager.setLogger(new HotUpdateManager.Logger() {
+                @Override public void log(String msg) { Log.i(TAG, msg); }
+                @Override public void warn(String msg) { Log.w(TAG, msg); }
+            });
+            HotUpdateManager hotManager = new HotUpdateManager(
+                    getFilesDir(), HotUpdateManager.HOT_UPDATE_BASE_URL, localAppCode);
+            hotManager.checkUpdateAsync(new HotUpdateManager.OnResult() {
+                @Override public void onApplied(String hotVersion) {
+                    mainHandler.post(() -> injectHotUpdateToast(webView, hotVersion));
+                }
+                @Override public void onNeedApk() {
+                    // minAppCode 门禁命中：热包要求更高 APK，转整包更新通道（黄色横幅
+                    // 由 startApkUpdateCheck 独立负责，此处仅记日志不重复打扰）
+                    Log.i(TAG, "[hot-update] 热包要求更高 APK versionCode，走整包更新通道");
+                }
+            });
+        } catch (Throwable t) {
+            Log.w(TAG, "[hot-update] 检查启动失败（不影响主流程）: " + t.getMessage());
+        }
+    }
+
+    /**
+     * 热更新就绪轻提示（登录页顶部淡绿横幅，6s 自动消失；与桌面端 update-manager
+     * showHotUpdateToast 同款，绝不打断任何操作）
+     */
+    private void injectHotUpdateToast(final WebView webView, String hotVersion) {
+        if (webView == null) return;
+        try {
+            final String ver = hotVersion.replaceAll("[^0-9A-Za-z.\\-]", "");
+            String code = "(function(){try{" +
+                "if(!document.body)return;" +
+                "var t=document.createElement('div');" +
+                "t.style.cssText='position:fixed;top:0;left:0;right:0;z-index:99998;padding:6px;background:#e8f5e9;border-bottom:1px solid #a5d6a7;color:#2e7d32;text-align:center;font-size:12px;font-family:sans-serif;';" +
+                "t.textContent='\\u2705 \\u65B0\\u7248 " + ver + " \\u5DF2\\u5C31\\u7EEA\\uFF0C\\u91CD\\u542F\\u540E\\u81EA\\u52A8\\u751F\\u6548';" +
+                "document.body.appendChild(t);" +
+                "setTimeout(function(){t.remove();},6000);" +
+                "}catch(e){}})();";
+            webView.evaluateJavascript(code, null);
+        } catch (Throwable ignored) {}
     }
 
     /**

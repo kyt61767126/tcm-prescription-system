@@ -1,0 +1,45 @@
+{
+  "_comment": "HotUpdateManagerTest fixture：真实 Ed25519 签名（Node 签发）。生成工具 tools/gen-hotupdate-test-fixture.cjs，密钥轮换后须重跑。",
+  "manifest": {
+    "format": 1,
+    "channel": "app-local",
+    "hotVersion": "2026.09.14-1",
+    "minAppCode": 287,
+    "appVersion": "1.0.0",
+    "files": [
+      {
+        "name": "index.html",
+        "sha256": "78fc3c7aac65baca660e53610d8250b8e60d28ca8f9937080039cc13577c9c21",
+        "size": 98
+      },
+      {
+        "name": "prescription-core.js",
+        "sha256": "f7fe238ce236e7d6e7864dd5f2b06823adfa9a6da222b13fedc6af8e000ca212",
+        "size": 28
+      },
+      {
+        "name": "medicine-dict.js",
+        "sha256": "6f7e3c971053edac5d5fe7d9dc6c6168f162205eb07e6839000ae1a244ccf39c",
+        "size": 19
+      },
+      {
+        "name": "vendor/xlsx.full.min.js",
+        "sha256": "6519ba76a3ee5414cb20000a48322866e73a2bc2de53201e7a089381dcf50155",
+        "size": 27
+      }
+    ],
+    "signedAt": 1730000000000,
+    "signature": "OraifqVRQ0Vb1jKXC/J1DYYJGUPI7LzzEmB6x95qZT3ss7aw5ROYFWdHl1ES8oRYj26zUS1pLTuBABHhf4dODQ=="
+  },
+  "fileContents": {
+    "index.html": "<!DOCTYPE html><html><head><title>hot-fixture</title></head><body>hot-update-fixture</body></html>",
+    "prescription-core.js": "// fixture business code v1\n",
+    "medicine-dict.js": "// fixture dict v1\n",
+    "vendor/xlsx.full.min.js": "// fixture vendored lib v1\n"
+  },
+  "ed25519Vector": {
+    "publicKeyHex": "22c2cdffeeeb8831c6423f0600905e53d92e4865e054489462abd396b6cfdabc",
+    "message": "",
+    "signatureBase64": "6KmcMOkS8Jtd1XpgGKB5nP/6sCoxjRgPA7sCv/tZuBV/FfKHV+X8ZyQDByQQqfHZrID+MEdZmAtNyTF4LurXDw=="
+  }
+}
