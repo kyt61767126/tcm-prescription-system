@@ -1,0 +1,80 @@
+{
+  "format": 1,
+  "channel": "local",
+  "hotVersion": "2026.09.14-1",
+  "appVersion": "1.0.245",
+  "files": [
+    {
+      "name": "index.html",
+      "sha256": "def8a6855abf0855b3dfc1a3107d32491dc3b81698e158592be1ec3c883e177e",
+      "size": 573564
+    },
+    {
+      "name": "auth-core.js",
+      "sha256": "b4839a2cf9d98c925dccd7627e23686028e71b6564e3229f0369bf2236d584e9",
+      "size": 471937
+    },
+    {
+      "name": "permission.js",
+      "sha256": "73e266ee83068a19482993c723d9e731ff699af341cc72f7190a61fd9aeb0c20",
+      "size": 16661
+    },
+    {
+      "name": "normalize-config.js",
+      "sha256": "af0243d4915b727b0d66553607a115ed4a522b7c14418590209320521bc99253",
+      "size": 5815
+    },
+    {
+      "name": "debug-logger.js",
+      "sha256": "763cebe6ae6f44b19595da12b6859362bc0b957cca7a9a0f0f5ea0f156b9f4f7",
+      "size": 8807
+    },
+    {
+      "name": "print-utils.js",
+      "sha256": "1d70677b83fc14de2b9edbbbcb53b6b7e1a7cef0b8a28db5d3b5486d48fa9628",
+      "size": 13029
+    },
+    {
+      "name": "medicine-dict.js",
+      "sha256": "6000894b3ab76bba01566fc5e3c5ff8490438f6b9db4f7da00862ade54192c06",
+      "size": 9035
+    },
+    {
+      "name": "symptom-dict.js",
+      "sha256": "9e07465bbf1bdcd23d536a6bab10bfd22d9e2ec42471734a136be137b5043236",
+      "size": 73130
+    },
+    {
+      "name": "performance-utils.js",
+      "sha256": "242bd17e730ae63a9f0107ce033d57192168d2fcea90d9c06922ee4a2afd9959",
+      "size": 17635
+    },
+    {
+      "name": "prescription-core.js",
+      "sha256": "c5b8b83dc469b54254b9d348cece73e6960017a7907ae37b42fb3e14438a449b",
+      "size": 10421
+    },
+    {
+      "name": "stock-core.js",
+      "sha256": "16feb778fa953f11f4043410ee9925ec997efea6f0169a2e649f379d4d5b72ef",
+      "size": 70209
+    },
+    {
+      "name": "security-guard.js",
+      "sha256": "0ebf96358654598254ba83bc6cf43b1e294c1ae28e809db10fc4622c8dbd2c76",
+      "size": 11808
+    },
+    {
+      "name": "electron/video-recorder.js",
+      "sha256": "d7f8ff7fa7d6a735e3d7e027f335140b8f9426d8aa0a4985fc20a45cceaa88df",
+      "size": 57631
+    },
+    {
+      "name": "vendor/xlsx.full.min.js",
+      "sha256": "c9506197caf809a075b6dee1da0d36fb19da7158ffe8a88e7b0c96c5d8623c99",
+      "size": 881727
+    }
+  ],
+  "signedAt": 1789350536572,
+  "signature": "K+MHkuGel6nzz5N64M0y1mELBIVlu7enKVKKaxT8FtZSB97fuqJ2akPD6z5GI5n0TOgsV2UHrhcPC+2XFUXnAw=="
+}

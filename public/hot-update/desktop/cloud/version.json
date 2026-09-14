@@ -1,0 +1,85 @@
+{
+  "format": 1,
+  "channel": "cloud",
+  "hotVersion": "2026.09.14-1",
+  "appVersion": "1.2.247",
+  "files": [
+    {
+      "name": "index.html",
+      "sha256": "f5d2ac9c197064ea27973ef62378131d803ca69484d8515216b4ddc966e62b72",
+      "size": 652545
+    },
+    {
+      "name": "auth-core.js",
+      "sha256": "30c6bdea30d64e7346f31b2ce94f0fe429dddbac306f2ab576efe575e9c40905",
+      "size": 324808
+    },
+    {
+      "name": "permission.js",
+      "sha256": "cb2b05837495ff0935ed784e8330019707ff75eb152c0cfc194ceec0d5a545f0",
+      "size": 27290
+    },
+    {
+      "name": "normalize-config.js",
+      "sha256": "af0243d4915b727b0d66553607a115ed4a522b7c14418590209320521bc99253",
+      "size": 5815
+    },
+    {
+      "name": "debug-logger.js",
+      "sha256": "05a2fb2f2417cfcecf3ed3c945d301b1b509bba516b8f6f671b98fec9880415b",
+      "size": 5230
+    },
+    {
+      "name": "print-utils.js",
+      "sha256": "c1f488f7b1c5703a04d07abfd5060a0c1cb11adcb08fc011d57e8b683cfef70c",
+      "size": 8096
+    },
+    {
+      "name": "medicine-dict.js",
+      "sha256": "7361a949d5b4063990553ebff38c57a6ecffe9b5a6157ec41a880534591c6dd4",
+      "size": 5317
+    },
+    {
+      "name": "symptom-dict.js",
+      "sha256": "9e07465bbf1bdcd23d536a6bab10bfd22d9e2ec42471734a136be137b5043236",
+      "size": 73130
+    },
+    {
+      "name": "cloud-api.js",
+      "sha256": "5d4d2ba18aca43efd3167140210d2bc0a23b0c92f7cdb2f64316231203b5cb77",
+      "size": 5781
+    },
+    {
+      "name": "performance-utils.js",
+      "sha256": "6585d30794524c4517d28f1245442236caa89555aa7b7592a8863401726db7a7",
+      "size": 22868
+    },
+    {
+      "name": "prescription-core.js",
+      "sha256": "a5f1b432ab8d8357ec1f03b9e9fb51b7290cc09bdc121828296cd730155f2763",
+      "size": 9719
+    },
+    {
+      "name": "stock-core.js",
+      "sha256": "16feb778fa953f11f4043410ee9925ec997efea6f0169a2e649f379d4d5b72ef",
+      "size": 70209
+    },
+    {
+      "name": "security-guard.js",
+      "sha256": "907c07f393c0ed4a2e2541d4c8a7cd9a4e87bf4688707db1bb83f64ffdbe3a3d",
+      "size": 15072
+    },
+    {
+      "name": "electron/video-recorder.js",
+      "sha256": "1eb77b2fda11223c5643ae6456e537586ae9dff16a56c183f57307889c119fa3",
+      "size": 58380
+    },
+    {
+      "name": "xlsx.full.min.js",
+      "sha256": "06b0589566e576e48d0da0c357c804bef26fd09f7e7e8e9fee3ee2d582a51b48",
+      "size": 881749
+    }
+  ],
+  "signedAt": 1789350536441,
+  "signature": "ZX/j+NzktRcQYjCYCqoIvYlWc2TQnBLt/ZCbe2SP6EfuJUwqEvXHpoxrpxodvTVRzzrRvcQfZTmxbDojmO3EDA=="
+}

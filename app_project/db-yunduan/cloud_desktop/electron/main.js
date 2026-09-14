@@ -441,7 +441,9 @@ const UPDATE_CHECK_URL = 'https://tcm-prescription-system.pages.dev/updates/clou
 const UPDATE_DOWNLOAD_URL = 'https://tcm-prescription-system.pages.dev/download?card=card-cloud-desktop';
 const updateManager = require('./update-manager.cjs').createDesktopUpdateManager({
     checkUrl: UPDATE_CHECK_URL,
-    downloadPageUrl: UPDATE_DOWNLOAD_URL
+    downloadPageUrl: UPDATE_DOWNLOAD_URL,
+    // ★ 2026-09-14 静默热更新（Ed25519 验签三道门禁，详见 shared/hot-update-core.cjs）
+    hotUpdateUrl: 'https://tcm-prescription-system.pages.dev/hot-update/desktop/cloud'
 });
 
 // ★ 2026-09-13 B2-2 窗口域收口：createMainWindow/createLoginWindow/focusWindow 等 6 函数

@@ -136,6 +136,17 @@ const GROUPS = [
         ]
     },
     {
+        // ★ 2026-09-14 静默热更新核心（与 update-manager 同组同位分发）：
+        //   纯逻辑模块（零 Electron 依赖），Ed25519 验签三道门禁 + 原子 swap +
+        //   失败自动回退 asar。update-manager.cjs 相对 require 依赖同目录布局。
+        //   sync-all Group 12 分发，本组 2 副本硬哈希门。
+        authority: 'shared/hot-update-core.cjs',
+        copies: [
+            'app_project/db-yunduan/cloud_desktop/electron/hot-update-core.cjs',
+            'app_project/db-offline/desktop/electron/hot-update-core.cjs'
+        ]
+    },
+    {
         // ★ 2026-09-13 B2-1 桌面文件域收口（与 update-manager 同位同构）：
         //   媒体/备份/用户数据 40 项函数/IPC 从双 main.js 等体抽出，
         //   sync-all Group 14 分发，本组 2 副本硬哈希门。

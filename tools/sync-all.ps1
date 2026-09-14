@@ -185,11 +185,14 @@ $PeGuardTargets = @(
     'app_project/db-offline/desktop/electron'
 )
 
-# Group 12: update-manager.cjs (★ 2026-09-13 P0-1 桌面更新器架构收口) -> 2 个 electron 目录
+# Group 12: update-manager.cjs + hot-update-core.cjs (★ 2026-09-13 P0-1 桌面更新器架构收口；
+#   ★ 2026-09-14 新增 hot-update-core.cjs 静默热更新纯逻辑模块，update-manager.cjs 组装)
 # 历史：云桌面/离线桌面 main.js 各内嵌 ~200 行同构更新器（仅渠道 URL 不同），
 #   靠人肉双改，09-12 /api/dl 代理修复被迫改两处。现抽为唯一权威源。
 # 配套：main.js 里 require('./update-manager.cjs')，渠道差异（updates/<cloud|local>/
-#   latest.json + 下载页 card 锚点）由 main.js 工厂入参注入，模块本体零差异。
+#   latest.json + 下载页 card 锚点 + hot-update/desktop/<cloud|local>）由 main.js 工厂
+#   入参注入，模块本体零差异。hot-update-core.cjs 与 update-manager.cjs 同组同位分发
+#   （update-manager 内相对 require('./hot-update-core.cjs') 依赖同目录布局）。
 $UpdateManagerTargets = @(
     'app_project/db-yunduan/cloud_desktop/electron',
     'app_project/db-offline/desktop/electron'
@@ -408,8 +411,8 @@ if ($VerifyOnly) { $syncHtmlArgs += '-VerifyOnly' }
 if ($LASTEXITCODE -ne 0) { $allInSync = $false }
 Write-Host ""
 
-# Group 12: update-manager.cjs -> 2 electron dirs (★ 2026-09-13 P0-1)
-$result = Sync-Group -GroupName 'update-manager.cjs -> 2 electron dirs' -Files @('update-manager.cjs') -Targets $UpdateManagerTargets -VerifyOnly $VerifyOnly
+# Group 12: update-manager.cjs + hot-update-core.cjs -> 2 electron dirs (★ 2026-09-13 P0-1 + 2026-09-14 热更新)
+$result = Sync-Group -GroupName 'update-manager.cjs + hot-update-core.cjs -> 2 electron dirs' -Files @('update-manager.cjs', 'hot-update-core.cjs') -Targets $UpdateManagerTargets -VerifyOnly $VerifyOnly
 if (-not $result) { $allInSync = $false }
 Write-Host ""
 

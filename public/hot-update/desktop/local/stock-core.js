@@ -1,0 +1,1248 @@
+// ============================================================================
+//  stock-core.js —— 药品库存管理核心（P1 闭环 + P2 出入库流水 · 2026-09-11）
+//
+//  架构（对齐 auth-core 自安装钩子模式，index.html 仅 4 处一行式锚点编辑）：
+//    ① 保存处方自动扣库存：包装 savePrescriptionToDB（唯一落库收口点）
+//       扣减公式 = 每味药用量(dosage) × 剂数(doseCount)，单位同药品单位（g）
+//    ② 同日覆盖/修改历史处方：差值冲正——处方记录携带 __stockApplied 幂等标记
+//       （{v,at,items:{药名:已扣量}}），重存时只扣增量/退回减量，回收站恢复
+//       天然 no-op（标记随记录同步），彻底删除时冲回（有标记才冲，防幻影退回）
+//    ③ 库存预警：药品 m.stockThreshold（0=不预警），低于阈值红字 + 药品管理
+//       tab 红点；拾药下拉显示 [库存:N]（灰=充足 红=不足本次所需）；
+//       「🔔 预警设置」弹窗集中批量设阈值（2026-09-12：统一阈值/仅未设置项/
+//       一键清空/搜索过滤/行内实时状态，替代逐药编辑弹窗的旧入口）
+//    ④ 出入库流水：入库登记 / 处方消耗 / 处方调整 / 删除冲回 / 盘点调整
+//       （药品编辑弹窗改库存数自动记"盘点调整"），localStorage 上限 3000 条
+//    ⑤ 开关：基础设置注入「启用库存管理」复选框，默认关闭——老用户升级后
+//       行为零变化；未启用时全部钩子 no-op、全部 UI 注入隐藏
+//    ⑥ 流水导出 Excel（复用页面 XLSX 库，未就绪自动降级 CSV）；批量入库导入
+//       （CSV/Excel 每行 药名,数量,备注，药名须与药品库一致，无此药跳过汇总）；
+//       入库模板下载（预填全部药名+数量列留空，留空行导入时自动跳过）
+//
+//  数据落点（与药品库同域，均为本机存储，无服务端改动）：
+//    开关   local_stockMgmtEnabled ('true'/'false')
+//    阈值   medicines[].stockThreshold（随药品库 JSON 持久化）
+//    流水   stock_ledger_v1（数组，新条目在前，cap 3000）
+//    标记   处方记录.__stockApplied（随处方 IndexedDB/云端同步）
+//
+//  跨端一致性：本文件为权威源（shared/），由 sync-all.ps1 分发；
+//    index.html 端的 4 处锚点编辑各端字节一致（html-sync-check / 人工核对）。
+//
+//  药品数组跨作用域访问：medicines 是各端 inline script 的顶层 let（非
+//    window 属性），本模块通过 Function 构造器（全局作用域）拿到活数组
+//    直接改库存并镜像写 localStorage，UI 数组、medicineMap、持久层三者
+//    始终同源一致。
+// ============================================================================
+(function (global) {
+    'use strict';
+
+    var ENABLE_KEY = 'local_stockMgmtEnabled';
+    var LEDGER_KEY = 'stock_ledger_v1';
+    var LEDGER_CAP = 3000;
+
+    // ------------------------------------------------------------------
+    //  基础工具
+    // ------------------------------------------------------------------
+    function esc(s) {
+        return String(s === undefined || s === null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+    function round2(n) { return Math.round(n * 100) / 100; }
+    function isEnabled() { try { return localStorage.getItem(ENABLE_KEY) === 'true'; } catch (e) { return false; } }
+    function setEnabled(v) {
+        try { localStorage.setItem(ENABLE_KEY, v ? 'true' : 'false'); } catch (e) {}
+        try { syncMedicineModalUI(); } catch (e0) {} // 开关任何路径变更，药品管理 UI 即时联动（2026-09-12 C期补：StockCore.setEnabled 直调也隐藏分组入口）
+    }
+    function toast(msg) {
+        try { if (typeof global.showToast === 'function') { global.showToast(msg); return; } } catch (e) {}
+        try { console.log('[StockCore] ' + msg); } catch (e) {}
+    }
+    function operator() {
+        try { return (global.currentUser && (global.currentUser.name || global.currentUser.username)) || 'unknown'; } catch (e) { return 'unknown'; }
+    }
+    // 活数组（与 UI 同源）：medicines 是各端 inline script 顶层 let（全局词法绑定），
+    // 所有经典 script 共享同一全局词法环境，直接按标识符即可跨脚本读取；
+    // 禁用 new Function/eval 取值——云端网页 CSP 拦 unsafe-eval 会静默失败（实测踩坑）
+    function getMedArrayLive() {
+        try {
+            return (typeof medicines !== 'undefined' && Array.isArray(medicines)) ? medicines : null;
+        } catch (e) { return null; } // TDZ（先于 inline script 初始化调用）：降级 localStorage
+    }
+    // 药品列表（只读用途）：优先活数组，降级 localStorage 解析副本
+    function getMedList() {
+        var live = getMedArrayLive();
+        if (live) return live;
+        try {
+            var arr = JSON.parse(localStorage.getItem('local_medicines') || '[]');
+            return Array.isArray(arr) ? arr : [];
+        } catch (e) { return []; }
+    }
+    // 活引用（UI 同步用）：优先走各端全局 getMedicineByName（medicineMap 活引用）
+    function getMedLive(name) {
+        try { if (typeof global.getMedicineByName === 'function') return global.getMedicineByName(name) || null; } catch (e) {}
+        return null;
+    }
+    function getThreshold(m) { return (m && parseFloat(m.stockThreshold) > 0) ? parseFloat(m.stockThreshold) : 0; }
+    function isLowStock(m) {
+        if (!m) return false;
+        var t = getThreshold(m);
+        if (t <= 0) return false;
+        return (parseFloat(m.stock) || 0) <= t;
+    }
+    function lowStockList() {
+        return getMedList().filter(isLowStock);
+    }
+
+    // ------------------------------------------------------------------
+    //  持久化：活数组优先改（UI 数组即药品库真身），localStorage 同步镜像，
+    //  electron 端再经 saveMedicinesToDisk 落用户数据盘
+    // ------------------------------------------------------------------
+    function persistList(list) {
+        try { localStorage.setItem('local_medicines', JSON.stringify(list)); } catch (e) { console.warn('[StockCore] 药品库镜像写入失败:', e); }
+        try { if (typeof global.saveMedicinesToDisk === 'function') global.saveMedicinesToDisk(); } catch (e) {}
+    }
+    // 对某药品库存加 delta（可负），返回新结存（null=未找到药品）
+    function applyStockDelta(name, delta) {
+        var arr = getMedArrayLive();
+        if (arr) {
+            for (var i = 0; i < arr.length; i++) {
+                if (arr[i] && arr[i].name === name) {
+                    arr[i].stock = round2((parseFloat(arr[i].stock) || 0) + delta);
+                    persistList(arr);
+                    return arr[i].stock;
+                }
+            }
+            return null; // 活数组中无此药（已删/改名）：不再降级，防双源不一致
+        }
+        var list = getMedList();
+        for (var j = 0; j < list.length; j++) {
+            if (list[j] && list[j].name === name) {
+                list[j].stock = round2((parseFloat(list[j].stock) || 0) + delta);
+                persistList(list);
+                return list[j].stock;
+            }
+        }
+        return null;
+    }
+
+    // ------------------------------------------------------------------
+    //  流水账
+    // ------------------------------------------------------------------
+    var TYPE_LABEL = { 'in': '入库', 'rx': '处方消耗', 'rx-adj': '处方调整', 'rx-revert': '删除冲回', 'adj': '盘点调整', 'init': '导入建账' };
+    function getLedger() {
+        try {
+            var arr = JSON.parse(localStorage.getItem(LEDGER_KEY) || '[]');
+            return Array.isArray(arr) ? arr : [];
+        } catch (e) { return []; }
+    }
+    function saveLedger(arr) {
+        try {
+            if (!Array.isArray(arr)) return;
+            if (arr.length > LEDGER_CAP) arr = arr.slice(0, LEDGER_CAP);
+            localStorage.setItem(LEDGER_KEY, JSON.stringify(arr));
+        } catch (e) { console.warn('[StockCore] 流水落盘失败:', e); }
+    }
+    function pushEntry(e) {
+        var arr = getLedger();
+        arr.unshift(e);
+        saveLedger(arr);
+    }
+    function makeEntry(name, type, qty, stock, note) {
+        return {
+            t: new Date().toISOString(),
+            name: name,
+            type: type,
+            qty: round2(qty),
+            stock: (stock === null || stock === undefined) ? null : round2(stock),
+            op: operator(),
+            note: note || ''
+        };
+    }
+
+    // ------------------------------------------------------------------
+    //  ① 处方扣减引擎（差值冲正 + 幂等标记）
+    // ------------------------------------------------------------------
+    // 纯计算：不产生副作用。返回 {hasChanges, deltas:[{name,delta}], marker}
+    function planDeduction(record) {
+        var items = (record && Array.isArray(record.items)) ? record.items : [];
+        var dose = parseInt(record && record.doseCount, 10) || 0;
+        var need = {};
+        for (var i = 0; i < items.length; i++) {
+            var it = items[i];
+            if (!it || !it.name) continue;
+            var q = (parseFloat(it.dosage) || 0) * dose;
+            if (Math.abs(q) < 0.01) continue;
+            need[it.name] = round2((need[it.name] || 0) + q);
+        }
+        var prev = {};
+        try {
+            if (record && record.__stockApplied && record.__stockApplied.items &&
+                typeof record.__stockApplied.items === 'object') {
+                prev = record.__stockApplied.items;
+            }
+        } catch (e) {}
+        var deltas = [];
+        var name;
+        for (name in need) {
+            if (!need.hasOwnProperty(name)) continue;
+            var d = round2(need[name] - (parseFloat(prev[name]) || 0));
+            if (Math.abs(d) >= 0.01) deltas.push({ name: name, delta: d });
+        }
+        for (name in prev) { // 处方中已删除的药味：全额退回
+            if (!prev.hasOwnProperty(name)) continue;
+            if (!(name in need)) {
+                var d2 = -round2(parseFloat(prev[name]) || 0);
+                if (Math.abs(d2) >= 0.01) deltas.push({ name: name, delta: d2 });
+            }
+        }
+        return {
+            hasChanges: deltas.length > 0,
+            deltas: deltas,
+            marker: { v: 1, at: new Date().toISOString(), items: need }
+        };
+    }
+    // 应用扣减计划：改库存 + 记流水，返回预警清单 [{name, stock, threshold}]
+    function commitDeduction(plan, rxNo, isFirstApply) {
+        var warns = [];
+        if (!plan || !plan.hasChanges) return warns;
+        for (var i = 0; i < plan.deltas.length; i++) {
+            var d = plan.deltas[i];
+            var next = applyStockDelta(d.name, -d.delta);
+            if (next === null) continue; // 药品库无此药（已删/改名）：跳过
+            pushEntry(makeEntry(d.name, isFirstApply ? 'rx' : 'rx-adj', d.delta, next, rxNo ? '处方 ' + rxNo : ''));
+            var live = getMedLive(d.name) || getMedList().filter(function (m) { return m.name === d.name; })[0];
+            if (live && isLowStock(live)) warns.push({ name: d.name, stock: live.stock, threshold: getThreshold(live) });
+            else if (live && (parseFloat(live.stock) || 0) < 0) warns.push({ name: d.name, stock: live.stock, threshold: 0 });
+        }
+        refreshUI();
+        return warns;
+    }
+    // 彻底删除冲回：有 __stockApplied 标记才冲（防幻影退回）
+    function revertRecord(record) {
+        var applied = null;
+        try { applied = record && record.__stockApplied && record.__stockApplied.items; } catch (e) {}
+        if (!applied) return 0;
+        var n = 0;
+        var rxNo = (record && (record.prescriptionNo || record.outpatientNo)) || '';
+        for (var name in applied) {
+            if (!applied.hasOwnProperty(name)) continue;
+            var qty = parseFloat(applied[name]) || 0;
+            if (Math.abs(qty) < 0.01) continue;
+            var next = applyStockDelta(name, qty);
+            if (next === null) continue;
+            pushEntry(makeEntry(name, 'rx-revert', qty, next, rxNo ? '处方 ' + rxNo + ' 删除冲回' : '删除冲回'));
+            n++;
+        }
+        if (n > 0) refreshUI();
+        return n;
+    }
+    function notifyLowStock(warns) {
+        if (!warns || !warns.length) return;
+        var parts = warns.slice(0, 3).map(function (w) {
+            return w.name + '(结存' + w.stock + (w.threshold > 0 ? '/阈值' + w.threshold : '') + ')';
+        });
+        toast('⚠ 库存预警：' + parts.join('、') + (warns.length > 3 ? ' 等' + warns.length + ' 项' : ''));
+    }
+
+    // ------------------------------------------------------------------
+    //  ② 入库 / 盘点
+    // ------------------------------------------------------------------
+    function stockIn(name, qty, note) {
+        qty = parseFloat(qty) || 0;
+        if (!name || Math.abs(qty) < 0.01) return false;
+        var next = applyStockDelta(name, qty);
+        if (next === null) return false;
+        pushEntry(makeEntry(name, 'in', qty, next, note || ''));
+        refreshUI();
+        return true;
+    }
+    function recordManualAdjust(name, oldStock, newStock, note) {
+        var diff = round2((parseFloat(newStock) || 0) - (parseFloat(oldStock) || 0));
+        if (Math.abs(diff) < 0.01) return false;
+        pushEntry(makeEntry(name, 'adj', diff, parseFloat(newStock) || 0, note || ''));
+        return true;
+    }
+
+    // ------------------------------------------------------------------
+    //  ③ UI 渲染辅助（供 index.html 锚点模板调用）
+    // ------------------------------------------------------------------
+    function stockText(m) {
+        var s = (m && m.stock !== undefined && m.stock !== null) ? m.stock : 0;
+        if (!isEnabled()) return String(s);
+        var low = isLowStock(m);
+        var neg = (parseFloat(s) || 0) < 0;
+        if (low || neg) {
+            var t = '<span style="color:#e53935;font-weight:bold;">' + esc(s);
+            if (low && getThreshold(m) > 0) t += ' ⚠';
+            t += '</span>';
+            return t;
+        }
+        return String(s);
+    }
+    function currentDoseCount() {
+        var ids = ['doseCountInput3', 'doseCountInput', 'doseCountInput3M', 'doseCountInput2'];
+        for (var i = 0; i < ids.length; i++) {
+            var el = document.getElementById(ids[i]);
+            if (el && el.value) { var v = parseInt(el.value, 10); if (v > 0) return v; }
+        }
+        return 7;
+    }
+    function dropBadge(m) {
+        if (!isEnabled() || !m) return '';
+        var s = parseFloat(m.stock) || 0;
+        var need = (parseFloat(m.dosage) || 0) * currentDoseCount();
+        var insufficient = need > 0 && s > 0 && s < need;
+        var low = isLowStock(m);
+        if (s <= 0 && !insufficient && !low) return ''; // 0=未维护，不显示（噪音控制）
+        var color = (insufficient || low) ? '#e53935' : '#909399';
+        return ' <span style="color:' + color + ';font-size:10px;">[库存:' + esc(s) + ']</span>';
+    }
+
+    // ------------------------------------------------------------------
+    //  红点徽标（药品管理 tab + 移动端底部导航）
+    // ------------------------------------------------------------------
+    function updateStockBadges() {
+        var count = isEnabled() ? lowStockList().length : 0;
+        var targets = [];
+        try {
+            var tabs = document.querySelectorAll('.tab-item');
+            for (var i = 0; i < tabs.length; i++) {
+                if (tabs[i].textContent.indexOf('药品管理') >= 0) { targets.push(tabs[i]); break; }
+            }
+            var navs = document.querySelectorAll('.mobile-nav-item');
+            for (var j = 0; j < navs.length; j++) {
+                if (navs[j].textContent.indexOf('药品') >= 0) { targets.push(navs[j]); break; }
+            }
+        } catch (e) {}
+        for (var k = 0; k < targets.length; k++) {
+            var t = targets[k];
+            var old = t.querySelector('.stock-badge');
+            if (old) old.parentNode.removeChild(old);
+            if (count > 0) {
+                var b = document.createElement('span');
+                b.className = 'stock-badge';
+                b.textContent = String(count);
+                b.style.cssText = 'display:inline-block;background:#e53935;color:#fff;border-radius:9px;font-size:9px;font-weight:bold;line-height:14px;min-width:14px;height:14px;text-align:center;padding:0 3px;margin-left:3px;vertical-align:middle;';
+                t.appendChild(b);
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------
+    //  ④ 注入式 UI：基础设置开关 / 药品管理按钮 / 编辑弹窗阈值 / 入库 / 流水
+    // ------------------------------------------------------------------
+    function injectSettingsToggle() {
+        try {
+            var body = document.querySelector('#settingsModal .modal-body');
+            if (!body || document.getElementById('stockMgmtToggleRow')) return;
+            var div = document.createElement('div');
+            div.id = 'stockMgmtToggleRow';
+            div.style.cssText = 'margin-bottom:12px;padding-top:12px;border-top:1px solid #eee;';
+            div.innerHTML =
+                '<label style="display:flex;align-items:center;gap:8px;">' +
+                '<input type="checkbox" id="stockMgmtEnabled" style="width:18px;height:18px;">' +
+                '启用库存管理（开方自动扣库存）</label>' +
+                '<div style="font-size:11px;color:#666;margin-top:4px;">启用后：保存处方按 用量×剂数 自动扣库存，改方自动多退少补；药品管理可入库、看流水；药品可设预警阈值</div>';
+            body.appendChild(div);
+            var cb = div.querySelector('#stockMgmtEnabled');
+            cb.checked = isEnabled();
+            cb.addEventListener('change', function () {
+                setEnabled(cb.checked);
+                refreshUI();
+                toast(cb.checked
+                    ? '库存管理已启用：请到「药品管理」入库/设置预警阈值（基础设置本次保存后生效提示可忽略，开关已即时保存）'
+                    : '库存管理已停用：保存处方不再扣减库存');
+            });
+        } catch (e) { console.warn('[StockCore] 设置开关注入失败:', e); }
+    }
+
+    function injectMedicineModalButtons() {
+        try {
+            var searchInput = document.getElementById('medicineSearch');
+            if (!searchInput || document.getElementById('stockInBtn')) return;
+            var row = searchInput.parentNode;
+            var mk = function (id, text, bg, fn) {
+                var b = document.createElement('button');
+                b.className = 'action-btn'; b.id = id; b.textContent = text;
+                b.style.background = bg; b.style.color = '#fff';
+                b.addEventListener('click', fn);
+                return b;
+            };
+            var inBtn = mk('stockInBtn', '📥 入库', '#2e7d32', function () { openStockInDialog(); });
+            var ledBtn = mk('stockLedgerBtn', '📒 库存流水', '#1565c0', function () { openLedgerDialog(); });
+            var thrBtn = mk('stockThrBtn', '🔔 预警设置', '#6a1b9a', function () { openThresholdDialog(); });
+            // 分组分隔（C期）：药品库操作与库存动账入口视觉分组，避免用户选错入口
+            var divider = document.createElement('span');
+            divider.id = 'stockGroupDivider';
+            divider.style.cssText = 'display:inline-flex;align-items:center;font-size:11px;font-weight:bold;color:#2e7d32;white-space:nowrap;';
+            divider.textContent = '｜库存:';
+            // 插到红色「清空药物库」按钮之前（工具类在前、破坏性操作殿后）
+            var clearBtn = null;
+            for (var i = 0; i < row.children.length; i++) {
+                var el = row.children[i];
+                if (el.tagName === 'BUTTON' && /clearMedicineLibrary/.test(el.getAttribute('onclick') || '')) { clearBtn = el; break; }
+            }
+            if (clearBtn) {
+                row.insertBefore(divider, clearBtn);
+                row.insertBefore(inBtn, clearBtn);
+                row.insertBefore(ledBtn, clearBtn);
+                row.insertBefore(thrBtn, clearBtn);
+            } else {
+                row.appendChild(divider);
+                row.appendChild(inBtn);
+                row.appendChild(ledBtn);
+                row.appendChild(thrBtn);
+            }
+            // 未启用提示条（启用后隐藏）
+            var list = document.getElementById('medicineList');
+            if (list && !document.getElementById('stockHintBar')) {
+                var hint = document.createElement('div');
+                hint.id = 'stockHintBar';
+                hint.style.cssText = 'margin-bottom:8px;padding:6px 10px;background:#fff8e1;border:1px solid #ffe082;border-radius:4px;font-size:11px;color:#795548;';
+                hint.textContent = '💡 库存管理未启用：可在「基础设置」勾选「启用库存管理」，开方自动扣库存、库存不足预警';
+                list.parentNode.insertBefore(hint, list);
+            }
+            syncMedicineModalUI();
+        } catch (e) { console.warn('[StockCore] 药品管理按钮注入失败:', e); }
+    }
+    function syncMedicineModalUI() {
+        var on = isEnabled();
+        var inBtn = document.getElementById('stockInBtn');
+        var ledBtn = document.getElementById('stockLedgerBtn');
+        var thrBtn = document.getElementById('stockThrBtn');
+        var hint = document.getElementById('stockHintBar');
+        var dv = document.getElementById('stockGroupDivider');
+        if (inBtn) inBtn.style.display = on ? '' : 'none';
+        if (ledBtn) ledBtn.style.display = on ? '' : 'none';
+        if (thrBtn) thrBtn.style.display = on ? '' : 'none';
+        if (hint) hint.style.display = on ? 'none' : '';
+        if (dv) dv.style.display = on ? 'inline-flex' : 'none';
+    }
+
+    // 编辑弹窗：库存输入框旁注入预警阈值输入框
+    function ensureEditThresholdField(m) {
+        try {
+            var stockInput = document.getElementById('medEditStock');
+            if (!stockInput) return;
+            var stockDiv = stockInput.parentNode;
+            var thrDiv = document.getElementById('medEditThresholdRow');
+            if (!thrDiv) {
+                thrDiv = document.createElement('div');
+                thrDiv.id = 'medEditThresholdRow';
+                thrDiv.innerHTML =
+                    '<label style="display:block;margin-bottom:4px;font-weight:bold;">库存预警阈值 <span style="font-weight:normal;font-size:11px;color:#999;">（0=不预警，库存≤此数时红字提醒）</span></label>' +
+                    '<input type="number" id="medEditThreshold" style="width:100%;padding:8px;border:1px solid #888;border-radius:4px;" placeholder="0" value="0">';
+                stockDiv.parentNode.insertBefore(thrDiv, stockDiv.nextSibling);
+            }
+            var thr = thrDiv.querySelector('#medEditThreshold');
+            thr.value = m ? (getThreshold(m) || 0) : 0;
+            thrDiv.style.display = isEnabled() ? '' : 'none';
+        } catch (e) {}
+    }
+
+    function closeInjectedModal(id) {
+        var el = document.getElementById(id);
+        if (el) el.parentNode.removeChild(el);
+    }
+    function openInjectedModal(id, title, bodyHtml, footerHtml, maxWidth) {
+        closeInjectedModal(id);
+        var wrap = document.createElement('div');
+        wrap.className = 'modal'; wrap.id = id;
+        wrap.style.display = 'flex';
+        wrap.innerHTML = '<div class="modal-content" style="max-width:' + (maxWidth || '460px') + ';width:92%;max-height:88vh;display:flex;flex-direction:column;">' +
+            '<div class="modal-header"><h3>' + esc(title) + '</h3><span class="close-btn" onclick="StockCore.closeInjectedModal(\'' + id + '\')">&times;</span></div>' +
+            '<div class="modal-body" style="overflow:auto;flex:1;">' + bodyHtml + '</div>' +
+            '<div class="modal-footer">' + (footerHtml || '<button class="action-btn" onclick="StockCore.closeInjectedModal(\'' + id + '\')">关闭</button>') + '</div></div>';
+        document.body.appendChild(wrap);
+        return wrap;
+    }
+
+    function openStockInDialog() {
+        if (!isEnabled()) { toast('请先在「基础设置」中启用库存管理'); return; }
+        var meds = getMedList();
+        if (!meds.length) { toast('药品库为空，请先添加药品'); return; }
+        var options = meds.map(function (m) {
+            return '<option value="' + esc(m.name) + '">' + esc(m.name) + '（当前库存 ' + esc(m.stock || 0) + esc(m.unit || 'g') + '）</option>';
+        }).join('');
+        var body =
+            '<div style="font-size:11px;color:#909399;margin-bottom:10px;">💡 首次建账/整库迁移用「导入药品」（含库存列，自动记建账流水）；日常进货、盘点补录用本页入库或批量导入</div>' +
+            '<div style="margin-bottom:10px;"><label style="display:block;font-weight:bold;margin-bottom:4px;">药品</label>' +
+            '<select id="stockInName" style="width:100%;padding:8px;border:1px solid #888;border-radius:4px;">' + options + '</select></div>' +
+            '<div style="margin-bottom:10px;"><label style="display:block;font-weight:bold;margin-bottom:4px;">入库数量（单位同药品单位，可负=退货出库）</label>' +
+            '<input type="number" id="stockInQty" placeholder="如 500" style="width:100%;padding:8px;border:1px solid #888;border-radius:4px;"></div>' +
+            '<div style="margin-bottom:6px;"><label style="display:block;font-weight:bold;margin-bottom:4px;">备注（选填）</label>' +
+            '<input type="text" id="stockInNote" placeholder="如：进货 5 公斤" style="width:100%;padding:8px;border:1px solid #888;border-radius:4px;"></div>' +
+            '<div style="font-size:11px;color:#909399;margin-bottom:6px;">💡 批发公斤请自行换算为克（1公斤=1000g）</div>' +
+            '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' +
+            '<button class="action-btn" style="padding:4px 10px;font-size:11px;background:#2e7d32;" onclick="StockCore.downloadStockTemplate()">📄 下载模板</button>' +
+            '<button class="action-btn" style="padding:4px 10px;font-size:11px;background:#1565c0;" onclick="StockCore.pickStockImportFile()">📥 从文件批量导入</button>' +
+            '<span style="font-size:11px;color:#909399;">模板已预填全部药名，填「数量」列即可导入；留空行自动跳过</span></div>';
+        var footer =
+            '<button class="action-btn" onclick="StockCore.closeInjectedModal(\'stockInModal\')">取消</button>' +
+            '<button class="action-btn primary" onclick="StockCore.confirmStockIn()">确定入库</button>';
+        openInjectedModal('stockInModal', '📥 药品入库', body, footer);
+    }
+    function confirmStockIn() {
+        var name = (document.getElementById('stockInName') || {}).value || '';
+        var qty = parseFloat((document.getElementById('stockInQty') || {}).value);
+        var note = (document.getElementById('stockInNote') || {}).value || '';
+        if (!name || isNaN(qty) || Math.abs(qty) < 0.01) { toast('请填写药品和入库数量'); return; }
+        if (stockIn(name, qty, note)) {
+            closeInjectedModal('stockInModal');
+            toast('已入库：' + name + ' ' + (qty > 0 ? '+' : '') + qty);
+            var m = getMedLive(name);
+            if (m && isLowStock(m)) toast('⚠ 注意：' + name + ' 仍低于预警阈值');
+        }
+    }
+
+    // ------------------------------------------------------------------
+    //  ⑥ 预警阈值集中设置（2026-09-12）：药品管理「预警设置」弹窗——表格化
+    //     一览全部药品库存/阈值，支持搜索过滤、统一阈值（全部/仅未设置）、
+    //     一键清空、逐行修改 + 行内实时状态，保存批量落库。
+    //     背景：原入口藏在每个药品的编辑弹窗里，逐个点开设置不可操作。
+    // ------------------------------------------------------------------
+    function thrStateOf(m, thr) {
+        var stock = parseFloat(m && m.stock) || 0;
+        if (!(thr > 0)) return { text: '未设阈值', color: '#909399' };
+        if (stock <= thr) return { text: '⚠ 低于阈值', color: '#e53935', bold: true };
+        return { text: '正常', color: '#2e7d32' };
+    }
+    function openThresholdDialog() {
+        if (!isEnabled()) { toast('请先在「基础设置」中启用库存管理'); return; }
+        var meds = getMedList();
+        if (!meds.length) { toast('药品库为空，请先添加药品'); return; }
+        var rows = meds.map(function (m) {
+            var thr = getThreshold(m) || 0;
+            var st = thrStateOf(m, thr);
+            return '<tr data-name="' + esc(m.name) + '" data-stock="' + (parseFloat(m.stock) || 0) + '">' +
+                '<td style="padding:3px 4px;">' + esc(m.name) + '</td>' +
+                '<td style="padding:3px 4px;white-space:nowrap;color:' + (thr > 0 && (parseFloat(m.stock) || 0) <= thr ? '#e53935' : '#666') + ';">' + esc(m.stock || 0) + esc(m.unit || 'g') + '</td>' +
+                '<td style="padding:3px 4px;"><input type="number" min="0" step="any" class="thr-input" data-name="' + esc(m.name) + '" value="' + thr + '" style="width:72px;padding:4px 6px;border:1px solid #888;border-radius:4px;text-align:center;"></td>' +
+                '<td class="thr-state" style="padding:3px 4px;font-size:11px;white-space:nowrap;color:' + st.color + ';' + (st.bold ? 'font-weight:bold;' : '') + '">' + st.text + '</td>' +
+                '</tr>';
+        }).join('');
+        var body =
+            '<div id="thrStatsBar" style="font-size:11px;color:#666;margin-bottom:8px;"></div>' +
+            '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px;">' +
+            '<input type="text" id="thrSearch" placeholder="🔍 搜索药名" style="flex:1;min-width:120px;padding:5px 8px;border:1px solid #888;border-radius:4px;">' +
+            '</div>' +
+            '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px;padding:6px 8px;background:#f5f5f5;border-radius:4px;">' +
+            '<span style="font-size:12px;">统一阈值：</span>' +
+            '<input type="number" min="0" step="any" id="thrBatchVal" placeholder="如 50" style="width:72px;padding:4px 6px;border:1px solid #888;border-radius:4px;text-align:center;">' +
+            '<button class="action-btn" style="padding:3px 8px;font-size:11px;background:#6a1b9a;" onclick="StockCore.applyThresholdBatch(\'all\')">应用到全部</button>' +
+            '<button class="action-btn" style="padding:3px 8px;font-size:11px;background:#8e24aa;" onclick="StockCore.applyThresholdBatch(\'empty\')">仅未设置项</button>' +
+            '<button class="action-btn" style="padding:3px 8px;font-size:11px;background:#b71c1c;" onclick="StockCore.applyThresholdBatch(\'clear\')">全部清空</button>' +
+            '</div>' +
+            '<table style="width:100%;border-collapse:collapse;font-size:12px;">' +
+            '<thead><tr style="border-bottom:2px solid #ddd;text-align:left;">' +
+            '<th style="padding:4px;">药品</th><th style="padding:4px;">当前库存</th>' +
+            '<th style="padding:4px;">预警阈值</th><th style="padding:4px;">状态</th></tr></thead>' +
+            '<tbody id="thrRows">' + rows + '</tbody></table>' +
+            '<div style="font-size:11px;color:#909399;margin-top:8px;">💡 阈值=0 表示不预警；库存 ≤ 阈值时药品列表红字、药品管理红点、保存处方时提醒</div>';
+        var footer =
+            '<button class="action-btn" onclick="StockCore.closeInjectedModal(\'stockThrModal\')">取消</button>' +
+            '<button class="action-btn primary" onclick="StockCore.confirmThresholdSave()">保存设置</button>';
+        openInjectedModal('stockThrModal', '🔔 库存预警阈值设置', body, footer, '640px');
+        // 搜索过滤（药名实时匹配，不区分大小写）
+        var searchEl = document.getElementById('thrSearch');
+        if (searchEl) {
+            searchEl.addEventListener('input', function () {
+                var kw = (searchEl.value || '').trim().toLowerCase();
+                var trs = document.querySelectorAll('#thrRows tr');
+                for (var i = 0; i < trs.length; i++) {
+                    var nm = (trs[i].getAttribute('data-name') || '').toLowerCase();
+                    trs[i].style.display = (!kw || nm.indexOf(kw) >= 0) ? '' : 'none';
+                }
+            });
+        }
+        // 逐行输入：状态列实时变色
+        var tbody = document.getElementById('thrRows');
+        if (tbody) {
+            tbody.addEventListener('input', function (ev) {
+                var inp = ev.target;
+                if (!inp || !inp.classList || !inp.classList.contains('thr-input')) return;
+                refreshThresholdRow(inp);
+                updateThresholdStats();
+            });
+        }
+        updateThresholdStats();
+    }
+    // 单行状态刷新（input → 所在 tr 的状态列）
+    function refreshThresholdRow(inp) {
+        try {
+            var tr = inp.closest('tr');
+            if (!tr) return;
+            var thr = parseFloat(inp.value); if (isNaN(thr) || thr < 0) thr = 0;
+            var stock = parseFloat(tr.getAttribute('data-stock')) || 0;
+            var st = thrStateOf({ stock: stock }, thr);
+            var cell = tr.querySelector('.thr-state');
+            if (cell) {
+                cell.textContent = st.text;
+                cell.style.color = st.color;
+                cell.style.fontWeight = st.bold ? 'bold' : 'normal';
+            }
+        } catch (e) {}
+    }
+    // 顶部统计（按当前输入框值实时汇总）
+    function updateThresholdStats() {
+        try {
+            var bar = document.getElementById('thrStatsBar');
+            var inputs = document.querySelectorAll('#thrRows .thr-input');
+            if (!bar || !inputs.length) return;
+            var set = 0, low = 0;
+            for (var i = 0; i < inputs.length; i++) {
+                var thr = parseFloat(inputs[i].value); if (isNaN(thr) || thr < 0) thr = 0;
+                var tr = inputs[i].closest('tr');
+                var stock = parseFloat(tr && tr.getAttribute('data-stock')) || 0;
+                if (thr > 0) set++;
+                if (thr > 0 && stock <= thr) low++;
+            }
+            bar.innerHTML = '共 <b>' + inputs.length + '</b> 个药品　·　已设阈值 <b style="color:#6a1b9a;">' + set + '</b> 个　·　低于预警 <b style="color:#e53935;">' + low + '</b> 个';
+        } catch (e) {}
+    }
+    // 批量应用（all=全部 / empty=仅未设置项 / clear=清空为 0）
+    function applyThresholdBatch(mode) {
+        var val = 0;
+        if (mode !== 'clear') {
+            var el = document.getElementById('thrBatchVal');
+            val = el ? (parseFloat(el.value) || 0) : 0;
+            if (isNaN(val) || val < 0) { toast('请填写有效的统一阈值'); return; }
+            if (val <= 0) { toast('统一阈值需大于 0（清空请用「全部清空」）'); return; }
+        }
+        var inputs = document.querySelectorAll('#thrRows .thr-input');
+        var n = 0;
+        for (var i = 0; i < inputs.length; i++) {
+            var cur = parseFloat(inputs[i].value); if (isNaN(cur) || cur < 0) cur = 0;
+            if (mode === 'all' || (mode === 'empty' && cur <= 0) || mode === 'clear') {
+                if (String(inputs[i].value) !== String(val)) {
+                    inputs[i].value = val;
+                    refreshThresholdRow(inputs[i]);
+                    n++;
+                }
+            }
+        }
+        updateThresholdStats();
+        if (n > 0) toast(mode === 'clear' ? '已清空 ' + n + ' 个药品的阈值（保存后生效）' : '已对 ' + n + ' 个药品应用统一阈值 ' + val + '（保存后生效）');
+    }
+    // 保存：批量写 medicines[].stockThreshold 落库 + 刷新药品列表红字与红点
+    function confirmThresholdSave() {
+        try {
+            var inputs = document.querySelectorAll('#thrRows .thr-input');
+            if (!inputs.length) { closeInjectedModal('stockThrModal'); return; }
+            var list = getMedList();
+            var byName = {};
+            for (var j = 0; j < list.length; j++) { if (list[j] && list[j].name) byName[list[j].name] = list[j]; }
+            var changed = 0, low = 0;
+            for (var i = 0; i < inputs.length; i++) {
+                var m = byName[inputs[i].getAttribute('data-name')];
+                if (!m) continue;
+                var thr = parseFloat(inputs[i].value); if (isNaN(thr) || thr < 0) thr = 0;
+                thr = round2(thr);
+                if ((getThreshold(m) || 0) !== thr) { m.stockThreshold = thr; changed++; }
+                if (thr > 0 && (parseFloat(m.stock) || 0) <= thr) low++;
+            }
+            if (changed > 0) {
+                persistList(list);
+                try { if (typeof global.renderMedicineList === 'function') global.renderMedicineList(); } catch (e0) {}
+                updateStockBadges();
+            }
+            closeInjectedModal('stockThrModal');
+            toast('预警阈值已保存：更新 ' + changed + ' 项' + (low > 0 ? '，当前 ' + low + ' 个药品低于预警' : '，库存均在阈值之上'));
+        } catch (e) {
+            console.warn('[StockCore] 预警阈值保存失败:', e);
+            toast('保存失败：' + (e && e.message ? e.message : '未知错误'));
+        }
+    }
+
+    // ------------------------------------------------------------------
+    //  ⑥a 批量入库导入：CSV/Excel → 每行 [药名,数量,备注?] → 预览确认 → 逐笔记账
+    //     （自包含解析：不依赖页面 parseCSVLine/decodeTextWithAutoEncoding，
+    //      8 副本各端行为一致；Excel 走页面 XLSX 库，未就绪提示转 CSV）
+    // ------------------------------------------------------------------
+    // CSV 单行解析（引号包裹/双引号转义/逗号分列）
+    function parseCsvRow(line) {
+        var out = [], cur = '', inQ = false;
+        for (var i = 0; i < line.length; i++) {
+            var c = line.charAt(i);
+            if (inQ) {
+                if (c === '"') {
+                    if (line.charAt(i + 1) === '"') { cur += '"'; i++; }
+                    else inQ = false;
+                } else cur += c;
+            } else if (c === '"') inQ = true;
+            else if (c === ',') { out.push(cur); cur = ''; }
+            else cur += c;
+        }
+        out.push(cur);
+        return out;
+    }
+    // 编码自动解码：BOM→UTF-8；否则严格 UTF-8（fatal）先试，非法再 GBK
+    // （fatal 必须显式开：TextDecoder 默认替换模式不抛错，GBK 文件会被静默解成乱码）
+    function decodeAuto(u8) {
+        try {
+            var s = null;
+            if (u8.length >= 3 && u8[0] === 0xEF && u8[1] === 0xBB && u8[2] === 0xBF) {
+                s = new TextDecoder('utf-8').decode(u8.subarray(3));
+            } else {
+                try { s = new TextDecoder('utf-8', { fatal: true }).decode(u8); }
+                catch (e1) { try { s = new TextDecoder('gbk').decode(u8); } catch (e2) { s = ''; } }
+            }
+            if (s && s.charCodeAt(0) === 0xFEFF) s = s.slice(1);
+            return s || '';
+        } catch (e) { return ''; }
+    }
+    // 二维列数组（CSV 行解析 / Excel sheet 行）→ {rows, bad}
+    // 首个非空行首列为「药品/名称/药名」视为表头跳过；数量非法行记 bad（行号）
+    function rowsFromColArrays(arrs) {
+        var rows = [], bad = [], firstSeen = false;
+        for (var i = 0; i < (arrs || []).length; i++) {
+            var cols = arrs[i] || [];
+            var joined = cols.join('').trim();
+            if (!joined) continue;
+            if (!firstSeen) {
+                firstSeen = true;
+                var head0 = String(cols[0] || '').trim();
+                if (head0 === '药品' || head0 === '名称' || head0 === '药名') continue;
+            }
+            var c = cols.map(function (x) { return String(x === undefined || x === null ? '' : x).trim(); });
+            var qty = parseFloat(c[1]);
+            if (!c[0] || isNaN(qty) || Math.abs(qty) < 0.01) { bad.push('第' + (i + 1) + '行'); continue; }
+            rows.push({ name: c[0], qty: qty, note: c[2] || '' });
+        }
+        return { rows: rows, bad: bad };
+    }
+    function parseStockImportText(text) {
+        var arrs = String(text || '').split(/\r?\n/).map(function (l) { return l.trim() ? parseCsvRow(l) : []; });
+        return rowsFromColArrays(arrs);
+    }
+    // ArrayBuffer → rows（按扩展名分流：xlsx/xls 走 XLSX 库，其余按 CSV 文本解码）
+    function rowsFromArrayBuffer(buf, fileName) {
+        var fn = String(fileName || '').toLowerCase();
+        if (fn.slice(-5) === '.xlsx' || fn.slice(-4) === '.xls') {
+            if (typeof XLSX === 'undefined') throw new Error('EXCEL_LIB_MISSING');
+            var wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
+            var ws = wb.Sheets[wb.SheetNames[0]];
+            return rowsFromColArrays(XLSX.utils.sheet_to_json(ws, { header: 1, raw: true }));
+        }
+        return rowsFromColArrays(String(decodeAuto(new Uint8Array(buf))).split(/\r?\n/).map(function (l) { return l.trim() ? parseCsvRow(l) : []; }));
+    }
+    // 执行批量入库：药名在库的逐笔 stockIn（改库存+记流水），无此药跳过汇总
+    function importStockBatch(rows) {
+        var ok = 0, skipped = [];
+        for (var i = 0; i < (rows || []).length; i++) {
+            var r = rows[i];
+            var exists = null;
+            var list = getMedList();
+            for (var j = 0; j < list.length; j++) { if (list[j] && list[j].name === r.name) { exists = list[j]; break; } }
+            if (!exists) { if (skipped.indexOf(r.name) < 0) skipped.push(r.name); continue; }
+            if (stockIn(r.name, r.qty, r.note || '批量导入')) ok++;
+        }
+        return { ok: ok, skipped: skipped };
+    }
+
+    // ------------------------------------------------------------------
+    //  ⑦ 文件解析原语正式 API（2026-09-12 B期）：各端 index.html 内联的
+    //      decodeTextWithAutoEncoding / parseCSVLine / loadXlsxLibrary 三函数
+    //      体已改为对本模块的薄委托——单一实现八端一致，同类 bug 修一处生效。
+    //      注：parseCsvLine 保持底层语义（不 trim 单元格），页面薄委托按需 map(trim)。
+    //      XLSX 库路径两端布局不同（云端根路径 / 离线 vendor/），按候选链依次尝试。
+    // ------------------------------------------------------------------
+    var _xlsxLoading = null;
+    var _XLSX_CANDIDATES = ['xlsx.full.min.js', 'vendor/xlsx.full.min.js'];
+    function loadXlsxLib() {
+        if (typeof XLSX !== 'undefined') return Promise.resolve();
+        if (global.__XLSX_MISSING__) return Promise.reject(new Error('xlsx missing'));
+        if (_xlsxLoading) return _xlsxLoading;
+        _xlsxLoading = new Promise(function (resolve, reject) {
+            var idx = 0;
+            function tryNext() {
+                if (idx >= _XLSX_CANDIDATES.length) {
+                    global.__XLSX_MISSING__ = true;
+                    reject(new Error('xlsx load failed'));
+                    return;
+                }
+                var src = _XLSX_CANDIDATES[idx++];
+                try {
+                    var s = document.createElement('script');
+                    s.src = src;
+                    s.onload = function () { resolve(); };
+                    s.onerror = function () { tryNext(); };
+                    (document.head || document.body).appendChild(s);
+                } catch (e) { tryNext(); }
+            }
+            tryNext();
+        });
+        return _xlsxLoading;
+    }
+
+    // ------------------------------------------------------------------
+    //  ⑧ 导入药品建账（2026-09-12 A期）：executeImportMethod 前后库存快照差值
+    //      → 记 'init' 流水。堵住库存体系唯一的无账通道——覆盖模式未填库存列
+    //      静默清零库存自此可追溯；未启用开关时零流水零行为变化。
+    // ------------------------------------------------------------------
+    function snapshotStockMap() {
+        var map = {};
+        var arr = getMedArrayLive() || getMedList() || [];
+        for (var i = 0; i < arr.length; i++) {
+            if (arr[i] && arr[i].name) map[arr[i].name] = round2(parseFloat(arr[i].stock) || 0);
+        }
+        return map;
+    }
+    function recordImportLedger(method, beforeMap) {
+        var arr = getMedArrayLive() || getMedList() || [];
+        if (!arr) return 0;
+        var modeLabel = method === 'overwrite' ? '覆盖' : (method === 'merge' ? '合并' : (method === 'append' ? '追加' : '导入'));
+        var afterMap = {}, n = 0, i, m;
+        for (i = 0; i < arr.length; i++) {
+            m = arr[i];
+            if (!m || !m.name) continue;
+            var newS = round2(parseFloat(m.stock) || 0);
+            afterMap[m.name] = newS;
+            if (Object.prototype.hasOwnProperty.call(beforeMap, m.name)) {
+                if (Math.abs(newS - beforeMap[m.name]) >= 0.01) {
+                    pushEntry(makeEntry(m.name, 'init', round2(newS - beforeMap[m.name]), newS, '导入药品·' + modeLabel));
+                    n++;
+                }
+            } else if (Math.abs(newS) >= 0.01) {
+                pushEntry(makeEntry(m.name, 'init', newS, newS, '导入药品·' + modeLabel));
+                n++;
+            }
+        }
+        // 覆盖模式：原有药品被移除 → 结存作废记账（结存列显示 '-'，流水链仍可加总追溯）
+        for (var nm in beforeMap) {
+            if (Object.prototype.hasOwnProperty.call(beforeMap, nm) &&
+                !Object.prototype.hasOwnProperty.call(afterMap, nm) &&
+                Math.abs(beforeMap[nm]) >= 0.01) {
+                pushEntry(makeEntry(nm, 'init', round2(-beforeMap[nm]), null, '导入药品·覆盖移除'));
+                n++;
+            }
+        }
+        return n;
+    }
+
+    function pickStockImportFile() {
+        if (!isEnabled()) { toast('请先在「基础设置」中启用库存管理'); return; }
+        var inp = document.createElement('input');
+        inp.type = 'file';
+        inp.accept = '.csv,.xlsx,.xls';
+        inp.style.display = 'none';
+        // ★ 2026-09-12 P0 修复「Excel 组件未就绪」误报：入库导入此前从不预载 XLSX 库，
+        //   rowsFromArrayBuffer 见 typeof XLSX==='undefined' 即抛 EXCEL_LIB_MISSING——
+        //   本会话首次用 Excel 导入必然报错（药品导入/模板下载均有预载，唯此路径漏了）。
+        //   修复：选中 .xlsx/.xls 后先 loadXlsxLib（根路径/vendor 双候选链），
+        //   真加载失败（离线端未放置库文件）才提示转 CSV。
+        inp.addEventListener('change', async function () {
+            var f = inp.files && inp.files[0];
+            if (!f) return;
+            var fn = String(f.name || '').toLowerCase();
+            if (fn.slice(-5) === '.xlsx' || fn.slice(-4) === '.xls') {
+                if (typeof XLSX === 'undefined') {
+                    try { await loadXlsxLib(); }
+                    catch (e1) {
+                        alert('Excel 组件加载失败：请将文件另存为 CSV 后再导入');
+                        return;
+                    }
+                }
+            }
+            var fr = new FileReader();
+            fr.onerror = function () { alert('文件读取失败，请重试'); };
+            fr.onload = function (ev) {
+                var parsed;
+                try { parsed = rowsFromArrayBuffer(ev.target.result, f.name); }
+                catch (e) {
+                    alert('Excel 解析失败（Excel 组件未就绪）：请将文件另存为 CSV 后再导入');
+                    return;
+                }
+                if (!parsed.rows.length) {
+                    alert('未解析到有效数据行\n格式：每行 药名,数量,备注（备注可省略）\n提示：数量列为空或非数字的行不会导入' + (parsed.bad.length ? '\n本次有 ' + parsed.bad.length + ' 行被跳过' : ''));
+                    return;
+                }
+                var names = {};
+                parsed.rows.forEach(function (r) { names[r.name] = 1; });
+                if (!confirm('共解析 ' + parsed.rows.length + ' 笔入库（涉及 ' + Object.keys(names).length + ' 种药）。\n药名须与药品库完全一致，不存在者自动跳过。\n\n确认执行批量入库？')) return;
+                var res = importStockBatch(parsed.rows);
+                var msg = '批量入库完成：成功 ' + res.ok + ' 笔';
+                if (res.skipped.length) msg += '；跳过 ' + res.skipped.length + ' 种（药品库无此药：' + res.skipped.slice(0, 5).join('、') + (res.skipped.length > 5 ? ' 等' : '') + '）';
+                closeInjectedModal('stockInModal');
+                refreshUI();
+                alert(msg);
+            };
+            fr.readAsArrayBuffer(f);
+        });
+        document.body.appendChild(inp);
+        inp.click();
+        setTimeout(function () { if (inp.parentNode) inp.parentNode.removeChild(inp); }, 60000);
+    }
+
+    // ------------------------------------------------------------------
+    //  ⑥b 入库模板下载：表头 + 全部药品库药名（数量列留空）+ 底部说明行。
+    //     防呆闭环：留空数量行解析时进 bad 自动跳过，说明行（单格无数列）同理——
+    //     模板原样导入 = 0 笔生效，用户只填「数量」列即安全导入。
+    // ------------------------------------------------------------------
+    function buildTemplateRows(meds) {
+        var rows = [['药品', '数量', '备注']];
+        (meds || []).forEach(function (m) { rows.push([m && m.name ? m.name : '', '', '']); });
+        // 说明行只占首格（无逗号），导入时数量列空 → 自动跳过
+        rows.push(['说明：数量列填入库数（单位同药品单位）；留空的行导入时自动跳过']);
+        return rows;
+    }
+    function toCsvLine(cells) {
+        return (cells || []).map(function (x) {
+            var s = String(x === undefined || x === null ? '' : x);
+            return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+        }).join(',');
+    }
+    async function downloadStockTemplate() {
+        try {
+            var meds = getMedList();
+            if (!meds.length) { toast('药品库为空，请先添加药品'); return; }
+            var rows = buildTemplateRows(meds);
+            var stamp = new Date().toLocaleDateString('zh-CN').replace(/\//g, '-');
+            if (typeof XLSX === 'undefined') {
+                try { await loadXlsxLib(); } catch (e1) {}
+            }
+            if (typeof XLSX !== 'undefined' && XLSX.utils && XLSX.writeFile) {
+                var ws = XLSX.utils.aoa_to_sheet(rows);
+                ws['!cols'] = [{ wch: 14 }, { wch: 10 }, { wch: 30 }];
+                var wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, '入库模板');
+                XLSX.writeFile(wb, '入库模板_' + stamp + '.xlsx');
+                toast('✅ 模板已下载——填好「数量」列后，从「批量导入」导入');
+            } else {
+                var csv = '\uFEFF' + rows.map(toCsvLine).join('\r\n') + '\r\n';
+                var a = document.createElement('a');
+                a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+                a.download = '入库模板_' + stamp + '.csv';
+                a.click();
+                toast('✅ 模板已下载（CSV）——填好「数量」列后，从「批量导入」导入');
+            }
+        } catch (e) { toast('模板下载失败：' + e.message); }
+    }
+
+    function openLedgerDialog() {
+        if (!isEnabled()) { toast('请先在「基础设置」中启用库存管理'); return; }
+        var body =
+            '<div style="margin-bottom:8px;display:flex;gap:6px;">' +
+            '<input type="text" id="ledgerFilter" placeholder="按药品名筛选（空=全部）" style="flex:1;padding:6px;border:1px solid #888;border-radius:4px;" oninput="StockCore.renderLedgerTable()">' +
+            '<button class="action-btn" onclick="StockCore.exportLedgerCsv()">导出CSV</button>' +
+            '<button class="action-btn" onclick="StockCore.exportLedgerXlsx()">导出Excel</button></div>' +
+            '<div id="ledgerTable" style="max-height:50vh;overflow:auto;"></div>';
+        openInjectedModal('ledgerModal', '📒 库存流水（最近 300 条）', body);
+        renderLedgerTable();
+    }
+    function renderLedgerTable() {
+        var el = document.getElementById('ledgerTable');
+        if (!el) return;
+        var kw = ((document.getElementById('ledgerFilter') || {}).value || '').trim();
+        var rows = getLedger().filter(function (e) { return !kw || (e.name || '').indexOf(kw) >= 0; }).slice(0, 300);
+        if (!rows.length) { el.innerHTML = '<div style="text-align:center;color:#999;padding:20px;font-size:12px;">暂无流水记录</div>'; return; }
+        var html = '<table style="width:100%;border-collapse:collapse;font-size:11px;">' +
+            '<thead><tr style="background:#f5f5f5;">' +
+            ['时间', '药品', '类型', '数量', '结存', '经办', '说明'].map(function (h) {
+                return '<th style="border:1px solid #ddd;padding:4px;text-align:' + (h === '药品' || h === '说明' ? 'left' : 'center') + ';">' + h + '</th>';
+            }).join('') + '</tr></thead><tbody>';
+        rows.forEach(function (e) {
+            var d = new Date(e.t);
+            var ts = isNaN(d.getTime()) ? '' : (d.toLocaleDateString('zh-CN') + ' ' + d.toTimeString().slice(0, 5));
+            var qtyColor = (e.qty < 0) ? '#e53935' : '#2e7d32';
+            html += '<tr>' +
+                '<td style="border:1px solid #ddd;padding:4px;white-space:nowrap;">' + esc(ts) + '</td>' +
+                '<td style="border:1px solid #ddd;padding:4px;">' + esc(e.name) + '</td>' +
+                '<td style="border:1px solid #ddd;padding:4px;text-align:center;white-space:nowrap;">' + esc(TYPE_LABEL[e.type] || e.type) + '</td>' +
+                '<td style="border:1px solid #ddd;padding:4px;text-align:center;color:' + qtyColor + ';font-weight:bold;">' + (e.qty > 0 ? '+' : '') + esc(e.qty) + '</td>' +
+                '<td style="border:1px solid #ddd;padding:4px;text-align:center;">' + esc(e.stock === null ? '-' : e.stock) + '</td>' +
+                '<td style="border:1px solid #ddd;padding:4px;text-align:center;white-space:nowrap;">' + esc(e.op) + '</td>' +
+                '<td style="border:1px solid #ddd;padding:4px;">' + esc(e.note) + '</td>' +
+                '</tr>';
+        });
+        el.innerHTML = html + '</tbody></table>';
+    }
+    function exportLedgerCsv() {
+        try {
+            var rows = getLedger();
+            if (!rows.length) { toast('暂无流水可导出'); return; }
+            var csv = '\uFEFF' + ['时间', '药品', '类型', '数量', '结存', '经办人', '说明'].join(',') + '\n';
+            rows.forEach(function (e) {
+                csv += [e.t, e.name, TYPE_LABEL[e.type] || e.type, e.qty, (e.stock === null ? '' : e.stock), e.op, e.note]
+                    .map(function (v) { return '"' + String(v === undefined || v === null ? '' : v).replace(/"/g, '""') + '"'; }).join(',') + '\n';
+            });
+            var a = document.createElement('a');
+            a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+            a.download = '库存流水_' + new Date().toLocaleDateString('zh-CN').replace(/\//g, '-') + '.csv';
+            a.click();
+        } catch (e) { toast('导出失败：' + e.message); }
+    }
+    // 导出 Excel（.xlsx）：XLSX 库按需加载（loadXlsxLib，B期起自包含），
+    // 库未放置/加载失败自动降级 CSV——与药品库 Excel 导出同款兜底，功能不因缺库而断
+    async function exportLedgerXlsx() {
+        try {
+            var rows = getLedger();
+            if (!rows.length) { toast('暂无流水可导出'); return; }
+            if (typeof XLSX === 'undefined') {
+                try { await loadXlsxLib(); } catch (e1) {}
+            }
+            if (typeof XLSX === 'undefined' || !XLSX.utils || !XLSX.writeFile) {
+                toast('Excel 组件未就绪，已改为导出 CSV');
+                exportLedgerCsv();
+                return;
+            }
+            var aoa = [['时间', '药品', '类型', '数量', '结存', '经办人', '说明']];
+            rows.forEach(function (e) {
+                var d = new Date(e.t);
+                var ts = isNaN(d.getTime()) ? e.t : (d.toLocaleDateString('zh-CN') + ' ' + d.toTimeString().slice(0, 5));
+                aoa.push([ts, e.name, TYPE_LABEL[e.type] || e.type, e.qty, (e.stock === null || e.stock === undefined ? '' : e.stock), e.op, e.note]);
+            });
+            var ws = XLSX.utils.aoa_to_sheet(aoa);
+            ws['!cols'] = [{ wch: 16 }, { wch: 12 }, { wch: 10 }, { wch: 8 }, { wch: 8 }, { wch: 10 }, { wch: 24 }];
+            var wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, '库存流水');
+            XLSX.writeFile(wb, '库存流水_' + new Date().toLocaleDateString('zh-CN').replace(/\//g, '-') + '.xlsx');
+            toast('✅ 库存流水已导出为 Excel');
+        } catch (e) {
+            toast('Excel 导出失败，已改为导出 CSV');
+            exportLedgerCsv();
+        }
+    }
+
+    // ------------------------------------------------------------------
+    //  ⑤ 钩子安装（DOMContentLoaded 后重试直至 inline script 定义目标函数）
+    // ------------------------------------------------------------------
+    var installed = false;
+    function tryInstall() {
+        if (installed) return true;
+        if (typeof global.savePrescriptionToDB !== 'function' ||
+            typeof global.saveMedicineEdit !== 'function' ||
+            typeof global.showMedicineEditModal !== 'function') {
+            return false;
+        }
+        installed = true;
+
+        // ① 保存处方 → 差值扣减（唯一落库收口：新存/同日覆盖/改历史/回收站恢复全走此）
+        var _saveRx = global.savePrescriptionToDB;
+        global.savePrescriptionToDB = async function (record) {
+            var plan = null, rxNo = '', isFirstApply = false;
+            try {
+                if (isEnabled()) {
+                    isFirstApply = !(record && record.__stockApplied);
+                    rxNo = (record && (record.prescriptionNo || record.outpatientNo)) || '';
+                    plan = planDeduction(record);
+                }
+            } catch (e) { plan = null; }
+            var result = await _saveRx.apply(this, arguments);
+            try {
+                if (plan && plan.hasChanges && record && typeof record === 'object') {
+                    record.__stockApplied = plan.marker;      // 幂等标记随处方持久化/云端同步
+                    try { await _saveRx.call(this, record); } catch (e2) {}
+                    notifyLowStock(commitDeduction(plan, rxNo, isFirstApply));
+                }
+            } catch (e) { console.warn('[StockCore] 处方扣库存失败（不影响处方保存）:', e); }
+            return result;
+        };
+
+        // ② 彻底删除/清空回收站 → 冲回（confirm 在原函数内部，须在其成功后判定）
+        var _delBin = global.deleteFromRecycleBin;
+        if (typeof _delBin === 'function') {
+            global.deleteFromRecycleBin = function (id) {
+                var rec = null;
+                try { if (isEnabled() && typeof global.getRecycleBin === 'function') { global.getRecycleBin().forEach(function (r) { if (r && r.id === id) rec = r; }); } } catch (e) {}
+                var r2 = _delBin.apply(this, arguments);
+                try {
+                    if (rec && isEnabled() && typeof global.getRecycleBin === 'function' &&
+                        !global.getRecycleBin().some(function (x) { return x.id === id; })) {
+                        var n = revertRecord(rec);
+                        if (n > 0) toast('已冲回 ' + n + ' 味药的处方扣减库存');
+                    }
+                } catch (e) {}
+                return r2;
+            };
+        }
+        var _clearBin = global.clearRecycleBin;
+        if (typeof _clearBin === 'function') {
+            global.clearRecycleBin = function () {
+                var recs = [];
+                try { if (isEnabled() && typeof global.getRecycleBin === 'function') { recs = global.getRecycleBin().filter(function (r) { return r && r.__stockApplied; }); } } catch (e) {}
+                var r2 = _clearBin.apply(this, arguments);
+                try {
+                    if (isEnabled() && recs.length && typeof global.getRecycleBin === 'function' && global.getRecycleBin().length === 0) {
+                        var n = 0; recs.forEach(function (r) { n += revertRecord(r) || 0; });
+                        if (n > 0) toast('已冲回 ' + n + ' 条处方扣减库存');
+                    }
+                } catch (e) {}
+                return r2;
+            };
+        }
+
+        // ③ 药品编辑：阈值字段注入 + 盘点调整自动记账
+        var _showEdit = global.showMedicineEditModal;
+        global.showMedicineEditModal = function (m, isAdd) {
+            var r = _showEdit.apply(this, arguments);
+            try { ensureEditThresholdField(m); } catch (e) {}
+            return r;
+        };
+        var _saveMed = global.saveMedicineEdit;
+        global.saveMedicineEdit = function () {
+            var name = '', oldStock = 0, wasAdd = false, thr = 0;
+            try {
+                var el = document.getElementById('medEditName');
+                name = (el && el.value ? el.value : '').trim();
+                var existing = (typeof global.getMedicineByName === 'function') ? global.getMedicineByName(name) : null;
+                wasAdd = !existing;
+                oldStock = existing ? (parseFloat(existing.stock) || 0) : 0;
+                var thrEl = document.getElementById('medEditThreshold');
+                thr = thrEl ? (parseFloat(thrEl.value) || 0) : 0;
+            } catch (e) {}
+            var r = _saveMed.apply(this, arguments);
+            try {
+                if (name) {
+                    var saved = (typeof global.getMedicineByName === 'function') ? global.getMedicineByName(name) : null;
+                    if (saved) {
+                        var changed = false;
+                        if (isEnabled() && (getThreshold(saved) || 0) !== thr) {
+                            saved.stockThreshold = thr; changed = true;
+                        }
+                        if (isEnabled()) {
+                            var newStock = parseFloat(saved.stock) || 0;
+                            if (!wasAdd && Math.abs(newStock - oldStock) >= 0.01) {
+                                recordManualAdjust(name, oldStock, newStock, '编辑药品'); changed = true;
+                            } else if (wasAdd && newStock > 0) {
+                                pushEntry(makeEntry(name, 'in', newStock, newStock, '新增药品期初库存')); changed = true;
+                            }
+                        }
+                        if (changed) {
+                            persistList(getMedList());
+                            if (typeof global.renderMedicineList === 'function') global.renderMedicineList();
+                        }
+                    }
+                }
+            } catch (e) { console.warn('[StockCore] 药品编辑后处理失败:', e); }
+            updateStockBadges();
+            return r;
+        };
+
+        // ④ 药品列表渲染后刷新红点（列表模板中的红字由锚点编辑直接渲染）
+        var _render = global.renderMedicineList;
+        if (typeof _render === 'function') {
+            global.renderMedicineList = function () {
+                var r = _render.apply(this, arguments);
+                updateStockBadges();
+                syncMedicineModalUI();
+                return r;
+            };
+        }
+
+        // ⑤ 备份恢复：流水 + 开关随备份走（备份导出字段由 index.html 锚点编辑注入 data 对象）
+        var _imp = global.importDataFromJson;
+        if (typeof _imp === 'function') {
+            global.importDataFromJson = async function (jsonStr) {
+                var r = await _imp.apply(this, arguments);
+                try { restoreFromBackup(jsonStr); } catch (e) {}
+                return r;
+            };
+        }
+
+        // ⑥ 导入药品建账（A期）：快照差值记账——覆盖模式静默清零库存自此可追溯。
+        //    快照/差值双采集与三模式内部实现解耦：覆盖取消（confirm 拒绝）时前后无差，零流水。
+        var _execImport = global.executeImportMethod;
+        if (typeof _execImport === 'function') {
+            global.executeImportMethod = function (method) {
+                var before = null;
+                try { if (isEnabled()) before = snapshotStockMap(); } catch (e0) {}
+                var r = _execImport.apply(this, arguments);
+                try {
+                    if (before && isEnabled()) {
+                        var n = recordImportLedger(method, before);
+                        if (n > 0) toast('已记「导入建账」流水 ' + n + ' 笔（库存流水可查）');
+                    }
+                } catch (e) { console.warn('[StockCore] 导入建账失败（不影响导入）:', e); }
+                return r;
+            };
+        }
+
+        injectSettingsToggle();
+        injectMedicineModalButtons();
+        updateStockBadges();
+        return true;
+    }
+    function restoreFromBackup(jsonStr) {
+        if (typeof jsonStr !== 'string' || !jsonStr.trim()) return;
+        var d = null;
+        try { d = JSON.parse(jsonStr); } catch (e) { return; }
+        if (!d || typeof d !== 'object') return;
+        var restored = false;
+        if (Array.isArray(d.stockLedger)) { saveLedger(d.stockLedger); restored = true; }
+        if (typeof d.stockMgmtEnabled === 'boolean') { setEnabled(d.stockMgmtEnabled); restored = true; }
+        if (restored) { updateStockBadges(); syncMedicineModalUI(); toast('库存流水已随备份恢复'); }
+    }
+
+    function refreshUI() {
+        updateStockBadges();
+        syncMedicineModalUI();
+        try { if (typeof global.renderMedicineList === 'function' && document.getElementById('medicineModal') && document.getElementById('medicineModal').style.display !== 'none') global.renderMedicineList(); } catch (e) {}
+    }
+
+    function boot() {
+        var tries = 0;
+        var timer = setInterval(function () {
+            tries++;
+            if (tryInstall() || tries > 100) { clearInterval(timer); }
+        }, 300);
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', boot);
+    } else {
+        boot();
+    }
+
+    // ------------------------------------------------------------------
+    //  导出
+    // ------------------------------------------------------------------
+    global.StockCore = {
+        isEnabled: isEnabled,
+        setEnabled: setEnabled,
+        stockText: stockText,          // 药品列表行：红字库存 HTML
+        dropBadge: dropBadge,          // 拾药下拉：[库存:N] 徽标
+        getLedger: getLedger,
+        lowStockList: lowStockList,
+        updateStockBadges: updateStockBadges,
+        closeInjectedModal: closeInjectedModal,
+        openStockInDialog: openStockInDialog,
+        confirmStockIn: confirmStockIn,
+        openThresholdDialog: openThresholdDialog,
+        applyThresholdBatch: applyThresholdBatch,
+        confirmThresholdSave: confirmThresholdSave,
+        openLedgerDialog: openLedgerDialog,
+        renderLedgerTable: renderLedgerTable,
+        exportLedgerCsv: exportLedgerCsv,
+        exportLedgerXlsx: exportLedgerXlsx,
+        pickStockImportFile: pickStockImportFile,
+        downloadStockTemplate: downloadStockTemplate,
+        // 文件解析原语正式 API（B期）：各端 index.html 内联解析器薄委托至此
+        decodeText: decodeAuto,
+        parseCsvLine: parseCsvRow,
+        loadXlsxLib: loadXlsxLib,
+        // 以下供单测/调试
+        _planDeduction: planDeduction,
+        _commitDeduction: commitDeduction,
+        _revertRecord: revertRecord,
+        _stockIn: stockIn,
+        _recordManualAdjust: recordManualAdjust,
+        _applyStockDelta: applyStockDelta,
+        _getMedList: getMedList,
+        _getThreshold: getThreshold,
+        _isLowStock: isLowStock,
+        _makeEntry: makeEntry,
+        _restoreFromBackup: restoreFromBackup,
+        _pushEntry: pushEntry,
+        _parseCsvRow: parseCsvRow,
+        _decodeAuto: decodeAuto,
+        _rowsFromColArrays: rowsFromColArrays,
+        _parseStockImportText: parseStockImportText,
+        _rowsFromArrayBuffer: rowsFromArrayBuffer,
+        _importStockBatch: importStockBatch,
+        _buildTemplateRows: buildTemplateRows,
+        _toCsvLine: toCsvLine,
+        _snapshotStockMap: snapshotStockMap,
+        _recordImportLedger: recordImportLedger
+    };
+})(typeof window !== 'undefined' ? window : this);

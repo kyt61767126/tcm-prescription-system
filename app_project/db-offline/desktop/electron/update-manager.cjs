@@ -10,6 +10,7 @@
 //     });
 //   接线点仅两处：
 //     ① 登录窗 dom-ready：updateManager.checkForUpdate(loginWindow)
+//        + updateManager.checkHotUpdate(loginWindow)（★ 2026-09-14 静默热更新）
 //     ② setWindowOpenHandler：if (updateManager.handleWindowOpen(url)) return { action: 'deny' };
 //   分发链：shared/ 权威源 → sync-all.ps1 Group 12 → 两个 electron/ 目录；
 //   copy-consistency.cjs 硬哈希门（pre-push ⑦ / CI ⑥）拦截漂移。
@@ -51,6 +52,33 @@ function createDesktopUpdateManager(opts) {
 
     let pendingUpdate = null;                 // { win, exeUrl, version }（injectUpdateBanner 时记录）
     let updateDownloading = false;
+
+    // ★ 2026-09-14 静默热更新（重建版，带 Ed25519 验签三道门禁，核心逻辑在
+    //   shared/hot-update-core.cjs 纯函数模块——本处只做 Electron 依赖组装）。
+    //   opts.hotUpdateUrl 不传则热更新禁用（向后兼容）。静默语义：后台检查+
+    //   增量下载+原子 swap，不打断使用；新版本下次启动生效（resolveHotEntry
+    //   复验通过才加载热目录，任何失败自动回退 asar 打包版）。
+    let hotManager = null;
+    if (opts.hotUpdateUrl) {
+        const hotCore = require('./hot-update-core.cjs');
+        hotManager = hotCore.createHotManager({
+            fetchImpl: function (u, o) { return net.fetch(u, o); },
+            dataDir: app.getPath('userData'),
+            baseUrl: opts.hotUpdateUrl
+        });
+    }
+
+    // 热更新就绪轻提示（登录窗顶部淡绿横幅，6s 自动消失；不打断任何操作）
+    function showHotUpdateToast(win, hotVersion) {
+        if (!win || win.isDestroyed()) return;
+        const code = '(function(){var t=document.createElement(\'div\');'
+            + 't.style.cssText=\'position:fixed;top:0;left:0;right:0;z-index:99998;padding:6px;'
+            + 'background:#e8f5e9;border-bottom:1px solid #a5d6a7;color:#2e7d32;text-align:center;'
+            + 'font-size:12px;font-family:Microsoft YaHei,sans-serif;\';'
+            + 't.textContent=\'✅ 新版 ' + JSON.stringify(String(hotVersion)) + ' 已就绪，重启后自动生效\';'
+            + 'document.body.appendChild(t);setTimeout(function(){t.remove();},6000);})();';
+        win.webContents.executeJavaScript(code).catch(function () {});
+    }
 
     function setUpdateBannerText(win, text, showLink, linkText) {
         if (!win || win.isDestroyed()) return;
@@ -275,6 +303,16 @@ function createDesktopUpdateManager(opts) {
         scheme: UPDATE_SCHEME,
         // 登录窗 dom-ready 后调用（原 checkForUpdateAndNotify）
         checkForUpdate: checkForUpdateAndNotify,
+        // ★ 2026-09-14 静默热更新：登录窗 dom-ready 后与整包检查并行调用（不传
+        //   hotUpdateUrl 时为空操作）。后台增量下载+原子 swap，下次启动生效。
+        checkHotUpdate: function (win) {
+            if (!hotManager) return Promise.resolve();
+            return hotManager.checkUpdate(function (hotVersion) { showHotUpdateToast(win, hotVersion); });
+        },
+        // ★ 2026-09-14 主窗口 loadFile 前调用：热目录复验（Ed25519 manifest 验签 +
+        //   全量文件哈希）通过返回热入口绝对路径，失败返回 null（坏目录已隔离，
+        //   desktop-windows.cjs 回退加载 asar 打包版）。
+        resolveHotEntry: hotManager ? function () { return hotManager.resolveEntry(); } : null,
         // setWindowOpenHandler 内调用：命中更新 scheme 触发下载并返回 true（调用方 deny 开窗）
         handleWindowOpen: function (url) {
             if (url === UPDATE_SCHEME) {

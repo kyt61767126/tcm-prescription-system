@@ -236,8 +236,30 @@ function createDesktopWindows({ app, BrowserWindow, shell, updateManager, sendSt
             } catch(e) { console.warn('[过滤toast] 注入失败:', e.message); }
         });
 
-        // ★ 直接加载打包的 index.html（已移除热更新机制，页面始终以打包文件为准）
-        win.loadFile(path.join(__dirname, '..', 'index.html'));
+        // ★ 2026-09-14 静默热更新接线（重建版，带 Ed25519 验签三道门禁）：
+        //   resolveHotEntry 复验（manifest 验签 + 全量文件哈希）通过 → 加载热目录
+        //   index.html（新版下次启动自动生效）；任何失败 → 该函数内部已隔离坏热目录，
+        //   此处回退 asar 打包版。config.json 绝不热更（含密码哈希/配置签名）——
+        //   从 asar 复制模板到热目录，等价原同步 XHR 行为（运行时权威仍是 userData 层）。
+        let hotEntry = null;
+        try {
+            if (updateManager && typeof updateManager.resolveHotEntry === 'function') {
+                hotEntry = updateManager.resolveHotEntry();
+            }
+        } catch (e) {
+            console.warn('[hot-update] 入口解析异常，回退打包版:', e && e.message);
+            hotEntry = null;
+        }
+        if (hotEntry) {
+            try {
+                fs.copyFileSync(path.join(__dirname, '..', 'config.json'),
+                    path.join(path.dirname(hotEntry), 'config.json'));
+            } catch (e) { /* 复制失败时同步 XHR 404 → 内联默认+userData 覆盖，等同现状 */ }
+            console.log('[hot-update] 加载热更新版入口:', hotEntry);
+            win.loadFile(hotEntry);
+        } else {
+            win.loadFile(path.join(__dirname, '..', 'index.html'));
+        }
 
         // ★ 安全：拦截 window.open 防止钓鱼攻击
         win.webContents.setWindowOpenHandler(({ url }) => {
@@ -365,6 +387,9 @@ function createDesktopWindows({ app, BrowserWindow, shell, updateManager, sendSt
                 const lw = getLoginWindow();
                 if (lw && !lw.isDestroyed()) {
                     updateManager.checkForUpdate(lw);
+                    // ★ 2026-09-14 静默热更新检查（与整包检查并行；后台增量下载，
+                    //   新版就绪后下次启动自动生效，仅淡绿横幅轻提示，绝不打断使用）
+                    updateManager.checkHotUpdate(lw);
                 }
                 sendStartupHeartbeat(); // ★ 匿名统计心跳（fire-and-forget，失败静默）
             }, 1500);
