@@ -412,6 +412,12 @@ public class MainActivity extends BridgeActivity {
                 String hotEntry = HotUpdateManager.resolveEntry(hotDir);
                 if (hotEntry != null) {
                     url = "file://" + hotEntry;
+                    // ★ Phase 2b：热入口生效时从 assets 复制 config.json 模板到热目录
+                    //   （config.json 绝不热更铁律——页面同步 XHR 'config.json' 相对路径
+                    //   读热目录；swap 后新 current 无此文件，每次启动补齐。模板语义，
+                    //   运行时权威仍是 Java config.json 权威层——对齐桌面 desktop-windows
+                    //   .cjs 从 asar 复制模板先例）
+                    ensureHotConfigTemplate(new File(hotEntry).getParentFile());
                     Log.i(TAG, "[hot-update] 加载热更新版入口: " + url);
                 }
             } catch (Throwable t) {
@@ -426,6 +432,30 @@ public class MainActivity extends BridgeActivity {
             mainHandler.postDelayed(this::loadLocalAssetWithRetry, WEBVIEW_READY_INTERVAL_MS);
         } else {
             Log.e(TAG, "WebView 就绪轮询失败，无法加载本地页面");
+        }
+    }
+
+    /**
+     * ★ Phase 2b：热目录 config.json 模板补齐（幂等，缺失才复制）。
+     * 热包清单绝不含 config.json（密码哈希 + configSignature 绝不热更铁律）；
+     * 页面同步 XHR 'config.json' 相对路径在热目录解析，swap 后新 current 缺此文件
+     * → 每次启动热入口生效时从 assets 打包源补模板（运行时权威仍是 Java 层）。
+     * 失败仅告警不阻断（页面有 Java 桥 config 权威源兜底链路）。
+     */
+    private void ensureHotConfigTemplate(File currentDir) {
+        try {
+            if (currentDir == null || !currentDir.isDirectory()) return;
+            File dst = new File(currentDir, "config.json");
+            if (dst.isFile()) return;
+            try (InputStream in = getAssets().open("public/config.json");
+                 OutputStream out = new FileOutputStream(dst)) {
+                byte[] buf = new byte[8192];
+                int n;
+                while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+            }
+            Log.i(TAG, "[hot-update] 已从 assets 复制 config.json 模板到热目录");
+        } catch (Throwable t) {
+            Log.w(TAG, "[hot-update] config.json 模板补齐失败（页面走 Java 桥兜底）: " + t.getMessage());
         }
     }
 
