@@ -548,6 +548,8 @@
 
 * ★ 2026-08-31 开放前官网安全审查（40+ Pages Functions 全面审计，详案已归档 `.trae/archive/2026-08-31-09-03-misc-experiences.md`）铁律：**①凡「客户端提交的标识参数」（machineId/phone/requestId）用于跨记录匹配时，命中的他人记录只能做无副作用读取——凡有写副作用（重置密码/开通账号）的调用必须限定「参数持有者本人记录」路径**；②KV `login_fail:{username}` 键的 TTL（24h 保计数）与锁定时长（按次数阶梯封顶 1h）是两回事。审查确认安全项：登录渐进锁定+IP 限流+防枚举哑哈希、dl.js 严格域名白名单（无 SSRF/开放代理）、admin-\* 强制 platform_admin 鉴权、ticket/trial 限流、处方 API 按创建者过滤、\_headers 安全头齐全。
 
+* ★ 2026-09-14 **设备封锁诊断三定律（"重装后疑似云端拉黑"排查闭环）**：测试机 release 288 卸载重装后出现注册开通页，一度推断"debug 包 INTEGRITY_FAIL=3 强信号已触发 blockDevice 拉黑 machineId"，KV 实锤证伪（零封锁记录）。三条铁律：①**封锁是否发生以 KV 为唯一裁决，禁靠客户端本地日志反推云端状态**——`npx wrangler kv key list --binding KV --prefix "device_block:" --remote`（`integrity_flag:` 同理；本机 workerd 报错时加 --remote 走线上），空=从未封锁。勿信"debug 包跑过强信号"式推断：**verifyOnline() 首行 readLicense 为 null 即短路返回不发网络请求（LicenseManager.java verifyOnline），无 license.dat 的篡改包（debug 包/卸载重装态）强信号永不上报云端**——封锁语义是"已激活设备的在线能力"，全新安装态根本没有上报通路；②**machineId 签名域天然隔离**——machineId=SHA256(ANDROID_ID|packageName|versionName|厂商|型号)，Android 8+ 的 ANDROID_ID 按 APK 签名密钥分域，debug 包与 release 包即使同一台机器也各持不同 machineId/hwFp（试用/封锁/激活绑定均不串扰），"debug 包触发的封锁波及 release"结构性不成立；③**卸载重装=出厂三清**——license.dat + config.json（本地账号）+ 试用文件全清，重装后必现「有效试用 + 注册开通页」：试用期内云端试用注册幂等放行（trial_fp:{hwFp} 在活跃窗口直接 allowed），valid=true 才会打 `[Integrity] 代码完整性校验通过` 日志（MainActivity 仅 valid 分支调 verifyJsIntegrity，见此日志≠已激活，也可能是试用态）。恢复正常路径=原手机号重新注册 → 登录 → 输原激活码（同签名 APK machineId 未变仍在 devices 秒恢复）。封锁文案全文备查：**"设备安全校验未通过，请更换设备或联系客服处理"**（HTTP 403，云端 10 出口统一：validate[claim 转发]/admin-submit×2/admin-status/verify×2/entitlement/heartbeat/status×2；客户端 LicenseManager.java activateOnline 透传 error 字段直显）。
+
 ## 10. 排查验证方法论
 
 * **报错文案会误导定位**：防静默包装只报 e.message 不报行号，「Cannot read 'success'」可能来自链路上任何一个 await——必须通读整条调用链。
@@ -575,6 +577,8 @@
 * 图片二维码验证：jsQR + PowerShell System.Drawing LockBits 提取 RGBA（GDI+ 是 BGRA 需转序）。
 
 * ★ 2026-09-10 云端APP"线上更新不生效"（用户连续三轮反馈布局未变化）双重根因：**① 根因一（最致命）：云端APP通过 Capacitor server.url 加载线上 URL（tcm-prescription-system.pages.dev），不是本地 assets——只改本地 assets 副本/只打包 APK 完全无效，必须推送 GitHub 触发 CF Pages 部署线上 HTML 才生效**。验证线上是否已部署：`curl -s https://tcm-prescription-system.pages.dev/ | grep 新标记`。**② 根因二（缓存竞争窗口）：Capacitor 初始加载发生在 configureWebView（postDelayed 延迟执行）之前/并行，clearCache(true) 是异步磁盘操作，WebView 可能已命中旧 HTTP 缓存完成首帧——clearCache + no-cache 头仍不够**。根治（V283）：configureWebView 清缓存后主动 `webView.loadUrl(CLOUD_URL + "?_v=" + System.currentTimeMillis())`，URL 不同=缓存键不同=必然拉最新；onPageStarted 兜底重定向同步带时间戳。isCloudUrl 按 host 判断（L1074），带参 URL 不被反钓鱼拦截。铁律：**云端APP排查"更新不生效"必查三件事：线上 HTML 是否真已部署（curl 新标记）、APK 是否 V283+（含时间戳绕缓存）、用户是否安装了新 APK（看 APP 内版本号 V1.0.0.283）**。
+
+* ★ 2026-09-14 排查"疑似云端拉黑/封锁"类问题两步法：**第一步先拿云端实锤再定位**——wrangler 直查 KV 前缀（device_block:/integrity_flag:，--remote），勿从客户端本地日志反推云端状态（本地 INTEGRITY_FAIL=3 ≠ 已上报）；**第二步判别截图/提示性质**——先分清是错误弹窗还是正常出厂页（注册开通页 = 卸载三清后的设计内行为，非故障），对照云端文案清单（validate.js 各 error 字段逐字透传直显）即可锁定链路。
 
 ## 11. D1 数据库迁移与激活审核有效期（2026-09-10）
 
