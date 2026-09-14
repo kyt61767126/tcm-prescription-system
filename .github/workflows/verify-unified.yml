@@ -113,9 +113,17 @@ jobs:
             exit 1
           }
 
+      - name: 8/8 Business JS cv hash consistency
+        shell: bash
+        run: |
+          node tools/check-cv-hashes.cjs || {
+            echo "::error::index.html 业务 JS 的 cv 参数与文件内容哈希不一致（immutable 长缓存下线上永不生效）。请运行 node tools/check-cv-hashes.cjs --update 重刷 cv，再跑 tools/sync-html.ps1 传播副本后提交。"
+            exit 1
+          }
+
       - name: Summary
         shell: bash
         run: |
           echo "### 校验结果" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "✅ 界面基线 / shared JS 同步 / HTML 副本 / 注入幂等性 / 源码落定门单测 / 独立js副本哈希 / 跨版本漂移 七重校验全部通过" >> $GITHUB_STEP_SUMMARY
+          echo "✅ 界面基线 / shared JS 同步 / HTML 副本 / 注入幂等性 / 源码落定门单测 / 独立js副本哈希 / 跨版本漂移 / cv哈希 八重校验全部通过" >> $GITHUB_STEP_SUMMARY

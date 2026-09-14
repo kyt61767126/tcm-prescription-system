@@ -1445,7 +1445,9 @@ export async function onRequest(context) {
                 // 服务端日志与审计仍区分场景（便于安全追溯），但对客户端响应完全一致
                 console.error('[登录失败]', userFound ? '密码错误:' : '用户不存在或凭据无效:', username);
                 const failCount = await recordLoginFailure(kv, lockKey);
-                await writeAuditLog(
+                // ★ 2026-09-14 登录提速：审计日志改 waitUntil 后台写（不阻塞响应；
+                //   防枚举时序不受影响——哑哈希等代价验证在密码环节，与审计无关）
+                context.waitUntil(writeAuditLog(
                     kv,
                     clinicId || null,
                     username,
@@ -1454,7 +1456,7 @@ export async function onRequest(context) {
                     userFound ? 'wrong_password' : 'user_not_found',
                     context,
                     { failCount }
-                );
+                ));
                 const remaining = Math.max(0, LOGIN_MAX_FAILURES - failCount);
                 const errorMsg = remaining > 0
                     ? `密码错误，剩余尝试次数：${remaining} 次`
@@ -1473,7 +1475,7 @@ export async function onRequest(context) {
             // 诊所被禁用（原在密码验证前直接返回，构成用户名枚举向量）
             if (clinicStatus === 'disabled') {
                 console.error('[登录失败] 诊所被禁用:', username, clinicName);
-                await writeAuditLog(kv, clinicId, username, user.role, 'login_failed', 'clinic_disabled', context, { clinicName });
+                context.waitUntil(writeAuditLog(kv, clinicId, username, user.role, 'login_failed', 'clinic_disabled', context, { clinicName }));
                 return json({
                     success: false,
                     error: '诊所已被禁用，请联系平台管理员',
@@ -1486,7 +1488,7 @@ export async function onRequest(context) {
             //   仅识别显式 true（undefined/缺省一律视为正常），宁漏检不可误报；停用即撤销其所有 token。
             if (user.disabled === true) {
                 console.error('[登录失败] 账号已被停用:', username, clinicName);
-                await writeAuditLog(kv, clinicId, username, user.role, 'login_failed', 'user_disabled', context, { clinicName });
+                context.waitUntil(writeAuditLog(kv, clinicId, username, user.role, 'login_failed', 'user_disabled', context, { clinicName }));
                 return json({
                     success: false,
                     error: '该账号已被平台管理员停用，如有需要请联系管理员启用',
@@ -1499,7 +1501,7 @@ export async function onRequest(context) {
             //   检查位于密码验证成功之后（P1-6：不构成用户名枚举向量）
             if (clinicStatus === 'test') {
                 console.error('[登录失败] 诊所待审核:', username, clinicName);
-                await writeAuditLog(kv, clinicId, username, user.role, 'login_failed', 'clinic_pending_approval', context, { clinicName });
+                context.waitUntil(writeAuditLog(kv, clinicId, username, user.role, 'login_failed', 'clinic_pending_approval', context, { clinicName }));
                 return json({
                     success: false,
                     error: '账号已创建，管理员审核通过后即可登录使用（如有疑问请联系客服）',
@@ -1512,7 +1514,7 @@ export async function onRequest(context) {
             if (clinicExpiresAt && new Date(clinicExpiresAt).getTime() < Date.now()) {
                 const expiredAt = new Date(clinicExpiresAt).toISOString().slice(0, 10);
                 console.error('[登录失败] 诊所已到期:', username, clinicName, expiredAt);
-                await writeAuditLog(kv, clinicId, username, user.role, 'login_failed', 'clinic_expired', context, { clinicName, expiredAt });
+                context.waitUntil(writeAuditLog(kv, clinicId, username, user.role, 'login_failed', 'clinic_expired', context, { clinicName, expiredAt }));
                 return json({
                     success: false,
                     error: '使用授权已于 ' + expiredAt + ' 到期，请联系管理员续费后登录',
@@ -1562,9 +1564,10 @@ export async function onRequest(context) {
 
             // P1-1：登录成功，清除失败计数
             // ★ 2026-08-26 锁定归一化：清权威账号 + 原始输入串两份计数（兼容历史分裂计数残留）
-            await clearLoginFailures(kv, lockKey);
+            // ★ 2026-09-14 登录提速：非关键写 waitUntil 化（不阻塞响应下发）
+            context.waitUntil(clearLoginFailures(kv, lockKey));
             if (lockKey !== username) {
-                await clearLoginFailures(kv, username);
+                context.waitUntil(clearLoginFailures(kv, username));
             }
 
             // ★★★ 2026-08-25 授权状态存量自愈：诊所从未设置有效期（早期平台管理员
@@ -1583,7 +1586,7 @@ export async function onRequest(context) {
                         await kv.put(KV_SYSTEM_CLINICS, JSON.stringify(clinics));
                         clinicExpiresAt = newExp;
                         console.log('[授权自愈] 诊所无有效期，已补写默认365天:', clinicName, newExp.slice(0, 10));
-                        await writeAuditLog(kv, clinicId, user.username, user.role, 'license_autofix_365d', 'auth', context, { expiresAt: newExp });
+                        context.waitUntil(writeAuditLog(kv, clinicId, user.username, user.role, 'license_autofix_365d', 'auth', context, { expiresAt: newExp }));
                     }
                 } catch (healErr) {
                     console.error('[授权自愈] 补写有效期失败（不影响登录）:', healErr.message);
@@ -1610,7 +1613,8 @@ export async function onRequest(context) {
             }
 
             // P1-2：记录登录成功审计日志
-            await writeAuditLog(kv, clinicId, user.username, user.role, 'login_success', 'auth', context);
+            // ★ 2026-09-14 登录提速：审计日志非关键路径，waitUntil 后台执行
+            context.waitUntil(writeAuditLog(kv, clinicId, user.username, user.role, 'login_success', 'auth', context));
 
             // ★★★ 2026-08-21 账号级设备授权：桌面/APP 设备指纹计入设备名额
             //   （网页版 clientClass=web 不占名额；旧客户端无 machineId 放行仅互斥）
@@ -1639,12 +1643,12 @@ export async function onRequest(context) {
                         const maxDev = (Number.isInteger(rawMax) && rawMax > 0) ? rawMax : null;
                         const already = devs.some(d => d && d.machineId === midFp);
                         if (maxDev !== null && !already && devs.length >= maxDev) {
-                            await writeAuditLog(kv, clinicId, user.username, user.role, 'login_failed', 'device_limit', context, {
+                            context.waitUntil(writeAuditLog(kv, clinicId, user.username, user.role, 'login_failed', 'device_limit', context, {
                                 machineId: midFp.substring(0, 8) + '...',
                                 clientClass: effClientClass,
                                 bound: devs.length,
                                 maxDevices: maxDev
-                            });
+                            }));
                             return json({
                                 success: false,
                                 error: '该机构版最多授权 ' + maxDev + ' 台设备，当前已满。请先在其他设备上解绑，或联系管理员扩容',
@@ -1657,11 +1661,11 @@ export async function onRequest(context) {
                 // ② 账号级设备绑定（机构版每账号 1 台 / 标准版每账号 2 台）
                 const bind = await bindUserDevice(kv, user.username, machineId, effClientClass, nowIso, normEdition, context.env);
                 if (!bind.ok && bind.code === 'DEVICE_LIMIT') {
-                    await writeAuditLog(kv, clinicId, user.username, user.role, 'login_failed', 'device_limit', context, {
+                    context.waitUntil(writeAuditLog(kv, clinicId, user.username, user.role, 'login_failed', 'device_limit', context, {
                         machineId: String(machineId || '').substring(0, 8) + '...',
                         clientClass: effClientClass,
                         bound: bind.record.devices.length
-                    });
+                    }));
                     return json({
                         success: false,
                         error: '设备数已达上限（机构版每账号最多 1 台、标准版 2 台：桌面/APP）。请先在已绑定设备上解绑，或联系管理员处理',

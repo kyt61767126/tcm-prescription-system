@@ -50,6 +50,9 @@ $unitDefs = @{
 #   ★ 2026-08-24 修复：public/updates/*/latest.json 是发布时 publish-release.js 写的
 #     自动更新元数据（cloud-desktop/cloud-app 的 sources 含 public），不排除会导致
 #     每次发布后云端两端必被误判"源码有新提交"而强制无谓重打（version 无谓递增）。
+#   ★ 2026-09-14 修复：public/hot-update/* 是 generate-{app,desktop}-hotupdate.cjs 发布的
+#     热包产物（离线端经线上拉取），云端两端 sources 含 public 但不消费——纯热包发布后
+#     云端两端被误判需重打（智能打包 [4] 预览误报，实测 09-14 20 时段），同性质排除。
 #   注意：手改 build.gradle/package.json 后请删除 .build-cache/build-state.json 强制全量重打
 $sideEffectPatterns = @(
     '^app_project/db-offline/app/app/src/main/assets/public/config\.json$',
@@ -62,7 +65,8 @@ $sideEffectPatterns = @(
     '^app_project/db-(offline/desktop|yunduan/cloud_desktop)/build-meta\.json$',
     '^public/hash-manifest\.json$',
     '^public/downloads/',
-    '^public/updates/'
+    '^public/updates/',
+    '^public/hot-update/'
 )
 
 # ---------- 工具函数 ----------

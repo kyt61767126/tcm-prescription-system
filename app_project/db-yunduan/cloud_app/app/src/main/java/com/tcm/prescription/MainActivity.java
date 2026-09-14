@@ -344,31 +344,36 @@ public class MainActivity extends BridgeActivity {
 
         WebSettings settings = webView.getSettings();
 
-        // ★★★ 2026-08-23 修复：云端页面更新不生效（用户"问题依旧"根因）
-        // 旧逻辑：仅 EXPECTED_APP_VERSION（编译期常量，2026-08-19-v1）变化才 clearCache——
-        //   但改线上 public/ 不会改变该常量 → APP 永远不主动清 HTTP 缓存；
-        //   再叠加服务端 / 返回 max-age=0（非 no-cache），Android WebView 磁盘缓存
-        //   不重新验证 → 用户手机一直显示旧页面（登录框旧的"开发模式/登录后显示版本"）。
-        // 新逻辑：每次启动无条件 clearCache(true)（仅清 HTTP 磁盘缓存，保留 localStorage
-        //   中的 rememberedUsername 等用户态），配合服务端 /*.js max-age=0 + etag 304，
-        //   未变资源走 304 极快、变更页面强制每次拉最新，彻底杜绝"线上更新不生效"。
-        // ★ 只清 HTTP 缓存，不清 DOM Storage（localStorage），保护记住用户功能。
-        webView.clearCache(true);
-        Log.d("TCM-Pres", "启动清HTTP缓存（保留localStorage），强制加载最新云端页面");
+        // ★★★ 2026-09-14 云端APP打开提速：移除每次启动 clearCache(true) ★★★
+        // 历史：2026-08-23 为治"线上更新不生效"加（当时服务端 / 返回 max-age=0，
+        //   Android WebView 磁盘缓存不重新验证，手机一直旧页面）；09-10 又加时间戳
+        //   URL 治清缓存异步竞争窗口。双刀叠加把缓存彻底废掉——每次冷启动 13 个
+        //   业务 JS 全量重下（auth-core 317KB 等，约 1MB），打开必慢。
+        // 现行机制（三层，无需再清缓存）：
+        //   ① HTML：下方 loadUrl 时间戳 URL 每次启动缓存键必变 → 必从网络拉最新，
+        //      "线上更新必生效"由它保证，与 HTTP 缓存无关；
+        //   ② 业务 JS：index.html script src 带 ?cv=<SHA256前8位> 内容哈希 +
+        //      服务端 immutable 长缓存（public/_headers 13 条精确规则）——
+        //      内容变 → cv 变 → URL 变 → 缓存键变 → 必拉新；内容不变则二次
+        //      打开直接命中磁盘缓存零网络请求（本次提速收益核心）；
+        //   ③ localStorage 本就不在 clearCache 范围（从来只清 HTTP 磁盘缓存），
+        //      rememberedUsername 等用户态不受任何影响。
+        // 防旧版卡死：忘 bump cv 由 pre-push ⑪ / CI 8/8 门禁拦截，机制化杜绝。
 
         // LOAD_DEFAULT: 优先使用缓存，但会向服务器验证缓存是否过期（304则用缓存，200则加载新页面）
-        // 配合版本检查机制：版本变更时onCreate清缓存，确保更新生效
-        // 效果：版本匹配时秒开，页面有更新时自动加载最新版本
+        // HTML 走时间戳 URL 必拉最新；业务 JS 走 cv+immutable 自失效，LOAD_DEFAULT 放行磁盘缓存
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
 
         // ★★★ 2026-09-10 根治"线上更新但云端APP不生效"（用户连续三轮反馈布局未变化）：
-        //   仅靠 clearCache + no-cache 头仍存在缓存竞争窗口——Capacitor server.url 的初始加载
-        //   发生在 configureWebView（延迟执行）之前/并行，clearCache(true) 是异步磁盘操作，
-        //   WebView 可能已命中旧 HTTP 缓存完成首帧。此处在清缓存后主动 loadUrl 带时间戳参数，
-        //   URL 不同 = 缓存键不同 = 必然从网络拉最新页面，彻底绕过磁盘缓存。
+        //   历史方案 clearCache + no-cache 头仍存在缓存竞争窗口——Capacitor server.url 的
+        //   初始加载发生在 configureWebView（延迟执行）之前/并行，WebView 可能已命中旧
+        //   HTTP 缓存完成首帧。此处主动 loadUrl 带时间戳参数，URL 不同 = 缓存键不同 =
+        //   必然从网络拉最新页面，彻底绕过磁盘缓存（2026-09-14 起不再依赖 clearCache，
+        //   本行成为"HTML 必拉最新"的唯一保证，长期保留）。
         //   isCloudUrl 按 host 判断（L1074），带 ?_v= 参数的 URL 仍视为云端，不会被
-        //   onPageStarted 反钓鱼重定向拦截。业务 JS 仍走 etag 304 极速缓存，性能无损。
-        //   首帧由遮罩覆盖（splashCoverUnlocked=false），双次加载用户不可见。
+        //   onPageStarted 反钓鱼重定向拦截。业务 JS 走 cv+immutable 自失效（磁盘缓存
+        //   直接命中，零网络请求），性能无损。首帧由遮罩覆盖（splashCoverUnlocked=false），
+        //   双次加载用户不可见。
         try {
             webView.loadUrl(CLOUD_URL + "?_v=" + System.currentTimeMillis());
             Log.d("TCM-Pres", "冷启动强制拉取最新云端页面(带时间戳绕缓存)");
