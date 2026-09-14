@@ -1,8 +1,8 @@
 {
   "format": 1,
   "channel": "app-local",
-  "hotVersion": "2026.09.14-1",
-  "minAppCode": 288,
+  "hotVersion": "2026.09.14-2",
+  "minAppCode": 999,
   "appVersion": "1.0.0",
   "files": [
     {
@@ -66,6 +66,6 @@
       "size": 881727
     }
   ],
-  "signedAt": 1789354767997,
-  "signature": "A4Ilr/sCFWwwG3zPjpqBf5TZTctrtz9NY/XIRBrbwJwkoyueU6F7kaNv5AAt7wpI3b2w/HvCzvzoWmMSQsWpDw=="
+  "signedAt": 1789355123953,
+  "signature": "4GALskfMhH/zLNDajA/Ppx/i9mlZw4KhIaPFLPKTbAUsyvikxsG8yFrClMOP5581mC8v+xVWyVGP+zUnebKBDQ=="
 }
