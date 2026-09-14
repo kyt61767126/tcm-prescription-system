@@ -506,6 +506,8 @@
 - **"版本号一致"≠"安装包一致"**：同 versionCode 多次打包靠 build-meta.js buildSeq 区分批次。
 - **wrangler KV 删除后立即 get 复核可能仍返回旧值**（边缘延迟 1 分钟内），复核失败≠删除失败。
 - **异步预填（解密/桥调用）必须存 Promise 让消费点可 await**，纯 fire-and-forget `.then()` 赋值必踩竞态。
+★ 2026-09-14（二十）**【平台校验三阶段计划·阶段1已落地】claim 端形态上报语义修正 + 双端授权漏洞定性**：评估「桌面/手机激活码独立授权，双端使用需分别购买」定价规则的技术执行现状——**validate.js 对 productClass/clientClass 只记录不校验（L468-488 仅 devices 元数据），同一码可跨桌面/APP 激活白嫖双端**（线上实证 BNZC-Y6TT 同码挂 desktop+app）。三阶段方案：①语义修正（已做）②服务端观察模式（记日志不拦截，量化跨端频率）③硬拦截（需客户端补标识+重打包）。**阶段1实修 3 处 clientClass 值 'app' 错填 productClass 域**（污染 KV devices 元数据/后台「类型」列/heartbeat 嗅探难补）：offline.js 离线APP直连claim→`productClass:'offline'+clientClass:'app'`、offline.js 云端APP分支→`'cloud'+'app'`、cloud.js 云端APP claim→`'cloud'+'app'`；sync-auth-core 11 副本全同步 + 重发 app-local 热包 2026.09.14-4。**claim 链路端标识现状备忘（阶段3清单）**：JS 直连路径已修正上报✓；桌面主进程 activate.js（submit→claim）与离线APP Java activateOnline（LicenseManager L3838 请求体）**均不发端标识**——硬拦截前必须补齐（APP 需 versionCode≥289 重打包、桌面需重打包）；发码侧仅 admin-approve 路径写 devices[0].clientClass（源自申请 appModeCarrier），generate.js 手动发码无载体字段。生效方式：离线APP（≥288）热更自动下发下次启动生效；云端网页/site-admin push 即生效；云桌面/离线桌面/云端APP 随下次重打包；服务端零部署影响。
+
 ## 8. 桌面版技术规范
 
 * **登录预填：已彻底取消（2026-09-06 Commit 2202236f，取代 9-04"来源单一化"方案）**：`initLoginInput` **不再做任何用户名自动预填**——登录框永远空白+聚焦；记住的账户仅保留**手动下拉切换**（renderUsernameDropdown，点▼选择）。演进史：8-27 恢复预填 → 9-04 收窄为"仅 localStorage 记住的用户名"（历史 bug：config.users 单账户分支无法区分出厂模板 admin，全新安装首次启动即预填 admin/admin）→ 9-06 用户实测"升级新版后自动显示旧记住的用户名，不像新客户"后**彻底取消**。理由：预填链路多次引发历史 bug + 升级安装 userData 不清导致残留展示；而手动下拉保留全部便利。

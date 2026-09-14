@@ -5370,7 +5370,11 @@
                                     user: effUser,
                                     clinicName: idClinicName || ((state && state.clinicName) || ''),
                                     phone: phoneVal,
-                                    productClass: 'app'
+                                    // ★ 2026-09-14 端形态语义修正：productClass 应为 cloud/offline，
+                                    //   'app' 属 clientClass 域（服务端 validate.js 据此落 devices 元数据，
+                                    //   供阶段2平台校验与后台「类型」列显示）
+                                    productClass: 'offline',
+                                    clientClass: 'app'
                                 }),
                                 signal: controller.signal
                             });
@@ -5488,7 +5492,11 @@
                                 user: effUser,
                                 clinicName: idClinicName || (state.clinicName || ''),
                                 phone: phoneVal,
-                                productClass: 'app'
+                                // ★ 2026-09-14 端形态语义修正：云端APP claim 上报
+                                //   productClass:'cloud' + clientClass:'app'（原 'app' 错占
+                                //   productClass 域，污染 KV 设备端形态记录）
+                                productClass: 'cloud',
+                                clientClass: 'app'
                             }),
                             signal: controller.signal
                         });
