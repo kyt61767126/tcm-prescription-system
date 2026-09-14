@@ -2399,11 +2399,14 @@
     // 上次失败的消息（用于兜底弹窗显示）
     let lastFailMessage = '授权已失效，请激活';
 
-    // ★ P1-7 心跳验证：每 24 小时联网验证一次 License，离线超过 7 天锁定
-    // 防盗破解：破解版无法通过心跳验证，7 天后自动锁定
+    // ★ P1-7 心跳验证：联网验证 License，离线超过 7 天锁定（防盗破解）
+    // ★ 2026-09-14 在线统计上报：周期从 24 小时缩短为 10 分钟——服务端按
+    //   devices[].lastHeartbeat ≤15 分钟窗口计「在线」（后台诊所管理
+    //   「在线：🖥️桌面 X · 📱APP X」，users.js 聚合），24h 周期下在线数恒为 0；
+    //   心跳同时显式上报端形态（productClass=offline + clientClass）。
     async function performHeartbeatCheck() {
         try {
-            const HEARTBEAT_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 小时
+            const HEARTBEAT_INTERVAL_MS = 10 * 60 * 1000; // ★ 10 分钟（在线统计上报周期，7 天离线锁定不变）
             const OFFLINE_LOCK_MS = 7 * 24 * 60 * 60 * 1000; // 7 天
             const now = Date.now();
 
@@ -2441,11 +2444,20 @@
                 }
             } catch (e) { /* 计数获取失败不影响心跳 */ }
 
+            // ★ 2026-09-14 端形态显式上报（服务端权威覆盖写 devices[].productClass/clientClass）：
+            //   离线端恒 offline；Capacitor=APP，桌面独有 activate.showExpireAlert 桥=桌面
+            //   （★ 判据铁律 KNOWLEDGE 2026-09-03：electronAPI.activate 在 APP 桥同样存在，
+            //     直接推 desktop 会把 APP 误标桌面；与 collectDeviceIdentity 同口径）——
+            //   供后台在线统计 🖥️/📱 分桶显示。
+            const repClientClass = (typeof global.Capacitor !== 'undefined' && global.Capacitor) ? 'app'
+                : ((global.electronAPI && global.electronAPI.activate &&
+                    typeof global.electronAPI.activate.showExpireAlert === 'function') ? 'desktop' : 'web');
+
             // 调用心跳接口
             const response = await fetch('https://tcm-prescription-system.pages.dev/api/license/heartbeat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ code: licenseCode, machineId: machineId, rxCount: rxCount, rxMonth: rxMonth })
+                body: JSON.stringify({ code: licenseCode, machineId: machineId, rxCount: rxCount, rxMonth: rxMonth, productClass: 'offline', clientClass: repClientClass })
             });
 
             if (!response.ok) {
@@ -2537,6 +2549,16 @@
         }
     }
 
+    // ★ 2026-09-14 在线心跳定时器：应用存活期间每 10 分钟上报一次（服务端按
+    //   ≤15 分钟窗口计在线，无定时器时仅在启动/激活后报一次 → 后台在线数很快归零）。
+    //   performHeartbeatCheck 内部自门控（未激活缺 license:code/machineId 时直接返回），无副作用。
+    let __heartbeatTimer = null;
+    function startHeartbeatTimer() {
+        if (__heartbeatTimer) return; // 幂等防重
+        __heartbeatTimer = setInterval(() => { performHeartbeatCheck(); }, 10 * 60 * 1000);
+        console.log('[Heartbeat] 在线上报定时器已启动（每 10 分钟）');
+    }
+
     async function checkLicenseAndShowActivate() {
         try {
             // 检查 license API 是否存在（APP 端无 window.electronAPI 时自动跳过）
@@ -2558,7 +2580,7 @@
                 // ★ 兼容逻辑：授权有效时清除失效标志
                 global.__licenseExpired = false;
                 global.__licenseActivating = false;
-                // ★ P1-7 心跳验证：异步执行，不阻断使用（24小时验证一次，7天离线锁定）
+                // ★ P1-7 心跳验证：异步执行，不阻断使用（10 分钟周期在线上报，7 天离线锁定）
                 performHeartbeatCheck();
                 // ★ P1-1 在线验证：如果需要在线验证，自动触发（不阻断使用）
                 if (result.needOnlineVerify && global.electronAPI.license.verifyOnline) {
@@ -5801,7 +5823,11 @@
                                     user: effUser,
                                     clinicName: idClinicName || ((state && state.clinicName) || ''),
                                     phone: phoneVal,
-                                    productClass: 'app'
+                                    // ★ 2026-09-14 端形态语义修正：productClass 应为 cloud/offline，
+                                    //   'app' 属 clientClass 域（服务端 validate.js 据此落 devices 元数据，
+                                    //   供阶段2平台校验与后台「类型」列显示）
+                                    productClass: 'offline',
+                                    clientClass: 'app'
                                 }),
                                 signal: controller.signal
                             });
@@ -5919,7 +5945,11 @@
                                 user: effUser,
                                 clinicName: idClinicName || (state.clinicName || ''),
                                 phone: phoneVal,
-                                productClass: 'app'
+                                // ★ 2026-09-14 端形态语义修正：云端APP claim 上报
+                                //   productClass:'cloud' + clientClass:'app'（原 'app' 错占
+                                //   productClass 域，污染 KV 设备端形态记录）
+                                productClass: 'cloud',
+                                clientClass: 'app'
                             }),
                             signal: controller.signal
                         });
@@ -7303,6 +7333,9 @@
             await checkLicenseAndShowActivate();
             // ★ 启动兜底检查（无论首次校验结果如何，都启动定时器）
             startFallbackCheck();
+            // ★ 2026-09-14 在线心跳定时器（10 分钟周期上报，供后台诊所管理在线统计；
+            //   未激活时函数内部自门控，激活后下一次 tick 自动开始上报）
+            startHeartbeatTimer();
             // ★ 2026-08-19 激活入口收敛：向 settingsModal（基础设置底部）注入授权状态 + 管理员激活
             // ★ 2026-08-20 云端APP（无试用）：登入框骨架管理员激活入口（申请云端账号）；网页/桌面无 loginOverlay，函数内部自动跳过
             injectLicenseStatusIntoSettings();

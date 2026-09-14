@@ -1,8 +1,8 @@
 {
   "format": 1,
   "channel": "local",
-  "hotVersion": "2026.09.14-1",
-  "appVersion": "1.0.245",
+  "hotVersion": "2026.09.14-2",
+  "appVersion": "1.0.246",
   "files": [
     {
       "name": "index.html",
@@ -11,13 +11,13 @@
     },
     {
       "name": "auth-core.js",
-      "sha256": "b4839a2cf9d98c925dccd7627e23686028e71b6564e3229f0369bf2236d584e9",
-      "size": 471937
+      "sha256": "a4dd8475f5454302dd65205ba7a242ea188b7b383654ab77fb1cce48f0b1af8b",
+      "size": 474797
     },
     {
       "name": "permission.js",
-      "sha256": "73e266ee83068a19482993c723d9e731ff699af341cc72f7190a61fd9aeb0c20",
-      "size": 16661
+      "sha256": "cb2b05837495ff0935ed784e8330019707ff75eb152c0cfc194ceec0d5a545f0",
+      "size": 27290
     },
     {
       "name": "normalize-config.js",
@@ -26,18 +26,18 @@
     },
     {
       "name": "debug-logger.js",
-      "sha256": "763cebe6ae6f44b19595da12b6859362bc0b957cca7a9a0f0f5ea0f156b9f4f7",
-      "size": 8807
+      "sha256": "05a2fb2f2417cfcecf3ed3c945d301b1b509bba516b8f6f671b98fec9880415b",
+      "size": 5230
     },
     {
       "name": "print-utils.js",
-      "sha256": "1d70677b83fc14de2b9edbbbcb53b6b7e1a7cef0b8a28db5d3b5486d48fa9628",
-      "size": 13029
+      "sha256": "8bdf9c894863e88bbd780f4d037260b0c9c2ee474b350e1901569c1a883fef52",
+      "size": 8036
     },
     {
       "name": "medicine-dict.js",
-      "sha256": "6000894b3ab76bba01566fc5e3c5ff8490438f6b9db4f7da00862ade54192c06",
-      "size": 9035
+      "sha256": "7361a949d5b4063990553ebff38c57a6ecffe9b5a6157ec41a880534591c6dd4",
+      "size": 5317
     },
     {
       "name": "symptom-dict.js",
@@ -46,13 +46,13 @@
     },
     {
       "name": "performance-utils.js",
-      "sha256": "242bd17e730ae63a9f0107ce033d57192168d2fcea90d9c06922ee4a2afd9959",
-      "size": 17635
+      "sha256": "6585d30794524c4517d28f1245442236caa89555aa7b7592a8863401726db7a7",
+      "size": 22868
     },
     {
       "name": "prescription-core.js",
-      "sha256": "c5b8b83dc469b54254b9d348cece73e6960017a7907ae37b42fb3e14438a449b",
-      "size": 10421
+      "sha256": "a5f1b432ab8d8357ec1f03b9e9fb51b7290cc09bdc121828296cd730155f2763",
+      "size": 9719
     },
     {
       "name": "stock-core.js",
@@ -61,8 +61,8 @@
     },
     {
       "name": "security-guard.js",
-      "sha256": "0ebf96358654598254ba83bc6cf43b1e294c1ae28e809db10fc4622c8dbd2c76",
-      "size": 11808
+      "sha256": "907c07f393c0ed4a2e2541d4c8a7cd9a4e87bf4688707db1bb83f64ffdbe3a3d",
+      "size": 15072
     },
     {
       "name": "electron/video-recorder.js",
@@ -75,6 +75,6 @@
       "size": 881727
     }
   ],
-  "signedAt": 1789350536572,
-  "signature": "K+MHkuGel6nzz5N64M0y1mELBIVlu7enKVKKaxT8FtZSB97fuqJ2akPD6z5GI5n0TOgsV2UHrhcPC+2XFUXnAw=="
+  "signedAt": 1789382313329,
+  "signature": "PlE9K8DiEboyospWHlrwBpSGhK+p9Pwd4K14+/EcWsYyqI8LSrwV7Cz61V39bECoPcQ+KtmjIfI9hY8pjWuQDA=="
 }

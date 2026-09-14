@@ -1,3 +1,148 @@
-(function(){
-(function(a,b){const W={a:0x1d4,b:0x1d5,d:0x1ff,e:0x1ef,f:0x1eb,i:0x1ec},x=h,y=h,d=a();while(!![]){try{const e=parseInt(x(0x1d9))/(0x182e+-0xc11*0x2+-0xb)*(parseInt(x(0x1e1))/(0x1*0x885+0xa92+0x3d1*-0x5))+parseInt(x(0x1e5))/(-0x3*-0x679+-0x1034*-0x1+-0x239c)+-parseInt(x(W.a))/(-0x255a+0x1*0x225+0x2339)+-parseInt(y(W.b))/(0x33f+-0x11*0x223+0x2119)+-parseInt(y(W.d))/(-0x10f6+-0x3*0x364+0x1b28)*(parseInt(x(W.e))/(0x7f6+-0x565+-0xa*0x41))+-parseInt(x(0x1d6))/(0x1ad2+0x1556+-0x7*0x6e0)*(-parseInt(x(W.f))/(-0x1f3a+-0x3*0x509+0x2e5e))+parseInt(x(W.i))/(0x248c+0xc3e+-0x28*0x138)*(parseInt(y(0x1c8))/(0x1076+0xe2e+0x45f*-0x7));if(e===b)break;else d['push'](d['shift']());}catch(f){d['push'](d['shift']());}}}(g,0x3*-0x208bb+0x2bd5*-0x27+0x10928d),function(i){const ak={a:0x1f9,b:0x1fd,d:0x1ee},aj={a:0x1da},ai={a:0x1d0},ag={a:0x1fa},af={a:0x1f8,b:0x207,d:0x1db,e:0x1ca,f:0x1ca,i:0x1d8},ae={a:0x1f1,b:0x1d7,d:0x209,e:0x1cc},ad={a:0x1f7,b:0x206,d:0x1f3,e:0x1de},a6={a:0x1e3,b:0x1dd},a1={a:0x1f5},G=h,H=h,j=(function(){let p=!![];return function(q,r){const s=p?function(){if(r){const t=r['apply'](q,arguments);return r=null,t;}}:function(){};return p=![],s;};}()),k=j(this,function(){const z=h;if(k['bind']()[z(a1.a)]()['indexOf']('\x0a')!==-(0x1892+-0x125*0x17+-0x1c2*-0x1))return;return k['toString']()['search']('(((.+)+)+)+$')['toString']()['constructor'](k)['search']('(((.+)+)+)+$');});k();const l=(function(){let p=!![];return function(q,r){const s=p?function(){if(r){const t=r['apply'](q,arguments);return r=null,t;}}:function(){};return p=![],s;};}());(function(){l(this,function(){const A=h,B=h,p=new RegExp('function\x20*\x5c(\x20*\x5c)'),q=new RegExp('\x5c+\x5c+\x20*(?:[a-zA-Z_$][0-9a-zA-Z_$]*)','i'),r=c(A(0x1ce));!p[B(a6.a)](r+A(a6.b))||!q[B(0x1e3)](r+'input')?r('0'):c();})();}());const m=(function(){let p=!![];return function(q,r){const s=p?function(){if(r){const t=r['apply'](q,arguments);return r=null,t;}}:function(){};return p=![],s;};}()),n=m(this,function(){const ac={a:0x200},E=h,F=h,p=function(){const C=h,D=h;let t;try{t=Function(C(ac.a)+D(0x1df)+');')();}catch(u){t=window;}return t;},q=p(),r=q['console']=q[E(0x1fc)]||{},s=['log','warn','info','error','exception','table',E(ad.a)];for(let t=0x636+0x1697*0x1+-0x1ccd;t<s['length'];t++){const u=m[F(ad.b)][F(ad.d)]['bind'](m),v=s[t],w=r[v]||u;u['__proto__']=m[E(ad.e)](m),u[F(0x1f5)]=w['toString'][F(ad.e)](w),r[v]=u;}});n();'use strict';const o={'PAGE_SIZES':{'A4':{'width':'210mm','height':G(ak.a),'margin':G(0x1e6)},'A5_PORTRAIT':{'width':H(0x1d7),'height':H(ak.b),'margin':'0'},'A5_LANDSCAPE':{'width':H(ak.b),'height':'148mm','margin':'0'}},'generatePrescriptionPrintHTML'(p,q){const I=H,J=H,r=q==='landscape',s=r?I(ae.a):'A5\x20portrait',t=r?'210mm':'148mm',u=r?J(ae.b):I(0x1fd);return J(0x1e2)+s+J(ae.d)+t+I(ae.e)+t+I(0x1f4)+u+J(0x1fb)+p+'</div></body></html>';},'printPrescription'(p){const K=H,L=H;p=p||'portrait';const q=document[K(af.a)]('prescriptionPaper')['innerHTML'],r=this[K(0x1cd)](q,p);if(i['AndroidNative']){if(i[L(0x207)][L(0x1db)]){i[K(af.b)][L(af.d)](r);return;}else{if(i[K(0x207)]['invoke'])try{i[L(0x207)]['invoke'](K(af.e),JSON[L(0x204)]({'html':r,'orientation':p}));return;}catch(u){console['error']('AndroidNative打印失败:',u);}}}if(i['electronAPI']&&i['electronAPI'][K(af.f)]){i[K(0x1f0)]['printPrescription'](r,p);return;}let s=document['getElementById']('printFrame');!s&&(s=document['createElement']('iframe'),s['id']=K(0x1e7),s[L(af.i)][L(0x1e9)]='position:fixed;right:0;bottom:0;width:0;height:0;border:0;',document['body'][L(0x1e0)](s));const t=s['contentWindow'][L(0x1d2)];t['open'](),t['write'](r),t['close'](),s['contentWindow']['focus'](),s[L(0x1c9)]['print']();},'generateMedicineListHTML'(p,q){const M=H,N=H,r=p['map']((s,t)=>'<tr><td>'+(t+(-0x13c7+-0xfc2+0x2*0x11c5))+M(0x1d1)+(s['name']||'')+N(0x1d1)+(s[M(0x1cf)]||'')+N(0x1d1)+(s[M(0x205)]||'')+M(0x1d1)+(s[M(0x208)]||'')+N(0x1f2))['join']('');return N(ag.a)+(q||'')+N(0x1ea)+r+M(0x1f6);},'exportCSV'(p,q){const ah={a:0x1e4},O=H,R=H,r=q['map'](u=>u[O(0x1d3)](v=>{const P=O,Q=O,w=String(v||'');return w[P(ah.a)](',')||w[P(ah.a)]('\x22')?'\x22'+w['replace'](/"/g,'\x22\x22')+'\x22':w;})['join'](','))[O(0x203)]('\x0a'),s='\uFEFF',t=new Blob([s+r],{'type':R(0x201)});this[O(ai.a)](t,p);},'downloadBlob'(p,q){const S=G,T=G,r=URL[S(0x1e8)](p),s=document[S(0x1dc)]('a');s['href']=r,s[S(aj.a)]=q,document['body'][T(0x1e0)](s),s['click'](),document['body']['removeChild'](s),URL[T(0x1cb)](r);}};i[G(ak.d)]=o;}(typeof window!=='undefined'?window:this));function h(a,b){a=a-(0x13e0+0x1*-0x11a7+-0x71);const c=g();let d=c[a];if(h['WQBMua']===undefined){var e=function(l){const m='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/=';let n='',o='',p=n+e,q=(''+function(){return-0x1d*-0x88+-0x3*0x61a+-0x6a*-0x7;})['indexOf']('\x0a')!==-(-0x26bf+-0x1a83*-0x1+0xf1*0xd);for(let r=-0x13*0x12d+0x794+0xec3,s,t,u=0x2*-0x47+-0x13e8+-0x2*-0xa3b;t=l['charAt'](u++);~t&&(s=r%(0x54e*-0x1+-0x90b+0xe5d)?s*(0x3*-0x1bc+-0x61c+0xb90)+t:t,r++%(-0x3*0x1f6+-0x268f*0x1+0x2c75))?n+=q||p['charCodeAt'](u+(-0xe7*0x1d+0xc8b+0xdaa))-(-0x2*-0x1a5+0x6b0+-0x9f0)!==-0x1*-0x397+0x2*-0x1135+-0xd*-0x25f?String['fromCharCode'](0x172a+-0x17*0xcf+-0x1*0x392&s>>(-(-0x62f*0x5+0xbf7*0x1+0x12f6)*r&0x1953+0x59d*-0x4+-0x2d9)):r:0x1ba5+0x1a56+-0x35fb){t=m['indexOf'](t);}for(let v=0x29c*-0x2+0x11*-0x34+0x8ac,w=n['length'];v<w;v++){o+='%'+('00'+n['charCodeAt'](v)['toString'](0x1e3+0x11*0x164+0x29*-0x9f))['slice'](-(0x11*0x1f9+0xc9b+-0x2e22));}return decodeURIComponent(o);};h['CdGViM']=e,h['ImHGlY']={},h['WQBMua']=!![];}const f=c[-0xf4c+0xed1*-0x2+0x2cee],i=a+f,j=h['ImHGlY'][i];if(!j){const k=function(l){this['RdZsGH']=l,this['eUogAg']=[-0x114*-0x1f+0x1*-0x1d63+-0x4*0x102,0x2088+0x574+-0x25fc,0x182e+-0xc11*0x2+-0xc],this['HLBDpI']=function(){return'newState';},this['caJfyn']='\x5c\x77\x2b\x20\x2a\x5c\x28\x5c\x29\x20\x2a\x7b\x5c\x77\x2b\x20\x2a',this['WcjXMp']='\x5b\x27\x7c\x22\x5d\x2e\x2b\x5b\x27\x7c\x22\x5d\x3b\x3f\x20\x2a\x7d';};k['prototype']['sQyTfN']=function(){const l=new RegExp(this['caJfyn']+this['WcjXMp']),m=l['test'](this['HLBDpI']['toString']())?--this['eUogAg'][0x1*0x885+0xa92+0x15d*-0xe]:--this['eUogAg'][-0x3*-0x679+-0x1034*-0x1+-0x239f];return this['ZSwZio'](m);},k['prototype']['ZSwZio']=function(l){if(!Boolean(~l))return l;return this['HDPlfG'](this['RdZsGH']);},k['prototype']['HDPlfG']=function(l){for(let m=-0x255a+0x1*0x225+0x2335,n=this['eUogAg']['length'];m<n;m++){this['eUogAg']['push'](Math['round'](Math['random']())),n=this['eUogAg']['length'];}return l(this['eUogAg'][0x33f+-0x11*0x223+0x2114]);},(''+function(){return-0x10f6+-0x3*0x364+0x1b22;})['indexOf']('\x0a')===-(0x7f6+-0x565+-0x4*0xa4)&&new k(h)['sQyTfN'](),d=h['CdGViM'](d),h['ImHGlY'][i]=d;}else d=j;return d;}function g(){const aq=['BwfW','mti3nJqWogPuvg5tuG','mta4mZeWnxjXyxD4tG','odHjsuHOzha','mtq4Bw0','C3r5Bgu','mZi1n0rVug51wq','zg93BMXVywq','ChjPBNriDg1S','y3jLyxrLrwXLBwvUDa','y2HHAw4','yMLUza','E30Uy29UC3rYDwn0B3iOiNjLDhvYBIb0AgLZiIKOicK','yxbWzw5Kq2HPBgq','otHYvhPMsfe','pcfet0nuwvbfigH0BwW+pgH0BwW+pgHLywq+phrPDgXLpUAdOow6T+s4REwmU+IVIUAjGoEUOEEqHUEZU+E7NYbwms4WlJaT5OMt5y2W6Ake6kEipc90AxrSzt48Bwv0ysbUyw1Lpsj2Awv3Cg9YDciGy29UDgvUDd0ID2LKDgG9zgv2AwnLlxDPzhrOlcbPBML0AwfSlxnJywXLpteUmci+phn0EwXLpGPaCgfNzsb7ihnPEMu6ia','DgvZDa','Aw5JBhvKzxm','mtaXnJm3BuTyA1fS','mtbTBq','ChjPBNrgCMfTzq','y3jLyxrLt2jQzwn0vvjm','y3nZvgv4Da','iokaLcdOJA/MNzdMUixLJzu8l2GYpGO8DgfIBgu+phrOzwfKpJX0CJ48DgG+iZWVDgG+phrOpUInR+wqJtWVDgG+phrOpUEUGoEGGtWVDgG+phrOpUwnLEs9JtWVDgG+phrOpUwnLEs7TZWVDgG+pc90CJ48l3rOzwfKpGO8DgjVzhK+','mZqYmJDNy1HrEfC','mtKWz0HOuKPe','C3rHDgvpyMPLy3q','uhjPBNrvDgLSCW','n2rwr05jvW','zwXLy3rYB25bueK','qtuGBgfUzhnJyxbL','pc90zd48l3rYpG','ChjVDg90ExbL','oYbOzwLNAhq6ia','Dg9tDhjPBMC','pc90yM9KEt48l3rHyMXLpGO8l2jVzhK+pc9ODg1SpG','DhjHy2u','z2v0rwXLBwvUDej5swq','mJK3Bw0','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','y29UC29Szq','mJeWBw0','z2DLCG','mJmYnZa1ofrqsxzcua','CMv0DxjUicHMDw5JDgLVBIGPia','Dgv4Dc9JC3y7y2HHCNnLDd11DgyTodS','D2HPBguGkhrYDwuPihT9','AM9PBG','C3rYAw5NAwz5','Dw5PDa','y29UC3rYDwn0B3i','qw5KCM9Pze5HDgL2zq','ChjPy2u','oYbTyxjNAw46ida7ih0kyM9KEsb7igzVBNqTzMfTAwX5oIaNu2LTu3vUjYWGj+wUI+s9KYCSihnLCMLMoYb3Awr0AdOG','C3rYAw5N','y291BNrLCG','ntqYmZy2DfzeB2LQ','y29UDgvUDfDPBMrVDW','ChjPBNrqCMvZy3jPChrPB24','CMv2B2TLt2jQzwn0vvjm','oYbWywrKAw5NoIaWoYbTyxjNAw46idaGyxv0BZSGzgLZCgXHEtOGzMXLEdSGANvZDgLMEs1JB250zw50oIbJzw50zxi7igfSAwDUlwL0zw1ZoIbMBgv4lxn0yxj0oYbTAw4TAgvPz2H0oIaXmdb2AdSGBgLUzs1OzwLNAhq6ideUodSGlxDLyMTPDc1WCMLUDc1JB2XVCI1HzgP1C3q6igv4ywn0oYbWCMLUDc1JB2XVCI1HzgP1C3q6igv4ywn0oYbJB2XVCJOGiZaWmdSGFqOUChjLC2nYAxb0Aw9UlxbHCgvYihSGD2LKDgG6ia','z2vUzxjHDgvqCMvZy3jPChrPB25qCMLUDeHutuW','Aw5PDa','y29Kzq','zg93BMXVywrcBg9I','pc90zd48Dgq+','zg9JDw1LBNq'];g=function(){return aq;};return g();}function c(a){const ao={a:0x20a,b:0x206,d:0x20b,e:0x206,f:0x1fe,i:0x1ed};function b(d){const U=h,V=h;if(typeof d===U(ao.a))return function(e){}[U(ao.b)](U(0x202))['apply'](U(ao.d));else(''+d/d)['length']!==-0x1da8+0x1e6a+-0xc1||d%(0x4e9+0x2444+-0x2919)===-0x44*0x17+0x9f9+-0x3dd?function(){return!![];}['constructor']('debu'+'gger')['call']('action'):function(){return![];}[U(ao.e)]('debu'+V(ao.f))['apply'](U(ao.i));b(++d);}try{if(a)return b;else b(-0x268f+-0xec3*-0x2+0x909);}catch(d){}}
-})();
+// ============================================================================
+// print-utils.js — 打印工具模块
+// 提供处方打印模板生成、A4适配、Excel导出等公共方法
+// ============================================================================
+(function (global) {
+    'use strict';
+
+    const PrintUtils = {
+        // 打印页面尺寸常量
+        PAGE_SIZES: {
+            A4: { width: '210mm', height: '297mm', margin: '10mm' },
+            A5_PORTRAIT: { width: '148mm', height: '210mm', margin: '0' },
+            A5_LANDSCAPE: { width: '210mm', height: '148mm', margin: '0' }
+        },
+
+        // 生成处方打印HTML
+        generatePrescriptionPrintHTML(content, orientation) {
+            const isLandscape = orientation === 'landscape';
+            const pageSize = isLandscape ? 'A5 landscape' : 'A5 portrait';
+            const paperWidth = isLandscape ? '210mm' : '148mm';
+            const paperHeight = isLandscape ? '148mm' : '210mm';
+
+            return `<!DOCTYPE html><html><head><title>惠康中医诊所管理系统 V1.0.0-打印预览</title><meta name="viewport" content="width=device-width, initial-scale=1.0"><style>
+@page { size: ${pageSize}; margin: 0; }
+body { font-family: 'SimSun', '宋体', serif; width: ${paperWidth}; padding: 0; margin: 0 auto; display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; line-height: 1.8; -webkit-print-color-adjust: exact; print-color-adjust: exact; color: #000; }
+.prescription-paper { width: ${paperWidth}; height: ${paperHeight}; padding: 28mm 15mm 20mm; margin: 0 auto; box-sizing: border-box; }
+.clinic-name { text-align: center; font-size: 16.5pt; font-weight: bold; color: #000; margin-bottom: 10px; letter-spacing: 2px; font-family: 'KaiTi', '楷体_GB2312', '楷体', serif; }
+.prescription-title { text-align: center; font-size: 16.5pt; font-weight: bold; color: #000; margin-bottom: 12px; letter-spacing: 4px; font-family: 'KaiTi', '楷体_GB2312', '楷体', serif; }
+.prescription-info { display: grid; grid-template-columns: repeat(6, 1fr); gap: 2px 2px; margin-bottom: 8px; border-bottom: 1px solid #000; padding-bottom: 4px; font-size: 10.5pt; color: #000; }
+.prescription-info > div { white-space: nowrap; text-align: left; min-width: 0; }
+.prescription-info > div:nth-child(1) { grid-column: 1 / 3; }
+.prescription-info > div:nth-child(2) { grid-column: 3 / 5; }
+.prescription-info > div:nth-child(3) { grid-column: 5 / 7; }
+.prescription-info > div:nth-child(4) { grid-column: 1 / 3; }
+.prescription-info > div:nth-child(5) { grid-column: 3 / 5; }
+.prescription-info > div:nth-child(6) { grid-column: 5 / 7; }
+.prescription-grid { border-top: 1px solid #000; border-bottom: 1px solid #000; min-height: 200px; margin-top: 8px; }
+.prescription-grid-inner { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 2px; }
+.prescription-line { padding: 5px 0; font-size: 11.25pt; text-align: center; font-weight: 500; color: #000; }
+.rp-mark { font-size: 16.5pt; font-weight: bold; font-style: italic; color: #000; font-family: 'Times New Roman', serif; }
+.dose-count { text-align: right; font-size: 11.25pt; color: #000; font-weight: bold; font-family: 'Times New Roman', serif; }
+.prescription-footer { margin-top: 8px; padding-top: 4px; border-top: none; font-size: 10.5pt; color: #000; }
+.usage-text { margin-bottom: 6px; font-size: 10.5pt; color: #000; font-weight: bold; white-space: nowrap; border: none; text-decoration: none; }
+.signature-row { display: flex; justify-content: space-between; font-size: 10.5pt; color: #000; }
+.signature-grid { display: grid; grid-template-columns: 4fr 3fr 3fr; gap: 6px 10px; margin-top: 8px; }
+.signature-item { font-size: 10.5pt; color: #000; padding: 2px 0; }
+.signature-item:nth-child(1) { text-align: left; }
+.signature-item:nth-child(2) { text-align: center; }
+.signature-item:nth-child(3) { text-align: right; padding-right: 50%; box-sizing: border-box; }
+</style></head><body><div class="prescription-paper">${content}</div></body></html>`;
+        },
+
+        // 打印处方
+        printPrescription(orientation) {
+            orientation = orientation || 'portrait';
+            const printContent = document.getElementById('prescriptionPaper').innerHTML;
+            const html = this.generatePrescriptionPrintHTML(printContent, orientation);
+
+            // 安卓原生打印
+            if (global.AndroidNative) {
+                if (global.AndroidNative.printHtml) {
+                    // 离线APP：直接调用 printHtml
+                    global.AndroidNative.printHtml(html);
+                    return;
+                } else if (global.AndroidNative.invoke) {
+                    // 云端APP：通过 invoke 调用 printPrescription
+                    try {
+                        global.AndroidNative.invoke('printPrescription', JSON.stringify({
+                            html: html,
+                            orientation: orientation
+                        }));
+                        return;
+                    } catch(e) {
+                        console.error('AndroidNative打印失败:', e);
+                    }
+                }
+            }
+
+            // Electron桌面端：通过IPC调用打印
+            if (global.electronAPI && global.electronAPI.printPrescription) {
+                global.electronAPI.printPrescription(html, orientation);
+                return;
+            }
+
+            // 网页端：iframe打印
+            let printFrame = document.getElementById('printFrame');
+            if (!printFrame) {
+                printFrame = document.createElement('iframe');
+                printFrame.id = 'printFrame';
+                printFrame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+                document.body.appendChild(printFrame);
+            }
+            const doc = printFrame.contentWindow.document;
+            doc.open();
+            doc.write(html);
+            doc.close();
+            printFrame.contentWindow.focus();
+            printFrame.contentWindow.print();
+        },
+
+        // 生成药材清单打印HTML
+        generateMedicineListHTML(medicines, clinicName) {
+            const rows = medicines.map((m, i) =>
+                `<tr><td>${i + 1}</td><td>${m.name || ''}</td><td>${m.code || ''}</td><td>${m.unit || ''}</td><td>${m.price || ''}</td></tr>`
+            ).join('');
+            return `<!DOCTYPE html><html><head><title>惠康中医诊所管理系统 V1.0.0-药材清单打印预览</title><style>
+@page { size: A4; margin: 10mm; }
+body { font-family: SimSun, serif; }
+h2 { text-align: center; }
+table { width: 100%; border-collapse: collapse; }
+td, th { border: 1px solid #000; padding: 4px 8px; font-size: 12px; text-align: center; }
+th { background: #f0f0f0; }
+</style></head><body>
+<h2>${clinicName || ''} — 药材清单</h2>
+<table><thead><tr><th>#</th><th>药名</th><th>简码</th><th>单位</th><th>单价</th></tr></thead>
+<tbody>${rows}</tbody></table>
+</body></html>`;
+        },
+
+        // 导出CSV
+        exportCSV(filename, rows) {
+            const csv = rows.map(row =>
+                row.map(cell => {
+                    const val = String(cell || '');
+                    return val.includes(',') || val.includes('"') ? '"' + val.replace(/"/g, '""') + '"' : val;
+                }).join(',')
+            ).join('\n');
+            const bom = '\uFEFF';
+            const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
+            this.downloadBlob(blob, filename);
+        },
+
+        // 下载Blob
+        downloadBlob(blob, filename) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+    };
+
+    global.PrintUtils = PrintUtils;
+
+})(typeof window !== 'undefined' ? window : this);
