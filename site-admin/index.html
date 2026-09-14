@@ -2407,9 +2407,13 @@ if (window.Permission) {
                     break;
                 case 'preview':
                     centerPanel.classList.add('active');
+                    // ★ 2026-09-15 预览缩放：进入预览复位上次缩放状态 + 首次使用提示
+                    //   （防御式调用：无预览缩放模块的副本如 site-admin 静默跳过）
+                    if (typeof window._previewZoomReset === 'function') window._previewZoomReset();
+                    if (typeof window._previewZoomEnterHint === 'function') window._previewZoomEnterHint();
                     break;
             }
-            
+
             // 设置当前标签为激活状态
             mobileNavItems.forEach(item =>{
                 if (item.getAttribute('onclick')?.includes(tabName)) {

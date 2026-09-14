@@ -1289,9 +1289,13 @@ let currentUser = null;
                     break;
                 case 'preview':
                     centerPanel.classList.add('active');
+                    // ★ 2026-09-15 预览缩放：进入预览复位上次缩放状态 + 首次使用提示
+                    //   （防御式调用：无预览缩放模块的副本如 site-admin 静默跳过）
+                    if (typeof window._previewZoomReset === 'function') window._previewZoomReset();
+                    if (typeof window._previewZoomEnterHint === 'function') window._previewZoomEnterHint();
                     break;
             }
-            
+
             // 设置当前标签为激活状态
             mobileNavItems.forEach(item =>{
                 if (item.getAttribute('onclick')?.includes(tabName)) {
@@ -1299,6 +1303,111 @@ let currentUser = null;
                 }
             });
         }
+
+        // ★ 2026-09-15 APP预览缩放：viewport user-scalable=no 全局禁缩放下，为预览tab
+        //   处方签实现局部手势缩放——双指捏合(0.5~3x，围绕手势中点)、放大后单指平移、
+        //   双击复位；全局放开缩放会引入输入框聚焦自动放大等副作用故不采用。
+        //   桌面端无触摸不触发（零影响）；仅预览tab(.center-panel.active)激活时生效。
+        (function () {
+            var panel = document.querySelector('.center-panel');
+            var paperSel = '.center-panel .prescription-paper';
+            var z = { scale: 1, tx: 0, ty: 0, gesture: null, lastTap: 0 };
+
+            function applyZoom(paper) {
+                paper.style.transformOrigin = '0 0';
+                paper.style.transform = 'translate(' + z.tx + 'px,' + z.ty + 'px) scale(' + z.scale + ')';
+            }
+
+            function resetZoom() {
+                z.scale = 1; z.tx = 0; z.ty = 0; z.gesture = null;
+                var paper = document.querySelector(paperSel);
+                if (paper) { paper.style.transform = ''; paper.style.transformOrigin = ''; }
+            }
+            window._previewZoomReset = resetZoom;
+
+            window._previewZoomEnterHint = function () {
+                try {
+                    if (!localStorage.getItem('preview_pinch_hint_shown')) {
+                        localStorage.setItem('preview_pinch_hint_shown', '1');
+                        showToast('双指捏合可缩放处方签，双击复位');
+                    }
+                } catch (e) {}
+            };
+
+            if (!panel) return;
+
+            function dist2(t1, t2) {
+                var dx = t1.clientX - t2.clientX, dy = t1.clientY - t2.clientY;
+                return Math.sqrt(dx * dx + dy * dy);
+            }
+
+            panel.addEventListener('touchstart', function (e) {
+                if (!panel.classList.contains('active')) return;
+                if (e.touches.length === 2) {
+                    var paper = document.querySelector(paperSel);
+                    if (!paper) { z.gesture = null; return; }
+                    var r = paper.getBoundingClientRect();
+                    var mx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+                    var my = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+                    z.gesture = {
+                        mode: 'pinch',
+                        dist: dist2(e.touches[0], e.touches[1]),
+                        s0: z.scale, tx0: z.tx, ty0: z.ty,
+                        ax: (mx - r.left) + z.tx,
+                        ay: (my - r.top) + z.ty
+                    };
+                } else if (e.touches.length === 1 && z.scale !== 1) {
+                    z.gesture = {
+                        mode: 'pan',
+                        x0: e.touches[0].clientX,
+                        y0: e.touches[0].clientY,
+                        tx0: z.tx, ty0: z.ty
+                    };
+                } else {
+                    z.gesture = null;
+                }
+            }, { passive: true });
+
+            panel.addEventListener('touchmove', function (e) {
+                var g = z.gesture;
+                if (!g || !panel.classList.contains('active')) return;
+                var paper = document.querySelector(paperSel);
+                if (!paper) return;
+                if (g.mode === 'pinch' && e.touches.length === 2) {
+                    e.preventDefault();
+                    var d = dist2(e.touches[0], e.touches[1]);
+                    if (g.dist > 0 && d > 0) {
+                        var s2 = Math.min(3, Math.max(0.5, g.s0 * (d / g.dist)));
+                        var k = 1 - (s2 / g.s0); // 围绕手势中点缩放的平移补正
+                        z.tx = g.tx0 + (g.ax - g.tx0) * k;
+                        z.ty = g.ty0 + (g.ay - g.ty0) * k;
+                        z.scale = s2;
+                        applyZoom(paper);
+                    }
+                } else if (g.mode === 'pan' && e.touches.length === 1) {
+                    e.preventDefault();
+                    z.tx = g.tx0 + (e.touches[0].clientX - g.x0);
+                    z.ty = g.ty0 + (e.touches[0].clientY - g.y0);
+                    applyZoom(paper);
+                }
+            }, { passive: false });
+
+            panel.addEventListener('touchend', function (e) {
+                z.gesture = null;
+                // 双击复位（仅缩放状态≠1时）：两次快速轻点
+                if (e.changedTouches.length === 1 && z.scale !== 1) {
+                    var now = Date.now();
+                    if (now - z.lastTap < 350) {
+                        resetZoom();
+                        z.lastTap = 0;
+                        try { showToast('已恢复原始大小'); } catch (err) {}
+                    } else {
+                        z.lastTap = now;
+                    }
+                }
+            });
+            panel.addEventListener('touchcancel', function () { z.gesture = null; });
+        })();
 
 
         async function getUserItem(key) {
