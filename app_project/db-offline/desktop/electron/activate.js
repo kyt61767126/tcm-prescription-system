@@ -87,6 +87,10 @@ async function activateOnline(code, machineId, user, clinicName, phone, password
         // ★ v3 新增：提交 clinicName（如填写）
         if (clinicName) body.clinicName = clinicName;
         if (phone) body.phone = phone;
+        // ★ 2026-09-14 阶段3 平台校验：端形态标识上报（服务端观察模式落
+        //   devices 元数据 + 后台「类型」列显示；硬拦截切换的数据前提）
+        body.productClass = 'offline';
+        body.clientClass = 'desktop';
         // ★ 2026-08-26 推广奖励：好友邀请码（选填）——邀请人+90天（封顶4人360天），本机+30天
         if (inviteCode && /^[A-Za-z0-9]{4,10}$/.test(String(inviteCode).trim())) {
             body.inviteCode = String(inviteCode).trim().toUpperCase();

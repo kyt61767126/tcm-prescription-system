@@ -331,6 +331,70 @@ export async function onRequest(context) {
         const licenseUser = (phoneVerified && (record.user || record.username)) ||
                             user || record.user || record.username || 'user';
 
+        // ★ 2026-09-14 阶段2/3 平台校验（观察模式已上线，硬拦截开关就绪）：
+        //   请求端 clientClass 存在 && 已绑定设备中任一端形态存在且与请求端不一致
+        //   → 记 platform-mismatch-observed 日志事件后照常放行。
+        //   判定语义与阶段3（硬拦截）保持一致：任一已绑定设备端形态与本次请求端
+        //   不同即跨端使用证据（较方案初稿 devices[0] 更严——多设备码不漏报）。
+        //   数据归一：clientClass 值域 desktop/app/web；阶段1 之前 APP 曾把 'app'
+        //   错填进 productClass 域，存量记录按 productClass==='app' 归一映射为
+        //   clientClass='app' 参与比对（与 heartbeat 兜底同源的错位容忍）。
+        //   桌面端 clientClass 补发属阶段3（当前桌面请求不带 → 三条件不满足不
+        //   记录，数据不足不误报）。观察期数据就绪后评估切换硬拦截时机。
+        // ★ 阶段3 硬拦截开关（KV config:platform-check = {"mode":"enforce"}）：
+        //   客户端补发标识覆盖率足够（桌面/APP 重打包发版后）且观察数据确认
+        //   跨端规模后，后台改 KV 键即切换拒绝模式，零代码零部署回滚同理
+        //   （删键/改 observe 即回到观察模式）。
+        // ★ 位置铁律：本块必须在任何激活写操作（buildLicenseData/updateLicense/
+        //   ensureInviteCode）之前执行——enforce 拒绝时新设备绝不能已写入 devices
+        //   （否则被拒设备占 maxDevices 名额 + 参与后续比对造成污染）；observe
+        //   放行路径无影响（后续正常落库）。auto-unbind 的 devices.shift() 仅改
+        //   内存不落库，拒绝时自动回滚，语义正确。
+        const pClass = (productClass || '').trim() || null;
+        const cClass = (clientClass || '').trim() || null;
+        if (cClass) {
+            const devClassOf = (d) => (((d && d.clientClass) || '').trim()) ||
+                (((d && d.productClass) || '') === 'app' ? 'app' : null);
+            const known = devices.map(d => ({
+                c: devClassOf(d),
+                p: (((d && d.productClass) || '').trim()) || null
+            }));
+            const mismatched = known.filter(k => k.c && k.c !== cClass);
+            if (mismatched.length > 0) {
+                const panorama = known.map(k => (k.c || 'null') + (k.p ? '(' + k.p + ')' : '')).join(', ');
+                // ★ 硬拦截开关：enforce 模式拒绝（阶段3），默认/observe 放行（阶段2）
+                let __enforce = false;
+                try {
+                    const __sw = await kv.get('config:platform-check', 'json');
+                    __enforce = !!(__sw && __sw.mode === 'enforce');
+                } catch (_) { /* 开关读取失败不拦截，维持观察模式 */ }
+                if (__enforce) {
+                    await appendLicenseLog(kv, code, {
+                        action: 'platform-mismatch-denied',
+                        time: new Date().toISOString(),
+                        ip: ip,
+                        operator: licenseUser,
+                        detail: '跨端激活拒绝（阶段3 enforce）：请求端 ' + cClass + (pClass ? '/' + pClass : '') +
+                            '，已绑定端=[' + panorama + ']，machineId=' + machineId.substring(0, 8) +
+                            '...，' + (existingDevice ? '同设备重激活' : '新设备激活')
+                    });
+                    return json({
+                        success: false,
+                        error: '该授权码已在其他平台（桌面/手机）激活。双端使用需分别购买授权，如有疑问请联系客服处理。'
+                    }, 403);
+                }
+                await appendLicenseLog(kv, code, {
+                    action: 'platform-mismatch-observed',
+                    time: new Date().toISOString(),
+                    ip: ip,
+                    operator: licenseUser,
+                    detail: '跨端激活观察（阶段2不拦截）：请求端 ' + cClass + (pClass ? '/' + pClass : '') +
+                        '，已绑定端=[' + panorama + ']，machineId=' + machineId.substring(0, 8) +
+                        '...，' + (existingDevice ? '同设备重激活' : '新设备激活')
+                });
+            }
+        }
+
         // ★ 2026-08-26 推广奖励：邀请码处理（可选字段，不影响既有激活流程）
         //  仅【新设备首次付费激活】且携带邀请码时发奖：邀请人 +90 天（封顶4人360天），
         //  被邀请人 +30 天。防刷条件见 license-core.applyInviteReward。
@@ -459,9 +523,6 @@ export async function onRequest(context) {
         }
         // ★ v4 新增：更新 devices 数组
         const newDevices = devices.slice();  // 复制现有设备列表
-        // ★ 2026-09-14 阶段2 端形态标识提取（观察模式数据源，validate 不做拦截）
-        const pClass = (productClass || '').trim() || null;
-        const cClass = (clientClass || '').trim() || null;
         if (existingDevice) {
             // 同设备重激活：更新该设备的激活时间
             existingDevice.activatedAt = getNowISO();
@@ -511,38 +572,6 @@ export async function onRequest(context) {
             operator: licenseUser,
             detail: `machineId=${machineId.substring(0, 8)}..., clinicName=${record.clinicName || 'null'}, devicesCount=${newDevices.length}/${maxDevices}`
         });
-
-        // ★ 2026-09-14 阶段2 平台校验观察模式（不拦截，量化真实跨端激活频率）：
-        //   请求端 clientClass 存在 && 已绑定设备中任一端形态存在且与请求端不一致
-        //   → 记 platform-mismatch-observed 日志事件后照常放行。
-        //   判定语义与阶段3（硬拦截）保持一致：任一已绑定设备端形态与本次请求端
-        //   不同即跨端使用证据（较方案初稿 devices[0] 更严——多设备码不漏报）。
-        //   数据归一：clientClass 值域 desktop/app/web；阶段1 之前 APP 曾把 'app'
-        //   错填进 productClass 域，存量记录按 productClass==='app' 归一映射为
-        //   clientClass='app' 参与比对（与 heartbeat 兜底同源的错位容忍）。
-        //   桌面端 clientClass 补发属阶段3（当前桌面请求不带 → 三条件不满足不
-        //   记录，数据不足不误报）。观察期数据就绪后评估切换硬拦截时机。
-        if (cClass) {
-            const devClassOf = (d) => (((d && d.clientClass) || '').trim()) ||
-                (((d && d.productClass) || '') === 'app' ? 'app' : null);
-            const known = devices.map(d => ({
-                c: devClassOf(d),
-                p: (((d && d.productClass) || '').trim()) || null
-            }));
-            const mismatched = known.filter(k => k.c && k.c !== cClass);
-            if (mismatched.length > 0) {
-                const panorama = known.map(k => (k.c || 'null') + (k.p ? '(' + k.p + ')' : '')).join(', ');
-                await appendLicenseLog(kv, code, {
-                    action: 'platform-mismatch-observed',
-                    time: new Date().toISOString(),
-                    ip: ip,
-                    operator: licenseUser,
-                    detail: '跨端激活观察（阶段2不拦截）：请求端 ' + cClass + (pClass ? '/' + pClass : '') +
-                        '，已绑定端=[' + panorama + ']，machineId=' + machineId.substring(0, 8) +
-                        '...，' + (isReactivation ? '同设备重激活' : '新设备激活')
-                });
-            }
-        }
 
         // 编码为 base64（客户端写入 license.dat 的格式）
         const licenseBase64 = encodeLicenseBase64(licenseData);

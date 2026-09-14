@@ -370,6 +370,47 @@ const RULES = [
                 ? { pass: true, detail: '主裁决+回退+四态退出条件齐全' }
                 : { pass: false, detail: '缺失：' + missing.join(', ') + ' —— 撤销检查切 entitlement 后回退与退出边界必须与老接口对拍（未找到绑定不退出）' };
         }
+    },
+
+    // ---------- G4 阶段3 平台校验：激活入口端形态标识上报完备（防回退） ----------
+    {
+        id: 'G4', desc: '端形态标识上报：全部激活入口 claim body 必带 productClass/clientClass（服务端观察模式与硬拦截的数据前提）',
+        source: 'KNOWLEDGE 条目二十：平台校验三阶段之阶段3清单——桌面 activate.js×2 + 离线APP Java + auth-core 双源共 6 处补发',
+        run: (s) => {
+            const bad = [];
+            const need = (src, patterns, name) => {
+                for (const [re, label] of patterns) {
+                    if (!re.test(src)) bad.push(name + ' 缺 ' + label);
+                }
+            };
+            // 桌面双端 activate.js（主进程，重打包生效）
+            need(s.activateOfflineDesktop, [
+                [/body\.productClass\s*=\s*'offline'/, "productClass='offline'"],
+                [/body\.clientClass\s*=\s*'desktop'/, "clientClass='desktop'"]
+            ], 'activate.js(离线桌面)');
+            need(s.activateCloudDesktop, [
+                [/body\.productClass\s*=\s*'cloud'/, "productClass='cloud'"],
+                [/body\.clientClass\s*=\s*'desktop'/, "clientClass='desktop'"]
+            ], 'activate.js(云桌面)');
+            // 离线APP Java 原生路径（整包发版生效，热更覆盖不到）
+            need(s.licenseJava, [
+                [/reqBody\.put\("productClass",\s*"offline"\)/, 'productClass="offline"'],
+                [/reqBody\.put\("clientClass",\s*"app"\)/, 'clientClass="app"']
+            ], 'LicenseManager.java(离线APP)');
+            // auth-core 双源 JS 直连分支（阶段1已修，防回退）
+            need(s.offline, [
+                [/productClass:\s*'offline',/, "offline 分支 productClass:'offline'"],
+                [/productClass:\s*'cloud',/, "云端APP分支 productClass:'cloud'"],
+                [/clientClass:\s*'app'/, "clientClass:'app'"]
+            ], 'auth-core/offline.js');
+            need(s.cloud, [
+                [/productClass:\s*'cloud',/, "productClass:'cloud'"],
+                [/clientClass:\s*'app'/, "clientClass:'app'"]
+            ], 'auth-core/cloud.js');
+            return bad.length === 0
+                ? { pass: true, detail: '6 处激活入口端形态标识齐全' }
+                : { pass: false, detail: bad.join('；') + ' —— 缺标识的端在观察模式下不产生跨端数据、硬拦截下会误伤（服务端按数据不足放行但无法精确切换）' };
+        }
     }
 ];
 

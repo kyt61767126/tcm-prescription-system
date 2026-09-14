@@ -3839,6 +3839,11 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
             reqBody.put("code", code != null ? code.trim() : "");
             reqBody.put("machineId", machineId != null ? machineId : "");
             reqBody.put("user", user != null ? user : "");
+            // ★ 2026-09-14 阶段3 平台校验：端形态标识上报（服务端观察模式落
+            //   devices 元数据 + 后台「类型」列显示；硬拦截切换的数据前提。
+            //   Java 原生路径热更覆盖不到，随下个整包 versionCode 发版生效）
+            reqBody.put("productClass", "offline");
+            reqBody.put("clientClass", "app");
             // ★ v3 新增：提交 clinicName（如填写）
             if (clinicName != null && !clinicName.isEmpty()) {
                 reqBody.put("clinicName", clinicName);
