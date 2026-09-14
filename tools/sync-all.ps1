@@ -220,6 +220,31 @@ $DesktopWindowsTargets = @(
     'app_project/db-offline/desktop/electron'
 )
 
+# Group 17: desktop-dialog.cjs + prompt-modal.html + prompt-preload.js (★ 2026-09-14 P3-A 桌面对话框域收口)
+#   -> 2 个 electron 目录。dialog:alert-sync / dialog:confirm-sync / dialog:prompt
+#   三 handler 从双 main.js 等体抽取（双端除 prompt 窗 title 外字节级同体，
+#   title 经工厂 promptTitle 入参注入端差异）。prompt-modal.html 双端 <title>
+#   统一为"请输入"（小输入窗标题无功能影响）；prompt-preload.js 三份归一
+#   （tools/ 下零引用副本已删）。三文件同组同位分发：desktop-dialog.cjs 内
+#   path.join(__dirname,...) 依赖同目录布局（asar 内与开发目录均正确）。
+#   配套：main.js require('./desktop-dialog.cjs').createDesktopDialogIpc({...}) 工厂注入。
+$DesktopDialogTargets = @(
+    'app_project/db-yunduan/cloud_desktop/electron',
+    'app_project/db-offline/desktop/electron'
+)
+
+# Group 18: desktop-crash-guard.cjs (★ 2026-09-14 P3-A 桌面崩溃韧性补强) -> 2 个 electron 目录
+#   render-process-gone / child-process-gone 兜底：此前双端仅有
+#   uncaughtException/unhandledRejection，渲染进程崩溃=白屏无恢复。
+#   主壳崩溃自动销毁重建（clean-exit 过滤防误报），60s 滑窗 >=3 次熔断
+#   提示后自然退出；GPU/Utility 子进程仅审计。窗口经访问器注入复用
+#   desktop-windows.cjs 的 createMainWindow/createLoginWindow（模块边界不交叉）。
+#   配套：main.js require('./desktop-crash-guard.cjs').createDesktopCrashGuard({...}) 工厂注入。
+$DesktopCrashGuardTargets = @(
+    'app_project/db-yunduan/cloud_desktop/electron',
+    'app_project/db-offline/desktop/electron'
+)
+
 # Group 11: index.html 权威源 -> 云端副本（★ 2026-09-02 从手工复制升级为生成模式）
 #   历史事故：权威源改动靠手工复制到云桌面/云APP 副本，多次遗漏导致 CI 红灯、
 #   重复 IIFE 脏块累积。现由 tools/sync-html.ps1 自动生成（端配置块保留，
@@ -423,6 +448,16 @@ Write-Host ""
 
 # Group 15: desktop-windows.cjs -> 2 electron dirs (★ 2026-09-13 B2-2 桌面窗口域收口)
 $result = Sync-Group -GroupName 'desktop-windows.cjs -> 2 electron dirs' -Files @('desktop-windows.cjs') -Targets $DesktopWindowsTargets -VerifyOnly $VerifyOnly
+if (-not $result) { $allInSync = $false }
+Write-Host ""
+
+# Group 17: desktop-dialog.cjs + prompt-modal.html + prompt-preload.js -> 2 electron dirs (★ 2026-09-14 P3-A 对话框域收口)
+$result = Sync-Group -GroupName 'desktop-dialog.cjs + prompt-modal.html + prompt-preload.js -> 2 electron dirs' -Files @('desktop-dialog.cjs', 'prompt-modal.html', 'prompt-preload.js') -Targets $DesktopDialogTargets -VerifyOnly $VerifyOnly
+if (-not $result) { $allInSync = $false }
+Write-Host ""
+
+# Group 18: desktop-crash-guard.cjs -> 2 electron dirs (★ 2026-09-14 P3-A 崩溃韧性补强)
+$result = Sync-Group -GroupName 'desktop-crash-guard.cjs -> 2 electron dirs' -Files @('desktop-crash-guard.cjs') -Targets $DesktopCrashGuardTargets -VerifyOnly $VerifyOnly
 if (-not $result) { $allInSync = $false }
 Write-Host ""
 

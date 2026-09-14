@@ -165,6 +165,47 @@ const GROUPS = [
             'app_project/db-yunduan/cloud_desktop/electron/desktop-windows.cjs',
             'app_project/db-offline/desktop/electron/desktop-windows.cjs'
         ]
+    },
+    {
+        // ★ 2026-09-14 P3-A 桌面对话框域收口（与 desktop-windows 同位同构）：
+        //   dialog:alert-sync / confirm-sync / prompt 三 handler 从双 main.js
+        //   等体抽出（title 经工厂入参注入端差异）。sync-all Group 17 分发，
+        //   本组 2 副本硬哈希门（配套 prompt-modal.html / prompt-preload.js
+        //   各自成组，三文件同组同位分发，__dirname 同目录解析）。
+        authority: 'shared/desktop-dialog.cjs',
+        copies: [
+            'app_project/db-yunduan/cloud_desktop/electron/desktop-dialog.cjs',
+            'app_project/db-offline/desktop/electron/desktop-dialog.cjs'
+        ]
+    },
+    {
+        // ★ 2026-09-14 P3-A 对话框域配套资源：prompt-modal.html（sync-all Group 17
+        //   同组分发，双端 <title> 统一为"请输入"）。
+        authority: 'shared/prompt-modal.html',
+        copies: [
+            'app_project/db-yunduan/cloud_desktop/electron/prompt-modal.html',
+            'app_project/db-offline/desktop/electron/prompt-modal.html'
+        ]
+    },
+    {
+        // ★ 2026-09-14 P3-A 对话框域配套资源：prompt-preload.js（sync-all Group 17
+        //   同组分发；tools/ 下零引用第三份已删，三份归一）。
+        authority: 'shared/prompt-preload.js',
+        copies: [
+            'app_project/db-yunduan/cloud_desktop/electron/prompt-preload.js',
+            'app_project/db-offline/desktop/electron/prompt-preload.js'
+        ]
+    },
+    {
+        // ★ 2026-09-14 P3-A 桌面崩溃韧性补强（与 desktop-windows 同位同构）：
+        //   render-process-gone / child-process-gone 兜底（主壳崩溃自动重建 +
+        //   60s>=3 次熔断 + clean-exit 过滤）。sync-all Group 18 分发，
+        //   本组 2 副本硬哈希门。
+        authority: 'shared/desktop-crash-guard.cjs',
+        copies: [
+            'app_project/db-yunduan/cloud_desktop/electron/desktop-crash-guard.cjs',
+            'app_project/db-offline/desktop/electron/desktop-crash-guard.cjs'
+        ]
     }
 ];
 

@@ -37,7 +37,6 @@ const { getExeDirectory, getDownloadsDirectory, migrateLegacyDataToCentral, sani
 
 let mainWindow;
 let loginWindow;
-let packagingWindow = null;
 let sharedSession;
 let currentLoggedInUser = null;
 const SESSION_PARTITION = 'persist:tcm-prescription-dingzhi';
@@ -621,6 +620,19 @@ const { createMainWindow, createLoginWindow, focusWindow } =
         getLoginWindow: () => loginWindow,
         setLoginWindow: (w) => { loginWindow = w; },
     });
+
+// ★ 2026-09-14 P3-A 崩溃韧性补强：render-process-gone / child-process-gone 兜底
+//   （shared/desktop-crash-guard.cjs 权威源，sync-all Group 18 分发）。主壳崩溃
+//   自动销毁重建（登录态渲染层自恢复），60s 内 >=3 次熔断提示后自然退出；
+//   clean-exit 过滤防正常关窗误报。窗口经访问器注入，不依赖 desktop-windows 内部。
+require('./desktop-crash-guard.cjs').createDesktopCrashGuard({
+    app, dialog, logger,
+    createMainWindow, createLoginWindow,
+    getMainWindow: () => mainWindow,
+    setMainWindow: (w) => { mainWindow = w; },
+    getLoginWindow: () => loginWindow,
+    setLoginWindow: (w) => { loginWindow = w; },
+});
 
 // ★ 2026-09-09 下载转化统计：匿名启动心跳（管理后台「下载转化统计」数据源）。
 //   隐私设计：机器码客户端 sha256 后上报（服务端再见不到原始机器码，且二次哈希存 KV），
@@ -1433,122 +1445,16 @@ ipcMain.handle('license:start-trial', () => {
 });
 
 // ★ 同步 alert/confirm 对话框（替代原生 window.alert/window.confirm）
-// 问题：Electron 35 中原生 alert() 关闭后鼠标光标不显示（Chromium 模态框焦点 bug）
-// 方案：使用 Electron 原生 dialog.showMessageBoxSync（同步阻塞，行为与原生一致）
-// 渲染进程通过 window.electronAPI.alertSync/confirmSync 调用（dom-ready 时已重写 window.alert/confirm）
-ipcMain.on('dialog:alert-sync', (event, message) => {
-    try {
-        const win = BrowserWindow.fromWebContents(event.sender) || mainWindow;
-        if (win && !win.isDestroyed()) {
-            dialog.showMessageBoxSync(win, {
-                type: 'info',
-                message: message,
-                buttons: ['确定'],
-                defaultId: 0,
-                noLink: true
-            });
-        }
-    } catch (e) {
-        console.error('[dialog:alert-sync] 失败:', e.message);
-    }
-    event.returnValue = true;
-});
-
-ipcMain.on('dialog:confirm-sync', (event, message) => {
-    let result = 0; // 默认取消
-    try {
-        const win = BrowserWindow.fromWebContents(event.sender) || mainWindow;
-        if (win && !win.isDestroyed()) {
-            result = dialog.showMessageBoxSync(win, {
-                type: 'question',
-                message: message,
-                buttons: ['取消', '确定'],
-                defaultId: 1,
-                cancelId: 0,
-                noLink: true
-            });
-        }
-    } catch (e) {
-        console.error('[dialog:confirm-sync] 失败:', e.message);
-    }
-    event.returnValue = result; // 0=取消, 1=确定
-});
-
-// ★ P0 修复：异步 prompt 对话框（替代原生 window.prompt）
-// 问题：Electron 中 window.prompt() 默认返回 null，导致 handleEditUser 等函数静默失败
-// 方案：创建模态子窗口（prompt-modal.html），返回 Promise<string|null>
-// 兼容：业务代码需用 `await prompt(...)`，preload.js 已暴露 electronAPI.prompt
-// ★ P0 修复：prompt-modal 资源路径（打包后必须在 asar 内可访问）
-const PROMPT_HTML_PATH = path.join(__dirname, 'prompt-modal.html');
-const PROMPT_PRELOAD_PATH = path.join(__dirname, 'prompt-preload.js');
-
-ipcMain.handle('dialog:prompt', async (event, message, defaultValue) => {
-    const parentWin = BrowserWindow.fromWebContents(event.sender) || mainWindow;
-    if (!parentWin || parentWin.isDestroyed()) {
-        return null;
-    }
-
-    const promptWin = new BrowserWindow({
-        width: 480,
-        height: 280,
-        parent: parentWin,
-        modal: true,
-        resizable: false,
-        minimizable: false,
-        maximizable: false,
-        autoHideMenuBar: true,
-        title: '惠康中医诊所管理系统 V1.0.0',
-        show: false,
-        webPreferences: {
-            contextIsolation: true,
-            nodeIntegration: false,
-            preload: PROMPT_PRELOAD_PATH
-        }
-    });
-
-    // 使用 hash 传递参数（避免 file:// query string 兼容问题）
-    const params = encodeURIComponent(JSON.stringify({ message: message || '', defaultValue: defaultValue || '' }));
-    // ★ P0 修复：loadURL(file://) 对 asar 内文件支持不可靠，打包后静默失败导致 await 挂起（点击编辑无反应）
-    // 改用 loadFile（Electron 原生 API，对 asar 路径有原生支持），与主窗口加载方式一致
-    try {
-        await promptWin.loadFile(PROMPT_HTML_PATH, { hash: params });
-    } catch (loadErr) {
-        console.error('[prompt] loadFile 失败:', PROMPT_HTML_PATH, loadErr);
-        try { promptWin.close(); } catch(e) {}
-        return null;
-    }
-    promptWin.show();
-
-    return new Promise((resolve) => {
-        let resolved = false;
-        const cleanup = () => {
-            ipcMain.removeListener('prompt:submit', handleSubmit);
-            ipcMain.removeListener('prompt:cancel', handleCancel);
-        };
-        const handleSubmit = (e, value) => {
-            if (resolved || e.sender !== promptWin.webContents) return;
-            resolved = true;
-            cleanup();
-            promptWin.close();
-            resolve(value);
-        };
-        const handleCancel = (e) => {
-            if (resolved || (e && e.sender !== promptWin.webContents)) return;
-            resolved = true;
-            cleanup();
-            promptWin.close();
-            resolve(null);
-        };
-        ipcMain.on('prompt:submit', handleSubmit);
-        ipcMain.on('prompt:cancel', handleCancel);
-        promptWin.on('closed', () => {
-            if (!resolved) {
-                resolved = true;
-                cleanup();
-                resolve(null);
-            }
-        });
-    });
+// ★ 2026-09-14 P3-A 对话框域收口：dialog:alert-sync / dialog:confirm-sync /
+//   dialog:prompt 三 handler 抽至 desktop-dialog.cjs（shared/ 权威源，sync-all
+//   Group 17 分发，与 prompt-modal.html / prompt-preload.js 同组同位）。
+//   历史注释归档：原生 alert 光标 bug 经 showMessageBoxSync 规避、prompt 经
+//   prompt-modal.html 模态窗实现（loadFile 保 asar 兼容）——详见权威源头注释。
+//   端差异仅 prompt 窗 title，经工厂入参注入；窗口引用经访问器注入（B2-2 同款）。
+require('./desktop-dialog.cjs').createDesktopDialogIpc({
+    ipcMain, dialog, BrowserWindow,
+    getMainWindow: () => mainWindow,
+    promptTitle: '惠康中医诊所管理系统 V1.0.0'
 });
 
 // ===================== 安全存储（safeStorage）=====================
@@ -1821,21 +1727,6 @@ ipcMain.handle('get-app-config', async () => {
         console.error('读取 config.json 失败:', e);
     }
     return { success: true, config: defaults };
-});
-
-// 打包配置页：读取 config.json
-ipcMain.handle('packaging-read-config', async () => {
-    try {
-        const configPath = getWritableConfigPath();
-        if (await fse.pathExists(configPath)) {
-            const cfg = await fse.readJson(configPath);
-            return cfg;
-        }
-        return null;
-    } catch (e) {
-        console.error('打包配置读取失败:', e);
-        return null;
-    }
 });
 
 // ===== 首次配置向导：更新 config.json =====
@@ -2275,26 +2166,6 @@ ipcMain.handle('bnzc:auto-activate', async (event, { code, clinicName, user }) =
     } catch (e) {
         console.error('[Bnzc] auto-activate 异常:', e);
         return { success: false, error: String(e.message || e) };
-    }
-});
-
-// 打包配置页：写入 config.json
-ipcMain.handle('packaging-write-config', async (event, config) => {
-    try {
-        const configPath = getWritableConfigPath();
-        await fse.writeJson(configPath, config, { spaces: 2 });
-        return true;
-    } catch (e) {
-        console.error('打包配置写入失败:', e);
-        return false;
-    }
-});
-
-// 打包配置完成信号
-ipcMain.on('packaging-done', () => {
-    if (packagingWindow) {
-        packagingWindow.close();
-        packagingWindow = null;
     }
 });
 
