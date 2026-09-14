@@ -8034,16 +8034,88 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
             renderFormulaList();
         }
 
-        async function showAddFormulaForm() {
-            const name = await prompt('请输入验方名称：');
-            if (!name) return;
-            const code = await prompt('请输入验方简码：');
-            if (!code) return;
-            const effect = await prompt('请输入功效：');
-            const indication = await prompt('请输入主治：');
-            formulas.push({name,code,effect:effect||'',indication:indication||'',composition:[]});
-            localStorage.setItem('local_formulas', JSON.stringify(formulas));
-            renderFormulaList();
+        // ========================================================================
+        // ★ 2026-09-14 新增验方表单化（补齐处方药物输入环节）：
+        //   旧版 4 连 prompt 只有名称/简码/功效/主治，composition 恒为空数组——
+        //   验方设置里新增的验方调用时开不出任何药（药物只能靠主界面「存验方」）。
+        //   改为表单模态（JS 动态创建零 HTML/CSS 改动）：基本信息 + 药物组成编辑器
+        //   （药名+数量 g 多行，可增删），保存组装 composition（price/unit 从药品库
+        //   自动补齐，与 selectFormula 消费端 c.price||med?.price 双向兼容）。
+        // ========================================================================
+        function showAddFormulaForm() {
+            const old = document.getElementById('__addFormulaModal');
+            if (old) old.remove();
+            const overlay = document.createElement('div');
+            overlay.id = '__addFormulaModal';
+            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99999;display:flex;align-items:center;justify-content:center;';
+            const panel = document.createElement('div');
+            panel.style.cssText = 'background:#fff;border-radius:10px;padding:16px 18px;width:400px;max-width:94vw;max-height:88vh;overflow:auto;box-shadow:0 8px 30px rgba(0,0,0,.3);font-size:13px;';
+            panel.innerHTML =
+                '<div style="font-weight:bold;font-size:15px;margin-bottom:10px;">新增验方</div>' +
+                '<div style="margin-bottom:8px;"><label style="display:block;margin-bottom:3px;font-weight:600;">验方名称 <span style="color:#c00;">*</span></label><input id="__afName" placeholder="如：安神汤" style="width:100%;padding:7px 9px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;"></div>' +
+                '<div style="margin-bottom:8px;"><label style="display:block;margin-bottom:3px;font-weight:600;">验方简码 <span style="color:#c00;">*</span></label><input id="__afCode" placeholder="如：ast" style="width:100%;padding:7px 9px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;"></div>' +
+                '<div style="display:flex;gap:8px;margin-bottom:8px;"><div style="flex:1;"><label style="display:block;margin-bottom:3px;font-weight:600;">功效</label><input id="__afEffect" placeholder="如：宁心安神" style="width:100%;padding:7px 9px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;"></div><div style="flex:1;"><label style="display:block;margin-bottom:3px;font-weight:600;">主治</label><input id="__afInd" placeholder="如：不寐" style="width:100%;padding:7px 9px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;"></div></div>' +
+                '<div style="font-weight:600;margin:10px 0 4px;">处方药物 <span style="color:#c00;">*</span> <span style="font-weight:normal;color:#888;font-size:11px;">（药名+数量，药名可从药品库直接输入）</span></div>' +
+                '<div id="__afRows" style="display:flex;flex-direction:column;gap:5px;"></div>' +
+                '<button id="__afAddRow" style="margin-top:6px;padding:5px 12px;border:1px dashed #1976d2;background:#f5f9ff;color:#1976d2;border-radius:6px;cursor:pointer;font-size:12px;">+ 添加药物</button>' +
+                '<div style="display:flex;gap:10px;margin-top:14px;justify-content:flex-end;">' +
+                '<button id="__afCancel" style="padding:7px 16px;border:1px solid #ccc;border-radius:6px;background:#f5f5f5;cursor:pointer;">取消</button>' +
+                '<button id="__afOk" style="padding:7px 16px;border:none;border-radius:6px;background:#1976d2;color:#fff;cursor:pointer;font-weight:600;">保存验方</button></div>';
+            overlay.appendChild(panel);
+            document.body.appendChild(overlay);
+
+            const rowsEl = panel.querySelector('#__afRows');
+            function addRow(name, dosage) {
+                const row = document.createElement('div');
+                row.style.cssText = 'display:flex;gap:5px;align-items:center;';
+                row.innerHTML =
+                    '<input class="__afMedName" list="__afMedSuggest" placeholder="药名" value="' + (name ? escapeHtml(name) : '') + '" style="flex:1;padding:6px 8px;border:1px solid #ccc;border-radius:6px;">' +
+                    '<input class="__afMedDosage" type="number" min="0" step="any" placeholder="数量" value="' + (dosage != null ? String(dosage) : '') + '" style="width:80px;padding:6px 8px;border:1px solid #ccc;border-radius:6px;text-align:center;">' +
+                    '<span style="font-size:12px;color:#888;">g</span>' +
+                    '<button class="__afDelRow" style="border:none;background:#ffdddd;color:#b91c1c;border-radius:5px;cursor:pointer;padding:4px 8px;font-size:12px;">✕</button>';
+                row.querySelector('.__afDelRow').onclick = function () { row.remove(); };
+                rowsEl.appendChild(row);
+            }
+            // 药名联想（datalist 从药品库动态生成，纯输入辅助零交互拦截）
+            const dl = document.createElement('datalist');
+            dl.id = '__afMedSuggest';
+            try {
+                const names = medicines.map(m => m.name).filter(Boolean).slice(0, 500);
+                dl.innerHTML = names.map(n => '<option value="' + escapeHtml(n) + '">').join('');
+            } catch (e) {}
+            panel.appendChild(dl);
+
+            panel.querySelector('#__afAddRow').onclick = function () { addRow(); };
+            addRow(); addRow(); addRow();
+
+            const close = () => { const m = document.getElementById('__addFormulaModal'); if (m) m.remove(); };
+            panel.querySelector('#__afCancel').onclick = close;
+            overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
+
+            panel.querySelector('#__afOk').onclick = function () {
+                const name = panel.querySelector('#__afName').value.trim();
+                const code = panel.querySelector('#__afCode').value.trim();
+                const effect = panel.querySelector('#__afEffect').value.trim();
+                const indication = panel.querySelector('#__afInd').value;
+                if (!name) { showToast('请输入验方名称'); panel.querySelector('#__afName').focus(); return; }
+                if (!code) { showToast('请输入验方简码'); panel.querySelector('#__afCode').focus(); return; }
+                const composition = [];
+                rowsEl.querySelectorAll('div').forEach(function (row) {
+                    const n = row.querySelector('.__afMedName').value.trim();
+                    const d = parseFloat(row.querySelector('.__afMedDosage').value);
+                    if (n && isFinite(d) && d > 0) {
+                        const med = (typeof getMedicineByName === 'function') ? getMedicineByName(n) : null;
+                        composition.push({ name: n, dosage: d, unit: 'g', price: (med && med.price) || 0 });
+                    }
+                });
+                if (composition.length === 0) { showToast('请至少输入一味有效药物（药名+数量）'); return; }
+                formulas.push({ name: name, code: code, effect: effect || '', indication: (indication || '').trim(), composition: composition });
+                localStorage.setItem('local_formulas', JSON.stringify(formulas));
+                renderFormulaList();
+                close();
+                showToast('验方「' + name + '」已保存（' + composition.length + ' 味药）');
+            };
+            setTimeout(function () { try { panel.querySelector('#__afName').focus(); } catch (_) {} }, 50);
         }
 
         function renderCaseList(list) {
