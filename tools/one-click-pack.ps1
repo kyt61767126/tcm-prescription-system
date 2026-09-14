@@ -2,7 +2,7 @@
 # All Chinese menu logic moved here from 一键打包.bat to avoid cmd GBK encoding issues
 # .ps1 with BOM can correctly handle UTF-8 Chinese display
 param(
-    [string]$AutoMode = "",   # 非空时跳过菜单直接执行：1=云端 2=本地 3=全部 4=智能，全程不暂停，完成后自动退出
+    [string]$AutoMode = "",   # 非空时跳过菜单直接执行：1=云端 2=本地 3=全部 4=智能；单端组合 1a=云端APP 1d=云端桌面 2a=本地APP 2d=本地桌面，全程不暂停，完成后自动退出
     [switch]$AutoCommit,      # P1-B: 打包完成后自动收纳打包副作用（versionCode/version/hash-manifest 提交并推送；index.html 等其余变更仅列出待人工确认）
     [switch]$CollectSideEffectsOnly,  # P1-B: 仅执行打包副作用收纳（预览/测试用，不打包）
     [switch]$SmartPlanOnly,   # ★ 2026-09-11 智能打包预览：仅输出四端改动检测报告，不打包（测试/预览用）
@@ -39,7 +39,7 @@ function Read-MenuChoice([string]$Prompt) {
     if ($null -eq $c) {
         Write-Host ""
         Write-Host "[FATAL] 标准输入已关闭：交互菜单在非交互环境（管道/自动化调用）中运行。" -ForegroundColor Red
-        Write-Host "  非交互打包请用: one-click-pack.ps1 -AutoMode 1|2|3|4 （1=云端 2=本地 3=全部 4=智能）" -ForegroundColor Yellow
+        Write-Host "  非交互打包请用: one-click-pack.ps1 -AutoMode 1|2|3|4 （1=云端 2=本地 3=全部 4=智能；单端：1a=云端APP 1d=云端桌面 2a=本地APP 2d=本地桌面）" -ForegroundColor Yellow
         exit 1
     }
     return $c
@@ -821,6 +821,36 @@ if ($AutoMode) {
             Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits
             exit $rc
         }
+        # ★ 2026-09-14 单端组合模式：仅一端源码真实变化时缩围重打（先例：云APP 提速重打，
+        #   云桌面 file:// 无 HTTP 缓存，无谓重打=versionCode 递增假更新）。门禁链与组模式同源。
+        "1a" {
+            $rc = Build-Cloud -Target "app"
+            if ($rc -is [array]) { $rc = [int]$rc[-1] }
+            if (-not $rc) { $rc = 0 }
+            Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits
+            exit $rc
+        }
+        "1d" {
+            $rc = Build-Cloud -Target "desktop"
+            if ($rc -is [array]) { $rc = [int]$rc[-1] }
+            if (-not $rc) { $rc = 0 }
+            Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits
+            exit $rc
+        }
+        "2a" {
+            $rc = Build-Offline -Version "dingzhi" -Target "app"
+            if ($rc -is [array]) { $rc = [int]$rc[-1] }
+            if (-not $rc) { $rc = 0 }
+            Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits
+            exit $rc
+        }
+        "2d" {
+            $rc = Build-Offline -Version "dingzhi" -Target "desktop"
+            if ($rc -is [array]) { $rc = [int]$rc[-1] }
+            if (-not $rc) { $rc = 0 }
+            Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits
+            exit $rc
+        }
         "2" {
             $rc = Build-Offline -Version "dingzhi" -Target "all"
             if ($rc -is [array]) { $rc = [int]$rc[-1] }
@@ -843,7 +873,7 @@ if ($AutoMode) {
             exit $rc
         }
         default {
-            Write-Host "[ERROR] 无效自动模式: $AutoMode（应为 1=云端 2=本地 3=全部 4=智能）" -ForegroundColor Red
+            Write-Host "[ERROR] 无效自动模式: $AutoMode（应为 1=云端 2=本地 3=全部 4=智能；单端：1a=云端APP 1d=云端桌面 2a=本地APP 2d=本地桌面）" -ForegroundColor Red
             exit 1
         }
     }
