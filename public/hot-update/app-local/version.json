@@ -1,0 +1,71 @@
+{
+  "format": 1,
+  "channel": "app-local",
+  "hotVersion": "2026.09.14-1",
+  "minAppCode": 288,
+  "appVersion": "1.0.0",
+  "files": [
+    {
+      "name": "index.html",
+      "sha256": "0971c2d0e3905d8274ed575d1d3c85c5bcb69295d5403f9f355b5b02f039fc52",
+      "size": 585584
+    },
+    {
+      "name": "auth-core.js",
+      "sha256": "b4839a2cf9d98c925dccd7627e23686028e71b6564e3229f0369bf2236d584e9",
+      "size": 471937
+    },
+    {
+      "name": "permission.js",
+      "sha256": "cb2b05837495ff0935ed784e8330019707ff75eb152c0cfc194ceec0d5a545f0",
+      "size": 27290
+    },
+    {
+      "name": "normalize-config.js",
+      "sha256": "af0243d4915b727b0d66553607a115ed4a522b7c14418590209320521bc99253",
+      "size": 5815
+    },
+    {
+      "name": "debug-logger.js",
+      "sha256": "05a2fb2f2417cfcecf3ed3c945d301b1b509bba516b8f6f671b98fec9880415b",
+      "size": 5230
+    },
+    {
+      "name": "print-utils.js",
+      "sha256": "8bdf9c894863e88bbd780f4d037260b0c9c2ee474b350e1901569c1a883fef52",
+      "size": 8036
+    },
+    {
+      "name": "medicine-dict.js",
+      "sha256": "7361a949d5b4063990553ebff38c57a6ecffe9b5a6157ec41a880534591c6dd4",
+      "size": 5317
+    },
+    {
+      "name": "symptom-dict.js",
+      "sha256": "9e07465bbf1bdcd23d536a6bab10bfd22d9e2ec42471734a136be137b5043236",
+      "size": 73130
+    },
+    {
+      "name": "performance-utils.js",
+      "sha256": "6585d30794524c4517d28f1245442236caa89555aa7b7592a8863401726db7a7",
+      "size": 22868
+    },
+    {
+      "name": "prescription-core.js",
+      "sha256": "a5f1b432ab8d8357ec1f03b9e9fb51b7290cc09bdc121828296cd730155f2763",
+      "size": 9719
+    },
+    {
+      "name": "stock-core.js",
+      "sha256": "16feb778fa953f11f4043410ee9925ec997efea6f0169a2e649f379d4d5b72ef",
+      "size": 70209
+    },
+    {
+      "name": "vendor/xlsx.full.min.js",
+      "sha256": "c9506197caf809a075b6dee1da0d36fb19da7158ffe8a88e7b0c96c5d8623c99",
+      "size": 881727
+    }
+  ],
+  "signedAt": 1789354672937,
+  "signature": "PmP5Z1hr95LVTS69YX1ebrcIXQbr5R3+24qDf2rqi3F+SBneRhqE2d9f2V0/kqQsvB70RJXfU7FKDzNl+vCyCw=="
+}
