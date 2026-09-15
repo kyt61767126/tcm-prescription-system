@@ -507,6 +507,24 @@
 4. **激活流程适配（已注册用户零重复输入）**：激活 Tab1 表单用 `license:registrationInfo` 预填诊所名/医师名/手机号；手机号与注册一致时**跳过密码步骤**（自动填两个密码框后自动提交）。注册状态判定 `isLocalRegisteredAsync` 双源：localStorage 注册信息 ∪ 桥 config.json 已有手机号账号（升级设备场景）。
 5. **新装机 SOP**：首次启动 → "注册开通" → 填诊所/医师/手机号/密码 → 登录试用 → 需正式使用时走管理员激活（表单已预填，密码步骤自动跳过）。
 
+### 条目廿二（2026-09-15 试用到期直通 · 版本页手机号=直通开关）
+**背景**：试用到期用户反馈激活仍要填"注册开通信息"表单。试用/存量未注册用户本地已有诊所名+医师姓名（试用期设置过），唯一缺口是手机号。
+**方案（APP `shared/auth-core/offline.js` 弹窗 + 桌面 `electron/activate-window.html` 激活窗口，双端同款）**：
+1. 版本选择页新增联系电话输入框（`editionPhone`）；手机号有效 + 点版本卡 = 自动补齐表单（诊所名/医师姓名本地预存、手机号带过去）→ 标记直通 → 复用标准校验收集链路直接提交 → 直建订单直达付款页。手机号留空/无效 = 原表单流程零影响（激活码/工单路径不变）。
+2. 密码语义（对齐方案B先例）：已注册用户（表单手机号=注册手机号）直通用注册密码（现场等解密 1.5s race 兜底，未就绪退回表单走「下一步」方案B）；未注册（试用到期）密码留空 → APP 端提交 payload `password:''`（服务端默认 admin）+ 桌面端 submitBtn `pwdRaw||'admin'` 归一。
+3. 本地诊所名/医师姓名缺失时：落入表单补填（手机号已带上，缺失字段标红）——绝不提交空值。
+4. 直通标记一次性消费（消费即清），校验失败/付款返回重试不误直通。
+
+**★ 分层生效矩阵（本次新沉淀，改激活链路必查）**：
+| 载体 | 文件 | 生效方式 |
+|---|---|---|
+| 离线APP 弹窗 | auth-core.js（11 副本协议） | APP 热包即覆盖（288-292 全装机） |
+| 桌面·主窗口弹窗（登录后只读横幅入口） | `db-offline/desktop/auth-core.js` | 桌面热包可覆盖（在清单） |
+| 桌面·独立激活窗口（试用到期主链路：main.js→activate.js→`path.join(__dirname,'activate-window.html')`） | `db-offline/desktop/electron/activate-window.html` | **asar 层不在热包清单且主进程直接 loadFile——必须重打安装包**（build-skip 会因 electron/ 目录变化正确识别） |
+| 桌面·登录窗口 | `electron/auth-core.js` + login.html | 同上 asar 层，重打包生效 |
+
+**发布 SOP（激活类改动）**：commit 源码 → `generate-app-hotupdate.cjs -n N` + `generate-desktop-hotupdate.cjs -c local -n M` → commit+push（CF Pages 自动部署）→ 桌面 asar 层改动跑 `one-click-pack.ps1 -AutoMode 2d`（单打本地桌面，APP 已热包覆盖无需重打 APK）。
+
 ### 历史过程归档索引（2026-09-12 梳理）
 
 ★ 2026-09-04~09-06 激活/登录架构的全部过程记录（AR-01~03 审查修复、交接备忘、方案B 发布闭环与独立审核、E2E 补全、试用只读模式、原生领码自愈、条目十三回归事故、同族门控、数据治理 30 条）已归档至 **`.trae/archive/2026-09-04-06-offline-activation-arch-log.md`**。其中铁律已固化进 `tools/probe-param-matrix.cjs` 断言库（19 断言）与 sync-all/copy-consistency 门禁，主文件不再保留过程性重复；查历史根因链/验证过程/Commit 号去归档文件。**跨条目通用教训摘录（高频复用）**：
