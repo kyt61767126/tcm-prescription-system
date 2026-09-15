@@ -6419,16 +6419,13 @@ let currentUser = null;
         }
 
         async function saveAsFormula() {
-            const name = await prompt('请输入验方名称：');
-            if (!name) return;
-            const code = await prompt('请输入验方简码：');
-            if (!code) return;
-            const effect = await prompt('请输入功效：');
-            const indication = await prompt('请输入主治：');
+            // ★ 2026-09-15 存验方表单化：废弃旧版 4 连 prompt——手机APP端系统弹窗体验差，
+            //   且无药物输入环节（当前处方为空时存出的验方 composition 恒为空数组，
+            //   调用时开不出任何药）。复用验方设置的表单模态（名称/简码/功效/主治 +
+            //   药物组成编辑器 + 药名联想），并预填当前处方已录入的药物（存验方本义：
+            //   把当前方存为验方；空处方=凭空录入新验方，药物直接在表单里输）。
             const items = prescriptionItems.filter(item =>item.name);
-            formulas.push({name, code, effect:effect||'', indication:indication||'', composition:items.map(i =>({name:i.name, dosage:i.dosage, price:i.price, unit:i.unit}))});
-            localStorage.setItem('local_formulas', JSON.stringify(formulas));
-            alert('验方保存成功！');
+            showAddFormulaForm(items);
         }
 
         async function printPrescription(orientation = 'portrait') {
@@ -8313,16 +8310,19 @@ let currentUser = null;
         //   （药名+数量 g 多行，可增删），保存组装 composition（price/unit 从药品库
         //   自动补齐，与 selectFormula 消费端 c.price||med?.price 双向兼容）。
         // ========================================================================
-        function showAddFormulaForm() {
+        function showAddFormulaForm(prefillItems) {
             const old = document.getElementById('__addFormulaModal');
             if (old) old.remove();
+            // ★ 2026-09-15 存验方复用：预填当前处方药物（saveAsFormula 场景），
+            //   无预填时保持原行为（验方设置→新增验方，3 空行起步）
+            const isPrefill = Array.isArray(prefillItems) && prefillItems.length > 0;
             const overlay = document.createElement('div');
             overlay.id = '__addFormulaModal';
             overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99999;display:flex;align-items:center;justify-content:center;';
             const panel = document.createElement('div');
             panel.style.cssText = 'background:#fff;border-radius:10px;padding:16px 18px;width:400px;max-width:94vw;max-height:88vh;overflow:auto;box-shadow:0 8px 30px rgba(0,0,0,.3);font-size:13px;';
             panel.innerHTML =
-                '<div style="font-weight:bold;font-size:15px;margin-bottom:10px;">新增验方</div>' +
+                '<div style="font-weight:bold;font-size:15px;margin-bottom:10px;">' + (isPrefill ? '存为验方（已带入当前处方药物）' : '新增验方') + '</div>' +
                 '<div style="margin-bottom:8px;"><label style="display:block;margin-bottom:3px;font-weight:600;">验方名称 <span style="color:#c00;">*</span></label><input id="__afName" placeholder="如：安神汤" style="width:100%;padding:7px 9px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;"></div>' +
                 '<div style="margin-bottom:8px;"><label style="display:block;margin-bottom:3px;font-weight:600;">验方简码 <span style="color:#c00;">*</span></label><input id="__afCode" placeholder="如：ast" style="width:100%;padding:7px 9px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;"></div>' +
                 '<div style="display:flex;gap:8px;margin-bottom:8px;"><div style="flex:1;"><label style="display:block;margin-bottom:3px;font-weight:600;">功效</label><input id="__afEffect" placeholder="如：宁心安神" style="width:100%;padding:7px 9px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;"></div><div style="flex:1;"><label style="display:block;margin-bottom:3px;font-weight:600;">主治</label><input id="__afInd" placeholder="如：不寐" style="width:100%;padding:7px 9px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;"></div></div>' +
@@ -8357,7 +8357,12 @@ let currentUser = null;
             panel.appendChild(dl);
 
             panel.querySelector('#__afAddRow').onclick = function () { addRow(); };
-            addRow(); addRow(); addRow();
+            // ★ 2026-09-15 存验方复用：预填当前处方药物行，无预填时 3 空行起步
+            if (isPrefill) {
+                prefillItems.forEach(function (it) { addRow(it.name, it.dosage); });
+            } else {
+                addRow(); addRow(); addRow();
+            }
 
             const close = () => { const m = document.getElementById('__addFormulaModal'); if (m) m.remove(); };
             panel.querySelector('#__afCancel').onclick = close;
