@@ -4985,6 +4985,16 @@
 
             // 第一步：版本选择
             '<div id="adminStepEdition" style="padding:16px;">' +
+                // ★ 2026-09-15 试用到期直通（用户反馈：到期激活仍要填"注册开通信息"）：
+                //   试用/存量未注册用户本地已有诊所名+医师姓名（试用期设置过），唯一缺口
+                //   是手机号。版本页新增联系电话输入：填手机号+点版本卡=自动补齐→直通提交
+                //   （密码归一 admin）→直建订单/申请→付款等待视图，跳过信息表单与密码步骤。
+                //   手机号留空则走原表单流程（激活码/工单/手动核对路径零影响）。
+                '<div style="margin-bottom:14px;background:linear-gradient(135deg,#fff7ed 0%,#ffedd5 100%);border:1px solid #fdba74;border-radius:8px;padding:10px 12px;">' +
+                    '<label style="display:block;font-size:13px;color:#9a3412;margin-bottom:5px;font-weight:bold;">📞 联系电话 <span style="color:#e53935;">*</span></label>' +
+                    '<input type="tel" id="editionPhone" placeholder="如：13800138000" autocomplete="off" inputmode="numeric" maxlength="11" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
+                    '<div id="editionPhoneHint" style="font-size:11px;color:#78350f;margin-top:4px;line-height:1.6;">💡 11位手机号将作为登录账号。填好后点击下方版本，<b>自动提交直接付款</b>，无需填写其他信息</div>' +
+                '</div>' +
                 // ★ 2026-09-06 P0 修复（邀请码入口断裂）：已注册用户「注册→立即激活→选版本→
                 //   自动提交直达付款页」跳过了管理员激活表单——表单里的邀请码输入框
                 //   （adminInviteCode）从未显示/读取，提交的申请必然不带邀请码（实测：
@@ -5655,6 +5665,38 @@
                     } catch (te2) {}
                     return;
                 }
+                // ★ 2026-09-15 试用到期直通（手机号=直通开关）：未注册用户读版本页
+                //   联系电话，本地自动补齐（诊所名=CONFIG.clinicName、姓名=CONFIG.doctorName，
+                //   试用期已设置过）→ 标记 __editionDirect → 复用 adminToStep2Btn 标准
+                //   校验收集链路直通提交（密码归一 admin）→ 直建订单/申请 → 付款等待视图。
+                //   手机号留空/无效：走原表单流程（原行为不变）；
+                //   诊所名/姓名本地缺失：落入表单补填（手机号已带上，缺失字段标红）。
+                try {
+                    const __epRaw = (document.getElementById('editionPhone') || {}).value || '';
+                    const __epVal = String(__epRaw).trim();
+                    if (__epVal && PHONE_RE.test(__epVal)) {
+                        const __fCn = document.getElementById('adminClinicName');
+                        const __fAn = document.getElementById('adminAdminName');
+                        const __fPh = document.getElementById('adminPhone');
+                        if (__fPh) __fPh.value = __epVal;
+                        if (__fCn && !__fCn.value.trim()) __fCn.value = String(clinicName || '').trim();
+                        if (__fAn && !__fAn.value.trim()) {
+                            try { if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.doctorName) __fAn.value = String(CONFIG.doctorName).trim(); } catch (eCf) {}
+                        }
+                        const __cnOk = !!(__fCn && __fCn.value.trim());
+                        const __anOk = !!(__fAn && __fAn.value.trim());
+                        if (__cnOk && __anOk) {
+                            state.__editionDirect = true;
+                            document.getElementById('adminToStep2Btn').click();
+                            return;
+                        }
+                        show('adminStepForm');
+                        setActiveTab('admin');
+                        if (!__cnOk) showFieldErr('adminClinicName', 'adminClinicNameHint', '请填写诊所名称');
+                        else showFieldErr('adminAdminName', 'adminAdminNameHint', '请填写管理员/医师姓名');
+                        return;
+                    }
+                } catch (edErr) { console.warn('[LicenseCheck] 版本页直通异常，退回原表单流程:', edErr); }
                 show('adminStepForm');
                 setActiveTab('admin');
             });
@@ -6138,6 +6180,9 @@
                         if (__cn2 && !__cn2.value.trim() && state.clinicName) __cn2.value = state.clinicName;
                         if (__an2 && !__an2.value.trim() && state.adminName) __an2.value = state.adminName;
                         if (__ph2 && !__ph2.value.trim()) __ph2.value = state.phone;
+                        // ★ 2026-09-15 版本页手机号同步预填（已注册用户点版本即直通）
+                        const __eph2 = document.getElementById('editionPhone');
+                        if (__eph2 && !__eph2.value.trim() && state.phone) __eph2.value = state.phone;
                         console.log('[LicenseCheck] 桥兜底预填完成(注册账号):', bp.phone);
                     } catch (be) { console.warn('[LicenseCheck] 桥兜底预填应用失败:', be); }
                 }).catch(function () {});
@@ -6163,6 +6208,9 @@
                 if (__cn && state.clinicName) __cn.value = state.clinicName;
                 if (__an && state.adminName) __an.value = state.adminName;
                 if (__ph && state.phone) __ph.value = state.phone;
+                // ★ 2026-09-15 版本页手机号同步预填（已注册用户点版本即直通）
+                const __eph = document.getElementById('editionPhone');
+                if (__eph && !__eph.value.trim() && state.phone) __eph.value = state.phone;
                 // ① 顶部同步提示条（插入 Tab1 表单首部，用户明确看到"已同步"）
                 try {
                     const __formBox = document.getElementById('adminStepForm');
@@ -6192,6 +6240,12 @@
         // ★ 2026-09-04 async 化：等待注册密码解密 Promise（最长 1.5s race 兜底），
         //   消除"解密未完成 → state.password 空 → 误入密码步骤"竞态。
         document.getElementById('adminToStep2Btn').addEventListener('click', async function() {
+            // ★ 2026-09-15 试用到期直通：版本页带手机号进来的（__editionDirect）密码归一
+            //   admin 跳过密码步骤直接提交——对齐桌面端「使用默认密码 admin 直接提交」先例。
+            //   标记消费即清（一次性）：校验失败用户补填后再点本按钮走正常密码步骤，
+            //   付款页返回/失败重试也不会误直通。
+            const __fromEditionDirect = !!(state && state.__editionDirect);
+            if (state && state.__editionDirect) state.__editionDirect = false;
             const clinicName = document.getElementById('adminClinicName').value.trim();
             const adminName = document.getElementById('adminAdminName').value.trim();
             const phone = document.getElementById('adminPhone').value.trim();
@@ -6212,6 +6266,13 @@
             state.phone = phone;
             state.remark = remark;
             state.inviteCode = inviteCodeClean;
+            // ★ 2026-09-15 试用到期直通分支：密码留空（→admin）直接提交，跳过密码步骤
+            if (__fromEditionDirect) {
+                state.password = '';
+                show('adminSubmitting');
+                document.getElementById('adminSubmitBtn').click();
+                return;
+            }
             // ★ 2026-09-04 方案B：已注册用户跳过密码步骤（账号+密码注册时已建，
             //   激活不收密码）——直接进入提交。密码一致性由注册时校验保证。
             if (__regPrefill && __regPrefill.phone === phone) {
