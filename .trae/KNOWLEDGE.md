@@ -516,6 +516,12 @@
 **★ 安全铁律（机器码维度短路的账号操作禁区）**：机器码是客户端自报参数（不可信），扫描命中的是**旧手机号**记录——**绝不做 provisionCloudAccount/normalizeActivationPassword 等账号操作**（会重置旧号密码=匿名接管，违反 2026-09-03 P0 决策）；仅可返回 activated+license（license 绑定 machineId，他机验签必失败）。admin-submit 版本短路出口必须过 getDeviceBlock（封锁设备不下发）+ ensureLicenseV7（重签自愈）。
 **语义**：已激活设备换号提交 = 本机已有有效授权，无需购买；纯服务端修复（CF Pages Functions）全端立即生效，无需热包/重打包。
 
+**★ 收尾三缺口（同日补全，服务端短路返回后各端对 activated 响应的处理必须逐一核对）**：
+1. **官网 Step2（public/download.html + site-official 双副本镜像）**：原只判 `data.success` → 短路响应被当建单成功 → toast"请扫码付款"+跳 Step3 付款页 = 重复付款诱导。补 `data.status==='activated'` 分支：绿色提示框"本机已有有效授权，无需重复购买"，不进 Step3、不轮询。
+2. **云端 orderFlow（cloud.js → 8 副本）**：trySubmitDirectOrder 后无 activated 短路处理 → 照走 adminWaiting 付款等待。补：activated 无 license → 立即凭 requestId 查 admin-status 领码收尾，失败退轮询。
+3. **云桌面激活窗口（electron/activate-window.html asar 层）**：原 `saveAndRestart(res.license||'')` 会把空 license 落盘（order-submit 短路不带 license）。补：有 license 直接装码；无 license → showWaiting+轮询领码（admin-status 对旧 activated 记录正常下发）。
+**发布链**：服务端+官网+cloud.js 副本 push（cv 门会拦 auth-core 的 cv 漂移 → `check-cv-hashes.cjs --update` + `sync-html.ps1` 重推）→ 云桌面热包 `-c cloud -n 3`（auth-core 短路收尾）→ 云桌面重打包（activate-window asar 层）。离线端不受本轮影响（offline.js 无改动，auth-core 内容未变无需重发热包）。
+
 ### 条目廿二（2026-09-15 试用到期直通 · 版本页手机号=直通开关）
 **背景**：试用到期用户反馈激活仍要填"注册开通信息"表单。试用/存量未注册用户本地已有诊所名+医师姓名（试用期设置过），唯一缺口是手机号。
 **方案（APP `shared/auth-core/offline.js` 弹窗 + 桌面 `electron/activate-window.html` 激活窗口，双端同款）**：
