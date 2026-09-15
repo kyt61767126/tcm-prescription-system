@@ -5836,8 +5836,38 @@
             state.remark = remark;
             state.inviteCode = inviteCodeClean;
             // ★ 2026-09-15 试用到期直通分支：密码留空（→admin）直接提交，跳过密码步骤
+            // ★ 2026-09-15 修复（直通清空注册密码回归）：已注册手机号走直通时密码不能清空——
+            //   state.password='' 提交后，激活收尾建号用 _resPwd||'admin'，且 addLocalActivationUser
+            //   铁律1强制覆盖本地密码 → 本地账号密码被 admin 覆盖，注册时自设密码（如 admin123）
+            //   登录必然失败。已注册时恢复注册密码并预填双密码框（提交处 pwd!==admin 需 pwd2
+            //   一致性校验）；密码不合规/解密失败回退 admin 归一（防卡提交中）。未注册维持原行为。
             if (__fromEditionDirect) {
-                state.password = '';
+                let __keepRegPwd = false;
+                if (__regPrefill && __regPrefill.phone === phone) {
+                    if (!state.password && __regPwdPromise) {
+                        try {
+                            const __p = await Promise.race([
+                                __regPwdPromise,
+                                new Promise(function (r) { setTimeout(function () { r(null); }, 1500); })
+                            ]);
+                            if (__p) state.password = String(__p);
+                        } catch (e) {}
+                    }
+                    const __sp = String(state.password || '');
+                    if (__sp && __sp !== 'admin' && __sp.length >= 8 && __sp.length <= 32 &&
+                        /[a-zA-Z]/.test(__sp) && /[0-9]/.test(__sp)) {
+                        __keepRegPwd = true;
+                        try {
+                            const pEl = document.getElementById('adminPassword');
+                            const p2El = document.getElementById('adminPassword2');
+                            if (pEl) pEl.value = __sp;
+                            if (p2El) p2El.value = __sp;
+                        } catch (e) {}
+                    } else {
+                        console.warn('[LicenseCheck] 直通已注册用户密码缺失/不合规，回退默认 admin');
+                    }
+                }
+                if (!__keepRegPwd) state.password = '';
                 show('adminSubmitting');
                 document.getElementById('adminSubmitBtn').click();
                 return;
