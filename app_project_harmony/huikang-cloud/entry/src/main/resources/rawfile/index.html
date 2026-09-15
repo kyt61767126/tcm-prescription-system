@@ -5594,9 +5594,15 @@ let currentUser = null;
 
         // 智能匹配性别：50-90年代取名常用字（各100字）+ 补充字
         function smartMatchGender(name) {
-            if (!name) return;
             const genderSelect = document.getElementById('patientGender');
             if (!genderSelect) return;
+            // ★ 2026-09-15 修复自动性别失效：manual 标记原先只置位永不重置——手动选过
+            //   一次性别后自动匹配永久关闭。现以"姓名清空 = 换患者"为信号：清空姓名时
+            //   重置 manual 恢复自动匹配；同一患者编辑名字（不清空）不重置，手动纠正不丢。
+            if (!name) {
+                genderSelect.dataset.manual = 'false';
+                return;
+            }
             if (genderSelect.dataset.manual === 'true') return;
             
             // 女性100字 + 果
@@ -5714,6 +5720,9 @@ let currentUser = null;
                 }
                 if (latestRecord.patientGender) {
                     document.getElementById('patientGender').value = latestRecord.patientGender;
+                    // ★ 2026-09-15 历史患者性别=权威：填充后置手动标记，防后续编辑
+                    //   姓名时 smartMatchGender 用字表猜测覆盖真实性别
+                    markGenderManual();
                 }
             }
             searchPatientsByName(name);
