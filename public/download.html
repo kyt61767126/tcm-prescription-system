@@ -3219,6 +3219,27 @@
                 });
                 const data = await res.json();
                 if (data.success) {
+                    // ★ 2026-09-15 已激活短路（服务端同机同号/换新手机号命中本机旧授权）：
+                    //   订单未建、无需付款——绝不进入 Step3 付款页（防已激活设备重复扫码
+                    //   付款），直接展示"本机已有授权"引导回软件。
+                    if (data.status === 'activated') {
+                        showToast('本机已有有效授权，无需重复购买');
+                        try {
+                            var __actHint = document.getElementById('step2ActivatedHint');
+                            if (!__actHint) {
+                                __actHint = document.createElement('div');
+                                __actHint.id = 'step2ActivatedHint';
+                                __actHint.style.cssText = 'margin-top:14px;padding:14px 16px;background:#f0fdf4;border:2px solid #22c55e;border-radius:10px;font-size:14px;color:#15803d;line-height:1.9;text-align:left;';
+                                var __s2btn = document.getElementById('step2Next');
+                                if (__s2btn && __s2btn.parentNode) __s2btn.parentNode.insertBefore(__actHint, __s2btn.nextSibling);
+                            }
+                            __actHint.innerHTML = '🎉 <strong>本机已有有效授权，无需重复购买</strong>。<br>' +
+                                '该设备识别码已绑定有效授权（可能与您本次填写的手机号不同——授权跟随设备）。<br>' +
+                                '✅ 请直接回到惠康中医软件使用；若软件仍显示试用/到期，请完全退出后重新打开（自动恢复激活），仍未恢复请联系客服处理。';
+                            __actHint.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        } catch (_he) { console.warn('已激活提示注入失败:', _he); }
+                        return;
+                    }
                     showToast('订单提交成功，请扫码付款');
                     goStep(3);
                     // ★ 2026-09-05 流程简化：取消客户付款确认按钮后，轮询从「点确认成功」

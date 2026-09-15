@@ -4417,6 +4417,40 @@
             }
 
             if (res && res.success) {
+                    // ★ 2026-09-15 同设备已激活短路收尾（换号场景）：order-submit 机器码
+                    //   短路返回 activated（复用本机旧授权）但不带 license——不进
+                    //   "等待付款"视图（防误触付款引导重复消费），立即凭 requestId 查
+                    //   admin-status 领码收尾（旧 activated 记录正常下发）。查询/领码
+                    //   失败才退回轮询兜底（adminWaiting 文案接管，付款按钮由
+                    //   onAdminActivated 成功时清 orderFlow 防复活）。
+                    if (res.status === 'activated' && !res.license) {
+                        let __shRes = null;
+                        try {
+                            if (global.electronAPI && global.electronAPI.activate &&
+                                typeof global.electronAPI.activate.checkAdminStatus === 'function') {
+                                __shRes = await global.electronAPI.activate.checkAdminStatus(
+                                    res.requestId || '',
+                                    (typeof machineId !== 'undefined' && machineId) ? String(machineId) : '');
+                            } else {
+                                let __shUrl = ADMIN_STATUS_URL + '?requestId=' + encodeURIComponent(res.requestId || '');
+                                if (typeof machineId !== 'undefined' && machineId) {
+                                    __shUrl += '&machineId=' + encodeURIComponent(machineId);
+                                }
+                                __shRes = await fetch(__shUrl, {
+                                    method: 'GET',
+                                    headers: { 'Content-Type': 'application/json' }
+                                }).then(function (__sr) { return __sr.json(); }).catch(function () { return null; });
+                            }
+                        } catch (__se) {
+                            console.warn('[LicenseCheck] 机器码短路领码查询异常，退回轮询兜底:', __se);
+                        }
+                        if (__shRes && __shRes.success && __shRes.status === 'activated' && __shRes.license) {
+                            try { await onAdminActivated(__shRes, res.requestId); return; }
+                            catch (__ae) { console.warn('[LicenseCheck] 机器码短路领码失败，退回轮询兜底:', __ae); }
+                        }
+                        startPolling(res.requestId);
+                        return;
+                    }
                     document.getElementById('adminRequestNo').textContent = res.requestId;
                     document.getElementById('adminSavedPhone').textContent = state.phone;
                     show('adminWaiting');

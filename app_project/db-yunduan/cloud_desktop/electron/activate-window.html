@@ -753,11 +753,19 @@ async function trySubmitDirectOrder() {
             adminName: (state.adminName || '').trim(),
             clinicName: (state.clinicName || '').trim()
         };
-        // 服务端已激活短路（同机同号重复提交）：直接走装码收尾
+        // 服务端已激活短路（同机同号/换新手机号命中本机旧授权）：直接走装码收尾
         if (res.status === 'activated') {
             console.log('[OrderFlow] 服务端返回已激活短路');
-            const ok = await saveAndRestart(res.license || '', state.phone);
-            if (ok) showSuccess(state.phone);
+            if (res.license) {
+                const ok = await saveAndRestart(res.license, state.phone);
+                if (ok) showSuccess(state.phone);
+                return true;
+            }
+            // ★ 2026-09-15 短路响应不带 license（order-submit 手机号/机器码维度短路均
+            //   不带）：绝不把空 license 落盘——凭 requestId 轮询领码（admin-status 对
+            //   旧 activated 记录正常下发 license），5s 内装码收尾。
+            showWaiting(__orderFlow.requestId, new Date().toISOString());
+            startPolling(__orderFlow.requestId);
             return true;
         }
         console.log('[OrderFlow] 直建订单成功:', __orderFlow.orderNo,
