@@ -507,6 +507,15 @@
 4. **激活流程适配（已注册用户零重复输入）**：激活 Tab1 表单用 `license:registrationInfo` 预填诊所名/医师名/手机号；手机号与注册一致时**跳过密码步骤**（自动填两个密码框后自动提交）。注册状态判定 `isLocalRegisteredAsync` 双源：localStorage 注册信息 ∪ 桥 config.json 已有手机号账号（升级设备场景）。
 5. **新装机 SOP**：首次启动 → "注册开通" → 填诊所/医师/手机号/密码 → 登录试用 → 需正式使用时走管理员激活（表单已预填，密码步骤自动跳过）。
 
+### 条目廿三（2026-09-15 已激活设备换号提交 → 同设备已激活短路）
+**现象**：已激活机器码换新手机号重新注册→提交激活→**先跳付款页，随后又提示"已激活"**（跳变困惑 + 已建订单存在重复付款风险）。
+**根因**：已激活短路口径不齐——order-submit/admin-submit 只按**手机号**查已激活记录（换号场景查不到→建单付款页），而 admin-status 轮询/断点续传带 **machineId 兜底扫描**会命中本机旧授权→返回 activated→客户端装码提示已激活。两套正常机制（防重复购买 vs 重装自愈闭环）口径不一致导致中间态矛盾。
+**修复**（order-submit.js / admin-submit.js 各加一块，均按 machineId 扫描 admin_req_index 前 200 条，口径对齐 admin-status 兜底）：
+1. order-submit：手机号短路之后、checkDeviceVersion 之前 → 命中返回 `status:'activated'`（客户端 auth-core 既有 activated 短路处理直接桥装码收尾，全程无付款页）。
+2. admin-submit：手机号短路之后、支付前置校验之前 → 命中返回 `status:'activated' + license`（桌面端走等待轮询→admin-status 装码）。
+**★ 安全铁律（机器码维度短路的账号操作禁区）**：机器码是客户端自报参数（不可信），扫描命中的是**旧手机号**记录——**绝不做 provisionCloudAccount/normalizeActivationPassword 等账号操作**（会重置旧号密码=匿名接管，违反 2026-09-03 P0 决策）；仅可返回 activated+license（license 绑定 machineId，他机验签必失败）。admin-submit 版本短路出口必须过 getDeviceBlock（封锁设备不下发）+ ensureLicenseV7（重签自愈）。
+**语义**：已激活设备换号提交 = 本机已有有效授权，无需购买；纯服务端修复（CF Pages Functions）全端立即生效，无需热包/重打包。
+
 ### 条目廿二（2026-09-15 试用到期直通 · 版本页手机号=直通开关）
 **背景**：试用到期用户反馈激活仍要填"注册开通信息"表单。试用/存量未注册用户本地已有诊所名+医师姓名（试用期设置过），唯一缺口是手机号。
 **方案（APP `shared/auth-core/offline.js` 弹窗 + 桌面 `electron/activate-window.html` 激活窗口，双端同款）**：
