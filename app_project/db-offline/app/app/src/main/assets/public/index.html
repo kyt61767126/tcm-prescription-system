@@ -2004,6 +2004,44 @@ let currentUser = null;
                     } catch (e) { console.warn('[LoginSelfHeal] 密码不匹配自愈异常(不影响登录):', e); }
                 }
 
+                // ★ 2026-09-15 直通事故自动救援：本地账号存在但密码不匹配（直通 bug 曾把本地
+                //   密码覆盖为 admin）→ 服务端密码从未被覆盖（admin-submit 对空密码跳过覆盖），
+                //   用 web 身份做纯凭据核验（不占设备名额、不绑设备、仅同端 web 会话互斥），
+                //   核验通过即以用户输入的密码修复本地+config.json 权威层并重登——中招用户
+                //   直接输原密码即可自动恢复，无需"忘记密码"弯路。无网/无服务端记录时静默
+                //   落回救援提示，行为不变。
+                if (!user) {
+                    try {
+                        const __cloudBase = (window.AuthCore && AuthCore.CLOUD_API_BASE) ||
+                            'https://tcm-prescription-system.pages.dev/api';
+                        const __resp = await fetch(__cloudBase + '/users?login=true', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ username: loginUsername, password: password, clientClass: 'web' })
+                        });
+                        const __data = await __resp.json();
+                        if (__data && __data.success) {
+                            const __all = getUsers();
+                            const __ri = __all.findIndex(u => u && (u.username === loginUsername || String(u.phone || '') === loginUsername));
+                            if (__ri >= 0) {
+                                __all[__ri].password = await hashPassword(password);
+                                saveUsers(__all);
+                                try {
+                                    if (window.electronAPI && typeof window.electronAPI.renameUser === 'function') {
+                                        await window.electronAPI.renameUser({ oldUsername: __all[__ri].username, newPassword: password });
+                                    }
+                                } catch (e2) { console.warn('[CloudPwdRecover] config.json 回写失败(本地已保存):', e2); }
+                                const __retry = await AuthCore.loginWithUsernamePassword(loginUsername, password, { users: getUsers() });
+                                if (__retry && __retry.success) {
+                                    user = __retry.user;
+                                    window.__loginHealDiag = (window.__loginHealDiag || '') + '|密码已云端核验自动恢复';
+                                    console.log('[CloudPwdRecover] 服务端核验通过，本地密码已自动修复');
+                                }
+                            }
+                        }
+                    } catch (e) { console.warn('[CloudPwdRecover] 云端核验不可用(离线场景走救援提示):', e); }
+                }
+
                 if (user) {
                     // ★ 2026-08-24 内置 admin 账号仅试用期有效，激活后失效（用户需求：admin/admin 只对试用期内有效）
                     //   判据：isBuiltinDefaultAdmin（username=admin 且密码仍是出厂默认哈希=未改密）+ license 已正式激活
