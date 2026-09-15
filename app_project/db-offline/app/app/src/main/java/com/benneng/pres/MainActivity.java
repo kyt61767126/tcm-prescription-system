@@ -803,7 +803,7 @@ public class MainActivity extends BridgeActivity {
                     getFilesDir(), HotUpdateManager.HOT_UPDATE_BASE_URL, localAppCode);
             hotManager.checkUpdateAsync(new HotUpdateManager.OnResult() {
                 @Override public void onApplied(String hotVersion) {
-                    mainHandler.post(() -> injectHotUpdateToast(webView, hotVersion));
+                    mainHandler.post(() -> autoReloadHotEntryIfIdle(webView, hotVersion));
                 }
                 @Override public void onNeedApk() {
                     // minAppCode 门禁命中：热包要求更高 APK，转整包更新通道（黄色横幅
@@ -819,21 +819,90 @@ public class MainActivity extends BridgeActivity {
     /**
      * 热更新就绪轻提示（登录页顶部淡绿横幅，6s 自动消失；与桌面端 update-manager
      * showHotUpdateToast 同款，绝不打断任何操作）
+     * appliedNow=true：当次打开已直接应用（智能热重载后）→ 文案"已生效"
      */
     private void injectHotUpdateToast(final WebView webView, String hotVersion) {
+        injectHotUpdateToast(webView, hotVersion, false);
+    }
+
+    private void injectHotUpdateToast(final WebView webView, String hotVersion, boolean appliedNow) {
         if (webView == null) return;
         try {
             final String ver = hotVersion.replaceAll("[^0-9A-Za-z.\\-]", "");
+            // appliedNow=已当次生效 / 否则=重启后生效
+            String suffix = appliedNow
+                ? "\\u5DF2\\u751F\\u6548"
+                : "\\u5DF2\\u5C31\\u7EEA\\uFF0C\\u91CD\\u542F\\u540E\\u81EA\\u52A8\\u751F\\u6548";
             String code = "(function(){try{" +
                 "if(!document.body)return;" +
                 "var t=document.createElement('div');" +
                 "t.style.cssText='position:fixed;top:0;left:0;right:0;z-index:99998;padding:6px;background:#e8f5e9;border-bottom:1px solid #a5d6a7;color:#2e7d32;text-align:center;font-size:12px;font-family:sans-serif;';" +
-                "t.textContent='\\u2705 \\u65B0\\u7248 " + ver + " \\u5DF2\\u5C31\\u7EEA\\uFF0C\\u91CD\\u542F\\u540E\\u81EA\\u52A8\\u751F\\u6548';" +
+                "t.textContent='\\u2705 \\u65B0\\u7248 " + ver + " " + suffix + "';" +
                 "document.body.appendChild(t);" +
                 "setTimeout(function(){t.remove();},6000);" +
                 "}catch(e){}})();";
             webView.evaluateJavascript(code, null);
         } catch (Throwable ignored) {}
+    }
+
+    /**
+     * ★ 2026-09-15 一次打开完成热更新：onApplied 时探测页面状态——
+     *   idle（登录页且焦点不在输入框，含账号预填未聚焦）→ 当次打开直接重载
+     *   热入口（无需重启APP，一次打开全部更新到位）；
+     *   typing（焦点在输入框/正在输入）或 op（已进入操作界面）→ 不打断用户，
+     *   保持原"重启后生效"轻提示。探测异常兜底走原提示路径。
+     *   判定用焦点而非输入框值：登录页有账号预填（local_rememberedUsername），
+     *   按值判断会令 idle 永不成立；焦点判定下预填未聚焦=空闲可安全重载。
+     */
+    private void autoReloadHotEntryIfIdle(final WebView webView, final String hotVersion) {
+        if (webView == null) return;
+        try {
+            String probe = "(function(){try{" +
+                "var o=document.getElementById('loginOverlay');" +
+                "if(!o||o.style.display==='none')return 'op';" +
+                "var ae=document.activeElement;" +
+                "if(ae&&(ae.tagName==='INPUT'||ae.tagName==='TEXTAREA'))return 'typing';" +
+                "return 'idle';" +
+                "}catch(e){return 'op';}})();";
+            webView.evaluateJavascript(probe, value -> {
+                try {
+                    if (value != null && value.contains("idle")) {
+                        Log.i(TAG, "[hot-update] 登录页空闲，当次打开直接应用新版");
+                        reloadHotEntry(webView);
+                        // 重载后是全新页面，横幅延迟注入（等新页面渲染稳定），文案=已生效
+                        mainHandler.postDelayed(() -> injectHotUpdateToast(webView, hotVersion, true), 1200);
+                    } else {
+                        injectHotUpdateToast(webView, hotVersion);
+                    }
+                } catch (Throwable t) {
+                    injectHotUpdateToast(webView, hotVersion);
+                }
+            });
+        } catch (Throwable t) {
+            injectHotUpdateToast(webView, hotVersion);
+        }
+    }
+
+    /**
+     * ★ 2026-09-15 热入口即时重载（autoReloadHotEntryIfIdle 专用）：
+     * resolveEntry 复验（Ed25519 manifest 验签+全量哈希）通过 → loadUrl 热入口
+     * （config.json 模板补齐）；失败回退 assets 打包版。与 loadLocalAssetWithRetry
+     * 同源逻辑但不做 WebView 就绪轮询（此时 WebView 已就绪）。重载触发
+     * onPageFinished → configureWebView 的 hotUpdateCheckStarted 已置位，不会二次检查。
+     */
+    private void reloadHotEntry(final WebView webView) {
+        try {
+            File hotDir = new File(getFilesDir(), "hot-update");
+            String hotEntry = HotUpdateManager.resolveEntry(hotDir);
+            String url = LOCAL_ASSET_URL;
+            if (hotEntry != null) {
+                url = "file://" + hotEntry;
+                ensureHotConfigTemplate(new File(hotEntry).getParentFile());
+            }
+            webView.loadUrl(url);
+        } catch (Throwable t) {
+            Log.w(TAG, "[hot-update] 热重载失败，保持当前页面: " + t.getMessage());
+        }
     }
 
     /**
