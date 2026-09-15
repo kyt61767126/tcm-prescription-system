@@ -2106,6 +2106,21 @@ let currentUser = null;
                         __diag = '\n诊断:本地' + users.length + '个账号[' + __names + ']密码[' + __pwd + ']' + __heal;
                         console.warn('[LoginDiag]' + __diag);
                     } catch (e) {}
+                    // ★ 2026-09-15 直通事故救援提示：-11 试用到期直通 bug 曾把已注册账号本地
+                    //   密码覆盖为 admin，用户输入注册密码必然失败且无从知晓。检测匹配账号
+                    //   密码是否为默认 admin，直接告知用 admin 登录（admin 为公开默认值，
+                    //   与"忘记密码"重置值同级，无泄露风险），免走激活码核验弯路。
+                    try {
+                        var __hitUser = users.find(function (u) { return u && (u.username === loginUsername || String(u.phone || '') === loginUsername); });
+                        if (__hitUser && __hitUser.username !== 'admin') {
+                            var __defPwd = false;
+                            if (__hitUser.password === 'admin') __defPwd = true;
+                            else if (typeof hashPassword === 'function') {
+                                try { __defPwd = (await hashPassword('admin')) === __hitUser.password; } catch (_) {}
+                            }
+                            if (__defPwd) __diag += '\n提示:该账号密码当前为默认 admin，请输入 admin 登录后到"修改密码"中恢复';
+                        }
+                    } catch (e) {}
                     errorDiv.textContent = '手机号/用户名或密码错误' + __diag;
                     errorDiv.style.display = 'block';
                 }
