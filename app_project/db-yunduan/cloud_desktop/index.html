@@ -5543,10 +5543,14 @@ let currentUser = null;
         function syncDoseInputs(sourceId) {
             // ★ 2026-09-10 剂数双实例双向同步：桌面输入框 doseCountInput3 与移动端输入框 doseCountInput3M
             const srcInput = sourceId === 'doseCountInput3' ? DOM_CACHE.doseCountInput3 : DOM_CACHE.doseCountInput3M;
-            const value = parseInt(srcInput?.value) || 7;
-            // 更新对端输入框
-            if (DOM_CACHE.doseCountInput3M && DOM_CACHE.doseCountInput3M.value != value) DOM_CACHE.doseCountInput3M.value = value;
-            if (DOM_CACHE.doseCountInput3 && DOM_CACHE.doseCountInput3.value != value) DOM_CACHE.doseCountInput3.value = value;
+            const raw = srcInput ? String(srcInput.value) : '';
+            // ★ 2026-09-15 修复剂数无法修改：原版 parseInt('')||7 在用户删除数字时立即把默认值写回输入框，
+            //   数字永远删不掉改不了。空值中间态不回写任何输入框，仅显示/计算用兜底值。
+            const value = parseInt(raw) || 7;
+            if (raw !== '') {
+                const other = sourceId === 'doseCountInput3' ? DOM_CACHE.doseCountInput3M : DOM_CACHE.doseCountInput3;
+                if (other && other.value != value) other.value = value;
+            }
             const display = document.getElementById('paperDoseCount');
             if (display) display.textContent = value;
             
@@ -5554,17 +5558,24 @@ let currentUser = null;
         }
 
         function syncRegistrationFee(sourceId) {
-            let value = 0;
-            if (sourceId === 'registrationFee2') {
-                value = parseFloat(DOM_CACHE.registrationFee2?.value) || 0;
-            } else {
-                value = parseFloat(DOM_CACHE.registrationFee2?.value || '0') || 0;
-            }
-            
-            if (DOM_CACHE.registrationFee2 && DOM_CACHE.registrationFee2.value != value) DOM_CACHE.registrationFee2.value = value;
-            
+            // ★ 2026-09-15 修复诊疗费无法修改：原版 parseFloat('')||0 在用户删除数字时立即回写 0，
+            //   数字无法修改；现空值中间态不回写输入框（calculateAmount 内部有 ||'0' 兜底）。
             calculateAmount();
         }
+
+        // ★ 2026-09-15 剂数/诊疗费失焦兜底：用户清空后未输入新值直接离开时恢复默认值（7/0）
+        //   并刷新显示，避免输入框长期留空（事件委托一次绑定，不改DOM不改CSS）
+        document.addEventListener('focusout', function(e) {
+            const t = e.target;
+            if (!t || !t.id) return;
+            if ((t.id === 'doseCountInput3' || t.id === 'doseCountInput3M') && String(t.value).trim() === '') {
+                t.value = 7;
+                syncDoseInputs(t.id);
+            } else if (t.id === 'registrationFee2' && String(t.value).trim() === '') {
+                t.value = 0;
+                syncRegistrationFee('registrationFee2');
+            }
+        });
 
         function calculateAmount() {
             const medicineTotal = prescriptionItems.reduce((sum, item) =>sum + (parseFloat(item.total) || 0), 0);

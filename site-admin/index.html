@@ -6458,44 +6458,53 @@ if (window.Permission) {
             const dose2 = document.getElementById('doseCountInput2');
             const dose3 = document.getElementById('doseCountInput3');
             const display = document.getElementById('paperDoseCount');
-            
-            let value = 7;
-            if (sourceId === 'doseCountInput') {
-                value = parseInt(dose1.value) || 7;
-            } else if (sourceId === 'doseCountInput2') {
-                value = parseInt(dose2.value) || 7;
-            } else if (sourceId === 'doseCountInput3') {
-                value = parseInt(dose3.value) || 7;
-            } else {
-                value = parseInt(dose3?.value || dose1?.value || '7') || 7;
+
+            // ★ 2026-09-15 修复剂数无法修改：原版 parseInt('')||7 在用户删除数字时立即把默认值写回输入框，
+            //   数字永远删不掉改不了。空值中间态不回写任何输入框，仅显示/计算用兜底值。
+            const src = sourceId === 'doseCountInput' ? dose1 : (sourceId === 'doseCountInput2' ? dose2 : dose3);
+            const raw = src ? String(src.value) : '';
+            const value = parseInt(raw) || 7;
+
+            if (raw !== '') {
+                if (dose1 && dose1.value != value) dose1.value = value;
+                if (dose2 && dose2.value != value) dose2.value = value;
+                if (dose3 && dose3.value != value) dose3.value = value;
             }
-            
-            if (dose1 && dose1.value != value) dose1.value = value;
-            if (dose2 && dose2.value != value) dose2.value = value;
-            if (dose3 && dose3.value != value) dose3.value = value;
             if (display) display.textContent = value;
-            
+
             calculateAmount();
         }
 
         function syncRegistrationFee(sourceId) {
             const regFee1 = document.getElementById('registrationFee');
             const regFee2 = document.getElementById('registrationFee2');
-            
-            let value = 0;
-            if (sourceId === 'registrationFee') {
-                value = parseFloat(regFee1?.value) || 0;
-            } else if (sourceId === 'registrationFee2') {
-                value = parseFloat(regFee2?.value) || 0;
-            } else {
-                value = parseFloat(regFee2?.value || regFee1?.value || '0') || 0;
-            }
-            
+
+            // ★ 2026-09-15 修复诊疗费无法修改：原版 parseFloat('')||0 在用户删除数字时立即回写 0，
+            //   数字无法修改；现空值中间态不回写输入框（calculateAmount 内部有兜底）。
+            const src = sourceId === 'registrationFee' ? regFee1 : regFee2;
+            const raw = src ? String(src.value) : '';
+            if (raw === '') { calculateAmount(); return; }
+            const value = parseFloat(raw) || 0;
+
             if (regFee1 && regFee1.value != value) regFee1.value = value;
             if (regFee2 && regFee2.value != value) regFee2.value = value;
-            
+
             calculateAmount();
         }
+
+        // ★ 2026-09-15 剂数/诊疗费失焦兜底：用户清空后未输入新值直接离开时恢复默认值（7/0）
+        //   并刷新显示，避免输入框长期留空（事件委托一次绑定，不改DOM不改CSS）
+        document.addEventListener('focusout', function(e) {
+            const t = e.target;
+            if (!t || !t.id) return;
+            if ((t.id === 'doseCountInput' || t.id === 'doseCountInput2' || t.id === 'doseCountInput3') && String(t.value).trim() === '') {
+                t.value = 7;
+                syncDoseInputs(t.id);
+            } else if ((t.id === 'registrationFee' || t.id === 'registrationFee2') && String(t.value).trim() === '') {
+                t.value = 0;
+                syncRegistrationFee(t.id);
+            }
+        });
 
         function calculateAmount() {
             const medicineTotal = prescriptionItems.reduce((sum, item) => sum + (parseFloat(item.total) || 0), 0);

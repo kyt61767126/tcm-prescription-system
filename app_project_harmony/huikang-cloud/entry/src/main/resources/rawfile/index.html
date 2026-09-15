@@ -5456,32 +5456,35 @@ let currentUser = null;
         }
 
         function syncDoseInputs(sourceId) {
-            let value = 7;
-            if (sourceId === 'doseCountInput3') {
-                value = parseInt(DOM_CACHE.doseCountInput3?.value) || 7;
-            } else {
-                value = parseInt(DOM_CACHE.doseCountInput3?.value || '7') || 7;
-            }
-            
-            if (DOM_CACHE.doseCountInput3 && DOM_CACHE.doseCountInput3.value != value) DOM_CACHE.doseCountInput3.value = value;
+            // ★ 2026-09-15 修复剂数无法修改：原版 parseInt('')||7 在用户删除数字时立即把默认值写回输入框，
+            //   数字永远删不掉改不了。空值中间态不回写输入框，仅显示/计算用兜底值。
+            const raw = DOM_CACHE.doseCountInput3 ? String(DOM_CACHE.doseCountInput3.value) : '';
+            const value = parseInt(raw) || 7;
             const display = document.getElementById('paperDoseCount');
             if (display) display.textContent = value;
-            
+
             calculateAmount();
         }
 
         function syncRegistrationFee(sourceId) {
-            let value = 0;
-            if (sourceId === 'registrationFee2') {
-                value = parseFloat(DOM_CACHE.registrationFee2?.value) || 0;
-            } else {
-                value = parseFloat(DOM_CACHE.registrationFee2?.value || '0') || 0;
-            }
-            
-            if (DOM_CACHE.registrationFee2 && DOM_CACHE.registrationFee2.value != value) DOM_CACHE.registrationFee2.value = value;
-            
+            // ★ 2026-09-15 修复诊疗费无法修改：原版 parseFloat('')||0 在用户删除数字时立即回写 0，
+            //   数字无法修改；现空值中间态不回写输入框（calculateAmount 内部有 ||'0' 兜底）。
             calculateAmount();
         }
+
+        // ★ 2026-09-15 剂数/诊疗费失焦兜底：用户清空后未输入新值直接离开时恢复默认值（7/0）
+        //   并刷新显示，避免输入框长期留空（事件委托一次绑定，不改DOM不改CSS）
+        document.addEventListener('focusout', function(e) {
+            const t = e.target;
+            if (!t || !t.id) return;
+            if (t.id === 'doseCountInput3' && String(t.value).trim() === '') {
+                t.value = 7;
+                syncDoseInputs(t.id);
+            } else if (t.id === 'registrationFee2' && String(t.value).trim() === '') {
+                t.value = 0;
+                syncRegistrationFee('registrationFee2');
+            }
+        });
 
         function calculateAmount() {
             const medicineTotal = prescriptionItems.reduce((sum, item) =>sum + (parseFloat(item.total) || 0), 0);
