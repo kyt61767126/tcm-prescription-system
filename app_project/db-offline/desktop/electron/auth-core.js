@@ -3466,6 +3466,8 @@
                         html += '<br>剩余 <b style="color:#4caf50;">' + remainingDays + '</b> 天';
                     }
                     el.innerHTML = html;
+                    // ★ 2026-09-15 激活码常显：已激活用户在授权状态区显示激活码（点击复制）
+                    renderActivationCode(el);
                     // ★ 2026-08-28 推广奖励：老用户邀请码展示——已激活用户在授权状态区显示专属邀请码+进度
                     loadInviteInfo(el);
                     // ★ 2026-08-25 全局统一：正式授权 >7天或永久(-1) → 灰色只读；≤7天恢复正常色提醒续费
@@ -3479,6 +3481,8 @@
                     // 未知类型，显示通用已激活
                     el.innerHTML = '✅ 已激活' +
                         (hasDays && remainingDays > 0 ? '<br>剩余 ' + remainingDays + ' 天' : '');
+                    // ★ 2026-09-15 激活码常显（未知授权类型同样已激活）
+                    renderActivationCode(el);
                     setAdminActivateBtnState(hasDays ? remainingDays : null);
                 }
             } else {
@@ -3518,6 +3522,116 @@
         } catch (_) { return null; }
     }
 
+    // ★ 2026-09-15 三来源取码共享函数（授权区激活码显示 + 邀请码查询共用）：
+    //   1) StorageAdapter（标准来源，激活成功后写入）
+    //   2) localStorage 直读（StorageAdapter 异常/未初始化兜底）
+    //   3) electronAPI.license.getActivationRecord()（APP端 Java 激活记录，
+    //      LicenseManager 激活成功时写入明文 code——旧记录无此字段则空）
+    //   4) machineId 联网找回（★ 本轮新增：桌面激活窗口激活的设备 license.dat 不含
+    //      码、两窗口 localStorage 物理隔离 → 本地恒无码。凭本机 machineId 调
+    //      admin-status 自救查询，activated 响应 licenseInfo.licenseCode 即权威码，
+    //      与存量自愈同源。仅已激活分支触达本函数，无码设备每次打开授权区联网一次，
+    //      成功即自愈回写来源1，后续不再联网）
+    //   返回 trim 后字符串，无码返回 ''。
+    async function getLicenseCode() {
+        let code = '';
+        try { code = await StorageAdapter.getItem('license:code'); } catch (_) {}
+        if (!code) {
+            try {
+                const ls = (typeof global !== 'undefined' && global.localStorage) ||
+                           (typeof window !== 'undefined' ? window.localStorage : null);
+                if (ls) code = ls.getItem('license:code');
+            } catch (_) {}
+        }
+        if (!code && global.electronAPI && global.electronAPI.license &&
+            typeof global.electronAPI.license.getActivationRecord === 'function') {
+            try {
+                const rec = await global.electronAPI.license.getActivationRecord();
+                if (rec && rec.code) {
+                    code = String(rec.code).trim();
+                    // 自愈回写标准存储，下次直接命中来源1
+                    try { await StorageAdapter.setItem('license:code', code); } catch (_) {}
+                }
+            } catch (_) {}
+        }
+        // 来源4：机器码联网找回（桌面激活窗口激活 / 旧版本激活的存量设备）
+        if (!code) {
+            try {
+                let mid = '';
+                try {
+                    const savedMid = await StorageAdapter.getItem('license:machineId');
+                    if (savedMid) mid = normalizeMachineIdResult(savedMid);
+                } catch (_) {}
+                if (!mid && global.electronAPI && global.electronAPI.license &&
+                    typeof global.electronAPI.license.getMachineId === 'function') {
+                    try {
+                        const m = await global.electronAPI.license.getMachineId();
+                        mid = normalizeMachineIdResult(m);
+                    } catch (_) {}
+                }
+                if (!mid && global.electronAPI && global.electronAPI.activate &&
+                    typeof global.electronAPI.activate.getMachineId === 'function') {
+                    try {
+                        const m = await global.electronAPI.activate.getMachineId();
+                        mid = normalizeMachineIdResult(m);
+                    } catch (_) {}
+                }
+                if (mid) {
+                    const r = await _queryAdminStatus('', mid);
+                    if (r && r.success && r.status === 'activated' &&
+                        r.licenseInfo && r.licenseInfo.licenseCode) {
+                        code = String(r.licenseInfo.licenseCode).trim();
+                        try { await StorageAdapter.setItem('license:code', code); } catch (_) {}
+                    }
+                }
+            } catch (_) {}
+        }
+        return code ? String(code).trim() : '';
+    }
+
+    // ★ 2026-09-15 激活码常显：已激活用户在授权状态区显示激活码（点击复制）。
+    //   客户换机重激活/到期续费/授权找回/客服核查均需提供激活码，此前仅激活成功
+    //   瞬间可见，之后无处可查只能找管理员。本地无码（旧版激活设备）静默跳过。
+    async function renderActivationCode(el) {
+        try {
+            // 幂等：与邀请码卡片同款防重复策略（多路径并发调用时先清旧卡片）
+            document.querySelectorAll('#activationCodeBox').forEach(n => { if (n.parentNode) n.parentNode.removeChild(n); });
+            const code = await getLicenseCode();
+            if (!code || code.length < 4) return;
+            const box = document.createElement('div');
+            box.id = 'activationCodeBox';
+            box.style.cssText = 'margin-top:8px;padding-top:8px;border-top:1px dashed #ddd;font-size:12px;color:#555;line-height:1.7;';
+            const label = document.createElement('span');
+            label.textContent = '🔑 激活码：';
+            const b = document.createElement('b');
+            b.id = 'activationCodeEl';
+            b.title = '点击复制';
+            b.style.cssText = 'color:#26a69a;font-family:monospace;letter-spacing:1px;font-size:14px;cursor:pointer;user-select:all;';
+            b.textContent = code; // textContent 写码防注入（码格式 BNZC-XXXX-XXXX-XXXX-XXXX）
+            box.appendChild(label);
+            box.appendChild(b);
+            el.appendChild(box);
+            b.addEventListener('click', function (ev) {
+                const txt = (ev.target.textContent || '').trim();
+                try {
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(txt);
+                    } else {
+                        const ta = document.createElement('textarea');
+                        ta.value = txt; document.body.appendChild(ta);
+                        ta.select(); document.execCommand('copy');
+                        document.body.removeChild(ta);
+                    }
+                    alert('激活码已复制：' + txt);
+                } catch (_) {
+                    alert('复制失败，请手动记录：' + txt);
+                }
+            });
+        } catch (e) {
+            console.warn('[ActivationCode] 激活码显示失败:', e && e.message);
+        }
+    }
+
     async function loadInviteInfo(el) {
         try {
             // ★ 2026-09-10 修复「多个邀请码重复渲染」：updateLicenseStatusText 为 async，
@@ -3525,32 +3639,8 @@
             //   第一个卡片，其余并发调用在异步等待期间均看不到旧卡片 → 各自 append 造成重复。
             //   改为 querySelectorAll 移除全部同名卡片，确保幂等。
             document.querySelectorAll('#inviteInfoBox').forEach(n => { if (n.parentNode) n.parentNode.removeChild(n); });
-            // ★ 三来源取码（APP端激活码可能只存于 Java 层/StorageAdapter 未初始化）：
-            //   1) StorageAdapter（标准来源，弹窗激活成功后写入）
-            //   2) localStorage 直读（StorageAdapter 异常/未初始化兜底）
-            //   3) electronAPI.license.getActivationRecord()（APP端 Java 激活记录，
-            //      LicenseManager 激活成功时写入明文 code——旧记录无此字段则空）
-            let code = '';
-            try { code = await StorageAdapter.getItem('license:code'); } catch (_) {}
-            if (!code) {
-                try {
-                    const ls = (typeof global !== 'undefined' && global.localStorage) ||
-                               (typeof window !== 'undefined' ? window.localStorage : null);
-                    if (ls) code = ls.getItem('license:code');
-                } catch (_) {}
-            }
-            if (!code && global.electronAPI && global.electronAPI.license &&
-                typeof global.electronAPI.license.getActivationRecord === 'function') {
-                try {
-                    const rec = await global.electronAPI.license.getActivationRecord();
-                    if (rec && rec.code) {
-                        code = String(rec.code).trim();
-                        // 自愈回写标准存储，下次直接命中来源1
-                        try { await StorageAdapter.setItem('license:code', code); } catch (_) {}
-                    }
-                } catch (_) {}
-            }
-            if (!code || String(code).trim().length < 4) {
+            const code = await getLicenseCode();
+            if (!code || code.length < 4) {
                 // ★ 4) machineId 联网找回（存量管理员激活/旧版本激活设备本地无码）：
                 //    服务端凭 device_version:{machineId} 绑定记录查回邀请信息（不返回码本身），
                 //    每次打开授权状态时自动执行，无需用户干预。

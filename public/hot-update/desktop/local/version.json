@@ -1,7 +1,7 @@
 {
   "format": 1,
   "channel": "local",
-  "hotVersion": "2026.09.15-7",
+  "hotVersion": "2026.09.15-8",
   "appVersion": "1.0.248",
   "files": [
     {
@@ -11,8 +11,8 @@
     },
     {
       "name": "auth-core.js",
-      "sha256": "3bd52aa6086cf76098c8b1bfbf36d47e9f52312ae4f1d8191e6f3ef25048acef",
-      "size": 483082
+      "sha256": "fdb47171b78553c11abfee39e8e06549394dc7a14eae9b63f9221ca416ce288d",
+      "size": 488046
     },
     {
       "name": "permission.js",
@@ -36,8 +36,8 @@
     },
     {
       "name": "medicine-dict.js",
-      "sha256": "7361a949d5b4063990553ebff38c57a6ecffe9b5a6157ec41a880534591c6dd4",
-      "size": 5317
+      "sha256": "8427c75fc49726468c5f77c790b193da2a1caca5c23f989198a8a726a868ddf2",
+      "size": 5171
     },
     {
       "name": "symptom-dict.js",
@@ -46,8 +46,8 @@
     },
     {
       "name": "performance-utils.js",
-      "sha256": "6585d30794524c4517d28f1245442236caa89555aa7b7592a8863401726db7a7",
-      "size": 22868
+      "sha256": "c4f8143accb357bd642d80348a463a819bdbd3ce55b915d490074978586e0b21",
+      "size": 22327
     },
     {
       "name": "prescription-core.js",
@@ -66,8 +66,8 @@
     },
     {
       "name": "electron/video-recorder.js",
-      "sha256": "d7f8ff7fa7d6a735e3d7e027f335140b8f9426d8aa0a4985fc20a45cceaa88df",
-      "size": 57631
+      "sha256": "112a600d6000d79af28d44e912ce997dd8ce75d63e1c1a7e15e881fd6f44a362",
+      "size": 56374
     },
     {
       "name": "vendor/xlsx.full.min.js",
@@ -75,6 +75,6 @@
       "size": 881727
     }
   ],
-  "signedAt": 1789475566344,
-  "signature": "EW4t+wKSzffwcj/CrnmA4gco22Lxz6IcAaT1ALfXnLjlOc3BDAEMF7XvdaOmmrwiJOOdheibAE2ujXo/5HwZCA=="
+  "signedAt": 1789481369473,
+  "signature": "hFDoshih/lZYt+kgVJkQzoQg+Ap4PKCT1RKzsfprbIZqfRlf8MeB6G48M5WYJkqNxeev0lxazhqT463yY6DeDg=="
 }

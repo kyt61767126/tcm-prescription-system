@@ -1,7 +1,7 @@
 {
   "format": 1,
   "channel": "cloud",
-  "hotVersion": "2026.09.15-4",
+  "hotVersion": "2026.09.15-5",
   "appVersion": "1.2.249",
   "files": [
     {
@@ -11,8 +11,8 @@
     },
     {
       "name": "auth-core.js",
-      "sha256": "75d2d1e1dd72e537b672d7b5a469fd23f236ad1606641a5d9891f25aaa3df637",
-      "size": 328409
+      "sha256": "4e743a3fd6e14a622d6bd4cc3078dd53cfbb8f73ed5209740a3e985b182342e7",
+      "size": 328406
     },
     {
       "name": "permission.js",
@@ -36,8 +36,8 @@
     },
     {
       "name": "medicine-dict.js",
-      "sha256": "7361a949d5b4063990553ebff38c57a6ecffe9b5a6157ec41a880534591c6dd4",
-      "size": 5317
+      "sha256": "8427c75fc49726468c5f77c790b193da2a1caca5c23f989198a8a726a868ddf2",
+      "size": 5171
     },
     {
       "name": "symptom-dict.js",
@@ -51,8 +51,8 @@
     },
     {
       "name": "performance-utils.js",
-      "sha256": "6585d30794524c4517d28f1245442236caa89555aa7b7592a8863401726db7a7",
-      "size": 22868
+      "sha256": "c4f8143accb357bd642d80348a463a819bdbd3ce55b915d490074978586e0b21",
+      "size": 22327
     },
     {
       "name": "prescription-core.js",
@@ -76,10 +76,10 @@
     },
     {
       "name": "xlsx.full.min.js",
-      "sha256": "06b0589566e576e48d0da0c357c804bef26fd09f7e7e8e9fee3ee2d582a51b48",
-      "size": 881749
+      "sha256": "c9506197caf809a075b6dee1da0d36fb19da7158ffe8a88e7b0c96c5d8623c99",
+      "size": 881727
     }
   ],
-  "signedAt": 1789462045533,
-  "signature": "YRcS2tzxsOhypykSThuKQbawPKZHx8d5fzBjPO1+8P5nB864zWfnzKDLm1dpRQ0rzhpExeMAs8u/ZCP35SIvCw=="
+  "signedAt": 1789481824145,
+  "signature": "Mty/BUgmJ/ipnUjOGETfzBp4MSf6yDGLXn2xxaG/R+7l0RsfLaEwt1qvzClo/NNaAc6jOAn9i5BzfV1NkGgPCg=="
 }

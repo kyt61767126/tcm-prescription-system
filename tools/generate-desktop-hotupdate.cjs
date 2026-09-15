@@ -106,14 +106,27 @@ function main() {
     }
 
     // 1. 逐文件哈希
+    // ★ 2026-09-15 P0 行尾铁律（对齐 generate-app-hotupdate.cjs）：文本文件
+    //   CRLF→LF 归一化后再哈希/写产物。根因实锤：源文件（sync 链 PREPEND 头等）
+    //   含 CRLF 时，本工具按磁盘 CRLF 字节算哈希，git 入库 eol=lf 剥 CR →
+    //   线上部署字节 ≠ version.json 清单哈希 → 客户端逐文件 SHA256 门禁
+    //   fail-closed 拒收整包（2026-09-14-1 起桌面双渠道所有热包从未送达，
+    //   线上实查 manifest=3bd52aa6 vs 部署=057f22e0）。归一化后：
+    //   磁盘产物 == git 入库 == 线上部署 == version.json 四方一致。
+    const isText = (n) => /\.(js|html|json)$/i.test(n);
+    const normalizeLf = (buf) => /\r\n/.test(buf.toString('latin1'))
+        ? Buffer.from(buf.toString('utf8').replace(/\r\n/g, '\n'), 'utf8') : buf;
     const files = [];
+    const fileBufs = new Map();
     for (const name of conf.files) {
         const fp = path.join(conf.srcDir, name);
         if (!fs.existsSync(fp)) {
             console.error('[HotUpdateGen] 源文件缺失: ' + name + '（' + fp + '）');
             process.exit(1);
         }
-        const buf = fs.readFileSync(fp);
+        let buf = fs.readFileSync(fp);
+        if (isText(name)) buf = normalizeLf(buf);
+        fileBufs.set(name, buf);
         files.push({ name: name, sha256: crypto.createHash('sha256').update(buf).digest('hex'), size: buf.length });
     }
 
@@ -138,7 +151,18 @@ function main() {
     for (const name of conf.files) {
         const dst = path.join(outDir, name);
         fs.mkdirSync(path.dirname(dst), { recursive: true });
-        fs.copyFileSync(path.join(conf.srcDir, name), dst);
+        fs.writeFileSync(dst, fileBufs.get(name)); // 写归一化字节（非 copyFileSync 原样拷贝）
+    }
+
+    // ★ 2026-09-15 回读复验：产物落盘后重新读取并校验哈希（防 fs 写入异常
+    //   造成「清单哈希 ≠ 磁盘产物」——客户端下载的正是磁盘产物字节）
+    for (const f of files) {
+        const rb = fs.readFileSync(path.join(outDir, f.name));
+        const rbHash = crypto.createHash('sha256').update(rb).digest('hex');
+        if (rb.length !== f.size || rbHash !== f.sha256) {
+            console.error('[HotUpdateGen] 回读复验失败: ' + f.name + '（磁盘产物与清单不一致）');
+            process.exit(1);
+        }
     }
 
     // 5. version.json（manifest 与签名一体：客户端下载后验签，热目录副本供启动复验）

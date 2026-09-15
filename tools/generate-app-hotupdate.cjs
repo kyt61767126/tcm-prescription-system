@@ -30,9 +30,9 @@
 //    （客户端只拉 sha256 变化的文件），同日重发加 -n 2。
 //
 //  【用法】
-//    node tools/generate-app-hotupdate.cjs                 # minAppCode 取 build.gradle versionCode
+//    node tools/generate-app-hotupdate.cjs                 # minAppCode 继承上一包（无则取 build.gradle）
 //    node tools/generate-app-hotupdate.cjs -n 2            # 同日第 2 版
-//    node tools/generate-app-hotupdate.cjs -m 284          # 指定最低 APK versionCode
+//    node tools/generate-app-hotupdate.cjs -m 284          # 指定最低 APK versionCode（含新桥依赖时才抬升）
 //    node tools/generate-app-hotupdate.cjs -o <dir>        # 输出根目录覆盖（测试用）
 //
 //  【发布】产物在 public/ 下随 git push 由 Cloudflare Pages 自动部署；客户端
@@ -99,7 +99,7 @@ function buildSignMessage(channel, hotVersion, signedAt, files) {
     return SIGN_PREFIX + '|' + channel + '|' + hotVersion + '|' + signedAt + '|' + parts.join('|');
 }
 
-// 读 build.gradle versionCode（默认 minAppCode——本热包要求的最低 APK versionCode）
+// 读 build.gradle versionCode（minAppCode 兜底——本热包要求的最低 APK versionCode）
 function readVersionCode() {
     const text = fs.readFileSync(BUILD_GRADLE, 'utf8');
     const m = text.match(/versionCode\s+(\d+)/);
@@ -108,6 +108,20 @@ function readVersionCode() {
         process.exit(1);
     }
     return parseInt(m[1], 10);
+}
+
+// ★ 2026-09-15 防呆：未显式传 -m 时继承上一包 minAppCode（而非读 build.gradle）。
+//   根因实锤：重打 APK 后 build.gradle 已 bump，裸跑工具默认读新 versionCode →
+//   minAppCode 被静默抬升 → 288-291 装机全部转整包通道收不到热包（-11~-15 事故，
+//   铁律「打完 APK 再发热包必须 -m 288 钉住」只靠人记已实际复发一次）。
+//   继承策略：首次发无上一包 → 读 build.gradle（首发 APK 与热包同步，语义正确）；
+//   后续默认继承（上一包的 minAppCode 是当时审定的安全值）；显式 -m 仍可覆盖。
+function readPrevMinAppCode(outRoot) {
+    try {
+        const prev = JSON.parse(fs.readFileSync(path.join(outRoot, OUT_SUBDIR, 'version.json'), 'utf8'));
+        if (prev && typeof prev.minAppCode === 'number' && prev.minAppCode >= 1) return prev.minAppCode;
+    } catch (_) { /* 无上一包 */ }
+    return 0;
 }
 
 function fail(msg) {
@@ -124,7 +138,12 @@ function main() {
         if (argv[i] === '-m') minAppCode = parseInt(argv[i + 1], 10) || 0;
         if (argv[i] === '-o') outRoot = path.resolve(argv[i + 1] || '.');
     }
-    if (!minAppCode) minAppCode = readVersionCode();
+    if (!minAppCode) {
+        // 防呆默认：继承上一包 → 无上一包才读 build.gradle（详见 readPrevMinAppCode 注释）
+        const prev = readPrevMinAppCode(outRoot);
+        minAppCode = prev || readVersionCode();
+        console.log('[AppHotGen] 未传 -m：minAppCode ' + (prev ? '继承上一包=' + prev : '取 build.gradle=' + minAppCode) + '（显式 -m 可覆盖；抬升须确认热包含新桥依赖）');
+    }
 
     // ---- 前置校验 ----
     const overlap = FILES.filter((f) => FORBIDDEN.indexOf(f) >= 0);
