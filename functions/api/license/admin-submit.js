@@ -381,6 +381,61 @@ export async function onRequest(context) {
             }
         }
 
+        // ★ 2026-09-15 同设备已激活短路（换号场景，与 order-submit 同款修复）：
+        //   已激活机器码换新手机号重新提交激活时，上方按手机号的短路查不到（新号无
+        //   记录）→ 建新申请走支付前置 → PAYMENT_REQUIRED 付款面板；但轮询
+        //   admin-status machineId 兜底随后命中本机旧授权 → "付款页→已激活"跳变
+        //   困惑，且已建申请存在重复付款风险（实测：已激活手机重新注册→提交→
+        //   付款页→提示已激活）。此处按 machineId 扫描最近记录（口径对齐
+        //   admin-status machineId 兜底）：本机存在已激活记录 → 直接返回
+        //   activated 短路，客户端进等待轮询后由 admin-status 完成装码。
+        //   ★ 安全边界（与手机号短路的关键差异）：机器码扫描命中的是【旧手机号】
+        //   的记录（phone ≠ 本次提交），机器码是客户端自报参数（不可信）——
+        //   绝不做 provisionCloudAccount / normalizeActivationPassword 等账号
+        //   操作（会重置旧号密码 = 匿名接管，违反 2026-09-03 P0 安全决策）；
+        //   仅返回 activated + license（license 绑定 machineId，他机验签必
+        //   失败，与 admin-status machineId 兜底同边界）。
+        {
+            const idxList = (await kv.get(KV_ADMIN_REQ_INDEX, 'json').catch(() => null)) || [];
+            let machineActivated = null;
+            for (const rid of idxList.slice(0, 200)) {
+                const rec = await kv.get(KV_ADMIN_REQ_PREFIX + rid, 'json').catch(() => null);
+                if (rec && String(rec.machineId || '') === finalMachineId &&
+                    rec.status === 'activated') {
+                    machineActivated = rec;
+                    break;
+                }
+            }
+            if (machineActivated) {
+                // ★ 2026-09-11 同款可疑设备拦截：封锁设备不下发 license
+                const __blk = await getDeviceBlock(kv, String(machineActivated.machineId || ''));
+                if (__blk) {
+                    console.warn('[AdminSubmit] 已封锁设备换号提交，拒绝下发 license:',
+                        machineActivated.machineId, 'reason=', __blk.reason);
+                    return json({ success: false, error: '设备安全校验未通过，请更换设备或联系客服处理' }, 403);
+                }
+                // ★ 阶段1a 重签自愈：短路下发出口过 ensureLicenseV7（防出口绕过）
+                machineActivated = await ensureLicenseV7(kv, machineActivated, context);
+                console.log('[AdminSubmit] 同设备已激活（换新手机号场景），短路复用不建新申请:',
+                    'machineId=', String(finalMachineId).slice(0, 12) + '...',
+                    'recordPhone=', machineActivated.phone, 'requestId=', machineActivated.requestId);
+                return json({
+                    success: true,
+                    status: 'activated',
+                    requestId: machineActivated.requestId,
+                    message: '已检测到本机已有激活授权，正在完成安装...',
+                    license: machineActivated.licenseBase64 || null,
+                    licenseInfo: {
+                        user: machineActivated.adminName || '',
+                        clinicName: machineActivated.clinicName || '',
+                        phone: machineActivated.phone || '',
+                        licenseCode: machineActivated.licenseCode || '',
+                        resolvedAt: machineActivated.resolvedAt || null
+                    }
+                });
+            }
+        }
+
         // ★ 2026-09-02 支付前置校验（激活流程完善：没有完成支付环节无法提交）：
         //   官网订单付款确认（order-paid）后记录带 paidAt 并进入待审队列。提交时统一判定：
         //   ① 已有"已付款待核对"申请 → 复用该申请，客户端直接进入等待轮询；

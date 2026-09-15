@@ -272,6 +272,41 @@ export async function onRequest(context) {
             }
         }
 
+        // ★ 2026-09-15 同设备已激活短路（换号场景）：已激活机器码换新手机号重新提交
+        //   激活时，上方按手机号的短路查不到（新号无记录）→ 建新订单跳付款页；但客户端
+        //   admin-status machineId 兜底随后命中本机旧授权 → "付款页→已激活"跳变困惑，
+        //   且已建订单存在重复付款风险（实测：已激活手机重新注册→提交→付款页→提示已激活）。
+        //   此处按 machineId 扫描最近记录（扫描口径对齐 admin-status machineId 兜底）：
+        //   本机存在已激活记录 → 直接返回 activated（客户端走桥装码收尾，全程无付款页）。
+        //   安全边界与 admin-status 兜底一致：machineId 虽是客户端提交参数（不可信），
+        //   但本响应不携带 license/账号信息，客户端凭真实 machineId 走桥取码落盘，
+        //   license 绑定 machineId，他机验签必失败。
+        {
+            const idxList = (await kv.get(KV_ADMIN_REQ_INDEX, 'json').catch(() => null)) || [];
+            let machineActivated = null;
+            for (const rid of idxList.slice(0, 200)) {
+                const rec = await kv.get(KV_ADMIN_REQ_PREFIX + rid, 'json').catch(() => null);
+                if (rec && String(rec.machineId || '') === finalMachineId &&
+                    rec.status === 'activated') {
+                    machineActivated = rec;
+                    break;
+                }
+            }
+            if (machineActivated) {
+                console.log('[OrderSubmit] 同设备已激活（换新手机号场景），短路不建新订单:',
+                    'machineId=', String(finalMachineId).slice(0, 12) + '...',
+                    'recordPhone=', machineActivated.phone, 'requestId=', machineActivated.requestId);
+                return json({
+                    success: true,
+                    orderNo: String(machineActivated.orderNo || orderNo).toUpperCase(),
+                    requestId: machineActivated.requestId,
+                    status: 'activated',
+                    idempotent: true,
+                    message: '本机已有有效授权，无需重复购买（沿用原激活记录自动完成）'
+                });
+            }
+        }
+
         // ★ 设备-版本绑定校验（与 admin-submit 同规则，browser- 前缀设备放行）
         const deviceCheck = await checkDeviceVersion(kv, finalMachineId, edition);
         if (!deviceCheck.ok) {
