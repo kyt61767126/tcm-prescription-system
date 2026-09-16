@@ -295,7 +295,7 @@
                         const s = String(u || '').trim();
                         if (s && isGenericUsername(s) && !LEGACY_USERNAMES.includes(s) &&
                             !merged.some(m => String(m.username).toLowerCase() === s.toLowerCase())) {
-                            merged.push({ username: s });
+                            merged.push({ username: s, source: 'remembered' });
                         } else if (s && !isGenericUsername(s)) {
                             if (!cleaned) cleaned = arr.slice();
                             const idx = cleaned.indexOf(u);
@@ -345,6 +345,11 @@
                         const dn = u.displayName || u.name || '';
                         if (dn && isGenericDisplayNameSafe(dn)) label = dn;
                         item.textContent = label;
+                        // ★ 2026-09-16 单条删除：行内布局让 × 靠右（动态内联样式，不改静态 CSS）
+                        item.style.display = 'flex';
+                        item.style.justifyContent = 'space-between';
+                        item.style.alignItems = 'center';
+                        item.style.gap = '8px';
                         item.addEventListener('click', function (e) {
                             e.stopPropagation();
                             const inputEl = document.getElementById('loginUsername');
@@ -353,6 +358,21 @@
                             if (pwd) { pwd.value = ''; pwd.focus(); }
                             menu.classList.remove('show');
                         });
+                        // ★ 2026-09-16 单条删除：仅记忆来源（local_rememberedUsers）显示 ×；
+                        //   本机注册账户（config.users）不显示——× 会误导为"删除账户"
+                        if (u.source === 'remembered') {
+                            const delBtn = document.createElement('span');
+                            delBtn.textContent = '×';
+                            delBtn.title = '删除此用户名';
+                            delBtn.style.cssText = 'flex-shrink:0;padding:1px 5px;color:#999;font-weight:bold;font-size:13px;line-height:1;border-radius:3px;user-select:none;';
+                            delBtn.addEventListener('mouseenter', function () { delBtn.style.color = '#dc2626'; delBtn.style.background = '#fee2e2'; });
+                            delBtn.addEventListener('mouseleave', function () { delBtn.style.color = '#999'; delBtn.style.background = 'transparent'; });
+                            delBtn.addEventListener('click', function (e) {
+                                e.stopPropagation();
+                                removeRememberedUsername(u.username);
+                            });
+                            item.appendChild(delBtn);
+                        }
                         menu.appendChild(item);
                     });
                 }
@@ -407,6 +427,60 @@
                 const v = String(username || '').trim();
                 if (v && !isGenericUsername(v)) localStorage.removeItem(KEY_REMEMBER_USER);
             } catch (_) {}
+        }
+    }
+
+    // ★ 2026-09-16 单条删除：下拉 × 调用——删除指定用户名记忆并重渲染（与网页/APP端统一）
+    //   同 origin 共享 localStorage：顺带清理主界面 AuthCore 的 auth:* 键，
+    //   防止主窗口 loginOverlay 下拉仍显示已删用户名。
+    function removeRememberedUsername(username) {
+        try {
+            const cleanUsername = String(username || '').trim();
+            if (!cleanUsername) return;
+            const lower = cleanUsername.toLowerCase();
+            // 1) 登录窗记忆数组（local_rememberedUsers）
+            let remaining = [];
+            try {
+                const arr = JSON.parse(localStorage.getItem('local_rememberedUsers') || '[]');
+                if (Array.isArray(arr)) {
+                    remaining = arr.filter(x => isGenericUsername(x) && String(x).toLowerCase() !== lower);
+                }
+            } catch (e) { remaining = []; }
+            try { localStorage.setItem('local_rememberedUsers', JSON.stringify(remaining)); } catch (e) {}
+            // 2) 单值预填键：删除的是当前预填值 → 切换为剩余首条或清除
+            try {
+                const single = localStorage.getItem(KEY_REMEMBER_USER);
+                if (single && String(single).trim().toLowerCase() === lower) {
+                    if (remaining.length > 0) localStorage.setItem(KEY_REMEMBER_USER, String(remaining[0]).trim());
+                    else localStorage.removeItem(KEY_REMEMBER_USER);
+                }
+            } catch (e) {}
+            // 3) 主界面 AuthCore 键（auth:rememberedUsers / auth:rememberedUsername）同步过滤
+            try {
+                const stored = localStorage.getItem('auth:rememberedUsers');
+                if (stored) {
+                    const arr = JSON.parse(stored);
+                    if (Array.isArray(arr)) {
+                        const filtered = arr.filter(x => isGenericUsername(x) && String(x).toLowerCase() !== lower);
+                        localStorage.setItem('auth:rememberedUsers', JSON.stringify(filtered));
+                    }
+                }
+                const authSingle = localStorage.getItem('auth:rememberedUsername');
+                if (authSingle && String(authSingle).trim().toLowerCase() === lower) {
+                    if (remaining.length > 0) localStorage.setItem('auth:rememberedUsername', String(remaining[0]).trim());
+                    else localStorage.removeItem('auth:rememberedUsername');
+                }
+            } catch (e) {}
+            // 4) 重渲染 + 输入框若正显示被删用户名则切换为剩余首条
+            if (typeof renderUsernameDropdown === 'function') renderUsernameDropdown();
+            try {
+                const input = $('loginUsername');
+                if (input && String(input.value || '').trim().toLowerCase() === lower) {
+                    input.value = remaining.length > 0 ? String(remaining[0]) : '';
+                }
+            } catch (e) {}
+        } catch (e) {
+            console.warn('[login] removeRememberedUsername 失败:', e && e.message || e);
         }
     }
 

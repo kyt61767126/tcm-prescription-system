@@ -2096,6 +2096,39 @@
         await StorageAdapter.removeItem('rememberedUsers');
     }
 
+    // ★ 2026-09-16 单条删除：登录框下拉 × 按钮调用，删除指定用户名的记忆
+    async function removeRememberedUser(username) {
+        const cleanUsername = String(username).trim();
+        if (!cleanUsername) return;
+
+        let remembered = [];
+        try {
+            const stored = await StorageAdapter.getItem('auth:rememberedUsers');
+            if (stored) remembered = JSON.parse(stored);
+            if (!Array.isArray(remembered)) remembered = [];
+        } catch (e) { remembered = []; }
+
+        // 实名防护：顺带过滤历史实名项（与 saveRememberedUser 同款读时清理）
+        remembered = remembered.filter(u => _isGenericUsername(u) && String(u).toLowerCase() !== cleanUsername.toLowerCase());
+        await StorageAdapter.setItem('auth:rememberedUsers', JSON.stringify(remembered));
+
+        // 若删除的是当前预填值：单值键切换为剩余首条（无剩余则清除）
+        const single = await StorageAdapter.getItem('auth:rememberedUsername');
+        if (single && String(single).trim().toLowerCase() === cleanUsername.toLowerCase()) {
+            if (remembered.length > 0) await StorageAdapter.setItem('auth:rememberedUsername', remembered[0]);
+            else await StorageAdapter.removeItem('auth:rememberedUsername');
+        }
+        // 兼容老单值键同步清理（防 loadRememberedUsers 兜底回读到已删条目）
+        for (const oldKey of ['cloud_rememberedUsername', 'local_rememberedUsername', 'rememberedUsername']) {
+            try {
+                const oldVal = await StorageAdapter.getItem(oldKey);
+                if (oldVal && String(oldVal).trim().toLowerCase() === cleanUsername.toLowerCase()) {
+                    await StorageAdapter.removeItem(oldKey);
+                }
+            } catch (e) {}
+        }
+    }
+
     // ==================== 初始化 ====================
 
     // 自动执行旧key迁移
@@ -2245,6 +2278,7 @@
         saveRememberedUser,
         loadRememberedUsers,
         clearRememberedUsers,
+        removeRememberedUser,
 
         // Key 迁移
         migrateOldKeys,
