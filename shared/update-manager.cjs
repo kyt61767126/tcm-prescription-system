@@ -23,6 +23,13 @@
 //   → 4 连接并行分片下载（每分片独立 Range/25s 看门狗/6 次指数退避）
 //   → 横幅实时进度速度 → 大小对账 → shell.openPath 自动开安装向导
 //   → 任一步失败回退官网下载页（safeDownload v4 兜底）；网络异常一律静默跳过
+//
+// ★ 2026-09-16 Layer 1/2 热更新本地回退（与 rollback-hotupdate.cjs Layer 0
+//   服务端重签回滚闭环互补）：登录窗注入「回退上一版」入口（仅热版本在效时）
+//   → kyt-desktop-hot-rollback:// scheme 被 setWindowOpenHandler 拦截 →
+//   hotManager.rollbackLocal：拉黑当前热版本（.hot-blacklist，checkUpdate 拒绝
+//   重灌同一版本；Layer 0 重签=新版本号不受影响）→ previous 复验晋升 current
+//   或回退 asar 打包版 → 登录后即用恢复的版本（主窗 resolveEntry 复验时生效）。
 // ============================================================================
 
 const { app, net, shell } = require('electron');
@@ -30,6 +37,10 @@ const path = require('path');
 const fsSync = require('fs');
 
 const UPDATE_SCHEME = 'kyt-desktop-update://start';
+// ★ 2026-09-16 Layer 1 本地回退：登录窗「回退上一版」入口点击 → window.open 本
+//   scheme → setWindowOpenHandler 拦截（登录窗已在 desktop-windows.cjs 接线）→
+//   hotManager.rollbackLocal（拉黑当前热版本 + previous 晋升 / 回 asar）。
+const HOT_ROLLBACK_SCHEME = 'kyt-desktop-hot-rollback://start';
 // ★ 2026-09-13 v2 参数对齐官网 robustDownload v4（用户实测官网页 6 连接 ≈5MB/s
 //   15 秒下完 78MB，而桌面更新器 4 连接卡 1-2%）：6 连接 / 15 次重试 / 15s 看门狗。
 //   实测基线（同刻）：/api/dl 代理单连接 0.9MB/s（206 正常）、GitHub 直连 0B/s
@@ -52,6 +63,7 @@ function createDesktopUpdateManager(opts) {
 
     let pendingUpdate = null;                 // { win, exeUrl, version }（injectUpdateBanner 时记录）
     let updateDownloading = false;
+    let hotRollbackWin = null;                // ★ Layer 2：注入回退入口的登录窗（点击时反馈结果用）
 
     // ★ 2026-09-14 静默热更新（重建版，带 Ed25519 验签三道门禁，核心逻辑在
     //   shared/hot-update-core.cjs 纯函数模块——本处只做 Electron 依赖组装）。
@@ -78,6 +90,64 @@ function createDesktopUpdateManager(opts) {
             + 't.textContent=\'✅ 新版 ' + JSON.stringify(String(hotVersion)) + ' 已就绪，重启后自动生效\';'
             + 'document.body.appendChild(t);setTimeout(function(){t.remove();},6000);})();';
         win.webContents.executeJavaScript(code).catch(function () {});
+    }
+
+    // ★ 2026-09-16 Layer 1：回退操作结果轻提示（顶部横幅式，6s 消失）
+    function showHotRollbackToast(win, text) {
+        if (!win || win.isDestroyed()) return;
+        const code = '(function(){var t=document.createElement(\'div\');'
+            + 't.style.cssText=\'position:fixed;top:0;left:0;right:0;z-index:99998;padding:6px;'
+            + 'background:#fff8e1;border-bottom:1px solid #f0c040;color:#7a5c00;text-align:center;'
+            + 'font-size:12px;font-family:Microsoft YaHei,sans-serif;\';'
+            + 't.textContent=' + JSON.stringify(String(text)) + ';'
+            + 'document.body.appendChild(t);setTimeout(function(){t.remove();},6000);})();';
+        win.webContents.executeJavaScript(code).catch(function () {});
+    }
+
+    // ★ 2026-09-16 Layer 2：登录窗「回退上一版」入口——仅热版本在效时注入。
+    //   login.html 属 asar 域（永不热更），坏热版本打不开主界面时本入口依然可用；
+    //   点击经 HOT_ROLLBACK_SCHEME 由主进程执行，不依赖页面自身 JS 存活。
+    function injectHotRollbackEntry(win) {
+        if (!hotManager || !win || win.isDestroyed()) return;
+        hotRollbackWin = win;
+        let state = null;
+        try { state = hotManager.getActiveHotState(); } catch (e) { state = null; }
+        if (!state || !state.active) return;
+        const label = state.hasPrevious ? '新版异常？点此回退上一版' : '新版异常？点此恢复内置版本';
+        const code = '(function(){if(document.getElementById(\'__hotRollbackLink\'))return;'
+            + 'var f=document.querySelector(\'.footer-section\')||document.body;'
+            + 'var a=document.createElement(\'div\');a.id=\'__hotRollbackLink\';'
+            + 'a.textContent=' + JSON.stringify(label) + ';'
+            + 'a.style.cssText=\'text-align:center;font-size:9px;color:#1565c0;'
+            + 'text-decoration:underline;cursor:pointer;padding:1px 0;'
+            + 'font-family:Microsoft YaHei,sans-serif;\';'
+            + 'a.addEventListener(\'click\',function(){window.open(' + JSON.stringify(HOT_ROLLBACK_SCHEME) + ');});'
+            + 'f.appendChild(a);})();';
+        win.webContents.executeJavaScript(code).catch(function () {});
+    }
+
+    // ★ Layer 1 回退执行（handleWindowOpen 拦截 HOT_ROLLBACK_SCHEME 时调用）：
+    //   同步毫秒级；current 已拉黑隔离 + previous 晋升 / 回 asar。正在运行的窗口
+    //   不受影响（下次 resolveEntry 生效——登录成功创建主窗时即走恢复后的版本）。
+    function performHotRollback(win) {
+        let r = null;
+        try { r = hotManager ? hotManager.rollbackLocal('manual') : null; }
+        catch (e) { r = { ok: false, reason: 'error' }; }
+        if (r && r.ok && r.restored === 'previous') {
+            showHotRollbackToast(win, '✅ 已回退到 ' + r.hotVersion + '，登录后即用该版本');
+        } else if (r && r.ok) {
+            showHotRollbackToast(win, '✅ 已回退到软件内置版本，登录后生效');
+        } else if (r && r.reason === 'no-current') {
+            showHotRollbackToast(win, '当前无热更新版本在效，无需回退');
+        } else {
+            showHotRollbackToast(win, '回退未完成，重启软件后将自动使用内置版本');
+        }
+        // 回退完成后移除入口（current 已隔离/更换，避免重复点击）
+        if (r && r.ok && win && !win.isDestroyed()) {
+            win.webContents.executeJavaScript(
+                '(function(){var a=document.getElementById(\'__hotRollbackLink\');if(a)a.remove();})();'
+            ).catch(function () {});
+        }
     }
 
     function setUpdateBannerText(win, text, showLink, linkText) {
@@ -313,10 +383,17 @@ function createDesktopUpdateManager(opts) {
         //   全量文件哈希）通过返回热入口绝对路径，失败返回 null（坏目录已隔离，
         //   desktop-windows.cjs 回退加载 asar 打包版）。
         resolveHotEntry: hotManager ? function () { return hotManager.resolveEntry(); } : null,
+        // ★ 2026-09-16 Layer 2：登录窗回退入口注入（与 checkHotUpdate 同接线点，
+        //   desktop-windows.cjs 登录窗 dom-ready 后 1.5s 调用；仅热版本在效时可见）
+        injectHotRollbackEntry: injectHotRollbackEntry,
         // setWindowOpenHandler 内调用：命中更新 scheme 触发下载并返回 true（调用方 deny 开窗）
         handleWindowOpen: function (url) {
             if (url === UPDATE_SCHEME) {
                 startInAppUpdateDownload();
+                return true;
+            }
+            if (url === HOT_ROLLBACK_SCHEME) {
+                performHotRollback(hotRollbackWin);
                 return true;
             }
             return false;

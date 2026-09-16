@@ -37,6 +37,43 @@
     "medicine-dict.js": "// fixture dict v1\n",
     "vendor/xlsx.full.min.js": "// fixture vendored lib v1\n"
   },
+  "manifestPrev": {
+    "format": 1,
+    "channel": "app-local",
+    "hotVersion": "2026.09.13-1",
+    "minAppCode": 287,
+    "appVersion": "1.0.0",
+    "files": [
+      {
+        "name": "index.html",
+        "sha256": "8a7a1e8eb98e4d242b1671290eeeb5e82ddf4296dabc6ac5dcafc0e052f87249",
+        "size": 108
+      },
+      {
+        "name": "prescription-core.js",
+        "sha256": "6e13d92a1a34df477ae105e6d9cb80f2f33ca5d68b955e8f16a6f704743b3087",
+        "size": 30
+      },
+      {
+        "name": "medicine-dict.js",
+        "sha256": "cf7456885ee81c4efa0f33aa62b6451401ae8f02305dc2432bca200b0d482c21",
+        "size": 21
+      },
+      {
+        "name": "vendor/xlsx.full.min.js",
+        "sha256": "97cfc3f69a007aeea5e73f1a861478937b821b96c658a3d90600b6de6e8661e5",
+        "size": 29
+      }
+    ],
+    "signedAt": 1729000000000,
+    "signature": "ajrVMlZTlL3vQraJ2O2zPabkEwJ0Fvvmd1G6kpUhjhTe4FJ8Gj06lhlIAPzTjJS/CJKOEr7o3fRtVHCGkIoGAA=="
+  },
+  "fileContentsPrev": {
+    "index.html": "<!DOCTYPE html><html><head><title>hot-fixture-prev</title></head><body>hot-update-fixture-prev</body></html>",
+    "prescription-core.js": "// fixture business code prev\n",
+    "medicine-dict.js": "// fixture dict prev\n",
+    "vendor/xlsx.full.min.js": "// fixture vendored lib prev\n"
+  },
   "ed25519Vector": {
     "publicKeyHex": "22c2cdffeeeb8831c6423f0600905e53d92e4865e054489462abd396b6cfdabc",
     "message": "",

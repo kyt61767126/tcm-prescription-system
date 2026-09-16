@@ -60,12 +60,34 @@ const msg = buildSignMessage(CHANNEL, HOT_VERSION, SIGNED_AT, files);
 const privateKey = fs.readFileSync(PRIVATE_KEY_PATH, 'utf8');
 const signature = crypto.sign(null, Buffer.from(msg, 'utf8'), crypto.createPrivateKey(privateKey)).toString('base64');
 
+// ★ 2026-09-16 Layer 1：第二份更旧版本 manifest（rollbackLocal 测试的 previous
+//   目标——黑名单拉黑的是版本号，previous 与 current 必须不同版本才能测「恢复后
+//   resolveEntry 递归复验通过」链路；独立内容 → 独立真实签名，确定性同上）
+const HOT_VERSION_PREV = '2026.09.13-1';
+const SIGNED_AT_PREV = 1729000000000;
+const fileContentsPrev = {
+    'index.html': '<!DOCTYPE html><html><head><title>hot-fixture-prev</title></head><body>hot-update-fixture-prev</body></html>',
+    'prescription-core.js': '// fixture business code prev\n',
+    'medicine-dict.js': '// fixture dict prev\n',
+    'vendor/xlsx.full.min.js': '// fixture vendored lib prev\n'
+};
+const filesPrev = Object.keys(fileContentsPrev).map((name) => {
+    const buf = Buffer.from(fileContentsPrev[name], 'utf8');
+    return { name: name, sha256: crypto.createHash('sha256').update(buf).digest('hex'), size: buf.length };
+});
+const msgPrev = buildSignMessage(CHANNEL, HOT_VERSION_PREV, SIGNED_AT_PREV, filesPrev);
+const signaturePrev = crypto.sign(null, Buffer.from(msgPrev, 'utf8'), crypto.createPrivateKey(privateKey)).toString('base64');
+
 // 交叉自验（Node crypto 验一遍，Java 侧 JUnit 再验一遍）
 const PUB_PEM = `-----BEGIN PUBLIC KEY-----
 MCowBQYDK2VwAyEAIsLN/+7riDHGQj8GAJBeU9kuSGXgVEiUYqvTlrbP2rw=
 -----END PUBLIC KEY-----`;
 if (!crypto.verify(null, Buffer.from(msg, 'utf8'), crypto.createPublicKey(PUB_PEM), Buffer.from(signature, 'base64'))) {
     console.error('[fixture] 自验失败：签名与公钥不匹配（密钥对不一致？）');
+    process.exit(1);
+}
+if (!crypto.verify(null, Buffer.from(msgPrev, 'utf8'), crypto.createPublicKey(PUB_PEM), Buffer.from(signaturePrev, 'base64'))) {
+    console.error('[fixture] 自验失败：prev 版本签名与公钥不匹配（密钥对不一致？）');
     process.exit(1);
 }
 
@@ -82,6 +104,18 @@ const fixture = {
         signature: signature
     },
     fileContents: fileContents,
+    // ★ Layer 1：更旧版本（rollbackLocal 的 previous 目标）
+    manifestPrev: {
+        format: 1,
+        channel: CHANNEL,
+        hotVersion: HOT_VERSION_PREV,
+        minAppCode: MIN_APP_CODE,
+        appVersion: '1.0.0',
+        files: filesPrev,
+        signedAt: SIGNED_AT_PREV,
+        signature: signaturePrev
+    },
+    fileContentsPrev: fileContentsPrev,
     // Ed25519 独立向量：私钥导出的原始公钥 + 空消息 + 签名
     // （用途：绕开 HOT_ED25519_PUBLIC_KEY_HEX 常量直接测 Java Ed25519 数学正确性）
     ed25519Vector: {

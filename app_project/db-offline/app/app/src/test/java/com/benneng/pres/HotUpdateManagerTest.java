@@ -28,6 +28,9 @@ import java.util.List;
  *   ⑤ resolveEntry：好目录（含子目录）→ 入口路径；文件篡改 → null + 隔离现场
  *   ⑥ Ed25519 数学正确性（独立向量，绕开常量）
  *   ⑦ Base64 / hex / sha256 工具（含非法输入 fail-null 与已知向量）
+ *   ⑧ ★ Layer 1 本地回退（2026-09-16，对齐桌面 smoke 用例 8-11）：黑名单（去重/
+ *      FIFO 上限 5）/ verifyHotDir / rollbackLocal（previous 恢复 / builtin 兜底 /
+ *      no-current）/ resolveEntry 黑名单自动恢复 / getActiveHotState
  */
 public class HotUpdateManagerTest {
 
@@ -37,6 +40,10 @@ public class HotUpdateManagerTest {
     private JSONObject fixtureManifest;
     private JSONObject fixtureContents;
     private JSONObject fixtureVector;
+    // ★ Layer 1：更旧版本（rollbackLocal 的 previous 目标；黑名单拉黑版本号，
+    //   previous 与 current 必须不同版本才能测「恢复后递归复验通过」链路）
+    private JSONObject fixtureManifestPrev;
+    private JSONObject fixtureContentsPrev;
 
     private static JSONObject loadFixture() throws Exception {
         InputStream in = HotUpdateManagerTest.class
@@ -55,6 +62,8 @@ public class HotUpdateManagerTest {
         JSONObject fixture = loadFixture();
         fixtureManifest = fixture.getJSONObject("manifest");
         fixtureContents = fixture.getJSONObject("fileContents");
+        fixtureManifestPrev = fixture.getJSONObject("manifestPrev");
+        fixtureContentsPrev = fixture.getJSONObject("fileContentsPrev");
         fixtureVector = fixture.getJSONObject("ed25519Vector");
         HotUpdateManager.setLogger(new HotUpdateManager.Logger() {
             @Override public void log(String msg) { System.out.println("[hot-test] " + msg); }
@@ -66,26 +75,64 @@ public class HotUpdateManagerTest {
         return new JSONObject(fixtureManifest.toString());
     }
 
-    // 在临时目录里按 fixture 搭建 current 热目录（文件 + manifest.json）
-    private File buildHotDir() throws Exception {
-        File hotDir = tmp.newFolder("hot-update");
-        File current = new File(hotDir, "current");
-        assertTrue(current.mkdirs());
-        java.util.Iterator<String> it = fixtureContents.keys();
+    // 在 hotDir/<dirName> 下按指定 manifest+contents 搭建版本目录（current/previous 通用）
+    private void buildVersionDir(File hotDir, String dirName,
+                                 JSONObject manifest, JSONObject contents) throws Exception {
+        File dir = new File(hotDir, dirName);
+        assertTrue(dir.mkdirs());
+        java.util.Iterator<String> it = contents.keys();
         while (it.hasNext()) {
             String name = it.next();
-            File f = new File(current, name);
+            File f = new File(dir, name);
             File parent = f.getParentFile();
             if (parent != null && !parent.isDirectory()) assertTrue(parent.mkdirs());
             try (java.io.FileOutputStream out = new java.io.FileOutputStream(f)) {
-                out.write(fixtureContents.getString(name).getBytes(StandardCharsets.UTF_8));
+                out.write(contents.getString(name).getBytes(StandardCharsets.UTF_8));
             }
         }
         try (java.io.FileOutputStream out = new java.io.FileOutputStream(
-                new File(current, "manifest.json"))) {
-            out.write(fixtureManifest.toString().getBytes(StandardCharsets.UTF_8));
+                new File(dir, "manifest.json"))) {
+            out.write(manifest.toString().getBytes(StandardCharsets.UTF_8));
         }
+    }
+
+    // 在临时目录里按 fixture 搭建 current 热目录（文件 + manifest.json）
+    private File buildHotDir() throws Exception {
+        return buildHotDir("hot-update");
+    }
+
+    private File buildHotDir(String dirName) throws Exception {
+        File hotDir = tmp.newFolder(dirName);
+        buildVersionDir(hotDir, "current", fixtureManifest, fixtureContents);
         return hotDir;
+    }
+
+    // 写 .hot-version（模拟 swap 后的本机生效版本记录）
+    private void writeHotVersion(File hotDir, String hotVersion, long signedAt) throws Exception {
+        JSONObject v = new JSONObject();
+        v.put("hotVersion", hotVersion);
+        v.put("signedAt", signedAt);
+        try (java.io.FileOutputStream out = new java.io.FileOutputStream(
+                new File(hotDir, ".hot-version"))) {
+            out.write(v.toString().getBytes(StandardCharsets.UTF_8));
+        }
+    }
+
+    private String readHotVersion(File hotDir) throws Exception {
+        File f = new File(hotDir, ".hot-version");
+        if (!f.isFile()) return null;
+        return new JSONObject(new String(
+                java.nio.file.Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8))
+                .optString("hotVersion", null);
+    }
+
+    private boolean hasQuarantine(File hotDir) {
+        File[] children = hotDir.listFiles();
+        if (children == null) return false;
+        for (File c : children) {
+            if (c.getName().startsWith("quarantine-")) return true;
+        }
+        return false;
     }
 
     // ======================================================================
@@ -352,5 +399,158 @@ public class HotUpdateManagerTest {
         // 已知向量：SHA-256("abc") 标准值
         assertEquals("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
                 HotUpdateManager.sha256Hex("abc".getBytes(StandardCharsets.UTF_8)));
+    }
+
+    // ======================================================================
+    //  ⑧ ★ Layer 1 本地回退（2026-09-16；对齐桌面 smoke-hot-update.cjs 用例 8-11）
+    // ======================================================================
+
+    @Test
+    public void blacklist_emptyOrMissing_readsEmpty() throws Exception {
+        File hotDir = tmp.newFolder("hot-bl-empty");
+        assertTrue("无黑名单文件 = 空表", HotUpdateManager.readBlacklist(hotDir).isEmpty());
+        assertFalse(HotUpdateManager.isBlacklisted(hotDir, "2026.09.14-1"));
+        assertFalse("null/空版本永不命中", HotUpdateManager.isBlacklisted(hotDir, null));
+    }
+
+    @Test
+    public void blacklist_addDetect_dedup_fifo() throws Exception {
+        File hotDir = tmp.newFolder("hot-bl");
+        HotUpdateManager.addToBlacklist(hotDir, "v-a", 1L, "t");
+        assertTrue("写入后须命中", HotUpdateManager.isBlacklisted(hotDir, "v-a"));
+        assertFalse(HotUpdateManager.isBlacklisted(hotDir, "v-b"));
+        // 去重：同版本重复拉黑不产生第二条
+        HotUpdateManager.addToBlacklist(hotDir, "v-a", 2L, "t2");
+        assertEquals(1, HotUpdateManager.readBlacklist(hotDir).size());
+        // FIFO 上限 5：再加 5 条共 6 → 最旧的 v-a 被淘汰
+        for (int i = 0; i < 5; i++) {
+            HotUpdateManager.addToBlacklist(hotDir, "v-" + (char) ('b' + i), (long) i, "t");
+        }
+        List<String> bl = HotUpdateManager.readBlacklist(hotDir);
+        assertEquals("上限 5 条", 5, bl.size());
+        assertFalse("最旧条目须被 FIFO 淘汰", bl.contains("v-a"));
+        assertTrue(bl.contains("v-f"));
+    }
+
+    @Test
+    public void verifyHotDir_validAndTampered() throws Exception {
+        File hotDir = buildHotDir();
+        File current = new File(hotDir, "current");
+        assertTrue("合法目录（manifest 验签+入口+逐文件哈希）须通过",
+                HotUpdateManager.verifyHotDir(current, fixtureManifest));
+        // 篡改清单内文件 → 哈希失配
+        try (java.io.FileOutputStream out = new java.io.FileOutputStream(
+                new File(current, "prescription-core.js"), true)) {
+            out.write("<!-- tampered -->".getBytes(StandardCharsets.UTF_8));
+        }
+        assertFalse("文件篡改后须复验失败",
+                HotUpdateManager.verifyHotDir(current, fixtureManifest));
+        assertFalse("null manifest 直接失败",
+                HotUpdateManager.verifyHotDir(current, null));
+    }
+
+    @Test
+    public void rollbackLocal_goodPrevious_restoresPrevious() throws Exception {
+        // 场景：current=v2(2026.09.14-1) 出问题，previous=v1(2026.09.13-1) 完好
+        File hotDir = buildHotDir();
+        buildVersionDir(hotDir, "previous", fixtureManifestPrev, fixtureContentsPrev);
+        writeHotVersion(hotDir, "2026.09.14-1", 1730000000000L);
+
+        HotUpdateManager.RollbackResult r = HotUpdateManager.rollbackLocal(hotDir, "test");
+        assertTrue(r.ok);
+        assertEquals("previous 复验通过须晋升 current", "previous", r.restored);
+        assertEquals("2026.09.13-1", r.hotVersion);
+
+        // 坏 v2 拉黑留档，v1 不受牵连
+        assertTrue(HotUpdateManager.isBlacklisted(hotDir, "2026.09.14-1"));
+        assertFalse(HotUpdateManager.isBlacklisted(hotDir, "2026.09.13-1"));
+        // v1 晋升 current、previous 消费掉、坏 v2 隔离留现场
+        assertEquals("2026.09.13-1", readHotVersion(hotDir));
+        assertFalse(new File(hotDir, "previous").exists());
+        assertTrue("坏 current 须隔离留现场", hasQuarantine(hotDir));
+        // 恢复后的 current 走完整 resolveEntry 复验通过（Layer 1 核心链路）
+        String entry = HotUpdateManager.resolveEntry(hotDir);
+        assertNotNull("恢复的 previous 须通过启动复验", entry);
+        assertTrue(entry.endsWith("current" + File.separator + "index.html"));
+    }
+
+    @Test
+    public void rollbackLocal_noPrevious_fallsBackToBuiltin() throws Exception {
+        // 场景：current=v2 出问题且无 previous → 回 assets 打包版（清 .hot-version）
+        File hotDir = buildHotDir();
+        writeHotVersion(hotDir, "2026.09.14-1", 1730000000000L);
+
+        HotUpdateManager.RollbackResult r = HotUpdateManager.rollbackLocal(hotDir, "test");
+        assertTrue(r.ok);
+        assertEquals("无 previous 须回 assets 兜底", "builtin", r.restored);
+        assertTrue(HotUpdateManager.isBlacklisted(hotDir, "2026.09.14-1"));
+        assertFalse("current 须已隔离消失", new File(hotDir, "current").exists());
+        assertTrue(hasQuarantine(hotDir));
+        assertNull(".hot-version 须清除（下次启动走 assets）", readHotVersion(hotDir));
+        assertNull("resolveEntry 须返回 null（调用方回 assets）",
+                HotUpdateManager.resolveEntry(hotDir));
+        assertFalse("登录页入口探测须为 false", HotUpdateManager.getActiveHotState(hotDir));
+    }
+
+    @Test
+    public void rollbackLocal_badPrevious_fallsBackToBuiltin() throws Exception {
+        // 场景：previous 也被篡改 → 复验失败跳过恢复，直接回 assets 兜底
+        File hotDir = buildHotDir();
+        buildVersionDir(hotDir, "previous", fixtureManifestPrev, fixtureContentsPrev);
+        try (java.io.FileOutputStream out = new java.io.FileOutputStream(
+                new File(hotDir, "previous/prescription-core.js"), true)) {
+            out.write("<!-- tampered -->".getBytes(StandardCharsets.UTF_8));
+        }
+
+        HotUpdateManager.RollbackResult r = HotUpdateManager.rollbackLocal(hotDir, "test");
+        assertTrue(r.ok);
+        assertEquals("坏 previous 不得晋升，须回 assets 兜底", "builtin", r.restored);
+        assertFalse(new File(hotDir, "current").exists());
+        // 坏 previous 保留留现场（与桌面端语义一致：只告警不删；下次 swap 前
+        // checkUpdateAsync 的 deleteTree(previous) 会清理，不会污染后续链路）
+        assertTrue(new File(hotDir, "previous").exists());
+        assertNull(HotUpdateManager.resolveEntry(hotDir));
+    }
+
+    @Test
+    public void rollbackLocal_noCurrent_fails() throws Exception {
+        File hotDir = tmp.newFolder("hot-nocur");
+        HotUpdateManager.RollbackResult r = HotUpdateManager.rollbackLocal(hotDir, "test");
+        assertFalse("无 current 须失败（无可回退）", r.ok);
+        assertEquals("no-current", r.reason);
+    }
+
+    @Test
+    public void resolveEntry_blacklistedCurrent_autoRestoresPrevious() throws Exception {
+        // 场景：rollbackLocal 半途中断等残局——v2 已拉黑但仍霸占 current
+        //   → resolveEntry 须自动本地回退到 v1 并递归复验通过
+        File hotDir = buildHotDir();
+        buildVersionDir(hotDir, "previous", fixtureManifestPrev, fixtureContentsPrev);
+        HotUpdateManager.addToBlacklist(hotDir, "2026.09.14-1", 1730000000000L, "test");
+        // 前置确认：黑名单版本在效（登录页入口探测 false）
+        assertFalse(HotUpdateManager.getActiveHotState(hotDir));
+
+        String entry = HotUpdateManager.resolveEntry(hotDir);
+        assertNotNull("黑名单 current 须自动回退恢复 previous", entry);
+        assertEquals("恢复后生效版本须为 v1", "2026.09.13-1", readHotVersion(hotDir));
+        assertTrue(hasQuarantine(hotDir));
+        assertFalse("恢复的 v1 须在效", HotUpdateManager.isBlacklisted(hotDir, "2026.09.13-1"));
+    }
+
+    @Test
+    public void getActiveHotState_scenarios() throws Exception {
+        // 好 current → true（登录页「回退上一版」入口显示的判据）
+        assertTrue(HotUpdateManager.getActiveHotState(buildHotDir("hot-good")));
+        // 无 current → false
+        assertFalse(HotUpdateManager.getActiveHotState(tmp.newFolder("hot-none")));
+        // current 验签失败（篡改 manifest）→ false
+        File hotDir = buildHotDir("hot-badsig");
+        JSONObject m = manifestCopy();
+        m.put("hotVersion", "2026.09.14-9");  // 破坏签名
+        try (java.io.FileOutputStream out = new java.io.FileOutputStream(
+                new File(hotDir, "current/manifest.json"))) {
+            out.write(m.toString().getBytes(StandardCharsets.UTF_8));
+        }
+        assertFalse("验签失败须视为不在效", HotUpdateManager.getActiveHotState(hotDir));
     }
 }

@@ -25,10 +25,21 @@ package com.benneng.pres;
 //
 //  【目录布局（filesDir 下，与桌面 userData 布局同构）】
 //    hot-update/current/          当前生效热目录（manifest.json + 全部文件）
+//    hot-update/previous/         上一份稳定热版本（swap 保留，本地回退目标）
 //    hot-update/pending-<ver>/    下载中（swap 成功才晋升 current）
 //    hot-update/.hot-version      本地已生效版本 {hotVersion, signedAt}
-//    hot-update/old-<ts>/         swap 瞬间旧 current（成功后即删）
-//    hot-update/quarantine-<ts>/  启动复验失败的坏 current（隔离留现场）
+//    hot-update/.hot-blacklist    坏版本黑名单（回退时记录，checkUpdate 拒绝重灌）
+//    hot-update/quarantine-<ts>/  启动复验失败/被回退的坏 current（隔离留现场）
+//
+//  【★ Layer 1 本地回退（2026-09-16，与桌面 hot-update-core.cjs 同构；与
+//    rollback-hotupdate.cjs Layer 0 服务端重签回滚闭环互补）】
+//    门禁验的是「完整性」≠「正确性」——签名哈希全过但内容有 bug 的热包，
+//    客户端仅剩 assets 兜底会丢掉全部热更收益；离线客户更收不到服务端回滚包。
+//    本地回退三件套：①swap 保留 previous（~2MB，磁盘换秒级恢复）；②坏版本黑名单
+//    （rollbackLocal 记录 + checkUpdate 拒绝重灌同一 hotVersion；Layer 0 重签发布
+//    =新版本号天然不命中黑名单，两通道零冲突）；③rollbackLocal 静态回退（previous
+//    全量复验通过→晋升 current；否则回 assets 打包版）+ 登录页原生注入「回退上一版」
+//    入口（注入代码在 APK 原生层，不依赖热版本页面 JS 存活）。
 //
 //  【静默语义】后台线程检查+增量下载（本地同哈希直接复制，只拉变更文件）+原子
 //    swap，不打断使用；新版下次启动生效（登录页淡绿横幅轻提示）。无网/超时/
@@ -230,12 +241,90 @@ public class HotUpdateManager {
         }
     }
 
+    // ------------------------------------------------------------------
+    //  ★ Layer 1：坏版本黑名单（.hot-blacklist，回退时记录；上限 5 条 FIFO）
+    // ------------------------------------------------------------------
+
+    /** 读黑名单（损坏/不存在 = 空表；JUnit 可测） */
+    public static List<String> readBlacklist(File hotUpdateDir) {
+        List<String> out = new ArrayList<>();
+        try {
+            File f = new File(hotUpdateDir, ".hot-blacklist");
+            if (!f.isFile()) return out;
+            JSONArray arr = new JSONArray(readTextFile(f));
+            for (int i = 0; i < arr.length(); i++) {
+                String v = arr.optJSONObject(i) != null ? arr.optJSONObject(i).optString("hotVersion", null) : null;
+                if (v != null && !v.isEmpty()) out.add(v);
+            }
+        } catch (Throwable ignored) {}
+        return out;
+    }
+
+    /** 追加黑名单（去重；超 5 条淘汰最旧；写失败仅告警不阻断回退） */
+    static void addToBlacklist(File hotUpdateDir, String hotVersion, long signedAt, String reason) {
+        try {
+            JSONArray arr = new JSONArray();
+            JSONArray old = null;
+            File f = new File(hotUpdateDir, ".hot-blacklist");
+            if (f.isFile()) {
+                try { old = new JSONArray(readTextFile(f)); } catch (Throwable ignored) {}
+            }
+            if (old != null) {
+                for (int i = 0; i < old.length(); i++) {
+                    JSONObject o = old.optJSONObject(i);
+                    if (o == null) continue;
+                    if (hotVersion.equals(o.optString("hotVersion", ""))) continue;  // 去重
+                    arr.put(o);
+                }
+            }
+            JSONObject e = new JSONObject();
+            e.put("hotVersion", hotVersion);
+            e.put("signedAt", signedAt);
+            e.put("reason", reason == null ? "manual" : reason);
+            e.put("at", System.currentTimeMillis());
+            arr.put(e);
+            while (arr.length() > 5) arr.remove(0);
+            writeBytes(f, arr.toString().getBytes(StandardCharsets.UTF_8));
+        } catch (Throwable t) {
+            logw("写黑名单失败（不阻断回退）: " + t);
+        }
+    }
+
+    static boolean isBlacklisted(File hotUpdateDir, String hotVersion) {
+        if (hotVersion == null || hotVersion.isEmpty()) return false;
+        return readBlacklist(hotUpdateDir).contains(hotVersion);
+    }
+
+    /**
+     * 目录全量复验：manifest 验签（格式+签名，不做版本比较）+ 入口存在 + 逐文件
+     * 大小/哈希（resolveEntry / rollbackLocal 恢复 previous / checkUpdate pending
+     * 复验共用同一把尺子）。
+     */
+    static boolean verifyHotDir(File dir, JSONObject manifest) {
+        try {
+            if (manifest == null) return false;
+            if (verifyManifest(manifest, null, 0L, 0) != VERIFY_OK) return false;
+            if (!new File(dir, "index.html").isFile()) return false;
+            List<HotFile> files = parseFiles(manifest);
+            if (files == null) return false;
+            for (HotFile f : files) {
+                File fp = new File(dir, f.name);
+                if (!fp.isFile() || fp.length() != f.size || !sha256Hex(fp).equals(f.sha256)) return false;
+            }
+            return true;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
     /**
      * ★ 启动复验（主入口加载前调用）：manifest 验签 + 全量文件哈希复验。
      * 通过 → 返回 current/index.html 绝对路径；任何失败 → 隔离坏目录并返回
      * null（调用方回退 assets 打包版）。
      * 只做验签+完整性，不做版本/minAppCode 比较（下载时已门禁；APK versionCode
      * 只升不降 → 已下载热包对当前 APK 永远适用）。
+     * ★ Layer 1：current 命中黑名单 → 自动本地回退（previous 晋升 / 回 assets），
+     * 回退后对恢复的 current 重新走完整复验。
      * @param hotUpdateDir filesDir/hot-update
      */
     public static String resolveEntry(File hotUpdateDir) {
@@ -246,6 +335,14 @@ public class HotUpdateManager {
             JSONObject manifest = new JSONObject(readTextFile(manifestFile));
             if (verifyManifest(manifest, null, 0L, 0) != VERIFY_OK) {
                 quarantine(currentDir, "bad-signature");
+                return null;
+            }
+            // ★ Layer 1：黑名单版本自动回退（防御 rollbackLocal 半途中断等残局）
+            String hv = manifest.optString("hotVersion", "");
+            if (isBlacklisted(hotUpdateDir, hv)) {
+                logw("current " + hv + " 已被本机拉黑，自动本地回退");
+                RollbackResult r = rollbackLocal(hotUpdateDir, "auto-blacklisted");
+                if (r != null && r.ok && "previous".equals(r.restored)) return resolveEntry(hotUpdateDir);
                 return null;
             }
             List<HotFile> files = parseFiles(manifest);
@@ -276,6 +373,95 @@ public class HotUpdateManager {
                 if (!currentDir.renameTo(q)) deleteTree(currentDir);
             }
         } catch (Throwable ignored) {}
+    }
+
+    // ------------------------------------------------------------------
+    //  ★ Layer 1：本地回退（静态纯文件操作，JUnit 可测；登录页「回退上一版」
+    //  入口与 resolveEntry 黑名单自动恢复共用）
+    // ------------------------------------------------------------------
+
+    /** 回退结果（与桌面 hot-update-core.cjs rollbackLocal 返回值语义对齐） */
+    public static final class RollbackResult {
+        public boolean ok;
+        public String restored;     // 'previous' | 'builtin'
+        public String hotVersion;   // restored=previous 时为恢复的版本号
+        public String reason;       // ok=false 时为 no-current 等
+    }
+
+    /**
+     * 拉黑 current → previous 全量复验通过则晋升 current（恢复 .hot-version），
+     * 否则隔离 current 回 assets 打包版。同步毫秒级；正在运行的 WebView 不受影响
+     * （MainActivity reloadHotEntry / 下次 resolveEntry 时生效）。
+     */
+    public static RollbackResult rollbackLocal(File hotUpdateDir, String reason) {
+        RollbackResult r = new RollbackResult();
+        try {
+            File currentDir = new File(hotUpdateDir, "current");
+            File previousDir = new File(hotUpdateDir, "previous");
+            File manifestFile = new File(currentDir, "manifest.json");
+            if (!manifestFile.isFile()) { r.ok = false; r.reason = "no-current"; return r; }
+
+            String hv = "unknown";
+            long signedAt = 0L;
+            try {
+                JSONObject m = new JSONObject(readTextFile(manifestFile));
+                String v = m.optString("hotVersion", null);
+                if (v != null && !v.isEmpty()) hv = v;
+                signedAt = m.optLong("signedAt", 0L);
+            } catch (Throwable ignored) { /* 损坏按未知版本拉黑 */ }
+            addToBlacklist(hotUpdateDir, hv, signedAt, reason);
+
+            // previous 复验通过 → 晋升 current（坏 current 隔离留现场）
+            File prevManifest = new File(previousDir, "manifest.json");
+            if (prevManifest.isFile()) {
+                try {
+                    JSONObject pm = new JSONObject(readTextFile(prevManifest));
+                    if (verifyHotDir(previousDir, pm)) {
+                        quarantine(currentDir, "rollback:" + hv);
+                        if (!previousDir.renameTo(currentDir)) {
+                            throw new IOException("swap 失败：previous → current");
+                        }
+                        JSONObject v = new JSONObject();
+                        v.put("hotVersion", pm.optString("hotVersion"));
+                        v.put("signedAt", pm.optLong("signedAt", 0L));
+                        writeBytes(new File(hotUpdateDir, ".hot-version"),
+                                v.toString().getBytes(StandardCharsets.UTF_8));
+                        r.ok = true;
+                        r.restored = "previous";
+                        r.hotVersion = pm.optString("hotVersion");
+                        logi("已本地回退到 " + r.hotVersion + "（拉黑 " + hv + "）");
+                        return r;
+                    }
+                    logw("previous 复验失败，跳过恢复直接回 assets 打包版");
+                } catch (Throwable t) {
+                    logw("previous 恢复异常，回 assets 打包版: " + t);
+                }
+            }
+            quarantine(currentDir, "rollback:" + hv);
+            new File(hotUpdateDir, ".hot-version").delete();
+            r.ok = true;
+            r.restored = "builtin";
+            logi("已本地回退到 assets 打包版（拉黑 " + hv + "）");
+            return r;
+        } catch (Throwable t) {
+            logw("本地回退异常: " + t);
+            r.ok = false;
+            r.reason = "error";
+            return r;
+        }
+    }
+
+    /** 登录页回退入口探测：current 验签通过且未拉黑 = 热版本在效（JUnit 可测） */
+    public static boolean getActiveHotState(File hotUpdateDir) {
+        try {
+            File manifestFile = new File(hotUpdateDir, "current/manifest.json");
+            if (!manifestFile.isFile()) return false;
+            JSONObject manifest = new JSONObject(readTextFile(manifestFile));
+            if (verifyManifest(manifest, null, 0L, 0) != VERIFY_OK) return false;
+            return !isBlacklisted(hotUpdateDir, manifest.optString("hotVersion", ""));
+        } catch (Throwable t) {
+            return false;
+        }
     }
 
     // ========================================================================
@@ -338,7 +524,13 @@ public class HotUpdateManager {
                 }
                 if (r != VERIFY_OK) { logw("version.json 验签失败（fail-closed 跳过）"); return; }
 
+                // ★ Layer 1：线上版本被本机拉黑（曾触发本地回退）→ 拒绝重灌同一坏
+                //   版本。Layer 0 服务端回滚=旧内容重签新版本号，不命中黑名单。
                 String hotVersion = manifest.optString("hotVersion");
+                if (isBlacklisted(baseDir, hotVersion)) {
+                    logw("线上版本 " + hotVersion + " 已被本机拉黑，跳过下载");
+                    return;
+                }
                 logi("发现新热版本 " + hotVersion + "（本地 " + (localVer == null ? "无" : localVer) + "），开始静默下载");
 
                 // 逐文件下载/增量复制到 pending
@@ -377,18 +569,20 @@ public class HotUpdateManager {
                 writeBytes(new File(pendingDir, "manifest.json"),
                         manifest.toString().getBytes(StandardCharsets.UTF_8));
 
-                // 原子 swap：current → old-<ts>；pending → current；成功后删 old
-                File oldDir = new File(baseDir, "old-" + System.currentTimeMillis());
-                if (currentDir.isDirectory() && !currentDir.renameTo(oldDir)) {
-                    throw new IOException("swap 失败：current → old");
+                // 原子 swap：current → previous（★ Layer 1 保留一份供本地回退，~2MB）；
+                //   pending → current。swap 失败把 previous 还原回 current（坏 pending
+                //   绝不污染 current），与黑名单/回退共同构成「坏版本可及时恢复」闭环。
+                File previousDir = new File(baseDir, "previous");
+                if (previousDir.isDirectory()) deleteTree(previousDir);
+                if (currentDir.isDirectory() && !currentDir.renameTo(previousDir)) {
+                    throw new IOException("swap 失败：current → previous");
                 }
                 if (!pendingDir.renameTo(currentDir)) {
-                    // 回滚：把 old 还原为 current（尽力而为，失败则下次启动走 assets）
-                    if (oldDir.isDirectory()) { oldDir.renameTo(currentDir); }
+                    // 回滚：把 previous 还原为 current（尽力而为，失败则下次启动走 assets）
+                    if (previousDir.isDirectory()) { previousDir.renameTo(currentDir); }
                     throw new IOException("swap 失败：pending → current");
                 }
                 pendingDir = null;
-                deleteTree(oldDir);
 
                 // 记录生效版本
                 JSONObject v = new JSONObject();

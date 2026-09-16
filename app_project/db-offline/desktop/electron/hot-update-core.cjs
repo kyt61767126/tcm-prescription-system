@@ -22,10 +22,20 @@
 //
 // 目录布局（userData 下）：
 //   hot-update/current/          当前生效热目录（含 manifest.json + 全部文件）
+//   hot-update/previous/         上一份稳定热版本（swap 保留，本地回退目标）
 //   hot-update/pending-<ver>/    下载中目录（swap 成功才晋升 current）
 //   hot-update/.hot-version      本地已生效版本 {hotVersion, signedAt}
-//   hot-update/old-<ts>/         swap 瞬间的旧 current（成功后即删）
-//   hot-update/quarantine-<ts>/  启动复验失败的坏 current（隔离留现场，不动 asar）
+//   hot-update/.hot-blacklist    坏版本黑名单（回退时记录，checkUpdate 拒绝重灌）
+//   hot-update/quarantine-<ts>/  启动复验失败/被回退的坏 current（隔离留现场，不动 asar）
+//
+// ★ 2026-09-16 Layer 1 本地回退（与服务端 Layer 0 重签回滚闭环互补）：
+//   门禁验的是「完整性」≠「正确性」——签名哈希全过但内容有 bug 的热包，
+//   客户端仅剩 asar 兜底会丢掉全部热更收益；离线客户更收不到服务端回滚包。
+//   本地回退三件套：①swap 保留 previous（~3MB，磁盘换秒级恢复）；②坏版本
+//   黑名单（rollbackLocal 记录 + checkUpdate 拒绝重灌同一 hotVersion；Layer 0
+//   重签发布=新版本号天然不命中黑名单，两通道零冲突）；③rollbackLocal 手动/
+//   自动回退（previous 复验通过→晋升 current；否则回 asar 打包版）+ 登录窗
+//   「回退上一版」入口（login.html 属 asar 域，不依赖热版本页面存活）。
 //
 // 分发链：shared/ 权威源 → sync-all.ps1 Group 12（与 update-manager.cjs 同组）
 // → 两个 electron/ 目录；copy-consistency.cjs 同组硬哈希门；build.files
@@ -101,6 +111,8 @@ function createHotManager(deps) {
 
     const hotDir = path.join(dataDir, 'hot-update');
     const currentDir = path.join(hotDir, 'current');
+    const previousDir = path.join(hotDir, 'previous');
+    const blacklistPath = path.join(hotDir, '.hot-blacklist');
     let hotBusy = false;   // 防重入（一次启动只跑一轮静默检查）
 
     // ---- 磁盘小工具 ----
@@ -122,8 +134,54 @@ function createHotManager(deps) {
         } catch (e) { console.warn('[hot-update] 写 .hot-version 失败:', e && e.message); }
     }
 
+    // ---- 坏版本黑名单（回退时记录；checkUpdate 拒绝重新拉取同一 hotVersion）----
+    function readBlacklist() {
+        try {
+            const arr = JSON.parse(fsSync.readFileSync(blacklistPath, 'utf8'));
+            if (Array.isArray(arr)) {
+                return arr.filter(function (x) { return x && typeof x.hotVersion === 'string'; });
+            }
+        } catch (e) { /* 无文件/损坏 = 空黑名单 */ }
+        return [];
+    }
+    function isBlacklisted(hotVersion) {
+        if (!hotVersion) return false;
+        const list = readBlacklist();
+        for (let i = 0; i < list.length; i++) {
+            if (list[i].hotVersion === hotVersion) return true;
+        }
+        return false;
+    }
+    function addToBlacklist(hotVersion, signedAt, reason) {
+        try {
+            const list = readBlacklist().filter(function (x) { return x.hotVersion !== hotVersion; });
+            list.push({ hotVersion: hotVersion, signedAt: signedAt || 0, reason: reason || 'manual', at: Date.now() });
+            while (list.length > 5) list.shift();   // 上限 5 条，最旧的先淘汰
+            fsSync.mkdirSync(hotDir, { recursive: true });
+            fsSync.writeFileSync(blacklistPath, JSON.stringify(list), 'utf8');
+        } catch (e) { console.warn('[hot-update] 写黑名单失败（不阻断回退）:', e && e.message); }
+    }
+
+    // 目录全量复验：manifest 验签 + 入口存在 + 逐文件大小/哈希（resolveEntry /
+    //   rollbackLocal 恢复 previous / checkUpdate pending 复验共用同一把尺子）
+    function verifyHotDir(dir, manifest) {
+        if (!verifyHotManifest(manifest)) return false;
+        if (!fsSync.existsSync(path.join(dir, 'index.html'))) return false;
+        for (let i = 0; i < manifest.files.length; i++) {
+            const f = manifest.files[i];
+            const fp = path.join(dir, f.name);
+            if (!fsSync.existsSync(fp) || fsSync.statSync(fp).size !== f.size
+                || sha256FileSync(fp) !== f.sha256) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     // ---- 启动复验（同步，主窗口 loadFile 前调用）----
-    // 返回 current/index.html 绝对路径；任何一关失败把坏 current 隔离后返回 null
+    // 返回 current/index.html 绝对路径；任何一关失败把坏 current 隔离后返回 null。
+    // ★ Layer 1：current 版本命中黑名单 → 自动回退（previous 复验通过晋升 current，
+    //   否则回 asar），回退后对恢复的 current 重新走完整复验。
     function resolveEntry() {
         try {
             const manifestPath = path.join(currentDir, 'manifest.json');
@@ -133,18 +191,17 @@ function createHotManager(deps) {
                 quarantineCurrent('bad-signature');
                 return null;
             }
-            const idx = path.join(currentDir, 'index.html');
-            if (!fsSync.existsSync(idx)) { quarantineCurrent('no-entry'); return null; }
-            for (let i = 0; i < manifest.files.length; i++) {
-                const f = manifest.files[i];
-                const fp = path.join(currentDir, f.name);
-                if (!fsSync.existsSync(fp) || fsSync.statSync(fp).size !== f.size
-                    || sha256FileSync(fp) !== f.sha256) {
-                    quarantineCurrent('hash-mismatch:' + f.name);
-                    return null;
-                }
+            if (isBlacklisted(manifest.hotVersion)) {
+                console.warn('[hot-update] current ' + manifest.hotVersion + ' 已被本机拉黑，自动本地回退');
+                const r = rollbackLocal('auto-blacklisted');
+                if (r && r.ok && r.restored === 'previous') return resolveEntry();
+                return null;
             }
-            return idx;
+            if (!verifyHotDir(currentDir, manifest)) {
+                quarantineCurrent('hash-mismatch');
+                return null;
+            }
+            return path.join(currentDir, 'index.html');
         } catch (e) {
             console.warn('[hot-update] resolveEntry 异常，回退打包版:', e && e.message);
             return null;
@@ -161,6 +218,63 @@ function createHotManager(deps) {
         } catch (e) { /* best-effort */ }
     }
 
+    // ---- Layer 1 本地回退（登录窗「回退上一版」入口 / 黑名单自动恢复共用）----
+    // 同步磁盘操作：拉黑 current → previous 全量复验通过则晋升 current（恢复其
+    // .hot-version），否则隔离 current 回 asar 打包版。返回值：
+    //   {ok:true, restored:'previous', hotVersion}  已恢复上一稳定热版本
+    //   {ok:true, restored:'builtin'}               无可用 previous，回 asar 版
+    //   {ok:false, reason}                          无热版本在效等
+    function rollbackLocal(reason) {
+        try {
+            const manifestPath = path.join(currentDir, 'manifest.json');
+            if (!fsSync.existsSync(manifestPath)) return { ok: false, reason: 'no-current' };
+            let manifest = null;
+            try { manifest = JSON.parse(fsSync.readFileSync(manifestPath, 'utf8')); } catch (e) { /* 损坏按未知版本拉黑 */ }
+            const hv = manifest && typeof manifest.hotVersion === 'string' ? manifest.hotVersion : 'unknown';
+            const signedAt = manifest && typeof manifest.signedAt === 'number' ? manifest.signedAt : 0;
+            addToBlacklist(hv, signedAt, reason || 'manual');
+
+            // previous 复验通过 → 晋升 current（隔离坏 current 留现场）
+            const prevManifestPath = path.join(previousDir, 'manifest.json');
+            if (fsSync.existsSync(prevManifestPath)) {
+                let prevManifest = null;
+                try { prevManifest = JSON.parse(fsSync.readFileSync(prevManifestPath, 'utf8')); } catch (e) { /* 下面的复验会拒 */ }
+                if (prevManifest && verifyHotDir(previousDir, prevManifest)) {
+                    quarantineCurrent('rollback:' + hv);
+                    fsSync.renameSync(previousDir, currentDir);
+                    writeLocalVersion({ hotVersion: prevManifest.hotVersion, signedAt: prevManifest.signedAt });
+                    console.log('[hot-update] ✅ 已本地回退到 ' + prevManifest.hotVersion + '（拉黑 ' + hv + '）');
+                    return { ok: true, restored: 'previous', hotVersion: prevManifest.hotVersion };
+                }
+                console.warn('[hot-update] previous 复验失败，跳过恢复直接回 asar 打包版');
+            }
+            quarantineCurrent('rollback:' + hv);
+            try { fsSync.rmSync(path.join(hotDir, '.hot-version'), { force: true }); } catch (e) { /* best-effort */ }
+            console.log('[hot-update] ✅ 已本地回退到 asar 打包版（拉黑 ' + hv + '）');
+            return { ok: true, restored: 'builtin' };
+        } catch (e) {
+            console.warn('[hot-update] 本地回退异常:', e && e.message);
+            return { ok: false, reason: 'error:' + (e && e.message) };
+        }
+    }
+
+    // 登录窗回退入口探测：current 验签通过且未拉黑 = 热版本在效（可显示回退按钮）
+    function getActiveHotState() {
+        try {
+            const manifestPath = path.join(currentDir, 'manifest.json');
+            if (!fsSync.existsSync(manifestPath)) return { active: false };
+            const manifest = JSON.parse(fsSync.readFileSync(manifestPath, 'utf8'));
+            if (!verifyHotManifest(manifest) || isBlacklisted(manifest.hotVersion)) return { active: false };
+            return {
+                active: true,
+                hotVersion: manifest.hotVersion,
+                hasPrevious: fsSync.existsSync(path.join(previousDir, 'manifest.json'))
+            };
+        } catch (e) {
+            return { active: false };
+        }
+    }
+
     // ---- 静默检查 + 下载 + swap（登录窗 dom-ready 后后台跑，绝不打断使用）----
     async function checkUpdate(onApplied) {
         if (hotBusy) return;
@@ -171,6 +285,13 @@ function createHotManager(deps) {
             if (!res.ok) { console.log('[hot-update] 检查跳过: HTTP ' + res.status); return; }
             const manifest = await res.json();
             if (!verifyHotManifest(manifest)) { console.warn('[hot-update] version.json 验签失败（fail-closed 跳过）'); return; }
+
+            // ★ Layer 1：线上版本被本机拉黑（曾触发本地回退）→ 拒绝重灌同一坏版本。
+            //   Layer 0 服务端回滚=旧内容重签新版本号，不命中黑名单，两通道零冲突。
+            if (isBlacklisted(manifest.hotVersion)) {
+                console.warn('[hot-update] 线上版本 ' + manifest.hotVersion + ' 已被本机拉黑，跳过下载');
+                return;
+            }
 
             const local = readLocalVersion();
             if (local && (manifest.hotVersion === local.hotVersion || manifest.signedAt <= local.signedAt)) {
@@ -211,19 +332,21 @@ function createHotManager(deps) {
             }
 
             // pending 全量复验（防下载过程中磁盘异常）+ 写 manifest 副本
-            for (let i = 0; i < manifest.files.length; i++) {
-                const f = manifest.files[i];
-                const fp = path.join(pendingDir, f.name);
-                if (!fsSync.existsSync(fp) || sha256FileSync(fp) !== f.sha256) throw new Error('pending 复验失败 ' + f.name);
-            }
+            if (!verifyHotDir(pendingDir, manifest)) throw new Error('pending 复验失败');
             fsSync.writeFileSync(path.join(pendingDir, 'manifest.json'), JSON.stringify(manifest));
 
-            // 原子 swap：current → old-<ts>；pending → current；成功后删 old
-            const oldDir = path.join(hotDir, 'old-' + Date.now());
-            if (fsSync.existsSync(currentDir)) fsSync.renameSync(currentDir, oldDir);
-            fsSync.renameSync(pendingDir, currentDir);
+            // 原子 swap：current → previous（★ Layer 1 保留一份供本地回退，~3MB）；
+            //   pending → current。swap 失败把 previous 还原回 current（坏 pending
+            //   绝不污染 current），与黑名单/回退共同构成「坏版本可及时恢复」闭环。
+            rmrf(previousDir);
+            if (fsSync.existsSync(currentDir)) fsSync.renameSync(currentDir, previousDir);
+            try {
+                fsSync.renameSync(pendingDir, currentDir);
+            } catch (e) {
+                if (fsSync.existsSync(previousDir)) fsSync.renameSync(previousDir, currentDir);
+                throw e;
+            }
             pendingDir = null;
-            rmrf(oldDir);
             writeLocalVersion({ hotVersion: manifest.hotVersion, signedAt: manifest.signedAt });
             console.log('[hot-update] ✅ 新热版本 ' + manifest.hotVersion + ' 已就绪，下次启动生效');
             if (typeof onApplied === 'function') { try { onApplied(manifest.hotVersion); } catch (e) { /* 通知失败不影响主流程 */ } }
@@ -238,6 +361,10 @@ function createHotManager(deps) {
     return {
         resolveEntry: resolveEntry,
         checkUpdate: checkUpdate,
+        // ★ Layer 1 本地回退：登录窗「回退上一版」按钮触发（同步，毫秒级）
+        rollbackLocal: rollbackLocal,
+        // 登录窗回退入口探测：{active, hotVersion, hasPrevious}
+        getActiveHotState: getActiveHotState,
         verifyHotManifest: verifyHotManifest
     };
 }

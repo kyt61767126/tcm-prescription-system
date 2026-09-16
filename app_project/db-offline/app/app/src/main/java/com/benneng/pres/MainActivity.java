@@ -88,6 +88,9 @@ public class MainActivity extends BridgeActivity {
     private boolean apkUpdateCheckStarted = false;
     // ★ 2026-09-14 Phase 2a 静默热更新：防重入标记（一次生命周期只跑一轮检查）
     private boolean hotUpdateCheckStarted = false;
+    // ★ 2026-09-16 Layer 2 热回退入口：回退成功后本进程不再注入登录页「回退上一版」
+    //   入口（reloadHotEntry 触发 onPageFinished 会重走注入链，防重复注入打扰）
+    private boolean hotRollbackEntryDone = false;
     // ★ 2026-09-09 更新下载提速：检查更新时从 manifest 解析 APK 直链（/downloads/惠康中医-本地.apk），
     //   横幅「立即下载」直接跳直链触发系统下载器，跳过官网 download.html（242KB+JS+多JSON请求）
     //   整页加载——用户反馈"点更新跳官网比 exe 更新慢很多、卡顿"的根因即在此。
@@ -739,6 +742,11 @@ public class MainActivity extends BridgeActivity {
                 // 录像拍照脚本延迟到页面渲染稳定后注入（避免40KB脚本同步执行阻塞UI）
                 // 300ms 是经验值：足够 React 完成首屏渲染，又不至于让用户感觉录像功能迟钝
                 mainHandler.postDelayed(() -> injectVideoRecorderScript(view), 300);
+
+                // ★ 2026-09-16 Layer 2：热版本生效时登录页注入「回退上一版」入口
+                //   （代码在 APK 原生层，不依赖热版本页面 JS 存活；内部自探测登录页
+                //   可见才注入，非登录页/已注入/已回退均静默跳过）
+                mainHandler.postDelayed(() -> injectHotRollbackEntry(view), 400);
             }
 
             // ★ 参考云端APP：SSL 证书错误直接取消，防止中间人攻击
@@ -903,6 +911,55 @@ public class MainActivity extends BridgeActivity {
         } catch (Throwable t) {
             Log.w(TAG, "[hot-update] 热重载失败，保持当前页面: " + t.getMessage());
         }
+    }
+
+    /**
+     * ★ 2026-09-16 Layer 2：登录页注入「回退上一版」原生入口（与桌面端
+     *   update-manager.cjs injectHotRollbackEntry 同款语义）：
+     *   - getActiveHotState 探测（current 有有效热版本）+ loginOverlay 可见才注入；
+     *   - 注入代码在 APK 原生层（evaluateJavascript 常量字符串），热版本页面 JS
+     *     崩了入口仍在——这是把入口放原生层而非热包 JS 的全部意义；
+     *   - 链接挂 loginOverlay 内部（.login-overlay 是 fixed 全屏层），登录成功
+     *     后随 loginOverlay display:none 自动消失，无需额外清理；
+     *   - 点击 → AndroidNative.invoke('hotRollback') → rollbackLocal 静态回退。
+     *   全程 best-effort：任何异常静默跳过，绝不影响登录页正常使用。
+     */
+    private void injectHotRollbackEntry(final WebView webView) {
+        if (webView == null || hotRollbackEntryDone) return;
+        try {
+            final File hotDir = new File(getFilesDir(), "hot-update");
+            if (!HotUpdateManager.getActiveHotState(hotDir)) return;
+            // 探测：登录页可见 + 尚未注入 → yes（与 autoReloadHotEntryIfIdle 同款判定）
+            String probe = "(function(){try{" +
+                "var o=document.getElementById('loginOverlay');" +
+                "if(!o||o.style.display==='none')return 'no';" +
+                "if(document.getElementById('__hotRollbackLink'))return 'dup';" +
+                "return 'yes';" +
+                "}catch(e){return 'no';}})();";
+            webView.evaluateJavascript(probe, value -> {
+                try {
+                    if (value == null || !value.contains("yes")) return;
+                    // 有 previous → 回退上一版；无 previous → 恢复内置版本（assets 兜底）
+                    boolean hasPrevious = new File(hotDir, "previous").isDirectory();
+                    String label = hasPrevious
+                        ? "\\u56DE\\u9000\\u4E0A\\u4E00\\u7248"          // 回退上一版
+                        : "\\u6062\\u590D\\u5185\\u7F6E\\u7248\\u672C";    // 恢复内置版本
+                    String code = "(function(){try{" +
+                        "var o=document.getElementById('loginOverlay');if(!o)return;" +
+                        "var d=document.createElement('div');" +
+                        "d.id='__hotRollbackLink';" +
+                        "d.style.cssText='position:absolute;bottom:6px;left:0;right:0;text-align:center;font-size:11px;font-family:sans-serif;';" +
+                        "var a=document.createElement('span');" +
+                        "a.style.cssText='color:#1565c0;text-decoration:underline;cursor:pointer;padding:8px;';" +
+                        "a.textContent='" + label + "';" +
+                        "a.onclick=function(){a.textContent='\\u56DE\\u9000\\u4E2D\\u2026';" +
+                        "try{AndroidNative.invoke('hotRollback','{}');}catch(e){}};" +
+                        "d.appendChild(a);o.appendChild(d);" +
+                        "}catch(e){}})();";
+                    webView.evaluateJavascript(code, null);
+                } catch (Throwable ignored) {}
+            });
+        } catch (Throwable ignored) {}
     }
 
     /**
@@ -1836,6 +1893,48 @@ public class MainActivity extends BridgeActivity {
                     case "printPrescription":
                         return printPrescription(args.optString("html", ""),
                                 args.optString("orientation", "portrait")).toString();
+                    // ★ 2026-09-16 Layer 1/2 本地热回退（登录页「回退上一版」入口触发）：
+                    //   rollbackLocal 静态毫秒级（current 拉黑 → previous 复验晋升/回
+                    //   assets 兜底），与桌面端 hot-update-core.cjs 同构。非敏感操作
+                    //   （只动 hot-update 目录），无需 isCallerAllowed 来源校验。
+                    //   JavascriptInterface 默认后台线程（文件 IO 安全），UI/重载回主线程。
+                    case "hotRollback": {
+                        try {
+                            File hotDir = new File(getFilesDir(), "hot-update");
+                            HotUpdateManager.RollbackResult r =
+                                    HotUpdateManager.rollbackLocal(hotDir, "manual-login-rollback");
+                            final boolean ok = r != null && r.ok;
+                            final boolean toPrevious = ok && "previous".equals(r.restored);
+                            mainHandler.post(() -> {
+                                try {
+                                    if (ok) {
+                                        // 回退成功：本进程不再注入入口；重载入口当次生效
+                                        hotRollbackEntryDone = true;
+                                        Toast.makeText(MainActivity.this,
+                                                toPrevious ? "已回退到上一版本" : "已恢复内置版本",
+                                                Toast.LENGTH_SHORT).show();
+                                        WebView wv = getBridge() != null
+                                                ? getBridge().getWebView() : null;
+                                        if (wv != null) reloadHotEntry(wv);
+                                    } else {
+                                        Toast.makeText(MainActivity.this,
+                                                "回退失败，请重启APP后重试",
+                                                Toast.LENGTH_LONG).show();
+                                    }
+                                } catch (Throwable t) {
+                                    Log.w(TAG, "[hot-rollback] 回退后处理失败: " + t.getMessage());
+                                }
+                            });
+                            return new JSONObject()
+                                    .put("ok", ok)
+                                    .put("restored", r != null ? r.restored : "")
+                                    .put("hotVersion", r != null ? r.hotVersion : "")
+                                    .toString();
+                        } catch (Throwable t) {
+                            Log.w(TAG, "[hot-rollback] 失败: " + t.getMessage());
+                            return fail("rollback error: " + t.getMessage()).toString();
+                        }
+                    }
                     // ★ 以下为从 NativeBridgePlugin 迁移的方法（方向3：统一到 JavascriptInterface 架构）
                     case "getLicenseStatus":
                         return getLicenseStatus().toString();

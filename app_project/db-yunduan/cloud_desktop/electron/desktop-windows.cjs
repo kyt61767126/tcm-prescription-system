@@ -387,9 +387,14 @@ function createDesktopWindows({ app, BrowserWindow, shell, updateManager, sendSt
                 const lw = getLoginWindow();
                 if (lw && !lw.isDestroyed()) {
                     updateManager.checkForUpdate(lw);
-                    // ★ 2026-09-14 静默热更新检查（与整包检查并行；后台增量下载，
-                    //   新版就绪后下次启动自动生效，仅淡绿横幅轻提示，绝不打断使用）
-                    updateManager.checkHotUpdate(lw);
+                // ★ 2026-09-14 静默热更新检查（与整包检查并行；后台增量下载，
+                //   新版就绪后下次启动自动生效，仅淡绿横幅轻提示，绝不打断使用）
+                updateManager.checkHotUpdate(lw);
+                // ★ 2026-09-16 Layer 2：热版本在效时注入登录窗「回退上一版」入口
+                //   （login.html 属 asar 域，坏热版本打不开主界面时仍可自助恢复）
+                if (typeof updateManager.injectHotRollbackEntry === 'function') {
+                    updateManager.injectHotRollbackEntry(lw);
+                }
                 }
                 sendStartupHeartbeat(); // ★ 匿名统计心跳（fire-and-forget，失败静默）
             }, 1500);
