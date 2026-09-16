@@ -1,9 +1,9 @@
 {
-    "version": "1.0.248",
-    "releaseDate": "2026-09-15",
-    "releaseNotes": "📋 其他:\n  - docs: KNOWLEDGE 沉淀激活试用到期直通经验（分层生效矩阵/发布SOP）\n  - 热包 2026.09.15-11（app）+ 桌面 -3（local）：激活试用到期直通（填手机号点版本直达付款）\n  - 激活流程试用到期直通：版本页填手机号点版本即自动提交直达付款，跳过注册信息表单（APP+桌面）\n  - docs: KNOWLEDGE 沉淀热更新一次到位经验（minAppCode自动抬升坑/打包时序/非交互发布入口）",
-    "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.15/huikang-local-setup-1.0.248.exe",
-    "portableUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.15/huikang-local-1.0.248.exe",
+    "version": "1.0.249",
+    "releaseDate": "2026-09-16",
+    "releaseNotes": "✨ 新增:\n  - feat(热更新): 回退 Layer 1+2——客户端本地回退三件套 + 登录页「回退上一版」入口（双桌面端+离线APP）\n  - 新增热更新一键回滚工具（Layer 0 服务端重签发布回滚）\n  - feat(授权): 激活码常显 + 热包基建两修复（桌面CRLF/minAppCode防呆）\n🐛 修复:\n  - fix(登录): 直通事故自动救援——本地密码被覆盖时云端核验并自动修复登录\n  - fix(登录): 直通事故救援提示——中招用户登录失败时直接告知密码为默认 admin\n  - fix(激活): 试用到期直通清空注册密码——已注册用户激活后自设密码失效无法登录\n  - fix(处方): 剂数/诊疗费输入框数字无法修改——空值不回写+失焦兜底\n  - 修复已激活设备换号提交激活误跳付款页：order-submit/admin-submit 补同设备已激活短路（机器码维度，防重复付款+消除付款页→已激活跳变）\n📋 其他:\n  - build: 一键打包副作用自动收纳\n  - docs: 热更新回滚 SOP 操作手册（.trae/documents/热更新一键回滚SOP.md）\n  - docs(KNOWLEDGE): 沉淀产品决策——云端三端不做激活码显示（账号订阅模型，用户确认）\n  - 热包 2026.09.15（三渠道）：剂数/诊疗费输入框空值不回写+失焦兜底\n  - docs(KNOWLEDGE): 产品决策沉淀——离线机构版不做前台收费角色（单机无并发价值）\n  - docs: KNOWLEDGE 收尾三缺口沉淀——已激活短路响应三端处理核对（官网/云端orderFlow/云桌面asar层）\n  - 热包 2026.09.15-3（cloud 桌面）：auth-core 已激活短路收尾（换号场景防误触付款）\n  - 已激活短路收尾补全三端：官网Step2短路分支（防误扫码重复付款）+ 云端orderFlow短路装码 + 云桌面窗口空license轮询兜底 + download双副本镜像对齐\n  - docs: KNOWLEDGE 条目廿三沉淀——已激活设备换号提交的同设备已激活短路（口径统一+账号操作禁区）\n  - docs: KNOWLEDGE 沉淀激活试用到期直通经验（分层生效矩阵/发布SOP）",
+    "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.16-1338/huikang-local-setup-1.0.249.exe",
+    "portableUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.09.16-1338/huikang-local-1.0.249.exe",
     "forceUpdate": false,
     "minVersion": "1.0.0",
     "rolloutPercentage": 100
