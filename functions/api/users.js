@@ -1971,15 +1971,16 @@ export async function onRequest(context) {
         if (method === 'POST' && url.searchParams.get('action') === 'change-password') {
             const body = await context.request.json().catch(() => ({}));
             const { username, oldPassword, newPassword } = body;
-            if (!username || !oldPassword || !newPassword) {
-                return json({ success: false, error: '参数不完整' }, 400, context.request);
-            }
-
             // ★ 2026-08-26 支持同时修改登录用户名（标准版改密弹窗选填"新用户名"）：
             //   body.newUsername 可选。一次调用完成改密+改名——若前端分两次调 set-username
             //   会先撤销 token，导致紧随的 change-password 401。校验/唯一/phone保底/
             //   设备迁移逻辑与 set-username 端点一致。
+            //   ★ 2026-09-16 后台账户安全弹窗：支持"仅改名不改密"——newPassword 与
+            //   newUsername 至少提供一项（原 newPassword 必填，改名被逼轮换密码）。
             const newUsername = body.newUsername ? String(body.newUsername).trim() : '';
+            if (!username || !oldPassword || (!newPassword && !newUsername)) {
+                return json({ success: false, error: '参数不完整（新密码与新用户名至少提供一项）' }, 400, context.request);
+            }
 
             const currentUser = await parseAuthHeader(context.request, context.env);
             if (!currentUser || currentUser.username !== username) {
@@ -2045,10 +2046,12 @@ export async function onRequest(context) {
                 usernameChanged = true;
             }
 
-            // 更新密码
-            const { passwordHash, salt } = await hashPassword(newPassword);
-            found.user.passwordHash = passwordHash;
-            found.user.salt = salt;
+            // 更新密码（★ 2026-09-16 仅改名时 newPassword 为空，保留原密码哈希）
+            if (newPassword) {
+                const { passwordHash, salt } = await hashPassword(newPassword);
+                found.user.passwordHash = passwordHash;
+                found.user.salt = salt;
+            }
             found.user.updatedAt = getNowISO();
 
             // 保存回 KV（findIndex 用旧 username 定位；found.user.username 可能已是新名）
@@ -2078,7 +2081,7 @@ export async function onRequest(context) {
                 success: true,
                 username: usernameChanged ? newUsername : username,
                 message: usernameChanged
-                    ? '密码与登录用户名修改成功，请使用新用户名重新登录'
+                    ? (newPassword ? '密码与登录用户名修改成功，请使用新用户名重新登录' : '登录用户名修改成功，请使用新用户名重新登录')
                     : '密码修改成功，请使用新密码重新登录'
             }, 200, context.request);
         }
