@@ -3888,6 +3888,7 @@ let currentUser = null;
                 {name:'川椒',code:'CJ',costPrice:0.045,price:0.225,unit:'g',dosage:10},
                 {name:'川楝子',code:'CLZ',costPrice:0.0105,price:0.063,unit:'g',dosage:10},
                 {name:'川木通',code:'CMT',costPrice:0.02,price:0.1,unit:'g',dosage:6},
+                {name:'川牛膝',code:'CNX',costPrice:0.04,price:0.2,unit:'g',dosage:15},
                 {name:'川芎',code:'CX',costPrice:0.025,price:0.125,unit:'g',dosage:10},
                 {name:'穿山甲',code:'CSJ',costPrice:0,price:0,unit:'g',dosage:10},
                 {name:'穿山龙',code:'CSL',costPrice:0.025,price:0.125,unit:'g',dosage:10},
@@ -4004,6 +4005,7 @@ let currentUser = null;
                 {name:'槐花',code:'HH',costPrice:0.015,price:0.09,unit:'g',dosage:12},
                 {name:'槐角',code:'HJ',costPrice:0.015,price:0.09,unit:'g',dosage:12},
                 {name:'槐米',code:'HM',costPrice:0.015,price:0.09,unit:'g',dosage:12},
+                {name:'怀牛膝',code:'HNX',costPrice:0.035,price:0.175,unit:'g',dosage:15},
                 {name:'黄柏',code:'HB',costPrice:0.115,price:0.345,unit:'g',dosage:10},
                 {name:'黄精',code:'HJ',costPrice:0.085,price:0.2975,unit:'g',dosage:15},
                 {name:'黄连',code:'HL',costPrice:0.55,price:0.825,unit:'g',dosage:5},
@@ -4311,7 +4313,35 @@ let currentUser = null;
             if (medicines.length === 0) {
                 medicines = defaultMedicines;
             }
-            
+
+            // ★ 2026-09-18 药库增量补丁：defaultMedicines 跨版本新增药对老用户不可见
+            //   （localStorage 恢复路径永不重建字典）——按补丁清单按 name 增量补插。
+            //   用户对既有药的编辑/删除不受影响；版本守卫确保每版只跑一次（此后用户
+            //   删掉新补的药不会复活）。后续新增默认药：清单追加 + 版本号 +1 即可。
+            //   背景：药库原只有「牛膝」，无川牛膝/怀牛膝，医生无法开方区分（用户实测）。
+            const MEDICINE_PATCH_VERSION = 1;
+            const MEDICINE_PATCH_ADDS = [
+                {name:'川牛膝',code:'CNX',costPrice:0.04,price:0.2,unit:'g',dosage:15},
+                {name:'怀牛膝',code:'HNX',costPrice:0.035,price:0.175,unit:'g',dosage:15}
+            ];
+            try {
+                const appliedPatch = parseInt(localStorage.getItem('local_medicines_patch_version') || '0', 10);
+                if (appliedPatch < MEDICINE_PATCH_VERSION && medicines.length > 0) {
+                    let patchAdded = 0;
+                    for (const pm of MEDICINE_PATCH_ADDS) {
+                        if (!medicines.some(m => m && m.name === pm.name)) {
+                            medicines.push(Object.assign({}, pm));
+                            patchAdded++;
+                        }
+                    }
+                    if (patchAdded > 0) {
+                        localStorage.setItem('local_medicines', JSON.stringify(medicines));
+                        console.log('[medicines] 增量补丁补入 ' + patchAdded + ' 味新默认药');
+                    }
+                    localStorage.setItem('local_medicines_patch_version', String(MEDICINE_PATCH_VERSION));
+                }
+            } catch (patchErr) { console.warn('[medicines] 增量补丁失败:', patchErr); }
+
             buildMedicineMap();
             loadMedicineFrequency();
             
