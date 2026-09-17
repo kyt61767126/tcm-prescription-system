@@ -1001,7 +1001,7 @@
 
 ### 21.1 voice 枚举链坐标（改动全链，后续二期三期在此扩展）
 * **服务端**：`functions/api/license/_lib/license-core.js` LICENSE_TYPE_CONFIG 新增 `voice`（`maxPrescriptions:0, features:['backup','voice']`，1年/1设备）+ versionOf + DEVICE_VERSION_LABEL『语音版』；`entitlement.js` 透传 features；`users.js` normalizeClinicEdition 精确匹配 `cloud_voice` + 「语音版」中文兜底；`admin-approve.js` / `activate-from-ticket.js` maxDevices 兜底 `(type==='pro')?5:(type==='voice'?1:2)`。
-* **客户端**：`shared/license/license-manager.js`、`shared/edition-lock.js`、`shared/permission.js`（+`isVoiceEdition()`）三镜像同步；`shared/auth-core/cloud.js` 登录钩子写 `CONFIG.edition = 'cloud_voice'` + localStorage 缓存恢复。edition 规范 key：**cloud_voice**（与 cloud_clinic/cloud_personal/offline_* 平行）。
+* **客户端**：`shared/license/license-manager.js`、`shared/edition-lock.js`、`shared/permission.js`（+`isVoiceEdition()`）三镜像同步；`shared/auth-core/cloud.js` 登录钩子写 `CONFIG.edition = 'cloud_voice'` + localStorage 缓存恢复。edition 规范 key：**cloud_voice**（与 cloud_clinic/cloud_personal/offline_* 平行）。**版本文案 5 处**（public/index.html，dce400f9）：首帧 `_lbl` fallback / `getCloudEditionTag` / `getEditionTag`（守卫+fallback）/ `refreshVersionTags` / `applyLoginTheme`——voice 判定（cloud_voice/voice 纯字符串）一律优先于标准/机构二分，显示「云端语音版」。
 * **admin 后台**：`public/admin/index.html` ↔ `site-admin/admin/index.html` 双副本（4 处下拉框 option + tag-voice 紫色样式 + typeLabel/typeNames/typeMap 映射 + voice1y 批量发码模板），开码即支持 voice 类型。
 * **官网**：`public/download.html` ↔ `site-official/download.html` 双副本（快速选择指南第 5 条 + 对比表「智能语音开方」行 + 语音版专属卡片；**价格不写死**，引导详询客服——用户偏好「暂不设置付费项目」）。
 
@@ -1021,6 +1021,11 @@
 
 ### 21.4 本轮新教训（必须传承）
 * **★ 服务端散落硬编码 type 白名单是 voice 上线首障（2026-09-17 实测抓到）**：LICENSE_TYPE_CONFIG 加了 voice 后，generate.js L96 硬编码 `['trial','personal','pro']` 拒收 voice → admin 开码 400 无弹窗。全仓排查共 5 处（generate/batch/admin-approve/activate-from-ticket 已根治 + order-submit 一期不动）。**根治**：license-core.js 导出 `LICENSE_TYPES`（全量）/`PAID_LICENSE_TYPES`（排除试用）权威集合，4 处 API 校验统一引用，`mapEditionToType` 补 voice/cloud_voice/语音分支。**铁律：新增版本类型只改 LICENSE_TYPE_CONFIG，改完必 grep `['trial'` / `'personal', 'pro'` 式散落硬编码**；order-submit.js L193 待语音版定价后再开 voice。commit f21f8a7c。
+* **★ 客户端版本文案同款坑（第三个，dce400f9）**：refreshVersionTags `_isStdEd` 白名单 + getCloudEditionTag/getEditionTag/applyLoginTheme/首帧 fallback 共 5 处「标准/机构」二分全部漏 voice → cloud_voice 登录后 title/顶栏误显「云端机构版」。**铁律：新增版本线时必 grep `云端标准版|云端机构版` 全部二分点，新版本判定一律放在二分之前**；语音版主题沿用机构版紫色（不动 CSS 基线），仅文案独立。
+* **★ import 漏常量 = 运行时 ReferenceError，node --check 查不出（P0，f147bdcb）**：admin-submit.js 3 处使用 KV_ADMIN_REQ_INDEX 但未 import → 全新手机号（无索引）走兜底扫描必 500，管理员激活通道对新客户静默损坏数月（历史成功记录走官网订单路径未踩中）。**方法论：①本地复现拿真实堆栈 = mock KV + 构造 context 直调 onRequest（tools/_tmp/admin-submit-repro.mjs 模式）；②系统性兜底 = 全仓静态扫描（剥字符串/注释后查 KV_* 标识符有无定义/import，scan-undefined-consts.mjs，可正式化为常设门禁）**。
+* **云端账号开通模型（开码≠开账号）**：激活码 claim（validate.js）只绑设备不建账号；admin 直接 generate 的码对云端网页登录无用。云端账号必须走 `provisionCloudAccount`（admin-approve 审核通过 / activate-from-ticket 工单通道），语音版审核 type=voice → mapActivationTypeToEdition → cloud_voice。
+* **付款前置拦截与白名单**：新手机号提交激活申请被 `PAYMENT_REQUIRED` 409 拦截（admin-submit 支付前置校验）；测试/免费开通用 admin 后台「➕ 加入白名单」写 `free_pass:{phone}` KV 跳过拦截。
+* **浏览器 agent 两坑**：①点击时机——auth-core.js 异步加载完成前，内联 onclick 的 `if(window.openAdminActivate)` 守卫静默无反应，用 browser_evaluate 直接调用 `window.openAdminActivate()` 绕过；②E2E 验证时序——Pages 部署需 2-5 分钟 + 浏览器缓存，push 后立即验证必见旧代码，须先 curl 线上 HTML 确认含新代码（查新标记字符串）再上浏览器，且导航带 `?nocache=` 参数。
 * **注入器内函数名必须加 voice 前缀**：新 script 内函数若与其他端旧函数撞名（如离线端已有 `function inject()`），diff-cross-version Tier B 会误报「同体函数单边改动」。12 个函数统一前缀（vLog/makeVoiceBtn/setVoiceListening/positionVoiceBtn/bindVoiceMic/voiceAfterFill/injectVoiceUI/voiceFillMedicine/injectMedicineVoiceMic/removeVoiceUI/voiceTick/voiceNotify）。
 * **.ps1 必须 UTF-8 带 BOM**：无 BOM 时 PS 5.1 `-File` 按 GBK 解析中文注释吞引号报 `Unexpected token ')'`（sync-all.ps1 曾中招）。含中文注释的 .ps1 检查前三字节须为 239,187,191。
 * **PowerShell 内联 `node -e` 引号转义易失败** → 写临时 .js 到 `tools/_tmp/` 执行（根目录受 package.json type:module 影响）。临时脚本用完即删；_tmp 下还有大量历史文件，只删本轮自己创建的。
