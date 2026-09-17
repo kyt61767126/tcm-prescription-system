@@ -1150,6 +1150,11 @@ let currentUser = null;
                 // 版本标签数据同步（登录框标签已视觉隐藏；仍写textContent供逻辑读取，title显示真实版本）
                 var _tag = document.getElementById('loginVersionTag');
                 var _lbl = (CONFIG && CONFIG.versionLabel) || (_isStd ? '云端标准版' : '云端机构版');
+                // ★ 2026-09-17 语音版：cloud_voice 独立版本线，versionLabel 只是打包默认/
+                //   渲染缓存，edition=voice 时强制派生「云端语音版」（纯字符串判定——
+                //   首帧执行期 isStandardEdition/Permission 均未加载，禁止依赖）。
+                var _eV = String((CONFIG && CONFIG.edition) || '').toLowerCase();
+                if ((_eV === 'cloud_voice' || _eV === 'voice') && String(_lbl).indexOf('语音') < 0) _lbl = '云端语音版';
                 if (_tag) _tag.textContent = '【' + _lbl + '】';
                 document.title = '惠康中医-' + _lbl;
                 // 写诊所名：local_clinicName 优先，次选 CONFIG.clinicName
@@ -2652,9 +2657,12 @@ let currentUser = null;
             const e = String(edition || '').toLowerCase();
             return ['personal', 'cloud_personal', 'offline_personal', 'standard', 'clinic_standard'].indexOf(e) >= 0;
         };
-        // 云端版本标签：根据实际注册 edition 返回"云端标准版/云端机构版"
+        // 云端版本标签：根据实际注册 edition 返回"云端标准版/云端机构版/云端语音版"
+        // ★ 2026-09-17 语音版：cloud_voice 独立版本线，voice 判定优先于标准/机构二分
         window.getCloudEditionTag = function() {
             var e = (typeof CONFIG !== 'undefined' && CONFIG.edition) || window.EDITION || 'clinic_custom';
+            var el = String(e).toLowerCase();
+            if (el === 'cloud_voice' || el === 'voice') return '云端语音版';
             return window.isStandardEdition(e) ? '云端标准版' : '云端机构版';
         };
 
@@ -2671,6 +2679,16 @@ let currentUser = null;
         //   此守卫使渲染层对分歧免疫：versionLabel 与 edition 分档判定相反时，
         //   以 edition 派生为准（对分装机版本 edition/versionLabel 本就一致，零影响）。
         function getEditionTag() {
+            // ★ 2026-09-17 语音版：edition=voice 时 versionLabel 缓存（标准/机构旧值）
+            //   一律不可信，直接派生「云端语音版」（对齐 refreshVersionTags 权威写入）。
+            try {
+                if (typeof CONFIG !== 'undefined' && CONFIG) {
+                    var _gVEd = String(CONFIG.edition || '').toLowerCase();
+                    if (_gVEd === 'cloud_voice' || _gVEd === 'voice') {
+                        return (String(CONFIG.versionLabel || '').indexOf('语音') >= 0) ? CONFIG.versionLabel : '云端语音版';
+                    }
+                }
+            } catch (_) {}
             if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.versionLabel) {
                 try {
                     if (CONFIG.edition && typeof window.isStandardEdition === 'function') {
@@ -2807,8 +2825,10 @@ let currentUser = null;
                     //   + 非标准即机构（旧 instArr 精确白名单缺 institutional/offline/single
                     //   → 这些机构值被误标标准版）；单列表来源 auth-core 登录归一化（含 single→标准）。
                     var _eLow = String(ed).toLowerCase();
+                    // ★ 2026-09-17 语音版：cloud_voice 独立版本线，voice 判定优先于 std/org 二分
+                    var _isVoiceEd = (_eLow === 'cloud_voice' || _eLow === 'voice');
                     var _isStdEd = ['personal', 'cloud_personal', 'offline_personal', 'standard', 'clinic_standard', 'single'].indexOf(_eLow) >= 0;
-                    CONFIG.versionLabel = _isStdEd ? '云端标准版' : '云端机构版';
+                    CONFIG.versionLabel = _isVoiceEd ? '云端语音版' : (_isStdEd ? '云端标准版' : '云端机构版');
                 }
                 if (typeof applyEditionTags === 'function') applyEditionTags();
                 if (ed && typeof window.applyLoginTheme === 'function') window.applyLoginTheme(ed);
@@ -2829,9 +2849,11 @@ let currentUser = null;
                 if (tagEl && _applyText) tagEl.textContent = '【云端标准版】';
             } else {
                 // 机构版：加 edition-org 切紫色（默认是蓝色标准版）
+                // ★ 2026-09-17 语音版：语音版同走紫色主题（不动 CSS 基线），仅文案独立显示「云端语音版」
                 root.classList.add('edition-org');
                 root.classList.remove('edition-standard');
-                if (tagEl && _applyText) tagEl.textContent = '【云端机构版】';
+                var _vEd = String(edition || '').toLowerCase();
+                if (tagEl && _applyText) tagEl.textContent = (_vEd === 'cloud_voice' || _vEd === 'voice') ? '【云端语音版】' : '【云端机构版】';
             }
         };
 
