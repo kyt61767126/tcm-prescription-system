@@ -121,9 +121,20 @@ jobs:
             exit 1
           }
 
+      # ★ 2026-09-17 九重防线（与 pre-push ⑫ 同构收口）：functions/ 未定义常量静态扫描。
+      #   缺口实锤：admin-submit.js 3 处使用 KV_ADMIN_REQ_INDEX 但未 import —— ReferenceError
+      #   是运行时错误，node --check 查不出 → 新手机号激活申请必 500，静默损坏数月。
+      - name: 9/9 Undefined constants scan (functions/)
+        shell: bash
+        run: |
+          node tools/scan-undefined-consts.cjs || {
+            echo "::error::functions/ 存在使用但未定义/未导入的 KV_* 常量——运行时必 ReferenceError（node --check 查不出），补 const 声明或 import 后提交。"
+            exit 1
+          }
+
       - name: Summary
         shell: bash
         run: |
           echo "### 校验结果" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "✅ 界面基线 / shared JS 同步 / HTML 副本 / 注入幂等性 / 源码落定门单测 / 独立js副本哈希 / 跨版本漂移 / cv哈希 八重校验全部通过" >> $GITHUB_STEP_SUMMARY
+          echo "✅ 界面基线 / shared JS 同步 / HTML 副本 / 注入幂等性 / 源码落定门单测 / 独立js副本哈希 / 跨版本漂移 / cv哈希 / 未定义常量 九重校验全部通过" >> $GITHUB_STEP_SUMMARY

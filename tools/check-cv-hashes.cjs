@@ -51,7 +51,13 @@ function escapeRegExp(s) {
 
 function sha8(filePath) {
     const buf = fs.readFileSync(filePath);
-    return crypto.createHash('sha256').update(buf).digest('hex').slice(0, 8);
+    // ★ 2026-09-17 根治「本地⑪绿 / CI 8-8 连红」：哈希统一按「git 入库规范化后
+    //   内容」（CRLF→LF）计算——Windows 磁盘 CRLF 文件（auth-core/medicine-dict/
+    //   performance-utils）与 git eol 入库转 LF 曾致本地按 CRLF 校验全绿、CI 按
+    //   LF checkout 校验必红（KNOWLEDGE 2026-09-14 热包 CRLF 入库哈希漂移教训的
+    //   门禁版同款）。CI checkout / Cloudflare Pages 线上部署均为 LF，与本地同基线。
+    const normalized = buf.toString('utf8').replace(/\r\n/g, '\n');
+    return crypto.createHash('sha256').update(normalized, 'utf8').digest('hex').slice(0, 8);
 }
 
 if (!fs.existsSync(HTML)) {
