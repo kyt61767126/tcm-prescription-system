@@ -955,21 +955,26 @@
             }
         } catch (e) {}
         if (exact.length) return { type: 'exact', meds: exact.slice(0, 20) };
-        // ② 拼音归一：白勺 → baishao == 白芍拼音（等值优先，子串兜底，防短拼音误命中）
+        // ② 拼音归一：白勺 → baishao == 白芍拼音。★ 2026-09-17 拼音全等优先：
+        //    先只收「拼音全等」——ASR 把「炙甘草」听成「制甘草」时 zhigancao 全等
+        //    炙甘草唯一命中（制/炙同音），不再因子串双向匹配混入「甘草」弹 2 候选；
+        //    全等无果再走子串兜底（生甘草 shenggancao ⊃ 甘草 gancao）。
         if (window.VoiceInput && typeof VoiceInput.toPinyin === 'function') {
             var py = VoiceInput.toPinyin(nameText);
             if (py && py.length >= 3) {
-                var pyHits = [];
+                var pyEq = [], pySub = [];
                 try {
                     for (var k = 0; k < medicines.length; k++) {
                         var mm = medicines[k];
                         if (!mm || !mm.name) continue;
                         var mp = VoiceInput.toPinyin(mm.name);
                         if (!mp || mp.length < 3) continue;
-                        if (py === mp || py.indexOf(mp) >= 0 || mp.indexOf(py) >= 0) pyHits.push(mm);
+                        if (py === mp) pyEq.push(mm);
+                        else if (py.indexOf(mp) >= 0 || mp.indexOf(py) >= 0) pySub.push(mm);
                     }
                 } catch (e2) {}
-                if (pyHits.length) return { type: 'pinyin', meds: pyHits.slice(0, 20) };
+                if (pyEq.length) return { type: 'pinyin', meds: pyEq.slice(0, 20) };
+                if (pySub.length) return { type: 'pinyin', meds: pySub.slice(0, 20) };
             }
         }
         return { type: 'none', meds: [] };
