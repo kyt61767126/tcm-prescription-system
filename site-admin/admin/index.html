@@ -102,6 +102,8 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
 .tag-trial { background: #e2e3e5; color: #383d41; }
 .tag-personal { background: #d1ecf1; color: #0c5460; }
 .tag-pro { background: #d4edda; color: #155724; }
+/* ★ 2026-09-17 语音版：紫色系徽章（与项目紫色主视觉 #667eea 对齐） */
+.tag-voice { background: #e6e0fa; color: #4c3a9e; }
 
 /* 过滤栏 */
 .filter-bar { display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
@@ -403,6 +405,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                         <option value="trial">试用版（30张/月，7天）</option>
                         <option value="personal" selected>标准版（无限处方，1年）</option>
                         <option value="pro">机构版（无限+同步+多设备，1年）</option>
+                        <option value="voice">语音版（无限处方+语音输入，1年）</option>
                     </select>
                 </div>
                 <div class="form-group">
@@ -474,6 +477,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                 <option value="trial">试用版</option>
                 <option value="personal">标准版</option>
                 <option value="pro">机构版</option>
+                <option value="voice">语音版</option>
             </select>
             <input type="text" id="filterQ" placeholder="搜索激活码/用户名/备注/订单号/电话/微信" onkeyup="if(event.key==='Enter') loadList()">
             <button class="btn btn-sm" onclick="loadList()">搜索</button>
@@ -958,9 +962,10 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                 <div class="form-group">
                     <label>版本类型 *</label>
                     <select id="approveType">
-                        <option value="personal" selected>标准版（无限处方，1年）</option>
-                        <option value="pro">机构版（无限+同步+多设备，1年）</option>
-                    </select>
+                    <option value="personal" selected>标准版（无限处方，1年）</option>
+                    <option value="pro">机构版（无限+同步+多设备，1年）</option>
+                    <option value="voice">语音版（无限处方+语音输入，1年）</option>
+                </select>
                 </div>
                 <div class="form-group">
                     <label>最大设备数</label>
@@ -1176,6 +1181,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
             <button class="tpl-btn" data-btpl="personalForever" onclick="applyBatchTemplate('personalForever')">个人 · 永久</button>
             <button class="tpl-btn" data-btpl="pro1y" onclick="applyBatchTemplate('pro1y')">专业 · 1年 · 5设备</button>
             <button class="tpl-btn" data-btpl="pro3y" onclick="applyBatchTemplate('pro3y')">专业 · 3年 · 10设备</button>
+            <button class="tpl-btn" data-btpl="voice1y" onclick="applyBatchTemplate('voice1y')">语音 · 1年</button>
             <button class="tpl-btn tpl-save" onclick="autoMatchBatchVersion()">🤖 智能匹配</button>
         </div>
         <div class="gen-row">
@@ -1185,6 +1191,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                     <option value="trial">试用版</option>
                     <option value="personal" selected>标准版</option>
                     <option value="pro">机构版</option>
+                    <option value="voice">语音版</option>
                 </select>
             </div>
             <div class="form-group">
@@ -1644,7 +1651,9 @@ const PRESET_TEMPLATES = {
     personalForever:  { name: '个人 · 永久',          type: 'personal', days: 36500, maxDevices: 1  },
     pro1y:            { name: '专业 · 1年 · 5设备',   type: 'pro',      days: 365,   maxDevices: 5  },
     pro3y:            { name: '专业 · 3年 · 10设备',  type: 'pro',      days: 1095,  maxDevices: 10 },
-    proForever:       { name: '专业 · 永久 · 10设备', type: 'pro',      days: 36500, maxDevices: 10 }
+    proForever:       { name: '专业 · 永久 · 10设备', type: 'pro',      days: 36500, maxDevices: 10 },
+    // ★ 2026-09-17 语音版：1年/1设备（权益=标准版全部+语音输入）
+    voice1y:          { name: '语音 · 1年',           type: 'voice',    days: 365,   maxDevices: 1  }
 };
 
 // 自定义模板存取（localStorage）
@@ -1674,7 +1683,7 @@ function renderCustomTplManageList() {
         listEl.innerHTML = '<div class="empty-tip">暂无自定义模板，点击上方"💾 存为模板"按钮保存当前配置</div>';
         return;
     }
-    const typeLabel = { trial: '试用版', personal: '标准版', pro: '机构版' };
+    const typeLabel = { trial: '试用版', personal: '标准版', pro: '机构版', voice: '语音版' };
     listEl.innerHTML = list.map((t, i) => {
         const daysLabel = t.days >= 36500 ? '永久' : (t.days >= 365 ? (t.days/365) + '年' : t.days + '天');
         const info = `${escapeHtml(t.name)} · ${typeLabel[t.type]||t.type} · ${daysLabel} · ${t.maxDevices}设备`;
@@ -2191,7 +2200,7 @@ function renderList(records) {
         tbody.innerHTML = '<tr><td colspan="12" class="empty">暂无激活码</td></tr>';
         return;
     }
-    const typeNames = { trial: '试用版', personal: '标准版', pro: '机构版' };
+    const typeNames = { trial: '试用版', personal: '标准版', pro: '机构版', voice: '语音版' };
     const statusNames = { unused: '未使用', used: '已激活', expired: '已过期', disabled: '已禁用' };
 
     tbody.innerHTML = records.map(r => {
@@ -2208,8 +2217,8 @@ function renderList(records) {
                 return '<span class="tag tag-' + r.type + '">' + edText + '</span>';
             }
             if (hasCloud) {
-                // 云端版 → 🌐网页·云端{版本}（tag 样式与其他板块云端同款）
-                const tagClass = r.type === 'pro' ? 'tag-pro' : 'tag-personal';
+                // 云端版 → 🌐网页·云端{版本}（tag 样式与其他板块云端同款；语音版紫色 tag-voice）
+                const tagClass = r.type === 'pro' ? 'tag-pro' : (r.type === 'voice' ? 'tag-voice' : 'tag-personal');
                 return '<span class="tag ' + tagClass + '">🌐网页·云端' + edText + '</span>';
             }
             // 离线版 → 载体前缀（desktop/app 组合）+ 离线{版本}
@@ -3618,9 +3627,11 @@ function renderVersionInfo(r) {
     const isOffline = r.appMode === 'local' || r.appMode === 'offline';
     const isPro = r.edition === 'institution' || r.edition === 'pro';
     const isPersonal = r.edition === 'personal';
+    const isVoice = r.edition === 'voice' || r.edition === 'cloud_voice';
     let edText = '';
     let tagClass = 'tag-trial';
     if (isCloud && isPro) { edText = '云端机构版'; tagClass = 'tag-pro'; }
+    else if (isCloud && isVoice) { edText = '云端语音版'; tagClass = 'tag-voice'; }
     else if (isCloud && isPersonal) { edText = '云端标准版'; tagClass = 'tag-personal'; }
     else if (isOffline && isPro) { edText = '离线机构版'; tagClass = 'tag-trial'; }
     else if (isOffline && isPersonal) { edText = '离线标准版'; tagClass = 'tag-trial'; }
@@ -3865,7 +3876,7 @@ async function submitApprove(action) {
 function showApproveResult(data) {
     const licenseCode = data.licenseCode || '-';
     const info = data.licenseInfo || {};
-    const typeMap = { 'personal': '标准版', 'pro': '机构版' };
+    const typeMap = { 'personal': '标准版', 'pro': '机构版', 'voice': '语音版' };
 
     // 填充结果面板
     document.getElementById('resultLicenseCode').textContent = licenseCode;
@@ -3985,6 +3996,7 @@ async function loadClinicsList() {
                     const map = {
                         cloud_clinic: ['云端机构版', 'tag-pro'],
                         cloud_personal: ['云端标准版', 'tag-personal'],
+                        cloud_voice: ['云端语音版', 'tag-voice'],
                         offline_clinic: ['离线机构版', 'tag-trial'],
                         offline_personal: ['离线标准版', 'tag-trial']
                     };
@@ -4734,6 +4746,7 @@ function renderUsersTable() {
             const editionMap = {
                 cloud_clinic: '云端机构版',
                 cloud_personal: '云端标准版',
+                cloud_voice: '云端语音版',
                 offline_clinic: '离线机构版',
                 offline_personal: '离线标准版'
             };
@@ -4748,6 +4761,7 @@ function renderUsersTable() {
             const tagClass = {
                 cloud_clinic: 'tag-pro',
                 cloud_personal: 'tag-personal',
+                cloud_voice: 'tag-voice',
                 offline_clinic: 'tag-trial',
                 offline_personal: 'tag-trial'
             }[u.clinicEdition] || 'tag-trial';
@@ -5087,9 +5101,11 @@ async function loadDeviceBindings() {
         // ★ 2026-09-07 统一版本标签：与用户管理同款（emoji·产品·版本，单一 tag）
         const versionTag = function (b) {
             const isPro = b.version === 'institution';
+            const isVoice = b.version === 'voice';
             const isCloud = b.productClass === 'cloud';
             let edText = '', tagClass = 'tag-trial';
             if (isCloud && isPro) { edText = '云端机构版'; tagClass = 'tag-pro'; }
+            else if (isCloud && isVoice) { edText = '云端语音版'; tagClass = 'tag-voice'; }
             else if (isCloud && !isPro) { edText = '云端标准版'; tagClass = 'tag-personal'; }
             else if (!isCloud && isPro) { edText = '离线机构版'; tagClass = 'tag-trial'; }
             else { edText = '离线标准版'; tagClass = 'tag-trial'; }
@@ -5124,9 +5140,11 @@ async function loadDeviceBindings() {
 // ★ 2026-09-07 统一版本标签：与用户管理同款（emoji·产品·版本，单一 tag）
 function renderSingleDeviceBindingCard(b) {
     const isPro = b.version === 'institution';
+    const isVoice = b.version === 'voice';
     const isCloud = b.productClass === 'cloud';
     let edText = '', tagClass = 'tag-trial';
     if (isCloud && isPro) { edText = '云端机构版'; tagClass = 'tag-pro'; }
+    else if (isCloud && isVoice) { edText = '云端语音版'; tagClass = 'tag-voice'; }
     else if (isCloud && !isPro) { edText = '云端标准版'; tagClass = 'tag-personal'; }
     else if (!isCloud && isPro) { edText = '离线机构版'; tagClass = 'tag-trial'; }
     else { edText = '离线标准版'; tagClass = 'tag-trial'; }

@@ -248,6 +248,23 @@ $DesktopCrashGuardTargets = @(
     'app_project/db-offline/desktop/electron'
 )
 
+# Group 19: voice 模块（voice-input.js）-> 3 云端目录（★ 2026-09-17 语音版一期）
+#   智能语音输入模块（Web Speech API，cloud_voice 版本专属入口）。
+#   仅分发云端表面：public（云端网页，一期主战场）+ cloud_desktop（云桌面
+#   index.html 由 sync-html 生成，携带 voice-input.js 引用标签）+ cloud_app
+#   assets（云APP WebView 实载线上 public，本地 assets 仅打包兜底）。
+#   Electron/WebView 无 Web Speech API → isAvailable() 三重 gate 自动隐藏
+#   按钮入口（降级安全，键盘开方零影响）。
+#   离线端（db-offline）四期换 sherpa-onnx 本地模型时再扩展目标集；
+#   site-admin/admin 后台无语音需求不分发。
+#   源文件带子目录 shared/voice/voice-input.js，Sync-Group 按文件名展平落位
+#   为各目录根级 voice-input.js（与 permission.js 同级，script src 相对引用）。
+$VoiceInputTargets = @(
+    'public',
+    'app_project/db-yunduan/cloud_desktop',
+    'app_project/db-yunduan/cloud_app/app/src/main/assets/public'
+)
+
 # Group 11: index.html 权威源 -> 云端副本（★ 2026-09-02 从手工复制升级为生成模式）
 #   历史事故：权威源改动靠手工复制到云桌面/云APP 副本，多次遗漏导致 CI 红灯、
 #   重复 IIFE 脏块累积。现由 tools/sync-html.ps1 自动生成（端配置块保留，
@@ -461,6 +478,11 @@ Write-Host ""
 
 # Group 18: desktop-crash-guard.cjs -> 2 electron dirs (★ 2026-09-14 P3-A 崩溃韧性补强)
 $result = Sync-Group -GroupName 'desktop-crash-guard.cjs -> 2 electron dirs' -Files @('desktop-crash-guard.cjs') -Targets $DesktopCrashGuardTargets -VerifyOnly $VerifyOnly
+if (-not $result) { $allInSync = $false }
+Write-Host ""
+
+# Group 19: voice-input.js -> 3 cloud dirs (★ 2026-09-17 语音版一期)
+$result = Sync-Group -GroupName 'voice-input.js -> 3 cloud dirs' -Files @('voice/voice-input.js') -Targets $VoiceInputTargets -VerifyOnly $VerifyOnly
 if (-not $result) { $allInSync = $false }
 Write-Host ""
 

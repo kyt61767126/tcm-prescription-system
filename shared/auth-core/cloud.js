@@ -1096,6 +1096,10 @@
                 const CE = String(rawCE);
                 if (['cloud_clinic', 'institution', 'institutional', 'clinic', 'offline', 'clinic_custom', 'offline_clinic', 'cloud'].includes(CE)) {
                     targetEd = 'cloud_clinic';
+                } else if (CE === 'cloud_voice' || CE === 'voice') {
+                    // ★ 2026-09-17 语音版：独立版本线（权益=标准版+语音输入），
+                    //   必须先于 cloud_personal 判定（不含 'personal' 不会误命中，显式分支保清晰）
+                    targetEd = 'cloud_voice';
                 } else if (['cloud_personal', 'personal', 'standard', 'single'].includes(CE)) {
                     targetEd = 'cloud_personal';
                 }
@@ -1437,6 +1441,9 @@
                         const CE = String(u.clinicEdition);
                         if (['cloud_clinic', 'institution', 'institutional', 'clinic', 'offline', 'clinic_custom', 'offline_clinic', 'cloud'].includes(CE)) {
                             editionFromCache = 'cloud_clinic';
+                        } else if (CE === 'cloud_voice' || CE === 'voice') {
+                            // ★ 2026-09-17 语音版：独立版本线缓存恢复
+                            editionFromCache = 'cloud_voice';
                         } else if (['cloud_personal', 'personal', 'standard', 'single'].includes(CE)) {
                             editionFromCache = 'cloud_personal';
                         }
@@ -1449,7 +1456,7 @@
             productFromCache = await StorageAdapter.getItem('auth:runtimeProductName') || '';
 
             const normEd = String(editionFromCache).trim();
-            if (normEd === 'cloud_clinic' || normEd === 'cloud_personal') {
+            if (normEd === 'cloud_clinic' || normEd === 'cloud_personal' || normEd === 'cloud_voice') {
                 try {
                     if (typeof CONFIG !== 'undefined' && CONFIG) {
                         CONFIG.edition = normEd;

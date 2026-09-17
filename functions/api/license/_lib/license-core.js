@@ -70,6 +70,12 @@ const LICENSE_TYPE_CONFIG = {
     pro: {
         maxPrescriptions: 0,
         features: ['backup', 'sync', 'multi-device', 'priority-support']
+    },
+    // ★ 2026-09-17 语音版（第一期）：与 trial/personal/pro 平行的独立版本线
+    //   权益 = 标准版全部（无限处方+备份）+ 语音输入；1年/1设备（maxDevices 服务端兜底 1）
+    voice: {
+        maxPrescriptions: 0,  // 0 = 无限
+        features: ['backup', 'voice']
     }
 };
 
@@ -715,14 +721,18 @@ export async function getDeviceBlock(kv, machineId) {
 //  值：{ machineId, version: 'standard'|'institution', licenseCode, clinicName, boundAt }
 // ============================================================================
 const KV_DEVICE_VERSION_PREFIX = 'device_version:';
-const DEVICE_VERSION_LABEL = { 'standard': '标准版', 'institution': '机构版' };
+const DEVICE_VERSION_LABEL = { 'standard': '标准版', 'institution': '机构版', 'voice': '语音版' };
 
-// 判断 license type / edition 属于哪个版本（institution=机构版, standard=标准版）
-// 兼容 type（personal/pro）和 edition（cloud_personal/cloud_clinic/clinic_custom...）多种写法
+// 判断 license type / edition 属于哪个版本（institution=机构版, standard=标准版, voice=语音版）
+// 兼容 type（personal/pro/voice）和 edition（cloud_personal/cloud_clinic/clinic_custom...）多种写法
 function versionOf(typeOrEdition) {
     const v = String(typeOrEdition || '').toLowerCase();
     if (['pro', 'institution', 'clinic', 'clinic_custom', 'cloud_clinic', 'offline_clinic', 'institutional'].includes(v)) {
         return 'institution';
+    }
+    // ★ 2026-09-17 语音版：独立枚举，不并入 standard（客户端据此渲染语音入口）
+    if (v === 'voice' || v === 'cloud_voice') {
+        return 'voice';
     }
     return 'standard';  // personal / trial / cloud_personal / 其他未识别 → 标准版
 }

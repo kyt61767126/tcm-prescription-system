@@ -994,3 +994,36 @@
 * **铁律 20-5（部署验证必须看内容指纹不看状态灯）**：deploy:success ≠ 内容正确（快照重放可假绿）。最终判据：title+长度指纹（public 568270「云端标准版」/ site-admin 568691「云端」/ site-official 5634「官方网站」）+ 物理文件探针（official /auth-core.js 必须非 JS 内容——SPA fallback 返回 index.html 属正常，规则9 只要求物理不存在）。
 
 * **2026-09-13 生效记录**：commit 642ec107（删 public/wrangler.toml 死文件，防 KV/D1 id 公网暴露）+ root_dir 配置 + 三站 wrangler 直传。adminconsole 控制台双副本（licenseSync 双特性）字节级一致上线；主域 wrangler.toml 已物理移除。五端零重打包（纯站点部署变更）；主站 642ec107 的 Git 部署因配额失败但线上由直传接管对齐，下月配额恢复后 push 自动回归 Git 构建链。
+
+## 21. 智能语音版版本线（2026-09-17 一期上线）
+
+> 一期范围：`voice` 版本类型全链路 + 云端网页四框口述（姓名/性别年龄/病史症状/诊断）+ 语音加药候选弹窗 + admin 后台枚举 + 官网说明。识别用 Web Speech API（Chrome/Edge 网页端），Electron/WebView 无此 API 自动降级隐藏入口。实施方案：`.trae/documents/语音版第一期实施计划.md`。
+
+### 21.1 voice 枚举链坐标（改动全链，后续二期三期在此扩展）
+* **服务端**：`functions/api/license/_lib/license-core.js` LICENSE_TYPE_CONFIG 新增 `voice`（`maxPrescriptions:0, features:['backup','voice']`，1年/1设备）+ versionOf + DEVICE_VERSION_LABEL『语音版』；`entitlement.js` 透传 features；`users.js` normalizeClinicEdition 精确匹配 `cloud_voice` + 「语音版」中文兜底；`admin-approve.js` / `activate-from-ticket.js` maxDevices 兜底 `(type==='pro')?5:(type==='voice'?1:2)`。
+* **客户端**：`shared/license/license-manager.js`、`shared/edition-lock.js`、`shared/permission.js`（+`isVoiceEdition()`）三镜像同步；`shared/auth-core/cloud.js` 登录钩子写 `CONFIG.edition = 'cloud_voice'` + localStorage 缓存恢复。edition 规范 key：**cloud_voice**（与 cloud_clinic/cloud_personal/offline_* 平行）。
+* **admin 后台**：`public/admin/index.html` ↔ `site-admin/admin/index.html` 双副本（4 处下拉框 option + tag-voice 紫色样式 + typeLabel/typeNames/typeMap 映射 + voice1y 批量发码模板），开码即支持 voice 类型。
+* **官网**：`public/download.html` ↔ `site-official/download.html` 双副本（快速选择指南第 5 条 + 对比表「智能语音开方」行 + 语音版专属卡片；**价格不写死**，引导详询客服——用户偏好「暂不设置付费项目」）。
+
+### 21.2 语音模块三处登记铁律（新增 shared 模块必查，同第 2 章铁律）
+`shared/voice/voice-input.js` 权威源（IIFE 暴露 `window.VoiceInput`：isAvailable/listen/highlight/cleanText/extractGender/extractAge），分发 3 云端副本（public/、cloud_desktop/、cloud_app assets/public/，Sync-File 按文件名展平落位目标根级）：
+1. `tools/sync-all.ps1` Group 19（$VoiceInputTargets 3 云端目录）
+2. `tools/copy-consistency.cjs` GROUPS 尾组（3 副本硬哈希门）
+3. `app_project/db-yunduan/cloud_desktop/package.json` build.files 白名单
+**离线端/鸿蒙不分发**（一期无入口）。obfuscate.js MODULE_FILES 不收 voice-input.js（无核心安全资产，gate 委托 Permission，与 login.js 明文先例同理）。
+
+### 21.3 注入器设计（public/index.html L740-742 script + 内嵌 IIFE）
+* **2s 轮询自适应注入**：云端登录是内嵌 overlay 不整页刷新，不能只靠登录钩子——voiceTick 轮询 `VoiceInput.isAvailable()`（三重 gate：SpeechRecognition 构造器存在 + isSecureContext + Permission.isVoiceEdition()）→ 注入/移除按钮，登出/切标准版自动撤除。
+* **四框填充语义**：姓名=替换（slice 30）；性别年龄=extractGender+extractAge 双填（性别走 markGenderManual）；病史症状=『；』追加；诊断=『，』追加。填充后 highlight 浅紫高亮 2.5s + updatePrescriptionPaper()。
+* **P0 铁律：语音药名强制走药名词典候选弹窗**。voiceFillMedicine 与 showSearchDropdown 同口径预查（简码 code 前缀 / 名称 name includes），无匹配只 toast「未做任何填充」绝不静默填充；有匹配设 currentEditIndex + currentSearchColumn 后调 showSearchDropdown 弹候选由医生点选确认。
+* **extractAge 含「百/千/万/零」复合表达（如“一百二十岁”）直接放弃**：截断误填（一百二→1）比不填更危险，宁缺勿错。
+* 新 script 标签加在现有 script 区内（L736 首个 script 之后），不触 check-interface 基线（body→首个 script 区间）。
+
+### 21.4 本轮新教训（必须传承）
+* **注入器内函数名必须加 voice 前缀**：新 script 内函数若与其他端旧函数撞名（如离线端已有 `function inject()`），diff-cross-version Tier B 会误报「同体函数单边改动」。12 个函数统一前缀（vLog/makeVoiceBtn/setVoiceListening/positionVoiceBtn/bindVoiceMic/voiceAfterFill/injectVoiceUI/voiceFillMedicine/injectMedicineVoiceMic/removeVoiceUI/voiceTick/voiceNotify）。
+* **.ps1 必须 UTF-8 带 BOM**：无 BOM 时 PS 5.1 `-File` 按 GBK 解析中文注释吞引号报 `Unexpected token ')'`（sync-all.ps1 曾中招）。含中文注释的 .ps1 检查前三字节须为 239,187,191。
+* **PowerShell 内联 `node -e` 引号转义易失败** → 写临时 .js 到 `tools/_tmp/` 执行（根目录受 package.json type:module 影响）。临时脚本用完即删；_tmp 下还有大量历史文件，只删本轮自己创建的。
+* **浏览器 agent 不支持 file:// 协议**：验证本地 HTML 渲染需起 HTTP 静态服务（`npx http-server` 或自写 serve 脚本带 `<目录> <端口>` 参数）。
+
+### 21.5 生效方式（一期）
+云端网页 push 即生效（一期主战场）；云端APP WebView 实载线上同步生效（系统无 Web Speech API 则按钮自动隐藏，键盘开方不受影响）；云桌面随下次打包生效（期内无语音入口）；离线端零改动；服务端（Cloudflare Pages Functions）push 即生效，admin 开码即支持 voice。验证基线：voice-input.js 沙箱 5/5、smoke-runtime 157/157、check-interface 6/6、copy-consistency 75 副本、diff-cross-version 四对全绿、浏览器冒烟（标准版 0 按钮→语音版 5 按钮→登出回 0）。

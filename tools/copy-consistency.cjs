@@ -206,6 +206,18 @@ const GROUPS = [
             'app_project/db-yunduan/cloud_desktop/electron/desktop-crash-guard.cjs',
             'app_project/db-offline/desktop/electron/desktop-crash-guard.cjs'
         ]
+    },
+    {
+        // ★ 2026-09-17 语音版一期：voice-input.js（Web Speech API 语音输入模块）。
+        //   仅云端表面分发（public 云端网页 / cloud_desktop 云桌面 / cloud_app
+        //   assets 兜底），离线端四期 sherpa-onnx 时再扩展。sync-all Group 19
+        //   分发，本组 3 副本硬哈希门。
+        authority: 'shared/voice/voice-input.js',
+        copies: [
+            'public/voice-input.js',
+            'app_project/db-yunduan/cloud_desktop/voice-input.js',
+            'app_project/db-yunduan/cloud_app/app/src/main/assets/public/voice-input.js'
+        ]
     }
 ];
 

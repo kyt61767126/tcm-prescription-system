@@ -146,6 +146,7 @@ function getEffectiveConfigSignKey() {
 // trial: 试用版，限 30 张/月处方，无高级功能
 // personal: 个人版，无限处方，支持数据备份
 // pro: 专业版，无限处方，支持云端同步+多设备+优先支持
+// voice: 语音版（2026-09-17 第一期），权益=个人版全部+语音输入，1年/1设备
 const LICENSE_TYPE_CONFIG = {
     trial: {
         maxPrescriptions: 30,
@@ -158,6 +159,10 @@ const LICENSE_TYPE_CONFIG = {
     pro: {
         maxPrescriptions: 0,
         features: ['backup', 'sync', 'multi-device', 'priority-support']
+    },
+    voice: {
+        maxPrescriptions: 0,  // 0 = 无限
+        features: ['backup', 'voice']
     }
 };
 

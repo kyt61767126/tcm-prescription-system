@@ -307,6 +307,9 @@ function normalizeClinicEdition(rawEdition, clinicStatus) {
     if (x === 'cloud_personal') return 'cloud_personal';
     if (x === 'offline_clinic') return 'offline_clinic';
     if (x === 'offline_personal') return 'offline_personal';
+    // ★ 2026-09-17 语音版：cloud_voice 规范 key（云端语音版诊所）——必须先于
+    //   含 'voice'/'语音' 的兜底命中精确匹配；语音版权益=标准版+语音输入
+    if (x === 'cloud_voice' || x === 'voice') return 'cloud_voice';
     if (x === 'institution' || x === 'institutional' || x === 'jigou') return 'cloud_clinic';
     if (x === 'standard') return 'cloud_personal';
     if (x === 'yj') return 'cloud_clinic';
@@ -318,6 +321,7 @@ function normalizeClinicEdition(rawEdition, clinicStatus) {
     if (x.indexOf('离线机构') >= 0) return 'offline_clinic';
     if (x.indexOf('离线标准') >= 0) return 'offline_personal';
     if (x.indexOf('机构版') >= 0) return 'cloud_clinic';
+    if (x.indexOf('语音版') >= 0) return 'cloud_voice';
     if (x.indexOf('标准版') >= 0) return 'cloud_personal';
     if (x.indexOf('clinic') >= 0 && x.indexOf('personal') < 0) return 'cloud_clinic';
     if (x.indexOf('institution') >= 0) return 'cloud_clinic';

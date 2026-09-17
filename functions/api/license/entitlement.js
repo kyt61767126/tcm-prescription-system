@@ -45,7 +45,7 @@
 
 import {
     getKV, getLicense, getDevices, getMaxDevices, versionOf,
-    isTestMachine, checkRateLimit, KV_LICENSE_INDEX, getDeviceBlock
+    isTestMachine, checkRateLimit, KV_LICENSE_INDEX, getDeviceBlock, LICENSE_TYPE_CONFIG
 } from './_lib/license-core.js';
 import { isValidMachineId } from './_lib/schema-guard.js';
 
@@ -170,6 +170,11 @@ async function adjudicate(kv, machineId, code) {
         ? Math.ceil((new Date(record.expiresAt) - now) / (24 * 60 * 60 * 1000))
         : -1;  // 永久授权（heartbeat.js 同款语义）
 
+    // ★ 2026-09-17 语音版：LICENSED 响应透传 features（服务端权威下发，
+    //   客户端语音入口只信此字段，不信任本地版本号/可伪造标记）
+    const typeConfig = LICENSE_TYPE_CONFIG[record.type] || {};
+    const features = record.features || typeConfig.features || [];
+
     return {
         state: ENTITLEMENT_STATES.LICENSED,
         edition: versionOf(record.type),
@@ -179,6 +184,7 @@ async function adjudicate(kv, machineId, code) {
         clinicName: record.clinicName || record.activatedClinicName || null,
         maxDevices,
         devicesCount: devices.length,
+        features,
         testMachine
     };
 }

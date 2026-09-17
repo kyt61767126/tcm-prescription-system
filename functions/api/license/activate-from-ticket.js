@@ -141,7 +141,8 @@ export async function onRequest(context) {
         // ★ 云端产品策略：个人版一个管理员默认授权 2 台设备（桌面+APP）
         // ★ 2026-08-30 机构版策略：type=pro 默认 5 台（机构安装 3-5 台电脑共用一码），
         //   工单审批页只传 ticketNo 不传 maxDevices，服务端必须按 type 兜底
-        let parsedMaxDevices = (type === 'pro') ? 5 : 2;
+        // ★ 2026-09-17 语音版策略：type=voice 默认 1 台（1年/1设备产品语义）
+        let parsedMaxDevices = (type === 'pro') ? 5 : (type === 'voice' ? 1 : 2);
         if (body.maxDevices !== undefined && body.maxDevices !== null) {
             parsedMaxDevices = parseInt(body.maxDevices, 10);
             if (isNaN(parsedMaxDevices) || parsedMaxDevices < 1 || parsedMaxDevices > 10) {

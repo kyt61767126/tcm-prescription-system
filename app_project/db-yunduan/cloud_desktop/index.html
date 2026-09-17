@@ -737,6 +737,272 @@
 <!-- ★ 双重保障：通过 [script] 标签加载 video-recorder.js，防止 main.js injectVideoRecorder 注入失败 -->
 <!-- IIFE 有 window.__videoRecorderInjected 防重复检查，不会与 main.js 注入冲突 -->
 <script src="electron/video-recorder.js?cv=1eb77b2f"></script>
+<!-- ★ 2026-09-17 语音版一期：voice-input.js（Web Speech API 语音输入，cloud_voice 专属入口；
+     Electron/WebView 无此 API、标准版无授权 → isAvailable() 三重 gate 自动隐藏，零感知） -->
+<script src="voice-input.js?cv=20260917"></script>
+<script>
+// ============================================================================
+// ★ 2026-09-17 语音版一期：四框麦克风按钮注入器（cloud_voice 专属入口）
+// 铁律：不改 HTML 静态 DOM（界面基线零变更）——按钮全部运行时 JS 动态注入。
+// 自适应：云端登录是内嵌 overlay 不整页刷新 → 2s 轮询按 isAvailable() 注入/移除，
+//   登录前后 edition 变化自动跟随（登出/切标准版 → 按钮自动消失）。
+// P0：语音药名强制走 showSearchDropdown 候选弹窗（复用简码匹配链），
+//   无匹配只 toast 提示绝不静默填充；所有填充内容浅紫色高亮待医生确认。
+// ============================================================================
+(function () {
+    'use strict';
+    if (window.__voiceMicInjector) return;
+    window.__voiceMicInjector = true;
+
+    var BTN_CLASS = 'voice-mic-btn';
+    var injected = false;
+    var btnRegistry = [];   // {btn, input} —— resize 时重算位置
+
+    function vLog() { try { console.vLog.apply(console, ['[VoiceMic]'].concat([].slice.call(arguments))); } catch (e) {} }
+    function voiceNotify(msg) { try { if (typeof showToast === 'function') showToast('🎤 ' + msg); else alert(msg); } catch (e) {} }
+
+    // —— 按钮构造（22px 圆形 🎤，紫色系与语音高亮一致）——
+    function makeVoiceBtn(title) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = BTN_CLASS;
+        b.title = title;
+        b.setAttribute('aria-label', title);
+        b.textContent = '🎤';
+        b.style.cssText = 'position:absolute;width:22px;height:22px;border-radius:50%;border:1px solid #b9a6f2;background:#f3eefa;color:#4c3a9e;font-size:12px;line-height:1;padding:0;cursor:pointer;z-index:60;display:flex;align-items:center;justify-content:center;transition:background .2s,transform .2s;';
+        return b;
+    }
+
+    function setVoiceListening(btn, on) {
+        try {
+            btn.style.background = on ? '#e65100' : '#f3eefa';
+            btn.style.color = on ? '#fff' : '#4c3a9e';
+            btn.style.transform = on ? 'scale(1.15)' : 'scale(1)';
+        } catch (e) {}
+    }
+
+    // 定位：按钮贴输入框右缘（getBoundingClientRect 差值，避免 offsetParent 歧义）
+    function positionVoiceBtn(btn, input) {
+        var wrap = input.parentElement;
+        if (!wrap) return;
+        try {
+            var ws = window.getComputedStyle(wrap).position;
+            if (ws === 'static' || !ws) wrap.style.position = 'relative';
+        } catch (e) { try { wrap.style.position = 'relative'; } catch (e2) {} }
+        if (btn.parentNode !== wrap) wrap.appendChild(btn);
+        try {
+            var ir = input.getBoundingClientRect(), wr = wrap.getBoundingClientRect();
+            btn.style.left = Math.round(ir.right - wr.left - 24) + 'px';
+            btn.style.top = Math.round(ir.top - wr.top + (ir.height - 22) / 2) + 'px';
+        } catch (e) {}
+    }
+
+    // —— 通用：单框语音绑定（识别 → onText 填充 → 高亮由回调内处理）——
+    function bindVoiceMic(input, title, onText) {
+        var btn = makeVoiceBtn(title);
+        positionVoiceBtn(btn, input);
+        btnRegistry.push({ btn: btn, input: input });
+        btn.addEventListener('click', function (ev) {
+            ev.preventDefault(); ev.stopPropagation();
+            if (!window.VoiceInput || VoiceInput.isListening()) return;
+            setVoiceListening(btn, true);
+            VoiceInput.listen(function (text) {
+                try { onText(text); } catch (e) { vLog('fill error', e && e.message); }
+            }, function (msg) {
+                voiceNotify(msg);
+            }, function () {
+                setVoiceListening(btn, false);
+            });
+        });
+    }
+
+    function voiceAfterFill() { try { updatePrescriptionPaper(); } catch (e) {} }
+
+    // —— 四框注入 ——
+    function injectVoiceUI() {
+        var q = function (id) { return document.getElementById(id); };
+
+        // 1) 姓名（替换填充）
+        var nameEl = q('patientName');
+        if (nameEl) bindVoiceMic(nameEl, '语音输入姓名', function (text) {
+            var t = VoiceInput.cleanText(text).slice(0, 30);
+            if (!t) return;
+            nameEl.value = t;
+            VoiceInput.highlight(nameEl);
+            voiceAfterFill();
+        });
+
+        // 2) 性别+年龄（共用年龄框麦克风：口述「男 四十五岁」双填）
+        var ageEl = q('patientAge');
+        if (ageEl) bindVoiceMic(ageEl, '语音输入性别年龄（如：男 四十五岁）', function (text) {
+            var gender = VoiceInput.extractGender(text);
+            var age = VoiceInput.extractAge(text);
+            var touched = false;
+            if (gender) {
+                var sel = q('patientGender');
+                if (sel) {
+                    sel.value = gender; touched = true;
+                    try { markGenderManual(); } catch (e) {}
+                    VoiceInput.highlight(sel);
+                }
+            }
+            if (age) { ageEl.value = age; touched = true; VoiceInput.highlight(ageEl); }
+            if (!touched) { voiceNotify('未识别到性别或年龄，请说「男 四十五岁」'); return; }
+            voiceAfterFill();
+        });
+
+        // 3) 病史症状（追加到末尾，支持键盘先输再语音补充）
+        var histEl = q('medicalHistory');
+        if (histEl) bindVoiceMic(histEl, '语音输入病史症状（追加到末尾）', function (text) {
+            var t = VoiceInput.cleanText(text);
+            if (!t) return;
+            var prev = String(histEl.value || '').replace(/\s+$/, '');
+            histEl.value = prev ? (prev + '；' + t) : t;
+            VoiceInput.highlight(histEl);
+            voiceAfterFill();
+        });
+
+        // 4) 诊断（追加填充，支持多诊断逗号串）
+        var diagEl = q('diagnosis');
+        if (diagEl) bindVoiceMic(diagEl, '语音输入诊断（追加到末尾）', function (text) {
+            var t = VoiceInput.cleanText(text);
+            if (!t) return;
+            var prev = String(diagEl.value || '').replace(/[，,\s]+$/, '');
+            diagEl.value = prev ? (prev + '，' + t) : t;
+            VoiceInput.highlight(diagEl);
+            voiceAfterFill();
+        });
+
+        // 5) 语音加药（药物表格提示条右侧，right 锚定不随 resize 漂移）
+        injectMedicineVoiceMic();
+
+        // resize 重算四框按钮位置
+        if (!window.__voiceMicResizeBound) {
+            window.__voiceMicResizeBound = true;
+            window.addEventListener('resize', function () {
+                for (var i = 0; i < btnRegistry.length; i++) {
+                    try { positionVoiceBtn(btnRegistry[i].btn, btnRegistry[i].input); } catch (e) {}
+                }
+            });
+        }
+    }
+
+    // —— 语音加药：识别药名/简码 → 复用简码匹配链弹候选 → 医生点选 ——
+    // P0：预查无匹配只 toast 提示，绝不填充；有匹配也只弹候选，点选走 selectMedicine。
+    function voiceFillMedicine(raw) {
+        var text = String(raw || '').trim();
+        if (!text) return;
+        // 简码判定：短字母数字串（≤6 位）按简码列前缀匹配，其余按药名列包含匹配
+        var column = /^[a-zA-Z0-9]{1,6}$/.test(text) ? 'code' : 'name';
+        var qs = text.toLowerCase();
+
+        // P0 预查（与 showSearchDropdown 同口径：code 前缀 / name 包含）
+        var hit = false;
+        try {
+            if (column === 'code') {
+                if (typeof medicineCodeIndex !== 'undefined' && medicineCodeIndex && medicineCodeIndex.size > 0) {
+                    medicineCodeIndex.forEach(function (meds, code) {
+                        if (!hit && String(code).startsWith(qs)) hit = true;
+                    });
+                } else if (typeof medicines !== 'undefined' && Array.isArray(medicines)) {
+                    for (var i = 0; i < medicines.length; i++) {
+                        var m = medicines[i];
+                        if (m && m.code && String(m.code).toLowerCase().startsWith(qs)) { hit = true; break; }
+                    }
+                }
+            } else if (typeof medicines !== 'undefined' && Array.isArray(medicines)) {
+                for (var j = 0; j < medicines.length; j++) {
+                    var mm = medicines[j];
+                    if (mm && mm.name && String(mm.name).indexOf(qs) >= 0) { hit = true; break; }
+                }
+            }
+        } catch (e) {}
+        if (!hit) { voiceNotify('未匹配到药品「' + text + '」（可说药名或简码），未做任何填充'); return; }
+
+        // 找首个空行；全满则 addEmptyRow（内部重渲染表格 DOM，取行需在渲染后）
+        var idx = -1;
+        try {
+            for (var k = 0; k < prescriptionItems.length; k++) {
+                if (!prescriptionItems[k] || !prescriptionItems[k].name) { idx = k; break; }
+            }
+        } catch (e) {}
+        if (idx < 0) {
+            try { addEmptyRow(); } catch (e) { vLog('addEmptyRow error', e && e.message); }
+            try { idx = prescriptionItems.length - 1; } catch (e2) {}
+        }
+        if (idx < 0) return;
+
+        var input = document.getElementById((column === 'code' ? 'code-input-' : 'name-input-') + idx);
+        if (!input) return;
+        try {
+            currentEditIndex = idx;                       // selectMedicine 候选点击依赖此全局
+            if (typeof currentSearchColumn !== 'undefined') currentSearchColumn = column;
+            input.value = text;
+        } catch (e) {}
+        // 复用简码匹配链弹候选（150ms debounce 内部处理）→ 医生点选 .search-item → selectMedicine
+        try { showSearchDropdown(input, text, column); } catch (e) { vLog('dropdown error', e && e.message); }
+    }
+
+    function injectMedicineVoiceMic() {
+        var container = document.querySelector('.medicine-section');
+        if (!container) return;
+        // 提示条 = .medicine-section 下含「简码」文案的 div（表格容器外的灰底提示行）
+        var tip = null;
+        var divs = container.querySelectorAll(':scope > div');
+        for (var i = 0; i < divs.length; i++) {
+            if ((divs[i].textContent || '').indexOf('简码') >= 0) { tip = divs[i]; break; }
+        }
+        if (!tip) tip = container;
+        try { tip.style.position = 'relative'; } catch (e) {}
+        var btn = makeVoiceBtn('语音加药（说药名或简码，弹候选后点选）');
+        btn.style.left = 'auto';
+        btn.style.right = '6px';
+        btn.style.top = '1px';
+        tip.appendChild(btn);
+        btn.addEventListener('click', function (ev) {
+            ev.preventDefault(); ev.stopPropagation();
+            if (!window.VoiceInput || VoiceInput.isListening()) return;
+            setVoiceListening(btn, true);
+            VoiceInput.listen(function (text) {
+                try { voiceFillMedicine(text); } catch (e) { vLog('med fill error', e && e.message); }
+            }, function (msg) {
+                voiceNotify(msg);
+            }, function () {
+                setVoiceListening(btn, false);
+            });
+        });
+    }
+
+    // —— 移除（登出 / 切换非语音版）——
+    function removeVoiceUI() {
+        for (var i = 0; i < btnRegistry.length; i++) {
+            try { var b = btnRegistry[i].btn; if (b && b.parentNode) b.parentNode.removeChild(b); } catch (e) {}
+        }
+        btnRegistry = [];
+        try {
+            var mbs = document.querySelectorAll('.' + BTN_CLASS);
+            for (var j = 0; j < mbs.length; j++) {
+                if (mbs[j].parentNode) mbs[j].parentNode.removeChild(mbs[j]);
+            }
+        } catch (e) {}
+        injected = false;
+    }
+
+    // —— 主循环：立即 + DOMContentLoaded + 2s 轮询（登录 overlay 不刷新页面的自适应）——
+    function voiceTick() {
+        try {
+            var ok = !!(window.VoiceInput && typeof VoiceInput.isAvailable === 'function' && VoiceInput.isAvailable());
+            if (ok && !injected && document.readyState !== 'loading') { injectVoiceUI(); injected = true; }
+            else if (!ok && injected) { removeVoiceUI(); }
+        } catch (e) {}
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function () { setTimeout(voiceTick, 100); });
+    }
+    setTimeout(voiceTick, 1500);   // 计划要求：1.5s 双触发兜底
+    setInterval(voiceTick, 2000);  // 持续自适应（登录/登出/版本切换）
+})();
+</script>
 <script>
 // 提前设置 EDITION，避免 Permission.init() 在 CONFIG 定义之前执行导致 _edition 错误
 // ★ 2026-08-28 版本身份（云端桌面标准版）：打包门禁 verify-version-display 严格校验：

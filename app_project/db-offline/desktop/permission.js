@@ -112,6 +112,9 @@ try {
             var x = s.toLowerCase();
             if (x === 'institution' || x === 'institutional' || x === 'jigou') return 'cloud_clinic';
             if (x === 'standard') return 'personal';
+            // ★ 2026-09-17 语音版：cloud_voice 规范 key 原样透传（独立版本线，
+            //   不归并 personal/clinic；与 edition-lock.js __normalizeEdition 逐行同步）
+            if (x === 'cloud_voice' || x === 'voice') return 'cloud_voice';
             if (x === 'yj') return 'cloud_clinic';
             if (x === 'yb') return 'cloud_personal';
             if (x === 'lj') return 'offline_clinic';
@@ -196,6 +199,17 @@ try {
         // 旧 API 兼容：isClinicCustom = isInstitutional
         isClinicCustom() {
             return this.isInstitutional();
+        },
+        // ★ 2026-09-17 语音版（第一期）：是否为语音输入版（cloud_voice 独立版本线）
+        //   权益 = 标准版全部 + 语音输入；语音模块入口唯一 gate（VoiceInput.isAvailable 三重条件之一）
+        //   判定依据 = 服务端登录响应 clinicEdition（auth-core 登录钩子写入 CONFIG.edition），
+        //   不信任本地可伪造标记
+        isVoiceEdition() {
+            var e = this._currentEdition();
+            if (e === 'cloud_voice') return true;
+            var x = String(e).toLowerCase();
+            if (x === 'voice' || x === 'cloud_voice') return true;
+            return false;
         },
 
         // 权限判断（规则4：云端标准版只有管理员，不能建子账号；
