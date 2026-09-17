@@ -21,6 +21,11 @@ jobs:
         run: |
           ./tools/sync-all.ps1 -VerifyOnly
 
+      # ★ 2026-09-17 十二道门 CI 侧兜底：functions/ 未定义常量静态扫描
+      #   （pre-push ⑫ 同款；ReferenceError 是运行时错误，node --check 查不出）
+      - name: Scan undefined constants in functions/
+        run: node tools/scan-undefined-consts.cjs
+
       - name: Check for junk files
         run: |
           echo "=== 检查垃圾文件 ==="
@@ -90,6 +95,7 @@ jobs:
           echo "### 代码质量检查结果" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "✅ shared/ 模块一致性检查通过" >> $GITHUB_STEP_SUMMARY
+          echo "✅ functions/ 未定义常量扫描通过" >> $GITHUB_STEP_SUMMARY
           echo "✅ 垃圾文件检查通过" >> $GITHUB_STEP_SUMMARY
           echo "✅ index.html title 一致性检查通过" >> $GITHUB_STEP_SUMMARY
           echo "✅ legacy 目录检查通过" >> $GITHUB_STEP_SUMMARY
