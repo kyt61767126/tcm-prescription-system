@@ -105,7 +105,9 @@
 
         recognition.lang = 'zh-CN';
         recognition.interimResults = false;   // 一期只要最终结果（准确率优先）
-        recognition.maxAlternatives = 1;
+        // ★ 2026-09-17 连报修复：多候选——ASR 对药名常输出同音字（白芍→白勺），
+        //   收集全部候选供业务层逐个尝试匹配（单候选时同音字必 miss）。
+        recognition.maxAlternatives = 5;
         recognition.continuous = false;       // 单句模式：说完自动结束
 
         listening = true;
@@ -113,11 +115,20 @@
         recognition.onresult = function (event) {
             try {
                 var text = '';
+                var alts = [];
                 if (event && event.results && event.results.length > 0) {
                     var r = event.results[event.results.length - 1];
-                    if (r && r.length > 0) text = String(r[0].transcript || '').trim();
+                    if (r && r.length > 0) {
+                        for (var ai = 0; ai < r.length; ai++) {
+                            var at = String(r[ai].transcript || '').trim();
+                            if (!at) continue;
+                            if (!text) text = at;
+                            if (alts.indexOf(at) < 0) alts.push(at);
+                        }
+                    }
                 }
-                if (text && typeof onResult === 'function') onResult(text);
+                // onResult(text, alts)：alts = 全部候选文本（含首选，去重），旧调用方只收 text 不受影响
+                if (text && typeof onResult === 'function') onResult(text, alts);
                 else if (!text && typeof onError === 'function') onError('未识别到内容，请再试一次');
             } catch (e) {
                 if (typeof onError === 'function') onError('识别结果处理异常');
@@ -183,6 +194,36 @@
                 try { el.classList.remove(HIGHLIGHT_CLASS); } catch (_) {}
             }, 2500);
         } catch (_) {}
+    };
+
+    // ── 3.5 拼音容错（2026-09-17 连报修复：ASR 药名同音字根治） ──
+    // vendor/pinyin-pro.min.js 本地按需加载（云端网页语音版专属；其余端
+    // isAvailable()=false 永不触达，vendor 404 也只静默降级——拼音匹配不可用，
+    // 精确/多候选匹配照常）。加载失败 resolve(null)，绝不 reject（防未捕获异常）。
+    var pinyinProPromise = null;
+    VoiceInput.ensurePinyin = function () {
+        if (pinyinProPromise) return pinyinProPromise;
+        pinyinProPromise = new Promise(function (resolve) {
+            try {
+                if (global.pinyinPro && typeof global.pinyinPro.pinyin === 'function') { resolve(global.pinyinPro); return; }
+                if (typeof document === 'undefined' || !document.head) { resolve(null); return; }
+                var s = document.createElement('script');
+                s.src = 'vendor/pinyin-pro.min.js';
+                s.onload = function () { resolve(global.pinyinPro || null); };
+                s.onerror = function () { pinyinProPromise = null; resolve(null); }; // 允许下次重试
+                document.head.appendChild(s);
+            } catch (e) { pinyinProPromise = null; resolve(null); }
+        });
+        return pinyinProPromise;
+    };
+
+    // 汉字→无声调全拼（如 白勺/白芍 → baishao）；未加载/失败返回 ''（调用方跳过拼音匹配）
+    VoiceInput.toPinyin = function (text) {
+        try {
+            var P = global.pinyinPro;
+            if (!P || typeof P.pinyin !== 'function') return '';
+            return P.pinyin(String(text || ''), { toneType: 'none', type: 'string' }).replace(/\s+/g, '');
+        } catch (e) { return ''; }
     };
 
     // ── 4. 文本后处理（常见同音字/口语词归一，一期轻量规则） ──────

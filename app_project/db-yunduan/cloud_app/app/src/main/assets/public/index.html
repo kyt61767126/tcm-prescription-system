@@ -739,7 +739,7 @@
 <script src="electron/video-recorder.js?cv=1eb77b2f"></script>
 <!-- ★ 2026-09-17 语音版一期：voice-input.js（Web Speech API 语音输入，cloud_voice 专属入口；
      Electron/WebView 无此 API、标准版无授权 → isAvailable() 三重 gate 自动隐藏，零感知） -->
-<script src="voice-input.js?cv=20260917"></script>
+<script src="voice-input.js?cv=793ee305"></script>
 <script>
 // ============================================================================
 // ★ 2026-09-17 语音版一期：四框麦克风按钮注入器（cloud_voice 专属入口）
@@ -887,60 +887,222 @@
         }
     }
 
-    // —— 语音加药：识别药名/简码 → 复用简码匹配链弹候选 → 医生点选 ——
-    // P0：预查无匹配只 toast 提示，绝不填充；有匹配也只弹候选，点选走 selectMedicine。
-    function voiceFillMedicine(raw) {
-        var text = String(raw || '').trim();
-        if (!text) return;
-        // 简码判定：短字母数字串（≤6 位）按简码列前缀匹配，其余按药名列包含匹配
-        var column = /^[a-zA-Z0-9]{1,6}$/.test(text) ? 'code' : 'name';
-        var qs = text.toLowerCase();
+    // —— 语音加药 v2（2026-09-17 连报实测修复）：连报整方 + 同音字拼音容错 ——
+    // 口述模式：「白芍15克，当归10克，川芎8克」连报，或单说「白芍」/「白芍15克」。
+    // 匹配链（每段）：①药名精确子串 ②拼音归一（白勺→baishao→白芍，等值/子串）
+    //   ③ASR 多候选文本重解析重匹配。P0 语义：唯一命中自动填入+浅紫高亮待核对；
+    //   多命中只弹候选点选（绝不自动选首个）；未命中 toast 汇总绝不静默。
+    function voiceSplitDose(seg) {
+        var m = String(seg || '').match(/^(.+?)(\d{1,4}(?:\.\d{1,2})?)\s*(?:克|g|G|公克)?$/);
+        if (m && m[1] && /[^\d]/.test(m[1])) return { name: m[1].trim(), dose: parseFloat(m[2]) };
+        return { name: String(seg || '').trim(), dose: 0 };
+    }
 
-        // P0 预查（与 showSearchDropdown 同口径：code 前缀 / name 包含）
-        var hit = false;
-        try {
-            if (column === 'code') {
-                if (typeof medicineCodeIndex !== 'undefined' && medicineCodeIndex && medicineCodeIndex.size > 0) {
+    function voiceParseSegments(text) {
+        var out = [];
+        var raw = String(text || '').trim();
+        if (!raw) return out;
+        var parts = raw.split(/[，。；、,;.\s]+|然后|再来|接着|下一味|下一个/g);
+        for (var i = 0; i < parts.length; i++) {
+            var seg = String(parts[i] || '').trim();
+            if (!seg) continue;
+            if (/克(?=[\u4e00-\u9fa5])/.test(seg)) {
+                var subs = seg.split(/克(?=[\u4e00-\u9fa5])/);   // 无标点连报兜底：白芍15克当归10克
+                for (var j = 0; j < subs.length; j++) {
+                    var s2 = String(subs[j] || '').trim();
+                    if (s2) out.push(voiceSplitDose(s2));
+                }
+            } else {
+                out.push(voiceSplitDose(seg));
+            }
+        }
+        return out;
+    }
+
+    function voiceMatchMed(nameText) {
+        var qs = String(nameText || '').trim().toLowerCase();
+        if (!qs) return { type: 'none', meds: [] };
+        // 简码（字母数字短串）：前缀匹配简码索引（与键盘链路口径一致，索引 key 已小写）
+        if (/^[a-z0-9]{1,6}$/.test(qs)) {
+            var codeHits = [];
+            try {
+                if (typeof medicineCodeIndex !== 'undefined' && medicineCodeIndex && medicineCodeIndex.forEach) {
                     medicineCodeIndex.forEach(function (meds, code) {
-                        if (!hit && String(code).startsWith(qs)) hit = true;
+                        if (String(code).indexOf(qs) === 0) codeHits = codeHits.concat(meds);
                     });
-                } else if (typeof medicines !== 'undefined' && Array.isArray(medicines)) {
-                    for (var i = 0; i < medicines.length; i++) {
-                        var m = medicines[i];
-                        if (m && m.code && String(m.code).toLowerCase().startsWith(qs)) { hit = true; break; }
-                    }
                 }
-            } else if (typeof medicines !== 'undefined' && Array.isArray(medicines)) {
-                for (var j = 0; j < medicines.length; j++) {
-                    var mm = medicines[j];
-                    if (mm && mm.name && String(mm.name).indexOf(qs) >= 0) { hit = true; break; }
-                }
+            } catch (e) {}
+            return codeHits.length ? { type: 'code', meds: codeHits.slice(0, 20) } : { type: 'none', meds: [] };
+        }
+        // ① 精确子串（与 showSearchDropdown 同口径）
+        var exact = [];
+        try {
+            for (var i = 0; i < medicines.length; i++) {
+                var m = medicines[i];
+                if (m && m.name && String(m.name).toLowerCase().indexOf(qs) >= 0) exact.push(m);
             }
         } catch (e) {}
-        if (!hit) { voiceNotify('未匹配到药品「' + text + '」（可说药名或简码），未做任何填充'); return; }
+        if (exact.length) return { type: 'exact', meds: exact.slice(0, 20) };
+        // ② 拼音归一：白勺 → baishao == 白芍拼音（等值优先，子串兜底，防短拼音误命中）
+        if (window.VoiceInput && typeof VoiceInput.toPinyin === 'function') {
+            var py = VoiceInput.toPinyin(nameText);
+            if (py && py.length >= 3) {
+                var pyHits = [];
+                try {
+                    for (var k = 0; k < medicines.length; k++) {
+                        var mm = medicines[k];
+                        if (!mm || !mm.name) continue;
+                        var mp = VoiceInput.toPinyin(mm.name);
+                        if (!mp || mp.length < 3) continue;
+                        if (py === mp || py.indexOf(mp) >= 0 || mp.indexOf(py) >= 0) pyHits.push(mm);
+                    }
+                } catch (e2) {}
+                if (pyHits.length) return { type: 'pinyin', meds: pyHits.slice(0, 20) };
+            }
+        }
+        return { type: 'none', meds: [] };
+    }
 
-        // 找首个空行；全满则 addEmptyRow（内部重渲染表格 DOM，取行需在渲染后）
+    // 自动填入（复用 selectMedicine 行写入逻辑 + 数量覆盖 + 行高亮待核对）
+    function voiceAutoAdd(med, dose) {
         var idx = -1;
         try {
             for (var k = 0; k < prescriptionItems.length; k++) {
                 if (!prescriptionItems[k] || !prescriptionItems[k].name) { idx = k; break; }
             }
-        } catch (e) {}
+        } catch (e) { return -1; }
         if (idx < 0) {
-            try { addEmptyRow(); } catch (e) { vLog('addEmptyRow error', e && e.message); }
-            try { idx = prescriptionItems.length - 1; } catch (e2) {}
+            try { addEmptyRow(); idx = prescriptionItems.length - 1; } catch (e) { return -1; }
         }
-        if (idx < 0) return;
-
-        var input = document.getElementById((column === 'code' ? 'code-input-' : 'name-input-') + idx);
-        if (!input) return;
         try {
-            currentEditIndex = idx;                       // selectMedicine 候选点击依赖此全局
-            if (typeof currentSearchColumn !== 'undefined') currentSearchColumn = column;
-            input.value = text;
+            var medicine = (typeof getMedicineByName === 'function') ? getMedicineByName(med.name) : null;
+            var d = (dose && dose > 0) ? dose :
+                (medicine && medicine.dosage !== undefined && medicine.dosage !== null && medicine.dosage !== '' ? medicine.dosage : 10);
+            var p = parseFloat(med.price); p = isNaN(p) ? 0 : p;
+            prescriptionItems[idx].name = med.name;
+            prescriptionItems[idx].code = med.code || '';
+            prescriptionItems[idx].price = p.toFixed(2);
+            prescriptionItems[idx].dosage = d;
+            try { prescriptionItems[idx].jianfa = (typeof getEffectiveJianfa === 'function') ? getEffectiveJianfa(medicine, med.name) : undefined; } catch (e2) {}
+            prescriptionItems[idx].total = (p * d).toFixed(2);
+            if (idx >= prescriptionItems.length - 3) { try { addEmptyRow(); } catch (e3) {} }
+            try { if (typeof DOM_CACHE !== 'undefined' && DOM_CACHE.init) DOM_CACHE.init(); } catch (e4) {}
+            try { renderPrescriptionTable(); } catch (e5) {}
+            try { calculateAmount(); } catch (e6) {}
+            try { updatePrescriptionPaper(); } catch (e7) {}
+            try {
+                if (med.name && typeof medicineFrequency !== 'undefined') {
+                    medicineFrequency[med.name] = (medicineFrequency[med.name] || 0) + 1;
+                    try { if (typeof saveMedicineFrequency === 'function') saveMedicineFrequency(); } catch (e8) {}
+                }
+            } catch (e9) {}
+            try {   // P0：render 后重查行再高亮（DOM 已重建）
+                var row = document.querySelector('#prescriptionBody tr:nth-child(' + (idx + 1) + ')');
+                if (row && window.VoiceInput) VoiceInput.highlight(row);
+            } catch (e10) {}
+        } catch (e) { return -1; }
+        return idx;
+    }
+
+    // 多命中候选点选（复用 medicineSearchDropdown 容器，点击走 voiceAutoAdd）
+    window.__voicePick = function (name, code, price) {
+        try {
+            var dropdown = document.getElementById('medicineSearchDropdown');
+            if (dropdown) dropdown.style.display = 'none';
+            var med = null;
+            for (var i = 0; i < medicines.length; i++) {
+                if (medicines[i] && medicines[i].name === name) { med = medicines[i]; break; }
+            }
+            if (!med) return;
+            var exists = false;
+            for (var k = 0; k < prescriptionItems.length; k++) {
+                if (prescriptionItems[k] && prescriptionItems[k].name === name) { exists = true; break; }
+            }
+            if (exists) { voiceNotify(name + ' 已在处方中'); return; }
+            if (voiceAutoAdd(med, 0) >= 0) voiceNotify('已加入 ' + name + '（高亮待核对）');
+        } catch (e) { vLog('pick error', e && e.message); }
+    };
+
+    function voiceShowMultiChoice(meds) {
+        try {
+            var dropdown = document.getElementById('medicineSearchDropdown');
+            if (!dropdown || !meds.length) return;
+            var html = '';
+            for (var i = 0; i < meds.length; i++) {
+                var m = meds[i];
+                var safeName = String(m.name || '').replace(/[<>"'&]/g, '');
+                var safeCode = String(m.code || '').replace(/[<>"'&]/g, '');
+                var p = parseFloat(m.price) || 0;
+                html += '<div class="search-item" onclick="window.__voicePick(\'' + safeName + '\',\'' + safeCode + '\',' + p + ')">🎤 ' + safeName + ' [' + safeCode + ']</div>';
+            }
+            dropdown.innerHTML = html;
+            var anchor = document.querySelector('.medicine-section');
+            var r = anchor ? anchor.getBoundingClientRect() : { left: 20, bottom: 120 };
+            dropdown.style.left = Math.round(r.left) + 'px';
+            dropdown.style.top = Math.round(r.bottom) + 'px';
+            dropdown.style.width = '200px';
+            dropdown.style.display = 'block';
         } catch (e) {}
-        // 复用简码匹配链弹候选（150ms debounce 内部处理）→ 医生点选 .search-item → selectMedicine
-        try { showSearchDropdown(input, text, column); } catch (e) { vLog('dropdown error', e && e.message); }
+    }
+
+    function voiceFillMedicineInner(text, alts) {
+        var segs = voiceParseSegments(text);
+        if (!segs.length) { voiceNotify('未识别到药品，请说药名（如：白芍15克）'); return; }
+        var added = [], dup = [], missed = [], multiSegs = [];
+        var existing = {};
+        try {
+            for (var e0 = 0; e0 < prescriptionItems.length; e0++) {
+                if (prescriptionItems[e0] && prescriptionItems[e0].name) existing[prescriptionItems[e0].name] = true;
+            }
+        } catch (e) {}
+        for (var i = 0; i < segs.length; i++) {
+            var seg = segs[i];
+            var r = voiceMatchMed(seg.name);
+            // ③ ASR 多候选兜底：主文本段 miss 时用候选文本重解析重匹配（同音字第二道保险）
+            if (r.type === 'none' && alts && alts.length) {
+                for (var a = 0; a < alts.length && r.type === 'none'; a++) {
+                    if (alts[a] === text) continue;
+                    var aSegs = voiceParseSegments(alts[a]);
+                    for (var b = 0; b < aSegs.length && r.type === 'none'; b++) {
+                        if (aSegs[b].name === seg.name) continue;
+                        var r2 = voiceMatchMed(aSegs[b].name);
+                        if (r2.type !== 'none') {
+                            r = r2;
+                            if (!seg.dose && aSegs[b].dose) seg.dose = aSegs[b].dose;
+                        }
+                    }
+                }
+            }
+            if (r.type === 'none') { missed.push(seg.name); continue; }
+            if (r.meds.length === 1) {
+                var med = r.meds[0];
+                if (existing[med.name]) { dup.push(med.name); continue; }
+                if (voiceAutoAdd(med, seg.dose) >= 0) {
+                    added.push(med.name + (seg.dose ? '(' + seg.dose + 'g)' : ''));
+                    existing[med.name] = true;
+                } else missed.push(seg.name);
+            } else {
+                multiSegs.push(seg);
+            }
+        }
+        if (multiSegs.length) voiceShowMultiChoice(voiceMatchMed(multiSegs[0].name).meds);
+        var msg = '';
+        if (added.length) msg += '已语音加入 ' + added.length + ' 味（高亮待核对）：' + added.join('、');
+        if (dup.length) msg += (msg ? '；' : '') + '已在处方跳过：' + dup.join('、');
+        if (multiSegs.length) msg += (msg ? '；' : '') + '「' + multiSegs[0].name + '」有多个匹配，请点选' + (multiSegs.length > 1 ? '（其余 ' + (multiSegs.length - 1) + ' 味请再说）' : '');
+        if (missed.length) msg += (msg ? '；' : '') + '未识别：' + missed.join('、') + '（可说药名或简码）';
+        voiceNotify(msg || '未识别到药品，请说药名（如：白芍15克）');
+    }
+
+    function voiceFillMedicine(raw, alts) {
+        var text = String(raw || '').trim();
+        if (!text) return;
+        // 拼音库按需就绪（已加载则同步）；加载失败降级为仅精确+多候选匹配
+        var ready = (window.VoiceInput && VoiceInput.ensurePinyin) ? VoiceInput.ensurePinyin() : Promise.resolve(null);
+        Promise.resolve(ready).then(function () {
+            try { voiceFillMedicineInner(text, alts || []); }
+            catch (e) { vLog('med fill error', e && e.message); }
+        });
     }
 
     function injectMedicineVoiceMic() {
@@ -963,8 +1125,9 @@
             ev.preventDefault(); ev.stopPropagation();
             if (!window.VoiceInput || VoiceInput.isListening()) return;
             setVoiceListening(btn, true);
-            VoiceInput.listen(function (text) {
-                try { voiceFillMedicine(text); } catch (e) { vLog('med fill error', e && e.message); }
+            // onResult(text, alts)：alts = ASR 全部候选（同音字容错），由 voiceFillMedicine v2 消费
+            VoiceInput.listen(function (text, alts) {
+                try { voiceFillMedicine(text, alts); } catch (e) { vLog('med fill error', e && e.message); }
             }, function (msg) {
                 voiceNotify(msg);
             }, function () {

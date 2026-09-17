@@ -9,7 +9,7 @@
 //   变了但引用 URL 没变」——本门禁强制 public/index.html 中每个 script src
 //   的 cv 参数 === 该文件当前内容的 SHA-256 前 8 位，忘 bump 即 push 拦截。
 //
-// 覆盖目标（13 个）：public/index.html 引用的 12 个根级 JS + electron/video-recorder.js
+// 覆盖目标（14 个）：public/index.html 引用的 13 个根级 JS + electron/video-recorder.js
 //   （video-recorder 历史用 ?v= 参数，统一归一为 ?cv=）。
 //   不覆盖：public/hot-update/**（已发布热包快照，永不改写）、
 //   public/electron/login.html（相对引用解析到 /electron/*.js 独立副本，非本门范围）。
@@ -28,7 +28,9 @@ const ROOT = path.resolve(__dirname, '..');
 const HTML = path.join(ROOT, 'public', 'index.html');
 const updateMode = process.argv.includes('--update');
 
-// 13 个目标：public/ 下的相对路径（= 页面 src 引用串）
+// 14 个目标：public/ 下的相对路径（= 页面 src 引用串）
+// ★ 2026-09-17 语音连报修复：补 voice-input.js——它曾用手写日期式 cv=20260917
+//   不在门禁清单，内容变更后 cv 不刷 = 已访问用户 immutable 缓存永不生效。
 const TARGETS = [
     'auth-core.js',
     'permission.js',
@@ -42,6 +44,7 @@ const TARGETS = [
     'prescription-core.js',
     'stock-core.js',
     'security-guard.js',
+    'voice-input.js',
     'electron/video-recorder.js'
 ];
 
@@ -118,5 +121,5 @@ if (mismatches.length > 0) {
     process.exit(1);
 }
 
-console.log('[cv-hash] OK：13 个业务 JS 的 cv 参数全部与内容哈希一致');
+console.log('[cv-hash] OK：' + TARGETS.length + ' 个业务 JS 的 cv 参数全部与内容哈希一致');
 process.exit(0);

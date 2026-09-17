@@ -161,6 +161,17 @@ $VendorTargets = @(
         'app_project/db-offline/app/app/src/main/assets/public/vendor'
 )
 
+# Group 7b: pinyin-pro vendor（★ 2026-09-17 语音连报修复）-> 3 云端 vendor 目录
+#   ASR 同音字（白勺→白芍）拼音归一匹配用，voice-input.js ensurePinyin 运行时
+#   动态加载（相对路径 vendor/pinyin-pro.min.js），三云端表面必须随 voice-input
+#   同步分发，缺位=拼音容错静默降级。固定版本库文件，内容永不变化。
+#   离线端（db-offline）无 Web Speech API（isAvailable=false 永不触达）不分发。
+$PinyinVendorTargets = @(
+    'public/vendor',
+    'app_project/db-yunduan/cloud_desktop/vendor',
+    'app_project/db-yunduan/cloud_app/app/src/main/assets/public/vendor'
+)
+
 # Group 8: cloud-only modules (cloud-api.js, local-db.js, sync-engine.js)
 # 仅同步到云端版目录，离线版不需要这些文件
 $CloudModuleFiles = @(
@@ -427,6 +438,11 @@ Write-Host ""
 
 # Group 7: vendor files -> 4 targets
 $result = Sync-Group -GroupName 'vendor (1 file -> 4 dirs)' -Files $VendorFiles -Targets $VendorTargets -VerifyOnly $VerifyOnly
+if (-not $result) { $allInSync = $false }
+Write-Host ""
+
+# Group 7b: pinyin-pro vendor -> 3 cloud dirs (★ 2026-09-17 语音连报修复)
+$result = Sync-Group -GroupName 'vendor pinyin-pro (1 file -> 3 cloud vendor dirs)' -Files @('vendor/pinyin-pro.min.js') -Targets $PinyinVendorTargets -VerifyOnly $VerifyOnly
 if (-not $result) { $allInSync = $false }
 Write-Host ""
 

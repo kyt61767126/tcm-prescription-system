@@ -64,6 +64,8 @@
   Cache-Control: public, max-age=31536000, immutable
 /security-guard.js
   Cache-Control: public, max-age=31536000, immutable
+/voice-input.js
+  Cache-Control: public, max-age=31536000, immutable
 
 # 其余 JS（/electron/ 目录副本、/hot-update/** 热包产物、admin 资源等）：304 校验兜底。
 #   ★ 2026-09-14 线上实测修正：CF Pages 对未命中规则的静态资源默认即
@@ -76,6 +78,10 @@
 /qrcode.min.js
   Cache-Control: public, max-age=604800
 /xlsx.full.min.js
+  Cache-Control: public, max-age=604800
+# ★ 2026-09-17 语音连报修复：pinyin-pro（ASR 同音字拼音归一匹配用），运行时
+#   由 voice-input.js ensurePinyin 动态加载（无 cv 参数），固定版本内容永不变。
+/vendor/pinyin-pro.min.js
   Cache-Control: public, max-age=604800
 
 # 站点配置（诊所名等）：始终重新校验，部署后立即生效
