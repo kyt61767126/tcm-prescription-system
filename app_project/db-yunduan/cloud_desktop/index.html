@@ -934,6 +934,18 @@
             } catch (e) {}
             return codeHits.length ? { type: 'code', meds: codeHits.slice(0, 20) } : { type: 'none', meds: [] };
         }
+        // ⓪ 精确相等优先（★ 2026-09-17 智能区别修复）：药名全等直接唯一命中——
+        //    子串式会把「黄连」误扩到「胡黄连」等（用户实测：说黄连/胡黄连都弹
+        //    候选勾选，期望各自精确直达）。ASR 同音字（白勺）全等必 miss，
+        //    自然落到下方子串/拼音层，容错链不受影响。
+        var eq = [];
+        try {
+            for (var i0 = 0; i0 < medicines.length; i0++) {
+                var m0 = medicines[i0];
+                if (m0 && m0.name && String(m0.name).toLowerCase() === qs) eq.push(m0);
+            }
+        } catch (e) {}
+        if (eq.length) return { type: 'exact', meds: eq.slice(0, 20) };
         // ① 精确子串（与 showSearchDropdown 同口径）
         var exact = [];
         try {
