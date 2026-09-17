@@ -1020,6 +1020,7 @@
 * 新 script 标签加在现有 script 区内（L736 首个 script 之后），不触 check-interface 基线（body→首个 script 区间）。
 
 ### 21.4 本轮新教训（必须传承）
+* **★ 服务端散落硬编码 type 白名单是 voice 上线首障（2026-09-17 实测抓到）**：LICENSE_TYPE_CONFIG 加了 voice 后，generate.js L96 硬编码 `['trial','personal','pro']` 拒收 voice → admin 开码 400 无弹窗。全仓排查共 5 处（generate/batch/admin-approve/activate-from-ticket 已根治 + order-submit 一期不动）。**根治**：license-core.js 导出 `LICENSE_TYPES`（全量）/`PAID_LICENSE_TYPES`（排除试用）权威集合，4 处 API 校验统一引用，`mapEditionToType` 补 voice/cloud_voice/语音分支。**铁律：新增版本类型只改 LICENSE_TYPE_CONFIG，改完必 grep `['trial'` / `'personal', 'pro'` 式散落硬编码**；order-submit.js L193 待语音版定价后再开 voice。commit f21f8a7c。
 * **注入器内函数名必须加 voice 前缀**：新 script 内函数若与其他端旧函数撞名（如离线端已有 `function inject()`），diff-cross-version Tier B 会误报「同体函数单边改动」。12 个函数统一前缀（vLog/makeVoiceBtn/setVoiceListening/positionVoiceBtn/bindVoiceMic/voiceAfterFill/injectVoiceUI/voiceFillMedicine/injectMedicineVoiceMic/removeVoiceUI/voiceTick/voiceNotify）。
 * **.ps1 必须 UTF-8 带 BOM**：无 BOM 时 PS 5.1 `-File` 按 GBK 解析中文注释吞引号报 `Unexpected token ')'`（sync-all.ps1 曾中招）。含中文注释的 .ps1 检查前三字节须为 239,187,191。
 * **PowerShell 内联 `node -e` 引号转义易失败** → 写临时 .js 到 `tools/_tmp/` 执行（根目录受 package.json type:module 影响）。临时脚本用完即删；_tmp 下还有大量历史文件，只删本轮自己创建的。
