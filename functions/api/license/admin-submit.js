@@ -31,7 +31,10 @@
 
 import { getKV, checkRateLimit, checkDeviceVersion, getDeviceBlock } from './_lib/license-core.js';
 import { provisionCloudAccount, normalizeActivationPassword } from './_lib/admin-account.js';
-import { createAdminRequest, updateAdminRequestStatus, ensureLicenseV7 } from './_lib/license-write-service.js';
+// ★ 2026-09-17 P0 修复：补 KV_ADMIN_REQ_INDEX import——原 3 处使用（L51/L72/L399）
+//   均未定义未导入，L399 在 onRequest 主体同步抛 ReferenceError → 全新手机号
+//   （无 admin_phone 索引）走兜底扫描必 500，管理员激活申请通道对新客户损坏。
+import { createAdminRequest, updateAdminRequestStatus, ensureLicenseV7, KV_ADMIN_REQ_INDEX } from './_lib/license-write-service.js';
 import { findPhoneOccupancy, hashPassword, KV_SYSTEM_CLINICS } from '../_lib/auth.js';
 // ★ 2026-09-07 架构防御：手机号校验收口 schema-guard 单一副本
 import { isValidPhone } from './_lib/schema-guard.js';
