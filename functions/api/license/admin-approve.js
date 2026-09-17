@@ -46,7 +46,8 @@ import {
     generateActivationCode, appendLicenseLog, getDevices, getMaxDevices,
     checkDeviceVersion, setDeviceVersion, versionOf,
     applyInviteReward, ensureInviteCode, findLicenseByInviteCode,
-    INVITE_BONUS_DAYS_INVITEE, INVITE_MAX_INVITEES
+    INVITE_BONUS_DAYS_INVITEE, INVITE_MAX_INVITEES,
+    PAID_LICENSE_TYPES
 } from './_lib/license-core.js';
 import { provisionCloudAccount, normalizeActivationPassword } from './_lib/admin-account.js';
 import { updateAdminRequestStatus } from './_lib/license-write-service.js';
@@ -144,8 +145,9 @@ export async function onRequest(context) {
 
         // ===== 通过分支 =====
         // 参数校验：type 必填
-        if (!type || !['personal', 'pro'].includes(type)) {
-            return json({ success: false, error: 'type 必须是 personal 或 pro' }, 400);
+        // ★ 2026-09-17 改用权威付费类型集合（原硬编码 ['personal','pro'] 漏 voice）
+        if (!type || !PAID_LICENSE_TYPES.includes(type)) {
+            return json({ success: false, error: 'type 必须是 ' + PAID_LICENSE_TYPES.join(' 或 ') }, 400);
         }
         // 校验 days 或 expiresAt 至少有一个
         if (!days && !expiresAt) {

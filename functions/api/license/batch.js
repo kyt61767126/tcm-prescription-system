@@ -33,7 +33,8 @@
 import { parseAuthHeader, isPlatformAdmin } from '../_lib/auth.js';
 import {
     getKV, saveLicense, sanitizeRecord,
-    generateActivationCode, appendLicenseLog
+    generateActivationCode, appendLicenseLog,
+    LICENSE_TYPES
 } from './_lib/license-core.js';
 
 function corsHeaders() {
@@ -132,8 +133,9 @@ export async function onRequest(context) {
         }
 
         // type 校验
-        if (!type || !['trial', 'personal', 'pro'].includes(type)) {
-            return json({ success: false, error: 'type 必须是 trial / personal / pro' }, 400);
+        // ★ 2026-09-17 改用权威类型集合（原硬编码 ['trial','personal','pro'] 漏 voice）
+        if (!type || !LICENSE_TYPES.includes(type)) {
+            return json({ success: false, error: 'type 必须是 ' + LICENSE_TYPES.join(' / ') }, 400);
         }
         // days 或 expiresAt 二选一
         if (!days && !expiresAt) {

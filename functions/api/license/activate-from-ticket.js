@@ -31,7 +31,8 @@ import {
 import {
     getKV, saveLicense, buildLicenseData, encodeLicenseBase64,
     generateActivationCode, appendLicenseLog, checkDeviceVersion,
-    setDeviceVersion, versionOf
+    setDeviceVersion, versionOf,
+    PAID_LICENSE_TYPES
 } from './_lib/license-core.js';
 import { provisionCloudAccount, normalizeActivationPassword } from './_lib/admin-account.js';
 
@@ -60,12 +61,16 @@ const KV_TICKET_PREFIX = 'ticket:';
 
 // 工单版本意向 → 激活类型映射（与 normalizeClinicEdition / mapActivationTypeToEdition 口径对齐）
 // 机构系：institution / institutional / jigou / clinic / pro / cloud_clinic / 机构版
+// 语音系：voice / cloud_voice / 语音版（★ 2026-09-17 一期补齐，原漏映射会错归标准版）
 // 标准系：personal / standard / cloud_personal / 标准版（含未知值兜底）
 function mapEditionToType(edition) {
     const e = String(edition || '').trim().toLowerCase();
     if (['institution', 'institutional', 'jigou', 'clinic', 'pro', 'cloud_clinic'].includes(e) ||
         String(edition || '').includes('机构')) {
         return 'pro';
+    }
+    if (['voice', 'cloud_voice'].includes(e) || String(edition || '').includes('语音')) {
+        return 'voice';
     }
     return 'personal';
 }
@@ -114,7 +119,8 @@ export async function onRequest(context) {
         }
 
         // ===== 参数解析（管理员最终确认权，未传时用工单意向的默认值）=====
-        const type = (body.type && ['personal', 'pro'].includes(body.type))
+        // ★ 2026-09-17 改用权威付费类型集合（原硬编码 ['personal','pro'] 漏 voice）
+        const type = (body.type && PAID_LICENSE_TYPES.includes(body.type))
             ? body.type
             : mapEditionToType(ticket.edition);
         const days = body.days ? parseInt(body.days, 10) : 365;

@@ -79,6 +79,13 @@ const LICENSE_TYPE_CONFIG = {
     }
 };
 
+// ★ 2026-09-17 权威类型集合（根治散落硬编码白名单漏 voice 教训）：
+//   generate.js / batch.js 开码校验用 LICENSE_TYPES（全量含 trial）；
+//   admin-approve.js / activate-from-ticket.js 付费通道校验用 PAID_LICENSE_TYPES（排除试用）。
+//   新增版本类型只改 LICENSE_TYPE_CONFIG，此处与各 API 校验自动跟随，禁止再散落硬编码。
+const LICENSE_TYPES = Object.freeze(Object.keys(LICENSE_TYPE_CONFIG));
+const PAID_LICENSE_TYPES = Object.freeze(LICENSE_TYPES.filter(t => t !== 'trial'));
+
 // 激活码字符集：去除易混淆字符 0/O/1/I
 const ACTIVATION_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const ACTIVATION_CODE_PREFIX = 'BNZC';
@@ -1345,6 +1352,8 @@ async function patchLicenseDeviceCarrier(kv, code, machineId, productClass, clie
 export {
     LICENSE_HMAC_KEY,
     LICENSE_TYPE_CONFIG,
+    LICENSE_TYPES,        // ★ 2026-09-17 权威全量类型集合（generate/batch 开码校验）
+    PAID_LICENSE_TYPES,   // ★ 2026-09-17 权威付费类型集合（审核/工单通道校验，排除试用）
     ACTIVATION_CODE_CHARS,
     KV_LICENSE_PREFIX,
     KV_LICENSE_INDEX,
