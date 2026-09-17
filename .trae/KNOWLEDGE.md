@@ -1008,7 +1008,7 @@
 * **官网**：`public/download.html` ↔ `site-official/download.html` 双副本（快速选择指南第 5 条 + 对比表「智能语音开方」行 + 语音版专属卡片；**价格不写死**，引导详询客服——用户偏好「暂不设置付费项目」）。
 
 ### 21.2 语音模块三处登记铁律（新增 shared 模块必查，同第 2 章铁律）
-`shared/voice/voice-input.js` 权威源（IIFE 暴露 `window.VoiceInput`：isAvailable/listen/highlight/cleanText/extractGender/extractAge），分发 3 云端副本（public/、cloud_desktop/、cloud_app assets/public/，Sync-File 按文件名展平落位目标根级）：
+`shared/voice/voice-input.js` 权威源（IIFE 暴露 `window.VoiceInput`：isAvailable/listen/highlight/cleanText/extractGender/extractAge/ensurePinyin/toPinyin），分发 3 云端副本（public/、cloud_desktop/、cloud_app assets/public/，Sync-File 按文件名展平落位目标根级）：
 1. `tools/sync-all.ps1` Group 19（$VoiceInputTargets 3 云端目录）
 2. `tools/copy-consistency.cjs` GROUPS 尾组（3 副本硬哈希门）
 3. `app_project/db-yunduan/cloud_desktop/package.json` build.files 白名单
@@ -1017,7 +1017,8 @@
 ### 21.3 注入器设计（public/index.html L740-742 script + 内嵌 IIFE）
 * **2s 轮询自适应注入**：云端登录是内嵌 overlay 不整页刷新，不能只靠登录钩子——voiceTick 轮询 `VoiceInput.isAvailable()`（三重 gate：SpeechRecognition 构造器存在 + isSecureContext + Permission.isVoiceEdition()）→ 注入/移除按钮，登出/切标准版自动撤除。
 * **四框填充语义**：姓名=替换（slice 30）；性别年龄=extractGender+extractAge 双填（性别走 markGenderManual）；病史症状=『；』追加；诊断=『，』追加。填充后 highlight 浅紫高亮 2.5s + updatePrescriptionPaper()。
-* **P0 铁律：语音药名强制走药名词典候选弹窗**。voiceFillMedicine 与 showSearchDropdown 同口径预查（简码 code 前缀 / 名称 name includes），无匹配只 toast「未做任何填充」绝不静默填充；有匹配设 currentEditIndex + currentSearchColumn 后调 showSearchDropdown 弹候选由医生点选确认。
+* **P0 铁律（v2 连报版语义，2026-09-17 同日升级，db8a49d9）**：唯一命中→自动填入+浅紫高亮待核对（复用 selectMedicine 行写入链）；多命中→只弹候选点选（voiceShowMultiChoice 复用 #medicineSearchDropdown 容器，window.__voicePick 内联 onclick）**绝不自动选**；未命中→toast 汇总「未识别清单」**绝不静默**。一期「强制全部弹候选」语义已被连报模式取代（整方口述每味都点选不可用）。
+* **连报分段解析三道保险（v2）**：①ASR 多候选——`maxAlternatives=5`，onResult 新签名 `(text, alts)` 向后兼容，miss 时用候选文本重解析；②拼音归一——白勺/白芍→同为 baishao（双方长度≥3 防误命中），ensurePinyin 按需加载 `vendor/pinyin-pro.min.js`（UMD 全局 `window.pinyinPro`，API `pinyin(text,{toneType:'none',type:'string'})`），加载失败 resolve(null) 静默降级仅精确匹配；③分段——按标点/连接词（然后|再来|接着|下一味）/「克后紧跟汉字」边界切段，每段 `voiceSplitDose` 剥尾部剂量（数字+克/g）自动填入剂数。6 个新函数全带 voice 前缀（voiceParseSegments/voiceSplitDose/voiceMatchMed/voiceAutoAdd/voiceShowMultiChoice/voiceFillMedicineInner），同 21.4 撞名教训。
 * **extractAge 含「百/千/万/零」复合表达（如“一百二十岁”）直接放弃**：截断误填（一百二→1）比不填更危险，宁缺勿错。
 * 新 script 标签加在现有 script 区内（L736 首个 script 之后），不触 check-interface 基线（body→首个 script 区间）。
 
@@ -1032,6 +1033,10 @@
 * **.ps1 必须 UTF-8 带 BOM**：无 BOM 时 PS 5.1 `-File` 按 GBK 解析中文注释吞引号报 `Unexpected token ')'`（sync-all.ps1 曾中招）。含中文注释的 .ps1 检查前三字节须为 239,187,191。
 * **PowerShell 内联 `node -e` 引号转义易失败** → 写临时 .js 到 `tools/_tmp/` 执行（根目录受 package.json type:module 影响）。临时脚本用完即删；_tmp 下还有大量历史文件，只删本轮自己创建的。
 * **浏览器 agent 不支持 file:// 协议**：验证本地 HTML 渲染需起 HTTP 静态服务（`npx http-server` 或自写 serve 脚本带 `<目录> <端口>` 参数）。
+* **★ ASR 药名同音字 = 语音开方「未匹配到药品」头号根因（2026-09-17 连报修复，db8a49d9）**：Web Speech API 把「白芍」识别成「白勺」，精确匹配必失败；且用户实际口述是带剂量整句（白芍15克，当归10克…），一期单药名匹配口径全不命中。**根治三道保险见 21.3**。方法论：agent 环境无麦克风，识别链路（click→isListening→按钮回落）用浏览器 agent 一锤定音，识别后环节（解析/匹配/填入）只能代码审查 + 用户实测；**先问清用户口述方式再定位根因，避免盲改**。
+* **★ 新 script 标签带 cv 参数必须三处同步登记（cv 逃逸教训）**：voice-input.js 曾用手写日期式 `cv=20260917` 不在 check-cv-hashes TARGETS 清单——内容变更后 cv 不刷 = 已访问用户 immutable 缓存**永不生效**，且 _headers 也漏 /voice-input.js 规则（12 业务 JS 有 immutable、它没有）。**铁律：index.html 新增带 ?cv= 的 script 引用时，必须同步①check-cv-hashes.cjs TARGETS ②public/_headers immutable 规则 ③（若是 shared 模块）sync-all 分发组**。现在 TARGETS=14。
+* **★ vendor 第三方库收 shared 权威源再分发**：pinyin-pro.min.js 初版只放 public/vendor/，云桌面/云APP assets 缺位 = 拼音容错静默降级（相对路径 `vendor/` 随表面走）。根治：收进 `shared/vendor/pinyin-pro.min.js` + sync-all **Group 7b**（$PinyinVendorTargets 3 云端 vendor 目录）+ _headers 长缓存规则。与 xlsx（Group 7 离线双端）目标集不同故独立分组。
+* **★ 跨版本基线重冻结流程（第⑩道门 voice 函数合理分叉）**：新增云端语音版专属函数（voice 前缀）必触发 diff-cross-version RED（desk+siteadmin 两侧缺）。处置：确认分叉合理（离线端无 Web Speech API、site-admin 无开方界面）后 `node tools/diff-cross-version.cjs --update-baseline --pair desk` + `--pair siteadmin` 各跑一次重冻结，基线文件随功能 commit 一起推（同 injectMedicineVoiceMic 一期先例）。
 
-### 21.5 生效方式（一期）
-云端网页 push 即生效（一期主战场）；云端APP WebView 实载线上同步生效（系统无 Web Speech API 则按钮自动隐藏，键盘开方不受影响）；云桌面随下次打包生效（期内无语音入口）；离线端零改动；服务端（Cloudflare Pages Functions）push 即生效，admin 开码即支持 voice。验证基线：voice-input.js 沙箱 5/5、smoke-runtime 157/157、check-interface 6/6、copy-consistency 75 副本、diff-cross-version 四对全绿、浏览器冒烟（标准版 0 按钮→语音版 5 按钮→登出回 0）。
+### 21.5 生效方式（一期 + 连报 v2）
+云端网页 push 即生效（一期主战场；连报 v2 同样 push 即生效，**已访问用户因 voice-input.js cv 刷为 793ee305 自动拉新**）；云端APP WebView 实载线上同步生效（系统无 Web Speech API 则按钮自动隐藏，键盘开方不受影响）；云桌面随下次打包生效（期内无语音入口，vendor/pinyin-pro 已随 Group 7b 分发到位）；离线端零改动；服务端（Cloudflare Pages Functions）push 即生效，admin 开码即支持 voice。验证基线：voice-input.js 沙箱 5/5、smoke-runtime 157/157、check-interface 6/6、copy-consistency 75 副本、diff-cross-version 四对全绿、浏览器冒烟（标准版 0 按钮→语音版 5 按钮→登出回 0）；v2 增验：smoke-runtime 26/26（S7 含 ensurePinyin 无 DOM 守卫）、cv-hash 14 目标、连报实测「白芍15克，当归10克，川芎8克」自动填入+高亮。
