@@ -1004,10 +1004,13 @@
         return idx;
     }
 
-    // 多命中候选点选（复用 medicineSearchDropdown 容器，点击走 voiceAutoAdd）
+    // 多命中候选点选（★ v2.1 独立容器：不再复用 medicineSearchDropdown——该容器
+    //   被键盘搜索管道管理（onblur→tryHideSearch 200ms 延迟关闭），共用导致语音
+    //   候选弹出即被误关、无法点选（2026-09-17 甘草实测抓到）。独立容器 + 更高
+    //   z-index，复用 medicine-search-dropdown/search-item 现成样式类。）
     window.__voicePick = function (name, code, price) {
         try {
-            var dropdown = document.getElementById('medicineSearchDropdown');
+            var dropdown = document.getElementById('voiceMultiDropdown');
             if (dropdown) dropdown.style.display = 'none';
             var med = null;
             for (var i = 0; i < medicines.length; i++) {
@@ -1025,8 +1028,16 @@
 
     function voiceShowMultiChoice(meds) {
         try {
-            var dropdown = document.getElementById('medicineSearchDropdown');
-            if (!dropdown || !meds.length) return;
+            if (!meds || !meds.length) return;
+            var dropdown = document.getElementById('voiceMultiDropdown');
+            if (!dropdown) {
+                dropdown = document.createElement('div');
+                dropdown.id = 'voiceMultiDropdown';
+                // 复用现成样式类（position:fixed/白底/边框/阴影/滚动），z-index 提到 1100 盖过搜索层
+                dropdown.className = 'medicine-search-dropdown';
+                dropdown.style.zIndex = '1100';
+                document.body.appendChild(dropdown);
+            }
             var html = '';
             for (var i = 0; i < meds.length; i++) {
                 var m = meds[i];
@@ -1035,14 +1046,27 @@
                 var p = parseFloat(m.price) || 0;
                 html += '<div class="search-item" onclick="window.__voicePick(\'' + safeName + '\',\'' + safeCode + '\',' + p + ')">🎤 ' + safeName + ' [' + safeCode + ']</div>';
             }
+            html += '<div style="padding:5px 10px;font-size:10px;color:#999;border-top:1px solid #eee;">点击选择 · 点空白处关闭</div>';
             dropdown.innerHTML = html;
             var anchor = document.querySelector('.medicine-section');
             var r = anchor ? anchor.getBoundingClientRect() : { left: 20, bottom: 120 };
             dropdown.style.left = Math.round(r.left) + 'px';
             dropdown.style.top = Math.round(r.bottom) + 'px';
-            dropdown.style.width = '200px';
+            dropdown.style.width = '220px';
             dropdown.style.display = 'block';
-        } catch (e) {}
+            // 外部点击关闭（延迟 300ms 绑定，避开本次显示事件链；触发一次后自移除）
+            setTimeout(function () {
+                try {
+                    var closer = function (ev) {
+                        try {
+                            if (dropdown.parentNode && !dropdown.contains(ev.target)) dropdown.style.display = 'none';
+                        } catch (e) {}
+                        document.removeEventListener('click', closer, true);
+                    };
+                    document.addEventListener('click', closer, true);
+                } catch (e) {}
+            }, 300);
+        } catch (e) { vLog('multi choice error', e && e.message); }
     }
 
     function voiceFillMedicineInner(text, alts) {
