@@ -43,6 +43,9 @@ function resolveProductMode(record) {
 
 function mapActivationTypeToEdition(type, record) {
     const t = String(type || '').toLowerCase();
+    // ★ 2026-09-17 语音版：voice 仅云端（一期），直接返回规范 key cloud_voice。
+    //   原实现无此分支，voice 会静默错归 cloud_personal（标准版权益，无语音入口）。
+    if (t === 'voice' || t === 'cloud_voice') return 'cloud_voice';
     const isPro = (t === 'pro' || t === 'institution' || t === 'clinic');
     const mode = resolveProductMode(record);
     if (mode === 'local') return isPro ? 'offline_clinic' : 'offline_personal';
