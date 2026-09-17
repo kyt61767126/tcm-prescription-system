@@ -1035,6 +1035,43 @@
         return out;
     }
 
+    // ============================================================================
+    // ★ 2026-09-18 口音自学习（学习我的纠正）：ASR 引擎自适应不可行（Web Speech
+    //   黑盒），改为学习医生的纠正信号——①拼音层多候选点选 ②语音自动填入后 60 秒
+    //   内同行改选。应用层放 voiceMatchMed 最前（⓪⁻⁻，优先于 ALIAS：个人纠正
+    //   覆盖默认别名，如学了「半夏→法半夏」则覆盖 ALIAS 的姜半夏）。
+    //   防误学设计：仅拼音层学点选（子串层如 牛膝→川牛膝/怀牛膝 是规格选择不学）；
+    //   同识别串新纠正覆盖旧值（自愈）；学习/应用均有 toast 感知；上限 200 条 FIFO。
+    // ============================================================================
+    var lastVoiceAutoAdd = null;   // 60 秒改选学习窗口标记 {idx, seg, medName, ts}
+    function voiceMapKey() {
+        try {
+            var u = (typeof currentUser !== 'undefined' && currentUser && currentUser.username) ? currentUser.username : '';
+            return u ? ('local_web_user_' + u + '_voice_map') : 'local_web_unauthenticated_voice_map';
+        } catch (e) { return 'local_web_unauthenticated_voice_map'; }
+    }
+    function voiceGetPersonalMap() {
+        try {
+            var raw = localStorage.getItem(voiceMapKey());
+            var obj = raw ? JSON.parse(raw) : null;
+            return (obj && typeof obj === 'object' && !Array.isArray(obj)) ? obj : {};
+        } catch (e) { return {}; }
+    }
+    function voiceLearnPersonal(segText, medName) {
+        try {
+            var seg = String(segText || '').trim().toLowerCase();
+            var name = String(medName || '').trim();
+            if (!seg || !name || seg === name.toLowerCase()) return;
+            var map = voiceGetPersonalMap();
+            if (map[seg] === name) return;
+            map[seg] = name;
+            var keys = Object.keys(map);
+            if (keys.length > 200) delete map[keys[0]];   // FIFO 防爆
+            localStorage.setItem(voiceMapKey(), JSON.stringify(map));
+            vLog('accent learned:', seg, '->', name);
+        } catch (e) { vLog('learn error', e && e.message); }
+    }
+
     function voiceMatchMed(nameText) {
         var qs = String(nameText || '').trim().toLowerCase();
         if (!qs) return { type: 'none', meds: [] };
@@ -1062,6 +1099,14 @@
             '大芸': '肉苁蓉', '苁蓉': '肉苁蓉',
             '仙灵脾': '淫羊藿', '故子': '补骨脂', '破故纸': '补骨脂'
         };
+        // ⓪⁻⁻ 个人口音映射应用（★ 2026-09-18 口音自学习）：学到的纠正最优先，
+        //    必须在 ALIAS 之前查（用原始识别串查——「半夏」若先被 ALIAS 归一成
+        //    「姜半夏」就查不到 PM['半夏'] 了，个人纠正将无法覆盖默认别名）。
+        //    映射值是学习时的药库药名（点选/改选来源），全等层必命中；若该药被
+        //    用户删除则自然落到下层匹配链，安全降级不报错。
+        var PM_APPLIED = null;
+        var PM = voiceGetPersonalMap();
+        if (PM[qs]) { PM_APPLIED = String(PM[qs]); qs = PM_APPLIED.toLowerCase(); nameText = PM_APPLIED; }
         if (ALIAS[qs]) { qs = ALIAS[qs].toLowerCase(); nameText = ALIAS[qs]; }
         // ⓪ 精确相等优先（★ 2026-09-17 智能区别修复）：药名全等直接唯一命中——
         //    子串式会把「黄连」误扩到「胡黄连」等（用户实测：说黄连/胡黄连都弹
@@ -1074,7 +1119,7 @@
                 if (m0 && m0.name && String(m0.name).toLowerCase() === qs) eq.push(m0);
             }
         } catch (e) {}
-        if (eq.length) return { type: 'exact', meds: eq.slice(0, 20) };
+        if (eq.length) return { type: 'exact', meds: eq.slice(0, 20), personal: PM_APPLIED };
         // ① 精确子串（与 showSearchDropdown 同口径）
         var exact = [];
         try {
@@ -1110,7 +1155,8 @@
     }
 
     // 自动填入（复用 selectMedicine 行写入逻辑 + 数量覆盖 + 行高亮待核对）
-    function voiceAutoAdd(med, dose) {
+    // segText：本行语音识别串原文（供 60 秒内同行改选的口音学习回溯）
+    function voiceAutoAdd(med, dose, segText) {
         var idx = -1;
         try {
             for (var k = 0; k < prescriptionItems.length; k++) {
@@ -1146,6 +1192,8 @@
                 var row = document.querySelector('#prescriptionBody tr:nth-child(' + (idx + 1) + ')');
                 if (row && window.VoiceInput) VoiceInput.highlight(row);
             } catch (e10) {}
+            // ★ 口音学习窗口标记：60 秒内同行改选（voiceHookSelectMedicine）视为纠正信号
+            lastVoiceAutoAdd = { idx: idx, seg: String(segText || ''), medName: med.name, ts: Date.now() };
         } catch (e) { return -1; }
         return idx;
     }
@@ -1154,7 +1202,7 @@
     //   被键盘搜索管道管理（onblur→tryHideSearch 200ms 延迟关闭），共用导致语音
     //   候选弹出即被误关、无法点选（2026-09-17 甘草实测抓到）。独立容器 + 更高
     //   z-index，复用 medicine-search-dropdown/search-item 现成样式类。）
-    window.__voicePick = function (name, code, price) {
+    window.__voicePick = function (name, code, price, segText, hitType) {
         try {
             var dropdown = document.getElementById('voiceMultiDropdown');
             if (dropdown) dropdown.style.display = 'none';
@@ -1168,11 +1216,54 @@
                 if (prescriptionItems[k] && prescriptionItems[k].name === name) { exists = true; break; }
             }
             if (exists) { voiceNotify(name + ' 已在处方中'); return; }
-            if (voiceAutoAdd(med, 0) >= 0) voiceNotify('已加入 ' + name + '（高亮待核对）');
+            if (voiceAutoAdd(med, 0, segText) >= 0) {
+                // ★ 口音学习信号①：拼音层多候选点选 = 明确口音纠正（ASR 同音异字，
+                //   如 白勺→白芍、制甘草→炙甘草）；子串层多候选（牛膝→川牛膝/怀牛膝）
+                //   是规格选择而非口音问题，不学。
+                if (hitType === 'pinyin' && segText && String(segText) !== name) {
+                    voiceLearnPersonal(segText, name);
+                    voiceNotify('已加入 ' + name + '（高亮待核对），已记住口音习惯，下次直达');
+                } else {
+                    voiceNotify('已加入 ' + name + '（高亮待核对）');
+                }
+            }
         } catch (e) { vLog('pick error', e && e.message); }
     };
 
-    function voiceShowMultiChoice(meds) {
+    // ★ 口音学习信号②：语音自动填入后 60 秒内同行改选 = 纠正信号。hook 全局
+    //   selectMedicine（主代码函数声明经内联 onclick 调用，DOMContentLoaded 后
+    //   必然已挂 window）。窗口过期/换行/同药名均不学；改选一次后标记即失效。
+    function voiceHookSelectMedicine() {
+        try {
+            if (typeof window.selectMedicine !== 'function' || window.selectMedicine.__voiceHooked) return;
+            var orig = window.selectMedicine;
+            var wrapped = function (index, name) {
+                try {
+                    if (lastVoiceAutoAdd && index === lastVoiceAutoAdd.idx) {
+                        if (lastVoiceAutoAdd.seg && (Date.now() - lastVoiceAutoAdd.ts) < 60000 &&
+                            name && name !== lastVoiceAutoAdd.medName) {
+                            voiceLearnPersonal(lastVoiceAutoAdd.seg, name);
+                            voiceNotify('已记住您的纠正：' + lastVoiceAutoAdd.seg + ' → ' + name + '（下次直达）');
+                        }
+                        lastVoiceAutoAdd = null;
+                    }
+                } catch (e) {}
+                return orig.apply(this, arguments);
+            };
+            wrapped.__voiceHooked = true;
+            window.selectMedicine = wrapped;
+            vLog('selectMedicine hooked for accent learning');
+        } catch (e) { vLog('hook error', e && e.message); }
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function () { setTimeout(voiceHookSelectMedicine, 0); });
+    } else {
+        setTimeout(voiceHookSelectMedicine, 0);
+    }
+
+    // segText/hitType：本组候选对应的语音识别串原文 + 命中层（点选学习仅拼音层收，
+    //   透传给 __voicePick 判定——子串层规格选择不学）
+    function voiceShowMultiChoice(meds, segText, hitType) {
         try {
             if (!meds || !meds.length) return;
             var dropdown = document.getElementById('voiceMultiDropdown');
@@ -1185,12 +1276,13 @@
                 document.body.appendChild(dropdown);
             }
             var html = '';
+            var safeSeg = String(segText || '').replace(/[<>"'&\\\/]/g, '');
             for (var i = 0; i < meds.length; i++) {
                 var m = meds[i];
                 var safeName = String(m.name || '').replace(/[<>"'&]/g, '');
                 var safeCode = String(m.code || '').replace(/[<>"'&]/g, '');
                 var p = parseFloat(m.price) || 0;
-                html += '<div class="search-item" onclick="window.__voicePick(\'' + safeName + '\',\'' + safeCode + '\',' + p + ')">🎤 ' + safeName + ' [' + safeCode + ']</div>';
+                html += '<div class="search-item" onclick="window.__voicePick(\'' + safeName + '\',\'' + safeCode + '\',' + p + ',\'' + safeSeg + '\',\'' + String(hitType || '') + '\')">🎤 ' + safeName + ' [' + safeCode + ']</div>';
             }
             html += '<div style="padding:5px 10px;font-size:10px;color:#999;border-top:1px solid #eee;">点击选择 · 点空白处关闭</div>';
             dropdown.innerHTML = html;
@@ -1247,15 +1339,17 @@
             if (r.meds.length === 1) {
                 var med = r.meds[0];
                 if (existing[med.name]) { dup.push(med.name); continue; }
-                if (voiceAutoAdd(med, seg.dose) >= 0) {
-                    added.push(med.name + (seg.dose ? '(' + seg.dose + 'g)' : ''));
+                if (voiceAutoAdd(med, seg.dose, seg.name) >= 0) {
+                    // r.personal：本味经个人口音映射归一直达（toast 汇总中显式标注，医生可感知）
+                    added.push(med.name + (r.personal ? '·口音直达' : '') + (seg.dose ? '(' + seg.dose + 'g)' : ''));
                     existing[med.name] = true;
                 } else missed.push(seg.name);
             } else {
-                multiSegs.push(seg);
+                // 多候选段带上识别串原文+命中层（点选学习信号，透传 voiceShowMultiChoice）
+                multiSegs.push({ name: seg.name, meds: r.meds, hitType: r.type });
             }
         }
-        if (multiSegs.length) voiceShowMultiChoice(voiceMatchMed(multiSegs[0].name).meds);
+        if (multiSegs.length) voiceShowMultiChoice(multiSegs[0].meds, multiSegs[0].name, multiSegs[0].hitType);
         var msg = '';
         if (added.length) msg += '已语音加入 ' + added.length + ' 味（高亮待核对）：' + added.join('、');
         if (dup.length) msg += (msg ? '；' : '') + '已在处方跳过：' + dup.join('、');
