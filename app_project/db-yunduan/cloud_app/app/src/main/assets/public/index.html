@@ -739,7 +739,7 @@
 <script src="electron/video-recorder.js?cv=1eb77b2f"></script>
 <!-- ★ 2026-09-17 语音版一期：voice-input.js（Web Speech API 语音输入，cloud_voice 专属入口；
      Electron/WebView 无此 API、标准版无授权 → isAvailable() 三重 gate 自动隐藏，零感知） -->
-<script src="voice-input.js?cv=793ee305"></script>
+<script src="voice-input.js?cv=36f62783"></script>
 <script>
 // ============================================================================
 // ★ 2026-09-17 语音版一期：四框麦克风按钮注入器（cloud_voice 专属入口）
@@ -776,6 +776,31 @@
                 try { t.style.opacity = '0'; setTimeout(function () { try { t.remove(); if (voiceToastEl === t) voiceToastEl = null; } catch (e2) {} }, 300); } catch (e3) {}
             }, 3200);
         } catch (e) { try { if (typeof showToast === 'function') showToast('🎤 ' + msg); else alert(msg); } catch (e4) {} }
+    }
+
+    // ★ 2026-09-18 提速：实时字幕——识别中间结果（interim）字随话出，医生获得
+    //   "已被听到"的即时反馈，消除说完到填入之间的静默等待焦虑。final 才走原
+    //   业务链填充，字幕只展示不落库。定位铁律（v2.2.1 教训）：锚定交互焦点
+    //   （🎤 按钮 rect）+ 视口夹取；pointer-events:none 点击穿透不挡操作。
+    var voiceSubEl = null;
+    function voiceSubtitleShow(anchorBtn, text) {
+        try {
+            if (!voiceSubEl || !voiceSubEl.parentNode) {
+                var s = document.createElement('div');
+                s.style.cssText = 'position:fixed;max-width:340px;padding:8px 12px;background:#4c3a9e;color:#fff;border-radius:8px;font-size:13px;line-height:1.5;z-index:9998;pointer-events:none;box-shadow:0 2px 10px rgba(0,0,0,.25);word-break:break-all;';
+                document.body.appendChild(s);
+                voiceSubEl = s;
+            }
+            var br = anchorBtn.getBoundingClientRect();
+            var top = Math.min(Math.max(br.bottom + 8, 10), window.innerHeight - 130);
+            var left = Math.max(8, Math.min(br.left, window.innerWidth - 360));
+            voiceSubEl.style.top = top + 'px';
+            voiceSubEl.style.left = left + 'px';
+            voiceSubEl.textContent = '🎧 ' + text;
+        } catch (e) {}
+    }
+    function voiceSubtitleHide() {
+        try { if (voiceSubEl) { voiceSubEl.remove(); voiceSubEl = null; } } catch (e) {}
     }
 
     // —— 按钮构造（22px 圆形 🎤，紫色系与语音高亮一致）——
@@ -821,14 +846,20 @@
         btnRegistry.push({ btn: btn, input: input });
         btn.addEventListener('click', function (ev) {
             ev.preventDefault(); ev.stopPropagation();
-            if (!window.VoiceInput || VoiceInput.isListening()) return;
+            if (!window.VoiceInput) return;
+            // ★ 提速：识别中再点 = 立即停止（原为忽略，医生无法主动中断）
+            if (VoiceInput.isListening()) { VoiceInput.stop(); return; }
             setVoiceListening(btn, true);
             VoiceInput.listen(function (text) {
+                voiceSubtitleHide();
                 try { onText(text); } catch (e) { vLog('fill error', e && e.message); }
             }, function (msg) {
                 voiceNotify(msg);
             }, function () {
+                voiceSubtitleHide();
                 setVoiceListening(btn, false);
+            }, {
+                onInterim: function (t) { voiceSubtitleShow(btn, t); }   // 字随话出
             });
         });
     }
@@ -1443,22 +1474,30 @@
         }
         if (!tip) tip = container;
         try { tip.style.position = 'relative'; } catch (e) {}
-        var btn = makeVoiceBtn('语音加药（说药名或简码，弹候选后点选）');
+        var btn = makeVoiceBtn('语音加药（连报药名，说完停顿即录入；再点停止）');
         btn.style.left = 'auto';
         btn.style.right = '6px';
         btn.style.top = '1px';
         tip.appendChild(btn);
         btn.addEventListener('click', function (ev) {
             ev.preventDefault(); ev.stopPropagation();
-            if (!window.VoiceInput || VoiceInput.isListening()) return;
+            if (!window.VoiceInput) return;
+            // ★ 提速连报：再点 = 手动停止（8 秒静音也会自动停）
+            if (VoiceInput.isListening()) { VoiceInput.stop(); return; }
             setVoiceListening(btn, true);
-            // onResult(text, alts)：alts = ASR 全部候选（同音字容错），由 voiceFillMedicine v2 消费
+            // onResult(text, alts)：alts = ASR 全部候选（同音字容错），由 voiceFillMedicine v2 消费；
+            // continuous 连报：每句 final 逐句填入（多候选队列连弹不变）
             VoiceInput.listen(function (text, alts) {
+                voiceSubtitleHide();   // 本句已录入，字幕退场；下句 interim 再现
                 try { voiceFillMedicine(text, alts); } catch (e) { vLog('med fill error', e && e.message); }
             }, function (msg) {
                 voiceNotify(msg);
             }, function () {
+                voiceSubtitleHide();
                 setVoiceListening(btn, false);
+            }, {
+                continuous: true,
+                onInterim: function (t) { voiceSubtitleShow(btn, t); }
             });
         });
     }

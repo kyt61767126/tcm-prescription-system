@@ -73,17 +73,35 @@
     // ── 2. ASR 识别（一期：Web Speech API） ─────────────────────
     var listening = false;
     var recognition = null;
+    var stopRequested = false;   // 主动停止标志（VoiceInput.stop / 静音守护置位）
+    var lastActivity = 0;        // 最近识别活动时刻（连报守护重启判据）
+    var watchdogTimer = null;    // 连报静音守护计时器（8s 无语音自动收尾）
+    var sessionSeq = 0;          // 识别会话序号（防旧会话异步回调错误重启/收尾新会话）
 
     // 防重入：识别中重复点击直接忽略
     VoiceInput.isListening = function () { return listening; };
 
+    // ★ 2026-09-18 提速：主动停止（连报模式再点 🎤 / 医生想立即中断时调用）。
+    //   abort → onend（stopRequested 已置位不触发守护重启）→ 正常收尾调 onEnd。
+    VoiceInput.stop = function () {
+        stopRequested = true;
+        if (watchdogTimer) { clearInterval(watchdogTimer); watchdogTimer = null; }
+        try { if (recognition) recognition.abort(); } catch (e) {}
+    };
+
     /**
-     * 单次语音识别（按下 🎤 → 说话 → 自动结束回调）
-     * @param {Function} onResult  (text:string) => void 识别成功回调（已 trim）
-     * @param {Function} onError   (msg:string) => void  失败/拒绝回调（用户可读中文）
+     * 单次/连报语音识别（按下 🎤 → 说话 → 自动结束回调）
+     * @param {Function} onResult  (text:string, alts:string[]) => void 最终结果回调（已 trim）
+     * @param {Function} onError   (msg:string) => void 失败/拒绝回调（用户可读中文）
      * @param {Function} onEnd     () => void 识别结束回调（无论成败，用于恢复按钮态）
+     * @param {Object}   [opts]    2026-09-18 提速增强（全部可选，旧调用方零影响）：
+     *   continuous : true 连报模式——说完一句不停继续听（连报多味药免反复点🎤）；
+     *                Chrome 静音数秒会静默 onend，6s 内有活动自动守护重启续听；
+     *                8 秒无语音自动收尾；VoiceInput.stop() 立即停。
+     *   onInterim  : fn(text) 中间结果实时回调（说话期间字随话出，仅供字幕展示，
+     *                绝不触发填充——final 结果才走 onResult 业务链）。
      */
-    VoiceInput.listen = function (onResult, onError, onEnd) {
+    VoiceInput.listen = function (onResult, onError, onEnd, opts) {
         var Ctor = getRecognitionCtor();
         if (!Ctor) {
             if (typeof onError === 'function') onError('当前环境不支持语音识别');
@@ -103,33 +121,52 @@
             return;
         }
 
+        var continuous = !!(opts && opts.continuous);
+        var onInterim = (opts && typeof opts.onInterim === 'function') ? opts.onInterim : null;
+
         recognition.lang = 'zh-CN';
-        recognition.interimResults = false;   // 一期只要最终结果（准确率优先）
+        // ★ 2026-09-18 提速：interimResults=true——说话期间实时吐中间结果
+        //   （onInterim 字幕展示，"字随话出"确定感大增）；final 行为不变。
+        recognition.interimResults = true;
         // ★ 2026-09-17 连报修复：多候选——ASR 对药名常输出同音字（白芍→白勺），
         //   收集全部候选供业务层逐个尝试匹配（单候选时同音字必 miss）。
         recognition.maxAlternatives = 5;
-        recognition.continuous = false;       // 单句模式：说完自动结束
+        // ★ 2026-09-18 提速：continuous 连报模式（药物 mic 用）——说完一句不停
+        //   继续听，免反复点🎤；患者信息各框保持单句模式说到自动结束。
+        recognition.continuous = continuous;
 
         listening = true;
+        var mySeq = ++sessionSeq;   // 本会话序号：旧会话的异步回调据此失效
+        stopRequested = false;      // 新一轮识别：清除上一轮的主动停止标志
+        lastActivity = Date.now();
+        if (watchdogTimer) { clearInterval(watchdogTimer); watchdogTimer = null; }
 
         recognition.onresult = function (event) {
+            lastActivity = Date.now();
             try {
+                // 只看最后一行（单句=唯一行；连报=最新 utterance）
+                var r = (event && event.results && event.results.length > 0)
+                    ? event.results[event.results.length - 1] : null;
+                if (!r || r.length === 0) return;
+                // ★ 提速：中间结果只做实时字幕，绝不填充（final 才走业务链）
+                if (!r.isFinal) {
+                    if (onInterim) {
+                        var it = String(r[0].transcript || '').trim();
+                        if (it) onInterim(it);
+                    }
+                    return;
+                }
                 var text = '';
                 var alts = [];
-                if (event && event.results && event.results.length > 0) {
-                    var r = event.results[event.results.length - 1];
-                    if (r && r.length > 0) {
-                        for (var ai = 0; ai < r.length; ai++) {
-                            var at = String(r[ai].transcript || '').trim();
-                            if (!at) continue;
-                            if (!text) text = at;
-                            if (alts.indexOf(at) < 0) alts.push(at);
-                        }
-                    }
+                for (var ai = 0; ai < r.length; ai++) {
+                    var at = String(r[ai].transcript || '').trim();
+                    if (!at) continue;
+                    if (!text) text = at;
+                    if (alts.indexOf(at) < 0) alts.push(at);
                 }
                 // onResult(text, alts)：alts = 全部候选文本（含首选，去重），旧调用方只收 text 不受影响
                 if (text && typeof onResult === 'function') onResult(text, alts);
-                else if (!text && typeof onError === 'function') onError('未识别到内容，请再试一次');
+                else if (!text && typeof onError === 'function' && !continuous) onError('未识别到内容，请再试一次');
             } catch (e) {
                 if (typeof onError === 'function') onError('识别结果处理异常');
             }
@@ -141,7 +178,9 @@
             if (code === 'not-allowed' || code === 'service-not-allowed') {
                 msg = '麦克风权限被拒绝，请在浏览器地址栏允许麦克风后重试';
             } else if (code === 'no-speech') {
-                msg = '未检测到语音，请靠近麦克风重试';
+                // 连报模式静音间隙的 no-speech 静默（onend 守护重启续听）；
+                // 单句模式才提示医生
+                msg = continuous ? '' : '未检测到语音，请靠近麦克风重试';
             } else if (code === 'network') {
                 msg = '语音服务网络异常，请检查网络后重试';
             } else if (code === 'aborted') {
@@ -152,16 +191,54 @@
             if (msg && typeof onError === 'function') onError(msg);
         };
 
-        recognition.onend = function () {
+        function finish() {
+            if (mySeq !== sessionSeq) return;   // 旧会话迟到回调：新会话已接管，全丢弃
             listening = false;
+            if (watchdogTimer) { clearInterval(watchdogTimer); watchdogTimer = null; }
             if (typeof onEnd === 'function') onEnd();
+        }
+
+        // ★ 提速连报：Chrome continuous 模式静音数秒会静默 onend（引擎行为，
+        //   不可配置）——6 秒内有识别活动则 200ms 后守护重启续听，医生无感；
+        //   超窗 / 主动停止则正常收尾。
+        recognition.onend = function () {
+            if (mySeq !== sessionSeq) return;   // 旧会话迟到回调：不影响新会话
+            if (continuous && !stopRequested && listening &&
+                (Date.now() - lastActivity) < 6000) {
+                setTimeout(function () {
+                    if (mySeq !== sessionSeq || stopRequested || !listening) return;
+                    try {
+                        recognition.start();
+                        lastActivity = Date.now();
+                        return;
+                    } catch (e) {}
+                    finish();
+                }, 200);
+                return;
+            }
+            finish();
         };
+
+        // ★ 提速连报：8 秒无任何语音自动收尾（防忘关麦克风一直收诊室环境音）
+        if (continuous) {
+            watchdogTimer = setInterval(function () {
+                if (stopRequested || !listening) {
+                    if (watchdogTimer) { clearInterval(watchdogTimer); watchdogTimer = null; }
+                    return;
+                }
+                if ((Date.now() - lastActivity) >= 8000) {
+                    stopRequested = true;   // 阻断 onend 守护重启，走正常收尾
+                    try { recognition.abort(); } catch (e) {}
+                }
+            }, 1500);
+        }
 
         try {
             recognition.start();
         } catch (e) {
             // start 抛异常（如已启动竞态）——按失败处理
             listening = false;
+            if (watchdogTimer) { clearInterval(watchdogTimer); watchdogTimer = null; }
             if (typeof onError === 'function') onError('语音识别启动失败，请重试');
             if (typeof onEnd === 'function') onEnd();
         }
