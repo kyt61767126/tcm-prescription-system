@@ -209,14 +209,17 @@ const GROUPS = [
     },
     {
         // ★ 2026-09-17 语音版一期：voice-input.js（Web Speech API 语音输入模块）。
-        //   仅云端表面分发（public 云端网页 / cloud_desktop 云桌面 / cloud_app
-        //   assets 兜底），离线端四期 sherpa-onnx 时再扩展。sync-all Group 19
-        //   分发，本组 3 副本硬哈希门。
+        //   ★ 2026-09-18 阶段二语音免费层下沉：扩离线两端（db-offline 桌面/APP
+        //   assets）——免费层解析链 VoiceInput.highlight/toPinyin/ensurePinyin
+        //   直接消费，缺位=整方解析中断。sync-all Group 19 分发，本组 5 副本
+        //   硬哈希门。
         authority: 'shared/voice/voice-input.js',
         copies: [
             'public/voice-input.js',
             'app_project/db-yunduan/cloud_desktop/voice-input.js',
-            'app_project/db-yunduan/cloud_app/app/src/main/assets/public/voice-input.js'
+            'app_project/db-yunduan/cloud_app/app/src/main/assets/public/voice-input.js',
+            'app_project/db-offline/desktop/voice-input.js',
+            'app_project/db-offline/app/app/src/main/assets/public/voice-input.js'
         ]
     }
 ];

@@ -42,6 +42,7 @@
             "prescription-core.js",
             "stock-core.js",
             "security-guard.js",
+            "voice-input.js",
             "build/icon.ico",
             "button-manager.js",
             "edition-lock.js",

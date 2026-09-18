@@ -1,24 +1,24 @@
 {
   "format": 1,
   "channel": "app-local",
-  "hotVersion": "2026.09.15-16",
+  "hotVersion": "2026.09.18-1",
   "minAppCode": 288,
   "appVersion": "1.0.0",
   "files": [
     {
       "name": "index.html",
-      "sha256": "3b50a033a657a33658cdf208255bf9fbb4e2a7f0a43cfd4e2ade7b02733a146d",
-      "size": 597937
+      "sha256": "00c67ea9d4d2743d615b7f14c9093f342c2f44e64736e9af29ebb675c3eebda1",
+      "size": 673810
     },
     {
       "name": "auth-core.js",
-      "sha256": "fdb47171b78553c11abfee39e8e06549394dc7a14eae9b63f9221ca416ce288d",
-      "size": 488046
+      "sha256": "01a503594df24aed168cf110c3579ba2c64b4803be521071a9cf5c910a202fd7",
+      "size": 489916
     },
     {
       "name": "permission.js",
-      "sha256": "cb2b05837495ff0935ed784e8330019707ff75eb152c0cfc194ceec0d5a545f0",
-      "size": 27290
+      "sha256": "a6f8096dacb10f1e0e57c251401a424d3c983d491452051164cd7de8073376c6",
+      "size": 28238
     },
     {
       "name": "normalize-config.js",
@@ -61,11 +61,21 @@
       "size": 70209
     },
     {
+      "name": "voice-input.js",
+      "sha256": "36f6278375441ba2cf23206c0b9979279f4016a35541ec8b76db842407ed8071",
+      "size": 18351
+    },
+    {
+      "name": "vendor/pinyin-pro.min.js",
+      "sha256": "30cdee15ee82a8cf7c7e5dc5e49e2e691e39d8fbcb89bfb163be977e82f95e33",
+      "size": 323085
+    },
+    {
       "name": "vendor/xlsx.full.min.js",
       "sha256": "c9506197caf809a075b6dee1da0d36fb19da7158ffe8a88e7b0c96c5d8623c99",
       "size": 881727
     }
   ],
-  "signedAt": 1789481708171,
-  "signature": "bpj1tarQPQ0HJjvWPpgJhijztqzscnqcR4I/3NkIUmMGb1BjdRIS/gDOTppIxl0dL0qexSWz4NyiPgm8BqFFCA=="
+  "signedAt": 1789720020407,
+  "signature": "TdFahLF9LKy0pSBpw5QgycQfxFxAwLo1846lAViSnWqYT6xOFTxrwcZU1sErkDPG835+hcp+72mdQM29upcgDA=="
 }

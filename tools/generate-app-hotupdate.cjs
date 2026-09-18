@@ -81,6 +81,8 @@ const FILES = [
     'performance-utils.js',
     'prescription-core.js',
     'stock-core.js',
+    'voice-input.js',                        // ★ 2026-09-18 阶段二：语音免费层（highlight/ensurePinyin 依赖）
+    'vendor/pinyin-pro.min.js',              // voice-input ensurePinyin 动态加载（同音字归一匹配）
     'vendor/xlsx.full.min.js'                // loadXlsxLibrary() 按需加载（Excel 导入）
 ];
 

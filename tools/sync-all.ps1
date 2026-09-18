@@ -1,4 +1,4 @@
-﻿# ============================================================================
+# ============================================================================
 #  sync-all.ps1 - Unified sync script for all shared modules
 #
 #  Purpose:
@@ -161,15 +161,19 @@ $VendorTargets = @(
         'app_project/db-offline/app/app/src/main/assets/public/vendor'
 )
 
-# Group 7b: pinyin-pro vendor（★ 2026-09-17 语音连报修复）-> 3 云端 vendor 目录
+# Group 7b: pinyin-pro vendor（★ 2026-09-17 语音连报修复）-> 5 端 vendor 目录
 #   ASR 同音字（白勺→白芍）拼音归一匹配用，voice-input.js ensurePinyin 运行时
 #   动态加载（相对路径 vendor/pinyin-pro.min.js），三云端表面必须随 voice-input
 #   同步分发，缺位=拼音容错静默降级。固定版本库文件，内容永不变化。
-#   离线端（db-offline）无 Web Speech API（isAvailable=false 永不触达）不分发。
+#   ★ 2026-09-18 阶段二语音免费层下沉：离线两端（db-offline 桌面/APP）分发——
+#   免费层解析链 voiceMatchMed 拼音归一层 + VoiceInput.highlight 均消费
+#   voice-input.js（ensurePinyin 动态加载本文件），离线缺位=同音字容错降级。
 $PinyinVendorTargets = @(
     'public/vendor',
     'app_project/db-yunduan/cloud_desktop/vendor',
-    'app_project/db-yunduan/cloud_app/app/src/main/assets/public/vendor'
+    'app_project/db-yunduan/cloud_app/app/src/main/assets/public/vendor',
+    'app_project/db-offline/desktop/vendor',
+    'app_project/db-offline/app/app/src/main/assets/public/vendor'
 )
 
 # Group 8: cloud-only modules (cloud-api.js, local-db.js, sync-engine.js)
@@ -259,21 +263,26 @@ $DesktopCrashGuardTargets = @(
     'app_project/db-offline/desktop/electron'
 )
 
-# Group 19: voice 模块（voice-input.js）-> 3 云端目录（★ 2026-09-17 语音版一期）
-#   智能语音输入模块（Web Speech API，cloud_voice 版本专属入口）。
-#   仅分发云端表面：public（云端网页，一期主战场）+ cloud_desktop（云桌面
-#   index.html 由 sync-html 生成，携带 voice-input.js 引用标签）+ cloud_app
-#   assets（云APP WebView 实载线上 public，本地 assets 仅打包兜底）。
+# Group 19: voice 模块（voice-input.js）-> 5 端目录（★ 2026-09-17 语音版一期；
+#   ★ 2026-09-18 阶段二扩离线两端）
+#   智能语音输入模块（Web Speech API，cloud_voice 版本专属入口）+
+#   免费层依赖（highlight 高亮/ensurePinyin 拼音归一，与识别 API 可用性无关）。
+#   分发表面：public（云端网页）+ cloud_desktop（云桌面 index.html 由 sync-html
+#   生成，携带引用标签）+ cloud_app assets（云APP WebView 实载线上 public，
+#   本地 assets 仅打包兜底）+ db-offline 桌面/APP assets（★ 阶段二语音免费层
+#   下沉：离线 index.html 由 tools/sync-voice-block.cjs 携带引用标签，解析链
+#   VoiceInput.highlight/toPinyin 直接消费本文件，缺位=整方解析中断）。
 #   Electron/WebView 无 Web Speech API → isAvailable() 三重 gate 自动隐藏
-#   按钮入口（降级安全，键盘开方零影响）。
-#   离线端（db-offline）四期换 sherpa-onnx 本地模型时再扩展目标集；
+#   付费按钮入口（降级安全，键盘开方零影响）；免费层照常生效。
 #   site-admin/admin 后台无语音需求不分发。
 #   源文件带子目录 shared/voice/voice-input.js，Sync-Group 按文件名展平落位
 #   为各目录根级 voice-input.js（与 permission.js 同级，script src 相对引用）。
 $VoiceInputTargets = @(
     'public',
     'app_project/db-yunduan/cloud_desktop',
-    'app_project/db-yunduan/cloud_app/app/src/main/assets/public'
+    'app_project/db-yunduan/cloud_app/app/src/main/assets/public',
+    'app_project/db-offline/desktop',
+    'app_project/db-offline/app/app/src/main/assets/public'
 )
 
 # Group 11: index.html 权威源 -> 云端副本（★ 2026-09-02 从手工复制升级为生成模式）

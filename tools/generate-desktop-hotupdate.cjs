@@ -47,6 +47,7 @@ const CHANNELS = {
             'cloud-api.js', 'performance-utils.js', 'prescription-core.js',
             'stock-core.js', 'security-guard.js',
             'electron/video-recorder.js',
+            'voice-input.js', 'vendor/pinyin-pro.min.js',
             'xlsx.full.min.js'
         ],
         appVersion: require(path.join(ROOT, 'app_project', 'db-yunduan', 'cloud_desktop', 'package.json')).version
@@ -60,6 +61,7 @@ const CHANNELS = {
             'performance-utils.js', 'prescription-core.js',
             'stock-core.js', 'security-guard.js',
             'electron/video-recorder.js',
+            'voice-input.js', 'vendor/pinyin-pro.min.js',
             'vendor/xlsx.full.min.js'
         ],
         appVersion: require(path.join(ROOT, 'app_project', 'db-offline', 'desktop', 'package.json')).version
