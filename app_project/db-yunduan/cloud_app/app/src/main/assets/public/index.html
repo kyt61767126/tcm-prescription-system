@@ -1619,20 +1619,29 @@
         });
     }
 
-    // —— 总入口按钮（病史症状标题行右缘，深紫底白字区别于单框浅紫 mic）——
+    // —— 总入口按钮（「填资料」按钮之后，深紫底白字区别于单框浅紫 mic）——
     function injectSmartVoiceMic() {
-        var tabs = document.querySelector('.symptom-section .history-tabs');
-        if (!tabs) return;
-        try { tabs.style.position = 'relative'; } catch (e) {}
+        var bar = document.querySelector('.top-tabs-left');
+        var fillTab = bar ? bar.querySelector('.tab-left-item') : null;   // 「填资料」tab
+        if (!bar || !fillTab) return;
         var btn = makeVoiceBtn('智能语音开方（连说整方自动分发）：如「男 35岁 失眠多梦 黄芪15克 当归10克 七剂」，说完停顿自动录入；再点停止');
+        // 行内融入按钮行（紧跟「填资料」，不参与 flex:1 均分，高度对齐 tab）
+        btn.style.position = 'static';
         btn.style.left = 'auto';
-        btn.style.right = '4px';
-        btn.style.top = '50%';
-        btn.style.marginTop = '-11px';   // 不用 transform 居中：setVoiceListening 的 scale 会覆盖
+        btn.style.right = 'auto';
+        btn.style.top = 'auto';
+        btn.style.marginTop = '0';
+        btn.style.flex = '0 0 auto';
+        btn.style.alignSelf = 'center';
+        btn.style.width = '26px';
+        btn.style.height = '20px';
+        btn.style.fontSize = '11px';
+        btn.style.marginLeft = '4px';
+        btn.style.borderRadius = '4px';
         btn.style.background = '#4c3a9e';
         btn.style.color = '#fff';
         btn.style.border = '1px solid #4c3a9e';
-        tabs.appendChild(btn);
+        bar.insertBefore(btn, fillTab.nextSibling);
         btn.addEventListener('click', function (ev) {
             ev.preventDefault(); ev.stopPropagation();
             if (!window.VoiceInput) return;
