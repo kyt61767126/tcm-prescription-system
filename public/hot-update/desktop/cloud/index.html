@@ -1702,6 +1702,120 @@
         });
     }
 
+    // ============================================================================
+    // ★ 2026-09-18 整方快速录入（免费层）：输入法语音/粘贴 + 现有解析链。
+    //   分层设计：付费语音版 = 界面内 🎤 一键开说（Web Speech，cloud_voice 专属，
+    //   isAvailable 三重 gate）；本入口 = 全用户免费——识别外包给系统输入法
+    //   （讯飞/搜狗/微信输入法等自带免费语音：点文本框 → 输入法面板麦克风），
+    //   理解复用 voiceSmartRoute 全链（性别/年龄/剂数/病史/药物五层匹配/多候选/
+    //   口音学习——纯文本处理，与识别引擎无关）。
+    //   铁律：①入口无 isVoiceEdition gate、注入不受 isAvailable 控制（无麦克风/
+    //   无语音版权限设备也能用输入法语音/打字/粘贴）；②removeVoiceUI 不移除本入口
+    //   （免费层常驻，与语音按钮生命周期解耦）；③弹窗 z-index=1050：低于多候选
+    //   队列(1100)便于点选核对，高于键盘搜索下拉(1000)。
+    // ============================================================================
+    var smartTextModal = null;
+
+    function closeSmartTextModal() {
+        if (smartTextModal) { try { smartTextModal.remove(); } catch (e) {} smartTextModal = null; }
+        try { document.removeEventListener('keydown', smartTextEsc); } catch (e1) {}
+    }
+
+    function smartTextEsc(e) {
+        if (e && e.key === 'Escape') closeSmartTextModal();
+    }
+
+    function showSmartTextModal() {
+        closeSmartTextModal();   // 单例重建（清空上次反馈）
+        var ov = document.createElement('div');
+        ov.id = 'smartTextEntryModal';
+        ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:1050;';
+        var box = document.createElement('div');
+        box.style.cssText = 'width:min(92vw,560px);max-height:86vh;overflow:auto;background:#fff;border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.28);';
+        box.innerHTML =
+            '<div style="background:linear-gradient(135deg,#7c4dff 0%,#5e35b1 100%);color:#fff;font-weight:bold;font-size:15px;padding:10px 14px;border-radius:10px 10px 0 0;display:flex;justify-content:space-between;align-items:center;">'
+          +   '<span>📋 整方快速录入</span><span id="smartTextEntryClose" style="cursor:pointer;font-weight:normal;font-size:16px;padding:0 4px;" title="关闭">✕</span>'
+          + '</div>'
+          + '<div style="padding:12px 14px;">'
+          +   '<div style="font-size:12px;color:#666;margin-bottom:8px;line-height:1.7;">点下方文本框 → 按输入法<b>麦克风</b>说话（或直接打字/粘贴），整段完成后点「解析录入」：<br>示例：<span style="color:#5e35b1;font-weight:bold;">男 35岁 失眠多梦 黄芪15克 当归10克 七剂</span></div>'
+          +   '<textarea id="smartTextEntryArea" placeholder="男 35岁 失眠多梦 黄芪15克 当归10克 七剂&#10;（性别/年龄/病史/药名+剂量/剂数可混说；未识别词会列出提示）" style="width:100%;height:140px;box-sizing:border-box;padding:8px;font-size:14px;border:1px solid #b39ddb;border-radius:6px;resize:vertical;font-family:inherit;"></textarea>'
+          +   '<div id="smartTextEntryResult" style="font-size:12px;margin-top:6px;min-height:18px;color:#555;"></div>'
+          +   '<div style="display:flex;gap:8px;margin-top:10px;justify-content:flex-end;">'
+          +     '<button type="button" id="smartTextEntryClear" style="padding:7px 16px;font-size:13px;border:1px solid #bbb;background:#f5f5f5;border-radius:6px;cursor:pointer;">清空</button>'
+          +     '<button type="button" id="smartTextEntryGo" style="padding:7px 20px;font-size:13px;font-weight:bold;border:none;border-radius:6px;cursor:pointer;background:linear-gradient(135deg,#7c4dff 0%,#5e35b1 100%);color:#fff;">🔍 解析录入</button>'
+          +   '</div>'
+          + '</div>';
+        ov.appendChild(box);
+        document.body.appendChild(ov);
+        smartTextModal = ov;
+        var closeSpan = document.getElementById('smartTextEntryClose');
+        if (closeSpan) closeSpan.onclick = closeSmartTextModal;
+        ov.addEventListener('click', function (e) { if (e.target === ov) closeSmartTextModal(); });
+        document.addEventListener('keydown', smartTextEsc);
+        var ta = document.getElementById('smartTextEntryArea');
+        var res = document.getElementById('smartTextEntryResult');
+        var clearBtn = document.getElementById('smartTextEntryClear');
+        var goBtn = document.getElementById('smartTextEntryGo');
+        if (clearBtn) clearBtn.onclick = function () { if (ta) { ta.value = ''; ta.focus(); } if (res) res.textContent = ''; };
+        if (goBtn) goBtn.onclick = function () {
+            var text = ta ? String(ta.value || '').trim() : '';
+            if (!text) { if (res) { res.style.color = '#b71c1c'; res.textContent = '请先输入，或点文本框后按输入法麦克风说话'; } return; }
+            if (res) { res.style.color = '#555'; res.textContent = '解析中…'; }
+            try {
+                // 复用智能分发全链：唯一命中自动填+高亮、多命中弹候选点选、
+                // 口音学习/未识别 toast 全部生效（与付费语音版同一体验）
+                voiceSmartRoute(text, []);
+                if (res) { res.style.color = '#2e7d32'; res.textContent = '✅ 已分发填入（紫色高亮处请核对）；候选弹窗请在表单上点选'; }
+            } catch (e) {
+                if (res) { res.style.color = '#b71c1c'; res.textContent = '解析失败：' + (e && e.message ? e.message : '未知错误'); }
+            }
+        };
+        setTimeout(function () { try { if (ta) ta.focus(); } catch (e2) {} }, 50);
+    }
+
+    function injectSmartTextEntry() {
+        if (document.getElementById('smartTextEntryBtn')) return;   // 幂等
+        var bar = document.querySelector('.top-tabs-left');
+        var fillTab = bar ? bar.querySelector('.tab-left-item') : null;   // 「填资料」tab
+        if (!bar || !fillTab) return;
+        var btn = document.createElement('button');
+        btn.id = 'smartTextEntryBtn';
+        btn.type = 'button';
+        btn.title = '整方快速录入（免费）：点文本框后按输入法麦克风说话（或粘贴/打字整段），自动分发到性别/年龄/病史/药物/剂数';
+        btn.textContent = '📋 整方录入';
+        // 免费层样式：白底紫字描边（付费语音总入口为深紫实底，视觉分层）
+        btn.style.cssText = 'flex:0 0 auto;align-self:center;height:20px;font-size:11px;margin-left:4px;padding:0 8px;border-radius:4px;background:#fff;color:#5e35b1;border:1px solid #9575cd;cursor:pointer;font-weight:bold;white-space:nowrap;';
+        // 插入锚点：语音总入口（若已注入）之后，否则紧跟「填资料」（保持语音入口紧贴填资料的既有布局）
+        var voiceEntry = bar.querySelector('.' + BTN_CLASS);
+        var anchor = voiceEntry ? voiceEntry.nextSibling : fillTab.nextSibling;
+        fillTab.parentNode.insertBefore(btn, anchor);
+        btn.addEventListener('click', function (ev) {
+            ev.preventDefault(); ev.stopPropagation();
+            showSmartTextModal();
+        });
+    }
+
+    // —— 搜索框剂量直录（免费层）：药名列输入/语音上屏「黄芪15克」整句时自动
+    //    解析入表。防误伤双闸：①input 且非输入法组词中（isComposing——组词过程
+    //    的中间态不触发，语音上屏/组词完成/手打完成均直达）②必须显式剂量单位
+    //    后缀（克/g/公克：「三七」正常搜索、「三七粉15」不触发）。capture 先于
+    //    行内 oninput 执行：清空后 showSearchDropdown 收到空 query 自动收起候选。
+    document.addEventListener('input', function (ev) {
+        try {
+            var t = ev.target;
+            if (!t || !t.id || ev.isComposing) return;
+            if (!/^name-input-\d+$/.test(t.id)) return;
+            var val = String(t.value || '').trim();
+            if (!/^(.+?)(\d{1,4}(?:\.\d{1,2})?)\s*(克|g|G|公克)$/.test(val)) return;
+            var sd = voiceSplitDose(val);
+            if (!sd.name || sd.dose <= 0) return;
+            if (voiceMatchMed(sd.name).type === 'none') return;   // 不干预：键盘候选照常弹出由医生手选
+            voiceSmartRoute(val, []);   // 整句走智能分发（剂量由 voiceAutoAdd 应用）
+            t.value = '';
+            try { var dd = document.getElementById('medicineSearchDropdown'); if (dd) dd.style.display = 'none'; } catch (e1) {}
+        } catch (e) {}
+    }, true);
+
     // —— 移除（登出 / 切换非语音版）——
     function removeVoiceUI() {
         for (var i = 0; i < btnRegistry.length; i++) {
@@ -1724,6 +1838,11 @@
             if (ok && !injected && document.readyState !== 'loading') { injectVoiceUI(); injected = true; }
             else if (!ok && injected) { removeVoiceUI(); }
         } catch (e) {}
+        // ★ 免费层：整方录入入口不受语音 gate 控制（无麦克风/无语音版权限设备
+        //   也可用输入法语音/打字/粘贴），DOM 就绪即注入，幂等常驻。
+        try {
+            if (document.readyState !== 'loading') injectSmartTextEntry();
+        } catch (e1) {}
     }
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', function () { setTimeout(voiceTick, 100); });
