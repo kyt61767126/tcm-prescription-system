@@ -1040,6 +1040,9 @@
         // 5) 语音加药（药物表格提示条右侧，right 锚定不随 resize 漂移）
         injectMedicineVoiceMic();
 
+        // 6) ★ 二期总入口：智能语音开方（病史症状标题行右缘，连说整方自动分发）
+        injectSmartVoiceMic();
+
         // resize 重算四框按钮位置
         if (!window.__voiceMicResizeBound) {
             window.__voiceMicResizeBound = true;
@@ -1400,6 +1403,13 @@
     function voiceFillMedicineInner(text, alts) {
         var segs = voiceParseSegments(text);
         if (!segs.length) { voiceNotify('未识别到药品，请说药名（如：白芍15克）'); return; }
+        var msg = voiceDispatchMeds(segs, alts);
+        voiceNotify(msg || '未识别到药品，请说药名（如：白芍15克）');
+    }
+
+    // ★ 药物分发内核（二期从 voiceFillMedicineInner 拆出，供智能路由复用）：
+    //   入参 segs = [{name, dose}]，返回汇总消息字符串；多候选组入队连弹（副作用）。
+    function voiceDispatchMeds(segs, alts) {
         var added = [], dup = [], missed = [], multiSegs = [];
         var existing = {};
         try {
@@ -1449,7 +1459,7 @@
         if (dup.length) msg += (msg ? '；' : '') + '已在处方跳过：' + dup.join('、');
         if (multiSegs.length) msg += (msg ? '；' : '') + '「' + multiSegs[0].name + '」有多个匹配，请点选' + (multiSegs.length > 1 ? '（共 ' + multiSegs.length + ' 组依次弹出）' : '');
         if (missed.length) msg += (msg ? '；' : '') + '未识别：' + missed.join('、') + '（可说药名或简码）';
-        voiceNotify(msg || '未识别到药品，请说药名（如：白芍15克）');
+        return msg;
     }
 
     function voiceFillMedicine(raw, alts) {
@@ -1460,6 +1470,187 @@
         Promise.resolve(ready).then(function () {
             try { voiceFillMedicineInner(text, alts || []); }
             catch (e) { vLog('med fill error', e && e.message); }
+        });
+    }
+
+    // ============================================================================
+    // ★ 2026-09-18 二期：全局智能分发（NLU 语义路由）—— 总入口 🎤 挂病史症状
+    //   标题行右缘，连报模式整方口述：「男 35岁 失眠多梦 黄芪15克 当归10克 七剂」
+    //   自动分段分发到性别/年龄/剂数/病史症状/药物表格，开方一次说完。
+    //
+    // 分类链（每细段，按确定性排序）：
+    //   ① 剥离性别/年龄/剂数短语（'岁'/'剂'字面铁证，与剂量'克'互不冲突）；
+    //   ② 症状词典纯词条全等 → 病史（先于药物链：症状词具体，药库用户可扩展防误中）；
+    //   ③ 症状拆词（'失眠多梦黄芪15'→失眠+多梦+残段）→ 词条进病史、残段走药物链；
+    //   ④ 药物五层匹配链（voiceMatchMed，多候选弹窗连弹/口音学习全复用）；
+    //   ⑤ 全 miss → 未识别 toast（绝不静默，医生手动处理）。
+    // 安全设计：extractAge 宽松正则会误吃'15克'的 15——路由剥离用严格版（要求
+    //   '岁'字或'年龄'前缀）；'每日一剂'类用法表述不剥剂数（'每'字头防护）。
+    // ============================================================================
+    function voiceCnNum(s) {
+        s = String(s || '').trim();
+        if (/^\d{1,3}$/.test(s)) return parseInt(s, 10);
+        var cnMap = { '一': 1, '二': 2, '两': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9, '十': 10 };
+        if (/^[一二两三四五六七八九十]{1,3}$/.test(s)) {
+            if (s.length === 1) return cnMap[s] || 0;
+            if (s.length === 2 && s[0] === '十') return 10 + (cnMap[s[1]] || 0);
+            if (s.length === 2 && s[1] === '十') return (cnMap[s[0]] || 0) * 10;
+            if (s.length === 3 && s[1] === '十') return (cnMap[s[0]] || 0) * 10 + (cnMap[s[2]] || 0);
+        }
+        return 0;   // 含'百/千/万'复合表达不可靠 → 放弃（宁缺勿错，同 extractAge 原则）
+    }
+
+    // 段内剥离性别/年龄/剂数短语（可混说：'男35岁失眠'→gender+age+rest'失眠'）
+    function voiceStripInfo(seg) {
+        var rest = String(seg || '').replace(/\s+/g, '');
+        var gender = '', age = '', doses = '';
+        // 剂数：'七剂' '14剂' '开七剂'；'每日一剂'等用法表述不剥（'每'字头防护）
+        if (!/每[^，。；,;]{0,4}(\d{1,3}|[一二两三四五六七八九十]{1,3})[剂贴付]/.test(rest)) {
+            var mD = rest.match(/(?:开|拿|取|配)?(\d{1,3}|[一二两三四五六七八九十]{1,3})[剂贴付]/);
+            if (mD) {
+                var dv = voiceCnNum(mD[1]);
+                if (dv > 0 && dv < 200) { doses = String(dv); rest = rest.replace(mD[0], ''); }
+            }
+        }
+        // 年龄（严格版）：'35岁' '三十五岁' 或 '年龄35'/'岁数三十五'（无岁字须有年龄前缀）
+        var mA = rest.match(/(?:年龄|岁数)[为是]?(\d{1,3}|[一二两三四五六七八九十]{1,4})|(\d{1,3}|[一二两三四五六七八九十]{1,4})岁/);
+        if (mA) {
+            var av = voiceCnNum(mA[1] || mA[2] || '');
+            if (av > 0 && av < 150) { age = String(av); rest = rest.replace(mA[0], ''); }
+        }
+        // 性别：'男' '女' '性别男' '男性'（药名/症状词条均无男女字，已验证安全剥离）
+        var mG = rest.match(/(?:性别)?[为是]?([男女])性?/);
+        if (mG) { gender = mG[1]; rest = rest.replace(mG[0], ''); }
+        return {
+            gender: gender, age: age, doses: doses,
+            rest: rest.replace(/^[，、。;；\s]+|[，、。;；\s]+$/g, '')
+        };
+    }
+
+    function voiceSmartRouteInner(text, alts) {
+        var raw = String(text || '').trim();
+        if (!raw) return;
+        var parts = raw.split(/[，。；、,;.\s]+|然后|再来|接着|下一味|下一个/g);
+        var gender = '', age = '', doses = '';
+        var symSegs = [], medSegs = [], unknown = [];
+        for (var i = 0; i < parts.length; i++) {
+            var seg = String(parts[i] || '').trim();
+            if (!seg) continue;
+            var info = voiceStripInfo(seg);
+            if (info.gender) gender = info.gender;
+            if (info.age) age = info.age;
+            if (info.doses) doses = info.doses;
+            var rest = info.rest;
+            if (!rest) continue;
+            // 无标点连报兜底：「克」后紧跟汉字处切段（黄芪15克当归10克）
+            var chunks = /克(?=[\u4e00-\u9fa5])/.test(rest) ? rest.split(/克(?=[\u4e00-\u9fa5])/) : [rest];
+            for (var c = 0; c < chunks.length; c++) {
+                var ch = String(chunks[c] || '').trim();
+                if (!ch) continue;
+                var sd = voiceSplitDose(ch);
+                var sym = voiceSymMatch(sd.name);
+                // ② 词典纯词条全等 → 症状（先于药物链：药库用户可扩展，症状词更具体）
+                if (sym && sym.length === 1 && sym[0] === sd.name) {
+                    if (symSegs.indexOf(sd.name) < 0) symSegs.push(sd.name);
+                    continue;
+                }
+                // ③ 拆词（词条+残段）：'失眠多梦黄芪15'→[失眠,多梦,黄芪15]
+                if (sym && sym.length) {
+                    for (var q = 0; q < sym.length; q++) {
+                        var t = sym[q];
+                        if (!t) continue;
+                        var tSym = voiceSymMatch(t);
+                        if (tSym && tSym.length === 1 && tSym[0] === t) {   // 词典词条 → 症状
+                            if (symSegs.indexOf(t) < 0) symSegs.push(t);
+                            continue;
+                        }
+                        var tSd = voiceSplitDose(t);                          // 残段 → 药物链
+                        if (voiceMatchMed(tSd.name).type !== 'none') { medSegs.push(tSd); continue; }
+                        if (tSym && tSym.length) { for (var h = 0; h < tSym.length; h++) if (symSegs.indexOf(tSym[h]) < 0) symSegs.push(tSym[h]); continue; }
+                        unknown.push(t);
+                    }
+                    continue;
+                }
+                // ④ 药物五层匹配链
+                if (voiceMatchMed(sd.name).type !== 'none') { medSegs.push(sd); continue; }
+                // ⑤ 未识别（toast 汇总，绝不静默）
+                unknown.push(sd.name);
+            }
+        }
+        // —— 分发填充 ——
+        var msgs = [];
+        if (gender) {
+            var gs = document.getElementById('patientGender');
+            if (gs) { gs.value = gender; try { markGenderManual(); } catch (e0) {} VoiceInput.highlight(gs); msgs.push('性别' + gender); }
+        }
+        if (age) {
+            var ae = document.getElementById('patientAge');
+            if (ae) { ae.value = age; VoiceInput.highlight(ae); msgs.push('年龄' + age + '岁'); }
+        }
+        if (doses) {
+            var de = document.getElementById('doseCountInput3');
+            if (de) { de.value = doses; try { syncDoseInputs('doseCountInput3'); } catch (e1) {} VoiceInput.highlight(de); msgs.push('剂数' + doses + '剂'); }
+        }
+        if (symSegs.length) {
+            var he = document.getElementById('medicalHistory');
+            if (he) {
+                var prevH = String(he.value || '').replace(/\s+$/, '');
+                he.value = prevH ? (prevH + '；' + symSegs.join('，')) : symSegs.join('，');
+                VoiceInput.highlight(he);
+                msgs.push('病史已加 ' + symSegs.length + ' 条（' + symSegs.join('、') + '）');
+            }
+        }
+        if (medSegs.length) {
+            var medMsg = voiceDispatchMeds(medSegs, alts);
+            if (medMsg) msgs.push(medMsg);
+        }
+        if (unknown.length) msgs.push('⚠未识别：' + unknown.join('、') + '（请手动填写或用对应框 🎤）');
+        if (msgs.length) { voiceNotify(msgs.join('；')); try { updatePrescriptionPaper(); } catch (e2) {} }
+        else voiceNotify('未识别到有效内容，请说「男 35岁 失眠多梦 黄芪15克」');
+    }
+
+    function voiceSmartRoute(raw, alts) {
+        var text = String(raw || '').trim();
+        if (!text) return;
+        var ready = (window.VoiceInput && VoiceInput.ensurePinyin) ? VoiceInput.ensurePinyin() : Promise.resolve(null);
+        Promise.resolve(ready).then(function () {
+            try { voiceSmartRouteInner(text, alts || []); }
+            catch (e) { vLog('smart route error', e && e.message); }
+        });
+    }
+
+    // —— 总入口按钮（病史症状标题行右缘，深紫底白字区别于单框浅紫 mic）——
+    function injectSmartVoiceMic() {
+        var tabs = document.querySelector('.symptom-section .history-tabs');
+        if (!tabs) return;
+        try { tabs.style.position = 'relative'; } catch (e) {}
+        var btn = makeVoiceBtn('智能语音开方（连说整方自动分发）：如「男 35岁 失眠多梦 黄芪15克 当归10克 七剂」，说完停顿自动录入；再点停止');
+        btn.style.left = 'auto';
+        btn.style.right = '4px';
+        btn.style.top = '50%';
+        btn.style.marginTop = '-11px';   // 不用 transform 居中：setVoiceListening 的 scale 会覆盖
+        btn.style.background = '#4c3a9e';
+        btn.style.color = '#fff';
+        btn.style.border = '1px solid #4c3a9e';
+        tabs.appendChild(btn);
+        btn.addEventListener('click', function (ev) {
+            ev.preventDefault(); ev.stopPropagation();
+            if (!window.VoiceInput) return;
+            if (VoiceInput.isListening()) { VoiceInput.stop(); return; }
+            setVoiceListening(btn, true);
+            VoiceInput.listen(function (text, alts) {
+                voiceSubtitleHide();   // 本句已录入，字幕退场；下句 interim 再现
+                try { voiceSmartRoute(text, alts); } catch (e) { vLog('route error', e && e.message); }
+            }, function (msg) {
+                voiceNotify(msg);
+            }, function () {
+                voiceSubtitleHide();
+                setVoiceListening(btn, false);
+                btn.style.background = '#4c3a9e'; btn.style.color = '#fff';   // 恢复深紫底（setVoiceListening 恢复的是浅紫）
+            }, {
+                continuous: true,
+                onInterim: function (t) { voiceSubtitleShow(btn, t); }
+            });
         });
     }
 
