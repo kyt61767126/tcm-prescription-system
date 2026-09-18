@@ -1774,7 +1774,7 @@
         box.style.cssText = 'width:min(92vw,560px);max-height:86vh;overflow:auto;background:#fff;border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.28);';
         box.innerHTML =
             '<div style="background:linear-gradient(135deg,#7c4dff 0%,#5e35b1 100%);color:#fff;font-weight:bold;font-size:15px;padding:10px 14px;border-radius:10px 10px 0 0;display:flex;justify-content:space-between;align-items:center;">'
-          +   '<span>📋 整方快速录入</span><span id="smartTextEntryClose" style="cursor:pointer;font-weight:normal;font-size:16px;padding:0 4px;" title="关闭">✕</span>'
+          +   '<span>🎙️ 语音录入（整方解析）</span><span id="smartTextEntryClose" style="cursor:pointer;font-weight:normal;font-size:16px;padding:0 4px;" title="关闭">✕</span>'
           + '</div>'
           + '<div style="padding:12px 14px;">'
           +   '<div style="font-size:12px;color:#666;margin-bottom:8px;line-height:1.7;">点下方文本框 → 按输入法<b>麦克风</b>说话（或直接打字/粘贴），整段完成后点「解析录入」：<br>示例：<span style="color:#5e35b1;font-weight:bold;">王明 男 35岁 失眠多梦 黄芪15克 当归10克 七剂 诊为不寐</span></div>'
@@ -1814,21 +1814,31 @@
     }
 
     function injectSmartTextEntry() {
-        if (document.getElementById('smartTextEntryBtn')) return;   // 幂等
+        if (document.getElementById('voiceEntryMainBtn')) return;   // 幂等
         var bar = document.querySelector('.top-tabs-left');
-        var fillTab = bar ? bar.querySelector('.tab-left-item') : null;   // 「填资料」tab
-        if (!bar || !fillTab) return;
+        if (!bar) return;
+        // ① 隐藏「横向打印」入口（display:none 零结构改动，界面基线不动；
+        //    printPrescription 函数保留，纵向打印不受影响）。用户 2026-09-18
+        //    指示：顶部工具栏已排满，横打位让给语音录入显眼入口。
+        var btns = bar.querySelectorAll('button');
+        var anchorBtn = null;
+        for (var i = 0; i < btns.length; i++) {
+            if (String(btns[i].getAttribute('onclick') || '').indexOf("printPrescription('landscape')") !== -1) {
+                btns[i].style.display = 'none';
+                anchorBtn = btns[i];
+            }
+        }
+        // ② 「🎙️ 语音录入」显眼入口（中整合聚合位）：深紫渐变底白字对齐语音
+        //    总入口规范，插在原横向打印位置（隐藏后紧邻纵向打印，视觉原位顶替）
         var btn = document.createElement('button');
-        btn.id = 'smartTextEntryBtn';
+        btn.id = 'voiceEntryMainBtn';
         btn.type = 'button';
-        btn.title = '整方快速录入（免费）：点文本框后按输入法麦克风说话（或粘贴/打字整段），自动分发到性别/年龄/病史/药物/剂数';
-        btn.textContent = '📋 整方录入';
-        // 免费层样式：白底紫字描边（付费语音总入口为深紫实底，视觉分层）
-        btn.style.cssText = 'flex:0 0 auto;align-self:center;height:20px;font-size:11px;margin-left:4px;padding:0 8px;border-radius:4px;background:#fff;color:#5e35b1;border:1px solid #9575cd;cursor:pointer;font-weight:bold;white-space:nowrap;';
-        // 插入锚点：语音总入口（若已注入）之后，否则紧跟「填资料」（保持语音入口紧贴填资料的既有布局）
-        var voiceEntry = bar.querySelector('.' + BTN_CLASS);
-        var anchor = voiceEntry ? voiceEntry.nextSibling : fillTab.nextSibling;
-        fillTab.parentNode.insertBefore(btn, anchor);
+        btn.className = 'action-btn';
+        btn.title = '语音录入（免费）：点文本框后按输入法麦克风说话（或粘贴/打字整段），自动分发到姓名/性别/年龄/病史/药物/剂数/诊断';
+        btn.textContent = '🎙️ 语音录入';
+        btn.style.cssText = 'flex:1;padding:2px 8px;font-size:12px;font-weight:bold;background:linear-gradient(135deg,#7c4dff 0%,#5e35b1 100%);color:#fff;border:none;white-space:nowrap;';
+        if (anchorBtn && anchorBtn.parentNode) anchorBtn.parentNode.insertBefore(btn, anchorBtn.nextSibling);
+        else bar.appendChild(btn);
         btn.addEventListener('click', function (ev) {
             ev.preventDefault(); ev.stopPropagation();
             showSmartTextModal();
