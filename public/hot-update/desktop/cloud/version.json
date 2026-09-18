@@ -1,23 +1,23 @@
 {
   "format": 1,
   "channel": "cloud",
-  "hotVersion": "2026.09.15-5",
-  "appVersion": "1.2.249",
+  "hotVersion": "2026.09.18-1",
+  "appVersion": "1.2.250",
   "files": [
     {
       "name": "index.html",
-      "sha256": "b5851bbb3b6d416f8f541d67116824dc8026a6c68d916cd0d7f16c5e44ba698e",
-      "size": 662659
+      "sha256": "cbec4388577cc6fc464ffd4801a1a3fad78f4e3dd91d0e9347777f2a4ac7f6ee",
+      "size": 728006
     },
     {
       "name": "auth-core.js",
-      "sha256": "4e743a3fd6e14a622d6bd4cc3078dd53cfbb8f73ed5209740a3e985b182342e7",
-      "size": 328406
+      "sha256": "3d3596c9134e5537eba3502a89cc88baa94b180f711398512e3376ebd2fa0e73",
+      "size": 337586
     },
     {
       "name": "permission.js",
-      "sha256": "cb2b05837495ff0935ed784e8330019707ff75eb152c0cfc194ceec0d5a545f0",
-      "size": 27290
+      "sha256": "a6f8096dacb10f1e0e57c251401a424d3c983d491452051164cd7de8073376c6",
+      "size": 28238
     },
     {
       "name": "normalize-config.js",
@@ -80,6 +80,6 @@
       "size": 881727
     }
   ],
-  "signedAt": 1789481824145,
-  "signature": "Mty/BUgmJ/ipnUjOGETfzBp4MSf6yDGLXn2xxaG/R+7l0RsfLaEwt1qvzClo/NNaAc6jOAn9i5BzfV1NkGgPCg=="
+  "signedAt": 1789701990151,
+  "signature": "HQMub+MMc+jNChVHKEVKHg1LOXfACYZP21hgGp3+LZzOovjyQ4Sz+P3iqh0Y/LfM129o/UpYHIbh7z40S/MnCQ=="
 }

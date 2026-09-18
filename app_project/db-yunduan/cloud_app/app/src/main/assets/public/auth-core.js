@@ -2957,6 +2957,8 @@
         if (document.getElementById('licenseStatusSection')) {
             // 已注入，仅更新状态文本
             updateLicenseStatusText();
+            // ★ 2026-09-18 语音版升级按钮显隐随登录态/版本态刷新（重复打开设置弹窗场景）
+            updateVoiceUpgradeBtnVisibility();
             return;
         }
 
@@ -2979,7 +2981,10 @@
         section.innerHTML =
             '<div style="font-weight:bold;margin-bottom:8px;color:#333;">🔐 授权状态</div>' +
             '<div id="licenseStatusText" style="font-size:13px;color:#666;margin-bottom:10px;">加载中...</div>' +
-            '<button class="action-btn" id="adminActivateSettingsBtn" style="background:#26a69a;color:white;width:100%;padding:8px;font-size:14px;border:none;border-radius:4px;cursor:pointer;">📋 管理员激活</button>';
+            '<button class="action-btn" id="adminActivateSettingsBtn" style="background:#26a69a;color:white;width:100%;padding:8px;font-size:14px;border:none;border-radius:4px;cursor:pointer;">📋 管理员激活</button>' +
+            // ★ 2026-09-18 语音版升级入口：已激活老用户（标准版/机构版）自助升级语音版
+            //   （默认隐藏，登录态 + 非语音版才显示，见 updateVoiceUpgradeBtnVisibility）
+            '<button id="voiceUpgradeSettingsBtn" style="display:none;margin-top:8px;background:linear-gradient(135deg,#7c4dff 0%,#5e35b1 100%);color:white;width:100%;padding:8px;font-size:14px;border:none;border-radius:4px;cursor:pointer;font-weight:bold;">🎙️ 升级语音版</button>';
 
         modalBody.appendChild(section);
 
@@ -3005,6 +3010,19 @@
                     }
                 });
             }
+            // ★ 2026-09-18 语音版升级按钮：直达激活弹窗 Tab2（输码+手机号），语音版
+            //   专属提示；不走桌面主进程激活窗口分流（主进程三Tab为通用窗口，
+            //   语音升级直达体验统一走本模块 DOM 弹窗，服务端 voiceUpgraded 响应
+            //   驱动"重新登录生效"提示）
+            const voiceBtn = section.querySelector('#voiceUpgradeSettingsBtn');
+            if (voiceBtn) {
+                voiceBtn.addEventListener('click', function () {
+                    try { closeModal('settingsModal'); } catch (e) { }
+                    if (typeof global.openAdminActivate === 'function') {
+                        global.openAdminActivate(true);  // voiceMode：直达 Tab2 输码
+                    }
+                });
+            }
             // ★ 2026-08-20 双入口合并：底部静态「激活软件/管理员激活」按钮与授权区「管理员激活」功能重复 → 隐藏静态按钮，授权区为唯一入口
             // （不动 index.html DOM；无 license 桥的纯网页环境本来就不渲染该静态按钮，查询不到自动跳过）
             try {
@@ -3015,6 +3033,46 @@
 
         // 异步加载 license 状态
         updateLicenseStatusText();
+        // ★ 2026-09-18 语音版升级按钮：登录态 + 非语音版才显示
+        updateVoiceUpgradeBtnVisibility();
+    }
+
+    // ★★★ 2026-09-18 语音版升级入口显隐：云端登录态 && 当前非语音版才显示
+    //   「🎙️ 升级语音版」按钮（授权状态区内）。判定双源：
+    //     Permission.isVoiceEdition()（服务端驱动 CONFIG.edition，不可伪造）优先，
+    //     CONFIG.edition 含 'voice' 直判兜底（permission.js 未加载的极端时序）。
+    //   未登录（readCloudLoginUser 无缓存）不显示——语音升级只对已激活老用户有意义。
+    function isCloudVoiceEditionNow() {
+        try {
+            if (typeof Permission !== 'undefined' && Permission &&
+                typeof Permission.isVoiceEdition === 'function') {
+                return !!Permission.isVoiceEdition();
+            }
+        } catch (e) { }
+        try {
+            if (typeof CONFIG !== 'undefined' && CONFIG &&
+                String(CONFIG.edition || '').indexOf('voice') !== -1) {
+                return true;
+            }
+        } catch (e) { }
+        return false;
+    }
+
+    async function updateVoiceUpgradeBtnVisibility() {
+        try {
+            const btn = document.getElementById('voiceUpgradeSettingsBtn');
+            if (!btn) return;
+            if (isCloudVoiceEditionNow()) {
+                btn.style.display = 'none';   // 已是语音版，无需升级入口
+                return;
+            }
+            const cu = await readCloudLoginUser();
+            if (!cu || !(cu.username || cu.phone || cu.name)) {
+                btn.style.display = 'none';   // 未登录不显示
+                return;
+            }
+            btn.style.display = 'block';
+        } catch (e) { /* 显隐判定失败保持隐藏，不阻断授权区 */ }
     }
 
     // ★★★ 2026-08-25 全局统一授权状态：读取当前云端登录用户（多 key 兜底）
@@ -4064,7 +4122,10 @@
         });
     }
 
-    global.openAdminActivate = async function () {
+    // ★ 2026-09-18 voiceMode 参数：true = 语音版升级直达（跳过版本选择直接进
+    //   Tab2 激活码输码 + 语音版专属提示 + 手机号预填），由授权状态区
+    //   「🎙️ 升级语音版」按钮触发；不传 = 原流程（版本选择起步）
+    global.openAdminActivate = async function (voiceMode) {
         try {
             // 兼容离线(有 activate 本地桥)与云端APP(无本地激活桥)：
             // 管理员激活是"提交申请->管理员审批->云端创建账号"，云端为 SaaS，无需本地激活桥即可完成
@@ -4101,14 +4162,15 @@
             try {
                 if (typeof CONFIG !== 'undefined' && CONFIG.clinicName) clinicName = CONFIG.clinicName;
             } catch (e) {}
-            showAdminActivateModal(machineId, clinicName);
+            showAdminActivateModal(machineId, clinicName, voiceMode);
         } catch (e) {
             console.warn('[LicenseCheck] 打开管理员激活弹窗失败:', e);
         }
     };
 
     // 管理员激活多步骤弹窗（自身管理状态机，不阻塞返回）
-    function showAdminActivateModal(machineId, clinicName) {
+    // ★ 2026-09-18 voiceMode：语音版升级直达模式（授权区「🎙️ 升级语音版」入口）
+    function showAdminActivateModal(machineId, clinicName, voiceMode) {
         // 若已打开则忽略
         if (document.getElementById('adminActivateOverlay')) return;
 
@@ -4163,7 +4225,7 @@
 
             // ★ Tab2：激活码激活面板（默认隐藏；对齐桌面 activate-window 的 tab-code）
             '<div id="adminTabCode" style="display:none;padding:16px;">' +
-                '<div style="background:#f0f7ff;border:1px solid #d6e8ff;border-radius:8px;padding:10px;margin-bottom:14px;font-size:12px;color:#1565c0;line-height:1.7;">' +
+                '<div id="adminCodeTip" style="background:#f0f7ff;border:1px solid #d6e8ff;border-radius:8px;padding:10px;margin-bottom:14px;font-size:12px;color:#1565c0;line-height:1.7;">' +
                     '💡 输入客服提供给您的激活码完成激活<br>还没有激活码？切换到「📨 工单申请」提交申请' +
                 '</div>' +
                 '<div style="margin-bottom:12px;">' +
@@ -4469,6 +4531,37 @@
             showTicketFormModal(machineId, state.clinicName || (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.clinicName) || '');
         });
 
+        // ★ 2026-09-18 语音版升级直达模式（授权区「🎙️ 升级语音版」入口）：
+        //   跳过版本选择直接进 Tab2 激活码输码；提示框换语音版文案；手机号预填
+        //   当前登录账号（老用户升级主场景：码+本机登录手机号，服务端手机号核验
+        //   通过 → clinic.edition 升级 cloud_voice → 重新登录生效）
+        if (voiceMode) {
+            try {
+                const tipEl = document.getElementById('adminCodeTip');
+                if (tipEl) {
+                    tipEl.innerHTML = '🎙️ 输入<b>语音版激活码</b>完成版本升级<br>升级成功后<b>退出并重新登录</b>，语音输入功能即可生效';
+                    tipEl.style.background = '#f5f0ff';
+                    tipEl.style.borderColor = '#dcd0f7';
+                    tipEl.style.color = '#5e35b1';
+                }
+            } catch (e) {}
+            show('adminTabCode'); setActiveTab('code');
+            setTimeout(function() { var i = document.getElementById('adminCodeInput'); if (i) i.focus(); }, 200);
+            readCloudLoginUser().then(function (cu) {
+                try {
+                    const phEl = document.getElementById('adminCodePhone');
+                    if (phEl && !phEl.value && cu) {
+                        const ph = String(cu.username || cu.phone || '').trim();
+                        if (PHONE_RE.test(ph)) {
+                            phEl.value = ph;
+                            const phHint = document.getElementById('adminCodePhoneHint');
+                            if (phHint) { phHint.textContent = '✓ 已自动填入当前登录账号'; phHint.style.color = '#26a69a'; }
+                        }
+                    }
+                } catch (e) {}
+            }).catch(function () {});
+        }
+
         // ★ Tab2 激活码激活：机器ID复制
         document.getElementById('adminCodeCopyMidBtn').addEventListener('click', async function() {
             const ok = await copyTextToClipboard(machineId || '');
@@ -4552,9 +4645,14 @@
                     if (res && res.success) {
                         loading.style.display = 'none';
                         successBox.style.display = 'block';
+                        // ★ 2026-09-18 语音版升级：voice 码成功 → 提示重启重登后语音功能生效
+                        const __isVoice = !!(res.voiceUpgraded || (res.licenseInfo && res.licenseInfo.type === 'voice'));
                         document.getElementById('adminCodeSuccessDesc').innerHTML =
-                            '授权已安装到本机<br>📱 登录账号：' + phoneVal +
-                            '<br>点击确定后应用将重启，请使用手机号登录';
+                            (__isVoice
+                                ? '🎙️ <b>语音版升级成功！</b><br>📱 登录账号：' + phoneVal +
+                                  '<br>点击确定后应用将重启，使用手机号登录即可使用语音输入功能'
+                                : '授权已安装到本机<br>📱 登录账号：' + phoneVal +
+                                  '<br>点击确定后应用将重启，请使用手机号登录');
                         btn.disabled = false;
                         btn.textContent = '🔄 重启应用';
                         btn.onclick = async function() {
@@ -4599,10 +4697,16 @@
                         loading.style.display = 'none';
                         successBox.style.display = 'block';
                         const li = res.licenseInfo || {};
+                        // ★ 2026-09-18 语音版升级：voice 码成功 → 提示退出重登后语音功能生效
+                        const __isVoice = !!(res.voiceUpgraded || (li && li.type === 'voice'));
                         document.getElementById('adminCodeSuccessDesc').innerHTML =
-                            '激活码有效，已绑定本设备' + (li.clinicName ? '（' + li.clinicName + '）' : '') + '<br>' +
-                            '📱 登录账号：' + phoneVal + '<br>' +
-                            '使用该手机号 + 密码（默认 admin）登录';
+                            (__isVoice
+                                ? '🎙️ <b>语音版激活成功！</b>' + (res.voiceUpgraded ? '（云端账号已同步升级）' : '') + '<br>' +
+                                  '📱 登录账号：' + phoneVal + '<br>' +
+                                  '📝 请<b>退出当前账号并重新登录</b>，语音输入功能即可生效'
+                                : '激活码有效，已绑定本设备' + (li.clinicName ? '（' + li.clinicName + '）' : '') + '<br>' +
+                                  '📱 登录账号：' + phoneVal + '<br>' +
+                                  '使用该手机号 + 密码（默认 admin）登录');
                         btn.disabled = false;
                         btn.textContent = '✅ 完成';
                         return;

@@ -41,6 +41,7 @@ import {
     INVITE_BONUS_DAYS_INVITEE, INVITE_MAX_INVITEES
 } from './_lib/license-core.js';
 import { getDeviceBlock } from './_lib/license-core.js';
+import { provisionCloudAccount } from './_lib/admin-account.js';
 
 // ★ P2 安全修复：收紧 CORS，仅允许合法 Origin
 const ALLOWED_ORIGINS = [
@@ -211,14 +212,16 @@ export async function onRequest(context) {
             return json({ success: false, error: deviceCheck.error }, 403);
         }
 
-        // ★ 版本升级：标准版→机构版，记录升级日志（审计留痕）
+        // ★ 版本升级：标准版→机构版 / 标准版·机构版→语音版，记录升级日志（审计留痕）
         if (deviceCheck.upgrade) {
             await appendLicenseLog(kv, code, {
                 action: 'version-upgrade',
                 time: new Date().toISOString(),
                 ip: ip,
                 operator: user || record.user || 'unknown',
-                detail: '设备从【标准版】升级到【机构版】, machineId=' + machineId.substring(0, 8) + '...'
+                detail: '设备从【' + (deviceCheck.from === 'standard' ? '标准版' : '机构版') +
+                    '】升级到【' + (deviceCheck.to === 'voice' ? '语音版' : '机构版') +
+                    '】, machineId=' + machineId.substring(0, 8) + '...'
             });
         }
 
@@ -556,6 +559,47 @@ export async function onRequest(context) {
             });
         } catch (e) { console.warn('[DeviceVersion] 绑定失败:', e.message); }
 
+        // ★ 2026-09-18 语音版升级（老用户自助）：voice 码激活成功后同步升级云端
+        //   诊所 edition → cloud_voice。云端语音功能 gate = 登录响应 clinicEdition ←
+        //   clinic.edition（users.js sanitizeUser），不更新则"激活成功但登录后仍是
+        //   标准版权益、语音入口不出现"。
+        //   安全边界：仅当身份锚点成立才执行——①手机号核验通过（phoneVerified，
+        //   提交手机号=码绑定手机号）或 ②码绑定诊所名与提交诊所名精确一致
+        //   （needClinicName 强校验链路已保证）。裸码（无任何绑定信息）不调用：
+        //   provisionCloudAccount 内含 ensureClinicUser（会向诊所补建账号），
+        //   匿名裸码场景不具定向性，防滥用；失败仅告警不阻断激活（license 已生效）。
+        //   诊所有效期（clinic.expiresAt）不改动：语音版为加购功能，云端授权期
+        //   沿用诊所原到期日（license 记录上的语音码 1 年期仍约束离线 license 校验）。
+        let voiceUpgraded = false;
+        if (versionOf(record.type) === 'voice') {
+            const __clinicNameMatched = !!(record.clinicName && clinicName === record.clinicName);
+            if (phoneVerified || __clinicNameMatched) {
+                const __voiceClinicName = record.clinicName || (clinicName && String(clinicName).trim()) || '';
+                const __voicePhone = clientPhone || recordPhone;
+                if (__voiceClinicName && __voicePhone) {
+                    try {
+                        await provisionCloudAccount(kv, {
+                            phone: __voicePhone,
+                            adminName: licenseUser,
+                            clinicName: __voiceClinicName,
+                            type: 'voice'   // mapActivationTypeToEdition('voice') → cloud_voice
+                        });
+                        voiceUpgraded = true;
+                        await appendLicenseLog(kv, code, {
+                            action: 'voice-edition-upgrade',
+                            time: new Date().toISOString(),
+                            ip: ip,
+                            operator: licenseUser,
+                            detail: '语音版升级：云端诊所 edition → cloud_voice（clinicName=' + __voiceClinicName +
+                                '，凭证=' + (phoneVerified ? '手机号核验' : '诊所名匹配') + '）'
+                        });
+                    } catch (e) {
+                        console.warn('[VoiceUpgrade] 云端诊所 edition 升级失败（不阻断激活）:', e.message);
+                    }
+                }
+            }
+        }
+
         // ★ P0 修复：存储 codeHash → code 映射（供 verify.js 反查真实校验）
         // verify.js 通过 codeHash 反查 code，再查询 license 记录进行真实校验
         try {
@@ -579,6 +623,9 @@ export async function onRequest(context) {
         return json({
             success: true,
             license: licenseBase64,
+            // ★ 2026-09-18 语音版升级标记：云端诊所 edition 已升级 cloud_voice，
+            //   客户端据此提示"重新登录后语音功能生效"
+            voiceUpgraded: voiceUpgraded,
             // ★ 2026-08-26 推广奖励信息（激活成功页展示：专属邀请码 + 阶梯进度 + 本次奖励）
             inviteInfo: {
                 inviteCode: recordWithInvite.inviteCode || null,

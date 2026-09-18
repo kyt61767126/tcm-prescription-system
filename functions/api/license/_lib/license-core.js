@@ -887,7 +887,15 @@ async function checkDeviceVersion(kv, machineId, targetTypeOrEdition) {
     if (binding.version === 'standard' && targetVersion === 'institution') {
         return { ok: true, binding: binding, upgrade: true, from: 'standard', to: 'institution' };
     }
-    // 其余情况（含"机构版 → 标准版"降级）拒绝
+    // ★ 2026-09-18 语音版升级：标准版/机构版老用户购买语音版激活码后自助升级
+    //   （validate 输码 / activate-from-ticket 工单审批两链路同受此规则约束）。
+    //   语音版为加购产品（加语音输入功能），从标准版或机构版升级均放行；
+    //   语音版设备切回其他版本仍拒绝（防降级绕费）。
+    if (targetVersion === 'voice' &&
+        (binding.version === 'standard' || binding.version === 'institution')) {
+        return { ok: true, binding: binding, upgrade: true, from: binding.version, to: 'voice' };
+    }
+    // 其余情况（含降级、语音版切回其他版本）拒绝
     const boundLabel = DEVICE_VERSION_LABEL[binding.version] || binding.version;
     const targetLabel = DEVICE_VERSION_LABEL[targetVersion] || targetVersion;
     return {
@@ -896,9 +904,11 @@ async function checkDeviceVersion(kv, machineId, targetTypeOrEdition) {
         boundLabel: boundLabel,
         targetLabel: targetLabel,
         error: '该设备已激活【' + boundLabel + '】，不能激活【' + targetLabel + '】。'
-            + (boundLabel === '机构版'
-                ? '【机构版】为最高版本，不支持降级为标准版。如需调整，请联系客服。'
-                : '同一台设备只能注册一个版本。如需从【标准版】升级到【机构版】，请使用【机构版】激活码在软件内重新激活。')
+            + (binding.version === 'voice'
+                ? '【语音版】设备如需更换版本，请联系客服处理。'
+                : (boundLabel === '机构版' && targetLabel === '标准版'
+                    ? '【机构版】为高阶版本，不支持降级为标准版。如需调整，请联系客服。'
+                    : '同一台设备只能注册一个版本。如需升级，请使用【机构版】或【语音版】激活码在软件内重新激活。'))
     };
 }
 
