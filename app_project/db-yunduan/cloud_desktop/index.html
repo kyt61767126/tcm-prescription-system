@@ -1323,10 +1323,22 @@
             }
             html += '<div style="padding:5px 10px;font-size:10px;color:#999;border-top:1px solid #eee;">点击选择' + (queueLeft > 0 ? ' · 本组选完还弹 ' + queueLeft + ' 组' : ' · 点空白处关闭') + '</div>';
             dropdown.innerHTML = html;
-            var anchor = document.querySelector('.medicine-section');
+            // ★ v2.2.1 定位真凶（2026-09-18 地黄二次实测：只有 toast、无弹窗）：
+            //   此前锚 .medicine-section（flex:1 占满主区，底缘≈屏幕底缘），
+            //   fixed 弹窗 top=r.bottom 被定位到视口外——弹窗一直在渲染，只是
+            //   永远在屏幕外看不见。改锚医生刚点过的 🎤 按钮（同键盘搜索锚输入框
+            //   的口径）+ top/left 视口双夹取兜底。
+            var anchor = document.querySelector('.medicine-section .voice-mic-btn') || document.querySelector('.medicine-section');
             var r = anchor ? anchor.getBoundingClientRect() : { left: 20, bottom: 120 };
-            dropdown.style.left = Math.round(r.left) + 'px';
-            dropdown.style.top = Math.round(r.bottom) + 'px';
+            var vw = 1200, vh = 800;
+            try { vw = window.innerWidth || (document.documentElement && document.documentElement.clientWidth) || 1200; } catch (e0) {}
+            try { vh = window.innerHeight || (document.documentElement && document.documentElement.clientHeight) || 800; } catch (e1) {}
+            var top = Math.round(r.bottom) + 4;
+            if (top < 10) top = 10;   // 🎤 滚出视口上方时也不至于定到屏幕外
+            if (top > vh - 200) top = Math.max(10, vh - 200);   // max-height:180 + 边距
+            var left = Math.min(Math.round(r.left), Math.max(10, vw - 240));
+            dropdown.style.left = left + 'px';
+            dropdown.style.top = top + 'px';
             dropdown.style.width = '220px';
             dropdown.style.display = 'block';
             // 外部点击关闭（★ v2.2 三重防误关——2026-09-18 地黄实测复发：弹窗出现后
