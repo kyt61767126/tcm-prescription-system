@@ -1,4 +1,4 @@
-# ============================================================================
+﻿# ============================================================================
 #  sync-all.ps1 - Unified sync script for all shared modules
 #
 #  Purpose:
@@ -450,8 +450,8 @@ $result = Sync-Group -GroupName 'vendor (1 file -> 4 dirs)' -Files $VendorFiles 
 if (-not $result) { $allInSync = $false }
 Write-Host ""
 
-# Group 7b: pinyin-pro vendor -> 3 cloud dirs (★ 2026-09-17 语音连报修复)
-$result = Sync-Group -GroupName 'vendor pinyin-pro (1 file -> 3 cloud vendor dirs)' -Files @('vendor/pinyin-pro.min.js') -Targets $PinyinVendorTargets -VerifyOnly $VerifyOnly
+# Group 7b: pinyin-pro vendor -> 5 vendor dirs (★ 2026-09-17 语音连报修复；09-18 阶段二扩离线两端)
+$result = Sync-Group -GroupName 'vendor pinyin-pro (1 file -> 5 vendor dirs)' -Files @('vendor/pinyin-pro.min.js') -Targets $PinyinVendorTargets -VerifyOnly $VerifyOnly
 if (-not $result) { $allInSync = $false }
 Write-Host ""
 
@@ -506,8 +506,8 @@ $result = Sync-Group -GroupName 'desktop-crash-guard.cjs -> 2 electron dirs' -Fi
 if (-not $result) { $allInSync = $false }
 Write-Host ""
 
-# Group 19: voice-input.js -> 3 cloud dirs (★ 2026-09-17 语音版一期)
-$result = Sync-Group -GroupName 'voice-input.js -> 3 cloud dirs' -Files @('voice/voice-input.js') -Targets $VoiceInputTargets -VerifyOnly $VerifyOnly
+# Group 19: voice-input.js -> 5 dirs (★ 2026-09-17 语音版一期；09-18 阶段二扩离线两端)
+$result = Sync-Group -GroupName 'voice-input.js -> 5 dirs (3 cloud + 2 offline)' -Files @('voice/voice-input.js') -Targets $VoiceInputTargets -VerifyOnly $VerifyOnly
 if (-not $result) { $allInSync = $false }
 Write-Host ""
 
