@@ -2644,6 +2644,12 @@
         } catch (e) { /* 显隐判定失败保持隐藏，不阻断授权区 */ }
     }
 
+    // ★ 2026-09-18 暴露到 window——与 updateLicenseStatusText 同款坑举一反三：
+    //   injectLicenseStatusIntoSettings 仅在启动后 2 秒（登录前）执行一次，登录态
+    //   变化后按钮显隐不再刷新（已登录老用户永远看不到升级按钮）。index.html
+    //   showModal('settingsModal') 打开设置时调用本函数即时刷新。
+    global.updateVoiceUpgradeBtnVisibility = updateVoiceUpgradeBtnVisibility;
+
     // ★★★ 2026-08-25 全局统一授权状态：读取当前云端登录用户（多 key 兜底）
     //   auth:currentUser   — AuthCore.login 写入（StorageAdapter，网页 localStorage / APP Capacitor Preferences）
     //   currentUser        — index.html handleLogin 写入（网页/桌面 localStorage）
