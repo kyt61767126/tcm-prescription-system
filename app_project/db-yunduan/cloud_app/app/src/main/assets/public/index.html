@@ -759,7 +759,24 @@
     var btnRegistry = [];   // {btn, input} —— resize 时重算位置
 
     function vLog() { try { console.vLog.apply(console, ['[VoiceMic]'].concat([].slice.call(arguments))); } catch (e) {} }
-    function voiceNotify(msg) { try { if (typeof showToast === 'function') showToast('🎤 ' + msg); else alert(msg); } catch (e) {} }
+    // ★ v2.2 自绘右上角 toast：主代码 showToast 居中展示会遮挡候选弹窗区域，医生
+    //   3 秒内点 toast 处 = 点到弹窗外 → capture closer 误关弹窗（2026-09-18 地黄
+    //   实测复发）。自绘右上角 + pointer-events:none（点击穿透），单例替换不叠加。
+    var voiceToastEl = null;
+    function voiceNotify(msg) {
+        try {
+            if (voiceToastEl) { try { voiceToastEl.remove(); } catch (e0) {} voiceToastEl = null; }
+            var t = document.createElement('div');
+            t.textContent = '🎤 ' + msg;
+            t.style.cssText = 'position:fixed;top:12px;right:12px;max-width:360px;padding:10px 14px;background:#4c3a9e;color:#fff;border-radius:8px;font-size:13px;line-height:1.5;z-index:9999;pointer-events:none;box-shadow:0 2px 10px rgba(0,0,0,.25);opacity:0;transition:opacity .3s;';
+            document.body.appendChild(t);
+            voiceToastEl = t;
+            setTimeout(function () { try { t.style.opacity = '1'; } catch (e1) {} }, 10);
+            setTimeout(function () {
+                try { t.style.opacity = '0'; setTimeout(function () { try { t.remove(); if (voiceToastEl === t) voiceToastEl = null; } catch (e2) {} }, 300); } catch (e3) {}
+            }, 3200);
+        } catch (e) { try { if (typeof showToast === 'function') showToast('🎤 ' + msg); else alert(msg); } catch (e4) {} }
+    }
 
     // —— 按钮构造（22px 圆形 🎤，紫色系与语音高亮一致）——
     function makeVoiceBtn(title) {
@@ -1210,12 +1227,16 @@
             for (var i = 0; i < medicines.length; i++) {
                 if (medicines[i] && medicines[i].name === name) { med = medicines[i]; break; }
             }
-            if (!med) return;
+            if (!med) return;   // 异常路径（药名对不上库），不推进队列
             var exists = false;
             for (var k = 0; k < prescriptionItems.length; k++) {
                 if (prescriptionItems[k] && prescriptionItems[k].name === name) { exists = true; break; }
             }
-            if (exists) { voiceNotify(name + ' 已在处方中'); return; }
+            if (exists) {
+                voiceNotify(name + ' 已在处方中');
+                voiceAdvanceMultiQueue();   // 跳过重复药 → 连弹下一组
+                return;
+            }
             if (voiceAutoAdd(med, 0, segText) >= 0) {
                 // ★ 口音学习信号①：拼音层多候选点选 = 明确口音纠正（ASR 同音异字，
                 //   如 白勺→白芍、制甘草→炙甘草）；子串层多候选（牛膝→川牛膝/怀牛膝）
@@ -1227,6 +1248,7 @@
                     voiceNotify('已加入 ' + name + '（高亮待核对）');
                 }
             }
+            voiceAdvanceMultiQueue();   // ★ v2.2 本组选完 → 连弹下一组（无下一组则收起）
         } catch (e) { vLog('pick error', e && e.message); }
     };
 
@@ -1263,6 +1285,20 @@
 
     // segText/hitType：本组候选对应的语音识别串原文 + 命中层（点选学习仅拼音层收，
     //   透传给 __voicePick 判定——子串层规格选择不学）
+    // ★ v2.2 队列连弹：连报多味多候选时（地黄+牛膝…）不再只弹第一组让「其余再说」，
+    //   而是逐组弹出、点选一组自动弹下一组（voiceAdvanceMultiQueue 推进）。
+    var voiceMultiQueue = [];   // 待弹候选组队列 [{name, meds, hitType}]
+    function voiceShowNextMulti() {
+        if (!voiceMultiQueue.length) {
+            try { var dd = document.getElementById('voiceMultiDropdown'); if (dd) dd.style.display = 'none'; } catch (e) {}
+            return;
+        }
+        var item = voiceMultiQueue[0];
+        voiceShowMultiChoice(item.meds, item.name, item.hitType);
+    }
+    function voiceAdvanceMultiQueue() {
+        try { voiceMultiQueue.shift(); voiceShowNextMulti(); } catch (e) {}
+    }
     function voiceShowMultiChoice(meds, segText, hitType) {
         try {
             if (!meds || !meds.length) return;
@@ -1277,6 +1313,7 @@
             }
             var html = '';
             var safeSeg = String(segText || '').replace(/[<>"'&\\\/]/g, '');
+            var queueLeft = Math.max(0, voiceMultiQueue.length - 1);   // 本组之后还剩几组
             for (var i = 0; i < meds.length; i++) {
                 var m = meds[i];
                 var safeName = String(m.name || '').replace(/[<>"'&]/g, '');
@@ -1284,7 +1321,7 @@
                 var p = parseFloat(m.price) || 0;
                 html += '<div class="search-item" onclick="window.__voicePick(\'' + safeName + '\',\'' + safeCode + '\',' + p + ',\'' + safeSeg + '\',\'' + String(hitType || '') + '\')">🎤 ' + safeName + ' [' + safeCode + ']</div>';
             }
-            html += '<div style="padding:5px 10px;font-size:10px;color:#999;border-top:1px solid #eee;">点击选择 · 点空白处关闭</div>';
+            html += '<div style="padding:5px 10px;font-size:10px;color:#999;border-top:1px solid #eee;">点击选择' + (queueLeft > 0 ? ' · 本组选完还弹 ' + queueLeft + ' 组' : ' · 点空白处关闭') + '</div>';
             dropdown.innerHTML = html;
             var anchor = document.querySelector('.medicine-section');
             var r = anchor ? anchor.getBoundingClientRect() : { left: 20, bottom: 120 };
@@ -1292,12 +1329,22 @@
             dropdown.style.top = Math.round(r.bottom) + 'px';
             dropdown.style.width = '220px';
             dropdown.style.display = 'block';
-            // 外部点击关闭（延迟 300ms 绑定，避开本次显示事件链；触发一次后自移除）
+            // 外部点击关闭（★ v2.2 三重防误关——2026-09-18 地黄实测复发：弹窗出现后
+            //   医生继续点 🎤 说下一味（连报习惯）或点到 toast 区域，capture closer
+            //   立即误关弹窗。①显示后 1 秒保护期内的点击一律忽略（语音链尾事件）
+            //   ②点 🎤 语音按钮不关（保留弹窗供回头点选）③真正关闭时清空待弹队列）
+            var shownAt = Date.now();
             setTimeout(function () {
                 try {
                     var closer = function (ev) {
                         try {
-                            if (dropdown.parentNode && !dropdown.contains(ev.target)) dropdown.style.display = 'none';
+                            if (Date.now() - shownAt < 1000) return;   // 保护期：不关不移除
+                            var t = ev.target;
+                            if (t && t.closest && t.closest('.voice-mic-btn')) return;   // 连报点🎤不关
+                            if (dropdown.parentNode && !dropdown.contains(t)) {
+                                dropdown.style.display = 'none';
+                                voiceMultiQueue = [];   // 医生主动关闭 = 放弃剩余组
+                            }
                         } catch (e) {}
                         document.removeEventListener('click', closer, true);
                     };
@@ -1349,11 +1396,15 @@
                 multiSegs.push({ name: seg.name, meds: r.meds, hitType: r.type });
             }
         }
-        if (multiSegs.length) voiceShowMultiChoice(multiSegs[0].meds, multiSegs[0].name, multiSegs[0].hitType);
+        if (multiSegs.length) {
+            // ★ v2.2 队列接管：整批多候选组入队，逐组弹出、点选后自动弹下一组
+            voiceMultiQueue = multiSegs;
+            voiceShowNextMulti();
+        }
         var msg = '';
         if (added.length) msg += '已语音加入 ' + added.length + ' 味（高亮待核对）：' + added.join('、');
         if (dup.length) msg += (msg ? '；' : '') + '已在处方跳过：' + dup.join('、');
-        if (multiSegs.length) msg += (msg ? '；' : '') + '「' + multiSegs[0].name + '」有多个匹配，请点选' + (multiSegs.length > 1 ? '（其余 ' + (multiSegs.length - 1) + ' 味请再说）' : '');
+        if (multiSegs.length) msg += (msg ? '；' : '') + '「' + multiSegs[0].name + '」有多个匹配，请点选' + (multiSegs.length > 1 ? '（共 ' + multiSegs.length + ' 组依次弹出）' : '');
         if (missed.length) msg += (msg ? '；' : '') + '未识别：' + missed.join('、') + '（可说药名或简码）';
         voiceNotify(msg || '未识别到药品，请说药名（如：白芍15克）');
     }
