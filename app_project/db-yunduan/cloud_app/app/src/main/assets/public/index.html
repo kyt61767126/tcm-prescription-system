@@ -1500,10 +1500,10 @@
         return 0;   // 含'百/千/万'复合表达不可靠 → 放弃（宁缺勿错，同 extractAge 原则）
     }
 
-    // 段内剥离性别/年龄/剂数短语（可混说：'男35岁失眠'→gender+age+rest'失眠'）
+    // 段内剥离性别/年龄/剂数/姓名/诊断短语（可混说：'男35岁失眠'→gender+age+rest'失眠'）
     function voiceStripInfo(seg) {
         var rest = String(seg || '').replace(/\s+/g, '');
-        var gender = '', age = '', doses = '';
+        var gender = '', age = '', doses = '', patientName = '', diagnosis = '';
         // 剂数：'七剂' '14剂' '开七剂'；'每日一剂'等用法表述不剥（'每'字头防护）
         if (!/每[^，。；,;]{0,4}(\d{1,3}|[一二两三四五六七八九十]{1,3})[剂贴付]/.test(rest)) {
             var mD = rest.match(/(?:开|拿|取|配)?(\d{1,3}|[一二两三四五六七八九十]{1,3})[剂贴付]/);
@@ -1521,8 +1521,18 @@
         // 性别：'男' '女' '性别男' '男性'（药名/症状词条均无男女字，已验证安全剥离）
         var mG = rest.match(/(?:性别)?[为是]?([男女])性?/);
         if (mG) { gender = mG[1]; rest = rest.replace(mG[0], ''); }
+        // ★ 姓名（前缀式，2026-09-18 免费层实测反馈补全）：'姓名王明/患者王明/叫王明'。
+        //   两道防误剥：①正则锚定段首（'夜尿叫醒'的中间'叫'不触发）②置于性别剥离
+        //   之后（'姓名王明男'先由性别剥走'男'，姓名捕获不被性别尾字污染）。
+        var mN = rest.match(/^(?:姓名|患者|名叫|叫做|叫)[:是为]?([\u4e00-\u9fa5]{2,4})/);
+        if (mN) { patientName = mN[1]; rest = rest.replace(mN[0], ''); }
+        // ★ 诊断（前缀式）：'诊断为不寐' '诊为心肾不交'——显式前缀整段捕获。
+        //   描述性内容无可靠模式，不做裸判定（宁缺勿错，误填比漏填危险）。
+        var mDiag = rest.match(/^(?:诊断|诊为)[:是为]?(.+)$/);
+        if (mDiag && mDiag[1]) { diagnosis = String(mDiag[1]).trim(); rest = ''; }
         return {
             gender: gender, age: age, doses: doses,
+            patientName: patientName, diagnosis: diagnosis,
             rest: rest.replace(/^[，、。;；\s]+|[，、。;；\s]+$/g, '')
         };
     }
@@ -1531,8 +1541,9 @@
         var raw = String(text || '').trim();
         if (!raw) return;
         var parts = raw.split(/[，。；、,;.\s]+|然后|再来|接着|下一味|下一个/g);
-        var gender = '', age = '', doses = '';
+        var gender = '', age = '', doses = '', patientName = '', diagnosis = '';
         var symSegs = [], medSegs = [], unknown = [];
+        var firstContent = true;   // ★ 裸名判定窗口：仅第一个内容段（口述习惯姓名打头）
         for (var i = 0; i < parts.length; i++) {
             var seg = String(parts[i] || '').trim();
             if (!seg) continue;
@@ -1540,8 +1551,11 @@
             if (info.gender) gender = info.gender;
             if (info.age) age = info.age;
             if (info.doses) doses = info.doses;
+            if (info.patientName) patientName = info.patientName;            // 前缀姓名
+            if (info.diagnosis) { diagnosis = info.diagnosis; continue; }   // 诊断整段（rest 已清空）
             var rest = info.rest;
             if (!rest) continue;
+            var isFirst = firstContent; firstContent = false;
             // 无标点连报兜底：「克」后紧跟汉字处切段（黄芪15克当归10克）
             var chunks = /克(?=[\u4e00-\u9fa5])/.test(rest) ? rest.split(/克(?=[\u4e00-\u9fa5])/) : [rest];
             for (var c = 0; c < chunks.length; c++) {
@@ -1573,12 +1587,38 @@
                 }
                 // ④ 药物五层匹配链
                 if (voiceMatchMed(sd.name).type !== 'none') { medSegs.push(sd); continue; }
-                // ⑤ 未识别（toast 汇总，绝不静默）
+                // ⑤ 首段裸名判定：纯 2-4 汉字 + 词典/药库均 miss + 无剂量残留 → 患者姓名
+                //   （'男35岁失眠'打头时首段已被性别/年龄/词典吃掉，不会误入此处；
+                //    带剂量数字（'王明15'）不判，防药名残段误吞）
+                if (isFirst && !patientName && !sd.dose && /^[\u4e00-\u9fa5]{2,4}$/.test(sd.name)) {
+                    patientName = sd.name;
+                    continue;
+                }
+                // ⑥ 未识别（toast 汇总，绝不静默）
                 unknown.push(sd.name);
             }
         }
         // —— 分发填充 ——
         var msgs = [];
+        if (patientName) {
+            var ne = document.getElementById('patientName');
+            if (ne) {
+                ne.value = patientName;
+                VoiceInput.highlight(ne);
+                msgs.push('姓名' + patientName);
+                // 历史患者联动（与单框姓名 mic 同入口）：同名下拉出现供点选带出档案
+                try { if (typeof searchPatientsQuick === 'function') searchPatientsQuick({ target: { value: patientName } }); } catch (eN) {}
+            }
+        }
+        if (diagnosis) {
+            var dge = document.getElementById('diagnosis');
+            if (dge) {
+                var prevD = String(dge.value || '').replace(/[，,\s]+$/, '');
+                dge.value = prevD ? (prevD + '，' + diagnosis) : diagnosis;
+                VoiceInput.highlight(dge);
+                msgs.push('诊断已填 ' + diagnosis);
+            }
+        }
         if (gender) {
             var gs = document.getElementById('patientGender');
             if (gs) { gs.value = gender; try { markGenderManual(); } catch (e0) {} VoiceInput.highlight(gs); msgs.push('性别' + gender); }
@@ -1737,8 +1777,8 @@
           +   '<span>📋 整方快速录入</span><span id="smartTextEntryClose" style="cursor:pointer;font-weight:normal;font-size:16px;padding:0 4px;" title="关闭">✕</span>'
           + '</div>'
           + '<div style="padding:12px 14px;">'
-          +   '<div style="font-size:12px;color:#666;margin-bottom:8px;line-height:1.7;">点下方文本框 → 按输入法<b>麦克风</b>说话（或直接打字/粘贴），整段完成后点「解析录入」：<br>示例：<span style="color:#5e35b1;font-weight:bold;">男 35岁 失眠多梦 黄芪15克 当归10克 七剂</span></div>'
-          +   '<textarea id="smartTextEntryArea" placeholder="男 35岁 失眠多梦 黄芪15克 当归10克 七剂&#10;（性别/年龄/病史/药名+剂量/剂数可混说；未识别词会列出提示）" style="width:100%;height:140px;box-sizing:border-box;padding:8px;font-size:14px;border:1px solid #b39ddb;border-radius:6px;resize:vertical;font-family:inherit;"></textarea>'
+          +   '<div style="font-size:12px;color:#666;margin-bottom:8px;line-height:1.7;">点下方文本框 → 按输入法<b>麦克风</b>说话（或直接打字/粘贴），整段完成后点「解析录入」：<br>示例：<span style="color:#5e35b1;font-weight:bold;">王明 男 35岁 失眠多梦 黄芪15克 当归10克 七剂 诊为不寐</span></div>'
+          +   '<textarea id="smartTextEntryArea" placeholder="王明 男 35岁 失眠多梦 黄芪15克 当归10克 七剂 诊为不寐&#10;（姓名开头自动识别；诊断说「诊为/诊断为」；性别/年龄/病史/药名+剂量/剂数可混说）" style="width:100%;height:140px;box-sizing:border-box;padding:8px;font-size:14px;border:1px solid #b39ddb;border-radius:6px;resize:vertical;font-family:inherit;"></textarea>'
           +   '<div id="smartTextEntryResult" style="font-size:12px;margin-top:6px;min-height:18px;color:#555;"></div>'
           +   '<div style="display:flex;gap:8px;margin-top:10px;justify-content:flex-end;">'
           +     '<button type="button" id="smartTextEntryClear" style="padding:7px 16px;font-size:13px;border:1px solid #bbb;background:#f5f5f5;border-radius:6px;cursor:pointer;">清空</button>'
