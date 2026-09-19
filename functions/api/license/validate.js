@@ -253,9 +253,15 @@ export async function onRequest(context) {
                 }, 400);
             }
             if (clinicName !== record.clinicName) {
+                // ★ 2026-09-19 死循环修复（惠康康案例）：诊所名框默认隐藏（09-11 换机简化），
+                //   但隐藏字段被跨 Tab 预填旧诊所名时值非空照常提交 → 命中本 403 → 客户端
+                //   仅在 needClinicName/needActivationInfo 时展开输入框 → 403 无标记 =
+                //   用户永远无法改正诊所名（激活窗口 activate-window.html L1709 分支）。
+                //   本 403 也带 needClinicName，复用既有展开逻辑，旧客户端即时生效零重打包。
                 return json({
                     success: false,
-                    error: `诊所名与激活码绑定的诊所不一致（绑定：${record.clinicName}，输入：${clinicName}），请联系客服核对`
+                    error: `诊所名与激活码绑定的诊所不一致（绑定：${record.clinicName}，输入：${clinicName}），请在下方诊所名称框修改后重新提交`,
+                    needClinicName: true
                 }, 403);
             }
         }
