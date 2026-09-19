@@ -649,6 +649,10 @@
 
 * ★ 2026-09-19 **后台设备配额弹窗「已绑定 1/5 台但列表显示暂无设备」**（惠康康中医诊所案例）：`admin-get-device-quota` 两分支返回形状不一致——机构/离线版分支 `devices` 为**裸数组**（license.devices 映射），普通账号分支为 `{devices:[...]}` 对象；前端只按 `data.devices.devices` 解包 → 机构版计数对、列表永远空。修复：双副本（public/admin/index.html + site-admin/admin/index.html）兼容解包 `Array.isArray(data.devices) ? data.devices : (data.devices.devices||[])`。**铁律：同一接口多分支返回形状必须统一；前端消费多形状时必须兼容解包。** 另：桌面端激活申请（admin-submit）报「该手机号已在其他设备完成激活」= 2026-09-05 安全铁律设计内拒绝（匿名接口手机号非秘密，设备不匹配一律 409 防接管，勿放开）；已开通云端账号的多端使用正解=桌面端登录框直接账号密码登录（走设备配额），激活申请入口仅用于新诊所首次开通。生效：服务端+后台页面 push 即部署，五端零重打包。
 
+* ★ 2026-09-19 **换机激活「填原绑定手机号自动恢复」从未生效**（惠康康案例，commit 09d40e65）：validate.js recordPhone 仅从 user 字符串提取手机号（"张三/138…" 老形态），而 admin-approve 生成的记录 user="惠康康"（纯姓名）、手机号存独立 record.phone 字段 → phoneVerified 恒 false → 客户端界面承诺的手机号换机恢复走不通，被迫依赖诊所名匹配（又被 Tab2 隐藏诊所名框跨 Tab 预填旧值卡成死循环，配套修复：诊所名不一致 403 补 needClinicName 展开标记，commit ff40a0fb）。**铁律：身份核验读记录字段必须覆盖全部存储形态（user 内嵌 / record.phone 独立字段），新增存储形态时同步审计所有读取点。**
+
+* ★ 2026-09-20 **KV 运维事故规程（生产 license 记录险些被毁，靠事前备份恢复）**：① 本版 wrangler `kv key get` **不支持 --path**（仅 put 支持），get 只能 --text；② **严禁 get→改→put 链式一条命令**——PowerShell 语句级错误不中断脚本，get 失败后 $null 继续流转，ConvertTo-Json 产出 "null" 字符串被 put 写进 KV **静默毁掉生产记录**；③ 规程：任何 KV put 前**先把当前值备份到文件**；构建修改文件必须 `$ErrorActionPreference='Stop'` + try/catch + sanity check（关键字段比对），**文件构建与 put 分两步执行**，put 后必读回验证；④ 中文字段经 --text 管道往返安全（控制台 UTF-8），但写回文件必须 [IO.File]::WriteAllText + UTF8Encoding($false)（无 BOM——BOM 会让服务端 JSON.parse 失败）。
+
 ## 11. D1 数据库迁移与激活审核有效期（2026-09-10）
 
 ### 用户表 D1 切读（登录+用户列表）→ ★ 2026-09-19 改判「KV 权威 + D1 自愈副本」
