@@ -649,15 +649,15 @@
 
 ## 11. D1 数据库迁移与激活审核有效期（2026-09-10）
 
-### 用户表 D1 切读（登录+用户列表）
+### 用户表 D1 切读（登录+用户列表）→ ★ 2026-09-19 改判「KV 权威 + D1 自愈副本」
 
-* **目标**：用户认证与列表查询从 KV 迁移到 D1，KV 保留回退兜底。
-* **改造点**（`functions/api/users.js`）：
-  - `findUserForLogin(kv, username, env)`：D1 `SELECT * FROM clinic_users WHERE clinic_id=? AND username=?` 优先，KV 回退命中时 `syncUserToD1` 补齐。
-  - `getAllClinicUsers(kv, env)`：D1 `SELECT * FROM clinic_users` 一次查全，KV 回退。
-  - clinic_admin 本诊所用户列表：D1 `WHERE clinic_id=?`，KV 回退。
+* **目标**：用户认证与列表查询迁移 D1 加速；**2026-09-19 实锤教训：D1 只能做副本/索引，不能做用户数据权威源**。
+* **2026-09-19 P0 修复「平台后台用户管理找不到诊所」（实锤案例：惠康康中医诊所 13398628212，诊所管理可见、用户管理永远搜不到）**：原 `getAllClinicUsers` D1 优先且 `clinic_users` 表内任意行存在即提前返回、永不回源 KV；而所有开通/修改路径（`clinic=create` 平台创建 / `register-clinic` 自助注册 / `provisionCloudAccount` 激活开通 / 后台改管理员手机号密码）**全部只写 KV**，全库唯一回填点是「该用户登录时」→ 从未登录过的账号在 D1 永远无行，用户管理永远不可见。三条修复（`functions/api/users.js`）：
+  - `getAllClinicUsers`：改 **KV 权威遍历**（与诊所管理同源直读 `system:clinics` + `clinic:{id}:users`）+ D1 缺行自动 UPSERT 回填（自愈：一次列表加载即修复存量漂移，无需人工数据迁移）。
+  - `findUserForLogin`：D1 命中后**必回读该诊所 KV 用户交叉校验**——KV 有 → 以 KV 为准并顺手回填 D1（根治「后台改了新密码、登录仍 401」的历史案例 13398628212，即 D1 旧密码哈希作祟）；KV 无（账号已删除/已迁移）→ 不信任 D1 行，落回 KV 链路重新定位。
+  - clinic_admin 本诊所用户列表：**KV 优先**，KV 空/读失败才回退 D1。
+* **铁律：①任何新增用户写路径只写 KV 即可，D1 由读路径自动回填收敛；②禁止把 D1 当用户数据权威源读取，除非先给该写路径补上 `syncUserToD1`；③后台两页数据源口径——诊所管理直读 KV，用户管理经 getAllClinicUsers（现同为 KV 权威），两页永不再分叉。**
 * **辅助函数**：`d1RowToUser`（D1 行→用户对象）、`findClinicUserD1`、`syncUserToD1`（UPSERT）、`deleteUserFromD1`。
-* **回退补齐**：KV 命中用户时自动写 D1，存量数据逐步迁移，无需一次性批量导入。
 * **生效方式**：服务端 Functions push 即部署，**五端零重打包**。
 
 * ★ 2026-09-12 **P0 铁律：D1 TEXT 列读回必须恢复客户端期望的 JS 类型**（处方历史「删除/加载按钮静默失效」根因）：`schema.sql` prescriptions.id 为 TEXT（upsert 绑 `String(p.id)` 入库），`d1RowToPrescription` 原样透传 `{...row}` → 客户端拿到字符串 id；而客户端全链路（`deleteHistory`/`loadHistory`/`deleteCase` 的 `find(p => p.id === id)`、按钮 onclick `Number(p.id)||0` 传参）按 KV 时代数字 id 做 `===` 严格匹配 → 字符串≠数字 → find 落空 → 静默 return，点击无任何反应。**修复：转换函数内 `纯数字串 → Number()`（`/^\d+$/.test(row.id)`），与 KV 回退路径类型对齐**。铁律：①新增 D1 表时行转换函数必须显式声明每个 id/数值列的目标类型，禁止裸 `{...row}`；②客户端 id 比较一律 `String(a) === String(b)` 归一化（新代码）；③症状特征——「按钮点了没反应且无 console 报错」优先查严格相等类型失配。生效：服务端 push 即部署（Cloudflare Pages），五端零重打包，本地 IndexedDB 缓存随下次云端拉取自动清空重写自愈。

@@ -433,35 +433,40 @@ async function findUserForLogin(kv, username, env = null) {
     const isPhoneInput = /^1[3-9]\d{9}$/.test(trimmed);
 
     // ★ P3：D1 优先查询诊所用户（一次 SQL 替代遍历所有诊所 KV key）
+    // ★ 2026-09-19 D1 命中后必须回读 KV 交叉校验：D1 行可能滞后（改密码/手机号只写
+    //   KV，回填此前仅在登录时发生），旧数据会导致「后台改了新密码、登录仍 401」
+    //   （历史案例：13398628212 反复改密码仍 401 的根因）。规则：
+    //   KV 有此用户 → 以 KV 为准（顺手 UPSERT 回填 D1，副本收敛）；
+    //   KV 无此用户（已删除/已迁移诊所）→ 不信任 D1 行，落入下方 KV 链路重新定位。
     const d1On = isD1Enabled(env);
     const db = d1On ? getDB(env) : null;
     if (db) {
         const d1User = await findClinicUserD1(db, trimmed).catch(() => null);
         if (d1User) {
-            // 找到用户，需要从 KV 获取诊所信息（status/edition/expiresAt）
+            // 需要从 KV 获取诊所信息（status/edition/expiresAt）
             const clinics = await kv.get(KV_SYSTEM_CLINICS, 'json').catch(() => null);
             const clinic = clinics?.find(c => c.id === d1User.clinicId) || null;
-            if (clinic && clinic.status !== 'disabled') {
-                return {
-                    user: d1User,
-                    clinicId: clinic.id,
-                    clinicName: clinic.name,
-                    clinicStatus: clinic.status || 'active',
-                    clinicEdition: clinic.edition || null,
-                    clinicExpiresAt: clinic.expiresAt || null,
-                    error: null
-                };
-            }
-            if (clinic && clinic.status === 'disabled') {
-                return {
-                    user: d1User,
-                    clinicId: clinic.id,
-                    clinicName: clinic.name,
-                    clinicStatus: 'disabled',
-                    clinicEdition: clinic.edition || null,
-                    clinicExpiresAt: clinic.expiresAt || null,
-                    error: null
-                };
+            if (clinic) {
+                let kvUser = null;
+                try {
+                    const cUsers = await kv.get(`clinic:${clinic.id}:users`, 'json');
+                    if (Array.isArray(cUsers)) {
+                        kvUser = cUsers.find(x => x && x.username === d1User.username) || null;
+                    }
+                } catch (e) { /* KV 读失败按无副本处理 */ }
+                if (kvUser) {
+                    try { await syncUserToD1(db, clinic.id, kvUser); } catch (e) { /* 回填失败不阻断登录 */ }
+                    return {
+                        user: kvUser,
+                        clinicId: clinic.id,
+                        clinicName: clinic.name,
+                        clinicStatus: clinic.status || 'active',
+                        clinicEdition: clinic.edition || null,
+                        clinicExpiresAt: clinic.expiresAt || null,
+                        error: null
+                    };
+                }
+                // KV 无此用户：D1 行视为失效，继续下方 KV 链路（platform_admins → 遍历诊所）
             }
         }
     }
@@ -550,72 +555,74 @@ async function findUserForLogin(kv, username, env = null) {
 }
 
 // 获取所有诊所的用户（用于 platform_admin）
+// ★ 2026-09-19 修复「用户管理找不到诊所」根因：改为 KV 权威 + D1 缺行自愈回填。
+//   原实现 D1 优先且 clinic_users 有任意行即提前返回、永不回源 KV——而所有开通/修改
+//   路径（平台创建诊所 clinic=create / 自助注册 register-clinic / 激活开通
+//   provisionCloudAccount / 后台改管理员手机号密码）全部只写 KV，全库唯一 D1 回填点
+//   是「该用户登录时」。从未登录过的账号（如惠康康中医诊所 13398628212）在 D1 永远
+//   无行 → 用户管理永远搜不到，诊所管理却可见（诊所管理直读 KV）。
+//   现与「诊所管理」同源遍历 KV（单一权威源），D1 降级为索引副本：缺失行自动
+//   UPSERT 回填，一次列表加载即完成自愈，无需等用户登录、无需人工数据迁移。
 async function getAllClinicUsers(kv, env = null) {
     const clinics = await kv.get(KV_SYSTEM_CLINICS, 'json');
     if (!clinics || !Array.isArray(clinics)) return [];
 
-    const result = [];
     const d1On = isD1Enabled(env);
     const db = d1On ? getDB(env) : null;
 
-    // ★ P3：D1 优先——一次 SQL 查询所有诊所用户（替代遍历所有诊所 KV key）
+    // D1 现存行索引（clinic_id|username），仅用于判定哪些账号需要回填，不作数据源。
+    // 读取失败按空集处理（效果=全量回填；UPSERT 幂等，无副作用）。
+    const d1Existing = new Set();
     if (db) {
         try {
-            const allRows = await db.prepare(`SELECT * FROM clinic_users ORDER BY clinic_id, username`).all();
-            if (allRows && allRows.success && allRows.results.length > 0) {
-                const clinicMap = new Map(clinics.map(c => [c.id, c]));
+            const allRows = await db.prepare(`SELECT clinic_id, username FROM clinic_users`).all();
+            if (allRows && allRows.success) {
                 for (const row of allRows.results) {
-                    const clinic = clinicMap.get(row.clinic_id);
-                    if (!clinic) continue;
-                    const u = d1RowToUser(row);
-                    const su = sanitizeUser(u, clinic.id, clinic.name, clinic.status, clinic.edition);
-                    try {
-                        if (u.username && String(clinic.edition || '').indexOf('cloud') === 0) {
-                            const dev = await kv.get(KV_USER_DEVICES_PREFIX + u.username, 'json');
-                            if (dev && Array.isArray(dev.devices) && dev.devices.length) {
-                                const classes = [...new Set(dev.devices.map(d => d && d.clientClass).filter(Boolean))];
-                                if (classes.length) su.deviceClasses = classes;
-                            }
-                        }
-                    } catch (e) {}
-                    result.push(su);
+                    if (row && row.clinic_id && row.username) d1Existing.add(row.clinic_id + '|' + row.username);
                 }
-                return result;
             }
         } catch (e) {
-            console.error('[D1] getAllClinicUsers failed, fallback to KV:', e.message);
+            console.error('[D1] getAllClinicUsers index read failed (按全量回填处理):', e.message);
         }
     }
 
+    const result = [];
+    const backfills = [];
     for (const clinic of clinics) {
         const users = await kv.get(`clinic:${clinic.id}:users`, 'json');
-        if (users && Array.isArray(users)) {
-            for (const u of users) {
-                // ★ 2026-08-23 修复：补传 clinic.status / clinic.edition，用户管理列表才能显示
-                //   真实版本类型（云端机构版/云端标准版）与诊所待审核徽章（原漏传导致全部兜底 active/cloud_clinic）
-                const su = sanitizeUser(u, clinic.id, clinic.name, clinic.status, clinic.edition);
-                // ★ 2026-09-03 载体信息：
-                //   云端版——读取账号绑定的设备（user_devices 存 desktop/app，网页版不占名额），
-                //     供后台用户管理显示"🖥️桌面·云端标准版 / 📱APP·云端机构版"。
-                //   离线版——账号不经云端登录（无 user_devices），载体取诊所记录的
-                //     offlineCarrier（激活审核时 provisionCloudAccount 从申请记录写入：
-                //     desktop=离线桌面 / app=离线APP）。
-                //   读取失败静默跳过（列表展示非关键路径，不影响主数据）。
-                try {
-                    if (u.username && String(clinic.edition || '').indexOf('cloud') === 0) {
-                        const dev = await kv.get(KV_USER_DEVICES_PREFIX + u.username, 'json');
-                        if (dev && Array.isArray(dev.devices) && dev.devices.length) {
-                            const classes = [...new Set(dev.devices.map(d => d && d.clientClass).filter(Boolean))];
-                            if (classes.length) su.deviceClasses = classes;
-                        }
-                    } else if (String(clinic.edition || '').indexOf('offline_') === 0 && clinic.offlineCarrier) {
-                        su.deviceClasses = [clinic.offlineCarrier];
+        if (!users || !Array.isArray(users)) continue;
+        for (const u of users) {
+            if (!u || !u.username) continue;
+            // ★ 2026-08-23 修复：补传 clinic.status / clinic.edition，用户管理列表才能显示
+            //   真实版本类型（云端机构版/云端标准版）与诊所待审核徽章（原漏传导致全部兜底 active/cloud_clinic）
+            const su = sanitizeUser(u, clinic.id, clinic.name, clinic.status, clinic.edition);
+            // ★ 2026-09-03 载体信息：
+            //   云端版——读取账号绑定的设备（user_devices 存 desktop/app，网页版不占名额），
+            //     供后台用户管理显示"🖥️桌面·云端标准版 / 📱APP·云端机构版"。
+            //   离线版——账号不经云端登录（无 user_devices），载体取诊所记录的
+            //     offlineCarrier（激活审核时 provisionCloudAccount 从申请记录写入：
+            //     desktop=离线桌面 / app=离线APP）。
+            //   读取失败静默跳过（列表展示非关键路径，不影响主数据）。
+            try {
+                if (String(clinic.edition || '').indexOf('cloud') === 0) {
+                    const dev = await kv.get(KV_USER_DEVICES_PREFIX + u.username, 'json');
+                    if (dev && Array.isArray(dev.devices) && dev.devices.length) {
+                        const classes = [...new Set(dev.devices.map(d => d && d.clientClass).filter(Boolean))];
+                        if (classes.length) su.deviceClasses = classes;
                     }
-                } catch (e) { /* 载体读取失败按未知处理 */ }
-                result.push(su);
+                } else if (String(clinic.edition || '').indexOf('offline_') === 0 && clinic.offlineCarrier) {
+                    su.deviceClasses = [clinic.offlineCarrier];
+                }
+            } catch (e) { /* 载体读取失败按未知处理 */ }
+            result.push(su);
+            // ★ 2026-09-19 D1 缺行回填（自愈）：登录不再是唯一回填点
+            if (db && !d1Existing.has(clinic.id + '|' + u.username)) {
+                backfills.push(syncUserToD1(db, clinic.id, u).catch(e =>
+                    console.error('[D1] backfill user failed:', u.username, e.message)));
             }
         }
     }
+    if (backfills.length) await Promise.all(backfills);
     return result;
 }
 
@@ -2883,19 +2890,22 @@ export async function onRequest(context) {
                 const clinic = clinics.find(c => c.id === currentUser.clinicId);
                 const clinicName = clinic ? clinic.name : null;
 
-                // ★ P3：D1 优先读取本诊所用户
+                // ★ 2026-09-19 读取优先级反转：KV 权威优先（所有用户写路径均落 KV，D1 仅为
+                //   回填副本），杜绝 D1 滞后导致诊所管理员看到旧名单/旧密码状态；
+                //   KV 空（键丢失/读失败）才回退 D1
                 let users = [];
-                const db = getDB(context.env);
-                if (isD1Enabled(context.env) && db) {
-                    try {
-                        const rows = await db.prepare(`SELECT * FROM clinic_users WHERE clinic_id = ? ORDER BY username`).bind(currentUser.clinicId).all();
-                        if (rows && rows.success) {
-                            users = rows.results.map(d1RowToUser);
-                        }
-                    } catch (e) { console.error('[D1] clinic users list failed:', e.message); }
-                }
+                try { users = (await kv.get(`clinic:${currentUser.clinicId}:users`, 'json')) || []; }
+                catch (e) { users = []; }
                 if (!users.length) {
-                    users = (await kv.get(`clinic:${currentUser.clinicId}:users`, 'json')) || [];
+                    const db = getDB(context.env);
+                    if (isD1Enabled(context.env) && db) {
+                        try {
+                            const rows = await db.prepare(`SELECT * FROM clinic_users WHERE clinic_id = ? ORDER BY username`).bind(currentUser.clinicId).all();
+                            if (rows && rows.success) {
+                                users = rows.results.map(d1RowToUser);
+                            }
+                        } catch (e) { console.error('[D1] clinic users list failed:', e.message); }
+                    }
                 }
                 const data = users.map(u => sanitizeUser(u, currentUser.clinicId, clinicName));
                 return json({ success: true, data, count: data.length });
