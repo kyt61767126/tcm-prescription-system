@@ -4891,7 +4891,11 @@ async function openDeviceQuotaModal(username) {
         const data = await res.json();
         if (!data.success) throw new Error(data.error || '查询失败');
         document.getElementById('deviceQuotaInput').value = data.maxDevices;
-        const list = (data.devices && data.devices.devices) || [];
+        // ★ 2026-09-19 形状兼容：机构/离线版分支 devices 返回裸数组（license.devices），
+        //   普通账号分支返回 { devices:[...] }——原只解包后者，导致机构版账号
+        //   "已绑定 1/5 台"却显示"暂无已绑定设备"（惠康康中医诊所案例）
+        const _devRaw = data.devices;
+        const list = Array.isArray(_devRaw) ? _devRaw : ((_devRaw && _devRaw.devices) || []);
         const max = data.maxDevices;
         const used = data.devicesCount;
         // 配额进度条（99=不限时显示绿色满条）
