@@ -235,7 +235,13 @@ export async function onRequest(context) {
 
         // ★ 2026-08-29 手机号身份核验：客户端手机号与激活码原绑定手机号一致
         //   → 原激活本人（换机/重装场景），自动恢复原激活信息，跳过严格匹配
-        const recordPhone = phoneOf(record.user || record.username || '');
+        // ★ 2026-09-19 修复（惠康康案例）：recordPhone 此前仅从 user 字符串提取手机号
+        //   （"张三/138..." 老形态）；admin-approve 生成的记录 user="惠康康"、手机号存
+        //   独立 record.phone 字段 → phoneVerified 恒 false，客户端界面承诺的「换机
+        //   激活填原绑定手机号可自动恢复」从未生效，被迫走诊所名匹配（又被隐藏预填
+        //   旧值卡死）。补 record.phone 字段回退（正则与 L135 clientPhone 同源）。
+        const recordPhone = phoneOf(record.user || record.username || '') ||
+            ((typeof record.phone === 'string' && /^1[3-9]\d{9}$/.test(record.phone.trim())) ? record.phone.trim() : '');
         const phoneVerified = !!(clientPhone && recordPhone && clientPhone === recordPhone);
 
         // ★ v3 新增：诊所名绑定校验
