@@ -2311,18 +2311,18 @@ function installLicense(base64Content, options = {}) {
         if (phone) {
             if (!Array.isArray(config.users)) config.users = [];
 
-            // 密码哈希（与 main.js hashPassword 逻辑一致）
-            const PASSWORD_SALT = 'bnzc_prescription_salt_v1';
-            const hashOf = (p) => crypto.createHash('sha256').update(Buffer.from(PASSWORD_SALT + p, 'utf8')).digest('hex');
-            const nowMs = Date.now();
-
             // 检查用户是否已存在
             const existingUser = config.users.find(u => u.username === phone);
             if (!existingUser) {
+                // 密码哈希（与 main.js hashPassword 逻辑一致）
+                const PASSWORD_SALT = 'bnzc_prescription_salt_v1';
+                const data = Buffer.from(PASSWORD_SALT + password, 'utf8');
+                const passwordHash = crypto.createHash('sha256').update(data).digest('hex');
+
                 config.users.push({
                     username: phone,
-                    password: hashOf(password),
-                    passwordHash: hashOf(password),
+                    password: passwordHash,
+                    passwordHash: passwordHash,
                     salt: PASSWORD_SALT,
                     name: doctorName || phone,
                     role: 'admin',
@@ -2330,23 +2330,6 @@ function installLicense(base64Content, options = {}) {
                 });
                 configChanged = true;
                 console.log('[License] 已创建管理员账户:', phone);
-            } else if (options.password && options.password !== 'admin') {
-                // ★ 2026-09-20 换机重激活密码同步（惠康康案例）：本机已有同号老账户
-                //   （历史注册/试用），激活窗口明确填写的密码此前被静默忽略 → 客户被
-                //   老密码锁死（激活成功却登录"用户名或密码错误"，且删数据目录对客户
-                //   不可行）。云端 claim 已通过身份核验（手机号/诊所名）=原激活本人，
-                //   允许按本次显式密码更新本机账户。'admin'=渲染层留空占位（2026-09-04
-                //   方案B 语义），不覆盖——保留注册密码保护铁律。lastPwdUpdatedAt 驱动
-                //   前端镜像层（addLocalActivationUser Phase 1.3）启动自愈强制覆盖。
-                const passwordHash = hashOf(options.password);
-                existingUser.password = passwordHash;
-                existingUser.passwordHash = passwordHash;
-                existingUser.salt = PASSWORD_SALT;
-                existingUser.name = doctorName || existingUser.name || phone;
-                existingUser.lastPwdUpdatedAt = nowMs;
-                existingUser.updatedAt = nowMs;
-                configChanged = true;
-                console.log('[License] 已更新已有账户密码(激活显式密码):', phone);
             }
         }
 
