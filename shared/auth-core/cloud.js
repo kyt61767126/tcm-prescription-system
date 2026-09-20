@@ -1089,6 +1089,21 @@
             //   否则 Permission._currentEdition() 继续读取 config.json 默认值 personal →
             //   isInstitutional()=false → 只显示【修改密码】不显示【用户管理】。
             //   同时缓存到 localStorage，刷新页面时自动恢复，避免状态丢失。
+            // ★ 2026-09-21 语音权益叠加：机构诊所加购语音后 clinicEdition 保持 cloud_clinic，
+            //   语音入口由登录响应 user.voiceEnabled 开启（服务端 users.js 透出）。
+            //   此处同步 CONFIG.voiceEnabled + localStorage 缓存，供 voice gate /
+            //   Permission.isVoiceEdition 读取。非 voiceEnabled 登录（换账号/退出）显式清 false。
+            try {
+                const __voiceOn = (user && user.voiceEnabled === true);
+                try {
+                    if (typeof CONFIG !== 'undefined' && CONFIG) CONFIG.voiceEnabled = __voiceOn;
+                } catch (_) {}
+                try { global.__voiceEnabled = __voiceOn; } catch (_) {}
+                await StorageAdapter.setItem('auth:voiceEnabled', __voiceOn ? '1' : '0');
+                try {
+                    console.log('[AuthCore] login voice-sync:', __voiceOn ? 'voiceEnabled=true (机构版语音权益)' : 'false');
+                } catch (e) {}
+            } catch (_ve) {}
             try {
                 const rawCE = user.clinicEdition || user.edition || '';
                 const rawName = user.clinicName || '';
@@ -1457,6 +1472,13 @@
 
             const normEd = String(editionFromCache).trim();
             if (normEd === 'cloud_clinic' || normEd === 'cloud_personal' || normEd === 'cloud_voice') {
+                // ★ 2026-09-21 语音权益叠加恢复：voiceEnabled 从缓存恢复（机构版+语音刷新后不丢语音入口）
+                try {
+                    const __veCache = await StorageAdapter.getItem('auth:voiceEnabled');
+                    const __veOn = (__veCache === '1');
+                    if (typeof CONFIG !== 'undefined' && CONFIG) CONFIG.voiceEnabled = __veOn;
+                    global.__voiceEnabled = __veOn;
+                } catch (_) {}
                 try {
                     if (typeof CONFIG !== 'undefined' && CONFIG) {
                         CONFIG.edition = normEd;

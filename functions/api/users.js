@@ -462,6 +462,7 @@ async function findUserForLogin(kv, username, env = null) {
                         clinicName: clinic.name,
                         clinicStatus: clinic.status || 'active',
                         clinicEdition: clinic.edition || null,
+                        clinicVoiceEnabled: clinic.voiceEnabled === true,  // ★ 2026-09-21 语音权益叠加标记（机构版+语音）
                         clinicExpiresAt: clinic.expiresAt || null,
                         error: null
                     };
@@ -524,6 +525,7 @@ async function findUserForLogin(kv, username, env = null) {
                     clinicName: clinic.name,
                     clinicStatus: clinic.status || 'active',
                     clinicEdition: clinic.edition || null,  // ★ 2026-08-22 取 clinic.edition
+                    clinicVoiceEnabled: clinic.voiceEnabled === true,  // ★ 2026-09-21 语音权益叠加标记
                     clinicExpiresAt: clinic.expiresAt || null
                 };
                 if (clinic.status === 'disabled') {
@@ -547,6 +549,7 @@ async function findUserForLogin(kv, username, env = null) {
             clinicName: foundInDisabledClinic.clinicName,
             clinicStatus: 'disabled',
             clinicEdition: foundInDisabledClinic.clinicEdition,
+            clinicVoiceEnabled: foundInDisabledClinic.clinicVoiceEnabled === true,
             error: null
         };
     }
@@ -1740,10 +1743,15 @@ export async function onRequest(context) {
             let loginPrescriptions = null;
             try { loginPrescriptions = await prefetchLoginPrescriptions; } catch (e) {}
 
+            // ★ 2026-09-21 语音权益叠加：voiceEnabled 随登录响应透出（机构诊所加购语音
+            //   后 edition 保持 cloud_clinic，语音入口靠此标记开启，而非 edition=cloud_voice）
+            const __loginSu = sanitizeUser(user, clinicId, clinicName, clinicStatus, clinicEdition);
+            if (found && found.clinicVoiceEnabled === true) __loginSu.voiceEnabled = true;
+
             return json({
                 success: true,
                 token,
-                user: sanitizeUser(user, clinicId, clinicName, clinicStatus, clinicEdition),
+                user: __loginSu,
                 device: deviceSummary,
                 // ★ 2026-08-23 云端APP F1基础设置-授权状态：返回诊所到期时间（前端显示"已激活（版本）剩余X天"）
                 clinicExpiresAt: clinicExpiresAt || null,

@@ -36,6 +36,11 @@
         if (PERSONAL_EDITIONS.indexOf(s) >= 0) return true;
         if (x.indexOf('标准版') >= 0) return true;
         if (x.indexOf('personal') >= 0) return true;
+        // ★ 2026-09-21 防御补丁（空洞修复）：cloud_voice 权益=标准版+语音，按钮行为必须
+        //   与标准版一致（【修改密码】显示）。原实现两表都不含 cloud_voice → isInst=false
+        //   且 isPersonal=false 落入判定空洞 → Arch 2.26 断言不保护。voice 权益叠加
+        //   （机构版+voiceEnabled）不经过此分支（edition 仍是 cloud_clinic，__isInstStr 命中）。
+        if (x === 'cloud_voice' || x === 'voice') return true;
         if (x === 'cloud' || x === 'cloud_personal') return (x !== 'cloud_clinic');
         return false;
     }

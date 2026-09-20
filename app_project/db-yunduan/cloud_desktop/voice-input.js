@@ -57,6 +57,10 @@
             }
         } catch (_) {}
         // Permission 未加载时兜底直读 CONFIG.edition（edition-lock getter 已归一化）
+        // ★ 2026-09-21 语音权益叠加：机构版诊所 edition=cloud_clinic + CONFIG.voiceEnabled
+        try {
+            if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.voiceEnabled === true) return true;
+        } catch (_) {}
         try {
             if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.edition) {
                 return String(CONFIG.edition) === 'cloud_voice';

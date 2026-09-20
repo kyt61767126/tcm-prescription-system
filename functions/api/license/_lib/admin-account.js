@@ -142,17 +142,44 @@ export async function provisionCloudAccount(kv, record) {
             clinicsDirty = true;
             console.log('[AdminAccount] ★ 诊所状态升级:', clinicName, oldStatus, '→ active (admin-approve)');
         }
-        const needPatchEdition = !clinic.edition || (clinic.edition !== targetEdition);
-        if (needPatchEdition) {
-            const oldEd = clinic.edition || '(empty)';
-            clinic.edition = targetEdition;
-            clinic.updatedAt = now;
-            // 同时同步 activationType 字段，保持与 edition 口径一致
+        // ★ 2026-09-21 语音版权益叠加（P0：机构诊所升级语音后丢失用户管理/处方查阅）：
+        //   语音版=加购权益，不是版本线替换。机构诊所（cloud_clinic 等）voice 升级
+        //   时 edition 必须保持机构版不变，只叠加 voiceEnabled=true —— 否则
+        //   provisionCloudAccount 强制覆盖 edition=cloud_voice → 机构管理员登录后
+        //   【用户管理】消失只剩【修改密码】（button-manager 断言 isInst=false 不保护）。
+        //   个人版诊所 voice 升级：edition cloud_personal → cloud_voice（版本线语义，
+        //   cloud_voice 权益=标准版+语音，行为不变），同样补 voiceEnabled=true 统一口径。
+        const __voiceTarget = (targetEdition === 'cloud_voice');
+        const __clinicEd = String(clinic.edition || '').toLowerCase();
+        const __clinicIsInst = ['cloud_clinic', 'clinic', 'institution', 'institutional', 'clinic_custom'].indexOf(__clinicEd) >= 0;
+        if (__voiceTarget && __clinicIsInst) {
+            if (clinic.voiceEnabled !== true) {
+                clinic.voiceEnabled = true;
+                clinic.updatedAt = now;
+                clinicsDirty = true;
+            }
+            // activationType 记录加购动作，但 edition/版本标签口径不漂移
             if (record.type) clinic.activationType = record.type;
-            else if (record.edition) clinic.activationType = record.edition;
-            clinicsDirty = true;
-            console.log('[AdminAccount] 诊所 edition 更新:', clinicName, oldEd, '→', targetEdition,
-                '(source:', rawActivation, ')');
+            clinicsDirty = true; // activationType 回写
+            console.log('[AdminAccount] 机构诊所语音权益叠加（edition 保持', clinic.edition, '）:', clinicName, '+voiceEnabled=true');
+        } else {
+            if (__voiceTarget && clinic.voiceEnabled !== true) {
+                clinic.voiceEnabled = true;
+                clinic.updatedAt = now;
+                clinicsDirty = true;
+            }
+            const needPatchEdition = !clinic.edition || (clinic.edition !== targetEdition);
+            if (needPatchEdition) {
+                const oldEd = clinic.edition || '(empty)';
+                clinic.edition = targetEdition;
+                clinic.updatedAt = now;
+                // 同时同步 activationType 字段，保持与 edition 口径一致
+                if (record.type) clinic.activationType = record.type;
+                else if (record.edition) clinic.activationType = record.edition;
+                clinicsDirty = true;
+                console.log('[AdminAccount] 诊所 edition 更新:', clinicName, oldEd, '→', targetEdition,
+                    '(source:', rawActivation, ')');
+            }
         }
         // ★ 2026-09-03 离线版载体写入/更新（仅离线版；有值才写，不覆盖为空）
         if (targetEdition.indexOf('offline_') === 0 && targetCarrier && clinic.offlineCarrier !== targetCarrier) {
