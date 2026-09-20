@@ -4564,18 +4564,28 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
                 //   账号已存在（注册创建）时激活收尾只补 phone/name，绝不覆盖密码——
                 //   防止激活收尾把注册密码重置回 admin（Mate 70 第7案密码错位的架构级根治）。
                 //   密码仅三个写点：registerLocalUser（注册）/ 修改密码 / 账号不存在时的激活兜底建号。
+                // ★ 2026-09-20 换机重激活密码同步（惠康康案例，与桌面 license-manager.js
+                //   同族修复）：激活窗口明确填写的密码（非 admin 占位）且账号已存在时
+                //   更新密码——云端 claim 身份核验已过=原激活本人，根治"本机老账户密码
+                //   锁死且无提示"盲区。'admin'=留空占位不覆盖，方案B 注册密码保护保留。
                 org.json.JSONObject u = users.optJSONObject(existsIdx);
                 if (u == null) u = new org.json.JSONObject();
                 u.put("username", username);
                 if (phone != null && !phone.isEmpty()) u.put("phone", phone);
                 else if (!u.has("phone")) u.put("phone", "");
-                if (u.optString("password", "").isEmpty()) u.put("password", effPwd);
+                boolean explicitPwd = password != null && !password.isEmpty() && !"admin".equals(password);
+                if (explicitPwd) {
+                    u.put("password", password);
+                    u.put("lastPwdUpdatedAt", System.currentTimeMillis());
+                } else if (u.optString("password", "").isEmpty()) {
+                    u.put("password", effPwd);
+                }
                 u.put("name", effName);
                 u.put("role", "admin");
 u.put("updatedAt", System.currentTimeMillis());
 
                 users.put(existsIdx, u);
-                Log.i(TAG, "激活登录账号 UPSERT 更新(密码保留): username=" + username + " phone=" + phone + " name=" + effName);
+                Log.i(TAG, "激活登录账号 UPSERT 更新(密码" + (explicitPwd ? "已更新-激活显式密码" : "保留") + "): username=" + username + " phone=" + phone + " name=" + effName);
             } else {
                 org.json.JSONObject nu = new org.json.JSONObject();
                 nu.put("username", username);
