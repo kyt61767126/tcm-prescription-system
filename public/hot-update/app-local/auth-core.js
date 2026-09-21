@@ -5989,11 +5989,18 @@
                 btn.textContent = '⏳ 正在开通...';
                 var r = await global.electronAPI.activate.claimFree(phone);
                 if (r && r.success) {
-                    // v299：执行点幂等——本地已是 free（前端状态查询失败等漏网场景）
+                    // v299：执行点幂等——本地已是 free（前端状态查询失败等漏网场景）。
+                    // v300：若本次填了手机号，执行点会幂等补建账号，弹窗如实告知。
                     if (r.alreadyFree) {
                         btn.disabled = false;
                         btn.textContent = '🆓 永久免费版（开方不限量）';
-                        await showHtmlAlert('✅ 您已开通永久免费版，无需重复领取。');
+                        var __afTip = '';
+                        if (r.accountCreated) {
+                            __afTip = r.accountExisted
+                                ? '\n\n📱 账号 ' + phone + ' 已存在，请使用注册时设置的密码登录。'
+                                : '\n\n📱 已补建登录账号：' + phone + '\n🔑 初始密码 admin（登录后请及时修改）';
+                        }
+                        await showHtmlAlert('✅ 您已开通永久免费版，无需重复领取。' + __afTip);
                         return;
                     }
                     global.__licenseActivating = false;
