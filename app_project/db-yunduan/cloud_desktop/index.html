@@ -5144,6 +5144,31 @@ let currentUser = null;
                     const electronUser = await window.electronAPI.getCurrentUser();
                     if (electronUser) {
                         currentUser = electronUser;
+                        // ★★★ 2026-09-21 根治【桌面机构版工具栏只剩修改密码·王桂杰三报】：
+                        //   云端桌面真实主流程 = login.js 登录窗 → 主进程 login-success →
+                        //   本分支自动登录（不走 handleLogin）。auth-core 的 login
+                        //   edition-sync 发生在【登录窗另一页面上下文】，主窗口的
+                        //   CONFIG.edition 仍 = 热目录模板 config.json 的出厂默认
+                        //   cloud_personal（desktop-windows.cjs 从 asar 复制模板；
+                        //   真配置 userData 层不经任何 IPC 进 CONFIG）→
+                        //   canManageUsersByRole 判个人版 → 机构管理员只见【修改密码】。
+                        //   restoreEditionFromCache 是异步竞态，跑赢也救不了已渲染的
+                        //   按钮。此处以 electronUser.clinicEdition（login.js 从服务端
+                        //   登录响应携带）为权威，在 updateUserDisplay 前确定性同步，
+                        //   与 09-13 补丁的 refreshVersionTags 同源同权。
+                        try {
+                            var _auEd = String((electronUser && (electronUser.clinicEdition || electronUser.edition)) || '');
+                            if (_auEd) {
+                                if (typeof CONFIG !== 'undefined' && CONFIG) CONFIG.edition = _auEd;
+                                try { window.EDITION = _auEd; } catch (_) {}
+                                if (window.Permission) {
+                                    try { if (typeof Permission.setEdition === 'function') Permission.setEdition(_auEd); } catch (_) {}
+                                    try { Permission._edition = _auEd; } catch (_) {}
+                                }
+                                try { localStorage.setItem('auth:runtimeEdition', _auEd); } catch (_) {}
+                                if (typeof console !== 'undefined' && console.log) console.log('[AutoLogin] edition-sync（桌面自动登录权威同步）:', _auEd);
+                            }
+                        } catch (_) {}
                         const loginData = { user: electronUser, loginTime: Date.now() };
                         localStorage.setItem('user_login_data', JSON.stringify(loginData));
                         localStorage.setItem('currentUser', JSON.stringify(electronUser));
