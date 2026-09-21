@@ -3487,6 +3487,19 @@
                 const remainingDays = status.remainingDays;
                 const hasDays = (typeof remainingDays === 'number' && !isNaN(remainingDays));
 
+                // ★ 2026-09-22 v299 真机修复：Java validateLicense 对 free 返回
+                //   {type:'licensed', licenseType:'free', remainingDays≈26765（2099到期）}，
+                //   旧代码取 licenseType='free' 三个分支全不匹配，落入"未知类型"误显
+                //   「已激活 剩余26765天」。free 必须独立卡片：不显示天数/激活码/邀请码
+                //   （renderActivationCode 内另有 free 早退双保险，防机器码找回翻出历史付费码）。
+                if (status.type === 'licensed' && licenseType === 'free') {
+                    el.innerHTML = '🆓 <b style="color:#26a69a;">永久免费版</b><br>' +
+                        '<span style="color:#666;">开方不限量 · 永久有效</span>';
+                    // 免费用户仍可输码升级付费版，管理员激活按钮保持可用色
+                    setAdminActivateBtnState(null);
+                    return;
+                }
+
                 if (licenseType === 'trial') {
                     // 试用期模式
                     if (hasDays && remainingDays > 0) {
