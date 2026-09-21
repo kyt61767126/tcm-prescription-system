@@ -4933,6 +4933,26 @@ let currentUser = null;
                     if (IS_DESKTOP_LOCAL && window.APP_MODE && String(window.APP_MODE) !== 'offline') IS_DESKTOP_LOCAL = false;
                 } catch(_) {}
 
+                // ★ 2026-09-21 服务端会话守卫（P0：机构管理员工具栏永远只剩【修改密码】根治）：
+                //   危险窗口 = 恢复登录时序竞态——currentUser 已从缓存恢复（含服务端下发的
+                //   clinicEdition/role），但 config.json 尚未异步加载完（configEdition=''），
+                //   软判据命中出厂 versionLabel「云端标准版」→ 下方全部机构豁免失效 → 执行强制：
+                //   C 步把服务端下发的 role:admin 永久降级为 user + DOM 强制 userManage=none，
+                //   且 updateUserDisplay-tail / login-setTimeout 调用点让该强制覆盖刚设好的
+                //   正确按钮，此后无更新时机 → 永久卡死。仅桌面 electron 有此竞态（APP/网页
+                //   无异步 config 竞态）→ 解释「桌面显示修改密码、APP 正常」。
+                //   铁律：本地代码不得改写服务端下发的角色/版本。currentUser.clinicEdition
+                //   非空即代表服务端权威会话，一律禁止本地强制（按钮正确性由 Permission +
+                //   button-manager 断言按服务端 edition/role 计算，无需本函数代劳）。
+                try {
+                    var _svcu = window.currentUser;
+                    var _svcEd = _svcu ? String(_svcu.clinicEdition || '').trim() : '';
+                    if (_svcu && _svcEd) {
+                        if (typeof console !== 'undefined' && console.log) console.log('[EnforceStandard] 服务端会话守卫，跳过强制 | user=' + (_svcu.username || '') + ' | clinicEdition=' + _svcEd + ' | reason=' + (reason || ''));
+                        return;
+                    }
+                } catch (_) {}
+
                 // ─── 5 重 OR 判据（软判据，命中即认为是标准版） ───
                 var tag = (typeof getEditionTag === 'function') ? String(getEditionTag()) : '';
                 var globalProduct = (typeof window.PRODUCT_NAME !== 'undefined') ? String(window.PRODUCT_NAME) : '';
