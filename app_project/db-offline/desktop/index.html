@@ -1954,10 +1954,32 @@ let currentUser = null;
 
         // 版本标签统一显示 V1.0.0（与软著申请版本号一致）
         // ★ 统一安装包：运行时按 config.edition 动态显示 标准版/机构版 标签
+        // ★ 2026-09-21 离线免费版：free 授权 edition 仍为 personal（单用户形态
+        //   不变），版本标签按 window.__licenseType==='free' 细分显示。此函数仅
+        //   用于展示，功能权益一律以主进程 license:check-feature 裁决为准。
         function getEditionTag() {
             var e = (typeof CONFIG !== 'undefined' && CONFIG.edition) || window.EDITION || 'personal';
             var inst = ['clinic_custom', 'offline', 'clinic', 'cloud_clinic', 'offline_clinic'].indexOf(e) >= 0;
-            return inst ? '离线机构版' : '离线标准版';
+            if (inst) return '离线机构版';
+            if (window.__licenseType === 'free') return '离线免费版';
+            return '离线标准版';
+        }
+        // ★ 2026-09-21 启动拉取一次授权类型用于标签细分（licensed 取 licenseType；
+        //   trial 取 trial；不可达/异常不影响标准版默认标签）。到位后重刷标签。
+        async function loadLicenseTypeForTag() {
+            try {
+                if (!window.electronAPI || !window.electronAPI.license ||
+                    typeof window.electronAPI.license.getStatus !== 'function') return;
+                var st = await window.electronAPI.license.getStatus();
+                if (!st) return;
+                var lt = '';
+                if (st.type === 'licensed') lt = String(st.licenseType || '');
+                else if (st.type === 'trial') lt = 'trial';
+                if (lt) {
+                    window.__licenseType = lt;
+                    try { applyEditionTags(); } catch (_) {}
+                }
+            } catch (e) { console.warn('[LicenseTag] 授权类型加载失败（沿用标准版标签）:', e); }
         }
         function applyEditionTags() {
             var label = getEditionTag();
@@ -2039,6 +2061,7 @@ let currentUser = null;
         }
         applyEditionTags();
         loadBuildMeta(); // ★ 铁闸4：主动拉取 build-meta.json 显示三元组（未登录也可见）
+        loadLicenseTypeForTag(); // ★ 2026-09-21 免费版：拉取授权类型细分版本标签（离线免费版）
 
         // 切换密码可见性（统一登录框规范）
         window.togglePasswordVisibility = function() {

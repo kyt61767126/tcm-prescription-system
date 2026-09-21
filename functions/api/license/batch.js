@@ -34,7 +34,7 @@ import { parseAuthHeader, isPlatformAdmin } from '../_lib/auth.js';
 import {
     getKV, saveLicense, sanitizeRecord,
     generateActivationCode, appendLicenseLog,
-    LICENSE_TYPES
+    CODE_ISSUABLE_TYPES
 } from './_lib/license-core.js';
 
 function corsHeaders() {
@@ -134,8 +134,9 @@ export async function onRequest(context) {
 
         // type 校验
         // ★ 2026-09-17 改用权威类型集合（原硬编码 ['trial','personal','pro'] 漏 voice）
-        if (!type || !LICENSE_TYPES.includes(type)) {
-            return json({ success: false, error: 'type 必须是 ' + LICENSE_TYPES.join(' / ') }, 400);
+        // ★ 2026-09-21 free 不走激活码体系（CODE_ISSUABLE_TYPES 排除 free，免费版仅 claim-free 自助领取）
+        if (!type || !CODE_ISSUABLE_TYPES.includes(type)) {
+            return json({ success: false, error: 'type 必须是 ' + CODE_ISSUABLE_TYPES.join(' / ') }, 400);
         }
         // days 或 expiresAt 二选一
         if (!days && !expiresAt) {

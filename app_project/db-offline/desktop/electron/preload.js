@@ -152,6 +152,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         show: () => ipcRenderer.invoke('license:show-activate'),
         // ★ 立即试用（2026-08-16）
         startTrial: () => ipcRenderer.invoke('license:start-trial'),
+        // ★ 2026-09-21 离线免费版领取（phone 选填；成功后重启进入免费版）
+        claimFree: (phone) => ipcRenderer.invoke('license:claim-free', phone),
         // ★ 一体化到期提示 + 拉起激活窗口（main process 中 dialog.showMessageBoxSync + showActivateWindow）
         showExpireAlert: (message) => ipcRenderer.invoke('license:show-expire-alert', message),
         // ★ v3 新增：clinicName 参数透传给云端做绑定校验

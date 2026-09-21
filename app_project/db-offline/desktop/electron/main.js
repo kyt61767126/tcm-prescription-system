@@ -1444,6 +1444,17 @@ ipcMain.handle('license:start-trial', () => {
     }
 });
 
+// ★ 2026-09-21 离线免费版领取（同包授权分档：claim-free → installLicense 正式落盘）
+ipcMain.handle('license:claim-free', async (event, phone) => {
+    try {
+        const machineId = activateManager.getMachineId();
+        return await activateManager.claimFreeOnline(machineId, phone);
+    } catch (e) {
+        console.error('[IPC] claim-free 异常:', e);
+        return { success: false, error: e.message };
+    }
+});
+
 // ★ 同步 alert/confirm 对话框（替代原生 window.alert/window.confirm）
 // ★ 2026-09-14 P3-A 对话框域收口：dialog:alert-sync / dialog:confirm-sync /
 //   dialog:prompt 三 handler 抽至 desktop-dialog.cjs（shared/ 权威源，sync-all

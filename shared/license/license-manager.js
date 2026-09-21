@@ -143,11 +143,20 @@ function getEffectiveConfigSignKey() {
 }
 
 // ★ v2: 版本类型默认配置（功能差异矩阵）
+// free: 离线免费版（2026-09-21 同包授权分档），永久授权、无限开方、无付费功能位
 // trial: 试用版，限 30 张/月处方，无高级功能
 // personal: 个人版，无限处方，支持数据备份
 // pro: 专业版，无限处方，支持云端同步+多设备+优先支持
 // voice: 语音版（2026-09-17 第一期），权益=个人版全部+语音输入，1年/1设备
+// ★ free 设计：服务端签名下发、机器绑定、永久有效（expiresAt=2099-12-31，
+//   复用到期判定，无需 perpetual 字段）；备份/数据导出/拍照录像/无水印打印
+//   均为付费功能位（feature-guard + 主进程 IPC fail-closed 拦截）；edition
+//   仍校正为 personal（单用户形态不变），版本标签按 licenseType=free 细分。
 const LICENSE_TYPE_CONFIG = {
+    free: {
+        maxPrescriptions: 0,  // 0 = 无限（免费版开方不限量）
+        features: []          // 不带任何付费功能位
+    },
     trial: {
         maxPrescriptions: 30,
         features: []  // 试用版无高级功能
@@ -2439,7 +2448,9 @@ function applyEditionBindingToConfig(license, config) {
     }
     const type = String(license.type || '').toLowerCase();
     const isInstitution = INSTITUTIONAL_LICENSE_TYPES.includes(type);
-    if (!isInstitution && type !== 'personal' && type !== 'standard') {
+    // ★ 2026-09-21 免费版（free）走标准版形态分支：edition 校正为 personal、
+    //   全员 user 角色（单用户）；功能差异由 features 位表达，与 edition 无关。
+    if (!isInstitution && type !== 'personal' && type !== 'standard' && type !== 'free') {
         return { skip: 'unknown-type' };  // 无法识别的版本，跳过
     }
     if (!config || typeof config !== 'object') {

@@ -33,7 +33,7 @@ import { parseAuthHeader, isPlatformAdmin } from '../_lib/auth.js';
 import {
     getKV, saveLicense, sanitizeRecord,
     generateActivationCode, LICENSE_TYPE_CONFIG, appendLicenseLog,
-    LICENSE_TYPES
+    CODE_ISSUABLE_TYPES
 } from './_lib/license-core.js';
 
 // P1-6 安全：CORS 收紧为固定域名（客服 PowerShell 调用不受 CORS 限制）
@@ -95,8 +95,9 @@ export async function onRequest(context) {
             return json({ success: false, error: '请提供用户名（user）' }, 400);
         }
         // ★ 2026-09-17 改用权威类型集合（原硬编码 ['trial','personal','pro'] 漏 voice 导致开码 400）
-        if (!type || !LICENSE_TYPES.includes(type)) {
-            return json({ success: false, error: 'type 必须是 ' + LICENSE_TYPES.join(' / ') }, 400);
+        // ★ 2026-09-21 free 不走激活码体系（CODE_ISSUABLE_TYPES 排除 free，免费版仅 claim-free 自助领取）
+        if (!type || !CODE_ISSUABLE_TYPES.includes(type)) {
+            return json({ success: false, error: 'type 必须是 ' + CODE_ISSUABLE_TYPES.join(' / ') }, 400);
         }
         if (!days && !expiresAt) {
             return json({ success: false, error: '请提供 days 或 expiresAt' }, 400);

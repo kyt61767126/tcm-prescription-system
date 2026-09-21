@@ -59,6 +59,13 @@ function getLicenseMasterKey(context) {
 
 // ★ v2: 版本类型默认配置（必须与 license-manager.js 中 LICENSE_TYPE_CONFIG 一致）
 const LICENSE_TYPE_CONFIG = {
+    // ★ 2026-09-21 离线免费版：永久（claim-free 以 expiresAt=2099 签发）、
+    //   无限开方、零付费功能位。free 不是付费类型（见 PAID_LICENSE_TYPES），
+    //   仅 claim-free 端点可签发，不进激活码库存/付费审核通道。
+    free: {
+        maxPrescriptions: 0,  // 0 = 无限
+        features: []
+    },
     trial: {
         maxPrescriptions: 30,
         features: []
@@ -80,11 +87,18 @@ const LICENSE_TYPE_CONFIG = {
 };
 
 // ★ 2026-09-17 权威类型集合（根治散落硬编码白名单漏 voice 教训）：
-//   generate.js / batch.js 开码校验用 LICENSE_TYPES（全量含 trial）；
-//   admin-approve.js / activate-from-ticket.js 付费通道校验用 PAID_LICENSE_TYPES（排除试用）。
+//   generate.js / batch.js 开码校验用 CODE_ISSUABLE_TYPES（排除 free——
+//   free 只走 claim-free 自助领取，不进激活码体系）；
+//   admin-approve.js / activate-from-ticket.js 付费通道校验用 PAID_LICENSE_TYPES
+//   （排除试用与免费——free 仅 claim-free 自助签发，绝不进付费/审核/工单通道）。
 //   新增版本类型只改 LICENSE_TYPE_CONFIG，此处与各 API 校验自动跟随，禁止再散落硬编码。
 const LICENSE_TYPES = Object.freeze(Object.keys(LICENSE_TYPE_CONFIG));
-const PAID_LICENSE_TYPES = Object.freeze(LICENSE_TYPES.filter(t => t !== 'trial'));
+const PAID_LICENSE_TYPES = Object.freeze(
+    LICENSE_TYPES.filter(t => t !== 'trial' && t !== 'free')
+);
+// ★ 2026-09-21 可开激活码类型（generate/batch 后台开码用）：排除 free——
+//   free 不进激活码库存/统计体系，只能由 claim-free 端点按机器自助签发。
+const CODE_ISSUABLE_TYPES = Object.freeze(LICENSE_TYPES.filter(t => t !== 'free'));
 
 // 激活码字符集：去除易混淆字符 0/O/1/I
 const ACTIVATION_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -1362,8 +1376,9 @@ async function patchLicenseDeviceCarrier(kv, code, machineId, productClass, clie
 export {
     LICENSE_HMAC_KEY,
     LICENSE_TYPE_CONFIG,
-    LICENSE_TYPES,        // ★ 2026-09-17 权威全量类型集合（generate/batch 开码校验）
-    PAID_LICENSE_TYPES,   // ★ 2026-09-17 权威付费类型集合（审核/工单通道校验，排除试用）
+    LICENSE_TYPES,        // ★ 2026-09-17 权威全量类型集合
+    PAID_LICENSE_TYPES,   // ★ 2026-09-17 权威付费类型集合（审核/工单通道校验，排除试用/免费）
+    CODE_ISSUABLE_TYPES,  // ★ 2026-09-21 可开激活码类型（generate/batch，排除 free）
     ACTIVATION_CODE_CHARS,
     KV_LICENSE_PREFIX,
     KV_LICENSE_INDEX,

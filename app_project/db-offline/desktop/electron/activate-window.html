@@ -367,6 +367,14 @@ h1 { color: #2c3e50; font-size: 18px; margin-bottom: 3px; }
     <!-- ★ 立即试用（2026-08-16）：不激活直接进入 7 天试用（默认标准版） -->
     <button class="btn btn-secondary" id="startTrialBtn" style="margin-top:4px;">⏳ 立即试用（免费7天 · 标准版）</button>
 
+    <!-- ★ 2026-09-21 离线免费版（同包授权分档）：永久免费、开方不限量。
+         备份恢复/Excel导入导出/拍照录像/无水印打印为付费功能；点击→服务端
+         签名领取 type=free 正式授权（machineId 绑定，可重装重领），重启生效；
+         日后输入付费激活码原地升级，处方数据零迁移。手机号选填（上方电话框），
+         留空也能领，进入后按引导注册本地账号。 -->
+    <button class="btn" id="claimFreeBtn" style="margin-top:10px;background:linear-gradient(135deg,#16a34a 0%,#15803d 100%);color:#fff;border:none;">🆓 免费使用（永久免费 · 开方不限量）</button>
+    <div style="font-size:11px;color:#909399;margin-top:6px;text-align:center;line-height:1.7;">免费版含：开方抓药 / 中药库验方 / 处方记录 / 自动更新<br>数据备份、Excel 导出、拍照录像、无水印打印为付费功能</div>
+
     <!-- Tab 切换 + 内容（版本选择后显示） -->
     <div id="tabContainer" style="display:none;">
     <div class="tabs">
@@ -1947,6 +1955,57 @@ document.getElementById('startTrialBtn').addEventListener('click', async () => {
     } catch (e) {
         console.warn('[activate] initTrialButton failed:', e);
         // 失败不隐藏按钮（保守策略，不让用户丢了试用入口）
+    }
+})();
+
+// ============ ★ 2026-09-21 离线免费版领取 ============
+document.getElementById('claimFreeBtn').addEventListener('click', async () => {
+    hideGlobalError();
+    const btn = document.getElementById('claimFreeBtn');
+    const phoneInput = document.getElementById('editionPhone');
+    let phone = phoneInput ? String(phoneInput.value || '').trim() : '';
+    // 手机号选填：填了必须合法，避免把错号建成登录账号
+    if (phone && !/^1[3-9]\d{9}$/.test(phone)) {
+        showGlobalError('联系电话格式不正确（11 位手机号）；不需要账号可清空电话后直接免费使用。');
+        return;
+    }
+    btn.disabled = true;
+    btn.textContent = '正在开通免费版...';
+    try {
+        const r = await window.electronAPI.activate.claimFree(phone);
+        if (r && r.success) {
+            // 与付费激活一致：落盘后重启，主窗口按 free 正式授权进入（功能墙生效）
+            window.electronAPI.alertSync('免费版已开通（永久免费 · 开方不限量）。\n\n' +
+                (r.accountCreated ? '登录账号为您的手机号，初始密码 admin，登录后请及时修改。\n' :
+                                   '重启后请按引导注册本地账号。\n') +
+                '数据备份、Excel 导出、拍照录像、无水印打印可随时在软件内升级标准版。');
+            window.electronAPI.activate.restart();
+        } else {
+            showGlobalError((r && r.error) || '免费版开通失败，请检查网络后重试');
+            btn.disabled = false;
+            btn.textContent = '🆓 免费使用（永久免费 · 开方不限量）';
+        }
+    } catch (e) {
+        showGlobalError('免费版开通失败：' + (e && e.message ? e.message : '请检查网络'));
+        btn.disabled = false;
+        btn.textContent = '🆓 免费使用（永久免费 · 开方不限量）';
+    }
+});
+// 免费按钮状态感知：已正式授权（含已免费）时禁用并标注；试用中/试用到期均可领取
+// （试用到期转免费是核心出路，按钮必须保持可用）
+(async function initFreeButton() {
+    const btn = document.getElementById('claimFreeBtn');
+    if (!btn) return;
+    try {
+        const status = await window.electronAPI.license.getStatus();
+        if (status && status.type === 'licensed') {
+            btn.disabled = true;
+            btn.textContent = status.licenseType === 'free'
+                ? '✅ 本机已开通免费版（永久有效）'
+                : '✅ 本机已激活正式授权';
+        }
+    } catch (e) {
+        console.warn('[activate] initFreeButton failed:', e);
     }
 })();
 </script>

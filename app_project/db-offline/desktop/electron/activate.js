@@ -28,6 +28,9 @@ const licenseManager = require('./license-manager');
 //    垃圾 machineId 门口 400 拒绝；行为与 validate 完全等价，对拍自测保证）
 const ACTIVATE_API_URL = 'https://tcm-prescription-system.pages.dev/api/license/claim';
 const ADMIN_ACTIVATE_API_URL = 'https://tcm-prescription-system.pages.dev/api/license/admin-submit';
+// ★ 2026-09-21 离线免费版领取端点（同包授权分档：服务端签名下发 type=free、
+//   机器绑定、永久有效、开方不限量、无付费功能位；可重领用于重装/丢码自愈）
+const CLAIM_FREE_API_URL = 'https://tcm-prescription-system.pages.dev/api/license/claim-free';
 
 // ============================================================================
 //  机器 ID 生成
@@ -166,6 +169,81 @@ async function activateOnline(code, machineId, user, clinicName, phone, password
         };
     } catch (e) {
         console.error('[Activate] 在线激活失败:', e);
+        let errorMsg = e.message;
+        if (e.message === 'FETCH_TIMEOUT' || e.name === 'AbortError') {
+            errorMsg = '连接服务器超时（15秒），请检查网络后重试';
+        } else if (e.message && e.message.includes('fetch failed')) {
+            errorMsg = '无法连接服务器，请检查网络连接';
+        }
+        return { success: false, error: errorMsg };
+    }
+}
+
+// ============================================================================
+//  ★ 免费版领取（2026-09-21 离线免费版，同包授权分档）
+//  POST /api/license/claim-free：服务端签发 type=free 正式 license（v7 签名、
+//  永久、无限开方、零付费功能位），installLicense 落盘=与付费版完全相同的
+//  安装链路（写 license.dat + 删 trial.dat + 签 config + edition 校正 personal）。
+//  phone 选填：填写则创建手机号本地账户（默认密码 admin）；留空则落盘后
+//  登录窗走既有注册向导（与试用进入后的注册路径一致）。
+//  返回 { success, licenseInfo } 或 { success:false, error }
+// ============================================================================
+async function claimFreeOnline(machineId, phone) {
+    try {
+        const mid = machineId || getMachineId();
+        const trimmedPhone = String(phone || '').trim();
+        const body = {
+            machineId: mid,
+            productClass: 'offline',
+            clientClass: 'desktop'
+        };
+        if (/^1[3-9]\d{9}$/.test(trimmedPhone)) body.phone = trimmedPhone;
+
+        const fetchPromise = async () => {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 12000);
+            try {
+                const response = await fetch(CLAIM_FREE_API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                    signal: controller.signal
+                });
+                return await response.json();
+            } finally {
+                clearTimeout(timeout);
+            }
+        };
+        const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('FETCH_TIMEOUT')), 15000);
+        });
+        const data = await Promise.race([fetchPromise(), timeoutPromise]);
+
+        if (!data || !data.success) {
+            return { success: false, error: (data && data.error) || '免费版领取失败' };
+        }
+
+        // 与付费激活同一安装入口（phone 留空时不建账户，登录窗走注册向导）
+        const installResult = licenseManager.installLicense(data.license, {
+            machineId: mid,
+            doctorName: trimmedPhone || '',
+            clinicName: '',
+            phone: trimmedPhone,
+            password: '',
+            edition: loadClientConfig().edition || 'standard'
+        });
+        if (!installResult.success) {
+            return { success: false, error: installResult.error };
+        }
+        return {
+            success: true,
+            licenseInfo: data.licenseInfo,
+            accountCreated: !!trimmedPhone,
+            message: '免费版已开通',
+            licensePath: installResult.path
+        };
+    } catch (e) {
+        console.error('[Activate] 免费版领取失败:', e);
         let errorMsg = e.message;
         if (e.message === 'FETCH_TIMEOUT' || e.name === 'AbortError') {
             errorMsg = '连接服务器超时（15秒），请检查网络后重试';
@@ -932,6 +1010,7 @@ module.exports = {
     getMachineId,
     startTrial,
     activateOnline,
+    claimFreeOnline,   // ★ 2026-09-21 离线免费版领取
     showActivateWindow,
     showExpireAlertAndActivate,
     closeActivateWindow,
