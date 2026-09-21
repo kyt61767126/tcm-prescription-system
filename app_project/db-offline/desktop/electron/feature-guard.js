@@ -8,10 +8,11 @@
 const licenseManager = require('./license-manager');
 
 // ★ 功能名称常量（避免硬编码字符串出错）
-// ★ 2026-09-21 离线免费版（free）新增三个付费功能位：
-//   DATA_EXPORT  数据导入导出（Excel/CSV 药库导入导出、历史处方导出、统计报表导出）
+// ★ 2026-09-21 离线免费版（free）新增四个付费功能位：
+//   DATA_EXPORT   数据导入导出（Excel/CSV 药库导入导出、历史处方导出、统计报表导出）
 //   MEDIA_CAPTURE 拍照/录像
-//   PRINT_CLEAN  无水印打印（免费版可打印但带「惠康中医免费版」水印）
+//   PRINT_CLEAN   无水印打印（免费版可打印但带「惠康中医免费版」水印）
+//   VOICE_INPUT   语音录入（整方智能解析面板；2026-09-21 真机复测后用户拍板纳入）
 const FEATURES = {
     BACKUP: 'backup',                    // 数据备份（一键备份/恢复/自动备份）
     SYNC: 'sync',                        // 云端同步
@@ -19,7 +20,8 @@ const FEATURES = {
     PRIORITY_SUPPORT: 'priority-support',// 优先技术支持
     DATA_EXPORT: 'data-export',          // ★ 免费版付费墙：Excel/CSV 导入导出 + 统计报表导出
     MEDIA_CAPTURE: 'media-capture',      // ★ 免费版付费墙：拍照/录像
-    PRINT_CLEAN: 'print-clean'           // ★ 免费版付费墙：无水印打印
+    PRINT_CLEAN: 'print-clean',          // ★ 免费版付费墙：无水印打印
+    VOICE_INPUT: 'voice-input'           // ★ 免费版付费墙：语音录入（整方解析）
 };
 
 // ★ 功能中文名称映射（供 UI 显示）
@@ -30,7 +32,8 @@ const FEATURE_NAMES_CN = {
     'priority-support': '优先技术支持',
     'data-export': 'Excel/CSV 导入导出',
     'media-capture': '拍照/录像',
-    'print-clean': '无水印打印'
+    'print-clean': '无水印打印',
+    'voice-input': '语音录入'
 };
 
 // ============================================================================
@@ -45,6 +48,24 @@ function hasFeature(featureName) {
 // 获取当前 license 类型
 function getLicenseType() {
     return licenseManager.getLicenseType();
+}
+
+// ★ 2026-09-21 离线免费版付费墙：唯一墙标准 = licenseType === 'free'
+//   设计依据（.trae/documents/离线免费版_plan.md）：free 复用 edition=personal，
+//   免费差异全部由 license.type=free 表达。
+//   - trial（无 license / 验签失败）= 评估期，全部功能放行（保持评估体验）；
+//   - 历史付费 license 内嵌 features 可能不含 data-export/media-capture/print-clean
+//     新位，不能因 checkFeature().allowed=false 误伤付费用户；
+//   - 仅 free 签名 license（features 恒 []）被墙。
+// 返回 true 仅当主进程确证当前为 free 档；任何异常返回 false（此函数只用于
+// 「证明免费后拒绝」，拒绝动作在各执行点 fail-closed 包装内完成）。
+function isFreeEdition() {
+    try {
+        return getLicenseType() === 'free';
+    } catch (e) {
+        console.warn('[FeatureGuard] isFreeEdition 判定异常:', e && e.message);
+        return false;
+    }
 }
 
 // 校验功能权限，返回 { allowed: boolean, message: string }
@@ -138,12 +159,16 @@ function checkMediaCapture() {
 function checkPrintClean() {
     return checkFeature(FEATURES.PRINT_CLEAN);
 }
+function checkVoiceInput() {
+    return checkFeature(FEATURES.VOICE_INPUT);
+}
 
 module.exports = {
     FEATURES,
     FEATURE_NAMES_CN,
     hasFeature,
     getLicenseType,
+    isFreeEdition,
     checkFeature,
     getAvailableFeatures,
     getFeatureStatus,
@@ -152,5 +177,6 @@ module.exports = {
     checkMultiDevice,
     checkDataExport,
     checkMediaCapture,
-    checkPrintClean
+    checkPrintClean,
+    checkVoiceInput
 };

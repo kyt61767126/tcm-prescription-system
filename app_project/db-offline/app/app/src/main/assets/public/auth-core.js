@@ -2462,6 +2462,20 @@
                 return;
             }
 
+            // ★ 2026-09-21 离线免费版豁免：free 是"永久免费、离线可用"产品档（v7 签名
+            //   expiresAt=2099），不参与在线心跳/entitlement 裁决，更不能被 7 天离线锁定
+            //   或 90 天降级（Java validateLicense 侧亦有豁免）。
+            try {
+                if (global.electronAPI && global.electronAPI.license &&
+                    typeof global.electronAPI.license.getStatus === 'function') {
+                    const _fs = await global.electronAPI.license.getStatus();
+                    if (_fs && _fs.licenseType === 'free') {
+                        console.log('[Heartbeat] 离线免费版(free)跳过心跳与离线锁定');
+                        return;
+                    }
+                }
+            } catch (fe) { /* 查询失败不阻断原心跳流程 */ }
+
             console.log('[Heartbeat] 开始心跳验证...');
 
             // ★ P2-3 计数上链：附带当月处方计数（云端高水位跟踪 + 本地清零对账）
@@ -3473,6 +3487,19 @@
                 const remainingDays = status.remainingDays;
                 const hasDays = (typeof remainingDays === 'number' && !isNaN(remainingDays));
 
+                // ★ 2026-09-22 v299 真机修复：Java validateLicense 对 free 返回
+                //   {type:'licensed', licenseType:'free', remainingDays≈26765（2099到期）}，
+                //   旧代码取 licenseType='free' 三个分支全不匹配，落入"未知类型"误显
+                //   「已激活 剩余26765天」。free 必须独立卡片：不显示天数/激活码/邀请码
+                //   （renderActivationCode 内另有 free 早退双保险，防机器码找回翻出历史付费码）。
+                if (status.type === 'licensed' && licenseType === 'free') {
+                    el.innerHTML = '🆓 <b style="color:#26a69a;">永久免费版</b><br>' +
+                        '<span style="color:#666;">开方不限量 · 永久有效</span>';
+                    // 免费用户仍可输码升级付费版，管理员激活按钮保持可用色
+                    setAdminActivateBtnState(null);
+                    return;
+                }
+
                 if (licenseType === 'trial') {
                     // 试用期模式
                     if (hasDays && remainingDays > 0) {
@@ -3628,6 +3655,17 @@
     //   瞬间可见，之后无处可查只能找管理员。本地无码（旧版激活设备）静默跳过。
     async function renderActivationCode(el) {
         try {
+            // ★ 2026-09-21 v297 真机复测：免费版（领取制，本就没有激活码）不渲染此卡片。
+            //   否则 getLicenseCode 的「机器码联网找回」会把该机器历史机构版付费码翻出来
+            //   显示给免费用户（实测全新领取后显示 BNZC-CA73-...），严重误导。
+            try {
+                if (global.electronAPI && global.electronAPI.license &&
+                    typeof global.electronAPI.license.getStatus === 'function') {
+                    const __freeCodeSt = await global.electronAPI.license.getStatus();
+                    if (__freeCodeSt && __freeCodeSt.type === 'licensed' &&
+                        __freeCodeSt.licenseType === 'free') return;
+                }
+            } catch (_) { /* 查询失败不影响原有激活码展示逻辑 */ }
             // 幂等：与邀请码卡片同款防重复策略（多路径并发调用时先清旧卡片）
             document.querySelectorAll('#activationCodeBox').forEach(n => { if (n.parentNode) n.parentNode.removeChild(n); });
             const code = await getLicenseCode();
@@ -5144,6 +5182,12 @@
                     '<span id="adminSkipToCode" style="color:#26a69a;cursor:pointer;-webkit-tap-highlight-color:transparent;">已有激活码？直接输入 →</span>' +
                     '<span id="adminSkipToTicket" style="color:#07c160;cursor:pointer;-webkit-tap-highlight-color:transparent;">留言申请激活码 →</span>' +
                 '</div>' +
+                // ★ 2026-09-21 离线免费版：版本选择页一键领取（与桌面激活窗免费卡同语义；
+                //   电话选填——填则建手机号账号(默认密码admin)，留空领取后走本地注册向导）
+                '<div style="margin-top:14px;border-top:1px dashed #ddd;padding-top:12px;">' +
+                    '<button type="button" id="adminClaimFreeBtn" style="width:100%;padding:12px;font-size:15px;font-weight:bold;border:2px solid #16a34a;border-radius:10px;background:#f0fdf4;color:#15803d;cursor:pointer;-webkit-tap-highlight-color:transparent;">🆓 永久免费版（开方不限量）</button>' +
+                    '<div style="font-size:11px;color:#166534;margin-top:5px;line-height:1.6;text-align:center;">开方永久免费；备份/导入导出/拍照录像为标准版功能，可随时输码升级</div>' +
+                '</div>' +
             '</div>' +
 
             // ★ 2026-08-23 三Tab（对齐桌面 activate-window）：版本选择后显示 Tab 栏
@@ -5877,6 +5921,117 @@
         var skipTicketLink = document.getElementById('adminSkipToTicket');
         if (skipTicketLink) skipTicketLink.addEventListener('click', function() {
             showTicketFormModal(machineId, (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.clinicName) || '');
+        });
+
+        // ★ 2026-09-21 离线免费版：一键领取 free 授权（APP 原生桥 claimFreeLicense；
+        //   桌面主进程也暴露 activate.claimFree）。电话复用版本页 #editionPhone，选填。
+        var claimFreeBtn = document.getElementById('adminClaimFreeBtn');
+        if (claimFreeBtn) claimFreeBtn.addEventListener('click', async function () {
+            var btn = claimFreeBtn;
+            var phone = '';
+            try {
+                if (!global.electronAPI || !global.electronAPI.activate ||
+                    typeof global.electronAPI.activate.claimFree !== 'function') {
+                    await showHtmlAlert('当前版本不支持免费领取，请更新到最新版后重试');
+                    return;
+                }
+                var phoneEl = document.getElementById('editionPhone');
+                phone = String((phoneEl && phoneEl.value) || '').trim();
+                if (phone && !/^1[3-9]\d{9}$/.test(phone)) {
+                    await showHtmlAlert('联系电话格式不正确（11 位手机号）；不需要账号可清空电话后直接免费使用。');
+                    return;
+                }
+                // ★ 2026-09-21 v299 免费版 × 已激活用户关系保护（Java/桌面执行点已硬拦，
+                //   此处做体验层前置说明，避免被拒后困惑或无谓网络请求）：
+                //   ①已开通 free → 幂等提示；②付费有效期内 → 权益说明不降级；
+                //   ③付费已过期 → 强提示二次确认（功能收窄+原码可恢复）；
+                //   ④试用/未激活/查询失败 → 直接走领取（fail-open 不误伤新用户）。
+                var __freeSt = null;
+                try {
+                    if (global.electronAPI && global.electronAPI.license &&
+                        typeof global.electronAPI.license.getStatus === 'function') {
+                        __freeSt = await global.electronAPI.license.getStatus();
+                    }
+                } catch (_) {}
+                if (__freeSt) {
+                    var __paidNameMap = {
+                        personal: '标准版', standard: '标准版', pro: '专业版',
+                        institution: '机构版', clinic: '机构版', clinic_custom: '机构版',
+                        offline: '机构版', offline_clinic: '机构版', cloud_clinic: '机构版'
+                    };
+                    var __stType = String(__freeSt.type || '');
+                    var __stLic = String(__freeSt.licenseType || '');
+                    var __stDays = (typeof __freeSt.remainingDays === 'number') ? __freeSt.remainingDays : null;
+                    if (__stType === 'licensed' && __stLic === 'free') {
+                        await showHtmlAlert('✅ 您已开通【永久免费版】：开方不限量、永久有效，无需重复领取。');
+                        return;
+                    }
+                    if (__stType === 'licensed' && __stLic && __stLic !== 'free') {
+                        var __pn = __paidNameMap[__stLic] || '付费版';
+                        var __validTxt = (__stDays === -1) ? '永久有效'
+                            : ('剩余 ' + (__stDays !== null ? __stDays : '?') + ' 天');
+                        await showHtmlAlert('您已激活【' + __pn + '】（' + __validTxt + '），无需领取免费版。\n\n' +
+                            '付费版已包含免费版全部功能，并额外支持：\n' +
+                            '① 数据备份与恢复\n② Excel/CSV 导入导出\n③ 拍照/录像\n④ 语音录入\n⑤ 无水印打印\n\n' +
+                            '授权到期后如不再续费，可再领取永久免费版；原激活码始终保留，随时输码即可恢复。');
+                        return;
+                    }
+                    if (__stType === 'expired') {
+                        var __goFree = confirm('您此前的付费授权已到期。领取永久免费版后：\n' +
+                            '✅ 开方不限量、永久可用\n' +
+                            '❌ 备份恢复/Excel导入导出/拍照录像/语音录入/无水印打印将不可用\n\n' +
+                            '您的原激活码仍然有效，续费后在「激活码激活」中重新输入即可恢复全部功能。\n\n' +
+                            '确认现在领取免费版吗？');
+                        if (!__goFree) return;
+                    }
+                }
+                btn.disabled = true;
+                btn.textContent = '⏳ 正在开通...';
+                var r = await global.electronAPI.activate.claimFree(phone);
+                if (r && r.success) {
+                    // v299：执行点幂等——本地已是 free（前端状态查询失败等漏网场景）。
+                    // v300：若本次填了手机号，执行点会幂等补建账号，弹窗如实告知。
+                    if (r.alreadyFree) {
+                        btn.disabled = false;
+                        btn.textContent = '🆓 永久免费版（开方不限量）';
+                        var __afTip = '';
+                        if (r.accountCreated) {
+                            __afTip = r.accountExisted
+                                ? '\n\n📱 账号 ' + phone + ' 已存在，请使用注册时设置的密码登录。'
+                                : '\n\n📱 已补建登录账号：' + phone + '\n🔑 初始密码 admin（登录后请及时修改）';
+                        }
+                        await showHtmlAlert('✅ 您已开通永久免费版，无需重复领取。' + __afTip);
+                        return;
+                    }
+                    global.__licenseActivating = false;
+                    try { global.__licenseExpired = false; } catch (e) {}
+                    // ★ 2026-09-21 修复：账号已存在=用户先走过注册向导，密码是注册时
+                    //   设置的（激活链铁律不覆盖注册密码），弹窗必须如实告知；只有新建账号
+                    //   才是默认密码 admin。桌面 IPC 旧版本无 accountExisted 字段时按新建提示
+                    //   （历史行为，桌面注册与激活窗口分离，多为新账号场景）。
+                    var __accountTip;
+                    if (!r.accountCreated) {
+                        __accountTip = '\n（未填手机号，稍后请在登录窗完成本地注册）\n';
+                    } else if (r.accountExisted) {
+                        __accountTip = '\n📱 登录账号：' + phone +
+                            '\n🔑 登录密码：请使用【注册开通时设置的密码】（非 admin，忘记密码可在登录页重置）\n';
+                    } else {
+                        __accountTip = '\n📱 登录账号：' + phone + '\n🔑 登录密码：admin（登录后请及时修改）\n';
+                    }
+                    await showHtmlAlert('✅ 免费版已开通！\n开方不限量、永久有效。\n' +
+                        __accountTip +
+                        '\n点击确定后应用将重启');
+                    try { await global.electronAPI.activate.restart(); } catch (re) {}
+                } else {
+                    btn.disabled = false;
+                    btn.textContent = '🆓 永久免费版（开方不限量）';
+                    await showHtmlAlert((r && r.error) ? r.error : '免费版领取失败，请稍后重试');
+                }
+            } catch (e) {
+                btn.disabled = false;
+                btn.textContent = '🆓 永久免费版（开方不限量）';
+                try { await showHtmlAlert('免费版领取失败：' + (e && e.message ? e.message : String(e))); } catch (e2) {}
+            }
         });
         document.getElementById('adminTabBtnCode').addEventListener('click', function() {
             syncSharedFieldsFrom('admin'); // Tab1 填过的信息同步到工单（切Tab2也刷新一遍，防止工单已打开值陈旧）

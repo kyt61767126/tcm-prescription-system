@@ -294,6 +294,9 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
     // ★ 2026-09-06 原生领码自愈：管理员激活状态查询 API（machineId 兜底查询，
     //   服务端语义：仅返回绑定该 machineId 的 license，无账号写操作，安全边界不变）
     private static final String ADMIN_STATUS_API_URL = "https://tcm-prescription-system.pages.dev/api/license/admin-status";
+    // ★ 2026-09-21 离线免费版：免费档一键领取（服务端签发 type=free 正式 license，
+    //   v7 Ed25519 签名、永久、开方不限量、零付费功能位），与付费激活同一安装链路
+    private static final String CLAIM_FREE_API_URL = "https://tcm-prescription-system.pages.dev/api/license/claim-free";
     // ★ 2026-09-06 原生领码自愈：节流（冷启动+onResume 双触发，60s 内不重复查询）
     private static final long NATIVE_SYNC_THROTTLE_MS = 60_000L;
     private static volatile long sLastNativeSyncAt = 0L;
@@ -3406,6 +3409,7 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
 
     private int getDefaultMaxPrescriptions(String type) {
         if ("trial".equals(type)) return TRIAL_MAX_PRESCRIPTIONS;
+        // ★ 2026-09-21 free=离线免费版：开方永久不限量（付费墙差异仅在功能位）
         if ("personal".equals(type)) return PERSONAL_MAX_PRESCRIPTIONS;
         if ("pro".equals(type)) return PRO_MAX_PRESCRIPTIONS;
         return PERSONAL_MAX_PRESCRIPTIONS;
@@ -3421,7 +3425,7 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
             features.put("multi-device");
             features.put("priority-support");
         }
-        // trial: 无高级功能
+        // trial/free: 无高级功能（★ free 零付费功能位：备份/导入导出/拍照录像全走付费墙）
         return features;
     }
 
@@ -3578,6 +3582,10 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
                 long remainingDays = (long) Math.ceil((expiresAtMs - effectiveNow) / (24.0 * 60 * 60 * 1000));
 
                 // ★ P1-1 在线授权验证：定期要求在线验证，防止离线破解后永久使用
+                // ★ 2026-09-21 离线免费版豁免：free 是"永久免费、离线可用"产品档
+                //   （v7 签名签发 expiresAt=2099），90 天未联网降级试用/验证提示均不适用，
+                //   否则免费用户长期离线后会被误降到 30 张试用上限。
+                boolean isFreeLic = "free".equals(license.optString("type", ""));
                 JSONObject verifyState = readVerifyState();
                 long lastVerify = verifyState.optLong("lastOnlineVerify", 0);
                 int prescriptionsSinceVerify = verifyState.optInt("prescriptionsSinceVerify", 0);
@@ -3592,7 +3600,7 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
                     daysSinceVerify = 0;
                 }
 
-                if (daysSinceVerify > ONLINE_VERIFY_DOWNGRADE_DAYS) {
+                if (!isFreeLic && daysSinceVerify > ONLINE_VERIFY_DOWNGRADE_DAYS) {
                     // 超过90天未验证，降级为试用模式（限制功能但不锁死）
                     JSONObject r = new JSONObject();
                     r.put("valid", true);
@@ -3609,7 +3617,7 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
                     return r;
                 }
 
-                if (daysSinceVerify > ONLINE_VERIFY_PROMPT_DAYS && prescriptionsSinceVerify >= ONLINE_VERIFY_PROMPT_PRESCRIPTIONS) {
+                if (!isFreeLic && daysSinceVerify > ONLINE_VERIFY_PROMPT_DAYS && prescriptionsSinceVerify >= ONLINE_VERIFY_PROMPT_PRESCRIPTIONS) {
                     // 提示但不阻断（到期时间同样北京时间化）
                     JSONObject r = new JSONObject();
                     r.put("valid", true);
@@ -3807,6 +3815,235 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
 
     public JSONObject activateOnline(String code, String machineId, String user, String clinicName) {
         return activateOnline(code, machineId, user, clinicName, null);
+    }
+
+    // ========================================================================
+    // ★ 2026-09-21 离线免费版：一键领取 type=free 正式 license（APP 原生通道）
+    //   POST /api/license/claim-free → 服务端签发 v7 签名的 free license，随后走与
+    //   付费激活完全相同的装码链路（writeLicenseContent + 删 trial.dat + config 同步 +
+    //   syncConfigEdition(free→personal) + 在线验证状态初始化）。
+    //   phone 选填：合法手机号则创建手机号本地账户（默认密码 admin）；留空不建账户，
+    //   登录窗走既有本地注册向导。调用方（MainActivity 桥）在成功后必须再做
+    //   validateLicense 自验，杜绝"假领取成功"。
+    // ========================================================================
+    public JSONObject claimFreeLicense(String phone) {
+        HttpURLConnection conn = null;
+        try {
+            final String machineId = getMachineId();
+            final String trimmedPhone = phone != null ? phone.trim() : "";
+            final boolean hasPhone = trimmedPhone.matches("1[3-9]\\d{9}");
+
+            // ★ 2026-09-21 v299 付费保护铁律：免费领取只面向「无授权/试用/付费已过期」
+            //   用户。本地若已有验签有效且未到期的付费 license（type≠free），一律拒绝
+            //   覆盖——writeLicenseContent 一旦执行，5 类付费功能立即按 free 收窄，
+            //   造成付费用户「被降级」事故（只能凭原激活码重新激活恢复）。已是 free 则
+            //   幂等直接成功，省一次网络往返。检查异常 fail-open（与 printHtml 同红线：
+            //   不误伤新用户领取），前端按钮状态提示是第二道防线。
+            try {
+                JSONObject __curLic = readLicense();
+                if (__curLic != null && verifySignature(__curLic)) {
+                    String __curType = __curLic.optString("type", "");
+                    long __curExp = parseIsoDate(__curLic.optString("expiresAt", ""));
+                    if ("free".equals(__curType)) {
+                        JSONObject __already = new JSONObject();
+                        __already.put("success", true);
+                        __already.put("alreadyFree", true);
+                        __already.put("message", "永久免费版已开通，无需重复领取");
+                        // ★ 2026-09-22 v300 审查修复：首次领取未填手机号的老 free 用户，
+                        //   重复领取时若填了手机号，幂等补建本地账号（建号函数不覆盖已存在
+                        //   密码，安全）；回读确认后才回传 accountCreated。
+                        if (hasPhone) {
+                            boolean[] __ua = ensureFreePhoneAccount(trimmedPhone);
+                            if (__ua[0]) {
+                                __already.put("accountCreated", true);
+                                __already.put("accountExisted", __ua[1]);
+                            }
+                        }
+                        return __already;
+                    }
+                    if (__curExp != 0 && __curExp != Long.MIN_VALUE
+                            && __curExp > System.currentTimeMillis()) {
+                        long __days = (long) Math.ceil(
+                                (__curExp - System.currentTimeMillis()) / (24.0 * 60 * 60 * 1000));
+                        JSONObject __deny = failResult("您当前已是付费授权用户（授权剩余 "
+                                + Math.max(0, __days) + " 天），付费版包含免费版全部功能，无需领取免费版。\n"
+                                + "如授权到期后不再续费，可再领取免费版；原激活码始终保留，随时可重新激活恢复。");
+                        __deny.put("errorCode", "ALREADY_PAID");
+                        __deny.put("licenseType", __curType);
+                        __deny.put("remainingDays", __days);
+                        return __deny;
+                    }
+                }
+            } catch (Exception __guardEx) {
+                Log.w(TAG, "免费领取付费保护检查异常(放行领取): " + __guardEx.getMessage());
+            }
+
+            URL url = new URL(CLAIM_FREE_API_URL);
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("POST");
+            conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
+            conn.setRequestProperty("Accept", "application/json");
+            conn.setConnectTimeout(ACTIVATE_TIMEOUT_MS);
+            conn.setReadTimeout(ACTIVATE_TIMEOUT_MS);
+            conn.setDoOutput(true);
+
+            JSONObject reqBody = new JSONObject();
+            reqBody.put("machineId", machineId != null ? machineId : "");
+            reqBody.put("productClass", "offline");
+            reqBody.put("clientClass", "app");
+            if (hasPhone) reqBody.put("phone", trimmedPhone);
+
+            try (OutputStream os = conn.getOutputStream()) {
+                os.write(reqBody.toString().getBytes(StandardCharsets.UTF_8));
+                os.flush();
+            }
+
+            int httpCode = conn.getResponseCode();
+            InputStream is = (httpCode >= 200 && httpCode < 400) ? conn.getInputStream() : conn.getErrorStream();
+            if (is == null) return failResult("服务器无响应 (HTTP " + httpCode + ")");
+            String response = readStream(is);
+            Log.i(TAG, "免费版领取响应: " + response);
+            JSONObject respJson = new JSONObject(response);
+            if (!respJson.optBoolean("success", false)) {
+                return failResult(respJson.optString("error",
+                        respJson.optString("message", "免费版领取失败")));
+            }
+
+            String licenseBase64 = respJson.optString("license", "");
+            if (licenseBase64 == null || licenseBase64.isEmpty()) {
+                return failResult("服务器返回的 license 数据为空");
+            }
+            if (!writeLicenseContent(licenseBase64, machineId)) {
+                return failResult("写入 license 文件失败");
+            }
+            // 已领取正式免费授权，清除试用标记
+            try { getFile(TRIAL_FILE).delete(); } catch (Exception ignored) {}
+            resetActivateFailCount();
+
+            // config 同步（clinicName 以 license 权威值为准；填手机号时 doctorName=手机号）
+            try {
+                JSONObject licenseData = null;
+                try {
+                    String jsonStr = decryptLicenseContent(licenseBase64, machineId);
+                    if (jsonStr != null && !jsonStr.isEmpty()) licenseData = new JSONObject(jsonStr);
+                } catch (Exception parseEx) { /* 解析失败不影响领取 */ }
+                if (licenseData == null) licenseData = readLicense(machineId);
+                if (licenseData != null) setLicenseDataContext(licenseData);
+
+                JSONObject cfg = readConfigJSON();
+                boolean changed = false;
+                String syncClinicName = licenseData != null ? licenseData.optString("clinicName", "") : "";
+                if (!syncClinicName.isEmpty() && !syncClinicName.equals(cfg.optString("clinicName", ""))) {
+                    cfg.put("clinicName", syncClinicName);
+                    changed = true;
+                }
+                // ★ 2026-09-21 修复：免费领取只在 doctorName 为空时补手机号，绝不能覆盖
+                //   注册时设置的真实医师姓名（原逻辑无条件覆盖，导致领取后医师名变手机号）。
+                if (hasPhone && cfg.optString("doctorName", "").trim().isEmpty()) {
+                    cfg.put("doctorName", trimmedPhone);
+                    changed = true;
+                }
+                boolean noSig = cfg.optString("configSignature", "").isEmpty();
+                if (changed || noSig) writeConfigJSON(cfg, true);
+            } catch (Exception syncErr) {
+                Log.w(TAG, "免费版领取后同步config失败(不影响授权): " + syncErr.getMessage());
+            }
+
+            // edition 归一：free → personal/user（不新增 edition 档位）
+            try {
+                syncConfigEdition("free");
+            } catch (Exception edErr) {
+                Log.w(TAG, "免费版版本同步失败(不影响授权): " + edErr.getMessage());
+            }
+
+            // 初始化在线验证状态（免费档长期离线豁免降级，此处仅初始化基准）
+            try {
+                JSONObject vs = new JSONObject();
+                vs.put("lastOnlineVerify", System.currentTimeMillis());
+                vs.put("prescriptionsSinceVerify", 0);
+                writeVerifyState(vs);
+            } catch (Exception ve) {
+                Log.w(TAG, "免费版初始化验证状态失败(不影响授权)", ve);
+            }
+
+            // 填手机号 → 创建本地登录账号（手机号即账号，默认密码 admin）
+            // ★ 2026-09-21 修复：账号已存在（用户先走过本地注册向导）时
+            //   syncCreateActivationUser 按铁律保留注册密码（'admin' 占位不覆盖），
+            //   必须把 accountExisted 回传前端——弹窗不能再撒谎显示"密码 admin"，
+            //   应提示用户用注册时设置的密码登录。
+            // ★ 2026-09-22 v300 代码审查修复：syncCreateActivationUser 内部吞异常且为
+            //   void，建号是否真正落盘必须回读 config.users 取证，禁止再用 hasPhone
+            //   冒充 accountCreated（config 写入失败时会引导用户登录不存在的账号）。
+            boolean accountExisted = false;
+            boolean accountCreateOk = false;
+            if (hasPhone) {
+                boolean[] __ua = ensureFreePhoneAccount(trimmedPhone);
+                accountCreateOk = __ua[0];
+                accountExisted = __ua[1];
+            }
+
+            JSONObject r = new JSONObject();
+            r.put("success", true);
+            r.put("message", "免费版已开通，请重启应用");
+            r.put("accountCreated", hasPhone && accountCreateOk);
+            r.put("accountExisted", accountExisted);
+            JSONObject li = respJson.optJSONObject("licenseInfo");
+            if (li != null) r.put("licenseInfo", li);
+            return r;
+        } catch (Exception e) {
+            Log.e(TAG, "免费版领取失败", e);
+            String msg = e.getMessage() != null ? e.getMessage() : "网络错误，请稍后重试";
+            if (msg.contains("timeout") || msg.contains("timed out")) {
+                msg = "连接服务器超时，请检查网络后重试";
+            } else if (msg.contains("Unable to resolve host") || msg.contains("Failed to connect")) {
+                msg = "无法连接服务器，请检查网络连接";
+            }
+            return failResult(msg);
+        } finally {
+            if (conn != null) conn.disconnect();
+        }
+    }
+
+    // ★ 2026-09-22 v300 代码审查：免费领取手机号账号幂等确保（claimFreeLicense 正常领取
+    //   与 alreadyFree 补绑共用）。返回 boolean[2]：[0]=账号回读确在 config.users（真正
+    //   落盘）；[1]=预检时账号已存在（注册密码保留，syncCreateActivationUser 不覆盖）。
+    //   syncCreateActivationUser 内部吞异常且为 void，调用方只能回读取证；任何异常返回
+    //   [false,false]——license 已落盘不受影响，前端按未建成引导注册向导。
+    private boolean[] ensureFreePhoneAccount(String phone) {
+        try {
+            boolean existed = false;
+            JSONObject cfg0 = readConfigJSON();
+            org.json.JSONArray users0 = cfg0.optJSONArray("users");
+            if (users0 != null) {
+                for (int i = 0; i < users0.length(); i++) {
+                    org.json.JSONObject u = users0.optJSONObject(i);
+                    if (u != null && phone.equals(u.optString("username", ""))) {
+                        existed = true;
+                        break;
+                    }
+                }
+            }
+            // 已存在则不重复建（铁律：不覆盖注册密码）；不存在才建（占位密码 admin）
+            if (!existed) {
+                syncCreateActivationUser(phone, phone, "admin", phone);
+            }
+            boolean created = false;
+            JSONObject cfg1 = readConfigJSON();
+            org.json.JSONArray users1 = cfg1.optJSONArray("users");
+            if (users1 != null) {
+                for (int i = 0; i < users1.length(); i++) {
+                    org.json.JSONObject u = users1.optJSONObject(i);
+                    if (u != null && phone.equals(u.optString("username", ""))) {
+                        created = true;
+                        break;
+                    }
+                }
+            }
+            return new boolean[] { created, existed };
+        } catch (Exception e) {
+            Log.w(TAG, "免费版手机号账号确保失败(不影响授权): " + e.getMessage());
+            return new boolean[] { false, false };
+        }
     }
 
     // ★ 2026-08-26 推广奖励：5 参实现，inviteCode（好友邀请码）随激活请求提交
@@ -4195,7 +4432,9 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
         try {
             String t = (rawType != null) ? rawType.toLowerCase().trim() : "";
             // 标准版（个人/标准）
-            if (t.equals("personal") || t.equals("standard")) {
+            // ★ 2026-09-21 free（离线免费版）复用 edition=personal、role=user：
+            //   同包授权分档，付费墙差异全部由 license.type=free 表达，edition 不新增档位
+            if (t.equals("personal") || t.equals("standard") || t.equals("free")) {
                 result.put("edition", "personal");
                 result.put("role", "user");
                 result.put("isInstitutional", false);
@@ -4786,6 +5025,19 @@ nu.put("updatedAt", System.currentTimeMillis());
         if (license == null) return "trial";
         if (!verifySignature(license)) return "trial";
         return license.optString("type", "personal");
+    }
+
+    // ★ 2026-09-21 离线免费版付费墙唯一裁决（与桌面 feature-guard.isFreeEdition 对齐）：
+    //   仅签名有效的 type=free 返回 true；无 license/验签失败/异常 → false（trial 评估期
+    //   全放行；历史付费 license 未带新功能位也不能误伤）。主进程执行点（备份/恢复/媒体
+    //   保存）fail-closed 门控统一调此方法。
+    public boolean isFreeEdition() {
+        try {
+            return "free".equals(getLicenseType());
+        } catch (Exception e) {
+            Log.w(TAG, "isFreeEdition 裁决异常(按非free放行): " + e.getMessage());
+            return false;
+        }
     }
 
     // ========================================================================

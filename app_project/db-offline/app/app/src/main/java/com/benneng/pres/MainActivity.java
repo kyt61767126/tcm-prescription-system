@@ -1465,6 +1465,8 @@ public class MainActivity extends BridgeActivity {
             "      setTrialDays: function(days){ return callNativeAsync('setTrialDays', {days: days}); }," +
             "      getTrialDays: function(){ return callNativeAsync('getTrialDays', {}); }," +
             "      verifyOnline: function(){ return callNativeAsync('verifyOnline', {}); }," +
+            // ★ 2026-09-21 离线免费版：功能位裁决（渲染层 requireFeature 唯一数据源）
+            "      checkFeature: function(feature){ return callNativeAsync('checkFeature', {feature: feature}); }," +
             "      getActivationRecord: function(){ return callNativeAsync('getActivationRecord', {}); }" +
             "    }," +
             "activate: {" +
@@ -1478,6 +1480,8 @@ public class MainActivity extends BridgeActivity {
             "      installLicenseFromServer: function(machineId){ return callNativeAsync('installLicenseFromServer', {machineId: machineId||''}); }," +
             "      setActivationFlowState: function(state){ return callNativeAsync('setActivationFlowState', {json: JSON.stringify(state||{})}); }," +
             "      getActivationFlowState: function(){ return callNativeAsync('getActivationFlowState', {}); }," +
+            // ★ 2026-09-21 离线免费版：一键领取（phone 选填；原生 POST claim-free + 装码自验）
+            "      claimFree: function(phone){ return callNativeAsync('claimFreeLicense', {phone: phone||''}); }," +
             "      close: function(){ return Promise.resolve({success:true}); }," +
             "      restart: function(){ return callNativeAsync('appRestart', {}); }" +
             "    }" +
@@ -1946,6 +1950,13 @@ public class MainActivity extends BridgeActivity {
                                 args.optString("user", ""),
                                 args.optString("password", "admin"),
                                 args.optString("inviteCode", "")).toString();
+                    // ★ 2026-09-21 离线免费版：功能位裁决（{allowed,feature,licenseType}），
+                    //   渲染层 requireFeature 唯一数据源；唯一墙标准=licenseType==='free'
+                    case "checkFeature":
+                        return getLM().getFeatureStatus(args.optString("feature", "")).toString();
+                    // ★ 2026-09-21 离线免费版：一键领取 free 授权（phone 选填）
+                    case "claimFreeLicense":
+                        return claimFreeLicense(args.optString("phone", "")).toString();
                     case "installAdminLicense":
                         // ★ 管理员激活：安装后端审批已生成的 license（无需网络校验激活码）
                         //   licenseCode：2026-08-29 邀请码自愈——服务端返回的真实激活码，
@@ -2058,6 +2069,13 @@ public class MainActivity extends BridgeActivity {
         // ------------------------------------------------------------------
         private JSONObject savePrescriptionImage(String imageData, String fileName) {
             try {
+                // ★ 2026-09-21 免费版拍照付费墙（按文件名收窄，与桌面 desktop-fs-ipc 同规则）：
+                //   仅相机照片（文件名含 _photo_）拦截；处方笺打印自动存档（_prescription.png）
+                //   必须放行——打印是免费功能。
+                if (fileName != null && fileName.contains("_photo_")) {
+                    JSONObject deny = freeWallDeny("拍照");
+                    if (deny != null) return deny;
+                }
                 String base64 = imageData;
                 if (base64.startsWith("data:image/png;base64,")) {
                     base64 = base64.substring("data:image/png;base64,".length());
@@ -2156,6 +2174,13 @@ public class MainActivity extends BridgeActivity {
         // ------------------------------------------------------------------
         private JSONObject saveVideoFile(String base64Data, String fileName) {
             try {
+                // ★ 2026-09-21 免费版录像付费墙（按文件名收窄）：仅相机录像
+                //   （generateFileName 格式 姓名_编号_video.webm，含 "_video."）拦截；
+                //   外部导入/拖入视频文件名不含该串，正常放行。
+                if (fileName != null && fileName.contains("_video.")) {
+                    JSONObject deny = freeWallDeny("录像");
+                    if (deny != null) return deny;
+                }
                 byte[] bytes = Base64.decode(base64Data, Base64.DEFAULT);
 
                 String safeName = sanitize(fileName);
@@ -2302,6 +2327,18 @@ public class MainActivity extends BridgeActivity {
         private JSONObject commitMediaSession(String sessionId, String fileName, String type) {
             File tempFile = null;
             try {
+                // ★ 2026-09-21 免费版拍照/录像付费墙（分片通道，按文件名收窄，与直写通道同规则）
+                boolean isVideo = "video".equals(type);
+                boolean isCameraCapture = fileName != null &&
+                        (isVideo ? fileName.contains("_video.") : fileName.contains("_photo_"));
+                if (isCameraCapture) {
+                    JSONObject deny = freeWallDeny(isVideo ? "录像" : "拍照");
+                    if (deny != null) {
+                        File orphan = mediaSessions.remove(sessionId);
+                        if (orphan != null) orphan.delete();
+                        return deny;
+                    }
+                }
                 tempFile = mediaSessions.remove(sessionId);
                 if (tempFile == null || !tempFile.exists()) {
                     return fail("会话文件不存在: " + sessionId);
@@ -2384,6 +2421,10 @@ public class MainActivity extends BridgeActivity {
         // ------------------------------------------------------------------
         private JSONObject saveBackupFile(String jsonStr, String fileName) {
             try {
+                // ★ 2026-09-21 免费版数据备份付费墙（手动备份+JS 自动备份同走此原生执行点，
+                //   fail-closed；渲染层 dailyAutoBackup/__bgAutoBackup 另有 silent 短路）
+                JSONObject deny = freeWallDeny("数据备份");
+                if (deny != null) return deny;
                 String safeName = sanitize(fileName);
                 if (safeName.isEmpty()) {
                     safeName = "backup_" + System.currentTimeMillis() + ".json";
@@ -2445,6 +2486,9 @@ public class MainActivity extends BridgeActivity {
         // ------------------------------------------------------------------
         private JSONObject listBackupFiles() {
             try {
+                // ★ 2026-09-21 免费版数据恢复付费墙（列文件即恢复入口，fail-closed）
+                JSONObject deny = freeWallDeny("数据恢复");
+                if (deny != null) return deny;
                 java.util.List<JSONObject> files = new java.util.ArrayList<>();
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     String selection = MediaStore.Downloads.RELATIVE_PATH + " LIKE ?";
@@ -2505,6 +2549,9 @@ public class MainActivity extends BridgeActivity {
         // ------------------------------------------------------------------
         private JSONObject readBackupFile(String fileName) {
             try {
+                // ★ 2026-09-21 免费版数据恢复付费墙（读文件执行点，fail-closed）
+                JSONObject deny = freeWallDeny("数据恢复");
+                if (deny != null) return deny;
                 String safeName = sanitize(fileName);
                 if (!safeName.endsWith(".json") || safeName.contains("/")) {
                     return fail("非法备份文件名");
@@ -2973,6 +3020,25 @@ public class MainActivity extends BridgeActivity {
             }
         }
 
+        // ★ 2026-09-21 离线免费版付费墙（原生执行点 fail-closed，与桌面 desktop-fs-ipc.cjs
+        //   freeWallReason 对齐）：仅签名有效的 type=free 返回拒绝对象；trial 评估期、历史
+        //   付费 license、裁决异常一律放行（返回 null）。拒绝串带 freeDenied:true 供渲染层识别。
+        private JSONObject freeWallDeny(String featureCn) {
+            try {
+                if (!getLM().isFreeEdition()) return null;
+                JSONObject r = new JSONObject();
+                r.put("success", false);
+                r.put("freeDenied", true);
+                r.put("error", "当前为【离线免费版】，" + featureCn
+                        + "为标准版功能，升级标准版后即可使用（开方等基本功能永久免费）。");
+                Log.i(TAG, "freeWall 拦截: " + featureCn);
+                return r;
+            } catch (Exception e) {
+                Log.w(TAG, "freeWall 裁决异常(放行): " + e.getMessage());
+                return null;
+            }
+        }
+
         // ------------------------------------------------------------------
         // ★ License/加密/Toast（从 NativeBridgePlugin 迁移，方向3统一架构）
         // ------------------------------------------------------------------
@@ -3044,8 +3110,21 @@ public class MainActivity extends BridgeActivity {
             } catch (Exception e) { return fail(e.getMessage()); }
         }
 
+        // ★ 2026-09-21 离线免费版：一键领取 free 授权 + 装后自验（与 activateLicense 同标准，
+        //   LicenseInstallValidator 防"假领取成功"，valid=false 时覆盖 success=false）
+        private JSONObject claimFreeLicense(String phone) {
+            try {
+                JSONObject result = getLM().claimFreeLicense(phone);
+                if (result != null && result.optBoolean("success", false)) {
+                    JSONObject verify = getLM().validateLicense(getLM().getMachineId());
+                    result = LicenseInstallValidator.applySelfVerify(result, verify);
+                }
+                return result == null ? fail("免费版领取失败") : result;
+            } catch (Exception e) { return fail(e.getMessage()); }
+        }
+
         // ★ 管理员激活：安装后端审批已生成的 license（复用 LicenseManager.installAdminLicense）
-        //   licenseCode：2026-08-29 邀请码自愈——服务端返回的真实激活码，透传 LicenseManager 写激活记录
+        //   licenseCode：2026-08-29 邀请码自愈——服务端透传的真实激活码，透传 LicenseManager 写激活记录
         private JSONObject installAdminLicense(String licenseBase64, String user, String clinicName,
                                                String password, String loginUsername, String phone,
                                                String licenseCode) {

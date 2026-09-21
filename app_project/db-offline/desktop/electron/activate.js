@@ -192,6 +192,46 @@ async function claimFreeOnline(machineId, phone) {
     try {
         const mid = machineId || getMachineId();
         const trimmedPhone = String(phone || '').trim();
+
+        // ★ 2026-09-21 v299 付费保护（与 APP Java LicenseManager.claimFreeLicense
+        //   同规则）：免费领取只面向「无授权/试用/付费已过期」用户。本地已有验签
+        //   有效且未到期的付费 license 时拒绝落盘，防止付费功能被 free 覆盖降级；
+        //   已是 free 幂等成功。检查异常 fail-open（不误伤新用户领取）。
+        try {
+            const __cur = licenseManager.readLicense(mid);
+            if (__cur && licenseManager.verifySignature(__cur)) {
+                const __curType = String(__cur.type || '');
+                const __expMs = Date.parse(__cur.expiresAt || '') || 0;
+                if (__curType === 'free') {
+                    // ★ 2026-09-22 v300 审查修复：老免费用户重复领取填了手机号时，
+                    //   幂等补建本地账号（不覆盖已存在密码，回读确认才回传）。
+                    const __r = { success: true, alreadyFree: true, message: '永久免费版已开通，无需重复领取' };
+                    if (/^1[3-9]\d{9}$/.test(trimmedPhone) &&
+                        typeof licenseManager.ensureLocalActivationUser === 'function') {
+                        const __af = licenseManager.ensureLocalActivationUser(trimmedPhone, 'admin');
+                        if (__af && __af.success) {
+                            __r.accountCreated = true;
+                            __r.accountExisted = !!__af.existed;
+                        }
+                    }
+                    return __r;
+                }
+                if (__expMs > Date.now()) {
+                    const __days = Math.max(0, Math.ceil((__expMs - Date.now()) / 86400000));
+                    return {
+                        success: false,
+                        errorCode: 'ALREADY_PAID',
+                        licenseType: __curType,
+                        remainingDays: __days,
+                        error: '您当前已是付费授权用户（授权剩余 ' + __days + ' 天），付费版包含免费版全部功能，无需领取免费版。\n'
+                            + '如授权到期后不再续费，可再领取免费版；原激活码始终保留，随时可重新激活恢复。'
+                    };
+                }
+            }
+        } catch (__guardE) {
+            console.warn('[Activate] 免费领取付费保护检查异常(放行领取):', __guardE && __guardE.message);
+        }
+
         const body = {
             machineId: mid,
             productClass: 'offline',
@@ -224,6 +264,13 @@ async function claimFreeOnline(machineId, phone) {
         }
 
         // 与付费激活同一安装入口（phone 留空时不建账户，登录窗走注册向导）
+        // ★ 2026-09-22 v300 审查修复：installLicense 内联建号且写盘失败被吞，
+        //   accountCreated 必须回读实际 config 取证；install 前先记录账号是否已存在，
+        //   供前端区分"初始密码 admin / 用注册密码登录"，弹窗不再撒谎。
+        const __phoneValid = /^1[3-9]\d{9}$/.test(trimmedPhone);
+        const __existedBefore = __phoneValid &&
+            typeof licenseManager.localUserExists === 'function' &&
+            licenseManager.localUserExists(trimmedPhone);
         const installResult = licenseManager.installLicense(data.license, {
             machineId: mid,
             doctorName: trimmedPhone || '',
@@ -235,10 +282,14 @@ async function claimFreeOnline(machineId, phone) {
         if (!installResult.success) {
             return { success: false, error: installResult.error };
         }
+        const __existsAfter = __phoneValid &&
+            typeof licenseManager.localUserExists === 'function' &&
+            licenseManager.localUserExists(trimmedPhone);
         return {
             success: true,
             licenseInfo: data.licenseInfo,
-            accountCreated: !!trimmedPhone,
+            accountCreated: __existsAfter,
+            accountExisted: __existsAfter && __existedBefore,
             message: '免费版已开通',
             licensePath: installResult.path
         };

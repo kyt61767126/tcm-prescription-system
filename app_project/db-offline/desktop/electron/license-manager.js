@@ -2533,6 +2533,111 @@ function enforceEditionBinding() {
     }
 }
 
+// ★ v300 免费版账号链修复（Seed 独立代码审查问题 1/2）：
+//   1) 建号结果必须"写入后回读取证"，调用方不能用"填了手机号"冒充账号已创建
+//      （config 写入/signConfig 失败时旧逻辑仍回传 accountCreated=true，客户登录失败）；
+//   2) already-free 幂等补绑走同一入口；账号已存在时不覆盖密码（注册密码保护铁律）。
+function __enumerateConfigPaths() {
+    const paths = [];
+    try {
+        paths.push(require('path').join(getWritableDir(), 'config.json'));
+    } catch (e) { /* 忽略 */ }
+    try {
+        const ud = app.getPath('userData');
+        if (ud) {
+            const p = require('path').join(ud, 'config.json');
+            if (paths.indexOf(p) === -1) paths.push(p);
+        }
+    } catch (e) { /* 忽略 */ }
+    return paths;
+}
+
+// 两处 config（可写目录 / userData fallback）任一回读到该用户即视为存在
+function localUserExists(username) {
+    if (!username) return false;
+    const target = String(username);
+    for (const p of __enumerateConfigPaths()) {
+        try {
+            if (!fs.existsSync(p)) continue;
+            const cfg = JSON.parse(fs.readFileSync(p, 'utf8'));
+            if (Array.isArray(cfg.users) && cfg.users.some(u => u && (u.username === target || u.name === target))) {
+                return true;
+            }
+        } catch (e) { /* 不可读按不存在继续查下一处 */ }
+    }
+    return false;
+}
+
+// 免费版领取/补绑专用：幂等确保手机号本地管理员账号存在。
+// 返回 {success, existed}；任何失败都 success=false，绝不"假成功"。
+function ensureLocalActivationUser(phone, password) {
+    try {
+        const trimmed = String(phone || '').trim();
+        if (!/^1[3-9]\d{9}$/.test(trimmed)) {
+            return { success: false, existed: false, error: '手机号格式不正确' };
+        }
+        if (localUserExists(trimmed)) {
+            // 已存在：不覆盖密码（保护用户注册时自设密码）
+            return { success: true, existed: true };
+        }
+
+        const pwd = password || 'admin';
+        const configPath = require('path').join(getWritableDir(), 'config.json');
+        let config = {};
+        try {
+            if (fs.existsSync(configPath)) {
+                config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+            }
+        } catch (e) {
+            console.warn('[License] ensureLocalActivationUser 读取 config 失败，将重建:', e.message);
+        }
+        if (!Array.isArray(config.users)) config.users = [];
+
+        config.users.push({
+            username: trimmed,
+            password: hashOf(pwd),
+            passwordHash: hashOf(pwd),
+            salt: PASSWORD_SALT,
+            name: trimmed,
+            role: 'admin',
+            createdAt: new Date().toISOString()
+        });
+
+        signConfig(config);
+        if (!config.configSignature) {
+            console.error('[License] ensureLocalActivationUser signConfig 未生成签名，拒绝写入');
+            return { success: false, existed: false, error: 'config签名失败' };
+        }
+
+        let writeOk = false;
+        try {
+            fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+            writeOk = true;
+        } catch (we) {
+            console.warn('[License] ensureLocalActivationUser 主路径写入失败，尝试 fallback:', we.message);
+            try {
+                const fallbackPath = require('path').join(app.getPath('userData'), 'config.json');
+                fs.writeFileSync(fallbackPath, JSON.stringify(config, null, 2), 'utf8');
+                writeOk = true;
+            } catch (fe) {
+                console.error('[License] ensureLocalActivationUser fallback 写入也失败:', fe.message);
+            }
+        }
+
+        // ★ 回读取证：写入声明成功但磁盘查不到，仍按失败返回
+        if (!writeOk || !localUserExists(trimmed)) {
+            return { success: false, existed: false, error: '手机号账号确保失败' };
+        }
+
+        backupUserAccounts(config);
+        console.log('[License] ensureLocalActivationUser 已确保本地管理员账号:', trimmed);
+        return { success: true, existed: false };
+    } catch (e) {
+        console.error('[License] ensureLocalActivationUser 异常:', e.message);
+        return { success: false, existed: false, error: e.message };
+    }
+}
+
 module.exports = {
     enforceEditionBinding,  // ★ 启动时校正 config.edition 与激活码版本一致（main.js 调用）
     validateLicense,
@@ -2557,6 +2662,9 @@ module.exports = {
     getUsersBackupPath,    // 账号备份文件路径
     backupUserAccounts,    // 备份 users 到独立文件
     loadUserAccountBackup, // 从独立备份读取 users
+    // ★ v300 免费版账号链：回读确证的幂等建号（免费领取/already-free 补绑）
+    localUserExists,
+    ensureLocalActivationUser,
     // ★ 路径相关（修复 NSIS 安装到 Program Files 无写权限问题）
     isPortableInstall,    // 检测是否为 portable 安装（供 activate.js 决定写入路径）
     getWritableDir,       // 获取可写目录（license.dat / trial-config.json 用）

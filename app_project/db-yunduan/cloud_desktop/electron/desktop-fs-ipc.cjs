@@ -19,6 +19,33 @@ function createDesktopFileIpc({ ipcMain, app, dialog, shell, BrowserWindow }) {
     const path = require('path');
 
     // ============================================================================
+    //  ★ 2026-09-21 离线免费版付费墙（主进程执行点，fail-closed）
+    //  渲染层门控只做体验，真正执行点必须在主进程再裁一次（plan R2）。
+    //  唯一墙标准：feature-guard.isFreeEdition() === true（仅 free 签名 license）。
+    //  feature-guard 与本文件同目录分发（离线桌面 electron/）；云桌面目录无此副本时
+    //  require 抛错→__fg=null→不墙（云端另有登录/授权体系，保持其现状零影响）。
+    // ============================================================================
+    let __fg;
+    function getFeatureGuard() {
+        if (__fg !== undefined) return __fg;
+        try { __fg = require('./feature-guard'); }
+        catch (e) { __fg = null; }
+        return __fg;
+    }
+    // 返回 null=放行；返回字符串=拒绝原因（供 IPC 直接回 {success:false,error}）
+    function freeWallReason(featureCn) {
+        try {
+            const fg = getFeatureGuard();
+            if (fg && typeof fg.isFreeEdition === 'function' && fg.isFreeEdition()) {
+                return '当前为【离线免费版】，' + featureCn + '为标准版功能，升级标准版后即可使用（开方等基本功能永久免费）。';
+            }
+        } catch (e) {
+            console.warn('[FreeWall] 授权裁决异常，按放行处理:', e && e.message);
+        }
+        return null;
+    }
+
+    // ============================================================================
     //  目录与键名工具
     // ============================================================================
     function getExeDirectory() {
@@ -320,10 +347,26 @@ function createDesktopFileIpc({ ipcMain, app, dialog, shell, BrowserWindow }) {
     // ============================================================================
     //  媒体/文件 IPC
     // ============================================================================
-    ipcMain.handle('save-prescription-image', (event, imageData, fileName) => savePrescriptionImage(imageData, fileName));
+    // ★ 2026-09-21 免费版付费墙（media-capture）：本通道双复用——
+    //   ① 相机照片（video-recorder.js 生成，文件名含 _photo_）→ free 拒绝；
+    //   ② 处方笺打印自动存档（文件名 _prescription.png，打印是免费功能）→ 必须放行，
+    //      绝不能因媒体墙误伤免费打印链路。
+    ipcMain.handle('save-prescription-image', (event, imageData, fileName) => {
+        if (String(fileName || '').indexOf('_photo_') >= 0) {
+            const __deny = freeWallReason('拍照');
+            if (__deny) return { success: false, error: __deny, freeDenied: true };
+        }
+        return savePrescriptionImage(imageData, fileName);
+    });
 
     // ★ 视频文件保存 IPC
+    // ★ 2026-09-21 免费版付费墙（media-capture）：相机录像文件名形如
+    //   姓名_编号_video.webm（含 '_video.'）；拖入的外部视频文件不拦（同拍照口径）。
     ipcMain.handle('save-video-file', async (event, arrayBuffer, fileName) => {
+        if (String(fileName || '').indexOf('_video.') >= 0) {
+            const __deny = freeWallReason('录像');
+            if (__deny) return { success: false, error: __deny, freeDenied: true };
+        }
         return await saveVideoFile(arrayBuffer, fileName);
     });
 
@@ -523,6 +566,8 @@ function createDesktopFileIpc({ ipcMain, app, dialog, shell, BrowserWindow }) {
     // 备份文件保存：写入「惠康中医媒体\downloads\中医处方系统\」子目录（与APP端命名一致，2026-08-29）
     ipcMain.handle('save-backup-file', async (event, jsonStr, fileName) => {
         try {
+            const __deny = freeWallReason('数据备份');
+            if (__deny) return { success: false, error: __deny, freeDenied: true };
             const safeName = sanitizeFileName(fileName);
             if (!safeName.endsWith('.json')) return { success: false, error: '文件名无效（仅允许 .json）' };
             const backupDir = path.join(getDownloadsDirectory(), '中医处方系统');
@@ -540,6 +585,8 @@ function createDesktopFileIpc({ ipcMain, app, dialog, shell, BrowserWindow }) {
     // 一键恢复：列出备份文件（中医处方系统/ 子目录 + downloads 根存量，按时间倒序）
     ipcMain.handle('list-backup-files', async () => {
         try {
+            const __deny = freeWallReason('数据恢复');
+            if (__deny) return { success: false, error: __deny, freeDenied: true };
             const base = getDownloadsDirectory();
             const dirs = [path.join(base, '中医处方系统'), base];
             const seen = new Set();
@@ -569,6 +616,8 @@ function createDesktopFileIpc({ ipcMain, app, dialog, shell, BrowserWindow }) {
     // 一键恢复：按文件名读取备份内容（兼容子目录与 downloads 根存量）
     ipcMain.handle('read-backup-file', async (event, fileName) => {
         try {
+            const __deny = freeWallReason('数据恢复');
+            if (__deny) return { success: false, error: __deny, freeDenied: true };
             const safeName = sanitizeFileName(fileName);
             if (!safeName.endsWith('.json')) return { success: false, error: '文件名无效' };
             const base = getDownloadsDirectory();
@@ -593,6 +642,8 @@ function createDesktopFileIpc({ ipcMain, app, dialog, shell, BrowserWindow }) {
     //   主进程 dialog.showOpenDialog 无用户激活限制，是最可靠的兜底通道。
     ipcMain.handle('open-backup-picker', async () => {
         try {
+            const __deny = freeWallReason('数据恢复');
+            if (__deny) return { success: false, error: __deny, freeDenied: true };
             let win = null;
             try { win = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0] || null; } catch (e) {}
             const base = getDownloadsDirectory();
@@ -617,6 +668,9 @@ function createDesktopFileIpc({ ipcMain, app, dialog, shell, BrowserWindow }) {
     // 文件名格式：backup_YYYYMMDD_HHmmss.json
     ipcMain.handle('save-auto-backup', async (event, jsonStr, fileName) => {
         try {
+            // ★ 免费版自动备份静默拒绝（渲染层已先静默短路；主进程兜底 fail-closed）
+            const __deny = freeWallReason('自动备份');
+            if (__deny) return { success: false, error: __deny, freeDenied: true };
             const safeName = sanitizeFileName(fileName);
             if (!safeName.endsWith('.json')) return { success: false, error: '文件名无效（仅允许 .json）' };
             if (!/^backup_\d{8}_\d{6}\.json$/.test(safeName)) {

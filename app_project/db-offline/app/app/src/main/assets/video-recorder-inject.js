@@ -643,7 +643,15 @@
     // ========================================================================
     // 6. 录像 Overlay
     // ========================================================================
-    window.openRecordingOverlay = function () {
+    window.openRecordingOverlay = async function () {
+        // ★ 2026-09-21 离线免费版付费墙：拍照/录像为标准版功能（主进程保存 IPC 另有
+        //   fail-closed 兜底，按文件名 _photo_/_video. 收窄）。渲染门仅在壳环境存在
+        //   requireFeature 时生效；无桥（旧壳/网页）放行由主进程/各自体系裁决。
+        if (typeof window.requireFeature === 'function') {
+            var ok = false;
+            try { ok = await window.requireFeature('media-capture'); } catch (e) { ok = false; }
+            if (!ok) return;
+        }
         // 懒加载：首次打开overlay时注入样式（避免启动时阻塞页面渲染）
         injectStyles();
         var existing = document.getElementById('cloudVrOverlay');
@@ -984,7 +992,17 @@
     // ========================================================================
     // 7. 拍照 Overlay
     // ========================================================================
-    window.openPhotoOverlay = function () {
+    window.openPhotoOverlay = async function () {
+        // ★ 2026-09-21 离线免费版付费墙：拍照为标准版功能（与录像入口 openRecordingOverlay
+        //   同门；桌面侧在 video-recorder.js 按钮 onclick 同门）。无门（旧壳/网页）放行，
+        //   由主进程按文件名 _photo_ fail-closed 兜底；有门但被拒则不弹相机，requireFeature
+        //   内部已弹升级引导，避免拍完两张舌图保存时才收到原生 freeDenied（且吞错成
+        //   "部分照片保存失败"无升级提示）。
+        if (typeof window.requireFeature === 'function') {
+            var ok = false;
+            try { ok = await window.requireFeature('media-capture'); } catch (e) { ok = false; }
+            if (!ok) return;
+        }
         // 懒加载：首次打开overlay时注入样式（避免启动时阻塞页面渲染）
         injectStyles();
         var existing = document.getElementById('cloudVrOverlay');
