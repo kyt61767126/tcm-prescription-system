@@ -583,6 +583,8 @@
 
 * 桌面管理员激活走主进程流程（activate-window + submitAdminRequest/saveLicense IPC），不经过 auth-core onAdminActivated。
 
+* ★ 2026-09-21 【双页面上下文铁律】云端桌面登录窗与主窗口是**两个独立页面上下文**：login.js（登录窗）里 auth-core login 的 edition-sync / localStorage 写入对主窗口的 `CONFIG` 对象**完全无效**（localStorage 跨窗共享，内存对象不共享）。云端桌面真实主流程 = 登录窗登录 → 主进程 login-success → 主窗口 checkLoginStatus 的 Electron 自动登录分支——此处 `updateUserDisplay()` 前必须以 `electronUser.clinicEdition`（login.js 从服务端登录响应携带、经 IPC 存 currentLoggedInUser 透传）为权威同步 CONFIG.edition / window.EDITION / Permission。历史三连报同根：08-21 离线端同款竞态（__appConfigReady 方案）、09-13 云端只补 refreshVersionTags 版本标签（标签对、按钮错）、09-21 云端自动登录分支补 CONFIG 同步（Commit 349a997b）根治。**深层原因**：热更新流程下 desktop-windows.cjs 从 asar 复制**出厂模板** config.json 到热目录，渲染层同步 XHR 读到的永远是 cloud_personal 模板而非 userData 真配置（云端 index.html 从未调用已存在的 get-app-config IPC）。**待办评估**：向云端移植离线端 __appConfigReady 全量配置加载（风险：Object.assign 旧快照可能覆盖新登录权威值，须排在 clinicEdition 同步之后）。**铁律：双窗口架构（登录窗+主窗口）下，任何"登录时同步"必须显式检查目标状态在哪个页面上下文；改按钮/权限判定先画全链路：登录窗→IPC→主窗口恢复→updateUserDisplay→Permission 谓词→button-manager 断言。**
+
 
 * **激活页面状态感知（2026-09-04 Commit 2fe38576）**：activate-window.html 的"立即试用"按钮（startTrialBtn）不能写死永远可见。页面加载时必须调 window.electronAPI.license.getStatus()（底层是 licenseManager.validateLicense()），根据 	ype 字段分支：
   - 	ype === 'trial' 或 undefined → 保持按钮可见（试用中 / 全新未启动过）
