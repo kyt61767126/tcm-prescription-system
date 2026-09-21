@@ -1955,7 +1955,11 @@ try {
     }
 } catch(e) {}
 if (window.Permission) {
-    Permission.init().then(function() {
+    // ★ 2026-09-21 审查修复（Seed-2.1-Pro）：留存 init 完成 Promise。init 的 getAppConfig
+    //   IPC 回调会绕过 edition-lock setter 直写 __authoritativeEdition 权威插槽；
+    //   checkLoginStatus 自动登录分支的服务端 edition-sync 必须 await 本 Promise 之后再写，
+    //   杜绝慢盘/杀软致 IPC 晚 resolve 把 cloud_clinic 盖回出厂 cloud_personal。
+    window.__permInitPromise = Permission.init().then(function() {
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', function() {
                 Permission.applyRuntimePermissions();
@@ -4934,20 +4938,25 @@ let currentUser = null;
                 } catch(_) {}
 
                 // ★ 2026-09-21 服务端会话守卫（P0：机构管理员工具栏永远只剩【修改密码】根治）：
-                //   危险窗口 = 恢复登录时序竞态——currentUser 已从缓存恢复（含服务端下发的
-                //   clinicEdition/role），但 config.json 尚未异步加载完（configEdition=''），
-                //   软判据命中出厂 versionLabel「云端标准版」→ 下方全部机构豁免失效 → 执行强制：
-                //   C 步把服务端下发的 role:admin 永久降级为 user + DOM 强制 userManage=none，
-                //   且 updateUserDisplay-tail / login-setTimeout 调用点让该强制覆盖刚设好的
-                //   正确按钮，此后无更新时机 → 永久卡死。仅桌面 electron 有此竞态（APP/网页
-                //   无异步 config 竞态）→ 解释「桌面显示修改密码、APP 正常」。
+                //   危险窗口 = 自动登录时序竞态——主窗口 config.json 是解析期【同步 XHR】读到的
+                //   热更新目录出厂模板（edition=cloud_personal、versionLabel=云端标准版），
+                //   而服务端下发的 clinicEdition（cloud_clinic）要等 checkLoginStatus 自动登录
+                //   分支才同步进 CONFIG；两者之间的 enforce 调用软判据命中「云端标准版」→
+                //   机构豁免失效 → DOM 强制 userManage=none 覆盖正确按钮 → 永久卡死。
+                //   仅桌面 electron 有此竞态（登录窗/主窗口双页面上下文；APP/网页无）。
                 //   铁律：本地代码不得改写服务端下发的角色/版本。currentUser.clinicEdition
                 //   非空即代表服务端权威会话，一律禁止本地强制（按钮正确性由 Permission +
                 //   button-manager 断言按服务端 edition/role 计算，无需本函数代劳）。
+                // ★ 2026-09-21 审查修复（Seed-2.1-Pro）：① currentUser 是本脚本顶层 let
+                //   词法绑定（见上方 let currentUser 声明），不挂 window——全仓库 grep 零赋值，
+                //   window.currentUser 恒 undefined，旧守卫从未触发（死代码）；必须读裸
+                //   currentUser。② APP_MODE 门控双保险：离线桌面（惠康中医-本地）Setup 权威
+                //   强制永不绕过（离线 login.js 本就剥离 clinicEdition，不会命中）。
                 try {
-                    var _svcu = window.currentUser;
+                    var _svcu = (typeof currentUser !== 'undefined') ? currentUser : null;
                     var _svcEd = _svcu ? String(_svcu.clinicEdition || '').trim() : '';
-                    if (_svcu && _svcEd) {
+                    var _svcCloud = (typeof window === 'undefined') || String(window.APP_MODE || '') !== 'offline';
+                    if (_svcu && _svcEd && _svcCloud) {
                         if (typeof console !== 'undefined' && console.log) console.log('[EnforceStandard] 服务端会话守卫，跳过强制 | user=' + (_svcu.username || '') + ' | clinicEdition=' + _svcEd + ' | reason=' + (reason || ''));
                         return;
                     }
@@ -4973,7 +4982,8 @@ let currentUser = null;
                 //   仅离线桌面权威模式（IS_DESKTOP_LOCAL=true）可强制；云端版（网页/APP_MODE=cloud）机构版配置一律放行。
                 var isInstitutionalDeploy = false;
                 try {
-                    var instDeploy = ['clinic_custom', 'cloud', 'clinic', 'cloud_clinic', 'offline_clinic', 'institution'];
+                    // ★ 2026-09-21 审查修复：补 institutional，与 permission._normalizeEdition / button-manager 名单对齐
+                    var instDeploy = ['clinic_custom', 'cloud', 'clinic', 'cloud_clinic', 'offline_clinic', 'institution', 'institutional'];
                     if (instDeploy.indexOf(String(configEdition)) >= 0 || instDeploy.indexOf(String(globalEdition)) >= 0) {
                         isInstitutionalDeploy = true;
                     }
@@ -4986,7 +4996,8 @@ let currentUser = null;
                 // ★★ 2026-08-19 机构版授权豁免：若当前 edition 为机构版，绝不执行标准版强制对齐。
                 //   （离线/云端机构版正式激活后，主进程 get-app-config 已将 config.edition 校正为机构版值；
                 //    此处若不豁免，权威强制模式(IS_DESKTOP_LOCAL/产品名/DOM锚点)仍会把它强行降级为标准版）
-                var INST_ED = ['clinic','offline_clinic','clinic_custom','offline','cloud_clinic','cloud'];
+                // ★ 2026-09-21 审查修复：补 institution/institutional（服务端已归一兜底，此为纵深防御）
+                var INST_ED = ['clinic','offline_clinic','clinic_custom','offline','cloud_clinic','cloud','institution','institutional'];
                 if (configEdition && INST_ED.indexOf(configEdition) >= 0) return;
                 if (globalEdition && INST_ED.indexOf(globalEdition) >= 0) return;
                 try { if (window.Permission && window.Permission._edition && INST_ED.indexOf(String(window.Permission._edition)) >= 0) return; } catch (_) {}
@@ -5014,12 +5025,12 @@ let currentUser = null;
                     }
                 } catch (_) {}
 
-                // C) 强制纠正角色（admin/clinic_admin → user，标准版永久单用户）
-                try {
-                    if (window.currentUser && (AuthCore.isClinicAdmin(currentUser))) {
-                        currentUser.role = 'user';
-                    }
-                } catch (_) {}
+                // C) 角色保护（★ 2026-09-21 Seed-2.1-Pro 审查修复）：
+                //    旧代码读 window.currentUser（恒 undefined，顶层 let 不挂 window）→
+                //    admin→user 降级从未真正执行过；且该意图与运行时主路径 button-manager 的
+                //    _roleSaysAdmin 铁律冲突——服务端下发的 admin/clinic_admin 身份，本地任何
+                //    代码不得降级。标准版按钮形态由 Permission 谓词 + D 步 DOM/Single-Writer
+                //    按 edition 对齐，与角色解耦，故降级语句永久废弃（全端副本同口径）。
 
                 // D) DOM 强制对齐（最后一道防线，直接改 display，任何逻辑再怎么覆盖都没用！）
                 try {
@@ -5156,6 +5167,10 @@ let currentUser = null;
                         //   按钮。此处以 electronUser.clinicEdition（login.js 从服务端
                         //   登录响应携带）为权威，在 updateUserDisplay 前确定性同步，
                         //   与 09-13 补丁的 refreshVersionTags 同源同权。
+                        // ★ 2026-09-21 审查修复（Seed-2.1-Pro）：先等 Permission.init 的
+                        //   getAppConfig IPC 落定（其回调直写 __authoritativeEdition 插槽），
+                        //   再做服务端权威同步 → 登录权威最后写入者必胜，慢 IPC 无法盖回。
+                        try { if (window.__permInitPromise) await window.__permInitPromise; } catch (_) {}
                         try {
                             var _auEd = String((electronUser && (electronUser.clinicEdition || electronUser.edition)) || '');
                             if (_auEd) {

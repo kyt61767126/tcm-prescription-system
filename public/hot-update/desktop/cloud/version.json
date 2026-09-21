@@ -1,13 +1,13 @@
 {
   "format": 1,
   "channel": "cloud",
-  "hotVersion": "2026.09.21-2",
+  "hotVersion": "2026.09.21-3",
   "appVersion": "1.2.251",
   "files": [
     {
       "name": "index.html",
-      "sha256": "df878f7dad4968d4a13d64ab7761a5dfed75eab89a041f60178414be1403934f",
-      "size": 744681
+      "sha256": "06ebee58141cb1add3c5eeb115554b3d1d358b316548a2e2839c967d286b6b33",
+      "size": 746815
     },
     {
       "name": "auth-core.js",
@@ -90,6 +90,6 @@
       "size": 881727
     }
   ],
-  "signedAt": 1789961232535,
-  "signature": "xLXewnJNQNBiXDLXg7gV2zNGFp/3hGhoOZIwUc6vVdUBIUUOmpn6ww6JKHUpFHv7L+4c+luRem0KBILf9PDODA=="
+  "signedAt": 1789970527050,
+  "signature": "9kF+csDJ9NVvFhBsBFYDhnGom4F8iDQT332pIiO0la7DNsHVUZAgVo7li9rqIRjXnH0/Bf+St1RrKpsz7eH0Dg=="
 }
