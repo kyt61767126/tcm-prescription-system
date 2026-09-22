@@ -1128,7 +1128,7 @@
 * 通用铁律：**凡"每次启动/每次轮询"都打 KV 的服务端点，写成本必须按"日活×写次数"对照 1000/天 预算设计**；统计端点优先边缘缓存+按自然日去重，安全端点（validate/claim-free）才配精确 KV 限流。
 
 ### 22.9 语音版取消单卖、权益并入全部付费版（2026-09-22）
-* **决策**：语音不再单卖（原 cloud_voice 独立版本线 1年/1设备、机构诊所 voiceEnabled 加购均取消），付费用户直接享有；免费版仍墙。老 cloud_voice 诊所/已发 voice 激活码**继续有效**（服务端 voice 类型全链路保留：normalize/generate/batch/validate/activate/admin 展示，只删后台开码 UI：4 处 option/按钮 + voice1y 模板；列表筛选器 voice 保留查老码；localStorage 遗留 voice 模板/记忆值在 applyCustomTemplate/restoreLastGenConfig 迁移为 personal）。
+* **决策**：语音不再单卖（原 cloud_voice 独立版本线 1年/1设备、机构诊所 voiceEnabled 加购均取消），付费用户直接享有；免费版仍墙。老 cloud_voice 诊所/已发 voice 激活码**继续有效**（服务端 voice 类型全链路保留：normalize/generate/batch/validate/activate/admin 展示，只删后台开码 UI：4 处 option/按钮 + voice1y 模板；列表筛选器 voice 保留查老码；localStorage 遗留 voice 模板/记忆值在 applyCustomTemplate/restoreLastGenConfig 迁移为 personal；**后台是跨版本双副本 public/admin/index.html ↔ site-admin/admin/index.html（adminconsole 对，pre-push ⑩强校验），改一处必须同步另一处**）。
 * **权益判定双轨**：①云端（public 网页/云桌面/云 APP）= 服务端登录响应驱动，users.js 登录成功对 edition∈{cloud_personal,cloud_clinic,cloud_voice} 一律 `voiceEnabled=true`（能过 test/禁用/到期三道闸的就是有效付费诊所；offline_* 精确排除；clinicVoiceEnabled 老标记保留）。客户端 auth-core/Permission 零改动。②离线 = voice-input.js hasVoiceEntitlement() 最前置读 `window.__licenseType`（index.html 启动 license.getStatus 写入）：**字符串已知即定论——'free' → false，其余 true**，不再落入 Permission/CONFIG 臂（防同机登过云端付费账号 CONFIG.voiceEnabled 残留跨模式串权，审查 P2-1）；云端两端不写此变量→undefined→自动走旧臂零影响。
 * **信任边界**：mic gate 只是渲染层 UI gate（ASR=系统 Web Speech 纯端能力、我方零服务端资源）；真正付费功能（🎙️整方录入面板）在 IPC/Java `checkFeature('voice-input')` 验签执行点 fail-closed。改 UI gate 不算授权绕过（双审查+安全二查一致结论）。
 * **环境事实**：Electron 无 SpeechRecognition 构造器（桌面 mic 永不渲染，付费语音=输入法语音整方解析面板）；Android WebView 多数无该 API，装有语音引擎时才显 mic。
