@@ -10478,12 +10478,19 @@ let currentUser = null;
         function renderFormulaList() {
             const list = DOM_CACHE.formulaList || document.getElementById('formulaList');
             if (!list) return;
-            list.innerHTML = formulas.map((f,i) =>`<div style="padding:8px;background:#f0f0f0;border-radius:3px;margin-bottom:8px;"><div style="display:flex;justify-content:space-between;"><div><div style="font-weight:bold;">${escapeHtml(f.name)}</div><div style="font-size:11px;color:#666;">功效：${escapeHtml(f.effect || '未知')}${f.indication ? ' | 主治：' + escapeHtml(f.indication) : ''}</div></div><div><button class="small-btn" onclick="applyFormula(${i})">调用</button><button class="small-btn" onclick="deleteFormula(${i})">删除</button></div></div><div style="font-size:10px;color:#999;margin-top:4px;">组成：${(f.composition || []).map(c =>escapeHtml(c.name) + escapeHtml(String(c.dosage || '')) + 'g').join('、')}</div></div>`).join('');
+            list.innerHTML = formulas.map((f,i) =>`<div style="padding:8px;background:#f0f0f0;border-radius:3px;margin-bottom:8px;"><div style="display:flex;justify-content:space-between;"><div><div style="font-weight:bold;">${escapeHtml(f.name)}</div><div style="font-size:11px;color:#666;">功效：${escapeHtml(f.effect || '未知')}${f.indication ? ' | 主治：' + escapeHtml(f.indication) : ''}</div></div><div><button class="small-btn" onclick="applyFormula(${i})">调用</button><button class="small-btn" onclick="editFormula(${i})">编辑</button><button class="small-btn" onclick="deleteFormula(${i})">删除</button></div></div><div style="font-size:10px;color:#999;margin-top:4px;">组成：${(f.composition || []).map(c =>escapeHtml(c.name) + escapeHtml(String(c.dosage || '')) + 'g').join('、')}</div></div>`).join('');
         }
 
         function applyFormula(index) {
             selectFormula(index);
             closeModal('formulaModal');
+        }
+
+        // ★ 2026-09-22 编辑验方：复用新增表单（编辑模式预填数据、原位保存）
+        function editFormula(index) {
+            const i = Number(index);
+            if (!formulas[i]) { showToast('该验方不存在'); renderFormulaList(); return; }
+            showAddFormulaForm(null, i);
         }
 
         function deleteFormula(index) {
@@ -10501,28 +10508,31 @@ let currentUser = null;
         //   （药名+数量 g 多行，可增删），保存组装 composition（price/unit 从药品库
         //   自动补齐，与 selectFormula 消费端 c.price||med?.price 双向兼容）。
         // ========================================================================
-        function showAddFormulaForm(prefillItems) {
+        function showAddFormulaForm(prefillItems, editIndex) {
             const old = document.getElementById('__addFormulaModal');
             if (old) old.remove();
             // ★ 2026-09-15 存验方复用：预填当前处方药物（saveAsFormula 场景），
             //   无预填时保持原行为（验方设置→新增验方，3 空行起步）
             const isPrefill = Array.isArray(prefillItems) && prefillItems.length > 0;
+            // ★ 2026-09-22 编辑模式：editIndex 指向现有验方，表单预填其全部数据，保存时原位更新
+            const editIdx = Number(editIndex);
+            const editing = (editIndex != null && editIndex !== '' && isFinite(editIdx) && editIdx >= 0 && formulas[editIdx]) ? formulas[editIdx] : null;
             const overlay = document.createElement('div');
             overlay.id = '__addFormulaModal';
             overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99999;display:flex;align-items:center;justify-content:center;';
             const panel = document.createElement('div');
             panel.style.cssText = 'background:#fff;border-radius:10px;padding:16px 18px;width:400px;max-width:94vw;max-height:88vh;overflow:auto;box-shadow:0 8px 30px rgba(0,0,0,.3);font-size:13px;';
             panel.innerHTML =
-                '<div style="font-weight:bold;font-size:15px;margin-bottom:10px;">' + (isPrefill ? '存为验方（已带入当前处方药物）' : '新增验方') + '</div>' +
-                '<div style="margin-bottom:8px;"><label style="display:block;margin-bottom:3px;font-weight:600;">验方名称 <span style="color:#c00;">*</span></label><input id="__afName" placeholder="如：安神汤" style="width:100%;padding:7px 9px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;"></div>' +
-                '<div style="margin-bottom:8px;"><label style="display:block;margin-bottom:3px;font-weight:600;">验方简码 <span style="color:#c00;">*</span></label><input id="__afCode" placeholder="如：ast" style="width:100%;padding:7px 9px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;"></div>' +
-                '<div style="display:flex;gap:8px;margin-bottom:8px;"><div style="flex:1;"><label style="display:block;margin-bottom:3px;font-weight:600;">功效</label><input id="__afEffect" placeholder="如：宁心安神" style="width:100%;padding:7px 9px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;"></div><div style="flex:1;"><label style="display:block;margin-bottom:3px;font-weight:600;">主治</label><input id="__afInd" placeholder="如：不寐" style="width:100%;padding:7px 9px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;"></div></div>' +
-                '<div style="font-weight:600;margin:10px 0 4px;">处方药物 <span style="color:#c00;">*</span> <span style="font-weight:normal;color:#888;font-size:11px;">（药名+数量，药名可从药品库直接输入）</span></div>' +
+                '<div style="font-weight:bold;font-size:15px;margin-bottom:10px;">' + (editing ? '编辑验方' : (isPrefill ? '存为验方（已带入当前处方药物）' : '新增验方')) + '</div>' +
+                '<div style="margin-bottom:8px;"><label style="display:block;margin-bottom:3px;font-weight:600;">验方名称 <span style="color:#c00;">*</span></label><input id="__afName" placeholder="如：安神汤" value="' + (editing ? escapeHtml(editing.name) : '') + '" style="width:100%;padding:7px 9px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;"></div>' +
+                '<div style="margin-bottom:8px;"><label style="display:block;margin-bottom:3px;font-weight:600;">验方简码 <span style="color:#c00;">*</span></label><input id="__afCode" placeholder="如：ast" value="' + (editing ? escapeHtml(editing.code || '') : '') + '" style="width:100%;padding:7px 9px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;"></div>' +
+                '<div style="display:flex;gap:8px;margin-bottom:8px;"><div style="flex:1;"><label style="display:block;margin-bottom:3px;font-weight:600;">功效</label><input id="__afEffect" placeholder="如：宁心安神" value="' + (editing ? escapeHtml(editing.effect || '') : '') + '" style="width:100%;padding:7px 9px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;"></div><div style="flex:1;"><label style="display:block;margin-bottom:3px;font-weight:600;">主治</label><input id="__afInd" placeholder="如：不寐" value="' + (editing ? escapeHtml(editing.indication || '') : '') + '" style="width:100%;padding:7px 9px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;"></div></div>' +
+                '<div style="font-weight:600;margin:10px 0 4px;">处方药物 <span style="color:#c00;">*</span> <span style="font-weight:normal;color:#888;font-size:11px;">（药名+数量，可增删；药名可从药品库直接输入）</span></div>' +
                 '<div id="__afRows" style="display:flex;flex-direction:column;gap:5px;"></div>' +
                 '<button id="__afAddRow" style="margin-top:6px;padding:5px 12px;border:1px dashed #1976d2;background:#f5f9ff;color:#1976d2;border-radius:6px;cursor:pointer;font-size:12px;">+ 添加药物</button>' +
                 '<div style="display:flex;gap:10px;margin-top:14px;justify-content:flex-end;">' +
                 '<button id="__afCancel" style="padding:7px 16px;border:1px solid #ccc;border-radius:6px;background:#f5f5f5;cursor:pointer;">取消</button>' +
-                '<button id="__afOk" style="padding:7px 16px;border:none;border-radius:6px;background:#1976d2;color:#fff;cursor:pointer;font-weight:600;">保存验方</button></div>';
+                '<button id="__afOk" style="padding:7px 16px;border:none;border-radius:6px;background:#1976d2;color:#fff;cursor:pointer;font-weight:600;">' + (editing ? '保存修改' : '保存验方') + '</button></div>';
             overlay.appendChild(panel);
             document.body.appendChild(overlay);
 
@@ -10532,7 +10542,7 @@ let currentUser = null;
                 row.style.cssText = 'display:flex;gap:5px;align-items:center;';
                 row.innerHTML =
                     '<input class="__afMedName" list="__afMedSuggest" placeholder="药名" value="' + (name ? escapeHtml(name) : '') + '" style="flex:1;padding:6px 8px;border:1px solid #ccc;border-radius:6px;">' +
-                    '<input class="__afMedDosage" type="number" min="0" step="any" placeholder="数量" value="' + (dosage != null ? String(dosage) : '') + '" style="width:80px;padding:6px 8px;border:1px solid #ccc;border-radius:6px;text-align:center;">' +
+                    '<input class="__afMedDosage" type="number" min="0" step="any" placeholder="数量" value="' + (dosage != null ? escapeHtml(String(dosage)) : '') + '" style="width:80px;padding:6px 8px;border:1px solid #ccc;border-radius:6px;text-align:center;">' +
                     '<span style="font-size:12px;color:#888;">g</span>' +
                     '<button class="__afDelRow" style="border:none;background:#ffdddd;color:#b91c1c;border-radius:5px;cursor:pointer;padding:4px 8px;font-size:12px;">✕</button>';
                 row.querySelector('.__afDelRow').onclick = function () { row.remove(); };
@@ -10548,8 +10558,13 @@ let currentUser = null;
             panel.appendChild(dl);
 
             panel.querySelector('#__afAddRow').onclick = function () { addRow(); };
-            // ★ 2026-09-15 存验方复用：预填当前处方药物行，无预填时 3 空行起步
-            if (isPrefill) {
+            // ★ 2026-09-22 编辑模式：预填现有 composition；老验方无组成时给 3 空行
+            if (editing) {
+                const comp = editing.composition || [];
+                if (comp.length) comp.forEach(function (c) { addRow(c.name, c.dosage); });
+                else { addRow(); addRow(); addRow(); }
+            } else if (isPrefill) {
+                // ★ 2026-09-15 存验方复用：预填当前处方药物行，无预填时 3 空行起步
                 prefillItems.forEach(function (it) { addRow(it.name, it.dosage); });
             } else {
                 addRow(); addRow(); addRow();
@@ -10576,11 +10591,17 @@ let currentUser = null;
                     }
                 });
                 if (composition.length === 0) { showToast('请至少输入一味有效药物（药名+数量）'); return; }
-                formulas.push({ name: name, code: code, effect: effect || '', indication: (indication || '').trim(), composition: composition });
+                const updated = { name: name, code: code, effect: effect || '', indication: (indication || '').trim(), composition: composition };
+                if (editing) {
+                    // ★ 2026-09-22 编辑模式：原位替换，其他验方索引不受影响
+                    formulas[editIdx] = updated;
+                } else {
+                    formulas.push(updated);
+                }
                 localStorage.setItem('local_formulas', JSON.stringify(formulas));
                 renderFormulaList();
                 close();
-                showToast('验方「' + name + '」已保存（' + composition.length + ' 味药）');
+                showToast('验方「' + name + '」' + (editing ? '已更新' : '已保存') + '（' + composition.length + ' 味药）');
             };
             setTimeout(function () { try { panel.querySelector('#__afName').focus(); } catch (_) {} }, 50);
         }
