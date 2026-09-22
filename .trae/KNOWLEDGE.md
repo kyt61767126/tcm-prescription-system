@@ -1138,5 +1138,13 @@
 * **环境事实**：Electron 无 SpeechRecognition 构造器（桌面 mic 永不渲染，付费语音=输入法语音整方解析面板）；Android WebView 多数无该 API，装有语音引擎时才显 mic。
 * **分发**：voice-input.js 权威源 shared/voice → sync-all Group19 五目标；属热更白名单，三渠道均要重签（本轮 app-local 2026.09.22-5、desktop/local 2026.09.22-2、desktop/cloud 2026.09.22-1）；营销改动在 public/download.html + site-official/download.html 双份（删🎤语音版卡片、对比表云端两列改✅），push 随 Pages 生效。**已知遗留（P3-1）**：__licenseType 仅启动拉一次，会话内激活升级后需重启才出 mic（Electron 本无 mic，影响仅 APP），后续可挂激活成功回调重拉。
 
+### 22.10 取消全部分散话筒、只保留顶部「语音录入」（2026-09-22）
+* **决策**：取消 6 个分散话筒入口——姓名/年龄/病史症状/诊断四框小话筒、药物表连报话筒、「填资料」旁智能语音开方小话筒；只留顶部紫色「🎙️语音录入」大按钮（#voiceEntryMainBtn，输入法麦克风/打字粘贴 + voiceSmartRoute 整方解析分发）。
+* **实现（最小侵入）**：两端权威源（public/index.html、db-offline/desktop/index.html）在 `injectVoiceUI()` 函数开头加注释 + `return;`，下方注入代码与 makeVoiceBtn/bindVoiceMic 等全部保留不删——voiceSmartRoute/voiceMatchMed/voiceParseSegments 等解析链是 IIFE 顶层函数声明，仍被语音录入模态（showSmartTextModal）和药名整句「黄芪15克」整句直录监听复用。候选弹窗锚点查询 `.medicine-section .voice-mic-btn` 有 `|| .medicine-section` 回退，无按钮正常。
+* **顺手修文案**：未识别汇总 toast 原引导「用对应框 🎤」改为「用顶部「语音录入」」。
+* **★ Playwright 测试两个时序坑**：①离线版语音录入 listener 是 **async**（先 `await requireFeature('voice-input')` 付费墙），click() 后模态在微任务才创建——同一 evaluate 内立即查 DOM 必为 null；必须 click 与断言拆两个 evaluate、中间 waitForTimeout。②测试离线端先打桩 `window.requireFeature = async()=>true`。③async 内 await 拒绝不走 window error 事件，要监听 `unhandledrejection`。
+* **校验结果**：冒烟 30/30（三端×零话筒/按钮保留/模态解析填入/不复活/零错误）；check-interface 6 OK；diff-cross-version 四对全绿（函数集合不变、双侧同改 Tier B 相等，无需动基线）。
+* **分发**：三渠道重签 desktop/cloud 2026.09.22-2、desktop/local 2026.09.22-3、app-local 2026.09.22-6（minAppCode 288 继承未抬升；生成器序号不自动递增，须按各渠道现有 -n 手动指定）。云端网页 push 随 Pages 即生效；云端 APP WebView 实载线上 public 即时生效。
+
 * **★★ v300 同步权威源错位险丢修复（改动前必查同步归属）**：桌面 electron 主进程文件 `app_project/db-offline/desktop/electron/license-manager.js`（128KB Node 版，含 installLicense）**不是权威源**，它是 `shared/license/license-manager.js` 的 5 副本之一（sync-all Group4 `$LicenseTargets`：cloud_desktop/electron、db-offline desktop/electron、desktop/license、assets/public/license）。陷阱在 `Sync-Group` 用 `Split-Path $file -Leaf`（L371）把 `license/license-manager.js` 展平拼进 electron 目标目录。手改副本后跑 sync-all 会被静默还原（`[SYNC] ...license-manager.js`）且 git 变 clean，极易误判"丢代码"。**铁律：动 desktop/cloud_desktop/electron 下任何 .js/.cjs/.html 前，先在 sync-all.ps1 组定义里查它是不是同步目标；是则只改 `shared/` 权威源再 sync-all。无 shared 源的才是真权威（activate.js、activate-window.html 即此类）**。本次 v300 修复已正确落到 shared/license/license-manager.js（导出 localUserExists/ensureLocalActivationUser）→ sync-all 4 副本 → 重打 v300 APK（3214998 字节，zip 读 assets 确认含新函数）。另：热更白名单 14 文件**不含** license/license-manager.js，它只随 APK/桌面整包分发；GLM 安全二查结论=无可利用项（showHtmlAlert innerHTML 是预存在 sink，新入参 phone 受 `1[3-9]\d{9}` 纯数字约束，服务端 error 走 HTTPS 不可控，不报）。
 

@@ -863,8 +863,14 @@
         return null;
     }
 
-    // —— 四框注入 ——
+    // —— 话筒按钮注入（★ 2026-09-22 应用户要求停用）——
     function injectVoiceUI() {
+        // ★ 2026-09-22 取消全部话筒语音输入按钮：姓名/年龄/病史/诊断四框小话筒、
+        //   药物表连报话筒、「填资料」旁智能语音开方小话筒；界面只保留顶部免费层
+        //   「语音录入」按钮（injectSmartTextEntry：输入法麦克风/打字粘贴 + 整方解析）。
+        //   下方注入代码保留不删——voiceSmartRoute/voiceMatchMed/voiceParseSegments
+        //   等解析链仍被「语音录入」模态与药名整句直录复用，仅停止按钮注入。
+        return;
         var q = function (id) { return document.getElementById(id); };
 
         // 1) 姓名（替换填充 + ★ 2026-09-18 历史患者联动：精确同名 → 带出最新档案）
@@ -1567,7 +1573,7 @@
             var medMsg = voiceDispatchMeds(medSegs, alts);
             if (medMsg) msgs.push(medMsg);
         }
-        if (unknown.length) msgs.push('⚠未识别：' + unknown.join('、') + '（请手动填写或用对应框 🎤）');
+        if (unknown.length) msgs.push('⚠未识别：' + unknown.join('、') + '（请手动填写或用顶部「语音录入」）');
         if (msgs.length) { voiceNotify(msgs.join('；')); try { updatePrescriptionPaper(); } catch (e2) {} }
         else voiceNotify('未识别到有效内容，请说「男 35岁 失眠多梦 黄芪15克」');
     }
