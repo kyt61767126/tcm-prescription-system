@@ -1736,6 +1736,18 @@ ipcMain.handle('get-app-config', async () => {
         }
     } catch (e) {
         console.error('读取 config.json 失败:', e);
+        // ★ 2026-09-22 A2 修复：config.json 存在但 JSON 损坏（readJson 解析抛错）时，
+        //   尝试从 users-backup.json 回填账号——否则老客户 config 损坏叠加
+        //   localStorage 为空（userData 迁移/被清）会被强制重新注册。
+        try {
+            const backedUsers = licenseManager.loadUserAccountBackup();
+            if (backedUsers.length > 0) {
+                defaults.users = backedUsers;
+                console.log('[Config] config.json 损坏，已从 users-backup.json 回填账号 ' + backedUsers.length + ' 个');
+            }
+        } catch (be) {
+            console.warn('[Config] 备份回填失败（非致命）:', be.message);
+        }
     }
     return { success: true, config: defaults };
 });

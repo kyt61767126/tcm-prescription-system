@@ -4626,8 +4626,27 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
     }
 
     // ★ 2026-09-04 方案B 注册前置：本地注册（先注册后激活）——离线端唯一密码写点
-    //   注册=创建手机号登录账号（明文密码与 syncCreateActivationUser 存储格式一致，
-    //   登录时前端自动兼容并升级哈希）；激活链永远不覆盖已注册密码（见 syncCreateActivationUser）。
+    //   注册=创建手机号登录账号（2026-09-22 起 SHA-256 哈希存储，与桌面端格式一致，
+    //   历史明文账号前端 verifyPassword 自动兼容并升级）；激活链永不覆盖已注册密码。
+    // ★ 2026-09-22 A3：密码哈希与桌面端 / auth-core 统一（SHA-256 + 固定盐）。
+    //   盐值必须与 shared/auth-core/offline.js 的 PASSWORD_SALT、
+    //   desktop electron/main.js hashPassword 完全一致，否则前端无法验证通过。
+    public static final String PASSWORD_SALT = "bnzc_prescription_salt_v1";
+    public static String hashPasswordSha(String password) {
+        if (password == null) return "";
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] h = md.digest((PASSWORD_SALT + password).getBytes("UTF-8"));
+            StringBuilder sb = new StringBuilder(h.length * 2);
+            for (byte b : h) sb.append(Character.forDigit((b >> 4) & 0xF, 16))
+                              .append(Character.forDigit(b & 0xF, 16));
+            return sb.toString();
+        } catch (Exception e) {
+            Log.w(TAG, "hashPasswordSha 失败（调用方需走明文兜底）: " + e.getMessage());
+            return "";
+        }
+    }
+
     public JSONObject registerLocalUser(String clinicName, String doctorName, String phone, String password) {
         JSONObject r = new JSONObject();
         try {
@@ -4639,6 +4658,10 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
                 r.put("success", false); r.put("error", "密码至少8位且须同时包含字母和数字"); return r;
             }
             String effPhone = phone.trim();
+            // ★ 2026-09-22 A3：统一哈希存储（与桌面端同盐同格式）；
+            //   极端情况哈希不可用时回退明文，宁可功能可用不留锁死风险。
+            String pwdHash = hashPasswordSha(password);
+            final String storedPwd = pwdHash.isEmpty() ? password : pwdHash;
             JSONObject cfg = readConfigJSON();
             // 同步诊所名/医师名（注册即写入 config，激活时服务端信息与此对齐）
             String effClinic = clinicName == null ? "" : clinicName.trim();
@@ -4663,7 +4686,9 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
                 if (u == null) u = new org.json.JSONObject();
                 u.put("username", effPhone);
                 u.put("phone", effPhone);
-                u.put("password", password);
+                u.put("password", storedPwd);
+                u.put("passwordHash", storedPwd);
+                u.put("salt", PASSWORD_SALT);
                 u.put("name", effName);
                 u.put("role", "admin");
                 if (!u.has("registeredAt")) u.put("registeredAt", now);
@@ -4675,7 +4700,9 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
                 org.json.JSONObject nu = new org.json.JSONObject();
                 nu.put("username", effPhone);
                 nu.put("phone", effPhone);
-                nu.put("password", password);
+                nu.put("password", storedPwd);
+                nu.put("passwordHash", storedPwd);
+                nu.put("salt", PASSWORD_SALT);
                 nu.put("name", effName);
                 nu.put("role", "admin");
                 nu.put("registeredAt", now);
@@ -4763,7 +4790,13 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
             }
             long now = System.currentTimeMillis();
             if (!newPwd.isEmpty()) {
-                u.put("password", newPwd);
+                // ★ 2026-09-22 A3：调用方传明文，统一哈希后落盘（与注册/桌面同格式）；
+                //   哈希不可用时回退明文。
+                String _h = hashPasswordSha(newPwd);
+                String _stored = _h.isEmpty() ? newPwd : _h;
+                u.put("password", _stored);
+                u.put("passwordHash", _stored);
+                u.put("salt", PASSWORD_SALT);
                 u.put("lastPwdUpdatedAt", now);
             }
             u.put("updatedAt", now);
@@ -4814,10 +4847,18 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
                 else if (!u.has("phone")) u.put("phone", "");
                 boolean explicitPwd = password != null && !password.isEmpty() && !"admin".equals(password);
                 if (explicitPwd) {
-                    u.put("password", password);
+                    // ★ 2026-09-22 A3：明文激活密码哈希后落盘（哈希不可用回退明文）
+                    String _h = hashPasswordSha(password);
+                    u.put("password", _h.isEmpty() ? password : _h);
+                    u.put("passwordHash", _h.isEmpty() ? password : _h);
+                    u.put("salt", PASSWORD_SALT);
                     u.put("lastPwdUpdatedAt", System.currentTimeMillis());
                 } else if (u.optString("password", "").isEmpty()) {
-                    u.put("password", effPwd);
+                    // 默认口令 admin 兜底建号，同样哈希落盘
+                    String _dh = hashPasswordSha(effPwd);
+                    u.put("password", _dh.isEmpty() ? effPwd : _dh);
+                    u.put("passwordHash", _dh.isEmpty() ? effPwd : _dh);
+                    u.put("salt", PASSWORD_SALT);
                 }
                 u.put("name", effName);
                 u.put("role", "admin");
@@ -4829,7 +4870,12 @@ u.put("updatedAt", System.currentTimeMillis());
                 org.json.JSONObject nu = new org.json.JSONObject();
                 nu.put("username", username);
                 if (phone != null && !phone.isEmpty()) nu.put("phone", phone);
-                nu.put("password", effPwd);
+                // ★ 2026-09-22 A3：统一哈希落盘（含默认口令 admin；哈希不可用回退明文）
+                String _nh = hashPasswordSha(effPwd);
+                String _nstored = _nh.isEmpty() ? effPwd : _nh;
+                nu.put("password", _nstored);
+                nu.put("passwordHash", _nstored);
+                nu.put("salt", PASSWORD_SALT);
                 nu.put("name", effName);
                 nu.put("role", "admin");nu.put("lastPwdUpdatedAt", System.currentTimeMillis());
 nu.put("updatedAt", System.currentTimeMillis());

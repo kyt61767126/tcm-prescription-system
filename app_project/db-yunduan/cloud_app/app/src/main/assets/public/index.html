@@ -2657,12 +2657,13 @@ let currentUser = null;
 //   与本文件一致，漂移即阻断构建。
 //   （不用 <script src>：避免独立文件 404 / 加载顺序 / 各端 build.files 三重风险）
 //
-// 行为契约（与 2026-08-21 修复版逐字节等价，零行为变化）：
+// 行为契约（2026-09-22 更新：出厂零账户、注册前置；此前为 2026-08-21 版）：
 //   get()             永远返回数组：localStorage 密文 → 解密 → JSON → legacy 账号
-//                     过滤（doctor1/doctor2，过滤后落盘）→ 旧明文兼容 → 全链兜底管理员
+//                     过滤（doctor1/doctor2，过滤后落盘）→ 旧明文兼容 → 无用户时返回 []
 //   save(users)       XORv1 加密后写 localStorage（同步，绝不能是 async —— 历史上
 //                     async 版曾把 '[object Promise]' 写入导致用户数据丢失）
-//   getDefaultUsers() CONFIG.users（必须数组，T2 关卡已在入口净化）→ 兜底 admin
+//   getDefaultUsers() CONFIG.users（必须数组，T2 关卡已在入口净化）→ 无用户时返回 []
+//                       （2026-09-22 取消硬编码 admin 兜底：注册前置，出厂零账户）
 //   remove(username)  过滤删除 + 落盘（新 API，供未来调用方迁移）
 // ============================================================================
 (function (global) {
@@ -2726,15 +2727,11 @@ let currentUser = null;
                     };
                 });
             } catch (e) {
-                try { console.error('[UserStore] CONFIG.users map 失败，使用兜底默认管理员:', e); } catch (_) {}
+                try { console.error('[UserStore] CONFIG.users map 失败:', e); } catch (_) {}
             }
         }
-        return [{
-            username: 'admin',
-            password: '2f1e152dfbccedc7d947d7f9d40e0790be6289309cf6904af728b3cf822c361b',
-            name: '管理员',
-            role: 'admin'
-        }];
+        // ★ 2026-09-22 无出厂账户：返回空数组，由注册前置流程引导开户（不再兜底 admin）
+        return [];
     }
 
     function get() {
@@ -2765,8 +2762,8 @@ let currentUser = null;
         try {
             return getDefaultUsers();
         } catch (e) {
-            try { console.error('[UserStore] getDefaultUsers 抛异常，使用兜底:', e); } catch (_) {}
-            return [{ username: 'admin', password: '2f1e152dfbccedc7d947d7f9d40e0790be6289309cf6904af728b3cf822c361b', name: '管理员', role: 'admin' }];
+            try { console.error('[UserStore] getDefaultUsers 抛异常，使用空列表:', e); } catch (_) {}
+            return [];
         }
     }
 
@@ -4169,23 +4166,13 @@ let currentUser = null;
                     } catch(e) { console.warn('密码校验异常:', e); }
                 }
                 if (!_verified) {
-                    // 校验失败：可能是用户忘记之前修改的密码，提供重置为 admin 的选项
-                    const reset = confirm('原密码错误！\n\n是否重置密码为默认值 admin？\n（重置后可用 admin 登录，再修改为新密码）');
-                    if (reset) {
-                        const defaultUsers = getDefaultUsers();
-                        saveUsers(defaultUsers);
-                        // 同步更新 currentUser，避免后续操作找不到用户
-                        const matchedUser = defaultUsers.find(u => u.username === (currentUser?.username || 'admin')) || defaultUsers[0];
-                        currentUser = matchedUser;
-                        localStorage.setItem('local_currentUser', JSON.stringify(currentUser));
-                        alert('密码已重置为 admin！\n\n请点击"修改密码"重新设置新密码。');
-                        closeModal('changePwdModal');
-                        // 修复历史处方消失：重置密码后重新加载处方数据
-                        try {
-                            await loadData();
-                            refreshUserInterface();
-                        } catch(e) { console.warn('重置密码后刷新数据失败:', e); }
-                    }
+                    // ★ 2026-09-22 安全修复：删除旧「重置为默认 admin」分支。
+                    //   旧分支 getDefaultUsers() 现恒返回 []（出厂已无 admin 种子），
+                    //   saveUsers([]) 会清空全部本地账号（含 local-only 账号永久丢失），
+                    //   cloud_desktop 断网时将直接锁死。云端账号由服务端管理，
+                    //   忘记密码请联系机构管理员或客服重置，本地不做破坏性操作。
+                    alert('原密码错误。\n\n如忘记原密码，请联系机构管理员或客服微信 hktzy1688 重置密码，\n切勿自行清理本地数据，以免账号丢失。');
+                    closeModal('changePwdModal');
                     return;
                 }
 

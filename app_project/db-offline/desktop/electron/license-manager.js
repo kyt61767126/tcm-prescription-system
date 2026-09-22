@@ -257,9 +257,24 @@ function getUsersBackupPath() {
 function backupUserAccounts(config) {
     try {
         if (!config || !Array.isArray(config.users) || config.users.length === 0) return false;
+        const newUsers = config.users;
+        // ★ 2026-09-22 截断保护：新列表账号数少于已有备份时不覆盖，防 config 被
+        //   异常截断/部分删除时把好备份冲掉，导致无法完整回填。正常删除账号的
+        //   场景保留旧备份无害（备份只在 config users 为空时才回填）。
+        try {
+            const bp = getUsersBackupPath();
+            if (fs.existsSync(bp)) {
+                const old = JSON.parse(fs.readFileSync(bp, 'utf8'));
+                if (old && Array.isArray(old.users) && old.users.length > newUsers.length) {
+                    console.warn('[License] backupUserAccounts 跳过：当前账号数 ' + newUsers.length
+                        + ' 少于备份 ' + old.users.length + '，保留原备份');
+                    return false;
+                }
+            }
+        } catch (oe) { /* 旧备份损坏/缺失 → 正常覆写 */ }
         const backup = {
             backupAt: new Date().toISOString(),
-            users: config.users
+            users: newUsers
         };
         fs.writeFileSync(getUsersBackupPath(), JSON.stringify(backup, null, 2), 'utf8');
         return true;

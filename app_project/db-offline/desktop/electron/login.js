@@ -611,13 +611,11 @@
         _loginInFlight = true;
         setLoginLoading(true);
         try {
-            // ★ 如果还没有任何管理员账户 → 提示重新激活（新版激活时已自动创建账户）
+            // ★ 2026-09-22 出厂零账户（admin/admin 已取消）：无账户时直接引导注册，
+            //   注册成功即可试用，不再引导「先激活」。
             if (!_users || _users.length === 0) {
-                if (confirm('ℹ️ 系统检测到还没有管理员账户！\n\n请先完成软件激活，激活时填写的手机号和密码将自动创建管理员账户。\n\n是否打开激活窗口？')) {
-                    openActivationWindow();
-                } else {
-                    showError('⚠️ 请先激活软件');
-                }
+                showError('⚠️ 请先完成注册，注册后即可试用');
+                if (typeof window.openLocalRegister === 'function') window.openLocalRegister();
                 return;
             }
 
@@ -770,14 +768,8 @@
         initLoginPermissions();
         // P3-3: 安全升级（2026-08-08）：移除记住密码功能，规则5强制每次手动输密码
         localStorage.removeItem('auth:savedPassword');
-        // ★ 例外：新装试用默认（仅 admin 单账户、未记住用户）密码框预填 admin，供直接试用
-        const _trialDefaultAdmin = Array.isArray(_users) && _users.length === 1 && _users[0].username === 'admin' &&
-            !localStorage.getItem(KEY_REMEMBER_USER);
-        if (_trialDefaultAdmin) {
-            $('loginPassword').value = 'admin';
-        } else {
-            $('loginPassword').value = '';
-        }
+        // ★ 2026-09-22 密码框永远空白（出厂 admin 已取消，不再预填）
+        $('loginPassword').value = '';
         $('btnOk').addEventListener('click', handleLogin);
         $('btnCancel').addEventListener('click', handleCancel);
         // ★ 优化：密码框回车直接登录，用户名框回车跳密码框
@@ -974,18 +966,19 @@
                     hint.style.background = '#fff5f5';
                     hint.style.borderRadius = '4px';
                     hint.style.border = '1px solid #fecaca';
+                    // ★ 2026-09-22：文案说「点击此处」必须能点（此前无绑定=死文案）
+                    hint.style.cursor = 'pointer';
+                    hint.onclick = () => { try { window.openLocalRegister(); } catch (e) {} };
                 } else {
                     hint.style.display = 'none';
                 }
             }
 
-            // 如果向导未完成 且 没有任何管理员用户 → 弹出注册向导
+            // ★ 2026-09-22 注册入口统一：不再自动弹旧版三步向导（与 auth-core
+            //   maybePromptRegistration 的注册弹窗重复）。首启注册由 auth-core 在
+            //   DOMContentLoaded 立即弹窗；上方 hint 保留手动入口（点击即弹注册窗）。
             if (wizardDone !== '1' && noAdmin) {
-                console.log('[FirstRun] 未检测到管理员账户，弹出注册向导');
-                // 延迟一点打开向导，确保DOM完全渲染
-                setTimeout(() => {
-                    openFirstRunWizard(config);
-                }, 300);
+                console.log('[FirstRun] 无注册账户，注册弹窗由 auth-core maybePromptRegistration 统一弹出');
                 return;
             }
             if (hasAdminUser(config)) {

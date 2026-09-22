@@ -2760,12 +2760,13 @@ let currentUser = null;
 //   与本文件一致，漂移即阻断构建。
 //   （不用 <script src>：避免独立文件 404 / 加载顺序 / 各端 build.files 三重风险）
 //
-// 行为契约（与 2026-08-21 修复版逐字节等价，零行为变化）：
+// 行为契约（2026-09-22 更新：出厂零账户、注册前置；此前为 2026-08-21 版）：
 //   get()             永远返回数组：localStorage 密文 → 解密 → JSON → legacy 账号
-//                     过滤（doctor1/doctor2，过滤后落盘）→ 旧明文兼容 → 全链兜底管理员
+//                     过滤（doctor1/doctor2，过滤后落盘）→ 旧明文兼容 → 无用户时返回 []
 //   save(users)       XORv1 加密后写 localStorage（同步，绝不能是 async —— 历史上
 //                     async 版曾把 '[object Promise]' 写入导致用户数据丢失）
-//   getDefaultUsers() CONFIG.users（必须数组，T2 关卡已在入口净化）→ 兜底 admin
+//   getDefaultUsers() CONFIG.users（必须数组，T2 关卡已在入口净化）→ 无用户时返回 []
+//                       （2026-09-22 取消硬编码 admin 兜底：注册前置，出厂零账户）
 //   remove(username)  过滤删除 + 落盘（新 API，供未来调用方迁移）
 // ============================================================================
 (function (global) {
@@ -2829,15 +2830,11 @@ let currentUser = null;
                     };
                 });
             } catch (e) {
-                try { console.error('[UserStore] CONFIG.users map 失败，使用兜底默认管理员:', e); } catch (_) {}
+                try { console.error('[UserStore] CONFIG.users map 失败:', e); } catch (_) {}
             }
         }
-        return [{
-            username: 'admin',
-            password: '2f1e152dfbccedc7d947d7f9d40e0790be6289309cf6904af728b3cf822c361b',
-            name: '管理员',
-            role: 'admin'
-        }];
+        // ★ 2026-09-22 无出厂账户：返回空数组，由注册前置流程引导开户（不再兜底 admin）
+        return [];
     }
 
     function get() {
@@ -2868,8 +2865,8 @@ let currentUser = null;
         try {
             return getDefaultUsers();
         } catch (e) {
-            try { console.error('[UserStore] getDefaultUsers 抛异常，使用兜底:', e); } catch (_) {}
-            return [{ username: 'admin', password: '2f1e152dfbccedc7d947d7f9d40e0790be6289309cf6904af728b3cf822c361b', name: '管理员', role: 'admin' }];
+            try { console.error('[UserStore] getDefaultUsers 抛异常，使用空列表:', e); } catch (_) {}
+            return [];
         }
     }
 
@@ -3177,6 +3174,19 @@ let currentUser = null;
                         }
                     }
                 } catch (e) { console.warn('[LoginSelfHeal] 登录兜底自愈异常(不影响登录):', e); }
+                // ★ 2026-09-22 注册前置零账户守卫：上方自愈桥已从 config 权威源拉过账号，
+                //   仍然零用户=真正的出厂新机（出厂零 admin，注册弹窗本应已盖住登录框）。
+                //   无论注册弹窗因何原因未出现，登录尝试一律唤起不可跳过的注册弹窗，
+                //   杜绝客户面对无意义的"用户名或密码错误"而不知如何是好。
+                if (!users || users.length === 0) {
+                    try {
+                        errorDiv.textContent = '请先完成注册，注册后即可试用';
+                        errorDiv.style.display = 'block';
+                        if (typeof openLocalRegister === 'function') openLocalRegister();
+                        else if (window.openLocalRegister) window.openLocalRegister();
+                    } catch (e) { console.warn('零账户唤起注册弹窗失败(不影响重试):', e); }
+                    return;
+                }
                 // ★ 2026-08-30 账号映射兜底：Tab2「激活码直接激活」路径 submit(code, user) 只传
                 //   CONFIG.doctorName（可能是出厂默认"XXX"），Java 建的账号 username=医师名、无 phone
                 //   字段 → 用户输手机号永远找不到账号。个人标准版下输入未命中任何账号时，映射到
@@ -3406,14 +3416,15 @@ let currentUser = null;
             }
         }
 
-        // ★ 忘记密码：登录界面注入"忘记密码"链接，点击后将指定账号密码重置为 admin
-        //   场景：用户忘记激活时设置的密码无法登录。离线本地系统数据本机可访问，
-        //   重置为 admin 后用户可登录再到"修改密码"设置新密码（与改密弹窗"重置为admin"一致）。
+        // ★ 忘记密码：登录界面注入"忘记密码"链接。
+        //   ★ 2026-09-22 注册前置：不再重置为临时口令 admin（admin 概念全面取消），
+        //     重置时直接设置新密码（两次输入+强度校验，规则与注册一致）。
+        //   场景：用户忘记注册时设置的密码无法登录。离线本地系统数据本机可访问。
         //   注入式实现（HTML DOM 零改动，沿用 __replaceTopClearWithStats 模式）。
-        // ★ 2026-09-11 安全加固：重置前必须通过「本机激活码」核验（与本地激活记录
-        //   code 全等比对）——旧逻辑零鉴权，任何人拿到设备输入账号名即可重置任意
-        //   账号密码为 admin 登录查看处方数据（真用户激活码有短信/微信记录可自查，
-        //   陌生人不知激活码被挡；激活记录无码/桥不可用一律 fail-closed 拒绝）。
+        // ★ 2026-09-11 安全加固 / 2026-09-22 三态安全门：激活机（有激活记录）重置前
+        //   必须通过「本机激活码」核验（记录读取失败/无码/不匹配一律 fail-closed）；
+        //   试用/免费机无激活记录，直接设置新密码（不再使用临时口令 admin）。
+        //   旧逻辑零鉴权，任何人拿到设备输入账号名即可重置任意账号密码查看处方数据。
         function injectForgotPasswordLink() {
             try {
                 const loginBtns = document.querySelector('.login-buttons');
@@ -3435,43 +3446,67 @@ let currentUser = null;
                 const users = getUsers();
                 const idx = users.findIndex(u => u && (u.username === username || String(u.phone || '') === username));
                 if (idx < 0) { alert('未找到账号 ' + username + '，请检查输入是否正确'); return; }
-                // ★ 激活码核验：取本地激活记录（Java installAdminLicense 时写入，含明文 code）
-                let recCode = '';
+                // ★ APP 忘记密码三态安全门（2026-09-11 加固 / 09-22 重构为真 fail-closed）：
+                //   ① 激活机（AuthCore.isDeviceLicensed 三源判定）→ 必须输入本机激活码核验，
+                //      激活记录读取失败/无码/核验不通过一律拒绝（联系客服）；
+                //   ② 试用/免费机 → 无激活记录，直接放行设置新密码。
+                let _devLicensed = false;
                 try {
-                    if (window.electronAPI && window.electronAPI.license &&
-                        typeof window.electronAPI.license.getActivationRecord === 'function') {
-                        const rec = await window.electronAPI.license.getActivationRecord();
-                        if (rec && rec.success !== false) recCode = String(rec.code || '').trim();
+                    _devLicensed = !!(typeof window.__isDeviceLicensed === 'function'
+                        && await window.__isDeviceLicensed());
+                } catch (e) {
+                    alert('激活状态读取异常，为保护账号安全暂不能自助重置密码。\n\n请联系客服微信 hktzy1688 处理。');
+                    return;
+                }
+                if (_devLicensed) {
+                    let recCode = '';
+                    let recReadOk = false;
+                    try {
+                        if (window.electronAPI && window.electronAPI.license &&
+                            typeof window.electronAPI.license.getActivationRecord === 'function') {
+                            const rec = await window.electronAPI.license.getActivationRecord();
+                            recReadOk = true;
+                            if (rec && rec.success !== false) recCode = String(rec.code || '').trim();
+                        }
+                    } catch (e) { console.warn('[忘记密码] 读取激活记录失败:', e); recReadOk = false; }
+                    if (!recReadOk || !recCode) {
+                        alert('本机激活记录无法核验（激活记录较旧或读取失败），为保护账号安全暂不能自助重置密码。\n\n请联系客服微信 hktzy1688 处理。');
+                        return;
                     }
-                } catch (e) { console.warn('[忘记密码] 读取激活记录失败:', e); }
-                if (!recCode) {
-                    alert('本机激活记录无法核验（激活记录较旧或读取失败），为保护账号安全暂不能自助重置密码。\n\n请联系客服微信 hktzy1688 处理。');
-                    return;
+                    const inputCode = String(prompt('为保护账号安全，请输入本机激活码完成身份核验：\n\n（购买时通过短信/微信发送，格式如 BNZC-XXXX-XXXX-XXXX-XXXX；\n  如遗失请联系客服微信 hktzy1688）') || '').trim();
+                    if (!inputCode) return;
+                    // 去横杠+大小写归一后全等比对（输入带不带横杠均可）
+                    const norm = s => String(s || '').replace(/-/g, '').toUpperCase();
+                    if (norm(inputCode) !== norm(recCode)) {
+                        alert('激活码核验失败，无法重置密码。\n\n请核对激活码后重试（购买时通过短信/微信发送）；\n如遗失请联系客服微信 hktzy1688。');
+                        return;
+                    }
                 }
-                const inputCode = String(prompt('为保护账号安全，请输入本机激活码完成身份核验：\n\n（购买时通过短信/微信发送，格式如 BNZC-XXXX-XXXX-XXXX-XXXX；\n  如遗失请联系客服微信 hktzy1688）') || '').trim();
-                if (!inputCode) return;
-                // 去横杠+大小写归一后全等比对（输入带不带横杠均可）
-                const norm = s => String(s || '').replace(/-/g, '').toUpperCase();
-                if (norm(inputCode) !== norm(recCode)) {
-                    alert('激活码核验失败，无法重置密码。\n\n请核对激活码后重试（购买时通过短信/微信发送）；\n如遗失请联系客服微信 hktzy1688。');
-                    return;
+                // ★ 2026-09-22 直接设置新密码（不再经过临时口令 admin）。
+                //   连续两次 prompt；任一步取消即中止，确认后才落盘。
+                const pwd = String(prompt('为账号 ' + username + ' 设置新登录密码\n\n规则：至少8位，须同时包含字母和数字') || '');
+                if (!pwd) return;
+                if (pwd.length < 8 || !/[a-zA-Z]/.test(pwd) || !/[0-9]/.test(pwd)) {
+                    alert('密码至少8位且须同时包含字母和数字，请重新操作'); return;
                 }
-                if (!confirm('激活码核验通过。\n确定要将账号 ' + username + ' 的密码重置为 admin 吗？\n\n重置后可用 admin 登录，再到"修改密码"设置新密码。')) return;
-                users[idx].password = await hashPassword('admin');
+                const pwd2 = String(prompt('请再次输入新密码') || '');
+                if (!pwd2) return;
+                if (pwd !== pwd2) { alert('两次输入的密码不一致，请重新操作'); return; }
+                users[idx].password = await hashPassword(pwd);
                 saveUsers(users);
                 // ★ 2026-09-06 第八轮修复（Single-Writer 补全）：重置密码必须回写 config.json
-                //   权威层（Java renameUserBridge / 桌面 renameUser IPC），否则下次冷启动
-                //   启动自愈 UPSERT 会把旧密码盖回 localStorage——"重置 admin 重启后失效"。
+                //   权威层（renameUser IPC，newPassword 传明文与注册存储格式一致），否则下次冷启动
+                //   启动自愈 UPSERT 会把旧密码盖回 localStorage——"重置重启后失效"。
                 try {
                     if (window.electronAPI && typeof window.electronAPI.renameUser === 'function') {
-                        const _rn = await window.electronAPI.renameUser({ oldUsername: username, newPassword: 'admin' });
+                        const _rn = await window.electronAPI.renameUser({ oldUsername: username, newPassword: pwd });
                         if (_rn && _rn.success === false) {
                             console.warn('[忘记密码] config.json 回写失败（本地已保存）:', _rn.error);
                         }
                     }
                 } catch (e) { console.warn('[忘记密码] config.json 回写异常（本地已保存）:', e); }
                 const errorDiv = document.getElementById('loginError');
-                if (errorDiv) { errorDiv.textContent = '密码已重置为 admin，请使用新密码登录'; errorDiv.style.display = 'block'; }
+                if (errorDiv) { errorDiv.textContent = '密码已重置，请使用新密码登录'; errorDiv.style.display = 'block'; }
                 const pwdInput = document.getElementById('loginPassword');
                 if (pwdInput) { pwdInput.value = ''; pwdInput.focus(); }
             } catch (e) { console.error('重置密码失败:', e); alert('重置密码失败: ' + (e.message || '未知错误')); }
@@ -3784,23 +3819,11 @@ let currentUser = null;
                     }
                 }
                 if (!_verified) {
-                    // 校验失败：可能是用户忘记之前修改的密码，提供重置为 admin 的选项
-                    const reset = confirm('原密码错误！\n\n是否重置密码为默认值 admin？\n（重置后可用 admin 登录，再修改为新密码）');
-                    if (reset) {
-                        const defaultUsers = getDefaultUsers();
-                        saveUsers(defaultUsers);
-                        // 同步更新 currentUser，避免后续操作找不到用户
-                        const matchedUser = defaultUsers.find(u => u.username === (currentUser?.username || 'admin')) || defaultUsers[0];
-                        currentUser = matchedUser;
-                        localStorage.setItem('local_currentUser', JSON.stringify(currentUser));
-                        alert('密码已重置为 admin！\n\n请点击"修改密码"重新设置新密码。');
-                        closeModal('changePwdModal');
-                        // 修复历史处方消失：重置密码后重新加载处方数据
-                        try {
-                            await loadData();
-                            refreshUserInterface();
-                        } catch(e) { console.warn('重置密码后刷新数据失败:', e); }
-                    }
+                    // ★ 2026-09-22 注册前置：不再提供"重置为默认 admin"（该旧操作覆盖整个
+                    //   用户表、且出厂零账户后默认列表为空=会清空所有账号）。忘记原密码时
+                    //   退出登录走登录页「忘记密码？」——直接设置新密码，无需旧密码、不影响其他账号。
+                    alert('原密码错误。\n\n如忘记原密码：请退出登录，在登录页面点击「忘记密码？」，即可直接设置新密码（无需旧密码）。');
+                    try { closeModal('changePwdModal'); } catch (e) {}
                     return;
                 }
 

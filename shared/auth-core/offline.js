@@ -3903,6 +3903,8 @@
         } catch (_) {}
         return false;
     }
+    // 挂 global：跨 IIFE 供 index.html handleForgotPassword（三态安全门）调用
+    global.__isDeviceLicensed = __isDeviceLicensed;
 
     function showLocalRegisterModal() {
         // 若已打开则忽略
@@ -7301,6 +7303,19 @@
         startLicenseCheck();
     } else {
         document.addEventListener('DOMContentLoaded', startLicenseCheck);
+    }
+    // ★ 2026-09-22 注册前置零等待：登录上下文下 DOMContentLoaded 立即弹注册窗，
+    //   不再等 startLicenseCheck 内的 2s 延迟（消灭客户在 2s 内用 admin/admin 抢登竞态；
+    //   弹窗在表单态无关闭按钮=强制注册）。与 2s 后的检测幂等共存。
+    function fireRegistrationPrompt() {
+        try { maybePromptRegistration(); } catch (e) {
+            console.warn('[LicenseCheck] 立即注册检测失败(不影响使用):', e);
+        }
+    }
+    if (document.readyState === 'complete' || document.readyState === 'interactive') {
+        fireRegistrationPrompt();
+    } else {
+        document.addEventListener('DOMContentLoaded', fireRegistrationPrompt);
     }
     // ★ 2026-09-04 需求2流程优化：前台化重查激活状态，消灭「审核通过后客户要二次提交才看到
     //   设备已激活重启提示」。场景：① 客户在APP激活弹窗点付款→跳浏览器/微信扫码→回到APP；

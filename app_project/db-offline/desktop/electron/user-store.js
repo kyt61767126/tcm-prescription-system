@@ -11,12 +11,13 @@
 //   与本文件一致，漂移即阻断构建。
 //   （不用 <script src>：避免独立文件 404 / 加载顺序 / 各端 build.files 三重风险）
 //
-// 行为契约（与 2026-08-21 修复版逐字节等价，零行为变化）：
+// 行为契约（2026-09-22 更新：出厂零账户、注册前置；此前为 2026-08-21 版）：
 //   get()             永远返回数组：localStorage 密文 → 解密 → JSON → legacy 账号
-//                     过滤（doctor1/doctor2，过滤后落盘）→ 旧明文兼容 → 全链兜底管理员
+//                     过滤（doctor1/doctor2，过滤后落盘）→ 旧明文兼容 → 无用户时返回 []
 //   save(users)       XORv1 加密后写 localStorage（同步，绝不能是 async —— 历史上
 //                     async 版曾把 '[object Promise]' 写入导致用户数据丢失）
-//   getDefaultUsers() CONFIG.users（必须数组，T2 关卡已在入口净化）→ 兜底 admin
+//   getDefaultUsers() CONFIG.users（必须数组，T2 关卡已在入口净化）→ 无用户时返回 []
+//                       （2026-09-22 取消硬编码 admin 兜底：注册前置，出厂零账户）
 //   remove(username)  过滤删除 + 落盘（新 API，供未来调用方迁移）
 // ============================================================================
 (function (global) {
@@ -80,15 +81,11 @@
                     };
                 });
             } catch (e) {
-                try { console.error('[UserStore] CONFIG.users map 失败，使用兜底默认管理员:', e); } catch (_) {}
+                try { console.error('[UserStore] CONFIG.users map 失败:', e); } catch (_) {}
             }
         }
-        return [{
-            username: 'admin',
-            password: '2f1e152dfbccedc7d947d7f9d40e0790be6289309cf6904af728b3cf822c361b',
-            name: '管理员',
-            role: 'admin'
-        }];
+        // ★ 2026-09-22 无出厂账户：返回空数组，由注册前置流程引导开户（不再兜底 admin）
+        return [];
     }
 
     function get() {
@@ -119,8 +116,8 @@
         try {
             return getDefaultUsers();
         } catch (e) {
-            try { console.error('[UserStore] getDefaultUsers 抛异常，使用兜底:', e); } catch (_) {}
-            return [{ username: 'admin', password: '2f1e152dfbccedc7d947d7f9d40e0790be6289309cf6904af728b3cf822c361b', name: '管理员', role: 'admin' }];
+            try { console.error('[UserStore] getDefaultUsers 抛异常，使用空列表:', e); } catch (_) {}
+            return [];
         }
     }
 

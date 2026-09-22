@@ -107,27 +107,15 @@ module.exports = [
   },
   {
     id: "T15",
-    desc: "注释：忘记密码安全加固说明（重置前必须通过本机激活码核验，fail-closed）",
+    desc: "注释：忘记密码安全加固说明（已激活设备通过本机激活码核验；试用/免费机直接重置）",
     find: "        //   注入式实现（HTML DOM 零改动，沿用 __replaceTopClearWithStats 模式）。\n        function injectForgotPasswordLink() {",
-    replace: "        //   注入式实现（HTML DOM 零改动，沿用 __replaceTopClearWithStats 模式）。\n        // ★ 2026-09-11 安全加固：重置前必须通过「本机激活码」核验（与本地激活记录\n        //   code 全等比对）——旧逻辑零鉴权，任何人拿到设备输入账号名即可重置任意\n        //   账号密码为 admin 登录查看处方数据（真用户激活码有短信/微信记录可自查，\n        //   陌生人不知激活码被挡；激活记录无码/桥不可用一律 fail-closed 拒绝）。\n        function injectForgotPasswordLink() {",
-  },
-  {
-    id: "T16",
-    desc: "删除旧零鉴权 confirm 重置行（由 T17 激活码核验块替代，本条连行尾换行一并删除）",
-    find: "                if (!confirm('确定要将账号 ' + username + ' 的密码重置为 admin 吗？\\n\\n重置后可用 admin 登录，再到\"修改密码\"设置新密码。')) return;\n",
-    replace: "",
+    replace: "        //   注入式实现（HTML DOM 零改动，沿用 __replaceTopClearWithStats 模式）。\n        // ★ 2026-09-11 安全加固 / 2026-09-22 三态安全门：激活机（有激活记录）重置前\n        //   必须通过「本机激活码」核验（记录读取失败/无码/不匹配一律 fail-closed）；\n        //   试用/免费机无激活记录，直接设置新密码（不再使用临时口令 admin）。\n        //   旧逻辑零鉴权，任何人拿到设备输入账号名即可重置任意账号密码查看处方数据。\n        function injectForgotPasswordLink() {",
   },
   {
     id: "T17",
-    desc: "【安全加固 2026-09-11】忘记密码激活码核验块：读本地激活记录 code → prompt 输入 → 去横杠大小写归一全等比对；无记录/桥不可用/不匹配一律拒绝（APP 专属：桌面无可靠激活码源，走桌面自有方案）",
-    find: "                if (idx < 0) { alert('未找到账号 ' + username + '，请检查输入是否正确'); return; }\n                users[idx].password = await hashPassword('admin');",
-    replace: "                if (idx < 0) { alert('未找到账号 ' + username + '，请检查输入是否正确'); return; }\n                // ★ 激活码核验：取本地激活记录（Java installAdminLicense 时写入，含明文 code）\n                let recCode = '';\n                try {\n                    if (window.electronAPI && window.electronAPI.license &&\n                        typeof window.electronAPI.license.getActivationRecord === 'function') {\n                        const rec = await window.electronAPI.license.getActivationRecord();\n                        if (rec && rec.success !== false) recCode = String(rec.code || '').trim();\n                    }\n                } catch (e) { console.warn('[忘记密码] 读取激活记录失败:', e); }\n                if (!recCode) {\n                    alert('本机激活记录无法核验（激活记录较旧或读取失败），为保护账号安全暂不能自助重置密码。\\n\\n请联系客服微信 hktzy1688 处理。');\n                    return;\n                }\n                const inputCode = String(prompt('为保护账号安全，请输入本机激活码完成身份核验：\\n\\n（购买时通过短信/微信发送，格式如 BNZC-XXXX-XXXX-XXXX-XXXX；\\n  如遗失请联系客服微信 hktzy1688）') || '').trim();\n                if (!inputCode) return;\n                // 去横杠+大小写归一后全等比对（输入带不带横杠均可）\n                const norm = s => String(s || '').replace(/-/g, '').toUpperCase();\n                if (norm(inputCode) !== norm(recCode)) {\n                    alert('激活码核验失败，无法重置密码。\\n\\n请核对激活码后重试（购买时通过短信/微信发送）；\\n如遗失请联系客服微信 hktzy1688。');\n                    return;\n                }\n                if (!confirm('激活码核验通过。\\n确定要将账号 ' + username + ' 的密码重置为 admin 吗？\\n\\n重置后可用 admin 登录，再到\"修改密码\"设置新密码。')) return;\n                users[idx].password = await hashPassword('admin');",
-  },
-  {
-    id: "T18",
-    desc: "注释换行重排（renameUser IPC 描述对齐，纯文案）",
-    find: "renameUser IPC），否则下次冷启动启动自愈 UPSERT 会把旧密码盖回\n                //  ",
-    replace: "Java renameUserBridge / 桌面 renameUser IPC），否则下次冷启动\n                //   启动自愈 UPSERT 会把旧密码盖回",
+    desc: "【三态安全门 2026-09-22】APP忘记密码：AuthCore.isDeviceLicensed 判定激活态→必须激活码核验（记录读取失败/无码/不匹配 fail-closed）；试用/免费机直接放行设置新密码",
+    find: "                if (idx < 0) { alert('未找到账号 ' + username + '，请检查输入是否正确'); return; }\n                // ★ 2026-09-22 直接设置新密码（不再经过临时口令 admin）。",
+    replace: "                if (idx < 0) { alert('未找到账号 ' + username + '，请检查输入是否正确'); return; }\n                // ★ APP 忘记密码三态安全门（2026-09-11 加固 / 09-22 重构为真 fail-closed）：\n                //   ① 激活机（AuthCore.isDeviceLicensed 三源判定）→ 必须输入本机激活码核验，\n                //      激活记录读取失败/无码/核验不通过一律拒绝（联系客服）；\n                //   ② 试用/免费机 → 无激活记录，直接放行设置新密码。\n                let _devLicensed = false;\n                try {\n                    _devLicensed = !!(typeof window.__isDeviceLicensed === 'function'\n                        && await window.__isDeviceLicensed());\n                } catch (e) {\n                    alert('激活状态读取异常，为保护账号安全暂不能自助重置密码。\\n\\n请联系客服微信 hktzy1688 处理。');\n                    return;\n                }\n                if (_devLicensed) {\n                    let recCode = '';\n                    let recReadOk = false;\n                    try {\n                        if (window.electronAPI && window.electronAPI.license &&\n                            typeof window.electronAPI.license.getActivationRecord === 'function') {\n                            const rec = await window.electronAPI.license.getActivationRecord();\n                            recReadOk = true;\n                            if (rec && rec.success !== false) recCode = String(rec.code || '').trim();\n                        }\n                    } catch (e) { console.warn('[忘记密码] 读取激活记录失败:', e); recReadOk = false; }\n                    if (!recReadOk || !recCode) {\n                        alert('本机激活记录无法核验（激活记录较旧或读取失败），为保护账号安全暂不能自助重置密码。\\n\\n请联系客服微信 hktzy1688 处理。');\n                        return;\n                    }\n                    const inputCode = String(prompt('为保护账号安全，请输入本机激活码完成身份核验：\\n\\n（购买时通过短信/微信发送，格式如 BNZC-XXXX-XXXX-XXXX-XXXX；\\n  如遗失请联系客服微信 hktzy1688）') || '').trim();\n                    if (!inputCode) return;\n                    // 去横杠+大小写归一后全等比对（输入带不带横杠均可）\n                    const norm = s => String(s || '').replace(/-/g, '').toUpperCase();\n                    if (norm(inputCode) !== norm(recCode)) {\n                        alert('激活码核验失败，无法重置密码。\\n\\n请核对激活码后重试（购买时通过短信/微信发送）；\\n如遗失请联系客服微信 hktzy1688。');\n                        return;\n                    }\n                }\n                // ★ 2026-09-22 直接设置新密码（不再经过临时口令 admin）。",
   },
   {
     id: "T19",
