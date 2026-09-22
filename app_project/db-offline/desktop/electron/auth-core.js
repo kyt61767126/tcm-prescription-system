@@ -4360,7 +4360,7 @@
             // 表单（一页式）
             '<div id="localRegForm" style="padding:16px;">' +
                 '<div style="background:#f0f7ff;border:1px solid #d6e8ff;border-radius:8px;padding:10px;margin-bottom:14px;font-size:12px;color:#1565c0;line-height:1.7;">' +
-                    '💡 请先完成注册（<b>手机号即登录账号</b>）。<br>注册后即可登录试用 7 天，试用期内随时可激活正式版。' +
+                    '💡 请先完成注册（<b>手机号即登录账号</b>）。<br>注册后两种方式任选：<b>🆓 领取永久免费版</b>（开方不限量、￥0 永久使用），或先 <b>试用 7 天</b> 标准版全功能、随时激活正式版。' +
                 '</div>' +
                 '<div style="margin-bottom:12px;">' +
                     '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">诊所名称 <span style="color:#e53935;">*</span></label>' +
@@ -4398,7 +4398,7 @@
             '<div id="localRegSuccess" style="display:none;padding:32px 16px;text-align:center;">' +
                 '<div style="font-size:44px;">🎉</div>' +
                 '<div style="font-size:17px;font-weight:bold;color:#2c3e50;margin-top:10px;">注册成功！</div>' +
-                '<div style="font-size:13px;color:#606266;margin-top:8px;line-height:1.7;">登录账号：<b id="localRegSuccessPhone" style="color:#26a69a;"></b><br>现在可以用「手机号 + 密码」登录试用（7天）</div>' +
+                '<div style="font-size:13px;color:#606266;margin-top:8px;line-height:1.7;">登录账号：<b id="localRegSuccessPhone" style="color:#26a69a;"></b><br>现在可用「手机号 + 密码」登录：在激活窗口点【🆓 永久免费版】领取（开方不限量、￥0 永久），也可先试用 7 天标准版再激活正式版</div>' +
                 '<button id="localRegActivateBtn" style="width:100%;margin-top:16px;padding:12px;font-size:15px;border:none;border-radius:8px;color:#fff;background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);cursor:pointer;font-weight:bold;">💳 立即激活正式版</button>' +
                 '<button id="localRegLaterBtn" style="width:100%;margin-top:10px;padding:12px;font-size:15px;border:none;border-radius:8px;color:#26a69a;background:#fff;border:2px solid #26a69a;cursor:pointer;font-weight:bold;">⏳ 稍后激活，先试用</button>' +
             '</div>';

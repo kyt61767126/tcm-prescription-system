@@ -1757,13 +1757,17 @@
         btn.id = 'voiceEntryMainBtn';
         btn.type = 'button';
         btn.className = 'action-btn';
-        btn.title = '语音录入（免费）：点文本框后按输入法麦克风说话（或粘贴/打字整段），自动分发到姓名/性别/年龄/病史/药物/剂数/诊断';
+        btn.title = '语音录入：点文本框后按输入法麦克风说话（或粘贴/打字整段），自动分发到姓名/性别/年龄/病史/药物/剂数/诊断';
         btn.textContent = '🎙️ 语音录入';
         btn.style.cssText = 'flex:1;padding:2px 8px;font-size:12px;font-weight:bold;background:linear-gradient(135deg,#7c4dff 0%,#5e35b1 100%);color:#fff;border:none;white-space:nowrap;';
         if (anchorBtn && anchorBtn.parentNode) anchorBtn.parentNode.insertBefore(btn, anchorBtn.nextSibling);
         else bar.appendChild(btn);
-        btn.addEventListener('click', function (ev) {
+        // ★ 2026-09-21 v298：语音录入纳入免费版付费墙（第 5 类）。唯一墙标准
+        //   licenseType==='free'：free 拒绝+升级引导，trial/付费全放行（requireFeature
+        //   统一裁决：APP 走 Java getFeatureStatus，桌面走 license:check-feature IPC）。
+        btn.addEventListener('click', async function (ev) {
             ev.preventDefault(); ev.stopPropagation();
+            if (!await window.requireFeature('voice-input')) return;
             showSmartTextModal();
         });
     }
@@ -1954,10 +1958,32 @@ let currentUser = null;
 
         // 版本标签统一显示 V1.0.0（与软著申请版本号一致）
         // ★ 统一安装包：运行时按 config.edition 动态显示 标准版/机构版 标签
+        // ★ 2026-09-21 离线免费版：free 授权 edition 仍为 personal（单用户形态
+        //   不变），版本标签按 window.__licenseType==='free' 细分显示。此函数仅
+        //   用于展示，功能权益一律以主进程 license:check-feature 裁决为准。
         function getEditionTag() {
             var e = (typeof CONFIG !== 'undefined' && CONFIG.edition) || window.EDITION || 'personal';
             var inst = ['clinic_custom', 'offline', 'clinic', 'cloud_clinic', 'offline_clinic'].indexOf(e) >= 0;
-            return inst ? '离线机构版' : '离线标准版';
+            if (inst) return '离线机构版';
+            if (window.__licenseType === 'free') return '离线免费版';
+            return '离线标准版';
+        }
+        // ★ 2026-09-21 启动拉取一次授权类型用于标签细分（licensed 取 licenseType；
+        //   trial 取 trial；不可达/异常不影响标准版默认标签）。到位后重刷标签。
+        async function loadLicenseTypeForTag() {
+            try {
+                if (!window.electronAPI || !window.electronAPI.license ||
+                    typeof window.electronAPI.license.getStatus !== 'function') return;
+                var st = await window.electronAPI.license.getStatus();
+                if (!st) return;
+                var lt = '';
+                if (st.type === 'licensed') lt = String(st.licenseType || '');
+                else if (st.type === 'trial') lt = 'trial';
+                if (lt) {
+                    window.__licenseType = lt;
+                    try { applyEditionTags(); } catch (_) {}
+                }
+            } catch (e) { console.warn('[LicenseTag] 授权类型加载失败（沿用标准版标签）:', e); }
         }
         function applyEditionTags() {
             var label = getEditionTag();
@@ -2039,6 +2065,46 @@ let currentUser = null;
         }
         applyEditionTags();
         loadBuildMeta(); // ★ 铁闸4：主动拉取 build-meta.json 显示三元组（未登录也可见）
+        loadLicenseTypeForTag(); // ★ 2026-09-21 免费版：拉取授权类型细分版本标签（离线免费版）
+
+        // ====================================================================
+        // ★ 2026-09-21 离线免费版付费墙：统一功能门控包装器
+        // 唯一墙标准 licenseType==='free'（与主进程 feature-guard.isFreeEdition 同口径）：
+        //  - free 签名 license：缺功能位 → 拒绝 + 升级引导；
+        //  - trial 评估期 / personal / pro 等：一律放行（含历史付费 license 未带新位）；
+        //  - Electron 桌面：走 license:check-feature IPC（执行点在主进程 fail-closed，
+        //    渲染层仅体验层；IPC 异常 fail-closed 拒绝，plan R2）；
+        //  - 非 Electron（网页/APP 壳阶段2前）：无此 IPC → 放行，避免误伤现有 APP。
+        // 用法：async 入口首行 `if (!await requireFeature('backup')) return;`
+        //       静默场景（自动备份）：requireFeature('backup', {silent:true})
+        // ====================================================================
+        window.requireFeature = async function (featureName, opts) {
+            opts = opts || {};
+            try {
+                var api = window.electronAPI && window.electronAPI.license;
+                if (!api || typeof api.checkFeature !== 'function') return true;
+                var r = await api.checkFeature(featureName);
+                if (r && r.licenseType === 'free' && !r.allowed) {
+                    if (!opts.silent) {
+                        try {
+                            alert(r.message || ('当前为【离线免费版】，此功能需要升级标准版。'));
+                            if (typeof confirm === 'function' &&
+                                confirm('是否立即打开激活窗口，升级为标准版？')) {
+                                try { window.electronAPI.activate.show(); } catch (e) {}
+                            }
+                        } catch (e) {}
+                    }
+                    return false;
+                }
+                return true;
+            } catch (e) {
+                console.warn('[FeatureGate] 功能校验失败（fail-closed 拒绝）:', featureName, e);
+                if (!opts.silent) {
+                    try { alert('功能校验失败，请重启软件后再试。'); } catch (_) {}
+                }
+                return false;
+            }
+        };
 
         // 切换密码可见性（统一登录框规范）
         window.togglePasswordVisibility = function() {
@@ -7649,6 +7715,39 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
                 alert('请先登录后再打印');
                 return;
             }
+            // ★ 2026-09-21 离线免费版：仅在送印 HTML 内加水印覆盖层（屏幕处方笺 DOM/CSS 零改动、
+            //   不改 HTML 基线）；标准版/机构版/试用 不注入，打印结果与历史完全一致；纵横两版
+            //   同一绝对定位覆盖层随纸面尺寸自适应。授权状态查询失败时 fail-open（打印本就是
+            //   免费版允许的功能，只去水印不拦打印；付费权益门在 check-feature，不在这里）。
+            let isFreePrint = window.__licenseType === 'free';
+            if (!isFreePrint && window.electronAPI && window.electronAPI.license &&
+                typeof window.electronAPI.license.getStatus === 'function') {
+                try {
+                    const __freePrintSt = await window.electronAPI.license.getStatus();
+                    isFreePrint = !!(__freePrintSt && __freePrintSt.type === 'licensed' &&
+                                     __freePrintSt.licenseType === 'free');
+                } catch (e) { /* 查询失败按非免费处理，正常打印 */ }
+            }
+            // 方案B 样张（2026-09-21 用户确认）：稀疏大字斜铺，灰度 8%。
+            // ★ 2026-09-21 v297 真机复测：Android 系统打印（WebView→保存PDF）不输出
+            //   CSS background-image 的 SVG data-URI（print-color-adjust 对背景图无效），
+            //   PDF 中水印整张丢失。改为真实 DOM 文字节点斜铺——文字是文档内容而非背景，
+            //   Chromium 打印管线必然绘制。桌面 Electron 打印同样兼容。容器旋转 -25°、
+            //   overflow:hidden 裁出纸面，网格按 96dpi A5（纵向559×794/横向794×559）
+            //   留足旋转余量，纵横两版共用。
+            const freePrintOverlay = isFreePrint ? (() => {
+                let __wmCells = '';
+                for (let __r = 0; __r < 14; __r++) {
+                    for (let __c = 0; __c < 12; __c++) {
+                        __wmCells += '<span style="position:absolute;left:' + (__c * 108 - 240) + 'px;top:' + (__r * 80 - 200) + 'px;' +
+                            'font-family:KaiTi,SimSun,serif;font-weight:bold;font-size:40px;line-height:1;' +
+                            'color:rgba(0,0,0,0.08);white-space:nowrap;-webkit-print-color-adjust:exact;print-color-adjust:exact;">免费版</span>';
+                    }
+                }
+                return '<div style="position:absolute;inset:0;z-index:10;pointer-events:none;overflow:hidden;' +
+                    '-webkit-print-color-adjust:exact;print-color-adjust:exact;transform:rotate(-25deg);">' +
+                    __wmCells + '</div>';
+            })() : '';
             const printContent = document.getElementById('prescriptionPaper').innerHTML;
             const isLandscape = orientation === 'landscape';
             const pageSize = isLandscape ? 'A5 landscape' : 'A5 portrait';
@@ -7659,7 +7758,7 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
            vh=手机屏幕高（约2200px）远大于 A5 纸高（210mm≈794px），body 被撑高溢出成 2 页；
            ②纸片高留 0.5mm 舍入余量——内容高==页高时亚像素舍入会甩出空白第 2 页 */
         body { font-family: 'SimSun', '宋体', serif; width: ${paperWidth}; padding: 0; margin: 0 auto; display: flex; justify-content: center; align-items: flex-start; line-height: 1.8; -webkit-print-color-adjust: exact; print-color-adjust: exact; color: #000; }
-        .prescription-paper { width: ${paperWidth}; height: calc(${paperHeight} - 0.5mm); padding: 28mm 15mm 20mm; margin: 0 auto; box-sizing: border-box; }
+        .prescription-paper { position: relative; width: ${paperWidth}; height: calc(${paperHeight} - 0.5mm); padding: 28mm 15mm 20mm; margin: 0 auto; box-sizing: border-box; }
         .clinic-name { text-align: center; font-size: 16.5pt; font-weight: bold; color: #000; margin-bottom: 10px; letter-spacing: 2px; font-family: 'KaiTi', '楷体_GB2312', '楷体', serif; }
         .prescription-title { text-align: center; font-size: 16.5pt; font-weight: bold; color: #000; margin-bottom: 12px; letter-spacing: 4px; font-family: 'KaiTi', '楷体_GB2312', '楷体', serif; }
         .prescription-info { display: grid; grid-template-columns: repeat(6, 1fr); gap: 2px 2px; margin-bottom: 8px; border-bottom: 1px solid #000; padding-bottom: 4px; font-size: 10.5pt; color: #000; }
@@ -7684,7 +7783,7 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
         .signature-item:nth-child(1) { text-align: left; }
         .signature-item:nth-child(2) { text-align: center; }
         .signature-item:nth-child(3) { text-align: right; padding-right: 50%; box-sizing: border-box; }
-    </style></head><body><div class="prescription-paper">${printContent}</div></body></html>`;
+    </style></head><body><div class="prescription-paper">${printContent}${freePrintOverlay}</div></body></html>`;
             if (window.AndroidNative && window.AndroidNative.printHtml) {
                 window.AndroidNative.printHtml(html);
             } else if (window.AndroidNative && window.AndroidNative.invoke) {
@@ -8393,6 +8492,9 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
         // P1-1 自动备份策略升级：每日首次启动触发；保留 7天+4周+12月
         async function dailyAutoBackup() {
             try {
+                // ★ 2026-09-21 免费版付费墙：自动备份属 backup 付费功能，静默短路
+                //   （plan R6：不产生报错噪音；升级引导只在用户手动点备份时弹）
+                if (!await window.requireFeature('backup', { silent: true })) return;
                 const today = new Date().toLocaleDateString('sv-SE');
                 const lastBackupDate = localStorage.getItem('lastDailyBackupDate');
                 if (lastBackupDate === today) return;
@@ -8412,6 +8514,8 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
         //   则零开销跳过，拍照切后台不会误触发）；全程静默，失败仅记日志不打扰用户。
         window.__bgAutoBackup = async function () {
             try {
+                // ★ 2026-09-21 免费版付费墙：退场备份同属 backup 付费功能，静默短路
+                if (!await window.requireFeature('backup', { silent: true })) return;
                 var lastTs = parseInt(localStorage.getItem('lastBgBackupTs') || '0', 10) || 0;
                 if (Date.now() - lastTs < 120000) return;  // 节流：2 分钟内不重复
                 var sig = String((prescriptionHistory || []).length) + ':' + String((medicines || []).length);
@@ -8613,6 +8717,8 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
         }
 
         async function exportData() {
+            // ★ 2026-09-21 免费版付费墙：一键备份（feature=backup，主进程 save-backup-file 双拦）
+            if (!await window.requireFeature('backup')) return;
             const now = new Date();
             const dateStr = now.getFullYear() + '-' + 
                            String(now.getMonth() + 1).padStart(2, '0') + '-' + 
@@ -8830,7 +8936,9 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
             }
         }
 
-        function importData() {
+        async function importData() {
+            // ★ 2026-09-21 免费版付费墙：一键恢复（feature=backup；list/read/picker 主进程全拦）
+            if (!await window.requireFeature('backup')) return;
             // ★ 2026-08-29 一键备份第三步：优先走"备份列表一键恢复"（与云桌面/APP端一致）
             //   列出 惠康中医媒体\downloads\中医处方系统\ 的备份文件，确认后直接用最新备份恢复
             //   （小白一键恢复，不用翻文件管理器）；取消/无备份再走系统文件选择器
@@ -9087,7 +9195,9 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
             closeMedicineEditModal();
         }
 
-        function exportMedicines() {
+        async function exportMedicines() {
+            // ★ 2026-09-21 免费版付费墙：药库导出（data-export）
+            if (!await window.requireFeature('data-export')) return;
             const headers = ['药品名称', '简码', '进价', '单价', '单位', '常用用量', '库存'];
             let csvContent = '\uFEFF' + headers.join(',') + '\n';
             medicines.forEach(m =>{
@@ -9113,6 +9223,8 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
         }
 
         async function exportMedicinesToExcel() {
+            // ★ 2026-09-21 免费版付费墙：药库 Excel 导出（data-export）
+            if (!await window.requireFeature('data-export')) return;
             try {
                 if (typeof loadXlsxLibrary === 'function') { await loadXlsxLibrary(); }
                 if (!window.XLSX) { alert('Excel库未加载，将使用CSV格式导出'); exportMedicinesToCSV(); return; }
@@ -9132,7 +9244,9 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
             }
         }
 
-        function exportMedicinesToCSV() {
+        async function exportMedicinesToCSV() {
+            // ★ 2026-09-21 免费版付费墙：药库 CSV 导出（data-export，亦是 Excel 导出失败兜底）
+            if (!await window.requireFeature('data-export')) return;
             let csv = '\uFEFF名称,编码,单价(元),单位,默认用量\n';
             medicines.forEach(m => {
                 csv += `${m.name || ''},${m.code || ''},${m.price || 0},${m.unit || 'g'},${m.dosage || 10}\n`;
@@ -9148,6 +9262,8 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
         }
 
         async function exportPrescriptionsToExcel() {
+            // ★ 2026-09-21 免费版付费墙：历史处方 Excel 导出（data-export）
+            if (!await window.requireFeature('data-export')) return;
             try {
                 if (prescriptionHistory.length === 0) { alert('暂无处方数据'); return; }
                 if (typeof loadXlsxLibrary === 'function') { await loadXlsxLibrary(); }
@@ -9177,7 +9293,9 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
             }
         }
 
-        function exportPrescriptionsToCSV() {
+        async function exportPrescriptionsToCSV() {
+            // ★ 2026-09-21 免费版付费墙：历史处方 CSV 导出（data-export，亦是 Excel 失败兜底）
+            if (!await window.requireFeature('data-export')) return;
             let csv = '\uFEFF处方编号,患者姓名,性别,年龄,诊断,处方内容,味数,总金额(元),医师,日期\n';
             prescriptionHistory.forEach(p => {
                 const items = (p.items || []).map(i => `${i.name} ${i.dosage}${i.unit||'g'}`).join(', ');
@@ -9241,6 +9359,12 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
         }
 
         async function importMedicines(event) {
+            // ★ 2026-09-21 免费版付费墙：药库 Excel/CSV 导入（data-export）
+            //   文件选择器先弹、选完文件在此收口；拒绝时清空 input 便于下次正常选择
+            if (!await window.requireFeature('data-export')) {
+                try { if (event && event.target) event.target.value = ''; } catch (_) {}
+                return;
+            }
             const file = event.target.files[0];
             if (!file) return;
 
@@ -10230,7 +10354,9 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
             showSideHistory();
         }
 
-        function exportStats() {
+        async function exportStats() {
+            // ★ 2026-09-21 免费版付费墙：统计报表导出（data-export；屏幕内统计查看仍免费）
+            if (!await window.requireFeature('data-export')) return;
             const patients = analyzePatients();
             const diseases = analyzeDiseases();
             const medicines = analyzeMedicines();

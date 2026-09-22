@@ -204,7 +204,11 @@ try {
         //   权益 = 标准版全部 + 语音输入；语音模块入口唯一 gate（VoiceInput.isAvailable 三重条件之一）
         //   判定依据 = 服务端登录响应 clinicEdition（auth-core 登录钩子写入 CONFIG.edition），
         //   不信任本地可伪造标记
+        // ★ 2026-09-21 语音权益叠加：机构诊所加购语音后 edition 保持 cloud_clinic（机构属性
+        //   不丢），语音权益由登录响应 user.voiceEnabled（auth-core 写 CONFIG.voiceEnabled）
+        //   判定——voice 权益 = cloud_voice 版本线 OR voiceEnabled 叠加标记，两者等效。
         isVoiceEdition() {
+            try { if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.voiceEnabled === true) return true; } catch (_) {}
             var e = this._currentEdition();
             if (e === 'cloud_voice') return true;
             var x = String(e).toLowerCase();

@@ -210,8 +210,10 @@
         photoBtn.className = 'video-rec-btn';
         photoBtn.innerHTML = '📷';
         photoBtn.title = '拍照';
-        photoBtn.onclick = function (e) {
+        photoBtn.onclick = async function (e) {
             e.preventDefault();
+            // ★ 2026-09-21 离线免费版付费墙（media-capture）；无 requireFeature 的环境放行
+            if (window.requireFeature && !(await window.requireFeature('media-capture'))) return;
             openPhotoOverlay();
         };
 
@@ -220,8 +222,10 @@
         videoBtn.className = 'video-rec-btn';
         videoBtn.innerHTML = '🎥';
         videoBtn.title = '录制问诊视频';
-        videoBtn.onclick = function (e) {
+        videoBtn.onclick = async function (e) {
             e.preventDefault();
+            // ★ 2026-09-21 离线免费版付费墙（media-capture）
+            if (window.requireFeature && !(await window.requireFeature('media-capture'))) return;
             openRecordingOverlay();
         };
 

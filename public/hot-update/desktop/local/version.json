@@ -1,23 +1,23 @@
 {
   "format": 1,
   "channel": "local",
-  "hotVersion": "2026.09.18-1",
-  "appVersion": "1.0.249",
+  "hotVersion": "2026.09.22-1",
+  "appVersion": "1.0.251",
   "files": [
     {
       "name": "index.html",
-      "sha256": "607e899b6f62a9c2532bb7120085fb493cd441231b4658ee055bba0e4c64278d",
-      "size": 661790
+      "sha256": "05e13cecc4d1393f8c4dc5db33105f259490036deabcf88f3940997ffe4c9437",
+      "size": 671132
     },
     {
       "name": "auth-core.js",
-      "sha256": "01a503594df24aed168cf110c3579ba2c64b4803be521071a9cf5c910a202fd7",
-      "size": 489916
+      "sha256": "061c3de3a6f4ca58246067277b97a1bdc394e92ec4d023f0e13761c48dbefed0",
+      "size": 501618
     },
     {
       "name": "permission.js",
-      "sha256": "a6f8096dacb10f1e0e57c251401a424d3c983d491452051164cd7de8073376c6",
-      "size": 28238
+      "sha256": "1d371b40986e07a02c5891bc7e1883c3e1a1f0a9c309105a7534eef6c5d8d8bb",
+      "size": 28698
     },
     {
       "name": "normalize-config.js",
@@ -66,13 +66,13 @@
     },
     {
       "name": "electron/video-recorder.js",
-      "sha256": "112a600d6000d79af28d44e912ce997dd8ce75d63e1c1a7e15e881fd6f44a362",
-      "size": 56374
+      "sha256": "172e2bf0d4bf19749adeedb3d12fc217648268526f131d315f7d08df4975c518",
+      "size": 56767
     },
     {
       "name": "voice-input.js",
-      "sha256": "36f6278375441ba2cf23206c0b9979279f4016a35541ec8b76db842407ed8071",
-      "size": 18351
+      "sha256": "3a579e6a50ccb3e09aca2c30a3f903a25476b7da9832ade4a130551f264e01fc",
+      "size": 18596
     },
     {
       "name": "vendor/pinyin-pro.min.js",
@@ -85,6 +85,6 @@
       "size": 881727
     }
   ],
-  "signedAt": 1789720019686,
-  "signature": "xiTHHOUmYjVSzzY3gq3emHBlJCudGeBzPA25biJK1S1YLnAe2wqLLm4KFpKZ9e3t/vEDCKaNrjgQqh+aSjPoAg=="
+  "signedAt": 1790036149659,
+  "signature": "M75q12coiZAQEAwLtKAslnXqkJ/+6o7ROFBdUA74J03F4lpd6JX8erZxBa01RIh27NxyEAfoRIdak4k9c6/rDw=="
 }
