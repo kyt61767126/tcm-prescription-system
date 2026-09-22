@@ -1,8 +1,8 @@
 {
   "format": 1,
   "channel": "local",
-  "hotVersion": "2026.09.22-1",
-  "appVersion": "1.0.251",
+  "hotVersion": "2026.09.22-2",
+  "appVersion": "1.0.252",
   "files": [
     {
       "name": "index.html",
@@ -71,8 +71,8 @@
     },
     {
       "name": "voice-input.js",
-      "sha256": "3a579e6a50ccb3e09aca2c30a3f903a25476b7da9832ade4a130551f264e01fc",
-      "size": 18596
+      "sha256": "96293e64139bf84924a942e9f8ff7da47e7a61705d1027dbf3f9326d5ff1bdae",
+      "size": 20265
     },
     {
       "name": "vendor/pinyin-pro.min.js",
@@ -85,6 +85,6 @@
       "size": 881727
     }
   ],
-  "signedAt": 1790036149659,
-  "signature": "M75q12coiZAQEAwLtKAslnXqkJ/+6o7ROFBdUA74J03F4lpd6JX8erZxBa01RIh27NxyEAfoRIdak4k9c6/rDw=="
+  "signedAt": 1790043463502,
+  "signature": "JHx7Koy6GhIOTenC3jOt1Tysvv8GQdknCIgluuuTlt9AvTM+udo/8G1HS1PvYT+FhQpECN9S0u5e99/hQscZBg=="
 }

@@ -1,8 +1,8 @@
 {
   "format": 1,
   "channel": "cloud",
-  "hotVersion": "2026.09.21-3",
-  "appVersion": "1.2.251",
+  "hotVersion": "2026.09.22-1",
+  "appVersion": "1.2.252",
   "files": [
     {
       "name": "index.html",
@@ -76,8 +76,8 @@
     },
     {
       "name": "voice-input.js",
-      "sha256": "3a579e6a50ccb3e09aca2c30a3f903a25476b7da9832ade4a130551f264e01fc",
-      "size": 18596
+      "sha256": "96293e64139bf84924a942e9f8ff7da47e7a61705d1027dbf3f9326d5ff1bdae",
+      "size": 20265
     },
     {
       "name": "vendor/pinyin-pro.min.js",
@@ -90,6 +90,6 @@
       "size": 881727
     }
   ],
-  "signedAt": 1789970527050,
-  "signature": "9kF+csDJ9NVvFhBsBFYDhnGom4F8iDQT332pIiO0la7DNsHVUZAgVo7li9rqIRjXnH0/Bf+St1RrKpsz7eH0Dg=="
+  "signedAt": 1790043463888,
+  "signature": "7YOyyPa2ATKPoqGUmbVaYyGzjwkRdv2sOBLVUUuxmUfKqgo36xUqJEy/zMjStyYc9Ul0nxrGcdStiem1ELM+Dw=="
 }

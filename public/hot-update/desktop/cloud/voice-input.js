@@ -13,8 +13,11 @@
 //   语音入口的显示与否 = 三重条件缺一不可（isAvailable()）：
 //     1. 环境支持：window.SpeechRecognition / webkitSpeechRecognition 存在
 //     2. 安全上下文：window.isSecureContext（麦克风权限需 https/localhost）
-//     3. 版本授权：Permission.isVoiceEdition()——判定依据是服务端登录响应
-//        clinicEdition（auth-core 登录钩子写入 CONFIG.edition），不信任本地可伪造标记
+//     3. 版本授权（2026-09-22 起语音并入付费权益，不再单卖）：
+//        · 离线端：window.__licenseType 存在且非 'free'（trial/personal/pro 放行；
+//          由主进程 license.getStatus 写入，与 feature-guard 付费墙同口径）
+//        · 云端：Permission.isVoiceEdition()——服务端登录响应 voiceEnabled
+//                   （付费云端版本自动透出）/ clinicEdition=cloud_voice（老用户）
 //   任一不满足 → 按钮不渲染 → 键盘开方完全不受影响（降级安全）。
 //
 // ★ P0 填充铁律：所有语音填充内容必须浅紫色高亮待医生确认；
@@ -51,6 +54,23 @@
 
     // 版本授权 gate：Permission.isVoiceEdition()（edition-lock 归一化后读取）
     function hasVoiceEntitlement() {
+        // ★ 2026-09-22 语音并入付费权益（取消独立语音版售卖/加购，付费用户直接可用）：
+        //   离线端（桌面/APP）index.html 启动时经 license.getStatus 写 window.__licenseType，
+        //   口径与付费墙 feature-guard 完全一致——仅 'free' 被墙，trial/personal/pro 放行。
+        //   必须先于 Permission.isVoiceEdition() 判定：离线 Permission 恒返回 false
+        //   （离线 edition 从不是 cloud_voice），放后面会被提前 return false 短路。
+        //   云端网页/云桌面不写此标记（undefined）→ 自动落入下方服务端驱动判定，零影响。
+        //   注意：此 gate 仅控制麦克风按钮渲染（ASR=系统 Web Speech 纯端能力、零我方
+        //   服务端资源），属体验层；离线真正付费功能（整方录入面板等）另有 IPC/Java
+        //   验签执行点，渲染变量被控制台篡改不影响那些付费墙。
+        try {
+            var __lt = global.__licenseType;
+            if (typeof __lt === 'string' && __lt) {
+                // 离线授权类型已确知即直接定论（含 free→false），不再走 Permission/CONFIG
+                // 臂——防同机登过云端付费账号后 CONFIG.voiceEnabled 缓存残留导致跨模式串权。
+                return __lt !== 'free';
+            }
+        } catch (_) {}
         try {
             if (global.Permission && typeof global.Permission.isVoiceEdition === 'function') {
                 return !!global.Permission.isVoiceEdition();

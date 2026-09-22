@@ -1743,10 +1743,16 @@ export async function onRequest(context) {
             let loginPrescriptions = null;
             try { loginPrescriptions = await prefetchLoginPrescriptions; } catch (e) {}
 
-            // ★ 2026-09-21 语音权益叠加：voiceEnabled 随登录响应透出（机构诊所加购语音
-            //   后 edition 保持 cloud_clinic，语音入口靠此标记开启，而非 edition=cloud_voice）
+            // ★ 2026-09-22 语音权益并入全部付费云端版本（取消独立语音版售卖与加购）：
+            //   能走到此处的登录均已过 test 待审核/禁用/到期闸门 = 有效付费诊所，
+            //   cloud_personal/cloud_clinic/cloud_voice 一律透出 voiceEnabled=true；
+            //   clinicVoiceEnabled 历史加购标记保留（老数据兼容，与新规则等效）。
             const __loginSu = sanitizeUser(user, clinicId, clinicName, clinicStatus, clinicEdition);
-            if (found && found.clinicVoiceEnabled === true) __loginSu.voiceEnabled = true;
+            if (found && found.clinicVoiceEnabled === true) {
+                __loginSu.voiceEnabled = true;
+            } else if (['cloud_personal', 'cloud_clinic', 'cloud_voice'].indexOf(__loginSu.clinicEdition) >= 0) {
+                __loginSu.voiceEnabled = true;
+            }
 
             return json({
                 success: true,

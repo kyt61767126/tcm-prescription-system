@@ -405,7 +405,6 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                         <option value="trial">试用版（30张/月，7天）</option>
                         <option value="personal" selected>标准版（无限处方，1年）</option>
                         <option value="pro">机构版（无限+同步+多设备，1年）</option>
-                        <option value="voice">语音版（无限处方+语音输入，1年）</option>
                     </select>
                 </div>
                 <div class="form-group">
@@ -964,7 +963,6 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                     <select id="approveType">
                     <option value="personal" selected>标准版（无限处方，1年）</option>
                     <option value="pro">机构版（无限+同步+多设备，1年）</option>
-                    <option value="voice">语音版（无限处方+语音输入，1年）</option>
                 </select>
                 </div>
                 <div class="form-group">
@@ -1181,7 +1179,6 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
             <button class="tpl-btn" data-btpl="personalForever" onclick="applyBatchTemplate('personalForever')">个人 · 永久</button>
             <button class="tpl-btn" data-btpl="pro1y" onclick="applyBatchTemplate('pro1y')">专业 · 1年 · 5设备</button>
             <button class="tpl-btn" data-btpl="pro3y" onclick="applyBatchTemplate('pro3y')">专业 · 3年 · 10设备</button>
-            <button class="tpl-btn" data-btpl="voice1y" onclick="applyBatchTemplate('voice1y')">语音 · 1年</button>
             <button class="tpl-btn tpl-save" onclick="autoMatchBatchVersion()">🤖 智能匹配</button>
         </div>
         <div class="gen-row">
@@ -1191,7 +1188,6 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                     <option value="trial">试用版</option>
                     <option value="personal" selected>标准版</option>
                     <option value="pro">机构版</option>
-                    <option value="voice">语音版</option>
                 </select>
             </div>
             <div class="form-group">
@@ -1651,9 +1647,9 @@ const PRESET_TEMPLATES = {
     personalForever:  { name: '个人 · 永久',          type: 'personal', days: 36500, maxDevices: 1  },
     pro1y:            { name: '专业 · 1年 · 5设备',   type: 'pro',      days: 365,   maxDevices: 5  },
     pro3y:            { name: '专业 · 3年 · 10设备',  type: 'pro',      days: 1095,  maxDevices: 10 },
-    proForever:       { name: '专业 · 永久 · 10设备', type: 'pro',      days: 36500, maxDevices: 10 },
-    // ★ 2026-09-17 语音版：1年/1设备（权益=标准版全部+语音输入）
-    voice1y:          { name: '语音 · 1年',           type: 'voice',    days: 365,   maxDevices: 1  }
+    proForever:       { name: '专业 · 永久 · 10设备', type: 'pro',      days: 36500, maxDevices: 10 }
+    // ★ 2026-09-22 语音版模板下线：语音已并入全部付费版本，不再单独开码
+    //   （历史 voice 激活码仍正常识别/展示，见 typeLabel/typeNames 与 validate 链）
 };
 
 // 自定义模板存取（localStorage）
@@ -1736,7 +1732,9 @@ function applyCustomTemplate(index) {
     if (!t) return;
     // 清除预设模板高亮
     document.querySelectorAll('.tpl-bar .tpl-btn:not(.tpl-custom)').forEach(b => b.classList.remove('active'));
-    document.getElementById('genType').value = t.type;
+    // ★ 2026-09-22 语音版已并入付费版：浏览器里 09-22 前保存的 voice 自定义模板
+    //   迁移为标准版（权益=标准版+语音，现标准版已含语音），避免 option 删除后空选 400
+    document.getElementById('genType').value = (t.type === 'voice') ? 'personal' : t.type;
     document.getElementById('genDays').value = t.days;
     document.getElementById('genExpiresAt').value = '';
     document.getElementById('genMaxDevices').value = t.maxDevices;
@@ -1791,7 +1789,8 @@ function restoreLastGenConfig() {
     try {
         const cfg = JSON.parse(localStorage.getItem('hk_last_gen_config') || '{}');
         if (!cfg || Object.keys(cfg).length === 0) return;
-        if (cfg.type) document.getElementById('genType').value = cfg.type;
+        // ★ 2026-09-22 遗留 voice 记忆值迁移为标准版（语音已并入付费版）
+        if (cfg.type) document.getElementById('genType').value = (cfg.type === 'voice') ? 'personal' : cfg.type;
         if (cfg.days) document.getElementById('genDays').value = cfg.days;
         if (cfg.expiresAt) document.getElementById('genExpiresAt').value = cfg.expiresAt;
         if (cfg.clinicName) document.getElementById('genClinicName').value = cfg.clinicName;
