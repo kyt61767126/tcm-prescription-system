@@ -1156,6 +1156,7 @@ export async function onRequest(context) {
             try {
                 await writeAccountTombstone(kv, {
                     username: target.username,
+                    phone: target.phone || '',
                     clinicId: found.clinicId,
                     deletedBy: authUser.username,
                     reason: 'delete-user'
@@ -2812,6 +2813,25 @@ export async function onRequest(context) {
                 } catch (e) { /* 单账号撤销失败不阻断 */ }
             }
 
+            // ★ 2026-09-23 账号墓碑联动：删诊所必须吊销离线登录。离线闸门只按
+            //   machineId 裁决，账号虽已随诊所删除，设备若仍绑在有效码上（多用户
+            //   绑定/测试机/未及解绑）依旧可以登录离线桌面/APP。墓碑在账号被真实
+            //   重新开通（激活开通/管理员补建用户）时由对应创建路径自动清除。
+            let tombstonedAccounts = 0;
+            for (const u of users) {
+                if (!u || !u.username) continue;
+                try {
+                    await writeAccountTombstone(kv, {
+                        username: u.username,
+                        phone: u.phone || '',
+                        clinicId: clinicId,
+                        deletedBy: currentUser.username,
+                        reason: 'delete-clinic'
+                    });
+                    tombstonedAccounts++;
+                } catch (e) { console.error('writeAccountTombstone(delete-clinic) error:', e && e.message); }
+            }
+
             // 3) system:clinics 移除条目（最后移除，前面失败可重试且诊所仍可登录管理）
             clinics.splice(clinicIdx, 1);
             await kv.put(KV_SYSTEM_CLINICS, JSON.stringify(clinics));
@@ -2824,6 +2844,7 @@ export async function onRequest(context) {
                 deletedKeyList: deletedKeys.slice(0, 50),
                 cleanedRequests: cleanedRequests,
                 revokedAccounts: revokedAccounts,
+                tombstonedAccounts: tombstonedAccounts,
                 backupKey: backupKey || null,
                 source: 'platform-admin'
             });

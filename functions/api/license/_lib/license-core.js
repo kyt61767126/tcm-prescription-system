@@ -824,6 +824,17 @@ export async function writeAccountTombstone(kv, info = {}) {
             deletedAt: nowIso
         };
         await kv.put(accountTombstoneKey(username), JSON.stringify(entry));
+        // ★ 2026-09-23 手机号别名：云端/部分端登录以手机号作为账号名上报裁决，
+        //   只写 username 键会漏掉手机号登录路径。别名键与主墓碑同形，重新开通
+        //   时 clearAccountTombstone 需对两个名字分别清除（见调用方）。
+        const phone = normalizeAccountName(info.phone);
+        if (phone && phone !== username) {
+            try {
+                await kv.put(accountTombstoneKey(phone), JSON.stringify({ ...entry, username: phone }));
+            } catch (pe) {
+                console.warn('[account] 手机号墓碑别名写入失败(不阻断):', pe && pe.message);
+            }
+        }
         console.warn('[account] 账号墓碑已写入:', username, 'clinic=', entry.clinicId);
         return entry;
     } catch (e) {
