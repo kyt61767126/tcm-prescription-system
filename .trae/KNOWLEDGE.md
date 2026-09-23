@@ -595,6 +595,7 @@
 - **新增铁律**：⑧**"设备唯一性"和"授权多设备"方向相反要分清**——多设备授权=一个码绑多台设备（机构共用一码合法），一台设备同一时刻只属于一个诊所码；新增绑定必须反向清理同设备的旧归属；⑨**吊销失效排查先问"裁决从哪个码来"**——遍历型裁决天然有跨记录兜底问题，吊销测试前必须确认设备无同域其他授权；⑩**取证优先于改码**：生产代码真实联网调用+锚点时间戳变化+线上裸端点对拍，三步可把"放行分支"钉死，避免误改。
 - **冒用 machineId 篡改评估**：攻击者持有效码+获知 32 位 machineId 可把设备绑到自己码并触发旧码解绑；但普通用户无删码入口无法即时 DoS（码到期最长 1 年缓期），双方审计留痕可追溯——与既有伪造 block 风险同级接受。存量绑定按用户决定保留，下次该设备激活任意码时自动清理。
 - **纯服务端修复，push 即部署（已验证 b3ce5910 success），五端零重打包。**
+- **★ 同日本机快路径实测闭环（通过）**：建 pro 测试码（设备 device_version 已锚定机构版，personal 会被降级拦截——测试码类型须与设备版本同级或高阶）→ 生产 validate 真实激活 → Y6TT/CA73 旧绑定自动清零、授权来源唯一 → 删码后 entitlement 立即 NO_LICENSE → verifyLoginGate 实返 ok:false（双锚点写 lastReject=NO_LICENSE）→ **真机重启弹「该诊所/激活码已被删除」眼见为实**；事后从 revoke-backup.json 恢复 Y6TT/CA73 记录 → entitlement/闸门恢复 LICENSED、lastReject 自动清除。脚本：tools/_tmp/verify-revoke.cjs（setup/delete/clean，临时脚本不入库）。
 
 **★ 同日打包链路自封事故（a7fe603e）**：1.0.253 真机登录报 HTTP 403。根因链：one-click-pack 的 E2E 在**签名之前**对未签名 win-unpacked exe 运行 → self-check 判 NotSigned=tampered → integrityState=2 → 用例活到 ready+25s 时 reportDesktopIntegrity 把**构建机自己 machineId** 经 /api/license/status 上报 blockDevice（KV device_block 键与日志时间实锤吻合）。修复：main.js reportDesktopIntegrity 开头 `if(process.env.BNZC_E2E==='1')return`（E2E 信号无意义直接跳过）；KV 封锁记录已 REST 删除清零。**铁律⑪：E2E 中的"安全上报"必须识别测试环境**——测试机跑生产上报逻辑=自我破坏；任何写真实风控状态的代码路径都要查有无测试守卫。云端桌面 main.js 有同款隐患（L489 未加守卫），记遗留下次云端发版处理。
 
