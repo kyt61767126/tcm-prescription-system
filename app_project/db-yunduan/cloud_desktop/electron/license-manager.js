@@ -2277,6 +2277,37 @@ function writeAnchorState(state, mid) {
     }
 }
 
+// ★ 2026-09-23 账号级拒绝标记 = 按用户名存储的集合 { username: {username,state,at} }
+//   （同机多账号先后被删互不覆盖；重新开通只清对应键）。旧版单条记录
+//   {username,state,at} 读入时自动迁移为集合，首次 persist 即落新格式。
+function normalizeRejectMap(v) {
+    if (!v || typeof v !== 'object') return {};
+    // 旧版单条：顶层自带 state 标量
+    if (v.__arMap !== 1 && (typeof v.state === 'string') && (typeof v.username === 'string')) {
+        const k = v.username || '';
+        const m = { __arMap: 1 };
+        m[k] = { username: v.username, state: v.state || 'ACCOUNT_REVOKED', at: Number(v.at) || Date.now() };
+        return m;
+    }
+    const m = { __arMap: 1 };
+    for (const k of Object.keys(v)) {
+        if (k === '__arMap') continue;
+        const rec = v[k];
+        if (rec && typeof rec === 'object' && typeof rec.state === 'string') m[k] = rec;
+    }
+    return m;
+}
+// 双锚点合并：同名记录取 at 更新者（任一锚点有即拒绝）
+function mergeRejectMaps(a, b) {
+    const out = { __arMap: 1 };
+    for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) {
+        if (k === '__arMap') continue;
+        const ra = a[k], rb = b[k];
+        out[k] = (!ra || (rb && Number(rb.at) > Number(ra.at))) ? rb : ra;
+    }
+    return out;
+}
+
 // 双锚点统一视图
 function getUnifiedGate(mid) {
     const gate = readGateState(mid) || {};
@@ -2285,8 +2316,10 @@ function getUnifiedGate(mid) {
     const lastReject = gate.lastReject || anchor.lastReject || null;
     const lastVerify = Math.max(Number(gate.lastVerify) || 0, Number(anchor.lastVerify) || 0);
     const lastSeenHigh = Math.max(Number(gate.lastSeenHigh) || 0, Number(anchor.lastSeenHigh) || 0);
-    // ★ 2026-09-23 账号级拒绝标记（按 username 隔离，不影响同机其他账号）
-    const accountReject = gate.accountReject || anchor.accountReject || null;
+    // ★ 账号级拒绝标记（按 username 隔离的集合；就地规范化，persist 时完成旧格式迁移）
+    gate.accountReject = normalizeRejectMap(gate.accountReject);
+    anchor.accountReject = normalizeRejectMap(anchor.accountReject);
+    const accountReject = mergeRejectMaps(gate.accountReject, anchor.accountReject);
     return { gate, anchor, everActivated, lastReject, lastVerify, lastSeenHigh, accountReject };
 }
 function persistUnified(u, mid) {
@@ -2315,8 +2348,9 @@ function gateGracePass(u, mid, username) {
     }
     // ★ 2026-09-23 账号级硬拒：该 username 在线收到过 ACCOUNT_REVOKED，断网也
     //   不享受宽限（按用户名精确匹配，同机其他未删账号不受影响）。
-    if (username && u.accountReject && u.accountReject.username === username) {
-        return { ok: false, message: gateStateMessage(u.accountReject.state || 'ACCOUNT_REVOKED') };
+    const __arRec = username ? u.accountReject[username] : null;
+    if (__arRec) {
+        return { ok: false, message: gateStateMessage(__arRec.state || 'ACCOUNT_REVOKED') };
     }
     const gs = Number(u.gate.offlineStart) || 0;
     const as = Number(u.anchor.offlineStart) || 0;
@@ -2371,19 +2405,22 @@ async function verifyLoginGate(usernameInput) {
     //   写【账号级】拒绝标记并硬拒（断网/MITM 均不可绕过；按用户名隔离，不影响
     //   同机其他账号）。返回非 null 即为应直接返回的拒绝结果。
     const accountHardFail = (ent) => {
-        if (ent && ent.accountState === 'ACCOUNT_REVOKED') {
-            const rec = { username: username || '', state: 'ACCOUNT_REVOKED', at: now };
-            u.gate.accountReject = rec;
-            u.anchor.accountReject = rec;
+        if (ent && ent.accountState === 'ACCOUNT_REVOKED' && username) {
+            const rec = { username: username, state: 'ACCOUNT_REVOKED', at: now };
+            u.gate.accountReject[username] = rec;
+            u.anchor.accountReject[username] = rec;
             persistUnified(u, mid);
             return fail(gateStateMessage('ACCOUNT_REVOKED'));
         }
         return null;
     };
-    // 服务端确认该账号无墓碑（真实有效）：清除本用户名残留的账号拒绝标记
+    // 服务端确认该账号无墓碑（真实有效）：只清【本用户名】的拒绝标记。
+    // ★ 铁律：username 缺失（主窗自检/激活窗复核等无登录态上下文调用）时绝不
+    //   清除任何账号标记——否则同机他人一次正常联网即可为被删账号滚动解封。
     const clearAccountRejectIfMatch = () => {
-        if (u.gate.accountReject && (!username || u.gate.accountReject.username === username)) u.gate.accountReject = null;
-        if (u.anchor.accountReject && (!username || u.anchor.accountReject.username === username)) u.anchor.accountReject = null;
+        if (!username) return;
+        delete u.gate.accountReject[username];
+        delete u.anchor.accountReject[username];
     };
 
     // ③ 永久免费版豁免（产品承诺永久离线可用；free license 服务端签发不可伪造）

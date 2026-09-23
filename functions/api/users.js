@@ -1153,24 +1153,26 @@ export async function onRequest(context) {
             // ★ 2026-09-23 账号墓碑：联动离线吊销。离线登录为本地密码校验、闸门只按
             //   machineId 裁决——不写墓碑则删账号后离线桌面/APP 仍可登录。墓碑在账号
             //   被真实重新开通（激活/管理员补建）时由对应创建路径清除。
+            let __tombOk = false;
             try {
-                await writeAccountTombstone(kv, {
+                __tombOk = !!(await writeAccountTombstone(kv, {
                     username: target.username,
                     phone: target.phone || '',
                     clinicId: found.clinicId,
                     deletedBy: authUser.username,
                     reason: 'delete-user'
-                });
+                }));
             } catch (e) { console.error('writeAccountTombstone error:', e); }
 
             await writeAuditLog(kv, found.clinicId, authUser.username, authUser.role,
                 'delete_user', target.username, context,
-                { targetClinicName: found.clinicName || null, targetRole: target.role });
+                { targetClinicName: found.clinicName || null, targetRole: target.role, tombstoned: __tombOk });
 
             return json({
                 success: true,
                 message: '用户已删除（云端处方数据保留）',
-                username: target.username
+                username: target.username,
+                tombstoned: __tombOk
             });
         }
 
@@ -2821,14 +2823,14 @@ export async function onRequest(context) {
             for (const u of users) {
                 if (!u || !u.username) continue;
                 try {
-                    await writeAccountTombstone(kv, {
+                    const __written = await writeAccountTombstone(kv, {
                         username: u.username,
                         phone: u.phone || '',
                         clinicId: clinicId,
                         deletedBy: currentUser.username,
                         reason: 'delete-clinic'
                     });
-                    tombstonedAccounts++;
+                    if (__written) tombstonedAccounts++;
                 } catch (e) { console.error('writeAccountTombstone(delete-clinic) error:', e && e.message); }
             }
 
@@ -2894,26 +2896,38 @@ export async function onRequest(context) {
             }
             // 恢复所有备份的 KV 键（键名中的 clinicId 替换为目标诊所ID）
             let restored = 0, skipped = 0;
+            const restoredUsers = [];
             for (const [srcKey, value] of Object.entries(backupData.keys || {})) {
                 try {
                     // 将备份键中的原 clinicId 替换为目标 clinicId
                     const destKey = srcKey.replace(new RegExp(`^clinic:${backupData.clinicId}:`), `clinic:${targetClinicId}:`);
                     await kv.put(destKey, JSON.stringify(value));
+                    if (/^clinic:[^:]+:users$/.test(destKey) && Array.isArray(value)) restoredUsers.push(...value);
                     restored++;
                 } catch (e) { skipped++; }
+            }
+            // ★ 2026-09-23 恢复即真实重新开通：备份恢复出的用户必须清除删除墓碑
+            //   （含手机号别名双键同清），否则恢复后全员在线登录即被账号吊销拦截。
+            let clearedTombstones = 0;
+            for (const u of restoredUsers) {
+                if (!u || !u.username) continue;
+                try { if (await clearAccountTombstone(kv, u.username)) clearedTombstones++; }
+                catch (e) { console.warn('restore clearAccountTombstone error:', e && e.message); }
             }
             await writeAuditLog(kv, targetClinicId, currentUser.username, ROLE_PLATFORM_ADMIN, 'restore_clinic_backup', `from=${backupKey}`, context, {
                 sourceClinicId: backupData.clinicId,
                 sourceClinicName: backupData.clinicName,
                 targetClinicId: targetClinicId,
                 restoredKeys: restored,
-                skippedKeys: skipped
+                skippedKeys: skipped,
+                clearedTombstones
             });
             return json({
                 success: true,
                 message: `已从备份 ${backupKey} 恢复诊所「${backupData.clinicName}」数据到目标诊所「${targetClinic.name}」`,
                 restoredKeys: restored,
                 skippedKeys: skipped,
+                clearedTombstones,
                 sourceClinic: backupData.clinicName,
                 targetClinic: targetClinic.name
             });
@@ -2990,6 +3004,7 @@ export async function onRequest(context) {
                 // platform_admin：可管理所有诊所
                 // 按诊所分组保存
                 const clinics = (await kv.get(KV_SYSTEM_CLINICS, 'json')) || [];
+                let batchRemoved = 0;
                 for (const clinic of clinics) {
                     const clinicUsers = body.users.filter(u => u.clinicId === clinic.id || (!u.clinicId && u.role !== ROLE_PLATFORM_ADMIN));
                     if (clinicUsers.length > 0) {
@@ -3004,18 +3019,33 @@ export async function onRequest(context) {
                                 }
                             }
                         }
+                        // ★ 2026-09-23 名单外既有用户=被删除：撤 token+写墓碑（删除联动）。
+                        //   仅当提交名单含【显式属于本诊所】的用户时才做移除判定——
+                        //   无 clinicId 的兼容旧数据会被旧筛选器摊到所有诊所，不能据此删人。
+                        const explicitKept = clinicUsers.filter(u => u.clinicId === clinic.id);
+                        if (explicitKept.length > 0) {
+                            batchRemoved += await revokeRemovedUsers(kv, existingUsers, explicitKept,
+                                { clinicId: clinic.id, deletedBy: currentUser.username });
+                        }
                         const savedUsers = await processUsersForSave(clinicUsers, existingUsers);
                         await kv.put(`clinic:${clinic.id}:users`, JSON.stringify(savedUsers));
+                        await clearTombstonesForNewUsers(kv, clinicUsers, existingUsers);
                     }
                 }
                 // 保存 platform_admins（如果有）
                 const platformAdmins = body.users.filter(u => u.role === ROLE_PLATFORM_ADMIN);
                 if (platformAdmins.length > 0) {
                     const existingAdmins = (await kv.get(KV_SYSTEM_PLATFORM_ADMINS, 'json')) || [];
+                    // ★ 平台管理员不允许经批量保存删除（防自锁管理入口；删除须走专用路径）
+                    const submittedNames = new Set(platformAdmins.map(u => String(u.username || '').trim().toLowerCase()));
+                    const droppedAdmin = existingAdmins.find(a => a.username && !submittedNames.has(String(a.username).trim().toLowerCase()));
+                    if (droppedAdmin) {
+                        return json({ success: false, error: `平台管理员 ${droppedAdmin.username} 不能通过批量保存移除，请使用专用删除入口` }, 400);
+                    }
                     const savedAdmins = await processUsersForSave(platformAdmins, existingAdmins);
                     await kv.put(KV_SYSTEM_PLATFORM_ADMINS, JSON.stringify(savedAdmins));
                 }
-                return json({ success: true, message: 'Users saved successfully', count: body.users.length });
+                return json({ success: true, message: 'Users saved successfully', count: body.users.length, removedAccounts: batchRemoved });
             }
 
             if (isClinicAdmin(currentUser)) {
@@ -3044,9 +3074,13 @@ export async function onRequest(context) {
                     }
                 }
 
+                // ★ 2026-09-23 名单外既有用户=被删除：撤 token+写墓碑（删除联动）
+                const removedAccounts = await revokeRemovedUsers(kv, existingUsers, body.users,
+                    { clinicId: clinicId, deletedBy: currentUser.username });
                 const savedUsers = await processUsersForSave(body.users, existingUsers);
                 await kv.put(`clinic:${clinicId}:users`, JSON.stringify(savedUsers));
-                return json({ success: true, message: 'Users saved successfully', count: body.users.length });
+                await clearTombstonesForNewUsers(kv, body.users, existingUsers);
+                return json({ success: true, message: 'Users saved successfully', count: body.users.length, removedAccounts });
             }
 
             // doctor：仅改自己密码
@@ -3252,9 +3286,13 @@ export async function onRequest(context) {
                 allowSavePrescription: u.allowSavePrescription !== undefined ? u.allowSavePrescription : true
             }));
 
-            // 使用 processUsersForSave 哈希密码 + 合并
-            const savedUsers = await processUsersForSave(normalizedUsers, existingClinicUsers);
-            await kv.put(`clinic:${targetClinicId}:users`, JSON.stringify(savedUsers));
+            // 使用 processUsersForSave 哈希密码；★ 必须与存量用户【合并】后写回
+            // （旧代码只写新导入名单=整诊所存量用户被覆盖删除的事故隐患）
+            const importedSaved = await processUsersForSave(normalizedUsers, existingClinicUsers);
+            const mergedUsers = [...existingClinicUsers, ...importedSaved];
+            await kv.put(`clinic:${targetClinicId}:users`, JSON.stringify(mergedUsers));
+            // 导入即真实开通：清除新用户名可能残留的删除墓碑
+            await clearTombstonesForNewUsers(kv, normalizedUsers, existingClinicUsers);
 
             await writeAuditLog(kv, targetClinicId, currentUser.username, currentUser.role, 'import_users', `clinic=${clinic.name}, imported=${normalizedUsers.length}, skipped=${skipped.length}`, context);
 
@@ -3473,6 +3511,45 @@ export async function onRequest(context) {
 }
 
 // 处理用户列表保存：明文密码哈希、保留原密码
+// ★ 2026-09-23 批量保存=按提交名单重建用户数组：名单外的既有用户等同于被删除。
+//   必须与 delete-user 同口径「撤 token + 清会话 + 写账号墓碑」，否则旧保存接口
+//   会成为绕过吊销联动的静默删人通道。返回被移除账号数。
+async function revokeRemovedUsers(kv, existingUsers, keptUsers, context) {
+    const kept = new Set((keptUsers || [])
+        .map(u => String((u && u.username) == null ? '' : u.username).trim().toLowerCase()));
+    let removed = 0;
+    for (const old of (existingUsers || [])) {
+        if (!old || !old.username) continue;
+        if (kept.has(String(old.username).trim().toLowerCase())) continue;
+        if (old.role === ROLE_PLATFORM_ADMIN) continue;  // 平台管理员不经业务保存路径删除
+        try { await revokeAllUserTokens(kv, old.username); } catch (e) {}
+        try { await clearUserSession(kv, old.username); } catch (e) {}
+        try {
+            const __w = await writeAccountTombstone(kv, {
+                username: old.username,
+                phone: old.phone || '',
+                clinicId: context && context.clinicId,
+                deletedBy: (context && context.deletedBy) || 'batch-save',
+                reason: 'batch-save-delete'
+            });
+            if (__w) removed++;
+        } catch (e) { console.warn('revokeRemovedUsers tombstone error:', e && e.message); }
+    }
+    return removed;
+}
+
+// 批量保存/导入中新增的用户=真实重新开通：清除可能存在的删除墓碑（双键同清）
+async function clearTombstonesForNewUsers(kv, newUsers, existingUsers) {
+    const existingNames = new Set((existingUsers || []).map(u => String((u && u.username) || '').trim().toLowerCase()));
+    let cleared = 0;
+    for (const nu of (newUsers || [])) {
+        const name = String((nu && nu.username) || '').trim();
+        if (!name || existingNames.has(name.toLowerCase())) continue;
+        try { if (await clearAccountTombstone(kv, name)) cleared++; } catch (e) {}
+    }
+    return cleared;
+}
+
 async function processUsersForSave(newUsers, existingUsers) {
     const now = getNowISO();
     const result = [];

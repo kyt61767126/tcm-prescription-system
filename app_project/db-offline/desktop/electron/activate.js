@@ -22,6 +22,12 @@ const os = require('os');
 const crypto = require('crypto');
 const licenseManager = require('./license-manager');
 
+// ★ 2026-09-23：主进程注入「当前登录用户」访问器。激活窗关闭复核闸门时透传
+//   用户名（账号墓碑按用户名裁决）；无登录态时为 null——设备级裁决照跑，
+//   但闸门内部不会清除任何账号级拒绝标记。
+let __getCurrentUser = null;
+function bindUserContext(getCurrentUser) { __getCurrentUser = getCurrentUser; }
+
 // ★ 云端激活 API URL（与 public/index.html 的 CLOUD_API_BASE 一致）
 // ★ P2 服务端收口（KNOWLEDGE 条目三十七）：激活统一走 claim 门面
 //   （claim = validate 业务逻辑 + machineId schema-guard 前置守门，
@@ -459,7 +465,12 @@ function showActivateWindow(parentWindow) {
         if (safeParent) safeParent.hide();
         (async () => {
             try {
-                const gateResult = await licenseManager.verifyLoginGate();
+                let gateUsername = '';
+                try {
+                    const __cu = __getCurrentUser ? __getCurrentUser() : null;
+                    if (__cu && __cu.username) gateUsername = String(__cu.username);
+                } catch (e) {}
+                const gateResult = await licenseManager.verifyLoginGate(gateUsername || undefined);
                 if (gateResult.ok) {
                     if (safeParent && !safeParent.isDestroyed()) {
                         safeParent.show();
@@ -1081,6 +1092,7 @@ async function getActivationFlowState() {
 
 module.exports = {
     getMachineId,
+    bindUserContext,   // ★ 2026-09-23 主进程注入当前登录用户访问器
     startTrial,
     activateOnline,
     claimFreeOnline,   // ★ 2026-09-21 离线免费版领取

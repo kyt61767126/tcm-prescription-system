@@ -3309,7 +3309,7 @@ let currentUser = null;
                     //   LICENSED 才放行（后台删除诊所/激活码即拒绝）；试用期内放行；
                     //   断网 7 天宽限。同时补写 license:machineId 让主窗口心跳复活。
                     if (window.AuthCore && typeof AuthCore.verifyLoginGate === 'function') {
-                        const __gate = await AuthCore.verifyLoginGate();
+                        const __gate = await AuthCore.verifyLoginGate(user.username || loginUsername);
                         if (!__gate.ok) {
                             errorDiv.textContent = __gate.message;
                             errorDiv.style.display = 'block';

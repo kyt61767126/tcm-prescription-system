@@ -815,27 +815,32 @@ export async function writeAccountTombstone(kv, info = {}) {
     try {
         const nowIso = new Date().toISOString();
         const prev = (await kv.get(accountTombstoneKey(username), 'json')) || null;
+        // ★ linkedNames=本墓碑的全部登录身份（用户名+手机号别名），清除时任一键
+        //   被重新开通都能据此双键同清，避免别名残留把合法重开账号永久锁死。
+        const phone = normalizeAccountName(info.phone);
+        const linked = Array.from(new Set([username, phone,
+            ...((prev && Array.isArray(prev.linkedNames)) ? prev.linkedNames : [])].filter(Boolean)));
         const entry = {
             username,
             clinicId: info.clinicId || (prev && prev.clinicId) || '',
             reason: info.reason || 'delete-user',
             deletedBy: info.deletedBy || (prev && prev.deletedBy) || '',
             firstDeletedAt: (prev && prev.firstDeletedAt) || nowIso,
-            deletedAt: nowIso
+            deletedAt: nowIso,
+            linkedNames: linked
         };
         await kv.put(accountTombstoneKey(username), JSON.stringify(entry));
         // ★ 2026-09-23 手机号别名：云端/部分端登录以手机号作为账号名上报裁决，
-        //   只写 username 键会漏掉手机号登录路径。别名键与主墓碑同形，重新开通
-        //   时 clearAccountTombstone 需对两个名字分别清除（见调用方）。
-        const phone = normalizeAccountName(info.phone);
+        //   只写 username 键会漏掉手机号登录路径。别名键同形记录并带 linkedNames。
         if (phone && phone !== username) {
             try {
-                await kv.put(accountTombstoneKey(phone), JSON.stringify({ ...entry, username: phone }));
+                await kv.put(accountTombstoneKey(phone),
+                    JSON.stringify({ ...entry, username: phone, linkedNames: linked }));
             } catch (pe) {
                 console.warn('[account] 手机号墓碑别名写入失败(不阻断):', pe && pe.message);
             }
         }
-        console.warn('[account] 账号墓碑已写入:', username, 'clinic=', entry.clinicId);
+        console.warn('[account] 账号墓碑已写入:', username, 'clinic=', entry.clinicId, 'linked=', linked.join(','));
         return entry;
     } catch (e) {
         console.warn('[account] writeAccountTombstone 落标记失败(不阻断删除):', e && e.message);
@@ -856,12 +861,20 @@ export async function getAccountTombstone(kv, username) {
 }
 
 // 清除账号墓碑（账号被真实重新开通时调用）
+// ★ 依据记录 linkedNames 双键同清（用户名主键 + 手机号别名）：只清单键会让
+//   别名残留，用户改名回别名身份（如 zm↔手机号）时被永久误锁。
 export async function clearAccountTombstone(kv, username) {
     const name = normalizeAccountName(username);
     if (!kv || !name) return false;
     try {
-        await kv.delete(accountTombstoneKey(name));
-        console.log('[account] 账号墓碑已清除(账号重新开通):', name);
+        const rec = (await kv.get(accountTombstoneKey(name), 'json')) || null;
+        const names = Array.from(new Set(
+            [name, ...((rec && Array.isArray(rec.linkedNames)) ? rec.linkedNames.map(normalizeAccountName) : [])]
+                .filter(Boolean)));
+        for (const n of names) {
+            try { await kv.delete(accountTombstoneKey(n)); } catch (e) {}
+        }
+        console.log('[account] 账号墓碑已清除(账号重新开通):', names.join(','));
         return true;
     } catch (e) {
         console.warn('[account] clearAccountTombstone 失败:', e && e.message);

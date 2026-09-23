@@ -39,6 +39,8 @@ let mainWindow;
 let loginWindow;
 let sharedSession;
 let currentLoggedInUser = null;
+// ★ 2026-09-23：激活窗关闭闸门复核需要当前登录用户名（账号墓碑按用户名裁决）
+try { activateManager.bindUserContext(() => currentLoggedInUser); } catch (e) {}
 const SESSION_PARTITION = 'persist:tcm-prescription-dingzhi';
 
 // ============================================================================

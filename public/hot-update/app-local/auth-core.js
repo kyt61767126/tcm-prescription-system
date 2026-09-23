@@ -2228,27 +2228,35 @@
     const LOGIN_GATE_ENTITLEMENT_URL = 'https://tcm-prescription-system.pages.dev/api/license/entitlement';
 
     let __loginGatePromise = null;
+    let __loginGateUser = '';
     function resetLoginGateCache() { __loginGatePromise = null; }
-    async function verifyLoginGate() {
+    async function verifyLoginGate(usernameInput) {
+        const username = String(usernameInput == null ? '' : usernameInput).trim().slice(0,64);
         // ★ 桌面端：裁决一律走主进程 IPC（file:// 渲染 fetch 必被 CORS 拦截，
         //   锚点 gate.dat 签名由主进程持有）。下方渲染 fetch 仅作无 IPC 环境兜底。
         try {
             const licApi = global.electronAPI && global.electronAPI.license;
             if (licApi && typeof licApi.verifyGate === 'function') {
-                return await licApi.verifyGate();
+                return await licApi.verifyGate(username);
             }
         } catch (e) { console.warn('[LoginGate] IPC 裁决异常(走渲染兜底):', e && e.message); }
-        // 页面生命周期内兜底裁决只跑一次；window online 时清空（宽限拒绝后
-        // 联网重试不必重启应用）。
-        if (!__loginGatePromise) __loginGatePromise = __verifyLoginGateInner();
+        // 兜底裁决按 username 缓存（不同账号登录不串用）；window online 时清空
+        // （宽限拒绝后联网重试不必重启应用）。
+        if (!__loginGatePromise || __loginGateUser !== username) {
+            __loginGateUser = username;
+            __loginGatePromise = __verifyLoginGateInner(username);
+        }
         return __loginGatePromise;
     }
     try {
         global.addEventListener('online', resetLoginGateCache);
     } catch (e) {}
 
-    async function __verifyLoginGateInner() {
+    async function __verifyLoginGateInner(usernameInput) {
         const fail = (message) => ({ ok: false, message });
+        const username = String(usernameInput == null ? '' : usernameInput).trim().slice(0,64);
+        // ★ 2026-09-23 账号删除文案
+        const accountRevokedMsg = '该账号已被删除，无法登录。如有疑问请联系客服';
         try {
             const licApi = global.electronAPI && global.electronAPI.license;
             let status = null;
@@ -2302,23 +2310,62 @@
                     const resp = await fetch(LOGIN_GATE_ENTITLEMENT_URL, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ machineId: machineId, code: code || undefined })
+                        body: JSON.stringify({ machineId: machineId, code: code || undefined,
+                            username: username || undefined })
                     });
                     if (resp.ok) { ent = await resp.json(); }
+                    else if (resp.status === 403) {
+                        // ★ 2026-09-23：403 = 设备安全封锁（device_block），按
+                        //   2026-09-11 红线「本地使用不阻断」，ent 留空走下方
+                        //   宽限（与网络不可达同口径；此为旧主进程兜底路径）。
+                    }
                     else {
-                        // ★ S2 修复：明确收到 HTTP 错误（403/429/500…）不是断网，
+                        // ★ S2 修复：其他 HTTP 错误（429/500…）不是断网，
                         //   fail-closed，绝不落入宽限 fail-open。
                         return fail('授权服务暂时不可用（HTTP ' + resp.status + '），请稍后重试或联系客服');
                     }
                 } catch (e) { /* 仅真·网络不可达（TypeError）才走下方宽限 */ }
 
                 if (ent) {
+                    // ★ 2026-09-23 账号删除优先裁决：即使设备授权有效，账号墓碑命中即硬拒。
+                    //   落账号级拒绝标记【按用户名集合】（断网也不享受宽限；同机多账号
+                    //   互不覆盖；旧版单条记录读入自动迁移）。
+                    const __readRejectMap = async () => {
+                        let raw = null;
+                        try { raw = JSON.parse(await StorageAdapter.getItem('license:accountReject') || 'null'); } catch (e) { raw = null; }
+                        if (!raw || typeof raw !== 'object') return { __arMap: 1 };
+                        // 旧版单条迁移
+                        if (raw.__arMap !== 1 && typeof raw.state === 'string' && typeof raw.username === 'string') {
+                            const m = { __arMap: 1 };
+                            m[raw.username || ''] = { username: raw.username, state: raw.state || 'ACCOUNT_REVOKED', at: Number(raw.at) || Date.now() };
+                            return m;
+                        }
+                        raw.__arMap = 1;
+                        return raw;
+                    };
+                    if (ent.success && ent.accountState === 'ACCOUNT_REVOKED' && username) {
+                        try {
+                            const __m = await __readRejectMap();
+                            __m[username] = { username: username, state: 'ACCOUNT_REVOKED', at: Date.now() };
+                            await StorageAdapter.setItem('license:accountReject', JSON.stringify(__m));
+                        } catch (e) {}
+                        return fail(accountRevokedMsg);
+                    }
                     if (ent.success && ent.state === 'LICENSED') {
                         const now = String(Date.now());
                         try {
                             await StorageAdapter.setItem('license:lastVerify', now);
                             await StorageAdapter.setItem('license:lastHeartbeat', now);
                             await StorageAdapter.removeItem('license:offlineStart');
+                            // 服务端确认账号无墓碑：只清【本用户名】的拒绝标记；
+                            // ★ username 缺失时绝不清理（防同机他人正常联网替被删账号解封）
+                            if (username) {
+                                const __m = await __readRejectMap();
+                                delete __m[username];
+                                const __rest = Object.keys(__m).filter(k => k !== '__arMap');
+                                if (__rest.length === 0) await StorageAdapter.removeItem('license:accountReject');
+                                else await StorageAdapter.setItem('license:accountReject', JSON.stringify(__m));
+                            }
                         } catch (e) {}
                         return { ok: true };
                     }
@@ -2335,7 +2382,19 @@
                     return fail(ent.message || '授权校验未通过，请联系客服');
                 }
 
-                // ④ 仅网络不可达：7 天宽限（与心跳 OFFLINE_LOCK_MS 同口径）
+                // ④ 仅网络不可达：先查账号级硬拒（该 username 在线收到过账号删除，
+                //   断网也不给宽限），再走 7 天宽限（与心跳 OFFLINE_LOCK_MS 同口径）
+                if (username) {
+                    let __arm = null;
+                    try { __arm = JSON.parse(await StorageAdapter.getItem('license:accountReject') || 'null'); } catch (e) {}
+                    // 新集合形态按键取；旧版单条按 username 比对
+                    const __arRec = (__arm && typeof __arm === 'object')
+                        ? (__arm[username] || (typeof __arm.state === 'string' && __arm.username === username ? __arm : null))
+                        : null;
+                    if (__arRec) {
+                        return fail(accountRevokedMsg);
+                    }
+                }
                 const now = Date.now();
                 let offlineStart = 0;
                 try { offlineStart = Number(await StorageAdapter.getItem('license:offlineStart')) || 0; } catch (e) {}
@@ -2389,7 +2448,17 @@
                 if (!st || !st.valid) return;
                 const lt = st.licenseType || st.type || '';
                 if (st.type !== 'licensed' || lt === 'free') return;
-                const g = await verifyLoginGate();
+                // ★ 2026-09-23 主窗自检必须带当前登录用户名：账号墓碑按用户名裁决，
+                //   无 username 的裁决既查不到墓碑还会（旧码）误清他人账号拒绝标记。
+                let gateUsername = '';
+                try {
+                    const __cu = await StorageAdapter.getItem('auth:currentUser');
+                    if (__cu) {
+                        const __o = JSON.parse(__cu);
+                        if (__o && __o.username) gateUsername = String(__o.username);
+                    }
+                } catch (e) {}
+                const g = await verifyLoginGate(gateUsername || undefined);
                 if (!g.ok) {
                     global.__licenseExpired = true;
                     // ★ 硬吊销：主进程即刻隐藏主窗+提示（激活窗关闭后主进程再裁决）；
@@ -4538,9 +4607,13 @@
     // 挂 global：跨 IIFE 供 index.html handleForgotPassword（三态安全门）调用
     global.__isDeviceLicensed = __isDeviceLicensed;
 
+    // ★ 2026-09-23 用户显式关闭注册窗标记：同一会话内不再自动重弹
+    //   （2s 后的二次 maybePromptRegistration 尊重它；重载页面才重置）。
+    let __localRegUserClosed = false;
     function showLocalRegisterModal() {
         // 若已打开则忽略
         if (document.getElementById('localRegisterOverlay')) return;
+        __localRegUserClosed = false;
         const PHONE_RE = /^1[3-9]\d{9}$/;
         const INPUT_STYLE = 'width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;';
 
@@ -4588,6 +4661,9 @@
                 '</div>' +
                 '<div id="localRegError" style="display:none;margin-bottom:12px;padding:10px 12px;border-radius:8px;background:#fdecea;color:#c0392b;font-size:13px;"></div>' +
                 '<button id="localRegSubmitBtn" style="width:100%;padding:12px;font-size:15px;border:none;border-radius:8px;color:#fff;background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);cursor:pointer;font-weight:bold;">✅ 完成注册</button>' +
+                '<div style="text-align:center;margin-top:10px;">' +
+                    '<span id="localRegCloseLink" style="font-size:13px;color:#909399;cursor:pointer;text-decoration:underline;">暂不注册，已有账号登录</span>' +
+                '</div>' +
             '</div>' +
 
             // 提交中（默认隐藏）
@@ -4657,6 +4733,14 @@
         }
         const laterBtn = document.getElementById('localRegLaterBtn');
         if (laterBtn) laterBtn.addEventListener('click', function () { close(); reloadLoginPage(); });
+
+        // ★ 2026-09-23 表单态「暂不注册，已有账号登录」：标记用户显式关闭，
+        //   本会话内 2s 后的二次自动检测不再重弹。
+        const closeLink = document.getElementById('localRegCloseLink');
+        if (closeLink) closeLink.addEventListener('click', function () {
+            __localRegUserClosed = true;
+            close();
+        });
 
         // 提交注册
         const submitBtn = document.getElementById('localRegSubmitBtn');
@@ -4795,6 +4879,8 @@
     // ★ 注册前置检测：登录上下文 + 未激活 + 未注册 → 强制先注册（弹窗置于激活弹窗之上）
     async function maybePromptRegistration() {
         try {
+            // ★ 用户本会话已显式关闭注册窗 → 不再自动弹（重载页面才重置）
+            if (__localRegUserClosed) return;
             // 登录上下文检测（双端）：
             //   ① 离线APP 壳 index.html：loginOverlay（登录时可见）
             //   ② 离线桌面登录窗 login.html：无 loginOverlay，特征 = btnOk + loginPassword

@@ -2328,12 +2328,26 @@
 
                 if (ent) {
                     // ★ 2026-09-23 账号删除优先裁决：即使设备授权有效，账号墓碑命中即硬拒。
-                    //   落账号级拒绝标记（断网也不享受宽限；按用户名隔离不影响同机他人）。
-                    if (ent.success && ent.accountState === 'ACCOUNT_REVOKED') {
+                    //   落账号级拒绝标记【按用户名集合】（断网也不享受宽限；同机多账号
+                    //   互不覆盖；旧版单条记录读入自动迁移）。
+                    const __readRejectMap = async () => {
+                        let raw = null;
+                        try { raw = JSON.parse(await StorageAdapter.getItem('license:accountReject') || 'null'); } catch (e) { raw = null; }
+                        if (!raw || typeof raw !== 'object') return { __arMap: 1 };
+                        // 旧版单条迁移
+                        if (raw.__arMap !== 1 && typeof raw.state === 'string' && typeof raw.username === 'string') {
+                            const m = { __arMap: 1 };
+                            m[raw.username || ''] = { username: raw.username, state: raw.state || 'ACCOUNT_REVOKED', at: Number(raw.at) || Date.now() };
+                            return m;
+                        }
+                        raw.__arMap = 1;
+                        return raw;
+                    };
+                    if (ent.success && ent.accountState === 'ACCOUNT_REVOKED' && username) {
                         try {
-                            await StorageAdapter.setItem('license:accountReject', JSON.stringify({
-                                username: username || '', state: 'ACCOUNT_REVOKED', at: Date.now()
-                            }));
+                            const __m = await __readRejectMap();
+                            __m[username] = { username: username, state: 'ACCOUNT_REVOKED', at: Date.now() };
+                            await StorageAdapter.setItem('license:accountReject', JSON.stringify(__m));
                         } catch (e) {}
                         return fail(accountRevokedMsg);
                     }
@@ -2343,11 +2357,14 @@
                             await StorageAdapter.setItem('license:lastVerify', now);
                             await StorageAdapter.setItem('license:lastHeartbeat', now);
                             await StorageAdapter.removeItem('license:offlineStart');
-                            // 服务端确认账号无墓碑：清除本用户名账号拒绝标记
-                            let __ar = null;
-                            try { __ar = JSON.parse(await StorageAdapter.getItem('license:accountReject') || 'null'); } catch (e) {}
-                            if (!__ar || !username || (__ar && __ar.username === username)) {
-                                await StorageAdapter.removeItem('license:accountReject');
+                            // 服务端确认账号无墓碑：只清【本用户名】的拒绝标记；
+                            // ★ username 缺失时绝不清理（防同机他人正常联网替被删账号解封）
+                            if (username) {
+                                const __m = await __readRejectMap();
+                                delete __m[username];
+                                const __rest = Object.keys(__m).filter(k => k !== '__arMap');
+                                if (__rest.length === 0) await StorageAdapter.removeItem('license:accountReject');
+                                else await StorageAdapter.setItem('license:accountReject', JSON.stringify(__m));
                             }
                         } catch (e) {}
                         return { ok: true };
@@ -2368,9 +2385,13 @@
                 // ④ 仅网络不可达：先查账号级硬拒（该 username 在线收到过账号删除，
                 //   断网也不给宽限），再走 7 天宽限（与心跳 OFFLINE_LOCK_MS 同口径）
                 if (username) {
-                    let __ar = null;
-                    try { __ar = JSON.parse(await StorageAdapter.getItem('license:accountReject') || 'null'); } catch (e) {}
-                    if (__ar && __ar.username === username) {
+                    let __arm = null;
+                    try { __arm = JSON.parse(await StorageAdapter.getItem('license:accountReject') || 'null'); } catch (e) {}
+                    // 新集合形态按键取；旧版单条按 username 比对
+                    const __arRec = (__arm && typeof __arm === 'object')
+                        ? (__arm[username] || (typeof __arm.state === 'string' && __arm.username === username ? __arm : null))
+                        : null;
+                    if (__arRec) {
                         return fail(accountRevokedMsg);
                     }
                 }
@@ -2427,7 +2448,17 @@
                 if (!st || !st.valid) return;
                 const lt = st.licenseType || st.type || '';
                 if (st.type !== 'licensed' || lt === 'free') return;
-                const g = await verifyLoginGate();
+                // ★ 2026-09-23 主窗自检必须带当前登录用户名：账号墓碑按用户名裁决，
+                //   无 username 的裁决既查不到墓碑还会（旧码）误清他人账号拒绝标记。
+                let gateUsername = '';
+                try {
+                    const __cu = await StorageAdapter.getItem('auth:currentUser');
+                    if (__cu) {
+                        const __o = JSON.parse(__cu);
+                        if (__o && __o.username) gateUsername = String(__o.username);
+                    }
+                } catch (e) {}
+                const g = await verifyLoginGate(gateUsername || undefined);
                 if (!g.ok) {
                     global.__licenseExpired = true;
                     // ★ 硬吊销：主进程即刻隐藏主窗+提示（激活窗关闭后主进程再裁决）；
