@@ -640,7 +640,7 @@
             // ★ 2026-09-22 P0 登录后台闸门：本地密码通过后，已激活机必须后台裁决
             //   LICENSED 才放行（后台删除诊所/激活码即拒绝）；试用期内放行；
             //   断网 7 天宽限。同时补写 license:machineId 让主窗口心跳复活。
-            const _gate = await AuthCore.verifyLoginGate();
+            const _gate = await AuthCore.verifyLoginGate(user.username || username);
             if (!_gate.ok) {
                 showError(_gate.message);
                 return;

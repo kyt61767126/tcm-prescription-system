@@ -2189,14 +2189,18 @@ function stopHeartbeat() {
 // ============================================================================
 const GATE_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
 
-async function adjudicateViaMainProcess(machineId) {
+async function adjudicateViaMainProcess(machineId, username) {
     const controller = new AbortController();
     const tid = setTimeout(() => controller.abort(), 15000);
     try {
+        // ★ 2026-09-23 账号删除联动：透传 username，服务端只读账号墓碑后下发
+        //   accountState（命中 ACCOUNT_REVOKED）。
+        const payload = { machineId: machineId };
+        if (username) payload.username = username;
         const resp = await fetch(ENTITLEMENT_API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ machineId: machineId }),
+            body: JSON.stringify(payload),
             signal: controller.signal
         });
         if (!resp.ok) return { httpFail: resp.status };
@@ -2215,6 +2219,7 @@ function gateStateMessage(state) {
         'NO_LICENSE': '该诊所/激活码已被删除，无法登录。如有疑问请联系客服',
         'LICENSE_REVOKED': '授权已被吊销，无法登录，请联系客服',
         'LICENSE_EXPIRED': '授权已过期，请续费后再登录',
+        'ACCOUNT_REVOKED': '该账号已被删除，无法登录。如有疑问请联系客服',
         'DEVICE_DISABLED': '本设备已被停用，请联系客服'
     }[state] || '授权状态异常，无法登录，请联系客服';
 }
@@ -2280,7 +2285,9 @@ function getUnifiedGate(mid) {
     const lastReject = gate.lastReject || anchor.lastReject || null;
     const lastVerify = Math.max(Number(gate.lastVerify) || 0, Number(anchor.lastVerify) || 0);
     const lastSeenHigh = Math.max(Number(gate.lastSeenHigh) || 0, Number(anchor.lastSeenHigh) || 0);
-    return { gate, anchor, everActivated, lastReject, lastVerify, lastSeenHigh };
+    // ★ 2026-09-23 账号级拒绝标记（按 username 隔离，不影响同机其他账号）
+    const accountReject = gate.accountReject || anchor.accountReject || null;
+    return { gate, anchor, everActivated, lastReject, lastVerify, lastSeenHigh, accountReject };
 }
 function persistUnified(u, mid) {
     writeGateState(u.gate, mid);
@@ -2301,10 +2308,15 @@ function bumpHighWater(u, now) {
 // 只能联网拿 LICENSED 清除）。gate 与 anchor 的 lastReject 任一存在即阻断。
 // ★ 高-1 修复：两侧 offlineStart 取【最早】值，绝不覆盖另一侧已有的起点
 //   （旧码读不到 gate 时把两侧都重写成 now，删单文件即可无限重置）。
-function gateGracePass(u, mid) {
+function gateGracePass(u, mid, username) {
     const now = Date.now();
     if (u.lastReject) {
         return { ok: false, message: '授权未通过授权服务器核验，请联网后重试' };
+    }
+    // ★ 2026-09-23 账号级硬拒：该 username 在线收到过 ACCOUNT_REVOKED，断网也
+    //   不享受宽限（按用户名精确匹配，同机其他未删账号不受影响）。
+    if (username && u.accountReject && u.accountReject.username === username) {
+        return { ok: false, message: gateStateMessage(u.accountReject.state || 'ACCOUNT_REVOKED') };
     }
     const gs = Number(u.gate.offlineStart) || 0;
     const as = Number(u.anchor.offlineStart) || 0;
@@ -2325,10 +2337,12 @@ function gateGracePass(u, mid) {
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-async function verifyLoginGate() {
+async function verifyLoginGate(usernameInput) {
     const fail = (message) => ({ ok: false, message });
     const mid = getMachineId();
     if (!mid) return fail('无法获取设备标识，请重启软件后重试');
+    // ★ 2026-09-23 账号删除联动：本地密码已通过的登录用户名，透传到裁决端点
+    const username = String(usernameInput == null ? '' : usernameInput).trim().slice(0,64);
 
     let local;
     try { local = validateLicense({ localMachineId: mid }); }
@@ -2353,6 +2367,25 @@ async function verifyLoginGate() {
         return true;
     };
 
+    // ★ 2026-09-23 账号墓碑消费：服务端下发 accountState=ACCOUNT_REVOKED → 双锚点
+    //   写【账号级】拒绝标记并硬拒（断网/MITM 均不可绕过；按用户名隔离，不影响
+    //   同机其他账号）。返回非 null 即为应直接返回的拒绝结果。
+    const accountHardFail = (ent) => {
+        if (ent && ent.accountState === 'ACCOUNT_REVOKED') {
+            const rec = { username: username || '', state: 'ACCOUNT_REVOKED', at: now };
+            u.gate.accountReject = rec;
+            u.anchor.accountReject = rec;
+            persistUnified(u, mid);
+            return fail(gateStateMessage('ACCOUNT_REVOKED'));
+        }
+        return null;
+    };
+    // 服务端确认该账号无墓碑（真实有效）：清除本用户名残留的账号拒绝标记
+    const clearAccountRejectIfMatch = () => {
+        if (u.gate.accountReject && (!username || u.gate.accountReject.username === username)) u.gate.accountReject = null;
+        if (u.anchor.accountReject && (!username || u.anchor.accountReject.username === username)) u.anchor.accountReject = null;
+    };
+
     // ③ 永久免费版豁免（产品承诺永久离线可用；free license 服务端签发不可伪造）
     if (local.valid && local.type === 'licensed' && lt === 'free') {
         bumpHighWater(u, now);
@@ -2362,7 +2395,7 @@ async function verifyLoginGate() {
 
     // ① 付费已激活：在线裁决
     if (local.valid && local.type === 'licensed') {
-        let r = await adjudicateViaMainProcess(mid);
+        let r = await adjudicateViaMainProcess(mid, username);
 
         // ★ P2-1：激活后 KV 传播最长约 60s，近 10 分钟内有 lastVerify 即收到
         //   NO_LICENSE，延时 2.5s 重裁一次（回拨可疑时不走此软重试）。
@@ -2370,10 +2403,13 @@ async function verifyLoginGate() {
             r.ent.state === 'NO_LICENSE' &&
             u.lastVerify && now - u.lastVerify < 10 * 60 * 1000) {
             await sleep(2500);
-            r = await adjudicateViaMainProcess(mid);
+            r = await adjudicateViaMainProcess(mid, username);
         }
 
         if (r.ok && r.ent && r.ent.success === true && r.ent.state) {
+            // ★ 账号删除优先裁决：即使设备授权 LICENSED，账号墓碑命中也硬拒
+            const __accFail = accountHardFail(r.ent);
+            if (__accFail) return __accFail;
             if (r.ent.state === 'LICENSED') {
                 if (rollbackSuspected) {
                     if (!healHighFromServer(r.ent)) return fail(rollbackMessage);
@@ -2383,6 +2419,7 @@ async function verifyLoginGate() {
                 u.gate.everActivated = true; u.anchor.everActivated = true;
                 u.gate.lastVerify = now; u.gate.offlineStart = null; u.gate.lastReject = null;
                 u.anchor.lastVerify = now; u.anchor.offlineStart = null; u.anchor.lastReject = null;
+                clearAccountRejectIfMatch();
                 persistUnified(u, mid);
                 return { ok: true };
             }
@@ -2400,7 +2437,7 @@ async function verifyLoginGate() {
         //   的 gateGracePass：受 lastReject 双锚点（曾在线收过硬拒即无宽限，
         //   MITM 注入 403 绕不过吊销）+ 7 天宽限约束。
         if (r.httpFail === 403) {
-            return gateGracePass(u, mid);
+            return gateGracePass(u, mid, username);
         }
         if (r.httpFail) {
             return fail('授权服务暂时不可用（HTTP ' + r.httpFail + '），请稍后重试或联系客服');
@@ -2412,7 +2449,7 @@ async function verifyLoginGate() {
             // success=false 或结构缺失，一律 fail-closed（低-1）
             return fail((r.ent && r.ent.message) || '授权校验未通过，请联系客服');
         }
-        return gateGracePass(u, mid);
+        return gateGracePass(u, mid, username);
     }
 
     // ② 试用期
@@ -2420,8 +2457,11 @@ async function verifyLoginGate() {
         if (u.everActivated || rollbackSuspected) {
             // 曾激活机 license.dat 被删，或时钟回拨可疑（纯试用也一样）：
             // 必须在线证明 LICENSED。
-            const r = await adjudicateViaMainProcess(mid);
+            const r = await adjudicateViaMainProcess(mid, username);
             if (r.ok && r.ent && r.ent.success === true && r.ent.state) {
+                // ★ 账号删除优先裁决
+                const __accFail = accountHardFail(r.ent);
+                if (__accFail) return __accFail;
                 if (r.ent.state === 'LICENSED') {
                     if (rollbackSuspected) {
                         if (!healHighFromServer(r.ent)) return fail(rollbackMessage);
@@ -2432,10 +2472,11 @@ async function verifyLoginGate() {
                     // ★ 中-1：LICENSED 落账双清 lastReject/offlineStart
                     u.gate.lastVerify = now; u.gate.offlineStart = null; u.gate.lastReject = null;
                     u.anchor.lastVerify = now; u.anchor.offlineStart = null; u.anchor.lastReject = null;
+                    clearAccountRejectIfMatch();
                     persistUnified(u, mid);
                     return { ok: true };
                 }
-                // ★ 高-2 修复：硬失效态同样双写 lastReject（旧码直接 return，
+                // ★ 高-2 修复：硬失效态同样双写 lastReject（旧码直接 return,
                 //   删 dat 后断网即可吃宽限，比不删 dat 处境更好）。
                 u.gate.lastReject = r.ent.state; u.gate.rejectAt = now;
                 u.anchor.lastReject = r.ent.state; u.anchor.rejectAt = now;
@@ -2444,13 +2485,13 @@ async function verifyLoginGate() {
             }
             if (rollbackSuspected) return fail(rollbackMessage);
             if (r.netFail) {
-                const g = gateGracePass(u, mid);
+                const g = gateGracePass(u, mid, username);
                 if (g.ok) return g;
                 return fail(g.message);  // 超宽限/曾拒：保留可读原因
             }
             if (r.httpFail === 403) {
                 // 设备安全封锁：同付费分支，按 09-11 红线走宽限
-                const g = gateGracePass(u, mid);
+                const g = gateGracePass(u, mid, username);
                 if (g.ok) return g;
                 return fail(g.message);
             }

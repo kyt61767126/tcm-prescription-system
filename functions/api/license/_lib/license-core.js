@@ -791,6 +791,74 @@ export async function getDeviceBlock(kv, machineId) {
 }
 
 // ============================================================================
+//  ★ 2026-09-23 账号墓碑（后台删账号 ↔ 离线吊销联动）
+//  背景：离线登录是【本地密码校验】，登录闸门只按 machineId 裁决激活码——后台
+//    删除「用户账号」（激活码/诊所仍在）时离线客户端完全无感知，仍可登录。
+//  机制：delete-user 成功后给该账号写墓碑；entitlement 裁决带 username 时
+//    【只读】墓碑，命中即在响应带 accountState=ACCOUNT_REVOKED，客户端硬拒。
+//  恢复：账号用同用户名被真实重新开通（ensureClinicUser 激活 / add-clinic_user
+//    管理员补建）时清除墓碑——只有重新开通能恢复，删文件/断网均不可绕过。
+//  KV key: account_tombstone:{username(小写归一)}
+// ============================================================================
+const KV_ACCOUNT_TOMBSTONE_PREFIX = 'account_tombstone:';
+function normalizeAccountName(username) {
+    return String(username == null ? '' : username).trim().toLowerCase();
+}
+function accountTombstoneKey(username) {
+    return KV_ACCOUNT_TOMBSTONE_PREFIX + normalizeAccountName(username);
+}
+
+// 写入账号墓碑（不设过期：删除必须持续到账号被真实重新开通；到期自动解封=绕过吊销）
+export async function writeAccountTombstone(kv, info = {}) {
+    const username = normalizeAccountName(info.username);
+    if (!kv || !username) return null;
+    try {
+        const nowIso = new Date().toISOString();
+        const prev = (await kv.get(accountTombstoneKey(username), 'json')) || null;
+        const entry = {
+            username,
+            clinicId: info.clinicId || (prev && prev.clinicId) || '',
+            reason: info.reason || 'delete-user',
+            deletedBy: info.deletedBy || (prev && prev.deletedBy) || '',
+            firstDeletedAt: (prev && prev.firstDeletedAt) || nowIso,
+            deletedAt: nowIso
+        };
+        await kv.put(accountTombstoneKey(username), JSON.stringify(entry));
+        console.warn('[account] 账号墓碑已写入:', username, 'clinic=', entry.clinicId);
+        return entry;
+    } catch (e) {
+        console.warn('[account] writeAccountTombstone 落标记失败(不阻断删除):', e && e.message);
+        return null;
+    }
+}
+
+// 只读账号墓碑（返回记录或 null；KV 异常按无墓碑处理）
+export async function getAccountTombstone(kv, username) {
+    const name = normalizeAccountName(username);
+    if (!kv || !name) return null;
+    try {
+        return (await kv.get(accountTombstoneKey(name), 'json')) || null;
+    } catch (e) {
+        console.warn('[account] getAccountTombstone 查询失败(按无墓碑处理):', e && e.message);
+        return null;
+    }
+}
+
+// 清除账号墓碑（账号被真实重新开通时调用）
+export async function clearAccountTombstone(kv, username) {
+    const name = normalizeAccountName(username);
+    if (!kv || !name) return false;
+    try {
+        await kv.delete(accountTombstoneKey(name));
+        console.log('[account] 账号墓碑已清除(账号重新开通):', name);
+        return true;
+    } catch (e) {
+        console.warn('[account] clearAccountTombstone 失败:', e && e.message);
+        return false;
+    }
+}
+
+// ============================================================================
 //  ★ 设备-版本绑定（同一台设备只能注册一个版本）
 //  需求：同一台电脑/手机只能激活一个版本（标准版 OR 机构版）
 //  一旦设备绑定某版本，另一个版本的激活/提交请求将被拒绝

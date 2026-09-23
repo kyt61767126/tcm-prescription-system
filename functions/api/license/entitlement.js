@@ -45,7 +45,8 @@
 
 import {
     getKV, getLicense, getDevices, getMaxDevices, versionOf,
-    isTestMachine, checkRateLimit, KV_LICENSE_INDEX, getDeviceBlock, LICENSE_TYPE_CONFIG
+    isTestMachine, checkRateLimit, KV_LICENSE_INDEX, getDeviceBlock, LICENSE_TYPE_CONFIG,
+    getAccountTombstone
 } from './_lib/license-core.js';
 import { isValidMachineId } from './_lib/schema-guard.js';
 
@@ -222,6 +223,9 @@ export async function onRequest(context) {
         const body = await context.request.json().catch(() => ({}));
         const machineId = String(body.machineId || '').trim();
         const code = body.code ? String(body.code).trim().toUpperCase() : '';
+        // ★ 2026-09-23 账号删除联动：带 username 时只读账号墓碑，命中在响应带
+        //   accountState=ACCOUNT_REVOKED（客户端硬拒，即使设备授权仍有效）。
+        const username = String(body.username || '').trim().slice(0, 64);
 
         // 参数校验：machineId 必填 + schema-guard 白名单
         // （垃圾 machineId 在门口就拒——与客户端 normalizeMachineIdResult 同规则）
@@ -242,10 +246,24 @@ export async function onRequest(context) {
             return json({ success: false, error: '设备安全校验未通过，请更换设备或联系客服处理' }, 403);
         }
 
+        // ★ 账号墓碑只读检查（getAccountTombstone 仅 kv.get）——纯只读铁律不破坏。
+        let accountState = null;
+        let accountDeletedAt = null;
+        if (username) {
+            const tomb = await getAccountTombstone(kv, username);
+            if (tomb) {
+                accountState = 'ACCOUNT_REVOKED';
+                accountDeletedAt = tomb.deletedAt || null;
+                console.warn('[entitlement] 账号已删除仍尝试登录:', username, 'machineId=', machineId);
+            }
+        }
+
         const result = await adjudicate(kv, machineId, code);
         return json({
             success: true,
             ...result,
+            accountState,
+            accountDeletedAt,
             serverTime: new Date().toISOString()
         });
 

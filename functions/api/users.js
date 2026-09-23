@@ -11,7 +11,8 @@ import { provisionCloudAccount } from './license/_lib/admin-account.js';
 import { deleteAdminRequest } from './license/_lib/license-write-service.js';
 // ★ 2026-09-08 离线版设备配额反查：license 索引遍历找该诊所激活码，读其多设备绑定列表
 // ★ 2026-09-12 续费同步延期：clinic=update 收费动作按 clinicName 反查同源（一处续费、两端同步）
-import { listLicenses, getDevices, updateLicense, appendLicenseLog } from './license/_lib/license-core.js';
+import { listLicenses, getDevices, updateLicense, appendLicenseLog,
+    writeAccountTombstone, clearAccountTombstone } from './license/_lib/license-core.js';
 // ★ 2026-09-10 审计日志单一事实源（并发安全，独立记录 key）
 import { writeAuditLog } from './_lib/audit-log.js';
 // ★ 2026-09-10 P3 D1 迁移：设备绑定 D1 双写
@@ -781,6 +782,9 @@ export async function onRequest(context) {
             });
             await kv.put(`clinic:${authUser.clinicId}:users`, JSON.stringify(clinicUsers));
 
+            // ★ 2026-09-23 账号被真实重新开通：清除可能存在的删除墓碑（同用户名恢复登录）
+            try { await clearAccountTombstone(kv, username); } catch (e) { console.error('clearAccountTombstone error:', e); }
+
             await writeAuditLog(kv, authUser.clinicId, authUser.username, authUser.role,
                 'add_clinic_user', username, context,
                 { newRole: role, newName: name });
@@ -1145,6 +1149,18 @@ export async function onRequest(context) {
 
             // 立即下线：撤销该用户全部已签发 token
             try { await revokeAllUserTokens(kv, target.username); } catch (e) { console.error('revokeAllUserTokens error:', e); }
+
+            // ★ 2026-09-23 账号墓碑：联动离线吊销。离线登录为本地密码校验、闸门只按
+            //   machineId 裁决——不写墓碑则删账号后离线桌面/APP 仍可登录。墓碑在账号
+            //   被真实重新开通（激活/管理员补建）时由对应创建路径清除。
+            try {
+                await writeAccountTombstone(kv, {
+                    username: target.username,
+                    clinicId: found.clinicId,
+                    deletedBy: authUser.username,
+                    reason: 'delete-user'
+                });
+            } catch (e) { console.error('writeAccountTombstone error:', e); }
 
             await writeAuditLog(kv, found.clinicId, authUser.username, authUser.role,
                 'delete_user', target.username, context,

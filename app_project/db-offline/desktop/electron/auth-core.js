@@ -2228,27 +2228,35 @@
     const LOGIN_GATE_ENTITLEMENT_URL = 'https://tcm-prescription-system.pages.dev/api/license/entitlement';
 
     let __loginGatePromise = null;
+    let __loginGateUser = '';
     function resetLoginGateCache() { __loginGatePromise = null; }
-    async function verifyLoginGate() {
+    async function verifyLoginGate(usernameInput) {
+        const username = String(usernameInput == null ? '' : usernameInput).trim().slice(0,64);
         // ★ 桌面端：裁决一律走主进程 IPC（file:// 渲染 fetch 必被 CORS 拦截，
         //   锚点 gate.dat 签名由主进程持有）。下方渲染 fetch 仅作无 IPC 环境兜底。
         try {
             const licApi = global.electronAPI && global.electronAPI.license;
             if (licApi && typeof licApi.verifyGate === 'function') {
-                return await licApi.verifyGate();
+                return await licApi.verifyGate(username);
             }
         } catch (e) { console.warn('[LoginGate] IPC 裁决异常(走渲染兜底):', e && e.message); }
-        // 页面生命周期内兜底裁决只跑一次；window online 时清空（宽限拒绝后
-        // 联网重试不必重启应用）。
-        if (!__loginGatePromise) __loginGatePromise = __verifyLoginGateInner();
+        // 兜底裁决按 username 缓存（不同账号登录不串用）；window online 时清空
+        // （宽限拒绝后联网重试不必重启应用）。
+        if (!__loginGatePromise || __loginGateUser !== username) {
+            __loginGateUser = username;
+            __loginGatePromise = __verifyLoginGateInner(username);
+        }
         return __loginGatePromise;
     }
     try {
         global.addEventListener('online', resetLoginGateCache);
     } catch (e) {}
 
-    async function __verifyLoginGateInner() {
+    async function __verifyLoginGateInner(usernameInput) {
         const fail = (message) => ({ ok: false, message });
+        const username = String(usernameInput == null ? '' : usernameInput).trim().slice(0,64);
+        // ★ 2026-09-23 账号删除文案
+        const accountRevokedMsg = '该账号已被删除，无法登录。如有疑问请联系客服';
         try {
             const licApi = global.electronAPI && global.electronAPI.license;
             let status = null;
@@ -2302,7 +2310,8 @@
                     const resp = await fetch(LOGIN_GATE_ENTITLEMENT_URL, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ machineId: machineId, code: code || undefined })
+                        body: JSON.stringify({ machineId: machineId, code: code || undefined,
+                            username: username || undefined })
                     });
                     if (resp.ok) { ent = await resp.json(); }
                     else if (resp.status === 403) {
@@ -2318,12 +2327,28 @@
                 } catch (e) { /* 仅真·网络不可达（TypeError）才走下方宽限 */ }
 
                 if (ent) {
+                    // ★ 2026-09-23 账号删除优先裁决：即使设备授权有效，账号墓碑命中即硬拒。
+                    //   落账号级拒绝标记（断网也不享受宽限；按用户名隔离不影响同机他人）。
+                    if (ent.success && ent.accountState === 'ACCOUNT_REVOKED') {
+                        try {
+                            await StorageAdapter.setItem('license:accountReject', JSON.stringify({
+                                username: username || '', state: 'ACCOUNT_REVOKED', at: Date.now()
+                            }));
+                        } catch (e) {}
+                        return fail(accountRevokedMsg);
+                    }
                     if (ent.success && ent.state === 'LICENSED') {
                         const now = String(Date.now());
                         try {
                             await StorageAdapter.setItem('license:lastVerify', now);
                             await StorageAdapter.setItem('license:lastHeartbeat', now);
                             await StorageAdapter.removeItem('license:offlineStart');
+                            // 服务端确认账号无墓碑：清除本用户名账号拒绝标记
+                            let __ar = null;
+                            try { __ar = JSON.parse(await StorageAdapter.getItem('license:accountReject') || 'null'); } catch (e) {}
+                            if (!__ar || !username || (__ar && __ar.username === username)) {
+                                await StorageAdapter.removeItem('license:accountReject');
+                            }
                         } catch (e) {}
                         return { ok: true };
                     }
@@ -2340,7 +2365,15 @@
                     return fail(ent.message || '授权校验未通过，请联系客服');
                 }
 
-                // ④ 仅网络不可达：7 天宽限（与心跳 OFFLINE_LOCK_MS 同口径）
+                // ④ 仅网络不可达：先查账号级硬拒（该 username 在线收到过账号删除，
+                //   断网也不给宽限），再走 7 天宽限（与心跳 OFFLINE_LOCK_MS 同口径）
+                if (username) {
+                    let __ar = null;
+                    try { __ar = JSON.parse(await StorageAdapter.getItem('license:accountReject') || 'null'); } catch (e) {}
+                    if (__ar && __ar.username === username) {
+                        return fail(accountRevokedMsg);
+                    }
+                }
                 const now = Date.now();
                 let offlineStart = 0;
                 try { offlineStart = Number(await StorageAdapter.getItem('license:offlineStart')) || 0; } catch (e) {}

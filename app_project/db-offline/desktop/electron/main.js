@@ -1260,9 +1260,9 @@ ipcMain.handle('license:get-machine-id', () => {
 
 // ★ 2026-09-23 P0 登录闸门：渲染端（登录窗/主窗口）一律经此 IPC 取主进程裁决，
 //   不允许渲染端自行 fetch（file:// 必被 CORS 拦截）。
-ipcMain.handle('license:verify-gate', async () => {
+ipcMain.handle('license:verify-gate', async (_event, username) => {
     try {
-        return await licenseManager.verifyLoginGate();
+        return await licenseManager.verifyLoginGate(username);
     } catch (e) {
         console.error('[IPC] verify-gate 异常:', e);
         return { ok: false, message: '授权校验异常，请重试或联系客服' };

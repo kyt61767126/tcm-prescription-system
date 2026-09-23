@@ -17,6 +17,8 @@ import {
     ROLE_DOCTOR,
     KV_SYSTEM_CLINICS
 } from '../../_lib/auth.js';
+// ★ 2026-09-23 账号被真实重新开通时清除删除墓碑（同手机号重新激活恢复登录）
+import { clearAccountTombstone } from './license-core.js';
 
 // ★ 2026-09-03 产品模式感知：激活 type（personal/pro）→ 规范 edition key
 //   必须结合产品模式（离线/云端），否则离线标准版审核通过后诊所 edition 被错写为
@@ -91,6 +93,8 @@ async function ensureClinicUser(kv, clinicId, clinicName, phone, adminName, now,
         updatedAt: now
     });
     await kv.put(`clinic:${clinicId}:users`, JSON.stringify(users));
+    // 账号被真实重新开通：清除删除墓碑（同手机号重新激活即恢复，无需客服介入）
+    try { await clearAccountTombstone(kv, phone); } catch (e) { console.warn('[AdminAccount] 清墓碑失败:', e && e.message); }
     console.log('[AdminAccount] 云端账号已开通:', phone, 'clinic=', clinicName, 'role=', role,
         hasAdmin ? '(诊所已有管理员，本次开通为普通用户)' : '(首个管理员)',
         (cred && cred.passwordHash) ? '(注册密码)' : '(默认密码 admin)');
