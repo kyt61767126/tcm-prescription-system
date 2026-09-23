@@ -3305,6 +3305,17 @@ let currentUser = null;
                             }
                         } catch (e) { console.warn('内置admin激活后失效检查异常(放行):', e); }
                     }
+                    // ★ 2026-09-22 P0 登录后台闸门：本地密码通过后，已激活机必须后台裁决
+                    //   LICENSED 才放行（后台删除诊所/激活码即拒绝）；试用期内放行；
+                    //   断网 7 天宽限。同时补写 license:machineId 让主窗口心跳复活。
+                    if (window.AuthCore && typeof AuthCore.verifyLoginGate === 'function') {
+                        const __gate = await AuthCore.verifyLoginGate();
+                        if (!__gate.ok) {
+                            errorDiv.textContent = __gate.message;
+                            errorDiv.style.display = 'block';
+                            return;
+                        }
+                    }
                     // 密码自动升级：旧格式（SHA-256/明文）→ PBKDF2
                     try {
                         if (window.AuthCore && AuthCore.upgradePasswordIfNeeded) {

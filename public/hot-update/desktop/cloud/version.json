@@ -1,7 +1,7 @@
 {
   "format": 1,
   "channel": "cloud",
-  "hotVersion": "2026.09.22-3",
+  "hotVersion": "2026.09.23-1",
   "appVersion": "1.2.252",
   "files": [
     {
@@ -90,6 +90,6 @@
       "size": 881727
     }
   ],
-  "signedAt": 1790068522897,
-  "signature": "cPDDnQMYPTkrvfoG5DOi4jxQ5fgA+mjiqwWlH09T3HEuTipakpx4kiVsH504uEurIOsu9/K7ZIxzwzBMGIzVCQ=="
+  "signedAt": 1790126301414,
+  "signature": "yhb01Hz8Q973poleI25lU4/3U9a9B+d5MhdGBciNi7usL6yFjvExX31a2QA5y4rTQqUfam6RkV/FJfZdcdaZDA=="
 }

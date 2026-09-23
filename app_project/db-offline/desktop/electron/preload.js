@@ -121,6 +121,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // ★ License 授权管理
     license: {
         getStatus: () => ipcRenderer.invoke('license:get-status'),
+        // ★ 2026-09-23 P0 登录后台闸门（主进程裁决：LICENSED/trial/free/7天宽限）
+        verifyGate: () => ipcRenderer.invoke('license:verify-gate'),
+        // ★ 闸门未过：立即隐藏主窗+提示（硬吊销，弹窗不可绕过）
+        gateFailed: (message) => ipcRenderer.invoke('license:gate-failed', message),
         activate: (base64Content) => ipcRenderer.invoke('license:activate', base64Content),
         // ★ 新增：离线激活文件选择对话框（返回 { success, filePath, base64Content }）
         selectOfflineFile: () => ipcRenderer.invoke('license:select-offline-file'),

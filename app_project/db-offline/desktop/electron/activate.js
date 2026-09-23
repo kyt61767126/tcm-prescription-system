@@ -313,6 +313,12 @@ let activateWindow = null;
 // ★ 是否正在执行 expire-alert 流程（防止 closed 事件与 expire-alert 互相递归）
 let inExpireAlertFlow = false;
 
+// ★ 2026-09-23 P2-3：应用退出/重启守卫——激活成功重启时 app.quit() 会触发
+//   激活窗 closed 事件，若此时跑闸门（还可能遇 KV 传播延迟）会把吊销对话框
+//   插进重启流程。退出中的 closed 一律不复核。
+let appIsQuitting = false;
+try { app.on('before-quit', () => { appIsQuitting = true; }); } catch (e) {}
+
 // ★ 一体化到期提示 + 拉起激活窗口（双按钮：前往激活 / 退出软件）
 // 用异步 dialog.showMessageBox（不阻塞 main process 事件循环）
 // 用户点击【前往激活】→ 关闭到期弹窗，唤起激活码输入页面，软件保持运行
@@ -433,42 +439,57 @@ function showActivateWindow(parentWindow) {
         }, 300);
     });
 
-    // ★ 关闭后的兜底：不再死循环调用showExpireAlertAndActivate
-    // 未激活状态下，用户关闭激活窗口 = 不想现在激活，直接显示登录窗口让用户知道（但无法操作）
+    // ★ 2026-09-23 P0 关闭后吊销闭环：以主进程登录闸门复核（后台 entitlement
+    // 四态裁决，不再只看本地 license.dat——本地 dat 在 NO_LICENSE 时仍有效，
+    // 旧代码等于不设防）。规则：
+    //   gate ok（LICENSED/trial/7天宽限）→ 主窗口正常前置；
+    //   gate fail（诊所/码已删/吊销/过期/超宽限）→ 隐藏主窗口并重弹提示，
+    //   直到激活成功或退出软件，主窗口始终不可操作。
     let closedOnce = false;
     activateWindow.on('closed', () => {
         activateWindow = null;
         if (closedOnce) return;  // 防递归
         closedOnce = true;
         if (inExpireAlertFlow) return;
-        try {
-            const localMachineId = getMachineId();
-            const licenseResult = licenseManager.validateLicense({ localMachineId });
-            if (!licenseResult.valid) {
-                // ★ 优化：未激活时关闭激活窗口，给parent窗口一个提示但不再强弹窗口
-                console.log('[Activate] 用户关闭激活窗口（未激活），不再强弹出期提示（避免死循环）');
-                // 如果有父窗口，把父窗口前置，提示用户稍后可从登录页重新打开激活窗口
-                if (parentWindow && !parentWindow.isDestroyed()) {
-                    parentWindow.show();
-                    parentWindow.focus();
+        if (appIsQuitting) return;  // ★ P2-3 退出/重启中不复核
+        // ★ 2026-09-23 中-2 修复：旧逻辑等闸门网络往返（最长15s）期间主窗可
+        //   操作（防火墙黑洞时反复关窗即持续获得工作窗），catch 还 fail-open。
+        //   现先立即隐藏主窗，裁决 ok 才 show；异常默认保持隐藏。
+        const safeParent = (parentWindow && !parentWindow.isDestroyed()) ? parentWindow : null;
+        if (safeParent) safeParent.hide();
+        (async () => {
+            try {
+                const gateResult = await licenseManager.verifyLoginGate();
+                if (gateResult.ok) {
+                    if (safeParent && !safeParent.isDestroyed()) {
+                        safeParent.show();
+                        safeParent.focus();
+                    }
+                    return;
+                }
+                console.warn('[Activate] 激活窗关闭但闸门未通过，保持主窗隐藏:', gateResult.message);
+                if (safeParent && !safeParent.isDestroyed()) {
+                    await showExpireAlertAndActivate(safeParent, gateResult.message);
                 } else {
-                    // ★ P1修复：无父窗口（启动时直接弹激活窗）且未激活时，退出应用避免空白桌面
-                    // 此时无任何可操作窗口，用户关闭激活窗=暂不激活，直接退出，下次启动仍可重新激活
-                    console.log('[Activate] 无父窗口且未激活，提示后退出应用');
+                    // 无父窗口（启动时直接弹激活窗）且闸门未过：退出避免空白桌面
                     try {
                         dialog.showMessageBoxSync({
                             type: 'warning',
-                            title: '未激活',
-                            message: '软件尚未激活，下次启动时仍可重新激活。软件即将退出。',
+                            title: '无法使用',
+                            message: (gateResult.message || '授权未通过') + '\n软件即将退出，下次启动时可重新激活。',
                             buttons: ['退出']
                         });
                     } catch (e) { /* 忽略 */ }
                     app.exit(0);
                 }
+            } catch (e) {
+                // ★ fail-closed：复核异常绝不 show 主窗，重弹提示让用户重试/退出
+                console.warn('[Activate] 关闭后闸门复核异常(保持隐藏):', e.message);
+                if (safeParent && !safeParent.isDestroyed()) {
+                    await showExpireAlertAndActivate(safeParent, '授权校验异常，请重试或联系客服');
+                }
             }
-        } catch (e) {
-            console.warn('[Activate] 关闭后校验 license 异常:', e.message);
-        }
+        })();
     });
 
     return activateWindow;
@@ -483,6 +504,7 @@ function closeActivateWindow() {
 
 // 重启应用
 function restartApp() {
+    appIsQuitting = true;  // ★ P2-3 关闭事件不复核（before-quit 之外的显式保险）
     app.relaunch();
     // ★ 2026-08-22 修复：原 app.exit(0) 立即强杀进程，渲染进程 localStorage（leveldb WAL）
     //   最近写入未 flush 即丢失——实锤（云端桌面同款）：注册标记 auth:activationDone 丢失后，

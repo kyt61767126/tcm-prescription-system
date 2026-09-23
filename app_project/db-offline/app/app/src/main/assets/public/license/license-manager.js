@@ -253,6 +253,37 @@ function getUsersBackupPath() {
     }
 }
 
+// ★ 2026-09-23 P0 登录闸门锚点：gate.dat（与 license.dat 同体系
+//   AES-256 + HMAC 签名，密钥由 machineId+硬件指纹派生）。渲染端拿不到密钥，
+//   只能通过 IPC 让主进程读写——防攻击者删键/改时间戳无限重置离线宽限。
+function getGatePath() {
+    try {
+        return path.join(getWritableDir(), 'gate.dat');
+    } catch (e) {
+        return path.join(app.getPath('userData'), 'gate.dat');
+    }
+}
+function readGateState(machineIdArg) {
+    try {
+        const p = getGatePath();
+        if (!fs.existsSync(p)) return null;
+        const enc = fs.readFileSync(p, 'utf8');
+        const json = decryptLicenseContent(enc, machineIdArg || getMachineId());
+        return json ? JSON.parse(json) : null;
+    } catch (e) { return null; }
+}
+function writeGateState(state, machineIdArg) {
+    try {
+        fs.writeFileSync(getGatePath(),
+            encryptLicenseContent(JSON.stringify(state), machineIdArg || getMachineId()),
+            { mode: 0o600 });
+        return true;
+    } catch (e) {
+        console.warn('[Gate] gate.dat 写入失败:', e && e.message);
+        return false;
+    }
+}
+
 // 将当前 config 中的 users 备份到独立文件（非关键路径，失败可安全跳过）
 function backupUserAccounts(config) {
     try {
@@ -1993,6 +2024,7 @@ const ENTITLEMENT_API_URL = 'https://tcm-prescription-system.pages.dev/api/licen
 const HEARTBEAT_API_URL = 'https://tcm-prescription-system.pages.dev/api/license/status';
 
 let _heartbeatTimer = null;
+let _heartbeatRetryTimer = null;
 let _heartbeatRetryCount = 0;
 
 // 带 15s 超时的 POST（★ 2026-08-16 P1 修复沿用：Node fetch(undici) 不识别
@@ -2065,19 +2097,56 @@ async function heartbeatHandler() {
         const machineId = getMachineId();
         if (!machineId) return;
 
+        // ★ 高-2 修复（TOCTOU）：本机付费态在发起网络请求【之前】一次性固化。
+        //   旧代码收到 NO_LICENSE 后再读 license.dat，攻击者可并发删 dat 降级为
+        //   trial 逃过退出。现在以请求前快照为准，事后删文件无效。
+        let preIsPaid = false;
+        try {
+            const _pre = validateLicense({ localMachineId: machineId });
+            const _plt = _pre.licenseType || _pre.type || '';
+            preIsPaid = !!(_pre.valid && _pre.type === 'licensed' && _plt !== 'free');
+        } catch (le) { /* 本地态异常按非付费处理（宁可漏检不可误退） */ }
+
         const result = await checkLicenseRevocation(machineId);
         if (result === null) {
             _heartbeatRetryCount++;
             if (_heartbeatRetryCount <= HEARTBEAT_MAX_RETRIES) {
                 console.warn('[Heartbeat] 重试第', _heartbeatRetryCount, '次');
-                _heartbeatTimer = setTimeout(heartbeatHandler, HEARTBEAT_RETRY_INTERVAL);
+                // ★ 低-4：重试句柄与 24h interval 句柄分离（旧码覆盖 interval 句柄
+                //   导致泄漏且 stopHeartbeat 无法真正停止）。
+                _heartbeatRetryTimer = setTimeout(heartbeatHandler, HEARTBEAT_RETRY_INTERVAL);
             }
             return;
         }
 
-        // ★ P2-③ 四态裁决（唯一退出条件：REVOKED / EXPIRED）
+        // ★ P2-③ 四态裁决。退出条件：
+        //   REVOKED / EXPIRED → 无条件退出；
+        //   ★ 2026-09-23 NO_LICENSE：请求前本机是有效付费授权（非 free），
+        //     后台却查无绑定 = 诊所/激活码已被删除 → 退出（与登录闸门同语义）。
+        //     真·试用机 preIsPaid=false，零影响。
         if (result.state === 'LICENSE_REVOKED' || result.state === 'LICENSE_EXPIRED') {
             console.error('[Heartbeat] 授权失效退出:', result.state, result.reason || '');
+            app.quit();
+        }
+        if (result.state === 'NO_LICENSE' && preIsPaid) {
+            // ★ 中-3：近 10 分钟内登录闸门刚验证通过（登录请求与心跳命中不同
+            //   colo、KV 传播窗口）时，延时 2.5s 重裁一次，避免登录后瞬间误退。
+            let _recentVerified = false;
+            try {
+                const _gu = getUnifiedGate(machineId);
+                _recentVerified = !!(_gu.lastVerify && Date.now() - _gu.lastVerify < 10 * 60 * 1000);
+            } catch (ge) { /* 读不到按非近期处理 */ }
+            if (_recentVerified) {
+                await sleep(2500);
+                const retry = await checkLicenseRevocation(machineId);
+                if (retry === null) return;  // 重裁不可达：不退出，等下个周期
+                if (retry.state === 'LICENSED') return;
+                if (retry.state === 'LICENSE_REVOKED' || retry.state === 'LICENSE_EXPIRED') {
+                    console.error('[Heartbeat] 授权失效退出:', retry.state, retry.reason || '');
+                    app.quit();
+                }
+            }
+            console.error('[Heartbeat] 后台已无授权绑定（诊所/激活码已删除），退出');
             app.quit();
         }
 
@@ -2090,7 +2159,7 @@ async function heartbeatHandler() {
 }
 
 function startHeartbeat() {
-    if (_heartbeatTimer) return;
+    if (_heartbeatTimer || _heartbeatRetryTimer) return;
     console.log('[Heartbeat] 启动网络心跳检测（每 24 小时检查一次）');
     heartbeatHandler();
     _heartbeatTimer = setInterval(heartbeatHandler, HEARTBEAT_INTERVAL);
@@ -2100,8 +2169,306 @@ function stopHeartbeat() {
     if (_heartbeatTimer) {
         clearInterval(_heartbeatTimer);
         _heartbeatTimer = null;
-        console.log('[Heartbeat] 停止网络心跳检测');
     }
+    if (_heartbeatRetryTimer) {
+        clearTimeout(_heartbeatRetryTimer);
+        _heartbeatRetryTimer = null;
+    }
+    console.log('[Heartbeat] 停止网络心跳检测');
+}
+
+// ============================================================================
+//  ★ 2026-09-23 P0 登录后台闸门（主进程裁决；渲染端经 IPC 调用）
+//  规则（用户拍板，与渲染层文案一致）：
+//   ① licensed 非 free → 必须后台 state=LICENSED；NO_LICENSE（诊所/码已删）/
+//     REVOKED/EXPIRED 一律 fail-closed；
+//   ② trial → 放行；但 gate.everActivated=true（曾激活）的机器必须在线证明；
+//   ③ free → 永久离线可用，豁免；
+//   ④ 网络不可达/HTTP错误 → 签名锚点 offlineStart（只由主进程写，不可重置）
+//     给 7 天宽限。
+// ============================================================================
+const GATE_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
+
+async function adjudicateViaMainProcess(machineId) {
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), 15000);
+    try {
+        const resp = await fetch(ENTITLEMENT_API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ machineId: machineId }),
+            signal: controller.signal
+        });
+        if (!resp.ok) return { httpFail: resp.status };
+        // ★ 低-1：JSON 解析失败（代理解析页/脏响应）不是断网，单独标记 fail-closed
+        let ent;
+        try { ent = await resp.json(); } catch (e) { return { malformed: true }; }
+        return { ok: true, ent: ent };
+    } catch (e) {
+        // AbortError（超时）与 TypeError（不可达）均按断网处理
+        return { netFail: true };
+    } finally { clearTimeout(tid); }
+}
+
+function gateStateMessage(state) {
+    return {
+        'NO_LICENSE': '该诊所/激活码已被删除，无法登录。如有疑问请联系客服',
+        'LICENSE_REVOKED': '授权已被吊销，无法登录，请联系客服',
+        'LICENSE_EXPIRED': '授权已过期，请续费后再登录',
+        'DEVICE_DISABLED': '本设备已被停用，请联系客服'
+    }[state] || '授权状态异常，无法登录，请联系客服';
+}
+
+// ============================================================================
+//  ★ 二级锚点（2026-09-23 纵深防御，针对复审高-1）
+//  攻击面：本机用户删 gate.dat 即可重播种 7 天宽限；删 license.dat+gate.dat
+//  可降级全新试用（everActivated 随文件灭失）。二级锚点 .license-anchor 与
+//  gate.dat 物理分离（便携版 gate 在 exe 目录、anchor 在 userData），密钥
+//  purpose 独立（'anchor-enc'/'anchor-mac'），只删一个文件无法重置/降级。
+//  残留风险：两锚点同源于随包静态 IKM，持有静态密钥的逆向者可同时伪造；
+//  根治需 OS 密钥库（Windows DPAPI/TPM、Android Keystore），已列入路线。
+// ============================================================================
+function getAnchorPath() {
+    return path.join(app.getPath('userData'), '.license-anchor');
+}
+function encryptAnchor(jsonStr, mid) {
+    const key = hkdfPurposeKey(mid, 'anchor-enc');
+    const iv = crypto.randomBytes(16);
+    const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
+    const payload = Buffer.concat([iv, cipher.update(Buffer.from(jsonStr, 'utf8')), cipher.final()]).toString('base64');
+    const mk = hkdfPurposeKey(mid, 'anchor-mac');
+    const hmac = crypto.createHmac('sha256', mk).update(payload).digest('hex');
+    return 'ANC2:' + hmac + ':' + payload;
+}
+function decryptAnchor(encrypted, mid) {
+    try {
+        if (!encrypted || encrypted.indexOf('ANC2:') !== 0) return null;
+        const parts = encrypted.substring(5).split(':');
+        if (parts.length < 2) return null;
+        const payload = parts.slice(1).join(':');
+        const mk = hkdfPurposeKey(mid, 'anchor-mac');
+        const expected = crypto.createHmac('sha256', mk).update(payload).digest('hex');
+        if (!crypto.timingSafeEqual(Buffer.from(parts[0], 'hex'), Buffer.from(expected, 'hex'))) return null;
+        const data = Buffer.from(payload, 'base64');
+        const decipher = crypto.createDecipheriv('aes-256-cbc', hkdfPurposeKey(mid, 'anchor-enc'), data.slice(0, 16));
+        return Buffer.concat([decipher.update(data.slice(16)), decipher.final()]).toString('utf8');
+    } catch (e) { return null; }
+}
+function readAnchorState(mid) {
+    try {
+        const p = getAnchorPath();
+        if (!fs.existsSync(p)) return null;
+        const json = decryptAnchor(fs.readFileSync(p, 'utf8'), mid);
+        return json ? JSON.parse(json) : null;
+    } catch (e) { return null; }
+}
+function writeAnchorState(state, mid) {
+    try {
+        fs.writeFileSync(getAnchorPath(), encryptAnchor(JSON.stringify(state), mid), { mode: 0o600 });
+        return true;
+    } catch (e) {
+        console.warn('[Gate] 二级锚点写入失败:', e && e.message);
+        return false;
+    }
+}
+
+// 双锚点统一视图
+function getUnifiedGate(mid) {
+    const gate = readGateState(mid) || {};
+    const anchor = readAnchorState(mid) || {};
+    const everActivated = !!(gate.everActivated || anchor.everActivated);
+    const lastReject = gate.lastReject || anchor.lastReject || null;
+    const lastVerify = Math.max(Number(gate.lastVerify) || 0, Number(anchor.lastVerify) || 0);
+    const lastSeenHigh = Math.max(Number(gate.lastSeenHigh) || 0, Number(anchor.lastSeenHigh) || 0);
+    return { gate, anchor, everActivated, lastReject, lastVerify, lastSeenHigh };
+}
+function persistUnified(u, mid) {
+    writeGateState(u.gate, mid);
+    writeAnchorState(u.anchor, mid);
+}
+
+// ★ 中-1：单调高水位防时间回拨/前拨。gate 与 anchor 双写 lastSeenHigh。
+//   回拨判定（now 显著低于历史高水位）见 verifyLoginGate 内 rollbackSuspected：
+//   不再直接硬拒，而是要求在线 LICENSED 自愈（旧 gateRollbackFail 已移除）。
+function bumpHighWater(u, now) {
+    const high = Math.max(u.lastSeenHigh, now);
+    u.lastSeenHigh = high;
+    u.gate.lastSeenHigh = high;
+    u.anchor.lastSeenHigh = high;
+}
+
+// 宽限判定（密文锚点 offlineStart 只缺失时播种；曾被硬拒一律不再给宽限，
+// 只能联网拿 LICENSED 清除）。gate 与 anchor 的 lastReject 任一存在即阻断。
+// ★ 高-1 修复：两侧 offlineStart 取【最早】值，绝不覆盖另一侧已有的起点
+//   （旧码读不到 gate 时把两侧都重写成 now，删单文件即可无限重置）。
+function gateGracePass(u, mid) {
+    const now = Date.now();
+    if (u.lastReject) {
+        return { ok: false, message: '授权未通过授权服务器核验，请联网后重试' };
+    }
+    const gs = Number(u.gate.offlineStart) || 0;
+    const as = Number(u.anchor.offlineStart) || 0;
+    let start;
+    if (!gs && !as) {
+        start = now;  // 两侧都缺失才新播种
+        u.gate.offlineStart = now;
+        u.anchor.offlineStart = now;
+    } else {
+        start = Math.min(gs || Infinity, as || Infinity);
+        if (!gs) u.gate.offlineStart = start;  // 只补缺失侧
+        if (!as) u.anchor.offlineStart = start;
+    }
+    persistUnified(u, mid);
+    if (now - start < GATE_GRACE_MS) return { ok: true, grace: true };
+    return { ok: false, message: '无法连接授权服务器且已超过 7 天离线宽限期，请联网后重试或联系客服' };
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function verifyLoginGate() {
+    const fail = (message) => ({ ok: false, message });
+    const mid = getMachineId();
+    if (!mid) return fail('无法获取设备标识，请重启软件后重试');
+
+    let local;
+    try { local = validateLicense({ localMachineId: mid }); }
+    catch (e) { return fail('授权校验异常，请联系客服'); }
+
+    const lt = local.licenseType || local.type || '';
+    const u = getUnifiedGate(mid);
+    const now = Date.now();
+
+    // ★ 高-3 修复：时间回拨不再于裁决前硬拒（旧逻辑合法用户无任何自愈途径，
+    //   free 用户也被锁）。只标记可疑：随后必须在线拿到 LICENSED，凭响应里
+    //   的权威 serverTime 重置高水位；断网/任何非 LICENSED 态均 fail-closed。
+    const rollbackSuspected = !!(u.lastSeenHigh && now < u.lastSeenHigh - TIME_TAMPER_THRESHOLD);
+    const rollbackMessage = '检测到系统时间异常（时间回拨），请恢复正确时间并联网核验';
+    // 以服务端时间执行回拨自愈（LICENSED 分支共用）
+    const healHighFromServer = (ent) => {
+        const stMs = Date.parse(ent.serverTime || '');
+        if (isNaN(stMs) || stMs <= 0) return false;
+        u.gate.lastSeenHigh = stMs;
+        u.anchor.lastSeenHigh = stMs;
+        u.lastSeenHigh = stMs;
+        return true;
+    };
+
+    // ③ 永久免费版豁免（产品承诺永久离线可用；free license 服务端签发不可伪造）
+    if (local.valid && local.type === 'licensed' && lt === 'free') {
+        bumpHighWater(u, now);
+        persistUnified(u, mid);
+        return { ok: true, free: true };
+    }
+
+    // ① 付费已激活：在线裁决
+    if (local.valid && local.type === 'licensed') {
+        let r = await adjudicateViaMainProcess(mid);
+
+        // ★ P2-1：激活后 KV 传播最长约 60s，近 10 分钟内有 lastVerify 即收到
+        //   NO_LICENSE，延时 2.5s 重裁一次（回拨可疑时不走此软重试）。
+        if (!rollbackSuspected && r.ok && r.ent && r.ent.success &&
+            r.ent.state === 'NO_LICENSE' &&
+            u.lastVerify && now - u.lastVerify < 10 * 60 * 1000) {
+            await sleep(2500);
+            r = await adjudicateViaMainProcess(mid);
+        }
+
+        if (r.ok && r.ent && r.ent.success === true && r.ent.state) {
+            if (r.ent.state === 'LICENSED') {
+                if (rollbackSuspected) {
+                    if (!healHighFromServer(r.ent)) return fail(rollbackMessage);
+                } else {
+                    bumpHighWater(u, now);
+                }
+                u.gate.everActivated = true; u.anchor.everActivated = true;
+                u.gate.lastVerify = now; u.gate.offlineStart = null; u.gate.lastReject = null;
+                u.anchor.lastVerify = now; u.anchor.offlineStart = null; u.anchor.lastReject = null;
+                persistUnified(u, mid);
+                return { ok: true };
+            }
+            // 硬失效态：双锚点持久化拒绝标记（删任一文件不能再吃宽限）
+            u.gate.lastReject = r.ent.state; u.gate.rejectAt = now;
+            u.anchor.lastReject = r.ent.state; u.anchor.rejectAt = now;
+            persistUnified(u, mid);
+            return fail(gateStateMessage(r.ent.state));
+        }
+        // ★ 回拨可疑：任何非在线 LICENSED 一律拒绝（含断网，无宽限）
+        if (rollbackSuspected) return fail(rollbackMessage);
+        // ★ S2：仅真断网（netFail）走宽限；HTTP 错误/畸形/ success 非 true 全拒
+        if (r.httpFail) {
+            return fail('授权服务暂时不可用（HTTP ' + r.httpFail + '），请稍后重试或联系客服');
+        }
+        if (r.malformed) {
+            return fail('授权服务响应异常，请稍后重试或联系客服');
+        }
+        if (r.ok) {
+            // success=false 或结构缺失，一律 fail-closed（低-1）
+            return fail((r.ent && r.ent.message) || '授权校验未通过，请联系客服');
+        }
+        return gateGracePass(u, mid);
+    }
+
+    // ② 试用期
+    if (local.valid && local.type === 'trial') {
+        if (u.everActivated || rollbackSuspected) {
+            // 曾激活机 license.dat 被删，或时钟回拨可疑（纯试用也一样）：
+            // 必须在线证明 LICENSED。
+            const r = await adjudicateViaMainProcess(mid);
+            if (r.ok && r.ent && r.ent.success === true && r.ent.state) {
+                if (r.ent.state === 'LICENSED') {
+                    if (rollbackSuspected) {
+                        if (!healHighFromServer(r.ent)) return fail(rollbackMessage);
+                    } else {
+                        bumpHighWater(u, now);
+                    }
+                    u.gate.everActivated = true; u.anchor.everActivated = true;
+                    // ★ 中-1：LICENSED 落账双清 lastReject/offlineStart
+                    u.gate.lastVerify = now; u.gate.offlineStart = null; u.gate.lastReject = null;
+                    u.anchor.lastVerify = now; u.anchor.offlineStart = null; u.anchor.lastReject = null;
+                    persistUnified(u, mid);
+                    return { ok: true };
+                }
+                // ★ 高-2 修复：硬失效态同样双写 lastReject（旧码直接 return，
+                //   删 dat 后断网即可吃宽限，比不删 dat 处境更好）。
+                u.gate.lastReject = r.ent.state; u.gate.rejectAt = now;
+                u.anchor.lastReject = r.ent.state; u.anchor.rejectAt = now;
+                persistUnified(u, mid);
+                return fail(gateStateMessage(r.ent.state));
+            }
+            if (rollbackSuspected) return fail(rollbackMessage);
+            if (r.netFail) {
+                const g = gateGracePass(u, mid);
+                if (g.ok) return g;
+                return fail(g.message);  // 超宽限/曾拒：保留可读原因
+            }
+            if (r.httpFail) {
+                return fail('授权服务暂时不可用（HTTP ' + r.httpFail + '），请稍后重试');
+            }
+            if (r.malformed) {
+                return fail('授权服务响应异常，请稍后重试');
+            }
+            if (r.ok) {
+                return fail((r.ent && r.ent.message) || '授权校验未通过，请联系客服');
+            }
+            return fail('授权校验异常，请联系客服');
+        }
+        bumpHighWater(u, now);
+        persistUnified(u, mid);
+        return { ok: true, trial: true };
+    }
+
+    // 本地状态无效：一行可读原因
+    // ★ P3-1：tampered 族同时提示系统时间可能（时间回拨也归此 type）
+    const msg = {
+        'expired': '授权已过期，请续费后再登录',
+        'trial_expired': '试用期已过期，请激活后再登录',
+        'tampered': '授权文件已损坏或系统时间异常，请重新激活或核对系统时间',
+        'config_tampered': '配置文件异常，请联系客服',
+        'binding_mismatch': '授权绑定不匹配，请联系客服',
+        'debugger': '检测到调试器连接，请关闭调试模式后重启',
+        'invalid': '授权状态异常，请联系客服'
+    }[local.type] || '本机授权状态异常，请先完成注册或激活';
+    return fail(msg);
 }
 
 // ============================================================================
@@ -2269,6 +2636,24 @@ function installLicense(base64Content, options = {}) {
         if (!writeResult.success) {
             return { success: false, error: writeResult.error };
         }
+
+        // ★ 2026-09-23 安全：激活唯一写点 → gate.dat + 二级锚点同置 everActivated。
+        //   此后删 license.dat（或单删任一锚点）也不能降级为全新试用。
+        try {
+            const __now = Date.now();
+            const __g = readGateState(actualMachineId) || {};
+            __g.everActivated = true;
+            __g.offlineStart = null;
+            __g.lastVerify = __now;
+            __g.lastReject = null;
+            writeGateState(__g, actualMachineId);
+            const __a = readAnchorState(actualMachineId) || {};
+            __a.everActivated = true;
+            __a.offlineStart = null;
+            __a.lastVerify = __now;
+            __a.lastReject = null;
+            writeAnchorState(__a, actualMachineId);
+        } catch (ge) { console.warn('[License] everActivated 标记失败(非致命):', ge && ge.message); }
 
         // 2. 清除试用期标记（trial.dat）
         try {
@@ -2700,6 +3085,10 @@ module.exports = {
     isVirtualMachine,      // 虚拟机检测（供 main.js 调用，仅记录日志）
     // ★ 网络心跳相关
     startHeartbeat,        // 启动心跳检测
+    // ★ 2026-09-23 登录后台闸门（IPC 委托：主进程裁决 LICENSED/trial/free/7天宽限）
+    verifyLoginGate,
+    readAnchorState,       // 二级锚点读（供测试用）
+    writeAnchorState,      // 二级锚点写（供测试用）
     // ★ 2026-09-11 阶段1b：拒绝原因查询（'hmac_sunset' = HMAC 日落截断，UI 引导联网自愈）
     getLastVerifyRejectReason,
     stopHeartbeat,         // 停止心跳检测

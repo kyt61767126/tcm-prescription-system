@@ -1460,6 +1460,9 @@ public class MainActivity extends BridgeActivity {
             "    getAppConfig: function() { return callNativeAsync('getAppConfig', {}); }," +
             "    license: {" +
             "      getStatus: function() { return callNativeAsync('getLicenseStatus', {}); }," +
+            // ★ 2026-09-23 P0：登录闸门 inner 兜底要取 machineId（缺则 entitlement 400，
+            //   付费激活后无法登录）。复用原生 getMachineId 处理器。
+            "      getMachineId: function() { return callNativeAsync('getMachineId', {}); }," +
             "      validate: function() { return callNativeAsync('validateLicense', {}); }," +
             "      activate: { importLicense: function(){ return Promise.resolve({success:false, error:'APP端不支持离线license文件导入，请使用在线激活'}); } }," +
             "      setTrialDays: function(days){ return callNativeAsync('setTrialDays', {days: days}); }," +

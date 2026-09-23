@@ -2214,6 +2214,200 @@
 
     // ==================== 导出 ====================
 
+    // ========== 登录后台闸门（2026-09-22 P0：后台删除诊所/激活码必须吊销） ==========
+    // 背景：登录窗口此前是纯本地密码比对，主窗口心跳又因缺 license:machineId 永远
+    //   自门控退出 → 后台删除记录客户端无任何感知。
+    // 规则（用户拍板）：
+    //   ① 本机已激活（licensed 非 free）→ 必须联网读到后台 state=LICENSED 才放行；
+    //      NO_LICENSE（诊所/码已删）/REVOKED/EXPIRED 一律 fail-closed 拒绝；
+    //   ② 本机试用期（trial remainingDays>0）→ 放行；试用过期拒绝；
+    //   ③ 永久免费版 free → 产品承诺永久离线可用，豁免在线闸门；
+    //   ④ 网络不可达 → 凭 license:offlineStart 给 7 天宽限，超期锁定。
+    // 副作用：激活机登录时补写 license:machineId，让主窗口 performHeartbeatCheck 复活。
+    const LOGIN_GATE_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
+    const LOGIN_GATE_ENTITLEMENT_URL = 'https://tcm-prescription-system.pages.dev/api/license/entitlement';
+
+    let __loginGatePromise = null;
+    function resetLoginGateCache() { __loginGatePromise = null; }
+    async function verifyLoginGate() {
+        // ★ 桌面端：裁决一律走主进程 IPC（file:// 渲染 fetch 必被 CORS 拦截，
+        //   锚点 gate.dat 签名由主进程持有）。下方渲染 fetch 仅作无 IPC 环境兜底。
+        try {
+            const licApi = global.electronAPI && global.electronAPI.license;
+            if (licApi && typeof licApi.verifyGate === 'function') {
+                return await licApi.verifyGate();
+            }
+        } catch (e) { console.warn('[LoginGate] IPC 裁决异常(走渲染兜底):', e && e.message); }
+        // 页面生命周期内兜底裁决只跑一次；window online 时清空（宽限拒绝后
+        // 联网重试不必重启应用）。
+        if (!__loginGatePromise) __loginGatePromise = __verifyLoginGateInner();
+        return __loginGatePromise;
+    }
+    try {
+        global.addEventListener('online', resetLoginGateCache);
+    } catch (e) {}
+
+    async function __verifyLoginGateInner() {
+        const fail = (message) => ({ ok: false, message });
+        try {
+            const licApi = global.electronAPI && global.electronAPI.license;
+            let status = null;
+            try {
+                status = (licApi && typeof licApi.getStatus === 'function') ? await licApi.getStatus() : null;
+            } catch (e) { console.warn('[LoginGate] getStatus 失败:', e && e.message); }
+
+            const licenseType = status ? (status.licenseType || status.type || '') : '';
+
+            // ③ 永久免费版：豁免（与 performHeartbeatCheck free 豁免一致）
+            if (status && status.valid && status.type === 'licensed' && licenseType === 'free') {
+                return { ok: true, free: true };
+            }
+
+            // ② 试用期
+            if (status && status.valid && licenseType === 'trial') {
+                if (typeof status.remainingDays === 'number' && status.remainingDays > 0) {
+                    return { ok: true, trial: true };
+                }
+                return fail('试用期已过期，请激活后再登录');
+            }
+
+            // ① 已激活（机构/标准/个人等付费档）：必须后台裁决 LICENSED
+            if (status && status.valid && status.type === 'licensed') {
+                let machineId = '';
+                try { machineId = await StorageAdapter.getItem('license:machineId') || ''; } catch (e) {}
+                const tryGetMid = async (fn) => {
+                    try { const v = normalizeMachineIdResult(await fn()); if (v) return v; } catch (e) {}
+                    return '';
+                };
+                if (!machineId && licApi && typeof licApi.getMachineId === 'function') {
+                    machineId = await tryGetMid(() => licApi.getMachineId());
+                }
+                // ★ P1-2：旧版桌面 preload 只在 activate 下挂 getMachineId（热更新混搭必需）
+                const actApi = global.electronAPI && global.electronAPI.activate;
+                if (!machineId && actApi && typeof actApi.getMachineId === 'function') {
+                    machineId = await tryGetMid(() => actApi.getMachineId());
+                }
+                if (!machineId && status && status.machineId) {
+                    machineId = normalizeMachineIdResult(status.machineId);
+                }
+                if (machineId) { try { await StorageAdapter.setItem('license:machineId', machineId); } catch (e) {} }
+                if (!machineId) {
+                    return fail('无法获取设备标识，请重启软件后重试或联系客服');
+                }
+                let code = '';
+                try { code = await StorageAdapter.getItem('license:code') || ''; } catch (e) {}
+
+                let ent = null;
+                try {
+                    const resp = await fetch(LOGIN_GATE_ENTITLEMENT_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ machineId: machineId, code: code || undefined })
+                    });
+                    if (resp.ok) { ent = await resp.json(); }
+                    else {
+                        // ★ S2 修复：明确收到 HTTP 错误（403/429/500…）不是断网，
+                        //   fail-closed，绝不落入宽限 fail-open。
+                        return fail('授权服务暂时不可用（HTTP ' + resp.status + '），请稍后重试或联系客服');
+                    }
+                } catch (e) { /* 仅真·网络不可达（TypeError）才走下方宽限 */ }
+
+                if (ent) {
+                    if (ent.success && ent.state === 'LICENSED') {
+                        const now = String(Date.now());
+                        try {
+                            await StorageAdapter.setItem('license:lastVerify', now);
+                            await StorageAdapter.setItem('license:lastHeartbeat', now);
+                            await StorageAdapter.removeItem('license:offlineStart');
+                        } catch (e) {}
+                        return { ok: true };
+                    }
+                    if (ent.success) {
+                        const msg = {
+                            'NO_LICENSE': '该诊所/激活码已被删除，无法登录。如有疑问请联系客服',
+                            'LICENSE_REVOKED': '授权已被吊销，无法登录，请联系客服',
+                            'LICENSE_EXPIRED': '授权已过期，请续费后再登录',
+                            'DEVICE_DISABLED': '本设备已被停用，请联系客服'
+                        }[ent.state] || '授权状态异常，无法登录，请联系客服';
+                        return fail(msg);
+                    }
+                    // ★ success=false：服务端明确拒绝 → fail-closed，不当断网
+                    return fail(ent.message || '授权校验未通过，请联系客服');
+                }
+
+                // ④ 仅网络不可达：7 天宽限（与心跳 OFFLINE_LOCK_MS 同口径）
+                const now = Date.now();
+                let offlineStart = 0;
+                try { offlineStart = Number(await StorageAdapter.getItem('license:offlineStart')) || 0; } catch (e) {}
+                if (!offlineStart) {
+                    offlineStart = now;
+                    try { await StorageAdapter.setItem('license:offlineStart', String(now)); } catch (e) {}
+                }
+                if (now - offlineStart < LOGIN_GATE_GRACE_MS) {
+                    return { ok: true, grace: true };
+                }
+                return fail('无法连接授权服务器且已超过 7 天离线宽限期，请联网后重试或联系客服');
+            }
+
+            // ★ S3 修复：本地状态无效（valid:false）→ 按 type 给可读消息，fail-closed
+            if (status && !status.valid) {
+                const msg = {
+                    expired: '授权已过期，请续费后再登录',
+                    trial_expired: '试用期已过期，请激活后再登录',
+                    trial_limit_reached: '试用处方额度已用完，请激活后再登录',
+                    tampered: '授权文件已损坏，请重新激活',
+                    config_tampered: '授权文件已损坏，请重新激活',
+                    binding_mismatch: '授权与本机不匹配，请联系客服',
+                    debugger: '检测到异常运行环境，请重启软件后再试',
+                    invalid: '本机授权状态异常，请重新激活'
+                }[status.type] || '本机授权状态异常，请先完成激活';
+                return fail(msg);
+            }
+
+            // 无有效授权且非试用：fail-closed（注册即试用，正常不会走到）
+            return fail('本机授权状态异常，请先完成注册或激活');
+        } catch (e) {
+            console.warn('[LoginGate] 异常:', e && e.message);
+            return fail('授权校验异常，请重试或联系客服');
+        }
+    }
+
+    // ========== 主窗口加载自检（2026-09-22 P0：唯一热更可达的吊销点） ==========
+    // 架构铁律：登录窗口固定 loadFile(asar/electron/login.html)，热更永不触达；
+    //   只有主窗口 index.html + auth-core.js 热更可达。故主窗口一加载就对已激活机
+    //   跑闸门：NO_LICENSE（后台删诊所/码）/REVOKED/EXPIRED 立即锁。
+    // trial（试用期）与 free（永久免费）不在此门；网络失败由闸门内部 7 天宽限处理。
+    function installMainWindowGate() {
+        const run = async () => {
+            try {
+                if (global.__mainWindowGateDone) return;
+                global.__mainWindowGateDone = true;
+                const licApi = global.electronAPI && global.electronAPI.license;
+                if (!licApi || typeof licApi.getStatus !== 'function') return;
+                let st = null;
+                try { st = await licApi.getStatus(); } catch (e) { return; }
+                if (!st || !st.valid) return;
+                const lt = st.licenseType || st.type || '';
+                if (st.type !== 'licensed' || lt === 'free') return;
+                const g = await verifyLoginGate();
+                if (!g.ok) {
+                    global.__licenseExpired = true;
+                    // ★ 硬吊销：主进程即刻隐藏主窗+提示（激活窗关闭后主进程再裁决）；
+                    //   无 gateFailed 桥（旧主进程/APP）回退 IIFE-2 弹窗函数。
+                    const licApi = global.electronAPI && global.electronAPI.license;
+                    if (licApi && typeof licApi.gateFailed === 'function') {
+                        await licApi.gateFailed(g.message);
+                    } else if (typeof global.showExpireAlertAndActivate === 'function') {
+                        await global.showExpireAlertAndActivate(g.message);
+                    }
+                }
+            } catch (e) { console.warn('[MainWindowGate] 异常:', e && e.message); }
+        };
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run);
+        else run();
+    }
+    installMainWindowGate();
+
     global.AuthCore = {
         // 常量
         PASSWORD_SALT,
@@ -2264,6 +2458,8 @@
         login,
         // 登录统一路由（P2 收敛 2026-09-03：四处登录入口唯一委托点）
         loginWithUsernamePassword,
+        // 登录后台闸门（2026-09-22：后台删除吊销，LICENSED/trial/free/7天宽限四规则）
+        verifyLoginGate,
         logout,
 
         // 适配器工厂
@@ -2512,31 +2708,33 @@
             }
 
             // 调用心跳接口
-            const response = await fetch('https://tcm-prescription-system.pages.dev/api/license/heartbeat', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(Object.assign(
-                    { code: licenseCode, machineId: machineId, rxCount: rxCount, rxMonth: rxMonth, productClass: 'offline' },
-                    repClientClass ? { clientClass: repClientClass } : {}
-                ))
-            });
-
-            if (!response.ok) {
-                console.warn('[Heartbeat] 网络错误，HTTP', response.status);
-                // 记录离线开始时间
+            // ★ 低-2：区分真断网与 HTTP 错误——只有 fetch 抛异常（网络不可达）
+            //   才播种 offlineStart；HTTP 非 200（服务异常）不播种、不锁定。
+            let response;
+            try {
+                response = await fetch('https://tcm-prescription-system.pages.dev/api/license/heartbeat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(Object.assign(
+                        { code: licenseCode, machineId: machineId, rxCount: rxCount, rxMonth: rxMonth, productClass: 'offline' },
+                        repClientClass ? { clientClass: repClientClass } : {}
+                    ))
+                });
+            } catch (netE) {
+                console.warn('[Heartbeat] 网络不可达:', netE && netE.message);
                 const offlineStart = await StorageAdapter.getItem('license:offlineStart');
                 if (!offlineStart) {
                     await StorageAdapter.setItem('license:offlineStart', String(now));
+                } else if (now - parseInt(offlineStart, 10) > OFFLINE_LOCK_MS) {
+                    console.error('[Heartbeat] 离线超过 7 天，锁定应用');
+                    global.__licenseExpired = true;
+                    await showExpireAlertAndActivate('应用已离线超过 7 天，请联网验证后继续使用');
                 }
-                // 检查离线是否超过 7 天
-                if (offlineStart) {
-                    const offlineTime = now - parseInt(offlineStart, 10);
-                    if (offlineTime > OFFLINE_LOCK_MS) {
-                        console.error('[Heartbeat] 离线超过 7 天，锁定应用');
-                        global.__licenseExpired = true;
-                        await showExpireAlertAndActivate('应用已离线超过 7 天，请联网验证后继续使用');
-                    }
-                }
+                return;
+            }
+
+            if (!response.ok) {
+                console.warn('[Heartbeat] 服务返回错误，HTTP', response.status);
                 return;
             }
 
@@ -2779,6 +2977,9 @@
             global.__licenseActivating = false;
         }
     }
+    // ★ 2026-09-23 B2 修复：IIFE-1 的 installMainWindowGate 要用此函数，
+    //   跨 IIFE 取不到闭包名（曾 ReferenceError 被静默吞），显式挂 global。
+    global.showExpireAlertAndActivate = showExpireAlertAndActivate;
 
     // ★ 兜底逻辑：定期检查 license 状态，失效则重新弹激活窗口
     // 防止用户关闭激活窗口后继续使用主界面

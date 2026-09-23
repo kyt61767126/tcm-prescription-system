@@ -76,7 +76,12 @@ let _currentRequest = null;
 
 function corsHeaders() {
     const origin = _currentRequest ? (_currentRequest.headers.get('Origin') || '') : '';
-    const allowedOrigin = (origin && ALLOWED_ORIGINS.includes(origin)) ? origin : 'https://tcm-prescription-system.pages.dev';
+    // ★ 2026-09-23：file:// 渲染端（桌面 loadFile/旧主进程缺失 IPC 时的兜底）
+    //   Origin 恒为字符串 "null"——与 admin-submit/order-submit 同口径放行，
+    //   否则预检失败、在线裁决在桌面端永不执行。
+    let allowedOrigin;
+    if (origin === 'null') allowedOrigin = 'null';
+    else allowedOrigin = (origin && ALLOWED_ORIGINS.includes(origin)) ? origin : 'https://tcm-prescription-system.pages.dev';
     return {
         'Access-Control-Allow-Origin': allowedOrigin,
         'Vary': 'Origin',

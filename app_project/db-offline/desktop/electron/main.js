@@ -847,6 +847,10 @@ app.whenReady().then(async () => {
         console.warn('[License] 启动版本绑定校验失败（非致命）:', e.message);
     }
 
+    // ★ 2026-09-23 P2-2：心跳不再在启动时立即执行（旧逻辑会在用户看登录窗时
+    //   无提示退出）。改为登录成功后启动（见 'login-success' handler）；登录窗
+    //   阶段的吊销由登录闸门给可读提示拦截。
+
     // ★ 2026-08-17关键修复：任何未授权状态（试用/过期/未激活/异常）都强制校正为标准版
     //   （机构版仅在正式激活后生效）防止旧安装包残留的机构版 edition 与实际试用状态不一致
     if (licenseResult && !_isLicensed) {
@@ -1248,6 +1252,40 @@ ipcMain.handle('license:get-machine-id', () => {
     }
 });
 
+// ★ 2026-09-23 P0 登录闸门：渲染端（登录窗/主窗口）一律经此 IPC 取主进程裁决，
+//   不允许渲染端自行 fetch（file:// 必被 CORS 拦截）。
+ipcMain.handle('license:verify-gate', async () => {
+    try {
+        return await licenseManager.verifyLoginGate();
+    } catch (e) {
+        console.error('[IPC] verify-gate 异常:', e);
+        return { ok: false, message: '授权校验异常，请重试或联系客服' };
+    }
+});
+
+// ★ 主窗口闸门未过：立即隐藏主窗 + 一体化提示（前往激活/退出）。激活窗关闭后
+//   activate.js 会再次跑闸门，未过继续隐藏，硬吊销。
+ipcMain.handle('license:gate-failed', async (event, message) => {
+    try {
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide();
+        return await activateManager.showExpireAlertAndActivate(mainWindow, message);
+    } catch (e) {
+        console.error('[IPC] gate-failed 异常:', e);
+        // ★ 中-4：绝不重新 show 主窗（旧码 catch 里 show = fail-open）。
+        //   保持隐藏，延时 1s 重弹一次；再失败则退出（未授权内容不得可见）。
+        setTimeout(() => {
+            try {
+                if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide();
+                activateManager.showExpireAlertAndActivate(mainWindow, message);
+            } catch (e2) {
+                console.error('[IPC] gate-failed 重试仍失败，退出:', e2);
+                try { app.quit(); } catch (e3) {}
+            }
+        }, 1000);
+        return { success: false, error: String(e) };
+    }
+});
+
 // ★ 2026-08-29 邀请码查询 - 主进程代理 fetch（渲染进程 file:// 直连被 CORS 拦截）
 ipcMain.handle('license:query-invite', async (event, data) => {
     try {
@@ -1531,6 +1569,12 @@ ipcMain.handle('login-success', async (event, userData) => {
         }
         if (!mainWindow || mainWindow.isDestroyed()) {
             createMainWindow();
+        }
+        // ★ 2026-09-23 P2-2：登录成功后再启动周期心跳（首次立即执行时主窗口
+        //   已在；REVOKED/EXPIRED/NO_LICENSE 退出均有登录闸门在前兜底，不会
+        //   在登录窗阶段无提示消失）。
+        try { licenseManager.startHeartbeat(); } catch (e) {
+            console.warn('[License] 心跳启动失败（非致命）:', e.message);
         }
         return { success: true };
     } catch (e) {

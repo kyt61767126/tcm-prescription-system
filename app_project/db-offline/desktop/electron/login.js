@@ -637,6 +637,15 @@
                 return;
             }
 
+            // ★ 2026-09-22 P0 登录后台闸门：本地密码通过后，已激活机必须后台裁决
+            //   LICENSED 才放行（后台删除诊所/激活码即拒绝）；试用期内放行；
+            //   断网 7 天宽限。同时补写 license:machineId 让主窗口心跳复活。
+            const _gate = await AuthCore.verifyLoginGate();
+            if (!_gate.ok) {
+                showError(_gate.message);
+                return;
+            }
+
             // ★ 严格版本匹配（安全隔离）：账户版本必须与电脑激活版本一致
             // ★ 2026-08-23 修复：判定账户版本优先用服务端 clinicEdition（防云端账号 role 误判），
             //   无 clinicEdition（本地/离线遗留账户）时回退按 role（admin=机构版）判定。
