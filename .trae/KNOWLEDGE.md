@@ -580,7 +580,7 @@
 ★ 2026-09-23（二十三）**【后台吊销闭环根治】后台删除诊所/激活码后，离线桌面/APP 仍可登录继续使用**（commit d8b84a64；热包 cloud/local/app-local 均 2026.09.23-1）。**根因 5 点**：①登录纯本地校验（validateLicense）不联网，后台吊销对本机零影响；②file:// 渲染 fetch 被 CORS 拦截（Origin:null 无回退，静默 TypeError）；③心跳 performHeartbeatCheck 缺 machineId 自门控退出；④**startHeartbeat 从未被 main.js 接线**（app.quit 吊销路径是死代码——"写了退出逻辑但没人启动心跳"）；⑤offlineStart 存渲染端 localStorage，可写可删无限重置。**修复体系（权威源 shared/license/license-manager.js + shared/auth-core/offline.js）**：
 - **verifyLoginGate 登录闸门**（IPC `license:verify-gate` 主进程裁决，渲染端禁止自行 fetch）：付费账户必须在线 state=LICENSED；纯新注册试用期可登录；**free 永久豁免**（产品承诺永久离线）；**曾激活机 everActivated 删 license.dat 不降级**，必须在线证明 LICENSED。
 - **双密文锚点**：gate.dat（ENC2）+ `.license-anchor`（ANC2，userData 物理分离），均 AES-256-CBC+HMAC，密钥由 machineId+硬件指纹经 HKDF purpose 域分离派生（mode 0o600）。everActivated / lastReject / lastVerify / lastSeenHigh **双写**；LICENSED 落账双清 lastReject/offlineStart。
-- **宽限**：仅真断网（fetch 抛异常）给 7 天；offlineStart 两侧**取最早、只补缺失侧**（删单文件/改新 gate 不能重置）；硬拒历史（lastReject）直接断宽限。**HTTP 非200 / success 非 true / 畸形 JSON 一律 fail-closed**。
+- **宽限**：仅真断网（fetch 抛异常）给 7 天；offlineStart 两侧**取最早、只补缺失侧**（删单文件/改新 gate 不能重置）；硬拒历史（lastReject）直接断宽限。**HTTP 非200 / success 非 true / 畸形 JSON 一律 fail-closed**。★ 2026-09-23 续修（a7fe603e）：**HTTP 403 例外走宽限**——设备封锁（device_block）本地使用不阻断是 09-11 红线，403 硬拒会让被封设备正常付费也无法使用；安全保证=gateGracePass 首查双锚点 lastReject（曾在线收 NO_LICENSE 硬拒即无宽限，MITM 注入 403 绕不过吊销），且 rollbackSuspected 在 403 分流之前拦截；其他 HTTP 错误仍 fail-closed。
 - **时间回拨（三轮复审真实教训）**：旧设计回拨前置硬拒——时钟误拨 >24h 后合法用户（含 free）无任何应用内自愈途径。改为只标记可疑：**在线 LICENSED 凭响应权威 serverTime 重置高水位**（entitlement.js 恒返 serverTime），断网/非 LICENSED fail-closed。
 - **TOCTOU**：心跳 preIsPaid 在网络请求【之前】固化（旧码事后读 license.dat，并发删 dat 可降级逃退出）；**心跳移至 login-success 后启动**（startHeartbeat 接线，所有登录路径必经该事件）；心跳 NO_LICENSE 近 10 分钟有 lastVerify 同样 2.5s 重裁，防 KV 跨 colo 传播窗口误退。
 - **KV 传播窗口**：激活后边缘传播最长约 60s，近 10 分钟 lastVerify + NO_LICENSE → sleep 2.5s 重裁一次；真删除（lastVerify 旧）不重试。
@@ -590,6 +590,14 @@
 **铁律（举一反三）**：①**"吊销/删除"是全生命周期操作**——本地登录、心跳、离线宽限、主窗口自检四条入口必须全部联网裁决，只堵一条=没堵；②**写了安全定时器必须在真实生命周期点接线**，接线审计要 grep 调用方（无调用方的退出代码=死代码）；③**任何 fail-open 候选（断网/HTTP错误/畸形/字段缺失）必须枚举并分类**：只有真断网可降级宽限，其余全 fail-closed；契约判定写 `success===true && 已知state`，不匹配默认拒（别依赖 success===false 才拒，字段缺失会漏到宽限）；④**防篡改状态字段双锚点双写，合并视图 OR/取max/取最早**——单锚点删文件即重置；⑤**时钟类安全检查必须留在线自愈路径**（服务端权威时间），硬锁死合法用户=安全设计事故；⑥**跨 IIFE 调用**先确认函数已挂 global（B2 教训）；⑦**Java 字符串注入 JS** 只可用 JS 单引号、禁未转义双引号/反斜杠，改完必须 grep 拼接边界。
 **残留风险（已记录路线）**：两锚点同源于随包静态 IKM，持逆向能力者可同时伪造——**根治 = OS 不可导出密钥**（Windows DPAPI/TPM、Android Keystore），激活时服务端登记公钥；原生 canPrescribe 业务阻断未下沉 savePrescription（MEDIUM 遗留）。
 **生效方式**：云端网页 push 即部署；主窗口/auth-core 走热包（已发，静默送达）；**但主进程闸门/gate.dat/二级锚点/心跳接线/preload verifyGate/gateFailed 不在热更白名单 → 必须重装新版本才完整生效**；APP 需新 APK（Java shim getMachineId）。验证：主进程闸门冒烟 28/28（N1-27，含回拨自愈/双锚点/重裁）、渲染登录闸门 13/13、注册优先 20/20；分发 VerifyOnly + 副本一致性 + 界面 6 OK 全绿。
+
+**★ 同日续：吊销实测仍放行 → 根因=设备跨码残留（b3ce5910）**。用户用新包删码后仍可登录。取证范式（全部在客户机本地完成、零猜测）：①`Get-CimInstance Win32_Process` 定位实际运行 exe → 解包**已安装** asar 确认修复在位（排除"装错包"）；②electron 打桩加载生产 license-manager.js，**真实联网**调 `verifyLoginGate()`，发现返回 ok:true 且锚点 lastVerify 被刷新（=服务端实返 LICENSED，非宽限）；③对线上 entitlement 端点裸机 POST 对拍——返回 LICENSED 但 licenseCode 是**另一个码**。事实：该开发机连挂 3 码（Y6TT 惠康堂 09-09 / CA73 惠康康 09-20 / BND4 桌面中医 09-22），entitlement 无 code 时按 machineId **遍历所有码、任一有效即 LICENSED**，删掉 BND4 后两个老永久码静默兜底。**根因**：设备激活新码时旧码 devices 绑定从未清理。**修复**：license-core 新增 `detachDeviceFromOtherLicenses(kv,targetCode,machineId)`——三个绑定入口（validate.js 输码/claim 激活、activate-from-ticket 工单激活、admin-approve 审核激活）写入绑定前把设备从其他所有码 devices 移除（含旧 machineId 单值字段），新旧双方码各写 cross-code-detach(-out) 审计；status/heartbeat 只更新已绑定设备不新增，无需接入。单测 7/7（多码清理/目标码与无关码不受影响/无残留零写/异常不抛错）。
+- **新增铁律**：⑧**"设备唯一性"和"授权多设备"方向相反要分清**——多设备授权=一个码绑多台设备（机构共用一码合法），一台设备同一时刻只属于一个诊所码；新增绑定必须反向清理同设备的旧归属；⑨**吊销失效排查先问"裁决从哪个码来"**——遍历型裁决天然有跨记录兜底问题，吊销测试前必须确认设备无同域其他授权；⑩**取证优先于改码**：生产代码真实联网调用+锚点时间戳变化+线上裸端点对拍，三步可把"放行分支"钉死，避免误改。
+- **冒用 machineId 篡改评估**：攻击者持有效码+获知 32 位 machineId 可把设备绑到自己码并触发旧码解绑；但普通用户无删码入口无法即时 DoS（码到期最长 1 年缓期），双方审计留痕可追溯——与既有伪造 block 风险同级接受。存量绑定按用户决定保留，下次该设备激活任意码时自动清理。
+- **纯服务端修复，push 即部署（已验证 b3ce5910 success），五端零重打包。**
+
+**★ 同日打包链路自封事故（a7fe603e）**：1.0.253 真机登录报 HTTP 403。根因链：one-click-pack 的 E2E 在**签名之前**对未签名 win-unpacked exe 运行 → self-check 判 NotSigned=tampered → integrityState=2 → 用例活到 ready+25s 时 reportDesktopIntegrity 把**构建机自己 machineId** 经 /api/license/status 上报 blockDevice（KV device_block 键与日志时间实锤吻合）。修复：main.js reportDesktopIntegrity 开头 `if(process.env.BNZC_E2E==='1')return`（E2E 信号无意义直接跳过）；KV 封锁记录已 REST 删除清零。**铁律⑪：E2E 中的"安全上报"必须识别测试环境**——测试机跑生产上报逻辑=自我破坏；任何写真实风控状态的代码路径都要查有无测试守卫。云端桌面 main.js 有同款隐患（L489 未加守卫），记遗留下次云端发版处理。
+
 
 ## 8. 桌面版技术规范
 
