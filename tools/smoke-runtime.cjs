@@ -188,10 +188,12 @@ const CASES = [
     call: (sb) => sb.getDefaultUsers(),
   },
   {
-    name: 'C3 CONFIG.users=undefined → 兜底admin',
+    name: 'C3 CONFIG.users=undefined → 无出厂账户(空数组)',
     setup: (sb) => { sb.CONFIG.users = undefined; },
     call: (sb) => sb.getDefaultUsers(),
-    assert: (r) => Array.isArray(r) && r.some(u => u && u.username === 'admin'),
+    // ★ 2026-09-22（5f5a9819）取消离线 admin/admin：无 CONFIG.users → []，
+    //   由注册前置流程引导开户；fail-closed（无凭据可登录）。
+    assert: (r) => Array.isArray(r) && r.length === 0,
   },
   {
     name: 'C4 CONFIG.users=合法数组 → 正常映射',
