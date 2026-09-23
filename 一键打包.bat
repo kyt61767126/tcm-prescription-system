@@ -1,4 +1,7 @@
 @echo off
+REM Save original console codepage before switching to UTF-8 (restore on exit
+REM so callers chaining this bat from an open terminal keep their codepage).
+for /f "tokens=2 delims=:" %%c in ('chcp') do set "OLD_CP=%%c"
 chcp 65001 >nul
 setlocal enableextensions
 cd /d "%~dp0"
@@ -9,7 +12,8 @@ if not exist "%PACK_PS1%" (
     powershell -NoProfile -Command "Write-Host '[ERROR] one-click-pack.ps1 not found' -ForegroundColor Red"
     echo   Path: %PACK_PS1%
     if not defined NO_PAUSE pause
-    exit /b 1
+    set "EXIT_CODE=1"
+    goto do_exit
 )
 
 REM [2026-09-05] Entry self-heal consolidated into tools\entry-selfheal.ps1 (single
@@ -22,7 +26,8 @@ if %HEAL_RC% neq 0 (
     echo.
     powershell -NoProfile -Command "Write-Host '[ERROR] Entry self-heal failed with code: %HEAL_RC%' -ForegroundColor Red"
     if not defined NO_PAUSE pause
-    exit /b %HEAL_RC%
+    set "EXIT_CODE=%HEAL_RC%"
+    goto do_exit
 )
 
 REM Launch one-click-pack.ps1 (forward args: 1=cloud 2=offline 3=all 4=smart, auto mode no pause)
@@ -33,8 +38,11 @@ REM [2026-09-01] Always append -AutoCommit: auto collect+commit+push packaging
 REM side effects (versionCode/version bumps) after build, so they never pile up
 REM uncommitted and block the source-settled gate on the next build.
 REM Opt out by setting NO_AUTOCOMMIT=1 (side effects listed for manual commit).
+REM [2026-09-23] Do not duplicate -AutoCommit if the caller already passed it
+REM (PowerShell rejects binding a named switch twice).
 set "EXTRA_ARGS=-AutoCommit"
 if defined NO_AUTOCOMMIT set "EXTRA_ARGS="
+echo %* | findstr /i /c:"-AutoCommit" >nul && set "EXTRA_ARGS="
 powershell -NoProfile -ExecutionPolicy Bypass -File "%PACK_PS1%" %* %EXTRA_ARGS%
 set "EXIT_CODE=%errorlevel%"
 
@@ -45,5 +53,8 @@ if %EXIT_CODE% neq 0 (
 echo.
 REM With args (auto mode) no pause; no args (interactive menu) or explicit NO_PAUSE pauses as needed
 if not defined NO_PAUSE if "%~1"=="" pause
-REM [2026-09-05] Propagate real exit code to callers (CI / schedulers / chained flows)
+
+:do_exit
+REM Unified exit: restore original codepage, then propagate the real exit code.
+if defined OLD_CP chcp %OLD_CP: =% >nul
 exit /b %EXIT_CODE%

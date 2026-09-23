@@ -94,6 +94,27 @@ if (Test-Path $gateTool) {
         exit 1
     }
 }
+# ★ 2026-09-23 版本基线漂移门（1.0.253/254 重名覆盖事故防呆）：
+#   上次打包版本号副作用未入库 / 被还原时，HEAD 基线落后于现存产物，
+#   本次 bump 会与旧产物同名覆盖且版本号错位。4 单元（2 桌面+2 APP）预检。
+#   保险丝 ALLOW_VERSION_DRIFT=1。退出码 2=漂移必拦；1=工具自身异常→WARN 放行。
+if ($env:ALLOW_VERSION_DRIFT -ne '1') {
+    $vbTool = Join-Path $PSScriptRoot 'verify-version-baseline.ps1'
+    if (Test-Path $vbTool) {
+        & $env:ComSpec /c "powershell -NoProfile -ExecutionPolicy Bypass -File `"$vbTool`" 2>&1" | ForEach-Object { Write-HostLine $_ }
+        $vbRc = $LASTEXITCODE
+        if ($vbRc -eq 2) {
+            Write-Host ""
+            Write-Host "[FATAL] 版本基线漂移，打包中止（修复指引见上方）。" -ForegroundColor Red
+            if (-not $script:SkipPause) { pause }
+            exit 2
+        }
+        if ($vbRc -eq 1) {
+            Write-Host "[WARN] 版本基线检测工具异常，已跳过（不阻断打包）" -ForegroundColor Yellow
+        }
+    }
+}
+
 # 检查某端是否可跳过打包（指纹=git HEAD+源码干净+产物哈希 三者一致 → true）
 function Test-BuildSkip([string]$unit) {
     if ($env:NO_BUILD_SKIP -eq '1') { return $false }
