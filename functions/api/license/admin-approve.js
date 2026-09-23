@@ -44,7 +44,7 @@ import {
 import {
     getKV, saveLicense, buildLicenseData, encodeLicenseBase64,
     generateActivationCode, appendLicenseLog, getDevices, getMaxDevices,
-    checkDeviceVersion, setDeviceVersion, versionOf,
+    checkDeviceVersion, setDeviceVersion, versionOf, detachDeviceFromOtherLicenses,
     applyInviteReward, ensureInviteCode, findLicenseByInviteCode,
     INVITE_BONUS_DAYS_INVITEE, INVITE_MAX_INVITEES,
     PAID_LICENSE_TYPES
@@ -312,6 +312,18 @@ export async function onRequest(context) {
         }
 
         await saveLicense(kv, licenseRecord);
+
+        // ★ 2026-09-23 单设备单码：清理该设备在其他诊所码的残留绑定
+        const detachedCodes = await detachDeviceFromOtherLicenses(kv, code, record.machineId);
+        if (detachedCodes.length) {
+            await appendLicenseLog(kv, code, {
+                action: 'cross-code-detach',
+                time: new Date().toISOString(),
+                ip: ip,
+                operator: currentUser.username,
+                detail: `审核激活绑定设备，已从旧码解绑: ${detachedCodes.join(', ')}`
+            });
+        }
 
         // ★ 2026-09-05 生成专属邀请码（幂等：已有沿用）——审核通过者即具备邀请资格。
         //   必须在 saveLicense 之后：ensureInviteCode 内部 updateLicense 要求 license:{code} 已存在。

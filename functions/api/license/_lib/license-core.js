@@ -682,6 +682,62 @@ function getMaxDevices(record) {
 }
 
 // ============================================================================
+//  ★ 2026-09-23 单设备单码：跨码残留解绑
+//
+//  背景：设备激活新诊所码时，旧码 devices 中的绑定从未被清理，一台设备可
+//   同时挂在多个诊所码下（实测本开发机连挂 3 码：Y6TT/CA73/BND4），导致：
+//    ① 后台删除/吊销某诊所码后，entitlement 按 machineId 遍历会命中其他残留
+//       码 → 继续返回 LICENSED，吊销静默失效（今日事故实测）
+//    ② 多个码各占一个设备名额，设备名额统计虚高
+//    ③ 客户端本地 license 与实际授权来源信息错乱（本地显 BND4 诊所，服务端
+//       实际按 Y6TT 放行）
+//
+//  业务语义：一台设备同一时刻只属于一个诊所码。注意方向相反不受影响——
+//   多设备授权 = 一个码绑多台设备（机构 5 台共用一码）。
+//
+//  返回被解绑的码列表（审计用）。任何异常仅告警、不阻断本次激活：设备转移
+//   清理失败不应把客户挡在新授权门外（残留最坏=维持旧行为，下次激活自愈）。
+// ============================================================================
+async function detachDeviceFromOtherLicenses(kv, targetCode, machineId) {
+    const detached = [];
+    try {
+        if (!kv || !targetCode || !machineId) return detached;
+        const index = (await kv.get(KV_LICENSE_INDEX, 'json')) || [];
+        for (const otherCode of index) {
+            if (!otherCode || otherCode === targetCode) continue;
+            const other = await getLicense(kv, otherCode);
+            if (!other) continue;
+            let dirty = false;
+            if (Array.isArray(other.devices)) {
+                const before = other.devices.length;
+                other.devices = other.devices.filter(d => !d || d.machineId !== machineId);
+                if (other.devices.length !== before) dirty = true;
+            }
+            // 旧格式：machineId 单值字段
+            if (other.machineId === machineId) {
+                other.machineId = '';
+                dirty = true;
+            }
+            if (dirty) {
+                await saveLicense(kv, other);
+                detached.push(otherCode);
+                console.log('[SingleDevice] 设备跨码解绑:',
+                    machineId.substring(0, 8) + '...', otherCode, '→ target', targetCode);
+                // 被移出方也留痕：冒用 machineId 的异常转移可在此码日志被审计发现
+                await appendLicenseLog(kv, otherCode, {
+                    action: 'cross-code-detach-out',
+                    time: new Date().toISOString(),
+                    detail: `设备被转移至其他激活码: ${targetCode}`
+                }).catch(() => {});
+            }
+        }
+    } catch (e) {
+        console.warn('[SingleDevice] 跨码解绑异常（不阻断激活）:', e.message);
+    }
+    return detached;
+}
+
+// ============================================================================
 //  ★ 2026-09-11 P2 安全画像：可疑设备封锁（verify.js 落标记 / 各下发出口拦截）
 //  机制：在线验证上报强信号（Frida 注入 / APK 签名双路分叉）→ 落 device_block 标记
 //       → 激活/轮询/验证出口一律拒绝 → 攻击者在线能力全部卡死（本地零阻塞维持红线）。
@@ -1399,6 +1455,7 @@ export {
     checkCodeRateLimit,  // ★ P0-1 新增：激活码级短时频控
     getDevices,        // ★ v4 新增：获取激活码已绑定的设备数组
     getMaxDevices,     // ★ v4 新增：获取激活码的最大设备数
+    detachDeviceFromOtherLicenses, // ★ 2026-09-23 单设备单码：绑定前清理跨码残留
     // ★ 设备-版本绑定：同一台设备只能注册一个版本
     versionOf,              // 判断 type/edition 属于机构版还是标准版
     getDeviceVersion,       // 读取设备已绑定版本

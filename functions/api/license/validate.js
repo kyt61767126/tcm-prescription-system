@@ -36,6 +36,7 @@ import {
     buildLicenseData, encodeLicenseBase64, checkRateLimit,
     checkCodeRateLimit,  // ★ P0-1 激活码级短时频控
     getDevices, getMaxDevices, appendLicenseLog,
+    detachDeviceFromOtherLicenses, // ★ 2026-09-23 单设备单码
     checkDeviceVersion, setDeviceVersion, versionOf,
     ensureInviteCode, applyInviteReward, findLicenseByInviteCode,
     INVITE_BONUS_DAYS_INVITEE, INVITE_MAX_INVITEES
@@ -559,7 +560,19 @@ export async function onRequest(context) {
         }
         updates.devices = newDevices;
         updates.maxDevices = maxDevices;
+        // ★ 2026-09-23 单设备单码：写入本次绑定前，把该设备从其他所有诊所码
+        //   的 devices 中移除（旧码残留会让删码吊销被其他码静默兜底）
+        const detachedCodes = await detachDeviceFromOtherLicenses(kv, code, machineId);
         await updateLicense(kv, code, updates);
+        if (detachedCodes.length) {
+            await appendLicenseLog(kv, code, {
+                action: 'cross-code-detach',
+                time: getNowISO(),
+                ip: ip,
+                operator: licenseUser,
+                detail: `设备绑定本码，已从 ${detachedCodes.length} 个旧码解绑: ${detachedCodes.join(', ')}`
+            });
+        }
 
         // ★ 设备-版本绑定：激活成功后绑定设备版本（同一设备只能注册一个版本）
         try {

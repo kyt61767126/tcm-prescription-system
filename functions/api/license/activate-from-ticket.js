@@ -31,7 +31,7 @@ import {
 import {
     getKV, saveLicense, buildLicenseData, encodeLicenseBase64,
     generateActivationCode, appendLicenseLog, checkDeviceVersion,
-    setDeviceVersion, versionOf,
+    setDeviceVersion, versionOf, detachDeviceFromOtherLicenses,
     PAID_LICENSE_TYPES
 } from './_lib/license-core.js';
 import { provisionCloudAccount, normalizeActivationPassword } from './_lib/admin-account.js';
@@ -188,6 +188,18 @@ export async function onRequest(context) {
         };
 
         await saveLicense(kv, licenseRecord);
+
+        // ★ 2026-09-23 单设备单码：新码已入库，清理该设备在其他诊所码的残留绑定
+        const detachedCodes = await detachDeviceFromOtherLicenses(kv, code, ticket.machineId);
+        if (detachedCodes.length) {
+            await appendLicenseLog(kv, code, {
+                action: 'cross-code-detach',
+                time: new Date().toISOString(),
+                ip: ip,
+                operator: currentUser.username,
+                detail: `工单激活绑定设备，已从旧码解绑: ${detachedCodes.join(', ')}`
+            });
+        }
 
         // 2. 云端账号自动开通（与 admin-approve 同链路）
         //    构造兼容 record：phone=工单联系电话，adminName=工单联系人
