@@ -4107,9 +4107,13 @@
     // 挂 global：跨 IIFE 供 index.html handleForgotPassword（三态安全门）调用
     global.__isDeviceLicensed = __isDeviceLicensed;
 
+    // ★ 2026-09-23 用户显式关闭注册窗标记：同一会话内不再自动重弹
+    //   （2s 后的二次 maybePromptRegistration 尊重它；重载页面才重置）。
+    let __localRegUserClosed = false;
     function showLocalRegisterModal() {
         // 若已打开则忽略
         if (document.getElementById('localRegisterOverlay')) return;
+        __localRegUserClosed = false;
         const PHONE_RE = /^1[3-9]\d{9}$/;
         const INPUT_STYLE = 'width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;';
 
@@ -4157,6 +4161,9 @@
                 '</div>' +
                 '<div id="localRegError" style="display:none;margin-bottom:12px;padding:10px 12px;border-radius:8px;background:#fdecea;color:#c0392b;font-size:13px;"></div>' +
                 '<button id="localRegSubmitBtn" style="width:100%;padding:12px;font-size:15px;border:none;border-radius:8px;color:#fff;background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);cursor:pointer;font-weight:bold;">✅ 完成注册</button>' +
+                '<div style="text-align:center;margin-top:10px;">' +
+                    '<span id="localRegCloseLink" style="font-size:13px;color:#909399;cursor:pointer;text-decoration:underline;">暂不注册，已有账号登录</span>' +
+                '</div>' +
             '</div>' +
 
             // 提交中（默认隐藏）
@@ -4226,6 +4233,14 @@
         }
         const laterBtn = document.getElementById('localRegLaterBtn');
         if (laterBtn) laterBtn.addEventListener('click', function () { close(); reloadLoginPage(); });
+
+        // ★ 2026-09-23 表单态「暂不注册，已有账号登录」：标记用户显式关闭，
+        //   本会话内 2s 后的二次自动检测不再重弹。
+        const closeLink = document.getElementById('localRegCloseLink');
+        if (closeLink) closeLink.addEventListener('click', function () {
+            __localRegUserClosed = true;
+            close();
+        });
 
         // 提交注册
         const submitBtn = document.getElementById('localRegSubmitBtn');
@@ -4364,6 +4379,8 @@
     // ★ 注册前置检测：登录上下文 + 未激活 + 未注册 → 强制先注册（弹窗置于激活弹窗之上）
     async function maybePromptRegistration() {
         try {
+            // ★ 用户本会话已显式关闭注册窗 → 不再自动弹（重载页面才重置）
+            if (__localRegUserClosed) return;
             // 登录上下文检测（双端）：
             //   ① 离线APP 壳 index.html：loginOverlay（登录时可见）
             //   ② 离线桌面登录窗 login.html：无 loginOverlay，特征 = btnOk + loginPassword

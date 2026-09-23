@@ -117,8 +117,29 @@ function findWindow(app, urlPart, timeoutMs = 30000) {
     });
 }
 
+async function dismissRegisterOverlay(page) {
+    // 注册前置（2026-09-22 zero-wait）：未注册机登录窗会被 localRegisterOverlay
+    // 覆盖。走真实 UI 入口「暂不注册，已有账号登录」关闭（与真实用户操作一致）。
+    for (let i = 0; i < 20; i++) {
+        const gone = await page.evaluate(() => !document.getElementById('localRegisterOverlay'));
+        if (gone) return;
+        const clicked = await page.evaluate(() => {
+            const l = document.getElementById('localRegCloseLink');
+            if (l) { l.click(); return true; }
+            return false;
+        });
+        if (clicked) {
+            await page.waitForFunction(() => !document.getElementById('localRegisterOverlay'),
+                null, { timeout: 5000 }).catch(() => {});
+            return;
+        }
+        await new Promise(r => setTimeout(r, 200));
+    }
+}
+
 async function login(page, username, password) {
     await page.waitForSelector('#loginUsername', { timeout: 15000 });
+    await dismissRegisterOverlay(page);
     await page.fill('#loginUsername', username);
     // ★ 反自动填充双保险（main.js dom-ready 注入）：密码框初始 readonly，focus 时才移除。
     //   fill 的可编辑性检查先于 focus → 直接 fill 会 30s 死等（E1-E3 曾靠竞态侥幸通过）。
