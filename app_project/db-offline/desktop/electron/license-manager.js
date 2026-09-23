@@ -2395,6 +2395,13 @@ async function verifyLoginGate() {
         // ★ 回拨可疑：任何非在线 LICENSED 一律拒绝（含断网，无宽限）
         if (rollbackSuspected) return fail(rollbackMessage);
         // ★ S2：仅真断网（netFail）走宽限；HTTP 错误/畸形/ success 非 true 全拒
+        // ★ 2026-09-23 例外：HTTP 403 = 设备安全封锁（device_block，entitlement
+        //   唯一 403 来源）。按 2026-09-11 红线「本地使用不阻断」，走与断网相同
+        //   的 gateGracePass：受 lastReject 双锚点（曾在线收过硬拒即无宽限，
+        //   MITM 注入 403 绕不过吊销）+ 7 天宽限约束。
+        if (r.httpFail === 403) {
+            return gateGracePass(u, mid);
+        }
         if (r.httpFail) {
             return fail('授权服务暂时不可用（HTTP ' + r.httpFail + '），请稍后重试或联系客服');
         }
@@ -2440,6 +2447,12 @@ async function verifyLoginGate() {
                 const g = gateGracePass(u, mid);
                 if (g.ok) return g;
                 return fail(g.message);  // 超宽限/曾拒：保留可读原因
+            }
+            if (r.httpFail === 403) {
+                // 设备安全封锁：同付费分支，按 09-11 红线走宽限
+                const g = gateGracePass(u, mid);
+                if (g.ok) return g;
+                return fail(g.message);
             }
             if (r.httpFail) {
                 return fail('授权服务暂时不可用（HTTP ' + r.httpFail + '），请稍后重试');

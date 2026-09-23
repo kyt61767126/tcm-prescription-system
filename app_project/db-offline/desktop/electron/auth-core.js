@@ -2305,8 +2305,13 @@
                         body: JSON.stringify({ machineId: machineId, code: code || undefined })
                     });
                     if (resp.ok) { ent = await resp.json(); }
+                    else if (resp.status === 403) {
+                        // ★ 2026-09-23：403 = 设备安全封锁（device_block），按
+                        //   2026-09-11 红线「本地使用不阻断」，ent 留空走下方
+                        //   宽限（与网络不可达同口径；此为旧主进程兜底路径）。
+                    }
                     else {
-                        // ★ S2 修复：明确收到 HTTP 错误（403/429/500…）不是断网，
+                        // ★ S2 修复：其他 HTTP 错误（429/500…）不是断网，
                         //   fail-closed，绝不落入宽限 fail-open。
                         return fail('授权服务暂时不可用（HTTP ' + resp.status + '），请稍后重试或联系客服');
                     }
