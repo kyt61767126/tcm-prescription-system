@@ -8,7 +8,7 @@
 //   E2 试用期降级反向 → config 写 role:'admin'+edition:'clinic' 也会被强制降级：
 //                        【用户管理】必须隐藏 + 【修改密码】必须可见
 //   E3 毒数据 + UserStore 运行时 → CONFIG.users 置非数组字符串 → window.UserStore.get()
-//                        必须返回兜底数组（非空）→ 点【修改密码】弹窗仍打开（绝不静默失败）
+//                        返回干净数组（空=无出厂兜底，fail-closed）→ 点【修改密码】弹窗仍打开
 //   E4 方案B哈希账号登录 → config 预写注册产物（username=手机号 + 全局盐 sha256 哈希，
 //                        与 electron/main.js license:register-local-user 同构）：
 //                        错误密码必须被拒（#loginError 可见），正确明文密码经
@@ -253,7 +253,7 @@ const CASES = [
     },
     {
         id: 'E3',
-        name: '毒数据：CONFIG.users 非数组 → UserStore 兜底数组 + 改密弹窗仍打开（绝不静默）',
+        name: '毒数据：CONFIG.users 非数组 → UserStore fail-closed 空数组(不抛错/不泄露毒串) + 改密弹窗仍打开',
         config: baseConfig('personal', [adminUser('e2epoison')]),
         async run(mainPage) {
             await mainPage.waitForFunction(() => {
@@ -270,17 +270,19 @@ const CASES = [
             });
             log('E3.1 已注入毒数据 CONFIG.users="garbage-poison-string..." ✓');
 
-            // UserStore 标记块运行时验证：get() 必须返回兜底数组而非抛错/返回毒字符串
+            // UserStore 标记块运行时验证：get() 必须返回数组、不抛错、不把毒
+            // 字符串带出。★ 2026-09-22（5f5a9819）起无出厂兜底：
+            //   CONFIG 毒数据 + localStorage 空 → 空数组（fail-closed，引导注册）
             const userArr = await mainPage.evaluate(() => {
                 if (!window.UserStore || typeof window.UserStore.get !== 'function') {
                     throw new Error('window.UserStore 不存在（标记块未加载）');
                 }
                 return window.UserStore.get();
             });
-            if (!Array.isArray(userArr) || userArr.length < 1) {
-                throw new Error(`E3.2 UserStore.get() 应返回非空数组，实际: ${Object.prototype.toString.call(userArr)} len=${userArr && userArr.length}`);
+            if (!Array.isArray(userArr) || userArr.some(u => !u || typeof u !== 'object')) {
+                throw new Error(`E3.2 UserStore.get() 应返回干净数组，实际: ${Object.prototype.toString.call(userArr)}`);
             }
-            log(`E3.2 毒数据下 UserStore.get() 返回兜底数组（${userArr.length} 个用户）✓`);
+            log(`E3.2 毒数据下 UserStore.get() 返回数组（${userArr.length} 个用户，无出厂兜底）不抛错不泄露 ✓`);
 
             // 点【修改密码】→ 弹窗必须打开（用户数据链路依赖方不静默失败）
             await mainPage.click('#changePwdBtn');
