@@ -1235,3 +1235,15 @@
 * **交互修正**：登录窗零账户时，老流程点【确定】先闪红字立即 `openLocalRegister()` 弹注册窗，打断已填手机号/密码的用户。改为**只留页红字提示**：桌面登录窗（db-offline/desktop/electron/login.js，真权威不同步、不进热包只随整包；dev 源运行即时生效）与离线主窗/APP 文案统一为「本机尚未注册管理员账户，请点击【注册开通】完成注册（注册后即可免费试用）」——首版提示引导"上方红条"，实测截图发现【注册开通】大按钮（auth-core.js 注入于 .login-buttons 之后、#loginError 之前，同样绑定 openLocalRegister）就在错误提示正上方，引导顶部红条绕远且长文案挤 4 行，故对齐就近按钮。注册动作一律改由用户主动点击触发（顶部红条/注册开通按钮仍绑定 openLocalRegister）；输入内容保留，按钮由 handleLogin finally 复位。云端 login.js 是 confirm 二选一+云端兜底认证的独立逻辑，未动；public/index.html 无此守卫。
 * **零用户判定链路备忘**：login.js `getUsers` = config.json users（主进程 get-app-config 已做 users-backup.json 回填 + 正式授权激活手机号自愈）+ localStorage XORv1 合并，三者皆空才是真零用户；时序无竞态（DOMContentLoaded 先 await getAppConfig 再 initLoginInput/绑按钮）。
 * **热包**：local/app-local 重签 **2026.09.24-3**（index.html 在白名单；login.js 不热更随下次桌面整包）；cloud 不动。check-interface 6 OK、copy-consistency 77 PASS、签名独立复验 true。
+
+## 24. 凭据/密钥安全 P0（2026-09-24，密钥入库事故四件套修复）
+
+* **事故**：①`generate-license.ps1`（根目录，客服离线发码脚本）明文内嵌真实 `X-Export-Secret`（64hex）+ 真实客户激活码/机器码/诊所名三元组并随 git 提交——任何拿到仓库者知道有效码+诊所名即可为**任意机器签发合法 v7 license**（export-license 鉴权=Bearer 管理员或该密钥，且当时无频控）；②`functions/api/users.js` 诊断端点 `DIAGNOSE_KEY = env.DIAGNOSE_KEY || 'tcm_diagnose_2026'` 硬编码默认密钥——匿名可枚举任意手机号是否注册、所属诊所、同所全部用户名/姓名/角色、锁定次数。生产核实 **DIAGNOSE_KEY env 从未配置**（端点一直靠默认密钥裸奔）。
+* **修复（commit aecb5fc7，纯服务端+客服脚本，五端零重打包）**：
+  1. **密钥只走 Pages secrets/env，仓库内零真实值**；禁止任何 `env.XXX || '硬编码默认密钥'` fallback——敏感配置缺失必须 **fail-closed**（端点关闭/拒绝），grep 全 functions 仅此一处同类模式。
+  2. **客服脚本密钥本机文件化**：`generate-license.ps1` 改读 `%USERPROFILE%\.hktzy\license-export-secret.txt`（Get-Content -Raw + Trim + `^[0-9a-fA-F]{64}$` 正则校验，缺失/格式错均友好报错退出）；密钥不进命令行（不进 PSReadLine 历史）、不打印、不进错误信息；客户信息占位符必须含「此处替换」以复用原未修改拦截（PS5.1 ConvertTo-Json 不转义中文，-match 有效，已实测）。
+  3. **发码端点必须频控**：export-license 鉴权通过后 `checkRateLimit(kv, ip + ':export', 20)`——**桶后缀拼在 ip 参数里是全库 9 处端点的既有惯例**（admin-submit/order-submit/admin-status/order-paid/order-status/claim-free/entitlement/heartbeat/status/ticket/trial），不要给 checkRateLimit 加参数；独立桶防办公 NAT 下 validate/invite/lookup 匿名激活流量饿死客服发码。429 body 不泄露计数。
+  4. **密钥轮换操作链**：`node crypto.randomBytes(32)` 生成 → 写本机 .hktzy 文件（不输出屏幕）→ `Get-Content 文件 -Raw | npx wrangler pages secret put NAME --project-name ...`（stdin 传值不进命令行文本）→ **secret 下次部署才注入，故先 put 后 push 代码**，同一次部署中新代码+新密钥同时生效；git 历史中的旧密钥不 rewrite，靠轮换失效。
+* **验证（线上实测全过）**：diagnose 旧默认密钥/无 key → 404；export-license 旧密钥/无密钥 → 403；新密钥+假码 → 404「激活码不存在」（证明过鉴权与频控）；OPTIONS → 200。旧 ps1 中泄漏激活码经 KV 只读核实为不存在的示例码，无需停用。
+* **铁律**：①新增任何"诊断/运维/导出"类端点，鉴权必须走 Bearer 管理员或强随机 env 密钥+频控，禁止默认值；②客服/运维脚本一律从仓库外本机文件读凭据，真实客户数据（码/机器码/诊所名/手机号）也禁止写入仓库脚本；③安全类端点上线前 grep `env\.[A-Z_]+\s*(\|\||\?\?)\s*['"][^'"]{6,}['"]` 全量扫兜底；④双独立审查（功能+安全）都提出「频控共桶」问题并已按全库惯例修正。
+* **遗留（P1 候选，不阻塞）**：diagnose 端点长期应并入 platform_admin Bearer（与 `?check=` 对齐，顺带 key 改头传递+常量时间比较+频控）；`docs/客服离线激活操作手册.md`（07-25 旧版，curl 示例仍教粘密钥）待 P1 客服材料统一重写；客服密钥文件可加 DPAPI/icacls 收紧 ACL。
