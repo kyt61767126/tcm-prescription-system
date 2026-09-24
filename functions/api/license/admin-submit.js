@@ -35,7 +35,7 @@ import { provisionCloudAccount, normalizeActivationPassword } from './_lib/admin
 //   均未定义未导入，L399 在 onRequest 主体同步抛 ReferenceError → 全新手机号
 //   （无 admin_phone 索引）走兜底扫描必 500，管理员激活申请通道对新客户损坏。
 import { createAdminRequest, updateAdminRequestStatus, ensureLicenseV7, KV_ADMIN_REQ_INDEX } from './_lib/license-write-service.js';
-import { findPhoneOccupancy, hashPassword, KV_SYSTEM_CLINICS } from '../_lib/auth.js';
+import { findPhoneOccupancy, hashPassword, getClinicsOrThrow, findClinicByName } from '../_lib/auth.js';
 // ★ 2026-09-07 架构防御：手机号校验收口 schema-guard 单一副本
 import { isValidPhone } from './_lib/schema-guard.js';
 
@@ -254,8 +254,11 @@ export async function onRequest(context) {
         //   审核通过"即可绕过停用决策，让平台的停用能力形同虚设。必须在申请入口处直接拦截：
         //   提示客户联系客服复开（正常业务流程），而不是让前台重注册一条请求去绕开护栏。
         try {
-            const clinics = (await kv.get(KV_SYSTEM_CLINICS, 'json')) || [];
-            const sameNameClinic = Array.isArray(clinics) && clinics.find(c => c && c.name === clinicName);
+            // ★ 2026-09-24 安全收尾批：统一走 getClinicsOrThrow——存在但非数组/读取异常
+            //   一律 fail-closed。旧实现 catch 后"放行申请"，KV 故障或清单损坏期间停用诊所
+            //   可由匿名入口重新提交（三条通道必须同口径，见 KNOWLEDGE §26 P2→§28）。
+            const clinics = await getClinicsOrThrow(kv);
+            const sameNameClinic = findClinicByName(clinics, clinicName);
             if (sameNameClinic && sameNameClinic.status === 'disabled') {
                 console.log('[AdminSubmit] ★ 同名诊所已停用(disabled)，拒绝新申请:',
                     clinicName, 'phone=', phone, 'machineId=', finalMachineId.substring(0, 8));
@@ -266,7 +269,12 @@ export async function onRequest(context) {
                 }, 409);
             }
         } catch (de) {
-            console.warn('[AdminSubmit] 停用诊所同名检查失败(放行申请):', de && de.message);
+            console.warn('[AdminSubmit] 停用诊所同名检查失败(fail-closed 拒绝申请):', de && de.message);
+            return json({
+                success: false,
+                code: 'CLINIC_CHECK_ERROR',
+                error: '系统繁忙，暂时无法提交激活申请，请稍后再试；如持续失败请联系客服微信 hktzy1688'
+            }, 503);
         }
 
         // ★ 2026-08-20 已激活申请短路：该手机号此前已有"管理员审核通过"的激活申请（且可能

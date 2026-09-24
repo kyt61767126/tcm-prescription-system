@@ -34,6 +34,39 @@ export const KV_SYSTEM_SERVICE_ACCOUNTS = 'system:service_accounts';
 export const KV_TOKEN_REVOKED_PREFIX = 'revoked_token:';
 
 // ============================================================================
+// ★ 2026-09-24 安全收尾批：平台诊所清单读取——唯一权威入口（防停用闸通道分叉）
+//   - 键不存在（null/undefined，首次启动）→ 返回 []（正常空表）；
+//   - 键存在但不是数组（合法 JSON 的对象/字符串/数字 = KV 数据损坏/误写）→ 抛
+//     ClinicsDataError，调用方必须 fail-closed（激活申请/主审核/工单审批/落库点
+//         统一 5xx，绝不放行）；
+//   - KV 读取/JSON 解析异常原样向上抛（不吞错、不回退 []，防"读不出=无停用诊所"）。
+//   教训（KNOWLEDGE §26 P2 遗留）：旧写法 `(await kv.get(...)) || []` 配
+//   `Array.isArray(x) && x.find()` 对"非数组合法 JSON"静默放行（find 不执行=
+//   当作没有停用诊所），停用诊所可绕闸复活；三通道各抄一份极易漏改。
+// ============================================================================
+export class ClinicsDataError extends Error {
+    constructor(message) {
+        super(message);
+        this.name = 'ClinicsDataError';
+    }
+}
+
+export async function getClinicsOrThrow(kv) {
+    const raw = await kv.get(KV_SYSTEM_CLINICS, 'json');
+    if (raw === null || raw === undefined) return [];
+    if (!Array.isArray(raw)) {
+        throw new ClinicsDataError('平台诊所清单数据异常（非数组），已安全拦截，请检查 KV ' + KV_SYSTEM_CLINICS);
+    }
+    return raw;
+}
+
+// 同名诊所精确查找（clinicName 为空返回 undefined；调用方应先用 getClinicsOrThrow 取表）
+export function findClinicByName(clinics, name) {
+    if (!name) return undefined;
+    return clinics.find(c => c && c.name === name);
+}
+
+// ============================================================================
 // ★ 2026-08-20 手机号占位检查（"一个号码只能注册一次"核心支撑）
 //   供 users.js（register-clinic / check-register）与 admin-submit.js（激活申请提交）
 //   共同调用，避免同一手机号产生重复注册 / 重复激活申请冲突，并及时向用户提示。

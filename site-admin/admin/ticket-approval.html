@@ -69,6 +69,7 @@ tr:hover{background:#f9fafc}
   function mask(id){ if(!id) return '-'; if(id.length<=12) return id; return id.slice(0,6)+'••••'+id.slice(-6); }
   function tagHTML(s){
     if(s==='submitted'||s==='pending') return '<span class="tag tag-pending">待审批</span>';
+    if(s==='processing') return '<span class="tag tag-pending">⏳处理中</span>';
     if(s==='approved') return '<span class="tag tag-approved">已通过</span>';
     if(s==='rejected') return '<span class="tag tag-rejected">已拒绝</span>';
     return '<span class="tag">'+s+'</span>';

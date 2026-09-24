@@ -137,8 +137,11 @@ export async function onRequest(context) {
         if (!contactPhone && !contactWechat) {
             return json({ success: false, error: '请至少填写一种联系方式（手机号/微信号）' }, 400);
         }
-        if (contactPhone && !/^[0-9+\-\s]{5,20}$/.test(contactPhone)) {
-            return json({ success: false, error: '手机号格式不正确' }, 400);
+        // ★ 2026-09-24 安全收尾批：白名单去掉 \s（含 \n\r\t，可夹带换行污染工单/后续渲染），
+        //   仅允许数字/+/连字符/空格；并要求至少 5 位数字（防 "+++++" 类无意义串通过）
+        if (contactPhone && (!/^[0-9+\- ]{5,20}$/.test(contactPhone) ||
+            contactPhone.replace(/\D/g, '').length < 5)) {
+            return json({ success: false, error: '手机号格式不正确（仅支持数字、+、空格、连字符）' }, 400);
         }
 
         // 生成工单

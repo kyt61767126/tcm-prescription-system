@@ -106,6 +106,7 @@ tr:hover{background:#f9fafc}
       <label class="fld">状态
         <select id="ticketStatus">
           <option value="pending">待审批</option>
+          <option value="processing">处理中</option>
           <option value="all">全部</option>
           <option value="approved">已通过</option>
           <option value="rejected">已拒绝</option>
@@ -301,7 +302,7 @@ tr:hover{background:#f9fafc}
 
   function statusTag(s){
     var map={unused:['tag-unused','未使用'],used:['tag-used','已使用'],expired:['tag-expired','已过期'],disabled:['tag-disabled','已停用'],
-      pending:['tag-pending','待审批'],submitted:['tag-pending','待审批'],approved:['tag-approved','已通过'],rejected:['tag-rejected','已拒绝']};
+      pending:['tag-pending','待审批'],submitted:['tag-pending','待审批'],processing:['tag-pending','⏳处理中'],approved:['tag-approved','已通过'],rejected:['tag-rejected','已拒绝']};
     var m=map[s]||['',s]; return '<span class="tag '+m[0]+'">'+esc(m[1])+'</span>';
   }
 
@@ -321,6 +322,12 @@ tr:hover{background:#f9fafc}
     if(!list.length){ $('ticketBody').innerHTML='<tr><td colspan="9" class="muted" style="text-align:center;padding:30px">暂无工单</td></tr>'; return; }
     $('ticketBody').innerHTML=list.map(function(t){
       var pending=(t.status==='submitted'||t.status==='pending');
+      var processing=t.status==='processing';
+      var actionCell=processing
+        ? '<span class="muted">⏳ 处理中…<br>请勿重复点击</span>'
+        : (pending
+          ? '<button class="btn btn-approve" data-act="approve" data-no="'+esc(t.ticketNo)+'">✅ 通过并发码</button><button class="btn btn-reject" data-act="reject" data-no="'+esc(t.ticketNo)+'">❌ 拒绝</button>'
+          : '<span class="muted">'+esc(t.resolvedBy||'-')+'</span>');
       return '<tr>'+
         '<td class="mono">'+esc(t.ticketNo)+'</td>'+
         '<td>'+fmtDate(t.submittedAt)+'</td>'+
@@ -330,14 +337,14 @@ tr:hover{background:#f9fafc}
         '<td>'+esc(t.contactPhone||t.contactWechat)+'</td>'+
         '<td class="mono" title="完整哈希仅用于写入激活，不回显">'+esc(mask(t.machineId))+'</td>'+
         '<td>'+statusTag(t.status)+'</td>'+
-        '<td>'+(pending
-          ? '<button class="btn btn-approve" data-act="approve" data-no="'+esc(t.ticketNo)+'">✅ 通过并发码</button><button class="btn btn-reject" data-act="reject" data-no="'+esc(t.ticketNo)+'">❌ 拒绝</button>'
-          : '<span class="muted">'+esc(t.resolvedBy||'-')+'</span>')+'</td>'+
+        '<td>'+actionCell+'</td>'+
       '</tr>';
     }).join('');
   }
   async function ticketAction(btn){
     var no=btn.getAttribute('data-no'), act=btn.getAttribute('data-act');
+    if(btn.disabled) return;          // 客户端防连点（服务端 CAS 为最终闸）
+    btn.disabled=true;
     try{
       if(act==='approve'){
         if(!confirm('确认通过工单 '+no+'？\n将自动生成激活码（默认365天；机构版5台/标准版2台）并开通云端账号。')) return;
@@ -351,6 +358,7 @@ tr:hover{background:#f9fafc}
         loadTickets();
       }
     }catch(e){ alert('操作失败：'+((e.data&&e.data.error)||e.netError||'未知错误')); }
+    finally{ btn.disabled=false; }
   }
 
   // ---- 离线激活 ----

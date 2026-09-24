@@ -15,7 +15,8 @@ import {
     hashPassword,
     ROLE_CLINIC_ADMIN,
     ROLE_DOCTOR,
-    KV_SYSTEM_CLINICS
+    KV_SYSTEM_CLINICS,
+    getClinicsOrThrow
 } from '../../_lib/auth.js';
 // ★ 2026-09-23 账号被真实重新开通时清除删除墓碑（同手机号重新激活恢复登录）
 import { clearAccountTombstone } from './license-core.js';
@@ -122,7 +123,12 @@ export async function provisionCloudAccount(kv, record) {
     const targetCarrier = (rawCarrier === 'desktop' || rawCarrier === 'app')
         ? rawCarrier
         : (String(record.appMode || '').toLowerCase() === 'app' ? 'app' : '');
-    const clinics = (await kv.get(KV_SYSTEM_CLINICS, 'json')) || [];
+    // ★ 2026-09-24 安全收尾批：统一权威入口。旧写法非数组时 `.find` 抛错或被上游吞掉，
+    //   更危险的是落到"新建分支 clinics.push"会把整张诊所清单覆盖成仅含新诊所的数组
+    //   （=全量诊所数据事故）。非数组/读取异常直接抛错，由调用方 try/catch 决定，
+    //   三条审批链的停用闸会先于此函数拦截，自愈类调用方（validate/admin-status/登录）
+    //   本来就包 try/catch，抛错=本次不开通，下次轮询重试，不污染数据。
+    const clinics = await getClinicsOrThrow(kv);
     let clinic = clinics.find(c => c.name === clinicName);
     let clinicsDirty = false;
 

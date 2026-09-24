@@ -39,7 +39,8 @@
 // ============================================================================
 
 import {
-    parseAuthHeader, isPlatformAdmin, KV_SYSTEM_CLINICS
+    parseAuthHeader, isPlatformAdmin,
+    getClinicsOrThrow, findClinicByName
 } from '../_lib/auth.js';
 import {
     getKV, saveLicense, buildLicenseData, encodeLicenseBase64,
@@ -175,8 +176,10 @@ export async function onRequest(context) {
         //   并要求"先在后台把该诊所手动设为 test 或删除"再通过——让停用状态的反转必须经
         //   平台管理员两次显式操作，避免误点通过。
         try {
-            const clinics = (await kv.get(KV_SYSTEM_CLINICS, 'json')) || [];
-            const sameNameClinic = Array.isArray(clinics) && clinics.find(c => c && c.name === clinicName);
+            // ★ 2026-09-24 安全收尾批：统一走 getClinicsOrThrow——键缺失按空表，
+            //   存在但非数组/读取异常直接抛错 fail-closed（旧写法对非数组静默放行）
+            const clinics = await getClinicsOrThrow(kv);
+            const sameNameClinic = findClinicByName(clinics, clinicName);
             if (sameNameClinic && sameNameClinic.status === 'disabled') {
                 console.log('[AdminApprove] ★ 同名诊所已停用(disabled)，拒绝审核通过:',
                     clinicName, 'requestId=', requestId, 'by=', currentUser && currentUser.username);
@@ -189,9 +192,11 @@ export async function onRequest(context) {
             }
         } catch (de) {
             console.warn('[AdminApprove] 停用诊所同名检查失败(拒绝通过以保安全):', de && de.message);
+            // 响应固定文案：内部 KV 键名等细节只进服务端日志，不回显给调用方
             return json({
                 success: false,
-                error: '诊所停用状态检查异常，请刷新后重试：' + (de && de.message || '未知错误')
+                code: 'CLINIC_CHECK_ERROR',
+                error: '诊所状态检查异常，请稍后重试；如持续失败请联系系统管理员检查诊所清单数据'
             }, 500);
         }
 

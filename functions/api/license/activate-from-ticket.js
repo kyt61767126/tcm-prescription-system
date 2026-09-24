@@ -34,7 +34,8 @@
 // ============================================================================
 
 import {
-    parseAuthHeader, isStaff, KV_SYSTEM_CLINICS
+    parseAuthHeader, isStaff,
+    getClinicsOrThrow, findClinicByName
 } from '../_lib/auth.js';
 import {
     getKV, saveLicense, buildLicenseData, encodeLicenseBase64,
@@ -97,6 +98,11 @@ export async function onRequest(context) {
         return json({ success: false, error: 'Method not allowed' }, 405);
     }
 
+    // CAS 回滚句柄：占用成功后赋值；外层 catch 凭它把崩溃残留的 processing 退回 pending
+    let rollbackClaim = null;
+    // 已生成落库的码：外层 catch 回滚时带上它打日志，防码已发/工单回 pending 产生孤儿码无迹可查
+    let issuedCode = null;
+
     try {
         // 平台员工认证（platform_admin 或 C批 service 客服——客服一键审批即代发激活码，
         // 属用户明确授予能力；下方 AR-01 停用闸/锚点三件套等功能闸门对两类角色同等生效）
@@ -119,11 +125,49 @@ export async function onRequest(context) {
         }
 
         // 读取工单
-        const ticket = await kv.get(KV_TICKET_PREFIX + ticketNo, 'json');
+        const ticketKey = KV_TICKET_PREFIX + ticketNo;
+        const ticket = await kv.get(ticketKey, 'json');
         if (!ticket) {
             return json({ success: false, error: '工单不存在或已失效' }, 404);
         }
-        if (ticket.status !== 'pending') {
+
+        // ★ 2026-09-24 安全收尾批 CAS 状态机（防双击/并发双发付费码）：
+        //   pending 可审批；approved/rejected 终态 409；processing=他人/前一次请求占用中。
+        //   KV 无原子 CAS，采用"processing 占用态 + 随机占用令牌 + 写后复核 + 发码前终审"
+        //   逼近互斥；崩溃残留 processing 超 10 分钟允许接管；占用后任何业务错误回滚 pending。
+        const PROCESSING_TTL_MS = 10 * 60 * 1000;
+        // 占用年龄：NaN（processingAt 缺失/非法）或负值（未来时间，仅 KV 权限级可污染）
+        // 一律视为已过期可接管——信任 status 而非可脏时间戳，杜绝工单永久卡死
+        const processingAgeMs = (t) => {
+            if (!t || !t.processingAt) return NaN;
+            return Date.now() - new Date(t.processingAt).getTime();
+        };
+        if (ticket.status === 'approved' || ticket.status === 'rejected') {
+            return json({
+                success: false,
+                code: 'TICKET_ALREADY_RESOLVED',
+                error: `工单${ticket.status === 'approved' ? '已通过' : '已拒绝'}，请勿重复操作`
+            }, 409);
+        }
+        if (ticket.status === 'processing') {
+            const ageMs = processingAgeMs(ticket);
+            const isFresh = !(isNaN(ageMs) || ageMs < 0 || ageMs >= PROCESSING_TTL_MS);
+            if (isFresh) {
+                return json({
+                    success: false,
+                    code: 'TICKET_PROCESSING',
+                    error: '工单正在处理中，请勿重复点击（若长时间未完成，请 10 分钟后再试）'
+                }, 409);
+            }
+            console.warn('[ActivateFromTicket] 接管超时/异常残留 processing 工单:', ticketNo,
+                'prevBy=', ticket.processingBy, 'at=', ticket.processingAt);
+            context.waitUntil(writeAuditLog(kv, null, currentUser.username, currentUser.role,
+                'ticket_claim_takeover', ticketNo, context, {
+                    channel: 'activate',
+                    prevProcessingBy: ticket.processingBy || null,
+                    prevProcessingAt: ticket.processingAt || null
+                }));
+        } else if (ticket.status !== 'pending') {
             return json({
                 success: false,
                 error: `工单当前状态为 ${ticket.status}，无法审批（仅待审批状态可操作）`
@@ -149,9 +193,74 @@ export async function onRequest(context) {
             return json({ success: false, error: '工单中缺少诊所名称' }, 400);
         }
 
-        // ★ 设备-版本绑定校验：若该设备已激活另一版本，则拒绝
+        // ★ 云端产品策略：个人版一个管理员默认授权 2 台设备（桌面+APP）
+        // ★ 2026-08-30 机构版策略：type=pro 默认 5 台（机构安装 3-5 台电脑共用一码），
+        //   工单审批页只传 ticketNo 不传 maxDevices，服务端必须按 type 兜底
+        // ★ 2026-09-17 语音版策略：type=voice 默认 1 台（1年/1设备产品语义）
+        // ★ CAS：参数校验全部前移到"占用工单"之前——非法请求不得留下 processing 残留
+        let parsedMaxDevices = (type === 'pro') ? 5 : (type === 'voice' ? 1 : 2);
+        if (body.maxDevices !== undefined && body.maxDevices !== null) {
+            parsedMaxDevices = parseInt(body.maxDevices, 10);
+            if (isNaN(parsedMaxDevices) || parsedMaxDevices < 1 || parsedMaxDevices > 10) {
+                return json({ success: false, error: 'maxDevices 必须是 1-10 之间的整数' }, 400);
+            }
+        }
+
+        // 计算到期时间（纯计算，置于占用前）
+        let recordExpiresAt = null;
+        if (expiresAt) {
+            recordExpiresAt = new Date(expiresAt + 'T23:59:59+08:00').toISOString();
+        }
+
+        // ===== CAS 占用：立即写 processing + 随机令牌，把双击的第二个请求挡在发码之前 =====
+        const claimToken = Array.from(crypto.getRandomValues(new Uint8Array(16)))
+            .map(b => b.toString(16).padStart(2, '0')).join('');
+        // 回滚助手必须先于占用 put 就绪：连"put 实际落盘但 Promise reject / 随后复核 GET 瞬断"
+        //   这类极端情况，外层 catch 也能拿到句柄（否则工单卡 processing 到 10 分钟 TTL）。
+        //   仅"仍由本次请求持有令牌"才允许退回 pending，绝不覆盖他人终态/占用；陈旧 pending 读下 no-op。
+        const rollbackToPending = async (why) => {
+            try {
+                const cur = await kv.get(ticketKey, 'json');
+                if (cur && cur.status === 'processing' && cur.processingToken === claimToken) {
+                    cur.status = 'pending';
+                    delete cur.processingBy;
+                    delete cur.processingAt;
+                    delete cur.processingToken;
+                    await kv.put(ticketKey, JSON.stringify(cur));
+                    console.log('[ActivateFromTicket] 工单占用已回滚 pending:', ticketNo, 'why=', why);
+                    context.waitUntil(writeAuditLog(kv, null, currentUser.username, currentUser.role,
+                        'ticket_claim_rollback', ticketNo, context, {
+                            reason: String(why || '').slice(0, 80),
+                            issuedCode: issuedCode || null
+                        }));
+                }
+            } catch (re) {
+                console.warn('[ActivateFromTicket] 回滚 pending 失败:', re && re.message);
+            }
+        };
+        rollbackClaim = rollbackToPending;
+        ticket.status = 'processing';
+        ticket.processingBy = currentUser.username;
+        ticket.processingAt = new Date().toISOString();
+        ticket.processingToken = claimToken;
+        await kv.put(ticketKey, JSON.stringify(ticket));
+        // 写后立即复核：并发双击时两次写 LWW，败者读到他人令牌即弃权（KV 全球最终一致，
+        //   极端陈旧读只会让真正胜者误弃权返回 409——失败方向安全；同时尽力回滚自己的占用，
+        //   陈旧读到 pending 时回滚 no-op，残留 10 分钟 TTL 自愈）
+        const claimed = await kv.get(ticketKey, 'json');
+        if (!claimed || claimed.status !== 'processing' || claimed.processingToken !== claimToken) {
+            await rollbackToPending('post-claim-verify');
+            return json({
+                success: false,
+                code: 'TICKET_PROCESSING',
+                error: '工单正在处理中，请勿重复点击'
+            }, 409);
+        }
+
+        // ★ 设备-版本绑定校验：若该设备已激活另一版本，则拒绝（占用后失败需回滚）
         const deviceCheck = await checkDeviceVersion(kv, ticket.machineId, type);
         if (!deviceCheck.ok) {
+            await rollbackToPending('device-check');
             return json({ success: false, error: deviceCheck.error }, 403);
         }
 
@@ -159,13 +268,16 @@ export async function onRequest(context) {
         //   同名诊所 status=disabled 时，工单审批通过也必须拒绝。工单通道与主审核通道是
         //   激活的两个并列入口，缺这道闸时停用诊所可由"提交工单→另一位管理员一键通过"
         //   复活（provisionCloudAccount disabled→active），平台停用护栏名存实亡。
-        //   检查异常 fail-closed（500），绝不放行。
+        // ★ 2026-09-24 安全收尾批：统一走 getClinicsOrThrow——键缺失按空表；
+        //   存在但非数组/读取异常 fail-closed（旧写法 `Array.isArray(x) && x.find()`
+        //   对非数组合法 JSON 静默放行 = 停用闸失效）。占用后失败需回滚 pending。
         try {
-            const clinics = (await kv.get(KV_SYSTEM_CLINICS, 'json')) || [];
-            const sameNameClinic = Array.isArray(clinics) && clinics.find(c => c && c.name === clinicName);
+            const clinics = await getClinicsOrThrow(kv);
+            const sameNameClinic = findClinicByName(clinics, clinicName);
             if (sameNameClinic && sameNameClinic.status === 'disabled') {
                 console.log('[ActivateFromTicket] ★ 同名诊所已停用(disabled)，拒绝工单通过:',
                     clinicName, 'ticketNo=', ticketNo, 'by=', currentUser && currentUser.username);
+                await rollbackToPending('clinic-disabled');
                 return json({
                     success: false,
                     code: 'CLINIC_DISABLED',
@@ -175,28 +287,24 @@ export async function onRequest(context) {
             }
         } catch (de) {
             console.warn('[ActivateFromTicket] 停用诊所同名检查失败(拒绝通过以保安全):', de && de.message);
+            await rollbackToPending('clinic-gate-error');
+            // 响应固定文案：内部 KV 键名等细节只进服务端日志，不回显给调用方
             return json({
                 success: false,
-                error: '诊所停用状态检查异常，请刷新后重试：' + (de && de.message || '未知错误')
+                code: 'CLINIC_CHECK_ERROR',
+                error: '诊所状态检查异常，请稍后重试；如持续失败请联系系统管理员'
             }, 500);
         }
 
-        // ★ 云端产品策略：个人版一个管理员默认授权 2 台设备（桌面+APP）
-        // ★ 2026-08-30 机构版策略：type=pro 默认 5 台（机构安装 3-5 台电脑共用一码），
-        //   工单审批页只传 ticketNo 不传 maxDevices，服务端必须按 type 兜底
-        // ★ 2026-09-17 语音版策略：type=voice 默认 1 台（1年/1设备产品语义）
-        let parsedMaxDevices = (type === 'pro') ? 5 : (type === 'voice' ? 1 : 2);
-        if (body.maxDevices !== undefined && body.maxDevices !== null) {
-            parsedMaxDevices = parseInt(body.maxDevices, 10);
-            if (isNaN(parsedMaxDevices) || parsedMaxDevices < 1 || parsedMaxDevices > 10) {
-                return json({ success: false, error: 'maxDevices 必须是 1-10 之间的整数' }, 400);
-            }
-        }
-
-        // 计算到期时间
-        let recordExpiresAt = null;
-        if (expiresAt) {
-            recordExpiresAt = new Date(expiresAt + 'T23:59:59+08:00').toISOString();
+        // ===== CAS 终审：不可逆发码（生成付费码+开云端账号）前再读一次，令牌不匹配立即弃权 =====
+        const beforeIssue = await kv.get(ticketKey, 'json');
+        if (!beforeIssue || beforeIssue.status !== 'processing' ||
+            beforeIssue.processingToken !== claimToken) {
+            return json({
+                success: false,
+                code: 'TICKET_PROCESSING',
+                error: '工单状态已变化（可能正在被另一请求处理），本次操作已中止，请刷新列表'
+            }, 409);
         }
 
         // 1. 生成新激活码并绑定 clinicName（工单的 machineId 作为首个设备）
@@ -235,6 +343,7 @@ export async function onRequest(context) {
         };
 
         await saveLicense(kv, licenseRecord);
+        issuedCode = code;  // 码已落库：此后外层 catch 回滚日志会带上它便于人工回收孤儿码
 
         // ★ 2026-09-23 单设备单码：新码已入库，清理该设备在其他诊所码的残留绑定
         const detachedCodes = await detachDeviceFromOtherLicenses(kv, code, ticket.machineId);
@@ -309,8 +418,33 @@ export async function onRequest(context) {
         const licenseData = await buildLicenseData(licenseRecord, licenseOptions);
         const licenseBase64 = encodeLicenseBase64(licenseData);
 
-        // 6. 更新工单 status=approved，回写管理员最终决策
+        // 6. 更新工单 status=approved，回写管理员最终决策（清理 CAS 占用字段）
+        // ★ CAS 终写复核：本码已发不可逆，覆盖前最后一读——若占用已超时被他人接管并产出
+        //   终态（approved/rejected），绝不盲写覆盖；本码记入冲突审计供人工回收/解绑。
+        const beforeTerminal = await kv.get(ticketKey, 'json');
+        if (!beforeTerminal || beforeTerminal.status !== 'processing' ||
+            beforeTerminal.processingToken !== claimToken) {
+            console.error('[ActivateFromTicket] ★终写复核失败，放弃覆盖终态（码已发，需人工核对）:',
+                ticketNo, 'localCode=', code, 'remoteStatus=', beforeTerminal && beforeTerminal.status,
+                'remoteCode=', beforeTerminal && beforeTerminal.licenseCode, 'by=', currentUser.username);
+            context.waitUntil(writeAuditLog(kv, null, currentUser.username, currentUser.role,
+                'ticket_approve_terminal_conflict', ticketNo, context, {
+                    localLicenseCode: code,
+                    remoteStatus: beforeTerminal ? beforeTerminal.status : 'missing',
+                    remoteLicenseCode: beforeTerminal && beforeTerminal.licenseCode ? beforeTerminal.licenseCode : null,
+                    machineIdHint: ticket.machineId ? ticket.machineId.substring(0, 8) : null
+                }));
+            return json({
+                success: false,
+                code: 'TICKET_PROCESSED_ELSEWHERE',
+                error: '工单可能已被另一请求处理完成，本次未覆盖审批结果；请刷新列表核对。' +
+                    '如发现同工单两个激活码，请联系管理员在激活码列表核查回收'
+            }, 409);
+        }
         ticket.status = 'approved';
+        delete ticket.processingBy;
+        delete ticket.processingAt;
+        delete ticket.processingToken;
         ticket.resolvedAt = new Date().toISOString();
         ticket.resolvedBy = currentUser.username;
         ticket.licenseCode = code;
@@ -352,7 +486,12 @@ export async function onRequest(context) {
         });
 
     } catch (error) {
-        console.error('Activate from ticket error:', error);
+        console.error('Activate from ticket error:', error, 'issuedCode=', issuedCode || 'none');
+        // CAS：占用后抛错（如 KV 写许可中断），尽力把工单退回 pending，防崩溃残留卡死。
+        //   若码已落库（issuedCode 非空），回滚审计会带码号，供人工回收孤儿码。
+        if (rollbackClaim) {
+            try { await rollbackClaim('outer-error' + (issuedCode ? ':code=' + issuedCode : '')); } catch (_) { /* 忽略二次异常 */ }
+        }
         return json({ success: false, error: '服务器内部错误，请稍后再试' }, 500);
     }
 }
