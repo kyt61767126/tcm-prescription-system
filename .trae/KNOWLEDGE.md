@@ -1217,10 +1217,11 @@
 * **热更三位一体扩到 cloud**：cloud 通道与 local 通道同等适用「整包+热包+生成器」同步原则（既往仅 local 被反复执行，cloud 长期漏管）。
 * 沙箱断言模板留存于 tools/_tmp/hot-env-assert.cjs（23 断言：事故现场/插槽时序变体/标准版回退/云端标准版/离线机构）。
 
-### 23.5 已知遗留（下次云端 APK 整包必办）
-* `app_project/db-yunduan/cloud_app/.../assets/public/permission.js` 是**手工分叉副本**（不在 sync-all BusinessJs 组，index.html 用 `?cv=1d371b40` 哈希锁定）：含 9-01 插槽写入但 `_currentEdition()` 同样不读插槽，与本次事故同构。云端 APP 无热更通道，修复需手工移植插槽读取 + 更新 cv 哈希 + 重打云端 APK。安全二查已确认：渲染层 edition 仅 UI 门控，云端用户管理真正鉴权在 functions/api/users.js 服务端按 token 角色独立执行（伪造插槽调接口 401/403），无越权风险。
+### 23.5 同步网教训与遗留
+* **pre-push 有两张同步网，sync-all 不是全部**：sync-all.ps1 的 BusinessJs 组（6 目标）**漏列** site-admin 与 cloud_app 两个 permission.js 副本；pre-push 钩子另跑 `node tools/copy-consistency.cjs`（16 组 77 副本）拦截。改 shared/ 后若只信 sync-all VerifyOnly 绿就提交，push 必被拦；此时官方姿势是 `node tools/copy-consistency.cjs --fix`（用 shared/ 权威源覆盖，勿手改）。本次 cloud_app permission.js 即靠 --fix 一并获得插槽修复（它不是手工分叉，与 shared 同源；9-01 插槽代码本就在里面）。
+* **下次云端 APK 整包待办**：cloud_app index.html 引用 permission.js 的 `?cv=1d371b40` 缓存哈希需随文件更新重算（不更新不影响加载，仅破缓存标记失真）；云端 APP 无热更通道，本次渲染层修复只随整包 APK 生效。安全二查已确认：渲染层 edition 仅 UI 门控，云端用户管理真正鉴权在 functions/api/users.js 服务端按 token 角色独立执行（伪造插槽调接口 401/403），无越权风险。
 * 安全加固建议（非阻断）：热目录隔离/swap 时剔除 config.json（含密码哈希的旧副本残留 quarantine/previous）；桌面热更生成器参照 app 通道补 FORBIDDEN 硬断言。
-* 双重复审结论：无阻断项、无本次引入的高危；Ed25519 签名三通道独立复验 true，逐文件 sha256 磁盘复验全一致。
+* 双重复审结论：无阻断项、无本次引入的高危；Ed25519 签名三通道独立复验 true，逐文件 sha256 磁盘复验全一致；copy-consistency 77 副本 ALL PASS。
 
 ### 23.6 生效与复测
 * 客户操作：云端桌面**联网重启 2 次**（第 1 次拉包、第 2 次生效），【用户管理】应恢复；仍异常则删除 userData/hot-update 目录回退 asar 并联系客服。desktop-windows.cjs 的 config 候选链修复随下次桌面整包（当前热包已靠插槽止血，不依赖该修复）。
