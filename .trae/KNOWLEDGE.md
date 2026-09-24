@@ -1225,3 +1225,8 @@
 
 ### 23.6 生效与复测
 * 客户操作：云端桌面**联网重启 2 次**（第 1 次拉包、第 2 次生效），【用户管理】应恢复；仍异常则删除 userData/hot-update 目录回退 asar 并联系客服。desktop-windows.cjs 的 config 候选链修复随下次桌面整包（当前热包已靠插槽止血，不依赖该修复）。
+
+### 22.12 注册弹窗「已有账号登录」入口置顶（2026-09-24）
+* **需求**：零用户注册前置弹窗（shared/auth-core/offline.js `showLocalRegisterModal`）的「暂不注册，已有账号登录」原在提交按钮下方，老用户难发现。移到表单第一行（蓝色说明框之上、右对齐浅绿胶囊 `border-radius:16px`，id `localRegCloseLink`/文案/click 绑定全不变，e2e `dismissRegisterOverlay` 按 id 点击不受影响）。
+* **多端**：弹窗模板在 shared/auth-core/offline.js（sync-auth-core 3 离线目标；cloud.js 无此弹窗），纯 JS innerHTML 不触 check-interface 基线（改前改后均 6 OK）。
+* **热包**：auth-core.js 在热更白名单 → desktop/local、app-local 同日重发 **2026.09.24-2**（minAppCode 288 继承）；desktop/cloud 用 cloud.js 不动。整包随下次打包。

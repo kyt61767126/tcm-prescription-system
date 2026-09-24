@@ -4635,6 +4635,11 @@
 
             // 表单（一页式）
             '<div id="localRegForm" style="padding:16px;">' +
+                // ★ 2026-09-24 「已有账号登录」入口置顶：老用户不必滚到表单底部找，
+                //   弹窗一打开即见（id/文案/绑定逻辑不变，仅位置从提交按钮下方上移）。
+                '<div style="display:flex;justify-content:flex-end;margin-bottom:12px;">' +
+                    '<span id="localRegCloseLink" style="font-size:13px;color:#00796b;cursor:pointer;font-weight:600;background:#e0f2f1;border:1px solid #80cbc4;border-radius:16px;padding:6px 14px;">暂不注册，已有账号登录 ›</span>' +
+                '</div>' +
                 '<div style="background:#f0f7ff;border:1px solid #d6e8ff;border-radius:8px;padding:10px;margin-bottom:14px;font-size:12px;color:#1565c0;line-height:1.7;">' +
                     '💡 请先完成注册（<b>手机号即登录账号</b>）。<br>注册后两种方式任选：<b>🆓 领取永久免费版</b>（开方不限量、￥0 永久使用），或先 <b>试用 7 天</b> 标准版全功能、随时激活正式版。' +
                 '</div>' +
@@ -4661,9 +4666,6 @@
                 '</div>' +
                 '<div id="localRegError" style="display:none;margin-bottom:12px;padding:10px 12px;border-radius:8px;background:#fdecea;color:#c0392b;font-size:13px;"></div>' +
                 '<button id="localRegSubmitBtn" style="width:100%;padding:12px;font-size:15px;border:none;border-radius:8px;color:#fff;background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);cursor:pointer;font-weight:bold;">✅ 完成注册</button>' +
-                '<div style="text-align:center;margin-top:10px;">' +
-                    '<span id="localRegCloseLink" style="font-size:13px;color:#909399;cursor:pointer;text-decoration:underline;">暂不注册，已有账号登录</span>' +
-                '</div>' +
             '</div>' +
 
             // 提交中（默认隐藏）
