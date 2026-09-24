@@ -3127,16 +3127,15 @@ let currentUser = null;
                     }
                 } catch (e) { console.warn('[LoginSelfHeal] 登录兜底自愈异常(不影响登录):', e); }
                 // ★ 2026-09-22 注册前置零账户守卫：上方自愈桥已从 config 权威源拉过账号，
-                //   仍然零用户=真正的出厂新机（出厂零 admin，注册弹窗本应已盖住登录框）。
-                //   无论注册弹窗因何原因未出现，登录尝试一律唤起不可跳过的注册弹窗，
-                //   杜绝客户面对无意义的"用户名或密码错误"而不知如何是好。
+                //   仍然零用户=真正的出厂新机。
+                // ★ 2026-09-24 交互修正：不再自动弹注册窗打断（与桌面登录窗 login.js 同源
+                //   口径），只在登录区红字留页提示，由用户主动点【注册开通】入口；
+                //   已填账号密码保留，可直接修改重试。
                 if (!users || users.length === 0) {
                     try {
-                        errorDiv.textContent = '请先完成注册，注册后即可试用';
+                        errorDiv.textContent = '本机尚未注册管理员账户，请点击【注册开通】完成注册（注册后即可免费试用）';
                         errorDiv.style.display = 'block';
-                        if (typeof openLocalRegister === 'function') openLocalRegister();
-                        else if (window.openLocalRegister) window.openLocalRegister();
-                    } catch (e) { console.warn('零账户唤起注册弹窗失败(不影响重试):', e); }
+                    } catch (e) { console.warn('零账户提示失败(不影响重试):', e); }
                     return;
                 }
                 // ★ 2026-08-30 账号映射兜底：Tab2「激活码直接激活」路径 submit(code, user) 只传

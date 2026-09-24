@@ -611,11 +611,13 @@
         _loginInFlight = true;
         setLoginLoading(true);
         try {
-            // ★ 2026-09-22 出厂零账户（admin/admin 已取消）：无账户时直接引导注册，
-            //   注册成功即可试用，不再引导「先激活」。
+            // ★ 2026-09-22 出厂零账户（admin/admin 已取消）：无账户时不做密码校验。
+            // ★ 2026-09-24 交互修正：不再自动弹注册窗打断——登录框顶部红条本身就是注册
+            //   入口（checkFirstRun 已绑定 openLocalRegister），用户主动点才弹；点确定只
+            //   留页红字提示，已填手机号/密码保留（按钮由 finally 复位）。避免老用户或
+            //   数据暂未读到的场景被强制弹窗、输入被遮。
             if (!_users || _users.length === 0) {
-                showError('⚠️ 请先完成注册，注册后即可试用');
-                if (typeof window.openLocalRegister === 'function') window.openLocalRegister();
+                showError('⚠️ 本机尚未注册管理员账户，请点击上方红色「点击此处立即注册」条开通（注册后即可免费试用）');
                 return;
             }
 
