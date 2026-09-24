@@ -1,7 +1,7 @@
 {
   "format": 1,
   "channel": "app-local",
-  "hotVersion": "2026.09.23-2",
+  "hotVersion": "2026.09.24-1",
   "minAppCode": 288,
   "appVersion": "1.0.0",
   "files": [
@@ -17,8 +17,8 @@
     },
     {
       "name": "permission.js",
-      "sha256": "1d371b40986e07a02c5891bc7e1883c3e1a1f0a9c309105a7534eef6c5d8d8bb",
-      "size": 28698
+      "sha256": "c3c70ff3757fdf6b6f0ea53d23115e7ff2370b77dedde3b6ab0b903703e07669",
+      "size": 30282
     },
     {
       "name": "normalize-config.js",
@@ -76,6 +76,6 @@
       "size": 881727
     }
   ],
-  "signedAt": 1790156647709,
-  "signature": "ltLdOR4rws7HfwRWRS+IZVd/DbxHi/9PA2wd7w74neRUG01Z4VHldC/PE61g28RqDCh5y7npK3kPY6cQJYpXCw=="
+  "signedAt": 1790207326667,
+  "signature": "VA4JfygzhX3N6klm8JwhdbrL+IkPEIkPyE+FTQX/v3upnXN1ir6guDJTNx+/v4h2tGJZX4ujblpZ7/8OOlzOAQ=="
 }

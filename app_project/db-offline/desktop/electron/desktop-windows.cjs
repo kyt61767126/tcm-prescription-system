@@ -252,8 +252,37 @@ function createDesktopWindows({ app, BrowserWindow, shell, updateManager, sendSt
         }
         if (hotEntry) {
             try {
-                fs.copyFileSync(path.join(__dirname, '..', 'config.json'),
-                    path.join(path.dirname(hotEntry), 'config.json'));
+                // ★★★ 2026-09-24 【热更环境机构版按钮消失根治】热目录 config.json 必须复制
+                //   userData 权威版（激活后含 cloud_clinic/offline_clinic + 密码哈希 + 配置签名），
+                //   而非 asar 出厂模板（cloud_personal/personal）。热目录布局固定为
+                //   <dataDir>/hot-update/<current|previous>/index.html（dataDir=userData），
+                //   上溯两级即 userData 根；便携版权威 config 在 exe 同目录（getWritableDir 语义），
+                //   故候选顺序：userData → exe 同目录 → asar 模板，首个存在即用。
+                //   事故现象：复制 asar 模板 → 渲染层同步 XHR 读到 personal 系默认值 →
+                //   CONFIG.edition 被打成标准版 → 机构管理员【用户管理】按钮消失。
+                //   config.json 仅在本机目录间复制，绝不打进分发的热包（见 hot-update-core 头注）。
+                const hotDirPath = path.dirname(hotEntry);
+                const configCandidates = [
+                    path.join(hotDirPath, '..', '..', 'config.json') // NSIS：userData 权威版
+                ];
+                try {
+                    // 便携版权威 config 在安装包 exe 同目录（getWritableDir 语义）。
+                    // ★ 必须优先 PORTABLE_EXECUTABLE_DIR：electron-builder portable 运行时
+                    //   app.getPath('exe') 指向 %TEMP% 解包目录而非真实 exe 所在目录
+                    //   （与 main.js getWritableConfigPath / desktop-fs-ipc.cjs env 优先约定一致）。
+                    const portableDir = process.env.PORTABLE_EXECUTABLE_DIR;
+                    if (portableDir) {
+                        configCandidates.push(path.join(portableDir, 'config.json'));
+                    } else if (app && app.getPath) {
+                        configCandidates.push(path.join(path.dirname(app.getPath('exe')), 'config.json'));
+                    }
+                } catch (_) {}
+                configCandidates.push(path.join(__dirname, '..', 'config.json')); // asar 出厂模板兜底
+                let srcConfig = configCandidates[configCandidates.length - 1];
+                for (const cand of configCandidates) {
+                    try { if (fs.existsSync(cand)) { srcConfig = cand; break; } } catch (_) {}
+                }
+                fs.copyFileSync(srcConfig, path.join(hotDirPath, 'config.json'));
             } catch (e) { /* 复制失败时同步 XHR 404 → 内联默认+userData 覆盖，等同现状 */ }
             console.log('[hot-update] 加载热更新版入口:', hotEntry);
             win.loadFile(hotEntry);

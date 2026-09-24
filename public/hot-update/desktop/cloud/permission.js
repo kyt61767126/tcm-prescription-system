@@ -127,7 +127,29 @@ try {
             if (x.indexOf('标准版') >= 0) return 'personal';
             return s;
         },
+        // ★★★ 2026-09-24 【热更环境机构版按钮消失根治】读取 userData 权威 edition 插槽。
+        //   事故链：cloud 热通道长期错投本地身份 index.html（EDITION=personal/惠康中医-本地/
+        //   APP_MODE=auto），热目录又无 config.json（主进程复制的是 asar 出厂模板 cloud_personal）
+        //   → CONFIG.edition 与 window.EDITION 全是 personal 系；唯一的真相是 Permission.init()
+        //   经 IPC 从 userData 读到并暂存的权威值（9-01 已写插槽，但按钮判定链从不读它）。
+        //   规则：插槽值（userData 激活配置）> CONFIG.edition（同目录 XHR，热目录可能是出厂模板）
+        //   > window.EDITION（出厂默认，必然不可信）> this._edition。
+        //   注意 TDZ：CONFIG 在解析期可能处于暂时性死区，typeof 亦抛错——必须 try-catch。
+        _authoritativeEditionValue() {
+            try {
+                if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.__authoritativeEdition) {
+                    return String(CONFIG.__authoritativeEdition);
+                }
+            } catch (_) {}
+            try {
+                if (this._authoritativeEdition) return String(this._authoritativeEdition);
+            } catch (_) {}
+            return '';
+        },
         _currentEdition() {
+            // ★ 2026-09-24 权威插槽最优先（热更环境 XHR/默认值均不可信，详见上方法注释）
+            var auth = this._authoritativeEditionValue();
+            if (auth) return this._normalizeEdition(auth);
             var v = '';
             try {
                 if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.edition) v = String(CONFIG.edition);

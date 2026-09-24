@@ -1,8 +1,8 @@
 {
   "format": 1,
   "channel": "local",
-  "hotVersion": "2026.09.23-2",
-  "appVersion": "1.0.252",
+  "hotVersion": "2026.09.24-1",
+  "appVersion": "1.0.254",
   "files": [
     {
       "name": "index.html",
@@ -16,8 +16,18 @@
     },
     {
       "name": "permission.js",
-      "sha256": "1d371b40986e07a02c5891bc7e1883c3e1a1f0a9c309105a7534eef6c5d8d8bb",
-      "size": 28698
+      "sha256": "c3c70ff3757fdf6b6f0ea53d23115e7ff2370b77dedde3b6ab0b903703e07669",
+      "size": 30282
+    },
+    {
+      "name": "button-manager.js",
+      "sha256": "07a99e613ed3eeb8775a517164b3fc3b0e906bf6240f210d9d354e08bb3d24e0",
+      "size": 23455
+    },
+    {
+      "name": "edition-lock.js",
+      "sha256": "648e0ba8ad05347f0b14c3fb44af804d8794719c41d9ad44cb5eab089eaf535a",
+      "size": 8605
     },
     {
       "name": "normalize-config.js",
@@ -85,6 +95,6 @@
       "size": 881727
     }
   ],
-  "signedAt": 1790156634791,
-  "signature": "YrQUFXcieiV+1FvZErvQEasf00h9Z3AFAcfkTKzDiSaqH9pj7KqpUJcgOHJmGshgRSKMK0BZZhbRdRuPCIxeBg=="
+  "signedAt": 1790209002128,
+  "signature": "+72rDOC8ltPgktjPX+4uZ6qT8BBVbaXTtMdakwwXAVKG5fPxfV30wbiDWQyfVRBFdgItUdl5OU4TAOdGoiLcDQ=="
 }

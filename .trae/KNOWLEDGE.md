@@ -1191,3 +1191,36 @@
 * **测试**：冒烟 20/20（含场景3：激活机错码拒绝/取消中止/小写无横杠正确码+哈希校验）；77 副本 PASS；check-interface 6 OK；4 对基线全绿。**APP 冒烟必须加载 assets/public/index.html（与 auth-core.js 同目录），index-app.html 是生成中间产物无同级脚本=全 404**。
 * **热包**：desktop/cloud 2026.09.22-3、desktop/local 2026.09.22-4、app-local 2026.09.22-7（minAppCode 288）。**热包不含 electron 主进程/Java 文件：注册弹窗本身（auth-core/index.html）热更即生效；A2 主进程修复、A3 Java 哈希、login.js 改动只随下版整包/APK 重装生效**。
 
+
+## 23. 【P0 事故复盘】云端机构版【用户管理】热更消失二次复发（2026-09-24，热包 2026.09.24-1）
+
+### 23.1 事故现象
+* 桌面云端机构版（客户「王桂杰」，标题正常显示「惠康中医-云端机构版」）导航唯独【用户管理】消失，只剩【修改密码】。这是 2026-09-01 TDZ 时序竞态修复后**第二次复发**；253 新 asar 发布后客户启动拉取错误热包即显现。
+
+### 23.2 四条根因（全部取证闭合）
+1. **cloud 桌面热通道取错源（根因之首，潜伏 4 个提交 ca3094de/79a3219a/5f5a9819/d8b84a64）**：generate-desktop-hotupdate.cjs cloud 通道 srcDir=`public/`（网页默认身份 personal/惠康中医-本地/APP_MODE=auto），正确源是 `app_project/db-yunduan/cloud_desktop`（cloud_personal/云端/cloud）。热目录文件全量遮蔽 asar。
+2. **权威插槽「只写不读」**：9-01 修复让 Permission.init() 经 IPC 把 userData 权威 edition（cloud_clinic）写入 `Permission._authoritativeEdition` + `CONFIG.__authoritativeEdition`，但 permission.js 的 `_currentEdition()` 与 button-manager.js 的 `__getEdition()` 都不读插槽 → `_isStandardEditionForced()` 据出厂 personal 值强制 canManageUsers=false。标题正常只因 edition-lock.js 的 getter 读了插槽 → 「标题机构版、按钮标准版」撕裂。
+3. **热目录 config.json 复制的是 asar 出厂模板**（cloud_personal）而非 userData 激活配置（cloud_clinic）：desktop-windows.cjs 旧码 `copyFileSync(path.join(__dirname,'..','config.json'))`。
+4. **edition-lock.js 不在桌面热包清单**：permission.js 头部 document.write 注入 edition-lock.js + button-manager.js，但热包长期两个都没有（button-manager 本次才补）。热环境缺 edition-lock → CONFIG.edition setter 镜像不存在，登录后服务端权威 clinicEdition（index.html 明文契约「登录权威最后写入者必胜」）会被 init 插槽快照遮蔽——时序复发隐患。
+
+### 23.3 修复（热包即时止血 + 整包纵深）
+* shared/permission.js：新增 `_authoritativeEditionValue()`（CONFIG 插槽→Permission 插槽，均 TDZ try-catch）；`_currentEdition()` 插槽最优先，无插槽完整回落旧链（标准版零回归）。
+* shared/button-manager.js：`__getEdition()` 同样插槽最优先。
+* shared/desktop-windows.cjs（只随整包）：热目录 config.json 复制候选链 **userData 根（热目录上溯两级）→ `PORTABLE_EXECUTABLE_DIR`（便携版；electron-builder 便携包 `app.getPath('exe')` 指向 %TEMP% 解包目录，必须用环境变量，对齐 main.js/desktop-fs-ipc.cjs）→ asar 模板**，首个存在即用。
+* tools/generate-desktop-hotupdate.cjs：①cloud 通道 index.html/button-manager.js 改 srcOverride 取 cloud_desktop；②桌面双白名单补 button-manager.js + edition-lock.js（热环境与 asar document.write 加载链完全同构）；③**身份断言 fail-fast 前置到签名/清目录之前**，行首独立声明正则（`/^\s*window\.EDITION\s*=\s*'cloud_personal'\s*;/m` 等），只认出厂声明行，不误伤 enforceStandardEditionButtons 内条件赋值。
+* 三通道热包：desktop/cloud、desktop/local、app-local 均 **2026.09.24-1**（app-local minAppCode 288 继承；APP 不引用 button-manager/edition-lock，FORBIDDEN 保持排除；permission.js 在 APP 白名单故 app-local 必须同批重签否则旧热包遮蔽新码）。
+
+### 23.4 新铁律（永久遵守）
+* **权威插槽消费铁律**：凡是影响权限/版本行为的判定谓词，读取 edition 时必须让 `__authoritativeEdition` 插槽最高优先；新增插槽只写不读等于没修。无插槽路径必须逐字节保留旧行为（真标准版永久隐藏用户管理）。
+* **热包同构铁律**：permission.js 用 document.write 注入的脚本（edition-lock.js、button-manager.js）以及 index.html 引用的每个本地 JS，热包清单缺一不可——热目录是全量遮蔽，404 即静默降级为另一套语义。改动白名单后必须 grep index.html/document.write 双向核对。
+* **热通道身份铁律**：cloud 入口只许取 cloud_desktop 源；生成器身份断言是最后闸门，任何 assert 失败禁止签发。
+* **热更三位一体扩到 cloud**：cloud 通道与 local 通道同等适用「整包+热包+生成器」同步原则（既往仅 local 被反复执行，cloud 长期漏管）。
+* 沙箱断言模板留存于 tools/_tmp/hot-env-assert.cjs（23 断言：事故现场/插槽时序变体/标准版回退/云端标准版/离线机构）。
+
+### 23.5 已知遗留（下次云端 APK 整包必办）
+* `app_project/db-yunduan/cloud_app/.../assets/public/permission.js` 是**手工分叉副本**（不在 sync-all BusinessJs 组，index.html 用 `?cv=1d371b40` 哈希锁定）：含 9-01 插槽写入但 `_currentEdition()` 同样不读插槽，与本次事故同构。云端 APP 无热更通道，修复需手工移植插槽读取 + 更新 cv 哈希 + 重打云端 APK。安全二查已确认：渲染层 edition 仅 UI 门控，云端用户管理真正鉴权在 functions/api/users.js 服务端按 token 角色独立执行（伪造插槽调接口 401/403），无越权风险。
+* 安全加固建议（非阻断）：热目录隔离/swap 时剔除 config.json（含密码哈希的旧副本残留 quarantine/previous）；桌面热更生成器参照 app 通道补 FORBIDDEN 硬断言。
+* 双重复审结论：无阻断项、无本次引入的高危；Ed25519 签名三通道独立复验 true，逐文件 sha256 磁盘复验全一致。
+
+### 23.6 生效与复测
+* 客户操作：云端桌面**联网重启 2 次**（第 1 次拉包、第 2 次生效），【用户管理】应恢复；仍异常则删除 userData/hot-update 目录回退 asar 并联系客服。desktop-windows.cjs 的 config 候选链修复随下次桌面整包（当前热包已靠插槽止血，不依赖该修复）。

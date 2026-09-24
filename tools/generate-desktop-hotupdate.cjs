@@ -42,7 +42,7 @@ const CHANNELS = {
         srcDir: path.join(ROOT, 'public'),
         files: [
             'index.html',
-            'auth-core.js', 'permission.js', 'normalize-config.js',
+            'auth-core.js', 'permission.js', 'button-manager.js', 'edition-lock.js', 'normalize-config.js',
             'debug-logger.js', 'print-utils.js', 'medicine-dict.js', 'symptom-dict.js',
             'cloud-api.js', 'performance-utils.js', 'prescription-core.js',
             'stock-core.js', 'security-guard.js',
@@ -50,19 +50,51 @@ const CHANNELS = {
             'voice-input.js', 'vendor/pinyin-pro.min.js',
             'xlsx.full.min.js'
         ],
+        // ★★★ 2026-09-24 【P0 事故防呆】cloud 通道 index.html 绝不能取 public/ 的网页默认身份
+        //   （public/index.html = EDITION personal / 惠康中医-本地 / APP_MODE auto）。
+        //   2026.09.23-1 热包即因此把本地身份 index.html 投给云端桌面客户：热目录 config.json
+        //   又是 asar 出厂模板 → 机构管理员【用户管理】按钮整批消失。云端热包入口必须取
+        //   cloud_desktop 的打包同源文件（Group11 生成器产物，身份=cloud_personal/云端/cloud）。
+        srcOverrides: {
+            'index.html': path.join(ROOT, 'app_project', 'db-yunduan', 'cloud_desktop', 'index.html'),
+            'button-manager.js': path.join(ROOT, 'app_project', 'db-yunduan', 'cloud_desktop', 'button-manager.js')
+        },
+        // 落盘后身份断言（任一不满足立即 exit 1，绝不签发错身份包）。
+        // 只认「行首独立声明行」（^\\s* 前缀），不匹配 enforceStandardEditionButtons 等
+        // 运行时强制逻辑里的条件赋值（如 `if (...) window.EDITION = 'personal'`）。
+        identityAsserts: [
+            { re: /^\s*window\.EDITION\s*=\s*'cloud_personal'\s*;/m, label: "独立声明 window.EDITION = 'cloud_personal'" },
+            { re: /^\s*window\.PRODUCT_NAME\s*=\s*'惠康中医-云端'\s*;/m, label: "独立声明 window.PRODUCT_NAME = '惠康中医-云端'" },
+            { re: /^\s*window\.APP_MODE\s*=\s*'cloud'\s*;/m, label: "独立声明 window.APP_MODE = 'cloud'" }
+        ],
+        identityForbidden: [
+            { re: /^\s*window\.EDITION\s*=\s*'personal'\s*;/m, label: "出厂身份声明 EDITION='personal'" },
+            { re: /^\s*window\.PRODUCT_NAME\s*=\s*'惠康中医-本地'\s*;/m, label: "出厂身份声明 PRODUCT_NAME='惠康中医-本地'" },
+            { re: /^\s*window\.APP_MODE\s*=\s*'auto'\s*;/m, label: "出厂身份声明 APP_MODE='auto'" }
+        ],
         appVersion: require(path.join(ROOT, 'app_project', 'db-yunduan', 'cloud_desktop', 'package.json')).version
     },
     local: {
         srcDir: path.join(ROOT, 'app_project', 'db-offline', 'desktop'),
         files: [
             'index.html',
-            'auth-core.js', 'permission.js', 'normalize-config.js',
+            'auth-core.js', 'permission.js', 'button-manager.js', 'edition-lock.js', 'normalize-config.js',
             'debug-logger.js', 'print-utils.js', 'medicine-dict.js', 'symptom-dict.js',
             'performance-utils.js', 'prescription-core.js',
             'stock-core.js', 'security-guard.js',
             'electron/video-recorder.js',
             'voice-input.js', 'vendor/pinyin-pro.min.js',
             'vendor/xlsx.full.min.js'
+        ],
+        identityAsserts: [
+            { re: /^\s*window\.EDITION\s*=\s*'personal'\s*;/m, label: "独立声明 window.EDITION = 'personal'" },
+            { re: /^\s*window\.PRODUCT_NAME\s*=\s*'惠康中医-本地'\s*;/m, label: "独立声明 window.PRODUCT_NAME = '惠康中医-本地'" },
+            { re: /^\s*window\.APP_MODE\s*=\s*'offline'\s*;/m, label: "独立声明 window.APP_MODE = 'offline'" }
+        ],
+        identityForbidden: [
+            { re: /^\s*window\.EDITION\s*=\s*'cloud_personal'\s*;/m, label: "出厂身份声明 EDITION='cloud_personal'" },
+            { re: /^\s*window\.PRODUCT_NAME\s*=\s*'惠康中医-云端'\s*;/m, label: "出厂身份声明 PRODUCT_NAME='惠康中医-云端'" },
+            { re: /^\s*window\.APP_MODE\s*=\s*'cloud'\s*;/m, label: "出厂身份声明 APP_MODE='cloud'" }
         ],
         appVersion: require(path.join(ROOT, 'app_project', 'db-offline', 'desktop', 'package.json')).version
     }
@@ -121,7 +153,7 @@ function main() {
     const files = [];
     const fileBufs = new Map();
     for (const name of conf.files) {
-        const fp = path.join(conf.srcDir, name);
+        const fp = (conf.srcOverrides && conf.srcOverrides[name]) || path.join(conf.srcDir, name);
         if (!fs.existsSync(fp)) {
             console.error('[HotUpdateGen] 源文件缺失: ' + name + '（' + fp + '）');
             process.exit(1);
@@ -130,6 +162,34 @@ function main() {
         if (isText(name)) buf = normalizeLf(buf);
         fileBufs.set(name, buf);
         files.push({ name: name, sha256: crypto.createHash('sha256').update(buf).digest('hex'), size: buf.length });
+    }
+
+    // ★★★ 2026-09-24 P0 身份断言（fail-fast）：签名/清目录/写盘之前执行，
+    //   index.html 必须是本通道产品身份，错身份包绝不签发，也不留残缺产物目录。
+    //   事故：cloud 通道长期取 public/ 默认身份（personal/本地/auto），机构版客户拉包后
+    //   【用户管理】按钮整批消失。assert 未命中/forbidden 命中均 exit 1。
+    if (conf.identityAsserts || conf.identityForbidden) {
+        const entryBuf = fileBufs.get('index.html');
+        if (!entryBuf) {
+            console.error('[HotUpdateGen] 身份断言失败: 清单缺少 index.html');
+            process.exit(1);
+        }
+        const entryText = entryBuf.toString('utf8');
+        const asserts = conf.identityAsserts || [];
+        for (const a of asserts) {
+            if (!a.re.test(entryText)) {
+                console.error('[HotUpdateGen] 身份断言失败: ' + channel + ' 通道 index.html 缺少「' + a.label + '」');
+                console.error('  该热包产品身份错误（曾导致机构版【用户管理】按钮消失），禁止签发。');
+                process.exit(1);
+            }
+        }
+        for (const a of (conf.identityForbidden || [])) {
+            if (a.re.test(entryText)) {
+                console.error('[HotUpdateGen] 身份断言失败: ' + channel + ' 通道 index.html 含禁止出厂身份「' + a.label + '」');
+                process.exit(1);
+            }
+        }
+        console.log('[HotUpdateGen] 身份断言通过 (' + channel + '): ' + asserts.map(function (a) { return a.label; }).join(' / '));
     }
 
     // 2. 版本号：YYYY.MM.DD-N（N 为同日序号）

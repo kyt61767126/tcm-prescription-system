@@ -1,13 +1,13 @@
 {
   "format": 1,
   "channel": "cloud",
-  "hotVersion": "2026.09.23-1",
-  "appVersion": "1.2.252",
+  "hotVersion": "2026.09.24-1",
+  "appVersion": "1.2.253",
   "files": [
     {
       "name": "index.html",
-      "sha256": "7748d3ee889feffcff6dc5d01be2b0830d8f7e57cb9a034997dae82ea33a80c3",
-      "size": 748538
+      "sha256": "54d06dae5e44cf292e7e39ee727936e91d6fbe3146003c21c0e717fa34153ae3",
+      "size": 748487
     },
     {
       "name": "auth-core.js",
@@ -16,8 +16,18 @@
     },
     {
       "name": "permission.js",
-      "sha256": "1d371b40986e07a02c5891bc7e1883c3e1a1f0a9c309105a7534eef6c5d8d8bb",
-      "size": 28698
+      "sha256": "c3c70ff3757fdf6b6f0ea53d23115e7ff2370b77dedde3b6ab0b903703e07669",
+      "size": 30282
+    },
+    {
+      "name": "button-manager.js",
+      "sha256": "07a99e613ed3eeb8775a517164b3fc3b0e906bf6240f210d9d354e08bb3d24e0",
+      "size": 23455
+    },
+    {
+      "name": "edition-lock.js",
+      "sha256": "648e0ba8ad05347f0b14c3fb44af804d8794719c41d9ad44cb5eab089eaf535a",
+      "size": 8605
     },
     {
       "name": "normalize-config.js",
@@ -90,6 +100,6 @@
       "size": 881727
     }
   ],
-  "signedAt": 1790126301414,
-  "signature": "yhb01Hz8Q973poleI25lU4/3U9a9B+d5MhdGBciNi7usL6yFjvExX31a2QA5y4rTQqUfam6RkV/FJfZdcdaZDA=="
+  "signedAt": 1790209001716,
+  "signature": "zD4A++8o1kYrUOQ85FKbchYy+cAsy9NgZikSGLMgSd6/ALhhVSHbhuh9ZcU+JUi4CyQSjEQB8bktnTDrIRj3Cg=="
 }

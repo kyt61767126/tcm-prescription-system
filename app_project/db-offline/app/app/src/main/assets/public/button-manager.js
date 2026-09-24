@@ -112,6 +112,28 @@
     }
 
     function __getEdition() {
+        // ★★★ 2026-09-24 【热更环境机构版按钮消失根治】权威插槽最优先：
+        //   cloud 热目录 index.html 是出厂身份（personal/cloud_personal）、热目录 config.json
+        //   是 asar 模板，CONFIG.edition/window.EDITION 在热更环境均非权威；唯一真相是
+        //   Permission.init() 经 IPC 从 userData 读取后写入的 __authoritativeEdition 插槽
+        //   （9-01 修复只建了插槽，按钮链没读，Arch 2.26 断言反把机构管理员锁进 personal 分支）。
+        //   TDZ 铁律：CONFIG 解析期可能处于暂时性死区，typeof 亦抛错，必须 try-catch。
+        try {
+            if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.__authoritativeEdition) {
+                return String(CONFIG.__authoritativeEdition);
+            }
+        } catch(_) {}
+        try {
+            if (global.Permission && Permission._authoritativeEdition) {
+                return String(Permission._authoritativeEdition);
+            }
+        } catch(_) {}
+        try {
+            if (global.Permission && typeof Permission._authoritativeEditionValue === 'function') {
+                var _ae = Permission._authoritativeEditionValue();
+                if (_ae) return String(_ae);
+            }
+        } catch(_) {}
         try { if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.edition) return String(CONFIG.edition); } catch(_) {}
         try { if (global.EDITION) return String(global.EDITION); } catch(_) {}
         try { if (global.Permission && Permission._edition) return String(Permission._edition); } catch(_) {}
