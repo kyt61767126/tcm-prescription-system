@@ -6,7 +6,7 @@
   "files": [
     {
       "name": "index.html",
-      "sha256": "54d06dae5e44cf292e7e39ee727936e91d6fbe3146003c21c0e717fa34153ae3",
+      "sha256": "409fba3b5c1fb4d7083b368878f5a3e6673b87c50f2f87e8e0295c435fcaccc8",
       "size": 748487
     },
     {
@@ -100,6 +100,6 @@
       "size": 881727
     }
   ],
-  "signedAt": 1790209001716,
-  "signature": "zD4A++8o1kYrUOQ85FKbchYy+cAsy9NgZikSGLMgSd6/ALhhVSHbhuh9ZcU+JUi4CyQSjEQB8bktnTDrIRj3Cg=="
+  "signedAt": 1790209534619,
+  "signature": "WIuYqqNJoRfBWm4YpXbIGW5r7evwDaBTyrw5Z68X/xccF21EoYZ59ZFD+BZs+ShW4cV+OuRaoptnWRJ1SJ7bAw=="
 }
