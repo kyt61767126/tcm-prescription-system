@@ -1176,12 +1176,18 @@ export async function onRequest(context) {
             });
         }
 
-        // ===== 公开诊断端点 GET /users?diagnose=username&key=xxx =====
-        // 用于临时排查账号问题，需要 DIAGNOSE_KEY 环境变量验证
+        // ===== 诊断端点 GET /users?diagnose=username&key=xxx =====
+        // 用于临时排查账号问题，必须显式配置 DIAGNOSE_KEY 环境变量才启用。
+        // ★ 2026-09-24 P0-2：删除硬编码默认密钥（旧 fallback 常量随 git 仓库公开，
+        // 等于匿名账号枚举后门：可查任意手机号是否注册、所属诊所、
+        // 同诊所用户名/角色、锁定次数）。未配置密钥=端点一律 fail-closed 关闭。
         if (method === 'GET' && url.searchParams.get('diagnose')) {
-            const DIAGNOSE_KEY = context.env.DIAGNOSE_KEY || 'tcm_diagnose_2026';
+            const DIAGNOSE_KEY = context.env.DIAGNOSE_KEY;
+            if (!DIAGNOSE_KEY) {
+                return json({ success: false, error: '诊断端点未启用' }, 404);
+            }
             const providedKey = url.searchParams.get('key');
-            
+
             if (providedKey !== DIAGNOSE_KEY) {
                 return json({ success: false, error: '诊断密钥错误' }, 403);
             }

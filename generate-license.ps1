@@ -5,24 +5,49 @@
     无需上传设备文件，填入客户 3 项信息一键生成离线授权文件到桌面
 .NOTES
     使用人：客服（或自任客服的管理员）
-    使用前：仅修改【2】区段的 3 处客户信息，【1】区段密钥严禁改动
+    使用前：仅修改【2】区段的 3 处客户信息，不要改动其他内容
+    密钥：自动读取本机 %USERPROFILE%\.hktzy\license-export-secret.txt，
+          严禁把密钥粘贴进本脚本，严禁把密钥文件外传
     环境要求：客服电脑可联网（客户机器断网不影响）
 #>
 
 $ErrorActionPreference = 'Continue'
 
 try {
-    # ==========【1、仅管理员可修改固定密钥，客服禁止改动此行】==========
+    # ==========【1、客服密钥（自动读取本机密钥文件，禁止把密钥写进本脚本）】==========
+    $secretPath = Join-Path $env:USERPROFILE '.hktzy\license-export-secret.txt'
+    if (-not (Test-Path $secretPath)) {
+        Write-Host "=====================================" -ForegroundColor Red
+        Write-Host "❌ 未找到客服密钥文件" -ForegroundColor Red
+        Write-Host "=====================================" -ForegroundColor Red
+        Write-Host ""
+        Write-Host "密钥文件路径：$secretPath" -ForegroundColor Yellow
+        Write-Host "请联系管理员获取密钥文件，保存为上述路径后重新运行。" -ForegroundColor Yellow
+        throw "密钥文件不存在"
+    }
+
+    $exportSecret = (Get-Content -Path $secretPath -Raw -ErrorAction Stop).Trim()
+    if ($exportSecret -notmatch '^[0-9a-fA-F]{64}$') {
+        Write-Host "=====================================" -ForegroundColor Red
+        Write-Host "❌ 密钥文件内容格式错误" -ForegroundColor Red
+        Write-Host "=====================================" -ForegroundColor Red
+        Write-Host ""
+        Write-Host "密钥应为 64 位十六进制字符（0-9 a-f）。" -ForegroundColor Yellow
+        Write-Host "请勿在密钥前后添加空格、引号或其他文字。" -ForegroundColor Yellow
+        Write-Host "如确认文件无误仍报错，请联系管理员重新发放密钥文件。" -ForegroundColor Yellow
+        throw "密钥格式错误"
+    }
+
     $headers = @{
         "Content-Type" = "application/json"
-        "X-Export-Secret" = "42a5b466d4488659f783ab757f443838796375db727e52d7b3b9cf26d29d0ad7"
+        "X-Export-Secret" = $exportSecret
     }
 
     # ==========【2、客服仅修改下方 3 个引号内客户信息】==========
     $body = @{
-        code = "BNZC-86KF-QZFM-YSCA-359Y"
-        machineId = "a4cfc9eabbe6e434474bacaba205d4e7"
-        clinicName = "本能堂中医诊所"
+        code = "BNZC-此处替换为激活码-XXXX-XXXX"
+        machineId = "此处替换为客户32位机器ID"
+        clinicName = "此处替换为客户诊所全称"
     } | ConvertTo-Json -Compress
 
     # 检查客户信息是否已修改
@@ -59,13 +84,14 @@ try {
         Write-Host "常见错误对照：" -ForegroundColor Yellow
         Write-Host "  · 激活码不存在       → 激活码输入错误，让客户重新复制"
         Write-Host "  · 激活码已被禁用     → 联系管理员在后台启用"
-        Write-Host "  · 激活码已过期       → 联系管理员在后台延期"
+        Write-Host "  · 激活码已过期       → 联系管理员延期"
         Write-Host "  · 诊所名不一致       → 让客户从激活窗口复制完整诊所名（含全角字符）"
         Write-Host "  · machineId 长度错误 → 让客户重新复制 32 位机器ID"
+        Write-Host "  · 操作过于频繁       → 每小时限 20 次，稍后再试"
         throw "接口返回失败"
     }
 
-    # 自动保存授权文件到电脑桌面 license.dat
+    # 自动保存授权文件到桌面 license.dat
     $desktopPath = [Environment]::GetFolderPath("Desktop")
     if (-not (Test-Path $desktopPath)) {
         # 桌面路径异常时回退到用户目录
@@ -114,9 +140,10 @@ catch {
     Write-Host ""
     Write-Host "排查清单：" -ForegroundColor Cyan
     Write-Host "  1. 客服电脑是否能正常上网？（关闭代理/加速器重试）"
-    Write-Host "  2. 客服密钥是否被重置？（联系管理员确认）"
-    Write-Host "  3. 返回 401 → 密钥不一致；返回 400 → 客户信息格式错误"
-    Write-Host "  4. 网络超时 → 检查网络后重试"
+    Write-Host "  2. 密钥文件是否存在于 $env:USERPROFILE\.hktzy\ 且内容为 64 位字符？"
+    Write-Host "  3. 返回 401/403 → 密钥已失效，联系管理员重新发放密钥文件"
+    Write-Host "  4. 返回 429 → 操作过于频繁，每小时限 20 次，稍后再试"
+    Write-Host "  5. 网络超时 → 检查网络后重试"
     Write-Host ""
     Write-Host "如无法解决，请截图本窗口联系技术支持" -ForegroundColor Yellow
 }

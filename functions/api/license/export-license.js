@@ -29,7 +29,7 @@
 //
 //  与 validate.js 的区别：
 //    - validate.js 是客户端直接调用（无认证 + IP 限速 20/h）
-//    - export-license 是管理员/客服调用（Bearer 认证或独立密钥，无限速）
+//    - export-license 是管理员/客服调用（Bearer 认证或独立密钥 + IP 限速 20/h，2026-09-24 P0-1 起）
 //    - 两者底层均调用 buildLicenseData + encodeLicenseBase64，license 内容完全等价
 // ============================================================================
 
@@ -37,7 +37,8 @@ import { parseAuthHeader, isPlatformAdmin, constantTimeEqual } from '../_lib/aut
 import {
     getKV, getLicense, updateLicense,
     buildLicenseData, encodeLicenseBase64,
-    getDevices, getMaxDevices, appendLicenseLog
+    getDevices, getMaxDevices, appendLicenseLog,
+    checkRateLimit
 } from './_lib/license-core.js';
 
 function corsHeaders() {
@@ -119,6 +120,23 @@ export async function onRequest(context) {
         }
 
         const ip = getClientIP(context);
+
+        // ★ 2026-09-24 P0-1 安全补强：客服发码端点 IP 频控 20/h（ip 拼 ':export'
+        // 独立计数桶，与 admin-submit/order-submit 等端点同款惯例；不与
+        // validate/invite/lookup 匿名激活流量共桶，防办公 NAT 下正常激活流量
+        // 连带饿死客服发码）。
+        // 背景：X-Export-Secret 曾随 generate-license.ps1 入库 git（仓库阅读者均可获得），
+        // 端点长期"无限速"，密钥轮换后仍需限速兜底，防批量签发/换机试探挤掉合法设备。
+        // 客服日常为低频操作（一单一次），20/h 不影响正常业务。
+        const rateLimit = await checkRateLimit(kv, ip + ':export', 20);
+        if (!rateLimit.allowed) {
+            return json({
+                success: false,
+                error: '操作过于频繁（每小时限 20 次），请稍后再试',
+                rateLimited: true
+            }, 429);
+        }
+
         const body = await context.request.json().catch(() => ({}));
         const { code, machineId, user, clinicName } = body;
 
