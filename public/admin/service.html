@@ -95,6 +95,7 @@ tr:hover{background:#f9fafc}
     <button data-tab="query">授权查询</button>
     <button data-tab="device">设备解绑</button>
     <button data-tab="diagnose">账号诊断</button>
+    <button data-tab="aggregate">客户全景</button>
     <button data-tab="staff" id="tabStaff" class="hidden">客服账号</button>
   </div>
 
@@ -191,6 +192,18 @@ tr:hover{background:#f9fafc}
       <button class="btn btn-primary" id="dgBtn">诊断</button>
     </div>
     <div id="dgResult"></div>
+  </section>
+
+  <!-- 客户全景聚合（P1-2 只读） -->
+  <section class="panel hidden" id="pane-aggregate">
+    <h2>客户全景（只读聚合）</h2>
+    <div class="muted">输入手机号 / 机器码 / 用户名，一键聚合：账号、删除墓碑、付费码、设备绑定/封锁、进行中订单、工单、官网订单/申请、免费领取与诊所视图。机器码由服务端脱敏显示，本页只读不写，每账号限 60 次/小时。</div>
+    <div class="row" style="margin-top:10px">
+      <input type="text" id="aggQ" placeholder="手机号 / 机器码 / 用户名或登记联系人姓名（至少 5 位）" maxlength="64" style="min-width:320px">
+      <button class="btn btn-primary" id="aggBtn">聚合查询</button>
+      <span id="aggMeta" class="muted"></span>
+    </div>
+    <div id="aggResult"></div>
   </section>
 
   <!-- 客服账号管理（仅 platform_admin） -->
@@ -294,7 +307,7 @@ tr:hover{background:#f9fafc}
   function switchTab(name){
     var tabs=document.querySelectorAll('#tabs button');
     for(var i=0;i<tabs.length;i++) tabs[i].classList.toggle('active',tabs[i].getAttribute('data-tab')===name);
-    ['ticket','export','query','device','diagnose','staff'].forEach(function(t){
+    ['ticket','export','query','device','diagnose','aggregate','staff'].forEach(function(t){
       $('pane-'+t).classList.toggle('hidden',t!==name);
     });
     if(name==='staff'&&!loadedTabs.staff){ loadedTabs.staff=true; loadStaff(); }
@@ -302,7 +315,9 @@ tr:hover{background:#f9fafc}
 
   function statusTag(s){
     var map={unused:['tag-unused','未使用'],used:['tag-used','已使用'],expired:['tag-expired','已过期'],disabled:['tag-disabled','已停用'],
-      pending:['tag-pending','待审批'],submitted:['tag-pending','待审批'],processing:['tag-pending','⏳处理中'],approved:['tag-approved','已通过'],rejected:['tag-rejected','已拒绝']};
+      pending:['tag-pending','待审批'],submitted:['tag-pending','待审批'],processing:['tag-pending','⏳处理中'],approved:['tag-approved','已通过'],rejected:['tag-rejected','已拒绝'],
+      pending_payment:['tag-pending','待付款'],
+      activated:['tag-approved','已激活'],cancelled:['tag-rejected','已取消'],pending_approval:['tag-pending','待审批']};
     var m=map[s]||['',s]; return '<span class="tag '+m[0]+'">'+esc(m[1])+'</span>';
   }
 
@@ -481,6 +496,194 @@ tr:hover{background:#f9fafc}
     }catch(e){ $('dgResult').innerHTML='<div class="msg msg-err">'+esc((e.data&&e.data.error)||e.netError||'诊断失败')+'</div>'; }
   }
 
+  // ---- 客户全景聚合（P1-2，纯只读；脱敏/频控/审计均在服务端）----
+  function aggTypeLabel(t){ return {phone:'手机号',machine:'机器码',name:'用户名'}[t]||t; }
+  function aggLicenseType(t){ return {standard:'标准版',institution:'机构版',cloud_personal:'云端个人版',cloud_clinic:'云端机构版'}[t]||t||'-'; }
+  function aggClinicStatus(s){ return {active:'正常',disabled:'已停用',test:'待审核'}[s]||s||'-'; }
+  function aggSection(title, inner){
+    return '<div style="margin:14px 0 4px;font-weight:600;color:#2c3e50;font-size:14px">'+esc(title)+'</div>'+inner;
+  }
+  var aggLoading=false;
+  async function aggregate(){
+    var q=$('aggQ').value.trim();
+    if(q.length<5){ $('aggResult').innerHTML='<div class="msg msg-err">请输入至少 5 位的手机号 / 机器码 / 用户名</div>'; return; }
+    if(aggLoading) return;   // 在途查询防并发（按钮 disabled 拦不住 Enter 键）
+    aggLoading=true;
+    $('aggResult').innerHTML='<div class="muted">聚合查询中（需扫描授权码/工单/订单索引，请稍候）…</div>';
+    $('aggBtn').disabled=true;
+    try{
+      var d=await api('/users?action=customer-aggregate&q='+encodeURIComponent(q));
+      renderAggregate(d);
+    }catch(e){
+      $('aggResult').innerHTML='<div class="msg msg-err">'+esc((e.data&&e.data.error)||e.netError||'聚合查询失败')+'</div>';
+    }finally{ $('aggBtn').disabled=false; aggLoading=false; }
+  }
+  function renderAggregate(d){
+    var h='';
+    $('aggMeta').textContent='查询类型：'+aggTypeLabel(d.queryType)+' · 扫描时间 '+fmtDate(d.scannedAt);
+
+    // 扫描截断 / 索引损坏提示（损坏与"无数据"必须可区分）
+    if(d.scanCaps&&(d.scanCaps.ticketsTruncated||d.scanCaps.adminRequestsTruncated||d.scanCaps.ticketsIndexValid===false||d.scanCaps.adminRequestsIndexValid===false||d.scanCaps.licensesIndexValid===false)){
+      var caps=[];
+      if(d.scanCaps.licensesIndexValid===false) caps.push('付费码索引清单损坏或缺失，本次未扫描授权码分区');
+      if(d.scanCaps.ticketsIndexValid===false) caps.push('工单索引清单损坏或缺失，本次未扫描工单分区');
+      else if(d.scanCaps.ticketsTruncated) caps.push('工单仅扫描最近 '+d.scanCaps.tickets+' 条，更早工单可能未纳入');
+      if(d.scanCaps.adminRequestsIndexValid===false) caps.push('订单/申请索引清单损坏或缺失，本次未扫描订单分区');
+      else if(d.scanCaps.adminRequestsTruncated) caps.push('订单/申请仅扫描最近 '+d.scanCaps.adminRequests+' 条，更早订单可能未纳入');
+      h+='<div class="warn-box">⚠️ '+esc(caps.join('；'))+'</div>';
+    }
+
+    // ① 账号
+    if(d.account){
+      var a=d.account;
+      h+='<div class="card"><dl>'+
+        '<dt>账号</dt><dd><b>'+esc(a.username)+'</b>（'+esc(a.name||'-')+'）</dd>'+
+        '<dt>角色/归属</dt><dd>'+esc(a.role)+' · '+esc({platform_admin:'平台管理员',service:'客服账号',clinic_user:'诊所用户'}[a.location]||a.location)+'</dd>'+
+        '<dt>诊所</dt><dd>'+esc(a.clinicName||'-')+(a.clinicStatus?'（'+esc(aggClinicStatus(a.clinicStatus))+'）':'')+'</dd>'+
+        '<dt>诊所到期</dt><dd>'+esc(a.clinicExpiresAt?String(a.clinicExpiresAt).slice(0,10):'-')+'</dd>'+
+        '<dt>账号状态</dt><dd>'+(a.disabled?'<span class="tag tag-rejected">已停用</span>':'<span class="tag tag-active">正常</span>')+'</dd>'+
+        '<dt>登录锁定</dt><dd>'+esc(a.failCount)+' 次失败 · '+(a.isLocked?'<span class="tag tag-rejected">已锁定</span>':'未锁定')+'</dd>'+
+      '</dl></div>';
+    }else{
+      h+='<div class="msg msg-info">未找到账号记录（登录链无此用户）</div>';
+    }
+
+    // ② 账号墓碑
+    if(d.tombstones&&d.tombstones.length){
+      h+='<div class="msg msg-err" style="margin-top:10px">🪦 存在账号删除墓碑：该账号已被删除，禁止登录</div>';
+      h+='<div class="card"><dl>'+d.tombstones.map(function(t){
+        return '<dt>墓碑账号</dt><dd>'+esc(t.username)+
+          '<br><span class="muted">删除人：'+esc(t.deletedBy||'-')+'；原因：'+esc(t.reason||'-')+
+          '<br>首次删除：'+fmtDate(t.firstDeletedAt)+'；最近删除：'+fmtDate(t.deletedAt)+'</span></dd>';
+      }).join('')+'</dl></div>';
+    }
+
+    // ③ 付费码
+    if(d.licenses&&d.licenses.length){
+      h+=aggSection('付费授权码（'+d.licenses.length+'）','<div class="table-box"><table><thead><tr><th>激活码</th><th>手机</th><th>用户</th><th>诊所</th><th>类型</th><th>状态</th><th>设备</th><th>到期</th></tr></thead><tbody>'+
+        d.licenses.map(function(r){
+          return '<tr><td class="mono">'+esc(r.code)+'</td>'+
+            '<td>'+esc(r.phone)+'</td>'+
+            '<td>'+esc(r.user)+'</td>'+
+            '<td>'+esc(r.clinicName)+'</td>'+
+            '<td>'+esc(aggLicenseType(r.type))+'</td>'+
+            '<td>'+statusTag(r.status)+'</td>'+
+            '<td class="mono">'+esc((r.devicesCount!=null?r.devicesCount:'-')+'/'+(r.maxDevices!=null?r.maxDevices:'-'))+'</td>'+
+            '<td>'+(r.expiresAt?esc(String(r.expiresAt).slice(0,10)):'-')+'</td></tr>';
+        }).join('')+'</tbody></table></div>');
+    }
+
+    // ④ 设备视图（仅机器码查询返回）
+    if(d.queryType==='machine'){
+      if(d.deviceVersion){
+        var v=d.deviceVersion;
+        h+=aggSection('设备版本绑定','<div class="card"><dl>'+
+          '<dt>机器码</dt><dd class="mono">'+esc(v.machineId)+'</dd>'+
+          '<dt>版本</dt><dd>'+esc(v.version)+'</dd>'+
+          '<dt>激活码</dt><dd class="mono">'+esc(v.licenseCode)+'</dd>'+
+          '<dt>诊所</dt><dd>'+esc(v.clinicName)+'</dd>'+
+          '<dt>端形态</dt><dd>'+esc([v.productClass,v.clientClass].filter(Boolean).join(' / ')||'-')+'</dd>'+
+          '<dt>绑定时间</dt><dd>'+fmtDate(v.boundAt)+'</dd>'+
+        '</dl></div>');
+      }else{
+        h+=aggSection('设备版本绑定','<div class="msg msg-info">无版本绑定记录（可能已解绑或从未绑定）</div>');
+      }
+      if(d.deviceBlock){
+        var b=d.deviceBlock;
+        h+=aggSection('设备安全封锁','<div class="card"><dl>'+
+          '<dt>状态</dt><dd><span class="tag tag-rejected">封锁中</span></dd>'+
+          '<dt>原因</dt><dd>'+esc(b.reason||'-')+'</dd>'+
+          '<dt>失败次数</dt><dd>'+esc(b.count)+'</dd>'+
+          '<dt>封锁时长</dt><dd>'+(b.ttlDays!=null?esc(b.ttlDays+' 天'):'-')+'</dd>'+
+          '<dt>首次/最近</dt><dd>'+fmtDate(b.firstBlockedAt)+' / '+fmtDate(b.lastBlockedAt)+'</dd>'+
+        '</dl></div>');
+      }
+      if(d.activeOrder){
+        var o=d.activeOrder;
+        h+=aggSection('48 小时内进行中订单','<div class="card"><dl>'+
+          '<dt>订单号</dt><dd class="mono">'+esc(o.orderNo)+'</dd>'+
+          '<dt>申请单号</dt><dd class="mono">'+esc(o.requestId)+'</dd>'+
+          '<dt>手机</dt><dd>'+esc(o.phone)+'</dd>'+
+          '<dt>状态</dt><dd>'+statusTag(o.status)+'</dd>'+
+          '<dt>创建时间</dt><dd>'+fmtDate(o.createdAt)+'</dd>'+
+        '</dl></div>');
+      }
+    }
+
+    // ⑤ 工单
+    if(d.tickets&&d.tickets.length){
+      h+=aggSection('激活工单（'+d.tickets.length+'）','<div class="table-box"><table><thead><tr><th>工单</th><th>时间</th><th>诊所</th><th>版本</th><th>联系人</th><th>电话</th><th>机器码</th><th>状态</th><th>激活码</th></tr></thead><tbody>'+
+        d.tickets.map(function(t){
+          return '<tr><td class="mono">'+esc(t.ticketNo)+'</td>'+
+            '<td>'+fmtDate(t.submittedAt)+'</td>'+
+            '<td>'+esc(t.clinicName)+'</td>'+
+            '<td>'+esc(t.edition)+'</td>'+
+            '<td>'+esc(t.contactName)+'</td>'+
+            '<td>'+esc(t.contactPhone||t.contactWechat||'-')+'</td>'+
+            '<td class="mono">'+esc(t.machineId)+'</td>'+
+            '<td>'+statusTag(t.status)+'</td>'+
+            '<td class="mono">'+esc(t.licenseCode)+'</td></tr>';
+        }).join('')+'</tbody></table></div>');
+    }
+
+    // ⑥ 官网订单 / 激活申请
+    if(d.adminRequests&&d.adminRequests.length){
+      h+=aggSection('官网订单 / 激活申请（'+d.adminRequests.length+'）','<div class="table-box"><table><thead><tr><th>申请单号</th><th>状态</th><th>诊所</th><th>联系人</th><th>手机</th><th>机器码</th><th>金额</th><th>下单时间</th><th>付款时间</th><th>订单号</th><th>激活码</th></tr></thead><tbody>'+
+        d.adminRequests.map(function(r){
+          return '<tr><td class="mono">'+esc(r.requestId)+'</td>'+
+            '<td>'+statusTag(r.status)+'</td>'+
+            '<td>'+esc(r.clinicName)+'</td>'+
+            '<td>'+esc(r.adminName)+'</td>'+
+            '<td>'+esc(r.phone)+'</td>'+
+            '<td class="mono">'+esc(r.machineId)+'</td>'+
+            '<td>'+(r.amount!=null?esc('¥'+r.amount):'-')+'</td>'+
+            '<td>'+fmtDate(r.submittedAt)+'</td>'+
+            '<td>'+fmtDate(r.paidAt)+'</td>'+
+            '<td class="mono">'+esc(r.orderNo)+'</td>'+
+            '<td class="mono">'+esc(r.licenseCode)+'</td></tr>';
+        }).join('')+'</tbody></table></div>');
+    }
+
+    // ⑦ 免费版领取（仅手机号查询可能命中）
+    if(d.freePass){
+      var f=d.freePass;
+      h+=aggSection('免费版领取记录','<div class="card"><dl>'+
+        '<dt>手机</dt><dd>'+esc(f.phone)+'</dd>'+
+        '<dt>备注</dt><dd>'+esc(f.note||'-')+'</dd>'+
+        '<dt>添加人</dt><dd>'+esc(f.addedBy||'-')+'</dd>'+
+        '<dt>添加/更新</dt><dd>'+fmtDate(f.addedAt)+' / '+fmtDate(f.updatedAt)+'</dd>'+
+      '</dl></div>');
+    }
+
+    // ⑧ 诊所视图
+    if(d.clinics&&d.clinics.length){
+      h+=aggSection('关联诊所（'+d.clinics.length+'）','<div class="table-box"><table><thead><tr><th>诊所名</th><th>状态</th><th>版本</th><th>到期</th><th>创建时间</th></tr></thead><tbody>'+
+        d.clinics.map(function(c){
+          return '<tr><td>'+esc(c.name)+'</td>'+
+            '<td>'+esc(aggClinicStatus(c.status))+'</td>'+
+            '<td>'+esc(aggLicenseType(c.edition))+'</td>'+
+            '<td>'+(c.expiresAt?esc(String(c.expiresAt).slice(0,10)):'-')+'</td>'+
+            '<td>'+fmtDate(c.createdAt)+'</td></tr>';
+        }).join('')+'</tbody></table></div>');
+    }
+
+    // 空分区汇总（明确告知"没有"，避免客服误判为没扫到）
+    var emptyParts=[];
+    if(!(d.tombstones&&d.tombstones.length)) emptyParts.push('无账号墓碑');
+    if(!(d.licenses&&d.licenses.length)) emptyParts.push('无付费码');
+    if(d.queryType==='machine'){
+      if(!d.deviceBlock) emptyParts.push('设备未封锁');
+      if(!d.activeOrder) emptyParts.push('无进行中订单');
+    }
+    if(!(d.tickets&&d.tickets.length)) emptyParts.push('无工单');
+    if(!(d.adminRequests&&d.adminRequests.length)) emptyParts.push(d.queryType==='phone'?'无已付款官网订单/申请（未付款单不在扫描范围）':'无官网订单/申请');
+    if(d.queryType==='phone'&&!d.freePass) emptyParts.push('无免费领取');
+    if(!(d.clinics&&d.clinics.length)) emptyParts.push('无关联诊所');
+    h+='<div class="muted" style="margin-top:12px">'+esc(emptyParts.join(' · '))+'</div>';
+
+    $('aggResult').innerHTML=h;
+  }
+
   // ---- 客服账号管理 ----
   async function loadStaff(){
     try{
@@ -550,6 +753,8 @@ tr:hover{background:#f9fafc}
   $('dvResult').addEventListener('click',function(e){ if(e.target.id==='dvUnbindBtn') dvUnbind(); });
   $('dgBtn').addEventListener('click',diagnose);
   $('dgQ').addEventListener('keydown',function(e){ if(e.key==='Enter') diagnose(); });
+  $('aggBtn').addEventListener('click',aggregate);
+  $('aggQ').addEventListener('keydown',function(e){ if(e.key==='Enter') aggregate(); });
   $('sfSave').addEventListener('click',sfSave);
   $('sfClear').addEventListener('click',sfClear);
   $('sfBody').addEventListener('click',function(e){

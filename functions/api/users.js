@@ -9,11 +9,16 @@ import {
     findPhoneOccupancy
 } from './_lib/auth.js';
 import { provisionCloudAccount } from './license/_lib/admin-account.js';
-import { deleteAdminRequest } from './license/_lib/license-write-service.js';
+import { deleteAdminRequest, KV_ADMIN_REQ_PREFIX, KV_ADMIN_REQ_INDEX,
+    getActiveOrder, KV_FREE_PASS_PREFIX_EXPORTED, ACTIVE_ORDER_MAX_AGE_MS } from './license/_lib/license-write-service.js';
 // ★ 2026-09-08 离线版设备配额反查：license 索引遍历找该诊所激活码，读其多设备绑定列表
 // ★ 2026-09-12 续费同步延期：clinic=update 收费动作按 clinicName 反查同源（一处续费、两端同步）
 import { listLicenses, getDevices, updateLicense, appendLicenseLog,
-    writeAccountTombstone, clearAccountTombstone } from './license/_lib/license-core.js';
+    writeAccountTombstone, clearAccountTombstone, sanitizeRecord,
+    getDeviceVersion, getDeviceBlock, getAccountTombstone, checkRateLimit,
+    KV_LICENSE_PREFIX, KV_LICENSE_INDEX } from './license/_lib/license-core.js';
+// ★ 2026-09-24 P1-2 客户全景聚合：查询类型判定走 schema-guard 权威正则（禁内联）
+import { isValidPhone, isValidMachineId } from './license/_lib/schema-guard.js';
 // ★ 2026-09-10 审计日志单一事实源（并发安全，独立记录 key）
 import { writeAuditLog } from './_lib/audit-log.js';
 // ★ 2026-09-10 P3 D1 迁移：设备绑定 D1 双写
@@ -1536,6 +1541,341 @@ export async function onRequest(context) {
             context.waitUntil(writeAuditLog(kv, null, authUser.username, authUser.role,
                 'account_diagnose', q, context, { found: !!result.found }));
             return json({ success: true, ...result });
+        }
+
+        // ===== 客户全景聚合 GET /users?action=customer-aggregate&q=手机号|机器码|用户名 =====
+        //   P1-2：客服排障一键聚合（★只读，本分支绝不写任何业务 KV；唯一写入是频控/审计）：
+        //   账号(存在性/归属/锁定) + 账号墓碑 + 付费码 + 设备版本绑定 + 设备安全封锁 +
+        //   待付订单(active_order) + 工单 + 激活申请/已付款订单(admin_req) + free 领取 + 诊所视图。
+        //   最小披露：machineId 统一 6+6 脱敏（与 ticket/list.js 同口径）；不返回密码哈希/盐；
+        //   device_block 不回 lastIp/codeHash/user；重扫描端点限账号 60/h。
+        //   注：诊所视图为纯展示分区，用本地 Array.isArray 守卫容错（不是安全闸，
+        //   清单损坏只影响该分区，不得拖垮整个聚合响应——与 getClinicsOrThrow 的安全闸语义不同）。
+        if (method === 'GET' && url.searchParams.get('action') === 'customer-aggregate') {
+            const authUser = await parseAuthHeader(context.request, context.env);
+            if (!authUser || !isStaff(authUser)) {
+                return json({ success: false, error: '未授权：仅平台员工可聚合查询客户信息' }, 403, context.request);
+            }
+            const q = String(url.searchParams.get('q') || '').trim().slice(0, 64);
+            if (!q || q.length < 5) {
+                return json({ success: false, error: '请输入手机号、机器码或用户名（至少 5 位）' }, 400, context.request);
+            }
+            // 重扫描端点（license/工单/申请三条索引）账号桶频控；独立前缀不与其他桶共计数
+            const aggRL = await checkRateLimit(kv, 'staff-aggregate:' + authUser.username, 60, 'ratelimit:staffaggregate');
+            if (!aggRL.allowed) {
+                return json({ success: false, error: '聚合查询过于频繁（每账号每小时限 60 次），请稍后再试' }, 429, context.request);
+            }
+
+            // 查询类型判定（双审 H1/H2 修复）：
+            //  ① 手机号优先——允许客服粘贴 +86/空格/连字符格式，双边数字归一后比对；
+            //  ② 8 位以上 ASCII 用户名与机器码字符集重叠（zhangsan 等），先暂定 machine，
+            //     待 ①账号分区 findUserForLogin 精确命中用户名后改判 name（见下方）。
+            const digitsOf = (s) => String(s || '').replace(/\D/g, '');
+            const normPhoneOf = (s) => {
+                const d = digitsOf(s);
+                if (/^1[3-9]\d{9}$/.test(d)) return d;          // 11 位手机号
+                if (/^861[3-9]\d{9}$/.test(d)) return d.slice(2); // 带 86 国家码
+                return null;
+            };
+            const phoneQ = normPhoneOf(q) || (isValidPhone(q) ? q : null);
+            let queryType = phoneQ ? 'phone' : (isValidMachineId(q) ? 'machine' : 'name');
+            // 与 ticket/list.js maskMachineId 同口径：前后各 6 位，≤12 位全打点
+            const maskMid = (id) => {
+                id = String(id || '');
+                if (!id) return '';
+                if (id.length <= 12) return id.replace(/./g, '•');
+                return id.slice(0, 6) + '••••' + id.slice(-6);
+            };
+            // 分批并行 KV 读：子请求总数不变，墙钟由串行 N×RTT 降为 ceil(N/25)×RTT；
+            // 单条读异常落 null，由调用方过滤（毒键不拖垮整批/整响应）
+            const batchGetJson = async (keys, size = 25) => {
+                const out = new Array(keys.length);
+                for (let i = 0; i < keys.length; i += size) {
+                    const part = await Promise.all(keys.slice(i, i + size)
+                        .map(k => kv.get(k, 'json').catch(() => null)));
+                    part.forEach((v, j) => { out[i + j] = v; });
+                }
+                return out;
+            };
+            // 扫描上限：当前规模（数十~数百条）下亚秒返回；P2-5 mid→code 派生索引上线后改 O(1)
+            const SCAN_TICKET_CAP = 150;
+            const SCAN_REQ_CAP = 150;
+
+            // ---- ① 账号（复用登录链权威查找；失败计数双键取 max，与 account-diagnose 同口径）----
+            //   单分区 KV 异常降级为"未命中"，不得拖垮其余 7 个分区（双审 M2）
+            //   复审 L-1：格式化手机号（+86/分隔符）输入时，账号/墓碑/失败计数统一用归一后号码查
+            const lookupQ = phoneQ || q;
+            const found = await findUserForLogin(kv, lookupQ, context.env).catch(() => null);
+            const readFail = async k => parseInt(await kv.get('login_fail:' + k).catch(() => '0') || '0', 10);
+            let failCount = await readFail(lookupQ);
+            const canonicalName = found && found.user ? found.user.username : null;
+            if (canonicalName && canonicalName !== q) {
+                failCount = Math.max(failCount, await readFail(canonicalName));
+            }
+            // 双审 H1：输入与登录用户名精确一致时（如 zhangsan 这类 ≥8 位 ASCII 用户名），
+            // machine 改判 name——否则付费码/工单/订单会按机器码匹配而静默漏数
+            if (queryType === 'machine' && canonicalName && canonicalName === q) queryType = 'name';
+            let account = null;
+            if (found && found.user) {
+                const u = found.user;
+                const location = u.role === ROLE_PLATFORM_ADMIN ? 'platform_admin'
+                    : (u.role === ROLE_SERVICE ? 'service' : 'clinic_user');
+                account = {
+                    username: u.username || null,
+                    role: u.role || null,
+                    name: u.name || null,
+                    location,
+                    clinicName: found.clinicName || null,
+                    clinicStatus: found.clinicStatus || null,
+                    clinicExpiresAt: found.clinicExpiresAt || null,
+                    disabled: u.disabled === true,
+                    failCount,
+                    isLocked: failCount >= LOGIN_MAX_FAILURES
+                };
+            }
+
+            // ---- ② 账号墓碑（q 键 + 解析出的规范用户名键，去重）----
+            const tombstones = [];
+            const seenTombstone = new Set();
+            for (const tName of [lookupQ, canonicalName].filter(Boolean)) {
+                const t = await getAccountTombstone(kv, tName);
+                if (t && t.username && !seenTombstone.has(t.username)) {
+                    seenTombstone.add(t.username);
+                    tombstones.push({
+                        username: t.username,
+                        clinicId: t.clinicId || '',
+                        reason: t.reason || '',
+                        deletedBy: t.deletedBy || '',
+                        firstDeletedAt: t.firstDeletedAt || null,
+                        deletedAt: t.deletedAt || null
+                    });
+                }
+            }
+
+            // ---- ③ 付费码（license 索引分批并行全扫；手机/机器/用户名三模匹配）----
+            const licenses = [];
+            const licIndexRaw = await kv.get(KV_LICENSE_INDEX, 'json').catch(() => null);
+            const licensesIndexValid = Array.isArray(licIndexRaw);
+            const licCodes = licensesIndexValid ? licIndexRaw : [];
+            const allLicenses = licCodes.length
+                ? (await batchGetJson(licCodes.map(c => KV_LICENSE_PREFIX + c))).filter(Boolean)
+                : [];
+            for (const r of allLicenses) {
+                let hit = false;
+                if (queryType === 'phone') {
+                    hit = normPhoneOf(r.phone) === phoneQ;   // 双边数字归一，兼容 +86/分隔符存量
+                } else if (queryType === 'machine') {
+                    hit = (!!r.machineId && r.machineId === q) || getDevices(r).some(d => d && d.machineId === q);
+                } else {
+                    // 复审 L-3：兼容仅带历史 username 字段的授权码（与 sanitizeRecord 同口径兜底）
+                    const licUserName = r.user || r.username;
+                    hit = !!licUserName && licUserName === q;
+                }
+                if (hit) {
+                    const rawDevices = getDevices(r);
+                    const s = sanitizeRecord(r);
+                    s.phone = r.phone || null;  // sanitizeRecord 默认不含 phone；客服聚合场景需要
+                    // ★ 全端点 machineId 统一 6+6 脱敏（覆盖 sanitizeRecord 默认的前 8 位口径，
+                    //   恰好 8 位的短机器码不会再被整值带出——双审安全 L1）
+                    s.machineId = r.machineId ? maskMid(r.machineId) : null;
+                    s.devices = (s.devices || []).map((d, i) => ({
+                        ...d,
+                        machineId: rawDevices[i] && rawDevices[i].machineId ? maskMid(rawDevices[i].machineId) : null
+                    }));
+                    licenses.push(s);
+                }
+            }
+
+            // ---- ④ 设备视图（仅机器码查询）：版本绑定 / 安全封锁 / 48h 待付订单 ----
+            let deviceVersion = null;
+            let deviceBlock = null;
+            let activeOrder = null;
+            if (queryType === 'machine') {
+                const dv = await getDeviceVersion(kv, q);
+                if (dv) {
+                    deviceVersion = {
+                        machineId: maskMid(dv.machineId),
+                        version: dv.version || null,
+                        licenseCode: dv.licenseCode || null,
+                        clinicName: dv.clinicName || null,
+                        boundAt: dv.boundAt || null,
+                        productClass: dv.productClass || null,
+                        clientClass: dv.clientClass || null
+                    };
+                }
+                const blk = await getDeviceBlock(kv, q);
+                if (blk) {
+                    // 不回 lastIp/codeHash/user（运营内部信息，客服排障不需要）
+                    deviceBlock = {
+                        reason: blk.reason || '',
+                        count: blk.count || 0,
+                        ttlDays: blk.ttlDays || null,
+                        firstBlockedAt: blk.firstBlockedAt || null,
+                        lastBlockedAt: blk.lastBlockedAt || null
+                    };
+                }
+                const ao = await getActiveOrder(kv, q);
+                // 双审 M4/安全 L2：仅白名单 5 字段透出（防历史脏键额外字段外泄）；
+                // 超 48h 的僵尸待付单不展示（由 admin-data-audit 巡检 stale_active_order 清理）
+                if (ao && ao.createdAt &&
+                    Date.now() - Date.parse(ao.createdAt) <= ACTIVE_ORDER_MAX_AGE_MS) {
+                    activeOrder = {
+                        requestId: ao.requestId || null,
+                        orderNo: ao.orderNo || null,
+                        phone: ao.phone || null,
+                        status: ao.status || null,
+                        createdAt: ao.createdAt || null
+                    };
+                }
+            }
+
+            // ---- ⑤ 工单（扫 ticket_index 最新在前，上限内；分批并行）----
+            const tickets = [];
+            const tIndexRaw = await kv.get('ticket_index', 'json').catch(() => null);
+            const ticketsIndexValid = Array.isArray(tIndexRaw);
+            const tScan = ticketsIndexValid ? tIndexRaw.slice(0, SCAN_TICKET_CAP) : [];
+            const tRecords = await batchGetJson(tScan.map(tno => 'ticket:' + tno));
+            for (const t of tRecords) {
+                if (!t) continue;
+                const hit = queryType === 'phone' ? normPhoneOf(t.contactPhone) === phoneQ
+                    : queryType === 'machine' ? !!t.machineId && t.machineId === q
+                    : !!t.contactName && t.contactName === q;
+                if (hit) {
+                    tickets.push({
+                        ticketNo: t.ticketNo,
+                        machineId: maskMid(t.machineId),
+                        edition: t.edition || '',
+                        clinicName: t.clinicName || '',
+                        contactName: t.contactName || '',
+                        contactPhone: t.contactPhone || '',
+                        contactWechat: t.contactWechat || '',
+                        remark: (t.remark || '').slice(0, 100),
+                        submittedAt: t.submittedAt || null,
+                        status: t.status,
+                        resolvedAt: t.resolvedAt || null,
+                        resolvedBy: t.resolvedBy || null,
+                        licenseCode: t.licenseCode || null,
+                        rejectReason: t.rejectReason || null,
+                        type: t.type || null
+                    });
+                }
+            }
+
+            // ---- ⑥ 激活申请/官网订单（admin_req 索引，分批并行；记录带 paidAt 即已付款订单）----
+            const adminRequests = [];
+            const rIndexRaw = await kv.get(KV_ADMIN_REQ_INDEX, 'json').catch(() => null);
+            const adminRequestsIndexValid = Array.isArray(rIndexRaw);
+            const rIndex = adminRequestsIndexValid ? rIndexRaw : [];
+            const rKeys = rIndex.slice(0, SCAN_REQ_CAP);
+            const rRecords = await batchGetJson(rKeys.map(rid => KV_ADMIN_REQ_PREFIX + rid));
+            for (const r of rRecords) {
+                if (!r) continue;
+                const hit = queryType === 'phone' ? normPhoneOf(r.phone) === phoneQ
+                    : queryType === 'machine' ? !!r.machineId && r.machineId === q
+                    : !!r.adminName && r.adminName === q;
+                if (hit) {
+                    adminRequests.push({
+                        requestId: r.requestId,
+                        status: r.status || null,
+                        clinicName: r.clinicName || '',
+                        adminName: r.adminName || '',
+                        phone: r.phone || '',
+                        machineId: maskMid(r.machineId),
+                        remark: (r.remark || '').slice(0, 100),
+                        submittedAt: r.submittedAt || r.createdAt || null,
+                        paidAt: r.paidAt || null,
+                        amount: (r.amount !== undefined && r.amount !== null) ? r.amount : null,
+                        orderNo: r.orderNo || null,
+                        resolvedAt: r.resolvedAt || null,
+                        licenseCode: r.licenseCode || null,
+                        rejectReason: r.rejectReason || null
+                    });
+                }
+            }
+
+            // ---- ⑦ free 免费领取记录（仅手机号查询；O(1) 直读，键用归一后 11 位手机号）----
+            let freePass = null;
+            if (queryType === 'phone') {
+                const fp = await kv.get(KV_FREE_PASS_PREFIX_EXPORTED + phoneQ, 'json').catch(() => null);
+                if (fp) {
+                    freePass = {
+                        phone: fp.phone || phoneQ,
+                        note: fp.note || '',
+                        addedAt: fp.addedAt || null,
+                        addedBy: fp.addedBy || null,
+                        updatedAt: fp.updatedAt || null
+                    };
+                }
+            }
+
+            // ---- ⑧ 诊所视图：以账号/付费码/申请/工单出现的诊所名反查权威清单 ----
+            const clinics = [];
+            const clinicNames = new Set();
+            if (account && account.clinicName) clinicNames.add(account.clinicName);
+            for (const l of licenses) if (l.clinicName) clinicNames.add(l.clinicName);
+            for (const r of adminRequests) if (r.clinicName) clinicNames.add(r.clinicName);
+            for (const t of tickets) if (t.clinicName) clinicNames.add(t.clinicName);
+            if (clinicNames.size) {
+                try {
+                    const clinicList = await kv.get(KV_SYSTEM_CLINICS, 'json').catch(() => null);
+                    if (Array.isArray(clinicList)) {
+                        for (const cname of clinicNames) {
+                            const c = clinicList.find(x => x && x.name === cname);
+                            if (c) {
+                                clinics.push({
+                                    name: c.name,
+                                    status: c.status || null,
+                                    edition: c.edition || null,
+                                    expiresAt: c.expiresAt || null,
+                                    createdAt: c.createdAt || null
+                                });
+                            }
+                        }
+                    }
+                } catch (ce) {
+                    console.warn('[CustomerAggregate] 诊所视图读取失败(不影响其他分区):', ce && ce.message);
+                }
+            }
+
+            const aggregate = {
+                queryType,
+                q,
+                account,
+                tombstones,
+                clinics,
+                licenses,
+                deviceVersion,
+                deviceBlock,
+                activeOrder,
+                tickets,
+                adminRequests,
+                freePass,
+                scannedAt: new Date().toISOString(),
+                scanCaps: {
+                    tickets: SCAN_TICKET_CAP,
+                    adminRequests: SCAN_REQ_CAP,
+                    ticketsTruncated: ticketsIndexValid && tIndexRaw.length > SCAN_TICKET_CAP,
+                    adminRequestsTruncated: adminRequestsIndexValid && rIndexRaw.length > SCAN_REQ_CAP,
+                    ticketsIndexValid,        // 索引清单损坏/缺失时为 false，前端显式警示，区别于"无数据"
+                    adminRequestsIndexValid,
+                    licensesIndexValid
+                }
+            };
+            context.waitUntil(writeAuditLog(kv, null, authUser.username, authUser.role,
+                'customer_aggregate', q, context, {
+                    queryType,
+                    found: {
+                        account: !!account,
+                        tombstones: tombstones.length,
+                        licenses: licenses.length,
+                        deviceBlock: !!deviceBlock,
+                        tickets: tickets.length,
+                        adminRequests: adminRequests.length,
+                        freePass: !!freePass,
+                        clinics: clinics.length
+                    }
+                }));
+            return json({ success: true, ...aggregate }, 200, context.request);
         }
 
         // ===== 初始化平台管理员 POST /users?action=bootstrap =====
