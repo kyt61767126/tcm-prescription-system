@@ -596,9 +596,30 @@ async function getLicense(kv, code) {
 }
 
 // 更新激活码（部分字段）
+// ★ 2026-09-24 P1-B KV 降写：新增可选 updates.__devicePatch = { machineId, lastHeartbeat,
+//   productClass, clientClass }。心跳等设备级写入不再传整个 devices 数组，而是在函数内部
+//   重读最新 record 后只 patch 本设备槽位——大幅收窄同码多设备并发心跳的整数组覆盖窗口
+//   （旧代码临界区横跨整个请求的多次 KV 往返；现压缩为重读-修改-写一次 RTT，交错请求
+//   后写者必能看到先写者的槽位，最多毫秒级同刻碰撞时丢一次刷新、下个 10 分钟周期自愈；
+//   KV 无 CAS，不提供严格原子性）。
+//   旧调用方不传该字段，行为完全不变；productClass/clientClass 仅真值覆盖（不清空）。
 async function updateLicense(kv, code, updates) {
     const record = await getLicense(kv, code);
     if (!record) return null;
+    if (updates && updates.__devicePatch) {
+        const p = updates.__devicePatch;
+        // 与 getDevices 同口径（含旧 machineId 单值格式 → 单槽位数组的隐式迁移）
+        const devices = getDevices(record).map(d => ({ ...d }));
+        const target = devices.find(d => d.machineId === p.machineId);
+        if (target) {
+            if (p.lastHeartbeat) target.lastHeartbeat = p.lastHeartbeat;
+            if (p.productClass) target.productClass = p.productClass;
+            if (p.clientClass) target.clientClass = p.clientClass;
+            updates = { ...updates, devices };
+        }
+        updates = { ...updates };
+        delete updates.__devicePatch;
+    }
     const updated = { ...record, ...updates };
     await saveLicense(kv, updated);
     return updated;
@@ -1365,15 +1386,28 @@ async function reportUsage(kv, code, report) {
         const data = (await kv.get(key, 'json')) || { months: {}, lastReport: null, rollbackEvents: 0 };
         if (!data.months || typeof data.months !== 'object') data.months = {};
         let rollback = false;
+        let levelChanged = false;
         let high = Number(data.months[serverMonth]) || 0;
         if (clientMonth && clientMonth !== serverMonth) {
-            // 月界时钟偏差：不更新高水位、不对账（防误报），仅记录
+            // 月界时钟偏差：不更新高水位、不对账（防误报）；
+            // ★ 2026-09-24 P1-B KV 降写：此分支也不再重写 lastReport（纯写放大），
+            //   直接返回当前高水位。
+            return { rollback: false, high: high, count: count, month: serverMonth };
         } else if (count > high) {
             data.months[serverMonth] = count;
             high = count;
+            levelChanged = true;
         } else if (count < high) {
             rollback = true;
             data.rollbackEvents = (Number(data.rollbackEvents) || 0) + 1;
+            levelChanged = true;
+        }
+        // ★ 2026-09-24 P1-B KV 降写：高水位持平（count === high）时跳过 kv.put。
+        //   心跳每 10 分钟一次，原逻辑即使数据无任何变化也重写整个 usage 键并刷新
+        //   lastReport。lastReport 仅风控页在"已有告警"时作辅助详情读取（admin-risk.js），
+        //   而回拨场景（rollback）必落盘，故跳过写不损失任何安全信号。
+        if (!levelChanged) {
+            return { rollback: false, high: high, count: count, month: serverMonth };
         }
         data.lastReport = {
             month: clientMonth || serverMonth,

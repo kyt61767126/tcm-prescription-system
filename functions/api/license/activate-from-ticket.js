@@ -23,10 +23,18 @@
 //    4. 自动开通云端账号（provisionCloudAccount）+ 激活密码归一化
 //    5. 生成 license base64（客户端凭工单号+手机号登录即可获取）
 //    6. 更新工单 status=approved，回写管理员最终决策（type/days/maxDevices）
+//
+//  ★ 2026-09-24 P1-B 与主审核 admin-approve 安全对齐（工单通道曾为绕过缺口）：
+//    - AR-01 停用诊所硬闸：同名诊所 status=disabled → 409 CLINIC_DISABLED，
+//      检查异常 fail-closed 500（与主审核同款，防停用诊所处经工单通道复活）；
+//    - licenseRecord 写 firstActivatedAt 锚点（防重激活续命，P0-2026-09-11 同款）；
+//    - licenseRecord 写 phone=ticket.contactPhone（lookup 自愈/登录链需要）。
+//    不适用项（工单协议无源数据，非缺口）：devices[0] 端形态（工单无 appMode 字段，
+//    审批请求 UA 是管理员浏览器不可嗅探，靠客户端心跳补）、邀请码结算（工单无 inviteCode）。
 // ============================================================================
 
 import {
-    parseAuthHeader, isPlatformAdmin
+    parseAuthHeader, isPlatformAdmin, KV_SYSTEM_CLINICS
 } from '../_lib/auth.js';
 import {
     getKV, saveLicense, buildLicenseData, encodeLicenseBase64,
@@ -129,9 +137,8 @@ export async function onRequest(context) {
         if (isNaN(days) || days < 1 || days > 3650) {
             return json({ success: false, error: 'days 必须是 1-3650 之间的整数' }, 400);
         }
-        if (!days && !expiresAt) {
-            return json({ success: false, error: '请提供 days 或 expiresAt' }, 400);
-        }
+        // 注：工单一键通过设计为 days 缺省固定 365（body.days 未传时），expiresAt 可覆盖
+        //   到期日；不存在主审核"days/expiresAt 二选一必填"场景，故无该必填校验。
 
         const clinicName = ticket.clinicName;
         if (!clinicName) {
@@ -142,6 +149,32 @@ export async function onRequest(context) {
         const deviceCheck = await checkDeviceVersion(kv, ticket.machineId, type);
         if (!deviceCheck.ok) {
             return json({ success: false, error: deviceCheck.error }, 403);
+        }
+
+        // ★ 2026-09-24 P1-B AR-01 对齐（主审核 admin-approve 2026-09-04 已有此闸）：
+        //   同名诊所 status=disabled 时，工单审批通过也必须拒绝。工单通道与主审核通道是
+        //   激活的两个并列入口，缺这道闸时停用诊所可由"提交工单→另一位管理员一键通过"
+        //   复活（provisionCloudAccount disabled→active），平台停用护栏名存实亡。
+        //   检查异常 fail-closed（500），绝不放行。
+        try {
+            const clinics = (await kv.get(KV_SYSTEM_CLINICS, 'json')) || [];
+            const sameNameClinic = Array.isArray(clinics) && clinics.find(c => c && c.name === clinicName);
+            if (sameNameClinic && sameNameClinic.status === 'disabled') {
+                console.log('[ActivateFromTicket] ★ 同名诊所已停用(disabled)，拒绝工单通过:',
+                    clinicName, 'ticketNo=', ticketNo, 'by=', currentUser && currentUser.username);
+                return json({
+                    success: false,
+                    code: 'CLINIC_DISABLED',
+                    error: '诊所「' + clinicName + '」状态为「已停用」，无法通过工单激活。\n' +
+                        '若客户确实需要复开，请先在用户管理后台把该诊所状态改为「待审核」或删除该诊所后，再审批此工单。'
+                }, 409);
+            }
+        } catch (de) {
+            console.warn('[ActivateFromTicket] 停用诊所同名检查失败(拒绝通过以保安全):', de && de.message);
+            return json({
+                success: false,
+                error: '诊所停用状态检查异常，请刷新后重试：' + (de && de.message || '未知错误')
+            }, 500);
         }
 
         // ★ 云端产品策略：个人版一个管理员默认授权 2 台设备（桌面+APP）
@@ -164,24 +197,34 @@ export async function onRequest(context) {
 
         // 1. 生成新激活码并绑定 clinicName（工单的 machineId 作为首个设备）
         const code = generateActivationCode();
+        // ★ 2026-09-24 P1-B：统一激活时刻（与主审核同款），并显式固化 firstActivatedAt
+        //   锚点（buildLicenseData 有效期三级回退 firstActivatedAt → activatedAt → now；
+        //   不写锚点则该码日后被重激活时可能漂移 = 续命漏洞，P0-2026-09-11）。
+        const __approveNow = new Date().toISOString();
         const licenseRecord = {
             code: code,
             user: ticket.contactName,
+            // ★ 2026-09-24 P1-B 对齐主审核：独立手机号字段——lookup 自愈接口凭它回填
+            //   手机号（user=contactName 多为联系人/诊所名，extractPhone 解析不到）
+            phone: ticket.contactPhone || '',
             type: type,
             days: days || null,
             expiresAt: recordExpiresAt,
-            issuedAt: new Date().toISOString(),
+            issuedAt: __approveNow,
             issuedBy: currentUser.username,
-            activatedAt: new Date().toISOString(),
+            activatedAt: __approveNow,
+            firstActivatedAt: __approveNow,
             activatedIp: ip,
             machineId: ticket.machineId,  // 旧字段（兼容）
             clinicName: clinicName,
             maxDevices: parsedMaxDevices,
             devices: [{
                 machineId: ticket.machineId,
-                activatedAt: new Date().toISOString(),
+                activatedAt: __approveNow,
                 clinicName: clinicName,
                 activatedIp: ip
+                // 注：工单协议无 appMode/appModeCarrier 源数据，端形态留空，
+                //   由客户端首次心跳经 UA 嗅探/显式上报补全（heartbeat 仅补空不覆盖）
             }],
             status: 'used',  // 直接标记为已使用（管理员已审批通过）
             note: (ticket.remark || '工单审批一键激活').trim().slice(0, 200)
