@@ -1232,6 +1232,6 @@
 * **热包**：auth-core.js 在热更白名单 → desktop/local、app-local 同日重发 **2026.09.24-2**（minAppCode 288 继承）；desktop/cloud 用 cloud.js 不动。整包随下次打包。
 
 ### 22.13 零账户点【确定】不再强制弹注册窗（2026-09-24，热包 -3）
-* **交互修正**：登录窗零账户时，老流程点【确定】先闪红字立即 `openLocalRegister()` 弹注册窗，打断已填手机号/密码的用户。改为**只留页红字提示**：桌面登录窗（db-offline/desktop/electron/login.js，真权威不同步、不进热包只随整包）提示「请点击上方红色『点击此处立即注册』条开通」；离线主窗/APP（db-offline/desktop/index.html 零账户守卫，sync-index-app 31 变换分发 index-app.html + APP assets）提示「请点击【注册开通】完成注册」。注册动作一律改由用户主动点击触发（顶部红条/注册开通按钮仍绑定 openLocalRegister）；输入内容保留，按钮由 handleLogin finally 复位。云端 login.js 是 confirm 二选一+云端兜底认证的独立逻辑，未动；public/index.html 无此守卫。
+* **交互修正**：登录窗零账户时，老流程点【确定】先闪红字立即 `openLocalRegister()` 弹注册窗，打断已填手机号/密码的用户。改为**只留页红字提示**：桌面登录窗（db-offline/desktop/electron/login.js，真权威不同步、不进热包只随整包；dev 源运行即时生效）与离线主窗/APP 文案统一为「本机尚未注册管理员账户，请点击【注册开通】完成注册（注册后即可免费试用）」——首版提示引导"上方红条"，实测截图发现【注册开通】大按钮（auth-core.js 注入于 .login-buttons 之后、#loginError 之前，同样绑定 openLocalRegister）就在错误提示正上方，引导顶部红条绕远且长文案挤 4 行，故对齐就近按钮。注册动作一律改由用户主动点击触发（顶部红条/注册开通按钮仍绑定 openLocalRegister）；输入内容保留，按钮由 handleLogin finally 复位。云端 login.js 是 confirm 二选一+云端兜底认证的独立逻辑，未动；public/index.html 无此守卫。
 * **零用户判定链路备忘**：login.js `getUsers` = config.json users（主进程 get-app-config 已做 users-backup.json 回填 + 正式授权激活手机号自愈）+ localStorage XORv1 合并，三者皆空才是真零用户；时序无竞态（DOMContentLoaded 先 await getAppConfig 再 initLoginInput/绑按钮）。
 * **热包**：local/app-local 重签 **2026.09.24-3**（index.html 在白名单；login.js 不热更随下次桌面整包）；cloud 不动。check-interface 6 OK、copy-consistency 77 PASS、签名独立复验 true。
