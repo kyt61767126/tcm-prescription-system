@@ -3,15 +3,17 @@
 //
 //  路由：POST /api/license/ticket/reject
 //
-//  认证：Bearer token（platform_admin）
+//  认证：Bearer token（platform_admin 或 C批新增 service 客服；拒绝动作写平台审计）
 //
 //  请求体：{ "ticketNo": "TK-XXXXXXXX-XXXXXX", "reason": "拒绝原因（客户可见）" }
 //
 //  返回：{ success: true, status: 'rejected' }
 // ============================================================================
 
-import { parseAuthHeader, isPlatformAdmin } from '../../_lib/auth.js';
+import { parseAuthHeader, isStaff } from '../../_lib/auth.js';
 import { getKV } from '../_lib/license-core.js';
+// ★ 2026-09-24 C批：客服可拒单，操作必留平台级审计（拒单此前仅 console.log）
+import { writeAuditLog } from '../../_lib/audit-log.js';
 
 function corsHeaders() {
     return {
@@ -41,10 +43,10 @@ export async function onRequest(context) {
     }
 
     try {
-        // 管理员认证
+        // 平台员工认证（platform_admin 或 C批 service 客服）
         const currentUser = await parseAuthHeader(context.request, context.env);
-        if (!currentUser || !isPlatformAdmin(currentUser)) {
-            return json({ success: false, error: '仅平台总管理员可拒绝工单' }, 403);
+        if (!currentUser || !isStaff(currentUser)) {
+            return json({ success: false, error: '仅平台员工（管理员/客服）可拒绝工单' }, 403);
         }
 
         const kv = getKV(context);
@@ -78,6 +80,10 @@ export async function onRequest(context) {
         ticket.resolvedAt = new Date().toISOString();
         ticket.resolvedBy = currentUser.username;
         await kv.put(KV_TICKET_PREFIX + ticketNo, JSON.stringify(ticket));
+
+        // ★ C批：平台级审计（resolvedBy 同时留在工单内，双轨；waitUntil 不阻塞响应）
+        context.waitUntil(writeAuditLog(kv, null, currentUser.username, currentUser.role,
+            'ticket_reject', ticketNo, context, { reason: ticket.rejectReason }));
 
         console.log('[TicketReject] 工单已拒绝:', ticketNo,
             'reason=', ticket.rejectReason, 'by=', currentUser.username);

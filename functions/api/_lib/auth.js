@@ -17,10 +17,18 @@ export const ROLE_PLATFORM_ADMIN = 'platform_admin';
 export const ROLE_CLINIC_ADMIN = 'clinic_admin';
 export const ROLE_DOCTOR = 'doctor';
 export const ROLE_CASHIER = 'cashier';
+// ★ 2026-09-24 C批：客服角色——独立账号、最小权限，仅可登录客服工作台
+//   （/admin/service.html）。service 不是 isAdmin：默认不能访问任何管理端点，
+//   只有显式用 isStaff 放宽的客服类端点（查询/离线发码/工单审批/设备解绑/账号诊断）
+//   才接受它；发新码/删码/延期/停用/用户管理等管理权始终仅 platform_admin。
+export const ROLE_SERVICE = 'service';
 
 export const KV_SYSTEM_CLINICS = 'system:clinics';
 export const KV_SYSTEM_PLATFORM_ADMINS = 'system:platform_admins';
 export const KV_SYSTEM_PLATFORM_MEDICINES = 'system:platform_medicines';
+// ★ 2026-09-24 C批：客服账号表（platform_admin 在客服工作台内维护）
+//   结构：[{ username, name, role:'service', passwordHash, salt, disabled, createdAt, updatedAt }]
+export const KV_SYSTEM_SERVICE_ACCOUNTS = 'system:service_accounts';
 
 // Token 黑名单 KV key 前缀
 export const KV_TOKEN_REVOKED_PREFIX = 'revoked_token:';
@@ -477,6 +485,17 @@ export function isDoctor(user) {
 // ★ 2026-08-25 前台收费角色：只读全所处方 + 收费动作，不可开方/改方/管用户
 export function isCashier(user) {
     return !!(user && user.role === ROLE_CASHIER);
+}
+
+// ★ 2026-09-24 C批：客服角色判定
+export function isService(user) {
+    return !!(user && user.role === ROLE_SERVICE);
+}
+
+// ★ 2026-09-24 C批：员工判定（总管理员 OR 客服）——仅用于明确面向客服开放的端点；
+//   管理/发码/停用等高权端点继续只用 isPlatformAdmin，禁止图省事改用本函数。
+export function isStaff(user) {
+    return isPlatformAdmin(user) || isService(user);
 }
 
 export function isAdmin(user) {

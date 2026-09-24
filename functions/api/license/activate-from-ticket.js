@@ -3,7 +3,7 @@
 //
 //  路由：POST /api/license/activate-from-ticket
 //
-//  认证：Bearer token（platform_admin）
+//  认证：Bearer token（platform_admin 或 C批新增 service 客服）
 //
 //  请求体：
 //    {
@@ -34,7 +34,7 @@
 // ============================================================================
 
 import {
-    parseAuthHeader, isPlatformAdmin, KV_SYSTEM_CLINICS
+    parseAuthHeader, isStaff, KV_SYSTEM_CLINICS
 } from '../_lib/auth.js';
 import {
     getKV, saveLicense, buildLicenseData, encodeLicenseBase64,
@@ -43,6 +43,9 @@ import {
     PAID_LICENSE_TYPES
 } from './_lib/license-core.js';
 import { provisionCloudAccount, normalizeActivationPassword } from './_lib/admin-account.js';
+// ★ 2026-09-24 C批双审：审批通过=service 可达最高价值写操作（发付费码+开云端账号），
+//   除单码 license 日志外必须落平台级审计，与 reject/unbind 同流可在 audit-logs 追溯
+import { writeAuditLog } from '../_lib/audit-log.js';
 
 function corsHeaders() {
     return {
@@ -95,10 +98,11 @@ export async function onRequest(context) {
     }
 
     try {
-        // 管理员认证
+        // 平台员工认证（platform_admin 或 C批 service 客服——客服一键审批即代发激活码，
+        // 属用户明确授予能力；下方 AR-01 停用闸/锚点三件套等功能闸门对两类角色同等生效）
         const currentUser = await parseAuthHeader(context.request, context.env);
-        if (!currentUser || !isPlatformAdmin(currentUser)) {
-            return json({ success: false, error: '仅平台总管理员可审批工单' }, 403);
+        if (!currentUser || !isStaff(currentUser)) {
+            return json({ success: false, error: '仅平台员工（管理员/客服）可审批工单' }, 403);
         }
 
         const kv = getKV(context);
@@ -316,6 +320,18 @@ export async function onRequest(context) {
         ticket.expiresAt = recordExpiresAt || null;
         ticket.maxDevices = parsedMaxDevices;
         await kv.put(KV_TICKET_PREFIX + ticketNo, JSON.stringify(ticket));
+
+        // ★ C批双审：平台级审计（waitUntil 不阻塞响应；操作者取自 token，不可被参数伪造）
+        context.waitUntil(writeAuditLog(kv, null, currentUser.username, currentUser.role,
+            'ticket_approve', ticketNo, context, {
+                licenseCode: code,
+                type,
+                days: days || null,
+                expiresAt: recordExpiresAt || null,
+                maxDevices: parsedMaxDevices,
+                clinicName: clinicName || null,
+                machineIdHint: ticket.machineId ? ticket.machineId.substring(0, 8) : null
+            }));
 
         console.log('[ActivateFromTicket] 工单已通过:', ticketNo, 'code=', code,
             'clinic=', clinicName, 'type=', type, 'by=', currentUser.username);

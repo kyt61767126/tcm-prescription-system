@@ -3,8 +3,13 @@
 //
 //  路由：POST /api/license/export-license
 //
-//  认证：Bearer token（platform_admin）
-//        或 LICENSE_EXPORT_SECRET 环境变量（客服专用密钥，需在请求头 X-Export-Secret 传递）
+//  认证：Bearer token（platform_admin 或 C批新增 service 客服）
+//        或 LICENSE_EXPORT_SECRET 环境变量（过渡期密钥，需在请求头 X-Export-Secret 传递；
+//        在 Cloudflare 后台将该变量置空即可关闭密钥通道）
+//  客服通道额外限制（2026-09-24 双审修复）：
+//    - 满额码换机：user 必填且必须与授权登记用户一致（禁止省略短路）
+//    - 账号维度 30/h + 激活码维度 10/h 频控（IP 20/h 桶之外叠加，防换 IP 批量发码）
+//    - machineId 必须过 schema-guard 白名单（8-64 位）
 //
 //  用途：
 //    当客户机器无法联网激活时，客服根据客户提供的机器ID和激活码，
@@ -33,13 +38,15 @@
 //    - 两者底层均调用 buildLicenseData + encodeLicenseBase64，license 内容完全等价
 // ============================================================================
 
-import { parseAuthHeader, isPlatformAdmin, constantTimeEqual } from '../_lib/auth.js';
+import { parseAuthHeader, isPlatformAdmin, isStaff, constantTimeEqual } from '../_lib/auth.js';
 import {
     getKV, getLicense, updateLicense,
     buildLicenseData, encodeLicenseBase64,
     getDevices, getMaxDevices, appendLicenseLog,
-    checkRateLimit
+    checkRateLimit, checkCodeRateLimit
 } from './_lib/license-core.js';
+// ★ C批双审：machineId 白名单统一走 schema-guard 单一副本（8-64 位，拒 unknown/undefined）
+import { isValidMachineId } from './_lib/schema-guard.js';
 
 function corsHeaders() {
     return {
@@ -73,13 +80,19 @@ function isValidCodeFormat(code) {
     return pattern.test(code);
 }
 
-// 鉴权：平台管理员 Bearer token 或 LICENSE_EXPORT_SECRET 独立密钥
+// 鉴权：平台员工 Bearer token（platform_admin 或 C批新增 service 客服）
+//   或 LICENSE_EXPORT_SECRET 独立密钥（过渡期保留，后续可在 KV 侧轮换为空关闭）
 async function authenticate(context) {
-    // 方式1：平台管理员 Bearer token
+    // 方式1：平台员工 Bearer token（platform_admin 全量；service 仅本端点等客服面）
     try {
         const currentUser = await parseAuthHeader(context.request, context.env);
-        if (currentUser && isPlatformAdmin(currentUser)) {
-            return { ok: true, operator: currentUser.username || 'admin', method: 'bearer' };
+        if (currentUser && isStaff(currentUser)) {
+            return {
+                ok: true,
+                operator: currentUser.username || (isPlatformAdmin(currentUser) ? 'admin' : 'service'),
+                role: isPlatformAdmin(currentUser) ? 'platform_admin' : 'service',
+                method: isPlatformAdmin(currentUser) ? 'bearer' : 'bearer-service'
+            };
         }
     } catch (e) { /* 继续尝试方式2 */ }
 
@@ -89,11 +102,11 @@ async function authenticate(context) {
         const providedSecret = context.request.headers.get('X-Export-Secret');
         // ★ P1修复：改用常量时间比较，防止时序攻击
         if (providedSecret && constantTimeEqual(providedSecret, exportSecret)) {
-            return { ok: true, operator: 'export-secret', method: 'secret' };
+            return { ok: true, operator: 'export-secret', role: 'secret', method: 'secret' };
         }
     }
 
-    return { ok: false, error: '需要平台管理员权限或有效的 LICENSE_EXPORT_SECRET' };
+    return { ok: false, error: '需要平台员工权限（管理员/客服）或有效的 LICENSE_EXPORT_SECRET' };
 }
 
 export async function onRequest(context) {
@@ -137,8 +150,25 @@ export async function onRequest(context) {
             }, 429);
         }
 
+        // ★ 2026-09-24 C批双审修复：service 客服通道叠加【账号维度】频控 30/h——
+        // IP 桶可被代理池绕过（每 IP 独立 20/h），账号桶跨 IP 聚合，被盗客服号无法批量发码。
+        // admin/secret 通道维持既有 IP 单桶，不改变存量行为。
+        const callerIsService = auth.role === 'service';
+        if (callerIsService) {
+            // 独立前缀 ratelimit:staffexport，与匿名 IP 桶 key 空间彻底隔离
+            const accLimit = await checkRateLimit(kv, 'staff-export:' + auth.operator, 30, 'ratelimit:staffexport');
+            if (!accLimit.allowed) {
+                return json({
+                    success: false,
+                    error: '客服发码操作过于频繁（每账号每小时限 30 次），请稍后再试',
+                    rateLimited: true
+                }, 429);
+            }
+        }
+
         const body = await context.request.json().catch(() => ({}));
-        const { code, machineId, user, clinicName } = body;
+        const { code, user, clinicName } = body;
+        const machineId = typeof body.machineId === 'string' ? body.machineId.trim() : '';
 
         // 参数校验
         if (!code) {
@@ -147,11 +177,25 @@ export async function onRequest(context) {
         if (!machineId) {
             return json({ success: false, error: '请提供机器 ID（machineId，由客户提供）' }, 400);
         }
-        if (typeof machineId !== 'string' || machineId.length < 8 || machineId.length > 128) {
-            return json({ success: false, error: 'machineId 长度需在 8-128 之间' }, 400);
+        // ★ C批双审：与全链路口径一致（schema-guard：8-64 位英文/数字/_/-，拒 unknown 字面量）
+        if (!isValidMachineId(machineId)) {
+            return json({ success: false, error: '机器码格式无效（需 8-64 位英文、数字、下划线或连字符）' }, 400);
         }
         if (!isValidCodeFormat(code)) {
             return json({ success: false, error: '激活码格式错误，应为 BNZC-XXXX-XXXX-XXXX-XXXX' }, 400);
+        }
+        // ★ C批双审修复：service 通道叠加【激活码维度】频控 10/h，
+        // 防对单一客户的码做换机踢机试探；admin/secret 通道不追加。
+        if (callerIsService) {
+            // 独立码桶前缀，不与客户端 validate 的 5/h 桶共计数
+            const codeLimit = await checkCodeRateLimit(kv, code, 10, 'ratelimit:staffexport:code');
+            if (!codeLimit.allowed) {
+                return json({
+                    success: false,
+                    error: '同一激活码操作过于频繁（每小时限 10 次），请稍后再试',
+                    rateLimited: true
+                }, 429);
+            }
         }
         // clinicName 字符校验
         if (clinicName !== undefined && clinicName !== null && clinicName !== '') {
@@ -204,22 +248,34 @@ export async function onRequest(context) {
 
         if (record.status === 'used' && !existingDevice) {
             if (devices.length >= maxDevices) {
-                // ★ P1修复：换机解绑二次校验（与 validate.js 一致）
-                // 仅当新设备 user 与 license 原始绑定 user 一致时才允许自动解绑，
-                // 防止客服持密钥用任意 machineId 换机挤掉合法用户
+                // ★ 2026-09-24 C批双审修复（High）：换机归属闸按通道分级
+                //   旧逻辑 `if (user && originalUser && user!==originalUser)` 有两个洞：
+                //   ①user 可省略→条件短路，任意 machineId 直接踢掉最旧合法设备；
+                //   ②user 对客服在 list 接口明文可见，照抄即过（弱归属凭据）。
+                //   现对 service 客服通道收紧为【强制】：user 必传、授权登记用户必须存在、
+                //   二者必须一致，否则拒绝并写 unbind-denied 审计（客服须先在线下核验
+                //   客户身份并按登记用户名填写）。admin/secret 通道维持原可选校验（既有行为）。
                 const originalUser = record.user || record.username || '';
-                if (user && originalUser && user !== originalUser) {
+                const providedUser = typeof user === 'string' ? user.trim() : '';
+                let denyReason = '';
+                if (callerIsService) {
+                    if (!providedUser) denyReason = '客服换机必须填写与授权登记一致的联系人用户名';
+                    else if (!originalUser) denyReason = '该授权缺少登记用户，无法完成客服换机，请联系管理员处理';
+                    else if (providedUser !== originalUser) denyReason = '联系人与授权登记用户不一致';
+                } else if (providedUser && originalUser && providedUser !== originalUser) {
+                    denyReason = '设备数已达上限，且用户名与授权用户不匹配，请联系客服处理换机';
+                }
+                if (denyReason) {
+                    // 日志字段截断（用户可控输入，防超长串污染日志；KV 为 JSON 结构化存储无换行注入面）
+                    const cut = s => String(s).slice(0, 60);
                     await appendLicenseLog(kv, code, {
                         action: 'unbind-denied',
                         time: new Date().toISOString(),
                         ip: ip,
                         operator: auth.operator,
-                        detail: `[export] 拒绝换机：新设备 user='${user}' 与授权 user='${originalUser}' 不一致`
+                        detail: `[export] 拒绝换机(${auth.method})：provided='${cut(providedUser)}' original='${cut(originalUser)}' reason=${denyReason}`
                     });
-                    return json({
-                        success: false,
-                        error: '设备数已达上限，且用户名与授权用户不匹配，请联系客服处理换机'
-                    }, 403);
+                    return json({ success: false, error: denyReason }, 403);
                 }
                 // 换机模式：自动解绑最旧设备
                 const oldestDevice = devices[0];
@@ -243,8 +299,8 @@ export async function onRequest(context) {
             }
         }
 
-        // 覆盖 user（如果提供了）
-        const licenseUser = user || record.user || record.username || 'user';
+        // 覆盖 user（如果提供了；trim 归一化，与换机闸 providedUser 同口径）
+        const licenseUser = (typeof user === 'string' ? user.trim() : '') || record.user || record.username || 'user';
 
         // 生成 license 数据（复用 buildLicenseData）
         const licenseRecord = { ...record, user: licenseUser };

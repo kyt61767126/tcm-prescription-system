@@ -3,7 +3,7 @@
 //
 //  路由：GET /api/license/ticket/list?status=pending|approved|rejected|all&limit=100
 //
-//  认证：Bearer token（platform_admin）
+//  认证：Bearer token（platform_admin 或 C批新增 service 客服；machineId 服务端脱敏）
 //
 //  返回：{ success: true, list: [...] }
 //
@@ -12,7 +12,7 @@
 //    与前端 mask() 双保险——即使前端被篡改，服务端也不泄露完整哈希。
 // ============================================================================
 
-import { parseAuthHeader, isPlatformAdmin } from '../../_lib/auth.js';
+import { parseAuthHeader, isStaff } from '../../_lib/auth.js';
 import { getKV } from '../_lib/license-core.js';
 
 function corsHeaders() {
@@ -51,10 +51,10 @@ export async function onRequest(context) {
     }
 
     try {
-        // 管理员认证
+        // 平台员工认证（platform_admin 或 C批 service 客服）
         const currentUser = await parseAuthHeader(context.request, context.env);
-        if (!currentUser || !isPlatformAdmin(currentUser)) {
-            return json({ success: false, error: '仅平台总管理员可查看工单列表' }, 403);
+        if (!currentUser || !isStaff(currentUser)) {
+            return json({ success: false, error: '仅平台员工（管理员/客服）可查看工单列表' }, 403);
         }
 
         const kv = getKV(context);

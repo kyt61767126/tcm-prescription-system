@@ -1453,8 +1453,10 @@ async function getUsage(kv, code) {
 //  速率限制（简单 KV 实现，防止暴力破解）
 // ============================================================================
 // 记录 IP 的校验请求次数
-async function checkRateLimit(kv, ip, maxPerHour = 5) {
-    const key = `ratelimit:license:${ip}:${Math.floor(Date.now() / (60 * 60 * 1000))}`;
+// ★ 2026-09-24 C批双审：prefix 可选参——员工账号桶等非 IP 维度须传独立前缀，
+//   与匿名 IP 桶的 key 空间彻底隔离（默认值保持 ratelimit:license，既有调用零影响）
+async function checkRateLimit(kv, ip, maxPerHour = 5, prefix = 'ratelimit:license') {
+    const key = `${prefix}:${ip}:${Math.floor(Date.now() / (60 * 60 * 1000))}`;
     const current = parseInt(await kv.get(key) || '0', 10);
     if (current >= maxPerHour) {
         return { allowed: false, current, max: maxPerHour };
@@ -1466,10 +1468,12 @@ async function checkRateLimit(kv, ip, maxPerHour = 5) {
 // ★ P0-1 安全补强：激活码级短时频控（防对单一合法激活码做换机试探/暴力爆破）
 // 与 checkRateLimit（按 IP）不同，本函数按激活码维度限流，用于 validate.js 等
 // 客户端激活入口。KV key 使用激活码大写（license:{code} 已含同样信息，无额外暴露）
-async function checkCodeRateLimit(kv, code, maxPerHour = 5) {
+// ★ C批双审：prefix 可选参——客服导出端点传独立桶前缀，避免与客户端 validate 的
+//   5/h 桶共用计数器互相占用额度（默认值保持 ratelimit:code，既有调用零影响）
+async function checkCodeRateLimit(kv, code, maxPerHour = 5, prefix = 'ratelimit:code') {
     const normalized = String(code || '').toUpperCase();
     if (!normalized) return { allowed: false, current: 0, max: maxPerHour };
-    const key = `ratelimit:code:${normalized}:${Math.floor(Date.now() / (60 * 60 * 1000))}`;
+    const key = `${prefix}:${normalized}:${Math.floor(Date.now() / (60 * 60 * 1000))}`;
     const current = parseInt(await kv.get(key) || '0', 10);
     if (current >= maxPerHour) {
         return { allowed: false, current, max: maxPerHour };

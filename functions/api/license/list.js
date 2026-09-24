@@ -19,7 +19,7 @@
 //    }
 // ============================================================================
 
-import { parseAuthHeader, isPlatformAdmin } from '../_lib/auth.js';
+import { parseAuthHeader, isStaff } from '../_lib/auth.js';
 import { getKV, listLicenses, sanitizeRecord, updateLicense } from './_lib/license-core.js';
 
 function corsHeaders() {
@@ -177,10 +177,10 @@ export async function onRequest(context) {
     }
 
     try {
-        // 管理员认证
+        // 平台员工认证（platform_admin 或 C批 service 客服；输出统一经 sanitizeRecord 脱敏）
         const currentUser = await parseAuthHeader(context.request, context.env);
-        if (!currentUser || !isPlatformAdmin(currentUser)) {
-            return json({ success: false, error: '仅平台总管理员可查看激活码列表' }, 403);
+        if (!currentUser || !isStaff(currentUser)) {
+            return json({ success: false, error: '仅平台员工（管理员/客服）可查看激活码列表' }, 403);
         }
 
         const kv = getKV(context);
@@ -225,6 +225,9 @@ export async function onRequest(context) {
                 (r.code && r.code.toLowerCase().includes(lowerQ)) ||
                 (r.user && r.user.toLowerCase().includes(lowerQ)) ||
                 (r.username && r.username.toLowerCase().includes(lowerQ)) ||
+                // ★ 2026-09-24 C批双审：工作台查询框承诺可按诊所名检索，补匹配（激活码/已激活诊所名）
+                (r.clinicName && r.clinicName.toLowerCase().includes(lowerQ)) ||
+                (r.activatedClinicName && r.activatedClinicName.toLowerCase().includes(lowerQ)) ||
                 (r.note && r.note.toLowerCase().includes(lowerQ)) ||
                 // ★ 2026-08-25 按机器码反查激活码：匹配旧 machineId 单值 + v4 devices 数组
                 //   （此处 r 为 sanitize 前原始记录，含完整 32 位机器码；子串匹配，输入前 8 位亦可命中）

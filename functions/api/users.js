@@ -3,8 +3,9 @@ import {
     parseAuthHeader, hashPassword, verifyPassword, signToken,
     isPlatformAdmin, isClinicAdmin, isAdmin, isLegacyPasswordHash,
     revokeAllUserTokens, writeUserSession, clearUserSession, getUserSession,
-    ROLE_PLATFORM_ADMIN, ROLE_CLINIC_ADMIN, ROLE_DOCTOR, ROLE_CASHIER,
-    KV_SYSTEM_CLINICS, KV_SYSTEM_PLATFORM_ADMINS,
+    ROLE_PLATFORM_ADMIN, ROLE_CLINIC_ADMIN, ROLE_DOCTOR, ROLE_CASHIER, ROLE_SERVICE,
+    KV_SYSTEM_CLINICS, KV_SYSTEM_PLATFORM_ADMINS, KV_SYSTEM_SERVICE_ACCOUNTS,
+    isStaff,
     findPhoneOccupancy
 } from './_lib/auth.js';
 import { provisionCloudAccount } from './license/_lib/admin-account.js';
@@ -492,6 +493,17 @@ async function findUserForLogin(kv, username, env = null) {
         }
     }
 
+    // ★ 2026-09-24 C批：客服账号（独立 KV 表 system:service_accounts，username 精确匹配）
+    //   与 platform_admins 同样不挂诊所（clinicId=null），但 role='service'，
+    //   登录后令牌天然无诊所归属、不占设备名额；禁用账号照常返回，由登录主链统一拒绝。
+    const serviceAccounts = await kv.get(KV_SYSTEM_SERVICE_ACCOUNTS, 'json').catch(() => null);
+    if (Array.isArray(serviceAccounts)) {
+        const svc = serviceAccounts.find(u => u && u.username === trimmed);
+        if (svc) {
+            return { user: svc, clinicId: null, clinicName: null, clinicStatus: 'active', clinicEdition: null, error: null };
+        }
+    }
+
     // 2. 查所有诊所用户
     const clinics = await kv.get(KV_SYSTEM_CLINICS, 'json');
     if (!clinics || !Array.isArray(clinics)) {
@@ -972,6 +984,24 @@ export async function onRequest(context) {
                     } else {
                         return json({ success: false, error: '诊所用户数据异常，未写入' }, 500, context.request);
                     }
+                } else if (found.user.role === ROLE_SERVICE) {
+                    // ★ C批：客服账号写回独立 KV 表
+                    // ★ C批双审：KV 值损坏（非数组）fail-closed 拒绝写入，杜绝 [] 覆盖坏值抹掉账号
+                    const svcAccountsRaw = await kv.get(KV_SYSTEM_SERVICE_ACCOUNTS, 'json').catch(() => null);
+                    if (!Array.isArray(svcAccountsRaw)) {
+                        return json({ success: false, error: '客服账号表数据异常（非数组），已拒绝写入，请排查 KV' }, 500, context.request);
+                    }
+                    const sIdx = svcAccountsRaw.findIndex(u => u.username === found.user.username);
+                    if (sIdx !== -1) {
+                        svcAccountsRaw[sIdx] = found.user;
+                        await kv.put(KV_SYSTEM_SERVICE_ACCOUNTS, JSON.stringify(svcAccountsRaw));
+                        // ★ C批双审：与 service-account-save 重置入口对齐——救援重置同样撤销全部旧会话，
+                        //   防泄露账号被改密后旧 token 在 TTL 内继续有效
+                        try { await revokeAllUserTokens(kv, found.user.username); }
+                        catch (e) { console.error('revokeAllUserTokens(service reset-password) error:', e); }
+                    } else {
+                        return json({ success: false, error: '客服账号数据异常，未写入' }, 500, context.request);
+                    }
                 } else {
                     const admins = (await kv.get(KV_SYSTEM_PLATFORM_ADMINS, 'json')) || [];
                     const idx = admins.findIndex(u => u.username === found.user.username);
@@ -1037,6 +1067,9 @@ export async function onRequest(context) {
             const target = found.user;
             if (target.role === ROLE_PLATFORM_ADMIN) {
                 return json({ success: false, error: '平台总管理员不支持在此启停/调整角色（防止锁死管理入口）' }, 403, context.request);
+            }
+            if (target.role === ROLE_SERVICE) {
+                return json({ success: false, error: '客服账号请在客服工作台「客服账号」页管理' }, 403, context.request);
             }
             if (!found.clinicId) {
                 return json({ success: false, error: '目标用户数据异常（无所属诊所）' }, 500, context.request);
@@ -1122,6 +1155,9 @@ export async function onRequest(context) {
             const target = found.user;
             if (target.role === ROLE_PLATFORM_ADMIN) {
                 return json({ success: false, error: '平台总管理员不支持删除（防止锁死管理入口）' }, 403, context.request);
+            }
+            if (target.role === ROLE_SERVICE) {
+                return json({ success: false, error: '客服账号不支持删除（停用即可），请在客服工作台管理' }, 403, context.request);
             }
             if (!found.clinicId) {
                 return json({ success: false, error: '目标用户数据异常（无所属诊所）' }, 500, context.request);
@@ -1302,6 +1338,204 @@ export async function onRequest(context) {
             };
 
             return json(result);
+        }
+
+        // ====================================================================
+        // ===== C批（2026-09-24）客服账号体系 ================================
+        //   独立 KV 表 system:service_accounts；账号管理仅 platform_admin，
+        //   service 自身无权增删改任何账号（含同类客服账号）。
+        // ====================================================================
+
+        // 客服账号列表 GET /users?action=service-account-list（仅 platform_admin；不回传哈希）
+        if (method === 'GET' && url.searchParams.get('action') === 'service-account-list') {
+            const authUser = await parseAuthHeader(context.request, context.env);
+            if (!authUser || !isPlatformAdmin(authUser)) {
+                return json({ success: false, error: '未授权：仅平台总管理员可管理客服账号' }, 403, context.request);
+            }
+            const accounts = (await kv.get(KV_SYSTEM_SERVICE_ACCOUNTS, 'json').catch(() => null)) || [];
+            const data = (Array.isArray(accounts) ? accounts : []).map(a => ({
+                username: a.username,
+                name: a.name || '',
+                role: ROLE_SERVICE,
+                disabled: a.disabled === true,
+                createdAt: a.createdAt || null,
+                updatedAt: a.updatedAt || null
+            }));
+            return json({ success: true, data, count: data.length });
+        }
+
+        // 新建/更新客服账号 POST /users?action=service-account-save
+        //   body: { username, name, password, disabled }
+        //   username 不存在=新建（password 必填）；存在=更新（password 留空=不改密码）
+        if (method === 'POST' && url.searchParams.get('action') === 'service-account-save') {
+            const authUser = await parseAuthHeader(context.request, context.env);
+            if (!authUser || !isPlatformAdmin(authUser)) {
+                return json({ success: false, error: '未授权：仅平台总管理员可管理客服账号' }, 403, context.request);
+            }
+
+            const body = await context.request.json().catch(() => ({}));
+            const username = String(body.username || '').trim();
+            const name = String(body.name || '').trim().slice(0, 30);
+            const password = typeof body.password === 'string' ? body.password : '';
+            // ★ C批双审：区分"未传 disabled"与"显式 false"——更新时漏传不得把停用账号静默启用
+            const disabledProvided = body.disabled === true || body.disabled === false;
+            const disabled = body.disabled === true;
+
+            if (!/^[A-Za-z0-9_-]{2,30}$/.test(username)) {
+                return json({ success: false, error: '用户名需为 2-30 位英文/数字/下划线/连字符' }, 400, context.request);
+            }
+            if (/^1[3-9]\d{9}$/.test(username)) {
+                return json({ success: false, error: '用户名不能使用手机号格式' }, 400, context.request);
+            }
+
+            // ★ C批双审：KV 值损坏（存在但非数组）fail-closed——拒绝一切写入，
+            //   防新建分支用 [] 覆盖坏值把现存客服账号整体抹掉
+            const accountsRaw = await kv.get(KV_SYSTEM_SERVICE_ACCOUNTS, 'json').catch(() => null);
+            if (accountsRaw !== null && !Array.isArray(accountsRaw)) {
+                return json({ success: false, error: '客服账号表数据异常（非数组），已拒绝写入，请排查 KV' }, 500, context.request);
+            }
+            const list = Array.isArray(accountsRaw) ? accountsRaw : [];
+            const idx = list.findIndex(u => u && u.username === username);
+            const isCreate = idx === -1;
+
+            if (isCreate) {
+                // 全局唯一查重：findUserForLogin 已覆盖 platform_admins / service_accounts / 全部诊所用户
+                const occupied = await findUserForLogin(kv, username, context.env);
+                if (occupied && occupied.user) {
+                    return json({ success: false, error: '该用户名已被占用，请换一个' }, 409, context.request);
+                }
+                if (!password) {
+                    return json({ success: false, error: '新建客服账号必须设置初始密码' }, 400, context.request);
+                }
+            }
+
+            if (password) {
+                if (password.length < 8 || password.length > 128 ||
+                    !/[a-zA-Z]/.test(password) || !/[0-9]/.test(password)) {
+                    return json({ success: false, error: '密码需 8-128 位且同时包含字母和数字' }, 400, context.request);
+                }
+            }
+
+            const nowIso = getNowISO();
+            if (isCreate) {
+                const { passwordHash, salt } = await hashPassword(password);
+                list.push({
+                    username, name, role: ROLE_SERVICE,
+                    passwordHash, salt,
+                    disabled,
+                    createdAt: nowIso, updatedAt: nowIso
+                });
+                await kv.put(KV_SYSTEM_SERVICE_ACCOUNTS, JSON.stringify(list));
+                await clearLoginFailures(kv, username).catch(() => {});
+                if (disabled) {
+                    try { await revokeAllUserTokens(kv, username); } catch (e) { console.error('revokeAllUserTokens error:', e); }
+                }
+                context.waitUntil(writeAuditLog(kv, null, authUser.username, authUser.role,
+                    'service_account_create', username, context, { name, disabled }));
+                return json({ success: true, username, created: true, message: '客服账号已创建' });
+            }
+
+            // 更新既有账号：姓名 / 停用状态 / 密码各自独立审计（不混用单一语义位）
+            const cur = list[idx];
+            if (cur.role && cur.role !== ROLE_SERVICE) {
+                return json({ success: false, error: '目标账号角色异常，已拒绝写入' }, 500, context.request);
+            }
+            const changes = [];
+            if (name !== (cur.name || '')) { cur.name = name; changes.push('name'); }
+            // ★ C批双审：仅当请求显式携带 disabled 时才变更停用态（漏传保持原状，防误启用）
+            if (disabledProvided && disabled !== (cur.disabled === true)) {
+                cur.disabled = disabled;
+                changes.push(disabled ? 'disabled' : 'enabled');
+                // 停用立即撤销全部登录态；重新启用不清会话（账号此前无有效会话）
+                if (disabled) {
+                    try { await revokeAllUserTokens(kv, username); } catch (e) { console.error('revokeAllUserTokens error:', e); }
+                } else {
+                    // 启用即解除此前失败锁定（否则停用期间账号可能仍处锁定态）
+                    await clearLoginFailures(kv, username).catch(() => {});
+                }
+            }
+            let passwordReset = false;
+            if (password) {
+                const { passwordHash, salt } = await hashPassword(password);
+                cur.passwordHash = passwordHash;
+                cur.salt = salt;
+                passwordReset = true;
+                changes.push('password');
+                // 重置密码即撤销全部旧会话，强制使用新密码重新登录；同时清除失败锁定
+                try { await revokeAllUserTokens(kv, username); } catch (e) { console.error('revokeAllUserTokens error:', e); }
+                await clearLoginFailures(kv, username).catch(() => {});
+            }
+            if (!changes.length) {
+                return json({ success: true, username, updated: false, message: '无变更' });
+            }
+            cur.role = ROLE_SERVICE;
+            cur.updatedAt = nowIso;
+            await kv.put(KV_SYSTEM_SERVICE_ACCOUNTS, JSON.stringify(list));
+
+            const auditExtra = { name: cur.name || '', changes };
+            context.waitUntil(writeAuditLog(kv, null, authUser.username, authUser.role,
+                'service_account_update', username, context, auditExtra));
+            if (passwordReset) {
+                context.waitUntil(writeAuditLog(kv, null, authUser.username, authUser.role,
+                    'service_account_reset_password', username, context, {}));
+            }
+            return json({ success: true, username, updated: true, changes, message: '客服账号已更新' });
+        }
+
+        // 账号诊断 GET /users?action=account-diagnose&q=用户名或手机号
+        //   客服（isStaff）只读：登录不上客户的定位——存在性/归属/角色/停用/锁定/到期。
+        //   最小披露：不返回密码哈希、不返回同诊所用户清单、不返回联系人等隐私字段。
+        if (method === 'GET' && url.searchParams.get('action') === 'account-diagnose') {
+            const authUser = await parseAuthHeader(context.request, context.env);
+            if (!authUser || !isStaff(authUser)) {
+                return json({ success: false, error: '未授权：仅平台员工可诊断账号' }, 403, context.request);
+            }
+            const q = String(url.searchParams.get('q') || '').trim();
+            if (!q || q.length > 40) {
+                return json({ success: false, error: '请提供要诊断的用户名或手机号' }, 400, context.request);
+            }
+
+            const found = await findUserForLogin(kv, q, context.env);
+            // ★ C批双审：失败计数权威键是解析后的 username（见登录链 lockKey 归一化），
+            //   客服按手机号诊断时原始串键读不到计数——两键取 max，与登录链双检同口径
+            const readFail = async k => parseInt(await kv.get('login_fail:' + k).catch(() => '0') || '0', 10);
+            let failCount = await readFail(q);
+            const canonicalName = found && found.user ? found.user.username : null;
+            if (canonicalName && canonicalName !== q) {
+                failCount = Math.max(failCount, await readFail(canonicalName));
+            }
+
+            let result;
+            if (!found || !found.user) {
+                result = { found: false, q, summary: { exists: false, isLocked: failCount >= LOGIN_MAX_FAILURES, failCount } };
+            } else {
+                const u = found.user;
+                const location = u.role === ROLE_PLATFORM_ADMIN ? 'platform_admin'
+                    : (u.role === ROLE_SERVICE ? 'service' : 'clinic_user');
+                result = {
+                    found: true,
+                    q,
+                    account: {
+                        username: u.username || null,
+                        role: u.role || null,
+                        name: u.name || null,
+                        location,
+                        clinicName: found.clinicName || null,
+                        clinicStatus: found.clinicStatus || null,
+                        clinicExpiresAt: found.clinicExpiresAt || null,
+                        disabled: u.disabled === true
+                    },
+                    summary: {
+                        exists: true,
+                        location,
+                        isLocked: failCount >= LOGIN_MAX_FAILURES,
+                        failCount
+                    }
+                };
+            }
+            context.waitUntil(writeAuditLog(kv, null, authUser.username, authUser.role,
+                'account_diagnose', q, context, { found: !!result.found }));
+            return json({ success: true, ...result });
         }
 
         // ===== 初始化平台管理员 POST /users?action=bootstrap =====
@@ -1569,7 +1803,7 @@ export async function onRequest(context) {
             }
 
             // 用户角色是否有效
-            if (!user.role || !['platform_admin', 'clinic_admin', 'doctor', 'cashier'].includes(user.role)) {
+            if (!user.role || !['platform_admin', 'clinic_admin', 'doctor', 'cashier', ROLE_SERVICE].includes(user.role)) {
                 console.error('[登录失败] 用户角色无效:', username, user.role);
                 return json({
                     success: false,
@@ -2035,6 +2269,11 @@ export async function onRequest(context) {
             const currentUser = await parseAuthHeader(context.request, context.env);
             if (!currentUser || currentUser.username !== username) {
                 return json({ success: false, error: '只能修改自己的密码' }, 403, context.request);
+            }
+            // ★ C批双审：客服账号凭证生命周期只由 platform_admin 经 service-account-save 管理
+            //   （独立 KV 表，无此分支写回逻辑；旧代码落入 platform_admins 空写回却回成功+踢 token）
+            if (currentUser.role === ROLE_SERVICE) {
+                return json({ success: false, error: '客服账号不可自助修改，请联系平台管理员在「客服账号」管理中重置' }, 403, context.request);
             }
 
             // 查找用户原始数据
@@ -3004,6 +3243,11 @@ export async function onRequest(context) {
             const currentUser = await parseAuthHeader(context.request, context.env);
             if (!currentUser) {
                 return json({ success: false, error: 'Forbidden: 需登录身份' }, 403);
+            }
+            // ★ C批双审：客服账号禁止走批量保存/doctor 自助兜底通道（旧路径空写回却回成功），
+            //   凭证与资料一律由 platform_admin 在 service-account-save 中管理
+            if (currentUser.role === ROLE_SERVICE) {
+                return json({ success: false, error: '客服账号不支持此操作，请由平台管理员在「客服账号」管理中处理' }, 403);
             }
 
             if (isPlatformAdmin(currentUser)) {
