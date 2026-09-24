@@ -221,6 +221,45 @@ const GROUPS = [
             'app_project/db-offline/desktop/voice-input.js',
             'app_project/db-offline/app/app/src/main/assets/public/voice-input.js'
         ]
+    },
+    {
+        // ★ 2026-09-24 P1：cloud-api.js（云端 API 客户端）。历史仅 sync-all Group 8
+        //   自动分发 cloud_desktop 一处，其余 6 处副本（public×2 / site-admin /
+        //   云APP assets / 离线APP assets / 鸿蒙 rawfile）全靠手工传播，无硬门。
+        //   本组 7 副本全量硬哈希；sync-all Group 8b 负责自动分发。
+        //   APP 侧必需的 typeof window._cloudReachable === 'undefined' 防御初始化
+        //   已含在权威源内（全端同体，无需副本定制）。
+        authority: 'shared/cloud-api.js',
+        copies: [
+            'public/cloud-api.js',
+            'public/electron/cloud-api.js',
+            'site-admin/cloud-api.js',
+            'app_project/db-yunduan/cloud_desktop/cloud-api.js',
+            'app_project/db-yunduan/cloud_app/app/src/main/assets/public/cloud-api.js',
+            'app_project/db-offline/app/app/src/main/assets/public/cloud-api.js',
+            'app_project_harmony/huikang-cloud/entry/src/main/resources/rawfile/cloud-api.js'
+        ]
+    },
+    {
+        // ★ 2026-09-24 P1：云系 electron 适配版 video-recorder.js（云端网页 / 云桌面
+        //   / 云APP 同源；云端热包 cloud 通道也取此源）。权威 public/electron；
+        //   2026-09-24 前云桌面 asar 副本纯落后 29 行（缺 AndroidNative 让位早退、
+        //   网页兜底、addMediaFileWeb 导出），已收敛并加硬门。sync-all Group 20a
+        //   自动分发。离线桌面 electron 副本是真分叉（media-capture 付费墙等），
+        //   刻意不入本组、禁止拉平。
+        authority: 'public/electron/video-recorder.js',
+        copies: [
+            'app_project/db-yunduan/cloud_desktop/electron/video-recorder.js'
+        ]
+    },
+    {
+        // ★ 2026-09-24 P1：纯浏览器版 video-recorder.js（MediaRecorder + IndexedDB，
+        //   与 electron 适配版不同源，消费方 site-admin/index.html 同目录加载）。
+        //   锁定双站根副本一致，防止手工传播漂移。
+        authority: 'public/video-recorder.js',
+        copies: [
+            'site-admin/video-recorder.js'
+        ]
     }
 ];
 

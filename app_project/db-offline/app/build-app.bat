@@ -423,8 +423,11 @@ if defined APKSIGNER (
     )
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] APK signature verification passed (v2/v3 + cert hash)'"
 ) else (
-    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] apksigner not found (ANDROID_HOME / ANDROID_SDK_ROOT / local.properties sdk.dir / C:\Android\Sdk all failed), skipping signature verification'"
-    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Set ANDROID_HOME to enable signature verification'"
+    REM ★ 2026-09-24 P1 签名硬失败：Gradle 出包必然依赖 build-tools（apksigner.bat
+    REM   随 build-tools 发布），发现链五源全败=SDK 环境异常；未验签 APK 禁止流出。
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] apksigner 未找到（ANDROID_HOME / ANDROID_SDK_ROOT / local.properties sdk.dir / C:\Android\Sdk 全部失败）' -ForegroundColor Red"
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] APK 签名终验无法执行，发布构建中止。请正确设置 ANDROID_HOME 后重试' -ForegroundColor Red"
+    goto build_fail
 )
 echo.
 

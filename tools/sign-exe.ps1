@@ -1,4 +1,4 @@
-﻿# ============================================================================
+# ============================================================================
 #  sign-exe.ps1 - Authenticode code signing tool (P0-3, 2026-08-26)
 #
 #  Signs exe files with the self-signed code signing certificate
@@ -12,13 +12,23 @@
 #
 #  Usage:
 #    powershell -NoProfile -ExecutionPolicy Bypass -File tools\sign-exe.ps1 `
-#        -ExePath "path\to\app.exe" [-VerifyBnzc]
+#        -ExePath "path\to\app.exe" [-VerifyBnzc] [-Strict] [-SelfCheckPath ...\electron\self-check.js]
 #
 #  Parameters:
 #    -ExePath     one or more exe files to sign (wildcards allowed)
 #    -VerifyBnzc  after signing, run node tools\pe-zone-sign.cjs verify on
 #                 each signed file; exit 1 if the .bnzc hash broke (rc=1/3).
 #                 rc=2 (no .bnzc zone, e.g. embed was skipped) is a WARN only.
+#    -Strict      release-build gate (P1, 2026-09-24): missing cert material
+#                 is a hard error (exit 1) instead of the legacy skip (rc=2).
+#                 Release pipelines MUST pass this so an unsigned exe can never
+#                 ship silently.
+#    -SelfCheckPath  path to the product electron\self-check.js. The loaded
+#                 pfx thumbprint MUST equal EXPECTED_EXE_SIGNER_THUMBPRINT
+#                 compiled into that file (runtime tamper-detection authority);
+#                 mismatch exits 1 BEFORE signing (a renewed/swapped cert would
+#                 make every client self-check report 'tampered'). In -Strict
+#                 mode a missing/unparseable self-check file also exits 1.
 #    -TimestampServer  Timestamp server URL (P1-1, 2026-08-30). Formal-CA-cert
 #                 scenario: stamps the signature so it stays valid after the
 #                 certificate expires. Empty (default) = offline-friendly, no
@@ -29,9 +39,11 @@
 #
 #  Exit codes:
 #    0 = all files signed OK (or nothing to sign)
-#    1 = signing failed / .bnzc broke after signing  -> build MUST abort
+#    1 = signing failed / .bnzc broke after signing / thumbprint mismatch /
+#        cert material or self-check missing under -Strict -> build MUST abort
 #    2 = cert material missing (fresh clone without tools/certs/*.pfx)
-#        -> skip signing, non-blocking (unsigned exe, same as pre-P0-3)
+#        -> skip signing, non-blocking (unsigned exe, same as pre-P0-3);
+#           NEVER returned when -Strict is set (becomes exit 1).
 #
 #  Notes:
 #    - Self-signed cert: on machines without the cert in trusted roots,
@@ -50,6 +62,8 @@ param(
     [Parameter(Mandatory = $true)]
     [string[]]$ExePath,
     [switch]$VerifyBnzc,
+    [switch]$Strict,
+    [string]$SelfCheckPath = '',
     [string]$TimestampServer = ''
 )
 
@@ -65,6 +79,10 @@ $PfxPath = Get-ChildItem -Path $CertDir -Filter '*.pfx' -ErrorAction SilentlyCon
 $PwPath = Join-Path $CertDir 'cert-password.txt'
 
 if ($null -eq $PfxPath -or -not (Test-Path $PwPath)) {
+    if ($Strict) {
+        Write-Host '[SIGN][ERROR] -Strict release build: cert material missing (tools/certs/*.pfx or cert-password.txt), aborting - unsigned exe must NOT ship' -ForegroundColor Red
+        exit 1
+    }
     Write-Host '[SIGN][WARN] cert material missing (tools/certs/*.pfx or cert-password.txt), skip signing' -ForegroundColor Yellow
     exit 2
 }
@@ -81,6 +99,45 @@ try {
 } catch {
     Write-Host ('[SIGN][ERROR] failed to load pfx: ' + $_.Exception.Message) -ForegroundColor Red
     exit 1
+}
+
+# P1 (2026-09-24) release-gate thumbprint assertion: the pfx about to sign MUST
+# be the certificate hard-coded in electron/self-check.js, otherwise every
+# shipped exe would self-report 'tampered' (fingerprint mismatch) on clients.
+# Fail fast BEFORE touching any exe.
+if ($SelfCheckPath) {
+    if (-not (Test-Path $SelfCheckPath)) {
+        if ($Strict) {
+            Write-Host ('[SIGN][ERROR] -Strict: self-check file not found: ' + $SelfCheckPath) -ForegroundColor Red
+            exit 1
+        }
+        Write-Host ('[SIGN][WARN] SelfCheckPath not found, thumbprint assertion skipped: ' + $SelfCheckPath) -ForegroundColor Yellow
+    } else {
+        # Read as UTF-8 explicitly: self-check.js is UTF-8 (no BOM) with Chinese
+        # comments; PS 5.1 Get-Content -Raw defaults to ANSI/GBK, whose DBCS
+        # resync can swallow adjacent LF bytes and silently corrupt the text.
+        $scText = Get-Content $SelfCheckPath -Raw -Encoding UTF8
+        # Anchor to the single const declaration (line start) and require exactly
+        # one match: a loose first-match could be spoofed by a comment/placeholder
+        # appearing above the real constant.
+        $tpMatches = [regex]::Matches($scText, "(?m)^const\s+EXPECTED_EXE_SIGNER_THUMBPRINT\s*=\s*'([0-9A-Fa-f]{40})'\s*;")
+        if ($tpMatches.Count -ne 1) {
+            if ($Strict) {
+                Write-Host ('[SIGN][ERROR] -Strict: expected exactly 1 const EXPECTED_EXE_SIGNER_THUMBPRINT in ' + $SelfCheckPath + ' (found ' + $tpMatches.Count + ')') -ForegroundColor Red
+                exit 1
+            }
+            Write-Host ('[SIGN][WARN] expected thumbprint const not found/unique (' + $tpMatches.Count + ' matches), assertion skipped') -ForegroundColor Yellow
+        } else {
+            $expectedTp = $tpMatches[0].Groups[1].Value.ToUpperInvariant()
+            $actualTp = $cert.Thumbprint.ToUpperInvariant()
+            if ($actualTp -ne $expectedTp) {
+                Write-Host ('[SIGN][ERROR] signer thumbprint MISMATCH: pfx=' + $actualTp + ' expected(self-check)=' + $expectedTp) -ForegroundColor Red
+                Write-Host '[SIGN][ERROR] Refusing to sign: clients would flag this exe as tampered. Restore the correct tools/certs pfx or update both sides deliberately.' -ForegroundColor Red
+                exit 1
+            }
+            Write-Host ('[SIGN][OK] pfx thumbprint matches self-check expectation: ' + $expectedTp)
+        }
+    }
 }
 
 $peZoneSign = Join-Path $PSScriptRoot 'pe-zone-sign.cjs'

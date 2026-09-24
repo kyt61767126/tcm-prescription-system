@@ -28,6 +28,16 @@
 (function () {
     'use strict';
 
+    // ★ 原生APP环境检测（云端APP）：由 MainActivity 注入的 video-recorder-inject.js
+    // 提供增强版（分片上传/分片下载）录像拍照与 electronAPI shim。
+    // 此处必须立刻跳过且不设置 __videoRecorderInjected 标志，避免抢占该标志后
+    // 导致原生增强版脚本 return 不执行（否则大视频走简单版 saveVideoFile，
+    // base64 JSON 参数超 Android Binder 1MB 限制 → 视频文件损坏 → 播放失败）。
+    if ((typeof AndroidNative !== 'undefined') ||
+        (window.electronAPI && window.electronAPI.isAndroidAPP)) {
+        return;
+    }
+
     if (window.__videoRecorderInjected) return;
     window.__videoRecorderInjected = true;
 
@@ -530,12 +540,18 @@
 
             console.log('[视频录制] 视频数据读取成功，大小: ' + (arrayBuffer.byteLength / 1024 / 1024).toFixed(2) + ' MB');
 
-            var result = await window.electronAPI.saveVideoFile(arrayBuffer, fileName);
+            var result;
+            if (window.electronAPI && window.electronAPI.saveVideoFile) {
+                result = await window.electronAPI.saveVideoFile(arrayBuffer, fileName);
+            } else {
+                // ★ 网页版（纯浏览器）：无本地文件系统，仅存 IndexedDB（blob），随处方记录在网页端查看
+                result = { success: true, fileName: fileName };
+            }
 
             if (result.success) {
                 var savePath = result.directory || result.filePath || '';
                 setStatus('视频已保存：' + (result.fileName || fileName), 'success');
-                showToast('视频已保存到：' + savePath);
+                showToast(savePath ? '视频已保存到：' + savePath : '视频已保存（浏览器存储）');
                 var videoInfo = getCurrentPrescriptionInfo();
                 saveMediaToDB({
                     patientName: videoInfo.patientName || 'unknown',
@@ -926,7 +942,14 @@
             for (let i = 0; i < capturedPhotos.length; i++) {
                 const dataUrl = capturedPhotos[i];
                 const fileName = generateFileName('photo', photoTypes[i]);
-                const result = await window.electronAPI.savePrescriptionImage(dataUrl, fileName);
+                var result;
+                if (window.electronAPI && window.electronAPI.savePrescriptionImage) {
+                    result = await window.electronAPI.savePrescriptionImage(dataUrl, fileName);
+                } else {
+                    // ★ 网页版（纯浏览器，无 electronAPI/AndroidNative）：无本地文件系统，
+                    // 跳过本地保存，仅存 IndexedDB（dataUrl），随处方记录在网页端查看
+                    result = { success: true };
+                }
 
                 if (result.success) {
                     successCount++;
@@ -1202,6 +1225,9 @@
     }
 
     window.findMediaFilesWeb = findMediaInDB;
+    // ★ 网页端写库入口：供 index.html 生成"处方签图片"时也存入 IndexedDB，
+    // 与照片/录像同一张表，历史处方媒体查看器才能查到并展示"处方签"（修复云端网页处方签不显示）
+    window.addMediaFileWeb = saveMediaToDB;
 
     function getCurrentPrescriptionInfo() {
         var patientName = '';

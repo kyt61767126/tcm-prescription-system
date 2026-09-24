@@ -54,9 +54,12 @@ jobs:
               echo "✅ $file title='$actual'"
             fi
           }
-          check_title "app_project/db-offline/desktop/index.html" "惠康中医-定制"
-          check_title "app_project/db-offline/desktop_geren/index.html" "惠康中医-个人"
-          check_title "public/index.html" "惠康中医-云端"
+          # ★ 2026-09-24 P1：修正与现行权威源一致的 title 断言。
+          #   旧断言引用已删除目录 desktop_geren（db-geren/db-geren 已合并为 db-offline），
+          #   且两个 title 期望值早已随产品改名（定制→诊所管理系统 V1.0.0 / 云端→云端标准版），
+          #   导致任何 PR 必红。云桌面副本由 sync-html 生成（另设门禁），不在此重复断言。
+          check_title "app_project/db-offline/desktop/index.html" "惠康中医诊所管理系统 V1.0.0"
+          check_title "public/index.html" "惠康中医-云端标准版"
           if [ $ERROR -eq 1 ]; then exit 1; fi
 
       - name: Check legacy android directories

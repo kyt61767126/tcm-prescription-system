@@ -176,10 +176,9 @@ $PinyinVendorTargets = @(
     'app_project/db-offline/app/app/src/main/assets/public/vendor'
 )
 
-# Group 8: cloud-only modules (cloud-api.js, local-db.js, sync-engine.js)
+# Group 8: cloud-only modules (local-db.js, sync-engine.js)
 # 仅同步到云端版目录，离线版不需要这些文件
 $CloudModuleFiles = @(
-    'cloud-api.js',
     'local-db.js',
     'sync-engine.js'
 )
@@ -187,6 +186,33 @@ $CloudModuleFiles = @(
 $CloudModuleTargets = @(
     'app_project/db-yunduan/cloud_desktop'
     )
+
+# Group 8b: cloud-api.js（★ 2026-09-24 P1 从 Group 8 拆出扩面分发）
+#   历史只发 cloud_desktop 一处，其余 6 处副本靠手工；现 7 副本全自动分发，
+#   copy-consistency.cjs cloud-api 组硬哈希兜底（APP/鸿蒙副本同体无定制）。
+$CloudApiTargets = @(
+    'public',
+    'public/electron',
+    'site-admin',
+    'app_project/db-yunduan/cloud_desktop',
+    'app_project/db-yunduan/cloud_app/app/src/main/assets/public',
+    'app_project/db-offline/app/app/src/main/assets/public',
+    'app_project_harmony/huikang-cloud/entry/src/main/resources/rawfile'
+)
+
+# Group 20a: 云系 electron 适配版 video-recorder.js（★ 2026-09-24 P1）
+#   权威源 public/electron（非 shared/，Sync-Group -SourceDir 覆盖）；
+#   云桌面 asar 副本 2026-09-24 前纯落后 29 行，自此自动收敛。
+#   离线桌面 electron 副本真分叉（media-capture 付费墙），禁止纳入。
+$VideoRecorderElectronTargets = @(
+    'app_project/db-yunduan/cloud_desktop/electron'
+)
+
+# Group 20b: 纯浏览器版 video-recorder.js（★ 2026-09-24 P1）
+#   权威源 public/ 根位置，site-admin 管理台同目录实载。
+$VideoRecorderWebTargets = @(
+    'site-admin'
+)
 
 # Group 9: electron-logger.cjs (P0-[6.3] 主进程滚动日志) -> 2 个 electron 目录
 # 与 main.js 配套使用：main.js 里 require('./electron-logger.cjs')
@@ -357,7 +383,8 @@ function Sync-Group {
         [string[]]$Files,
         [string[]]$Targets,
         [bool]$VerifyOnly,
-        [string]$TargetLeafName = ''   # ★ 2026-08-28: optional rename, e.g. print-utils-offline.js -> print-utils.js
+        [string]$TargetLeafName = '',  # ★ 2026-08-28: optional rename, e.g. print-utils-offline.js -> print-utils.js
+        [string]$SourceDir = ''       # ★ 2026-09-24 P1: override source base (default shared/). 用于权威源在 public/ 的组分发
     )
 
     Write-Host "--- [$GroupName] ---" -ForegroundColor Cyan
@@ -367,7 +394,8 @@ function Sync-Group {
     $syncedCount = 0
 
     foreach ($file in $Files) {
-        $srcPath = Join-Path $SharedDir $file
+        $srcBase = if ($SourceDir) { Join-Path $ProjectRoot $SourceDir } else { $SharedDir }
+        $srcPath = Join-Path $srcBase $file
         $fileName = Split-Path $file -Leaf
         if ($TargetLeafName) { $fileName = $TargetLeafName }
 
@@ -456,7 +484,12 @@ if (-not $result) { $allInSync = $false }
 Write-Host ""
 
 # Group 8: cloud-only modules -> 1 target (cloud_desktop only)
-$result = Sync-Group -GroupName 'cloud modules (3 files -> 1 cloud dir)' -Files $CloudModuleFiles -Targets $CloudModuleTargets -VerifyOnly $VerifyOnly
+$result = Sync-Group -GroupName 'cloud modules (2 files: local-db/sync-engine -> 1 cloud dir)' -Files $CloudModuleFiles -Targets $CloudModuleTargets -VerifyOnly $VerifyOnly
+if (-not $result) { $allInSync = $false }
+Write-Host ""
+
+# Group 8b: cloud-api.js -> 7 dirs（★ 2026-09-24 P1 扩面；shared 权威，APP/鸿蒙/双站全端同体）
+$result = Sync-Group -GroupName 'cloud-api.js -> 7 dirs (web x2, site-admin, cloud desktop/APP, offline APP, harmony)' -Files @('cloud-api.js') -Targets $CloudApiTargets -VerifyOnly $VerifyOnly
 if (-not $result) { $allInSync = $false }
 Write-Host ""
 
@@ -508,6 +541,17 @@ Write-Host ""
 
 # Group 19: voice-input.js -> 5 dirs (★ 2026-09-17 语音版一期；09-18 阶段二扩离线两端)
 $result = Sync-Group -GroupName 'voice-input.js -> 5 dirs (3 cloud + 2 offline)' -Files @('voice/voice-input.js') -Targets $VoiceInputTargets -VerifyOnly $VerifyOnly
+if (-not $result) { $allInSync = $false }
+Write-Host ""
+
+# Group 20a: 云系 electron 版 video-recorder.js -> cloud_desktop/electron（★ 2026-09-24 P1）
+#   权威在 public/electron（Sync-Group 默认源是 shared/，用 -SourceDir 覆盖）。
+$result = Sync-Group -GroupName 'electron video-recorder.js (public/electron authority -> cloud_desktop/electron)' -Files @('video-recorder.js') -Targets $VideoRecorderElectronTargets -VerifyOnly $VerifyOnly -SourceDir 'public/electron'
+if (-not $result) { $allInSync = $false }
+Write-Host ""
+
+# Group 20b: 浏览器版 video-recorder.js -> site-admin（★ 2026-09-24 P1）
+$result = Sync-Group -GroupName 'web video-recorder.js (public authority -> site-admin)' -Files @('video-recorder.js') -Targets $VideoRecorderWebTargets -VerifyOnly $VerifyOnly -SourceDir 'public'
 if (-not $result) { $allInSync = $false }
 Write-Host ""
 

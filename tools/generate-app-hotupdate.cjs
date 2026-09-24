@@ -30,10 +30,20 @@
 //    （客户端只拉 sha256 变化的文件），同日重发加 -n 2。
 //
 //  【用法】
-//    node tools/generate-app-hotupdate.cjs                 # minAppCode 继承上一包（无则取 build.gradle）
-//    node tools/generate-app-hotupdate.cjs -n 2            # 同日第 2 版
+//    node tools/generate-app-hotupdate.cjs                 # 序号自动递增；minAppCode 继承上一包（无则取 build.gradle）
+//    node tools/generate-app-hotupdate.cjs -n 2            # 显式指定同日序号
 //    node tools/generate-app-hotupdate.cjs -m 284          # 指定最低 APK versionCode（含新桥依赖时才抬升）
 //    node tools/generate-app-hotupdate.cjs -o <dir>        # 输出根目录覆盖（测试用）
+//
+//  【序号规则】★ 2026-09-24 P1 防呆（不再默认 -1）：
+//    - 不传 -n：自动读输出目录已发布 version.json，当日已签发则序号 +1，
+//      跨自然日重置为 1（忘记 -n 也绝不会覆盖当日已发布热包）。
+//    - 显式 -n 不大于当日已签最大序号（同号或回退）→ fail-fast；因客户端
+//      只判 hotVersion 相等或 signedAt 新旧，低序号新签会被高序号客户端降级安装。
+//      确需回灌/同号重签（相关客户端尚未拉取）须显式加 --force。
+//      系统日期早于已签发日期（时钟回拨）拒签，--force 也不能绕过。
+//    - -o 仅用于隔离测试：正式发布必须不带 -o 直写 public/（让线上清单参与防呆），
+//      严禁 -o 产出后手工落盘发布（绕过序号/回退保护）。
 //
 //  【发布】产物在 public/ 下随 git push 由 Cloudflare Pages 自动部署；客户端
 //    startHotUpdateCheck 启动 2s 后静默拉取 → 原子 swap → 下次启动生效（淡绿横幅）。
@@ -118,12 +128,46 @@ function readVersionCode() {
 //   铁律「打完 APK 再发热包必须 -m 288 钉住」只靠人记已实际复发一次）。
 //   继承策略：首次发无上一包 → 读 build.gradle（首发 APK 与热包同步，语义正确）；
 //   后续默认继承（上一包的 minAppCode 是当时审定的安全值）；显式 -m 仍可覆盖。
-function readPrevMinAppCode(outRoot) {
+function readPrevManifest(outRoot) {
+    const fp = path.join(outRoot, OUT_SUBDIR, 'version.json');
+    if (!fs.existsSync(fp)) return null;
     try {
-        const prev = JSON.parse(fs.readFileSync(path.join(outRoot, OUT_SUBDIR, 'version.json'), 'utf8'));
-        if (prev && typeof prev.minAppCode === 'number' && prev.minAppCode >= 1) return prev.minAppCode;
-    } catch (_) { /* 无上一包 */ }
-    return 0;
+        return JSON.parse(fs.readFileSync(fp, 'utf8'));
+    } catch (e) {
+        fail('无法解析既有 version.json: ' + fp + '（' + e.message + '）——禁止在热包清单损坏时盲目签发');
+    }
+}
+
+function todayPart() {
+    const now = new Date();
+    const pad = (x) => String(x).padStart(2, '0');
+    return now.getFullYear() + '.' + pad(now.getMonth() + 1) + '.' + pad(now.getDate());
+}
+
+// ★ 2026-09-24 P1 序号防呆：自动递增 + 重名 fail-fast（见头部「序号规则」）
+function resolveSeq(explicitSeq, force, prev) {
+    const datePart = todayPart();
+    if (!prev || !prev.hotVersion) return { seq: explicitSeq || 1, datePart: datePart, auto: false };
+    const m = String(prev.hotVersion).match(/^(\d{4}\.\d{2}\.\d{2})-(\d+)$/);
+    if (!m) fail('既有 hotVersion 格式无法识别: ' + prev.hotVersion);
+    if (m[1] > datePart) {
+        fail('系统日期（' + datePart + '）早于已签发热包日期（' + m[1] + '），疑似时钟回拨，拒绝签发');
+    }
+    if (explicitSeq) {
+        // ★ 双审加固（2026-09-24）：不仅"同号"拒，凡显式 -n <= 当日已签最大序号一律拒。
+        //   客户端只判 hotVersion 相等 || signedAt 新旧（不做序号大小比较），
+        //   低序号新签（signedAt 更新）会被已装高序号的客户端当"更新"下载→降级/替换。
+        if (m[1] === datePart && explicitSeq <= Number(m[2]) && !force) {
+            console.error('[AppHotGen][FAIL] 序号 -n ' + explicitSeq + ' 不大于当日已签发最大序号 -' + m[2] + '（重号/回退 fail-fast）。');
+            console.error('  低序号新签包 signedAt 更新，会被已装高序号的客户端当作"更新"降级安装！');
+            console.error('  请用更大的 -n（建议 -n ' + (Number(m[2]) + 1) + '），或裸跑让其自动递增；');
+            console.error('  确需回灌/同号重签（确认相关客户端尚未拉取）须显式加 --force。');
+            process.exit(1);
+        }
+        return { seq: explicitSeq, datePart: datePart, auto: false };
+    }
+    if (m[1] === datePart) return { seq: Number(m[2]) + 1, datePart: datePart, auto: true };
+    return { seq: 1, datePart: datePart, auto: false };
 }
 
 function fail(msg) {
@@ -134,17 +178,29 @@ function fail(msg) {
 function main() {
     // ---- 参数 ----
     const argv = process.argv.slice(2);
-    let seq = 1, minAppCode = 0, outRoot = ROOT;
+    let explicitSeq = 0, minAppCode = 0, outRoot = ROOT, force = false;
     for (let i = 0; i < argv.length; i++) {
-        if (argv[i] === '-n') seq = Math.max(1, parseInt(argv[i + 1], 10) || 1);
+        if (argv[i] === '-n') explicitSeq = Math.max(1, parseInt(argv[i + 1], 10) || 1);
         if (argv[i] === '-m') minAppCode = parseInt(argv[i + 1], 10) || 0;
         if (argv[i] === '-o') outRoot = path.resolve(argv[i + 1] || '.');
+        if (argv[i] === '--force') force = true;
     }
+
+    // ---- 序号决策（在任何哈希/写盘/签名之前）：自动递增或校验显式 -n ----
+    const prevOut = readPrevManifest(outRoot);
+    const seqInfo = resolveSeq(explicitSeq, force, prevOut);
+    const seq = seqInfo.seq;
+    if (seqInfo.auto) {
+        console.log('[AppHotGen] 序号自动递增：当日已签发 -' + (seq - 1) + ' → 本次 -' + seq + '（显式 -n 可指定；同号重签需 --force）');
+    } else if (force && explicitSeq) {
+        console.warn('[AppHotGen][WARN] --force 同序号重签 ' + seqInfo.datePart + '-' + seq + '：已拉到该版本的客户端不会再更新，请确认该版本尚未发布到客户。');
+    }
+
     if (!minAppCode) {
-        // 防呆默认：继承上一包 → 无上一包才读 build.gradle（详见 readPrevMinAppCode 注释）
-        const prev = readPrevMinAppCode(outRoot);
-        minAppCode = prev || readVersionCode();
-        console.log('[AppHotGen] 未传 -m：minAppCode ' + (prev ? '继承上一包=' + prev : '取 build.gradle=' + minAppCode) + '（显式 -m 可覆盖；抬升须确认热包含新桥依赖）');
+        // 防呆默认：继承上一包 → 无上一包才读 build.gradle（详见 readPrevManifest 注释）
+        const prevMin = (prevOut && typeof prevOut.minAppCode === 'number' && prevOut.minAppCode >= 1) ? prevOut.minAppCode : 0;
+        minAppCode = prevMin || readVersionCode();
+        console.log('[AppHotGen] 未传 -m：minAppCode ' + (prevMin ? '继承上一包=' + prevMin : '取 build.gradle=' + minAppCode) + '（显式 -m 可覆盖；抬升须确认热包含新桥依赖）');
     }
 
     // ---- 前置校验 ----
@@ -185,10 +241,8 @@ function main() {
     if (files.length === 0 || files.length > MAX_FILES) fail('文件数越界（1..' + MAX_FILES + '）: ' + files.length);
     if (!files.some((f) => f.name === 'index.html')) fail('index.html 必须在清单（resolveEntry 入口）');
 
-    // ---- 2. 版本号 YYYY.MM.DD-N（与桌面热更同格式；N 为同日序号）----
-    const now = new Date();
-    const pad = (x) => String(x).padStart(2, '0');
-    const hotVersion = now.getFullYear() + '.' + pad(now.getMonth() + 1) + '.' + pad(now.getDate()) + '-' + seq;
+    // ---- 2. 版本号 YYYY.MM.DD-N（与桌面热更同格式；N 由序号决策得出）----
+    const hotVersion = seqInfo.datePart + '-' + seq;
     if (!HOT_VERSION_RE.test(hotVersion)) fail('hotVersion 格式非法: ' + hotVersion);
     const signedAt = Date.now();
 

@@ -489,6 +489,12 @@ const INTEGRITY_REPORT_URL = 'https://tcm-prescription-system.pages.dev/api/lice
 async function reportDesktopIntegrity() {
     try {
         if (!app.isPackaged) return;
+        // ★ 2026-09-24 P1 对齐离线版（离线端 2026-09-23 事故同险）：E2E/打包链路
+        //   （[7.8/9] pre-fuse）跑的是签名前的 win-unpacked exe，self-check 必然判
+        //   NotSigned=tampered → state=2，若用例活到 ready+25s 就会把【构建机自己的
+        //   machineId】上报封锁，导致正式包登录时 entitlement 403。E2E 环境信号无意义，
+        //   直接跳过（BNZC_E2E=1 由 smoke-launch.cjs spawn 注入）。
+        if (process.env.BNZC_E2E === '1') return;
         const state = (selfCheck && selfCheck.getIntegrityState) ? selfCheck.getIntegrityState() : null;
         if (typeof state !== 'number') return;
         let mid = '';

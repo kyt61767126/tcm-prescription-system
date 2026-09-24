@@ -343,11 +343,13 @@ REM   签名不改其余任何字节 → 签名与 .bnzc 两路校验共存。si
 REM   会在签名后立即复验 .bnzc，失配即失败（防"签完哈希坏"的产物交付）。
 echo [8.2/9] Sign main exe (Authenticode, after .bnzc embed)...
 for %%A in ("%MAIN_EXE%") do set "MAIN_EXE_NAME=%%~nxA"
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\..\tools\sign-exe.ps1" -ExePath "%MAIN_EXE%" -VerifyBnzc
+REM ★ 2026-09-24 P1 签名硬失败：-Strict 缺证书即中止（rc=2 不再放行）；
+REM   -SelfCheckPath 比对 pfx 指纹 == self-check.js 内置期望，错证书签前 fail-fast
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\..\tools\sign-exe.ps1" -ExePath "%MAIN_EXE%" -VerifyBnzc -Strict -SelfCheckPath "%~dp0electron\self-check.js"
 set "SIGN_RC=%errorlevel%"
 if "%SIGN_RC%"=="1" (
     set NODE_TLS_REJECT_UNAUTHORIZED=
-    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] 主 exe 签名失败（或签名后 .bnzc 失配）- build aborted'"
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] 主 exe 签名失败（证书缺失/指纹不符/签名后 .bnzc 失配）- build aborted'"
     node "%~dp0..\..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
     if not defined NO_PAUSE pause
     exit /b 1
@@ -356,7 +358,13 @@ if "%SIGN_RC%"=="0" (
     copy /Y "%MAIN_EXE%" "%BACKUP_ASAR_DIR%\real_main.exe" >nul
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '  [OK] 已签名主 exe 备份到: %BACKUP_ASAR_DIR%\real_main.exe'"
 ) else (
-    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] 证书材料缺失，本次主 exe 未签名（不阻断，与 P0-3 之前状态一致）'"
+    REM -Strict 下理论不可达（缺证书已转为 rc=1）；保留为防御性硬失败。
+    REM 注意：消息里不要写 %SIGN_RC%——复合 if/else 块内 %VAR% 在解析期展开，值会失真。
+    set NODE_TLS_REJECT_UNAUTHORIZED=
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] 签名返回非 0（证书材料缺失/指纹不符等），发布构建禁止未签名产物 - build aborted'"
+    node "%~dp0..\..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
+    if not defined NO_PAUSE pause
+    exit /b 1
 )
 echo.
 
@@ -505,11 +513,18 @@ if exist "%BACKUP_ASAR_DIR%\real_main.exe" (
 )
 echo [8.95/9] Sign installers (Setup / portable exe)...
 set "SIGN_FAIL=0"
+set "INST_COUNT=0"
 for %%f in ("%OUTPUT_DIR%\*.exe") do (
-    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\..\tools\sign-exe.ps1" -ExePath "%%f"
-    if errorlevel 1 (
-        if not errorlevel 2 set "SIGN_FAIL=1"
-    )
+    set /a INST_COUNT+=1
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\..\tools\sign-exe.ps1" -ExePath "%%f" -Strict -SelfCheckPath "%~dp0electron\self-check.js"
+    if errorlevel 1 set "SIGN_FAIL=1"
+)
+REM ★ 双审加固（2026-09-24）：glob 零命中时 for 体根本不执行，SIGN_FAIL 会保持 0 假成功；
+REM   electron-builder 必产 Setup/portable，零产物=构建异常，硬失败防未签名/空交付。
+if "%INST_COUNT%"=="0" (
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] 安装包阶段未在 OUTPUT_DIR 发现任何 exe（零产物），签名步骤被跳过 - build aborted'"
+    if not defined NO_PAUSE pause
+    exit /b 1
 )
 if "%SIGN_FAIL%"=="1" (
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] 安装包签名失败 - build aborted'"
