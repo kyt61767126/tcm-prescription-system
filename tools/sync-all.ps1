@@ -59,6 +59,7 @@ $BusinessJsFiles = @(
     'permission.js',
     'prescription-core.js',
     'stock-core.js',
+    'analytics-core.js',
     'security-guard.js'
 )
 

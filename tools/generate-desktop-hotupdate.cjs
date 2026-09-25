@@ -53,7 +53,7 @@ const CHANNELS = {
             'auth-core.js', 'permission.js', 'button-manager.js', 'edition-lock.js', 'normalize-config.js',
             'debug-logger.js', 'print-utils.js', 'medicine-dict.js', 'symptom-dict.js',
             'cloud-api.js', 'performance-utils.js', 'prescription-core.js',
-            'stock-core.js', 'security-guard.js',
+            'stock-core.js', 'analytics-core.js', 'security-guard.js',
             'electron/video-recorder.js',
             'voice-input.js', 'vendor/pinyin-pro.min.js',
             'xlsx.full.min.js'
@@ -89,7 +89,7 @@ const CHANNELS = {
             'auth-core.js', 'permission.js', 'button-manager.js', 'edition-lock.js', 'normalize-config.js',
             'debug-logger.js', 'print-utils.js', 'medicine-dict.js', 'symptom-dict.js',
             'performance-utils.js', 'prescription-core.js',
-            'stock-core.js', 'security-guard.js',
+            'stock-core.js', 'analytics-core.js', 'security-guard.js',
             'electron/video-recorder.js',
             'voice-input.js', 'vendor/pinyin-pro.min.js',
             'vendor/xlsx.full.min.js'

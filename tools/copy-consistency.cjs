@@ -125,6 +125,22 @@ const GROUPS = [
         ]
     },
     {
+        // ★ 2026-09-25 P2-1 数据统计核心（analytics-core.js）：与 stock-core 同位
+        //   分发，sync-all BusinessJs 组只盖 6 副本，本组全量 8 副本硬哈希堵漏
+        //   （含云端APP assets 与鸿蒙 rawfile 手工维护盲区）。
+        authority: 'shared/analytics-core.js',
+        copies: [
+            'public/analytics-core.js',
+            'public/electron/analytics-core.js',
+            'app_project/db-yunduan/cloud_desktop/analytics-core.js',
+            'app_project/db-yunduan/cloud_desktop/electron/analytics-core.js',
+            'app_project/db-yunduan/cloud_app/app/src/main/assets/public/analytics-core.js',
+            'app_project/db-offline/desktop/analytics-core.js',
+            'app_project/db-offline/app/app/src/main/assets/public/analytics-core.js',
+            'app_project_harmony/huikang-cloud/entry/src/main/resources/rawfile/analytics-core.js'
+        ]
+    },
+    {
         // ★ P0-1（2026-09-13）：桌面更新器收口。云桌面/离线桌面 main.js 原各内嵌
         //   ~200 行同构更新器（仅渠道 URL 不同），历史靠人肉双改。现抽为唯一权威源
         //   shared/update-manager.cjs，main.js require + 工厂入参注入渠道差异。

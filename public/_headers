@@ -62,6 +62,8 @@
   Cache-Control: public, max-age=31536000, immutable
 /stock-core.js
   Cache-Control: public, max-age=31536000, immutable
+/analytics-core.js
+  Cache-Control: public, max-age=31536000, immutable
 /security-guard.js
   Cache-Control: public, max-age=31536000, immutable
 /voice-input.js

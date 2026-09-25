@@ -43,6 +43,7 @@ const TARGETS = [
     'performance-utils.js',
     'prescription-core.js',
     'stock-core.js',
+    'analytics-core.js',
     'security-guard.js',
     'voice-input.js',
     'electron/video-recorder.js'

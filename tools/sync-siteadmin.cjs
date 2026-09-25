@@ -64,15 +64,15 @@ const TARGET_REL = 'site-admin/index.html';
 //   其余 Tier C 带平台标记（存储后端/编号方案/DOM 结构/分页机制）。
 //   新增条目流程：把函数移植到两侧规范化同体 → 在此登记函数名 → 跑同步。
 const SYNCED_FNS = [
-    '__medicineTableFirewall', '_isGenericLoginName', 'analyzeDiseases', 'analyzeMedicines',
-    'analyzePatients', 'analyzeVisitTrend', 'applyFormula', 'buildMedicineMap',
+    '__medicineTableFirewall', '_isGenericLoginName',
+    'applyFormula', 'buildMedicineMap',
     'clearRecycleBin', 'closeMediaViewer', 'closeModal', 'computeBackupHmac',
-    'createChart', 'createEmptyMedicine', 'debounce', 'deleteFromRecycleBin', 'deleteRow',
-    'escapeJs', 'exportMedicines', 'formatDate', 'formatPrice',
-    'getEffectiveJianfa', 'getFilteredPrescriptions', 'getMedicineByName', 'getPinyinCode',
+    'createEmptyMedicine', 'debounce', 'deleteFromRecycleBin', 'deleteRow',
+    'escapeJs', 'exportMedicines', 'formatPrice',
+    'getEffectiveJianfa', 'getMedicineByName', 'getPinyinCode',
     'getRecycleBin', 'handleInput', 'handleKeyboard', 'handleSearchKey',
     'handleSearchKeyDown', 'handleSearchKeyPress', 'hidePatientNameDropdown', 'injectRecycleBinButton',
-    'loadLastHistory', 'loadPatientHistory', 'markGenderManual', 'mediaLabelOf',
+    'loadLastHistory', 'markGenderManual', 'mediaLabelOf',
     'mediaViewerNav', 'parseMedicineRow', 'removeDuplicateMedicines', 'renderMediaViewerSingle', 'renderPrescriptionTable',
     'renderRememberedUsers', 'renderSyndromeList', 'resetCaseSearch', 'safeParseJSON',
     'saveRecycleBin', 'searchCases', 'selectFormula', 'selectMedicine',

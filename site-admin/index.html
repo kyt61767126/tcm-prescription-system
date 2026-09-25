@@ -10038,7 +10038,6 @@ IconFile=${scriptPath}`;
         let diseaseChart = null;
         let medicineChart = null;
 
-        // >>> SYNCED-FN getFilteredPrescriptions (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function getFilteredPrescriptions(rangeId) {
             const elementId = rangeId || 'analyticsRange';
             const range = document.getElementById(elementId)?.value || 'month';
@@ -10071,9 +10070,7 @@ IconFile=${scriptPath}`;
                 return date >= startDate;
             });
         }
-        // <<< SYNCED-FN-END getFilteredPrescriptions ===
 
-        // >>> SYNCED-FN analyzePatients (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function analyzePatients() {
             const filteredPrescriptions = getFilteredPrescriptions();
             const patientMap = new Map();
@@ -10108,9 +10105,7 @@ IconFile=${scriptPath}`;
                 lastVisit: data.lastVisit
             }));
         }
-        // <<< SYNCED-FN-END analyzePatients ===
 
-        // >>> SYNCED-FN analyzeDiseases (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function analyzeDiseases() {
             const filteredPrescriptions = getFilteredPrescriptions();
             const diseaseMap = new Map();
@@ -10124,9 +10119,7 @@ IconFile=${scriptPath}`;
                 .map(([name, count]) =>({ name, count }))
                 .sort((a, b) =>b.count - a.count);
         }
-        // <<< SYNCED-FN-END analyzeDiseases ===
 
-        // >>> SYNCED-FN analyzeMedicines (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function analyzeMedicines() {
             const filteredPrescriptions = getFilteredPrescriptions();
             const medicineMap = new Map();
@@ -10147,9 +10140,7 @@ IconFile=${scriptPath}`;
                 .sort((a, b) =>b.totalDosage - a.totalDosage)
                 .slice(0, 10);
         }
-        // <<< SYNCED-FN-END analyzeMedicines ===
 
-        // >>> SYNCED-FN analyzeVisitTrend (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function analyzeVisitTrend() {
             const filteredPrescriptions = getFilteredPrescriptions();
             const dailyMap = new Map();
@@ -10166,21 +10157,17 @@ IconFile=${scriptPath}`;
                 counts: dates.map(d =>dailyMap.get(d))
             };
         }
-        // <<< SYNCED-FN-END analyzeVisitTrend ===
 
-        // >>> SYNCED-FN formatDate (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function formatDate(date) {
             if (!date) return '-';
             return date.toLocaleDateString('zh-CN');
         }
-        // <<< SYNCED-FN-END formatDate ===
 
         function formatDateTime(date) {
             if (!date) return '-';
             return date.toLocaleString('zh-CN');
         }
 
-        // >>> SYNCED-FN createChart (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function createChart(canvasId, type, data, retryCount = 0) {
             const canvas = document.getElementById(canvasId);
             if (!canvas) return null;
@@ -10446,7 +10433,6 @@ IconFile=${scriptPath}`;
                 ctx.setLineDash([]);
             }
         }
-        // <<< SYNCED-FN-END createChart ===
 
         function analyzeMonthlyStats() {
             const statsMap = new Map();
@@ -10602,14 +10588,12 @@ IconFile=${scriptPath}`;
             }, 300);
         });
 
-        // >>> SYNCED-FN loadPatientHistory (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function loadPatientHistory(patientName) {
             closeModal('analyticsModal');
             document.getElementById('patientName').value = patientName;
             searchPatientsQuick({ key: 'Enter' });
             showSideHistory();
         }
-        // <<< SYNCED-FN-END loadPatientHistory ===
 
         function showModal(modalId) {
             document.getElementById(modalId).style.display = 'flex';
