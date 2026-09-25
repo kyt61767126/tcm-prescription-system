@@ -224,6 +224,16 @@ const GROUPS = [
         ]
     },
     {
+        // ★ 2026-09-25 P2-3 桌面打印域收口（与 desktop-fs-ipc 同位同构）：
+        //   print-prescription handler（隐藏打印窗+系统打印对话框/A5）。
+        //   sync-all Group 21 分发，本组 2 副本硬哈希门。
+        authority: 'shared/desktop-print.cjs',
+        copies: [
+            'app_project/db-yunduan/cloud_desktop/electron/desktop-print.cjs',
+            'app_project/db-offline/desktop/electron/desktop-print.cjs'
+        ]
+    },
+    {
         // ★ 2026-09-17 语音版一期：voice-input.js（Web Speech API 语音输入模块）。
         //   ★ 2026-09-18 阶段二语音免费层下沉：扩离线两端（db-offline 桌面/APP
         //   assets）——免费层解析链 VoiceInput.highlight/toPinyin/ensurePinyin

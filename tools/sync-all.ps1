@@ -290,6 +290,15 @@ $DesktopCrashGuardTargets = @(
     'app_project/db-offline/desktop/electron'
 )
 
+# Group 21: desktop-print.cjs (★ 2026-09-25 P2-3 桌面打印域收口) -> 2 个 electron 目录
+#   print-prescription handler（隐藏打印窗+系统打印对话框，默认A5）从双 main.js
+#   等体抽取（115 行字节级同体，改前哈希 cd537a37 一致）。主进程域热更不可达。
+#   配套：main.js require('./desktop-print.cjs').createDesktopPrintIpc({ ipcMain, BrowserWindow }) 工厂注入。
+$DesktopPrintTargets = @(
+    'app_project/db-yunduan/cloud_desktop/electron',
+    'app_project/db-offline/desktop/electron'
+)
+
 # Group 19: voice 模块（voice-input.js）-> 5 端目录（★ 2026-09-17 语音版一期；
 #   ★ 2026-09-18 阶段二扩离线两端）
 #   智能语音输入模块（Web Speech API，cloud_voice 版本专属入口）+
@@ -553,6 +562,11 @@ Write-Host ""
 
 # Group 20b: 浏览器版 video-recorder.js -> site-admin（★ 2026-09-24 P1）
 $result = Sync-Group -GroupName 'web video-recorder.js (public authority -> site-admin)' -Files @('video-recorder.js') -Targets $VideoRecorderWebTargets -VerifyOnly $VerifyOnly -SourceDir 'public'
+if (-not $result) { $allInSync = $false }
+Write-Host ""
+
+# Group 21: desktop-print.cjs -> 2 electron dirs (★ 2026-09-25 P2-3 桌面打印域收口)
+$result = Sync-Group -GroupName 'desktop-print.cjs -> 2 electron dirs' -Files @('desktop-print.cjs') -Targets $DesktopPrintTargets -VerifyOnly $VerifyOnly
 if (-not $result) { $allInSync = $false }
 Write-Host ""
 
