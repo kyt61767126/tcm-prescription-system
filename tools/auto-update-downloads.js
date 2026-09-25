@@ -250,6 +250,9 @@ function updateDownloads(target) {
 
     // ★ 2026-08-24 修复：dingzhi→local manifest 双 key 同步（download.html 读 local，
     //   只写 dingzhi 会让 local key 停在旧版；与 publish-release.js 保持同一镜像逻辑）
+    //   ★ 2026-09-25 P1-6 定性：dingzhi 键为只读兼容镜像（离线 APP MainActivity 保留
+    //   local 缺失时 fallback dingzhi 的兜底链），禁止拆除、禁止新增消费方，随 APP
+    //   整包淘汰 fallback 后才可移除。
     if (manifest.dingzhi) {
         manifest.local = JSON.parse(JSON.stringify(manifest.dingzhi));
     }

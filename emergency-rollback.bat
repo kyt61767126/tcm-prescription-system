@@ -80,9 +80,9 @@ echo.
 echo [Desktop EXE Rollback]
 echo.
 echo Available channels:
-echo cloud - Cloud Desktop
-echo dingzhi - Custom Desktop
-echo all - All Desktop
+echo cloud  - Cloud Desktop
+echo local  - Local Desktop (legacy name: dingzhi, accepted as alias)
+echo all    - All Desktop
 echo.
 set /p channel="Channel (default=cloud): "
 if "%channel%"=="" set channel=cloud
@@ -127,7 +127,7 @@ git push origin main
 
 echo.
 echo [2/2] Rolling back Desktop EXE (all channels)...
-for %%c in (cloud dingzhi) do (
+for %%c in (cloud local) do (
 echo.
 echo Channel: %%c
 node tools/rollback.js %%c 2>nul

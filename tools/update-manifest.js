@@ -9,25 +9,35 @@
 //    4. 生成 latest.json 版本清单
 //    5. 复制 exe 到 public/updates/{channel}/ 目录
 //
+//  ★ 2026-09-25 P1-6 状态标注：本工具为早期手工工具，发布菜单已不调用（正式发布唯一
+//    入口是 tools/publish-release.js，其 latest.json 是 hash-manifest 的纯投影，URL 走
+//    GitHub Release 且不写 sha256）。本工具产物形状与主发布链不同（pages.dev 中文文件名
+//    URL、含 sha256、无 rolloutPercentage、不续期 dingzhi 跳板、不镜像 site-official），
+//    仅限本地临时验证；用后如推送，必须再跑一次正式发布让投影归一。
+//
 //  用法：
 //    node tools/update-manifest.js <channel> [--release-notes="更新说明"]
 //
 //  示例：
-//    node tools/update-manifest.js dingzhi --release-notes="新增打印功能"
+//    node tools/update-manifest.js local --release-notes="新增打印功能"
 //    node tools/update-manifest.js cloud --release-notes="同步云端功能"
 //
 //  channel 取值：
-//    dingzhi  → app_project/db-offline/desktop/
+//    local    → app_project/db-offline/desktop/（旧名 dingzhi 自动归一，勿再使用）
 //    cloud    → app_project/db-yunduan/cloud_desktop/
+//
+//  ★ 2026-09-25 P1-6：dingzhi 渠道名已于 2026-08-23 退役为 local。旧名仅保留命令行
+//    兼容（自动归一），写入路径一律 public/updates/local；public/updates/dingzhi 是
+//    publish-release.js 独占维护的 legacy 跳板，本工具禁止再写该目录。
 // ============================================================================
 
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-// 端配置映射
+// 端配置映射（规范渠道名；dingzhi 旧名在 parseArgs 归一，禁止在此恢复键名）
 const CHANNEL_CONFIG = {
-    dingzhi: {
+    local: {
         dir: 'app_project/db-offline/desktop',
         productName: '惠康中医-本地',
         outputDir: 'dist'
@@ -39,6 +49,9 @@ const CHANNEL_CONFIG = {
     }
 };
 
+// 旧渠道名 → 规范名（仅命令行兼容用）
+const CHANNEL_ALIAS = { dingzhi: 'local' };
+
 // 项目根目录
 const ROOT_DIR = path.resolve(__dirname, '..');
 const UPDATES_DIR = path.join(ROOT_DIR, 'public', 'updates');
@@ -46,7 +59,7 @@ const UPDATES_DIR = path.join(ROOT_DIR, 'public', 'updates');
 // 解析命令行参数
 function parseArgs() {
     const args = process.argv.slice(2);
-    const channel = args[0];
+    let channel = args[0];
     let releaseNotes = '版本更新';
 
     for (let i = 1; i < args.length; i++) {
@@ -55,9 +68,16 @@ function parseArgs() {
         }
     }
 
+    // 旧渠道名归一（dingzhi→local），防止旧命令/文档复活 public/updates/dingzhi 陈旧目录
+    if (channel && CHANNEL_ALIAS[channel]) {
+        const oldName = channel;
+        channel = CHANNEL_ALIAS[oldName];
+        console.warn(`[WARN] 渠道名 '${oldName}' 已退役，自动按 '${channel}' 处理（写入 public/updates/${channel}，旧 dingzhi 目录为只读 legacy 跳板）`);
+    }
+
     if (!channel || !CHANNEL_CONFIG[channel]) {
         console.error('用法: node tools/update-manifest.js <channel> [--release-notes="更新说明"]');
-        console.error('channel 取值: dingzhi, cloud');
+        console.error('channel 取值: local, cloud（旧名 dingzhi 等价 local）');
         process.exit(1);
     }
 

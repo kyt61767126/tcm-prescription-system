@@ -901,6 +901,9 @@ function main() {
     //   改名时改了读取端），但发布工具的 APP_CONFIG 内部 key 一直是 'dingzhi'，只写
     //   dingzhi key 导致 local key 停在旧版本（下载页显示旧版 1.0.103 而实际已 1.0.104）。
     //   修复：每次发布把 dingzhi 镜像到 local，两个 key 永远一致，新旧消费者都正确。
+    //   ★ 2026-09-25 P1-6 定性：dingzhi 键是【只读兼容镜像】，非独立通道——离线 APP
+    //     MainActivity 仍保留 manifest.local 缺失时 fallback 读 dingzhi 的兜底链，
+    //     镜像逻辑禁止拆除，直至该 fallback 随 APP 整包淘汰（禁止新增任何 dingzhi 消费方）。
     if (manifest.dingzhi) {
         manifest.local = JSON.parse(JSON.stringify(manifest.dingzhi));
     }
@@ -958,6 +961,25 @@ function main() {
     //   旧版本号/旧更新时间）。发布时自动镜像 public 元数据到 site-official；
     //   镜像失败 = 发布失败（exit 1），绝不带漂移状态 push。
     try {
+        // ★ 2026-09-25 P1-6：legacy updates/dingzhi 跳板续期（非独立通道，禁止再手工维护）。
+        //   2026-08-23 桌面更新 URL 由 updates/dingzhi 改名 updates/local，此前构建的极老
+        //   桌面 EXE 仍硬编码旧 URL；若该文件停在旧版（曾停 1.0.172 三周无人更新），老客户
+        //   只能升到中间旧版，删除则静默永久收不到更新提示。故每次发布把 local 权威投影
+        //   原样复制到 dingzhi 路径：老客户端一跳直上最新版，新版 main.js 改读 local 永久归队。
+        //   随后随下方 updates 目录递归镜像同步到 site-official。撤销条件：确认无 2026-08-23
+        //   前构建的桌面端在网（或满一个大版本周期）后，删除两处 dingzhi 目录及本复制逻辑。
+        //   残余风险（已评估接受，见 KNOWLEDGE §30）：≤1.0.24 旧 notifier 消费本 JSON 的 url
+        //   无 host 白名单、无 sha256 即不校验，但可写本文件=已具 main 推送权=分发链全面失守，
+        //   不构成独立入口；故不为此单字段加 sha256（会误伤存量便携版老客户端）。
+        const legacySpringboard = path.join(PROJECT_ROOT, 'public', 'updates', 'dingzhi', 'latest.json');
+        const localLatest = path.join(PROJECT_ROOT, 'public', 'updates', 'local', 'latest.json');
+        if (fs.existsSync(localLatest)) {
+            fs.mkdirSync(path.dirname(legacySpringboard), { recursive: true });
+            fs.copyFileSync(localLatest, legacySpringboard);
+            console.log('  [OK] legacy updates/dingzhi 跳板已对齐 local/latest.json');
+        } else {
+            console.warn('  [WARN] public/updates/local/latest.json 不存在，legacy dingzhi 跳板本次未续期（请检查 local 投影是否异常）');
+        }
         const mirrorPairs = [
             [path.join(PROJECT_ROOT, 'public', 'hash-manifest.json'), path.join(PROJECT_ROOT, 'site-official', 'hash-manifest.json')],
             [path.join(PROJECT_ROOT, 'public', 'updates'), path.join(PROJECT_ROOT, 'site-official', 'updates')]
