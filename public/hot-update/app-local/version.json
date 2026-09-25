@@ -1,7 +1,7 @@
 {
   "format": 1,
   "channel": "app-local",
-  "hotVersion": "2026.09.25-1",
+  "hotVersion": "2026.09.25-2",
   "minAppCode": 288,
   "appVersion": "1.0.0",
   "files": [
@@ -62,8 +62,8 @@
     },
     {
       "name": "analytics-core.js",
-      "sha256": "04542dfb0bd8272d45342a4509e761042d057f78341adb39d20f27a99f1d327f",
-      "size": 31353
+      "sha256": "32994144118b5c17f8d726d734be5f8b7246e89665a158f4315255c2ade1ae8c",
+      "size": 31648
     },
     {
       "name": "voice-input.js",
@@ -81,6 +81,6 @@
       "size": 881727
     }
   ],
-  "signedAt": 1790328901043,
-  "signature": "nklOrhfFDivMg7kF5tWIlN7BO539AZDRo7Nmb5gxwyzIPIHF5N7lFf5TS0nveyk3z2yJpjjuV4i1QuYUzkJ2Ag=="
+  "signedAt": 1790329607393,
+  "signature": "s4qbO28rOvK7sy9ytmkUDnOQKGg6hKOsJ0xAyJ6YIuqvLOpwgZpJTnUZ46Erg7P6J7hBPTNlWF2XLDs3tzL+AQ=="
 }

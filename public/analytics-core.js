@@ -562,8 +562,11 @@
 
         function loadPatientHistory(patientName) {
             closeModal('analyticsModal');
-            document.getElementById('patientName').value = patientName;
-            searchPatientsQuick({ key: 'Enter' });
+            const nameInput = document.getElementById('patientName');
+            nameInput.value = patientName;
+            // ★ 2026-09-25 修复：必须带 target（searchPatientsQuick 读 event.target.value）。
+            //   旧写法只传 {key:'Enter'} → input 落 '' → 防抖后搜空串覆盖侧栏为"请输入患者姓名"。
+            searchPatientsQuick({ target: nameInput, key: 'Enter' });
             showSideHistory();
         }
 

@@ -10590,8 +10590,10 @@ IconFile=${scriptPath}`;
 
         function loadPatientHistory(patientName) {
             closeModal('analyticsModal');
-            document.getElementById('patientName').value = patientName;
-            searchPatientsQuick({ key: 'Enter' });
+            const nameInput = document.getElementById('patientName');
+            nameInput.value = patientName;
+            // ★ 2026-09-25 修复：必须带 target（searchPatientsQuick 读 event.target.value）。
+            searchPatientsQuick({ target: nameInput, key: 'Enter' });
             showSideHistory();
         }
 
