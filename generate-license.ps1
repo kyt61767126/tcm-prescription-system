@@ -46,7 +46,7 @@ try {
     # ==========【2、客服仅修改下方 3 个引号内客户信息】==========
     $body = @{
         code = "BNZC-此处替换为激活码-XXXX-XXXX"
-        machineId = "此处替换为客户32位机器ID"
+        machineId = "此处替换为客户完整机器码(8-64位英文数字)"
         clinicName = "此处替换为客户诊所全称"
     } | ConvertTo-Json -Compress
 
@@ -60,7 +60,7 @@ try {
         Write-Host "  1. 右键此 .ps1 文件 → 用记事本打开"
         Write-Host "  2. 找到【2】区段，修改 3 个引号内的内容："
         Write-Host '     code       = "客户激活码 BNZC-XXXX-XXXX-XXXX-XXXX"'
-        Write-Host '     machineId  = "客户32位机器ID"'
+        Write-Host '     machineId  = "客户完整机器码（8-64 位英文/数字/_/-，不同端长度不同）"'
         Write-Host '     clinicName = "客户诊所全称"'
         Write-Host "  3. 保存文件（Ctrl+S）"
         Write-Host "  4. 再次双击 start-license.bat 启动"
@@ -86,7 +86,7 @@ try {
         Write-Host "  · 激活码已被禁用     → 联系管理员在后台启用"
         Write-Host "  · 激活码已过期       → 联系管理员延期"
         Write-Host "  · 诊所名不一致       → 让客户从激活窗口复制完整诊所名（含全角字符）"
-        Write-Host "  · machineId 长度错误 → 让客户重新复制 32 位机器ID"
+        Write-Host "  · 机器码格式无效     → 让客户重新复制完整机器码（8-64 位英文/数字/下划线/连字符）"
         Write-Host "  · 操作过于频繁       → 每小时限 20 次，稍后再试"
         throw "接口返回失败"
     }
