@@ -16,7 +16,7 @@
 import { getKV } from '../../_lib/kv.js';
 // ★ 2026-09-07 架构防御：machineId 等字段校验收口到 schema-guard 单一副本
 //   （原 setDeviceVersion 内联正则迁移至此；三起脏数据事故的结构性根治）
-import { isValidMachineId } from './schema-guard.js';
+import { isValidMachineId, isValidLicenseCode } from './schema-guard.js';
 
 // ★ 必须与客户端 license-manager.js 中的 LICENSE_HMAC_KEY 保持一致
 // 优先从环境变量读取（Cloudflare Secrets），硬编码作为默认值（向后兼容）
@@ -109,6 +109,12 @@ const ACTIVATION_CODE_GROUP_LENGTH = 4;
 // KV key 前缀
 const KV_LICENSE_PREFIX = 'license:';
 const KV_LICENSE_INDEX = 'system:license_index';
+// ★ P2-5 派生索引（2026-09-25）：mid_idx:{machineId} -> code（纯文本 code，JSON 存储）。
+//   派生数据：唯一权威仍是 license:{code}.devices[]；本索引只把"按 mid 反查所属码"
+//   从全量 listLicenses 扫描降为 O(1)。写时由 saveLicense/deleteLicense 维护，
+//   读侧 findLicensesByMachine 对缺失/陈旧自动全扫回填，损坏或漂移永不影响授权正确性。
+const KV_MID_INDEX_PREFIX = 'mid_idx:';
+function midIndexKey(machineId) { return KV_MID_INDEX_PREFIX + machineId; }
 
 // ——— 2026-09-03 (架构统一 P1) admin 激活索引常量：唯一副本供所有写端 API/Service 共享
 //     原 admin-submit.js / order-paid.js / admin-delete.js 各自内联一份，长度和漂移难维护
@@ -578,6 +584,17 @@ function encodeLicenseBase64(data) {
 //   继续访问 .phone 等字段会 TypeError（admin-approve「无反应」案的次生坑）
 async function saveLicense(kv, record) {
     const key = KV_LICENSE_PREFIX + record.code;
+
+    // ★ P2-5：主数据落盘前先取旧设备集合（落盘后读就只剩新值，无法 diff）。
+    //   读失败不阻断保存——仅放弃本轮删除侧维护，读侧懒回填会自愈。
+    let oldMids = null;
+    try {
+        const oldRecord = await kv.get(key, 'json');
+        if (oldRecord) {
+            oldMids = new Set(getDevices(oldRecord).map(d => d && d.machineId).filter(Boolean));
+        }
+    } catch (_) { oldMids = null; }
+
     await kv.put(key, JSON.stringify(record));
 
     // 更新索引
@@ -586,7 +603,136 @@ async function saveLicense(kv, record) {
         index.push(record.code);
         await kv.put(KV_LICENSE_INDEX, JSON.stringify(index));
     }
+
+    // ★ P2-5：维护 mid_idx 派生索引（设备集合 diff + 读时校准）。
+    //   所有设备增删（激活/换机 auto-unbind/客服解绑/配额缩减/跨码清理）都经本函数落库，
+    //   在这一处收口即全覆盖。
+    //   写策略（KV 配额读 10w/写 1k，读便宜写贵）：每个相关 mid 先读当前键值——
+    //     · 值=本码   → 跳过（心跳等高频稳态写零派生索引写）
+    //     · 键缺失    → 补写（首存/旧单值格式存量迁移）
+    //     · 值=他码   → 不抢归属（转绑/detach 保护，最终一致以转绑流程为准）
+    //     · 脏值      → 修正为本码（本记录确含该设备）
+    //   消失设备仅在键仍指本码时删除。派生索引维护失败只 WARN 不抛出——
+    //   绝不能让索引故障阻断激活主流程（读侧 findLicensesByMachine 全扫兜底）。
+    try {
+        const newMids = new Set(getDevices(record).map(d => d && d.machineId).filter(Boolean));
+        const removedMids = oldMids ? [...oldMids].filter(m => !newMids.has(m)) : [];
+        for (const mid of removedMids) {
+            // 仅当索引仍指向本码才删：防并发场景设备已转绑新码后，旧码的滞后
+            // 保存把新归属的索引误删。
+            const cur = await kv.get(midIndexKey(mid), 'json').catch(() => null);
+            if (cur === record.code) await kv.delete(midIndexKey(mid));
+        }
+        for (const mid of newMids) {
+            const cur = await kv.get(midIndexKey(mid), 'json').catch(() => null);
+            if (cur === record.code) continue;          // 稳态：零写
+            if (typeof cur === 'string' && cur) continue; // 已指他码：不抢
+            await kv.put(midIndexKey(mid), JSON.stringify(record.code)); // 缺失/脏值：补建修正
+        }
+    } catch (e) {
+        console.warn('[MidIndex] saveLicense 索引维护失败（不影响主流程，读侧将懒回填）:',
+            record.code, e && e.message);
+    }
     return record;
+}
+
+// ★ P2-5：按机器码反查所属授权（O(1) 直查 + 全扫懒回填自愈）。
+//   返回命中记录数组（正常 0 或 1 条；历史跨码残留期可能 >1，保持与旧"遍历取首个"
+//   语义兼容，调用方按 [0] 取用）。设备在册校验以 license:{code}.devices 权威数据为准，
+//   索引陈旧/缺失/损坏只会多触发一次全扫并回填，永不返回错误归属。
+//   options：
+//     · readOnly=true  只查不写（entitlement 登录裁决等纯只读铁律路径——不回填/不清键，
+//                      零 KV 业务写；索引由心跳/激活等写路径自然建立）
+//     · forceScan=true 跳过索引直查、强制全扫并返回"全部"命中码（需要穷尽属主的语义：
+//                      detach 跨码清理、客服全景；激活/客服低频，全扫可接受。
+//                      可与 readOnly 组合：客服聚合=穷尽且零写）
+async function findLicensesByMachine(kv, machineId, options = {}) {
+    if (!kv || !machineId) return [];
+    const readOnly = options && options.readOnly === true;
+    const forceScan = options && options.forceScan === true;
+    const idxKey = midIndexKey(machineId);
+
+    // indexedCode 三态：合法码串=可直查；null=无索引/脏值/强制全扫；直查 KV 异常单独标记
+    let indexedCode = null;
+    if (!forceScan) {
+        try {
+            const v = await kv.get(idxKey, 'json');
+            // 纵深防御：索引值只接受合法激活码格式；污染/脏值一律按"无索引"处理落全扫
+            if (typeof v === 'string' && v && isValidLicenseCode(v)) {
+                indexedCode = v;
+            } else if (v !== null && v !== undefined) {
+                console.warn('[MidIndex] 索引值非激活码格式，按陈旧落全扫:',
+                    String(v).substring(0, 32));
+            }
+        } catch (_) { indexedCode = null; }
+    }
+
+    if (indexedCode) {
+        let direct = null, directFailed = false;
+        try { direct = await getLicense(kv, indexedCode); }
+        catch (_) { directFailed = true; }
+        if (direct && getDevices(direct).some(d => d && d.machineId === machineId)) {
+            return [direct];
+        }
+        // 直查 KV 异常时保守：不清除索引（可能是瞬时抖动而非真陈旧），落全扫取权威结果
+        if (directFailed) indexedCode = null;
+        // direct===null（码明确不存在）或在册校验失败：保留 indexedCode，全扫无归属时清键
+    }
+
+    // 全量扫描（旧行为；强制全扫/索引缺失/陈旧/脏值/直查异常均走这里）
+    const records = await listLicenses(kv);
+    const hits = records.filter(r => getDevices(r).some(d => d && d.machineId === machineId));
+
+    if (!readOnly) {
+        try {
+            if (hits.length > 0) {
+                const owner = hits[0];
+                await kv.put(idxKey, JSON.stringify(owner.code));
+                if (hits.length > 1) {
+                    console.warn('[MidIndex] 设备存在跨码残留，索引指向首个命中码:',
+                        String(machineId).substring(0, 8) + '...', hits.map(r => r.code).join(','));
+                }
+            } else if (indexedCode) {
+                // 索引有合法值、直查明确无该绑定（非 KV 异常）、全扫亦无归属：
+                // 确定性陈旧键才清，避免读抖动误删有效索引
+                await kv.delete(idxKey);
+            }
+        } catch (e) {
+            console.warn('[MidIndex] 懒回填失败（下次查询重试）:', e && e.message);
+        }
+    } else if (hits.length > 1) {
+        // 只读模式不写，但多码残留仍要打 WARN（安全可观测性）
+        console.warn('[MidIndex][scan] 设备存在跨码残留:',
+            String(machineId).substring(0, 8) + '...', hits.map(r => r.code).join(','));
+    }
+
+    return hits;
+}
+
+// ★ P2-5：统一删码——license 记录 + code 总索引 + 该码名下设备的 mid 派生索引。
+//   设备 mid 键仅在仍指向本码时删除（防误删已转绑设备的新归属）。
+async function deleteLicense(kv, code) {
+    if (!code) return;
+    let oldMids = [];
+    try {
+        const old = await getLicense(kv, code).catch(() => null);
+        if (old) oldMids = [...new Set(getDevices(old).map(d => d && d.machineId).filter(Boolean))];
+    } catch (_) { oldMids = []; }
+
+    await kv.delete(KV_LICENSE_PREFIX + code);
+
+    const index = (await kv.get(KV_LICENSE_INDEX, 'json')) || [];
+    const newIndex = index.filter(c => c !== code);
+    if (newIndex.length !== index.length) {
+        await kv.put(KV_LICENSE_INDEX, JSON.stringify(newIndex));
+    }
+
+    for (const mid of oldMids) {
+        try {
+            const cur = await kv.get(midIndexKey(mid), 'json').catch(() => null);
+            if (cur === code) await kv.delete(midIndexKey(mid));
+        } catch (_) { /* 陈旧 mid 键残留无害，findLicensesByMachine 会自愈 */ }
+    }
 }
 
 // 从 KV 读取激活码
@@ -723,11 +869,18 @@ async function detachDeviceFromOtherLicenses(kv, targetCode, machineId) {
     const detached = [];
     try {
         if (!kv || !targetCode || !machineId) return detached;
-        const index = (await kv.get(KV_LICENSE_INDEX, 'json')) || [];
-        for (const otherCode of index) {
+        // ★ P2-5：跨码清理必须"穷尽所有属主码"（双审 M1）——不能用 O(1) 直查：
+        //   审批/工单通道是先 saveLicense(target) 后 detach，索引可能已指向 target，
+        //   直查短路会让他码残留永不清理（回归 09-23 单设备单码保障）。故激活路径
+        //   强制全扫（forceScan），语义与旧实现完全等价；O(1) 收益只让给心跳/裁决
+        //   等高频只读点。激活低频，全扫成本可接受。
+        //   发现扫描配 readOnly（三轮复审建议 1）：不在清理前把键回填给 hits[0]
+        //   （可能是残留码，紧接着又被删→抖动+终态短暂缺失）；mid 键的最终归属
+        //   完全由下方各码 saveLicense 连锁维护，清理结束即收敛到 target。
+        const owners = await findLicensesByMachine(kv, machineId, { forceScan: true, readOnly: true });
+        for (const other of owners) {
+            const otherCode = other.code;
             if (!otherCode || otherCode === targetCode) continue;
-            const other = await getLicense(kv, otherCode);
-            if (!other) continue;
             let dirty = false;
             if (Array.isArray(other.devices)) {
                 const before = other.devices.length;
@@ -1568,6 +1721,7 @@ export {
     ACTIVATION_CODE_CHARS,
     KV_LICENSE_PREFIX,
     KV_LICENSE_INDEX,
+    KV_MID_INDEX_PREFIX,  // ★ P2-5：mid_idx 派生索引前缀
     generateActivationCode,
     generateSignature,
     generateSignatureV3,
@@ -1580,6 +1734,8 @@ export {
     getLicense,
     updateLicense,
     listLicenses,
+    findLicensesByMachine, // ★ P2-5：mid→code O(1) 反查（缺失/陈旧自动全扫回填）
+    deleteLicense,         // ★ P2-5：统一删码（记录+code 总索引+mid 派生索引三清）
     sanitizeRecord,
     checkRateLimit,
     checkCodeRateLimit,  // ★ P0-1 新增：激活码级短时频控

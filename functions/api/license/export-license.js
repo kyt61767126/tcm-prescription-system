@@ -43,6 +43,7 @@ import {
     getKV, getLicense, updateLicense,
     buildLicenseData, encodeLicenseBase64,
     getDevices, getMaxDevices, appendLicenseLog,
+    detachDeviceFromOtherLicenses,
     checkRateLimit, checkCodeRateLimit
 } from './_lib/license-core.js';
 // ★ C批双审：machineId 白名单统一走 schema-guard 单一副本（8-64 位，拒 unknown/undefined）
@@ -341,6 +342,23 @@ export async function onRequest(context) {
         }
         updates.devices = newDevices;
         updates.maxDevices = maxDevices;
+        // ★ 2026-09-25 S1（P2-5 双审）：离线发码新设备入码前，同样执行单设备单码
+        //   跨码清理（与 validate.js 一致；09-23 detach 上线时本通道遗漏）。
+        //   仅"新设备"需要：同机重激活（existingDevice）本就绑在本码，全扫无收益。
+        //   detach 内部异常自吞（最坏维持旧行为，不阻断发码）；forceScan 穷尽全部属主码。
+        let detachedCodes = [];
+        if (!existingDevice) {
+            detachedCodes = await detachDeviceFromOtherLicenses(kv, code, machineId);
+            if (detachedCodes.length) {
+                await appendLicenseLog(kv, code, {
+                    action: 'cross-code-detach',
+                    time: updates.activatedAt,
+                    ip: ip,
+                    operator: auth.operator || 'export-secret',
+                    detail: `[export] 设备绑定本码，已从 ${detachedCodes.length} 个旧码解绑: ${detachedCodes.join(', ')}`
+                }).catch(() => {});
+            }
+        }
         await updateLicense(kv, code, updates);
 
         // 记录日志（标记为离线导出）

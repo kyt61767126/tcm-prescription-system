@@ -31,7 +31,7 @@
 // ============================================================================
 
 import { parseAuthHeader, isPlatformAdmin } from '../_lib/auth.js';
-import { getKV } from './_lib/license-core.js';
+import { getKV, deleteLicense } from './_lib/license-core.js';
 import { deleteAdminRequest } from './_lib/license-write-service.js';
 
 const ALLOWED_ORIGINS = [
@@ -178,17 +178,17 @@ async function executeDeviceReset(kv, scan) {
     }
     if (scan.reqIds.length > 0) indexesUpdated.push('admin_req_index（Service 原子维护）');
 
-    // 2. license + 日志直删 + license_index filter（license 域不在 write-service 五类 key 内）
+    // 2. license 删除走 core 统一服务（P2-5 起三键清理：license 记录 +
+    //    system:license_index + 该码设备 mid_idx 派生索引）；日志仍直删。
+    //    多码循环中 deleteLicense 幂等 filter 总索引（运维低频，重复读改可接受）。
     if (scan.licCodes.length > 0) {
-        const licIndex = (await kv.get('system:license_index', 'json')) || [];
-        const newLicIndex = licIndex.filter(c => !scan.licCodes.includes(c));
         for (const code of scan.licCodes) {
-            await kv.delete('license:' + code);
+            await deleteLicense(kv, code);
             await kv.delete('license_log:' + code);
             deleted.push('license:' + code, 'license_log:' + code);
         }
-        await kv.put('system:license_index', JSON.stringify(newLicIndex));
-        indexesUpdated.push(`system:license_index（${licIndex.length} → ${newLicIndex.length}）`);
+        const licIndexAfter = (await kv.get('system:license_index', 'json').catch(() => null)) || [];
+        indexesUpdated.push(`system:license_index（删除 ${scan.licCodes.length} 码后剩余 ${licIndexAfter.length}）；mid_idx 派生索引随码清理`);
     }
 
     // 3. 试用指纹

@@ -45,7 +45,7 @@
 
 import {
     getKV, getLicense, getDevices, getMaxDevices, versionOf,
-    isTestMachine, checkRateLimit, KV_LICENSE_INDEX, getDeviceBlock, LICENSE_TYPE_CONFIG,
+    isTestMachine, checkRateLimit, findLicensesByMachine, getDeviceBlock, LICENSE_TYPE_CONFIG,
     getAccountTombstone
 } from './_lib/license-core.js';
 import { isValidMachineId } from './_lib/schema-guard.js';
@@ -116,14 +116,12 @@ async function adjudicate(kv, machineId, code) {
             record = r;
         }
     } else {
-        // 自愈路径：客户端丢 license.dat，按 machineId 遍历索引找回绑定
-        // （与 status.js handleHeartbeat 同模式；正序首个命中，语义一致）
-        const index = (await kv.get(KV_LICENSE_INDEX, 'json')) || [];
-        for (const c of index) {
-            const r = await getLicense(kv, c);
-            if (!r) continue;
-            if (getDevices(r).some(d => d.machineId === machineId)) { record = r; break; }
-        }
+        // 自愈路径：客户端丢 license.dat，按 machineId 反查找回绑定。
+        // ★ P2-5：mid 派生索引 O(1)（旧实现遍历全量码索引，登录闸门高频路径）。
+        //   readOnly：裁决纯只读铁律（E1），不回填/不清键，零业务写；索引缺失时
+        //   退化为全扫（旧行为），由心跳/激活等写路径自然完成回填，首个命中语义不变。
+        const hits = await findLicensesByMachine(kv, machineId, { readOnly: true });
+        record = hits[0] || null;
     }
 
     // 测试机标记（客户端可提示"测试模式"；纯读，不写绑定）

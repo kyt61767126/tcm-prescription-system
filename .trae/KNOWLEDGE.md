@@ -1329,3 +1329,17 @@
 * **★ 文档重写铁律：客服/运维手册的每个数值、错误文案、入口路径必须回源当前代码逐条取证**——材料滞后比没有材料更危险（v1.0 教人粘真实密钥即是）；机器码长度这类"看起来不重要"的提示文案会直接导致客服拒收客户合法机器码。
 * **未做（用户运维动作，勿代办）**：同名 `客服离线激活操作手册.docx`（07-25 二进制旧版）未同步——md 已注明以 md 为准并提示按 md 重新导出 docx 分发，不擅自生成二进制文档。
 * **生效方式**：md 文档随 push 进仓库即生效（无运行时影响）；ps1 是客服本机工具，需客服电脑重新拉取/分发新脚本（或仅知会机器码口径），**云端网页/云桌面/云端 APP/离线桌面/离线 APP 五端零改动、无热包、零重打包**。
+
+## 32. P2-5 KV 读放大治理：mid_idx 派生索引（2026-09-25，纯 functions 后端，五端零重打包）
+
+* **问题模型**：按 machineId 反查授权（心跳/entitlement/客服聚合）旧实现走 `listLicenses()` 全量扫描——700 码=700+ KV 子请求，千级诊所规模必撞 Workers Paid 单请求 1000 子请求上限。
+* **键设计**：新增派生键 **`mid_idx:{machineId}` → JSON 字符串激活码**（如 `"BNZC-XXXX-..."`）。**唯一权威仍是 `license:{code}.devices[]`**，索引只决定"快还是全扫"，永不决定"归谁"——直查命中必须再过 `getDevices(r).some(d=>d.machineId===mid)` 在册校验，校验失败落全扫。键命名空间与 `license:`/`system:` 隔离；键值读出先过 `isValidLicenseCode` 白名单（schema-guard），非法值当陈旧处理（纵深防御，注入值如 `../../x` 不可利用）。
+* **★ 写策略=读时校准（读多写少，对齐 KV 配额：读 10w/天 vs 写 1k/天）**：所有设备写仍只收口 `saveLicense/updateLicense`（另把 admin-device-reset 删码收口到统一 `deleteLicense` 三键清理：license 记录+system:license_index+该码设备 mid_idx，mid 键仅在仍指本码时删）。saveLicense 维护规则（先读旧记录取 oldMids，与新集合 diff）：① 新增 mid：读当前键——缺失才补写（兼旧顶层 machineId 单值存量迁移）、值=本码跳过（**心跳稳态零写**）、**值=他码不抢归属**、脏值修正；② 消失 mid：仅当键仍指本码才 delete（防并发转绑误删）；③ 维护失败只 WARN 不阻断主流程，读侧懒回填兜底。
+* **★ 两选项语义（findLicensesByMachine，按调用点性质选，不可混用）**：`readOnly:true`=零业务写（**entitlement 登录裁决铁律**，回填交给心跳/激活）；`forceScan:true`=跳过索引直查强制全扫、**返回全部命中码**（穷尽属主语义）。四调用点：**心跳 status=默认写模式**（回填/清键，端点本有写）；**entitlement=readOnly**；**客服 customer-aggregate=forceScan+readOnly**（历史多码残留要全部呈现+GET 零副作用）；**detach=forceScan+readOnly**。
+* **★★ M1 教训（三轮审查实锤，本项目特有）：需要"穷尽属主"的写路径绝不走 O(1) 直查短路**。审批/工单通道时序是**先 saveLicense(target) 后 detach**——若 detach 用索引直查，索引已被钉成 target，命中 target===targetCode 即 continue，他码历史残留（09-23 前实测连挂 3 码）永不清理，直接回归"删码/吊销被他码静默兜底=白嫖经济损失"。detach 必须 forceScan；发现扫描再配 readOnly，避免把键先回填给 hits[0]（可能是残留码）再随其 saveLicense 被删的抖动——mid 键最终归属完全由各码 saveLicense 连锁维护，清理结束立即收敛 target。validate.js 是"先 detach 后 update"的正确范式。
+* **S1 同批存量修复**：export-license.js 客服离线发码是第四设备写点但 09-23 detach 上线时漏网——新设备（`!existingDevice`）updateLicense 前补 detach（同机重激活不触发，省全扫；满额换机 shift 进来的必为新设备），参照 validate 写 cross-code-detach 日志；detach 异常内部自吞不阻断发码。
+* **异常保守**：直查码时 getLicense 抛错 ≠ 码不存在——瞬时 KV 失败时索引键保留不清（仅"码明确不存在+全扫无归属"的确定性陈旧才删）。
+* **存量上线**：无独立迁移脚本；mid_idx 由心跳（离线端 10min 级）/激活/客服查询懒回填自然建立，陈旧/缺失一跳全扫自愈。
+* **审查模式（值得复用）**：46 用例单测（tools/_tmp/test-mid-index.mjs，gitignored）先于审查暴露了高频写放大（B4）和只读副作用（E1 entitlement 零写探针 21 项）；两轮互不通气独立审共同命中 M1；K 用例初版只覆盖"索引指他码"，**"索引指 target+另有残留"是另一个场景**，补针对性用例；第三轮复审后采纳其建议 1（detach 发现扫描 readOnly）。
+* **遗留备忘（勿重复立项，另开独立项）**：① admin-device-reset.js 扫描谓词 L126 只匹配顶层 `v.machineId` 单值，v4 devices[] 格式码选不中→该端点"删码"分支对现行格式实际不可达（存量，非本次引入），修时谓词换 getDevices；② readOnly 路径不清陈旧键（纯只读契约与 GC 冲突，60/h 频控限损失，接受）；③ listLicenses 串行 N+1 可并行化（独立项）；④ saveLicense 稳态多读（集合相等可整体跳过）；⑤ 部署后可跑一次全量多码残留离线巡检。
+* **生效方式**：纯 functions 服务端，CF push 后自动部署，**云端网页/云桌面/云端 APP/离线桌面/离线 APP 五端零重打包、无热包**；线上冒烟=真实机器码调 entitlement（带/不带 code）+status 心跳，观察日志无 `[MidIndex]` WARN 风暴。

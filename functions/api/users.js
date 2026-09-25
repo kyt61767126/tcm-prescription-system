@@ -16,6 +16,7 @@ import { deleteAdminRequest, KV_ADMIN_REQ_PREFIX, KV_ADMIN_REQ_INDEX,
 import { listLicenses, getDevices, updateLicense, appendLicenseLog,
     writeAccountTombstone, clearAccountTombstone, sanitizeRecord,
     getDeviceVersion, getDeviceBlock, getAccountTombstone, checkRateLimit,
+    findLicensesByMachine,
     KV_LICENSE_PREFIX, KV_LICENSE_INDEX } from './license/_lib/license-core.js';
 // ★ 2026-09-24 P1-2 客户全景聚合：查询类型判定走 schema-guard 权威正则（禁内联）
 import { isValidPhone, isValidMachineId } from './license/_lib/schema-guard.js';
@@ -1652,14 +1653,22 @@ export async function onRequest(context) {
                 }
             }
 
-            // ---- ③ 付费码（license 索引分批并行全扫；手机/机器/用户名三模匹配）----
+            // ---- ③ 付费码（手机/用户名：license 索引分批并行全扫；机器码：P2-5 起
+            //      走 mid_idx 反查）。机器查询需"穷尽全部属主码"（历史多码残留也要
+            //      全部呈现给客服，不能直查只回 1 条）→ forceScan；GET 查询零副作用
+            //      （不回填/不清键）→ readOnly；索引回填由心跳/激活写路径负责。
             const licenses = [];
             const licIndexRaw = await kv.get(KV_LICENSE_INDEX, 'json').catch(() => null);
             const licensesIndexValid = Array.isArray(licIndexRaw);
-            const licCodes = licensesIndexValid ? licIndexRaw : [];
-            const allLicenses = licCodes.length
-                ? (await batchGetJson(licCodes.map(c => KV_LICENSE_PREFIX + c))).filter(Boolean)
-                : [];
+            let allLicenses;
+            if (queryType === 'machine') {
+                allLicenses = await findLicensesByMachine(kv, q, { forceScan: true, readOnly: true }).catch(() => []);
+            } else {
+                const licCodes = licensesIndexValid ? licIndexRaw : [];
+                allLicenses = licCodes.length
+                    ? (await batchGetJson(licCodes.map(c => KV_LICENSE_PREFIX + c))).filter(Boolean)
+                    : [];
+            }
             for (const r of allLicenses) {
                 let hit = false;
                 if (queryType === 'phone') {

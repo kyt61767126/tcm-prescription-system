@@ -15,7 +15,8 @@
 
 import { parseAuthHeader, isPlatformAdmin } from '../_lib/auth.js';
 import {
-    getKV, getLicense, updateLicense, sanitizeRecord, KV_LICENSE_PREFIX, KV_LICENSE_INDEX,
+    getKV, getLicense, updateLicense, sanitizeRecord,
+    findLicensesByMachine, deleteLicense,
     getDevices, getMaxDevices, appendLicenseLog, deleteLicenseLogs,
     setDeviceVersion, getDeviceVersion, versionOf,
     blockDevice, getDeviceBlock, checkRateLimit
@@ -35,18 +36,8 @@ function json(data, status = 200) {
     return new Response(JSON.stringify(data), { status, headers: corsHeaders() });
 }
 
-// 删除激活码（从 KV 和索引中移除）
-async function deleteLicense(kv, code) {
-    const key = KV_LICENSE_PREFIX + code;
-    await kv.delete(key);
-
-    // 从索引中移除
-    const index = (await kv.get(KV_LICENSE_INDEX, 'json')) || [];
-    const newIndex = index.filter(c => c !== code);
-    if (newIndex.length !== index.length) {
-        await kv.put(KV_LICENSE_INDEX, JSON.stringify(newIndex));
-    }
-}
+// 注：deleteLicense 已收口至 license-core（P2-5 起统一三键清理：
+// license 记录 + system:license_index + mid_idx 派生索引），见上方 import。
 
 // 获取客户端 IP（用于日志记录）
 function getClientIP(context) {
@@ -92,11 +83,13 @@ async function handleHeartbeat(kv, body, clientIP) {
         return json({ success: false, error: '设备安全校验未通过，请更换设备或联系客服处理' }, 403);
     }
 
-    const index = (await kv.get(KV_LICENSE_INDEX, 'json')) || [];
-    for (const code of index) {
-        const record = await getLicense(kv, code);
-        if (!record) continue;
+    // ★ P2-5：mid 派生索引 O(1) 反查（旧实现遍历 system:license_index 逐个
+    //   getLicense，~700 码时心跳一次即数百子请求）；缺失/陈旧自动全扫回填。
+    const owners = await findLicensesByMachine(kv, machineId);
+    const record = owners[0] || null;
 
+    if (record) {
+        const code = record.code;
         const devices = getDevices(record);
         const matchedDevice = devices.find(d => d.machineId === machineId);
         if (matchedDevice) {
