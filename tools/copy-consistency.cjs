@@ -246,6 +246,18 @@ const GROUPS = [
         ]
     },
     {
+        // ★ 2026-09-25 P2 user 域收口：双 main.js 用户管理 IPC
+        //   （通用 user:change-password/user:add 字节同构；
+        //    user:rename-username 仅离线 productClass 门控）。
+        //   工厂含分节注释字节切片自改前 main.js；密码/config 签名写点。
+        //   sync-all Group 23 分发，本组 2 副本硬哈希门。
+        authority: 'shared/desktop-user-ipc.cjs',
+        copies: [
+            'app_project/db-yunduan/cloud_desktop/electron/desktop-user-ipc.cjs',
+            'app_project/db-offline/desktop/electron/desktop-user-ipc.cjs'
+        ]
+    },
+    {
         // ★ 2026-09-17 语音版一期：voice-input.js（Web Speech API 语音输入模块）。
         //   ★ 2026-09-18 阶段二语音免费层下沉：扩离线两端（db-offline 桌面/APP
         //   assets）——免费层解析链 VoiceInput.highlight/toPinyin/ensurePinyin

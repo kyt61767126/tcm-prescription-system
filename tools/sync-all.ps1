@@ -310,6 +310,18 @@ $DesktopLicenseIpcTargets = @(
     'app_project/db-offline/desktop/electron'
 )
 
+# Group 23: desktop-user-ipc.cjs (★ 2026-09-25 P2 user 域收口) -> 2 个 electron 目录
+#   双 main.js 用户管理 IPC（3+1 通道：通用 user:change-password/user:add 字节同构；
+#   user:rename-username 仅离线 productClass 门控）收口为工厂
+#   createDesktopUserIpc(options)；handler 含分节注释字节切片自改前 main.js。
+#   改前整块哈希（含分节注释）：cloud f323c30c / local 033bee50；
+#   handler-only：cloud 1f21ae21 / local 8a922a05。密码/config 签名写点，
+#   主进程域热更不可达。
+$DesktopUserIpcTargets = @(
+    'app_project/db-yunduan/cloud_desktop/electron',
+    'app_project/db-offline/desktop/electron'
+)
+
 # Group 19: voice 模块（voice-input.js）-> 5 端目录（★ 2026-09-17 语音版一期；
 #   ★ 2026-09-18 阶段二扩离线两端）
 #   智能语音输入模块（Web Speech API，cloud_voice 版本专属入口）+
@@ -583,6 +595,11 @@ Write-Host ""
 
 # Group 22: desktop-license-ipc.cjs -> 2 electron dirs (★ 2026-09-25 license IPC 胶合层收口)
 $result = Sync-Group -GroupName 'desktop-license-ipc.cjs -> 2 electron dirs' -Files @('desktop-license-ipc.cjs') -Targets $DesktopLicenseIpcTargets -VerifyOnly $VerifyOnly
+if (-not $result) { $allInSync = $false }
+Write-Host ""
+
+# Group 23: desktop-user-ipc.cjs -> 2 electron dirs (★ 2026-09-25 P2 user 域收口)
+$result = Sync-Group -GroupName 'desktop-user-ipc.cjs -> 2 electron dirs' -Files @('desktop-user-ipc.cjs') -Targets $DesktopUserIpcTargets -VerifyOnly $VerifyOnly
 if (-not $result) { $allInSync = $false }
 Write-Host ""
 
