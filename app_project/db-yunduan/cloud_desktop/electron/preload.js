@@ -128,8 +128,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
         // v2 新增：功能权限校验
         checkFeature: (featureName) => ipcRenderer.invoke('license:check-feature', featureName),
         getFeatureStatus: () => ipcRenderer.invoke('license:get-feature-status'),
-        // ★ 试用期配置（测试用，0=立即过期，默认 7）
-        setTrialDays: (days) => ipcRenderer.invoke('license:set-trial-days', days),
+        // ★ 试用期天数读取（setTrialDays IPC 已按 P2-7 移除：渲染进程不得改试用期）
         getTrialDays: () => ipcRenderer.invoke('license:get-trial-days'),
         // ★ 2026-09-05 邀请码查询：主进程代理 fetch（渲染进程 file:// 直连云端被 CORS 拦截）
         queryInvite: (payload) => ipcRenderer.invoke('license:query-invite', payload)

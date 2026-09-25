@@ -234,6 +234,18 @@ const GROUPS = [
         ]
     },
     {
+        // ★ 2026-09-25 license IPC 胶合层收口：双 main.js 全部 license:* IPC
+        //   （38 通道：通用22（21字节同构+submit-activate注释差）/端分叉3/仅云端1/仅离线12；
+        //    set-trial-days 故意不注册）
+        //   工厂字节切片自改前 main.js，唯一变换 mainWindow → getMainWindow()。
+        //   sync-all Group 22 分发，本组 2 副本硬哈希门。
+        authority: 'shared/desktop-license-ipc.cjs',
+        copies: [
+            'app_project/db-yunduan/cloud_desktop/electron/desktop-license-ipc.cjs',
+            'app_project/db-offline/desktop/electron/desktop-license-ipc.cjs'
+        ]
+    },
+    {
         // ★ 2026-09-17 语音版一期：voice-input.js（Web Speech API 语音输入模块）。
         //   ★ 2026-09-18 阶段二语音免费层下沉：扩离线两端（db-offline 桌面/APP
         //   assets）——免费层解析链 VoiceInput.highlight/toPinyin/ensurePinyin
