@@ -1414,3 +1414,13 @@
 * **双路独立审查（并行新上下文：数据正确性 + 安全）**：**0 阻断 0 重要 0 可利用**——鉴权（parseAuthHeader+isPlatformAdmin）未动、无新端点；完整 code 本就在总管理员激活码 tab 明文可见、不构成新暴露；纯读无 put/eval；ES6 Map 无原型污染。4 条次要全部修正（offline_ 门控/+08 日口径/历史类型 clinic·institution/强化 B17 真边界+加 B18）。
 * **既有-backlog（非本次引入）**：激活码表 code 单元格 `r.code` 未 escapeHtml（服务端生成字符集受控，无注入源）；adminconsole 静态层 JWT 硬门禁未实施（现状客户端门 + Bearer 把关）。
 * **生效方式**：**push 后随主站（API）与后台站 huikang-admin 部署生效**（管理台是网页，运营人员刷新即用；遇 Git 构建配额耗尽走 wrangler pages deploy 直传，见 DEPLOY-站点分离部署说明.md）；五端客户端（双 exe/双 APP/鸿蒙）与主站医师工作站页面不受影响，无需重打包。promo/ 不纳入提交。
+
+## 39. 双桌面整包发布：云端 1.2.255 / 离线 1.0.256（2026-09-25，打印/license IPC/user IPC 三批主进程抽取落地）
+
+* **产物**（各自 dist/，含 Setup 与 portable，均经全铁闸：copy-consistency→GATE-KEEPER→真实 E2E 3/3→ASAR integrity 嵌入→fuses→.bnzc ver2→Authenticode 签名→最终冒烟）：
+  - 云桌面 V1.2.255：`app_project/db-yunduan/cloud_desktop/dist/` 惠康中医-云端 Setup 1.2.255.exe + 惠康中医-云端 1.2.255.exe
+  - 离线桌面 V1.0.256：`app_project/db-offline/desktop/dist/` 惠康中医-本地 Setup 1.0.256.exe + 惠康中医-本地 1.0.256.exe
+  - 终核：两份最终 app.asar 头部均含 desktop-print.cjs / desktop-license-ipc.cjs / desktop-user-ipc.cjs；最终 exe 无调试参数冒烟启动 PASS（离线真实窗「惠康中医诊所管理系统 - 登录」）。
+* **★ 连打两桌面的时序铁律**：构建必须串行（全局 .build.lock，build-lock.ps1 acquire/release）；**先打的一端 bump-version 会把其 package.json/build-meta.json 留在工作区**，后打一端的 ensure-build-env **Step 1.5 源码落定门**必以「检测到未提交源码修改」FAIL 中止——正解是**两端构建之间先提交首端版本落定**（本次离线首打即在此被正确拦截，提交 662ce642 后重打通过）。禁止用 ALLOW_DIRTY_BUILD=1 绕过。
+* **★ 构建副作用是正常修复**：ensure-build-env Step 2 会给缺 BOM 的 .ps1 自动补 BOM（本次 sign-exe.ps1 被补，提交保留）；改后不必惊讶，diff 确认仅 BOM 即可纳入版本落定提交。
+* **升级/生效方式**：新 Setup 覆盖安装（perMachine）或用 portable 直接替换旧 exe——主进程改动**只有整包升级**才生效，热更永不触达；用户云端诊所/双 APP/鸿蒙无需动作。KNOWLEDGE §35-38 记载的 4 条打印窗加固与 6 条 user 安全 backlog 仍未实施（均不阻断当前发布），立项时另改另发。
