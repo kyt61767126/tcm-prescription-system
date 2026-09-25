@@ -25,6 +25,11 @@ function createDesktopPrintIpc({ ipcMain, BrowserWindow }) {
 //   旧方案（显示窗口+webContents.print+30秒超时）已废弃，用户体验差且超时过短
 ipcMain.handle('print-prescription', async (event, html, orientation) => {
     try {
+        // ★ 2026-09-25 安全加固①：仅主框架可调（拒绝被注入的 iframe 子框架）
+        if (!event || !event.senderFrame || !event.senderFrame.isMainFrame) {
+            console.warn('[print] reject non-main-frame invoke');
+            return false;
+        }
         const isLandscape = orientation === 'landscape';
 
         // 隐藏窗口（用户不可见）
@@ -38,7 +43,9 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
             height: isLandscape ? 600 : 850,
             webPreferences: {
                 contextIsolation: true,
-                nodeIntegration: false
+                nodeIntegration: false,
+                sandbox: true,        // ★ 2026-09-25 加固②：显式沙箱（不预载任何主进程能力）
+                webSecurity: true     // ★ 显式开启同源策略
             }
         });
         printWin.setMenu(null);
@@ -46,19 +53,32 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
         // ★ 彻底修复字体偏大：移除CSS @page的size规则，避免与webContents.print pageSize选项双重指定
         //   双重指定（CSS @page size + pageSize选项）触发Chromium fit-to-page缩放，内容被放大
         //   移除size后：纸张大小由pageSize选项唯一控制，边距由CSS @page margin:0唯一控制
-        const processedHtml = html.replace(/@page\s*\{[^}]*\}/g, '');
+        const processedHtml = String(html == null ? '' : html).replace(/@page\s*\{[^}]*\}/g, '');
         const base64Html = Buffer.from(processedHtml, 'utf8').toString('base64');
         const dataUrl = 'data:text/html;charset=utf-8;base64,' + base64Html;
 
         return new Promise((resolve) => {
             let settled = false;
 
+            // ★ 2026-09-25 加固③：关窗用 destroy() 而非 close()——处方 HTML 里若注入
+            //   onbeforeunload 返回非空串会阻止 close()（窗口残留/进程挂住）；
+            //   destroy() 强制销毁，不触发 beforeunload/close 事件。
             const safeResolve = (val) => {
                 if (settled) return;
                 settled = true;
-                if (!printWin.isDestroyed()) printWin.close();
+                if (!printWin.isDestroyed()) printWin.destroy();
                 resolve(val);
             };
+
+            // ★ 2026-09-25 加固④：打印窗内容是本地 data URL，禁止任何导航/跳转/新窗
+            //   （处方 HTML 若被注入 <a target=_blank>/meta refresh/window.open 等，
+            //   一律拒绝，防止隐藏窗被带去远程内容或挂起）。
+            printWin.webContents.on('will-navigate', (navE) => {
+                navE.preventDefault();
+                console.warn('[print] navigation blocked');
+                safeResolve(false);
+            });
+            printWin.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 
             printWin.loadURL(dataUrl);
 
@@ -92,22 +112,21 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
                         // ★ 默认纸张A5 + 手动选打印机（2026-08-17）
                         //   客户端打印机不固定，不做自动匹配；始终弹打印对话框由用户手动选择打印机，
                         //   pageSize:'A5' 作为对话框默认纸张，无需每次手动切换纸张
-                        await new Promise((resolvePrint) => {
-                            const printOptions = {
-                                silent: false,
-                                printBackground: true,
-                                pageSize: 'A5',
-                                landscape: isLandscape,
-                                margins: { marginType: 'none' }
-                            };
-                            printWin.webContents.print(printOptions, (success, failureReason) => {
-                                if (!success && failureReason) {
-                                    console.error('[print] 打印失败:', failureReason);
-                                }
-                                resolvePrint();
-                            });
+                        const printOptions = {
+                            silent: false,
+                            printBackground: true,
+                            pageSize: 'A5',
+                            landscape: isLandscape,
+                            margins: { marginType: 'none' }
+                        };
+                        // ★ 2026-09-25 加固⑤：返回值反映真实打印结果（用户取消/
+                        //   打印机失败 → false；渲染层当前未使用返回值，未来可据此提示）
+                        printWin.webContents.print(printOptions, (success, failureReason) => {
+                            if (!success && failureReason) {
+                                console.error('[print] 打印失败:', failureReason);
+                            }
+                            safeResolve(success === true);
                         });
-                        safeResolve(true);
                     } catch (e) {
                         console.error('[print] 打印失败:', e);
                         safeResolve(false);

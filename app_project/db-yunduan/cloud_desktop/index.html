@@ -4139,9 +4139,13 @@ let currentUser = null;
                     return;
                 }
 
-                // ★ 2026-08-26 只改用户名（密码三项留空）时跳过密码校验，原密码保持不变
+                // ★ 2026-09-25 安全加固：本地分支修改用户名也必须验证原密码
                 let _verified = true;
-                if (_pwdChange) {
+                if (_pwdChange || _newUsername) {
+                    if (!oldPwd) {
+                        alert('请输入原密码！\n即使只修改用户名，也需验证原密码。');
+                        return;
+                    }
                     // 使用与 login.js 完全一致的密码校验逻辑（hashPassword 直接比较 + 明文兼容）
                     // 不依赖 AuthCore.verifyPassword（混淆后行为可能与源码不一致）
                     const storedPwd = users[userIndex].password || '';

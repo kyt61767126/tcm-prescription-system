@@ -1397,11 +1397,17 @@ require('./desktop-user-ipc.cjs').createDesktopUserIpc({
 
 async function hashPassword(password) {
     const crypto = require('crypto');
-    const PASSWORD_SALT = 'bnzc_prescription_salt_v1';
-    const data = Buffer.from(PASSWORD_SALT + password, 'utf8');
+    // ★ 2026-09-25 安全加固：常量盐单轮 SHA-256 → PBKDF2-SHA256 慢哈希
+    //   600000 轮（OWASP 2025/2026 PBKDF2-SHA256 基线）+ 每密码 16 字节随机盐；
+    //   存储格式（AuthCore.verifyPassword 同栈识别）：
+    //   pbkdf2_sha256$<iterations>$<saltHex>$<derivedKeyHex>
+    const iterations = 600000;
+    const saltBuf = crypto.randomBytes(16);
+    const dk = crypto.pbkdf2Sync(String(password), saltBuf, iterations, 32, 'sha256');
+    const stored = 'pbkdf2_sha256$' + iterations + '$' + saltBuf.toString('hex') + '$' + dk.toString('hex');
     return {
-        passwordHash: crypto.createHash('sha256').update(data).digest('hex'),
-        salt: PASSWORD_SALT
+        passwordHash: stored,
+        salt: saltBuf.toString('hex')
     };
 }
 

@@ -341,8 +341,50 @@
         return typeof pwd === 'string' && pwd.length === 64 && /^[a-f0-9]{64}$/.test(pwd);
     }
 
+    // ★ 2026-09-25 慢哈希加固：PBKDF2-SHA256 自描述格式
+    //   pbkdf2_sha256$<iterations>$<saltHex 32>$<derivedKeyHex 64>
+    const STRONG_HASH_RE = /^pbkdf2_sha256\$(\d+)\$([0-9a-f]{32})\$([0-9a-f]{64})$/;
+    function isStrongPasswordHash(pwd) {
+        return typeof pwd === 'string' && STRONG_HASH_RE.test(pwd);
+    }
+
+    function _hexToBytes(hex) {
+        const out = new Uint8Array(hex.length / 2);
+        for (let i = 0; i < out.length; i++) {
+            out[i] = parseInt(hex.substr(i * 2, 2), 16);
+        }
+        return out;
+    }
+
+    async function verifyStrongPassword(inputPassword, storedPassword) {
+        const m = storedPassword.match(STRONG_HASH_RE);
+        if (!m) return false;
+        const iterations = parseInt(m[1], 10);
+        const enc = new TextEncoder();
+        try {
+            const key = await crypto.subtle.importKey('raw', enc.encode(String(inputPassword)),
+                { name: 'PBKDF2' }, false, ['deriveBits']);
+            const bits = await crypto.subtle.deriveBits(
+                { name: 'PBKDF2', salt: _hexToBytes(m[2]), iterations: iterations, hash: 'SHA-256' },
+                key, 256);
+            const bytes = new Uint8Array(bits);
+            let hex = '';
+            for (let i = 0; i < bytes.length; i++) hex += bytes[i].toString(16).padStart(2, '0');
+            if (hex.length !== m[3].length) return false;
+            let diff = 0;
+            for (let i = 0; i < hex.length; i++) diff |= hex.charCodeAt(i) ^ m[3].charCodeAt(i);
+            return diff === 0;
+        } catch (e) {
+            return false;
+        }
+    }
+
     async function verifyPassword(inputPassword, storedPassword, username) {
         if (!storedPassword) return false;
+        // ★ 2026-09-25 新 PBKDF2 慢哈希优先
+        if (isStrongPasswordHash(storedPassword)) {
+            return await verifyStrongPassword(inputPassword, storedPassword);
+        }
         if (isPasswordHashed(storedPassword)) {
             // 先尝试增强版哈希（含用户名盐值）
             if (username) {
@@ -1213,7 +1255,14 @@
             if (_ok) { user = u; break; }
         }
         if (user) {
-            return { success: true, user: user, matchedIdentifier: matchedIdentifier, source: 'local' };
+            return {
+                success: true,
+                user: user,
+                matchedIdentifier: matchedIdentifier,
+                source: 'local',
+                // ★ 2026-09-25：旧哈希 → 调用方可透明升级
+                weakHash: !isStrongPasswordHash(user.password || '')
+            };
         }
         if (options.cloud && typeof CLOUD_API_BASE !== 'undefined' && CLOUD_API_BASE) {
             try {

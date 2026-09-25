@@ -3,8 +3,9 @@
 //  desktop-print-smoke.cjs — P2-3 打印域模块功能冒烟（零依赖，stub electron）
 //
 //  用 stub ipcMain / BrowserWindow 加载真实 shared/desktop-print.cjs 工厂，
-//  覆盖：handler 注册、隐藏窗参数、@page 剥离、打印选项（A5/横版/边距）、
-//  成功/打印失败/页面加载失败/构造抛错 五条回路与窗口关闭时序。
+//  覆盖：handler 注册、主框架门控、隐藏窗参数、sandbox、@page 剥离、
+//  导航拦截/新窗拒绝、打印选项（A5/横版/边距）、真实打印结果契约、
+//  页面加载失败/构造抛错回路与 destroy 强关窗时序。
 //
 //  用法: node tools/desktop-print-smoke.cjs
 //  退出码: 0 全过；1 有失败
@@ -33,10 +34,16 @@ function makeEnv(opts) {
             windows.push(this);
             this.closed = false;
             this.destroyed = false;
+            this.openHandler = null;
+            this._on = {};
             const self = this;
             this.webContents = {
                 _once: {},
                 once(ev, cb) { this._once[ev] = cb; },
+                on(ev, cb) {
+                    (self._on[ev] = self._on[ev] || []).push(cb);
+                },
+                setWindowOpenHandler(fn) { self.openHandler = fn; },
                 executeJavaScript() { return Promise.resolve(); },
                 print(o, cb) {
                     printCalls.push(o);
@@ -49,11 +56,17 @@ function makeEnv(opts) {
             this.loadedUrl = url;
             const self = this;
             setImmediate(() => {
+                if (opts.navigate) {
+                    const prevent = { defaultPrevented: false, preventDefault() { this.defaultPrevented = true; } };
+                    (self._on['will-navigate'] || []).forEach(cb => cb(prevent));
+                    return;
+                }
                 if (opts.failLoad) self.webContents._once['did-fail-load']({}, -3, 'ERR_FAIL');
                 else self.webContents._once['did-finish-load']();
             });
         }
         close() { this.closed = true; this.destroyed = true; }
+        destroy() { this.closed = false; this.destroyed = true; }
         isDestroyed() { return this.destroyed; }
     }
 
@@ -69,8 +82,15 @@ function makeEnv(opts) {
 // did-finish-load 后内部有 500+200ms 真实等待
 const WAIT = 900;
 
-async function invoke(env, html, orientation) {
-    return env.handlers['print-prescription']({ sender: {} }, html, orientation);
+function frame(extra) {
+    return Object.assign({
+        sender: {},
+        senderFrame: { isMainFrame: true, url: 'file:///app/index.html' }
+    }, extra || {});
+}
+
+async function invoke(env, html, orientation, ev) {
+    return env.handlers['print-prescription'](ev || frame(), html, orientation);
 }
 
 function decodeDataUrl(url) {
@@ -96,12 +116,14 @@ function decodeDataUrl(url) {
         ok(w.options.width === 600 && w.options.height === 850, '竖版窗口尺寸 600x850');
         ok(w.options.webPreferences.contextIsolation === true, 'contextIsolation:true');
         ok(w.options.webPreferences.nodeIntegration === false, 'nodeIntegration:false');
+        ok(w.options.webPreferences.sandbox === true, 'sandbox:true（显式沙箱）');
+        ok(w.options.webPreferences.webSecurity === true, 'webSecurity:true');
         const decoded = decodeDataUrl(w.loadedUrl);
         ok(decoded !== null && !decoded.includes('@page'), '@page 规则已剥离（防双重指定缩放）');
         ok(decoded !== null && decoded.includes('处方内容'), 'HTML 内容完整进入 dataURL');
         const result = await Promise.race([resultP, new Promise(r => setTimeout(() => r('TIMEOUT'), WAIT))]);
         ok(result === true, '成功回路返回 true');
-        ok(w.closed === true && w.isDestroyed() === true, '成功后窗口已关闭');
+        ok(w.destroyed === true && w.closed === false, '成功后走 destroy() 强关窗（不受 beforeunload 影响）');
         ok(env.printCalls.length === 1, 'webContents.print 被调用 1 次');
         const po = env.printCalls[0];
         ok(po.silent === false, 'silent:false（弹系统对话框手动选打印机）');
@@ -109,6 +131,9 @@ function decodeDataUrl(url) {
         ok(po.pageSize === 'A5', '默认纸张 A5');
         ok(po.landscape === false, '竖版 landscape:false');
         ok(po.margins && po.margins.marginType === 'none', '无边距 marginType:none');
+        ok(typeof w.openHandler === 'function', '设置了 setWindowOpenHandler');
+        const openDecision = w.openHandler({ url: 'https://evil.example' });
+        ok(openDecision && openDecision.action === 'deny', '新窗口一律 deny');
     }
 
     // —— 3. 横版 ——
@@ -123,23 +148,41 @@ function decodeDataUrl(url) {
         ok(env.printCalls[0].landscape === true, '横版 landscape:true');
     }
 
-    // —— 4. 打印机回调失败（契约：仍 resolve true，不阻断 UI）——
+    // —— 4. 非主框架调用被拒绝 ——
+    {
+        const env = makeEnv({});
+        const ev = { senderFrame: { isMainFrame: false, url: 'file:///app/index.html' } };
+        const result = await invoke(env, '<body>x</body>', 'portrait', ev);
+        ok(result === false, 'iframe 子框架调用返回 false');
+        ok(env.windows.length === 0, '拒绝时不创建窗口');
+    }
+
+    // —— 5. 导航被拦截 ——
+    {
+        const env = makeEnv({ navigate: true });
+        const result = await Promise.race([invoke(env, '<body>x</body>', 'portrait'), new Promise(r => setTimeout(() => r('TIMEOUT'), 100))]);
+        ok(result === false, 'will-navigate 触发后返回 false');
+        ok(env.windows[0].destroyed === true, '导航拦截后窗口已销毁');
+        ok(env.printCalls.length === 0, '导航拦截后不再打印');
+    }
+
+    // —— 6. 打印机回调失败（契约：返回 false，反映真实结果）——
     {
         const env = makeEnv({ printSuccess: false });
         const result = await Promise.race([invoke(env, '<body>x</body>', 'portrait'), new Promise(r => setTimeout(() => r('TIMEOUT'), WAIT))]);
-        ok(result === true, '打印机回调失败仍返回 true（现状契约）');
-        ok(env.windows[0].closed === true, '打印失败后窗口仍关闭');
+        ok(result === false, '用户取消/打印失败返回 false（新契约）');
+        ok(env.windows[0].destroyed === true, '打印失败后窗口仍销毁');
     }
 
-    // —— 5. 页面加载失败 ——
+    // —— 7. 页面加载失败 ——
     {
         const env = makeEnv({ failLoad: true });
         const result = await Promise.race([invoke(env, '<body>x</body>', 'portrait'), new Promise(r => setTimeout(() => r('TIMEOUT'), 100))]);
         ok(result === false, 'did-fail-load 返回 false');
-        ok(env.windows[0].closed === true, '加载失败后窗口已关闭');
+        ok(env.windows[0].destroyed === true, '加载失败后窗口已销毁');
     }
 
-    // —— 6. BrowserWindow 构造抛错（外层 catch）——
+    // —— 8. BrowserWindow 构造抛错（外层 catch）——
     {
         const env = makeEnv({ ctorThrow: true });
         const result = await invoke(env, '<body>x</body>', 'portrait');

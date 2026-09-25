@@ -696,6 +696,23 @@
             localStorage.setItem('currentUser', userDataStr);
             localStorage.setItem('isLoggedIn', 'true');
 
+            // ★ 2026-09-25 密码慢哈希透明升级：旧哈希账户（常量盐 SHA256/明文）
+            //   登录成功后，经登录窗密码同步通道把 config.json 密码升级为 PBKDF2；
+            //   失败不阻断本次登录（下次登录自动重试）。
+            if (route.weakHash && window.electronAPI && typeof window.electronAPI.renameUser === 'function') {
+                try {
+                    const _up = await window.electronAPI.renameUser({
+                        oldUsername: user.username,
+                        newPassword: password
+                    });
+                    if (_up && _up.success) {
+                        console.log('[login] config.json 密码已升级为 PBKDF2 慢哈希');
+                    } else {
+                        console.warn('[login] 慢哈希升级未成功:', _up && _up.error);
+                    }
+                } catch (upErr) { console.warn('[login] 慢哈希升级异常:', upErr); }
+            }
+
             // ★ 2026-08-28 与云端网页版统一：记住登录时输入的用户名（原文回填）
             //   旧逻辑存 user.username（解析后的账户名）——手机号登录时回填的不是用户输入的值；
             //   网页版 saveRememberedUser 存输入框原文。
