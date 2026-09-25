@@ -1,13 +1,13 @@
 {
   "format": 1,
   "channel": "local",
-  "hotVersion": "2026.09.24-3",
-  "appVersion": "1.0.254",
+  "hotVersion": "2026.09.25-1",
+  "appVersion": "1.0.255",
   "files": [
     {
       "name": "index.html",
-      "sha256": "f295785fe0828c68a1c991b6c053b79edf5beeaf99d214df4535a23367f0e822",
-      "size": 675129
+      "sha256": "fbc4f028b2414d78a8e0b8b5b1e7968a355f81d34188d0d224a8c4f391eba07d",
+      "size": 646985
     },
     {
       "name": "auth-core.js",
@@ -70,6 +70,11 @@
       "size": 70209
     },
     {
+      "name": "analytics-core.js",
+      "sha256": "04542dfb0bd8272d45342a4509e761042d057f78341adb39d20f27a99f1d327f",
+      "size": 31353
+    },
+    {
       "name": "security-guard.js",
       "sha256": "907c07f393c0ed4a2e2541d4c8a7cd9a4e87bf4688707db1bb83f64ffdbe3a3d",
       "size": 15072
@@ -95,6 +100,6 @@
       "size": 881727
     }
   ],
-  "signedAt": 1790212755865,
-  "signature": "4Zi7oJ/Ga8ZJSZmaHmXJBVvovUKXOHBRvi03Hzt3+QYrthy3FOyuVOUUcCBoM4mPraGzQCPkRtdLM+ta3BEdBw=="
+  "signedAt": 1790328892395,
+  "signature": "PE6zLPbyemxxN2B4bqdYtaKkBratDryDtcq4lYiK8rRJDR37zznHpTZKbkb+BB3oDqDWyD44zy36h1lfsL+WDw=="
 }
