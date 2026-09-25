@@ -27,6 +27,17 @@ import { getDB, isD1Enabled } from './_lib/d1.js';
 // ★ 2026-09-15 登录提速：登录响应携带首屏处方（D1 快路径，与 writeUserSession 并行）
 import { d1LoadPrescriptions } from './_lib/prescriptions-store.js';
 
+// ★ 2026-09-25 P2-2 抽出纯函数（原内联于 clinic=update 续费段），供核心业务单测：
+//   续费锚点取晚者——未过期从当前到期日续（剩余天数不损失），已过期/无有效期/
+//   坏日期从今天续。days 合法性（1..3650）由调用方保证；nowMs 注入仅为测试确定性。
+export function computeRenewedExpiresAt(curExpiresIso, renewDays, nowMs = Date.now()) {
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    let cur = 0;
+    if (curExpiresIso) { const t = new Date(curExpiresIso).getTime(); if (!isNaN(t)) cur = t; }
+    const base = cur > nowMs ? cur : nowMs;
+    return new Date(base + renewDays * DAY_MS).toISOString();
+}
+
 // ============================================================================
 // ★★★ 2026-08-21 账号级设备授权（一个云端管理员最多绑定 2 台设备：桌面/APP）
 //   KV key: user_devices:{username} -> { maxDevices, devices: [{machineId, clientClass, boundAt, lastSeenAt}] }
@@ -3050,9 +3061,8 @@ export async function onRequest(context) {
             // ★ 2026-08-20 续费：对已生效诊所叠加有效期（从当前到期日或今天起 +renewDays 天，默认365）
             //   （转正时已写入有效期的不再叠加，避免同请求重复计算）
             if (typeof renewDays === 'number' && renewDays > 0 && renewDays <= 3650 && !expiresSetByApproval) {
-                const cur = clinics[clinicIdx].expiresAt ? new Date(clinics[clinicIdx].expiresAt).getTime() : 0;
-                const base = (cur > Date.now()) ? cur : Date.now();
-                const newExp = new Date(base + renewDays * 24 * 60 * 60 * 1000).toISOString();
+                // ★ 2026-09-25 P2-2：数学收口 computeRenewedExpiresAt（锚点取晚者，biz-smoke 有单测）
+                const newExp = computeRenewedExpiresAt(clinics[clinicIdx].expiresAt, renewDays);
                 if (newExp !== clinics[clinicIdx].expiresAt) {
                     changes.push(`expiresAt: ${(clinics[clinicIdx].expiresAt || '-').slice(0, 10)} → ${newExp.slice(0, 10)}（续费+${renewDays}天）`);
                     clinics[clinicIdx].expiresAt = newExp;

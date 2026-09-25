@@ -5236,6 +5236,10 @@ if (window.Permission) {
         function removeDuplicateMedicines(arr) {
             const seen = new Set();
             return arr.filter(m =>{
+                // ★ 2026-09-25 P2-2 毒数据防护（biz-smoke D 组实锤）：药品数组含
+                //   null/非对象条目时旧实现读 m.name 抛 TypeError，而 loadData 的
+                //   调用点无 try/catch → 整个数据加载中断。脏条目直接丢弃。
+                if (!m || typeof m !== 'object') return false;
                 const key = m.name + m.code;
                 if (seen.has(key)) return false;
                 seen.add(key);

@@ -143,5 +143,18 @@ node tools/scan-undefined-consts.cjs || {
     exit 1
 }
 
-echo "[pre-push] 十二道校验全部通过，允许推送"
+# ★ 2026-09-25 十三道门补强：biz-smoke.cjs（P2-2 核心业务断言）。
+#   四条医疗/资金事故防线锁进无 DOM 沙箱：库存扣减/差值冲正（stock-core 真实文件
+#   vm 执行）、续费锚定数学（buildLicenseData + computeRenewedExpiresAt）、
+#   D1 处方毒数据（d1RowToPrescription）、loadData 毒数据（六端 HTML 内联函数
+#   提取执行，兼守副本漂移）。缺口实锤：removeDuplicateMedicines 遇 null 药条目
+#   抛 TypeError 而 loadData 调用点无 try/catch（六端同款），即为本门首批用例
+#   （D 组）拦截的真实事故面。
+echo "[pre-push] ⑬ 核心业务冒烟（库存/续费/处方/loadData）..."
+node tools/biz-smoke.cjs || {
+    echo "[pre-push] FAIL: 核心业务断言未过——按 [BIZ-SMOKE][FAIL] 用例名定位（A 库存/B 续费/C 处方/D loadData），修复后重推"
+    exit 1
+}
+
+echo "[pre-push] 十三道校验全部通过，允许推送"
 exit 0
