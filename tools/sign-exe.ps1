@@ -1,4 +1,4 @@
-# ============================================================================
+﻿# ============================================================================
 #  sign-exe.ps1 - Authenticode code signing tool (P0-3, 2026-08-26)
 #
 #  Signs exe files with the self-signed code signing certificate
