@@ -1401,3 +1401,16 @@
 * **双重独立审查（并行新上下文：功能取证 + 安全，高风险链密码写点强制）**：功能 **0 阻断 0 重要**（程序化逐行比对 handler 与 HEAD 逐字节一致、注入 8 项定义位/提升全核对、登记/BOM/哈希三副本一致、冒烟断言与行为相符）；安全 **0 可利用**（明文不落盘不回传、payload 全解构白名单无原型污染、rename 云端不可达、signConfig 覆盖全部 config 写点、注入面无渲染层触达）。两条次要已修：模块头注释行号/哈希口径错配、双 main.js L33 过时注释（change-password 回退已迁走）。
 * **安全 Backlog（全部 HEAD 既有、非本次引入，下次 user 域立项处理）**：① change-password 解构 oldPassword 但从不校验——渲染方仅凭 username 即可重置 admin 密码（可加旧密码校验）；② user:add 的 role 由渲染层 payload 控制且默认 admin；③ rename 不查重可覆盖既有账户；④ systemUsers.json 回退写点无签名；⑤ 全部 handler 不校验 event.sender；⑥ 常量盐单轮 sha256 非慢哈希。
 * **生效方式**：**主进程域热更不可达**——云/离桌面需**重打 exe**（与打印域/license IPC 三批攒一批，一次双桌面重打全部生效）；云端网页/双 APP/鸿蒙不受影响。promo/ 不纳入提交。
+
+## 38. P2-4 双源有效期视图（诊所列表授权码到期行，2026-09-25，纯后台读取视图）
+
+* **产出**：平台后台「诊所管理」离线诊所卡片在既有「有效期（源A=诊所表 expiresAt）」下新增一行「授权码到期（源B=绑定激活码 expiresAt，逐码列出+类型）」，落实 2026-09-11 铁律「任何有效期操作必须同时回答：云端账户到几时？license 到几时？」两源日期不一致 → 红底「⚠ 双源不一致」；单边 → 橙字提示；云端诊所（edition 非 offline_）三字段为 null、不渲染该行。
+* **后端（functions/api/users.js，仅读零写）**：① 导出纯函数 **compareDualExpiry(clinicIso, licenseIso)** 五分支（match/mismatch/none/clinic-only/license-only）；② /users?clinics=true 分支 license 全量遍历趟次（原有心跳聚合）顺带建 **licenseByClinic**（clinicName→[{code,expiresAt,type,status}]），**零额外 KV 读取**；③ 诊所循环 raw edition `/^offline_/` 门控，licenseCodes 按到期升序、**licenseExpiresAt 多码取最晚**（跳过 null/坏日期），push licenseCodes/licenseExpiresAt/dualCompare。
+* **★ 口径对齐铁律（独立审查核心）**：联表三处口径必须与同文件 clinic=update 续费同步块逐字一致——纳入集 used+expired（排除 disabled/unused）、按 raw `clinic.name === record.clinicName` 精确匹配（改名不追溯，用旧名）、门控 `/^offline_/`（含下划线；本批审查曾抓出 `/^offline/` 少一下划线，现存 edition 无裸 offline 不触发但已修正）。
+* **★ 时区口径**：比对按**东八区日历日**（+8h 后取 UTC 日串）而非 UTC 日——运营与诊所均在中国，同日不同时分（直填/extend 编辑）判 match，跨 UTC 午夜但中国同日（17:00Z vs 次日 01:00Z）也判 match；UTC 日口径会在该边界误报 mismatch。
+* **前端（两份 admin/index.html 双副本）**：原有效期彩色块提为 expiryColored(iso) 两源共用（相同输入逐字节等价）；license 行渲染 code 进 title 属性经 escapeHtml（无属性逃逸），type 经转义；**坏日期防御**：lc.expiresAt 须 `Number.isFinite(Date.parse())` 才调用彩色块，否则显示「无到期日」（安全审查提示：坏 ISO 会让 toISOString 抛错中断整列表渲染）。
+* **★ 双副本同步教训**：管理台 index.html 是双副本（public/admin ↔ site-admin/admin，HEAD 字节一致，diff-cross-version **adminconsole 对**按行守护）；只改 site-admin 侧会致漂移，且 **copy-consistency 不管此对**（它只挂整文件哈希组）——改 admin 页后必须手工 Copy-Item 到 public/admin 并跑 diff-cross-version（4 对全绿）。site-admin 根页双轨则走 sync-siteadmin.cjs（不同机制，勿混）。
+* **验证全绿**：node ESM 语法检查、biz-smoke **93/93**（新增 B12-B18：五分支+同日时分+跨午夜真边界+单边+坏串）、smoke-runtime 157、copy-consistency、界面 6 OK、diff-cross-version 4 对；**浏览器 5 场景真实渲染**（静态服务 8791 + fetch stub）：同康一致无标、益民红标双源不一致（诊所 249 天/码 157 天数学对）、德仁堂无绑定橙标、仁心仅授权码（码已过期 55 天）、云端诊所无授权码行；控制台成功渲染后零 error。
+* **双路独立审查（并行新上下文：数据正确性 + 安全）**：**0 阻断 0 重要 0 可利用**——鉴权（parseAuthHeader+isPlatformAdmin）未动、无新端点；完整 code 本就在总管理员激活码 tab 明文可见、不构成新暴露；纯读无 put/eval；ES6 Map 无原型污染。4 条次要全部修正（offline_ 门控/+08 日口径/历史类型 clinic·institution/强化 B17 真边界+加 B18）。
+* **既有-backlog（非本次引入）**：激活码表 code 单元格 `r.code` 未 escapeHtml（服务端生成字符集受控，无注入源）；adminconsole 静态层 JWT 硬门禁未实施（现状客户端门 + Bearer 把关）。
+* **生效方式**：**push 后随主站（API）与后台站 huikang-admin 部署生效**（管理台是网页，运营人员刷新即用；遇 Git 构建配额耗尽走 wrangler pages deploy 直传，见 DEPLOY-站点分离部署说明.md）；五端客户端（双 exe/双 APP/鸿蒙）与主站医师工作站页面不受影响，无需重打包。promo/ 不纳入提交。

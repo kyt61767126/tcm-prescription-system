@@ -38,6 +38,29 @@ export function computeRenewedExpiresAt(curExpiresIso, renewDays, nowMs = Date.n
     return new Date(base + renewDays * DAY_MS).toISOString();
 }
 
+// ★ 2026-09-25 P2-4 双源有效期视图纯函数：
+//   源A=诊所表 clinic.expiresAt；源B=绑定激活码 license record.expiresAt（多码取最晚）。
+//   按东八区日历日比对——续费同步双写同一 ISO（clinic=update），但管理员直填/extend.js
+//   编辑可能产生同日不同时分；运营与诊所均在中国，以 +08:00 日历日判"同一天"，
+//   避免同日跨 UTC 午夜（如 17:00Z vs 次日 01:00Z）误报 mismatch。
+//   返回：'match'（两源同日）/ 'none'（两源均无或日期不可解析）/
+//         'mismatch'（两源都有但日期不同）/
+//         'clinic-only'（仅诊所有有效期）/ 'license-only'（仅授权码有有效期）。
+export function compareDualExpiry(clinicExpiresIso, licenseExpiresIso) {
+    const TZ_OFFSET_MS = 8 * 3600 * 1000;
+    const dayPart = v => {
+        if (!v) return null;
+        const t = new Date(v).getTime();
+        return Number.isNaN(t) ? null : new Date(t + TZ_OFFSET_MS).toISOString().slice(0, 10);
+    };
+    const c = dayPart(clinicExpiresIso);
+    const l = dayPart(licenseExpiresIso);
+    if (c && l) return c === l ? 'match' : 'mismatch';
+    if (c) return 'clinic-only';
+    if (l) return 'license-only';
+    return 'none';
+}
+
 // ============================================================================
 // ★★★ 2026-08-21 账号级设备授权（一个云端管理员最多绑定 2 台设备：桌面/APP）
 //   KV key: user_devices:{username} -> { maxDevices, devices: [{machineId, clientClass, boundAt, lastSeenAt}] }
@@ -2778,12 +2801,27 @@ export async function onRequest(context) {
             //   云端端不调用 /api/license/heartbeat（cloud.js 链路），与 user_session 口径无重叠。
             //   读取失败不影响诊所列表（按无在线处理）。
             const offlineOnlineMap = new Map(); // clinicName -> { desktop, app }
+            // ★ 2026-09-25 P2-4 双源有效期视图：clinicName -> 绑定授权码摘要列表。
+            //   纳入集 = used/expired（排除 disabled/unused），与 clinic=update 续费
+            //   同步匹配集（L 附近 matches 过滤）严格一致。
+            const licenseByClinic = new Map();
             try {
                 const licKeys = await listAllKeys(kv, 'license:');
                 for (let i = 0; i < licKeys.length; i += 20) {
                     const batch = licKeys.slice(i, i + 20);
                     const licVals = await Promise.all(batch.map(k => kv.get(k, 'json').catch(() => null)));
                     licVals.forEach(rec => {
+                        // ★ P2-4 联表（不影响下方心跳聚合）：无 clinicName 的码（如通用
+                        //   未绑定码）不进视图
+                        if (rec && rec.clinicName && rec.status !== 'disabled' && rec.status !== 'unused') {
+                            if (!licenseByClinic.has(rec.clinicName)) licenseByClinic.set(rec.clinicName, []);
+                            licenseByClinic.get(rec.clinicName).push({
+                                code: rec.code,
+                                expiresAt: rec.expiresAt || null,
+                                type: rec.type || null,
+                                status: rec.status
+                            });
+                        }
                         // 已激活 license 的 status='used'（unused/disabled/expired 不计在线——
                         //   heartbeat.js 对这些状态提前返回，devices[].lastHeartbeat 不会刷新）
                         if (!rec || rec.status !== 'used' || !rec.clinicName) return;
@@ -2825,6 +2863,28 @@ export async function onRequest(context) {
                 const offOn = offlineOnlineMap.get(clinic.name) || { desktop: 0, app: 0 };
                 onlineDesktop += offOn.desktop;
                 onlineApp += offOn.app;
+
+                // ★ 2026-09-25 P2-4 双源有效期视图（仅离线版诊所；门控口径与
+                //   clinic=update 续费同步相同：raw edition 以 offline_ 开头）。
+                //   licenseExpiresAt = 绑定码中最晚到期（多码场景的有效授权口径），
+                //   列表按到期先后排序供前端逐码展示。
+                const isOfflineEdition = /^offline_/.test(String(clinic.edition || ''));
+                let licenseCodes = [];
+                let licenseExpiresAt = null;
+                if (isOfflineEdition) {
+                    licenseCodes = (licenseByClinic.get(clinic.name) || []).slice().sort((a, b) => {
+                        const ta = a.expiresAt ? new Date(a.expiresAt).getTime() : 0;
+                        const tb = b.expiresAt ? new Date(b.expiresAt).getTime() : 0;
+                        return (Number.isNaN(ta) ? 0 : ta) - (Number.isNaN(tb) ? 0 : tb);
+                    });
+                    for (const lc of licenseCodes) {
+                        const t = lc.expiresAt ? new Date(lc.expiresAt).getTime() : NaN;
+                        if (!Number.isNaN(t) && (licenseExpiresAt === null || t > new Date(licenseExpiresAt).getTime())) {
+                            licenseExpiresAt = lc.expiresAt;
+                        }
+                    }
+                }
+
                 result.push({
                     id: clinic.id,
                     name: clinic.name,
@@ -2848,7 +2908,13 @@ export async function onRequest(context) {
                     onlineApp,
                     onlineWeb,
                     onlineTotal: onlineDesktop + onlineApp + onlineWeb,
-                    createdAt: clinic.createdAt
+                    createdAt: clinic.createdAt,
+                    // ★ P2-4 双源有效期视图（非离线诊所一律 null，前端不显示该行）
+                    licenseCodes: isOfflineEdition ? licenseCodes : null,
+                    licenseExpiresAt: isOfflineEdition ? licenseExpiresAt : null,
+                    dualCompare: isOfflineEdition
+                        ? compareDualExpiry(clinic.expiresAt, licenseExpiresAt)
+                        : null
                 });
             }
 

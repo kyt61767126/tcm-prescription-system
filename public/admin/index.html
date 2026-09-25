@@ -1647,9 +1647,9 @@ const PRESET_TEMPLATES = {
     personalForever:  { name: '个人 · 永久',          type: 'personal', days: 36500, maxDevices: 1  },
     pro1y:            { name: '专业 · 1年 · 5设备',   type: 'pro',      days: 365,   maxDevices: 5  },
     pro3y:            { name: '专业 · 3年 · 10设备',  type: 'pro',      days: 1095,  maxDevices: 10 },
-    proForever:       { name: '专业 · 永久 · 10设备', type: 'pro',      days: 36500, maxDevices: 10 }
-    // ★ 2026-09-22 语音版模板下线：语音已并入全部付费版本，不再单独开码
-    //   （历史 voice 激活码仍正常识别/展示，见 typeLabel/typeNames 与 validate 链）
+    proForever:       { name: '专业 · 永久 · 10设备', type: 'pro',      days: 36500, maxDevices: 10  }
+    // ★ 2026-09-22 语音版已停售（语音并入全部付费版，无需单独购买/加购）：
+    //   voice1y 预设下线；历史已发 voice 激活码仍可查询/审核/激活（服务端与筛选器保留）
 };
 
 // 自定义模板存取（localStorage）
@@ -3963,18 +3963,57 @@ async function loadClinicsList() {
                     nextStatus = 'active';
                     toggleText = '启用';
                 }
-                // ★ 2026-08-20 有效期显示：正常诊所显示到期日与剩余天数，临近到期（≤30天）黄色提醒
-                let expiryHtml = '长期有效';
-                if (c.expiresAt) {
-                    const exp = new Date(c.expiresAt);
+                // ★ 有效期彩色格式化（P2-4：诊所/license 两源共用同口径）：
+                //   剩余天数，临近到期（≤30天）黄色、已过期红色加粗
+                const expiryColored = (iso) => {
+                    const exp = new Date(iso);
                     const days = Math.ceil((exp.getTime() - Date.now()) / 86400000);
+                    const dateStr = exp.toISOString().slice(0, 10);
                     if (days < 0) {
-                        expiryHtml = '<span style="color:#e74c3c;font-weight:bold;">已到期 ' + (-days) + ' 天</span>';
+                        return '<span style="color:#e74c3c;font-weight:bold;">已到期 ' + (-days) + ' 天</span>';
                     } else if (days <= 30) {
-                        expiryHtml = '<span style="color:#f39c12;font-weight:bold;">剩 ' + days + ' 天（' + exp.toISOString().slice(0, 10) + '）</span>';
-                    } else {
-                        expiryHtml = '剩 ' + days + ' 天（' + exp.toISOString().slice(0, 10) + '）';
+                        return '<span style="color:#f39c12;font-weight:bold;">剩 ' + days + ' 天（' + dateStr + '）</span>';
                     }
+                    return '剩 ' + days + ' 天（' + dateStr + '）';
+                };
+                // ★ 2026-08-20 有效期显示：正常诊所显示到期日与剩余天数
+                let expiryHtml = '长期有效';
+                if (c.expiresAt) expiryHtml = expiryColored(c.expiresAt);
+
+                // ★ 2026-09-25 P2-4 双源有效期视图（仅离线诊所，后端 dualCompare 非 null）：
+                //   逐码展示授权码到期（悬停看完整码），与上方「诊所有效期」并列；
+                //   日期不一致打红标——2026-09-11 铁律：任何有效期操作必须同时回答
+                //   「云端账户到几时？license 到几时？」
+                let licenseRowHtml = '';
+                if (c.licenseCodes) {
+                    const typeShort = {
+                        trial: '试用', personal: '标准', pro: '机构', voice: '语音',
+                        clinic: '机构', institution: '机构'   // 历史类型别名
+                    };
+                    let bodyHtml;
+                    if (c.licenseCodes.length === 0) {
+                        bodyHtml = '<span style="color:#e67e22;">无绑定授权码</span>';
+                    } else {
+                        bodyHtml = c.licenseCodes.map(lc =>
+                            '<span title="' + escapeHtml(lc.code) + '">' +
+                            (lc.expiresAt && Number.isFinite(Date.parse(lc.expiresAt))
+                                ? expiryColored(lc.expiresAt)
+                                : '<span style="color:#909399;">无到期日</span>') +
+                            ' <span style="color:#909399;font-size:11px;">(' +
+                            escapeHtml(typeShort[lc.type] || lc.type || '-') +
+                            (lc.status === 'expired' ? '·码已过期' : '') + ')</span></span>'
+                        ).join('，');
+                    }
+                    let cmpTag = '';
+                    if (c.dualCompare === 'mismatch') {
+                        cmpTag = ' <span style="color:#fff;background:#e74c3c;padding:1px 6px;border-radius:3px;font-size:11px;font-weight:bold;">⚠ 双源不一致</span>';
+                    } else if (c.dualCompare === 'clinic-only') {
+                        cmpTag = ' <span style="color:#e67e22;font-size:11px;">⚠ 仅诊所有有效期</span>';
+                    } else if (c.dualCompare === 'license-only') {
+                        cmpTag = ' <span style="color:#e67e22;font-size:11px;">⚠ 仅授权码有有效期</span>';
+                    }
+                    licenseRowHtml = '<div style="font-size:12px;color:#909399;margin-top:2px;">授权码到期: '
+                        + bodyHtml + cmpTag + '</div>';
                 }
                 const toggleBtn = '<button class="btn btn-sm btn-warning" onclick="toggleClinicStatus(\'' + c.id + '\',\'' + nextStatus + '\')">' + toggleText + '</button>';
                 const renewBtn = (c.status === 'active')
@@ -4024,6 +4063,7 @@ async function loadClinicsList() {
                         '<div style="font-weight:600;color:#2c3e50;">' + escapeHtml(c.name) + ' ' + editionTagHtml + ' ' + statusBadge + srcTag + '</div>' +
                         '<div style="font-size:12px;color:#909399;margin-top:4px;">ID: ' + escapeHtml(c.id) + ' | 管理员: <strong>' + adminLink + '</strong>（' + escapeHtml(c.adminName || '-') + '）' + adminPhoneText + ' | 医师: ' + c.doctorCount + ' | 总账号: ' + c.userCount + ' | 创建: ' + escapeHtml(created) + '</div>' +
                         '<div style="font-size:12px;color:#909399;margin-top:2px;">有效期: ' + expiryHtml + '</div>' +
+                        licenseRowHtml +
                         '<div style="font-size:12px;color:#27ae60;margin-top:2px;">在线：🖥️桌面 ' + (c.onlineDesktop || 0) + ' · 📱APP ' + (c.onlineApp || 0) + ' · 🌐网页 ' + (c.onlineWeb || 0) + ((c.onlineTotal || 0) > 0 ? '' : '（当前无在线）') + '</div>' +
                     '</div>' +
                     '<div style="white-space:nowrap;">' + editBtn + ' ' + testBtn + ' ' + toggleBtn + ' ' + renewBtn + ' ' + deleteBtn + '</div>' +

@@ -221,7 +221,7 @@ async function runGroupB() {
     const licenseCore = await import(pathToFileURL(path.join(ROOT, 'functions/api/license/_lib/license-core.js')).href);
     const users = await import(pathToFileURL(path.join(ROOT, 'functions/api/users.js')).href);
     const { buildLicenseData } = licenseCore;
-    const { computeRenewedExpiresAt } = users;
+    const { computeRenewedExpiresAt, compareDualExpiry } = users;
 
     const anchor = '2026-01-01T00:00:00.000Z';
     // buildLicenseData：只断言 expiresAt 数学；传测试 secret 走 HMAC，不带 context 跳过 ECDSA
@@ -269,6 +269,24 @@ async function runGroupB() {
         computeRenewedExpiresAt(null, 90, NOW) === new Date(NOW + 90 * DAY).toISOString());
     check('B11 坏日期字符串：从今天续不 NaN',
         computeRenewedExpiresAt('garbage', 90, NOW) === new Date(NOW + 90 * DAY).toISOString());
+
+    // —— P2-4 compareDualExpiry：诊所表/license 双源日粒度比对 ——
+    check('B12 两源均无/均坏日期 → none',
+        compareDualExpiry(null, null) === 'none' &&
+        compareDualExpiry('garbage', 'also-bad') === 'none');
+    check('B13 同日不同时分（直填/编辑场景，+08 同日）→ match',
+        compareDualExpiry('2027-01-15T02:00:00.000Z', '2027-01-15T12:00:00.000Z') === 'match');
+    check('B14 日期真不同 → mismatch',
+        compareDualExpiry('2027-01-15T00:00:00.000Z', '2027-02-15T00:00:00.000Z') === 'mismatch');
+    check('B15 单边有效期：clinic-only / license-only',
+        compareDualExpiry('2027-01-15T00:00:00.000Z', null) === 'clinic-only' &&
+        compareDualExpiry(null, '2027-01-15T00:00:00.000Z') === 'license-only');
+    check('B16 日期串(UTC零点) 与 同日ISO → match',
+        compareDualExpiry('2027-01-15', '2027-01-15T12:00:00.000Z') === 'match');
+    check('B17 跨 UTC 午夜但 +08 同日（17:00Z vs 次日01:00Z，UTC 日不同）→ match',
+        compareDualExpiry('2027-01-15T17:00:00.000Z', '2027-01-16T01:00:00.000Z') === 'match');
+    check('B18 +08 日期真不同（跨午夜两边）→ mismatch',
+        compareDualExpiry('2027-01-15T16:00:00.000Z', '2027-01-16T17:00:00.000Z') === 'mismatch');
 }
 
 // ============================================================================
