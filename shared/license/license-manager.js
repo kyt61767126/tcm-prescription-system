@@ -2813,6 +2813,16 @@ function markVaultTransient() {
     _vaultFailAt = Date.now();
 }
 
+// 轻量可用性门（不 spawn 进程）：仅环境禁用与退避期短路。实际探活由
+// read-many/write 本身的成败承担（read 对 spawn 失败返回 dead，语义等价
+// probe 且省一次 PS spawn——单次 spawn 本机实测 2.5s+，启动链敏感）。
+function vaultAvailable() {
+    if (!VAULT_PACKAGED && process.env.BNZC_VAULT_DISABLED === '1') _vaultEnvDisabled = true;
+    if (_vaultEnvDisabled) return false;
+    if (_vaultHealth === -1 && Date.now() - _vaultFailAt < VAULT_RETRY_MS) return false;
+    return true;
+}
+
 // vault 独立加密用途（与 license.dat / gate.dat 的 'license' 域分离，
 // 防密文跨位置互换重放）。格式 VLT2:hex(hmac):base64(iv+ciphertext)
 function encryptVaultBlob(jsonStr, mid) {
@@ -2873,15 +2883,38 @@ function readVaultState(mid) {
     const r = vaultInvoke('read', VAULT_TARGET_PREFIX + mid, '');
     if (!r || r.ok !== true) return { dead: true };
     if (!r.found || !r.blob) return { dead: false, state: null };
-    // 遍历指纹候选（当前指纹 / mg-only / 空），任一解出即可
+    return decryptVaultRecord(r.blob, mid);
+}
+
+// blob → 统一状态（遍历指纹候选，VLT2 与早期 ENC2 回退）
+function decryptVaultRecord(blob, mid) {
     let json = null;
     for (const fp of getHwFingerprintVariants()) {
-        json = decryptVaultBlob(r.blob, mid, fp) || decryptEnc2VaultFallback(r.blob, mid, fp);
+        json = decryptVaultBlob(blob, mid, fp) || decryptEnc2VaultFallback(blob, mid, fp);
         if (json) break;
     }
     if (!json) return { dead: false, state: null, corrupt: true };
     try { return { dead: false, state: JSON.parse(json) || null }; }
     catch (e) { return { dead: false, state: null, corrupt: true }; }
+}
+
+// 批量读：N 个 mid 候选合并为一次 PS 进程（单次 PS spawn 本机实测 2.5s+，
+// 逐个 spawn 会让登录/激活启动链阻塞 N×2.5s——E2E 与慢机实测回归）
+function readVaultStates(mids) {
+    const list = mids.filter(Boolean);
+    if (!list.length) return [];
+    const joined = list.map(m => VAULT_TARGET_PREFIX + m).join(',');
+    const r = vaultInvoke('read-many', joined, '');
+    if (!r || r.ok !== true || !Array.isArray(r.items)) {
+        // 批量整体失败（spawn/输出异常）按全 dead 处理
+        return list.map(() => ({ dead: true }));
+    }
+    return list.map((m) => {
+        const item = r.items.find(it => it && it.target === VAULT_TARGET_PREFIX + m);
+        if (!item || item.error) return { dead: true };
+        if (!item.found || !item.blob) return { dead: false, state: null };
+        return decryptVaultRecord(item.blob, m);
+    });
 }
 let _emptyFpWarned = false;
 function writeVaultState(state, mid) {
@@ -2918,12 +2951,15 @@ function getMidVariants() {
 // （不能命中第一个即返回——抖动下旧 target 可能遮蔽更新的拒绝），合并态写
 // primary，再统一删除所有旧 target。
 function resolveVaultState(primaryMid) {
+    const variants = getMidVariants();
+    // 批量读（1 次 PS 进程），避免逐候选 spawn 的启动链阻塞
+    const results = readVaultStates(variants);
     const found = [];
     let anyDead = false, anyCorrupt = false;
-    for (const cand of getMidVariants()) {
-        const v = readVaultState(cand);
-        if (v.dead) { anyDead = true; continue; }
-        if (v.state) found.push({ mid: cand, state: v.state });
+    for (let i = 0; i < variants.length; i++) {
+        const v = results[i];
+        if (!v || v.dead) { anyDead = true; continue; }
+        if (v.state) found.push({ mid: variants[i], state: v.state });
         if (v.corrupt) anyCorrupt = true;
     }
     if (!found.length) {
@@ -3024,7 +3060,12 @@ function invalidateUnifiedCache() { _unifiedCache = null; }
 function readUnifiedState(mid) {
     const now = Date.now();
     if (_unifiedCache && _unifiedCache.mid === mid && now - _unifiedCache.at < UNIFIED_CACHE_MS) {
-        return _unifiedCache.result;
+        // 缓存命中前检查旧文件锚点：降级期另一实例可能刚落了文件态（对账
+        // 输入），文件存在必须 fresh 对账——文件检查为微秒级 fs.stat，不损性能
+        let hasLegacy = false;
+        try { hasLegacy = fs.existsSync(getGatePath()) || fs.existsSync(getAnchorPath()); }
+        catch (e) { hasLegacy = false; }
+        if (!hasLegacy) return _unifiedCache.result;
     }
     const result = readUnifiedStateFresh(mid);
     // 只缓存 vault 成功结果：文件态读取无 PS 开销，且文件可能被外部删除，
@@ -3038,7 +3079,7 @@ function readUnifiedState(mid) {
 // 统一状态读取：vault 优先（跨 mid 候选）；vault↔文件强制对账；
 // 旧双文件一次性迁移；写 vault 必须成功才删旧文件。
 function readUnifiedStateFresh(mid) {
-    if (vaultProbe()) {
+    if (vaultAvailable()) {
         const v = resolveVaultState(mid);
         if (v.dead) {
             markVaultTransient(); // 运行中瞬态故障：退避，不永久判决
@@ -3081,7 +3122,12 @@ function readUnifiedStateFresh(mid) {
 // 统一状态写入：vault 优先；写失败/不可用回落【双文件双写】（至少一份落盘）
 function writeUnifiedState(state, mid) {
     invalidateUnifiedCache();
-    if (vaultProbe() && writeVaultState(state, mid)) return true;
+    if (vaultAvailable() && writeVaultState(state, mid)) {
+        // 写成功即填缓存：紧随其后的 readUnifiedState（persist 链常态）不再
+        // 触发一次 2.5s+ 的 fresh read——启动链总阻塞的关键收敛点
+        _unifiedCache = { mid, at: Date.now(), result: { vault: true, state } };
+        return true;
+    }
     if (!_vaultEnvDisabled) markVaultTransient();
     // 注意：两份都要尝试，不能用 || 短路（gate 成功就跳过 anchor 会破坏
     // 单删任一文件不失效的双写语义）

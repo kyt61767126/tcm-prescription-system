@@ -19,7 +19,7 @@
 #    { ok:false, error:'...' }             调用失败（调用方按 vault 不可用降级）
 # ============================================================================
 param(
-    [ValidateSet('probe', 'read', 'write', 'delete')]
+    [ValidateSet('probe', 'read', 'read-many', 'write', 'delete')]
     [string]$Action = '',
     [string]$Target = '',
     [string]$Value = ''
@@ -167,5 +167,36 @@ switch ($Action) {
             if ($__err -eq $ERROR_NOT_FOUND) { Out-Json @{ ok = $true; found = $false } }
             else { Out-Json @{ ok = $false; error = "CredDelete win32=$__err" } }
         }
+    }
+    # 批量读：Target 逗号分隔多个 target，一次进程读完（JS 侧 mid 候选扫描
+    # 原为 N 次 spawn；本机实测单次 PS 进程 2.5s+，合并后启动链少 N-1 次往返）
+    'read-many' {
+        $__names = @($Target -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+        if (-not $__names.Count) { Out-Json @{ ok = $false; error = 'empty-target' }; break }
+        $__items = @()
+        foreach ($__n in $__names) {
+            $__ptr = [IntPtr]::Zero
+            $__blob = ''
+            $__found = $false
+            if ([CredApi]::CredRead($__n, $CRED_TYPE_GENERIC, 0, [ref]$__ptr)) {
+                try {
+                    $__c = [Runtime.InteropServices.Marshal]::PtrToStructure($__ptr, [Type][CredApi+CREDENTIAL])
+                    if ($__c.CredentialBlobSize -gt 0) {
+                        $__buf = New-Object byte[] $__c.CredentialBlobSize
+                        [Runtime.InteropServices.Marshal]::Copy($__c.CredentialBlob, $__buf, 0, $__c.CredentialBlobSize)
+                        $__blob = [Text.Encoding]::UTF8.GetString($__buf)
+                        $__found = ($__blob.Length -gt 0)
+                    }
+                } finally {
+                    [void][CredApi]::CredFree($__ptr)
+                }
+            } elseif ([Runtime.InteropServices.Marshal]::GetLastWin32Error() -ne $ERROR_NOT_FOUND) {
+                # 非 NOT_FOUND 的读取失败：单条记错误（调用方按 dead 处理）
+                $__items += @{ target = $__n; error = ("win32=" + [Runtime.InteropServices.Marshal]::GetLastWin32Error()) }
+                continue
+            }
+            $__items += @{ target = $__n; found = $__found; blob = $__blob }
+        }
+        Out-Json @{ ok = $true; items = $__items }
     }
 }
