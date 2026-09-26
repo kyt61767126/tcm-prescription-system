@@ -35,6 +35,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const Module = require('module');
 
 const ROOT = path.resolve(__dirname, '..');
 const TMP_ROOT = path.join(__dirname, '.tmp');
@@ -48,6 +49,40 @@ function rmrfSafe(p) {
 }
 
 const E2E_PASSWORD = 'E2ePass123!';
+
+// ============================================================================
+// ★ 2026-09-26 F2 适配：夹具必须与真实注册态【同构】——
+//   F2 之后闸门 configUsersProvenAuthentic 对「含 users 但无 v2 签名备份」的
+//   config 判 config_tampered（弹窗「配置文件用户列表已被篡改或备份损坏」，
+//   login 窗不出现）。旧夹具只手写无签名 config.json 的捷径失效。
+//   修复：用真实 shared/license-manager 原语给夹具 signConfig（机器密钥）+
+//   proven 写 users-backup。machineId 全部基于机器级特征（MachineGuid/主板/CPU），
+//   本运行器进程与被测 exe 同机 → 派生密钥一致，签名可被验过。
+// ============================================================================
+const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
+let _currentFixtureDir = null;
+const electronStub = {
+    app: {
+        getPath(p) {
+            if (p === 'userData' && _currentFixtureDir) return _currentFixtureDir;
+            return require('os').tmpdir();
+        }
+    },
+    BrowserWindow: function () { return {}; },
+    dialog: { showMessageBox: async () => ({ response: 0 }) },
+    safeStorage: { isEncryptionAvailable: () => false, encryptString: () => Buffer.alloc(0) },
+    shell: {}
+};
+const _origModuleLoad = Module._load;
+Module._load = function (request, ...rest) {
+    if (request === 'electron') return electronStub;
+    return _origModuleLoad.call(this, request, ...rest);
+};
+// 仓库根 "type":"module"：shared/*.js 需在本进程显式按 CJS 编译（与冒烟同款）
+Module._extensions['.js'] = function (mod, filename) {
+    mod._compile(fs.readFileSync(filename, 'utf8'), filename);
+};
+const lm = require(path.join(REPO_ROOT, 'shared', 'license', 'license-manager.js'));
 
 // —— 解析命令行 ——
 const args = process.argv.slice(2);
@@ -155,12 +190,26 @@ async function login(page, username, password) {
     await page.click('#btnOk');
 }
 
-// 每个用例独立 userData + 预置 config.json（app 启动时会自动补签名 + 试用期降级）
+// 每个用例独立 userData + 预置【机器密钥签名 config + v2 备份】（F2 同构）
 function prepareUserdata(tag, config) {
     const dir = path.join(TMP_BASE, tag);
     rmrfSafe(dir);
     fs.mkdirSync(dir, { recursive: true });
+    _currentFixtureDir = dir;
+    // ★ F2 同构：configIssuedAt + 机器密钥双签名（signConfig 直接改原对象）
+    if (!config.configIssuedAt) config.configIssuedAt = new Date().toISOString();
+    lm.signConfig(config);
+    if (!config.configSignature) {
+        console.error('[E2E][FAIL] 夹具 signConfig 未生成签名，终止');
+        process.exit(1);
+    }
     fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify(config, null, 2), 'utf8');
+    // ★ proven 写 v2 签名 users-backup（目标=stub userData=dir）；
+    //   闸门 usersProvenByBackup 验此件。失败即终止（否则全部用例假失败）。
+    if (lm.backupUserAccounts(config, { proven: true }) !== true) {
+        console.error('[E2E][FAIL] 夹具 users-backup 写入失败，终止');
+        process.exit(1);
+    }
     return dir;
 }
 
