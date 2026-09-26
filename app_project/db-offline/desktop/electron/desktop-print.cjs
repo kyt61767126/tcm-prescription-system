@@ -26,7 +26,9 @@ function createDesktopPrintIpc({ ipcMain, BrowserWindow }) {
 ipcMain.handle('print-prescription', async (event, html, orientation) => {
     try {
         // ★ 2026-09-25 安全加固①：仅主框架可调（拒绝被注入的 iframe 子框架）
-        if (!event || !event.senderFrame || !event.senderFrame.isMainFrame) {
+        // ★ 2026-09-26 修复：Electron 35 WebFrameMain 无 isMainFrame 成员，
+        //   主框架判定=parent===null（旧写法恒 undefined，会拒绝全部打印调用）。
+        if (!event || !event.senderFrame || event.senderFrame.parent !== null) {
             console.warn('[print] reject non-main-frame invoke');
             return false;
         }

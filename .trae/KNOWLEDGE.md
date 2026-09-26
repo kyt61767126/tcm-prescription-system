@@ -1435,3 +1435,21 @@
 * **验证全绿**：node --check 全部改动文件 / sync-all -VerifyOnly / copy-consistency ALL PASS / biz-smoke **93/93** / smoke-runtime --all **157/157** / 模块冒烟打印 24→**33**、用户 32→**51**；**真实 Electron 直启**双端启动链正常（云端"软件激活"窗、离线"登录"窗，E2E 三重隔离+marker 跑完即删），另用临时探针 app 在**真实 Chromium** 下实证：页面内 `location.href` 导航被拦返回 false、子框架拒绝 false（取证后临时目录已删）；check-interface **6 OK**；diff-cross-version 4 对全绿。
 * **遗留 backlog（本次审查新增/确认，需另立项）**：F2 config users 数组不在 signConfig 签名范围（仅签 clinicName|doctorName|edition|configIssuedAt）→ 目标=启动时校验 users 完整性，防静默篡改/植入；F3 `license:register-local-user`（desktop-license-ipc.cjs 约 L533）缺 isMainFrame 门（当前全端无 iframe 不可利用）；F4 installLicense/ensureLocalActivationUser 仍写单轮 SHA-256（登录后自动升级，应收口 hashPassword）；中期密码存储迁移 Argon2id。
 * **生效方式**：**主进程域热更不可达**——云桌面/离线桌面需**双桌面重打 exe**（两批可攒一起，建议下次发版带上）；auth-core 渲染层部分需按热更白名单核实是否可走热更，不凭猜测；云端网页主体、双 APP/鸿蒙无改动不受影响。promo/ 不纳入提交。
+
+## 41. F2+F3 授权链深度加固批：config users 完整性签名 + 激活帧门收窄（2026-09-26，主进程域+shared，需双桌面重打 exe）
+
+覆盖 §40 backlog 的 F2/F3，五轮迭代（四轮实现 + 三路独立复审：2 功能 + 1 安全，复审抓出 2 高危当轮收尾）。
+
+* **F2 config users 完整性签名（v2 双签名）**：signConfig 升级 usersSignature（覆盖整个 users 数组，stableStringify：对象键序无关、数组序敏感）+ configSignature（header 5 段=clinicName|doctorName|edition|configIssuedAt|usersSignature）。inspectConfigSignatures 识别 v1/v2 双格式；v1 合法旧件 migrateConfigUsersSignature 一次性升级（**迁移须备份证明 users**，防把篡改固化进 v2）；删 usersSignature 的降级攻击不回退 v1，仍 fail-closed。签名失败拒绝写盘（configSignature 缺失=不落盘，绝不假成功）。
+* **签名密钥机器绑定（杀跨机移植三路径）**：v2 usersSignature / v2 configSignature / users-backup 签名密钥全部=HKDF(本机 machineId, 域串, 基钥)——`getUsersSignKey()`('users-sign')、`getUsersBackupSignKey()`('users-backup-sign')。攻击者自有安装产出的任何签名件在受害者机器必验签失败。v1 静态多候选（CONFIG_SIGN_KEY+masterKey 派生）仅限**历史存量验签**（宁可漏检不可误报，v1 签名本不覆盖 users）。
+* **★ 第五轮高危修复 #1（安全）：masterKey 派生候选删除**。LICENSE_MASTER_KEY 是全局单一 Cloudflare env 且**明文随 license 下发**——v2 验签若保留 masterKey 派生候选，攻击者持同部署任一 license 即可在自有机器预签 masterKey 派生签名件移植受害者机（PoC 实证幽灵 admin 放行）。v2 系新引入无存量 → v2Candidates 仅机器键，signConfig 恒用机器键（否则 masterKey 在场时自签自验不过）。教训：**"随 license 下发的秘密"不能当跨设备信任锚**。
+* **★ 第五轮高危修复 #2（功能）：损坏回填丢号**。ensureLocalActivationUser 的 J3 回填（config JSON 损坏→`getFillableUsers()`）原被 `if (!primaryReadOk) config={}` 清空——损坏 config+好备份时补绑会丢光旧账号，且后续 proven 覆写把备份也冲掉=**账号双端丢失**。修复：回填件置 primaryReadOk=true；幂等命中（inPrimary，回填件含该用户=备份证明过的内容）且 configCorruptBackfilled 时顺带重签写盘修复损坏 config（try 包裹非致命）。冒烟 13B 节 7 例锁定。
+* **F3 激活帧门收窄**：`license:register-local-user` 帧门从「文件名正则」收紧为【本模块目录 activate-window.html 绝对路径全等】（decodeURIComponent+小写化 pathname；**query/hash 不参与**——loadFile 附 machineId query，全等误杀合法帧的坑）+ **host 校验**（file://evil/share/ UNC 的 pathname 可同构，host 必须与本地一致=空串）。配套 will-navigate 白名单收窄：主窗=[asar 应用根, 热更目录]、登录窗/激活窗=模块自身目录（两端 activate.js 同款）。location.reload/锚点变更不触发 will-navigate，全库核实无整页跳转误杀。
+* **写路径闸门全覆盖（TOCTOU 收口）**：installLicense / ensureLocalActivationUser / enforceEditionBinding / 两端 main.js ensureWritableConfig / get-app-config / desktop-user-ipc 三 handler——凡读已有 config 再重签的写路径一律先过 `configUsersProvenAuthentic` 闸门，且**直接裁决调用方内存件**（不二读盘，防闸门后换件）。enforceEditionBinding 改写前深拷贝快照过闸+写盘后 proven 刷备份；get-app-config 回填统一走 getFillableUsers（仅新鲜 v2 / v1 窗口内 legacy）。
+* **出厂件无签名的设计理由**：两端出厂 config.json 剥掉 configSignature/usersSignature 保留 configIssuedAt——出厂 users 空数组，闸门对「无签名+users 空」天然放行，首次写路径即以机器密钥重签。出厂预签静态密钥反而制造跨机同签名件。
+* **f2-legacy 窗口结论（表述修正）**：legacy 迁移窗口**任何机器都可合成**（双删锚点+旧静态 v1 壳+无签名 legacy 备份即可达），此前「仅真实老机可达」表述被复审推翻；但**能力上限=v1 基线**（v1 签名本不覆盖 users，该窗口能做的一切=改造前世界已能做的），属接受性残留而非新增暴露面。防回滚硬边界=**单调 gen 双锚点**（gate.dat+二级锚点：单删任一不失效、旧 gen 重放拒绝、legacy sticky 退役、锚点在场非 proven 拒写备份）。
+* **机器绑定换硬件客服 SOP**：users 签名零回退（换主板/重装系统丢机器指纹→config 全部验签失败）vs license.dat 三级回退——失配场景联系客服走重新激活补绑（ensureLocalActivationUser 闸门+备份回填保证不丢号）。
+* **已知写放大（接受）**：get-app-config 每次触发 gen+1 备份重写，与 P2-5 mid_idx 同批观察频控。
+* **后续 backlog**：desktop-user-ipc isLoginFrameCall 与本批帧门同弱点类（已修 pathname 判定，host 校验待同类补齐）；F4 installLicense/ensureLocalActivationUser 仍写单轮 SHA-256（登录后自动升级收口）；中期 Argon2id。
+* **验证全绿**：node --check 全过；冒烟 license-config-sign **134/134**（新增 13B 损坏回填不丢号 7 例）、desktop-license **141/141**（新增 evil/ 目录拒绝+UNC host 拒绝+盘符小写放行 3 例）、desktop-user 58/58、print 33/33、biz 93/93、runtime 双端 26/26；sync-all SYNCED+VerifyOnly / copy-consistency **100/0** / check-interface **6 OK** / diff-cross-version **4 对全绿**。
+* **生效方式**：主进程域热更不可达 → **云桌面/离线桌面重打 exe**（与上批 6d5b915e 攒同批发布）；云端网页/云端 APP/离线 APP/鸿蒙零改动不受影响。promo/ 不纳入提交。

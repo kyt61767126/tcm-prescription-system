@@ -64,8 +64,20 @@ function makeEnv(productClass, overrides) {
         }
     };
     const licenseManager = {
-        signConfig(cfg) { signCalls.push(cfg); cfg.__signed = true; }
+        signConfig(cfg) { signCalls.push(cfg); cfg.__signed = true; },
+        // ★ 2026-09-26 I1：三 handler 读后重签闸门（桩默认放行；
+        // env.gateResult 可改写为 false 验证阻断）
+        configUsersProvenAuthentic() { return env && env.gateResult === false ? false : true; },
+        // ★ 第四轮（B-建3）：写盘后 proven 刷备份——desktop-user-ipc 三 handler
+        //   均调用 backupUserAccounts(config,{proven:true})，桩需提供否则告警刷屏
+        //   且丢失"备份被调用"这层断言面。
+        backupUserAccounts(cfg, opts) {
+            backupCalls.push({ cfg, proven: !!(opts && opts.proven === true) });
+            return true;
+        }
     };
+    const env = { gateResult: true };
+    const backupCalls = [];
 
     createDesktopUserIpc({
         ipcMain: { handle(ch, fn) { handlers[ch] = fn; } },
@@ -76,13 +88,13 @@ function makeEnv(productClass, overrides) {
         productClass
     });
 
-    return { handlers, files, signCalls, writes, CONFIG_PATH };
+    return { handlers, files, signCalls, backupCalls, writes, CONFIG_PATH, gateState: env };
 }
 
-// ---- 调用帧 ----
-const mainEv = () => ({ senderFrame: { isMainFrame: true, url: 'file:///app/index.html' } });
-const loginEv = () => ({ senderFrame: { isMainFrame: true, url: 'file:///app/login.html' } });
-const childEv = () => ({ senderFrame: { isMainFrame: false, url: 'file:///app/index.html' } });
+// ---- 调用帧（形状对齐 Electron 35 WebFrameMain：主框架 parent===null） ----
+const mainEv = () => ({ senderFrame: { parent: null, url: 'file:///app/index.html' } });
+const loginEv = () => ({ senderFrame: { parent: null, url: 'file:///app/login.html' } });
+const childEv = () => ({ senderFrame: { parent: {}, url: 'file:///app/index.html' } });
 const invoke = async (env, ch, payload, ev) => env.handlers[ch](ev || mainEv(), payload);
 
 async function main() {
@@ -127,6 +139,9 @@ async function main() {
         ok(!!u.createdAt && !!u.updatedAt, 'add: 时间戳落位');
         ok(u.password !== 'Passw0rd1', 'add: 明文不落盘');
         ok(env.signCalls.length === 1, 'add: signConfig 被调用');
+        // ★ 第四轮（B-建3）：写盘后 proven 刷备份断言
+        ok(env.backupCalls.length === 1 && env.backupCalls[0].proven === true,
+            'add: 写盘后 backupUserAccounts(proven:true) 被调用');
 
         r = await invoke(env, 'user:add', { username: 'admin1', password: 'Passw0rd1' });
         ok(r.success === false && r.error === '用户名已存在', 'add: 重复用户名拦截');
@@ -225,17 +240,17 @@ async function main() {
         ok(r.success === false && r.error === '登录窗口不允许修改用户名', 'rename: 登录窗改名拒绝');
 
         // D1c hash 伪造：主窗 URL 带 #login.html 不得被判为登录窗（审查阻断项回归）
-        const forgedEv = { senderFrame: { isMainFrame: true, url: 'file:///app/index.html#login.html' } };
+        const forgedEv = { senderFrame: { parent: null, url: 'file:///app/index.html#login.html' } };
         r = await invoke(env, 'user:rename-username',
             { oldUsername: 'oldname1', newPassword: 'Hacked99' }, forgedEv);
         ok(r.success === false && r.error === '需要验证原密码或管理员密码',
             'rename: index.html#login.html hash 伪造不绕过证明');
-        const forgedEv2 = { senderFrame: { isMainFrame: true, url: 'file:///app/index.html?x=login.html' } };
+        const forgedEv2 = { senderFrame: { parent: null, url: 'file:///app/index.html?x=login.html' } };
         r = await invoke(env, 'user:rename-username',
             { oldUsername: 'oldname1', newPassword: 'Hacked99' }, forgedEv2);
         ok(r.success === false, 'rename: ?x=login.html query 伪造不绕过证明');
         // 真实登录窗 pathname + query 仍应识别
-        const realQEv = { senderFrame: { isMainFrame: true, url: 'file:///app/login.html?from=logout' } };
+        const realQEv = { senderFrame: { parent: null, url: 'file:///app/login.html?from=logout' } };
         r = await invoke(env, 'user:rename-username',
             { oldUsername: 'oldname1', newPassword: 'RecoverP9' }, realQEv);
         ok(r.success === true, 'rename: 真实 login.html pathname（带query）仍走恢复通道');
@@ -323,6 +338,36 @@ async function main() {
         env10.files[env10.CONFIG_PATH] = { users: [] };
         r = await invoke(env10, 'user:rename-username', { oldUsername: 'oldname1', newUsername: 'newname1' });
         ok(r.success === false && String(r.error).indexOf('read boom') !== -1, 'rename: 异常返回 false 且带原因');
+    }
+
+    // ===== E. 配置完整性闸门（F2 I-1/I-2 阻断回归）：三 handler 篡改态一律中止 =====
+    {
+        const blockText = '检测到本地配置被篡改';
+
+        // E1 add：先验证参数、读后闸门，不写不签
+        let env = makeEnv('cloud');
+        env.gateState.gateResult = false;
+        let r = await invoke(env, 'user:add', { username: 'addx1234', password: 'Passw0rd1' });
+        ok(r.success === false && r.error.indexOf(blockText) !== -1, '闸门 add: 篡改态中止');
+        ok(env.signCalls.length === 0 && env.writes.length === 0, '闸门 add: 不签名不写盘');
+
+        // E2 change-password
+        env = makeEnv('cloud');
+        env.files[env.CONFIG_PATH] = { users: [{ username: 'admin1', password: legacyGlobalHash('OldPwd12') }] };
+        env.gateState.gateResult = false;
+        r = await invoke(env, 'user:change-password',
+            { username: 'admin1', oldPassword: 'OldPwd12', newPassword: 'NewPass99' });
+        ok(r.success === false && r.error.indexOf(blockText) !== -1, '闸门 pw: 篡改态中止');
+        ok(env.signCalls.length === 0 && env.writes.length === 0, '闸门 pw: 不签名不写盘');
+
+        // E3 rename：登录窗密码同步分支也须被闸门覆盖（闸门在分支选择前）
+        env = makeEnv('offline');
+        env.files[env.CONFIG_PATH] = { users: [{ username: 'oldname1', password: legacyGlobalHash('AnyPwd12') }] };
+        env.gateState.gateResult = false;
+        r = await invoke(env, 'user:rename-username',
+            { oldUsername: 'oldname1', newPassword: 'RecoverP9' }, loginEv());
+        ok(r.success === false && r.error.indexOf(blockText) !== -1, '闸门 rename: 登录窗同步分支也中止');
+        ok(env.signCalls.length === 0 && env.writes.length === 0, '闸门 rename: 不签名不写盘');
     }
 
     console.log('');

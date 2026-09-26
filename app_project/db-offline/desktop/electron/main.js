@@ -151,19 +151,24 @@ function getWritableConfigPath() {
 }
 
 // ★ 首次启动时，将 asar 内的 config.json 复制到可写路径（仅复制一次）
-// ★ 修复：如果已存在的 config.json 签名不匹配（旧版用 masterKey 派生密钥签名），用硬编码密钥重新签名
+// ★ 2026-09-26 B2 修复：已存在的 config.json 绝不无条件重签——否则被篡改/
+//   植入的 users 会在 validateLicense 之前就被合法密钥就地"洗白"。
+//   现仅检查签名状态：v2 完整件保持原样；v1 合法旧件交由 validateLicense
+//   带备份校验迁移；签名无效件不动，由 validateLicense fail-closed。
 async function ensureWritableConfig() {
     try {
         const writablePath = getWritableConfigPath();
         if (await fse.pathExists(writablePath)) {
-            // 已存在：确保签名正确（兼容旧版无签名或 masterKey 派生密钥签名）
             try {
-                const cfg = await fse.readJson(writablePath);
-                // signConfig(cfg) 直接修改原对象：设置 configIssuedAt（如无）+ 更新 configSignature 字符串
-                // 切勿将返回值赋给 configSignature 属性（会造成循环引用）
-                licenseManager.signConfig(cfg);
-                await fse.writeJson(writablePath, cfg, { spaces: 2 });
-                console.log('[Config] config.json 签名已修复/刷新');
+                const insp = licenseManager.inspectConfigSignatures();
+                if (insp.ok && !insp.legacy) {
+                    // v2 双签名完整：无需任何处理
+                } else if (insp.ok && insp.legacy) {
+                    console.log('[Config] 现存 config.json 为 v1 合法旧件，启动校验时迁移');
+                } else {
+                    console.warn('[Config] 现存 config.json 签名无效(reason='
+                        + insp.reason + ')，不就地重签，交由 validateLicense 裁决');
+                }
             } catch (e) {
                 console.warn('[Config] 签名检查失败，跳过:', e.message);
             }
@@ -219,6 +224,14 @@ async function ensureEditionSelected() {
         try { hasLicense = !!licenseManager.readLicense(); } catch (e) { hasLicense = false; }
 
         if (!hasLicense) {
+            // ★ 2026-09-26 H1/B1：本块改 users 角色并重签，先验明磁盘 users 来源，
+            // 防篡改/植入 users 经启动校正洗白。不通过则跳过本块（不重签不写盘），
+            // validateLicense 随后 fail-closed。
+            // ★ 第四轮（J2）：闸门直接裁决本次读入的内存件（防 TOCTOU 二次读窗口）。
+            if (!licenseManager.configUsersProvenAuthentic(config)) {
+                console.warn('[Edition] 跳过试用标准版校正：现存 users 无真实签发来源');
+                return;
+            }
             // 试用期固定标准版（personal）
             config.edition = 'personal';
             if (Array.isArray(config.users)) {
@@ -231,6 +244,9 @@ async function ensureEditionSelected() {
             }
             licenseManager.signConfig(config);
             await fse.writeJson(configPath, config, { spaces: 2 });
+            // ★ 第四轮（B-重2）：改角色写盘后 proven 刷新备份——否则备份滞留旧 admin
+            //   角色，config 损坏后由备份回填=提权复活。
+            try { licenseManager.backupUserAccounts(config, { proven: true }); } catch (_) {}
             console.log('[Edition] 无授权，试用默认标准版（personal）');
             return;
         }
@@ -268,6 +284,12 @@ async function ensureTrialStandardEdition() {
         const configPath = getWritableConfigPath();
         if (!fsSync.existsSync(configPath)) return false;
         const config = JSON.parse(fsSync.readFileSync(configPath, 'utf8'));
+        // ★ 2026-09-26 H1/B1：校正会改 users 角色并重签，先验明来源（同上）
+        // ★ 第四轮（J2）：闸门裁决本次读入的内存件（改写前状态，防 TOCTOU）。
+        if (!licenseManager.configUsersProvenAuthentic(config)) {
+            console.warn('[Trial] 跳过试用标准版校正：现存 users 无真实签发来源');
+            return false;
+        }
         let changed = false;
         if (config.edition !== 'personal') {
             console.log('[Trial] 试用期校正 edition:', config.edition, '->', 'personal');
@@ -286,6 +308,8 @@ async function ensureTrialStandardEdition() {
         if (changed) {
             licenseManager.signConfig(config);
             fsSync.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+            // ★ 第四轮（B-重2）：改角色写盘后 proven 刷新备份（防旧角色备份回填提权）。
+            try { licenseManager.backupUserAccounts(config, { proven: true }); } catch (_) {}
         }
         return true;
     } catch (e) {
@@ -1163,10 +1187,19 @@ ipcMain.handle('get-app-config', async () => {
             // 若 config 的 users 被清除，则从备份回填，避免原账号密码无法登入。
             try {
                 if (Array.isArray(cfg.users) && cfg.users.length > 0) {
-                    licenseManager.backupUserAccounts(cfg);
+                    // ★ 2026-09-26 阻断修复（三审共识·备份毒化链 + 复审 TOCTOU）：
+                    //   只有验明来源的内存件 users 才允许刷新备份——旧逻辑在任何
+                    //   license 校验之前无条件备份，应用自身会给未验签 users 签出合法
+                    //   v2 备份，攻击者再删 config 签名即可凭毒化备份通过闸门、重签洗白。
+                    if (licenseManager.configUsersProvenAuthentic(cfg)) {
+                        licenseManager.backupUserAccounts(cfg);
+                    } else {
+                        console.warn('[Config] users 来源未证明，跳过备份刷新（防毒化）');
+                    }
                 } else {
-                    const backedUsers = licenseManager.loadUserAccountBackup();
-                    if (backedUsers.length > 0) cfg.users = backedUsers;
+                    // 回填统一走 getFillableUsers：仅新鲜 v2 / v1 合法件窗口内 legacy
+                    const fillUsers = licenseManager.getFillableUsers();
+                    if (fillUsers.length > 0) cfg.users = fillUsers;
                 }
             } catch (e) {
                 console.warn('账号备份刷新失败（非致命）:', e.message);
@@ -1210,6 +1243,10 @@ ipcMain.handle('get-app-config', async () => {
                         const wantRole = formalInstitution ? 'admin' : 'user';
                         const needHeal = !acctUser || !acctUser.password;
                         if (needHeal) {
+                            // ★ 复审 TOCTOU：闸门在 mutate【之前】裁决同一内存件
+                            // （新账号来源=已验签 admin-account.dat；先 mutate 会让
+                            // users 签名失配，本块永远落不了盘）。
+                            const __proven = licenseManager.configUsersProvenAuthentic(cfg);
                             const { passwordHash, salt } = await hashPassword('admin');
                             const healedUser = {
                                 username: acctPhone,
@@ -1228,13 +1265,17 @@ ipcMain.handle('get-app-config', async () => {
                             } else {
                                 cfg.users.push(healedUser);
                             }
-                            // 写入磁盘（需先签名，签名失败则跳过写入，保留原配置）
+                            // 写入磁盘（需闸门通过+签名成功，否则跳过写入保留原配置）
                             try {
                                 const writeCfg = { ...cfg };
                                 licenseManager.signConfig(writeCfg);
-                                if (writeCfg.configSignature) {
+                                if (__proven && writeCfg.configSignature) {
                                     await fse.writeJson(configPath, writeCfg, { spaces: 2 });
+                                    try { licenseManager.backupUserAccounts(writeCfg, { proven: true }); } catch (e2) {}
                                     console.log('[Config] 自愈：已补齐激活管理员账户 (手机号=' + acctPhone + ', 角色=' + wantRole + ')');
+                                } else if (!__proven) {
+                                    // ★ 2026-09-26 I-1：防未验签 users 借本块重签洗白
+                                    console.warn('[Config] users 来源未证明，激活账号补齐不落盘');
                                 }
                             } catch (we) {
                                 console.warn('[Config] 自愈写 config 失败（非致命）:', we.message);
@@ -1246,23 +1287,27 @@ ipcMain.handle('get-app-config', async () => {
                     //   绝不覆盖用户已设的非空密码；普通只读 user 账户不受影响）。
                     if (formalInstitution && !acctPhone) {
                         if (Array.isArray(cfg.users)) {
-                            let healed = false;
-                            for (const u of cfg.users) {
-                                if (u && u.role === 'admin' && !u.password) {
-                                    const { passwordHash, salt } = await hashPassword('admin');
-                                    u.password = passwordHash;
-                                    u.passwordHash = passwordHash;
-                                    u.salt = salt;
-                                    healed = true;
+                            // ★ 复审 TOCTOU：先查有无目标、闸门裁决内存件，再 mutate。
+                            const hasEmptyAdmin = cfg.users.some(u => u && u.role === 'admin' && !u.password);
+                            if (hasEmptyAdmin) {
+                                const __proven = licenseManager.configUsersProvenAuthentic(cfg);
+                                for (const u of cfg.users) {
+                                    if (u && u.role === 'admin' && !u.password) {
+                                        const { passwordHash, salt } = await hashPassword('admin');
+                                        u.password = passwordHash;
+                                        u.passwordHash = passwordHash;
+                                        u.salt = salt;
+                                    }
                                 }
-                            }
-                            if (healed) {
                                 try {
                                     const writeCfg = { ...cfg };
                                     licenseManager.signConfig(writeCfg);
-                                    if (writeCfg.configSignature) {
+                                    if (__proven && writeCfg.configSignature) {
                                         await fse.writeJson(configPath, writeCfg, { spaces: 2 });
+                                        try { licenseManager.backupUserAccounts(writeCfg, { proven: true }); } catch (e2) {}
                                         console.log('[Config] 自愈兜底：机构版空密码 admin 账户已重置为 admin');
+                                    } else if (!__proven) {
+                                        console.warn('[Config] users 来源未证明，空密码兜底不落盘');
                                     }
                                 } catch (we) {
                                     console.warn('[Config] 自愈兜底写 config 失败（非致命）:', we.message);
@@ -1307,18 +1352,22 @@ ipcMain.handle('get-app-config', async () => {
                     try {
                         const lh = licenseManager.readLicense();
                         if (lh) {
+                            // ★ 复审 TOCTOU：闸门在 applyEditionBinding【之前】裁决内存件
+                            // （apply 会改 edition/补 admin，先 mutate 签名就失配）。
+                            const __proven = licenseManager.configUsersProvenAuthentic(cfg);
                             const bind = licenseManager.applyEditionBindingToConfig(lh, cfg);
                             if (bind.applied) {
                                 merged.edition = cfg.edition;
                                 if (bind.corrected) {
                                     const writeCfg = { ...cfg };
                                     licenseManager.signConfig(writeCfg);
-                                    if (writeCfg.configSignature) {
+                                    if (__proven && writeCfg.configSignature) {
                                         await fse.writeJson(configPath, writeCfg, { spaces: 2 });
+                                        try { licenseManager.backupUserAccounts(writeCfg, { proven: true }); } catch (e2) {}
                                         console.log('[Config] 存量自愈：机构版 config.json 已固化 edition=' + cfg.edition +
                                             '（from=' + (bind.from || '?') + '）');
                                     } else {
-                                        console.warn('[Config] 存量自愈：签名失败，仅本次会话生效（磁盘未固化）');
+                                        console.warn('[Config] 存量自愈：闸门/签名未过，仅本次会话生效（磁盘未固化）');
                                     }
                                 }
                             }
@@ -1340,10 +1389,12 @@ ipcMain.handle('get-app-config', async () => {
         //   尝试从 users-backup.json 回填账号——否则老客户 config 损坏叠加
         //   localStorage 为空（userData 迁移/被清）会被强制重新注册。
         try {
-            const backedUsers = licenseManager.loadUserAccountBackup();
-            if (backedUsers.length > 0) {
-                defaults.users = backedUsers;
-                console.log('[Config] config.json 损坏，已从 users-backup.json 回填账号 ' + backedUsers.length + ' 个');
+            // 仅回填可信备份（新鲜 v2；config 已损坏不再接受无签名 legacy）
+            const fillUsers = licenseManager.getFillableUsers();
+            if (fillUsers.length > 0) {
+                defaults.users = fillUsers;
+                console.log('[Config] config.json 损坏，已从可信备份回填账号 '
+                    + fillUsers.length + ' 个');
             }
         } catch (be) {
             console.warn('[Config] 备份回填失败（非致命）:', be.message);
@@ -1355,10 +1406,16 @@ ipcMain.handle('get-app-config', async () => {
 // ===== 首次配置向导：更新 config.json =====
 ipcMain.handle('config:update', async (event, updates) => {
     try {
+        // ★ 2026-09-26 H1/B1 + 复审 TOCTOU：config 只读一次，闸门裁决内存件，
+        // 防篡改/植入 users 经配置向导洗白。出厂空 config 自然通过。
         const configPath = getWritableConfigPath();
         let config = {};
         if (await fse.pathExists(configPath)) {
             config = await fse.readJson(configPath);
+        }
+        if (!licenseManager.configUsersProvenAuthentic(config)) {
+            console.warn('[Config] config:update 中止：现存 users 无真实签发来源');
+            return { success: false, error: '检测到本地配置被篡改，设置已中止，请联系客服' };
         }
         if (updates.clinicName !== undefined) config.clinicName = updates.clinicName;
         if (updates.doctorName !== undefined) config.doctorName = updates.doctorName;
@@ -1366,6 +1423,8 @@ ipcMain.handle('config:update', async (event, updates) => {
         // 签名保护：signConfig(config) 直接修改原对象，切勿将返回值赋值给属性（会造成循环引用）
         licenseManager.signConfig(config);
         await fse.writeJson(configPath, config, { spaces: 2 });
+        // users 未变；proven 刷备份保持新鲜
+        try { licenseManager.backupUserAccounts(config, { proven: true }); } catch (e2) {}
         console.log('[Config] config.json updated:', JSON.stringify(updates));
         return { success: true, config };
     } catch (e) {

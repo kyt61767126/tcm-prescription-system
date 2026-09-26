@@ -54,7 +54,9 @@ function createDesktopUserIpc(options) {
 
     // ---- 调用帧守卫 -----------------------------------------------------
     function isMainFrameCall(event) {
-        return !!(event && event.senderFrame && event.senderFrame.isMainFrame);
+        // ★ 2026-09-26 修复：Electron 35 WebFrameMain 无 isMainFrame 成员
+        //   （旧写法永远 false，会拒绝全部用户 IPC），主框架特征=parent===null。
+        return !!(event && event.senderFrame && event.senderFrame.parent === null);
     }
     function isLoginFrameCall(event) {
         // 独立登录窗口 loadFile('login.html')；主窗为 index.html
@@ -137,6 +139,11 @@ ipcMain.handle('user:change-password', async (event, { username, oldPassword, ne
         const configPath = getWritableConfigPath();
         if (await fse.pathExists(configPath)) {
             const config = await fse.readJson(configPath);
+            // ★ 2026-09-26 I1（双重独立审查 + 复审 TOCTOU）：闸门直接裁决内存件，
+            //   防会话内篡改 config 后经改密洗白全部 users。
+            if (!licenseManager.configUsersProvenAuthentic(config)) {
+                return { success: false, error: '检测到本地配置被篡改，操作已中止，请联系客服' };
+            }
             if (config && Array.isArray(config.users)) {
                 const userIdx = config.users.findIndex(u => u.username === username);
                 if (userIdx !== -1) {
@@ -157,6 +164,11 @@ ipcMain.handle('user:change-password', async (event, { username, oldPassword, ne
                     // 签名保护：signConfig(config) 直接修改原对象，切勿将返回值赋值给属性（会造成循环引用）
                     licenseManager.signConfig(config);
                     await fse.writeJson(configPath, config, { spaces: 2 });
+                    // ★ 复审陈旧收口：proven 刷新备份（users 刚过闸门随签名 config
+                    //   落盘），否则改密后备份冻结旧哈希，config 损坏会回填旧密码。
+                    try { licenseManager.backupUserAccounts(config, { proven: true }); } catch (be) {
+                        console.warn('[User] 备份刷新失败（非致命）:', be.message);
+                    }
                     console.log('[User] password changed for:', username);
                     return { success: true };
                 }
@@ -211,6 +223,11 @@ ipcMain.handle('user:rename-username', async (event, payload) => {
         const configPath = getWritableConfigPath();
         if (await fse.pathExists(configPath)) {
             const config = await fse.readJson(configPath);
+            // ★ 2026-09-26 I1 + 复审 TOCTOU：读后重签路径统一闸门（登录窗密码
+            //   同步分支同样覆盖），闸门裁决内存件。
+            if (!licenseManager.configUsersProvenAuthentic(config)) {
+                return { success: false, error: '检测到本地配置被篡改，操作已中止，请联系客服' };
+            }
             if (config && Array.isArray(config.users)) {
                 let userIdx = config.users.findIndex(u => u && u.username === oldUsername);
                 if (userIdx === -1) {
@@ -269,6 +286,10 @@ ipcMain.handle('user:rename-username', async (event, payload) => {
                     // 签名保护：signConfig(config) 直接修改原对象（勿赋值返回值，循环引用）
                     licenseManager.signConfig(config);
                     await fse.writeJson(configPath, config, { spaces: 2 });
+                    // ★ 复审陈旧收口：proven 刷新备份（含改名/登录窗密码同步）。
+                    try { licenseManager.backupUserAccounts(config, { proven: true }); } catch (be) {
+                        console.warn('[User] 备份刷新失败（非致命）:', be.message);
+                    }
                     console.log('[User] rename synced to config.json:', oldUsername, '->',
                         actuallyRenaming ? trimmedNew : '(username unchanged)',
                         wantsPwd ? '(password synced)' : '');
@@ -307,6 +328,10 @@ ipcMain.handle('user:add', async (event, { username, password, name }) => {
         if (await fse.pathExists(configPath)) {
             config = await fse.readJson(configPath);
         }
+        // ★ 2026-09-26 I1 + 复审 TOCTOU：闸门裁决内存件（无文件出厂态自然通过）。
+        if (!licenseManager.configUsersProvenAuthentic(config)) {
+            return { success: false, error: '检测到本地配置被篡改，操作已中止，请联系客服' };
+        }
         if (!config.users) config.users = [];
 
         // 检查用户名是否已存在
@@ -330,6 +355,10 @@ ipcMain.handle('user:add', async (event, { username, password, name }) => {
         // 签名保护：signConfig(config) 直接修改原对象，切勿将返回值赋值给属性（会造成循环引用）
         licenseManager.signConfig(config);
         await fse.writeJson(configPath, config, { spaces: 2 });
+        // ★ 复审陈旧收口：新增用户后 proven 刷新备份。
+        try { licenseManager.backupUserAccounts(config, { proven: true }); } catch (be) {
+            console.warn('[User] 备份刷新失败（非致命）:', be.message);
+        }
         console.log('[User] add user:', username);
         return { success: true };
     } catch (e) {

@@ -284,10 +284,19 @@ function showActivateWindow(parentWindow) {
 
     // ★ 安全（P3-1 最终加固）：激活窗口主框架导航防护——仅允许应用自身 file:// 页面
     //   （激活窗口含 CDN 二维码脚本等远程资源，防被诱导整页跳转钓鱼页）
+    // ★ 第四轮（B-重1）导航收窄：仅允许应用自身 electron 目录下的 file:// 页面
+    //   （activate-window.html 所在目录），阻断被诱导跳到远程地址或任意本地文件。
+    const __activateNavPrefix = (() => {
+        try {
+            return require('url').pathToFileURL(path.join(__dirname)).href.toLowerCase() + '/';
+        } catch (_) { return null; }
+    })();
     activateWindow.webContents.on('will-navigate', (event, url) => {
-        if (!url.startsWith('file://')) {
+        const lower = typeof url === 'string' ? url.toLowerCase() : '';
+        const allowed = !!__activateNavPrefix && lower.startsWith('file://') && lower.startsWith(__activateNavPrefix);
+        if (!allowed) {
             event.preventDefault();
-            console.warn('[安全] 已阻断激活窗口整页导航到非本地地址:', url);
+            console.warn('[安全] 已阻断激活窗口整页导航到非应用自身页面:', url);
         }
     });
 

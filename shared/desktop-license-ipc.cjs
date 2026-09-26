@@ -24,7 +24,8 @@
 //          prescriptionCounter,featureGuard / getMainWindow / productClass；
 //    仅离线：isTrialDenied / fse,safeStorage,path,getWritableConfigPath,hashPassword
 //    （后 5 个仅注册块使用；hashPassword 等为 main.js 函数声明，提升后可在块1位点注入）。
-//  模块本体零 require（handler 内原有内联 require('electron')/require('fs') 保持原样）。
+//  模块本体零 require（handler 内原有内联 require('electron')/require('fs') 保持原样；
+//  F3 帧门函数内惰性 require('path')/require('url') 为第四轮 B-重1 新增，仅白名单比对用）。
 //
 //  分发：shared/ → sync-all Group 22 → 2 个 electron 目录；
 //    copy-consistency desktop-license-ipc 组（2 副本硬哈希门）。
@@ -33,6 +34,36 @@
 //  安全：set-trial-days IPC 故意不注册（P2-7：渲染进程不得修改试用期天数）。
 // ============================================================================
 'use strict';
+
+// ★ 2026-09-26 F3+M1：register-local-user 唯一合法来源 = activate-window.html
+//   的顶层帧（无 iframe）。Electron 35 WebFrameMain 无 isMainFrame 成员，
+//   主框架判定 = parent===null（真实 Electron 探针实证）。
+// ★ 第四轮（B-重1）：URL 白名单从"文件名正则"收紧为【应用自身目录绝对路径全等】
+//   ——正则可被任意目录下同名文件绕过（下载目录/UNC/映射盘投放同名 html）；
+//   绝对路径全等后，只有本安装内（asar 或解包目录）的激活窗页面能过门。
+//   仅比对 host+pathname：query/hash 不参与（loadFile 会附 machineId 等 query，
+//   冒烟 qEvent 用例锁定该语义）。
+// ★ 第五轮（采纳）：host 同校验——file: URL 的 host 承载 UNC 主机名
+//   （file://evil/share/activate-window.html 的 pathname 与本地同构），仅比
+//   pathname 会放过异地主机投放的同构目录；host 必须与本机 expected 一致（本地
+//   file URL host 为空串）。
+//   目录/文件路径必须与激活窗页面完全一致。
+//   parent/url 均为主进程原生只读属性，渲染侧不可伪造。本文件由 sync-all 复制进
+//   两端 electron 目录运行，__dirname 即激活窗页面所在目录。
+function isActivateWindowFrame(frame) {
+    try {
+        if (!frame || frame.parent !== null) return false;
+        const u = new URL(frame.url || '');
+        if (u.protocol !== 'file:') return false;
+        const path = require('path');
+        const pathToFileURL = require('url').pathToFileURL;
+        const expectedUrl = pathToFileURL(path.join(__dirname, 'activate-window.html'));
+        if (u.host !== expectedUrl.host) return false;
+        // Windows 文件系统大小写不敏感：两侧解码后归一小写比较，仅放宽大小写不放宽路径
+        return decodeURIComponent(u.pathname).toLowerCase()
+            === decodeURIComponent(expectedUrl.pathname).toLowerCase();
+    } catch (e) { return false; }
+}
 
 function createDesktopLicenseIpc(options) {
     const {
@@ -532,6 +563,11 @@ ipcMain.handle('license:claim-free', async (event, phone) => {
 
 ipcMain.handle('license:register-local-user', async (event, payload) => {
     try {
+        // ★ 2026-09-26 F3+M1：仅 activate-window.html 顶层帧可调（见 isActivateWindowFrame）
+        if (!isActivateWindowFrame(event && event.senderFrame)) {
+            console.warn('[Register] reject non-main-frame/non-activate-window invoke');
+            return { success: false, error: '非法调用来源' };
+        }
         const p = payload || {};
         const effPhone = String(p.phone || '').trim();
         const effPwd = String(p.password || '');
@@ -547,12 +583,18 @@ ipcMain.handle('license:register-local-user', async (event, payload) => {
             return { success: false, error: '密码至少8位且须同时包含字母和数字' };
         }
 
+        // ★ 2026-09-26 H1/B1 + 复审 TOCTOU 收口：config 只读一次，闸门直接裁决
+        //   内存件（不二次读盘）——外部进程无法在闸门后替换 config 让异件被签。
         const configPath = getWritableConfigPath();
         let config = {};
         if (await fse.pathExists(configPath)) {
             config = await fse.readJson(configPath);
         }
         if (!Array.isArray(config.users)) config.users = [];
+        if (!licenseManager.configUsersProvenAuthentic(config)) {
+            console.warn('[Register] 中止：磁盘现存 users 无真实签发来源');
+            return { success: false, error: '检测到本地配置被篡改，注册已中止，请联系客服' };
+        }
 
         // UPSERT 手机号账号（username=手机号；重复注册=用户明确重设密码）
         const { passwordHash, salt } = await hashPassword(effPwd);
@@ -613,6 +655,13 @@ ipcMain.handle('license:register-local-user', async (event, payload) => {
         await fse.writeJson(configPath, config, { spaces: 2 });
         console.log('[Register] 本地注册成功:', effPhone, existed ? '(UPSERT 更新)' : '(新增)',
             'users=' + config.users.length);
+
+        // ★ 2026-09-26 I-4 + 复审陈旧收口：写盘成功立即 proven 刷新 v2 备份
+        //   （users 刚过闸门并随有效签名 config 落盘；proven 允许 UPSERT 改字段、
+        //   幽灵账号移除条目变少），备份不再滞后/永久陈旧。
+        try { licenseManager.backupUserAccounts(config, { proven: true }); } catch (be) {
+            console.warn('[Register] 备份刷新失败（非致命）:', be.message);
+        }
 
         // ★ 2026-09-08 注册密码直通（修复 localStorage 跨 session 隔离 bug）：
         //   主窗口 partition='persist:tcm-prescription-dingzhi'，激活窗口 defaultSession，

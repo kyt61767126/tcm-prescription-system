@@ -45,7 +45,11 @@ function makeDomainStubs() {
         getTrialDays: () => 7,
         verifyLoginGate: async (u) => ({ ok: true, u }),
         submitActivationTicket: async (p) => ({ success: true, p }),
-        signConfig(c) { c.configSignature = 'sig-' + (c.users || []).length; }
+        signConfig(c) { c.configSignature = 'sig-' + (c.users || []).length; },
+        configUsersProvenAuthentic: () => true,
+        // ★ 2026-09-26 I-4：register 写盘成功后立即刷新 users 备份（防备份滞后）
+        backupCalls: [],
+        backupUserAccounts(cfg) { this.backupCalls.push(cfg); }
     };
     const activateManager = {
         getMachineId: () => 'mid-1',
@@ -96,9 +100,17 @@ function intercept(map) {
 function restoreLoad() { Module._load = origLoad; }
 
 async function invoke(handlers, ch, ...args) {
-    const event = { sender: { id: 'wc1' } };
+    // 帧形状对齐 Electron 35 WebFrameMain：主框架 parent===null
+    const event = { sender: { id: 'wc1' }, senderFrame: { parent: null, url: ACTIVATE_FRAME_URL } };
     return handlers.get(ch)(event, ...args);
 }
+
+// ★ 第四轮（B-重1）：帧门白名单已收紧为"模块自身目录绝对路径全等"——
+//   mock 帧 URL 必须用被加载模块目录（shared/）下的 activate-window.html 真实
+//   file URL，否则绝对路径比对不通过。运行时该文件由 sync-all 复制进 electron
+//   目录，__dirname 同口径。
+const ACTIVATE_FRAME_URL = require('url').pathToFileURL(
+    require('path').join(__dirname, '..', 'shared', 'activate-window.html')).href;
 
 // —— 启动两产品工厂 ——
 const { createDesktopLicenseIpc } = require('../shared/desktop-license-ipc.cjs');
@@ -321,6 +333,96 @@ assert(!offlineIpc.handlers.has('license:set-trial-days'), 'set-trial-days 两�
     d.activateManager.showExpireAlertAndActivate = origAlert;
 
     // —— 11. register-local-user ——
+    // F3：子框架调用直接拒绝（不校验内容、不写 config）
+    {
+        const subEvent = { sender: { id: 'wc2' }, senderFrame: { parent: {}, url: ACTIVATE_FRAME_URL } };
+        r = await offlineIpc.handlers.get('license:register-local-user')(subEvent, {
+            phone: '13800000000', password: 'pass1234'
+        });
+        assert(r.success === false && /非法调用来源/.test(r.error), 'F3 register-local-user 子框架拒绝');
+        assert(Object.keys(fseStub._store).filter(k => /config\.json$/.test(k)).length === 0,
+            'F3 拒绝时不写 config.json');
+    }
+    // 无 senderFrame 同样拒绝
+    {
+        r = await offlineIpc.handlers.get('license:register-local-user')({}, {
+            phone: '13800000000', password: 'pass1234'
+        });
+        assert(r.success === false && /非法调用来源/.test(r.error), 'F3 register-local-user 无帧对象拒绝');
+    }
+    // M1：主窗 index.html 顶层帧（parent===null 但 URL pathname 不在白名单）→ 拒绝。
+    // 本 handler 硬编码 role:'admin'，主窗顶层帧同样满足 parent===null，必须按 URL 收窄。
+    {
+        const mainWinEvent = { sender: { id: 'wc3' }, senderFrame: { parent: null, url: 'file:///app/index.html' } };
+        r = await offlineIpc.handlers.get('license:register-local-user')(mainWinEvent, {
+            phone: '13800000000', password: 'pass1234'
+        });
+        assert(r.success === false && /非法调用来源/.test(r.error), 'M1 主窗 index.html 顶层帧拒绝');
+        assert(Object.keys(fseStub._store).filter(k => /config\.json$/.test(k)).length === 0,
+            'M1 拒绝时不写 config.json');
+    }
+    // M1：http(s) 页面顶层帧拒绝（即使文件名相同）
+    {
+        const httpEvent = { sender: { id: 'wc4' }, senderFrame: { parent: null, url: 'https://evil.com/activate-window.html' } };
+        r = await offlineIpc.handlers.get('license:register-local-user')(httpEvent, {
+            phone: '13800000000', password: 'pass1234'
+        });
+        assert(r.success === false && /非法调用来源/.test(r.error), 'M1 https 同名页面顶层帧拒绝');
+    }
+    // M1：缺 url / 畸形 url 的顶层帧拒绝
+    {
+        const noUrlEvent = { sender: { id: 'wc5' }, senderFrame: { parent: null } };
+        r = await offlineIpc.handlers.get('license:register-local-user')(noUrlEvent, {
+            phone: '13800000000', password: 'pass1234'
+        });
+        assert(r.success === false && /非法调用来源/.test(r.error), 'M1 缺 url 顶层帧拒绝');
+    }
+    // M1：query/hash 不改变 pathname，激活窗合法 URL 帧门放行（随后进入手机号校验）
+    {
+        const qEvent = { sender: { id: 'wc6' }, senderFrame: { parent: null, url: ACTIVATE_FRAME_URL + '?a=1#top' } };
+        r = await offlineIpc.handlers.get('license:register-local-user')(qEvent, {
+            phone: '123', password: 'abcdefgh1'
+        });
+        assert(r.success === false && /手机号/.test(r.error), 'M1 query/hash 不影响白名单（帧门放行）');
+    }
+    // ★ 第五轮（采纳）：本应用目录下多一层 evil/ 段投放同名 html（pathname 异构）→ 拒绝
+    {
+        const evilUrl = ACTIVATE_FRAME_URL.replace(/\/activate-window\.html$/, '/evil/activate-window.html');
+        const evilEvent = { sender: { id: 'wc7' }, senderFrame: { parent: null, url: evilUrl } };
+        r = await offlineIpc.handlers.get('license:register-local-user')(evilEvent, {
+            phone: '13800000000', password: 'pass1234'
+        });
+        assert(r.success === false && /非法调用来源/.test(r.error), '第五轮 同名异目录（evil/段）顶层帧拒绝');
+    }
+    // ★ 第五轮（采纳）：file://evil/share/ UNC host——pathname 与本地同构但 host 异地 → 拒绝
+    {
+        const uncPath = new URL(ACTIVATE_FRAME_URL).pathname;
+        const uncEvent = { sender: { id: 'wc8' }, senderFrame: { parent: null, url: 'file://evil' + uncPath } };
+        r = await offlineIpc.handlers.get('license:register-local-user')(uncEvent, {
+            phone: '13800000000', password: 'pass1234'
+        });
+        assert(r.success === false && /非法调用来源/.test(r.error), '第五轮 file://evil UNC host 拒绝');
+    }
+    // ★ 第五轮（采纳）：盘符大小写不敏感（Windows）→ 帧门放行（随后手机号校验拦截证明过门）
+    {
+        const lowerUrl = ACTIVATE_FRAME_URL.replace(/^(file:\/\/\/[A-Z]:)/, m => m.toLowerCase());
+        const lowerEvent = { sender: { id: 'wc9' }, senderFrame: { parent: null, url: lowerUrl } };
+        r = await offlineIpc.handlers.get('license:register-local-user')(lowerEvent, {
+            phone: '123', password: 'abcdefgh1'
+        });
+        assert(r.success === false && /手机号/.test(r.error), '第五轮 盘符小写放行（帧门过→手机号校验拦截）');
+    }
+    // H1/B1：帧门通过但磁盘 users 无签发来源 → 拒绝（不洗白）
+    {
+        const origGate = d.licenseManager.configUsersProvenAuthentic;
+        d.licenseManager.configUsersProvenAuthentic = () => false;
+        try {
+            r = await invoke(offlineIpc.handlers, 'license:register-local-user', {
+                phone: '13800000000', password: 'pass1234'
+            });
+            assert(r.success === false && /篡改/.test(r.error), 'users 来源闸门失败时注册拒绝');
+        } finally { d.licenseManager.configUsersProvenAuthentic = origGate; }
+    }
     // 校验失败
     r = await invoke(offlineIpc.handlers, 'license:register-local-user', { phone: '123', password: 'abcdefgh1' });
     assert(r.success === false && /手机号/.test(r.error), '注册手机号校验');
@@ -335,6 +437,7 @@ assert(!offlineIpc.handlers.has('license:set-trial-days'), 'set-trial-days 两�
         });
         assert(r.success && r.users.length === 1 && r.users[0].username === '13800000000', '注册新增成功');
         assert(fseStub._store[path.join('/tmp/userdata', 'registration-info.json')], '注册信息直通落盘');
+        assert(d.licenseManager.backupCalls.length === 1, 'I-4 新增写盘后立即刷新备份×1');
     } finally { restoreLoad(); }
 
     // UPSERT：第二次调用同名用户（config 已存在）
@@ -344,6 +447,7 @@ assert(!offlineIpc.handlers.has('license:set-trial-days'), 'set-trial-days 两�
             phone: '13800000000', password: 'newpass99', clinicName: '惠康堂', adminName: '费医生'
         });
         assert(r.success && r.users.length === 1 && r.users[0].password === 'hash:newpass99', '注册 UPSERT 更新密码');
+        assert(d.licenseManager.backupCalls.length === 2, 'I-4 UPSERT 写盘后再次刷新备份×2');
     } finally { restoreLoad(); }
 
     // —— 12. load-registration-info / get-activation-users ——

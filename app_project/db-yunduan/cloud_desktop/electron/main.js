@@ -149,19 +149,24 @@ function getWritableConfigPath() {
 }
 
 // ★ 首次启动时，将 asar 内的 config.json 复制到可写路径（仅复制一次）
-// ★ 修复：如果已存在的 config.json 签名不匹配（旧版用 masterKey 派生密钥签名），用硬编码密钥重新签名
+// ★ 2026-09-26 B2 修复：已存在的 config.json 绝不无条件重签——否则被篡改/
+//   植入的 users 会在 validateLicense 之前就被合法密钥就地"洗白"。
+//   现仅检查签名状态：v2 完整件保持原样；v1 合法旧件交由 validateLicense
+//   带备份校验迁移；签名无效件不动，由 validateLicense fail-closed。
 async function ensureWritableConfig() {
     try {
         const writablePath = getWritableConfigPath();
         if (await fse.pathExists(writablePath)) {
-            // 已存在：确保签名正确（兼容旧版无签名或 masterKey 派生密钥签名）
             try {
-                const cfg = await fse.readJson(writablePath);
-                // signConfig(cfg) 直接修改原对象：设置 configIssuedAt（如无）+ 更新 configSignature 字符串
-                // 切勿将返回值赋给 configSignature 属性（会造成循环引用）
-                licenseManager.signConfig(cfg);
-                await fse.writeJson(writablePath, cfg, { spaces: 2 });
-                console.log('[Config] config.json 签名已修复/刷新');
+                const insp = licenseManager.inspectConfigSignatures();
+                if (insp.ok && !insp.legacy) {
+                    // v2 双签名完整：无需任何处理
+                } else if (insp.ok && insp.legacy) {
+                    console.log('[Config] 现存 config.json 为 v1 合法旧件，启动校验时迁移');
+                } else {
+                    console.warn('[Config] 现存 config.json 签名无效(reason='
+                        + insp.reason + ')，不就地重签，交由 validateLicense 裁决');
+                }
             } catch (e) {
                 console.warn('[Config] 签名检查失败，跳过:', e.message);
             }
@@ -937,10 +942,18 @@ ipcMain.handle('get-app-config', async () => {
             // 若 config 的 users 被清除，则从备份回填，避免原账号密码无法登入。
             try {
                 if (Array.isArray(cfg.users) && cfg.users.length > 0) {
-                    licenseManager.backupUserAccounts(cfg);
+                    // ★ 2026-09-26 阻断修复（三审共识·备份毒化链 + 复审 TOCTOU）：
+                    //   仅验明来源的【内存件】users 才允许刷新备份，防应用给未验签
+                    //   users 签合法 v2 备份。
+                    if (licenseManager.configUsersProvenAuthentic(cfg)) {
+                        licenseManager.backupUserAccounts(cfg);
+                    } else {
+                        console.warn('[Config] users 来源未证明，跳过备份刷新（防毒化）');
+                    }
                 } else {
-                    const backedUsers = licenseManager.loadUserAccountBackup();
-                    if (backedUsers.length > 0) cfg.users = backedUsers;
+                    // 回填统一走 getFillableUsers：仅新鲜 v2 / v1 合法件窗口内 legacy
+                    const fillUsers = licenseManager.getFillableUsers();
+                    if (fillUsers.length > 0) cfg.users = fillUsers;
                 }
             } catch (e) {
                 console.warn('账号备份刷新失败（非致命）:', e.message);
@@ -956,10 +969,16 @@ ipcMain.handle('get-app-config', async () => {
 // ===== 首次配置向导：更新 config.json =====
 ipcMain.handle('config:update', async (event, updates) => {
     try {
+        // ★ 2026-09-26 H1/B1 + 复审 TOCTOU：config 只读一次，闸门裁决内存件，
+        // 防篡改/植入 users 经配置向导洗白。出厂空 config 自然通过。
         const configPath = getWritableConfigPath();
         let config = {};
         if (await fse.pathExists(configPath)) {
             config = await fse.readJson(configPath);
+        }
+        if (!licenseManager.configUsersProvenAuthentic(config)) {
+            console.warn('[Config] config:update 中止：现存 users 无真实签发来源');
+            return { success: false, error: '检测到本地配置被篡改，设置已中止，请联系客服' };
         }
         if (updates.clinicName !== undefined) config.clinicName = updates.clinicName;
         if (updates.doctorName !== undefined) config.doctorName = updates.doctorName;
@@ -967,6 +986,8 @@ ipcMain.handle('config:update', async (event, updates) => {
         // 签名保护：signConfig(config) 直接修改原对象，切勿将返回值赋值给属性（会造成循环引用）
         licenseManager.signConfig(config);
         await fse.writeJson(configPath, config, { spaces: 2 });
+        // users 未变；若新 users 仍证明成立，proven 刷备份保持新鲜
+        try { licenseManager.backupUserAccounts(config, { proven: true }); } catch (e2) {}
         console.log('[Config] config.json updated:', JSON.stringify(updates));
         return { success: true, config };
     } catch (e) {

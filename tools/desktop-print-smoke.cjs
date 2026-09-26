@@ -85,7 +85,7 @@ const WAIT = 900;
 function frame(extra) {
     return Object.assign({
         sender: {},
-        senderFrame: { isMainFrame: true, url: 'file:///app/index.html' }
+        senderFrame: { parent: null, url: 'file:///app/index.html' }
     }, extra || {});
 }
 
@@ -151,7 +151,7 @@ function decodeDataUrl(url) {
     // —— 4. 非主框架调用被拒绝 ——
     {
         const env = makeEnv({});
-        const ev = { senderFrame: { isMainFrame: false, url: 'file:///app/index.html' } };
+        const ev = { senderFrame: { parent: {}, url: 'file:///app/index.html' } };
         const result = await invoke(env, '<body>x</body>', 'portrait', ev);
         ok(result === false, 'iframe 子框架调用返回 false');
         ok(env.windows.length === 0, '拒绝时不创建窗口');

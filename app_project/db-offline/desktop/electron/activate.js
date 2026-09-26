@@ -421,10 +421,19 @@ function showActivateWindow(parentWindow) {
 
     // ★ 安全（P3-1 最终加固）：激活窗口主框架导航防护——仅允许应用自身 file:// 页面
     //   （激活窗口含 CDN 二维码脚本等远程资源，防被诱导整页跳转钓鱼页）
+    // ★ 第四轮（B-重1）导航收窄：仅允许应用自身 electron 目录下的 file:// 页面
+    //   （activate-window.html 所在目录），阻断被诱导跳到远程地址或任意本地文件。
+    const __activateNavPrefix = (() => {
+        try {
+            return require('url').pathToFileURL(path.join(__dirname)).href.toLowerCase() + '/';
+        } catch (_) { return null; }
+    })();
     activateWindow.webContents.on('will-navigate', (event, url) => {
-        if (!url.startsWith('file://')) {
+        const lower = typeof url === 'string' ? url.toLowerCase() : '';
+        const allowed = !!__activateNavPrefix && lower.startsWith('file://') && lower.startsWith(__activateNavPrefix);
+        if (!allowed) {
             event.preventDefault();
-            console.warn('[安全] 已阻断激活窗口整页导航到非本地地址:', url);
+            console.warn('[安全] 已阻断激活窗口整页导航到非应用自身页面:', url);
         }
     });
 
@@ -614,6 +623,14 @@ function clearAdminRequestId() {
 // ★ 2026-08-18 激活账号手机号独立持久化（不随审批成功清除）
 //   自愈机制依赖它：正式授权已装但管理员账户缺失时，按该手机号补齐"手机号+默认admin"账户。
 //   admin-request-id.dat 审批成功后会被清除，但激活手机号需长期保留直到下一次激活覆盖。
+// ★ 2026-09-26 安全审查 #3：本文件加独立 HMAC——旧明文裸存时，攻击者只需覆写
+//   admin-account.dat（无需碰 config 签名）即可让 get-app-config 用默认密码 admin
+//   造一个 role:'admin' 全职管理员。旧无签名件读取时按无记录处理。
+const ADMIN_ACCOUNT_SIGN_KEY = 'bnzc_admin_account_key_v1_2026';
+function computeAdminAccountSignature(phone, edition, savedAt) {
+    return crypto.createHmac('sha256', ADMIN_ACCOUNT_SIGN_KEY)
+        .update([String(phone), edition || '', savedAt].join('|')).digest('hex');
+}
 function getAdminAccountPhonePath() {
     try {
         return path.join(licenseManager.getWritableDir(), 'admin-account.dat');
@@ -624,10 +641,12 @@ function getAdminAccountPhonePath() {
 function saveAdminAccountPhone(phone, edition) {
     if (!phone) return;
     try {
+        const savedAt = new Date().toISOString();
         fs.writeFileSync(getAdminAccountPhonePath(), JSON.stringify({
             phone: String(phone),
             edition: edition || '',
-            savedAt: new Date().toISOString()
+            savedAt: savedAt,
+            signature: computeAdminAccountSignature(phone, edition, savedAt)
         }), 'utf8');
     } catch (e) {
         console.warn('[Admin] 保存激活手机号失败:', e.message);
@@ -638,7 +657,18 @@ function loadAdminAccountPhone() {
         const p = getAdminAccountPhonePath();
         if (fs.existsSync(p)) {
             const data = JSON.parse(fs.readFileSync(p, 'utf8'));
-            return (data && data.phone) ? String(data.phone) : '';
+            const sig = data && typeof data.signature === 'string' ? data.signature : '';
+            const expected = (data && data.phone && data.savedAt)
+                ? computeAdminAccountSignature(data.phone, data.edition, data.savedAt) : '';
+            if (expected && /^[0-9a-f]{64}$/.test(sig)) {
+                const a = Buffer.from(sig, 'hex');
+                const b = Buffer.from(expected, 'hex');
+                if (a.length === b.length && crypto.timingSafeEqual(a, b)) {
+                    return String(data.phone);
+                }
+            }
+            // 无签名旧件/验签失败：按无记录处理（防覆写注入管理员）
+            console.warn('[Admin] admin-account.dat 无有效签名，忽略该激活手机号');
         }
     } catch (e) {
         console.warn('[Admin] 读取激活手机号失败:', e.message);
@@ -1107,6 +1137,7 @@ module.exports = {
     queryInvite,
     cancelAdminRequest,
     saveAdminRequestId,
+    saveAdminAccountPhone, // ★ 2026-09-26：导出供完整性冒烟（admin-account.dat 签名）
     loadAdminAccountPhone,
     loadAdminRequestId,
     clearAdminRequestId,

@@ -104,8 +104,23 @@ const TRIAL_KEY = 'bnzc_trial_key_v1';
 const LASTRUN_KEY = 'bnzc_lastrun_key_v1';
 
 // ★ v3 新增：config.json 完整性签名密钥（与 edit-config.ps1 中 $CONFIG_SIGN_KEY 保持一致）
-// 用于校验 config.json 中的 clinicName/doctorName 未被篡改
+// 用于校验 config.json 中的 clinicName/doctorName 未被篡改。
+// ★ 第四轮口径：静态密钥仅用于 v1 历史存量头验签；v2 usersSignature 一律机器绑定
+// 密钥（getUsersSignKey），静态签名件不再具备 v2 采信资格（防跨机移植洗白）。
 const CONFIG_SIGN_KEY = 'bnzc_config_sign_key_v1_2026';
+
+// ★ 2026-09-26 I2：users-backup.json 独立签名密钥基（域分离，禁止与 config 签名互串）。
+// 备份是 selfHeal/装码恢复账号时的权威来源，必须自带 HMAC，防备份投毒。
+// ★ 第四轮：实际签名密钥=HKDF(本机指纹,'users-backup-sign',本基)（getUsersBackupSignKey），
+// 机器绑定，攻击者自有安装产出的备份移植到他人机器验签必失败。
+const USERS_BACKUP_SIGN_KEY = 'bnzc_users_backup_key_v1_2026';
+
+// ★ 2026-09-26 备份采信收口（双重独立审查阻断项）：
+// 无签名 legacy 备份只在该日期前写入的件、且仅在 v1 合法件上才允许采信；
+// missing/unsigned 状态一律不接受 legacy（攻击者可自行制造这两种状态）。
+// backupAt 可被回写，真正的硬防线是 gate.dat 内 usersBackupGen 单调锚点：
+// 锚点一旦建立（新 exe 成功写过 v2 备份），legacy 永久退出采信。
+const USERS_LEGACY_BACKUP_SUNSET = '2027-03-31';
 
 // ============================================================================
 //  ★ P1-3 新增：masterKey 派生密钥机制
@@ -140,6 +155,29 @@ function getEffectiveConfigSignKey() {
         return crypto.createHash('sha256').update(mk + ':config-sign:v1').digest('hex');
     }
     return CONFIG_SIGN_KEY;
+}
+
+// ★ 2026-09-26 第四轮（跨机移植阻断）：
+//   usersSignature / users-backup 签名密钥【机器绑定】——HKDF 以本机
+//   machineId+硬件指纹派生用途密钥。旧静态密钥下，攻击者可在自己合法安装上
+//   伪造签名件（users+usersSignature 双字段替换 / 植入外来 users-backup.json）
+//   后移植受害者机器洗白；机器绑定后无法为他人机器预签任何签名件。
+//   换机/改硬件 → 签名失效 → 走既有客服恢复流程（与 license.dat 机器绑定同口径）。
+//   注意：hkdfPurposeKey 为函数声明（提升），此处运行时可用。
+function getUsersSignKey() {
+    return hkdfPurposeKey(getMachineId(), 'users-sign', CONFIG_SIGN_KEY);
+}
+function getUsersBackupSignKey() {
+    return hkdfPurposeKey(getMachineId(), 'users-backup-sign', USERS_BACKUP_SIGN_KEY);
+}
+
+// ★ 2026-09-26 阻断修复：旧全局盐 SHA256 快哈希（installLicense 激活建号、
+// ensureLocalActivationUser 免费版补绑共用）。原声明在 installLicense 的
+// if(phone) 块内为块级 const，ensureLocalActivationUser 引用必抛 ReferenceError，
+// 免费版用户补绑手机号 100% 失败。现提升为模块级。
+const PASSWORD_SALT = 'bnzc_prescription_salt_v1';
+function hashOf(p) {
+    return crypto.createHash('sha256').update(Buffer.from(PASSWORD_SALT + String(p), 'utf8')).digest('hex');
 }
 
 // ★ v2: 版本类型默认配置（功能差异矩阵）
@@ -284,30 +322,203 @@ function writeGateState(state, machineIdArg) {
     }
 }
 
+// ★ 2026-09-26 users-backup 单调 gen：gate.dat 与二级锚点 .license-anchor 双写
+//   （复用 09-23 登录闸门的双锚点；gate 在 writable/exe 目录、anchor 在 userData），
+//   machineId 派生密钥加密，渲染端/攻击者无法伪造内容；单删任一文件无法重置。
+//   防旧 v2 备份重放导致密码/角色回滚。
+function readUsersBackupGen(machineIdArg) {
+    try {
+        const mid = machineIdArg || getMachineId();
+        const gate = readGateState(mid) || {};
+        const anchor = readAnchorState(mid) || {};
+        const gg = Number(gate.usersBackupGen);
+        const ag = Number(anchor.usersBackupGen);
+        const high = Math.max(gg > 0 ? gg : 0, ag > 0 ? ag : 0);
+        return high > 0 ? high : 0;
+    } catch (e) { return 0; }
+}
+function writeUsersBackupGen(gen, machineIdArg) {
+    try {
+        const mid = machineIdArg || getMachineId();
+        const n = Number(gen);
+        if (!(n > 0)) return false;
+        let ok1 = true, ok2 = true;
+        const gate = readGateState(mid) || {};
+        if ((Number(gate.usersBackupGen) || 0) < n) {
+            gate.usersBackupGen = n;
+            ok1 = !!writeGateState(gate, mid);
+        }
+        const anchor = readAnchorState(mid) || {};
+        if ((Number(anchor.usersBackupGen) || 0) < n) {
+            anchor.usersBackupGen = n;
+            ok2 = !!writeAnchorState(anchor, mid);
+        }
+        // 双份至少一份落盘（读取高水位），单文件写入失败不致命
+        return ok1 || ok2;
+    } catch (e) {
+        console.warn('[Gate] usersBackupGen 写入失败（非致命）:', e && e.message);
+        return false;
+    }
+}
+
+// ★ 2026-09-26 legacy 永久退役标记（双锚点 sticky）：新 exe 一旦写过 v2 备份
+//   即置位，此后无签名 legacy 备份一律不可采信；单删任一文件无法复位。
+//   ★ 第四轮残留风险评估（机器绑定后收窄）：备份 v2 签名已机器绑定，攻击者无法
+//   为受害者机器预签任何 v2 备份；"双删锚点+植入旧件"只剩无签名 legacy 路径，
+//   而 legacy 采信需 anchor 未建立+未退役+日落窗口内三条件同成立，可利用窗口
+//   已收敛到真实 v1 老机升级场景（基线等价性论证记 KNOWLEDGE）。
+function legacyRetired(machineIdArg) {
+    try {
+        const mid = machineIdArg || getMachineId();
+        const gate = readGateState(mid) || {};
+        const anchor = readAnchorState(mid) || {};
+        return gate.usersLegacyRetired === true || anchor.usersLegacyRetired === true;
+    } catch (e) { return false; }
+}
+function markLegacyRetired(machineIdArg) {
+    try {
+        const mid = machineIdArg || getMachineId();
+        let ok1 = true, ok2 = true;
+        const gate = readGateState(mid) || {};
+        if (gate.usersLegacyRetired !== true) {
+            gate.usersLegacyRetired = true;
+            ok1 = !!writeGateState(gate, mid);
+        }
+        const anchor = readAnchorState(mid) || {};
+        if (anchor.usersLegacyRetired !== true) {
+            anchor.usersLegacyRetired = true;
+            ok2 = !!writeAnchorState(anchor, mid);
+        }
+        return ok1 || ok2;
+    } catch (e) {
+        console.warn('[Gate] legacyRetired 标记失败（非致命）:', e && e.message);
+        return false;
+    }
+}
+
+// ★ 2026-09-26 I2：备份文件 users 的独立 HMAC（stableStringify 在本文件后文定义，
+// 函数声明提升，运行时可用）。
+// ★ 2026-09-26 gen 绑定：签名必须覆盖 gen——gen 若在签名外，攻击者拿到旧 v2
+// 备份只改 gen 字段即可冒充新件，单调锚点失效。签名内容=gen|stableStringify(users)。
+// ★ 第四轮：签名密钥机器绑定（getUsersBackupSignKey）——攻击者自有安装产出的
+// 合法 v2 备份移植到受害者机器后验签必失败（trusted='bad'），回填/证明链全断。
+function computeUsersBackupSignature(users, gen) {
+    const list = Array.isArray(users) ? users : [];
+    const genPart = String(typeof gen === 'number' ? gen : Number(gen) || 0);
+    return crypto.createHmac('sha256', getUsersBackupSignKey())
+        .update(genPart + '|' + stableStringify(list)).digest('hex');
+}
+
+// 检查 users-backup.json，返回 { trusted, users }：
+//   trusted='v2'    有独立签名且验签通过（权威）
+//   trusted='legacy' 旧版无签名备份（仅一个升级周期内的兼容窗口，调用方按场景采信）
+//   trusted='bad'   有签名但验签失败/文件损坏（疑似投毒，禁止采信）
+//   trusted='none'  备份不存在
+function inspectUsersBackup() {
+    try {
+        const p = getUsersBackupPath();
+        if (!fs.existsSync(p)) return { trusted: 'none', users: [] };
+        const backup = JSON.parse(fs.readFileSync(p, 'utf8'));
+        const users = backup && Array.isArray(backup.users) ? backup.users : [];
+        if (typeof backup.usersSignature === 'string' && backup.usersSignature.length > 0) {
+            if (hexSignatureMatches(backup.usersSignature,
+                computeUsersBackupSignature(users, backup.gen))) {
+                return { trusted: 'v2', users, backupAt: backup.backupAt, gen: backup.gen };
+            }
+            console.warn('[License] users-backup.json 签名校验失败（疑似投毒），备份不可采信');
+            return { trusted: 'bad', users: [] };
+        }
+        return { trusted: 'legacy', users, backupAt: backup.backupAt, gen: backup.gen };
+    } catch (e) {
+        return { trusted: 'bad', users: [] };
+    }
+}
+
 // 将当前 config 中的 users 备份到独立文件（非关键路径，失败可安全跳过）
-function backupUserAccounts(config) {
+// ★ 2026-09-26 阻断修复（双重独立三审共识：备份毒化链）：
+//   ① 写入单调 gen 并双持久化 gate.dat + .license-anchor（machineId 密钥加密，
+//      攻击者无法伪造内容；单删任一文件不失效），旧件重放（密码/角色回滚）在
+//      回填/证明处被 gen 新鲜度拒绝；
+//   ② 已有可验证 v2 备份时，新 users 必须包含旧备份全部条目（旧为新的子集）
+//      才允许覆写——防应用自身给未验签 users 签出合法备份（毒化洗白）；
+//   ③ 锚点已建立但备份文件缺失（攻击者删备份制造竞态）→ 拒绝写入；
+//   ④ options.proven=true：调用方已对【同一份 config】过 configUsersProvenAuthentic
+//      闸门、本次写盘是已认证变更（改密/改名/移除幽灵账号），允许推进备份
+//      （含条目变少），解决"合法改密→超集校验拒绝→备份永久陈旧→损坏后旧哈希回填"。
+//   非 proven 路径截断保护（新列表条数变少不覆写）保留。
+function backupUserAccounts(config, options) {
     try {
         if (!config || !Array.isArray(config.users) || config.users.length === 0) return false;
+        options = options || {};
+        const proven = options.proven === true;
         const newUsers = config.users;
-        // ★ 2026-09-22 截断保护：新列表账号数少于已有备份时不覆盖，防 config 被
-        //   异常截断/部分删除时把好备份冲掉，导致无法完整回填。正常删除账号的
-        //   场景保留旧备份无害（备份只在 config users 为空时才回填）。
+        const bp = getUsersBackupPath();
+        let oldBackup = null;
+        let oldMissing = false;
         try {
-            const bp = getUsersBackupPath();
             if (fs.existsSync(bp)) {
-                const old = JSON.parse(fs.readFileSync(bp, 'utf8'));
-                if (old && Array.isArray(old.users) && old.users.length > newUsers.length) {
+                oldBackup = JSON.parse(fs.readFileSync(bp, 'utf8')) || null;
+                // ★ 截断保护：新列表条数少于旧备份不覆盖，防异常截断冲掉好备份。
+                //   proven 变更（移除幽灵账号/合法删号）允许变少。
+                if (!proven && oldBackup && Array.isArray(oldBackup.users)
+                    && oldBackup.users.length > newUsers.length) {
                     console.warn('[License] backupUserAccounts 跳过：当前账号数 ' + newUsers.length
-                        + ' 少于备份 ' + old.users.length + '，保留原备份');
+                        + ' 少于备份 ' + oldBackup.users.length + '，保留原备份');
+                    return false;
+                }
+            } else {
+                oldMissing = true;
+            }
+        } catch (oe) { oldBackup = null; oldMissing = true; /* 旧件损坏 → 允许覆写 */ }
+
+        if (!proven) {
+            // ★ 第四轮（J1 纵深）：gen 锚点已建立时，在场备份必须是【新鲜 v2 件】
+            //   才允许非 proven 覆写。否则（legacy/bad/陈旧 gen/缺失）一律拒绝——
+            //   合法流中锚点建立后在场备份总与锚点同 gen（新鲜 v2），此分支只拦
+            //   "锚点在而备份被替换/回滚/删除"的攻击与竞态，正常路径不可达。
+            if (readUsersBackupGen() > 0) {
+                const inPlace = inspectUsersBackup();
+                if (!(inPlace.trusted === 'v2' && backupGenFresh(inPlace))) {
+                    console.warn('[License] backupUserAccounts 拒绝：gen 锚点已建立但在场备份非新鲜 v2 件'
+                        + '(trusted=' + inPlace.trusted + ')，防备份替换/回滚洗白');
                     return false;
                 }
             }
-        } catch (oe) { /* 旧备份损坏/缺失 → 正常覆写 */ }
+            // 旧件是 v2 签名件：新 users 必须是旧备份的超集（usersProvenByBackup(old,new)），
+            // 未验签新增/改字段条目会让检查失败 → 拒绝覆写（防毒化）。
+            // 旧件 legacy 无签名，不作此约束（调用方必须已先过 configUsersProvenAuthentic）。
+            if (oldBackup && typeof oldBackup.usersSignature === 'string') {
+                let oldV2 = null;
+                try {
+                    if (hexSignatureMatches(oldBackup.usersSignature,
+                        computeUsersBackupSignature(oldBackup.users, oldBackup.gen))) {
+                        oldV2 = oldBackup;
+                    }
+                } catch (_) { oldV2 = null; }
+                if (oldV2 && !usersProvenByBackup(oldV2.users, newUsers)) {
+                    console.warn('[License] backupUserAccounts 拒绝覆写：新 users 含旧 v2 备份无法证明的条目（防毒化）');
+                    return false;
+                }
+            }
+            // ★ 阻断修复（复审发现 2）：gen 锚点已建立但备份缺失/不可解析——
+            //   攻击者删备份可让超集校验整体跳过（竞态实证）→ 无证明不签。
+            if ((oldMissing || !oldBackup) && readUsersBackupGen() > 0) {
+                console.warn('[License] backupUserAccounts 拒绝：gen 锚点已建立但备份缺失（防删备份竞态洗白）');
+                return false;
+            }
+        }
+
+        const anchorGen = readUsersBackupGen();
+        const gen = (typeof anchorGen === 'number' && anchorGen > 0) ? anchorGen + 1 : 1;
         const backup = {
             backupAt: new Date().toISOString(),
-            users: newUsers
+            gen: gen,
+            users: newUsers,
+            usersSignature: computeUsersBackupSignature(newUsers, gen)
         };
-        fs.writeFileSync(getUsersBackupPath(), JSON.stringify(backup, null, 2), 'utf8');
+        fs.writeFileSync(bp, JSON.stringify(backup, null, 2), { mode: 0o600 });
+        writeUsersBackupGen(gen);
+        markLegacyRetired(); // v2 备份一旦写过，legacy 永久退役
         return true;
     } catch (e) {
         console.warn('[License] backupUserAccounts 失败（非致命）:', e.message);
@@ -315,18 +526,9 @@ function backupUserAccounts(config) {
     }
 }
 
-// 从独立备份读取 users（config 缺失/被清空时回填，避免原账号密码丢失）
+// 从独立备份读取 users（保持导出名，返回 inspectUsersBackup 的结构化结果）
 function loadUserAccountBackup() {
-    try {
-        const p = getUsersBackupPath();
-        if (!fs.existsSync(p)) return [];
-        const backup = JSON.parse(fs.readFileSync(p, 'utf8'));
-        if (backup && Array.isArray(backup.users)) return backup.users;
-        return [];
-    } catch (e) {
-        console.warn('[License] loadUserAccountBackup 失败（非致命）:', e.message);
-        return [];
-    }
+    return inspectUsersBackup();
 }
 
 // ★ 获取试用期天数（可配置，默认 7 天，测试时可设为 0 天立即触发激活）
@@ -1513,52 +1715,183 @@ function checkLicenseBinding(license, localMachineId) {
 // ★ v3 新增：校验 config.json 完整性签名
 // 防止用户修改 config.json 中的 clinicName 绕过 license 绑定校验
 // 返回 true=完整 / false=被篡改或无签名
-// ★ P1-3: 使用 getEffectiveConfigSignKey() 派生密钥（从 license.masterKey 派生，向后兼容）
-function verifyConfigIntegrity() {
+// ★ 2026-09-26 F2：格式感知——v2（有 usersSignature）须 users/config 双签名同时
+//   匹配；v1（无 usersSignature）旧配置按原 4 字段内容验签，交由调用方迁移。
+function loadSignedConfigCandidate() {
+    // ★ 第三轮终检 P2 修复（2026-08-16）：
+    //   1. 原只读 exe 目录 config，而 installLicense 写的是 writableDir（NSIS 版= userData），
+    //      路径不一致导致 NSIS 版从未真正校验过签名（exe 目录无签名 → 一直走兜底放行）。
+    //      现优先校验 writableDir（与签名写入一致），exe 目录作兼容兜底（Portable 旧数据）。
+    //   2. 删除两处兜底放行：无 config.json / 无 configSignature 原返回 true，
+    //      攻击者删 config 或删签名字段即可绕过 → 现返回 false。
+    //      安全性依据：本函数仅在 license 含 licenseBinding（v3+ 激活）时被调用，
+    //      v3+ 激活流程 installLicense 必写签名 config，无签名 = 被删/损坏/篡改。
+    const candidatePaths = [
+        path.join(getWritableDir(), 'config.json'),
+        path.join(getExeDirectory(), 'config.json')
+    ];
+    // ★ 2026-09-26 fail-closed（安全审查 #5）：区分 JSON 损坏与 IO 错误，
+    //   不再与"文件不存在"混为一谈，否则锁文件竞态可把闸门打成空态放行。
+    let sawCorrupt = false;
+    let sawIoError = false;
+    for (const p of candidatePaths) {
+        try {
+            if (!fs.existsSync(p)) continue;
+            const parsed = JSON.parse(fs.readFileSync(p, 'utf8'));
+            if (parsed && parsed.configSignature) return { cfg: parsed, configPath: p };
+        } catch (e) {
+            if (e && e.name === 'SyntaxError') sawCorrupt = true;
+            else if (e && e.code === 'ENOENT') { /* exists/读之间被删，继续下一路径 */ }
+            else sawIoError = true;
+        }
+    }
+    if (sawIoError) return { ioError: true };
+    if (sawCorrupt) return { corrupt: true };
+    return null;
+}
+
+function hexSignatureMatches(actualHex, expectedHex) {
     try {
-        // ★ 第三轮终检 P2 修复（2026-08-16）：
-        //   1. 原只读 exe 目录 config，而 installLicense 写的是 writableDir（NSIS 版= userData），
-        //      路径不一致导致 NSIS 版从未真正校验过签名（exe 目录无签名 → 一直走兜底放行）。
-        //      现优先校验 writableDir（与签名写入一致），exe 目录作兼容兜底（Portable 旧数据）。
-        //   2. 删除两处兜底放行：无 config.json / 无 configSignature 原返回 true，
-        //      攻击者删 config 或删签名字段即可绕过 → 现返回 false。
-        //      安全性依据：本函数仅在 license 含 licenseBinding（v3+ 激活）时被调用，
-        //      v3+ 激活流程 installLicense 必写签名 config，无签名 = 被删/损坏/篡改。
-        const candidatePaths = [
-            path.join(getWritableDir(), 'config.json'),
-            path.join(getExeDirectory(), 'config.json')
-        ];
-        let cfg = null;
-        for (const p of candidatePaths) {
-            try {
-                if (!fs.existsSync(p)) continue;
-                const parsed = JSON.parse(fs.readFileSync(p, 'utf8'));
-                if (parsed && parsed.configSignature) { cfg = parsed; break; }
-            } catch (e) { /* 尝试下一路径 */ }
+        // ★ 2026-09-26 严格格式：Buffer.from(hex) 会静默丢弃奇数尾 nibble，
+        //   真签名追加 1 个 hex 字符仍可能判等。先锁死 64 位小写 hex。
+        if (typeof actualHex !== 'string' || !/^[0-9a-f]{64}$/.test(actualHex)) return false;
+        if (typeof expectedHex !== 'string' || !/^[0-9a-f]{64}$/.test(expectedHex)) return false;
+        const a = Buffer.from(actualHex, 'hex');
+        const b = Buffer.from(expectedHex, 'hex');
+        return a.length === b.length && crypto.timingSafeEqual(a, b);
+    } catch (e) { return false; }
+}
+
+// 检查 config 双签名，返回 { ok, legacy, configPath, cfg, reason, usersTrusted }
+// ★ 2026-09-26 失败分类（H1/B1 修复核心）：
+//   reason='missing'            无任何带 configSignature 的候选件
+//   reason='bad_issued_at'      configIssuedAt 缺失
+//   reason='users_mismatch'     v2 件 users 签名在所有候选密钥下均不通过
+//                               （users 无权威源可纠正 → 调用方必须 fail-closed）
+//   reason='header_mismatch'    users 签名通过但 config 签名不通过（users 可信、仅
+//                               header 漂移 → 可自愈重签）
+//   reason='unsigned_unverified' 无 usersSignature 且 v1 签名也不通过
+// cfgArg（可选）：调用方已读入内存的 config 对象——传入时直接检查它、
+//   不再二次读盘（防 TOCTOU：闸门看到好件、写盘用了被替换的异件）；
+//   configPath 按写口径回填，仅供日志使用。
+function inspectConfigSignatures(cfgArg) {
+    let loaded;
+    if (cfgArg && typeof cfgArg === 'object') {
+        loaded = { cfg: cfgArg, configPath: path.join(getWritableDir(), 'config.json') };
+    } else {
+        loaded = loadSignedConfigCandidate();
+        if (loaded && loaded.ioError) {
+            console.warn('[License] config.json 读取 IO 错误，fail-closed（不与文件缺失混淆）');
+            return { ok: false, reason: 'config_io_error' };
         }
-        if (!cfg) {
+        if (loaded && loaded.corrupt) {
+            console.warn('[License] config.json JSON 损坏，fail-closed（交由备份自愈）');
+            return { ok: false, reason: 'config_corrupt' };
+        }
+        if (!loaded) {
             console.warn('[License] config.json 缺失或无签名，完整性校验不通过（fail-closed）');
-            return false;
+            return { ok: false, reason: 'missing' };
         }
-        // 必须有 configIssuedAt 才能验签
-        if (!cfg.configIssuedAt) return false;
-        // 签名内容：clinicName|doctorName|edition|configIssuedAt
-        const signContent = [cfg.clinicName || '', cfg.doctorName || '', cfg.edition || '', cfg.configIssuedAt].join('|');
-        // ★ P1-预防重装：config 签名统一用稳定硬编码密钥发/验签（signConfig 已用 CONFIG_SIGN_KEY）。
-        // 兼容历史 masterKey 派生的老签名：多候选密钥逐个验签，任一匹配即通过，
-        // 避免重装/重激活后密钥漂移导致已激活用户被误锁（宁可漏检不可误报）。
-        const signCandidates = [CONFIG_SIGN_KEY];
-        const _mk = getLicenseMasterKey();
-        if (_mk) signCandidates.push(getEffectiveConfigSignKey());
+    }
+    const { cfg, configPath } = loaded;
+    // 必须有 configIssuedAt 才能验签
+    if (!cfg.configIssuedAt) return { ok: false, reason: 'bad_issued_at', cfg, configPath };
+    // ★ P1-预防重装：v1 头签名（无 usersSignature 的历史存量件）用稳定硬编码密钥
+    // 验签；兼容历史 masterKey 派生的老签名：多候选密钥逐个验签，任一匹配即通过，
+    // 避免重装/重激活后密钥漂移导致已激活用户被误锁（宁可漏检不可误报）。
+    const signCandidates = [CONFIG_SIGN_KEY];
+    const _mk = getLicenseMasterKey();
+    if (_mk) signCandidates.push(getEffectiveConfigSignKey());
+    const hasUsersSig = typeof cfg.usersSignature === 'string' && cfg.usersSignature.length > 0;
+    let usersTrusted = false;
+    if (hasUsersSig) {
+        // ★ 第四轮：v2 users 签名【机器绑定】——静态 CONFIG_SIGN_KEY 不是 v2 候选：
+        //   usersSignature 为本次新引入、野外无静态签名存量；保留静态候选=保留
+        //   跨机移植洗白通道（攻击者自有安装产出的签名件在受害者机器上必须验签失败）。
+        // ★ 第五轮（安全#1）：masterKey 派生键同样出局——LICENSE_MASTER_KEY 是
+        //   全局单一 Cloudflare env 且明文随 license 下发，攻击者持同部署任一
+        //   license 即可预签 masterKey 派生件移植受害者机（PoC 实证幽灵 admin
+        //   放行）。v2 系新引入无存量 → 直接删除该候选；signConfig 同口径恒用
+        //   机器键，否则 masterKey 在场时自签自验不过。
+        const v2Candidates = [getUsersSignKey()];
+        for (const key of v2Candidates) {
+            const expectedUsers = computeUsersSignature(cfg.users, key);
+            const usersOk = hexSignatureMatches(cfg.usersSignature, expectedUsers);
+            const signContent = [
+                cfg.clinicName || '', cfg.doctorName || '', cfg.edition || '',
+                cfg.configIssuedAt, cfg.usersSignature
+            ].join('|');
+            const headerOk = hexSignatureMatches(cfg.configSignature,
+                crypto.createHmac('sha256', key).update(signContent).digest('hex'));
+            if (usersOk && headerOk) {
+                return { ok: true, legacy: false, configPath, cfg, usersTrusted: true };
+            }
+            if (usersOk) usersTrusted = true; // users 有签发证明，仅 header 漂移
+        }
+    } else {
+        // v1 旧格式：签名内容仅 clinicName|doctorName|edition|configIssuedAt
         for (const key of signCandidates) {
+            const signContent = [cfg.clinicName || '', cfg.doctorName || '', cfg.edition || '',
+                                  cfg.configIssuedAt].join('|');
             const expected = crypto.createHmac('sha256', key).update(signContent).digest('hex');
-            try {
-                if (crypto.timingSafeEqual(Buffer.from(cfg.configSignature, 'hex'), Buffer.from(expected, 'hex'))) return true;
-            } catch (e) { /* 尝试下一候选密钥 */ }
+            if (hexSignatureMatches(cfg.configSignature, expected)) {
+                return { ok: true, legacy: true, configPath, cfg };
+            }
         }
-        return false;
+    }
+    if (usersTrusted) {
+        return { ok: false, reason: 'header_mismatch', usersTrusted: true, cfg, configPath };
+    }
+    return { ok: false, reason: hasUsersSig ? 'users_mismatch' : 'unsigned_unverified', cfg, configPath };
+}
+
+function verifyConfigIntegrity() {
+    return inspectConfigSignatures().ok;
+}
+
+// v1 合法配置一次性迁移为 v2（users 纳入签名）。
+// 返回值：
+//   true       迁移完成
+//   false      临时性失败（IO/签名异常），不致命，下次启动重试
+//   'tampered' 拒绝迁移：磁盘 users 与备份不一致/缺少可验证备份
+//              （v1 签名不覆盖 users，无权威源时不得把 users 固化进 v2）
+function migrateConfigUsersSignature(inspection) {
+    try {
+        const cfg = inspection.cfg;
+        const diskUsers = Array.isArray(cfg.users) ? cfg.users : [];
+        const backup = inspectUsersBackup();
+        if (diskUsers.length > 0) {
+            // 有账号：必须有【可采信】备份且磁盘全部账号由备份证明（子集语义）。
+            //   v2 备份须 gen 新鲜（防旧件重放回滚密码/角色）；
+            //   legacy 无签名备份须在日落窗口+锚点未建立（锚点建立后伪造不可分辨）。
+            // 防存量 v1 机器升级时把"被篡改/植入"的 users 静默固化（I1）。
+            let backupAcceptable = false;
+            if (backup.trusted === 'v2') {
+                backupAcceptable = backupGenFresh(backup);
+            } else if (backup.trusted === 'legacy') {
+                backupAcceptable = legacyBackupUsable(backup);
+            }
+            if (!backupAcceptable || !usersProvenByBackup(diskUsers, backup.users)) {
+                // none/bad/窗口外/gen 旧件/证明失败：v1 签名不覆盖 users——
+                // 攻击者可拿任意合法 v1 件改 users、伪造/回滚备份冒充老用户，
+                // 故一律拒绝（fail-closed），真实极少数老用户由客服核验恢复。
+                console.warn('[License] v1→v2 迁移中止：磁盘 users 缺少可采信备份证明（trusted='
+                    + backup.trusted + '）');
+                return 'tampered';
+            }
+        } else if (backup.trusted === 'v2' && backupGenFresh(backup) && backup.users.length > 0) {
+            // 磁盘 users 被清空但 v2 新鲜备份有账号：先回填再迁移（截断保护场景）
+            cfg.users = backup.users;
+        }
+
+        signConfig(cfg);
+        if (!cfg.configSignature || !cfg.usersSignature) return false;
+        fs.writeFileSync(inspection.configPath, JSON.stringify(cfg, null, 2), 'utf8');
+        backupUserAccounts(cfg);
+        console.log('[License] users 完整性签名迁移完成（v1→v2）');
+        return true;
     } catch (e) {
-        console.warn('[License] config.json 完整性校验异常:', e.message);
+        console.warn('[License] migrateConfigUsersSignature 异常:', e.message);
         return false;
     }
 }
@@ -1566,25 +1899,67 @@ function verifyConfigIntegrity() {
 // ★ P2-预防重装：config.json 完整性自愈
 // 触发时机：license 本身验签有效（调用方已前置校验），但本地 config 完整性签名不匹配。
 // 典型场景：重装/重激活导致 config 签名密钥或内容漂移，合法用户被误锁。
-// 处理：用 license 内已验签的权威值（clinicName/doctorName）覆盖本地 config 并重签写入，
-//       edition/users 等其他字段原样保留，避免账号丢失。
-// 安全性：改 config 企图绕过绑定时会被 authority 值覆盖回正版值（等价"纠正篡改"），
-//         符合"宁可漏检不可误报"，不向攻击者放行。
-function selfHealConfigFromLicense(license) {
+// 处理：用 license 内已验签的权威值（clinicName/doctorName）覆盖本地 config 并重签写入。
+// ★ 2026-09-26 H1/B1 修复（阻断项）：
+//   users 不在 license 内，本地不存在"权威 users"。因此：
+//   ① inspection.reason==='users_mismatch'（v2 件 users 签名失败）时调用方直接
+//      fail-closed，不得进入本函数——重签未验签的 users 等于洗白植入/提权/降级；
+//   ② 磁盘有 users 时必须与可信备份（v2；特定兼容状态含 legacy）完全一致才允许
+//      带着它们重签；备份缺失/投毒/不一致一律拒绝；
+//   ③ 磁盘 users 为空时从备份回填：v2 权威直接采信；legacy 旧备份仅兼容窗口采信，
+//      本函数成功后立即重写为 v2 签名备份；bad 备份拒绝。
+function selfHealConfigFromLicense(license, inspection) {
     try {
+        inspection = inspection || inspectConfigSignatures();
+        if (inspection.reason === 'users_mismatch') {
+            console.warn('[License] selfHeal 拒绝：users 签名失配且无权威源，禁止重签洗白');
+            return false;
+        }
         const configDir = getWritableDir();
         const configPath = require('path').join(configDir, 'config.json');
         let config = {};
         try {
             if (fs.existsSync(configPath)) config = JSON.parse(fs.readFileSync(configPath, 'utf8')) || {};
         } catch (e) { config = {}; }
+        if (!Array.isArray(config.users)) config.users = [];
 
-        // ★ P3-预防重装：config 缺失/被清空导致 users 丢失时，从独立备份回填账号，避免原密码无法登入
-        if (!Array.isArray(config.users) || config.users.length === 0) {
-            const backedUsers = loadUserAccountBackup();
-            if (backedUsers.length > 0) {
-                config.users = backedUsers;
-                console.log('[License] selfHeal 已从 users-backup.json 回填账号:', backedUsers.length, '个');
+        const backup = inspectUsersBackup();
+
+        if (config.users.length === 0) {
+            // 空账号：只从【新鲜 v2】备份回填（旧 gen 件拒绝=防重放回滚）；
+            // legacy 无签名备份仅当现存 config 本身是 v1 合法件且在窗口内才允许。
+            if (backup.trusted === 'v2') {
+                if (backupGenFresh(backup) && backup.users.length > 0) {
+                    config.users = backup.users;
+                    console.log('[License] selfHeal 已从 users-backup.json 回填账号:',
+                        backup.users.length, '个(v2)');
+                }
+            } else if (inspection.ok && inspection.legacy
+                       && legacyBackupUsable(backup) && backup.users.length > 0) {
+                config.users = backup.users;
+                console.log('[License] selfHeal 已从 legacy 备份回填账号:',
+                    backup.users.length, '个(legacy窗口)');
+            } else if (backup.trusted === 'bad') {
+                console.warn('[License] selfHeal 拒绝：users-backup.json 签名损坏（疑被投毒）');
+                return false;
+            }
+        } else if (inspection.usersTrusted) {
+            // users 签名本身通过（header_mismatch）：users 已有签发证明，无需备份复核
+        } else {
+            // 磁盘有账号、签名不通过：
+            //   新鲜 v2 备份可证明（子集语义）；
+            //   legacy 备份只在 v1 合法件（inspection.legacy===true）窗口内可证明——
+            //   missing/unsigned/bad_issued_at 等攻击者可自造状态一律不再接受 legacy。
+            let proven = false;
+            if (backup.trusted === 'v2' && backupGenFresh(backup)) {
+                proven = usersProvenByBackup(config.users, backup.users);
+            } else if (inspection.legacy === true && legacyBackupUsable(backup)) {
+                proven = usersProvenByBackup(config.users, backup.users);
+            }
+            if (!proven) {
+                console.warn('[License] selfHeal 拒绝：磁盘 users 无有效备份证明'
+                    + '(reason=' + inspection.reason + ',backup=' + backup.trusted + ')');
+                return false;
             }
         }
 
@@ -1602,7 +1977,9 @@ function selfHealConfigFromLicense(license) {
             return false;
         }
         fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
-        backupUserAccounts(config); // 重写后同步刷新账号备份
+        // proven：users 已由本函数内部验签/备份证明、且刚随有效 v2 config 落盘，
+        // 允许推进备份（含"备份缺失+gen锚点已建立"场景，否则备份永久缺失）。
+        backupUserAccounts(config, { proven: true });
         console.log('[License] config.json 重装自愈完成（用 license 权威值重签）');
         return true;
     } catch (e) {
@@ -1809,22 +2186,51 @@ function validateLicense(options) {
         // ★ P1-[2.2] 新增：v6 serial 防重放审计（仅警告记录，fail-open，不影响放行）
         auditSigSerial(license);
 
-        // ★ v3 新增：config.json 完整性校验（仅对绑定型 license 生效）
+        // ★ v3 新增：config.json 完整性校验
         // 防止用户修改 config.json 中的 clinicName 绕过 license 绑定校验
-        // ★ P2-预防重装：license 前已验签有效；config 签名不匹配大概率是重装/重激活
-        //   导致的密钥或内容漂移，而非真实篡改 → 先尝试自愈（用 license 权威值重签）。
-        //   自愈后仍失败才判为真实篡改并 fail-closed（宁可漏检不可误报）。
-        if (license.licenseBinding && !verifyConfigIntegrity()) {
-            const healed = selfHealConfigFromLicense(license);
+        // ★ 2026-09-26 H1/B1 修复：
+        //   - users 签名失配（users_mismatch）= 无权威源可纠正的篡改/植入，
+        //     直接 fail-closed，绝不允许 selfHeal 重签洗白；
+        //   - 其他失配（missing/header 漂移等）才尝试自愈，自愈后仍失败也 fail-closed；
+        //   - v1 合法旧件迁移时若 users 与备份不一致（migrate 返回 'tampered'），
+        //     同样拒绝放行。
+        //   ★ 复审重要项收口：任何已装 license（含 free 无 licenseBinding）都强制
+        //     本地完整性校验——本地签名不依赖网络/绑定，免费档跑在最不受控机器上，
+        //     不能整体豁免（空 users 的未签名件由 selfHeal 重签迁移，不误杀）。
+        const configInspection = inspectConfigSignatures();
+        if (!configInspection.ok) {
+            if (configInspection.reason === 'users_mismatch') {
+                console.warn('[License] users 签名失配，config_tampered（禁止自愈洗白）');
+                return {
+                    valid: false,
+                    message: '配置文件用户列表已被篡改（账号/角色/密码哈希签名校验失败）。\n请联系客服处理，切勿自行修改 config.json。',
+                    type: 'config_tampered',
+                    license: license
+                };
+            }
+            const healed = selfHealConfigFromLicense(license, configInspection);
             if (!healed || !verifyConfigIntegrity()) {
                 return {
                     valid: false,
-                    message: '配置文件 config.json 已被篡改或损坏，请重新打包或联系客服。\n（诊所名/医师名等关键字段签名校验失败）',
+                    message: '配置文件 config.json 已被篡改或损坏，请重新打包或联系客服。\n（诊所名/医师名/用户列表签名校验失败）',
                     type: 'config_tampered',
                     license: license
                 };
             }
             // 自愈后放行，不锁定合法用户
+        } else if (configInspection.ok && configInspection.legacy) {
+            const migrated = migrateConfigUsersSignature(configInspection);
+            if (migrated === 'tampered') {
+                return {
+                    valid: false,
+                    message: '配置文件用户列表与备份不一致（账号可能被篡改或植入）。\n请联系客服处理，切勿自行修改 config.json。',
+                    type: 'config_tampered',
+                    license: license
+                };
+            }
+            if (migrated !== true) {
+                console.warn('[License] users 签名迁移未完成，下次启动重试（不影响本次放行）');
+            }
         }
 
         // ★ v3 新增：三因子绑定校验（clinicName + machineId）
@@ -1903,6 +2309,19 @@ function validateLicense(options) {
 
     // 校验试用到期
     const trialExpiresAtMs = trial.expiresAt || (trial.startTime + currentTrialDays * 24 * 60 * 60 * 1000);
+
+    // ★ 2026-09-26 阻断修复（安全审查 #1）：users 来源闸门必须在试用到期裁决
+    //   之前——旧顺序下"试用过期/只读"态闸门被跳过，get-app-config 会给未验签
+    //   users 签出合法 v2 备份，攻击者账号永久洗白。任何授权状态先过此闸。
+    if (!configUsersProvenAuthentic()) {
+        console.warn('[License] 试用态 users 来源校验失败，config_tampered');
+        return {
+            valid: false,
+            message: '配置文件用户列表已被篡改或备份损坏。\n请联系客服处理，切勿自行修改 config.json 或 users-backup.json。',
+            type: 'config_tampered'
+        };
+    }
+
     if (now > trialExpiresAtMs) {
         return {
             valid: false,
@@ -2682,9 +3101,168 @@ function getCachedActivationTicket() {
 }
 
 // ============================================================================
+//  ★ 2026-09-26 F2：users 数组完整性签名
+//  usersSignature = HMAC(users 稳定序列化)；configSignature（v2 格式）把
+//  usersSignature 纳入签名内容，形成 users→usersSignature→configSignature 链，
+//  防本地篡改/植入账号、提权 role、降级密码哈希。
+//  旧（v1）签名配置无 usersSignature：验签通过后一次性迁移重签（见 validateLicense）。
+// ============================================================================
+function stableStringify(value) {
+    if (value === null || typeof value !== 'object') return JSON.stringify(value);
+    if (Array.isArray(value)) {
+        return '[' + value.map(stableStringify).join(',') + ']';
+    }
+    const keys = Object.keys(value).sort();
+    return '{' + keys.map(k => JSON.stringify(k) + ':' + stableStringify(value[k])).join(',') + '}';
+}
+
+function computeUsersSignature(users, key) {
+    const list = Array.isArray(users) ? users : [];
+    return crypto.createHmac('sha256', key).update(stableStringify(list)).digest('hex');
+}
+
+// 两个 users 列表确定性深比较（顺序也参与）
+function usersListsEqual(a, b) {
+    return stableStringify(Array.isArray(a) ? a : [])
+        === stableStringify(Array.isArray(b) ? b : []);
+}
+
+// ★ 2026-09-26 账号来源证明（多重集子集语义）：磁盘每个账号都必须能在备份中
+// 找到一个【逐字段完全相同】的条目。
+// 为什么不用全等：backupUserAccounts 有截断保护——正常删除账号后备份会合法地
+// 保留更多旧账号（备份是磁盘的超集）；全等比较会把合法删号误判为篡改而锁死。
+// 攻击覆盖：
+//   磁盘多出备份没有的账号（植入/提权新建）→ 条数超出 → 拒绝；
+//   改 role/密码哈希但条数不变 → 找不到相同条目 → 拒绝；
+//   删账号+加恶意号（条数不变）→ 恶意号无匹配 → 拒绝。
+function usersProvenByBackup(diskUsers, backupUsers) {
+    const disk = Array.isArray(diskUsers) ? diskUsers : [];
+    const backup = Array.isArray(backupUsers) ? backupUsers : [];
+    if (disk.length > backup.length) return false;
+    const pool = backup.map(u => stableStringify(u));
+    for (const d of disk) {
+        const key = stableStringify(d);
+        const idx = pool.indexOf(key);
+        if (idx === -1) return false;
+        pool.splice(idx, 1);
+    }
+    return true;
+}
+
+// 读取主 config 原件（与 main.js getWritableConfigPath 同口径：
+// portable→exe 目录，NSIS→userData），返回 { cfg, configPath }
+// ★ 2026-09-26 区分错误：JSON 损坏→corrupt；其他 IO 错误→ioError（fail-closed），
+//   不再一律按空件处理（否则锁文件竞态把闸门打成空态 fail-open）。
+function loadPrimaryConfigRaw() {
+    try {
+        const p = path.join(getWritableDir(), 'config.json');
+        if (fs.existsSync(p)) {
+            return { cfg: JSON.parse(fs.readFileSync(p, 'utf8')) || {}, configPath: p };
+        }
+    } catch (e) {
+        if (e && e.name === 'SyntaxError') return { cfg: {}, configPath: null, corrupt: true };
+        if (e && e.code === 'ENOENT') return { cfg: {}, configPath: null };
+        return { cfg: {}, configPath: null, ioError: true };
+    }
+    return { cfg: {}, configPath: null };
+}
+
+// v2 备份 gen 新鲜度：锚点缺失（新机/锚点被删，无法证明回滚）→ 采信；
+// 锚点存在 → 备份 gen 必须 ≥ 锚点高水位（正常写入后两者相等；
+// 旧件重放 gen 更小 → 拒绝，防密码/角色回滚）。
+function backupGenFresh(backup) {
+    if (!backup || backup.trusted !== 'v2') return false;
+    const anchorGen = readUsersBackupGen();
+    if (!anchorGen) return true;
+    const bg = Number(backup.gen);
+    return typeof bg === 'number' && bg >= anchorGen;
+}
+
+// legacy（无签名）备份可采信条件，缺一不可：
+//   ① legacy 未被双锚点标记永久退役（新 exe 一旦写过 v2 备份即退役，sticky）；
+//   ② 双锚点 usersBackupGen 均未建立（单删任一文件仍由另一锚点拦截）；
+//   ③ backupAt 存在且不晚于硬编码日落；
+//   ④ 调用方处于 v1 合法件上下文（由调用处用 inspection 判定，本函数不含此项）。
+//   注：backupAt 是无签名字段，单靠日落不构成硬边界——硬边界是①②双锚点；
+//   日落只用于"从未跑过新 exe 的真实老升级"这一不可避免的一次性窗口收口。
+function legacyBackupUsable(backup) {
+    if (!backup || backup.trusted !== 'legacy') return false;
+    if (legacyRetired()) return false;
+    if (readUsersBackupGen() > 0) return false;
+    if (!backup.backupAt) return false;
+    const cutoff = new Date(USERS_LEGACY_BACKUP_SUNSET + 'T23:59:59+08:00').getTime();
+    const t = new Date(backup.backupAt).getTime();
+    return !isNaN(cutoff) && !isNaN(t) && t <= cutoff;
+}
+
+// get-app-config 回填专用：磁盘 users 为空时，只回填新鲜 v2 备份；
+// v1 合法件窗口内允许 legacy（missing/unsigned 状态拒绝 legacy）。
+function getFillableUsers() {
+    try {
+        const backup = inspectUsersBackup();
+        if (backup.trusted === 'v2' && backupGenFresh(backup) && backup.users.length > 0) {
+            return backup.users;
+        }
+        const insp = inspectConfigSignatures();
+        if (insp.ok && insp.legacy && legacyBackupUsable(backup) && backup.users.length > 0) {
+            return backup.users;
+        }
+    } catch (e) { /* 返回空 */ }
+    return [];
+}
+
+// ★ 2026-09-26 H1/B1：磁盘 config 中既有 users 是否具有"真实应用签发"的来源证明。
+// 一切"读取已有 config 再重签"的写路径（register-local-user / config:update /
+// installLicense / enforceEditionBinding / ensureLocalActivationUser /
+// desktop-user-ipc / get-app-config 内联自愈）都必须先过此闸门，
+// 防止这些路径成为 users 篡改的洗白通道。
+// 采信规则：
+//   v2 双签名完整 / usersTrusted（仅 header 漂移）→ true；
+//   IO 错误 → false（fail-closed，不与缺失混淆）；
+//   users 为空（出厂/首注册态）→ true（users_mismatch/corrupt 除外）；
+//   v1 合法旧件（legacy）→ v2 新鲜备份 或 窗口内 legacy 备份子集证明；
+//   missing/unsigned/其他失配 → 仅新鲜 v2 备份子集证明。
+// cfgArg（可选）：调用方已读入内存的 config——闸门直接裁决该对象，不二次读盘
+//   （TOCTOU 阻断：否则外部进程可在闸门后替换 config，让异件被签）。
+function configUsersProvenAuthentic(cfgArg) {
+    const hasArg = cfgArg && typeof cfgArg === 'object';
+    const insp = inspectConfigSignatures(hasArg ? cfgArg : undefined);
+    if (insp.ok && !insp.legacy) return true;
+    if (insp.usersTrusted) return true;
+    if (insp.reason === 'config_io_error') return false;
+
+    let diskUsers;
+    if (hasArg) {
+        diskUsers = Array.isArray(cfgArg.users) ? cfgArg.users : [];
+    } else {
+        const raw = loadPrimaryConfigRaw();
+        if (raw.ioError) return false;
+        // 无内存件且磁盘损坏：拿不到真实 users，任何证明都无从谈起（fail-closed）
+        if (raw.corrupt) return false;
+        diskUsers = Array.isArray(raw.cfg.users) ? raw.cfg.users : [];
+    }
+    if (diskUsers.length === 0) {
+        // users_mismatch 且磁盘为空 = 攻击者删光 users 制造"空"态 → 不放行
+        return insp.reason !== 'users_mismatch';
+    }
+
+    const backup = inspectUsersBackup();
+    if (insp.ok && insp.legacy) {
+        // v1 合法件：新鲜 v2 备份 / 窗口内 legacy 备份证明磁盘全部账号（子集语义）。
+        if (backup.trusted === 'v2') {
+            return backupGenFresh(backup) && usersProvenByBackup(diskUsers, backup.users);
+        }
+        return legacyBackupUsable(backup) && usersProvenByBackup(diskUsers, backup.users);
+    }
+    // missing / unsigned / 其他失配：仅新鲜 v2 签名备份
+    return backup.trusted === 'v2' && backupGenFresh(backup)
+        && usersProvenByBackup(diskUsers, backup.users);
+}
+
+// ============================================================================
 //  ★ P0 修复：config.json 签名函数
-//  直接修改原对象，设置 configIssuedAt + configSignature
-//  签名内容：clinicName|doctorName|edition|configIssuedAt
+//  直接修改原对象，设置 configIssuedAt + usersSignature + configSignature
+//  v2 签名内容：clinicName|doctorName|edition|configIssuedAt|usersSignature
 // ============================================================================
 function signConfig(config) {
     try {
@@ -2692,14 +3270,23 @@ function signConfig(config) {
         if (!config.configIssuedAt) {
             config.configIssuedAt = new Date().toISOString();
         }
+        // ★ 第五轮（安全#1）：恒用机器绑定密钥——v2 验签端已删除 masterKey 派生
+        //   候选（跨机移植通道），签发端必须同口径，否则 masterKey license 在场
+        //   时自签的 config 本机验不过。
+        const signKey = getUsersSignKey();
+        // 先在局部算齐再赋值，保证两签名原子落盘（任一异常都不产生半成品）
+        const usersSignature = computeUsersSignature(config.users, signKey);
         const signContent = [
             config.clinicName || '',
             config.doctorName || '',
             config.edition || '',
-            config.configIssuedAt
+            config.configIssuedAt,
+            usersSignature
         ].join('|');
-        config.configSignature = crypto.createHmac('sha256', CONFIG_SIGN_KEY)
+        const configSignature = crypto.createHmac('sha256', signKey)
             .update(signContent).digest('hex');
+        config.usersSignature = usersSignature;
+        config.configSignature = configSignature;
         return config;
     } catch (e) {
         console.warn('[License] signConfig 失败:', e.message);
@@ -2721,6 +3308,34 @@ function signConfig(config) {
 function installLicense(base64Content, options = {}) {
     try {
         const actualMachineId = options.machineId || getMachineId();
+
+        // ★ 2026-09-26 H1/B1 + 复审 TOCTOU：config 只读一次，闸门裁决内存件，
+        // 随后所有 mutate 都在同一对象上完成，防读盘窗口被利用。
+        const configDir = getWritableDir();
+        const configPath = require('path').join(configDir, 'config.json');
+        let config = {};
+        try {
+            if (fs.existsSync(configPath)) {
+                config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+            }
+        } catch (e) {
+            // ★ 第四轮（J3）：JSON 损坏区分处置——从新鲜备份回填 users 后继续
+            //   （闸门仍会对回填件裁决；备份不可信时回填为空，闸门按空 users 放行
+            //   正常装码），其他 IO 错误维持原空件行为。
+            if (e && e.name === 'SyntaxError') {
+                console.warn('[License] config.json JSON 损坏，装码前从备份回填 users:', e.message);
+                config = { users: getFillableUsers() };
+            } else {
+                console.warn('[License] 读取 config.json 失败，将创建新配置:', e.message);
+            }
+        }
+        // 装码前先验明现存 users 来源，fail-fast——
+        // 防止试用期间植入/篡改的账号经激活重签洗白。无 config 的出厂态（users 空）
+        // 自然通过。
+        if (!configUsersProvenAuthentic(config)) {
+            console.warn('[License] installLicense 中止：现存 users 无真实签发来源');
+            return { success: false, error: '本地配置已被篡改，请联系客服处理后再激活' };
+        }
 
         // 1. 写入加密的 license.dat
         const writeResult = writeLicenseContent(base64Content, actualMachineId);
@@ -2758,16 +3373,7 @@ function installLicense(base64Content, options = {}) {
         }
 
         // 3. 同步 config.json（诊所名、医师名、管理员账户）
-        const configDir = getWritableDir();
-        const configPath = require('path').join(configDir, 'config.json');
-        let config = {};
-        try {
-            if (fs.existsSync(configPath)) {
-                config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-            }
-        } catch (e) {
-            console.warn('[License] 读取 config.json 失败，将创建新配置:', e.message);
-        }
+        // config / configPath / configDir 已在函数开头单次读取（闸门裁决同一对象）
 
         let configChanged = false;
 
@@ -2811,9 +3417,8 @@ function installLicense(base64Content, options = {}) {
         if (phone) {
             if (!Array.isArray(config.users)) config.users = [];
 
-            // 密码哈希（与 main.js hashPassword 逻辑一致）
-            const PASSWORD_SALT = 'bnzc_prescription_salt_v1';
-            const hashOf = (p) => crypto.createHash('sha256').update(Buffer.from(PASSWORD_SALT + p, 'utf8')).digest('hex');
+            // 密码哈希：PASSWORD_SALT / hashOf 已提升为模块级
+            // （2026-09-26 阻断修复，原块级 const 导致 ensureLocalActivationUser 必崩）
             const nowMs = Date.now();
 
             // 检查用户是否已存在
@@ -2897,7 +3502,9 @@ function installLicense(base64Content, options = {}) {
         }
 
         console.log('[License] installLicense 完成，license 路径:', writeResult.path);
-        backupUserAccounts(config); // ★ P3-预防重装：激活后同步刷新账号独立备份
+        // proven：装码已通过 license 验签 + users 闸门，config 刚重签落盘，
+        // 允许推进备份（含备份缺失场景，否则备份永久缺失、后续自愈无据可依）。
+        backupUserAccounts(config, { proven: true }); // ★ P3-预防重装：激活后同步刷新账号独立备份
         return { success: true, path: writeResult.path, configUpdated: configChanged };
     } catch (e) {
         console.error('[License] installLicense 异常:', e);
@@ -3000,13 +3607,23 @@ function enforceEditionBinding() {
         if (!fs.existsSync(configPath)) {
             return { success: true, corrected: false };
         }
+        // ★ 第四轮（J2/B-重2）：闸门必须裁决【改写前】的同一内存件——apply 会就地
+        //   改 edition/users 角色，改后验签必失真；快照在改写前留存（与读盘同一份，
+        //   无 TOCTOU 二次读窗口），闸门验快照=磁盘原貌。
         const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        const __preMutationSnapshot = JSON.parse(JSON.stringify(config));
         const r = applyEditionBindingToConfig(license, config);
         if (r.skip) {
             return { success: true, corrected: false };
         }
 
         if (r.corrected) {
+            // ★ 2026-09-26 H1/B1：重签前验明磁盘 users 来源（快照=改写前内存件），
+            // 防本路径洗白篡改 users。
+            if (!configUsersProvenAuthentic(__preMutationSnapshot)) {
+                console.warn('[License] 版本绑定校正中止：磁盘 users 无真实签发来源');
+                return { success: false, corrected: false, error: 'config_tampered' };
+            }
             signConfig(config);
             // ★ 第三轮终检 P2 修复：未生成签名则拒绝写入（与 installLicense 策略一致）
             if (!config.configSignature) {
@@ -3014,6 +3631,9 @@ function enforceEditionBinding() {
                 return { success: true, corrected: false };
             }
             fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+            // ★ 第四轮（B-重2）：改角色/版本后 proven 刷新备份——否则备份滞留旧
+            //   admin 角色，config 损坏后由备份回填=提权复活。
+            try { backupUserAccounts(config, { proven: true }); } catch (be) { /* 非致命 */ }
             console.log('[License] config.json 版本绑定校正完成，已重新签名');
         }
 
@@ -3067,23 +3687,66 @@ function ensureLocalActivationUser(phone, password) {
         if (!/^1[3-9]\d{9}$/.test(trimmed)) {
             return { success: false, existed: false, error: '手机号格式不正确' };
         }
-        if (localUserExists(trimmed)) {
-            // 已存在：不覆盖密码（保护用户注册时自设密码）
-            return { success: true, existed: true };
-        }
 
-        const pwd = password || 'admin';
+        // ★ 复审 TOCTOU 收口：config 只读一次，后续闸门/落盘都用同一内存件。
         const configPath = require('path').join(getWritableDir(), 'config.json');
-        let config = {};
+        let config = null;
+        let primaryReadOk = false;
+        let configCorruptBackfilled = false;
         try {
             if (fs.existsSync(configPath)) {
                 config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+                primaryReadOk = true;
             }
         } catch (e) {
-            console.warn('[License] ensureLocalActivationUser 读取 config 失败，将重建:', e.message);
+            // ★ 第四轮（J3）：JSON 损坏→备份回填（闸门随后裁决回填件），
+            //   其他 IO 错误维持"将重建"行为。
+            if (e && e.name === 'SyntaxError') {
+                console.warn('[License] ensureLocalActivationUser config 损坏，从备份回填 users:', e.message);
+                config = { users: getFillableUsers() };
+                // ★ 第五轮（复审A高危#1）：回填件视为有效主件内容——若仍置
+                //   primaryReadOk=false，下方 `if (!primaryReadOk) config={}` 会把
+                //   刚回填的账号清空，后续 proven 覆写把备份也冲掉=账号双端丢失。
+                primaryReadOk = true;
+                configCorruptBackfilled = true;
+            } else {
+                console.warn('[License] ensureLocalActivationUser 读取 config 失败，将重建:', e.message);
+            }
         }
+        // 幂等：主件命中 或 fallback 件命中（保持原 localUserExists 全路径语义），
+        // 不覆盖密码（保护用户注册时自设密码）。
+        const inPrimary = !!(config && Array.isArray(config.users)
+            && config.users.some(u => u && (u.username === trimmed || u.name === trimmed)));
+        if (inPrimary || localUserExists(trimmed)) {
+            // ★ 第五轮（复审A#5）：config 刚从损坏回填且账号在回填件中命中时，
+            //   磁盘上仍是坏件——顺带重签写盘把损坏 config 修复掉（非致命，
+            //   失败不影响本次补绑结果；inPrimary 才修：回填件含该用户才是
+            //   备份证明过的真实内容）。
+            if (configCorruptBackfilled && inPrimary) {
+                try {
+                    signConfig(config);
+                    if (config.configSignature) {
+                        fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+                        backupUserAccounts(config, { proven: true });
+                        console.log('[License] ensureLocalActivationUser 已顺带修复损坏 config');
+                    }
+                } catch (re) {
+                    console.warn('[License] ensureLocalActivationUser 修复损坏 config 失败（非致命）:', re.message);
+                }
+            }
+            return { success: true, existed: true };
+        }
+        if (!config || !primaryReadOk) config = {};
         if (!Array.isArray(config.users)) config.users = [];
 
+        // ★ 2026-09-26 H1/B1：新增账号前闸门裁决内存件（免费领取在出厂空 config
+        //   上进行，自然通过），防篡改 config 经此路径重签洗白。
+        if (!configUsersProvenAuthentic(config)) {
+            console.warn('[License] ensureLocalActivationUser 中止：现存 users 无真实签发来源');
+            return { success: false, existed: false, error: '本地配置被篡改，建号已中止，请联系客服' };
+        }
+
+        const pwd = password || 'admin';
         config.users.push({
             username: trimmed,
             password: hashOf(pwd),
@@ -3120,7 +3783,8 @@ function ensureLocalActivationUser(phone, password) {
             return { success: false, existed: false, error: '手机号账号确保失败' };
         }
 
-        backupUserAccounts(config);
+        // proven：users 刚过闸门随签名 config 落盘
+        backupUserAccounts(config, { proven: true });
         console.log('[License] ensureLocalActivationUser 已确保本地管理员账号:', trimmed);
         return { success: true, existed: false };
     } catch (e) {
@@ -3152,7 +3816,14 @@ module.exports = {
     // ★ P3-预防重装：账号独立持久化备份
     getUsersBackupPath,    // 账号备份文件路径
     backupUserAccounts,    // 备份 users 到独立文件
-    loadUserAccountBackup, // 从独立备份读取 users
+    loadUserAccountBackup, // 从独立备份读取 users（返回 {users,trusted}）
+    inspectUsersBackup,    // ★ 2026-09-26 I2：备份签名检查（{trusted,users}）
+    configUsersProvenAuthentic, // ★ 2026-09-26 H1/B1：重签前置闸门
+    getFillableUsers,     // ★ 2026-09-26：回填专用（新鲜v2/v1窗口legacy）
+    backupGenFresh,       // ★ 2026-09-26：v2 备份 gen 新鲜度（测试用）
+    legacyBackupUsable,   // ★ 2026-09-26：legacy 备份可采信判定（测试用）
+    usersProvenByBackup,   // ★ 2026-09-26：账号来源子集证明（测试用）
+    usersListsEqual,       // 全等等比较（测试用）
     // ★ v300 免费版账号链：回读确证的幂等建号（免费领取/already-free 补绑）
     localUserExists,
     ensureLocalActivationUser,
@@ -3194,6 +3865,9 @@ module.exports = {
     getCachedActivationTicket,
     // ★ P0 修复：config签名 + license统一安装
     signConfig,
+    inspectConfigSignatures, // ★ 2026-09-26 F2：双签名检查（供测试/启动迁移）
+    migrateConfigUsersSignature, // v1→v2 迁移（供测试）
+    stableStringify,         // users 稳定序列化（供测试）
     installLicense,
     // ★ 2026-09-07 导出装码绑定核心：main.js get-app-config 存量自愈调用
     //   （旧版本激活的机器 config.edition 停留出厂 personal → 机构版【用户管理】
