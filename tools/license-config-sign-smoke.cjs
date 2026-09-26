@@ -65,6 +65,9 @@ Module._extensions['.js'] = function (mod, filename) {
     mod._compile(fs.readFileSync(filename, 'utf8'), filename);
 };
 
+// 本冒烟锚点走文件路径（与测试临时 userData 同构；禁用凭据 vault，
+// 避免真实凭据管理器被写入——真实 vault 链路由 credential-vault-smoke 专测）
+process.env.BNZC_VAULT_DISABLED = '1';
 const lm = require('../shared/license/license-manager.js');
 const activate = require('../app_project/db-offline/desktop/electron/activate.js');
 const configPath = path.join(userDataDir, 'config.json');

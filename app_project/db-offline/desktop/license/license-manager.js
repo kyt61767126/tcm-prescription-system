@@ -12,6 +12,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
+const childProcess = require('child_process');
 const { app } = require('electron');
 
 // ★ 2026-09-11 阶段2 对称密钥轮换：V1 已随历史 APK/exe 泄露（可伪造本地加密文件/试用签名
@@ -329,12 +330,10 @@ function writeGateState(state, machineIdArg) {
 function readUsersBackupGen(machineIdArg) {
     try {
         const mid = machineIdArg || getMachineId();
-        const gate = readGateState(mid) || {};
-        const anchor = readAnchorState(mid) || {};
-        const gg = Number(gate.usersBackupGen);
-        const ag = Number(anchor.usersBackupGen);
-        const high = Math.max(gg > 0 ? gg : 0, ag > 0 ? ag : 0);
-        return high > 0 ? high : 0;
+        // ★ 2026-09-26 M-2：gen 随统一状态存储（vault 优先）
+        const r = readUnifiedState(mid);
+        const g = Number(r.state && r.state.usersBackupGen);
+        return (g > 0) ? g : 0;
     } catch (e) { return 0; }
 }
 function writeUsersBackupGen(gen, machineIdArg) {
@@ -342,19 +341,12 @@ function writeUsersBackupGen(gen, machineIdArg) {
         const mid = machineIdArg || getMachineId();
         const n = Number(gen);
         if (!(n > 0)) return false;
-        let ok1 = true, ok2 = true;
-        const gate = readGateState(mid) || {};
-        if ((Number(gate.usersBackupGen) || 0) < n) {
-            gate.usersBackupGen = n;
-            ok1 = !!writeGateState(gate, mid);
+        // 单调高水位补丁（uncertain 时落文件，不覆盖 vault）
+        const r = readUnifiedState(mid);
+        if ((Number(r.state && r.state.usersBackupGen) || 0) < n) {
+            return patchUnifiedState({ usersBackupGen: n }, mid);
         }
-        const anchor = readAnchorState(mid) || {};
-        if ((Number(anchor.usersBackupGen) || 0) < n) {
-            anchor.usersBackupGen = n;
-            ok2 = !!writeAnchorState(anchor, mid);
-        }
-        // 双份至少一份落盘（读取高水位），单文件写入失败不致命
-        return ok1 || ok2;
+        return true;
     } catch (e) {
         console.warn('[Gate] usersBackupGen 写入失败（非致命）:', e && e.message);
         return false;
@@ -370,26 +362,18 @@ function writeUsersBackupGen(gen, machineIdArg) {
 function legacyRetired(machineIdArg) {
     try {
         const mid = machineIdArg || getMachineId();
-        const gate = readGateState(mid) || {};
-        const anchor = readAnchorState(mid) || {};
-        return gate.usersLegacyRetired === true || anchor.usersLegacyRetired === true;
+        // ★ 2026-09-26 M-2：退役标记随统一状态存储
+        const r = readUnifiedState(mid);
+        return !!(r.state && r.state.usersLegacyRetired === true);
     } catch (e) { return false; }
 }
 function markLegacyRetired(machineIdArg) {
     try {
         const mid = machineIdArg || getMachineId();
-        let ok1 = true, ok2 = true;
-        const gate = readGateState(mid) || {};
-        if (gate.usersLegacyRetired !== true) {
-            gate.usersLegacyRetired = true;
-            ok1 = !!writeGateState(gate, mid);
-        }
-        const anchor = readAnchorState(mid) || {};
-        if (anchor.usersLegacyRetired !== true) {
-            anchor.usersLegacyRetired = true;
-            ok2 = !!writeAnchorState(anchor, mid);
-        }
-        return ok1 || ok2;
+        const r = readUnifiedState(mid);
+        if (r.state && r.state.usersLegacyRetired === true) return true;
+        // 退役补丁（uncertain 时落文件，不覆盖 vault）
+        return patchUnifiedState({ usersLegacyRetired: true }, mid);
     } catch (e) {
         console.warn('[Gate] legacyRetired 标记失败（非致命）:', e && e.message);
         return false;
@@ -641,19 +625,22 @@ function xorDecrypt(base64, key) {
 //   新：硬件指纹为主体（MachineGuid+主板序列号+CPU ID+磁盘序列号），
 //       软件信息仅作补充防碰撞（占比小）；
 //   只上传最终 SHA256 哈希 32 位前缀，不上传原始硬件信息。
-function getMachineId() {
+function getMachineId(hwFpOverride) {
     try {
         // 1. 硬件特征（主体，规则3要求"多硬件哈希串"）
         // 优先使用 getHardwareFingerprint（MachineGuid + 主板 + CPU）
         let hwFp = '';
-        try {
+        if (hwFpOverride !== undefined) {
+            hwFp = hwFpOverride; // 显式指定（mid 候选用），跳过磁盘回退
+        } else {
+          try {
             if (typeof getHardwareFingerprint === 'function') {
                 hwFp = getHardwareFingerprint();
             }
-        } catch (e) { /* 忽略 */ }
+          } catch (e) { /* 忽略 */ }
 
-        // 如果硬件指纹为空（非Windows/权限不足），尽力补充磁盘型号
-        if (!hwFp) {
+          // 如果硬件指纹为空（非Windows/权限不足），尽力补充磁盘型号
+          if (!hwFp) {
             try {
                 const { execSync } = require('child_process');
                 const diskParts = [];
@@ -669,6 +656,7 @@ function getMachineId() {
                         .update(diskParts.join('|')).digest('hex');
                 }
             } catch (e) { /* 忽略 */ }
+          }
         }
 
         // 2. 软件信息（仅作补充防碰撞，占比小）
@@ -765,10 +753,34 @@ function hkdfSha256(ikm, salt, info, keylen) {
 // 第三层：用途密钥（域分离，info 带独立前缀防止与激活码签名链路混淆）
 // ★ 阶段2：可选 ikm 参数——写路径不传（默认最新密钥 V2）；读路径按档位遍历生成候选，
 //   存量旧密钥派生的文件读取成功后重存即自动迁移 V2
-function hkdfPurposeKey(machineId, purpose, ikm) {
-    const hwFp = getHardwareFingerprint();
+function hkdfPurposeKey(machineId, purpose, ikm, hwFpOverride) {
+    const hwFp = (hwFpOverride !== undefined) ? hwFpOverride : getHardwareFingerprint();
     const salt = HKDF_SALT_PREFIX + (machineId || '') + '|' + (hwFp || '');
     return hkdfSha256(ikm || LICENSE_HMAC_KEY, salt, HKDF_INFO_PREFIX + purpose, 32);
+}
+
+// 指纹候选：当前采集值 + 仅 MachineGuid。Win11 24H2 起 wmic 被移除、旧机
+// 采集抖动（2s 超时）都会让指纹退化为 mg-only——解密时逐一尝试避免击穿
+let _hwFpVariantsCache = null;
+function getHwFingerprintVariants() {
+    if (_hwFpVariantsCache) return _hwFpVariantsCache;
+    const list = [];
+    const primary = getHardwareFingerprint();
+    if (primary) list.push(primary);
+    // mg-only 候选（重算一次只含 MachineGuid 的指纹）
+    try {
+        const out = require('child_process').execSync(
+            'reg query "HKLM\\SOFTWARE\\Microsoft\\Cryptography" /v MachineGuid',
+            { timeout: 4000, windowsHide: true }).toString();
+        const m = out.match(/MachineGuid\s+REG_SZ\s+([A-Fa-f0-9-]+)/i);
+        if (m) {
+            const mgOnly = crypto.createHash('sha256').update('mg=' + m[1].toLowerCase()).digest('hex');
+            if (list.indexOf(mgOnly) === -1) list.push(mgOnly);
+        }
+    } catch (e) { /* 忽略 */ }
+    list.push(''); // 极端：全部采集失败
+    _hwFpVariantsCache = Array.from(new Set(list));
+    return _hwFpVariantsCache;
 }
 
 // ★ P1-[2.1] 各用途 HKDF 密钥
@@ -2696,6 +2708,403 @@ function writeAnchorState(state, mid) {
     }
 }
 
+// ============================================================================
+//  ★ 2026-09-26 M-2 根治：Windows 凭据管理器锚点（替代可双删的文件锚点）
+//
+//  旧风险：gate.dat + .license-anchor 两个文件双删后，在线吊销/账号删除的拒绝
+//  标记与 7 天宽限起点全部消失 → 断网滚动重播种即可无限本地使用。
+//  现把【统一状态】经 CredWrite 存进 Windows 凭据管理器（Generic 凭据，DPAPI
+//  保管、按 Windows 用户隔离），资源管理器/del/双删均无法触及，只能经
+//  shared/credential-vault.ps1 的 delete/write 通道操作。
+//
+//  威胁模型边界（诚实记录）：凭据管理器把攻击门槛从「任何用户删两个文件」提高
+//  到「需代码执行 + CredWrite API + 重算机器密钥并构造有效密文」——对教程级
+//  /脚本小子级双删是根治；但同 Windows 用户下已具备代码执行能力的攻击者仍可
+//  调 CredWrite 重写 blob（本地软件对本机代码执行无纯客户端数学解）。残余项
+//  对应未来「服务端短周期 token + 设备证明」路线。
+//
+//  降级：PowerShell/凭据 API 不可用（极旧系统或策略禁用）时自动回落旧双文件
+//  模式，可用性不变，风险仅限该类罕见机器。环境变量 BNZC_VAULT_DISABLED=1
+//  供测试强制走文件路径。
+// ============================================================================
+// 打包态判定：生产包【不信任任何环境变量安全配置】——否则普通用户一条
+// `setx BNZC_VAULT_DISABLED 1` 就能把 vault 永久打回可双删的文件模式。
+// 开发/冒烟（node 或 -app 直启）下 app.isPackaged 为假，env 开关才生效。
+function isAppPackaged() {
+    try { return !!require('electron').app.isPackaged; }
+    catch (e) {
+        try { return __dirname.indexOf('app.asar') !== -1; }
+        catch (e2) { return false; }
+    }
+}
+const VAULT_PACKAGED = isAppPackaged();
+const VAULT_TARGET_PREFIX =
+    (!VAULT_PACKAGED && process.env.BNZC_VAULT_TARGET_PREFIX) || 'BNZC/license-vault/';
+let _vaultHealth = 0;     // 0=未探测 1=可用 -1=瞬态失败（退避到期可重试）
+let _vaultFailAt = 0;
+let _vaultEnvDisabled = false; // 开发态经 BNZC_VAULT_DISABLED 显式禁用（非故障）
+const VAULT_RETRY_MS = 30000;
+
+// 定位随包 ps1：展平分发布局（electron/credential-vault.ps1）或 shared 布局
+function getVaultPs1Path() {
+    // 禁用开关仅开发态生效（打包后忽略，防普通用户 setx 关闭 vault）
+    if (!VAULT_PACKAGED && process.env.BNZC_VAULT_DISABLED === '1') return null;
+    const cands = [
+        path.join(__dirname, 'credential-vault.ps1'),        // 进包：electron/
+        path.join(__dirname, '..', 'credential-vault.ps1')  // 开发：shared/license/
+    ];
+    for (const f of cands) {
+        try { if (fs.existsSync(f)) return f; } catch (e) { /* 续 */ }
+    }
+    return null;
+}
+
+// 经 EncodedCommand 执行 ps1（asar 内无法 -File；参数走环境变量，ps1 同口径）
+function vaultInvoke(action, target, value) {
+    const ps1Path = getVaultPs1Path();
+    if (!ps1Path) return { ok: false, error: 'vault-ps1-unavailable' };
+    let script;
+    try { script = fs.readFileSync(ps1Path, 'utf8'); }
+    catch (e) { return { ok: false, error: 'vault-ps1-read-failed' }; }
+    // ★ EncodedCommand 下脚本按 Unicode 传入，文件 UTF-8 BOM 会成为内容首字符，
+    //   使 param 块不再是首个语句而解析失败（InvalidLeftHandSide）——剥掉 BOM
+    if (script.charCodeAt(0) === 0xFEFF) script = script.slice(1);
+
+    const env = Object.assign({}, process.env, {
+        BNZC_VAULT_ACTION: action,
+        BNZC_VAULT_TARGET: target || '',
+        BNZC_VAULT_VALUE: value || ''
+    });
+    const psExe = process.env.SystemRoot
+        ? path.join(process.env.SystemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
+        : 'powershell.exe';
+    let stdout;
+    try {
+        stdout = childProcess.execFileSync(psExe, [
+            '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+            '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')
+        ], { env, timeout: 15000, maxBuffer: 1 << 20, windowsHide: true });
+    } catch (e) {
+        return { ok: false, error: 'vault-spawn-failed' };
+    }
+    const lines = String(stdout || '').trim().split(/[\r\n]+/).filter(Boolean);
+    if (!lines.length) return { ok: false, error: 'vault-empty-output' };
+    try { return JSON.parse(lines[lines.length - 1]); }
+    catch (e) { return { ok: false, error: 'vault-bad-json' }; }
+}
+
+// 凭据子系统健康探测（懒加载）：失败只标记时间，退避到期允许重试——
+// PowerShell 冷启动/杀软拖慢造成的瞬态失败不应永久封死本进程。
+function vaultProbe() {
+    if (_vaultHealth === 1) return true;
+    const now = Date.now();
+    if (_vaultHealth === -1 && now - _vaultFailAt < VAULT_RETRY_MS) return false;
+    if (!VAULT_PACKAGED && process.env.BNZC_VAULT_DISABLED === '1') _vaultEnvDisabled = true;
+    if (getVaultPs1Path() === null) { _vaultHealth = -1; _vaultFailAt = now; return false; }
+    const r = vaultInvoke('probe', '', '');
+    if (r && r.ok === true) { _vaultHealth = 1; return true; }
+    _vaultHealth = -1;
+    _vaultFailAt = now;
+    return false;
+}
+// 运行中 read/write 瞬态故障：转退避态（下次调用到期可重试，不永久判决）
+function markVaultTransient() {
+    _vaultHealth = -1;
+    _vaultFailAt = Date.now();
+}
+
+// vault 独立加密用途（与 license.dat / gate.dat 的 'license' 域分离，
+// 防密文跨位置互换重放）。格式 VLT2:hex(hmac):base64(iv+ciphertext)
+function encryptVaultBlob(jsonStr, mid) {
+    const key = hkdfPurposeKey(mid, 'vault-enc');
+    const iv = crypto.randomBytes(16);
+    const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
+    const payload = Buffer.concat([
+        iv,
+        cipher.update(Buffer.from(jsonStr, 'utf8')),
+        cipher.final()
+    ]).toString('base64');
+    const mk = hkdfPurposeKey(mid, 'vault-mac');
+    const hmac = crypto.createHmac('sha256', mk).update(payload).digest('hex');
+    return 'VLT2:' + hmac + ':' + payload;
+}
+function decryptVaultBlob(blob, mid, fp) {
+    try {
+        if (!blob || blob.indexOf('VLT2:') !== 0) return null;
+        const parts = blob.substring(5).split(':');
+        if (parts.length < 2) return null;
+        const storedHmac = parts[0];
+        const payload = parts.slice(1).join(':');
+        const mk = hkdfPurposeKey(mid, 'vault-mac', undefined, fp);
+        const expected = crypto.createHmac('sha256', mk).update(payload).digest('hex');
+        if (!crypto.timingSafeEqual(Buffer.from(storedHmac, 'hex'), Buffer.from(expected, 'hex'))) {
+            return null;
+        }
+        const data = Buffer.from(payload, 'base64');
+        if (data.length < 32) return null;
+        const decipher = crypto.createDecipheriv('aes-256-cbc',
+            hkdfPurposeKey(mid, 'vault-enc', undefined, fp), data.slice(0, 16));
+        return Buffer.concat([decipher.update(data.slice(16)), decipher.final()]).toString('utf8');
+    } catch (e) { return null; }
+}
+
+// 早期 vault（曾用 license 用途 ENC2 写入）按指定指纹候选解密
+function decryptEnc2VaultFallback(blob, mid, fp) {
+    try {
+        if (!blob || blob.indexOf('ENC2:') !== 0) return null;
+        const parts = blob.substring(5).split(':');
+        if (parts.length < 2) return null;
+        const storedHmac = parts[0];
+        const payload = parts.slice(1).join(':');
+        const mk = hkdfPurposeKey(mid, 'license-hmac', undefined, fp);
+        const expected = crypto.createHmac('sha256', mk).update(payload).digest('hex');
+        if (!crypto.timingSafeEqual(Buffer.from(storedHmac, 'hex'), Buffer.from(expected, 'hex'))) {
+            return null;
+        }
+        const data = Buffer.from(payload, 'base64');
+        if (data.length < 32) return null;
+        const decipher = crypto.createDecipheriv('aes-256-cbc',
+            hkdfPurposeKey(mid, 'license', undefined, fp), data.slice(0, 16));
+        return Buffer.concat([decipher.update(data.slice(16)), decipher.final()]).toString('utf8');
+    } catch (e) { return null; }
+}
+
+function readVaultState(mid) {
+    const r = vaultInvoke('read', VAULT_TARGET_PREFIX + mid, '');
+    if (!r || r.ok !== true) return { dead: true };
+    if (!r.found || !r.blob) return { dead: false, state: null };
+    // 遍历指纹候选（当前指纹 / mg-only / 空），任一解出即可
+    let json = null;
+    for (const fp of getHwFingerprintVariants()) {
+        json = decryptVaultBlob(r.blob, mid, fp) || decryptEnc2VaultFallback(r.blob, mid, fp);
+        if (json) break;
+    }
+    if (!json) return { dead: false, state: null, corrupt: true };
+    try { return { dead: false, state: JSON.parse(json) || null }; }
+    catch (e) { return { dead: false, state: null, corrupt: true }; }
+}
+let _emptyFpWarned = false;
+function writeVaultState(state, mid) {
+    // 采集全失败时静默写会让 blob 脱离硬件绑定——显式告警（不拒绝，保可用性）
+    if (!_emptyFpWarned && getHardwareFingerprint() === '') {
+        _emptyFpWarned = true;
+        console.error('[Gate] 硬件指纹采集全部失败，vault blob 未绑定硬件（请检查系统）');
+    }
+    let blob;
+    try { blob = encryptVaultBlob(JSON.stringify(state), mid); }
+    catch (e) { return false; }
+    const r = vaultInvoke('write', VAULT_TARGET_PREFIX + mid, blob);
+    if (r && r.ok === true) return true;
+    // 触顶等确定性失败显式告警（叠加对账机制避免静默丢状态）
+    console.warn('[Gate] vault 写入失败，本次回落文件：', r && r.error);
+    return false;
+}
+
+// mid 候选：当前 mid + 各指纹候选（mg-only 等）对应的 mid。Win11 移除
+// wmic 会让 mid 自身变化——vault target 必须逐个候选查找，否则旧凭据被孤立
+let _midVariantsCache = null;
+function getMidVariants() {
+    if (_midVariantsCache) return _midVariantsCache;
+    const list = [getMachineId()];
+    for (const fp of getHwFingerprintVariants()) {
+        const m = getMachineId(fp);
+        if (m && list.indexOf(m) === -1) list.push(m);
+    }
+    _midVariantsCache = list.filter(Boolean);
+    return _midVariantsCache;
+}
+
+// 跨 mid 候选解析 vault：扫描【全部】候选 target，所有命中态级联合并
+// （不能命中第一个即返回——抖动下旧 target 可能遮蔽更新的拒绝），合并态写
+// primary，再统一删除所有旧 target。
+function resolveVaultState(primaryMid) {
+    const found = [];
+    let anyDead = false, anyCorrupt = false;
+    for (const cand of getMidVariants()) {
+        const v = readVaultState(cand);
+        if (v.dead) { anyDead = true; continue; }
+        if (v.state) found.push({ mid: cand, state: v.state });
+        if (v.corrupt) anyCorrupt = true;
+    }
+    if (!found.length) {
+        if (anyDead) return { dead: true };
+        return { dead: false, state: null, corrupt: anyCorrupt };
+    }
+    let merged = {};
+    for (const f of found) merged = mergeUnifiedStates(merged, f.state);
+    // 稳态快路径：唯一命中就在 primary——无需重写（每次读省一次 PS 写进程）
+    if (found.length === 1 && found[0].mid === primaryMid) {
+        return { dead: false, state: found[0].state };
+    }
+    if (writeVaultState(merged, primaryMid)) {
+        for (const f of found) {
+            if (f.mid !== primaryMid) {
+                vaultInvoke('delete', VAULT_TARGET_PREFIX + f.mid, '');
+            }
+        }
+        return { dead: false, state: merged };
+    }
+    return { dead: false, state: merged };
+}
+
+// 两个统一状态对账合并
+// 权威侧 = lastVerify 较大一侧：其 null 字段（LICENSED 清除）必须生效，
+// 不能被另一侧旧态复活（曾误拒合法用户）。
+function mergeUnifiedStates(a, b) {
+    a = a || {};
+    b = b || {};
+    const va = Number(a.lastVerify) || 0, vb = Number(b.lastVerify) || 0;
+    let auth;
+    if (vb > va) auth = b;
+    else if (va > vb) auth = a;
+    else {
+        // verify 同刻（如 vault 写拒绝失败、只落文件）：拒绝跟较晚 rejectAt
+        auth = (Number(b.rejectAt) || 0) > (Number(a.rejectAt) || 0) ? b : a;
+    }
+    // 墓碑只做保守并集：merge 无法区分「权威侧曾承载该键后被在线裁决清除」与
+    // 「权威侧由启动读缺口（PS 冷启动/杀软/退避）建立、从未加载过该键」——
+    // 凭 at<verify 推断清除会误删合法墓碑（R4-1）。合法清除只走本人在线
+    // LICENSED 的 clearAccountRejectIfMatch 显式通道并随 persist 全量落盘；
+    // 若当次 vault 写失败导致旧键残留，并集期间该用户离线仍被拒（fail-closed，
+    // 下次在线 LICENSED 重试清除）。
+    const authVerify = Math.max(va, vb);
+    return {
+        everActivated: !!(a.everActivated || b.everActivated),
+        lastReject: auth.lastReject || null,
+        rejectAt: Number(auth.rejectAt) || null,
+        lastVerify: authVerify,
+        offlineStart: Number(auth.offlineStart) || null,
+        lastSeenHigh: Math.max(Number(a.lastSeenHigh) || 0, Number(b.lastSeenHigh) || 0),
+        accountReject: mergeRejectMaps(
+            normalizeRejectMap(a.accountReject),
+            normalizeRejectMap(b.accountReject)),
+        usersBackupGen: Math.max(Number(a.usersBackupGen) || 0, Number(b.usersBackupGen) || 0),
+        usersLegacyRetired: a.usersLegacyRetired === true || b.usersLegacyRetired === true
+    };
+}
+
+// 旧双文件状态合并（沿用既有语义；offlineStart 两侧取最早）
+function mergeLegacyState(gate, anchor) {
+    gate = gate || {};
+    anchor = anchor || {};
+    const gs = Number(gate.offlineStart) || 0;
+    const as = Number(anchor.offlineStart) || 0;
+    return {
+        everActivated: !!(gate.everActivated || anchor.everActivated),
+        lastReject: gate.lastReject || anchor.lastReject || null,
+        rejectAt: gate.rejectAt || anchor.rejectAt || null,
+        lastVerify: Math.max(Number(gate.lastVerify) || 0, Number(anchor.lastVerify) || 0),
+        offlineStart: (gs && as) ? Math.min(gs, as) : (gs || as || null),
+        lastSeenHigh: Math.max(Number(gate.lastSeenHigh) || 0, Number(anchor.lastSeenHigh) || 0),
+        accountReject: mergeRejectMaps(
+            normalizeRejectMap(gate.accountReject),
+            normalizeRejectMap(anchor.accountReject)),
+        usersBackupGen: Math.max(Number(gate.usersBackupGen) || 0, Number(anchor.usersBackupGen) || 0),
+        usersLegacyRetired: gate.usersLegacyRetired === true || anchor.usersLegacyRetired === true
+    };
+}
+
+// 迁移完成后清理旧文件（便携版 exe 目录可能无权限，失败忽略）
+function removeLegacyAnchorFiles() {
+    try { fs.rmSync(getGatePath(), { force: true }); } catch (e) { /* 忽略 */ }
+    try { fs.rmSync(getAnchorPath(), { force: true }); } catch (e) { /* 忽略 */ }
+}
+function readFileLegacyState(mid) {
+    const gate = readGateState(mid);
+    const anchor = readAnchorState(mid);
+    return (gate || anchor) ? mergeLegacyState(gate, anchor) : null;
+}
+
+// 统一状态读取（进程内短缓存：写即失效）。backupUserAccounts 等链路会连续
+// 多次读取，缓存把多次 PS 往返收敛为一次；同步读-改-写流不会读到旧值。
+const UNIFIED_CACHE_MS = 1500;
+let _unifiedCache = null; // {mid, at, result}
+function invalidateUnifiedCache() { _unifiedCache = null; }
+
+function readUnifiedState(mid) {
+    const now = Date.now();
+    if (_unifiedCache && _unifiedCache.mid === mid && now - _unifiedCache.at < UNIFIED_CACHE_MS) {
+        return _unifiedCache.result;
+    }
+    const result = readUnifiedStateFresh(mid);
+    // 只缓存 vault 成功结果：文件态读取无 PS 开销，且文件可能被外部删除，
+    // 缓存文件态会导致读-改-写链路误判锚点存在。
+    // at 必须在读取完成后取：fresh 自身可能慢于缓存窗口（慢机多 PS 往返），
+    // 否则缓存插入即过期，性能收敛失效。
+    if (result.vault === true) _unifiedCache = { mid, at: Date.now(), result };
+    return result;
+}
+
+// 统一状态读取：vault 优先（跨 mid 候选）；vault↔文件强制对账；
+// 旧双文件一次性迁移；写 vault 必须成功才删旧文件。
+function readUnifiedStateFresh(mid) {
+    if (vaultProbe()) {
+        const v = resolveVaultState(mid);
+        if (v.dead) {
+            markVaultTransient(); // 运行中瞬态故障：退避，不永久判决
+        } else {
+            const fileState = readFileLegacyState(mid);
+            // ① vault 与文件并存（降级期写入留下）：对账后写回，成功才删文件
+            if (v.state && fileState) {
+                const merged = mergeUnifiedStates(v.state, fileState);
+                if (writeVaultState(merged, mid)) {
+                    removeLegacyAnchorFiles();
+                    return { vault: true, state: merged };
+                }
+                return { vault: false, state: merged };
+            }
+            if (v.state) return { vault: true, state: v.state };
+            if (fileState) {
+                // ③ vault 损坏 + 旧文件：不能当空 vault 迁移覆盖（会丢真态），
+                //   本次用文件态并标 uncertain，待在线 LICENSED 权威覆写
+                if (v.corrupt) return { vault: false, state: fileState, uncertain: true };
+                // ② vault 无凭据 + 旧双文件：迁移（写成功才删）
+                if (writeVaultState(fileState, mid)) {
+                    removeLegacyAnchorFiles();
+                    console.log('[Gate] 旧双文件锚点已迁移进 Windows 凭据管理器');
+                    return { vault: true, state: fileState };
+                }
+                return { vault: false, state: fileState };
+            }
+            // vault 凭据解不开（指纹抖动/损坏）且无文件：状态不明
+            if (v.corrupt) return { vault: true, state: null, uncertain: true };
+            // ④ 真空态
+            return { vault: true, state: null };
+        }
+    }
+    const fileState = readFileLegacyState(mid);
+    if (fileState) return { vault: false, state: fileState };
+    // vault 退避中又无文件：显式禁用（测试）外，状态不明 → fail-closed
+    return { vault: false, state: null, uncertain: !_vaultEnvDisabled };
+}
+
+// 统一状态写入：vault 优先；写失败/不可用回落【双文件双写】（至少一份落盘）
+function writeUnifiedState(state, mid) {
+    invalidateUnifiedCache();
+    if (vaultProbe() && writeVaultState(state, mid)) return true;
+    if (!_vaultEnvDisabled) markVaultTransient();
+    // 注意：两份都要尝试，不能用 || 短路（gate 成功就跳过 anchor 会破坏
+    // 单删任一文件不失效的双写语义）
+    let gOk = false, aOk = false;
+    try { gOk = !!writeGateState(state, mid); } catch (e) { /* 继续写 anchor */ }
+    try { aOk = !!writeAnchorState(state, mid); } catch (e) { /* 忽略 */ }
+    return !!(gOk || aOk);
+}
+
+// 内部读-改-写补丁（gen/退役标记）：uncertain 时绝不覆盖可能只是暂时
+// 读不出的 vault——补丁落文件，待 vault 恢复后对账合并
+function patchUnifiedState(patch, mid) {
+    const r = readUnifiedState(mid);
+    const s = Object.assign({}, r.state, patch);
+    if (r.uncertain) {
+        let gOk = false, aOk = false;
+        try { gOk = !!writeGateState(s, mid); } catch (e) { /* 续 */ }
+        try { aOk = !!writeAnchorState(s, mid); } catch (e) { /* 忽略 */ }
+        return !!(gOk || aOk);
+    }
+    return writeUnifiedState(s, mid);
+}
+
 // ★ 2026-09-23 账号级拒绝标记 = 按用户名存储的集合 { username: {username,state,at} }
 //   （同机多账号先后被删互不覆盖；重新开通只清对应键）。旧版单条记录
 //   {username,state,at} 读入时自动迁移为集合，首次 persist 即落新格式。
@@ -2729,21 +3138,30 @@ function mergeRejectMaps(a, b) {
 
 // 双锚点统一视图
 function getUnifiedGate(mid) {
-    const gate = readGateState(mid) || {};
-    const anchor = readAnchorState(mid) || {};
-    const everActivated = !!(gate.everActivated || anchor.everActivated);
-    const lastReject = gate.lastReject || anchor.lastReject || null;
-    const lastVerify = Math.max(Number(gate.lastVerify) || 0, Number(anchor.lastVerify) || 0);
-    const lastSeenHigh = Math.max(Number(gate.lastSeenHigh) || 0, Number(anchor.lastSeenHigh) || 0);
-    // ★ 账号级拒绝标记（按 username 隔离的集合；就地规范化，persist 时完成旧格式迁移）
-    gate.accountReject = normalizeRejectMap(gate.accountReject);
-    anchor.accountReject = normalizeRejectMap(anchor.accountReject);
-    const accountReject = mergeRejectMaps(gate.accountReject, anchor.accountReject);
-    return { gate, anchor, everActivated, lastReject, lastVerify, lastSeenHigh, accountReject };
+    // ★ 2026-09-26 M-2：统一状态（vault 优先 + 旧双文件迁移/降级）。
+    //   gate/anchor 指向同一状态对象——旧代码对两处的同写保持幂等；
+    //   降级文件模式 persist 时同内容双写，物理双份语义不变。
+    const r = readUnifiedState(mid);
+    const s = r.state || {};
+    // __arMap 是 accountReject 映射内部标记（非 state 顶层字段）
+    if (!s.accountReject || s.accountReject.__arMap !== 1) {
+        s.accountReject = normalizeRejectMap(s.accountReject);
+    }
+    return {
+        gate: s,
+        anchor: s,
+        vault: r.vault === true,
+        uncertain: r.uncertain === true,
+        everActivated: !!s.everActivated,
+        lastReject: s.lastReject || null,
+        lastVerify: Number(s.lastVerify) || 0,
+        lastSeenHigh: Number(s.lastSeenHigh) || 0,
+        accountReject: s.accountReject || {}
+    };
 }
 function persistUnified(u, mid) {
-    writeGateState(u.gate, mid);
-    writeAnchorState(u.anchor, mid);
+    // vault 模式写凭据；故障/降级自动回落双文件
+    return writeUnifiedState(u.gate, mid);
 }
 
 // ★ 中-1：单调高水位防时间回拨/前拨。gate 与 anchor 双写 lastSeenHigh。
@@ -2762,6 +3180,11 @@ function bumpHighWater(u, now) {
 //   （旧码读不到 gate 时把两侧都重写成 now，删单文件即可无限重置）。
 function gateGracePass(u, mid, username) {
     const now = Date.now();
+    // 状态不明（vault 瞬态故障且无文件 / 凭据损坏 / 指纹抖动）：fail-closed，
+    // 绝不播种新宽限（否则一次启动故障即可把 7 天时钟归零），只认在线 LICENSED
+    if (u.uncertain) {
+        return { ok: false, message: '授权状态暂无法核验，请联网后重试' };
+    }
     if (u.lastReject) {
         return { ok: false, message: '授权未通过授权服务器核验，请联网后重试' };
     }
@@ -2873,8 +3296,8 @@ async function verifyLoginGate(usernameInput) {
                     bumpHighWater(u, now);
                 }
                 u.gate.everActivated = true; u.anchor.everActivated = true;
-                u.gate.lastVerify = now; u.gate.offlineStart = null; u.gate.lastReject = null;
-                u.anchor.lastVerify = now; u.anchor.offlineStart = null; u.anchor.lastReject = null;
+                u.gate.lastVerify = now; u.gate.offlineStart = null; u.gate.lastReject = null; u.gate.rejectAt = null;
+                u.anchor.lastVerify = now; u.anchor.offlineStart = null; u.anchor.lastReject = null; u.anchor.rejectAt = null;
                 clearAccountRejectIfMatch();
                 persistUnified(u, mid);
                 return { ok: true };
@@ -2910,7 +3333,8 @@ async function verifyLoginGate(usernameInput) {
 
     // ② 试用期
     if (local.valid && local.type === 'trial') {
-        if (u.everActivated || rollbackSuspected) {
+        // uncertain（指纹/read 瞬态故障）同样必须在线证明，不得 fail-open
+        if (u.everActivated || rollbackSuspected || u.uncertain) {
             // 曾激活机 license.dat 被删，或时钟回拨可疑（纯试用也一样）：
             // 必须在线证明 LICENSED。
             const r = await adjudicateViaMainProcess(mid, username);
@@ -2926,8 +3350,8 @@ async function verifyLoginGate(usernameInput) {
                     }
                     u.gate.everActivated = true; u.anchor.everActivated = true;
                     // ★ 中-1：LICENSED 落账双清 lastReject/offlineStart
-                    u.gate.lastVerify = now; u.gate.offlineStart = null; u.gate.lastReject = null;
-                    u.anchor.lastVerify = now; u.anchor.offlineStart = null; u.anchor.lastReject = null;
+                    u.gate.lastVerify = now; u.gate.offlineStart = null; u.gate.lastReject = null; u.gate.rejectAt = null;
+                    u.anchor.lastVerify = now; u.anchor.offlineStart = null; u.anchor.lastReject = null; u.anchor.rejectAt = null;
                     clearAccountRejectIfMatch();
                     persistUnified(u, mid);
                     return { ok: true };
@@ -3343,22 +3767,18 @@ function installLicense(base64Content, options = {}) {
             return { success: false, error: writeResult.error };
         }
 
-        // ★ 2026-09-23 安全：激活唯一写点 → gate.dat + 二级锚点同置 everActivated。
-        //   此后删 license.dat（或单删任一锚点）也不能降级为全新试用。
+        // ★ 2026-09-23 安全 / 2026-09-26 M-2：激活唯一写点 → 统一状态（vault
+        //   凭据优先，降级双文件）同置 everActivated。此后删 license.dat / 双删文件
+        //   都不能降级为全新试用（vault 凭据无法用文件删除移除）。
         try {
-            const __now = Date.now();
-            const __g = readGateState(actualMachineId) || {};
-            __g.everActivated = true;
-            __g.offlineStart = null;
-            __g.lastVerify = __now;
-            __g.lastReject = null;
-            writeGateState(__g, actualMachineId);
-            const __a = readAnchorState(actualMachineId) || {};
-            __a.everActivated = true;
-            __a.offlineStart = null;
-            __a.lastVerify = __now;
-            __a.lastReject = null;
-            writeAnchorState(__a, actualMachineId);
+            const __r = readUnifiedState(actualMachineId);
+            const __s = __r.state || {};
+            __s.everActivated = true;
+            __s.offlineStart = null;
+            __s.lastVerify = Date.now();
+            __s.lastReject = null;
+            __s.rejectAt = null;
+            writeUnifiedState(__s, actualMachineId);
         } catch (ge) { console.warn('[License] everActivated 标记失败(非致命):', ge && ge.message); }
 
         // 2. 清除试用期标记（trial.dat）
@@ -3851,6 +4271,19 @@ module.exports = {
     verifyLoginGate,
     readAnchorState,       // 二级锚点读（供测试用）
     writeAnchorState,      // 二级锚点写（供测试用）
+    // ★ 2026-09-26 M-2：文件锚点原语/统一视图（迁移冒烟用，与 anchor 导出对称）
+    readGateState,
+    writeGateState,
+    getUnifiedGate,
+    persistUnified,
+    // ★ 2026-09-26 M-2：凭据管理器层（冒烟/诊断用）
+    vaultProbe,
+    readUnifiedState,
+    writeUnifiedState,
+    invalidateUnifiedCache,
+    // M-2 级联对账冒烟用（内部原语）
+    writeVaultState,
+    getMidVariants,
     // ★ 2026-09-11 阶段1b：拒绝原因查询（'hmac_sunset' = HMAC 日落截断，UI 引导联网自愈）
     getLastVerifyRejectReason,
     stopHeartbeat,         // 停止心跳检测

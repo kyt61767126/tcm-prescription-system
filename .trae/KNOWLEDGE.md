@@ -1469,3 +1469,18 @@
 * **★ 后台控制台是【手工双轨双副本】**：`public/admin/index.html` ↔ `site-admin/admin/index.html`，diff-cross-version 的 **adminconsole** 对会逐行比对。改后台页面必须两份同改，否则 pre-push 拦截（本次首推被拦即此因）。
 * **诊所行多管理员手机号**：functions/api/users.js 诊所列表新增 `adminPhones`（全部管理员手机号去重），两份前端「手机:」处顿号并列显示。提交 05051f57 + ef7ebf15。
 * **生效方式**：纯 Pages 后台，部署后刷新页面即生效；客户端零改动、无热包、不重打包。
+
+## 44. M-2 授权锚点根治：Windows 凭据管理器（2026-09-26，主进程域，需双桌面重打 exe）
+
+授权链本地锚点（吊销标记/宽限起点/已激活标记/账号墓碑）从「可被普通 del/双删的 gate.dat + .license-anchor 文件」迁入 **Windows 凭据管理器**（CredWrite/CredRead/CredDelete），文件降为降级副本。五轮迭代：核心实现 + 四轮双重独立审查（功能+安全互不通气），修复 10+6+4+2 项。
+
+* **核心实现**：
+  - [shared/credential-vault.ps1](file:///d:/trae_projects/kyt-zy/shared/credential-vault.ps1)（sync Group 24 分发至两端 electron/）：-Action probe|read|write|delete，stdout 末行单行 JSON。**probe 不注册 Add-Type（快热路径）**；Add-Type 前 TEMP 韧性兜底（候选 `$env:TEMP/TMP/LOCALAPPDATA\Temp/SystemRoot\Temp` 逐一试写，防 `setx TEMP` 投毒永久 addtype-failed；候选必须字符串拼接——`Join-Path` 校验盘符存在性，坏盘符会在数组构造阶段抛异常无输出）；blob 硬上限 2560（CRED_MAX_CREDENTIAL_BLOB_SIZE）。
+  - license-manager.js：`VLT2` 独立加密用途（Encrypt-then-MAC，purpose vault-enc/vault-mac，与 ENC2 license 用途分离；旧 ENC2 单向回退解密兼容）；`getMidVariants()`=[当前 mid]+各指纹候选（primary/mg-only/空）对应 mid，**跨 target 扫描级联合并**（resolveVaultState 扫全部候选 target，mergeUnifiedStates 归并，写 primary 后删全部旧 target——防指纹抖动下旧 target 遮蔽更新拒绝；稳态唯一 primary 命中走快路径不重写防读放大）；readUnifiedState 1.5s 进程缓存（**只缓存 vault:true 结果**、at 在读取完成后打点、写即失效）；vault 损坏/退避+无文件 → `uncertain:true` fail-closed（宽限不播种、trial 必须在线证明）；降级写=双文件两份都尝试（禁 `||` 短路）；patchUnifiedState 收口 gen/退役补丁（uncertain 只落文件不覆盖 vault）。
+  - 打包态硬化：`isAppPackaged()` → 打包态**忽略** `BNZC_VAULT_DISABLED`/`BNZC_VAULT_TARGET_PREFIX`（防用户 setx 关闭 vault），仅开发态生效。
+* **★ R4-1 铁律（第四轮安全审查引入后第五轮修复）**：**账号墓碑 merge 只做纯保守并集，绝不能凭「权威侧 lastVerify 更晚且缺键」推断清除**——启动 vault 读缺口（PS 冷启动/杀软/30s 退避）会让一侧状态从 null 血统建立、从未加载过该键，推断清除=误删合法墓碑、旁路服务端 ACCOUNT_REVOKED。墓碑唯一合法清除通道=**本人在线裁决 LICENSED 时 clearAccountRejectIfMatch**（username 缺失绝不清除）+ persistUnified 全量落盘；写失败残留期 fail-closed，下次在线重试。标量字段（lastReject/offlineStart）仍按 lastVerify 权威侧 null 清除（verify 在线裁决独占写入，可安全推断）。
+* **★ .ps1 编辑铁律（复申）**：Edit 工具会剥 UTF-8 BOM，PS5.1 无 BOM 按 GBK 解码中文注释破坏语法——**每次编辑 .ps1 后检查首三字节 239,187,191**；EncodedCommand 模式读入 ps1 内容须先剥 BOM（BOM 成内容首字符致 param 块解析失败）。
+* **威胁模型边界（如实）**：纯文件操作攻击者已根治；**同用户代码执行残余仍存在**（CredWrite 直写/包内静态 IKM 伪造高 verify 态），merge/候选机制不放大也不消除该残余——根治路径=服务端短周期 token+设备证明（backlog）。wmic 永久移除（24H2）致 full 指纹不可重建时旧 vault target 无法回溯（mg-only 候选可部分覆盖）——**根治=CIM 替代 wmic（CIM 仍提供 bb/cpu，可回溯解密旧 vault），列为下一安全加固优先项**；服务端 gen 高水位并入 token 路线。
+* **Android 侧**：M-2 为 Windows 凭据管理器专属；APP 侧对应 Android Keystore，另行立项（本轮 APK 零改动）。
+* **验证全绿**：credential-vault-smoke **60/60**（空态/读写/直读/旧双文件迁移/降级/对账/null清除/超大件/损坏 uncertain/多 target 级联/墓碑语义）；license-config-sign 134/134（顶部 `BNZC_VAULT_DISABLED=1` 防污染真实凭据——**凡加载真实 lm 的冒烟必须加**）；desktop-license 141/141、desktop-user 58/58、print 33/33、biz 93/93、runtime --all 157/157；check-interface 6 OK、diff-cross-version 4 对、copy-consistency ALL PASS；两端 electron 进包副本（stub packaged electron）write/read/VLT2 前缀/测后恢复验证通过（打包态验证须注意 merge 输出为显式字段清单，测试自定义字段会被丢弃）。
+* **生效方式**：主进程域热更不可达 → **云桌面/离线桌面重打 exe**；云端网页/云端 APP/离线 APP/鸿蒙零改动。promo/ 不纳入提交。

@@ -322,6 +322,16 @@ $DesktopUserIpcTargets = @(
     'app_project/db-offline/desktop/electron'
 )
 
+# Group 24: credential-vault.ps1 (★ 2026-09-26 M-2 凭据管理器锚点) -> 2 个 electron 目录
+#   Windows Credential API（CredWrite/CredRead/CredDelete）封装；license-manager.js
+#   经 EncodedCommand 执行（asar 内无法 -File），授权链统一状态存凭据管理器替代
+#   可双删的 gate.dat/.license-anchor。主进程域热更不可达，随双桌面整包生效。
+#   .ps1 必须 UTF-8 BOM（BOM 规范化组守护）。
+$CredVaultTargets = @(
+    'app_project/db-yunduan/cloud_desktop/electron',
+    'app_project/db-offline/desktop/electron'
+)
+
 # Group 19: voice 模块（voice-input.js）-> 5 端目录（★ 2026-09-17 语音版一期；
 #   ★ 2026-09-18 阶段二扩离线两端）
 #   智能语音输入模块（Web Speech API，cloud_voice 版本专属入口）+
@@ -600,6 +610,11 @@ Write-Host ""
 
 # Group 23: desktop-user-ipc.cjs -> 2 electron dirs (★ 2026-09-25 P2 user 域收口)
 $result = Sync-Group -GroupName 'desktop-user-ipc.cjs -> 2 electron dirs' -Files @('desktop-user-ipc.cjs') -Targets $DesktopUserIpcTargets -VerifyOnly $VerifyOnly
+if (-not $result) { $allInSync = $false }
+Write-Host ""
+
+# Group 24: credential-vault.ps1 -> 2 electron dirs (★ 2026-09-26 M-2 凭据管理器锚点)
+$result = Sync-Group -GroupName 'credential-vault.ps1 -> 2 electron dirs' -Files @('credential-vault.ps1') -Targets $CredVaultTargets -VerifyOnly $VerifyOnly
 if (-not $result) { $allInSync = $false }
 Write-Host ""
 
