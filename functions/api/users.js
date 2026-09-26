@@ -2843,7 +2843,10 @@ export async function onRequest(context) {
 
             for (const clinic of clinics) {
                 const users = await kv.get(`clinic:${clinic.id}:users`, 'json');
-                const admin = users && users.find(u => u.role === ROLE_CLINIC_ADMIN);
+                // ★ 2026-09-26 多管理员：取全部管理员（同名诊所多次激活可并存多个
+                //   clinic_admin），admin 仍为首个，保持原有引用；列表展示全部手机号
+                const admins = users ? users.filter(u => u.role === ROLE_CLINIC_ADMIN) : [];
+                const admin = admins[0];
                 const doctorCount = users ? users.filter(u => u.role === ROLE_DOCTOR).length : 0;
                 // 聚合本诊所在线端：loginAt ≤15 分钟才算在线，clientClass 归并（web 及未知兜底计入网页）
                 let onlineDesktop = 0, onlineApp = 0, onlineWeb = 0;
@@ -2902,6 +2905,9 @@ export async function onRequest(context) {
                     adminUsername: admin ? admin.username : '-',
                     adminName: admin ? admin.name : '-',
                     adminPhone: admin ? (admin.phone || '') : '',
+                    // ★ 2026-09-26 全部管理员手机号（去重；前端诊所行并列展示）
+                    adminPhones: [...new Set(admins.map(a => (a.phone || a.username || '')))]
+                        .filter(x => x),
                     doctorCount,
                     userCount: users ? users.length : 0,
                     onlineDesktop,

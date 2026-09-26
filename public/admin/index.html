@@ -4054,9 +4054,13 @@ async function loadClinicsList() {
                 const adminLink = c.adminUsername
                     ? '<a href="javascript:void(0)" onclick="jumpToUser(\'' + escapeHtml(c.adminUsername) + '\')" style="color:#3498db;text-decoration:underline;" title="到用户管理处理该账号">' + escapeHtml(c.adminUsername) + '</a>'
                     : '-';
-                // ★ 2026-08-23 管理员手机号显示（可在编辑弹窗修改）
-                const adminPhoneText = c.adminPhone
-                    ? ' | 手机: <strong>' + escapeHtml(c.adminPhone) + '</strong>'
+                // ★ 2026-09-26 多管理员手机号并列显示（同名诊所并存多个管理员时，
+                //   手机: A、B 全部可见；无 adminPhones 时回落旧单字段）
+                const adminPhones = (Array.isArray(c.adminPhones) && c.adminPhones.length)
+                    ? c.adminPhones
+                    : (c.adminPhone ? [c.adminPhone] : []);
+                const adminPhoneText = adminPhones.length
+                    ? ' | 手机: <strong>' + adminPhones.map(p => escapeHtml(p)).join('、') + '</strong>'
                     : ' | 手机: -';
                 return '<div style="padding:12px;border-bottom:1px solid #ebeef5;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">' +
                     '<div style="flex:1;min-width:200px;">' +
