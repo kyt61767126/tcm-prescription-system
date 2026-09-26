@@ -1453,3 +1453,12 @@
 * **后续 backlog**：desktop-user-ipc isLoginFrameCall 与本批帧门同弱点类（已修 pathname 判定，host 校验待同类补齐）；F4 installLicense/ensureLocalActivationUser 仍写单轮 SHA-256（登录后自动升级收口）；中期 Argon2id。
 * **验证全绿**：node --check 全过；冒烟 license-config-sign **134/134**（新增 13B 损坏回填不丢号 7 例）、desktop-license **141/141**（新增 evil/ 目录拒绝+UNC host 拒绝+盘符小写放行 3 例）、desktop-user 58/58、print 33/33、biz 93/93、runtime 双端 26/26；sync-all SYNCED+VerifyOnly / copy-consistency **100/0** / check-interface **6 OK** / diff-cross-version **4 对全绿**。
 * **生效方式**：主进程域热更不可达 → **云桌面/离线桌面重打 exe**（与上批 6d5b915e 攒同批发布）；云端网页/云端 APP/离线 APP/鸿蒙零改动不受影响。promo/ 不纳入提交。
+
+## 42. 双桌面整包发布：云端 1.2.256 / 离线 1.0.257（2026-09-26，F2+F3+打印/user/PBKDF2 攒同批落地）
+
+* **产物**：云端 `app_project/db-yunduan/cloud_desktop/dist/` 惠康中医-云端 1.2.256.exe + Setup；离线 `app_project/db-offline/desktop/dist/` 惠康中医-本地 1.0.257.exe + Setup。双端 E2E 全过（云端 3/3、离线 **6/6**）、FINAL IRON GATE 全过、fuse 五项、冒烟启动 PASS（云端「软件激活」窗、离线「登录」窗）。提交：云端落定 829f99b4、离线落定 bb58d882。
+* **★ 核心教训：F2 类"首启闸门"改动会让 E2E 夹具集体假失败——改闸门必须同步改夹具，且夹具要与真实写态【同构】**。本次离线 E2E 连续 3 次"失败"（弹窗「配置文件用户列表已被篡改或备份损坏」），初判负载抖动是错的：旧夹具 `prepareUserdata` 只手写**无签名 config（含测试账号）**，F2 闸门对「有 users 无 v2 签名备份」判 config_tampered → login 窗不出现 → Playwright 30s/180s 超时（"超时"两字极易误判成机器慢）。
+* **E2E 夹具 F2 同构范式（commit df947571，run-e2e.cjs）**：stub electron（app.getPath('userData') 指向当前夹具目录）+ 覆盖 Module._extensions['.js'] 按 CJS 编译 → require 真实 shared/license-manager → `signConfig(config)`（机器密钥）+ `backupUserAccounts(config,{proven:true})` 落 v2 签名备份。**可行性关键：machineId 全部基于机器级特征（MachineGuid/主板/CPU/hostname），运行器 Node 与被测 exe 同机 → HKDF 派生密钥一致，签名互验通过。** 修后 6/6 仅 27s（旧夹具靠超时，单轮 3min+）。
+* **★ 排查方法论修正**：E2E "等待窗口超时"先看日志里应用自身的判定输出（config_tampered/闸门 reason），不要先归因 Defender/负载；手动 smoke-launch 同一 win-unpacked 可快速二分「产物问题 vs 夹具/环境问题」。
+* **另踩一门**：build.bat Step 1.5 源码落定门会拦「夹具修复未提交」——属正常拦截，提交后重跑；禁止 ALLOW_DIRTY_BUILD 绕过。bump-version 无条件 +1，失败重跑前需把 package.json 版本号手工回退，否则跳号。
+* **生效方式**：用户覆盖安装新 Setup / 替换 portable 即生效（主进程改动只有整包触达）；云端网页/双 APP/鸿蒙零改动。exe 分发走自建渠道。
