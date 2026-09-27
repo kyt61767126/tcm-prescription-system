@@ -1497,3 +1497,13 @@
 * **铁律/坑**：业务裁决全 **HTTP200+allowed:false** 绝不 403，429 仅限流；checkRateLimit 独立前缀走第四参；oidBytes 只返内容字节必须包 tlv(0x06,…)；高号 context tag = 0x80|0x20|0x1f + base128（续字节必带 0x80，如 tag600 → `bf 84 58`）；WebCrypto RSA generateKey 必带 hash、ECDSA.verify 只收 raw R‖S；含中文 .ps1 Edit 后查 BOM；模拟器无网时 RKPD keygen 失败 → Tier B 优雅降级（正常非缺陷）；真机旧热包 -1 的 auth-core 是 P3-B 前版本，证明能力随热包 -2 下发。
 * **验证全绿**：attestation-smoke **68/68**（含 CA 约束负向、free+paid 残留 forceScan、过期付费不阻断 free 恢复）、gate-token **25/25**、probe-param-matrix **20/20**、smoke-runtime **157/157**、biz 93/93、license-config-sign 134、desktop 套件全绿、copy-consistency ALL PASS、sync-all VerifyOnly、check-interface 6 OK；release APK versionCode **307**，模拟器 E2E 通过（注册→登录→门诊主界面），真机 E2E 随热包 -2 下发后复验。
 * **生效方式**：**离线 APP**——JS 走 app-local 热包（联网打开一次、彻底划掉重进），Java 新行为须装 v307 APK；**离线桌面/云桌面 exe** 零改动（Android 专属；gate v2 仅预置未切换，v1 验签不受影响）；**云端网页/云端 APP/鸿蒙** 零改动。promo/、APK、构建产物、tools/secrets 不纳入提交。
+
+## 46. ★紧急回归修复：登录门误判 HTTP200 为失败（2026-09-27，热包 -3 + APK 308，commit d8e59fa6/9f540d72）
+
+* **现象**：用户报「手机激活后不断弹出管理员激活框」；登录红字「授权服务暂时不可用（HTTP 200）」。三重证据定位（截图 + CDP 响应体 + git show）：P3-B（4467ae0c）重构 `__verifyLoginGateInner` 时把旧分支「`resp.ok` 成功 / 403 宽限 / else 失败」改成状态码数值比较「403 / `entHttpStatus !== 0` 即失败」，**丢掉了 200 成功分支**——正常 entitlement 200（register 被 429 限流时 observe 下仍返 200 LICENSED）被误判失败：冷启动 gate → `showExpireAlertAndActivate` → JS 派 `app:show-activate` → 弹管理员激活框；登录同路径失败。
+* **修复（一行）**：[shared/auth-core/offline.js](file:///d:/trae_projects/kyt-zy/shared/auth-core/offline.js) 失败条件 `entHttpStatus !== 0` → `entHttpStatus !== 200 && entHttpStatus !== 0`。五路径表：**200→消费裁决体（成功）；403→gate token 离线宽限门（ES256 验签，非 fail-open）；429/5xx→fail-closed；0（断网/异常）→离线 gate token 门**。
+* **★新铁律**：把「`resp.ok`/else 类分支」重构成 HTTP 状态码数值谓词前，**必须先列全 200/403/429/5xx/0 五路径表**并逐格核对；`!== 0`、`> 0` 这类谓词天然吞掉 200，是本类回归的固定陷阱。
+* **流程**：三重独立审查（2 功能互盲 + 1 安全对抗）全过 → 门禁全绿（smoke-runtime 157/157、attestation 68/68、biz 93/93、check-interface 6 OK、sync-all VerifyOnly）→ app-local 热包 **2026.09.27-3**（minAppCode 继承 288 未抬）→ 真机 CDP 连续 3 次冷启动零弹窗 + CDP 自动登录 + 用户手动登录均成功 → 删临时调试开关（`WebView.setWebContentsDebuggingEnabled` 仅在工作区从未入库，删除即恢复 clean）→ APK **308** 重打重装，核验无 devtools socket、手动登录进主界面。
+* **临时诊断开关纪律**：release 包抓 WebView 证据可临时开 `setWebContentsDebuggingEnabled`，必须加「发布前必删」注释、绝不 git add、发布包用 `/proc/net/unix` 查无 `webview_devtools` socket 作关闭证据。
+* **既有低优（非本批引入，另开工单）**：`postOnce` 同一 try/catch 把「200 但 JSON 畸形」映射 httpStatus:0 走离线门（主进程同场景硬拒，口径不一）；2xx 中仅判 200（服务端契约只用 200）。
+* **生效方式**：**离线 APP**——JS 走 app-local 热包 **2026.09.27-3**（联网打开一次、划掉重进），装 v308 APK 关闭调试面；**离线桌面/云桌面 exe、云端网页/云端 APP/鸿蒙** 零改动。
