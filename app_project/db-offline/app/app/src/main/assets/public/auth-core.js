@@ -2733,9 +2733,13 @@
                         //   2026-09-11 红线「本地使用不阻断」，ent 留空走下方
                         //   宽限（与网络不可达同口径；此为旧主进程兜底路径）。
                     }
-                    else if (entHttpStatus !== 0) {
+                    else if (entHttpStatus !== 200 && entHttpStatus !== 0) {
                         // ★ S2 修复：其他 HTTP 错误（429/500…）不是断网，
                         //   fail-closed，绝不落入宽限 fail-open。
+                        // ★ 2026-09-27 紧急回归修复（P3-B 引入）：200=裁决成功
+                        //   ——register 被 429 限流时，observe 模式下 entitlement
+                        //   仍返回 200 LICENSED；此前条件把 200 也误判失败，导致
+                        //   登录页冷启动弹管理员激活框+登录报「HTTP 200」红字。
                         return fail('授权服务暂时不可用（HTTP ' + entHttpStatus + '），请稍后重试或联系客服');
                     }
                 } catch (e) { /* 仅真·网络不可达（httpStatus=0）才走下方宽限 */ }
