@@ -21,3 +21,7 @@ database_id = "e74894e3-dafc-491f-8777-d2ee9962e677"
 [vars]
 AUTH_TOKEN_TTL_HOURS = "8"
 USE_D1 = "true"
+# ★ P3-A gate token（ES256）：kid 密钥版本（私钥 GATE_SIGN_P8_B64 走 secret，不入库）
+#   GATE_TOKEN_TTL_HOURS: 离线 gate token 有效期（默认 48h，替代客户端固定 7 天宽限）
+GATE_SIGN_KID = "v1"
+GATE_TOKEN_TTL_HOURS = "48"

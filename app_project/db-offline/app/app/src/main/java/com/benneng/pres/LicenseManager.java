@@ -402,13 +402,17 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
     }
 
     // ========================================================================
-    //  ★ 2026-08-15 防重复试用：云端试用注册（宽限模式）
-    //  行为：首次创建试用时上报硬件指纹，云端判定是否允许。
-    //  宽限模式：网络不可用/超时/解析失败时默认允许（返回 true），不阻断首次使用；
-    //  仅当云端明确返回 allowed=false（次数超限）时才拒绝。
-    //  返回：true=允许试用，false=云端拒绝（试用次数已达上限）
+    //  ★ P3-A（2026-09-27）云端试用注册——strict 模式（原 2026-08-15 lenient 已废）
+    //  背景：lenient（网络失败默认允许）使「清除应用数据 + 断网」可重播新试用。
+    //  新规则：首次注册必须在线，只有云端明确 allowed=true 才放行试用；
+    //          云端明确拒绝（allowed=false）=次数超限；网络不可达/服务异常=需联网重试。
+    //  返回：TRIAL_REG_OK=允许；TRIAL_REG_LIMIT=云端拒绝（超限）；TRIAL_REG_NETWORK=网络失败
     // ========================================================================
-    public boolean registerTrialOnline() {
+    public static final int TRIAL_REG_OK = 0;
+    public static final int TRIAL_REG_LIMIT = 1;
+    public static final int TRIAL_REG_NETWORK = 2;
+
+    public int registerTrialOnline() {
         HttpURLConnection conn = null;
         try {
             URL url = new URL(TRIAL_REGISTER_API_URL);
@@ -433,25 +437,28 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
             }
 
             int codeResp = conn.getResponseCode();
+            // ★ 服务端超限裁决是 HTTP200+allowed=false（register.js 从不返回403）；
+            //   403 只可能来自边缘 WAF/拦截 → 按网络失败处理，允许重试自愈
             InputStream is = (codeResp >= 200 && codeResp < 400) ? conn.getInputStream() : conn.getErrorStream();
-            if (is == null) return true; // 宽限：无响应默认允许
+            if (is == null) return TRIAL_REG_NETWORK; // strict：无响应不允许
             String response = readStream(is);
             Log.i(TAG, "试用注册响应: " + response);
             JSONObject respJson = new JSONObject(response);
 
             if (respJson.optBoolean("success", false)) {
-                return respJson.optBoolean("allowed", true);
+                return respJson.optBoolean("allowed", false) ? TRIAL_REG_OK : TRIAL_REG_LIMIT;
             }
-            return true; // 云端返回非成功，宽限默认允许
+            // success=false 且服务端明确语义：保守按网络失败（引导重试，不一次锁死）
+            return TRIAL_REG_NETWORK;
         } catch (java.net.SocketTimeoutException e) {
-            Log.w(TAG, "试用注册超时（宽限允许）", e);
-            return true;
+            Log.w(TAG, "试用注册超时（strict：需联网重试）", e);
+            return TRIAL_REG_NETWORK;
         } catch (java.net.UnknownHostException e) {
-            Log.w(TAG, "试用注册无法连接（宽限允许）", e);
-            return true;
+            Log.w(TAG, "试用注册无法连接（strict：需联网重试）", e);
+            return TRIAL_REG_NETWORK;
         } catch (Exception e) {
-            Log.w(TAG, "试用注册异常（宽限允许）", e);
-            return true;
+            Log.w(TAG, "试用注册异常（strict：需联网重试）", e);
+            return TRIAL_REG_NETWORK;
         } finally {
             if (conn != null) conn.disconnect();
         }
@@ -3655,13 +3662,19 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
             JSONObject trial = readTrial();
             int currentTrialDays = getTrialDays();   // ★ 当前配置的试用期天数
             if (trial == null) {
-                // ★ 2026-08-15 防重复试用：首次创建试用前先上报硬件指纹到云端
-                // 宽限模式：网络失败默认允许；仅云端明确拒绝（次数超限）才阻止
-                if (!registerTrialOnline()) {
-                    JSONObject r = failValidation(
-                            "该设备试用次数已达上限，无法继续试用。\n请联系客服购买正式授权。",
-                            "trial_limit_reached");
-                    return r;
+                // ★ P3-A：首次创建试用前必须联网注册（strict）。
+                //   云端判重：清数据后 hwFp/mid 不变，重复试用/曾激活设备一律被云端拒绝；
+                //   断网/服务异常 fail-closed（trial_need_network），杜绝清数据+断网重播试用。
+                int trialReg = registerTrialOnline();
+                if (trialReg != TRIAL_REG_OK) {
+                    if (trialReg == TRIAL_REG_LIMIT) {
+                        return failValidation(
+                                "该设备试用次数已达上限，无法继续试用。\n请联系客服购买正式授权。",
+                                "trial_limit_reached");
+                    }
+                    return failValidation(
+                            "需要连接网络完成首次注册（仅需一次）。\n联网后重新打开即可，或联系客服。",
+                            "trial_need_network");
                 }
                 trial = new JSONObject();
                 trial.put("startTime", now);

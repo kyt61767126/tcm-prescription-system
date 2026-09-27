@@ -1835,18 +1835,128 @@
 
     // ==================== 导出 ====================
 
-    // ========== 登录后台闸门（2026-09-22 P0：后台删除诊所/激活码必须吊销） ==========
+    // ========== 登录后台闸门（2026-09-22 P0；2026-09-27 P3-A 宽限收口） ==========
     // 背景：登录窗口此前是纯本地密码比对，主窗口心跳又因缺 license:machineId 永远
     //   自门控退出 → 后台删除记录客户端无任何感知。
-    // 规则（用户拍板）：
+    // 规则（用户拍板 + P3-A 修订）：
     //   ① 本机已激活（licensed 非 free）→ 必须联网读到后台 state=LICENSED 才放行；
     //      NO_LICENSE（诊所/码已删）/REVOKED/EXPIRED 一律 fail-closed 拒绝；
     //   ② 本机试用期（trial remainingDays>0）→ 放行；试用过期拒绝；
+    //      ★ APP 首次试用必须联网注册成功（strict，见 Java registerTrialOnline）；
     //   ③ 永久免费版 free → 产品承诺永久离线可用，豁免在线闸门；
-    //   ④ 网络不可达 → 凭 license:offlineStart 给 7 天宽限，超期锁定。
+    //   ④ 网络不可达 → 凭服务端签发的 ES256 gate token 离线验签放行
+    //      （mid 绑定 + 服务端校正时钟 + 回拨检测）；token 缺失/过期/篡改 fail-closed。
     // 副作用：激活机登录时补写 license:machineId，让主窗口 performHeartbeatCheck 复活。
-    const LOGIN_GATE_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
     const LOGIN_GATE_ENTITLEMENT_URL = 'https://tcm-prescription-system.pages.dev/api/license/entitlement';
+
+    // ========== P3-A：Gate Token（ES256）离线验签 ==========
+    // 服务端裁决放行时签发短周期 token（私钥仅服务端持有）；此处只内置验签公钥。
+    // kid 映射支持密钥轮换（轮换时预置新旧公钥）。公钥=SPKI DER base64（标准/base64url 均可）。
+    const GATE_VERIFY_PUBKEYS = Object.freeze({
+        v1: 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEzyAyTa5wJL44H5DeyZBLVNlNgyE9'
+          + '2BOqibasK+J69Wh+a58JscqR3pDRZBmQ1M+F3upJYXQQYjV7lOK5f5eCJA=='
+    });
+    const GATE_CLOCK_SKEW_GRACE_MS = 5 * 60 * 1000;   // 回拨判定容差
+    const GATE_MAX_OFFSET_MS = 10 * 60 * 1000;         // 时钟偏移容忍上限
+
+    function b64urlToBytes(s) {
+        s = String(s).replace(/-/g, '+').replace(/_/g, '/');
+        while (s.length % 4) s += '=';
+        const bin = atob(s);
+        const u8 = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+        return u8;
+    }
+    function b64urlToStr(s) { return new TextDecoder().decode(b64urlToBytes(s)); }
+
+    // 验证 gate token；成功返回 payload，任何异常/不符返回 null（fail-closed）
+    async function verifyGateToken(token, machineId, adjustedNowMs) {
+        try {
+            const parts = String(token || '').split('.');
+            if (parts.length !== 3) return null;
+            const header = JSON.parse(b64urlToStr(parts[0]));
+            const payload = JSON.parse(b64urlToStr(parts[1]));
+            if (!header || header.alg !== 'ES256') return null;
+            const pubB64 = GATE_VERIFY_PUBKEYS[header.kid];
+            if (!pubB64) return null;
+            if (!payload || payload.v !== 1 || payload.mid !== machineId) return null;
+            // exp 上界（token 有效期）
+            const expMs = Number(payload.exp) * 1000;
+            if (!(expMs > adjustedNowMs)) return null;
+            // ★ iat 下界（签名内不可篡改）：即使 maxLocalTime 锚点被删 + 时钟大回拨，
+            //   adjustedNow 也不得早于签发时刻超容差——堵住「删单键+回拨」绕过。
+            const iatFloorMs = (Number(payload.iat) - GATE_CLOCK_SKEW_GRACE_MS / 1000) * 1000;
+            if (!(adjustedNowMs >= iatFloorMs)) return null;
+            // ★ licExp：授权本身在 token 窗口内到期 → 离线同样不超用
+            if (payload.licExp) {
+                const licExpMs = Number(payload.licExp) * 1000;
+                if (!(licExpMs >= adjustedNowMs)) return null;
+            }
+            const key = await global.crypto.subtle.importKey(
+                'spki', b64urlToBytes(pubB64),
+                { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
+            const ok = await global.crypto.subtle.verify(
+                { name: 'ECDSA', hash: 'SHA-256' }, key,
+                b64urlToBytes(parts[2]),
+                new TextEncoder().encode(parts[0] + '.' + parts[1]));
+            return ok ? payload : null;
+        } catch (e) { return null; }
+    }
+
+    async function readClockOffsetMs() {
+        try {
+            const raw = await StorageAdapter.getItem('license:clockOffsetMs');
+            if (raw == null || raw === '') return null;   // 从无在线基线
+            const n = Number(raw);
+            return Number.isFinite(n) ? n : null;
+        } catch (e) { return null; }
+    }
+
+    // 时间回拨检测：当前本地时间比历史最大本地时间小超容差 → 回拨嫌疑。
+    // 同时把最大本地时间向前推进（防前调到未来再调回）。
+    async function detectClockRollback(nowLocal) {
+        try {
+            const maxSeen = Number(await StorageAdapter.getItem('license:maxLocalTime')) || 0;
+            if (nowLocal + GATE_CLOCK_SKEW_GRACE_MS < maxSeen) return true;
+            if (nowLocal > maxSeen) {
+                await StorageAdapter.setItem('license:maxLocalTime', String(nowLocal));
+            }
+        } catch (e) {}
+        return false;
+    }
+
+    // 在线成功时以服务端权威时间重置时钟基线：clockOffset + maxLocal 一起覆盖。
+    // 作用：用户曾前调系统时钟污染 maxLocalTime 后，只要联网成功即可自愈，
+    // 不必等真实时钟自然越过污染值。返回是否成功。
+    async function refreshClockBaseline(localNow, serverTime) {
+        try {
+            const serverMs = Date.parse(serverTime);
+            if (!Number.isFinite(serverMs)) return false;
+            await StorageAdapter.setItem('license:clockOffsetMs', String(serverMs - localNow));
+            await StorageAdapter.setItem('license:maxLocalTime', String(serverMs));
+            return true;
+        } catch (e) { return false; }
+    }
+
+    // 统一离线裁决：登录门与心跳共用。返回 {ok:true,payload} 或 {ok:false,reason}
+    async function evaluateOfflineGate(machineId) {
+        const localNow = Date.now();
+        if (await detectClockRollback(localNow)) return { ok: false, reason: 'rollback' };
+        const offsetMs = await readClockOffsetMs();
+        if (offsetMs == null) return { ok: false, reason: 'no-baseline' };
+        if (Math.abs(offsetMs) > GATE_MAX_OFFSET_MS) return { ok: false, reason: 'offset' };
+        let gateToken = '';
+        try { gateToken = await StorageAdapter.getItem('license:gateToken') || ''; } catch (e) {}
+        try { await StorageAdapter.removeItem('license:offlineStart'); } catch (e) {}
+        const payload = await verifyGateToken(gateToken, machineId, localNow + offsetMs);
+        return payload ? { ok: true, payload: payload } : { ok: false, reason: 'expired' };
+    }
+    const OFFLINE_GATE_REASON_MSG = Object.freeze({
+        'rollback': '系统时间异常，请恢复为正确时间后联网登录',
+        'no-baseline': '本机授权状态异常，请连接网络后登录，或联系客服',
+        'offset': '系统时间与授权服务器偏差过大，请校正时间后联网登录',
+        'expired': '离线授权已到期，请连接网络后登录，或联系客服'
+    });
 
     let __loginGatePromise = null;
     let __loginGateUser = '';
@@ -1973,11 +2083,21 @@
                         return fail(accountRevokedMsg);
                     }
                     if (ent.success && ent.state === 'LICENSED') {
-                        const now = String(Date.now());
+                        const localNow = Date.now();
+                        const now = String(localNow);
                         try {
                             await StorageAdapter.setItem('license:lastVerify', now);
                             await StorageAdapter.setItem('license:lastHeartbeat', now);
                             await StorageAdapter.removeItem('license:offlineStart');
+                            // ★ P3-A：保存服务端 gate token（离线唯一放行凭证，TTL 由服务端定）
+                            if (ent.gateToken) {
+                                await StorageAdapter.setItem('license:gateToken', String(ent.gateToken));
+                            }
+                            // ★ P3-A：以服务端权威时间重置时钟基线（前调污染联网即自愈）；
+                            //   无 serverTime 时退化为仅推进本地基线
+                            if (!await refreshClockBaseline(localNow, ent.serverTime)) {
+                                await detectClockRollback(localNow);
+                            }
                             // 服务端确认账号无墓碑：只清【本用户名】的拒绝标记；
                             // ★ username 缺失时绝不清理（防同机他人正常联网替被删账号解封）
                             if (username) {
@@ -2003,8 +2123,9 @@
                     return fail(ent.message || '授权校验未通过，请联系客服');
                 }
 
-                // ④ 仅网络不可达：先查账号级硬拒（该 username 在线收到过账号删除，
-                //   断网也不给宽限），再走 7 天宽限（与心跳 OFFLINE_LOCK_MS 同口径）
+                // ④ P3-A：仅网络不可达 → gate token 离线验签（取代旧固定 7 天宽限）。
+                //   先查账号级硬拒（该 username 在线收到过账号删除，token 有效也拒），
+                //   再查时间回拨/时钟基线，最后验签；任一不符 fail-closed。
                 if (username) {
                     let __arm = null;
                     try { __arm = JSON.parse(await StorageAdapter.getItem('license:accountReject') || 'null'); } catch (e) {}
@@ -2016,17 +2137,12 @@
                         return fail(accountRevokedMsg);
                     }
                 }
-                const now = Date.now();
-                let offlineStart = 0;
-                try { offlineStart = Number(await StorageAdapter.getItem('license:offlineStart')) || 0; } catch (e) {}
-                if (!offlineStart) {
-                    offlineStart = now;
-                    try { await StorageAdapter.setItem('license:offlineStart', String(now)); } catch (e) {}
+                // P3-A 离线裁决（时间回拨/时钟基线/ES256 验签统一处理）
+                const gate = await evaluateOfflineGate(machineId);
+                if (gate.ok) {
+                    return { ok: true, gate: true };
                 }
-                if (now - offlineStart < LOGIN_GATE_GRACE_MS) {
-                    return { ok: true, grace: true };
-                }
-                return fail('无法连接授权服务器且已超过 7 天离线宽限期，请联网后重试或联系客服');
+                return fail(OFFLINE_GATE_REASON_MSG[gate.reason] || OFFLINE_GATE_REASON_MSG.expired);
             }
 
             // ★ S3 修复：本地状态无效（valid:false）→ 按 type 给可读消息，fail-closed
@@ -2035,6 +2151,7 @@
                     expired: '授权已过期，请续费后再登录',
                     trial_expired: '试用期已过期，请激活后再登录',
                     trial_limit_reached: '试用处方额度已用完，请激活后再登录',
+                    trial_need_network: '需要连接网络完成首次注册，请联网后重新打开',
                     tampered: '授权文件已损坏，请重新激活',
                     config_tampered: '授权文件已损坏，请重新激活',
                     binding_mismatch: '授权与本机不匹配，请联系客服',
@@ -2056,7 +2173,7 @@
     // 架构铁律：登录窗口固定 loadFile(asar/electron/login.html)，热更永不触达；
     //   只有主窗口 index.html + auth-core.js 热更可达。故主窗口一加载就对已激活机
     //   跑闸门：NO_LICENSE（后台删诊所/码）/REVOKED/EXPIRED 立即锁。
-    // trial（试用期）与 free（永久免费）不在此门；网络失败由闸门内部 7 天宽限处理。
+    // trial（试用期）与 free（永久免费）不在此门；网络失败由 gate token 离线验签处理。
     function installMainWindowGate() {
         const run = async () => {
             try {
@@ -2148,7 +2265,7 @@
         login,
         // 登录统一路由（P2 收敛 2026-09-03：四处登录入口唯一委托点）
         loginWithUsernamePassword,
-        // 登录后台闸门（2026-09-22：后台删除吊销，LICENSED/trial/free/7天宽限四规则）
+        // 登录后台闸门（2026-09-22 P0；P3-A：LICENSED/trial/free/gate token 四规则）
         verifyLoginGate,
         logout,
 
@@ -2285,6 +2402,15 @@
     global.setStateV2 = setStateV2;
     global._STATES = _STATES;
 
+    // ★ P3-A 测试钩子（tools/gate-token-smoke.cjs 使用；生产环境无调用方，无副作用）
+    global.AuthCore.__gateTest = {
+        verifyGateToken,
+        evaluateOfflineGate,
+        GATE_VERIFY_PUBKEYS,
+        setItem: (k, v) => StorageAdapter.setItem(k, v),
+        removeItem: (k) => StorageAdapter.removeItem(k)
+    };
+
 })(typeof window !== 'undefined' ? window : typeof globalThis !== 'undefined' ? globalThis : this);
 
 // ============================================================================
@@ -2326,8 +2452,8 @@
     //   心跳同时显式上报端形态（productClass=offline + clientClass）。
     async function performHeartbeatCheck() {
         try {
-            const HEARTBEAT_INTERVAL_MS = 10 * 60 * 1000; // ★ 10 分钟（在线统计上报周期，7 天离线锁定不变）
-            const OFFLINE_LOCK_MS = 7 * 24 * 60 * 60 * 1000; // 7 天
+            const HEARTBEAT_INTERVAL_MS = 10 * 60 * 1000; // ★ 10 分钟（在线统计上报周期）
+            // ★ P3-A：离线锁定不再按固定 7 天，改由 gate token exp 裁决（evaluateOfflineGate）
             const now = Date.now();
 
             // 获取上次心跳时间
@@ -2412,14 +2538,17 @@
                 });
             } catch (netE) {
                 console.warn('[Heartbeat] 网络不可达:', netE && netE.message);
-                const offlineStart = await StorageAdapter.getItem('license:offlineStart');
-                if (!offlineStart) {
-                    await StorageAdapter.setItem('license:offlineStart', String(now));
-                } else if (now - parseInt(offlineStart, 10) > OFFLINE_LOCK_MS) {
-                    console.error('[Heartbeat] 离线超过 7 天，锁定应用');
-                    global.__licenseExpired = true;
-                    await showExpireAlertAndActivate('应用已离线超过 7 天，请联网验证后继续使用');
+                // ★ P3-A：gate token 离线裁决（取代旧 offlineStart+7天 宽限）
+                const gate = await evaluateOfflineGate(machineId);
+                if (gate.ok) {
+                    console.log('[Heartbeat] gate token 离线放行，exp:',
+                        new Date(gate.payload.exp * 1000).toISOString());
+                    return;
                 }
+                console.error('[Heartbeat] 离线授权失效，锁定应用:', gate.reason);
+                global.__licenseExpired = true;
+                await showExpireAlertAndActivate(
+                    OFFLINE_GATE_REASON_MSG[gate.reason] || OFFLINE_GATE_REASON_MSG.expired);
                 return;
             }
 
@@ -2436,7 +2565,7 @@
             //   不可达时的回退判定。machineId-only 查询（不带 code）= 本机授权
             //   真值（与老 status 心跳同语义），本地 license:code 过期错位时仍能
             //   找回本机有效绑定（P1 丢码自愈路径）。
-            let entState = null;
+            let entState = null, entFull = null;
             try {
                 const entResp = await fetch('https://tcm-prescription-system.pages.dev/api/license/entitlement', {
                     method: 'POST',
@@ -2444,8 +2573,8 @@
                     body: JSON.stringify({ machineId: machineId })
                 });
                 if (entResp.ok) {
-                    const ent = await entResp.json();
-                    if (ent && ent.success) entState = ent.state;
+                    entFull = await entResp.json();
+                    if (entFull && entFull.success) entState = entFull.state;
                 }
             } catch (entE) {
                 console.warn('[Heartbeat] entitlement 裁决不可达，回退心跳判定:', entE && entE.message);
@@ -2454,6 +2583,15 @@
             if (entState === 'LICENSED') {
                 await StorageAdapter.setItem('license:lastHeartbeat', String(now));
                 await StorageAdapter.removeItem('license:offlineStart');
+                // ★ P3-A：续期 gate token + 权威重置时钟基线（心跳每 10 分钟跑，token 自动滚动）
+                try {
+                    if (entFull.gateToken) {
+                        await StorageAdapter.setItem('license:gateToken', String(entFull.gateToken));
+                    }
+                    if (!await refreshClockBaseline(now, entFull.serverTime)) {
+                        await detectClockRollback(now);
+                    }
+                } catch (e) {}
                 console.log('[Heartbeat] 心跳成功（entitlement=LICENSED）');
                 return;
             }
@@ -2475,6 +2613,8 @@
             if (data.success && data.valid && data.action === 'ok') {
                 await StorageAdapter.setItem('license:lastHeartbeat', String(now));
                 await StorageAdapter.removeItem('license:offlineStart');
+                // 半连通状态（entitlement 不可达）老心跳成功：推进时间基线，防回拨
+                await detectClockRollback(now);
                 console.log('[Heartbeat] 心跳成功，剩余天数:', data.daysRemaining);
             } else {
                 console.error('[Heartbeat] 心跳失败:', data.action);
@@ -2488,13 +2628,8 @@
                 await showExpireAlertAndActivate(msg);
             }
         } catch (e) {
+            // ★ P3-A：心跳异常不阻断使用，也不播种任何宽限；下次心跳重跑在线/离线裁决。
             console.warn('[Heartbeat] 异常:', e.message);
-            // 心跳异常不阻断使用，但记录离线时间
-            const now = Date.now();
-            const offlineStart = await StorageAdapter.getItem('license:offlineStart');
-            if (!offlineStart) {
-                await StorageAdapter.setItem('license:offlineStart', String(now));
-            }
         }
     }
 

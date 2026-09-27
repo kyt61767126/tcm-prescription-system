@@ -193,6 +193,62 @@ async function adjudicate(kv, machineId, code) {
     };
 }
 
+// ============================================================================
+//  P3-A：Gate Token 签名（ES256 / EC P-256）
+//  服务端裁决放行态时签发短周期 token，客户端内置公钥离线验签（见 offline.js）。
+//  私钥仅从环境变量读取：GATE_SIGN_P8_B64=PKCS#8 DER base64（CF secret，不入库）；
+//  GATE_SIGN_KID（默认 v1）支持密钥轮换；GATE_TOKEN_TTL_HOURS（默认 48）。
+// ============================================================================
+
+let _gateSignKeyCache = null;  // { p8, key }（key 为已 import 的 CryptoKey）
+
+function b64urlFromBytes(u8) {
+    let bin = '';
+    for (let i = 0; i < u8.length; i++) bin += String.fromCharCode(u8[i]);
+    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function b64urlFromStr(str) {
+    return b64urlFromBytes(new TextEncoder().encode(str));
+}
+
+async function getGateSigningKey(p8b64) {
+    if (_gateSignKeyCache && _gateSignKeyCache.p8 === p8b64) {
+        return _gateSignKeyCache.key;
+    }
+    const der = Uint8Array.from(atob(p64ToB64(p8b64)), c => c.charCodeAt(0));
+    const keyPromise = crypto.subtle.importKey(
+        'pkcs8', der,
+        { name: 'ECDSA', namedCurve: 'P-256' },
+        false, ['sign']
+    );
+    _gateSignKeyCache = { p8: p8b64, key: await keyPromise };
+    return _gateSignKeyCache.key;
+}
+
+// 环境变量可能存为标准 base64 或 base64url，统一成标准 base64
+function p64ToB64(s) {
+    s = s.replace(/-/g, '+').replace(/_/g, '/');
+    while (s.length % 4) s += '=';
+    return s;
+}
+
+async function signGateToken(payload, env) {
+    const p8b64 = env && env.GATE_SIGN_P8_B64;
+    if (!p8b64) throw new Error('GATE_SIGN_P8_B64 未配置');
+    const kid = (env && env.GATE_SIGN_KID) || 'v1';
+    const header = { alg: 'ES256', typ: 'JWT', kid };
+    const signingInput = b64urlFromStr(JSON.stringify(header)) + '.'
+                       + b64urlFromStr(JSON.stringify(payload));
+    const key = await getGateSigningKey(p8b64);
+    const sigBuf = await crypto.subtle.sign(
+        { name: 'ECDSA', hash: 'SHA-256' },
+        key,
+        new TextEncoder().encode(signingInput)
+    );
+    return signingInput + '.' + b64urlFromBytes(new Uint8Array(sigBuf));
+}
+
 export async function onRequest(context) {
     _currentRequest = context.request;  // CORS 动态检查
     const method = context.request.method;
@@ -257,11 +313,48 @@ export async function onRequest(context) {
         }
 
         const result = await adjudicate(kv, machineId, code);
+
+        // ★ P3-A：放行态签发短周期 gate token。账号墓碑命中（accountState）不签；
+        //   私钥缺失/签名异常只降级（不带 token），绝不阻塞在线登录。
+        let gateToken = null;
+        if (result.state === ENTITLEMENT_STATES.LICENSED && !accountState) {
+            try {
+                // TTL 合法性：非数/非法配置回退 48h；钳制 [1h,168h]（防错配架空吊销节奏）
+                let ttlHours = Number((context.env && context.env.GATE_TOKEN_TTL_HOURS));
+                if (!Number.isFinite(ttlHours) || ttlHours <= 0) ttlHours = 48;
+                ttlHours = Math.min(168, Math.max(1, ttlHours));
+                const iatSec = Math.floor(Date.now() / 1000);
+                // licExp 与 iat/exp 同型 = epoch 秒（result.expiresAt 契约为 ISO，转换；
+                //   永久授权/解析失败 → null，客户端按永久语义放行）
+                let licExpSec = null;
+                if (result.expiresAt) {
+                    const licMs = Date.parse(result.expiresAt);
+                    if (Number.isFinite(licMs)) licExpSec = Math.floor(licMs / 1000);
+                }
+                const tokenPayload = {
+                    v: 1,
+                    mid: machineId,
+                    username: username || '',
+                    state: result.state,
+                    type: result.edition || null,
+                    features: result.features || [],
+                    licExp: licExpSec,
+                    iat: iatSec,
+                    exp: iatSec + ttlHours * 3600,
+                    jti: crypto.randomUUID()
+                };
+                gateToken = await signGateToken(tokenPayload, context.env);
+            } catch (ge) {
+                console.warn('[entitlement] gate token 签发失败（降级，不阻塞）:', ge.message);
+            }
+        }
+
         return json({
             success: true,
             ...result,
             accountState,
             accountDeletedAt,
+            gateToken,
             serverTime: new Date().toISOString()
         });
 
