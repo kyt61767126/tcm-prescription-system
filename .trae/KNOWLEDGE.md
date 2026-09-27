@@ -1505,5 +1505,6 @@
 * **★新铁律**：把「`resp.ok`/else 类分支」重构成 HTTP 状态码数值谓词前，**必须先列全 200/403/429/5xx/0 五路径表**并逐格核对；`!== 0`、`> 0` 这类谓词天然吞掉 200，是本类回归的固定陷阱。
 * **流程**：三重独立审查（2 功能互盲 + 1 安全对抗）全过 → 门禁全绿（smoke-runtime 157/157、attestation 68/68、biz 93/93、check-interface 6 OK、sync-all VerifyOnly）→ app-local 热包 **2026.09.27-3**（minAppCode 继承 288 未抬）→ 真机 CDP 连续 3 次冷启动零弹窗 + CDP 自动登录 + 用户手动登录均成功 → 删临时调试开关（`WebView.setWebContentsDebuggingEnabled` 仅在工作区从未入库，删除即恢复 clean）→ APK **308** 重打重装，核验无 devtools socket、手动登录进主界面。
 * **临时诊断开关纪律**：release 包抓 WebView 证据可临时开 `setWebContentsDebuggingEnabled`，必须加「发布前必删」注释、绝不 git add、发布包用 `/proc/net/unix` 查无 `webview_devtools` socket 作关闭证据。
-* **既有低优（非本批引入，另开工单）**：`postOnce` 同一 try/catch 把「200 但 JSON 畸形」映射 httpStatus:0 走离线门（主进程同场景硬拒，口径不一）；2xx 中仅判 200（服务端契约只用 200）。
-* **生效方式**：**离线 APP**——JS 走 app-local 热包 **2026.09.27-3**（联网打开一次、划掉重进），装 v308 APK 关闭调试面；**离线桌面/云桌面 exe、云端网页/云端 APP/鸿蒙** 零改动。
+* **JSON 畸形口径收口（同日续修，热包 -4）**：原低优项已解决——`postOnce` 拆成两段 try：fetch reject→httpStatus:0（真断网）；`!resp.ok`→状态码；`resp.ok` 但 `json()` 抛错→`{malformed:true}`。`requestEntitlement` 全部 9 个出口传播 malformed（含 needProof/needAttestation 二次响应畸形，硬拒不消费 first 中间态）；登录门在 ent 消费与离线门之前硬拒「授权服务响应异常，请稍后重试或联系客服」（文案与主进程逐字一致）；心跳仅加 console.warn，非阻断回退语义零变化。专用白盒 [tools/login-gate-smoke.cjs](file:///d:/trae_projects/kyt-zy/tools/login-gate-smoke.cjs) 7/7（加载实际分发的 APP assets auth-core.js，含畸形/正常/429/断网/403 六场景）。
+* **残留既有低优（非本批引入，契约不可达，另开工单）**：200+合法 JSON 但体为 `null`/`false` 字面值时渲染端仍走离线门（主进程硬拒；利用需 MITM 且与断网安全等价，离线门仍强制 ES256 验签）；渲染 fetch 无 15s 超时（挂起仅 DoS，fail-closed）。
+* **生效方式**：**离线 APP**——JS 走 app-local 热包 **2026.09.27-4**（联网打开一次、划掉重进），Java 零改动继续用 v308 APK；**离线桌面/云桌面 exe、云端网页/云端 APP/鸿蒙** 零改动。

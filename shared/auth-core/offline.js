@@ -2114,7 +2114,8 @@
      *   needProof + nonce → signProof → 带 proof 重试一次；
      *   needAttestation   → 强制重跑登记 → 重试一次。
      * 每次信号最多额外一轮，杜绝无限循环。
-     * @returns {{httpStatus:number, ent:?object, attInfo:?object}}
+     * @returns {{httpStatus:number, ent:?object, attInfo:?object, malformed:boolean}}
+     *   malformed=true 表示 HTTP 200 但响应体不是合法 JSON（非断网，调用方 fail-closed）
      */
     async function requestEntitlement(o) {
         const { mid, code, username, getResetAuth } = o;
@@ -2130,23 +2131,34 @@
                 code: code || undefined,
                 username: username || undefined
             }, android ? { platform: 'android' } : null, extra || {});
+            let resp;
             try {
-                const resp = await fetch(LOGIN_GATE_ENTITLEMENT_URL, {
+                resp = await fetch(LOGIN_GATE_ENTITLEMENT_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
-                return { httpStatus: resp.status,
-                         ent: resp.ok ? await resp.json() : null };
             } catch (e) {
+                // 真·网络不可达（DNS/TCP 失败等）→ httpStatus 0 走离线门
                 return { httpStatus: 0, ent: null };
+            }
+            if (!resp.ok) return { httpStatus: resp.status, ent: null };
+            try {
+                return { httpStatus: resp.status, ent: await resp.json() };
+            } catch (e) {
+                // ★ 2026-09-27：HTTP 200 但响应体畸形（代理解析页/脏响应）不是
+                //   断网——单独 malformed 标记 fail-closed，与主进程
+                //   adjudicateViaMainProcess 的 {malformed:true} 同口径，绝不映射
+                //   httpStatus:0 误入离线 gate token 门。
+                return { httpStatus: resp.status, ent: null, malformed: true };
             }
         };
 
         const first = await postOnce();
         const ent = first.ent;
         if (!ent || !ent.success) {
-            return { httpStatus: first.httpStatus, ent, attInfo };
+            return { httpStatus: first.httpStatus, ent, attInfo,
+                     malformed: !!first.malformed };
         }
 
         // ① needProof：用下发 nonce 签名后重试一次
@@ -2156,6 +2168,11 @@
                 const second = await postOnce({
                     proof: { kid: sp.kid, jti: ent.proofNonce.jti, sig: sp.sig }
                 });
+                if (second.malformed) {
+                    // 二次 POP 响应畸形：fail-closed，不回退消费 first 裁决
+                    return { httpStatus: second.httpStatus, ent: null,
+                             attInfo, malformed: true };
+                }
                 if (second.ent) {
                     await recordProofTelemetry(second.ent);
                     return { httpStatus: second.httpStatus,
@@ -2169,6 +2186,10 @@
             attInfo = await ensureDeviceAttested({ mid, getResetAuth, force: true });
             if (attInfo.registered) {
                 const second = await postOnce();
+                if (second.malformed) {
+                    return { httpStatus: second.httpStatus, ent: null,
+                             attInfo, malformed: true };
+                }
                 if (second.ent) {
                     return { httpStatus: second.httpStatus,
                              ent: second.ent, attInfo };
@@ -2288,6 +2309,7 @@
 
                 let ent = null;
                 let entHttpStatus = 0;
+                let entMalformed = false;
                 try {
                     // ★ P3-B：统一裁决请求——Android 自动带设备证明 + 两步式 POP；
                     //   桌面端无 attestation 桥即短路，行为与旧版一致。
@@ -2297,6 +2319,7 @@
                     });
                     entHttpStatus = rq.httpStatus;
                     ent = rq.ent;
+                    entMalformed = !!rq.malformed;
                     if (entHttpStatus === 403) {
                         // ★ 2026-09-23：403 = 设备安全封锁（device_block），按
                         //   2026-09-11 红线「本地使用不阻断」，ent 留空走下方
@@ -2312,6 +2335,12 @@
                         return fail('授权服务暂时不可用（HTTP ' + entHttpStatus + '），请稍后重试或联系客服');
                     }
                 } catch (e) { /* 仅真·网络不可达（httpStatus=0）才走下方宽限 */ }
+
+                if (entMalformed) {
+                    // ★ 2026-09-27：200 响应体畸形 ≠ 断网，fail-closed（与主进程
+                    //   license-manager 的 malformed 同口径），不落离线 gate token 门。
+                    return fail('授权服务响应异常，请稍后重试或联系客服');
+                }
 
                 if (ent) {
                     // ★ 2026-09-23 账号删除优先裁决：即使设备授权有效，账号墓碑命中即硬拒。
@@ -2840,6 +2869,11 @@
                 const __rq = await global.AuthCore.requestEntitlement({
                     mid: machineId
                 });
+                if (__rq.malformed) {
+                    // 畸形体按「裁决不可达」回退老心跳（心跳不阻断铁律不变），
+                    // 但单独告警，区别于真断网
+                    console.warn('[Heartbeat] entitlement 响应体畸形，回退心跳判定');
+                }
                 entFull = __rq.ent;
                 if (entFull && entFull.success) entState = entFull.state;
             } catch (entE) {
