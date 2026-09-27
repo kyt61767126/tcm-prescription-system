@@ -264,7 +264,8 @@ public class MainActivity extends BridgeActivity {
         try {
             LicenseManager lm = new LicenseManager(this);
             String machineId = lm.getMachineId();
-            JSONObject result = lm.validateLicense(machineId);
+            // ★ P3-A：主线程不允许联网（NetworkOnMainThreadException），allowNetworkTrial=false
+            JSONObject result = lm.validateLicense(machineId, false);
             if (result == null) {
                 Log.w(TAG, "[StartupCheck] validateLicense 返回 null，跳过原生校验");
                 return true;
@@ -281,6 +282,13 @@ public class MainActivity extends BridgeActivity {
             }
             String reason = result.optString("type", "unknown");
             String message = result.optString("message", "授权校验失败，应用无法启动");
+            // ★ P3-A：全新态（无 license 无 trial）主线程未联网裁决 → 放行 WebView。
+            //   首次试用注册由 JS 登录门经 getStatus 桥（binder 线程可联网）strict 完成：
+            //   有网云端判重裁决；断网 trial_need_network fail-closed。
+            if ("trial_first_check".equals(reason)) {
+                Log.i(TAG, "[StartupCheck] 全新态：放行 WebView，首次试用由 JS 门在线裁决");
+                return true;
+            }
             Log.e(TAG, "[StartupCheck] 授权校验失败：type=" + reason + " msg=" + message);
             // ★ 2026-08-23 修复：正常业务拒绝（试用超限/过期/未激活）提供"前往激活"入口，
             //   不再只有退出死路；代码篡改（下方 verifyJsIntegrity 分支）仍走致命退出不放行

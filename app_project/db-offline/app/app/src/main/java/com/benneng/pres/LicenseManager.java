@@ -3443,10 +3443,17 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
     // ★ v3 新增：接受 localMachineId 参数用于三因子绑定校验，旧调用方式（无参）默认空串跳过机器 ID 校验
     // ========================================================================
     public JSONObject validateLicense() {
-        return validateLicense(null);
+        return validateLicense(null, true);
     }
 
     public JSONObject validateLicense(String localMachineId) {
+        return validateLicense(localMachineId, true);
+    }
+
+    // ★ P3-A：allowNetworkTrial=false 供主线程启动闸使用——主线程禁止联网
+    //   （NetworkOnMainThreadException），全新态不注册/不落盘，返回 trial_first_check
+    //   交启动闸放行 WebView；首次试用注册由 JS 门经 binder 线程（可联网）strict 完成。
+    public JSONObject validateLicense(String localMachineId, boolean allowNetworkTrial) {
         // ★ 修复 2026-07-27：localMachineId 为 null/空时使用本机 machineId
         // 原代码 if (localMachineId == null) localMachineId = ""; 会导致 readLicense 空串解密失败，
         // 进而使激活后的 license.dat 无法读取，APP 误入试用模式（"授权状态 7 天"）
@@ -3662,6 +3669,12 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
             JSONObject trial = readTrial();
             int currentTrialDays = getTrialDays();   // ★ 当前配置的试用期天数
             if (trial == null) {
+                if (!allowNetworkTrial) {
+                    // 主线程路径：不触发网络（必崩）、不写 trial，交 WebView 后在 binder 线程裁决
+                    return failValidation(
+                            "需要连接网络完成首次注册（仅需一次）。",
+                            "trial_first_check");
+                }
                 // ★ P3-A：首次创建试用前必须联网注册（strict）。
                 //   云端判重：清数据后 hwFp/mid 不变，重复试用/曾激活设备一律被云端拒绝；
                 //   断网/服务异常 fail-closed（trial_need_network），杜绝清数据+断网重播试用。
