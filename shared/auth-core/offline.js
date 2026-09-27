@@ -1854,7 +1854,11 @@
     // kid 映射支持密钥轮换（轮换时预置新旧公钥）。公钥=SPKI DER base64（标准/base64url 均可）。
     const GATE_VERIFY_PUBKEYS = Object.freeze({
         v1: 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEzyAyTa5wJL44H5DeyZBLVNlNgyE9'
-          + '2BOqibasK+J69Wh+a58JscqR3pDRZBmQ1M+F3upJYXQQYjV7lOK5f5eCJA=='
+          + '2BOqibasK+J69Wh+a58JscqR3pDRZBmQ1M+F3upJYXQQYjV7lOK5f5eCJA==',
+        // v2：轮换预置（2026-09）。私钥已备，生产默认 kid 暂仍 v1；
+        // 待所有端（含无法热更的桌面端）均内置 v2 后，再经 GATE_SIGN_KID 切换签发。
+        v2: 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEMBkE0WC4qN3sQkIWi5vtzJTvjvk82'
+          + 'ebTzlVO+EAzpq/OYrxmyZRU7VSvTeETCYK/inABVFfHvvdQo0HGA80I8Q=='
     });
     const GATE_CLOCK_SKEW_GRACE_MS = 5 * 60 * 1000;   // 回拨判定容差
     const GATE_MAX_OFFSET_MS = 10 * 60 * 1000;         // 时钟偏移容忍上限
@@ -1958,10 +1962,254 @@
         'expired': '离线授权已到期，请连接网络后登录，或联系客服'
     });
 
+    // ======================================================================
+    //  P3-B：Android 设备证明编排
+    //  桌面/云端检测不到 attestation 桥，全部函数自动短路（零影响）。
+    // ======================================================================
+    const ATTESTATION_REGISTER_URL =
+        'https://tcm-prescription-system.pages.dev/api/license/attestation/register';
+    // gate token 剩余 <12h 视为应尽快带 proof 续签（48h TTL 下仅断网恢复时逼近）
+    const PROOF_RENEW_THRESHOLD_MS = 12 * 60 * 60 * 1000;
+
+    function isAndroidRuntime() {
+        try {
+            const att = global.electronAPI
+                && global.electronAPI.license
+                && global.electronAPI.license.attestation;
+            if (!att || typeof att.probe !== 'function') return false;
+            return /android/i.test((global.navigator && global.navigator.userAgent) || '');
+        } catch (e) { return false; }
+    }
+
+    async function readAttState() {
+        try {
+            return JSON.parse(await StorageAdapter.getItem('license:attState') || 'null') || {};
+        } catch (e) { return {}; }
+    }
+    async function writeAttState(patch) {
+        try {
+            const next = Object.assign({}, await readAttState(), patch,
+                { updatedAt: Date.now() });
+            await StorageAdapter.setItem('license:attState', JSON.stringify(next));
+            return next;
+        } catch (e) { return null; }
+    }
+
+    /** POST 设备证明注册端点；非 2xx 返 {__httpStatus}，网络异常返 null。 */
+    async function postAttestation(payload) {
+        try {
+            const resp = await fetch(ATTESTATION_REGISTER_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (!resp.ok) return { __httpStatus: resp.status };
+            return await resp.json();
+        } catch (e) { return null; }
+    }
+
+    /**
+     * 确保设备已完成证明登记（Tier A 硬件链）。
+     * @param {object} o
+     * @param {string} o.mid             机器 ID
+     * @param {Function} [o.getResetAuth] 公钥变更被拒时，异步返回有效 sessionToken
+     * @param {boolean} [o.force]        强制重跑（无视本地 registered 标记）
+     * @returns {{tier:'A'|'B'|'n/a', registered:boolean, reason:?string, kid:?string}}
+     */
+    async function ensureDeviceAttested(o) {
+        const mid = o && o.mid;
+        const ret = { tier: 'n/a', registered: false, reason: null, kid: null };
+        if (!mid || !isAndroidRuntime()) return ret;
+
+        const att = global.electronAPI.license.attestation;
+        if (!o.force) {
+            const st = await readAttState();
+            if (st.tier === 'A' && st.registered) {
+                return { tier: 'A', registered: true, reason: null,
+                         kid: st.kid || null };
+            }
+        }
+
+        // ① 探针定 Tier
+        let probe = null;
+        try { probe = await att.probe(); } catch (e) {}
+        if (!probe || !probe.ok || probe.tier !== 'A') {
+            ret.tier = 'B';
+            ret.reason = (probe && (probe.unsupported || probe.tier)) || 'probe_failed';
+            await writeAttState({ tier: 'B', registered: false,
+                                  lastReason: ret.reason });
+            return ret;
+        }
+        ret.tier = 'A';
+
+        // ② challenge → 强制新生成证明密钥（证书链与本次 challenge 绑定）→ register
+        let resetAuth = '';
+        for (let attempt = 0; attempt < 2; attempt++) {
+            const ch = await postAttestation({ action: 'challenge', mid });
+            if (!ch || !ch.challenge) {
+                ret.reason = (ch && ch.__httpStatus)
+                    ? ('http_' + ch.__httpStatus) : 'challenge_failed';
+                return ret;
+            }
+
+            let ek = null;
+            try { ek = await att.ensureKey(ch.challenge, true, true); } catch (e) {}
+            if (!ek || !ek.ok) {
+                try { ek = await att.ensureKey(ch.challenge, false, true); }
+                catch (e) {}
+            }
+            if (!ek || !ek.ok || !ek.chain || !ek.chain.length) {
+                ret.reason = (ek && ek.unsupported) || 'ensure_key_failed';
+                return ret;
+            }
+
+            const regBody = {
+                action: 'register', mid,
+                certChain: ek.chain,
+                apiLevel: probe.sdkInt || 0
+            };
+            if (resetAuth) regBody.resetAuth = resetAuth;
+            const reg = await postAttestation(regBody);
+            if (!reg) { ret.reason = 'register_unreachable'; return ret; }
+
+            if (reg.success && reg.allowed) {
+                ret.registered = true;
+                ret.kid = reg.kid || ek.keyId || null;
+                await writeAttState({
+                    tier: 'A', registered: true,
+                    kid: ret.kid, secLevel: reg.secLevel || null
+                });
+                return ret;
+            }
+
+            // 公钥重置被拒：取 resetAuth 后只允许重试一次
+            if (reg.code === 'RESET_AUTH_REQUIRED' && o.getResetAuth && !resetAuth) {
+                try { resetAuth = await o.getResetAuth() || ''; } catch (e) {}
+                if (resetAuth) continue;
+            }
+            ret.reason = reg.reason || reg.code || 'register_rejected';
+            ret.resetDenied = reg.code === 'RESET_AUTH_REQUIRED';
+            await writeAttState({
+                tier: 'A', registered: false,
+                lastReason: ret.reason, kid: ek.keyId || null
+            });
+            return ret;
+        }
+        ret.reason = 'reset_auth_failed';
+        return ret;
+    }
+
+    async function safeSignProof(mid, nonce) {
+        try {
+            const r = await global.electronAPI.license.attestation
+                .signProof(mid, nonce);
+            return (r && r.ok && r.sig)
+                ? { kid: r.kid, sig: r.sig } : null;
+        } catch (e) { return null; }
+    }
+
+    /**
+     * 统一在线 entitlement 请求（登录门/心跳共用）：
+     *   Android → 先确保设备证明（best-effort；Tier B 自动回退）→ 带 platform 裁决；
+     *   needProof + nonce → signProof → 带 proof 重试一次；
+     *   needAttestation   → 强制重跑登记 → 重试一次。
+     * 每次信号最多额外一轮，杜绝无限循环。
+     * @returns {{httpStatus:number, ent:?object, attInfo:?object}}
+     */
+    async function requestEntitlement(o) {
+        const { mid, code, username, getResetAuth } = o;
+        const android = isAndroidRuntime();
+        let attInfo = null;
+        if (android) {
+            attInfo = await ensureDeviceAttested({ mid, getResetAuth });
+        }
+
+        const postOnce = async (extra) => {
+            const payload = Object.assign({
+                machineId: mid,
+                code: code || undefined,
+                username: username || undefined
+            }, android ? { platform: 'android' } : null, extra || {});
+            try {
+                const resp = await fetch(LOGIN_GATE_ENTITLEMENT_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                return { httpStatus: resp.status,
+                         ent: resp.ok ? await resp.json() : null };
+            } catch (e) {
+                return { httpStatus: 0, ent: null };
+            }
+        };
+
+        const first = await postOnce();
+        const ent = first.ent;
+        if (!ent || !ent.success) {
+            return { httpStatus: first.httpStatus, ent, attInfo };
+        }
+
+        // ① needProof：用下发 nonce 签名后重试一次
+        if (ent.needProof && ent.proofNonce && android) {
+            const sp = await safeSignProof(mid, ent.proofNonce.nonce);
+            if (sp) {
+                const second = await postOnce({
+                    proof: { kid: sp.kid, jti: ent.proofNonce.jti, sig: sp.sig }
+                });
+                if (second.ent) {
+                    await recordProofTelemetry(second.ent);
+                    return { httpStatus: second.httpStatus,
+                             ent: second.ent, attInfo };
+                }
+            }
+        }
+
+        // ② needAttestation：强制重跑登记后重试一次
+        if (ent.needAttestation && android) {
+            attInfo = await ensureDeviceAttested({ mid, getResetAuth, force: true });
+            if (attInfo.registered) {
+                const second = await postOnce();
+                if (second.ent) {
+                    return { httpStatus: second.httpStatus,
+                             ent: second.ent, attInfo };
+                }
+            }
+        }
+
+        await recordProofTelemetry(ent);
+        return { httpStatus: first.httpStatus, ent, attInfo };
+    }
+
+    async function recordProofTelemetry(ent) {
+        if (!isAndroidRuntime()) return;
+        try {
+            await writeAttState({
+                lastProofState: ent.proofState || null,
+                attMode: ent.attMode || null
+            });
+        } catch (e) {}
+    }
+
+    /**
+     * gate token 剩余时长（毫秒）；读不到/异常 → null。
+     * 用于断网恢复后判断是否需立即带 proof 续签（<12h）。
+     */
+    async function gateTokenRemainingMsAsync() {
+        try {
+            const token = await StorageAdapter.getItem('license:gateToken') || '';
+            const parts = String(token).split('.');
+            if (parts.length !== 3) return null;
+            const payload = JSON.parse(b64urlToStr(parts[1]));
+            const expMs = Number(payload && payload.exp) * 1000;
+            if (!Number.isFinite(expMs)) return null;
+            return expMs - Date.now();
+        } catch (e) { return null; }
+    }
+
     let __loginGatePromise = null;
     let __loginGateUser = '';
     function resetLoginGateCache() { __loginGatePromise = null; }
-    async function verifyLoginGate(usernameInput) {
+    async function verifyLoginGate(usernameInput, opts) {
         const username = String(usernameInput == null ? '' : usernameInput).trim().slice(0,64);
         // ★ 桌面端：裁决一律走主进程 IPC（file:// 渲染 fetch 必被 CORS 拦截，
         //   锚点 gate.dat 签名由主进程持有）。下方渲染 fetch 仅作无 IPC 环境兜底。
@@ -1975,7 +2223,7 @@
         // （宽限拒绝后联网重试不必重启应用）。
         if (!__loginGatePromise || __loginGateUser !== username) {
             __loginGateUser = username;
-            __loginGatePromise = __verifyLoginGateInner(username);
+            __loginGatePromise = __verifyLoginGateInner(username, opts);
         }
         return __loginGatePromise;
     }
@@ -1983,9 +2231,11 @@
         global.addEventListener('online', resetLoginGateCache);
     } catch (e) {}
 
-    async function __verifyLoginGateInner(usernameInput) {
+    async function __verifyLoginGateInner(usernameInput, opts) {
         const fail = (message) => ({ ok: false, message });
         const username = String(usernameInput == null ? '' : usernameInput).trim().slice(0,64);
+        const getResetAuth = opts && typeof opts.getResetAuth === 'function'
+            ? opts.getResetAuth : null;
         // ★ 2026-09-23 账号删除文案
         const accountRevokedMsg = '该账号已被删除，无法登录。如有疑问请联系客服';
         try {
@@ -2037,25 +2287,27 @@
                 try { code = await StorageAdapter.getItem('license:code') || ''; } catch (e) {}
 
                 let ent = null;
+                let entHttpStatus = 0;
                 try {
-                    const resp = await fetch(LOGIN_GATE_ENTITLEMENT_URL, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ machineId: machineId, code: code || undefined,
-                            username: username || undefined })
+                    // ★ P3-B：统一裁决请求——Android 自动带设备证明 + 两步式 POP；
+                    //   桌面端无 attestation 桥即短路，行为与旧版一致。
+                    const rq = await requestEntitlement({
+                        mid: machineId, code, username,
+                        getResetAuth: getResetAuth || undefined
                     });
-                    if (resp.ok) { ent = await resp.json(); }
-                    else if (resp.status === 403) {
+                    entHttpStatus = rq.httpStatus;
+                    ent = rq.ent;
+                    if (entHttpStatus === 403) {
                         // ★ 2026-09-23：403 = 设备安全封锁（device_block），按
                         //   2026-09-11 红线「本地使用不阻断」，ent 留空走下方
                         //   宽限（与网络不可达同口径；此为旧主进程兜底路径）。
                     }
-                    else {
+                    else if (entHttpStatus !== 0) {
                         // ★ S2 修复：其他 HTTP 错误（429/500…）不是断网，
                         //   fail-closed，绝不落入宽限 fail-open。
-                        return fail('授权服务暂时不可用（HTTP ' + resp.status + '），请稍后重试或联系客服');
+                        return fail('授权服务暂时不可用（HTTP ' + entHttpStatus + '），请稍后重试或联系客服');
                     }
-                } catch (e) { /* 仅真·网络不可达（TypeError）才走下方宽限 */ }
+                } catch (e) { /* 仅真·网络不可达（httpStatus=0）才走下方宽限 */ }
 
                 if (ent) {
                     // ★ 2026-09-23 账号删除优先裁决：即使设备授权有效，账号墓碑命中即硬拒。
@@ -2267,6 +2519,9 @@
         loginWithUsernamePassword,
         // 登录后台闸门（2026-09-22 P0；P3-A：LICENSED/trial/free/gate token 四规则）
         verifyLoginGate,
+        // P3-B 设备证明编排（Android 自动启用；smoke 白盒钩子）
+        ensureDeviceAttested,
+        requestEntitlement,
         logout,
 
         // 适配器工厂
@@ -2408,7 +2663,14 @@
         evaluateOfflineGate,
         GATE_VERIFY_PUBKEYS,
         setItem: (k, v) => StorageAdapter.setItem(k, v),
-        removeItem: (k) => StorageAdapter.removeItem(k)
+        removeItem: (k) => StorageAdapter.removeItem(k),
+        // P3-B 白盒钩子
+        isAndroidRuntime,
+        ensureDeviceAttested,
+        requestEntitlement,
+        readAttState,
+        gateTokenRemainingMsAsync,
+        PROOF_RENEW_THRESHOLD_MS
     };
 
 })(typeof window !== 'undefined' ? window : typeof globalThis !== 'undefined' ? globalThis : this);
@@ -2567,15 +2829,15 @@
             //   找回本机有效绑定（P1 丢码自愈路径）。
             let entState = null, entFull = null;
             try {
-                const entResp = await fetch('https://tcm-prescription-system.pages.dev/api/license/entitlement', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ machineId: machineId })
+                // ★ P3-B：entitlement 经统一裁决请求——Android 自动带设备证明/
+                //   POP 两步式；桌面端无 attestation 桥，行为与旧版逐字节一致。
+                //   心跳每 10 分钟无条件续签（token 剩余恒 >47.5h），故 12h 主动
+                //   续签阈值只对断网恢复场景生效，由登录门的 requestEntitlement 覆盖。
+                const __rq = await global.AuthCore.requestEntitlement({
+                    mid: machineId
                 });
-                if (entResp.ok) {
-                    entFull = await entResp.json();
-                    if (entFull && entFull.success) entState = entFull.state;
-                }
+                entFull = __rq.ent;
+                if (entFull && entFull.success) entState = entFull.state;
             } catch (entE) {
                 console.warn('[Heartbeat] entitlement 裁决不可达，回退心跳判定:', entE && entE.message);
             }

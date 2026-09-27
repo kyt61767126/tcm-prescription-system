@@ -61,6 +61,12 @@
 # 必须保留 NativeGuard 类名/包名与 native 方法名，否则 JNI 绑定失效
 # ============================================================================
 -keep class com.benneng.pres.NativeGuard { *; }
+
+# ============================================================================
+# P3-B 设备证明（2026-09-27）
+# invoke 分发直接引用；keep 类与全部方法，防 R8 full mode 裁剪/重打包
+# ============================================================================
+-keep class com.benneng.pres.DeviceAttestationManager { *; }
 -keepclasseswithmembernames class * {
     native <methods>;
 }

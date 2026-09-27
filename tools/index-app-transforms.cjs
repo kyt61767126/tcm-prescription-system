@@ -207,4 +207,10 @@ module.exports = [
     find: "        // 系统文件选择器路径（兜底）",
     replace: "        // 系统文件选择器路径（网页版主路径；APP/桌面端兜底）",
   },
+  {
+    id: "T35",
+    desc: "P3-B 登录闸门加 getResetAuth：APP 设备证明公钥重置被服务端拒绝时，在线登录本账号取 sessionToken 完成密钥恢复（桌面端无此选项）",
+    find: "                        const __gate = await AuthCore.verifyLoginGate(user.username || loginUsername);",
+    replace: "                        const __gate = await AuthCore.verifyLoginGate(user.username || loginUsername, {\n                            // P3-B：设备证明公钥重置被拒时，在线登录本账号取 sessionToken 完成恢复\n                            getResetAuth: async () => {\n                                try {\n                                    const __lr = await fetch('https://tcm-prescription-system.pages.dev/api/users?login=true', {\n                                        method: 'POST',\n                                        headers: { 'Content-Type': 'application/json' },\n                                        body: JSON.stringify({\n                                            username: user.username || loginUsername,\n                                            password: password\n                                        })\n                                    });\n                                    const __lj = await __lr.json().catch(() => null);\n                                    return (__lr.ok && __lj && __lj.token) ? String(__lj.token) : '';\n                                } catch (e) { return ''; }\n                            }\n                        });",
+  },
 ];

@@ -1478,7 +1478,13 @@ public class MainActivity extends BridgeActivity {
             "      verifyOnline: function(){ return callNativeAsync('verifyOnline', {}); }," +
             // ★ 2026-09-21 离线免费版：功能位裁决（渲染层 requireFeature 唯一数据源）
             "      checkFeature: function(feature){ return callNativeAsync('checkFeature', {feature: feature}); }," +
-            "      getActivationRecord: function(){ return callNativeAsync('getActivationRecord', {}); }" +
+            "      getActivationRecord: function(){ return callNativeAsync('getActivationRecord', {}); }," +
+            // ★ P3-B 设备证明：probe 探针 / ensureKey 带 challenge 建钥 / signProof POP
+            "      attestation: {" +
+            "        probe: function(){ return callNativeAsync('attestationProbe', {}); }," +
+            "        ensureKey: function(challengeB64, includeProps, forceRegen){ return callNativeAsync('attestationEnsureKey', {challenge: challengeB64||'', includeProps: includeProps !== false, forceRegen: !!forceRegen}); }," +
+            "        signProof: function(mid, nonce){ return callNativeAsync('attestationSign', {mid: mid||'', nonce: nonce||''}); }" +
+            "      }" +
             "    }," +
             "activate: {" +
             "      show: function(){ return new Promise(function(resolve){ try { window.dispatchEvent(new CustomEvent('app:show-activate')); resolve({success:true}); } catch(e){ resolve({success:false,error:String(e)}); } }); }," +
@@ -2019,6 +2025,31 @@ public class MainActivity extends BridgeActivity {
                                 args.optString("json", "")).toString();
                     case "getActivationFlowState":
                         return getLM().getActivationFlowState().toString();
+                    // ★ P3-B 设备证明：三动作正式桥（本地硬件操作，invoke 在桥线程）
+                    //   probe——可行性探针（证书链+安全级，诊断/夹具存档）
+                    //   attestationEnsureKey——带服务端 challenge keygen（设备属性自动降级）
+                    //   attestationSign——POP 签名 bnzc_poc_v1|mid|nonce（raw R||S）
+                    case "attestationProbe":
+                        return new DeviceAttestationManager(MainActivity.this).probe().toString();
+                    case "attestationEnsureKey": {
+                        byte[] ch = null;
+                        String challengeB64 = args.optString("challenge", "");
+                        if (challengeB64.length() > 0) {
+                            try {
+                                ch = Base64.decode(challengeB64, Base64.DEFAULT);
+                            } catch (Exception e) {
+                                return fail("bad challenge base64: " + e.getMessage()).toString();
+                            }
+                        }
+                        return new DeviceAttestationManager(MainActivity.this).ensureDeviceKey(
+                                ch,
+                                args.optBoolean("includeProps", true),
+                                args.optBoolean("forceRegen", false)).toString();
+                    }
+                    case "attestationSign":
+                        return new DeviceAttestationManager(MainActivity.this).signProof(
+                                args.optString("mid", ""),
+                                args.optString("nonce", "")).toString();
                     case "appRestart":
                         return appRestart().toString();
                     case "setTrialDays":

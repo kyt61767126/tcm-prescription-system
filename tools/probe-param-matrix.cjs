@@ -283,22 +283,51 @@ const RULES = [
         }
     },
     {
-        id: 'F3', desc: 'entitlement.js 纯只读铁律（剥注释后零写调用：kv.put/kv.delete/updateLicense/saveLicense/setDeviceVersion/appendLicenseLog）',
+        id: 'F3', desc: 'adjudicate 纯只读铁律（裁决函数体内零写调用；P3-B 证明门仅可经 attestation-core 的 issue/consumeProofNonce 写 10min TTL 短键）',
         source: 'KNOWLEDGE 条目三十六 P1-①：裁决幂等/可重试/无副作用，机器可查',
         run: (s) => {
             // 剥注释后检查，防"注释里提到写调用"假阳；URL 字符串不受影响（写调用不可能出现在其同行尾部）
             const code = s.entitlement.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
-            const hits = [];
+
+            // 抽取 adjudicate 函数体（大括号配平）
+            function extractFunctionBody(src, name) {
+                const m = src.match(new RegExp('async function ' + name + '\\s*\\([^)]*\\)\\s*{'));
+                if (!m) return null;
+                let depth = 1, i = m.index + m[0].length;
+                for (; i < src.length && depth > 0; i++) {
+                    if (src[i] === '{') depth++;
+                    else if (src[i] === '}') depth--;
+                }
+                return depth === 0 ? src.slice(m.index + m[0].length, i - 1) : null;
+            }
+            const adjudicateBody = extractFunctionBody(code, 'adjudicate');
+            if (adjudicateBody == null) {
+                return { pass: false, detail: 'adjudicate 函数未找到（改名/重构会破坏只读校验）' };
+            }
+
             const patterns = [
                 [/kv\.put\(/, 'kv.put('], [/kv\.delete\(/, 'kv.delete('],
                 [/\bupdateLicense\(/, 'updateLicense('], [/\bsaveLicense\(/, 'saveLicense('],
-                [/\bsetDeviceVersion\(/, 'setDeviceVersion('], [/\bappendLicenseLog\(/, 'appendLicenseLog(']
+                [/\bsetDeviceVersion\(/, 'setDeviceVersion('], [/\bappendLicenseLog\(/, 'appendLicenseLog('],
+                [/\bissueProofNonce\(/, 'issueProofNonce('], [/\bconsumeProofNonce\(/, 'consumeProofNonce(']
             ];
+            const hits = [];
             for (const [re, label] of patterns) {
-                if (re.test(code)) hits.push(label);
+                if (re.test(adjudicateBody)) hits.push(label);
             }
-            return hits.length === 0 ? { pass: true }
-                : { pass: false, detail: '发现写调用：' + hits.join(', ') + ' —— 裁决端点绝不写 KV（端形态上报走 heartbeat），写调用会破坏幂等与可重试性' };
+            if (hits.length) {
+                return { pass: false, detail: 'adjudicate 内发现写调用：' + hits.join(', ')
+                    + ' —— 裁决函数必须严格纯只读；P3-B 写操作只能在其后的 attestationGate' };
+            }
+
+            // 整文件层面：仍禁止直接 kv 写与老写函数（nonce 写必须封在 attestation-core）
+            const fileHits = [];
+            for (const [re, label] of patterns.slice(0, 6)) {
+                if (re.test(code)) fileHits.push(label);
+            }
+            return fileHits.length === 0 ? { pass: true }
+                : { pass: false, detail: '文件内发现直接写调用：' + fileHits.join(', ')
+                    + ' —— nonce 写入只能经 attestation-core 的 issue/consumeProofNonce（短 TTL）' };
         }
     },
 

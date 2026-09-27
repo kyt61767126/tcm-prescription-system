@@ -47,9 +47,9 @@ const gate = sandbox.AuthCore && sandbox.AuthCore.__gateTest;
 if (!gate) { console.error('[FATAL] AuthCore.__gateTest 未挂载'); process.exit(1); }
 
 // ---------- 导入真实服务端私钥 ----------
-const p8File = path.join(os.tmpdir(), 'gate-p8.b64');
+const p8File = path.join(os.tmpdir(), 'gate-p8-v2.b64');
 if (!fs.existsSync(p8File)) {
-    console.error('[SKIP] 真实私钥 %TEMP%\\gate-p8.b64 不存在，无法验证真实链路');
+    console.error('[SKIP] 真实私钥 %TEMP%\\gate-p8-v2.b64 不存在，无法验证真实链路');
     process.exit(2);
 }
 const p8b64 = fs.readFileSync(p8File, 'utf8').trim();
@@ -68,7 +68,7 @@ function b64urlFromBytes(u8) {
 }
 function b64urlFromStr(str) { return b64urlFromBytes(Buffer.from(str, 'utf8')); }
 
-async function signToken(payload, privKey, { kid = 'v1', alg = 'ES256', typ = 'JWT', rawHeader } = {}) {
+async function signToken(payload, privKey, { kid = 'v2', alg = 'ES256', typ = 'JWT', rawHeader } = {}) {
     const header = rawHeader || { alg, typ, kid };
     const si = b64urlFromStr(JSON.stringify(header)) + '.'
              + b64urlFromStr(JSON.stringify(payload));
@@ -129,8 +129,8 @@ console.log('\n=== P3-A Gate Token Smoke ===\n');
     });
     const pubKeyObj = require('crypto').createPublicKey(privKeyObj);
     const spkiB64 = pubKeyObj.export({ format: 'der', type: 'spki' }).toString('base64');
-    check('真实私钥公钥 = offline.js 内置 v1 公钥',
-        spkiB64 === gate.GATE_VERIFY_PUBKEYS.v1, spkiB64.slice(0, 32) + '…');
+    check('真实私钥公钥 = offline.js 内置 v2 公钥',
+        spkiB64 === gate.GATE_VERIFY_PUBKEYS.v2, spkiB64.slice(0, 32) + '…');
 }
 
 // 1. 正常 token 验签

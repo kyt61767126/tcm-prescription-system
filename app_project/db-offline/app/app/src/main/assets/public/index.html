@@ -3308,7 +3308,23 @@ let currentUser = null;
                     //   LICENSED 才放行（后台删除诊所/激活码即拒绝）；试用期内放行；
                     //   断网 7 天宽限。同时补写 license:machineId 让主窗口心跳复活。
                     if (window.AuthCore && typeof AuthCore.verifyLoginGate === 'function') {
-                        const __gate = await AuthCore.verifyLoginGate(user.username || loginUsername);
+                        const __gate = await AuthCore.verifyLoginGate(user.username || loginUsername, {
+                            // P3-B：设备证明公钥重置被拒时，在线登录本账号取 sessionToken 完成恢复
+                            getResetAuth: async () => {
+                                try {
+                                    const __lr = await fetch('https://tcm-prescription-system.pages.dev/api/users?login=true', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                            username: user.username || loginUsername,
+                                            password: password
+                                        })
+                                    });
+                                    const __lj = await __lr.json().catch(() => null);
+                                    return (__lr.ok && __lj && __lj.token) ? String(__lj.token) : '';
+                                } catch (e) { return ''; }
+                            }
+                        });
                         if (!__gate.ok) {
                             errorDiv.textContent = __gate.message;
                             errorDiv.style.display = 'block';

@@ -49,6 +49,13 @@ import {
     getAccountTombstone
 } from './_lib/license-core.js';
 import { isValidMachineId } from './_lib/schema-guard.js';
+import {
+    getAttestationConfig,
+    getDeviceRegistration,
+    issueProofNonce,
+    consumeProofNonce,
+    verifyProof
+} from './_lib/attestation-core.js';
 
 // ★ 授权状态四态枚举——全项目（服务端+五端客户端）唯一权威定义。
 //   客户端 UI 状态（试用中/试用过期/已激活/已过期/被撤销）= 本枚举 + 客户端
@@ -194,6 +201,91 @@ async function adjudicate(kv, machineId, code) {
 }
 
 // ============================================================================
+//  P3-B：设备证明门（仅 platform:'android' 客户端启用；桌面/云端零影响）
+//
+//  observe（默认）：门只观测不拦——canSign 恒 true，缺证明只标记 proofState +
+//    下发 nonce 引导客户端补签（用于切 enforce 前的全网 telemetry）。
+//  enforce：未登记 → needAttestation（不签 token）；已登记无 proof → needProof +
+//    一次性 nonce（不签）；proof 验签失败 → 拒签并重新下发 nonce。
+//
+//  注意：本函数可能写 KV（issueProofNonce 落 10min 短 TTL 键）。adjudicate 仍
+//    严格纯只读；写操作只发生在裁决之后的证明门，且键全部自带 TTL 自清理。
+// ============================================================================
+async function attestationGate(kv, machineId, body, result, config, accountState) {
+    const out = {
+        canSign: true,
+        needProof: false,
+        needAttestation: false,
+        proofState: null,
+        proofJti: null,
+        proofNonceB64: null
+    };
+
+    // 仅 Android 客户端（显式 platform）且裁决 LICENSED 且无账号墓碑时启用
+    if (String(body.platform || '') !== 'android') return out;
+    if (result.state !== ENTITLEMENT_STATES.LICENSED || accountState) return out;
+
+    const enforce = config.mode === 'enforce';
+    const reg = await getDeviceRegistration(kv, machineId);
+    const proof = (body.proof && typeof body.proof === 'object') ? body.proof : null;
+
+    // ① 未登记
+    if (!reg) {
+        out.needAttestation = true;
+        out.proofState = 'unregistered';
+        out.canSign = !enforce;
+        return out;
+    }
+
+    // ② 带 proof：消费一次性 nonce → kid 一致 → POP 验签
+    if (proof) {
+        let valid = false;
+        try {
+            const consumed = await consumeProofNonce(kv, String(proof.jti || ''));
+            if (consumed && consumed.mid === machineId
+                && String(proof.kid || '') === String(reg.kid || '')) {
+                valid = await verifyProof({
+                    spkiB64: reg.pub,
+                    mid: machineId,
+                    nonce: consumed.nonce,
+                    sigB64: String(proof.sig || '')
+                });
+            }
+        } catch (e) {
+            console.warn('[entitlement] proof 校验异常（按失败处理）:', e && e.message);
+        }
+
+        if (valid) {
+            out.proofState = 'verified';
+            return out;  // canSign=true
+        }
+
+        out.proofState = 'invalid';
+        if (enforce) {
+            const n = await issueProofNonce(kv, machineId);
+            if (n.jti) {
+                out.needProof = true;
+                out.proofJti = n.jti;
+                out.proofNonceB64 = n.nonce;
+            }
+            out.canSign = false;
+        }
+        return out;  // observe：验签失败也放行（仅标记）
+    }
+
+    // ③ 无 proof：签发一次性 nonce 引导补签
+    const n = await issueProofNonce(kv, machineId);
+    if (n.jti) {
+        out.needProof = true;
+        out.proofJti = n.jti;
+        out.proofNonceB64 = n.nonce;
+    }
+    out.proofState = 'missing';
+    out.canSign = !enforce;
+    return out;
+}
+
+// ============================================================================
 //  P3-A：Gate Token 签名（ES256 / EC P-256）
 //  服务端裁决放行态时签发短周期 token，客户端内置公钥离线验签（见 offline.js）。
 //  私钥仅从环境变量读取：GATE_SIGN_P8_B64=PKCS#8 DER base64（CF secret，不入库）；
@@ -314,10 +406,17 @@ export async function onRequest(context) {
 
         const result = await adjudicate(kv, machineId, code);
 
+        // ★ P3-B：设备证明门（仅 Android；observe 默认不拦）。必须在签发前完成。
+        const attConfig = await getAttestationConfig(kv);
+        const att = await attestationGate(
+            kv, machineId, body, result, attConfig, accountState);
+
         // ★ P3-A：放行态签发短周期 gate token。账号墓碑命中（accountState）不签；
+        //   P3-B enforce 未过证明门（att.canSign=false）不签；
         //   私钥缺失/签名异常只降级（不带 token），绝不阻塞在线登录。
         let gateToken = null;
-        if (result.state === ENTITLEMENT_STATES.LICENSED && !accountState) {
+        if (result.state === ENTITLEMENT_STATES.LICENSED
+            && !accountState && att.canSign) {
             try {
                 // TTL 合法性：非数/非法配置回退 48h；钳制 [1h,168h]（防错配架空吊销节奏）
                 let ttlHours = Number((context.env && context.env.GATE_TOKEN_TTL_HOURS));
@@ -354,6 +453,13 @@ export async function onRequest(context) {
             ...result,
             accountState,
             accountDeletedAt,
+            // P3-B 设备证明引导（非 Android 端全为 null/false，零影响）
+            needAttestation: att.needAttestation,
+            needProof: att.needProof,
+            proofState: att.proofState,
+            proofNonce: att.proofJti
+                ? { jti: att.proofJti, nonce: att.proofNonceB64 } : null,
+            attMode: String(body.platform || '') === 'android' ? attConfig.mode : null,
             gateToken,
             serverTime: new Date().toISOString()
         });
