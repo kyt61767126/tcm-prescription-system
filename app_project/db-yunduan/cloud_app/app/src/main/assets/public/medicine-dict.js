@@ -1,3 +1,146 @@
-(function(){
-function h(a,b){a=a-(0x4dd+-0x1*-0x985+-0xc8a*0x1);const c=g();let d=c[a];if(h['AKfXPV']===undefined){var e=function(l){const m='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/=';let n='',o='',p=n+e,q=(''+function(){return-0x5*-0x3f5+0x26*0x7+0x6f1*-0x3;})['indexOf']('\x0a')!==-(0x940+0x123*-0xd+-0x162*-0x4);for(let r=0x5*0x6eb+0x16d2+-0x3969,s,t,u=-0x2*0xb2+-0x97*0x2e+0x1c86;t=l['charAt'](u++);~t&&(s=r%(-0x22c9+0x202a+0x3*0xe1)?s*(0x4e5+-0x1a6c+0x15c7)+t:t,r++%(-0x9*-0x2b6+0x2355+-0x3bb7))?n+=q||p['charCodeAt'](u+(-0xa7*-0x3+-0x2*0x949+-0x57*-0x31))-(0x1ff7*0x1+0x1*0x17a1+-0x378e)!==0x1309*0x1+-0x3*0x949+0x8d2*0x1?String['fromCharCode'](-0x1efd+0x3*-0x875+0x1*0x395b&s>>(-(0x4e*0x73+-0x17d6+-0xb32)*r&0x23ba+-0x1*0x2309+0xab*-0x1)):r:-0x12*-0xf1+-0x13*-0x17b+-0x2d13){t=m['indexOf'](t);}for(let v=0x80*0x44+0xa*-0xb0+0x10*-0x1b2,w=n['length'];v<w;v++){o+='%'+('00'+n['charCodeAt'](v)['toString'](0xa6*-0xc+-0x9ca*-0x1+-0x2*0xf9))['slice'](-(0x2191+0x1*0x64f+-0xe*0x2d9));}return decodeURIComponent(o);};h['jooeZJ']=e,h['qPPQwH']={},h['AKfXPV']=!![];}const f=c[-0x6b5*-0x1+0x2653+-0x2d08],i=a+f,j=h['qPPQwH'][i];if(!j){const k=function(l){this['iPiDIB']=l,this['OkYbxX']=[0x1*-0x1c1e+0x1*-0x2435+-0x4054*-0x1,0x20fd+-0x1ae*0xa+0x5*-0x33d,0x113f*-0x2+-0x8e*-0x9+0x1d80],this['xRsSnu']=function(){return'newState';},this['ndeoMo']='\x5c\x77\x2b\x20\x2a\x5c\x28\x5c\x29\x20\x2a\x7b\x5c\x77\x2b\x20\x2a',this['sJjDFK']='\x5b\x27\x7c\x22\x5d\x2e\x2b\x5b\x27\x7c\x22\x5d\x3b\x3f\x20\x2a\x7d';};k['prototype']['yJfrhr']=function(){const l=new RegExp(this['ndeoMo']+this['sJjDFK']),m=l['test'](this['xRsSnu']['toString']())?--this['OkYbxX'][0x1c93+-0x25d2+0x940]:--this['OkYbxX'][-0x1b*-0x119+0x668+-0x240b];return this['zBrjHM'](m);},k['prototype']['zBrjHM']=function(l){if(!Boolean(~l))return l;return this['moLBig'](this['iPiDIB']);},k['prototype']['moLBig']=function(l){for(let m=-0x2328+-0x12bf*-0x1+0x1069*0x1,n=this['OkYbxX']['length'];m<n;m++){this['OkYbxX']['push'](Math['round'](Math['random']())),n=this['OkYbxX']['length'];}return l(this['OkYbxX'][-0xd7*0x3+-0x2401+0x2686]);},(''+function(){return 0xd*-0x92+-0x12*-0x9+-0x364*-0x2;})['indexOf']('\x0a')===-(-0x3*0x59f+-0x17f*0x1+0x125d)&&new k(h)['yJfrhr'](),d=h['jooeZJ'](d),h['qPPQwH'][i]=d;}else d=j;return d;}const a6=h;(function(a,b){const a9={a:0x1e5,b:0x1f4,d:0x1f9},x=h,y=h,d=a();while(!![]){try{const e=parseInt(x(0x211))/(-0x2e5*0xd+-0x15f6+-0x3b98*-0x1)+-parseInt(x(a9.a))/(0x2*0x45d+-0xad*0xd+0x11*0x1)*(parseInt(y(0x1e0))/(-0xc17+0x4b*-0x28+0x1*0x17d2))+parseInt(y(0x1fb))/(0x31*0x59+-0x10bc+-0x1*0x49)*(parseInt(x(0x1ec))/(-0x25a8+0x157*-0x2+0x285b))+parseInt(y(0x20e))/(-0x123+-0xa*0x223+-0x49*-0x4f)+parseInt(y(a9.b))/(0x4a*-0x86+-0x1*0x16f+0x2832)*(parseInt(y(0x1f8))/(-0x1*0xbc4+0x1*-0x812+0x13de))+-parseInt(x(0x1dc))/(-0x52e*0x2+-0x132b*-0x1+-0x2*0x463)*(-parseInt(x(a9.d))/(0x2f9+0x2e6+-0x5d5))+parseInt(x(0x1db))/(0x27f+0x5d1+-0x845)*(-parseInt(y(0x1ff))/(-0x2a9*-0x7+-0x12f1+0x1*0x5e));if(e===b)break;else d['push'](d['shift']());}catch(f){d['push'](d['shift']());}}}(g,0x901c*0x1a+0x67a04+0x7f*-0xc56),function(i){const aF={a:0x1ea},aE={a:0x1f0,b:0x1de},aC={a:0x202,b:0x206},aB={a:0x212},aA={a:0x207,b:0x204,d:0x1df},az={a:0x209,b:0x1e3},au={a:0x1ed,b:0x1e1},at={a:0x1e9,b:0x1d9,d:0x1e9,e:0x1da},ar={a:0x1f0},aq={a:0x1d8,b:0x1fa,d:0x1fa},ae={a:0x1f3},a5=h,j=(function(){let p=!![];return function(q,r){const s=p?function(){if(r){const t=r['apply'](q,arguments);return r=null,t;}}:function(){};return p=![],s;};}()),k=j(this,function(){const z=h,A=h;if(k[z(0x1fa)]()['toString']()['indexOf']('\x0a')!==-(0x1*0x187d+0x490+-0x1d0c))return;return k[z(0x1f2)]()['search'](A(ae.a))[A(0x1f2)]()['constructor'](k)[z(0x205)](A(ae.a));});k();const l=(function(){let p=!![];return function(q,r){const af={a:0x210},s=p?function(){const B=h;if(r){const t=r[B(af.a)](q,arguments);return r=null,t;}}:function(){};return p=![],s;};}());(function(){const aj={a:0x1dd};l(this,function(){const C=h,D=h,p=new RegExp(C(0x1fc)),q=new RegExp('\x5c+\x5c+\x20*(?:[a-zA-Z_$][0-9a-zA-Z_$]*)','i'),r=c(C(aj.a));!p['test'](r+'chain')||!q['test'](r+'input')?r('0'):c();})();}());const m=(function(){let p=!![];return function(q,r){const s=p?function(){if(r){const t=r['apply'](q,arguments);return r=null,t;}}:function(){};return p=![],s;};}()),n=m(this,function(){const G=h,H=h,p=function(){const E=h,F=h;let t;try{t=Function(E(0x1e7)+F(0x1e8)+');')();}catch(u){t=window;}return t;},q=p(),r=q['console']=q[G(0x1fe)]||{},s=['log','warn','info','error',H(aq.a),'table',G(0x1ef)];for(let t=-0x78a*-0x5+0xa9*0x25+0x3*-0x14b5;t<s['length'];t++){const u=m[H(0x1e4)][G(0x201)][G(aq.b)](m),v=s[t],w=r[v]||u;u[H(0x203)]=m[G(aq.d)](m),u['toString']=w['toString'][H(aq.d)](w),r[v]=u;}});n();'use strict';const o={'_medicines':null,'_pinyinIndex':null,'init'(p){const I=h,J=h;this[I(ar.a)]=p||[],this[I(0x1eb)]();},'_buildIndex'(){const K=h,L=h;if(!this[K(0x1f0)])return;this['_pinyinIndex']=this[K(0x1f0)][K(0x1f5)](p=>({'name':(p['name']||'')[L(0x1f6)](),'code':(p[K(0x20c)]||'')[K(0x1f6)](),'pinyin':(p[K(0x1d9)]||'')[K(0x1f6)](),'original':p}));},'search'(p,q){const M=h,N=h;if(!this['_pinyinIndex']||!p)return[];q=q||-0x1a08+-0x23c7+-0x1*-0x3de3;const r=p['toLowerCase']()['trim'](),s=[],t=[],u=[];for(const v of this[M(0x1ed)]){if(v['name']===r||v['code']===r)s['push'](v[N(0x20d)]);else{if(v['name']['startsWith'](r)||v['code']['startsWith'](r))t['push'](v[M(0x20d)]);else(v['name']['includes'](r)||v['code'][M(at.a)](r)||v[N(at.b)][N(at.d)](r))&&u['push'](v['original']);}if(s['length']+t['length']+u[N(0x1e2)]>=q*(0x3c0+-0x13a0+-0x7f1*-0x2))break;}return[...s,...t,...u][M(at.e)](0x1*-0x1a91+0x1458+0x639,q);},'findByCode'(p){const O=h,P=h;if(!this['_pinyinIndex']||!p)return null;const q=p['toLowerCase']()['trim'](),r=this[O(au.a)][P(au.b)](s=>s['code']===q);return r?r['original']:null;},'findByName'(p){const Q=h,R=h;if(!this[Q(0x1ed)]||!p)return null;const q=p['toLowerCase']()['trim'](),r=this[R(0x1ed)][R(0x1e1)](s=>s[Q(0x1f7)]===q);return r?r['original']:null;},'formatMedicine'(p){const S=h,T=h;if(!p)return'';const q=[p[S(0x1f7)]];if(p['unit'])q['push']('('+p['unit']+')');if(p['price'])q[S(0x204)]('¥'+p['price']);return q[T(0x20f)]('\x20');},'calculateTotal'(p){if(!p||!p['length'])return 0x685*-0x1+-0x4*0x772+0x244d;return p['reduce']((q,r)=>{const s=parseFloat(r['quantity'])||-0x151a+-0xa7*-0x3+-0x1d*-0xa9,t=parseFloat(r['price'])||0x92b*0x1+0x1622*-0x1+0x1*0xcf7;return q+s*t;},-0x15b7+0x1309*0x1+-0xe*-0x31);},'generateId'(){const U=h,V=h;return U(az.a)+Date[U(az.b)]()+'_'+Math[V(0x1ee)](Math['random']()*(0x19c6+0x2176+-0x3754));},'validate'(p){const W=h,X=h,q=[];if(!p['name']||!p[W(0x1f7)]['trim']())q[X(0x204)]('药名不能为空');if(!p[X(aA.a)])q[X(aA.b)](X(aA.d));return p[W(0x214)]!==undefined&&isNaN(parseFloat(p[X(0x214)]))&&q['push'](X(0x20a)),q;},'loadFromStorage'(p){const Y=h,Z=h;p=p||'medicine_library';try{const q=localStorage[Y(0x1f1)](p),r=q?JSON['parse'](q):[];return this['init'](r),r;}catch(s){return console[Z(aB.a)]('[DBG]\x20加载药材库失败:',s),this['init']([]),[];}},'saveToStorage'(p,q){const a0=h,a1=h;q=q||a0(aC.a);try{return localStorage['setItem'](q,JSON[a1(0x200)](p)),this['init'](p),!![];}catch(r){return console['error'](a1(aC.b),r),![];}},'getAll'(){const a2=h;return this[a2(0x1f0)]||[];},'filterByCategory'(p){const a3=h,a4=h;if(!this['_medicines'])return[];if(!p)return this['_medicines'];return this[a3(aE.a)][a4(aE.b)](q=>q['category']===p);}};i[a5(aF.a)]=o;}(typeof window!==a6(0x1fd)?window:this));function c(a){const aJ={a:0x1e2,b:0x213,d:0x210,e:0x215};function b(d){const a7=h,a8=h;if(typeof d===a7(0x20b))return function(e){}['constructor'](a7(0x1e6))['apply'](a8(0x216));else(''+d/d)[a7(aJ.a)]!==0xd*0x17b+-0x1bb*-0x5+0x25*-0xc1||d%(-0x1a8*0x1+-0x968+-0x2e*-0x3e)===0x54b*0x5+-0x53*-0x71+-0x29*0x18a?function(){return!![];}[a7(0x1e4)]('debu'+a8(0x217))['call'](a7(0x208)):function(){return![];}['constructor'](a7(aJ.b)+'gger')[a7(aJ.d)](a7(aJ.e));b(++d);}try{if(a)return b;else b(-0x2490+0x80*0x44+0x4*0xa4);}catch(d){}}function g(){const aL=['Dg9mB3DLCKnHC2u','BMfTzq','ota5mZaYneTvEwnxzG','oti4ntKXme1RsgrVEG','yMLUza','mJbnzertvvK','zNvUy3rPB24GkLWOicPCkq','Dw5KzwzPBMvK','y29UC29Szq','mtjiAuXZtgK','C3rYAw5NAwz5','ChjVDg90ExbL','BwvKAwnPBMvFBgLICMfYEq','x19WCM90B19F','ChvZAa','C2vHCMnO','w0rcr10G5l+D5A2y6i2V5P2q5BQt5AsX6lsLoG','Dw5PDa','ywn0Aw9U','BwvKxW','5y2v5lU35B+f6Ag75PIV5PwW5A2x','C3rYAw5N','y29Kzq','B3jPz2LUywW','mteXmdG0mtj3vevwB2K','AM9PBG','yxbWBhK','nte1mZy3r2jWzwHI','D2fYBG','zgvIDq','ChjPy2u','C3rHDgvpyMPLy3q','y291BNrLCG','z2DLCG','zxHJzxb0Aw9U','CgLUEwLU','C2XPy2u','mZKWntm4mdzACvbPD1K','oxb1DKfrrW','Aw5PDa','zMLSDgvY','5y2v5l2n5lIn6io95lI656M6','mte3ndqWn1zVC1zOqG','zMLUza','BgvUz3rO','BM93','y29UC3rYDwn0B3i','mKHbvKjpyG','D2HPBguGkhrYDwuPihT9','CMv0DxjUicHMDw5JDgLVBIGPia','E30Uy29UC3rYDwn0B3iOiNjLDhvYBIb0AgLZiIKOicK','Aw5JBhvKzxm','twvKAwnPBMveAwn0','x2j1AwXKsw5KzxG','ndKYnda1AMPuywzY','x3bPBNLPBKLUzgv4','zMXVB3i','DhjHy2u','x21LzgLJAw5LCW','z2v0sxrLBq','Dg9tDhjPBMC','kcGOlISPkYKRksSK','n2fJtwTyAW','BwfW'];g=function(){return aL;};return g();}
-})();
+// ============================================================================
+// medicine-dict.js — 中药字典工具模块
+// 提供药品搜索、拼音简码匹配、字典加载等公共方法
+// ============================================================================
+(function (global) {
+    'use strict';
+
+    const MedicineDict = {
+        _medicines: null,
+        _pinyinIndex: null,
+
+        // 初始化药材库
+        init(medicines) {
+            this._medicines = medicines || [];
+            this._buildIndex();
+        },
+
+        // 构建搜索索引
+        _buildIndex() {
+            if (!this._medicines) return;
+            this._pinyinIndex = this._medicines.map(m => ({
+                name: (m.name || '').toLowerCase(),
+                code: (m.code || '').toLowerCase(),
+                pinyin: (m.pinyin || '').toLowerCase(),
+                original: m
+            }));
+        },
+
+        // 搜索药品（支持名称、简码、拼音）
+        search(keyword, limit) {
+            if (!this._pinyinIndex || !keyword) return [];
+            limit = limit || 20;
+            const kw = keyword.toLowerCase().trim();
+            const exact = [];
+            const prefix = [];
+            const contains = [];
+
+            for (const item of this._pinyinIndex) {
+                if (item.name === kw || item.code === kw) {
+                    exact.push(item.original);
+                } else if (item.name.startsWith(kw) || item.code.startsWith(kw)) {
+                    prefix.push(item.original);
+                } else if (item.name.includes(kw) || item.code.includes(kw) || item.pinyin.includes(kw)) {
+                    contains.push(item.original);
+                }
+                if (exact.length + prefix.length + contains.length >= limit * 2) break;
+            }
+
+            return [...exact, ...prefix, ...contains].slice(0, limit);
+        },
+
+        // 简码匹配（输入简码自动找到药名）
+        findByCode(code) {
+            if (!this._pinyinIndex || !code) return null;
+            const lc = code.toLowerCase().trim();
+            const match = this._pinyinIndex.find(m => m.code === lc);
+            return match ? match.original : null;
+        },
+
+        // 名称匹配
+        findByName(name) {
+            if (!this._pinyinIndex || !name) return null;
+            const lc = name.toLowerCase().trim();
+            const match = this._pinyinIndex.find(m => m.name === lc);
+            return match ? match.original : null;
+        },
+
+        // 格式化药材显示文本
+        formatMedicine(m) {
+            if (!m) return '';
+            const parts = [m.name];
+            if (m.unit) parts.push(`(${m.unit})`);
+            if (m.price) parts.push(`¥${m.price}`);
+            return parts.join(' ');
+        },
+
+        // 计算药材总价
+        calculateTotal(medicines) {
+            if (!medicines || !medicines.length) return 0;
+            return medicines.reduce((sum, m) => {
+                const qty = parseFloat(m.quantity) || 0;
+                const price = parseFloat(m.price) || 0;
+                return sum + (qty * price);
+            }, 0);
+        },
+
+        // 生成药材编号（自动递增）
+        generateId() {
+            return 'med_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+        },
+
+        // 验证药材数据完整性
+        validate(medicine) {
+            const errors = [];
+            if (!medicine.name || !medicine.name.trim()) errors.push('药名不能为空');
+            if (!medicine.unit) errors.push('单位不能为空');
+            if (medicine.price !== undefined && isNaN(parseFloat(medicine.price))) {
+                errors.push('单价必须是数字');
+            }
+            return errors;
+        },
+
+        // 从 localStorage 加载药材库
+        loadFromStorage(key) {
+            key = key || 'medicine_library';
+            try {
+                const data = localStorage.getItem(key);
+                const medicines = data ? JSON.parse(data) : [];
+                this.init(medicines);
+                return medicines;
+            } catch (e) {
+                console.warn('[DBG] 加载药材库失败:', e);
+                this.init([]);
+                return [];
+            }
+        },
+
+        // 保存药材库到 localStorage
+        saveToStorage(medicines, key) {
+            key = key || 'medicine_library';
+            try {
+                localStorage.setItem(key, JSON.stringify(medicines));
+                this.init(medicines);
+                return true;
+            } catch (e) {
+                console.error('[DBG] 保存药材库失败:', e);
+                return false;
+            }
+        },
+
+        // 获取所有药材
+        getAll() {
+            return this._medicines || [];
+        },
+
+        // 按分类筛选
+        filterByCategory(category) {
+            if (!this._medicines) return [];
+            if (!category) return this._medicines;
+            return this._medicines.filter(m => m.category === category);
+        }
+    };
+
+    global.MedicineDict = MedicineDict;
+
+})(typeof window !== 'undefined' ? window : this);
