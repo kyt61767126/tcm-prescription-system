@@ -2005,10 +2005,23 @@ public class MainActivity extends BridgeActivity {
                     case "renameUser":
                         // ★ 2026-09-06 第八轮（Single-Writer 补全）：改密/重置/编辑用户回写
                         //   config.json 权威层（对齐桌面 user:rename-username IPC 语义）
-                        return getLM().renameUserBridge(
-                                args.optString("oldUsername", ""),
-                                args.optString("newUsername", ""),
-                                args.optString("newPassword", "")).toString();
+                        // ★ 2026-09-27 指纹快速登录：改名/改密后旧指纹凭据自动删除
+                        //   （文件名/密钥均按用户名派生；残留即孤儿），用户需重新开通
+                        {
+                            org.json.JSONObject __rr = getLM().renameUserBridge(
+                                    args.optString("oldUsername", ""),
+                                    args.optString("newUsername", ""),
+                                    args.optString("newPassword", ""));
+                            try {
+                                if (__rr.optBoolean("success", false)) {
+                                    new BiometricUnlockManager(MainActivity.this)
+                                            .delete(args.optString("oldUsername", ""));
+                                }
+                            } catch (Exception e) {
+                                Log.w(TAG, "改名后指纹清理异常(不阻断): " + e.getMessage());
+                            }
+                            return __rr.toString();
+                        }
                     case "getAppConfig":
                         // ★ 2026-09-06 机构版按钮修复：对齐桌面 'get-app-config' IPC。
                         //   返回 userData 权威 config（含 edition），前端 L927 异步加载
@@ -2050,6 +2063,24 @@ public class MainActivity extends BridgeActivity {
                         return new DeviceAttestationManager(MainActivity.this).signProof(
                                 args.optString("mid", ""),
                                 args.optString("nonce", "")).toString();
+                    // ★ 2026-09-27 指纹快速登录：指纹仅解密原密码，渲染层仍走完整登录门
+                    case "biometricProbe":
+                        return new BiometricUnlockManager(MainActivity.this).probe().toString();
+                    case "biometricStatus":
+                        return new BiometricUnlockManager(MainActivity.this)
+                                .status(args.optString("username", "")).toString();
+                    case "biometricList":
+                        return new BiometricUnlockManager(MainActivity.this).list().toString();
+                    case "biometricEnroll":
+                        return new BiometricUnlockManager(MainActivity.this).enroll(
+                                args.optString("username", ""),
+                                args.optString("password", "")).toString();
+                    case "biometricUnlock":
+                        return new BiometricUnlockManager(MainActivity.this)
+                                .unlock(args.optString("username", "")).toString();
+                    case "biometricDelete":
+                        return new BiometricUnlockManager(MainActivity.this)
+                                .delete(args.optString("username", "")).toString();
                     case "appRestart":
                         return appRestart().toString();
                     case "setTrialDays":
@@ -2103,7 +2134,11 @@ public class MainActivity extends BridgeActivity {
         //    被 isCallerAllowed 误拦截（URL 短暂变化导致），路径白名单已足够安全
         // ------------------------------------------------------------------
         private boolean isSensitiveOperation(String name) {
-            return "deleteFile".equals(name);
+            // ★ 2026-09-27 安全审查 L1：指纹六个动作全部要求本地来源
+            //   （probe/status/list/enroll/unlock/delete）。业务页 URL 恒定
+            //   file://（导航白名单封死远程页），不会误伤正常调用。
+            return "deleteFile".equals(name)
+                    || (name != null && name.startsWith("biometric"));
         }
 
         // ------------------------------------------------------------------

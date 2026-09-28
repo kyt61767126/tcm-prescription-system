@@ -10,6 +10,7 @@
 //   ⑤ 真断网（无 gate token）→ 离线门拒绝，且与畸形口径不同
 //   ⑥ 403（设备封锁）→ 离线门路径，不按畸形处理
 'use strict';
+const fs = require('fs');
 const path = require('path');
 const ROOT = path.join(__dirname, '..');
 const { chromium } = require(path.join(
@@ -26,7 +27,13 @@ const check = (name, cond, detail) => {
     else { failN++; console.log('  FAIL  ' + name + (detail ? ' → ' + detail : '')); }
 };
 
+// 自包含 harness：同目录真实 auth-core.js；跑完即删
+const harnessHtml =
+    '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>' +
+    '<script src="auth-core.js"></scr' + 'ipt></body></html>';
+
 (async () => {
+    fs.writeFileSync(HARNESS, harnessHtml);
     const pageErrors = [];
     const browser = await chromium.launch({ channel: 'msedge', headless: true });
     const page = await browser.newPage();
@@ -126,6 +133,10 @@ const check = (name, cond, detail) => {
     check('Z 全程无 pageerror', pageErrors.length === 0, pageErrors.join('\n'));
 
     await browser.close();
+    try { fs.unlinkSync(HARNESS); } catch (e) {}
     console.log(`\n${pass}/${pass + failN} passed`);
     process.exit(failN ? 1 : 0);
-})().catch(e => { console.error(e); process.exit(1); });
+})().catch(e => {
+    try { fs.unlinkSync(HARNESS); } catch (err) {}
+    console.error(e); process.exit(1);
+});

@@ -47,7 +47,7 @@ android {
         applicationId "com.benneng.pres.dingzhi"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 308
+        versionCode 309
         versionName "1.0.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
@@ -99,6 +99,7 @@ dependencies {
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation project(':capacitor-android')
+    implementation 'androidx.biometric:biometric:1.1.0'
     testImplementation "junit:junit:$junitVersion"
     // ★ 2026-09-04 AR-03：android.jar 自带的 org.json 是 100% Stub（host 单元测试调用
     //   就抛"Method put not mocked" RuntimeException）。为缺口层纯函数 LicenseInstallValidator

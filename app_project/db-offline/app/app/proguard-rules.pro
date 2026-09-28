@@ -67,6 +67,13 @@
 # invoke 分发直接引用；keep 类与全部方法，防 R8 full mode 裁剪/重打包
 # ============================================================================
 -keep class com.benneng.pres.DeviceAttestationManager { *; }
+
+# ============================================================================
+# 指纹快速登录（2026-09-27）
+# invoke 分发与 BiometricPrompt 回调引用；keep 类与全部方法防 R8 裁剪
+# ============================================================================
+-keep class com.benneng.pres.BiometricUnlockManager { *; }
+-keep class androidx.biometric.** { *; }
 -keepclasseswithmembernames class * {
     native <methods>;
 }

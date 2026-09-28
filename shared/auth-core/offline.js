@@ -2230,23 +2230,66 @@
     let __loginGatePromise = null;
     let __loginGateUser = '';
     function resetLoginGateCache() { __loginGatePromise = null; }
+
+    // ★ 2026-09-27 C2 关键时序：指纹功能平台判定【不得】用 isAndroidRuntime()
+    //   ——它依赖 electronAPI.license.attestation，而 electronAPI shim 由
+    //   Java onPageFinished 之后才注入，晚于本 IIFE 的同步执行期（同文件
+    //   IIFE-2 须 setTimeout 2s 等 shm 即旁证）；同步期调用必 false 且无重试，
+    //   功能在冷启动整页死亡。AndroidNative 是 addJavascriptInterface 在页面
+    //   加载【之前】挂载，脚本解析期即可用。老 APK 无 biometric* 动作，
+    //   probe 返回 unknown method（success:false）→ no-op，零行为变化。
+    function androidNativeBridgeReady() {
+        try {
+            if (typeof global.AndroidNative === 'undefined' || !global.AndroidNative ||
+                typeof global.AndroidNative.invoke !== 'function') return false;
+            return /android/i.test((global.navigator && global.navigator.userAgent) || '');
+        } catch (e) { return false; }
+    }
+
+    // ★ 2026-09-27 指纹快速登录：门裁决为吊销/删除/停用时清本机指纹凭据。
+    //   必须是闭包内独立函数（不能在 installBiometricUnlock 里包
+    //   global.AuthCore.verifyLoginGate）——主窗自检 installMainWindowGate
+    //   直连闭包内 verifyLoginGate，不经过 global 包装（安全审查 M2）。
+    //   仅 Android 桥存在时生效；桌面/老 APK no-op；永不抛错、不改门结果。
+    //   过期不在其列（续费后同账号指纹仍可继续用）。
+    function purgeBiometricCredential(username) {
+        try {
+            if (!androidNativeBridgeReady()) return;
+            global.AndroidNative.invoke('biometricDelete', JSON.stringify({
+                username: String(username || '')
+            }));
+        } catch (e) {}
+    }
+
     async function verifyLoginGate(usernameInput, opts) {
         const username = String(usernameInput == null ? '' : usernameInput).trim().slice(0,64);
+        let r = null;
         // ★ 桌面端：裁决一律走主进程 IPC（file:// 渲染 fetch 必被 CORS 拦截，
         //   锚点 gate.dat 签名由主进程持有）。下方渲染 fetch 仅作无 IPC 环境兜底。
         try {
             const licApi = global.electronAPI && global.electronAPI.license;
             if (licApi && typeof licApi.verifyGate === 'function') {
-                return await licApi.verifyGate(username);
+                r = await licApi.verifyGate(username);
             }
         } catch (e) { console.warn('[LoginGate] IPC 裁决异常(走渲染兜底):', e && e.message); }
         // 兜底裁决按 username 缓存（不同账号登录不串用）；window online 时清空
         // （宽限拒绝后联网重试不必重启应用）。
-        if (!__loginGatePromise || __loginGateUser !== username) {
-            __loginGateUser = username;
-            __loginGatePromise = __verifyLoginGateInner(username, opts);
+        if (!r) {
+            if (!__loginGatePromise || __loginGateUser !== username) {
+                __loginGateUser = username;
+                __loginGatePromise = __verifyLoginGateInner(username, opts);
+            }
+            r = await __loginGatePromise;
         }
-        return __loginGatePromise;
+        // ★ 吊销/删除/停用硬拒 → 同步删指纹凭据（出口收口，登录链与主窗自检
+        //   两条调用路径全覆盖；delete 幂等，缓存期重复调用无害）
+        try {
+            if (r && !r.ok && username &&
+                /吊销|已被删除|已被停用|默认账户已停用/.test(String(r.message || ''))) {
+                purgeBiometricCredential(username);
+            }
+        } catch (e) {}
+        return r;
     }
     try {
         global.addEventListener('online', resetLoginGateCache);
@@ -2500,6 +2543,234 @@
     }
     installMainWindowGate();
 
+    // ====================================================================
+    // 指纹快速登录（2026-09-27）——仅 Android
+    // 铁律：指纹只替代「输入密码」，解锁后仍走 handleLogin 完整链路
+    // （本地校验 + verifyLoginGate 授权门），不新增任何放行路径。
+    // UI 一律运行时注入，index.html 静态 DOM 零改动（界面保护铁律）。
+    // ====================================================================
+    function installBiometricUnlock() {
+        // C2：只认「UA Android + AndroidNative 桥」，不认晚注入的 electronAPI
+        if (!androidNativeBridgeReady()) return;
+
+        const bridge = (action, payload) => {
+            try {
+                const raw = global.AndroidNative.invoke(action, JSON.stringify(payload || {}));
+                return JSON.parse(raw);
+            } catch (e) { return null; }
+        };
+
+        // M-3：安装体封成 setup()，probe 未就绪时可重入重探。
+        //   返回 legacy=老 APK（桥无此动作，确定性不支持，永不重试）；
+        //   wait=暂不可用（开机 HAL 未就绪/尚未录入指纹，可后续变 capable）；
+        //   done=已安装。
+        let installed = false;
+        const setup = () => {
+            if (installed) return 'done';
+        const probe = bridge('biometricProbe');
+        if (probe && probe.success === false && probe.error &&
+            String(probe.error).indexOf('unknown method') >= 0) {
+            return 'legacy'; // 老 APK：整体 no-op，零行为变化
+        }
+        if (!probe || !probe.success || !probe.capable) return 'wait';
+        installed = true;
+
+        let origHandleLogin = null;
+        let wrapped = false;
+
+        const curUsername = () => {
+            const el = document.getElementById('loginUsername');
+            return el ? String(el.value || '').trim() : '';
+        };
+
+        const ensureRow = () => {
+            let row = document.getElementById('bioUnlockRow');
+            if (row) return row;
+            const box = document.querySelector('#loginOverlay .login-box');
+            if (!box) return null;
+            row = document.createElement('div');
+            row.id = 'bioUnlockRow';
+            row.style.cssText = 'display:none;margin-top:10px;text-align:center;';
+            row.innerHTML =
+                '<button type="button" id="bioUnlockBtn" style="width:100%;padding:10px;border:none;' +
+                'border-radius:6px;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;' +
+                'font-size:15px;cursor:pointer;">指纹解锁登录</button>' +
+                '<a href="javascript:void(0)" id="bioDisableLink" style="display:inline-block;' +
+                'margin-top:8px;font-size:12px;color:#999;text-decoration:underline;">关闭指纹登录</a>';
+            box.appendChild(row);
+            document.getElementById('bioUnlockBtn').addEventListener('click', doUnlock);
+            document.getElementById('bioDisableLink').addEventListener('click', doDisable);
+            return row;
+        };
+
+        const refresh = () => {
+            const row = ensureRow();
+            if (!row) return;
+            const u = curUsername();
+            if (!u) { row.style.display = 'none'; return; }
+            const st = bridge('biometricStatus', { username: u });
+            row.style.display = (st && st.success && st.enrolled) ? 'block' : 'none';
+        };
+
+        const doUnlock = async () => {
+            const u = curUsername();
+            if (!u) return;
+            const errEl = document.getElementById('loginError');
+            if (errEl) errEl.style.display = 'none';
+            const r = bridge('biometricUnlock', { username: u });
+            if (r && r.success && typeof r.password === 'string') {
+                document.getElementById('loginUsername').value = u;
+                document.getElementById('loginPassword').value = r.password;
+                if (origHandleLogin) await origHandleLogin();
+                // M3 自收敛：密码已在他处被改（改名/改密/忘记密码重置时桥失败，
+                // 旧密文残留），本地 PBKDF2 校验必失败（登录层仍在+本地失败文案）。
+                // 必须精确匹配本地失败文案，不能用 /密码错误/——会误吞授权门的
+                // 「密码错误次数过多，账号已暂时锁定」。网络/HTTP/门错误不误删。
+                try {
+                    const ov = document.getElementById('loginOverlay');
+                    if (ov && ov.style.display !== 'none' && errEl &&
+                        String(errEl.textContent || '')
+                            .indexOf('手机号/用户名或密码错误') !== -1) {
+                        bridge('biometricDelete', { username: u });
+                    }
+                } catch (e) {}
+                refresh();
+                return;
+            }
+            // 按 Java 稳定 errorCode 分支（H1/M1，不依赖中文文案正则）：
+            // invalidated=指纹库变更致密钥作废或密文损坏，Java 已自清，
+            //   这里兜底再删（幂等）并隐藏入口；
+            // cancel=用户主动取消/点「使用密码」，静默；
+            // lockout/timeout/unavailable/failed=红字提示，杜绝点击无反馈。
+            if (r && r.code === 'invalidated') {
+                bridge('biometricDelete', { username: u });
+                refresh();
+            } else if (r && r.code !== 'cancel' && r.error) {
+                if (errEl) {
+                    errEl.textContent = '指纹解锁失败：' + r.error;
+                    errEl.style.display = 'block';
+                }
+            }
+        };
+
+        const doDisable = () => {
+            const u = curUsername();
+            if (!u) return;
+            if (typeof global.confirm === 'function' &&
+                !global.confirm('确定关闭该账号的指纹快速登录吗？')) return;
+            bridge('biometricDelete', { username: u });
+            refresh();
+        };
+
+        // 密码登录成功后的开通引导
+        const offerEnroll = (username, password) => {
+            if (!username || !password) return;
+            const st = bridge('biometricStatus', { username });
+            if (st && st.success && st.enrolled) return;
+            try {
+                const key = 'bioOfferDismiss_' + username;
+                const last = Number(global.localStorage.getItem(key) || 0);
+                if (last && Date.now() - last < 30 * 24 * 3600 * 1000) return;
+            } catch (e) {}
+            let yes = false;
+            try {
+                yes = global.confirm(
+                    '是否开启指纹快速登录？\n' +
+                    '开通后可使用指纹直接登录，无需输入密码。\n' +
+                    '注意：本机已录入的所有指纹都能解锁该账号。');
+            } catch (e) { return; }
+            if (!yes) {
+                try { global.localStorage.setItem('bioOfferDismiss_' + username, String(Date.now())); } catch (e) {}
+                return;
+            }
+            const r = bridge('biometricEnroll', { username, password });
+            if (r && r.success) {
+                refresh();
+            } else if (r && r.code !== 'cancel' && r.error) {
+                // 仅取消静默；lockout/unavailable/invalidated 等均提示（M1）
+                try { global.alert('指纹开通失败：' + r.error); } catch (e) {}
+            }
+        };
+
+        // 包裹 handleLogin：成功（登录层隐藏）后引导开通
+        const wrap = () => {
+            if (wrapped) return true;
+            if (typeof global.handleLogin !== 'function') return false;
+            origHandleLogin = global.handleLogin;
+            global.handleLogin = async function () {
+                const u = curUsername();
+                const pwdEl = document.getElementById('loginPassword');
+                const pwd = pwdEl ? String(pwdEl.value || '') : '';
+                const r = await origHandleLogin.apply(this, arguments);
+                try {
+                    const ov = document.getElementById('loginOverlay');
+                    if (ov && ov.style.display === 'none') offerEnroll(u, pwd);
+                } catch (e) {}
+                return r;
+            };
+            wrapped = true;
+            return true;
+        };
+
+        // 注：授权门吊销/删除/停用 → 删指纹凭据的逻辑已下沉到闭包内
+        // verifyLoginGate 出口（purgeBiometricCredential），登录链与主窗自检
+        // 全覆盖；此处不再 monkey-patch global.AuthCore.verifyLoginGate。
+
+        // input 监听必须在 DOM ready 后绑定（本 IIFE 可能早于 DOM 执行），
+        // 且只绑一次；轮询同时兜底 handleLogin 晚挂与输入框晚出现
+        let inputBound = false;
+        const bindInput = () => {
+            if (inputBound) return;
+            const userEl = document.getElementById('loginUsername');
+            if (!userEl) return;
+            userEl.addEventListener('input', refresh);
+            inputBound = true;
+        };
+
+        const start = () => { wrap(); bindInput(); refresh(); };
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+        else start();
+
+        let tries = 0;
+        const timer = setInterval(() => {
+            tries++;
+            wrap();
+            bindInput();
+            refresh();
+            if ((wrapped && inputBound) || tries > 60) clearInterval(timer);
+        }, 500);
+        return 'done';
+        }; // /setup
+
+        // M-3：首次 probe 暂不可用（wait）——用户可能先启动 App 后去系统设置
+        //   录入指纹，或开机瞬间指纹 HAL 未就绪。回前台立即重探（覆盖数分钟后
+        //   补录场景），另 30s 限时轮询覆盖 HAL 晚就绪；安装成功后自卸载入。
+        //   legacy（老 APK 无桥动作）已在上方直接 return，不做任何重试。
+        if (setup() !== 'wait') return;
+        let rtTicks = 0;
+        const onVisible = () => {
+            if (document.hidden) return;
+            if (setup() === 'done') {
+                document.removeEventListener('visibilitychange', onVisible);
+                if (global.removeEventListener) {
+                    try { global.removeEventListener('pageshow', onVisible); } catch (e) {}
+                }
+            }
+        };
+        try {
+            document.addEventListener('visibilitychange', onVisible);
+            if (global.addEventListener) global.addEventListener('pageshow', onVisible);
+        } catch (e) {}
+        const rtTimer = setInterval(() => {
+            rtTicks++;
+            if (setup() === 'done' || rtTicks >= 15) clearInterval(rtTimer);
+            // visibility 监听刻意保留：补录指纹可能在轮询窗口之后才发生，
+            // installed 后 onVisible 会自行移除；wait 设备回前台一次本地 invoke
+            // 成本可忽略
+        }, 2000);
+    }
+    // installBiometricUnlock() 须在 global.AuthCore 赋值后调用（见文件后段引导处）
+
     global.AuthCore = {
         // 常量
         PASSWORD_SALT,
@@ -2705,6 +2976,12 @@
         gateTokenRemainingMsAsync,
         PROOF_RENEW_THRESHOLD_MS
     };
+
+    // 指纹快速登录引导：必须在【本 IIFE 内】调用——installBiometricUnlock
+    // 是本 IIFE 顶层函数，文件末尾另有 IIFE-2/IIFE-3，跨闭包不可见
+    // （2026-09-27 首版误挂文件尾部导致 ReferenceError，功能整体未执行）。
+    // 此时 global.AuthCore 已完成赋值；函数内部再做 Android/桥能力探测。
+    installBiometricUnlock();
 
 })(typeof window !== 'undefined' ? window : typeof globalThis !== 'undefined' ? globalThis : this);
 
