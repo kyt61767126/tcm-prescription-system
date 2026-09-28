@@ -896,8 +896,53 @@
         return typeof pwd === 'string' && pwd.length === 64 && /^[a-f0-9]{64}$/.test(pwd);
     }
 
+    // ★ 2026-09-25 慢哈希加固：PBKDF2-SHA256 自描述格式
+    //   pbkdf2_sha256$<iterations>$<saltHex 32>$<derivedKeyHex 64>
+    const STRONG_HASH_RE = /^pbkdf2_sha256\$(\d+)\$([0-9a-f]{32})\$([0-9a-f]{64})$/;
+    function isStrongPasswordHash(pwd) {
+        return typeof pwd === 'string' && STRONG_HASH_RE.test(pwd);
+    }
+
+    function _hexToBytes(hex) {
+        const out = new Uint8Array(hex.length / 2);
+        for (let i = 0; i < out.length; i++) {
+            out[i] = parseInt(hex.substr(i * 2, 2), 16);
+        }
+        return out;
+    }
+
+    async function verifyStrongPassword(inputPassword, storedPassword) {
+        const m = storedPassword.match(STRONG_HASH_RE);
+        if (!m) return false;
+        const iterations = parseInt(m[1], 10);
+        const enc = new TextEncoder();
+        const tryVerify = async (deriveBits) => {
+            const bytes = new Uint8Array(deriveBits);
+            let hex = '';
+            for (let i = 0; i < bytes.length; i++) hex += bytes[i].toString(16).padStart(2, '0');
+            if (hex.length !== m[3].length) return false;
+            let diff = 0;
+            for (let i = 0; i < hex.length; i++) diff |= hex.charCodeAt(i) ^ m[3].charCodeAt(i);
+            return diff === 0;
+        };
+        try {
+            const key = await crypto.subtle.importKey('raw', enc.encode(String(inputPassword)),
+                { name: 'PBKDF2' }, false, ['deriveBits']);
+            const bits = await crypto.subtle.deriveBits(
+                { name: 'PBKDF2', salt: _hexToBytes(m[2]), iterations: iterations, hash: 'SHA-256' },
+                key, 256);
+            return await tryVerify(bits);
+        } catch (e) {
+            return false; // 无 subtle 的环境不支持强哈希校验（桌面主进程另有同栈校验）
+        }
+    }
+
     async function verifyPassword(inputPassword, storedPassword, username) {
         if (!storedPassword) return false;
+        // ★ 2026-09-25 新 PBKDF2 慢哈希优先
+        if (isStrongPasswordHash(storedPassword)) {
+            return await verifyStrongPassword(inputPassword, storedPassword);
+        }
         if (isPasswordHashed(storedPassword)) {
             // 先尝试增强版哈希（含用户名盐值）
             if (username) {
@@ -1859,7 +1904,14 @@
             if (_ok) { user = u; break; }
         }
         if (user) {
-            return { success: true, user: user, matchedIdentifier: matchedIdentifier, source: 'local' };
+            return {
+                success: true,
+                user: user,
+                matchedIdentifier: matchedIdentifier,
+                source: 'local',
+                // ★ 2026-09-25：旧哈希（全局盐/用户名盐 SHA256 或明文）→ 调用方可透明升级
+                weakHash: !isStrongPasswordHash(user.password || '')
+            };
         }
         if (options.cloud && typeof CLOUD_API_BASE !== 'undefined' && CLOUD_API_BASE) {
             try {
@@ -2214,47 +2266,471 @@
 
     // ==================== 导出 ====================
 
-    // ========== 登录后台闸门（2026-09-22 P0：后台删除诊所/激活码必须吊销） ==========
+    // ========== 登录后台闸门（2026-09-22 P0；2026-09-27 P3-A 宽限收口） ==========
     // 背景：登录窗口此前是纯本地密码比对，主窗口心跳又因缺 license:machineId 永远
     //   自门控退出 → 后台删除记录客户端无任何感知。
-    // 规则（用户拍板）：
+    // 规则（用户拍板 + P3-A 修订）：
     //   ① 本机已激活（licensed 非 free）→ 必须联网读到后台 state=LICENSED 才放行；
     //      NO_LICENSE（诊所/码已删）/REVOKED/EXPIRED 一律 fail-closed 拒绝；
     //   ② 本机试用期（trial remainingDays>0）→ 放行；试用过期拒绝；
+    //      ★ APP 首次试用必须联网注册成功（strict，见 Java registerTrialOnline）；
     //   ③ 永久免费版 free → 产品承诺永久离线可用，豁免在线闸门；
-    //   ④ 网络不可达 → 凭 license:offlineStart 给 7 天宽限，超期锁定。
+    //   ④ 网络不可达 → 凭服务端签发的 ES256 gate token 离线验签放行
+    //      （mid 绑定 + 服务端校正时钟 + 回拨检测）；token 缺失/过期/篡改 fail-closed。
     // 副作用：激活机登录时补写 license:machineId，让主窗口 performHeartbeatCheck 复活。
-    const LOGIN_GATE_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
     const LOGIN_GATE_ENTITLEMENT_URL = 'https://tcm-prescription-system.pages.dev/api/license/entitlement';
+
+    // ========== P3-A：Gate Token（ES256）离线验签 ==========
+    // 服务端裁决放行时签发短周期 token（私钥仅服务端持有）；此处只内置验签公钥。
+    // kid 映射支持密钥轮换（轮换时预置新旧公钥）。公钥=SPKI DER base64（标准/base64url 均可）。
+    const GATE_VERIFY_PUBKEYS = Object.freeze({
+        v1: 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEzyAyTa5wJL44H5DeyZBLVNlNgyE9'
+          + '2BOqibasK+J69Wh+a58JscqR3pDRZBmQ1M+F3upJYXQQYjV7lOK5f5eCJA==',
+        // v2：轮换预置（2026-09）。私钥已备，生产默认 kid 暂仍 v1；
+        // 待所有端（含无法热更的桌面端）均内置 v2 后，再经 GATE_SIGN_KID 切换签发。
+        v2: 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEMBkE0WC4qN3sQkIWi5vtzJTvjvk82'
+          + 'ebTzlVO+EAzpq/OYrxmyZRU7VSvTeETCYK/inABVFfHvvdQo0HGA80I8Q=='
+    });
+    const GATE_CLOCK_SKEW_GRACE_MS = 5 * 60 * 1000;   // 回拨判定容差
+    const GATE_MAX_OFFSET_MS = 10 * 60 * 1000;         // 时钟偏移容忍上限
+
+    function b64urlToBytes(s) {
+        s = String(s).replace(/-/g, '+').replace(/_/g, '/');
+        while (s.length % 4) s += '=';
+        const bin = atob(s);
+        const u8 = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+        return u8;
+    }
+    function b64urlToStr(s) { return new TextDecoder().decode(b64urlToBytes(s)); }
+
+    // 验证 gate token；成功返回 payload，任何异常/不符返回 null（fail-closed）
+    async function verifyGateToken(token, machineId, adjustedNowMs) {
+        try {
+            const parts = String(token || '').split('.');
+            if (parts.length !== 3) return null;
+            const header = JSON.parse(b64urlToStr(parts[0]));
+            const payload = JSON.parse(b64urlToStr(parts[1]));
+            if (!header || header.alg !== 'ES256') return null;
+            const pubB64 = GATE_VERIFY_PUBKEYS[header.kid];
+            if (!pubB64) return null;
+            if (!payload || payload.v !== 1 || payload.mid !== machineId) return null;
+            // exp 上界（token 有效期）
+            const expMs = Number(payload.exp) * 1000;
+            if (!(expMs > adjustedNowMs)) return null;
+            // ★ iat 下界（签名内不可篡改）：即使 maxLocalTime 锚点被删 + 时钟大回拨，
+            //   adjustedNow 也不得早于签发时刻超容差——堵住「删单键+回拨」绕过。
+            const iatFloorMs = (Number(payload.iat) - GATE_CLOCK_SKEW_GRACE_MS / 1000) * 1000;
+            if (!(adjustedNowMs >= iatFloorMs)) return null;
+            // ★ licExp：授权本身在 token 窗口内到期 → 离线同样不超用
+            if (payload.licExp) {
+                const licExpMs = Number(payload.licExp) * 1000;
+                if (!(licExpMs >= adjustedNowMs)) return null;
+            }
+            const key = await global.crypto.subtle.importKey(
+                'spki', b64urlToBytes(pubB64),
+                { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
+            const ok = await global.crypto.subtle.verify(
+                { name: 'ECDSA', hash: 'SHA-256' }, key,
+                b64urlToBytes(parts[2]),
+                new TextEncoder().encode(parts[0] + '.' + parts[1]));
+            return ok ? payload : null;
+        } catch (e) { return null; }
+    }
+
+    async function readClockOffsetMs() {
+        try {
+            const raw = await StorageAdapter.getItem('license:clockOffsetMs');
+            if (raw == null || raw === '') return null;   // 从无在线基线
+            const n = Number(raw);
+            return Number.isFinite(n) ? n : null;
+        } catch (e) { return null; }
+    }
+
+    // 时间回拨检测：当前本地时间比历史最大本地时间小超容差 → 回拨嫌疑。
+    // 同时把最大本地时间向前推进（防前调到未来再调回）。
+    async function detectClockRollback(nowLocal) {
+        try {
+            const maxSeen = Number(await StorageAdapter.getItem('license:maxLocalTime')) || 0;
+            if (nowLocal + GATE_CLOCK_SKEW_GRACE_MS < maxSeen) return true;
+            if (nowLocal > maxSeen) {
+                await StorageAdapter.setItem('license:maxLocalTime', String(nowLocal));
+            }
+        } catch (e) {}
+        return false;
+    }
+
+    // 在线成功时以服务端权威时间重置时钟基线：clockOffset + maxLocal 一起覆盖。
+    // 作用：用户曾前调系统时钟污染 maxLocalTime 后，只要联网成功即可自愈，
+    // 不必等真实时钟自然越过污染值。返回是否成功。
+    async function refreshClockBaseline(localNow, serverTime) {
+        try {
+            const serverMs = Date.parse(serverTime);
+            if (!Number.isFinite(serverMs)) return false;
+            await StorageAdapter.setItem('license:clockOffsetMs', String(serverMs - localNow));
+            await StorageAdapter.setItem('license:maxLocalTime', String(serverMs));
+            return true;
+        } catch (e) { return false; }
+    }
+
+    // 统一离线裁决：登录门与心跳共用。返回 {ok:true,payload} 或 {ok:false,reason}
+    async function evaluateOfflineGate(machineId) {
+        const localNow = Date.now();
+        if (await detectClockRollback(localNow)) return { ok: false, reason: 'rollback' };
+        const offsetMs = await readClockOffsetMs();
+        if (offsetMs == null) return { ok: false, reason: 'no-baseline' };
+        if (Math.abs(offsetMs) > GATE_MAX_OFFSET_MS) return { ok: false, reason: 'offset' };
+        let gateToken = '';
+        try { gateToken = await StorageAdapter.getItem('license:gateToken') || ''; } catch (e) {}
+        try { await StorageAdapter.removeItem('license:offlineStart'); } catch (e) {}
+        const payload = await verifyGateToken(gateToken, machineId, localNow + offsetMs);
+        return payload ? { ok: true, payload: payload } : { ok: false, reason: 'expired' };
+    }
+    const OFFLINE_GATE_REASON_MSG = Object.freeze({
+        'rollback': '系统时间异常，请恢复为正确时间后联网登录',
+        'no-baseline': '本机授权状态异常，请连接网络后登录，或联系客服',
+        'offset': '系统时间与授权服务器偏差过大，请校正时间后联网登录',
+        'expired': '离线授权已到期，请连接网络后登录，或联系客服'
+    });
+
+    // ======================================================================
+    //  P3-B：Android 设备证明编排
+    //  桌面/云端检测不到 attestation 桥，全部函数自动短路（零影响）。
+    // ======================================================================
+    const ATTESTATION_REGISTER_URL =
+        'https://tcm-prescription-system.pages.dev/api/license/attestation/register';
+    // gate token 剩余 <12h 视为应尽快带 proof 续签（48h TTL 下仅断网恢复时逼近）
+    const PROOF_RENEW_THRESHOLD_MS = 12 * 60 * 60 * 1000;
+
+    function isAndroidRuntime() {
+        try {
+            const att = global.electronAPI
+                && global.electronAPI.license
+                && global.electronAPI.license.attestation;
+            if (!att || typeof att.probe !== 'function') return false;
+            return /android/i.test((global.navigator && global.navigator.userAgent) || '');
+        } catch (e) { return false; }
+    }
+
+    async function readAttState() {
+        try {
+            return JSON.parse(await StorageAdapter.getItem('license:attState') || 'null') || {};
+        } catch (e) { return {}; }
+    }
+    async function writeAttState(patch) {
+        try {
+            const next = Object.assign({}, await readAttState(), patch,
+                { updatedAt: Date.now() });
+            await StorageAdapter.setItem('license:attState', JSON.stringify(next));
+            return next;
+        } catch (e) { return null; }
+    }
+
+    /** POST 设备证明注册端点；非 2xx 返 {__httpStatus}，网络异常返 null。 */
+    async function postAttestation(payload) {
+        try {
+            const resp = await fetch(ATTESTATION_REGISTER_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (!resp.ok) return { __httpStatus: resp.status };
+            return await resp.json();
+        } catch (e) { return null; }
+    }
+
+    /**
+     * 确保设备已完成证明登记（Tier A 硬件链）。
+     * @param {object} o
+     * @param {string} o.mid             机器 ID
+     * @param {Function} [o.getResetAuth] 公钥变更被拒时，异步返回有效 sessionToken
+     * @param {boolean} [o.force]        强制重跑（无视本地 registered 标记）
+     * @returns {{tier:'A'|'B'|'n/a', registered:boolean, reason:?string, kid:?string}}
+     */
+    async function ensureDeviceAttested(o) {
+        const mid = o && o.mid;
+        const ret = { tier: 'n/a', registered: false, reason: null, kid: null };
+        if (!mid || !isAndroidRuntime()) return ret;
+
+        const att = global.electronAPI.license.attestation;
+        if (!o.force) {
+            const st = await readAttState();
+            if (st.tier === 'A' && st.registered) {
+                return { tier: 'A', registered: true, reason: null,
+                         kid: st.kid || null };
+            }
+        }
+
+        // ① 探针定 Tier
+        let probe = null;
+        try { probe = await att.probe(); } catch (e) {}
+        if (!probe || !probe.ok || probe.tier !== 'A') {
+            ret.tier = 'B';
+            ret.reason = (probe && (probe.unsupported || probe.tier)) || 'probe_failed';
+            await writeAttState({ tier: 'B', registered: false,
+                                  lastReason: ret.reason });
+            return ret;
+        }
+        ret.tier = 'A';
+
+        // ② challenge → 强制新生成证明密钥（证书链与本次 challenge 绑定）→ register
+        let resetAuth = '';
+        for (let attempt = 0; attempt < 2; attempt++) {
+            const ch = await postAttestation({ action: 'challenge', mid });
+            if (!ch || !ch.challenge) {
+                ret.reason = (ch && ch.__httpStatus)
+                    ? ('http_' + ch.__httpStatus) : 'challenge_failed';
+                return ret;
+            }
+
+            let ek = null;
+            try { ek = await att.ensureKey(ch.challenge, true, true); } catch (e) {}
+            if (!ek || !ek.ok) {
+                try { ek = await att.ensureKey(ch.challenge, false, true); }
+                catch (e) {}
+            }
+            if (!ek || !ek.ok || !ek.chain || !ek.chain.length) {
+                ret.reason = (ek && ek.unsupported) || 'ensure_key_failed';
+                return ret;
+            }
+
+            const regBody = {
+                action: 'register', mid,
+                certChain: ek.chain,
+                apiLevel: probe.sdkInt || 0
+            };
+            if (resetAuth) regBody.resetAuth = resetAuth;
+            const reg = await postAttestation(regBody);
+            if (!reg) { ret.reason = 'register_unreachable'; return ret; }
+
+            if (reg.success && reg.allowed) {
+                ret.registered = true;
+                ret.kid = reg.kid || ek.keyId || null;
+                await writeAttState({
+                    tier: 'A', registered: true,
+                    kid: ret.kid, secLevel: reg.secLevel || null
+                });
+                return ret;
+            }
+
+            // 公钥重置被拒：取 resetAuth 后只允许重试一次
+            if (reg.code === 'RESET_AUTH_REQUIRED' && o.getResetAuth && !resetAuth) {
+                try { resetAuth = await o.getResetAuth() || ''; } catch (e) {}
+                if (resetAuth) continue;
+            }
+            ret.reason = reg.reason || reg.code || 'register_rejected';
+            ret.resetDenied = reg.code === 'RESET_AUTH_REQUIRED';
+            await writeAttState({
+                tier: 'A', registered: false,
+                lastReason: ret.reason, kid: ek.keyId || null
+            });
+            return ret;
+        }
+        ret.reason = 'reset_auth_failed';
+        return ret;
+    }
+
+    async function safeSignProof(mid, nonce) {
+        try {
+            const r = await global.electronAPI.license.attestation
+                .signProof(mid, nonce);
+            return (r && r.ok && r.sig)
+                ? { kid: r.kid, sig: r.sig } : null;
+        } catch (e) { return null; }
+    }
+
+    /**
+     * 统一在线 entitlement 请求（登录门/心跳共用）：
+     *   Android → 先确保设备证明（best-effort；Tier B 自动回退）→ 带 platform 裁决；
+     *   needProof + nonce → signProof → 带 proof 重试一次；
+     *   needAttestation   → 强制重跑登记 → 重试一次。
+     * 每次信号最多额外一轮，杜绝无限循环。
+     * @returns {{httpStatus:number, ent:?object, attInfo:?object, malformed:boolean}}
+     *   malformed=true 表示 HTTP 200 但响应体不是合法 JSON（非断网，调用方 fail-closed）
+     */
+    async function requestEntitlement(o) {
+        const { mid, code, username, getResetAuth } = o;
+        const android = isAndroidRuntime();
+        let attInfo = null;
+        if (android) {
+            attInfo = await ensureDeviceAttested({ mid, getResetAuth });
+        }
+
+        const postOnce = async (extra) => {
+            const payload = Object.assign({
+                machineId: mid,
+                code: code || undefined,
+                username: username || undefined
+            }, android ? { platform: 'android' } : null, extra || {});
+            let resp;
+            try {
+                resp = await fetch(LOGIN_GATE_ENTITLEMENT_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+            } catch (e) {
+                // 真·网络不可达（DNS/TCP 失败等）→ httpStatus 0 走离线门
+                return { httpStatus: 0, ent: null };
+            }
+            if (!resp.ok) return { httpStatus: resp.status, ent: null };
+            try {
+                return { httpStatus: resp.status, ent: await resp.json() };
+            } catch (e) {
+                // ★ 2026-09-27：HTTP 200 但响应体畸形（代理解析页/脏响应）不是
+                //   断网——单独 malformed 标记 fail-closed，与主进程
+                //   adjudicateViaMainProcess 的 {malformed:true} 同口径，绝不映射
+                //   httpStatus:0 误入离线 gate token 门。
+                return { httpStatus: resp.status, ent: null, malformed: true };
+            }
+        };
+
+        const first = await postOnce();
+        const ent = first.ent;
+        if (!ent || !ent.success) {
+            return { httpStatus: first.httpStatus, ent, attInfo,
+                     malformed: !!first.malformed };
+        }
+
+        // ① needProof：用下发 nonce 签名后重试一次
+        if (ent.needProof && ent.proofNonce && android) {
+            const sp = await safeSignProof(mid, ent.proofNonce.nonce);
+            if (sp) {
+                const second = await postOnce({
+                    proof: { kid: sp.kid, jti: ent.proofNonce.jti, sig: sp.sig }
+                });
+                if (second.malformed) {
+                    // 二次 POP 响应畸形：fail-closed，不回退消费 first 裁决
+                    return { httpStatus: second.httpStatus, ent: null,
+                             attInfo, malformed: true };
+                }
+                if (second.ent) {
+                    await recordProofTelemetry(second.ent);
+                    return { httpStatus: second.httpStatus,
+                             ent: second.ent, attInfo };
+                }
+            }
+        }
+
+        // ② needAttestation：强制重跑登记后重试一次
+        if (ent.needAttestation && android) {
+            attInfo = await ensureDeviceAttested({ mid, getResetAuth, force: true });
+            if (attInfo.registered) {
+                const second = await postOnce();
+                if (second.malformed) {
+                    return { httpStatus: second.httpStatus, ent: null,
+                             attInfo, malformed: true };
+                }
+                if (second.ent) {
+                    return { httpStatus: second.httpStatus,
+                             ent: second.ent, attInfo };
+                }
+            }
+        }
+
+        await recordProofTelemetry(ent);
+        return { httpStatus: first.httpStatus, ent, attInfo };
+    }
+
+    async function recordProofTelemetry(ent) {
+        if (!isAndroidRuntime()) return;
+        try {
+            await writeAttState({
+                lastProofState: ent.proofState || null,
+                attMode: ent.attMode || null
+            });
+        } catch (e) {}
+    }
+
+    /**
+     * gate token 剩余时长（毫秒）；读不到/异常 → null。
+     * 用于断网恢复后判断是否需立即带 proof 续签（<12h）。
+     */
+    async function gateTokenRemainingMsAsync() {
+        try {
+            const token = await StorageAdapter.getItem('license:gateToken') || '';
+            const parts = String(token).split('.');
+            if (parts.length !== 3) return null;
+            const payload = JSON.parse(b64urlToStr(parts[1]));
+            const expMs = Number(payload && payload.exp) * 1000;
+            if (!Number.isFinite(expMs)) return null;
+            return expMs - Date.now();
+        } catch (e) { return null; }
+    }
 
     let __loginGatePromise = null;
     let __loginGateUser = '';
     function resetLoginGateCache() { __loginGatePromise = null; }
-    async function verifyLoginGate(usernameInput) {
+
+    // ★ 2026-09-27 C2 关键时序：指纹功能平台判定【不得】用 isAndroidRuntime()
+    //   ——它依赖 electronAPI.license.attestation，而 electronAPI shim 由
+    //   Java onPageFinished 之后才注入，晚于本 IIFE 的同步执行期（同文件
+    //   IIFE-2 须 setTimeout 2s 等 shm 即旁证）；同步期调用必 false 且无重试，
+    //   功能在冷启动整页死亡。AndroidNative 是 addJavascriptInterface 在页面
+    //   加载【之前】挂载，脚本解析期即可用。老 APK 无 biometric* 动作，
+    //   probe 返回 unknown method（success:false）→ no-op，零行为变化。
+    function androidNativeBridgeReady() {
+        try {
+            if (typeof global.AndroidNative === 'undefined' || !global.AndroidNative ||
+                typeof global.AndroidNative.invoke !== 'function') return false;
+            return /android/i.test((global.navigator && global.navigator.userAgent) || '');
+        } catch (e) { return false; }
+    }
+
+    // ★ 2026-09-27 指纹快速登录：门裁决为吊销/删除/停用时清本机指纹凭据。
+    //   必须是闭包内独立函数（不能在 installBiometricUnlock 里包
+    //   global.AuthCore.verifyLoginGate）——主窗自检 installMainWindowGate
+    //   直连闭包内 verifyLoginGate，不经过 global 包装（安全审查 M2）。
+    //   仅 Android 桥存在时生效；桌面/老 APK no-op；永不抛错、不改门结果。
+    //   过期不在其列（续费后同账号指纹仍可继续用）。
+    function purgeBiometricCredential(username) {
+        try {
+            if (!androidNativeBridgeReady()) return;
+            global.AndroidNative.invoke('biometricDelete', JSON.stringify({
+                username: String(username || '')
+            }));
+        } catch (e) {}
+    }
+
+    async function verifyLoginGate(usernameInput, opts) {
         const username = String(usernameInput == null ? '' : usernameInput).trim().slice(0,64);
+        let r = null;
         // ★ 桌面端：裁决一律走主进程 IPC（file:// 渲染 fetch 必被 CORS 拦截，
         //   锚点 gate.dat 签名由主进程持有）。下方渲染 fetch 仅作无 IPC 环境兜底。
         try {
             const licApi = global.electronAPI && global.electronAPI.license;
             if (licApi && typeof licApi.verifyGate === 'function') {
-                return await licApi.verifyGate(username);
+                r = await licApi.verifyGate(username);
             }
         } catch (e) { console.warn('[LoginGate] IPC 裁决异常(走渲染兜底):', e && e.message); }
         // 兜底裁决按 username 缓存（不同账号登录不串用）；window online 时清空
         // （宽限拒绝后联网重试不必重启应用）。
-        if (!__loginGatePromise || __loginGateUser !== username) {
-            __loginGateUser = username;
-            __loginGatePromise = __verifyLoginGateInner(username);
+        if (!r) {
+            if (!__loginGatePromise || __loginGateUser !== username) {
+                __loginGateUser = username;
+                __loginGatePromise = __verifyLoginGateInner(username, opts);
+            }
+            r = await __loginGatePromise;
         }
-        return __loginGatePromise;
+        // ★ 吊销/删除/停用硬拒 → 同步删指纹凭据（出口收口，登录链与主窗自检
+        //   两条调用路径全覆盖；delete 幂等，缓存期重复调用无害）
+        try {
+            if (r && !r.ok && username &&
+                /吊销|已被删除|已被停用|默认账户已停用/.test(String(r.message || ''))) {
+                purgeBiometricCredential(username);
+            }
+        } catch (e) {}
+        return r;
     }
     try {
         global.addEventListener('online', resetLoginGateCache);
     } catch (e) {}
 
-    async function __verifyLoginGateInner(usernameInput) {
+    async function __verifyLoginGateInner(usernameInput, opts) {
         const fail = (message) => ({ ok: false, message });
         const username = String(usernameInput == null ? '' : usernameInput).trim().slice(0,64);
+        const getResetAuth = opts && typeof opts.getResetAuth === 'function'
+            ? opts.getResetAuth : null;
         // ★ 2026-09-23 账号删除文案
         const accountRevokedMsg = '该账号已被删除，无法登录。如有疑问请联系客服';
         try {
@@ -2306,25 +2782,39 @@
                 try { code = await StorageAdapter.getItem('license:code') || ''; } catch (e) {}
 
                 let ent = null;
+                let entHttpStatus = 0;
+                let entMalformed = false;
                 try {
-                    const resp = await fetch(LOGIN_GATE_ENTITLEMENT_URL, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ machineId: machineId, code: code || undefined,
-                            username: username || undefined })
+                    // ★ P3-B：统一裁决请求——Android 自动带设备证明 + 两步式 POP；
+                    //   桌面端无 attestation 桥即短路，行为与旧版一致。
+                    const rq = await requestEntitlement({
+                        mid: machineId, code, username,
+                        getResetAuth: getResetAuth || undefined
                     });
-                    if (resp.ok) { ent = await resp.json(); }
-                    else if (resp.status === 403) {
+                    entHttpStatus = rq.httpStatus;
+                    ent = rq.ent;
+                    entMalformed = !!rq.malformed;
+                    if (entHttpStatus === 403) {
                         // ★ 2026-09-23：403 = 设备安全封锁（device_block），按
                         //   2026-09-11 红线「本地使用不阻断」，ent 留空走下方
                         //   宽限（与网络不可达同口径；此为旧主进程兜底路径）。
                     }
-                    else {
+                    else if (entHttpStatus !== 200 && entHttpStatus !== 0) {
                         // ★ S2 修复：其他 HTTP 错误（429/500…）不是断网，
                         //   fail-closed，绝不落入宽限 fail-open。
-                        return fail('授权服务暂时不可用（HTTP ' + resp.status + '），请稍后重试或联系客服');
+                        // ★ 2026-09-27 紧急回归修复（P3-B 引入）：200=裁决成功
+                        //   ——register 被 429 限流时，observe 模式下 entitlement
+                        //   仍返回 200 LICENSED；此前条件把 200 也误判失败，导致
+                        //   登录页冷启动弹管理员激活框+登录报「HTTP 200」红字。
+                        return fail('授权服务暂时不可用（HTTP ' + entHttpStatus + '），请稍后重试或联系客服');
                     }
-                } catch (e) { /* 仅真·网络不可达（TypeError）才走下方宽限 */ }
+                } catch (e) { /* 仅真·网络不可达（httpStatus=0）才走下方宽限 */ }
+
+                if (entMalformed) {
+                    // ★ 2026-09-27：200 响应体畸形 ≠ 断网，fail-closed（与主进程
+                    //   license-manager 的 malformed 同口径），不落离线 gate token 门。
+                    return fail('授权服务响应异常，请稍后重试或联系客服');
+                }
 
                 if (ent) {
                     // ★ 2026-09-23 账号删除优先裁决：即使设备授权有效，账号墓碑命中即硬拒。
@@ -2352,11 +2842,21 @@
                         return fail(accountRevokedMsg);
                     }
                     if (ent.success && ent.state === 'LICENSED') {
-                        const now = String(Date.now());
+                        const localNow = Date.now();
+                        const now = String(localNow);
                         try {
                             await StorageAdapter.setItem('license:lastVerify', now);
                             await StorageAdapter.setItem('license:lastHeartbeat', now);
                             await StorageAdapter.removeItem('license:offlineStart');
+                            // ★ P3-A：保存服务端 gate token（离线唯一放行凭证，TTL 由服务端定）
+                            if (ent.gateToken) {
+                                await StorageAdapter.setItem('license:gateToken', String(ent.gateToken));
+                            }
+                            // ★ P3-A：以服务端权威时间重置时钟基线（前调污染联网即自愈）；
+                            //   无 serverTime 时退化为仅推进本地基线
+                            if (!await refreshClockBaseline(localNow, ent.serverTime)) {
+                                await detectClockRollback(localNow);
+                            }
                             // 服务端确认账号无墓碑：只清【本用户名】的拒绝标记；
                             // ★ username 缺失时绝不清理（防同机他人正常联网替被删账号解封）
                             if (username) {
@@ -2382,8 +2882,9 @@
                     return fail(ent.message || '授权校验未通过，请联系客服');
                 }
 
-                // ④ 仅网络不可达：先查账号级硬拒（该 username 在线收到过账号删除，
-                //   断网也不给宽限），再走 7 天宽限（与心跳 OFFLINE_LOCK_MS 同口径）
+                // ④ P3-A：仅网络不可达 → gate token 离线验签（取代旧固定 7 天宽限）。
+                //   先查账号级硬拒（该 username 在线收到过账号删除，token 有效也拒），
+                //   再查时间回拨/时钟基线，最后验签；任一不符 fail-closed。
                 if (username) {
                     let __arm = null;
                     try { __arm = JSON.parse(await StorageAdapter.getItem('license:accountReject') || 'null'); } catch (e) {}
@@ -2395,17 +2896,12 @@
                         return fail(accountRevokedMsg);
                     }
                 }
-                const now = Date.now();
-                let offlineStart = 0;
-                try { offlineStart = Number(await StorageAdapter.getItem('license:offlineStart')) || 0; } catch (e) {}
-                if (!offlineStart) {
-                    offlineStart = now;
-                    try { await StorageAdapter.setItem('license:offlineStart', String(now)); } catch (e) {}
+                // P3-A 离线裁决（时间回拨/时钟基线/ES256 验签统一处理）
+                const gate = await evaluateOfflineGate(machineId);
+                if (gate.ok) {
+                    return { ok: true, gate: true };
                 }
-                if (now - offlineStart < LOGIN_GATE_GRACE_MS) {
-                    return { ok: true, grace: true };
-                }
-                return fail('无法连接授权服务器且已超过 7 天离线宽限期，请联网后重试或联系客服');
+                return fail(OFFLINE_GATE_REASON_MSG[gate.reason] || OFFLINE_GATE_REASON_MSG.expired);
             }
 
             // ★ S3 修复：本地状态无效（valid:false）→ 按 type 给可读消息，fail-closed
@@ -2414,6 +2910,7 @@
                     expired: '授权已过期，请续费后再登录',
                     trial_expired: '试用期已过期，请激活后再登录',
                     trial_limit_reached: '试用处方额度已用完，请激活后再登录',
+                    trial_need_network: '需要连接网络完成首次注册，请联网后重新打开',
                     tampered: '授权文件已损坏，请重新激活',
                     config_tampered: '授权文件已损坏，请重新激活',
                     binding_mismatch: '授权与本机不匹配，请联系客服',
@@ -2435,7 +2932,7 @@
     // 架构铁律：登录窗口固定 loadFile(asar/electron/login.html)，热更永不触达；
     //   只有主窗口 index.html + auth-core.js 热更可达。故主窗口一加载就对已激活机
     //   跑闸门：NO_LICENSE（后台删诊所/码）/REVOKED/EXPIRED 立即锁。
-    // trial（试用期）与 free（永久免费）不在此门；网络失败由闸门内部 7 天宽限处理。
+    // trial（试用期）与 free（永久免费）不在此门；网络失败由 gate token 离线验签处理。
     function installMainWindowGate() {
         const run = async () => {
             try {
@@ -2476,6 +2973,288 @@
         else run();
     }
     installMainWindowGate();
+
+    // ====================================================================
+    // 指纹快速登录（2026-09-27）——仅 Android
+    // 铁律：指纹只替代「输入密码」，解锁后仍走 handleLogin 完整链路
+    // （本地校验 + verifyLoginGate 授权门），不新增任何放行路径。
+    // UI 一律运行时注入，index.html 静态 DOM 零改动（界面保护铁律）。
+    // ====================================================================
+    function installBiometricUnlock() {
+        // C2：只认「UA Android + AndroidNative 桥」，不认晚注入的 electronAPI
+        if (!androidNativeBridgeReady()) return;
+
+        const bridge = (action, payload) => {
+            try {
+                const raw = global.AndroidNative.invoke(action, JSON.stringify(payload || {}));
+                return JSON.parse(raw);
+            } catch (e) { return null; }
+        };
+
+        // M-3：安装体封成 setup()，probe 未就绪时可重入重探。
+        //   返回 legacy=老 APK（桥无此动作，确定性不支持，永不重试）；
+        //   wait=暂不可用（开机 HAL 未就绪/尚未录入指纹，可后续变 capable）；
+        //   done=已安装。
+        let installed = false;
+        const setup = () => {
+            if (installed) return 'done';
+        const probe = bridge('biometricProbe');
+        if (probe && probe.success === false && probe.error &&
+            String(probe.error).indexOf('unknown method') >= 0) {
+            return 'legacy'; // 老 APK：整体 no-op，零行为变化
+        }
+        if (!probe || !probe.success || !probe.capable) return 'wait';
+        installed = true;
+
+        let origHandleLogin = null;
+        let wrapped = false;
+
+        const curUsername = () => {
+            const el = document.getElementById('loginUsername');
+            return el ? String(el.value || '').trim() : '';
+        };
+
+        const ensureRow = () => {
+            let row = document.getElementById('bioUnlockRow');
+            if (row) return row;
+            const box = document.querySelector('#loginOverlay .login-box');
+            if (!box) return null;
+            row = document.createElement('div');
+            row.id = 'bioUnlockRow';
+            row.style.cssText = 'display:none;margin-top:10px;text-align:center;';
+            row.innerHTML =
+                '<button type="button" id="bioUnlockBtn" style="width:100%;padding:10px;border:none;' +
+                'border-radius:6px;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;' +
+                'font-size:15px;cursor:pointer;">指纹解锁登录</button>' +
+                '<a href="javascript:void(0)" id="bioDisableLink" style="display:inline-block;' +
+                'margin-top:8px;font-size:12px;color:#999;text-decoration:underline;">关闭指纹登录</a>';
+            box.appendChild(row);
+            document.getElementById('bioUnlockBtn').addEventListener('click', doUnlock);
+            document.getElementById('bioDisableLink').addEventListener('click', doDisable);
+            return row;
+        };
+
+        const refresh = () => {
+            const row = ensureRow();
+            if (!row) return;
+            const u = curUsername();
+            if (!u) { row.style.display = 'none'; return; }
+            const st = bridge('biometricStatus', { username: u });
+            row.style.display = (st && st.success && st.enrolled) ? 'block' : 'none';
+        };
+
+        // 解锁成功→回填密码→走原始 handleLogin（本地 PBKDF2 + 授权门约 1-3 秒，
+        // 与密码登录同链路不可省）期间，用遮罩盖住登录框，避免裸框闪烁造成"卡顿"观感。
+        const showLoggingMask = () => {
+            let m = document.getElementById('bioLoggingMask');
+            if (m) { m.style.display = 'flex'; return; }
+            m = document.createElement('div');
+            m.id = 'bioLoggingMask';
+            m.style.cssText = 'position:fixed;left:0;top:0;right:0;bottom:0;z-index:99999;' +
+                'display:flex;flex-direction:column;align-items:center;justify-content:center;' +
+                'background:rgba(255,255,255,0.92);';
+            m.innerHTML =
+                '<div style="width:42px;height:42px;border:4px solid #d8def5;' +
+                'border-top-color:#667eea;border-radius:50%;' +
+                'animation:bioSpin .8s linear infinite;"></div>' +
+                '<div style="margin-top:14px;font-size:15px;color:#555;">指纹验证成功，正在登录…</div>' +
+                '<style>@keyframes bioSpin{to{transform:rotate(360deg)}}</style>';
+            document.body.appendChild(m);
+        };
+        const hideLoggingMask = () => {
+            const m = document.getElementById('bioLoggingMask');
+            if (m) m.style.display = 'none';
+        };
+        // 遮罩收口：登录层一旦隐藏（密码校验通过、主界面开始呈现）立即收起——
+        //   不能等 handleLogin 整体 resolve：其成功路径在隐藏登录层后还会
+        //   await loadData()（IndexedDB，慢机/大处方库可达十余秒），干等会白屏
+        //   盖住已进入的主界面。失败路径登录层不隐藏，由 finally 保底收起；
+        //   30s 看门狗防门网络静默挂起导致遮罩常驻。
+        let maskPoll = null, maskWatchdog = null, maskClosed = false;
+        const closeLoggingMask = () => {
+            if (maskClosed) return;
+            maskClosed = true;
+            if (maskPoll) { clearInterval(maskPoll); maskPoll = null; }
+            if (maskWatchdog) { clearTimeout(maskWatchdog); maskWatchdog = null; }
+            hideLoggingMask();
+        };
+        const armLoggingMask = () => {
+            maskClosed = false;
+            showLoggingMask();
+            maskPoll = setInterval(() => {
+                const ov = document.getElementById('loginOverlay');
+                if (ov && ov.style.display === 'none') closeLoggingMask();
+            }, 120);
+            maskWatchdog = setTimeout(closeLoggingMask, 30000);
+        };
+
+        const doUnlock = async () => {
+            const u = curUsername();
+            if (!u) return;
+            const errEl = document.getElementById('loginError');
+            if (errEl) errEl.style.display = 'none';
+            const r = bridge('biometricUnlock', { username: u });
+            if (r && r.success && typeof r.password === 'string') {
+                document.getElementById('loginUsername').value = u;
+                document.getElementById('loginPassword').value = r.password;
+                if (origHandleLogin) {
+                    armLoggingMask();
+                    try {
+                        await origHandleLogin();
+                    } finally {
+                        // 失败/异常路径（登录层仍在）由此收起；成功路径遮罩已在
+                        // 轮询探到登录层隐藏时提前收起，closeLoggingMask 幂等。
+                        closeLoggingMask();
+                    }
+                }
+                // M3 自收敛：密码已在他处被改（改名/改密/忘记密码重置时桥失败，
+                // 旧密文残留），本地 PBKDF2 校验必失败（登录层仍在+本地失败文案）。
+                // 必须精确匹配本地失败文案，不能用 /密码错误/——会误吞授权门的
+                // 「密码错误次数过多，账号已暂时锁定」。网络/HTTP/门错误不误删。
+                try {
+                    const ov = document.getElementById('loginOverlay');
+                    if (ov && ov.style.display !== 'none' && errEl &&
+                        String(errEl.textContent || '')
+                            .indexOf('手机号/用户名或密码错误') !== -1) {
+                        bridge('biometricDelete', { username: u });
+                    }
+                } catch (e) {}
+                refresh();
+                return;
+            }
+            // 按 Java 稳定 errorCode 分支（H1/M1，不依赖中文文案正则）：
+            // invalidated=指纹库变更致密钥作废或密文损坏，Java 已自清，
+            //   这里兜底再删（幂等）并隐藏入口；
+            // cancel=用户主动取消/点「使用密码」，静默；
+            // lockout/timeout/unavailable/failed=红字提示，杜绝点击无反馈。
+            if (r && r.code === 'invalidated') {
+                bridge('biometricDelete', { username: u });
+                refresh();
+            } else if (r && r.code !== 'cancel' && r.error) {
+                if (errEl) {
+                    errEl.textContent = '指纹解锁失败：' + r.error;
+                    errEl.style.display = 'block';
+                }
+            }
+        };
+
+        const doDisable = () => {
+            const u = curUsername();
+            if (!u) return;
+            if (typeof global.confirm === 'function' &&
+                !global.confirm('确定关闭该账号的指纹快速登录吗？')) return;
+            bridge('biometricDelete', { username: u });
+            refresh();
+        };
+
+        // 密码登录成功后的开通引导
+        const offerEnroll = (username, password) => {
+            if (!username || !password) return;
+            const st = bridge('biometricStatus', { username });
+            if (st && st.success && st.enrolled) return;
+            try {
+                const key = 'bioOfferDismiss_' + username;
+                const last = Number(global.localStorage.getItem(key) || 0);
+                if (last && Date.now() - last < 30 * 24 * 3600 * 1000) return;
+            } catch (e) {}
+            let yes = false;
+            try {
+                yes = global.confirm(
+                    '是否开启指纹快速登录？\n' +
+                    '开通后可使用指纹直接登录，无需输入密码。\n' +
+                    '注意：本机已录入的所有指纹都能解锁该账号。');
+            } catch (e) { return; }
+            if (!yes) {
+                try { global.localStorage.setItem('bioOfferDismiss_' + username, String(Date.now())); } catch (e) {}
+                return;
+            }
+            const r = bridge('biometricEnroll', { username, password });
+            if (r && r.success) {
+                refresh();
+            } else if (r && r.code !== 'cancel' && r.error) {
+                // 仅取消静默；lockout/unavailable/invalidated 等均提示（M1）
+                try { global.alert('指纹开通失败：' + r.error); } catch (e) {}
+            }
+        };
+
+        // 包裹 handleLogin：成功（登录层隐藏）后引导开通
+        const wrap = () => {
+            if (wrapped) return true;
+            if (typeof global.handleLogin !== 'function') return false;
+            origHandleLogin = global.handleLogin;
+            global.handleLogin = async function () {
+                const u = curUsername();
+                const pwdEl = document.getElementById('loginPassword');
+                const pwd = pwdEl ? String(pwdEl.value || '') : '';
+                const r = await origHandleLogin.apply(this, arguments);
+                try {
+                    const ov = document.getElementById('loginOverlay');
+                    if (ov && ov.style.display === 'none') offerEnroll(u, pwd);
+                } catch (e) {}
+                return r;
+            };
+            wrapped = true;
+            return true;
+        };
+
+        // 注：授权门吊销/删除/停用 → 删指纹凭据的逻辑已下沉到闭包内
+        // verifyLoginGate 出口（purgeBiometricCredential），登录链与主窗自检
+        // 全覆盖；此处不再 monkey-patch global.AuthCore.verifyLoginGate。
+
+        // input 监听必须在 DOM ready 后绑定（本 IIFE 可能早于 DOM 执行），
+        // 且只绑一次；轮询同时兜底 handleLogin 晚挂与输入框晚出现
+        let inputBound = false;
+        const bindInput = () => {
+            if (inputBound) return;
+            const userEl = document.getElementById('loginUsername');
+            if (!userEl) return;
+            userEl.addEventListener('input', refresh);
+            inputBound = true;
+        };
+
+        const start = () => { wrap(); bindInput(); refresh(); };
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+        else start();
+
+        let tries = 0;
+        const timer = setInterval(() => {
+            tries++;
+            wrap();
+            bindInput();
+            refresh();
+            if ((wrapped && inputBound) || tries > 60) clearInterval(timer);
+        }, 500);
+        return 'done';
+        }; // /setup
+
+        // M-3：首次 probe 暂不可用（wait）——用户可能先启动 App 后去系统设置
+        //   录入指纹，或开机瞬间指纹 HAL 未就绪。回前台立即重探（覆盖数分钟后
+        //   补录场景），另 30s 限时轮询覆盖 HAL 晚就绪；安装成功后自卸载入。
+        //   legacy（老 APK 无桥动作）已在上方直接 return，不做任何重试。
+        if (setup() !== 'wait') return;
+        let rtTicks = 0;
+        const onVisible = () => {
+            if (document.hidden) return;
+            if (setup() === 'done') {
+                document.removeEventListener('visibilitychange', onVisible);
+                if (global.removeEventListener) {
+                    try { global.removeEventListener('pageshow', onVisible); } catch (e) {}
+                }
+            }
+        };
+        try {
+            document.addEventListener('visibilitychange', onVisible);
+            if (global.addEventListener) global.addEventListener('pageshow', onVisible);
+        } catch (e) {}
+        const rtTimer = setInterval(() => {
+            rtTicks++;
+            if (setup() === 'done' || rtTicks >= 15) clearInterval(rtTimer);
+            // visibility 监听刻意保留：补录指纹可能在轮询窗口之后才发生，
+            // installed 后 onVisible 会自行移除；wait 设备回前台一次本地 invoke
+            // 成本可忽略
+        }, 2000);
+    }
+    // installBiometricUnlock() 须在 global.AuthCore 赋值后调用（见文件后段引导处）
 
     global.AuthCore = {
         // 常量
@@ -2527,8 +3306,11 @@
         login,
         // 登录统一路由（P2 收敛 2026-09-03：四处登录入口唯一委托点）
         loginWithUsernamePassword,
-        // 登录后台闸门（2026-09-22：后台删除吊销，LICENSED/trial/free/7天宽限四规则）
+        // 登录后台闸门（2026-09-22 P0；P3-A：LICENSED/trial/free/gate token 四规则）
         verifyLoginGate,
+        // P3-B 设备证明编排（Android 自动启用；smoke 白盒钩子）
+        ensureDeviceAttested,
+        requestEntitlement,
         logout,
 
         // 适配器工厂
@@ -2664,6 +3446,28 @@
     global.setStateV2 = setStateV2;
     global._STATES = _STATES;
 
+    // ★ P3-A 测试钩子（tools/gate-token-smoke.cjs 使用；生产环境无调用方，无副作用）
+    global.AuthCore.__gateTest = {
+        verifyGateToken,
+        evaluateOfflineGate,
+        GATE_VERIFY_PUBKEYS,
+        setItem: (k, v) => StorageAdapter.setItem(k, v),
+        removeItem: (k) => StorageAdapter.removeItem(k),
+        // P3-B 白盒钩子
+        isAndroidRuntime,
+        ensureDeviceAttested,
+        requestEntitlement,
+        readAttState,
+        gateTokenRemainingMsAsync,
+        PROOF_RENEW_THRESHOLD_MS
+    };
+
+    // 指纹快速登录引导：必须在【本 IIFE 内】调用——installBiometricUnlock
+    // 是本 IIFE 顶层函数，文件末尾另有 IIFE-2/IIFE-3，跨闭包不可见
+    // （2026-09-27 首版误挂文件尾部导致 ReferenceError，功能整体未执行）。
+    // 此时 global.AuthCore 已完成赋值；函数内部再做 Android/桥能力探测。
+    installBiometricUnlock();
+
 })(typeof window !== 'undefined' ? window : typeof globalThis !== 'undefined' ? globalThis : this);
 
 // ============================================================================
@@ -2705,8 +3509,8 @@
     //   心跳同时显式上报端形态（productClass=offline + clientClass）。
     async function performHeartbeatCheck() {
         try {
-            const HEARTBEAT_INTERVAL_MS = 10 * 60 * 1000; // ★ 10 分钟（在线统计上报周期，7 天离线锁定不变）
-            const OFFLINE_LOCK_MS = 7 * 24 * 60 * 60 * 1000; // 7 天
+            const HEARTBEAT_INTERVAL_MS = 10 * 60 * 1000; // ★ 10 分钟（在线统计上报周期）
+            // ★ P3-A：离线锁定不再按固定 7 天，改由 gate token exp 裁决（evaluateOfflineGate）
             const now = Date.now();
 
             // 获取上次心跳时间
@@ -2791,14 +3595,17 @@
                 });
             } catch (netE) {
                 console.warn('[Heartbeat] 网络不可达:', netE && netE.message);
-                const offlineStart = await StorageAdapter.getItem('license:offlineStart');
-                if (!offlineStart) {
-                    await StorageAdapter.setItem('license:offlineStart', String(now));
-                } else if (now - parseInt(offlineStart, 10) > OFFLINE_LOCK_MS) {
-                    console.error('[Heartbeat] 离线超过 7 天，锁定应用');
-                    global.__licenseExpired = true;
-                    await showExpireAlertAndActivate('应用已离线超过 7 天，请联网验证后继续使用');
+                // ★ P3-A：gate token 离线裁决（取代旧 offlineStart+7天 宽限）
+                const gate = await evaluateOfflineGate(machineId);
+                if (gate.ok) {
+                    console.log('[Heartbeat] gate token 离线放行，exp:',
+                        new Date(gate.payload.exp * 1000).toISOString());
+                    return;
                 }
+                console.error('[Heartbeat] 离线授权失效，锁定应用:', gate.reason);
+                global.__licenseExpired = true;
+                await showExpireAlertAndActivate(
+                    OFFLINE_GATE_REASON_MSG[gate.reason] || OFFLINE_GATE_REASON_MSG.expired);
                 return;
             }
 
@@ -2815,17 +3622,22 @@
             //   不可达时的回退判定。machineId-only 查询（不带 code）= 本机授权
             //   真值（与老 status 心跳同语义），本地 license:code 过期错位时仍能
             //   找回本机有效绑定（P1 丢码自愈路径）。
-            let entState = null;
+            let entState = null, entFull = null;
             try {
-                const entResp = await fetch('https://tcm-prescription-system.pages.dev/api/license/entitlement', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ machineId: machineId })
+                // ★ P3-B：entitlement 经统一裁决请求——Android 自动带设备证明/
+                //   POP 两步式；桌面端无 attestation 桥，行为与旧版逐字节一致。
+                //   心跳每 10 分钟无条件续签（token 剩余恒 >47.5h），故 12h 主动
+                //   续签阈值只对断网恢复场景生效，由登录门的 requestEntitlement 覆盖。
+                const __rq = await global.AuthCore.requestEntitlement({
+                    mid: machineId
                 });
-                if (entResp.ok) {
-                    const ent = await entResp.json();
-                    if (ent && ent.success) entState = ent.state;
+                if (__rq.malformed) {
+                    // 畸形体按「裁决不可达」回退老心跳（心跳不阻断铁律不变），
+                    // 但单独告警，区别于真断网
+                    console.warn('[Heartbeat] entitlement 响应体畸形，回退心跳判定');
                 }
+                entFull = __rq.ent;
+                if (entFull && entFull.success) entState = entFull.state;
             } catch (entE) {
                 console.warn('[Heartbeat] entitlement 裁决不可达，回退心跳判定:', entE && entE.message);
             }
@@ -2833,6 +3645,15 @@
             if (entState === 'LICENSED') {
                 await StorageAdapter.setItem('license:lastHeartbeat', String(now));
                 await StorageAdapter.removeItem('license:offlineStart');
+                // ★ P3-A：续期 gate token + 权威重置时钟基线（心跳每 10 分钟跑，token 自动滚动）
+                try {
+                    if (entFull.gateToken) {
+                        await StorageAdapter.setItem('license:gateToken', String(entFull.gateToken));
+                    }
+                    if (!await refreshClockBaseline(now, entFull.serverTime)) {
+                        await detectClockRollback(now);
+                    }
+                } catch (e) {}
                 console.log('[Heartbeat] 心跳成功（entitlement=LICENSED）');
                 return;
             }
@@ -2854,6 +3675,8 @@
             if (data.success && data.valid && data.action === 'ok') {
                 await StorageAdapter.setItem('license:lastHeartbeat', String(now));
                 await StorageAdapter.removeItem('license:offlineStart');
+                // 半连通状态（entitlement 不可达）老心跳成功：推进时间基线，防回拨
+                await detectClockRollback(now);
                 console.log('[Heartbeat] 心跳成功，剩余天数:', data.daysRemaining);
             } else {
                 console.error('[Heartbeat] 心跳失败:', data.action);
@@ -2867,13 +3690,8 @@
                 await showExpireAlertAndActivate(msg);
             }
         } catch (e) {
+            // ★ P3-A：心跳异常不阻断使用，也不播种任何宽限；下次心跳重跑在线/离线裁决。
             console.warn('[Heartbeat] 异常:', e.message);
-            // 心跳异常不阻断使用，但记录离线时间
-            const now = Date.now();
-            const offlineStart = await StorageAdapter.getItem('license:offlineStart');
-            if (!offlineStart) {
-                await StorageAdapter.setItem('license:offlineStart', String(now));
-            }
         }
     }
 

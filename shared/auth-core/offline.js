@@ -2612,6 +2612,51 @@
             row.style.display = (st && st.success && st.enrolled) ? 'block' : 'none';
         };
 
+        // 解锁成功→回填密码→走原始 handleLogin（本地 PBKDF2 + 授权门约 1-3 秒，
+        // 与密码登录同链路不可省）期间，用遮罩盖住登录框，避免裸框闪烁造成"卡顿"观感。
+        const showLoggingMask = () => {
+            let m = document.getElementById('bioLoggingMask');
+            if (m) { m.style.display = 'flex'; return; }
+            m = document.createElement('div');
+            m.id = 'bioLoggingMask';
+            m.style.cssText = 'position:fixed;left:0;top:0;right:0;bottom:0;z-index:99999;' +
+                'display:flex;flex-direction:column;align-items:center;justify-content:center;' +
+                'background:rgba(255,255,255,0.92);';
+            m.innerHTML =
+                '<div style="width:42px;height:42px;border:4px solid #d8def5;' +
+                'border-top-color:#667eea;border-radius:50%;' +
+                'animation:bioSpin .8s linear infinite;"></div>' +
+                '<div style="margin-top:14px;font-size:15px;color:#555;">指纹验证成功，正在登录…</div>' +
+                '<style>@keyframes bioSpin{to{transform:rotate(360deg)}}</style>';
+            document.body.appendChild(m);
+        };
+        const hideLoggingMask = () => {
+            const m = document.getElementById('bioLoggingMask');
+            if (m) m.style.display = 'none';
+        };
+        // 遮罩收口：登录层一旦隐藏（密码校验通过、主界面开始呈现）立即收起——
+        //   不能等 handleLogin 整体 resolve：其成功路径在隐藏登录层后还会
+        //   await loadData()（IndexedDB，慢机/大处方库可达十余秒），干等会白屏
+        //   盖住已进入的主界面。失败路径登录层不隐藏，由 finally 保底收起；
+        //   30s 看门狗防门网络静默挂起导致遮罩常驻。
+        let maskPoll = null, maskWatchdog = null, maskClosed = false;
+        const closeLoggingMask = () => {
+            if (maskClosed) return;
+            maskClosed = true;
+            if (maskPoll) { clearInterval(maskPoll); maskPoll = null; }
+            if (maskWatchdog) { clearTimeout(maskWatchdog); maskWatchdog = null; }
+            hideLoggingMask();
+        };
+        const armLoggingMask = () => {
+            maskClosed = false;
+            showLoggingMask();
+            maskPoll = setInterval(() => {
+                const ov = document.getElementById('loginOverlay');
+                if (ov && ov.style.display === 'none') closeLoggingMask();
+            }, 120);
+            maskWatchdog = setTimeout(closeLoggingMask, 30000);
+        };
+
         const doUnlock = async () => {
             const u = curUsername();
             if (!u) return;
@@ -2621,7 +2666,16 @@
             if (r && r.success && typeof r.password === 'string') {
                 document.getElementById('loginUsername').value = u;
                 document.getElementById('loginPassword').value = r.password;
-                if (origHandleLogin) await origHandleLogin();
+                if (origHandleLogin) {
+                    armLoggingMask();
+                    try {
+                        await origHandleLogin();
+                    } finally {
+                        // 失败/异常路径（登录层仍在）由此收起；成功路径遮罩已在
+                        // 轮询探到登录层隐藏时提前收起，closeLoggingMask 幂等。
+                        closeLoggingMask();
+                    }
+                }
                 // M3 自收敛：密码已在他处被改（改名/改密/忘记密码重置时桥失败，
                 // 旧密文残留），本地 PBKDF2 校验必失败（登录层仍在+本地失败文案）。
                 // 必须精确匹配本地失败文案，不能用 /密码错误/——会误吞授权门的

@@ -77,6 +77,11 @@ public class MainActivity extends BridgeActivity {
     private boolean hasDoneFirstResume = false;
     // ★ 修复 2026-07-27：NativeBridge 实例引用，用于 onDestroy 时清理会话资源
     private NativeBridge nativeBridge = null;
+    // ★ 修复 2026-09-28：当前页面 URL 缓存（仅主线程 onPageStarted/onPageFinished 写入）。
+    //   @JavascriptInterface invoke 运行在 JavaBridge 后台线程，华为新内核严格禁止在该线程
+    //   调用 webView.getUrl()（直接抛 RuntimeException，曾导致敏感桥来源校验全部静默失败），
+    //   故来源校验改读此 volatile 快照；null 时 fail-closed。
+    private volatile String lastWebViewUrl = null;
 
     // ★ 2026-08-28 方案A 轻量更新提示（与云端APP/桌面端 main.js 同构）：启动后台静默检查官网 hash-manifest.json
     //   - 官网 APK version > 本地 versionName 才提示（三段式比较，宁可漏检不可误报）
@@ -717,6 +722,9 @@ public class MainActivity extends BridgeActivity {
             @Override
             public void onPageStarted(WebView view, String url, Bitmap favicon) {
                 super.onPageStarted(view, url, favicon);
+                // ★ 2026-09-28：主线程更新 URL 快照，供 JavaBridge 线程的敏感桥来源校验使用。
+                //   null 不写（与 onPageFinished 对称；null 时保持旧快照/初值，方向 fail-closed）
+                if (url != null) lastWebViewUrl = url;
                 // 提前注入 anti-autofill（虽然 DOM 可能未加载完，但 evaluateJavascript 会排队执行）
                 injectAutocompleteOff(view);
             }
@@ -724,6 +732,8 @@ public class MainActivity extends BridgeActivity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
+                // ★ 2026-09-28：与 onPageStarted 双保险更新 URL 快照（主线程）
+                if (url != null) lastWebViewUrl = url;
                 int statusBarHeightPx = getStatusBarHeightPx();
                 float density = getResources().getDisplayMetrics().density;
                 int cssPx = (int) (statusBarHeightPx / density);
@@ -1369,16 +1379,13 @@ public class MainActivity extends BridgeActivity {
      * 防止 XSS 注入页面或第三方页面调用 readFileAsBase64 读取沙箱任意文件
      */
     private boolean isCallerAllowed() {
-        try {
-            WebView webView = this.getBridge().getWebView();
-            if (webView == null) return false;
-            String url = webView.getUrl();
-            if (url == null) return false;
-            // 允许 file:// (离线assets) 和 https://localhost (Capacitor内部URL)
-            return url.startsWith("file://") || url.startsWith("https://localhost") || url.startsWith("http://localhost");
-        } catch (Exception e) {
-            return false;
-        }
+        // ★ 2026-09-28：本方法在 JavaBridge 后台线程被 @JavascriptInterface invoke 调用，
+        //   严禁直接调 webView.getUrl()（华为新内核抛线程异常→被吞→敏感桥全拒）。
+        //   改读 onPageStarted/onPageFinished 在主线程维护的 volatile URL 快照。
+        String url = lastWebViewUrl;
+        if (url == null) return false;
+        // 允许 file:// (离线assets/热更目录) 和 https://localhost (Capacitor内部URL)
+        return url.startsWith("file://") || url.startsWith("https://localhost") || url.startsWith("http://localhost");
     }
 
     /**
@@ -1749,6 +1756,8 @@ public class MainActivity extends BridgeActivity {
         if (mainHandler != null) {
             mainHandler.removeCallbacksAndMessages(null);
         }
+        // ★ 2026-09-28：销毁即失效 URL 快照，杜绝 WebView 拆除在途桥调用读到残留 file:// 放行
+        lastWebViewUrl = null;
         // ★ 2026-09-09 更新二次提速：注销 APK 下载完成广播（系统下载继续，通知栏点击仍可安装）
         try { unregisterReceiver(apkDownloadReceiver); } catch (Exception ignored) {}
         // ★ 修复 2026-07-27：清理 mediaSessions 临时文件（防止 cacheDir 文件泄漏）

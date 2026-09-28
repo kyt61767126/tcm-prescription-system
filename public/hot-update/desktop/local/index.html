@@ -3666,18 +3666,23 @@ let currentUser = null;
                 const newPwd = document.getElementById('newPwd').value;
                 const confirmNewPwd = document.getElementById('confirmNewPwd').value;
 
-                // ★ 2026-08-26 只改用户名：填了新用户名时密码三项可全留空（原密码不变）
+                // ★ 2026-09-25 安全加固：修改用户名也必须验证原密码
+                //   （旧逻辑允许密码三项全留空直接改名，属 backlog 高危项）
                 let _newUsername = '';
                 const _nuField = document.getElementById('newUsernameField');
                 if (_nuField) _newUsername = String(_nuField.value || '').trim();
                 if (_newUsername && _newUsername === currentUser.username) _newUsername = '';
-                const _pwdChange = !!(oldPwd && newPwd && confirmNewPwd);
-                if (!_newUsername && !_pwdChange) {
-                    alert('请填写所有字段！\n\n提示：只修改用户名时，填"新用户名"，密码三项留空即可。');
+                if (!oldPwd) {
+                    alert('请输入原密码！\n\n即使只修改用户名，也需验证原密码。');
                     return;
                 }
-                if (!_pwdChange && (oldPwd || newPwd || confirmNewPwd)) {
-                    alert('密码三项请全部填写（或全部留空 = 只修改用户名）');
+                const _pwdChange = !!(newPwd && confirmNewPwd);
+                if (!_newUsername && !_pwdChange) {
+                    alert('请填写新用户名或新密码！');
+                    return;
+                }
+                if ((newPwd && !confirmNewPwd) || (!newPwd && confirmNewPwd)) {
+                    alert('新密码两次请全部填写（或全部留空 = 只修改用户名）');
                     return;
                 }
                 if (_pwdChange && newPwd !== confirmNewPwd) {
@@ -3780,7 +3785,8 @@ let currentUser = null;
                             const _rn = await window.electronAPI.renameUser({
                                 oldUsername: _oldLoginName,
                                 newUsername: _newUsername || users[userIndex].username,
-                                newPassword: _pwdChange ? newPwd : undefined
+                                newPassword: _pwdChange ? newPwd : undefined,
+                                oldPassword: oldPwd   // ★ 2026-09-25：主进程强制验证原密码
                             });
                             if (_rn && _rn.success === false) {
                                 console.warn('[改名] config.json 同步失败（本地已保存）:', _rn.error);
@@ -3949,6 +3955,13 @@ let currentUser = null;
                     return;
                 }
 
+                // ★ 2026-09-25 安全加固：管理员给他人改名/改密前，重新验证管理员本人密码
+                let _adminPwd = '';
+                if (newUsername !== originalUsername || newPassword.trim()) {
+                    _adminPwd = prompt('安全验证：\n修改他人用户名或密码，请输入当前管理员（您本人）的密码');
+                    if (!_adminPwd) { alert('已取消保存'); return; }
+                }
+
                 const userIndex = users.findIndex(u => u.username === originalUsername);
                 if (userIndex === -1) { alert('用户不存在'); return; }
 
@@ -3978,7 +3991,8 @@ let currentUser = null;
                         const _rn = await window.electronAPI.renameUser({
                             oldUsername: originalUsername,
                             newUsername: newUsername,
-                            newPassword: newPassword.trim() || undefined
+                            newPassword: newPassword.trim() || undefined,
+                            adminPassword: _adminPwd   // ★ 2026-09-25：管理员密码证明
                         });
                         if (_rn && _rn.success === false) {
                             console.warn('[编辑用户] config.json 回写失败（本地已保存）:', _rn.error);
