@@ -2007,6 +2007,310 @@
         }
     })();
 
+    // ====================================================================
+    // 指纹快速登录（2026-09-28 云端APP移植自 offline.js）——仅云端安卓 APP
+    // 铁律：指纹只替代「输入密码」，解锁后回填 loginUsername/loginPassword
+    // 仍走原始云端 handleLogin 完整链路（loginWithUsernamePassword：本地表 +
+    // 云端 /users?login=true 服务端权威认证），不新增任何放行路径、不写登录态。
+    // 云端无离线 verifyLoginGate 门裁决，凭据自清只靠：① Java invalidated
+    // （指纹库变更/密文损坏）；② M3 登录失败精确文案。
+    // UI 一律运行时注入，index.html 静态 DOM 零改动（界面保护铁律）。
+    // 本模块随 cloud.js 分发 8 目标（网页/云桌面/site-admin/鸿蒙/云端APP…），
+    // 双闸门（UA Android + AndroidNative.invoke 存在）保证其余端零行为变化。
+    // ====================================================================
+
+    // ★ C2 关键时序（与离线版同坑）：平台判定【不得】用任何依赖 electronAPI
+    //   的信号——electronAPI shim 由 Java onPageFinished 之后才注入，晚于本
+    //   IIFE 的同步执行期；同步期调用必 false 且无重试，功能冷启动整页死亡。
+    //   AndroidNative 是 addJavascriptInterface 在页面加载【之前】挂载，脚本
+    //   解析期即可用。老 APK 无 biometric* 动作，probe 返回 unknown method
+    //   （success:false）→ no-op，零行为变化。
+    function androidNativeBridgeReady() {
+        try {
+            if (typeof global.AndroidNative === 'undefined' || !global.AndroidNative ||
+                typeof global.AndroidNative.invoke !== 'function') return false;
+            return /android/i.test((global.navigator && global.navigator.userAgent) || '');
+        } catch (e) { return false; }
+    }
+
+    function installBiometricUnlock() {
+        // C2：只认「UA Android + AndroidNative 桥」，不认晚注入的 electronAPI
+        if (!androidNativeBridgeReady()) return;
+
+        const bridge = (action, payload) => {
+            try {
+                const raw = global.AndroidNative.invoke(action, JSON.stringify(payload || {}));
+                return JSON.parse(raw);
+            } catch (e) { return null; }
+        };
+
+        // M-3：安装体封成 setup()，probe 未就绪时可重入重探。
+        //   返回 legacy=老 APK（桥无此动作，确定性不支持，永不重试）；
+        //   wait=暂不可用（开机 HAL 未就绪/尚未录入指纹，可后续变 capable）；
+        //   done=已安装。
+        let installed = false;
+        const setup = () => {
+            if (installed) return 'done';
+        const probe = bridge('biometricProbe');
+        if (probe && probe.success === false && probe.error &&
+            String(probe.error).indexOf('unknown method') >= 0) {
+            return 'legacy'; // 老 APK：整体 no-op，零行为变化
+        }
+        if (!probe || !probe.success || !probe.capable) return 'wait';
+        installed = true;
+
+        let origHandleLogin = null;
+        let wrapped = false;
+
+        const curUsername = () => {
+            const el = document.getElementById('loginUsername');
+            return el ? String(el.value || '').trim() : '';
+        };
+
+        const ensureRow = () => {
+            let row = document.getElementById('bioUnlockRow');
+            if (row) return row;
+            const box = document.querySelector('#loginOverlay .login-box');
+            if (!box) return null;
+            row = document.createElement('div');
+            row.id = 'bioUnlockRow';
+            row.style.cssText = 'display:none;margin-top:10px;text-align:center;';
+            row.innerHTML =
+                '<button type="button" id="bioUnlockBtn" style="width:100%;padding:10px;border:none;' +
+                'border-radius:6px;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;' +
+                'font-size:15px;cursor:pointer;">指纹解锁登录</button>' +
+                '<a href="javascript:void(0)" id="bioDisableLink" style="display:inline-block;' +
+                'margin-top:8px;font-size:12px;color:#999;text-decoration:underline;">关闭指纹登录</a>';
+            box.appendChild(row);
+            document.getElementById('bioUnlockBtn').addEventListener('click', doUnlock);
+            document.getElementById('bioDisableLink').addEventListener('click', doDisable);
+            return row;
+        };
+
+        const refresh = () => {
+            const row = ensureRow();
+            if (!row) return;
+            const u = curUsername();
+            if (!u) { row.style.display = 'none'; return; }
+            const st = bridge('biometricStatus', { username: u });
+            row.style.display = (st && st.success && st.enrolled) ? 'block' : 'none';
+        };
+
+        // 解锁成功→回填密码→走原始云端 handleLogin（服务端联网认证约 1-3 秒，
+        // 与密码登录同链路不可省）期间，用遮罩盖住登录框，避免裸框闪烁造成"卡顿"观感。
+        const showLoggingMask = () => {
+            let m = document.getElementById('bioLoggingMask');
+            if (m) { m.style.display = 'flex'; return; }
+            m = document.createElement('div');
+            m.id = 'bioLoggingMask';
+            m.style.cssText = 'position:fixed;left:0;top:0;right:0;bottom:0;z-index:99999;' +
+                'display:flex;flex-direction:column;align-items:center;justify-content:center;' +
+                'background:rgba(255,255,255,0.92);';
+            m.innerHTML =
+                '<div style="width:42px;height:42px;border:4px solid #d8def5;' +
+                'border-top-color:#667eea;border-radius:50%;' +
+                'animation:bioSpin .8s linear infinite;"></div>' +
+                '<div style="margin-top:14px;font-size:15px;color:#555;">指纹验证成功，正在登录…</div>' +
+                '<style>@keyframes bioSpin{to{transform:rotate(360deg)}}</style>';
+            document.body.appendChild(m);
+        };
+        const hideLoggingMask = () => {
+            const m = document.getElementById('bioLoggingMask');
+            if (m) m.style.display = 'none';
+        };
+        // 遮罩收口：登录层一旦隐藏（服务端认证通过、主界面开始呈现）立即收起——
+        //   不能等 handleLogin 整体 resolve：其成功路径在隐藏登录层后还会
+        //   await loadData()（慢机/大处方库可达十余秒），干等会白屏盖住已进入
+        //   的主界面。失败路径登录层不隐藏，由 finally 保底收起；
+        //   30s 看门狗防网络静默挂起导致遮罩常驻。
+        let maskPoll = null, maskWatchdog = null, maskClosed = false;
+        const closeLoggingMask = () => {
+            if (maskClosed) return;
+            maskClosed = true;
+            if (maskPoll) { clearInterval(maskPoll); maskPoll = null; }
+            if (maskWatchdog) { clearTimeout(maskWatchdog); maskWatchdog = null; }
+            hideLoggingMask();
+        };
+        const armLoggingMask = () => {
+            maskClosed = false;
+            showLoggingMask();
+            maskPoll = setInterval(() => {
+                const ov = document.getElementById('loginOverlay');
+                if (ov && ov.style.display === 'none') closeLoggingMask();
+            }, 120);
+            maskWatchdog = setTimeout(closeLoggingMask, 30000);
+        };
+
+        const doUnlock = async () => {
+            const u = curUsername();
+            if (!u) return;
+            const errEl = document.getElementById('loginError');
+            if (errEl) errEl.style.display = 'none';
+            const r = bridge('biometricUnlock', { username: u });
+            if (r && r.success && typeof r.password === 'string') {
+                document.getElementById('loginUsername').value = u;
+                document.getElementById('loginPassword').value = r.password;
+                if (origHandleLogin) {
+                    armLoggingMask();
+                    try {
+                        await origHandleLogin();
+                    } finally {
+                        // 失败/异常路径（登录层仍在）由此收起；成功路径遮罩已在
+                        // 轮询探到登录层隐藏时提前收起，closeLoggingMask 幂等。
+                        closeLoggingMask();
+                    }
+                }
+                // M3 自收敛：密码已在他处被改（改名/改密/重置），旧密文残留，
+                // 云端登录链（本地表/服务端认证）必失败（登录层仍在+失败文案）。
+                // 必须精确匹配失败文案「手机号/用户名或密码错误」（cloud.js
+                // loginWithUsernamePassword 的本地与云端兜底同串），不能用
+                // /密码错误/——避免误吞其他服务端错误；网络/HTTP/锁定不误删。
+                try {
+                    const ov = document.getElementById('loginOverlay');
+                    if (ov && ov.style.display !== 'none' && errEl &&
+                        String(errEl.textContent || '')
+                            .indexOf('手机号/用户名或密码错误') !== -1) {
+                        bridge('biometricDelete', { username: u });
+                    }
+                } catch (e) {}
+                refresh();
+                return;
+            }
+            // 按 Java 稳定 errorCode 分支（H1/M1，不依赖中文文案正则）：
+            // invalidated=指纹库变更致密钥作废或密文损坏，Java 已自清，
+            //   这里兜底再删（幂等）并隐藏入口；
+            // cancel=用户主动取消/点「使用密码」，静默；
+            // lockout/timeout/unavailable/failed=红字提示，杜绝点击无反馈。
+            if (r && r.code === 'invalidated') {
+                bridge('biometricDelete', { username: u });
+                refresh();
+            } else if (r && r.code !== 'cancel' && r.error) {
+                if (errEl) {
+                    errEl.textContent = '指纹解锁失败：' + r.error;
+                    errEl.style.display = 'block';
+                }
+            }
+        };
+
+        const doDisable = () => {
+            const u = curUsername();
+            if (!u) return;
+            if (typeof global.confirm === 'function' &&
+                !global.confirm('确定关闭该账号的指纹快速登录吗？')) return;
+            bridge('biometricDelete', { username: u });
+            refresh();
+        };
+
+        // 密码登录成功后的开通引导
+        const offerEnroll = (username, password) => {
+            if (!username || !password) return;
+            const st = bridge('biometricStatus', { username });
+            if (st && st.success && st.enrolled) return;
+            try {
+                const key = 'bioOfferDismiss_' + username;
+                const last = Number(global.localStorage.getItem(key) || 0);
+                if (last && Date.now() - last < 30 * 24 * 3600 * 1000) return;
+            } catch (e) {}
+            let yes = false;
+            try {
+                yes = global.confirm(
+                    '是否开启指纹快速登录？\n' +
+                    '开通后可使用指纹直接登录，无需输入密码。\n' +
+                    '注意：本机已录入的所有指纹都能解锁该账号。');
+            } catch (e) { return; }
+            if (!yes) {
+                try { global.localStorage.setItem('bioOfferDismiss_' + username, String(Date.now())); } catch (e) {}
+                return;
+            }
+            const r = bridge('biometricEnroll', { username, password });
+            if (r && r.success) {
+                refresh();
+            } else if (r && r.code !== 'cancel' && r.error) {
+                // 仅取消静默；lockout/unavailable/invalidated 等均提示（M1）
+                try { global.alert('指纹开通失败：' + r.error); } catch (e) {}
+            }
+        };
+
+        // 包裹 handleLogin：成功（登录层隐藏）后引导开通
+        const wrap = () => {
+            if (wrapped) return true;
+            if (typeof global.handleLogin !== 'function') return false;
+            origHandleLogin = global.handleLogin;
+            global.handleLogin = async function () {
+                const u = curUsername();
+                const pwdEl = document.getElementById('loginPassword');
+                const pwd = pwdEl ? String(pwdEl.value || '') : '';
+                const r = await origHandleLogin.apply(this, arguments);
+                try {
+                    const ov = document.getElementById('loginOverlay');
+                    if (ov && ov.style.display === 'none') offerEnroll(u, pwd);
+                } catch (e) {}
+                return r;
+            };
+            wrapped = true;
+            return true;
+        };
+
+        // 注：云端无离线 verifyLoginGate 门裁决（账号吊销/删除由服务端登录
+        //   响应直接拒绝），故没有门出口 purge 挂点；凭据失效自清依赖上方
+        //   Java invalidated 与 M3 精确文案两条路径，均为 fail-safe 设计。
+
+        // input 监听必须在 DOM ready 后绑定（本 IIFE 可能早于 DOM 执行），
+        // 且只绑一次；轮询同时兜底 handleLogin 晚挂与输入框晚出现
+        let inputBound = false;
+        const bindInput = () => {
+            if (inputBound) return;
+            const userEl = document.getElementById('loginUsername');
+            if (!userEl) return;
+            userEl.addEventListener('input', refresh);
+            inputBound = true;
+        };
+
+        const start = () => { wrap(); bindInput(); refresh(); };
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+        else start();
+
+        let tries = 0;
+        const timer = setInterval(() => {
+            tries++;
+            wrap();
+            bindInput();
+            refresh();
+            if ((wrapped && inputBound) || tries > 60) clearInterval(timer);
+        }, 500);
+        return 'done';
+        }; // /setup
+
+        // M-3：首次 probe 暂不可用（wait）——用户可能先启动 App 后去系统设置
+        //   录入指纹，或开机瞬间指纹 HAL 未就绪。回前台立即重探（覆盖数分钟后
+        //   补录场景），另 30s 限时轮询覆盖 HAL 晚就绪；安装成功后自卸载入。
+        //   legacy（老 APK 无桥动作）已在上方直接 return，不做任何重试。
+        if (setup() !== 'wait') return;
+        let rtTicks = 0;
+        const onVisible = () => {
+            if (document.hidden) return;
+            if (setup() === 'done') {
+                document.removeEventListener('visibilitychange', onVisible);
+                if (global.removeEventListener) {
+                    try { global.removeEventListener('pageshow', onVisible); } catch (e) {}
+                }
+            }
+        };
+        try {
+            document.addEventListener('visibilitychange', onVisible);
+            if (global.addEventListener) global.addEventListener('pageshow', onVisible);
+        } catch (e) {}
+        const rtTimer = setInterval(() => {
+            rtTicks++;
+            if (setup() === 'done' || rtTicks >= 15) clearInterval(rtTimer);
+            // visibility 监听刻意保留：补录指纹可能在轮询窗口之后才发生，
+            // installed 后 onVisible 会自行移除；wait 设备回前台一次本地 invoke
+            // 成本可忽略
+        }, 2000);
+    }
+    // installBiometricUnlock() 须在 global.AuthCore 赋值后、本 IIFE 结束前调用
+    // （跨 IIFE 闭包不可见——offline.js 2026-09-27 首版误挂文件尾部的坑）。
+
     // ==================== 导出 ====================
 
     global.AuthCore = {
@@ -2186,6 +2490,19 @@
     global.encryptSensitive = encryptSensitive;
     global.decryptSensitive = decryptSensitive;
     global.collectDeviceIdentity = collectDeviceIdentity;
+
+    // ★ 2026-09-28 指纹快速登录引导：必须在【本 IIFE 内】调用——
+    //   installBiometricUnlock 是本 IIFE 顶层函数，文件末尾另有 IIFE-2/IIFE-3，
+    //   跨闭包不可见（offline.js 首版误挂文件尾部 ReferenceError 的同款坑）。
+    //   此时 global.AuthCore 已完成赋值；函数内部再做 Android/桥能力探测，
+    //   网页/云桌面/鸿蒙/老 APK 均为确定性 no-op。
+    //   try/catch 兜底（功能审查 Low-1）：指纹模块是纯增强，任何同步异常都
+    //   不得阻断其后 IIFE-2/IIFE-3（License 校验/心跳链路）的求值。
+    try {
+        installBiometricUnlock();
+    } catch (e) {
+        console.warn('[AuthCore] 指纹快速登录模块安装失败:', e && e.message);
+    }
 
 })(typeof window !== 'undefined' ? window : typeof globalThis !== 'undefined' ? globalThis : this);
 

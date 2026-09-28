@@ -60,7 +60,16 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
 
+    <!-- ★ 2026-09-28 指纹快速登录：USE_BIOMETRIC 为普通安装权限免运行时申请；
+         USE_FINGERPRINT 仅 API28 及以下需要；uses-feature required=false 保证
+         无指纹硬件机型（平板等）仍可安装。缺 USE_BIOMETRIC 时真机 canAuthenticate
+         恒返 NONE_ENROLLED，指纹入口永不出现且不报错（极难排查）。 -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <uses-permission android:name="android.permission.USE_FINGERPRINT"
+        android:maxSdkVersion="28" />
+
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.front" android:required="false" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
+    <uses-feature android:name="android.hardware.fingerprint" android:required="false" />
 </manifest>

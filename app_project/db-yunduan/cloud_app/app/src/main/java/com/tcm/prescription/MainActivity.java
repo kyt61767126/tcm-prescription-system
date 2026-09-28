@@ -119,6 +119,13 @@ public class MainActivity extends BridgeActivity {
     private volatile String apkNewVersion = "";
     private long apkDownloadId = -1L;
 
+    // ★ 2026-09-28（云端移植离线同款修复）：当前页面 URL 快照，仅主线程
+    //   onPageStarted/onPageFinished 写入。@JavascriptInterface invoke 运行在
+    //   JavaBridge 后台线程，华为新内核严格禁止在该线程调 webView.getUrl()
+    //   （直接抛 RuntimeException 被 catch 静默吞掉→敏感桥来源校验恒 false），
+    //   来源校验一律读此 volatile 快照；null 时 fail-closed。
+    private volatile String lastWebViewUrl = null;
+
     // ★ 2026-08-29 一键备份第三步：文件选择器结果回调（onShowFileChooser 配套）
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
@@ -577,6 +584,9 @@ public class MainActivity extends BridgeActivity {
             @Override
             public void onPageStarted(WebView view, String url, Bitmap favicon) {
                 super.onPageStarted(view, url, favicon);
+                // ★ 2026-09-28：主线程更新 URL 快照，供 JavaBridge 线程的敏感桥来源校验。
+                //   null 不写（与 onPageFinished 对称；null 时保持旧快照/初值，方向 fail-closed）
+                if (url != null) lastWebViewUrl = url;
                 // 提前注入 anti-autofill（虽然 DOM 可能未加载完，但 evaluateJavascript 会排队执行）
                 injectAutocompleteOff(view);
                 // ★ 2026-08-23 根治三屏闪：仅在冷启动未揭幕阶段保持遮罩显示；
@@ -609,6 +619,8 @@ public class MainActivity extends BridgeActivity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
+                // ★ 2026-09-28：与 onPageStarted 双保险更新 URL 快照（主线程）
+                if (url != null) lastWebViewUrl = url;
                 int statusBarHeightPx = getStatusBarHeightPx();
                 float density = getResources().getDisplayMetrics().density;
                 int cssPx = (int) (statusBarHeightPx / density);
@@ -1110,14 +1122,12 @@ public class MainActivity extends BridgeActivity {
      * 防止 XSS 注入页面或第三方页面调用 readFileAsBase64 读取沙箱任意文件
      */
     private boolean isCallerAllowed() {
-        try {
-            WebView webView = this.getBridge().getWebView();
-            if (webView == null) return false;
-            String url = webView.getUrl();
-            return isCloudUrl(url);
-        } catch (Exception e) {
-            return false;
-        }
+        // ★ 2026-09-28：本方法在 JavaBridge 后台线程被 @JavascriptInterface invoke 调用，
+        //   严禁直接调 webView.getUrl()（华为新内核抛线程异常→被吞→敏感桥全拒）。
+        //   改读 onPageStarted/onPageFinished 在主线程维护的 volatile URL 快照。
+        String url = lastWebViewUrl;
+        if (url == null) return false;
+        return isCloudUrl(url);
     }
 
     /**
@@ -1570,6 +1580,8 @@ public class MainActivity extends BridgeActivity {
         if (mainHandler != null) {
             mainHandler.removeCallbacksAndMessages(null);
         }
+        // ★ 2026-09-28：销毁即失效 URL 快照，杜绝 WebView 拆除在途桥调用读到残留云端 URL 放行
+        lastWebViewUrl = null;
         // ★ 2026-09-09 更新二次提速：注销 APK 下载完成广播（系统下载继续，通知栏点击仍可安装）
         try { unregisterReceiver(apkDownloadReceiver); } catch (Exception ignored) {}
         WebView webView = this.getBridge() != null ? this.getBridge().getWebView() : null;
@@ -1706,6 +1718,25 @@ public class MainActivity extends BridgeActivity {
                     //   导航会被 shouldOverrideUrlLoading 反钓鱼拦截 → 桥是唯一可靠通路。
                     case "openExternalUrl":
                         return openExternalUrl(args.optString("url", "")).toString();
+                    // ★ 2026-09-28 指纹快速登录（云端APP移植）：指纹仅解密原密码，
+                    //   渲染层回填后仍走原始云端 handleLogin 服务端认证，不新增放行路径。
+                    case "biometricProbe":
+                        return new BiometricUnlockManager(MainActivity.this).probe().toString();
+                    case "biometricStatus":
+                        return new BiometricUnlockManager(MainActivity.this)
+                                .status(args.optString("username", "")).toString();
+                    case "biometricList":
+                        return new BiometricUnlockManager(MainActivity.this).list().toString();
+                    case "biometricEnroll":
+                        return new BiometricUnlockManager(MainActivity.this).enroll(
+                                args.optString("username", ""),
+                                args.optString("password", "")).toString();
+                    case "biometricUnlock":
+                        return new BiometricUnlockManager(MainActivity.this)
+                                .unlock(args.optString("username", "")).toString();
+                    case "biometricDelete":
+                        return new BiometricUnlockManager(MainActivity.this)
+                                .delete(args.optString("username", "")).toString();
                     default:
                         return fail("unknown method: " + name).toString();
                 }
@@ -1724,7 +1755,11 @@ public class MainActivity extends BridgeActivity {
         //        savePrescriptionImage/saveVideoFile/saveMediaSession（只写指定目录）、findMediaFiles（按模式查找）
         // ------------------------------------------------------------------
         private boolean isSensitiveOperation(String name) {
-            return "readFileAsBase64".equals(name) || "deleteFile".equals(name);
+            // ★ 2026-09-28：指纹六动作（probe/status/list/enroll/unlock/delete）
+            //   全部要求云端页面来源；业务页 URL 恒定 CLOUD_HOST（导航白名单封死远程页）。
+            return "readFileAsBase64".equals(name)
+                    || "deleteFile".equals(name)
+                    || (name != null && name.startsWith("biometric"));
         }
 
         // ------------------------------------------------------------------

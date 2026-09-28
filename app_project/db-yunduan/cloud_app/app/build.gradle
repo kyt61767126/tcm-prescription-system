@@ -48,7 +48,7 @@ android {
         applicationId "com.tcm.prescription"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 307
+        versionCode 308
         versionName "1.0.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
@@ -104,6 +104,8 @@ dependencies {
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation project(':capacitor-cordova-android-plugins')
+    // ★ 2026-09-28 指纹快速登录（与离线APP同版）：BiometricPrompt + BIOMETRIC_STRONG
+    implementation 'androidx.biometric:biometric:1.1.0'
 }
 
 apply from: 'capacitor.build.gradle'

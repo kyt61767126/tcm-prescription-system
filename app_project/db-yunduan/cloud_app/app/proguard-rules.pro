@@ -52,6 +52,14 @@
 }
 
 # ============================================================================
+# 指纹快速登录（2026-09-28 云端APP移植）
+# BiometricUnlockManager 由 NativeBridge.invoke 分发与 BiometricPrompt 回调引用；
+# keep 类与全部方法防 R8 repackage/裁剪导致指纹动作 ClassNotFound/回调丢失
+# ============================================================================
+-keep class com.tcm.prescription.BiometricUnlockManager { *; }
+-keep class androidx.biometric.** { *; }
+
+# ============================================================================
 # Capacitor 框架
 # ============================================================================
 -keep class com.getcapacitor.** { *; }
