@@ -987,6 +987,12 @@
 
 **生效方式**：服务端 + 管理后台 push 即部署生效；四端客户端需重新打包发布后才开始积累心跳数据。
 
+* ★ 2026-09-28 **下载转化 P0/P1/P2 修复（0 故障 + 名副其实下载量 + 口径修正，五端零重打包）**：
+  1. **P0「0」故障根治**：旧 funnel.js 在 GitHub HTTP 403（限流）时不进 catch，desktop/app=0 被当成功值写 KV 毒化 1h；新铁律——**抓取失败（非2xx/异常/非数组）绝不写缓存，有旧值（含过期）标 stale 沿用，从未成功返回 available:false，前端显示"暂不可用"，转化率分母不可用显示"—"（null，禁止拿 0 算百分比）**。另加 `env.GITHUB_TOKEN` Bearer 鉴权（CF Pages 后台 Variables 加密项；未配置自动降级，未鉴权 60/h 按 CF 共享出口 IP 几乎常年打满，token 提到 5000/h；公开仓库无 scope 只读 token 即可）。
+  2. **P1 官网实际下载量**：埋点存储**必须走 D1 不能用 KV**（KV 免费 1000 写/天，心跳已在配额治理）；新表 `download_uniq(day,file,ip_hash, ts, PK(day,file,ip_hash))`，口径=**IP+文件+UTC自然日去重的下载发起次数（估算）**——Worker 流式+Range 无法感知下载完成，HEAD/分片/重试/同天多次点击均只计 1 次；埋点公共模块 `functions/api/_lib/download-counter.js`（getDB 解析、waitUntil 异步、任何异常静默不阻断下载）。两个写入点：`functions/api/dl.js`（4 个成功回包点 200/206 才计）+ 新增 `functions/downloads/[[path]].js`（context.next() 透传静态资源；**必须同步把 `/downloads/*` 加进 public/_routes.json include，否则函数不生效——本次 E2E 实测踩中**；并以 content-type 非 text/html 排除 404 HTML 兜底）。后台新增「官网实际下载（次·估算）」卡，原卡改名「GitHub 展示下载量（次）」加 title 注释。
+  3. **P2 口径修正**：①试用未激活改为**机器码集合差**——心跳记录落存客户端已上报的 mid=sha256(ed+':'+机器码)（heartbeat.js record 加 mid 字段，**四端字段早已在发，零重打包**；老记录 35 天 TTL 内缺字段，funnel 返回 trialCoverage{withMid,missing}，卡片标"估算"）；funnel 侧把授权库原始机器码展开四端盐 sha256(ed+':'+M) 成集合后比对，同机多端装任一端激活即正确排除（旧 installs.total−activatedMachines 多端重复计数口径废弃）；②趋势归日统一**北京时间 UTC+8**（funnel beijingDay 切片 + 双 admin 前端 renderTrendChart/renderDeviceTrend 同款 +8h 法，不依赖浏览器时区）；③新增「近14天新增启动设备」紫色柱图（接口 new14d 数据现成，funnel 早就在返回只是没画）。
+  **双副本纪律**：funnel 消费方 public/admin/index.html ↔ site-admin/admin/index.html 必须镜像同改（adminconsole lines 基线门守）；D1 建表远程已执行（num_tables 7）。验证：5 个函数 node --check、Playwright 双副本 38/38（含暂不可用/积累中/—/正常取数/空趋势/14柱）、wrangler pages dev 真实 E2E（APK 两 IP 去重=2、EXE=1、HEAD/404HTML 不计、心跳 mid 落存 KV、funnel 403、dl 502 不计）、四对跨版本基线全绿、copy-consistency 100 副本 0 失败、界面 6 OK。**运维待办：CF Pages → Settings → Variables 添加 GITHUB_TOKEN（加密）后额度才真正提升。生效方式：全部为服务端+后台静态站，push 即部署，五端零重打包。**
+
 ## 18. 下载速度优化（2026-09-09 实测基线与统筹路线）
 
 **三层模型（排障先分层归因，勿在机制层空转）**：①**源**——文件托管在哪（GitHub Release / CF Pages / R2 / 国内 OSS）；②**管道**——用户到源的网络路径（大陆访问海外源的跨境链路是硬瓶颈）；③**机制**——客户端下载方式（`<a>` 直下 / robustDownload 流式断点续传 / APP DownloadManager）。**机制层已到顶**（官网 robustDownload 六连接并行+看门狗+30 次重试、APP DownloadManager 进度+自动安装均已上线），后续瓶颈全在源与管道层。

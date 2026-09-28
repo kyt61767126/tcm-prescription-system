@@ -210,7 +210,11 @@ export async function onRequest(context) {
             first: prev.first || now,
             last: now,
             days: days,
-            v: v
+            v: v,
+            // ★ 2026-09-28 P2：落存客户端已加盐哈希 mid=sha256(ed+':'+机器码)，
+            //   供 stats/funnel 与授权机器码做集合差（试用未激活估算）。
+            //   客户端四端早已上报此字段，老记录在 35 天 TTL 内逐步补齐，无需客户端重打包。
+            mid: mid
         };
         // TTL 35 天：与 DAYS_KEEP=30 匹配，过期设备（含随机 mid 刷量垃圾键）自动回收，
         // 不依赖 funnel 清理；first/new14d 等指标窗口均 ≤30 天，到期无统计损失

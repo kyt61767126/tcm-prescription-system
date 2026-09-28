@@ -336,9 +336,10 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
 
             <h2 style="margin-top:24px;">下载转化统计 <span style="font-size:12px;color:#909399;font-weight:normal;">（安装设备自 2026-09-09 四端新版起开始积累；下载量含历史全部）</span></h2>
             <div class="stats" id="funnelStatsBox">
-                <div class="stat-card"><div class="num" id="fnDownloads">-</div><div class="label">官网下载量（次）</div></div>
+                <div class="stat-card" title="GitHub Release 资产官方计数：含更新器拉取与全部历史版本；缓存1小时，抓取失败沿用上次成功值，从未成功显示暂不可用"><div class="num" id="fnDownloads">-</div><div class="label">GitHub 展示下载量（次）</div></div>
+                <div class="stat-card" title="2026-09-28 起积累：同 IP 同文件当天去重的下载发起次数（估算，HEAD探测/断点分片/重复点击不重复计）"><div class="num" id="fnSiteDownloads">-</div><div class="label">官网实际下载（次·估算）</div></div>
                 <div class="stat-card used"><div class="num" id="fnInstalls">-</div><div class="label">安装启动设备（台）</div></div>
-                <div class="stat-card unused"><div class="num" id="fnTrial">-</div><div class="label">试用未激活（台）</div></div>
+                <div class="stat-card unused" title="机器码集合差：有启动心跳但未激活的设备；2026-09-28 前的老心跳记录 35 天 TTL 内逐步补齐，数字为估算"><div class="num" id="fnTrial">-</div><div class="label">试用未激活（台·估算）</div></div>
                 <div class="stat-card"><div class="num" id="fnRequests">-</div><div class="label">提交激活申请（累计）</div></div>
                 <div class="stat-card used"><div class="num" id="fnActivated">-</div><div class="label">已激活设备（台）</div></div>
                 <div class="stat-card"><div class="num" id="fnActive7">-</div><div class="label">近7天活跃设备（台）</div></div>
@@ -352,6 +353,10 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                 <div style="display:flex;gap:16px;margin-top:8px;font-size:12px;color:#606266;">
                     <span><span style="display:inline-block;width:10px;height:10px;background:#3498db;border-radius:2px;margin-right:4px;"></span>新增诊所</span>
                     <span><span style="display:inline-block;width:10px;height:10px;background:#27ae60;border-radius:2px;margin-right:4px;"></span>新增用户账号</span>
+                </div>
+                <div style="margin-top:14px;border-top:1px dashed #dcdfe6;padding-top:10px;">
+                    <div style="font-size:12px;color:#606266;margin-bottom:4px;"><span style="display:inline-block;width:10px;height:10px;background:#9b59b6;border-radius:2px;margin-right:4px;"></span>新增启动设备（按机器码去重，北京时间）</div>
+                    <div id="deviceTrendChart" style="width:100%;overflow-x:auto;"></div>
                 </div>
             </div>
         </div>
@@ -3038,17 +3043,20 @@ async function loadFunnelStats(token) {
         const d = await res.json();
         if (!d.success) return;
         const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
-        set('fnDownloads', d.downloads ? d.downloads.total : '-');
+        // ★ 2026-09-28 P0：GitHub 抓取失败且无历史值时后端标 available:false → 显示"暂不可用"，绝不显示 0
+        set('fnDownloads', (d.downloads && d.downloads.available) ? d.downloads.total : '暂不可用');
         set('fnInstalls', d.installs ? d.installs.total : 0);
         set('fnTrial', (d.trialNotActivated != null) ? d.trialNotActivated : 0);
         set('fnRequests', d.activation ? d.activation.total : 0);
         set('fnActivated', (d.activatedMachines != null) ? d.activatedMachines : 0);
         set('fnActive7', d.installs ? d.installs.active7 : 0);
+        // ★ 2026-09-28 P1：官网实际下载（D1 去重·估算），埋点上线前/无 D1 时显示"积累中"
+        set('fnSiteDownloads', (d.siteDownloads && d.siteDownloads.available) ? d.siteDownloads.total : '积累中');
         const conv = d.conversion || {};
         const cEl = document.getElementById('funnelConversion');
         if (cEl) {
-            cEl.textContent = '转化率：下载→安装 ' + (conv.downloadToInstall || 0) + '% ｜ 安装→提交申请 '
-                + (conv.installToRequest || 0) + '% ｜ 安装→激活 ' + (conv.installToActivated || 0) + '%';
+            cEl.textContent = '转化率：下载→安装 ' + (conv.downloadToInstall == null ? '—' : conv.downloadToInstall + '%')
+                + ' ｜ 安装→提交申请 ' + (conv.installToRequest || 0) + '% ｜ 安装→激活 ' + (conv.installToActivated || 0) + '%';
         }
         const eEl = document.getElementById('funnelEditions');
         if (eEl && d.installs && d.installs.byEdition) {
@@ -3058,21 +3066,59 @@ async function loadFunnelStats(token) {
                 .map(k => names[k] + ' ' + d.installs.byEdition[k].total + ' 台（近7天活跃 ' + d.installs.byEdition[k].active7 + '）');
             eEl.textContent = parts.length ? ('分端安装：' + parts.join(' ｜ ')) : '分端安装：暂无数据（新版客户端上线后开始积累）';
         }
+        // ★ 2026-09-28 P2：新增启动设备趋势（服务端已按北京时间归日）
+        renderDeviceTrend(d.installs && d.installs.new14d);
     } catch (e) { /* 静默：统计加载失败不影响后台使用 */ }
+}
+
+// ★ 2026-09-28 P2：近 14 天新增启动设备趋势（数据源 funnel installs.new14d，按机器码去重）
+function renderDeviceTrend(new14d) {
+    const el = document.getElementById('deviceTrendChart');
+    if (!el) return;
+    if (!Array.isArray(new14d) || !new14d.length) {
+        el.innerHTML = '<div style="font-size:12px;color:#909399;padding:6px 0;">暂无数据（四端新版客户端上线后开始积累）</div>';
+        return;
+    }
+    const map = new Map(new14d.map(x => [x.date, x.count]));
+    const days = [];
+    const bjNow = new Date(Date.now() + 8 * 3600000); // 北京当前时刻的 UTC 视图
+    for (let i = 13; i >= 0; i--) {
+        const d = new Date(bjNow.getTime() - i * 86400000);
+        days.push({
+            key: d.toISOString().slice(0, 10),
+            label: Number(d.toISOString().slice(5, 7)) + '/' + Number(d.toISOString().slice(8, 10)),
+            count: map.get(d.toISOString().slice(0, 10)) || 0
+        });
+    }
+    const max = Math.max(1, ...days.map(d => d.count));
+    const step = 30, barW = 16, W = 14 * step, H = 120;
+    let svg = '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" style="min-width:' + W + 'px;">';
+    days.forEach((d, i) => {
+        const x = i * step + 7;
+        const h = Math.round(d.count / max * 90);
+        const y = 100 - h;
+        svg += '<rect x="' + x + '" y="' + y + '" width="' + barW + '" height="' + Math.max(h, d.count > 0 ? 2 : 0) + '" fill="#9b59b6" rx="2"><title>' + d.key + ' 新增启动设备 ' + d.count + '</title></rect>';
+        svg += '<text x="' + (x + 8) + '" y="116" text-anchor="middle" font-size="9" fill="#909399">' + d.label + '</text>';
+        if (d.count > 0) svg += '<text x="' + (x + 8) + '" y="' + (y - 3) + '" text-anchor="middle" font-size="9" fill="#9b59b6">' + d.count + '</text>';
+    });
+    svg += '</svg>';
+    el.innerHTML = svg;
 }
 
 function renderTrendChart(clinics, users) {
     const el = document.getElementById('trendChart');
     if (!el) return;
     const days = [];
-    const today = new Date(); today.setHours(0, 0, 0, 0);
+    // ★ 2026-09-28 P2：统一北京时间归日（旧实现按浏览器本地/UTC 混用，非北京时区查看会错日）
+    const bjNow = new Date(Date.now() + 8 * 3600000);
     for (let i = 13; i >= 0; i--) {
-        const d = new Date(today.getTime() - i * 86400000);
-        days.push({ key: d.toISOString().slice(0, 10), label: (d.getMonth() + 1) + '/' + d.getDate(), clinics: 0, users: 0 });
+        const d = new Date(bjNow.getTime() - i * 86400000);
+        days.push({ key: d.toISOString().slice(0, 10), label: Number(d.toISOString().slice(5, 7)) + '/' + Number(d.toISOString().slice(8, 10)), clinics: 0, users: 0 });
     }
     const map = new Map(days.map(d => [d.key, d]));
-    for (const c of clinics) { const k = (c.createdAt || '').slice(0, 10); if (map.has(k)) map.get(k).clinics++; }
-    for (const u of users) { const k = (u.createdAt || '').slice(0, 10); if (map.has(k)) map.get(k).users++; }
+    const bjKey = (s) => { const t = Date.parse(s); return isNaN(t) ? '' : new Date(t + 8 * 3600000).toISOString().slice(0, 10); };
+    for (const c of clinics) { const k = bjKey(c.createdAt || ''); if (map.has(k)) map.get(k).clinics++; }
+    for (const u of users) { const k = bjKey(u.createdAt || ''); if (map.has(k)) map.get(k).users++; }
     const max = Math.max(1, ...days.map(d => Math.max(d.clinics, d.users)));
     const W = 14 * 44, H = 150, barW = 14, groupW = 44;
     let svg = '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" style="min-width:' + W + 'px;">';

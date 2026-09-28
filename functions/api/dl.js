@@ -29,6 +29,8 @@
 //     R2 仅缓存透传所得字节，put 幂等同源覆盖）。
 // ============================================================================
 
+import { recordDownload } from './_lib/download-counter.js';
+
 const ASSET_RE = /^https:\/\/github\.com\/kyt61767126\/tcm-prescription-system\/releases\/download\/([^/?#]+)\/([^/?#]+)$/;
 
 function resolveTarget(raw) {
@@ -153,6 +155,8 @@ export async function onRequestGet({ request, env, waitUntil }) {
                         'Accept-Ranges': 'bytes',
                         'X-Proxy-Source': 'r2-cache'
                     };
+                    // ★ 2026-09-28 P1：R2 成功回包才计数（按 IP+文件+当天去重，Range 分片不重复）
+                    recordDownload(env, waitUntil, target.fileName, request);
                     if (r) {
                         h['Content-Length'] = String(r.length);
                         h['Content-Range'] = 'bytes ' + r.offset + '-' + (r.offset + r.length - 1) + '/' + meta.size;
@@ -201,6 +205,8 @@ export async function onRequestGet({ request, env, waitUntil }) {
     const contentRange = upstream.headers.get('content-range');
     if (contentRange) h['Content-Range'] = contentRange;
 
+    // ★ 2026-09-28 P1：GitHub 链路成功回包才计数（HEAD 探测/5xx 不计）
+    recordDownload(env, waitUntil, target.fileName, request);
     // 上游返回 206 → 原样透传 206（断点续传命中）
     if (upstream.status === 206) {
         return new Response(upstream.body, { status: 206, headers: h });

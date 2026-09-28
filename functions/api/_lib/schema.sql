@@ -113,3 +113,18 @@ CREATE TABLE IF NOT EXISTS user_devices (
   PRIMARY KEY (username, machine_id)
 );
 CREATE INDEX IF NOT EXISTS idx_devices_user ON user_devices(username);
+
+-- ★ 2026-09-28 P1 官网实际下载埋点（口径：按 IP+文件+UTC自然日去重的下载发起次数·估算）
+--   写入点：functions/api/dl.js（代理 GET 200/206）+ functions/downloads/[[path]].js（静态直链透传）
+--   读取方：functions/api/stats/funnel.js（platform_admin 聚合）
+--   去重：INSERT OR IGNORE，主键冲突=同 IP 当天同文件（HEAD 探测/Range 分片/多次点击均不重复计）
+--   为什么不用 KV：KV 免费版仅 1000 写/天（心跳端点已在配额治理），D1 免费版 10 万写/天
+--   隐私：只存 sha256(IP)，不存原始 IP；行可按 day 定期清理
+CREATE TABLE IF NOT EXISTS download_uniq (
+  day     TEXT NOT NULL,
+  file    TEXT NOT NULL,
+  ip_hash TEXT NOT NULL,
+  ts      INTEGER NOT NULL,
+  PRIMARY KEY (day, file, ip_hash)
+);
+CREATE INDEX IF NOT EXISTS idx_download_uniq_day ON download_uniq(day);
