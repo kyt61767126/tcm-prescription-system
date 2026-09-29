@@ -455,6 +455,22 @@ function backupUserAccounts(config, options) {
             }
         } catch (oe) { oldBackup = null; oldMissing = true; /* 旧件损坏 → 允许覆写 */ }
 
+        // ★ 2026-09-29 性能幂等：在场已是签名有效 v2 件且 users 与当前逐字段一致时，
+        //   直接短路——不写盘、不推进 gen、不读写 vault（Windows 凭据管理器经
+        //   execFileSync 同步往返，实测单次 2.7s；get-app-config 在登录窗/主窗启动
+        //   必调，旧实现账号一字未改也要 vault 读+写各一次，冻结主进程 5s+，导致
+        //   登录窗迟显、show/关窗消息排队错层闪烁，gen 每分钟空涨数代）。
+        //   安全性等价：同内容刷新不改变任何密码哈希/角色/条目，也不签发新东西，
+        //   锚点不推进无损防回滚（内容相同的旧件重放零收益）；账号真增减/改密/改名
+        //   时 users 必变，相等检查不通过，自动走下方完整证明+写入路径。
+        //   仅信任验签通过的 v2 件（机器绑定 HMAC），legacy/bad/损坏件不短路。
+        try {
+            const inPlace0 = inspectUsersBackup();
+            if (inPlace0.trusted === 'v2' && usersListsEqual(newUsers, inPlace0.users)) {
+                return true;
+            }
+        } catch (ie) { /* 校验异常按原完整路径处理 */ }
+
         if (!proven) {
             // ★ 第四轮（J1 纵深）：gen 锚点已建立时，在场备份必须是【新鲜 v2 件】
             //   才允许非 proven 覆写。否则（legacy/bad/陈旧 gen/缺失）一律拒绝——
