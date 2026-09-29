@@ -140,7 +140,9 @@
             
             filteredPrescriptions.forEach(p =>{
                 const date = new Date(p.date || p.createdAt || 0);
-                const dateStr = date.toLocaleDateString('zh-CN');
+                // ★ 2026-09-29 键改 ISO YYYY-MM-DD：旧 zh-CN「2026/9/9」按字符串排序会错排
+                //   （9 日排到 10 日之后）；ISO 键字典序即时间序，X 轴还能直接截「日」做短标签
+                const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
                 dailyMap.set(dateStr, (dailyMap.get(dateStr) || 0) + 1);
             });
             
@@ -508,7 +510,9 @@
             
             const trend = analyzeVisitTrend();
             createChart('visitTrendChart', 'bar', {
-                labels: trend.dates.slice(-14),
+                // ★ 2026-09-29 X 轴只显示「日」（14 个完整日期 2026/09/16 挤叠看不清）；
+                //   ISO 键 YYYY-MM-DD 截第 9 位起并去前导零，跨月处 28/29/30/1/2 连续可辨
+                labels: trend.dates.slice(-14).map(d => String(parseInt(d.slice(8), 10))),
                 values: trend.counts.slice(-14)
             });
             
