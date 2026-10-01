@@ -932,13 +932,12 @@ function getMachineId(hwFpOverride) {
             try {
                 const { execSync } = require('child_process');
                 const diskParts = [];
-                try {
-                    const diskOut = execSync('wmic diskdrive get serialnumber',
-                        { timeout: 2000, windowsHide: true }).toString();
-                    const lines = diskOut.split('\n').map(s => s.trim())
+                const dskOut = tryWmicExec('wmic diskdrive get serialnumber', 2000);
+                if (dskOut) {
+                    const lines = dskOut.split('\n').map(s => s.trim())
                         .filter(s => s && s.toLowerCase() !== 'serialnumber');
                     if (lines.length > 0 && lines[0]) diskParts.push('dsk=' + lines[0]);
-                } catch (e) {}
+                }
                 if (diskParts.length > 0) {
                     hwFp = require('crypto').createHash('sha256')
                         .update(diskParts.join('|')).digest('hex');
@@ -970,6 +969,27 @@ function getMachineId(hwFpOverride) {
 // 缓存结果避免重复执行 WMIC 命令（执行约 100-500ms）
 // 任一特征获取失败时跳过该特征，不影响其他特征
 // 全部失败时返回空字符串（密钥派生降级为不含硬件指纹，兼容旧版）
+// ★ 2026-10-01 wmic 退役：Win11 24H2 起系统不再附带 wmic.exe，每次 execSync
+//   都快速失败（~40ms/次 × 每启动 6 次）并刷 stderr 噪声；detectWmicGone 后
+//   永久跳过，老系统（wmic 存在）行为不变。
+let _wmicAvailable = null;
+function tryWmicExec(cmd, timeoutMs) {
+    if (_wmicAvailable === false) return null;
+    try {
+        const out = require('child_process').execSync(cmd,
+            { timeout: timeoutMs || 4000, windowsHide: true }).toString();
+        if (_wmicAvailable === null) _wmicAvailable = true;
+        return out;
+    } catch (e) {
+        // 9009=Windows"不是内部或外部命令"；ENOENT=spawn 找不到——均为 wmic 已移除，
+        // 判定永久不可用；超时/其他非零退出保持未知（老机瞬态失败可重试）
+        if (_wmicAvailable === null
+            && (e && (e.code === 'ENOENT' || e.status === 9009))) {
+            _wmicAvailable = false;
+        }
+        return null;
+    }
+}
 let _hardwareFingerprintCache = null;
 function getHardwareFingerprint() {
     if (_hardwareFingerprintCache !== null) return _hardwareFingerprintCache;
@@ -984,21 +1004,23 @@ function getHardwareFingerprint() {
             if (m) parts.push('mg=' + m[1].toLowerCase());
         } catch (e) { /* 忽略 */ }
         // 2. 主板序列号（硬件固定，VM 克隆时可能为空或默认值）
-        try {
-            const out = execSync('wmic baseboard get serialnumber',
-                { timeout: 2000, windowsHide: true }).toString();
-            const lines = out.split('\n').map(s => s.trim())
-                .filter(s => s && s.toLowerCase() !== 'serialnumber');
-            if (lines.length > 0 && lines[0]) parts.push('bb=' + lines[0]);
-        } catch (e) { /* 忽略 */ }
+        {
+            const out = tryWmicExec('wmic baseboard get serialnumber', 2000);
+            if (out) {
+                const lines = out.split('\n').map(s => s.trim())
+                    .filter(s => s && s.toLowerCase() !== 'serialnumber');
+                if (lines.length > 0 && lines[0]) parts.push('bb=' + lines[0]);
+            }
+        }
         // 3. CPU ID（硬件固定，VM 克隆时可能变化）
-        try {
-            const out = execSync('wmic cpu get processorid',
-                { timeout: 2000, windowsHide: true }).toString();
-            const lines = out.split('\n').map(s => s.trim())
-                .filter(s => s && s.toLowerCase() !== 'processorid');
-            if (lines.length > 0 && lines[0]) parts.push('cpu=' + lines[0]);
-        } catch (e) { /* 忽略 */ }
+        {
+            const out = tryWmicExec('wmic cpu get processorid', 2000);
+            if (out) {
+                const lines = out.split('\n').map(s => s.trim())
+                    .filter(s => s && s.toLowerCase() !== 'processorid');
+                if (lines.length > 0 && lines[0]) parts.push('cpu=' + lines[0]);
+            }
+        }
         _hardwareFingerprintCache = parts.length === 0 ? '' :
             crypto.createHash('sha256').update(parts.join('|')).digest('hex');
     } catch (e) {
@@ -2347,62 +2369,69 @@ function isVirtualMachine() {
             _vmCheckCache = false;
             return false;
         }
-        const { execSync } = require('child_process');
         const vmIndicators = [
             'vmware', 'virtualbox', 'vbox', 'qemu', 'xen', 'hyper-v', 'hyperv',
             'parallels', 'vmware virtual platform', 'innotek gmbh'
         ];
 
         // 1. WMI 查询计算机制造商和型号
-        try {
-            const out = execSync('wmic computersystem get manufacturer,model',
-                { timeout: 2000, windowsHide: true }).toString().toLowerCase();
-            for (const ind of vmIndicators) {
-                if (out.includes(ind)) {
-                    console.warn('[License] 检测到 VM 标志（WMI Manufacturer/Model）:', ind);
-                    _vmCheckCache = true;
-                    return true;
+        {
+            const out = tryWmicExec('wmic computersystem get manufacturer,model', 2000);
+            if (out) {
+                const low = out.toLowerCase();
+                for (const ind of vmIndicators) {
+                    if (low.includes(ind)) {
+                        console.warn('[License] 检测到 VM 标志（WMI Manufacturer/Model）:', ind);
+                        _vmCheckCache = true;
+                        return true;
+                    }
                 }
             }
-        } catch (e) { /* 忽略 WMI 失败 */ }
+        }
 
         // 2. WMI 查询磁盘型号（VM 磁盘通常含 VBOX/VIRTUAL/VMware）
-        try {
-            const out = execSync('wmic diskdrive get model',
-                { timeout: 2000, windowsHide: true }).toString().toLowerCase();
-            for (const ind of vmIndicators) {
-                if (out.includes(ind)) {
-                    console.warn('[License] 检测到 VM 标志（WMI DiskDrive Model）:', ind);
-                    _vmCheckCache = true;
-                    return true;
+        {
+            const out = tryWmicExec('wmic diskdrive get model', 2000);
+            if (out) {
+                const low = out.toLowerCase();
+                for (const ind of vmIndicators) {
+                    if (low.includes(ind)) {
+                        console.warn('[License] 检测到 VM 标志（WMI DiskDrive Model）:', ind);
+                        _vmCheckCache = true;
+                        return true;
+                    }
                 }
             }
-        } catch (e) { /* 忽略 */ }
+        }
 
         // 3. BIOS 版本字符串（VMware/VirtualBox BIOS 标志）
-        try {
-            const out = execSync('wmic bios get serialnumber,version',
-                { timeout: 2000, windowsHide: true }).toString().toLowerCase();
-            for (const ind of vmIndicators) {
-                if (out.includes(ind)) {
-                    console.warn('[License] 检测到 VM 标志（WMI BIOS）:', ind);
+        {
+            const out = tryWmicExec('wmic bios get serialnumber,version', 2000);
+            if (out) {
+                const low = out.toLowerCase();
+                for (const ind of vmIndicators) {
+                    if (low.includes(ind)) {
+                        console.warn('[License] 检测到 VM 标志（WMI BIOS）:', ind);
+                        _vmCheckCache = true;
+                        return true;
+                    }
+                }
+            }
+        }
+
+        // 4. 进程列表检测沙箱（Sandboxie）
+        {
+            const out = tryWmicExec('wmic process get name', 2000);
+            if (out) {
+                const low = out.toLowerCase();
+                if (low.includes('sandboxie') || low.includes('sandboxiedcomlaunch') ||
+                    low.includes('sandboxierpcss')) {
+                    console.warn('[License] 检测到沙箱进程（Sandboxie）');
                     _vmCheckCache = true;
                     return true;
                 }
             }
-        } catch (e) { /* 忽略 */ }
-
-        // 4. 进程列表检测沙箱（Sandboxie）
-        try {
-            const out = execSync('wmic process get name',
-                { timeout: 2000, windowsHide: true }).toString().toLowerCase();
-            if (out.includes('sandboxie') || out.includes('sandboxiedcomlaunch') ||
-                out.includes('sandboxierpcss')) {
-                console.warn('[License] 检测到沙箱进程（Sandboxie）');
-                _vmCheckCache = true;
-                return true;
-            }
-        } catch (e) { /* 忽略 */ }
+        }
 
         _vmCheckCache = false;
         return false;
@@ -2852,7 +2881,7 @@ async function heartbeatHandler() {
             //   colo、KV 传播窗口）时，延时 2.5s 重裁一次，避免登录后瞬间误退。
             let _recentVerified = false;
             try {
-                const _gu = getUnifiedGate(machineId);
+                const _gu = await getUnifiedGateAsync(machineId);
                 _recentVerified = !!(_gu.lastVerify && Date.now() - _gu.lastVerify < 10 * 60 * 1000);
             } catch (ge) { /* 读不到按非近期处理 */ }
             if (_recentVerified) {
@@ -3079,6 +3108,222 @@ function vaultInvoke(action, target, value) {
     if (!lines.length) return { ok: false, error: 'vault-empty-output' };
     try { return JSON.parse(lines[lines.length - 1]); }
     catch (e) { return { ok: false, error: 'vault-bad-json' }; }
+}
+
+// ★ 2026-10-01 启动性能根治：vault 异步原语族。
+//   背景：vaultInvoke 用 execFileSync 同步 spawn PowerShell（单次实测 1.5~3.4s），
+//   verifyLoginGate（登录窗/主窗打开即触发）链路 3 次同步 PS 累计冻结主进程
+//   ~4.5s——所有窗口 IPC/compositor 调度全停，用户感知"打开登录框/页面异常缓慢"。
+//   异步化后 PS 仍要跑同样时长，但主进程事件循环不再被阻塞（UI 流畅，仅授权
+//   检查本身耗时，渲染端本就有等待态）。
+//   安全语义与同步版逐条等价（fresh 读合并 / uncertain 不覆写 / 双文件降级），
+//   写链经 _vaultWriteChain 串行化保持同步版"主进程单线程天然串行"的写序。
+function __vaultParseStdout(stdout) {
+    const lines = String(stdout || '').trim().split(/[\r\n]+/).filter(Boolean);
+    if (!lines.length) return { ok: false, error: 'vault-empty-output' };
+    try { return JSON.parse(lines[lines.length - 1]); }
+    catch (e) { return { ok: false, error: 'vault-bad-json' }; }
+}
+function vaultInvokeAsync(action, target, value) {
+    return new Promise((resolve) => {
+        const ps1Path = getVaultPs1Path();
+        if (!ps1Path) { resolve({ ok: false, error: 'vault-ps1-unavailable' }); return; }
+        let script;
+        try { script = fs.readFileSync(ps1Path, 'utf8'); }
+        catch (e) { resolve({ ok: false, error: 'vault-ps1-read-failed' }); return; }
+        if (script.charCodeAt(0) === 0xFEFF) script = script.slice(1);
+        const env = Object.assign({}, process.env, {
+            BNZC_VAULT_ACTION: action,
+            BNZC_VAULT_TARGET: target || '',
+            BNZC_VAULT_VALUE: value || ''
+        });
+        const psExe = process.env.SystemRoot
+            ? path.join(process.env.SystemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
+            : 'powershell.exe';
+        childProcess.execFile(psExe, [
+            '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+            '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')
+        ], { env, timeout: 15000, maxBuffer: 1 << 20, windowsHide: true },
+            (err, stdout) => {
+                if (err) { resolve({ ok: false, error: 'vault-spawn-failed' }); return; }
+                resolve(__vaultParseStdout(stdout));
+            });
+    });
+}
+
+// 异步读单 mid（与 readVaultState 同语义）
+async function readVaultStateAsync(mid) {
+    const r = await vaultInvokeAsync('read', VAULT_TARGET_PREFIX + mid, '');
+    if (!r || r.ok !== true) return { dead: true };
+    if (!r.found || !r.blob) return { dead: false, state: null };
+    return decryptVaultRecord(r.blob, mid);
+}
+// 异步批量读（与 readVaultStates 同语义：一次 PS 进程合并 N 候选）
+async function readVaultStatesAsync(mids) {
+    const list = mids.filter(Boolean);
+    if (!list.length) return [];
+    const joined = list.map(m => VAULT_TARGET_PREFIX + m).join(',');
+    const r = await vaultInvokeAsync('read-many', joined, '');
+    if (!r || r.ok !== true || !Array.isArray(r.items)) {
+        return list.map(() => ({ dead: true }));
+    }
+    return list.map((m) => {
+        const item = r.items.find(it => it && it.target === VAULT_TARGET_PREFIX + m);
+        if (!item || item.error) return { dead: true };
+        if (!item.found || !item.blob) return { dead: false, state: null };
+        return decryptVaultRecord(item.blob, m);
+    });
+}
+// 异步写（与 writeVaultState 同语义）
+async function writeVaultStateAsync(state, mid) {
+    if (!_emptyFpWarned && getHardwareFingerprint() === '') {
+        _emptyFpWarned = true;
+        console.error('[Gate] 硬件指纹采集全部失败，vault blob 未绑定硬件（请检查系统）');
+    }
+    let blob;
+    try { blob = encryptVaultBlob(JSON.stringify(state), mid); }
+    catch (e) { return false; }
+    const r = await vaultInvokeAsync('write', VAULT_TARGET_PREFIX + mid, blob);
+    if (r && r.ok === true) return true;
+    console.warn('[Gate] vault 写入失败，本次回落文件：', r && r.error);
+    return false;
+}
+// 异步跨候选解析（与 resolveVaultState 同语义：全候选级联合并、写回 primary、删旧）
+async function resolveVaultStateAsync(primaryMid) {
+    const variants = getMidVariants();
+    const results = await readVaultStatesAsync(variants);
+    const found = [];
+    let anyDead = false, anyCorrupt = false;
+    for (let i = 0; i < variants.length; i++) {
+        const v = results[i];
+        if (!v || v.dead) { anyDead = true; continue; }
+        if (v.state) found.push({ mid: variants[i], state: v.state });
+        if (v.corrupt) anyCorrupt = true;
+    }
+    if (!found.length) {
+        if (anyDead) return { dead: true };
+        return { dead: false, state: null, corrupt: anyCorrupt };
+    }
+    let merged = {};
+    for (const f of found) merged = mergeUnifiedStates(merged, f.state);
+    if (found.length === 1 && found[0].mid === primaryMid) {
+        const __st = found[0].state;
+        if (__st && (__st.usersBackupGenV2 || __st.usersLegacyRetiredV2)) {
+            __st.usersBackupGenV2 = mergeDomainGenMaps(null, __st.usersBackupGenV2);
+            __st.usersLegacyRetiredV2 = mergeDomainRetiredMaps(null, __st.usersLegacyRetiredV2);
+        }
+        return { dead: false, state: __st };
+    }
+    if (await writeVaultStateAsync(merged, primaryMid)) {
+        for (const f of found) {
+            if (f.mid !== primaryMid) {
+                await vaultInvokeAsync('delete', VAULT_TARGET_PREFIX + f.mid, '');
+            }
+        }
+        return { dead: false, state: merged };
+    }
+    return { dead: false, state: merged };
+}
+// 异步统一态读取（与 readUnifiedStateFresh 同语义，全链 await）
+async function readUnifiedStateFreshAsync(mid) {
+    if (vaultAvailable()) {
+        const v = await resolveVaultStateAsync(mid);
+        if (v.dead) {
+            markVaultTransient();
+        } else {
+            const fileState = readFileLegacyState(mid);
+            if (v.state && fileState) {
+                const merged = mergeUnifiedStates(v.state, fileState);
+                if (await writeVaultStateAsync(merged, mid)) {
+                    removeLegacyAnchorFiles();
+                    return { vault: true, state: merged };
+                }
+                return { vault: false, state: merged };
+            }
+            if (v.state) return { vault: true, state: v.state };
+            if (fileState) {
+                if (v.corrupt) return { vault: false, state: fileState, uncertain: true };
+                if (await writeVaultStateAsync(fileState, mid)) {
+                    removeLegacyAnchorFiles();
+                    console.log('[Gate] 旧双文件锚点已迁移进 Windows 凭据管理器');
+                    return { vault: true, state: fileState };
+                }
+                return { vault: false, state: fileState };
+            }
+            if (v.corrupt) return { vault: true, state: null, uncertain: true };
+            return { vault: true, state: null };
+        }
+    }
+    const fileState = readFileLegacyState(mid);
+    if (fileState) return { vault: false, state: fileState };
+    return { vault: false, state: null, uncertain: !_vaultEnvDisabled };
+}
+// 异步统一态读取（缓存 + in-flight 单飞去重：并发 IPC 只 spawn 一次 PS）
+let _unifiedReadInFlight = null;
+function readUnifiedStateAsync(mid) {
+    const now = Date.now();
+    if (_unifiedCache && _unifiedCache.mid === mid && now - _unifiedCache.at < UNIFIED_CACHE_MS) {
+        let hasLegacy = false;
+        try { hasLegacy = fs.existsSync(getGatePath()) || fs.existsSync(getAnchorPath()); }
+        catch (e) { hasLegacy = false; }
+        if (!hasLegacy) return Promise.resolve(_unifiedCache.result);
+    }
+    if (_unifiedReadInFlight && _unifiedReadInFlight.mid === mid) return _unifiedReadInFlight.p;
+    const p = readUnifiedStateFreshAsync(mid).then((result) => {
+        if (result.vault === true) _unifiedCache = { mid, at: Date.now(), result };
+        return result;
+    }).finally(() => { if (_unifiedReadInFlight && _unifiedReadInFlight.p === p) _unifiedReadInFlight = null; });
+    _unifiedReadInFlight = { mid, p };
+    return p;
+}
+// 异步统一态写入（与 writeUnifiedState 同语义：fresh 读合并、写成功回填缓存、
+// 失败降级双文件）；_vaultWriteChain 串行化保持同步版天然串行的写序。
+let _vaultWriteChain = Promise.resolve();
+function writeUnifiedStateAsync(state, mid, freshRead) {
+    const run = async () => {
+        let s = state;
+        try {
+            if (!freshRead) invalidateUnifiedCache();
+            const cur = freshRead || await readUnifiedStateAsync(mid);
+            const cs = cur.state;
+            if (cs) {
+                s = Object.assign({}, cs, state);
+                s.usersBackupGenV2 = mergeDomainGenMaps(cs.usersBackupGenV2, state.usersBackupGenV2);
+                s.usersLegacyRetiredV2 = mergeDomainRetiredMaps(cs.usersLegacyRetiredV2, state.usersLegacyRetiredV2);
+            }
+        } catch (e) { s = state; }
+        if (vaultAvailable() && await writeVaultStateAsync(s, mid)) {
+            _unifiedCache = { mid, at: Date.now(), result: { vault: true, state: s } };
+            return true;
+        }
+        if (!_vaultEnvDisabled) markVaultTransient();
+        let gOk = false, aOk = false;
+        try { gOk = !!writeGateState(s, mid); } catch (e) { /* 继续写 anchor */ }
+        try { aOk = !!writeAnchorState(s, mid); } catch (e) { /* 忽略 */ }
+        return !!(gOk || aOk);
+    };
+    const p = _vaultWriteChain.then(run, run);
+    _vaultWriteChain = p.catch(() => {});
+    return p;
+}
+// 异步 getUnifiedGate（与 getUnifiedGate 同语义）
+async function getUnifiedGateAsync(mid) {
+    const r = await readUnifiedStateAsync(mid);
+    const s = r.state || {};
+    if (!s.accountReject || s.accountReject.__arMap !== 1) {
+        s.accountReject = normalizeRejectMap(s.accountReject);
+    }
+    return {
+        gate: s,
+        anchor: s,
+        vault: r.vault === true,
+        uncertain: r.uncertain === true,
+        everActivated: !!s.everActivated,
+        lastReject: s.lastReject || null,
+        lastVerify: Number(s.lastVerify) || 0,
+        lastSeenHigh: Number(s.lastSeenHigh) || 0,
+        accountReject: s.accountReject || {}
+    };
 }
 
 // 凭据子系统健康探测（懒加载）：失败只标记时间，退避到期允许重试——
@@ -3560,6 +3805,12 @@ function persistUnified(u, mid) {
     return writeUnifiedState(u.gate, mid);
 }
 
+// ★ 2026-10-01 启动性能：异步版 persist（verifyLoginGate 全链专用，主进程零冻结）
+function persistUnifiedAsync(u, mid) {
+    // vault 模式写凭据；故障/降级自动回落双文件（语义同 persistUnified）
+    return writeUnifiedStateAsync(u.gate, mid);
+}
+
 // ★ 中-1：单调高水位防时间回拨/前拨。gate 与 anchor 双写 lastSeenHigh。
 //   回拨判定（now 显著低于历史高水位）见 verifyLoginGate 内 rollbackSuspected：
 //   不再直接硬拒，而是要求在线 LICENSED 自愈（旧 gateRollbackFail 已移除）。
@@ -3574,7 +3825,7 @@ function bumpHighWater(u, now) {
 // 只能联网拿 LICENSED 清除）。gate 与 anchor 的 lastReject 任一存在即阻断。
 // ★ 高-1 修复：两侧 offlineStart 取【最早】值，绝不覆盖另一侧已有的起点
 //   （旧码读不到 gate 时把两侧都重写成 now，删单文件即可无限重置）。
-function gateGracePass(u, mid, username) {
+async function gateGracePass(u, mid, username) {
     const now = Date.now();
     // 状态不明（vault 瞬态故障且无文件 / 凭据损坏 / 指纹抖动）：fail-closed，
     // 绝不播种新宽限（否则一次启动故障即可把 7 天时钟归零），只认在线 LICENSED
@@ -3602,7 +3853,7 @@ function gateGracePass(u, mid, username) {
         if (!gs) u.gate.offlineStart = start;  // 只补缺失侧
         if (!as) u.anchor.offlineStart = start;
     }
-    persistUnified(u, mid);
+    await persistUnifiedAsync(u, mid);
     if (now - start < GATE_GRACE_MS) return { ok: true, grace: true };
     return { ok: false, message: '无法连接授权服务器且已超过 7 天离线宽限期，请联网后重试或联系客服' };
 }
@@ -3621,7 +3872,8 @@ async function verifyLoginGate(usernameInput) {
     catch (e) { return fail('授权校验异常，请联系客服'); }
 
     const lt = local.licenseType || local.type || '';
-    const u = getUnifiedGate(mid);
+    // ★ 2026-10-01 启动性能：gate 冷读走异步（vault PS ~1.5s 不再冻结主进程）
+    const u = await getUnifiedGateAsync(mid);
     const now = Date.now();
 
     // ★ 高-3 修复：时间回拨不再于裁决前硬拒（旧逻辑合法用户无任何自愈途径，
@@ -3642,12 +3894,12 @@ async function verifyLoginGate(usernameInput) {
     // ★ 2026-09-23 账号墓碑消费：服务端下发 accountState=ACCOUNT_REVOKED → 双锚点
     //   写【账号级】拒绝标记并硬拒（断网/MITM 均不可绕过；按用户名隔离，不影响
     //   同机其他账号）。返回非 null 即为应直接返回的拒绝结果。
-    const accountHardFail = (ent) => {
+    const accountHardFail = async (ent) => {
         if (ent && ent.accountState === 'ACCOUNT_REVOKED' && username) {
             const rec = { username: username, state: 'ACCOUNT_REVOKED', at: now };
             u.gate.accountReject[username] = rec;
             u.anchor.accountReject[username] = rec;
-            persistUnified(u, mid);
+            await persistUnifiedAsync(u, mid);
             return fail(gateStateMessage('ACCOUNT_REVOKED'));
         }
         return null;
@@ -3664,7 +3916,7 @@ async function verifyLoginGate(usernameInput) {
     // ③ 永久免费版豁免（产品承诺永久离线可用；free license 服务端签发不可伪造）
     if (local.valid && local.type === 'licensed' && lt === 'free') {
         bumpHighWater(u, now);
-        persistUnified(u, mid);
+        await persistUnifiedAsync(u, mid);
         return { ok: true, free: true };
     }
 
@@ -3683,7 +3935,7 @@ async function verifyLoginGate(usernameInput) {
 
         if (r.ok && r.ent && r.ent.success === true && r.ent.state) {
             // ★ 账号删除优先裁决：即使设备授权 LICENSED，账号墓碑命中也硬拒
-            const __accFail = accountHardFail(r.ent);
+            const __accFail = await accountHardFail(r.ent);
             if (__accFail) return __accFail;
             if (r.ent.state === 'LICENSED') {
                 if (rollbackSuspected) {
@@ -3695,13 +3947,13 @@ async function verifyLoginGate(usernameInput) {
                 u.gate.lastVerify = now; u.gate.offlineStart = null; u.gate.lastReject = null; u.gate.rejectAt = null;
                 u.anchor.lastVerify = now; u.anchor.offlineStart = null; u.anchor.lastReject = null; u.anchor.rejectAt = null;
                 clearAccountRejectIfMatch();
-                persistUnified(u, mid);
+                await persistUnifiedAsync(u, mid);
                 return { ok: true };
             }
             // 硬失效态：双锚点持久化拒绝标记（删任一文件不能再吃宽限）
             u.gate.lastReject = r.ent.state; u.gate.rejectAt = now;
             u.anchor.lastReject = r.ent.state; u.anchor.rejectAt = now;
-            persistUnified(u, mid);
+            await persistUnifiedAsync(u, mid);
             return fail(gateStateMessage(r.ent.state));
         }
         // ★ 回拨可疑：任何非在线 LICENSED 一律拒绝（含断网，无宽限）
@@ -3712,7 +3964,7 @@ async function verifyLoginGate(usernameInput) {
         //   的 gateGracePass：受 lastReject 双锚点（曾在线收过硬拒即无宽限，
         //   MITM 注入 403 绕不过吊销）+ 7 天宽限约束。
         if (r.httpFail === 403) {
-            return gateGracePass(u, mid, username);
+            return await gateGracePass(u, mid, username);
         }
         if (r.httpFail) {
             return fail('授权服务暂时不可用（HTTP ' + r.httpFail + '），请稍后重试或联系客服');
@@ -3724,7 +3976,7 @@ async function verifyLoginGate(usernameInput) {
             // success=false 或结构缺失，一律 fail-closed（低-1）
             return fail((r.ent && r.ent.message) || '授权校验未通过，请联系客服');
         }
-        return gateGracePass(u, mid, username);
+        return await gateGracePass(u, mid, username);
     }
 
     // ② 试用期
@@ -3736,7 +3988,7 @@ async function verifyLoginGate(usernameInput) {
             const r = await adjudicateViaMainProcess(mid, username);
             if (r.ok && r.ent && r.ent.success === true && r.ent.state) {
                 // ★ 账号删除优先裁决
-                const __accFail = accountHardFail(r.ent);
+                const __accFail = await accountHardFail(r.ent);
                 if (__accFail) return __accFail;
                 if (r.ent.state === 'LICENSED') {
                     if (rollbackSuspected) {
@@ -3749,25 +4001,25 @@ async function verifyLoginGate(usernameInput) {
                     u.gate.lastVerify = now; u.gate.offlineStart = null; u.gate.lastReject = null; u.gate.rejectAt = null;
                     u.anchor.lastVerify = now; u.anchor.offlineStart = null; u.anchor.lastReject = null; u.anchor.rejectAt = null;
                     clearAccountRejectIfMatch();
-                    persistUnified(u, mid);
+                    await persistUnifiedAsync(u, mid);
                     return { ok: true };
                 }
                 // ★ 高-2 修复：硬失效态同样双写 lastReject（旧码直接 return,
                 //   删 dat 后断网即可吃宽限，比不删 dat 处境更好）。
                 u.gate.lastReject = r.ent.state; u.gate.rejectAt = now;
                 u.anchor.lastReject = r.ent.state; u.anchor.rejectAt = now;
-                persistUnified(u, mid);
+                await persistUnifiedAsync(u, mid);
                 return fail(gateStateMessage(r.ent.state));
             }
             if (rollbackSuspected) return fail(rollbackMessage);
             if (r.netFail) {
-                const g = gateGracePass(u, mid, username);
+                const g = await gateGracePass(u, mid, username);
                 if (g.ok) return g;
                 return fail(g.message);  // 超宽限/曾拒：保留可读原因
             }
             if (r.httpFail === 403) {
                 // 设备安全封锁：同付费分支，按 09-11 红线走宽限
-                const g = gateGracePass(u, mid, username);
+                const g = await gateGracePass(u, mid, username);
                 if (g.ok) return g;
                 return fail(g.message);
             }
@@ -3783,7 +4035,7 @@ async function verifyLoginGate(usernameInput) {
             return fail('授权校验异常，请联系客服');
         }
         bumpHighWater(u, now);
-        persistUnified(u, mid);
+        await persistUnifiedAsync(u, mid);
         return { ok: true, trial: true };
     }
 

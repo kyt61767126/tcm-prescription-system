@@ -2503,6 +2503,15 @@
     //   跑闸门：NO_LICENSE（后台删诊所/码）/REVOKED/EXPIRED 立即锁。
     // trial（试用期）与 free（永久免费）不在此门；网络失败由 gate token 离线验签处理。
     function installMainWindowGate() {
+        // ★ 2026-10-01 启动性能：登录窗（login.html）不装主窗自检。
+        //   自检会触发 verify-login-gate IPC（主进程 vault 读写 + 在线裁决），
+        //   在登录窗阶段既无主窗内容可锁、结果也没人消费，纯耗时且冻结
+        //   主进程 ~4.5s（用户感知"打开登录框异常缓慢"）。登录提交链
+        //   （login() 内 verifyLoginGate）与主窗加载时仍各自完整跑闸门，
+        //   吊销检测不缺位。
+        if (/login\.html(\?|#|$)/i.test(String(location.pathname) + String(location.search) + String(location.hash))) {
+            return;
+        }
         const run = async () => {
             try {
                 if (global.__mainWindowGateDone) return;
