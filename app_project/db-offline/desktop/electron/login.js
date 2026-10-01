@@ -20,12 +20,16 @@
 
     // ★ 2026-08-28 实名信息防护：判定一个"记忆候选"是否为"通用用户名"
     //   实名内容（真实手机号/真实医师名）一律不记忆；仅允许"拼音/英文/通用称呼类"用户名记忆到下拉/预填。
+    //   ★ 2026-10-01（双审查 B-J3 收口）：电话号码判据去分隔符化——+86138…、
+    //   "138 0000 1111"、"138-0000-1111"、(010) 等变体去掉非数字字符后含 ≥7 位
+    //   连续数字即按电话号码拒（手机/座机），堵死"记忆键写入→下拉实名上屏"铁律缺口。
     function isGenericUsername(candidate) {
         try {
             const s = String(candidate || '').trim();
             if (!s) return false;
             if (LEGACY_USERNAMES.includes(s)) return false;
             if (/^\d{10,15}$/.test(s)) return false;
+            if (s.replace(/\D/g, '').length >= 7) return false; // 任意分隔的电话号变体
             if (/[\u4e00-\u9fa5]{2,}/.test(s)) return false;
             if (s.indexOf('@') >= 0) return false;
             return true;
@@ -250,30 +254,50 @@
     let _users = [];
 
     function initLoginInput(config) {
-        // ★ 2026-09-06 用户要求：彻底取消登录框用户名自动预填
-        //   （历次：8-27 恢复预填 → 9-04 删 config.users 单账户预填 → 9-06 彻底取消所有自动预填）
-        //   场景：测试笔记本升级新版后自动显示旧记住的用户名，不像新客户首次使用；
-        //   预填链路也多次引发"首次启动预填 admin/admin"类历史 bug。现统一：
-        //   登录框用户名永远空白+聚焦；记住的账户仅保留手动下拉切换（renderUsernameDropdown）。
+        // ★ 2026-10-01 恢复登录框「最后登录用户名」自动预填（用户反馈：原秒开版一直有）。
+        //   9-06 曾按要求彻底取消，现恢复，但保留三重防护杜绝历史事故（翻新机/默认 admin/实名残留）：
+        //   1) isGenericUsername：拒绝真实姓名/手机号/邮箱（KNOWLEDGE 登录框实名防护铁律）
+        //   2) LEGACY_USERNAMES：doctor1/doctor2 内置旧账户永不预填
+        //   3) ★ 必须在【当前本机 config 用户列表】中实际存在（翻新机/localStorage 残留一律不预填）
+        //   任一不满足 → 用户名空白+聚焦；多账户仍可手动下拉切换（renderUsernameDropdown 保留）。
         const input = $('loginUsername');
         const users = getUsers(config);
         _users = users;
+        // 预填存在性只认【本机 config.json 权威账户】（含密码、已过滤内置旧账户），
+        // 不用 getUsers 合并结果——后者混有 localStorage 补充件与 DEFAULT_USERS 兜底，
+        // 严格贴合"翻新机/残留一律不预填"的防护注释。
+        const configUsers = getUsersFromConfig(config);
 
-        // ★ 实名防护兜底（保留）：单键残留的实名（手机号/真实姓名/邮箱）静默清除
+        let rememberedUser = '';
         try {
-            const rememberedUser = localStorage.getItem(KEY_REMEMBER_USER);
-            if (rememberedUser && !isGenericUsername(rememberedUser)) {
+            const v = String(localStorage.getItem(KEY_REMEMBER_USER) || '').trim();
+            if (v && !isGenericUsername(v)) {
+                // 实名防护兜底：单键残留的实名（手机号/真实姓名/邮箱）静默清除
                 localStorage.removeItem(KEY_REMEMBER_USER);
+            } else {
+                rememberedUser = v;
             }
         } catch (_) {}
 
         try { const dnEl = document.getElementById('loginDoctorName'); if (dnEl) dnEl.style.display = 'none'; } catch (e) {}
 
-        // 登录框保持全新状态：用户名空白 + 聚焦输入
-        input.value = '';
-        setTimeout(() => { input.focus(); }, 200);
+        let matchedName = '';
+        if (rememberedUser && !LEGACY_USERNAMES.includes(rememberedUser)) {
+            const hit = configUsers.find(u =>
+                String(u.username || '').trim().toLowerCase() === rememberedUser.toLowerCase());
+            if (hit) matchedName = String(hit.username).trim(); // 回填规范名（防记忆值大小写漂移）
+        }
+        if (matchedName) {
+            // 预填最后登录账户，焦点直接落密码框（回车即可登录）；密码永远空白
+            input.value = matchedName;
+            try { const pwd = $('loginPassword'); if (pwd) setTimeout(() => pwd.focus(), 200); } catch (e) {}
+        } else {
+            // 无可用记忆：用户名空白 + 聚焦输入（新机/翻新机/手机号登录用户均走此态）
+            input.value = '';
+            setTimeout(() => { input.focus(); }, 200);
+        }
 
-        // ★ 2026-08-28 全局统一：渲染多账户下拉切换（手动操作，不自动显示）
+        // ★ 2026-08-28 全局统一：渲染多账户下拉切换（手动操作）
         renderUsernameDropdown(users);
     }
 
@@ -387,6 +411,9 @@
             const s = String(displayName || '').trim();
             if (!s) return false;
             if (/^\d{10,15}$/.test(s)) return false;
+            // ★ 2026-10-01：与 isGenericUsername 同口径，带分隔符的电话号
+            //   （+86/空格/连字符/括号，去非数字后 ≥7 位）也不得作为显示名上屏
+            if (s.replace(/\D/g, '').length >= 7) return false;
             if (/[\u4e00-\u9fa5]{2,}/.test(s)) return false;
             if (s.indexOf('@') >= 0) return false;
             return true;

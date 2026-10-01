@@ -503,6 +503,42 @@ function ensureDomainBootstrap(mid) {
         }
     } catch (e) { /* 固化失败不阻断：调用方退回内存引导，下次启动重试；哨位不写 */ }
 }
+// ★ 2026-10-01 性能：ensureDomainBootstrap 的全异步镜像（prewarmGate 后台预固化
+//   专用）。与同步版共享 _domainBootstrapDone——两者在本进程都只尝试一次，先到者
+//   占位，失败语义也与同步版一致（退回内存引导，下次启动重试）。读写全走异步
+//   vault 链，绝不 spawn 同步 PowerShell 冻结主进程/登录链。
+async function ensureDomainBootstrapAsync(mid) {
+    if (_domainBootstrapDone) return;
+    _domainBootstrapDone = true;
+    try {
+        const r = await readUnifiedStateAsync(mid);
+        const s = r.state || null;
+        const dom = getAppDomain();
+        const genDone = !!(s && s.usersBackupGenV2 && Number(s.usersBackupGenV2[dom]) > 0);
+        const retiredDone = !!(s && s.usersLegacyRetiredV2 && s.usersLegacyRetiredV2[dom] === true);
+        if (genDone && retiredDone) { syncDomainSentinel(dom, s); return; }
+        const inPlace = inspectUsersBackup();
+        if (inPlace.trusted !== 'v2') {
+            // legacy/none/bad：新机语义，落负哨位（gen=0）让后续定时器跳过冷读
+            syncDomainSentinel(dom, s);
+            return;
+        }
+        const patch = {};
+        const curGen = Number(s && s.usersBackupGenV2 && s.usersBackupGenV2[dom]) || 0;
+        const seed = Math.max(Number(inPlace.gen) || 0, Number(s && s.usersBackupGen) || 0, curGen, 1);
+        if (seed > curGen) {
+            patch.usersBackupGenV2 = Object.assign({}, (s && s.usersBackupGenV2) || null, { [dom]: seed });
+        }
+        if (!retiredDone) {
+            patch.usersLegacyRetiredV2 = Object.assign({}, (s && s.usersLegacyRetiredV2) || null, { [dom]: true });
+        }
+        if (Object.keys(patch).length) {
+            await patchUnifiedStateAsync(patch, mid);
+            const r2 = await readUnifiedStateAsync(mid); // 写成功已回填缓存，零 PS
+            syncDomainSentinel(dom, r2.state);
+        }
+    } catch (e) { /* 固化失败不阻断：调用方退回内存引导 */ }
+}
 // 幂等稳态（备份 v2 且 users 全等、直接短路）路径专用：延迟一次性固化，
 // 绝不在登录窗/主窗首帧链路同步 spawn PowerShell（2026-09-29 性能修复红线）。
 function scheduleDomainBootstrap(mid) {
@@ -539,7 +575,7 @@ function scheduleDomainBootstrap(mid) {
 function readUsersBackupGen(machineIdArg) {
     try {
         const mid = machineIdArg || getMachineId();
-        // ★ 2026-09-26 M-2：gen 随统一状态存储（vault 优先）
+        // ★ M-2：gen 随统一状态存储（vault 优先）
         const r0 = readUnifiedState(mid);
         const dom = getAppDomain();
         const g0 = Number(r0.state && r0.state.usersBackupGenV2 && r0.state.usersBackupGenV2[dom]);
@@ -554,8 +590,14 @@ function readUsersBackupGen(machineIdArg) {
                 if (ip.trusted === 'v2') {
                     const bg = Number(ip.gen) || 0;
                     if (bg > g0) {
-                        writeUsersBackupGen(bg, mid);
-                        syncDomainSentinel(dom, readUnifiedState(mid).state);
+                        // ★ 2026-10-01 性能：自愈抬升改异步写（原同步 PS 写实测在
+                        //   登录 rename 备份链上与 persist 写并发竞争 CredMan/PS，
+                        //   单点冻结 5s+）。抬升依据是在场机器签名 v2 件（攻击者签
+                        //   不出更高件），晚数百 ms 落 vault 无安全窗口——本次直接
+                        //   返回 bg 供调用方签 bg+1 新件，下一次读自愈路径仍会兜底
+                        //   抬升；写由 _vaultWriteChain 串行，与其他写保序合并不覆盖。
+                        writeUsersBackupGenAsync(bg, mid).catch(() => {});
+                        try { syncDomainSentinel(dom, readUnifiedState(mid).state); } catch (e2) { /* 忽略 */ }
                         return bg;
                     }
                 }
@@ -700,9 +742,40 @@ function inspectUsersBackup() {
 //      （含条目变少），解决"合法改密→超集校验拒绝→备份永久陈旧→损坏后旧哈希回填"。
 //   非 proven 路径截断保护（新列表条数变少不覆写）保留。
 function backupUserAccounts(config, options) {
+    options = options || {};
+    // ★ 2026-10-01 根修（冷机登录窗冻结残余路径）：asyncVault 模式把【整条证明链】
+    //   延后到预热读（prewarmGate 发起的 readUnifiedStateAsync，in-flight 单飞）
+    //   回填缓存之后再执行。此前实现只把链尾两次 vault 写改异步，但链上的
+    //   readUsersBackupGen×3 仍是同步 execFileSync——冷机 PowerShell 5.1 冷启动
+    //   8~14s 期间（登录窗 get-app-config / whenReady 校正链与 prewarm 并发），
+    //   同步 PS 会把整个主进程冻结，登录窗迟显、IPC 排队错层。延后后：
+    //   ① 调用点（get-app-config IPC / 登录弱哈希升级 rename 链）立即返回，零冻结；
+    //   ② await 到的是 prewarm 同一个 in-flight Promise，不额外 spawn PS；
+    //   ③ 续跑时 30s 缓存必热，同步证明链全走 existsSync/内存，毫秒完成，链尾
+    //      gen+退役仍是单次异步补丁；
+    //   ④ 安全实质不变：调用点 cfg.users 已经 configUsersProvenAuthentic 证明
+    //      （rename/校正传 proven:true），v2 备份件晚数百 ms~数秒落盘只影响
+    //      "此窄窗内 config 同时被删"的可用性（权威 config 仍在），无绕过面，
+    //      锚点有 M3 在场件自愈；读失败时降级直接执行（=旧行为，正确优先）。
+    if (options.asyncVault === true && options.__deferred !== true) {
+        let mid2 = '';
+        try { mid2 = getMachineId(); } catch (e) { mid2 = ''; }
+        const reentry = () => {
+            try {
+                backupUserAccounts(config, Object.assign({}, options, { __deferred: true }));
+            } catch (e) {
+                console.warn('[License] 异步备份延后链执行失败（非致命）:', e && e.message);
+            }
+        };
+        if (mid2 && typeof readUnifiedStateAsync === 'function') {
+            Promise.resolve(readUnifiedStateAsync(mid2)).then(reentry, reentry);
+        } else {
+            setImmediate(reentry);
+        }
+        return true;
+    }
     try {
         if (!config || !Array.isArray(config.users) || config.users.length === 0) return false;
-        options = options || {};
         const proven = options.proven === true;
         const newUsers = config.users;
         const bp = getUsersBackupPath();
@@ -789,8 +862,27 @@ function backupUserAccounts(config, options) {
             usersSignature: computeUsersBackupSignature(newUsers, gen)
         };
         fs.writeFileSync(bp, JSON.stringify(backup, null, 2), { mode: 0o600 });
-        writeUsersBackupGen(gen);
-        markLegacyRetired(); // v2 备份一旦写过，legacy 永久退役
+        // ★ 2026-10-01 启动性能：options.asyncVault=true（get-app-config 启动备份
+        //   刷新 / 登录时弱哈希升级 PBKDF2 的 rename 链 proven 刷新）时，gen+退役
+        //   合并为【单次】异步补丁后台完成，不阻塞登录：一次 CredWrite 两键齐落，
+        //   既省一次 1.5~9s 的 PS 往返，也从结构上消除两个兄弟写背靠背入队、后写
+        //   旧快照回退前写的面。两类调用点 config 重签写盘+v2 备份文件（机器绑定
+        //   HMAC）均已同步落盘，仅锚点延后，且 rename 链随后 verifyLoginGate 经
+        //   写链保序；读路径带 M3 自愈与在场 v2 件水位抬升，安全语义不变。
+        //   启动安全翻转（v1 迁移/重装自愈/版本绑定校正）与改密/删号/激活等交互
+        //   路径不传此项，保持同步写满语义零窗口。
+        if (options.asyncVault === true) {
+            const __dom = getAppDomain();
+            // ★ mid 必传：缺失会使异步读走跨 mid 候选合并分支（把 primary blob
+            //   当旧 mid 残留删除 + 补丁写到 undefined 目标，灾难级，冒烟实证）。
+            patchUnifiedStateAsync({
+                usersBackupGenV2: { [__dom]: gen },
+                usersLegacyRetiredV2: { [__dom]: true } // v2 备份一旦写过，legacy 永久退役
+            }, getMachineId()).catch(() => {});
+        } else {
+            writeUsersBackupGen(gen);
+            markLegacyRetired();
+        }
         return true;
     } catch (e) {
         console.warn('[License] backupUserAccounts 失败（非致命）:', e.message);
@@ -2209,7 +2301,11 @@ function migrateConfigUsersSignature(inspection) {
         signConfig(cfg);
         if (!cfg.configSignature || !cfg.usersSignature) return false;
         fs.writeFileSync(inspection.configPath, JSON.stringify(cfg, null, 2), 'utf8');
-        backupUserAccounts(cfg);
+        // ★ 2026-10-01（双审查 B-Z3 收口）：v1→v2 迁移是【安全翻转】（gen 锚点建立
+        //   + legacy 退役墓碑），刻意保持同步满语义、零窗口——锚点延后落盘的数秒
+        //   窗内若进程被杀/植入 legacy 件，正中"双删洗白 legacy 账号"威胁模型。
+        //   迁移为每台老机一次性路径，宁可这一次承担冷 PS 耗时。
+        backupUserAccounts(cfg, {});
         console.log('[License] users 完整性签名迁移完成（v1→v2）');
         return true;
     } catch (e) {
@@ -2301,6 +2397,8 @@ function selfHealConfigFromLicense(license, inspection) {
         fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
         // proven：users 已由本函数内部验签/备份证明、且刚随有效 v2 config 落盘，
         // 允许推进备份（含"备份缺失+gen锚点已建立"场景，否则备份永久缺失）。
+        // ★ 2026-10-01（双审查 B-Z3 收口）：重装自愈属安全翻转，锚点同步写零窗口
+        //   （自愈为偶发恢复路径，冷 PS 一次性耗时可接受，不留双删洗白窗）。
         backupUserAccounts(config, { proven: true });
         console.log('[License] config.json 重装自愈完成（用 license 权威值重签）');
         return true;
@@ -3140,14 +3238,21 @@ function vaultInvokeAsync(action, target, value) {
         const psExe = process.env.SystemRoot
             ? path.join(process.env.SystemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
             : 'powershell.exe';
-        childProcess.execFile(psExe, [
-            '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
-            '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')
-        ], { env, timeout: 15000, maxBuffer: 1 << 20, windowsHide: true },
-            (err, stdout) => {
-                if (err) { resolve({ ok: false, error: 'vault-spawn-failed' }); return; }
-                resolve(__vaultParseStdout(stdout));
-            });
+        // ★ 2026-10-01：execFile 极端错误（EMFILE/EINVAL）可能同步抛出，包一层
+        //   与回调失败同口径 resolve（永不 reject），避免沿写链冒泡成未捕获异常
+        //   且跳过文件降级（双审查 A-建议2）。
+        try {
+            childProcess.execFile(psExe, [
+                '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+                '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')
+            ], { env, timeout: 15000, maxBuffer: 1 << 20, windowsHide: true },
+                (err, stdout) => {
+                    if (err) { resolve({ ok: false, error: 'vault-spawn-failed' }); return; }
+                    resolve(__vaultParseStdout(stdout));
+                });
+        } catch (e) {
+            resolve({ ok: false, error: 'vault-spawn-failed' });
+        }
     });
 }
 
@@ -3269,8 +3374,18 @@ function readUnifiedStateAsync(mid) {
         if (!hasLegacy) return Promise.resolve(_unifiedCache.result);
     }
     if (_unifiedReadInFlight && _unifiedReadInFlight.mid === mid) return _unifiedReadInFlight.p;
+    // 记录读发起时刻：冷 PS 读飞行 1.5~14s，期间同步 writeUnifiedState
+    // （execFileSync 阻塞模型）可整体插队完成 invalidate→fresh读→CredWrite→
+    // 回填缓存；晚到的异步读回调携带的是插队前的旧镜像，绝不能反覆盖更新的
+    // 权威回填，否则后续 async 写会以旧态为基底整 blob 回退（双审查 A#1）。
+    const readStartedAt = Date.now();
     const p = readUnifiedStateFreshAsync(mid).then((result) => {
-        if (result.vault === true) _unifiedCache = { mid, at: Date.now(), result };
+        if (result.vault === true) {
+            const cc = _unifiedCache;
+            if (!cc || cc.mid !== mid || cc.at <= readStartedAt) {
+                _unifiedCache = { mid, at: Date.now(), result };
+            }
+        }
         return result;
     }).finally(() => { if (_unifiedReadInFlight && _unifiedReadInFlight.p === p) _unifiedReadInFlight = null; });
     _unifiedReadInFlight = { mid, p };
@@ -3279,23 +3394,139 @@ function readUnifiedStateAsync(mid) {
 // 异步统一态写入（与 writeUnifiedState 同语义：fresh 读合并、写成功回填缓存、
 // 失败降级双文件）；_vaultWriteChain 串行化保持同步版天然串行的写序。
 let _vaultWriteChain = Promise.resolve();
-function writeUnifiedStateAsync(state, mid, freshRead) {
+function writeUnifiedStateAsync(state, mid, freshRead, patchLike) {
+    // ★ 2026-10-01 根修（双独立审查阻断项）：合并基底必须在"执行时刻"选定，
+    //   不能信任入队时刻传入的 freshRead。写链只串行化执行，多个写常背靠背入队
+    //   （gen+退役、trial 高水位+弱哈希备份），PS CredWrite 单次 1.5~9s，等轮到
+    //   自己执行时入队时快照早已陈旧——若据此整 blob CredWrite，会把链上前一写
+    //   刚落的增量（gen/墓碑/lastSeenHigh，极端时序下甚至 installLicense 同步
+    //   落账的 everActivated）整包回退。规则（freshRead 形参保留仅作调用方意图
+    //   声明，实际基底只认执行时刻状态）：
+    //   ① 入队之后本进程有更新的 vault 读/写回填（cache.at > enqueueAt，含同步
+    //      权威写回填）→ 一律以最新镜像为基底（本进程串行写序即真相）；
+    //   ② 否则缓存镜像 vault 非空且年龄 <2s（同 tick 刚读/fresh PS 读均会新鲜
+    //      回填，外部无并发窗口）→ 用之（覆盖 patch 链传 freshRead 的零 PS 场景）；
+    //   ③ 否则（含空 vault 首写、缓存超窗）invalidate + fresh PS 读，保持云/离
+    //      并发 M3 前提，杜绝 30s 陈旧镜像整包覆盖对端域键；
+    //   ④ 写后复核：async CredWrite await 让出事件循环期间，同步 writeUnifiedState
+    //      （execFileSync 阻塞模型，如 installLicense 激活落账）可以整体插队完成
+    //      自己的读-改-写；若写完发现 cache.at 新于本次基底，说明插队权威写已被
+    //      我们这次 blob 覆盖——立即以其镜像为基底重合并本次补丁并再写一次
+    //      （最多 3 次收敛）。链上其他 async 写都排在本 run 之后，不可能插队，
+    //      竞争者只有同步写；排队 async 写随后经规则①采用本次回填，链式收敛。
+    //   ⑤ 补丁类写（patchLike，仅 gen/退役键）基底不明或 vault uncertain 时绝不
+    //      裸写 vault（裸补丁整 blob 会抹掉 everActivated/账号墓碑等安全键，
+    //      fail-open），按域单调合并落双文件，待 vault 恢复对账——同同步
+    //      patchUnifiedState 语义。权威全态写（persist 在线裁决）不适用。
+    //   ⑥ 复核 3 次仍持续观测到插队（极端竞争）不撒谎 return true：失效缓存
+    //      强制对账并返回 false，状态翻转类调用方（均 await）按失败重试。
+    const enqueueAt = Date.now();
+    mid = mid || getMachineId();
+    const mergeOnto = (cs) => {
+        const out = Object.assign({}, cs, state);
+        out.usersBackupGenV2 = mergeDomainGenMaps(cs.usersBackupGenV2, state.usersBackupGenV2);
+        out.usersLegacyRetiredV2 = mergeDomainRetiredMaps(cs.usersLegacyRetiredV2, state.usersLegacyRetiredV2);
+        // accountReject 刻意保持顶层整键替换（不用 mergeRejectMaps 并集）：
+        // clearAccountRejectIfMatch 解封路径依赖"在线确认有效→删除本用户名条目
+        // →整键写回"完成墓碑移除，并集会把已解除条目复活致合法用户无法登录。
+        // 代价（两个不同用户名裁决背靠背时后写旧快照抹掉前者墓碑）在现实不可达：
+        // 翻转类 persist 全部 await、登录裁决 UI 串行、心跳自检 username 为空。
+        return out;
+    };
     const run = async () => {
         let s = state;
+        let baseAt = 0;
+        let spillToFiles = false; // 补丁写须走双文件分流（基底不明/uncertain）
         try {
-            if (!freshRead) invalidateUnifiedCache();
-            const cur = freshRead || await readUnifiedStateAsync(mid);
+            let cur;
+            const c = _unifiedCache;
+            const sameMidVault = !!(c && c.mid === mid && c.result && c.result.vault === true);
+            const newerThanQueue = sameMidVault && c.at > enqueueAt;
+            const selfFresh = sameMidVault && !!c.result.state && (Date.now() - c.at < 2000);
+            if (newerThanQueue || selfFresh) {
+                cur = c.result;
+            } else {
+                invalidateUnifiedCache();
+                const readStart = Date.now();
+                cur = await readUnifiedStateAsync(mid);
+                // 读飞行窗口（冷 PS 1.5~14s）内同步权威写整体插队完成时，缓存已
+                // 被其更新镜像占据（回填守卫保证晚到读不反覆盖）→ 改用更新镜像，
+                // 不能用 Promise 带回的插队前旧态当基底（双审查 A#1 配套）。
+                const cf = _unifiedCache;
+                if (cf && cf.mid === mid && cf.result && cf.result.vault === true
+                    && cf.result.state && cf.at > readStart && cf.result !== cur) {
+                    cur = cf.result;
+                }
+            }
+            // fresh PS 读与缓存命中都会把 result 回填 _unifiedCache（同引用），
+            // 记录基底时间戳供写后复核比对。
+            const c2 = _unifiedCache;
+            if (c2 && c2.mid === mid && c2.result === cur) baseAt = c2.at;
             const cs = cur.state;
             if (cs) {
-                s = Object.assign({}, cs, state);
-                s.usersBackupGenV2 = mergeDomainGenMaps(cs.usersBackupGenV2, state.usersBackupGenV2);
-                s.usersLegacyRetiredV2 = mergeDomainRetiredMaps(cs.usersLegacyRetiredV2, state.usersLegacyRetiredV2);
+                s = mergeOnto(cs);
+                // vault 暂时解不开（指纹抖动/瞬态损坏），cs 只是文件侧镜像：
+                // 补丁不得覆写真 vault（权威写的 uncertain 覆写是设计语义，不限）
+                if (patchLike && cur.uncertain) spillToFiles = true;
+            } else if (patchLike && cur.uncertain) {
+                spillToFiles = true; // vault 解不开/状态不明：补丁落双文件；
+                // 注意真空 vault（found:false、非 uncertain）不在此列——裸补丁
+                // 直写正是锚点首建路径，vault 本空无安全键可抹（同同步版语义）。
             }
-        } catch (e) { s = state; }
-        if (vaultAvailable() && await writeVaultStateAsync(s, mid)) {
-            _unifiedCache = { mid, at: Date.now(), result: { vault: true, state: s } };
-            return true;
+        } catch (e) {
+            if (patchLike) {
+                // fresh 读抛错（fs/解析异常）：禁止裸补丁直写 vault。尽力合并
+                // 文件侧旧态后走双文件，与同步 patchUnifiedState 分流同构。
+                spillToFiles = true;
+                try {
+                    const fst = readFileLegacyState(mid);
+                    if (fst) {
+                        s = Object.assign({}, fst, state);
+                        s.usersBackupGenV2 = mergeDomainGenMaps(fst.usersBackupGenV2, state.usersBackupGenV2);
+                        s.usersLegacyRetiredV2 = mergeDomainRetiredMaps(fst.usersLegacyRetiredV2, state.usersLegacyRetiredV2);
+                    }
+                } catch (e2) { s = state; }
+            } else {
+                s = state; // 权威全态写：读取异常按旧行为直写，vault 写自身成败兜底
+            }
         }
+        // ⑤ 补丁分流：基底不明/uncertain，只落双文件绝不碰 vault
+        if (spillToFiles) {
+            invalidateUnifiedCache();
+            if (!_vaultEnvDisabled) markVaultTransient();
+            let gOk0 = false, aOk0 = false;
+            try { gOk0 = !!writeGateState(s, mid); } catch (e) { /* 续写 anchor */ }
+            try { aOk0 = !!writeAnchorState(s, mid); } catch (e) { /* 忽略 */ }
+            return !!(gOk0 || aOk0);
+        }
+        if (vaultAvailable()) {
+            let wrote = await writeVaultStateAsync(s, mid);
+            // ④ 写后复核+重合并重写（见函数头注释）
+            let guard = 0;
+            let converged = true;
+            while (wrote) {
+                const cc = _unifiedCache;
+                const jumpedIn = cc && cc.mid === mid && cc.result && cc.result.vault === true
+                    && !!cc.result.state && cc.at > baseAt;
+                if (!jumpedIn) break;
+                if (guard++ >= 3) { converged = false; break; }
+                baseAt = cc.at;
+                s = mergeOnto(cc.result.state);
+                wrote = await writeVaultStateAsync(s, mid);
+            }
+            if (wrote && converged) {
+                _unifiedCache = { mid, at: Date.now(), result: { vault: true, state: s } };
+                return true;
+            }
+            // ⑥ 持续插队未收敛：失效缓存强制下次 fresh 对账，不谎报成功
+            if (!converged) {
+                invalidateUnifiedCache();
+                return false;
+            }
+        }
+        // 降级写双文件后进程内 vault 缓存不再代表完整态（文件侧可能被 M3 读回合并），
+        // 显式失效，下一次读重新 fresh 合并。
+        invalidateUnifiedCache();
         if (!_vaultEnvDisabled) markVaultTransient();
         let gOk = false, aOk = false;
         try { gOk = !!writeGateState(s, mid); } catch (e) { /* 继续写 anchor */ }
@@ -3308,10 +3539,18 @@ function writeUnifiedStateAsync(state, mid, freshRead) {
 }
 // 异步 getUnifiedGate（与 getUnifiedGate 同语义）
 async function getUnifiedGateAsync(mid) {
+    // ★ 2026-10-01：必须返回浅拷贝。readUnifiedStateAsync 命中 30s 缓存时 r.state
+    //   就是 _unifiedCache 本体，而 verifyLoginGate 会就地改 gate（lastVerify/
+    //   lastSeenHigh/accountReject、trial 纯放行等），且部分路径不 await 落盘——
+    //   若直接透出本体，心跳/并发调用会在缓存窗口里读到"半裁决"污染态。嵌套 V2
+    //   map 裁决只读，且写链 mergeDomain*Maps 恒返回新对象，顶层 + accountReject
+    //   一层拷贝即足。
     const r = await readUnifiedStateAsync(mid);
-    const s = r.state || {};
+    const s = Object.assign({}, r.state || {});
     if (!s.accountReject || s.accountReject.__arMap !== 1) {
         s.accountReject = normalizeRejectMap(s.accountReject);
+    } else {
+        s.accountReject = Object.assign({}, s.accountReject);
     }
     return {
         gate: s,
@@ -3614,7 +3853,14 @@ function readFileLegacyState(mid) {
 
 // 统一状态读取（进程内短缓存：写即失效）。backupUserAccounts 等链路会连续
 // 多次读取，缓存把多次 PS 往返收敛为一次；同步读-改-写流不会读到旧值。
-const UNIFIED_CACHE_MS = 1500;
+// ★ 2026-10-01 启动性能：1.5s → 30s。旧窗口在 prewarm 完成后、用户输完密码
+//   点击登录前就过期（实测 4-9s PS 预热 + 真实用户 3-10s 输入），gate 读只能
+//   重新 spawn 一次 PS，预热完全白做。30s 窗口覆盖一次登录交互全程；安全不失：
+//   本进程任何写都主动 invalidate/回填（读-改-写不读旧值）；OS 凭据无法被普通
+//   文件删除改写（vault 设计前提），外部持同用户权限主动 delete 已超出本机威胁
+//   模型；云/离并发写入由 fresh 读 + M3 gen 水位自愈收敛；每次应用重启都全新
+//   fresh 读，运行期心跳本为 24h 长周期，30s 陈旧窗口无可观测安全增益差。
+const UNIFIED_CACHE_MS = 30000;
 let _unifiedCache = null; // {mid, at, result}
 function invalidateUnifiedCache() { _unifiedCache = null; }
 
@@ -3704,6 +3950,8 @@ function writeUnifiedState(state, mid, freshRead) {
             // 两张 V2 map 绝不整键替换：入参无该字段时也保留当前态（过白名单）
             s.usersBackupGenV2 = mergeDomainGenMaps(cs.usersBackupGenV2, state.usersBackupGenV2);
             s.usersLegacyRetiredV2 = mergeDomainRetiredMaps(cs.usersLegacyRetiredV2, state.usersLegacyRetiredV2);
+            // accountReject 保持整键替换：解封（clearAccountRejectIfMatch）依赖
+            // 整键写回移除条目；详见异步写链 mergeOnto 处注释（2026-10-01）。
         }
     } catch (e) { s = state; /* 读取异常按原状态直写（vault 写自身成败兜底） */ }
     if (vaultAvailable() && writeVaultState(s, mid)) {
@@ -3745,6 +3993,53 @@ function patchUnifiedState(patch, mid) {
     }
     return writeUnifiedState(patch, mid, r);
 }
+
+// ★ 2026-10-01 启动性能：patchUnifiedState 的全异步版（启动备份固化链专用）。
+//   语义与同步版严格一致：uncertain（指纹抖动/vault 瞬态故障）时只落双文件、
+//   绝不覆写 vault；正常态走异步 vault 写链（freshRead 传入避免二次 PS 读）。
+async function patchUnifiedStateAsync(patch, mid) {
+    // 纵深防御：mid 缺失会让 readUnifiedStateFreshAsync 走跨候选合并，误删
+    // primary blob（见 backupUserAccounts asyncVault 调用点冒烟实证）。
+    mid = mid || getMachineId();
+    const r = await readUnifiedStateAsync(mid);
+    if (r.uncertain) {
+        const s = Object.assign({}, r.state, patch);
+        if (patch.usersBackupGenV2) {
+            s.usersBackupGenV2 = mergeDomainGenMaps(r.state && r.state.usersBackupGenV2, s.usersBackupGenV2);
+        }
+        if (patch.usersLegacyRetiredV2) {
+            s.usersLegacyRetiredV2 = mergeDomainRetiredMaps(r.state && r.state.usersLegacyRetiredV2, s.usersLegacyRetiredV2);
+        }
+        let gOk = false, aOk = false;
+        try { gOk = !!writeGateState(s, mid); } catch (e) { /* 续 */ }
+        try { aOk = !!writeAnchorState(s, mid); } catch (e) { /* 忽略 */ }
+        return !!(gOk || aOk);
+    }
+    // patchLike=true：执行时刻基底若翻 uncertain/读失败，写链按规则⑤只落
+    // 双文件绝不裸补丁覆写 vault（入队前这一道 uncertain 分流仍保留，省一次入队）
+    return writeUnifiedStateAsync(patch, mid, r, true);
+}
+// writeUsersBackupGen 的全异步版（单调高水位补丁，语义同同步版）
+async function writeUsersBackupGenAsync(gen, machineIdArg) {
+    try {
+        const mid = machineIdArg || getMachineId();
+        const n = Number(gen);
+        if (!(n > 0)) return false;
+        const dom = getAppDomain();
+        const r = await readUnifiedStateAsync(mid);
+        const cur = Number(r.state && r.state.usersBackupGenV2 && r.state.usersBackupGenV2[dom]) || 0;
+        if (cur >= n) return true;
+        const newMap = Object.assign({}, (r.state && r.state.usersBackupGenV2) || null, { [dom]: n });
+        return await patchUnifiedStateAsync({ usersBackupGenV2: newMap }, mid);
+    } catch (e) {
+        console.warn('[Gate] usersBackupGen 异步写入失败（非致命）:', e && e.message);
+        return false;
+    }
+}
+// 注：曾有 markLegacyRetiredAsync（退役单键异步补丁），2026-10-01 起移除——
+// asyncVault 备份链已把 gen+退役合并为单次 patchUnifiedStateAsync 补丁
+// （backupUserAccounts L874-883），单键版无调用方且会多开一次 CredWrite、
+// 重新引入兄弟写背靠背互踩面，故不保留。
 
 // ★ 2026-09-23 账号级拒绝标记 = 按用户名存储的集合 { username: {username,state,at} }
 //   （同机多账号先后被删互不覆盖；重新开通只清对应键）。旧版单条记录
@@ -3808,7 +4103,14 @@ function persistUnified(u, mid) {
 // ★ 2026-10-01 启动性能：异步版 persist（verifyLoginGate 全链专用，主进程零冻结）
 function persistUnifiedAsync(u, mid) {
     // vault 模式写凭据；故障/降级自动回落双文件（语义同 persistUnified）
-    return writeUnifiedStateAsync(u.gate, mid);
+    // ★ 2026-10-01 性能/安全：gate 裁决刚读过 unified blob（prewarm/缓存/fresh），
+    //   传同一镜像仅作意图声明；writeUnifiedStateAsync 在执行时刻重验基底——
+    //   镜像新鲜（<2s）时零 PS 读直接合并，超窗/入队后有更新写则自行 fresh 读
+    //   或采用更新镜像，陈旧快照绝不整包覆盖 vault（双独立审查 F1 收口）。
+    const c = _unifiedCache;
+    const freshRead = c && c.mid === mid && c.result && c.result.vault === true && c.result.state
+        ? c.result : undefined;
+    return writeUnifiedStateAsync(u.gate, mid, freshRead);
 }
 
 // ★ 中-1：单调高水位防时间回拨/前拨。gate 与 anchor 双写 lastSeenHigh。
@@ -3860,6 +4162,41 @@ async function gateGracePass(u, mid, username) {
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
+// ★ 2026-10-01 启动性能：app whenReady 最早阶段后台预热授权统一态。
+//   背景：1.0.258 M-2 把锚点迁入 Windows 凭据管理器后，读状态需 spawn
+//   Windows PowerShell 5.1——冷机实测 9~14s、客户现场 1.5~3.4s（系统日志：
+//   "正在准备首次使用模块"）。登录提交 verifyLoginGate 与主窗自检都消费同一
+//   状态。此处与窗口创建/用户输密码并行提前发起一次异步读：readUnifiedStateAsync
+//   自带 in-flight 单飞+短时缓存（同步 readUnifiedState 共享同一缓存），后续
+//   所有 gate 读 await 同一 Promise 或直接命中缓存，冷 PS 不再压在登录关键路径；
+//   vault 健康探测也顺带完成。性能原语：幂等、永不抛错、不改变任何
+//   fail-open/closed 裁决。注意它并非零写入——读路径本身在检测到旧双文件锚点/
+//   跨 mid 残留时会做幂等迁入合并写回（既有语义，非预热新增），ensureDomain
+//   BootstrapAsync 也会幂等固化缺失的域键；除此之外不产生读路径之外的额外写。
+//   vault 不可用时读双文件（毫秒）后自然结束。
+let _gatePrewarmPromise = null;
+function prewarmGate() {
+    if (_gatePrewarmPromise) return _gatePrewarmPromise;
+    _gatePrewarmPromise = (async () => {
+        try {
+            const mid = getMachineId();
+            if (mid) {
+                await readUnifiedStateAsync(mid);
+                // ★ 2026-10-01 性能：全新机/域键缺失时，把首次 readUsersBackupGen
+                //   才触发的域键耐久化（原同步 PS 写，实测压在登录 rename 备份链上
+                //   冻结 4-7s）提前到预热后台完成。不 await 固化写：与用户输密码
+                //   并行；即使点击时尚写完，readUsersBackupGen 也会退回纯文件内存
+                //   引导（同一 max 水位 seed 算法、零 PS），随后的备份 gen 写经
+                //   _vaultWriteChain 排在固化写之后，水位只抬不降，安全等价。
+                ensureDomainBootstrapAsync(mid).catch(() => {});
+            }
+        } catch (e) {
+            console.warn('[Gate] 启动预热失败（非致命）:', e && e.message);
+        }
+    })();
+    return _gatePrewarmPromise;
+}
+
 async function verifyLoginGate(usernameInput) {
     const fail = (message) => ({ ok: false, message });
     const mid = getMachineId();
@@ -3872,7 +4209,21 @@ async function verifyLoginGate(usernameInput) {
     catch (e) { return fail('授权校验异常，请联系客服'); }
 
     const lt = local.licenseType || local.type || '';
-    // ★ 2026-10-01 启动性能：gate 冷读走异步（vault PS ~1.5s 不再冻结主进程）
+
+    // ★ 2026-10-01 启动性能：free 永久豁免在 vault 冷读【之前】直接放行——
+    //   free license.dat 由服务端签发，validateLicense 已完成验签+机器绑定校验，
+    //   本机不可伪造；free 产品语义永久离线可用，不消费 gate 任何字段
+    //   （everActivated/lastReject/offlineStart/accountReject/lastSeenHigh 均不适用：
+    //   时间回拨对 free 本来就不拦、不进宽限/墓碑/在线裁决）。旧码在 free 分支的
+    //   bumpHighWater+persist 没有任何安全消费者，徒增每次登录 2 次 PS 往返。
+    //   放行结果与旧码完全一致（{ ok:true, free:true }），但 free 机登录零 PS。
+    if (local.valid && local.type === 'licensed' && lt === 'free') {
+        return { ok: true, free: true };
+    }
+
+    // ★ 2026-10-01 启动性能：gate 冷读走异步（vault PS 不冻结主进程）；
+    //   app whenReady 已调 prewarmGate() 与登录窗显示并行预热，此处通常直接
+    //   命中 in-flight 单飞/短时缓存（同步读共享同一缓存），冷机不再苦等 PS。
     const u = await getUnifiedGateAsync(mid);
     const now = Date.now();
 
@@ -3913,12 +4264,7 @@ async function verifyLoginGate(usernameInput) {
         delete u.anchor.accountReject[username];
     };
 
-    // ③ 永久免费版豁免（产品承诺永久离线可用；free license 服务端签发不可伪造）
-    if (local.valid && local.type === 'licensed' && lt === 'free') {
-        bumpHighWater(u, now);
-        await persistUnifiedAsync(u, mid);
-        return { ok: true, free: true };
-    }
+    // ③ free 永久豁免已上移至 vault 冷读之前（零 PS 快道）
 
     // ① 付费已激活：在线裁决
     if (local.valid && local.type === 'licensed') {
@@ -4035,7 +4381,12 @@ async function verifyLoginGate(usernameInput) {
             return fail('授权校验异常，请联系客服');
         }
         bumpHighWater(u, now);
-        await persistUnifiedAsync(u, mid);
+        // ★ 2026-10-01 启动性能：纯试用放行不等待 vault 写——主窗立即打开，
+        //   高水位心跳写在后台串行完成（_vaultWriteChain 保序）。此处仅推进单调
+        //   时间戳，无任何安全状态翻转；放行后数秒内崩溃最坏只损失本轮水位推进
+        //   （回拨利用需先回拨系统时钟，几秒差无实际增益）。所有状态翻转类写
+        //   （LICENSED 落账/硬拒墓碑/宽限播种/账号墓碑）仍一律 await，见上各分支。
+        persistUnifiedAsync(u, mid).catch(() => {});
         return { ok: true, trial: true };
     }
 
@@ -4701,6 +5052,8 @@ function enforceEditionBinding() {
             fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
             // ★ 第四轮（B-重2）：改角色/版本后 proven 刷新备份——否则备份滞留旧
             //   admin 角色，config 损坏后由备份回填=提权复活。
+            // ★ 2026-10-01（双审查 B-Z3 收口）：版本绑定校正改角色属安全翻转，
+            //   锚点保持同步写零窗口（仅在 r.corrected 偶发校正时执行一次）。
             try { backupUserAccounts(config, { proven: true }); } catch (be) { /* 非致命 */ }
             console.log('[License] config.json 版本绑定校正完成，已重新签名');
         }
@@ -4917,6 +5270,8 @@ module.exports = {
     startHeartbeat,        // 启动心跳检测
     // ★ 2026-09-23 登录后台闸门（IPC 委托：主进程裁决 LICENSED/trial/free/7天宽限）
     verifyLoginGate,
+    // ★ 2026-10-01 启动性能：whenReady 后台预热 vault 统一态（冷 PS 移出登录关键路径）
+    prewarmGate,
     readAnchorState,       // 二级锚点读（供测试用）
     writeAnchorState,      // 二级锚点写（供测试用）
     // ★ 2026-09-26 M-2：文件锚点原语/统一视图（迁移冒烟用，与 anchor 导出对称）

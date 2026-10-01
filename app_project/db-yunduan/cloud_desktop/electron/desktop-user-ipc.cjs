@@ -287,7 +287,13 @@ ipcMain.handle('user:rename-username', async (event, payload) => {
                     licenseManager.signConfig(config);
                     await fse.writeJson(configPath, config, { spaces: 2 });
                     // ★ 复审陈旧收口：proven 刷新备份（含改名/登录窗密码同步）。
-                    try { licenseManager.backupUserAccounts(config, { proven: true }); } catch (be) {
+                    // ★ 2026-10-01 启动性能：asyncVault——config 重签写盘与 v2 备份
+                    //   文件（机器绑定 HMAC）已在上方同步落盘，仅 gen/退役 vault 锚点
+                    //   后台固化（写链串行、读路径带水位自愈）。旧版弱哈希账户升级
+                    //   PBKDF2 在登录关键路径触发 3~4 次串行 PowerShell 往返（冷机
+                    //   单次 9~14s），是"登录后打开主窗极慢"的主因；主窗内改名/改密
+                    //   场景同样不依赖锚点秒级到位，安全语义不变。
+                    try { licenseManager.backupUserAccounts(config, { proven: true, asyncVault: true }); } catch (be) {
                         console.warn('[User] 备份刷新失败（非致命）:', be.message);
                     }
                     console.log('[User] rename synced to config.json:', oldUsername, '->',

@@ -246,7 +246,8 @@ async function ensureEditionSelected() {
             await fse.writeJson(configPath, config, { spaces: 2 });
             // ★ 第四轮（B-重2）：改角色写盘后 proven 刷新备份——否则备份滞留旧 admin
             //   角色，config 损坏后由备份回填=提权复活。
-            try { licenseManager.backupUserAccounts(config, { proven: true }); } catch (_) {}
+            // ★ 2026-10-01：启动链调用，asyncVault 搭车 prewarm 后台完成，不冻结登录窗。
+            try { licenseManager.backupUserAccounts(config, { proven: true, asyncVault: true }); } catch (_) {}
             console.log('[Edition] 无授权，试用默认标准版（personal）');
             return;
         }
@@ -309,7 +310,9 @@ async function ensureTrialStandardEdition() {
             licenseManager.signConfig(config);
             fsSync.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
             // ★ 第四轮（B-重2）：改角色写盘后 proven 刷新备份（防旧角色备份回填提权）。
-            try { licenseManager.backupUserAccounts(config, { proven: true }); } catch (_) {}
+            // ★ 2026-10-01 启动性能：asyncVault 让 gen/退役 vault 写后台完成
+            //   （备份签名文件本身已同步落盘），首启校正不再阻塞登录窗显示。
+            try { licenseManager.backupUserAccounts(config, { proven: true, asyncVault: true }); } catch (_) {}
         }
         return true;
     } catch (e) {
@@ -826,6 +829,11 @@ async function verifyCodeIntegrity() {
 }
 
 app.whenReady().then(async () => {
+    // ★ 2026-10-01 启动性能：第一时间后台预热授权 vault 统一态。冷 PS
+    //   （Windows PowerShell 5.1 首启 1.5~14s）从此与迁移数据/建窗/用户输密码
+    //   并行，登录闸门 verifyLoginGate 读状态时直接命中 in-flight/缓存。
+    //   纯预热、不写状态、永不抛错；必须放在任何 license/vault 读取之前。
+    try { if (licenseManager.prewarmGate) licenseManager.prewarmGate(); } catch (e) {}
     // ★ P0-③ exe 签名/完整性自校验（非阻塞，仅记录，不影响启动流程）
     selfCheck.runSelfCheck();
     // ★ 2026-09-11 P1 完整性上报：延迟 25s 等三路校验落定后聚合上报（篡改证据
@@ -1192,7 +1200,10 @@ ipcMain.handle('get-app-config', async () => {
                     //   license 校验之前无条件备份，应用自身会给未验签 users 签出合法
                     //   v2 备份，攻击者再删 config 签名即可凭毒化备份通过闸门、重签洗白。
                     if (licenseManager.configUsersProvenAuthentic(cfg)) {
-                        licenseManager.backupUserAccounts(cfg);
+                        // ★ 2026-10-01：登录窗/主窗启动必经 IPC，asyncVault 让整条
+                        //   备份证明链（含 vault 同步读）搭车 prewarm 缓存后台执行，
+                        //   冷机 PS 冷启动 8~14s 不再冻结本 IPC/登录窗显示。
+                        licenseManager.backupUserAccounts(cfg, { asyncVault: true });
                     } else {
                         console.warn('[Config] users 来源未证明，跳过备份刷新（防毒化）');
                     }
@@ -1271,7 +1282,7 @@ ipcMain.handle('get-app-config', async () => {
                                 licenseManager.signConfig(writeCfg);
                                 if (__proven && writeCfg.configSignature) {
                                     await fse.writeJson(configPath, writeCfg, { spaces: 2 });
-                                    try { licenseManager.backupUserAccounts(writeCfg, { proven: true }); } catch (e2) {}
+                                    try { licenseManager.backupUserAccounts(writeCfg, { proven: true, asyncVault: true }); } catch (e2) {}
                                     console.log('[Config] 自愈：已补齐激活管理员账户 (手机号=' + acctPhone + ', 角色=' + wantRole + ')');
                                 } else if (!__proven) {
                                     // ★ 2026-09-26 I-1：防未验签 users 借本块重签洗白
@@ -1304,7 +1315,7 @@ ipcMain.handle('get-app-config', async () => {
                                     licenseManager.signConfig(writeCfg);
                                     if (__proven && writeCfg.configSignature) {
                                         await fse.writeJson(configPath, writeCfg, { spaces: 2 });
-                                        try { licenseManager.backupUserAccounts(writeCfg, { proven: true }); } catch (e2) {}
+                                        try { licenseManager.backupUserAccounts(writeCfg, { proven: true, asyncVault: true }); } catch (e2) {}
                                         console.log('[Config] 自愈兜底：机构版空密码 admin 账户已重置为 admin');
                                     } else if (!__proven) {
                                         console.warn('[Config] users 来源未证明，空密码兜底不落盘');
@@ -1363,7 +1374,7 @@ ipcMain.handle('get-app-config', async () => {
                                     licenseManager.signConfig(writeCfg);
                                     if (__proven && writeCfg.configSignature) {
                                         await fse.writeJson(configPath, writeCfg, { spaces: 2 });
-                                        try { licenseManager.backupUserAccounts(writeCfg, { proven: true }); } catch (e2) {}
+                                        try { licenseManager.backupUserAccounts(writeCfg, { proven: true, asyncVault: true }); } catch (e2) {}
                                         console.log('[Config] 存量自愈：机构版 config.json 已固化 edition=' + cfg.edition +
                                             '（from=' + (bind.from || '?') + '）');
                                     } else {
