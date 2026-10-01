@@ -970,7 +970,10 @@
                         return new Date(b.createdAt || b.date || 0).getTime() - new Date(a.createdAt || a.date || 0).getTime();
                     });
                     var lr = recs[0];
-                    if (lr.patientAge) { var ae = q('patientAge'); if (ae) { ae.value = lr.patientAge; VoiceInput.highlight(ae); } }
+                    // ★ 年龄按历史记录自动更新（与 selectPatientName 口径一致）
+                    var vAge = deriveCurrentAgeFromHistory(recs);
+                    if (vAge === '') vAge = lr.patientAge || '';
+                    if (vAge) { var ae = q('patientAge'); if (ae) { ae.value = vAge; VoiceInput.highlight(ae); } }
                     if (lr.patientPhone) { var pe = q('patientPhone'); if (pe) pe.value = lr.patientPhone; }
                     if (lr.patientAddress) { var de = q('patientAddress'); if (de) de.value = lr.patientAddress; }
                     if (lr.patientGender) {
@@ -7138,6 +7141,59 @@ let currentUser = null;
             if (dropdown) dropdown.remove();
         }
 
+        // ★ 患者年龄按历史记录自动更新（2026-09-30）
+        //   数据模型无「出生日期」，历史处方只存开方当时的年龄。此处反推出生年：
+        //       出生年 = 记录年份 − 当时年龄
+        //   记录年份优先取处方日期 date（补录历史处方以所录日期为准），退回
+        //   visitDate，再退回 createdAt；异常值（年龄 ≤0 或 >150、年份越界）剔除。
+        //   取出现次数最多的出生年（并列时取距今最近的记录），
+        //   当前年龄 = 当前年份 − 出生年。例：2023-05-01 记 45 岁 → 2026 年得 48 岁。
+        //   说明：仅年份粒度，当年未过生日的患者会提前 1 岁；推算不出时由调用方回退旧值。
+        function historyRecordYear(rec) {
+            if (!rec) return 0;
+            var m = String(rec.date || rec.visitDate || '').match(/(\d{4})/);
+            if (m) {
+                var y = parseInt(m[1], 10);
+                if (y >= 1900 && y <= 2200) return y;
+            }
+            if (rec.createdAt) {
+                var y2 = new Date(rec.createdAt).getFullYear();
+                if (isFinite(y2) && y2 >= 1900 && y2 <= 2200) return y2;
+            }
+            return 0;
+        }
+
+        function deriveCurrentAgeFromHistory(records, refYear) {
+            if (!records || !records.length) return '';
+            var nowYear = parseInt(refYear, 10) || new Date().getFullYear();
+            var tally = {}, best = null, k;
+            for (var i = 0; i < records.length; i++) {
+                var rec = records[i];
+                if (!rec) continue;
+                var age = parseInt(rec.patientAge, 10);
+                if (!isFinite(age) || age <= 0 || age > 150) continue;
+                var ry = historyRecordYear(rec);
+                if (!ry || ry > nowYear) continue;
+                var birthYear = ry - age;
+                if (birthYear < 1900 || birthYear > nowYear) continue;
+                if (!tally[birthYear]) tally[birthYear] = { n: 0, gap: Infinity };
+                tally[birthYear].n++;
+                var gap = Math.abs(nowYear - ry);
+                if (gap < tally[birthYear].gap) tally[birthYear].gap = gap;
+            }
+            for (k in tally) {
+                if (!Object.prototype.hasOwnProperty.call(tally, k)) continue;
+                var cur = tally[k];
+                if (!best || cur.n > best.n || (cur.n === best.n && cur.gap < best.gap)) {
+                    best = { birthYear: parseInt(k, 10), n: cur.n, gap: cur.gap };
+                }
+            }
+            if (!best) return '';
+            var nowAge = nowYear - best.birthYear;
+            if (!isFinite(nowAge) || nowAge <= 0 || nowAge > 150) return '';
+            return String(nowAge);
+        }
+
         function selectPatientName(name) {
             document.getElementById('patientName').value = name;
             hidePatientNameDropdown();
@@ -7156,7 +7212,20 @@ let currentUser = null;
                 });
                 
                 const latestRecord = patientRecords[0];
-                if (latestRecord.patientAge) {
+                // ★ 患者年龄按历史记录自动更新（2026-09-30）：不再原样沿用历史记录里的
+                //   旧年龄，改用全部同名历史记录反推出生年，再按当前年份算出当前年龄。
+                //   精确同名优先，避免「王明」被「王明华」的记录污染年龄（电话/地址维持原逻辑）。
+                const exactRecs = filterPrescriptionsByPermission(prescriptionHistory).filter(p =>
+                    p && p.patientName && String(p.patientName).trim() === String(name).trim()
+                );
+                const derivedAge = deriveCurrentAgeFromHistory(exactRecs.length ? exactRecs : patientRecords);
+                if (derivedAge !== '') {
+                    document.getElementById('patientAge').value = derivedAge;
+                    // 仅在推算值与历史记录原值不一致时提示，避免无变化时打扰
+                    if (String(latestRecord.patientAge || '') !== String(derivedAge)) {
+                        showToast('年龄已按历史记录自动更新为 ' + derivedAge + ' 岁');
+                    }
+                } else if (latestRecord.patientAge) {
                     document.getElementById('patientAge').value = latestRecord.patientAge;
                 }
                 if (latestRecord.patientPhone) {
