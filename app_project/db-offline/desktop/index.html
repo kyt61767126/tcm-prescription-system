@@ -2989,6 +2989,20 @@ let currentUser = null;
             if (/^pbkdf2_sha256\$(\d+)\$([0-9a-f]{32})\$([0-9a-f]{64})$/.test(pwd)) return true;
             return pwd.length === 64 && /^[a-f0-9]{64}$/.test(pwd);
         }
+        // ★ 2026-10-01 P0：prompt 跨环境归一化。Electron 桌面 window.prompt 被
+        //   desktop-windows.cjs 注入为 electronAPI.prompt（dialog:prompt 模态子窗口），
+        //   返回 Promise<string|null>；浏览器/部分 WebView 原生 prompt 同步返回 string|null。
+        //   铁律：任何取值后要参与 IPC/存储的 prompt 调用必须 await promptAsync()——
+        //   同步拿 Promise：① 塞进 ipcRenderer.invoke 触发 "An object could not be cloned"；
+        //   ② String(Promise) 变成 "[object Promise]"（忘记密码曾因此把新密码设成该串）。
+        async function promptAsync(message, defaultValue) {
+            try {
+                if (typeof window.prompt !== 'function') return null;
+                const r = window.prompt(message, defaultValue);
+                if (r && typeof r.then === 'function') return await r;
+                return (r === null || r === undefined) ? null : String(r);
+            } catch (e) { return null; }
+        }
         async function computeBackupHmac(jsonStr) {
             try {
                 const encoder = new TextEncoder();
@@ -3417,12 +3431,12 @@ let currentUser = null;
                 if (idx < 0) { alert('未找到账号 ' + username + '，请检查输入是否正确'); return; }
                 // ★ 2026-09-22 直接设置新密码（不再经过临时口令 admin）。
                 //   连续两次 prompt；任一步取消即中止，确认后才落盘。
-                const pwd = String(prompt('为账号 ' + username + ' 设置新登录密码\n\n规则：至少8位，须同时包含字母和数字') || '');
+                const pwd = String(await promptAsync('为账号 ' + username + ' 设置新登录密码\n\n规则：至少8位，须同时包含字母和数字') || '');
                 if (!pwd) return;
                 if (pwd.length < 8 || !/[a-zA-Z]/.test(pwd) || !/[0-9]/.test(pwd)) {
                     alert('密码至少8位且须同时包含字母和数字，请重新操作'); return;
                 }
-                const pwd2 = String(prompt('请再次输入新密码') || '');
+                const pwd2 = String(await promptAsync('请再次输入新密码') || '');
                 if (!pwd2) return;
                 if (pwd !== pwd2) { alert('两次输入的密码不一致，请重新操作'); return; }
                 users[idx].password = await hashPassword(pwd);
@@ -3983,7 +3997,7 @@ let currentUser = null;
                 // ★ 2026-09-25 安全加固：管理员给他人改名/改密前，重新验证管理员本人密码
                 let _adminPwd = '';
                 if (newUsername !== originalUsername || newPassword.trim()) {
-                    _adminPwd = prompt('安全验证：\n修改他人用户名或密码，请输入当前管理员（您本人）的密码');
+                    _adminPwd = await promptAsync('安全验证：\n修改他人用户名或密码，请输入当前管理员（您本人）的密码');
                     if (!_adminPwd) { alert('已取消保存'); return; }
                 }
 
