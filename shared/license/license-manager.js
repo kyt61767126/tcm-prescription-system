@@ -327,13 +327,261 @@ function writeGateState(state, machineIdArg) {
 //   （复用 09-23 登录闸门的双锚点；gate 在 writable/exe 目录、anchor 在 userData），
 //   machineId 派生密钥加密，渲染端/攻击者无法伪造内容；单删任一文件无法重置。
 //   防旧 v2 备份重放导致密码/角色回滚。
+//
+// ★★ 2026-09-29 云离锚点跨端污染修复（装机实测：离线新版首启误报"配置与备份
+//   不一致"）：云端/离线是两个独立产品——各自 userData、各自 config.json 与
+//   users-backup.json；但 vault 统一状态是机器级单键（BNZC/license-vault/<mid>），
+//   旧设计把 usersBackupGen/usersLegacyRetired 存成共享标量。云端先升级运行会把
+//   gen 推高（实测 71）并置 legacy 退役；离线之后全新安装，自己的合法 legacy
+//   备份读到"对端的"高水位+退役标记 → legacyBackupUsable 永久 false → 迁移被判
+//   修法：这两个【产品私有】字段改按产品域分键（usersBackupGenV2 /
+//   usersLegacyRetiredV2）。旧共享标量从此不再推进，merge 时原样保留存量、
+//   仅升级引导期在"本产品在场有 v2 备份"前提下条件继承（回退旧版读到的锚点
+//   冻结在升级前水位，属有意取舍）；授权裁决类字段 everActivated/accountReject
+//   等仍机器级共享，语义不变。
+//   域键首次缺失时绝不回退旧共享标量（那正是污染源），改以本产品在场【签名有效
+//   v2 备份】的 gen 引导一次高水位；无 v2 备份（全新安装/legacy 老件）即为 0，
+//   legacy 老件在日落窗口内正常迁移——与"新机首装"安全语义等价。
+// 产品域名必须用【精确白名单】：任何未知名（自定义 --user-data-dir、未来第三
+// 产品、改名变体如 tcm-prescription-system）一律落 'default' 桶，绝不并入
+// cloud/offline——否则未知产品可向真实产品域写高水位/退役标记（跨域 DoS），
+// 也可能让真实产品被误分进对端域。注意多个未知名会共享 default 桶（非标准
+// 部署彼此间仍有同类互抬水位的可能），但 cloud/offline 两个真实产品的锚点
+// 与 default 物理隔离、绝不被未知名抬升，等价新机锚点语义。
+// 残余边界：本机执行者可用 --user-data-dir 指定同名目录冒入真实域（影响方向
+// fail-closed、需本机执行权，旧标量时代同样可直接推高共享锚点），纵深加固需
+// 叠加渠道常量双因子，记为已知项。
+const APP_DOMAIN_BY_USERDATA = {
+    'tcm-prescription-cloud': 'cloud',
+    'tcm-prescription': 'offline'
+};
+function getAppDomain() {
+    if (_appDomainCache !== undefined) return _appDomainCache;
+    let d = 'default';
+    try {
+        if (typeof app !== 'undefined' && app && typeof app.getPath === 'function') {
+            const base = require('path').basename(String(app.getPath('userData') || '')).toLowerCase();
+            if (Object.prototype.hasOwnProperty.call(APP_DOMAIN_BY_USERDATA, base)) {
+                d = APP_DOMAIN_BY_USERDATA[base];
+            }
+        }
+    } catch (e) { return 'default'; } // getPath 抛错（app 将就绪未就绪）：不缓存，允许后续重判；
+    // 无 electron 运行时（typeof app==='undefined'）不抛错、落 default 并缓存——
+    // 该环境下产品名永不变，缓存无害（生产主进程所有调用均在 app 可用之后）。
+    _appDomainCache = d;
+    return d;
+}
+let _appDomainCache;
+// 域 map 合并：gen 按域取高水位；退役标记按域取或。
+// null-proto + 仅接受三个白名单域键：blob 虽经机器密钥加密，仍做纵深防御，
+// 杜绝 __proto__/constructor 等键进入 map 后在别处被普通对象读取触发原型访问。
+const DOMAIN_KEY_WHITELIST = { cloud: 1, offline: 1, default: 1 };
+function mergeDomainGenMaps(a, b) {
+    const out = Object.create(null);
+    [a, b].forEach(m => {
+        if (m && typeof m === 'object') {
+            Object.keys(m).forEach(k => {
+                if (!Object.prototype.hasOwnProperty.call(DOMAIN_KEY_WHITELIST, k)) return;
+                const v = Number(m[k]); if (v > 0) out[k] = Math.max(out[k] || 0, v);
+            });
+        }
+    });
+    return out;
+}
+function mergeDomainRetiredMaps(a, b) {
+    const out = Object.create(null);
+    [a, b].forEach(m => {
+        if (m && typeof m === 'object') {
+            Object.keys(m).forEach(k => {
+                if (!Object.prototype.hasOwnProperty.call(DOMAIN_KEY_WHITELIST, k)) return;
+                if (m[k] === true) out[k] = true;
+            });
+        }
+    });
+    return out;
+}
+// ★ 2026-09-30 三方独立审查（2 功能 + 1 安全，安全侧端到端实证）阻断项修复：
+//   引导结论必须【耐久化】。域键缺失但本产品在场有签名有效 v2 备份时，该产品
+//   历史上确已参与锚点体系，应把继承自旧共享标量的高水位/退役结论一次性固化进
+//   本产品域 map——否则 backupUserAccounts 幂等短路（users 不变即不重写备份）使
+//   域键长期缺失，攻击者（或杀软/清理工具隔离）删掉 users-backup.json 后引导条件
+//   （在场 v2）不再成立，vault 里仍存的旧标量读不到，gen/退役双双塌缩为 0/false，
+//   植入无签名 legacy 件 + 伪造 v1 config 即可把任意 users 洗白签成 v2 权威。
+//   固化后裁决只认 V2 map，不再依赖在场备份文件存续，删文件攻击链断开。
+//   一次性成本：仅"升级后首启且 users 无变更"触发一次补丁（gen+退役合并为一次
+//   写）；此后哨位命中零 vault 往返。legacy/none/bad 在场（全新安装/从未跑过新版）
+//   绝不固化——那是本次事故修复的豁免路径。
+// ★ 2026-09-30 第二轮（云离并发审查）：退役固化不再依赖旧共享标量——在场机器
+//   签名 v2 件本身就是"本产品写过 v2"的铁证，写过 v2 即永久退役 legacy；这使并发
+//   整 blob 写抹掉退役键后可在任意锚点读路径自愈（新机上旧标量根本不存在）。
+let _domainBootstrapDone = false;
+let _domainBootstrapScheduled = false;
+// 登录窗显示后延迟固化：3s 落在用户查看/输入密码期间（主进程冻结不挡窗前首帧，
+// 2026-09-29 性能红线），同时把"首启→固化完成"换件竞态压到 3s 一次性窗口。
+const DOMAIN_BOOTSTRAP_DELAY_MS = 3000;
+// 域锚点本地哨位 .domain-anchor（纯性能缓存，绝非安全权威）：
+//   内容 {v,dom,gen,retired,at,sig}，sig=HMAC(机器绑定备份签名钥,'sentinel|'…)，
+//   攻击者无法为本机预签（与 v2 备份同级机器绑定），跨机/跨产品复制验签必失败。
+//   命中即让定时器回调跳过 vault 冷读（实测单次 PS spawn 2.7s，稳态每启动省一次）；
+//   删除/篡改只损失这次读，fail-safe；安全裁决永远只认 vault/双文件 V2 map。
+function getDomainSentinelPath() {
+    try { return path.join(app.getPath('userData'), '.domain-anchor'); }
+    catch (e) { return ''; }
+}
+function readDomainSentinel(dom) {
+    try {
+        const p = getDomainSentinelPath();
+        if (!p || !fs.existsSync(p)) return null;
+        const j = JSON.parse(fs.readFileSync(p, 'utf8'));
+        if (!j || j.v !== 1 || j.dom !== dom) return null;
+        const gen = Number(j.gen) || 0;
+        const retired = j.retired === true;
+        const at = Number(j.at) || 0;
+        const payload = '1|' + dom + '|' + gen + '|' + (retired ? '1' : '0') + '|' + at;
+        const sig = crypto.createHmac('sha256', getUsersBackupSignKey())
+            .update('sentinel|' + payload).digest('hex');
+        if (!hexSignatureMatches(j.sig, sig)) return null;
+        return { gen: gen, retired: retired };
+    } catch (e) { return null; }
+}
+function writeDomainSentinel(dom, gen, retired) {
+    try {
+        const p = getDomainSentinelPath();
+        if (!p) return;
+        const at = Date.now();
+        const g = Number(gen) || 0;
+        const rt = retired === true;
+        const payload = '1|' + dom + '|' + g + '|' + (rt ? '1' : '0') + '|' + at;
+        const sig = crypto.createHmac('sha256', getUsersBackupSignKey())
+            .update('sentinel|' + payload).digest('hex');
+        fs.writeFileSync(p, JSON.stringify({ v: 1, dom: dom, gen: g, retired: rt, at: at, sig: sig }),
+            { mode: 0o600 });
+    } catch (e) { /* 哨位写失败仅损失一次 PS 读，不影响安全 */ }
+}
+// 用持有的统一态快照（刚读/刚写，缓存命中零 PS）刷新哨位
+function syncDomainSentinel(dom, s) {
+    try {
+        const g = Number(s && s.usersBackupGenV2 && s.usersBackupGenV2[dom]) || 0;
+        const rt = !!(s && s.usersLegacyRetiredV2 && s.usersLegacyRetiredV2[dom] === true);
+        writeDomainSentinel(dom, g, rt);
+    } catch (e) { /* 忽略 */ }
+}
+function ensureDomainBootstrap(mid) {
+    if (_domainBootstrapDone) return;
+    _domainBootstrapDone = true; // 失败也只在本进程尝试一次（异常不缓存于跨进程：重启自然重试）
+    try {
+        const r = readUnifiedState(mid);
+        const s = r.state || null;
+        const dom = getAppDomain();
+        const genDone = !!(s && s.usersBackupGenV2 && Number(s.usersBackupGenV2[dom]) > 0);
+        const retiredDone = !!(s && s.usersLegacyRetiredV2 && s.usersLegacyRetiredV2[dom] === true);
+        if (genDone && retiredDone) { syncDomainSentinel(dom, s); return; }
+        const inPlace = inspectUsersBackup();
+        if (inPlace.trusted !== 'v2') {
+            // legacy/none/bad：新机语义，绝不把旧标量归域（离线全新装豁免路径）；
+            // 落"负哨位"（gen=0）让后续启动定时器跳过 vault 冷读。
+            syncDomainSentinel(dom, s);
+            return;
+        }
+        // 在场机器签名 v2 件=本产品确已写过 v2：
+        //  gen seed=max(在场件 gen, 旧共享标量, 当前域键)，只抬不降（兜底 1：v2
+        //  首件；域键被物理整 blob 覆盖回滚为旧值时也由此抬回真水位）；
+        //  retired 直接置 true（写过 v2 即永久退役 legacy；并发抹键后据此自愈）。
+        const patch = {};
+        const curGen = Number(s && s.usersBackupGenV2 && s.usersBackupGenV2[dom]) || 0;
+        const seed = Math.max(Number(inPlace.gen) || 0, Number(s && s.usersBackupGen) || 0, curGen, 1);
+        if (seed > curGen) {
+            patch.usersBackupGenV2 = Object.assign({}, (s && s.usersBackupGenV2) || null, { [dom]: seed });
+        }
+        if (!retiredDone) {
+            patch.usersLegacyRetiredV2 = Object.assign({}, (s && s.usersLegacyRetiredV2) || null, { [dom]: true });
+        }
+        if (Object.keys(patch).length) {
+            patchUnifiedState(patch, mid);
+            const r2 = readUnifiedState(mid); // 写成功已回填缓存，零 PS
+            syncDomainSentinel(dom, r2.state);
+        }
+    } catch (e) { /* 固化失败不阻断：调用方退回内存引导，下次启动重试；哨位不写 */ }
+}
+// 幂等稳态（备份 v2 且 users 全等、直接短路）路径专用：延迟一次性固化，
+// 绝不在登录窗/主窗首帧链路同步 spawn PowerShell（2026-09-29 性能修复红线）。
+function scheduleDomainBootstrap(mid) {
+    if (_domainBootstrapDone || _domainBootstrapScheduled) return;
+    _domainBootstrapScheduled = true;
+    try {
+        // 开发态/测试可经环境变量缩短延迟（仅时序，无安全后果：延迟越短越保守）
+        const ev = Number(process.env.BNZC_DOMAIN_BOOTSTRAP_DELAY_MS);
+        const delay = Number.isFinite(ev) && ev >= 0 ? ev : DOMAIN_BOOTSTRAP_DELAY_MS;
+        setTimeout(() => {
+            try {
+                // 哨位命中（含 gen=0 新机负哨位）：零 vault 往返直接结案。
+                // 但加一次纯文件级漂移校验（无 PS）：物理整 blob 覆盖后自愈路径
+                // 可能写出"gen 已抬/退役缺位"的降级哨位，或在场真件水位已高于
+                // 哨位——此时回退完整 ensure 耐久补齐；legacy/none 在场不触发
+                // （新机豁免语义不变）。
+                const st0 = readDomainSentinel(getAppDomain());
+                if (st0) {
+                    let drift = false;
+                    try {
+                        const ip0 = inspectUsersBackup();
+                        if (ip0.trusted === 'v2'
+                            && ((Number(ip0.gen) || 0) > st0.gen || st0.retired !== true)) {
+                            drift = true;
+                        }
+                    } catch (e) { /* 文件不可读按无漂移处理，安全读路径另有自愈 */ }
+                    if (!drift) { _domainBootstrapDone = true; return; }
+                }
+            } catch (e) { /* 哨位异常走完整检查 */ }
+            ensureDomainBootstrap(mid);
+        }, delay);
+    } catch (e) { ensureDomainBootstrap(mid); /* 无定时器环境：同步兜底固化 */ }
+}
 function readUsersBackupGen(machineIdArg) {
     try {
         const mid = machineIdArg || getMachineId();
         // ★ 2026-09-26 M-2：gen 随统一状态存储（vault 优先）
+        const r0 = readUnifiedState(mid);
+        const dom = getAppDomain();
+        const g0 = Number(r0.state && r0.state.usersBackupGenV2 && r0.state.usersBackupGenV2[dom]);
+        if (g0 > 0) {
+            // ★ 2026-09-30 M3 自愈：云离并发整 blob CredWrite 的读-写残余窗口
+            //   （fresh 读与写入是两次独立 PS spawn）理论上可把本域键回滚为旧值。
+            //   在场机器签名 v2 件是本机真水位——攻击者无法签出更高件、只能放更
+            //   旧件（更旧则不抬升），故 inPlace.gen 更高时立即抬回。正常态两者
+            //   恒等，不产生任何写入（inspect 仅文件级 HMAC，无 PS）。
+            try {
+                const ip = inspectUsersBackup();
+                if (ip.trusted === 'v2') {
+                    const bg = Number(ip.gen) || 0;
+                    if (bg > g0) {
+                        writeUsersBackupGen(bg, mid);
+                        syncDomainSentinel(dom, readUnifiedState(mid).state);
+                        return bg;
+                    }
+                }
+            } catch (e) { /* 文件异常以 vault 键为准 */ }
+            return g0;
+        }
+        // 域键缺失：先尝试一次性引导固化（在场 v2 才固化，防删备份塌缩锚点）
+        ensureDomainBootstrap(mid);
         const r = readUnifiedState(mid);
-        const g = Number(r.state && r.state.usersBackupGen);
-        return (g > 0) ? g : 0;
+        const g = Number(r.state && r.state.usersBackupGenV2 && r.state.usersBackupGenV2[dom]);
+        if (g > 0) return g;
+        // 未固化（legacy/无备份在场）内存引导：
+        //  ① 本产品在场有签名有效 v2 备份 → 历史上参与过旧共享标量推进，继承
+        //     标量高水位与本地 gen 取大——只抬高不降低，防回滚相对旧版零降级；
+        //  ② 仅 legacy/无备份（如离线全新安装、从未跑过新版）→ 从未参与锚点
+        //     体系，旧标量是对端污染值，绝不继承，从 0 开始，合法 legacy 老件
+        //     在日落窗口内正常迁移。
+        try {
+            const inPlace = inspectUsersBackup();
+            if (inPlace.trusted === 'v2') {
+                const bg = Number(inPlace.gen) || 0;
+                const scalar = Number(r.state && r.state.usersBackupGen) || 0;
+                return Math.max(bg, scalar);
+            }
+        } catch (e) { /* 无在场 v2 件 → 0（新机/legacy 老件） */ }
+        return 0;
     } catch (e) { return 0; }
 }
 function writeUsersBackupGen(gen, machineIdArg) {
@@ -341,12 +589,13 @@ function writeUsersBackupGen(gen, machineIdArg) {
         const mid = machineIdArg || getMachineId();
         const n = Number(gen);
         if (!(n > 0)) return false;
+        const dom = getAppDomain();
         // 单调高水位补丁（uncertain 时落文件，不覆盖 vault）
         const r = readUnifiedState(mid);
-        if ((Number(r.state && r.state.usersBackupGen) || 0) < n) {
-            return patchUnifiedState({ usersBackupGen: n }, mid);
-        }
-        return true;
+        const cur = Number(r.state && r.state.usersBackupGenV2 && r.state.usersBackupGenV2[dom]) || 0;
+        if (cur >= n) return true;
+        const newMap = Object.assign({}, (r.state && r.state.usersBackupGenV2) || null, { [dom]: n });
+        return patchUnifiedState({ usersBackupGenV2: newMap }, mid);
     } catch (e) {
         console.warn('[Gate] usersBackupGen 写入失败（非致命）:', e && e.message);
         return false;
@@ -363,17 +612,37 @@ function legacyRetired(machineIdArg) {
     try {
         const mid = machineIdArg || getMachineId();
         // ★ 2026-09-26 M-2：退役标记随统一状态存储
+        // ★ 2026-09-29：按产品域读取（云端退役不连坐离线新装）；旧共享标量
+        //   仅在本产品在场确有 v2 备份（=本产品确实写过 v2）时继承，只收紧
+        // ★ 2026-09-30：域键缺失先做引导耐久化（gen+退役一次补丁），固化后
+        //   只认 V2 map——删/换 users-backup.json 无法撤销退役（H-1 攻击链）
+        const r0 = readUnifiedState(mid);
+        const dom = getAppDomain();
+        if (r0.state && r0.state.usersLegacyRetiredV2 && r0.state.usersLegacyRetiredV2[dom] === true) return true;
+        ensureDomainBootstrap(mid);
         const r = readUnifiedState(mid);
-        return !!(r.state && r.state.usersLegacyRetired === true);
+        if (r.state && r.state.usersLegacyRetiredV2 && r.state.usersLegacyRetiredV2[dom] === true) return true;
+        // 未固化（legacy/无备份在场）：旧标量不继承
+        if (r.state && r.state.usersLegacyRetired === true) {
+            try {
+                const inPlace = inspectUsersBackup();
+                if (inPlace.trusted === 'v2') return true;
+            } catch (e) { /* 无法核验 → 不继承 */ }
+        }
+        return false;
     } catch (e) { return false; }
 }
 function markLegacyRetired(machineIdArg) {
     try {
         const mid = machineIdArg || getMachineId();
+        const dom = getAppDomain();
         const r = readUnifiedState(mid);
-        if (r.state && r.state.usersLegacyRetired === true) return true;
+        if (r.state && r.state.usersLegacyRetiredV2 && r.state.usersLegacyRetiredV2[dom] === true) return true;
         // 退役补丁（uncertain 时落文件，不覆盖 vault）
-        return patchUnifiedState({ usersLegacyRetired: true }, mid);
+        const newMap = Object.assign({}, (r.state && r.state.usersLegacyRetiredV2) || null, { [dom]: true });
+        const ok = patchUnifiedState({ usersLegacyRetiredV2: newMap }, mid);
+        if (ok) syncDomainSentinel(dom, readUnifiedState(mid).state); // 缓存命中零 PS
+        return ok;
     } catch (e) {
         console.warn('[Gate] legacyRetired 标记失败（非致命）:', e && e.message);
         return false;
@@ -467,6 +736,9 @@ function backupUserAccounts(config, options) {
         try {
             const inPlace0 = inspectUsersBackup();
             if (inPlace0.trusted === 'v2' && usersListsEqual(newUsers, inPlace0.users)) {
+                // 同步性能红线不破：引导耐久化（升级首启一次性 gen/退役固化，
+                // 防删备份塌缩锚点）延迟到主窗显示后异步执行一次。
+                scheduleDomainBootstrap(getMachineId());
                 return true;
             }
         } catch (ie) { /* 校验异常按原完整路径处理 */ }
@@ -2984,9 +3256,16 @@ function resolveVaultState(primaryMid) {
     }
     let merged = {};
     for (const f of found) merged = mergeUnifiedStates(merged, f.state);
-    // 稳态快路径：唯一命中就在 primary——无需重写（每次读省一次 PS 写进程）
+    // 稳态快路径：唯一命中就在 primary——无需重写（每次读省一次 PS 写进程）。
+    // ★ 2026-09-30：raw 直返前对两张 V2 map 过白名单归一（blob 虽经机器密钥
+    //   加密，纵深防御 __proto__/constructor 等异类键残留进入后续读-改-写链）。
     if (found.length === 1 && found[0].mid === primaryMid) {
-        return { dead: false, state: found[0].state };
+        const __st = found[0].state;
+        if (__st && (__st.usersBackupGenV2 || __st.usersLegacyRetiredV2)) {
+            __st.usersBackupGenV2 = mergeDomainGenMaps(null, __st.usersBackupGenV2);
+            __st.usersLegacyRetiredV2 = mergeDomainRetiredMaps(null, __st.usersLegacyRetiredV2);
+        }
+        return { dead: false, state: __st };
     }
     if (writeVaultState(merged, primaryMid)) {
         for (const f of found) {
@@ -3031,7 +3310,10 @@ function mergeUnifiedStates(a, b) {
             normalizeRejectMap(a.accountReject),
             normalizeRejectMap(b.accountReject)),
         usersBackupGen: Math.max(Number(a.usersBackupGen) || 0, Number(b.usersBackupGen) || 0),
-        usersLegacyRetired: a.usersLegacyRetired === true || b.usersLegacyRetired === true
+        usersLegacyRetired: a.usersLegacyRetired === true || b.usersLegacyRetired === true,
+        // ★ 2026-09-29 产品域隔离锚点：按域合并，云端/离线互不抬水位
+        usersBackupGenV2: mergeDomainGenMaps(a.usersBackupGenV2, b.usersBackupGenV2),
+        usersLegacyRetiredV2: mergeDomainRetiredMaps(a.usersLegacyRetiredV2, b.usersLegacyRetiredV2)
     };
 }
 
@@ -3041,6 +3323,22 @@ function mergeLegacyState(gate, anchor) {
     anchor = anchor || {};
     const gs = Number(gate.offlineStart) || 0;
     const as = Number(anchor.offlineStart) || 0;
+    // ★ 2026-09-29：gate.dat/.license-anchor 在【本产品】可写目录，但内容可能是
+    //   vault 写失败时回落的【整份机器态】（含对端推进的共享标量），物理位置不
+    //   能证明标量归属。
+    const fileGen = Math.max(Number(gate.usersBackupGen) || 0, Number(anchor.usersBackupGen) || 0);
+    const fileRetired = gate.usersLegacyRetired === true || anchor.usersLegacyRetired === true;
+    // 只搬运文件中【已持久化】的 V2 域 map（降级文件模式的权威锚点，缺失会让
+    // gen/退役跨重启归零，防回滚失效）。旧共享标量【不在 merge 时动态归域】：
+    // 归域与耐久化唯一收口在 ensureDomainBootstrap（由 readUsersBackupGen/
+    // legacyRetired 引导读触发，或幂等短路延迟调度），以在场 v2 备份为门槛，
+    // 首见即一次性固化进 V2 map。
+    // 致命反例（TOCTOU）：backupUserAccounts 先写 v2 备份文件、后打 gen 补丁，
+    // 若 merge 每次读都按"实时在场件"把标量归域，中间窗口在场件已翻 v2，污染
+    // 标量 71 会被归成当前域高水位，反使 writeUsersBackupGen 误判 cur>=n 而
+    // 拒绝落补丁——锚点永久停在污染值。故此处绝不读 users-backup.json。
+    const genV2Map = mergeDomainGenMaps(gate.usersBackupGenV2, anchor.usersBackupGenV2);
+    const retiredV2Map = mergeDomainRetiredMaps(gate.usersLegacyRetiredV2, anchor.usersLegacyRetiredV2);
     return {
         everActivated: !!(gate.everActivated || anchor.everActivated),
         lastReject: gate.lastReject || anchor.lastReject || null,
@@ -3051,8 +3349,10 @@ function mergeLegacyState(gate, anchor) {
         accountReject: mergeRejectMaps(
             normalizeRejectMap(gate.accountReject),
             normalizeRejectMap(anchor.accountReject)),
-        usersBackupGen: Math.max(Number(gate.usersBackupGen) || 0, Number(anchor.usersBackupGen) || 0),
-        usersLegacyRetired: gate.usersLegacyRetired === true || anchor.usersLegacyRetired === true
+        usersBackupGen: fileGen,
+        usersLegacyRetired: fileRetired,
+        usersBackupGenV2: genV2Map,
+        usersLegacyRetiredV2: retiredV2Map
     };
 }
 
@@ -3136,35 +3436,69 @@ function readUnifiedStateFresh(mid) {
 }
 
 // 统一状态写入：vault 优先；写失败/不可用回落【双文件双写】（至少一份落盘）
-function writeUnifiedState(state, mid) {
-    invalidateUnifiedCache();
-    if (vaultAvailable() && writeVaultState(state, mid)) {
+// ★ 2026-09-30 M3（云离并发审查阻断项收口）：所有整 blob CredWrite（persistUnified
+//   在线裁决 8 个调用点 / installLicense 激活 / gen / 退役补丁）写前统一取当前
+//   统一态，把云离对端进程在本快照之后落入的域锚点按单调语义并入（gen 按域 max、
+//   退役按域 OR），杜绝持网络裁决前陈旧快照整包写抹掉对端键、重开删备份洗白链。
+//   patch 链经 freshRead 形参传入同 tick 的 fresh 读结果（零新增 PS）；persist/
+//   installLicense 等权威写强制 fresh——网络 await 再短也不信 1500ms 缓存。
+//   残余：fresh 读与 CredWrite 是两次独立 PS spawn，该秒级窗口内对端写入仍可能
+//   被覆盖，由 readUsersBackupGen 在场件水位自愈 + 退役在场 v2 自愈兜底
+//   （均为文件级检查，无 PS；攻击者只能放更旧件，无法签高件/撤退役）。
+function writeUnifiedState(state, mid, freshRead) {
+    let s = state;
+    try {
+        // freshRead=同 tick 刚 invalidate 后读到的结果（patch 链专用，零新增 PS）；
+        // 否则（persist 在线裁决/激活等持可能陈旧快照的权威写）强制废弃 1500ms
+        // 缓存做 fresh 读——快网裁决 <1.5s 返回时缓存仍会遮蔽对端刚落的域键。
+        if (!freshRead) invalidateUnifiedCache();
+        const cur = freshRead || readUnifiedState(mid);
+        const cs = cur.state;
+        if (cs) {
+            s = Object.assign({}, cs, state);
+            // 两张 V2 map 绝不整键替换：入参无该字段时也保留当前态（过白名单）
+            s.usersBackupGenV2 = mergeDomainGenMaps(cs.usersBackupGenV2, state.usersBackupGenV2);
+            s.usersLegacyRetiredV2 = mergeDomainRetiredMaps(cs.usersLegacyRetiredV2, state.usersLegacyRetiredV2);
+        }
+    } catch (e) { s = state; /* 读取异常按原状态直写（vault 写自身成败兜底） */ }
+    if (vaultAvailable() && writeVaultState(s, mid)) {
         // 写成功即填缓存：紧随其后的 readUnifiedState（persist 链常态）不再
         // 触发一次 2.5s+ 的 fresh read——启动链总阻塞的关键收敛点
-        _unifiedCache = { mid, at: Date.now(), result: { vault: true, state } };
+        _unifiedCache = { mid, at: Date.now(), result: { vault: true, state: s } };
         return true;
     }
     if (!_vaultEnvDisabled) markVaultTransient();
     // 注意：两份都要尝试，不能用 || 短路（gate 成功就跳过 anchor 会破坏
     // 单删任一文件不失效的双写语义）
     let gOk = false, aOk = false;
-    try { gOk = !!writeGateState(state, mid); } catch (e) { /* 继续写 anchor */ }
-    try { aOk = !!writeAnchorState(state, mid); } catch (e) { /* 忽略 */ }
+    try { gOk = !!writeGateState(s, mid); } catch (e) { /* 继续写 anchor */ }
+    try { aOk = !!writeAnchorState(s, mid); } catch (e) { /* 忽略 */ }
     return !!(gOk || aOk);
 }
 
 // 内部读-改-写补丁（gen/退役标记）：uncertain 时绝不覆盖可能只是暂时
 // 读不出的 vault——补丁落文件，待 vault 恢复后对账合并
+// ★ 2026-09-30（M2/M3）：写前强制失效 1500ms 缓存做 fresh 读；正常态补丁交由
+//   writeUnifiedState 统一 fresh 合并（同 tick 缓存命中零新增 PS），云离并发下
+//   对端域键在任意整 blob 写路径都不被抹。
 function patchUnifiedState(patch, mid) {
+    invalidateUnifiedCache();
     const r = readUnifiedState(mid);
-    const s = Object.assign({}, r.state, patch);
     if (r.uncertain) {
+        // 状态不明：补丁与文件态按域单调合并后落双文件，绝不覆写 vault
+        const s = Object.assign({}, r.state, patch);
+        if (patch.usersBackupGenV2) {
+            s.usersBackupGenV2 = mergeDomainGenMaps(r.state && r.state.usersBackupGenV2, s.usersBackupGenV2);
+        }
+        if (patch.usersLegacyRetiredV2) {
+            s.usersLegacyRetiredV2 = mergeDomainRetiredMaps(r.state && r.state.usersLegacyRetiredV2, s.usersLegacyRetiredV2);
+        }
         let gOk = false, aOk = false;
         try { gOk = !!writeGateState(s, mid); } catch (e) { /* 续 */ }
         try { aOk = !!writeAnchorState(s, mid); } catch (e) { /* 忽略 */ }
         return !!(gOk || aOk);
     }
-    return writeUnifiedState(s, mid);
+    return writeUnifiedState(patch, mid, r);
 }
 
 // ★ 2026-09-23 账号级拒绝标记 = 按用户名存储的集合 { username: {username,state,at} }
