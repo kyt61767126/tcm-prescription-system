@@ -1603,3 +1603,26 @@
 * **验证全绿**：tools/_tmp/smoke-async-write-chain.cjs（临时不入库）**20/20** 三连稳定——A 同步插队 everActivated 不回退 / B 背靠背 async 不互踩 / C 2.1s 陈旧缓存 fresh 读保对端域键（域 map 白名单 cloud/offline/default，测试夹具别用自造域名）/ **D 读飞行 120ms 窗内同步插队 lastSeenHigh 不被旧镜像回退** / **E vault corrupt 时补丁分流双文件不覆写 vault（M3 以在场 v2 件 gen 水位抬升）**；性能探针（Playwright 官方旁路，夹具 e2eadmin/E2ePass123!）**R1 主窗 0.89s/可操作 1.05s、R2 1.34s/1.62s**（修复前 22s/16s）；预填探针 PROBE-PASS；node --check 三文件；sync-all + VerifyOnly exit 0（54 组）；check-interface 6 OK 0 CHANGED。
 * **backlog（已评估不阻断）**：①retired 墓碑缺与 gen M3 对称的跨进程自愈（ensureDomainBootstrap 仅一次性引导，可排期）；②persistUnifiedAsync 翻转类调用方 await 但忽略 false 返回（需 4 次同步写连续插队，不可达，建议 LICENSED/墓碑分支改重试或拒放）；③云桌面 main.js 未接 prewarmGate（云端无 free/trial 冷读快道场景，性能一致性另项）；④selfFresh 2s 窗相对 HEAD 零秒基底略有扩大（仍远小于旧同步读-改-写秒级盲窗，残余由 M3+日落收口）。
 * **生效方式：登录窗/主进程在 asar 层不走热更 → 离线桌面必须重打 exe 1.0.262（package.json 已 261→262；build-meta.json 由 build.bat 铁闸4/5 自动重写勿手改）；云桌面/两端 APP 随 license-manager 共享改动在下次整包带上（云端主进程未接线故行为零变化）；云端网页/服务端零改动。promo/、tools/patch-*.cjs、tools/_tmp/、e2e/.tmp 不入提交。**
+
+## 52. 【登录秒开】在线裁决预取保热 + LICENSED 快车道后台对账（2026-10-02，离线 1.0.263，双独立子代理两审两收口）
+
+* **现象（用户回归）**：hkk/admin123 登录点击后转圈 6~10s 才进主界面（"5 天前秒开、离线桌面几乎秒开，最近优化后变慢"）。
+* **根因（真机插桩 `%TEMP%\bnzc-perf.log` 实证，非静态推测）**：主进程零冻结（200ms tick 无空洞）、主窗创建 47ms；慢点全部在授权闸门——每次登录跑**两趟完整闸门**（登录提交 `license:verify-gate` + 主窗 `installMainWindowGate` 热更吊销自检，后者不可省），单趟串行吃两个冷源：**冷在线裁决 fetch 2.1~3.8s**（冷 TLS + Cloudflare Worker 冷路径；热连接稳定 0.55s）+ **冷 vault PowerShell 读 3~6.6s / 写 2.5~4.4s**（§44/§51 的 PS 5.1 凭据管理器）。
+* **★修复三件套（权威源 `shared/license/license-manager.js` → sync Group 4；离线 main.js 保热定时器为离线独有，不 sync）**：
+  1. **在线裁决预取+保热 `prewarmAdjudication`**：app whenReady 即用上次登录名（login-state.json 经 safeStorage 解密，失败留空只预热连接）预取一次；登录窗期间 main.js 每 **15s** 调一次（×120 上限=30 分钟，login-success/关窗立即清 `global.__bnzcLoginPrewarmTimer`）。槽规则：**TTL 20s、one-shot（主窗第二趟必新鲜重裁）、键=mid|username、仅 200+success+LICENSED 可被复用消费**（`__consumeAdjPrewarm`，非 LICENSED/reject 自动新鲜补裁）。
+  2. **★LICENSED 秒开快车道（verifyLoginGate，free 快道之后、vault 冷读之前）**：本地 `valid+licensed` 先在线裁决，满足全部条件立即 `return {ok:true}`，vault 读-改-写全部后移 `reconcileOnlineLicensedAsync` 后台完成；**其他一切情形（netFail/httpFail/malformed/非LICENSED/墓碑/trial/本地无效/回拨不自愈）落原全量逻辑，fail-closed 语义零变化**；裁决结果存 `__fastAdj` 透传分支①复用防重复请求。
+  3. **prewarmGate 可重入保热**：在途单飞 + 缓存年龄 ≥`GATE_PREWARM_FRESH_MS=12s` 先 invalidateUnifiedCache 强制 fresh（配合 15s 定时，点击时缓存年龄 ≤~15s）；LICENSED 稳态写后台化延续 §51（翻转仍 await）。
+* **★快车道双独立审查必补四硬条件（零 PS/零额外网络成本，缺一不发版）**：
+  - ⑤ **serverTime 硬条件**：`Date.parse(ent.serverTime)` 必须有效 >0 才放行——真实 Worker 对 success 恒发 serverTime（functions/api/license/entitlement.js），缺时间戳的注入/畸形响应不享受快车道（落全量后非回滚态与旧版逐字一致，回滚态由 healHighFromServer 失败硬拒）。
+  - ⑥ **回拨零成本识别**：`__getWarmLastSeenHigh(mid)` 只读 ≤30s 内存缓存（冷/降级返回 0）；热缓存显示回拨且 serverTime 不足以凭旧高水位自愈 → 不走快车道，落全量分支按原语义自愈或硬拒。
+  - ⑦ **reconcile 防陈旧裁决清吊销**：缺/不足 serverTime → **零 mutation 直接返回**；清 lastReject/rejectAt/offlineStart 与删本用户墓碑，必须本地时间戳 ≤ serverTime+60s（对齐 KV 传播软重试口径），更新的本地拒绝记录保留（fail-safe）；everActivated/lastVerify 照写；写仍经 _vaultWriteChain 保序。
+  - ⑧ **新机首激活内存标记 `__lastOnlineLicensedAt`**：快车道放行同步置位（进程内存、不落盘），补 reconcile 冷 PS 尚未把 lastVerify 写进 vault 时主窗第二趟撞跨 colo NO_LICENSE 的 10 分钟软重试条件（重试仍失败照常硬拒，不放宽任何终裁）。
+* **实测（补丁后真机 hkk 账号）**：快点击 gate#1 **37ms**（预取槽命中、零 PS），点登录→主窗创建 108ms；停留 50s 慢点击 38ms；gate#2 主窗闸门 974~1085ms（新鲜裁决+快车道）；PS 读 6.5s/写 2.5~3.3s 全部在后台对账，不挡界面；真实响应恒带 serverTime（st=1）。
+* **★可复用教训/铁律**：
+  - 保热槽的"在途单飞"必须区分**在途 vs 已完成**（`settled` 标志）：若同键无脑 return，定时器只在启动时发第一次请求，后续保热全失效（慢点击场景实测抓到）。
+  - "先放行、后台写"类优化必须显式列举 fail-closed 清单并经双独立审查；唯一强制收口是主窗第二趟闸门（**新鲜裁决，预取槽 one-shot 绝不复用**，失败 gateFailed 隐藏主窗+锁死，登录窗无业务数据）。
+  - 临时插桩（BNZC_TIMING 计时块/AUTOLOGIN 自动登录钩）只允许放离线 electron 副本、env 门控；**收口清理方式 = 改回干净权威源后重跑 sync-all 覆盖副本**（勿手删副本后忘记权威源），清理后 grep `BNZC_TIMING|__bnzcPerf` 必须零命中。
+  - 发版版号以 `package.json` + bump-version 实际值为准（源码停留上一发版号，build.bat 自动 +1，262→263）；代码注释里写的计划版号（曾误写 1.0.264）发版前必须 grep 核对订正。
+  - build.bat 门禁 1.5 拒绝脏工作区打包：**先精确 git add/commit 源码，再跑 build.bat**（bump 出来的 package.json/build-meta 变化走"打包副作用自动收纳"提交）。
+* **backlog（已评估不阻断）**：①P3-C 桌面主进程消费校验 ES256 gateToken（在线裁决目前完整性仅靠 TLS，既有问题非本次回归，见 §45/p3-gate-token_plan）；②reconcile 条件化清除基于读快照时刻，写执行时刻 CAS 重判（多进程秒级窗）待 P3-C 同批；③check-admin-status/query-invite 主窗显示后 2.2~3.2s 但不挡界面。
+* **生效方式：授权主进程在 asar 层不走热更 → 重打离线 exe 1.0.263；未触热更白名单（license-manager.js 不在 14 个热更文件内），无热包；云桌面 main.js 未接预取/快车道、行为零变化，云桌面与两端 APP 副本随下次整包带上；云端网页/服务端零改动。**

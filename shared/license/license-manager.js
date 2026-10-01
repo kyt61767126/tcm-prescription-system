@@ -3035,7 +3035,23 @@ function stopHeartbeat() {
 // ============================================================================
 const GATE_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
 
-async function adjudicateViaMainProcess(machineId, username) {
+// ★ 2026-10-02 登录性能：在线裁决预取。真机/Node 实测：同进程首个裁决
+//   2.1~3.8s（冷 TLS 握手 + Cloudflare Worker 冷路径），连接热后稳定
+//   0.55s。登录窗 whenReady 即后台预取一次，点登录直接复用，冷耗时整段
+//   藏进"用户看登录框/输密码"窗口。
+//   安全边界（四条，缺一不可）：
+//   ① 仅复用「HTTP 200 + ent.success===true + state==='LICENSED'」；
+//     netFail/httpFail/malformed/任何拒绝态一律丢弃、点登录时新鲜重裁，
+//     fail-closed 语义零变化；
+//   ② 一次性消费：登录链取走即清空槽位 → 紧随其后的主窗
+//     installMainWindowGate 吊销自检永远拿新鲜裁决（吊销延迟不增加）；
+//   ③ 缓存键 = machineId|username：换用户名/换机不命中，账号墓碑联动
+//     不会错用到他人裁决；
+//   ④ TTL 20s：只覆盖正常"开程序→输密码→登录"交互；超时作废。
+const ADJ_PREWARM_TTL_MS = 20000;
+let __adjPrewarm = null; // { key, at, promise }
+
+async function __adjudicateFetch(machineId, username) {
     const controller = new AbortController();
     const tid = setTimeout(() => controller.abort(), 15000);
     try {
@@ -3058,6 +3074,47 @@ async function adjudicateViaMainProcess(machineId, username) {
         // AbortError（超时）与 TypeError（不可达）均按断网处理
         return { netFail: true };
     } finally { clearTimeout(tid); }
+}
+
+// 供 main.js 登录窗显示期间周期调用以保持裁决"热"：槽位在途则跳过，
+// 否则重新预取替换槽位（TTL 20s + 建议 15s 刷新间隔 → 点登录时命中的
+// 裁决年龄永远 ≤~15s，吊销复用窗口不大于旧单次预取的 20s TTL）。
+// username 读不到时传空串——即便键不匹配，冷 TLS/Worker 也已被预热，
+// 点登录的新鲜请求走热连接（~0.55s）。
+function prewarmAdjudication(machineId, username) {
+    try {
+        if (!machineId) return;
+        const key = machineId + '|' + (username || '');
+        // 在途（同键未完成）直接复用该 Promise，不重复打服务端；已完成的槽位
+        // 每次保心跳调用都以新结果替换（main.js 登录窗期间 15s 周期调用）。
+        if (__adjPrewarm && __adjPrewarm.key === key && !__adjPrewarm.settled) return;
+        const now = Date.now();
+        const slot = { key, at: now, promise: null, settled: false };
+        slot.promise = __adjudicateFetch(machineId, username)
+            .catch(() => ({ netFail: true }))
+            .then((r) => { slot.settled = true; return r; });
+        __adjPrewarm = slot;
+    } catch (e) { /* 预热纯增益，任何异常静默 */ }
+}
+
+// 一次性取出可复用的预取结果（LICENSED 才用）；其余情况新鲜补裁。
+function __consumeAdjPrewarm(machineId, username) {
+    if (!__adjPrewarm) return null;
+    if (Date.now() - __adjPrewarm.at > ADJ_PREWARM_TTL_MS) { __adjPrewarm = null; return null; }
+    if (__adjPrewarm.key !== machineId + '|' + (username || '')) return null;
+    const slot = __adjPrewarm;
+    __adjPrewarm = null; // ② one-shot：主窗自检不得再复用
+    return slot.promise
+        .then((r) => (r && r.ok && r.ent && r.ent.success === true && r.ent.state === 'LICENSED')
+            ? r
+            : __adjudicateFetch(machineId, username))
+        .catch(() => __adjudicateFetch(machineId, username));
+}
+
+async function adjudicateViaMainProcess(machineId, username) {
+    const cached = __consumeAdjPrewarm(machineId, username);
+    if (cached) return cached;
+    return __adjudicateFetch(machineId, username);
 }
 
 function gateStateMessage(state) {
@@ -3565,6 +3622,18 @@ async function getUnifiedGateAsync(mid) {
     };
 }
 
+// ★ 2026-10-02 快车道专用：零 PS 读取"仍在缓存窗内"的本机高水位，用于在不付
+//   vault 冷读代价的前提下识别时钟回拨。缓存冷/不鲜/vault 降级一律返回 0
+//   （调用方按"无法判定"保守处理）。
+function __getWarmLastSeenHigh(mid) {
+    try {
+        const c = _unifiedCache;
+        if (!c || c.mid !== mid || !c.result || c.result.vault !== true) return 0;
+        if (Date.now() - c.at > UNIFIED_CACHE_MS) return 0;
+        return Number(c.result.state && c.result.state.lastSeenHigh) || 0;
+    } catch (e) { return 0; }
+}
+
 // 凭据子系统健康探测（懒加载）：失败只标记时间，退避到期允许重试——
 // PowerShell 冷启动/杀软拖慢造成的瞬态失败不应永久封死本进程。
 function vaultProbe() {
@@ -3861,6 +3930,9 @@ function readFileLegacyState(mid) {
 //   模型；云/离并发写入由 fresh 读 + M3 gen 水位自愈收敛；每次应用重启都全新
 //   fresh 读，运行期心跳本为 24h 长周期，30s 陈旧窗口无可观测安全增益差。
 const UNIFIED_CACHE_MS = 30000;
+// ★ 2026-10-02：登录窗保热鲜度线（< UNIFIED_CACHE_MS；main.js 15s 周期调
+//   prewarmGate，缓存年龄过线即失效重读，保证点击时缓存年龄 ≤~15s）
+const GATE_PREWARM_FRESH_MS = 12000;
 let _unifiedCache = null; // {mid, at, result}
 function invalidateUnifiedCache() { _unifiedCache = null; }
 
@@ -4162,6 +4234,77 @@ async function gateGracePass(u, mid, username) {
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
+// ★ 2026-10-02 登录秒开（1.0.263）：在线明确 LICENSED 的放行后 vault 对账。
+//   verifyLoginGate 付费快车道在拿到服务端明确裁决后【立即放行】（不等待 vault
+//   PS 读/写，冷 PS 真机 3~14s），本机统一态的读-改-写全部在本函数后台完成，
+//   与主窗 installMainWindowGate 紧接其后的第二趟闸门形成强制收口：该趟持
+//   【新鲜在线裁决】（预取槽一次性消费，绝不复用），在线时成功态同样走快车道
+//   但任何吊销/墓碑/硬拒/时间异常（非 LICENSED 或缺 serverTime/回拨不自愈）都
+//   落 fresh vault 全量逻辑立即隐藏主窗并锁死（架构既定的"唯一热更可达吊销点"，
+//   登录窗不展示任何业务数据）；断网时该趟完整执行 vault 宽限/墓碑/回拨硬分支。
+//   安全语义对照同步分支逐项保持一致：
+//   ① rollback：凭 ent.serverTime 自愈高水位；快车道已强制 serverTime 可解析，
+//      本函数再守一道（比同步分支更严，见函数内注释）——缺有效 serverTime 或其
+//      不足以自愈回拨时【不做任何 mutation】直接返回；
+//   ② everActivated/lastVerify 同值同写；lastReject/rejectAt/offlineStart 双清
+//      与墓碑删除属安全翻转，仅当本地记录时间戳不新于本次在线裁决（+60s 容差）
+//      时才执行，相对旧"无条件清除"净收敛，防止陈旧 LICENSED 裁决清掉更新吊销；
+//   ③ 仅按本 username 删账号墓碑（username 空绝不清理，铁律不变）；
+//   ④ persistUnifiedAsync 在后台链内被 await（经 _vaultWriteChain 保序），
+//      翻转不丢、不与其他写乱序；失败由主窗闸门下一轮完整读裁决兜底。
+function reconcileOnlineLicensedAsync(mid, username, ent) {
+    (async () => {
+        // ★ 双审查收口：裁决时间戳是本次所有"清除/解封/自愈"指令的权威水位。
+        //   拿不到有效 serverTime 则宁可不写（保留旧拒绝态），绝不凭本地时钟解封。
+        const stMs = Date.parse((ent && ent.serverTime) || '');
+        if (isNaN(stMs) || stMs <= 0) {
+            try { console.warn('[Gate] LICENSED 后台对账：缺有效 serverTime，跳过写入'); } catch (e2) {}
+            return;
+        }
+        const u = await getUnifiedGateAsync(mid);
+        const now = Date.now();
+        const rollback = !!(u.lastSeenHigh && now < u.lastSeenHigh - TIME_TAMPER_THRESHOLD);
+        if (rollback) {
+            // 比同步分支 healHighFromServer 更严的纵深防御：stMs 不足以凭旧高
+            // 水位自愈时（同步分支只校验可解析性即放行——兼容用户时钟前调后
+            // 拨正的合法场景），后台任务不做任何 mutation；放行与否由快车道
+            // ⑥ 与全量分支按各自语义决定，状态收敛不依赖本写。
+            if (stMs < (u.lastSeenHigh || 0) - TIME_TAMPER_THRESHOLD) {
+                try { console.warn('[Gate] LICENSED 后台对账：serverTime 不足自愈回拨，跳过写入'); } catch (e2) {}
+                return;
+            }
+            u.gate.lastSeenHigh = stMs; u.anchor.lastSeenHigh = stMs; u.lastSeenHigh = stMs;
+        } else {
+            const high = Math.max(u.lastSeenHigh || 0, now);
+            u.lastSeenHigh = high; u.gate.lastSeenHigh = high; u.anchor.lastSeenHigh = high;
+        }
+        u.gate.everActivated = true; u.anchor.everActivated = true;
+        u.gate.lastVerify = now; u.anchor.lastVerify = now;
+        // ★ 双审查收口（对抗 fail-open）：本地拒绝记录比本次裁决【更新】时不清。
+        //   60s 容差对齐 KV 传播软重试口径；任何方向失败都保留拒绝态（fail-safe）。
+        //   注：本判定基于读快照时刻，属对旧"无条件清除"的净收敛；写执行时刻
+        //   CAS 重判（多进程秒级窗口）见既有 backlog R3/P3-C，不在本次范围。
+        const VERDICT_SKEW_MS = 60 * 1000;
+        const localRejectAt = Math.max(Number(u.gate.rejectAt) || 0,
+            Number(u.anchor && u.anchor.rejectAt) || 0);
+        if (localRejectAt <= stMs + VERDICT_SKEW_MS) {
+            u.gate.offlineStart = null; u.gate.lastReject = null; u.gate.rejectAt = null;
+            u.anchor.offlineStart = null; u.anchor.lastReject = null; u.anchor.rejectAt = null;
+        }
+        if (username) {
+            const tomb = (u.gate.accountReject || {})[username];
+            const tombAt = (tomb && (Number(tomb.at) || 0)) || 0;
+            if (tombAt <= stMs + VERDICT_SKEW_MS) {
+                delete u.gate.accountReject[username];
+                delete u.anchor.accountReject[username];
+            }
+        }
+        await persistUnifiedAsync(u, mid);
+    })().catch((e) => {
+        try { console.warn('[Gate] LICENSED 后台对账失败（主窗闸门将强制复核）:', e && e.message); } catch (e2) {}
+    });
+}
+
 // ★ 2026-10-01 启动性能：app whenReady 最早阶段后台预热授权统一态。
 //   背景：1.0.258 M-2 把锚点迁入 Windows 凭据管理器后，读状态需 spawn
 //   Windows PowerShell 5.1——冷机实测 9~14s、客户现场 1.5~3.4s（系统日志：
@@ -4175,8 +4318,29 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 //   BootstrapAsync 也会幂等固化缺失的域键；除此之外不产生读路径之外的额外写。
 //   vault 不可用时读双文件（毫秒）后自然结束。
 let _gatePrewarmPromise = null;
+let __gatePrewarmInFlight = false;
+// ★ 2026-10-02 内存级"刚在线证实 LICENSED"时刻（不落盘、零 PS）。快车道放行时
+//   同步置位，供主窗第二趟闸门在新机首激活（reconcile 冷 PS 尚未把 lastVerify
+//   写入 vault）撞 KV 跨 colo 传播 NO_LICENSE 时仍可走 10 分钟软重试；进程重启清空。
+let __lastOnlineLicensedAt = 0;
 function prewarmGate() {
-    if (_gatePrewarmPromise) return _gatePrewarmPromise;
+    // ★ 2026-10-02：保热可重入。旧实现一次性 latch——首次预热 5~14s 填缓存
+    //   后，30s TTL 一过再调也直接返回旧 Promise，用户在登录框停留超过 30s
+    //   点击时仍吃一次冷 PS 读（真机 3~6s）。现：在途必单飞（绝不并发 spawn
+    //   第二个 PS）；缓存仍鲜（30s 内 vault 成功态）直接复用；过期则重新发起。
+    const c = _unifiedCache;
+    const cacheAge = c && c.at ? (Date.now() - c.at) : Infinity;
+    const cacheWarm = !!(c && c.result && c.result.vault === true && c.result.state
+        && cacheAge < UNIFIED_CACHE_MS);
+    if (__gatePrewarmInFlight) return _gatePrewarmPromise;
+    if (cacheWarm && _gatePrewarmPromise) {
+        // 仍在裁决可接受窗口但已过保热鲜度线（12s）：失效缓存强制下一轮
+        // fresh PS 读——main.js 每 15s 调一次，保证点击时缓存年龄 ≤~15s，
+        // 不留"30s TTL + 15s 间隔"拼出的 40s 冷读空档。
+        if (cacheAge >= GATE_PREWARM_FRESH_MS) invalidateUnifiedCache();
+        else return _gatePrewarmPromise;
+    }
+    __gatePrewarmInFlight = true;
     _gatePrewarmPromise = (async () => {
         try {
             const mid = getMachineId();
@@ -4192,6 +4356,8 @@ function prewarmGate() {
             }
         } catch (e) {
             console.warn('[Gate] 启动预热失败（非致命）:', e && e.message);
+        } finally {
+            __gatePrewarmInFlight = false;
         }
     })();
     return _gatePrewarmPromise;
@@ -4221,11 +4387,81 @@ async function verifyLoginGate(usernameInput) {
         return { ok: true, free: true };
     }
 
+    // ★ 2026-10-02 秒开快车道（1.0.263，真机插桩实测）：付费已激活机先在线
+    //   裁决，只要拿到【服务端明确的成功态 LICENSED 且账号无删除标记】立即放行，
+    //   vault 统一态的 PS 读+写全部后移到 reconcileOnlineLicensedAsync 后台完成，
+    //   冷 PS（真机 3~14s）无论用户点多快都不再压在点击路径；紧随其后的主窗
+    //   installMainWindowGate 是权威完整闸门（fresh vault+新鲜裁决+硬锁），安全
+    //   收口点不变、吊销时间窗不增加。以下情形【绝不快车道】，落下方原全量逻辑
+    //   （fail-closed 语义零变化）：网络失败/超时、HTTP 错误、响应畸形、success
+    //   非 true、任何非 LICENSED 态、ACCOUNT_REVOKED 账号墓碑、试用期、本地授权
+    //   无效。裁决结果透传给分支①复用，不重复请求（预取槽本为一次性消费）。
+    let __fastAdj = null;
+    if (local.valid && local.type === 'licensed') {
+        __fastAdj = await adjudicateViaMainProcess(mid, username);
+        const __fe = __fastAdj && __fastAdj.ok && __fastAdj.ent;
+        if (__fe && __fe.success === true && __fe.state === 'LICENSED'
+            && __fe.accountState !== 'ACCOUNT_REVOKED') {
+            // ★ 双独立审查收口（1.0.263 发版必补，零 PS/零额外网络成本）：
+            // ⑤ 必须携带可解析的权威 serverTime——旧 LICENSED 分支
+            //    healHighFromServer 依赖同一份时间证明，真实服务端 success 恒发；
+            //    缺时间戳的注入/畸形成功响应不享受快车道，落全量分支按原硬拒处理。
+            // ⑥ 回拨态零成本识别：读 ≤30s 内存热缓存（whenReady 起每 15s 保热，
+            //    正常点击时必有槽）的高水位；本机处于回拨态且 serverTime 不足以
+            //    凭旧高水位自愈时不走快车道，落全量分支（由其 healHighFromServer
+            //    按原语义自愈放行或硬拒——fail-closed 语义零变化）。
+            //    缓存冷（极罕见：vault 降级/PS 仍在途）无法零成本判回拨——仍强制
+            //    有效 serverTime，且 reconcile 缺有效 serverTime 时不做任何
+            //    mutation，离线回拨硬分支继续 fail-closed 兜底。
+            const __stMs = Date.parse(__fe.serverTime || '');
+            let __rollbackBlocked = false;
+            if (!isNaN(__stMs) && __stMs > 0) {
+                const __warmHigh = __getWarmLastSeenHigh(mid);
+                if (__warmHigh && Date.now() < __warmHigh - TIME_TAMPER_THRESHOLD
+                    && __stMs < __warmHigh - TIME_TAMPER_THRESHOLD) {
+                    __rollbackBlocked = true;
+                }
+            }
+            if (!isNaN(__stMs) && __stMs > 0 && !__rollbackBlocked) {
+                // ⑦ 内存标记（见 __lastOnlineLicensedAt 注释）：覆盖新机首激活时
+                //   冷 PS 对账尚未把 lastVerify 写进 vault 的 KV 传播窗口。
+                __lastOnlineLicensedAt = Date.now();
+                reconcileOnlineLicensedAsync(mid, username, __fe);
+                return { ok: true };
+            }
+        }
+    }
+
     // ★ 2026-10-01 启动性能：gate 冷读走异步（vault PS 不冻结主进程）；
     //   app whenReady 已调 prewarmGate() 与登录窗显示并行预热，此处通常直接
     //   命中 in-flight 单飞/短时缓存（同步读共享同一缓存），冷机不再苦等 PS。
     const u = await getUnifiedGateAsync(mid);
     const now = Date.now();
+
+    // ★ 2026-10-01 性能（1.0.263，真机插桩实测）：稳态 LICENSED 放行不等待 vault 写。
+    //   实测每次登录要跑两趟完整闸门（登录提交链 + 主窗 installMainWindowGate
+    //   热更吊销自检），旧码两趟都无条件 await persistUnifiedAsync——而写链规则③
+    //   必 fresh PS 读 + CredWrite（真机热 PS 各 2.5~3s、冷 PS 8~14s），单趟
+    //   ~7s 串行压在登录点击路径（转圈"正在进入系统…"）。稳态放行时本轮落盘
+    //   内容只有 lastVerify + bumpHighWater(lastSeenHigh) 两个单调时间戳，与
+    //   §51 试用高水位同款风险包（后台 _vaultWriteChain 保序落盘；放行后秒级内
+    //   崩溃只损失本轮水位推进，回拨利用需先回拨系统时钟，几秒差无增益），故不
+    //   await。凡真实安全翻转仍一律 await 落盘后才放行：
+    //   ① everActivated false→true（首激活落账）；
+    //   ② lastReject/rejectAt/offlineStart 存在→本轮清除（硬拒/宽限恢复，解封语义）；
+    //   ③ 本 username 有 accountReject 墓碑→本轮解封删除（延迟落盘会让下次登录
+    //      仍命中墓碑，且墓碑属安全翻转类，保守 await）；
+    //   ④ rollbackSuspected 凭服务端时间自愈高水位（时钟攻击语境，保守 await）。
+    //   墓碑【新增】（accountHardFail）/硬拒落账/宽限播种在各自分支本就 await，不动。
+    //   ★必须在应用本轮 mutation 之前调用（判定读的是历史态）。
+    const licensedHasSecurityFlip = (rollback) => {
+        if (rollback) return true;
+        if (!u || !u.gate) return true;
+        if (!u.gate.everActivated) return true;
+        if (u.gate.lastReject || u.gate.rejectAt || u.gate.offlineStart) return true;
+        if (username && u.gate.accountReject && u.gate.accountReject[username]) return true;
+        return false;
+    };
 
     // ★ 高-3 修复：时间回拨不再于裁决前硬拒（旧逻辑合法用户无任何自愈途径，
     //   free 用户也被锁）。只标记可疑：随后必须在线拿到 LICENSED，凭响应里
@@ -4268,13 +4504,20 @@ async function verifyLoginGate(usernameInput) {
 
     // ① 付费已激活：在线裁决
     if (local.valid && local.type === 'licensed') {
-        let r = await adjudicateViaMainProcess(mid, username);
+        // ★ 2026-10-02：快车道已消费预取槽并裁决过一次（非 LICENSED 才会走到
+        //   这里），直接复用其结果，不再发第二次请求；仅当快车道未执行时新裁。
+        let r = __fastAdj || await adjudicateViaMainProcess(mid, username);
 
         // ★ P2-1：激活后 KV 传播最长约 60s，近 10 分钟内有 lastVerify 即收到
         //   NO_LICENSE，延时 2.5s 重裁一次（回拨可疑时不走此软重试）。
+        // ★ 2026-10-02：快车道放行（首激活冷 PS 对账 lastVerify 尚未落盘）后主窗
+        //   第二趟闸门同属"刚被服务端证实 LICENSED"，内存标记 __lastOnlineLicensedAt
+        //   等价覆盖该 10 分钟窗口，避免新机首登误锁主窗。
+        const __recentOnlineLicensed = !!__lastOnlineLicensedAt
+            && now - __lastOnlineLicensedAt < 10 * 60 * 1000;
         if (!rollbackSuspected && r.ok && r.ent && r.ent.success &&
             r.ent.state === 'NO_LICENSE' &&
-            u.lastVerify && now - u.lastVerify < 10 * 60 * 1000) {
+            ((u.lastVerify && now - u.lastVerify < 10 * 60 * 1000) || __recentOnlineLicensed)) {
             await sleep(2500);
             r = await adjudicateViaMainProcess(mid, username);
         }
@@ -4284,6 +4527,8 @@ async function verifyLoginGate(usernameInput) {
             const __accFail = await accountHardFail(r.ent);
             if (__accFail) return __accFail;
             if (r.ent.state === 'LICENSED') {
+                // ★ 2026-10-01：mutation 前判翻转，稳态放行不等 vault 写（见函数头注释）
+                const __awaitWrite = licensedHasSecurityFlip(rollbackSuspected);
                 if (rollbackSuspected) {
                     if (!healHighFromServer(r.ent)) return fail(rollbackMessage);
                 } else {
@@ -4293,7 +4538,8 @@ async function verifyLoginGate(usernameInput) {
                 u.gate.lastVerify = now; u.gate.offlineStart = null; u.gate.lastReject = null; u.gate.rejectAt = null;
                 u.anchor.lastVerify = now; u.anchor.offlineStart = null; u.anchor.lastReject = null; u.anchor.rejectAt = null;
                 clearAccountRejectIfMatch();
-                await persistUnifiedAsync(u, mid);
+                const __wp = persistUnifiedAsync(u, mid);
+                if (__awaitWrite) await __wp; else __wp.catch(() => {});
                 return { ok: true };
             }
             // 硬失效态：双锚点持久化拒绝标记（删任一文件不能再吃宽限）
@@ -4337,6 +4583,8 @@ async function verifyLoginGate(usernameInput) {
                 const __accFail = await accountHardFail(r.ent);
                 if (__accFail) return __accFail;
                 if (r.ent.state === 'LICENSED') {
+                    // ★ 2026-10-01：mutation 前判翻转，稳态放行不等 vault 写（见函数头注释）
+                    const __awaitWrite = licensedHasSecurityFlip(rollbackSuspected);
                     if (rollbackSuspected) {
                         if (!healHighFromServer(r.ent)) return fail(rollbackMessage);
                     } else {
@@ -4347,7 +4595,8 @@ async function verifyLoginGate(usernameInput) {
                     u.gate.lastVerify = now; u.gate.offlineStart = null; u.gate.lastReject = null; u.gate.rejectAt = null;
                     u.anchor.lastVerify = now; u.anchor.offlineStart = null; u.anchor.lastReject = null; u.anchor.rejectAt = null;
                     clearAccountRejectIfMatch();
-                    await persistUnifiedAsync(u, mid);
+                    const __wp = persistUnifiedAsync(u, mid);
+                    if (__awaitWrite) await __wp; else __wp.catch(() => {});
                     return { ok: true };
                 }
                 // ★ 高-2 修复：硬失效态同样双写 lastReject（旧码直接 return,
@@ -5272,6 +5521,8 @@ module.exports = {
     verifyLoginGate,
     // ★ 2026-10-01 启动性能：whenReady 后台预热 vault 统一态（冷 PS 移出登录关键路径）
     prewarmGate,
+    // ★ 2026-10-02 登录性能：whenReady 后台预取在线裁决（冷 TLS/Worker 移出登录路径）
+    prewarmAdjudication,
     readAnchorState,       // 二级锚点读（供测试用）
     writeAnchorState,      // 二级锚点写（供测试用）
     // ★ 2026-09-26 M-2：文件锚点原语/统一视图（迁移冒烟用，与 anchor 导出对称）

@@ -834,6 +834,48 @@ app.whenReady().then(async () => {
     //   并行，登录闸门 verifyLoginGate 读状态时直接命中 in-flight/缓存。
     //   纯预热、不写状态、永不抛错；必须放在任何 license/vault 读取之前。
     try { if (licenseManager.prewarmGate) licenseManager.prewarmGate(); } catch (e) {}
+    // ★ 2026-10-02 登录性能：登录窗期间周期保热在线裁决 + vault 统一态。
+    //   真机实测：冷裁决 2.1~3.8s / 热连接 0.55s；冷 PS read 3~6s。
+    //   启动即首次预取（用户名取上次登录名，点登录前早已完成），之后每
+    //   15s 刷新、最多 120 次（覆盖登录窗存活 30 分钟，上限防闲置无限轮询
+    //   打服务端）；真机实测用户可能在登录框停留数分钟，旧 2 分钟上限会
+    //   让慢速点击重新吃冷 PS+冷裁决（各 2~4s）。点登录 20s 内一次性复用
+    //   （仅 LICENSED 成功态，主窗吊销自检永远新鲜重裁）。login-success /
+    //   登录窗关闭立即停止。纯后台、永不抛错。
+    global.__bnzcLoginPrewarmTimer = null;
+    const __runLoginPrewarm = async () => {
+        try {
+            let username = '';
+            try {
+                const raw = await fs.readFile(path.join(app.getPath('userData'), 'login-state.json'), 'utf8');
+                let jsonText = raw;
+                if (raw.startsWith('ENC:')) {
+                    if (!safeStorage.isEncryptionAvailable()) throw new Error('safeStorage unavailable');
+                    jsonText = safeStorage.decryptString(Buffer.from(raw.slice(4), 'base64'));
+                }
+                const j = JSON.parse(jsonText);
+                username = (j && j.user && j.user.username) ? String(j.user.username) : '';
+            } catch (e) { /* 无 login-state/解密失败：username 留空 */ }
+            const mid = typeof licenseManager.getMachineId === 'function' ? licenseManager.getMachineId() : '';
+            if (!mid) return;
+            if (typeof licenseManager.prewarmAdjudication === 'function') {
+                licenseManager.prewarmAdjudication(mid, username);
+            }
+            // vault 统一态同步保热（内部 30s 缓存/in-flight 单飞自去重）
+            if (typeof licenseManager.prewarmGate === 'function') licenseManager.prewarmGate();
+        } catch (e) { /* 预热纯增益，失败静默 */ }
+    };
+    __runLoginPrewarm();
+    let __prewarmTicks = 0;
+    global.__bnzcLoginPrewarmTimer = setInterval(() => {
+        __prewarmTicks++;
+        if (__prewarmTicks > 120) {
+            clearInterval(global.__bnzcLoginPrewarmTimer);
+            global.__bnzcLoginPrewarmTimer = null;
+            return;
+        }
+        __runLoginPrewarm();
+    }, 15000);
     // ★ P0-③ exe 签名/完整性自校验（非阻塞，仅记录，不影响启动流程）
     selfCheck.runSelfCheck();
     // ★ 2026-09-11 P1 完整性上报：延迟 25s 等三路校验落定后聚合上报（篡改证据
@@ -1151,6 +1193,11 @@ ipcMain.handle('config:get-force-token', async () => {
 // 登录成功：保存用户、关闭登录窗口、打开主窗口
 ipcMain.handle('login-success', async (event, userData) => {
     try {
+        // ★ 2026-10-02：已登录，停止登录窗保热轮询（裁决槽留给主窗自检一次性消费）
+        if (global.__bnzcLoginPrewarmTimer) {
+            clearInterval(global.__bnzcLoginPrewarmTimer);
+            global.__bnzcLoginPrewarmTimer = null;
+        }
         await saveLoginState(true, userData);
         if (loginWindow && !loginWindow.isDestroyed()) {
             loginWindow.close();
