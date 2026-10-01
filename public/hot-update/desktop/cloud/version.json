@@ -1,18 +1,18 @@
 {
   "format": 1,
   "channel": "cloud",
-  "hotVersion": "2026.09.25-2",
-  "appVersion": "1.2.254",
+  "hotVersion": "2026.10.01-1",
+  "appVersion": "1.2.259",
   "files": [
     {
       "name": "index.html",
-      "sha256": "dd7cc5dce743cc4d6ecf957f58c3ee6c1bcc2155ca0e8ce6aee475fe6af7da19",
-      "size": 720523
+      "sha256": "9f6b347e6cbf9e6510c46989a5c78c45c5d75ae17ae70c28855d94eaff9b9e9f",
+      "size": 724896
     },
     {
       "name": "auth-core.js",
-      "sha256": "c7ca24ffdec0d8264dcf6ea0a648e4ee22fb06dc51fad9212544d8994751b4b0",
-      "size": 339581
+      "sha256": "91714b0ece444c8ae4fb9eaa5dcc366b1b7a67fb0a5f349cb7c1b08cdd8f7b7b",
+      "size": 358287
     },
     {
       "name": "permission.js",
@@ -76,8 +76,8 @@
     },
     {
       "name": "analytics-core.js",
-      "sha256": "32994144118b5c17f8d726d734be5f8b7246e89665a158f4315255c2ade1ae8c",
-      "size": 31648
+      "sha256": "8b40373323b74e19e65bf426093dddef18c24bfa8b4a16f1e3454f1bb4f32d9c",
+      "size": 32230
     },
     {
       "name": "security-guard.js",
@@ -105,6 +105,6 @@
       "size": 881727
     }
   ],
-  "signedAt": 1790329606683,
-  "signature": "TZGSvKt2JY7kaA16z+noyotG1YtlL+dpMxS+W99k2lgD/kqW8ervPVprb8OTwbD87nnJKn4JdGnZADoYrZcqAQ=="
+  "signedAt": 1790816590221,
+  "signature": "xIW7sfNqTO8I/E6PaEaMHAqSUYgP7pZWoRKJwsfwuoyGbQvUJIq7s2wmg6l1sogvwS0wmqQDoCp31Dw9TC40BQ=="
 }
