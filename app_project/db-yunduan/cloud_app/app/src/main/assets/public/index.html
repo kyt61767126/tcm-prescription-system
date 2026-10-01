@@ -2924,7 +2924,15 @@ let currentUser = null;
             }
         }
         function isPasswordHashed(pwd) {
-            return typeof pwd === 'string' && pwd.length === 64 && /^[a-f0-9]{64}$/.test(pwd);
+            if (typeof pwd !== 'string') return false;
+            // ★ 2026-10-01 根因修复：PBKDF2-SHA256 慢哈希（pbkdf2_sha256$iter$32hex盐$64hex密钥）
+            //   同样属于"已哈希"。旧实现只认 64 位十六进制 SHA-256，导致：
+            //   ① 主窗启动 ensurePasswordsHashed 把 config 镜像来的 pbkdf2 串误判为明文二次
+            //      哈希（污染在用户无操作时发生）；② 用户管理改名且未填新密码时同一误判再次
+            //      污染——新用户名登录按任意盐校验都不可能命中"对哈希串再哈希"的垃圾值，
+            //      表现为改名后新用户名登录报"用户名或密码错误"，手机号（走 config 权威行）正常。
+            if (/^pbkdf2_sha256\$(\d+)\$([0-9a-f]{32})\$([0-9a-f]{64})$/.test(pwd)) return true;
+            return pwd.length === 64 && /^[a-f0-9]{64}$/.test(pwd);
         }
         async function computeBackupHmac(jsonStr) {
             try {

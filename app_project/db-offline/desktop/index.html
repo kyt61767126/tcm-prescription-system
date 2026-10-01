@@ -2979,7 +2979,15 @@ let currentUser = null;
             }
         }
         function isPasswordHashed(pwd) {
-            return typeof pwd === 'string' && pwd.length === 64 && /^[a-f0-9]{64}$/.test(pwd);
+            if (typeof pwd !== 'string') return false;
+            // ★ 2026-10-01 根因修复：PBKDF2-SHA256 慢哈希（pbkdf2_sha256$iter$32hex盐$64hex密钥）
+            //   同样属于"已哈希"。旧实现只认 64 位十六进制 SHA-256，导致：
+            //   ① 主窗启动 ensurePasswordsHashed 把 config 镜像来的 pbkdf2 串误判为明文二次
+            //      哈希（污染在用户无操作时发生）；② 用户管理改名且未填新密码时同一误判再次
+            //      污染——新用户名登录按任意盐校验都不可能命中"对哈希串再哈希"的垃圾值，
+            //      表现为改名后新用户名登录报"用户名或密码错误"，手机号（走 config 权威行）正常。
+            if (/^pbkdf2_sha256\$(\d+)\$([0-9a-f]{32})\$([0-9a-f]{64})$/.test(pwd)) return true;
+            return pwd.length === 64 && /^[a-f0-9]{64}$/.test(pwd);
         }
         async function computeBackupHmac(jsonStr) {
             try {
@@ -3779,6 +3787,9 @@ let currentUser = null;
                     users[userIndex].password = await hashPassword(newPwd);
                 }
                 saveUsers(users);
+                // ★ 2026-10-01：回写失败不再静默（与编辑用户入口同修），失败必须告知，
+                //   否则用户看到"修改成功"但 config.json 权威层仍旧，改名会被登录镜像还原。
+                let __renameErr2 = '';
                 // ★ 2026-08-26 双源同步：改名/改密同步 config.json（登录端权威源），
                 //   杜绝"config 旧账号仍有效 + 本地新账号密码过期"的漂移；非 Electron 环境跳过
                 if (_newUsername || _pwdChange) {
@@ -3793,16 +3804,27 @@ let currentUser = null;
                             });
                             if (_rn && _rn.success === false) {
                                 console.warn('[改名] config.json 同步失败（本地已保存）:', _rn.error);
+                                __renameErr2 = _rn.error || '未知错误';
                             }
                         }
-                    } catch (e) { console.warn('[改名] config.json 同步异常（本地已保存）:', e); }
+                    } catch (e) {
+                        console.warn('[改名] config.json 同步异常（本地已保存）:', e);
+                        __renameErr2 = String(e && e.message ? e.message : e);
+                    }
                 }
                 currentUser = users[userIndex];
                 localStorage.setItem('local_currentUser', JSON.stringify(currentUser));
 
-                alert(_newUsername
-                    ? '修改成功！\n\n新登录用户名：' + _newUsername + '\n\n下次登录请使用新用户名（或原手机号）。' + (_pwdChange ? '' : '\n（密码未修改）')
-                    : '密码修改成功！');
+                // ★ 2026-10-01：权威层失败时把真实原因告诉用户，不再误报成功
+                if (__renameErr2) {
+                    alert('⚠️ 本机已保存，但登录配置（config.json）同步失败：\n' + __renameErr2 +
+                        '\n\n新用户名可能无法登录或在下次登录后被还原。请用【手机号】登录后重试，' +
+                        '或联系客服处理。');
+                } else {
+                    alert(_newUsername
+                        ? '修改成功！\n\n新登录用户名：' + _newUsername + '\n\n下次登录请使用新用户名（或原手机号）。' + (_pwdChange ? '' : '\n（密码未修改）')
+                        : '密码修改成功！');
+                }
                 closeModal('changePwdModal');
                 // 修复历史处方消失：修改密码后重新加载处方数据
                 // 之前 prescriptionHistory 可能为空（loadData 超时或后台重编号竞态），导致历史处方消失
@@ -3985,6 +4007,10 @@ let currentUser = null;
                     users[userIndex].password = await hashPassword(users[userIndex].password);
                 }
                 saveUsers(users);
+                // ★ 2026-10-01：回写失败不再静默提示"修改成功"——旧逻辑只 console.warn，
+                //   用户误以为改名已生效，实际 config.json 权威层未更新（登录窗登录成功后
+                //   还会用 config 镜像覆盖 localStorage，表现为"改名消失/新用户名无法登录"）。
+                let __renameErr = '';
                 // ★ 2026-09-06 第八轮修复（Single-Writer 补全）：编辑用户（改名/改密）回写
                 //   config.json 权威层，与 handleChangePassword 的 renameUser 回写同构；
                 //   漏回写 = 下次启动 UPSERT 把旧用户名/旧密码盖回 localStorage。
@@ -3999,9 +4025,13 @@ let currentUser = null;
                         });
                         if (_rn && _rn.success === false) {
                             console.warn('[编辑用户] config.json 回写失败（本地已保存）:', _rn.error);
+                            __renameErr = _rn.error || '未知错误';
                         }
                     }
-                } catch (e) { console.warn('[编辑用户] config.json 回写异常（本地已保存）:', e); }
+                } catch (e) {
+                    console.warn('[编辑用户] config.json 回写异常（本地已保存）:', e);
+                    __renameErr = String(e && e.message ? e.message : e);
+                }
 
                 if (currentUser && currentUser.username === originalUsername) {
                     currentUser = users[userIndex];
@@ -4032,7 +4062,14 @@ let currentUser = null;
                 document.getElementById('editUserModal').remove();
                 document.getElementById('userManageModal').style.display = 'flex';
                 renderUserList();
-                alert('✅ 用户信息修改成功！');
+                // ★ 2026-10-01：权威层回写失败时明确告知，不再误报"修改成功"
+                if (__renameErr) {
+                    alert('⚠️ 本机界面已更新，但登录配置（config.json）同步失败：\n' + __renameErr +
+                        '\n\n此时新用户名可能无法登录或在下次登录后被还原。请用【手机号】登录一次后重新修改，' +
+                        '并在安全验证框中正确输入当前管理员密码；若仍失败请联系客服。');
+                } else {
+                    alert('✅ 用户信息修改成功！');
+                }
             } catch (e) {
                 console.error('编辑用户失败:', e);
                 alert('编辑用户失败: ' + (e.message || '未知错误'));
