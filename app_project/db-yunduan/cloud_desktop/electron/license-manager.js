@@ -1083,6 +1083,12 @@ function tryWmicExec(cmd, timeoutMs) {
     }
 }
 let _hardwareFingerprintCache = null;
+// ★ 2026-10-02 启动性能：首次指纹采集已 reg query 过一次 MachineGuid，
+//   getHwFingerprintVariants 的 mg-only 候选直接复用，启动链再省一次 reg
+//   进程（本机 ~50ms，慢机/杀软下可达数百 ms）。null=尚未拿到（variants 仍
+//   可按旧逻辑自查 reg 一次，保留瞬态失败的独立重试语义）；字符串=已拿到
+//   的小写 guid。
+let _machineGuidCache = null;
 function getHardwareFingerprint() {
     if (_hardwareFingerprintCache !== null) return _hardwareFingerprintCache;
     try {
@@ -1093,8 +1099,12 @@ function getHardwareFingerprint() {
             const out = execSync('reg query "HKLM\\SOFTWARE\\Microsoft\\Cryptography" /v MachineGuid',
                 { timeout: 2000, windowsHide: true }).toString();
             const m = out.match(/MachineGuid\s+REG_SZ\s+([A-Fa-f0-9-]+)/i);
-            if (m) parts.push('mg=' + m[1].toLowerCase());
-        } catch (e) { /* 忽略 */ }
+            // 仅成功时缓存：失败/正则不匹配保持 null，variants 自查兜底行为同旧版
+            if (m) {
+                _machineGuidCache = m[1].toLowerCase();
+                parts.push('mg=' + _machineGuidCache);
+            }
+        } catch (e) { /* 保持 _machineGuidCache = null，variants 可独立重试 */ }
         // 2. 主板序列号（硬件固定，VM 克隆时可能为空或默认值）
         {
             const out = tryWmicExec('wmic baseboard get serialnumber', 2000);
@@ -1170,16 +1180,27 @@ function getHwFingerprintVariants() {
     const primary = getHardwareFingerprint();
     if (primary) list.push(primary);
     // mg-only 候选（重算一次只含 MachineGuid 的指纹）
-    try {
-        const out = require('child_process').execSync(
-            'reg query "HKLM\\SOFTWARE\\Microsoft\\Cryptography" /v MachineGuid',
-            { timeout: 4000, windowsHide: true }).toString();
-        const m = out.match(/MachineGuid\s+REG_SZ\s+([A-Fa-f0-9-]+)/i);
-        if (m) {
-            const mgOnly = crypto.createHash('sha256').update('mg=' + m[1].toLowerCase()).digest('hex');
-            if (list.indexOf(mgOnly) === -1) list.push(mgOnly);
-        }
-    } catch (e) { /* 忽略 */ }
+    // ★ 2026-10-02：优先复用首次指纹采集已查到的 MachineGuid（_machineGuidCache），
+    //   避免启动链第二次 reg query；仅在尚未采集过时走 reg 自查兜底（行为同旧版）。
+    let mgLower = null;
+    if (_machineGuidCache !== null) {
+        mgLower = _machineGuidCache;
+    } else {
+        try {
+            const out = require('child_process').execSync(
+                'reg query "HKLM\\SOFTWARE\\Microsoft\\Cryptography" /v MachineGuid',
+                { timeout: 4000, windowsHide: true }).toString();
+            const m = out.match(/MachineGuid\s+REG_SZ\s+([A-Fa-f0-9-]+)/i);
+            if (m) {
+                mgLower = m[1].toLowerCase();
+                _machineGuidCache = mgLower;
+            }
+        } catch (e) { /* 忽略 */ }
+    }
+    if (mgLower) {
+        const mgOnly = crypto.createHash('sha256').update('mg=' + mgLower).digest('hex');
+        if (list.indexOf(mgOnly) === -1) list.push(mgOnly);
+    }
     list.push(''); // 极端：全部采集失败
     _hwFpVariantsCache = Array.from(new Set(list));
     return _hwFpVariantsCache;
@@ -4460,8 +4481,9 @@ async function verifyLoginGate(usernameInput) {
     }
 
     // ★ 2026-10-01 启动性能：gate 冷读走异步（vault PS 不冻结主进程）；
-    //   app whenReady 已调 prewarmGate() 与登录窗显示并行预热，此处通常直接
-    //   命中 in-flight 单飞/短时缓存（同步读共享同一缓存），冷机不再苦等 PS。
+    //   ★ 2026-10-02：离线端 prewarmGate() 改为登录窗 show 后发起（PS CreateProcess
+    //   同步阻塞不抢首帧），云端不接线；此处通常仍命中 in-flight 单飞/短时缓存
+    //   （同步读共享同一缓存），冷机不再苦等 PS；未预热时本行自行发起冷读，fail-closed 不变。
     const u = await getUnifiedGateAsync(mid);
     const now = Date.now();
 

@@ -58,6 +58,24 @@ setImmediate(() => {
         })();
     } catch (e) { /* 预热纯增益 */ }
 });
+// ★ 2026-10-02 启动性能：登录窗首帧"已显示"门闩。vault 读链首次发起
+//   powershell.exe 时，Windows CreateProcess + Defender/AMSI 扫描 EncodedCommand
+//   在主线程同步阻塞 0.7~1.5s（慢机更久）。一切"仅为预热/后台备份"性质的
+//   vault PS 首发（prewarmGate、asyncVault 备份链）都必须挂在该门闩之后，
+//   保证阻塞永不落在登录窗显示之前。门闩在登录窗 show 瞬间 resolve；无登录窗
+//   的异常场景（到期弹窗等）由 whenReady 内 15s 保热首拍兜底 resolve。
+let __bnzcLoginShownResolve = null;
+const __bnzcLoginShown = new Promise(r => { __bnzcLoginShownResolve = r; });
+let __bnzcLoginShownFired = false;
+function __bnzcMarkLoginShown() {
+    if (__bnzcLoginShownFired) return;
+    __bnzcLoginShownFired = true;
+    try { __bnzcLoginShownResolve(); } catch (e) {}
+}
+function __bnzcAfterLoginShown(fn) {
+    if (__bnzcLoginShownFired) { try { fn(); } catch (e) {} return; }
+    __bnzcLoginShown.then(() => { try { fn(); } catch (e) {} });
+}
 app.setAppUserModelId('com.benneng.prescription');  // ★ Windows 任务栏图标关联
 const prescriptionCounter = require('./prescription-counter');
 const featureGuard = require('./feature-guard');
@@ -286,7 +304,10 @@ async function ensureEditionSelected() {
             // ★ 第四轮（B-重2）：改角色写盘后 proven 刷新备份——否则备份滞留旧 admin
             //   角色，config 损坏后由备份回填=提权复活。
             // ★ 2026-10-01：启动链调用，asyncVault 搭车 prewarm 后台完成，不冻结登录窗。
-            try { licenseManager.backupUserAccounts(config, { proven: true, asyncVault: true }); } catch (_) {}
+            // ★ 2026-10-02：asyncVault 首发 PS 阻塞挂登录窗 show 门闩，不抢首帧
+            __bnzcAfterLoginShown(() => {
+                try { licenseManager.backupUserAccounts(config, { proven: true, asyncVault: true }); } catch (_) {}
+            });
             console.log('[Edition] 无授权，试用默认标准版（personal）');
             return;
         }
@@ -351,7 +372,10 @@ async function ensureTrialStandardEdition() {
             // ★ 第四轮（B-重2）：改角色写盘后 proven 刷新备份（防旧角色备份回填提权）。
             // ★ 2026-10-01 启动性能：asyncVault 让 gen/退役 vault 写后台完成
             //   （备份签名文件本身已同步落盘），首启校正不再阻塞登录窗显示。
-            try { licenseManager.backupUserAccounts(config, { proven: true, asyncVault: true }); } catch (_) {}
+            // ★ 2026-10-02：asyncVault 首发 PS 阻塞挂登录窗 show 门闩，不抢首帧
+            __bnzcAfterLoginShown(() => {
+                try { licenseManager.backupUserAccounts(config, { proven: true, asyncVault: true }); } catch (_) {}
+            });
         }
         return true;
     } catch (e) {
@@ -695,6 +719,20 @@ const { createMainWindow, createLoginWindow, focusWindow, revealMainWindow } =
             // createLoginWindow 内部有 existing 防重：每次 setLoginWindow(非空)
             // 都对应一个新登录窗（含崩溃重建），故每次都安排一次预建判定。
             if (w) {
+                // ★ 2026-10-02 启动性能：vault/裁决首次预热的 PowerShell CreateProcess
+                //   在主线程同步阻塞（实测 0.7~1.5s，慢机杀软扫描 EncodedCommand 更久），
+                //   推迟到登录窗首帧 show 之后再发起——登录窗可见前零阻塞；用户输入
+                //   账号密码的数秒内后台预热照常完成，点击登录仍命中热缓存（详见
+                //   whenReady 内 __bnzcKickLoginPrewarm 注释）。
+                w.once('show', () => {
+                    // 首帧已显示：解除 vault PS 首发门闩（备份链等也自此放行）
+                    try { __bnzcMarkLoginShown(); } catch (e) {}
+                    try {
+                        if (typeof global.__bnzcKickLoginPrewarm === 'function') {
+                            setTimeout(global.__bnzcKickLoginPrewarm, 50);
+                        }
+                    } catch (e) { /* 预热纯增益，失败静默 */ }
+                });
                 setTimeout(() => {
                     try {
                         if ((!mainWindow || mainWindow.isDestroyed()) &&
@@ -891,14 +929,18 @@ async function verifyCodeIntegrity() {
 }
 
 app.whenReady().then(async () => {
-    // ★ 2026-10-01 启动性能：第一时间后台预热授权 vault 统一态。冷 PS
-    //   （Windows PowerShell 5.1 首启 1.5~14s）从此与迁移数据/建窗/用户输密码
-    //   并行，登录闸门 verifyLoginGate 读状态时直接命中 in-flight/缓存。
-    //   纯预热、不写状态、永不抛错；必须放在任何 license/vault 读取之前。
-    try { if (licenseManager.prewarmGate) licenseManager.prewarmGate(); } catch (e) {}
+    // ★ 2026-10-02 启动性能：vault 统一态预热【不在此处同步发起】。
+    //   prewarmGate 内 read-many 走 execFile(powershell -EncodedCommand 24KB)，
+    //   Windows 上 CreateProcess+杀软/AMSI 扫描在主线程同步阻塞（本机实测
+    //   700ms+，慢机 1.5s+），是"双击→登录窗弹出"链路上的最大单块。预热只
+    //   服务登录窗存活期的 verifyLoginGate（启动放行 validateLicense 直接读
+    //   license.dat 文件，10ms 级，从不依赖预热），故推迟到登录窗 show 后
+    //   50ms 发起（setLoginWindow 挂钩）：窗口可见前零阻塞；PS 冷启 3~6s 与
+    //   用户输入账号密码并行，正常点击时早已命中 in-flight/缓存。纯预热、不写
+    //   状态、永不抛错。
     // ★ 2026-10-02 登录性能：登录窗期间周期保热在线裁决 + vault 统一态。
     //   真机实测：冷裁决 2.1~3.8s / 热连接 0.55s；冷 PS read 3~6s。
-    //   启动即首次预取（用户名取上次登录名，点登录前早已完成），之后每
+    //   登录窗 show 后即首次预取（用户名取上次登录名，点登录前早已完成），之后每
     //   15s 刷新、最多 120 次（覆盖登录窗存活 30 分钟，上限防闲置无限轮询
     //   打服务端）；真机实测用户可能在登录框停留数分钟，旧 2 分钟上限会
     //   让慢速点击重新吃冷 PS+冷裁决（各 2~4s）。点登录 20s 内一次性复用
@@ -927,10 +969,26 @@ app.whenReady().then(async () => {
             if (typeof licenseManager.prewarmGate === 'function') licenseManager.prewarmGate();
         } catch (e) { /* 预热纯增益，失败静默 */ }
     };
-    __runLoginPrewarm();
+    // ★ 2026-10-02：首次预热由"whenReady 立即发起"改为登录窗 show 后触发
+    //   （挂钩见 setLoginWindow 注入处）。全局单飞：show 后 50ms 启动一次，
+    //   周期保热仍走原 15s 定时间歇（登录窗未出现的异常场景由首拍 15s 兜底，
+    //   此时本来也没有登录闸门请求，fail-closed 语义不变）。
+    let __loginPrewarmKicked = false;
+    global.__bnzcKickLoginPrewarm = () => {
+        if (__loginPrewarmKicked) return;
+        __loginPrewarmKicked = true;
+        // vault 预热不等 login-state.json/safeStorage（实测该 await 在启动期
+        // 线程池排队约 1s）：show 后立刻发起 PS，快手回车用户也能与旧版同时
+        // 拿到热缓存；下方 __runLoginPrewarm 体内的 prewarmGate 单飞命中。
+        try { if (licenseManager.prewarmGate) licenseManager.prewarmGate(); } catch (e) {}
+        __runLoginPrewarm();
+    };
     let __prewarmTicks = 0;
     global.__bnzcLoginPrewarmTimer = setInterval(() => {
         __prewarmTicks++;
+        // 兜底：15s 首拍时登录窗仍未 show（到期弹窗/异常路径），门闩也要解除，
+        // 避免启动期挂起的 asyncVault 备份链永久不执行。
+        try { __bnzcMarkLoginShown(); } catch (e) {}
         if (__prewarmTicks > 120) {
             clearInterval(global.__bnzcLoginPrewarmTimer);
             global.__bnzcLoginPrewarmTimer = null;
@@ -1329,7 +1387,11 @@ ipcMain.handle('get-app-config', async () => {
                         // ★ 2026-10-01：登录窗/主窗启动必经 IPC，asyncVault 让整条
                         //   备份证明链（含 vault 同步读）搭车 prewarm 缓存后台执行，
                         //   冷机 PS 冷启动 8~14s 不再冻结本 IPC/登录窗显示。
-                        licenseManager.backupUserAccounts(cfg, { asyncVault: true });
+                        // ★ 2026-10-02：asyncVault 首发 PS（~0.7~1.5s 同步阻塞）挂
+                        //   登录窗 show 门闩之后；门闩已放行（主窗期再调本 IPC）则立即执行。
+                        __bnzcAfterLoginShown(() => {
+                            try { licenseManager.backupUserAccounts(cfg, { asyncVault: true }); } catch (e2) {}
+                        });
                     } else {
                         console.warn('[Config] users 来源未证明，跳过备份刷新（防毒化）');
                     }
@@ -1408,7 +1470,9 @@ ipcMain.handle('get-app-config', async () => {
                                 licenseManager.signConfig(writeCfg);
                                 if (__proven && writeCfg.configSignature) {
                                     await fse.writeJson(configPath, writeCfg, { spaces: 2 });
-                                    try { licenseManager.backupUserAccounts(writeCfg, { proven: true, asyncVault: true }); } catch (e2) {}
+                                    __bnzcAfterLoginShown(() => {
+                                        try { licenseManager.backupUserAccounts(writeCfg, { proven: true, asyncVault: true }); } catch (e2) {}
+                                    });
                                     console.log('[Config] 自愈：已补齐激活管理员账户 (手机号=' + acctPhone + ', 角色=' + wantRole + ')');
                                 } else if (!__proven) {
                                     // ★ 2026-09-26 I-1：防未验签 users 借本块重签洗白
@@ -1441,7 +1505,9 @@ ipcMain.handle('get-app-config', async () => {
                                     licenseManager.signConfig(writeCfg);
                                     if (__proven && writeCfg.configSignature) {
                                         await fse.writeJson(configPath, writeCfg, { spaces: 2 });
+                                        __bnzcAfterLoginShown(() => {
                                         try { licenseManager.backupUserAccounts(writeCfg, { proven: true, asyncVault: true }); } catch (e2) {}
+                                    });
                                         console.log('[Config] 自愈兜底：机构版空密码 admin 账户已重置为 admin');
                                     } else if (!__proven) {
                                         console.warn('[Config] users 来源未证明，空密码兜底不落盘');
@@ -1500,7 +1566,9 @@ ipcMain.handle('get-app-config', async () => {
                                     licenseManager.signConfig(writeCfg);
                                     if (__proven && writeCfg.configSignature) {
                                         await fse.writeJson(configPath, writeCfg, { spaces: 2 });
+                                        __bnzcAfterLoginShown(() => {
                                         try { licenseManager.backupUserAccounts(writeCfg, { proven: true, asyncVault: true }); } catch (e2) {}
+                                    });
                                         console.log('[Config] 存量自愈：机构版 config.json 已固化 edition=' + cfg.edition +
                                             '（from=' + (bind.from || '?') + '）');
                                     } else {
