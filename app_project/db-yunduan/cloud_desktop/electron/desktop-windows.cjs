@@ -381,7 +381,13 @@ function createDesktopWindows({ app, BrowserWindow, shell, updateManager, sendSt
                             if (typeof checkLoginStatus !== 'function') return 'NOFN';
                             await checkLoginStatus();
                             var _ov = document.getElementById('loginOverlay');
-                            return (_ov && _ov.style.display === 'none') ? 'OK' : 'STILLMASK';
+                            if (!_ov || _ov.style.display !== 'none') return 'STILLMASK';
+                            // 预建窗在登录前加载，auth-core 的未注册引导层
+                            // （maybePromptRegistration 以 loginOverlay 可见判定登录
+                            // 上下文）可能已在隐藏期注入；登录确立后它不应存在，清除。
+                            var _reg = document.getElementById('localRegisterOverlay');
+                            if (_reg) _reg.remove();
+                            return 'OK';
                         } catch (e) { return 'ERR:' + (e && e.message); }
                     })()`);
                 } catch (e) { return 'ERR:' + (e && e.message); }
