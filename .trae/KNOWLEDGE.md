@@ -1627,7 +1627,7 @@
 * **backlog（已评估不阻断）**：①P3-C 桌面主进程消费校验 ES256 gateToken（在线裁决目前完整性仅靠 TLS，既有问题非本次回归，见 §45/p3-gate-token_plan）；②reconcile 条件化清除基于读快照时刻，写执行时刻 CAS 重判（多进程秒级窗）待 P3-C 同批；③check-admin-status/query-invite 主窗显示后 2.2~3.2s 但不挡界面。
 * **生效方式：授权主进程在 asar 层不走热更 → 重打离线 exe 1.0.263；未触热更白名单（license-manager.js 不在 14 个热更文件内），无热包；云桌面 main.js 未接预取/快车道、行为零变化，云桌面与两端 APP 副本随下次整包带上；云端网页/服务端零改动。**
 
-### 52.1 【登录秒开二次优化】t0 同步预取 + 点击并行预热 + 预建隐藏主窗（2026-10-02，离线 1.0.264，双独立子代理初审 FAIL→修复→复审 PASS）
+### 52.1 【登录秒开二次优化】t0 同步预取 + 点击并行预热 + 预建隐藏主窗（2026-10-02，离线 1.0.265，双独立子代理初审 FAIL→修复→复审 PASS）
 
 * **现象**：1.0.263 点击→可用 1.23s（gate#1 497ms + 建窗+index.html dom-ready 408ms），仍不如手机离线 App 秒开。
 * **★四件套（shared/license/license-manager.js Group4、shared/desktop-license-ipc.cjs Group22、shared/desktop-windows.cjs Group15、shared/desktop-crash-guard.cjs Group18；离线 main.js/preload.js/login.js/activate.js 独有不 sync）**：
@@ -1643,5 +1643,6 @@
   - P2：crash-guard rebuildMainWindow 无参重建会无条件 show → 继承旧窗 `__preloadHidden` 以 `{preloadHidden:true}` 重建。
   - P2：reveal 无总超时，渲染层 IndexedDB 挂起（已知故障类）会僵尸化 login-success → 15s race 兜底；second-instance/macOS activate 的 focus/restore 补 `!__preloadHidden` 守卫。
 * **实测（hkk 真机，热 Worker）**：点击→主窗可用（471 条药材+currentUser 就绪、loadData 40~107ms）**253~496ms**（1.0.263 为 1.23s）；gate#1 8~11ms 命中槽（保热换新边界偶发 232~343ms 热连新鲜裁决）；自检在 reveal+800ms 后新鲜裁决通过、gate-failed 不再误触发；未登录 X 关窗进程 0 残留。
-* **★可复用教训**：①"预建窗"类优化必须列出渲染层**所有一次性 init**（checkLoginStatus 只跑一次），揭窗等价于一次完整的"已登录启动"，不能只改 CSS；②断言性能指标时探针要抓"数据真的就绪"（函数 hook+真实计数），DOM 可见不等于数据就绪；③HTTP 429/5xx 在裁决链仍维持 S2 fail-closed 硬策略（既有行为，不因性能改动放宽；限流仅由错峰+预热节奏缓解）；④预建/挂起全部为离线端接线，云端 createMainWindow() 无参、verify-gate 块不注册，shared 改动对云端逐行惰性，九份 SHA 全等由子代理实证。
-* **生效方式：重打离线 exe 1.0.264；license-manager.js 不在热更白名单无热包；云桌面零接线零变化。**
+* **★E2E pre-fuse 抓到第六个问题（首包 1.0.264 中止、重打为 1.0.265）**：预建窗登录前加载 index.html 时 loginOverlay 可见，auth-core `maybePromptRegistration`（以 overlay 可见判定"登录上下文"）在隐藏窗注入 `localRegisterOverlay` 未注册引导层；reveal 只重跑 checkLoginStatus 不会移除它，干净机登录后该层拦截所有点击（E3 毒数据用例实锤，已注册/已激活真机因前置条件跳过不触发）。修复：reveal 注入在 checkLoginStatus 成功（overlay none）后 `removeChild(#localRegisterOverlay)`。**教训：预建窗把"登录后才存在的文档"提前到未登录期创建，凡主窗 init 中以"页面状态"为条件的一次性 UI 副作用（注册引导/激活弹窗/定时器）都要逐一过一遍"未登录预演+登录后收敛"**。
+* **★可复用教训**：①"预建窗"类优化必须列出渲染层**所有一次性 init**（checkLoginStatus 只跑一次），揭窗等价于一次完整的"已登录启动"，不能只改 CSS；②断言性能指标时探针要抓"数据真的就绪"（函数 hook+真实计数），DOM 可见不等于数据就绪；③HTTP 429/5xx 在裁决链仍维持 S2 fail-closed 硬策略（既有行为，不因性能改动放宽；限流仅由错峰+预热节奏缓解）；④预建/挂起全部为离线端接线，云端 createMainWindow() 无参、verify-gate 块不注册，shared 改动对云端逐行惰性，九份 SHA 全等由子代理实证；⑤**E2E/pre-fuse 失败而中止的 build 也已消耗版号 bump**（263→264 首包 abort，修复重打即 265），交付版号以 dist 交付核对单为准并回订 KNOWLEDGE/注释。
+* **生效方式：重打离线 exe 1.0.265（7 铁闸 ALL PASS、pre-fuse E2E 6/6、fuse/签名/冒烟全过）；license-manager.js 不在热更白名单无热包；云桌面零接线零变化。**
