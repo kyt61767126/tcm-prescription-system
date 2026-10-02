@@ -155,6 +155,20 @@ function findWindow(app, urlPart, timeoutMs = 30000) {
 async function dismissRegisterOverlay(page) {
     // 注册前置（2026-09-22 zero-wait）：未注册机登录窗会被 localRegisterOverlay
     // 覆盖。走真实 UI 入口「暂不注册，已有账号登录」关闭（与真实用户操作一致）。
+    // ★ 2026-10-02：reg-gate 同步快道后 overlay 在 DOMContentLoaded tick 注入，
+    //   但 waitForSelector('#loginUsername') 可能早其半拍解析返回——首轮 evaluate
+    //   立即放弃会让 overlay 在 fill 期间弹出、click 被遮 30s（pre-fuse E1-E3 实
+    //   锤）。先给 800ms 宽限等它【出现】，再关闭；始终不出现（手机号用户/已激
+    //   活）才放行。
+    let appeared = false;
+    for (let i = 0; i < 8; i++) {
+        if (await page.evaluate(() => !!document.getElementById('localRegisterOverlay'))) {
+            appeared = true;
+            break;
+        }
+        await new Promise(r => setTimeout(r, 100));
+    }
+    if (!appeared) return;
     for (let i = 0; i < 20; i++) {
         const gone = await page.evaluate(() => !document.getElementById('localRegisterOverlay'));
         if (gone) return;

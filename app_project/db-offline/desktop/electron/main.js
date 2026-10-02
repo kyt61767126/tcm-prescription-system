@@ -207,6 +207,53 @@ function getWritableConfigPath() {
     }
 }
 
+// ★ 2026-10-02 注册引导竞态根治（E2E pre-fuse E1-E3 实锤）：登录窗 preload 在
+//   页面任何脚本之前 sendSync 取两个判定布尔——①已正式授权(非试用) ②config 已有
+//   手机号账号（=已注册）。auth-core DOMContentLoaded 零 IPC 往返即可决定是否弹
+//   localRegisterOverlay，避开登录窗 show 后 vault 预热（powershell CreateProcess）
+//   对主进程事件循环的同步阻塞窗口（旧异步链 get-status→get-activation-users 若撞
+//   阻塞，overlay 会晚弹 0.7~1.5s，自动化/快手用户在弹窗注入前已操作登录框）。
+//   本 handler 纯文件读（license.dat/config.json，毫秒级），绝不碰 vault/网络；
+//   安全上只影响"注册引导 UI"时序，真正闸门（validateLicense/verifyLoginGate）仍在
+//   主进程，渲染层伪造该标志无任何授权收益。
+ipcMain.on('license:reg-gate-sync', (event) => {
+    // ★ 双审 P2 加固：仅应答登录窗帧（纵深防御；非登录帧返回 null，
+    //   渲染端按"无 gate"回退原异步链）
+    try {
+        const frameUrl = new URL(event.senderFrame.url);
+        if (!/login\.html($|\?)/i.test(frameUrl.pathname)) {
+            event.returnValue = null;
+            return;
+        }
+    } catch (e) {
+        event.returnValue = null;
+        return;
+    }
+    let licensed = false;
+    let hasPhoneUser = false;
+    try {
+        // 优先复用 whenReady 已算好的裁决（窗口创建必在其之后），避免重复读
+        const cached = global.__bnzcLicenseStatusCache;
+        let st = null;
+        if (cached && typeof cached === 'object') st = cached;
+        else {
+            const localMachineId = activateManager.getMachineId();
+            st = licenseManager.validateLicense({ localMachineId });
+        }
+        licensed = !!(st && st.valid === true &&
+            String(st.licenseType || st.type || '') !== 'trial');
+    } catch (e) { licensed = false; }
+    try {
+        const cfg = JSON.parse(fsSync.readFileSync(getWritableConfigPath(), 'utf8'));
+        if (Array.isArray(cfg.users)) {
+            // 与 auth-core isLocalRegisteredAsync 同判据：phone 或 username 为手机号
+            hasPhoneUser = cfg.users.some(u => !!u &&
+                /^1[3-9]\d{9}$/.test(String(u.phone || u.username || '')));
+        }
+    } catch (e) { hasPhoneUser = false; }
+    event.returnValue = { licensed, hasPhoneUser };
+});
+
 // ★ 首次启动时，将 asar 内的 config.json 复制到可写路径（仅复制一次）
 // ★ 2026-09-26 B2 修复：已存在的 config.json 绝不无条件重签——否则被篡改/
 //   植入的 users 会在 validateLicense 之前就被合法密钥就地"洗白"。
@@ -1024,6 +1071,8 @@ app.whenReady().then(async () => {
         const localMachineId = activateManager.getMachineId();
         licenseResult = licenseManager.validateLicense({ localMachineId });
         _isLicensed = licenseResult.valid;
+        // ★ 2026-10-02：缓存裁决供登录窗 preload sendSync（license:reg-gate-sync）复用
+        global.__bnzcLicenseStatusCache = licenseResult;
         console.log('[License]', licenseResult.type, licenseResult.message);
     } catch (e) {
         // ★ P0修复：异常时拒绝启动（禁止降级为无限试用）
@@ -1037,6 +1086,9 @@ app.whenReady().then(async () => {
             message: '激活信息校验异常，请重新激活软件。'
         };
         _isLicensed = false;
+        // ★ 双审 P2 加固：异常裁决也写缓存（fail-closed），保证 reg-gate handler
+        //   永远命中纯读缓存，不现场重调带写副作用的 validateLicense
+        global.__bnzcLicenseStatusCache = licenseResult;
     }
 
     // ★ 版本绑定：存在正式 license 时强制校正 config.edition 与激活码版本一致
@@ -1091,6 +1143,9 @@ app.whenReady().then(async () => {
         } catch (e) {
             console.warn('[Trial] 试用登记异常（非致命，继续试用）:', e.message);
         }
+        // ★ 双审 P2 加固：服务端试用否决可能已把 licenseResult 重判为
+        //   trial_limit_reached，同步刷新 reg-gate 缓存（登录窗尚未创建）
+        global.__bnzcLicenseStatusCache = licenseResult;
     }
 
     fse.ensureDirSync(getDownloadsDirectory());
@@ -1178,6 +1233,8 @@ app.whenReady().then(async () => {
                         if (newLic && newLic.valid) {
                             _isLicensed = true;
                             licenseResult = newLic;
+                            // ★ 双审 P2 加固：续传装码成功后刷新 reg-gate 缓存
+                            global.__bnzcLicenseStatusCache = licenseResult;
                             try {
                                 const b = licenseManager.enforceEditionBinding();
                                 if (b && b.success && b.corrected) console.log('[License] 断点续传后版本校正:', b.edition);

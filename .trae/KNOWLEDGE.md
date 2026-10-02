@@ -1659,3 +1659,17 @@
 * **实测（无探针外部墙钟）**：登录窗 SHOW 2.4s → **0.80~0.93s**（首次冷缓存 1.7s 属机器抖动）；真人节奏真实登录点击→主窗 170ms/480ms，主窗数据正常（hkk=惠康康，处方笺/471 药材）；未登录 X 关窗 electron 进程零残留。
 * **★Windows E2E 自动化坑（复测用）**：①CDP 被安全层剥离不可用；②本机 150% DPI 缩放，PS 默认 DPI 不感知拿到的是虚拟化坐标（520,156），mouse_event 用物理坐标——测试脚本先 `SetProcessDPIAware()` 再取 rect 换算；③TRAE 等大窗抢前台时 AttachThreadInput+Alt 键 hack 可能失败，先 `(New-Object -ComObject Shell.Application).MinimizeAll()` 清场再 ShowWindow+SetForeground 最稳；④密码框 readonly+webkitTextSecurity 逐字 SendKeys 丢首字符，**焦点后 Set-Clipboard + SendWait('^v')**；⑤SendKeys 程序集要在调用前 Add-Type -AssemblyName System.Windows.Forms。
 * **生效方式：重打离线 exe 1.0.266；license-manager.js 不在热更白名单无热包；云桌面零接线零变化。**
+
+### 52.3 【266 pre-fuse 拦截】注册引导 overlay 撞 show 后阻塞窗晚注入 → preload sendSync 同步快道根治（2026-10-02，离线 1.0.267，双独立子代理复审 PASS）
+
+* **事故**：266 build 到 [7.8/9] pre-fuse，E1/E2/E3 两条各试均 FAIL（`#btnOk` 30s 超时，localRegisterOverlay 拦截 pointer events），E4-E6 PASS。**失败 build 同样消耗 bump：266 版号已废，重打即 267。**
+* **根因（时序推演+实锤，不是慢而是竞态迁移）**：52.2 把 PS CreateProcess 同步阻塞从 whenReady 移到登录窗 **show+50ms** 后，auth-core 的注册引导弹窗注入链（DOMContentLoaded 即跑 `maybePromptRegistration` → 串行 await `license:get-status`→`license:get-activation-users` 两个 IPC）恰好撞入新阻塞窗 → overlay 晚 0.7~1.5s 注入；E2E harness `dismissRegisterOverlay` 首轮 evaluate 见不到 overlay 立即返回，overlay 随后无人关闭 → btnOk 被遮。E1-E3 夹具为无手机号用户（必弹），E4-E6 是手机号注册用户（不弹）所以幸免。**铁律：把主线程阻塞从启动 A 点后移到 B 点后，必须重审所有"show 后立刻发起、且结果影响首屏可见 UI"的 IPC 链——阻塞没消失，只是换了受害者。**
+* **修复（3 处，离线 main.js/preload.js 独有不 sync；shared/auth-core/offline.js 权威源→sync-auth-core.ps1 3 离线副本，云端 cloud.js 零改动）**：
+  1. main.js 新增 `ipcMain.on('license:reg-gate-sync')`：返回 `{licensed,hasPhoneUser}` 两布尔，纯同步文件读（裁决复用 `global.__bnzcLicenseStatusCache`（validateLicense 后/异常 fail-closed/试用否决/断点续传装码四处都刷新缓存，handler 永不现场重调带写副作用的 validateLicense）+ config.json 手机号正则，绝不碰 vault/网络）；**双审加固：senderFrame URL 必须 login.html，否则 returnValue=null**。
+  2. preload.js 仅 login.html 在页面脚本前 `sendSync` 取 gate → `contextBridge.exposeInMainWorld('__bnzcRegGate')`，null/异常不暴露；主窗共用 preload 但路径不匹配零开销。
+  3. offline.js `maybePromptRegistration` 两处 await 裁决改 gate 三元：有 gate 零 IPC 同步裁决，gate=null（APP/云端/通道异常）逐字节回退原异步链。
+  4. harness `dismissRegisterOverlay` 加固：先 800ms 轮询等 overlay **出现**再关（同步快道下注入与 #loginUsername 同 tick，waitForSelector 可能早半拍返回），不出现才放行——根除测试侧竞态，E4-E6 仅每例 +0.8s。
+* **安全定性（双审逐闸门核实）**：gate 只控制注册引导 UI；伪造 `__bnzcRegGate={licensed:true}` 无任何授权收益——启动闸 validateLicense、登录链 verify-gate 主进程裁决、主窗 installMainWindowGate 二次硬裁、开方计数主进程裁决四重硬闸门全不读它；铁律1-5 已激活无手机号存量设备 licensed 短路语义不变；gate 与旧异步链的 3 处判据漂移（registrationInfo 标记/license:code 兜底/续传空手机号）全部只向"多弹一次可关闭的窗"方向，从不反向放行；返回值无 PII。
+* **实测（dev electron+Playwright 隔离 userData）**：无手机号夹具 3 轮冷启，登录窗就绪后 overlay 稳定已在（轮询 <100ms 内）、gate `{licensed:false,hasPhoneUser:false}`、关闭→登录→主窗 205~274ms；手机号夹具 gate `{…,hasPhoneUser:true}`、overlay 不弹、200ms 进主窗；加固后复验同；sync VerifyOnly 11 副本 exit 0、node --check 全 0、check-interface 6 OK。
+* **测试工具坑**：dev 源码不能用 run-e2e.cjs 验（--exe 模式 args 不含 '.' login.html 30s 不出现；mode B 的 `_backup_asar\real_app.asar` 是 asarmor 加密格式 npx asar 无法重打）——只能写一次性 Playwright `_electron.launch({executablePath: 本地 electron.exe, args:['.']})` 脚本（仓库根 package.json `"type":"module"`，脚本里 require shared/*.js 必须 stub electron + `Module._extensions['.js']=_compile`，与 run-e2e.cjs L75-84 同款）；临时脚本置 e2e/.tmp/ 用完即删勿提交。
+* **生效方式：重打离线 exe 1.0.267（pre-fuse 6/6 必须全过）；auth-core 随包分发无热更；云端零变化。**

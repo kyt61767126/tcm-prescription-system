@@ -9,6 +9,24 @@
 // ============================================================================
 const { contextBridge, ipcRenderer } = require('electron');
 
+// ★ 2026-10-02 注册引导判定同步快道（离线端独有）：preload 先于页面任何脚本执行，
+//   sendSync 在 dom-ready 之前取回 {licensed, hasPhoneUser} 两个纯文件读布尔，
+//   auth-core 决定 localRegisterOverlay 时零 IPC 往返，不受登录窗 show 后 vault
+//   预热（powershell CreateProcess）短暂阻塞主进程的影响。主进程无此 channel
+//   （云端/异常）→ 不暴露 → auth-core 自动回退原异步 IPC 链。
+try {
+    // 仅登录窗需要（主窗 index.html 共用本 preload：隐藏预建窗无需为此阻塞）
+    if (typeof location !== 'undefined' && /login\.html($|\?)/i.test(location.pathname)) {
+        const __regGate = ipcRenderer.sendSync('license:reg-gate-sync');
+        if (__regGate && typeof __regGate === 'object') {
+            contextBridge.exposeInMainWorld('__bnzcRegGate', {
+                licensed: !!__regGate.licensed,
+                hasPhoneUser: !!__regGate.hasPhoneUser
+            });
+        }
+    }
+} catch (e) { /* 同步快道不可用：auth-core 走原异步链 */ }
+
 contextBridge.exposeInMainWorld('electronAPI', {
     isElectron: true,
 
