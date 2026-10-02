@@ -637,6 +637,14 @@
 
         _loginInFlight = true;
         setLoginLoading(true);
+        // ★ 2026-10-02 登录秒开：点击瞬间 fire-and-forget 预热在线裁决（与下方
+        //   PBKDF2 密码校验并行）。纯提前发请求、不改变任何裁决；若输入名与规范
+        //   用户名（手机号别名等）不一致导致槽键不匹配，verifyGate 会走新鲜请求，
+        //   TLS/Worker 连接仍已热。任何异常静默。
+        try {
+            const _lic = window.electronAPI && window.electronAPI.license;
+            if (_lic && typeof _lic.prewarmAdjudication === 'function') _lic.prewarmAdjudication(username);
+        } catch (e) {}
         try {
             // ★ 2026-09-22 出厂零账户（admin/admin 已取消）：无账户时不做密码校验。
             // ★ 2026-09-24 交互修正：不再自动弹注册窗打断——注册入口就近可见（顶部红条

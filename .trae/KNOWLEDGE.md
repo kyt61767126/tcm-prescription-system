@@ -1626,3 +1626,22 @@
   - build.bat 门禁 1.5 拒绝脏工作区打包：**先精确 git add/commit 源码，再跑 build.bat**（bump 出来的 package.json/build-meta 变化走"打包副作用自动收纳"提交）。
 * **backlog（已评估不阻断）**：①P3-C 桌面主进程消费校验 ES256 gateToken（在线裁决目前完整性仅靠 TLS，既有问题非本次回归，见 §45/p3-gate-token_plan）；②reconcile 条件化清除基于读快照时刻，写执行时刻 CAS 重判（多进程秒级窗）待 P3-C 同批；③check-admin-status/query-invite 主窗显示后 2.2~3.2s 但不挡界面。
 * **生效方式：授权主进程在 asar 层不走热更 → 重打离线 exe 1.0.263；未触热更白名单（license-manager.js 不在 14 个热更文件内），无热包；云桌面 main.js 未接预取/快车道、行为零变化，云桌面与两端 APP 副本随下次整包带上；云端网页/服务端零改动。**
+
+### 52.1 【登录秒开二次优化】t0 同步预取 + 点击并行预热 + 预建隐藏主窗（2026-10-02，离线 1.0.264，双独立子代理初审 FAIL→修复→复审 PASS）
+
+* **现象**：1.0.263 点击→可用 1.23s（gate#1 497ms + 建窗+index.html dom-ready 408ms），仍不如手机离线 App 秒开。
+* **★四件套（shared/license/license-manager.js Group4、shared/desktop-license-ipc.cjs Group22、shared/desktop-windows.cjs Group15、shared/desktop-crash-guard.cjs Group18；离线 main.js/preload.js/login.js/activate.js 独有不 sync）**：
+  1. **t0 进程启动同步预取**：main.js setImmediate 内**同步** `fs.readFileSync(config.json)` 读 users（恰 1 用户即取规范名；无/多用户才异步读 safeStorage 加密 login-state.json），同回调内立即 `prewarmAdjudication`——**此回调严禁 await**（实测让出后恢复被 Electron 启动 native 阻塞推迟 ~1s）；与冷 TLS/Worker 并行，登录窗显示时裁决槽已在途。
+  2. **点击瞬间并行预热**：login.js handleLogin 在 setLoginLoading 之后立即 fire-and-forget `license.prewarmAdjudication(username)`（preload 新增 `license:prewarm-adjudication` IPC，trim/slice64、永不抛错），与 PBKDF2(~110ms) 并行；license-manager 新增 `ensureAdjudicationWarm(mid,username)`：TTL(20s) 内同键槽（在途/已完成）直接复用。保热换新阈值 `ADJ_PREWARM_REFRESH_MS=10s`。
+  3. **预建隐藏主窗**：setLoginWindow(非空) 注入安排 400ms 后 `createMainWindow({preloadHidden:true})`（三重条件：主窗不存在+登录窗活+!currentLoggedInUser；createMainWindow 内 existing 防护）；预建窗 `show:false+skipTaskbar:true+setBackgroundThrottling(false)`，dom-ready 只置 `__mainDomReady` 不 show 不发 main:login-user；setLoginWindow(null) 且未登录 → destroy 预建窗（X 关窗 window-all-closed 正常退出，实测进程零残留）。
+  4. **revealMainWindow(user) 揭窗**（login-success 且 saveLoginState 已同步落 currentLoggedInUser 之后）：窗保持隐藏，executeJavaScript 让渲染层**重跑 `checkLoginStatus()`**（该函数无重入锁；成功分支 get-current-user→落 localStorage→loadData→updateUserDisplay→自揭 overlay），以 overlay `display==='none'` 为 OK 判据，OK 后才 setSkipTaskbar(false)+show+focus；**整体 Promise.race 15s 超时**；任何 NOFN/ERR/STILLMASK/TIMEOUT/DEAD 返回 false → main.js 销毁隐藏壳走常规 createMainWindow() 回退（登录窗已被 X 关则只销毁不建窗）。
+* **★verify-gate 挂起（desktop-license-ipc.cjs，仅 `productClass==='offline'` 块内）**：主窗 index.html 一加载即自检（installMainWindowGate），预建窗隐藏期该自检无消费者；handler 判定 `event.sender===getMainWindow().webContents && __preloadHidden`（主进程原生对象身份比对，渲染层不可伪造）后 30ms 轮询挂起到**揭开(+800ms 平滑避开登录后 IPC/PS 突发)或窗销毁**两终态，**不设超时**（仅一个布尔轮询随窗生命周期）；销毁返回 {ok:true} 给不到活渲染层。恢复后用 `win.__revealedUser.username`（reveal 时挂载）覆盖登录前的空用户名参数重裁，保留账号墓碑维度。
+* **★初审 FAIL 的五个真实问题（复审全 PASS）**：
+  - **P0（功能）**：预建窗 init 时未登录，checkLoginStatus 首跑走"遮罩+不 loadData"分支；初版 reveal 只手动改 overlay CSS + 发零消费者的 main:login-user 死通道 → 揭出 currentUser=null 的空壳、数据永不加载。**教训：探针断言 `meds>=0` 被空数组骗过，必须 hook loadData 本身+断言真实条数（471）+currentUser**。
+  - P1：activate.js 激活窗关闭复核 gate ok 后 `safeParent.show()` 会揭开未登录预建窗 → 加 `!__preloadHidden` 门禁。
+  - P1：挂起先设 10s 兜底，超时在用户输密码时真裁决，网络抖动即 gate-failed 弹激活窗+抢 one-shot 槽 → 去超时改两终态。
+  - P2：crash-guard rebuildMainWindow 无参重建会无条件 show → 继承旧窗 `__preloadHidden` 以 `{preloadHidden:true}` 重建。
+  - P2：reveal 无总超时，渲染层 IndexedDB 挂起（已知故障类）会僵尸化 login-success → 15s race 兜底；second-instance/macOS activate 的 focus/restore 补 `!__preloadHidden` 守卫。
+* **实测（hkk 真机，热 Worker）**：点击→主窗可用（471 条药材+currentUser 就绪、loadData 40~107ms）**253~496ms**（1.0.263 为 1.23s）；gate#1 8~11ms 命中槽（保热换新边界偶发 232~343ms 热连新鲜裁决）；自检在 reveal+800ms 后新鲜裁决通过、gate-failed 不再误触发；未登录 X 关窗进程 0 残留。
+* **★可复用教训**：①"预建窗"类优化必须列出渲染层**所有一次性 init**（checkLoginStatus 只跑一次），揭窗等价于一次完整的"已登录启动"，不能只改 CSS；②断言性能指标时探针要抓"数据真的就绪"（函数 hook+真实计数），DOM 可见不等于数据就绪；③HTTP 429/5xx 在裁决链仍维持 S2 fail-closed 硬策略（既有行为，不因性能改动放宽；限流仅由错峰+预热节奏缓解）；④预建/挂起全部为离线端接线，云端 createMainWindow() 无参、verify-gate 块不注册，shared 改动对云端逐行惰性，九份 SHA 全等由子代理实证。
+* **生效方式：重打离线 exe 1.0.264；license-manager.js 不在热更白名单无热包；云桌面零接线零变化。**

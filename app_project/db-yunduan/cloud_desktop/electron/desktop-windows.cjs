@@ -131,12 +131,17 @@ function createDesktopWindows({ app, BrowserWindow, shell, updateManager, sendSt
         }
     }
 
-    function createMainWindow() {
+    // ★ 2026-10-02 登录秒开：opts.preloadHidden=true —— 登录窗显示期间后台预建
+    //   主窗并加载 index.html（~400ms 移出点击路径）。预建窗绝不自动 show：
+    //   gate#1 未过（login-success 未到）内容不可见；登录成功后由主进程显式调用
+    //   revealMainWindow(user) 揭开。未传 opts（云端/常规路径）行为完全不变。
+    function createMainWindow(opts) {
         const existing = getMainWindow();
         if (existing && !existing.isDestroyed()) {
             focusWindow(existing);
             return;
         }
+        const __preloadHidden = !!(opts && opts.preloadHidden);
 
         const win = new BrowserWindow({
             width: 1400,
@@ -146,9 +151,16 @@ function createDesktopWindows({ app, BrowserWindow, shell, updateManager, sendSt
             autoHideMenuBar: true,
             center: true,
             show: false,
+            // 预建期不进任务栏/Alt+Tab；reveal 时即时恢复
+            skipTaskbar: __preloadHidden,
             icon: APP_ICON,
             webPreferences: getSharedWebPrefs()
         });
+        win.__preloadHidden = __preloadHidden;
+        // 隐藏预建窗也要全速加载（禁后台节流，避免 dom-ready 被拖慢）
+        if (__preloadHidden) {
+            try { win.webContents.setBackgroundThrottling(false); } catch (e) {}
+        }
         setMainWindow(win);
 
         // ★ P1-A6：DevTools 反调试（仅打包环境生效）
@@ -161,7 +173,11 @@ function createDesktopWindows({ app, BrowserWindow, shell, updateManager, sendSt
             //       会在 show() 之后才隐藏 loginOverlay，导致用户看到第二次登录界面闪现
             // 方案：已通过 login.html 登录时（currentLoggedInUser 存在），
             //       先 executeJavaScript 同步隐藏 loginOverlay，再 show()
-            if (getCurrentLoggedInUser()) {
+            // ★ 预建模式：此处绝不 show（登录闸门未过），仅标记 dom 就绪；
+            //   揭窗统一由 revealMainWindow() 在 login-success（gate#1 已过）后执行。
+            if (__preloadHidden) {
+                win.__mainDomReady = true;
+            } else if (getCurrentLoggedInUser()) {
                 try {
                     await win.webContents.executeJavaScript(`
                         try {
@@ -174,9 +190,12 @@ function createDesktopWindows({ app, BrowserWindow, shell, updateManager, sendSt
                 } catch(e) { /* 忽略注入失败 */ }
                 win.webContents.send('main:login-user', getCurrentLoggedInUser());
             }
-            win.show();
+            if (!__preloadHidden) {
+                win.show();
+            }
 
             // ★ 注入视频录制模块（从同目录读取 video-recorder.js）
+            //   预建隐藏窗同样注入（纯模块装载，与可见性无关），reveal 即零等待。
             injectVideoRecorder(win);
 
             // ★ 修复 Electron 35 alert() 关闭后鼠标光标不显示的 bug
@@ -328,6 +347,67 @@ function createDesktopWindows({ app, BrowserWindow, shell, updateManager, sendSt
         });
     }
 
+    // ★ 2026-10-02 登录秒开：揭开预建隐藏主窗。仅在 login-success（gate#1 已过、
+    //   currentLoggedInUser 已落定）后由主进程调用。非预建窗调用等价 show()+focus()。
+    //   早于 dom-ready 调用则挂到首次 dom-ready 执行，绝不提前露出未授权画面。
+    //   ★ 双审修复：预建窗 init 时未登录，渲染层 checkLoginStatus() 走的是
+    //   "显示遮罩、不 loadData"分支；故 reveal 必须在窗仍隐藏时让渲染层以已登录
+    //   身份重跑 checkLoginStatus()（内部完成 currentUser 落库 + loadData + 自揭
+    //   遮罩），确认遮罩已揭后才 show；任何失败返回 false 由调用方走常规建窗回退。
+    async function revealMainWindow(user) {
+        const win = getMainWindow();
+        if (!win || win.isDestroyed()) return false;
+        if (!win.__preloadHidden) {
+            try { win.show(); win.focus(); } catch (e) {}
+            return true;
+        }
+        try {
+            // 整体 15s 超时兜底：dom-ready 永不到达 / 渲染层 IndexedDB 挂起
+            // （已知故障类）等极端情况下不允许 login-success 永久挂死，超时按
+            // false 交给调用方走常规建窗回退。正常路径实测 loadData 40-107ms。
+            let __timer = null;
+            const __work = (async () => {
+                if (!win.__mainDomReady) {
+                    await new Promise((resolve) => {
+                        try { win.webContents.once('dom-ready', resolve); } catch (e) { resolve(); }
+                    });
+                }
+                if (win.isDestroyed()) return 'DEAD';
+                // 窗仍隐藏：重跑登录初始化（get-current-user 此时必返回已落定用户）。
+                // 返回 OK 才允许 show；NOFN/ERR/STILLMASK 一律保持隐藏（fail-closed）。
+                try {
+                    return await win.webContents.executeJavaScript(`(async function () {
+                        try {
+                            if (typeof checkLoginStatus !== 'function') return 'NOFN';
+                            await checkLoginStatus();
+                            var _ov = document.getElementById('loginOverlay');
+                            return (_ov && _ov.style.display === 'none') ? 'OK' : 'STILLMASK';
+                        } catch (e) { return 'ERR:' + (e && e.message); }
+                    })()`);
+                } catch (e) { return 'ERR:' + (e && e.message); }
+            })();
+            const __timeout = new Promise((resolve) => { __timer = setTimeout(() => resolve('TIMEOUT'), 15000); });
+            const __r = await Promise.race([__work, __timeout]);
+            clearTimeout(__timer);
+            if (__r !== 'OK') {
+                console.warn('[Main] 预建窗登录初始化未完成，保持隐藏走回退:', __r);
+                return false;
+            }
+            win.setSkipTaskbar(false);
+            // 记录揭窗用户：主窗吊销自检在登录前发起（参数为空用户名），
+            // 挂起恢复后据此以已登录账号重裁，保留账号墓碑维度。
+            win.__revealedUser = user || getCurrentLoggedInUser() || null;
+            try { win.webContents.send('main:login-user', win.__revealedUser); } catch (e) {}
+            win.__preloadHidden = false;
+            win.show();
+            win.focus();
+            return true;
+        } catch (e) {
+            console.warn('[Main] revealMainWindow 失败:', e && e.message);
+            return false;
+        }
+    }
+
     function createLoginWindow() {
         const existing = getLoginWindow();
         if (existing && !existing.isDestroyed()) {
@@ -464,6 +544,7 @@ function createDesktopWindows({ app, BrowserWindow, shell, updateManager, sendSt
         injectVideoRecorder,
         installDevToolsGuard,
         createMainWindow,
+        revealMainWindow,
         createLoginWindow,
     };
 }

@@ -456,8 +456,65 @@ ipcMain.handle('license:get-trial-days', () => {
 
     // —— 仅离线 ——
     if (productClass === 'offline') {
-ipcMain.handle('license:verify-gate', async (_event, username) => {
+// ★ 2026-10-02 登录秒开：渲染层点击登录瞬间（PBKDF2 之前）fire-and-forget
+//   预热在线裁决，使 verify-gate 真正发起时槽已在途/完成。纯预热、永不抛错、
+//   不改变任何裁决结果；消费侧安全条件全部在 verifyLoginGate 快车道内。
+ipcMain.handle('license:prewarm-adjudication', (_event, username) => {
     try {
+        if (typeof licenseManager.ensureAdjudicationWarm === 'function') {
+            const mid = typeof licenseManager.getMachineId === 'function' ? licenseManager.getMachineId() : '';
+            if (mid) licenseManager.ensureAdjudicationWarm(mid, String(username == null ? '' : username).trim().slice(0, 64));
+        }
+        return { ok: true };
+    } catch (e) {
+        console.warn('[IPC] prewarm-adjudication 非致命异常:', e && e.message);
+        return { ok: false };
+    }
+});
+
+ipcMain.handle('license:verify-gate', async (event, username) => {
+    try {
+        // ★ 2026-10-02 登录秒开（预建隐藏主窗配套）：主窗 index.html 一加载就会
+        //   自动跑"主窗吊销自检"（auth-core installMainWindowGate）。预建窗在登录
+        //   gate#1 通过前处于隐藏待揭状态，此时自检既无人消费结果，又会：
+        //   ①偷消费 one-shot 裁决预热槽（登录 gate#1 被迫新鲜请求，实测 +400ms）；
+        //   ②可能在用户仍输密码时触发 gate-failed 弹激活窗。
+        //   处理：确认调用方就是"未 reveal 的预建主窗"时，将请求挂起到揭开
+        //   （__preloadHidden 被 revealMainWindow 置 false）后再真实执行——
+        //   只推迟、不伪造结果（窗销毁路径的返回给不到任何活渲染层，无 fail-open）；
+        //   不设超时：挂起仅一个 30ms 布尔轮询，终态只有揭开或窗销毁。
+        //   登录窗/激活窗/已揭主窗均不匹配，行为零变化。
+        try {
+            const __mw = getMainWindow();
+            if (__mw && !__mw.isDestroyed() && __mw.__preloadHidden &&
+                __mw.webContents === event.sender) {
+                // 预建隐藏窗的自检在揭开前没有任何消费者：此时裁决只会 (1) 在
+                // 用户输密码时因网络抖动触发 gate-failed 弹激活窗、(2) 抢消费
+                // one-shot 预热槽。故挂起到"揭开"或"窗销毁"两个终态为止——
+                // 隐藏窗销毁时该 invoke 的接收方已不存在，应答被丢弃。
+                await new Promise((resolve) => {
+                    const __iv = setInterval(() => {
+                        try {
+                            if (__mw.isDestroyed()) { clearInterval(__iv); resolve(); }
+                            else if (!__mw.__preloadHidden) {
+                                // 已揭开：再平滑等待 800ms，避开 login-success 后的
+                                // IPC/PS 突发（admin-status/invite 等），降低服务端
+                                // 限流耦合；自检纯后台，本就不挡界面。
+                                clearInterval(__iv);
+                                setTimeout(resolve, 800);
+                            }
+                        } catch (e) { clearInterval(__iv); resolve(); }
+                    }, 30);
+                });
+                if (__mw.isDestroyed()) return { ok: true };
+                // 自检请求在登录前发起（渲染层传入的 username 为空）；揭开后改用
+                // 登录成功链记录在窗口上的账号重裁，保留账号墓碑维度。
+                try {
+                    const __ru = __mw.__revealedUser;
+                    if (__ru && __ru.username) username = String(__ru.username).slice(0, 64);
+                } catch (e) {}
+            }
+        } catch (e) { /* 挂起判定失败：按正常裁决继续，安全方向不受影响 */ }
         return await licenseManager.verifyLoginGate(username);
     } catch (e) {
         console.error('[IPC] verify-gate 异常:', e);

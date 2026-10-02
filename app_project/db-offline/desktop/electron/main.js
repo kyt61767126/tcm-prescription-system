@@ -19,6 +19,45 @@ const fsSync = require('fs');
 const fse = require('fs-extra');
 const crypto = require('crypto');
 const licenseManager = require('./license-manager');
+// ★ 2026-10-02 登录秒开：进程启动最早阶段（app ready 之前）即发裁决预取，
+//   把冷 TLS + Cloudflare Worker 冷路径（真机 2.1~3.8s，热连接仅 0.55s）移出
+//   点击路径。目标：t0 立即用"上次登录用户名"发唯一的目标键请求，使点击时槽
+//   早已完成。用户名来源（均为只读，纯预热用途，伪造/猜错只影响槽键命中，
+//   gate 消费侧仍以登录后规范名+全部安全条件为准）：
+//   ① config.json 明文 users（本地账户表，读取毫秒级）——恰有 1 个用户即采用；
+//   ② 多用户/读取失败 → login-state.json（safeStorage 解密，首次调用约 +0.9s）；
+//   ③ 都不行 → 空名（仅热 TLS/Worker），whenReady 保热定时器立即以真实名补发。
+setImmediate(() => {
+    try {
+        if (typeof licenseManager.prewarmAdjudication !== 'function') return;
+        // ★ 全部同步完成：实测 setImmediate 回调内一旦 await 让出，恢复点会被
+        //   Electron 启动期 native 阻塞推迟约 1s（冷裁决 1.8s 场景下每 1ms 都关键）。
+        let _username = '';
+        try {
+            const _cfg = JSON.parse(fsSync.readFileSync(getWritableConfigPath(), 'utf8'));
+            const _names = (Array.isArray(_cfg && _cfg.users) ? _cfg.users : [])
+                .map(u => (u && u.username) ? String(u.username) : '').filter(Boolean);
+            if (_names.length === 1) _username = _names[0];
+        } catch (e) { /* 无 config：走 login-state 兜底 */ }
+        const _mid = typeof licenseManager.getMachineId === 'function' ? licenseManager.getMachineId() : '';
+        if (_mid && _username) { licenseManager.prewarmAdjudication(_mid, _username); return; }
+        if (!_mid) return;
+        // 多用户/无 config：异步走加密 login-state（慢 ~0.9s，仅多用户场景）
+        (async () => {
+            try {
+                const _raw = await fs.readFile(path.join(app.getPath('userData'), 'login-state.json'), 'utf8');
+                let _txt = _raw;
+                if (_raw.startsWith('ENC:')) {
+                    if (!safeStorage.isEncryptionAvailable()) throw new Error('safeStorage-not-ready');
+                    _txt = safeStorage.decryptString(Buffer.from(_raw.slice(4), 'base64'));
+                }
+                const _j = JSON.parse(_txt);
+                const _u = (_j && _j.user && _j.user.username) ? String(_j.user.username) : '';
+                licenseManager.prewarmAdjudication(_mid, _u);
+            } catch (e) { licenseManager.prewarmAdjudication(_mid, ''); }
+        })();
+    } catch (e) { /* 预热纯增益 */ }
+});
 app.setAppUserModelId('com.benneng.prescription');  // ★ Windows 任务栏图标关联
 const prescriptionCounter = require('./prescription-counter');
 const featureGuard = require('./feature-guard');
@@ -465,7 +504,7 @@ app.on('second-instance', (event, commandLine) => {
             break;
         }
     }
-    if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.__preloadHidden) {
         if (mainWindow.isMinimized()) mainWindow.restore();
         mainWindow.focus();
     }
@@ -638,7 +677,7 @@ const updateManager = require('./update-manager.cjs').createDesktopUpdateManager
 //   抽至 desktop-windows.cjs（shared 唯一权威源 → sync-all Group 15 分发 → copy-consistency
 //   哈希门）。状态经访问器注入：mainWindow/loginWindow/currentLoggedInUser 仍是本文件的
 //   模块级变量（体外引用零改动），模块内经 get/set 读写保持同步。
-const { createMainWindow, createLoginWindow, focusWindow } =
+const { createMainWindow, createLoginWindow, focusWindow, revealMainWindow } =
     require('./desktop-windows.cjs').createDesktopWindows({
         app, BrowserWindow, shell,
         updateManager,
@@ -647,7 +686,30 @@ const { createMainWindow, createLoginWindow, focusWindow } =
         getMainWindow: () => mainWindow,
         setMainWindow: (w) => { mainWindow = w; },
         getLoginWindow: () => loginWindow,
-        setLoginWindow: (w) => { loginWindow = w; },
+        // ★ 2026-10-02 登录秒开：登录窗创建 400ms 后后台预建隐藏主窗（index.html
+        //   ~400ms 加载移出点击路径）；登录窗未登录即关闭（X/退出）时销毁隐藏窗，
+        //   保证 window-all-closed 正常触发、进程不残留。登录成功关闭时
+        //   currentLoggedInUser 已落定，绝不在此销毁（login-success 会 reveal 复用）。
+        setLoginWindow: (w) => {
+            loginWindow = w;
+            // createLoginWindow 内部有 existing 防重：每次 setLoginWindow(非空)
+            // 都对应一个新登录窗（含崩溃重建），故每次都安排一次预建判定。
+            if (w) {
+                setTimeout(() => {
+                    try {
+                        if ((!mainWindow || mainWindow.isDestroyed()) &&
+                            loginWindow && !loginWindow.isDestroyed() && !currentLoggedInUser) {
+                            createMainWindow({ preloadHidden: true });
+                        }
+                    } catch (e) { /* 预建纯增益，失败走 login-success 常规创建 */ }
+                }, 400);
+            } else if (!currentLoggedInUser && mainWindow && !mainWindow.isDestroyed() &&
+                mainWindow.__preloadHidden) {
+                // 登录窗未登录即关闭（X/退出）：销毁隐藏预建窗，保证
+                // window-all-closed 正常触发、进程不残留。
+                try { mainWindow.destroy(); } catch (e) {}
+            }
+        },
     });
 
 // ★ 2026-09-14 P3-A 崩溃韧性补强：render-process-gone / child-process-gone 兜底
@@ -1103,7 +1165,7 @@ app.whenReady().then(async () => {
         } else {
             if (loginWindow && !loginWindow.isDestroyed()) {
                 focusWindow(loginWindow);
-            } else if (mainWindow && !mainWindow.isDestroyed()) {
+            } else if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.__preloadHidden) {
                 focusWindow(mainWindow);
             }
         }
@@ -1199,11 +1261,28 @@ ipcMain.handle('login-success', async (event, userData) => {
             global.__bnzcLoginPrewarmTimer = null;
         }
         await saveLoginState(true, userData);
-        if (loginWindow && !loginWindow.isDestroyed()) {
-            loginWindow.close();
-        }
-        if (!mainWindow || mainWindow.isDestroyed()) {
-            createMainWindow();
+        // ★ 2026-10-02 登录秒开：复用后台预建的隐藏主窗（gate#1 已过才到这里），
+        //   先揭开主窗再关登录窗，任务栏/焦点无缝；无预建窗则走原"关登录窗→建窗"。
+        if (mainWindow && !mainWindow.isDestroyed() && mainWindow.__preloadHidden) {
+            let __revealed = false;
+            try { __revealed = await revealMainWindow(userData); } catch (e) {
+                console.warn('预建主窗揭开异常，走常规重建:', e && e.message);
+            }
+            if (__revealed) {
+                if (loginWindow && !loginWindow.isDestroyed()) loginWindow.close();
+            } else {
+                // 预建窗初始化失败/超时：若登录窗已被用户关掉（X 取消），只销毁
+                // 隐藏壳让 window-all-closed 退出，不再凭空建出已登录主窗；
+                // 登录窗仍在才回退到原"关登录窗→常规建窗"。
+                try { if (!mainWindow.isDestroyed()) mainWindow.destroy(); } catch (e) {}
+                if (loginWindow && !loginWindow.isDestroyed()) {
+                    loginWindow.close();
+                    createMainWindow();
+                }
+            }
+        } else {
+            if (loginWindow && !loginWindow.isDestroyed()) loginWindow.close();
+            if (!mainWindow || mainWindow.isDestroyed()) createMainWindow();
         }
         // ★ 2026-09-23 P2-2：登录成功后再启动周期心跳（首次立即执行时主窗口
         //   已在；REVOKED/EXPIRED/NO_LICENSE 退出均有登录闸门在前兜底，不会

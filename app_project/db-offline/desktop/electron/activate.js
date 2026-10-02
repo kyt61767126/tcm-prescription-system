@@ -482,8 +482,13 @@ function showActivateWindow(parentWindow) {
                 const gateResult = await licenseManager.verifyLoginGate(gateUsername || undefined);
                 if (gateResult.ok) {
                     if (safeParent && !safeParent.isDestroyed()) {
-                        safeParent.show();
-                        safeParent.focus();
+                        // ★ 2026-10-02 登录秒开：登录前预建的隐藏主窗（用户尚未通过
+                        //   gate#1）禁止由此处提前 show；保持隐藏，只允许登录成功链
+                        //   revealMainWindow 揭开（此时窗内本就遮罩兜底，不可见无损失）。
+                        if (!safeParent.__preloadHidden) {
+                            safeParent.show();
+                            safeParent.focus();
+                        }
                     }
                     return;
                 }

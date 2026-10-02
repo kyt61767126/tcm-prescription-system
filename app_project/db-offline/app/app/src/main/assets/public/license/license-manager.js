@@ -3049,6 +3049,9 @@ const GATE_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
 //     不会错用到他人裁决；
 //   ④ TTL 20s：只覆盖正常"开程序→输密码→登录"交互；超时作废。
 const ADJ_PREWARM_TTL_MS = 20000;
+// 保热定时调用：已完成槽位小于此年龄视为热槽保留（配合 15s 调用间隔，
+// 保证到点换新、点击时槽龄恒 ≤~15s 且不产生多余请求）。
+const ADJ_PREWARM_REFRESH_MS = 10000;
 let __adjPrewarm = null; // { key, at, promise }
 
 async function __adjudicateFetch(machineId, username) {
@@ -3076,25 +3079,49 @@ async function __adjudicateFetch(machineId, username) {
     } finally { clearTimeout(tid); }
 }
 
-// 供 main.js 登录窗显示期间周期调用以保持裁决"热"：槽位在途则跳过，
-// 否则重新预取替换槽位（TTL 20s + 建议 15s 刷新间隔 → 点登录时命中的
-// 裁决年龄永远 ≤~15s，吊销复用窗口不大于旧单次预取的 20s TTL）。
-// username 读不到时传空串——即便键不匹配，冷 TLS/Worker 也已被预热，
-// 点登录的新鲜请求走热连接（~0.55s）。
+// 供 main.js 登录窗显示期间周期调用以保持裁决"热"：
+//   · 同键在途 → 单飞复用，绝不重复打服务端；
+//   · 同键已完成且年龄 < ADJ_PREWARM_REFRESH_MS(10s) → 仍是热槽，保留；
+//   · 其余（无槽/异键/已凉）→ 发新裁决替换。
+// 配合 15s 保热间隔：每次定时调用时槽龄约 15s（≥10s）→ 换新，点登录时
+// 槽龄恒 ≤~15s（< TTL 20s），吊销复用窗口不大于旧单次预取的 20s TTL。
 function prewarmAdjudication(machineId, username) {
     try {
         if (!machineId) return;
         const key = machineId + '|' + (username || '');
-        // 在途（同键未完成）直接复用该 Promise，不重复打服务端；已完成的槽位
-        // 每次保心跳调用都以新结果替换（main.js 登录窗期间 15s 周期调用）。
-        if (__adjPrewarm && __adjPrewarm.key === key && !__adjPrewarm.settled) return;
-        const now = Date.now();
-        const slot = { key, at: now, promise: null, settled: false };
-        slot.promise = __adjudicateFetch(machineId, username)
-            .catch(() => ({ netFail: true }))
-            .then((r) => { slot.settled = true; return r; });
-        __adjPrewarm = slot;
+        const cur = __adjPrewarm;
+        if (cur && cur.key === key) {
+            if (!cur.settled) return;                                  // 在途单飞
+            if (Date.now() - cur.at < ADJ_PREWARM_REFRESH_MS) return;  // 热槽保留
+        }
+        __fireAdjPrewarmSlot(machineId, username, key);
     } catch (e) { /* 预热纯增益，任何异常静默 */ }
+}
+
+// ★ 2026-10-02 点击登录瞬间调用（login.js 在 PBKDF2 之前 fire-and-forget）：
+//   与密码校验并行，gate 真正发起时槽已在途或已完成。TTL(20s) 内同键槽
+//   （在途或已完成）一律直接复用——点击场景零等待优先；异键/无槽/超龄才发
+//   新裁决。只是"提前发请求"，裁决消费的安全条件（200/success/LICENSED/
+//   serverTime/墓碑）全部不变，不构成新攻击面。
+function ensureAdjudicationWarm(machineId, username) {
+    try {
+        if (!machineId) return;
+        const key = machineId + '|' + (username || '');
+        const cur = __adjPrewarm;
+        if (cur && cur.key === key) {
+            if (!cur.settled) return;
+            if (Date.now() - cur.at < ADJ_PREWARM_TTL_MS) return;
+        }
+        __fireAdjPrewarmSlot(machineId, username, key);
+    } catch (e) { /* 预热纯增益，任何异常静默 */ }
+}
+
+function __fireAdjPrewarmSlot(machineId, username, key) {
+    const slot = { key, at: Date.now(), promise: null, settled: false };
+    slot.promise = __adjudicateFetch(machineId, username)
+        .catch(() => ({ netFail: true }))
+        .then((r) => { slot.settled = true; return r; });
+    __adjPrewarm = slot;
 }
 
 // 一次性取出可复用的预取结果（LICENSED 才用）；其余情况新鲜补裁。
@@ -5523,6 +5550,8 @@ module.exports = {
     prewarmGate,
     // ★ 2026-10-02 登录性能：whenReady 后台预取在线裁决（冷 TLS/Worker 移出登录路径）
     prewarmAdjudication,
+    // ★ 2026-10-02 登录性能：点击登录瞬间保热（TTL 内热槽直接复用，与 PBKDF2 并行）
+    ensureAdjudicationWarm,
     readAnchorState,       // 二级锚点读（供测试用）
     writeAnchorState,      // 二级锚点写（供测试用）
     // ★ 2026-09-26 M-2：文件锚点原语/统一视图（迁移冒烟用，与 anchor 导出对称）

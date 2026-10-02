@@ -124,6 +124,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         // ★ 2026-09-23 P0 登录后台闸门（主进程裁决：LICENSED/trial/free/7天宽限）
         //   ★ 账号删除联动：透传登录用户名（服务端只读账号墓碑）
         verifyGate: (username) => ipcRenderer.invoke('license:verify-gate', username),
+        // ★ 2026-10-02 登录秒开：点击登录瞬间预热裁决（fire-and-forget，不阻塞）
+        prewarmAdjudication: (username) => ipcRenderer.invoke('license:prewarm-adjudication', username),
         // ★ 闸门未过：立即隐藏主窗+提示（硬吊销，弹窗不可绕过）
         gateFailed: (message) => ipcRenderer.invoke('license:gate-failed', message),
         activate: (base64Content) => ipcRenderer.invoke('license:activate', base64Content),

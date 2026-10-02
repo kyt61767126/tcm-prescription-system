@@ -67,9 +67,13 @@ function createDesktopCrashGuard({ app, dialog, logger,
     }
 
     function rebuildMainWindow() {
-        destroyShell(getMainWindow());
+        // ★ 2026-10-02 登录秒开：未登录预建的隐藏主窗崩溃后，重建窗必须同样保持
+        //   隐藏（gate#1 未过不可见不变式），登录成功链仍可 reveal 复用。
+        const __oldWin = getMainWindow();
+        const __wasHidden = !!(__oldWin && __oldWin.__preloadHidden);
+        destroyShell(__oldWin);
         setMainWindow(null);
-        try { createMainWindow(); } catch (e) { logCrash('crash-guard-rebuild-fail', { reason: String(e && e.message || e), type: 'main' }); }
+        try { createMainWindow(__wasHidden ? { preloadHidden: true } : undefined); } catch (e) { logCrash('crash-guard-rebuild-fail', { reason: String(e && e.message || e), type: 'main' }); }
     }
 
     function rebuildLoginWindow() {
