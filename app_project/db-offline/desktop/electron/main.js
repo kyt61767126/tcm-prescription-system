@@ -40,7 +40,7 @@ setImmediate(() => {
             if (_names.length === 1) _username = _names[0];
         } catch (e) { /* 无 config：走 login-state 兜底 */ }
         const _mid = typeof licenseManager.getMachineId === 'function' ? licenseManager.getMachineId() : '';
-        if (_mid && _username) { licenseManager.prewarmAdjudication(_mid, _username); return; }
+        if (_mid && _username) { licenseManager.prewarmAdjudication(_mid, _username, 'keepwarm'); return; }
         if (!_mid) return;
         // 多用户/无 config：异步走加密 login-state（慢 ~0.9s，仅多用户场景）
         (async () => {
@@ -53,8 +53,8 @@ setImmediate(() => {
                 }
                 const _j = JSON.parse(_txt);
                 const _u = (_j && _j.user && _j.user.username) ? String(_j.user.username) : '';
-                licenseManager.prewarmAdjudication(_mid, _u);
-            } catch (e) { licenseManager.prewarmAdjudication(_mid, ''); }
+                licenseManager.prewarmAdjudication(_mid, _u, 'keepwarm');
+            } catch (e) { licenseManager.prewarmAdjudication(_mid, '', 'keepwarm'); }
         })();
     } catch (e) { /* 预热纯增益 */ }
 });
@@ -192,6 +192,29 @@ app.commandLine.appendSwitch('allow-file-access-from-files');
 })();
 
 // ============================================================================
+// ★ A4（2026-10-02 启动性能）：bnzc-debug.log 写盘门控
+//   旧码每次普通启动固定 3 次 appendFileSync（extractBnzc START/未找到/
+//   _startupActivation 汇总），另有 second-instance、激活 IPC 等多处。同步
+//   open/write/close 在机械盘/杀软实时扫描下每次数 ms~十几 ms。该日志仅用于
+//   排查 bnzc:// 一键激活"无反应"，现改为仅在激活诊断场景落盘：
+//     ① 命令行（含 second-instance 转交）含 bnzc: ② BNZC_DEBUG=1
+//     ③ userData 存在 admin-request-id.dat（断点续传在途）④ 运行期显式打开开关
+// ============================================================================
+function __bnzcDebugEnabled() {
+    try {
+        if (global.__bnzcDebugOn === true) return true;
+        if (process.env.BNZC_DEBUG === '1') return true;
+        if (process.argv.some(a => typeof a === 'string' && a.toLowerCase().indexOf('bnzc:') >= 0)) return true;
+        if (fs.existsSync(path.join(app.getPath('userData'), 'admin-request-id.dat'))) return true;
+    } catch (e) {}
+    return false;
+}
+function __bnzcDbg(line) {
+    if (!__bnzcDebugEnabled()) return;
+    try { fs.appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] ${line}\n`); } catch (e) {}
+}
+
+// ============================================================================
 //  目录与键名工具
 // ============================================================================
 // ★ 获取可写的 config.json 路径（打包后 asar 只读，必须用 exe 目录或 userData）
@@ -205,6 +228,68 @@ function getWritableConfigPath() {
     } catch (e) {
         return path.join(getExeDirectory(), 'config.json');
     }
+}
+
+// ★ 2026-10-02 A3 启动性能：license 状态指纹缓存。validateLicense 含 license.dat
+//   HKDF/AES 解密 + ECDSA/Ed25519 验签 + config HMAC + lastRun 读写，登录点击链上
+//   get-app-config、get-status 等多个 IPC 每次都重算（实测每登录 2~3 次）。以
+//   license.dat / trial-config.json / gate.dat 三文件的 mtimeMs+size 做廉价指纹
+//   （3 次 stat 为亚毫秒级；刻意不含 last-run.dat——它每次 validate 都自写，
+//   mtime 恒变，且其时间回拨语义的权威消费点在 verifyLoginGate 实时裁决）：
+//   指纹与缓存一致即复用 whenReady 结果；装码/激活/删证/试用落锁使任一文件变化
+//   时自动失效重算并回填，无需人工枚举所有翻转点。
+//   安全口径：本助手只服务 UI/配置侧（edition 标签、self-heal、reg-gate）；登录
+//   授权闸门 verifyLoginGate 内部始终自行实时 validateLicense，不吃本缓存。
+function __bnzcLicenseStatusFingerprint() {
+    const parts = [];
+    let baseDir = '';
+    try { baseDir = licenseManager.getWritableDir(); } catch (e) { baseDir = ''; }
+    // ★ 双审修复（2026-10-02）：config.json 必须入指纹——validateLicense 显式
+    //   依赖它（inspectConfigSignatures users_mismatch fail-closed、装码自愈重签、
+    //   A2 慢哈希升级 renameUser 重写）；trial.dat 为试用态自写文件（删除/损坏只
+    //   重播种，入指纹仅多一次 stat）。
+    const files = [
+        (() => { try { return licenseManager.getLicensePath(); } catch (e) { return ''; } })(),
+        baseDir ? path.join(baseDir, 'trial-config.json') : '',
+        baseDir ? path.join(baseDir, 'trial.dat') : '',
+        (() => { try { return getWritableConfigPath(); } catch (e) { return ''; } })(),
+        baseDir ? path.join(baseDir, 'gate.dat') : ''
+    ];
+    for (const f of files) {
+        if (!f) { parts.push('x'); continue; }
+        try {
+            const st = fs.statSync(f);
+            parts.push(st.mtimeMs + ':' + st.size);
+        } catch (e) { parts.push('x'); }
+    }
+    // ★ 双审建议：trial.dat 由 license-manager 固定写在 userData（便携版 baseDir
+    //   是 exe 目录，与 trial.dat 不同位），按真实落盘位补一指纹。
+    try {
+        const st = fs.statSync(path.join(app.getPath('userData'), 'trial.dat'));
+        parts.push(st.mtimeMs + ':' + st.size);
+    } catch (e) { parts.push('x'); }
+    return parts.join('|');
+}
+
+// ★ 双审修复：缓存最大年龄 30s——到期/时间回拨/授权跨到期点等"无文件翻转"
+//   场景强制重算（verifyLoginGate 等安全闸从不读本缓存，这里只影响 UI/配置侧）。
+//   时钟回拨（now-cacheAt<0）同样视为过期，宁可重算不吃陈旧件。
+const __BNZC_LIC_CACHE_MAX_AGE_MS = 30000;
+function __bnzcGetLicenseStatus(localMachineId) {
+    const fp = __bnzcLicenseStatusFingerprint();
+    const cached = global.__bnzcLicenseStatusCache;
+    const cacheAge = Date.now() - (Number(global.__bnzcLicenseStatusCacheAt) || 0);
+    if (cached && typeof cached === 'object' && cached.__bnzcLicFp === fp &&
+        cacheAge >= 0 && cacheAge < __BNZC_LIC_CACHE_MAX_AGE_MS &&
+        fp.indexOf('x|x|x') !== 0) {
+        return cached;
+    }
+    const fresh = licenseManager.validateLicense(
+        localMachineId ? { localMachineId } : {});
+    try { fresh.__bnzcLicFp = fp; } catch (e) { /* 返回件可能被冻结则放弃标记 */ }
+    global.__bnzcLicenseStatusCache = fresh;
+    global.__bnzcLicenseStatusCacheAt = Date.now();
+    return fresh;
 }
 
 // ★ 2026-10-02 注册引导竞态根治（E2E pre-fuse E1-E3 实锤）：登录窗 preload 在
@@ -562,11 +647,15 @@ if (!gotTheLock) {
 
 app.on('second-instance', (event, commandLine) => {
     console.log('[Bnzc] second-instance 事件, commandLine:', JSON.stringify(commandLine));
-    try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] second-instance: ${JSON.stringify(commandLine)}\n`); } catch(e) {}
+    // ★ A4：转交命令行含 bnzc: 时打开诊断开关再落盘
+    if (Array.isArray(commandLine) && commandLine.some(a => typeof a === 'string' && a.toLowerCase().indexOf('bnzc:') >= 0)) {
+        global.__bnzcDebugOn = true;
+    }
+    __bnzcDbg('second-instance: ' + JSON.stringify(commandLine));
     for (const arg of commandLine) {
         if (arg && arg.startsWith('bnzc://')) {
             const parsed = parseBnzcUrl(arg);
-            try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] parsed: ${JSON.stringify(parsed)}\n`); } catch(e) {}
+            __bnzcDbg('parsed: ' + JSON.stringify(parsed));
             if (parsed) {
                 _pendingActivation = parsed;
                 console.log('[Bnzc] second-instance 捕获激活链接:', parsed.code);
@@ -599,7 +688,7 @@ let _pendingActivation = null;
 
 // ★ 通知现有窗口有新的待激活数据
 function notifyPendingActivation(parsed) {
-    try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] notifyPendingActivation: code=${parsed.code}, mainWindow=${!!mainWindow && !mainWindow.isDestroyed()}, loginWindow=${!!loginWindow && !loginWindow.isDestroyed()}\n`); } catch(e) {}
+    __bnzcDbg(`notifyPendingActivation: code=${parsed.code}, mainWindow=${!!mainWindow && !mainWindow.isDestroyed()}, loginWindow=${!!loginWindow && !loginWindow.isDestroyed()}`);
     // 通知主窗口（已登录状态）
     if (mainWindow && !mainWindow.isDestroyed()) {
         if (mainWindow.webContents) {
@@ -628,17 +717,17 @@ function notifyPendingActivation(parsed) {
 function extractBnzcFromArgv() {
     try {
         const argv = process.argv;
-        // ★ 诊断日志：记录启动参数（定位"无反应"问题）
-        try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] extractBnzcFromArgv START: argv=${JSON.stringify(argv)}\n`); } catch(e) {}
+        // ★ A4：诊断日志已收口到 __bnzcDbg（普通启动不再落盘）
+        __bnzcDbg('extractBnzcFromArgv START: argv=' + JSON.stringify(argv));
         // 先尝试找完整的 bnzc:// URL
         for (const arg of argv) {
             if (arg && arg.startsWith('bnzc://')) {
                 // ★ 诊断日志：找到 bnzc:// 参数
-                try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] found bnzc arg: ${arg}\n`); } catch(e) {}
+                __bnzcDbg('found bnzc arg: ' + arg);
                 const parsed = parseBnzcUrl(arg);
                 if (parsed) {
                     console.log('[Bnzc] 从命令行参数解析激活链接:', parsed.code);
-                    try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] parsed OK: code=${parsed.code}\n`); } catch(e) {}
+                    __bnzcDbg('parsed OK: code=' + parsed.code);
                     return parsed;
                 }
                 // 若首个片段无法独立解析，尝试拼接后续片段
@@ -660,10 +749,12 @@ function extractBnzcFromArgv() {
                 }
             }
         }
-        // ★ 诊断日志：遍历完 argv 但未找到 bnzc:// 参数
-        try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] extractBnzcFromArgv: 未找到 bnzc:// 参数\n`); } catch(e) {}
+        // ★ 诊断日志：遍历完 argv 但未找到 bnzc:// 参数（A4 门控：普通启动不写盘）
+        __bnzcDbg('extractBnzcFromArgv: 未找到 bnzc:// 参数');
     } catch (e) {
-        try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] extractBnzcFromArgv 异常: ${e && e.message}\n`); } catch(e2) {}
+        // 解析异常本身值得记录：打开开关后落盘
+        global.__bnzcDebugOn = true;
+        __bnzcDbg('extractBnzcFromArgv 异常: ' + (e && e.message));
     }
     return null;
 }
@@ -724,8 +815,9 @@ const _startupActivation = extractBnzcFromArgv();
 if (_startupActivation) {
     _pendingActivation = _startupActivation;
 }
-// ★ 诊断日志：记录 _startupActivation 最终结果
-try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] _startupActivation=${JSON.stringify(_startupActivation)}, _pendingActivation=${JSON.stringify(_pendingActivation)}\n`); } catch(e) {}
+// ★ 诊断日志：记录 _startupActivation 最终结果（A4：普通启动不写盘）
+if (_startupActivation) global.__bnzcDebugOn = true;
+__bnzcDbg('_startupActivation=' + JSON.stringify(_startupActivation) + ', _pendingActivation=' + JSON.stringify(_pendingActivation));
 
 // ============================================================================
 //  视频录制模块注入 —— B2-2 已随窗口域抽至 desktop-windows.cjs
@@ -757,10 +849,11 @@ const { createMainWindow, createLoginWindow, focusWindow, revealMainWindow } =
         getMainWindow: () => mainWindow,
         setMainWindow: (w) => { mainWindow = w; },
         getLoginWindow: () => loginWindow,
-        // ★ 2026-10-02 登录秒开：登录窗创建 400ms 后后台预建隐藏主窗（index.html
-        //   ~400ms 加载移出点击路径）；登录窗未登录即关闭（X/退出）时销毁隐藏窗，
-        //   保证 window-all-closed 正常触发、进程不残留。登录成功关闭时
-        //   currentLoggedInUser 已落定，绝不在此销毁（login-success 会 reveal 复用）。
+        // ★ 2026-10-02 登录秒开：登录窗首帧 show 后即刻后台预建隐藏主窗（index.html
+        //   ~240ms parse 移出点击路径，A6 由 +400ms 提前到 show 当拍）；登录窗未登录
+        //   即关闭（X/退出）时销毁隐藏窗，保证 window-all-closed 正常触发、进程不残留。
+        //   登录成功关闭时 currentLoggedInUser 已落定，绝不在此销毁（login-success 会
+        //   reveal 复用）。
         setLoginWindow: (w) => {
             loginWindow = w;
             // createLoginWindow 内部有 existing 防重：每次 setLoginWindow(非空)
@@ -779,15 +872,31 @@ const { createMainWindow, createLoginWindow, focusWindow, revealMainWindow } =
                             setTimeout(global.__bnzcKickLoginPrewarm, 50);
                         }
                     } catch (e) { /* 预热纯增益，失败静默 */ }
-                });
-                setTimeout(() => {
+                    // ★ A6（2026-10-02）：预建隐藏主窗由"建窗后固定 400ms"改为首帧
+                    //   show 后即刻发起——实测主窗 index.html parse 仅 ~240ms，提前
+                    //   发起让快击用户点击时窗也已就绪；show 已触发故不抢首帧。
                     try {
                         if ((!mainWindow || mainWindow.isDestroyed()) &&
-                            loginWindow && !loginWindow.isDestroyed() && !currentLoggedInUser) {
+                            !currentLoggedInUser) {
                             createMainWindow({ preloadHidden: true });
                         }
                     } catch (e) { /* 预建纯增益，失败走 login-success 常规创建 */ }
-                }, 400);
+                    // ★ A1（2026-10-02）：VM/沙箱检测含 4×wmic（老机/杀软 0.4~2s+），
+                    //   结果仅日志、无安全消费者。延到首帧 8s 后的空闲期执行：正常用户
+                    //   此时仍在输密码（窗早可见，阻塞只影响后台 IPC 不影响打字），
+                    //   快击场景 reveal 也已在 ~3s 前完成，不撞登录关键路径。
+                    try {
+                        if (licenseManager && typeof licenseManager.kickDeferredVmCheck === 'function') {
+                            const _vmTimer = setTimeout(() => {
+                                try { licenseManager.kickDeferredVmCheck(); } catch (e) {}
+                            }, 8000);
+                            // ★ 双审建议：unref 不拖住退出；登录窗 8s 内关闭（X/快登后
+                            //   窗销毁/退程）时撤下，避免退程途中 4×wmic 阻塞。
+                            if (typeof _vmTimer.unref === 'function') _vmTimer.unref();
+                            w.on('closed', () => { try { clearTimeout(_vmTimer); } catch (e) {} });
+                        }
+                    } catch (e) { /* VM 检测纯诊断，失败静默 */ }
+                });
             } else if (!currentLoggedInUser && mainWindow && !mainWindow.isDestroyed() &&
                 mainWindow.__preloadHidden) {
                 // 登录窗未登录即关闭（X/退出）：销毁隐藏预建窗，保证
@@ -1010,7 +1119,9 @@ app.whenReady().then(async () => {
             const mid = typeof licenseManager.getMachineId === 'function' ? licenseManager.getMachineId() : '';
             if (!mid) return;
             if (typeof licenseManager.prewarmAdjudication === 'function') {
-                licenseManager.prewarmAdjudication(mid, username);
+                // ★ 双审 A9：保热来源标记——主进程槽位据此让路给渲染层按当前
+                //   输入名建立的年轻槽（15s 保护期内异键不驱逐）。
+                licenseManager.prewarmAdjudication(mid, username, 'keepwarm');
             }
             // vault 统一态同步保热（内部 30s 缓存/in-flight 单飞自去重）
             if (typeof licenseManager.prewarmGate === 'function') licenseManager.prewarmGate();
@@ -1073,6 +1184,7 @@ app.whenReady().then(async () => {
         _isLicensed = licenseResult.valid;
         // ★ 2026-10-02：缓存裁决供登录窗 preload sendSync（license:reg-gate-sync）复用
         global.__bnzcLicenseStatusCache = licenseResult;
+        global.__bnzcLicenseStatusCacheAt = Date.now();
         console.log('[License]', licenseResult.type, licenseResult.message);
     } catch (e) {
         // ★ P0修复：异常时拒绝启动（禁止降级为无限试用）
@@ -1089,6 +1201,7 @@ app.whenReady().then(async () => {
         // ★ 双审 P2 加固：异常裁决也写缓存（fail-closed），保证 reg-gate handler
         //   永远命中纯读缓存，不现场重调带写副作用的 validateLicense
         global.__bnzcLicenseStatusCache = licenseResult;
+        global.__bnzcLicenseStatusCacheAt = Date.now();
     }
 
     // ★ 版本绑定：存在正式 license 时强制校正 config.edition 与激活码版本一致
@@ -1146,6 +1259,7 @@ app.whenReady().then(async () => {
         // ★ 双审 P2 加固：服务端试用否决可能已把 licenseResult 重判为
         //   trial_limit_reached，同步刷新 reg-gate 缓存（登录窗尚未创建）
         global.__bnzcLicenseStatusCache = licenseResult;
+        global.__bnzcLicenseStatusCacheAt = Date.now();
     }
 
     fse.ensureDirSync(getDownloadsDirectory());
@@ -1235,6 +1349,7 @@ app.whenReady().then(async () => {
                             licenseResult = newLic;
                             // ★ 双审 P2 加固：续传装码成功后刷新 reg-gate 缓存
                             global.__bnzcLicenseStatusCache = licenseResult;
+                            global.__bnzcLicenseStatusCacheAt = Date.now();
                             try {
                                 const b = licenseManager.enforceEditionBinding();
                                 if (b && b.success && b.corrected) console.log('[License] 断点续传后版本校正:', b.edition);
@@ -1471,7 +1586,11 @@ ipcMain.handle('get-app-config', async () => {
             let formalCheckLic = null;
             try {
                 const mid = (activateManager && activateManager.getMachineId) ? activateManager.getMachineId() : '';
-                formalCheckLic = licenseManager.validateLicense({ localMachineId: mid });
+                // ★ A3（2026-10-02）：复用 license.dat/trial/gate 指纹缓存，避免登录
+                //   点击链（本 IPC + get-status + reg-gate）反复解密验签；文件变化
+                //   （装码/激活/删证/试用落锁）自动失效。授权权威判定仍以登录闸门
+                //   verifyLoginGate 的实时 validateLicense 为准，本处仅 UI/配置侧。
+                formalCheckLic = __bnzcGetLicenseStatus(mid);
                 formalValid = !!(formalCheckLic && formalCheckLic.valid);
                 if (formalValid) {
                     const lh = licenseManager.readLicense();
@@ -1740,11 +1859,12 @@ async function hashPassword(password) {
 ipcMain.handle('bnzc:get-pending-activation', () => {
     try {
         console.log('[Bnzc] get-pending-activation: _pendingActivation =', JSON.stringify(_pendingActivation));
-        try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] IPC get-pending-activation called, _pendingActivation=${JSON.stringify(_pendingActivation)}\n`); } catch(e) {}
+        __bnzcDbg('IPC get-pending-activation called, _pendingActivation=' + JSON.stringify(_pendingActivation));
         return { success: true, data: _pendingActivation };
     } catch (e) {
         console.error('[Bnzc] get-pending-activation 异常:', e);
-        try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] IPC get-pending-activation ERROR: ${e && e.message}\n`); } catch(e2) {}
+        global.__bnzcDebugOn = true;
+        __bnzcDbg('IPC get-pending-activation ERROR: ' + (e && e.message));
         return { success: false, error: String(e) };
     }
 });
@@ -1766,7 +1886,9 @@ ipcMain.handle('bnzc:clear-pending-activation', () => {
 ipcMain.handle('bnzc:auto-activate', async (event, { code, clinicName, user }) => {
     try {
         console.log('[Bnzc] auto-activate 调用:', { code, clinicName, user });
-        try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] IPC auto-activate called: code=${code}, clinic=${clinicName}, user=${user}\n`); } catch(e) {}
+        // 激活动作本身即诊断场景：开启写盘开关，保留完整激活轨迹
+        global.__bnzcDebugOn = true;
+        __bnzcDbg(`IPC auto-activate called: code=${code}, clinic=${clinicName}, user=${user}`);
         if (!code) return { success: false, error: '激活码为空' };
 
         // 1. 校验激活码格式
@@ -1784,7 +1906,7 @@ ipcMain.handle('bnzc:auto-activate', async (event, { code, clinicName, user }) =
         console.log('[Bnzc] 开始云端激活...');
         const result = await activateManager.activateOnline(code, machineId, user || '', clinicName || '');
         console.log('[Bnzc] 激活结果:', result);
-        try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] auto-activate RESULT: ${JSON.stringify(result)}\n`); } catch(e) {}
+        __bnzcDbg('auto-activate RESULT: ' + JSON.stringify(result));
 
         // 4. 多设备提示
         if (result && result.success && result.licenseInfo) {

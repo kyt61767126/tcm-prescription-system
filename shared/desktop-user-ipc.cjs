@@ -52,6 +52,25 @@ function createDesktopUserIpc(options) {
         productClass                                        // 'cloud' | 'offline'
     } = options;
 
+    // ★ 双审修复（2026-10-02 A2）：config.json 原子替换。
+    //   必须用原生 fs.rename（Windows: MoveFileExW + MOVEFILE_REPLACE_EXISTING，
+    //   同卷目录项单步交换）；不能用 fse.move({overwrite:true})——其实现是
+    //   remove(dest)→rename 两步，中间存在读者拿到 ENOENT 的窗口，退程时还会
+    //   把"目标缺失"永久留在盘上。临时件进程内唯一序号，杜绝同进程并发写共用
+    //   同一 tmp 互相截断；原子覆盖失败（杀软锁等）才退回 remove→rename 兜底。
+    let __configWriteSeq = 0;
+    async function atomicReplaceConfigJson(targetPath, config) {
+        const tmpPath = targetPath + '.tmp-rename-' + process.pid + '-' +
+            (++__configWriteSeq) + '-' + Date.now();
+        await fse.writeJson(tmpPath, config, { spaces: 2 });
+        try {
+            await fse.rename(tmpPath, targetPath);
+        } catch (e1) {
+            try { await fse.remove(targetPath); } catch (e2) { /* 目标本就缺失也可 */ }
+            await fse.rename(tmpPath, targetPath);
+        }
+    }
+
     // ---- 调用帧守卫 -----------------------------------------------------
     function isMainFrameCall(event) {
         // ★ 2026-09-26 修复：Electron 35 WebFrameMain 无 isMainFrame 成员
@@ -163,7 +182,7 @@ ipcMain.handle('user:change-password', async (event, { username, oldPassword, ne
                     target.updatedAt = new Date().toISOString();
                     // 签名保护：signConfig(config) 直接修改原对象，切勿将返回值赋值给属性（会造成循环引用）
                     licenseManager.signConfig(config);
-                    await fse.writeJson(configPath, config, { spaces: 2 });
+                    await atomicReplaceConfigJson(configPath, config);
                     // ★ 复审陈旧收口：proven 刷新备份（users 刚过闸门随签名 config
                     //   落盘），否则改密后备份冻结旧哈希，config 损坏会回填旧密码。
                     try { licenseManager.backupUserAccounts(config, { proven: true }); } catch (be) {
@@ -285,7 +304,12 @@ ipcMain.handle('user:rename-username', async (event, payload) => {
                     u.updatedAt = new Date().toISOString();
                     // 签名保护：signConfig(config) 直接修改原对象（勿赋值返回值，循环引用）
                     licenseManager.signConfig(config);
-                    await fse.writeJson(configPath, config, { spaces: 2 });
+                    // ★ 双审修复（2026-10-02 A2）：原子落盘（同目录临时件 + 原生
+                    //   rename 单步替换）。弱哈希升级已延后到 reveal 主窗之后
+                    //   fire-and-forget，主窗自检（reveal+800ms）与本写盘并发，
+                    //   且用户可在写盘途中退出进程——原子替换保证任何读者要么读到
+                    //   完整旧件、要么读到完整新件，退程也不留半截 config.json。
+                    await atomicReplaceConfigJson(configPath, config);
                     // ★ 复审陈旧收口：proven 刷新备份（含改名/登录窗密码同步）。
                     // ★ 2026-10-01 启动性能：asyncVault——config 重签写盘与 v2 备份
                     //   文件（机器绑定 HMAC）已在上方同步落盘，仅 gen/退役 vault 锚点
@@ -360,7 +384,7 @@ ipcMain.handle('user:add', async (event, { username, password, name }) => {
 
         // 签名保护：signConfig(config) 直接修改原对象，切勿将返回值赋值给属性（会造成循环引用）
         licenseManager.signConfig(config);
-        await fse.writeJson(configPath, config, { spaces: 2 });
+        await atomicReplaceConfigJson(configPath, config);
         // ★ 复审陈旧收口：新增用户后 proven 刷新备份。
         try { licenseManager.backupUserAccounts(config, { proven: true }); } catch (be) {
             console.warn('[User] 备份刷新失败（非致命）:', be.message);

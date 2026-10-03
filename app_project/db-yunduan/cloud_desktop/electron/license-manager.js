@@ -2480,6 +2480,7 @@ function isDebuggerAttached() {
 //        （避免在 VM 中合法用户被误判阻塞，由调用方决定如何处理）
 // ============================================================================
 let _vmCheckCache = null;
+let _vmCheckKicked = false;
 function isVirtualMachine() {
     if (_vmCheckCache !== null) return _vmCheckCache;
     try {
@@ -2560,6 +2561,24 @@ function isVirtualMachine() {
     }
 }
 
+// ★ 2026-10-02 启动性能（A1）：VM/沙箱检测内含 4 次 wmic execSync（Win10 老机/
+//   杀软环境实测 0.4~2s+，最坏 8s），而检测结果【没有任何安全消费者】——唯一作用
+//   是 console.warn 便于事后分析。旧码在 validateLicense 首调时同步执行，正压在
+//   登录窗创建之前。现从同步热路径摘除，由主进程在登录窗 show 后的空闲期调用
+//   kickDeferredVmCheck() 跑一次（幂等、单飞；结果仍写 _vmCheckCache，语义不变）。
+//   无调用方接线的端（如 APP WebView，本就没有 wmic）等于不检测，零功能影响。
+function kickDeferredVmCheck() {
+    if (_vmCheckCache !== null || _vmCheckKicked) return;
+    _vmCheckKicked = true;
+    setImmediate(() => {
+        try {
+            if (isVirtualMachine()) {
+                console.warn('[License] 检测到运行在 VM/沙箱环境中（仍允许运行，仅记录日志）');
+            }
+        } catch (e) { /* VM 检测永不影响主流程 */ }
+    });
+}
+
 // ============================================================================
 //  校验主逻辑
 // ============================================================================
@@ -2597,11 +2616,10 @@ function validateLicense(options) {
         };
     }
 
-    // ★ P3-B 新增：VM/沙箱检测（仅记录日志，不阻塞运行）
-    // 用途：便于将来分析破解行为，避免误判合法用户（如企业 IT 部署在 VM 中）
-    if (isVirtualMachine()) {
-        console.warn('[License] 检测到运行在 VM/沙箱环境中（仍允许运行，仅记录日志）');
-    }
+    // ★ 2026-10-02 A1 启动性能：VM/沙箱检测（4×wmic execSync，老机 0.4~2s+）已移出
+    //   validateLicense 同步热路径，改由主进程在登录窗 show 后空闲期
+    //   kickDeferredVmCheck() 执行。检测结果本就仅 console.warn、无任何安全消费者，
+    //   validateLicense 的行为与返回值零变化。
 
     // 1. 检查时间回拨（防止用户修改系统时间延长试用/授权）
     const lastRun = readLastRun();
@@ -3106,16 +3124,22 @@ async function __adjudicateFetch(machineId, username) {
 //   · 其余（无槽/异键/已凉）→ 发新裁决替换。
 // 配合 15s 保热间隔：每次定时调用时槽龄约 15s（≥10s）→ 换新，点登录时
 // 槽龄恒 ≤~15s（< TTL 20s），吊销复用窗口不大于旧单次预取的 20s TTL。
-function prewarmAdjudication(machineId, username) {
+function prewarmAdjudication(machineId, username, source) {
     try {
         if (!machineId) return;
+        const src = source === 'keepwarm' ? 'keepwarm' : 'renderer';
         const key = machineId + '|' + (username || '');
         const cur = __adjPrewarm;
         if (cur && cur.key === key) {
             if (!cur.settled) return;                                  // 在途单飞
             if (Date.now() - cur.at < ADJ_PREWARM_REFRESH_MS) return;  // 热槽保留
+        } else if (cur && !__bnzcMayEvictSlot(cur, src)) {
+            // ★ 双审修复（2026-10-02 A9）：15s 保热轮询（键常为 mid|'' 或
+            //   login-state 旧用户名）不得驱逐渲染层按当前输入名刚建的年轻槽，
+            //   否则慢操作场景点击时槽键不匹配、~3s 裁决等待原样回归。
+            return;
         }
-        __fireAdjPrewarmSlot(machineId, username, key);
+        __fireAdjPrewarmSlot(machineId, username, key, src);
     } catch (e) { /* 预热纯增益，任何异常静默 */ }
 }
 
@@ -3124,21 +3148,34 @@ function prewarmAdjudication(machineId, username) {
 //   （在途或已完成）一律直接复用——点击场景零等待优先；异键/无槽/超龄才发
 //   新裁决。只是"提前发请求"，裁决消费的安全条件（200/success/LICENSED/
 //   serverTime/墓碑）全部不变，不构成新攻击面。
-function ensureAdjudicationWarm(machineId, username) {
+function ensureAdjudicationWarm(machineId, username, source) {
     try {
         if (!machineId) return;
+        const src = source === 'keepwarm' ? 'keepwarm' : 'renderer';
         const key = machineId + '|' + (username || '');
         const cur = __adjPrewarm;
         if (cur && cur.key === key) {
             if (!cur.settled) return;
             if (Date.now() - cur.at < ADJ_PREWARM_TTL_MS) return;
+        } else if (cur && !__bnzcMayEvictSlot(cur, src)) {
+            return;
         }
-        __fireAdjPrewarmSlot(machineId, username, key);
+        __fireAdjPrewarmSlot(machineId, username, key, src);
     } catch (e) { /* 预热纯增益，任何异常静默 */ }
 }
 
-function __fireAdjPrewarmSlot(machineId, username, key) {
-    const slot = { key, at: Date.now(), promise: null, settled: false };
+// ★ 双审 A9：渲染层槽位保护期（≥15s 保热轮询周期）。期内保热轮询遇到异键
+//   只让路、不驱逐；渲染层自身改名不受限（永远允许新建，旧 promise 已吞错）。
+const ADJ_RENDERER_SLOT_PROTECT_MS = 15000;
+function __bnzcMayEvictSlot(cur, src) {
+    if (src !== 'keepwarm') return true;
+    if (cur && cur.source === 'renderer' &&
+        (Date.now() - cur.at) < ADJ_RENDERER_SLOT_PROTECT_MS) return false;
+    return true;
+}
+
+function __fireAdjPrewarmSlot(machineId, username, key, source) {
+    const slot = { key, at: Date.now(), promise: null, settled: false, source: source || 'renderer' };
     slot.promise = __adjudicateFetch(machineId, username)
         .catch(() => ({ netFail: true }))
         .then((r) => { slot.settled = true; return r; });
@@ -5564,6 +5601,7 @@ module.exports = {
     isDebuggerAttached,    // 调试器检测（供 main.js 调用）
     // ★ P3-B 新增：VM/沙箱检测
     isVirtualMachine,      // 虚拟机检测（供 main.js 调用，仅记录日志）
+    kickDeferredVmCheck,   // A1：登录窗 show 后空闲期再跑 VM 检测（避启动同步 wmic）
     // ★ 网络心跳相关
     startHeartbeat,        // 启动心跳检测
     // ★ 2026-09-23 登录后台闸门（IPC 委托：主进程裁决 LICENSED/trial/free/7天宽限）

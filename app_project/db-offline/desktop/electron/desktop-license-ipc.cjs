@@ -463,7 +463,9 @@ ipcMain.handle('license:prewarm-adjudication', (_event, username) => {
     try {
         if (typeof licenseManager.ensureAdjudicationWarm === 'function') {
             const mid = typeof licenseManager.getMachineId === 'function' ? licenseManager.getMachineId() : '';
-            if (mid) licenseManager.ensureAdjudicationWarm(mid, String(username == null ? '' : username).trim().slice(0, 64));
+            // ★ 双审 A9：显式 renderer 来源——槽位受 15s 保护，不被主进程
+            //   15s 保热轮询（键可能为空/旧用户名）异键驱逐。
+            if (mid) licenseManager.ensureAdjudicationWarm(mid, String(username == null ? '' : username).trim().slice(0, 64), 'renderer');
         }
         return { ok: true };
     } catch (e) {

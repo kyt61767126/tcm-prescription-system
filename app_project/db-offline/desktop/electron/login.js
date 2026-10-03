@@ -127,6 +127,12 @@
         return appConfigCache;
     }
 
+    // ★ A3（2026-10-02）：config 被本窗内的写操作（慢哈希升级/改名等）改变后令缓存
+    //   失效，下次 getAppConfig() 重新走 IPC 取权威值；不主动重取（避免无谓 IPC）。
+    function invalidateAppConfigCache() {
+        appConfigCache = null;
+    }
+
     function getUsersFromConfig(config) {
         if (Array.isArray(config.users) && config.users.length > 0) {
             // ★ 过滤历史遗留账号（doctor1/doctor2/张医生/李医生）
@@ -620,6 +626,44 @@
         } catch (_) { return false; }
     }
 
+    // ★ A9（2026-10-02 启动性能）：把在线裁决预热从"点击瞬间"提前到"用户即将
+    //   登录"的信号点——实测点击→进系统 2.7~3.9s 中约 88% 是 gate 在线裁决等待，
+    //   点击瞬间预热只能与 ~120ms 本地校验并行，几乎省不掉。新增触发点：
+    //   ① 单用户机 DCL 自动回填后立即预热（最常见的诊所单机）；
+    //   ② 用户名输入停顿 500ms（真人输完名还要输密码，天然 2~8s）；
+    //   ③ 密码框获得焦点（登录意图明确）。
+    //   主进程侧槽位保证安全/成本不变：同键在途单飞、TTL 20s、刷新线 10s、
+    //   异键/超龄 gate 自动补一次新鲜裁决；仅"提前发同一个请求"，不改变裁决条件。
+    let _adjPrewarmName = null;
+    let _adjPrewarmTimer = null;
+    function prewarmGateFor(rawName) {
+        try {
+            let name = String(rawName == null ? '' : rawName).trim();
+            if (!name) return;
+            const inp = $('loginUsername');
+            if (inp && inp.dataset && inp.dataset.realLogin && inp.dataset.displayName &&
+                name === inp.dataset.displayName) {
+                name = inp.dataset.realLogin;
+            }
+            if (_adjPrewarmName === name) return;
+            // ★ 双审 A9（隐私/防 429 自伤）：只对【本机 config 账户表中真实存在
+            //   的 username/phone】预热——试探名/错拼名登录必败于本地校验，预热
+            //   收益为零，却会把名字外发并对授权端点刷请求。
+            const hitsAccount = Array.isArray(_users) && _users.some(u => !!u && (
+                String(u.username || '') === name ||
+                (u.phone && String(u.phone) === name)));
+            if (!hitsAccount) return;
+            _adjPrewarmName = name;
+            const _lic = window.electronAPI && window.electronAPI.license;
+            if (_lic && typeof _lic.prewarmAdjudication === 'function') {
+                try {
+                    const p = _lic.prewarmAdjudication(name);
+                    if (p && typeof p.catch === 'function') p.catch(() => {});
+                } catch (e) {}
+            }
+        } catch (e) {}
+    }
+
     async function handleLogin() {
         clearError();
         hideGreenHint();
@@ -643,9 +687,18 @@
         //   TLS/Worker 连接仍已热。任何异常静默。
         try {
             const _lic = window.electronAPI && window.electronAPI.license;
-            if (_lic && typeof _lic.prewarmAdjudication === 'function') _lic.prewarmAdjudication(username);
+            if (_lic && typeof _lic.prewarmAdjudication === 'function') {
+                const p = _lic.prewarmAdjudication(username);
+                if (p && typeof p.catch === 'function') p.catch(() => {});
+            }
         } catch (e) {}
         try {
+            // ★ A7 配套防护：事件绑定已提前到 getAppConfig() 返回之前，极端快击
+            //   （自动化/粘贴后立即回车）可能在账户表就绪前进入本函数——先等齐，
+            //   避免把"配置尚未读到"误报成"本机尚未注册管理员账户"。
+            if (!_users || _users.length === 0) {
+                try { _users = getUsers(await getAppConfig()); } catch (e) {}
+            }
             // ★ 2026-09-22 出厂零账户（admin/admin 已取消）：无账户时不做密码校验。
             // ★ 2026-09-24 交互修正：不再自动弹注册窗打断——注册入口就近可见（顶部红条
             //   与提示正上方的【注册开通】按钮均绑定 openLocalRegister），用户主动点才弹；
@@ -731,22 +784,11 @@
             localStorage.setItem('currentUser', userDataStr);
             localStorage.setItem('isLoggedIn', 'true');
 
-            // ★ 2026-09-25 密码慢哈希透明升级：旧哈希账户（常量盐 SHA256/明文）
-            //   登录成功后，经登录窗密码同步通道把 config.json 密码升级为 PBKDF2；
-            //   失败不阻断本次登录（下次登录自动重试）。
-            if (route.weakHash && window.electronAPI && typeof window.electronAPI.renameUser === 'function') {
-                try {
-                    const _up = await window.electronAPI.renameUser({
-                        oldUsername: user.username,
-                        newPassword: password
-                    });
-                    if (_up && _up.success) {
-                        console.log('[login] config.json 密码已升级为 PBKDF2 慢哈希');
-                    } else {
-                        console.warn('[login] 慢哈希升级未成功:', _up && _up.error);
-                    }
-                } catch (upErr) { console.warn('[login] 慢哈希升级异常:', upErr); }
-            }
+            // ★ A2（2026-10-02 启动性能）：密码慢哈希透明升级（旧常量盐 SHA256/明文
+            //   账户登录时 renameUser 触发主进程 2×pbkdf2Sync，本机 ~240ms、慢机
+            //   0.5~1s）已移出登录点击关键路径，改到下方 loginSuccess reveal 进主窗
+            //   之后 fire-and-forget。本次身份验证早已通过，升级仅影响"下次登录走
+            //   PBKDF2 校验"，失败不阻断本次登录，下次登录自动重试。
 
             // ★ 2026-08-28 与云端网页版统一：记住登录时输入的用户名（原文回填）
             //   旧逻辑存 user.username（解析后的账户名）——手机号登录时回填的不是用户输入的值；
@@ -758,13 +800,14 @@
             localStorage.removeItem('auth:savedPassword');
 
             // ★ 同步用户列表到 localStorage（供 index.html 主界面读取）
+            // ★ A3（2026-10-02）：旧码此处绕过本地缓存再发一次 get-app-config IPC，
+            //   主进程 handler 会重跑 validateLicense+readLicense。本函数上方
+            //   （版本匹配校验）已调过 getAppConfig() 且结果在内存缓存，直接复用。
             try {
-                if (window.electronAPI && window.electronAPI.getAppConfig) {
-                    const cfgResult = await window.electronAPI.getAppConfig();
-                    if (cfgResult && cfgResult.success && cfgResult.config && Array.isArray(cfgResult.config.users)) {
-                        const usersToSave = cfgResult.config.users.map(normalizeUser);
-                        localStorage.setItem(KEY_USERS, simpleEncrypt(JSON.stringify(usersToSave)));
-                    }
+                const cachedCfg = await getAppConfig();
+                if (cachedCfg && Array.isArray(cachedCfg.users)) {
+                    const usersToSave = cachedCfg.users.map(normalizeUser);
+                    localStorage.setItem(KEY_USERS, simpleEncrypt(JSON.stringify(usersToSave)));
                 }
             } catch(e) { console.warn('同步用户列表失败:', e); }
 
@@ -775,6 +818,25 @@
                 // ★ 绿色成功反馈：登录成功提示
                 showGreenHint(`✓ 登录成功！欢迎 ${user.name || user.username}，正在进入系统...${user._editionNote || ''}`);
                 await window.electronAPI.loginSuccess(userData);
+            }
+
+            // ★ A2：慢哈希透明升级延后到 reveal 进主窗之后（fire-and-forget，不 await）。
+            //   renameUser 内含主进程 2×pbkdf2Sync（旧哈希校验+新哈希写入），放在登录
+            //   关键路径上会冻住主进程 ~240ms（慢机 0.5~1s）；此刻主窗已揭、用户已进
+            //   操作页，后台静默升级；成功后令本地 config 缓存失效（下次取权威值）。
+            if (route && route.weakHash && window.electronAPI &&
+                typeof window.electronAPI.renameUser === 'function') {
+                window.electronAPI.renameUser({
+                    oldUsername: user.username,
+                    newPassword: password
+                }).then((_up) => {
+                    if (_up && _up.success) {
+                        console.log('[login] config.json 密码已升级为 PBKDF2 慢哈希');
+                        try { invalidateAppConfigCache(); } catch (e) {}
+                    } else {
+                        console.warn('[login] 慢哈希升级未成功:', _up && _up.error);
+                    }
+                }).catch((upErr) => { console.warn('[login] 慢哈希升级异常:', upErr); });
             }
         } catch (e) {
             console.error('[login] handleLogin 异常:', e);
@@ -820,16 +882,10 @@
     }
 
     document.addEventListener('DOMContentLoaded', async () => {
-        const config = await getAppConfig();
-        // ★ 主动清理历史遗留用户（在渲染登录界面之前）
+        // ★ A7（2026-10-02 启动性能）：事件绑定/历史清理不依赖 config，先于首个
+        //   await 完成——旧码把 btnOk 绑定放在 await getAppConfig() 之后，IPC 慢时
+        //   登录窗已可见但点击/回车无效。
         cleanLegacyUsers();
-        loadClinicName(config);
-        _configForTag = config;
-        applyEditionTag(config); // 登录前 _loggedIn=false 保持「登录后显示版本」待登录提示
-        loadBuildMeta(); // ★ 铁闸4（离线版全局推广）：启动画面自证真伪三元组（asar内build-meta.json）
-        initLoginInput(config);
-        initLoginPermissions();
-        // P3-3: 安全升级（2026-08-08）：移除记住密码功能，规则5强制每次手动输密码
         localStorage.removeItem('auth:savedPassword');
         // ★ 2026-09-22 密码框永远空白（出厂 admin 已取消，不再预填）
         $('loginPassword').value = '';
@@ -842,7 +898,35 @@
         $('loginUsername').addEventListener('keydown', (e) => {
             if (e.key === 'Enter') { e.preventDefault(); $('loginPassword').focus(); }
         });
-        // ★ 优化：密码框输入足够长时自动提示可登录（绿色反馈已显示，保留手动触发以保证安全）
+        // ★ A9：用户名停顿 500ms 即推测预热裁决；密码框聚焦再补一发（幂等单飞）
+        $('loginUsername').addEventListener('input', () => {
+            clearTimeout(_adjPrewarmTimer);
+            const v = $('loginUsername').value;
+            _adjPrewarmTimer = setTimeout(() => prewarmGateFor(v), 500);
+        });
+        $('loginPassword').addEventListener('focus', () => {
+            prewarmGateFor($('loginUsername').value);
+        });
+
+        // ★ A7：get-app-config 与 bnzc 待激活检查两个 IPC 无依赖，并行发起
+        //   （旧码严格串行：先 await config 完才发 pending 查询）。
+        const configPromise = getAppConfig();
+        const pendingPromise = (window.electronAPI && window.electronAPI.bnzcGetPendingActivation)
+            ? window.electronAPI.bnzcGetPendingActivation().catch(() => null)
+            : Promise.resolve(null);
+
+        const config = await configPromise;
+        loadClinicName(config);
+        _configForTag = config;
+        applyEditionTag(config); // 登录前 _loggedIn=false 保持「登录后显示版本」待登录提示
+        loadBuildMeta(); // ★ 铁闸4（离线版全局推广）：启动画面自证真伪三元组（asar内build-meta.json）
+        initLoginInput(config);
+        initLoginPermissions();
+
+        // ★ A9：登录窗就绪时用户名框通常已回填（单用户机自动回填 / 记住的上次
+        //   登录名，诊所电脑几乎都是这两种）——此时即预热裁决，真人 3~8s 输密码
+        //   的时间正好盖住网络往返；未回填则 no-op，后续 input/focus 信号兜底。
+        try { prewarmGateFor($('loginUsername').value); } catch (e) {}
 
         // 显示试用期状态
         showTrialStatus();
@@ -850,9 +934,17 @@
         // ★ 2026-08-19 激活入口收敛：按激活状态显示/隐藏登录框极简提示
         updateLoginActivateHint();
 
-        // ★ bnzc:// 一键激活：检查是否有待激活数据
-        await checkBnzcPendingActivation(config);
-
+        // ★ bnzc:// 一键激活：消费并行取回的待激活数据（成功且有 code 才走自动激活）
+        try {
+            const pendingResult = await pendingPromise;
+            if (pendingResult && pendingResult.success && pendingResult.data && pendingResult.data.code) {
+                console.log('[Bnzc] 检测到待激活数据:', pendingResult.data.code);
+                window.__bnzcHasPending = true;
+                await performAutoActivation(pendingResult.data, config);
+            }
+        } catch (e) {
+            console.warn('[Bnzc] 检查待激活数据失败:', e);
+        }
         // ★ bnzc:// 运行时监听（macOS open-url 或软件运行时收到链接）
         if (window.electronAPI && window.electronAPI.onBnzcPendingActivation) {
             window.electronAPI.onBnzcPendingActivation(async (data) => {
@@ -878,19 +970,8 @@
     });
 
     // ===== bnzc:// 一键激活 =====
-    async function checkBnzcPendingActivation(config) {
-        try {
-            if (!window.electronAPI || !window.electronAPI.bnzcGetPendingActivation) return;
-            const result = await window.electronAPI.bnzcGetPendingActivation();
-            if (result && result.success && result.data && result.data.code) {
-                console.log('[Bnzc] 检测到待激活数据:', result.data.code);
-                window.__bnzcHasPending = true;
-                await performAutoActivation(result.data, config);
-            }
-        } catch (e) {
-            console.warn('[Bnzc] 检查待激活数据失败:', e);
-        }
-    }
+    // ★ A7 双审收口：原 checkBnzcPendingActivation() 已内联到 DCL（与 get-app-config
+    //   并行的 pendingPromise 消费段），本函数无任何引用方，删除以免后续误改出双调用。
 
     async function performAutoActivation(data, config) {
         if (!data || !data.code) return;

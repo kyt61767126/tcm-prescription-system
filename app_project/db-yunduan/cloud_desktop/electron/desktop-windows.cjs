@@ -343,7 +343,10 @@ function createDesktopWindows({ app, BrowserWindow, shell, updateManager, sendSt
         });
 
         win.on('closed', () => {
-            setMainWindow(null);
+            // ★ 双审修复（2026-10-02 A6）：身份守卫——预建隐藏窗 reveal 失败回退时，
+            //   旧窗 destroy 与新窗 setMainWindow 交错，旧窗 closed 事件晚到不得把
+            //   新窗引用置空；仅当死去的仍是当前主窗时才清空。
+            if (getMainWindow() === win) setMainWindow(null);
         });
     }
 
