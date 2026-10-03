@@ -1,11 +1,16 @@
 {
-  "frozenAt": "2026-10-01T01:02:16.398Z",
+  "frozenAt": "2026-10-03T01:14:41.959Z",
   "pair": "public/index.html <-> site-admin/index.html",
   "mode": "normalized",
   "note": "Tier B→C 迁移（同体→分叉）与 Tier A/C 新增必须人工确认后重冻结；Tier C 收敛（分叉对齐）属改进，重冻结即可",
   "tierA_onlyA": [
+    "__applyFirstFrame",
+    "__bail",
+    "__consumeConfigJson",
     "__finalEnforce__",
+    "__finish",
     "__medicinesFirewall",
+    "__parseConfigXhr",
     "__readFileAs",
     "__renderHistoryPage",
     "__replaceTopClearWithStats",
