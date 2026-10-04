@@ -735,6 +735,12 @@
                 return;
             }
             let user = route.user;
+            // ★ 2026-10-03 批次B·B5④：登录响应回带的首屏处方在任何 await 之前捕获
+            //   （服务端 D1 快路径，与 GET /prescriptions 同规则；null/非数组=服务端
+            //   未带或离线缓存登录，主窗自然回退 GET）。登录成功后随 loginSuccess
+            //   IPC 第二参透传主进程注入预建主窗，防串号责任在主进程（只注本次会话
+            //   新建隐藏窗）+ 渲染层一次性消费清空。
+            const _prefetchedRx = Array.isArray(route.prescriptions) ? route.prescriptions : null;
             if (route.source === 'cloud') {
                 const _cloudAuth = route.user; // 含云端返回的 token
                 // 用云端用户填充本地匹配结果（后续版本匹配/password字段判断走云端）
@@ -765,6 +771,31 @@
                 return;
             }
 
+            // ★ 2026-10-03 批次B·B5①②：云端救援登录（/users?login=true）惰性单飞。
+            //   旧实现在本段有两个串行触发点——clinic_admin 缺 clinicEdition 时解析
+            //   权威版本、以及本地分支用户缺 token 时补拉——两者是同端点同凭据的同一
+            //   个请求，最坏打两次冷 RTT。现合并为至多一次：两处都 await 同一个惰性
+            //   Promise，结果共享；两处都不需要时零请求（云端路由成功且 token/edition
+            //   齐全即常态）。失败语义与旧实现一致：版本解析失败保守按机构版、token
+            //   补拉失败仅告警不阻断登录。
+            let __rescuePromise = null;
+            const __ensureCloudRescue = () => {
+                if (__rescuePromise) return __rescuePromise;
+                __rescuePromise = (async () => {
+                    try {
+                        if (typeof window.AuthCore === 'object' && typeof AuthCore.login === 'function') {
+                            // adapter 显式传 cloudAdapter（与旧 token 补拉点一致；
+                            // AuthCore.login 默认适配器本就是它）
+                            return await AuthCore.login(username, password, { adapter: AuthCore.cloudAdapter });
+                        }
+                    } catch (e) {
+                        return { success: false, error: String(e && e.message || e) };
+                    }
+                    return null;
+                })();
+                return __rescuePromise;
+            };
+
             // ★ 严格版本匹配（安全隔离）：账户版本必须与电脑激活版本一致
             // ★ 2026-08-23 修复：判定账户版本改以服务端权威 clinicEdition 为准，
             //   不再按 role 判定。根因：云端标准版诊所首个管理员 role='clinic_admin'，
@@ -785,7 +816,8 @@
                     // 轻量云端登录解析权威版本，避免 clinic_admin 被误判为机构版账户（标准版误报的关键）。
                     let resolvedEdition = '';
                     try {
-                        const ceRes = await AuthCore.login(username, password);
+                        // ★ B5①②：与下方 token 补拉共享同一次救援登录（惰性单飞）
+                        const ceRes = await __ensureCloudRescue();
                         if (ceRes && ceRes.success && ceRes.user) {
                             resolvedEdition = ceRes.user.clinicEdition || ceRes.user.edition || '';
                         }
@@ -826,7 +858,9 @@
             try {
                 let hasToken = !!(user.token || (user.cloud_token));
                 if (!hasToken && typeof window.AuthCore === 'object' && typeof AuthCore.login === 'function') {
-                    const rescue = await AuthCore.login(username, password, { adapter: AuthCore.cloudAdapter });
+                    // ★ B5①②：复用上面版本解析可能已发起的同一次救援登录（同端点
+                    //   同凭据），至多一次冷 RTT；版本段未触发则此处惰性首发
+                    const rescue = await __ensureCloudRescue();
                     if (rescue && rescue.success && rescue.user && rescue.user.token) {
                         // 用云端返回的 token 补齐，保证后续云端 API 请求(Bearer)可用
                         user.token = rescue.user.token;
@@ -903,7 +937,8 @@
                 applyEditionTag(_configForTag);
                 // ★ 绿色成功反馈：登录成功提示
                 showGreenHint(`✓ 登录成功！欢迎 ${user.name || user.username}，正在进入系统...${user._editionNote || ''}`);
-                await window.electronAPI.loginSuccess(userData);
+                // ★ B5④：预取首屏处方随 loginSuccess 透传（null 时主窗走原 GET 路径）
+                await window.electronAPI.loginSuccess(userData, _prefetchedRx);
             }
         } catch (e) {
             console.error('[login] handleLogin 异常:', e);

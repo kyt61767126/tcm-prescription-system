@@ -339,6 +339,14 @@ function showActivateWindow(parentWindow) {
                 // ★ 优化：未激活时关闭激活窗口，给parent窗口一个提示但不再强弹窗口
                 console.log('[Activate] 用户关闭激活窗口（未激活），不再强弹出期提示（避免死循环）');
                 // 如果有父窗口，把父窗口前置，提示用户稍后可从登录页重新打开激活窗口
+                // ★ 2026-10-03 批次B·双审低-1：父窗若是登录前预建的隐藏主窗
+                //   （desktop-license-ipc 的 license:show-* 以 getMainWindow() 为 parent，
+                //   B1 后未登录也存在隐藏主窗），绝不允许 show()——那会绕过登录闸门露出
+                //   主窗界面。销毁隐藏壳后按"无可见父窗"路径提示退出，避免零可见窗残留。
+                if (parentWindow && !parentWindow.isDestroyed() && parentWindow.__preloadHidden) {
+                    try { parentWindow.destroy(); } catch (e2) { /* 已毁 */ }
+                    parentWindow = null;
+                }
                 if (parentWindow && !parentWindow.isDestroyed()) {
                     parentWindow.show();
                     parentWindow.focus();

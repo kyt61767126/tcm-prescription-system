@@ -56,8 +56,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     encryptString: (plaintext) => ipcRenderer.invoke('auth:encryptString', plaintext),
     decryptString: (encryptedBase64) => ipcRenderer.invoke('auth:decryptString', encryptedBase64),
 
-    // 登录态
-    loginSuccess: (userData) => ipcRenderer.invoke('login-success', userData),
+    // 登录态（第二参=B5④ 登录响应预取的首屏处方，由主进程注入预建主窗，可空）
+    loginSuccess: (userData, prefetchedPrescriptions) =>
+        ipcRenderer.invoke('login-success', userData, prefetchedPrescriptions),
     getCurrentUser: () => ipcRenderer.invoke('get-current-user'),
 
     // 应用配置（取代旧的 get-index-html-content 正则解析）
@@ -198,39 +199,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
           role: r.user.role || 'clinic_admin', token: TOKEN, clinicId: r.user.clinicId || '',
           clinicName: r.user.clinicName || '', cloudEnabled: true, loginTime: Date.now()
         });
-
-// ===== 🔧 历史处方修复: token全链路注入 4 localStorage + 2 sessionStorage + window.__FORCE_CLOUD_TOKEN__ =====
-(async function bootstrapForceCloudToken() {
-  try {
-    if (typeof electronAPI !== 'undefined' && electronAPI.getForceToken) {
-      const r = await electronAPI.getForceToken();
-      if (r && r.token && r.user) {
-        const TOKEN = r.token;
-        try { window.__FORCE_CLOUD_TOKEN__ = TOKEN; } catch {}
-        try { globalThis.__FORCE_CLOUD_TOKEN__ = TOKEN; } catch {}
-        const userStr = JSON.stringify({
-          username: r.user.username || 'wgj', displayName: r.user.displayName || r.user.name || '',
-          role: r.user.role || 'clinic_admin', token: TOKEN, clinicId: r.user.clinicId || '',
-          clinicName: r.user.clinicName || '', cloudEnabled: true, loginTime: Date.now()
-        });
-        try {
-          const LS = (typeof window !== 'undefined') ? window.localStorage : localStorage;
-          LS.setItem('auth:currentUser', userStr);
-          LS.setItem('currentUser', userStr);
-          LS.setItem('cloud_currentUser', userStr);
-          LS.setItem('authToken', TOKEN);
-          LS.setItem('wgj_token', TOKEN);
-          LS.setItem('isLoggedIn','1');
-          LS.setItem('cloud_isLoggedIn','1');
-          const SS = (typeof window !== 'undefined') ? window.sessionStorage : sessionStorage;
-          SS.setItem('auth:currentUser', userStr);
-          SS.setItem('currentUser', userStr);
-          console.log('[preload🔧] ✅ Token全链路注入 len='+TOKEN.length);
-        } catch(e) { console.warn('[preload] localStorage fail:',e); }
-      }
-    }
-  } catch(e) { console.error('[preload bootstrapForceCloudToken] err:',e); }
-})();
 
         try {
           const LS = (typeof window !== 'undefined') ? window.localStorage : localStorage;

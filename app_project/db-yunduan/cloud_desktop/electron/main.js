@@ -26,6 +26,49 @@ const activateManager = require('./activate');
 const selfCheck = require('./self-check');  // ★ P0-③ exe 签名/完整性自校验（非阻塞，仅记录）
 const logger = require('./electron-logger.cjs');  // ★ P0-[6.3] 主进程滚动日志（脱敏 + 2MB 轮转，.cjs 确保 CJS 解析）
 
+// ★ 2026-10-03 全端启动/登录架构优化 批次B·B3：进程启动最早阶段（app ready 之前）
+//   即做两件预热，把成本移出 whenReady→登录窗显示 与 点击登录路径：
+//   ① getMachineId() 首次调用（reg query/指纹采集，慢机百毫秒级）提前完成、缓存变热；
+//   ② prewarmAdjudication 预热到 tcm-prescription-system.pages.dev 的冷 TLS + Worker
+//      冷路径（真机 2.1~3.8s，热连接仅 0.55s）——主进程全局 fetch(undici) 按源复用
+//      连接，未激活机的断点续传 checkAdminStatus（/api/license/admin-status，同源）
+//      同样吃到热连接。云端主进程不消费裁决槽（verify-gate 仅离线注册），本预热对
+//      云端纯为连接+机器码预热，裁决安全条件零改动、不构成新攻击面。
+//   用户名来源（均为只读，纯预热用途；伪造/猜错只影响槽键命中）：
+//   ① config.json 明文 users（恰 1 个用户即采用）② login-state.json（safeStorage 解密）
+//   ③ 都不行 → 空名（仅热 TLS/Worker）。与离线 main.js 同款（批次A 已双审）。
+setImmediate(() => {
+    try {
+        if (typeof licenseManager.prewarmAdjudication !== 'function') return;
+        // ★ 全部同步完成：setImmediate 回调内一旦 await 让出，恢复点会被 Electron
+        //   启动期 native 阻塞推迟（离线实测约 1s），冷连接每 1ms 都关键。
+        let _username = '';
+        try {
+            const _cfg = JSON.parse(fsSync.readFileSync(getWritableConfigPath(), 'utf8'));
+            const _names = (Array.isArray(_cfg && _cfg.users) ? _cfg.users : [])
+                .map(u => (u && u.username) ? String(u.username) : '').filter(Boolean);
+            if (_names.length === 1) _username = _names[0];
+        } catch (e) { /* 无 config（首启 whenReady 才复制）：走 login-state 兜底 */ }
+        const _mid = typeof licenseManager.getMachineId === 'function' ? licenseManager.getMachineId() : '';
+        if (_mid && _username) { licenseManager.prewarmAdjudication(_mid, _username, 'keepwarm'); return; }
+        if (!_mid) return;
+        // 多用户/无 config：异步走加密 login-state（慢 ~0.9s，仅少数场景）
+        (async () => {
+            try {
+                const _raw = await fs.readFile(path.join(app.getPath('userData'), 'login-state.json'), 'utf8');
+                let _txt = _raw;
+                if (_raw.startsWith('ENC:')) {
+                    if (!safeStorage.isEncryptionAvailable()) throw new Error('safeStorage-not-ready');
+                    _txt = safeStorage.decryptString(Buffer.from(_raw.slice(4), 'base64'));
+                }
+                const _j = JSON.parse(_txt);
+                const _u = (_j && _j.user && _j.user.username) ? String(_j.user.username) : '';
+                licenseManager.prewarmAdjudication(_mid, _u, 'keepwarm');
+            } catch (e) { licenseManager.prewarmAdjudication(_mid, '', 'keepwarm'); }
+        })();
+    } catch (e) { /* 预热纯增益 */ }
+});
+
 // ★ 2026-09-13 B2-1 文件域收口：媒体保存/查找/重命名、备份读写/一键恢复、用户数据
 //   落盘、路径白名单等文件域逻辑全部在 desktop-fs-ipc.cjs（shared/ 唯一权威源 →
 //   sync-all Group 14 分发 → copy-consistency 哈希门），39 项函数/IPC（19 handler + 20 工具）双端等体抽取。
@@ -281,7 +324,8 @@ app.on('second-instance', (event, commandLine) => {
             break;
         }
     }
-    if (mainWindow && !mainWindow.isDestroyed()) {
+    // ★ 双审低-2：预建隐藏主窗（登录未完成）绝不 restore/focus（对齐离线 1.0.265）
+    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.__preloadHidden) {
         if (mainWindow.isMinimized()) mainWindow.restore();
         mainWindow.focus();
     }
@@ -307,7 +351,10 @@ let _pendingActivation = null;
 function notifyPendingActivation(parsed) {
     try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] notifyPendingActivation: code=${parsed.code}, mainWindow=${!!mainWindow && !mainWindow.isDestroyed()}, loginWindow=${!!loginWindow && !loginWindow.isDestroyed()}\n`); } catch(e) {}
     // 通知主窗口（已登录状态）
-    if (mainWindow && !mainWindow.isDestroyed()) {
+    // ★ 双审低-3：登录前预建的隐藏主窗不参与消费——否则 bnzc:// 冷启动时隐藏窗与
+    //   登录窗各弹一个"是否现在激活"原生确认框（隐藏窗的确认框无可视父窗）。未登录
+    //   一律由登录窗单点处理。
+    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.__preloadHidden) {
         if (mainWindow.webContents) {
             mainWindow.webContents.send('bnzc:pending-activation', parsed);
             console.log('[Bnzc] 已通知主窗口 pending-activation');
@@ -454,7 +501,7 @@ const updateManager = require('./update-manager.cjs').createDesktopUpdateManager
 //   抽至 desktop-windows.cjs（shared 唯一权威源 → sync-all Group 15 分发 → copy-consistency
 //   哈希门）。状态经访问器注入：mainWindow/loginWindow/currentLoggedInUser 仍是本文件的
 //   模块级变量（体外引用零改动），模块内经 get/set 读写保持同步。
-const { createMainWindow, createLoginWindow, focusWindow } =
+const { createMainWindow, createLoginWindow, focusWindow, revealMainWindow } =
     require('./desktop-windows.cjs').createDesktopWindows({
         app, BrowserWindow, shell,
         updateManager,
@@ -463,7 +510,31 @@ const { createMainWindow, createLoginWindow, focusWindow } =
         getMainWindow: () => mainWindow,
         setMainWindow: (w) => { mainWindow = w; },
         getLoginWindow: () => loginWindow,
-        setLoginWindow: (w) => { loginWindow = w; },
+        // ★ 2026-10-03 批次B·B1（移植离线 1.0.265 已双审范式，云端无 vault/VM 门闩
+        //   故只保留预建/销毁两段）：登录窗首帧 show 后即刻后台预建隐藏主窗
+        //   （index.html parse+云连接预热移出点击路径）；登录窗未登录即关闭（X/退出）
+        //   时销毁隐藏窗，保证 window-all-closed 正常触发、进程不残留。登录成功
+        //   关闭时 currentLoggedInUser 已落定，绝不在此销毁（login-success reveal 复用）。
+        setLoginWindow: (w) => {
+            loginWindow = w;
+            // createLoginWindow 内部有 existing 防重：每次 setLoginWindow(非空)
+            // 都对应一个新登录窗（含崩溃重建），故每次都安排一次预建判定。
+            if (w) {
+                w.once('show', () => {
+                    try {
+                        if ((!mainWindow || mainWindow.isDestroyed()) &&
+                            !currentLoggedInUser) {
+                            createMainWindow({ preloadHidden: true });
+                        }
+                    } catch (e) { /* 预建纯增益，失败走 login-success 常规创建 */ }
+                });
+            } else if (!currentLoggedInUser && mainWindow && !mainWindow.isDestroyed() &&
+                mainWindow.__preloadHidden) {
+                // 登录窗未登录即关闭（X/退出）：销毁隐藏预建窗，保证
+                // window-all-closed 正常触发、进程不残留。
+                try { mainWindow.destroy(); } catch (e) {}
+            }
+        },
     });
 
 // ★ 2026-09-14 P3-A 崩溃韧性补强：render-process-gone / child-process-gone 兜底
@@ -734,21 +805,39 @@ app.whenReady().then(async () => {
     });
 
     // ★ 云端版流程：未激活时先弹激活窗口，已激活直接进登录
-    // ★ 2026-09-03 (架构统一 P1) 启动断点续传补齐（离线桌面在 main.js L1453-L1515 已有，云端桌面缺，
-    //   原 admin-status 查激活无 machineId 兜底 → 漏扫）— 统一: 创建登录窗口前 10s 超时自检
+    // ★ 2026-09-03 (架构统一 P1) 启动断点续传补齐——创建登录窗口前 10s 超时自检
+    // ★ 2026-10-03 批次B·B4：旧实现在 createLoginWindow 之前 await checkAdminStatus，
+    //   冷 Worker/弱网下最坏 10s 全程无窗。现改为【先建登录窗立即可见 → 断点续传
+    //   后台自检】，两条收口路径（10s 超时 / 自检完成，含 activated 自动装号分支）
+    //   与旧代码逐行一致，仅执行时机后移；showActivateWindow 依赖 loginWindow，
+    //   两路径均在登录窗已建之后经 __showActivateAfterLogin 延迟 500ms 唤起。
     if (!_isLicensed) {
-        console.log('[Cloud] 未激活，启动断点续传 10s 自检 + 再显示登录+激活窗口');
+        console.log('[Cloud] 未激活：先显示登录窗，后台执行断点续传 10s 自检（B4）');
+        createLoginWindow();
         let _resumeDone = false;
+        const __showActivateAfterLogin = () => {
+            setTimeout(() => {
+                try {
+                    // ★ 双审中-1 修复：用户已登录成功（saveLoginState 同步落定
+                    //   currentLoggedInUser）就绝不再弹置顶激活窗——否则会盖住已登录
+                    //   主窗，且关闭激活窗的未激活兜底会 app.exit(0) 杀掉合法云端会话
+                    //   （云端允许无本地激活直接登录，见 login.js 自愈路径）。
+                    if (loginWindow && !loginWindow.isDestroyed() && !currentLoggedInUser) {
+                        activateManager.showActivateWindow(loginWindow);
+                    }
+                } catch (e) { /* 登录窗已关则不弹 */ }
+            }, 500);
+        };
         const _resumeTimeout = setTimeout(() => {
             if (_resumeDone) return;
-            console.log('[Cloud] 启动断点续传 10s 超时，直接进入登录流程（渲染进程再兜底）');
+            console.log('[Cloud] 启动断点续传 10s 超时，登录窗已显示，渲染进程再兜底 + 弹激活窗');
             _resumeDone = true;
-            createLoginWindow();
-            setTimeout(() => {
-                if (loginWindow && !loginWindow.isDestroyed()) activateManager.showActivateWindow(loginWindow);
-            }, 500);
+            __showActivateAfterLogin();
         }, 10000);
-        try {
+        // ★ 后台自检：不 await、不阻塞 whenReady 与登录窗交互（B3 的 t0 预热已让
+        //   机器码缓存与 pages.dev 冷连接变热，正常情况下自检在用户看清登录窗前完成）
+        (async () => {
+          try {
             const savedReq = await activateManager.loadAdminRequestId();
             const localMachineId = activateManager.getMachineId();
             if (savedReq && savedReq.requestId) {
@@ -799,15 +888,14 @@ app.whenReady().then(async () => {
                     }
                 }
             }
-        } catch (e) { console.warn('[Cloud] 启动断点续传全局异常（不阻断）:', e.message); }
-        if (!_resumeDone) {
-            clearTimeout(_resumeTimeout);
-            _resumeDone = true;
-            createLoginWindow();
-            setTimeout(() => {
-                if (loginWindow && !loginWindow.isDestroyed()) activateManager.showActivateWindow(loginWindow);
-            }, 500);
-        }
+          } catch (e) { console.warn('[Cloud] 启动断点续传全局异常（不阻断）:', e.message); }
+          if (!_resumeDone) {
+              clearTimeout(_resumeTimeout);
+              _resumeDone = true;
+              // 与旧实现一致：自检完成（无论是否装号）都在登录窗之上唤起激活窗
+              __showActivateAfterLogin();
+          }
+        })();
     } else {
         createLoginWindow();
     }
@@ -820,7 +908,8 @@ app.whenReady().then(async () => {
             if (loginWindow && !loginWindow.isDestroyed()) {
                 focusWindow(loginWindow);
             } else if (mainWindow && !mainWindow.isDestroyed()) {
-                focusWindow(mainWindow);
+                // ★ 双审低-2：隐藏预建窗不 focus（对齐离线 main.js L1398）
+                if (!mainWindow.__preloadHidden) focusWindow(mainWindow);
             }
         }
     });
@@ -904,15 +993,93 @@ ipcMain.handle('config:get-force-token', async () => {
     return { success: false };
 });
 
-// 登录成功：保存用户、关闭登录窗口、打开主窗口
-ipcMain.handle('login-success', async (event, userData) => {
+// 登录成功：保存用户、关闭登录窗口、揭开预建主窗或创建主窗口
+// ★ 2026-10-03 批次B：
+//   B1——复用登录窗显示期间后台预建的隐藏主窗（revealMainWindow，15s 超时 fail-closed，
+//   失败销毁隐藏壳走常规 createMainWindow 回退；与离线 1.0.265 已双审范式同源）。
+//   B5④——login.js 把登录响应回带的首屏处方（route.prescriptions，服务端 D1 快路径，
+//   与 GET /prescriptions 同规则）经本 IPC 第二参透传，在窗仍隐藏、reveal 重跑
+//   checkLoginStatus→loadData 之前注入 window.__loginPrefetchedPrescriptions（主窗
+//   渲染层本就有一次性消费+清空逻辑），跳过主屏 ~1s 的 /prescriptions 往返。
+//   预取数据绝不落盘（不进 login-state.json）；仅注入本次登录会话新建的隐藏窗，
+//   X 关窗销毁隐藏窗、渲染层消费后置 null，双保险防跨账号串号。
+ipcMain.handle('login-success', async (event, userData, prefetchedPrescriptions) => {
     try {
         await saveLoginState(true, userData);
-        if (loginWindow && !loginWindow.isDestroyed()) {
-            loginWindow.close();
-        }
-        if (!mainWindow || mainWindow.isDestroyed()) {
-            createMainWindow();
+        // ★ 双审中-1 修复：登录已成功就关掉未激活断点续传可能已弹出的激活窗
+        //   （独立置顶窗，不关会盖住主窗；其渲染端 5s 轮询若在登录后装号还会触发
+        //   自动重启）。此时其 parent=登录窗仍存活可见，closed 兜底仅前置登录窗，
+        //   不会走无父窗 app.exit 分支；云端合法允许无本地激活登录。
+        try { activateManager.closeActivateWindow(); } catch (e) { /* 无激活窗 */ }
+        if (mainWindow && !mainWindow.isDestroyed() && mainWindow.__preloadHidden) {
+            // —— B5④ 预取处方注入（仅预建隐藏窗路径可靠；回退新建窗的页面 init
+            //    checkLoginStatus 与 loadData 竞态太早，跳过，消费端自然回退 GET）——
+            if (Array.isArray(prefetchedPrescriptions)) {
+                try {
+                    const _pw = mainWindow;
+                    if (!_pw.__mainDomReady) {
+                        // 等 dom-ready，但必须可退出：渲染进程崩溃（crash-guard 会
+                        // 另建新窗，本 _pw 已死）/closed/10s 兜底任一发生即放行，
+                        // 下方 isDestroyed 闸会跳过注入（回退 GET），绝不挂死 login-success
+                        await new Promise((resolve) => {
+                            const __done = () => {
+                                try { clearTimeout(__t); } catch (e2) {}
+                                resolve();
+                            };
+                            const __t = setTimeout(__done, 10000);
+                            try {
+                                _pw.webContents.once('dom-ready', __done);
+                                _pw.once('closed', __done);
+                            } catch (e) { __done(); }
+                        });
+                    }
+                    if (!_pw.isDestroyed()) {
+                        const __payload = JSON.stringify(prefetchedPrescriptions);
+                        // 5MB 守卫：异常大响应不拖慢揭窗（消费端回退 GET，等同优化前）
+                        if (__payload.length <= 5 * 1024 * 1024) {
+                            // 双重 JSON：外层 stringify 保证内层字符串是合法 JS 字面量，
+                            // 页面内 JSON.parse 还原数组（免疫 </script>/U+2028/引号注入）
+                            const __lit = JSON.stringify(__payload);
+                            // 5s 超时竞速：渲染器"活着但主线程卡死"时 executeJavaScript
+                            // 会永不返回（裸 await 会让 login-success 永久挂死、X 后零
+                            // 可见窗进程残留）；超时即放弃注入直接去揭窗，消费端回退
+                            // GET（等同优化前）。迟回的 promise 不再 await，结果丢弃。
+                            await Promise.race([
+                                _pw.webContents.executeJavaScript(
+                                    'window.__loginPrefetchedPrescriptions=JSON.parse(' + __lit + ');'),
+                                new Promise((resolve) => setTimeout(resolve, 5000))
+                            ]);
+                        } else {
+                            console.warn('[B5] 预取处方体积超限，跳过注入（回退 GET）:', __payload.length);
+                        }
+                    }
+                } catch (e) {
+                    console.warn('[B5] 预取处方注入失败（回退 GET 拉取，非致命）:', e && e.message);
+                }
+            }
+            // —— B1 揭窗（先揭开再关登录窗，任务栏/焦点无缝）——
+            let __revealed = false;
+            try { __revealed = await revealMainWindow(userData); } catch (e) {
+                console.warn('预建主窗揭开异常，走常规重建:', e && e.message);
+            }
+            if (__revealed) {
+                if (loginWindow && !loginWindow.isDestroyed()) loginWindow.close();
+            } else {
+                // 预建窗初始化失败/超时：登录窗已被用户 X 关掉则只销毁隐藏壳，不凭空
+                // 建已登录主窗；登录窗仍在才回退到原"关登录窗→常规建窗"。
+                try { if (!mainWindow.isDestroyed()) mainWindow.destroy(); } catch (e) {}
+                if (loginWindow && !loginWindow.isDestroyed()) {
+                    loginWindow.close();
+                    createMainWindow();
+                }
+            }
+        } else {
+            if (loginWindow && !loginWindow.isDestroyed()) {
+                loginWindow.close();
+            }
+            if (!mainWindow || mainWindow.isDestroyed()) {
+                createMainWindow();
+            }
         }
         return { success: true };
     } catch (e) {
@@ -946,7 +1113,17 @@ ipcMain.handle('get-app-config', async () => {
                     //   仅验明来源的【内存件】users 才允许刷新备份，防应用给未验签
                     //   users 签合法 v2 备份。
                     if (licenseManager.configUsersProvenAuthentic(cfg)) {
-                        licenseManager.backupUserAccounts(cfg);
+                        // ★ 2026-10-03 批次B·B6：备份刷新是纯副作用（本 IPC 响应不依赖
+                        //   它），延后到响应关键路径之外执行——登录窗与预建主窗启动各
+                        //   调一次本 IPC，旧实现每次同步跑备份链读验；shared
+                        //   backupUserAccounts 对同内容 v2 件本就短路（不写盘、不推进
+                        //   gen），延后只省冷盘/杀软扫描下的读验延迟，证明门/截断保护/
+                        //   回填语义全部不变。真实变更点（config:update/installLicense/
+                        //   user 域）仍各自 proven 同步写，不依赖本读侧刷新。
+                        const __cfgSnapshot = cfg;
+                        setImmediate(() => {
+                            try { licenseManager.backupUserAccounts(__cfgSnapshot); } catch (e2) {}
+                        });
                     } else {
                         console.warn('[Config] users 来源未证明，跳过备份刷新（防毒化）');
                     }
