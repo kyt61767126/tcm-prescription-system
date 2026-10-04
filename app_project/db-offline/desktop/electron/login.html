@@ -4,6 +4,13 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- ★ 2026-10-03 批次B·B2：登录页解析即刻预热云端 TLS/DNS（冷 Worker 真机 2.1~3.8s，
+         热连接仅 0.55s）。preconnect 在文档头部即发起，与本页渲染、用户输密码并行，
+         点击登录后首个到 pages.dev 的请求直接复用热连接。资源提示不受 connect-src
+         限制、不携带任何数据/凭据，不改变任何请求语义；渲染进程网络栈与主进程独立，
+         主进程 t0 预热覆盖不到渲染层，故云/离线两端登录页均配置本提示。 -->
+    <link rel="preconnect" href="https://tcm-prescription-system.pages.dev" crossorigin>
+    <link rel="dns-prefetch" href="https://tcm-prescription-system.pages.dev">
     <title>惠康中医诊所管理系统 - 登录</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
