@@ -1698,3 +1698,12 @@
 * **热更三位一体（2026-10-05 实操）**：先签热包推送（app-local + desktop/local 均 2026.10.05-1）→ CF Pages 部署后**必须 node fetch 原始字节核对线上散文件 SHA 与 version.json 清单一致**（PowerShell Invoke-WebRequest 有 308/UTF-16 双坑，禁用；6 文件全 OK）→ 再打 APK。比对本地权威源哈希必须 CRLF→LF 规范化（磁盘 CRLF≠清单 LF）。
 * **生效方式矩阵**：**D5+新 auth-core**=已装机离线 APP/离线桌面联网启动一次拉热包即得（彻底划掉重进）；**D1/D2/D6**=仅离线 APK v313（versionCode 312→313，产物 `db-offline/惠康中医-v313免费版测试包.apk` 与 `惠康中医-本地.apk`，旧包归档 %TEMP%\apk-archive-20261005，验包：aapt2 versionCode + dex 含 js-integrity/electron·video-recorder.js/security-check + assets index 含 __ensureIdleBizLibs）；**D3/D4**=仅云 APK v312（311→312，`db-yunduan/惠康中医-云端.apk`，dex 含 wv-prewarm/dns-prefetch，R8 保留 Manifest 引用的 StartupApplication）；**B**=云桌面 1.2.262 已发。待真机回归：D3 低端/国产 ROM 冷启动无 ANR（评审 M1 遗留）、D5 WebView file:// 动态 script onload 实测、D2 闸门耗时。
 
+## 53. 后台诊所管理「今日登录」统计（2026-10-05，commit 40eb6017，纯 functions+admin 双副本，五端零改动 push 即达）
+
+* **需求**：诊所卡片原显示 15 分钟实时在线（`onlineDesktop/App/Web`），没人正挂着恒为 0，运营无参考价值 → 改显示**今日登录端数**，口径"登录一次代表一天"（同账号/设备当天多次登录只计 1 次），分 🖥️桌面/📱APP/🌐网页，全 0 显示「（今日未登录）」。
+* **数据源（无登录历史表，只能统计今天）**：云端=`user_session:{u}:{cc}` 的 **loginAt 日期**（每次登录覆盖刷新；离线端本地登录不写此键）；离线端=`license:{code}.devices[].lastHeartbeat` **日期**（heartbeat.js 10 分钟周期、5 分钟节流，当天开机登录后必刷新；常驻跨天计活跃；登录后极短时间(<10min)完全离线退出会漏，可接受）。只遍历 status='used' 授权码，与实时在线口径同源同范围。
+* **实现**：functions/api/users.js 的 `GET /api/users?clinics=true` 聚合段新增 `beijingDayStartMs()`（UTC+8 日界：`floor((now+8h)/DAY)*DAY-8h`）；云端按 `username|clientClass` Set 去重（防旧键 `user_session:{u}` 与新键 `:{cc}` 并存双计，未知 cc 兜底 web），离线按 clinicName→{desktop:Set(mid),app:Set(mid)} 去重（防同机换码续期绑多码重复）；返回新增 loginDesktop/loginApp/loginWeb/loginTotal，**online* 字段保留不删**（API 兼容）。前端 public/admin/index.html L4117 + site-admin/admin/index.html 双副本同改（adminconsole 跨版本守卫 lines 基线保持 A=0 B=0）。
+* **铁律/易错**：日界必须按**北京时间**（服务器是 UTC，直接取 UTC 0 点会在早 8 点前错算一天）；生产判定只需 `loginTs >= todayStart`（登录/心跳时间不可能晚于 now，无上界需求，写单测别自加未来时刻上界断言）；改 admin 页面前后跑 check-interface（6 OK），改完跑 diff-cross-version（adminconsole 必须 lines 全绿）。
+* **局限与后续**：只统计今天、无历史趋势；离线端是"今日心跳活跃"近似"今日登录"。若运营要近 7 天/精确登录动作数，需新增每日打卡 KV（如 `login_daily:{yyyy-mm-dd}` 位图/Set），登录成功点三端上报——JS 端（网页/桌面/APP 热更层）可热更，**云 APP Java 登录链必须发新版 APK**，立项时按授权链改动走评审。
+* **生效方式**：push 后 CF Pages 自动部署 Functions+静态页即生效，五端客户端零改动。已线上核验：/admin/ 含「今日登录」无「当前无在线」残留；未带管理员 token 调 clinics 接口返回 403（证明 Function 部署运行、非 500）。
+
