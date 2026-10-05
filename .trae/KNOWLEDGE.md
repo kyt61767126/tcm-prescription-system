@@ -1704,6 +1704,19 @@
 * **数据源（无登录历史表，只能统计今天）**：云端=`user_session:{u}:{cc}` 的 **loginAt 日期**（每次登录覆盖刷新；离线端本地登录不写此键）；离线端=`license:{code}.devices[].lastHeartbeat` **日期**（heartbeat.js 10 分钟周期、5 分钟节流，当天开机登录后必刷新；常驻跨天计活跃；登录后极短时间(<10min)完全离线退出会漏，可接受）。只遍历 status='used' 授权码，与实时在线口径同源同范围。
 * **实现**：functions/api/users.js 的 `GET /api/users?clinics=true` 聚合段新增 `beijingDayStartMs()`（UTC+8 日界：`floor((now+8h)/DAY)*DAY-8h`）；云端按 `username|clientClass` Set 去重（防旧键 `user_session:{u}` 与新键 `:{cc}` 并存双计，未知 cc 兜底 web），离线按 clinicName→{desktop:Set(mid),app:Set(mid)} 去重（防同机换码续期绑多码重复）；返回新增 loginDesktop/loginApp/loginWeb/loginTotal，**online* 字段保留不删**（API 兼容）。前端 public/admin/index.html L4117 + site-admin/admin/index.html 双副本同改（adminconsole 跨版本守卫 lines 基线保持 A=0 B=0）。
 * **铁律/易错**：日界必须按**北京时间**（服务器是 UTC，直接取 UTC 0 点会在早 8 点前错算一天）；生产判定只需 `loginTs >= todayStart`（登录/心跳时间不可能晚于 now，无上界需求，写单测别自加未来时刻上界断言）；改 admin 页面前后跑 check-interface（6 OK），改完跑 diff-cross-version（adminconsole 必须 lines 全绿）。
-* **局限与后续**：只统计今天、无历史趋势；离线端是"今日心跳活跃"近似"今日登录"。若运营要近 7 天/精确登录动作数，需新增每日打卡 KV（如 `login_daily:{yyyy-mm-dd}` 位图/Set），登录成功点三端上报——JS 端（网页/桌面/APP 热更层）可热更，**云 APP Java 登录链必须发新版 APK**，立项时按授权链改动走评审。
+* **局限与后续**：只统计今天、无历史趋势；离线端是"今日心跳活跃"近似"今日登录"。~~若运营要历史累计需新增每日打卡 KV~~ → 同日已落地，见下条。
 * **生效方式**：push 后 CF Pages 自动部署 Functions+静态页即生效，五端客户端零改动。已线上核验：/admin/ 含「今日登录」无「当前无在线」残留；未带管理员 token 调 clinics 接口返回 403（证明 Function 部署运行、非 500）。
+
+### §53.1 「累计登录」历史统计（2026-10-05，commit 333964d0，纯服务端打卡，五端仍零改动）
+
+* **需求**：今日登录行下加一行橙色「累计登录：🖥️X·📱X·🌐X（共N次）」，悬停显示统计起始日。口径与今日登录严格一致——**端·天**去重（同账号/设备同端每个北京自然日 1 次），自 2026-10-05 部署起累积，**无法回填历史**。
+* **关键决策：不需要三端上报/发 APK**。云端登录成功点 users.js `writeUserSession` 后（作用域内已有 clinicName/effClientClass/username）与离线端 heartbeat.js 设备匹配路径（record.clinicName/machineId/found.clientClass）本就是服务端两个既有触点，纯 Functions 改动 push 即达。
+* **KV 设计**（[login-punch.js](file:///d:/trae_projects/kyt-zy/functions/api/_lib/login-punch.js)，新文件 functions/api/_lib/）：CF KV 最终一致无 CAS，**不用读-改-写计数器**（多设备并发心跳必丢更新），改用"每端每天一个独立 key"天然去重：
+  - `lp:{yyyy-mm-dd}:{encClinic}:{d|a|w}:{encUid}` 去重凭证 TTL 400 天；get 命中跳过、miss 才 put（稳态 1 写/端/天，每心跳仅多 1 次廉价读；边缘收敛期重复 put 同值无害）；uid 云端=username、离线=machineId。
+  - `lp_start` 统计起始日（首打卡写，并发重复写同值幂等）；`lpcur:{yyyy-mm}` 当月聚合缓存 20min（**每次打卡 miss put 后 delete 该缓存**使累计尽快纳入）；`lparch:{yyyy-mm}` 月归档标志；`lpmon:{yyyy-mm}:{encClinic}` 历史月桶 {d,a,w} **绝对值计数**（重复归档写同值，幂等防并发双管理员重复触发）。
+  - **懒归档**：`getClinicLoginHistory` 每次诊所列表请求时，从 lp_start 月枚举到上月，缺标志的月份 list 全月 `lp:{ym}-` 原始 key 数 key 聚合写月桶再置标志；累计=历史月桶之和+当月缓存。原始 key 400 天 TTL，月桶永久（量=诊所数×月数，小）。
+* **铁律/易错**：① 离线端 clientClass 兜底必须与今日登录聚合一致——**未知形态计桌面**（heartbeat 是离线端点无网页），只有显式 `'app'` 计 APP，不能用 lib 的通用 web 兜底；② `enumerateMonths(from,to)` 必须处理 **from>to**（部署当天起始月=当月，上月更早，字典序比较直接返回空，否则空转 24 个月）；③ 月前缀 `lp:2026-09-` 精确覆盖该月全部日 key（yyyy-mm-dd 定长字典序）；④ clinicName/uid 入 key 一律 encodeURIComponent（防冒号破坏 split(':') 5 段解析，中文合法）；⑤ 打卡与聚合全程 try/catch warn，**绝不阻断登录/心跳/诊所列表**（已测 KV 全挂 fail-open）。
+* **成本核算**：20 台离线设备 ≈ 2.9k 次额外 KV 读/天（免费额度 10 万/天），写 ≈20/天；云端登录频率低可忽略。
+* **验证**：node --check 三文件；4 对跨版本守卫全绿；check-interface 6 OK；**内存 mockKV 11 项逻辑测试**（e2e/.tmp/login-punch-test.mjs，未跟踪）覆盖去重/大小写归一/lp_start/跨月归档/幂等/起始月=当月空窗/KV 故障 fail-open。线上核验页面含「累计登录」+histTotal、未授权 403。
+* **遗留**：原始凭证 400 天滚动 + 月桶永久；若管理员连续 400 天不开诊所列表导致未归档月的原始 key 过期才会丢该月（实际管理员每月都开，风险可忽略）；诊所改名后历史月桶挂旧名（与离线在线/续费按名同源的既有局限一致）。
 
