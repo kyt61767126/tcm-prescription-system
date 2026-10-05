@@ -74,6 +74,15 @@ const KV_USER_DEVICES_PREFIX = 'user_devices:';
 // ★ 2026-09-10 在线端聚合：loginAt 距今 ≤15 分钟视为「在线」
 //   （session TTL 8 天远大于在线直觉，不能仅凭 key 存在判定在线）
 const ONLINE_ACTIVE_MS = 15 * 60 * 1000;
+// ★ 2026-10-05 诊所管理「今日登录」（运营要求：登录一次代表一天——同一账号/设备
+//   当天多次登录只计 1 次，分桌面/APP/网页三桶）。云端取 user_session.loginAt 的
+//   日期，离线端取 devices[].lastHeartbeat 的日期（心跳 10 分钟周期，当天开机登录
+//   后必刷新；常驻跨天计为活跃）。统一按北京时间(UTC+8)划日界，返回今日 00:00 (+8)
+//   对应的 UTC 毫秒戳。局限：无登录历史表，只能统计今天，不支持历史回溯。
+function beijingDayStartMs(nowMs) {
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    return Math.floor((nowMs + 8 * 60 * 60 * 1000) / DAY_MS) * DAY_MS - 8 * 60 * 60 * 1000;
+}
 const MAX_DEVICES_PER_ACCOUNT = 2;
 // 豁免账户的设备配额（99 = 实际不限，避免前端对 -1 显示异常）
 const DEVICE_EXEMPT_MAX = 99;
@@ -2793,6 +2802,8 @@ export async function onRequest(context) {
             } catch (e) { /* 在线聚合读取失败按无在线处理 */ }
 
             const nowTs = Date.now();
+            // ★ 2026-10-05 北京时间今日 0 点（今日登录日界，云端/离线两源共用）
+            const todayStartTs = beijingDayStartMs(nowTs);
 
             // ★ 2026-09-14 离线端在线统计（后台诊所管理「在线：🖥️桌面 X · 📱APP X」离线端归零修复）：
             //   上方 user_session 口径只覆盖云端登录（离线端本地登录不写 user_session），
@@ -2801,6 +2812,9 @@ export async function onRequest(context) {
             //   云端端不调用 /api/license/heartbeat（cloud.js 链路），与 user_session 口径无重叠。
             //   读取失败不影响诊所列表（按无在线处理）。
             const offlineOnlineMap = new Map(); // clinicName -> { desktop, app }
+            // ★ 2026-10-05 今日登录（离线端）：clinicName -> { desktop:Set(machineId),
+            //   app:Set(machineId) }，Set 按 machineId 去重（换机续期同机绑多码也不重复计）
+            const offlineLoginMap = new Map();
             // ★ 2026-09-25 P2-4 双源有效期视图：clinicName -> 绑定授权码摘要列表。
             //   纳入集 = used/expired（排除 disabled/unused），与 clinic=update 续费
             //   同步匹配集（L 附近 matches 过滤）严格一致。
@@ -2828,7 +2842,18 @@ export async function onRequest(context) {
                         for (const d of (Array.isArray(rec.devices) ? rec.devices : [])) {
                             if (!d || !d.lastHeartbeat) continue;
                             const hbTs = Date.parse(d.lastHeartbeat);
-                            if (!Number.isFinite(hbTs) || (nowTs - hbTs) > ONLINE_ACTIVE_MS) continue;
+                            if (!Number.isFinite(hbTs)) continue;
+                            // ★ 2026-10-05 今日登录（日活口径）：今天有心跳即视为今日登录使用，
+                            //   Set 按 machineId 去重（未知端形态兜底计桌面，离线端无网页形态）
+                            if (hbTs >= todayStartTs) {
+                                if (!offlineLoginMap.has(rec.clinicName)) {
+                                    offlineLoginMap.set(rec.clinicName, { desktop: new Set(), app: new Set() });
+                                }
+                                const loginBucket = offlineLoginMap.get(rec.clinicName);
+                                if (d.clientClass === 'app') loginBucket.app.add(d.machineId);
+                                else loginBucket.desktop.add(d.machineId);
+                            }
+                            if ((nowTs - hbTs) > ONLINE_ACTIVE_MS) continue;
                             if (!offlineOnlineMap.has(rec.clinicName)) {
                                 offlineOnlineMap.set(rec.clinicName, { desktop: 0, app: 0 });
                             }
@@ -2850,13 +2875,29 @@ export async function onRequest(context) {
                 const doctorCount = users ? users.filter(u => u.role === ROLE_DOCTOR).length : 0;
                 // 聚合本诊所在线端：loginAt ≤15 分钟才算在线，clientClass 归并（web 及未知兜底计入网页）
                 let onlineDesktop = 0, onlineApp = 0, onlineWeb = 0;
+                // ★ 2026-10-05 今日登录：loginAt 落在北京时间今天即计，按 账号|端 去重
+                //   （旧键 user_session:{u} 与新键 user_session:{u}:{cc} 可能并存，避免双计）
+                let loginDesktop = 0, loginApp = 0, loginWeb = 0;
+                const loginSeen = new Set();
                 for (const u of (Array.isArray(users) ? users : [])) {
                     if (!u || !u.username) continue;
                     const sessions = onlineMap.get(u.username) || [];
                     for (const s of sessions) {
                         if (!s || !s.loginAt) continue;
                         const loginTs = Date.parse(s.loginAt);
-                        if (!Number.isFinite(loginTs) || (nowTs - loginTs) > ONLINE_ACTIVE_MS) continue;
+                        if (!Number.isFinite(loginTs)) continue;
+                        // 今日登录桶（先于 15 分钟在线判定，互不影响）
+                        if (loginTs >= todayStartTs) {
+                            const cc = (s.clientClass === 'desktop' || s.clientClass === 'app') ? s.clientClass : 'web';
+                            const dedupKey = u.username + '|' + cc;
+                            if (!loginSeen.has(dedupKey)) {
+                                loginSeen.add(dedupKey);
+                                if (cc === 'desktop') loginDesktop++;
+                                else if (cc === 'app') loginApp++;
+                                else loginWeb++;
+                            }
+                        }
+                        if ((nowTs - loginTs) > ONLINE_ACTIVE_MS) continue;
                         if (s.clientClass === 'desktop') onlineDesktop++;
                         else if (s.clientClass === 'app') onlineApp++;
                         else onlineWeb++;
@@ -2866,6 +2907,12 @@ export async function onRequest(context) {
                 const offOn = offlineOnlineMap.get(clinic.name) || { desktop: 0, app: 0 };
                 onlineDesktop += offOn.desktop;
                 onlineApp += offOn.app;
+                // 离线端今日登录（设备级 Set 已按 machineId 去重，离线端无网页桶）
+                const offLogin = offlineLoginMap.get(clinic.name);
+                if (offLogin) {
+                    loginDesktop += offLogin.desktop.size;
+                    loginApp += offLogin.app.size;
+                }
 
                 // ★ 2026-09-25 P2-4 双源有效期视图（仅离线版诊所；门控口径与
                 //   clinic=update 续费同步相同：raw edition 以 offline_ 开头）。
@@ -2914,6 +2961,11 @@ export async function onRequest(context) {
                     onlineApp,
                     onlineWeb,
                     onlineTotal: onlineDesktop + onlineApp + onlineWeb,
+                    // ★ 2026-10-05 今日登录端数（每账号/设备当天去重 1 次，北京时间日界）
+                    loginDesktop,
+                    loginApp,
+                    loginWeb,
+                    loginTotal: loginDesktop + loginApp + loginWeb,
                     createdAt: clinic.createdAt,
                     // ★ P2-4 双源有效期视图（非离线诊所一律 null，前端不显示该行）
                     licenseCodes: isOfflineEdition ? licenseCodes : null,
