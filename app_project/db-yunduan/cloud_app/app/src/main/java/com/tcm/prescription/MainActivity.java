@@ -220,14 +220,22 @@ public class MainActivity extends BridgeActivity {
             }
         }, "security-check").start();
 
-        // ★ DNS 预解析：提前解析云端域名，减少首屏网络延迟
-        // 在 WebView 开始加载前完成 DNS 解析，节省 100-300ms
-        try {
-            java.net.InetAddress.getAllByName(CLOUD_HOST);
-            Log.d(TAG, "DNS 预解析完成: " + CLOUD_HOST);
-        } catch (Exception e) {
-            Log.w(TAG, "DNS 预解析失败（不影响正常加载）: " + e.getMessage());
-        }
+        // ★ DNS 预解析：提前解析云端域名，减少首屏网络延迟（节省 100-300ms）
+        // ★ 2026-10-04 批次D·D4：InetAddress.getAllByName 是真实网络查询，原代码在
+        //   主线程执行——弱网/DNS 慢时直接卡 onCreate 首帧（StrictMode 违例）。改后台
+        //   线程：预热的是系统 netd 解析缓存（Chromium 另有 host resolver 缓存，故为
+        //   部分受益而非完全复用），解析与首屏请求并行就绪即可，主线程不等待；
+        //   结果无人消费、失败仅日志，不改变任何功能行为。
+        Thread dnsThread = new Thread(() -> {
+            try {
+                java.net.InetAddress.getAllByName(CLOUD_HOST);
+                Log.d(TAG, "DNS 预解析完成: " + CLOUD_HOST);
+            } catch (Exception e) {
+                Log.w(TAG, "DNS 预解析失败（不影响正常加载）: " + e.getMessage());
+            }
+        }, "dns-prefetch");
+        dnsThread.setDaemon(true);
+        dnsThread.start();
 
         // 后台预加载录像拍照脚本（避免 onPageFinished 时同步IO阻塞UI）
         preloadVideoRecorderScript();

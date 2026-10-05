@@ -106,6 +106,9 @@ dependencies {
     implementation project(':capacitor-cordova-android-plugins')
     // ★ 2026-09-28 指纹快速登录（与离线APP同版）：BiometricPrompt + BIOMETRIC_STRONG
     implementation 'androidx.biometric:biometric:1.1.0'
+    // ★ 2026-10-04 批次D·D3：WebView 官方进程级预热 API（WebViewCompat.startUpWebView，
+    //   STARTUP_API 自 1.8.0 起；与 capacitor-android 内置版本对齐 1.14.0，Gradle 去重）
+    implementation 'androidx.webkit:webkit:1.14.0'
 }
 
 apply from: 'capacitor.build.gradle'

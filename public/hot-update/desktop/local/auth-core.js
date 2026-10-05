@@ -2934,6 +2934,15 @@
     //   跑闸门：NO_LICENSE（后台删诊所/码）/REVOKED/EXPIRED 立即锁。
     // trial（试用期）与 free（永久免费）不在此门；网络失败由 gate token 离线验签处理。
     function installMainWindowGate() {
+        // ★ 2026-10-01 启动性能：登录窗（login.html）不装主窗自检。
+        //   自检会触发 verify-login-gate IPC（主进程 vault 读写 + 在线裁决），
+        //   在登录窗阶段既无主窗内容可锁、结果也没人消费，纯耗时且冻结
+        //   主进程 ~4.5s（用户感知"打开登录框异常缓慢"）。登录提交链
+        //   （login() 内 verifyLoginGate）与主窗加载时仍各自完整跑闸门，
+        //   吊销检测不缺位。
+        if (/login\.html(\?|#|$)/i.test(String(location.pathname) + String(location.search) + String(location.hash))) {
+            return;
+        }
         const run = async () => {
             try {
                 if (global.__mainWindowGateDone) return;
@@ -5696,6 +5705,19 @@
         try { showLocalRegisterModal(); } catch (e) { console.warn('[LicenseCheck] 打开本地注册弹窗失败:', e); }
     };
 
+    // ★ 2026-10-02 注册引导同步快道（离线桌面 preload 注入）：登录窗 preload 在页面
+    //   脚本前 sendSync 取 {licensed, hasPhoneUser}（主进程纯文件读，dom-ready 前完成，
+    //   不受登录窗 show 后 vault 预热 CreateProcess 阻塞主进程的影响）。有值时零 IPC
+    //   往返即可裁决，消灭"弹窗晚于用户首轮操作"的竞态；无值（APP/云端/异常）回退原
+    //   异步链。该标志仅控制注册引导 UI，非授权安全边界。
+    function __getSyncRegGate() {
+        try {
+            const g = (typeof global !== 'undefined' && global.__bnzcRegGate) ||
+                      (typeof window !== 'undefined' && window.__bnzcRegGate) || null;
+            return (g && typeof g === 'object') ? g : null;
+        } catch (e) { return null; }
+    }
+
     // ★ 注册前置检测：登录上下文 + 未激活 + 未注册 → 强制先注册（弹窗置于激活弹窗之上）
     async function maybePromptRegistration() {
         try {
@@ -5718,8 +5740,10 @@
             }
             // 云端注册制已完成（云端APP同壳共用 auth-core）→ 不打扰
             if (isCloudActivationDone()) return;
+            // 同步快道优先；无标志时回退异步 IPC（APP/云端/标志缺失）
+            const __regGate = __getSyncRegGate();
             // 已激活的存量设备不打扰（可能无手机号账号，维持现状，铁律 1-5 不破坏）
-            if (await __isDeviceLicensed()) return;
+            if (__regGate ? !!__regGate.licensed : (await __isDeviceLicensed())) return;
             // 本地桥判定：云端APP/纯网页无 getActivationUsers/registerLocalUser 桥 → 跳过
             const api = global.electronAPI || (typeof window !== 'undefined' ? window.electronAPI : null);
             const hasLocalBridge = !!(api && api.activate &&
@@ -5727,7 +5751,7 @@
                  typeof api.activate.registerLocalUser === 'function'));
             if (!hasLocalBridge) return;
             // 已注册（标记或桥账号有手机号）→ 跳过
-            if (await isLocalRegisteredAsync()) return;
+            if (__regGate ? !!__regGate.hasPhoneUser : (await isLocalRegisteredAsync())) return;
             showLocalRegisterModal();
             console.log('[LicenseCheck] 检测到未注册设备，已弹出注册界面（方案B 注册前置）',
                 isDesktopLoginPage ? '(桌面登录窗)' : '(APP登录界面)');

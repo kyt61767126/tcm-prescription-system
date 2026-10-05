@@ -73,6 +73,9 @@ public class MainActivity extends BridgeActivity {
     private int webViewReadyRetries = 0;
 
     private Handler mainHandler;
+
+    // ★ D2：JS 完整性校验后台预取任务（onCreate 最早期启动，license 有效分支 join）
+    private java.util.concurrent.FutureTask<Boolean> _jsIntegrityTask;
     private volatile String cachedVideoRecorderScript = null;
     private boolean hasDoneFirstResume = false;
     // ★ 修复 2026-07-27：NativeBridge 实例引用，用于 onDestroy 时清理会话资源
@@ -159,6 +162,26 @@ public class MainActivity extends BridgeActivity {
 
         super.onCreate(savedInstanceState);
 
+        // ★ 2026-10-04 批次D·D2（安全评审通过的唯一变体）：P1-9 JS 完整性哈希
+        //   （读 assets/auth-core.js + license-manager.js 并两次 SHA-256，真机 20~80ms）
+        //   从 license 有效分支的主线程同步调用，改为 onCreate 最早期后台预取、在**同一
+        //   闸门点**（performNativeStartupLicenseCheck 有效分支，WebView 创建/加载之前）
+        //   future.get() 消费。安全语义零变化：
+        //   - 不后移到页面加载之后——未校验 JS 绝不能先执行（杜绝 TOCTOU 绕过窗）；
+        //   - fail-closed 不变：false/异常/中断一律走 showFatalLicenseErrorAndExit；
+        //   - 校验逻辑、基线（versionCode 化首跑自写）、首跑建立基线时序均原样；
+        //   - 后台线程不依赖主线程（assets/SharedPreferences 线程安全；后台构造
+        //     LicenseManager 与 triggerNativeLicenseSync 同款先例），无死锁可能；
+        //   - trial_first_check 放行分支原本就不做完整性校验，本次保持原行为不动。
+        _jsIntegrityTask = new java.util.concurrent.FutureTask<>(
+                () -> {
+                    Thread.currentThread().setName("js-integrity");
+                    return new LicenseManager(MainActivity.this).verifyJsIntegrity();
+                });
+        Thread integrityThread = new Thread(_jsIntegrityTask);
+        integrityThread.setDaemon(true);
+        integrityThread.start();
+
         // T5: 使用主线程 Looper 的 Handler，便于 onDestroy 统一清理
         mainHandler = new Handler(Looper.getMainLooper());
 
@@ -172,8 +195,20 @@ public class MainActivity extends BridgeActivity {
         }
 
         // ★ 安全检测（参考云端APP SecurityGuard）：root/调试器/签名/Frida/Xposed/模拟器
-        // 异步执行避免阻塞启动，检测到威胁时 Toast 提示并退出
-        mainHandler.post(() -> SecurityGuard.checkAndExit(this));
+        // ★ 2026-10-04 批次D·D1：原 mainHandler.post 仍跑在主线程（which su/root 探测、
+        //   PackageManager 签名读盘真机 100~400ms，直接拖慢冷启动首帧），改为真后台
+        //   线程（与云APP 同款）。SecurityGuard.showAndExit 内部已 runOnUiThread
+        //   （Toast+finishAffinity），后台调用安全；检测纯只读、不改变任何裁决结果。
+        Thread securityThread = new Thread(() -> {
+            try {
+                Thread.currentThread().setName("security-check");
+                SecurityGuard.checkAndExit(this);
+            } catch (Throwable t) {
+                Log.e(TAG, "SecurityGuard 异步检测异常", t);
+            }
+        }, "security-check");
+        securityThread.setDaemon(true);
+        securityThread.start();
 
         // ★ P1-8 多层校验 Layer 2：Android 原生 License 启动校验
         // 在 WebView 加载前由 Java 层独立校验 license 有效性（试用过期/license 篡改/绑定不符等）
@@ -279,7 +314,9 @@ public class MainActivity extends BridgeActivity {
             if (valid) {
                 Log.i(TAG, "[StartupCheck] 授权有效，允许启动：type=" + result.optString("type", ""));
                 // ★ P1-9 代码完整性校验：检测 auth-core.js / license-manager.js 是否被篡改
-                if (!lm.verifyJsIntegrity()) {
+                // ★ D2：改消费 onCreate 最早期后台预取结果（同一闸门点、WebView 加载前），
+                //   未跑在主线程的只有等待；任何异常 fail-closed 与原同步实现一致。
+                if (!awaitJsIntegrityVerified()) {
                     showFatalLicenseErrorAndExit("检测到关键代码文件已被篡改，软件无法启动。\n请从官方渠道重新下载安装。");
                     return false;
                 }
@@ -303,6 +340,19 @@ public class MainActivity extends BridgeActivity {
             // ★安全优化：原生校验异常时阻止启动（原为降级到JS层校验，存在安全风险）
             Log.e(TAG, "[StartupCheck] 原生校验异常（阻止启动）", e);
             showFatalLicenseErrorAndExit("软件校验异常，请重新安装或联系客服。");
+            return false;
+        }
+    }
+
+    // ★ D2：在原闸门点等待完整性预取结果。get() 无超时——任务不依赖主线程，无死锁；
+    //   最坏情况与改动前主线程同步哈希等长（且已与 license 校验并行而通常早已完成）。
+    //   任何中断/执行异常/取消一律 fail-closed（返回 false → 致命退出，语义同原实现）。
+    private boolean awaitJsIntegrityVerified() {
+        try {
+            Boolean ok = _jsIntegrityTask.get();
+            return ok != null && ok;
+        } catch (Throwable t) {
+            Log.e(TAG, "[Integrity] 等待后台完整性校验结果异常（fail-closed 阻止启动）", t);
             return false;
         }
     }
@@ -719,6 +769,46 @@ public class MainActivity extends BridgeActivity {
                 return true; // 拦截外部导航
             }
 
+            // ★ 2026-10-04 批次D·D6：离线APP 不随包分发 public/electron/ 目录，
+            //   index-app.html 的双保险标签 <script src="electron/video-recorder.js">
+            //   必然 404（assets 与热更目录都没有该文件；云端APP 走 Pages 远端不受影响）。
+            //   该功能在本 APP 由原生 video-recorder-inject.js 承担——网络层把这个精确
+            //   请求替换为注入脚本内容（200 application/javascript），消灭 404 与解析期
+            //   阻塞，功能也在脚本标签自然位置就绪；与 evaluateJavascript 注入靠
+            //   window.__videoRecorderInjected 幂等互斥。仅放行 file:// 下精确尾路径
+            //   （assets 与热更 current 目录两个前缀都覆盖），不碰 https/其他资源。
+            //   ★ 评审 L1 修复：若热更 current 包内已带该文件（经 HotUpdateManager
+            //   Ed25519 manifest + 逐文件 SHA 验签），优先放行让热更版生效，绝不遮蔽；
+            //   只对热更包不存在该文件的现状（消除 404）返回 APK 内置可信脚本。
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                try {
+                    if (request != null && request.getUrl() != null
+                            && "file".equals(request.getUrl().getScheme())) {
+                        String p = request.getUrl().getPath();
+                        if (p != null && p.endsWith("/electron/video-recorder.js")) {
+                            // 固定字面路径探测，不使用请求路径拼盘（只做 exists 判断）
+                            File hotVersion = new File(
+                                    new File(MainActivity.this.getFilesDir(),
+                                            "hot-update/current/electron"),
+                                    "video-recorder.js");
+                            if (hotVersion.isFile()) {
+                                return super.shouldInterceptRequest(view, request);
+                            }
+                            String js = getVideoRecorderScript();
+                            if (js != null && !js.isEmpty()) {
+                                Log.d(TAG, "D6 拦截 video-recorder.js 请求→返回注入脚本（消除404）");
+                                return new WebResourceResponse("application/javascript", "UTF-8",
+                                        new java.io.ByteArrayInputStream(js.getBytes("UTF-8")));
+                            }
+                        }
+                    }
+                } catch (Throwable t) {
+                    Log.w(TAG, "D6 拦截替换异常，放行默认请求: " + t.getMessage());
+                }
+                return super.shouldInterceptRequest(view, request);
+            }
+
             @Override
             public void onPageStarted(WebView view, String url, Bitmap favicon) {
                 super.onPageStarted(view, url, favicon);
@@ -727,6 +817,10 @@ public class MainActivity extends BridgeActivity {
                 if (url != null) lastWebViewUrl = url;
                 // 提前注入 anti-autofill（虽然 DOM 可能未加载完，但 evaluateJavascript 会排队执行）
                 injectAutocompleteOff(view);
+                // ★ D6：录像拍照脚本从 onPageFinished+300ms 提前到 onPageStarted
+                //   （IIFE 自带 readyState 等待与 __videoRecorderInjected 幂等，DOM 操作
+                //   懒到首次打开 overlay，提前执行只先占住 openRecordingOverlay 等全局函数）
+                injectVideoRecorderScript(view);
             }
 
             @Override
@@ -757,9 +851,12 @@ public class MainActivity extends BridgeActivity {
                 // 布局修复脚本立即注入（体积小，影响UI布局）
                 mainHandler.post(() -> injectLayoutFixScript(view));
 
-                // 录像拍照脚本延迟到页面渲染稳定后注入（避免40KB脚本同步执行阻塞UI）
-                // 300ms 是经验值：足够 React 完成首屏渲染，又不至于让用户感觉录像功能迟钝
-                mainHandler.postDelayed(() -> injectVideoRecorderScript(view), 300);
+                // ★ D6：录像拍照脚本已在 onPageStarted 立即注入，且
+                //   <script src="electron/video-recorder.js"> 经 shouldInterceptRequest
+                //   返回同一份脚本（自然位置加载）。此处保留同 tick 幂等补注（原+300ms
+                //   延迟删除）：__videoRecorderInjected 防重，极端情况下（JS 上下文被
+                //   重建）仍能兜底，且不再推迟功能就绪。
+                injectVideoRecorderScript(view);
 
                 // ★ 2026-09-16 Layer 2：热版本生效时登录页注入「回退上一版」入口
                 //   （代码在 APK 原生层，不依赖热版本页面 JS 存活；内部自探测登录页
