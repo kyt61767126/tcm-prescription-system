@@ -24,8 +24,10 @@ import { isValidPhone, isValidMachineId } from './license/_lib/schema-guard.js';
 import { writeAuditLog } from './_lib/audit-log.js';
 // ★ 2026-09-10 P3 D1 迁移：设备绑定 D1 双写
 import { getDB, isD1Enabled } from './_lib/d1.js';
-// ★ 2026-09-15 登录提速：登录响应携带首屏处方（D1 快路径，与 writeUserSession 并行）
+// ★ 2026-09-15 登录提速：首屏处方（D1 快路径，与 writeUserSession 并行）
 import { d1LoadPrescriptions } from './_lib/prescriptions-store.js';
+// ★ 2026-10-05 历史登录打卡/累计聚合（诊所管理「累计登录」，KNOWLEDGE §53）
+import { punchLogin, getClinicLoginHistory } from './_lib/login-punch.js';
 
 // ★ 2026-09-25 P2-2 抽出纯函数（原内联于 clinic=update 续费段），供核心业务单测：
 //   续费锚点取晚者——未过期从当前到期日续（剩余天数不损失），已过期/无有效期/
@@ -2391,6 +2393,15 @@ export async function onRequest(context) {
                 machineId: machineId || null,
                 clientClass: effClientClass
             });
+            // ★ 2026-10-05 历史登录打卡（云端账号=网页/云桌面/云APP 登录成功唯一服务端
+            //   触点，uid=username；服务端记录，三端云端客户端零改动）。失败不阻断登录。
+            try {
+                await punchLogin(kv, {
+                    clinicName: clinicName,
+                    clientClass: effClientClass || 'web',
+                    uid: user.username
+                });
+            } catch (e) { console.warn('[login-punch] 云端打卡失败:', e && e.message); }
             let loginPrescriptions = null;
             try { loginPrescriptions = await prefetchLoginPrescriptions; } catch (e) {}
 
@@ -2866,6 +2877,11 @@ export async function onRequest(context) {
                 }
             } catch (e) { /* 离线端在线聚合读取失败按无在线处理 */ }
 
+            // ★ 2026-10-05 历史累计登录（KNOWLEDGE §53）：全量取一次，循环内按
+            //   encodeURIComponent(clinic.name) 取用。内部含跨月懒归档（每月仅一次），
+            //   失败按无历史处理，不影响诊所列表。
+            const loginHistory = await getClinicLoginHistory(kv).catch(() => ({ startDate: null, totals: new Map() }));
+
             for (const clinic of clinics) {
                 const users = await kv.get(`clinic:${clinic.id}:users`, 'json');
                 // ★ 2026-09-26 多管理员：取全部管理员（同名诊所多次激活可并存多个
@@ -2913,6 +2929,8 @@ export async function onRequest(context) {
                     loginDesktop += offLogin.desktop.size;
                     loginApp += offLogin.app.size;
                 }
+                // ★ 2026-10-05 历史累计登录（自统计起始日起，端·天口径，key 与打卡端编码一致）
+                const hist = loginHistory.totals.get(encodeURIComponent(clinic.name)) || { d: 0, a: 0, w: 0 };
 
                 // ★ 2026-09-25 P2-4 双源有效期视图（仅离线版诊所；门控口径与
                 //   clinic=update 续费同步相同：raw edition 以 offline_ 开头）。
@@ -2966,6 +2984,12 @@ export async function onRequest(context) {
                     loginApp,
                     loginWeb,
                     loginTotal: loginDesktop + loginApp + loginWeb,
+                    // ★ 2026-10-05 历史累计登录（端·天去重，自 loginStatsStart 起累加，
+                    //   含今日；无打卡前为 0。起始日随列表顶层 loginStatsStart 一并返回）
+                    histDesktop: hist.d,
+                    histApp: hist.a,
+                    histWeb: hist.w,
+                    histTotal: hist.d + hist.a + hist.w,
                     createdAt: clinic.createdAt,
                     // ★ P2-4 双源有效期视图（非离线诊所一律 null，前端不显示该行）
                     licenseCodes: isOfflineEdition ? licenseCodes : null,
@@ -2976,7 +3000,7 @@ export async function onRequest(context) {
                 });
             }
 
-            return json({ success: true, data: result });
+            return json({ success: true, data: result, loginStatsStart: loginHistory.startDate || null });
         }
 
         // ===== 创建诊所 POST /users?clinic=create =====

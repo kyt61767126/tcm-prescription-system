@@ -35,6 +35,7 @@ import {
     getKV, getLicense, updateLicense, checkRateLimit, getDevices, getMaxDevices, appendLicenseLog,
     setDeviceVersion, getDeviceVersion, reportUsage, sniffCarrierFromUA, patchClinicCarrier, getDeviceBlock
 } from './_lib/license-core.js';
+import { punchLogin } from '../_lib/login-punch.js';
 
 // ★ 2026-09-24 P1-B KV 降写：纯心跳（端形态无变化、无需补审计）整记录写近重复节流阈值。
 //   客户端正常周期 10 分钟，在线判定窗口 15 分钟（users.js ONLINE_ACTIVE_MS）；
@@ -302,6 +303,19 @@ export async function onRequest(context) {
                     }
                 } catch (e) { console.warn('[Heartbeat] 设备绑定端形态更新失败:', e.message); }
             }
+
+            // ★ 2026-10-05 历史登录打卡（诊所管理「累计登录」，KNOWLEDGE §53）：
+            //   离线端唯一活跃触点即心跳（10min 周期，当天登录后必达）。每端每天
+            //   服务端 get-miss-put 去重，多耗 1 次廉价读/心跳，稳态 1 写/天。
+            //   端类型兜底必须与今日登录聚合一致：离线端未知形态计「桌面」，只有
+            //   显式 app 才计 APP（本端点无网页形态）。失败静默，绝不影响心跳响应。
+            try {
+                await punchLogin(kv, {
+                    clinicName: record.clinicName,
+                    clientClass: found.clientClass === 'app' ? 'app' : 'desktop',
+                    uid: machineId
+                });
+            } catch (e) { console.warn('[Heartbeat] 登录打卡失败:', e && e.message); }
         }
 
         // 计算剩余天数
