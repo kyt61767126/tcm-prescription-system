@@ -8,8 +8,7 @@ import android.webkit.WebView;
 
 import androidx.annotation.NonNull;
 import androidx.webkit.WebViewCompat;
-import androidx.webkit.WebViewFeature;
-import androidx.webkit.WebViewStartUpCallback;
+import androidx.webkit.WebViewStartUpConfig;
 import androidx.webkit.WebViewStartUpResult;
 
 import java.util.concurrent.Executor;
@@ -25,11 +24,14 @@ import java.util.concurrent.Executor;
  * 不会重复初始化。
  *
  * 两条路径（安全评审 M1 整改）：
- * 1) 设备 WebView 支持 STARTUP_API 时用官方 WebViewCompat.startUpWebView——不构造
- *    实例、不涉及非 UI 线程 Looper 建 WebView 的兼容性问题，内部正确处理并发首建；
- * 2) 旧 WebView provider 回退到"带 Looper 后台线程创建一次性实例后 destroy"的
- *    既定做法：实例只用 Application Context、不加载 URL、同线程 destroy，随后
- *    Looper.loop() 承接 Chromium 清理消息（线程空闲零 CPU、daemon 不拖进程退出）。
+ * 1) androidx.webkit 1.14.0 的 WebViewCompat.startUpWebView 官方 API——不构造实例、
+ *    不涉及非 UI 线程 Looper 建 WebView 的兼容性问题；该 compat API 无需特性常量
+ *    门控（1.14 中无 STARTUP_API 常量），旧 provider 上内部自动退化为普通启动，
+ *    回调仅有 onSuccess 且一定会被调用。必须跑 UI 线程的启动任务用
+ *    setShouldRunUiThreadStartUpTasks(false) 推迟到真实首建（避免抢占启动期主线程）。
+ * 2) 官方调用本身抛异常的极端环境，回退到"带 Looper 后台线程创建一次性实例后
+ *    destroy"的既定做法：实例只用 Application Context、不加载 URL、同线程 destroy，
+ *    随后 Looper.loop() 承接 Chromium 清理消息（线程空闲零 CPU、daemon 不拖进程退出）。
  * 全程 fail-open：任何失败仅日志，MainActivity 行为与未预热时完全一致。
  */
 public class StartupApplication extends Application {
@@ -50,31 +52,30 @@ public class StartupApplication extends Application {
                 }
             };
 
-            if (WebViewFeature.isFeatureSupported(WebViewFeature.STARTUP_API)) {
-                WebViewCompat.startUpWebView(appContext, backgroundExecutor,
-                        new WebViewStartUpCallback() {
-                            @Override
-                            public void onSuccess(@NonNull WebViewStartUpResult result) {
-                                Log.d(TAG, "D3 WebView 官方预热完成（STARTUP_API，"
-                                        + "loggedErrors=" + result.getLoggedErrors().size() + "）");
-                            }
-
-                            @Override
-                            public void onFailure(@NonNull Throwable error) {
-                                Log.w(TAG, "D3 官方预热失败，回退旧路径: " + error.getMessage());
-                                legacyWarmUp(appContext);
-                            }
-                        });
-            } else {
-                Log.d(TAG, "D3 设备不支持 STARTUP_API，使用后台线程实例预热回退路径");
-                legacyWarmUp(appContext);
-            }
+            // 1.14.0 真实签名：startUpWebView(Context, WebViewStartUpConfig,
+            // WebViewCompat.WebViewStartUpCallback)，回调只有 onSuccess。
+            WebViewStartUpConfig config = new WebViewStartUpConfig.Builder(backgroundExecutor)
+                    .setShouldRunUiThreadStartUpTasks(false)
+                    .build();
+            WebViewCompat.startUpWebView(appContext, config,
+                    new WebViewCompat.WebViewStartUpCallback() {
+                        @Override
+                        public void onSuccess(@NonNull WebViewStartUpResult result) {
+                            Log.d(TAG, "D3 WebView 官方预热完成（startUpWebView，"
+                                    + "uiThreadTotalMs=" + result.getTotalTimeInUiThreadMillis()
+                                    + ", uiThreadMaxTaskMs=" + result.getMaxTimePerTaskInUiThreadMillis()
+                                    + ", blockingLocations="
+                                    + result.getBlockingStartUpLocations().size() + "）");
+                        }
+                    });
         } catch (Throwable e) {
-            Log.w(TAG, "D3 WebView 预热调度失败（忽略，不影响启动）: " + e.getMessage());
+            Log.w(TAG, "D3 官方预热调用失败，回退后台线程实例预热（不影响启动）: "
+                    + e.getMessage());
+            legacyWarmUp(getApplicationContext());
         }
     }
 
-    /** 旧 provider 回退：后台 Looper 线程创建一次性 WebView 触发进程级初始化。 */
+    /** 旧 provider/异常环境回退：后台 Looper 线程创建一次性 WebView 触发进程级初始化。 */
     private void legacyWarmUp(final Context appContext) {
         Thread t = new Thread(() -> {
             Looper.prepare();

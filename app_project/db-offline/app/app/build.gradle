@@ -47,7 +47,7 @@ android {
         applicationId "com.benneng.pres.dingzhi"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 312
+        versionCode 313 // ★ 2026-10-05 批次D：D1安全检测后台线程/D2完整性预取闸门/D6录像404根治/D5业务库idle（热更2026.10.05-1）
         versionName "1.0.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
