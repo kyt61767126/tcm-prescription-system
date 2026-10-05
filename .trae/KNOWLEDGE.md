@@ -1720,3 +1720,9 @@
 * **验证**：node --check 三文件；4 对跨版本守卫全绿；check-interface 6 OK；**内存 mockKV 11 项逻辑测试**（e2e/.tmp/login-punch-test.mjs，未跟踪）覆盖去重/大小写归一/lp_start/跨月归档/幂等/起始月=当月空窗/KV 故障 fail-open。线上核验页面含「累计登录」+histTotal、未授权 403。
 * **遗留**：原始凭证 400 天滚动 + 月桶永久；若管理员连续 400 天不开诊所列表导致未归档月的原始 key 过期才会丢该月（实际管理员每月都开，风险可忽略）；诊所改名后历史月桶挂旧名（与离线在线/续费按名同源的既有局限一致）。
 
+## 五十四、官网「注册开通」付费激活说明卡（2026-10-06，commit 154cc3fa，push 即达五端零改动）
+* **背景**：`/download` 注册开通 tab 原本只讲免费自助申请→管理员审核一键激活，注册用户看不到任何付费/付款激活路径。在「开通方式」卡之后、`tab-register` 收尾前新增琥珀色卡片（border #f59e0b），标题「免费试用后，如何付费激活」。
+* **内容来源铁律**：卡内价格（本地 99/299、云端 199/399 按年）、设备授权规则（桌面/手机不同设备、标准 1 台双端分别买、机构 3-5 台、换机原码+原手机号）、付款四步（选版本→填信息含设备识别码→扫码备注订单后6位/手机端保存图片相册识别→5-30 分钟自动激活或第4步领码）、邀请码 +90/+30 全部摘自购买 tab 与 promo tab 现网文案，**不发明新政策新价格**。
+* **实现要点**：纯 inline style 复用既有 class（card/trial-card/notice notice-warning/download-btn/wx-id）与既有函数（switchTab('purchase')/copyText），未改 CSS/HTML 结构；CTA 与客服微信 hktzy1688 各一处。
+* **同步验证**：双副本 `public/download.html` ↔ `site-official/download.html` 字面同文插入 156 行；`node tools/diff-cross-version.cjs` 四对全绿（download 仅A侧0/仅B侧0）；整页 div 配平；check-interface 6 OK。线上核验 7 项（标题/价格/跳转/唯一性等）。官网纯静态 push 后 CF Pages 约 70 秒部署，五端零重打包。
+
