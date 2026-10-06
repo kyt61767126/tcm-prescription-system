@@ -38,17 +38,17 @@
     },
     "cloud": {
         "apk": {
-            "version": "V1.0.0.313",
-            "versionCode": 313,
-            "sha256": "ddb29a5e2ff029f621231a9ff8fd8ae0c87d28adb874db933a0e89d0ed9c1c95",
+            "version": "V1.0.0.314",
+            "versionCode": 314,
+            "sha256": "c2f143b30c0008123d5ea8ba73288a7ed55b0a7732c99a74d3aac7035cfe3937",
             "url": "/downloads/惠康中医-云端.apk",
-            "releaseUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.10.05-0938/huikang-cloud.apk",
-            "size": 12373075,
-            "updateTime": "2026-10-05T01:39:56.777Z",
+            "releaseUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.10.06-0830/huikang-cloud.apk",
+            "size": 12373169,
+            "updateTime": "2026-10-06T00:21:33.255Z",
             "fileName": "惠康中医-云端.apk",
             "releaseFileName": "huikang-cloud.apk",
-            "releaseTag": "v2026.10.05-0938",
-            "releaseNotes": "✨ 新增:\n  - feat(admin): 诊所管理新增「累计登录」历史统计（端天去重，纯服务端打卡五端零改动）\n  - feat(admin): 诊所管理「实时在线」改为「今日登录」端数（登录一次代表一天，三端去重）\n  - feat(patient): 历史患者年龄按记录年份自动推算递增，选中患者不再沿用旧年龄\n🐛 修复:\n  - fix(app): D3 对齐 androidx.webkit 1.14.0 真实 API，双APP版号 离线313/云端312\n  - fix(desktop): B2 preconnect 双端 login.html 对齐（pre-push 漂移门：云/离线桌面登录页规范化后必须一致）\n  - fix(license): 注册引导改 preload sendSync 同步快道，根治 266 pre-fuse E1-E3 overlay 晚注入竞态\n  - fix(login): 预建隐藏窗登录后清除未注册引导残留层（E3 pre-fuse 回归：localRegisterOverlay 拦截改密按钮）\n  - perf(login): 离线登录秒开二次优化——t0同步预取+点击并行预热+预建隐藏主窗（1.0.264，双独立审查初审FAIL修复后复审PASS）\n  - fix(license): 离线登录预填恢复 + vault 冷PS冻结全链异步化（1.0.262，三重独立审查）\n  - fix(login): 改名安全验证 prompt 漏 await 致 Promise 进 IPC 克隆失败（热更-3）\n  - fix(login): 修复改名后新用户名无法登录（isPasswordHashed 漏认 PBKDF2 致二次哈希污染）\n  - fix(license): vault 备份锚点按产品域隔离，根治云离跨端污染致离线首启篡改弹窗\n  - fix(analytics): 就诊趋势柱状图X轴只显示「日」，修日键字典序错排\n⚡ 优化:\n  - docs(knowledge): §52.5 全端启动优化 B/C/D 收口——生效矩阵+webkit1.14 javap 实测教训+热更三位一体\n  - perf(app): 全端启动提速 批次D——双APP后台线程化+D6录像脚本404根治+D5业务库idle加载，热更双通道重签 2026.10.05-1\n  - perf(cloud-desktop): 全端启动/登录架构优化 批次B——预建隐藏主窗+未激活先见登录窗+t0冷连接预热+登录响应处方预取\n  - perf(startup): C1 config.json 同步XHR改head异步预取+唯一收口点（全端优化批次C，零版号）\n  - perf(startup): 离线桌面批次A 全端启动/登录架构优化——点击进系统 2.3~3.9s 降至 0.4~1.0s（1.0.268）\n  - perf(license): 登录窗弹出提速 2.4s->0.85s，vault 预热后移首窗 show 后(1.0.266)\n  - build: 离线桌面 1.0.265 打包版号自动收纳（登录秒开二次优化：7铁闸ALL PASS+pre-fuse E2E 6/6+fuse/签名/冒烟全过）\n  - perf(license): 登录秒开——裁决预取保热 + LICENSED 快车道后台对账（离线 1.0.263，双独立审查两审两收口）\n  - perf(license): verifyLoginGate 全链异步化，消除登录窗 4.5s 同步冻结\n  - perf(license): backupUserAccounts 幂等短路，消除启动时凭据保险库同步冻结\n📋 其他:\n  - build: 一键打包副作用自动收纳\n  - docs(knowledge): §53.1 累计登录历史统计——服务端打卡KV设计/月懒归档/兜底铁律\n  - docs(knowledge): §53 后台诊所管理「今日登录」统计口径/数据源/北京日界铁律\n  - build: 离线桌面 1.0.263 打包版号自动收纳（登录秒开快车道，7 铁闸+E2E E1-E3 PASS+签名+冒烟全过）\n  - build: 一键打包副作用自动收纳（云端+离线，桌面+APP 四端 2026-10-01）\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - release(hotupdate): 年龄自动递增热包 2026.10.01-1（desktop cloud/local + app-local 三通道）\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳"
+            "releaseTag": "v2026.10.06-0830",
+            "releaseNotes": "✨ 新增:\n  - feat(download): 注册开通页新增「免费试用后如何付费激活」完整说明卡\n  - feat(admin): 诊所管理新增「累计登录」历史统计（端天去重，纯服务端打卡五端零改动）\n  - feat(admin): 诊所管理「实时在线」改为「今日登录」端数（登录一次代表一天，三端去重）\n  - feat(patient): 历史患者年龄按记录年份自动推算递增，选中患者不再沿用旧年龄\n🐛 修复:\n  - fix(app-cloud): P0 云APK build314 止血——停用D3 WebView预热（华为/荣耀机型点图标即闪退无登录框）\n  - fix(app): D3 对齐 androidx.webkit 1.14.0 真实 API，双APP版号 离线313/云端312\n  - fix(desktop): B2 preconnect 双端 login.html 对齐（pre-push 漂移门：云/离线桌面登录页规范化后必须一致）\n  - fix(license): 注册引导改 preload sendSync 同步快道，根治 266 pre-fuse E1-E3 overlay 晚注入竞态\n  - fix(login): 预建隐藏窗登录后清除未注册引导残留层（E3 pre-fuse 回归：localRegisterOverlay 拦截改密按钮）\n  - perf(login): 离线登录秒开二次优化——t0同步预取+点击并行预热+预建隐藏主窗（1.0.264，双独立审查初审FAIL修复后复审PASS）\n  - fix(license): 离线登录预填恢复 + vault 冷PS冻结全链异步化（1.0.262，三重独立审查）\n  - fix(login): 改名安全验证 prompt 漏 await 致 Promise 进 IPC 克隆失败（热更-3）\n  - fix(login): 修复改名后新用户名无法登录（isPasswordHashed 漏认 PBKDF2 致二次哈希污染）\n  - fix(license): vault 备份锚点按产品域隔离，根治云离跨端污染致离线首启篡改弹窗\n⚡ 优化:\n  - docs(knowledge): §52.5 全端启动优化 B/C/D 收口——生效矩阵+webkit1.14 javap 实测教训+热更三位一体\n  - perf(app): 全端启动提速 批次D——双APP后台线程化+D6录像脚本404根治+D5业务库idle加载，热更双通道重签 2026.10.05-1\n  - perf(cloud-desktop): 全端启动/登录架构优化 批次B——预建隐藏主窗+未激活先见登录窗+t0冷连接预热+登录响应处方预取\n  - perf(startup): C1 config.json 同步XHR改head异步预取+唯一收口点（全端优化批次C，零版号）\n  - perf(startup): 离线桌面批次A 全端启动/登录架构优化——点击进系统 2.3~3.9s 降至 0.4~1.0s（1.0.268）\n  - perf(license): 登录窗弹出提速 2.4s->0.85s，vault 预热后移首窗 show 后(1.0.266)\n  - build: 离线桌面 1.0.265 打包版号自动收纳（登录秒开二次优化：7铁闸ALL PASS+pre-fuse E2E 6/6+fuse/签名/冒烟全过）\n  - perf(license): 登录秒开——裁决预取保热 + LICENSED 快车道后台对账（离线 1.0.263，双独立审查两审两收口）\n  - perf(license): verifyLoginGate 全链异步化，消除登录窗 4.5s 同步冻结\n  - perf(license): backupUserAccounts 幂等短路，消除启动时凭据保险库同步冻结\n📋 其他:\n  - docs(knowledge): §54 官网注册开通付费激活说明卡（双副本同文/现网文案铁律/push即达）\n  - build: 一键打包副作用自动收纳\n  - docs(knowledge): §53.1 累计登录历史统计——服务端打卡KV设计/月懒归档/兜底铁律\n  - docs(knowledge): §53 后台诊所管理「今日登录」统计口径/数据源/北京日界铁律\n  - build: 离线桌面 1.0.263 打包版号自动收纳（登录秒开快车道，7 铁闸+E2E E1-E3 PASS+签名+冒烟全过）\n  - build: 一键打包副作用自动收纳（云端+离线，桌面+APP 四端 2026-10-01）\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - release(hotupdate): 年龄自动递增热包 2026.10.01-1（desktop cloud/local + app-local 三通道）\n  - build: 一键打包副作用自动收纳"
         },
         "exe": {
             "version": "1.2.263",
@@ -76,12 +76,12 @@
     "provenance": {
         "schemaVersion": 1,
         "repo": "https://github.com/kyt61767126/tcm-prescription-system.git",
-        "commit": "1cb95be3d6bb",
+        "commit": "7f8b87682615",
         "ref": "main",
         "builder": "kyt61767126",
-        "builtAt": "2026-10-05T01:39:57.370Z",
+        "builtAt": "2026-10-06T00:21:33.934Z",
         "buildTool": "publish-release.js@v24.16.0",
-        "releaseTag": "v2026.10.05-0938"
+        "releaseTag": "v2026.10.06-0830"
     },
     "dingzhi": {
         "apk": {
