@@ -444,8 +444,25 @@
 
                 const stats = statsMap.get(monthKey);
                 stats.visits++;
-                stats.totalIncome += (parseFloat(p.totalAmount) || 0) + (parseFloat(p.registrationFee) || 0);
-                stats.totalRegFee += parseFloat(p.registrationFee) || 0;
+                // ★ 2026-10-06 修复总收入双重计算诊费：现行全部端（云网页/云桌面/离线APP/
+                //   离线桌面/鸿蒙，2026-07 起）保存时 totalAmount = 药费(单价×用量×剂数)+诊疗费，
+                //   此处再加 registrationFee 会把诊费计两遍（云端 D1 回填诊费字段后总收入虚高）。
+                //   为兼容极个别旧版/备份导入的 totalAmount 不含诊费记录，用记录内冻结的 item.price
+                //   重算药费逐张自识别：≈药费+诊费→已含只取 totalAmount；≈仅药费→旧口径补诊费；
+                //   两者都不符（改价/缺价等）默认取 totalAmount，fail-safe 不误加。
+                const ta = parseFloat(p.totalAmount) || 0;
+                const fee = parseFloat(p.registrationFee) || 0;
+                const recDoses = parseFloat(p.doseCount) || 1;
+                let medSum = 0;
+                if (Array.isArray(p.items)) {
+                    p.items.forEach(it => {
+                        medSum += (parseFloat(it.price) || 0) * (parseFloat(it.dosage) || 0) * recDoses;
+                    });
+                }
+                stats.totalIncome += (fee > 0 && Math.abs(ta - medSum) < 0.03 && Math.abs(ta - (medSum + fee)) >= 0.03)
+                    ? (ta + fee)
+                    : ta;
+                stats.totalRegFee += fee;
                 stats.totalDoses += parseFloat(p.doseCount) || 0;
 
                 if (p.items && Array.isArray(p.items)) {
