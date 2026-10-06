@@ -3,7 +3,7 @@ import { getKV, listAllKeys } from './_lib/kv.js';
 import { getDB, isD1Enabled } from './_lib/d1.js';
 import { writeAuditLog } from './_lib/audit-log.js';
 // ★ 2026-09-15 登录提速：D1 读取/行转换抽至 _lib/prescriptions-store.js（与 users.js 共享）
-import { d1LoadPrescriptions, d1RowToPrescription, safeJsonParse } from './_lib/prescriptions-store.js';
+import { d1LoadPrescriptions, d1RowToPrescription, safeJsonParse, ensurePrescriptionSchema } from './_lib/prescriptions-store.js';
 
 // P1-6 安全增强：CORS 白名单（与 users.js 一致）
 function getAllowedOrigins() {
@@ -273,16 +273,19 @@ async function deletePrescriptionById(kv, clinicId, id) {
 
 // 写入/更新单条处方到 D1（upsert by id）
 async function d1UpsertPrescription(db, clinicId, p) {
+    // ★ 2026-10-06 首次写入前确保新列就位（幂等单飞，见 prescriptions-store.js）
+    await ensurePrescriptionSchema(db);
     await db.prepare(`
         INSERT INTO prescriptions (id, clinic_id, patient_name, doctor_name, created_by, date,
-            prescription_no, outpatient_no, diagnosis, items, total_amount, fee_status,
-            paid_at, paid_by, pay_method, media_files, extra, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            prescription_no, outpatient_no, diagnosis, items, total_amount, registration_fee, dose_count,
+            fee_status, paid_at, paid_by, pay_method, media_files, extra, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             patient_name=excluded.patient_name, doctor_name=excluded.doctor_name,
             date=excluded.date, prescription_no=excluded.prescription_no,
             outpatient_no=excluded.outpatient_no, diagnosis=excluded.diagnosis,
             items=excluded.items, total_amount=excluded.total_amount,
+            registration_fee=excluded.registration_fee, dose_count=excluded.dose_count,
             fee_status=excluded.fee_status, paid_at=excluded.paid_at,
             paid_by=excluded.paid_by, pay_method=excluded.pay_method,
             media_files=excluded.media_files, extra=excluded.extra,
@@ -298,6 +301,9 @@ async function d1UpsertPrescription(db, clinicId, p) {
         p.diagnosis || null,
         JSON.stringify(p.items || []),
         typeof p.totalAmount === 'number' ? p.totalAmount : 0,
+        // ★ 2026-10-06 诊疗费/剂数入库（此前 D1 丢这两字段 → 云端月度报表诊疗费、剂数恒 0、成本按 1 剂少算）
+        typeof p.registrationFee === 'number' ? p.registrationFee : (parseFloat(p.registrationFee) || 0),
+        parseInt(p.doseCount, 10) || 0,
         p.feeStatus || 'unpaid',
         p.paidAt || null,
         p.paidBy || null,

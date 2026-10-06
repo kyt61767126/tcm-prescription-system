@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS prescriptions (
   diagnosis       TEXT,
   items           TEXT,                    -- JSON 药材列表
   total_amount    REAL DEFAULT 0,
+  registration_fee REAL DEFAULT 0,         -- ★ 2026-10-06 诊疗费（诊金/挂号费），月度统计「总诊疗费」数据源；遗漏致云端报表恒 0
+  dose_count      INTEGER DEFAULT 0,       -- ★ 2026-10-06 剂数（帖数），月度统计「总剂数」+成本倍数（cost×dosage×doseCount）数据源
   fee_status      TEXT DEFAULT 'unpaid',   -- unpaid / paid
   paid_at         TEXT,
   paid_by         TEXT,

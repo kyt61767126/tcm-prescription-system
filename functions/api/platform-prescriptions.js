@@ -17,6 +17,8 @@ function d1RowToPrescription(row) {
         diagnosis: row.diagnosis,
         items: row.items ? JSON.parse(row.items) : [],
         totalAmount: row.total_amount,
+        registrationFee: row.registration_fee != null ? row.registration_fee : 0,  // ★ 2026-10-06 诊疗费
+        doseCount: row.dose_count != null ? row.dose_count : 0,                    // ★ 2026-10-06 剂数
         feeStatus: row.fee_status,
         paidAt: row.paid_at,
         paidBy: row.paid_by,

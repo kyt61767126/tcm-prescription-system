@@ -11,6 +11,7 @@
 import { parseAuthHeader, isPlatformAdmin } from './_lib/auth.js';
 import { getKV, listAllKeys } from './_lib/kv.js';
 import { getDB, isD1Enabled } from './_lib/d1.js';
+import { ensurePrescriptionSchema } from './_lib/prescriptions-store.js';
 
 function getCorsHeaders() {
     return {
@@ -48,6 +49,8 @@ export async function onRequest(context) {
 
         // 1) 扫描所有诊所的处方 key（按日期分 key + 旧全量 key）
         if (target === 'all' || target === 'prescriptions') {
+        // ★ 2026-10-06 迁移前确保 registration_fee/dose_count 两列就位（幂等在线加列）
+        await ensurePrescriptionSchema(db);
         const dateKeys = await listAllKeys(kv, 'clinic:');
         const rxKeys = dateKeys.filter(k =>
             k.startsWith('clinic:') && k.includes(':prescriptions')
@@ -65,14 +68,15 @@ export async function onRequest(context) {
                         const exists = !!before;
                         await db.prepare(`
                             INSERT INTO prescriptions (id, clinic_id, patient_name, doctor_name, created_by, date,
-                                prescription_no, outpatient_no, diagnosis, items, total_amount, fee_status,
-                                paid_at, paid_by, pay_method, media_files, extra, created_at, updated_at)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                prescription_no, outpatient_no, diagnosis, items, total_amount, registration_fee, dose_count,
+                                fee_status, paid_at, paid_by, pay_method, media_files, extra, created_at, updated_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                             ON CONFLICT(id) DO UPDATE SET
                                 patient_name=excluded.patient_name, doctor_name=excluded.doctor_name,
                                 date=excluded.date, prescription_no=excluded.prescription_no,
                                 outpatient_no=excluded.outpatient_no, diagnosis=excluded.diagnosis,
                                 items=excluded.items, total_amount=excluded.total_amount,
+                                registration_fee=excluded.registration_fee, dose_count=excluded.dose_count,
                                 fee_status=excluded.fee_status, paid_at=excluded.paid_at,
                                 paid_by=excluded.paid_by, pay_method=excluded.pay_method,
                                 media_files=excluded.media_files, extra=excluded.extra,
@@ -89,6 +93,9 @@ export async function onRequest(context) {
                             p.diagnosis || null,
                             JSON.stringify(p.items || []),
                             typeof p.totalAmount === 'number' ? p.totalAmount : 0,
+                            // ★ 2026-10-06 诊疗费/剂数从 KV 完整对象回填（KV 双写一直保留全字段）
+                            typeof p.registrationFee === 'number' ? p.registrationFee : (parseFloat(p.registrationFee) || 0),
+                            parseInt(p.doseCount, 10) || 0,
                             p.feeStatus || 'unpaid',
                             p.paidAt || null,
                             p.paidBy || null,
