@@ -230,8 +230,11 @@ public class MainActivity extends BridgeActivity {
             try {
                 java.net.InetAddress.getAllByName(CLOUD_HOST);
                 Log.d(TAG, "DNS 预解析完成: " + CLOUD_HOST);
-            } catch (Exception e) {
-                Log.w(TAG, "DNS 预解析失败（不影响正常加载）: " + e.getMessage());
+            } catch (Throwable t) {
+                // ★ 2026-10-06 P0 止血加固：catch Throwable 而非 Exception——本进程设有
+                // 全局 UncaughtExceptionHandler（任何线程漏网异常都会 killProcess），
+                // DNS 预热纯收益无人消费，Error 也不得逃逸误杀启动。
+                Log.w(TAG, "DNS 预解析失败（不影响正常加载）: " + t.getMessage());
             }
         }, "dns-prefetch");
         dnsThread.setDaemon(true);

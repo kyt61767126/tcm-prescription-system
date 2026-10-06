@@ -2,8 +2,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- ★ 2026-10-06 P0 止血（云 APK build 314）：不再注册 android:name=".StartupApplication"。
+         build 313 的 D3「Application.onCreate 进程级 WebView 预热」在华为/荣耀机型
+         （含部分鸿蒙/老 EMUI、系统 WebView provider 异常环境）触发 native abort，
+         进程在任何界面前被杀死——点图标立即闪退回桌面、登录框完全不显示。
+         预热纯启动提速、零功能依赖，注销后启动行为回到 build 311 已验证路径。
+         恢复前必须在华为/荣耀/小米/OPPO/vivo 低中高全系真机冷启动回归。 -->
     <application
-        android:name=".StartupApplication"
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
