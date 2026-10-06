@@ -1727,6 +1727,7 @@
 * **同步验证**：双副本 `public/download.html` ↔ `site-official/download.html` 字面同文插入 156 行；`node tools/diff-cross-version.cjs` 四对全绿（download 仅A侧0/仅B侧0）；整页 div 配平；check-interface 6 OK。线上核验 7 项（标题/价格/跳转/唯一性等）。官网纯静态 push 后 CF Pages 约 70 秒部署，五端零重打包。
 
 ## 五十五、P0 云 APK build313 华为/荣耀点图标即闪退——D3 Application 预热 WebView 事故（2026-10-06，修复 build314 / commits 7f8b8768、5bde5959、9e133226）
+* **✅ 修复确认**：build314 经客户故障华为/荣耀真机覆盖安装后**可正常打开云端 App、登录框正常**（2026-10-06 用户反馈确认），事故闭环；模拟器冒烟与真机表现一致。
 * **事故现象**：云端安卓 APP 从 build 311 升级 **build 313**（2026-10-05 批次 D 的 D3）后，华为/荣耀机型**点图标立刻闪退回桌面、无任何界面、登录框完全不显示**；crash_logs 目录无记录（全局 UncaughtExceptionHandler 也抓不到）。
 * **根因**：D3 在 `StartupApplication.onCreate`（先于一切 Activity/界面执行）调 `WebViewCompat.startUpWebView` 做进程级预热；华为/荣耀（含部分鸿蒙、老 EMUI、系统 WebView provider 被禁用/多用户等异常环境）在该阶段触发 **native abort**——Java 层 try/catch(Throwable) 与 UncaughtExceptionHandler 对 native 崩溃全部失效。§52.5 已留过"M1 遗留：低端/国产 ROM 冷启动未真机回归"，但仍随包发出 = 已知风险未闭环就上线，教训按 P0 记。
 * **修复（build314，云线 versionCode 313→314；包名 com.tcm.prescription 与离线 com.benneng.pres.dingzhi 独立）**：①Manifest 删除 `android:name=".StartupApplication"`（注释不能嵌在 `<application>` 标签属性之间，AAPT 直接编译失败，必须放标签外）；②StartupApplication 空壳化，release R8 收缩后不进 dex；③D4 dns-prefetch 线程 catch(Exception) 收紧为 catch(Throwable)——本 APP 设了全局 handler 杀进程，启动期任何后台线程不得让 Error 逃逸。D3 仅 150~400ms 提速、零功能依赖，停用后启动路径等同已大规模验证的 build 311。
