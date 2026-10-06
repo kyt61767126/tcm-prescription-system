@@ -1739,3 +1739,16 @@
   4. **闪退型故障，应用内更新（登录页横幅拉 hash-manifest）无法自救**——APP 起不来就拉不到更新；只能靠客户到 `/download` 手动下载覆盖安装（同包名同签名覆盖，versionCode 更高即可，不卸载、本地登录态/数据不丢），故 APK 修复版必须第一时间替换 public/downloads 托管文件；客服可直接微信发 APK。
   5. 恢复 D3 的前置：华为/荣耀（鸿蒙+EMUI 新老）、小米、OPPO/vivo 全系真机（含 provider 停用/多用户/低版本 Android）冷启动通过；回退路径禁止非 UI 线程 new WebView（老 ROM 同样 native abort）。
 
+## 五十六、云端月度统计「诊疗费/剂数恒 0、成本少算、收入双算」——D1 字段缺失全链路事故（2026-10-06，commits b49dd71c/fe647ef1/a54602b6，纯服务端+热包零重打包）
+
+* **事故现象**：客户云端月度报表（惠康堂）总诊疗费、总剂数恒 0，总成本按 1 剂计（4 诊次仅 46.60）；对照离线正常诊所（诊费 140/7 剂/成本 52.09）报障。
+* **根因链（两处独立 bug 叠加）**：
+  1. **D1 建表漏列**：云端处方双写 KV（完整对象）+D1，而 `schema.sql` prescriptions 表无 `registration_fee`/`dose_count`，`d1UpsertPrescription` INSERT 不含、`d1RowToPrescription` 不映射、`platform-prescriptions.js` 还有一份**独立行映射**（不吃共享 store）——读回两字段 undefined → analytics 恒 0；成本 `doseCount||1` 按 1 剂少算。**KV 双写始终完整 = 免费的回填源。**
+  2. **收入公式双算诊费（潜伏已久）**：全部端 2026-07 起保存口径就是 `totalAmount = Σ(单价×用量)×剂数 + 诊疗费`，而 `analyzeMonthlyStats` 又 `totalIncome += totalAmount + registrationFee`。客户截图的"正确收入 1284.26"纯属诊费被 D1 削 0 的负负得正；字段一旦回填会虚高成 1613.26。全量 217 张实测：31 张含费处方 totalAmount 无一例外已含诊费。
+* **★ 铁律：给 D1 表新增字段必须同批改四处**——①schema.sql 建表；②upsert INSERT/VALUES/ON CONFLICT/bind；③共享 `d1RowToPrescription`（含 delete 残键清理）；④**platform-* 端点的独立行映射**（不 import 共享库，最易漏）；外加 migrate.js 的 KV→D1 SQL。漏任一处即静默数据丢失且无报错。
+* **本机 wrangler/workerd 崩溃（std::terminate/UV_HANDLE_CLOSING，exit 3221226505）无法执行 D1 DDL 时的替代方案**：应用层幂等自迁移——`ensurePrescriptionSchema(db)` 模块级单飞 Promise + `PRAGMA table_info` 检测缺列则 `ALTER TABLE ADD COLUMN`（存量行 DEFAULT 0 不锁表），首次写请求即全区域 isolate 收敛；catch 重置 Promise 允许重试。历史真值随后由 `POST /api/migrate?target=prescriptions`（platform_admin Bearer，KV→D1 ON CONFLICT 更新，幂等可重跑）回填。回填脚本登录走 `/api/users?login=true`（body {username,password,clientClass:'web'}），禁止发明凭据。本次 migrate 234 张扫出 230 更新、4 张 UNIQUE(prescription_no) 冲突（6 月旧重复编号，非 9/10 月，不影响报表）。
+* **★ 铁律：聚合公式改前必须用线上真实全量数据回放验证口径假设**。修复用"记录内冻结的 item.price×dosage×doseCount 重算药费"逐张自识别新旧口径：≈药费+诊费→已含只取 totalAmount；≈仅药费→旧版/备份导入记录补加诊费；两者都不符（改价/缺价/缓存缺 doseCount）fail-safe 取总额。这样离线旧数据与现行数据都不出错，无需数据迁移。**不要用"显示看起来对"反推公式正确**——客户两张截图都是被削字段后的意外值。
+* **分发链（render 层白名单 JS 变更标准动作）**：改 `shared/analytics-core.js` → 11 副本逐字节同步（sync-all 只管 6 目标，hot-update×3、云 APP assets、鸿蒙 rawfile 需手工 Copy）→ 三渠道热包重签（app-local/desktop-local `-n` 自动按日 → 2026.10.06-1；desktop/cloud 因刷 cv 后二次重签 → -2）→ **pre-push cv 门禁**：业务 JS 内容变必须 `node tools/check-cv-hashes.cjs --update` 刷 `?cv=` 指纹再 `tools/sync-html.ps1` 传播（本次只云端 3 份 HTML 用 cv 引 analytics），漏刷则线上 immutable 长缓存不生效；**热包 index.html 引了 cv 的（cloud 通道），刷 cv 后必须重新生成重签**，否则热包内新 JS 配旧 cv 仍读缓存。
+* **离线端核查结论（本次无需为"离线数据"做任何修复）**：离线处方只走本机 IndexedDB/文件，字段完整、11 份 analytics-core 与权威源同 SHA、无"云端处方覆盖本地"同步路径（silentSyncFromCloud 只读云端所内数据用于云账号，不回写离线本地库）；离线端获得收入双算修复仅靠热包（联网开一次+彻底划掉重启），零重打包。成本数字依赖各端药材库 costPrice 维护（platform 接口侧无药材库，用售价核出的成本只是上界，不能作为客户口径）。
+* **生效方式**：云网页/云服务 push 即达（CF Pages ~70s，已线上 SHA256 核验 60dad9ce + 三通道 version.json 在线）；新开方部署即正确，历史 230 张已回填；云桌面/离线桌面/离线 APP 靠 2026.10.06 热包，JS 修复联网打开一次+彻底重启即可，Java/native 修复才需整包。双审（功能边界+安全 Ed25519 实测验签 54/54）PASS，BIZ-SMOKE 93/93。
+
