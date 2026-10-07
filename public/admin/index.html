@@ -1178,6 +1178,17 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
             每行一个用户名（最多 100 个），共享下方配置。<br>
             系统会为每个用户生成一个独立激活码，生成后可在结果弹窗中下载 CSV。
         </div>
+        <!-- ★ 2026-10-07 淘宝一键备货：点规格→自动占位名+自动开码，结果窗复制纯码/导出 TXT 导 91 -->
+        <div class="tpl-bar" style="margin-bottom:10px;padding:8px 10px;border:1px dashed #409eff;border-radius:6px;align-items:center;">
+            <span class="tpl-label">🛒 淘宝备货（一键开码）：</span>
+            <button class="tpl-btn" onclick="taobaoStockPreset('localStd')">本地标准版 ￥99</button>
+            <button class="tpl-btn" onclick="taobaoStockPreset('localPro')">本地机构版 ￥299</button>
+            <button class="tpl-btn" onclick="taobaoStockPreset('cloudStd')">云端标准版 ￥199</button>
+            <button class="tpl-btn" onclick="taobaoStockPreset('cloudPro')">云端机构版 ￥399</button>
+            <span style="margin-left:6px;font-size:13px;color:#606266;">数量</span>
+            <input type="number" id="taobaoStockCount" value="20" min="1" max="100" style="width:72px;padding:4px 8px;">
+            <span style="font-size:12px;color:#909399;">（1-100，自动占位名/365天/选好端，买家激活自动覆盖）</span>
+        </div>
         <div class="form-group" style="margin-bottom:12px;">
             <label>用户名列表（每行一个）*</label>
             <textarea id="batchGenUsers" class="batch-textarea" placeholder="张三&#10;李四&#10;王五&#10;本能堂中医诊所_赵医师"></textarea>
@@ -1269,8 +1280,9 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
         </div>
         <div id="resultList" class="result-list"></div>
         <div class="result-actions">
-            <button class="btn" onclick="copyAllResultCodes()">复制全部</button>
-            <button class="btn" onclick="downloadResultCSV()">下载 CSV</button>
+            <button class="btn" onclick="copyAllResultCodes()">复制全部纯码</button>
+            <button class="btn" onclick="downloadResultTxt()">导出纯码 TXT（导 91 用）</button>
+            <button class="btn" onclick="downloadResultCSV()">下载 CSV（留底）</button>
             <button class="btn btn-success" onclick="closeResultModal()">完成</button>
         </div>
     </div>
@@ -1984,6 +1996,40 @@ function syncBatchFromMain() {
     showAlert('batchGenAlert', '已从主表单同步配置', 'info');
 }
 
+// ★ 2026-10-07 淘宝一键备货预设（4 规格；与淘宝商品/91 卡种一一对应）
+//   一键完成：占位用户名（唯一不重复）+365 天 +type/maxDevices/锁端/note，随后直接开码。
+const TAOBAO_STOCK_PRESETS = {
+    localStd: { label: '本地标准版￥99',  prefix: '本地标准备货', type: 'personal', maxDevices: 1, productClass: 'offline', note: '淘宝-本地标准版-99' },
+    localPro: { label: '本地机构版￥299', prefix: '本地机构备货', type: 'pro',      maxDevices: 5, productClass: 'offline', note: '淘宝-本地机构版-299' },
+    cloudStd: { label: '云端标准版￥199', prefix: '云端标准备货', type: 'personal', maxDevices: 1, productClass: 'cloud',   note: '淘宝-云端标准版-199' },
+    cloudPro: { label: '云端机构版￥399', prefix: '云端机构备货', type: 'pro',      maxDevices: 5, productClass: 'cloud',   note: '淘宝-云端机构版-399' }
+};
+function taobaoStockPreset(key) {
+    const p = TAOBAO_STOCK_PRESETS[key];
+    if (!p) return;
+    let n = parseInt(document.getElementById('taobaoStockCount').value, 10);
+    if (!Number.isFinite(n) || n < 1) n = 1;
+    if (n > 100) n = 100;   // batch 接口单次上限 100
+    document.getElementById('taobaoStockCount').value = n;
+    const width = Math.max(2, String(n).length);
+    const names = [];
+    for (let i = 1; i <= n; i++) names.push(p.prefix + String(i).padStart(width, '0'));
+    document.getElementById('batchGenUsers').value = names.join('\n');
+    document.getElementById('batchGenType').value = p.type;
+    document.getElementById('batchGenDays').value = 365;
+    document.getElementById('batchGenExpiresAt').value = '';
+    document.getElementById('batchGenClinicName').value = '';
+    document.getElementById('batchGenMaxDevices').value = p.maxDevices;
+    document.getElementById('batchGenProductClass').value = p.productClass;
+    document.getElementById('batchGenNote').value = p.note;
+    // 备货码不挂售后信息，避免污染库存记录
+    document.getElementById('batchGenOrderNo').value = '';
+    document.getElementById('batchGenPhone').value = '';
+    document.getElementById('batchGenWechat').value = '';
+    showAlert('batchGenAlert', '已按「' + p.label + '」填入 ' + n + ' 个占位名，正在开码…', 'info');
+    batchGenerate();
+}
+
 // 批量生成：调用 /api/license/batch
 async function batchGenerate() {
     const usersText = document.getElementById('batchGenUsers').value.trim();
@@ -2173,6 +2219,26 @@ function downloadResultCSV() {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     showAlert('resultModalAlert', 'CSV 已下载（' + lastResultCodes.length + ' 条）', 'success');
+}
+
+// ★ 2026-10-07 导出纯码 TXT：一行一个 BNZC 码（91 卡券批量导入直接粘贴/上传此内容）
+function downloadResultTxt() {
+    if (lastResultCodes.length === 0) {
+        showAlert('resultModalAlert', '无激活码可导出', 'error');
+        return;
+    }
+    const text = lastResultCodes.map(c => c.code).join('\r\n') + '\r\n';
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    a.download = 'activation_codes_pure_' + dateStr + '.txt';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showAlert('resultModalAlert', '纯码 TXT 已下载（' + lastResultCodes.length + ' 条，一行一个，可直接导 91）', 'success');
 }
 
 function clearGenForm() {
