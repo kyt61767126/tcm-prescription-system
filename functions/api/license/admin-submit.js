@@ -29,13 +29,19 @@
 //    key: admin_req_index  -> [requestId1, requestId2, ...]
 // ============================================================================
 
-import { getKV, checkRateLimit, checkDeviceVersion, getDeviceBlock } from './_lib/license-core.js';
+import {
+    getKV, checkRateLimit, checkDeviceVersion, getDeviceBlock,
+    // ★ 2026-10-06 机构版多设备免客服自动加机：复用 validate 多机权威链路
+    getLicense, updateLicense, getDevices, getMaxDevices,
+    buildLicenseData, encodeLicenseBase64, appendLicenseLog,
+    detachDeviceFromOtherLicenses, setDeviceVersion, versionOf
+} from './_lib/license-core.js';
 import { provisionCloudAccount, normalizeActivationPassword } from './_lib/admin-account.js';
 // ★ 2026-09-17 P0 修复：补 KV_ADMIN_REQ_INDEX import——原 3 处使用（L51/L72/L399）
 //   均未定义未导入，L399 在 onRequest 主体同步抛 ReferenceError → 全新手机号
 //   （无 admin_phone 索引）走兜底扫描必 500，管理员激活申请通道对新客户损坏。
 import { createAdminRequest, updateAdminRequestStatus, ensureLicenseV7, KV_ADMIN_REQ_INDEX } from './_lib/license-write-service.js';
-import { findPhoneOccupancy, hashPassword, getClinicsOrThrow, findClinicByName } from '../_lib/auth.js';
+import { findPhoneOccupancy, hashPassword, verifyPassword, getClinicsOrThrow, findClinicByName } from '../_lib/auth.js';
 // ★ 2026-09-07 架构防御：手机号校验收口 schema-guard 单一副本
 import { isValidPhone } from './_lib/schema-guard.js';
 
@@ -84,6 +90,50 @@ async function findPaidOrderForPhoneOrMachine(kv, phone, machineId) {
         console.warn('[AdminSubmit] 已付款订单查找失败:', e.message);
         return null;
     }
+}
+
+// ★ 2026-10-06 机构版多设备免客服自动加机（方案A：登录密码核验）
+// 安全模型：admin-submit 是匿名接口、手机号半公开（名片/客服处可得），故 2026-09-03
+// P0 决策禁止"仅凭手机号"在他机做任何授权/账号操作。密码是私密凭证，与登录同信任级：
+// 持手机号+正确密码 = 账号本人，在多机配额内自动绑机不构成接管。
+// ★ 双审修复（2026-10-07）：云端记录【只信诊所实时账号表】，不再接受 admin_req 内
+//   注册哈希——用户改密/员工离职后旧密码必须立即失效（否则旧密码可永久加机，且经
+//   owner 短路演化为账号接管 P0）。遍历所有诊所按 username/phone 命中（防诊所改名/
+//   同名诊所失配，语义同 users.js findUserForLogin 的 KV 链路）。离线记录无实时账号
+//   表，admin_req 注册哈希是唯一权威，保留。
+// 任何异常仅告警并返回 false（fail-closed）。
+async function verifyExistingDeviceSecret(kv, record, phone, rawPassword) {
+    if (!rawPassword || typeof rawPassword !== 'string' || rawPassword.length < 8) return false;
+    const _phone = String(phone || '').trim();
+    if (record && record.appMode === 'cloud') {
+        try {
+            const clinics = await getClinicsOrThrow(kv);
+            for (const clinic of clinics) {
+                if (!clinic || !clinic.id) continue;
+                const users = await kv.get(`clinic:${clinic.id}:users`, 'json').catch(() => null);
+                if (!Array.isArray(users)) continue;
+                const u = users.find(x => x && (x.username === _phone || x.phone === _phone));
+                if (!u) continue;
+                // 停用账号/停用诊所跳过（字段对齐 users.js：账号是布尔 disabled，
+                //   诊所是 status==='disabled'；扫描语义同 findUserForLogin——跨诊所
+                //   历史脏数据时可继续找其他启用诊所的同手机号账号）
+                if (u.disabled === true || clinic.status === 'disabled') continue;
+                if (u.passwordHash && u.salt &&
+                    await verifyPassword(rawPassword, u.passwordHash, u.salt)) {
+                    return true;
+                }
+                return false;  // 命中启用账号但密码错：终局，不再 fallthrough
+            }
+        } catch (e) { console.warn('[AutoBind] 云端实时账号密码核验异常:', e.message); }
+        return false;
+    }
+    // 离线版：激活时设置的密码哈希即权威
+    try {
+        if (record && record.passwordHash && record.passwordSalt) {
+            return await verifyPassword(rawPassword, record.passwordHash, record.passwordSalt);
+        }
+    } catch (e) { console.warn('[AutoBind] 记录密码核验异常:', e.message); }
+    return false;
 }
 
 const ALLOWED_ORIGINS = [
@@ -311,20 +361,227 @@ export async function onRequest(context) {
                 }
                 const _isOwnerDevice = !!finalMachineId && _boundMachines.has(String(finalMachineId));
                 if (!_isOwnerDevice) {
-                    // ★ 2026-09-05 复核回滚：此处曾尝试"手机号核验通过即自动解绑换机"，
-                    //   独立审查发现两条 P0 缺陷，已回滚为一律 409 拒绝：
-                    //   ① 安全：existingActivated 就是用提交的 phone 查到的，
-                    //      `record.phone === phone` 恒真，_phoneVerified 形同虚设——
-                    //      攻击者知道受害者手机号（半公开）即可匿名解绑受害者设备，
-                    //      且 fall-through 后 normalizeActivationPassword 会重置账号密码
-                    //      = 完整云端接管（违反本文件 L249-267 的 09-03 P0 安全决策）。
-                    //      validate.js 换机安全的前提是凭证为激活码（付费秘密），
-                    //      admin-submit 凭证仅手机号（自报、非秘密），不可照搬。
-                    //   ② 功能：buildLicenseData 签名为 (record, options) 2 参，
-                    //      误传 (kv, code, opts, ctx) 必抛错；而 updateLicense 先执行已把
-                    //      旧设备踢出 devices → 旧机掉激活、新机拿不到 license = 双输。
-                    //   换机正当路径（既有，安全）：客服微信 hktzy1688 核验后后台
-                    //   admin-approve 换机解绑 / 免费白名单；机构版多机走 Tab2 输同一激活码。
+                    // ================================================================
+                    // ★ 2026-10-06 机构版多设备免客服自动加机（方案A：登录密码核验）
+                    // ★ 2026-10-07 双审修复（P0/P1）：
+                    //   ① 绝不回写 admin_req.devices——附属机一旦出现在 admin_req 即被
+                    //      上方 owner 判定当作首机，匿名触发 normalizeActivationPassword
+                    //      重置云端账号密码=账号接管（2026-09-03 同 sink P0）。多机权威
+                    //      只存 license:{code}.devices。
+                    //   ② 云端密码只信诊所实时账号表（见 verifyExistingDeviceSecret）。
+                    //   ③ 授权被禁用/过期、设备跨版本、满额、密码错全部 fail-closed。
+                    //   ④ 签发与过期闸前置于任何写库（镜像 validate L486-502），写库
+                    //      顺序 detach→updateLicense→setDeviceVersion 与 validate 一致，
+                    //      不回写 maxDevices（管理端独占配额，防并发抬升）。
+                    //   ⑤ 配额判定先于密码核验：消除"密码对错预言机"侧信道。
+                    //   ⑥ 密码核验前的匿名拒绝不回机位数/机位数上限（防客户分层枚举）。
+                    // ================================================================
+                    const __code = existingActivated.licenseCode || '';
+                    const __licRec = __code ? await getLicense(kv, __code).catch(() => null) : null;
+                    const __maxDev = __licRec ? getMaxDevices(__licRec) : 1;
+                    const __licDevices = __licRec ? getDevices(__licRec) : [];
+                    const __midStr = String(finalMachineId);
+                    const __existingDev = __licDevices.find(d => d && String(d.machineId) === __midStr);
+                    const __canMulti = !!__licRec && (__maxDev > 1 || !!__existingDev);
+
+                    if (__canMulti) {
+                        // 闸1：封锁设备一律拒（锚定提交机本身，不查首机）
+                        const __blkNew = await getDeviceBlock(kv, __midStr);
+                        if (__blkNew) {
+                            console.warn('[AutoBind] 封锁设备自动加机被拒:', __midStr.slice(0, 8), __blkNew.reason);
+                            return json({ success: false, error: '设备安全校验未通过，请更换设备或联系客服处理' }, 403);
+                        }
+                        // 闸2：授权状态（后台禁用/吊销/过期码不得借加机复活）
+                        if (__licRec.status === 'disabled' || __licRec.status === 'expired') {
+                            console.warn('[AutoBind] 授权已' + __licRec.status + '，拒绝加机:', phone, __code);
+                            return json({ success: false, code: 'LICENSE_DISABLED',
+                                error: '该授权已被停用，请联系客服微信 hktzy1688' }, 403);
+                        }
+                        // 闸3：设备-版本绑定（同一设备只能注册一个版本，镜像 validate L202-214）
+                        const __verChk = await checkDeviceVersion(kv, __midStr, __licRec.type);
+                        if (!__verChk.ok) {
+                            await appendLicenseLog(kv, __code, {
+                                action: 'auto-bind-denied',
+                                time: new Date().toISOString(),
+                                ip: ip,
+                                operator: phone.trim(),
+                                detail: '设备已绑' + (__verChk.boundLabel || '其他版本') + '，拒绝加机 machineId=' + __midStr.slice(0, 8) + '...'
+                            }).catch(() => {});
+                            return json({ success: false, error: __verChk.error || '该设备已绑定其他版本授权，无法重复绑定' }, 403);
+                        }
+                        if (__verChk.upgrade) {
+                            await appendLicenseLog(kv, __code, {
+                                action: 'version-upgrade',
+                                time: new Date().toISOString(),
+                                ip: ip,
+                                operator: phone.trim(),
+                                detail: '自动加机设备版本升级，machineId=' + __midStr.slice(0, 8) + '...'
+                            }).catch(() => {});
+                        }
+
+                        // 端形态映射（镜像 admin-approve L230-233：appMode cloud→cloud / local,offline→offline）
+                        const __pClass = String(body.productClass || '').trim() ||
+                            (existingActivated.appMode === 'cloud' ? 'cloud'
+                                : ((existingActivated.appMode === 'local' || existingActivated.appMode === 'offline') ? 'offline' : null));
+                        const __cClass = String(body.clientClass || '').trim() || null;
+
+                        let __newDevices;
+                        let __isReactivate = false;
+                        if (__existingDev) {
+                            // 同设备重激活（权威 license 已绑，admin_req 漂移自愈）：免密，
+                            // 动作对齐 validate 重激活（刷新激活时间/补空端形态/跨码清残留/版本绑定）
+                            __isReactivate = true;
+                            __existingDev.activatedAt = new Date().toISOString();
+                            __existingDev.clinicName = __licRec.clinicName || existingActivated.clinicName || __existingDev.clinicName;
+                            if (!__existingDev.clientClass && __cClass) __existingDev.clientClass = __cClass;
+                            if (!__existingDev.productClass && __pClass) __existingDev.productClass = __pClass;
+                            __newDevices = __licDevices.slice();
+                            console.log('[AutoBind] 本机已在权威 license 绑定，按重激活处理:', phone, __code);
+                        } else {
+                            // 全新设备：先判配额（满额不验密码，防对错预言机）
+                            if (__licDevices.length >= __maxDev) {
+                                await appendLicenseLog(kv, __code, {
+                                    action: 'auto-bind-denied',
+                                    time: new Date().toISOString(),
+                                    ip: ip,
+                                    operator: phone.trim(),
+                                    detail: '机位已满，拒绝加机 machineId=' + __midStr.slice(0, 8) + '..., devices=' + __licDevices.length + '/' + __maxDev
+                                }).catch(() => {});
+                                console.log('[AutoBind] 机位已满，拒绝加机:', phone, __licDevices.length + '/' + __maxDev);
+                                return json({
+                                    success: false,
+                                    code: 'DEVICE_LIMIT',
+                                    error: '该授权的设备名额已满。请先在不再使用的设备上解绑，或联系客服微信 hktzy1688 办理换机'
+                                }, 409);
+                            }
+                            // 密码核验（私密凭证，与登录同信任级；fail-closed）
+                            const __pwdOk = await verifyExistingDeviceSecret(kv, existingActivated, phone.trim(), pwdRaw);
+                            if (!__pwdOk) {
+                                // 未带密码：引导自助，不消耗失败桶（无 PBKDF2 成本，
+                                //   且已有 IP 10/h 桶兜底；防匿名者烧掉他人小时配额）
+                                if (!pwdRaw) {
+                                    console.log('[AutoBind] 多机新设备未提供密码，引导自助:', phone);
+                                    return json({
+                                        success: false,
+                                        code: 'AUTO_BIND_NEED_PASSWORD',
+                                        error: '本机是该授权尚未绑定的新设备。若您的授权支持多台设备（机构版）且仍有余额，请在密码框输入该账号的【当前登录密码】后重新提交，系统将自动绑定本机，无需联系客服；也可切换到「激活码激活」页输入原激活码。注意：登录密码不足 8 位（如默认 admin）时无法使用本功能，请先在已激活设备上修改为 8 位以上含字母和数字的密码。'
+                                    }, 409);
+                                }
+                                // 手机号桶防爆破：每小时 5 次【错误密码】（与 IP 10/h 双桶
+                                //   独立，key 不含 IP → 分布式 IP 无法放大）
+                                const __fl = await checkRateLimit(kv, 'autobindfail:' + phone.trim(), 5);
+                                if (!__fl.allowed) {
+                                    return json({
+                                        success: false, code: 'AUTO_BIND_RATE_LIMITED',
+                                        error: '密码核验尝试过于频繁，请 1 小时后再试；也可切换「激活码激活」页输入原激活码，或联系客服微信 hktzy1688'
+                                    }, 429);
+                                }
+                                await appendLicenseLog(kv, __code, {
+                                    action: 'auto-bind-denied',
+                                    time: new Date().toISOString(),
+                                    ip: ip,
+                                    operator: phone.trim(),
+                                    detail: '密码核验失败，拒绝自动加机 machineId=' + __midStr.slice(0, 8) + '..., devices=' + __licDevices.length + '/' + __maxDev
+                                }).catch(() => {});
+                                return json({
+                                    success: false,
+                                    code: 'AUTO_BIND_PASSWORD_MISMATCH',
+                                    error: '登录密码核验未通过。请确认输入的是该账号【当前正在使用的登录密码】（非默认 admin、非支付密码）；忘记密码请在已登录设备修改为 8 位以上新密码后再试，或切换「激活码激活」页输入原激活码；换机请联系客服微信 hktzy1688。'
+                                }, 409);
+                            }
+                            __newDevices = __licDevices.concat([{
+                                machineId: __midStr,
+                                activatedAt: new Date().toISOString(),
+                                clinicName: __licRec.clinicName || existingActivated.clinicName || null,
+                                activatedIp: ip,
+                                productClass: __pClass,
+                                clientClass: __cClass
+                            }]);
+                        }
+
+                        // 先签发：锚定 firstActivatedAt 防续命（与 validate 同源），
+                        //   过期在此拦截，确保随后写库不会产生"加机成功却拿到过期授权"
+                        const __licenseRecord = Object.assign({}, __licRec, {
+                            user: __licRec.user || existingActivated.adminName || 'user'
+                        });
+                        if (!__licenseRecord.firstActivatedAt && __licenseRecord.activatedAt) {
+                            __licenseRecord.firstActivatedAt = __licenseRecord.activatedAt;
+                        }
+                        const __licenseData = await buildLicenseData(__licenseRecord, {
+                            clinicName: __licRec.clinicName || existingActivated.clinicName || '',
+                            machineId: __midStr,
+                            licenseBinding: 'clinic+user+machine',
+                            maxDevices: __maxDev,
+                            devicesCount: __newDevices.length,
+                            kv: kv,
+                            context: context
+                        });
+                        const __expMs = new Date(__licenseData.expiresAt).getTime();
+                        if (isNaN(__expMs) || Date.now() > __expMs) {
+                            await appendLicenseLog(kv, __code, {
+                                action: 'auto-bind-denied',
+                                time: new Date().toISOString(),
+                                ip: ip,
+                                operator: phone.trim(),
+                                detail: '授权已过期，拒绝加机/重激活 machineId=' + __midStr.slice(0, 8) + '...'
+                            }).catch(() => {});
+                            return json({ success: false, code: 'LICENSE_EXPIRED',
+                                error: '该授权已到期，请续费后再在本机激活' }, 403);
+                        }
+
+                        // 闸后写库（仅 license 权威记录；不写 admin_req、不回写 maxDevices）
+                        const __detached = await detachDeviceFromOtherLicenses(kv, __code, __midStr);
+                        await updateLicense(kv, __code, { devices: __newDevices });
+                        try {
+                            await setDeviceVersion(kv, __midStr, versionOf(__licRec.type), {
+                                licenseCode: __code,
+                                clinicName: __licRec.clinicName || existingActivated.clinicName || '',
+                                productClass: __pClass || undefined,
+                                clientClass: __cClass || undefined
+                            });
+                        } catch (e) { console.warn('[AutoBind] 设备版本绑定失败:', e.message); }
+                        if (__detached.length) {
+                            await appendLicenseLog(kv, __code, {
+                                action: 'cross-code-detach',
+                                time: new Date().toISOString(),
+                                ip: ip,
+                                operator: phone.trim(),
+                                detail: '自动加机绑定本码，已从 ' + __detached.length + ' 个旧码解绑: ' + __detached.join(', ')
+                            }).catch(() => {});
+                        }
+                        await appendLicenseLog(kv, __code, {
+                            action: __isReactivate ? 'reactivate' : 'device-auto-bind',
+                            time: new Date().toISOString(),
+                            ip: ip,
+                            operator: phone.trim(),
+                            detail: (__isReactivate ? '权威记录重激活(admin_req漂移自愈)' : '登录密码核验通过自动加机') +
+                                ' machineId=' + __midStr.slice(0, 8) + '..., devices=' + __newDevices.length + '/' + __maxDev
+                        }).catch(() => {});
+                        console.log('[AutoBind] 设备激活完成:', phone, __code, __newDevices.length + '/' + __maxDev,
+                            __isReactivate ? '(reactivate)' : '(auto-bind)');
+                        return json({
+                            success: true,
+                            status: 'activated',
+                            requestId: existingActivated.requestId,
+                            autoBound: !__isReactivate,
+                            message: __isReactivate
+                                ? '已检测到本机授权，正在完成安装...'
+                                : '登录密码核验通过，本机已自动绑定（第 ' + __newDevices.length + '/' + __maxDev + ' 台），正在完成安装...',
+                            license: encodeLicenseBase64(__licenseData),
+                            devicesCount: __newDevices.length,
+                            maxDevices: __maxDev,
+                            licenseInfo: {
+                                user: existingActivated.adminName || '',
+                                clinicName: existingActivated.clinicName || '',
+                                phone: existingActivated.phone || '',
+                                licenseCode: __code,
+                                resolvedAt: existingActivated.resolvedAt || null
+                            }
+                        });
+                    }
+
+                    // 单机码 / 无权威 license 记录：维持 2026-09-03 P0 安全决策
+                    // （换机正当路径：客服微信 hktzy1688 核验后后台换机解绑/免费白名单）
                     console.log('[AdminSubmit] 手机号命中已激活记录但设备不匹配，拒绝（换机走客服/后台）:',
                         phone, existingActivated.requestId);
                     return json({
@@ -336,7 +593,13 @@ export async function onRequest(context) {
                 // ★ 2026-09-07 注册密码生效：本机是 owner 设备（上面已严格校验 devices
                 //   绑定）且 phone 恒匹配（existingActivated 按 phone 查出）——新提交带了
                 //   密码则先写回记录再 normalize，用户"同机重提交改密码"即时生效。
-                if (passwordCred) {
+                // ★ 2026-10-07 双审 P0 纵深防御：账号写操作（密码回写/provision/normalize）
+                //   严格收窄到【首机 record.machineId】。admin_req.devices 理论上只可能
+                //   含首机（多机加机只写 license 不写 admin_req），此处再判一次杜绝任何
+                //   存量/脏数据让附属机进入匿名改密 sink（2026-09-03 P0 同路径）。
+                const __isPrimaryOwner = !!finalMachineId &&
+                    String(finalMachineId) === String(existingActivated.machineId || '');
+                if (__isPrimaryOwner && passwordCred) {
                     try {
                         await updateAdminRequestStatus(kv, existingActivated.requestId, {
                             passwordHash: passwordCred.passwordHash, passwordSalt: passwordCred.salt });
@@ -345,20 +608,22 @@ export async function onRequest(context) {
                     } catch (e) { console.warn('[AdminSubmit] 已激活申请密码更新失败（忽略）:', e.message); }
                 }
                 // 若账号已被后台删除或从未建号，先补开（幂等），保证"删除后重注册"也能直接重建
-                try {
+                if (__isPrimaryOwner) try {
                     await provisionCloudAccount(kv, existingActivated);
                 } catch (e) {
                     console.warn('[AdminSubmit] 已激活申请账号补开失败:', e.message);
                 }
-                try {
+                if (__isPrimaryOwner) try {
                     await normalizeActivationPassword(kv, existingActivated);
                 } catch (e) {
                     console.warn('[AdminSubmit] 已激活申请密码归一化失败:', e.message);
                 }
-                console.log('[AdminSubmit] 手机号已有已激活申请，短路复用:', phone, existingActivated.requestId);
+                console.log('[AdminSubmit] 手机号已有已激活申请，短路复用:', phone, existingActivated.requestId,
+                    __isPrimaryOwner ? '(primary-owner)' : '(devices-member:no-account-ops)');
                 // ★ 2026-09-11 P2 可疑设备拦截：被封锁设备不下发 license（对齐 admin-status
                 //   轮询出口/validate 激活出口，封锁锚定 machineId 换码无用）
-                const __blkPhone = await getDeviceBlock(kv, String(existingActivated.machineId || ''));
+                // ★ 2026-10-07 锚定提交机本身（而非仅首机），堵附属机借 owner 短路绕过封锁
+                const __blkPhone = await getDeviceBlock(kv, String(finalMachineId || existingActivated.machineId || ''));
                 if (__blkPhone) {
                     console.warn('[AdminSubmit] 已封锁设备提交，拒绝下发 license:',
                         existingActivated.machineId, 'reason=', __blkPhone.reason);

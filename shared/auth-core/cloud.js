@@ -4275,9 +4275,9 @@
                     '<span style="width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,#26a69a,#00897b);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;">2</span>' +
                 '</div>' +
                 '<div style="margin-bottom:12px;">' +
-                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">登录密码（可留空＝默认 admin）</label>' +
-                    '<input type="password" id="adminPassword" placeholder="云端登录密码固定为 admin（自定义密码不生效）" autocomplete="new-password" data-lpignore="true" maxlength="32" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
-                    '<div class="admin-field-hint" id="adminPwdHint" style="font-size:11px;color:#e53935;margin-top:4px;">💡 云端登录密码固定为 admin，自定义密码不生效，登入后请自行修改密码</div>' +
+                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">登录密码（首次激活可留空＝默认 admin）</label>' +
+                    '<input type="password" id="adminPassword" placeholder="首次激活设置密码；新设备激活请输入原登录密码" autocomplete="new-password" data-lpignore="true" maxlength="32" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
+                    '<div class="admin-field-hint" id="adminPwdHint" style="font-size:11px;color:#e53935;margin-top:4px;">💡 首次激活：至少8位含字母和数字，留空＝默认 admin（登入后请自行修改）。已有机构版在新设备激活：输入该账号【当前登录密码】即可自动绑定本机（限 5 台，无需客服）</div>' +
                 '</div>' +
                 '<div style="margin-bottom:14px;">' +
                     '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">确认密码（自定义时需再输一次）</label>' +
@@ -5234,6 +5234,10 @@
             // ★ 2026-09-07 注册密码生效：成功页密码行按实际密码显示（自设密码 vs 默认 admin）
             const _pwdEl = document.getElementById('adminSuccessPwd');
             if (_pwdEl) _pwdEl.textContent = (pwd && pwd !== 'admin') ? '（您注册时设置的密码）' : '（默认 admin，登入后请修改）';
+            // ★ 2026-10-06 机构版多设备免客服加机成功提示（admin-submit/admin-status 透传）
+            const __autoBindMsg = (r && r.autoBound && r.devicesCount && r.maxDevices)
+                ? '✅ 登录密码核验通过，本机已自动绑定（第 ' + r.devicesCount + '/' + r.maxDevices + ' 台）<br>'
+                : '';
             // ★ 2026-09-05 管理员激活成功页：专属邀请码提示（r.inviteInfo 来自
             //   admin-status activated 响应，旧后端无该字段则不展示）
             let __cloudInviteMsg = '';
@@ -5256,7 +5260,7 @@
                         phone: phone
                     });
                     if (inst && inst.success) {
-                        descEl.innerHTML = '管理员已通过您的激活申请<br>软件即将重启，请使用手机号登录' + __cloudInviteMsg;
+                        descEl.innerHTML = __autoBindMsg + '管理员已通过您的激活申请<br>软件即将重启，请使用手机号登录' + __cloudInviteMsg;
                         show('adminSuccess');
                         document.getElementById('adminSuccessBtn').textContent = '🔄 重启应用';
                         document.getElementById('adminSuccessBtn').onclick = function() {
@@ -5277,11 +5281,13 @@
                 // 云端 APP / 无本地安装桥：账号已在云端创建，用手机号登录即可
                 // ★ 2026-09-07 注册密码生效：注册时设置的自定义密码随申请哈希落库，云端账户
                 //   开通即用注册密码（此前硬编码 admin 需要登入后修改）。留空/默认 → admin。
-                descEl.innerHTML = '管理员已通过您的激活申请<br>请返回登录框，使用手机号登录' +
+                descEl.innerHTML = __autoBindMsg + '管理员已通过您的激活申请<br>请返回登录框，使用手机号登录' +
                     __cloudInviteMsg +
-                    (pwd && pwd !== 'admin'
-                        ? '（密码为您注册时设置的密码）'
-                        : '（默认密码 admin，登入后请修改）');
+                    ((r && r.autoBound)
+                        ? '（密码为该账号现有登录密码）'
+                        : (pwd && pwd !== 'admin'
+                            ? '（密码为您注册时设置的密码）'
+                            : '（默认密码 admin，登入后请修改）'));
                 show('adminSuccess');
                 document.getElementById('adminSuccessBtn').textContent = '✅ 好的';
                 document.getElementById('adminSuccessBtn').onclick = function() {

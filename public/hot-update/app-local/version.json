@@ -1,7 +1,7 @@
 {
   "format": 1,
   "channel": "app-local",
-  "hotVersion": "2026.10.06-1",
+  "hotVersion": "2026.10.07-1",
   "minAppCode": 288,
   "appVersion": "1.0.0",
   "files": [
@@ -12,8 +12,8 @@
     },
     {
       "name": "auth-core.js",
-      "sha256": "469ced81a55b04dc05b93269ea43eb45dc6112526549711eb4b75af0f79c1cce",
-      "size": 563111
+      "sha256": "ad98c947ec24c45f5632a6a2479fa7c8f1a20ac23544b8a6290f3596d61dd990",
+      "size": 563683
     },
     {
       "name": "permission.js",
@@ -81,6 +81,6 @@
       "size": 881727
     }
   ],
-  "signedAt": 1791249578884,
-  "signature": "qh02tSiZsB5oXZfqZWz7kPKdQWbn0/mB1BPDU7IX0MoIwdp/O2e7WCtqzBZq7V/f9c+3l6luYm66w3vepd6DCQ=="
+  "signedAt": 1791333235611,
+  "signature": "CEcNVcdBjV2lsZkPqYT8nqvP3zR/XOS2oGqzyTKlZ4JJ0iH8237GLRK3n5you3yOSK4XtHbYo/vDv0kqHmE+Ag=="
 }

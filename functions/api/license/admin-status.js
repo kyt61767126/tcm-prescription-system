@@ -13,7 +13,9 @@
 //    不存在:     { success: false, error: "请求不存在或已失效" }
 // ============================================================================
 
-import { getKV, checkRateLimit, sniffCarrierFromUA, patchClinicCarrier, patchLicenseDeviceCarrier, getDeviceBlock } from './_lib/license-core.js';
+import { getKV, checkRateLimit, sniffCarrierFromUA, patchClinicCarrier, patchLicenseDeviceCarrier, getDeviceBlock,
+    // ★ 2026-10-06 机构版多设备：附属设备轮询按本机 machineId 重签 license
+    getLicense, getDevices, getMaxDevices, buildLicenseData, encodeLicenseBase64 } from './_lib/license-core.js';
 import { provisionCloudAccount, normalizeActivationPassword } from './_lib/admin-account.js';
 import { updateAdminRequestStatus, ensureLicenseV7, ensureLicenseRenewed } from './_lib/license-write-service.js';
 
@@ -203,7 +205,51 @@ export async function onRequest(context) {
             // ★ 安全修复（2026-08-31）：machineId 兜底命中的他人记录跳过账号补开/密码
             //   归一化（machineId 参数不可信，见上方兜底扫描处注释），仅自己的
             //   requestId 走受信链路。
-            if (!viaMachineIdFallback) {
+            // ★ 2026-10-06 机构版多设备自动加机配套：轮询机若是该授权 license.devices
+            //   中的附属设备（非首机 record.machineId），有两个关键差异：
+            //   ① 绝不能跑 normalizeActivationPassword/provisionCloudAccount——用户刚用
+            //      「当前登录密码」通过 admin-submit 核验完成加机，归一化会把云端密码重置
+            //      回注册/admin 密码（等于改掉用户正在用的登录密码）；账号在首机激活时
+            //      早已开通，对附属机补开/归一化均无必要。
+            //   ② 下发文件必须按本机 machineId 重签——record.licenseBase64 绑定首机，
+            //      直接下发附属机，本地三因子验签必失败（桌面旧包 activate.js 不透传
+            //      admin-submit 的即时 license，只能走轮询，此分支即为其闭环出口）。
+            //   信任边界不变：requestId 随机签发仅持有者持有（见 2026-08-31 安全注释），
+            //   且新 license 绑定该附属机自身 machineId，他机拿到也验签失败。
+            const __pollMid = String(machineIdParam || '');
+            let __isSecondaryDevice = false;
+            let __multiDetectFailed = false;
+            if (__pollMid && record.licenseCode && __pollMid !== String(record.machineId || '')) {
+                // ★ 2026-10-07 双审 P1 修复（第二轮）：getLicense 返回 null 可能是
+                //   「授权已被管理员删除」而非仅 KV 抖动——必须 fail-closed（跳过
+                //   provision/normalize 全部账号写操作），否则持 requestId 的附属机在
+                //   授权删除后轮询即可把账号密码重置为注册哈希/admin（接管 sink）。
+                //   promise rejection 也归并为 null（.catch），同等待遇。
+                const __preLic = await getLicense(kv, record.licenseCode).catch(() => null);
+                if (!__preLic) {
+                    __multiDetectFailed = true;
+                    console.warn('[AdminStatus] 授权记录缺失或不可读，附属机识别 fail-closed（跳过账号操作）:',
+                        record.licenseCode, __pollMid.slice(0, 8) + '...');
+                } else if (__preLic.status === 'disabled' || __preLic.status === 'expired') {
+                    // 禁用/吊销授权在此即拦（早于 ensure* 重签写入与账号操作），
+                    //   附属机/异常机均不得借轮询获得任何签发物
+                    console.warn('[AdminStatus] 轮询命中已' + __preLic.status + '授权，拒绝:',
+                        record.licenseCode, __pollMid.slice(0, 8) + '...');
+                    return json({
+                        success: false,
+                        code: 'LICENSE_DISABLED',
+                        error: '该授权已被停用，请联系客服微信 hktzy1688'
+                    }, 403, origin);
+                } else {
+                    __isSecondaryDevice = getDevices(__preLic)
+                        .some(d => d && String(d.machineId) === __pollMid);
+                    if (__isSecondaryDevice) {
+                        console.log('[AdminStatus] 多机附属设备轮询，跳过密码归一化并按本机重签:',
+                            record.clinicName, __pollMid.slice(0, 8) + '...');
+                    }
+                }
+            }
+            if (!viaMachineIdFallback && !__isSecondaryDevice && !__multiDetectFailed) {
                 try {
                     await provisionCloudAccount(kv, record);
                 } catch (e) {
@@ -267,10 +313,11 @@ export async function onRequest(context) {
             // ★ 2026-09-11 P2 可疑设备拦截：被封锁设备（verify 上报强信号：Frida 注入/签名
             //   分叉）不下发 license——轮询激活闭环被掐断，与 validate 激活拦截形成
             //   "换码无用"的在线能力卡死。客服可删 device_block:{machineId} 解封。
-            const __deviceBlock = await getDeviceBlock(kv, String(record.machineId || ''));
+            const __deviceBlock = (await getDeviceBlock(kv, String(record.machineId || ''))) ||
+                ((__isSecondaryDevice || __multiDetectFailed) ? await getDeviceBlock(kv, __pollMid) : null);
             if (__deviceBlock) {
                 console.warn('[AdminStatus] 已封锁设备轮询，拒绝下发 license:',
-                    record.machineId, 'reason=', __deviceBlock.reason);
+                    __isSecondaryDevice ? __pollMid : record.machineId, 'reason=', __deviceBlock.reason);
                 return json({
                     success: false,
                     error: '设备安全校验未通过，请更换设备或联系客服处理'
@@ -282,11 +329,71 @@ export async function onRequest(context) {
             //   存量用户联网轮询一次即自动升级非对称签名文件。幂等：已带 V7 零写入。
             //   必须在过期拦截之后：过期 license 不重签不下发，维持 license_expired。
             record = await ensureLicenseV7(kv, record, context);
+
+            // ★ 2026-10-06 附属设备按本机重签（admin-submit 自动加机的轮询闭环）。
+            //   在续费/V7 处理之后重新加载权威 license（保证拿到续费后到期日），镜像
+            //   validate.js 重激活签发：锚定 firstActivatedAt 防续命、过期 fail-closed。
+            let __outLicenseBase64 = record.licenseBase64;
+            let __multiExtra = {};
+            if (__isSecondaryDevice) {
+                const __licRec2 = await getLicense(kv, record.licenseCode).catch(() => null);
+                const __devs2 = __licRec2 ? getDevices(__licRec2) : [];
+                const __stillBound = __devs2.some(d => d && String(d.machineId) === __pollMid);
+                if (!__licRec2 || !__stillBound) {
+                    // 授权被删/本机已被解绑或换机踢出：不下发首机文件
+                    console.warn('[AdminStatus] 附属设备轮询时授权记录缺失或已解绑:', record.licenseCode, __pollMid.slice(0, 8) + '...');
+                    return json({
+                        success: false,
+                        code: 'DEVICE_UNBOUND',
+                        error: '本机已不在该授权的绑定设备列表中，如需使用请联系客服微信 hktzy1688'
+                    }, 409, origin);
+                }
+                // ★ 2026-10-07 双审 P1 修复：禁用/吊销授权不得借附属机轮询重签复活
+                if (__licRec2.status === 'disabled' || __licRec2.status === 'expired') {
+                    console.warn('[AdminStatus] 附属设备轮询命中已' + __licRec2.status + '授权，拒绝下发:', record.licenseCode);
+                    return json({
+                        success: false,
+                        code: 'LICENSE_DISABLED',
+                        error: '该授权已被停用，请联系客服微信 hktzy1688'
+                    }, 403, origin);
+                }
+                const __maxDev2 = getMaxDevices(__licRec2);
+                const __recForSign = Object.assign({}, __licRec2, {
+                    user: __licRec2.user || record.adminName || 'user'
+                });
+                if (!__recForSign.firstActivatedAt && __recForSign.activatedAt) {
+                    __recForSign.firstActivatedAt = __recForSign.activatedAt;
+                }
+                const __data2 = await buildLicenseData(__recForSign, {
+                    clinicName: __licRec2.clinicName || record.clinicName || '',
+                    machineId: __pollMid,
+                    licenseBinding: 'clinic+user+machine',
+                    maxDevices: __maxDev2,
+                    devicesCount: __devs2.length,
+                    kv: kv,
+                    context: context
+                });
+                const __expMs2 = new Date(__data2.expiresAt).getTime();
+                if (isNaN(__expMs2) || Date.now() > __expMs2) {
+                    const __expBJ = new Date(__expMs2 + 8 * 3600e3).toISOString().slice(0, 10);
+                    return json({
+                        success: true,
+                        status: 'license_expired',
+                        expiresAt: __data2.expiresAt,
+                        message: `授权已于 ${__expBJ} 到期，请续费后重新激活`
+                    }, 200, origin);
+                }
+                __outLicenseBase64 = encodeLicenseBase64(__data2);
+                __multiExtra = { autoBound: true, devicesCount: __devs2.length, maxDevices: __maxDev2 };
+                console.log('[AdminStatus] 附属设备 license 已按本机重签下发:',
+                    record.clinicName, __devs2.length + '/' + __maxDev2);
+            }
+
             // ★ 关键：客户端检查 status === 'activated' 时会取 result.license 写入 license.dat
-            return json({
+            return json(Object.assign({
                 success: true,
                 status: 'activated',
-                license: record.licenseBase64,
+                license: __outLicenseBase64,
                 licenseInfo: {
                     user: record.adminName,
                     clinicName: record.clinicName,
@@ -311,7 +418,7 @@ export async function onRequest(context) {
                         invitedBy: record.invitedBy || null
                     }
                 } : {})
-            }, 200, origin);
+            }, __multiExtra), 200, origin);
         }
         if (status === 'rejected') {
             return json({

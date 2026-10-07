@@ -5990,9 +5990,9 @@
                     '<span style="width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,#26a69a,#00897b);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;">2</span>' +
                 '</div>' +
                 '<div style="margin-bottom:12px;">' +
-                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">登录密码（可留空＝默认 admin）</label>' +
-                    '<input type="password" id="adminPassword" placeholder="至少8位，含字母和数字（留空＝默认 admin）" autocomplete="new-password" data-lpignore="true" maxlength="32" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
-                    '<div class="admin-field-hint" id="adminPwdHint" style="font-size:11px;color:#909399;margin-top:4px;">💡 至少8位，含字母和数字；留空＝默认密码 admin（登入后可自行修改）</div>' +
+                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">登录密码（首次激活可留空＝默认 admin）</label>' +
+                    '<input type="password" id="adminPassword" placeholder="首次激活设置密码；新设备激活请输入原登录密码" autocomplete="new-password" data-lpignore="true" maxlength="32" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
+                    '<div class="admin-field-hint" id="adminPwdHint" style="font-size:11px;color:#909399;margin-top:4px;">💡 首次激活：至少8位含字母和数字，留空＝默认密码 admin（登入后可改）。已有机构版在新电脑/手机激活：请输入该账号【当前登录密码】，核验通过且未超 5 台时自动绑定本机，无需联系客服</div>' +
                 '</div>' +
                 '<div style="margin-bottom:14px;">' +
                     '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">确认密码（自定义时需再输一次）</label>' +
@@ -7752,6 +7752,10 @@
             }
             const descEl = document.getElementById('adminSuccessDesc');
             document.getElementById('adminSuccessPhone').textContent = phone;
+            // ★ 2026-10-06 机构版多设备免客服加机成功提示（admin-submit/admin-status 透传）
+            const __autoBindMsg = (r && r.autoBound && r.devicesCount && r.maxDevices)
+                ? '✅ 登录密码核验通过，本机已自动绑定（第 ' + r.devicesCount + '/' + r.maxDevices + ' 台）<br>'
+                : '';
             // ★ 2026-09-08 成功页密码三态显示（对齐桌面 activate-window 同款修复）：
             //   注册密码必填且禁止 admin，旧文案写死「默认 admin」必然误导自设密码用户
             //   （拿 admin 登录失败）。三态：已注册→注册密码；自设→您设置的密码；否则默认 admin。
@@ -7869,7 +7873,7 @@
                                 try { window.updateLicenseStatusText(); } catch (_uf) {}
                             }
                         } catch (_ro) { console.warn('[LicenseCheck] 退出只读模式清理失败(不影响):', _ro && _ro.message); }
-                        descEl.innerHTML = '管理员已通过您的激活申请<br>软件即将重启，请使用手机号登录' + __adminInviteMsg;
+                        descEl.innerHTML = __autoBindMsg + '管理员已通过您的激活申请<br>软件即将重启，请使用手机号登录' + __adminInviteMsg;
                         show('adminSuccess');
                         const __restartApp = function () {
                             if (global.electronAPI && global.electronAPI.activate && global.electronAPI.activate.restart) {
@@ -7907,7 +7911,7 @@
                 }
             } else {
                 // 云端 APP / 无本地安装桥：账号已在云端创建，用手机号登录即可
-                descEl.innerHTML = '管理员已通过您的激活申请<br>请返回登录框，使用手机号登录' + __adminInviteMsg;
+                descEl.innerHTML = __autoBindMsg + '管理员已通过您的激活申请<br>请返回登录框，使用手机号登录' + __adminInviteMsg;
                 show('adminSuccess');
                 document.getElementById('adminSuccessBtn').textContent = '✅ 好的';
                 document.getElementById('adminSuccessBtn').onclick = function() { cleanup(); };
