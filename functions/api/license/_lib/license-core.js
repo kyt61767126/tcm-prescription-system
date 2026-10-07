@@ -109,7 +109,7 @@ const CODE_PRODUCT_CLASSES = Object.freeze(['cloud', 'offline']);
 
 function normalizeCodeProductClass(v) {
     if (v === undefined || v === null) return null;
-    if (typeof v !== 'string') return null;
+    if (typeof v !== 'string') return 'INVALID';  // 数组/数字等非字符串=非法（防 400 绕过落脏值）
     const s = v.trim().toLowerCase();
     if (s === '') return null;
     if (s === 'local') return 'offline';  // 历史别称兼容
@@ -117,20 +117,52 @@ function normalizeCodeProductClass(v) {
 }
 
 // 码的有效锁定端（单一权威口径，validate/export-license/admin-submit 共用，禁止各端点自造）：
-//   ① 优先码记录预置 record.productClass（淘宝库存码开码即定）；
-//   ② 已激活但无预置的老码/官网订单码，从首个在册设备的端形态派生（首次激活即钉死
-//      购买版本，防后续附属机跨端加机）；
-//   ③ 都无法判定 → null（不锁，维持旧行为）。
-function getLicenseProductLock(record) {
-    if (!record) return null;
+//   ① 优先码记录预置 record.productClass（淘宝库存码开码即定，source='preset'）；
+//   ② 已激活但无预置的老码/官网订单码，从首个在册设备的端形态派生
+//      （source='device'；09-08 后 admin-approve 新签码、09-14 后客户端激活/心跳
+//      已大面积落端形态，故存量码常落此来源）；
+//   ③ 都无法判定 → value=null（不锁，维持旧行为）。
+function getLicenseProductLockInfo(record) {
+    if (!record) return { value: null, source: null };
     const preset = normalizeCodeProductClass(record.productClass);
-    if (preset && preset !== 'INVALID') return preset;
+    if (preset && preset !== 'INVALID') return { value: preset, source: 'preset' };
     const devs = getDevices(record);
     for (const d of devs) {
         const dc = normalizeCodeProductClass(d && d.productClass);
-        if (dc && dc !== 'INVALID') return dc;
+        if (dc && dc !== 'INVALID') return { value: dc, source: 'device' };
     }
-    return null;
+    return { value: null, source: null };
+}
+
+function getLicenseProductLock(record) {
+    return getLicenseProductLockInfo(record).value;
+}
+
+// 端锁定闸权威评估（三个激活端点共用，禁止各端点自造判定）：
+//   · source='preset'（码记录预置，淘宝库存码）→ 调用方必须硬拦：check 不通过
+//     即 403（请求端缺失/非法同样 fail-closed，防删字段/旧客户端套利）；
+//   · source='device'（无预置、从在册设备派生的历史码/官网码）→ 观察期只审计
+//     不拦截：09-14 前旧 exe 永不上报端、历史存在合法的跨端混合部署，硬拦会
+//     误伤付费老客户（双审中-2 结论）；待观察日志 product-class-derived-observe
+//     证明覆盖率与跨端规模后，再参照 config:platform-check 先例加 KV 开关切硬；
+//   · source=null → check.ok 恒 true。
+//   安全口径（安全二查结论）：端形态为客户端自报，本闸防普通买家误用/套利，非
+//   密码学隔离；云端权益的独立护城河是云账号开通链（仅付费订单/人工审批/admin
+//   -submit 支付前置），改包谎报端拿不到云端账号，套利链不成立。
+function evaluateProductClassGate(record, requestRaw) {
+    const info = getLicenseProductLockInfo(record);
+    if (!info.value) return { source: null, locked: null, requestEnd: null, check: { ok: true } };
+    let requestEnd = null;
+    if (typeof requestRaw === 'string') {
+        const n = normalizeCodeProductClass(requestRaw);
+        if (n && n !== 'INVALID') requestEnd = n;
+    }
+    return {
+        source: info.source,
+        locked: info.value,
+        requestEnd: requestEnd,
+        check: checkProductClassMatch(info.value, requestRaw)
+    };
 }
 
 // 端锁定闸：locked=getLicenseProductLock 的结果（null 直接放行）；
@@ -1784,7 +1816,9 @@ export {
     // ★ 2026-10-07 码-端锁定（淘宝分版本售卖防套利）
     CODE_PRODUCT_CLASSES,       // ['cloud','offline']
     normalizeCodeProductClass,  // 入参归一（'local'→'offline'，非法→'INVALID'）
-    getLicenseProductLock,      // 码有效锁定端（预置优先，否则从在册设备派生）
+    getLicenseProductLock,      // 码有效锁定端字符串（预置优先，否则从在册设备派生）
+    getLicenseProductLockInfo,  // {value, source:'preset'|'device'|null}
+    evaluateProductClassGate,   // 三激活端点共用闸评估（preset 硬拦 / device 观察）
     checkProductClassMatch,     // 端锁定闸（缺失/不符 fail-closed）
     ACTIVATION_CODE_CHARS,
     KV_LICENSE_PREFIX,

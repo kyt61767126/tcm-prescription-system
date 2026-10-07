@@ -19,7 +19,7 @@ import {
     findLicensesByMachine, deleteLicense,
     getDevices, getMaxDevices, appendLicenseLog, deleteLicenseLogs,
     setDeviceVersion, getDeviceVersion, versionOf,
-    blockDevice, getDeviceBlock, checkRateLimit
+    blockDevice, getDeviceBlock, checkRateLimit, normalizeCodeProductClass
 } from './_lib/license-core.js';
 
 function corsHeaders() {
@@ -94,12 +94,27 @@ async function handleHeartbeat(kv, body, clientIP) {
         const matchedDevice = devices.find(d => d.machineId === machineId);
         if (matchedDevice) {
             // ★ 端形态自动上报持久化：更新 record.devices + 设备-版本绑定
+            //   ★ 2026-10-07 端锁定白名单（双审中-3，本端点仅凭 machineId 无认证）：
+            //   productClass 过权威归一（非字符串/非法值丢弃），且仅补空/修复脏值，
+            //   禁止 cloud↔offline 翻转与清空；按字段独立处理（修掉原"只报 productClass
+            //   会把 clientClass 冲成 null"的部分上报 bug），省略字段绝不清空。
             if (body.productClass || body.clientClass) {
-                const pc = ((body.productClass || '').trim()) || null;
-                const cc = ((body.clientClass || '').trim()) || null;
-                if (matchedDevice.productClass !== pc || matchedDevice.clientClass !== cc) {
-                    matchedDevice.productClass = pc;
+                const __pcNorm = normalizeCodeProductClass(body.productClass);
+                const pc = (__pcNorm && __pcNorm !== 'INVALID') ? __pcNorm : null;
+                const cc = (typeof body.clientClass === 'string' && body.clientClass.trim()) ? body.clientClass.trim() : null;
+                let __metaChanged = false;
+                if (pc) {
+                    const __curPc = normalizeCodeProductClass(matchedDevice.productClass);
+                    if (!__curPc || __curPc === 'INVALID') {
+                        matchedDevice.productClass = pc;
+                        __metaChanged = true;
+                    }
+                }
+                if (cc && matchedDevice.clientClass !== cc) {
                     matchedDevice.clientClass = cc;
+                    __metaChanged = true;
+                }
+                if (__metaChanged) {
                     try {
                         await updateLicense(kv, code, { devices, maxDevices: getMaxDevices(record) });
                     } catch (e) { console.warn('[Heartbeat] 设备端形态写入失败:', e.message); }
@@ -107,9 +122,15 @@ async function handleHeartbeat(kv, body, clientIP) {
                 try {
                     const prevBinding = await getDeviceVersion(kv, machineId);
                     if (prevBinding) {
+                        // ★ 2026-10-07 绑定回写与 devices 同口径（复审 Low-1）：端值从
+                        //   在册设备【现值】取（已是仅补空结果），不信请求原值——禁止经
+                        //   本无认证端点翻转 device_version.productClass；脏值/缺失回退旧绑定。
+                        const __bindPcNorm = normalizeCodeProductClass(matchedDevice.productClass);
+                        const __bindPc = (__bindPcNorm && __bindPcNorm !== 'INVALID')
+                            ? __bindPcNorm : (prevBinding.productClass || undefined);
                         await setDeviceVersion(kv, machineId, prevBinding.version || 'standard', {
-                            productClass: pc || undefined,
-                            clientClass: cc || undefined,
+                            productClass: __bindPc,
+                            clientClass: matchedDevice.clientClass || prevBinding.clientClass || undefined,
                             licenseCode: prevBinding.licenseCode || undefined,
                             clinicName: prevBinding.clinicName || undefined
                         });

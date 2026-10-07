@@ -34,7 +34,8 @@ import {
     // ★ 2026-10-06 机构版多设备免客服自动加机：复用 validate 多机权威链路
     getLicense, updateLicense, getDevices, getMaxDevices,
     buildLicenseData, encodeLicenseBase64, appendLicenseLog,
-    detachDeviceFromOtherLicenses, setDeviceVersion, versionOf
+    detachDeviceFromOtherLicenses, setDeviceVersion, versionOf,
+    evaluateProductClassGate, normalizeCodeProductClass // ★ 2026-10-07 码-端锁定闸
 } from './_lib/license-core.js';
 import { provisionCloudAccount, normalizeActivationPassword } from './_lib/admin-account.js';
 // ★ 2026-09-17 P0 修复：补 KV_ADMIN_REQ_INDEX import——原 3 处使用（L51/L72/L399）
@@ -419,11 +420,60 @@ export async function onRequest(context) {
                             }).catch(() => {});
                         }
 
-                        // 端形态映射（镜像 admin-approve L230-233：appMode cloud→cloud / local,offline→offline）
-                        const __pClass = String(body.productClass || '').trim() ||
-                            (existingActivated.appMode === 'cloud' ? 'cloud'
-                                : ((existingActivated.appMode === 'local' || existingActivated.appMode === 'offline') ? 'offline' : null));
-                        const __cClass = String(body.clientClass || '').trim() || null;
+                        // ★ 2026-10-07 请求端判定（双审加固版，统一走权威归一）：请求端
+                        //   以【本次提交】客户端自报为准，非字符串/数组不再被 String() 强转
+                        //   成合法值；'local'→offline；'app'/非法值忽略。
+                        //   ① body.productClass（渲染层/新版 APP 显式上报 cloud/offline）；
+                        //   ② body.appMode（Electron 激活窗与 auth-core 必报：cloud→cloud，
+                        //      local/offline→offline；旧值 'app' 是载体非端，忽略）。
+                        //   禁止回退 existingActivated.appMode——那是【首机】端：跨端加机
+                        //   攻击（99 本地码第二台机挂云端软件）正是本闸要拦的场景，用首机
+                        //   端会把攻击请求误判为 offline 放行。
+                        let __pClass = null;
+                        const __pcNorm = normalizeCodeProductClass(body.productClass);
+                        if (__pcNorm && __pcNorm !== 'INVALID') __pClass = __pcNorm;
+                        if (!__pClass) {
+                            const __amNorm = normalizeCodeProductClass(body.appMode);
+                            if (__amNorm && __amNorm !== 'INVALID') __pClass = __amNorm;
+                        }
+                        const __cClass = (typeof body.clientClass === 'string' && body.clientClass.trim())
+                            ? body.clientClass.trim() : null;
+
+                        // 闸0（2026-10-07 码-端锁定）：先于配额/验密——不泄露机位余量等
+                        //   分层信息（与既有⑤"配额先于密码"同原则）。
+                        //   · 预置锁端码（淘宝库存码，source='preset'）：必须同端加机；
+                        //     旧客户端未上报端 → fail-closed 403 提示升级；同设备重激活同过闸；
+                        //   · 派生锁（无预置历史码/官网码，source='device'）：观察期只审计
+                        //     不拦截（双审中-2：旧客户端与历史混合端诊所零误伤）。
+                        const __pcGate = evaluateProductClassGate(__licRec, __pClass);
+                        if (!__pcGate.check.ok) {
+                            const __reqEndDesc = __pcGate.requestEnd || '(缺失/无法识别)';
+                            if (__pcGate.source === 'preset') {
+                                await appendLicenseLog(kv, __code, {
+                                    action: 'product-class-denied',
+                                    time: new Date().toISOString(),
+                                    ip: ip,
+                                    operator: phone.trim(),
+                                    detail: '自动加机/重激活端锁定拒绝：码锁端=' + __pcGate.locked +
+                                        '，请求端=' + __reqEndDesc +
+                                        '，machineId=' + __midStr.slice(0, 8) + '...，' +
+                                        (__existingDev ? '同设备重激活' : '新设备加机') +
+                                        '，原因=' + __pcGate.check.code
+                                }).catch(() => {});
+                                return json({ success: false, code: __pcGate.check.code, error: __pcGate.check.error }, 403);
+                            }
+                            await appendLicenseLog(kv, __code, {
+                                action: 'product-class-derived-observe',
+                                time: new Date().toISOString(),
+                                ip: ip,
+                                operator: phone.trim(),
+                                detail: '自动加机/重激活派生端不一致观察（不拦截）：在册锁端=' + __pcGate.locked +
+                                    '，请求端=' + __reqEndDesc +
+                                    '，machineId=' + __midStr.slice(0, 8) + '...，' +
+                                    (__existingDev ? '同设备重激活' : '新设备加机') +
+                                    '，原因=' + __pcGate.check.code
+                            }).catch(() => {});
+                        }
 
                         let __newDevices;
                         let __isReactivate = false;

@@ -44,7 +44,8 @@ import {
     buildLicenseData, encodeLicenseBase64,
     getDevices, getMaxDevices, appendLicenseLog,
     detachDeviceFromOtherLicenses,
-    checkRateLimit, checkCodeRateLimit
+    checkRateLimit, checkCodeRateLimit,
+    evaluateProductClassGate // ★ 2026-10-07 码-端锁定闸
 } from './_lib/license-core.js';
 // ★ C批双审：machineId 白名单统一走 schema-guard 单一副本（8-64 位，拒 unknown/undefined）
 import { isValidMachineId } from './_lib/schema-guard.js';
@@ -225,6 +226,34 @@ export async function onRequest(context) {
             return json({ success: false, error: '激活码已过期' }, 403);
         }
 
+        // ★ 2026-10-07 码-端锁定闸（方案B）：离线文件通道服务的客户恒在【本地版】
+        //   软件上（云端版必须联网使用，不存在离线导入场景），故请求端恒为 offline。
+        //   预置云端锁端码走本通道 = 跨版签发，硬拒 403 并审计；无预置的历史码/
+        //   官网码即使在册端为 cloud（派生来源），观察期仅审计不拦截，维持老客户
+        //   客服文件通道历史可用口径（双审中-2 裁定）。
+        const __pcGate = evaluateProductClassGate(record, 'offline');
+        if (!__pcGate.check.ok) {
+            if (__pcGate.source === 'preset') {
+                await appendLicenseLog(kv, code, {
+                    action: 'product-class-denied',
+                    time: new Date().toISOString(),
+                    ip: ip,
+                    operator: auth.operator,
+                    detail: `[export] 离线文件通道端锁定拒绝：码锁端=${__pcGate.locked}，请求端=offline，` +
+                        `machineId=${machineId.substring(0, 8)}...，authMethod=${auth.method}，原因=${__pcGate.check.code}`
+                }).catch(() => {});
+                return json({ success: false, code: __pcGate.check.code, error: __pcGate.check.error }, 403);
+            }
+            await appendLicenseLog(kv, code, {
+                action: 'product-class-derived-observe',
+                time: new Date().toISOString(),
+                ip: ip,
+                operator: auth.operator,
+                detail: `[export] 派生端不一致观察（不拦截）：在册锁端=${__pcGate.locked}，请求端=offline，` +
+                    `machineId=${machineId.substring(0, 8)}...，authMethod=${auth.method}，原因=${__pcGate.check.code}`
+            }).catch(() => {});
+        }
+
         // 诊所名绑定校验（与 validate.js 一致）
         if (record.clinicName) {
             if (!clinicName || clinicName.trim() === '') {
@@ -332,12 +361,17 @@ export async function onRequest(context) {
         if (existingDevice) {
             existingDevice.activatedAt = getNowISO();
             existingDevice.clinicName = record.clinicName || existingDevice.clinicName;
+            // ★ 2026-10-07 端锁定：文件通道恒 offline，旧设备缺端形态时补空回填
+            //   （仅补空不覆盖，与 validate 重激活同口径）
+            if (!existingDevice.productClass) existingDevice.productClass = 'offline';
         } else {
             newDevices.push({
                 machineId: machineId,
                 activatedAt: getNowISO(),
                 clinicName: record.clinicName || clinicName || null,
-                activatedIp: ip
+                activatedIp: ip,
+                // ★ 2026-10-07 端锁定：离线文件通道设备恒属本地版（供通用码锁端派生）
+                productClass: 'offline'
             });
         }
         updates.devices = newDevices;

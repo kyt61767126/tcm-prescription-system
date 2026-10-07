@@ -33,7 +33,8 @@
 
 import {
     getKV, getLicense, updateLicense, checkRateLimit, getDevices, getMaxDevices, appendLicenseLog,
-    setDeviceVersion, getDeviceVersion, reportUsage, sniffCarrierFromUA, patchClinicCarrier, getDeviceBlock
+    setDeviceVersion, getDeviceVersion, reportUsage, sniffCarrierFromUA, patchClinicCarrier, getDeviceBlock,
+    normalizeCodeProductClass
 } from './_lib/license-core.js';
 import { punchLogin } from '../_lib/login-punch.js';
 
@@ -223,16 +224,28 @@ export async function onRequest(context) {
         //     ④ usage 计数持平不写（见 license-core.reportUsage）。
         //     降写后稳态约 1 次写/台/10 分钟（原 3 次），20 台活跃 ≈ 2.9k 写/天（原约 8.6k）。
         if (deviceMatched) {
-            const repPc = ((body.productClass || '').trim()) || null;
-            const repCc = ((body.clientClass || '').trim()) || null;
+            // ★ 2026-10-07 端锁定白名单（双审中-3）：productClass 只接受权威归一后的
+            //   cloud/offline（'local'→offline，非字符串/非法值丢弃），杜绝匿名心跳写
+            //   脏值操纵派生锁。
+            const __repPcNorm = normalizeCodeProductClass(body.productClass);
+            const repPc = (__repPcNorm && __repPcNorm !== 'INVALID') ? __repPcNorm : null;
+            const repCc = (typeof body.clientClass === 'string' && body.clientClass.trim()) ? body.clientClass.trim() : null;
             const found = devices.find(d => d.machineId === machineId);
             let metaChanged = false;
             if (repPc || repCc) {
-                // ① 显式上报：权威覆盖——★ 2026-09-14 按字段覆盖：仅覆盖客户端明确上报
+                // ① 显式上报——★ 2026-09-14 按字段覆盖：仅覆盖客户端明确上报
                 //   的字段（客户端判据不确定时省略 clientClass 只报 productClass，省略字段
-                //   绝不清空已有值——防部分上报把 devices[].clientClass 冲成 null）
+                //   绝不清空已有值——防部分上报把 devices[].clientClass 冲成 null）。
+                //   ★ 2026-10-07 productClass 改为【仅补空】（空/历史脏值 'app'/非法
+                //   现存值都视为空）：禁止 cloud↔offline 翻转——在册端形态是派生锁的
+                //   依据，换机换端必须走客服解绑，不能被持码心跳匿名改写。
                 if (found) {
-                    if (repPc && found.productClass !== repPc) { found.productClass = repPc; metaChanged = true; }
+                    if (repPc) {
+                        const __curPc = normalizeCodeProductClass(found.productClass);
+                        if (!__curPc || __curPc === 'INVALID') {
+                            found.productClass = repPc; metaChanged = true;
+                        }
+                    }
                     if (repCc && found.clientClass !== repCc) { found.clientClass = repCc; metaChanged = true; }
                 }
             } else if (found && (!found.productClass || !found.clientClass)) {

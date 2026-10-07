@@ -39,7 +39,8 @@ import {
     detachDeviceFromOtherLicenses, // ★ 2026-09-23 单设备单码
     checkDeviceVersion, setDeviceVersion, versionOf,
     ensureInviteCode, applyInviteReward, findLicenseByInviteCode,
-    INVITE_BONUS_DAYS_INVITEE, INVITE_MAX_INVITEES
+    INVITE_BONUS_DAYS_INVITEE, INVITE_MAX_INVITEES,
+    evaluateProductClassGate, normalizeCodeProductClass // ★ 2026-10-07 码-端锁定闸
 } from './_lib/license-core.js';
 import { getDeviceBlock } from './_lib/license-core.js';
 import { provisionCloudAccount } from './_lib/admin-account.js';
@@ -197,6 +198,46 @@ export async function onRequest(context) {
         }
         if (record.status === 'expired') {
             return json({ success: false, error: '激活码已过期' }, 403);
+        }
+
+        // ★ 2026-10-07 激活码-产品端锁定闸（淘宝分版本售卖防套利，方案B；claim 转发
+        //   本端点故同闸覆盖；权威口径在 license-core.evaluateProductClassGate）：
+        //   ① 淘宝库存码开码即【预置】productClass（cloud/offline，source='preset'）：
+        //      硬闸——激活端必须一致；不符或请求端缺失/无法识别（09-14 前旧客户端
+        //      不上报）一律 403 并提示升级（fail-closed，防删字段套利）。99 本地码
+        //      无法在 199 云端软件激活；经济兜底：validate 不开通云端账号（云账号仅
+        //      付费订单/人工审批/admin-submit 支付前置产生），改包谎报端也拿不到云端权益；
+        //   ② 无预置的历史码/官网订单码（source='device'，09-08 后新签码与 09-14 后
+        //      客户端已在 devices 落端形态，存量面很大）：观察期只记审计不拦截——
+        //      旧 exe 重装、历史合法跨端混合部署的付费客户行为零变化；
+        //   ③ 无预置且无在册端形态（source=null）→ 直接放行。
+        //   位置铁律：本块先于一切写库/签发（checkDeviceVersion/配额/devices.shift/
+        //   updateLicense/buildLicenseData）。
+        const __pcGate = evaluateProductClassGate(record, productClass);
+        if (!__pcGate.check.ok) {
+            const __reqEndDesc = __pcGate.requestEnd || '(缺失/无法识别)';
+            if (__pcGate.source === 'preset') {
+                await appendLicenseLog(kv, code, {
+                    action: 'product-class-denied',
+                    time: new Date().toISOString(),
+                    ip: ip,
+                    operator: user || record.user || 'unknown',
+                    detail: '端锁定拒绝：码锁端=' + __pcGate.locked + '，请求端=' + __reqEndDesc +
+                        '，machineId=' + machineId.substring(0, 8) + '...，原因=' + __pcGate.check.code
+                }).catch(() => {});
+                return json({ success: false, code: __pcGate.check.code, error: __pcGate.check.error }, 403);
+            }
+            // 派生锁观察期（双审中-2 裁定）：留证据不拦截，为后续 KV 开关切硬积累数据
+            const __isReactivate = getDevices(record).some(d => d.machineId === machineId);
+            await appendLicenseLog(kv, code, {
+                action: 'product-class-derived-observe',
+                time: new Date().toISOString(),
+                ip: ip,
+                operator: user || record.user || 'unknown',
+                detail: '派生端不一致观察（不拦截）：在册锁端=' + __pcGate.locked +
+                    '，请求端=' + __reqEndDesc + '，machineId=' + machineId.substring(0, 8) + '...，' +
+                    (__isReactivate ? '同设备重激活' : '新设备激活') + '，原因=' + __pcGate.check.code
+            }).catch(() => {});
         }
 
         // ★ 设备-版本绑定校验：同一台设备只能注册一个版本
@@ -366,14 +407,17 @@ export async function onRequest(context) {
         //   （否则被拒设备占 maxDevices 名额 + 参与后续比对造成污染）；observe
         //   放行路径无影响（后续正常落库）。auto-unbind 的 devices.shift() 仅改
         //   内存不落库，拒绝时自动回滚，语义正确。
-        const pClass = (productClass || '').trim() || null;
-        const cClass = (clientClass || '').trim() || null;
+        // ★ 2026-10-07 端形态读取统一过权威归一（非字符串/非法值不再抛 500，落库
+        //   也只存规范值 cloud/offline；'local' 归 offline）
+        const __pClassNorm = normalizeCodeProductClass(productClass);
+        const pClass = (__pClassNorm && __pClassNorm !== 'INVALID') ? __pClassNorm : null;
+        const cClass = (typeof clientClass === 'string' && clientClass.trim()) ? clientClass.trim() : null;
         if (cClass) {
-            const devClassOf = (d) => (((d && d.clientClass) || '').trim()) ||
-                (((d && d.productClass) || '') === 'app' ? 'app' : null);
+            const devClassOf = (d) => (typeof (d && d.clientClass) === 'string' && d.clientClass.trim() ? d.clientClass.trim() :
+                (((d && d.productClass) || '') === 'app' ? 'app' : null));
             const known = devices.map(d => ({
                 c: devClassOf(d),
-                p: (((d && d.productClass) || '').trim()) || null
+                p: (typeof (d && d.productClass) === 'string' && d.productClass.trim()) ? d.productClass.trim() : null
             }));
             const mismatched = known.filter(k => k.c && k.c !== cClass);
             if (mismatched.length > 0) {
@@ -579,8 +623,8 @@ export async function onRequest(context) {
             await setDeviceVersion(kv, machineId, versionOf(record.type), {
                 licenseCode: code,
                 clinicName: record.clinicName || clinicName || '',
-                productClass: (productClass || '').trim() || undefined,
-                clientClass: (clientClass || '').trim() || undefined
+                productClass: pClass || undefined,    // ★ 归一后的规范值（cloud/offline）
+                clientClass: cClass || undefined
             });
         } catch (e) { console.warn('[DeviceVersion] 绑定失败:', e.message); }
 
