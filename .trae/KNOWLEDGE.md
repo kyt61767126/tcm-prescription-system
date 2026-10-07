@@ -1752,3 +1752,20 @@
 * **离线端核查结论（本次无需为"离线数据"做任何修复）**：离线处方只走本机 IndexedDB/文件，字段完整、11 份 analytics-core 与权威源同 SHA、无"云端处方覆盖本地"同步路径（silentSyncFromCloud 只读云端所内数据用于云账号，不回写离线本地库）；离线端获得收入双算修复仅靠热包（联网开一次+彻底划掉重启），零重打包。成本数字依赖各端药材库 costPrice 维护（platform 接口侧无药材库，用售价核出的成本只是上界，不能作为客户口径）。
 * **生效方式**：云网页/云服务 push 即达（CF Pages ~70s，已线上 SHA256 核验 60dad9ce + 三通道 version.json 在线）；新开方部署即正确，历史 230 张已回填；云桌面/离线桌面/离线 APP 靠 2026.10.06 热包，JS 修复联网打开一次+彻底重启即可，Java/native 修复才需整包。双审（功能边界+安全 Ed25519 实测验签 54/54）PASS，BIZ-SMOKE 93/93。
 
+## 五十七、机构版多设备登录「密码核验自动加机」（2026-10-07，commit 637a57d8，三轮双独立审查，服务端+热包零重打包）
+
+* **需求/方案**：机构版（多机码 maxDevices>1）第 2~5 台设备原一律 409「该手机号已在其他设备激活，联系客服」。选定方案 A：新设备激活时输**当前登录密码**，服务端核验通过且未满额自动加入 `license.devices` 并按本机重签下发，全程无需激活码/客服。单机版换机维持原 409 客服路径不动。
+* **改动面**：`functions/api/license/admin-submit.js`（多机自动绑定主逻辑+`verifyExistingDeviceSecret`）、`admin-status.js`（附属机 5s 轮询按机重签闭环）、`shared/auth-core/cloud.js+offline.js`（密码步文案+成功页「第 X/N 台」，11 副本 sync）。
+* **★★ 铁律（三轮双审血泪，下次动授权激活端点逐条对照）**：
+  1. **附属机绝不写 `admin_req.devices`**：原 owner 短路会用提交体 devices 回写激活记录，而该记录后续被 `normalizeActivationPassword` 当 owner 数据消费——附属机可借此**匿名改管理员密码=账号接管**（与 2026-09-03 同 sink P0 同类）。绑定只写 `updateLicense(code,{devices})`，不回写 admin_req、不回写 maxDevices。
+  2. **三个账号写操作（密码回写/provisionCloudAccount/normalizeActivationPassword）仅限首机**（`finalMachineId===existingActivated.machineId`）；封锁检查锚定**提交机** finalMachineId 而非原 owner。
+  3. **云端只信实时诊所账号哈希**（遍历 getClinicsOrThrow 全部诊所的 `clinic:{id}:users`，按 username/phone 命中；字段是 `u.passwordHash`+**`u.salt`**，admin_req 才叫 passwordSalt）。不采信 admin_req 注册哈希——否则改密/离职后旧密码永久可加机。命中启用账号即终局（密码错 return false 不 fallthrough）；**离线版（appMode!=='cloud'）才验 admin_req 哈希**；异常全 fail-closed。
+  4. **停用判定字段按模型来，别想当然**：账号停用是**布尔 `u.disabled===true`**（users.js 写入/登录闸同此），不是 `u.status==='disabled'`；诊所级才是 `clinic.status==='disabled'`。停用账号/诊所要 **continue 不 return false**（扫描语义对齐 findUserForLogin——跨诊所历史脏数据时同手机号在启用诊所仍可登录）。
+  5. **闸口顺序（照抄 validate.js）**：封锁机（getDeviceBlock 锚提交机）→ license status disabled/expired 403（LICENSE_DISABLED，**早于一切账号操作**）→ checkDeviceVersion（参数传 `__licRec.type`，不是 versionOf(type)）→ **满额 DEVICE_LIMIT 判定先于验密**（防密码预言机）→ 验密 → buildLicenseData **过期闸（锚 firstActivatedAt||activatedAt，403）先于写库** → detachDeviceFromOtherLicenses → updateLicense → setDeviceVersion → appendLicenseLog 审计。
+  6. **未带密码返 AUTO_BIND_NEED_PASSWORD 且不耗失败桶**；错误密码才入 `checkRateLimit(kv,'autobindfail:'+phone,5)` 桶+审计+AUTO_BIND_PASSWORD_MISMATCH。匿名响应**不带机位数数字**防枚举。同机已在 license.devices 走免密重激活。
+  7. **admin-status 识别失败必须 fail-closed**：附属机识别（machineId 参数非空且≠record.machineId）时 getLicense 返回 null（授权删除/KV 抖动）置 `__multiDetectFailed=true`，**绝不 fallthrough 到 provision/normalize**（否则识别失败反被账号接管 sink 接住）；账号操作守卫 `!viaMachineIdFallback && !__isSecondaryDevice && !__multiDetectFailed`；附属机在册才按 `__pollMid` 用 buildLicenseData（options 同时给 clinicName+machineId 才写三因子绑定）重签，不在册 409 DEVICE_UNBOUND。
+  8. **改 import 后全文 grep 被删符号**：第二轮实证误删 `findClinicByName` 而 L310 停用诊所检查仍调用→全部 POST 503。
+* **客户端事实**：Electron `submitAdminRequest` IPC 成功只回 requestId 不透传 license，附属机靠 5s 轮询/Observer 带 machineId 调 admin-status 领码重签；云端另有账号级 bindUserDevice（每账号 1 台）本次未动，license.devices 是全所总额度（签发 maxDevices，机构版 5）。
+* **分发**：functions 改动 push 即 CF Pages 部署（~70s，无需 wrangler——本机 npx wrangler d1 崩溃 exit 3221226505）；auth-core 11 副本 sync-auth-core → `check-cv-hashes.cjs --update`（刷 1 个 cv）→ sync-html → check-interface 6 OK → 三渠道热包 **2026.10.07-1**（跨自然日序号自动重置，生成器自动递增/回退拒签已生效）。线上核验：三渠道 version.json 均 2026.10.07-1；admin-submit 空 body/非法手机号均 **400**（非 500/503，证明模块加载且参数校验在 KV 写之前，无污染）。真实密码链路无法 mock，待客户真机验 AUTO_BIND_NEED_PASSWORD/成功页分支。
+* **遗留低优（不修）**：expired 也返 code=LICENSE_DISABLED（文案不精确，HTTP 403 与 validate 一致）；licenseCode 缺失脏记录角；同手机号跨禁用/正常诊所时加机比登录口径更严（P3）。BIZ-SMOKE 93/93，十三道门全过。
+
