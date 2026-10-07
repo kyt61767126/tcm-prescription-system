@@ -33,7 +33,7 @@ import { parseAuthHeader, isPlatformAdmin } from '../_lib/auth.js';
 import {
     getKV, saveLicense, sanitizeRecord,
     generateActivationCode, LICENSE_TYPE_CONFIG, appendLicenseLog,
-    CODE_ISSUABLE_TYPES
+    CODE_ISSUABLE_TYPES, normalizeCodeProductClass
 } from './_lib/license-core.js';
 
 // P1-6 安全：CORS 收紧为固定域名（客服 PowerShell 调用不受 CORS 限制）
@@ -88,7 +88,7 @@ export async function onRequest(context) {
 
         const ip = getClientIP(context);
         const body = await context.request.json().catch(() => ({}));
-        const { user, type, days, expiresAt, count, note, maxPrescriptions, features, clinicName, maxDevices } = body;
+        const { user, type, days, expiresAt, count, note, maxPrescriptions, features, clinicName, maxDevices, productClass } = body;
 
         // 参数校验
         if (!user) {
@@ -122,6 +122,12 @@ export async function onRequest(context) {
                 return json({ success: false, error: 'maxDevices 必须是 1-10 之间的整数' }, 400);
             }
         }
+        // ★ 2026-10-07 端锁定：'cloud'/'offline'（'local' 归一 offline），留空=通用码；
+        //   非法值直接 400，绝不落脏值
+        const parsedProductClass = normalizeCodeProductClass(productClass);
+        if (parsedProductClass === 'INVALID') {
+            return json({ success: false, error: 'productClass 只能是 cloud（云端版）或 offline（本地版），留空=两端通用' }, 400);
+        }
 
         const generateCount = Math.min(Math.max(parseInt(count, 10) || 1, 1), 100);
 
@@ -151,7 +157,8 @@ export async function onRequest(context) {
                 status: 'unused',  // unused / used / expired / disabled
                 maxPrescriptions: maxPrescriptions !== undefined ? maxPrescriptions : undefined,
                 features: features || undefined,
-                note: note || ''
+                note: note || '',
+                productClass: parsedProductClass  // ★ 2026-10-07 端锁定（null=通用码）
             };
 
             await saveLicense(kv, record);
@@ -161,7 +168,7 @@ export async function onRequest(context) {
                 time: record.issuedAt,
                 ip: ip,
                 operator: currentUser.username,
-                detail: `type=${type}, days=${days || 0}, expiresAt=${recordExpiresAt || 'null'}, clinicName=${clinicName || ''}, maxDevices=${parsedMaxDevices}`
+                detail: `type=${type}, days=${days || 0}, expiresAt=${recordExpiresAt || 'null'}, clinicName=${clinicName || ''}, maxDevices=${parsedMaxDevices}, productClass=${parsedProductClass || 'universal'}`
             });
             codes.push(sanitizeRecord(record));
         }

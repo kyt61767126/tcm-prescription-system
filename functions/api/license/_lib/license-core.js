@@ -100,6 +100,66 @@ const PAID_LICENSE_TYPES = Object.freeze(
 //   free 不进激活码库存/统计体系，只能由 claim-free 端点按机器自助签发。
 const CODE_ISSUABLE_TYPES = Object.freeze(LICENSE_TYPES.filter(t => t !== 'free'));
 
+// ★ 2026-10-07 激活码-产品端锁定（淘宝分版本售卖防套利，方案B）：
+//   库存码开码时可预置 productClass：'cloud'=仅云端版软件可激活，'offline'=仅本地版。
+//   null/缺省=通用码（官网订单码与全部历史码行为不变，不锁端）。
+//   设备上报历史别称 'local' 归一为 'offline'；非法值返回哨兵 'INVALID'（开码侧拒，
+//   读旧数据侧当作未锁定，避免脏值误杀）。
+const CODE_PRODUCT_CLASSES = Object.freeze(['cloud', 'offline']);
+
+function normalizeCodeProductClass(v) {
+    if (v === undefined || v === null) return null;
+    if (typeof v !== 'string') return null;
+    const s = v.trim().toLowerCase();
+    if (s === '') return null;
+    if (s === 'local') return 'offline';  // 历史别称兼容
+    return CODE_PRODUCT_CLASSES.includes(s) ? s : 'INVALID';
+}
+
+// 码的有效锁定端（单一权威口径，validate/export-license/admin-submit 共用，禁止各端点自造）：
+//   ① 优先码记录预置 record.productClass（淘宝库存码开码即定）；
+//   ② 已激活但无预置的老码/官网订单码，从首个在册设备的端形态派生（首次激活即钉死
+//      购买版本，防后续附属机跨端加机）；
+//   ③ 都无法判定 → null（不锁，维持旧行为）。
+function getLicenseProductLock(record) {
+    if (!record) return null;
+    const preset = normalizeCodeProductClass(record.productClass);
+    if (preset && preset !== 'INVALID') return preset;
+    const devs = getDevices(record);
+    for (const d of devs) {
+        const dc = normalizeCodeProductClass(d && d.productClass);
+        if (dc && dc !== 'INVALID') return dc;
+    }
+    return null;
+}
+
+// 端锁定闸：locked=getLicenseProductLock 的结果（null 直接放行）；
+//   requestRaw=本次请求端（客户端上报 productClass，离线文件通道可缺省由调用方补 offline）。
+//   锁端缺失/无法识别请求端一律 fail-closed（防删字段绕过 99→199 套利）。
+function checkProductClassMatch(locked, requestRaw, options) {
+    if (!locked) return { ok: true };
+    let req = (typeof requestRaw === 'string') ? requestRaw.trim().toLowerCase() : '';
+    if (req === 'local') req = 'offline';
+    const labels = { cloud: '云端版', offline: '本地版' };
+    if (!req || !CODE_PRODUCT_CLASSES.includes(req)) {
+        return {
+            ok: false,
+            code: 'PRODUCT_CLASS_UNKNOWN',
+            error: (options && options.missingError) ||
+                '无法确认软件版本（云端版/本地版），请将软件升级到最新版后重新激活；如仍失败请联系客服微信 hktzy1688'
+        };
+    }
+    if (req !== locked) {
+        return {
+            ok: false,
+            code: 'PRODUCT_CLASS_LOCKED',
+            error: '该激活码为' + labels[locked] + '授权，不能在' + labels[req] +
+                '软件上激活。如需' + labels[req] + '请选购对应版本的激活码，或联系客服微信 hktzy1688 处理'
+        };
+    }
+    return { ok: true };
+}
+
 // 激活码字符集：去除易混淆字符 0/O/1/I
 const ACTIVATION_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const ACTIVATION_CODE_PREFIX = 'BNZC';
@@ -786,10 +846,13 @@ async function listLicenses(kv) {
 // ★ v4 新增：maxDevices + devices 数组（多设备授权）
 function sanitizeRecord(record) {
     const devices = getDevices(record);
+    // ★ 2026-10-07 码-端锁定：仅回显合法预置端，脏值不外露
+    const __pcLock = normalizeCodeProductClass(record.productClass);
     return {
         code: record.code,
         user: record.user || record.username,
         type: record.type,
+        productClass: (__pcLock && __pcLock !== 'INVALID') ? __pcLock : null,
         days: record.days,
         issuedAt: record.issuedAt,
         activatedAt: record.activatedAt,
@@ -1718,6 +1781,11 @@ export {
     LICENSE_TYPES,        // ★ 2026-09-17 权威全量类型集合
     PAID_LICENSE_TYPES,   // ★ 2026-09-17 权威付费类型集合（审核/工单通道校验，排除试用/免费）
     CODE_ISSUABLE_TYPES,  // ★ 2026-09-21 可开激活码类型（generate/batch，排除 free）
+    // ★ 2026-10-07 码-端锁定（淘宝分版本售卖防套利）
+    CODE_PRODUCT_CLASSES,       // ['cloud','offline']
+    normalizeCodeProductClass,  // 入参归一（'local'→'offline'，非法→'INVALID'）
+    getLicenseProductLock,      // 码有效锁定端（预置优先，否则从在册设备派生）
+    checkProductClassMatch,     // 端锁定闸（缺失/不符 fail-closed）
     ACTIVATION_CODE_CHARS,
     KV_LICENSE_PREFIX,
     KV_LICENSE_INDEX,

@@ -15,7 +15,10 @@
 //      "expiresAt": "2027-12-31",             // 到期日期 YYYY-MM-DD（与 days 二选一）
 //      "note": "批量生成",                    // 备注（可选）
 //      "clinicName": "本能堂中医诊所",         // 绑定诊所名（可选）
-//      "maxDevices": 1                         // 最大设备数（可选，默认 1，最大 10）
+//      "maxDevices": 1,                        // 最大设备数（可选，默认 1，最大 10）
+//      "productClass": "offline"               // ★ 2026-10-07 端锁定（可选）：
+//                                             //   'offline'=仅本地版可激活 / 'cloud'=仅云端版；
+//                                             //   缺省=通用码（两端通用，官网渠道用）
 //    }
 //
 //  返回：
@@ -34,7 +37,7 @@ import { parseAuthHeader, isPlatformAdmin } from '../_lib/auth.js';
 import {
     getKV, saveLicense, sanitizeRecord,
     generateActivationCode, appendLicenseLog,
-    CODE_ISSUABLE_TYPES
+    CODE_ISSUABLE_TYPES, normalizeCodeProductClass
 } from './_lib/license-core.js';
 
 function corsHeaders() {
@@ -113,7 +116,7 @@ export async function onRequest(context) {
 
         const ip = getClientIP(context);
         const body = await context.request.json().catch(() => ({}));
-        const { users, type, days, expiresAt, note, clinicName, maxDevices } = body;
+        const { users, type, days, expiresAt, note, clinicName, maxDevices, productClass } = body;
 
         // 参数校验：users 必须是非空数组
         if (!Array.isArray(users) || users.length === 0) {
@@ -162,6 +165,12 @@ export async function onRequest(context) {
                 return json({ success: false, error: 'maxDevices 必须是 1-10 之间的整数' }, 400);
             }
         }
+        // ★ 2026-10-07 端锁定：仅接受 'cloud' / 'offline'（'local' 归一 offline）；
+        //   非法值直接 400，绝不落 INVALID 脏值
+        const parsedProductClass = normalizeCodeProductClass(productClass);
+        if (parsedProductClass === 'INVALID') {
+            return json({ success: false, error: 'productClass 只能是 cloud（云端版）或 offline（本地版），留空=两端通用' }, 400);
+        }
 
         // 计算到期时间（用于记录，非 license.issuedAt）
         let recordExpiresAt = null;
@@ -190,7 +199,8 @@ export async function onRequest(context) {
                     maxDevices: parsedMaxDevices,
                     devices: [],
                     status: 'unused',
-                    note: note || ''
+                    note: note || '',
+                    productClass: parsedProductClass  // ★ 2026-10-07 端锁定（null=通用码）
                 };
                 await saveLicense(kv, record);
                 // 写入操作日志
@@ -199,7 +209,7 @@ export async function onRequest(context) {
                     time: record.issuedAt,
                     ip: ip,
                     operator: currentUser.username,
-                    detail: `batch: type=${type}, days=${days || 0}, expiresAt=${recordExpiresAt || 'null'}, clinicName=${clinicName || ''}, maxDevices=${parsedMaxDevices}`
+                    detail: `batch: type=${type}, days=${days || 0}, expiresAt=${recordExpiresAt || 'null'}, clinicName=${clinicName || ''}, maxDevices=${parsedMaxDevices}, productClass=${parsedProductClass || 'universal'}`
                 });
                 codes.push(sanitizeRecord(record));
             } catch (e) {
@@ -207,13 +217,15 @@ export async function onRequest(context) {
             }
         }
 
-        // 生成 CSV 文本（带 BOM），列：code, user, type, expiresAt, clinicName
-        const csvHeader = 'code,user,type,expiresAt,clinicName';
+        // 生成 CSV 文本（带 BOM），列：code,user,type,productClass,expiresAt,clinicName
+        //   ★ productClass 便于按 4 个淘宝卡种分拣导出（cloud云端/offline本地/空=通用）
+        const csvHeader = 'code,user,type,productClass,expiresAt,clinicName';
         const csvLines = codes.map(c => {
             return [
                 csvEscape(c.code),
                 csvEscape(c.user),
                 csvEscape(c.type),
+                csvEscape(c.productClass || ''),
                 csvEscape(formatDate(c.expiresAt)),
                 csvEscape(c.clinicName)
             ].join(',');
