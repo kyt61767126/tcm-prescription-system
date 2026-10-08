@@ -1170,6 +1170,16 @@ app.whenReady().then(async () => {
     // ★ 首次启动时将 config.json 从 asar 复制到可写路径
     await ensureWritableConfig();
 
+    // ★ 2026-10-08（KNOWLEDGE §59）：老版卸载重装遗留的出厂默认账号
+    //   （admin/admin、doctor1/doctor2）一次性归一为现行出厂空态。必须在
+    //   ensureEditionSelected / validateLicense 等任何签名与裁决之前执行，
+    //   否则旧"无签名模板账号+无备份"会被误判 config_tampered 拦在首启。
+    try {
+        licenseManager.normalizeLegacyFactoryConfig();
+    } catch (e) {
+        console.warn('[Config] 遗留出厂账号归一失败（非致命）:', e.message);
+    }
+
     // ★ 首次启动版本选择（统一安装包，试用前确定标准版/机构版）
     await ensureEditionSelected();
     

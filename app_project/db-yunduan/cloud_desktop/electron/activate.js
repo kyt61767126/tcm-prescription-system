@@ -88,6 +88,16 @@ function loadClientConfig() {
 // ★ 优化：Promise.race 双保险超时，解决 Electron 28 中 AbortController 可能不生效导致 fetch 卡死几十分钟的问题
 async function activateOnline(code, machineId, user, clinicName, phone, password, edition, inviteCode) {
     try {
+        // ★ 2026-10-08（KNOWLEDGE §59）：claim 前本地落盘预检，不过则零联网
+        //   零消耗（防"服务端码已绑定设备、本机装码被闸拒"售后死局）。
+        if (licenseManager.canInstallLicenseLocally
+            && licenseManager.canInstallLicenseLocally() === false) {
+            return {
+                success: false,
+                error: '本地配置异常（旧版本残留或配置损坏），激活已中止且未消耗激活码。'
+                     + '请退出软件后联系客服微信 hktzy1688 指导清理，再重新激活。'
+            };
+        }
         const body = { code, machineId };
         if (user) body.user = user;
         // ★ v3 新增：提交 clinicName（如填写）

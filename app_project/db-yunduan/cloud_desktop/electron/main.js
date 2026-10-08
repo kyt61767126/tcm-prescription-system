@@ -731,7 +731,16 @@ app.whenReady().then(async () => {
 
     // ★ 首次启动时将 config.json 从 asar 复制到可写路径
     await ensureWritableConfig();
-    
+
+    // ★ 2026-10-08（KNOWLEDGE §59）：老版卸载重装遗留的出厂默认账号
+    //   （admin/admin、doctor1/doctor2）一次性归一为现行出厂空态，必须在任何
+    //   config 签名/授权裁决之前，避免旧模板账号+无备份被误判 config_tampered。
+    try {
+        licenseManager.normalizeLegacyFactoryConfig();
+    } catch (e) {
+        console.warn('[Config] 遗留出厂账号归一失败（非致命）:', e.message);
+    }
+
     // ★ 云端版：不进入试用模式，直接检查 license.dat 是否存在且有效
     // 云端版需求：无试用、平台管理员一键激活后才可使用
     let _isLicensed = false;

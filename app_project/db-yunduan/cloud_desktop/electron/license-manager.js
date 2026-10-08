@@ -4982,6 +4982,139 @@ function getFillableUsers() {
 //   missing/unsigned/其他失配 → 仅新鲜 v2 备份子集证明。
 // cfgArg（可选）：调用方已读入内存的 config——闸门直接裁决该对象，不二次读盘
 //   （TOCTOU 阻断：否则外部进程可在闸门后替换 config，让异件被签）。
+//
+// ============================================================================
+// ★ 2026-10-08 旧版出厂默认账号识别（淘宝售后根因，KNOWLEDGE §59）：
+//   2026-08 前安装器出厂 config 内置默认账号（admin/admin、doctor1/doctor2
+//   /123456）。NSIS 卸载重装不清 userData，客户装旧试用版后再装新版时，
+//   遗留"无签名模板账号+无 users-backup.json"被签名闸误判 config_tampered；
+//   且激活是先 claim 后本地落盘，导致服务端码已消耗、本机装码被闸拒。
+//   模板账号随安装器公开分发、默认口令公开，不代表真实身份。严格逐字段比对
+//   （用户名+默认口令哈希+角色未提权+无手机号+不重复），改密/提权/挂手机号
+//   即不认；装码/建号路径会随后把它们物理清除，不发生"未验签账号被签白"。
+// ============================================================================
+// ★ 2026-10-08 复审最终收口（三轮独立审查/安全对抗）：出厂模板账号唯一处理
+//   入口是启动 normalizeLegacyFactoryConfig（main.js 在一切签名裁决前调用）：
+//   识别→清空 users→v2 重签。闸门 configUsersProvenAuthentic 【不为】模板
+//   账号开设任何放行分支——归一成功后磁盘只可能是空 users（走既有空态分支）；
+//   归一未跑/失败/同进程内被换件，一律维持本改动前的 fail-closed
+//   （config_tampered→客服 SOP），从根上杜绝 ensureEditionSelected/
+//   config:update/get-app-config 备份刷新/enforceEditionBinding/register 等
+//   任何重签路径把模板账号 v2 签白或毒化备份。装码/建号路径内的 strip
+//   仅作纵深防御（清 v2 合法 mixed 件里可能共存的模板账号）。
+const LEGACY_FACTORY_ACCOUNTS = {
+    admin:   { password: 'admin',  role: 'admin' },
+    doctor1: { password: '123456', role: 'user' },
+    doctor2: { password: '123456', role: 'user' }
+};
+function isLegacyFactoryAccount(u) {
+    try {
+        if (!u || typeof u !== 'object') return false;
+        const t = LEGACY_FACTORY_ACCOUNTS[String(u.username)];
+        if (!t) return false;
+        if (u.phone) return false;                          // 真实账号可能挂手机号，模板件绝不挂
+        if (u.role && String(u.role) !== t.role) return false;  // 被提权即不认
+        const hash = hashOf(t.password);
+        if (String(u.password || '') !== hash) return false;
+        if (u.passwordHash && String(u.passwordHash) !== hash) return false;
+        return true;
+    } catch (e) { return false; }
+}
+function isUntouchedLegacyFactoryUsers(users) {
+    if (!Array.isArray(users) || users.length === 0) return false;
+    const seen = new Set();
+    return users.every(u => {
+        const key = String((u && u.username) || '');
+        if (!key || seen.has(key)) return false;    // 同名重复也不是出厂模板
+        seen.add(key);
+        return isLegacyFactoryAccount(u);
+    });
+}
+
+// ★ 2026-10-08：激活联网 claim 前的本地预检。本地落盘必然失败（篡改/IO/JSON
+//   损坏）时不得先消耗服务端激活额度——根因案中 claim 成功后 installLicense
+//   被闸门拒绝，客户机进不去、码已绑定设备，只能客服解绑。渲染层 activate.js
+//   在任何 fetch claim 之前调用；false 时直接提示客户清理旧配置/联系客服。
+function canInstallLicenseLocally() {
+    try {
+        const raw = loadPrimaryConfigRaw();
+        // IO 错误（EPERM/锁文件等，非"文件缺失"）：装码写盘同样会失败，fail-closed
+        if (raw.ioError) return false;
+        if (raw.corrupt) {
+            // ★ 复审重要项：与 installLicense 的 SyntaxError 处置完全同口径——
+            //   从可采信备份回填 users 后裁决（回填件过备份子集证明；无备份时
+            //   回填为空 users，按出厂态放行），避免预检误杀装码自带的损坏自愈。
+            return configUsersProvenAuthentic({ users: getFillableUsers() });
+        }
+        return configUsersProvenAuthentic(raw.cfg);
+    } catch (e) {
+        console.warn('[License] canInstallLicenseLocally 异常，fail-closed:', e && e.message);
+        return false;
+    }
+}
+
+// ★ 2026-10-08：启动一次性归一——现存 config 仅有未改动旧版出厂默认账号时，
+//   清空 users 并 v2 重签，把老机残留态还原为现行出厂空态，从根上消除首启
+//   config_tampered 弹窗（trial/装码后续路径全部干净）。
+//   v2 完整件 / users_mismatch / 含真实账号 / 可采信备份里存在真实账号 /
+//   IO·JSON 异常一律不动（fail-closed，交既有迁移/客服 SOP）。
+//   注：清空后 users=[]，backupUserAccounts 对空 users 是 no-op（不写备份、
+//   不推进 gen 锚点、不退役 legacy），归一结果等同新机出厂基线。
+//   返回 true 表示本次启动完成归一（同时翻转进程内放行标记）。同步一次性。
+function normalizeLegacyFactoryConfig() {
+    try {
+        const raw = loadPrimaryConfigRaw();
+        if (!raw.configPath || raw.ioError || raw.corrupt) return false;
+        const cfg = raw.cfg || {};
+        const users = Array.isArray(cfg.users) ? cfg.users : [];
+        if (users.length === 0) return false;
+        const insp = inspectConfigSignatures(cfg);
+        if (insp.ok && !insp.legacy) return false;    // v2 双签完整件不动
+        if (insp.reason === 'users_mismatch') return false;
+        if (!isUntouchedLegacyFactoryUsers(users)) return false;
+        // ★ 复审重要项：清空前 consult users-backup——磁盘被旧安装器覆盖为模板件、
+        //   但备份里仍有真实账号（新鲜 v2 备份；或 v1 合法件日落窗口内的 legacy
+        //   备份）时绝不能清空，否则真实账号失去自动回填入口/被 proven 覆写冲掉。
+        //   备份只含模板账号（旧版非 proven 刷新产物）则照常归一。
+        try {
+            const bu = inspectUsersBackup();
+            const hasReal = Array.isArray(bu.users)
+                && bu.users.some(u => !isLegacyFactoryAccount(u));
+            if (hasReal) {
+                // legacyBackupUsable 自身含三重硬边界（legacy 未退役+双 gen 锚点未建
+                // +backupAt 日落窗口），不额外要求磁盘是 v1 合法件——根因客户盘
+                // 恰是"无签名模板件+窗口内 legacy 备份含真实账号"，而"跳过归一"
+                // 不产生任何写盘/签名，最坏仅维持原 tampered→客服 SOP。
+                const backupTrustworthy = (bu.trusted === 'v2' && backupGenFresh(bu))
+                    || legacyBackupUsable(bu);
+                if (backupTrustworthy) {
+                    console.warn('[License] 出厂模板账号归一跳过：可采信备份中存在真实账号，交既有迁移/客服流程');
+                    return false;
+                }
+            }
+        } catch (be) { /* 备份不可读不阻塞磁盘归一 */ }
+        cfg.users = [];
+        signConfig(cfg);
+        if (!cfg.configSignature) return false;
+        try {
+            atomicWriteFileSync(raw.configPath, JSON.stringify(cfg, null, 2));
+        } catch (we) {
+            // EPERM/EISDIR 等失败时 atomic 写可能残留 .tmp，清理后 fail-closed
+            try { fs.unlinkSync(raw.configPath + '.tmp'); } catch (_) { /* 无残留 */ }
+            throw we;
+        }
+        try { backupUserAccounts(cfg, { proven: true }); } catch (be) {
+            // 空 users 必然 no-op（L778 早退）；保留 catch 仅为防御未来改动
+            console.warn('[License] 归一后备份调用异常（非致命）:', be && be.message);
+        }
+        console.log('[License] 已清除旧版出厂默认账号，归一为现行出厂空态');
+        return true;
+    } catch (e) {
+        console.warn('[License] normalizeLegacyFactoryConfig 异常（非致命）:', e && e.message);
+        return false;
+    }
+}
+
 function configUsersProvenAuthentic(cfgArg) {
     const hasArg = cfgArg && typeof cfgArg === 'object';
     const insp = inspectConfigSignatures(hasArg ? cfgArg : undefined);
@@ -5003,6 +5136,14 @@ function configUsersProvenAuthentic(cfgArg) {
         // users_mismatch 且磁盘为空 = 攻击者删光 users 制造"空"态 → 不放行
         return insp.reason !== 'users_mismatch';
     }
+
+    // ★ 2026-10-08（三轮审查最终结论）：此处刻意【不设】"仅出厂模板账号"放行
+    //   分支。模板件只由启动 normalizeLegacyFactoryConfig 清空为空 users 件后，
+    //   经上面的空 users 分支放行；任何时刻磁盘仍呈现模板账号（归一未跑/失败/
+    //   归一后被外部换件）都落入下面的备份证明，无新鲜 v2/窗口内 legacy 备份
+    //   即 fail-closed。这样 ensureEditionSelected/config:update/enforceEdition
+    //   Binding/get-app-config 备份刷新/register-local-user 等全部重签路径无需
+    //   逐一改造，天然不可能把模板账号 v2 签白或毒化备份。
 
     const backup = inspectUsersBackup();
     if (insp.ok && insp.legacy) {
@@ -5130,6 +5271,21 @@ function installLicense(base64Content, options = {}) {
         // config / configPath / configDir 已在函数开头单次读取（闸门裁决同一对象）
 
         let configChanged = false;
+
+        // ★ 2026-10-08（复审收口）：装码即物理清除旧版出厂默认账号
+        //   （admin/admin、doctor1/doctor2），无条件执行（不再限于带手机号激活——
+        //   覆盖 license:activate 文件导入/手机号留空等无 phone 装码路径），
+        //   防止任何装码重签把模板账号 v2 签白。闸门已保证现存 users 来源可信；
+        //   仅严格逐字段命中的模板账号被删（改密/提权/挂手机号不匹配、不误删）。
+        if (Array.isArray(config.users)) {
+            const __factoryKept = config.users.filter(u => !isLegacyFactoryAccount(u));
+            if (__factoryKept.length !== config.users.length) {
+                console.log('[License] 激活时清除旧版出厂默认账号:',
+                    config.users.length - __factoryKept.length, '个');
+                config.users = __factoryKept;
+                configChanged = true;
+            }
+        }
 
         // 更新诊所名
         // ★ 2026-09-06 P0 修复（绑定校验诊所名不匹配）：同步 config.clinicName 以 license
@@ -5474,20 +5630,36 @@ function ensureLocalActivationUser(phone, password) {
         const inPrimary = !!(config && Array.isArray(config.users)
             && config.users.some(u => u && (u.username === trimmed || u.name === trimmed)));
         if (inPrimary || localUserExists(trimmed)) {
+            // ★ 2026-10-08 复审建议：existed 早返回路径（claimFree already-free
+            //   纯本地补绑走此路）此前不清除模板账号，doctor1/2 可残留。仅在
+            //   来源可信时重签：损坏回填件内容由 getFillableUsers 备份证明；
+            //   其余件必须过闸门，防借本路径洗白未验签账号。
+            let __needResign = false;
+            try {
+                if (config && primaryReadOk && Array.isArray(config.users)
+                    && config.users.some(u => isLegacyFactoryAccount(u))
+                    && (configCorruptBackfilled || configUsersProvenAuthentic(config))) {
+                    const __kept = config.users.filter(u => !isLegacyFactoryAccount(u));
+                    console.log('[License] 账号已存在补绑时清除旧版出厂默认账号:',
+                        config.users.length - __kept.length, '个');
+                    config.users = __kept;
+                    __needResign = true;
+                }
+            } catch (ge) { /* 裁决异常不阻断幂等成功 */ }
             // ★ 第五轮（复审A#5）：config 刚从损坏回填且账号在回填件中命中时，
             //   磁盘上仍是坏件——顺带重签写盘把损坏 config 修复掉（非致命，
             //   失败不影响本次补绑结果；inPrimary 才修：回填件含该用户才是
             //   备份证明过的真实内容）。
-            if (configCorruptBackfilled && inPrimary) {
+            if ((configCorruptBackfilled && inPrimary) || __needResign) {
                 try {
                     signConfig(config);
                     if (config.configSignature) {
-                        fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+                        atomicWriteFileSync(configPath, JSON.stringify(config, null, 2));
                         backupUserAccounts(config, { proven: true });
-                        console.log('[License] ensureLocalActivationUser 已顺带修复损坏 config');
+                        console.log('[License] ensureLocalActivationUser 已顺带修复/固化 config');
                     }
                 } catch (re) {
-                    console.warn('[License] ensureLocalActivationUser 修复损坏 config 失败（非致命）:', re.message);
+                    console.warn('[License] ensureLocalActivationUser 修复 config 失败（非致命）:', re.message);
                 }
             }
             return { success: true, existed: true };
@@ -5500,6 +5672,15 @@ function ensureLocalActivationUser(phone, password) {
         if (!configUsersProvenAuthentic(config)) {
             console.warn('[License] ensureLocalActivationUser 中止：现存 users 无真实签发来源');
             return { success: false, existed: false, error: '本地配置被篡改，建号已中止，请联系客服' };
+        }
+
+        // ★ 2026-10-08：建手机号账号前清除旧版出厂默认账号（严格逐字段命中才删，
+        //   真实注册账号保留；与 installLicense 同口径）
+        const __factoryKept = config.users.filter(u => !isLegacyFactoryAccount(u));
+        if (__factoryKept.length !== config.users.length) {
+            console.log('[License] 建手机号账号时清除旧版出厂默认账号:',
+                config.users.length - __factoryKept.length, '个');
+            config.users = __factoryKept;
         }
 
         const pwd = password || 'admin';
@@ -5575,6 +5756,11 @@ module.exports = {
     loadUserAccountBackup, // 从独立备份读取 users（返回 {users,trusted}）
     inspectUsersBackup,    // ★ 2026-09-26 I2：备份签名检查（{trusted,users}）
     configUsersProvenAuthentic, // ★ 2026-09-26 H1/B1：重签前置闸门
+    // ★ 2026-10-08 旧版出厂账号遗留修复（KNOWLEDGE §59）
+    isLegacyFactoryAccount,       // 严格判定单个未改动出厂账号（测试/装码清除用）
+    isUntouchedLegacyFactoryUsers,// 严格判定"磁盘上只有出厂模板账号"
+    canInstallLicenseLocally,     // claim 前本地预检（activate.js 调用，防码空耗）
+    normalizeLegacyFactoryConfig, // 启动一次性归一（main.js 调用）
     getFillableUsers,     // ★ 2026-09-26：回填专用（新鲜v2/v1窗口legacy）
     backupGenFresh,       // ★ 2026-09-26：v2 备份 gen 新鲜度（测试用）
     legacyBackupUsable,   // ★ 2026-09-26：legacy 备份可采信判定（测试用）

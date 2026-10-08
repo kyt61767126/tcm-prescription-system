@@ -91,6 +91,19 @@ function loadClientConfig() {
 // ★ 优化：Promise.race 双保险超时，解决 Electron 28 中 AbortController 可能不生效导致 fetch 卡死几十分钟的问题
 async function activateOnline(code, machineId, user, clinicName, phone, password, edition, inviteCode) {
     try {
+        // ★ 2026-10-08（KNOWLEDGE §59）：claim 前先做本地落盘预检。旧版残留/
+        //   config 损坏时 installLicense 必被 proven 闸拒；若先 claim，会出现
+        //   "服务端码已绑定设备、本机激活失败"的售后死局。预检不过零联网零消耗，
+        //   由客户先清理旧配置（首启归一已自动处理出厂默认账号，走到这里多为
+        //   真损坏/被改写）。
+        if (licenseManager.canInstallLicenseLocally
+            && licenseManager.canInstallLicenseLocally() === false) {
+            return {
+                success: false,
+                error: '本地配置异常（旧版本残留或配置损坏），激活已中止且未消耗激活码。'
+                     + '请退出软件后联系客服微信 hktzy1688 指导清理，再重新激活。'
+            };
+        }
         const body = { code, machineId };
         if (user) body.user = user;
         // ★ v3 新增：提交 clinicName（如填写）
@@ -236,6 +249,18 @@ async function claimFreeOnline(machineId, phone) {
             }
         } catch (__guardE) {
             console.warn('[Activate] 免费领取付费保护检查异常(放行领取):', __guardE && __guardE.message);
+        }
+
+        // ★ 2026-10-08（KNOWLEDGE §59）：落盘前本地预检，不过则零联网，提示清理
+        //   旧配置，避免服务端已发 free 授权而本机装不进。置于上面的纯本地幂等
+        //   分支（already-free 补绑/付费保护）之后——不联网的本地操作不应被挡。
+        if (licenseManager.canInstallLicenseLocally
+            && licenseManager.canInstallLicenseLocally() === false) {
+            return {
+                success: false,
+                error: '本地配置异常（旧版本残留或配置损坏），领取已中止。'
+                     + '请退出软件后联系客服微信 hktzy1688 指导清理。'
+            };
         }
 
         const body = {
