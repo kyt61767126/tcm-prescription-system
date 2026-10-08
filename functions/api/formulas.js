@@ -1,4 +1,4 @@
-import { parseAuthHeader, isPlatformAdmin, isClinicAdmin, isAdmin } from './_lib/auth.js';
+import { parseAuthHeader, isPlatformAdmin, isClinicAdmin, isAdmin, userMustChangePassword } from './_lib/auth.js';
 import { getKV, listAllKeys } from './_lib/kv.js';
 import { getDB, isD1Enabled } from './_lib/d1.js';
 
@@ -162,6 +162,10 @@ export async function onRequest(context) {
         if (method === 'POST' || method === 'PUT') {
             if (!currentUser) {
                 return json({ success: false, error: '未授权访问，请先登录' }, 401);
+            }
+            // ★ 二期：首登强制改密期间写库 403
+            if (await userMustChangePassword(context.env, currentUser)) {
+                return json({ success: false, code: 'MUST_CHANGE_PASSWORD', error: '首次登录请先修改密码后再操作' }, 403);
             }
 
             let body;

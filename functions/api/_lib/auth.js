@@ -502,6 +502,28 @@ export async function parseAuthHeader(request, env) {
     }
 }
 
+// ★ 2026-10-08 二期：首登强制改密写闸。
+//   token 是精简签名体（u/r/c/e/v/k），不含 mustChangePassword，故写接口前
+//   新鲜读取诊所用户行。仅当【明确读到 mustChangePassword===true】才拦截；
+//   读不到/异常一律 fail-open（KV 降级时后续保存本身也会失败，避免双重误伤）。
+//   只读接口不调用本函数。
+export async function userMustChangePassword(env, user) {
+    try {
+        if (!user || !user.clinicId || !user.username) return false;
+        const kv = getKV(env);
+        if (!kv) return false;
+        const users = await kv.get(`clinic:${user.clinicId}:users`, 'json').catch(() => null);
+        if (!Array.isArray(users)) return false;
+        const hit = users.find(u => u && (
+            u.username === user.username ||
+            (user.phone && u.phone === user.phone)
+        ));
+        return !!(hit && hit.mustChangePassword === true);
+    } catch (e) {
+        return false;
+    }
+}
+
 // 角色判定函数
 export function isPlatformAdmin(user) {
     return !!(user && user.role === ROLE_PLATFORM_ADMIN);

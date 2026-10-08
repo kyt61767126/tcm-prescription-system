@@ -91,6 +91,8 @@ async function ensureClinicUser(kv, clinicId, clinicName, phone, adminName, now,
         role: role,
         passwordHash,
         salt,
+        // ★ 二期：随机初始密码账户首登强制改密；自设密码/默认 admin 不带此标记
+        mustChangePassword: (cred && cred.mustChangePassword === true) ? true : undefined,
         allowedMode: 'both',
         cloudEnabled: true,
         allowSavePrescription: true,
@@ -102,7 +104,8 @@ async function ensureClinicUser(kv, clinicId, clinicName, phone, adminName, now,
     try { await clearAccountTombstone(kv, phone); } catch (e) { console.warn('[AdminAccount] 清墓碑失败:', e && e.message); }
     console.log('[AdminAccount] 云端账号已开通:', phone, 'clinic=', clinicName, 'role=', role,
         hasAdmin ? '(诊所已有管理员，本次开通为普通用户)' : '(首个管理员)',
-        (cred && cred.passwordHash) ? '(注册密码)' : '(默认密码 admin)');
+        (cred && cred.mustChangePassword === true) ? '(随机初始密码+强制改密)'
+            : (cred && cred.passwordHash) ? '(客户自设/注册密码)' : '(默认密码 admin)');
 }
 
 // 审核通过记录 → 幂等开通云端诊所 + clinic_admin 账号
@@ -368,6 +371,19 @@ export async function phoneHasCloudAccount(kv, phone) {
 
 // 兜底名随机后缀字符集（去易混 0/o/1/i/l）
 const AUTO_NAME_RAND_CHARS = 'abcdefghjkmnpqrstuvwxyz23456789';
+
+// ★ 2026-10-08 二期：随机初始登录密码（10 位易读字母数字，必含字母+数字；CSPRNG）。
+//   仅在新客户端（pwdCap=v2）激活且买家未自设密码时生成，随 validate 响应一次性
+//   下发，服务端只存 PBKDF2 哈希；用户行带 mustChangePassword，首登强制改密。
+function generateAutoInitialPassword() {
+    for (let i = 0; i < 24; i++) {
+        const s = Array.from(crypto.getRandomValues(new Uint8Array(10)))
+            .map(b => AUTO_NAME_RAND_CHARS[b % AUTO_NAME_RAND_CHARS.length]).join('');
+        if (/[a-z]/.test(s) && /[2-9]/.test(s)) return s;
+    }
+    return 'k' + Array.from(crypto.getRandomValues(new Uint8Array(8)))
+        .map(b => AUTO_NAME_RAND_CHARS[b % AUTO_NAME_RAND_CHARS.length]).join('') + '7';
+}
 function autoNameRandomSuffix(len) {
     return Array.from(crypto.getRandomValues(new Uint8Array(len)))
         .map(b => AUTO_NAME_RAND_CHARS[b % AUTO_NAME_RAND_CHARS.length]).join('');
@@ -461,6 +477,23 @@ export async function commitTaobaoCloudAuto(kv, opts) {
     if (rawType !== 'personal' && rawType !== 'pro') return { ok: false, reason: 'type-not-eligible' };
     const actType = rawType === 'pro' ? 'pro' : 'personal';
 
+    // ★ 二期 开通密码三态（仅新客户端 pwdCap=v2 会走到非默认分支）：
+    //   ①买家自设密码（validate 已做 8-32 位字母数字校验并 PBKDF2 哈希后传入）
+    //   ②留空 → 本函数生成随机初始密码（明文随本次返回一次性下发，KV 只存哈希）+ 强制改密
+    //   ③旧客户端无 pwdCap → 固定 admin（一期行为，零回归）
+    let initialPassword = '';
+    let recCred = (p.passwordCred && p.passwordCred.passwordHash && p.passwordCred.salt)
+        ? { passwordHash: String(p.passwordCred.passwordHash), salt: String(p.passwordCred.salt) }
+        : null;
+    let mustChangePassword = false;
+    if (!recCred && p.randomInitial === true) {
+        initialPassword = generateAutoInitialPassword();
+        const __h = await hashPassword(initialPassword);
+        recCred = { passwordHash: __h.passwordHash, salt: __h.salt };
+        mustChangePassword = true;
+    }
+    const autoPwdMode = recCred ? (mustChangePassword ? 'random' : 'selfset') : 'admin';
+
     // ① 防御性复查（预检→落库并发窗）：fail-closed，读异常绝不按"无占用"放行
     let occupied = null;
     try {
@@ -514,7 +547,11 @@ export async function commitTaobaoCloudAuto(kv, opts) {
         clinicName,
         adminName: '',
         phone,
-        remark: '淘宝云端备货码 claim 自动开通（初始密码 admin，首次登录请改密）',
+        remark: autoPwdMode === 'random'
+            ? '淘宝云端备货码 claim 自动开通（随机初始密码，首登强制改密）'
+            : (autoPwdMode === 'selfset'
+                ? '淘宝云端备货码 claim 自动开通（买家自设登录密码）'
+                : '淘宝云端备货码 claim 自动开通（初始密码 admin，首次登录请改密）'),
         machineId,
         status: 'activated',
         submittedAt: now,
@@ -529,8 +566,10 @@ export async function commitTaobaoCloudAuto(kv, opts) {
         appMode: 'cloud',
         appModeCarrier: '',
         inviteCode: '',
-        passwordHash: '',
-        passwordSalt: '',
+        passwordHash: recCred ? recCred.passwordHash : '',
+        passwordSalt: recCred ? recCred.salt : '',
+        mustChangePassword: mustChangePassword === true,
+        pwdMode: autoPwdMode,
         versionLabel: '',
         env: 'production',
         freePass: false,
@@ -575,6 +614,10 @@ export async function commitTaobaoCloudAuto(kv, opts) {
                 expiresAt,
                 inviteeBonusDays,
                 appMode: 'cloud',
+                // 二期：开通密码 cred 透传至 ensureClinicUser（随机分支带强制改密标记）
+                passwordHash: recCred ? recCred.passwordHash : '',
+                passwordSalt: recCred ? recCred.salt : '',
+                mustChangePassword,
                 requestId,
                 __autoRequestId: requestId
             });
@@ -591,7 +634,8 @@ export async function commitTaobaoCloudAuto(kv, opts) {
             break;
         }
     }
-    return { ok: true, requestId, clinicName, nameSource, provisioned, provisionError };
+    // initialPassword 仅 random 分支非空——明文只走本次返回，不随任何状态/轮询接口二次下发
+    return { ok: true, requestId, clinicName, nameSource, provisioned, provisionError, pwdMode: autoPwdMode, initialPassword };
 }
 
 // license 签发后回填审计记录（validate 在 encodeLicenseBase64 之后调用）：

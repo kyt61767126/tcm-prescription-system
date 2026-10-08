@@ -3,6 +3,7 @@ import {
     parseAuthHeader, hashPassword, verifyPassword, signToken,
     isPlatformAdmin, isClinicAdmin, isAdmin, isLegacyPasswordHash,
     revokeAllUserTokens, writeUserSession, clearUserSession, getUserSession,
+    userMustChangePassword,
     ROLE_PLATFORM_ADMIN, ROLE_CLINIC_ADMIN, ROLE_DOCTOR, ROLE_CASHIER, ROLE_SERVICE,
     KV_SYSTEM_CLINICS, KV_SYSTEM_PLATFORM_ADMINS, KV_SYSTEM_SERVICE_ACCOUNTS,
     isStaff,
@@ -480,6 +481,8 @@ function sanitizeUser(user, clinicId, clinicName, clinicStatus, clinicEdition) {
         cloudEnabled: user.cloudEnabled !== undefined ? user.cloudEnabled : computeCloudEnabled(user),
         allowSavePrescription: user.allowSavePrescription !== undefined ? user.allowSavePrescription : true,
         hasPassword: !!(user.passwordHash || user.password),
+        // ★ 二期：随机初始密码账户首登强制改密（登录响应据此弹改密框）
+        mustChangePassword: user.mustChangePassword === true,
         createdAt: user.createdAt,
         updatedAt: user.updatedAt
     };
@@ -719,6 +722,26 @@ export async function onRequest(context) {
         const kv = getKV(context);
         if (!kv) {
             return json({ success: false, error: 'KV binding not found. Please configure TCM_PRESCRIPTION_KV.' }, 500);
+        }
+
+        // ★ 二期强制改密·用户管理面写闸（安全复审中危收口）：
+        //   mustChangePassword=true 的诊所账号在改密完成前，除登录/改密/登出外
+        //   不得调用任何写接口——防止抢登窗口内新建无标后门账号、删改用户、抢注用户名等。
+        //   平台/客服令牌无 clinicId，userMustChangePassword 天然放行；GET 只读不受影响。
+        if (method !== 'GET' && method !== 'OPTIONS' && method !== 'HEAD') {
+            const __mcAuthUser = await parseAuthHeader(context.request, context.env);
+            if (__mcAuthUser) {
+                const __mcAction = url.searchParams.get('action') || '';
+                const __mcClinicParam = url.searchParams.get('clinic') || '';
+                // login=true 仅在"纯登录请求"（无 action/clinic）时放行；
+                //   严禁作为与其他写 action 组合的万能通行参数（add-clinic-user
+                //   等分支排在登录分支之前，否则追加 &login=true 即可越闸）。
+                const __mcAllowed = __mcAction === 'change-password' || __mcAction === 'logout'
+                    || (url.searchParams.get('login') === 'true' && !__mcAction && !__mcClinicParam);
+                if (!__mcAllowed && await userMustChangePassword(context.env, __mcAuthUser)) {
+                    return json({ success: false, code: 'MUST_CHANGE_PASSWORD', error: '首次登录请先修改密码后再操作' }, 403);
+                }
+            }
         }
 
         // ===== 诊断端点 GET /users?check=username =====
@@ -1039,6 +1062,9 @@ export async function onRequest(context) {
                 found.user.passwordHash = passwordHash;
                 found.user.salt = salt;
                 found.user.updatedAt = getNowISO();
+                // ★ 二期：客服重置的临时密码首登强制改密（与随机初始密码同闸；
+                //   仅诊所用户，客服/平台管理员账号不带此标记）
+                if (found.clinicId) found.user.mustChangePassword = true;
 
                 if (found.clinicId) {
                     const users = (await kv.get(`clinic:${found.clinicId}:users`, 'json')) || [];
@@ -1049,6 +1075,11 @@ export async function onRequest(context) {
                     } else {
                         return json({ success: false, error: '诊所用户数据异常，未写入' }, 500, context.request);
                     }
+                    // ★ 二期：与客服账号重置分支对齐——诊所用户密码被重置后撤销全部旧
+                    //   会话（旧密码+mustChangePassword 期间的 token 立即失效），
+                    //   客户须用客服给的临时密码重新登录并强制改密。
+                    try { await revokeAllUserTokens(kv, found.user.username); }
+                    catch (e) { console.error('revokeAllUserTokens(clinic reset-password) error:', e); }
                 } else if (found.user.role === ROLE_SERVICE) {
                     // ★ C批：客服账号写回独立 KV 表
                     // ★ C批双审：KV 值损坏（非数组）fail-closed 拒绝写入，杜绝 [] 覆盖坏值抹掉账号
@@ -1073,6 +1104,10 @@ export async function onRequest(context) {
                     if (idx !== -1) {
                         admins[idx] = found.user;
                         await kv.put(KV_SYSTEM_PLATFORM_ADMINS, JSON.stringify(admins));
+                        // ★ 二期复审：与 reset-platform-admin 专用端点对齐——
+                        //   平台管理员密码被救援重置后同样撤销全部旧会话
+                        try { await revokeAllUserTokens(kv, found.user.username); }
+                        catch (e) { console.error('revokeAllUserTokens(platform-admin reset-password) error:', e); }
                     } else {
                         return json({ success: false, error: '平台管理员数据异常，未写入' }, 500, context.request);
                     }
@@ -2682,6 +2717,14 @@ export async function onRequest(context) {
             if (!username || !oldPassword || (!newPassword && !newUsername)) {
                 return json({ success: false, error: '参数不完整（新密码与新用户名至少提供一项）' }, 400, context.request);
             }
+            // ★ 二期：改密强度服务端兜底（与 reset-password 同规则：8-128 位且含字母和
+            //   数字；激活自设/随机密码改密走同一端点，不能让随机强密码被改成 1 位弱密码）。
+            if (newPassword) {
+                if (typeof newPassword !== 'string' || newPassword.length < 8 || newPassword.length > 128 ||
+                    !/[a-zA-Z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
+                    return json({ success: false, error: '新密码需 8-128 位且同时包含字母和数字' }, 400, context.request);
+                }
+            }
 
             const currentUser = await parseAuthHeader(context.request, context.env);
             if (!currentUser || currentUser.username !== username) {
@@ -2757,6 +2800,8 @@ export async function onRequest(context) {
                 const { passwordHash, salt } = await hashPassword(newPassword);
                 found.user.passwordHash = passwordHash;
                 found.user.salt = salt;
+                // ★ 二期：成功改密即解除首登强制改密标记（含随机初始密码场景）
+                delete found.user.mustChangePassword;
             }
             found.user.updatedAt = getNowISO();
 
@@ -3337,6 +3382,9 @@ export async function onRequest(context) {
                         const { passwordHash, salt } = await hashPassword(adminPassword);
                         users[adminIdx].passwordHash = passwordHash;
                         users[adminIdx].salt = salt;
+                        // ★ 二期复审：后台改密后撤销该管理员全部旧会话，旧 token 立即失效
+                        try { await revokeAllUserTokens(kv, users[adminIdx].username); }
+                        catch (e) { console.error('revokeAllUserTokens(clinic=update admin password) error:', e); }
                     }
                     users[adminIdx].updatedAt = now;
                     await kv.put(`clinic:${clinicId}:users`, JSON.stringify(users));

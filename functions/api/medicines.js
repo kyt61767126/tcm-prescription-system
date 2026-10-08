@@ -1,4 +1,4 @@
-import { parseAuthHeader, isPlatformAdmin, isClinicAdmin, isAdmin, KV_SYSTEM_PLATFORM_MEDICINES } from './_lib/auth.js';
+import { parseAuthHeader, isPlatformAdmin, isClinicAdmin, isAdmin, KV_SYSTEM_PLATFORM_MEDICINES, userMustChangePassword } from './_lib/auth.js';
 import { getKV } from './_lib/kv.js';
 
 // P1-6 安全增强：CORS 白名单
@@ -98,6 +98,11 @@ export async function onRequest(context) {
             if (!currentUser.clinicId) {
                 return json({ success: false, error: '无诊所ID' }, 400);
             }
+            // ★ 二期：sync_platform 是整库覆写诊所药品库的写动作，与通用 POST/PUT
+            //   保存同闸——mustChangePassword 首登期间 403。
+            if (await userMustChangePassword(context.env, currentUser)) {
+                return json({ success: false, code: 'MUST_CHANGE_PASSWORD', error: '首次登录请先修改密码后再操作' }, 403);
+            }
 
             const clinicKey = `clinic:${currentUser.clinicId}:medicines`;
             const platformMedicines = await kv.get(KV_SYSTEM_PLATFORM_MEDICINES, 'json');
@@ -131,6 +136,10 @@ export async function onRequest(context) {
         if (method === 'POST' || method === 'PUT') {
             if (!currentUser) {
                 return json({ success: false, error: '未授权访问，请先登录' }, 401);
+            }
+            // ★ 二期：首登强制改密期间写库 403
+            if (await userMustChangePassword(context.env, currentUser)) {
+                return json({ success: false, code: 'MUST_CHANGE_PASSWORD', error: '首次登录请先修改密码后再操作' }, 403);
             }
             if (!isAdmin(currentUser)) {
                 return json({ success: false, error: '仅管理员可管理药品库' }, 403);

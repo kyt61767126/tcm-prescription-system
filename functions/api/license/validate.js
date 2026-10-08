@@ -44,6 +44,7 @@ import {
 } from './_lib/license-core.js';
 import { getDeviceBlock } from './_lib/license-core.js';
 import { provisionCloudAccount, preflightTaobaoCloudAuto, commitTaobaoCloudAuto, attachLicenseToAutoRequest } from './_lib/admin-account.js';
+import { hashPassword } from '../_lib/auth.js';
 
 // ★ P2 安全修复：收紧 CORS，仅允许合法 Origin
 const ALLOWED_ORIGINS = [
@@ -127,6 +128,29 @@ export async function onRequest(context) {
 
         const body = await context.request.json().catch(() => ({}));
         const { code, machineId, user, clinicName, productClass, clientClass, inviteCode, phone } = body;
+
+        // ★ 2026-10-08 二期：买家自设密码 / 随机初始密码。
+        //   能力位硬分流——只有新客户端显式带 pwdCap:'v2' 才进入新分支；
+        //   旧客户端（不带）全程保持一期固定 admin 行为，杜绝「旧包收到随机
+        //   密码却不会展示 → 客户锁死」。弱密码只在 v2 分支拦截，旧请求零影响。
+        const __pwdCapV2 = body.pwdCap === 'v2';
+        let __autoPasswordCred = null;
+        let __autoRandomInitial = false;
+        if (__pwdCapV2) {
+            const __pwdRaw = typeof body.password === 'string' ? body.password : '';
+            if (__pwdRaw) {
+                // ★ 双审加固：纯字母数字且必须同时含字母和数字（无空格/符号，
+                //   消除首尾空格与登录输入歧义），8-32 位。
+                if (!/^(?=.*[A-Za-z])(?=.*[0-9])[A-Za-z0-9]{8,32}$/.test(__pwdRaw)) {
+                    return json({ success: false, error: '密码需 8-32 位且同时包含字母和数字' }, 400);
+                }
+                const __ph = await hashPassword(__pwdRaw);
+                __autoPasswordCred = { passwordHash: __ph.passwordHash, salt: __ph.salt };
+            } else {
+                // 留空 → 服务端 CSPRNG 随机初始密码 + mustChangePassword
+                __autoRandomInitial = true;
+            }
+        }
 
         // ★ 2026-08-29 已激活用户重装/换机自愈：手机号身份核验
         //   客户端提交的 user（可能为"姓名/手机号"或纯姓名）与 phone 字段中提取手机号，
@@ -690,6 +714,7 @@ export async function onRequest(context) {
         //   扫描两条既有自愈链会幂等补开。任何异常都不影响已成功的 license 主结果。
         let __cloudProvisioned = false;
         let __autoRequestId = '';
+        let __autoInitialPassword = '';
         if (__taobaoAuto) {
             try {
                 const __autoRes = await commitTaobaoCloudAuto(kv, {
@@ -703,11 +728,16 @@ export async function onRequest(context) {
                     expiresAt: record.expiresAt,
                     inviteeBonusDays,
                     nameSource: __taobaoAuto.nameSource,
+                    // 二期：密码 cred（仅 pwdCap=v2 且本次确实触发自动开通时才有意义）
+                    passwordCred: __pwdCapV2 ? __autoPasswordCred : null,
+                    randomInitial: __pwdCapV2 ? __autoRandomInitial : false,
                     ip
                 });
                 if (__autoRes.ok) {
                     __cloudProvisioned = !!__autoRes.provisioned;
                     __autoRequestId = __autoRes.requestId || '';
+                    // 明文初始密码仅此一次随响应下发，不落日志/不进轮询接口
+                    __autoInitialPassword = __autoRes.initialPassword || '';
                     // 落库点新鲜唯名与预检不一致（并发撞名换名）→ 最终名回写码记录/
                     //   设备槽位/__boundClinicName（license 文件此前已签名不可改，
                     //   clinicName 在 license 中仅显示/绑定因子，登录找所只按手机号）
@@ -851,6 +881,13 @@ export async function onRequest(context) {
             // ★ 2026-10-08 淘宝云端备货码自动开通标记（一期仅服务端记账/审计用，
             //   客户端无分支消费；false 含"待自愈补开"，账号最终以登录成功为准）
             cloudAccountProvisioned: __cloudProvisioned,
+            // ★ 二期：随机初始密码仅此一次随激活响应返回（关闭不可再查），
+            //   自设密码/旧客户端/admin 分支均不下发；mustChangePassword 同步
+            //   给新客户端作为「首登强制改密」备用标记（权威标记在用户行）。
+            ...(__autoInitialPassword ? {
+                initialPassword: __autoInitialPassword,
+                mustChangePassword: true
+            } : {}),
             // ★ 2026-08-26 推广奖励信息（激活成功页展示：专属邀请码 + 阶梯进度 + 本次奖励）
             inviteInfo: {
                 inviteCode: recordWithInvite.inviteCode || null,

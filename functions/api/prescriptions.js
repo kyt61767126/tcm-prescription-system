@@ -1,4 +1,4 @@
-import { parseAuthHeader, isPlatformAdmin, isClinicAdmin, isAdmin, isCashier } from './_lib/auth.js';
+import { parseAuthHeader, isPlatformAdmin, isClinicAdmin, isAdmin, isCashier, userMustChangePassword } from './_lib/auth.js';
 import { getKV, listAllKeys } from './_lib/kv.js';
 import { getDB, isD1Enabled } from './_lib/d1.js';
 import { writeAuditLog } from './_lib/audit-log.js';
@@ -491,6 +491,15 @@ export async function onRequest(context) {
 
         // POST - 保存处方或恢复处方
         if (method === 'POST') {
+            // ★ 二期：随机初始密码/客服重置密码账户首登强制改密——所有写动作（
+            //   开方/收费/删除/恢复）统一 403，只读放行；平台管理员不受影响。
+            if (await userMustChangePassword(context.env, currentUser)) {
+                return json({
+                    success: false,
+                    code: 'MUST_CHANGE_PASSWORD',
+                    error: '首次登录请先修改密码后再操作'
+                }, 403, context.request);
+            }
             // ★ 2026-08-25 前台收费动作：POST ?action=mark-paid  body: { id, payMethod }
             //   仅 cashier/admin 可调；状态单向 unpaid→paid（退款走管理员后续流程）；
             //   幂等：已收费直接返回成功，重复点击不报错。
@@ -734,6 +743,16 @@ export async function onRequest(context) {
 
             if (!prescriptionId) {
                 return json({ success: false, error: 'Missing prescription ID' }, 400, context.request);
+            }
+
+            // ★ 二期：首登强制改密写闸——DELETE（软删/永久删）与 POST 写动作同闸，
+            //   只读 GET 放行；平台管理员不受影响。
+            if (await userMustChangePassword(context.env, currentUser)) {
+                return json({
+                    success: false,
+                    code: 'MUST_CHANGE_PASSWORD',
+                    error: '首次登录请先修改密码后再操作'
+                }, 403, context.request);
             }
 
             const d1On = isD1Enabled(context.env);
