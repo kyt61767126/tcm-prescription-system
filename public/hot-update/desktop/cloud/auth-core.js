@@ -1669,6 +1669,119 @@
     //   - source='local'  → user 为本地表原对象（调用方继续走密码升级/token 补拉等本地副作用）
     //   - source='cloud'  → user 为云端返回（含 token；落地本地表/缓存等副作用由调用方负责）
     //   - 云端异常不阻断：按本地未命中返回（保持离线可用，与各端旧行为一致）
+    // ★ 2026-10-08 二期：首登强制改密弹窗（纯 JS 动态 DOM，不碰静态 HTML/CSS）。
+    //   登录响应 user.mustChangePassword=true 时阻断进入主界面：改密成功 →
+    //   返回新密码由调用方重新认证（服务端改密即撤销全部旧 token）；取消 → null。
+    function enforceMustChangePassword(user, oldPassword) {
+        return new Promise(function(resolve) {
+            if (typeof document === 'undefined' || !document.body) { resolve(null); return; }
+            const overlay = document.createElement('div');
+            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;';
+            overlay.innerHTML =
+                '<div style="background:#fff;border-radius:12px;width:100%;max-width:360px;padding:20px;box-shadow:0 8px 30px rgba(0,0,0,0.25);">' +
+                    '<div style="font-size:16px;font-weight:bold;color:#333;margin-bottom:6px;">🔐 首次登录请先修改密码</div>' +
+                    '<div style="font-size:12px;color:#909399;line-height:1.7;margin-bottom:14px;">您的账号使用的是系统生成的随机初始密码，为保障账号安全，请设置新密码后再进入系统。</div>' +
+                    '<input type="password" id="__mcpNew" placeholder="新密码（8-32位，须含字母和数字）" autocomplete="new-password" maxlength="32" style="width:100%;box-sizing:border-box;padding:11px;font-size:14px;border:2px solid #ddd;border-radius:8px;outline:none;margin-bottom:10px;">' +
+                    '<input type="password" id="__mcpNew2" placeholder="再次输入新密码" autocomplete="new-password" maxlength="32" style="width:100%;box-sizing:border-box;padding:11px;font-size:14px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
+                    '<div id="__mcpErr" style="font-size:12px;color:#e53935;min-height:18px;margin:6px 0 8px;line-height:1.5;"></div>' +
+                    '<button id="__mcpOk" type="button" style="width:100%;padding:11px;border:none;border-radius:8px;color:#fff;background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);font-size:14px;font-weight:bold;cursor:pointer;">确认修改并进入系统</button>' +
+                    '<div id="__mcpCancel" style="text-align:center;font-size:12px;color:#909399;margin-top:10px;cursor:pointer;">暂不修改，退出登录</div>' +
+                '</div>';
+            document.body.appendChild(overlay);
+            const errEl = overlay.querySelector('#__mcpErr');
+            const p1 = overlay.querySelector('#__mcpNew');
+            const p2 = overlay.querySelector('#__mcpNew2');
+            const okBtn = overlay.querySelector('#__mcpOk');
+            const cancelEl = overlay.querySelector('#__mcpCancel');
+            let settled = false;
+            let inFlight = false;
+            function cleanup() { if (settled) return; settled = true; try { overlay.remove(); } catch (e) {} }
+            async function submit() {
+                if (inFlight) return;
+                const np = String(p1.value || '');
+                const np2 = String(p2.value || '');
+                if (np.length < 8 || np.length > 32 || !/[a-zA-Z]/.test(np) || !/\d/.test(np)) {
+                    errEl.textContent = '⚠ 密码需 8-32 位且同时包含字母和数字'; return;
+                }
+                if (np !== np2) { errEl.textContent = '⚠ 两次输入的新密码不一致'; return; }
+                inFlight = true;
+                okBtn.disabled = true; okBtn.textContent = '⏳ 提交中...';
+                // ★ 提交在途禁用取消：防止服务端改密已成功而 Promise 被 resolve(null)
+                //   丢弃，造成「服务端已改密、UI 却要求重改」的不一致。
+                cancelEl.style.pointerEvents = 'none';
+                cancelEl.style.opacity = '0.4';
+                cancelEl.textContent = '⏳ 提交中...';
+                try {
+                    const fetchFn = global.cloudFetch || global.fetch;
+                    const r = await fetchFn(CLOUD_API_BASE + '/users?action=change-password', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (user.token || '') },
+                        body: JSON.stringify({
+                            username: user.username || user.phone || '',
+                            oldPassword: oldPassword,
+                            newPassword: np
+                        })
+                    });
+                    const data = (r && typeof r.json === 'function') ? (await r.json().catch(() => ({}))) : r;
+                    if (!r || r.status >= 400 || !data || data.success !== true) {
+                        errEl.textContent = '⚠ ' + ((data && data.error) || ('密码修改失败(' + ((r && r.status) || '?') + ')'));
+                        okBtn.disabled = false; okBtn.textContent = '确认修改并进入系统';
+                        inFlight = false;
+                        cancelEl.style.pointerEvents = '';
+                        cancelEl.style.opacity = '';
+                        cancelEl.textContent = '暂不修改，退出登录';
+                        return;
+                    }
+                    cleanup(); resolve({ newPassword: np });
+                } catch (e) {
+                    errEl.textContent = '⚠ 网络错误：' + ((e && e.message) || '请稍后重试');
+                    okBtn.disabled = false; okBtn.textContent = '确认修改并进入系统';
+                    inFlight = false;
+                    cancelEl.style.pointerEvents = '';
+                    cancelEl.style.opacity = '';
+                    cancelEl.textContent = '暂不修改，退出登录';
+                }
+            }
+            okBtn.addEventListener('click', submit);
+            cancelEl.addEventListener('click', function() { if (!inFlight) { cleanup(); resolve(null); } });
+            [p1, p2].forEach(function(el) {
+                el.addEventListener('keydown', function(ev) { if (ev.key === 'Enter') submit(); });
+            });
+            setTimeout(function() { try { p1.focus(); } catch (e) {} }, 100);
+        });
+    }
+
+    // ★ 二期：激活成功页一次性随机初始密码块（仅服务端返回 initialPassword 时渲染）。
+    //   pwd/phone 当前受字符集约束（字母数字），转义为纵深防御，防字段未来复用。
+    function __escapeHtml(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+    function buildInitialPasswordBlock(pwd, phone) {
+        const safePwd = __escapeHtml(pwd);
+        const safePhone = __escapeHtml(phone);
+        return '<div style="margin-top:10px;padding:10px 12px;border:2px dashed #f0a020;background:#fff8e6;border-radius:8px;text-align:left;">' +
+            '<div style="font-size:12px;color:#b26a00;font-weight:bold;margin-bottom:6px;">🔑 您的初始登录密码（仅显示这一次，请立即复制保存）</div>' +
+            '<div style="display:flex;align-items:center;gap:8px;">' +
+                '<b id="adminCodeInitPwdText" style="flex:1;font-size:18px;letter-spacing:2px;color:#d84315;font-family:monospace;user-select:all;">' + safePwd + '</b>' +
+                '<button type="button" id="adminCodeInitPwdCopy" style="flex-shrink:0;font-size:12px;padding:6px 12px;border:1px solid #f0a020;border-radius:6px;background:#fff;color:#b26a00;font-weight:bold;cursor:pointer;">复制密码</button>' +
+            '</div>' +
+            '<div style="font-size:11px;color:#b26a00;margin-top:6px;line-height:1.6;">登录账号：' + safePhone + '<br>首次登录将要求修改密码；关闭本窗口后无法再次查看，请妥善保存。</div>' +
+        '</div>';
+    }
+    async function bindInitialPasswordCopy() {
+        const btn = document.getElementById('adminCodeInitPwdCopy');
+        if (!btn) return;
+        btn.addEventListener('click', async function() {
+            const txtEl = document.getElementById('adminCodeInitPwdText');
+            const copied = await copyTextToClipboard(txtEl ? txtEl.textContent : '');
+            this.textContent = copied ? '✅ 已复制' : '❌ 请长按选择复制';
+            const self = this;
+            setTimeout(function() { self.textContent = '复制密码'; }, 1600);
+        });
+    }
+
     async function loginWithUsernamePassword(username, password, options = {}) {
         const users = (typeof options.getUsers === 'function') ? (options.getUsers() || []) : (options.users || []);
         let user = null;
@@ -1685,28 +1798,124 @@
             }
             if (_ok) { user = u; break; }
         }
+        // ★ 二期双审 S1：本地账户行镜像了 mustChangePassword（桌面随机初始密码
+        //   建号）时，本地哈希命中也不放行——必须落入云端认证走强制改密闸，否则
+        //   云桌面「本地优先登录」会短路整个首登改密设计。
+        let __localMustChangePending = false;
         if (user) {
-            return {
-                success: true,
-                user: user,
-                matchedIdentifier: matchedIdentifier,
-                source: 'local',
-                // ★ 2026-09-25：旧哈希 → 调用方可透明升级
-                weakHash: !isStrongPasswordHash(user.password || '')
-            };
+            if (user.mustChangePassword === true && options.cloud &&
+                typeof CLOUD_API_BASE !== 'undefined' && CLOUD_API_BASE) {
+                __localMustChangePending = true;
+            } else {
+                return {
+                    success: true,
+                    user: user,
+                    matchedIdentifier: matchedIdentifier,
+                    source: 'local',
+                    // ★ 2026-09-25：旧哈希 → 调用方可透明升级
+                    weakHash: !isStrongPasswordHash(user.password || '')
+                };
+            }
+        }
+        // 强改密取消/失败时回收 login() 已提前落地的登录态（M3：不残留带有效
+        //   token 的 mustChange 会话）。
+        async function __rollbackPendingLoginState() {
+            try {
+                // ★ 复审低危收口：一并清离线登录缓存，旧随机密码/旧 token 不残留
+                for (const __k of ['auth:currentUser', 'auth:isLoggedIn', 'auth:loginData', 'auth:offlineLoginCache']) {
+                    await StorageAdapter.removeItem(__k);
+                    StorageAdapter.removeSessionItem(__k);
+                }
+            } catch (e) {}
+        }
+        // 桌面端改密成功后把新密码回写本机 config 本地账户（复用既有
+        //   user:change-password IPC，主进程校验旧密码+签名写盘+清本地标记）。
+        //   失败不阻断（服务端为权威），仅告警——在线走云端不受影响。
+        async function __syncDesktopLocalPassword(loginName, oldPwd, newPwd) {
+            try {
+                if (global.electronAPI && global.electronAPI.changeUserPassword) {
+                    const r = await global.electronAPI.changeUserPassword({
+                        username: loginName,
+                        oldPassword: oldPwd,
+                        newPassword: newPwd
+                    });
+                    if (r && r.success) return true;
+                    console.warn('[loginWithUsernamePassword] 本机账户密码回写失败:', r && r.error);
+                }
+            } catch (e) {
+                console.warn('[loginWithUsernamePassword] 本机账户密码回写异常:', e && e.message);
+            }
+            return false;
         }
         if (options.cloud && typeof CLOUD_API_BASE !== 'undefined' && CLOUD_API_BASE) {
+            let __cloudAttempted = false;
             try {
+                __cloudAttempted = true;
                 const cloudResult = await login(username, password, { adapter: cloudAdapter });
                 if (cloudResult && cloudResult.success && cloudResult.user) {
+                    // ★ 二期：随机初始密码/客服重置密码账户首登强制改密——未改密绝不
+                    //   返回 success（调用方不会写任何登录态/不进主界面）。改密成功后
+                    //   服务端撤销旧 token，此处用新密码重新认证一次再放行。
+                    if (cloudResult.user.mustChangePassword === true) {
+                        const changed = await enforceMustChangePassword(cloudResult.user, password);
+                        if (!changed) {
+                            await __rollbackPendingLoginState();
+                            return { success: false, user: null, matchedIdentifier: username,
+                                source: 'cloud', code: 'MUST_CHANGE_PASSWORD',
+                                error: '首次登录必须修改密码后才能进入系统' };
+                        }
+                        // 桌面：新密码回写本机 config（旧随机密码通过主进程旧密码校验）
+                        await __syncDesktopLocalPassword(
+                            cloudResult.user.username || matchedIdentifier,
+                            password, changed.newPassword);
+                        try {
+                            const reAuth = await cloudAdapter.authenticate(username, changed.newPassword);
+                            if (reAuth && reAuth.success && reAuth.user) {
+                                // M2：覆写离线登录缓存为新密码（重认证走 adapter 不经过
+                                //   login()，否则断网兜底仍比对旧随机密码）
+                                try { await cacheOfflineLogin(username, changed.newPassword, reAuth.user); } catch (ce) {}
+                                return { success: true, user: reAuth.user, matchedIdentifier: username,
+                                    source: 'cloud', prescriptions: reAuth.prescriptions || null };
+                            }
+                            await __rollbackPendingLoginState();
+                            return { success: false, user: null, matchedIdentifier: username, source: 'cloud',
+                                code: 'PASSWORD_CHANGED_RELOGIN',
+                                error: '密码修改成功，请使用新密码重新登录' };
+                        } catch (e2) {
+                            await __rollbackPendingLoginState();
+                            return { success: false, user: null, matchedIdentifier: username, source: 'cloud',
+                                code: 'PASSWORD_CHANGED_RELOGIN',
+                                error: '密码修改成功，请使用新密码重新登录' };
+                        }
+                    }
+                    // 本地带强改标记但云端已无标记（用户已在其他端改密）：借本次本人
+                    //   旧密码校验通过的机会清掉本机陈旧标记（密码不变）。
+                    if (__localMustChangePending) {
+                        await __syncDesktopLocalPassword(
+                            cloudResult.user.username || matchedIdentifier, password, password);
+                    }
                     // ★ 2026-09-15 登录提速：透传首屏处方（服务端登录响应预取）
                     return { success: true, user: cloudResult.user, matchedIdentifier: username, source: 'cloud', prescriptions: cloudResult.prescriptions || null };
                 }
                 if (cloudResult && cloudResult.success === false) {
+                    if (__localMustChangePending) {
+                        await __rollbackPendingLoginState();
+                        return { success: false, user: null, matchedIdentifier: username, source: 'cloud',
+                            code: 'MUST_CHANGE_PASSWORD',
+                            error: cloudResult.error ? ('首次登录需联网完成密码修改（' + cloudResult.error + '）') :
+                                '首次登录需联网完成密码修改，请检查网络后重试' };
+                    }
                     return { success: false, user: null, matchedIdentifier: username, source: 'cloud', error: cloudResult.error || '手机号/用户名或密码错误' };
                 }
             } catch (cloudErr) {
                 console.warn('[loginWithUsernamePassword] 云端认证异常(按本地结果返回):', cloudErr);
+            }
+            // 本地强改账户因云端不可达没能过闸：fail-closed 明确提示，不放行本地登录
+            if (__localMustChangePending && __cloudAttempted) {
+                await __rollbackPendingLoginState();
+                return { success: false, user: null, matchedIdentifier: username, source: 'cloud',
+                    code: 'MUST_CHANGE_PASSWORD',
+                    error: '首次登录需联网完成密码修改，请检查网络后重试' };
             }
         }
         return { success: false, user: null, matchedIdentifier: username, source: 'local', error: '手机号/用户名或密码错误' };
@@ -4635,6 +4844,15 @@
                     '<input type="tel" id="adminCodePhone" placeholder="如：13800138000" autocomplete="off" data-lpignore="true" inputmode="numeric" maxlength="11" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
                     '<div id="adminCodePhoneHint" style="font-size:11px;color:#909399;margin-top:4px;">💡 换机/重装请填原绑定手机号，可自动恢复授权</div>' +
                 '</div>' +
+                // ★ 2026-10-08 二期：买家自设登录密码（选填）。留空 → 服务端生成
+                //   随机初始密码（激活成功页一次性展示+复制），首次登录强制改密。
+                //   换机/老码激活留空即可，云端账号密码不受影响（仅新码首激生效）。
+                '<div style="margin-bottom:12px;">' +
+                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">设置登录密码 <span style="font-size:11px;color:#909399;font-weight:normal;">（选填）</span></label>' +
+                    '<input type="password" id="adminCodePassword" placeholder="8-32 位，须含字母和数字" autocomplete="new-password" data-lpignore="true" maxlength="32" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;margin-bottom:8px;">' +
+                    '<input type="password" id="adminCodePassword2" placeholder="再次输入登录密码" autocomplete="new-password" data-lpignore="true" maxlength="32" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
+                    '<div id="adminCodePwdHint" style="font-size:11px;color:#909399;margin-top:4px;">💡 留空则系统生成随机初始密码，首次登录需修改密码</div>' +
+                '</div>' +
                 // ★ 2026-09-11 渐进式身份字段（默认隐藏）：needClinicName/
                 //   needActivationInfo 服务端标记触发展开；手机号核验通过的换机场景永不出现
                 '<div id="adminCodeIdentityFields" style="display:none;">' +
@@ -5021,7 +5239,42 @@
                 try {
                     user = (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.doctorName) ? CONFIG.doctorName : '';
                 } catch (e) {}
-                const pwdVal = (state && state.password) ? String(state.password).trim() : '';
+                // ★ 二期 Tab2 登录密码：自设（8-32 位纯字母数字）或留空（服务端随机初始密码）
+                let codePwd1 = '', codePwd2 = '';
+                try {
+                    const __cp1 = document.getElementById('adminCodePassword');
+                    const __cp2 = document.getElementById('adminCodePassword2');
+                    if (__cp1) codePwd1 = String(__cp1.value || '');
+                    if (__cp2) codePwd2 = String(__cp2.value || '');
+                } catch (e) {}
+                const pwdHintEl = document.getElementById('adminCodePwdHint');
+                const setPwdHint = function(msg, bad) {
+                    if (!pwdHintEl) return;
+                    pwdHintEl.textContent = msg;
+                    pwdHintEl.style.color = bad ? '#e53935' : '#909399';
+                };
+                if (codePwd1 || codePwd2) {
+                    if (!/^(?=.*[A-Za-z])(?=.*[0-9])[A-Za-z0-9]{8,32}$/.test(codePwd1)) {
+                        btn.disabled = false;
+                        btn.textContent = '🚀 立即激活';
+                        loading.style.display = 'none';
+                        setPwdHint('⚠ 登录密码需 8-32 位且同时包含字母和数字', true);
+                        try { document.getElementById('adminCodePassword').focus(); } catch (e) {}
+                        return;
+                    }
+                    if (codePwd1 !== codePwd2) {
+                        btn.disabled = false;
+                        btn.textContent = '🚀 立即激活';
+                        loading.style.display = 'none';
+                        setPwdHint('⚠ 两次输入的登录密码不一致', true);
+                        try { document.getElementById('adminCodePassword2').focus(); } catch (e) {}
+                        return;
+                    }
+                    setPwdHint('✓ 将使用您设置的登录密码', false);
+                    pwdHintEl.style.color = '#26a69a';
+                } else {
+                    setPwdHint('💡 留空则系统生成随机初始密码，首次登录需修改密码', false);
+                }
                 // 渐进式身份字段（服务端 needClinicName/needActivationInfo 标记触发展开后填写）
                 let idClinicName = '', idAdminName = '';
                 try {
@@ -5034,19 +5287,28 @@
                 // 云桌面（有本地激活桥，7 参签名）：走主进程 submit（validate+安装 license+重启）
                 if (global.electronAPI && global.electronAPI.activate &&
                     typeof global.electronAPI.activate.submit === 'function') {
+                    // ★ 二期：Tab2 密码框值直传主进程——''=留空（主进程 claim 带
+                    //   pwdCap=v2 换随机初始密码，成功响应一次性回传，本地账号同密码）；
+                    //   非空=买家自设密码；旧调用方传 'admin' 保持一期行为不变。
                     res = await global.electronAPI.activate.submit(code, effUser || user,
-                        idClinicName || ((state && state.clinicName) || ''), phoneVal, pwdVal || 'admin', undefined, '');
+                        idClinicName || ((state && state.clinicName) || ''), phoneVal, codePwd1, undefined, '');
                     if (res && res.success) {
                         loading.style.display = 'none';
                         successBox.style.display = 'block';
                         // ★ 2026-09-18 语音版升级：voice 码成功 → 提示重启重登后语音功能生效
                         const __isVoice = !!(res.voiceUpgraded || (res.licenseInfo && res.licenseInfo.type === 'voice'));
-                        document.getElementById('adminCodeSuccessDesc').innerHTML =
-                            (__isVoice
-                                ? '🎙️ <b>语音版升级成功！</b><br>📱 登录账号：' + phoneVal +
-                                  '<br>点击确定后应用将重启，使用手机号登录即可使用语音输入功能'
-                                : '授权已安装到本机<br>📱 登录账号：' + phoneVal +
-                                  '<br>点击确定后应用将重启，请使用手机号登录');
+                        let __baseDesc = (__isVoice
+                            ? '🎙️ <b>语音版升级成功！</b><br>📱 登录账号：' + phoneVal +
+                              '<br>点击确定后应用将重启，使用手机号登录即可使用语音输入功能'
+                            : '授权已安装到本机<br>📱 登录账号：' + phoneVal +
+                              '<br>点击确定后应用将重启，请使用手机号登录');
+                        if (res.initialPassword) {
+                            __baseDesc += buildInitialPasswordBlock(res.initialPassword, phoneVal);
+                        } else if (codePwd1) {
+                            __baseDesc += '<div style="margin-top:8px;font-size:12px;color:#2e7d32;">🔑 请使用您刚设置的登录密码登录</div>';
+                        }
+                        document.getElementById('adminCodeSuccessDesc').innerHTML = __baseDesc;
+                        if (res.initialPassword) bindInitialPasswordCopy();
                         btn.disabled = false;
                         btn.textContent = '🔄 重启应用';
                         btn.onclick = async function() {
@@ -5081,7 +5343,11 @@
                                 //   productClass:'cloud' + clientClass:'app'（原 'app' 错占
                                 //   productClass 域，污染 KV 设备端形态记录）
                                 productClass: 'cloud',
-                                clientClass: 'app'
+                                clientClass: 'app',
+                                // ★ 二期：能力位+买家自设密码（留空不带 password →
+                                //   服务端生成随机初始密码，仅本响应一次性下发）
+                                pwdCap: 'v2',
+                                password: codePwd1 || undefined
                             }),
                             signal: controller.signal
                         });
@@ -5093,6 +5359,13 @@
                         const li = res.licenseInfo || {};
                         // ★ 2026-09-18 语音版升级：voice 码成功 → 提示退出重登后语音功能生效
                         const __isVoice = !!(res.voiceUpgraded || (li && li.type === 'voice'));
+                        // ★ 二期：随机初始密码一次性块 / 自设密码登录提示
+                        let __pwdSuffix = '';
+                        if (res.initialPassword) {
+                            __pwdSuffix = buildInitialPasswordBlock(res.initialPassword, phoneVal);
+                        } else if (codePwd1) {
+                            __pwdSuffix = '<div style="margin-top:8px;font-size:12px;color:#2e7d32;">🔑 请使用您刚设置的登录密码登录</div>';
+                        }
                         document.getElementById('adminCodeSuccessDesc').innerHTML =
                             (__isVoice
                                 ? '🎙️ <b>语音版激活成功！</b>' + (res.voiceUpgraded ? '（云端账号已同步升级）' : '') + '<br>' +
@@ -5100,7 +5373,13 @@
                                   '📝 请<b>退出当前账号并重新登录</b>，语音输入功能即可生效'
                                 : '激活码有效，已绑定本设备' + (li.clinicName ? '（' + li.clinicName + '）' : '') + '<br>' +
                                   '📱 登录账号：' + phoneVal + '<br>' +
-                                  '使用该手机号 + 密码（默认 admin）登录');
+                                  (res.initialPassword
+                                      ? '初始密码见下方，请立即复制保存'
+                                      : (codePwd1
+                                          ? '使用该手机号 + 您设置的登录密码登录'
+                                          : '使用该手机号 + 密码（默认 admin）登录'))) +
+                            __pwdSuffix;
+                        if (res.initialPassword) bindInitialPasswordCopy();
                         btn.disabled = false;
                         btn.textContent = '✅ 完成';
                         return;
@@ -5138,6 +5417,33 @@
                 hint.style.color = '#e53935';
             }
         });
+
+        // ★ 二期 Tab2 登录密码实时提示
+        const bindCodePwdInput = function(elId, peerId) {
+            const el = document.getElementById(elId);
+            if (!el || el.__boundPwdV2) return;
+            el.__boundPwdV2 = true;
+            el.addEventListener('input', function() {
+                const ph = document.getElementById('adminCodePwdHint');
+                const peer = document.getElementById(peerId);
+                const v = this.value, v2 = peer ? peer.value : '';
+                if (!v && !v2) {
+                    ph.textContent = '💡 留空则系统生成随机初始密码，首次登录需修改密码';
+                    ph.style.color = '#909399';
+                } else if (v && !/^(?=.*[A-Za-z])(?=.*[0-9])[A-Za-z0-9]{8,32}$/.test(v)) {
+                    ph.textContent = '⚠ 密码需 8-32 位且同时包含字母和数字';
+                    ph.style.color = '#e53935';
+                } else if (v2 && v !== v2) {
+                    ph.textContent = '⚠ 两次输入的密码不一致';
+                    ph.style.color = '#e53935';
+                } else {
+                    ph.textContent = '✓ 密码格式正确';
+                    ph.style.color = '#26a69a';
+                }
+            });
+        };
+        bindCodePwdInput('adminCodePassword', 'adminCodePassword2');
+        bindCodePwdInput('adminCodePassword2', 'adminCodePassword');
 
         // ★ 2026-09-11 Tab2 手机号实时校验（数字过滤 + 格式提示，对齐 offline.js）
         document.getElementById('adminCodePhone').addEventListener('input', function() {
