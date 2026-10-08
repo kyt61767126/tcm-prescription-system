@@ -111,6 +111,13 @@ async function activateOnline(code, machineId, user, clinicName, phone, password
         if (inviteCode && /^[A-Za-z0-9]{4,10}$/.test(String(inviteCode).trim())) {
             body.inviteCode = String(inviteCode).trim().toUpperCase();
         }
+        // ★ 2026-10-08 二期：登录密码能力位（渲染层 auth-core 新逻辑传入）。
+        //   非空且非旧默认 'admin' = 买家自设密码；空串 '' = 留空，服务端生成
+        //   随机初始密码；undefined/旧调用方/'admin' = 一期固定 admin，零回归。
+        if (password === '' || (password && password !== 'admin')) {
+            body.pwdCap = 'v2';
+            if (password) body.password = password;
+        }
 
         // ★ 优化：Promise.race 实现可靠超时
         // 原问题：Electron 28 中 AbortController.abort() 可能不中断 fetch，导致卡死几十分钟
@@ -159,13 +166,20 @@ async function activateOnline(code, machineId, user, clinicName, phone, password
             effDoctorName = parsed;
         }
 
+        // ★ 二期：留空换发的随机初始密码（服务端一次性返回）同时作为本机本地
+        //   账户密码，保证云端/本地单一密码；明文不入日志、不落任何额外存储。
+        let effPassword = password || '';
+        if (data.initialPassword) effPassword = data.initialPassword;
+
         // ★ 统一安装 License（写license+清trial+同步config+创建管理员账户 = 一行搞定）
         const installResult = licenseManager.installLicense(data.license, {
             machineId,
             doctorName: effDoctorName,
             clinicName: clinicName || '',
             phone: phone || '',
-            password: password || '',
+            password: effPassword,
+            // ★ 二期：随机初始密码账户镜像首登强改标记到本机 config 用户行
+            mustChangePassword: data.mustChangePassword === true,
             edition: edition || loadClientConfig().edition || 'standard'
         });
         if (!installResult.success) {
@@ -176,7 +190,10 @@ async function activateOnline(code, machineId, user, clinicName, phone, password
             success: true,
             licenseInfo: data.licenseInfo,
             message: '激活成功',
-            licensePath: installResult.path
+            licensePath: installResult.path,
+            // ★ 二期：随机初始密码一次性回传渲染层（成功页展示后即不可再查）
+            initialPassword: data.initialPassword || '',
+            mustChangePassword: data.mustChangePassword === true
         };
     } catch (e) {
         console.error('[Activate] 在线激活失败:', e);

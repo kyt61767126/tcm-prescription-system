@@ -5334,7 +5334,10 @@ function installLicense(base64Content, options = {}) {
             // 检查用户是否已存在
             const existingUser = config.users.find(u => u.username === phone);
             if (!existingUser) {
-                config.users.push({
+                // ★ 二期：云端码留空 → 服务端随机初始密码账户 mustChangePassword=true，
+                //   本机 config 用户行镜像该标记，桌面登录本地命中后据此落入云端强改密
+                //   闸（防本地短路）；自设密码/旧流程不带标记，零回归。
+                const __newAdmin = {
                     username: phone,
                     password: hashOf(password),
                     passwordHash: hashOf(password),
@@ -5342,7 +5345,9 @@ function installLicense(base64Content, options = {}) {
                     name: doctorName || phone,
                     role: 'admin',
                     createdAt: new Date().toISOString()
-                });
+                };
+                if (options.mustChangePassword === true) __newAdmin.mustChangePassword = true;
+                config.users.push(__newAdmin);
                 configChanged = true;
                 console.log('[License] 已创建管理员账户:', phone);
             } else if (options.password && options.password !== 'admin') {
@@ -5360,6 +5365,13 @@ function installLicense(base64Content, options = {}) {
                 existingUser.name = doctorName || existingUser.name || phone;
                 existingUser.lastPwdUpdatedAt = nowMs;
                 existingUser.updatedAt = nowMs;
+                // ★ 二期：显式密码同时来自 v2 激活时，三态同步首登标记；
+                //   旧调用方不传该选项（undefined）→ 不动既有标记，零回归。
+                if (options.mustChangePassword === true) {
+                    existingUser.mustChangePassword = true;
+                } else if (options.mustChangePassword === false) {
+                    delete existingUser.mustChangePassword;
+                }
                 configChanged = true;
                 console.log('[License] 已更新已有账户密码(激活显式密码):', phone);
             }

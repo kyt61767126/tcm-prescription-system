@@ -99,7 +99,7 @@
     }
 
     function normalizeUser(u) {
-        return {
+        const normalized = {
             username: u.username || '',
             password: u.password || '',
             name: u.name || u.username || '',
@@ -108,6 +108,9 @@
             //   否则 loginWithUsernamePassword 的 phone 匹配永远落空（改名后手机号无法登录的根因）
             phone: u.phone || ''
         };
+        // ★ 二期：强改标记随行（离线流程不传 cloud 不拦截，仅保持字段不丢失）
+        if (u.mustChangePassword === true) normalized.mustChangePassword = true;
+        return normalized;
     }
 
     // 一次性获取 app config（IPC 缓存，避免重复跨进程调用）

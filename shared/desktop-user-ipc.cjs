@@ -179,6 +179,9 @@ ipcMain.handle('user:change-password', async (event, { username, oldPassword, ne
                     target.password = passwordHash;
                     target.passwordHash = passwordHash;
                     target.salt = salt;
+                    // ★ 二期：本地改密成功即解除首登强改标记（与服务端 change-password
+                    //   delete mustChangePassword 同构），否则桌面登录每次都落入强改密闸。
+                    delete target.mustChangePassword;
                     target.updatedAt = new Date().toISOString();
                     // 签名保护：signConfig(config) 直接修改原对象，切勿将返回值赋值给属性（会造成循环引用）
                     licenseManager.signConfig(config);

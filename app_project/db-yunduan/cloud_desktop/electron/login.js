@@ -105,7 +105,7 @@
     }
 
     function normalizeUser(u) {
-        return {
+        const normalized = {
             username: u.username || '',
             password: u.password || '',
             name: u.name || u.username || '',
@@ -114,6 +114,10 @@
             //   本地优先匹配支持 phone；云端服务端本就支持 phone，此处仅消除本地匹配盲区
             phone: u.phone || ''
         };
+        // ★ 二期 S1 闭环：强制改密标记必须透传到 loginWithUsernamePassword，
+        //   否则本地哈希命中后直接 source:'local' 放行，云端强改闸永不触发。
+        if (u.mustChangePassword === true) normalized.mustChangePassword = true;
+        return normalized;
     }
 
     // 一次性获取 app config（IPC 缓存，避免重复跨进程调用）
