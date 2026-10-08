@@ -659,7 +659,12 @@ export async function onRequest(context) {
                 }
                 // 若账号已被后台删除或从未建号，先补开（幂等），保证"删除后重注册"也能直接重建
                 if (__isPrimaryOwner) try {
-                    await provisionCloudAccount(kv, existingActivated);
+                    // ★ 2026-10-08 安全二查：淘宝无人通道记录补开带属主标记，
+                    //   防半成态撞名被降 doctor 注入他人诊所（同 users.js 自愈链）
+                    await provisionCloudAccount(kv,
+                        existingActivated.orderSource === 'taobao-cloud-auto'
+                            ? Object.assign({}, existingActivated, { __autoRequestId: existingActivated.requestId })
+                            : existingActivated);
                 } catch (e) {
                     console.warn('[AdminSubmit] 已激活申请账号补开失败:', e.message);
                 }
@@ -726,8 +731,11 @@ export async function onRequest(context) {
             let machineActivated = null;
             for (const rid of idxList.slice(0, 200)) {
                 const rec = await kv.get(KV_ADMIN_REQ_PREFIX + rid, 'json').catch(() => null);
+                // ★ 2026-10-08 双审修复：跳过无 licenseBase64 的 activated 记录
+                //   （淘宝自动开通半成态：validate 回填失败的记录），口径对齐
+                //   admin-status 两处 machineId 扫描，杜绝短路返回 license:null
                 if (rec && String(rec.machineId || '') === finalMachineId &&
-                    rec.status === 'activated') {
+                    rec.status === 'activated' && rec.licenseBase64) {
                     machineActivated = rec;
                     break;
                 }

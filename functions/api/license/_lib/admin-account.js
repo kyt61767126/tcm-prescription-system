@@ -16,10 +16,14 @@ import {
     ROLE_CLINIC_ADMIN,
     ROLE_DOCTOR,
     KV_SYSTEM_CLINICS,
-    getClinicsOrThrow
+    getClinicsOrThrow,
+    findPhoneOccupancy
 } from '../../_lib/auth.js';
 // ★ 2026-09-23 账号被真实重新开通时清除删除墓碑（同手机号重新激活恢复登录）
 import { clearAccountTombstone } from './license-core.js';
+// ★ 2026-10-08 淘宝云端码 claim 自动开通：审计三索引唯一写入口（无循环依赖：
+//   license-write-service 只依赖 license-core/schema-guard，不 import 本文件）
+import { createAdminRequest, KV_ADMIN_REQ_PREFIX } from './license-write-service.js';
 
 // ★ 2026-09-03 产品模式感知：激活 type（personal/pro）→ 规范 edition key
 //   必须结合产品模式（离线/云端），否则离线标准版审核通过后诊所 edition 被错写为
@@ -132,6 +136,22 @@ export async function provisionCloudAccount(kv, record) {
     let clinic = clinics.find(c => c.name === clinicName);
     let clinicsDirty = false;
 
+    // ★ 2026-10-08 淘宝无人通道属主护栏（双审修复）：自动开通携带
+    //   __autoRequestId 时，同名诊所若属于【另一次】自动开通请求，说明预检→落库
+    //   之间名字被并发抢注（不同买家手机尾号相同/同名自报并发）。绝不能走下方
+    //   "同名补号、已有 admin 则降 doctor" 语义（=买家以 doctor 身份进别人诊所
+    //   看他人处方）；抛命名冲突由 commit 重新唯名后重试。同 requestId 命中=
+    //   本请求的幂等重试/半成态补开，照常放行；人工通道（无 __autoRequestId）
+    //   语义完全不变。
+    const __autoReqId = record.__autoRequestId ? String(record.__autoRequestId) : '';
+    if (clinic && __autoReqId && String(clinic.autoRequestId || '') !== __autoReqId) {
+        // 注意：clinic.autoRequestId 缺省（人工通道创建的同名诊所）同样按冲突处理——
+        //   自动通道是 create-only 语义，只认"本请求自己建的诊所"。
+        const __e = new Error('AUTO_NAME_COLLISION: ' + clinicName);
+        __e.code = 'AUTO_NAME_COLLISION';
+        throw __e;
+    }
+
     // 1) 存在同名诊所 → 补齐 / 更新 edition + status，再补充账号
     //   规则：
     //     - ★ 2026-09-04 P0 修复：已有同名 clinic 漏 status 升级 → 自助注册
@@ -227,6 +247,9 @@ export async function provisionCloudAccount(kv, record) {
         updatedAt: now,
         edition: targetEdition,          // ★ 新诊所统一写入 edition
         activationType: record.type || null,
+        // ★ 2026-10-08 淘宝无人通道属主标记：仅自动开通写；供并发命名冲突时
+        //   识别"本请求自建诊所"（幂等补开）vs"别人的诊所"（必须换名）。
+        autoRequestId: __autoReqId || undefined,
         // ★ 2026-09-03 离线版载体（desktop/app，云端版不写）
         offlineCarrier: (targetEdition.indexOf('offline_') === 0 && targetCarrier) ? targetCarrier : undefined,
         expiresAt: __clinicExpiresAt,
@@ -290,5 +313,303 @@ export async function normalizeActivationPassword(kv, record) {
     } catch (e) {
         console.warn('[AdminAccount] 激活密码归一化失败:', e.message);
         return { changed: false, updated: 0, error: e.message };
+    }
+}
+
+// ============================================================================
+// ★ 2026-10-08 淘宝云端备货码「填码即开通」一期（KNOWLEDGE §60，纯服务端）
+//
+// 背景：淘宝 199/399 云端码开码即预置 productClass='cloud'（后台
+//   TAOBAO_STOCK_PRESETS），91 卡券自动发码、客户在激活窗填码+手机号自助
+//   激活。validate/claim 历史上只签发 license、不开云端诊所账号（云账号仅经
+//   付费订单→人工审核/工单产生），客户"码已激活、无账号可登"必须客服补走
+//   注册→确认收款→审核。本模块在【码记录硬证据】（预置 cloud，非客户端
+//   自报）+ 首激 + 手机号在网无占用三条件齐备时，claim 成功即自动开通。
+//
+// ★★ 安全边界（每次改动逐条复核）：
+//   1. 调用资格由 validate.js 按【码记录】判定：__pcGate.source==='preset'
+//      && locked==='cloud' && 端闸 check.ok（99 离线预置码在此之前已 403）
+//      && status==='unused' 首机首激；本助手不采信任何客户端自报产品端；
+//   2. 手机号在网双查：admin_req 申请索引（findPhoneOccupancy）+ 遍历全部
+//      诊所 clinic:{id}:users 真实账号行（含禁用诊所/停用账号行——占位语义
+//      宁严勿松，防给老客户静默开第二个同名手机账号）；管理员删除账号=用户
+//      行已移除，允许重开（provisionCloudAccount 内清删除墓碑）；
+//   3. 客户自报诊所名仅在【全局无同名诊所】时采信：provisionCloudAccount 对
+//      同名诊所是"补账号"语义（该诊所已有管理员时新号降为 doctor=进别人所
+//      看别人方），人工通道靠管理员把关，无人通道必须在代码里堵死这个越权
+//      注入；重名/未填一律用服务端唯一名「中医诊所·手机尾号XXXX」；
+//   4. 审计先行：先落 status=activated 的 admin_req 三索引（admin-list 历史
+//      可见、admin-status 按机重签、登录自愈 maybeProvisionFromActivation
+//      幂等补开），再 provisionCloudAccount；provision 失败不回滚 license
+//      （码已签发是主结果），客户首次登录时自愈补开；
+//   5. 一期初始密码固定 admin（与工单/无密码官网订单同水位），自设密码随
+//      二期客户端把激活窗已收集的密码随 claim 上传后闭环。
+// ============================================================================
+
+// 手机号是否已是任一诊所真实账号（用户行存在即占用；墓碑删除=行不存在=未占用）
+export async function phoneHasCloudAccount(kv, phone) {
+    const ph = String(phone || '').trim();
+    if (!/^1[3-9]\d{9}$/.test(ph)) return null;
+    const clinics = await getClinicsOrThrow(kv);
+    for (const clinic of clinics) {
+        const users = (await kv.get(`clinic:${clinic.id}:users`, 'json').catch(() => null)) || [];
+        const hit = users.find(u => u && (u.username === ph || u.phone === ph));
+        if (hit) {
+            return {
+                clinicId: clinic.id,
+                clinicName: clinic.name,
+                role: hit.role || '',
+                disabled: hit.disabled === true
+            };
+        }
+    }
+    return null;
+}
+
+// 兜底名随机后缀字符集（去易混 0/o/1/i/l）
+const AUTO_NAME_RAND_CHARS = 'abcdefghjkmnpqrstuvwxyz23456789';
+function autoNameRandomSuffix(len) {
+    return Array.from(crypto.getRandomValues(new Uint8Array(len)))
+        .map(b => AUTO_NAME_RAND_CHARS[b % AUTO_NAME_RAND_CHARS.length]).join('');
+}
+function autoNameBase(phone) {
+    const tail = /\d{4}$/.test(String(phone || '')) ? String(phone).slice(-4) : '0000';
+    return '中医诊所·' + tail;
+}
+function autoNameMachinePart(machineId) {
+    return String(machineId || '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 6);
+}
+
+// 在【给定诊所清单】上选一个当前唯一的兜底名：尾号 → 撞则加机器指纹 →
+//   再撞循环随机后缀。调用方负责提供新鲜清单（落库点会重读）。
+function pickFallbackName(clinics, phone, machineId) {
+    const taken = (n) => clinics.some(c => c && c.name === n);
+    const base = autoNameBase(phone);
+    if (!taken(base)) return base;
+    const midPart = autoNameMachinePart(machineId);
+    const withMid = base + (midPart ? '·' + midPart : '');
+    if (!taken(withMid)) return withMid;
+    for (let i = 0; i < 12; i++) {
+        const cand = base + '·' + autoNameRandomSuffix(3);
+        if (!taken(cand)) return cand;
+    }
+    return base + '·' + midPart + '·' + autoNameRandomSuffix(6);
+}
+
+// 自动开通唯名解析：客户起名 2~50 字、无管道符且全局无同名才采信，否则服务端
+//   兜底唯一名。nameSource：client=客户起名采信；fallback=客户未填；
+//   fallback-collision=客户起名合法但撞名；fallback-invalid=超长/过短/含非法字符。
+export async function resolveAutoCloudClinicName(kv, opts) {
+    const o = opts || {};
+    const phone = String(o.phone || '').trim();
+    const machineId = String(o.machineId || '');
+    const submitted = String(o.submittedName || '').trim();
+    const clinics = await getClinicsOrThrow(kv);
+    if (submitted) {
+        const valid = submitted.length >= 2 && submitted.length <= 50 && !submitted.includes('|');
+        if (valid && !clinics.some(c => c && c.name === submitted)) {
+            return { clinicName: submitted, nameSource: 'client' };
+        }
+        return {
+            clinicName: pickFallbackName(clinics, phone, machineId),
+            nameSource: valid ? 'fallback-collision' : 'fallback-invalid'
+        };
+    }
+    return { clinicName: pickFallbackName(clinics, phone, machineId), nameSource: 'fallback' };
+}
+
+// 落库点重新唯名（预检→落库并发窗撞名后的重试入口）：重读最新诊所清单，
+//   直接选带机器指纹/随机后缀的唯一兜底名，不再尝试客户原名。
+export async function regenerateAutoCloudClinicName(kv, opts) {
+    const clinics = await getClinicsOrThrow(kv);
+    return { clinicName: pickFallbackName(clinics, opts.phone, opts.machineId), nameSource: 'fallback-race' };
+}
+
+// 占号+唯名预检（纯读；validate 在任何写库/签发前调用。读异常向上抛由调用方
+//   按 fail-closed 处理=本次不开通，绝不影响 license 主流程）
+export async function preflightTaobaoCloudAuto(kv, opts) {
+    const o = opts || {};
+    const phone = String(o.phone || '').trim();
+    if (!/^1[3-9]\d{9}$/.test(phone)) return { ok: false, reason: 'bad-phone' };
+    if (!o.machineId || !o.code) return { ok: false, reason: 'bad-args' };
+    const occupied = await findPhoneOccupancy(kv, phone);
+    if (occupied) return { ok: false, reason: 'req-' + occupied.kind };
+    const existed = await phoneHasCloudAccount(kv, phone);
+    if (existed) return { ok: false, reason: 'cloud-account-exists', clinicName: existed.clinicName };
+    const resolved = await resolveAutoCloudClinicName(kv, {
+        phone, machineId: o.machineId, submittedName: o.submittedName
+    });
+    return { ok: true, phone: phone, clinicName: resolved.clinicName, nameSource: resolved.nameSource };
+}
+
+// 一码一诊所幂等键：码级标记，防同码并发双开（KV 无事务，窄窗内第二请求读到
+//   标记即放弃开通；读/写异常不阻断——下方 provision 属主护栏仍能阻止跨所注入）
+function autoCodeMarkerKey(code) { return 'taobao_auto_code:' + code; }
+
+// 落库开通（createAdminRequest 审计三索引 → provisionCloudAccount）。
+//   双审加固（KNOWLEDGE §60）：①占号复查 fail-closed（KV 读异常=放弃开通）；
+//   ②码级幂等键；③落库点【新鲜重读】唯名，provision create-only 属主护栏，
+//   撞名换随机唯名重试，彻底杜绝"补号降 doctor 进别人所"；④仅 personal/pro。
+export async function commitTaobaoCloudAuto(kv, opts) {
+    const p = opts || {};
+    const phone = String(p.phone || '').trim();
+    const code = String(p.code || '').trim();
+    const machineId = String(p.machineId || '').trim();
+    if (!/^1[3-9]\d{9}$/.test(phone) || !machineId) return { ok: false, reason: 'bad-args' };
+    if (!/^BNZC-[A-HJ-NP-Z2-9]{4}(-[A-HJ-NP-Z2-9]{4}){3}$/.test(code)) return { ok: false, reason: 'bad-code' };
+    const rawType = String(p.type || 'personal').toLowerCase();
+    if (rawType !== 'personal' && rawType !== 'pro') return { ok: false, reason: 'type-not-eligible' };
+    const actType = rawType === 'pro' ? 'pro' : 'personal';
+
+    // ① 防御性复查（预检→落库并发窗）：fail-closed，读异常绝不按"无占用"放行
+    let occupied = null;
+    try {
+        occupied = await findPhoneOccupancy(kv, phone);
+    } catch (e) {
+        return { ok: false, reason: 'recheck-read-error', detail: e && e.message };
+    }
+    if (occupied) return { ok: false, reason: 'req-' + occupied.kind + '-race' };
+    try {
+        const existed = await phoneHasCloudAccount(kv, phone);
+        if (existed) return { ok: false, reason: 'cloud-account-exists-race', clinicName: existed.clinicName };
+    } catch (e) {
+        return { ok: false, reason: 'recheck-read-error', detail: e && e.message };
+    }
+
+    // ② 码级幂等键（同码并发/重试只允许一次自动开通）
+    const markerKey = autoCodeMarkerKey(code);
+    const marker = await kv.get(markerKey, 'json').catch(() => null);
+    if (marker && marker.requestId) {
+        return { ok: false, reason: 'code-already-provisioned', requestId: marker.requestId };
+    }
+
+    const now = new Date().toISOString();
+    // requestId 形状与 admin-submit.generateRequestId 同构（REQ-<ts36*9>-<hex4>）
+    const ts = Date.now().toString(36).toUpperCase().padStart(9, '0').slice(-9);
+    const rand = Array.from(crypto.getRandomValues(new Uint8Array(2)))
+        .map(b => b.toString(16).toUpperCase().padStart(2, '0')).join('');
+    const requestId = `REQ-${ts}-${rand}`;
+    const days = Number(p.days) > 0 ? Number(p.days) : 365;
+    // 非法日期串（脏数据）按无 expiresAt 处理，避免 toISOString 抛错使开通静默失败
+    let expiresAt = null;
+    if (p.expiresAt) {
+        const __d = new Date(p.expiresAt);
+        if (!isNaN(__d.getTime())) expiresAt = __d.toISOString();
+    }
+    // 被邀请人 +30 天奖励与 validate 签发的 license 同源贯通（provisionCloudAccount
+    //   对 expiresAt 优先、否则 days+inviteeBonusDays；与 admin-approve 链路口径一致）
+    const inviteeBonusDays = Number(p.inviteeBonusDays) || 0;
+
+    // ③ 落库点新鲜唯名（不复用预检结果——预检到此处间隔整段 validate 多次 KV 往返）
+    const fresh = await resolveAutoCloudClinicName(kv, {
+        phone, machineId, submittedName: String(p.submittedName || '').trim()
+    });
+    let clinicName = fresh.clinicName;
+    let nameSource = fresh.nameSource;
+
+    // 审计记录：字段形状对齐 admin-submit recordPayload——admin-list 历史列表、
+    //   admin-status 按机重签、users.js 登录自愈三条读链全部直接复用。
+    const buildRecord = () => ({
+        requestId,
+        clinicName,
+        adminName: '',
+        phone,
+        remark: '淘宝云端备货码 claim 自动开通（初始密码 admin，首次登录请改密）',
+        machineId,
+        status: 'activated',
+        submittedAt: now,
+        createdAt: now,
+        resolvedAt: now,
+        resolvedBy: 'system:taobao-cloud-auto',
+        licenseCode: code,
+        licenseBase64: null,
+        rejectReason: null,
+        productName: '',
+        edition: actType === 'pro' ? 'institution' : 'personal',
+        appMode: 'cloud',
+        appModeCarrier: '',
+        inviteCode: '',
+        passwordHash: '',
+        passwordSalt: '',
+        versionLabel: '',
+        env: 'production',
+        freePass: false,
+        orderSource: 'taobao-cloud-auto',
+        // provisionCloudAccount 兼容字段
+        type: actType,
+        days,
+        expiresAt,
+        inviteeBonusDays,
+        autoSource: 'taobao-cloud-code',
+        autoNameSource: nameSource,
+        submittedIp: p.ip || '',
+        activatedIp: p.ip || ''
+    });
+    let record = buildRecord();
+    // 三索引原子序列：admin_req:{rid} + admin_phone:{phone}=activated + index unshift
+    await createAdminRequest(kv, record);
+    await kv.put(markerKey, JSON.stringify({ requestId, phone, at: now })).catch((e) => {
+        console.warn('[TaobaoCloudAuto] 码级幂等键写入失败（不影响开通，属主护栏兜底）:', e && e.message);
+    });
+
+    // ④ provision create-only：撞名（属主非本请求）→ 换新鲜随机唯名重试，至多 3 次
+    let provisioned = false;
+    let provisionError = '';
+    for (let attempt = 0; attempt < 3; attempt++) {
+        if (attempt > 0) {
+            const regen = await regenerateAutoCloudClinicName(kv, { phone, machineId });
+            clinicName = regen.clinicName;
+            nameSource = regen.nameSource;
+            record = buildRecord();
+            // 审计记录同步最终名（三索引中 admin_phone 只含 requestId，无需动）
+            await kv.put(KV_ADMIN_REQ_PREFIX + requestId, JSON.stringify(record)).catch(() => {});
+        }
+        try {
+            await provisionCloudAccount(kv, {
+                phone,
+                adminName: '',
+                clinicName,
+                machineId,
+                type: actType,
+                days,
+                expiresAt,
+                inviteeBonusDays,
+                appMode: 'cloud',
+                requestId,
+                __autoRequestId: requestId
+            });
+            provisioned = true;
+            break;
+        } catch (e) {
+            if (e && e.code === 'AUTO_NAME_COLLISION' && attempt < 2) {
+                console.warn('[TaobaoCloudAuto] 诊所名并发撞名，换唯名重试:', clinicName, '→');
+                continue;
+            }
+            // 不抛：license 已签发是主结果；审计记录已在，登录/状态轮询自愈补开
+            provisionError = (e && e.message) || String(e);
+            console.warn('[TaobaoCloudAuto] provisionCloudAccount 失败（不影响license，登录自愈补开）:', provisionError);
+            break;
+        }
+    }
+    return { ok: true, requestId, clinicName, nameSource, provisioned, provisionError };
+}
+
+// license 签发后回填审计记录（validate 在 encodeLicenseBase64 之后调用）：
+//   admin-status machineId 自救扫描命中本记录时必须带真实 license，否则会回
+//   license:null 让客户端误判"已自动安装"。仅回填本通道记录、幂等、失败不阻断。
+export async function attachLicenseToAutoRequest(kv, requestId, licenseBase64) {
+    try {
+        const rid = String(requestId || '');
+        if (!/^REQ-[A-Z0-9]+-[A-F0-9]+$/i.test(rid) || !licenseBase64) return false;
+        const key = KV_ADMIN_REQ_PREFIX + rid;
+        const rec = await kv.get(key, 'json').catch(() => null);
+        if (!rec || rec.orderSource !== 'taobao-cloud-auto') return false;
+        if (rec.licenseBase64) return true;
+        rec.licenseBase64 = licenseBase64;
+        await kv.put(key, JSON.stringify(rec));
+        return true;
+    } catch (e) {
+        console.warn('[TaobaoCloudAuto] license 回填审计记录失败（不影响激活）:', e && e.message);
+        return false;
     }
 }

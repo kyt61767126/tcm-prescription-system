@@ -194,13 +194,27 @@ async function maybeProvisionFromActivation(kv, username) {
                 if (rec && rec.phone === username) { requestId = rid; st = rec.status || ''; break; }
             }
         }
-        // 无论是否命中都写冷却标记，避免下一次失败登录再次全量扫描
-        await kv.put('admin_selfheal_cool:' + username, JSON.stringify({ t: now + 15 * 60 * 1000 })).catch(() => {});
-        if (!requestId) return false;
-        if (st !== 'activated' && st !== 'approved') return false; // 仅已通过
+        // 冷却写入口径（2026-10-08 加固）：① 无记录/状态不符 → 写（无东西可补）；
+        //   ② provision 成功 → 写（账号已开，且 provision 本身幂等）；
+        //   ③ provision 抛错（KV 瞬断/诊所整表冲突等临时性失败）→ 不写，
+        //   允许下次失败登录立即重试，避免淘宝自动开通半成态买家被晾 15 分钟。
+        const writeCool = () => kv.put(
+            'admin_selfheal_cool:' + username,
+            JSON.stringify({ t: now + 15 * 60 * 1000 })
+        ).catch(() => {});
+        if (!requestId) { await writeCool(); return false; }
+        if (st !== 'activated' && st !== 'approved') { await writeCool(); return false; } // 仅已通过
         const record = await kv.get('admin_req:' + requestId, 'json');
-        if (!record) return false;
-        await provisionCloudAccount(kv, record);
+        if (!record) { await writeCool(); return false; }
+        // ★ 2026-10-08 安全二查：淘宝无人通道记录在自愈点补开时同样必须带属主
+        //   标记（记录只持久化 requestId/__autoRequestId 不入库），否则半成态
+        //   （commit 时 provision 失败）记录若撞上后出现的同名诊所，会被
+        //   ensureClinicUser 降为 doctor 注入别人诊所（跨租户看处方）。
+        //   带标记后撞名抛 AUTO_NAME_COLLISION → fail-closed，客服改名处理。
+        await provisionCloudAccount(kv, record.orderSource === 'taobao-cloud-auto'
+            ? Object.assign({}, record, { __autoRequestId: record.requestId })
+            : record);
+        await writeCool();
         return true;
     } catch (e) {
         console.warn('[Login] 激活自愈补开账号失败:', e.message);

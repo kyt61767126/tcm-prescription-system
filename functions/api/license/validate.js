@@ -43,7 +43,7 @@ import {
     evaluateProductClassGate, normalizeCodeProductClass // ★ 2026-10-07 码-端锁定闸
 } from './_lib/license-core.js';
 import { getDeviceBlock } from './_lib/license-core.js';
-import { provisionCloudAccount } from './_lib/admin-account.js';
+import { provisionCloudAccount, preflightTaobaoCloudAuto, commitTaobaoCloudAuto, attachLicenseToAutoRequest } from './_lib/admin-account.js';
 
 // ★ P2 安全修复：收紧 CORS，仅允许合法 Origin
 const ALLOWED_ORIGINS = [
@@ -286,6 +286,54 @@ export async function onRequest(context) {
             ((typeof record.phone === 'string' && /^1[3-9]\d{9}$/.test(record.phone.trim())) ? record.phone.trim() : '');
         const phoneVerified = !!(clientPhone && recordPhone && clientPhone === recordPhone);
 
+        // ★ 2026-10-08 淘宝云端备货码「填码即开通」一期（KNOWLEDGE §60）：
+        //   预置云端码（码记录硬证据，非客户端自报）+首机首激+合法手机号时，
+        //   claim 成功即自动开诊所+管理员（手机号登录/初始密码 admin）。
+        //   此处只做纯读预检（手机号在网双查+唯名解析），落库在 updateLicense
+        //   之后；预检不满足或异常一律不阻断激活（维持只发 license 旧行为，
+        //   客服通道兜底），保证码消耗主流程零回归。
+        let __taobaoAuto = null;
+        // ★ 双审加固：trial/free 等非售卖类型不进自动开通（淘宝预置仅 personal/pro；
+        //   后台手工组合 trial+cloud 预置码也不可触发）
+        const __taobaoEligibleType = record.type === 'personal' || record.type === 'pro';
+        // ★ 运维熔断开关：KV config:taobao-cloud-auto={"mode":"off"} 一键关闭自动开通
+        //   （读异常按放行处理，绝不因配置读失败影响买家激活；与 platform-check 同模式）
+        let __taobaoAutoEnabled = true;
+        if (record.status === 'unused' && !existingDevice && clientPhone && __taobaoEligibleType &&
+            __pcGate.source === 'preset' && __pcGate.locked === 'cloud' && __pcGate.check.ok) {
+            try {
+                const __sw = await kv.get('config:taobao-cloud-auto', 'json');
+                if (__sw && __sw.mode === 'off') __taobaoAutoEnabled = false;
+            } catch (_) { /* 配置读失败不影响开通 */ }
+        }
+        if (record.status === 'unused' && !existingDevice && clientPhone && __taobaoEligibleType &&
+            __pcGate.source === 'preset' && __pcGate.locked === 'cloud' && __pcGate.check.ok &&
+            __taobaoAutoEnabled) {
+            try {
+                const __autoPre = await preflightTaobaoCloudAuto(kv, {
+                    code, phone: clientPhone, machineId, submittedName: clinicName
+                });
+                if (__autoPre.ok) {
+                    __taobaoAuto = {
+                        phone: clientPhone,
+                        clinicName: __autoPre.clinicName,
+                        nameSource: __autoPre.nameSource
+                    };
+                } else {
+                    await appendLicenseLog(kv, code, {
+                        action: 'taobao-cloud-auto-skip',
+                        time: getNowISO(),
+                        ip: ip,
+                        operator: clientPhone,
+                        detail: '云端自动开通预检未通过（不影响激活）：' + __autoPre.reason +
+                            (__autoPre.clinicName ? '，已在诊所=' + __autoPre.clinicName : '')
+                    }).catch(() => {});
+                }
+            } catch (e) {
+                console.warn('[TaobaoCloudAuto] 预检异常（本次不开通，不影响激活）:', e.message);
+            }
+        }
+
         // ★ v3 新增：诊所名绑定校验
         // 仅当激活码生成时已绑定 clinicName 时才校验（向后兼容旧激活码）
         // ★ 2026-08-25：同设备重激活（existingDevice 命中）自动跳过诊所名校验——
@@ -385,8 +433,19 @@ export async function onRequest(context) {
         // ★ 2026-09-11 换机身份保持：手机号核验通过 = 原激活本人，沿用原绑定身份
         //   （防 APP 重装/换机时客户端自动填的本地医师名覆盖 record.user 造成身份漂移；
         //   手机号不匹配或新码首激活时仍以客户端提供的 user 为准）
-        const licenseUser = (phoneVerified && (record.user || record.username)) ||
+        // ★ 2026-10-08 淘宝云端备货码：备货占位名（"云端标准备货01"）首激被买家
+        //   手机号覆盖（TAOBAO_STOCK_PRESETS 设计约定：买家激活信息覆盖占位名）
+        const licenseUser = (__taobaoAuto && __taobaoAuto.phone) ||
+                            (phoneVerified && (record.user || record.username)) ||
                             user || record.user || record.username || 'user';
+
+        // 首激绑定诊所名：码上已绑定的优先；淘宝云端自动开通首激用预检唯名。
+        //   用于 license v3 三因子绑定、devices[].clinicName、setDeviceVersion 四处同源。
+        //   let：commit 落库点撞名换唯名后会回写最终名（license 文件此前已按预检名
+        //   签名不可改；码记录/设备绑定/后续重激活以最终名为准）。
+        let __boundClinicName = String(
+            record.clinicName || (__taobaoAuto && __taobaoAuto.clinicName) || ''
+        ).trim();
 
         // ★ 2026-09-14 阶段2/3 平台校验（观察模式已上线，硬拦截开关就绪）：
         //   请求端 clientClass 存在 && 已绑定设备中任一端形态存在且与请求端不一致
@@ -509,8 +568,8 @@ export async function onRequest(context) {
             licenseRecord.firstActivatedAt = licenseRecord.activatedAt;
         }
         const licenseOptions = {};
-        if (record.clinicName) {
-            licenseOptions.clinicName = record.clinicName;
+        if (__boundClinicName) {
+            licenseOptions.clinicName = __boundClinicName;
             licenseOptions.machineId = machineId;
             licenseOptions.licenseBinding = 'clinic+user+machine';
         }
@@ -558,6 +617,12 @@ export async function onRequest(context) {
             machineId: machineId,  // 保留旧字段（向后兼容，= devices[0].machineId）
             activatedIp: ip,
             user: licenseUser,
+            // ★ 2026-10-08 淘宝云端自动开通：买家手机号+唯名诊所在码上落锚
+            //   （phone 供日后同码重激活手机号核验；clinicName 使该码成为 v3
+            //   三因子绑定码，与 admin-approve 签发码同形）
+            ...(__taobaoAuto
+                ? { phone: __taobaoAuto.phone, clinicName: __taobaoAuto.clinicName }
+                : {}),
             ...(__isFirstActivation
                 ? { activatedAt: getNowISO() }
                 : { lastReactivatedAt: getNowISO() })
@@ -578,8 +643,8 @@ export async function onRequest(context) {
             updates.invitedBy = invitedByCode;
         }
         // ★ v3 新增：首次激活时记录 clinicName（已使用重激活时不变更）
-        if (record.clinicName && !record.activatedClinicName) {
-            updates.activatedClinicName = record.clinicName;
+        if (__boundClinicName && !record.activatedClinicName) {
+            updates.activatedClinicName = __boundClinicName;
         }
         // ★ v4 新增：更新 devices 数组
         const newDevices = devices.slice();  // 复制现有设备列表
@@ -596,7 +661,7 @@ export async function onRequest(context) {
             newDevices.push({
                 machineId: machineId,
                 activatedAt: getNowISO(),
-                clinicName: record.clinicName || clinicName || null,
+                clinicName: __boundClinicName || clinicName || null,
                 activatedIp: ip,
                 productClass: pClass,
                 clientClass: cClass
@@ -618,11 +683,91 @@ export async function onRequest(context) {
             });
         }
 
+        // ★ 2026-10-08 淘宝云端备货码「填码即开通」一期（KNOWLEDGE §60）：
+        //   预检通过（__taobaoAuto 非空）时，码状态已落 used 后再执行开通落库——
+        //   审计记录（admin_req 三索引，status=activated）先行，provision 失败不抛：
+        //   客户登录时 users.js maybeProvisionFromActivation / admin-status 按机
+        //   扫描两条既有自愈链会幂等补开。任何异常都不影响已成功的 license 主结果。
+        let __cloudProvisioned = false;
+        let __autoRequestId = '';
+        if (__taobaoAuto) {
+            try {
+                const __autoRes = await commitTaobaoCloudAuto(kv, {
+                    code,
+                    phone: __taobaoAuto.phone,
+                    clinicName: __taobaoAuto.clinicName,
+                    submittedName: clinicName,   // 落库点会新鲜重判，预检名不作数
+                    machineId,
+                    type: record.type,
+                    days: record.days,
+                    expiresAt: record.expiresAt,
+                    inviteeBonusDays,
+                    nameSource: __taobaoAuto.nameSource,
+                    ip
+                });
+                if (__autoRes.ok) {
+                    __cloudProvisioned = !!__autoRes.provisioned;
+                    __autoRequestId = __autoRes.requestId || '';
+                    // 落库点新鲜唯名与预检不一致（并发撞名换名）→ 最终名回写码记录/
+                    //   设备槽位/__boundClinicName（license 文件此前已签名不可改，
+                    //   clinicName 在 license 中仅显示/绑定因子，登录找所只按手机号）
+                    if (__autoRes.clinicName && __autoRes.clinicName !== __taobaoAuto.clinicName) {
+                        try {
+                            const __lic2 = await getLicense(kv, code);
+                            const __devs2 = Array.isArray(__lic2 && __lic2.devices) ? __lic2.devices : [];
+                            for (const __d of __devs2) {
+                                if (__d && __d.machineId === machineId) __d.clinicName = __autoRes.clinicName;
+                            }
+                            await updateLicense(kv, code, {
+                                clinicName: __autoRes.clinicName,
+                                activatedClinicName: __autoRes.clinicName,
+                                devices: __devs2
+                            });
+                        } catch (e) {
+                            console.warn('[TaobaoCloudAuto] 最终诊所名回写码记录失败（不影响激活）:', e.message);
+                        }
+                        __boundClinicName = __autoRes.clinicName;
+                    }
+                    await appendLicenseLog(kv, code, {
+                        action: __autoRes.provisioned
+                            ? 'taobao-cloud-auto-provisioned'
+                            : 'taobao-cloud-auto-pending-selfheal',
+                        time: getNowISO(),
+                        ip: ip,
+                        operator: __taobaoAuto.phone,
+                        detail: '淘宝云端码自动开通：requestId=' + __autoRes.requestId +
+                            '，诊所=' + __autoRes.clinicName +
+                            '（名源=' + __autoRes.nameSource + '，类型=' + String(record.type || 'personal') +
+                            '，天数=' + (Number(record.days) || 365) +
+                            (inviteeBonusDays ? '，邀请奖励+' + inviteeBonusDays : '') + '）' +
+                            (__autoRes.provisioned ? '' : '，provision 未成功待登录/轮询自愈：' + __autoRes.provisionError)
+                    }).catch(() => {});
+                } else {
+                    await appendLicenseLog(kv, code, {
+                        action: 'taobao-cloud-auto-commit-skipped',
+                        time: getNowISO(),
+                        ip: ip,
+                        operator: __taobaoAuto.phone,
+                        detail: '淘宝云端码自动开通落库复查未通过（不影响激活）：' + __autoRes.reason
+                    }).catch(() => {});
+                }
+            } catch (e) {
+                console.warn('[TaobaoCloudAuto] 开通落库异常（不影响激活，待自愈补开）:', e.message);
+                await appendLicenseLog(kv, code, {
+                    action: 'taobao-cloud-auto-pending-selfheal',
+                    time: getNowISO(),
+                    ip: ip,
+                    operator: __taobaoAuto.phone,
+                    detail: '淘宝云端码自动开通异常（不影响激活，待自愈补开）：' + (e && e.message || e)
+                }).catch(() => {});
+            }
+        }
+
         // ★ 设备-版本绑定：激活成功后绑定设备版本（同一设备只能注册一个版本）
         try {
             await setDeviceVersion(kv, machineId, versionOf(record.type), {
                 licenseCode: code,
-                clinicName: record.clinicName || clinicName || '',
+                clinicName: __boundClinicName || clinicName || '',
                 productClass: pClass || undefined,    // ★ 归一后的规范值（cloud/offline）
                 clientClass: cClass || undefined
             });
@@ -683,11 +828,19 @@ export async function onRequest(context) {
             time: updates.activatedAt,
             ip: ip,
             operator: licenseUser,
-            detail: `machineId=${machineId.substring(0, 8)}..., clinicName=${record.clinicName || 'null'}, devicesCount=${newDevices.length}/${maxDevices}`
+            detail: `machineId=${machineId.substring(0, 8)}..., clinicName=${__boundClinicName || 'null'}, devicesCount=${newDevices.length}/${maxDevices}`
         });
 
         // 编码为 base64（客户端写入 license.dat 的格式）
         const licenseBase64 = encodeLicenseBase64(licenseData);
+
+        // ★ 2026-10-08 淘宝自动开通：真实 license 回填审计记录（双审修复）——
+        //   admin-status/admin-submit 的 machineId 自救扫描会把该记录当"本机已
+        //   激活"命中并下发其 licenseBase64；为 null 时客户端会误判"已自动安装"
+        //   却没装上 license。回填后该记录与人工审批记录完全同形；失败不阻断。
+        if (__autoRequestId) {
+            await attachLicenseToAutoRequest(kv, __autoRequestId, licenseBase64);
+        }
 
         return json({
             success: true,
@@ -695,6 +848,9 @@ export async function onRequest(context) {
             // ★ 2026-09-18 语音版升级标记：云端诊所 edition 已升级 cloud_voice，
             //   客户端据此提示"重新登录后语音功能生效"
             voiceUpgraded: voiceUpgraded,
+            // ★ 2026-10-08 淘宝云端备货码自动开通标记（一期仅服务端记账/审计用，
+            //   客户端无分支消费；false 含"待自愈补开"，账号最终以登录成功为准）
+            cloudAccountProvisioned: __cloudProvisioned,
             // ★ 2026-08-26 推广奖励信息（激活成功页展示：专属邀请码 + 阶梯进度 + 本次奖励）
             inviteInfo: {
                 inviteCode: recordWithInvite.inviteCode || null,

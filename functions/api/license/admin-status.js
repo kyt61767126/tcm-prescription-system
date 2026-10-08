@@ -124,7 +124,10 @@ export async function onRequest(context) {
                 for (const rid of index.slice(0, 200)) {
                     const rec = await kv.get(KV_ADMIN_REQ_PREFIX + rid, 'json').catch(() => null);
                     if (!rec || !rec.machineId || String(rec.machineId) !== machineIdParam) continue;
-                    if (rec.status === 'activated') {
+                    // ★ 2026-10-08 双审修复：无 licenseBase64 的 activated 记录不具备
+                    //   下发条件（淘宝自动开通记录在 validate 签发后已回填；回填失败的
+                    //   半成记录若命中会回 license:null，客户端误判"已自动安装"）→ 跳过
+                    if (rec.status === 'activated' && rec.licenseBase64) {
                         record = rec;
                         viaMachineIdFallback = true;
                         console.log('[AdminStatus] machineId-only 自救命中已激活:', rid, '(仅返回license，跳过账号操作)');
@@ -157,7 +160,10 @@ export async function onRequest(context) {
                 for (const rid of index.slice(0, 200)) {
                     if (rid === requestId) continue;
                     const rec = await kv.get(KV_ADMIN_REQ_PREFIX + rid, 'json');
-                    if (rec && rec.machineId === machineIdParam && rec.status === 'activated') {
+                    // ★ 2026-10-08 同 machineId-only 扫描口径：跳过无 licenseBase64
+                    //   的 activated 记录（淘宝自动开通半成态），禁止回 license:null
+                    if (rec && rec.machineId === machineIdParam &&
+                        rec.status === 'activated' && rec.licenseBase64) {
                         record = rec;
                         viaMachineIdFallback = true;
                         console.log('[AdminStatus] machineId 兜底命中:', rid, '(仅返回license，跳过账号操作)');
@@ -251,7 +257,11 @@ export async function onRequest(context) {
             }
             if (!viaMachineIdFallback && !__isSecondaryDevice && !__multiDetectFailed) {
                 try {
-                    await provisionCloudAccount(kv, record);
+                    // ★ 2026-10-08 安全二查：淘宝无人通道记录补开带属主标记，
+                    //   防半成态撞名被降 doctor 注入他人诊所（同 users.js 自愈链）
+                    await provisionCloudAccount(kv, record.orderSource === 'taobao-cloud-auto'
+                        ? Object.assign({}, record, { __autoRequestId: record.requestId })
+                        : record);
                 } catch (e) {
                     console.warn('[AdminStatus] 云端账号补开失败（不影响license读取）:', e.message);
                 }
