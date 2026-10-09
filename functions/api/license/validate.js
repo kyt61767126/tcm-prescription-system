@@ -320,19 +320,33 @@ export async function onRequest(context) {
         // ★ 双审加固：trial/free 等非售卖类型不进自动开通（淘宝预置仅 personal/pro；
         //   后台手工组合 trial+cloud 预置码也不可触发）
         const __taobaoEligibleType = record.type === 'personal' || record.type === 'pro';
-        // ★ 运维熔断开关：KV config:taobao-cloud-auto={"mode":"off"} 一键关闭自动开通
+        // ★ 2026-10-09 三期：预置 offline 码（99/299 本地版）同格自动开通。
+        //   资格只认码记录锁端 __pcGate.locked（cloud/offline），不采信客户端自报端。
+        const __taobaoAutoMode = (__pcGate.locked === 'cloud' || __pcGate.locked === 'offline')
+            ? __pcGate.locked : '';
+        // 离线载体：APP 客户端显式带 clientClass='app'；桌面旧客户端不带 → desktop 兜底
+        //   （淘宝本地码当前渠道为桌面；云端诊所不写 carrier）
+        const __taobaoCarrier = __taobaoAutoMode === 'offline'
+            ? (String(clientClass || '').trim().toLowerCase() === 'app' ? 'app' : 'desktop')
+            : '';
+        // ★ 运维熔断开关：云端/本地各一个 KV 键（config:taobao-cloud-auto /
+        //   config:taobao-local-auto），{"mode":"off"} 可独立一键关闭
         //   （读异常按放行处理，绝不因配置读失败影响买家激活；与 platform-check 同模式）
         let __taobaoAutoEnabled = true;
-        if (record.status === 'unused' && !existingDevice && clientPhone && __taobaoEligibleType &&
-            __pcGate.source === 'preset' && __pcGate.locked === 'cloud' && __pcGate.check.ok) {
+        // ★ 双审 S-4：七条件收口为一个布尔，熔断读取块与预检块共用，防后续加条件漂移
+        const __taobaoAutoEligible = record.status === 'unused' && !existingDevice &&
+            !!clientPhone && __taobaoEligibleType &&
+            __pcGate.source === 'preset' && !!__taobaoAutoMode && !!__pcGate.check.ok;
+        if (__taobaoAutoEligible) {
             try {
-                const __sw = await kv.get('config:taobao-cloud-auto', 'json');
+                const __swKey = __taobaoAutoMode === 'offline'
+                    ? 'config:taobao-local-auto'
+                    : 'config:taobao-cloud-auto';
+                const __sw = await kv.get(__swKey, 'json');
                 if (__sw && __sw.mode === 'off') __taobaoAutoEnabled = false;
             } catch (_) { /* 配置读失败不影响开通 */ }
         }
-        if (record.status === 'unused' && !existingDevice && clientPhone && __taobaoEligibleType &&
-            __pcGate.source === 'preset' && __pcGate.locked === 'cloud' && __pcGate.check.ok &&
-            __taobaoAutoEnabled) {
+        if (__taobaoAutoEligible && __taobaoAutoEnabled) {
             try {
                 const __autoPre = await preflightTaobaoCloudAuto(kv, {
                     code, phone: clientPhone, machineId, submittedName: clinicName
@@ -341,20 +355,24 @@ export async function onRequest(context) {
                     __taobaoAuto = {
                         phone: clientPhone,
                         clinicName: __autoPre.clinicName,
-                        nameSource: __autoPre.nameSource
+                        nameSource: __autoPre.nameSource,
+                        mode: __taobaoAutoMode,
+                        appMode: __taobaoAutoMode === 'offline' ? 'local' : 'cloud',
+                        carrier: __taobaoCarrier
                     };
                 } else {
                     await appendLicenseLog(kv, code, {
-                        action: 'taobao-cloud-auto-skip',
+                        action: 'taobao-' + (__taobaoAutoMode === 'offline' ? 'local' : 'cloud') + '-auto-skip',
                         time: getNowISO(),
                         ip: ip,
                         operator: clientPhone,
-                        detail: '云端自动开通预检未通过（不影响激活）：' + __autoPre.reason +
+                        detail: (__taobaoAutoMode === 'offline' ? '本地' : '云端') +
+                            '自动开通预检未通过（不影响激活）：' + __autoPre.reason +
                             (__autoPre.clinicName ? '，已在诊所=' + __autoPre.clinicName : '')
                     }).catch(() => {});
                 }
             } catch (e) {
-                console.warn('[TaobaoCloudAuto] 预检异常（本次不开通，不影响激活）:', e.message);
+                console.warn('[TaobaoAuto] 预检异常（本次不开通，不影响激活）:', e.message);
             }
         }
 
@@ -715,6 +733,13 @@ export async function onRequest(context) {
         let __cloudProvisioned = false;
         let __autoRequestId = '';
         let __autoInitialPassword = '';
+        // ★ 2026-10-09 三期：日志/标记按锁端分云端/本地（local 客户端不走云端
+        //   登录，provision 失败无登录自愈，需后台人工补诊所——文案单独提示）
+        const __autoTag = __taobaoAuto && __taobaoAuto.mode === 'offline' ? 'local' : 'cloud';
+        const __autoGoods = __autoTag === 'local' ? '淘宝本地码' : '淘宝云端码';
+        // 本地客户端不走云端登录，provision 失败无自愈通道，需人工补开——日志 action
+        //   与云端区分（pending-manual vs pending-selfheal），防运维看板误判终将收敛
+        const __autoPendingAction = __autoTag === 'local' ? 'pending-manual' : 'pending-selfheal';
         if (__taobaoAuto) {
             try {
                 const __autoRes = await commitTaobaoCloudAuto(kv, {
@@ -728,6 +753,9 @@ export async function onRequest(context) {
                     expiresAt: record.expiresAt,
                     inviteeBonusDays,
                     nameSource: __taobaoAuto.nameSource,
+                    // 三期：产品模式+载体透传（local/desktop 落 offline_* 诊所）
+                    appMode: __taobaoAuto.appMode,
+                    appModeCarrier: __taobaoAuto.carrier,
                     // 二期：密码 cred（仅 pwdCap=v2 且本次确实触发自动开通时才有意义）
                     passwordCred: __pwdCapV2 ? __autoPasswordCred : null,
                     randomInitial: __pwdCapV2 ? __autoRandomInitial : false,
@@ -754,41 +782,49 @@ export async function onRequest(context) {
                                 devices: __devs2
                             });
                         } catch (e) {
-                            console.warn('[TaobaoCloudAuto] 最终诊所名回写码记录失败（不影响激活）:', e.message);
+                            console.warn('[TaobaoAuto] 最终诊所名回写码记录失败（不影响激活）:', e.message);
                         }
                         __boundClinicName = __autoRes.clinicName;
                     }
                     await appendLicenseLog(kv, code, {
                         action: __autoRes.provisioned
-                            ? 'taobao-cloud-auto-provisioned'
-                            : 'taobao-cloud-auto-pending-selfheal',
+                            ? 'taobao-' + __autoTag + '-auto-provisioned'
+                            : 'taobao-' + __autoTag + '-auto-' + __autoPendingAction,
                         time: getNowISO(),
                         ip: ip,
                         operator: __taobaoAuto.phone,
-                        detail: '淘宝云端码自动开通：requestId=' + __autoRes.requestId +
+                        detail: __autoGoods + '自动开通：requestId=' + __autoRes.requestId +
                             '，诊所=' + __autoRes.clinicName +
                             '（名源=' + __autoRes.nameSource + '，类型=' + String(record.type || 'personal') +
+                            '，模式=' + __autoTag +
+                            (__autoRes.appModeCarrier ? '，载体=' + __autoRes.appModeCarrier : '') +
                             '，天数=' + (Number(record.days) || 365) +
                             (inviteeBonusDays ? '，邀请奖励+' + inviteeBonusDays : '') + '）' +
-                            (__autoRes.provisioned ? '' : '，provision 未成功待登录/轮询自愈：' + __autoRes.provisionError)
+                            (__autoRes.provisioned ? ''
+                                : (__autoTag === 'local'
+                                    ? '，provision 未成功需后台人工补开诊所：'
+                                    : '，provision 未成功待登录/轮询自愈：')
+                                + __autoRes.provisionError)
                     }).catch(() => {});
                 } else {
                     await appendLicenseLog(kv, code, {
-                        action: 'taobao-cloud-auto-commit-skipped',
+                        action: 'taobao-' + __autoTag + '-auto-commit-skipped',
                         time: getNowISO(),
                         ip: ip,
                         operator: __taobaoAuto.phone,
-                        detail: '淘宝云端码自动开通落库复查未通过（不影响激活）：' + __autoRes.reason
+                        detail: __autoGoods + '自动开通落库复查未通过（不影响激活）：' + __autoRes.reason
                     }).catch(() => {});
                 }
             } catch (e) {
-                console.warn('[TaobaoCloudAuto] 开通落库异常（不影响激活，待自愈补开）:', e.message);
+                console.warn('[TaobaoAuto] 开通落库异常（不影响激活，待补开）:', e.message);
                 await appendLicenseLog(kv, code, {
-                    action: 'taobao-cloud-auto-pending-selfheal',
+                    action: 'taobao-' + __autoTag + '-auto-' + __autoPendingAction,
                     time: getNowISO(),
                     ip: ip,
                     operator: __taobaoAuto.phone,
-                    detail: '淘宝云端码自动开通异常（不影响激活，待自愈补开）：' + (e && e.message || e)
+                    detail: __autoGoods + '自动开通异常（不影响激活' +
+                        (__autoTag === 'local' ? '，需后台人工补开诊所' : '，待自愈补开') +
+                        '）：' + (e && e.message || e)
                 }).catch(() => {});
             }
         }

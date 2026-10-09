@@ -16,7 +16,7 @@
 import { getKV, checkRateLimit, sniffCarrierFromUA, patchClinicCarrier, patchLicenseDeviceCarrier, getDeviceBlock,
     // ★ 2026-10-06 机构版多设备：附属设备轮询按本机 machineId 重签 license
     getLicense, getDevices, getMaxDevices, buildLicenseData, encodeLicenseBase64 } from './_lib/license-core.js';
-import { provisionCloudAccount, normalizeActivationPassword } from './_lib/admin-account.js';
+import { provisionCloudAccount, normalizeActivationPassword, isTaobaoAutoOrderSource } from './_lib/admin-account.js';
 import { updateAdminRequestStatus, ensureLicenseV7, ensureLicenseRenewed } from './_lib/license-write-service.js';
 
 const ALLOWED_ORIGINS = [
@@ -259,7 +259,7 @@ export async function onRequest(context) {
                 try {
                     // ★ 2026-10-08 安全二查：淘宝无人通道记录补开带属主标记，
                     //   防半成态撞名被降 doctor 注入他人诊所（同 users.js 自愈链）
-                    await provisionCloudAccount(kv, record.orderSource === 'taobao-cloud-auto'
+                    await provisionCloudAccount(kv, isTaobaoAutoOrderSource(record.orderSource)
                         ? Object.assign({}, record, { __autoRequestId: record.requestId })
                         : record);
                 } catch (e) {

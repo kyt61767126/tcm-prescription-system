@@ -9,7 +9,7 @@ import {
     isStaff,
     findPhoneOccupancy
 } from './_lib/auth.js';
-import { provisionCloudAccount } from './license/_lib/admin-account.js';
+import { provisionCloudAccount, isTaobaoAutoOrderSource } from './license/_lib/admin-account.js';
 import { deleteAdminRequest, KV_ADMIN_REQ_PREFIX, KV_ADMIN_REQ_INDEX,
     getActiveOrder, KV_FREE_PASS_PREFIX_EXPORTED, ACTIVE_ORDER_MAX_AGE_MS } from './license/_lib/license-write-service.js';
 // ★ 2026-09-08 离线版设备配额反查：license 索引遍历找该诊所激活码，读其多设备绑定列表
@@ -212,7 +212,7 @@ async function maybeProvisionFromActivation(kv, username) {
         //   （commit 时 provision 失败）记录若撞上后出现的同名诊所，会被
         //   ensureClinicUser 降为 doctor 注入别人诊所（跨租户看处方）。
         //   带标记后撞名抛 AUTO_NAME_COLLISION → fail-closed，客服改名处理。
-        await provisionCloudAccount(kv, record.orderSource === 'taobao-cloud-auto'
+        await provisionCloudAccount(kv, isTaobaoAutoOrderSource(record.orderSource)
             ? Object.assign({}, record, { __autoRequestId: record.requestId })
             : record);
         await writeCool();

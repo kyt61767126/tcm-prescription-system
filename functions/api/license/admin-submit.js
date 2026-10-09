@@ -37,7 +37,7 @@ import {
     detachDeviceFromOtherLicenses, setDeviceVersion, versionOf,
     evaluateProductClassGate, normalizeCodeProductClass // ★ 2026-10-07 码-端锁定闸
 } from './_lib/license-core.js';
-import { provisionCloudAccount, normalizeActivationPassword } from './_lib/admin-account.js';
+import { provisionCloudAccount, normalizeActivationPassword, isTaobaoAutoOrderSource } from './_lib/admin-account.js';
 // ★ 2026-09-17 P0 修复：补 KV_ADMIN_REQ_INDEX import——原 3 处使用（L51/L72/L399）
 //   均未定义未导入，L399 在 onRequest 主体同步抛 ReferenceError → 全新手机号
 //   （无 admin_phone 索引）走兜底扫描必 500，管理员激活申请通道对新客户损坏。
@@ -662,7 +662,7 @@ export async function onRequest(context) {
                     // ★ 2026-10-08 安全二查：淘宝无人通道记录补开带属主标记，
                     //   防半成态撞名被降 doctor 注入他人诊所（同 users.js 自愈链）
                     await provisionCloudAccount(kv,
-                        existingActivated.orderSource === 'taobao-cloud-auto'
+                        isTaobaoAutoOrderSource(existingActivated.orderSource)
                             ? Object.assign({}, existingActivated, { __autoRequestId: existingActivated.requestId })
                             : existingActivated);
                 } catch (e) {

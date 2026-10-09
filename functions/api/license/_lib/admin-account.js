@@ -331,8 +331,10 @@ export async function normalizeActivationPassword(kv, record) {
 //
 // ★★ 安全边界（每次改动逐条复核）：
 //   1. 调用资格由 validate.js 按【码记录】判定：__pcGate.source==='preset'
-//      && locked==='cloud' && 端闸 check.ok（99 离线预置码在此之前已 403）
-//      && status==='unused' 首机首激；本助手不采信任何客户端自报产品端；
+//      && locked∈{cloud,offline} && 端闸 check.ok（端不一致在 evaluateProductClassGate
+//      已 403）&& status==='unused' 首机首激；本助手不采信任何客户端自报产品端；
+//      ★ 2026-10-09 三期：offline 预置码（99/299 本地版）同条件自动开通，落
+//      offline_personal/offline_clinic 诊所记录（与官网离线订单人工审核同形态）；
 //   2. 手机号在网双查：admin_req 申请索引（findPhoneOccupancy）+ 遍历全部
 //      诊所 clinic:{id}:users 真实账号行（含禁用诊所/停用账号行——占位语义
 //      宁严勿松，防给老客户静默开第二个同名手机账号）；管理员删除账号=用户
@@ -476,6 +478,22 @@ export async function commitTaobaoCloudAuto(kv, opts) {
     const rawType = String(p.type || 'personal').toLowerCase();
     if (rawType !== 'personal' && rawType !== 'pro') return { ok: false, reason: 'type-not-eligible' };
     const actType = rawType === 'pro' ? 'pro' : 'personal';
+    // ★ 2026-10-09 三期：产品模式（云端 cloud / 本地 local）。资格由 validate 按
+    //   码记录 __pcGate.locked 判定后透传；缺省 cloud 保持云端链零回归。
+    //   显式三态：'local'/'offline'（resolveProductMode 同义词）→ local，
+    //   'cloud' → cloud，其余脏值直接拒绝（防未来新调用方静默建错版本诊所）。
+    const __appModeRaw = String(p.appMode || 'cloud').toLowerCase();
+    if (__appModeRaw !== 'cloud' && __appModeRaw !== 'local' && __appModeRaw !== 'offline') {
+        return { ok: false, reason: 'bad-app-mode' };
+    }
+    const rawAppMode = (__appModeRaw === 'local' || __appModeRaw === 'offline') ? 'local' : 'cloud';
+    const isLocal = rawAppMode === 'local';
+    // 离线载体 desktop/app 仅对 local 有意义（云端诊所不写 carrier）；
+    // 离线桌面旧客户端不上报 clientClass → 默认 desktop（淘宝本地码当前仅桌面渠道）。
+    const __rawCarrier = String(p.appModeCarrier || '').toLowerCase();
+    const appModeCarrier = isLocal
+        ? (__rawCarrier === 'app' ? 'app' : 'desktop')
+        : '';
 
     // ★ 二期 开通密码三态（仅新客户端 pwdCap=v2 会走到非默认分支）：
     //   ①买家自设密码（validate 已做 8-32 位字母数字校验并 PBKDF2 哈希后传入）
@@ -540,6 +558,15 @@ export async function commitTaobaoCloudAuto(kv, opts) {
     let clinicName = fresh.clinicName;
     let nameSource = fresh.nameSource;
 
+    const autoOrderSource = isLocal ? 'taobao-local-auto' : 'taobao-cloud-auto';
+    const autoResolvedBy = isLocal ? 'system:taobao-local-auto' : 'system:taobao-cloud-auto';
+    const autoCodeSource = isLocal ? 'taobao-local-code' : 'taobao-cloud-code';
+    const autoGoodsLabel = isLocal ? '淘宝本地备货码' : '淘宝云端备货码';
+    const autoPwdSuffix = autoPwdMode === 'random'
+        ? 'claim 自动开通（随机初始密码，首登强制改密）'
+        : (autoPwdMode === 'selfset'
+            ? 'claim 自动开通（买家自设登录密码）'
+            : 'claim 自动开通（初始密码 admin，首次登录请改密）');
     // 审计记录：字段形状对齐 admin-submit recordPayload——admin-list 历史列表、
     //   admin-status 按机重签、users.js 登录自愈三条读链全部直接复用。
     const buildRecord = () => ({
@@ -547,24 +574,20 @@ export async function commitTaobaoCloudAuto(kv, opts) {
         clinicName,
         adminName: '',
         phone,
-        remark: autoPwdMode === 'random'
-            ? '淘宝云端备货码 claim 自动开通（随机初始密码，首登强制改密）'
-            : (autoPwdMode === 'selfset'
-                ? '淘宝云端备货码 claim 自动开通（买家自设登录密码）'
-                : '淘宝云端备货码 claim 自动开通（初始密码 admin，首次登录请改密）'),
+        remark: autoGoodsLabel + ' ' + autoPwdSuffix,
         machineId,
         status: 'activated',
         submittedAt: now,
         createdAt: now,
         resolvedAt: now,
-        resolvedBy: 'system:taobao-cloud-auto',
+        resolvedBy: autoResolvedBy,
         licenseCode: code,
         licenseBase64: null,
         rejectReason: null,
         productName: '',
         edition: actType === 'pro' ? 'institution' : 'personal',
-        appMode: 'cloud',
-        appModeCarrier: '',
+        appMode: rawAppMode,
+        appModeCarrier: appModeCarrier,
         inviteCode: '',
         passwordHash: recCred ? recCred.passwordHash : '',
         passwordSalt: recCred ? recCred.salt : '',
@@ -573,13 +596,13 @@ export async function commitTaobaoCloudAuto(kv, opts) {
         versionLabel: '',
         env: 'production',
         freePass: false,
-        orderSource: 'taobao-cloud-auto',
+        orderSource: autoOrderSource,
         // provisionCloudAccount 兼容字段
         type: actType,
         days,
         expiresAt,
         inviteeBonusDays,
-        autoSource: 'taobao-cloud-code',
+        autoSource: autoCodeSource,
         autoNameSource: nameSource,
         submittedIp: p.ip || '',
         activatedIp: p.ip || ''
@@ -613,7 +636,10 @@ export async function commitTaobaoCloudAuto(kv, opts) {
                 days,
                 expiresAt,
                 inviteeBonusDays,
-                appMode: 'cloud',
+                // ★ 三期：local 透传 → 诊所 edition 落 offline_personal/offline_clinic
+                //   （mapActivationTypeToEdition 按 appMode 判定），carrier 同步落库
+                appMode: rawAppMode,
+                appModeCarrier: appModeCarrier,
                 // 二期：开通密码 cred 透传至 ensureClinicUser（随机分支带强制改密标记）
                 passwordHash: recCred ? recCred.passwordHash : '',
                 passwordSalt: recCred ? recCred.salt : '',
@@ -635,7 +661,14 @@ export async function commitTaobaoCloudAuto(kv, opts) {
         }
     }
     // initialPassword 仅 random 分支非空——明文只走本次返回，不随任何状态/轮询接口二次下发
-    return { ok: true, requestId, clinicName, nameSource, provisioned, provisionError, pwdMode: autoPwdMode, initialPassword };
+    return { ok: true, requestId, clinicName, nameSource, provisioned, provisionError,
+        pwdMode: autoPwdMode, initialPassword, appMode: rawAppMode, appModeCarrier: appModeCarrier };
+}
+
+// 淘宝无人通道 orderSource 判定（云端/本地自动开通记录在三处自愈点都必须
+//   带 __autoRequestId 属主标记；新增通道枚举时只改这里一处）
+export function isTaobaoAutoOrderSource(s) {
+    return s === 'taobao-cloud-auto' || s === 'taobao-local-auto';
 }
 
 // license 签发后回填审计记录（validate 在 encodeLicenseBase64 之后调用）：
@@ -647,7 +680,7 @@ export async function attachLicenseToAutoRequest(kv, requestId, licenseBase64) {
         if (!/^REQ-[A-Z0-9]+-[A-F0-9]+$/i.test(rid) || !licenseBase64) return false;
         const key = KV_ADMIN_REQ_PREFIX + rid;
         const rec = await kv.get(key, 'json').catch(() => null);
-        if (!rec || rec.orderSource !== 'taobao-cloud-auto') return false;
+        if (!rec || !isTaobaoAutoOrderSource(rec.orderSource)) return false;
         if (rec.licenseBase64) return true;
         rec.licenseBase64 = licenseBase64;
         await kv.put(key, JSON.stringify(rec));
