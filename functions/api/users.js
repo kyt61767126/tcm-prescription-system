@@ -3174,7 +3174,7 @@ export async function onRequest(context) {
             }
 
             const body = await context.request.json().catch(() => ({}));
-            const { clinicId, status, name, adminUsername, adminName, adminPassword, adminPhone, renewDays, edition, expiresAt } = body;
+            const { clinicId, status, name, adminUsername, adminName, adminPassword, adminPhone, renewDays, edition, expiresAt, offlineCarrier } = body;
             if (!clinicId) {
                 return json({ success: false, error: '缺少诊所ID' }, 400);
             }
@@ -3299,6 +3299,25 @@ export async function onRequest(context) {
                 }
                 changes.push(`name: ${oldClinic.name} → ${name}`);
                 clinics[clinicIdx].name = name.trim();
+            }
+            // ★ 2026-10-09 离线载体补写（人工补台账缺口，KNOWLEDGE §62）：
+            //   存量离线码人工补台账时自动链未跑、offlineCarrier 为空，诊所卡片
+            //   比自动链客户少「🖥️桌面/📱APP」前缀。这里允许平台管理员补写；
+            //   仅接受 desktop/app，且只允许离线版诊所（云端版载体由登录实时反映）。
+            if (offlineCarrier !== undefined) {
+                const carrierVal = String(offlineCarrier).trim().toLowerCase();
+                if (!['desktop', 'app'].includes(carrierVal)) {
+                    return json({ success: false, error: 'offlineCarrier 仅支持 desktop（桌面）/ app（APP）' }, 400);
+                }
+                // 以同请求内可能刚更新过的 edition 为准
+                const curEdition = String(clinics[clinicIdx].edition || '');
+                if (curEdition.indexOf('offline_') !== 0) {
+                    return json({ success: false, error: '仅离线版诊所可设置载体（当前版本: ' + (curEdition || '未知') + '）' }, 400);
+                }
+                if (carrierVal !== (clinics[clinicIdx].offlineCarrier || '')) {
+                    changes.push(`offlineCarrier: ${clinics[clinicIdx].offlineCarrier || '(空)'} → ${carrierVal}`);
+                    clinics[clinicIdx].offlineCarrier = carrierVal;
+                }
             }
             clinics[clinicIdx].updatedAt = now;
             await kv.put(KV_SYSTEM_CLINICS, JSON.stringify(clinics));
