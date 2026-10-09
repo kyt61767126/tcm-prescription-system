@@ -121,10 +121,18 @@ async function activateOnline(code, machineId, user, clinicName, phone, password
 
         // ★ 优化：Promise.race 实现可靠超时
         // 原问题：Electron 28 中 AbortController.abort() 可能不中断 fetch，导致卡死几十分钟
-        // 修复：Promise.race 确保 15 秒后必定返回超时错误，不依赖 AbortController
+        // 修复：Promise.race 确保总超时后必定返回超时错误，不依赖 AbortController
+        //
+        // ★ 2026-10-09 真机实测调大（原 12s/15s 过短，是真机激活失败的 P0 根因）：
+        //   服务端 /license/claim 实测耗时 —— 冷启首次 14.2s（另一次实测达 22.7s），
+        //   预热后同机重激活 3.5~4.9s。原 12s abort 会让冷启请求【必然】被客户端掐断：
+        //   客户看到"连接服务器超时，请检查网络后重试"，而服务端可能已提交（码已消耗/
+        //   诊所已建）→ 客户端却装不上 license；客户按提示重试还会烧掉每码 5 次/小时
+        //   额度，重试 5 次即被锁 1 小时（KNOWLEDGE §59 同类死局，真机日志实证 429）。
+        //   改为 35s/40s，给冷启留足余量。
         const fetchPromise = async () => {
             const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 12000);  // 12 秒 AbortController 超时
+            const timeout = setTimeout(() => controller.abort(), 35000);  // 35 秒 AbortController 超时
             try {
                 const response = await fetch(ACTIVATE_API_URL, {
                     method: 'POST',
@@ -139,7 +147,7 @@ async function activateOnline(code, machineId, user, clinicName, phone, password
         };
 
         const timeoutPromise = new Promise((_, reject) => {
-            setTimeout(() => reject(new Error('FETCH_TIMEOUT')), 15000);  // 15 秒总超时兜底
+            setTimeout(() => reject(new Error('FETCH_TIMEOUT')), 40000);  // 40 秒总超时兜底
         });
 
         const data = await Promise.race([fetchPromise(), timeoutPromise]);
