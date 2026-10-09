@@ -414,6 +414,21 @@ function pickFallbackName(clinics, phone, machineId) {
     return base + '·' + midPart + '·' + autoNameRandomSuffix(6);
 }
 
+// ★ 2026-10-09 修复：出厂 config.json 模板自带占位诊所名（clinicName:"XXX中医诊所"、
+//   doctorName:"XXX"），旧版离线/云端客户端会把它当成"客户自报名"上报，服务端按
+//   nameSource='client' 采信 → 淘宝买家只填码、不填诊所名，结果诊所真被建成
+//   「XXX中医诊所」（真机日志实证：taobao-local-auto-provisioned … 名源=client）。
+//   这里把出厂占位值视为【非法名】，落到既有 fallback-invalid 分支走服务端唯名兜底
+//   （「中医诊所·手机尾号XXXX」），不新增 nameSource 枚举值、不改调用方语义。
+//   判定从严，只匹配出厂模板的确切形态，真实客户名（含中文）绝不受影响。
+export function isFactoryPlaceholderName(s) {
+    const t = String(s || '').trim();
+    if (!t) return true;                          // 空串等同未填
+    if (/^x+$/i.test(t)) return true;             // "XXX" / "XXXX"
+    if (/^x{2,}中医诊所$/i.test(t)) return true;   // 出厂模板精确形态 "XXX中医诊所"
+    return false;
+}
+
 // 自动开通唯名解析：客户起名 2~50 字、无管道符且全局无同名才采信，否则服务端
 //   兜底唯一名。nameSource：client=客户起名采信；fallback=客户未填；
 //   fallback-collision=客户起名合法但撞名；fallback-invalid=超长/过短/含非法字符。
@@ -423,6 +438,13 @@ export async function resolveAutoCloudClinicName(kv, opts) {
     const machineId = String(o.machineId || '');
     const submitted = String(o.submittedName || '').trim();
     const clinics = await getClinicsOrThrow(kv);
+    // 出厂占位名（"XXX中医诊所"/"XXX"）不采信，按非法名兜底
+    if (submitted && isFactoryPlaceholderName(submitted)) {
+        return {
+            clinicName: pickFallbackName(clinics, phone, machineId),
+            nameSource: 'fallback-invalid'
+        };
+    }
     if (submitted) {
         const valid = submitted.length >= 2 && submitted.length <= 50 && !submitted.includes('|');
         if (valid && !clinics.some(c => c && c.name === submitted)) {

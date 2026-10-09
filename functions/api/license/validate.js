@@ -172,13 +172,30 @@ export async function onRequest(context) {
         }
         // ★ P0-1 安全补强：激活码级短时频控（防对单一合法激活码做换机试探/暴力爆破）
         // 与上面的 IP 限流（每 IP 每小时 20 次）叠加，从"激活码"维度再限一层
-        const codeRate = await checkCodeRateLimit(kv, code, 5);
-        if (!codeRate.allowed) {
-            return json({
-                success: false,
-                error: '该激活码校验过于频繁，请 1 小时后再试（每小时限 5 次）',
-                rateLimited: true
-            }, 429);
+        //
+        // ★ 2026-10-09 修复（真机复现的"超时→重试→锁死一小时"）：
+        //   客户端 claim 自带 12s abort（离线 activate.js:134/149，云端 :129/:145），
+        //   而服务端冷启首次 claim 实测 14.2s（同机重激活 3.5~4.9s）→ 客户端必然报
+        //   "连接服务器超时，请检查网络后重试"并引导客户重试。旧实现把每次重试都计入
+        //   5 次/小时额度，客户重试 5 次后整码被锁 1 小时，而此时码已 used、本机却没
+        //   装上授权（与 KNOWLEDGE §59 同类死局；真机日志实证 429 "每小时限 5 次"）。
+        //   新口径：**同机同码的幂等重放不计额度**——record.status==='used' 且 machineId
+        //   已在 record.devices 中，说明本设备只是"拿回自己已绑定的授权"，不构成换机
+        //   试探；真正的新 machineId 换机试探照旧计额度并被 429 拦截，防护不降级。
+        //   顺带省一次 KV 读（下方 L214 复用同一份 record）。
+        const recordForRate = await getLicense(kv, code);
+        const __sameDeviceReplay = !!(recordForRate && recordForRate.status === 'used'
+            && Array.isArray(recordForRate.devices)
+            && recordForRate.devices.some(d => d && d.machineId === machineId));
+        if (!__sameDeviceReplay) {
+            const codeRate = await checkCodeRateLimit(kv, code, 5);
+            if (!codeRate.allowed) {
+                return json({
+                    success: false,
+                    error: '该激活码校验过于频繁，请 1 小时后再试（每小时限 5 次）',
+                    rateLimited: true
+                }, 429);
+            }
         }
         // ★ 2026-09-11 P2 可疑设备拦截：被封锁设备（verify 上报强信号：Frida 注入/签名分叉）
         //   一律拒绝激活——封锁锚定 machineId，攻击者换激活码也没用（在线能力卡死闭环）
@@ -210,8 +227,9 @@ export async function onRequest(context) {
             }
         }
 
-        // 查询激活码
-        const record = await getLicense(kv, code);
+        // 查询激活码（★ 复用上方为幂等判定已读取的 recordForRate，省一次 KV 读；
+        //   两次读取之间只有纯读操作，无写→无 TOCTOU 变化）
+        const record = recordForRate;
         if (!record) {
             return json({ success: false, error: '激活码不存在' }, 404);
         }
