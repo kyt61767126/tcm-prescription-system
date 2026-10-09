@@ -343,7 +343,23 @@ function matchPrefix(key) {
 // ============================================================================
 // onRequest
 // ============================================================================
+// ★ 2026-10-10 后台聚合端点短时结果缓存（默认 300s；运维开关 config:admin-heavy-cache）
+//   本端点内含 10 处 kv.list（数据体检本身即全量语义），后台反复点击/轮询会再次打满
+//   每日 1000 次 list 配额（本次真机已因此降级）。缓存键绑定调用方凭证哈希 → 跨权限不共享；
+//   只缓存 2xx；{"mode":"off"} 可一键绕过（无需重新部署）。
+import { withAdminResponseCache } from '../_lib/admin-cache.js';
+
 export async function onRequest(context) {
+    return withAdminResponseCache(
+        context.env && context.env.KV,
+        'admin-data-audit',
+        context.request,
+        (context.request.headers.get('Authorization') || ''),
+        () => onRequestInner(context)
+    );
+}
+
+async function onRequestInner(context) {
     const method = context.request.method;
 
     if (method === 'OPTIONS') {

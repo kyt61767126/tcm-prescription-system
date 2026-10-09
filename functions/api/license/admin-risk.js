@@ -151,7 +151,22 @@ export function classifyMultiIp(entries, multiDeviceCapable) {
     };
 }
 
+// ★ 2026-10-10 短时结果缓存（默认 300s；运维开关 config:admin-heavy-cache {"mode":"off"}）
+//   本端点含 integrity_flag 全前缀 list，后台轮询会持续吃 list 配额；缓存键绑定调用方
+//   凭证哈希 → 跨权限不共享；只缓存 2xx。
+import { withAdminResponseCache } from '../_lib/admin-cache.js';
+
 export async function onRequest(context) {
+    return withAdminResponseCache(
+        context.env && context.env.KV,
+        'admin-risk',
+        context.request,
+        (context.request.headers.get('Authorization') || ''),
+        () => onRequestInner(context)
+    );
+}
+
+async function onRequestInner(context) {
     const method = context.request.method;
 
     if (method === 'OPTIONS') {

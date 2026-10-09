@@ -18,7 +18,8 @@ import { listLicenses, getDevices, updateLicense, appendLicenseLog,
     writeAccountTombstone, clearAccountTombstone, sanitizeRecord,
     getDeviceVersion, getDeviceBlock, getAccountTombstone, checkRateLimit,
     findLicensesByMachine,
-    KV_LICENSE_PREFIX, KV_LICENSE_INDEX } from './license/_lib/license-core.js';
+    KV_LICENSE_PREFIX, KV_LICENSE_INDEX,
+    getLicenseCodesByClinic, putLicenseClinicIndex } from './license/_lib/license-core.js';
 // ★ 2026-09-24 P1-2 客户全景聚合：查询类型判定走 schema-guard 权威正则（禁内联）
 import { isValidPhone, isValidMachineId } from './license/_lib/schema-guard.js';
 // ★ 2026-09-10 审计日志单一事实源（并发安全，独立记录 key）
@@ -2932,17 +2933,37 @@ export async function onRequest(context) {
             //   同步匹配集（L 附近 matches 过滤）严格一致。
             const licenseByClinic = new Map();
             try {
-                // ★ 2026-10-10 KV list 配额治理：原 `listAllKeys(kv,'license:')` 全站扫描
-                //   改为读既有授权码索引 system:license_index（1 次 get）；索引异常才回退 list。
-                //   （逐条 get 保持不变，读配额 10 万/天，昂贵的是被 1000/天 卡死的 list）
-                const __licIdx = await kv.get('system:license_index', 'json').catch(() => null);
-                const licKeys = Array.isArray(__licIdx)
-                    ? __licIdx.filter(c => typeof c === 'string' && c).map(c => 'license:' + c)
-                    : await listAllKeys(kv, 'license:');
+                // ★ 2026-10-10 KV 读量治理（两阶段，全量模式）
+                //   ① listAllKeys('license:') → 读既有 system:license_index（免掉被 1000/天卡死的 list）
+                //   ② 全量 166 条逐条 get → 读 license_clinic_index 只取【涉及当前诊所的码】
+                //      （约 1~2 条/诊所），读量降 6~8 倍；索引缺失/脏值 → 回退全索引读，
+                //      并在本轮读取中回填诊所索引（自愈，此后不再全扫）。
+                //   等价性：下游按 clinic 循环取用，孤立 clinicName 的码本来也不会被任何诊所读到。
+                const __clinicMap = await getLicenseCodesByClinic(kv);
+                let licKeys, __needBackfill = false;
+                if (__clinicMap) {
+                    licKeys = [];
+                    for (const c of clinics) {
+                        const codes = __clinicMap.get(c && c.name);
+                        if (Array.isArray(codes)) for (const code of codes) licKeys.push(KV_LICENSE_PREFIX + code);
+                    }
+                } else {
+                    __needBackfill = true;
+                    const __licIdx = await kv.get(KV_LICENSE_INDEX, 'json').catch(() => null);
+                    licKeys = Array.isArray(__licIdx)
+                        ? __licIdx.filter(c => typeof c === 'string' && c).map(c => KV_LICENSE_PREFIX + c)
+                        : await listAllKeys(kv, KV_LICENSE_PREFIX);
+                }
+                const __backfillMap = new Map();
                 for (let i = 0; i < licKeys.length; i += 20) {
                     const batch = licKeys.slice(i, i + 20);
                     const licVals = await Promise.all(batch.map(k => kv.get(k, 'json').catch(() => null)));
                     licVals.forEach(rec => {
+                        // 回填用：任何带 clinicName 的码都登记（状态过滤在下游做，保持与全扫等价）
+                        if (__needBackfill && rec && typeof rec.clinicName === 'string' && rec.clinicName && rec.code) {
+                            if (!__backfillMap.has(rec.clinicName)) __backfillMap.set(rec.clinicName, []);
+                            __backfillMap.get(rec.clinicName).push(rec.code);
+                        }
                         // ★ P2-4 联表（不影响下方心跳聚合）：无 clinicName 的码（如通用
                         //   未绑定码）不进视图
                         if (rec && rec.clinicName && rec.status !== 'disabled' && rec.status !== 'unused') {
@@ -2982,6 +3003,7 @@ export async function onRequest(context) {
                         }
                     });
                 }
+                if (__needBackfill) await putLicenseClinicIndex(kv, __backfillMap);
             } catch (e) { /* 离线端在线聚合读取失败按无在线处理 */ }
 
             // ★ 2026-10-05 历史累计登录（KNOWLEDGE §53）：全量取一次，循环内按

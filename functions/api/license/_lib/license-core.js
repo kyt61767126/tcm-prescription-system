@@ -267,6 +267,83 @@ async function removeMidOwner(kv, machineId, code) {
     await writeMidOwners(kv, machineId, cur.filter(c => c !== code));
 }
 
+// ============================================================================
+//  ★ 2026-10-10 诊所授权索引 license_clinic_index = { clinicName: [code, ...] }
+//
+//  动机：users.js `clinics=true` 全量模式要按 clinicName 聚合"已激活授权"
+//  （P2-4 双源有效期视图 + 离线端在线/今日登录心跳），原先用
+//  listAllKeys('license:') + 逐条 get（实测 166 条 → 166 次 get，按后台轮询
+//  288 次/天估算约 4.8 万读/天，占免费读配额一半）。改为读本索引 → 只 get
+//  涉及诊所的码（约 20~30 条）→ 读量降 6~8 倍，且彻底不再全扫。
+//
+//  写侧：saveLicense 单一落库收口处按 **clinicName diff** 维护——
+//    稳态保存（心跳刷新 lastHeartbeat 等）clinicName 不变 → **零额外 KV 操作**
+//    （旧记录本来就已读取用于设备集合 diff）；仅激活/改名/续期时多 1 读 + 1 写。
+//  读侧：键缺失/脏值 → 返回 null，调用方回退全扫并回填（与 mid_owners 同款策略）。
+//  等价性：全量模式输出按 clinic 循环取用，故"仅按当前诊所集合取码"与全扫输出等价
+//    （clinicName 不属于任何现有诊所的孤立码，本来也不会被任何诊所读取）。
+// ============================================================================
+const KV_LICENSE_CLINIC_INDEX = 'license_clinic_index';
+
+// 读取诊所授权索引 → Map<clinicName, code[]>；不可信（缺失/脏值）返回 null
+async function getLicenseCodesByClinic(kv) {
+    if (!kv) return null;
+    try {
+        const v = await kv.get(KV_LICENSE_CLINIC_INDEX, 'json');
+        if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+        const m = new Map();
+        for (const [name, codes] of Object.entries(v)) {
+            if (typeof name !== 'string' || !name || !Array.isArray(codes)) return null;
+            const arr = codes.filter(c => typeof c === 'string' && isValidLicenseCode(c));
+            // ★ 条目为空 = 脏值/陈旧（我方写入者只写非空条目并会删除空条目）→ 视为不可信整体落全扫。
+            //   若只过滤成空数组就采信，会让该诊所"看起来没有任何授权"→ 静默藏数据。
+            if (arr.length === 0) return null;
+            m.set(name, arr);
+        }
+        return m;
+    } catch (_) { return null; }
+}
+
+// 回填诊所授权索引（仅写非空条目；空映射不写，避免"假空索引"掩盖真实数据）
+async function putLicenseClinicIndex(kv, map) {
+    if (!kv || !map || map.size === 0) return false;
+    try {
+        const obj = {};
+        for (const [name, codes] of map) {
+            const arr = [...new Set(codes.filter(c => typeof c === 'string' && isValidLicenseCode(c)))];
+            if (arr.length) obj[name] = arr;
+        }
+        if (Object.keys(obj).length === 0) return false;
+        await kv.put(KV_LICENSE_CLINIC_INDEX, JSON.stringify(obj));
+        return true;
+    } catch (e) {
+        console.warn('[LicenseClinicIndex] 回填失败（下次读取再全扫）:', e && e.message);
+        return false;
+    }
+}
+
+// saveLicense 内调用：按 clinicName diff 维护（稳态零写）
+async function maintainClinicIndexOnSave(kv, code, oldName, newName) {
+    if (oldName === newName) return;
+    try {
+        const idx = await kv.get(KV_LICENSE_CLINIC_INDEX, 'json').catch(() => null);
+        if (!idx || typeof idx !== 'object' || Array.isArray(idx)) return;   // 缺失/脏 → 留给读侧全扫回填
+        let changed = false;
+        if (oldName && Array.isArray(idx[oldName])) {
+            const next = idx[oldName].filter(c => c !== code);
+            if (next.length) idx[oldName] = next; else delete idx[oldName];
+            changed = true;
+        }
+        if (newName) {
+            if (!Array.isArray(idx[newName])) idx[newName] = [];
+            if (!idx[newName].includes(code)) { idx[newName].push(code); changed = true; }
+        }
+        if (changed) await kv.put(KV_LICENSE_CLINIC_INDEX, JSON.stringify(idx));
+    } catch (e) {
+        console.warn('[LicenseClinicIndex] 维护失败（读侧将全扫回填）:', e && e.message);
+    }
+}
+
 
 // ——— 2026-09-03 (架构统一 P1) admin 激活索引常量：唯一副本供所有写端 API/Service 共享
 //     原 admin-submit.js / order-paid.js / admin-delete.js 各自内联一份，长度和漂移难维护
@@ -740,12 +817,15 @@ async function saveLicense(kv, record) {
     // ★ P2-5：主数据落盘前先取旧设备集合（落盘后读就只剩新值，无法 diff）。
     //   读失败不阻断保存——仅放弃本轮删除侧维护，读侧懒回填会自愈。
     let oldMids = null;
+    let oldClinicName = '';
     try {
         const oldRecord = await kv.get(key, 'json');
         if (oldRecord) {
             oldMids = new Set(getDevices(oldRecord).map(d => d && d.machineId).filter(Boolean));
+            // ★ 2026-10-10 诊所授权索引同样需要 clinicName diff（复用这次已发生的读，零额外读）
+            oldClinicName = typeof oldRecord.clinicName === 'string' ? oldRecord.clinicName : '';
         }
-    } catch (_) { oldMids = null; }
+    } catch (_) { oldMids = null; oldClinicName = ''; }
 
     await kv.put(key, JSON.stringify(record));
 
@@ -799,6 +879,10 @@ async function saveLicense(kv, record) {
         console.warn('[MidOwners] saveLicense 属主集合维护失败（不影响主流程，读侧将全扫重建）:',
             record.code, e && e.message);
     }
+
+    // ★ 2026-10-10 诊所授权索引维护（clinicName diff；稳态零写，详见常量处说明）
+    await maintainClinicIndexOnSave(kv, record.code,
+        oldClinicName, typeof record.clinicName === 'string' ? record.clinicName : '');
     return record;
 }
 
@@ -1981,6 +2065,9 @@ export {
     KV_LICENSE_INDEX,
     KV_MID_INDEX_PREFIX,  // ★ P2-5：mid_idx 派生索引前缀
     KV_MID_OWNERS_PREFIX, // ★ 2026-10-10：mid_owners 属主集合前缀（可穷尽 + O(1)，替代 claim 全扫）
+    KV_LICENSE_CLINIC_INDEX,   // ★ 2026-10-10：clinicName → codes 索引（全量模式免全扫 166 条）
+    getLicenseCodesByClinic,   //    读索引（不可信返回 null → 调用方全扫回填）
+    putLicenseClinicIndex,     //    回填索引
     generateActivationCode,
     generateSignature,
     generateSignatureV3,
