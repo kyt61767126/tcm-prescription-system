@@ -52,6 +52,7 @@ export const KV_PREFIX = {
     license:        'license:',
     licenseLog:     'license_log:',
     licenseLogGap:  'license_log_gap:',   // ★ 审计缺口标记（license_log 写失败时的显式留痕）
+    midOwners:      'mid_owners:',        // ★ 属主集合索引（可穷尽 + O(1)，替代 claim 全扫 166 条）
     freePass:       'free_pass:'
 };
 

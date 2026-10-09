@@ -208,6 +208,66 @@ const KV_LICENSE_INDEX = 'system:license_index';
 const KV_MID_INDEX_PREFIX = 'mid_idx:';
 function midIndexKey(machineId) { return KV_MID_INDEX_PREFIX + machineId; }
 
+// ============================================================================
+//  ★ 2026-10-10 属主集合索引 mid_owners:{mid} = [code, ...]（可穷尽 + O(1)）
+//
+//  真机实测（2026-10-09/10）：claim 响应 24~27s、旧客户端必然"连接服务器超时"。
+//  根因不是冷启（冷启基线仅 1.85s）、也不是自动开通，而是
+//  detachDeviceFromOtherLicenses 为满足 P2-5「穷尽所有属主码」强制全扫：
+//  listLicenses = 1 条 list + **166 条 license 逐条 get**（正常 ~3.3s，KV 抖动时 ~24s）。
+//  而 mid_idx:{mid} 只存【单个】码，无法回答"还有哪些码也含该设备"，故当时只能全扫。
+//
+//  本索引存全部属主码数组，使全扫退化为 O(1)：
+//    · 写侧（saveLicense 唯一落库收口）增量维护：设备新增→并集加入本码；设备移除→移出。
+//      键缺失时先做一次全扫回填再写（每个设备只付一次全扫，此后 O(1)）。
+//    · 读侧（forceScan 路径）先读集合 → 只 get 候选码 → 仍以 license:{code}.devices
+//      **权威校验过滤**；集合多值(陈旧)无害，缺值由"键缺失/脏值→全扫重建"兜底。
+//    · 空数组 [] 视为"经全扫确认无属主"的确定结论，可信任（否则未绑定设备每次都要全扫）。
+//  残余风险（如实记录）：KV 无事务，读侧回填写回 [] 与并发写侧加入存在极窄竞态，
+//    最坏后果=某码 devices 残留该设备（等价于旧行为，下次该码保存时自愈），
+//    不涉及越权/错发授权；相较于每次 claim 全扫 166 条，收益远大于此风险。
+// ============================================================================
+const KV_MID_OWNERS_PREFIX = 'mid_owners:';
+function midOwnersKey(machineId) { return KV_MID_OWNERS_PREFIX + machineId; }
+
+// 读取属主集合：返回数组（可信，含 []）或 null（键缺失/脏值 → 不可信，调用方全扫重建）
+async function readMidOwners(kv, machineId) {
+    try {
+        const v = await kv.get(midOwnersKey(machineId), 'json');
+        if (!Array.isArray(v)) return null;
+        if (v.some(c => typeof c !== 'string' || !isValidLicenseCode(c))) return null;
+        return v;
+    } catch (_) { return null; }
+}
+
+async function writeMidOwners(kv, machineId, codes) {
+    try {
+        await kv.put(midOwnersKey(machineId), JSON.stringify([...new Set(codes)]));
+    } catch (e) {
+        console.warn('[MidOwners] 属主集合写入失败（读侧将全扫重建自愈）:', e && e.message);
+    }
+}
+
+// 加入属主：键缺失时先全扫回填（每设备仅一次），避免写出不完整集合
+async function addMidOwner(kv, machineId, code) {
+    let cur = await readMidOwners(kv, machineId);
+    if (cur === null) {
+        try {
+            const scanned = await findLicensesByMachine(kv, machineId, { forceScan: true });
+            cur = [...new Set(scanned.map(r => r.code))];
+        } catch (_) { cur = []; }
+    }
+    if (cur.includes(code)) return;
+    await writeMidOwners(kv, machineId, cur.concat([code]));
+}
+
+async function removeMidOwner(kv, machineId, code) {
+    const cur = await readMidOwners(kv, machineId);
+    if (cur === null || !cur.includes(code)) return;
+    await writeMidOwners(kv, machineId, cur.filter(c => c !== code));
+}
+
+
 // ——— 2026-09-03 (架构统一 P1) admin 激活索引常量：唯一副本供所有写端 API/Service 共享
 //     原 admin-submit.js / order-paid.js / admin-delete.js 各自内联一份，长度和漂移难维护
 const KV_ADMIN_REQ_INDEX = 'admin_req_index';
@@ -725,6 +785,20 @@ async function saveLicense(kv, record) {
         console.warn('[MidIndex] saveLicense 索引维护失败（不影响主流程，读侧将懒回填）:',
             record.code, e && e.message);
     }
+
+    // ★ 2026-10-10 属主集合维护：**每次保存都确保 newMids 在集合中**（不只是新增设备）。
+    //   原因：重激活时设备集合未变（addedMids 为空），若只在"新增设备"时才维护，
+    //   已绑定设备永远拿不到属主集合 → claim 仍要全扫。此处多付 1 次 get，
+    //   换掉原先全扫的 166 次 get（键缺失时 addMidOwner 会全扫回填一次，此后 O(1)）。
+    try {
+        const newMids2 = new Set(getDevices(record).map(d => d && d.machineId).filter(Boolean));
+        const goneMids = oldMids ? [...oldMids].filter(m => !newMids2.has(m)) : [];
+        for (const mid of newMids2) await addMidOwner(kv, mid, record.code);
+        for (const mid of goneMids) await removeMidOwner(kv, mid, record.code);
+    } catch (e) {
+        console.warn('[MidOwners] saveLicense 属主集合维护失败（不影响主流程，读侧将全扫重建）:',
+            record.code, e && e.message);
+    }
     return record;
 }
 
@@ -771,9 +845,41 @@ async function findLicensesByMachine(kv, machineId, options = {}) {
         // direct===null（码明确不存在）或在册校验失败：保留 indexedCode，全扫无归属时清键
     }
 
+    // ★ 2026-10-10 属主集合快路径：forceScan 的语义是"穷尽属主码"，用集合索引 O(1) 达成。
+    //   真机实测原先全扫 166 条 license → claim 24~27s（旧客户端必超时）。
+    if (forceScan) {
+        const owners = await readMidOwners(kv, machineId);
+        if (owners !== null) {
+            const cands = new Set(owners);
+            // mid_idx 单值兜底：集合万一漏项，单值索引通常仍指向某个属主（空集场景的关键保险）
+            try {
+                const single = await kv.get(idxKey, 'json');
+                if (typeof single === 'string' && isValidLicenseCode(single)) cands.add(single);
+            } catch (_) { /* 忽略，走下面的权威校验 */ }
+            const recs = [];
+            for (const c of cands) {
+                const r = await getLicense(kv, c).catch(() => null);
+                if (r && getDevices(r).some(d => d && d.machineId === machineId)) recs.push(r);
+            }
+            // 有命中，或集合明确为空（经全扫确认无属主）→ 可定论
+            if (recs.length > 0 || owners.length === 0) {
+                if (!readOnly && recs.length > 0) {
+                    await kv.put(idxKey, JSON.stringify(recs[0].code)).catch(() => {});
+                }
+                return recs;
+            }
+            // 集合非空但权威校验零命中 → 集合疑似陈旧，落全扫重建（安全优先）
+        }
+    }
+
     // 全量扫描（旧行为；强制全扫/索引缺失/陈旧/脏值/直查异常均走这里）
     const records = await listLicenses(kv);
     const hits = records.filter(r => getDevices(r).some(d => d && d.machineId === machineId));
+
+    // ★ 2026-10-10 全扫后回填属主集合（含空数组，使未绑定设备不再反复全扫）
+    if (!readOnly) {
+        await writeMidOwners(kv, machineId, hits.map(r => r.code));
+    }
 
     if (!readOnly) {
         try {
@@ -1874,6 +1980,7 @@ export {
     KV_LICENSE_PREFIX,
     KV_LICENSE_INDEX,
     KV_MID_INDEX_PREFIX,  // ★ P2-5：mid_idx 派生索引前缀
+    KV_MID_OWNERS_PREFIX, // ★ 2026-10-10：mid_owners 属主集合前缀（可穷尽 + O(1)，替代 claim 全扫）
     generateActivationCode,
     generateSignature,
     generateSignatureV3,
