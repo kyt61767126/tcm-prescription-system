@@ -25,6 +25,9 @@
 import { parseAuthHeader, isPlatformAdmin, KV_SYSTEM_CLINICS } from '../_lib/auth.js';
 import { getKV, listLicenses } from './_lib/license-core.js';
 import { listAllKeys } from '../_lib/kv.js';
+// ★ 2026-10-09 KV list 配额治理：逐诊所统计原本每诊所打一条 list（N 家 = N 条），
+//   改用显式索引（1 次 get），详见 _lib/prescriptions-store.js
+import { getPrescriptionDayKeys } from '../_lib/prescriptions-store.js';
 
 function corsHeaders() {
     return {
@@ -107,8 +110,8 @@ export async function onRequest(context) {
                     })();
                     entry.sizeKB += Math.round(rxRaw.length * 2 / 1024);
                 }
-                // 日期分 key：clinic:{id}:prescriptions:{yymmdd}
-                const dayKeys = await listAllKeys(kv, `clinic:${clinic.id}:prescriptions:`).catch(() => []);
+                // 日期分 key：clinic:{id}:prescriptions:{yymmdd}（★ 2026-10-09 改显式索引，不再逐诊所 list）
+                const dayKeys = await getPrescriptionDayKeys(kv, clinic.id).catch(() => []);
                 for (const dk of dayKeys) {
                     const dRaw = await kv.get(dk);
                     if (!dRaw) continue;

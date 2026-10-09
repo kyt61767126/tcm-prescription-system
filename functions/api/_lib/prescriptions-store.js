@@ -5,7 +5,12 @@
 //   /prescriptions GET 一次完整网络往返 ~1s），users.js 需要复用
 //   prescriptions.js 的 D1 读取与行转换逻辑，抽为共享模块。
 //   与 prescriptions.js 内部实现逐字符一致（同源抽取，行为不变）。
+//
+//  ★ 2026-10-09 扩充：同时承载处方日期分片【显式索引】助手（KV list 配额治理），
+//    prescriptions.js 与 users.js 共用（见文件末尾说明）。
 // ============================================================================
+
+import { listAllKeys } from './kv.js';
 
 // D1 行 → 处方对象（恢复 items/media_files/extra 的 JSON 解析）
 export function d1RowToPrescription(row) {
@@ -92,4 +97,84 @@ export function ensurePrescriptionSchema(db) {
         throw e;
     });
     return _ensureSchemaPromise;
+}
+
+// ============================================================================
+//  ★ 2026-10-09 KV list 配额治理：处方日期分片的【显式索引】
+//
+//  触发：Cloudflare 告警「已超过每日操作限制 —— Workers KV 免费套餐每日 list 1000 次」
+//  （2026-10-09 20:38，list 操作返回 429，直到 00:00 UTC 重置）。
+//
+//  根因（读放大）：处方按 clinic:{id}:prescriptions:{YYMMDD} 分片存放，而读取路径用
+//  listAllKeys 扫全部日期 key —— **每读一次处方 = 1 条 list**。云桌面/APP 轮询、
+//  users.js 首屏处方、admin-usage 逐诊所统计各打一条，几小时即可吃光日配额。
+//
+//  修复：维护显式索引键 clinic:{id}:prescriptions_index = ["260101","260102",...]
+//    · 读路径 = 1 次 get 索引 + 每日期 1 次 get（list 归零）；
+//    · 索引缺失（首次上线 / 被清理）→ 懒回填：list 一次并写回，此后不再 list；
+//    · ★ 写入顺序铁律：**先写索引、后写日期 key**。崩溃/异常最坏只留「索引里有、
+//      数据还没写」——读时 get 得 null 直接跳过，下次写入自愈；绝不出现
+//      「数据已写、索引没记」导致该日处方永久不可见（医疗数据不可接受）。
+// ============================================================================
+export function prescriptionsDayPrefix(clinicId) {
+    return `clinic:${clinicId}:prescriptions:`;
+}
+export function prescriptionsDayKey(clinicId, yymmdd) {
+    return prescriptionsDayPrefix(clinicId) + yymmdd;
+}
+export function prescriptionsDayIndexKey(clinicId) {
+    return `clinic:${clinicId}:prescriptions_index`;
+}
+
+// 取某诊所全部日期分片 key（索引优先；索引缺失才 list 一次并回填）
+export async function getPrescriptionDayKeys(kv, clinicId) {
+    const prefix = prescriptionsDayPrefix(clinicId);
+    const idxKey = prescriptionsDayIndexKey(clinicId);
+    if (kv) {
+        const idx = await kv.get(idxKey, 'json').catch(() => null);
+        if (Array.isArray(idx)) {
+            return idx.filter(d => typeof d === 'string' && d).map(d => prefix + d);
+        }
+    }
+    const keys = await listAllKeys(kv, prefix).catch(() => []);
+    const days = keys.map(k => k.slice(prefix.length)).filter(d => /^\d{6}$/.test(d));
+    if (days.length) {
+        await kv.put(idxKey, JSON.stringify(days.slice().sort())).catch(() => {});
+    }
+    return keys;
+}
+
+// 确保某日期已登记进索引 —— 必须在写入该日期 key【之前】调用（顺序铁律见上）
+export async function ensurePrescriptionDayIndexed(kv, clinicId, yymmdd) {
+    const day = String(yymmdd || '');
+    if (!kv || !/^\d{6}$/.test(day)) return false;
+    const prefix = prescriptionsDayPrefix(clinicId);
+    const idxKey = prescriptionsDayIndexKey(clinicId);
+    const idx = await kv.get(idxKey, 'json').catch(() => null);
+    if (Array.isArray(idx)) {
+        if (idx.includes(day)) return true;
+        idx.push(day);
+        idx.sort();
+        try {
+            await kv.put(idxKey, JSON.stringify(idx));
+            return true;
+        } catch (e) {
+            // ★ 索引写失败 ⇒ 主动删掉索引键，让下次读取走"索引缺失 → list 完整回填"，
+            //   宁可多花一条 list，也绝不留"数据已写、索引没记"的不可见窗口。
+            await kv.delete(idxKey).catch(() => {});
+            return false;
+        }
+    }
+    // 索引尚不存在：懒回填（含本日期），避免"只登记本日期、漏掉历史日期"
+    const keys = await listAllKeys(kv, prefix).catch(() => []);
+    const days = keys.map(k => k.slice(prefix.length)).filter(d => /^\d{6}$/.test(d));
+    if (!days.includes(day)) days.push(day);
+    days.sort();
+    try {
+        await kv.put(idxKey, JSON.stringify(days));
+        return true;
+    } catch (e) {
+        await kv.delete(idxKey).catch(() => {});
+        return false;
+    }
 }

@@ -1,9 +1,13 @@
 import { parseAuthHeader, isPlatformAdmin, isClinicAdmin, isAdmin, isCashier, userMustChangePassword } from './_lib/auth.js';
-import { getKV, listAllKeys } from './_lib/kv.js';
+import { getKV } from './_lib/kv.js';
 import { getDB, isD1Enabled } from './_lib/d1.js';
 import { writeAuditLog } from './_lib/audit-log.js';
 // ★ 2026-09-15 登录提速：D1 读取/行转换抽至 _lib/prescriptions-store.js（与 users.js 共享）
-import { d1LoadPrescriptions, d1RowToPrescription, safeJsonParse, ensurePrescriptionSchema } from './_lib/prescriptions-store.js';
+// ★ 2026-10-09 KV list 配额治理：日期分片改为显式索引，读路径不再 listAllKeys
+import {
+    d1LoadPrescriptions, d1RowToPrescription, safeJsonParse, ensurePrescriptionSchema,
+    getPrescriptionDayKeys, ensurePrescriptionDayIndexed
+} from './_lib/prescriptions-store.js';
 
 // P1-6 安全增强：CORS 白名单（与 users.js 一致）
 function getAllowedOrigins() {
@@ -195,9 +199,10 @@ async function loadAllPrescriptions(kv, clinicId) {
         }
     }
 
-    // 2) 扫描所有日期分 key，覆盖旧全量中同 id 的记录
-    const prefix = getDayPrescriptionsPrefix(clinicId);
-    const dayKeys = await listAllKeys(kv, prefix).catch(() => []);
+    // 2) 读取所有日期分 key，覆盖旧全量中同 id 的记录
+    //    ★ 2026-10-09：改为显式索引读取（不再 listAllKeys —— 每次读取一条 list 是
+    //      KV 每日 list 1000 配额被打满的根因；索引缺失时内部懒回填一次）
+    const dayKeys = await getPrescriptionDayKeys(kv, clinicId);
     for (const k of dayKeys) {
         const arr = await kv.get(k, 'json').catch(() => null);
         if (Array.isArray(arr)) {
@@ -216,6 +221,10 @@ async function loadAllPrescriptions(kv, clinicId) {
 async function upsertToDayKey(kv, clinicId, prescription) {
     const yymmdd = extractYYMMDD(prescription);
     const key = getDayPrescriptionsKey(clinicId, yymmdd);
+    // ★ 2026-10-09 顺序铁律：先登记索引、再写日期 key（详见 prescriptions-store.js）。
+    //   中途失败最坏只留"索引有、数据没写"（读时 get 得 null 跳过、下次写入自愈），
+    //   绝不出现"数据已写、索引没记"导致该日处方永久不可见。
+    await ensurePrescriptionDayIndexed(kv, clinicId, yymmdd);
     const list = await kv.get(key, 'json').catch(() => null) || [];
     const idx = list.findIndex(p => String(p.id) === String(prescription.id));
     if (idx >= 0) {
@@ -232,9 +241,8 @@ async function upsertToDayKey(kv, clinicId, prescription) {
 async function deletePrescriptionById(kv, clinicId, id) {
     const strId = String(id);
 
-    // 1) 先查日期分 key
-    const prefix = getDayPrescriptionsPrefix(clinicId);
-    const dayKeys = await listAllKeys(kv, prefix).catch(() => []);
+    // 1) 先查日期分 key（★ 2026-10-09 显式索引，不再 listAllKeys）
+    const dayKeys = await getPrescriptionDayKeys(kv, clinicId);
     for (const k of dayKeys) {
         const list = await kv.get(k, 'json').catch(() => null);
         if (!Array.isArray(list)) continue;
