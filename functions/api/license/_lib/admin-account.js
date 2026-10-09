@@ -450,8 +450,15 @@ export async function preflightTaobaoCloudAuto(kv, opts) {
     const phone = String(o.phone || '').trim();
     if (!/^1[3-9]\d{9}$/.test(phone)) return { ok: false, reason: 'bad-phone' };
     if (!o.machineId || !o.code) return { ok: false, reason: 'bad-args' };
+    // ★ 占用判定铁律（2026-10-09 修正）：以【当前真实用户行】(phoneHasCloudAccount)
+    //   为唯一占用依据。pending（待审核/未付款）申请=流程未闭环，照旧拦截；activated
+    //   旧申请若对应用户行已被管理员删除，仅作历史凭证不得拦截——原逻辑见 activated
+    //   即拒，与"管理员删账号=允许重开"的设计本意矛盾，实测只删用户后买家"激活成功
+    //   却无诊所可登录"。
     const occupied = await findPhoneOccupancy(kv, phone);
-    if (occupied) return { ok: false, reason: 'req-' + occupied.kind };
+    if (occupied && occupied.kind === 'pending_activation') {
+        return { ok: false, reason: 'req-pending_activation' };
+    }
     const existed = await phoneHasCloudAccount(kv, phone);
     if (existed) return { ok: false, reason: 'cloud-account-exists', clinicName: existed.clinicName };
     const resolved = await resolveAutoCloudClinicName(kv, {
@@ -519,7 +526,9 @@ export async function commitTaobaoCloudAuto(kv, opts) {
     } catch (e) {
         return { ok: false, reason: 'recheck-read-error', detail: e && e.message };
     }
-    if (occupied) return { ok: false, reason: 'req-' + occupied.kind + '-race' };
+    if (occupied && occupied.kind === 'pending_activation') {
+        return { ok: false, reason: 'req-pending_activation-race' };
+    }
     try {
         const existed = await phoneHasCloudAccount(kv, phone);
         if (existed) return { ok: false, reason: 'cloud-account-exists-race', clinicName: existed.clinicName };
