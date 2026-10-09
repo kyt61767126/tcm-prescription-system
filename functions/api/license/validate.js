@@ -43,7 +43,7 @@ import {
     evaluateProductClassGate, normalizeCodeProductClass // ★ 2026-10-07 码-端锁定闸
 } from './_lib/license-core.js';
 import { getDeviceBlock } from './_lib/license-core.js';
-import { provisionCloudAccount, preflightTaobaoCloudAuto, commitTaobaoCloudAuto, attachLicenseToAutoRequest } from './_lib/admin-account.js';
+import { provisionCloudAccount, preflightTaobaoCloudAuto, commitTaobaoCloudAuto, attachLicenseToAutoRequest, renewClinicForRepeatPurchase } from './_lib/admin-account.js';
 import { hashPassword } from '../_lib/auth.js';
 
 // ★ P2 安全修复：收紧 CORS，仅允许合法 Origin
@@ -379,15 +379,59 @@ export async function onRequest(context) {
                         carrier: __taobaoCarrier
                     };
                 } else {
-                    await appendLicenseLog(kv, code, {
-                        action: 'taobao-' + (__taobaoAutoMode === 'offline' ? 'local' : 'cloud') + '-auto-skip',
-                        time: getNowISO(),
-                        ip: ip,
-                        operator: clientPhone,
-                        detail: (__taobaoAutoMode === 'offline' ? '本地' : '云端') +
-                            '自动开通预检未通过（不影响激活）：' + __autoPre.reason +
-                            (__autoPre.clinicName ? '，已在诊所=' + __autoPre.clinicName : '')
-                    }).catch(() => {});
+                    const __autoTagName = __taobaoAutoMode === 'offline' ? 'local' : 'cloud';
+                    const __modeName = __taobaoAutoMode === 'offline' ? '本地' : '云端';
+                    // ★ 2026-10-09 重复购买顺延：同手机号已有账号时不再"只发一张 license 就完事"
+                    //   —— 把新码天数顺延到该诊所 expiresAt，消除"付款了但没有任何新增权益"
+                    let __renewInfo = null;
+                    if (__autoPre.reason === 'cloud-account-exists') {
+                        try {
+                            __renewInfo = await renewClinicForRepeatPurchase(kv, {
+                                code, phone: clientPhone, days: record.days, type: record.type
+                            });
+                        } catch (e) {
+                            console.warn('[TaobaoAuto] 重复购买顺延异常（不影响激活）:', e && e.message);
+                        }
+                    }
+                    if (__renewInfo && __renewInfo.renewed) {
+                        const __renewLogOk = await appendLicenseLog(kv, code, {
+                            action: 'taobao-' + __autoTagName + '-auto-renewed',
+                            time: getNowISO(),
+                            ip: ip,
+                            operator: clientPhone,
+                            detail: __modeName + '码重复购买顺延：诊所=' + __renewInfo.clinicName +
+                                '（' + __renewInfo.clinicId + '），有效期 ' +
+                                (__renewInfo.oldExpiresAt || 'null') + ' → ' + __renewInfo.newExpiresAt +
+                                '（+' + __renewInfo.days + ' 天）' +
+                                (__renewInfo.tierUpgradeSuggested
+                                    ? '；★ 本码为机构版但该诊所当前是个人版，版本权益未自动升级，请客服人工判断'
+                                    : '')
+                        });
+                        if (__renewLogOk !== true) {
+                            console.error('[TaobaoAuto] 顺延审计未落库（已留缺口标记）: code=' + code +
+                                ' clinic=' + __renewInfo.clinicId);
+                        }
+                    } else if (__renewInfo && __renewInfo.already) {
+                        await appendLicenseLog(kv, code, {
+                            action: 'taobao-' + __autoTagName + '-auto-renewed',
+                            time: getNowISO(), ip: ip, operator: clientPhone,
+                            detail: __modeName + '码重复购买顺延：本码此前已顺延过（幂等命中），有效期仍为 ' +
+                                __renewInfo.newExpiresAt + '，不重复叠加'
+                        });
+                    } else {
+                        const __skipLogOk = await appendLicenseLog(kv, code, {
+                            action: 'taobao-' + __autoTagName + '-auto-skip',
+                            time: getNowISO(),
+                            ip: ip,
+                            operator: clientPhone,
+                            detail: __modeName + '自动开通预检未通过（不影响激活）：' + __autoPre.reason +
+                                (__autoPre.clinicName ? '，已在诊所=' + __autoPre.clinicName : '') +
+                                (__renewInfo && __renewInfo.reason ? '，顺延未执行：' + __renewInfo.reason : '')
+                        });
+                        if (__skipLogOk !== true) {
+                            console.error('[TaobaoAuto] 跳过审计未落库（已留缺口标记）: code=' + code);
+                        }
+                    }
                 }
             } catch (e) {
                 console.warn('[TaobaoAuto] 预检异常（本次不开通，不影响激活）:', e.message);
@@ -758,7 +802,17 @@ export async function onRequest(context) {
         // 本地客户端不走云端登录，provision 失败无自愈通道，需人工补开——日志 action
         //   与云端区分（pending-manual vs pending-selfheal），防运维看板误判终将收敛
         const __autoPendingAction = __autoTag === 'local' ? 'pending-manual' : 'pending-selfheal';
-        if (__taobaoAuto) {
+        // ★ 2026-10-09 响应提速（旧客户端救援）：自动开通改为 context.waitUntil 后台执行。
+        //   原先必须把 admin_req 三索引 + 诊所/账号开通全部 await 完才返回 license，
+        //   实测 claim 3.5~14s（冷启更久，真机见过 22.7s），而已装机的旧客户端只有
+        //   12s/15s 预算 → 必然报"连接服务器超时"，且服务端可能已提交、本地却没装上。
+        //   改为后台执行后 license 立即返回，旧包无需升级即可通过。
+        //   唯一例外：客户【留空密码】时服务端要一次性回传随机初始密码 → 必须同步。
+        //   后台失败不影响激活：§60 两条自愈链（users.js 登录自愈 / admin-status 补开）
+        //   会幂等补开；且本轮审计改动让任何丢失都在后台可见。
+        const __autoMustAwaitProvision = __pwdCapV2 && __autoRandomInitial;
+        let __autoDeferred = false;
+        const __runTaobaoAuto = async () => {
             try {
                 const __autoRes = await commitTaobaoCloudAuto(kv, {
                     code,
@@ -833,6 +887,18 @@ export async function onRequest(context) {
                             ' action=' + (__autoRes.provisioned ? 'provisioned' : __autoPendingAction) +
                             '（开通本身已成功，不影响客户）');
                     }
+                    // ★ 2026-10-09 异步化配套：license 回填必须与开通同生共死。
+                    //   同步路径由响应前的统一回填负责（下方 __autoRequestId 分支）；
+                    //   异步路径必须在这里回填，否则 admin-status 的 machineId 自救扫描会
+                    //   命中 licenseBase64 为 null 的记录 → 客户端误判"已自动安装"却没装上
+                    //   license（§60 双审修复记录的原症状）。
+                    if (__autoDeferred) {
+                        try {
+                            await attachLicenseToAutoRequest(kv, __autoRes.requestId, encodeLicenseBase64(licenseData));
+                        } catch (e) {
+                            console.warn('[TaobaoAuto] 异步路径 license 回填失败（待 admin-status 补开兜底）:', e && e.message);
+                        }
+                    }
                 } else {
                     const __skipLogOk = await appendLicenseLog(kv, code, {
                         action: 'taobao-' + __autoTag + '-auto-commit-skipped',
@@ -862,13 +928,34 @@ export async function onRequest(context) {
                         ' err=' + (e && e.message || e));
                 }
             }
+        };
+
+        // ★ 调度：随机初始密码分支必须同步（要随响应一次性下发）；其余走 waitUntil 后台
+        if (__taobaoAuto) {
+            if (__autoMustAwaitProvision) {
+                await __runTaobaoAuto();
+            } else if (typeof context.waitUntil === 'function') {
+                // ★ 先启动任务再交给 waitUntil；若 waitUntil 抛错，await 同一个 promise
+                //   （此前写成 context.waitUntil(__runTaobaoAuto()) + 失败再调一次 → 会双开）
+                const __autoJob = __runTaobaoAuto();
+                try {
+                    context.waitUntil(__autoJob);
+                    __autoDeferred = true;
+                } catch (_) {
+                    await __autoJob;   // waitUntil 不可用 → 复用同一任务同步等完，行为不变
+                }
+            } else {
+                await __runTaobaoAuto();       // 老运行时无 waitUntil → 回退同步
+            }
         }
 
         // ★ 设备-版本绑定：激活成功后绑定设备版本（同一设备只能注册一个版本）
         try {
             await setDeviceVersion(kv, machineId, versionOf(record.type), {
                 licenseCode: code,
-                clinicName: __boundClinicName || clinicName || '',
+                // 异步路径下 __boundClinicName 尚未回写（后台任务里才拿到最终名）→
+                // 退回预检解析名，保证 device_version 至少有可读诊所名
+                clinicName: __boundClinicName || (__taobaoAuto && __taobaoAuto.clinicName) || clinicName || '',
                 productClass: pClass || undefined,    // ★ 归一后的规范值（cloud/offline）
                 clientClass: cClass || undefined
             });
@@ -929,7 +1016,7 @@ export async function onRequest(context) {
             time: updates.activatedAt,
             ip: ip,
             operator: licenseUser,
-            detail: `machineId=${machineId.substring(0, 8)}..., clinicName=${__boundClinicName || 'null'}, devicesCount=${newDevices.length}/${maxDevices}`
+            detail: `machineId=${machineId.substring(0, 8)}..., clinicName=${__boundClinicName || (__taobaoAuto && __taobaoAuto.clinicName) || 'null'}, devicesCount=${newDevices.length}/${maxDevices}`
         });
 
         // 编码为 base64（客户端写入 license.dat 的格式）
@@ -939,7 +1026,8 @@ export async function onRequest(context) {
         //   admin-status/admin-submit 的 machineId 自救扫描会把该记录当"本机已
         //   激活"命中并下发其 licenseBase64；为 null 时客户端会误判"已自动安装"
         //   却没装上 license。回填后该记录与人工审批记录完全同形；失败不阻断。
-        if (__autoRequestId) {
+        // 异步路径已在其后台任务内回填（见上方 __autoDeferred 分支），此处只处理同步路径
+        if (__autoRequestId && !__autoDeferred) {
             await attachLicenseToAutoRequest(kv, __autoRequestId, licenseBase64);
         }
 
@@ -951,6 +1039,9 @@ export async function onRequest(context) {
             voiceUpgraded: voiceUpgraded,
             // ★ 2026-10-08 淘宝云端备货码自动开通标记（一期仅服务端记账/审计用，
             //   客户端无分支消费；false 含"待自愈补开"，账号最终以登录成功为准）
+            // ★ 2026-10-09 响应提速后：非随机密码场景下开通已改为 waitUntil 后台执行，
+            //   故此处恒为 false 属正常（不代表未开通）——开通结果以 admin_req 台账为准
+            //   （后台"激活码日志"已叠加展示），客户端一律以登录成功判定。
             cloudAccountProvisioned: __cloudProvisioned,
             // ★ 二期：随机初始密码仅此一次随激活响应返回（关闭不可再查），
             //   自设密码/旧客户端/admin 分支均不下发；mustChangePassword 同步

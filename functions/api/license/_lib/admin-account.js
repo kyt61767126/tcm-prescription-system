@@ -698,6 +698,89 @@ export async function commitTaobaoCloudAuto(kv, opts) {
 
 // 淘宝无人通道 orderSource 判定（云端/本地自动开通记录在三处自愈点都必须
 //   带 __autoRequestId 属主标记；新增通道枚举时只改这里一处）
+// ============================================================================
+// ★ 2026-10-09 重复购买顺延（淘宝码"同手机号已有账号"口径，产品选"顺延/续费语义"）
+//
+//  问题：同手机号已有云端账号时，预检返回 cloud-account-exists → 自动开通整体跳过
+//  （设计如此，避免一号双所）→ **新码的 N 天不会落到已有诊所的 expiresAt 上**，
+//  客户表现为"付款了但没有任何新增权益"，而原先这条只写日志、客服不会主动发现
+//  （真机实证：客户 15200069705 的诊所停在 2027-10-08，第二枚码无处生效）。
+//
+//  口径：把新码天数顺延到该手机号所在诊所的 expiresAt
+//    · 基线 = max(now, 当前 expiresAt) + days（已过期从当下起算，未到期向后叠加）
+//    · ★ 幂等双保险：①调用方仅在 record.status==='unused' 时调用（码一旦激活即 used，
+//      同机重激活不再进来）；②taobao_renew_code:{code} 一次性标记，覆盖"顺延成功但
+//      后续闸拒绝、码仍为 unused、客户重试"的窄窗 → 绝不重复叠加天数
+//    · ★ 停用(disabled)诊所 fail-closed 不顺延（平台停用是最后一道闸，见 §AR-01）
+//    · ★ 不改 edition：不因为顺延就静默授予更高版本权益；若码档次高于诊所当前
+//      edition，返回 tierUpgradeSuggested 供后台提示客服人工判断
+//  返回：{ ok, renewed, already, clinicId, clinicName, oldExpiresAt, newExpiresAt,
+//          days, tierUpgradeSuggested } 或 { ok:false, reason }
+// ============================================================================
+function autoRenewMarkerKey(code) { return 'taobao_renew_code:' + code; }
+
+export async function renewClinicForRepeatPurchase(kv, opts) {
+    const o = opts || {};
+    const code = String(o.code || '').trim();
+    const phone = String(o.phone || '').trim();
+    if (!kv || !code || !/^1[3-9]\d{9}$/.test(phone)) return { ok: false, reason: 'bad-args' };
+
+    // ① 幂等：本码已顺延过 → 返回既有结果（绝不二次叠加）
+    const prev = await kv.get(autoRenewMarkerKey(code), 'json').catch(() => null);
+    if (prev && prev.newExpiresAt) {
+        return {
+            ok: true, renewed: false, already: true,
+            clinicId: prev.clinicId, clinicName: prev.clinicName,
+            oldExpiresAt: prev.oldExpiresAt, newExpiresAt: prev.newExpiresAt,
+            days: prev.days, tierUpgradeSuggested: false
+        };
+    }
+
+    // ② 定位该手机号所在诊所（真实用户行为唯一占用依据）
+    const existed = await phoneHasCloudAccount(kv, phone);
+    if (!existed || !existed.clinicId) return { ok: false, reason: 'no-account' };
+
+    // ③ 新鲜重读诊所清单后落库（与 provisionCloudAccount 同款 RMW 做法，缩小竞态窗）
+    const clinics = await getClinicsOrThrow(kv);
+    const idx = clinics.findIndex(c => c && c.id === existed.clinicId);
+    if (idx < 0) return { ok: false, reason: 'clinic-not-found' };
+    const clinic = clinics[idx];
+    if (clinic.status === 'disabled') {
+        return { ok: false, reason: 'clinic-disabled', clinicName: clinic.name };
+    }
+
+    const days = Number(o.days) > 0 ? Math.floor(Number(o.days)) : 365;
+    const nowMs = Date.now();
+    const curMs = Date.parse(clinic.expiresAt || '');
+    const baseMs = (Number.isFinite(curMs) && curMs > nowMs) ? curMs : nowMs;
+    const oldExpiresAt = clinic.expiresAt || null;
+    const newExpiresAt = new Date(baseMs + days * 86400000).toISOString();
+
+    clinic.expiresAt = newExpiresAt;
+    clinic.lastRenewedAt = new Date(nowMs).toISOString();
+    clinic.lastRenewCode = code;
+    clinics[idx] = clinic;
+    await kv.put(KV_SYSTEM_CLINICS, JSON.stringify(clinics));
+
+    const tierUpgradeSuggested = String(o.type || '') === 'pro'
+        && /personal/.test(String(clinic.edition || ''));
+
+    // ④ 一次性标记（标记写失败不回滚顺延：调用方 status==='unused' 是主幂等闸，
+    //    本标记只覆盖"顺延成功但码仍 unused 后重试"的窄窗）
+    await kv.put(autoRenewMarkerKey(code), JSON.stringify({
+        code, phone, clinicId: clinic.id, clinicName: clinic.name, days,
+        oldExpiresAt, newExpiresAt, type: o.type || '', at: new Date(nowMs).toISOString()
+    })).catch((e) => {
+        console.warn('[TaobaoRenew] 顺延幂等标记写入失败（本次顺延已生效）:', e && e.message);
+    });
+
+    return {
+        ok: true, renewed: true, already: false,
+        clinicId: clinic.id, clinicName: clinic.name,
+        oldExpiresAt, newExpiresAt, days, tierUpgradeSuggested
+    };
+}
+
 export function isTaobaoAutoOrderSource(s) {
     return s === 'taobao-cloud-auto' || s === 'taobao-local-auto';
 }
