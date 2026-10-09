@@ -1847,3 +1847,13 @@
 * **生效方式/运维**：functions push 后 CF Pages 约 70s 自动部署，local 链**默认即开**（无熔断键=放行，用户已拍板直接放量不灰度）。紧急关停写 KV `config:taobao-local-auto={"mode":"off"}`（只关新开）。PM8F 客户（手机号 15725958012，license:BNZC-PM8F-HJ8C-WNZP-JZAN）：本机用 bat v2 清理后重激恢复本机授权（码绑本机不另扣次数）；后台台账已于 2026-10-09 按上面 SOP 补齐（clinic_yo20azyg6h1t，唯一管理员即手机号，实测登录成功，已补 desktop 载体，卡片显示与自动链客户一致）。
 * **已知接受（非本次回归，未来项）**：①跨模式/跨版本复购占号偏严（99→199 同手机第二条码自动开通被静默 skip、edition 不升级）——与官网 website 同水位，需产品定夺；②离线 APP Tab2 claim body 不带 pwdCap/password（shared/auth-core/offline.js），三期后该渠道若上 APP 会建固定 admin 账户（桌面 activate.js 正常带）；③carrier 恒 desktop 会堵死三条「仅补空」载体自愈（展示标签非权益，现实风险低）。
 
+## 六十三、CF Workers KV 日告警读放大治理：clinics lite 轻量接口 + 后台轮询降频（2026-10-09，纯 functions+admin 双副本，五端零重打包 push 即达）
+
+* **触发**：Cloudflare 告警邮件——Workers KV 免费套餐（**1GB / 10 万读·每天 UTC0 重置 / 1000 写删列·每天**）日操作达 50%；超限后所有 KV 操作返 429（客户登录/授权验证一并失败）。付费 Workers Paid **$5/月含 1000 万读+100 万写每月**（约 33 万读/天）。
+* **根源（代码实证，非客户使用）**：`refreshTodoBadges`（旧 60s 轮询）调全量 `GET /users?clinics=true`——[users.js](functions/api/users.js) 该分支一次调用要 list+逐个 get 全部 `user_session:` + 全部 `license:`（线上 127 个）+ 每诊所 `clinic:{id}:users` + 登录历史，**单次上百次 KV 读**；而 badge 实际只用 `c.status` 一个字段。激活审核页自动刷新更密（10s）。后台挂一天即可自刷 5 万+。
+* **改动（3 文件 +72/-10，零 HTML 结构/CSS 变更）**：①users.js clinics=true 新增 **`lite=1`**：鉴权后仅读诊所总表 1 个 key 直接映射主表标量（id/name/status/expiresAt/source/edition/offlineCarrier/createdAt），聚合字段给默认值（admin*='-'、online/login/hist=0、licenseCodes/dualCompare=null），顶层带 `lite:true`；在线/今日登录/授权码视图仅全量模式（诊所管理页 loadClinics、待办页 loadTodoCenter）返回。②admin 双副本（[public/admin/index.html](public/admin/index.html) 与 site-admin/admin/index.html，adminconsole 双轨基线守护）：badge 改调 `clinics=true&lite=1`；轮询 **60s→300s** 且 `document.hidden` 时跳过、visibilitychange 恢复可见立即刷一次；激活页自动刷新 **10s→60s** 同样 hidden 暂停。
+* **★ 轮询/后台读接口铁律**：后台定时任务必须 ①间隔 ≥5 分钟 ②页面隐藏不发请求 ③优先走 lite/计数专用轻量路径，禁止为一个计数字段拉全量聚合。新增全量扫描型 GET 必须配套 lite 参数。KV get/list 默认边缘缓存 cacheTtl=60s（colo 级，免费不计读），但 TTL < 轮询间隔时每轮必 miss——降本靠间隔+轻量路径，不能指望默认缓存。
+* **费用与上架决策（2026-10-09 调研结论）**：现阶段（13 诊所/15 用户/127 license）**不升 $5、不迁国内云**；优化后日读预计 1-2 万，观察 CF Dashboard 用量，诊所 30+ 家或仍频告警再开月付。国内轻量云 459 元/年（2核2G/4M，腾讯云）但**建站/App 后端必须 ICP 备案（约 20 工作日）**，性价比低于免备案的 CF。**上安卓商店前置链（提前 2 个月办）**：软著（自办免费 30-60 天）→ 买最低配国内云做接入 → **APP 备案（工信部强制，免费、经云厂商、约 20 工作日，未备案不得上架）** → 医疗类目资质（华为接受**《中医诊所备案证》/《诊所备案凭证》**替代执业许可证；申报"诊所内部工具、不对公众诊疗"可走工具类降低门槛；小米另要软著）。苹果中国区同样要备案号 + $99/年。
+* **验证**：check-interface 6 OK（改前改后）、node --check users.js、diff-cross-version 4 对基线全绿（adminconsole 双副本行差 0）。
+* **生效方式**：push 后 CF Pages 约 70s 自动部署，云端网页/云桌面/云端APP/离线桌面/离线APP **五端零重打包**（admin 是服务端托管页）；这几天避免长时间挂后台页（旧页面仍 60s 轮询，重新打开后台即取新版）。
+

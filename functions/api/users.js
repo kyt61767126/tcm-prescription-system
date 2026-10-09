@@ -2849,6 +2849,46 @@ export async function onRequest(context) {
                 return json({ success: true, data: [] });
             }
 
+            // ★ 2026-10-09 lite 轻量模式（CF KV 免费额度日告警根源治理）：
+            //   后台角标轮询 refreshTodoBadges 只用 c.status 一个字段，旧路径却全量扫
+            //   user_session: + 全部 license:（127 个 key）+ 每诊所 clinic:{id}:users，
+            //   一次调用上百次 KV 读。lite 仅读诊所总表 1 个 key（0 额外读），
+            //   聚合字段给默认值；在线/今日登录/授权码视图等仅全量模式（诊所管理页/待办页）返回。
+            if (url.searchParams.get('lite') === '1') {
+                const liteData = clinics.map(c => ({
+                    id: c.id,
+                    name: c.name,
+                    status: c.status,
+                    expiresAt: c.expiresAt || null,
+                    source: c.source || null,
+                    edition: normalizeClinicEdition(c.edition, c.status) || null,
+                    offlineCarrier: c.offlineCarrier || null,
+                    createdAt: c.createdAt,
+                    adminUsername: '-',
+                    adminName: '-',
+                    adminPhone: '',
+                    adminPhones: [],
+                    doctorCount: 0,
+                    userCount: 0,
+                    onlineDesktop: 0,
+                    onlineApp: 0,
+                    onlineWeb: 0,
+                    onlineTotal: 0,
+                    loginDesktop: 0,
+                    loginApp: 0,
+                    loginWeb: 0,
+                    loginTotal: 0,
+                    histDesktop: 0,
+                    histApp: 0,
+                    histWeb: 0,
+                    histTotal: 0,
+                    licenseCodes: null,
+                    licenseExpiresAt: null,
+                    dualCompare: null
+                }));
+                return json({ success: true, data: liteData, loginStatsStart: null, lite: true });
+            }
+
             const result = [];
 
             // ★ 2026-09-10 在线端聚合：一次列出全部 user_session 键，建 username→session 映射
