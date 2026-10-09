@@ -51,6 +51,7 @@ export const KV_PREFIX = {
     testMachine:    'test_machine:',
     license:        'license:',
     licenseLog:     'license_log:',
+    licenseLogGap:  'license_log_gap:',   // ★ 审计缺口标记（license_log 写失败时的显式留痕）
     freePass:       'free_pass:'
 };
 

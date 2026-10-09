@@ -804,7 +804,7 @@ export async function onRequest(context) {
                         }
                         __boundClinicName = __autoRes.clinicName;
                     }
-                    await appendLicenseLog(kv, code, {
+                    const __autoLogOk = await appendLicenseLog(kv, code, {
                         action: __autoRes.provisioned
                             ? 'taobao-' + __autoTag + '-auto-provisioned'
                             : 'taobao-' + __autoTag + '-auto-' + __autoPendingAction,
@@ -823,19 +823,32 @@ export async function onRequest(context) {
                                     ? '，provision 未成功需后台人工补开诊所：'
                                     : '，provision 未成功待登录/轮询自愈：')
                                 + __autoRes.provisionError)
-                    }).catch(() => {});
+                    });
+                    // ★ 2026-10-09：不再静默吞错。appendLicenseLog 内部已重试，失败时会写
+                    //   license_log_gap:{code} 缺口标记（后台日志视图叠加可见）并返回 false；
+                    //   此处再落一条服务端错误日志，保证任何审计丢失都至少两处可查。
+                    if (__autoLogOk !== true) {
+                        console.error('[TaobaoAuto] 自动开通审计未落库（已留缺口标记 license_log_gap）: ' +
+                            'code=' + code + ' requestId=' + __autoRes.requestId +
+                            ' action=' + (__autoRes.provisioned ? 'provisioned' : __autoPendingAction) +
+                            '（开通本身已成功，不影响客户）');
+                    }
                 } else {
-                    await appendLicenseLog(kv, code, {
+                    const __skipLogOk = await appendLicenseLog(kv, code, {
                         action: 'taobao-' + __autoTag + '-auto-commit-skipped',
                         time: getNowISO(),
                         ip: ip,
                         operator: __taobaoAuto.phone,
                         detail: __autoGoods + '自动开通落库复查未通过（不影响激活）：' + __autoRes.reason
-                    }).catch(() => {});
+                    });
+                    if (__skipLogOk !== true) {
+                        console.error('[TaobaoAuto] 落库未通过审计未落库（已留缺口标记）: ' +
+                            'code=' + code + ' reason=' + __autoRes.reason);
+                    }
                 }
             } catch (e) {
                 console.warn('[TaobaoAuto] 开通落库异常（不影响激活，待补开）:', e.message);
-                await appendLicenseLog(kv, code, {
+                const __errLogOk = await appendLicenseLog(kv, code, {
                     action: 'taobao-' + __autoTag + '-auto-' + __autoPendingAction,
                     time: getNowISO(),
                     ip: ip,
@@ -843,7 +856,11 @@ export async function onRequest(context) {
                     detail: __autoGoods + '自动开通异常（不影响激活' +
                         (__autoTag === 'local' ? '，需后台人工补开诊所' : '，待自愈补开') +
                         '）：' + (e && e.message || e)
-                }).catch(() => {});
+                });
+                if (__errLogOk !== true) {
+                    console.error('[TaobaoAuto] 异常审计未落库（已留缺口标记）: code=' + code +
+                        ' err=' + (e && e.message || e));
+                }
             }
         }
 

@@ -2416,6 +2416,18 @@ async function showLogs(code) {
         const data = await res.json();
         if (data.success) {
             renderLogs(data.logs || []);
+            // ★ 2026-10-09 审计缺口显式告警：缺口不再静默，并明确"以台账为准"
+            const auditGaps = Array.isArray(data.auditGaps) ? data.auditGaps : [];
+            if (auditGaps.length > 0) {
+                showAlert('logModalAlert',
+                    '⚠️ 本码存在 ' + auditGaps.length + ' 条审计缺口（操作日志未落库，重试后仍失败）。开通事实请以下方「自动开通台账」为准。',
+                    'error');
+            } else if (data.auditLedger && data.auditReconciled) {
+                showAlert('logModalAlert', '✅ 审计自洽：自动开通台账（admin_req）与操作日志一致。', 'info');
+            } else {
+                const _lm = document.getElementById('logModalAlert');
+                if (_lm) _lm.className = 'alert';
+            }
         } else {
             if (res.status === 403) {
                 showAlert('logModalAlert', '登录已过期，请重新登录', 'error');
@@ -2447,7 +2459,11 @@ function renderLogs(logs) {
         extend: '延期',
         'export-offline': '导出离线文件',
         'export-offline-reactivate': '导出离线文件(重激活)',
-        update: '修改字段'
+        update: '修改字段',
+        // ★ 2026-10-09 审计单一事实源叠加项（logs.js 注入；admin_req 为事实源）
+        'taobao-cloud-auto-ledger': '☁️ 淘宝云端码自动开通台账',
+        'taobao-local-auto-ledger': '🖥️ 淘宝本地码自动开通台账',
+        'audit-gap': '⚠️ 审计缺口（日志未落库）'
     };
     ul.innerHTML = logs.map(log => {
         const time = new Date(log.time).toLocaleString('zh-CN');

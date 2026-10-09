@@ -1350,30 +1350,80 @@ async function checkDeviceVersion(kv, machineId, targetTypeOrEdition) {
 //  最多保留 200 条（防止无限增长），FIFO 队列
 // ============================================================================
 const KV_LICENSE_LOG_PREFIX = 'license_log:';
+// ★ 2026-10-09 审计可靠性：license_log 写失败时的【缺口标记】键（单键 put，无读改写）
+const KV_LICENSE_LOG_GAP_PREFIX = 'license_log_gap:';
 const LICENSE_LOG_MAX_ENTRIES = 200;
+const LICENSE_LOG_WRITE_ATTEMPTS = 3;
 
-// 追加操作日志（fire-and-forget，不阻塞主流程）
+// 追加操作日志（写侧可靠化，2026-10-09）
+//   旧实现：fire-and-forget + 单次读改写 + catch 静默吞错 —— 真机上出现过
+//   「自动开通已落库（admin_req 有记录、诊所已建）但 license_log 缺成功行」的
+//   不可观测状态（KNOWLEDGE §60/§62；2026-10-09 云端机构码 BNZC-MWLX… 实测复现）：
+//   客户端 12s 掐断 → Worker 在 provision 落库之后、日志写回之前被取消 → 审计行丢失，
+//   而运维巡检 SOP 恰恰按 license_log 过滤，于是该状态无人可见。
+//   现改为三层：
+//     ① 读改写带退避【重试】（瞬时 KV 抖动不再丢）；
+//     ② 重试后仍失败 → 写一条 license_log_gap:{code} 【缺口标记】并 console.error，
+//        让"审计丢失"从静默变成后台日志视图里可见的一条显式记录；
+//     ③ 返回 boolean 供调用方记账（函数仍为 async，既有的 await / .catch() 调用方零影响）。
 async function appendLicenseLog(kv, code, entry) {
-    if (!kv || !code || !entry || !entry.action) return;
-    try {
-        const logKey = KV_LICENSE_LOG_PREFIX + code;
-        const logs = (await kv.get(logKey, 'json')) || [];
-        // 补全字段
-        const logEntry = {
-            action: entry.action,
-            time: entry.time || new Date().toISOString(),
-            ip: entry.ip || 'unknown',
-            operator: entry.operator || 'system',
-            detail: entry.detail || ''
-        };
-        logs.push(logEntry);
-        // 超过上限时丢弃最旧的（FIFO）
-        if (logs.length > LICENSE_LOG_MAX_ENTRIES) {
-            logs.splice(0, logs.length - LICENSE_LOG_MAX_ENTRIES);
+    if (!kv || !code || !entry || !entry.action) return false;
+    const logKey = KV_LICENSE_LOG_PREFIX + code;
+    // 补全字段
+    const logEntry = {
+        action: entry.action,
+        time: entry.time || new Date().toISOString(),
+        ip: entry.ip || 'unknown',
+        operator: entry.operator || 'system',
+        detail: entry.detail || ''
+    };
+    let lastErr = null;
+    for (let attempt = 1; attempt <= LICENSE_LOG_WRITE_ATTEMPTS; attempt++) {
+        try {
+            const logs = (await kv.get(logKey, 'json')) || [];
+            logs.push(logEntry);
+            // 超过上限时丢弃最旧的（FIFO）
+            if (logs.length > LICENSE_LOG_MAX_ENTRIES) {
+                logs.splice(0, logs.length - LICENSE_LOG_MAX_ENTRIES);
+            }
+            await kv.put(logKey, JSON.stringify(logs));
+            return true;
+        } catch (e) {
+            lastErr = e;
+            if (attempt < LICENSE_LOG_WRITE_ATTEMPTS) {
+                await new Promise(r => setTimeout(r, 60 * attempt));
+            }
         }
-        await kv.put(logKey, JSON.stringify(logs));
+    }
+    console.error('[LicenseLog] 追加日志最终失败（已重试 ' + LICENSE_LOG_WRITE_ATTEMPTS + ' 次）:',
+        code, logEntry.action, lastErr && lastErr.message);
+    try {
+        await kv.put(KV_LICENSE_LOG_GAP_PREFIX + code, JSON.stringify({
+            action: logEntry.action,
+            time: logEntry.time,
+            operator: logEntry.operator,
+            ip: logEntry.ip,
+            detail: logEntry.detail,
+            error: (lastErr && lastErr.message) || 'unknown',
+            attempts: LICENSE_LOG_WRITE_ATTEMPTS,
+            gapAt: new Date().toISOString()
+        }), { expirationTtl: 90 * 24 * 60 * 60 });
+    } catch (e2) {
+        // 连缺口标记都写不进（KV 全域故障）——此时只能靠服务端日志，但不静默
+        console.error('[LicenseLog] 缺口标记亦写入失败（该状态仅服务端日志可查）:', e2 && e2.message);
+    }
+    return false;
+}
+
+// 读取审计缺口标记（后台日志视图叠加展示；最多每码一条，最新覆盖）
+async function getLicenseLogGaps(kv, code) {
+    if (!kv || !code) return [];
+    try {
+        const gap = await kv.get(KV_LICENSE_LOG_GAP_PREFIX + code, 'json');
+        return gap ? [gap] : [];
     } catch (e) {
-        console.warn('[LicenseLog] 追加日志失败:', e.message);
+        console.warn('[LicenseLog] 查询缺口标记失败:', e && e.message);
+        return [];
     }
 }
 
@@ -1856,9 +1906,11 @@ export {
     removeTestMachine,      // 取消测试机
     listTestMachines,       // 列出测试机
     // ★ 任务5 新增：操作日志
-    appendLicenseLog,  // 追加激活码操作日志
+    appendLicenseLog,  // 追加激活码操作日志（返回 boolean；失败写缺口标记）
     getLicenseLogs,    // 查询激活码操作日志
+    getLicenseLogGaps, // ★ 查询审计缺口标记（license_log 写失败时的显式留痕）
     deleteLicenseLogs, // 删除激活码日志（删激活码时调用）
+    KV_LICENSE_LOG_GAP_PREFIX, // 缺口标记前缀（体检/清理路径用）
     // ★ P2-3 新增：计数上链（处方计数高水位 + 回拨对账）
     reportUsage,       // 心跳/在线验证时上报计数并检测本地篡改
     getUsage,          // 读取计数上报记录（风控展示）
