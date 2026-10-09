@@ -398,9 +398,33 @@ function embedZone(exePath, asarPath) {
     payload.copy(base, zone2.rawPtr, 0, payload.length);
 
     // 原子写：先写临时文件再替换，避免写坏导致 exe 不可用
+    //
+    // ★ 2026-10-09 加固：Windows 上刚被 fuse 写入/上一轮嵌入改写的 190MB+ exe 会被
+    //   杀软实时扫描瞬时锁定，紧接着的 rename 会 EPERM/EBUSY（真机实锤：整条打包
+    //   流水线走到最后一步 `[PE-Zone] embed 失败: EPERM ... rename 'xxx.exe.bnzc.tmp'
+    //   -> 'xxx.exe'`，而前面 fuse 写入明明成功、并残留 201MB 的 .tmp）。加重试+退避，
+    //   避免十几分钟的流水线因一次瞬时锁白跑。
     const tmp = exePath + '.bnzc.tmp';
     fs.writeFileSync(tmp, base);
-    fs.renameSync(tmp, exePath);
+    {
+        const delays = [0, 200, 400, 600, 800, 1000, 1200, 1500, 2000, 2000, 2000, 2000];
+        let lastErr = null;
+        let ok = false;
+        for (let i = 0; i < delays.length && !ok; i++) {
+            if (delays[i]) {
+                try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, delays[i]); }
+                catch (_) { const end = Date.now() + delays[i]; while (Date.now() < end) { /* spin */ } }
+            }
+            try { fs.renameSync(tmp, exePath); ok = true; }
+            catch (e) {
+                lastErr = e;
+                if (i === 0 || i === 2 || i === delays.length - 1) {
+                    console.warn('[PE-Guard] rename 重试 ' + (i + 1) + '/' + delays.length + '：' + e.code);
+                }
+            }
+        }
+        if (!ok) throw lastErr;
+    }
 
     // 自验证：嵌入后必须能通过校验 + PE 布局合法（Windows 可加载）
     const check = verifyZone(exePath);
