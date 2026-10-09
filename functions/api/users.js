@@ -2738,7 +2738,7 @@ export async function onRequest(context) {
 
             // 查找用户原始数据
             const found = await findUserForLogin(kv, username, context.env);
-            if (!found) {
+            if (!found || !found.user) {
                 return json({ success: false, error: '用户不存在' }, 404, context.request);
             }
 
@@ -3099,7 +3099,9 @@ export async function onRequest(context) {
 
             // 检查用户名是否已存在（全局唯一，跨诊所 + platform_admins）
             const existing = await findUserForLogin(kv, adminUsername, context.env);
-            if (existing) {
+            // ★ 修复：findUserForLogin 失败时返回 {user:null,error}（真值对象），
+            //   旧写法 if(existing) 导致任意用户名都被判「已存在」，创建诊所接口完全不可用。
+            if (existing && existing.user) {
                 return json({ success: false, error: '登录账号已存在，请更换（admin_诊所简码 全局唯一）' }, 409);
             }
 
