@@ -21,6 +21,13 @@
 const fs = require('fs');
 const path = require('path');
 
+// ★★ 2026-10-09：必须剥离 ELECTRON_RUN_AS_NODE（宿主环境/CI 可能注入）★★
+//   该变量为 1 时，Electron 会退化成【纯 Node 模式】：拒绝 --inspect 并立即退出，
+//   Playwright 表现为 `Process failed to launch!`，本门禁必然失败（本机实锤复现：
+//   exe 报 `bad option: --remote-debugging-port=xxxx` 后秒退）。必须在启动被测 exe
+//   之前删除，保证其以真·Electron 模式运行。
+delete process.env.ELECTRON_RUN_AS_NODE;
+
 const ROOT = path.resolve(__dirname, '..');
 const TMP_ROOT = path.join(__dirname, '.tmp');
 // ★ 每轮运行唯一 tmp 目录：强杀残留/Defender 句柄锁住旧目录时（EPERM），绝不能阻断本轮
