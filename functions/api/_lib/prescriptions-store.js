@@ -168,6 +168,10 @@ export async function ensurePrescriptionDayIndexed(kv, clinicId, yymmdd) {
     // 索引尚不存在：懒回填（含本日期），避免"只登记本日期、漏掉历史日期"
     const keys = await listAllKeys(kv, prefix).catch(() => []);
     const days = keys.map(k => k.slice(prefix.length)).filter(d => /^\d{6}$/.test(d));
+    // ★ 列表为空不写索引：list 失败(如配额 429)与"确实无历史日期"无法区分，若写出
+    //   [本日期] 会让历史日期永久不可见（医疗数据不可接受）。留空键 → 下次读取再全扫
+    //   （代价 1 条 list，换正确性）；本日期 key 照写，下次读取的 list 会把它捞回来登记。
+    if (days.length === 0) return true;
     if (!days.includes(day)) days.push(day);
     days.sort();
     try {

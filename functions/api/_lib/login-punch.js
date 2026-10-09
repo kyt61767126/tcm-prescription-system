@@ -145,29 +145,46 @@ async function archiveMonth(kv, ym) {
  * @returns {Promise<{startDate:string|null, totals:Map<string,{d:number,a:number,w:number}>}>}
  *          totals 的 key 为 encodeURIComponent(clinicName)，与前端取用方式一致。
  */
-export async function getClinicLoginHistory(kv) {
+export async function getClinicLoginHistory(kv, clinicNames) {
     const empty = { startDate: null, totals: new Map() };
     if (!kv) return empty;
     try {
         const now = Date.now();
         const { month: curMonth } = beijingParts(now);
 
-        // ① 懒归档：从起始月到上月，补齐所有缺标志的月份
+        // ① 懒归档：从起始月到上月，补齐所有缺标志的月份（顺带记录已归档月份供 ② 推导）
         let startDate = null;
+        const archivedMonths = [];
         try { startDate = await kv.get('lp_start'); } catch (_) {}
         if (startDate) {
             const startMonth = String(startDate).slice(0, 7);
             const lastMonth = prevMonth(curMonth);
             for (const ym of enumerateMonths(startMonth, lastMonth)) {
                 const done = await kv.get(`lparch:${ym}`).catch(() => null);
-                if (done) continue;
-                await archiveMonth(kv, ym);
+                if (done) { archivedMonths.push(ym); continue; }
+                try { await archiveMonth(kv, ym); archivedMonths.push(ym); } catch (_) {}
             }
         }
 
         // ② 历史月桶求和
+        //   ★ 2026-10-10 KV list 配额治理：原先每次调用都 `listAllKeys(kv,'lpmon:')` 全站扫描，
+        //     与 users.js 的 license/session 全扫叠加，是每日 1000 次 list 被打满的主因之一。
+        //     桶 key = lpmon:{ym}:{encClinic}，其中月份集合（已归档）与诊所集合均可推导，
+        //     故改为派生 key 直读：get 次数 = 已归档月数 × 诊所数，**零 list**。
+        //     未传诊所集合时回退旧行为（兼容其他调用方）。
         const totals = new Map();
-        const monKeys = await listAllKeys(kv, 'lpmon:');
+        const encClinics = Array.isArray(clinicNames)
+            ? [...new Set(clinicNames.filter(n => typeof n === 'string' && n).map(n => encodeURIComponent(n)))]
+            : null;
+        let monKeys = null;
+        if (encClinics && encClinics.length) {
+            monKeys = [];
+            for (const ym of archivedMonths) {
+                for (const ec of encClinics) monKeys.push(`lpmon:${ym}:${ec}`);
+            }
+        } else {
+            monKeys = await listAllKeys(kv, 'lpmon:');
+        }
         const monVals = await batchGetJson(kv, monKeys);
         monKeys.forEach((k, i) => {
             const v = monVals[i];

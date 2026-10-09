@@ -3,7 +3,7 @@ import {
     parseAuthHeader, hashPassword, verifyPassword, signToken,
     isPlatformAdmin, isClinicAdmin, isAdmin, isLegacyPasswordHash,
     revokeAllUserTokens, writeUserSession, clearUserSession, getUserSession,
-    userMustChangePassword,
+    userMustChangePassword, listUserSessionKeys,
     ROLE_PLATFORM_ADMIN, ROLE_CLINIC_ADMIN, ROLE_DOCTOR, ROLE_CASHIER, ROLE_SERVICE,
     KV_SYSTEM_CLINICS, KV_SYSTEM_PLATFORM_ADMINS, KV_SYSTEM_SERVICE_ACCOUNTS,
     isStaff,
@@ -2895,7 +2895,9 @@ export async function onRequest(context) {
             //   （在线口径 loginAt ≤15 分钟，见下方循环内聚合）。读取失败不影响诊所列表。
             const onlineMap = new Map();
             try {
-                const sessKeys = await listAllKeys(kv, 'user_session:');
+                // ★ 2026-10-10 KV list 配额治理：原 `listAllKeys(kv,'user_session:')` 全站扫描
+                //   改为 session 键清单索引（1 get + N get，零 list；键缺失由索引函数全扫回填一次）
+                const sessKeys = await listUserSessionKeys(kv);
                 for (let i = 0; i < sessKeys.length; i += 20) {
                     const batch = sessKeys.slice(i, i + 20);
                     const sessVals = await Promise.all(batch.map(k => kv.get(k, 'json').catch(() => null)));
@@ -2930,7 +2932,13 @@ export async function onRequest(context) {
             //   同步匹配集（L 附近 matches 过滤）严格一致。
             const licenseByClinic = new Map();
             try {
-                const licKeys = await listAllKeys(kv, 'license:');
+                // ★ 2026-10-10 KV list 配额治理：原 `listAllKeys(kv,'license:')` 全站扫描
+                //   改为读既有授权码索引 system:license_index（1 次 get）；索引异常才回退 list。
+                //   （逐条 get 保持不变，读配额 10 万/天，昂贵的是被 1000/天 卡死的 list）
+                const __licIdx = await kv.get('system:license_index', 'json').catch(() => null);
+                const licKeys = Array.isArray(__licIdx)
+                    ? __licIdx.filter(c => typeof c === 'string' && c).map(c => 'license:' + c)
+                    : await listAllKeys(kv, 'license:');
                 for (let i = 0; i < licKeys.length; i += 20) {
                     const batch = licKeys.slice(i, i + 20);
                     const licVals = await Promise.all(batch.map(k => kv.get(k, 'json').catch(() => null)));
@@ -2979,7 +2987,8 @@ export async function onRequest(context) {
             // ★ 2026-10-05 历史累计登录（KNOWLEDGE §53）：全量取一次，循环内按
             //   encodeURIComponent(clinic.name) 取用。内部含跨月懒归档（每月仅一次），
             //   失败按无历史处理，不影响诊所列表。
-            const loginHistory = await getClinicLoginHistory(kv).catch(() => ({ startDate: null, totals: new Map() }));
+            const loginHistory = await getClinicLoginHistory(kv, clinics.map(c => c && c.name))
+                .catch(() => ({ startDate: null, totals: new Map() }));
 
             for (const clinic of clinics) {
                 const users = await kv.get(`clinic:${clinic.id}:users`, 'json');

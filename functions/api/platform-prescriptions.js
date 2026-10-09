@@ -1,6 +1,8 @@
 import { parseAuthHeader, isPlatformAdmin, KV_SYSTEM_CLINICS } from './_lib/auth.js';
-import { getKV, listAllKeys } from './_lib/kv.js';
+import { getKV } from './_lib/kv.js';
 import { getDB, isD1Enabled } from './_lib/d1.js';
+// ★ 2026-10-10 KV list 配额治理：与 prescriptions.js 共用日期分片显式索引（零 list）
+import { getPrescriptionDayKeys } from './_lib/prescriptions-store.js';
 
 // D1 行 → 处方对象
 function d1RowToPrescription(row) {
@@ -42,8 +44,8 @@ async function loadClinicPrescriptions(kv, clinicId) {
             if (p && typeof p === 'object' && p.id != null) byId.set(String(p.id), p);
         }
     }
-    // 日期分 key
-    const dayKeys = await listAllKeys(kv, `clinic:${clinicId}:prescriptions:`).catch(() => []);
+    // 日期分 key（★ 2026-10-10：改用共享显式索引 prescriptions_index，与 prescriptions.js 同源，零 list）
+    const dayKeys = await getPrescriptionDayKeys(kv, clinicId);
     for (const k of dayKeys) {
         const arr = await kv.get(k, 'json').catch(() => null);
         if (Array.isArray(arr)) {

@@ -389,10 +389,10 @@ export async function revokeAllUserTokens(kv, username) {
         // ★ 2026-08-21 单设备在线（★ 2026-09-10 多端并存）：改密/撤销时清除该账号全部端类型 session，
         //   防止 session 中残留的旧 tokenHash 遮蔽新登录（否则改密后重新登录也会被误踢）
         try {
-            const sBase = KV_USER_SESSION_PREFIX + username;
-            const sKeys = await listAllKeys(kv, sBase + ':');
-            sKeys.push(sBase);
-            await Promise.all(sKeys.map(k => kv.delete(k)));
+            // ★ 2026-10-10：改为枚举派生 key（去掉 kv.list；端类型集合见 sessionKeysFor 注释）
+            const keys = sessionKeysFor(username);
+            await Promise.all(keys.map(k => kv.delete(k)));
+            await removeSessionIndexKeys(kv, keys);
         } catch (e) {}
         return true;
     } catch (e) {
@@ -411,6 +411,62 @@ export async function revokeAllUserTokens(kv, username) {
 // ============================================================================
 const KV_USER_SESSION_PREFIX = 'user_session:';
 const USER_SESSION_TTL_SECONDS = 8 * 24 * 60 * 60; // 8 天
+
+// ★ 2026-10-10 KV list 配额治理：session key 集合是【可枚举】的 —— 端类型只有
+//   web/desktop/app（与 users.js:2327/2347 的归一集合同源），外加迁移前的旧单 key。
+//   故撤销/清除/读取一律改为直接派生 key，彻底去掉 3 处 kv.list
+//   （此前每日 1000 次 list 配额被打满 → 功能降级告警）。
+const SESSION_CLIENT_CLASSES = ['web', 'desktop', 'app'];
+function sessionKeysFor(username) {
+    const base = KV_USER_SESSION_PREFIX + username;
+    return [base].concat(SESSION_CLIENT_CLASSES.map(c => base + ':' + c));
+}
+
+// ★ 2026-10-10 在线 session 键清单索引 user_session_index = [完整key,...]
+//   动机：users.js clinics=true 全量模式原先用 `listAllKeys(kv,'user_session:')` 全站扫描，
+//   与「license 全扫」「登录历史月份 list」叠加，是每日 1000 次 list 配额被打满的主因之一。
+//   写侧维护（登录加入、登出/改密移除），读侧键缺失时全扫一次回填（此后 1 get + N get，零 list）。
+const KV_USER_SESSION_INDEX = 'user_session_index';
+
+async function addSessionIndexKeys(kv, keys) {
+    try {
+        const cur = await kv.get(KV_USER_SESSION_INDEX, 'json');
+        if (!Array.isArray(cur)) return;   // 键缺失/脏 → 留给读侧全扫回填，不写出不完整清单
+        const set = new Set(cur);
+        let changed = false;
+        for (const k of keys) if (!set.has(k)) { set.add(k); changed = true; }
+        if (changed) await kv.put(KV_USER_SESSION_INDEX, JSON.stringify([...set]));
+    } catch (e) { /* 索引维护失败不影响登录主流程，读侧全扫兜底 */ }
+}
+
+async function removeSessionIndexKeys(kv, keys) {
+    try {
+        const cur = await kv.get(KV_USER_SESSION_INDEX, 'json');
+        if (!Array.isArray(cur)) return;
+        const drop = new Set(keys);
+        const next = cur.filter(k => !drop.has(k));
+        if (next.length !== cur.length) await kv.put(KV_USER_SESSION_INDEX, JSON.stringify(next));
+    } catch (e) { /* 同上 */ }
+}
+
+// 读取全部在线 session 键（索引优先；缺失则全扫一次并回填）
+export async function listUserSessionKeys(kv) {
+    if (!kv) return [];
+    try {
+        const cur = await kv.get(KV_USER_SESSION_INDEX, 'json');
+        if (Array.isArray(cur)) {
+            return cur.filter(k => typeof k === 'string' && k.startsWith(KV_USER_SESSION_PREFIX));
+        }
+    } catch (_) { /* 落全扫 */ }
+    const keys = await listAllKeys(kv, KV_USER_SESSION_PREFIX).catch(() => []);
+    // ★ 只在高置信（非空）时写索引：list 失败(如配额 429)与"真的无 session"无法区分，
+    //   若把失败当空写回索引，在线聚合会静默变成"无人在线"且永不自愈。
+    //   留空键 → 下次再全扫重试（代价 1 条 list，换正确性）。
+    if (keys.length > 0) {
+        try { await kv.put(KV_USER_SESSION_INDEX, JSON.stringify(keys)); } catch (_) {}
+    }
+    return keys;
+}
 
 // 写入当前账号在线 session（新登录调用；仅顶掉「同端类型」的旧设备）
 // ★ 2026-09-10 多端并存：key = user_session:{username}:{clientClass}，
@@ -433,6 +489,9 @@ export async function writeUserSession(kv, username, token, meta = {}) {
         if (meta.clientClass) {
             try { await kv.delete(KV_USER_SESSION_PREFIX + username); } catch (e) {}
         }
+        // ★ 2026-10-10 维护 session 键清单索引（消除读侧全站 list）
+        await addSessionIndexKeys(kv, [key]);
+        if (meta.clientClass) await removeSessionIndexKeys(kv, [KV_USER_SESSION_PREFIX + username]);
         return true;
     } catch (e) {
         console.error('[UserSession] 写入失败:', e.message);
@@ -444,10 +503,10 @@ export async function writeUserSession(kv, username, token, meta = {}) {
 export async function clearUserSession(kv, username) {
     if (!kv || !username) return false;
     try {
-        const base = KV_USER_SESSION_PREFIX + username;
-        const keys = await listAllKeys(kv, base + ':'); // 按端类型分的 key
-        keys.push(base); // 兼容旧单 key（可能不存在，delete 静默）
+        // ★ 2026-10-10：改为枚举派生 key（去掉 kv.list）
+        const keys = sessionKeysFor(username);
         await Promise.all(keys.map(k => kv.delete(k)));
+        await removeSessionIndexKeys(kv, keys);
         return true;
     } catch (e) {
         return false;
@@ -459,9 +518,8 @@ export async function clearUserSession(kv, username) {
 export async function getUserSession(kv, username) {
     if (!kv || !username) return null;
     try {
-        const base = KV_USER_SESSION_PREFIX + username;
-        const keys = await listAllKeys(kv, base + ':');
-        keys.push(base);
+        // ★ 2026-10-10：改为枚举派生 key 直读（去掉 kv.list，同时消除 list+逐条 get 的 N+1）
+        const keys = sessionKeysFor(username);
         let latest = null, latestAt = '';
         for (const k of keys) {
             const s = await kv.get(k, 'json').catch(() => null);
