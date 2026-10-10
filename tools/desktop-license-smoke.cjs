@@ -169,10 +169,17 @@ const CLOUD_ONLY = ['license:load-pending-order-no'];
 const LOCAL_ONLY = ['license:claim-free', 'license:gate-failed', 'license:get-activation-users',
     'license:get-flow-state', 'license:install-admin-license', 'license:install-from-server',
     'license:query-order-status', 'license:load-registration-info', 'license:register-local-user',
-    'license:set-flow-state', 'license:start-trial', 'license:verify-gate'];
+    'license:set-flow-state', 'license:start-trial', 'license:verify-gate',
+    // ★ 2026-10-10 补登：该通道由 ebf3ab0b「38 通道收口」加入代码但漏登记清单，
+    //   导致下方计数断言长期过期（应37实际38）——本次一并修正。
+    'license:prewarm-adjudication'];
 
-assert(cloudIpc.handlers.size === 26, '云端注册数应26，实际' + cloudIpc.handlers.size);
-assert(offlineIpc.handlers.size === 37, '离线注册数应37，实际' + offlineIpc.handlers.size);
+// ★ 2026-10-10：计数改为【由清单推导】，杜绝"加了通道忘改数字"的再次过期。
+const CLOUD_EXPECTED = [...COMMON, ...BRANCH, ...CLOUD_ONLY];
+const OFFLINE_EXPECTED = [...COMMON, ...BRANCH, ...LOCAL_ONLY];
+
+assert(cloudIpc.handlers.size === CLOUD_EXPECTED.length, '云端注册数应' + CLOUD_EXPECTED.length + '，实际' + cloudIpc.handlers.size);
+assert(offlineIpc.handlers.size === OFFLINE_EXPECTED.length, '离线注册数应' + OFFLINE_EXPECTED.length + '，实际' + offlineIpc.handlers.size);
 for (const ch of [...COMMON, ...BRANCH, ...CLOUD_ONLY]) {
     assert(cloudIpc.handlers.has(ch), '云端应有 ' + ch);
 }
@@ -357,7 +364,7 @@ assert(!offlineIpc.handlers.has('license:set-trial-days'), 'set-trial-days 两�
         r = await offlineIpc.handlers.get('license:register-local-user')(mainWinEvent, {
             phone: '13800000000', password: 'pass1234'
         });
-        assert(r.success === false && /非法调用来源/.test(r.error), 'M1 主窗 index.html 顶层帧拒绝');
+        assert(r.success === false && /非法调用来源/.test(r.error), 'M1 异目录 index.html 顶层帧拒绝（本应用内 login.html 已按修复放行）');
         assert(Object.keys(fseStub._store).filter(k => /config\.json$/.test(k)).length === 0,
             'M1 拒绝时不写 config.json');
     }
@@ -412,6 +419,48 @@ assert(!offlineIpc.handlers.has('license:set-trial-days'), 'set-trial-days 两�
         });
         assert(r.success === false && /手机号/.test(r.error), '第五轮 盘符小写放行（帧门过→手机号校验拦截）');
     }
+    // ★ 2026-10-10 线上阻断修复回归：注册表单实际在【登录窗 login.html】，
+    //   该页顶层帧必须过帧门（随后进入手机号校验拦截）。此前只放行 activate-window.html
+    //   → 真机全新安装注册恒报「非法调用来源」（用户可见阻断）。
+    {
+        const loginUrl = require('url').pathToFileURL(
+            require('path').join(__dirname, '..', 'shared', 'login.html')).href;
+        const loginEvent = { sender: { id: 'wcL1' }, senderFrame: { parent: null, url: loginUrl } };
+        r = await offlineIpc.handlers.get('license:register-local-user')(loginEvent, {
+            phone: '123', password: 'abcdefgh1'
+        });
+        assert(r.success === false && /手机号/.test(r.error), '★ login.html 顶层帧过帧门（修复回归锁）');
+        // login.html + query/hash 同样不影响白名单
+        const loginQuery = { sender: { id: 'wcL2' }, senderFrame: { parent: null, url: loginUrl + '?x=1#y' } };
+        r = await offlineIpc.handlers.get('license:register-local-user')(loginQuery, {
+            phone: '123', password: 'abcdefgh1'
+        });
+        assert(r.success === false && /手机号/.test(r.error), '★ login.html query/hash 不影响白名单');
+        // 子框架里的 login.html 仍拒绝
+        const loginSub = { sender: { id: 'wcL3' }, senderFrame: { parent: {}, url: loginUrl } };
+        r = await offlineIpc.handlers.get('license:register-local-user')(loginSub, {
+            phone: '13800000000', password: 'pass1234'
+        });
+        assert(r.success === false && /非法调用来源/.test(r.error), '★ login.html 子框架仍拒绝');
+        // 异目录同名 login.html 仍拒绝（绝对路径全等不放松）
+        const evilLogin = loginUrl.replace(/\/login\.html$/, '/evil/login.html');
+        r = await offlineIpc.handlers.get('license:register-local-user')(
+            { sender: { id: 'wcL4' }, senderFrame: { parent: null, url: evilLogin } },
+            { phone: '13800000000', password: 'pass1234' });
+        assert(r.success === false && /非法调用来源/.test(r.error), '★ 异目录 login.html 拒绝');
+        // https 下的同名 login.html 仍拒绝
+        r = await offlineIpc.handlers.get('license:register-local-user')(
+            { sender: { id: 'wcL5' }, senderFrame: { parent: null, url: 'https://evil.com/login.html' } },
+            { phone: '13800000000', password: 'pass1234' });
+        assert(r.success === false && /非法调用来源/.test(r.error), '★ https login.html 拒绝');
+        // UNC host + login.html pathname 仍拒绝
+        const uncLogin = 'file://evil' + new URL(loginUrl).pathname;
+        r = await offlineIpc.handlers.get('license:register-local-user')(
+            { sender: { id: 'wcL6' }, senderFrame: { parent: null, url: uncLogin } },
+            { phone: '13800000000', password: 'pass1234' });
+        assert(r.success === false && /非法调用来源/.test(r.error), '★ UNC host login.html 拒绝');
+    }
+
     // H1/B1：帧门通过但磁盘 users 无签发来源 → 拒绝（不洗白）
     {
         const origGate = d.licenseManager.configUsersProvenAuthentic;

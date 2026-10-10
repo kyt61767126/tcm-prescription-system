@@ -35,34 +35,55 @@
 // ============================================================================
 'use strict';
 
-// ★ 2026-09-26 F3+M1：register-local-user 唯一合法来源 = activate-window.html
-//   的顶层帧（无 iframe）。Electron 35 WebFrameMain 无 isMainFrame 成员，
-//   主框架判定 = parent===null（真实 Electron 探针实证）。
+// ★ 2026-09-26 F3+M1：register-local-user 只允许【应用自身页面】的顶层帧（无 iframe）调用。
+//   Electron 35 WebFrameMain 无 isMainFrame 成员，主框架判定 = parent===null（真实 Electron 探针实证）。
 // ★ 第四轮（B-重1）：URL 白名单从"文件名正则"收紧为【应用自身目录绝对路径全等】
 //   ——正则可被任意目录下同名文件绕过（下载目录/UNC/映射盘投放同名 html）；
-//   绝对路径全等后，只有本安装内（asar 或解包目录）的激活窗页面能过门。
+//   绝对路径全等后，只有本安装内（asar 或解包目录）的页面能过门。
 //   仅比对 host+pathname：query/hash 不参与（loadFile 会附 machineId 等 query，
 //   冒烟 qEvent 用例锁定该语义）。
 // ★ 第五轮（采纳）：host 同校验——file: URL 的 host 承载 UNC 主机名
-//   （file://evil/share/activate-window.html 的 pathname 与本地同构），仅比
-//   pathname 会放过异地主机投放的同构目录；host 必须与本机 expected 一致（本地
-//   file URL host 为空串）。
-//   目录/文件路径必须与激活窗页面完全一致。
+//   （file://evil/share/login.html 的 pathname 与本地同构），仅比 pathname 会放过
+//   异地主机投放的同构目录；host 必须与本机 expected 一致（本地 file URL host 为空串）。
 //   parent/url 均为主进程原生只读属性，渲染侧不可伪造。本文件由 sync-all 复制进
-//   两端 electron 目录运行，__dirname 即激活窗页面所在目录。
-function isActivateWindowFrame(frame) {
+//   两端 electron 目录运行，__dirname 即本目录。
+//
+// ★★ 2026-10-10 线上阻断修复（真机复现）：注册表单实际渲染在 **login.html**（登录窗的
+//   「✅ 完成注册」弹窗，见 auth-core 的 localRegForm），而本守卫此前只放行
+//   activate-window.html → 自 09-26 收紧起，桌面端本地注册恒返回「非法调用来源」，
+//   全新安装用户"注册不了=登录不了"（真机实测：senderFrame.url=…/electron/login.html
+//   → 主进程日志 `[Register] reject non-main-frame/non-activate-window invoke`）。
+//   修法：把白名单从"单个文件"改为【应用自身目录内的页面文件集合】，登记
+//   activate-window.html 与 login.html；安全性质完全不变——仍要求
+//   ①顶层帧 ②file: 协议 ③host（UNC 主机）与本地一致 ④绝对路径全等（大小写按 Windows 归一）。
+const REGISTER_INVOKER_PAGES = ['activate-window.html', 'login.html'];
+
+function isTrustedAppFrame(frame, pageFiles) {
     try {
         if (!frame || frame.parent !== null) return false;
         const u = new URL(frame.url || '');
         if (u.protocol !== 'file:') return false;
         const path = require('path');
         const pathToFileURL = require('url').pathToFileURL;
-        const expectedUrl = pathToFileURL(path.join(__dirname, 'activate-window.html'));
-        if (u.host !== expectedUrl.host) return false;
-        // Windows 文件系统大小写不敏感：两侧解码后归一小写比较，仅放宽大小写不放宽路径
-        return decodeURIComponent(u.pathname).toLowerCase()
-            === decodeURIComponent(expectedUrl.pathname).toLowerCase();
+        const rawPath = decodeURIComponent(u.pathname).toLowerCase();
+        for (const file of pageFiles) {
+            const expectedUrl = pathToFileURL(path.join(__dirname, file));
+            if (u.host !== expectedUrl.host) continue;
+            // Windows 文件系统大小写不敏感：两侧解码后归一小写比较，仅放宽大小写不放宽路径
+            if (rawPath === decodeURIComponent(expectedUrl.pathname).toLowerCase()) return true;
+        }
+        return false;
     } catch (e) { return false; }
+}
+
+// 激活窗（历史语义，保持原行为）
+function isActivateWindowFrame(frame) {
+    return isTrustedAppFrame(frame, ['activate-window.html']);
+}
+
+// 本地注册（★ 2026-10-10：注册表单在登录窗 login.html，必须一并放行）
+function isRegisterInvokerFrame(frame) {
+    return isTrustedAppFrame(frame, REGISTER_INVOKER_PAGES);
 }
 
 function createDesktopLicenseIpc(options) {
@@ -622,9 +643,10 @@ ipcMain.handle('license:claim-free', async (event, phone) => {
 
 ipcMain.handle('license:register-local-user', async (event, payload) => {
     try {
-        // ★ 2026-09-26 F3+M1：仅 activate-window.html 顶层帧可调（见 isActivateWindowFrame）
-        if (!isActivateWindowFrame(event && event.senderFrame)) {
-            console.warn('[Register] reject non-main-frame/non-activate-window invoke');
+        // ★ 2026-10-10 线上阻断修复：注册表单在【登录窗 login.html】（auth-core localRegForm），
+        //   与 activate-window.html 同为合法来源；仍限"本应用目录内页面 + 顶层帧 + file: + host 同源"。
+        if (!isRegisterInvokerFrame(event && event.senderFrame)) {
+            console.warn('[Register] reject untrusted frame invoke (allowed: ' + REGISTER_INVOKER_PAGES.join(', ') + ')');
             return { success: false, error: '非法调用来源' };
         }
         const p = payload || {};
