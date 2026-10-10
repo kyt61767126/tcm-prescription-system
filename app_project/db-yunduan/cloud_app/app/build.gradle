@@ -48,7 +48,7 @@ android {
         applicationId "com.tcm.prescription"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 320 // ★ 2026-10-05 批次D：D3 Application 预热 WebView（startUpWebView）/D4 DNS 预解析后台线程
+        versionCode 321 // ★ 2026-10-05 批次D：D3 Application 预热 WebView（startUpWebView）/D4 DNS 预解析后台线程
         versionName "1.0.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
