@@ -1885,4 +1885,11 @@
   - **JS（cloud.js collectDeviceIdentity）**：electronAPI 与 Capacitor 之间新增 `AndroidNative.invoke('getMachineId','{}')` 分支，clientClass='app'，正则校验后采用；桥异常留空走指纹兜底。openAdminActivate 路径原本就有该 invoke 调用（过去返回 unknown-method JSON 被清空），现在自动生效。
   - **一次性迁移**：旧设备服务端绑的是随机 browser-xxx，换硬件 ID 后机构版账号会再 403 一次——需 `wrangler kv key delete "user_devices:{phone}" ... --remote`，新 APK 登录重建。测试账号 13398999999 旧绑定此前已清、未再登录，故零迁移；真实存量机构版买家（目前应无）走客服同法。
   - **验证**：云 Web/桌面不触发该分支（无 AndroidNative）行为不变；真机验证=装新 APK → 管理员激活窗口底部机器 ID 应为 `and-xxxxxxxxxx...`（不再是 browser-）→ 退出重登稳定不变。
+* **★★ 2026-10-10 生产事故：KV 每日写配额耗尽导致全站登录 500（commit aaca4fd0，users.js）**：
+  - **现象**：客户/真机登录报「服务器内部错误（HTTP 500）」，且不是预期的设备超额 403。
+  - **定位手法（重要，tail 被墙时）**：wrangler tail/pages deployment tail 的 WebSocket 域名在本机 DNS 污染（解析到 Facebook/199.59.148.x 等 IP，ETIMEDOUT/ECONNREFUSED）→ 无法看实时日志。改用**临时在 handler 顶层 catch（users.js L4500）把 `error.name+' :: '+error.message` 经响应字段回显**，push→部署→脚本复现→拿到 `Error :: KV put() limit exceeded for the day.`，定位后立即还原。比静态猜可靠。
+  - **根因**：Cloudflare **Free 计划 KV 写入 1000 次/天**硬顶；登录成功路径上有多个 put（bindUserDevice 设备绑定、session、clearLoginFailures×2、license devices 注册、punch 等），当天反复真机登录测试+业务+可能的写放大耗尽配额。其中 **bindUserDevice 的 kv.put（原 L151）无 try**，reject 直接冒泡到 handler 顶层 catch → 500（wgj 在 DEVICE_LIMIT_EXEMPT_ACCOUNTS，跳过数量检查、正好走到该 put，故不是 403）。
+  - **修复**：bindUserDevice 的 kv.put 包 try/catch，配额耗尽/瞬断时**降级继续**（不阻断登录；D1 双写仍补偿；都失败则本次暂不落库、下次登录补写）——设备名额强一致让位于可用性。其余写大多已 waitUntil/自 try。验证主域名登录恢复 200、token 正常。
+  - **容量决策（长期）**：免费版 1000 writes/day 对多诊所+心跳+登录+处方偏紧，UTC 0 点重置（临时恢复）但会复发。**根治=升级 Workers Paid（$5/月，KV writes 1000→1,000,000/天，D1/Pages 额度同增）**；次选=审计削减登录/心跳冗余写（每次登录 updateLicense 注册设备、clearLoginFailures 双写等）但治标。
+  - **通用铁律**：任何非关键依赖（KV/外部写）失败都不得把核心登录/读操作打死；handler 顶层 catch 只兜底，关键写必须就地容错。
 
