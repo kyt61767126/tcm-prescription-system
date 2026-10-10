@@ -297,6 +297,33 @@ export async function onRequest(context) {
                     }
                     break;
 
+                case 'reveal-device': {
+                    // ★ 2026-10-10 总管理员在「查看设备」弹窗按需展开完整机器码。
+                    //   前端持有脱敏值（前8位+'...'），此处按 精确 → 前缀(去...) 回退
+                    //   匹配该码真实设备；每次查看写入码日志留痕。本接口所在的 POST
+                    //   管理操作仅 platform_admin 可调用（见上方认证）。
+                    const hint = String(body.machineId || '').trim();
+                    const allDevices = getDevices(record);
+                    let target = allDevices.find(d => d.machineId === hint);
+                    if (!target && hint.endsWith('...')) {
+                        const prefix = hint.slice(0, -3);
+                        if (prefix.length >= 6) {
+                            target = allDevices.find(d => d.machineId && d.machineId.startsWith(prefix));
+                        }
+                    }
+                    if (!target) {
+                        return json({ success: false, error: '未找到指定设备' }, 404);
+                    }
+                    await appendLicenseLog(kv, code, {
+                        action: 'reveal-device',
+                        time: new Date().toISOString(),
+                        ip: getClientIP(context),
+                        operator: currentUser.username,
+                        detail: `完整机器码查看：${target.machineId}（hint=${hint}）`
+                    }).catch(() => {});
+                    return json({ success: true, machineId: target.machineId });
+                }
+
                 case 'disable':
                     updates = { status: 'disabled' };
                     message = '激活码已禁用';
