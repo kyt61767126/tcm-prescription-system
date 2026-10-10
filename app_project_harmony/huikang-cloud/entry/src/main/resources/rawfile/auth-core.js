@@ -3579,9 +3579,12 @@
             '<div style="font-weight:bold;margin-bottom:8px;color:#333;">🔐 授权状态</div>' +
             '<div id="licenseStatusText" style="font-size:13px;color:#666;margin-bottom:10px;">加载中...</div>' +
             '<button class="action-btn" id="adminActivateSettingsBtn" style="background:#26a69a;color:white;width:100%;padding:8px;font-size:14px;border:none;border-radius:4px;cursor:pointer;">📋 管理员激活</button>' +
-            // ★ 2026-09-18 语音版升级入口：已激活老用户（标准版/机构版）自助升级语音版
-            //   （默认隐藏，登录态 + 非语音版才显示，见 updateVoiceUpgradeBtnVisibility）
-            '<button id="voiceUpgradeSettingsBtn" style="display:none;margin-top:8px;background:linear-gradient(135deg,#7c4dff 0%,#5e35b1 100%);color:white;width:100%;padding:8px;font-size:14px;border:none;border-radius:4px;cursor:pointer;font-weight:bold;">🎙️ 升级语音版</button>';
+            // ★ 2026-10-10 语音升级入口【下线】：2026-09-22 起语音已并入全部付费版
+            //   （取消独立语音版售卖/加购，付费用户直接可用——见 functions/api/users.js
+            //   语音权益并入、shared/voice/voice-input.js 注释、《客服离线激活操作手册》
+            //   "语音录入不单独卖"）。该按钮作废，不再渲染，避免误导付费用户去"激活语音"。
+            //   updateVoiceUpgradeBtnVisibility() 保留为空转守卫（无按钮即 return），避免大范围改动。
+            '';
 
         modalBody.appendChild(section);
 
