@@ -121,8 +121,22 @@ export async function punchLogin(kv, { clinicName, clientClass, uid } = {}) {
             const start = await kv.get('lp_start');
             if (start === null || start === undefined) await kv.put('lp_start', day);
         } catch (_) {}
-        // 作废当月聚合缓存，使累计数在下一次诊所列表加载时纳入本次打卡
-        try { await kv.delete(`lpcur:${month}`); } catch (_) {}
+        // ★ 2026-10-10 列表配额治理：原 `delete(lpcur:{month})` 会作废当月聚合缓存 →
+        //   管理员下次打开诊所列表必触发 aggregateMonthRawKeys('lp:{month}-') 对**全月原始打卡键**
+        //   做 listAllKeys（list 配额 1000/天 被打满的隐藏消耗源，见 Cloudflare 降级告警）。
+        //   改为【增量更新缓存里本诊所的计数】：仅 1 get + 1 put，且打卡链路已随登录整条后台化。
+        //   缓存不存在/结构异常时不新建（交由列表侧按既有逻辑与 TTL 自建，避免半成品缓存）。
+        try {
+            const curKey = `lpcur:${month}`;
+            const cache = await kv.get(curKey, 'json');
+            if (cache && cache.c && typeof cache.c === 'object' && cache.builtAt) {
+                const ec = enc(clinicName);
+                const bucket = cache.c[ec] || { d: 0, a: 0, w: 0 };
+                bucket[t] = (Number(bucket[t]) || 0) + 1;
+                cache.c[ec] = bucket;
+                await kv.put(curKey, JSON.stringify(cache), { expirationTtl: MONTH_CACHE_TTL_SECONDS });
+            }
+        } catch (_) { /* 缓存更新失败不影响打卡与登录 */ }
     } catch (e) {
         console.warn('[login-punch] 打卡失败（不影响主流程）:', e && e.message);
     }

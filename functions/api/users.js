@@ -2482,12 +2482,19 @@ export async function onRequest(context) {
             });
             // ★ 2026-10-05 历史登录打卡（云端账号=网页/云桌面/云APP 登录成功唯一服务端
             //   触点，uid=username；服务端记录，三端云端客户端零改动）。失败不阻断登录。
+            // ★ 2026-10-10 登录提速：整条链路移入后台（原为阻塞 await：2 get + 2 put + 1 delete）。
+            //   统计最多晚一个缓存周期；打卡失败不影响登录（punchLogin 内部已自捕获）。
             try {
-                await punchLogin(kv, {
+                const __punch = punchLogin(kv, {
                     clinicName: clinicName,
                     clientClass: effClientClass || 'web',
                     uid: user.username
                 });
+                if (typeof context.waitUntil === 'function') {
+                    context.waitUntil(Promise.resolve(__punch).catch(() => {}));
+                } else {
+                    await __punch;
+                }
             } catch (e) { console.warn('[login-punch] 云端打卡失败:', e && e.message); }
             let loginPrescriptions = null;
             try { loginPrescriptions = await prefetchLoginPrescriptions; } catch (e) {}

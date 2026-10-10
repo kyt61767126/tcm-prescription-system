@@ -54,10 +54,16 @@ export function safeJsonParse(str, fallback) {
     try { return JSON.parse(str); } catch (e) { return fallback; }
 }
 
-export async function d1LoadPrescriptions(db, clinicId, includeDeleted = false) {
+export async function d1LoadPrescriptions(db, clinicId, includeDeleted = false, limit = null) {
+    // ★ 2026-10-10 登录提速：原 `ORDER BY datetime(created_at) DESC` 是【表达式排序】，
+    //   使 idx_rx_clinic_created(clinic_id, created_at) 失效（schema.sql:37）→ 全结果集排序。
+    //   created_at 一律以 ISO-8601 文本写入（prescriptions.js:321 `toISOString()`），
+    //   字典序即时间序，故直改 `ORDER BY created_at DESC` 可用上索引，语义等价。
+    //   limit：可选上限（不传 = 不限，既有调用方语义不变）。
+    const __lim = (Number.isInteger(limit) && limit > 0) ? (' LIMIT ' + limit) : '';
     const sql = includeDeleted
-        ? `SELECT * FROM prescriptions WHERE clinic_id = ? ORDER BY datetime(created_at) DESC`
-        : `SELECT * FROM prescriptions WHERE clinic_id = ? AND deleted_at IS NULL ORDER BY datetime(created_at) DESC`;
+        ? `SELECT * FROM prescriptions WHERE clinic_id = ? ORDER BY created_at DESC${__lim}`
+        : `SELECT * FROM prescriptions WHERE clinic_id = ? AND deleted_at IS NULL ORDER BY created_at DESC${__lim}`;
     const result = await db.prepare(sql).bind(clinicId).all();
     if (!result || !result.success) return [];
     return result.results.map(row => d1RowToPrescription(row));

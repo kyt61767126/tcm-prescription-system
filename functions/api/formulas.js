@@ -135,7 +135,9 @@ export async function onRequest(context) {
 
         // D1 读取方剂
         async function readFormulasD1() {
-            const result = await db.prepare(`SELECT * FROM formulas WHERE clinic_id = ? ORDER BY datetime(updated_at) DESC`).bind(clinicKey).all();
+            // ★ 2026-10-10：`datetime(updated_at)` 为表达式排序，使 (clinic_id, updated_at) 索引失效；
+            //   updated_at 以 ISO-8601 文本写入，字典序即时间序 → 直用列排序（仅影响显示顺序，语义等价）。
+            const result = await db.prepare(`SELECT * FROM formulas WHERE clinic_id = ? ORDER BY updated_at DESC`).bind(clinicKey).all();
             if (!result || !result.success) return [];
             return result.results.map(d1RowToFormula);
         }

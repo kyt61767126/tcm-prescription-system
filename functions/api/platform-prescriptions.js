@@ -141,7 +141,9 @@ export async function onRequest(context) {
 
             if (d1On && db) {
                 // ★ D1 优先：一次 SQL 查询所有诊所处方（替代 KV 逐诊所扫描）
-                const result = await db.prepare(`SELECT * FROM prescriptions WHERE deleted_at IS NULL ORDER BY datetime(created_at) DESC`).all();
+                // ★ 2026-10-10：`datetime(created_at)` 为表达式排序，使 (clinic_id, created_at) 索引失效；
+                //   created_at 以 ISO-8601 文本写入，字典序即时间序 → 直用列排序（仅影响显示顺序）。
+                const result = await db.prepare(`SELECT * FROM prescriptions WHERE deleted_at IS NULL ORDER BY created_at DESC`).all();
                 if (result && result.success) {
                     allPrescriptions = result.results.map(d1RowToPrescription);
                     // 补充 clinicName
