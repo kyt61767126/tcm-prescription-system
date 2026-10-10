@@ -1880,4 +1880,9 @@
   - **修复**：claim 超时 12s→**30s**；loading 改显「首次开通约需 10～30 秒，请勿关闭」；catch 对 AbortError 给「请直接再点一次，重试通常很快」友好引导。只改激活码路径；付款下单/工单申请接口快，12s 不动。
   - **两张设备表别混淆**（登录 403 排查）：①全局 `license:{code}.devices`（maxDevices=5，机构版也不卡）；②**账号级 `user_devices:{手机号}`**（机构版 1 台/标准版 2 台）——登录卡的是②，错误文案「机构版每账号最多 1 台」即此。重置测试账号=`wrangler kv key delete "user_devices:{phone}" --namespace-id b1ab3e4b683341958cef369fcbf94933 --remote`（get 返回 404=已删，非异常），下次登录自动重建并绑定当前设备。
   - **★ 深层隐患（未根治，待决策）**：云端 App Java 桥**未实现 getMachineId**，机器 ID 是随机 `browser-<18hex>` 存 `auth:deviceMachineId`——重装/清数据/存储写失败即换指纹，机构版 1 台限制下易把真买家锁死（激活窗口与登录共用 collectDeviceIdentity 同键，故同机数据在则一致）。根治选项：①Java 桥补稳定硬件 ID + collectDeviceIdentity 增加 AndroidNative 尝试；②登录凭正确密码允许自动换机（现在 claim 换机放行、login 却硬 403，口径不一）。
+* **★ 2026-10-10 云端App稳定硬件机器 ID（方案①落地，commit 3400168e，cloud.js → 8 副本 + 云 App Java）**：
+  - **Java（MainActivity.NativeBridge）**：新增 `case "getMachineId"` → `getStableMachineId()`，**返回原始 ID 字符串而非 JSON**（前端按 8-64 位正则直消费，JSON 会被消毒清空）。分层=**缓存优先（SharedPreferences `tcm_device/machine_id`，命中合法格式直接返回，生成后永不重算）→ ANDROID_ID SHA-256 派生**（`"cloud-mid:"+aid` 入哈希、取前 32 hex、前缀 `and-`=36 字符；与心跳同隐私口径，原始 ANDROID_ID 不出设备；Android 8+ 按签名+应用稳定，卸载重装不变 → 缓存丢也算出同值）→ **UUID 兜底**（前缀 `uid-`）。过滤 unknown/空/<8 位；异常返空串走前端兜底不崩。
+  - **JS（cloud.js collectDeviceIdentity）**：electronAPI 与 Capacitor 之间新增 `AndroidNative.invoke('getMachineId','{}')` 分支，clientClass='app'，正则校验后采用；桥异常留空走指纹兜底。openAdminActivate 路径原本就有该 invoke 调用（过去返回 unknown-method JSON 被清空），现在自动生效。
+  - **一次性迁移**：旧设备服务端绑的是随机 browser-xxx，换硬件 ID 后机构版账号会再 403 一次——需 `wrangler kv key delete "user_devices:{phone}" ... --remote`，新 APK 登录重建。测试账号 13398999999 旧绑定此前已清、未再登录，故零迁移；真实存量机构版买家（目前应无）走客服同法。
+  - **验证**：云 Web/桌面不触发该分支（无 AndroidNative）行为不变；真机验证=装新 APK → 管理员激活窗口底部机器 ID 应为 `and-xxxxxxxxxx...`（不再是 browser-）→ 退出重登稳定不变。
 
