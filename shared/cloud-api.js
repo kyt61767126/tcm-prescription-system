@@ -20,6 +20,32 @@ if (typeof window.updateModeStatus !== 'function') {
 }
 
 // 云端同步辅助函数 - 对用户、处方、药品、方剂API启用
+// ★ 2026-10-10 修复「指纹解锁报 The user aborted a request.」——
+//   原先固定 10s 硬超时，abort 抛出的 AbortError 在 Blink 里 message 恒为
+//   "The user aborted a request."，本函数又把它【原样】return，经 auth-core 的
+//   loginWithUsernamePassword（`cloudResult.error` 透传）落到登录框红字：
+//   用户只看到一句英文平台文案，既不知道是"请求超时"，也不知道该怎么办。
+//   真机现象：指纹验证成功 → 解锁后立即登录（刚退出系统指纹弹窗，WebView/网络栈
+//   处于恢复期，弱网下更明显）→ 越过 10s 被 abort → 英文红字；密码登录只是赶巧没超时。
+//   ① 超时改为可配且分档：登录类 30s、其余 20s（options.timeoutMs 可覆盖）
+//   ② 错误归一化：abort/超时 与 WebView 平台级网络文案一律转中文可执行提示；
+//      我方构造的 HTTP 错误（含服务端 error 透传）保持原样不动
+//   ③ 返回对象带 timedOut 标记，供调用方（如指纹解锁）做一次自动重试
+const CLOUD_FETCH_TIMEOUT_DEFAULT_MS = 20000;
+const CLOUD_FETCH_TIMEOUT_LOGIN_MS = 30000;
+const CLOUD_FETCH_TIMEOUT_MSG = '网络较慢或已断开，请求超时，请检查网络后重试';
+
+function isPlatformNetText(msg) {
+    return /abort|Failed to fetch|NetworkError|Load failed|ERR_[A-Z_]+|net::/i.test(String(msg || ''));
+}
+
+function normalizeCloudFetchError(error, timedOut) {
+    const raw = String((error && error.message) || '');
+    if (timedOut || isPlatformNetText(raw)) return CLOUD_FETCH_TIMEOUT_MSG;
+    if (!raw) return '网络异常，请稍后重试';
+    return raw;   // 我方 HTTP 错误（带服务端原因）原样保留
+}
+
 window.cloudFetch = async function(url, options = {}) {
     if (!url.includes('/users') && !url.includes('/prescriptions') &&
         !url.includes('/medicines') && !url.includes('/formulas') &&
@@ -27,8 +53,17 @@ window.cloudFetch = async function(url, options = {}) {
         return { success: false, error: 'Non-allowed API disabled', fromCloud: false };
     }
 
+    // ★ 登录放宽到 30s（见上方注释②）；options.timeoutMs 可显式覆盖
+    const __isLogin = /login=true/i.test(String(url));
+    const __timeoutMs = (Number(options && options.timeoutMs) > 0)
+        ? Number(options.timeoutMs)
+        : (__isLogin ? CLOUD_FETCH_TIMEOUT_LOGIN_MS : CLOUD_FETCH_TIMEOUT_DEFAULT_MS);
+    let __timedOut = false;
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    const timeoutId = setTimeout(() => {
+        __timedOut = true;
+        try { controller.abort(); } catch (e) {}
+    }, __timeoutMs);
 
     try {
         const response = await fetch(url, {
@@ -115,11 +150,14 @@ window.cloudFetch = async function(url, options = {}) {
 
     } catch (error) {
         clearTimeout(timeoutId);
-        console.error('Cloud sync failed:', error.message);
+        // ★ 2026-10-10：平台级文案（abort/超时/NetworkError…）归一化为中文可执行提示，
+        //   绝不再把 "The user aborted a request." 这类英文原样抛给用户（见文件头①-③）
+        const __errMsg = normalizeCloudFetchError(error, __timedOut);
+        console.error('Cloud sync failed:', (error && error.message) || error);
         if (window._cloudReachable !== false) {
             window._cloudReachable = false;
             window.updateModeStatus();
         }
-        return { success: false, error: error.message, status: error.status, fromCloud: false };
+        return { success: false, error: __errMsg, status: error && error.status, timedOut: !!__timedOut, fromCloud: false };
     }
 };

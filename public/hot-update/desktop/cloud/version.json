@@ -1,12 +1,12 @@
 {
   "format": 1,
   "channel": "cloud",
-  "hotVersion": "2026.10.08-1",
-  "appVersion": "1.2.264",
+  "hotVersion": "2026.10.10-1",
+  "appVersion": "1.2.267",
   "files": [
     {
       "name": "index.html",
-      "sha256": "3cea4d343439333b76a6c4e9c8ab842addedb72ccbfdeec771fa14cd99fdb040",
+      "sha256": "8618d1905cd143fa92846f1369da80e0cfad4cd2bdf2ec8908b9d3b5d5f6cee3",
       "size": 730514
     },
     {
@@ -56,8 +56,8 @@
     },
     {
       "name": "cloud-api.js",
-      "sha256": "5d4d2ba18aca43efd3167140210d2bc0a23b0c92f7cdb2f64316231203b5cb77",
-      "size": 5781
+      "sha256": "638ab84afea12a794b5f9dccc0f1b5ac462716d8ef30e2d501c078fb7c42527e",
+      "size": 8300
     },
     {
       "name": "performance-utils.js",
@@ -105,6 +105,6 @@
       "size": 881727
     }
   ],
-  "signedAt": 1791449603722,
-  "signature": "+pIeCQ0/SBokLzk7gKjucgFsA/dDt6O9aQOT039on1FeyVqTp8wNIeEWJWXt4ptohKjWilyVwmKqBC5ArXncBw=="
+  "signedAt": 1791594307735,
+  "signature": "R/gRcL2B4INrYfqvCiWs3gwov3eu3MrrwLlWaXs+RRSqpWHX9oaUjPh43mtBt1g/MFwXBsh8gM6VA/Pj2G/BDQ=="
 }
