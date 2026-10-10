@@ -1891,5 +1891,6 @@
   - **根因**：Cloudflare **Free 计划 KV 写入 1000 次/天**硬顶；登录成功路径上有多个 put（bindUserDevice 设备绑定、session、clearLoginFailures×2、license devices 注册、punch 等），当天反复真机登录测试+业务+可能的写放大耗尽配额。其中 **bindUserDevice 的 kv.put（原 L151）无 try**，reject 直接冒泡到 handler 顶层 catch → 500（wgj 在 DEVICE_LIMIT_EXEMPT_ACCOUNTS，跳过数量检查、正好走到该 put，故不是 403）。
   - **修复**：bindUserDevice 的 kv.put 包 try/catch，配额耗尽/瞬断时**降级继续**（不阻断登录；D1 双写仍补偿；都失败则本次暂不落库、下次登录补写）——设备名额强一致让位于可用性。其余写大多已 waitUntil/自 try。验证主域名登录恢复 200、token 正常。
   - **容量决策（长期）**：免费版 1000 writes/day 对多诊所+心跳+登录+处方偏紧，UTC 0 点重置（临时恢复）但会复发。**根治=升级 Workers Paid（$5/月，KV writes 1000→1,000,000/天，D1/Pages 额度同增）**；次选=审计削减登录/心跳冗余写（每次登录 updateLicense 注册设备、clearLoginFailures 双写等）但治标。
+  - **写削减已落地（commit 6a03e0d5，用户选"先削减冗余写"不升级）**：①`clearLoginFailures` 改先 get 确认失败计数存在才 delete（成功登录常态 0 写，用宽裕读配额换紧张写配额）；②`bindUserDevice` 设备表不再每次登录全量写——新设备必写，已存在设备仅端类型变化或距上次落库 lastSeenAt≥24h 才写（当天反复登录/真机测试零设备写，lastSeenAt 天级精度；KV 与 D1 双写同门控）。一次成功登录的写耗降到**仅 session**（互斥必需）+当天首次的 punch。验证配额仍超限下登录照样 200。
   - **通用铁律**：任何非关键依赖（KV/外部写）失败都不得把核心登录/读操作打死；handler 顶层 catch 只兜底，关键写必须就地容错。
 
