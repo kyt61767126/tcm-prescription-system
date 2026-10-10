@@ -1867,4 +1867,11 @@
   - **复测铁证**：构造 2 管理员诊所（add-clinic-user 建 doctor → update-user 升 clinic_admin）→ delete-user 删掉手机号本人（绕过最后管理员保护的唯一途径）→ batch 云端码 validate，响应 cloudAccountProvisioned=true，日志 `taobao-cloud-auto-provisioned`（自动开新诊所，旧申请原地留档）。
   - **实测方法论沉淀**：码记录**带 productClass（cloud/offline）即判定 source='preset'**，无独立字段——batch 接口可零成本造等价淘宝备货码；admin-submit 支付前置 409 必须先 `free-pass {action:'add'}`（客户端传 freePass 字段无效）；admin-approve 必须显式带 type + days/expiresAt；add-clinic-user 仅 doctor/cashier（禁止造管理员）；客服兜底 SOP=客户报手机号 → 后台清残留 admin_req 后重新激活，或直接人工补开诊所。
 * **2026-10-10 后台按需查看完整机器码（commit 19b60423，后端 status.js + admin 双副本，五端零重打包）**：所有码接口（含 sanitizeRecord / 查看设备弹窗）对机器码**统一脱敏只显前 8 位+...**，客服解绑/换机核对拿不到全值。新增 `POST /api/license/status {code, action:'reveal-device', machineId:'前8位...'}`——服务端从该码真实 devices 按 精确→前缀(去...) 回退匹配返回完整 machineId；前端「查看设备」弹窗每行加「👁显示/🙈隐藏」按钮，点击才展开、默认仍脱敏。**仅平台总管理员可用**（status.js POST 管理操作本就只放 platform_admin，service 客服不可），每次查看写码日志 `reveal-device` 留痕。线上验证：脱敏 hint 返回 `e2e-latency-probe-0001`，错误 hint 404。另注：客户本机完整机器码查看入口=云端桌面「管理员激活」窗口底部（带复制按钮）；设备版本查询/解除本身只需前 8 位即可命中。
+* **★ 2026-10-10 淘宝买家「激活码激活」入口强化（commit 11d972f5 + cv c7025d3a；offline/cloud 双权威源 → sync 11 副本；签发 app-local 热更 2026.10.10-1，minAppCode 288 不抬）**：
+  - **问题**：App 版管理员激活版本选择页把付款流程当主路径，「已有激活码？直接输入」只是 12px 灰色小字；注册成功页也只有「立即激活正式版（=去付款）/稍后激活」——淘宝买家拿码找不到入口，易误提交待付款订单。
+  - **改动（纯 JS innerHTML，0 改 HTML 结构/CSS 文件）**：①版本选择页版本卡下方加**全宽金色主按钮「🔑 已有激活码？点此直接激活」**（id `adminCodeEntryBtn`，点击 `show('adminTabCode')+setActiveTab('code')`），原 adminSkipToCode 小字删除，留言申请改绿色小字保留；②**离线版注册成功页**加金色「🔑 我有激活码，立即激活」（id `localRegCodeBtn`），原付款按钮文案改「💳 没有激活码，在线购买正式版」。
+  - **直达机制**：`openAdminActivate(opts)` 新增 `opts.initialTab='code'`，透传 `showAdminActivateModal(mid,cname,initialTab)` 第三参，全部事件绑定后执行跳转，**并自动把注册手机号预填进 Tab2 的 adminCodePhone**（state.phone 优先、版本页电话兜底）。
+  - **生效方式**：云端 Web/桌面刷新即达；**离线 App 走热更**（启动静默拉取→下次启动生效，无需重装 APK）；云端 App/鸿蒙随下次 APK。
+  - **踩坑**：业务 JS 内容变更后 pre-push 必拦 cv——必须 `node tools/check-cv-hashes.cjs --update` + `tools/sync-html.ps1` 传播 index.html 副本（本次刷 1 个：auth-core cv 045b2b7e→784caa1a）。
+  - **线上验证**：云端 Web 真实弹窗截图确认金色按钮渲染、点击后 Tab2 正确显示且 tab 高亮；离线注册成功页为 offline.js 独占未上公网，同构代码+静态复核（若客户反馈异常再针对性实测）。
 
