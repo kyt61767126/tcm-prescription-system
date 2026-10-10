@@ -56,7 +56,7 @@ REM 2026-08-19 Add: Unified build-env gate (8-step: Git/BOM/encoding/version/pac
 REM Replaces scattered fix-ps1-bom / verify-app-version / verify-no-hardcoded-clinic / pre-flight-check calls (single entry, no missed steps)
 echo [0/10] Ensure build environment (BOM / encoding / version gate / APP resource / disk ^>=5GB)...
 REM NOTE: -AppDir must point to Gradle project root (where gradlew.bat lives), NOT the inner app module dir
-REM ★ 2026-08-19 修复: 传 %APP_DIR%(去尾反斜杠) 而非 %~dp0(尾反斜杠+引号=>\" 被 PowerShell 当转义引号, 吞掉后续参数)
+REM ★ 2026-08-19 修复: 传 %APP_DIR%(去尾反斜杠) 而非 %~dp0(尾反斜杠+引号=)\" 被 PowerShell 当转义引号, 吞掉后续参数)
 powershell -NoProfile -ExecutionPolicy Bypass -File "%REPO_ROOT%\tools\ensure-build-env.ps1" -Target offline-app -AppDir "%APP_DIR%" -MinDiskSpaceGB 5.0
 if errorlevel 1 (
     echo [FATAL] ensure-build-env FAIL, build aborted! Please fix issues above

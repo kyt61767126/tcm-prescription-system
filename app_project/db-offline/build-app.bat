@@ -7,7 +7,7 @@ REM ============================================================
 REM build-app.bat - Offline APP 统一入口（代理到 app\build-app.bat）
 REM 顶层菜单 one-click-pack.ps1 / release-menu.ps1 统一调用本文件，
 REM 与云端版 db-yunduan\build-app.bat 保持一致的调用接口。
-REM 用法: build-app.bat [standard|institutional]
+REM 用法: build-app.bat [standard/institutional]
 REM ============================================================
 
 if not exist "%~dp0app\build-app.bat" (
