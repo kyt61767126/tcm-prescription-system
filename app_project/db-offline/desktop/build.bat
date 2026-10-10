@@ -135,7 +135,7 @@ if exist "%OUTPUT_DIR%" (
         rename "%OUTPUT_DIR%" "dist_old_!DSTAMP!" 2>nul
     )
     REM 2026-08-19 fallback: if rename ALSO fails (Defender minifilter lock on app.asar),
-    REM   switch to timestamp-isolated output dir build_output_<ts>. Never blocks.
+    REM   switch to timestamp-isolated output dir build_output_(). Never blocks.
     if exist "%OUTPUT_DIR%" (
         powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] %OUTPUT_DIR% still locked (likely Defender scanning app.asar), switching to alternate output dir build_output_!DSTAMP!...'"
         set "OUTPUT_DIR=build_output_!DSTAMP!"
@@ -173,7 +173,7 @@ echo [OK] Code obfuscation complete
 echo.
 
 REM ★ 铁闸4/5（2026-08-21 同步自云端 B2 推广）：写入 build-meta.json — 登录页/主界面版本自证三元组
-REM   登录页/主界面顶端会显示 Vx.x.xx | Build 时间 | Arch 2.xx，用户一眼能对照真假包
+REM   登录页/主界面顶端会显示 Vx.x.xx / Build 时间 / Arch 2.xx，用户一眼能对照真假包
 echo [7.5/9] Iron Gate #4 / #5 — Write build-meta.json (version-triple for login page)...
 node "%~dp0..\..\..\tools\write-build-meta.cjs" "%CD%"
 if errorlevel 1 (
@@ -200,15 +200,15 @@ set "TMP=%CD%\tmp"
 
 REM ============================================================================
 REM 2026-08-19 Two-phase build (fix .bnzc hash invalidated by rcedit):
-REM electron-builder order = copy exe -> afterPack(embed .bnzc, hash OK) ->
-REM rcedit(icon/version writes exe -> hash broken). Old single npm run build
+REM electron-builder order = copy exe →to afterPack(embed .bnzc, hash OK) →to
+REM rcedit(icon/version writes exe →to hash broken). Old single npm run build
 REM produced Setup with mismatched .bnzc. New flow:
 REM   Phase 1: --dir only (afterPack + rcedit complete, exe final)
 REM   Phase 2: embed+verify .bnzc on final exe (blocking gate)
 REM   Phase 3: --prepackaged builds nsis+portable from the embedded exe
 REM ============================================================================
 set NODE_TLS_REJECT_UNAUTHORIZED=0
-REM 2026-08-19: pass OUTPUT_DIR explicitly (supports build_output_<ts> fallback when dist locked)
+REM 2026-08-19: pass OUTPUT_DIR explicitly (supports build_output_() fallback when dist locked)
 node "node_modules\electron-builder\cli.js" --win --dir --config.directories.output="%OUTPUT_DIR%"
 set "BUILD_RC=%errorlevel%"
 if not "%BUILD_RC%"=="0" (
@@ -534,7 +534,7 @@ if "%SIGN_FAIL%"=="1" (
 echo [OK] Installers signed
 echo.
 
-REM 2026-08-19 POST-BUILD CONSOLIDATION: if we used build_output_<ts> fallback dir (dist was locked)
+REM 2026-08-19 POST-BUILD CONSOLIDATION: if we used build_output_() fallback dir (dist was locked)
 REM   now try to move results back to dist so user always finds deliverable in dist/ (project convention)
 REM   Do NOT fail build if move fails (dist might still be locked); just report and keep alt dir.
 set "DEFAULT_OUTPUT=dist"
@@ -549,7 +549,7 @@ if /i not "%OUTPUT_DIR%"=="%DEFAULT_OUTPUT%" (
     REM ★ 2026-08-23 防嵌套合并：move 目标已存在时，Windows 会把源目录移入目标内部，
     REM   形成 dist\win-unpacked\win-unpacked 嵌套（Defender 锁定半删除场景已实际发生，主 exe 藏进二级目录，
     REM   实锤：dist\win-unpacked\win-unpacked\惠康中医-本地.exe）。铁律：
-    REM   ① move 前先删目标；② 删不掉则 rename 让路（*_old_<时间戳>）；③ 两者都失败→本项放弃
+    REM   ① move 前先删目标；② 删不掉则 rename 让路（*_old_(时间戳)）；③ 两者都失败→本项放弃
     REM   （MOVE_OK=0，产物完整留在 fallback 目录，绝不 move 进半删除目录，绝不 xcopy 合并出新旧混合包）。
     set "MOVE_OK=1"
     for /f "delims=" %%E in ('dir /b "%OUTPUT_DIR%" 2^>nul') do (

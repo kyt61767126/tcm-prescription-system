@@ -137,7 +137,7 @@ if exist "%OUTPUT_DIR%" (
         rename "%OUTPUT_DIR%" "dist_old_!DSTAMP!" 2>nul
     )
     REM 2026-08-19 NEW fallback: rename ALSO fails (Defender minifilter lock on app.asar)
-    REM   -> switch to build_output_<ts> isolated dir. Never block build.
+    REM   →to switch to build_output_() isolated dir. Never block build.
     if exist "%OUTPUT_DIR%" (
         powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] %OUTPUT_DIR% locked (likely Defender scanning app.asar), switching to alternate output dir build_output_!DSTAMP!...'"
         set "OUTPUT_DIR=build_output_!DSTAMP!"
@@ -191,7 +191,7 @@ echo [OK] Code obfuscation complete
 echo.
 
 REM ★ 铁闸4（2026-08-21）：构建前写 build-meta.json（版本三元组）
-REM   登录页顶端会显示 Vx.x.xx | Build 时间 | Arch 2.xx，用户一眼能对照真假包
+REM   登录页顶端会显示 Vx.x.xx / Build 时间 / Arch 2.xx，用户一眼能对照真假包
 echo [7.1/9] Iron Gate #4 / #5 — Write build-meta.json (version-triple for login page)...
 node "%~dp0..\..\..\tools\write-build-meta.cjs" "%CD%"
 if errorlevel 1 (
@@ -413,7 +413,7 @@ if errorlevel 1 (
 )
 echo [OK] Original code restored
 echo.
-REM 2026-08-19 POST-BUILD CONSOLIDATION: if we used build_output_<ts> fallback dir (dist was locked)
+REM 2026-08-19 POST-BUILD CONSOLIDATION: if we used build_output_() fallback dir (dist was locked)
 REM   now try to move results back to dist so user always finds deliverable in dist/ (project convention)
 REM   Do NOT fail build if move fails (dist might still be locked); just report and keep alt dir.
 set "DEFAULT_OUTPUT=dist"
@@ -427,7 +427,7 @@ if /i not "%OUTPUT_DIR%"=="%DEFAULT_OUTPUT%" (
     ) else ( mkdir "%DEFAULT_OUTPUT%" )
     REM ★ 2026-08-23 防嵌套合并：move 目标已存在时，Windows 会把源目录移入目标内部，
     REM   形成 dist\win-unpacked\win-unpacked 嵌套（Defender 锁定半删除场景已实际发生，主 exe 藏进二级目录）。
-    REM   铁律：① move 前先删目标；② 删不掉则 rename 让路（*_old_<时间戳>）；③ 两者都失败→本项放弃
+    REM   铁律：① move 前先删目标；② 删不掉则 rename 让路（*_old_(时间戳)）；③ 两者都失败→本项放弃
     REM   （MOVE_OK=0，产物完整留在 fallback 目录，绝不 move 进半删除目录，绝不 xcopy 合并出新旧混合包）。
     set "MOVE_OK=1"
     for /f "delims=" %%E in ('dir /b "%OUTPUT_DIR%" 2^>nul') do (
