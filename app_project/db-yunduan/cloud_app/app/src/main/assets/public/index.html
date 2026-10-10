@@ -2442,6 +2442,52 @@ let currentUser = null;
             }
         }
 
+        // ★ 2026-10-10 P1-③ 处方落库【增量 upsert】（替代 clear() + 全量 put）
+        //   原流程：清空整个 store + 把 n 条全部重写（n=2000 → 1 次 clear + 2000 次 put，
+        //   是慢机上"十余秒"的组成部分之一）。
+        //   改为按 id 比对：只 put【新增/变更】的记录，只 delete【本地有、权威集里没有】的记录。
+        //     · 变更判据：updatedAt 不同（服务端溯源时间戳；任一方缺失视为变更，保守重写）
+        //     · 删除收敛：入参是"已合并本地未同步 + 已过滤删除墓碑"的权威集，
+        //       故仅当某 id 不在其中才删（跨端删除不会在本机复活）
+        //     · ★ 任何异常都抛出，由调用方回退到原 clear+全量 put（最坏 = 今天的行为，零回归）
+        async function syncPrescriptionsDBDiff(records) {
+            const database = await openDB();
+            const incoming = (records || []).filter(function (r) { return r && r.id != null; });
+            const incomingById = new Map();
+            incoming.forEach(function (r) { incomingById.set(String(r.id), r); });
+            return await new Promise(function (resolve, reject) {
+                const tx = database.transaction(['prescriptions'], 'readwrite');
+                const store = tx.objectStore('prescriptions');
+                const reqAll = store.getAll();
+                const stat = { put: 0, del: 0, kept: 0, total: incoming.length };
+                reqAll.onerror = function () { reject(reqAll.error); };
+                reqAll.onsuccess = function () {
+                    // 同一事务内继续排队写请求（IndexedDB 允许，只要不让出事件循环）
+                    const existing = reqAll.result || [];
+                    const existingIds = new Set();
+                    existing.forEach(function (rec) {
+                        if (!rec || rec.id == null) return;
+                        const k = String(rec.id);
+                        existingIds.add(k);
+                        const inc = incomingById.get(k);
+                        if (!inc) { stat.del++; store.delete(rec.id); return; }
+                        const same = (inc.updatedAt != null && rec.updatedAt != null)
+                            ? String(inc.updatedAt) === String(rec.updatedAt)
+                            : false;
+                        if (same) { stat.kept++; return; }
+                        stat.put++; store.put(inc);
+                    });
+                    incoming.forEach(function (inc) {
+                        if (!existingIds.has(String(inc.id))) { stat.put++; store.put(inc); }
+                    });
+                    try { window.__lastPrescriptionSyncStat = stat; } catch (e) {}
+                };
+                tx.oncomplete = function () { resolve(stat); };
+                tx.onerror = function () { reject(tx.error); };
+                tx.onabort = function () { reject(tx.error || new Error('事务被中止')); };
+            });
+        }
+
         async function clearPrescriptionsDB() {
             try {
                 const database = await openDB();
@@ -10906,8 +10952,15 @@ let currentUser = null;
                             } catch(e) { console.warn('[getAllUserPrescriptions] 合并本地未同步处方失败:', e); }
                             // ★ 硬性删除标记过滤：合并后剔除本机已删除的处方，防止删除后刷新"闪现"重现
                             allPrescriptions = filterOutDeleted(allPrescriptions);
-                            // 云端数据正确，清空旧的乱码缓存再写入（合并后结果）
-                            try { await clearPrescriptionsDB(); } catch(e) {}
+                            // ★ 2026-10-10 P1-③：增量落库（只写变更、只删权威集已无的 id）；
+                            //   失败则回退"清空 + 全量写"（最坏 = 原行为，零回归）
+                            try {
+                                await syncPrescriptionsDBDiff(allPrescriptions);
+                            } catch (e) {
+                                console.warn('[getAllUserPrescriptions] 增量落库失败，回退清空+全量写:', e && e.message);
+                                try { await clearPrescriptionsDB(); } catch (e2) {}
+                                try { await saveAllPrescriptionsToDB(allPrescriptions); } catch (e3) {}
+                            }
                             // ★ 2026-10-10 登录/加载提速（P1-②安全子集）：
                             //   本行原为【同步】`JSON.stringify` + 写盘——n=2000 时 5–20MB、
                             //   主线程阻塞 100–600ms，且就卡在登录后首屏路径上。
@@ -10922,7 +10975,8 @@ let currentUser = null;
                                 if (typeof requestIdleCallback === 'function') requestIdleCallback(__mirror, { timeout: 3000 });
                                 else setTimeout(__mirror, 0);
                             } catch (e) {}
-                            try { await saveAllPrescriptionsToDB(allPrescriptions); } catch(e) {}
+                            // ★ 2026-10-10 P1-③：原此处 `saveAllPrescriptionsToDB(allPrescriptions)`（全量 put）
+                            //   已被上面的增量落库取代，成功路径不再全量重写；失败路径由其内部回退覆盖。
                             console.log('[getAllUserPrescriptions] ✅ 云端API返回 '+arr.length+' 条，合并本地未同步 '+ (allPrescriptions.length - arr.length) +' 条，已写入');
                         }
                     }
