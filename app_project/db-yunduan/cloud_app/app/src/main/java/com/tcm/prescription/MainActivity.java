@@ -1748,6 +1748,11 @@ public class MainActivity extends BridgeActivity {
                     case "biometricDelete":
                         return new BiometricUnlockManager(MainActivity.this)
                                 .delete(args.optString("username", "")).toString();
+                    // ★ 2026-10-10 稳定硬件机器 ID（账号级设备授权唯一身份）。
+                    //   注意：本方法返回【原始机器 ID 字符串】而非 JSON——前端调用方
+                    //   按 /^[A-Za-z0-9_-]{8,64}$/ 直接消费（JSON 会被消毒正则清空）。
+                    case "getMachineId":
+                        return getStableMachineId();
                     default:
                         return fail("unknown method: " + name).toString();
                 }
@@ -1771,6 +1776,52 @@ public class MainActivity extends BridgeActivity {
             return "readFileAsBase64".equals(name)
                     || "deleteFile".equals(name)
                     || (name != null && name.startsWith("biometric"));
+        }
+
+        // ------------------------------------------------------------------
+        // ★ 2026-10-10 稳定设备机器 ID（账号级设备授权唯一身份，替代随机 browser-xxx）
+        //   分层策略（缓存优先，生成一次后永不重算）：
+        //     ① SharedPreferences 缓存：重装/重启稳定，同机永不变；
+        //     ② ANDROID_ID SHA-256 派生（取前 32 hex，前缀 and-，共 36 字符）：
+        //       与心跳同口径，原始 ANDROID_ID 永不出设备（隐私）；ANDROID_ID 在
+        //       Android 8+ 按签名+应用稳定，卸载重装也不变（缓存丢了也能算出同值）；
+        //     ③ 随机 UUID 兜底（前缀 uid-）：ANDROID_ID 不可用时生成并持久化。
+        //   "unknown"/空串等占位值一律过滤；任何异常返回空串（前端走兜底，不崩）。
+        // ------------------------------------------------------------------
+        private String getStableMachineId() {
+            try {
+                android.content.SharedPreferences sp =
+                        getSharedPreferences("tcm_device", Context.MODE_PRIVATE);
+                String cached = sp.getString("machine_id", "");
+                if (cached != null && cached.matches("[A-Za-z0-9_-]{8,64}")) return cached;
+
+                String id = "";
+                try {
+                    String aid = android.provider.Settings.Secure.getString(
+                            getContentResolver(), android.provider.Settings.Secure.ANDROID_ID);
+                    if (aid != null) aid = aid.trim();
+                    if (aid != null && aid.length() >= 8 && !"unknown".equalsIgnoreCase(aid)) {
+                        java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+                        byte[] h = md.digest(("cloud-mid:" + aid).getBytes("UTF-8"));
+                        StringBuilder sb = new StringBuilder();
+                        for (byte b : h) sb.append(String.format("%02x", b));
+                        id = "and-" + sb.substring(0, 32);
+                    }
+                } catch (Exception ex) {
+                    Log.w(TAG, "[machineId] ANDROID_ID 派生失败: " + ex.getMessage());
+                }
+
+                if (id.isEmpty()) {
+                    id = "uid-" + java.util.UUID.randomUUID().toString().replace("-", "");
+                    Log.i(TAG, "[machineId] ANDROID_ID 不可用，使用 UUID 兜底");
+                }
+                sp.edit().putString("machine_id", id).apply();
+                Log.i(TAG, "[machineId] 已生成稳定机器 ID: " + id.substring(0, 10) + "...");
+                return id;
+            } catch (Exception e) {
+                Log.e(TAG, "[machineId] getStableMachineId 失败", e);
+                return "";
+            }
         }
 
         // ------------------------------------------------------------------

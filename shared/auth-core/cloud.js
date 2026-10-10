@@ -793,6 +793,15 @@
                 const __mid = normalizeMachineIdResult(await global.electronAPI.activate.getMachineId());
                 if (__mid) { machineId = __mid; clientClass = 'desktop'; }
                 else if (global.Capacitor) { clientClass = 'app'; }
+            } else if (global.AndroidNative && typeof global.AndroidNative.invoke === 'function') {
+                // ★ 2026-10-10 云端App稳定硬件 ID（Java 桥 getStableMachineId：
+                //   SharedPreferences 缓存优先 + ANDROID_ID SHA-256 派生 + UUID 兜底）。
+                //   同机重装/清缓存也不漂移，替代随机 browser-xxx，杜绝机构版 1 台误锁。
+                clientClass = 'app';
+                try {
+                    const __hw = String(global.AndroidNative.invoke('getMachineId', '{}') || '').trim();
+                    if (/^[A-Za-z0-9_-]{8,64}$/.test(__hw)) machineId = __hw;
+                } catch (e2) { /* 桥异常留空，走下方指纹兜底 */ }
             } else if (global.Capacitor) {
                 clientClass = 'app';
             }
