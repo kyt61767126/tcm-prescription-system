@@ -3744,71 +3744,220 @@
     // ★★★ 2026-08-25 旧缓存自愈：免密拉取云端用户资料（GET /users?action=get-profile，Bearer token）。
     //   场景：登录缓存缺 clinicExpiresAt（部署前的旧登录数据，网页版会话恢复不重新登录）→
     //   基础设置授权区打开时静默拉取补齐并写回本地缓存，无需用户重新登录。
-    //   24 小时节流：拉取无结果（如平台管理员无到期时间）不重复打接口。
+    //
+    // ★★★ 2026-10-10 P0 修复「激活/续费成功后主窗口仍显示未激活/已缓存」：
+    //   原实现有两处致命保守，导致"服务器已经是对的、客户端永远不刷新"：
+    //     ① 回写只补空不覆盖 —— `if (!data.clinicExpiresAt && !cu.clinicExpiresAt) cu.clinicExpiresAt = ...`
+    //        ＋ patch 内 `if (!target.clinicExpiresAt && cu.clinicExpiresAt)`：缓存里已有
+    //        clinicExpiresAt（哪怕早已被续费改掉、或该码早已 used）就**永不更新**，
+    //        授权区永远停在登录那一刻的快照 ⇒ 续费到 2028-10-07 客户端仍显示旧到期日。
+    //     ② 触发条件只认"缺字段" —— `if (!cu.clinicExpiresAt) await refreshCloudProfile(cu)`：
+    //        旧缓存有 clinicStatus('test'/'active') 或有 clinicExpiresAt 时**根本不进来**，
+    //        于是「⏳ 未激活/旧缓存」这类文案一旦渲染就再无修正机会（早退分支直接 return）。
+    //   现口径（服务端 get-profile 是授权状态唯一权威，见 users.js sanitizeUser +
+    //   clinicExpiresAt）：
+    //     · 服务端明确给出的字段值**一律覆盖**本地缓存（补空语义已无必要），
+    //       仅当服务端未提供该字段（无到期时间的平台管理员等）才跳过；
+    //     · 节流改为 6 小时（原 24 小时），且**只在拉取真正成功时**记账 ——
+    //       网络失败/401 不再吃掉 6 小时窗口，下次打开设置即可重试；
+    //     · 返回 { ok, changed } 供调用方判断"缓存已被改写"→ 重渲授权区。
+    //   兼容性：本函数从不上界面、失败静默返回 false 语义（ok:false），
+    //   不写任何非授权字段，不碰 token/role/clinicId。
+    const PROFILE_FETCH_INTERVAL_MS = 6 * 60 * 60 * 1000;   // 6 小时／每个页面会话
     let __lastProfileFetchAt = 0;
+    // ★ 2026-10-10 P0：同一页面会话内并发渲染（防重入 reqId + 邀请码重渲）可能同时进入
+    //   自愈；用 in-flight 去重，避免一个设置面板打开就打两次 get-profile。
+    let __profileFetchInflight = null;
+
+    // ★ 服务端授权字段 → 本地缓存对象的落位（$target 与 cu 同步改）
+    //   为什么需要这个：并发渲染时后到的那次调用拿到的是**上一次快照 cu**（它没有拿到
+    //   in-flight 的返回值），若不把服务端值回灌到它身上，它会用旧值渲染出
+    //   「⏳ 未激活/旧缓存」+ 误导的"网络未完成"提示（复核 B6b/B6a 实测缺陷）。
+    function applyProfilePatch(target, src, overwrite) {
+        if (!target || !src) return false;
+        const keys = ['clinicEdition', 'clinicExpiresAt', 'clinicStatus', 'clinicName', 'userType'];
+        let touched = false;
+        for (let i = 0; i < keys.length; i++) {
+            const k = keys[i];
+            const v = src[k];
+            if (v === undefined || v === null || v === '') continue;
+            if (!overwrite && target[k]) continue;
+            if (String(target[k] === undefined || target[k] === null ? '' : target[k]) !== String(v)) touched = true;
+            target[k] = v;
+        }
+        return touched;
+    }
+
     async function refreshCloudProfile(cu) {
         try {
             const now = Date.now();
-            if (now - __lastProfileFetchAt < 24 * 60 * 60 * 1000) return false;
-            __lastProfileFetchAt = now;
-            if (!cu || !cu.token) return false;
-            if (!API_BASE) return false;
+            // ★ 2026-10-10 复核修复（B6a/B6b 真正的根因）：窗口可能是**本次渲染刚被另一个
+            //   并发/在途渲染占掉**的（同 tick 两次渲染、用户重开设置）——此时缓存里已经有
+            //   权威值了，只是本地 `cu` 还是旧快照。若这里一律返回 {ok:false}，后到的那次渲染
+            //   就会拿旧快照渲染出「⏳ 未激活/旧缓存」+ 误导的"联网校验未完成"提示，而缓存其实
+            //   已经修好了（复核实测：要再开一次设置才对）。
+            //   故：**先看缓存是否比本地快照新**（换号竞态用 username 挡住）→ 是则按"已问到
+            //   服务端"返回 ok:true，让调用方做完缓存归一后再渲染。
+            const cacheFresh = await isCacheAuthoritativeFor(cu);
+            if (cacheFresh) return { ok: true, changed: false, fromCache: true };
+            // ★ 有在途请求时必须**先等它落地再回读缓存**：刚刚那一刻 owner 还没写缓存，
+            //   先回读只会读到旧值 → 后到的渲染依然 stale（复核 B6a 实测顺序：
+            //   req2(joiner) 先渲染 stale、req1(owner) 后渲染正确，最终界面停在 stale）。
+            if (__profileFetchInflight) {
+                let __shared = null;
+                try { __shared = await __profileFetchInflight; } catch (e) { __shared = null; }
+                if (__shared && __shared.ok) return __shared;
+                if (await isCacheAuthoritativeFor(cu)) return { ok: true, changed: false, fromCache: true };
+                return { ok: false, changed: false };
+            }
+            if (now - __lastProfileFetchAt < PROFILE_FETCH_INTERVAL_MS) {
+                return { ok: false, changed: false, throttled: true };
+            }
+            if (!cu || !cu.token) return { ok: false, changed: false, noToken: true };
+            if (!API_BASE) return { ok: false, changed: false };
+            __profileFetchInflight = __refreshCloudProfileInner(cu);
+            try { return await __profileFetchInflight; }
+            finally { __profileFetchInflight = null; }
+        } catch (e) { __profileFetchInflight = null; return { ok: false, changed: false }; }
+    }
+
+    // 缓存里的授权字段是否比本地快照 `cu` 更权威（更晚的到期日 / 新出现的状态字段）
+    async function isCacheAuthoritativeFor(cu) {
+        try {
+            const raw = await StorageAdapter.getItem('auth:currentUser');
+            if (!raw) return false;
+            const d = JSON.parse(raw);
+            if (!d) return false;
+            const sameUser = (d.username && cu && cu.username)
+                ? String(d.username) === String(cu.username)
+                : true;
+            if (!sameUser) return false;
+            if (d.clinicExpiresAt) {
+                if (!cu || !cu.clinicExpiresAt) return true;
+                const a = new Date(d.clinicExpiresAt).getTime();
+                const b = new Date(cu.clinicExpiresAt).getTime();
+                if (isFinite(a) && isFinite(b) && a > b) return true;
+            }
+            if (d.clinicStatus && (!cu || !cu.clinicStatus)) return true;
+            if (d.clinicName && (!cu || !cu.clinicName)) return true;
+            if (d.clinicEdition && (!cu || !cu.clinicEdition)) return true;
+            return false;
+        } catch (e) { return false; }
+    }
+
+    async function __refreshCloudProfileInner(cu) {
+        // ★ 2026-10-10：窗口占用与回滚放进同一对 try/finally ——
+        //   先占窗口（原实现在 await 之后才记账 → 并发渲染会重复打接口），
+        //   任何**异常**路径（fetch reject / JSON 解析失败 / DNS 失败）都必须把窗口回滚为 0，
+        //   否则"网络失败后再打开设置应当重试"只是注释里的空话（复核 B7/B10 实测抓到这个缺口）。
+        __lastProfileFetchAt = Date.now();
+        let gotServerAnswer = false;
+        try {
+            if (typeof global.fetch !== 'function') return { ok: false, changed: false };
             // ★ 2026-08-25 必须用原生 fetch：cloudFetch 的 401 分支会触发全局登出+弹登录框
             //   （单设备互斥被顶下线的旧 token 调 get-profile 返回 401 时，自愈会误踢用户）。
-            //   自愈是静默兜底，失败就返回 false，不产生任何界面副作用。
+            //   自愈是静默兜底，失败就返回 ok:false，不产生任何界面副作用。
             const controller = (typeof AbortController !== 'undefined') ? new AbortController() : null;
             const timer = controller ? setTimeout(function () { try { controller.abort(); } catch (e) {} }, 10000) : null;
             let data = null;
+            let httpOk = false;
             try {
                 const resp = await global.fetch(API_BASE + '/users?action=get-profile', {
                     headers: { 'Authorization': 'Bearer ' + cu.token, 'Content-Type': 'application/json' },
                     cache: 'no-cache',
                     signal: controller ? controller.signal : undefined
                 });
+                httpOk = !!(resp && resp.ok);
                 const text = await resp.text();
                 data = JSON.parse(text.replace(/^\uFEFF/, '').trim());
             } finally {
                 if (timer) clearTimeout(timer);
             }
-            if (data && data.success && data.user) {
-                if (data.user.clinicEdition && !cu.clinicEdition) cu.clinicEdition = data.user.clinicEdition;
-                if (data.clinicExpiresAt && !cu.clinicExpiresAt) cu.clinicExpiresAt = data.clinicExpiresAt;
-                // ★ 2026-09-09 关键补齐：clinicStatus（老缓存缺此字段导致试用用户离线被误判为已激活）
-                if (data.user.clinicStatus && !cu.clinicStatus) cu.clinicStatus = data.user.clinicStatus;
-                if (data.user.userType && !cu.userType) cu.userType = data.user.userType;
-                // 写回本地缓存（存在才更新，同用户才合并），下次打开不再拉取
-                const patch = function (target) {
-                    if (target && target.username === cu.username) {
-                        if (!target.clinicEdition && cu.clinicEdition) target.clinicEdition = cu.clinicEdition;
-                        if (!target.clinicExpiresAt && cu.clinicExpiresAt) target.clinicExpiresAt = cu.clinicExpiresAt;
-                        if (!target.clinicStatus && cu.clinicStatus) target.clinicStatus = cu.clinicStatus;
-                        return true;
-                    }
-                    return false;
-                };
-                try {
-                    const raw = await StorageAdapter.getItem('auth:currentUser');
-                    if (raw) {
-                        const d = JSON.parse(raw);
-                        if (patch(d)) await StorageAdapter.setItem('auth:currentUser', JSON.stringify(d));
-                    }
-                } catch (e) { }
-                const lsKeys = ['currentUser', 'cloud_currentUser', 'user_login_data'];
-                for (let i = 0; i < lsKeys.length; i++) {
-                    try {
-                        const raw = global.localStorage.getItem(lsKeys[i]);
-                        if (!raw) continue;
-                        const d = JSON.parse(raw);
-                        const target = (d && d.user) ? d.user : d;
-                        if (patch(target)) global.localStorage.setItem(lsKeys[i], JSON.stringify(d));
-                    } catch (e) { }
-                }
-                return true;
+            // ★ 只有 HTTP 成功才算"问到服务端"（占住窗口）；401/5xx/网络异常都回滚 → 下次打开即重试
+            gotServerAnswer = httpOk;
+            // ★ 换账号竞态防护：响应可能是上一个账号的（自愈期间用户已退出/换号）→ 不写缓存
+            const __srvUser = (data && data.success) ? data.user : null;
+            const __srvName = __srvUser ? String(__srvUser.username || '') : '';
+            if (__srvName && String(cu.username || '') && __srvName !== String(cu.username)) {
+                return { ok: !!httpOk, changed: false };
             }
-        } catch (e) { }
-        return false;
-    }
+            if (!__srvUser) {
+                // 401 / success:false / 脏响应 → ok:false，界面会显示"联网校验未完成"提示
+                return { ok: false, changed: false };
+            }
+            // ★ 服务端值即权威：明确给出的授权字段一律覆盖（补空语义已废弃，见函数头说明）
+            const __srv = __srvUser;
+            // ★ 2026-10-10 复核修复（B6a/B6b）：**先把缓存里已有的授权字段归一进本对象，
+            //   再让服务端权威值覆盖** —— 顺序不能反，否则刚覆盖进去的权威值会被缓存里的
+            //   旧值反盖回来（复核回归实测：缓存退回 2027-10-08、渲染 363 天）。
+            //   为什么需要归一：并发/在途重开设置时，后到的那次调用拿到的是**上一次快照 cu**
+            //   （它只等到同一个 in-flight 结果，不会走本函数的写入分支）→ 若不归一，它会用
+            //   旧值渲染出「⏳ 未激活/旧缓存」+ 误导的"网络未完成"提示。
+            //   归一只覆盖授权字段（白名单），不动 token/role/username。
+            try {
+                const rawPrev = await StorageAdapter.getItem('auth:currentUser');
+                if (rawPrev) {
+                    const dPrev = JSON.parse(rawPrev);
+                    const __samePrev = (dPrev && dPrev.username && cu.username)
+                        ? String(dPrev.username) === String(cu.username)
+                        : true;   // 缓存无 username（旧形态）时按同会话处理（值来自本会话的缓存）
+                    if (__samePrev) applyProfilePatch(cu, dPrev, true);
+                }
+            } catch (e) { }
+            let changed = false;
+            const __set = function (key, val) {
+                if (val === undefined || val === null || val === '') return false;
+                if (String(cu[key] === undefined || cu[key] === null ? '' : cu[key]) === String(val)) return false;
+                cu[key] = val;
+                return true;
+            };
+            if (__set('clinicEdition', __srv.clinicEdition)) changed = true;
+            if (__set('clinicStatus', __srv.clinicStatus)) changed = true;
+            if (__set('userType', __srv.userType)) changed = true;
+            if (__set('clinicName', __srv.clinicName)) changed = true;
+            // 到期时间在响应顶层（users.js get-profile），也容忍嵌在 user 里的旧形态
+            const __exp = (data.clinicExpiresAt != null && data.clinicExpiresAt !== '')
+                ? data.clinicExpiresAt
+                : (__srv.clinicExpiresAt != null ? __srv.clinicExpiresAt : null);
+            if (__set('clinicExpiresAt', __exp)) changed = true;
 
+            // —— 写回本地缓存（同用户才合并），下次打开不再拉取 ——
+            // 先构造"要写进去的值"（= 权威 + 已合并的本地字段），本函数返回给调用方复用，
+            // 避免"缓存已修好、调用方却还拿旧对象渲染"的时序缺口。
+            const __fresh = {};
+            applyProfilePatch(__fresh, cu, true);
+            const patch = function (target) {
+                if (!target || target.username !== cu.username) return false;
+                return applyProfilePatch(target, __fresh, true);
+            };
+            try {
+                const raw = await StorageAdapter.getItem('auth:currentUser');
+                if (raw) {
+                    const d = JSON.parse(raw);
+                    if (patch(d)) await StorageAdapter.setItem('auth:currentUser', JSON.stringify(d));
+                }
+            } catch (e) { }
+            // ★ 关键：currentUser / cloud_currentUser 存的是 user 本体；
+            //   user_login_data 存的是 { user, loginTime } 结构 —— 必须按结构分别 patch，
+            //   patch 对错结构返回 false（username 不匹配）会静默漏写（原实现即如此）。
+            const lsKeys = ['currentUser', 'cloud_currentUser', 'user_login_data', 'local_currentUser'];
+            for (let i = 0; i < lsKeys.length; i++) {
+                try {
+                    const raw = global.localStorage.getItem(lsKeys[i]);
+                    if (!raw) continue;
+                    const d = JSON.parse(raw);
+                    const target = (d && d.user && typeof d.user === 'object') ? d.user : d;
+                    if (patch(target)) global.localStorage.setItem(lsKeys[i], JSON.stringify(d));
+                } catch (e) { }
+            }
+            return { ok: true, changed: changed, fresh: __fresh };
+        } catch (e) {
+            return { ok: false, changed: false };
+        } finally {
+            // 没拿到服务端答案（网络/超时/解析异常）→ 回滚窗口，让下次打开设置即重试
+            if (!gotServerAnswer) __lastProfileFetchAt = 0;
+        }
+    }
     // ★★★ 2026-08-25 全局统一授权状态：云端账号授权状态文案（参考离线版格式）
     //   已登录 → "✅ 已激活（机构版/标准版）<br>剩余 X 天"
     //   版本判定 clinicEdition（cloud_clinic→机构版 / cloud_personal→标准版），缺省回退 CONFIG.edition
@@ -3816,24 +3965,64 @@
     async function getCloudAccountLicenseHtml() {
         const cu = await readCloudLoginUser();
         if (!cu) return null;
+        // ★★★ 2026-10-10 P0：**先自愈、后判定**（原实现是"先判定、再自愈"，且自愈只认缺字段）
+        //   病史：续费/审核通过后服务端 already 正确（clinicExpiresAt 已推后、码已 used），
+        //   但本地缓存停在登录快照且"只补空不覆盖"⇒
+        //     · 命中 clinicStatus==='test' → 早退返回「⏳ 试用期/待审核」，永不再拉服务端；
+        //     · 命中"旧缓存兜底" → 早退返回「⏳ 未激活/旧缓存」，同样永不自愈；
+        //     · 有 clinicExpiresAt → 连 refreshCloudProfile 都不调用。
+        //   现在：只要登录缓存存在就先问一次服务端权威值（6 小时节流 + 只在成功时记账，
+        //   见 refreshCloudProfile），拿到即覆盖重算——用户不需要重新登录。
+        // ★ 2026-10-10 复核修复（B9）：登录缓存里可能**没有 token**（本地表登录路径在
+        //   "云端补拉 token 失败"时会写一份无 token 的 user 对象）→ 此时一次请求都不发，
+        //   界面恒停在「⏳ 未激活/旧缓存」。这里做一次定向补读：若 auth:currentUser 里有
+        //   token 就补上（只补 token，不改其它字段）。仍拿不到才放弃自愈（需重新登录）。
+        if (!cu.token) {
+            try {
+                const raw = await StorageAdapter.getItem('auth:currentUser');
+                if (raw) {
+                    const d = JSON.parse(raw);
+                    if (d && d.username === cu.username && d.token) cu.token = d.token;
+                }
+            } catch (e) { }
+        }
+        // ★ 2026-10-10 复核修复（B6a/B6b：在途重开设置/并发渲染停在 stale）：
+        //   自愈成功后，**用缓存里的权威值把本对象的授权字段归一**（白名单，不动 token/role），
+        //   否则并发时后到的那次调用会拿旧快照渲染出「⏳ 未激活/旧缓存」+ 误导网络提示。
+        let __refreshed = { ok: false, changed: false };
+        try { __refreshed = await refreshCloudProfile(cu) || __refreshed; } catch (e) { }
+        if (__refreshed && __refreshed.ok) {
+            try {
+                const raw = await StorageAdapter.getItem('auth:currentUser');
+                if (raw) {
+                    const d = JSON.parse(raw);
+                    const __same = (d && d.username && cu.username)
+                        ? String(d.username) === String(cu.username)
+                        : true;
+                    if (__same) applyProfilePatch(cu, d, true);
+                }
+            } catch (e) { }
+        }
         // ★ 2026-09-09 关键修复：clinicStatus === 'test'（自助注册待审核/试用用户）
         //   绝不显示「✅ 已激活」——此前只要有云端登录缓存就无差别显示已激活，
         //   导致试用用户离线打开也被误判为已激活（用户实测反馈）。
         //   test 状态 → 显示「⏳ 试用期/待审核」；active 状态 → 显示已激活+剩余天数。
         const clinicStatus = String(cu.clinicStatus || cu.status || '');
-        // 兜底：旧缓存没 clinicStatus 且没 clinicExpiresAt → 保守视为试用/未激活
+        // 兜底：旧缓存没 clinicStatus 且没 clinicExpiresAt → 保守视为试用/未激活。
+        //   ★ 注意：服务端已明确回 clinicStatus='active' 时这里不再误判（sanitizeUser 恒返回
+        //   clinicStatus，缺省 'active'）；仅当"服务端也没问到 + 本地确实什么都不缺"才兜底。
         const isLikelyInactive = !clinicStatus && !cu.clinicExpiresAt && !cu.expiresAt;
         if (clinicStatus === 'test' || isLikelyInactive) {
             let html = '⏳ <span style="color:#ff9800;">' + (clinicStatus === 'test' ? '试用期/待审核' : '未激活/旧缓存') + '</span>';
             if (cu.clinicName) html += '<br><span style="color:#666;font-size:12px;">诊所：' + cu.clinicName + '</span>';
+            // ★ 2026-10-10：本次自愈失败（网络/401）或仍缺字段时，给一句"可重试"提示，
+            //   不再让用户以为"已经续费了却永远显示未激活"；成功取到权威值则不会走到这里。
+            if (!__refreshed.ok) {
+                html += '<br><span style="color:#999;font-size:11px;">（授权状态联网校验未完成，请检查网络后重开本页）</span>';
+            }
             // 试用用户不给已激活按钮的"灰色只读"状态
             setAdminActivateBtnState(null);
             return html;
-        }
-        // ★ 2026-08-25 旧缓存自愈：登录缓存缺 clinicExpiresAt 时免密拉取补齐
-        //   （网页版会话恢复不重新登录 / 云端APP 旧版本缓存，打开授权区即自愈）
-        if (!cu.clinicExpiresAt) {
-            await refreshCloudProfile(cu);
         }
         let ed = String(cu.clinicEdition || cu.edition || '');
         if (!ed && typeof CONFIG !== 'undefined' && CONFIG && CONFIG.edition) ed = String(CONFIG.edition);
@@ -4026,6 +4215,12 @@
             if (!d || !d.clinicExpiresAt) return;
             const cu = await readCloudLoginUser();
             if (!cu || String(cu.clinicExpiresAt || '') === String(d.clinicExpiresAt)) return;
+            // ★ 2026-10-10 P0 配套：单调回写 —— 邀请码接口的诊所有效期可能比 get-profile
+            //   刚取回的权威值**更旧**（缓存/投影滞后），若直接回写会把刚刷新到的续费日期
+            //   改回去（用户表现为"刚看到续费后的天数又跳回旧值"）。只在"更晚"时采用。
+            const __curMs = new Date(cu.clinicExpiresAt || '').getTime();
+            const __newMs = new Date(d.clinicExpiresAt).getTime();
+            if (isFinite(__curMs) && isFinite(__newMs) && __newMs <= __curMs) return;
             cu.clinicExpiresAt = d.clinicExpiresAt;
             const patch = function (target) {
                 if (target && target.username === cu.username) {
@@ -4825,11 +5020,11 @@
                         '<div style="font-size:24px;">🏨</div><div style="font-size:14px;font-weight:bold;margin-top:2px;color:#333;">机构版</div><div style="font-size:11px;color:#909399;">多人机构 · 多用户管理</div>' +
                     '</div>' +
                 '</div>' +
-                // ★ 2026-08-23 简化：版本选择页直达链接——手里已有激活码/想留言申请的用户跳过版本选择
-                //   （版本仅 Tab1 管理员激活申请需要，Tab2 输码/Tab3 工单不消费该字段，原流程强制选择属冗余步骤）
-                '<div style="display:flex;justify-content:space-between;gap:8px;margin-top:14px;font-size:12px;">' +
-                    '<span id="adminSkipToCode" style="color:#26a69a;cursor:pointer;-webkit-tap-highlight-color:transparent;">已有激活码？直接输入 →</span>' +
-                    '<span id="adminSkipToTicket" style="color:#07c160;cursor:pointer;-webkit-tap-highlight-color:transparent;">留言申请激活码 →</span>' +
+                // ★ 2026-10-10 淘宝买家入口强化：原 12px 小字「已有激活码？直接输入」
+                //   升级为全宽金色主按钮，点击直达输码 Tab；留言申请链接保留在按钮下方。
+                '<button type="button" id="adminCodeEntryBtn" style="width:100%;margin-top:14px;padding:13px;font-size:15px;font-weight:bold;border:none;border-radius:10px;color:#fff;background:linear-gradient(135deg,#fbbf24 0%,#f59e0b 100%);cursor:pointer;-webkit-tap-highlight-color:transparent;box-shadow:0 2px 6px rgba(245,158,11,0.35);">🔑 已有激活码？点此直接激活</button>' +
+                '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px;font-size:12px;">' +
+                    '<span id="adminSkipToTicket" style="color:#07c160;cursor:pointer;-webkit-tap-highlight-color:transparent;">没有激活码？留言申请 →</span>' +
                 '</div>' +
             '</div>' +
 
@@ -5136,9 +5331,9 @@
             syncSharedFieldsFrom('ticket'); // 工单Tab填过的信息同步到管理员激活
             show('adminStepForm'); setActiveTab('admin');
         });
-        // ★ 2026-08-23 简化：版本选择页直达链接（跳过版本选择，复用 Tab 切换逻辑）
-        var skipCodeLink = document.getElementById('adminSkipToCode');
-        if (skipCodeLink) skipCodeLink.addEventListener('click', function() {
+        // ★ 2026-10-10 金色主按钮直达输码 Tab（替代原小字链接 adminSkipToCode）
+        var codeEntryBtn = document.getElementById('adminCodeEntryBtn');
+        if (codeEntryBtn) codeEntryBtn.addEventListener('click', function() {
             show('adminTabCode'); setActiveTab('code');
             setTimeout(function() { var i = document.getElementById('adminCodeInput'); if (i) i.focus(); }, 200);
         });

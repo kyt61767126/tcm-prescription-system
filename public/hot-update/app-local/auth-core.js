@@ -5697,8 +5697,9 @@
             '<div id="localRegSuccess" style="display:none;padding:32px 16px;text-align:center;">' +
                 '<div style="font-size:44px;">🎉</div>' +
                 '<div style="font-size:17px;font-weight:bold;color:#2c3e50;margin-top:10px;">注册成功！</div>' +
-                '<div style="font-size:13px;color:#606266;margin-top:8px;line-height:1.7;">登录账号：<b id="localRegSuccessPhone" style="color:#26a69a;"></b><br>现在可用「手机号 + 密码」登录：在激活窗口点【🆓 永久免费版】领取（开方不限量、￥0 永久），也可先试用 7 天标准版再激活正式版</div>' +
-                '<button id="localRegActivateBtn" style="width:100%;margin-top:16px;padding:12px;font-size:15px;border:none;border-radius:8px;color:#fff;background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);cursor:pointer;font-weight:bold;">💳 立即激活正式版</button>' +
+                '<div style="font-size:13px;color:#606266;margin-top:8px;line-height:1.7;">登录账号：<b id="localRegSuccessPhone" style="color:#26a69a;"></b><br>手里<b>已有激活码</b>（如淘宝购买）点下方金色按钮直接激活；也可点【🆓 永久免费版】领取（开方不限量、￥0 永久），或先试用 7 天标准版</div>' +
+                '<button id="localRegCodeBtn" style="width:100%;margin-top:16px;padding:12px;font-size:15px;border:none;border-radius:8px;color:#fff;background:linear-gradient(135deg,#fbbf24 0%,#f59e0b 100%);cursor:pointer;font-weight:bold;">🔑 我有激活码，立即激活</button>' +
+                '<button id="localRegActivateBtn" style="width:100%;margin-top:10px;padding:12px;font-size:15px;border:none;border-radius:8px;color:#fff;background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);cursor:pointer;font-weight:bold;">💳 没有激活码，在线购买正式版</button>' +
                 '<button id="localRegLaterBtn" style="width:100%;margin-top:10px;padding:12px;font-size:15px;border:none;border-radius:8px;color:#26a69a;background:#fff;border:2px solid #26a69a;cursor:pointer;font-weight:bold;">⏳ 稍后激活，先试用</button>' +
             '</div>';
 
@@ -5747,6 +5748,25 @@
                         reloadLoginPage();
                     } else if (typeof window.openAdminActivate === 'function') {
                         window.openAdminActivate();
+                    }
+                } catch (e) {}
+            });
+        }
+        const codeBtn = document.getElementById('localRegCodeBtn');
+        if (codeBtn) {
+            codeBtn.addEventListener('click', function () {
+                close();
+                try {
+                    if (isDesktopLoginPage) {
+                        // 桌面：打开桌面激活窗口（其内含激活码 Tab）
+                        if (window.electronAPI && window.electronAPI.activate &&
+                            typeof window.electronAPI.activate.show === 'function') {
+                            window.electronAPI.activate.show();
+                        }
+                        reloadLoginPage();
+                    } else if (typeof window.openAdminActivate === 'function') {
+                        // ★ 2026-10-10 直达输码 Tab（淘宝买家主路径）
+                        window.openAdminActivate({ initialTab: 'code' });
                     }
                 } catch (e) {}
             });
@@ -6393,10 +6413,13 @@
         });
     }
 
-    global.openAdminActivate = async function () {
+    global.openAdminActivate = async function (opts) {
         // 设置激活中标志，抑制fallbackTimer和其他弹窗源
         global.__licenseActivating = true;
         try {
+            // ★ 2026-10-10 opts.initialTab='code'：开窗直达「激活码激活」Tab
+            //   （注册成功页「我有激活码」按钮使用；默认不传=版本选择页）
+            const initialTab = (opts && opts.initialTab === 'code') ? 'code' : null;
             // 兼容离线(有 activate 本地桥)与云端APP(无本地激活桥)：
             // 管理员激活是"提交申请->管理员审批->云端创建账号"，云端为 SaaS，无需本地激活桥即可完成
             const hasActivate = global.electronAPI && global.electronAPI.activate &&
@@ -6414,14 +6437,14 @@
             try {
                 if (typeof CONFIG !== 'undefined' && CONFIG.clinicName) clinicName = CONFIG.clinicName;
             } catch (e) {}
-            showAdminActivateModal(machineId, clinicName);
+            showAdminActivateModal(machineId, clinicName, initialTab);
         } catch (e) {
             console.warn('[LicenseCheck] 打开管理员激活弹窗失败:', e);
         }
     };
 
     // 管理员激活多步骤弹窗（自身管理状态机，不阻塞返回）
-    function showAdminActivateModal(machineId, clinicName) {
+    function showAdminActivateModal(machineId, clinicName, initialTab) {
         // 若已打开则忽略
         if (document.getElementById('adminActivateOverlay')) return;
 
@@ -6500,11 +6523,11 @@
                         '<div style="font-size:24px;">🏨</div><div style="font-size:14px;font-weight:bold;margin-top:2px;color:#333;">机构版</div><div style="font-size:11px;color:#909399;">多人机构 · 多用户管理</div>' +
                     '</div>' +
                 '</div>' +
-                // ★ 2026-08-23 简化：版本选择页直达链接——手里已有激活码/想留言申请的用户跳过版本选择
-                //   （版本仅 Tab1 管理员激活申请需要，Tab2 输码/Tab3 工单不消费该字段，原流程强制选择属冗余步骤）
-                '<div style="display:flex;justify-content:space-between;gap:8px;margin-top:14px;font-size:12px;">' +
-                    '<span id="adminSkipToCode" style="color:#26a69a;cursor:pointer;-webkit-tap-highlight-color:transparent;">已有激活码？直接输入 →</span>' +
-                    '<span id="adminSkipToTicket" style="color:#07c160;cursor:pointer;-webkit-tap-highlight-color:transparent;">留言申请激活码 →</span>' +
+                // ★ 2026-10-10 淘宝买家入口强化：原 12px 小字「已有激活码？直接输入」
+                //   升级为全宽金色主按钮，点击直达输码 Tab；留言申请链接保留在按钮下方。
+                '<button type="button" id="adminCodeEntryBtn" style="width:100%;margin-top:14px;padding:13px;font-size:15px;font-weight:bold;border:none;border-radius:10px;color:#fff;background:linear-gradient(135deg,#fbbf24 0%,#f59e0b 100%);cursor:pointer;-webkit-tap-highlight-color:transparent;box-shadow:0 2px 6px rgba(245,158,11,0.35);">🔑 已有激活码？点此直接激活</button>' +
+                '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px;font-size:12px;">' +
+                    '<span id="adminSkipToTicket" style="color:#07c160;cursor:pointer;-webkit-tap-highlight-color:transparent;">没有激活码？留言申请 →</span>' +
                 '</div>' +
                 // ★ 2026-09-21 离线免费版：版本选择页一键领取（与桌面激活窗免费卡同语义；
                 //   电话选填——填则建手机号账号(默认密码admin)，留空领取后走本地注册向导）
@@ -7244,9 +7267,9 @@
             syncSharedFieldsFrom('ticket'); // 工单Tab填过的信息同步到管理员激活
             show('adminStepForm'); setActiveTab('admin');
         });
-        // ★ 2026-08-23 简化：版本选择页直达链接（跳过版本选择，复用 Tab 切换逻辑）
-        var skipCodeLink = document.getElementById('adminSkipToCode');
-        if (skipCodeLink) skipCodeLink.addEventListener('click', function() {
+        // ★ 2026-10-10 金色主按钮直达输码 Tab（替代原小字链接 adminSkipToCode）
+        var codeEntryBtn = document.getElementById('adminCodeEntryBtn');
+        if (codeEntryBtn) codeEntryBtn.addEventListener('click', function() {
             show('adminTabCode'); setActiveTab('code');
             setTimeout(function() { var i = document.getElementById('adminCodeInput'); if (i) i.focus(); }, 200);
         });
@@ -7254,6 +7277,22 @@
         if (skipTicketLink) skipTicketLink.addEventListener('click', function() {
             showTicketFormModal(machineId, (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.clinicName) || '');
         });
+
+        // ★ 2026-10-10 注册成功页「我有激活码，立即激活」：开窗即停在输码 Tab
+        //   （放在全部绑定之后执行，保证 show/setActiveTab 可用、且不被其他逻辑覆盖）
+        if (initialTab === 'code') {
+            show('adminTabCode'); setActiveTab('code');
+            // 预填注册手机号（state.phone 来自注册信息；兜底取版本页电话框）
+            try {
+                const cp = document.getElementById('adminCodePhone');
+                if (cp && !cp.value) {
+                    const src = (state.phone && PHONE_RE.test(state.phone)) ? state.phone
+                        : ((document.getElementById('editionPhone') || {}).value || '');
+                    if (PHONE_RE.test(String(src))) cp.value = String(src);
+                }
+            } catch (e) {}
+            setTimeout(function() { var i = document.getElementById('adminCodeInput'); if (i) i.focus(); }, 200);
+        }
 
         // ★ 2026-09-21 离线免费版：一键领取 free 授权（APP 原生桥 claimFreeLicense；
         //   桌面主进程也暴露 activate.claimFree）。电话复用版本页 #editionPhone，选填。
