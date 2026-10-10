@@ -134,9 +134,17 @@ async function bindUserDevice(kv, username, machineId, clientClass, nowIso, edit
     }
 
     const existing = record.devices.find(d => d.machineId === mid);
+    // ★ 2026-10-10 KV 写配额治理（免费版 1000 写/天）：不再每次登录都全量写设备表。
+    //   新设备必须写；已存在设备仅在 ①端类型变化 或 ②距上次落库的 lastSeenAt 超过
+    //   24h 时才写——同一天反复登录/真机测试零设备写，lastSeenAt 保持"天"级精度。
+    let needWrite = false;
     if (existing) {
+        const clsChanged = !!(clientClass && existing.clientClass !== clientClass);
+        const seenMs = existing.lastSeenAt ? Date.parse(existing.lastSeenAt) : 0;
+        const stale = !existing.lastSeenAt || !isFinite(seenMs) || (Date.now() - seenMs) >= 24 * 3600 * 1000;
         existing.lastSeenAt = nowIso;
         if (clientClass) existing.clientClass = clientClass;
+        needWrite = clsChanged || stale;
     } else {
         if (!exempt && record.devices.length >= record.maxDevices) {
             return { ok: false, code: 'DEVICE_LIMIT', record };
@@ -147,18 +155,20 @@ async function bindUserDevice(kv, username, machineId, clientClass, nowIso, edit
             boundAt: nowIso,
             lastSeenAt: nowIso
         });
+        needWrite = true;
     }
-    try {
+    if (needWrite) {
+      try {
         await kv.put(KV_USER_DEVICES_PREFIX + username, JSON.stringify(record));
-    } catch (putErr) {
+      } catch (putErr) {
         // ★ 2026-10-10 容错（生产事故根因）：KV 每日写配额耗尽（"KV put() limit
         //   exceeded for the day"）或瞬断时，设备绑定属"尽力而为"，绝不能把核心
         //   登录打成 500。降级继续——下方 D1 双写仍可补偿；都失败则本次绑定
         //   暂不落库，配额恢复后下次登录补上。设备名额的强一致让位于可用性。
         console.error('[bindUserDevice] KV 写入失败，降级继续（D1补偿/下次补写）:', putErr && putErr.message);
-    }
-    // ★ P3：D1 双写设备绑定（USE_D1=true 时同步写 D1）
-    if (env && isD1Enabled(env)) {
+      }
+      // ★ P3：D1 双写设备绑定（USE_D1=true 时同步写 D1）
+      if (env && isD1Enabled(env)) {
         const db = getDB(env);
         if (db) {
             try {
@@ -173,6 +183,7 @@ async function bindUserDevice(kv, username, machineId, clientClass, nowIso, edit
                 }
             } catch (e) { console.error('[D1] bindUserDevice sync failed:', e.message); }
         }
+      }
     }
     return { ok: true, record };
 }
@@ -310,7 +321,13 @@ async function checkLoginLocked(kv, username) {
 
 async function clearLoginFailures(kv, username) {
     const key = 'login_fail:' + username;
-    await kv.delete(key);
+    // ★ 2026-10-10 KV 写配额治理：delete 也占写配额。原实现每次成功登录都无脑
+    //   delete（即使计数从不存在=空删）。改为先 get 确认存在才删——读配额
+    //   (10万/天) 远宽裕于写 (1000/天)，成功登录常态下 0 写。
+    try {
+        const v = await kv.get(key);
+        if (v !== null && v !== undefined) await kv.delete(key);
+    } catch (e) { /* 清失败计数失败绝不阻断登录 */ }
 }
 
 // ★ P1-6 防登录枚举：哑验证参数（格式与真实 PBKDF2 哈希一致，SHA-256 输出 64 个十六进制字符）
