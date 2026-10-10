@@ -4491,7 +4491,7 @@ export async function onRequest(context) {
 
     } catch (error) {
         console.error('Users API error:', error);
-        return json({ success: false, error: '服务器内部错误，请稍后再试' }, 500);
+        return json({ success: false, error: '服务器内部错误，请稍后再试', _dbg: (error && error.name) + ' :: ' + (error && error.message) }, 500);
     }
 }
 
