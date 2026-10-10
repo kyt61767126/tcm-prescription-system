@@ -170,5 +170,49 @@ node tools/prescriptions-db-diff-test.cjs || {
     exit 1
 }
 
-echo "[pre-push] 十四道校验全部通过，允许推送"
+# ★ 2026-10-10 十五道门补强：prescriptions-ready-gate-test.cjs（P1-④ 处方号取号收口点）。
+#   背景：loadData 可变 fire-and-forget（主界面先出现、数据随后到），但处方号生成
+#   generatePrescriptionNo → getGlobalMaxSerial 依赖处方全量集 —— 数据未到位就取号 =
+#   **重复处方号**（医疗场景不可接受）。定案：处方号生成唯一收口点 = getGlobalMaxSerial，
+#   在那里 fail-closed（未就绪不返回序号、不写任何存储，给可行动中文提示）。
+#   ★ 该测试【按函数本体从各端 index.html 抽取】执行，并按用户指定口径打桩
+#     cloudFetch / IndexedDB / localStorage；同时断言"六端 loadData 成功+失败两路都开闸"，
+#     防止单端漏改导致该端开方永久被拒（fail-closed 的反面风险）。
+#   为何必须是门禁：重复处方号 / 开方被永久卡死，两者都是医疗事故级缺陷。
+echo "[pre-push] ⑮ 处方号收口点 fail-closed 回归（P1-④）..."
+node tools/prescriptions-ready-gate-test.cjs || {
+    echo "[pre-push] FAIL: 处方号就绪闸断言未过——按 [FAIL] 用例名定位（A 预取消费/落库护栏 B 未就绪 fail-closed C 六端就绪闸契约），修复后重推"
+    exit 1
+}
+
+# ★ 2026-10-10 十六道门补强：license-renew-backfill-test.cjs（续费顺延回填码记录 clinicName）。
+#   背景（真机实证 15200069705 / clinic_o67d5eqv1r）：淘宝重复购买「顺延」路径只写 clinic:{id}，
+#   从不碰 license:{code} ⇒ 该码 clinicName 恒空 ⇒ ① 登录机构版设备额度预检按
+#   license_clinic_index（clinicName→codes 投影索引）取码直接取不到；② 后台「诊所授权」
+#   视图按 rec.clinicName 联表 → 该码不进视图（客户续费到 2028-10-07 却查不到授权）。
+#   ★ 该测试 import 真实模块（不抄副本）用 mock KV 驱动，断言：
+#     A 回填 + 索引新增本码且不破坏他所条目 / B 已绑定他所**绝不覆盖**（防越权改归属）
+#     C 读/写/索引异常与码不存在均不得影响已生效的顺延 / D 幂等（二次不叠加、零额外写）。
+echo "[pre-push] ⑯ 续费顺延回填码记录与诊所索引回归..."
+node tools/license-renew-backfill-test.cjs || {
+    echo "[pre-push] FAIL: 续费回填断言未过——按 [FAIL] 用例名定位（A 回填+索引/B 越权防护/C 容错/D 幂等），修复后重推"
+    exit 1
+}
+
+# ★ 2026-10-10 十七道门补强：auth-status-refresh-test.cjs（授权状态自愈行为）。
+#   背景（客户 15200069705 实证）：云端客户端授权区读的是本地登录缓存快照，服务端 get-profile
+#   才是权威；原实现"回写只补空不覆盖 + 触发条件只认缺字段" ⇒ 续费后客户端永远显示
+#   「未激活/旧缓存」。本门禁在 vm 里跑**真实上线包**（不抽函数体——节流窗口/in-flight 去重/
+#   reqId 防重入都在闭包里，抽函数体会把被测语义抽走），断言：
+#     P1 过时缓存被服务端覆盖 + 渲染新天数 / P2 旧缓存形态能自愈成「✅ 已激活」
+#     P3 试用用户**绝不**被显示成已激活（2026-09-09 安全修复不得回退）
+#     P4 网络失败与 401 零写入 / P5 换账号竞态零写入 / P6 邀请码回写单调性
+#     P7 并发与在途重开设置不得停在 stale / P8 网络失败不吃节流窗口（必须可重试）
+echo "[pre-push] ⑰ 授权状态自愈行为回归（激活/续费后不再显示未激活/已缓存）..."
+node tools/auth-status-refresh-test.cjs || {
+    echo "[pre-push] FAIL: 授权状态自愈断言未过——按 [FAIL] 用例名定位（P1 覆盖/P2 自愈/P3 试用防护/P4 零写/P7 并发/P8 重试），修复后重推"
+    exit 1
+}
+
+echo "[pre-push] 十七道主校验全部通过，允许推送"
 exit 0

@@ -20,7 +20,8 @@ import {
     findPhoneOccupancy
 } from '../../_lib/auth.js';
 // ★ 2026-09-23 账号被真实重新开通时清除删除墓碑（同手机号重新激活恢复登录）
-import { clearAccountTombstone } from './license-core.js';
+// ★ 2026-10-10 续费顺延同时回填码记录 clinicName（→ saveLicense 自动补 license_clinic_index）
+import { clearAccountTombstone, getLicense, updateLicense } from './license-core.js';
 // ★ 2026-10-08 淘宝云端码 claim 自动开通：审计三索引唯一写入口（无循环依赖：
 //   license-write-service 只依赖 license-core/schema-guard，不 import 本文件）
 import { createAdminRequest, KV_ADMIN_REQ_PREFIX } from './license-write-service.js';
@@ -774,10 +775,51 @@ export async function renewClinicForRepeatPurchase(kv, opts) {
         console.warn('[TaobaoRenew] 顺延幂等标记写入失败（本次顺延已生效）:', e && e.message);
     });
 
+    // ⑤ ★ 2026-10-10 修复「码记录 clinicName 未回填 + 诊所→码索引未随续费更新」
+    //   本函数**只写 clinic:{id}**，从不碰 license:{code}。而 validate.js 的续费分支
+    //   走的是"预检不通过 → 顺延"路径，**不经过 commitTaobaoCloudAuto**，
+    //   故 license:{code}.clinicName 恒为空 ⇒ 两处实证故障：
+    //     · 后台「诊所授权」视图按 rec.clinicName 联表 → 续费码**不进视图**
+    //       （users.js clinics=true 的 licenseByClinic 过滤 rec.clinicName）；
+    //     · license_clinic_index（clinicName → codes 投影索引）是按
+    //       saveLicense 内 clinicName diff 维护的，记录没 clinicName → **索引里没有这个码**
+    //       ⇒ users.js 登录机构版设备额度预检按索引取码直接取不到（本轮客户
+    //       15200069705 / clinic_o67d5eqv1r 即此形态：续费到 2028-10-07 但索引未更新）。
+    //   修法：读回该码记录，仅当 clinicName 为空（或已等于本诊所，幂等）时写回；
+    //   用 updateLicense（→ saveLicense）落库，clinicName diff 由既有逻辑自动
+    //   **顺带把索引项补上**（新增 clinicName = 一次 1 读 + 1 写，稳态零开销）。
+    //   安全边界：① 绝不覆盖"已绑定到别的诊所"的码（防越权改归属，只警告）；
+    //             ② 码不存在（脏数据/已删）→ 跳过；③ 任何异常都不影响已生效的顺延。
+    let __licenseBackfilled = false;
+    try {
+        // ★ 2026-10-10 复核修复（C4）：原先 `.catch(() => null)` 把 KV 读异常吞成"码不存在"，
+        //   外层 catch 永不触发 ⇒ 线上没有任何日志线索。这里显式记一条 warn。
+        const prevLic = await getLicense(kv, code).catch((e) => {
+            console.warn('[TaobaoRenew] 读回码记录失败（KV 异常，clinicName 未回填）:', code, e && e.message);
+            return null;
+        });
+        if (prevLic) {
+            const __oldName = String(prevLic.clinicName || '').trim();
+            if (!__oldName) {
+                await updateLicense(kv, code, { clinicName: clinic.name });
+                __licenseBackfilled = true;
+            } else if (__oldName !== clinic.name) {
+                console.warn('[TaobaoRenew] 该码已绑定其他诊所，跳过 clinicName 回填（防越权改归属）:',
+                    code, __oldName, '≠', clinic.name);
+            } else {
+                __licenseBackfilled = true;   // 已一致：索引早该有它（幂等，无需写）
+            }
+        }
+    } catch (e) {
+        console.warn('[TaobaoRenew] 码记录 clinicName 回填失败（索引仍可由读侧回填，不影响续费）:',
+            code, e && e.message);
+    }
+
     return {
         ok: true, renewed: true, already: false,
         clinicId: clinic.id, clinicName: clinic.name,
-        oldExpiresAt, newExpiresAt, days, tierUpgradeSuggested
+        oldExpiresAt, newExpiresAt, days, tierUpgradeSuggested,
+        licenseBackfilled: __licenseBackfilled
     };
 }
 

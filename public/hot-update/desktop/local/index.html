@@ -2486,6 +2486,53 @@ let currentUser = null;
             }
         }
 
+        // ★ 2026-10-10 P1-③ 处方落库【增量 upsert】（离线端移植；云端 public/index.html 同源同体）
+        //   原流程：清空整个 store + 把 n 条全部重写（n=2000 → 1 次 clear + 2000 次 put，
+        //   是慢机上"十余秒"的组成部分之一）。离线端虽然是本地权威（无云端权威集），
+        //   但"迁移回填 / 读后回写"这类全量重写同样可以按 id diff 收敛为只写变更。
+        //   改为按 id 比对：只 put【新增/变更】的记录，只 delete【本地有、入参集合里没有】的记录。
+        //     · 变更判据：updatedAt 不同（服务端溯源时间戳；任一方缺失视为变更，保守重写）
+        //     · 删除收敛：入参是调用方算出的"应存集合"（离线端为 getAllPrescriptionsFromDB 的
+        //       完整读回 + localStorage 迁移集），故仅当某 id 不在其中才删
+        //     · ★ 任何异常都抛出，由调用方回退到原 clear+全量 put（最坏 = 今天的行为，零回归）
+        async function syncPrescriptionsDBDiff(records) {
+            const database = await openDB();
+            const incoming = (records || []).filter(function (r) { return r && r.id != null; });
+            const incomingById = new Map();
+            incoming.forEach(function (r) { incomingById.set(String(r.id), r); });
+            return await new Promise(function (resolve, reject) {
+                const tx = database.transaction(['prescriptions'], 'readwrite');
+                const store = tx.objectStore('prescriptions');
+                const reqAll = store.getAll();
+                const stat = { put: 0, del: 0, kept: 0, total: incoming.length };
+                reqAll.onerror = function () { reject(reqAll.error); };
+                reqAll.onsuccess = function () {
+                    // 同一事务内继续排队写请求（IndexedDB 允许，只要不让出事件循环）
+                    const existing = reqAll.result || [];
+                    const existingIds = new Set();
+                    existing.forEach(function (rec) {
+                        if (!rec || rec.id == null) return;
+                        const k = String(rec.id);
+                        existingIds.add(k);
+                        const inc = incomingById.get(k);
+                        if (!inc) { stat.del++; store.delete(rec.id); return; }
+                        const same = (inc.updatedAt != null && rec.updatedAt != null)
+                            ? String(inc.updatedAt) === String(rec.updatedAt)
+                            : false;
+                        if (same) { stat.kept++; return; }
+                        stat.put++; store.put(inc);
+                    });
+                    incoming.forEach(function (inc) {
+                        if (!existingIds.has(String(inc.id))) { stat.put++; store.put(inc); }
+                    });
+                    try { window.__lastPrescriptionSyncStat = stat; } catch (e) {}
+                };
+                tx.oncomplete = function () { resolve(stat); };
+                tx.onerror = function () { reject(tx.error); };
+                tx.onabort = function () { reject(tx.error || new Error('事务被中止')); };
+            });
+        }
+
         async function clearPrescriptionsDB() {
             try {
                 const database = await openDB();
@@ -5116,6 +5163,38 @@ let currentUser = null;
             });
         }
 
+        // ★★★ 2026-10-10 P1-④ 处方数据"就绪"闸（唯一收口点：getGlobalMaxSerial）
+        //   与云端 public/index.html 同体（跨版本门禁 Tier B 监控）：主界面"先出现、数据随后到"时，
+        //   处方号生成依赖处方全量集 ⇒ 未就绪取号 = 重复处方号（医疗场景不可接受）。
+        //   定案：不 gate 7 个创建入口，只在取号收口点 fail-closed（不取号、不写任何存储 + 中文提示）。
+        //   契约（改这里前先看 tools/prescriptions-ready-gate-test.cjs）：
+        //     · window.__prescriptionsReady       —— loadData 成功/失败**两路**都必须置 true；
+        //     · window.__prescriptionsReadyPromise —— 同一 Promise，供取号处 await；
+        //     · window.__prescriptionsReadyTimeoutMs —— 可选覆盖等待上限（默认 10s，测试注入）。
+        (function initPrescriptionsReadyGate() {
+            const w = window;
+            if (w.__prescriptionsReadyPromise && typeof w.__prescriptionsReadyPromise.then === 'function') return;
+            w.__prescriptionsReady = false;
+            w.__prescriptionsReadyPromise = new Promise(function (resolve) {
+                w.__prescriptionsReadyResolve = function (v) {
+                    w.__prescriptionsReady = true;
+                    resolve(v === undefined ? true : v);
+                };
+            });
+        })();
+
+        // loadData 内标记就绪（两路调用；幂等，重复 resolve 无副作用）
+        function markPrescriptionsReady() {
+            try {
+                if (typeof window.__prescriptionsReadyResolve === 'function') {
+                    window.__prescriptionsReadyResolve(true);
+                } else {
+                    // 闸未初始化（极端时序）→ 直接置位，绝不让开方被永久卡死
+                    window.__prescriptionsReady = true;
+                }
+            } catch (e) { }
+        }
+
         // ★修复"重新登入后历史处方不显示"：loadData token 机制
         // 防止 init() 异步触发的 loadData 在 handleLogin 的 loadData 之后完成，
         // 用空数据（init 时 currentUser 为 null，IndexedDB 可能未就绪）覆盖已加载的处方。
@@ -5180,6 +5259,8 @@ let currentUser = null;
                 } else {
                     console.warn('[loadData] token=' + myToken + ' 已过期（最新 token=' + _loadDataToken + '），跳过 prescriptionHistory 设置');
                 }
+                // ★ 2026-10-10 P1-④：处方集已到位（或已有权威兜底路径）→ 开放取号闸
+                markPrescriptionsReady();
             } catch(e) {
                 console.warn('getAllUserPrescriptions 失败，尝试 localStorage 降级:', e);
                 if (myToken !== _loadDataToken) {
@@ -5202,6 +5283,10 @@ let currentUser = null;
                         prescriptionHistory = fallbackPrescriptions;
                     }
                 }
+                // ★ 2026-10-10 P1-④：失败路径**同样必须**置位就绪闸 ——
+                //   否则 window.__prescriptionsReady 永久 false，getGlobalMaxSerial fail-closed
+                //   会把开方整体卡死（宁可放行已降级的缓存数据，也不能锁死业务）。
+                markPrescriptionsReady();
             }
             
             defaultMedicines = [
@@ -5752,10 +5837,39 @@ let currentUser = null;
             });
         }
 
+        // ★★★ 2026-10-10 P1-④：处方号生成**唯一收口点**（generatePrescriptionNo /
+        //   generatePrescriptionNoForSave / 打印 / 图片 / 复制 / 新处方 共 7 处调用点都经它）。
+        //   未就绪（loadData 尚未把处方全量集放好）时 **fail-closed**：
+        //     · 不读序列号、不写任何存储（绝不留下半成品序号让后续"接着往后取"）；
+        //     · 返回 null 并给明确中文提示 —— 医疗场景"拒绝一次开方"远优于"生成重复处方号"。
+        //   就绪后行为与改动前逐字一致（当日已存序号直接返回；否则扫权威处方集取当日最大）。
         async function getGlobalMaxSerial() {
+            // ① 就绪闸（带超时；超时同样 fail-closed）
+            const __readyFlag = (typeof window !== 'undefined') && window.__prescriptionsReady === true;
+            const __readyPromise = (typeof window !== 'undefined') ? window.__prescriptionsReadyPromise : null;
+            if (!__readyFlag && __readyPromise && typeof __readyPromise.then === 'function') {
+                let __timeoutMs = 10000;
+                try {
+                    const __ov = (typeof window !== 'undefined') ? Number(window.__prescriptionsReadyTimeoutMs) : NaN;
+                    if (isFinite(__ov) && __ov > 0) __timeoutMs = __ov;
+                } catch (e) { }
+                await new Promise(function (resolve) {
+                    let done = false;
+                    const finish = function () { if (!done) { done = true; resolve(); } };
+                    try { __readyPromise.then(finish, finish); } catch (e) { finish(); }
+                    try { setTimeout(finish, __timeoutMs); } catch (e) { finish(); }
+                });
+            }
+            if (!((typeof window !== 'undefined') && window.__prescriptionsReady === true)) {
+                try { window.__lastSerialGateStat = { ok: false, reason: 'not-ready' }; } catch (e) { }
+                try { alert('处方数据仍在加载，请稍候再开方（避免生成重复处方号）。若长时间如此，请重新登录或刷新页面。'); } catch (e) { }
+                return null;
+            }
+
             const today = new Date().toLocaleDateString('sv-SE');
             const todayPrefix = today.replace(/-/g, '').slice(2); // YYMMDD
-            let stored = localStorage.getItem('global_max_serial');
+            let stored = null;
+            try { stored = localStorage.getItem('global_max_serial'); } catch (e) { }
             
             // 如果 localStorage 为空，尝试从 IndexedDB 读取
             if (!stored) {
@@ -5784,28 +5898,45 @@ let currentUser = null;
             }
             
             if (stored) {
-                const data = JSON.parse(stored);
-                if (data.date === today) {
+                let data = null;
+                try { data = JSON.parse(stored); } catch (e) { data = null; }
+                if (data && data.date === today) {
                     return data.maxSerial;
                 }
             }
             
             // 日期不匹配或无数据，扫描历史处方确定当日最大序号
+            // ★ 2026-10-10 P1-④：**权威集优先** —— localStorage 镜像的写盘已延后到空闲时
+            //   （P1-②），刚取的号可能还没落盘；此时若只读镜像会算小 → 重复号。
+            //   内存里的处方全量集是权威（loadData 已置就绪闸，故此处必然可信），镜像仅兜底。
             let maxSerial = 0;
             try {
                 let allPrescriptions = [];
-                const savedPrescriptions = localStorage.getItem('all_prescription_list');
-                if (savedPrescriptions) {
-                    allPrescriptions = JSON.parse(savedPrescriptions);
-                } else {
-                    const dbData = await getFromIndexedDB('settings', 'all_prescription_list');
-                    if (dbData && dbData.value) {
-                        const data = typeof dbData.value === 'string' ? JSON.parse(dbData.value) : dbData.value;
-                        if (Array.isArray(data)) {
-                            allPrescriptions = data;
+                try {
+                    const im = (typeof window !== 'undefined') ? window.__prescriptionListForSerial : null;
+                    if (Array.isArray(im)) allPrescriptions = im;
+                } catch (e) { }
+                if (allPrescriptions.length === 0 &&
+                    typeof prescriptionHistory !== 'undefined' && Array.isArray(prescriptionHistory) &&
+                    prescriptionHistory.length > 0) {
+                    allPrescriptions = prescriptionHistory;
+                }
+                if (allPrescriptions.length === 0) {
+                    let savedPrescriptions = null;
+                    try { savedPrescriptions = localStorage.getItem('all_prescription_list'); } catch (e) { }
+                    if (savedPrescriptions) {
+                        allPrescriptions = JSON.parse(savedPrescriptions);
+                    } else {
+                        const dbData = await getFromIndexedDB('settings', 'all_prescription_list');
+                        if (dbData && dbData.value) {
+                            const data = typeof dbData.value === 'string' ? JSON.parse(dbData.value) : dbData.value;
+                            if (Array.isArray(data)) {
+                                allPrescriptions = data;
+                            }
                         }
                     }
                 }
+                if (!Array.isArray(allPrescriptions)) allPrescriptions = [];
                 
                 // 找出当日已有的最大编号
                 allPrescriptions.forEach(p => {
@@ -5821,7 +5952,10 @@ let currentUser = null;
                 console.error('扫描历史处方确定序号失败:', e);
             }
             
-            setGlobalMaxSerial(maxSerial);
+            // ★ 2026-10-10 P1-④：落盘仍走 setGlobalMaxSerial（本页权威实现），
+            //   测试沙箱里经 window.setGlobalMaxSerial 注入同一实现（收口点可观测）。
+            if (typeof setGlobalMaxSerial === 'function') setGlobalMaxSerial(maxSerial);
+            else if (typeof window !== 'undefined' && typeof window.setGlobalMaxSerial === 'function') window.setGlobalMaxSerial(maxSerial);
             return maxSerial;
         }
 
@@ -9976,10 +10110,14 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
 
         async function getAllUserPrescriptions(filterUsername) {
             let allPrescriptions = [];
+            // ★ 2026-10-10 P1-③（离线端）：记录"IDB 是否读取成功"，供末尾落库护栏使用
+            //   （避免空集被当作"应存集合"而把 store 全删）
+            let __idbReadOk = false;
 
             // P7: 优先从 IndexedDB prescriptions store 读取
             try {
                 const dbPrescriptions = await getAllPrescriptionsFromDB();
+                __idbReadOk = Array.isArray(dbPrescriptions);
                 if (dbPrescriptions && dbPrescriptions.length > 0) {
                     allPrescriptions = dbPrescriptions;
                 }
@@ -10057,6 +10195,29 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
                 const timeB = b.createdAt ? new Date(b.createdAt).getTime() : (b.id || 0);
                 return timeB - timeA;
             });
+
+            // ★ 2026-10-10 P1-③（离线端移植）：落库改**增量 upsert**（原为全量 put，n=2000 时
+            //   1 次 clear/2000 次 put 的白写）。失败回退"清空 + 全量写"（最坏 = 原行为，零回归）。
+            //   ★ 安全护栏（与云端不同：离线端**没有**"云端响应即权威"这个前置条件）：
+            //     仅当本次集合非空 —— 或 —— IDB 读取确实成功且真的为空（首装/清库场景）时才落库。
+            //     读取异常/迁移写失败会得到空集，此时若直接 diff 会把 store 全删（灾难性数据丢失），
+            //     故宁可不落库（数据仍在 IDB / localStorage，下次读取自愈）。
+            try {
+                let __dbReadOk = __idbReadOk;
+                if ((Array.isArray(allPrescriptions) && allPrescriptions.length > 0) || __dbReadOk) {
+                    try {
+                        await syncPrescriptionsDBDiff(allPrescriptions);
+                    } catch (e) {
+                        console.warn('[getAllUserPrescriptions] 离线端增量落库失败，回退清空+全量写:', e && e.message);
+                        try { await clearPrescriptionsDB(); } catch (e2) {}
+                        try { await saveAllPrescriptionsToDB(allPrescriptions); } catch (e3) {}
+                    }
+                } else {
+                    console.warn('[getAllUserPrescriptions] 离线端跳过落库（集合为空且 IDB 读取未成功）');
+                }
+            } catch (e) {
+                console.warn('[getAllUserPrescriptions] 离线端落库步骤异常（不影响读取结果）:', e && e.message);
+            }
 
             return allPrescriptions;
         }
