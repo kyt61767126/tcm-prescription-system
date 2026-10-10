@@ -2463,14 +2463,39 @@ export async function onRequest(context) {
             //   预取仅走 D1 快路径（一次 SQL ~50ms）；D1 未启用/无数据/异常时响应不带
             //   prescriptions 字段，客户端自动走原有 GET 流程（行为完全不变）。
             //   处方量 > 2000 条时跳过预取（响应体积保护，客户端自行分页拉取）。
+            // ★ 2026-10-10 首屏瘦身（P1-①）：预取上限与元信息。
+            //   ★ 能力协商是安全前提：**仅当客户端显式声明 prefetchPartialOk 时才限量**，
+            //     老客户端（不声明）继续拿全量 —— 否则它们会把"部分"当全量、以为历史处方就这么多。
+            const PREFETCH_CAP = 200;
+            let __prefetchPartial = false;
+            let __prefetchTotal = null;
             const prefetchLoginPrescriptions = (async () => {
                 try {
                     const dbPf = getDB(context);
                     if (!isD1Enabled(context) || !dbPf || !clinicId) return null;
+                    const __partialOk = !!(body && (body.prefetchPartialOk === true || body.prefetchPartialOk === 1 || body.prefetchPartialOk === '1'));
+                    const canSeeAll = isAdmin(user) || user.role === ROLE_CASHIER;
+                    const __roleWhere = canSeeAll ? '' : ' AND created_by = ?';
+                    if (__partialOk) {
+                        // 计数与查询同规则（角色过滤一致），避免给医生一个"全所总数"的误导数字
+                        const __cntSql = `SELECT COUNT(*) AS n FROM prescriptions WHERE clinic_id = ? AND deleted_at IS NULL${__roleWhere}`;
+                        const __cntStmt = canSeeAll ? dbPf.prepare(__cntSql).bind(clinicId)
+                                                    : dbPf.prepare(__cntSql).bind(clinicId, user.username);
+                        const __cnt = await __cntStmt.all().catch(() => null);
+                        const __total = (__cnt && __cnt.success && __cnt.results && __cnt.results[0]) ? Number(__cnt.results[0].n) : null;
+                        const recent = await d1LoadPrescriptions(dbPf, clinicId, false, PREFETCH_CAP).catch(() => null);
+                        if (!Array.isArray(recent) || recent.length === 0) return null;
+                        const __view = canSeeAll ? recent : recent.filter(p => p.createdBy === user.username);
+                        __prefetchTotal = (typeof __total === 'number' && isFinite(__total)) ? __total : __view.length;
+                        // 只有"确实被截断"才算 partial：总量 ≤ 上限（或计数不可用且未截满）视为完整
+                        __prefetchPartial = (typeof __total === 'number' && isFinite(__total))
+                            ? (__total > PREFETCH_CAP)
+                            : (recent.length >= PREFETCH_CAP);
+                        return __view;
+                    }
                     const allPres = await d1LoadPrescriptions(dbPf, clinicId, false).catch(() => null);
                     if (!Array.isArray(allPres) || allPres.length === 0 || allPres.length > 2000) return null;
                     // 角色过滤与 GET /prescriptions 同规则（isAdmin/isCashier 见全所，其余仅本人）
-                    const canSeeAll = isAdmin(user) || user.role === ROLE_CASHIER;
                     return canSeeAll ? allPres : allPres.filter(p => p.createdBy === user.username);
                 } catch (e) {
                     return null;
@@ -2518,7 +2543,12 @@ export async function onRequest(context) {
                 // ★ 2026-08-23 云端APP F1基础设置-授权状态：返回诊所到期时间（前端显示"已激活（版本）剩余X天"）
                 clinicExpiresAt: clinicExpiresAt || null,
                 // ★ 2026-09-15 登录提速：首屏处方（仅 D1 快路径命中时存在；null/缺省=客户端走原 GET）
-                prescriptions: loginPrescriptions
+                prescriptions: loginPrescriptions,
+                // ★ 2026-10-10 P1-① 首屏瘦身元信息：partial=true 表示"预取只含最近 N 条"，
+                //   客户端须把它当首屏加速、随后补拉全量；partial=false 表示预取即全量（可跳过 GET）。
+                //   仅当客户端声明 prefetchPartialOk 时才可能为 true（老客户端恒 false = 行为不变）。
+                prescriptionsPartial: !!__prefetchPartial,
+                prescriptionTotal: (typeof __prefetchTotal === 'number' ? __prefetchTotal : null)
             }, 200, context.request);
         }
 

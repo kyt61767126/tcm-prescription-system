@@ -1281,7 +1281,11 @@
                         username,
                         password,
                         machineId: identity.machineId,
-                        clientClass: identity.clientClass
+                        clientClass: identity.clientClass,
+                        // ★ 2026-10-10 P1-① 首屏瘦身能力声明：本端能正确处理"部分预取"
+                        //   （先画首屏、随即补拉全量并按 id 合并）。服务端仅对声明者限量，
+                        //   未声明的老客户端继续拿全量 —— 避免它们把"部分"当全量而截断历史处方。
+                        prefetchPartialOk: true
                     })
                 });
                 // cloudFetch 返回已解析的 JS 对象，原生 fetch 返回 Response 对象
@@ -1304,7 +1308,14 @@
                 // ★ 2026-09-15 登录提速：透传首屏处方（服务端 D1 快路径预取，
                 //   客户端 getAllUserPrescriptions 命中预取即跳过 /prescriptions GET 往返）
                 const loginPrescriptions = Array.isArray(data.prescriptions) ? data.prescriptions : null;
-                return { success: true, user: { ...data.user, token: data.token, clinicExpiresAt: data.clinicExpiresAt || null }, prescriptions: loginPrescriptions };
+                return {
+                    success: true,
+                    user: { ...data.user, token: data.token, clinicExpiresAt: data.clinicExpiresAt || null },
+                    prescriptions: loginPrescriptions,
+                    // ★ P1-①：只有服务端声明 partial 时，调用方才须补拉全量（见 index.html 消费处）
+                    prescriptionsPartial: data.prescriptionsPartial === true,
+                    prescriptionTotal: (typeof data.prescriptionTotal === 'number' ? data.prescriptionTotal : null)
+                };
             } catch (e) {
                 console.error('云端登录失败:', e);
                 // ★ 离线登录缓存：网络错误时尝试离线登录
