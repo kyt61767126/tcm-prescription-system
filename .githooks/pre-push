@@ -156,5 +156,19 @@ node tools/biz-smoke.cjs || {
     exit 1
 }
 
-echo "[pre-push] 十三道校验全部通过，允许推送"
+# ★ 2026-10-10 十四道门补强：prescriptions-db-diff-test.cjs（P1-③ 处方落库增量 upsert）。
+#   背景：首屏落库原为 clear() + 全量 put（n=2000 → 1 次清空 + 2000 次写），
+#   改为按 id 增量 upsert（只写变更、只删权威集已无的 id、updatedAt 缺失则保守重写，
+#   失败必须 reject 以便上层回退清空+全量写）。
+#   ★ 该测试【按函数本体从 public/index.html 抽取】执行，不做副本/不手抄 ——
+#     函数被改名或删除会立刻以"抽取失败"拦截，而不会悄悄失去覆盖。
+#   为何必须是门禁：增量落库直接决定"历史处方在不在"（医疗数据可见性），
+#   一旦回归为漏写/误删，用户看到的处方会缺失或复活，属不可接受的静默损坏。
+echo "[pre-push] ⑭ 处方落库增量 upsert 回归（P1-③）..."
+node tools/prescriptions-db-diff-test.cjs || {
+    echo "[pre-push] FAIL: 处方增量落库断言未过——按 [FAIL] 用例名定位（A 增量语义/B 缺时间戳保守重写/C 无 id 忽略/D 权威集一致/E 失败必须 reject），修复后重推"
+    exit 1
+}
+
+echo "[pre-push] 十四道校验全部通过，允许推送"
 exit 0
