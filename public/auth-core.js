@@ -5536,8 +5536,17 @@
                     // ★ 2026-09-11 换机激活简化：请求体带 user/phone（本页手机号框），
                     //   服务端手机号核验通过自动解绑换机；needClinicName/
                     //   needActivationInfo 标记走下方通用失败段渐进式展开
+                    // ★ 2026-10-10 首次激活超时根因修复：淘宝云端码首次 claim 要
+                    //   自动开通诊所+连续写多个 KV（实测 31s，稳态仅 2.5s），原 12s
+                    //   超时会在服务端成功前掐断 → 买家看到 abort 报错（实际已开通）。
+                    //   超时提到 30s，并明确提示首次开通较慢。
+                    try {
+                        loading.innerHTML =
+                            '<span style="display:inline-block;width:18px;height:18px;border:2px solid #ddd;border-top-color:#26a69a;border-radius:50%;animation:adminActivateSpin 0.8s linear infinite;vertical-align:middle;margin-right:8px;"></span>' +
+                            '<span style="font-size:13px;color:#26a69a;vertical-align:middle;">正在激活，首次开通云端账号约需 10～30 秒，请勿关闭页面...</span>';
+                    } catch (e) {}
                     const controller = new AbortController();
-                    const t = setTimeout(function(){ try { controller.abort(); } catch(e){} }, 12000);
+                    const t = setTimeout(function(){ try { controller.abort(); } catch(e){} }, 30000);
                     try {
                         const r = await fetch('https://tcm-prescription-system.pages.dev/api/license/claim', {
                             method: 'POST',
@@ -5622,7 +5631,10 @@
                 loading.style.display = 'none';
                 btn.disabled = false;
                 btn.textContent = '🚀 立即激活';
-                hint.textContent = '⚠ 网络错误：' + ((e && e.message) ? e.message : '请检查网络连接');
+                const __aborted = e && (e.name === 'AbortError' || /aborted/i.test(e.message || ''));
+                hint.textContent = __aborted
+                    ? '⚠ 网络较慢，等待超时。请直接再点一次「立即激活」（首次开通可能已在后台完成，重试通常很快）'
+                    : '⚠ 网络错误：' + ((e && e.message) ? e.message : '请检查网络连接');
                 hint.style.color = '#e53935';
             }
         });
