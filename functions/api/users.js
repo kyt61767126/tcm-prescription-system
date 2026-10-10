@@ -17,7 +17,7 @@ import { deleteAdminRequest, KV_ADMIN_REQ_PREFIX, KV_ADMIN_REQ_INDEX,
 import { listLicenses, getDevices, updateLicense, appendLicenseLog,
     writeAccountTombstone, clearAccountTombstone, sanitizeRecord,
     getDeviceVersion, getDeviceBlock, getAccountTombstone, checkRateLimit,
-    findLicensesByMachine,
+    findLicensesByMachine, getLicense,
     KV_LICENSE_PREFIX, KV_LICENSE_INDEX,
     getLicenseCodesByClinic, putLicenseClinicIndex } from './license/_lib/license-core.js';
 // ★ 2026-09-24 P1-2 客户全景聚合：查询类型判定走 schema-guard 权威正则（禁内联）
@@ -2355,8 +2355,45 @@ export async function onRequest(context) {
                 // ① 机构版全局设备额度预检：全所 desktop/app 设备总数 ≤ license.maxDevices
                 if (normEdition === 'cloud_clinic' && clinicName && hasFp) {
                     try {
-                        const licenses = await listLicenses(kv).catch(() => []);
-                        globalLic = (licenses || []).find(l => l && l.clinicName === clinicName) || null;
+                        // ★ 2026-10-10 登录提速（真机实测：冷登 25,664ms / 暖登 2,948ms）：
+                        //   原实现在此 `listLicenses(kv)` —— 1 次索引 get + **逐条 get 全部 license**
+                        //   （实测 166 条），只为找 clinicName 命中的那一条。计时对照实测：
+                        //     暖登 3.1s = "密码错误提前失败"基线 1.0s + 本段 ≈2.1s（166×~12ms）
+                        //     冷登 25.7s（166×~150ms）→ 本段占暖登约 68%、冷登约 80%。
+                        //   改为读 license_clinic_index（clinicName → codes 投影索引，本日已建）：
+                        //   只 get 命中诊所的码（通常 1 条）→ 166 次 get 降到 1~2 次。
+                        //   语义保持：`listLicenses` 取的是 system:license_index 顺序下**首个**命中，
+                        //   故多码同所时按该顺序取，避免与旧行为不一致（常见单码场景无需额外读）。
+                        const __licIdxMap = await getLicenseCodesByClinic(kv);
+                        if (__licIdxMap) {
+                            const __codes = __licIdxMap.get(clinicName) || [];
+                            let __ordered = __codes;
+                            if (__codes.length > 1) {
+                                const __order = await kv.get(KV_LICENSE_INDEX, 'json').catch(() => null);
+                                if (Array.isArray(__order)) {
+                                    const __pick = __order.filter(c => __codes.indexOf(c) !== -1);
+                                    if (__pick.length) __ordered = __pick;
+                                }
+                            }
+                            for (const __c of __ordered) {
+                                const __rec = await getLicense(kv, __c).catch(() => null);
+                                if (__rec && __rec.clinicName === clinicName) { globalLic = __rec; break; }
+                            }
+                        } else {
+                            // 索引缺失/脏值 → 回退全扫（仅首次），并懒回填索引让后续登录走快路径
+                            const licenses = await listLicenses(kv).catch(() => []);
+                            globalLic = (licenses || []).find(l => l && l.clinicName === clinicName) || null;
+                            try {
+                                const __bf = new Map();
+                                for (const __l of (licenses || [])) {
+                                    if (__l && typeof __l.clinicName === 'string' && __l.clinicName && __l.code) {
+                                        if (!__bf.has(__l.clinicName)) __bf.set(__l.clinicName, []);
+                                        __bf.get(__l.clinicName).push(__l.code);
+                                    }
+                                }
+                                await putLicenseClinicIndex(kv, __bf);
+                            } catch (_) { /* 回填失败不影响登录 */ }
+                        }
                     } catch (e) { globalLic = null; }
                     if (globalLic && globalLic.code) {
                         const devs = getDevices(globalLic);
