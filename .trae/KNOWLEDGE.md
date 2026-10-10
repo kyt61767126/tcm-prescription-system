@@ -1893,4 +1893,5 @@
   - **容量决策（长期）**：免费版 1000 writes/day 对多诊所+心跳+登录+处方偏紧，UTC 0 点重置（临时恢复）但会复发。**根治=升级 Workers Paid（$5/月，KV writes 1000→1,000,000/天，D1/Pages 额度同增）**；次选=审计削减登录/心跳冗余写（每次登录 updateLicense 注册设备、clearLoginFailures 双写等）但治标。
   - **写削减已落地（commit 6a03e0d5，用户选"先削减冗余写"不升级）**：①`clearLoginFailures` 改先 get 确认失败计数存在才 delete（成功登录常态 0 写，用宽裕读配额换紧张写配额）；②`bindUserDevice` 设备表不再每次登录全量写——新设备必写，已存在设备仅端类型变化或距上次落库 lastSeenAt≥24h 才写（当天反复登录/真机测试零设备写，lastSeenAt 天级精度；KV 与 D1 双写同门控）。一次成功登录的写耗降到**仅 session**（互斥必需）+当天首次的 punch。验证配额仍超限下登录照样 200。
   - **通用铁律**：任何非关键依赖（KV/外部写）失败都不得把核心登录/读操作打死；handler 顶层 catch 只兜底，关键写必须就地容错。
+  - **★ 但激活写不可降级（当晚硬挡教训）**：离线/云 App 激活在 [validate.js L779→saveLicense L830] 的 license 主记录写是**核心落盘**（标记已激活+绑诊所/手机/设备），**无此写不能返回成功**（否则码可复用、绑定缺失）。2026-10-10 晚实测 `wrangler kv put` 返回 **10048 "reached the free usage limit for this operation for today"**，当晚离线激活全部 500、任何代码改动都无法解锁，只能等北京 8 点 UTC 重置（或升级 Paid）。故：登录/读可容错降级，激活写配额必须**事前**留足。当晚若有买家，客服发话术约明早激活。
 
