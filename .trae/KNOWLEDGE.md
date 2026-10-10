@@ -1874,4 +1874,10 @@
   - **生效方式**：云端 Web/桌面刷新即达；**离线 App 走热更**（启动静默拉取→下次启动生效，无需重装 APK）；云端 App/鸿蒙随下次 APK。
   - **踩坑**：业务 JS 内容变更后 pre-push 必拦 cv——必须 `node tools/check-cv-hashes.cjs --update` + `tools/sync-html.ps1` 传播 index.html 副本（本次刷 1 个：auth-core cv 045b2b7e→784caa1a）。
   - **线上验证**：云端 Web 真实弹窗截图确认金色按钮渲染、点击后 Tab2 正确显示且 tab 高亮；离线注册成功页为 offline.js 独占未上公网，同构代码+静态复核（若客户反馈异常再针对性实测）。
+* **★ 2026-10-10 云端App首次激活「abort 超时」根因修复（commit 81332061，cloud.js → 8 副本）**：
+  - **现象**：云端 App 机构版输码点激活，提示「网络错误：The user aborted a request」。
+  - **根因（实测）**：首次 claim 要自动开通诊所+连写多个 KV，**耗时 31s**（第二次稳态仅 2.5s），而客户端 AbortController 超时仅 **12s** → 服务端 31s 成功、App 12s 先掐断，买家看到失败（实际已开通）。
+  - **修复**：claim 超时 12s→**30s**；loading 改显「首次开通约需 10～30 秒，请勿关闭」；catch 对 AbortError 给「请直接再点一次，重试通常很快」友好引导。只改激活码路径；付款下单/工单申请接口快，12s 不动。
+  - **两张设备表别混淆**（登录 403 排查）：①全局 `license:{code}.devices`（maxDevices=5，机构版也不卡）；②**账号级 `user_devices:{手机号}`**（机构版 1 台/标准版 2 台）——登录卡的是②，错误文案「机构版每账号最多 1 台」即此。重置测试账号=`wrangler kv key delete "user_devices:{phone}" --namespace-id b1ab3e4b683341958cef369fcbf94933 --remote`（get 返回 404=已删，非异常），下次登录自动重建并绑定当前设备。
+  - **★ 深层隐患（未根治，待决策）**：云端 App Java 桥**未实现 getMachineId**，机器 ID 是随机 `browser-<18hex>` 存 `auth:deviceMachineId`——重装/清数据/存储写失败即换指纹，机构版 1 台限制下易把真买家锁死（激活窗口与登录共用 collectDeviceIdentity 同键，故同机数据在则一致）。根治选项：①Java 桥补稳定硬件 ID + collectDeviceIdentity 增加 AndroidNative 尝试；②登录凭正确密码允许自动换机（现在 claim 换机放行、login 却硬 403，口径不一）。
 
