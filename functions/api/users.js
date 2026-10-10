@@ -148,7 +148,15 @@ async function bindUserDevice(kv, username, machineId, clientClass, nowIso, edit
             lastSeenAt: nowIso
         });
     }
-    await kv.put(KV_USER_DEVICES_PREFIX + username, JSON.stringify(record));
+    try {
+        await kv.put(KV_USER_DEVICES_PREFIX + username, JSON.stringify(record));
+    } catch (putErr) {
+        // ★ 2026-10-10 容错（生产事故根因）：KV 每日写配额耗尽（"KV put() limit
+        //   exceeded for the day"）或瞬断时，设备绑定属"尽力而为"，绝不能把核心
+        //   登录打成 500。降级继续——下方 D1 双写仍可补偿；都失败则本次绑定
+        //   暂不落库，配额恢复后下次登录补上。设备名额的强一致让位于可用性。
+        console.error('[bindUserDevice] KV 写入失败，降级继续（D1补偿/下次补写）:', putErr && putErr.message);
+    }
     // ★ P3：D1 双写设备绑定（USE_D1=true 时同步写 D1）
     if (env && isD1Enabled(env)) {
         const db = getDB(env);
@@ -4491,7 +4499,7 @@ export async function onRequest(context) {
 
     } catch (error) {
         console.error('Users API error:', error);
-        return json({ success: false, error: '服务器内部错误，请稍后再试', _dbg: (error && error.name) + ' :: ' + (error && error.message) }, 500);
+        return json({ success: false, error: '服务器内部错误，请稍后再试' }, 500);
     }
 }
 
