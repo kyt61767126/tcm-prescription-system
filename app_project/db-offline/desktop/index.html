@@ -2423,23 +2423,135 @@ let currentUser = null;
             }
         }
 
+        // ★★ 2026-10-13 P0（华为离线App老问题：删除处方后点刷新又出现）：
+        //   旧实现外层 try/catch 把 openDB 3s 超时/事务失败全部吞掉并 resolve(undefined)，
+        //   调用方误以为删除成功、从内存移除记录并提示成功，刷新时从 IDB 重读——记录还在，
+        //   表现为"删不掉、刷新复活"。现改为：失败必抛、事务以 oncomplete 为准、删除后读回校验。
+        //   调用方必须 try/catch 并在失败时保留 UI 记录、明确告知用户重试。
         async function deletePrescriptionFromDB(id) {
+            const database = await openDB();
+            await new Promise((resolve, reject) => {
+                const transaction = database.transaction(['prescriptions'], 'readwrite');
+                const store = transaction.objectStore('prescriptions');
+                // 2026-09-12 P0: IndexedDB key is type-sensitive; delete both number and string keys
+                store.delete(Number(id));
+                const request = store.delete(String(id));
+                request.onerror = () => reject(request.error);
+                // 以事务 oncomplete 为准（request.onsuccess 后事务仍可能 abort）
+                transaction.oncomplete = () => resolve();
+                transaction.onerror = () => reject(transaction.error);
+                transaction.onabort = () => reject(transaction.error || new Error('事务被中止'));
+            });
+            // 读回校验：任一类型键仍能取到记录即视为删除失败（华为低端 WebView 静默失败兜底）
+            const stillThere = await new Promise((resolve) => {
+                try {
+                    const tx = database.transaction(['prescriptions'], 'readonly');
+                    const st = tx.objectStore('prescriptions');
+                    const r1 = st.get(Number(id));
+                    const r2 = st.get(String(id));
+                    let hits = 0;
+                    const done = () => { if (++hits === 2) resolve(Boolean(r1.result || r2.result)); };
+                    r1.onsuccess = done; r2.onsuccess = done;
+                    r1.onerror = done; r2.onerror = done;
+                    tx.onabort = () => resolve(false); // 读不回时不阻断（删除事务已 complete）
+                } catch (e) { resolve(false); }
+            });
+            if (stillThere) throw new Error('删除后读回校验失败，记录仍存在（id=' + id + '）');
+        }
+
+        // ★★ 2026-10-13 删除标记 + 副本清理工具族（历史上 addDeletedRxId 在离线端"只调用未定义"，
+        //   silentArchiveDupRx 调它必抛 ReferenceError 被外层吞掉；删除标记机制实际从未生效）。
+        // 写入当前登录用户的删除标记（恢复时移除）。任何异常都不允许打断删除主流程。
+        // 与云端 public/index.html 同体（tombstone 统一存字符串，避免 number/string 双类型漏比）
+        function addDeletedRxId(id) {
+            try {
+                if (id == null) return;
+                const k = 'deletedRxIds_' + (currentUser ? currentUser.username : 'default');
+                const ids = JSON.parse(localStorage.getItem(k) || '[]');
+                const arr = Array.isArray(ids) ? ids.map(String) : [];
+                const s = String(id);
+                if (arr.indexOf(s) === -1) {
+                    arr.push(s);
+                    localStorage.setItem(k, JSON.stringify(arr));
+                }
+            } catch(e) { console.warn('添加删除标记失败:', e); }
+        }
+
+        function removeDeletedRxId(id) {
+            try {
+                const key = 'deletedRxIds_' + ((typeof currentUser !== 'undefined' && currentUser && currentUser.username) || 'default');
+                let ids = [];
+                try { ids = JSON.parse(localStorage.getItem(key) || '[]'); } catch (e) { ids = []; }
+                if (Array.isArray(ids) && ids.some(function (x) { return String(x) === String(id); })) {
+                    localStorage.setItem(key, JSON.stringify(ids.filter(function (x) { return String(x) !== String(id); })));
+                }
+            } catch (e) { console.warn('[删除标记] 移除失败:', e); }
+        }
+
+        // 汇总本机【所有用户】的删除标记（回灌源是全量副本，可能含任意用户的已删处方）
+        function getAllDeletedRxIdSet() {
+            const s = new Set();
+            try {
+                for (let i = 0; i < localStorage.length; i++) {
+                    const k = localStorage.key(i);
+                    if (!k || k.indexOf('deletedRxIds_') !== 0) continue;
+                    let ids = [];
+                    try { ids = JSON.parse(localStorage.getItem(k) || '[]'); } catch (e) { ids = []; }
+                    if (Array.isArray(ids)) ids.forEach(function (x) { s.add(String(x)); });
+                }
+            } catch (e) {}
+            return s;
+        }
+
+        // 回灌/降级读取的统一过滤：任何副本里带删除标记的记录一律不得复活
+        function filterOutDeletedRx(list) {
+            if (!Array.isArray(list) || list.length === 0) return list;
+            const deleted = getAllDeletedRxIdSet();
+            if (deleted.size === 0) return list;
+            return list.filter(function (p) { return p && p.id != null && !deleted.has(String(p.id)); });
+        }
+
+        // 删除成功后同步清理两个深副本（best-effort，失败由删除标记在回灌时兜底，不抛）：
+        //   ① localStorage all_prescription_list —— IDB 读空/abort 时的回灌源（主复活路径）；
+        //   ② IndexedDB settings.all_prescription_list —— 主 store 与 localStorage 双丢时的回灌源。
+        async function removeRxFromBackupCopies(id) {
+            const sid = String(id);
+            try {
+                const raw = localStorage.getItem('all_prescription_list');
+                if (raw) {
+                    const list = JSON.parse(raw);
+                    if (Array.isArray(list) && list.some(function (p) { return p && String(p.id) === sid; })) {
+                        localStorage.setItem('all_prescription_list',
+                            JSON.stringify(list.filter(function (p) { return !(p && String(p.id) === sid); })));
+                    }
+                }
+            } catch (e) { console.warn('[删除副本] localStorage 缓存清理失败:', e); }
             try {
                 const database = await openDB();
-                return new Promise((resolve, reject) => {
-                    const transaction = database.transaction(['prescriptions'], 'readwrite');
-                    const store = transaction.objectStore('prescriptions');
-                    // 2026-09-12 P0: IndexedDB key is type-sensitive; delete both number and string keys
-                    store.delete(Number(id));
-                    const request = store.delete(String(id));
-                    request.onsuccess = () => resolve();
-                    request.onerror = () => reject(request.error);
-                    // ★修复事务挂起：abort 时必须 reject
-                    transaction.onabort = () => reject(transaction.error || new Error('事务被中止'));
+                const row = await new Promise(function (resolve, reject) {
+                    const tx = database.transaction(['settings'], 'readonly');
+                    const req = tx.objectStore('settings').get('all_prescription_list');
+                    req.onsuccess = function () { resolve(req.result || null); };
+                    req.onerror = function () { reject(req.error); };
+                    tx.onabort = function () { resolve(null); };
                 });
-            } catch (e) {
-                console.error('从 IndexedDB 删除单条处方失败:', e);
-            }
+                if (row) {
+                    const wasString = typeof row.value === 'string';
+                    let list = row.value;
+                    if (wasString) { try { list = JSON.parse(list); } catch (e) { list = null; } }
+                    if (Array.isArray(list) && list.some(function (p) { return p && String(p.id) === sid; })) {
+                        list = list.filter(function (p) { return !(p && String(p.id) === sid); });
+                        row.value = wasString ? JSON.stringify(list) : list;
+                        await new Promise(function (resolve, reject) {
+                            const wtx = database.transaction(['settings'], 'readwrite');
+                            wtx.objectStore('settings').put(row);
+                            wtx.oncomplete = function () { resolve(); };
+                            wtx.onerror = function () { reject(wtx.error); };
+                            wtx.onabort = function () { reject(wtx.error || new Error('事务被中止')); };
+                        });
+                    }
+                }
+            } catch (e) { console.warn('[删除副本] settings 深兜清理失败:', e); }
         }
 
         async function getAllPrescriptionsFromDB() {
@@ -2565,6 +2677,303 @@ let currentUser = null;
                 });
             } catch (e) {
                 console.error('批量保存处方到 IndexedDB 失败:', e);
+            }
+        }
+
+        // ★★ 2026-10-13 P0 改名数据归属迁移（红米真机实锤：手机号改成英文用户名登录后
+        //   历史处方消失，手机号登录正常——处方/回收站/删除标记全部按用户名归属，
+        //   而 confirmEditUser 历史上只迁移了 local_web_user_ 前缀键，IndexedDB 里
+        //   createdBy 仍是旧用户名，新用户名登录过滤结果为空。数据从未丢失，只是挂在旧名）。
+        // 迁移范围（幂等：无命中零写入，可对同一对名字重复调用）：
+        //   ① IndexedDB prescriptions / prescriptions_trash 两个 store 的 createdBy；
+        //   ② localStorage all_prescription_list 旧全量缓存内的 createdBy（getAllUserPrescriptions
+        //     的迁移/降级源，不一起改会被降级路径写回旧归属）；
+        //   ③ localStorage recycleBin_<旧名> / deletedRxIds_<旧名> 两个键 → 新名（按 id 合并去重）。
+        // 不迁移：媒体文件（按患者名+处方号+时间存储，与用户名无关）、global_max_serial（全局编号）。
+        // deletedBy/_deletedBy 是"谁执行的删除"历史动作留痕，语义上不改。
+        // 返回 { rx: 处方迁移条数, trash: 回收站迁移条数, errors: [] }；调用方据 errors 决定是否告警。
+        async function migrateUserDataOwnership(oldName, newName) {
+            const result = { rx: 0, trash: 0, errors: [] };
+            const oldKey = String(oldName == null ? '' : oldName).trim();
+            const newKey = String(newName == null ? '' : newName).trim();
+            if (!oldKey || !newKey || oldKey === newKey) return result;
+
+            // ① IndexedDB：prescriptions + prescriptions_trash
+            try {
+                const database = await openDB();
+                // 主处方 store
+                try {
+                    const allRx = await new Promise(function (resolve, reject) {
+                        const tx = database.transaction(['prescriptions'], 'readonly');
+                        const req = tx.objectStore('prescriptions').getAll();
+                        req.onsuccess = function () { resolve(req.result || []); };
+                        req.onerror = function () { reject(req.error); };
+                        tx.onabort = function () { resolve([]); };
+                    });
+                    const changedRx = allRx.filter(function (p) { return p && p.createdBy === oldKey; })
+                        .map(function (p) { return Object.assign({}, p, { createdBy: newKey }); });
+                    if (changedRx.length > 0) {
+                        // ★ 2026-10-13 独立审查 M3：不能用 saveAllPrescriptionsToDB——其外层 catch
+                        //   会吞掉 openDB 失败并返回 undefined，heal 会误判成功、写幂等标志后永不重试。
+                        //   用自带 reject 的 readwrite 事务，任何失败都必须进入 errors。
+                        await new Promise(function (resolve, reject) {
+                            const wtx = database.transaction(['prescriptions'], 'readwrite');
+                            const wstore = wtx.objectStore('prescriptions');
+                            changedRx.forEach(function (p) { wstore.put(p); });
+                            wtx.oncomplete = function () { resolve(); };
+                            wtx.onerror = function () { reject(wtx.error); };
+                            wtx.onabort = function () { reject(wtx.error || new Error('事务被中止')); };
+                        });
+                        result.rx = changedRx.length;
+                    }
+                } catch (e) {
+                    result.errors.push('prescriptions:' + (e && e.message ? e.message : String(e)));
+                }
+                // 回收站 store（恢复后的处方归属必须一并修正，否则改名后看不到/恢复后又挂旧名）
+                try {
+                    const allTrash = await new Promise(function (resolve, reject) {
+                        const tx = database.transaction(['prescriptions_trash'], 'readonly');
+                        const req = tx.objectStore('prescriptions_trash').getAll();
+                        req.onsuccess = function () { resolve(req.result || []); };
+                        req.onerror = function () { reject(req.error); };
+                        tx.onabort = function () { resolve([]); };
+                    });
+                    const changedTrash = allTrash.filter(function (p) { return p && p.createdBy === oldKey; })
+                        .map(function (p) { return Object.assign({}, p, { createdBy: newKey }); });
+                    if (changedTrash.length > 0) {
+                        await new Promise(function (resolve, reject) {
+                            const tx = database.transaction(['prescriptions_trash'], 'readwrite');
+                            const store = tx.objectStore('prescriptions_trash');
+                            changedTrash.forEach(function (p) { store.put(p); });
+                            tx.oncomplete = function () { resolve(); };
+                            tx.onerror = function () { reject(tx.error); };
+                            tx.onabort = function () { reject(tx.error || new Error('事务被中止')); };
+                        });
+                        result.trash = changedTrash.length;
+                    }
+                } catch (e) {
+                    result.errors.push('prescriptions_trash:' + (e && e.message ? e.message : String(e)));
+                }
+                // settings store 深兜副本 all_prescription_list（主 store 与 localStorage 双丢时
+                // getAllUserPrescriptions 的回灌源；不一起改，极端场景会回灌旧归属且 heal 已置标志）
+                try {
+                    const settingRow = await new Promise(function (resolve, reject) {
+                        const tx = database.transaction(['settings'], 'readonly');
+                        const req = tx.objectStore('settings').get('all_prescription_list');
+                        req.onsuccess = function () { resolve(req.result || null); };
+                        req.onerror = function () { reject(req.error); };
+                        tx.onabort = function () { resolve(null); };
+                    });
+                    if (settingRow) {
+                        const wasString = typeof settingRow.value === 'string';
+                        let rawList = settingRow.value;
+                        if (wasString) {
+                            try { rawList = JSON.parse(rawList); } catch (eParse) { rawList = null; }
+                        }
+                        if (Array.isArray(rawList)) {
+                            let sChanged = 0;
+                            rawList.forEach(function (p) {
+                                if (p && p.createdBy === oldKey) { p.createdBy = newKey; sChanged++; }
+                            });
+                            if (sChanged > 0) {
+                                settingRow.value = wasString ? JSON.stringify(rawList) : rawList;
+                                await new Promise(function (resolve, reject) {
+                                    const wtx = database.transaction(['settings'], 'readwrite');
+                                    wtx.objectStore('settings').put(settingRow);
+                                    wtx.oncomplete = function () { resolve(); };
+                                    wtx.onerror = function () { reject(wtx.error); };
+                                    wtx.onabort = function () { reject(wtx.error || new Error('事务被中止')); };
+                                });
+                            }
+                        }
+                    }
+                } catch (e) {
+                    result.errors.push('settings:' + (e && e.message ? e.message : String(e)));
+                }
+            } catch (e) {
+                result.errors.push('idb-open:' + (e && e.message ? e.message : String(e)));
+            }
+
+            // ② localStorage 旧全量缓存
+            try {
+                const raw = localStorage.getItem('all_prescription_list');
+                if (raw) {
+                    const list = JSON.parse(raw);
+                    if (Array.isArray(list)) {
+                        let changed = 0;
+                        list.forEach(function (p) {
+                            if (p && p.createdBy === oldKey) { p.createdBy = newKey; changed++; }
+                        });
+                        if (changed > 0) localStorage.setItem('all_prescription_list', JSON.stringify(list));
+                    }
+                }
+            } catch (e) {
+                result.errors.push('all_prescription_list:' + (e && e.message ? e.message : String(e)));
+            }
+
+            // ③ 回收站 / 删除标记：整键迁移（与新名键下已有内容按 id 合并去重后删旧键）
+            const mergeKeys = [
+                ['recycleBin_' + oldKey, 'recycleBin_' + newKey, function (a, b) {
+                    // ★ 2026-10-13 独立审查 H1：数组元素是完整处方对象，而恢复链
+                    //   （restoreFromRecycleBin）只读 localStorage 回收站、不读 IDB trash store，
+                    //   恢复后还按 createdBy===当前用户名 严格过滤。只搬键不改元素 createdBy，
+                    //   用户点"恢复"会立刻不可见、且记录从回收站移除——等同永久丢失。
+                    const seen = new Set(b.map(function (r) { return String(r.id); }));
+                    a.forEach(function (r) {
+                        if (!seen.has(String(r.id))) {
+                            if (r && typeof r === 'object') r.createdBy = newKey;
+                            b.push(r);
+                        }
+                    });
+                    // 新键下既有元素若残留旧归属（历史半成品迁移）一并收敛
+                    b.forEach(function (r) {
+                        if (r && typeof r === 'object' && r.createdBy === oldKey) r.createdBy = newKey;
+                    });
+                    return b;
+                }],
+                ['deletedRxIds_' + oldKey, 'deletedRxIds_' + newKey, function (a, b) {
+                    a.forEach(function (id) { if (b.indexOf(id) === -1) b.push(id); });
+                    return b;
+                }]
+            ];
+            mergeKeys.forEach(function (pair) {
+                try {
+                    const oldRaw = localStorage.getItem(pair[0]);
+                    if (oldRaw == null) return;
+                    const oldArr = JSON.parse(oldRaw);
+                    if (!Array.isArray(oldArr) || oldArr.length === 0) {
+                        localStorage.removeItem(pair[0]);
+                        return;
+                    }
+                    let newArr = [];
+                    const newRaw = localStorage.getItem(pair[1]);
+                    if (newRaw) { try { newArr = JSON.parse(newRaw) || []; } catch (e2) { newArr = []; } }
+                    if (!Array.isArray(newArr)) newArr = [];
+                    localStorage.setItem(pair[1], JSON.stringify(pair[2](oldArr, newArr)));
+                    localStorage.removeItem(pair[0]);
+                } catch (e3) {
+                    result.errors.push(pair[0] + ':' + (e3 && e3.message ? e3.message : String(e3)));
+                }
+            });
+
+            if (result.errors.length > 0) {
+                console.warn('[migrateUserDataOwnership] 部分归属迁移失败（下次登录会按别名重试）:', result.errors);
+            }
+            return result;
+        }
+
+        // ★★ 2026-10-13 登录后身份归一 + 历史处方归属自愈（修复存量已改名用户，无需重新改名）
+        // 背景：早期版本改名不迁处方归属；另有 Java config.json 回写失败导致的"双行"
+        //   （localStorage 同时存在 {username:英文名, phone:手机号} 新行与 config 重灌的
+        //   {username:手机号} 旧行）——手机号登录被 username 精确匹配优先命中旧行（能看到
+        //   旧处方），英文名登录命中新行（历史全空）。
+        // 步骤：
+        //   ① 身份归一：当前行 username 本身是手机号、且本机存在与该手机号互指的非手机号
+        //      用户名行（同一人改名后的新身份）→ 统一以新身份行作为登录身份（密码已在输入
+        //      账号上验证通过，纯会话层归一、不改账号存储）；
+        //   ② 归属收敛：把本人旧别名（phone / 被替代的手机号行名）名下的处方/回收站归属
+        //      迁到规范用户名。以"规范名+已处理别名列表"做幂等标志，无新增别名时零成本。
+        // 任何异常都必须 fail-open 返回原 user，绝不能阻断登录。
+        async function normalizeLoginIdentityAndHealOwnership(user) {
+            if (!user || !user.username) return user;
+            const PHONE_RE_OWNER = /^1[3-9]\d{9}$/;
+            try {
+                let effective = user;
+                const replacedOldNames = [];
+                // ★ 2026-10-13 独立审查 H2：本次登录仍未完成归属收敛的别名。
+                //   非空期间 getAllUserPrescriptions 必须跳过"删除收敛落库"、loadData 不得用
+                //   过滤结果覆盖全量缓存——否则红米冷启动 openDB 超时（heal 失败放行）后，
+                //   loadData 的 diff 会把挂在旧名下的本人处方物理删除。
+                const pendingAliases = [];
+
+                // ① 双行身份归一
+                if (PHONE_RE_OWNER.test(String(user.username))) {
+                    try {
+                        const all = (typeof getUsers === 'function') ? getUsers() : [];
+                        const twins = (all || []).filter(function (v) {
+                            if (!v || v === user) return false;
+                            const vu = String(v.username || '');
+                            if (!vu || PHONE_RE_OWNER.test(vu) || vu === 'admin') return false;
+                            // 同一人：双向手机号互指（phone 是本人登录凭证，跨人误配概率可忽略）
+                            return String(v.phone || '') === String(user.username) ||
+                                   (user.phone && vu === String(user.phone));
+                        });
+                        // ★ 独立审查 M1 护栏：候选必须【恰好一个】且【角色一致】才归一。
+                        //   phone 字段在代码层无唯一约束（配置灌入/误配可造成同号多行），
+                        //   .find 静默取第一个会"换身"——提权/掉权并把处方迁给另一账号。
+                        //   任何歧义都不切换、不迁移，继续以手机号身份正常登录。
+                        const normRole = function (u) {
+                            return String((u && u.role) || '').toLowerCase();
+                        };
+                        if (twins.length === 1 && normRole(twins[0]) === normRole(user)) {
+                            const twin = twins[0];
+                            replacedOldNames.push(String(user.username));
+                            const safeTwin = Object.assign({}, twin);
+                            delete safeTwin.password;
+                            effective = safeTwin;
+                            console.log('[OwnerHeal] 手机号身份已归一到改名后的用户名:', safeTwin.username);
+                        } else if (twins.length > 1) {
+                            console.warn('[OwnerHeal] 检测到 ' + twins.length +
+                                ' 个与该手机号互指的用户行（角色=' + twins.map(normRole).join('/') +
+                                '），跳过身份归一与归属迁移，请管理员核对用户配置');
+                        }
+                    } catch (e) { console.warn('[OwnerHeal] 身份归一异常(不影响登录):', e); }
+                }
+
+                // ② 别名归属收敛（按规范用户名记录已处理别名，幂等）
+                try {
+                    const canonical = String(effective.username || '');
+                    const aliases = [];
+                    [effective.phone].concat(replacedOldNames).forEach(function (a) {
+                        const v = String(a == null ? '' : a).trim();
+                        if (v && v !== canonical && aliases.indexOf(v) === -1) aliases.push(v);
+                    });
+                    if (canonical && aliases.length > 0) {
+                        const flagKey = 'local_rxowner_healed_v1_' + canonical;
+                        let done = [];
+                        try {
+                            const flagRaw = localStorage.getItem(flagKey);
+                            const parsed = flagRaw ? JSON.parse(flagRaw) : [];
+                            if (Array.isArray(parsed)) done = parsed;
+                        } catch (e) { done = []; }
+                        for (let i = 0; i < aliases.length; i++) {
+                            const alias = aliases[i];
+                            if (done.indexOf(alias) !== -1) continue;
+                            const mig = await migrateUserDataOwnership(alias, canonical);
+                            if (!mig.errors || mig.errors.length === 0) {
+                                done.push(alias);
+                                localStorage.setItem(flagKey, JSON.stringify(done));
+                                if (mig.rx > 0 || mig.trash > 0) {
+                                    console.log('[OwnerHeal] 历史处方归属已收敛:', alias, '->', canonical,
+                                        '处方' + mig.rx + '条/回收站' + mig.trash + '条');
+                                }
+                            } else {
+                                pendingAliases.push(alias);
+                                console.warn('[OwnerHeal] 别名归属迁移失败，本次会话锁定删除收敛，下次登录重试:',
+                                    alias, mig.errors);
+                            }
+                        }
+                    }
+                } catch (e) {
+                    // 收敛流程自身异常：把全部候选别名置为 pending，宁可锁定不落库也不误删
+                    try {
+                        const canonical0 = String(effective.username || '');
+                        [effective.phone].concat(replacedOldNames).forEach(function (a) {
+                            const v = String(a == null ? '' : a).trim();
+                            if (v && v !== canonical0 && pendingAliases.indexOf(v) === -1) pendingAliases.push(v);
+                        });
+                    } catch (e2) {}
+                    console.warn('[OwnerHeal] 处方归属收敛异常(不影响登录):', e);
+                }
+
+                // ★ H2 防护闸：失败别名非空时，本次会话的处方加载只许读、不许删除收敛，
+                //   全量缓存也不许被过滤结果覆盖（由 getAllUserPrescriptions / loadData 读取）。
+                try { window.__ownerHealPendingAliases = pendingAliases.slice(); } catch (eWin) {}
+
+                return effective;
+            } catch (e) {
+                console.warn('[OwnerHeal] 自愈总异常(不影响登录):', e);
+                return user;
             }
         }
 
@@ -3418,7 +3827,13 @@ let currentUser = null;
                             }
                         }
                     } catch (e) { console.warn('密码升级失败:', e); }
-                    
+
+                    // ★★ 2026-10-13 P0：改名身份归一 + 历史处方归属自愈（必须在 currentUser
+                    //   赋值与 loadData 之前完成；内部全异常 fail-open，绝不阻断登录）。
+                    //   修复存量：早版本改名未迁处方归属 / config 回写失败造成的双账号行。
+                    try { user = await normalizeLoginIdentityAndHealOwnership(user); }
+                    catch (eHeal) { console.warn('[OwnerHeal] 登录自愈异常(不影响登录):', eHeal); }
+
                     currentUser = user;
                     // 使用统一的 user_login_data 存储登录信息
                     const loginData = {
@@ -3840,6 +4255,9 @@ let currentUser = null;
                     alert('用户不存在');
                     return;
                 }
+                // ★ 2026-10-13：记录用户行改名前的原始 username（自愈场景 currentUser 是
+                //   手机号登录行、定位到的行可能是另一个旧名），归属迁移两个旧名都要覆盖
+                const __rowOldUsername = String(users[userIndex].username || '');
 
                 // ★ 2026-08-26 只改用户名（密码三项留空）时跳过密码校验，原密码保持不变
                 let _verified = true;
@@ -3916,14 +4334,63 @@ let currentUser = null;
                 // ★ 2026-10-01：回写失败不再静默（与编辑用户入口同修），失败必须告知，
                 //   否则用户看到"修改成功"但 config.json 权威层仍旧，改名会被登录镜像还原。
                 let __renameErr2 = '';
+
+                // ★★ 2026-10-13 P0：本入口（改密弹窗里顺带改用户名）历史上既没迁
+                //   local_web_user_ 偏好键，也没迁处方归属——是"改名后历史处方消失"的
+                //   另一个漏口。与 confirmEditUser 完全对齐：旧名覆盖"登录名+行原名"两种。
+                if (_newUsername) {
+                    const __oldNamesForMig = [];
+                    [_oldLoginName, __rowOldUsername].forEach(function (n) {
+                        const v = String(n == null ? '' : n).trim();
+                        if (v && v !== _newUsername && __oldNamesForMig.indexOf(v) === -1) {
+                            __oldNamesForMig.push(v);
+                        }
+                    });
+                    __oldNamesForMig.forEach(function (oldN) {
+                        const oldPrefix = 'local_web_user_' + oldN + '_';
+                        const newPrefix = 'local_web_user_' + _newUsername + '_';
+                        for (let i = 0; i < localStorage.length; i++) {
+                            const key = localStorage.key(i);
+                            if (key.startsWith(oldPrefix)) {
+                                const value = localStorage.getItem(key);
+                                const newKey = key.replace(oldPrefix, newPrefix);
+                                localStorage.setItem(newKey, value);
+                                localStorage.removeItem(key);
+                                i--;
+                            }
+                        }
+                        if (localStorage.getItem('local_rememberedUsername') === oldN) {
+                            localStorage.setItem('local_rememberedUsername', _newUsername);
+                        }
+                    });
+                    for (let __mi = 0; __mi < __oldNamesForMig.length; __mi++) {
+                        try {
+                            const __ownMig2 = await migrateUserDataOwnership(__oldNamesForMig[__mi], _newUsername);
+                            if (__ownMig2.errors && __ownMig2.errors.length > 0 && !__renameErr2) {
+                                __renameErr2 = '历史处方归属迁移失败（' + __ownMig2.errors.join('；') +
+                                    '）。账号改名已生效，请稍后重新登录触发自动修复，仍异常请联系客服。';
+                            }
+                        } catch (eMig2) {
+                            if (!__renameErr2) {
+                                __renameErr2 = '历史处方归属迁移异常（' +
+                                    (eMig2 && eMig2.message ? eMig2.message : String(eMig2)) +
+                                    '）。请稍后重新登录触发自动修复。';
+                            }
+                        }
+                    }
+                }
                 // ★ 2026-08-26 双源同步：改名/改密同步 config.json（登录端权威源），
                 //   杜绝"config 旧账号仍有效 + 本地新账号密码过期"的漂移；非 Electron 环境跳过
                 if (_newUsername || _pwdChange) {
                     try {
                         if (window.electronAPI && window.electronAPI.renameUser) {
-                            // oldUsername 用登录名（自愈场景=旧号/手机号，正常场景=旧用户名）
+                            // ★ 2026-10-13 独立审查 M2：主进程按 u.username===old || u.phone===old 匹配。
+                            //   登录自愈会把会话身份归一为英文名，而 config.json 旧行可能仍是手机号行，
+                            //   传英文名会双不命中→静默 synced:false→下次启动密码被 config 旧值还原。
+                            //   手机号是 config/localStorage 两行最稳定的不变键，有 phone 一律优先传 phone。
+                            const _cfgMatchKey = users[userIndex].phone || _oldLoginName;
                             const _rn = await window.electronAPI.renameUser({
-                                oldUsername: _oldLoginName,
+                                oldUsername: _cfgMatchKey,
                                 newUsername: _newUsername || users[userIndex].username,
                                 newPassword: _pwdChange ? newPwd : undefined,
                                 oldPassword: oldPwd   // ★ 2026-09-25：主进程强制验证原密码
@@ -4143,8 +4610,14 @@ let currentUser = null;
                 try {
                     if (window.electronAPI && typeof window.electronAPI.renameUser === 'function' &&
                         (newUsername !== originalUsername || newPassword.trim())) {
+                        // ★ 2026-10-13 M2：主进程按 u.username===old || u.phone===old 匹配。
+                        //   旧名本身是手机号时（手机号直接改名）传旧名必命中 config 行；
+                        //   旧名是英文名且账号带 phone（双行机 config 仍是手机号行）时传 phone 才命中。
+                        const _editCfgMatchKey = /^1[3-9]\d{9}$/.test(originalUsername)
+                            ? originalUsername
+                            : (users[userIndex].phone || originalUsername);
                         const _rn = await window.electronAPI.renameUser({
-                            oldUsername: originalUsername,
+                            oldUsername: _editCfgMatchKey,
                             newUsername: newUsername,
                             newPassword: newPassword.trim() || undefined,
                             adminPassword: _adminPwd   // ★ 2026-09-25：管理员密码证明
@@ -4182,6 +4655,29 @@ let currentUser = null;
 
                     if (localStorage.getItem('local_rememberedUsername') === originalUsername) {
                         localStorage.setItem('local_rememberedUsername', newUsername);
+                    }
+
+                    // ★★ 2026-10-13 P0：同步迁移处方归属（IndexedDB prescriptions/trash 的
+                    //   createdBy + all_prescription_list 缓存 + recycleBin_/deletedRxIds_ 键）。
+                    //   历史漏迁导致改名后新用户名登录历史处方全空（数据仍在，只是挂在旧名）。
+                    //   迁移失败必须告警——医疗数据可见性问题严禁静默成功。
+                    try {
+                        const __ownMig = await migrateUserDataOwnership(originalUsername, newUsername);
+                        if (__ownMig.errors && __ownMig.errors.length > 0) {
+                            __renameErr = '历史处方归属迁移失败（' + __ownMig.errors.join('；') +
+                                '）。账号改名已生效，但历史处方可能仍只在旧用户名下，' +
+                                '请稍后重新登录触发自动修复，仍异常请联系客服。';
+                        } else if (Array.isArray(prescriptionHistory)) {
+                            // ★ 独立审查 L3：内存列表仍是旧归属，不重写的话同日覆盖处方会保留
+                            //   todayExisting.createdBy 把旧名写回库。
+                            prescriptionHistory.forEach(function (p) {
+                                if (p && p.createdBy === originalUsername) p.createdBy = newUsername;
+                            });
+                        }
+                    } catch (eMig) {
+                        __renameErr = '历史处方归属迁移异常（' +
+                            (eMig && eMig.message ? eMig.message : String(eMig)) +
+                            '）。请稍后重新登录触发自动修复。';
                     }
                 }
 
@@ -4334,11 +4830,35 @@ let currentUser = null;
             }
             if (!await confirm('确定删除该用户？删除后该用户的所有处方数据也将被删除！')) return;
 
+            // ★ 2026-10-13 独立审查 M1：IDB 打不开时 getAllPrescriptionsFromDB 会吞错返回 []，
+            //   旧逻辑据此误报"删除成功"，处方原样残留。先做健康检查，不健康直接中止（账号不动）。
+            try {
+                await openDB();
+            } catch (eDb) {
+                console.warn('[删除用户] 本机处方存储不可用，中止删除用户:', eDb);
+                try {
+                    alert('本机处方存储当前不可用（' + (eDb && eDb.message ? eDb.message : String(eDb)) +
+                        '），为避免处方残留，本次未删除该用户。请重启应用后重试。');
+                } catch (eAlert) {}
+                return;
+            }
             // P7: 从 prescriptions store 批量删除该用户的处方
+            // ★ 2026-10-13：单条失败不中断删用户流程（新删除语义会 throw），逐条容错+标记+清副本
             const userPrescriptions = await getAllPrescriptionsFromDB();
             const toDelete = userPrescriptions.filter(p => p.createdBy === username);
+            let __delFail = 0;
             for (const p of toDelete) {
-                await deletePrescriptionFromDB(p.id);
+                try {
+                    await deletePrescriptionFromDB(p.id);
+                    addDeletedRxId(p.id);
+                    try { await removeRxFromBackupCopies(p.id); } catch (eCp) {}
+                } catch (e) {
+                    __delFail++;
+                    console.warn('[删除用户] 处方删除失败，跳过:', p.id, e && e.message);
+                    // 物理删除未成也要落隔离标记+清缓存副本，杜绝降级回灌路径复活
+                    try { addDeletedRxId(p.id); } catch (eMark) {}
+                    try { await removeRxFromBackupCopies(p.id); } catch (eCp) {}
+                }
             }
 
             // 删除用户
@@ -4351,7 +4871,9 @@ let currentUser = null;
             }
 
             renderUserList();
-            alert('用户删除成功！');
+            alert(__delFail > 0
+                ? ('用户已删除，但有 ' + __delFail + ' 条处方因本机存储忙暂未清理。它们仍会显示在管理员的全部处方视图中，请稍后重启应用再删除一次，或联系客服处理。')
+                : '用户删除成功！');
         }
 
         // ★P5-3 启用移动端录像/拍照按钮（由 video-recorder.js init 完成后调用）
@@ -4878,10 +5400,14 @@ let currentUser = null;
                     } catch(_) {}
                     const electronUser = await window.electronAPI.getCurrentUser();
                     if (electronUser) {
-                        currentUser = electronUser;
-                        const loginData = { user: electronUser, loginTime: Date.now() };
+                        // ★ 2026-10-13：与 APP 登录路径同源的改名身份归一+处方归属自愈
+                        let __eu = electronUser;
+                        try { __eu = await normalizeLoginIdentityAndHealOwnership(__eu); }
+                        catch (eHeal) { console.warn('[OwnerHeal] 桌面自动登录自愈异常(不影响登录):', eHeal); }
+                        currentUser = __eu;
+                        const loginData = { user: __eu, loginTime: Date.now() };
                         localStorage.setItem('user_login_data', JSON.stringify(loginData));
-                        localStorage.setItem('currentUser', JSON.stringify(electronUser));
+                        localStorage.setItem('currentUser', JSON.stringify(__eu));
                         localStorage.setItem('isLoggedIn', 'true');
                         document.getElementById('loginOverlay').style.display = 'none';
                         document.querySelector('.main-container').style.display = 'flex';
@@ -5252,7 +5778,12 @@ let currentUser = null;
                     prescriptionHistory = result;
                     // ★双重备份：加载成功后同步到 localStorage
                     try {
-                        if (Array.isArray(result) && result.length > 0) {
+                        // ★ 2026-10-13 H2：归属自愈有未完成别名时，result 只是过滤后的部分集合，
+                        //   覆盖全量缓存会让旧别名处方从缓存副本灭失；此时保留旧缓存
+                        //   （migrateUserDataOwnership 成功后会原地把缓存内 createdBy 改好）。
+                        const __healCacheLocked = Array.isArray(window.__ownerHealPendingAliases) &&
+                            window.__ownerHealPendingAliases.length > 0;
+                        if (Array.isArray(result) && result.length > 0 && !__healCacheLocked) {
                             localStorage.setItem('all_prescription_list', JSON.stringify(result));
                         }
                     } catch(lsErr) { console.warn('[loadData] localStorage 备份失败:', lsErr); }
@@ -5270,7 +5801,10 @@ let currentUser = null;
                     try {
                         const savedPrescriptions = localStorage.getItem('all_prescription_list');
                         if (savedPrescriptions) {
-                            const data = JSON.parse(savedPrescriptions);
+                            let data = JSON.parse(savedPrescriptions);
+                            // ★ 2026-10-13 独立审查 M3：超时降级直读缓存是另一条绕过回灌过滤的
+                            //   复活漏口（慢机超时 + 副本清理失败同时成立时），同样按删除标记过滤。
+                            if (Array.isArray(data)) data = filterOutDeletedRx(data);
                             if (Array.isArray(data) && data.length > 0) {
                                 fallbackPrescriptions = data;
                                 console.warn('[loadData] 从 localStorage 降级读取到 ' + data.length + ' 条处方');
@@ -7756,7 +8290,29 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
             } catch(e) { console.warn('保存到处方回收站失败:', e); }
 
             // P7: 单条从 prescriptions store 删除
-            await deletePrescriptionFromDB(id);
+            // ★★ 2026-10-13 P0（华为离线App：删除后刷新复活）：删除必须成功才更新 UI。
+            //   失败（openDB 3s 超时/事务 abort/读回仍在）时撤回刚放入回收站的副本、
+            //   保留内存与界面记录、明确告知用户重试——旧逻辑静默吞错假装删除成功。
+            try {
+                await deletePrescriptionFromDB(id);
+            } catch (delErr) {
+                console.error('[删除处方] IndexedDB 删除失败，保留记录:', delErr);
+                // 回滚回收站 + 清掉刚写到内存对象上的删除留痕字段（同一引用，不清除会污染日后保存）
+                try {
+                    saveRecycleBin(getRecycleBin().filter(r => String(r.id) !== String(id)));
+                } catch (eRollback) {}
+                try { delete record._deletedAt; delete record._deletedBy; } catch (eField) {}
+                try {
+                    alert('删除未成功，处方仍保留在历史记录中，请稍后重试。\n（' +
+                        (delErr && delErr.message ? delErr.message : String(delErr)) + '）');
+                } catch (eAlert) {}
+                return;
+            }
+
+            // 删除落库已确认：①写删除标记（所有降级回灌路径据此过滤，防止任何副本复活）；
+            //   ②同步清理 localStorage 全量缓存与 settings 深兜（best-effort，标记兜底）。
+            addDeletedRxId(id);
+            try { await removeRxFromBackupCopies(id); } catch (eCp) { console.warn('删除副本清理异常:', eCp); }
 
             // 更新内存数组
             prescriptionHistory = prescriptionHistory.filter(p => String(p.id) !== String(id));
@@ -7825,26 +8381,75 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
             modal.style.display = 'flex';
         }
 
-        function restoreFromRecycleBin(id) {
+        // ★ 2026-10-13 独立审查 H1：恢复必须"先落库确认（事务 oncomplete + 读回校验），
+        //   再提交内存/删除标记/回收站"。旧实现先删标记和回收站条目、再 fire-and-forget
+        //   调 savePrescriptionToDB（其外层 catch 吞错），华为慢机上一旦写入失败/应用被杀，
+        //   处方从 UI、回收站、标记三处同时消失，等同永久丢失。
+        async function restoreFromRecycleBin(id) {
             const bin = getRecycleBin();
             const record = bin.find(r => String(r.id) === String(id));
             if (!record) { showToast('❌ 未找到该处方'); return; }
+
+            // ① 严格落库（与删除对称：oncomplete + 双类型键读回）
+            try {
+                const database = await openDB();
+                const restoreRecord = Object.assign({}, record);
+                delete restoreRecord._deletedAt;
+                delete restoreRecord._deletedBy;
+                await new Promise((resolve, reject) => {
+                    const tx = database.transaction(['prescriptions'], 'readwrite');
+                    tx.objectStore('prescriptions').put(restoreRecord);
+                    tx.oncomplete = () => resolve();
+                    tx.onerror = () => reject(tx.error);
+                    tx.onabort = () => reject(tx.error || new Error('事务被中止'));
+                });
+                const existsInDB = await new Promise((resolve) => {
+                    try {
+                        const tx = database.transaction(['prescriptions'], 'readonly');
+                        const st = tx.objectStore('prescriptions');
+                        const r1 = st.get(Number(id));
+                        const r2 = st.get(String(id));
+                        let n = 0;
+                        const done = () => { if (++n === 2) resolve(Boolean(r1.result || r2.result)); };
+                        r1.onsuccess = done; r2.onsuccess = done;
+                        r1.onerror = done; r2.onerror = done;
+                        tx.onabort = () => resolve(false);
+                    } catch (e) { resolve(false); }
+                });
+                if (!existsInDB) throw new Error('恢复后读回校验失败，记录未落库（id=' + id + '）');
+            } catch (e) {
+                console.warn('[恢复处方] IndexedDB 落库失败，保留回收站条目:', e);
+                try {
+                    alert('恢复未成功，处方仍保留在回收站中，请稍后重试。\n（' +
+                        (e && e.message ? e.message : String(e)) + '）');
+                } catch (eAlert) {}
+                showRecycleBin();
+                return;
+            }
+
+            // ② 落库确认后再提交内存/标记/回收站/缓存
             delete record._deletedAt;
             delete record._deletedBy;
             const exists = prescriptionHistory.some(p => String(p.id) === String(id));
             if (!exists) {
                 prescriptionHistory.unshift(record);
             }
-            try {
-                const delKey = 'deletedRxIds_' + (currentUser ? currentUser.username : 'default');
-                const deletedIds = JSON.parse(localStorage.getItem(delKey) || '[]');
-                const newDeletedIds = deletedIds.filter(did => did !== id);
-                localStorage.setItem(delKey, JSON.stringify(newDeletedIds));
-            } catch(e) { console.warn('移除删除标记失败:', e); }
+            // 移除删除标记（恢复后降级回灌不得再过滤它）
+            removeDeletedRxId(id);
             const newBin = bin.filter(r => String(r.id) !== String(id));
             saveRecycleBin(newBin);
-            if (typeof savePrescriptionHistory === 'function') { savePrescriptionHistory(); }
-            else if (typeof savePrescriptionToDB === 'function') { savePrescriptionToDB(record).catch(e => console.warn('恢复保存失败:', e)); }
+            // ★ 恢复时把记录补回 localStorage 全量缓存——否则极端场景（主 store 丢失触发
+            //   缓存回灌）恢复的处方仍会因缓存缺失而不见。仅在缓存已存在时并入，不凭空新建。
+            try {
+                const raw = localStorage.getItem('all_prescription_list');
+                if (raw) {
+                    const list = JSON.parse(raw);
+                    if (Array.isArray(list) && !list.some(p => p && String(p.id) === String(id))) {
+                        list.unshift(record);
+                        localStorage.setItem('all_prescription_list', JSON.stringify(list));
+                    }
+                }
+            } catch(e) { console.warn('恢复处方时同步缓存失败:', e); }
             renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, typeof historyDisplayCount !== 'undefined' ? historyDisplayCount : 15));
             showToast('✅ 处方已恢复');
             showRecycleBin();
@@ -7882,7 +8487,12 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
                 } catch(e) { console.warn('[同日覆盖] 写入localStorage回收站失败:', e); }
                 await deletePrescriptionFromDB(d.id);
                 addDeletedRxId(d.id);
-                try { deletePrescriptionFromCloud(d.id); } catch (e) { console.warn('[同日覆盖] 云端软删除同步失败:', e); }
+                // ★ 2026-10-13 P0：与手动删除同修，清理缓存/深兜副本防刷新复活
+                try { await removeRxFromBackupCopies(d.id); } catch (eCp) { console.warn('[同日覆盖] 副本清理失败:', eCp); }
+                // typeof 守卫：deletePrescriptionFromCloud 仅云端版定义，离线端调用必抛 ReferenceError
+                if (typeof deletePrescriptionFromCloud === 'function') {
+                    try { deletePrescriptionFromCloud(d.id); } catch (e) { console.warn('[同日覆盖] 云端软删除同步失败:', e); }
+                }
                 prescriptionHistory = prescriptionHistory.filter(p => String(p.id) !== String(d.id));
                 try { if (window.AuditLog) AuditLog.record('archive_duplicate_rx', (d.patientName || '') + ' [' + (d.prescriptionNo || '') + '] 同日覆盖自动归档'); } catch(e) {}
             } catch (e) {
@@ -7890,19 +8500,54 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
             }
         }
 
-        function deleteFromRecycleBin(id) {
+        async function deleteFromRecycleBin(id) {
             if (!confirm('彻底删除后无法恢复，确定吗？')) return;
             const bin = getRecycleBin();
-            const newBin = bin.filter(r => String(r.id) !== String(id));
-            saveRecycleBin(newBin);
+            if (!bin.some(r => String(r.id) === String(id))) { showRecycleBin(); return; }
+            // ★ 2026-10-13 独立审查 M2：主 store 物理删除成功（含读回校验）后才补标记、
+            //   清副本、移出回收站；失败则保留条目让用户可重试（标记挡不住主 store 直读复活）。
+            try {
+                await deletePrescriptionFromDB(id);
+            } catch (e) {
+                console.warn('[彻底删除] 主 store 删除失败，保留回收站条目:', e);
+                try {
+                    alert('彻底删除未成功，该处方仍保留在回收站中，请稍后重试。\n（' +
+                        (e && e.message ? e.message : String(e)) + '）');
+                } catch (eAlert) {}
+                showRecycleBin();
+                return;
+            }
+            addDeletedRxId(id);
+            try { await removeRxFromBackupCopies(id); } catch (e) { console.warn('彻底删除副本清理失败:', e); }
+            saveRecycleBin(bin.filter(r => String(r.id) !== String(id)));
             showToast('已彻底删除');
             showRecycleBin();
         }
 
-        function clearRecycleBin() {
+        async function clearRecycleBin() {
             if (!confirm('清空回收站后所有已删除处方将无法恢复，确定吗？')) return;
-            saveRecycleBin([]);
-            showToast('回收站已清空');
+            // ★ 2026-10-13 独立审查 M2：逐条物理删，成功者移出回收站；失败者保留并汇总告知
+            const bin = getRecycleBin();
+            const remain = [];
+            let failCount = 0;
+            for (const r of bin) {
+                if (!r || r.id === undefined || r.id === null) continue;
+                try {
+                    await deletePrescriptionFromDB(r.id);
+                    addDeletedRxId(r.id);
+                    try { await removeRxFromBackupCopies(r.id); } catch (e) {}
+                } catch (e) {
+                    failCount++;
+                    console.warn('[清空回收站] 条目物理删除失败，保留:', r.id, e && e.message);
+                    remain.push(r);
+                }
+            }
+            saveRecycleBin(remain);
+            if (failCount > 0) {
+                try { alert('有 ' + failCount + ' 条处方因存储忙未能彻底删除，仍保留在回收站中，请稍后重试。'); } catch (e) {}
+            } else {
+                showToast('回收站已清空');
+            }
             showRecycleBin();
         }
 
@@ -10089,12 +10734,30 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
         }
 
         async function deleteCase(id) {
+            // ★ 2026-10-13 独立审查 L1：与 deleteHistory 对齐，未登录拒绝删除
+            if (!currentUser || !currentUser.username) {
+                console.warn('[安全] 拒绝未登录状态调用 deleteCase');
+                try { alert('请先登录后再操作'); } catch (e) {}
+                return;
+            }
             if (!confirm('确定删除该病历？')) return;
             const record = prescriptionHistory.find(p => String(p.id) === String(id));
             if (!record) return;
 
             // P7: 单条从 prescriptions store 删除
-            await deletePrescriptionFromDB(id);
+            // ★ 2026-10-13 P0：与 deleteHistory 同修——失败必须告知且不移除 UI 记录
+            try {
+                await deletePrescriptionFromDB(id);
+            } catch (delErr) {
+                console.error('[删除病历] IndexedDB 删除失败，保留记录:', delErr);
+                try {
+                    alert('删除未成功，病历仍保留在列表中，请稍后重试。\n（' +
+                        (delErr && delErr.message ? delErr.message : String(delErr)) + '）');
+                } catch (eAlert) {}
+                return;
+            }
+            addDeletedRxId(id);
+            try { await removeRxFromBackupCopies(id); } catch (eCp) { console.warn('删除副本清理异常:', eCp); }
 
             // 更新内存数组
             prescriptionHistory = prescriptionHistory.filter(p => String(p.id) !== String(id));
@@ -10130,9 +10793,12 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
                 const savedPrescriptions = localStorage.getItem('all_prescription_list');
                 if (savedPrescriptions) {
                     try {
-                        const data = JSON.parse(savedPrescriptions);
+                        // ★ 2026-10-13 P0：回灌前必须滤掉已删除标记——删除时若 IDB 删除成功而
+                        //   缓存未同步（历史版本），这里就是"删除后刷新复活"的确定性路径。
+                        const data = filterOutDeletedRx(JSON.parse(savedPrescriptions));
                         if (Array.isArray(data) && data.length > 0) {
                             allPrescriptions = data;
+                            localStorage.setItem('all_prescription_list', JSON.stringify(data));
                             await saveAllPrescriptionsToDB(data).catch(e => {
                                 console.error('数据迁移到 prescriptions store 失败:', e);
                             });
@@ -10148,8 +10814,10 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
                 try {
                     const dbData = await getFromIndexedDB('settings', 'all_prescription_list');
                     if (dbData && dbData.value) {
-                        const data = typeof dbData.value === 'string' ? JSON.parse(dbData.value) : dbData.value;
-                        if (Array.isArray(data)) {
+                        let data = typeof dbData.value === 'string' ? JSON.parse(dbData.value) : dbData.value;
+                        // ★ 2026-10-13 P0：深兜回灌同样过滤删除标记，并顺手把过滤结果收敛进各副本
+                        data = filterOutDeletedRx(Array.isArray(data) ? data : []);
+                        if (Array.isArray(data) && data.length > 0) {
                             allPrescriptions = data;
                             localStorage.setItem('all_prescription_list', JSON.stringify(allPrescriptions));
                             await saveAllPrescriptionsToDB(data).catch(e => {
@@ -10167,8 +10835,10 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
                 try {
                     const result = await window.electronAPI.getUserData('all_prescription_list');
                     if (result.success && result.data !== null) {
-                        const data = typeof result.data === 'string' ? JSON.parse(result.data) : result.data;
-                        if (Array.isArray(data)) {
+                        let data = typeof result.data === 'string' ? JSON.parse(result.data) : result.data;
+                        // ★ 2026-10-13 P0：Electron fs 深兜回灌同样过滤删除标记
+                        data = filterOutDeletedRx(Array.isArray(data) ? data : []);
+                        if (Array.isArray(data) && data.length > 0) {
                             allPrescriptions = data;
                             localStorage.setItem('all_prescription_list', JSON.stringify(allPrescriptions));
                             await saveAllPrescriptionsToDB(data).catch(e => {
@@ -10204,7 +10874,16 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
             //     故宁可不落库（数据仍在 IDB / localStorage，下次读取自愈）。
             try {
                 let __dbReadOk = __idbReadOk;
-                if ((Array.isArray(allPrescriptions) && allPrescriptions.length > 0) || __dbReadOk) {
+                // ★ 2026-10-13 独立审查 H2：登录归属自愈（normalizeLoginIdentityAndHealOwnership）
+                //   存在未完成别名时，过滤集合不含旧名下的本人处方；此刻任何删除收敛
+                //   （syncPrescriptionsDBDiff / clear 全量写）都会把这些记录物理删除。
+                //   锁定期间只读不删，下次登录迁移成功后自动解锁。
+                const __healDeleteLocked = Array.isArray(window.__ownerHealPendingAliases) &&
+                    window.__ownerHealPendingAliases.length > 0;
+                if (__healDeleteLocked) {
+                    console.warn('[getAllUserPrescriptions] 归属自愈未完成，本次跳过删除收敛落库，待迁移别名:',
+                        window.__ownerHealPendingAliases);
+                } else if ((Array.isArray(allPrescriptions) && allPrescriptions.length > 0) || __dbReadOk) {
                     try {
                         await syncPrescriptionsDBDiff(allPrescriptions);
                     } catch (e) {
