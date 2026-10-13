@@ -900,6 +900,11 @@ async function findLicensesByMachine(kv, machineId, options = {}) {
     if (!kv || !machineId) return [];
     const readOnly = options && options.readOnly === true;
     const forceScan = options && options.forceScan === true;
+    // ★ 2026-10-13：readOnly 调用方（detach）全扫后允许只回填【属主集合】——
+    //   紧接着的 saveLicense→addMidOwner 即可读到确定集合（含 []），不再触发
+    //   第二次全扫（新设备首激原先后 detach+addMidOwner 各扫一遍=33s）。
+    //   单值 mid_idx 仍严格遵守 readOnly 不回填（三轮复审"不回填 hits[0]"意图不变）。
+    const backfillOwners = options && options.backfillOwners === true;
     const idxKey = midIndexKey(machineId);
 
     // indexedCode 三态：合法码串=可直查；null=无索引/脏值/强制全扫；直查 KV 异常单独标记
@@ -961,7 +966,8 @@ async function findLicensesByMachine(kv, machineId, options = {}) {
     const hits = records.filter(r => getDevices(r).some(d => d && d.machineId === machineId));
 
     // ★ 2026-10-10 全扫后回填属主集合（含空数组，使未绑定设备不再反复全扫）
-    if (!readOnly) {
+    // ★ 2026-10-13 backfillOwners：readOnly 的 detach 全扫也回填集合（不碰单值索引）
+    if (!readOnly || backfillOwners) {
         await writeMidOwners(kv, machineId, hits.map(r => r.code));
     }
 
@@ -996,9 +1002,13 @@ async function findLicensesByMachine(kv, machineId, options = {}) {
 async function deleteLicense(kv, code) {
     if (!code) return;
     let oldMids = [];
+    let oldInviteCode = '';
     try {
         const old = await getLicense(kv, code).catch(() => null);
-        if (old) oldMids = [...new Set(getDevices(old).map(d => d && d.machineId).filter(Boolean))];
+        if (old) {
+            oldMids = [...new Set(getDevices(old).map(d => d && d.machineId).filter(Boolean))];
+            oldInviteCode = typeof old.inviteCode === 'string' ? old.inviteCode : '';
+        }
     } catch (_) { oldMids = []; }
 
     await kv.delete(KV_LICENSE_PREFIX + code);
@@ -1014,6 +1024,15 @@ async function deleteLicense(kv, code) {
             const cur = await kv.get(midIndexKey(mid), 'json').catch(() => null);
             if (cur === code) await kv.delete(midIndexKey(mid));
         } catch (_) { /* 陈旧 mid 键残留无害，findLicensesByMachine 会自愈 */ }
+    }
+
+    // ★ 2026-10-13 清理邀请码反向索引（仅在仍指向本码时删，防误删新占用）
+    if (oldInviteCode) {
+        try {
+            const ik = inviteIndexKey(oldInviteCode);
+            const cur = await kv.get(ik).catch(() => null);
+            if (cur === code) await kv.delete(ik);
+        } catch (_) { /* 残留索引读侧会按"码不存在"自愈删除 */ }
     }
 }
 
@@ -1054,14 +1073,22 @@ async function updateLicense(kv, code, updates) {
 }
 
 // 列出所有激活码
+// ★ 2026-10-13 分批并行（原串行 for-await）：166 条 license 在国内 RTT(~200ms) 下
+//   串行要 33s（新设备首激两次全扫→客户端 12s 超时，客户码一直 unused）。
+//   分批 20 并发 + 按 index 原下标落位，输出顺序与串行版逐位一致，调用方零感知。
 async function listLicenses(kv) {
     const index = (await kv.get(KV_LICENSE_INDEX, 'json')) || [];
-    const records = [];
-    for (const code of index) {
-        const record = await getLicense(kv, code);
-        if (record) records.push(record);
+    const records = new Array(index.length);
+    const BATCH = 20;
+    for (let i = 0; i < index.length; i += BATCH) {
+        const part = await Promise.all(
+            index.slice(i, i + BATCH).map(code => getLicense(kv, code).catch(() => null))
+        );
+        for (let j = 0; j < part.length; j++) {
+            if (part[j]) records[i + j] = part[j];
+        }
     }
-    return records;
+    return records.filter(Boolean);
 }
 
 // 隐藏敏感字段，返回安全的记录对象
@@ -1162,7 +1189,9 @@ async function detachDeviceFromOtherLicenses(kv, targetCode, machineId) {
         //   发现扫描配 readOnly（三轮复审建议 1）：不在清理前把键回填给 hits[0]
         //   （可能是残留码，紧接着又被删→抖动+终态短暂缺失）；mid 键的最终归属
         //   完全由下方各码 saveLicense 连锁维护，清理结束即收敛到 target。
-        const owners = await findLicensesByMachine(kv, machineId, { forceScan: true, readOnly: true });
+        // ★ 2026-10-13 backfillOwners：全扫结果回填属主集合，紧接着 saveLicense 的
+        //   addMidOwner 直接命中（含空集 []），消除新设备首激的第二次全扫（33s→秒级）
+        const owners = await findLicensesByMachine(kv, machineId, { forceScan: true, readOnly: true, backfillOwners: true });
         for (const other of owners) {
             const otherCode = other.code;
             if (!otherCode || otherCode === targetCode) continue;
@@ -1666,30 +1695,63 @@ function generateInviteCode() {
     return code;
 }
 
+// ★ 2026-10-13 邀请码反向索引 invite_idx:{6位码} = licenseCode
+//   原实现每次激活 ensureInviteCode 都 listLicenses 全扫 166 条做唯一性校验
+//   （串行时代是首激 33s 的三个全扫之一）。邀请码只经 ensureInviteCode 分配，
+//   故可 O(1) 占位；存量邀请码无索引键时读侧全扫兜底并懒回填，最终一致。
+const KV_INVITE_INDEX_PREFIX = 'invite_idx:';
+function inviteIndexKey(inviteCode) {
+    return KV_INVITE_INDEX_PREFIX + String(inviteCode).trim().toUpperCase();
+}
+
 // 确保激活码记录上有邀请码（首次激活时生成，幂等：已有则沿用）
 async function ensureInviteCode(kv, record) {
     if (!kv || !record || !record.code) return record;
     if (record.inviteCode) return record;
-    // 邀请码全局唯一：冲突时重生成（最多3次，仍冲突直接带前缀兜底）
+    // 邀请码全局唯一：O(1) 占位键判重（冲突时重生成，最多3次）
+    const reserve = async (candidate) => {
+        try {
+            const k = inviteIndexKey(candidate);
+            const owner = await kv.get(k);
+            if (owner !== null && owner !== undefined) return false;  // 已占位
+            await updateLicense(kv, record.code, { inviteCode: candidate });
+            await kv.put(k, record.code).catch(() => {});  // 占位失败不影响授权，读侧全扫兜底
+            return true;
+        } catch (_) { return false; }
+    };
     for (let i = 0; i < 3; i++) {
         const candidate = generateInviteCode();
-        const existing = await findLicenseByInviteCode(kv, candidate);
-        if (!existing) {
-            await updateLicense(kv, record.code, { inviteCode: candidate });
-            return { ...record, inviteCode: candidate };
-        }
+        if (await reserve(candidate)) return { ...record, inviteCode: candidate };
     }
-    const fallback = (record.code || 'X').replace(/[^A-Z0-9]/g, '').substring(0, 6).padEnd(6, 'X');
+    let fallback = (record.code || 'X').replace(/[^A-Z0-9]/g, '').substring(0, 6).padEnd(6, 'X');
+    // 兜底码也占位冲突则追加一位（极罕见）
+    try {
+        if (await kv.get(inviteIndexKey(fallback)) !== null) fallback = fallback + 'X';
+    } catch (_) { /* 读失败照常写，与旧实现同水位 */ }
     await updateLicense(kv, record.code, { inviteCode: fallback });
+    await kv.put(inviteIndexKey(fallback), record.code).catch(() => {});
     return { ...record, inviteCode: fallback };
 }
 
-// 按邀请码查找激活码记录（扫全量 license 记录，量级百级以内，KV 读额度充足）
+// 按邀请码查找激活码记录（O(1) 索引直查 + 权威校验；无索引键时全扫兜底+懒回填）
 async function findLicenseByInviteCode(kv, inviteCode) {
     if (!kv || !inviteCode) return null;
     const code = String(inviteCode).trim().toUpperCase();
+    const k = inviteIndexKey(code);
+    try {
+        const owner = await kv.get(k);
+        if (typeof owner === 'string' && isValidLicenseCode(owner)) {
+            const rec = await getLicense(kv, owner).catch(() => null);
+            if (rec && rec.inviteCode && String(rec.inviteCode).toUpperCase() === code) return rec;
+            // 陈旧索引（码已删/邀请码已变）→ 删除后落全扫，由全扫结果重建
+            await kv.delete(k).catch(() => {});
+        }
+    } catch (_) { /* 索引读失败 → 全扫兜底 */ }
+    // 存量邀请码（2026-10-13 前分配）无索引键：全扫一次并懒回填，此后 O(1)
     const records = await listLicenses(kv);
-    return records.find(r => r.inviteCode && String(r.inviteCode).toUpperCase() === code) || null;
+    const hit = records.find(r => r.inviteCode && String(r.inviteCode).toUpperCase() === code) || null;
+    if (hit) await kv.put(k, hit.code).catch(() => {});
+    return hit;
 }
 
 // 发放邀请奖励（validate.js 激活成功时调用）
