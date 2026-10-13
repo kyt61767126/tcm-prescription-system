@@ -4997,6 +4997,78 @@
 
         const PHONE_RE = /^1[3-9]\d{9}$/;
         let state = { edition: 'institution', phone: '', clinicName: '', adminName: '', password: '', remark: '' };
+        // ★ 2026-10-13 激活架构优化（P1，与 offline.js 同构）：云端统一身份提供器 +
+        //   Tab2 全入口预填。云端无本地台账，身份来自登录态 auth:currentUser / 运行时
+        //   currentUser / 记住的登录名；已注册/登录用户打开激活码页自动带出手机号与诊所/
+        //   姓名，「只填激活码」。仅回填输入框（可改），不放宽服务端核验。
+        let __localIdentity = null;
+        let __localIdentityPromise = null;
+        function resolveLocalIdentity() {
+            if (__localIdentity) return Promise.resolve(__localIdentity);
+            if (__localIdentityPromise) return __localIdentityPromise;
+            __localIdentityPromise = (async function () {
+                const m = {};
+                const absorb = function (u) {
+                    if (!u) return;
+                    const up = String(u.phone || '').trim();
+                    const un = String(u.username || '').trim();
+                    const ph = PHONE_RE.test(up) ? up : (PHONE_RE.test(un) ? un : '');
+                    const nm = String(u.adminName || u.name || u.realName || u.doctorName || '').trim();
+                    const cn = String(u.clinicName || '').trim();
+                    if (ph) {
+                        if (!m.phone) { m.phone = ph; m.source = m.source || 'currentUser'; }
+                        if (nm && !m.adminName) m.adminName = nm;
+                        if (cn && !m.clinicName) m.clinicName = cn;
+                    } else {
+                        if (nm && !m.adminName) m.adminName = nm;
+                        if (cn && !m.clinicName) m.clinicName = cn;
+                    }
+                };
+                // ① 运行时登录用户（模块级 currentUser，typeof 保护）
+                try { if (typeof currentUser !== 'undefined' && currentUser) absorb(currentUser); } catch (e) {}
+                // ② 持久化登录用户 auth:currentUser（StorageAdapter 已解密，明文 JSON）
+                try {
+                    const s = await StorageAdapter.getItem('auth:currentUser');
+                    if (s) absorb(JSON.parse(s));
+                } catch (e) {}
+                // ③ 记住的登录名（手机号登录场景）
+                if (!m.phone) {
+                    try {
+                        const rn = await StorageAdapter.getItem('auth:rememberedUsername');
+                        if (rn && PHONE_RE.test(String(rn).trim())) {
+                            m.phone = String(rn).trim();
+                            if (!m.source) m.source = 'remembered';
+                        }
+                    } catch (e) {}
+                }
+                // ④ CONFIG.clinicName 末位补诊所名
+                if (!m.clinicName) {
+                    try { if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.clinicName) m.clinicName = String(CONFIG.clinicName).trim(); } catch (e) {}
+                }
+                if (m.phone) __localIdentity = m;
+                return m.phone ? m : null;
+            })();
+            return __localIdentityPromise;
+        }
+        // 用本机/登录身份预填 Tab2（空才填，不覆盖用户输入），同步灌入 state 供 claim body
+        function applyCodeIdentityPrefill(id) {
+            if (!id) return;
+            try {
+                if (id.phone && (!state.phone || !PHONE_RE.test(state.phone))) state.phone = id.phone;
+                if (id.clinicName && !state.clinicName) state.clinicName = id.clinicName;
+                if (id.adminName && !state.adminName) state.adminName = id.adminName;
+                const cp = document.getElementById('adminCodePhone');
+                if (cp && !cp.value.trim() && PHONE_RE.test(id.phone || '')) {
+                    cp.value = id.phone;
+                    const hint = document.getElementById('adminCodePhoneHint');
+                    if (hint) hint.textContent = '✓ 将使用您的注册手机号 ' + id.phone + '（如需换机请改成原绑定手机号）';
+                }
+                const cnEl = document.getElementById('adminCodeClinicName');
+                if (cnEl && !cnEl.value.trim() && id.clinicName) cnEl.value = id.clinicName;
+                const anEl = document.getElementById('adminCodeAdminName');
+                if (anEl && !anEl.value.trim() && id.adminName) anEl.value = id.adminName;
+            } catch (e) {}
+        }
         // ★ 2026-09-03 (架构统一 P2 客户端收敛): 同 offline.js
         let pollTimer = null;
         let pollCount = 0;
@@ -5272,6 +5344,11 @@
                 b.style.borderBottom = on ? '2.5px solid #26a69a' : '2.5px solid transparent';
                 b.style.background = on ? '#fafcfb' : 'transparent';
             });
+            // ★ 2026-10-13 一切到「激活码」Tab 即带出注册/登录身份（金色按钮/语音直达/
+            //   Tab 按钮三入口都经此收口）；resolve 有缓存、apply 空才填，重复调用幂等。
+            if (tab === 'code') {
+                resolveLocalIdentity().then(applyCodeIdentityPrefill).catch(function () {});
+            }
         }
 
         function cleanup() {
@@ -5622,14 +5699,24 @@
                     const idf = document.getElementById('adminCodeIdentityFields');
                     if (idf && idf.style.display === 'none') {
                         idf.style.display = '';
+                        // 预填注册/登录身份的诊所名/管理员姓名（state 已在切到 code 页时由统一
+                        // 身份提供器灌入；再 await 兜底存储读取晚到）——已注册用户无需再打一遍
                         try {
+                            let __id = null;
+                            try { __id = await resolveLocalIdentity(); } catch (ie) {}
+                            const __cn = (state && state.clinicName) || (__id && __id.clinicName) || '';
+                            const __an = (state && state.adminName) || (__id && __id.adminName) || '';
                             const cnEl = document.getElementById('adminCodeClinicName');
-                            if (cnEl && !cnEl.value && state && state.clinicName) cnEl.value = state.clinicName;
+                            if (cnEl && !cnEl.value && __cn) cnEl.value = __cn;
                             const anEl = document.getElementById('adminCodeAdminName');
-                            if (anEl && !anEl.value && state && state.adminName) anEl.value = state.adminName;
+                            if (anEl && !anEl.value && __an) anEl.value = __an;
                         } catch (e) {}
                         setTimeout(function() {
-                            try { document.getElementById('adminCodeClinicName').focus(); } catch (e) {}
+                            try {
+                                const __c = document.getElementById('adminCodeClinicName');
+                                if (__c && !__c.value) { document.getElementById('adminCodeAdminName').focus(); }
+                                else { __c.focus(); }
+                            } catch (e) {}
                         }, 250);
                     }
                 }

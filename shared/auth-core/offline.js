@@ -6019,6 +6019,92 @@
 
         const PHONE_RE = /^1[3-9]\d{9}$/;
         let state = { edition: 'institution', phone: '', clinicName: '', adminName: '', password: '', remark: '' };
+        // ★ 2026-10-13 激活架构优化（P1）：统一本机身份提供器 + Tab2 全入口预填。
+        //   背景：已注册用户（localStorage registrationInfo / 桥 config 账号）从版本页金色
+        //   按钮、到期提醒等入口进「激活码激活」时，手机号不会自动带出（旧逻辑仅在注册成功
+        //   页 initialTab='code' 一次性预填），被迫重填已注册信息。此处把身份来源收口为一个
+        //   异步提供器，弹窗打开/切到 Tab2/needActivationInfo 展开三处统一预填——已注册用户
+        //   任意入口都「只填激活码」。仅回填输入框（用户可见可改），不放宽服务端核验。
+        let __localIdentity = null;
+        let __localIdentityPromise = null;
+        function resolveLocalIdentity() {
+            if (__localIdentity) return Promise.resolve(__localIdentity);
+            if (__localIdentityPromise) return __localIdentityPromise;
+            __localIdentityPromise = (async function () {
+                const m = {};
+                // ① localStorage 注册信息（同步、最高优先；方案B 注册前置写入）
+                try {
+                    const rg = getLocalRegistrationInfo();
+                    if (rg && /^1[3-9]\d{9}$/.test(String(rg.phone || '').trim())) {
+                        m.phone = String(rg.phone).trim();
+                        m.clinicName = String(rg.clinicName || '').trim();
+                        m.adminName = String(rg.adminName || rg.name || '').trim();
+                        m.source = 'registration';
+                    }
+                } catch (e) {}
+                // ② 桥 config.json 账号兜底（2s 超时；补 registrationInfo 缺失字段）
+                try {
+                    const api = global.electronAPI || (typeof window !== 'undefined' ? window.electronAPI : null);
+                    if (api && api.activate && typeof api.activate.getActivationUsers === 'function') {
+                        const res = await Promise.race([
+                            api.activate.getActivationUsers(),
+                            new Promise(function (r) { setTimeout(function () { r(null); }, 2000); })
+                        ]);
+                        if (res && res.success && Array.isArray(res.users)) {
+                            const bc = String(res.clinicName || '').trim();
+                            for (let i = 0; i < res.users.length; i++) {
+                                const u = res.users[i] || {};
+                                const ph = String(u.phone || u.username || '').trim();
+                                if (/^1[3-9]\d{9}$/.test(ph)) {
+                                    if (!m.phone) m.phone = ph;
+                                    if (!m.adminName) m.adminName = String(u.name || '').trim();
+                                    if (!m.clinicName) m.clinicName = bc;
+                                    if (!m.source) m.source = 'bridge';
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                } catch (e) {}
+                // ③ CONFIG.clinicName / local_clinicName 末位补诊所名（试用到期用户本地有诊所名）
+                if (!m.clinicName) {
+                    try {
+                        if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.clinicName) {
+                            m.clinicName = String(CONFIG.clinicName).trim();
+                        }
+                    } catch (e) {}
+                    if (!m.clinicName) {
+                        try {
+                            const lc = global.localStorage && global.localStorage.getItem('local_clinicName');
+                            if (lc) m.clinicName = String(lc).trim();
+                        } catch (e) {}
+                    }
+                }
+                if (m.phone) __localIdentity = m;
+                return m.phone ? m : null;
+            })();
+            return __localIdentityPromise;
+        }
+        // 用本机身份预填 Tab2：手机号必填框 + （展开后的）诊所名/管理员姓名。
+        //   一律「框为空才填」，绝不覆盖用户已输入/已修改的值；同步灌入 state 供 claim body。
+        function applyCodeIdentityPrefill(id) {
+            if (!id) return;
+            try {
+                if (id.phone && (!state.phone || !PHONE_RE.test(state.phone))) state.phone = id.phone;
+                if (id.clinicName && !state.clinicName) state.clinicName = id.clinicName;
+                if (id.adminName && !state.adminName) state.adminName = id.adminName;
+                const cp = document.getElementById('adminCodePhone');
+                if (cp && !cp.value.trim() && PHONE_RE.test(id.phone || '')) {
+                    cp.value = id.phone;
+                    const hint = document.getElementById('adminCodePhoneHint');
+                    if (hint) hint.textContent = '✓ 将使用本机注册手机号 ' + id.phone + '（如需换机请改成原绑定手机号）';
+                }
+                const cnEl = document.getElementById('adminCodeClinicName');
+                if (cnEl && !cnEl.value.trim() && id.clinicName) cnEl.value = id.clinicName;
+                const anEl = document.getElementById('adminCodeAdminName');
+                if (anEl && !anEl.value.trim() && id.adminName) anEl.value = id.adminName;
+            } catch (e) {}
+        }
         // ★ 2026-09-03 (架构统一 P2 客户端收敛): pollTimer/pollCount 仅保留作兼容别名，
         //   真实调度统一委托给 ActivationObserver（showAdminActivateModal 窗口内 单例）
         let pollTimer = null;
@@ -6353,6 +6439,11 @@
                 b.style.borderBottom = on ? '2.5px solid #26a69a' : '2.5px solid transparent';
                 b.style.background = on ? '#fafcfb' : 'transparent';
             });
+            // ★ 2026-10-13 一切到「激活码」Tab 即带出本机注册身份（金色按钮/到期/注册成功页/
+            //   Tab 按钮三入口都经此收口）；resolve 有缓存、apply 空才填，重复调用幂等。
+            if (tab === 'code') {
+                resolveLocalIdentity().then(applyCodeIdentityPrefill).catch(function () {});
+            }
         }
 
         function cleanup() {
@@ -6862,6 +6953,9 @@
             } catch (e) {}
             setTimeout(function() { var i = document.getElementById('adminCodeInput'); if (i) i.focus(); }, 200);
         }
+        // ★ 2026-10-13 弹窗打开即异步解析本机身份并预填 Tab2（覆盖版本页金色按钮、到期
+        //   提醒、注册成功页等全部入口；DOM 此刻已插入，面板隐藏不影响回填）。空才填、可改。
+        resolveLocalIdentity().then(applyCodeIdentityPrefill).catch(function () {});
 
         // ★ 2026-09-21 离线免费版：一键领取 free 授权（APP 原生桥 claimFreeLicense；
         //   桌面主进程也暴露 activate.claimFree）。电话复用版本页 #editionPhone，选填。
@@ -6975,7 +7069,7 @@
         });
         document.getElementById('adminTabBtnCode').addEventListener('click', function() {
             syncSharedFieldsFrom('admin'); // Tab1 填过的信息同步到工单（切Tab2也刷新一遍，防止工单已打开值陈旧）
-            show('adminTabCode'); setActiveTab('code');
+            show('adminTabCode'); setActiveTab('code'); // setActiveTab('code') 统一带出本机注册身份
             setTimeout(function() { var i = document.getElementById('adminCodeInput'); if (i) i.focus(); }, 200);
         });
         // 工单申请：复用工单叠加层弹窗（showTicketFormModal，完整表单+提交+成功面板，z-index 更高天然覆盖）
@@ -7322,15 +7416,24 @@
                     const idf = document.getElementById('adminCodeIdentityFields');
                     if (idf && idf.style.display === 'none') {
                         idf.style.display = '';
-                        // 预填 Tab1 已填值（用户少打字）
+                        // 预填本机注册的诊所名/管理员姓名（state 已在开窗时由统一身份提供器
+                        // 灌入；此处再 await 兜底桥数据晚到场景）——已注册用户无需再打一遍
                         try {
+                            let __id = null;
+                            try { __id = await resolveLocalIdentity(); } catch (ie) {}
+                            const __cn = (state && state.clinicName) || (__id && __id.clinicName) || '';
+                            const __an = (state && state.adminName) || (__id && __id.adminName) || '';
                             const cnEl = document.getElementById('adminCodeClinicName');
-                            if (cnEl && !cnEl.value && state && state.clinicName) cnEl.value = state.clinicName;
+                            if (cnEl && !cnEl.value && __cn) cnEl.value = __cn;
                             const anEl = document.getElementById('adminCodeAdminName');
-                            if (anEl && !anEl.value && state && state.adminName) anEl.value = state.adminName;
+                            if (anEl && !anEl.value && __an) anEl.value = __an;
                         } catch (e) {}
                         setTimeout(function() {
-                            try { document.getElementById('adminCodeClinicName').focus(); } catch (e) {}
+                            try {
+                                const __c = document.getElementById('adminCodeClinicName');
+                                if (__c && !__c.value) { document.getElementById('adminCodeAdminName').focus(); }
+                                else { __c.focus(); }
+                            } catch (e) {}
                         }, 250);
                     }
                 }
