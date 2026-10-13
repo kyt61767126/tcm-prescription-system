@@ -466,13 +466,34 @@ export async function onRequest(context) {
             }
         }
 
+        // ★ 2026-10-13 P2「码+手机号」单锚点首激：全新裸码（无 clinicName/user/phone
+        //   任何身份锚点的渠道码）只要客户端带合法手机号即放行，手机号固化为授权身份
+        //   （落 record.phone），日后换机走既有手机号核验（phoneVerified）自动解绑恢复，
+        //   无需再补诊所名/姓名。安全边界：① 仅 unused 首机首激；② used 码换机核验
+        //   （下方 devices 配额段）完全不变；③ 不触发任何云端账号自动开通（开通仍只认
+        //   淘宝预置码）；④ 诊所名仅在客户端真带了同名时才锚定，绝不凭空生成（否则会
+        //   与本地真实诊所名不符，日后反被 L447 诊所名严格比对拦死）。
+        //   运维开关 config:activation-phone-anchor = {"mode":"off"} 一键关闭（读失败默认放行）。
+        let __phoneAnchorEnabled = true;
+        try {
+            const __paSw = await kv.get('config:activation-phone-anchor', 'json');
+            if (__paSw && __paSw.mode === 'off') __phoneAnchorEnabled = false;
+        } catch (_) { /* 开关读失败不影响激活，默认启用 */ }
+        const __phoneAnchor = !!(__phoneAnchorEnabled &&
+            record.status === 'unused' && !existingDevice &&
+            !record.clinicName && !record.user &&
+            !(record.phone && /^1[3-9]\d{9}$/.test(String(record.phone).trim())) &&
+            clientPhone);
         // ★ 2026-09-11 换机激活简化（客户端默认只填激活码+手机号）：
         //   全新码首次激活且码本身无任何身份锚点（clinicName/user 均空，如纯渠道码），
         //   客户端又未提供诊所名/姓名时，要求补齐身份信息建立授权身份（客户端收
         //   needActivationInfo 标记后展开诊所名+姓名输入框二次提交）。旧客户端
         //   必填这两项永不触发，行为零变化。
+        //   ★ 2026-10-13 P2：客户端带了合法手机号（__phoneAnchor）即视为身份已足够，
+        //   不再回 needActivationInfo——配合客户端 P1 自动带出本机注册手机号，「只填码」。
         if (record.status === 'unused' && !record.clinicName && !record.user &&
-            !(clinicName && String(clinicName).trim()) && !(user && String(user).trim())) {
+            !(clinicName && String(clinicName).trim()) && !(user && String(user).trim()) &&
+            !__phoneAnchor) {
             return json({
                 success: false,
                 error: '首次激活请补充诊所名称与管理员姓名，用于建立授权身份',
@@ -541,14 +562,18 @@ export async function onRequest(context) {
         //   手机号覆盖（TAOBAO_STOCK_PRESETS 设计约定：买家激活信息覆盖占位名）
         const licenseUser = (__taobaoAuto && __taobaoAuto.phone) ||
                             (phoneVerified && (record.user || record.username)) ||
-                            user || record.user || record.username || 'user';
+                            user || record.user || record.username ||
+                            (__phoneAnchor ? clientPhone : '') || 'user';
 
         // 首激绑定诊所名：码上已绑定的优先；淘宝云端自动开通首激用预检唯名。
         //   用于 license v3 三因子绑定、devices[].clinicName、setDeviceVersion 四处同源。
         //   let：commit 落库点撞名换唯名后会回写最终名（license 文件此前已按预检名
         //   签名不可改；码记录/设备绑定/后续重激活以最终名为准）。
         let __boundClinicName = String(
-            record.clinicName || (__taobaoAuto && __taobaoAuto.clinicName) || ''
+            record.clinicName || (__taobaoAuto && __taobaoAuto.clinicName) ||
+            // ★ 2026-10-13 P2：手机号单锚点首激时，客户端带了合法诊所名才升级为 v3
+            //   三因子绑定（与淘宝/admin-approve 码同形）；没带则留空，不凭空生成。
+            (__phoneAnchor && clinicName ? clinicName : '') || ''
         ).trim();
 
         // ★ 2026-09-14 阶段2/3 平台校验（观察模式已上线，硬拦截开关就绪）：
@@ -724,9 +749,13 @@ export async function onRequest(context) {
             // ★ 2026-10-08 淘宝云端自动开通：买家手机号+唯名诊所在码上落锚
             //   （phone 供日后同码重激活手机号核验；clinicName 使该码成为 v3
             //   三因子绑定码，与 admin-approve 签发码同形）
+            // ★ 2026-10-13 P2：手机号单锚点首激同形落 phone（换机核验锚点）；
+            //   clinicName 仅在客户端真带同名时落（不凭空生成，空名不进 record）。
             ...(__taobaoAuto
                 ? { phone: __taobaoAuto.phone, clinicName: __taobaoAuto.clinicName }
-                : {}),
+                : (__phoneAnchor
+                    ? { phone: clientPhone, ...(__boundClinicName ? { clinicName: __boundClinicName } : {}) }
+                    : {})),
             ...(__isFirstActivation
                 ? { activatedAt: getNowISO() }
                 : { lastReactivatedAt: getNowISO() })
@@ -1010,6 +1039,21 @@ export async function onRequest(context) {
             await kv.put(`codehash:${codeHashHex}`, code);
         } catch (e) { /* 忽略映射存储失败，不影响激活 */ }
 
+        // ★ 2026-10-13 P2：手机号单锚点首激留痕（便于运维看板区分身份来源），非阻断
+        if (__phoneAnchor) {
+            try {
+                await appendLicenseLog(kv, code, {
+                    action: 'phone-anchor-activation',
+                    time: new Date().toISOString(),
+                    ip: ip,
+                    operator: clientPhone,
+                    detail: '码+手机号单锚点首激（无 clinicName/user 预置锚点）：phone=' + clientPhone +
+                        (__boundClinicName ? '，clinicName=' + __boundClinicName + '（v3 三因子）' : '，无诊所名（不 v3 绑定）') +
+                        '，machineId=' + machineId.substring(0, 8) + '...，clientClass=' + (clientClass || 'null')
+                });
+            } catch (e) { /* 日志失败不影响激活 */ }
+        }
+
         // ★ 任务5：记录激活/重激活日志
         await appendLicenseLog(kv, code, {
             action: isReactivation ? 'reactivate' : 'activate',
@@ -1043,6 +1087,17 @@ export async function onRequest(context) {
             //   故此处恒为 false 属正常（不代表未开通）——开通结果以 admin_req 台账为准
             //   （后台"激活码日志"已叠加展示），客户端一律以登录成功判定。
             cloudAccountProvisioned: __cloudProvisioned,
+            // ★ 2026-10-13 P2：回带本次激活最终采用的身份锚点（新客户端装码/建本地
+            //   账号时可直接消费，少猜字段；旧客户端忽略多余字段，零回归）
+            resolvedIdentity: {
+                phone: (__taobaoAuto && __taobaoAuto.phone) || clientPhone ||
+                    (record.phone && /^1[3-9]\d{9}$/.test(String(record.phone).trim()) ? record.phone : '') || null,
+                clinicName: __boundClinicName || (licenseData && licenseData.clinicName) || null,
+                adminName: (user && String(user).trim()) ? String(user).trim() : null
+            },
+            identitySource: __taobaoAuto ? 'taobao-auto'
+                : (__phoneAnchor ? 'phone-anchor'
+                    : (phoneVerified ? 'phone-verified' : 'existing')),
             // ★ 二期：随机初始密码仅此一次随激活响应返回（关闭不可再查），
             //   自设密码/旧客户端/admin 分支均不下发；mustChangePassword 同步
             //   给新客户端作为「首登强制改密」备用标记（权威标记在用户行）。
