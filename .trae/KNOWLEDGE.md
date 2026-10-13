@@ -1919,4 +1919,11 @@
   - **稳态预算**：业务热路径 0 list；管理端人工操作（设备/测试机列表、三ID重置、删诊所3、体检5、备份2）日耗 < 100，余量 10 倍。
   - **验证**：新 e2e/.tmp/kv-list-quota-test.mjs **28 断言**（缓存/熔断/critical/分页/order_index 写删脏空/admin-list 端到端零 list）；存量 first-activation 15 + mid-owners 30 + kv-list-quota-round2 22 + clinic-index 25 全绿。**熔断是 isolate 模块级状态，单测里熔断用例必须排最后（或复位），否则污染后续正常 list 用例。**
   - **writes 侧连带**：order_index 维护每新单/删单约 1 put（低频）；withAdminResponseCache 每 miss 1 put（5min TTL，三端点仅人工切 tab 触发，非轮询），注意别给重扫描端点加自动轮询。
+* **★★ 2026-10-13 注册→激活架构梳理 +「激活只填码」P1（commit b7bf5530 / cv 1f8a3bc1 / 热更 73c995d4；计划 .trae/documents/activation-architecture-optimization_plan.md）**：
+  - **现状全景（claim 硬锚点）**：注册=建账号（离线 registrationInfo+桥 config.users；云端 auth:currentUser），激活=纯 license（claim/validate.js）。claim 硬必填仅 code+machineId：**同机重激**免身份、**换机**需手机号核验 phoneVerified（L483-523）、**全新裸码首激无锚点**回 needActivationInfo 要 clinicName/user（L474）、**淘宝预置码**码+手机号即自动开通（preset，personal/pro）。免费版开方永久免费无需激活；trial 码+trial_fp 指纹，verify 90 天降级试用；付款走 order-submit→order-paid(markOrderPaid)→admin-approve。
+  - **主诉根因**：Tab2 激活码页手机号自动带出**只在注册成功页 initialTab='code' 一次性预填**（offline L6852 旧逻辑）；从版本页金色按钮/到期入口进不回填本机注册手机号，已注册用户被迫重填；needActivationInfo 展开的诊所/姓名框也只取 state（开窗时为空）不预填。cloud.js 同构同病。
+  - **P1 修复（纯前端，双权威源）**：offline.js/cloud.js 各加 `resolveLocalIdentity()`（模块缓存+2s 桥超时）与 `applyCodeIdentityPrefill(id)`（**框空才填、绝不覆盖用户已输入**，同步灌 state 供 claim body）。offline 来源优先级：registrationInfo→桥 getActivationUsers→CONFIG/local_clinicName；cloud：运行时 currentUser→StorageAdapter auth:currentUser（phone 或 username=手机号，name 取 adminName/name/realName/doctorName）→auth:rememberedUsername→CONFIG.clinicName。**触发收口在 setActiveTab('code')**（金色按钮/到期/注册成功页/Tab按钮四入口都经此）+ 开窗预热一次；needActivationInfo 展开时再 await 兜底预填诊所/姓名。
+  - **安全红线（P1 不碰服务端）**：码+machineId 仍硬锚点，换机仍必须手机号核验，预填仅回填可见可改的输入框，不接受机内自报诊所名接管他人授权。**P2（让裸码首激接受"码+手机号"单锚点、放宽 needActivationInfo）已在计划列出但暂缓，待用户明确批准再做。**
+  - **发布**：sync-auth-core 11 副本（offline3/cloud8）；check-interface 6 OK；业务 JS 变 cv 必须 `node tools/check-cv-hashes.cjs --update`（本次 auth-core c51dbfa3→**9d0de10a**）再 sync-html 传播 public/index.html+云桌面/云APP 两副本（offline index 不同源不动）；离线 App 热更 **2026.10.13-3，minAppCode 288 不抬**，退出重开第 2 次生效。
+  - **验证**：e2e/.tmp/activation-identity-prefill-test.mjs **20 断言**——关键手法是用括号配平从权威源**抽取真身函数文本**注入 mock DOM/桥/StorageAdapter 沙箱（new Function），无需浏览器/打包 exe 即可测来源优先级/空才填不覆盖/缓存/无手机号 null；pre-push 17 道全过。
 
