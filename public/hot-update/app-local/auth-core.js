@@ -7556,8 +7556,16 @@
                         //   只透传 error 文本（needClinicName/needActivationInfo 标记丢失），
                         //   无法渐进式展开身份字段；直连方案标记直达前端，服务端手机号
                         //   核验通过即自动解绑换机，全程零 Java 原生改动
+                        // ★ 2026-10-13 首次激活超时对齐云端（原 12s）：真机实测新设备首激
+                        //   服务端串行全扫 166 条 license 要 33s，12s 必 abort（客户卡 unused）；
+                        //   服务端已改并行全扫（秒级），客户端同步提到 30s 双保险。
+                        try {
+                            loading.innerHTML =
+                                '<span style="display:inline-block;width:18px;height:18px;border:2px solid #ddd;border-top-color:#26a69a;border-radius:50%;animation:adminActivateSpin 0.8s linear infinite;vertical-align:middle;margin-right:8px;"></span>' +
+                                '<span style="font-size:13px;color:#26a69a;vertical-align:middle;">正在激活，首次绑定设备约需 10～30 秒，请勿关闭页面...</span>';
+                        } catch (e3) {}
                         const controller = new AbortController();
-                        const t = setTimeout(function(){ try { controller.abort(); } catch(e2){} }, 12000);
+                        const t = setTimeout(function(){ try { controller.abort(); } catch(e2){} }, 30000);
                         try {
                             const r = await fetch('https://tcm-prescription-system.pages.dev/api/license/claim', {
                                 method: 'POST',
@@ -7684,8 +7692,14 @@
                     // ★ 2026-09-11 换机激活简化：请求体带 user/phone（本页手机号框），
                     //   服务端手机号核验通过自动解绑换机；needClinicName/
                     //   needActivationInfo 标记走下方通用失败段渐进式展开
+                    // ★ 2026-10-13 超时对齐 cloud.js 30s（原 12s，新设备首激 33s 必 abort）
+                    try {
+                        loading.innerHTML =
+                            '<span style="display:inline-block;width:18px;height:18px;border:2px solid #ddd;border-top-color:#26a69a;border-radius:50%;animation:adminActivateSpin 0.8s linear infinite;vertical-align:middle;margin-right:8px;"></span>' +
+                            '<span style="font-size:13px;color:#26a69a;vertical-align:middle;">正在激活，首次开通云端账号约需 10～30 秒，请勿关闭页面...</span>';
+                    } catch (e3) {}
                     const controller = new AbortController();
-                    const t = setTimeout(function(){ try { controller.abort(); } catch(e){} }, 12000);
+                    const t = setTimeout(function(){ try { controller.abort(); } catch(e){} }, 30000);
                     try {
                         const r = await fetch('https://tcm-prescription-system.pages.dev/api/license/claim', {
                             method: 'POST',
@@ -7758,7 +7772,10 @@
                 loading.style.display = 'none';
                 btn.disabled = false;
                 btn.textContent = '🚀 立即激活';
-                hint.textContent = '⚠ 网络错误：' + ((e && e.message) ? e.message : '请检查网络连接');
+                const __aborted = e && (e.name === 'AbortError' || /aborted/i.test(e.message || ''));
+                hint.textContent = __aborted
+                    ? '⚠ 网络较慢，等待超时。请直接再点一次「立即激活」（首次绑定可能已在后台完成，重试通常很快）'
+                    : '⚠ 网络错误：' + ((e && e.message) ? e.message : '请检查网络连接');
                 hint.style.color = '#e53935';
             }
         });
