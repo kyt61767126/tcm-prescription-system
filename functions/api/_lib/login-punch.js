@@ -87,7 +87,9 @@ async function batchGetJson(kv, keys, batchSize = 20) {
 // list 某月全部原始打卡 key，聚合出 encClinic -> {d,a,w}（key 本身即去重凭证，数 key 即可）
 async function aggregateMonthRawKeys(kv, monthPrefix) {
     const agg = new Map();
-    const keys = await listAllKeys(kv, monthPrefix);
+    // ★ 2026-10-13 list 配额治理：当月原始键重建结果 30s 内存缓存（上层已有
+    //   lpcur 月缓存，这是二级保险，防管理台统计连点/多页签重复重建）
+    const keys = await listAllKeys(kv, monthPrefix, { ttlMs: 30000 });
     for (const k of keys) {
         const parts = k.split(':'); // lp:date:encClinic:t:encUid
         if (parts.length !== 5) continue;

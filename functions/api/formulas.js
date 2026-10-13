@@ -120,7 +120,8 @@ export async function onRequest(context) {
                 }
             }
             if (perUserPrefix) {
-                const keys = await listAllKeys(kv, perUserPrefix);
+                // ★ 2026-10-13 list 配额治理：D1 空库回退路径，30s 内存缓存防同步连点
+                const keys = await listAllKeys(kv, perUserPrefix, { ttlMs: 30000 });
                 for (const k of keys) {
                     const arr = await kv.get(k, 'json').catch(() => null);
                     if (Array.isArray(arr)) {

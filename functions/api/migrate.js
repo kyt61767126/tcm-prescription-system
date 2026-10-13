@@ -51,7 +51,7 @@ export async function onRequest(context) {
         if (target === 'all' || target === 'prescriptions') {
         // ★ 2026-10-06 迁移前确保 registration_fee/dose_count 两列就位（幂等在线加列）
         await ensurePrescriptionSchema(db);
-        const dateKeys = await listAllKeys(kv, 'clinic:');
+        const dateKeys = await listAllKeys(kv, 'clinic:', { critical: true });
         const rxKeys = dateKeys.filter(k =>
             k.startsWith('clinic:') && k.includes(':prescriptions')
         );
@@ -118,7 +118,7 @@ export async function onRequest(context) {
 
         // 2) 同步编号计数器（从 KV clinic:{id}:prescription_seq:{yymmdd} 导入）
         if (target === 'all' || target === 'prescriptions') {
-        const seqKeys = await listAllKeys(kv, 'clinic:');
+        const seqKeys = await listAllKeys(kv, 'clinic:', { critical: true });
         for (const key of seqKeys) {
             if (!key.includes(':prescription_seq:')) continue;
             try {
@@ -139,7 +139,7 @@ export async function onRequest(context) {
 
         // 3) ★ P1：迁移审计日志（从 KV audit_log:{cid}:{date}:{ts} 导入 D1 audit_logs）
         if (target === 'all' || target === 'audit_logs') {
-        const auditKeys = await listAllKeys(kv, 'audit_log:');
+        const auditKeys = await listAllKeys(kv, 'audit_log:', { critical: true });
         let auditMigrated = 0;
         for (const key of auditKeys) {
             try {
@@ -182,7 +182,7 @@ export async function onRequest(context) {
 
         // 4) ★ P2：迁移方剂库（从 KV clinic:{id}:formulas:{username} + system:platform_formulas 导入 D1 formulas）
         if (target === 'all' || target === 'formulas') {
-        const formulaKeys = await listAllKeys(kv, 'clinic:');
+        const formulaKeys = await listAllKeys(kv, 'clinic:', { critical: true });
         const platFormulas = await kv.get('system:platform_formulas', 'json').catch(() => null);
         let formulaMigrated = 0;
 
@@ -241,7 +241,7 @@ export async function onRequest(context) {
 
         // 5) ★ P3：迁移设备绑定（从 KV user_devices:{username} 导入 D1 user_devices）
         if (target === 'all' || target === 'devices') {
-        const deviceKeys = await listAllKeys(kv, 'user_devices:');
+        const deviceKeys = await listAllKeys(kv, 'user_devices:', { critical: true });
         let deviceMigrated = 0;
         for (const key of deviceKeys) {
             try {
@@ -265,7 +265,7 @@ export async function onRequest(context) {
 
         // 6) ★ P3：迁移用户表（从 KV clinic:{id}:users 导入 D1 clinic_users）
         if (target === 'all' || target === 'users') {
-        const clinicKeys = await listAllKeys(kv, 'clinic:');
+        const clinicKeys = await listAllKeys(kv, 'clinic:', { critical: true });
         let userMigrated = 0;
         for (const key of clinicKeys) {
             if (!key.endsWith(':users')) continue;

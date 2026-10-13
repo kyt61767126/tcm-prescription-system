@@ -14,7 +14,7 @@
 
 import { parseAuthHeader, isPlatformAdmin } from '../_lib/auth.js';
 import { getKV } from './_lib/license-core.js';
-import { unbindActiveOrder } from './_lib/license-write-service.js';
+import { unbindActiveOrder, listOrderKeys, removeOrderIndexKey } from './_lib/license-write-service.js';
 
 function corsHeaders() {
     return {
@@ -57,7 +57,11 @@ async function purgeExpiredPendingPayment(kv, record, orderKey) {
     }
     const ok = orderKey || (record && record.orderNo
         ? ('order:' + String(record.orderNo).trim().toUpperCase()) : null);
-    if (ok) jobs.push(kv.delete(ok).catch(() => null));
+    if (ok) {
+        jobs.push(kv.delete(ok).catch(() => null));
+        // ★ 2026-10-13 同步移出 order_index（函数内部容错，不阻断清理）
+        jobs.push(removeOrderIndexKey(kv, ok).catch(() => null));
+    }
     if (record && record.machineId) {
         // ★ 2026-09-07 架构防御 B：active_order 删除走 write-service 唯一入口
         //   （裸前缀纯 delete，清理路径要能删脏键；内部容错不抛）
@@ -142,29 +146,23 @@ export async function onRequest(context) {
         if (statusFilter === 'pending_payment') {
             const records = [];
             try {
-                let cursor = undefined;
-                let fetched = 0;
-                // 分页枚举 order: 前缀（每页最多 1000 keys，安全上限 2000 条映射）
-                while (records.length < limit && fetched < 2000) {
-                    const listOpts = { prefix: 'order:' };
-                    if (cursor) listOpts.cursor = cursor;
-                    const page = await kv.list(listOpts);
-                    fetched += (page.keys || []).length;
-                    for (const key of (page.keys || [])) {
-                        if (records.length >= limit) break;
-                        const mapping = await kv.get(key.name, 'json').catch(() => null);
-                        if (!mapping || !mapping.requestId) continue;
-                        const record = await kv.get(KV_ADMIN_REQ_PREFIX + mapping.requestId, 'json').catch(() => null);
-                        if (!record || record.status !== 'pending_payment') continue;
-                        // ★ 过期弃单（7天未付款）：不进列表 + 惰性清理三键
-                        if (isExpiredPendingPayment(record)) {
-                            await purgeExpiredPendingPayment(kv, record, key.name);
-                            continue;
-                        }
-                        records.push(maskRecord(record));
+                // ★ 2026-10-13 list 配额治理：kv.list 分页枚举 → order_index 直读
+                //   （1 次 get 索引 + N 次 get，零 list；本接口被待办角标每 5 分钟
+                //   轮询，旧实现每轮 1 list，页面开一天约 288 次）
+                //   安全上限 2000 条映射保持不变
+                const orderKeys = (await listOrderKeys(kv)).slice(0, 2000);
+                for (const keyName of orderKeys) {
+                    if (records.length >= limit) break;
+                    const mapping = await kv.get(keyName, 'json').catch(() => null);
+                    if (!mapping || !mapping.requestId) continue;
+                    const record = await kv.get(KV_ADMIN_REQ_PREFIX + mapping.requestId, 'json').catch(() => null);
+                    if (!record || record.status !== 'pending_payment') continue;
+                    // ★ 过期弃单（7天未付款）：不进列表 + 惰性清理三键
+                    if (isExpiredPendingPayment(record)) {
+                        await purgeExpiredPendingPayment(kv, record, keyName);
+                        continue;
                     }
-                    if (page.list_complete || !page.cursor) break;
-                    cursor = page.cursor;
+                    records.push(maskRecord(record));
                 }
             } catch (e) {
                 console.warn('[AdminList] 枚举待付款订单失败:', e.message);
@@ -215,38 +213,34 @@ export async function onRequest(context) {
         //   管理员后台"只看到未付款 pending_payment 但看不到已付款 pending"的 P0 直接修复。
         if ((statusFilter === 'pending' || statusFilter === 'pending_payment' || statusFilter === 'all') && records.length < limit) {
             try {
-                let cursor = undefined;
+                // ★ 2026-10-13 list 配额治理：分页 kv.list → order_index 直读（零 list）。
+                //   管理台待办角标每 5 分钟轮询 status=pending，旧实现每轮必扫一次 order:，
+                //   是免费版 1000 list/天配额的最大持续消耗；本兜底保留全部孤儿单语义，
+                //   只是键清单来源从 list 换成索引（历史漏索引的单在首次懒回填后即可见）。
                 let scanned = 0;
-                while (records.length < limit && scanned < 2000) {
-                    const listOpts = { prefix: 'order:' };
-                    if (cursor) listOpts.cursor = cursor;
-                    const page = await kv.list(listOpts).catch(() => null);
-                    if (!page || !Array.isArray(page.keys)) break;
-                    scanned += page.keys.length;
-                    for (const key of page.keys) {
-                        if (records.length >= limit) break;
-                        const mapping = await kv.get(key.name, 'json').catch(() => null);
-                        if (!mapping || !mapping.requestId) continue;
-                        const rid = String(mapping.requestId);
-                        if (seen.has(rid)) continue;  // 已在主路径 records 中，避免重复
-                        const record = await kv.get(KV_ADMIN_REQ_PREFIX + rid, 'json').catch(() => null);
-                        if (!record) continue;
-                        // ★ 过期弃单（7天未付款）：兜底枚举路径同样不返回 + 惰性清理三键
-                        if (isExpiredPendingPayment(record)) {
-                            await purgeExpiredPendingPayment(kv, record, key.name);
-                            continue;
-                        }
-                        let keep = false;
-                        if (statusFilter === 'all') keep = true;
-                        else if (statusFilter === 'pending') keep = (record.status === 'pending' || record.status === 'pending_approval');
-                        else if (statusFilter === 'pending_payment') keep = (record.status === 'pending_payment');
-                        if (keep) {
-                            records.push(maskRecord(record));
-                            seen.add(rid);
-                        }
+                const orderKeys = await listOrderKeys(kv);
+                for (const keyName of orderKeys) {
+                    if (records.length >= limit || scanned >= 2000) break;
+                    scanned++;
+                    const mapping = await kv.get(keyName, 'json').catch(() => null);
+                    if (!mapping || !mapping.requestId) continue;
+                    const rid = String(mapping.requestId);
+                    if (seen.has(rid)) continue;  // 已在主路径 records 中，避免重复
+                    const record = await kv.get(KV_ADMIN_REQ_PREFIX + rid, 'json').catch(() => null);
+                    if (!record) continue;
+                    // ★ 过期弃单（7天未付款）：兜底枚举路径同样不返回 + 惰性清理三键
+                    if (isExpiredPendingPayment(record)) {
+                        await purgeExpiredPendingPayment(kv, record, keyName);
+                        continue;
                     }
-                    if (page.list_complete || !page.cursor) break;
-                    cursor = page.cursor;
+                    let keep = false;
+                    if (statusFilter === 'all') keep = true;
+                    else if (statusFilter === 'pending') keep = (record.status === 'pending' || record.status === 'pending_approval');
+                    else if (statusFilter === 'pending_payment') keep = (record.status === 'pending_payment');
+                    if (keep) {
+                        records.push(maskRecord(record));
+                        seen.add(rid);
+                    }
                 }
             } catch (e) {
                 console.warn('[AdminList] 兜底枚举 order: 失败(不影响主路径):', e.message);

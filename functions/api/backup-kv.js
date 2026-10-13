@@ -42,7 +42,8 @@ export async function onRequest(context) {
         }
 
         // ★ P2-C 修复：分页遍历所有 key（kv.list() 每页最多 1000 个，不翻页会静默截断）
-        const allKeyNames = await listAllKeys(kv);
+        // ★ 2026-10-13 critical：备份必须拿实时全量，绕过 list 配额熔断/缓存
+        const allKeyNames = await listAllKeys(kv, null, { critical: true });
         // ★ P2-C 修复：排除旧备份 key，防止备份雪球膨胀（备份套备份）
         const dataKeyNames = allKeyNames.filter(name => !name.startsWith('kv_backup_'));
 

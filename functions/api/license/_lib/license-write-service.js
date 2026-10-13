@@ -33,11 +33,81 @@ import { getKV, appendRequestIndex, saveLicense, getLicense,
 // ★ 2026-09-07 架构防御：字段校验收口 schema-guard 单一副本（新建写路径入参
 //   走工厂校验防脏；存量 rid 维护路径保持裸前缀拼接，信任存量数据防误炸）
 import { isValidPhone, isValidOrderNo, normalizeOrderNo, kvKey } from './schema-guard.js';
+import { listAllKeys } from '../../_lib/kv.js';
 
 // —— 常量定义（与 license-core.js / 7 个 API 中各自内联副本保持一致；集中维护避免漂移）——
 export const KV_ADMIN_REQ_PREFIX = 'admin_req:';
 export const KV_ADMIN_PHONE_PREFIX = 'admin_phone:';
 export const KV_ADMIN_REQ_INDEX = 'admin_req_index';
+
+// ============================================================================
+//  ★ 2026-10-13 order_index：order:{ORDERNO} 全部映射键清单（KV list 配额治理）
+//
+//  根因：admin-list 的 pending_payment 分支与「孤儿订单兜底」分支每次请求都
+//    kv.list({prefix:'order:'})；而管理台待办角标每 5 分钟打 2 次 admin-list，
+//    页面开一天 ≈ 576 次 list（免费额度仅 1000/天，2026-10-09 已超限报警）。
+//  收口：写（bindOrderToRequest）/删（deleteAdminRequest、过期弃单惰性清理）
+//    统一维护本索引；读侧 listOrderKeys 索引优先，缺失/脏才全扫一次懒回填，
+//    与 license_index/mid_owners 同一套「可穷尽 + O(1) + 权威在键值」模式。
+// ============================================================================
+const KV_ORDER_INDEX = 'order_index';
+const ORDER_KEY_PREFIX = 'order:';
+
+// 写侧：加入一个 order: 键（索引缺失/脏 → 全扫一次建立，含本键；失败静默不阻断下单）
+async function addOrderIndexKey(kv, fullKey) {
+    try {
+        const cur0 = await kv.get(KV_ORDER_INDEX, 'json');
+        const valid = Array.isArray(cur0) &&
+            cur0.every(k => typeof k === 'string' && k.startsWith(ORDER_KEY_PREFIX));
+        let cur;
+        if (valid) {
+            cur = cur0;
+        } else {
+            // 索引缺失/脏 → 全扫重建。注意：调用方已先 put 本键，扫描结果天然含本键，
+            // 故重建路径必须无条件落库一次（不能因 includes 命中而 return，否则索引
+            // 永远建不起来，每单都退化成全扫——2026-10-13 单测抓到的真实缺陷）
+            const scanned = await listAllKeys(kv, ORDER_KEY_PREFIX).catch(() => null);
+            if (!Array.isArray(scanned)) return;   // list 失败（如配额 429）不写不完整清单
+            cur = scanned;
+        }
+        const changed = !cur.includes(fullKey);
+        if (changed) cur.push(fullKey);
+        if (changed || !valid) {
+            await kv.put(KV_ORDER_INDEX, JSON.stringify(cur));
+        }
+    } catch (_) { /* 索引维护失败不阻断订单写入，读侧兜底全扫 */ }
+}
+
+// 删侧：移出一个 order: 键（索引缺失 → 无需动作，读侧重建时自然不含）
+export async function removeOrderIndexKey(kv, fullKey) {
+    try {
+        const cur = await kv.get(KV_ORDER_INDEX, 'json');
+        if (!Array.isArray(cur) || !cur.includes(fullKey)) return;
+        await kv.put(KV_ORDER_INDEX, JSON.stringify(cur.filter(k => k !== fullKey)));
+    } catch (_) { /* 同上 */ }
+}
+
+/**
+ * 读侧：返回全部 order: 键名（索引优先；缺失/脏 → 全扫一次并回填）
+ * 仅供管理端枚举（待付款/孤儿订单）；真实下单/查单一律 kv.get('order:'+orderNo) 直查
+ */
+export async function listOrderKeys(kv) {
+    if (!kv) return [];
+    try {
+        const cur = await kv.get(KV_ORDER_INDEX, 'json');
+        if (Array.isArray(cur) && cur.every(k => typeof k === 'string' && k.startsWith(ORDER_KEY_PREFIX))) {
+            return cur;
+        }
+    } catch (_) { /* 落全扫 */ }
+    const keys = await listAllKeys(kv, ORDER_KEY_PREFIX).catch(() => null);
+    if (Array.isArray(keys) && keys.length > 0) {
+        // 与 session/license 索引同口径：仅非空才回填（list 失败与真空不可区分，
+        // 空结果不写，避免把失败固化成"永久空清单"）
+        try { await kv.put(KV_ORDER_INDEX, JSON.stringify(keys)); } catch (_) {}
+        return keys;
+    }
+    return Array.isArray(keys) ? keys : [];
+}
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // 内部工具：根据 rid 找对应 phone 的主记录后，从 admin_req_index 重建 phone 索引
@@ -142,10 +212,13 @@ export async function bindOrderToRequest(kv, orderNo, requestId, phone) {
     }
     const ORDER_PREFIX = 'order:';
     const orderKey = normalizeOrderNo(orderNo);
-    await kv.put(ORDER_PREFIX + orderKey, JSON.stringify({
+    const fullKey = ORDER_PREFIX + orderKey;
+    await kv.put(fullKey, JSON.stringify({
         requestId: String(requestId),
         phone: phone ? String(phone) : ''
     }));
+    // ★ 2026-10-13 list 配额治理：维护 order_index（读侧免 kv.list）
+    await addOrderIndexKey(kv, fullKey);
     return { orderKey, requestId, phone: phone || '' };
 }
 
@@ -371,20 +444,25 @@ export async function deleteAdminRequest(kv, requestId) {
     // 删除 order: 映射（如果有的话）
     const ORDER_PREFIX_REAL = 'order:';
     if (record.orderNo) {
-        await kv.delete(ORDER_PREFIX_REAL + record.orderNo);
+        const fullKey = ORDER_PREFIX_REAL + record.orderNo;
+        await kv.delete(fullKey);
+        await removeOrderIndexKey(kv, fullKey);
     } else {
-        // 兜底：扫描 order: 键找匹配值→rid
+        // 兜底：按 order_index 枚举 order: 键找匹配值→rid（★ 2026-10-13 由 kv.list
+        //   全扫改索引读，管理台删申请不再耗 list 配额；索引缺失时 listOrderKeys
+        //   内部懒回填一次，此后 O(1)）
         try {
-            const listed = await kv.list({ prefix: ORDER_PREFIX_REAL }).catch(() => null);
-            if (listed && Array.isArray(listed.keys)) {
-                for (const k of listed.keys) {
-                    const raw = await kv.get(k.name, 'text').catch(() => null);
-                    let matches = false;
-                    try {
-                        const o = JSON.parse(raw);
-                        matches = o && typeof o === 'object' && o.requestId === requestId;
-                    } catch (_) { matches = raw === requestId; }
-                    if (matches) await kv.delete(k.name);
+            const orderKeys = await listOrderKeys(kv);
+            for (const k of orderKeys) {
+                const raw = await kv.get(k, 'text').catch(() => null);
+                let matches = false;
+                try {
+                    const o = JSON.parse(raw);
+                    matches = o && typeof o === 'object' && o.requestId === requestId;
+                } catch (_) { matches = raw === requestId; }
+                if (matches) {
+                    await kv.delete(k);
+                    await removeOrderIndexKey(kv, k);
                 }
             }
         } catch (_) { /* 忽略扫描失败 */ }

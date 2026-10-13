@@ -198,7 +198,9 @@ export async function onRequest(context) {
     //     audit_log:{cid}:{YYYY-MM-DD}              → 旧数组 key（parts 长度 3）
     //     audit_log:{cid}:{YYYY-MM-DD}:{ts}-{rand}   → 新单条 key（parts 长度 4）
     const prefix = clinicId === 'all' ? 'audit_log:' : `audit_log:${clinicId}:`;
-    const allKeys = await listAllKeys(kv, prefix);
+    // ★ 2026-10-13 list 配额治理：KV 回退路径（D1 成功不走这），审计键 880+ 临近分页
+    //   阈值；管理端查看结果 45s isolate 缓存，切页/连点不重复打 list
+    const allKeys = await listAllKeys(kv, prefix, { ttlMs: 45000 });
     const keys = allKeys.filter(k => {
         const parts = k.split(':');
         return parts.length >= 3 && dateSet.has(parts[2]);
