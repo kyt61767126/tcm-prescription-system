@@ -11,3 +11,10 @@
 - 会话开始先 `git status`（防会话恢复快照静默覆盖）。
 - 改界面相关内容前后运行 `check-interface.bat`；禁止改 HTML 结构/CSS。
 - 多端同步清单（6 份 index.html / auth-core 双权威源 / cloud-api 8 副本）改动必查。
+
+## 跨用户接力协议（不同账号/机器续作同一项目）
+- **交接唯一通道是 Git 内的 `.trae/` 文件**（本地记忆 user_profile/project_memory、全局规则均不跨用户，勿依赖）。
+- **接工**：`git pull` → `git status` → Read `.trae/KNOWLEDGE.md` → Read `.trae/HANDOFF.md`，从 OPEN 任务取最高优先级续作；任务转 IN-PROGRESS 时写明账号@机器与日期。
+- **收工**：把任务状态、commit hash、验证结果、下一步/阻塞更新进 `.trae/HANDOFF.md`，**与代码同批 commit + push**；完成的任务从 OPEN 删除并把结论沉淀进 KNOWLEDGE.md。
+- 用户说「交接/接力/收工/遗留任务」时，加载 project-handoff skill 按清单执行。
+- HANDOFF 内禁放密钥与客户隐私；凭据各机自备（见 HANDOFF 文末环境前置）。
