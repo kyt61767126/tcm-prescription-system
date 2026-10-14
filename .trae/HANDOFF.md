@@ -29,6 +29,9 @@
 ## OPEN 遗留任务
 
 ### H1 ｜优先级：低（纯重构，等用户立项再做）｜激活架构 P3：各入口请求体拼装收口
+- **状态：IN-PROGRESS（Trae 主账号@本机，2026-10-14，用户已批准立项）**
+- **范围锁定**：仅 shared/auth-core/offline.js + cloud.js 两个权威源，收口 **5 处 body**（offline：order-local L6641 / claim-offline L7236 / claim-cloud L7370；cloud：claim-cloud L5209 / order-cloud L5454）为单一 `buildActivationPayload(kind,id)`。
+- **不纳入**（计划"最小收口、不大范围搬迁"约束）：桌面主进程 activate.js 两份（Node 域、条件挂键+邀请码门控+clientClass=desktop，各仅 1 处）、官网 download.html 两处 order-submit、admin-submit 旧链路 body（服务端旧契约、字段集不同）。
 - **背景**：Tab1 付款购买 / Tab2 激活码 / 桌面 activate-window / 到期直通 四处各自拼 claim·order 请求体，字段口径靠注释维持、易漂移。P1/P2 已解决用户体感，本项无功能变化。
 - **范围**：在 shared/auth-core/offline.js 与 cloud.js 内收敛为单一 `buildActivationPayload(identity)`（离线不带密码、云端 pwdCap:'v2'、桌面桥参透传 user/clinicName/phone）。
 - **勿做**：不改服务端字段契约、不改 HTML/CSS、不抬 minAppCode。

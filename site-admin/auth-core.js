@@ -4997,6 +4997,50 @@
 
         const PHONE_RE = /^1[3-9]\d{9}$/;
         let state = { edition: 'institution', phone: '', clinicName: '', adminName: '', password: '', remark: '' };
+        // ★ 2026-10-14 激活架构 P3（与 offline.js 同构）：claim/order 请求体单点收口。
+        //   Tab1 下单 / Tab2 激活码 / 到期直通等入口不再各自手写 body，统一由本函数构造，
+        //   字段口径一处维护。kind：claim-cloud（pwdCap v2 + 可选密码）/ order-cloud。
+        //   纯重构：字段集与空值处理逐一对齐旧内联实现，零行为变化。
+        function buildActivationPayload(kind, id) {
+            id = id || {};
+            if (kind === 'claim-cloud' || kind === 'claim-offline') {
+                const body = {
+                    code: id.code,
+                    machineId: id.machineId || 'unknown',
+                    user: id.user,
+                    clinicName: id.clinicName || '',
+                    phone: id.phone,
+                    productClass: kind === 'claim-cloud' ? 'cloud' : 'offline',
+                    clientClass: id.clientClass || 'app'
+                };
+                if (kind === 'claim-cloud') {
+                    body.pwdCap = 'v2';
+                    // 对齐旧实现 password: codePwd1 || undefined——空串不带键
+                    if (id.password) body.password = id.password;
+                }
+                return body;
+            }
+            // order-cloud（云端密码门控：仅排除默认 admin，无长度校验——保持旧口径）
+            const st = id.state || {};
+            const pwdRaw = st.password;
+            const pwdOk = kind === 'order-cloud'
+                ? !!(pwdRaw && pwdRaw !== 'admin')
+                : !!(pwdRaw && pwdRaw !== 'admin' && pwdRaw.length >= 8 && pwdRaw.length <= 32);
+            return {
+                orderNo: id.orderNo,
+                productKey: kind === 'order-cloud' ? 'cloud' : 'local',
+                edition: id.edition,
+                price: id.price || '',
+                clinicName: st.clinicName,
+                adminName: st.adminName,
+                phone: st.phone,
+                machineId: id.machineId || 'unknown',
+                note: st.remark || '',
+                inviteCode: st.inviteCode || '',
+                dp: id.dp,
+                password: pwdOk ? pwdRaw : ''
+            };
+        }
         // ★ 2026-10-13 激活架构优化（P1，与 offline.js 同构）：云端统一身份提供器 +
         //   Tab2 全入口预填。云端无本地台账，身份来自登录态 auth:currentUser / 运行时
         //   currentUser / 记住的登录名；已注册/登录用户打开激活码页自动带出手机号与诊所/
@@ -5637,22 +5681,16 @@
                         const r = await fetch('https://tcm-prescription-system.pages.dev/api/license/claim', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
+                            // ★ 2026-10-14 P3：body 统一构造（云端码 productClass=cloud/
+                            //   clientClass=app + pwdCap v2；密码空→不带键，服务端随机初始密码）
+                            body: JSON.stringify(buildActivationPayload('claim-cloud', {
                                 code: code,
-                                machineId: machineId || 'unknown',
+                                machineId: machineId,
                                 user: effUser,
                                 clinicName: idClinicName || ((state && state.clinicName) || ''),
                                 phone: phoneVal,
-                                // ★ 2026-09-14 端形态语义修正：云端APP claim 上报
-                                //   productClass:'cloud' + clientClass:'app'（原 'app' 错占
-                                //   productClass 域，污染 KV 设备端形态记录）
-                                productClass: 'cloud',
-                                clientClass: 'app',
-                                // ★ 二期：能力位+买家自设密码（留空不带 password →
-                                //   服务端生成随机初始密码，仅本响应一次性下发）
-                                pwdCap: 'v2',
-                                password: codePwd1 || undefined
-                            }),
+                                password: codePwd1
+                            })),
                             signal: controller.signal
                         });
                         res = await r.json();
@@ -5882,22 +5920,15 @@
                         if (window.electronAPI && window.electronAPI.activate &&
                             typeof window.electronAPI.activate.showExpireAlert === 'function') __dpCarrier = 'desktop';
                     } catch (eDp) {}
-                    const orderPayload = {
+                    // ★ 2026-10-14 P3：请求体统一由 buildActivationPayload 构造（同 offline.js）
+                    const orderPayload = buildActivationPayload('order-cloud', {
                         orderNo: genOrderNo(),
-                        productKey: 'cloud',
                         edition: editionKey,
                         price: ORDER_PRICE_MAP_CLOUD[editionKey] || '',
-                        clinicName: state.clinicName,
-                        adminName: state.adminName,
-                        phone: state.phone,
-                        machineId: machineId || 'unknown',
-                        note: state.remark || '',
-                        inviteCode: state.inviteCode || '',
                         dp: __dpCarrier,
-                        // ★ 注册密码随订单落服务端（PBKDF2 哈希落库）——审核通过开云端
-                        //   账户用注册密码；默认 admin 不传保持旧行为
-                        password: (state.password && state.password !== 'admin') ? state.password : ''
-                    };
+                        machineId: machineId,
+                        state: state
+                    });
                     let oRes;
                     if (global.electronAPI && global.electronAPI.activate &&
                         typeof global.electronAPI.activate.submitOrderDirect === 'function') {

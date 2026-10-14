@@ -6450,6 +6450,55 @@
 
         const PHONE_RE = /^1[3-9]\d{9}$/;
         let state = { edition: 'institution', phone: '', clinicName: '', adminName: '', password: '', remark: '' };
+        // ★ 2026-10-14 激活架构 P3：claim/order 请求体单点收口。
+        //   Tab1 下单 / Tab2 激活码 / 到期直通等入口不再各自手写 body，统一由本函数构造，
+        //   字段口径一处维护（历史漂移：productClass 曾被 'app' 错占、云端 claim 漏 pwdCap、
+        //   两端 order 密码门控不一致）。kind：
+        //     claim-cloud   云端码 productClass=cloud + pwdCap v2 + 可选密码（空→不带键，服务端随机）
+        //     claim-offline 离线码 productClass=offline，不带密码（本地密码走 installAdminLicense）
+        //     order-local / order-cloud 直建订单（id.state 取弹窗身份，密码门控两端保持旧口径）
+        //   纯重构：字段集与空值/undefined 处理逐一对齐旧内联实现，零行为变化。
+        function buildActivationPayload(kind, id) {
+            id = id || {};
+            if (kind === 'claim-cloud' || kind === 'claim-offline') {
+                const body = {
+                    code: id.code,
+                    machineId: id.machineId || 'unknown',
+                    user: id.user,
+                    clinicName: id.clinicName || '',
+                    phone: id.phone,
+                    productClass: kind === 'claim-cloud' ? 'cloud' : 'offline',
+                    clientClass: id.clientClass || 'app'
+                };
+                if (kind === 'claim-cloud') {
+                    body.pwdCap = 'v2';
+                    // 对齐旧实现 password: codePwd1 || undefined——空串不带键（stringify 丢弃 undefined）
+                    if (id.password) body.password = id.password;
+                }
+                return body;
+            }
+            // order-local / order-cloud
+            const st = id.state || {};
+            const pwdRaw = st.password;
+            // 旧口径差异保持：local 额外要求 8~32 位；cloud 仅排除默认 admin
+            const pwdOk = kind === 'order-cloud'
+                ? !!(pwdRaw && pwdRaw !== 'admin')
+                : !!(pwdRaw && pwdRaw !== 'admin' && pwdRaw.length >= 8 && pwdRaw.length <= 32);
+            return {
+                orderNo: id.orderNo,
+                productKey: kind === 'order-cloud' ? 'cloud' : 'local',
+                edition: id.edition,
+                price: id.price || '',
+                clinicName: st.clinicName,
+                adminName: st.adminName,
+                phone: st.phone,
+                machineId: id.machineId || 'unknown',
+                note: st.remark || '',
+                inviteCode: st.inviteCode || '',
+                dp: id.dp,
+                password: pwdOk ? pwdRaw : ''
+            };
+        }
         // ★ 2026-10-13 激活架构优化（P1）：统一本机身份提供器 + Tab2 全入口预填。
         //   背景：已注册用户（localStorage registrationInfo / 桥 config 账号）从版本页金色
         //   按钮、到期提醒等入口进「激活码激活」时，手机号不会自动带出（旧逻辑仅在注册成功
@@ -7069,24 +7118,15 @@
             try {
                 const editionKey = (state.edition === 'institution') ? 'pro' : 'personal';
                 const orderNo = genOrderNo();
-                const orderPayload = {
+                // ★ 2026-10-14 P3：请求体统一由 buildActivationPayload 构造（字段口径单点维护）
+                const orderPayload = buildActivationPayload('order-local', {
                     orderNo: orderNo,
-                    productKey: 'local',
                     edition: editionKey,
                     price: (ORDER_PRICE_MAP.local && ORDER_PRICE_MAP.local[editionKey]) || '',
-                    clinicName: state.clinicName,
-                    adminName: state.adminName,
-                    phone: state.phone,
-                    machineId: machineId || 'unknown',
-                    note: state.remark || '',
-                    inviteCode: state.inviteCode || '',
                     dp: detectCarrier(),
-                    // ★ 2026-09-07 注册密码生效：直建订单携带注册密码（自定义时；默认 admin
-                    //   不传保持旧行为）→ 服务端哈希落库 → 审核通过后云端账户同步用注册
-                    //   密码（此前仅靠本地 adminReqPending 存根，云端账户永远 admin）
-                    password: (state.password && state.password !== 'admin' &&
-                        state.password.length >= 8 && state.password.length <= 32) ? state.password : ''
-                };
+                    machineId: machineId,
+                    state: state
+                });
                 const res = await postOrderDirect(orderPayload);
                 if (!res || res.__fallbackLegacy) return false;
                 if (!res.success) {
@@ -7664,18 +7704,15 @@
                             const r = await fetch('https://tcm-prescription-system.pages.dev/api/license/claim', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
+                                // ★ 2026-10-14 P3：body 统一构造（离线码 productClass=offline/
+                                //   clientClass=app、不带密码；本地账户密码走 installAdminLicense）
+                                body: JSON.stringify(buildActivationPayload('claim-offline', {
                                     code: code,
-                                    machineId: machineId || 'unknown',
+                                    machineId: machineId,
                                     user: effUser,
                                     clinicName: idClinicName || ((state && state.clinicName) || ''),
-                                    phone: phoneVal,
-                                    // ★ 2026-09-14 端形态语义修正：productClass 应为 cloud/offline，
-                                    //   'app' 属 clientClass 域（服务端 validate.js 据此落 devices 元数据，
-                                    //   供阶段2平台校验与后台「类型」列显示）
-                                    productClass: 'offline',
-                                    clientClass: 'app'
-                                }),
+                                    phone: phoneVal
+                                })),
                                 signal: controller.signal
                             });
                             res = await r.json();
@@ -7798,21 +7835,16 @@
                         const r = await fetch('https://tcm-prescription-system.pages.dev/api/license/claim', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
+                            // ★ 2026-10-14 P3：body 统一构造（云端码 productClass=cloud/
+                            //   clientClass=app + pwdCap v2；密码空→不带键，服务端随机初始密码）
+                            body: JSON.stringify(buildActivationPayload('claim-cloud', {
                                 code: code,
-                                machineId: machineId || 'unknown',
+                                machineId: machineId,
                                 user: effUser,
                                 clinicName: idClinicName || (state.clinicName || ''),
                                 phone: phoneVal,
-                                // ★ 2026-09-14 端形态语义修正：云端APP claim 上报
-                                //   productClass:'cloud' + clientClass:'app'（原 'app' 错占
-                                //   productClass 域，污染 KV 设备端形态记录）
-                                productClass: 'cloud',
-                                clientClass: 'app',
-                                // ★ 二期：能力位 + 自设密码（留空 → 服务端随机初始密码）
-                                pwdCap: 'v2',
-                                password: codePwd1 || undefined
-                            }),
+                                password: codePwd1
+                            })),
                             signal: controller.signal
                         });
                         res = await r.json();
