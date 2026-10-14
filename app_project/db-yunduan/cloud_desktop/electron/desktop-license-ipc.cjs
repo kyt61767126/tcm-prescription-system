@@ -423,9 +423,11 @@ ipcMain.handle('license:check-admin-status', async (event, requestId, machineId)
     }
 });
 
-ipcMain.handle('license:save-license', async (event, licenseBase64) => {
+ipcMain.handle('license:save-license', async (event, licenseBase64, renderPhone) => {
     try {
-        const result = await activateManager.saveLicense(licenseBase64);
+        // ★ 2026-10-14 修复：新增第二参 renderPhone（autoRestore machineId 兜底自愈时
+        //   渲染端从 admin-status licenseInfo.phone 透传）。可选参，旧渲染端不传零回归。
+        const result = await activateManager.saveLicense(licenseBase64, renderPhone);
         return result;
     } catch (e) {
         console.error('[IPC] save-license 异常:', e);

@@ -1048,11 +1048,25 @@ function hideGlobalError() {
 }
 
 // ============ Auto restore pending request ============
+// ★ 2026-10-14 对齐云端：无本地申请记录时按 machineId 兜底查询（admin-request-id.dat
+//   被重置工具清理/异常丢失，但服务端已 activated 且 license 绑定本机），
+//   装号时 phone 透传主进程补建本地管理员账户（密码回退 admin）。
 (async function autoRestore() {
     try {
         if (!window.electronAPI?.activate?.loadAdminRequestId) return;
         const saved = await window.electronAPI.activate.loadAdminRequestId();
-        if (!saved?.requestId) return;
+        if (!saved?.requestId) {
+            // ★ 兜底：无本地申请记录，但本机可能已激活（记录被取消等待/异常清理）
+            try {
+                const r = await window.electronAPI.activate.checkAdminStatus(null);
+                if (r && r.success && r.status === 'activated' && r.license) {
+                    const ok = await saveAndRestart(r.license, r.licenseInfo?.phone || '');
+                    if (ok) showSuccess(r.licenseInfo?.phone || '', false, true);
+                    // 失败：保留红条错误，不再自动重启
+                }
+            } catch (e) { console.warn('machineId 兜底查询失败（忽略）:', e); }
+            return;
+        }
         // 恢复版本选择
         if (saved.edition) {
             selectEdition(saved.edition);
@@ -1454,8 +1468,10 @@ function startPolling(requestId) {
             const r = await window.electronAPI.activate.checkAdminStatus(requestId, pollMid);
             if (r.success && r.status === 'activated') {
                 clearInterval(_pollTimer); _pollTimer = null;
-                const ok = await saveAndRestart(r.license, state.phone);
-                if (ok) showSuccess(state.phone);
+                // ★ 2026-10-14：state.phone 缺失时用服务端权威手机号兜底（同款空号缺口）
+                const __phone = state.phone || r.licenseInfo?.phone || '';
+                const ok = await saveAndRestart(r.license, __phone);
+                if (ok) showSuccess(__phone);
             } else if (r.success && r.status === 'rejected') {
                 clearInterval(_pollTimer); _pollTimer = null;
                 await window.electronAPI.activate.clearAdminRequestId();
@@ -1472,7 +1488,9 @@ function startPolling(requestId) {
 
 async function saveAndRestart(license, phone) {
     try {
-        const r = await window.electronAPI.activate.saveLicense(license);
+        // ★ 2026-10-14 修复：phone 透传主进程（machineId 兜底自愈时本地无
+        //   admin-request-id.dat，主进程据此手机号建本地账户；缺失会"有授权无账号"）
+        const r = await window.electronAPI.activate.saveLicense(license, phone || '');
         if (!r.success) {
             showGlobalError('激活文件写入失败：' + (r.error || '未知错误'));
             return false;

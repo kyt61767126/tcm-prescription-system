@@ -1328,8 +1328,10 @@ function startPolling(requestId) {
             const r = await window.electronAPI.activate.checkAdminStatus(requestId);
             if (r.success && r.status === 'activated') {
                 clearInterval(_pollTimer); _pollTimer = null;
-                const ok = await saveAndRestart(r.license, state.phone);
-                if (ok) showSuccess(state.phone);
+                // ★ 2026-10-14：state.phone 缺失时用服务端权威手机号兜底（同款空号缺口）
+                const __phone = state.phone || r.licenseInfo?.phone || '';
+                const ok = await saveAndRestart(r.license, __phone);
+                if (ok) showSuccess(__phone);
             } else if (r.success && r.status === 'rejected') {
                 clearInterval(_pollTimer); _pollTimer = null;
                 await window.electronAPI.activate.clearAdminRequestId();
@@ -1346,7 +1348,9 @@ function startPolling(requestId) {
 
 async function saveAndRestart(license, phone) {
     try {
-        const r = await window.electronAPI.activate.saveLicense(license);
+        // ★ 2026-10-14 修复：phone 透传主进程（machineId 兜底自愈时本地无
+        //   admin-request-id.dat，主进程据此手机号建本地账户；缺失会"有授权无账号"）
+        const r = await window.electronAPI.activate.saveLicense(license, phone || '');
         if (!r.success) {
             showGlobalError('激活文件写入失败：' + (r.error || '未知错误'));
             return false;

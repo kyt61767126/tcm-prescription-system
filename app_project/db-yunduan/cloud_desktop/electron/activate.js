@@ -704,7 +704,14 @@ async function checkAdminStatus(requestId, machineId) {
 }
 
 // ★ 保存管理员激活返回的license + 自动创建管理员账户（统一走installLicense）
-async function saveLicense(licenseBase64) {
+// ★ 2026-10-14 修复：新增 renderPhone 第二参。autoRestore machineId 兜底自愈场景
+//   （admin-request-id.dat 已被重置工具清理/从未存在）下 savedPhone 必为空，旧逻辑
+//   装号成功却不建本地账户 → 重启后"有授权+有诊所名+无账号"，登录窗无法登录且激活
+//   窗不再弹出（客户事故：激活窗一闪过、登录框空白）。三级兜底：
+//   adminReq.phone > 渲染端透传 licenseInfo.phone（手机号校验）> license.user
+//   （仅当其恰为 11 位手机号时；管理员审批链路该字段常为姓名，不命中即不建号）。
+//   installLicense 对"有手机号+密码空"已自动回退 admin 建号，与成功页文案一致。
+async function saveLicense(licenseBase64, renderPhone) {
     try {
         // 读取本地保存的激活信息（clinicName, adminName, phone, password）
         let savedClinicName = '';
@@ -726,11 +733,24 @@ async function saveLicense(licenseBase64) {
             }
         } catch (e) { /* 忽略 */ }
 
+        // ★ 手机号三级兜底（严格 11 位手机号才建号；非手机号 user 保持旧行为零回归）
+        let effectivePhone = String(savedPhone || '').trim();
+        if (!effectivePhone && renderPhone && /^1[3-9]\d{9}$/.test(String(renderPhone).trim())) {
+            effectivePhone = String(renderPhone).trim();
+        }
+        if (!effectivePhone) {
+            try {
+                const __lic = JSON.parse(Buffer.from(String(licenseBase64 || ''), 'base64').toString('utf8'));
+                const __u = __lic && __lic.user ? String(__lic.user).trim() : '';
+                if (/^1[3-9]\d{9}$/.test(__u)) effectivePhone = __u;
+            } catch (_) { /* license 解码失败交给下方 installLicense 报错 */ }
+        }
+
         // ★ 统一安装（一行搞定：写license+清trial+同步config+创建账户）
         const installResult = licenseManager.installLicense(licenseBase64, {
             clinicName: savedClinicName,
             doctorName: savedAdminName,
-            phone: savedPhone,
+            phone: effectivePhone,
             password: savedPassword,
             edition: savedEdition || loadClientConfig().edition || 'standard'
         });

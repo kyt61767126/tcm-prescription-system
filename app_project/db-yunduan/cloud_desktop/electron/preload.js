@@ -159,7 +159,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
         //   缺它时渲染层 resumeAdminPendingRequest 的 machineId 自救（requestId=''）
         //   经 IPC 后 machineId 丢失 → 服务端 400「缺少 requestId」→ 自救永远失败。
         checkAdminStatus: (requestId, machineId) => ipcRenderer.invoke('license:check-admin-status', requestId, machineId),
-        saveLicense: (licenseBase64) => ipcRenderer.invoke('license:save-license', licenseBase64),
+        saveLicense: (licenseBase64, phone) => ipcRenderer.invoke('license:save-license', licenseBase64, phone),
         cancelAdminRequest: (requestId) => ipcRenderer.invoke('license:cancel-admin-request', requestId),
         // ★ requestId 本地持久化（解决轮询超时/关闭窗口后丢失状态的问题）
         loadAdminRequestId: () => ipcRenderer.invoke('license:load-admin-request-id'),

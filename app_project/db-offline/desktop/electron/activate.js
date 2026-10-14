@@ -807,11 +807,19 @@ async function submitAdminRequest(data) {
 }
 
 // ★ 管理员激活状态轮询（machineId 可选：官网订单付费激活兜底检测）
+// ★ 2026-10-14 对齐云端实现（原离线旧版无空值守卫，requestId 为空时会拼出
+//   requestId=null 死请求；也缺 cancelled 索引指错时的 machineId 自救重查）：
+//   ①URLSearchParams 双参，requestId 缺省=machineId-only 查询（autoRestore
+//   machineId 兜底自愈分支依赖）；②只读回 cancelled 时按 machineId 再扫一次。
 async function checkAdminStatus(requestId, machineId) {
     try {
-        let url = `https://tcm-prescription-system.pages.dev/api/license/admin-status?requestId=${encodeURIComponent(requestId)}`;
-        if (machineId) url += `&machineId=${encodeURIComponent(machineId)}`;
-        
+        const mid = machineId || getMachineId();
+        const params = new URLSearchParams();
+        if (requestId) params.set('requestId', requestId);
+        if (mid) params.set('machineId', mid);
+        const qs = params.toString();
+        const url = `https://tcm-prescription-system.pages.dev/api/license/admin-status${qs ? '?' + qs : ''}`;
+
         const fetchPromise = async () => {
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 8000);
@@ -833,6 +841,17 @@ async function checkAdminStatus(requestId, machineId) {
 
         const result = await Promise.race([fetchPromise(), timeoutPromise]);
 
+        // ★ 如果只读回来 cancelled，说明 admin_phone 索引指错了 → 只按 machineId 再查一次自救
+        if (result && result.success && result.status === 'cancelled' && mid) {
+            try {
+                const fallbackUrl = `https://tcm-prescription-system.pages.dev/api/license/admin-status?machineId=${encodeURIComponent(mid)}`;
+                const fb = await fetch(fallbackUrl, { method: 'GET', headers: { 'Content-Type': 'application/json' } }).then(r => r.json());
+                if (fb && fb.success && (fb.status === 'activated' || fb.status === 'pending')) {
+                    return fb;
+                }
+            } catch (_) { /* ignore fallback */ }
+        }
+
         return result;
     } catch (e) {
         console.warn('[Admin] 检查激活状态失败:', e.message);
@@ -841,7 +860,14 @@ async function checkAdminStatus(requestId, machineId) {
 }
 
 // ★ 保存管理员激活返回的license + 自动创建管理员账户（统一走installLicense）
-async function saveLicense(licenseBase64) {
+// ★ 2026-10-14 修复：新增 renderPhone 第二参。autoRestore machineId 兜底自愈场景
+//   （admin-request-id.dat 已被重置工具清理/从未存在）下 savedPhone 必为空，旧逻辑
+//   装号成功却不建本地账户 → 重启后"有授权+有诊所名+无账号"，登录窗无法登录且激活
+//   窗不再弹出。三级兜底：
+//   adminReq.phone > 渲染端透传 licenseInfo.phone（手机号校验）> license.user
+//   （仅当其恰为 11 位手机号时；管理员审批链路该字段常为姓名，不命中即不建号）。
+//   installLicense 对"有手机号+密码空"已自动回退 admin 建号，与成功页文案一致。
+async function saveLicense(licenseBase64, renderPhone) {
     try {
         // 读取本地保存的激活信息（clinicName, adminName, phone, password）
         let savedClinicName = '';
@@ -863,11 +889,24 @@ async function saveLicense(licenseBase64) {
             }
         } catch (e) { /* 忽略 */ }
 
+        // ★ 手机号三级兜底（严格 11 位手机号才建号；非手机号 user 保持旧行为零回归）
+        let effectivePhone = String(savedPhone || '').trim();
+        if (!effectivePhone && renderPhone && /^1[3-9]\d{9}$/.test(String(renderPhone).trim())) {
+            effectivePhone = String(renderPhone).trim();
+        }
+        if (!effectivePhone) {
+            try {
+                const __lic = JSON.parse(Buffer.from(String(licenseBase64 || ''), 'base64').toString('utf8'));
+                const __u = __lic && __lic.user ? String(__lic.user).trim() : '';
+                if (/^1[3-9]\d{9}$/.test(__u)) effectivePhone = __u;
+            } catch (_) { /* license 解码失败交给下方 installLicense 报错 */ }
+        }
+
         // ★ 统一安装（一行搞定：写license+清trial+同步config+创建账户）
         const installResult = licenseManager.installLicense(licenseBase64, {
             clinicName: savedClinicName,
             doctorName: savedAdminName,
-            phone: savedPhone,
+            phone: effectivePhone,
             password: savedPassword,
             edition: savedEdition || loadClientConfig().edition || 'standard'
         });
