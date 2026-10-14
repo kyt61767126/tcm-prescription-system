@@ -16,36 +16,28 @@
 
 ## 当前基线（2026-10-14 更新）
 
-- **main HEAD：`2ea44f71`**（已 push，Cloudflare Pages 自动部署已验证）。
+- **main HEAD：`3498c5ba`**（已 push，Cloudflare Pages 自动部署已验证）。
 - 近 24h 已上线、**勿重复实施**：
   - KV list 1000/天告警根治（order_index + safeListPage 熔断/短缓存，`6601c943`，详见 KNOWLEDGE 2026-10-13 条目）。
-  - 激活架构 **P1** 客户端「只填码」身份自动带出（`b7bf5530`，auth-core cv=`9d0de10a`，离线 App 热更 **2026.10.13-3，minAppCode 288 不抬**）。
+  - 激活架构 **P1** 客户端「只填码」身份自动带出（`b7bf5530`）。
   - 激活架构 **P2** 服务端裸码「码+手机号」单锚点首激（`3a7a762f`，开关 `config:activation-phone-anchor`）。
-  - 完整方案：`.trae/documents/activation-architecture-optimization_plan.md`。
+  - 激活架构 **P3** claim/order 请求体收口 `buildActivationPayload`（`3498c5ba`，纯重构零行为变化）；auth-core cv=**ed835152**（云端刷新即达）；离线 App 热更 **2026.10.14-1，minAppCode 288 不抬**（退出重开第 2 次生效）。
+  - 完整方案：`.trae/documents/activation-architecture-optimization_plan.md`（P1/P2/P3 全部闭环）。
 - 工作区有多个**未跟踪文件**（`_verify/`、`_verify-report.md`、`e2e/.tmp/*-test.*` 的一部分、`.trae/documents/phase2-taobao-cloud-password_plan.md` 等）：非本台账任务产物，**提交时精确 `git add`，禁止 `git add -A`**。
 
 ---
 
 ## OPEN 遗留任务
 
-### H1 ｜优先级：低（纯重构，等用户立项再做）｜激活架构 P3：各入口请求体拼装收口
-- **状态：IN-PROGRESS（Trae 主账号@本机，2026-10-14，用户已批准立项）**
-- **范围锁定**：仅 shared/auth-core/offline.js + cloud.js 两个权威源，收口 **5 处 body**（offline：order-local L6641 / claim-offline L7236 / claim-cloud L7370；cloud：claim-cloud L5209 / order-cloud L5454）为单一 `buildActivationPayload(kind,id)`。
-- **不纳入**（计划"最小收口、不大范围搬迁"约束）：桌面主进程 activate.js 两份（Node 域、条件挂键+邀请码门控+clientClass=desktop，各仅 1 处）、官网 download.html 两处 order-submit、admin-submit 旧链路 body（服务端旧契约、字段集不同）。
-- **背景**：Tab1 付款购买 / Tab2 激活码 / 桌面 activate-window / 到期直通 四处各自拼 claim·order 请求体，字段口径靠注释维持、易漂移。P1/P2 已解决用户体感，本项无功能变化。
-- **范围**：在 shared/auth-core/offline.js 与 cloud.js 内收敛为单一 `buildActivationPayload(identity)`（离线不带密码、云端 pwdCap:'v2'、桌面桥参透传 user/clinicName/phone）。
-- **勿做**：不改服务端字段契约、不改 HTML/CSS、不抬 minAppCode。
-- **验收**：sync-auth-core 11 副本；activation-identity-prefill 20 + phone-anchor 25 + 存量回归全绿；`check-interface.bat` 6 OK。
-- **基线**：`2ea44f71`。关联：activation-architecture-optimization_plan.md §四 P3。
-
-### H2 ｜优先级：中（需人工真机，Agent 不可替代）｜激活 P1/P2 真机回归
+### H2 ｜优先级：中（需人工真机，Agent 不可替代）｜激活 P1/P2/P3 真机回归
 - **清单**：
   1. 离线 App（已注册账号）：版本页金色按钮进激活码页 → 手机号自动带出 → **只输码**激活成功。
-  2. 离线 App：试用到期提醒入口同上；App 需彻底退出重开第 2 次拉到热更 2026.10.13-3。
+  2. 离线 App：试用到期提醒入口同上；App 需彻底退出重开第 2 次拉到热更 2026.10.14-1。
   3. 换机：新设备输码，手机号带出为原绑定号 → 自动解绑最旧机恢复；故意改错手机号 → 必须被拒。
   4. 桌面（Electron，云/离各一）：激活窗 user/clinicName/phone 正确透传桥 submit。
-  5. 云端 Web/桌面：刷新即达（cv 9d0de10a），登录态用户手机号自动带出。
+  5. 云端 Web/桌面：刷新即达（cv ed835152），登录态用户手机号自动带出。
   6. 渠道裸码（无锁端 personal 码）首激：码+手机号 200，`identitySource=phone-anchor`；后台激活码日志可见 `phone-anchor-activation`。
+  7. P3 零行为变化核对（任一版本即可）：抓包 claim body 仍含 productClass/clientClass（云端另含 pwdCap:'v2'）；Tab1 直建订单 order-submit 正常（字段未缺失）。
 - **异常回流**：任何一项失败，把现象/机器/版本记入本任务并改 BLOCKED，附 license_log action。
 
 ### H3 ｜优先级：低（长期观察）｜KV 容量与套餐
