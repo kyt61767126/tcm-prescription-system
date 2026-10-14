@@ -709,6 +709,10 @@
 
 * ★ 2026-09-20 **KV 运维事故规程（生产 license 记录险些被毁，靠事前备份恢复）**：① 本版 wrangler `kv key get` **不支持 --path**（仅 put 支持），get 只能 --text；② **严禁 get→改→put 链式一条命令**——PowerShell 语句级错误不中断脚本，get 失败后 $null 继续流转，ConvertTo-Json 产出 "null" 字符串被 put 写进 KV **静默毁掉生产记录**；③ 规程：任何 KV put 前**先把当前值备份到文件**；构建修改文件必须 `$ErrorActionPreference='Stop'` + try/catch + sanity check（关键字段比对），**文件构建与 put 分两步执行**，put 后必读回验证；④ 中文字段经 --text 管道往返安全（控制台 UTF-8），但写回文件必须 [IO.File]::WriteAllText + UTF8Encoding($false)（无 BOM——BOM 会让服务端 JSON.parse 失败）。
 
+* ★ 2026-10-14 **vm 沙箱跑真实 bundle 的门禁三铁律**（第⑰道门 auth-status-refresh 事故：2 个 FAIL 仍放行推送）：① **定时器必须透传宿主真实实现**——sandbox 把 setTimeout 桩成 no-op 时，假 fetch 一旦返回 pending Promise（如在途 gate），Node 事件循环零句柄会**静默 exit 0**，后续用例/汇总全部不跑、已有 FAIL 也吞掉（真实浏览器 fetch 是网络 IO 天然持句柄，故只在测试里暴露）；setInterval 相反要保持 no-op，防 bundle 常驻轮询挂死进程；测试自身的 pending gate 必须由**真实宏任务**释放（`setTimeout(release, 5)`），禁止「await p 之后才 release p」的自死锁写法。② **套件必须加断尾护栏**：`process.on('exit')` 里若未跑到汇总且 code===0 → process.exitCode=99（实测红灯 exit 99 生效）。③ **断言禁止硬编码随自然时间漂移的值**（"剩余 728 天"写用例当天成立，4 天后变 724 假红）——sandbox 注入冻结可控时钟（FakeDate + sb._tickClock(ms)，基准 2026-10-10T00:00Z 使 728/363 恒成立），种子时间戳与冻结时钟对齐。④ **钩子引用的门禁文件必须随钩子入库**——本事故两文件是未跟踪 WIP 而 .githooks/pre-push 已调用，其他机器 clone 后该门必挂；新增门禁同提交必须 `git ls-files` 确认文件已入库。验收纪律：门禁修复必须做**红灯双向验证**（翻转断言→exit 1、恢复死锁→exit 99）再还原复跑全绿，只看绿灯无法证明拦截力。
+
+* ★ 2026-10-14 **PowerShell 写 git commit -F 文件禁用 Set-Content -Encoding UTF8**：PS5 该写法带 UTF-8 BOM，commit 标题被混入 BOM（`git log --oneline` 显示 `﻿feat(...)`）。统一用 `[IO.File]::WriteAllText($tmp, $msg, (New-Object Text.UTF8Encoding($false)))`，或多个 `git commit -m`。
+
 ## 11. D1 数据库迁移与激活审核有效期（2026-09-10）
 
 ### 用户表 D1 切读（登录+用户列表）→ ★ 2026-09-19 改判「KV 权威 + D1 自愈副本」
