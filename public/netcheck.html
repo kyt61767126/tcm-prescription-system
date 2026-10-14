@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>云端连通体检</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+      'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+    background: #f2f3f7;
+    color: #2b2b33;
+    font-size: 14px;
+    line-height: 1.55;
+    text-rendering: optimizeLegibility;
+    padding-bottom: calc(24px + env(safe-area-inset-bottom));
+  }
+  .wrap { max-width: 560px; margin: 0 auto; padding: 0 12px; }
+
+  header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #fff;
+    border-radius: 0 0 16px 16px;
+    padding: 20px 16px 16px;
+    margin-bottom: 12px;
+    box-shadow: 0 4px 14px rgba(102,126,234,.28);
+  }
+  header h1 { font-size: 19px; font-weight: 700; letter-spacing: .5px; }
+  header .sub { font-size: 12px; opacity: .9; margin-top: 4px; }
+
+  .env-card {
+    background: #fff; border-radius: 12px; padding: 12px 14px;
+    margin-bottom: 10px; box-shadow: 0 1px 4px rgba(0,0,0,.05);
+    font-size: 12.5px;
+  }
+  .env-row { display: flex; justify-content: space-between; gap: 10px; padding: 2px 0; }
+  .env-row .k { color: #8a8f9c; flex: 0 0 64px; }
+  .env-row .v { text-align: right; word-break: break-all; }
+
+  .summary {
+    display: flex; gap: 8px; margin-bottom: 10px;
+  }
+  .stat {
+    flex: 1; background: #fff; border-radius: 12px; padding: 10px 6px;
+    text-align: center; box-shadow: 0 1px 4px rgba(0,0,0,.05);
+  }
+  .stat .num { font-size: 20px; font-weight: 700; }
+  .stat .lbl { font-size: 11.5px; color: #8a8f9c; margin-top: 2px; }
+  .stat.ok .num { color: #1ea97c; }
+  .stat.warn .num { color: #e8902a; }
+  .stat.bad .num { color: #e24848; }
+
+  .group-title {
+    font-size: 12.5px; font-weight: 700; color: #6b52c4;
+    margin: 14px 4px 6px;
+  }
+  .item {
+    background: #fff; border-radius: 10px; margin-bottom: 6px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.05); overflow: hidden;
+  }
+  .item-main {
+    display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+    min-height: 48px;
+  }
+  .dot { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 10px; background: #d3d6de; }
+  .dot.ok { background: #1ea97c; }
+  .dot.warn { background: #e8902a; }
+  .dot.bad { background: #e24848; }
+  .item-info { flex: 1; min-width: 0; }
+  .item-name { font-size: 13.5px; font-weight: 600; }
+  .item-path { font-size: 11px; color: #9aa0ad; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .badge {
+    flex: 0 0 auto; font-size: 11.5px; font-weight: 700; border-radius: 6px;
+    padding: 3px 8px; font-variant-numeric: tabular-nums;
+  }
+  .badge.ok { background: #e6f7f0; color: #128a63; }
+  .badge.warn { background: #fdf1e0; color: #b96a12; }
+  .badge.bad { background: #fdeaea; color: #c53030; }
+  .badge.pending { background: #eef0f5; color: #8a8f9c; }
+  .ms { flex: 0 0 58px; text-align: right; font-size: 11.5px; color: #8a8f9c; font-variant-numeric: tabular-nums; }
+  .item-detail {
+    display: none; padding: 0 12px 10px 32px; font-size: 11.5px; color: #6b7080;
+    word-break: break-all;
+  }
+  .item.open .item-detail { display: block; }
+  .item-detail pre {
+    background: #f6f7fa; border-radius: 6px; padding: 6px 8px; margin-top: 4px;
+    white-space: pre-wrap; word-break: break-all; font-size: 11px;
+    font-family: 'Segoe UI', Consolas, Menlo, monospace;
+  }
+
+  .actions { display: flex; gap: 8px; margin: 14px 0 8px; }
+  button {
+    flex: 1; border: 0; border-radius: 10px; padding: 13px 8px;
+    font-size: 14.5px; font-weight: 700; cursor: pointer;
+    font-family: inherit;
+  }
+  .btn-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #fff; box-shadow: 0 3px 10px rgba(102,126,234,.32);
+  }
+  .btn-primary:disabled { opacity: .55; box-shadow: none; }
+  .btn-ghost { background: #fff; color: #5c4bb0; border: 1px solid #d8d2f2; }
+  .deep-card {
+    background: #fff; border-radius: 12px; padding: 12px 14px;
+    margin-top: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.05);
+  }
+  .deep-title { font-size: 13.5px; font-weight: 700; }
+  .deep-desc { font-size: 12px; color: #8a8f9c; margin: 4px 0 10px; }
+  .deep-result {
+    display: none; margin-top: 10px; font-size: 12px; word-break: break-all;
+    background: #f6f7fa; border-radius: 8px; padding: 8px 10px;
+  }
+  .deep-result.show { display: block; }
+  .note {
+    font-size: 11.5px; color: #9aa0ad; margin: 12px 4px 0; line-height: 1.7;
+  }
+  .banner {
+    display: none; background: #fff7e8; color: #9a6312; border: 1px solid #f3d9a4;
+    border-radius: 10px; padding: 9px 12px; font-size: 12.5px; margin-bottom: 10px;
+  }
+  .banner.show { display: block; }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>📡 云端连通体检</h1>
+    <div class="sub">逐项检测手机到惠康云端各服务接口的连通情况，全程只读，不消耗激活码</div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="banner" id="deployBanner">
+    ⚠ 本页面不是从云端正式地址打开的，检测结果会因浏览器跨域限制而失真。请部署后用
+    <b>https://tcm-prescription-system.pages.dev/netcheck.html</b> 打开。
+  </div>
+
+  <div class="env-card" id="envCard"></div>
+
+  <div class="summary">
+    <div class="stat ok"><div class="num" id="stOk">–</div><div class="lbl">正常</div></div>
+    <div class="stat warn"><div class="num" id="stWarn">–</div><div class="lbl">异常/关注</div></div>
+    <div class="stat bad"><div class="num" id="stBad">–</div><div class="lbl">不通</div></div>
+    <div class="stat"><div class="num" id="stMs">–</div><div class="lbl">平均耗时</div></div>
+  </div>
+
+  <div class="actions">
+    <button class="btn-primary" id="btnRun">开始检测</button>
+    <button class="btn-ghost" id="btnCopy">复制报告</button>
+  </div>
+
+  <div id="list"></div>
+
+  <div class="group-title">深度检测（模拟 APP 真实联网动作）</div>
+  <div class="deep-card">
+    <div class="deep-title">🔐 APP 试用硬件证明·挑战请求</div>
+    <div class="deep-desc">
+      对应 APP 首次试用第一步（attestation challenge）。点击后服务器会下发一串一次性挑战码，
+      并产生一条 10 分钟自动过期的测试记录，不影响任何正式数据。
+    </div>
+    <button class="btn-primary" id="btnDeep" style="width:100%;">执行深测</button>
+    <div class="deep-result" id="deepResult"></div>
+  </div>
+
+  <div class="note">
+    判定口径：<b>2xx/4xx 都算"接口可达"</b>——405=该接口只接受 APP 的 POST 动作、
+    404=查无此测试数据、401=需要登录、403=拒绝浏览器直接访问，这些都是云端服务正常应答的证据；
+    5xx=云端函数异常（黄灯）；超时/连接失败=网络不通（红灯）。<br>
+    检测仅使用 GET 只读请求，不触发任何业务写入、不占用限流额度。
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var TIMEOUT_MS = 12000;
+
+  // 预期状态码均已在 PC 侧实测（2026-10-14）：405=仅POST 404=业务无此数据 401=需登录 403=拒GET
+  var GROUPS = [
+    { title: '一、静态入口（APP 内嵌网页）', items: [
+      { name: '系统首页 / 登录页', method: 'GET', path: '/', expect: 200 }
+    ]},
+    { title: '二、激活授权核心', items: [
+      { name: '付费激活（淘宝码/普通码）', method: 'GET', path: '/api/license/claim', expect: 405 },
+      { name: '免费版领取', method: 'GET', path: '/api/license/claim-free', expect: 405 },
+      { name: '旧版激活（兼容入口）', method: 'GET', path: '/api/license/validate', expect: 405 }
+    ]},
+    { title: '三、登录 · 权益 · 心跳', items: [
+      { name: '用户登录 / 注册', method: 'GET', path: '/api/users', expect: 401 },
+      { name: '登录权益闸门', method: 'GET', path: '/api/license/entitlement', expect: 405 },
+      { name: '授权心跳', method: 'GET', path: '/api/license/heartbeat', expect: 405 },
+      { name: '状态上报', method: 'GET', path: '/api/license/status', expect: 403 }
+    ]},
+    { title: '四、淘宝下单与审核通道', items: [
+      { name: '官网下单提交', method: 'GET', path: '/api/license/order-submit', expect: 405 },
+      { name: '订单状态查询', method: 'GET', path: '/api/license/order-status?orderNo=BNZC-TB-202601010000-TEST', expect: 404 },
+      { name: '激活审核提交', method: 'GET', path: '/api/license/admin-submit', expect: 405 },
+      { name: '激活状态轮询（按机器）', method: 'GET', path: '/api/license/admin-status?machineId=probe-netcheck-0001', expect: 404 },
+      { name: '工单激活提交', method: 'GET', path: '/api/license/ticket/submit', expect: 405 }
+    ]},
+    { title: '五、试用与遥测', items: [
+      { name: 'APP 试用硬件证明注册', method: 'GET', path: '/api/license/attestation/register', expect: 405 },
+      { name: '遥测心跳', method: 'GET', path: '/api/telemetry/heartbeat', expect: 405 },
+      { name: '桌面端试用注册', method: 'GET', path: '/api/trial/register', expect: 405 }
+    ]}
+  ];
+
+  var results = []; // {name, path, status, ms, level, preview, error}
+
+  function el(id) { return document.getElementById(id); }
+
+  function deviceInfo() {
+    var ua = navigator.userAgent || '';
+    var dev = '未知设备';
+    if (/iPhone|iPad|iPod/.test(ua)) dev = /iPad/.test(ua) ? 'iPad' : 'iPhone';
+    else if (/Android/.test(ua)) {
+      var m = ua.match(/Android\s([0-9.]+)/);
+      dev = 'Android ' + (m ? m[1] : '');
+    } else if (/Windows/.test(ua)) dev = 'Windows 电脑';
+    else if (/Mac OS X/.test(ua)) dev = 'Mac 电脑';
+    var browser = '未知浏览器';
+    if (/MicroMessenger/.test(ua)) browser = '微信内置浏览器';
+    else if (/Edg\//.test(ua)) browser = 'Edge';
+    else if (/Chrome\//.test(ua) && !/Chromium/.test(ua)) browser = 'Chrome';
+    else if (/Chrome\//.test(ua)) browser = 'Chromium';
+    else if (/Safari\//.test(ua)) browser = 'Safari';
+    else if (/Firefox\//.test(ua)) browser = 'Firefox';
+    var net = '未知';
+    var conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    if (conn) {
+      net = (conn.effectiveType || (conn.type || '').toLowerCase() || '未知');
+      if (conn.downlink) net += ' · ' + conn.downlink + 'Mbps';
+    }
+    var online = navigator.onLine === false ? '离线' : '在线';
+    return { dev: dev, browser: browser, net: net, online: online, ua: ua };
+  }
+
+  function renderEnv() {
+    var d = deviceInfo();
+    var rows = [
+      ['网络状态', d.online + '（' + d.net + '）'],
+      ['设备', d.dev],
+      ['浏览器', d.browser],
+      ['页面来源', location.origin],
+      ['检测时间', new Date().toLocaleString('zh-CN', { hour12: false })]
+    ];
+    el('envCard').innerHTML = rows.map(function (r) {
+      return '<div class="env-row"><span class="k">' + r[0] + '</span><span class="v">' + r[1] + '</span></div>';
+    }).join('');
+    if (location.protocol !== 'https:' || location.hostname !== 'tcm-prescription-system.pages.dev') {
+      el('deployBanner').classList.add('show');
+    }
+  }
+
+  function renderList() {
+    var html = '';
+    GROUPS.forEach(function (g) {
+      html += '<div class="group-title">' + g.title + '</div>';
+      g.items.forEach(function (it) {
+        var id = 'it-' + results.length;
+        html += '<div class="item" id="' + id + '">' +
+          '<div class="item-main">' +
+            '<span class="dot" data-dot></span>' +
+            '<div class="item-info"><div class="item-name">' + it.name + '</div>' +
+            '<div class="item-path">' + it.method + ' ' + it.path + '</div></div>' +
+            '<span class="ms" data-ms>等待</span>' +
+            '<span class="badge pending" data-badge>待测</span>' +
+          '</div>' +
+          '<div class="item-detail" data-detail></div>' +
+        '</div>';
+        results.push({ name: it.name, method: it.method, path: it.path, expect: it.expect,
+          level: 'pending', status: 0, ms: 0, preview: '', error: '', elId: id });
+      });
+    });
+    el('list').innerHTML = html;
+  }
+
+  function classify(status, expect) {
+    if (status >= 200 && status < 400) {
+      return status === expect ? { level: 'ok', text: '正常 ' + status }
+                               : { level: 'warn', text: status + ' 非预期' };
+    }
+    if (status >= 400 && status < 500) {
+      return status === expect ? { level: 'ok', text: '可达 ' + status }
+                               : { level: 'warn', text: '可达 ' + status };
+    }
+    if (status >= 500) return { level: 'warn', text: '服务异常 ' + status };
+    return { level: 'bad', text: status === -1 ? '超时' : '连接失败' };
+  }
+
+  function updateRow(r) {
+    var box = el(r.elId);
+    if (!box) return;
+    var c = classify(r.status, r.expect);
+    r.level = c.level;
+    box.querySelector('[data-dot]').className = 'dot ' + c.level;
+    var badge = box.querySelector('[data-badge]');
+    badge.className = 'badge ' + c.level;
+    badge.textContent = c.text;
+    box.querySelector('[data-ms]').textContent = r.ms > 0 ? r.ms + 'ms' : '–';
+    var detailParts = [];
+    if (r.error) detailParts.push('错误：' + r.error);
+    detailParts.push('预期：' + r.expect + '　实际：' + (r.status || '无应答'));
+    if (r.preview) detailParts.push('响应预览：<pre>' + escapeHtml(r.preview) + '</pre>');
+    box.querySelector('[data-detail]').innerHTML = detailParts.join('<br>');
+    box.querySelector('.item-main').onclick = function () { box.classList.toggle('open'); };
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"]/g, function (ch) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch];
+    });
+  }
+
+  function probeOne(r) {
+    return new Promise(function (resolve) {
+      var ctrl = ('AbortController' in window) ? new AbortController() : null;
+      var timer = ctrl ? setTimeout(function () {
+        try { ctrl.abort(); } catch (e) {}
+      }, TIMEOUT_MS) : null;
+      var t0 = Date.now();
+      fetch(r.path, { method: 'GET', cache: 'no-store', signal: ctrl ? ctrl.signal : undefined })
+        .then(function (resp) {
+          clearTimeout(timer);
+          r.status = resp.status;
+          r.ms = Date.now() - t0;
+          return resp.text().catch(function () { return ''; });
+        })
+        .then(function (txt) {
+          r.preview = (txt || '').substring(0, 160);
+          resolve();
+        })
+        .catch(function (err) {
+          clearTimeout(timer);
+          r.ms = Date.now() - t0;
+          if (err && err.name === 'AbortError') { r.status = -1; r.error = '12 秒超时无响应'; }
+          else { r.status = 0; r.error = (err && err.message) || '连接失败（DNS/证书/网络中断）'; }
+          resolve();
+        });
+    });
+  }
+
+  function updateSummary() {
+    var okN = 0, warnN = 0, badN = 0, msSum = 0, msCnt = 0;
+    results.forEach(function (r) {
+      if (r.level === 'ok') okN++;
+      else if (r.level === 'warn') warnN++;
+      else if (r.level === 'bad') badN++;
+      if (r.ms > 0) { msSum += r.ms; msCnt++; }
+    });
+    el('stOk').textContent = okN;
+    el('stWarn').textContent = warnN;
+    el('stBad').textContent = badN;
+    el('stMs').textContent = msCnt ? Math.round(msSum / msCnt) + 'ms' : '–';
+    return { okN: okN, warnN: warnN, badN: badN };
+  }
+
+  function runAll() {
+    var btn = el('btnRun');
+    btn.disabled = true;
+    btn.textContent = '检测中…';
+    var chain = Promise.resolve();
+    results.forEach(function (r) {
+      r.level = 'pending'; r.status = 0; r.ms = 0; r.error = ''; r.preview = '';
+      var box = el(r.elId);
+      if (box) {
+        box.querySelector('[data-dot]').className = 'dot';
+        var badge = box.querySelector('[data-badge]');
+        badge.className = 'badge pending'; badge.textContent = '检测中';
+        box.querySelector('[data-ms]').textContent = '…';
+      }
+    });
+    // 每批 3 个并发，避免弱网下一次性打满
+    var queue = results.slice();
+    function nextBatch() {
+      var batch = queue.splice(0, 3);
+      if (!batch.length) return Promise.resolve();
+      return Promise.all(batch.map(function (r) {
+        return probeOne(r).then(function () { updateRow(r); updateSummary(); });
+      })).then(nextBatch);
+    }
+    nextBatch().then(function () {
+      var s = updateSummary();
+      btn.disabled = false;
+      btn.textContent = s.badN === 0 ? '重新检测' : '重新检测（有不通项）';
+    });
+  }
+
+  function buildReport() {
+    var d = deviceInfo();
+    var s = updateSummary();
+    var lines = [];
+    lines.push('【惠康云端连通体检】');
+    lines.push('时间：' + new Date().toLocaleString('zh-CN', { hour12: false }));
+    lines.push('网络：' + d.online + ' / ' + d.net);
+    lines.push('设备：' + d.dev + ' / ' + d.browser);
+    lines.push('结果：正常 ' + s.okN + '，关注 ' + s.warnN + '，不通 ' + s.badN +
+      '，平均 ' + el('stMs').textContent);
+    lines.push('');
+    results.forEach(function (r) {
+      var icon = r.level === 'ok' ? '✅' : (r.level === 'warn' ? '⚠️' : (r.level === 'bad' ? '❌' : '⏳'));
+      var tail = r.ms > 0 ? ' ' + r.ms + 'ms' : '';
+      lines.push(icon + ' ' + r.name + '：' +
+        (r.status ? r.status : (r.error || '未测')) + tail);
+    });
+    var dr = el('deepResult');
+    if (dr.classList.contains('show')) {
+      lines.push('', '深测：' + (dr.getAttribute('data-report') || '已执行'));
+    }
+    return lines.join('\n');
+  }
+
+  function copyReport() {
+    var text = buildReport();
+    function fallback() {
+      var ta = document.createElement('textarea');
+      ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); alert('报告已复制，可粘贴发给客服'); }
+      catch (e) { prompt('长按全选复制报告：', text); }
+      document.body.removeChild(ta);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () {
+        alert('报告已复制，可粘贴发给客服');
+      }, fallback);
+    } else fallback();
+  }
+
+  function runDeep() {
+    var btn = el('btnDeep'), box = el('deepResult');
+    btn.disabled = true; btn.textContent = '深测中…';
+    var t0 = Date.now();
+    var mid;
+    try {
+      var arr = new Uint8Array(8);
+      (window.crypto || window.msCrypto).getRandomValues(arr);
+      mid = 'webprobe-' + Array.prototype.map.call(arr, function (b) {
+        return b.toString(16).padStart(2, '0');
+      }).join('');
+    } catch (e) { mid = 'webprobe-' + Date.now().toString(16) + '0000'; }
+
+    var ctrl = new AbortController();
+    var timer = setTimeout(function () { try { ctrl.abort(); } catch (e) {} }, TIMEOUT_MS);
+    fetch('/api/license/attestation/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'challenge', mid: mid }),
+      signal: ctrl.signal
+    }).then(function (resp) {
+      clearTimeout(timer);
+      return resp.json().then(function (j) { return { status: resp.status, j: j }; });
+    }).then(function (r) {
+      var ms = Date.now() - t0;
+      var ok = r.status === 200 && r.j && r.j.success === true && !!r.j.challenge;
+      box.classList.add('show');
+      if (ok) {
+        box.innerHTML = '✅ 深测成功（' + ms + 'ms）<br>POST→KV 写入→下发挑战码全链路正常：<br>' +
+          '<b>' + escapeHtml(r.j.challenge) + '</b><br>服务器时间：' + escapeHtml(r.j.serverTime || '') +
+          '<br>测试机标识：' + escapeHtml(mid) + '（记录 10 分钟自动过期）';
+        box.setAttribute('data-report', '✅ 挑战下发成功 ' + ms + 'ms');
+      } else {
+        box.innerHTML = '⚠️ HTTP ' + r.status + ' 业务未通过：<pre>' +
+          escapeHtml(JSON.stringify(r.j)) + '</pre>';
+        box.setAttribute('data-report', '⚠️ HTTP ' + r.status);
+      }
+    }).catch(function (err) {
+      clearTimeout(timer);
+      var msg = (err && err.name === 'AbortError') ? '12 秒超时' : ((err && err.message) || '连接失败');
+      box.classList.add('show');
+      box.innerHTML = '❌ 深测失败：' + escapeHtml(msg);
+      box.setAttribute('data-report', '❌ ' + msg);
+    }).then(function () {
+      btn.disabled = false; btn.textContent = '重新执行深测';
+    });
+  }
+
+  el('btnRun').addEventListener('click', runAll);
+  el('btnCopy').addEventListener('click', copyReport);
+  el('btnDeep').addEventListener('click', runDeep);
+
+  renderEnv();
+  renderList();
+  runAll();
+})();
+</script>
+</body>
+</html>
