@@ -2,6 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
+    <meta name="referrer" content="strict-origin-when-cross-origin">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>惠康中医 · 下载中心（本地统一包 / 云端统一包）</title>
     <style>
@@ -3521,24 +3522,73 @@
         }
 
         // 订单激活状态查询（activated 后停止轮询）
-        async function queryOrderStatus(manual) {
+        // ★ 2026-10-14 单调请求序号：弱网下手动验证/轮询响应乱序时，迟到的旧响应不得覆盖新状态
+        let __orderStatusSeq = 0;
+        // ★ 2026-10-14 phoneOverride 仅本次手动验证携带；只有服务端确认匹配后
+        //   才提交到 window.__resumePhone 供 30s 轮询复用——错号绝不污染后台轮询。
+        async function queryOrderStatus(manual, phoneOverride) {
             if (!orderInfo.number) return;
-            const phone = (document.getElementById('custPhone').value || '').trim();
+            // ★ 2026-10-14 恢复模式无 custPhone 表单：用 URL ?p= 或验证盒输入的手机号
+            let phone = '';
+            if (phoneOverride) phone = String(phoneOverride).trim();
+            if (!phone) {
+                try {
+                    const __cpEl = document.getElementById('custPhone');
+                    if (__cpEl) phone = String(__cpEl.value || '').trim();
+                } catch (e) {}
+            }
+            if (!phone && window.__resumePhone) phone = String(window.__resumePhone).trim();
             const textEl = document.getElementById('orderStatusText');
+            const __seq = ++__orderStatusSeq;
             try {
                 const res = await fetch(BASE + '/api/license/order-status?orderNo=' +
                     encodeURIComponent(orderInfo.number) + '&phone=' + encodeURIComponent(phone));
                 const data = await res.json();
+                if (__seq !== __orderStatusSeq) return; // 已有更新的查询发出，丢弃迟到响应
                 if (!data.success) {
+                    // ★ 2026-10-14 M1：恢复模式下"手机号不匹配"只联动验证盒（红字+可重试），
+                    //   不覆盖主状态区付款指引、不停止轮询；订单失效等其他错误维持红条原行为。
+                    var __isPhoneMismatch = window.__orderResumeMode && /手机号/.test(data.error || '');
+                    if (__isPhoneMismatch) {
+                        try {
+                            var __pmMsg = document.getElementById('resumePhoneVerifyMsg');
+                            if (__pmMsg) {
+                                __pmMsg.style.color = '#b91c1c';
+                                __pmMsg.textContent = data.error || '手机号验证失败，请核对后重新输入';
+                            }
+                        } catch (ePm) {}
+                        return;
+                    }
                     textEl.textContent = '❌ ' + (data.error || '查询失败');
+                    // ★ 2026-10-14 手机号不匹配时联动验证盒（恢复模式）：保持输入态并红字提示
+                    try {
+                        var __evMsg = document.getElementById('resumePhoneVerifyMsg');
+                        if (__evMsg && window.__orderResumeMode) {
+                            __evMsg.style.color = '#b91c1c';
+                            __evMsg.textContent = data.error || '手机号验证失败，请核对后重新输入';
+                        }
+                    } catch (eEv) {}
                     return;
                 }
+                // ★ 2026-10-14 手动验证手机号通过：提交为轮询手机号，之后后台自动带出码
+                if (phoneOverride && data.phoneVerified) window.__resumePhone = String(phoneOverride).trim();
                 renderOrderStatus(data);
                 if (data.status === 'activated' || data.status === 'rejected') {
                     stopOrderStatusPolling();
                 }
             } catch (e) {
-                if (manual) showToast('网络错误，请稍后重试');
+                if (__seq !== __orderStatusSeq) return;
+                if (manual) {
+                    showToast('网络错误，请稍后重试');
+                    // ★ 2026-10-14 网络异常时复位验证盒提示，避免停留"正在验证…"
+                    try {
+                        var __neMsg = document.getElementById('resumePhoneVerifyMsg');
+                        if (__neMsg && window.__orderResumeMode) {
+                            __neMsg.style.color = '#b91c1c';
+                            __neMsg.textContent = '网络错误，请稍后重试';
+                        }
+                    } catch (eNe) {}
+                }
                 else textEl.textContent = '网络波动，稍后自动重试...';
             }
         }
@@ -3571,14 +3621,20 @@
                 const _isCloud = String(data.versionLabel || '').indexOf('云端') >= 0;
                 if (_isCloud) {
                     html = '🎉 <strong>已开通成功</strong>：管理员已开通您的云端账号。<br>' +
-                        '登录账号：<strong>' + (data.phone || '下单时填写的手机号') + '</strong>，' +
-                        '初始密码：<strong>admin</strong>，请登录后立即修改密码。<br>' +
-                        '专属激活码（见下方）用于桌面端/APP 绑定激活，复制后粘贴到软件"激活授权"弹窗即可。';
+                        (__hasCode
+                            ? ('登录账号：<strong>' + (data.phone || '下单时填写的手机号') + '</strong>，' +
+                               '初始密码：<strong>admin</strong>，请登录后立即修改密码。<br>' +
+                               '专属激活码（见下方）用于桌面端/APP 绑定激活，复制后粘贴到软件“激活授权”弹窗即可。')
+                            : ('登录账号为<strong>您下单时填写的手机号</strong>，初始密码：<strong>admin</strong>，请登录后立即修改密码。<br>' +
+                               '专属激活码请在下方<strong>验证下单手机号</strong>后查看（用于桌面端/APP 绑定激活）；也可直接回到软件，检测到激活后会自动完成绑定。'));
                 } else {
-                    html = '🎉 <strong>已激活</strong>：您的专属激活码已生成（见下方）。<br>' +
-                        // ★ 2026-09-04 流程优化：强烈建议客户回到APP而非停留在官网复制激活码，
-                        //   APP 端断点续传/Observer会自动装码→避免 Tab2 激活码激活限流+密码错位。
-                        '<span style="color:#16a34a;">✅ 同时惠康中医 APP/桌面版会自动弹"激活成功请重启登录"，<strong>不用复制激活码也可以</strong>，直接回到APP即可。</span>';
+                    html = __hasCode
+                        ? ('🎉 <strong>已激活</strong>：您的专属激活码已生成（见下方）。<br>' +
+                           // ★ 2026-09-04 流程优化：强烈建议客户回到APP而非停留在官网复制激活码，
+                           //   APP 端断点续传/Observer会自动装码→避免 Tab2 激活码激活限流+密码错位。
+                           '<span style="color:#16a34a;">✅ 同时惠康中医 APP/桌面版会自动弹“激活成功请重启登录”，<strong>不用复制激活码也可以</strong>，直接回到APP即可。</span>')
+                        : ('🎉 <strong>已激活</strong>：您的专属激活码已生成。<br>' +
+                           '在下方<strong>验证下单手机号</strong>后即可查看并复制激活码；<span style="color:#16a34a;">也可以直接回到惠康中医 APP/桌面版，会自动弹“激活成功请重启登录”，<strong>不复制激活码也可以</strong>。</span>');
                 }
                 if (__hasCode) {
                     document.getElementById('licenseCodeText').textContent = data.licenseCode || '';
@@ -3597,16 +3653,18 @@
                         codeBox.parentNode.appendChild(__doneHint);
                     }
                     __doneHint.innerHTML = '💡 您现在可以 <strong>关闭这个页面</strong>，回到惠康中医 APP/桌面版即可。' +
-                        '<br>APP/桌面版会自动检测到激活状态并弹提示"激活成功，请重启登录"，无需您再做其他操作。' +
-                        (_isCloud ? ('<br>🌐 云端登录账号：<strong>' + (data.phone || '下单时填写的手机号') + '</strong>，初始密码：<strong>admin</strong>（登录后请立即修改）。') : '');
+                        '<br>APP/桌面版会自动检测到激活状态并弹提示“激活成功，请重启登录”，无需您再做其他操作。' +
+                        ((_isCloud && data.phoneVerified) ? ('<br>🌐 云端登录账号：<strong>' + (data.phone || '下单时填写的手机号') + '</strong>，初始密码：<strong>admin</strong>（登录后请立即修改）。') : '');
                 } catch (_ef) {}
                 // ★ P2-2 激活成功 alert 强提示：轮询 30s 一次 → 守卫确保只弹一次
                 try {
                     if (!window.__activatedAlertDone) {
                         window.__activatedAlertDone = true;
                         (function() {
-                            var __msg = '🎉 激活成功！\n\n✅ 您的专属激活码已生成（本页下方可看到）。\n\n👉 现在请【关闭这个页面】，回到惠康中医 APP/桌面版。\n\n✅ APP/桌面版会自动检测到激活状态，稍后弹出"激活成功，请重启登录"提示——按提示重新登录即可使用，无需复制激活码手动粘贴。';
-                            if (_isCloud) __msg += '\n\n🌐 云端版账号信息：\n登录账号：' + (data.phone || '下单时填写的手机号') + '\n初始密码：admin（登录后请立即修改）';
+                            var __msg = __hasCode
+                                ? '🎉 激活成功！\n\n✅ 您的专属激活码已生成（本页下方可看到）。\n\n👉 现在请【关闭这个页面】，回到惠康中医 APP/桌面版。\n\n✅ APP/桌面版会自动检测到激活状态，稍后弹出“激活成功，请重启登录”提示——按提示重新登录即可使用，无需复制激活码手动粘贴。'
+                                : '🎉 激活成功！\n\n👉 现在请【关闭这个页面】，回到惠康中医 APP/桌面版——软件会自动检测到激活状态并完成装码，无需手动复制。\n\n如需保留激活码，可在本页订单状态区输入下单手机号，验证通过后激活码自动显示。';
+                            if (_isCloud && data.phoneVerified) __msg += '\n\n🌐 云端版账号信息：\n登录账号：' + (data.phone || '下单时填写的手机号') + '\n初始密码：admin（登录后请立即修改）';
                             try { alert(__msg); } catch (_e1) {}
                             try { window.close(); } catch (_e2) {}
                         })();
@@ -3618,6 +3676,37 @@
                 html = '⏳ 当前状态：' + data.status;
             }
             textEl.innerHTML = html;
+            // ★ 2026-10-14 恢复模式手机号验证盒联动：已验证显示绿色通过态；
+            //   激活码已显示则隐藏验证盒；其余状态保持输入态（可提前验证，激活即出码）
+            try {
+                var __rpb = document.getElementById('resumePhoneVerifyBox');
+                if (__rpb && window.__orderResumeMode) {
+                    var __verified = !!(data && data.phoneVerified);
+                    var __rInp = document.getElementById('resumePhoneInput');
+                    var __rBtn = document.getElementById('resumePhoneVerifyBtn');
+                    var __rTit = document.getElementById('resumePhoneVerifyTitle');
+                    var __rMsg = document.getElementById('resumePhoneVerifyMsg');
+                    if (__verified && __hasCode) {
+                        __rpb.style.display = 'none';
+                    } else {
+                        __rpb.style.display = 'block';
+                        __rpb.style.borderColor = __verified ? '#86efac' : '#93c5fd';
+                        __rpb.style.background = __verified ? '#f0fdf4' : '#fff';
+                        if (__rInp) __rInp.style.display = __verified ? 'none' : '';
+                        if (__rBtn) __rBtn.style.display = __verified ? 'none' : '';
+                        if (__rTit) {
+                            __rTit.style.color = __verified ? '#15803d' : '#1e40af';
+                            __rTit.textContent = __verified ? '✅ 下单手机号已验证' : '🔐 查看激活码需验证下单手机号';
+                        }
+                        if (__rMsg) {
+                            __rMsg.style.color = '#64748b';
+                            __rMsg.textContent = __verified
+                                ? '手机号双因子已通过，激活码生成后将自动显示在下方绿色框内。'
+                                : '为保障安全，激活码需手机号双因子校验后显示；您也可以直接关闭网页回到软件，激活成功后会自动装码，无需手动复制。';
+                        }
+                    }
+                }
+            } catch (_rpbE) {}
         }
 
         function startOrderStatusPolling() {
@@ -3719,12 +3808,25 @@
         //   凭订单号直达付款步骤：收款码 + 只读订单信息 + 状态自动轮询，无任何表单、
         //   不读 cn/n/p 参数（信息以服务端订单记录为准，杜绝字段合并污染）。
         //   订单失效：红条提示并回正常购买流程；已激活：轮询显示"回APP自动激活"指引。
-        async function enterOrderResumeMode(orderNo) {
+        async function enterOrderResumeMode(orderNo, phone) {
             try {
+                // ★ 2026-10-14 恢复模式手机号双因子（order-status 不带手机号时服务端
+                //   安全策略不返回激活码）：URL ?p= 预填或客户在状态盒内手动输入验证。
+                window.__resumePhone = (phone && /^1[3-9]\d{9}$/.test(String(phone).trim()))
+                    ? String(phone).trim() : '';
                 if (typeof switchToPurchase === 'function') switchToPurchase();
                 try { goStep(3); } catch (eGo) {}
-                const res = await fetch(BASE + '/api/license/order-status?orderNo=' + encodeURIComponent(orderNo));
+                var __resumeQs = '?orderNo=' + encodeURIComponent(orderNo) +
+                    (window.__resumePhone ? ('&phone=' + encodeURIComponent(window.__resumePhone)) : '');
+                const res = await fetch(BASE + '/api/license/order-status' + __resumeQs);
                 const data = await res.json().catch(() => null);
+                // ★ 2026-10-14 URL 自带手机号与订单不匹配（403）：订单本身有效，
+                //   不能误判"订单失效"——丢弃错误手机号，按无手机号重查一次，
+                //   后续客户可在状态盒手动输入正确号码领码。
+                if ((!data || !data.success) && window.__resumePhone && data && /手机号/.test(data.error || '')) {
+                    window.__resumePhone = '';
+                    return enterOrderResumeMode(orderNo, '');
+                }
                 if (!data || !data.success) {
                     try { goStep(1); } catch (eGo2) {}
                     var __errBox = document.getElementById('orderResumeBanner');
@@ -3764,6 +3866,53 @@
                 // 状态轮询盒移入步骤3（付款后本页即可看到状态，无需翻页）
                 var __stBox = document.getElementById('orderStatusBox');
                 if (__stBox) { __stBox.style.display = 'block'; if (__s3) __s3.appendChild(__stBox); }
+                // ★ 2026-10-14 手机号双因子领码盒：恢复模式无表单，order-status 不带
+                //   手机号时服务端不发激活码（防订单号链接被枚举露码）。URL 已带合法
+                //   手机号则自动通过；否则给输入框，客户输下单手机号→带参重查→出码。
+                (function() {
+                    if (!__stBox || document.getElementById('resumePhoneVerifyBox')) return;
+                    var box = document.createElement('div');
+                    box.id = 'resumePhoneVerifyBox';
+                    box.style.cssText = 'margin-top:10px;padding:10px 12px;border:1px dashed #93c5fd;border-radius:8px;background:#fff;font-size:13px;';
+                    box.innerHTML =
+                        '<div id="resumePhoneVerifyTitle" style="color:#1e40af;margin-bottom:6px;font-weight:600;">🔐 查看激活码需验证下单手机号</div>' +
+                        '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+                            '<input id="resumePhoneInput" maxlength="11" inputmode="numeric" placeholder="输入下单时填写的手机号" style="flex:1;min-width:170px;padding:8px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:14px;">' +
+                            '<button id="resumePhoneVerifyBtn" type="button" style="padding:8px 16px;border:none;border-radius:6px;background:#2563eb;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">验证并查看激活码</button>' +
+                        '</div>' +
+                        '<div id="resumePhoneVerifyMsg" style="font-size:12px;margin-top:6px;color:#64748b;line-height:1.6;">为保障安全，激活码需手机号双因子校验后显示；您也可以直接关闭网页回到软件，激活成功后会自动装码，无需手动复制。</div>';
+                    var __ref = document.getElementById('licenseCodeBox');
+                    __stBox.insertBefore(box, __ref);
+                    var input = document.getElementById('resumePhoneInput');
+                    var btn = document.getElementById('resumePhoneVerifyBtn');
+                    if (input) input.addEventListener('input', function() {
+                        input.value = String(input.value || '').replace(/\D/g, '').slice(0, 11);
+                    });
+                    var doVerify = async function() {
+                        var v = String(input && input.value || '').trim();
+                        var msg = document.getElementById('resumePhoneVerifyMsg');
+                        if (!/^1[3-9]\d{9}$/.test(v)) {
+                            if (msg) { msg.style.color = '#b91c1c'; msg.textContent = '请输入正确的 11 位下单手机号'; }
+                            return;
+                        }
+                        // ★ 2026-10-14 不提前写 __resumePhone：号码仅本次请求携带，
+                        //   服务端确认匹配后由 queryOrderStatus 提交（错号不污染 30s 轮询）
+                        // ★ 2026-10-14 in-flight 禁用，防弱网连点产生竞态（配合单调请求序号）
+                        var __oldText = btn.textContent;
+                        btn.disabled = true;
+                        btn.style.opacity = '0.6';
+                        btn.textContent = '验证中…';
+                        if (msg) { msg.style.color = '#64748b'; msg.textContent = '正在验证…'; }
+                        try { await queryOrderStatus(true, v); }
+                        finally {
+                            btn.disabled = false;
+                            btn.style.opacity = '';
+                            btn.textContent = __oldText;
+                        }
+                    };
+                    if (btn) btn.addEventListener('click', doVerify);
+                    if (input) input.addEventListener('keydown', function(ev) { if (ev.key === 'Enter') doVerify(); });
+                })();
                 // 恢复模式无表单可返回，隐藏"上一步"
                 var __prev = document.querySelector('.purchase-step[data-step="3"] .step-nav .prev');
                 if (__prev) __prev.style.display = 'none';
@@ -4457,9 +4606,13 @@
                 // ★ 2026-09-06 架构重构：?orderNo= 订单恢复模式优先（客户端直建订单后跳转，
                 //   无表单直达付款步）；无 orderNo 才走旧 mid 预填/自动下单链路（旧包兼容）。
                 const __resumeOrderNo = (sp.get('orderNo') || sp.get('o') || '').trim().toUpperCase();
+                // ★ 2026-10-14 恢复模式领码双因子：客户端 orderNo 链接可携 ?p= 下单手机号
+                //   （仅用于 order-status 双因子查询以放行激活码，不参与任何表单/下单回填）
+                const __resumePhoneRaw = (sp.get('p') || sp.get('phone') || '').trim();
+                const __resumePhoneInit = /^1[3-9]\d{9}$/.test(__resumePhoneRaw) ? __resumePhoneRaw : '';
                 if (__resumeOrderNo) {
                     window.__orderResumeMode = true;
-                    enterOrderResumeMode(__resumeOrderNo);
+                    enterOrderResumeMode(__resumeOrderNo, __resumePhoneInit);
                 } else
                 if (true) {
                 const mid = sp.get('mid');

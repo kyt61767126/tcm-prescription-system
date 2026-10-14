@@ -1968,3 +1968,16 @@
   - **产物（2026-10-14 构建，PE-zone+签名+postbuild 全绿，asar 内 renderPhone×8/licenseInfo?.phone×3 双端实搜确认）**：云端 `cloud_desktop/dist/` 惠康中医-云端 Setup 1.2.268.exe（+便携版）、离线 `desktop/dist/` 惠康中医-本地 Setup 1.0.275.exe（+便携版）。源码提交 a569e0cd、打包副作用 AutoCommit 9743d632 均已推。**包仅本地构建，下载页未发布——需人工核验后走 一键发布.bat / auto-update-downloads.js --confirm**（本次 all 模式顺带重建云/离 APP，无 APP 代码改动可不发）。另：根目录两份未跟踪旧中文 bat（客户登录重置-新版V2/客户登录重置工具）缺 chcp 65001 会被编码门拦截，打包前临时移出仓库、打完移回（旧工具勿改勿外发，重置只用 ResetLogin-HKZY.bat）。
 * **★ 排障方法论**：「弹窗/界面一闪而过」先怀疑**断点续传/自愈自动流**（main.js __showActivateAfterLogin、activate-window autoRestore、auth-core resumeAdminPendingRequest），用 admin-status?machineId 直查云端权威态 + 客户端真代码 verifySignature 实测，比猜网络/猜版本快；写 license 的 `writeLicenseContent` **不验签**（只校验 JSON），验签在读取侧，排查「装上却不认」要直接调 verifySignature。
 * **【自我纠偏】在只有两张截图+一句「自动退出」时，曾一度脑补「客户重提码报 invalid_credentials 密码错误」并写入经验——无任何证据（客户没发报错），已撤回。教训：客户没说的报错不能写进 KNOWLEDGE；推断链每一步都要有截图/日志/API 回执支撑。**
+
+## 56. 【付费链】网页版打开付款页不显示激活码：恢复模式 orderNo 链接漏手机号双因子（2026-10-14）
+
+* **现象**：云端桌面「激活码激活→打开官网付款」（download.html?orderNo=xxx 恢复模式），客户付款成功后网页只显示「已开通成功」，**绿色激活码框不出码**。
+* **根因（服务端/客户端对不齐，实锤）**：`functions/api/license/order-status.js` 安全策略=必须 `orderNo`+`phone` **双因子匹配**才返回 `licenseCode`（无 phone 只给掩码手机号、licenseCode=null；错 phone 返 403「手机号与订单不匹配」；限流 60 次/小时/IP）。4 步表单模式有 custPhone 输入框一直带 phone，正常；恢复模式无表单、纯靠 URL——付款链接三处构造点中**云桌面独立窗 activate-window.html payGuideUrl 和 shared/auth-core/offline.js buildPayUrl 的 orderNo 分支都漏了 `&p=`**（仅 shared/auth-core/cloud.js openOfficialPayUrl 云端家族本就无条件追加 p）。客户机 V1.2.267 走独立窗 → 永远无码。
+* **★ 修复（页面兜底先行，对全端新老包即时生效）**：
+  - `public/download.html`（=site-official 镜像，push 即 Cloudflare Pages 部署）：恢复模式解析 `?p=`（严格手机号正则）；**无 p 时在订单状态盒插入手机号验证框**（输号→带 phone 手动重查→出码）；403 错号只红验证盒、不覆盖主状态付款指引；激活码始终 textContent 渲染。这样不更新任何客户端也能立刻领到码。
+  - 客户端链接补 p（增强，随各自版本带出）：offline.js buildPayUrl orderNo 分支 + 云桌面 activate-window payGuideUrl（**订单存根 `__orderFlow.phone` 优先**，输入框/state 仅兜底，防工单联系人≠下单号致 403）。
+  - **铁律**：手动验证失败值**不得写共享态**（错号一度写 `window.__resumePhone` 致 30s 轮询持续 403、主状态区被红条永久覆盖且轮询永不停止=第二审查 M1）。正确做法：`queryOrderStatus(manual, phoneOverride)` 只在服务端确认 `phoneVerified` 后才提交全局；配合单调请求序号防弱网乱序、in-flight 按钮禁用、catch 复位文案。
+  - 顺手加固：download.html `<head>` 加 `<meta name="referrer" content="strict-origin-when-cross-origin">`（订单 URL 含手机号，页面有 jsdelivr 二维码兜底脚本）。
+* **验证**：浏览器 mock 实测 8 态全过（无 p 验证盒/错号 403 红字且主区不污染+轮询不带错号/对号出码+验证盒隐藏/URL p 直达/乱序迟到 403 不覆盖/断网红字+按钮恢复+无「正在验证…」残留/验证通过后轮询自动带号）；两独立子代理代码审查（无 Critical/High）+ 安全审查无可利用项（激活码出码仍 100% 由服务端双因子决定，页面只暴露既有查询通道；手机号枚举受 60/h 限流+订单号高熵后缀不可行；新增 DOM 全静态模板/textContent 无 XSS）；node --check/内联脚本编译/双副本 hash 一致/diff-cross-version 四对基线/check-interface 6OK/copy-consistency 100 副本 0 失败。
+* **★ 付款链接三构造点排查清单（改订单/付款/领码链路必须三处同查）**：①`shared/auth-core/cloud.js` openOfficialPayUrl（云端网页/APP/云桌面内嵌场景，有 `if(fd.p)` 追加）；②`shared/auth-core/offline.js` buildPayUrl（离线家族，orderNo 与 mid 两分支，mid 分支早带 p/cn/n/wx）；③**云桌面 electron/activate-window.html payGuideUrl（独立窗自成一套，不经过 cloud.js，无 shared 源，漏改重灾区）**。
+* **生效分层（2026-10-14 晚）**：download.html 修复 push 后随 Pages 部署**立即对全端生效**（核心修复）；shared/auth-core/offline.js 在 APP 热更白名单（generate-app-hotupdate.cjs FILES 含 auth-core.js）+桌面热包，客户端自动带 p 需重签热包/整包（未做，待决策）；云桌面 activate-window.html 非白名单随整包（**当晚 1.2.268/1.0.275 不含本修复**，下一版才带出）——页面手动验证盒对旧包完全兼容，故不紧急。
