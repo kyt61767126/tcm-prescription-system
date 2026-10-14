@@ -427,15 +427,35 @@ const RULES = [
                 [/reqBody\.put\("clientClass",\s*"app"\)/, 'clientClass="app"']
             ], 'LicenseManager.java(离线APP)');
             // auth-core 双源 JS 直连分支（阶段1已修，防回退）
-            need(s.offline, [
-                [/productClass:\s*'offline',/, "offline 分支 productClass:'offline'"],
-                [/productClass:\s*'cloud',/, "云端APP分支 productClass:'cloud'"],
-                [/clientClass:\s*'app'/, "clientClass:'app'"]
-            ], 'auth-core/offline.js');
-            need(s.cloud, [
-                [/productClass:\s*'cloud',/, "productClass:'cloud'"],
-                [/clientClass:\s*'app'/, "clientClass:'app'"]
-            ], 'auth-core/cloud.js');
+            // ★ 2026-10-14 P3 收口后：claim body 由 buildActivationPayload 单点构造，
+            //   端形态字面量移入构造器。断言随之演进且强度更高——构造器缺失/被改名、
+            //   体内 productClass 三元或 clientClass 兜底丢失、调用点绕过构造器手写
+            //   body，任一发生即 FAIL（旧正则只认内联字面量，会误判合法收口）。
+            const extractBuilderBody = (src) => {
+                const start = src.indexOf('function buildActivationPayload');
+                if (start < 0) return '';
+                const brace = src.indexOf('{', start);
+                let depth = 0, i = brace;
+                for (; i < src.length; i++) {
+                    if (src[i] === '{') depth++;
+                    else if (src[i] === '}') { depth--; if (depth === 0) { i++; break; } }
+                }
+                return src.slice(brace, i);
+            };
+            const checkAuthCore = (src, name, expectClaimKinds) => {
+                const bbody = extractBuilderBody(src);
+                if (!bbody) { bad.push(name + ' 缺 buildActivationPayload（P3 收口构造器被删/改名）'); return; }
+                if (!/productClass:[\s\S]*?'cloud'[\s\S]*?'offline'/.test(bbody))
+                    bad.push(name + " 构造器缺 productClass cloud/offline 三元");
+                if (!/clientClass:[^;]*'app'/.test(bbody))
+                    bad.push(name + " 构造器缺 clientClass:'app' 兜底");
+                for (const k of expectClaimKinds) {
+                    if (!(new RegExp("buildActivationPayload\\('" + k + "'")).test(src))
+                        bad.push(name + ' claim 调用点未经过构造器: ' + k);
+                }
+            };
+            checkAuthCore(s.offline, 'auth-core/offline.js', ['claim-offline', 'claim-cloud']);
+            checkAuthCore(s.cloud, 'auth-core/cloud.js', ['claim-cloud']);
             return bad.length === 0
                 ? { pass: true, detail: '6 处激活入口端形态标识齐全' }
                 : { pass: false, detail: bad.join('；') + ' —— 缺标识的端在观察模式下不产生跨端数据、硬拦截下会误伤（服务端按数据不足放行但无法精确切换）' };
