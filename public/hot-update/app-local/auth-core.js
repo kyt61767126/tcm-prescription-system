@@ -7092,8 +7092,12 @@
         function buildPayUrl() {
             const dp = detectCarrier();
             if (__orderFlow && __orderFlow.orderNo) {
+                // ★ 2026-10-14 补下单手机号 p：官网恢复模式凭 orderNo+p 双因子查询才放行
+                //   激活码展示（无 p 时服务端安全策略不发码，客户在网页看不到激活码）
+                const __ofp = String(__orderFlow.phone || state.phone || '').trim();
                 return 'https://tcm-prescription-system.pages.dev/download.html?orderNo=' +
-                    encodeURIComponent(__orderFlow.orderNo) + '&dp=' + dp;
+                    encodeURIComponent(__orderFlow.orderNo) + '&dp=' + dp +
+                    (/^1[3-9]\d{9}$/.test(__ofp) ? ('&p=' + encodeURIComponent(__ofp)) : '');
             }
             var __edParam = (state.edition === 'institution') ? 'local-pro'
                 : (state.edition === 'personal' ? 'local-personal' : '');

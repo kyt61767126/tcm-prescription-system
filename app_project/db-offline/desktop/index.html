@@ -2874,8 +2874,12 @@ let currentUser = null;
         //   ② 归属收敛：把本人旧别名（phone / 被替代的手机号行名）名下的处方/回收站归属
         //      迁到规范用户名。以"规范名+已处理别名列表"做幂等标志，无新增别名时零成本。
         // 任何异常都必须 fail-open 返回原 user，绝不能阻断登录。
-        async function normalizeLoginIdentityAndHealOwnership(user) {
+        async function normalizeLoginIdentityAndHealOwnership(user, opts) {
             if (!user || !user.username) return user;
+            // ★ 2026-10-15 二次审查加固：credentialVerified 仅交互登录（当次输入并校验过密码）
+            //   才允许为 true；Electron 免密自动登录不传 → 只做身份归一/归属收敛，不回写密码，
+            //   防止把改密前的陈旧哈希盖到英文名行（自动登录 user 不保证密码新鲜）。
+            const __credVerified = !!(opts && opts.credentialVerified);
             const PHONE_RE_OWNER = /^1[3-9]\d{9}$/;
             try {
                 let effective = user;
@@ -2908,6 +2912,50 @@ let currentUser = null;
                         if (twins.length === 1 && normRole(twins[0]) === normRole(user)) {
                             const twin = twins[0];
                             replacedOldNames.push(String(user.username));
+                            // ★ 2026-10-15 P1 红米实报「手机号能登、英文名登录密码错误」根治
+                            //   （二次审查加固后两道闸）：
+                            //   闸1【仅交互认证】：本次必须是输入密码并通过认证的登录；Electron
+                            //       免密自动登录不回写，避免用改密前陈旧哈希覆盖新密码。
+                            //   闸2【新鲜度】：以 lastPwdUpdatedAt 比较——twin 英文名行的密码版本
+                            //       新于本次手机号行（用户在英文名身份上改过密）时跳过，旧密码
+                            //       永远不能把新密码回滚；双方都无时间戳的历史行视为同代，放行
+                            //       以修复红米污染哈希（无时间戳的英文名行必是改名后从未改过密）。
+                            //   App 无改名写回 Java config 通道，红米冷启动桥超时期间英文名行会
+                            //   长期滞留污染哈希（2026-10-01 双哈希事故残留），英文名直接登录
+                            //   命中该行 verifyPassword 必败；手机号行可登说明其密码权威可用。
+                            try {
+                                if (__credVerified && typeof getUsers === 'function' &&
+                                    typeof saveUsers === 'function') {
+                                    const healUsers = getUsers() || [];
+                                    // 权威值取存储行而非内存 user：密码可能刚在登录时完成
+                                    // SHA-256→PBKDF2 自动升级（升级只落存储行），避免把旧格式
+                                    // 哈希复制给 twin 导致英文名侧再延迟一轮收敛
+                                    const __pi = healUsers.findIndex(function (x) {
+                                        return !!x && String(x.username || '') === String(user.username || '');
+                                    });
+                                    const __authRow = __pi >= 0 ? healUsers[__pi] : user;
+                                    const __authPwd = __authRow && __authRow.password;
+                                    const __uTs = Number((__authRow && __authRow.lastPwdUpdatedAt) || 0) || 0;
+                                    const __tTs = Number(twin.lastPwdUpdatedAt || 0) || 0;
+                                    if (__authPwd && twin.password !== __authPwd && !(__tTs > __uTs)) {
+                                        const ti = healUsers.findIndex(function (x) {
+                                            return !!x && String(x.username || '') === String(twin.username || '');
+                                        });
+                                        if (ti >= 0) {
+                                            healUsers[ti] = Object.assign({}, healUsers[ti], { password: __authPwd });
+                                            if (__uTs > 0) healUsers[ti].lastPwdUpdatedAt = __uTs;
+                                            saveUsers(healUsers);
+                                            console.log('[OwnerHeal] twin 英文名行密码已按本次交互认证权威行修复:',
+                                                healUsers[ti].username);
+                                        }
+                                    } else if (__tTs > __uTs) {
+                                        console.log('[OwnerHeal] twin 密码版本更新（英文名侧已改密），跳过回写防回滚:',
+                                            twin.username);
+                                    }
+                                }
+                            } catch (ePwd) {
+                                console.warn('[OwnerHeal] twin 密码修复异常(不影响登录):', ePwd);
+                            }
                             const safeTwin = Object.assign({}, twin);
                             delete safeTwin.password;
                             effective = safeTwin;
@@ -3768,6 +3816,10 @@ let currentUser = null;
                             const __ri = __all.findIndex(u => u && (u.username === loginUsername || String(u.phone || '') === loginUsername));
                             if (__ri >= 0) {
                                 __all[__ri].password = await hashPassword(password);
+                                // ★ 2026-10-15 密码版本时间戳：登录 heal 双行修复的新鲜度判据，
+                                //   保证新改密码不会被孪生行旧哈希回滚
+                                __all[__ri].lastPwdUpdatedAt = Date.now();
+                                __all[__ri].updatedAt = __all[__ri].lastPwdUpdatedAt;
                                 saveUsers(__all);
                                 try {
                                     if (window.electronAPI && typeof window.electronAPI.renameUser === 'function') {
@@ -3831,7 +3883,9 @@ let currentUser = null;
                     // ★★ 2026-10-13 P0：改名身份归一 + 历史处方归属自愈（必须在 currentUser
                     //   赋值与 loadData 之前完成；内部全异常 fail-open，绝不阻断登录）。
                     //   修复存量：早版本改名未迁处方归属 / config 回写失败造成的双账号行。
-                    try { user = await normalizeLoginIdentityAndHealOwnership(user); }
+                    //   credentialVerified=true：本路径已通过密码校验（含自动升级落盘），
+                    //   允许 heal 用权威行修复 twin 英文名行污染密码；自动登录路径不传此标志
+                    try { user = await normalizeLoginIdentityAndHealOwnership(user, { credentialVerified: true }); }
                     catch (eHeal) { console.warn('[OwnerHeal] 登录自愈异常(不影响登录):', eHeal); }
 
                     currentUser = user;
@@ -3967,6 +4021,9 @@ let currentUser = null;
                 if (!pwd2) return;
                 if (pwd !== pwd2) { alert('两次输入的密码不一致，请重新操作'); return; }
                 users[idx].password = await hashPassword(pwd);
+                // ★ 2026-10-15 密码版本时间戳（heal 新鲜度判据，理由同忘记密码入口）
+                users[idx].lastPwdUpdatedAt = Date.now();
+                users[idx].updatedAt = users[idx].lastPwdUpdatedAt;
                 saveUsers(users);
                 // ★ 2026-09-06 第八轮修复（Single-Writer 补全）：重置密码必须回写 config.json
                 //   权威层（renameUser IPC，newPassword 传明文与注册存储格式一致），否则下次冷启动
@@ -4329,6 +4386,9 @@ let currentUser = null;
                 // ★ 只改用户名时密码保持原值
                 if (_pwdChange) {
                     users[userIndex].password = await hashPassword(newPwd);
+                    // ★ 2026-10-15 密码版本时间戳（heal 新鲜度判据，理由同忘记密码入口）
+                    users[userIndex].lastPwdUpdatedAt = Date.now();
+                    users[userIndex].updatedAt = users[userIndex].lastPwdUpdatedAt;
                 }
                 saveUsers(users);
                 // ★ 2026-10-01：回写失败不再静默（与编辑用户入口同修），失败必须告知，
@@ -4596,6 +4656,9 @@ let currentUser = null;
                 users[userIndex].userType = newUserType;
                 if (newPassword.trim()) {
                     users[userIndex].password = await hashPassword(newPassword.trim());
+                    // ★ 2026-10-15 密码版本时间戳（heal 新鲜度判据，理由同忘记密码入口）
+                    users[userIndex].lastPwdUpdatedAt = Date.now();
+                    users[userIndex].updatedAt = users[userIndex].lastPwdUpdatedAt;
                 } else if (!isPasswordHashed(users[userIndex].password)) {
                     users[userIndex].password = await hashPassword(users[userIndex].password);
                 }

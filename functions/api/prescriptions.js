@@ -1,4 +1,4 @@
-import { parseAuthHeader, isPlatformAdmin, isClinicAdmin, isAdmin, isCashier, userMustChangePassword } from './_lib/auth.js';
+import { parseAuthHeader, isPlatformAdmin, isClinicAdmin, isAdmin, isCashier, userMustChangePassword, ownerAliasesOf } from './_lib/auth.js';
 import { getKV } from './_lib/kv.js';
 import { getDB, isD1Enabled } from './_lib/d1.js';
 import { writeAuditLog } from './_lib/audit-log.js';
@@ -423,6 +423,11 @@ export async function onRequest(context) {
             return json({ success: false, error: '缺少诊所信息' }, 400);
         }
 
+        // ★★ 2026-10-15 本人处方归属别名集（当前用户名 + 手机号 + 历次曾用名，服务端 token
+        //   签名下发）。改名后即便个别存储副本 createdBy 未迁净，本人读/改/删/恢复自己的
+        //   历史处方不受影响；别名全部服务端签发，客户端无法构造他人别名（无水平越权面）。
+        const ownerNames = ownerAliasesOf(currentUser);
+
         // platform_admin 无 clinicId，处方功能主要用于诊所用户
         const targetClinicId = clinicId || 'platform';
         // ★ 2026-09-10 处方按日期分 key：KV_PRESCRIPTIONS 为旧全量 key（兼容期仅读取，不再写入）
@@ -444,7 +449,7 @@ export async function onRequest(context) {
                     trash = (await kv.get(KV_TRASH, 'json')) || [];
                 }
                 if (!currentUser.isAdmin && !isPlatformAdmin(currentUser)) {
-                    trash = trash.filter(p => p.createdBy === currentUser.username);
+                    trash = trash.filter(p => ownerNames.indexOf(p.createdBy) !== -1);
                 }
                 trash.sort((a, b) => {
                     const timeA = new Date(a.deletedAt || 0).getTime();
@@ -468,7 +473,7 @@ export async function onRequest(context) {
             let filtered = prescriptions;
             // ★ 2026-08-25 前台收费：cashier 与管理员一样可读全所处方（收费工作台数据源）
             if (!isAdmin(currentUser) && !isCashier(currentUser)) {
-                filtered = prescriptions.filter(p => p.createdBy === currentUser.username);
+                filtered = prescriptions.filter(p => ownerNames.indexOf(p.createdBy) !== -1);
             }
 
             // P1-4 排序一致性：改为按 createdAt 时间戳倒序排序（与前端 sortPrescriptionsByTimeDesc 对齐）
@@ -578,7 +583,7 @@ export async function onRequest(context) {
                     if (!existing || !existing.deletedAt) {
                         return json({ success: false, error: '回收站中未找到此处方' }, 404);
                     }
-                    if (existing.createdBy !== currentUser.username && !isAdmin(currentUser)) {
+                    if (ownerNames.indexOf(existing.createdBy) === -1 && !isAdmin(currentUser)) {
                         return json({ success: false, error: '无权恢复此处方' }, 403);
                     }
                     await d1Restore(db, targetClinicId, prescriptionId);
@@ -601,7 +606,7 @@ export async function onRequest(context) {
                 }
 
                 const prescription = trash[idx];
-                if (prescription.createdBy !== currentUser.username && !isAdmin(currentUser)) {
+                if (ownerNames.indexOf(prescription.createdBy) === -1 && !isAdmin(currentUser)) {
                     return json({ success: false, error: '无权恢复此处方' }, 403);
                 }
 
@@ -773,7 +778,7 @@ export async function onRequest(context) {
                     if (!existing || !existing.deletedAt) {
                         return json({ success: false, error: '回收站中未找到此处方' }, 404, context.request);
                     }
-                    if (existing.createdBy !== currentUser.username && !isAdmin(currentUser)) {
+                    if (ownerNames.indexOf(existing.createdBy) === -1 && !isAdmin(currentUser)) {
                         return json({ success: false, error: '无权删除此处方' }, 403, context.request);
                     }
                     await d1PermanentDelete(db, targetClinicId, prescriptionId);
@@ -792,7 +797,7 @@ export async function onRequest(context) {
                 }
 
                 const prescription = trash[idx];
-                if (prescription.createdBy !== currentUser.username && !isAdmin(currentUser)) {
+                if (ownerNames.indexOf(prescription.createdBy) === -1 && !isAdmin(currentUser)) {
                     return json({ success: false, error: '无权删除此处方' }, 403, context.request);
                 }
 
@@ -813,7 +818,7 @@ export async function onRequest(context) {
                 if (!existing || existing.deletedAt) {
                     return json({ success: false, error: 'Prescription not found' }, 404, context.request);
                 }
-                if (existing.createdBy !== currentUser.username && !isAdmin(currentUser)) {
+                if (ownerNames.indexOf(existing.createdBy) === -1 && !isAdmin(currentUser)) {
                     return json({ success: false, error: '无权删除此处方' }, 403, context.request);
                 }
                 await d1SoftDelete(db, targetClinicId, prescriptionId, currentUser.username);
@@ -826,7 +831,7 @@ export async function onRequest(context) {
                 if (!prescription) {
                     return json({ success: false, error: 'Prescription not found' }, 404, context.request);
                 }
-                if (prescription.createdBy !== currentUser.username && !isAdmin(currentUser)) {
+                if (ownerNames.indexOf(prescription.createdBy) === -1 && !isAdmin(currentUser)) {
                     return json({ success: false, error: '无权删除此处方' }, 403, context.request);
                 }
             }

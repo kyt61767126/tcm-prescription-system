@@ -14,9 +14,10 @@
 
 ---
 
-## 当前基线（2026-10-14 更新）
+## 当前基线（2026-10-15 更新）
 
-- **main HEAD：`c63761d3`**（已 push；含 vm 沙箱门禁三铁律与第⑰道授权自愈门禁修复，台账基线行之后的 4 个提交均已上线）。
+- **main HEAD：提交后见 `git log -1`**（2026-10-15 红米改名双端根治，见 OPEN H4；上一基线 `dad9e997`）。
+- 2026-10-15 已随热更上线（Pages 部署后）：app-local 与 desktop/local 热更 **2026.10.15-1（minAppCode 288 不抬）**，含红米改名双端修复 + 补齐 10-13/10-14 已提交但未热发的激活链改进（auth-core 累积漂移随包）。
 - 近 24h 已上线、**勿重复实施**：
   - KV list 1000/天告警根治（order_index + safeListPage 熔断/短缓存，`6601c943`，详见 KNOWLEDGE 2026-10-13 条目）。
   - 激活架构 **P1** 客户端「只填码」身份自动带出（`b7bf5530`）。
@@ -28,6 +29,14 @@
 ---
 
 ## OPEN 遗留任务
+
+### H4 ｜优先级：高｜红米改名修复云端 functions 部署 + 真机复验（2026-10-15）
+- **代码已提交推送**：users.js（migratePrescriptionOwnership + formerUsernames 链 + 两改名端点）、prescriptions.js + _lib/auth.js（token `a` 别名签名与读侧别名过滤）、离线 5 副本 index.html（heal 双闸）、热更 2026.10.15-1 双端。双独立审查+安全二查已过，105 断言全绿（rename-cloud 36 / rename-heal-pwd 31 / owner-migrate 回归 38）。
+- **⏳ BLOCKED 待办（需凭据/真机）**：
+  1. **云端部署（必须）**：`npx wrangler deploy`（或项目既有发布脚本）部署 functions——本机无 Cloudflare 凭据，各机自备。部署后回归：诊所账号手机号改英文名 → 历史处方与回收站立即可见；`migrationWarning` 仅在单副本失败时 true；审计日志含 migrate 统计。
+  2. **真机复验（红米）**：联网打开 App 拉到 2026.10.15-1 → 彻底划掉重进 → ①手机号登录一次（heal 修复英文名行）→ 英文名退出再登成功；②历史处方可见；③英文名身份改密后手机号+旧密码登录不得把新密码回滚（闸2）。
+  3. 已知遗留（产品确认后另开）：云端 formulas 个人常用方 created_by 未随改名迁移。
+- 详见 KNOWLEDGE 2026-10-15 条目（§408-413）。
 
 ### H2 ｜优先级：中（需人工真机，Agent 不可替代）｜激活 P1/P2/P3 真机回归
 - **执行用详细清单（含预期/抓包点/记录模板，执行人直接照做）**：`.trae/documents/h2-real-device-regression-checklist.md`

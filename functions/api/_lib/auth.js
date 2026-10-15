@@ -281,7 +281,18 @@ export async function signToken(payload, env, ttlMs = null) {
         } catch (e) { /* KV 读取失败按 v=0 继续（不影响正常登录） */ }
     }
     // ★ 2026-09-10 多端会话：签名体纳入 k（clientClass），供 verifyToken 按端类型定位 session
-    const tokenPayload = { u: payload.username, r: payload.role, c: payload.clinicId || null, e: expireAt, v: tokenVersion, k: payload.clientClass || null };
+    // ★ 2026-10-15：签名体纳入 a（处方归属别名=手机号+历次曾用名，改名时累积，改名即撤销旧
+    //   token 重签）。读侧按别名集过滤处方，即使部分存储副本迁移失败或撤销传播窗口期内旧会话
+    //   仍以旧名写入，本人历史处方也不丢失（云端版登录自愈兜底）。
+    const aliasSet = new Set();
+    if (Array.isArray(payload.aliases)) {
+        for (const a of payload.aliases) {
+            const s = String(a == null ? '' : a).trim();
+            if (s) aliasSet.add(s);
+            if (aliasSet.size >= 10) break;
+        }
+    }
+    const tokenPayload = { u: payload.username, r: payload.role, c: payload.clinicId || null, e: expireAt, v: tokenVersion, k: payload.clientClass || null, a: Array.from(aliasSet) };
     const payloadStr = JSON.stringify(tokenPayload);
     const sig = await hmacSign(payloadStr, secret);
     const fullPayload = { ...tokenPayload, s: sig };
@@ -311,6 +322,8 @@ export async function verifyToken(token, env) {
         const sigBody = { u: payload.u, r: payload.r, c: payload.c, e: payload.e };
         if (payload.v !== undefined) sigBody.v = payload.v;
         if (payload.k !== undefined) sigBody.k = payload.k;
+        // ★ 2026-10-15：a（归属别名）纳入签名，旧 token 无 a 不拼接保持兼容
+        if (payload.a !== undefined) sigBody.a = Array.isArray(payload.a) ? payload.a : [];
         const expectedSig = await hmacSign(JSON.stringify(sigBody), secret);
         if (expectedSig !== payload.s) return null;
 
@@ -357,7 +370,9 @@ export async function verifyToken(token, env) {
             username: payload.u,
             role: payload.r,
             clinicId: payload.c || null,
-            isAdmin: payload.r === ROLE_PLATFORM_ADMIN || payload.r === ROLE_CLINIC_ADMIN
+            isAdmin: payload.r === ROLE_PLATFORM_ADMIN || payload.r === ROLE_CLINIC_ADMIN,
+            // ★ 2026-10-15：服务端签名的处方归属别名（手机号/曾用名），读侧据此放行本人旧名数据
+            aliases: Array.isArray(payload.a) ? payload.a : []
         };
     } catch (e) {
         return null;
@@ -613,4 +628,23 @@ export function isStaff(user) {
 
 export function isAdmin(user) {
     return isPlatformAdmin(user) || isClinicAdmin(user);
+}
+
+// ★★ 2026-10-15 处方归属别名集（改名不丢历史处方的读侧兜底）：
+//   兼容两种 user 形态——①KV 用户行（含 phone / formerUsernames，登录签发 token 时用）；
+//   ②verifyToken 返回的会话身份（含 username / aliases，处方接口鉴权后用）。
+//   别名全部由服务端在改名时落库或在 token 中签名，客户端不可控；上限 10 个防膨胀。
+export function ownerAliasesOf(user) {
+    const out = [];
+    const push = v => {
+        const s = String(v == null ? '' : v).trim();
+        if (s && out.indexOf(s) === -1) out.push(s);
+    };
+    if (user) {
+        push(user.username);
+        push(user.phone);
+        if (Array.isArray(user.formerUsernames)) user.formerUsernames.forEach(push);
+        if (Array.isArray(user.aliases)) user.aliases.forEach(push);
+    }
+    return out.slice(0, 10);
 }

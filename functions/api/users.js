@@ -7,6 +7,7 @@ import {
     ROLE_PLATFORM_ADMIN, ROLE_CLINIC_ADMIN, ROLE_DOCTOR, ROLE_CASHIER, ROLE_SERVICE,
     KV_SYSTEM_CLINICS, KV_SYSTEM_PLATFORM_ADMINS, KV_SYSTEM_SERVICE_ACCOUNTS,
     isStaff,
+    ownerAliasesOf,
     findPhoneOccupancy
 } from './_lib/auth.js';
 import { provisionCloudAccount, isTaobaoAutoOrderSource } from './license/_lib/admin-account.js';
@@ -27,7 +28,8 @@ import { writeAuditLog } from './_lib/audit-log.js';
 // ★ 2026-09-10 P3 D1 迁移：设备绑定 D1 双写
 import { getDB, isD1Enabled } from './_lib/d1.js';
 // ★ 2026-09-15 登录提速：首屏处方（D1 快路径，与 writeUserSession 并行）
-import { d1LoadPrescriptions } from './_lib/prescriptions-store.js';
+// ★ 2026-10-15 改名归属迁移：getPrescriptionDayKeys 取 KV 日期分片（收口 10-13 云端遗留）
+import { d1LoadPrescriptions, getPrescriptionDayKeys } from './_lib/prescriptions-store.js';
 // ★ 2026-10-05 历史登录打卡/累计聚合（诊所管理「累计登录」，KNOWLEDGE §53）
 import { punchLogin, getClinicLoginHistory } from './_lib/login-punch.js';
 
@@ -664,6 +666,108 @@ async function findUserForLogin(kv, username, env = null) {
     return { user: null, error: { code: 'USER_NOT_FOUND', message: '用户不存在' } };
 }
 
+// ★★ 2026-10-15 P0 云端改名处方归属迁移（收口 KNOWLEDGE 2026-10-13 记录的云端遗留：
+//   set-username 历史上只迁 user_devices/token，不迁处方 created_by——手机号改英文名后
+//   历史处方与回收站在新用户名下全部查空；离线端 10-13 已修，云端本函数为同语义服务端版）。
+//   处方归属三处副本，全部收敛：
+//   ① D1 prescriptions.created_by（主存储，GET 优先读；含回收站行 deleted_at，一并 UPDATE）；
+//   ② KV 日期分片 clinic:{cid}:prescriptions:{YYMMDD} 内嵌 createdBy（D1 不可用/空库回退源）；
+//   ③ KV 旧全量 key clinic:{cid}:prescriptions 与回收站 clinic:{cid}:prescriptions_trash。
+//   另清理 D1 clinic_users 旧 username 残留行（改名只写 KV，登录回填插新行后旧行不删，
+//   手机号登录 D1 命中旧行会交叉校验失败白跑一趟），幂等 DELETE。
+//   铁律：只改 createdBy === oldName 的项；可重复执行、支持 A→B→C 连续改名
+//   （部分副本失败时有读侧 formerUsernames 别名兜底，不会永久丢数据）；
+//   任何单副本失败只记录不抛出（改名本身已落 KV，不能因处方迁移失败回滚用户名）。
+// opts.deleteOldUserRow：仅当调用方已把新名用户行 UPSERT 成功时才允许删 D1 旧名行，
+//   否则宁可留双行（登录链路 D1 缺行可自愈回填），也不许把该用户在 D1 删成零行。
+async function migratePrescriptionOwnership(kv, env, clinicId, oldName, newName, opts = {}) {
+    const stats = { d1Rx: 0, kvDayKeys: 0, kvRx: 0, legacyRx: 0, trashRx: 0, errors: [] };
+    if (!clinicId || !oldName || !newName || oldName === newName) return stats;
+
+    // ① D1 主存储：处方归属（含回收站行）+ 可选的用户表旧行清理
+    try {
+        if (isD1Enabled(env)) {
+            const db = getDB(env);
+            if (db) {
+                try {
+                    const r = await db.prepare(
+                        `UPDATE prescriptions SET created_by = ? WHERE clinic_id = ? AND created_by = ?`
+                    ).bind(newName, clinicId, oldName).run();
+                    stats.d1Rx = (r && r.meta && typeof r.meta.changes === 'number') ? r.meta.changes : 0;
+                } catch (e) {
+                    stats.errors.push('d1-rx:' + e.message);
+                    console.error('[rename-migrate] D1 处方归属 UPDATE 失败:', e.message);
+                }
+                // 仅新名行 UPSERT 成功后才删旧行（B3 铁律：UPSERT 失败时双行优于零行）
+                if (opts.deleteOldUserRow === true) {
+                    try {
+                        await db.prepare(
+                            `DELETE FROM clinic_users WHERE clinic_id = ? AND username = ?`
+                        ).bind(clinicId, oldName).run();
+                    } catch (e) {
+                        // 旧行残留只影响性能不影响正确性，记日志即可
+                        console.warn('[rename-migrate] D1 clinic_users 旧行清理失败:', e.message);
+                    }
+                }
+            }
+        }
+    } catch (e) {
+        stats.errors.push('d1:' + e.message);
+        console.error('[rename-migrate] D1 段异常:', e.message);
+    }
+
+    // ②③ KV 副本：日期分片 + 旧全量 key + 回收站（D1 为空/不可用时 GET 回退读这些）
+    try {
+        // 分片枚举失败绝不能静默吞成"无分片"（会把整库跳过还看着像零迁移）
+        let dayKeys = [];
+        try {
+            dayKeys = await getPrescriptionDayKeys(kv, clinicId);
+        } catch (e) {
+            stats.errors.push('kv-index:' + e.message);
+            console.error('[rename-migrate] 日期分片枚举失败（仅旧全量/回收站会被迁移）:', e.message);
+        }
+        const allKeys = dayKeys.concat([
+            `clinic:${clinicId}:prescriptions`,
+            `clinic:${clinicId}:prescriptions_trash`
+        ]);
+        // 限量并发（≤5）防风暴 KV 写触发日限 429；单键失败重试 1 次仍败则记错跳过
+        const CONCURRENCY = 5;
+        const migrateOneKey = async (key) => {
+            let lastErr = null;
+            for (let attempt = 0; attempt < 2; attempt++) {
+                try {
+                    const arr = await kv.get(key, 'json');
+                    if (!Array.isArray(arr) || arr.length === 0) return;
+                    let changed = 0;
+                    for (const p of arr) {
+                        if (p && p.createdBy === oldName) { p.createdBy = newName; changed++; }
+                    }
+                    if (changed === 0) return;
+                    await kv.put(key, JSON.stringify(arr));
+                    if (key === `clinic:${clinicId}:prescriptions_trash`) {
+                        stats.trashRx += changed;
+                    } else if (key === `clinic:${clinicId}:prescriptions`) {
+                        stats.legacyRx += changed;
+                    } else {
+                        stats.kvDayKeys += 1;
+                        stats.kvRx += changed;
+                    }
+                    return;
+                } catch (e) { lastErr = e; }
+            }
+            stats.errors.push('kv:' + key.slice(-14) + ':' + (lastErr && lastErr.message));
+        };
+        for (let i = 0; i < allKeys.length; i += CONCURRENCY) {
+            await Promise.all(allKeys.slice(i, i + CONCURRENCY).map(migrateOneKey));
+        }
+    } catch (e) {
+        stats.errors.push('kv:' + e.message);
+        console.error('[rename-migrate] KV 段异常:', e.message);
+    }
+
+    return stats;
+}
+
 // 获取所有诊所的用户（用于 platform_admin）
 // ★ 2026-09-19 修复「用户管理找不到诊所」根因：改为 KV 权威 + D1 缺行自愈回填。
 //   原实现 D1 优先且 clinic_users 有任意行即提前返回、永不回源 KV——而所有开通/修改
@@ -998,6 +1102,14 @@ export async function onRequest(context) {
                 target.user.phone = oldUsername;
             }
 
+            // ★★ 2026-10-15 记录曾用名链（读侧别名兜底：迁移失败/token 撤销传播窗口期
+            //   旧名写入，登录 token 仍按别名集放行本人历史处方；支持连续改名累积）
+            if (target.store === 'clinic') {
+                const former = Array.isArray(target.user.formerUsernames) ? target.user.formerUsernames.slice() : [];
+                if (former.indexOf(oldUsername) === -1) former.push(oldUsername);
+                target.user.formerUsernames = former.slice(-10);
+            }
+
             // 执行改名
             target.user.username = newUsername;
             target.user.updatedAt = now;
@@ -1033,14 +1145,53 @@ export async function onRequest(context) {
                 await clearUserSession(kv, oldUsername);
             } catch (e) { console.warn('[set-username] 旧 token 撤销失败:', e); }
 
+            // ★★ 2026-10-15 P0 诊所用户改名：同步 D1 用户表 + 迁移全部处方归属。
+            //   不做这两步，手机号改英文名后：①历史处方/回收站在新用户名下查空；
+            //   ②D1 clinic_users 旧名行残留，手机号登录交叉校验白跑。platform_admin 无处方跳过。
+            let renameMigStats = null;
+            if (target.store === 'clinic' && target.clinicId) {
+                // D1 先 UPSERT 新名行（主键 clinic_id+username）；成功才允许迁移函数删旧名行
+                let d1UserUpsertOk = false;
+                try {
+                    if (isD1Enabled(context.env)) {
+                        const db = getDB(context.env);
+                        if (db) {
+                            try { await syncUserToD1(db, target.clinicId, target.user); d1UserUpsertOk = true; }
+                            catch (e) { console.warn('[set-username] D1 用户新名行 UPSERT 失败（保留旧行）:', e.message); }
+                        }
+                    }
+                } catch (e) { console.warn('[set-username] D1 用户表同步异常:', e); }
+                // 处方归属迁移：D1 UPDATE + KV 分片/全量/回收站（必须在返回前完成，
+                // 用户收到成功即重新登录；单副本失败不阻断，统计入审计/响应）
+                try {
+                    renameMigStats = await migratePrescriptionOwnership(
+                        kv, context.env, target.clinicId, oldUsername, newUsername,
+                        { deleteOldUserRow: d1UserUpsertOk });
+                    console.log('[set-username] 处方归属已迁移',
+                        oldUsername, '->', newUsername, JSON.stringify(renameMigStats));
+                } catch (e) {
+                    console.warn('[set-username] 处方归属迁移失败（不阻断改名，读侧别名兜底）:', e);
+                }
+            }
+
             await writeAuditLog(kv, target.clinicId || null, authUser.username, authUser.role,
                 'set_username', oldUsername + ' -> ' + newUsername, context,
-                { originalUsername: oldUsername, newUsername: newUsername, self: isSelf });
+                {
+                    originalUsername: oldUsername, newUsername: newUsername, self: isSelf,
+                    // 迁移统计入审计（医疗数据：errors 非空可按日志/审计追溯补偿）
+                    migrate: renameMigStats ? {
+                        d1Rx: renameMigStats.d1Rx, kvRx: renameMigStats.kvRx,
+                        legacyRx: renameMigStats.legacyRx, trashRx: renameMigStats.trashRx,
+                        errors: renameMigStats.errors
+                    } : null
+                });
 
             return json({
                 success: true,
                 username: newUsername,
                 phone: target.user.phone || '',
+                // 单副本迁移失败不判失败（读侧别名仍可见），但给出弱提示便于客服追踪
+                migrationWarning: !!(renameMigStats && renameMigStats.errors && renameMigStats.errors.length),
                 message: '登录用户名设置成功，请退出并使用新用户名重新登录（手机号登录不受影响）'
             });
         }
@@ -2350,7 +2501,10 @@ export async function onRequest(context) {
                     clinicId: clinicId,
                     // ★ 2026-09-10 多端并存：token 携带端类型（desktop/app/web），
                     //   供 verifyToken 按端定位 session，实现跨端不互踢、同端互斥
-                    clientClass: ['desktop', 'app', 'web'].includes(clientClass) ? clientClass : 'web'
+                    clientClass: ['desktop', 'app', 'web'].includes(clientClass) ? clientClass : 'web',
+                    // ★ 2026-10-15：携带处方归属别名（手机号+曾用名），改名重登后
+                    // 历史处方在各存储副本下均可见（迁移失败/撤销传播窗口写入兜底）
+                    aliases: ownerAliasesOf(user)
                 }, context.env);
             } catch (signErr) {
                 console.error('[P1-A] 登录 Token 签发失败:', signErr.message);
@@ -2891,6 +3045,12 @@ export async function onRequest(context) {
                         }
                     }
                 } catch (e) { console.warn('[change-password+rename] 设备绑定迁移失败:', e); }
+                // ★★ 2026-10-15 记录曾用名链（与 set-username 同构的读侧别名兜底）
+                if (found.clinicId) {
+                    const formerCp = Array.isArray(found.user.formerUsernames) ? found.user.formerUsernames.slice() : [];
+                    if (formerCp.indexOf(username) === -1) formerCp.push(username);
+                    found.user.formerUsernames = formerCp.slice(-10);
+                }
                 found.user.username = newUsername;
                 usernameChanged = true;
             }
@@ -2925,12 +3085,46 @@ export async function onRequest(context) {
 
             // P1-3：撤销该用户所有 Token，强制重新登录（按旧 username 撤销——token 均以旧名签发）
             await revokeAllUserTokens(kv, username);
+
+            // ★★ 2026-10-15 P0 合并端点改名时同迁处方归属 + D1 用户表（与 set-username 同语义，
+            //   否则改密+改名一体提交后历史处方在新用户名下查空；仅诊所用户、确有改名时执行）
+            let renameMigStats2 = null;
+            if (usernameChanged && newUsername && found.clinicId) {
+                let d1UserUpsertOk2 = false;
+                try {
+                    if (isD1Enabled(context.env)) {
+                        const db = getDB(context.env);
+                        if (db) {
+                            try { await syncUserToD1(db, found.clinicId, found.user); d1UserUpsertOk2 = true; }
+                            catch (e) { console.warn('[change-password+rename] D1 用户新名行 UPSERT 失败（保留旧行）:', e.message); }
+                        }
+                    }
+                } catch (e) { console.warn('[change-password+rename] D1 用户表同步异常:', e); }
+                try {
+                    renameMigStats2 = await migratePrescriptionOwnership(
+                        kv, context.env, found.clinicId, username, newUsername,
+                        { deleteOldUserRow: d1UserUpsertOk2 });
+                    console.log('[change-password+rename] 处方归属已迁移',
+                        username, '->', newUsername, JSON.stringify(renameMigStats2));
+                } catch (e) {
+                    console.warn('[change-password+rename] 处方归属迁移失败（不阻断，读侧别名兜底）:', e);
+                }
+            }
+
             await writeAuditLog(kv, found.clinicId, username, found.user.role, 'change_password_success',
-                usernameChanged ? (username + ' -> ' + newUsername) : 'self', context.request);
+                usernameChanged ? (username + ' -> ' + newUsername) : 'self', context.request,
+                renameMigStats2 ? {
+                    migrate: {
+                        d1Rx: renameMigStats2.d1Rx, kvRx: renameMigStats2.kvRx,
+                        legacyRx: renameMigStats2.legacyRx, trashRx: renameMigStats2.trashRx,
+                        errors: renameMigStats2.errors
+                    }
+                } : undefined);
 
             return json({
                 success: true,
                 username: usernameChanged ? newUsername : username,
+                migrationWarning: !!(renameMigStats2 && renameMigStats2.errors && renameMigStats2.errors.length),
                 message: usernameChanged
                     ? (newPassword ? '密码与登录用户名修改成功，请使用新用户名重新登录' : '登录用户名修改成功，请使用新用户名重新登录')
                     : '密码修改成功，请使用新密码重新登录'
