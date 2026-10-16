@@ -51,8 +51,8 @@
   2. **整包构建已完成（2026-10-16）**：离线 App v320（验包三重+分发两文件位，旧 v316 归档 %TEMP%）、云 App v323（构建+验包）；versionCode 改动已 commit+push（d9dc48ab）。下载页 APK v320 已随 v2026.10.16-1036 发布闭环（1e7d4717）。
   2b. **鸿蒙构建：暂停（用户指示 2026-10-16）**。已达成的进度，恢复时直接续：① 环境齐备——DevEco Studio 26.0 在 `D:\Program Files\Huawei\DevEco Studio`（hvigor 6.26.4/ohpm/SDK default），签名材料 9-04 全套在 `~/.ohos/config`（debug+release 两套 .p12/.cer/.p7b）；② **unsigned HAP 构建成功**（hvigorw --mode module -p module=entry@default -p product=default assembleHap，BUILD SUCCESSFUL 27s，产物 entry-default-unsigned.hap 2.2MB）；③ **审查 P1 emitter 修复获编译实证**。剩余仅一步：DevEco GUI（File > Project Structure > Signing Configs > 自动签名，密码在 material/ 加密分片命令行不可还原）→ 重跑同命令出 signed HAP → 真机 bnzc 链路验证。
   3. **线上核验（发版终验）**：activate.html 可访问 + bnzc:// 端到端真机（双 APK 安装后：链接唤起→兑换/装码→激活成功；鸿蒙真机部分随 2b 暂停）。
-  4. **优化建议阶段 2（用户已批，发版后做）**：validate.js resolvedIdentity.phone 改回带 record 锚点号（~L1093）；后台激活日志展示设备友好名；解绑原因明确化（unbound-by-new-device）。
-  5. **优化建议阶段 3**：鸿蒙 index.html 纳入 diff-cross-version 基线（本批 probeBnzcPending 双侧同体 INFO 已提示 --update-baseline）；KNOWLEDGE 固化「六端能力矩阵」清单。
+  4. **✅ 优化建议阶段 2 已完成（2026-10-16，commit `3a2ca967` 已 push，服务端 Pages 自动部署全端刷新即达）**：① validate.js resolvedIdentity.phone 优先回带 record.phone 锚点（淘宝预置>record 11位校验>请求回显），杜绝错号建本地账号；② 换机自动解绑留痕 lastUnboundDevice（与 devices 移除原子同批落库，拒绝路径不落库），被踢设备下次 validate 撞配额无凭证返回 reason=unbound-by-new-device+明确中文（向后兼容）；③ 后台激活日志/设备列表/风控审计三处设备友好名徽标（and-=安卓APP/browser-=网页/其他=桌面离线，悬停口径说明）。
+  5. **优化建议阶段 3（待做）**：鸿蒙 index.html 纳入 diff-cross-version 基线（本批 probeBnzcPending 双侧同体 INFO 已提示 --update-baseline）；KNOWLEDGE 固化「六端能力矩阵」清单。
 - **✅ 双独立审查已完成（2026-10-16，commit `24c5925e` 已 push）**：2 独立功能审查（互不通气）+ 1 安全二查。关键成果：
   - **P0 断链（审查员 B 独报、主会话亲验坐实）**：页面解析期 `const IS_ELECTRON` 固化 false（App shim onPageFinished 才注入）→ 双安卓 App/鸿蒙兜底页 bnzc 块永不执行=端到端断链。修复：`probeBnzcPending` 延迟重试探测（250ms×20），权威源 public/index.html + **db-offline/desktop/index.html**（sync-index-app.cjs 证实它才是离线 App 页权威源，index-app.html 是生成产物）→ 7 副本分发全绿；同法覆盖鸿蒙 onPageBegin 注入竞态。
   - **P1 桌面令牌日志脱敏（A+安全双证实）**：parsed 新增 token 字段使存量序列化日志恶化为完整令牌落盘 bnzc-debug.log——双端 main.js 全部 brief 化（前 8 位）。
