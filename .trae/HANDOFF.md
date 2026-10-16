@@ -16,13 +16,14 @@
 
 ## 当前基线（2026-10-16 更新）
 
-- **main HEAD：`9d8c6bd0`**（2026-10-16 P0 激活方案 WIP：服务端/落地页/桌面/离线App 完成，云App 深链接/鸿蒙/双审查/热更未做，详见 OPEN H5）。
-- 近 24h 已上线、**勿重复实施**：
+- **main HEAD：`67cd9b62`**（2026-10-16 P0 激活方案 WIP：服务端/落地页/桌面/离线App/**云App 深链接**完成，鸿蒙/双审查/热更未做，详见 OPEN H5）。
+- **近 24h 已上线、**勿重复实施**：
   - KV list 1000/天告警根治（order_index + safeListPage 熔断/短缓存，`6601c943`，详见 KNOWLEDGE 2026-10-13 条目）。
   - 激活架构 **P1** 客户端「只填码」身份自动带出（`b7bf5530`）。
   - 激活架构 **P2** 服务端裸码「码+手机号」单锚点首激（`3a7a762f`，开关 `config:activation-phone-anchor`）。
   - 激活架构 **P3** claim/order 请求体收口 `buildActivationPayload`（`3498c5ba`，纯重构零行为变化）；auth-core cv=**ed835152**（云端刷新即达）；离线 App 热更 **2026.10.14-1，minAppCode 288 不抬**（退出重开第 2 次生效）。
   - 完整方案：`.trae/documents/activation-architecture-optimization_plan.md`（P1/P2/P3 全部闭环）。
+  - 云 App bnzc:// 深链接实现（`67cd9b62`）：MainActivity.java 四方法 + NativeBridge 三 case + bnzcRedeemToken(productClass=cloud)，自审 PASS。
 - 工作区有多个**未跟踪文件**（`_verify/`、`_verify-report.md`、`e2e/.tmp/*-test.*` 的一部分、`promo/`、`tools/_tmp/*` 等）：非本台账任务产物，**提交时精确 `git add`，禁止 `git add -A`**。
 
 ---
@@ -41,12 +42,12 @@
   - 离线 App 深链接：`db-offline/app/.../MainActivity.java`（parseBnzcDeepLink/onNewIntent/dispatchBnzcToWebView/NativeBridge 三 case/bnzcRedeemToken productClass=offline）+ manifest intent-filter。
   - 云端 HTML 权威源 `public/index.html`（bnzcGetPending 判 `code||token`、onBnzcPendingActivation 日志脱敏、showBnzcActivationNotice 令牌兑换分支 tokenConfirmed）→ `sync-html.ps1` 已同步到 cloud_desktop + cloud_app assets。
   - 云 App manifest intent-filter（`db-yunduan/cloud_app/.../AndroidManifest.xml`）。
+  - 云 App 深链接 MainActivity（`67cd9b62`）：parseBnzcDeepLink/onNewIntent/dispatchBnzcToWebView/appendBnzcDebug 四方法 + NativeBridge 三 case + bnzcRedeemToken(productClass=cloud, getStableMachineId)；`isSensitiveOperation` 加 bnzcRedeemToken 敏感标记；自审 PASS（6/6 检查点）。
 - **未完成（下一步按序）**：
-  1. **云 App MainActivity 深链接**（最高优）：`app_project/db-yunduan/cloud_app/app/src/main/java/com/tcm/prescription/MainActivity.java` 当前**无** bnzc 处理——参照离线 App 实现 parseBnzcDeepLink/onNewIntent/dispatchBnzcToWebView/NativeBridge(bnzcGetPending/bnzcClearPending/bnzcRedeemToken productClass=**cloud**)/shim 注入。
-  2. **鸿蒙端核查**：`app_project_harmony/huikang-cloud/entry/src/main/resources/rawfile/index.html` 是否已含 bnzc 令牌兼容分支；若需同步，确认鸿蒙权威源与同步链。
-  3. **双独立审查 + 安全二查**：激活/安全链路铁律——Seed-2.1-Pro 独立审查 + GLM-5.3 安全二查（当前自审未过）。
-  4. **热更生成**：app-local + desktop/cloud + desktop/local，需抬序号（当前 minAppCode 288）。
-  5. **线上核验**：version.json + functions 部署 + activate.html 可访问 + token 端到端真机。
+  1. **鸿蒙端深链接实现**：核查确认 `app_project_harmony/huikang-cloud/` 三端均**缺失** bnzc——NativeBridge.ets 无三 case、EntryAbility.ets 无 onNewWant/深链接解析、rawfile/index.html 无 JS 令牌兼容分支、module.json5 无 bnzc scheme。鸿蒙端 index.html 是独立权威源（非 public/index.html 同步副本），需另开任务实现。
+  2. **双独立审查 + 安全二查**：激活/安全链路铁律——Seed-2.1-Pro 独立审查 + GLM-5.3 安全二查（当前自审未过）。
+  3. **热更生成**：app-local + desktop/cloud + desktop/local，需抬序号（当前 minAppCode 288）。
+  4. **线上核验**：version.json + functions 部署 + activate.html 可访问 + token 端到端真机。
 - **勿做**：不发热更、不打 APK、不做产品决策（如放宽安全锚点须显式批准）；禁止手改生成副本（cloud_desktop/cloud_app assets/index-app/offline assets），改权威源后跑生成器。
 - **验证命令**：
   - `node tools/_tmp/activation-token-test.cjs`（42 PASS）
@@ -54,7 +55,7 @@
   - `powershell -File tools\check-index-consistency.ps1`（OK）
   - `node tools/sync-index-app.cjs --verify-only`（PASS）
   - `node --check` 7 个 JS（activation-token.js + 双桌面 main/preload/login）
-- **基线 commit**：`9d8c6bd0`（WIP，已 push）　关联文档：`.trae/documents/activation-streamline_plan.md`
+- **基线 commit**：`67cd9b62`（云 App 深链接，已 push）　关联文档：`.trae/documents/activation-streamline_plan.md`
 
 ### H4 ｜优先级：高｜红米改名修复云端 functions 部署 + 真机复验（2026-10-15）
 - **代码已提交推送并上线**：commit `d085f785`——users.js（migratePrescriptionOwnership + formerUsernames 链 + 两改名端点）、prescriptions.js + _lib/auth.js（token `a` 别名签名与读侧别名过滤）、离线 5 副本 index.html（heal 双闸）、热更 2026.10.15-1 双端。双独立审查+安全二查已过，105 断言全绿（rename-cloud 36 / rename-heal-pwd 31 / owner-migrate 回归 38）。
