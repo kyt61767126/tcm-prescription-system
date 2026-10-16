@@ -47,10 +47,11 @@
   - 鸿蒙端深链接（`7a1393f3`，与安卓/桌面同构）：module.json5 skills（browsable+viewData，bnzc://activate）+ launchType singleton；EntryAbility onCreate/onNewWant 双收口（code 大写优先/t/clinic/user，脱敏日志）；NativeBridge bnzcGetPending（读后不删）/bnzcClearPending/bnzcRedeemToken（JS fetch 兜底）+ appendBnzcDebug；Index.ets emitter→dispatchBnzcToWebView 直推；shared-inject/cloud-electron-api-shim.js bnzc 六方法（redeemToken/autoActivate 同源 fetch claim，productClass=cloud/clientClass=app、40s 超时、needClinicName 透传、成功 2600ms reload）+ 机器码三级口径抽 bnzcMachineId 共用（桥优先→localStorage browser-xxx→生成式，与 auth-core collectDeviceIdentity 同款）；copy-assets 追平 rawfile 6 落后文件 + vendor/pinyin-pro + voice-input.js（工具既定行为）。
   - **注意**：云端权威源 L6670 `bnzcAutoActivate` 无方法级守卫——现六端均提供该方法后实际缺口已消（浏览器无 bnzc scheme 不触发）；若未来新增端须带齐 shim 六方法。
 - **未完成（下一步按序）**：
-  1. **热更生成**：app-local + desktop/cloud + desktop/local，需抬序号（当前 minAppCode 288）；**云 App/鸿蒙含 Native 改动需重打包 APK/鸿蒙包（非热更可达）**。
-  2. **线上核验**：version.json + functions 部署 + activate.html 可访问 + token 端到端真机（含鸿蒙真机 bnzc 链接唤起 + 兑换 + reload 生效）。
-  3. **优化建议阶段 2（用户已批，H5 发版后做）**：validate.js resolvedIdentity.phone 改回带 record 锚点号（~L1093）；后台激活日志展示设备友好名；解绑原因明确化（unbound-by-new-device）。
-  4. **优化建议阶段 3**：鸿蒙 index.html 纳入 diff-cross-version 基线；KNOWLEDGE 固化「六端能力矩阵」清单。
+  1. **热更已完成（`058e378f` 已 push，线上核验通过）**：三渠道 2026.10.16-1（app-local minAppCode 288 继承不抬/probe 探测式降级安全；desktop/cloud 20 文件；desktop/local 19 文件），Ed25519 三包自验全过，线上 version.json 实拉三渠道全命中。
+  2. **整包构建进行中（2026-10-16）**：离线 App versionCode 319→320、云 App 322→323（build.gradle 已改，gradle assembleRelease 构建中）；**鸿蒙包本机无 DevEco/hvigorw，需 DevEco 构建或标注遗留**。构建完成后：验包（R8 混淆下用未混淆中文字符串/常量搜）、离线 App 分发两文件位（v320 测试包+本地.apk 固定名，旧 v316 包归档 %TEMP%）、versionCode 改动随构建 commit+push。
+  3. **线上核验（发版终验）**：activate.html 可访问 + bnzc:// 端到端真机（双 APK 安装后：链接唤起→兑换/装码→激活成功；鸿蒙真机同链）。
+  4. **优化建议阶段 2（用户已批，发版后做）**：validate.js resolvedIdentity.phone 改回带 record 锚点号（~L1093）；后台激活日志展示设备友好名；解绑原因明确化（unbound-by-new-device）。
+  5. **优化建议阶段 3**：鸿蒙 index.html 纳入 diff-cross-version 基线（本批 probeBnzcPending 双侧同体 INFO 已提示 --update-baseline）；KNOWLEDGE 固化「六端能力矩阵」清单。
 - **✅ 双独立审查已完成（2026-10-16，commit `24c5925e` 已 push）**：2 独立功能审查（互不通气）+ 1 安全二查。关键成果：
   - **P0 断链（审查员 B 独报、主会话亲验坐实）**：页面解析期 `const IS_ELECTRON` 固化 false（App shim onPageFinished 才注入）→ 双安卓 App/鸿蒙兜底页 bnzc 块永不执行=端到端断链。修复：`probeBnzcPending` 延迟重试探测（250ms×20），权威源 public/index.html + **db-offline/desktop/index.html**（sync-index-app.cjs 证实它才是离线 App 页权威源，index-app.html 是生成产物）→ 7 副本分发全绿；同法覆盖鸿蒙 onPageBegin 注入竞态。
   - **P1 桌面令牌日志脱敏（A+安全双证实）**：parsed 新增 token 字段使存量序列化日志恶化为完整令牌落盘 bnzc-debug.log——双端 main.js 全部 brief 化（前 8 位）。
