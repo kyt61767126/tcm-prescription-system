@@ -16,8 +16,7 @@
 
 ## 当前基线（2026-10-16 更新）
 
-- **main HEAD：`14ce52ce`**（2026-10-15 docs(handoff): H4 functions 随 Pages 自动部署已上线）。
-- 工作区有大量**未提交改动**（P0 激活方案·一键激活全端打通 + 链接安全化），将在本会话以 WIP commit 推送；未发热更、未打 APK、未双独立审查。
+- **main HEAD：`9d8c6bd0`**（2026-10-16 P0 激活方案 WIP：服务端/落地页/桌面/离线App 完成，云App 深链接/鸿蒙/双审查/热更未做，详见 OPEN H5）。
 - 近 24h 已上线、**勿重复实施**：
   - KV list 1000/天告警根治（order_index + safeListPage 熔断/短缓存，`6601c943`，详见 KNOWLEDGE 2026-10-13 条目）。
   - 激活架构 **P1** 客户端「只填码」身份自动带出（`b7bf5530`）。
@@ -55,7 +54,7 @@
   - `powershell -File tools\check-index-consistency.ps1`（OK）
   - `node tools/sync-index-app.cjs --verify-only`（PASS）
   - `node --check` 7 个 JS（activation-token.js + 双桌面 main/preload/login）
-- **基线 commit**：本会话 WIP commit（待生成）　关联文档：`.trae/documents/activation-streamline_plan.md`
+- **基线 commit**：`9d8c6bd0`（WIP，已 push）　关联文档：`.trae/documents/activation-streamline_plan.md`
 
 ### H4 ｜优先级：高｜红米改名修复云端 functions 部署 + 真机复验（2026-10-15）
 - **代码已提交推送并上线**：commit `d085f785`——users.js（migratePrescriptionOwnership + formerUsernames 链 + 两改名端点）、prescriptions.js + _lib/auth.js（token `a` 别名签名与读侧别名过滤）、离线 5 副本 index.html（heal 双闸）、热更 2026.10.15-1 双端。双独立审查+安全二查已过，105 断言全绿（rename-cloud 36 / rename-heal-pwd 31 / owner-migrate 回归 38）。
