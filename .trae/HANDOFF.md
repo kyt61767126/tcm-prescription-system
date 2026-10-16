@@ -14,21 +14,48 @@
 
 ---
 
-## 当前基线（2026-10-15 更新）
+## 当前基线（2026-10-16 更新）
 
-- **main HEAD：`d085f785`**（2026-10-15 红米改名双端根治，已 push 且 Pages 部署完成，见 OPEN H4；上一基线 `dad9e997`）。
-- 2026-10-15 已随热更上线（Pages 部署后）：app-local 与 desktop/local 热更 **2026.10.15-1（minAppCode 288 不抬）**，含红米改名双端修复 + 补齐 10-13/10-14 已提交但未热发的激活链改进（auth-core 累积漂移随包）。
+- **main HEAD：`14ce52ce`**（2026-10-15 docs(handoff): H4 functions 随 Pages 自动部署已上线）。
+- 工作区有大量**未提交改动**（P0 激活方案·一键激活全端打通 + 链接安全化），将在本会话以 WIP commit 推送；未发热更、未打 APK、未双独立审查。
 - 近 24h 已上线、**勿重复实施**：
   - KV list 1000/天告警根治（order_index + safeListPage 熔断/短缓存，`6601c943`，详见 KNOWLEDGE 2026-10-13 条目）。
   - 激活架构 **P1** 客户端「只填码」身份自动带出（`b7bf5530`）。
   - 激活架构 **P2** 服务端裸码「码+手机号」单锚点首激（`3a7a762f`，开关 `config:activation-phone-anchor`）。
   - 激活架构 **P3** claim/order 请求体收口 `buildActivationPayload`（`3498c5ba`，纯重构零行为变化）；auth-core cv=**ed835152**（云端刷新即达）；离线 App 热更 **2026.10.14-1，minAppCode 288 不抬**（退出重开第 2 次生效）。
   - 完整方案：`.trae/documents/activation-architecture-optimization_plan.md`（P1/P2/P3 全部闭环）。
-- 工作区有多个**未跟踪文件**（`_verify/`、`_verify-report.md`、`e2e/.tmp/*-test.*` 的一部分、`.trae/documents/phase2-taobao-cloud-password_plan.md` 等）：非本台账任务产物，**提交时精确 `git add`，禁止 `git add -A`**。
+- 工作区有多个**未跟踪文件**（`_verify/`、`_verify-report.md`、`e2e/.tmp/*-test.*` 的一部分、`promo/`、`tools/_tmp/*` 等）：非本台账任务产物，**提交时精确 `git add`，禁止 `git add -A`**。
 
 ---
 
 ## OPEN 遗留任务
+
+### H5 ｜优先级：高｜P0 激活方案·一键激活全端打通 + 链接安全化（在制品）
+- **状态**：IN-PROGRESS（本账号@本机器，2026-10-16）
+- **方案文档**：`.trae/documents/activation-streamline_plan.md`（已获批）
+- **背景**：把旧 `bnzc://activate?code=裸码` 升级为 `?t=<一次性令牌>`（双参数并存兼容），令牌 32 字节 CSPRNG base64url、KV 权威、24h 有效、首兑机绑（同机幂等/异机 409）、兑换不发新码不写账号；落地页 `public/activate.html` 自包含零依赖 + CSP 严格 + 微信遮罩；后台生成器异步调 `/api/license/activation-token` issue。
+- **已完成（本会话 WIP 将提交）**：
+  - 服务端 `functions/api/license/activation-token.js`：路由 `POST /api/license/activation-token`，actions=issue/preview/redeem/revoke；单测 `tools/_tmp/activation-token-test.cjs` **42/42 PASS**（鉴权/签发/preview 不泄码/redeem 同机成功+异机409+幂等/端锁 preset 硬拦 device 观察期放行/过期/revoke 单+批量/fail-closed/频控429）。
+  - 落地页 `public/activate.html` + `site-official/activate.html`（镜像）+ `tools/diff-cross-version.cjs` 新增 activate pair + `tools/.cross-version-baseline-activate.json` 基线。
+  - 后台生成器 `public/admin/index.html` + `site-admin/admin/index.html`（双副本一致）：`generateActivationLink` 异步 issue，失败回退裸码。
+  - 桌面双端 Electron：离线 `db-offline/desktop/electron/{main,preload,login}.js` + 云端 `db-yunduan/cloud_desktop/electron/{main,preload,login}.js`——`parseBnzcUrl` 支持 `t=`、`bnzc:redeem-token` IPC handler、6 处日志脱敏。
+  - 离线 App 深链接：`db-offline/app/.../MainActivity.java`（parseBnzcDeepLink/onNewIntent/dispatchBnzcToWebView/NativeBridge 三 case/bnzcRedeemToken productClass=offline）+ manifest intent-filter。
+  - 云端 HTML 权威源 `public/index.html`（bnzcGetPending 判 `code||token`、onBnzcPendingActivation 日志脱敏、showBnzcActivationNotice 令牌兑换分支 tokenConfirmed）→ `sync-html.ps1` 已同步到 cloud_desktop + cloud_app assets。
+  - 云 App manifest intent-filter（`db-yunduan/cloud_app/.../AndroidManifest.xml`）。
+- **未完成（下一步按序）**：
+  1. **云 App MainActivity 深链接**（最高优）：`app_project/db-yunduan/cloud_app/app/src/main/java/com/tcm/prescription/MainActivity.java` 当前**无** bnzc 处理——参照离线 App 实现 parseBnzcDeepLink/onNewIntent/dispatchBnzcToWebView/NativeBridge(bnzcGetPending/bnzcClearPending/bnzcRedeemToken productClass=**cloud**)/shim 注入。
+  2. **鸿蒙端核查**：`app_project_harmony/huikang-cloud/entry/src/main/resources/rawfile/index.html` 是否已含 bnzc 令牌兼容分支；若需同步，确认鸿蒙权威源与同步链。
+  3. **双独立审查 + 安全二查**：激活/安全链路铁律——Seed-2.1-Pro 独立审查 + GLM-5.3 安全二查（当前自审未过）。
+  4. **热更生成**：app-local + desktop/cloud + desktop/local，需抬序号（当前 minAppCode 288）。
+  5. **线上核验**：version.json + functions 部署 + activate.html 可访问 + token 端到端真机。
+- **勿做**：不发热更、不打 APK、不做产品决策（如放宽安全锚点须显式批准）；禁止手改生成副本（cloud_desktop/cloud_app assets/index-app/offline assets），改权威源后跑生成器。
+- **验证命令**：
+  - `node tools/_tmp/activation-token-test.cjs`（42 PASS）
+  - `powershell -File tools\sync-html.ps1 -VerifyOnly`（0 drift）
+  - `powershell -File tools\check-index-consistency.ps1`（OK）
+  - `node tools/sync-index-app.cjs --verify-only`（PASS）
+  - `node --check` 7 个 JS（activation-token.js + 双桌面 main/preload/login）
+- **基线 commit**：本会话 WIP commit（待生成）　关联文档：`.trae/documents/activation-streamline_plan.md`
 
 ### H4 ｜优先级：高｜红米改名修复云端 functions 部署 + 真机复验（2026-10-15）
 - **代码已提交推送并上线**：commit `d085f785`——users.js（migratePrescriptionOwnership + formerUsernames 链 + 两改名端点）、prescriptions.js + _lib/auth.js（token `a` 别名签名与读侧别名过滤）、离线 5 副本 index.html（heal 双闸）、热更 2026.10.15-1 双端。双独立审查+安全二查已过，105 断言全绿（rename-cloud 36 / rename-heal-pwd 31 / owner-migrate 回归 38）。

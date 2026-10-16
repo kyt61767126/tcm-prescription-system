@@ -176,6 +176,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     bnzcGetPendingActivation: () => ipcRenderer.invoke('bnzc:get-pending-activation'),
     bnzcClearPendingActivation: () => ipcRenderer.invoke('bnzc:clear-pending-activation'),
     bnzcAutoActivate: (payload) => ipcRenderer.invoke('bnzc:auto-activate', payload),
+    // ★ 2026-10-15 一次性令牌兑换（t=… → 激活码），机器码在主进程拼装
+    bnzcRedeemToken: (token) => ipcRenderer.invoke('bnzc:redeem-token', token),
 
     // 监听主进程推送的 bnzc:// 激活事件（macOS open-url 或运行时收到链接）
     onBnzcPendingActivation: (callback) => {

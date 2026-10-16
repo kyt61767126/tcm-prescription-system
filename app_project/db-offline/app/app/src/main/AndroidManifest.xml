@@ -31,6 +31,16 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- ★ 2026-10-15 一键激活 P0：注册 bnzc:// 协议，客服发的 https 落地页
+                 点"一键激活"即可唤起本 App（冷启/运行中均由 MainActivity 收口解析）。
+                 host 固定 activate；singleTask 保证运行中点击只复用不新建任务。 -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="bnzc" android:host="activate" />
+            </intent-filter>
+
         </activity>
 
         <provider

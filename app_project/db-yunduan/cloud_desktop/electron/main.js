@@ -318,7 +318,7 @@ app.on('second-instance', (event, commandLine) => {
             try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] parsed: ${JSON.stringify(parsed)}\n`); } catch(e) {}
             if (parsed) {
                 _pendingActivation = parsed;
-                console.log('[Bnzc] second-instance 捕获激活链接:', parsed.code);
+                console.log('[Bnzc] second-instance 捕获激活链接:', parsed.code || ('token:' + (parsed.token || '').slice(0, 8)));
                 notifyPendingActivation(parsed);
             }
             break;
@@ -349,7 +349,7 @@ let _pendingActivation = null;
 
 // ★ 通知现有窗口有新的待激活数据
 function notifyPendingActivation(parsed) {
-    try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] notifyPendingActivation: code=${parsed.code}, mainWindow=${!!mainWindow && !mainWindow.isDestroyed()}, loginWindow=${!!loginWindow && !loginWindow.isDestroyed()}\n`); } catch(e) {}
+    try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] notifyPendingActivation: ${parsed.code ? ('code=' + parsed.code) : ('token=' + (parsed.token || '').slice(0, 8))}, mainWindow=${!!mainWindow && !mainWindow.isDestroyed()}, loginWindow=${!!loginWindow && !loginWindow.isDestroyed()}\n`); } catch(e) {}
     // 通知主窗口（已登录状态）
     // ★ 双审低-3：登录前预建的隐藏主窗不参与消费——否则 bnzc:// 冷启动时隐藏窗与
     //   登录窗各弹一个"是否现在激活"原生确认框（隐藏窗的确认框无可视父窗）。未登录
@@ -390,8 +390,8 @@ function extractBnzcFromArgv() {
                 try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] found bnzc arg: ${arg}\n`); } catch(e) {}
                 const parsed = parseBnzcUrl(arg);
                 if (parsed) {
-                    console.log('[Bnzc] 从命令行参数解析激活链接:', parsed.code);
-                    try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] parsed OK: code=${parsed.code}\n`); } catch(e) {}
+                    console.log('[Bnzc] 从命令行参数解析激活链接:', parsed.code || ('token:' + (parsed.token || '').slice(0, 8)));
+                    try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] parsed OK: ${parsed.code ? ('code=' + parsed.code) : ('token=' + (parsed.token || '').slice(0, 8))}\n`); } catch(e) {}
                     return parsed;
                 }
                 // 若首个片段无法独立解析，尝试拼接后续片段
@@ -408,7 +408,7 @@ function extractBnzcFromArgv() {
                 console.log('[Bnzc] 拼接完整 URL:', fullUrl);
                 const parsed2 = parseBnzcUrl(fullUrl);
                 if (parsed2) {
-                    console.log('[Bnzc] 从拼接 URL 解析激活链接:', parsed2.code);
+                    console.log('[Bnzc] 从拼接 URL 解析激活链接:', parsed2.code || ('token:' + (parsed2.token || '').slice(0, 8)));
                     return parsed2;
                 }
             }
@@ -445,15 +445,21 @@ function parseBnzcUrl(rawUrl) {
             }
         }
 
-        if (!params.code) return null;
+        // ★ 2026-10-15 一键激活 P0：支持一次性令牌参数 t（bnzc://activate?t=…）。
+        //   令牌经渲染层 bnzc:redeem-token IPC 兑换成码；code（旧裸码链接）与 t
+        //   二选一，code 优先；两者皆无才丢弃。
+        const code = params.code ? params.code.trim().toUpperCase() : '';
+        const token = params.t ? String(params.t).trim() : '';
+        if (!code && !token) return null;
         const result = {
-            code: params.code.trim().toUpperCase(),
+            code: code,
+            token: token,
             clinicName: params.clinic ? decodeURIComponent(params.clinic) : '',
             user: params.user ? decodeURIComponent(params.user) : '',
             source: 'url-scheme',
             timestamp: Date.now()
         };
-        console.log('[Bnzc] parseBnzcUrl 解析结果:', result);
+        console.log('[Bnzc] parseBnzcUrl 解析结果:', code ? { code } : { token: token.slice(0, 8) + '…' });
         return result;
     } catch (e) {
         console.error('[Bnzc] parseBnzcUrl 失败:', e);
@@ -467,7 +473,7 @@ app.on('open-url', (event, url) => {
     const parsed = parseBnzcUrl(url);
     if (parsed) {
         _pendingActivation = parsed;
-        console.log('[Bnzc] open-url 事件捕获激活链接:', parsed.code);
+        console.log('[Bnzc] open-url 事件捕获激活链接:', parsed.code || ('token:' + (parsed.token || '').slice(0, 8)));
         notifyPendingActivation(parsed);
     }
 });
@@ -1293,6 +1299,40 @@ ipcMain.handle('bnzc:auto-activate', async (event, { code, clinicName, user }) =
     } catch (e) {
         console.error('[Bnzc] auto-activate 异常:', e);
         return { success: false, error: String(e.message || e) };
+    }
+});
+
+// ★ 2026-10-15 一键激活 P0：一次性令牌兑换（bnzc://activate?t=…）
+//   机器码不出主进程；productClass 固定 cloud（云端桌面端），端锁由服务端复核。
+//   兑换只拿回激活码（与客服原本手发的码同物），不直接写任何授权/账号数据，
+//   随后仍走 bnzc:auto-activate 的激活流程。
+const BNZC_ACTIVATION_TOKEN_API_URL = 'https://tcm-prescription-system.pages.dev/api/license/activation-token';
+ipcMain.handle('bnzc:redeem-token', async (event, tokenRaw) => {
+    try {
+        const token = String(tokenRaw || '').trim();
+        try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] IPC redeem-token called: token=${token.slice(0, 8)}…\n`); } catch(e) {}
+        if (!/^[A-Za-z0-9_-]{32,64}$/.test(token)) {
+            return { success: false, error: '激活链接格式不正确' };
+        }
+        const machineId = activateManager.getMachineId();
+        const resp = await fetch(BNZC_ACTIVATION_TOKEN_API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'redeem', token: token, machineId: machineId, productClass: 'cloud' })
+        });
+        const data = await resp.json().catch(() => null);
+        try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] redeem-token resp status=${resp.status} ok=${!!(data && data.success)}\n`); } catch(e) {}
+        if (!resp.ok || !data || !data.success) {
+            return {
+                success: false,
+                error: (data && data.error) || ('兑换失败（' + resp.status + '）'),
+                reason: data && data.reason
+            };
+        }
+        return data; // { success, code, clinic, user, productLock }
+    } catch (e) {
+        console.error('[Bnzc] redeem-token 异常:', e);
+        return { success: false, error: '网络异常：' + (e && e.message ? e.message : String(e)) };
     }
 });
 

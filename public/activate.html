@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="referrer" content="no-referrer">
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none';">
+    <title>惠康中医 · 一键激活</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        :root {
+            --primary: #667eea;
+            --primary-dark: #764ba2;
+            --text-primary: #1f2937;
+            --text-secondary: #6b7280;
+            --text-tertiary: #9ca3af;
+            --border-color: #e5e7eb;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background-attachment: fixed;
+            min-height: 100vh;
+            color: var(--text-primary);
+            line-height: 1.6;
+            font-size: 15px;
+            -webkit-font-smoothing: antialiased;
+            padding: 24px 14px 40px;
+        }
+        .wrap { max-width: 440px; margin: 0 auto; }
+        .brand {
+            text-align: center; color: #fff; margin-bottom: 18px;
+        }
+        .brand .logo {
+            width: 56px; height: 56px; margin: 0 auto 8px;
+            border-radius: 16px;
+            background: rgba(255,255,255,0.18);
+            border: 1.5px solid rgba(255,255,255,0.35);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 26px;
+        }
+        .brand h1 { font-size: 19px; font-weight: 700; letter-spacing: 1px; }
+        .brand p { font-size: 12.5px; opacity: .9; margin-top: 2px; }
+
+        .card {
+            background: #fff; border-radius: 18px; padding: 26px 22px;
+            box-shadow: 0 20px 50px rgba(76, 57, 140, 0.28);
+        }
+        .card h2 { font-size: 18px; text-align: center; margin-bottom: 4px; }
+        .card .sub { text-align: center; color: var(--text-secondary); font-size: 13px; margin-bottom: 18px; }
+
+        .info-list { border: 1px solid var(--border-color); border-radius: 12px; overflow: hidden; margin-bottom: 18px; }
+        .info-row { display: flex; justify-content: space-between; gap: 12px; padding: 11px 14px; font-size: 14px; }
+        .info-row + .info-row { border-top: 1px solid var(--border-color); }
+        .info-row .k { color: var(--text-secondary); flex-shrink: 0; }
+        .info-row .v { font-weight: 600; text-align: right; word-break: break-all; }
+
+        .btn {
+            display: block; width: 100%; padding: 14px;
+            border: none; border-radius: 12px;
+            font-size: 16.5px; font-weight: 700;
+            cursor: pointer; text-decoration: none; text-align: center;
+            transition: transform .12s ease, box-shadow .12s ease, opacity .12s;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.38);
+        }
+        .btn-primary:active { transform: scale(0.985); }
+        .btn-ghost {
+            background: #f3f4f6; color: var(--text-primary);
+            margin-top: 10px;
+        }
+        .tip { margin-top: 14px; font-size: 12.5px; color: var(--text-tertiary); text-align: center; }
+        .tip a { color: var(--primary); text-decoration: none; }
+
+        .fallback {
+            display: none; margin-top: 14px; padding: 12px 14px;
+            background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px;
+            font-size: 13px; color: #92400e;
+        }
+        .fallback.show { display: block; }
+        .fallback a { color: #7c4d02; font-weight: 700; }
+
+        .status-icon {
+            width: 60px; height: 60px; margin: 0 auto 12px;
+            border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            font-size: 30px; color: #fff;
+        }
+        .status-icon.err { background: linear-gradient(135deg, #f87171, #dc2626); }
+        .status-icon.warn { background: linear-gradient(135deg, #fbbf24, #d97706); }
+        .status-icon.load { background: linear-gradient(135deg, #a5b4fc, #6366f1); }
+        .spin { animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .err-msg { text-align: center; color: var(--text-secondary); font-size: 14px; margin: 10px 0 18px; }
+        .copy-row { display: flex; gap: 8px; margin-top: 10px; }
+        .copy-row input {
+            flex: 1; min-width: 0; padding: 10px 12px; font-size: 12px;
+            border: 1px solid var(--border-color); border-radius: 10px;
+            background: #f9fafb; color: var(--text-secondary);
+        }
+        .copy-row button {
+            padding: 10px 14px; border: none; border-radius: 10px;
+            background: var(--primary); color: #fff; font-size: 13px; font-weight: 600;
+            white-space: nowrap; cursor: pointer;
+        }
+
+        /* 微信遮罩 */
+        .wx-mask {
+            display: none;
+            position: fixed; inset: 0; z-index: 99;
+            background: rgba(0,0,0,0.82);
+            color: #fff; text-align: right; padding: 18px 20px;
+        }
+        .wx-mask.show { display: block; }
+        .wx-mask .arrow { font-size: 46px; line-height: 1; margin-bottom: 10px; }
+        .wx-mask .t1 { font-size: 19px; font-weight: 700; margin-bottom: 8px; }
+        .wx-mask .t2 { font-size: 14.5px; opacity: .92; max-width: 290px; margin-left: auto; }
+        .wx-mask .ok-btn {
+            display: inline-block; margin-top: 26px;
+            padding: 10px 26px; border: 1px solid rgba(255,255,255,0.5);
+            border-radius: 999px; font-size: 14px; cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <div class="brand">
+            <div class="logo">惠</div>
+            <h1>惠康中医</h1>
+            <p>一键激活 · 安全便捷</p>
+        </div>
+
+        <div class="card" id="card">
+            <div id="loadingView">
+                <div class="status-icon load"><span class="spin">⟳</span></div>
+                <h2>正在核验激活链接</h2>
+                <p class="sub">请稍候…</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 微信内置浏览器引导 -->
+    <div class="wx-mask" id="wxMask">
+        <div class="arrow">↗</div>
+        <div class="t1">请点击右上角「···」</div>
+        <div class="t2">选择「在浏览器打开」后，即可正常一键激活。微信内无法直接唤起惠康中医软件。</div>
+        <div class="ok-btn" id="wxMaskOk">我知道了</div>
+    </div>
+
+<script>
+(function () {
+    'use strict';
+
+    var API = '/api/license/activation-token';
+    var token = new URLSearchParams(location.search).get('token') || '';
+    var card = document.getElementById('card');
+    var wxMask = document.getElementById('wxMask');
+    var isWX = /MicroMessenger/i.test(navigator.userAgent);
+    var bnzcUrl = null;
+    var leaveTimer = null;
+
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    function fmtExpire(iso) {
+        try {
+            var d = new Date(iso);
+            if (isNaN(d.getTime())) return '';
+            var p = function (n) { return (n < 10 ? '0' : '') + n; };
+            return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) +
+                ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+        } catch (e) { return ''; }
+    }
+
+    function setView(html) { card.innerHTML = html; }
+
+    function showWxMask() { wxMask.classList.add('show'); }
+    document.getElementById('wxMaskOk').addEventListener('click', function () {
+        wxMask.classList.remove('show');
+    });
+
+    function renderError(iconCls, title, msg, showCopy) {
+        var link = location.origin + location.pathname + '?token=' + encodeURIComponent(token);
+        setView(
+            '<div class="status-icon ' + iconCls + '">!</div>' +
+            '<h2>' + esc(title) + '</h2>' +
+            '<p class="err-msg">' + esc(msg) + '</p>' +
+            '<a class="btn btn-ghost" href="/download.html">前往下载中心</a>' +
+            '<p class="tip">如仍有问题，请联系您的专属客服，并把本链接完整发给客服核对。</p>' +
+            (showCopy ? '<div class="copy-row"><input readonly value="' + esc(link) + '" id="cpInput">' +
+                '<button id="cpBtn" type="button">复制</button></div>' : '')
+        );
+        var cpBtn = document.getElementById('cpBtn');
+        if (cpBtn) cpBtn.addEventListener('click', function () {
+            var inp = document.getElementById('cpInput');
+            inp.select();
+            try { document.execCommand('copy'); cpBtn.textContent = '已复制'; } catch (e) {}
+        });
+    }
+
+    function renderActive(info) {
+        bnzcUrl = 'bnzc://activate?t=' + encodeURIComponent(token);
+        var rows = '';
+        if (info.edition) rows += '<div class="info-row"><span class="k">授权版本</span><span class="v">' + esc(info.edition) + '</span></div>';
+        if (info.clinic) rows += '<div class="info-row"><span class="k">诊所名称</span><span class="v">' + esc(info.clinic) + '</span></div>';
+        if (info.user) rows += '<div class="info-row"><span class="k">登记信息</span><span class="v">' + esc(info.user) + '</span></div>';
+        if (info.expiresAt) rows += '<div class="info-row"><span class="k">链接有效期至</span><span class="v">' + esc(fmtExpire(info.expiresAt)) + '</span></div>';
+
+        setView(
+            '<h2>确认激活信息</h2>' +
+            '<p class="sub">请核对以下信息无误后，在惠康中医软件中完成激活</p>' +
+            '<div class="info-list">' + rows + '</div>' +
+            '<button class="btn btn-primary" id="openBtn" type="button">在惠康中医中一键激活</button>' +
+            '<a class="btn btn-ghost" href="/download.html">还没安装？先下载软件</a>' +
+            '<div class="fallback" id="fallback">' +
+            '软件没有自动打开？请确认已安装最新版惠康中医；仍打不开可先 <a href="/download.html">点此下载</a>，' +
+            '或复制链接后在手机浏览器中重新打开。' +
+            '</div>' +
+            '<p class="tip">激活链接仅限本人本次设备使用，24 小时内有效，请勿转发他人。</p>'
+        );
+
+        document.getElementById('openBtn').addEventListener('click', function () {
+            if (isWX) { showWxMask(); return; }
+            launchApp();
+        });
+    }
+
+    function launchApp() {
+        var fb = document.getElementById('fallback');
+        var t0 = Date.now();
+        var hidden = false;
+        var onVis = function () {
+            if (document.hidden) {
+                hidden = true;
+                if (leaveTimer) { clearTimeout(leaveTimer); leaveTimer = null; }
+            }
+        };
+        document.addEventListener('visibilitychange', onVis);
+        window.addEventListener('pagehide', onVis);
+        try { location.href = bnzcUrl; } catch (e) {}
+        leaveTimer = setTimeout(function () {
+            // 成功唤起时页面进入后台（hidden=true）；2.6s 后仍在前台视为唤端失败
+            if (!hidden && Date.now() - t0 > 2500) fb.classList.add('show');
+        }, 2600);
+    }
+
+    if (!token || !/^[A-Za-z0-9_-]{32,64}$/.test(token)) {
+        renderError('err', '链接无效', '链接缺少有效激活参数，请确认复制了客服发送的完整链接（不要在微信聊天里截断复制）。', true);
+        return;
+    }
+
+    fetch(API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'preview', token: token })
+    }).then(function (res) {
+        return res.json().catch(function () { return { success: false, status: 'bad_json' }; })
+            .then(function (j) { return { status: res.status, json: j }; });
+    }).then(function (r) {
+        var j = r.json || {};
+        if (r.status === 200 && j.status === 'active') {
+            if (isWX) showWxMask();
+            renderActive(j);
+            return;
+        }
+        if (j.status === 'expired') {
+            renderError('warn', '链接已过期', '一键激活链接 24 小时内有效，本链接已超过有效期。请联系客服重新获取激活链接。', true);
+        } else if (j.status === 'redeemed') {
+            renderError('warn', '链接已被使用', '一键激活链接仅限一台设备使用一次，本链接已完成激活。如您更换了手机或电脑，请联系客服处理。', true);
+        } else if (j.status === 'revoked') {
+            renderError('warn', '链接已作废', '本激活链接已被客服作废，请联系客服重新获取。', true);
+        } else if (j.status === 'not_found') {
+            renderError('err', '链接不存在', '未查到该激活链接，可能链接不完整或已被系统清理。请联系客服重新获取。', true);
+        } else {
+            renderError('err', '暂时无法核验', (j && j.error) ? j.error : '网络繁忙，请稍后重新打开本链接。', true);
+        }
+    }).catch(function () {
+        renderError('err', '网络连接失败', '请检查手机网络后，关闭页面重新点开链接；仍失败请联系客服。', true);
+    });
+})();
+</script>
+</body>
+</html>

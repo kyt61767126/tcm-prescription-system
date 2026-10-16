@@ -85,6 +85,16 @@ const PAIRS = [
         mode: 'lines',
     },
     {
+        // ★ 2026-10-15 一键激活 P0：https 短链落地页双副本（新建即字节一致，
+        //   主域与官网站分离部署，任一侧漂移都会导致客户拿到不同激活页）
+        id: 'activate',
+        label: 'public/activate.html ↔ site-official 激活落地页双副本',
+        fileA: 'public/activate.html',
+        fileB: 'site-official/activate.html',
+        baseline: '.cross-version-baseline-activate.json',
+        mode: 'lines',
+    },
+    {
         // ★ 2026-09-13 重整分离部署新增：管理台控制台子页双副本（主域 /admin/ 与
         //   后台站 site-admin/admin/ 同一份内容，字节级镜像，基线=空差集；
         //   实锤事故：09-10 漏斗只进 public、09-11/12 license 警示只进

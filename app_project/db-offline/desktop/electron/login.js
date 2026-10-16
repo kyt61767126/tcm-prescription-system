@@ -940,8 +940,9 @@
         // ★ bnzc:// 一键激活：消费并行取回的待激活数据（成功且有 code 才走自动激活）
         try {
             const pendingResult = await pendingPromise;
-            if (pendingResult && pendingResult.success && pendingResult.data && pendingResult.data.code) {
-                console.log('[Bnzc] 检测到待激活数据:', pendingResult.data.code);
+            if (pendingResult && pendingResult.success && pendingResult.data &&
+                (pendingResult.data.code || pendingResult.data.token)) {
+                console.log('[Bnzc] 检测到待激活数据:', pendingResult.data.code || ('token:' + String(pendingResult.data.token).slice(0, 8)));
                 window.__bnzcHasPending = true;
                 await performAutoActivation(pendingResult.data, config);
             }
@@ -977,7 +978,7 @@
     //   并行的 pendingPromise 消费段），本函数无任何引用方，删除以免后续误改出双调用。
 
     async function performAutoActivation(data, config) {
-        if (!data || !data.code) return;
+        if (!data || (!data.code && !data.token)) return;
 
         // ★ 隐藏首次配置向导，避免干扰
         const wizardOverlay = document.getElementById('wizardOverlay');
@@ -991,6 +992,40 @@
             bar.className = 'trial-bar';
             bar.innerHTML = '<span class="trial-text">🔄 正在通过激活链接自动激活...</span>';
             bar.style.display = 'flex';
+        }
+
+        // ★ 2026-10-15 一次性令牌链接：先向服务端兑换成激活码（一次性+绑本机），
+        //   成功后与旧裸码链接同路径自动激活；失败给明确文案并清 pending。
+        if (!data.code && data.token) {
+            bar.innerHTML = '<span class="trial-text">🔄 正在核验安全激活链接...</span>';
+            try {
+                const redeem = await window.electronAPI.bnzcRedeemToken(data.token);
+                if (!redeem || !redeem.success) {
+                    const errorMsg = (redeem && redeem.error) || '激活链接核验失败';
+                    bar.className = 'trial-bar expired';
+                    bar.innerHTML = '<span class="trial-text">❌ ' + errorMsg + '</span>' +
+                        '<a class="trial-action" onclick="openActivationWindow()">手动激活 →</a>';
+                    alert('❌ 无法通过链接激活：\n\n' + errorMsg + '\n\n如链接已过期或已在其他设备使用，请联系客服重新获取。');
+                    if (window.electronAPI.bnzcClearPendingActivation) {
+                        window.electronAPI.bnzcClearPendingActivation();
+                    }
+                    window.__bnzcHasPending = false;
+                    checkFirstRun(config);
+                    return;
+                }
+                data = {
+                    code: redeem.code,
+                    clinicName: redeem.clinic || data.clinicName || '',
+                    user: redeem.user || data.user || ''
+                };
+            } catch (e) {
+                bar.className = 'trial-bar expired';
+                bar.innerHTML = '<span class="trial-text">❌ 激活链接核验异常</span>' +
+                    '<a class="trial-action" onclick="openActivationWindow()">手动激活 →</a>';
+                window.__bnzcHasPending = false;
+                checkFirstRun(config);
+                return;
+            }
         }
 
         try {

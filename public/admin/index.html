@@ -5655,7 +5655,22 @@ function closeActivationLinkModal() {
     document.getElementById('activationLinkModal').classList.remove('show');
 }
 
-function generateActivationLink() {
+// ★ 2026-10-15 一键激活 P0：改为服务端签发一次性令牌 + https 短链落地页
+//   （微信可直接点开、未安装自动引导下载、扫码唤起 App）；诊所/用户信息以
+//   激活码记录为准（令牌不含建号信息）。服务不可用时回退本地裸码拼接，
+//   保证客服任何时候都能发出激活链接（旧 bnzc:// 链路由各端永久兼容）。
+let __actLinkBusy = false;
+let __lastActLink = null;   // 最近一次签发回显 {fullUrl, code, edition, clinic, user, expiresAt, tokenized}
+
+function __fallbackBnzcLink(code, clinicName, userName) {
+    let url = BNZC_PROTOCOL + '?code=' + encodeURIComponent(code);
+    if (clinicName) url += '&clinic=' + encodeURIComponent(clinicName);
+    if (userName) url += '&user=' + encodeURIComponent(userName);
+    return url;
+}
+
+async function generateActivationLink() {
+    if (__actLinkBusy) return;
     const code = document.getElementById('linkCode').value.trim().toUpperCase();
     const clinicName = document.getElementById('linkClinicName').value.trim();
     const userName = document.getElementById('linkUserName').value.trim();
@@ -5672,27 +5687,62 @@ function generateActivationLink() {
         return;
     }
 
-    // 生成 URL Scheme
-    let url = BNZC_PROTOCOL + '?code=' + encodeURIComponent(code);
-    if (clinicName) url += '&clinic=' + encodeURIComponent(clinicName);
-    if (userName) url += '&user=' + encodeURIComponent(userName);
+    __actLinkBusy = true;
+    let data = null, errMsg = '';
+    try {
+        const res = await fetch('/api/license/activation-token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ action: 'issue', code: code, ttlHours: 24 })
+        });
+        data = await res.json().catch(() => null);
+        if (!res.ok || !data || !data.success) {
+            errMsg = (data && data.error) ? data.error : ('服务端返回 ' + res.status);
+            data = null;
+        }
+    } catch (e) {
+        errMsg = e && e.message ? e.message : '网络异常';
+        data = null;
+    }
+    __actLinkBusy = false;
+
+    let url, meta, tokenized;
+    if (data) {
+        // 令牌短链（主路径）：https 落地页 → 唤起 bnzc://activate?t=…
+        url = location.origin + data.activateUrl;
+        meta = { edition: data.edition || '', clinic: data.clinic || clinicName, user: data.user || userName, expiresAt: data.expiresAt || '' };
+        tokenized = true;
+    } else {
+        // 回退：本地拼裸码 scheme（服务不可用/旧环境），行为与升级前一致
+        url = __fallbackBnzcLink(code, clinicName, userName);
+        meta = { edition: '', clinic: clinicName, user: userName, expiresAt: '' };
+        tokenized = false;
+    }
+    __lastActLink = Object.assign({ fullUrl: url, code: code, tokenized: tokenized }, meta);
 
     // 显示链接
     document.getElementById('generatedLink').value = url;
     document.getElementById('activationLinkResult').style.display = 'block';
 
-    // 生成二维码
+    // 生成二维码（内容为 https 短链；回退时为 bnzc:// 裸码链接）
     generateQRCode(url);
 
     // 生成文本预览
-    const textPreview = '【惠康中医】激活链接\n' +
+    const expireStr = meta.expiresAt ? new Date(meta.expiresAt).toLocaleString('zh-CN') : '';
+    const textPreview = '【惠康中医】一键激活\n' +
+        (meta.edition ? '版本：' + meta.edition + '\n' : '') +
         '激活码：' + code + '\n' +
-        (clinicName ? '诊所：' + clinicName + '\n' : '') +
-        (userName ? '用户：' + userName + '\n' : '') +
-        '点击下方链接即可激活（需安装惠康中医软件）：\n' + url;
+        (meta.clinic ? '诊所：' + meta.clinic + '\n' : '') +
+        (meta.user ? '登记：' + meta.user + '\n' : '') +
+        '点击链接核对信息后按提示激活（手机/电脑均可，未装软件会自动引导下载）：\n' + url +
+        (tokenized ? '\n链接 24 小时内有效、仅限本人一台设备使用，请勿转发。' : '');
     document.getElementById('linkTextPreview').textContent = textPreview;
+    document.getElementById('linkTextPreview').style.display = 'none';
 
-    showAlert('activationLinkAlert', '链接生成成功！', 'success');
+    showAlert('activationLinkAlert',
+        tokenized ? ('安全激活链接已生成（24h 内有效' + (expireStr ? '，至 ' + expireStr : '') + '）')
+                  : '链接服务暂不可用（' + errMsg + '），已改用本地协议链接，功能不受影响',
+        tokenized ? 'success' : 'error');
 }
 
 function generateQRCode(text) {
@@ -5734,21 +5784,25 @@ function copyLinkAsText() {
 }
 
 function sendLinkByWechat() {
-    const code = document.getElementById('linkCode').value.trim().toUpperCase();
-    const clinicName = document.getElementById('linkClinicName').value.trim();
-    const userName = document.getElementById('linkUserName').value.trim();
     const url = document.getElementById('generatedLink').value;
+    const code = (__lastActLink && __lastActLink.code) || document.getElementById('linkCode').value.trim().toUpperCase();
+    const clinicName = (__lastActLink && __lastActLink.clinic) || document.getElementById('linkClinicName').value.trim();
+    const userName = (__lastActLink && __lastActLink.user) || document.getElementById('linkUserName').value.trim();
+    const edition = (__lastActLink && __lastActLink.edition) || '';
+    const tokenized = !!(__lastActLink && __lastActLink.tokenized);
 
     const wechatMsg = '您好！您的惠康中医软件激活信息如下：\n\n' +
+        (edition ? '📦 版本：' + edition + '\n' : '') +
         '📋 激活码：' + code + '\n' +
         (clinicName ? '🏥 诊所：' + clinicName + '\n' : '') +
-        (userName ? '👤 用户：' + userName + '\n' : '') +
-        '\n🔗 点击下方链接即可一键激活：\n' + url + '\n\n' +
+        (userName ? '👤 登记：' + userName + '\n' : '') +
+        '\n🔗 请点击下面链接，核对信息后按提示一键激活：\n' + url + '\n\n' +
         '💡 使用说明：\n' +
-        '1. 确保客户电脑已安装惠康中医软件\n' +
-        '2. 在电脑浏览器中打开上述链接\n' +
-        '3. 软件将自动激活并重启\n\n' +
-        '如无法点击链接，请手动复制激活码在软件激活窗口输入。';
+        '1. 手机或电脑均可直接点开（微信里点不开请点右上角「···」选浏览器打开）\n' +
+        '2. 已安装软件会自动唤起完成激活；未安装页面会引导下载\n' +
+        (tokenized ? '3. 链接 24 小时内有效，仅限您本人一台设备使用，请勿转发\n\n'
+                   : '3. 如无法点击链接，请手动复制激活码在软件激活窗口输入\n\n') +
+        '操作中有任何问题随时联系我们。';
 
     const ta = document.createElement('textarea');
     ta.value = wechatMsg;
