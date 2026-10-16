@@ -126,6 +126,12 @@ public class MainActivity extends BridgeActivity {
     //   来源校验一律读此 volatile 快照；null 时 fail-closed。
     private volatile String lastWebViewUrl = null;
 
+    // ★ 2026-10-16 一键激活 P0：bnzc://activate?code=… 或 ?t=一次性令牌 深链暂存。
+    //   冷启动由 JS 经 bnzcGetPending 桥主动拉取（读后不删，clear 单独调用——与桌面
+    //   Electron / 离线 App 同语义）；运行中点击由 onNewIntent 解析后经 __bnzcEmitFromNative
+    //   直接派发。JSON 形如 {code?,token?,clinicName,user}。
+    private volatile String pendingBnzcActivationJson = null;
+
     // ★ 2026-08-29 一键备份第三步：文件选择器结果回调（onShowFileChooser 配套）
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
@@ -141,6 +147,95 @@ public class MainActivity extends BridgeActivity {
             return;
         }
         super.onActivityResult(requestCode, resultCode, data);
+    }
+
+    // ========================================================================
+    //  ★ 2026-10-16 一键激活 P0：bnzc:// 深链接收口（冷启 + 运行中）
+    //  与桌面 Electron parseBnzcUrl / 离线 App 同名方法同语义：code（旧裸码）/ t
+    //  （一次性令牌）二选一，code 优先；query 参数 getQueryParameter 已自动 URL decode。
+    // ========================================================================
+    private String parseBnzcDeepLink(Intent intent) {
+        try {
+            if (intent == null || intent.getData() == null) return null;
+            Uri uri = intent.getData();
+            if (!"bnzc".equals(uri.getScheme())) return null;
+            String host = uri.getHost();
+            // 兼容 bnzc://activate 与 bnzc://activate/
+            if (host != null && !"activate".equals(host)) return null;
+
+            String code = uri.getQueryParameter("code");
+            String token = uri.getQueryParameter("t");
+            code = (code != null) ? code.trim().toUpperCase() : "";
+            token = (token != null) ? token.trim() : "";
+            if (code.isEmpty() && token.isEmpty()) return null;
+
+            String clinic = uri.getQueryParameter("clinic");
+            String user = uri.getQueryParameter("user");
+            JSONObject j = new JSONObject();
+            if (!code.isEmpty()) j.put("code", code);
+            if (!token.isEmpty()) j.put("token", token);
+            j.put("clinicName", clinic != null ? clinic : "");
+            j.put("user", user != null ? user : "");
+            String json = j.toString();
+            pendingBnzcActivationJson = json;
+            appendBnzcDebug("deep-link captured: "
+                    + (!code.isEmpty() ? code : ("token:" + token.substring(0, Math.min(8, token.length())))));
+            return json;
+        } catch (Exception e) {
+            Log.w(TAG, "[Bnzc] 深链解析失败: " + e.getMessage());
+            return null;
+        }
+    }
+
+    // singleTask：App 运行中点击链接走这里（不新建实例）
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        String json = parseBnzcDeepLink(intent);
+        if (json != null) dispatchBnzcToWebView(json);
+    }
+
+    // 运行中事件直推渲染层（冷启动则由 JS 主动 bnzcGetPending 拉取成员变量）
+    private void dispatchBnzcToWebView(String json) {
+        try {
+            WebView wv = (getBridge() != null) ? getBridge().getWebView() : null;
+            if (wv == null) {
+                appendBnzcDebug("dispatch: webview 未就绪，等待 JS getPending 拉取");
+                return;
+            }
+            mainHandler.post(() -> {
+                try {
+                    // JSON 嵌单引号 JS 串：转义反斜杠与单引号即可（JSON 无换行/控制符裸出）
+                    String esc = json.replace("\\", "\\\\").replace("'", "\\'");
+                    wv.evaluateJavascript(
+                        "try{ if (typeof window.__bnzcEmitFromNative === 'function') {"
+                        + " window.__bnzcEmitFromNative(JSON.parse('" + esc + "')); } }"
+                        + "catch(e){ console.warn('[Bnzc] 派发失败', e); }", null);
+                    appendBnzcDebug("dispatch: 已派发渲染层");
+                } catch (Exception e) {
+                    Log.w(TAG, "[Bnzc] 派发深链失败: " + e.getMessage());
+                }
+            });
+        } catch (Exception e) {
+            Log.w(TAG, "[Bnzc] dispatch 异常: " + e.getMessage());
+        }
+    }
+
+    // 诊断日志（与桌面/离线 App 同名 filesDir/bnzc-debug.log，"点了没反应"可远程取证）
+    private void appendBnzcDebug(String line) {
+        FileOutputStream fos = null;
+        try {
+            File f = new File(getFilesDir(), "bnzc-debug.log");
+            String stamp = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.CHINA)
+                    .format(new java.util.Date());
+            byte[] b = ("[" + stamp + "] " + line + "\n").getBytes("UTF-8");
+            fos = new FileOutputStream(f, true);
+            fos.write(b);
+        } catch (Exception ignored) {
+        } finally {
+            if (fos != null) { try { fos.close(); } catch (Exception ignored2) {} }
+        }
     }
 
     @Override
@@ -172,6 +267,10 @@ public class MainActivity extends BridgeActivity {
         requestWindowFeature(Window.FEATURE_NO_TITLE);
 
         super.onCreate(savedInstanceState);
+
+        // ★ 2026-10-16 一键激活 P0：冷启动 bnzc:// 深链接收口（license 闸在其后，
+        //   未激活用户点链接也能放行到激活页，JS 启动后经 bnzcGetPending 拉取）。
+        parseBnzcDeepLink(getIntent());
 
         // T5: 使用主线程 Looper 的 Handler，便于 onDestroy 统一清理
         mainHandler = new Handler(Looper.getMainLooper());
@@ -1753,6 +1852,23 @@ public class MainActivity extends BridgeActivity {
                     //   按 /^[A-Za-z0-9_-]{8,64}$/ 直接消费（JSON 会被消毒正则清空）。
                     case "getMachineId":
                         return getStableMachineId();
+                    // ★ 2026-10-16 一键激活 P0：bnzc:// 深链三件套（与离线 App / 桌面
+                    //   Electron IPC 同名语义）。productClass 固定 cloud，机器码取
+                    //   getStableMachineId 权威值；令牌兑换走服务端 activation-token 端点。
+                    case "bnzcGetPending": {
+                        JSONObject rr = new JSONObject();
+                        rr.put("success", true);
+                        if (pendingBnzcActivationJson != null) {
+                            rr.put("data", new JSONObject(pendingBnzcActivationJson));
+                        }
+                        return rr.toString();
+                    }
+                    case "bnzcClearPending":
+                        pendingBnzcActivationJson = null;
+                        appendBnzcDebug("pending cleared by JS");
+                        return new JSONObject().put("success", true).toString();
+                    case "bnzcRedeemToken":
+                        return bnzcRedeemToken(args.optString("token", "")).toString();
                     default:
                         return fail("unknown method: " + name).toString();
                 }
@@ -1773,8 +1889,10 @@ public class MainActivity extends BridgeActivity {
         private boolean isSensitiveOperation(String name) {
             // ★ 2026-09-28：指纹六动作（probe/status/list/enroll/unlock/delete）
             //   全部要求云端页面来源；业务页 URL 恒定 CLOUD_HOST（导航白名单封死远程页）。
+            // ★ 2026-10-16：bnzcRedeemToken 敏感——向服务端兑换令牌并暴露激活码给 JS。
             return "readFileAsBase64".equals(name)
                     || "deleteFile".equals(name)
+                    || "bnzcRedeemToken".equals(name)
                     || (name != null && name.startsWith("biometric"));
         }
 
@@ -2706,6 +2824,67 @@ public class MainActivity extends BridgeActivity {
         private String sanitize(String name) {
             if (name == null) return "";
             return name.replaceAll("[\\\\/:*?\"<>|]", "_").trim();
+        }
+
+        // ★ 2026-10-16 一键激活 P0：一次性令牌兑换（bnzc://activate?t=… → 激活码）。
+        //   在 JavaBridge binder 线程同步执行（与其他桥方法同款，JS 桥本就同步等待）；
+        //   productClass 固定 cloud，机器码取 getStableMachineId 权威值；只换码不写授权，
+        //   云端 JS 收到 code 后自行完成激活流程（不同于离线 App 有本地 LicenseManager）。
+        private JSONObject bnzcRedeemToken(String token) {
+            java.net.HttpURLConnection conn = null;
+            try {
+                if (token == null || !token.matches("[A-Za-z0-9_-]{32,64}")) {
+                    return fail("激活链接格式不正确");
+                }
+                String machineId = getStableMachineId();
+                JSONObject req = new JSONObject();
+                req.put("action", "redeem");
+                req.put("token", token);
+                req.put("machineId", machineId);
+                req.put("productClass", "cloud");
+                byte[] body = req.toString().getBytes("UTF-8");
+
+                java.net.URL u = new java.net.URL(
+                        "https://tcm-prescription-system.pages.dev/api/license/activation-token");
+                conn = (java.net.HttpURLConnection) u.openConnection();
+                conn.setRequestMethod("POST");
+                conn.setConnectTimeout(10000);
+                conn.setReadTimeout(15000);
+                conn.setDoOutput(true);
+                conn.setRequestProperty("Content-Type", "application/json");
+                conn.setRequestProperty("Accept", "application/json");
+                OutputStream os = conn.getOutputStream();
+                os.write(body);
+                os.flush();
+                os.close();
+
+                int sc = conn.getResponseCode();
+                InputStream is = (sc >= 200 && sc < 300) ? conn.getInputStream() : conn.getErrorStream();
+                String resp = "";
+                if (is != null) {
+                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                    byte[] buf = new byte[4096];
+                    int n;
+                    while ((n = is.read(buf)) > 0) baos.write(buf, 0, n);
+                    is.close();
+                    resp = new String(baos.toByteArray(), "UTF-8");
+                }
+                JSONObject out = resp.isEmpty() ? new JSONObject() : new JSONObject(resp);
+                appendBnzcDebug("redeem-token status=" + sc + " ok=" + out.optBoolean("success", false));
+                if (sc < 200 || sc >= 300 || !out.optBoolean("success", false)) {
+                    JSONObject e2 = new JSONObject();
+                    e2.put("success", false);
+                    e2.put("error", out.optString("error", "兑换失败（" + sc + "）"));
+                    if (out.has("reason")) e2.put("reason", out.optString("reason"));
+                    return e2;
+                }
+                return out; // { success, code, clinic, user, productLock }
+            } catch (Exception e) {
+                appendBnzcDebug("redeem-token error: " + e.getMessage());
+                return fail("网络异常：" + e.getMessage());
+            } finally {
+                if (conn != null) conn.disconnect();
+            }
         }
 
         private JSONObject fail(String msg) {
