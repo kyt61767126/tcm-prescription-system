@@ -153,8 +153,9 @@
     // ★ 2026-10-16 一键激活 P0：兑换码直激 bnzcAutoActivate——JS 同源 fetch POST
     //   /api/license/claim，口径对齐云 App MainActivity activateOnline（productClass=
     //   cloud / clientClass=app，桌面为 desktop）。超时 AbortController 40s（对齐桌面
-    //   真机 claim 冷启实测 14~23s）。失败透传服务端 error，needClinicName 渐进式表单
-    //   标记原样透传（服务端仅此一个字段名，无 needUser）；成功后 2600ms reload 兜底
+    //   真机 claim 冷启实测 14~23s）。失败透传服务端 error；needClinicName 为防御性
+    //   透传：claim 端点当前不返回该标记（渐进式表单仅 validate 端有），保留字段以
+    //   兼容未来扩展。成功后 2600ms reload 兜底
     //   （App 无 license.restart，页面重载后云端配置即激活态，时序避开页面 1500ms
     //   restart 窗口）。
     bnzcAutoActivate: function(payload) {
@@ -181,7 +182,7 @@
               clearTimeout(timer);
               if (!resp.ok || !out || out.success !== true) {
                 var e2 = { success: false, error: (out && out.error) ? out.error : '激活失败' };
-                if (out && out.needClinicName !== undefined) e2.needClinicName = out.needClinicName; // 渐进式表单标记
+                if (out && out.needClinicName !== undefined) e2.needClinicName = out.needClinicName; // 防御性透传：claim 端点当前无此标记
                 resolve(e2);
                 return;
               }

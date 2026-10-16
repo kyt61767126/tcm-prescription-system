@@ -310,12 +310,12 @@ if (!gotTheLock) {
 }
 
 app.on('second-instance', (event, commandLine) => {
-    console.log('[Bnzc] second-instance 事件, commandLine:', JSON.stringify(commandLine));
-    try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] second-instance: ${JSON.stringify(commandLine)}\n`); } catch(e) {}
+    console.log('[Bnzc] second-instance 事件, commandLine:', JSON.stringify(commandLine.map(a => (typeof a === 'string' && a.startsWith('bnzc://')) ? a.split('?')[0] : a)));
+    try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] second-instance: ${JSON.stringify(commandLine.map(a => (typeof a === 'string' && a.startsWith('bnzc://')) ? a.split('?')[0] : a))}\n`); } catch(e) {}
     for (const arg of commandLine) {
         if (arg && arg.startsWith('bnzc://')) {
             const parsed = parseBnzcUrl(arg);
-            try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] parsed: ${JSON.stringify(parsed)}\n`); } catch(e) {}
+            try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] parsed: ${parsed ? (parsed.code ? ('code=' + parsed.code) : ('token=' + (parsed.token || '').slice(0, 8))) : 'null'}\n`); } catch(e) {}
             if (parsed) {
                 _pendingActivation = parsed;
                 console.log('[Bnzc] second-instance 捕获激活链接:', parsed.code || ('token:' + (parsed.token || '').slice(0, 8)));
@@ -382,12 +382,12 @@ function extractBnzcFromArgv() {
     try {
         const argv = process.argv;
         // ★ 诊断日志：记录启动参数（定位"无反应"问题）
-        try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] extractBnzcFromArgv START: argv=${JSON.stringify(argv)}\n`); } catch(e) {}
+        try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] extractBnzcFromArgv START: argv=${JSON.stringify(argv.map(a => (typeof a === 'string' && a.startsWith('bnzc://')) ? a.split('?')[0] : a))}\n`); } catch(e) {}
         // 先尝试找完整的 bnzc:// URL
         for (const arg of argv) {
             if (arg && arg.startsWith('bnzc://')) {
                 // ★ 诊断日志：找到 bnzc:// 参数
-                try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] found bnzc arg: ${arg}\n`); } catch(e) {}
+                try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] found bnzc arg: ${arg.split('?')[0]}\n`); } catch(e) {}
                 const parsed = parseBnzcUrl(arg);
                 if (parsed) {
                     console.log('[Bnzc] 从命令行参数解析激活链接:', parsed.code || ('token:' + (parsed.token || '').slice(0, 8)));
@@ -454,8 +454,8 @@ function parseBnzcUrl(rawUrl) {
         const result = {
             code: code,
             token: token,
-            clinicName: params.clinic ? decodeURIComponent(params.clinic) : '',
-            user: params.user ? decodeURIComponent(params.user) : '',
+            clinicName: params.clinic || '',
+            user: params.user || '',
             source: 'url-scheme',
             timestamp: Date.now()
         };
@@ -484,7 +484,7 @@ if (_startupActivation) {
     _pendingActivation = _startupActivation;
 }
 // ★ 诊断日志：记录 _startupActivation 最终结果
-try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] _startupActivation=${JSON.stringify(_startupActivation)}, _pendingActivation=${JSON.stringify(_pendingActivation)}\n`); } catch(e) {}
+try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] _startupActivation=${_startupActivation ? (_startupActivation.code ? ('code=' + _startupActivation.code) : ('token=' + (_startupActivation.token || '').slice(0, 8))) : 'null'}, _pendingActivation=${_pendingActivation ? (_pendingActivation.code ? ('code=' + _pendingActivation.code) : ('token=' + (_pendingActivation.token || '').slice(0, 8))) : 'null'}\n`); } catch(e) {}
 
 // ============================================================================
 //  视频录制模块注入 —— B2-2 已随窗口域抽至 desktop-windows.cjs
@@ -1232,8 +1232,8 @@ async function hashPassword(password) {
 // 查询是否有待激活数据（来自 URL Scheme）
 ipcMain.handle('bnzc:get-pending-activation', () => {
     try {
-        console.log('[Bnzc] get-pending-activation: _pendingActivation =', JSON.stringify(_pendingActivation));
-        try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] IPC get-pending-activation called, _pendingActivation=${JSON.stringify(_pendingActivation)}\n`); } catch(e) {}
+        console.log('[Bnzc] get-pending-activation: _pendingActivation =', _pendingActivation ? (_pendingActivation.code ? ('code=' + _pendingActivation.code) : ('token=' + (_pendingActivation.token || '').slice(0, 8))) : 'null');
+        try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] IPC get-pending-activation called, _pendingActivation=${_pendingActivation ? (_pendingActivation.code ? ('code=' + _pendingActivation.code) : ('token=' + (_pendingActivation.token || '').slice(0, 8))) : 'null'}\n`); } catch(e) {}
         return { success: true, data: _pendingActivation };
     } catch (e) {
         console.error('[Bnzc] get-pending-activation 异常:', e);

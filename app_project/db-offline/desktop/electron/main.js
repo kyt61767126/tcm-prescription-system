@@ -646,16 +646,16 @@ if (!gotTheLock) {
 }
 
 app.on('second-instance', (event, commandLine) => {
-    console.log('[Bnzc] second-instance 事件, commandLine:', JSON.stringify(commandLine));
+    console.log('[Bnzc] second-instance 事件, commandLine:', JSON.stringify(commandLine.map(a => (typeof a === 'string' && a.startsWith('bnzc://')) ? a.split('?')[0] : a)));
     // ★ A4：转交命令行含 bnzc: 时打开诊断开关再落盘
     if (Array.isArray(commandLine) && commandLine.some(a => typeof a === 'string' && a.toLowerCase().indexOf('bnzc:') >= 0)) {
         global.__bnzcDebugOn = true;
     }
-    __bnzcDbg('second-instance: ' + JSON.stringify(commandLine));
+    __bnzcDbg('second-instance: ' + JSON.stringify(commandLine.map(a => (typeof a === 'string' && a.startsWith('bnzc://')) ? a.split('?')[0] : a)));
     for (const arg of commandLine) {
         if (arg && arg.startsWith('bnzc://')) {
             const parsed = parseBnzcUrl(arg);
-            __bnzcDbg('parsed: ' + JSON.stringify(parsed));
+            __bnzcDbg('parsed: ' + (parsed ? (parsed.code ? ('code=' + parsed.code) : ('token=' + (parsed.token || '').slice(0, 8))) : 'null'));
             if (parsed) {
                 _pendingActivation = parsed;
                 console.log('[Bnzc] second-instance 捕获激活链接:', parsed.code || ('token:' + (parsed.token || '').slice(0, 8)));
@@ -718,12 +718,12 @@ function extractBnzcFromArgv() {
     try {
         const argv = process.argv;
         // ★ A4：诊断日志已收口到 __bnzcDbg（普通启动不再落盘）
-        __bnzcDbg('extractBnzcFromArgv START: argv=' + JSON.stringify(argv));
+        __bnzcDbg('extractBnzcFromArgv START: argv=' + JSON.stringify(argv.map(a => (typeof a === 'string' && a.startsWith('bnzc://')) ? a.split('?')[0] : a)));
         // 先尝试找完整的 bnzc:// URL
         for (const arg of argv) {
             if (arg && arg.startsWith('bnzc://')) {
                 // ★ 诊断日志：找到 bnzc:// 参数
-                __bnzcDbg('found bnzc arg: ' + arg);
+                __bnzcDbg('found bnzc arg: ' + arg.split('?')[0]);
                 const parsed = parseBnzcUrl(arg);
                 if (parsed) {
                     console.log('[Bnzc] 从命令行参数解析激活链接:', parsed.code || ('token:' + (parsed.token || '').slice(0, 8)));
@@ -792,8 +792,8 @@ function parseBnzcUrl(rawUrl) {
         const result = {
             code: code,
             token: token,
-            clinicName: params.clinic ? decodeURIComponent(params.clinic) : '',
-            user: params.user ? decodeURIComponent(params.user) : '',
+            clinicName: params.clinic || '',
+            user: params.user || '',
             source: 'url-scheme',
             timestamp: Date.now()
         };
@@ -823,7 +823,7 @@ if (_startupActivation) {
 }
 // ★ 诊断日志：记录 _startupActivation 最终结果（A4：普通启动不写盘）
 if (_startupActivation) global.__bnzcDebugOn = true;
-__bnzcDbg('_startupActivation=' + JSON.stringify(_startupActivation) + ', _pendingActivation=' + JSON.stringify(_pendingActivation));
+__bnzcDbg('_startupActivation=' + (_startupActivation ? (_startupActivation.code ? ('code=' + _startupActivation.code) : ('token=' + (_startupActivation.token || '').slice(0, 8))) : 'null') + ', _pendingActivation=' + (_pendingActivation ? (_pendingActivation.code ? ('code=' + _pendingActivation.code) : ('token=' + (_pendingActivation.token || '').slice(0, 8))) : 'null'));
 
 // ============================================================================
 //  视频录制模块注入 —— B2-2 已随窗口域抽至 desktop-windows.cjs
@@ -1874,8 +1874,8 @@ async function hashPassword(password) {
 // 查询是否有待激活数据（来自 URL Scheme）
 ipcMain.handle('bnzc:get-pending-activation', () => {
     try {
-        console.log('[Bnzc] get-pending-activation: _pendingActivation =', JSON.stringify(_pendingActivation));
-        __bnzcDbg('IPC get-pending-activation called, _pendingActivation=' + JSON.stringify(_pendingActivation));
+        console.log('[Bnzc] get-pending-activation: _pendingActivation =', _pendingActivation ? (_pendingActivation.code ? ('code=' + _pendingActivation.code) : ('token=' + (_pendingActivation.token || '').slice(0, 8))) : 'null');
+        __bnzcDbg('IPC get-pending-activation called, _pendingActivation=' + (_pendingActivation ? (_pendingActivation.code ? ('code=' + _pendingActivation.code) : ('token=' + (_pendingActivation.token || '').slice(0, 8))) : 'null'));
         return { success: true, data: _pendingActivation };
     } catch (e) {
         console.error('[Bnzc] get-pending-activation 异常:', e);

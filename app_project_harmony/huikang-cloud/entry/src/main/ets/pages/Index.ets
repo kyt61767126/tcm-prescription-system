@@ -77,8 +77,10 @@ struct Index {
     //   （EntryAbility onNewWant 解析后经 emitter 通知，此处直推渲染层；
     //     页面未就绪时 __bnzcEmitFromNative 未定义会静默跳过，
     //     由 JS 启动后 bnzcGetPending 拉取暂存兜底——对齐安卓双保险语义）
-    emitter.on({ eventId: BNZC_EMIT_EVENT_ID }, (e: emitter.EventData<Record<string, Object>>) => {
-      const j: Object | undefined = e.data['json'];
+    // ★ 2026-10-16 双独立审查修复：EventData 非泛型（API 12），泛型重载 @since 23 不可用；e.data 需判空
+    emitter.on({ eventId: BNZC_EMIT_EVENT_ID }, (e: emitter.EventData) => {
+      const payload: Object | undefined = e.data as Record<string, Object>;
+      const j: Object | undefined = (payload as Record<string, Object>)?.['json'];
       if (typeof j === 'string') {
         this.dispatchBnzcToWebView(j as string);
       }

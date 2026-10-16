@@ -2918,7 +2918,8 @@ public class MainActivity extends BridgeActivity {
         //   clinicName/productClass/cloud + clientClass/app；桌面为 desktop）。
         //   超时对齐桌面真机经验（claim 冷启实测 14~23s）：connect 10s / read 40s。
         //   云 App 无本地 LicenseManager 落盘预检（服务端即权威），失败直接透传
-        //   服务端错误（含渐进式表单标记，由页面弹窗展示）。
+        //   服务端错误。claim 端点当前不返回 needClinicName（渐进式表单仅 validate
+        //   端有），下方透传属防御性兼容，保留字段以兼容未来扩展。
         private JSONObject activateOnline(String code, String user, String clinicName) {
             java.net.HttpURLConnection conn = null;
             try {
@@ -2965,7 +2966,7 @@ public class MainActivity extends BridgeActivity {
                     JSONObject e2 = new JSONObject();
                     e2.put("success", false);
                     e2.put("error", out.optString("error", "激活失败（" + sc + "）"));
-                    // 透传服务端渐进式表单标记（needClinicName：换机用户需补诊所名）
+                    // 防御性透传：claim 端点当前不返回 needClinicName（渐进式表单仅 validate 端有），保留字段以兼容未来扩展
                     if (out.has("needClinicName")) e2.put("needClinicName", out.optBoolean("needClinicName", false));
                     return e2;
                 }

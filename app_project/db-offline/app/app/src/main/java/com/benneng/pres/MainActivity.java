@@ -2373,7 +2373,9 @@ public class MainActivity extends BridgeActivity {
             // ★ 2026-09-27 安全审查 L1：指纹六个动作全部要求本地来源
             //   （probe/status/list/enroll/unlock/delete）。业务页 URL 恒定
             //   file://（导航白名单封死远程页），不会误伤正常调用。
+            // ★ 2026-10-16 双独立审查对齐：令牌兑换列为敏感操作
             return "deleteFile".equals(name)
+                    || "bnzcRedeemToken".equals(name)
                     || (name != null && name.startsWith("biometric"));
         }
 
