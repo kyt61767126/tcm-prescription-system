@@ -1474,6 +1474,11 @@ public class MainActivity extends BridgeActivity {
             "      } catch(e) { reject(e); }" +
             "    });" +
             "  }" +
+            // ★ 2026-10-16 一键激活 P0：原生 onNewIntent 收到 bnzc:// 运行中事件时
+            //   evaluateJavascript 调此函数，转发给渲染层注册的 onBnzcPendingActivation 回调
+            "  window.__bnzcEmitFromNative = function(data) {" +
+            "    try { if (typeof window.__bnzcNativeCb === 'function') window.__bnzcNativeCb(data); } catch(e) {}" +
+            "  };" +
             "  window.electronAPI = {" +
             "    __nativeBridgeProxy: true," +
             "    isElectron: true," +
@@ -1532,7 +1537,19 @@ public class MainActivity extends BridgeActivity {
             "    renameMediaFiles: function(oldPatientName, newPatientName, oldNo, newNo) { return callNativeAsync('renameMediaFiles', {oldPatientName: oldPatientName||'', newPatientName: newPatientName||'', oldNo: oldNo||'', newNo: newNo||''}); }," +
             "    startReadSession: function(filePath) { return callNativeAsync('startReadSession', {filePath: filePath}); }," +
             "    readNextChunk: function(sessionId) { return callNativeAsync('readNextChunk', {sessionId: sessionId}); }," +
-            "    closeReadSession: function(sessionId) { callNative('closeReadSession', {sessionId: sessionId}); }" +
+            "    closeReadSession: function(sessionId) { callNative('closeReadSession', {sessionId: sessionId}); }," +
+            // ★ 2026-10-16 一键激活 P0：bnzc:// 协议桥（与桌面 preload / 离线 App 同名）。
+            //   bnzcAutoActivate 走 NativeBridge activateOnline（Java 复刻桌面 activateManager
+            //   .activateOnline 的 claim 口径）；成功后 2600ms reload 兜底（App 无
+            //   license.restart，页面重载后云端配置即激活态，时序避开页面 1500ms restart 窗）。
+            "    bnzcGetPendingActivation: function() { return callNativeAsync('bnzcGetPending', {}); }," +
+            "    bnzcClearPendingActivation: function() { return callNativeAsync('bnzcClearPending', {}); }," +
+            "    bnzcRedeemToken: function(token) { return callNativeAsync('bnzcRedeemToken', {token: token||''}); }," +
+            "    bnzcAutoActivate: function(payload) {" +
+            "      return callNativeAsync('activateOnline', {code: (payload&&payload.code)||'', user: (payload&&payload.user)||'', clinicName: (payload&&payload.clinicName)||''})" +
+            "        .then(function(r){ try { if (r && r.success) setTimeout(function(){ try { location.reload(); } catch(e){} }, 2600); } catch(e){} return r; });" +
+            "    }," +
+            "    onBnzcPendingActivation: function(cb) { window.__bnzcNativeCb = cb; }" +
             "  };" +
             "})();";
         webView.evaluateJavascript(js, null);
@@ -1869,6 +1886,14 @@ public class MainActivity extends BridgeActivity {
                         return new JSONObject().put("success", true).toString();
                     case "bnzcRedeemToken":
                         return bnzcRedeemToken(args.optString("token", "")).toString();
+                    // ★ 2026-10-16 一键激活 P0：bnzcAutoActivate 兑换码落地——Java 复刻
+                    //   桌面 activateManager.activateOnline 的 claim 口径（productClass=cloud
+                    //   /clientClass=app；桌面传 desktop）。云 App 无本地 LicenseManager，
+                    //   claim 成功即服务端激活态，页面 reload 后配置生效。
+                    case "activateOnline":
+                        return activateOnline(args.optString("code", ""),
+                                args.optString("user", ""),
+                                args.optString("clinicName", "")).toString();
                     default:
                         return fail("unknown method: " + name).toString();
                 }
@@ -1893,6 +1918,7 @@ public class MainActivity extends BridgeActivity {
             return "readFileAsBase64".equals(name)
                     || "deleteFile".equals(name)
                     || "bnzcRedeemToken".equals(name)
+                    || "activateOnline".equals(name)
                     || (name != null && name.startsWith("biometric"));
         }
 
@@ -2881,6 +2907,71 @@ public class MainActivity extends BridgeActivity {
                 return out; // { success, code, clinic, user, productLock }
             } catch (Exception e) {
                 appendBnzcDebug("redeem-token error: " + e.getMessage());
+                return fail("网络异常：" + e.getMessage());
+            } finally {
+                if (conn != null) conn.disconnect();
+            }
+        }
+
+        // ★ 2026-10-16 一键激活 P0：bnzcAutoActivate 落地——POST /api/license/claim。
+        //   口径对齐桌面 activateManager.activateOnline（body: code/machineId/user/
+        //   clinicName/productClass/cloud + clientClass/app；桌面为 desktop）。
+        //   超时对齐桌面真机经验（claim 冷启实测 14~23s）：connect 10s / read 40s。
+        //   云 App 无本地 LicenseManager 落盘预检（服务端即权威），失败直接透传
+        //   服务端错误（含渐进式表单标记，由页面弹窗展示）。
+        private JSONObject activateOnline(String code, String user, String clinicName) {
+            java.net.HttpURLConnection conn = null;
+            try {
+                if (code == null || code.trim().isEmpty()) {
+                    return fail("激活码不能为空");
+                }
+                JSONObject req = new JSONObject();
+                req.put("code", code.trim());
+                req.put("machineId", getStableMachineId());
+                if (user != null && !user.trim().isEmpty()) req.put("user", user.trim());
+                if (clinicName != null && !clinicName.trim().isEmpty()) req.put("clinicName", clinicName.trim());
+                req.put("productClass", "cloud");
+                req.put("clientClass", "app");
+                byte[] body = req.toString().getBytes("UTF-8");
+
+                java.net.URL u = new java.net.URL(
+                        "https://tcm-prescription-system.pages.dev/api/license/claim");
+                conn = (java.net.HttpURLConnection) u.openConnection();
+                conn.setRequestMethod("POST");
+                conn.setConnectTimeout(10000);
+                conn.setReadTimeout(40000);
+                conn.setDoOutput(true);
+                conn.setRequestProperty("Content-Type", "application/json");
+                conn.setRequestProperty("Accept", "application/json");
+                OutputStream os = conn.getOutputStream();
+                os.write(body);
+                os.flush();
+                os.close();
+
+                int sc = conn.getResponseCode();
+                InputStream is = (sc >= 200 && sc < 300) ? conn.getInputStream() : conn.getErrorStream();
+                String resp = "";
+                if (is != null) {
+                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                    byte[] buf = new byte[4096];
+                    int n;
+                    while ((n = is.read(buf)) > 0) baos.write(buf, 0, n);
+                    is.close();
+                    resp = new String(baos.toByteArray(), "UTF-8");
+                }
+                JSONObject out = resp.isEmpty() ? new JSONObject() : new JSONObject(resp);
+                appendBnzcDebug("activate-online status=" + sc + " ok=" + out.optBoolean("success", false));
+                if (sc < 200 || sc >= 300 || !out.optBoolean("success", false)) {
+                    JSONObject e2 = new JSONObject();
+                    e2.put("success", false);
+                    e2.put("error", out.optString("error", "激活失败（" + sc + "）"));
+                    // 透传服务端渐进式表单标记（needClinicName：换机用户需补诊所名）
+                    if (out.has("needClinicName")) e2.put("needClinicName", out.optBoolean("needClinicName", false));
+                    return e2;
+                }
+                return out; // { success, license, licenseInfo, ... }
+            } catch (Exception e) {
+                appendBnzcDebug("activate-online error: " + e.getMessage());
                 return fail("网络异常：" + e.getMessage());
             } finally {
                 if (conn != null) conn.disconnect();

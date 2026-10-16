@@ -27,6 +27,9 @@
         "startWindowIcon": "$media:app_icon",
         "startWindowBackground": "$color:start_window_background",
         "exported": true,
+        // ★ 2026-10-16 一键激活 P0：对齐安卓 singleTask——运行中点击 bnzc:// 深链
+        //   复用实例走 onNewWant（standard 会新建实例，onNewWant 不回调）。
+        "launchType": "singleton",
         "orientation": "portrait",
         "skills": [
           {
@@ -35,6 +38,23 @@
             ],
             "actions": [
               "action.system.home"
+            ]
+          },
+          {
+            // ★ 2026-10-16 一键激活 P0：注册 bnzc:// 协议（对齐安卓 intent-filter
+            //   VIEW + BROWSABLE + scheme bnzc + host activate），客服发的
+            //   bnzc://activate?code=… / ?t=… 链接可唤起本 App。
+            "entities": [
+              "entity.system.browsable"
+            ],
+            "actions": [
+              "ohos.want.action.viewData"
+            ],
+            "uris": [
+              {
+                "scheme": "bnzc",
+                "host": "activate"
+              }
             ]
           }
         ]

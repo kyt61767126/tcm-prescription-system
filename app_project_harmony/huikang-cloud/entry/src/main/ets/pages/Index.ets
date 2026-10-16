@@ -15,7 +15,8 @@ import { webview } from '@kit.ArkWeb';
 import { common, Want } from '@kit.AbilityKit';
 import { picker } from '@kit.CoreFileKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { NativeBridge } from '../bridge/NativeBridge';
+import { emitter } from '@kit.BasicServicesKit';
+import { NativeBridge, BNZC_EMIT_EVENT_ID } from '../bridge/NativeBridge';
 import { PageInject } from '../bridge/PageInject';
 
 const DOMAIN: number = 0x0000;
@@ -72,6 +73,34 @@ struct Index {
     setTimeout(() => {
       this.hideLoading();
     }, 5000);
+    // ★ 2026-10-16 一键激活 P0：运行中 bnzc:// 深链
+    //   （EntryAbility onNewWant 解析后经 emitter 通知，此处直推渲染层；
+    //     页面未就绪时 __bnzcEmitFromNative 未定义会静默跳过，
+    //     由 JS 启动后 bnzcGetPending 拉取暂存兜底——对齐安卓双保险语义）
+    emitter.on({ eventId: BNZC_EMIT_EVENT_ID }, (e: emitter.EventData<Record<string, Object>>) => {
+      const j: Object | undefined = e.data['json'];
+      if (typeof j === 'string') {
+        this.dispatchBnzcToWebView(j as string);
+      }
+    });
+  }
+
+  /**
+   * bnzc 深链直推渲染层（对齐安卓 dispatchBnzcToWebView）：
+   * JSON 嵌单引号 JS 串，转义反斜杠与单引号即可（JSON 无换行/控制符裸出）。
+   */
+  private dispatchBnzcToWebView(json: string): void {
+    try {
+      const esc: string = json.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      const js: string =
+        `try{ if (typeof window.__bnzcEmitFromNative === 'function') {` +
+        ` window.__bnzcEmitFromNative(JSON.parse('${esc}')); } }` +
+        `catch(e){ console.warn('[Bnzc] 派发失败', e); }`;
+      this.controller.runJavaScript(js);
+      hilog.info(DOMAIN, TAG, '[Bnzc] 深链已派发渲染层');
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, '[Bnzc] 派发深链失败: %{public}s', JSON.stringify(e));
+    }
   }
 
   private hideLoading(): void {

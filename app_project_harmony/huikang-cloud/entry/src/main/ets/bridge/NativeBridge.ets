@@ -34,6 +34,11 @@ const ALLOWED_URL_PREFIX: string = 'https://tcm-prescription-system.pages.dev/do
 /** 分片读取：每片 256KB 原始字节（base64 后约 349KB，远低于调用栈限制） */
 const READ_CHUNK_SIZE: number = 256 * 1024;
 
+/** ★ 2026-10-16 一键激活 P0：bnzc:// 深链暂存 AppStorage key（EntryAbility 写入，本桥读取） */
+export const BNZC_PENDING_KEY: string = 'pendingBnzcActivationJson';
+/** ★ 2026-10-16 一键激活 P0：EntryAbility onNewWant → Index 派发渲染层的 emitter 事件 ID */
+export const BNZC_EMIT_EVENT_ID: number = 910016;
+
 /** 分片上传/读取会话 */
 class MediaSessionInfo {
   tempPath: string = '';
@@ -148,6 +153,28 @@ export class NativeBridge {
         // ---------- 官网付款导引 ----------
         case 'openExternalUrl':
           return this.openExternalUrl(optStr(args, 'url'));
+
+        // ---------- ★ 2026-10-16 一键激活 P0：bnzc:// 深链三件套（对齐安卓云 App） ----------
+        // bnzcGetPending：读暂存（读后不删，clear 单独调用）；data 为 {code?,token?,clinicName,user}
+        case 'bnzcGetPending': {
+          const pending: string | undefined = AppStorage.get<string>(BNZC_PENDING_KEY);
+          if (pending !== undefined && pending.length > 0) {
+            const r: Record<string, Object> = { 'success': true, 'data': JSON.parse(pending) as Object };
+            return JSON.stringify(r);
+          }
+          const ok: Record<string, Object> = { 'success': true };
+          return JSON.stringify(ok);
+        }
+        case 'bnzcClearPending': {
+          AppStorage.delete(BNZC_PENDING_KEY);
+          appendBnzcDebug(this.context, 'pending cleared by JS');
+          const ok: Record<string, Object> = { 'success': true };
+          return JSON.stringify(ok);
+        }
+        // 令牌兑换由 shim 在页面侧同源 fetch 完成（ArkTS http 异步无法同步返回给 invoke），
+        // 此 case 仅兜底防直接 invoke 误用（shim 不会调到这里）。
+        case 'bnzcRedeemToken':
+          return failJson('use-js-fetch');
 
         // ---------- 与安卓行为一致：未知方法 ----------
         default:
@@ -1102,6 +1129,30 @@ function getCurrentMonthFolder(): string {
 function formatTime(d: Date): string {
   const p2: (n: number) => string = (n: number): string => n < 10 ? '0' + n : String(n);
   return `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}${p2(d.getSeconds())}`;
+}
+
+/**
+ * ★ 2026-10-16 一键激活 P0：bnzc 诊断日志（对齐安卓 appendBnzcDebug，
+ * filesDir/bnzc-debug.log 追加 + 本地时间戳前缀，"点了没反应"可远程取证）。
+ */
+export function appendBnzcDebug(context: common.UIAbilityContext, line: string): void {
+  try {
+    const p2: (n: number) => string = (n: number): string => n < 10 ? '0' + n : String(n);
+    const d: Date = new Date();
+    const stamp: string =
+      `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}T` +
+      `${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`;
+    const path: string = `${context.filesDir}/bnzc-debug.log`;
+    const fd: number = fs.openSync(path,
+      fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE | fs.OpenMode.APPEND).fd;
+    try {
+      fs.writeSync(fd, `[${stamp}] ${line}\n`);
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch (e) {
+    hilog.warn(DOMAIN, TAG, 'appendBnzcDebug 失败: %{public}s', JSON.stringify(e));
+  }
 }
 
 /** 按扩展名推断 MIME（对齐安卓 mimeForFile） */

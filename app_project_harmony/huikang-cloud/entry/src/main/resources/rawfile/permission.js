@@ -112,6 +112,9 @@ try {
             var x = s.toLowerCase();
             if (x === 'institution' || x === 'institutional' || x === 'jigou') return 'cloud_clinic';
             if (x === 'standard') return 'personal';
+            // ★ 2026-09-17 语音版：cloud_voice 规范 key 原样透传（独立版本线，
+            //   不归并 personal/clinic；与 edition-lock.js __normalizeEdition 逐行同步）
+            if (x === 'cloud_voice' || x === 'voice') return 'cloud_voice';
             if (x === 'yj') return 'cloud_clinic';
             if (x === 'yb') return 'cloud_personal';
             if (x === 'lj') return 'offline_clinic';
@@ -124,7 +127,29 @@ try {
             if (x.indexOf('标准版') >= 0) return 'personal';
             return s;
         },
+        // ★★★ 2026-09-24 【热更环境机构版按钮消失根治】读取 userData 权威 edition 插槽。
+        //   事故链：cloud 热通道长期错投本地身份 index.html（EDITION=personal/惠康中医-本地/
+        //   APP_MODE=auto），热目录又无 config.json（主进程复制的是 asar 出厂模板 cloud_personal）
+        //   → CONFIG.edition 与 window.EDITION 全是 personal 系；唯一的真相是 Permission.init()
+        //   经 IPC 从 userData 读到并暂存的权威值（9-01 已写插槽，但按钮判定链从不读它）。
+        //   规则：插槽值（userData 激活配置）> CONFIG.edition（同目录 XHR，热目录可能是出厂模板）
+        //   > window.EDITION（出厂默认，必然不可信）> this._edition。
+        //   注意 TDZ：CONFIG 在解析期可能处于暂时性死区，typeof 亦抛错——必须 try-catch。
+        _authoritativeEditionValue() {
+            try {
+                if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.__authoritativeEdition) {
+                    return String(CONFIG.__authoritativeEdition);
+                }
+            } catch (_) {}
+            try {
+                if (this._authoritativeEdition) return String(this._authoritativeEdition);
+            } catch (_) {}
+            return '';
+        },
         _currentEdition() {
+            // ★ 2026-09-24 权威插槽最优先（热更环境 XHR/默认值均不可信，详见上方法注释）
+            var auth = this._authoritativeEditionValue();
+            if (auth) return this._normalizeEdition(auth);
             var v = '';
             try {
                 if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.edition) v = String(CONFIG.edition);
@@ -196,6 +221,21 @@ try {
         // 旧 API 兼容：isClinicCustom = isInstitutional
         isClinicCustom() {
             return this.isInstitutional();
+        },
+        // ★ 2026-09-17 语音版（第一期）：是否为语音输入版（cloud_voice 独立版本线）
+        //   权益 = 标准版全部 + 语音输入；语音模块入口唯一 gate（VoiceInput.isAvailable 三重条件之一）
+        //   判定依据 = 服务端登录响应 clinicEdition（auth-core 登录钩子写入 CONFIG.edition），
+        //   不信任本地可伪造标记
+        // ★ 2026-09-21 语音权益叠加：机构诊所加购语音后 edition 保持 cloud_clinic（机构属性
+        //   不丢），语音权益由登录响应 user.voiceEnabled（auth-core 写 CONFIG.voiceEnabled）
+        //   判定——voice 权益 = cloud_voice 版本线 OR voiceEnabled 叠加标记，两者等效。
+        isVoiceEdition() {
+            try { if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.voiceEnabled === true) return true; } catch (_) {}
+            var e = this._currentEdition();
+            if (e === 'cloud_voice') return true;
+            var x = String(e).toLowerCase();
+            if (x === 'voice' || x === 'cloud_voice') return true;
+            return false;
         },
 
         // 权限判断（规则4：云端标准版只有管理员，不能建子账号；

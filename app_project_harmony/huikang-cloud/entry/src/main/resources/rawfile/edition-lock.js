@@ -25,6 +25,9 @@
         var x = s.toLowerCase();
         if (x === 'institution' || x === 'institutional' || x === 'jigou') return 'cloud_clinic';
         if (x === 'standard') return 'personal';
+        // ★ 2026-09-17 语音版：cloud_voice 规范 key 原样透传（独立版本线，
+        //   不归并到 personal/clinic；显式登记防未来兜底规则误伤）
+        if (x === 'cloud_voice' || x === 'voice') return 'cloud_voice';
         if (x === 'yj') return 'cloud_clinic';
         if (x === 'yb') return 'cloud_personal';
         if (x === 'lj') return 'offline_clinic';
