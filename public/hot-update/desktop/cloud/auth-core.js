@@ -1224,6 +1224,15 @@
                 const __mid = normalizeMachineIdResult(await global.electronAPI.activate.getMachineId());
                 if (__mid) { machineId = __mid; clientClass = 'desktop'; }
                 else if (global.Capacitor) { clientClass = 'app'; }
+            } else if (global.AndroidNative && typeof global.AndroidNative.invoke === 'function') {
+                // ★ 2026-10-10 云端App稳定硬件 ID（Java 桥 getStableMachineId：
+                //   SharedPreferences 缓存优先 + ANDROID_ID SHA-256 派生 + UUID 兜底）。
+                //   同机重装/清缓存也不漂移，替代随机 browser-xxx，杜绝机构版 1 台误锁。
+                clientClass = 'app';
+                try {
+                    const __hw = String(global.AndroidNative.invoke('getMachineId', '{}') || '').trim();
+                    if (/^[A-Za-z0-9_-]{8,64}$/.test(__hw)) machineId = __hw;
+                } catch (e2) { /* 桥异常留空，走下方指纹兜底 */ }
             } else if (global.Capacitor) {
                 clientClass = 'app';
             }
@@ -4988,6 +4997,122 @@
 
         const PHONE_RE = /^1[3-9]\d{9}$/;
         let state = { edition: 'institution', phone: '', clinicName: '', adminName: '', password: '', remark: '' };
+        // ★ 2026-10-14 激活架构 P3（与 offline.js 同构）：claim/order 请求体单点收口。
+        //   Tab1 下单 / Tab2 激活码 / 到期直通等入口不再各自手写 body，统一由本函数构造，
+        //   字段口径一处维护。kind：claim-cloud（pwdCap v2 + 可选密码）/ order-cloud。
+        //   纯重构：字段集与空值处理逐一对齐旧内联实现，零行为变化。
+        function buildActivationPayload(kind, id) {
+            id = id || {};
+            if (kind === 'claim-cloud' || kind === 'claim-offline') {
+                const body = {
+                    code: id.code,
+                    machineId: id.machineId || 'unknown',
+                    user: id.user,
+                    clinicName: id.clinicName || '',
+                    phone: id.phone,
+                    productClass: kind === 'claim-cloud' ? 'cloud' : 'offline',
+                    clientClass: id.clientClass || 'app'
+                };
+                if (kind === 'claim-cloud') {
+                    body.pwdCap = 'v2';
+                    // 对齐旧实现 password: codePwd1 || undefined——空串不带键
+                    if (id.password) body.password = id.password;
+                }
+                return body;
+            }
+            // order-cloud（云端密码门控：仅排除默认 admin，无长度校验——保持旧口径）
+            const st = id.state || {};
+            const pwdRaw = st.password;
+            const pwdOk = kind === 'order-cloud'
+                ? !!(pwdRaw && pwdRaw !== 'admin')
+                : !!(pwdRaw && pwdRaw !== 'admin' && pwdRaw.length >= 8 && pwdRaw.length <= 32);
+            return {
+                orderNo: id.orderNo,
+                productKey: kind === 'order-cloud' ? 'cloud' : 'local',
+                edition: id.edition,
+                price: id.price || '',
+                clinicName: st.clinicName,
+                adminName: st.adminName,
+                phone: st.phone,
+                machineId: id.machineId || 'unknown',
+                note: st.remark || '',
+                inviteCode: st.inviteCode || '',
+                dp: id.dp,
+                password: pwdOk ? pwdRaw : ''
+            };
+        }
+        // ★ 2026-10-13 激活架构优化（P1，与 offline.js 同构）：云端统一身份提供器 +
+        //   Tab2 全入口预填。云端无本地台账，身份来自登录态 auth:currentUser / 运行时
+        //   currentUser / 记住的登录名；已注册/登录用户打开激活码页自动带出手机号与诊所/
+        //   姓名，「只填激活码」。仅回填输入框（可改），不放宽服务端核验。
+        let __localIdentity = null;
+        let __localIdentityPromise = null;
+        function resolveLocalIdentity() {
+            if (__localIdentity) return Promise.resolve(__localIdentity);
+            if (__localIdentityPromise) return __localIdentityPromise;
+            __localIdentityPromise = (async function () {
+                const m = {};
+                const absorb = function (u) {
+                    if (!u) return;
+                    const up = String(u.phone || '').trim();
+                    const un = String(u.username || '').trim();
+                    const ph = PHONE_RE.test(up) ? up : (PHONE_RE.test(un) ? un : '');
+                    const nm = String(u.adminName || u.name || u.realName || u.doctorName || '').trim();
+                    const cn = String(u.clinicName || '').trim();
+                    if (ph) {
+                        if (!m.phone) { m.phone = ph; m.source = m.source || 'currentUser'; }
+                        if (nm && !m.adminName) m.adminName = nm;
+                        if (cn && !m.clinicName) m.clinicName = cn;
+                    } else {
+                        if (nm && !m.adminName) m.adminName = nm;
+                        if (cn && !m.clinicName) m.clinicName = cn;
+                    }
+                };
+                // ① 运行时登录用户（模块级 currentUser，typeof 保护）
+                try { if (typeof currentUser !== 'undefined' && currentUser) absorb(currentUser); } catch (e) {}
+                // ② 持久化登录用户 auth:currentUser（StorageAdapter 已解密，明文 JSON）
+                try {
+                    const s = await StorageAdapter.getItem('auth:currentUser');
+                    if (s) absorb(JSON.parse(s));
+                } catch (e) {}
+                // ③ 记住的登录名（手机号登录场景）
+                if (!m.phone) {
+                    try {
+                        const rn = await StorageAdapter.getItem('auth:rememberedUsername');
+                        if (rn && PHONE_RE.test(String(rn).trim())) {
+                            m.phone = String(rn).trim();
+                            if (!m.source) m.source = 'remembered';
+                        }
+                    } catch (e) {}
+                }
+                // ④ CONFIG.clinicName 末位补诊所名
+                if (!m.clinicName) {
+                    try { if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.clinicName) m.clinicName = String(CONFIG.clinicName).trim(); } catch (e) {}
+                }
+                if (m.phone) __localIdentity = m;
+                return m.phone ? m : null;
+            })();
+            return __localIdentityPromise;
+        }
+        // 用本机/登录身份预填 Tab2（空才填，不覆盖用户输入），同步灌入 state 供 claim body
+        function applyCodeIdentityPrefill(id) {
+            if (!id) return;
+            try {
+                if (id.phone && (!state.phone || !PHONE_RE.test(state.phone))) state.phone = id.phone;
+                if (id.clinicName && !state.clinicName) state.clinicName = id.clinicName;
+                if (id.adminName && !state.adminName) state.adminName = id.adminName;
+                const cp = document.getElementById('adminCodePhone');
+                if (cp && !cp.value.trim() && PHONE_RE.test(id.phone || '')) {
+                    cp.value = id.phone;
+                    const hint = document.getElementById('adminCodePhoneHint');
+                    if (hint) hint.textContent = '✓ 将使用您的注册手机号 ' + id.phone + '（如需换机请改成原绑定手机号）';
+                }
+                const cnEl = document.getElementById('adminCodeClinicName');
+                if (cnEl && !cnEl.value.trim() && id.clinicName) cnEl.value = id.clinicName;
+                const anEl = document.getElementById('adminCodeAdminName');
+                if (anEl && !anEl.value.trim() && id.adminName) anEl.value = id.adminName;
+            } catch (e) {}
+        }
         // ★ 2026-09-03 (架构统一 P2 客户端收敛): 同 offline.js
         let pollTimer = null;
         let pollCount = 0;
@@ -5020,11 +5145,11 @@
                         '<div style="font-size:24px;">🏨</div><div style="font-size:14px;font-weight:bold;margin-top:2px;color:#333;">机构版</div><div style="font-size:11px;color:#909399;">多人机构 · 多用户管理</div>' +
                     '</div>' +
                 '</div>' +
-                // ★ 2026-08-23 简化：版本选择页直达链接——手里已有激活码/想留言申请的用户跳过版本选择
-                //   （版本仅 Tab1 管理员激活申请需要，Tab2 输码/Tab3 工单不消费该字段，原流程强制选择属冗余步骤）
-                '<div style="display:flex;justify-content:space-between;gap:8px;margin-top:14px;font-size:12px;">' +
-                    '<span id="adminSkipToCode" style="color:#26a69a;cursor:pointer;-webkit-tap-highlight-color:transparent;">已有激活码？直接输入 →</span>' +
-                    '<span id="adminSkipToTicket" style="color:#07c160;cursor:pointer;-webkit-tap-highlight-color:transparent;">留言申请激活码 →</span>' +
+                // ★ 2026-10-10 淘宝买家入口强化：原 12px 小字「已有激活码？直接输入」
+                //   升级为全宽金色主按钮，点击直达输码 Tab；留言申请链接保留在按钮下方。
+                '<button type="button" id="adminCodeEntryBtn" style="width:100%;margin-top:14px;padding:13px;font-size:15px;font-weight:bold;border:none;border-radius:10px;color:#fff;background:linear-gradient(135deg,#fbbf24 0%,#f59e0b 100%);cursor:pointer;-webkit-tap-highlight-color:transparent;box-shadow:0 2px 6px rgba(245,158,11,0.35);">🔑 已有激活码？点此直接激活</button>' +
+                '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px;font-size:12px;">' +
+                    '<span id="adminSkipToTicket" style="color:#07c160;cursor:pointer;-webkit-tap-highlight-color:transparent;">没有激活码？留言申请 →</span>' +
                 '</div>' +
             '</div>' +
 
@@ -5263,6 +5388,11 @@
                 b.style.borderBottom = on ? '2.5px solid #26a69a' : '2.5px solid transparent';
                 b.style.background = on ? '#fafcfb' : 'transparent';
             });
+            // ★ 2026-10-13 一切到「激活码」Tab 即带出注册/登录身份（金色按钮/语音直达/
+            //   Tab 按钮三入口都经此收口）；resolve 有缓存、apply 空才填，重复调用幂等。
+            if (tab === 'code') {
+                resolveLocalIdentity().then(applyCodeIdentityPrefill).catch(function () {});
+            }
         }
 
         function cleanup() {
@@ -5331,9 +5461,9 @@
             syncSharedFieldsFrom('ticket'); // 工单Tab填过的信息同步到管理员激活
             show('adminStepForm'); setActiveTab('admin');
         });
-        // ★ 2026-08-23 简化：版本选择页直达链接（跳过版本选择，复用 Tab 切换逻辑）
-        var skipCodeLink = document.getElementById('adminSkipToCode');
-        if (skipCodeLink) skipCodeLink.addEventListener('click', function() {
+        // ★ 2026-10-10 金色主按钮直达输码 Tab（替代原小字链接 adminSkipToCode）
+        var codeEntryBtn = document.getElementById('adminCodeEntryBtn');
+        if (codeEntryBtn) codeEntryBtn.addEventListener('click', function() {
             show('adminTabCode'); setActiveTab('code');
             setTimeout(function() { var i = document.getElementById('adminCodeInput'); if (i) i.focus(); }, 200);
         });
@@ -5536,28 +5666,31 @@
                     // ★ 2026-09-11 换机激活简化：请求体带 user/phone（本页手机号框），
                     //   服务端手机号核验通过自动解绑换机；needClinicName/
                     //   needActivationInfo 标记走下方通用失败段渐进式展开
+                    // ★ 2026-10-10 首次激活超时根因修复：淘宝云端码首次 claim 要
+                    //   自动开通诊所+连续写多个 KV（实测 31s，稳态仅 2.5s），原 12s
+                    //   超时会在服务端成功前掐断 → 买家看到 abort 报错（实际已开通）。
+                    //   超时提到 30s，并明确提示首次开通较慢。
+                    try {
+                        loading.innerHTML =
+                            '<span style="display:inline-block;width:18px;height:18px;border:2px solid #ddd;border-top-color:#26a69a;border-radius:50%;animation:adminActivateSpin 0.8s linear infinite;vertical-align:middle;margin-right:8px;"></span>' +
+                            '<span style="font-size:13px;color:#26a69a;vertical-align:middle;">正在激活，首次开通云端账号约需 10～30 秒，请勿关闭页面...</span>';
+                    } catch (e) {}
                     const controller = new AbortController();
-                    const t = setTimeout(function(){ try { controller.abort(); } catch(e){} }, 12000);
+                    const t = setTimeout(function(){ try { controller.abort(); } catch(e){} }, 30000);
                     try {
                         const r = await fetch('https://tcm-prescription-system.pages.dev/api/license/claim', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
+                            // ★ 2026-10-14 P3：body 统一构造（云端码 productClass=cloud/
+                            //   clientClass=app + pwdCap v2；密码空→不带键，服务端随机初始密码）
+                            body: JSON.stringify(buildActivationPayload('claim-cloud', {
                                 code: code,
-                                machineId: machineId || 'unknown',
+                                machineId: machineId,
                                 user: effUser,
                                 clinicName: idClinicName || ((state && state.clinicName) || ''),
                                 phone: phoneVal,
-                                // ★ 2026-09-14 端形态语义修正：云端APP claim 上报
-                                //   productClass:'cloud' + clientClass:'app'（原 'app' 错占
-                                //   productClass 域，污染 KV 设备端形态记录）
-                                productClass: 'cloud',
-                                clientClass: 'app',
-                                // ★ 二期：能力位+买家自设密码（留空不带 password →
-                                //   服务端生成随机初始密码，仅本响应一次性下发）
-                                pwdCap: 'v2',
-                                password: codePwd1 || undefined
-                            }),
+                                password: codePwd1
+                            })),
                             signal: controller.signal
                         });
                         res = await r.json();
@@ -5604,14 +5737,24 @@
                     const idf = document.getElementById('adminCodeIdentityFields');
                     if (idf && idf.style.display === 'none') {
                         idf.style.display = '';
+                        // 预填注册/登录身份的诊所名/管理员姓名（state 已在切到 code 页时由统一
+                        // 身份提供器灌入；再 await 兜底存储读取晚到）——已注册用户无需再打一遍
                         try {
+                            let __id = null;
+                            try { __id = await resolveLocalIdentity(); } catch (ie) {}
+                            const __cn = (state && state.clinicName) || (__id && __id.clinicName) || '';
+                            const __an = (state && state.adminName) || (__id && __id.adminName) || '';
                             const cnEl = document.getElementById('adminCodeClinicName');
-                            if (cnEl && !cnEl.value && state && state.clinicName) cnEl.value = state.clinicName;
+                            if (cnEl && !cnEl.value && __cn) cnEl.value = __cn;
                             const anEl = document.getElementById('adminCodeAdminName');
-                            if (anEl && !anEl.value && state && state.adminName) anEl.value = state.adminName;
+                            if (anEl && !anEl.value && __an) anEl.value = __an;
                         } catch (e) {}
                         setTimeout(function() {
-                            try { document.getElementById('adminCodeClinicName').focus(); } catch (e) {}
+                            try {
+                                const __c = document.getElementById('adminCodeClinicName');
+                                if (__c && !__c.value) { document.getElementById('adminCodeAdminName').focus(); }
+                                else { __c.focus(); }
+                            } catch (e) {}
                         }, 250);
                     }
                 }
@@ -5622,7 +5765,10 @@
                 loading.style.display = 'none';
                 btn.disabled = false;
                 btn.textContent = '🚀 立即激活';
-                hint.textContent = '⚠ 网络错误：' + ((e && e.message) ? e.message : '请检查网络连接');
+                const __aborted = e && (e.name === 'AbortError' || /aborted/i.test(e.message || ''));
+                hint.textContent = __aborted
+                    ? '⚠ 网络较慢，等待超时。请直接再点一次「立即激活」（首次开通可能已在后台完成，重试通常很快）'
+                    : '⚠ 网络错误：' + ((e && e.message) ? e.message : '请检查网络连接');
                 hint.style.color = '#e53935';
             }
         });
@@ -5774,22 +5920,15 @@
                         if (window.electronAPI && window.electronAPI.activate &&
                             typeof window.electronAPI.activate.showExpireAlert === 'function') __dpCarrier = 'desktop';
                     } catch (eDp) {}
-                    const orderPayload = {
+                    // ★ 2026-10-14 P3：请求体统一由 buildActivationPayload 构造（同 offline.js）
+                    const orderPayload = buildActivationPayload('order-cloud', {
                         orderNo: genOrderNo(),
-                        productKey: 'cloud',
                         edition: editionKey,
                         price: ORDER_PRICE_MAP_CLOUD[editionKey] || '',
-                        clinicName: state.clinicName,
-                        adminName: state.adminName,
-                        phone: state.phone,
-                        machineId: machineId || 'unknown',
-                        note: state.remark || '',
-                        inviteCode: state.inviteCode || '',
                         dp: __dpCarrier,
-                        // ★ 注册密码随订单落服务端（PBKDF2 哈希落库）——审核通过开云端
-                        //   账户用注册密码；默认 admin 不传保持旧行为
-                        password: (state.password && state.password !== 'admin') ? state.password : ''
-                    };
+                        machineId: machineId,
+                        state: state
+                    });
                     let oRes;
                     if (global.electronAPI && global.electronAPI.activate &&
                         typeof global.electronAPI.activate.submitOrderDirect === 'function') {

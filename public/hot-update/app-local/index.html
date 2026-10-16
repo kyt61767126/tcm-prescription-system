@@ -6853,34 +6853,78 @@ let currentUser = null;
             setTimeout(function () { checkMediaBackupRisk(); }, 5000);
             
             // ★ bnzc:// 一键激活：检查是否有待激活数据
-            if (IS_ELECTRON && window.electronAPI && window.electronAPI.bnzcGetPendingActivation) {
+            // ★ 2026-10-16 双独立审查 P0 修复：APP 端 electronAPI shim 在 onPageFinished 注入，
+            //   const IS_ELECTRON 页面脚本加载时已固化 false（同 2026-08-29 备份功能踩过的坑，
+            //   见 index-app.html 备份保存处注释），原 IS_ELECTRON 门禁使双安卓 App 与鸿蒙
+            //   兜底页深链「原生暂存后无人消费」。改为延迟重试探测：立即试 + 250ms×20 次
+            //   （5s 窗口，覆盖 onPageFinished 注入与鸿蒙 onPageBegin 注入竞态）；
+            //   桌面 preload 先于页面脚本注入，首次探测即命中，行为不变。
+            (function probeBnzcPending(attempt) {
                 try {
-                    const result = await window.electronAPI.bnzcGetPendingActivation();
-                    if (result && result.success && result.data && result.data.code) {
-                        console.log('[Bnzc] 主窗口检测到待激活数据:', result.data.code);
-                        // 显示激活提示并执行自动激活
-                        showBnzcActivationNotice(result.data);
+                    if (window.electronAPI && window.electronAPI.bnzcGetPendingActivation) {
+                        (async () => {
+                            try {
+                                const result = await window.electronAPI.bnzcGetPendingActivation();
+                                if (result && result.success && result.data && (result.data.code || result.data.token)) {
+                                    console.log('[Bnzc] 主窗口检测到待激活数据:', result.data.code || ('token:' + String(result.data.token).slice(0, 8)));
+                                    // 显示激活提示并执行自动激活
+                                    showBnzcActivationNotice(result.data);
+                                }
+                            } catch (e) {
+                                console.warn('[Bnzc] 主窗口检查待激活数据失败:', e);
+                            }
+                        })();
+                        // 桥就绪后一并注册运行时监听（软件已运行时收到链接）
+                        if (window.electronAPI.onBnzcPendingActivation) {
+                            window.electronAPI.onBnzcPendingActivation(async (data) => {
+                                console.log('[Bnzc] 主窗口收到运行时激活链接:', data.code || ('token:' + String(data.token).slice(0, 8)));
+                                showBnzcActivationNotice(data);
+                            });
+                        }
+                        return; // 命中即止，不再重试
                     }
-                } catch (e) {
-                    console.warn('[Bnzc] 主窗口检查待激活数据失败:', e);
+                } catch (e) { /* 探测异常继续重试 */ }
+                if (attempt < 20) {
+                    setTimeout(function () { probeBnzcPending(attempt + 1); }, 250);
                 }
-            }
-            
-            // ★ bnzc:// 运行时监听（软件已运行时收到链接）
-            if (IS_ELECTRON && window.electronAPI && window.electronAPI.onBnzcPendingActivation) {
-                window.electronAPI.onBnzcPendingActivation(async (data) => {
-                    console.log('[Bnzc] 主窗口收到运行时激活链接:', data.code);
-                    showBnzcActivationNotice(data);
-                });
-            }
+            })(0);
         }
         
         // ★ bnzc:// 主窗口激活通知与自动激活
         async function showBnzcActivationNotice(data) {
-            if (!data || !data.code) return;
+            if (!data || (!data.code && !data.token)) return;
+
+            // ★ 2026-10-15 一次性安全令牌链接：用户确认后才兑换（兑换即绑本机消耗），
+            //   兑换成功后直接进入自动激活，不再二次询问。
+            let tokenConfirmed = false;
+            if (!data.code && data.token) {
+                if (!confirm('收到一键激活安全链接（24 小时内有效、仅限本机使用一次）。\n\n是否现在核验并激活？')) {
+                    if (window.electronAPI.bnzcClearPendingActivation) {
+                        window.electronAPI.bnzcClearPendingActivation();
+                    }
+                    return;
+                }
+                tokenConfirmed = true;
+                try {
+                    const redeem = await window.electronAPI.bnzcRedeemToken(data.token);
+                    if (!redeem || !redeem.success) {
+                        alert('❌ 激活链接核验失败：' + ((redeem && redeem.error) || '未知错误') +
+                            '\n\n如链接已过期或已在其他设备使用，请联系客服重新获取。');
+                        if (window.electronAPI.bnzcClearPendingActivation) {
+                            window.electronAPI.bnzcClearPendingActivation();
+                        }
+                        return;
+                    }
+                    data = { code: redeem.code, clinicName: redeem.clinic || '', user: redeem.user || '' };
+                } catch (e) {
+                    alert('❌ 激活链接核验异常：' + e.message);
+                    return;
+                }
+            }
+
             const typeInfo = getEditionTag();
             const msg = `收到一键激活链接：\n激活码：${data.code}\n${data.clinicName ? '诊所：' + data.clinicName + '\n' : ''}${data.user ? '用户：' + data.user + '\n' : ''}\n\n是否现在激活？`;
-            if (confirm(msg)) {
+            if (tokenConfirmed || confirm(msg)) {
                 try {
                     const result = await window.electronAPI.bnzcAutoActivate({
                         code: data.code,
