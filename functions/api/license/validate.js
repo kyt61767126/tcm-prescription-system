@@ -501,6 +501,10 @@ export async function onRequest(context) {
             }, 400);
         }
 
+        // ★ 2026-10-16 阶段2：换机自动解绑留痕——本次被 auto-unbind 踢掉的设备
+        //   （激活成功时随 updates.lastUnboundDevice 落库），该设备下次 validate
+        //   撞配额且无身份凭证时据此返回明确的「已被新设备解绑」提示
+        let __lastUnboundDevice = null;
         if (record.status === 'used' && !existingDevice) {
             // 新设备激活：检查是否还有配额
             if (devices.length >= maxDevices) {
@@ -515,14 +519,30 @@ export async function onRequest(context) {
                 //   手机号核验通过 / 诊所名精确匹配 / user 与原绑定全等；否则拒绝解绑
                 const originalUser = record.user || record.username || '';
                 const clinicNameMatched = !!(record.clinicName && clinicName === record.clinicName);
+                // ★ 2026-10-16 阶段2：被踢设备识别——上次 auto-unbind 移除的机器码与本次
+                //   请求一致即视为「被新设备挤掉的原设备」，返回明确 reason + 中文提示
+                //   （此前笼统报错，用户误以为激活失效→客服工单）；其余场景（无凭证
+                //   全新设备/攻击者）保持原提示与响应结构完全不变
+                const __isKickedDevice = !!(record.lastUnboundDevice &&
+                    record.lastUnboundDevice.machineId === machineId);
                 if (!phoneVerified && !clinicNameMatched && originalUser && (!user || user !== originalUser)) {
                     await appendLicenseLog(kv, code, {
                         action: 'unbind-denied',
                         time: new Date().toISOString(),
                         ip: ip,
                         operator: user || '(empty)',
-                        detail: `拒绝换机：新设备无有效身份凭证（phoneVerified=${phoneVerified}, clinicNameMatched=${clinicNameMatched}, user='${user || ''}' vs '${originalUser}'）`
+                        // ★ 2026-10-16 阶段2：被踢设备场景加 [unbound-by-new-device] 前缀标记，便于客服检索
+                        detail: (__isKickedDevice ? '[unbound-by-new-device] ' : '') +
+                            `拒绝换机：新设备无有效身份凭证（phoneVerified=${phoneVerified}, clinicNameMatched=${clinicNameMatched}, user='${user || ''}' vs '${originalUser}'）`
                     });
+                    if (__isKickedDevice) {
+                        // 被踢设备：新增 reason 字段（旧客户端忽略未知字段，仅展示 error，向后兼容）
+                        return json({
+                            success: false,
+                            reason: 'unbound-by-new-device',
+                            error: '该激活码已在新设备激活，本设备已自动解绑；如需恢复请联系客服或重新激活'
+                        }, 403);
+                    }
                     return json({
                         success: false,
                         error: '设备数已达上限。请填写与授权绑定一致的手机号（登录账号）即可自动换机；若已更换手机号，请联系客服处理'
@@ -538,6 +558,9 @@ export async function onRequest(context) {
                     detail: `auto-unbind oldest device ${oldestDevice.machineId.substring(0, 8)}... for new device ${machineId.substring(0, 8)}..., remaining=${devices.length - 1}/${maxDevices}`
                 });
                 devices.shift();  // 移除最旧的设备
+                // ★ 2026-10-16 阶段2：留痕被踢设备（激活成功时随 updates.lastUnboundDevice
+                //   落库，供其下次 validate 识别；中途拒绝不落库=踢除未生效，语义自洽）
+                __lastUnboundDevice = { machineId: oldestDevice.machineId, at: getNowISO() };
                 // 继续后续激活流程（新设备会被添加到 devices 数组）
             }
             // 配额充足，允许新设备激活（在后续 updateLicense 中添加到 devices 数组）
@@ -760,6 +783,11 @@ export async function onRequest(context) {
                 ? { activatedAt: getNowISO() }
                 : { lastReactivatedAt: getNowISO() })
         };
+        // ★ 2026-10-16 阶段2：被踢设备留痕随本次激活一并落库（devices 的移除同样在
+        //   本条 updateLicense 生效——留痕与踢除原子同批，拒绝路径两者都不落库）
+        if (__lastUnboundDevice) {
+            updates.lastUnboundDevice = __lastUnboundDevice;
+        }
         // ★ 2026-08-26 有效期锚定：首次激活时间只写一次（后续重激活/换机激活不变），
         //   buildLicenseData 用 firstActivatedAt + days 计算固定到期时间
         // ★ 2026-09-11 同源修正：缺失时锚定旧 activatedAt（而非 now），与上方
@@ -1089,9 +1117,13 @@ export async function onRequest(context) {
             cloudAccountProvisioned: __cloudProvisioned,
             // ★ 2026-10-13 P2：回带本次激活最终采用的身份锚点（新客户端装码/建本地
             //   账号时可直接消费，少猜字段；旧客户端忽略多余字段，零回归）
+            // ★ 2026-10-16 阶段2：优先回带 record.phone 服务端锚点号（P2 注册时落库的
+            //   真值，错号用户此前会拿回显的请求 phone 建本地账号）——取值优先级：
+            //   淘宝预置锚点 > record.phone（服务端锚点，真值）> 请求 phone（兜底回显）
             resolvedIdentity: {
-                phone: (__taobaoAuto && __taobaoAuto.phone) || clientPhone ||
-                    (record.phone && /^1[3-9]\d{9}$/.test(String(record.phone).trim()) ? record.phone : '') || null,
+                phone: (__taobaoAuto && __taobaoAuto.phone) ||
+                    (record.phone && /^1[3-9]\d{9}$/.test(String(record.phone).trim()) ? String(record.phone).trim() : '') ||
+                    clientPhone || null,
                 clinicName: __boundClinicName || (licenseData && licenseData.clinicName) || null,
                 adminName: (user && String(user).trim()) ? String(user).trim() : null
             },
