@@ -47,11 +47,16 @@
   - 鸿蒙端深链接（`7a1393f3`，与安卓/桌面同构）：module.json5 skills（browsable+viewData，bnzc://activate）+ launchType singleton；EntryAbility onCreate/onNewWant 双收口（code 大写优先/t/clinic/user，脱敏日志）；NativeBridge bnzcGetPending（读后不删）/bnzcClearPending/bnzcRedeemToken（JS fetch 兜底）+ appendBnzcDebug；Index.ets emitter→dispatchBnzcToWebView 直推；shared-inject/cloud-electron-api-shim.js bnzc 六方法（redeemToken/autoActivate 同源 fetch claim，productClass=cloud/clientClass=app、40s 超时、needClinicName 透传、成功 2600ms reload）+ 机器码三级口径抽 bnzcMachineId 共用（桥优先→localStorage browser-xxx→生成式，与 auth-core collectDeviceIdentity 同款）；copy-assets 追平 rawfile 6 落后文件 + vendor/pinyin-pro + voice-input.js（工具既定行为）。
   - **注意**：云端权威源 L6670 `bnzcAutoActivate` 无方法级守卫——现六端均提供该方法后实际缺口已消（浏览器无 bnzc scheme 不触发）；若未来新增端须带齐 shim 六方法。
 - **未完成（下一步按序）**：
-  1. **双独立审查 + 安全二查**：激活/安全链路铁律——Seed-2.1-Pro 独立审查 + GLM-5.3 安全二查（当前自审未过）。审查范围含 H5 全部 commit：服务端 activation-token.js、落地页、桌面双端、离线/云 App、鸿蒙 `7a1393f3`（ArkTS 未本地编译，审查时重点核 EntryAbility/NativeBridge/Index 类型签名与 emitter 泛型）。
-  2. **热更生成**：app-local + desktop/cloud + desktop/local，需抬序号（当前 minAppCode 288）；**云 App/鸿蒙含 Native 改动需重打包 APK/鸿蒙包（非热更可达）**。
-  3. **线上核验**：version.json + functions 部署 + activate.html 可访问 + token 端到端真机（含鸿蒙真机 bnzc 链接唤起 + 兑换 + reload 生效）。
-  4. **优化建议阶段 2（用户已批，H5 发版后做）**：validate.js resolvedIdentity.phone 改回带 record 锚点号（~L1093）；后台激活日志展示设备友好名；解绑原因明确化（unbound-by-new-device）。
-  5. **优化建议阶段 3**：鸿蒙 index.html 纳入 diff-cross-version 基线；KNOWLEDGE 固化「六端能力矩阵」清单。
+  1. **热更生成**：app-local + desktop/cloud + desktop/local，需抬序号（当前 minAppCode 288）；**云 App/鸿蒙含 Native 改动需重打包 APK/鸿蒙包（非热更可达）**。
+  2. **线上核验**：version.json + functions 部署 + activate.html 可访问 + token 端到端真机（含鸿蒙真机 bnzc 链接唤起 + 兑换 + reload 生效）。
+  3. **优化建议阶段 2（用户已批，H5 发版后做）**：validate.js resolvedIdentity.phone 改回带 record 锚点号（~L1093）；后台激活日志展示设备友好名；解绑原因明确化（unbound-by-new-device）。
+  4. **优化建议阶段 3**：鸿蒙 index.html 纳入 diff-cross-version 基线；KNOWLEDGE 固化「六端能力矩阵」清单。
+- **✅ 双独立审查已完成（2026-10-16，commit `24c5925e` 已 push）**：2 独立功能审查（互不通气）+ 1 安全二查。关键成果：
+  - **P0 断链（审查员 B 独报、主会话亲验坐实）**：页面解析期 `const IS_ELECTRON` 固化 false（App shim onPageFinished 才注入）→ 双安卓 App/鸿蒙兜底页 bnzc 块永不执行=端到端断链。修复：`probeBnzcPending` 延迟重试探测（250ms×20），权威源 public/index.html + **db-offline/desktop/index.html**（sync-index-app.cjs 证实它才是离线 App 页权威源，index-app.html 是生成产物）→ 7 副本分发全绿；同法覆盖鸿蒙 onPageBegin 注入竞态。
+  - **P1 桌面令牌日志脱敏（A+安全双证实）**：parsed 新增 token 字段使存量序列化日志恶化为完整令牌落盘 bnzc-debug.log——双端 main.js 全部 brief 化（前 8 位）。
+  - **P1 鸿蒙 emitter 泛型（A）**：API 12 EventData 非泛型（泛型重载 @since 23）→ Index.ets 改保守非泛型+判空，DevEco 编译仍需实证。
+  - P2 顺手修：离线 App isSensitiveOperation 对齐 bnzcRedeemToken；双桌面 parseBnzcUrl 删二次 decode（含 % 诊所名 URIError 致深链失效）；needClinicName 注释改准确；siteadmin 基线刷新（admin 无 bnzc 桥的合法分叉）。
+  - 安全二查结论 PASS-with-notes：注入链转义安全、redeem fail-closed、频控 CF-IP、manifest 无新增 exported。可接受不改（P3）：redeem 并发双花有界（maxDevices 兜底）、host null 放行（manifest 已限定）。
 - **勿做**：不发热更、不打 APK、不做产品决策（如放宽安全锚点须显式批准）；禁止手改生成副本（cloud_desktop/cloud_app assets/index-app/offline assets），改权威源后跑生成器。
 - **验证命令**：
   - `node tools/_tmp/activation-token-test.cjs`（42 PASS）
@@ -59,7 +64,7 @@
   - `powershell -File tools\check-index-consistency.ps1`（OK）
   - `node tools/sync-index-app.cjs --verify-only`（PASS）
   - `node --check` 7 个 JS（activation-token.js + 双桌面 main/preload/login）
-- **基线 commit**：`7a1393f3`（鸿蒙深链接 + 云 App shim 补口，已 push）　关联文档：`.trae/documents/activation-streamline_plan.md`
+- **基线 commit**：`24c5925e`（双独立审查修复完成，已 push）　关联文档：`.trae/documents/activation-streamline_plan.md`
 
 ### H4 ｜优先级：高｜红米改名修复云端 functions 部署 + 真机复验（2026-10-15）
 - **代码已提交推送并上线**：commit `d085f785`——users.js（migratePrescriptionOwnership + formerUsernames 链 + 两改名端点）、prescriptions.js + _lib/auth.js（token `a` 别名签名与读侧别名过滤）、离线 5 副本 index.html（heal 双闸）、热更 2026.10.15-1 双端。双独立审查+安全二查已过，105 断言全绿（rename-cloud 36 / rename-heal-pwd 31 / owner-migrate 回归 38）。
