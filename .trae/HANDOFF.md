@@ -48,17 +48,23 @@
 - **验收**：发布后下载页/`hash-manifest.json` 版本=1.0.276/322；线上 `hot-update/desktop/local/version.json`=-3；桌面冷启动深链通过。
 - **基线 commit**：`adcd4ee8`
 
-### H8 ｜优先级：中（方案待拍板）｜激活流程全端架构收敛（评审文档已出，建议 S1 先行）
-- **状态**：OPEN（待用户拍板；文档 `.trae/documents/activation-architecture-review-2026-10-17.md`）
-- **结论**：六端 × 自动/手动 × 标准/机构功能已全覆盖，但架构仍是「**6 条服务端签发通道 × 8 条客户端落盘路径 × 6 类权威载体**」；2026-10-17 P40「本地有效 / 服务端 unused」分裂是该结构必然。建议优先 O1 激活会话收敛 / O2 签发原子化 / O3 reconcile+启动三向自检+后台诊断页。
-- **S1 建议范围（1 迭代，待批准后执行）**：
+### H8 ｜优先级：中（已拍板，S1 可开工）｜激活流程全端架构收敛
+- **状态**：OPEN（**5 项决策已拍板 2026-10-17**，S1 范围已锁定；等用户一句「开始 S1」即开工。文档 `.trae/documents/activation-architecture-review-2026-10-17.md`）
+- **已拍板决策**：
+  1. **O1 activation-session**：✅ 接受，S1 先做 MVP（令牌核销后移到 claim 成功，幂等可重试）；
+  2. **云 APP 本地授权载体**：✅ 补**签名 gate token 缓存**（不引入 license.dat），云端统一为「账号权威 + gate token 离线宽限」；
+  3. **O4 设备投影表迁移**：✅ 双写 **2 个整包周期**（S3 执行）；
+  4. **旧端点退役**：✅ 冻结新客户端 → 观察 **12 个月** → 公告 **6 个月** sunset（约 18 个月；`validate`/旧裸码链接/`status.js` 心跳）；
+  5. **历史默认 admin 强制改密**：✅ 仅**新开通/重置**强制（随机密码路径 `mustChangePassword` 保持），历史账号不强制。
+- **S1 范围（已锁定）**：
   1. 服务端 `POST /api/license/reconcile`（默认只读；repair 需管理员 token/首兑令牌证据）；
   2. 客户端（离线 APP/桌面优先）启动三向自检：`license.dat × license:code × entitlement(mid)`——NO_LICENSE 且 mid 有绑定→重装 license；本地有 license 但服务端已停用/删除→明确失效+自助入口；残留码冲突→自动清理并记录诊断；
   3. 后台双副本新增「🔎 激活诊断」页（码/机码/手机号 → license+admin_req+order+device_version+license_log 时间线 + 一键报告）；
   4. 删除 `normalizeActivationPassword` 的「审批覆盖已改密码」行为（统一随机+mustChangePassword）；
-  5. activation-session MVP：令牌核销时点后移到 claim 成功（失败可重试，不再"令牌已用码未激活"）。
+  5. activation-session MVP：令牌核销时点后移到 claim 成功（失败可重试，不再"令牌已用码未激活"）；
+  6. 云 APP 签名 gate token 缓存 + 离线宽限（判定逻辑与 offline 同源）。
 - **勿做**：不动 35+ 端点历史语义；不改人工审核铁律/价格/端锁；**禁止手工改 KV 码记录**（业务级重置一律走 reconcile/repair 或 admin 工具——P40 事故直接教训）。
-- **验收**：重现「KV 手改 unused + 本地有 license」→ 可一键诊断/修复，不再需要 wrangler 手查；旧客户端零回归；pre-push 17 道 + 新增 act-* mock 入库测试。
+- **验收**：重现「KV 手改 unused + 本地有 license」→ 可一键诊断/修复，不再需要 wrangler 手查；云 APP 断网可用 gate token 宽限且到期/停用仍 fail-closed；旧客户端零回归；pre-push 17 道 + 新增 act-* mock 入库测试。
 - **基线 commit**：`d042fac6`
 
 ### H4 ｜优先级：高｜红米改名修复云端 functions 部署 + 真机复验（2026-10-15）
