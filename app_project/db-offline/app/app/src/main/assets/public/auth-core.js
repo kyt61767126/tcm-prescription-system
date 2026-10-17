@@ -2970,7 +2970,13 @@
                     return fail('无法获取设备标识，请重启软件后重试或联系客服');
                 }
                 let code = '';
-                try { code = await StorageAdapter.getItem('license:code') || ''; } catch (e) {}
+                // ★ 2026-10-17 P40 真机实证：直接读 StorageAdapter 可能拿到残留错码
+                // （之前测试/旧激活流程写入但未清除）→ entitlement 用错码查 → NO_LICENSE
+                // → "该诊所/激活码已被删除" 弹窗（服务端全干净，纯客户端码错位）。
+                // 改用 getLicenseCode()：完整 4 来源链（StorageAdapter→localStorage→electronAPI 自愈→机器码联网找回）
+                // + 联网回写正确码到 StorageAdapter，一次自愈永久修复。
+                try { code = await getLicenseCode(); } catch (_) {}
+                if (!code) { try { code = await StorageAdapter.getItem('license:code') || ''; } catch (_) {} }
 
                 let ent = null;
                 let entHttpStatus = 0;

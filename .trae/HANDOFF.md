@@ -58,22 +58,16 @@
     - `shared/desktop-license-ipc.cjs`（双桌面副本 sync-all 分发）：**P1 修复**——submit-activate 多设备授权弹窗 `showMessageBoxSync(getMainWindow(),…)` 在登录窗冷启动时主窗未创建（null 父窗 Electron 35 抛参→激活成功却报失败），改「主窗存在才带父窗」。
     - 双独立审查（2 功能互不通气 + 1 安全二查）全过：A 无 P0/P1；B 报 P1（null 主窗弹窗，已修）+ deviceInfo 死代码（已删）；安全 PASS（密码链/注入/越权/热更混跑窗口均查过，已注册判定改桥优先）。
     - 校验链全绿：sync-index-app 32 变换命中 / sync-all VerifyOnly 0 drift / diff-cross-version 6 对全绿（desk 基线重冻结=离线专属编排合法分叉）/ check-interface 6 OK。
-  - **下一步（2026-10-17 二次更新，按序）**：
-    1. **P40 令牌深链复测闭环（待设备重连）**：新令牌已 KV 直签（issuedBy=trae-p40-retest，72h 有效，绕过 issue 端点无审计日志条目——已知留痕缺口，过期自动清无需处理）；设备重连后 `adb shell am start ... -d 'bnzc://activate?t=<令牌>'` → 确认弹窗 → 兑换（redeem 写台账）→ 自动装码（validate 台账豁免诊所名闸）→ 激活成功 → 重启 → 手机号 13398628212+用户 10:49 所设密码登录。令牌查询：`wrangler kv key list --binding KV --prefix "act_token:" --remote`（取 status=active 的）。
+  - **下一步（2026-10-17 三次更新，按序）**：
+    1. **P40 登录闭环（用户手动）**：热更 2026.10.17-4 已拉取生效（弹窗已消失，登录表单已出，诊所名「惠康康中医诊所」预填正确）；用户用手机号 13398628212 + 10:49 注册窗所设密码手动登录完成最后一步。
     2. **离线桌面 exe 重打**（login.js + desktop-license-ipc.cjs 主进程域，可攒批）→ 冷启动深链复测。
     3. **APK 攒批修复**：Java `activateLicense` 透传 config clinicName（`LicenseManager` L3228 已有 getter，MainActivity L3474 一行改）→ 下次 APK 重打一并带上（服务端台账豁免已兜底，此项为纵深防御非紧急）。
     4. 复测闭环后：六端能力矩阵离线 bnzc 行更新 + 本任务收口。
-    5. **★ 2026-10-17 真机复测进展 + registrationInfo 分裂修复（已 push）**：
-       - P40 实测：热更 2026.10.17-1 已生效（logcat「热版本已是最新 2026.10.17-1」+加载 hot-update/current/index.html）；深链接链路可达（bnzcRedeemToken→激活成功）；但**未弹注册窗**。
-       - **根因（双份同构）**：bnzcOfflineAutoActivate 的「已注册」判定兜底读了 localStorage `license:registrationInfo`——P40 有历史测试残留（预填 13398628212 即其旁证）而账号表空 → 误判已注册跳过建号 → 装码成功但启动闸只认账号表 → 重启弹管理员激活页（状态分裂自断链）。
-       - **修复**：主窗 `db-offline/desktop/index.html` + 登录窗 `db-offline/desktop/electron/login.js` 同构——registrationInfo 降级为**注册窗预填源**（regHintPhone/regHintClinic，码锚点优先），「已注册」唯一准绳=账号表（与 auth-core isLocalRegisteredAsync 同口径）。
-       - **已办**：双渠道热更 2026.10.17-2 已签（app-local 15 文件/desktop-local 19 文件，Ed25519 自验过）；MG3B 码已解绑重置（后台 status API action=unbind，machineId 传脱敏前缀须带 `...` 后缀）。
-       - **复测命令**：`adb shell am start -n com.benneng.pres.dingzhi/com.benneng.pres.MainActivity -a android.intent.action.VIEW -d 'bnzc://activate?t=<token>'`（微信点 bnzc:// 会被拦，用 adb 注入或网页版 activate.html 引导）。
-    6. **★ 2026-10-17 二次复测：诊所预置码 App 端死锁（已修，服务端上线）**：
-       - registrationInfo 修复实证有效（已注册分支正确跳过注册窗直装码）；但装码 400「此激活码已绑定诊所，激活时必须提供 clinicName」。
-       - **根因**：MG3B 为淘宝预置码（发码预绑 clinicName，KV 实证 status=unused+devices 空），App Java `activateLicense`（MainActivity L3474）clinicName 硬编码空串 → 深链/手动/令牌三路径全被 validate 诊所名闸拦死，存量 APK 无诊所名输入通道；令牌 redeem 只交还码明文不豁免该闸（3 令牌全耗尽、码未激活）。
-       - **修复**：服务端 redeemedDevices 台账豁免（`activation-token.js` redeem 写台账 + `validate.js` 命中豁免），已 wrangler pages deploy 直传上线（deployment 24b76137），存量 APK 零重打包受益；设计论证与铁律⑦⑧见 KNOWLEDGE 2026-10-17 条目。
-       - 10:49「激活超时 15s」复盘：实为服务端 400/慢响应+客户端超时叠加；**弹窗文案会误导，排查先读 KV 码记录实证**。
+    5. **★ 2026-10-17 三次复测进展（全链闭环！）**：
+       - 注册链建号 → 令牌兑换写 redeemedDevices 台账 → validate 台账豁免 → 激活成功（v3 license 装机 + 账号 UPSERT）→ auth-core `__isDeviceLicensed` Java 桥判定生效 → **弹窗消失 → 登录表单出现 → 诊所名预填正确**。
+       - **auth-core 闸 bug**：激活成功后 maybePromptRegistration 仍弹注册窗（每次启动重弹+关闭自动重弹）→ 根因：`__isDeviceLicensed()` 三层判定（electronAPI/StorageAdapter/localStorage license:code）APP 端全空恒 false → 误判未激活。修复：加第四层 APP 端 Java 桥判定 `NativeBridge.invoke('getLicenseStatus')`，热更 2026.10.17-4 已签+已拉取生效（`登录页空闲，当次打开直接应用新版`）。
+       - 双权威源同步：改 `shared/auth-core/offline.js` + `sync-auth-core.ps1` 分发 3 副本，pre-push 17 道校验全通过。
+       - Cloudflare Pages 部署陷阱：直传 public 被 77MB exe 超限拦截，用 `git archive HEAD public` 抽入库内容绕开（入库 exe 已 gitignore）。
   4. **✅ 优化建议阶段 2 已完成（2026-10-16，commit `3a2ca967` 已 push，服务端 Pages 自动部署全端刷新即达）**：① validate.js resolvedIdentity.phone 优先回带 record.phone 锚点（淘宝预置>record 11位校验>请求回显），杜绝错号建本地账号；② 换机自动解绑留痕 lastUnboundDevice（与 devices 移除原子同批落库，拒绝路径不落库），被踢设备下次 validate 撞配额无凭证返回 reason=unbound-by-new-device+明确中文（向后兼容）；③ 后台激活日志/设备列表/风控审计三处设备友好名徽标（and-=安卓APP/browser-=网页/其他=桌面离线，悬停口径说明）。
   5. **✅ 优化建议阶段 3 已完成（2026-10-17，commit `81ba2693` 已 push，pre-push 十七道校验全过）**：① 鸿蒙 rawfile 兜底页纳入 sync-html.ps1 分发链（$Targets 第 3 目标——实锤旧结论纠正：鸿蒙副本与 public 权威源 SHA256 字节一致，非独立权威源，bnzc 掉队根因=不在同步链靠人肉复制）；② diff-cross-version.cjs 新增第 6 对 harmony 基线（lines 模式），全 6 对重冻结（desk probeBnzcPending 同体纳入 Tier B）；③ KNOWLEDGE 第 2 章传播链加鸿蒙行 + 章末新增六端能力矩阵（含鸿蒙三件套必查清单）。**优化建议三阶段全部收官。**
 - **✅ 双独立审查已完成（2026-10-16，commit `24c5925e` 已 push）**：2 独立功能审查（互不通气）+ 1 安全二查。关键成果：
