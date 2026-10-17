@@ -16,10 +16,11 @@
 
 ## 当前基线（2026-10-17 晚更新）
 
-- **main HEAD：docs 提交（父 `0012e7a2`；代码基线 `a9193675`）**（2026-10-17 P40 收尾：登录闸 NO_LICENSE 码错位自愈 + 热更 **2026.10.17-7** + 令牌幂等台账补写 + Java clinicName 透传入库；整包未打，见 OPEN H6/H7）。
+- **main HEAD：本次 docs 提交**（代码基线 `a9193675`；其后 push 由 Pages git 构建自动部署）。2026-10-17 P40 收尾：登录闸 NO_LICENSE 码错位自愈 + 热更 **2026.10.17-7** + 令牌幂等台账补写 + Java clinicName 透传入库；P40 真机已激活+登录闭环，仅剩整包攒批（H7）。
 - **线上状态（已实测）**：
-  - production 部署源 `f9e9ea16`（push 后 **Pages git 构建自动部署已 Active**；直传 `0012e7a2` 为同内容兜底，二者内容一致）；app-local 热更 **2026.10.17-7**（minAppCode 288 继承；线上 version.json 实测，auth-core.js SHA256 `bb4dede2…45210` 与 manifest 逐字节一致，无 `DEBUG verifyLoginGate` 串）。
+  - production 部署源=每次 push 的最新提交（**Pages git 构建自动部署已 Active**；本次直传 `0012e7a2` 与 git 构建 `f9e9ea16` 已等价验证，后续无需手动 wrangler）；app-local 热更 **2026.10.17-7**（minAppCode 288 继承；线上 version.json 实测，auth-core.js SHA256 `bb4dede2…45210` 与 manifest 逐字节一致，无 `DEBUG verifyLoginGate` 串）。
   - functions 已随部署更新（activation-token GET 405 / 坏码 POST 400 冒烟通过；令牌幂等台账补写 + validate 诊所名闸台账豁免均在线）。**git 构建配额可用 → 后续静态/functions 随 push 即达，wrangler 直传仅作配额耗尽/大文件超限兜底。**
+  - **P40 真机闭环（2026-10-17 晚，已实证）**：-7 热更生效（DEBUG alert 消失）→ 管理员激活框用 `BNZC-MG3B-…` + 手机号重新激活（预设诊所名经 `redeemedDevices` 台账豁免）→ KV 记录 `status=used、devices=[P40 mid]、productClass=offline、clientClass=app`，`entitlement(mid)=LICENSED（institution，永久）` → **登录正常**（license_log 有 `activate machineId=5784b5da...`）。此前 -7 后仍弹激活框的真因=上一会话手工重置码记录造成「本地有 license.dat / 服务端 unused」分裂，非客户端 bug。
   - desktop/local 热更仍 **-2**（等整包重签）；cloud 热更 -5；三渠道版本表在整包批统一。
   - **勿重复实施**：-6 调试 alert 已移除并重签 -7 覆盖；P40 登录闸码错位自愈已上线；令牌 redeemedDevices 台账（首兑写 + 幂等短路补写）已上线；Java `activateLicense` clinicName 透传已入库（待 APK v325 生效）。
   - 完整方案：`.trae/documents/activation-architecture-optimization_plan.md` / `.trae/documents/activation-streamline_plan.md`（P0 方案A 全链已闭环，详见 KNOWLEDGE 2026-10-17 条目）。
@@ -29,23 +30,11 @@
 
 ## OPEN 遗留任务
 
-### H6 ｜优先级：高（需人工真机）｜P40 离线 App -7 复测（登录闸码错位自愈）
-- **状态**：OPEN（等用户真机复测，2026-10-17 晚起）
-- **背景**：热更 -5 的 getLicenseCode 自愈未生效。P40 -6 调试弹窗实测 `code=BNZC-CA73-…、state=NO_LICENSE、success=true、HTTP=200`——本地 `license:code` 残留旧测试码（非空）→ 来源1 直接命中，机器码联网找回永不执行 → entitlement 按错码直查 NO_LICENSE → verifyLoginGate 硬拒（「该诊所/激活码已被删除」+ 管理员激活框）。修复见 `a9193675` + KNOWLEDGE 2026-10-17（晚）条目：仅 NO_LICENSE 用 machineId 重裁一次并回写服务端权威码；REVOKED/EXPIRED 不放宽。热更 -7 已线上。
-- **执行步骤（用户手动）**：
-  1. 联网打开离线 App → **彻底划掉重进 2 次**（第 2 次冷启动才拉热更；logcat 应出现 `热版本已是最新 2026.10.17-7`）。
-  2. 确认：① 不再弹 `[DEBUG verifyLoginGate]`；② 不再弹「该诊所/激活码已被删除」；③ 不再弹管理员激活框。
-  3. 用注册手机号+密码登录 → 进入主界面；设置-授权状态里激活码应显示为**真实码**（不再是 CA73…旧码）。
-  4. 复测通过后：本卡删除，结论并入 KNOWLEDGE（含 `hotVersion_after=2026.10.17-7`）。
-- **异常回流**：若仍失败 → 截图 + `adb logcat -d -s TCM_Prescription` 抓 `热版本`/`LicenseManager` 行记入本卡，改 BLOCKED；**勿清 KV/勿后台解绑**（保留现场）。
-- **验收**：登录成功进主界面；`validateLicense` 返回 licensed/pro；本地 `license:code` 已回写真实码。
-- **基线 commit**：`a9193675`　线上热更：2026.10.17-7
-
 ### H7 ｜优先级：高｜整包攒批：离线桌面 exe 1.0.276 + 离线 APK v325（P40 收尾最后一步）
 - **状态**：OPEN（代码已入库，仅剩打包/验包；用户 2026-10-17 决定攒批）
 - **背景**（主进程/原生域修复热更带不到，必须整包）：
   1. **离线桌面 exe**：`login.js`（登录窗冷启动消费 bnzc pending 的方案A编排）+ `shared/desktop-license-ipc.cjs`（多设备授权弹窗 null 主窗修复）已入库（`cf425655` 及之前），但 exe 仍是 **1.0.275（2026-10-14）**；desktop/local 热更仍 **-2**（方案A 页面已发，主进程改动未达）。桌面离线登录闸走主进程 IPC，auth-core 的 NO_LICENSE 自愈需随 exe 整包才生效。
-  2. **离线 APK**：`MainActivity.activateLicense` 诊所名透传（`getLocalClinicName()`，`a9193675` 入库）需重打 APK（建议 **v325**）才生效；JS 侧已由 app-local -7 覆盖。
+  2. **离线 APK**：`MainActivity.activateLicense` 诊所名透传（`getLocalClinicName()`，`a9193675` 入库）需重打 APK（建议 **v325**）才生效；JS 侧已由 app-local -7 覆盖。**P40 已于 2026-10-17 用 -7 页面 + 服务端台账豁免完成真实激活/登录（真机闭环）**，Java 透传为下批 APK 的纵深防御，非 P0 阻塞。
 - **范围**：
   1. 离线桌面 `one-click-pack`（打 1.0.276，签名/验包/分发位）→ **冷启动深链复测**：`bnzc://activate?...` 唤起 → 令牌兑换 → 自动注册/装码 → 登录（重点验登录窗冷启动主窗为 null 的弹窗路径）。
   2. 离线 APK v325（`build.gradle` versionCode bump + 打包 + aapt2 验 versionCode + 真机安装复测 clinicName 透传激活）。
