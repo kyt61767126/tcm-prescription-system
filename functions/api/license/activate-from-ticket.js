@@ -376,9 +376,9 @@ export async function onRequest(context) {
             console.warn('[ActivateFromTicket] 云端账号开通失败（不影响license）:', e.message);
         }
 
-        // 3. 激活密码归一化（手机号账号密码统一为默认 admin）
+        // 3. 激活密码归一化（2026-10-17 S1-O4 收紧：仅补空账号，不覆盖已改密码）
         try {
-            await normalizeActivationPassword(kv, compatRecord);
+            await normalizeActivationPassword(kv, compatRecord, { mode: 'fill-empty' });
         } catch (e) {
             console.warn('[ActivateFromTicket] 激活密码归一化失败（不影响license）:', e.message);
         }

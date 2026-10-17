@@ -669,7 +669,10 @@ export async function onRequest(context) {
                     console.warn('[AdminSubmit] 已激活申请账号补开失败:', e.message);
                 }
                 if (__isPrimaryOwner) try {
-                    await normalizeActivationPassword(kv, existingActivated);
+                    // ★ 2026-10-17 S1-O4：仅当本请求显式提交了新密码（passwordCred）才允许覆盖
+                    //   （=用户主动重置，且已过既有身份核验）；否则只补空密码历史账号。
+                    await normalizeActivationPassword(kv, existingActivated,
+                        { mode: passwordCred ? 'overwrite' : 'fill-empty' });
                 } catch (e) {
                     console.warn('[AdminSubmit] 已激活申请密码归一化失败:', e.message);
                 }

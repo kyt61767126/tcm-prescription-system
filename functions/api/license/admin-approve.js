@@ -373,10 +373,10 @@ export async function onRequest(context) {
             console.warn('[AdminApprove] 云端账号开通失败（不影响license）:', e.message);
         }
 
-        // ★ 2026-08-20 激活密码归一化：审核通过即把该手机号账号密码统一为默认 admin，
-        //   解决历史旧账号/跨诊所重复导致后续登录 401。
+        // ★ 2026-08-20 激活密码归一化（2026-10-17 S1-O4 收紧）：
+        //   仅补「无密码哈希」的历史空账号；已存在密码的账号绝不覆盖（审批不重置客户改后的密码）。
         try {
-            await normalizeActivationPassword(kv, record);
+            await normalizeActivationPassword(kv, record, { mode: 'fill-empty' });
         } catch (e) {
             console.warn('[AdminApprove] 激活密码归一化失败（不影响license）:', e.message);
         }

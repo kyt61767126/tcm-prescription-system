@@ -265,10 +265,10 @@ export async function onRequest(context) {
                 } catch (e) {
                     console.warn('[AdminStatus] 云端账号补开失败（不影响license读取）:', e.message);
                 }
-                // ★ 2026-08-20 激活密码归一化：该手机号下既有旧账号若密码非 admin，
-                //   重置为默认 admin，杜绝老账号旧密码导致登录 401。requestId 持有者才可到此。
+                // ★ 2026-08-20 激活密码归一化（2026-10-17 S1-O4 收紧）：
+                //   仅补空密码历史账号；已存在密码的账号不覆盖（轮询自愈不得重置客户密码）。
                 try {
-                    await normalizeActivationPassword(kv, record);
+                    await normalizeActivationPassword(kv, record, { mode: 'fill-empty' });
                 } catch (e) {
                     console.warn('[AdminStatus] 激活密码归一化失败（不影响license读取）:', e.message);
                 }

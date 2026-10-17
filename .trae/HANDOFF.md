@@ -48,23 +48,26 @@
 - **验收**：发布后下载页/`hash-manifest.json` 版本=1.0.276/322；线上 `hot-update/desktop/local/version.json`=-3；桌面冷启动深链通过。
 - **基线 commit**：`adcd4ee8`
 
-### H8 ｜优先级：中（已拍板，S1 可开工）｜激活流程全端架构收敛
-- **状态**：OPEN（**5 项决策已拍板 2026-10-17**，S1 范围已锁定；等用户一句「开始 S1」即开工。文档 `.trae/documents/activation-architecture-review-2026-10-17.md`）
+### H8 ｜优先级：中（S1 实施中）｜激活流程全端架构收敛
+- **状态**：IN-PROGRESS（5 项决策已拍板；**S1a 代码已落地**（本次提交）：reconcile 端点/密码收紧/客户端登录闸对账自愈 + 29 断言测试；**S1b 剩余**：后台「激活诊断」页、activation-session MVP、云 APP gate token 缓存）。
 - **已拍板决策**：
   1. **O1 activation-session**：✅ 接受，S1 先做 MVP（令牌核销后移到 claim 成功，幂等可重试）；
   2. **云 APP 本地授权载体**：✅ 补**签名 gate token 缓存**（不引入 license.dat），云端统一为「账号权威 + gate token 离线宽限」；
   3. **O4 设备投影表迁移**：✅ 双写 **2 个整包周期**（S3 执行）；
-  4. **旧端点退役**：✅ 冻结新客户端 → 观察 **12 个月** → 公告 **6 个月** sunset（约 18 个月；`validate`/旧裸码链接/`status.js` 心跳）；
-  5. **历史默认 admin 强制改密**：✅ 仅**新开通/重置**强制（随机密码路径 `mustChangePassword` 保持），历史账号不强制。
-- **S1 范围（已锁定）**：
-  1. 服务端 `POST /api/license/reconcile`（默认只读；repair 需管理员 token/首兑令牌证据）；
-  2. 客户端（离线 APP/桌面优先）启动三向自检：`license.dat × license:code × entitlement(mid)`——NO_LICENSE 且 mid 有绑定→重装 license；本地有 license 但服务端已停用/删除→明确失效+自助入口；残留码冲突→自动清理并记录诊断；
-  3. 后台双副本新增「🔎 激活诊断」页（码/机码/手机号 → license+admin_req+order+device_version+license_log 时间线 + 一键报告）；
-  4. 删除 `normalizeActivationPassword` 的「审批覆盖已改密码」行为（统一随机+mustChangePassword）；
-  5. activation-session MVP：令牌核销时点后移到 claim 成功（失败可重试，不再"令牌已用码未激活"）；
-  6. 云 APP 签名 gate token 缓存 + 离线宽限（判定逻辑与 offline 同源）。
-- **勿做**：不动 35+ 端点历史语义；不改人工审核铁律/价格/端锁；**禁止手工改 KV 码记录**（业务级重置一律走 reconcile/repair 或 admin 工具——P40 事故直接教训）。
-- **验收**：重现「KV 手改 unused + 本地有 license」→ 可一键诊断/修复，不再需要 wrangler 手查；云 APP 断网可用 gate token 宽限且到期/停用仍 fail-closed；旧客户端零回归；pre-push 17 道 + 新增 act-* mock 入库测试。
+  4. **旧端点退役**：✅ 冻结新客户端 → 观察 **12 个月** → 公告 **6 个月** sunset（约 18 个月）；
+  5. **历史默认 admin 强制改密**：✅ 仅**新开通/重置**强制，历史账号不强制。
+- **S1a 已完成（本次提交）**：
+  1. 新增 `functions/api/license/reconcile.js`：默认不写授权业务 KV；`actions`（NO_ACTION/CLEAR_STALE_CODE/REINSTALL_LICENSE/SERVER_RECORD_MISMATCH/COMPLETE_ACTIVATION/REACTIVATE/RENEW/CONTACT_SUPPORT）；**匿名未绑定码只回 codeExists**（无 clinicName/到期泄露）+ 码级频控 5/h（管理员豁免）；repair 仅 platform_admin，且只允许（a）重建派生索引（b）凭 `redeemedDevices` 台账 + 码 unused + 配额未满 三条件补绑（写 license 记录 + `reconcile-rebind` 审计），其余 repairFailed。
+  2. `shared/auth-core/offline.js` 登录闸失败自愈：**结构化触发**（仅本地 `status.valid && type=licensed` 且非 free/trial，排除账号删除/吊销/停用/网络类）；对账成功→清错位码/重装 license 后**优先重跑主进程 verifyGate**（桌面 IPC 锚点/回拨/墓碑不被绕过）；P40 型「本地有效/服务端无授权」只追加诊断码文案，不自动修复；同账号每运行期只对账一次。
+  3. `admin-account.normalizeActivationPassword` 默认 `fill-empty`（只补无 hash/salt 的历史空账号），审批/轮询/工单不再覆盖已改密码；仅 admin-submit 显式 passwordCred 才 overwrite；无凭据时拒绝回落字面 admin。
+  4. 测试 `tools/act-reconcile-test.cjs` **29 PASS/0 FAIL**（含匿名码探测面/管理员诊断面/码错位二次裁决/P40 分裂/repair 三态/频控/封锁设备）。
+- **生效注意（审查结论，务必遵守）**：
+  - 服务端 reconcile 随 push 由 Pages 构建即上线；
+  - auth-core 属热更白名单：**APP 需重签 app-local 热更才生效**（minAppCode 288 不抬）；**桌面登录链在 asar 登录窗内**，主窗热更不覆盖登录窗 → 桌面「登录闸自愈」需**整包 1.0.277** 才生效；
+  - 自愈仅对「本地授权有效但闸门拒绝」触发；时间回拨/tampered/config_tampered/账号删除**不触发**（防硬拒态变可写修复路径）。
+- **S1b 待做**：① 后台双副本「🔎 激活诊断」页（码/机码/手机号 → 时间线 + repair 按钮）② activation-session MVP（令牌核销后移）③ 云 APP gate token 缓存 + 离线宽限。④ 真机矩阵：码错位/license.dat 损坏/时间回拨/账号删除。
+- **勿做**：不动 35+ 端点历史语义；不改人工审核铁律/价格/端锁；**禁止手工改 KV 码记录**（业务级重置一律走 reconcile/repair 或 admin 工具）。
+- **验收**：S1b 完成后重现「KV 手改 unused + 本地有 license」→ 后台诊断页可定位并可受控 repair；旧客户端零回归；pre-push 全绿 + act-* mock 入库测试常绿。
 - **基线 commit**：`d042fac6`
 
 ### H4 ｜优先级：高｜红米改名修复云端 functions 部署 + 真机复验（2026-10-15）

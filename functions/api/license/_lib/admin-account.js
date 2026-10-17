@@ -276,11 +276,15 @@ export async function provisionCloudAccount(kv, record) {
 // 安全性：只在"激活通过的受信链路"（admin-approve / admin-status / admin-submit 探测到
 //   已激活申请）调用，调用方要么是持有该激活申请的客户端，要么是平台管理员。
 //   绝不能在匿名登录的自愈路径调用（否则等于任何人可用手机号重置为 admin 接管账号）。
-// 幂等：已是目标密码（哈希串一致）则跳过，避免无谓写 KV。
-export async function normalizeActivationPassword(kv, record) {
+// ★ 2026-10-17 S1-O4（已拍板）：默认 mode='fill-empty'——只给「既无 passwordHash 也无 salt」
+//   的历史空密码账号补默认口令，已存在密码的账号一律跳过（审批/自愈不得静默覆盖客户改后的密码）。
+//   mode='overwrite' 仅由「本请求显式提交了新密码」的换机重激活路径（admin-submit 首机）传入，
+//   语义=用户主动重置，仍需经既有身份核验后才可到达。
+export async function normalizeActivationPassword(kv, record, options = {}) {
+    const mode = (options && options.mode === 'overwrite') ? 'overwrite' : 'fill-empty';
     try {
         const phone = (record && record.phone ? String(record.phone).trim() : '');
-        if (!/^1[3-9]\d{9}$/.test(phone)) return { changed: false, reason: 'not_phone' };
+        if (!/^1[3-9]\d{9}$/.test(phone)) return { changed: false, reason: 'not_phone', mode };
         // 注册密码哈希优先；无则默认 admin
         let passwordHash, salt;
         if (record && record.passwordHash && record.passwordSalt) {
@@ -291,7 +295,7 @@ export async function normalizeActivationPassword(kv, record) {
         }
 
         const clinics = (await kv.get(KV_SYSTEM_CLINICS, 'json')) || [];
-        let changed = false, updated = 0;
+        let changed = false, updated = 0, skipped = 0;
         for (const clinic of clinics) {
             const key = `clinic:${clinic.id}:users`;
             const users = (await kv.get(key, 'json')) || [];
@@ -300,6 +304,7 @@ export async function normalizeActivationPassword(kv, record) {
                 const isTarget = u && ((u.username === phone) || (u.phone === phone));
                 if (!isTarget) continue;
                 if (clinic.status === 'disabled') continue; // 禁用诊所不理会，登录优先返回启用诊所
+                if ((u.passwordHash || u.salt) && mode !== 'overwrite') { skipped++; continue; }
                 // 已是目标密码（PBKDF2 含随机 salt，哈希串一致才跳过）则无需重置
                 if (u.passwordHash === passwordHash && u.salt === salt) continue;
                 u.passwordHash = passwordHash;
@@ -313,10 +318,10 @@ export async function normalizeActivationPassword(kv, record) {
                 changed = true;
             }
         }
-        return { changed, updated };
+        return { changed, updated, skipped, mode };
     } catch (e) {
         console.warn('[AdminAccount] 激活密码归一化失败:', e.message);
-        return { changed: false, updated: 0, error: e.message };
+        return { changed: false, updated: 0, skipped: 0, mode, error: e.message };
     }
 }
 

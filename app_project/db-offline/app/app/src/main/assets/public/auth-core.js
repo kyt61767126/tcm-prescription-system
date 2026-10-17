@@ -2851,7 +2851,14 @@
 
     let __loginGatePromise = null;
     let __loginGateUser = '';
-    function resetLoginGateCache() { __loginGatePromise = null; }
+    // ★ 2026-10-17 S1-O3：对账自愈防重入（同一次失败只尝试一次，避免与重跑闸门递归）
+    let __loginGateHealing = false;
+    // 同账号本次运行内只对账一次（失败结果已缓存；避免每次点登录都打一次网络）
+    const __loginGateHealedKeys = Object.create(null);
+    function resetLoginGateCache() {
+        __loginGatePromise = null;
+        try { Object.keys(__loginGateHealedKeys).forEach(function (k) { delete __loginGateHealedKeys[k]; }); } catch (_) {}
+    }
 
     // ★ 2026-09-27 C2 关键时序：指纹功能平台判定【不得】用 isAndroidRuntime()
     //   ——它依赖 electronAPI.license.attestation，而 electronAPI shim 由
@@ -2883,6 +2890,125 @@
         } catch (e) {}
     }
 
+    // ★ 2026-10-17 S1-O3：登录闸失败时的服务端对账自愈（三向自检的服务端半程）。
+    //   POST /api/license/reconcile 返回服务端权威 state + actions：
+    //   · CLEAR_STALE_CODE → 本地 license:code 残留错位，回写服务端权威码；
+    //   · REINSTALL_LICENSE → 本地 license.dat 缺失/失效但服务端 LICENSED，走单一装码入口重装；
+    //   只在授权类失败（NO_LICENSE/已删除/无效）时调用，成功返回 {retry:true} 由调用方重跑一次闸门；
+    //   网络失败/异常一律静默返回 null（绝不改变原裁决，离线使用不阻断红线）。
+    async function __reconcileLoginGate() {
+        try {
+            const licApi = global.electronAPI && global.electronAPI.license;
+            const actApi = global.electronAPI && global.electronAPI.activate;
+            let status = null;
+            try {
+                status = (licApi && typeof licApi.getStatus === 'function') ? await licApi.getStatus() : null;
+            } catch (_) {}
+            let machineId = '';
+            try { machineId = normalizeMachineIdResult(await StorageAdapter.getItem('license:machineId') || ''); } catch (_) {}
+            if (!machineId && licApi && typeof licApi.getMachineId === 'function') {
+                try { machineId = normalizeMachineIdResult(await licApi.getMachineId()); } catch (_) {}
+            }
+            if (!machineId && actApi && typeof actApi.getMachineId === 'function') {
+                try { machineId = normalizeMachineIdResult(await actApi.getMachineId()); } catch (_) {}
+            }
+            if (!machineId) return null;
+            let localCode = '';
+            try { localCode = await getLicenseCode(); } catch (_) {}
+            // 本地码格式损坏时不要把脏值当 code 发给服务端（否则 400 放弃自愈）；
+            // 脏值仅作 client.code 诊断提示，服务端据此返回 CLEAR_STALE_CODE。
+            const __codeFmt = /^BNZC(-[A-Z0-9]{4}){4}$/;
+            const localCodeValid = __codeFmt.test(String(localCode || '').trim().toUpperCase());
+            const body = {
+                machineId: machineId,
+                code: localCodeValid ? String(localCode).trim().toUpperCase() : undefined,
+                client: {
+                    licenseStatus: status ? (status.valid ? 'valid' : 'invalid') : 'missing',
+                    code: localCode || ''
+                }
+            };
+            const ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+            const timer = ctrl ? setTimeout(function () { try { ctrl.abort(); } catch (_) {} }, 5000) : null;
+            let resp = null;
+            try {
+                resp = await fetch('https://tcm-prescription-system.pages.dev/api/license/reconcile', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                    signal: ctrl ? ctrl.signal : undefined
+                });
+            } finally {
+                if (timer) clearTimeout(timer);
+            }
+            if (!resp || !resp.ok) return null;
+            const j = await resp.json().catch(function () { return null; });
+            if (!j || !j.success) return null;
+            const actions = Array.isArray(j.actions) ? j.actions : [];
+            if (j.traceId) {
+                console.info('[LoginGate][reconcile] trace=' + j.traceId +
+                    ' state=' + j.state + ' actions=' + actions.join(','));
+            }
+            let __healedCode = false;
+            if (actions.indexOf('CLEAR_STALE_CODE') !== -1 && j.license && j.license.code) {
+                const __newCode = String(j.license.code).trim().toUpperCase();
+                // 写入前格式校验（服务端权威码理论必合法，纵深防御防脏值落本地）
+                if (/^BNZC(-[A-Z0-9]{4}){4}$/.test(__newCode)) {
+                    try {
+                        await StorageAdapter.setItem('license:code', __newCode);
+                        __healedCode = true;
+                    } catch (_) {}
+                }
+            }
+            if (actions.indexOf('REINSTALL_LICENSE') !== -1) {
+                let inst = null;
+                try {
+                    if (actApi && typeof actApi.installLicenseFromServer === 'function') {
+                        inst = await actApi.installLicenseFromServer(machineId);
+                    } else if (licApi && typeof licApi.installLicenseFromServer === 'function') {
+                        inst = await licApi.installLicenseFromServer(machineId);
+                    }
+                } catch (ie) {
+                    console.warn('[LoginGate][reconcile] 重装授权异常(忽略):', ie && ie.message);
+                }
+                // 桥在 unregistered/pending/phone_mismatch 等场景也返回 success:true（什么都没装），
+                // 只有 installed/already_licensed 才算真正落盘成功。
+                const __instOk = !!(inst && inst.success === true &&
+                    (inst.status === 'installed' || inst.status === 'already_licensed'));
+                if (__instOk) {
+                    console.info('[LoginGate][reconcile] 本地 license 已按服务端权威重装(' + inst.status + ')，重跑登录闸');
+                    return { retry: true, actions: actions, traceId: j.traceId || '' };
+                }
+                if (inst && inst.status) {
+                    console.info('[LoginGate][reconcile] 重装未落盘 status=' + inst.status);
+                }
+            }
+            // 仅错位码被纠正（服务端 LICENSED）→ 重跑闸门即可用权威码通过
+            if (__healedCode && actions.indexOf('CLEAR_STALE_CODE') !== -1) {
+                console.info('[LoginGate][reconcile] 本地残留码已按服务端权威纠正，重跑登录闸');
+                return { retry: true, actions: actions, traceId: j.traceId || '' };
+            }
+            return { retry: false, actions: actions, state: j.state || '', traceId: j.traceId || '' };
+        } catch (e) {
+            console.warn('[LoginGate][reconcile] 对账异常(忽略):', e && e.message);
+            return null;
+        }
+    }
+
+    // 重跑登录闸：桌面端优先再走主进程 IPC（gate.dat 锚点/回拨/accountReject 墓碑全在主进程），
+    // 无 IPC 桥（APP）才退渲染层兜底 inner —— 避免自愈重跑走弱闸。
+    async function __rerunLoginGate(username, opts) {
+        try {
+            const licApi = global.electronAPI && global.electronAPI.license;
+            if (licApi && typeof licApi.verifyGate === 'function') {
+                const rr = await licApi.verifyGate(username);
+                if (rr) return rr;
+            }
+        } catch (e) {
+            console.warn('[LoginGate] 自愈重跑 IPC 异常(退渲染兜底):', e && e.message);
+        }
+        return await __verifyLoginGateInner(username, opts);
+    }
+
     async function verifyLoginGate(usernameInput, opts) {
         const username = String(usernameInput == null ? '' : usernameInput).trim().slice(0,64);
         let r = null;
@@ -2902,6 +3028,48 @@
                 __loginGatePromise = __verifyLoginGateInner(username, opts);
             }
             r = await __loginGatePromise;
+        }
+        // ★ 2026-10-17 S1-O3：授权类失败 → 服务端对账自愈（清本地错位码 / 按权威重装 license）。
+        //   触发改为结构化判定（代码审查修正）：仅「本地授权有效(licensed) 且闸门拒绝」才值得对账；
+        //   tampered/回拨/试用/免费/账号删除/网络类失败一律不介入（避免把硬拒态变成可写修复路径）。
+        //   同账号本次运行只对账一次（__loginGateHealedKeys），失败结果写回缓存。
+        if (r && !r.ok && username && !__loginGateHealing && !__loginGateHealedKeys[username]) {
+            const __msg = String(r.message || '');
+            const __skip = /账号已被删除|吊销|已被停用|默认账户|授权服务暂时不可用|响应异常/.test(__msg);
+            let __st = null;
+            try {
+                const __lic = global.electronAPI && global.electronAPI.license;
+                if (__lic && typeof __lic.getStatus === 'function') __st = await __lic.getStatus();
+            } catch (_) {}
+            const __licenseType = __st ? String(__st.licenseType || __st.type || '') : '';
+            const __locallyLicensed = !!(__st && __st.valid && __st.type === 'licensed' &&
+                __licenseType !== 'free' && __licenseType !== 'trial');
+            if (!__skip && __locallyLicensed) {
+                __loginGateHealedKeys[username] = true;
+                __loginGateHealing = true;
+                try {
+                    const __heal = await __reconcileLoginGate();
+                    if (__heal && __heal.retry) {
+                        r = await __rerunLoginGate(username, opts);
+                    }
+                    if (r && __heal) {
+                        r = Object.assign({}, r, { reconcile: __heal });
+                        // P40 型「本地有效 / 服务端无授权」：不自动修复，但把诊断码并入用户文案
+                        if (!r.ok && __heal.actions && __heal.actions.indexOf('SERVER_RECORD_MISMATCH') !== -1) {
+                            r.message = (r.message || '') + '（本机授权与服务端记录不一致' +
+                                (__heal.traceId ? '，诊断码 ' + __heal.traceId : '') + '；请重新激活或联系客服）';
+                        }
+                    }
+                    if (username) {
+                        __loginGateUser = username;
+                        __loginGatePromise = Promise.resolve(r);
+                    }
+                } catch (_) {
+                    /* 对账失败保留原裁决 */
+                } finally {
+                    __loginGateHealing = false;
+                }
+            }
         }
         // ★ 吊销/删除/停用硬拒 → 同步删指纹凭据（出口收口，登录链与主窗自检
         //   两条调用路径全覆盖；delete 幂等，缓存期重复调用无害）

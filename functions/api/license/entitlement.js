@@ -112,7 +112,9 @@ function getClientIP(context) {
 }
 
 // 裁决核心（纯只读）：按 code 直查或按 machineId 遍历索引，返回统一契约
-async function adjudicate(kv, machineId, code) {
+// ★ 2026-10-17 S1-O3：导出 adjudicate 作为「唯一裁决函数」供 reconcile.js 复用，
+//   禁止对账端点另写一套判定（历史"两头算"漂移根因）。
+export async function adjudicate(kv, machineId, code) {
     const now = new Date();
     let record = null;
 
