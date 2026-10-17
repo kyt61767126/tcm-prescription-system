@@ -3471,7 +3471,14 @@ public class MainActivity extends BridgeActivity {
                 name = name.replaceAll("[/\\-\\s]+$", "").trim();
                 String loginUsername = phone.isEmpty() ? raw : phone;
                 // ★ 2026-08-26 推广奖励：透传好友邀请码（选填）→ 服务端发奖（邀请人+90天，本机+30天）
-                JSONObject result = getLM().activateOnline(code, machineId, name, "", password, loginUsername, phone, inviteCode);
+                // ★ 2026-10-17 P40 真机实证：诊所预置码发码时服务端预绑 clinicName，validate
+                //   诊所名闸要求 claim 必带同名——此处原硬编码空串 → 深链裸码/手动表单/令牌
+                //   兑换三条激活路径全 400「此激活码已绑定诊所」（令牌 redeem 只交还码明文，
+                //   激活仍走 validate/claim，令牌链不豁免诊所名闸）。改为透传本机 config
+                //   clinicName（LicenseManager.getLocalClinicName）：与预置码同名即放行；
+                //   无 clinicName 的普通码不受影响（服务端仅 record.clinicName 存在时才比对）。
+                //   服务端 redeemedDevices 台账豁免已兜底，本项为纵深防御（随下批 APK 生效）。
+                JSONObject result = getLM().activateOnline(code, machineId, name, getLM().getLocalClinicName(), password, loginUsername, phone, inviteCode);
                 // ★ 修复 2026-07-27：激活成功后立即验证 license.dat 是否可正确读取
                 // 这样可以在激活时就发现问题，而不是等用户重启后才发现问题
                 // ★ 2026-09-11 P0 假激活拦截（对齐 installAdminLicense 的 AR-03 加固）：

@@ -2973,8 +2973,9 @@
                 // ★ 2026-10-17 P40 真机实证：直接读 StorageAdapter 可能拿到残留错码
                 // （之前测试/旧激活流程写入但未清除）→ entitlement 用错码查 → NO_LICENSE
                 // → "该诊所/激活码已被删除" 弹窗（服务端全干净，纯客户端码错位）。
-                // 改用 getLicenseCode()：完整 4 来源链（StorageAdapter→localStorage→electronAPI 自愈→机器码联网找回）
-                // + 联网回写正确码到 StorageAdapter，一次自愈永久修复。
+                // 改用 getLicenseCode()：完整 4 来源链（StorageAdapter→localStorage→electronAPI 自愈→机器码联网找回）。
+                // ★ 二次实证：残留码【非空】时来源1 直接命中，机器码找回（来源4）永不执行 →
+                //   getLicenseCode 单独不足以自愈；真正的兜底在下方「NO_LICENSE → machineId 重裁」。
                 try { code = await getLicenseCode(); } catch (_) {}
                 if (!code) { try { code = await StorageAdapter.getItem('license:code') || ''; } catch (_) {} }
 
@@ -3014,8 +3015,31 @@
                 }
 
                 if (ent) {
-                    // ★ 2026-10-17 DEBUG: 屏幕显示 entitlement 返回值（测完即删）
-                    try { alert('[DEBUG verifyLoginGate]\ncode=' + (code || '(空)') + '\nstate=' + ent.state + '\nsuccess=' + ent.success + '\nmsg=' + (ent.message || '') + '\nHTTP=' + entHttpStatus); } catch (_) {}
+                    // ★ 2026-10-17 P40 真机二次实证（热更 -6 弹窗值：code=BNZC-CA73-…、
+                    //   state=NO_LICENSE、HTTP=200）：本地 license:code 残留旧测试码且【非空】，
+                    //   getLicenseCode 来源1 直接命中 → 机器码联网找回永不执行 → 服务端按码
+                    //   直查判 NO_LICENSE。但服务端裁决核心（entitlement.js adjudicate）仅在
+                    //   code 为空时才走 machineId 索引自愈——同机真实授权可找回。
+                    //   码错位 ≠ 无授权：仅 NO_LICENSE 用 machineId 重裁一次，命中 LICENSED
+                    //   即回写服务端权威 licenseCode（一次自愈永久修复）；REVOKED/EXPIRED/
+                    //   账号墓碑一律保持原 fail-closed 裁决，不放宽任何裁决面。
+                    if (ent.success && ent.state === 'NO_LICENSE' && code) {
+                        try {
+                            const rq2 = await requestEntitlement({
+                                mid: machineId, code: '', username,
+                                getResetAuth: getResetAuth || undefined
+                            });
+                            if (rq2.httpStatus === 200 && rq2.ent && rq2.ent.success &&
+                                rq2.ent.state === 'LICENSED') {
+                                ent = rq2.ent;
+                                entHttpStatus = 200;
+                                if (ent.licenseCode) {
+                                    try { await StorageAdapter.setItem('license:code', String(ent.licenseCode).trim()); } catch (_) {}
+                                }
+                                console.info('[LoginGate] 本地码错位 → machineId 自愈重裁命中 LICENSED，已回写权威码');
+                            }
+                        } catch (_) { /* 重裁失败保留原 NO_LICENSE 裁决 */ }
+                    }
                     // ★ 2026-09-23 账号删除优先裁决：即使设备授权有效，账号墓碑命中即硬拒。
                     //   落账号级拒绝标记【按用户名集合】（断网也不享受宽限；同机多账号
                     //   互不覆盖；旧版单条记录读入自动迁移）。

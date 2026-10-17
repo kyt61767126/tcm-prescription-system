@@ -273,6 +273,21 @@ async function handleRedeem(context, kv, body, origin, ip) {
     if (status === 'redeemed') {
         // 幂等：同一设备网络重试/重启恢复 → 原样返码；异机 → 拒绝（一次性）
         if (rec.machineId === machineId) {
+            // ★ 2026-10-17 P40 真机实证：幂等返回前也补写 redeemedDevices 台账
+            // （之前 KV 手动重置码记录清空 redeemedDevices 但令牌仍 redeemed，
+            //  幂等短路跳过写台账 → validate 无豁免 → clinicName 400）。
+            try {
+                const __lic = await getLicense(kv, rec.code).catch(() => null);
+                if (__lic && String(__lic.status) !== 'disabled') {
+                    const __rd = Array.isArray(__lic.redeemedDevices) ? __lic.redeemedDevices : [];
+                    if (__rd.indexOf(String(machineId)) === -1) {
+                        __rd.push(String(machineId));
+                        __lic.redeemedDevices = __rd.slice(-10);
+                        await kv.put(KV_LICENSE_PREFIX + rec.code, JSON.stringify(__lic));
+                    }
+                }
+            } catch (e) { console.error('[activation-token] 幂等台账补写失败:', e && e.message); }
+
             const lic0 = await getLicense(kv, rec.code).catch(() => null);
             if (!lic0 || String(lic0.status) === 'disabled') {
                 return json({ success: false, error: '激活码已停用，请联系客服' }, 410, origin);
