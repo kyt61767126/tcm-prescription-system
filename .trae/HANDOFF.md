@@ -14,76 +14,45 @@
 
 ---
 
-## 当前基线（2026-10-16 更新）
+## 当前基线（2026-10-17 晚更新）
 
-- **main HEAD：`67cd9b62`**（2026-10-16 P0 激活方案 WIP：服务端/落地页/桌面/离线App/**云App 深链接**完成，鸿蒙/双审查/热更未做，详见 OPEN H5）。
-- **近 24h 已上线、**勿重复实施**：
-  - KV list 1000/天告警根治（order_index + safeListPage 熔断/短缓存，`6601c943`，详见 KNOWLEDGE 2026-10-13 条目）。
-  - 激活架构 **P1** 客户端「只填码」身份自动带出（`b7bf5530`）。
-  - 激活架构 **P2** 服务端裸码「码+手机号」单锚点首激（`3a7a762f`，开关 `config:activation-phone-anchor`）。
-  - 激活架构 **P3** claim/order 请求体收口 `buildActivationPayload`（`3498c5ba`，纯重构零行为变化）；auth-core cv=**ed835152**（云端刷新即达）；离线 App 热更 **2026.10.14-1，minAppCode 288 不抬**（退出重开第 2 次生效）。
-  - 完整方案：`.trae/documents/activation-architecture-optimization_plan.md`（P1/P2/P3 全部闭环）。
-  - 云 App bnzc:// 深链接实现（`67cd9b62`）：MainActivity.java 四方法 + NativeBridge 三 case + bnzcRedeemToken(productClass=cloud)，自审 PASS。
-- 工作区有多个**未跟踪文件**（`_verify/`、`_verify-report.md`、`e2e/.tmp/*-test.*` 的一部分、`promo/`、`tools/_tmp/*` 等）：非本台账任务产物，**提交时精确 `git add`，禁止 `git add -A`**。
+- **main HEAD：docs 提交（父 `0012e7a2`；代码基线 `a9193675`）**（2026-10-17 P40 收尾：登录闸 NO_LICENSE 码错位自愈 + 热更 **2026.10.17-7** + 令牌幂等台账补写 + Java clinicName 透传入库；整包未打，见 OPEN H6/H7）。
+- **线上状态（已实测）**：
+  - production 部署源 `0012e7a2`（branch main）；app-local 热更 **2026.10.17-7**（minAppCode 288 继承；线上 version.json 实测，auth-core.js SHA256 `bb4dede2…45210` 与 manifest 逐字节一致，无 `DEBUG verifyLoginGate` 串）。
+  - functions 已随直传更新（activation-token GET 405 / 坏码 POST 400 冒烟通过；令牌幂等台账补写 + validate 诊所名闸台账豁免均在线）。
+  - desktop/local 热更仍 **-2**（等整包重签）；cloud 热更 -5；三渠道版本表在整包批统一。
+  - **勿重复实施**：-6 调试 alert 已移除并重签 -7 覆盖；P40 登录闸码错位自愈已上线；令牌 redeemedDevices 台账（首兑写 + 幂等短路补写）已上线；Java `activateLicense` clinicName 透传已入库（待 APK v325 生效）。
+  - 完整方案：`.trae/documents/activation-architecture-optimization_plan.md` / `.trae/documents/activation-streamline_plan.md`（P0 方案A 全链已闭环，详见 KNOWLEDGE 2026-10-17 条目）。
+- 工作区有多个**未跟踪文件**（`_verify/`、`_verify-report.md`、`promo/`、`tools/_tmp/*` 等）：非本台账任务产物，**提交时精确 `git add`，禁止 `git add -A`**。
 
 ---
 
 ## OPEN 遗留任务
 
-### H5 ｜优先级：高｜P0 激活方案·一键激活全端打通 + 链接安全化（在制品）
-- **状态**：IN-PROGRESS（本账号@本机器，2026-10-16）
-- **方案文档**：`.trae/documents/activation-streamline_plan.md`（已获批）
-- **背景**：把旧 `bnzc://activate?code=裸码` 升级为 `?t=<一次性令牌>`（双参数并存兼容），令牌 32 字节 CSPRNG base64url、KV 权威、24h 有效、首兑机绑（同机幂等/异机 409）、兑换不发新码不写账号；落地页 `public/activate.html` 自包含零依赖 + CSP 严格 + 微信遮罩；后台生成器异步调 `/api/license/activation-token` issue。
-- **已完成（本会话 WIP 将提交）**：
-  - 服务端 `functions/api/license/activation-token.js`：路由 `POST /api/license/activation-token`，actions=issue/preview/redeem/revoke；单测 `tools/_tmp/activation-token-test.cjs` **42/42 PASS**（鉴权/签发/preview 不泄码/redeem 同机成功+异机409+幂等/端锁 preset 硬拦 device 观察期放行/过期/revoke 单+批量/fail-closed/频控429）。
-  - 落地页 `public/activate.html` + `site-official/activate.html`（镜像）+ `tools/diff-cross-version.cjs` 新增 activate pair + `tools/.cross-version-baseline-activate.json` 基线。
-  - 后台生成器 `public/admin/index.html` + `site-admin/admin/index.html`（双副本一致）：`generateActivationLink` 异步 issue，失败回退裸码。
-  - 桌面双端 Electron：离线 `db-offline/desktop/electron/{main,preload,login}.js` + 云端 `db-yunduan/cloud_desktop/electron/{main,preload,login}.js`——`parseBnzcUrl` 支持 `t=`、`bnzc:redeem-token` IPC handler、6 处日志脱敏。
-  - 离线 App 深链接：`db-offline/app/.../MainActivity.java`（parseBnzcDeepLink/onNewIntent/dispatchBnzcToWebView/NativeBridge 三 case/bnzcRedeemToken productClass=offline）+ manifest intent-filter。
-  - 云端 HTML 权威源 `public/index.html`（bnzcGetPending 判 `code||token`、onBnzcPendingActivation 日志脱敏、showBnzcActivationNotice 令牌兑换分支 tokenConfirmed）→ `sync-html.ps1` 已同步到 cloud_desktop + cloud_app assets。
-  - 云 App manifest intent-filter（`db-yunduan/cloud_app/.../AndroidManifest.xml`）。
-  - 云 App 深链接 MainActivity（`67cd9b62`）：parseBnzcDeepLink/onNewIntent/dispatchBnzcToWebView/appendBnzcDebug 四方法 + NativeBridge 三 case + bnzcRedeemToken(productClass=cloud, getStableMachineId)；`isSensitiveOperation` 加 bnzcRedeemToken 敏感标记；自审 PASS（6/6 检查点）。
-  - 云 App shim 补口（`7a1393f3`）：injectElectronApiShim 加 bnzc 五方法（getPending/clearPending/redeemToken/autoActivate/onBnzcPendingActivation）+ `__bnzcEmitFromNative`；NativeBridge 加 activateOnline case（Java 复刻桌面 activateManager.activateOnline claim 口径：cloud/app、connect 10s/read 40s、needClinicName 透传）；成功后 2600ms reload 兜底（App 无 license.restart）；isSensitiveOperation 加 activateOnline。
-  - 鸿蒙端深链接（`7a1393f3`，与安卓/桌面同构）：module.json5 skills（browsable+viewData，bnzc://activate）+ launchType singleton；EntryAbility onCreate/onNewWant 双收口（code 大写优先/t/clinic/user，脱敏日志）；NativeBridge bnzcGetPending（读后不删）/bnzcClearPending/bnzcRedeemToken（JS fetch 兜底）+ appendBnzcDebug；Index.ets emitter→dispatchBnzcToWebView 直推；shared-inject/cloud-electron-api-shim.js bnzc 六方法（redeemToken/autoActivate 同源 fetch claim，productClass=cloud/clientClass=app、40s 超时、needClinicName 透传、成功 2600ms reload）+ 机器码三级口径抽 bnzcMachineId 共用（桥优先→localStorage browser-xxx→生成式，与 auth-core collectDeviceIdentity 同款）；copy-assets 追平 rawfile 6 落后文件 + vendor/pinyin-pro + voice-input.js（工具既定行为）。
-  - **注意**：云端权威源 L6670 `bnzcAutoActivate` 无方法级守卫——现六端均提供该方法后实际缺口已消（浏览器无 bnzc scheme 不触发）；若未来新增端须带齐 shim 六方法。
-- **未完成（下一步按序）**：
-  1. **热更已完成（`058e378f` 已 push，线上核验通过）**：三渠道 2026.10.16-1（app-local minAppCode 288 继承不抬/probe 探测式降级安全；desktop/cloud 20 文件；desktop/local 19 文件），Ed25519 三包自验全过，线上 version.json 实拉三渠道全命中。
-  2. **整包构建已完成（2026-10-16）**：离线 App v320（验包三重+分发两文件位，旧 v316 归档 %TEMP%）、云 App v323（构建+验包）；versionCode 改动已 commit+push（d9dc48ab）。下载页 APK v320 已随 v2026.10.16-1036 发布闭环（1e7d4717）。
-  2b. **鸿蒙构建：暂停（用户指示 2026-10-16）**。已达成的进度，恢复时直接续：① 环境齐备——DevEco Studio 26.0 在 `D:\Program Files\Huawei\DevEco Studio`（hvigor 6.26.4/ohpm/SDK default），签名材料 9-04 全套在 `~/.ohos/config`（debug+release 两套 .p12/.cer/.p7b）；② **unsigned HAP 构建成功**（hvigorw --mode module -p module=entry@default -p product=default assembleHap，BUILD SUCCESSFUL 27s，产物 entry-default-unsigned.hap 2.2MB）；③ **审查 P1 emitter 修复获编译实证**。剩余仅一步：DevEco GUI（File > Project Structure > Signing Configs > 自动签名，密码在 material/ 加密分片命令行不可还原）→ 重跑同命令出 signed HAP → 真机 bnzc 链路验证。
-  3. **线上核验（发版终验）**：activate.html 可访问 + bnzc:// 端到端真机（双 APK 安装后：链接唤起→兑换/装码→激活成功；鸿蒙真机部分随 2b 暂停）。
-  - **✅ 真机核验已完成（2026-10-17，P40）**：**云端 App v324 全链闭环 ✅**（深链接唤起→兑换→装码→「激活成功！即将重启」弹窗，logcat activateOnline jsonLen=61 实证）。**离线 App v324 暴露关键 bug（已修，见下）**：装码成功（服务端 validate 实证 license pro 有效、devicesCount 绑定 P40）但重启回「管理员激活页」= 本地手机号账号缺失——根因：旧链 bnzcAutoActivate 直调装码，链接不带 user 时 App Java 激活收尾 syncCreateActivationUser 因 username 空直接 return 不建号、桌面 installLicense 建号 phone 空 → auth-core 启动闸弹回激活页。
-  - **✅ 方案A修复已完成（2026-10-17 本会话，用户拍板全自动编排，业务铁律「本地需先注册再激活」）**：
-    - `db-offline/desktop/index.html`（离线权威页）：showBnzcActivationNotice 改调 **bnzcOfflineAutoActivate**（已注册→getActivationUsers 桥优先取手机号直装码；未注册→DOM 弹窗 bnzcCollectRegParams 收手机号+密码→registerLocalUser 建号→镜像三步→activate.submit 带手机号装码）。Electron 不支持 window.prompt 故用 DOM 弹窗；失败/取消**不清 pending**（令牌一次性兑换，码不能丢）+ 报错回显激活码引导手动激活。
-    - `db-offline/desktop/electron/login.js`（桌面登录窗冷启动消费 pending 的主路径）：同构编排；镜像①不回写 localStorage 用户表（XORv1 加密约定，config.json 已由桥写入）。
-    - `shared/desktop-license-ipc.cjs`（双桌面副本 sync-all 分发）：**P1 修复**——submit-activate 多设备授权弹窗 `showMessageBoxSync(getMainWindow(),…)` 在登录窗冷启动时主窗未创建（null 父窗 Electron 35 抛参→激活成功却报失败），改「主窗存在才带父窗」。
-    - 双独立审查（2 功能互不通气 + 1 安全二查）全过：A 无 P0/P1；B 报 P1（null 主窗弹窗，已修）+ deviceInfo 死代码（已删）；安全 PASS（密码链/注入/越权/热更混跑窗口均查过，已注册判定改桥优先）。
-    - 校验链全绿：sync-index-app 32 变换命中 / sync-all VerifyOnly 0 drift / diff-cross-version 6 对全绿（desk 基线重冻结=离线专属编排合法分叉）/ check-interface 6 OK。
-  - **下一步（2026-10-17 三次更新，按序）**：
-    1. **P40 登录闭环（用户手动）**：热更 2026.10.17-4 已拉取生效（弹窗已消失，登录表单已出，诊所名「惠康康中医诊所」预填正确）；用户用手机号 13398628212 + 10:49 注册窗所设密码手动登录完成最后一步。
-    2. **离线桌面 exe 重打**（login.js + desktop-license-ipc.cjs 主进程域，可攒批）→ 冷启动深链复测。
-    3. **APK 攒批修复**：Java `activateLicense` 透传 config clinicName（`LicenseManager` L3228 已有 getter，MainActivity L3474 一行改）→ 下次 APK 重打一并带上（服务端台账豁免已兜底，此项为纵深防御非紧急）。
-    4. 复测闭环后：六端能力矩阵离线 bnzc 行更新 + 本任务收口。
-    5. **★ 2026-10-17 三次复测进展（全链闭环！）**：
-       - 注册链建号 → 令牌兑换写 redeemedDevices 台账 → validate 台账豁免 → 激活成功（v3 license 装机 + 账号 UPSERT）→ auth-core `__isDeviceLicensed` Java 桥判定生效 → **弹窗消失 → 登录表单出现 → 诊所名预填正确**。
-       - **auth-core 闸 bug**：激活成功后 maybePromptRegistration 仍弹注册窗（每次启动重弹+关闭自动重弹）→ 根因：`__isDeviceLicensed()` 三层判定（electronAPI/StorageAdapter/localStorage license:code）APP 端全空恒 false → 误判未激活。修复：加第四层 APP 端 Java 桥判定 `NativeBridge.invoke('getLicenseStatus')`，热更 2026.10.17-4 已签+已拉取生效（`登录页空闲，当次打开直接应用新版`）。
-       - 双权威源同步：改 `shared/auth-core/offline.js` + `sync-auth-core.ps1` 分发 3 副本，pre-push 17 道校验全通过。
-       - Cloudflare Pages 部署陷阱：直传 public 被 77MB exe 超限拦截，用 `git archive HEAD public` 抽入库内容绕开（入库 exe 已 gitignore）。
-  4. **✅ 优化建议阶段 2 已完成（2026-10-16，commit `3a2ca967` 已 push，服务端 Pages 自动部署全端刷新即达）**：① validate.js resolvedIdentity.phone 优先回带 record.phone 锚点（淘宝预置>record 11位校验>请求回显），杜绝错号建本地账号；② 换机自动解绑留痕 lastUnboundDevice（与 devices 移除原子同批落库，拒绝路径不落库），被踢设备下次 validate 撞配额无凭证返回 reason=unbound-by-new-device+明确中文（向后兼容）；③ 后台激活日志/设备列表/风控审计三处设备友好名徽标（and-=安卓APP/browser-=网页/其他=桌面离线，悬停口径说明）。
-  5. **✅ 优化建议阶段 3 已完成（2026-10-17，commit `81ba2693` 已 push，pre-push 十七道校验全过）**：① 鸿蒙 rawfile 兜底页纳入 sync-html.ps1 分发链（$Targets 第 3 目标——实锤旧结论纠正：鸿蒙副本与 public 权威源 SHA256 字节一致，非独立权威源，bnzc 掉队根因=不在同步链靠人肉复制）；② diff-cross-version.cjs 新增第 6 对 harmony 基线（lines 模式），全 6 对重冻结（desk probeBnzcPending 同体纳入 Tier B）；③ KNOWLEDGE 第 2 章传播链加鸿蒙行 + 章末新增六端能力矩阵（含鸿蒙三件套必查清单）。**优化建议三阶段全部收官。**
-- **✅ 双独立审查已完成（2026-10-16，commit `24c5925e` 已 push）**：2 独立功能审查（互不通气）+ 1 安全二查。关键成果：
-  - **P0 断链（审查员 B 独报、主会话亲验坐实）**：页面解析期 `const IS_ELECTRON` 固化 false（App shim onPageFinished 才注入）→ 双安卓 App/鸿蒙兜底页 bnzc 块永不执行=端到端断链。修复：`probeBnzcPending` 延迟重试探测（250ms×20），权威源 public/index.html + **db-offline/desktop/index.html**（sync-index-app.cjs 证实它才是离线 App 页权威源，index-app.html 是生成产物）→ 7 副本分发全绿；同法覆盖鸿蒙 onPageBegin 注入竞态。
-  - **P1 桌面令牌日志脱敏（A+安全双证实）**：parsed 新增 token 字段使存量序列化日志恶化为完整令牌落盘 bnzc-debug.log——双端 main.js 全部 brief 化（前 8 位）。
-  - **P1 鸿蒙 emitter 泛型（A）**：API 12 EventData 非泛型（泛型重载 @since 23）→ Index.ets 改保守非泛型+判空，DevEco 编译仍需实证。
-  - P2 顺手修：离线 App isSensitiveOperation 对齐 bnzcRedeemToken；双桌面 parseBnzcUrl 删二次 decode（含 % 诊所名 URIError 致深链失效）；needClinicName 注释改准确；siteadmin 基线刷新（admin 无 bnzc 桥的合法分叉）。
-  - 安全二查结论 PASS-with-notes：注入链转义安全、redeem fail-closed、频控 CF-IP、manifest 无新增 exported。可接受不改（P3）：redeem 并发双花有界（maxDevices 兜底）、host null 放行（manifest 已限定）。
-- **勿做**：不发热更、不打 APK、不做产品决策（如放宽安全锚点须显式批准）；禁止手改生成副本（cloud_desktop/cloud_app assets/index-app/offline assets），改权威源后跑生成器。
-- **验证命令**：
-  - `node tools/_tmp/activation-token-test.cjs`（42 PASS）
-  - `powershell -File tools\sync-html.ps1 -VerifyOnly`（0 drift）
-  - `powershell -File tools\check-index-consistency.ps1`（OK）
-  - `node tools/sync-index-app.cjs --verify-only`（PASS）
-  - `node --check` 7 个 JS（activation-token.js + 双桌面 main/preload/login）
-- **基线 commit**：`24c5925e`（双独立审查修复完成，已 push）　关联文档：`.trae/documents/activation-streamline_plan.md`
+### H6 ｜优先级：高（需人工真机）｜P40 离线 App -7 复测（登录闸码错位自愈）
+- **状态**：OPEN（等用户真机复测，2026-10-17 晚起）
+- **背景**：热更 -5 的 getLicenseCode 自愈未生效。P40 -6 调试弹窗实测 `code=BNZC-CA73-…、state=NO_LICENSE、success=true、HTTP=200`——本地 `license:code` 残留旧测试码（非空）→ 来源1 直接命中，机器码联网找回永不执行 → entitlement 按错码直查 NO_LICENSE → verifyLoginGate 硬拒（「该诊所/激活码已被删除」+ 管理员激活框）。修复见 `a9193675` + KNOWLEDGE 2026-10-17（晚）条目：仅 NO_LICENSE 用 machineId 重裁一次并回写服务端权威码；REVOKED/EXPIRED 不放宽。热更 -7 已线上。
+- **执行步骤（用户手动）**：
+  1. 联网打开离线 App → **彻底划掉重进 2 次**（第 2 次冷启动才拉热更；logcat 应出现 `热版本已是最新 2026.10.17-7`）。
+  2. 确认：① 不再弹 `[DEBUG verifyLoginGate]`；② 不再弹「该诊所/激活码已被删除」；③ 不再弹管理员激活框。
+  3. 用注册手机号+密码登录 → 进入主界面；设置-授权状态里激活码应显示为**真实码**（不再是 CA73…旧码）。
+  4. 复测通过后：本卡删除，结论并入 KNOWLEDGE（含 `hotVersion_after=2026.10.17-7`）。
+- **异常回流**：若仍失败 → 截图 + `adb logcat -d -s TCM_Prescription` 抓 `热版本`/`LicenseManager` 行记入本卡，改 BLOCKED；**勿清 KV/勿后台解绑**（保留现场）。
+- **验收**：登录成功进主界面；`validateLicense` 返回 licensed/pro；本地 `license:code` 已回写真实码。
+- **基线 commit**：`a9193675`　线上热更：2026.10.17-7
+
+### H7 ｜优先级：高｜整包攒批：离线桌面 exe 1.0.276 + 离线 APK v325（P40 收尾最后一步）
+- **状态**：OPEN（代码已入库，仅剩打包/验包；用户 2026-10-17 决定攒批）
+- **背景**（主进程/原生域修复热更带不到，必须整包）：
+  1. **离线桌面 exe**：`login.js`（登录窗冷启动消费 bnzc pending 的方案A编排）+ `shared/desktop-license-ipc.cjs`（多设备授权弹窗 null 主窗修复）已入库（`cf425655` 及之前），但 exe 仍是 **1.0.275（2026-10-14）**；desktop/local 热更仍 **-2**（方案A 页面已发，主进程改动未达）。桌面离线登录闸走主进程 IPC，auth-core 的 NO_LICENSE 自愈需随 exe 整包才生效。
+  2. **离线 APK**：`MainActivity.activateLicense` 诊所名透传（`getLocalClinicName()`，`a9193675` 入库）需重打 APK（建议 **v325**）才生效；JS 侧已由 app-local -7 覆盖。
+- **范围**：
+  1. 离线桌面 `one-click-pack`（打 1.0.276，签名/验包/分发位）→ **冷启动深链复测**：`bnzc://activate?...` 唤起 → 令牌兑换 → 自动注册/装码 → 登录（重点验登录窗冷启动主窗为 null 的弹窗路径）。
+  2. 离线 APK v325（`build.gradle` versionCode bump + 打包 + aapt2 验 versionCode + 真机安装复测 clinicName 透传激活）。
+  3. 打包后重签 desktop/local 热更（三渠道版本表同步）并发布；下载页 APK/exe 版本随发布闭环。
+- **勿做**：打包期间不并发改代码（源码落定门会拦）；鸿蒙构建**暂停**（用户指示，恢复=DevEco GUI 自动签名一步，见 KNOWLEDGE 2026-10-16 2b 记录）。
+- **验收**：`tools/artifact-locate.js --check` + 打包三重验包过；桌面冷启动深链真机通过；APK 真机预置码激活 200（无「已绑定诊所」）；六端能力矩阵同步更新。
+- **基线 commit**：`a9193675`
 
 ### H4 ｜优先级：高｜红米改名修复云端 functions 部署 + 真机复验（2026-10-15）
 - **代码已提交推送并上线**：commit `d085f785`——users.js（migratePrescriptionOwnership + formerUsernames 链 + 两改名端点）、prescriptions.js + _lib/auth.js（token `a` 别名签名与读侧别名过滤）、离线 5 副本 index.html（heal 双闸）、热更 2026.10.15-1 双端。双独立审查+安全二查已过，105 断言全绿（rename-cloud 36 / rename-heal-pwd 31 / owner-migrate 回归 38）。
@@ -101,11 +70,11 @@
   - ✅ **A1（P0）**：已登录用户激活码 Tab 手机号/诊所/姓名自动带出，提示文案正确（截图 phone-30）。
   - ✅ **F2（P0）**：离线 App claim body 精确匹配 P3 口径（offline/app、无 pwdCap/password）。
   - ⚠️ **D2 同机不适用**：错号在同机幂等放行属设计（existingDevice 免核验），服务端锚点/设备/到期零改动已实证；**跨机 D1/D2 仍需设备 B**。
-  - 🟡 附带观察（低优，不阻塞）：existing 重激活响应 `resolvedIdentity.phone` 回显客户端号而非 record 锚点号（validate.js L1093），错号场景客户端会建本地错号账号；建议后续改为优先回带 record.phone。
+  - 🟡 附带观察（低优，不阻塞）：existing 重激活响应 `resolvedIdentity.phone` 回显客户端号而非 record 锚点号（validate.js L1093），错号场景客户端会建本地错号账号；已由 2026-10-16 阶段2①修复（record.phone 锚点优先回带）。
   - ⏳ 待测：A2/A3/B 组（云端三端）/C 组（桌面）/D1+D2（设备 B）/E 组（裸码，需管理员备 unused 裸码）/F1/F3/F4。
 - **摘要**：
   1. 离线 App（已注册账号）：版本页金色按钮进激活码页 → 手机号自动带出 → **只输码**激活成功。
-  2. 离线 App：试用到期提醒入口同上；App 需彻底退出重开第 2 次拉到热更 2026.10.14-1。
+  2. 离线 App：试用到期提醒入口同上；App 需彻底退出重开第 2 次拉到热更（当前 -7）。
   3. 换机：新设备输码，手机号带出为原绑定号 → 自动解绑最旧机恢复；故意改错手机号 → 必须被拒。
   4. 桌面（Electron，云/离各一）：激活窗 user/clinicName/phone 正确透传桥 submit。
   5. 云端 Web/桌面：刷新即达（cv ed835152），登录态用户手机号自动带出。
