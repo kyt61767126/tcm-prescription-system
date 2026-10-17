@@ -444,7 +444,14 @@ export async function onRequest(context) {
         //   license 始终按 record.clinicName 生成，重装客户只需重输激活码即可恢复
         // ★ 2026-08-29：手机号核验通过（phoneVerified）同样跳过——原激活本人换机时
         //   无需重填诊所名，服务端自动沿用原绑定 clinicName（"自动填写原激活信息"）
-        if (record.clinicName && !existingDevice && !phoneVerified) {
+        // ★ 2026-10-17 P40 真机实证：令牌兑换设备台账豁免（redeemedDevices）——
+        //   App 端 activateLicense 桥 clinicName 硬编码空串（MainActivity.java L3474），
+        //   诊所预置码的深链/手动/令牌三条激活路径全被本闸 400 拦死（存量 APK 无
+        //   诊所名输入通道）。兑换者已持管理员签发的一次性令牌（首兑机绑，由
+        //   activation-token.js redeem 写台账），信任级等同 phoneVerified，命中即豁免。
+        const __redeemedDeviceMatch = !!machineId && Array.isArray(record.redeemedDevices)
+            && record.redeemedDevices.indexOf(String(machineId)) !== -1;
+        if (record.clinicName && !existingDevice && !phoneVerified && !__redeemedDeviceMatch) {
             if (!clinicName || clinicName.trim() === '') {
                 return json({
                     success: false,

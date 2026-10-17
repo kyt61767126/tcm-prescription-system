@@ -37,7 +37,7 @@
 import { parseAuthHeader, isPlatformAdmin } from '../_lib/auth.js';
 import {
     getKV, getLicense, appendLicenseLog, checkRateLimit,
-    evaluateProductClassGate
+    evaluateProductClassGate, KV_LICENSE_PREFIX
 } from './_lib/license-core.js';
 import { isValidMachineId } from './_lib/schema-guard.js';
 
@@ -333,6 +333,25 @@ async function handleRedeem(context, kv, body, origin, ip) {
         ip, operator: 'anonymous',
         detail: `mid=${String(machineId).slice(0, 12)} end=${gate.requestEnd || productClassRaw} token=${token.slice(0, 8)}…`
     }).catch(() => {});
+
+    // ★ 2026-10-17 P40 真机实证：兑换设备台账（诊所预置码 App 端死锁根治）。
+    //   App 端 activateLicense 桥 clinicName 硬编码空串（MainActivity.java L3474），
+    //   诊所预置码的深链/手动/令牌三条激活路径全被 validate.js 诊所名闸 400 拦死，
+    //   存量 APK 无诊所名输入通道。兑换者已持管理员签发的一次性令牌（首兑机绑），
+    //   信任级等同 phoneVerified——把兑换设备 machineId 记入码记录 redeemedDevices
+    //   台账，validate.js 据此豁免诊所名校验（服务端单点修复，老客户端零重打包）。
+    //   台账封顶 10 台防 KV 记录膨胀；写失败不阻断兑换（码明文已交还，兜底仍由
+    //   validate 既有闸把关，仅损失本次豁免资格）。
+    try {
+        const __rdList = Array.isArray(licRecord.redeemedDevices) ? licRecord.redeemedDevices : [];
+        if (machineId && __rdList.indexOf(String(machineId)) === -1) {
+            __rdList.push(String(machineId));
+            licRecord.redeemedDevices = __rdList.slice(-10);
+            await kv.put(KV_LICENSE_PREFIX + rec.code, JSON.stringify(licRecord));
+        }
+    } catch (e) {
+        console.error('[activation-token] 兑换设备台账落盘失败(不阻断):', e && e.message);
+    }
 
     return json({
         success: true,
