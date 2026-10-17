@@ -61,7 +61,7 @@
   2. `shared/auth-core/offline.js` 登录闸失败自愈：**结构化触发**（仅本地 `status.valid && type=licensed` 且非 free/trial，排除账号删除/吊销/停用/网络类）；对账成功→清错位码/重装 license 后**优先重跑主进程 verifyGate**（桌面 IPC 锚点/回拨/墓碑不被绕过）；P40 型「本地有效/服务端无授权」只追加诊断码文案，不自动修复；同账号每运行期只对账一次。
   3. `admin-account.normalizeActivationPassword` 默认 `fill-empty`（只补无 hash/salt 的历史空账号），审批/轮询/工单不再覆盖已改密码；仅 admin-submit 显式 passwordCred 才 overwrite；无凭据时拒绝回落字面 admin。
   4. 测试 `tools/act-reconcile-test.cjs` **29 PASS/0 FAIL**（含匿名码探测面/管理员诊断面/码错位二次裁决/P40 分裂/repair 三态/频控/封锁设备）。
-  5. **S1b-① 后台「🔎 激活诊断」页已上线**（双副本）：主站 `https://tcm-prescription-system.pages.dev/admin/activation-diagnose.html`、后台站 `https://huikang-admin.pages.dev/admin/activation-diagnose.html`（需先在该站登录后台，令牌读 `license_admin_token`）；功能=机码/激活码/本地状态 → reconcile 摘要 + 建议动作 + license_log 时间线 + 受控修复按钮 + 一键复制诊断报告；页面同源调用 `/api/license/{reconcile,logs}`。
+  5. **S1b-① 后台「🔎 激活诊断」页已上线**：主站 `https://tcm-prescription-system.pages.dev/admin/activation-diagnose`（Cloudflare Pages 去 .html，用 pretty URL）；功能=机码/激活码/本地状态 → reconcile 摘要 + 建议动作 + license_log 时间线 + 受控修复按钮 + 一键复制诊断报告；令牌读主站 `license_admin_token`。**后台站副本为跳转页**（huikang-admin 未部署 /api Functions，接口固定主域）；需先在主站 /admin 登录平台管理员。
   6. **app-local 热更 2026.10.17-8 已重签**（minAppCode 288 继承）：APP 端登录闸对账自愈自第 2 次冷启动起生效（桌面登录窗在 asar 内仍需整包 1.0.277）。
 - **生效注意（审查结论，务必遵守）**：
   - 服务端 reconcile 随 push 由 Pages 构建即上线；
