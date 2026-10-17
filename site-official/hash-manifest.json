@@ -1,39 +1,39 @@
 {
     "local": {
         "apk": {
-            "version": "V1.0.0.320",
-            "versionCode": 320,
-            "sha256": "193eca0aa71ca242f7c850d41fb50eb4ea7a6e0e8fc8be3e9c91916da98568c3",
+            "version": "V1.0.0.322",
+            "versionCode": 322,
+            "sha256": "b7d034ba9d71d3501d8d604e015a05d1558c7fccb6d54f39d1e8fbc264d436f9",
             "url": "/downloads/惠康中医-本地.apk",
-            "releaseUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.10.16-1036/huikang-local.apk",
-            "size": 3530265,
-            "updateTime": "2026-10-16T02:36:47.851Z",
+            "releaseUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.10.17-1723/huikang-local.apk",
+            "size": 3576866,
+            "updateTime": "2026-10-17T09:24:48.232Z",
             "fileName": "惠康中医-本地.apk",
             "releaseFileName": "huikang-local.apk",
-            "releaseTag": "v2026.10.16-1036",
-            "releaseNotes": "✨ 新增:\n  - feat(harmony+cloud-app): 鸿蒙端 bnzc:// 一键激活深链接 + 云 App shim 补口\n  - feat(cloud-app): 云 App bnzc:// 一键激活深链接（与离线 App/桌面 Electron 同构）\n  - feat(activation): P0 一键激活全端打通 + 链接安全化（WIP·服务端/落地页/桌面/离线App 完成）\n  - feat(netcheck): 新增手机云端连通体检页netcheck.html(人工排障工具,零业务影响)\n  - feat(activation): P2 裸码首激接受码+手机号单锚点(仅unused/可开关/不放松换机)\n  - feat(activation): 激活只填码——统一本机身份提供器,Tab2全入口自动带出注册手机号/诊所/姓名\n  - feat(cloud-app): 补稳定硬件机器ID——Java桥getStableMachineId(缓存优先+ANDROID_ID SHA256派生+UUID兜底,重装不漂移)+collectDeviceIdentity硬件通道,根治机构版1台误锁\n🐛 修复:\n  - fix(bnzc): 双独立审查修复——P0 App端深链断链 + P1 桌面令牌日志脱敏 + P1 鸿蒙emitter签名\n  - docs(handoff): H4 修正-functions随Pages自动部署已上线,仅剩红米真机复验\n  - fix(auth): 红米手机改英文名后历史处方消失+英文名无法登录 云端离线双端根治\n  - fix(payment): 官网订单恢复模式补手机号双因子领码(修复付款后网页不显示激活码)\n  - fix(license): 修复machineId兜底自愈装号不建本地账号(云+离线双桌面)\n  - fix(support): 重置工具v3补删Partitions持久分区+端选择,修复云端桌面清账号后注册入口消失\n  - fix(gate): 修复第⑰道授权自愈门禁两处缺陷(断尾exit0+天数过期),36断言全绿\n  - fix(offline): 改名处方归属迁移+登录自愈；删除处方刷新复活根治\n  - fix(app-activation): 离线App claim超时12s→30s对齐云端+AbortError友好引导,签发app-local热更2026.10.13-1\n  - fix(login): KV每日写配额耗尽时登录不再500——bindUserDevice设备绑定写容错降级(D1补偿/下次补写),设备强一致让位于可用性\n⚡ 优化:\n  - refactor(activation): P3 buildActivationPayload收口5处claim/order请求体(零行为变化,cv ed835152)\n  - perf(kv-list): 根治免费版list 1000/天告警——order_index消灭角标轮询泄漏+统一熔断/短缓存\n  - perf(license): 根治新设备首激33s超时——listLicenses分批并行+detach回填属主集合+邀请码O(1)索引\n  - perf(login): 削减冗余KV写——clearLoginFailures先get后删(空操作不再占写配额)+bindUserDevice设备表当天不重复写(24h节流),登录写耗降到仅session\n📋 其他:\n  - docs(HANDOFF): 发版完成——热更 2026.10.16-1 三渠道线上核验通过，双 APK v320/v323 构建验包分发，鸿蒙包遗留待 DevEco\n  - docs(HANDOFF): 双独立审查完成（24c5925e），P0断链/P1脱敏/P1emitter已修，剩热更+线上核验\n  - docs(HANDOFF): H5 鸿蒙深链接+云App shim 补口完成（7a1393f3），下一步双独立审查\n  - docs(HANDOFF): H5 云 App 深链接已完成（67cd9b62），鸿蒙端需另开任务\n  - docs(handoff): H5 基线 commit 刷新为 9d8c6bd0（P0 激活方案 WIP 已 push）\n  - docs(knowledge): §55 补记双桌面268/275产物哈希/未发布状态与旧bat打包门坑\n  - build: 一键打包副作用自动收纳\n  - docs(h2): 真机CDP回归记录——A1手机号带出/F2请求体PASS，D2待设备B\n  - docs(knowledge): 沉淀vm沙箱门禁三铁律(真实定时器/断尾护栏/冻结时钟)+commit文件禁BOM\n  - release(app-hotupdate): 离线App热更2026.10.14-1 P3请求体收口(minAppCode288不抬)+HANDOFF关单H1+KNOWLEDGE"
+            "releaseTag": "v2026.10.17-1723",
+            "releaseNotes": "✨ 新增:\n  - feat(guard): 阶段3——鸿蒙纳入同步链+跨版本第6对基线+KNOWLEDGE六端能力矩阵\n  - feat(license): 阶段2三项优化——phone锚点回带/解绑原因明确化/后台设备友好名\n🐛 修复:\n  - fix(auth-core): P40 登录闸 NO_LICENSE 码错位自愈 + 移除调试 alert（热更 2026.10.17-7）\n  - fix(auth-core): verifyLoginGate用getLicenseCode自愈链替代StorageAdapter直读\n  - fix(auth-core): APP端__isDeviceLicensed加NativeBridge Java桥判定（双权威源同步）\n  - fix(auth-core): APP端__isDeviceLicensed加NativeBridge Java桥判定\n  - fix(license): 诊所预置码 App 端激活死锁根治——redeemedDevices 台账豁免\n  - fix(bnzc): registrationInfo 残留降级为注册窗预填源（P40 真机实证）\n  - fix(license): 离线端bnzc一键激活改先注册再激活（方案A全自动编排）\n  - fix(app): 双安卓 App bnzc 冷启动派发 NPE 修复（真机核验实锤）+ versionCode 321/324\n⚡ 优化:\n  - docs(HANDOFF): 阶段3完成（81ba2693），优化建议三阶段全部收官\n  - docs(HANDOFF): 阶段2三项优化完成（3a2ca967），剩阶段3+真机核验\n📋 其他:\n  - build(release): 离线整包 1.0.276 + APK 322 构建完成 + desktop/local 热更 -3（待发布）\n  - build: 一键打包副作用自动收纳\n  - docs(handoff): P40 真机激活+登录闭环实证，H6 收口沉淀 KNOWLEDGE（铁律⑭）\n  - docs(handoff): 刷新部署源为 push 自动构建 f9e9ea16（git 构建配额可用）\n  - docs(handoff): P40 收尾沉淀 KNOWLEDGE + HANDOFF（-7 自愈规则/铁律⑪-⑬、H6/H7 任务卡）\n  - debug(auth-core): verifyLoginGate加alert暴露运行时值\n  - docs(knowledge): 沉淀离线bnzc先注册再激活方案A铁律与六端矩阵更新\n  - docs(HANDOFF): 整包构建完成（v320/v323+发布闭环1e7d4717）；鸿蒙构建暂停（用户指示）——unsigned HAP 已构建成功+emitter编译实证，恢复时仅剩DevEco GUI签名一步"
         },
         "portable": {
-            "version": "1.0.275",
-            "sha256": "e6614ef2f28c857f0c6e347876de879769f83321b94c159b8277888b8f4a3a93",
-            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.10.14-1847/huikang-local-1.0.275.exe",
-            "size": 79014112,
-            "updateTime": "2026-10-14T10:57:44.301Z",
-            "fileName": "惠康中医-本地 1.0.275.exe",
-            "releaseFileName": "huikang-local-1.0.275.exe",
-            "releaseTag": "v2026.10.14-1847",
-            "releaseNotes": "✨ 新增:\n  - feat(netcheck): 新增手机云端连通体检页netcheck.html(人工排障工具,零业务影响)\n  - feat(activation): P2 裸码首激接受码+手机号单锚点(仅unused/可开关/不放松换机)\n  - feat(activation): 激活只填码——统一本机身份提供器,Tab2全入口自动带出注册手机号/诊所/姓名\n  - feat(cloud-app): 补稳定硬件机器ID——Java桥getStableMachineId(缓存优先+ANDROID_ID SHA256派生+UUID兜底,重装不漂移)+collectDeviceIdentity硬件通道,根治机构版1台误锁\n🐛 修复:\n  - fix(license): 修复machineId兜底自愈装号不建本地账号(云+离线双桌面)\n  - fix(support): 重置工具v3补删Partitions持久分区+端选择,修复云端桌面清账号后注册入口消失\n  - fix(gate): 修复第⑰道授权自愈门禁两处缺陷(断尾exit0+天数过期),36断言全绿\n  - fix(offline): 改名处方归属迁移+登录自愈；删除处方刷新复活根治\n  - fix(app-activation): 离线App claim超时12s→30s对齐云端+AbortError友好引导,签发app-local热更2026.10.13-1\n  - fix(login): KV每日写配额耗尽时登录不再500——bindUserDevice设备绑定写容错降级(D1补偿/下次补写),设备强一致让位于可用性\n  - docs: KNOWLEDGE 增补云端App首次激活超时修复(81332061)+两张设备表排查+随机指纹隐患\n⚡ 优化:\n  - refactor(activation): P3 buildActivationPayload收口5处claim/order请求体(零行为变化,cv ed835152)\n  - perf(kv-list): 根治免费版list 1000/天告警——order_index消灭角标轮询泄漏+统一熔断/短缓存\n  - perf(license): 根治新设备首激33s超时——listLicenses分批并行+detach回填属主集合+邀请码O(1)索引\n  - perf(login): 削减冗余KV写——clearLoginFailures先get后删(空操作不再占写配额)+bindUserDevice设备表当天不重复写(24h节流),登录写耗降到仅session\n📋 其他:\n  - docs(knowledge): §55 补记双桌面268/275产物哈希/未发布状态与旧bat打包门坑\n  - build: 一键打包副作用自动收纳\n  - docs(h2): 真机CDP回归记录——A1手机号带出/F2请求体PASS，D2待设备B\n  - docs(knowledge): 沉淀vm沙箱门禁三铁律(真实定时器/断尾护栏/冻结时钟)+commit文件禁BOM\n  - release(app-hotupdate): 离线App热更2026.10.14-1 P3请求体收口(minAppCode288不抬)+HANDOFF关单H1+KNOWLEDGE\n  - docs: KNOWLEDGE 记录P2裸码码+手机号单锚点(3a7a762f)\n  - docs: KNOWLEDGE 记录激活只填码P1(统一身份提供器+setActiveTab收口, b7bf5530)\n  - release(app-hotupdate): 离线App热更 2026.10.13-3 激活只填码身份预填(minAppCode288不抬)\n  - docs: KNOWLEDGE 记录KV list 1000/天告警根治(order_index+熔断短缓存,6601c943)\n  - docs: KNOWLEDGE 记录离线App首激33s三扫根因+服务端并行/回填/invite_idx三修+客户端30s热更2026.10.13-1"
+            "version": "1.0.276",
+            "sha256": "96564b4c72272509567d9e3861cf59012300441736ba3694dc04d2b8fd67ac11",
+            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.10.17-1723/huikang-local-1.0.276.exe",
+            "size": 79031040,
+            "updateTime": "2026-10-17T09:24:48.232Z",
+            "fileName": "惠康中医-本地 1.0.276.exe",
+            "releaseFileName": "huikang-local-1.0.276.exe",
+            "releaseTag": "v2026.10.17-1723",
+            "releaseNotes": "✨ 新增:\n  - feat(guard): 阶段3——鸿蒙纳入同步链+跨版本第6对基线+KNOWLEDGE六端能力矩阵\n  - feat(license): 阶段2三项优化——phone锚点回带/解绑原因明确化/后台设备友好名\n🐛 修复:\n  - fix(auth-core): P40 登录闸 NO_LICENSE 码错位自愈 + 移除调试 alert（热更 2026.10.17-7）\n  - fix(auth-core): verifyLoginGate用getLicenseCode自愈链替代StorageAdapter直读\n  - fix(auth-core): APP端__isDeviceLicensed加NativeBridge Java桥判定（双权威源同步）\n  - fix(auth-core): APP端__isDeviceLicensed加NativeBridge Java桥判定\n  - fix(license): 诊所预置码 App 端激活死锁根治——redeemedDevices 台账豁免\n  - fix(bnzc): registrationInfo 残留降级为注册窗预填源（P40 真机实证）\n  - fix(license): 离线端bnzc一键激活改先注册再激活（方案A全自动编排）\n  - fix(app): 双安卓 App bnzc 冷启动派发 NPE 修复（真机核验实锤）+ versionCode 321/324\n⚡ 优化:\n  - docs(HANDOFF): 阶段3完成（81ba2693），优化建议三阶段全部收官\n  - docs(HANDOFF): 阶段2三项优化完成（3a2ca967），剩阶段3+真机核验\n📋 其他:\n  - build(release): 离线整包 1.0.276 + APK 322 构建完成 + desktop/local 热更 -3（待发布）\n  - build: 一键打包副作用自动收纳\n  - docs(handoff): P40 真机激活+登录闭环实证，H6 收口沉淀 KNOWLEDGE（铁律⑭）\n  - docs(handoff): 刷新部署源为 push 自动构建 f9e9ea16（git 构建配额可用）\n  - docs(handoff): P40 收尾沉淀 KNOWLEDGE + HANDOFF（-7 自愈规则/铁律⑪-⑬、H6/H7 任务卡）\n  - debug(auth-core): verifyLoginGate加alert暴露运行时值\n  - docs(knowledge): 沉淀离线bnzc先注册再激活方案A铁律与六端矩阵更新\n  - docs(HANDOFF): 整包构建完成（v320/v323+发布闭环1e7d4717）；鸿蒙构建暂停（用户指示）——unsigned HAP 已构建成功+emitter编译实证，恢复时仅剩DevEco GUI签名一步"
         },
         "exe": {
-            "version": "1.0.275",
-            "sha256": "80087b9513be32fdb1e884b1aad00ecaff31a7aa57e9f7b7b5faedbe52685d0b",
-            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.10.14-1847/huikang-local-setup-1.0.275.exe",
-            "size": 79289072,
-            "updateTime": "2026-10-14T10:57:44.301Z",
-            "fileName": "惠康中医-本地 Setup 1.0.275.exe",
-            "releaseFileName": "huikang-local-setup-1.0.275.exe",
-            "releaseTag": "v2026.10.14-1847",
-            "releaseNotes": "✨ 新增:\n  - feat(netcheck): 新增手机云端连通体检页netcheck.html(人工排障工具,零业务影响)\n  - feat(activation): P2 裸码首激接受码+手机号单锚点(仅unused/可开关/不放松换机)\n  - feat(activation): 激活只填码——统一本机身份提供器,Tab2全入口自动带出注册手机号/诊所/姓名\n  - feat(cloud-app): 补稳定硬件机器ID——Java桥getStableMachineId(缓存优先+ANDROID_ID SHA256派生+UUID兜底,重装不漂移)+collectDeviceIdentity硬件通道,根治机构版1台误锁\n🐛 修复:\n  - fix(license): 修复machineId兜底自愈装号不建本地账号(云+离线双桌面)\n  - fix(support): 重置工具v3补删Partitions持久分区+端选择,修复云端桌面清账号后注册入口消失\n  - fix(gate): 修复第⑰道授权自愈门禁两处缺陷(断尾exit0+天数过期),36断言全绿\n  - fix(offline): 改名处方归属迁移+登录自愈；删除处方刷新复活根治\n  - fix(app-activation): 离线App claim超时12s→30s对齐云端+AbortError友好引导,签发app-local热更2026.10.13-1\n  - fix(login): KV每日写配额耗尽时登录不再500——bindUserDevice设备绑定写容错降级(D1补偿/下次补写),设备强一致让位于可用性\n  - docs: KNOWLEDGE 增补云端App首次激活超时修复(81332061)+两张设备表排查+随机指纹隐患\n⚡ 优化:\n  - refactor(activation): P3 buildActivationPayload收口5处claim/order请求体(零行为变化,cv ed835152)\n  - perf(kv-list): 根治免费版list 1000/天告警——order_index消灭角标轮询泄漏+统一熔断/短缓存\n  - perf(license): 根治新设备首激33s超时——listLicenses分批并行+detach回填属主集合+邀请码O(1)索引\n  - perf(login): 削减冗余KV写——clearLoginFailures先get后删(空操作不再占写配额)+bindUserDevice设备表当天不重复写(24h节流),登录写耗降到仅session\n📋 其他:\n  - docs(knowledge): §55 补记双桌面268/275产物哈希/未发布状态与旧bat打包门坑\n  - build: 一键打包副作用自动收纳\n  - docs(h2): 真机CDP回归记录——A1手机号带出/F2请求体PASS，D2待设备B\n  - docs(knowledge): 沉淀vm沙箱门禁三铁律(真实定时器/断尾护栏/冻结时钟)+commit文件禁BOM\n  - release(app-hotupdate): 离线App热更2026.10.14-1 P3请求体收口(minAppCode288不抬)+HANDOFF关单H1+KNOWLEDGE\n  - docs: KNOWLEDGE 记录P2裸码码+手机号单锚点(3a7a762f)\n  - docs: KNOWLEDGE 记录激活只填码P1(统一身份提供器+setActiveTab收口, b7bf5530)\n  - release(app-hotupdate): 离线App热更 2026.10.13-3 激活只填码身份预填(minAppCode288不抬)\n  - docs: KNOWLEDGE 记录KV list 1000/天告警根治(order_index+熔断短缓存,6601c943)\n  - docs: KNOWLEDGE 记录离线App首激33s三扫根因+服务端并行/回填/invite_idx三修+客户端30s热更2026.10.13-1"
+            "version": "1.0.276",
+            "sha256": "6834724cba753fc044d703208ab4fb53f0f5faaad6983532955d1d44dd3c2b6a",
+            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.10.17-1723/huikang-local-setup-1.0.276.exe",
+            "size": 79305920,
+            "updateTime": "2026-10-17T09:24:48.232Z",
+            "fileName": "惠康中医-本地 Setup 1.0.276.exe",
+            "releaseFileName": "huikang-local-setup-1.0.276.exe",
+            "releaseTag": "v2026.10.17-1723",
+            "releaseNotes": "✨ 新增:\n  - feat(guard): 阶段3——鸿蒙纳入同步链+跨版本第6对基线+KNOWLEDGE六端能力矩阵\n  - feat(license): 阶段2三项优化——phone锚点回带/解绑原因明确化/后台设备友好名\n🐛 修复:\n  - fix(auth-core): P40 登录闸 NO_LICENSE 码错位自愈 + 移除调试 alert（热更 2026.10.17-7）\n  - fix(auth-core): verifyLoginGate用getLicenseCode自愈链替代StorageAdapter直读\n  - fix(auth-core): APP端__isDeviceLicensed加NativeBridge Java桥判定（双权威源同步）\n  - fix(auth-core): APP端__isDeviceLicensed加NativeBridge Java桥判定\n  - fix(license): 诊所预置码 App 端激活死锁根治——redeemedDevices 台账豁免\n  - fix(bnzc): registrationInfo 残留降级为注册窗预填源（P40 真机实证）\n  - fix(license): 离线端bnzc一键激活改先注册再激活（方案A全自动编排）\n  - fix(app): 双安卓 App bnzc 冷启动派发 NPE 修复（真机核验实锤）+ versionCode 321/324\n⚡ 优化:\n  - docs(HANDOFF): 阶段3完成（81ba2693），优化建议三阶段全部收官\n  - docs(HANDOFF): 阶段2三项优化完成（3a2ca967），剩阶段3+真机核验\n📋 其他:\n  - build(release): 离线整包 1.0.276 + APK 322 构建完成 + desktop/local 热更 -3（待发布）\n  - build: 一键打包副作用自动收纳\n  - docs(handoff): P40 真机激活+登录闭环实证，H6 收口沉淀 KNOWLEDGE（铁律⑭）\n  - docs(handoff): 刷新部署源为 push 自动构建 f9e9ea16（git 构建配额可用）\n  - docs(handoff): P40 收尾沉淀 KNOWLEDGE + HANDOFF（-7 自愈规则/铁律⑪-⑬、H6/H7 任务卡）\n  - debug(auth-core): verifyLoginGate加alert暴露运行时值\n  - docs(knowledge): 沉淀离线bnzc先注册再激活方案A铁律与六端矩阵更新\n  - docs(HANDOFF): 整包构建完成（v320/v323+发布闭环1e7d4717）；鸿蒙构建暂停（用户指示）——unsigned HAP 已构建成功+emitter编译实证，恢复时仅剩DevEco GUI签名一步"
         }
     },
     "cloud": {
@@ -76,48 +76,48 @@
     "provenance": {
         "schemaVersion": 1,
         "repo": "https://github.com/kyt61767126/tcm-prescription-system.git",
-        "commit": "a421af1875c9",
+        "commit": "d042fac6033f",
         "ref": "main",
         "builder": "kyt61767126",
-        "builtAt": "2026-10-16T02:36:48.482Z",
+        "builtAt": "2026-10-17T09:24:48.772Z",
         "buildTool": "publish-release.js@v24.16.0",
-        "releaseTag": "v2026.10.16-1036"
+        "releaseTag": "v2026.10.17-1723"
     },
     "dingzhi": {
         "apk": {
-            "version": "V1.0.0.320",
-            "versionCode": 320,
-            "sha256": "193eca0aa71ca242f7c850d41fb50eb4ea7a6e0e8fc8be3e9c91916da98568c3",
+            "version": "V1.0.0.322",
+            "versionCode": 322,
+            "sha256": "b7d034ba9d71d3501d8d604e015a05d1558c7fccb6d54f39d1e8fbc264d436f9",
             "url": "/downloads/惠康中医-本地.apk",
-            "releaseUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.10.16-1036/huikang-local.apk",
-            "size": 3530265,
-            "updateTime": "2026-10-16T02:36:47.851Z",
+            "releaseUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.10.17-1723/huikang-local.apk",
+            "size": 3576866,
+            "updateTime": "2026-10-17T09:24:48.232Z",
             "fileName": "惠康中医-本地.apk",
             "releaseFileName": "huikang-local.apk",
-            "releaseTag": "v2026.10.16-1036",
-            "releaseNotes": "✨ 新增:\n  - feat(harmony+cloud-app): 鸿蒙端 bnzc:// 一键激活深链接 + 云 App shim 补口\n  - feat(cloud-app): 云 App bnzc:// 一键激活深链接（与离线 App/桌面 Electron 同构）\n  - feat(activation): P0 一键激活全端打通 + 链接安全化（WIP·服务端/落地页/桌面/离线App 完成）\n  - feat(netcheck): 新增手机云端连通体检页netcheck.html(人工排障工具,零业务影响)\n  - feat(activation): P2 裸码首激接受码+手机号单锚点(仅unused/可开关/不放松换机)\n  - feat(activation): 激活只填码——统一本机身份提供器,Tab2全入口自动带出注册手机号/诊所/姓名\n  - feat(cloud-app): 补稳定硬件机器ID——Java桥getStableMachineId(缓存优先+ANDROID_ID SHA256派生+UUID兜底,重装不漂移)+collectDeviceIdentity硬件通道,根治机构版1台误锁\n🐛 修复:\n  - fix(bnzc): 双独立审查修复——P0 App端深链断链 + P1 桌面令牌日志脱敏 + P1 鸿蒙emitter签名\n  - docs(handoff): H4 修正-functions随Pages自动部署已上线,仅剩红米真机复验\n  - fix(auth): 红米手机改英文名后历史处方消失+英文名无法登录 云端离线双端根治\n  - fix(payment): 官网订单恢复模式补手机号双因子领码(修复付款后网页不显示激活码)\n  - fix(license): 修复machineId兜底自愈装号不建本地账号(云+离线双桌面)\n  - fix(support): 重置工具v3补删Partitions持久分区+端选择,修复云端桌面清账号后注册入口消失\n  - fix(gate): 修复第⑰道授权自愈门禁两处缺陷(断尾exit0+天数过期),36断言全绿\n  - fix(offline): 改名处方归属迁移+登录自愈；删除处方刷新复活根治\n  - fix(app-activation): 离线App claim超时12s→30s对齐云端+AbortError友好引导,签发app-local热更2026.10.13-1\n  - fix(login): KV每日写配额耗尽时登录不再500——bindUserDevice设备绑定写容错降级(D1补偿/下次补写),设备强一致让位于可用性\n⚡ 优化:\n  - refactor(activation): P3 buildActivationPayload收口5处claim/order请求体(零行为变化,cv ed835152)\n  - perf(kv-list): 根治免费版list 1000/天告警——order_index消灭角标轮询泄漏+统一熔断/短缓存\n  - perf(license): 根治新设备首激33s超时——listLicenses分批并行+detach回填属主集合+邀请码O(1)索引\n  - perf(login): 削减冗余KV写——clearLoginFailures先get后删(空操作不再占写配额)+bindUserDevice设备表当天不重复写(24h节流),登录写耗降到仅session\n📋 其他:\n  - docs(HANDOFF): 发版完成——热更 2026.10.16-1 三渠道线上核验通过，双 APK v320/v323 构建验包分发，鸿蒙包遗留待 DevEco\n  - docs(HANDOFF): 双独立审查完成（24c5925e），P0断链/P1脱敏/P1emitter已修，剩热更+线上核验\n  - docs(HANDOFF): H5 鸿蒙深链接+云App shim 补口完成（7a1393f3），下一步双独立审查\n  - docs(HANDOFF): H5 云 App 深链接已完成（67cd9b62），鸿蒙端需另开任务\n  - docs(handoff): H5 基线 commit 刷新为 9d8c6bd0（P0 激活方案 WIP 已 push）\n  - docs(knowledge): §55 补记双桌面268/275产物哈希/未发布状态与旧bat打包门坑\n  - build: 一键打包副作用自动收纳\n  - docs(h2): 真机CDP回归记录——A1手机号带出/F2请求体PASS，D2待设备B\n  - docs(knowledge): 沉淀vm沙箱门禁三铁律(真实定时器/断尾护栏/冻结时钟)+commit文件禁BOM\n  - release(app-hotupdate): 离线App热更2026.10.14-1 P3请求体收口(minAppCode288不抬)+HANDOFF关单H1+KNOWLEDGE"
+            "releaseTag": "v2026.10.17-1723",
+            "releaseNotes": "✨ 新增:\n  - feat(guard): 阶段3——鸿蒙纳入同步链+跨版本第6对基线+KNOWLEDGE六端能力矩阵\n  - feat(license): 阶段2三项优化——phone锚点回带/解绑原因明确化/后台设备友好名\n🐛 修复:\n  - fix(auth-core): P40 登录闸 NO_LICENSE 码错位自愈 + 移除调试 alert（热更 2026.10.17-7）\n  - fix(auth-core): verifyLoginGate用getLicenseCode自愈链替代StorageAdapter直读\n  - fix(auth-core): APP端__isDeviceLicensed加NativeBridge Java桥判定（双权威源同步）\n  - fix(auth-core): APP端__isDeviceLicensed加NativeBridge Java桥判定\n  - fix(license): 诊所预置码 App 端激活死锁根治——redeemedDevices 台账豁免\n  - fix(bnzc): registrationInfo 残留降级为注册窗预填源（P40 真机实证）\n  - fix(license): 离线端bnzc一键激活改先注册再激活（方案A全自动编排）\n  - fix(app): 双安卓 App bnzc 冷启动派发 NPE 修复（真机核验实锤）+ versionCode 321/324\n⚡ 优化:\n  - docs(HANDOFF): 阶段3完成（81ba2693），优化建议三阶段全部收官\n  - docs(HANDOFF): 阶段2三项优化完成（3a2ca967），剩阶段3+真机核验\n📋 其他:\n  - build(release): 离线整包 1.0.276 + APK 322 构建完成 + desktop/local 热更 -3（待发布）\n  - build: 一键打包副作用自动收纳\n  - docs(handoff): P40 真机激活+登录闭环实证，H6 收口沉淀 KNOWLEDGE（铁律⑭）\n  - docs(handoff): 刷新部署源为 push 自动构建 f9e9ea16（git 构建配额可用）\n  - docs(handoff): P40 收尾沉淀 KNOWLEDGE + HANDOFF（-7 自愈规则/铁律⑪-⑬、H6/H7 任务卡）\n  - debug(auth-core): verifyLoginGate加alert暴露运行时值\n  - docs(knowledge): 沉淀离线bnzc先注册再激活方案A铁律与六端矩阵更新\n  - docs(HANDOFF): 整包构建完成（v320/v323+发布闭环1e7d4717）；鸿蒙构建暂停（用户指示）——unsigned HAP 已构建成功+emitter编译实证，恢复时仅剩DevEco GUI签名一步"
         },
         "portable": {
-            "version": "1.0.275",
-            "sha256": "e6614ef2f28c857f0c6e347876de879769f83321b94c159b8277888b8f4a3a93",
-            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.10.14-1847/huikang-local-1.0.275.exe",
-            "size": 79014112,
-            "updateTime": "2026-10-14T10:57:44.301Z",
-            "fileName": "惠康中医-本地 1.0.275.exe",
-            "releaseFileName": "huikang-local-1.0.275.exe",
-            "releaseTag": "v2026.10.14-1847",
-            "releaseNotes": "✨ 新增:\n  - feat(netcheck): 新增手机云端连通体检页netcheck.html(人工排障工具,零业务影响)\n  - feat(activation): P2 裸码首激接受码+手机号单锚点(仅unused/可开关/不放松换机)\n  - feat(activation): 激活只填码——统一本机身份提供器,Tab2全入口自动带出注册手机号/诊所/姓名\n  - feat(cloud-app): 补稳定硬件机器ID——Java桥getStableMachineId(缓存优先+ANDROID_ID SHA256派生+UUID兜底,重装不漂移)+collectDeviceIdentity硬件通道,根治机构版1台误锁\n🐛 修复:\n  - fix(license): 修复machineId兜底自愈装号不建本地账号(云+离线双桌面)\n  - fix(support): 重置工具v3补删Partitions持久分区+端选择,修复云端桌面清账号后注册入口消失\n  - fix(gate): 修复第⑰道授权自愈门禁两处缺陷(断尾exit0+天数过期),36断言全绿\n  - fix(offline): 改名处方归属迁移+登录自愈；删除处方刷新复活根治\n  - fix(app-activation): 离线App claim超时12s→30s对齐云端+AbortError友好引导,签发app-local热更2026.10.13-1\n  - fix(login): KV每日写配额耗尽时登录不再500——bindUserDevice设备绑定写容错降级(D1补偿/下次补写),设备强一致让位于可用性\n  - docs: KNOWLEDGE 增补云端App首次激活超时修复(81332061)+两张设备表排查+随机指纹隐患\n⚡ 优化:\n  - refactor(activation): P3 buildActivationPayload收口5处claim/order请求体(零行为变化,cv ed835152)\n  - perf(kv-list): 根治免费版list 1000/天告警——order_index消灭角标轮询泄漏+统一熔断/短缓存\n  - perf(license): 根治新设备首激33s超时——listLicenses分批并行+detach回填属主集合+邀请码O(1)索引\n  - perf(login): 削减冗余KV写——clearLoginFailures先get后删(空操作不再占写配额)+bindUserDevice设备表当天不重复写(24h节流),登录写耗降到仅session\n📋 其他:\n  - docs(knowledge): §55 补记双桌面268/275产物哈希/未发布状态与旧bat打包门坑\n  - build: 一键打包副作用自动收纳\n  - docs(h2): 真机CDP回归记录——A1手机号带出/F2请求体PASS，D2待设备B\n  - docs(knowledge): 沉淀vm沙箱门禁三铁律(真实定时器/断尾护栏/冻结时钟)+commit文件禁BOM\n  - release(app-hotupdate): 离线App热更2026.10.14-1 P3请求体收口(minAppCode288不抬)+HANDOFF关单H1+KNOWLEDGE\n  - docs: KNOWLEDGE 记录P2裸码码+手机号单锚点(3a7a762f)\n  - docs: KNOWLEDGE 记录激活只填码P1(统一身份提供器+setActiveTab收口, b7bf5530)\n  - release(app-hotupdate): 离线App热更 2026.10.13-3 激活只填码身份预填(minAppCode288不抬)\n  - docs: KNOWLEDGE 记录KV list 1000/天告警根治(order_index+熔断短缓存,6601c943)\n  - docs: KNOWLEDGE 记录离线App首激33s三扫根因+服务端并行/回填/invite_idx三修+客户端30s热更2026.10.13-1"
+            "version": "1.0.276",
+            "sha256": "96564b4c72272509567d9e3861cf59012300441736ba3694dc04d2b8fd67ac11",
+            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.10.17-1723/huikang-local-1.0.276.exe",
+            "size": 79031040,
+            "updateTime": "2026-10-17T09:24:48.232Z",
+            "fileName": "惠康中医-本地 1.0.276.exe",
+            "releaseFileName": "huikang-local-1.0.276.exe",
+            "releaseTag": "v2026.10.17-1723",
+            "releaseNotes": "✨ 新增:\n  - feat(guard): 阶段3——鸿蒙纳入同步链+跨版本第6对基线+KNOWLEDGE六端能力矩阵\n  - feat(license): 阶段2三项优化——phone锚点回带/解绑原因明确化/后台设备友好名\n🐛 修复:\n  - fix(auth-core): P40 登录闸 NO_LICENSE 码错位自愈 + 移除调试 alert（热更 2026.10.17-7）\n  - fix(auth-core): verifyLoginGate用getLicenseCode自愈链替代StorageAdapter直读\n  - fix(auth-core): APP端__isDeviceLicensed加NativeBridge Java桥判定（双权威源同步）\n  - fix(auth-core): APP端__isDeviceLicensed加NativeBridge Java桥判定\n  - fix(license): 诊所预置码 App 端激活死锁根治——redeemedDevices 台账豁免\n  - fix(bnzc): registrationInfo 残留降级为注册窗预填源（P40 真机实证）\n  - fix(license): 离线端bnzc一键激活改先注册再激活（方案A全自动编排）\n  - fix(app): 双安卓 App bnzc 冷启动派发 NPE 修复（真机核验实锤）+ versionCode 321/324\n⚡ 优化:\n  - docs(HANDOFF): 阶段3完成（81ba2693），优化建议三阶段全部收官\n  - docs(HANDOFF): 阶段2三项优化完成（3a2ca967），剩阶段3+真机核验\n📋 其他:\n  - build(release): 离线整包 1.0.276 + APK 322 构建完成 + desktop/local 热更 -3（待发布）\n  - build: 一键打包副作用自动收纳\n  - docs(handoff): P40 真机激活+登录闭环实证，H6 收口沉淀 KNOWLEDGE（铁律⑭）\n  - docs(handoff): 刷新部署源为 push 自动构建 f9e9ea16（git 构建配额可用）\n  - docs(handoff): P40 收尾沉淀 KNOWLEDGE + HANDOFF（-7 自愈规则/铁律⑪-⑬、H6/H7 任务卡）\n  - debug(auth-core): verifyLoginGate加alert暴露运行时值\n  - docs(knowledge): 沉淀离线bnzc先注册再激活方案A铁律与六端矩阵更新\n  - docs(HANDOFF): 整包构建完成（v320/v323+发布闭环1e7d4717）；鸿蒙构建暂停（用户指示）——unsigned HAP 已构建成功+emitter编译实证，恢复时仅剩DevEco GUI签名一步"
         },
         "exe": {
-            "version": "1.0.275",
-            "sha256": "80087b9513be32fdb1e884b1aad00ecaff31a7aa57e9f7b7b5faedbe52685d0b",
-            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.10.14-1847/huikang-local-setup-1.0.275.exe",
-            "size": 79289072,
-            "updateTime": "2026-10-14T10:57:44.301Z",
-            "fileName": "惠康中医-本地 Setup 1.0.275.exe",
-            "releaseFileName": "huikang-local-setup-1.0.275.exe",
-            "releaseTag": "v2026.10.14-1847",
-            "releaseNotes": "✨ 新增:\n  - feat(netcheck): 新增手机云端连通体检页netcheck.html(人工排障工具,零业务影响)\n  - feat(activation): P2 裸码首激接受码+手机号单锚点(仅unused/可开关/不放松换机)\n  - feat(activation): 激活只填码——统一本机身份提供器,Tab2全入口自动带出注册手机号/诊所/姓名\n  - feat(cloud-app): 补稳定硬件机器ID——Java桥getStableMachineId(缓存优先+ANDROID_ID SHA256派生+UUID兜底,重装不漂移)+collectDeviceIdentity硬件通道,根治机构版1台误锁\n🐛 修复:\n  - fix(license): 修复machineId兜底自愈装号不建本地账号(云+离线双桌面)\n  - fix(support): 重置工具v3补删Partitions持久分区+端选择,修复云端桌面清账号后注册入口消失\n  - fix(gate): 修复第⑰道授权自愈门禁两处缺陷(断尾exit0+天数过期),36断言全绿\n  - fix(offline): 改名处方归属迁移+登录自愈；删除处方刷新复活根治\n  - fix(app-activation): 离线App claim超时12s→30s对齐云端+AbortError友好引导,签发app-local热更2026.10.13-1\n  - fix(login): KV每日写配额耗尽时登录不再500——bindUserDevice设备绑定写容错降级(D1补偿/下次补写),设备强一致让位于可用性\n  - docs: KNOWLEDGE 增补云端App首次激活超时修复(81332061)+两张设备表排查+随机指纹隐患\n⚡ 优化:\n  - refactor(activation): P3 buildActivationPayload收口5处claim/order请求体(零行为变化,cv ed835152)\n  - perf(kv-list): 根治免费版list 1000/天告警——order_index消灭角标轮询泄漏+统一熔断/短缓存\n  - perf(license): 根治新设备首激33s超时——listLicenses分批并行+detach回填属主集合+邀请码O(1)索引\n  - perf(login): 削减冗余KV写——clearLoginFailures先get后删(空操作不再占写配额)+bindUserDevice设备表当天不重复写(24h节流),登录写耗降到仅session\n📋 其他:\n  - docs(knowledge): §55 补记双桌面268/275产物哈希/未发布状态与旧bat打包门坑\n  - build: 一键打包副作用自动收纳\n  - docs(h2): 真机CDP回归记录——A1手机号带出/F2请求体PASS，D2待设备B\n  - docs(knowledge): 沉淀vm沙箱门禁三铁律(真实定时器/断尾护栏/冻结时钟)+commit文件禁BOM\n  - release(app-hotupdate): 离线App热更2026.10.14-1 P3请求体收口(minAppCode288不抬)+HANDOFF关单H1+KNOWLEDGE\n  - docs: KNOWLEDGE 记录P2裸码码+手机号单锚点(3a7a762f)\n  - docs: KNOWLEDGE 记录激活只填码P1(统一身份提供器+setActiveTab收口, b7bf5530)\n  - release(app-hotupdate): 离线App热更 2026.10.13-3 激活只填码身份预填(minAppCode288不抬)\n  - docs: KNOWLEDGE 记录KV list 1000/天告警根治(order_index+熔断短缓存,6601c943)\n  - docs: KNOWLEDGE 记录离线App首激33s三扫根因+服务端并行/回填/invite_idx三修+客户端30s热更2026.10.13-1"
+            "version": "1.0.276",
+            "sha256": "6834724cba753fc044d703208ab4fb53f0f5faaad6983532955d1d44dd3c2b6a",
+            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.10.17-1723/huikang-local-setup-1.0.276.exe",
+            "size": 79305920,
+            "updateTime": "2026-10-17T09:24:48.232Z",
+            "fileName": "惠康中医-本地 Setup 1.0.276.exe",
+            "releaseFileName": "huikang-local-setup-1.0.276.exe",
+            "releaseTag": "v2026.10.17-1723",
+            "releaseNotes": "✨ 新增:\n  - feat(guard): 阶段3——鸿蒙纳入同步链+跨版本第6对基线+KNOWLEDGE六端能力矩阵\n  - feat(license): 阶段2三项优化——phone锚点回带/解绑原因明确化/后台设备友好名\n🐛 修复:\n  - fix(auth-core): P40 登录闸 NO_LICENSE 码错位自愈 + 移除调试 alert（热更 2026.10.17-7）\n  - fix(auth-core): verifyLoginGate用getLicenseCode自愈链替代StorageAdapter直读\n  - fix(auth-core): APP端__isDeviceLicensed加NativeBridge Java桥判定（双权威源同步）\n  - fix(auth-core): APP端__isDeviceLicensed加NativeBridge Java桥判定\n  - fix(license): 诊所预置码 App 端激活死锁根治——redeemedDevices 台账豁免\n  - fix(bnzc): registrationInfo 残留降级为注册窗预填源（P40 真机实证）\n  - fix(license): 离线端bnzc一键激活改先注册再激活（方案A全自动编排）\n  - fix(app): 双安卓 App bnzc 冷启动派发 NPE 修复（真机核验实锤）+ versionCode 321/324\n⚡ 优化:\n  - docs(HANDOFF): 阶段3完成（81ba2693），优化建议三阶段全部收官\n  - docs(HANDOFF): 阶段2三项优化完成（3a2ca967），剩阶段3+真机核验\n📋 其他:\n  - build(release): 离线整包 1.0.276 + APK 322 构建完成 + desktop/local 热更 -3（待发布）\n  - build: 一键打包副作用自动收纳\n  - docs(handoff): P40 真机激活+登录闭环实证，H6 收口沉淀 KNOWLEDGE（铁律⑭）\n  - docs(handoff): 刷新部署源为 push 自动构建 f9e9ea16（git 构建配额可用）\n  - docs(handoff): P40 收尾沉淀 KNOWLEDGE + HANDOFF（-7 自愈规则/铁律⑪-⑬、H6/H7 任务卡）\n  - debug(auth-core): verifyLoginGate加alert暴露运行时值\n  - docs(knowledge): 沉淀离线bnzc先注册再激活方案A铁律与六端矩阵更新\n  - docs(HANDOFF): 整包构建完成（v320/v323+发布闭环1e7d4717）；鸿蒙构建暂停（用户指示）——unsigned HAP 已构建成功+emitter编译实证，恢复时仅剩DevEco GUI签名一步"
         }
     }
 }
