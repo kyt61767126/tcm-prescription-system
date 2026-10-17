@@ -305,14 +305,23 @@ ipcMain.handle('license:submit-activate', async (event, code, user, clinicName, 
             // 多设备授权时显示配额信息（单设备时不显示，保持原行为）
             if (maxDevices > 1) {
                 const { dialog } = require('electron');
-                dialog.showMessageBoxSync(getMainWindow(), {
+                // ★ 2026-10-17 P1修复：登录窗冷启动激活时主窗未创建（getMainWindow()=null），
+                //   null 父窗在 Electron 35 会抛参数异常 → 激活已成功却 catch 返回 success:false。
+                //   主窗存在才带父窗，否则用无父窗形式（离线 bnzc 登录窗先注册再激活新链首次暴露此路径）。
+                const __parent = (typeof getMainWindow === 'function') ? getMainWindow() : null;
+                const __box = {
                     type: 'info',
                     title: '激活成功',
                     message: `激活成功！\n已绑定 ${devicesCount}/${maxDevices} 台设备`,
                     detail: `剩余可用设备数：${maxDevices - devicesCount} 台\n如需解绑旧设备，请联系管理员。`,
                     buttons: ['确定'],
                     defaultId: 0
-                });
+                };
+                if (__parent && !__parent.isDestroyed()) {
+                    dialog.showMessageBoxSync(__parent, __box);
+                } else {
+                    dialog.showMessageBoxSync(__box);
+                }
             }
         }
         return result;

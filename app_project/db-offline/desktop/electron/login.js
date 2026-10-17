@@ -1029,11 +1029,9 @@
         }
 
         try {
-            const result = await window.electronAPI.bnzcAutoActivate({
-                code: data.code,
-                clinicName: data.clinicName || '',
-                user: data.user || ''
-            });
+            // ★ 2026-10-17 方案A（离线端全自动编排）：改为「先注册再激活」，
+            //   不再直调 bnzcAutoActivate（云端语义，离线端直调装码不建本地账号）。
+            const result = await bnzcOfflineAutoActivate(data);
 
             if (result && result.success) {
                 // 激活成功
@@ -1064,6 +1062,16 @@
                         window.electronAPI.license.restart();
                     }
                 }, 2000);
+            } else if (result && result.cancelled) {
+                // ★ 用户取消注册弹窗：保留 pending（令牌已兑换、码不能丢），下次打开可重试
+                console.log('[Bnzc] 用户取消本地注册，待激活数据已保留');
+                if (bar) {
+                    bar.className = 'trial-bar expired';
+                    bar.innerHTML = '<span class="trial-text">⏸ 已取消注册，激活链接已保留（下次打开软件可重试）</span>' +
+                        '<a class="trial-action" onclick="openActivationWindow()">手动激活 →</a>';
+                }
+                window.__bnzcHasPending = false;
+                checkFirstRun(config);
             } else {
                 // 激活失败
                 const errorMsg = (result && result.error) || '激活失败，请检查激活码是否正确';
@@ -1072,12 +1080,11 @@
                     bar.innerHTML = '<span class="trial-text">❌ 自动激活失败：' + errorMsg + '</span>' +
                         '<a class="trial-action" onclick="openActivationWindow()">手动激活 →</a>';
                 }
-                alert('❌ 自动激活失败：\n\n' + errorMsg + '\n\n请点击"手动激活"输入激活码，或联系客服协助。');
-
-                // 清除失败的 pending 数据
-                if (window.electronAPI.bnzcClearPendingActivation) {
-                    window.electronAPI.bnzcClearPendingActivation();
-                }
+                // ★ 失败不清 pending（旧链失败即清，令牌一次性兑换后码会丢失）：
+                //   报错 + 显示激活码 + 指引手动激活兜底；下次打开软件仍可重试本链接。
+                alert('❌ 自动激活失败：\n\n' + errorMsg +
+                    '\n\n您的激活码：' + data.code +
+                    '\n\n请点击"手动激活"输入上面激活码完成激活，或下次打开软件重试本链接。');
 
                 // ★ 失败后恢复首次向导（让用户可以手动配置诊所信息）
                 window.__bnzcHasPending = false;
@@ -1090,11 +1097,129 @@
                 bar.innerHTML = '<span class="trial-text">❌ 自动激活异常</span>' +
                     '<a class="trial-action" onclick="openActivationWindow()">手动激活 →</a>';
             }
+            alert('❌ 自动激活异常：\n\n' + (e && e.message ? e.message : String(e)) +
+                '\n\n您的激活码：' + (data && data.code ? data.code : '') +
+                '\n\n请点击"手动激活"输入上面激活码完成激活。');
 
             // ★ 异常后恢复首次向导
             window.__bnzcHasPending = false;
             checkFirstRun(config);
         }
+    }
+
+    // ★ 2026-10-17 方案A辅助：注册参数收集弹窗（未注册时先注册再激活）。
+    //   Electron 不支持 window.prompt，登录窗与主窗统一用 DOM 弹窗收参；
+    //   校验规则与 auth-core 注册表单 / 桌面 register-local-user 完全一致
+    //   （手机号11位；密码≥8位且同时含字母和数字且≠admin；两次一致）。
+    //   返回 Promise<{phone,password}|null>（null=用户取消）。
+    function bnzcCollectRegParams(defaults) {
+        return new Promise((resolve) => {
+            const PHONE_RE = /^1[3-9]\d{9}$/;
+            const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            const overlay = document.createElement('div');
+            overlay.id = 'bnzcRegOverlay';
+            overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.75);z-index:100000;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;';
+            const INPUT_STYLE = 'width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;';
+            overlay.innerHTML =
+                '<div style="background:white;border-radius:14px;width:100%;max-width:400px;box-shadow:0 10px 30px rgba(0,0,0,0.3);max-height:92vh;overflow-y:auto;box-sizing:border-box;padding:24px;">' +
+                    '<h3 style="margin:0 0 6px;font-size:17px;color:#303133;">📝 首次激活 · 本地注册</h3>' +
+                    '<div style="font-size:13px;color:#909399;margin-bottom:14px;line-height:1.6;">系统采用「先注册、再激活」安全流程，注册信息仅保存在本机，手机号即登录账号。</div>' +
+                    ((defaults && defaults.clinicName) ? '<div style="font-size:13px;color:#606266;margin-bottom:12px;">诊所：' + esc(defaults.clinicName) + '</div>' : '') +
+                    '<input id="bnzcRegPhone" type="tel" maxlength="11" placeholder="请输入手机号（11位）" style="' + INPUT_STYLE + 'margin-bottom:12px;" value="' + esc((defaults && defaults.phone) || '') + '">' +
+                    '<input id="bnzcRegPwd" type="password" placeholder="设置登录密码（至少8位，含字母和数字）" style="' + INPUT_STYLE + 'margin-bottom:12px;" autocomplete="new-password">' +
+                    '<input id="bnzcRegPwd2" type="password" placeholder="再次输入密码确认" style="' + INPUT_STYLE + 'margin-bottom:10px;" autocomplete="new-password">' +
+                    '<div id="bnzcRegError" style="display:none;color:#f56c6c;font-size:13px;margin-bottom:10px;"></div>' +
+                    '<div style="display:flex;gap:10px;">' +
+                        '<button id="bnzcRegCancel" style="flex:1;padding:12px;font-size:15px;border:1px solid #dcdfe6;border-radius:8px;background:#fff;color:#606266;cursor:pointer;">取消</button>' +
+                        '<button id="bnzcRegOk" style="flex:1;padding:12px;font-size:15px;border:none;border-radius:8px;background:linear-gradient(135deg,#7c3aed 0%,#6d28d9 100%);color:#fff;font-weight:bold;cursor:pointer;">注册并激活</button>' +
+                    '</div>' +
+                '</div>';
+            document.body.appendChild(overlay);
+            const __q = (id) => document.getElementById(id);
+            const __done = (val) => { try { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); } catch (e) {} resolve(val); };
+            const __err = (m) => { const el = __q('bnzcRegError'); if (el) { el.textContent = m; el.style.display = 'block'; } };
+            __q('bnzcRegCancel').addEventListener('click', () => __done(null));
+            __q('bnzcRegOk').addEventListener('click', () => {
+                const __phone = String(__q('bnzcRegPhone').value || '').trim();
+                const __pwd = String(__q('bnzcRegPwd').value || '');
+                const __pwd2 = String(__q('bnzcRegPwd2').value || '');
+                if (!PHONE_RE.test(__phone)) { __err('请输入正确的11位手机号'); return; }
+                if (__pwd.length < 8 || __pwd === 'admin' || !/[a-zA-Z]/.test(__pwd) || !/[0-9]/.test(__pwd)) { __err('密码至少8位且须同时包含字母和数字'); return; }
+                if (__pwd !== __pwd2) { __err('两次输入的密码不一致'); return; }
+                __done({ phone: __phone, password: __pwd });
+            });
+            setTimeout(() => { try { __q('bnzcRegPhone').focus(); } catch (e) {} }, 100);
+        });
+    }
+
+    // ★ 2026-10-17 方案A（离线端一键激活全自动编排）：业务铁律「本地需先注册再激活」。
+    //   旧链 bnzcAutoActivate 直调装码——链接不带 user 时（码锚点可为空），装码后本地
+    //   无手机号账号 → 重启后 auth-core 启动闸弹回「管理员激活页」（真机实锤：
+    //   服务端装码成功但登录链断）。
+    //   新链：未注册 → DOM 弹窗收参 → registerLocalUser（唯一密码写点+幽灵admin清除，
+    //   login.html 在桌面 register-local-user 来源白名单内）→ 镜像（登录窗用户表/
+    //   registrationInfo/FSM，均 typeof 守卫，login.html 与主窗镜像函数同构）→
+    //   activate.submit 带 phone 装码；已注册 → 直接带本机注册手机号装码（密码留空
+    //   =激活收尾不覆盖注册密码）。edition 传空：installLicense 装码即按 license.type
+    //   就地校正版本绑定。
+    async function bnzcOfflineAutoActivate(data) {
+        const api = window.electronAPI;
+        const PHONE_RE = /^1[3-9]\d{9}$/;
+        if (!api.activate || typeof api.activate.registerLocalUser !== 'function' || typeof api.activate.submit !== 'function') {
+            return { success: false, error: '当前版本不支持链接自动激活，请升级到最新版本' };
+        }
+        // ① 本机注册状态（桥 config 账号优先=登录主源，license:registrationInfo 兜底——
+        //   与 auth-core isLocalRegisteredAsync 同族；安全审查 P2-1：registrationInfo
+        //   本地可篡改，桥读取的 config 账号更权威，故桥优先）
+        let regPhone = '', regName = '', regClinic = '';
+        if (typeof api.activate.getActivationUsers === 'function') {
+            try {
+                const res = await api.activate.getActivationUsers();
+                if (res && res.success && Array.isArray(res.users)) {
+                    for (let i = 0; i < res.users.length; i++) {
+                        const u = res.users[i] || {};
+                        const ph = String(u.phone || u.username || '');
+                        if (PHONE_RE.test(ph)) { regPhone = ph; regName = String(u.name || ''); break; }
+                    }
+                }
+            } catch (e) {}
+        }
+        if (!regPhone) {
+            try {
+                const raw = localStorage.getItem('license:registrationInfo');
+                if (raw) {
+                    const info = JSON.parse(raw);
+                    if (info && PHONE_RE.test(String(info.phone || ''))) {
+                        regPhone = String(info.phone); regName = String(info.adminName || ''); regClinic = String(info.clinicName || '');
+                    }
+                }
+            } catch (e) {}
+        }
+        // ② 未注册：DOM 弹窗收参 → registerLocalUser 建号（唯一密码写点）→ 镜像
+        if (!regPhone) {
+            const anchorPhone = (String(data.user || '').match(PHONE_RE) || [''])[0];
+            const params = await bnzcCollectRegParams({ phone: anchorPhone, clinicName: String(data.clinicName || '') });
+            if (!params) return { success: false, cancelled: true };
+            const adminName = (String(data.user || '').replace(PHONE_RE, '').replace(/[/\-\s]+$/, '').trim()) || params.phone;
+            const clinicName = String(data.clinicName || '').trim();
+            const rr = await api.activate.registerLocalUser({ clinicName: clinicName, adminName: adminName, phone: params.phone, password: params.password });
+            if (!rr || !rr.success) return { success: false, error: '本地注册失败：' + ((rr && rr.error) || '未知错误') };
+            regPhone = params.phone; regName = adminName; regClinic = clinicName;
+            // 镜像①：登录窗用户表无需回写——config.json 账号已由 register-local-user 桥写入
+            //   （登录主源，getUsers 优先读 config）；localStorage 用户表为 XORv1 加密格式
+            //   不做明文回写，主窗另有启动自愈（桥 getActivationUsers → addLocalActivationUser）兜底。
+            // 镜像②：注册信息持久化（激活弹窗预填 + 断点续传密码源）
+            try {
+                let passwordEnc = '';
+                try { if (typeof encryptSensitive === 'function') passwordEnc = await encryptSensitive(params.password) || ''; } catch (ee) {}
+                localStorage.setItem('license:registrationInfo', JSON.stringify({ clinicName: regClinic, adminName: adminName, phone: regPhone, passwordEnc: passwordEnc, at: Date.now() }));
+            } catch (me2) { console.warn('[Bnzc] 注册镜像2失败(激活预填走桥兜底):', me2); }
+            // 镜像③：FSM registered 标记（对齐 auth-core 注册成功链；仅 auth-core 已加载且导出全局时调）
+            try { if (typeof setStateV2 === 'function' && typeof _STATES !== 'undefined') { await setStateV2(_STATES.UNACTIVATED, { registered: true }); } } catch (fe) {}
+        }
+        // ③ 装码激活（密码留空=激活收尾不覆盖注册密码；phone 供服务端身份核验/锚点比对；
+        //   桌面 preload activate.submit(code,user,clinicName,phone,password,edition,inviteCode)）
+        return await api.activate.submit(data.code, regName, regClinic, regPhone, '', '', '');
     }
 
     // ===== 试用期状态显示 =====

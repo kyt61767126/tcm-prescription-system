@@ -51,6 +51,18 @@
   2. **整包构建已完成（2026-10-16）**：离线 App v320（验包三重+分发两文件位，旧 v316 归档 %TEMP%）、云 App v323（构建+验包）；versionCode 改动已 commit+push（d9dc48ab）。下载页 APK v320 已随 v2026.10.16-1036 发布闭环（1e7d4717）。
   2b. **鸿蒙构建：暂停（用户指示 2026-10-16）**。已达成的进度，恢复时直接续：① 环境齐备——DevEco Studio 26.0 在 `D:\Program Files\Huawei\DevEco Studio`（hvigor 6.26.4/ohpm/SDK default），签名材料 9-04 全套在 `~/.ohos/config`（debug+release 两套 .p12/.cer/.p7b）；② **unsigned HAP 构建成功**（hvigorw --mode module -p module=entry@default -p product=default assembleHap，BUILD SUCCESSFUL 27s，产物 entry-default-unsigned.hap 2.2MB）；③ **审查 P1 emitter 修复获编译实证**。剩余仅一步：DevEco GUI（File > Project Structure > Signing Configs > 自动签名，密码在 material/ 加密分片命令行不可还原）→ 重跑同命令出 signed HAP → 真机 bnzc 链路验证。
   3. **线上核验（发版终验）**：activate.html 可访问 + bnzc:// 端到端真机（双 APK 安装后：链接唤起→兑换/装码→激活成功；鸿蒙真机部分随 2b 暂停）。
+  - **✅ 真机核验已完成（2026-10-17，P40）**：**云端 App v324 全链闭环 ✅**（深链接唤起→兑换→装码→「激活成功！即将重启」弹窗，logcat activateOnline jsonLen=61 实证）。**离线 App v324 暴露关键 bug（已修，见下）**：装码成功（服务端 validate 实证 license pro 有效、devicesCount 绑定 P40）但重启回「管理员激活页」= 本地手机号账号缺失——根因：旧链 bnzcAutoActivate 直调装码，链接不带 user 时 App Java 激活收尾 syncCreateActivationUser 因 username 空直接 return 不建号、桌面 installLicense 建号 phone 空 → auth-core 启动闸弹回激活页。
+  - **✅ 方案A修复已完成（2026-10-17 本会话，用户拍板全自动编排，业务铁律「本地需先注册再激活」）**：
+    - `db-offline/desktop/index.html`（离线权威页）：showBnzcActivationNotice 改调 **bnzcOfflineAutoActivate**（已注册→getActivationUsers 桥优先取手机号直装码；未注册→DOM 弹窗 bnzcCollectRegParams 收手机号+密码→registerLocalUser 建号→镜像三步→activate.submit 带手机号装码）。Electron 不支持 window.prompt 故用 DOM 弹窗；失败/取消**不清 pending**（令牌一次性兑换，码不能丢）+ 报错回显激活码引导手动激活。
+    - `db-offline/desktop/electron/login.js`（桌面登录窗冷启动消费 pending 的主路径）：同构编排；镜像①不回写 localStorage 用户表（XORv1 加密约定，config.json 已由桥写入）。
+    - `shared/desktop-license-ipc.cjs`（双桌面副本 sync-all 分发）：**P1 修复**——submit-activate 多设备授权弹窗 `showMessageBoxSync(getMainWindow(),…)` 在登录窗冷启动时主窗未创建（null 父窗 Electron 35 抛参→激活成功却报失败），改「主窗存在才带父窗」。
+    - 双独立审查（2 功能互不通气 + 1 安全二查）全过：A 无 P0/P1；B 报 P1（null 主窗弹窗，已修）+ deviceInfo 死代码（已删）；安全 PASS（密码链/注入/越权/热更混跑窗口均查过，已注册判定改桥优先）。
+    - 校验链全绿：sync-index-app 32 变换命中 / sync-all VerifyOnly 0 drift / diff-cross-version 6 对全绿（desk 基线重冻结=离线专属编排合法分叉）/ check-interface 6 OK。
+  - **下一步（2026-10-17 更新，按序）**：
+    1. **热更签发**：App 页面改动→`node tools/generate-app-hotupdate.cjs -n <递增>`（app-local，minAppCode 288 继承）；桌面 index.html→desktop/local 渠道；**login.js + desktop-license-ipc.cjs 主进程域热更不可达→离线桌面 exe 重打包**（可攒批）。
+    2. **离线 App 端到端复测**：先在后台**解绑 MG3B 码的 P40 绑定**（devicesCount 已计但本地未生效），再用 local 端型新码真机复测（深链接→注册弹窗→注册→装码→重启→手机号+密码登录进系统）。
+    3. **桌面离线 exe 重打后复测**：冷启动深链接→登录窗注册弹窗→装码→重启登录。
+    4. **遗留疑点**（复测时顺带观察）：两端冷启动首次 bnzcGetPending jsonLen=2（空）随后 probe 重试拿到码——probe 兜底结果正确，时序复盘待 release 包 bnzc-debug.log。
   4. **✅ 优化建议阶段 2 已完成（2026-10-16，commit `3a2ca967` 已 push，服务端 Pages 自动部署全端刷新即达）**：① validate.js resolvedIdentity.phone 优先回带 record.phone 锚点（淘宝预置>record 11位校验>请求回显），杜绝错号建本地账号；② 换机自动解绑留痕 lastUnboundDevice（与 devices 移除原子同批落库，拒绝路径不落库），被踢设备下次 validate 撞配额无凭证返回 reason=unbound-by-new-device+明确中文（向后兼容）；③ 后台激活日志/设备列表/风控审计三处设备友好名徽标（and-=安卓APP/browser-=网页/其他=桌面离线，悬停口径说明）。
   5. **✅ 优化建议阶段 3 已完成（2026-10-17，commit `81ba2693` 已 push，pre-push 十七道校验全过）**：① 鸿蒙 rawfile 兜底页纳入 sync-html.ps1 分发链（$Targets 第 3 目标——实锤旧结论纠正：鸿蒙副本与 public 权威源 SHA256 字节一致，非独立权威源，bnzc 掉队根因=不在同步链靠人肉复制）；② diff-cross-version.cjs 新增第 6 对 harmony 基线（lines 模式），全 6 对重冻结（desk probeBnzcPending 同体纳入 Tier B）；③ KNOWLEDGE 第 2 章传播链加鸿蒙行 + 章末新增六端能力矩阵（含鸿蒙三件套必查清单）。**优化建议三阶段全部收官。**
 - **✅ 双独立审查已完成（2026-10-16，commit `24c5925e` 已 push）**：2 独立功能审查（互不通气）+ 1 安全二查。关键成果：
