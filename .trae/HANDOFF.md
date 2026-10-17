@@ -20,6 +20,7 @@
 - **线上状态（已实测）**：
   - production 部署源=每次 push 的最新提交（**Pages git 构建自动部署已 Active**；本次直传 `0012e7a2` 与 git 构建 `f9e9ea16` 已等价验证，后续无需手动 wrangler）；app-local 热更 **2026.10.17-7**（minAppCode 288 继承；线上 version.json 实测，auth-core.js SHA256 `bb4dede2…45210` 与 manifest 逐字节一致，无 `DEBUG verifyLoginGate` 串）。
   - functions 已随部署更新（activation-token GET 405 / 坏码 POST 400 冒烟通过；令牌幂等台账补写 + validate 诊所名闸台账豁免均在线）。**git 构建配额可用 → 后续静态/functions 随 push 即达，wrangler 直传仅作配额耗尽/大文件超限兜底。**
+  - **激活架构评审（2026-10-17）**：`.trae/documents/activation-architecture-review-2026-10-17.md`（六端 × 激活方式 × 版本全景 + P0/P1 问题清单 + O1-O7 优化建议 + S1-S4 路线 + 待拍板 5 项；见 OPEN H8）。
   - **P40 真机闭环（2026-10-17 晚，已实证）**：-7 热更生效（DEBUG alert 消失）→ 管理员激活框用 `BNZC-MG3B-…` + 手机号重新激活（预设诊所名经 `redeemedDevices` 台账豁免）→ KV 记录 `status=used、devices=[P40 mid]、productClass=offline、clientClass=app`，`entitlement(mid)=LICENSED（institution，永久）` → **登录正常**（license_log 有 `activate machineId=5784b5da...`）。此前 -7 后仍弹激活框的真因=上一会话手工重置码记录造成「本地有 license.dat / 服务端 unused」分裂，非客户端 bug。
   - **整包批次（2026-10-17 晚，已构建未发布）**：离线桌面 **1.0.276**（Setup/便携，E2E 6/6 + 签名 + fuse + .bnzc 三重 + 7 铁闸全过）、离线 APK **versionCode 322**（aapt2/apksigner 验过，签名哈希与注入期望一致）、desktop/local 热更 **2026.10.17-3**（app 1.0.276）。发布需人工 `--confirm`（硬规则禁止自动上传，见 H7）。
   - desktop/local 热更 **-3**（等整包发布）；cloud 热更 -5；三渠道版本表在发布时统一。
@@ -46,6 +47,19 @@
 - **勿做**：鸿蒙构建仍暂停（用户指示，恢复=DevEco GUI 自动签名一步，见 KNOWLEDGE 2026-10-16 2b）；发布前不再改源码（打包基线=`adcd4ee8`）。
 - **验收**：发布后下载页/`hash-manifest.json` 版本=1.0.276/322；线上 `hot-update/desktop/local/version.json`=-3；桌面冷启动深链通过。
 - **基线 commit**：`adcd4ee8`
+
+### H8 ｜优先级：中（方案待拍板）｜激活流程全端架构收敛（评审文档已出，建议 S1 先行）
+- **状态**：OPEN（待用户拍板；文档 `.trae/documents/activation-architecture-review-2026-10-17.md`）
+- **结论**：六端 × 自动/手动 × 标准/机构功能已全覆盖，但架构仍是「**6 条服务端签发通道 × 8 条客户端落盘路径 × 6 类权威载体**」；2026-10-17 P40「本地有效 / 服务端 unused」分裂是该结构必然。建议优先 O1 激活会话收敛 / O2 签发原子化 / O3 reconcile+启动三向自检+后台诊断页。
+- **S1 建议范围（1 迭代，待批准后执行）**：
+  1. 服务端 `POST /api/license/reconcile`（默认只读；repair 需管理员 token/首兑令牌证据）；
+  2. 客户端（离线 APP/桌面优先）启动三向自检：`license.dat × license:code × entitlement(mid)`——NO_LICENSE 且 mid 有绑定→重装 license；本地有 license 但服务端已停用/删除→明确失效+自助入口；残留码冲突→自动清理并记录诊断；
+  3. 后台双副本新增「🔎 激活诊断」页（码/机码/手机号 → license+admin_req+order+device_version+license_log 时间线 + 一键报告）；
+  4. 删除 `normalizeActivationPassword` 的「审批覆盖已改密码」行为（统一随机+mustChangePassword）；
+  5. activation-session MVP：令牌核销时点后移到 claim 成功（失败可重试，不再"令牌已用码未激活"）。
+- **勿做**：不动 35+ 端点历史语义；不改人工审核铁律/价格/端锁；**禁止手工改 KV 码记录**（业务级重置一律走 reconcile/repair 或 admin 工具——P40 事故直接教训）。
+- **验收**：重现「KV 手改 unused + 本地有 license」→ 可一键诊断/修复，不再需要 wrangler 手查；旧客户端零回归；pre-push 17 道 + 新增 act-* mock 入库测试。
+- **基线 commit**：`d042fac6`
 
 ### H4 ｜优先级：高｜红米改名修复云端 functions 部署 + 真机复验（2026-10-15）
 - **代码已提交推送并上线**：commit `d085f785`——users.js（migratePrescriptionOwnership + formerUsernames 链 + 两改名端点）、prescriptions.js + _lib/auth.js（token `a` 别名签名与读侧别名过滤）、离线 5 副本 index.html（heal 双闸）、热更 2026.10.15-1 双端。双独立审查+安全二查已过，105 断言全绿（rename-cloud 36 / rename-heal-pwd 31 / owner-migrate 回归 38）。
