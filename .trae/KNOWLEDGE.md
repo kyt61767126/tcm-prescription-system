@@ -68,6 +68,7 @@
 | **云端权威源** | `public/index.html` | **手改点①（云系唯一手改处）** |
 | → 云桌面 | `db-yunduan/cloud_desktop/index.html` | `sync-html.ps1` 自动生成（sync-all Group 11） |
 | → 云APP assets | `db-yunduan/cloud_app/app/src/main/assets/public/index.html` | 同上（09-13 收编回链；云APP WebView 实载线上 public，本地 assets 仅打包兜底） |
+| → 鸿蒙兜底页 | `app_project_harmony/huikang-cloud/entry/src/main/resources/rawfile/index.html` | 同上（★ 2026-10-17 收编：鸿蒙主页面实载线上云端页，rawfile 仅断网兜底，端配置块与 public 同值；bnzc 批次曾静默掉队实锤） |
 | **离线权威源** | `db-offline/desktop/index.html` | **手改点②（离线系唯一手改处）** |
 | → 离线APP 打包源 | `db-offline/index-app.html` | `sync-index-app.cjs` 应用 33 条变换表自动生成（sync-all Group 13） |
 | → 离线APP assets | `db-offline/app/app/src/main/assets/public/index.html` | 生成器同一 buffer 双写 |
@@ -154,7 +155,7 @@
 
 * ★ 2026-09-09 **离线APP「打包源覆写回滚」铁律**（金额修复 29f9a06d 被打回旧版实锤）：`db-offline/index-app.html` 是离线APP 的**打包源**，`build-app.bat` 每次 APK 打包执行 `copy /Y index-app.html → assets/public/index.html`——assets 只是构建产物副本。事故链：金额显示修复（formatPrice）只改了 assets 副本、漏了打包源 → push 全绿（无门监控这对文件）→ 当晚打包源覆写副本 → **已提交修复在新 APK 中静默回滚**（¥356.0025 浮点 bug 复活，versionCode 261 报废重打 262）。**铁律：改离线APP 的 index.html 一律改打包源 `db-offline/index-app.html`，再 Copy-Item 到 assets；直接改 assets 必被下次打包覆写。** 已收口：html-sync-check.ps1 新增第③节「离线APP source/assets 字节级一致性」（SHA256 比对，随 pre-push ①运行），改源漏副本/改副本漏源均在 push 时拦截。同类隐患备忘：build-app.bat 还从 desktop\ 复制 config.json/vendor/共享 js 模块到 assets——共享 js 三点（shared→desktop→assets）已被 copy-consistency 链覆盖，vendor 库基本不手改，风险敞口就是 HTML 这对，已堵。**★ 2026-09-13 P1-B 后此铁律升级：index-app.html 本身也升级为生成产物（desktop 权威源 + 变换表 → sync-index-app.cjs），"改打包源"进一步上移为"改 desktop/index.html 权威源"——三级链每一级都有门禁兜底。**
 
-* ★ 2026-09-10 **手机端布局改造 + 云端APP隔离铁律**（桌面/手机布局差异 → 隔离）：操作界面把「剂数+输入框（doseCountInput3）」从诊断行移到价格行（剂数/每剂/药费/诊疗/总计一行）、「医师（doctorName）与诊断同排」——**仅手机端生效**（离线APP：`db-offline/index-app.html` 打包源 + assets；云端APP：`cloud_app/app/src/main/assets/public/index.html`；鸿蒙：`rawfile/index.html`），**桌面端保持原样（剂数仍在诊断行）**。**架构矛盾**：`public/index.html`（权威源）同时驱动云桌面+云APP，桌面/手机布局冲突无法同一源供给 → 把云APP 从 `tools/sync-html.ps1` 与 `tools/html-sync-check.ps1` 的 `$Targets` 移除，**隔离独立维护**（同离线端 index-app.html 模式）；云桌面继续跟随权威源（桌面布局）。改该类布局时：桌面/网页=只改权威源 `public/index.html` 后跑 sync-html.ps1 同步云桌面；手机=按上面三处独立改，勿改权威源（否则污染云桌面/云端网页）。**★ 2026-09-13 P1-A 已解除隔离：public 权威源现含双实例响应式（冲突根源消解），云APP assets 重新纳入 sync-html.ps1 / html-sync-check.ps1 $Targets 自动生成链；云APP WebView 实载线上 public/，本地 assets 仅打包兜底，可随权威源自动传播。鸿蒙 rawfile 仍独立（搁置期）。**
+* ★ 2026-09-10 **手机端布局改造 + 云端APP隔离铁律**（桌面/手机布局差异 → 隔离）：操作界面把「剂数+输入框（doseCountInput3）」从诊断行移到价格行（剂数/每剂/药费/诊疗/总计一行）、「医师（doctorName）与诊断同排」——**仅手机端生效**（离线APP：`db-offline/index-app.html` 打包源 + assets；云端APP：`cloud_app/app/src/main/assets/public/index.html`；鸿蒙：`rawfile/index.html`），**桌面端保持原样（剂数仍在诊断行）**。**架构矛盾**：`public/index.html`（权威源）同时驱动云桌面+云APP，桌面/手机布局冲突无法同一源供给 → 把云APP 从 `tools/sync-html.ps1` 与 `tools/html-sync-check.ps1` 的 `$Targets` 移除，**隔离独立维护**（同离线端 index-app.html 模式）；云桌面继续跟随权威源（桌面布局）。改该类布局时：桌面/网页=只改权威源 `public/index.html` 后跑 sync-html.ps1 同步云桌面；手机=按上面三处独立改，勿改权威源（否则污染云桌面/云端网页）。**★ 2026-09-13 P1-A 已解除隔离：public 权威源现含双实例响应式（冲突根源消解），云APP assets 重新纳入 sync-html.ps1 / html-sync-check.ps1 $Targets 自动生成链；云APP WebView 实载线上 public/，本地 assets 仅打包兜底，可随权威源自动传播。★ 2026-10-17 鸿蒙 rawfile 亦已收编（sync-html $Targets 第 3 目标 + diff-cross-version 第 6 对 harmony 基线 lines 模式）——鸿蒙副本与 public 字节一致（SHA256 实测同值），端配置块同值无需端差异，「搁置期独立」时代结束。**
 
 * 改 index.html JS 后必查（2026-09-13 P1/P2-B1/P2-B 后新流程）：①改云系 → `sync-html.ps1` 生成 + `html-sync-check.ps1` 绿；②改离线系 → `node tools/sync-index-app.cjs` 生成 + `--verify-only` 绿；③改共面函数（public↔site-admin 的 66 共享函数，收敛饱和后仅日常修复增补）→ `node tools/sync-siteadmin.cjs` 刷标记块 + `--check` 绿；④跨版本改动 → `node tools/diff-cross-version.cjs` 三对基线绿（desk + siteadmin + download，单边漏改红灯）；⑤push 前十道门自动兜底（②含 Group 11+13+16 生成校验、⑩含跨版本三对）。
 
@@ -177,6 +178,19 @@
 * **云端 APP 是 WebView 壳，内容取自线上 public/**：改云端 APP 界面必须在 `public/` 改并推 GitHub，改 APK 内 assets/public 无效。
 
 * ★ 2026-09-14 **编辑用户被存量值拦死（表单编辑校验只约束"本次修改"铁律）**：离线APP 291 实锤——管理员只想改用户名（jlh→jihuo），医师姓名字段未动（存量"激活1"），保存被 08-31 加的「医师姓名必须纯中文≥2汉字」无条件校验拦死（存量值含数字过不了正则）。修复：`confirmEditUser` 校验改为 **`newName !== 原值` 才做格式校验**（`const origUser = getUsers().find(...)` 前置读原值，getUsers 纯读无副作用）——未变更字段零阻塞、一旦修改新值必须合规。改动 3 权威源（public + db-offline/desktop + 鸿蒙 rawfile）经 sync-all 全链传播 7 份 index.html，冒烟 8/8（存量不合规未动放行/合规未动放行/改合规放行/改英文/单字/含数字拦截/用户不存在兜底）。**铁律：表单编辑保存的格式校验必须区分「存量未变更」与「本次新输入」——编辑≠新增，存量值不追溯；无条件校验旧数据会把用户永久锁死在"什么都改不了"状态。同类排查点：今后给编辑类表单加任何格式校验，先问一句"存量数据若不合规，用户还能改别的字段吗"。** 生效：云端网页/云端APP（WebView 实载线上）push 即生效；离线APP 走 app-local 热包（291 已装机无需重打）；离线桌面走 desktop/local 热包或下次打包；云桌面/鸿蒙随下次打包。
+
+* ★ 2026-10-17 **【六端能力矩阵】**（★ 举一反三沉淀：bnzc 深链接批次鸿蒙静默掉队的根治不是补一端代码，而是建立「新增激活/登录相关能力时逐端勾稽」的检查表。**新增下表任一能力时，必须逐列勾稽并在 commit 信息注明六端覆盖状态与生效方式**；矩阵随能力演进而更新）：
+
+| 能力 | 云端网页 | 云桌面 | 云APP | 离线桌面 | 离线APP | 鸿蒙 |
+|---|---|---|---|---|---|---|
+| bnzc:// 深链接（冷启+运行中+兑换） | ✗（无 scheme 概念，落地页填码/令牌） | ✅ main.js parse（1.2.269+） | ✅ v323（probe 兜底） | ✅ main.js parse（1.0.269+） | ✅ v320（probe 兜底） | ✅ 源码就绪 ⏸ 未签名发布 |
+| bnzc probe 延迟重试探测（IS_ELECTRON 竞态兜底） | 不适用 | 不适用（preload 先注入） | ✅ 权威源/兜底页 24 版 | 不适用（preload 先注入） | ✅ 打包源/兜底页 24 版 | ✅ rawfile 兜底页（sync-html 同步链） |
+| 指纹快速登录 | ✗ | ✅ | ✅ | ✅ | ✅ | ✗ |
+| 热更通道 | =线上本身 | ✅ desktop/cloud | ✅ app-local | ✅ desktop/local | ✅ app-local | ✗（无热更，整包重打） |
+| phone 锚点回带/解绑 reason（服务端） | ✅ 全端刷新即达 | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 界面/功能改动生效方式 | push 即达 | 热更或整包 | WebView 实载线上即达/兜底随 APK | 热更或整包 | 热更或整包 | 整包重打（DevEco） |
+
+  **鸿蒙勾稽必查三件**（每次新能力）：① `shared-inject/cloud-electron-api-shim.js`（electronAPI 桥方法）② `NativeBridge.ets` switch case ③ `EntryAbility.ets` intent 收口 + `module.json5` scheme 登记。**鸿蒙 rawfile/index.html 已纳入 sync-html 分发链与 diff-cross-version harmony 基线（第 6 对），页面层漂移有门禁；桥/Ability 层无自动门禁，靠本矩阵人工勾稽。**
 
 ## 3. 界面保护铁律
 

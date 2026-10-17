@@ -50,7 +50,12 @@ $Authority = 'public/index.html'
 #   （EDITION='personal'/APP_MODE='auto'）属有意保留：兜底内容与线上体验一致。
 $Targets = @(
     'app_project/db-yunduan/cloud_desktop/index.html',
-    'app_project/db-yunduan/cloud_app/app/src/main/assets/public/index.html'
+    'app_project/db-yunduan/cloud_app/app/src/main/assets/public/index.html',
+    # ★ 2026-10-17 阶段3 收编：鸿蒙兜底页纳入同步链（实锤事故：bnzc 深链接批次
+    #   鸿蒙静默掉队，事后核查 rawfile 副本与 public 权威源 SHA256 字节一致——
+    #   鸿蒙主页面实载线上云端页，rawfile 仅断网兜底，端配置块与 public 同值，
+    #   无需端差异。此前不在任何同步链上=靠人肉复制，即漂移温床）
+    'app_project_harmony/huikang-cloud/entry/src/main/resources/rawfile/index.html'
 )
 
 # 赋值行模式（用于定位端配置块；每文件必须恰好各 1 行）

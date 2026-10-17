@@ -106,6 +106,18 @@ const PAIRS = [
         baseline: '.cross-version-baseline-adminconsole.json',
         mode: 'lines',
     },
+    {
+        // ★ 2026-10-17 阶段3 新增第 6 对：鸿蒙兜底页（rawfile）双副本。鸿蒙主页面
+        //   实载线上云端页，rawfile 仅断网兜底；当前与 public 权威源 SHA256 字节
+        //   一致（bnzc 深链接批次鸿蒙曾静默掉队，同步链已于同日收编 sync-html）。
+        //   lines 模式：全内容行对比，基线=空差集，任何单边改动即红灯。
+        id: 'harmony',
+        label: 'public/index.html ↔ 鸿蒙 rawfile 兜底页双副本',
+        fileA: 'public/index.html',
+        fileB: 'app_project_harmony/huikang-cloud/entry/src/main/resources/rawfile/index.html',
+        baseline: '.cross-version-baseline-harmony.json',
+        mode: 'lines',
+    },
 ];
 
 const quiet = process.argv.includes('--quiet');
