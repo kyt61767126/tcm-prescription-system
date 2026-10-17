@@ -1168,10 +1168,13 @@
         if (!api.activate || typeof api.activate.registerLocalUser !== 'function' || typeof api.activate.submit !== 'function') {
             return { success: false, error: '当前版本不支持链接自动激活，请升级到最新版本' };
         }
-        // ① 本机注册状态（桥 config 账号优先=登录主源，license:registrationInfo 兜底——
-        //   与 auth-core isLocalRegisteredAsync 同族；安全审查 P2-1：registrationInfo
-        //   本地可篡改，桥读取的 config 账号更权威，故桥优先）
+        // ① 本机注册状态：以桥 config 账号表为唯一准绳（与 auth-core isLocalRegisteredAsync
+        //   同口径）；registrationInfo 残留仅作预填。
+        //   ★ 2026-10-17 P40 真机实证修复：localStorage 残留 registrationInfo 而账号表为空
+        //   （清账号/重置/历史残留）时，误判已注册会跳过建号 → 装码成功但启动闸只认账号表
+        //   → 重启即弹管理员激活页（状态分裂自断链）。残留降级为注册窗预填（码锚点优先）。
         let regPhone = '', regName = '', regClinic = '';
+        let regHintPhone = '', regHintClinic = '';
         if (typeof api.activate.getActivationUsers === 'function') {
             try {
                 const res = await api.activate.getActivationUsers();
@@ -1190,15 +1193,15 @@
                 if (raw) {
                     const info = JSON.parse(raw);
                     if (info && PHONE_RE.test(String(info.phone || ''))) {
-                        regPhone = String(info.phone); regName = String(info.adminName || ''); regClinic = String(info.clinicName || '');
+                        regHintPhone = String(info.phone); regHintClinic = String(info.clinicName || '');
                     }
                 }
             } catch (e) {}
         }
         // ② 未注册：DOM 弹窗收参 → registerLocalUser 建号（唯一密码写点）→ 镜像
         if (!regPhone) {
-            const anchorPhone = (String(data.user || '').match(PHONE_RE) || [''])[0];
-            const params = await bnzcCollectRegParams({ phone: anchorPhone, clinicName: String(data.clinicName || '') });
+            const anchorPhone = (String(data.user || '').match(PHONE_RE) || [''])[0] || regHintPhone;
+            const params = await bnzcCollectRegParams({ phone: anchorPhone, clinicName: String(data.clinicName || '').trim() || regHintClinic });
             if (!params) return { success: false, cancelled: true };
             const adminName = (String(data.user || '').replace(PHONE_RE, '').replace(/[/\-\s]+$/, '').trim()) || params.phone;
             const clinicName = String(data.clinicName || '').trim();

@@ -63,6 +63,13 @@
     2. **离线 App 端到端复测**：先在后台**解绑 MG3B 码的 P40 绑定**（devicesCount 已计但本地未生效），再用 local 端型新码真机复测（深链接→注册弹窗→注册→装码→重启→手机号+密码登录进系统）。
     3. **桌面离线 exe 重打后复测**：冷启动深链接→登录窗注册弹窗→装码→重启登录。
     4. **遗留疑点**（复测时顺带观察）：两端冷启动首次 bnzcGetPending jsonLen=2（空）随后 probe 重试拿到码——probe 兜底结果正确，时序复盘待 release 包 bnzc-debug.log。
+    5. **★ 2026-10-17 真机复测进展 + registrationInfo 分裂修复（待 push）**：
+       - P40 实测：热更 2026.10.17-1 已生效（logcat「热版本已是最新 2026.10.17-1」+加载 hot-update/current/index.html）；深链接链路可达（bnzcRedeemToken→激活成功）；但**未弹注册窗**。
+       - **根因（双份同构）**：bnzcOfflineAutoActivate 的「已注册」判定兜底读了 localStorage `license:registrationInfo`——P40 有历史测试残留（预填 13398628212 即其旁证）而账号表空 → 误判已注册跳过建号 → 装码成功但启动闸只认账号表 → 重启弹管理员激活页（状态分裂自断链）。
+       - **修复**：主窗 `db-offline/desktop/index.html` + 登录窗 `db-offline/desktop/electron/login.js` 同构——registrationInfo 降级为**注册窗预填源**（regHintPhone/regHintClinic，码锚点优先），「已注册」唯一准绳=账号表（与 auth-core isLocalRegisteredAsync 同口径）。
+       - **已办**：双渠道热更 2026.10.17-2 已签（app-local 15 文件/desktop-local 19 文件，Ed25519 自验过）；MG3B 码已解绑重置（后台 status API action=unbind，machineId 传脱敏前缀须带 `...` 后缀）；新令牌已签发。
+       - **剩余**：P40 拉热更（联网打开→划掉→重开 2 次）→ adb 注入深链接 → 应弹注册窗（手机号预填）→ 注册并激活 → 重启 → 手机号+密码登录闭环；桌面 exe 重打；复测闭环后沉淀 KNOWLEDGE（六端矩阵离线 bnzc 状态更新）。
+       - 复测命令：`adb shell am start -n com.benneng.pres.dingzhi/com.benneng.pres.MainActivity -a android.intent.action.VIEW -d 'bnzc://activate?t=<token>'`（微信点 bnzc:// 会被拦，用 adb 注入或网页版 activate.html 引导）。
   4. **✅ 优化建议阶段 2 已完成（2026-10-16，commit `3a2ca967` 已 push，服务端 Pages 自动部署全端刷新即达）**：① validate.js resolvedIdentity.phone 优先回带 record.phone 锚点（淘宝预置>record 11位校验>请求回显），杜绝错号建本地账号；② 换机自动解绑留痕 lastUnboundDevice（与 devices 移除原子同批落库，拒绝路径不落库），被踢设备下次 validate 撞配额无凭证返回 reason=unbound-by-new-device+明确中文（向后兼容）；③ 后台激活日志/设备列表/风控审计三处设备友好名徽标（and-=安卓APP/browser-=网页/其他=桌面离线，悬停口径说明）。
   5. **✅ 优化建议阶段 3 已完成（2026-10-17，commit `81ba2693` 已 push，pre-push 十七道校验全过）**：① 鸿蒙 rawfile 兜底页纳入 sync-html.ps1 分发链（$Targets 第 3 目标——实锤旧结论纠正：鸿蒙副本与 public 权威源 SHA256 字节一致，非独立权威源，bnzc 掉队根因=不在同步链靠人肉复制）；② diff-cross-version.cjs 新增第 6 对 harmony 基线（lines 模式），全 6 对重冻结（desk probeBnzcPending 同体纳入 Tier B）；③ KNOWLEDGE 第 2 章传播链加鸿蒙行 + 章末新增六端能力矩阵（含鸿蒙三件套必查清单）。**优化建议三阶段全部收官。**
 - **✅ 双独立审查已完成（2026-10-16，commit `24c5925e` 已 push）**：2 独立功能审查（互不通气）+ 1 安全二查。关键成果：
