@@ -47,7 +47,7 @@ android {
         applicationId "com.benneng.pres.dingzhi"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 320 // ★ 2026-10-16 H5 P0：bnzc:// 一键激活深链接（parseBnzcDeepLink/shim bnzc五方法/activateLicense LicenseManager 装码）+ isSensitiveOperation 对齐；页面 probeBnzcPending 断链修复（热更 2026.10.16-1 同步）
+        versionCode 321 // ★ 2026-10-17 真机核验修复：bnzc 冷启动派发 mainHandler 未初始化 NPE（判空等待 JS getPending 兜底）；320 已随下载页 v2026.10.16-1036 分发不可复用
         versionName "1.0.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {

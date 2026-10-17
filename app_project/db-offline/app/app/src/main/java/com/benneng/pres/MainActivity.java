@@ -191,6 +191,13 @@ public class MainActivity extends BridgeActivity {
                 appendBnzcDebug("dispatch: webview 未就绪，等待 JS getPending 拉取");
                 return;
             }
+            // ★ 2026-10-17 真机核验实锤：冷启动时 parseBnzcDeepLink 早于 onCreate 中
+            //   mainHandler 初始化，post 会 NPE（catch 兜底未崩溃但带病运行）——判空后
+            //   交由 JS bnzcGetPending 拉取兜底，与 webview 未就绪同款语义
+            if (mainHandler == null) {
+                appendBnzcDebug("dispatch: mainHandler 未就绪，等待 JS getPending 拉取");
+                return;
+            }
             mainHandler.post(() -> {
                 try {
                     // JSON 嵌单引号 JS 串：转义反斜杠与单引号即可（JSON 无换行/控制符裸出）

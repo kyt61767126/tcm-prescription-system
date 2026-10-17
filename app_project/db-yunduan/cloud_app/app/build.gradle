@@ -48,7 +48,7 @@ android {
         applicationId "com.tcm.prescription"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 323 // ★ 2026-10-16 H5 P0：bnzc:// 一键激活深链接（parseBnzcDeepLink/shim bnzc五方法/activateOnline claim桥）+ isSensitiveOperation；页面 probeBnzcPending 断链修复（热更 2026.10.16-1 同步）
+        versionCode 324 // ★ 2026-10-17 真机核验修复：bnzc 冷启动派发 mainHandler 未初始化 NPE（判空等待 JS getPending 兜底）；323 已构建验包未对外但号已占用不可复用
         versionName "1.0.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
