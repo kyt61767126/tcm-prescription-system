@@ -184,6 +184,7 @@
 | 能力 | 云端网页 | 云桌面 | 云APP | 离线桌面 | 离线APP | 鸿蒙 |
 |---|---|---|---|---|---|---|
 | bnzc:// 深链接（冷启+运行中+兑换） | ✗（无 scheme 概念，落地页填码/令牌） | ✅ main.js parse（1.2.269+） | ✅ v323（probe 兜底） | ✅ main.js parse（1.0.269+） | ✅ v320（probe 兜底） | ✅ 源码就绪 ⏸ 未签名发布 |
+| bnzc 一键激活（★ 2026-10-17 方案A） | ✗（云端账号体系） | ✅ 云端语义（真机未验，无本地账号需求） | ✅ 云端语义 v324 真机全链闭环 | ✅ 先注册再激活编排（desktop/local 热更+login.js 随整包） | ✅ 先注册再激活编排（app-local 2026.10.17-1） | ✅ 云端语义（同云 App shim，真机未验） |
 | bnzc probe 延迟重试探测（IS_ELECTRON 竞态兜底） | 不适用 | 不适用（preload 先注入） | ✅ 权威源/兜底页 24 版 | 不适用（preload 先注入） | ✅ 打包源/兜底页 24 版 | ✅ rawfile 兜底页（sync-html 同步链） |
 | 指纹快速登录 | ✗ | ✅ | ✅ | ✅ | ✅ | ✗ |
 | 热更通道 | =线上本身 | ✅ desktop/cloud | ✅ app-local | ✅ desktop/local | ✅ app-local | ✗（无热更，整包重打） |
@@ -191,6 +192,8 @@
 | 界面/功能改动生效方式 | push 即达 | 热更或整包 | WebView 实载线上即达/兜底随 APK | 热更或整包 | 热更或整包 | 整包重打（DevEco） |
 
   **鸿蒙勾稽必查三件**（每次新能力）：① `shared-inject/cloud-electron-api-shim.js`（electronAPI 桥方法）② `NativeBridge.ets` switch case ③ `EntryAbility.ets` intent 收口 + `module.json5` scheme 登记。**鸿蒙 rawfile/index.html 已纳入 sync-html 分发链与 diff-cross-version harmony 基线（第 6 对），页面层漂移有门禁；桥/Ability 层无自动门禁，靠本矩阵人工勾稽。**
+
+* ★ 2026-10-17 **离线端 bnzc 一键激活「先注册再激活」方案A（真机实锤→修复闭环，`cf425655`）**：P40 真机核验离线 App 旧链 bnzcAutoActivate 直调装码——服务端装码成功但**重启弹回「管理员激活页」**。根因：链接不带 user 时（码锚点可为空）App Java 激活收尾 `syncCreateActivationUser` 因 username 空直接 return **不建本地账号**、桌面 `installLicense` 建号 phone 空 → auth-core 启动闸判定未注册。修复=离线权威页 `db-offline/desktop/index.html` 新增 **bnzcOfflineAutoActivate** 编排（已注册→getActivationUsers **桥优先**取手机号直装码；未注册→DOM 弹窗 bnzcCollectRegParams 收手机号+密码→registerLocalUser（唯一密码写点+幽灵 admin 清除）→镜像三步（addLocalActivationUser/license:registrationInfo 仅存 passwordEnc/FSM registered）→activate.submit 带 phone 装码，**密码留空=激活收尾不覆盖注册密码**）；桌面登录窗 `login.js` 同构（login.html 在 register-local-user 来源白名单内）；`shared/desktop-license-ipc.cjs` P1 修复（submit-activate 多设备授权弹窗 `showMessageBoxSync(getMainWindow(),…)` 登录窗冷启动时主窗为 null → Electron 抛参=激活成功却报失败，改主窗存在才带父窗）。**可复用铁律：① 离线端任何「激活后自动可用」链路必须先 registerLocalUser 建本地手机号账号——直调装码链 user 空时静默不建号，「激活成功」≠「可登录」；② Electron 渲染层不支持 window.prompt，收参一律 DOM 弹窗；③ 桌面 register-local-user 来源白名单仅 activate-window.html+login.html（主窗未注册用户本就不可达，越界调用返回"非法调用来源"属预期失败模式）；④ 令牌一次性兑换：激活失败/取消**不得清 pending**（码会丢），报错须回显激活码+引导手动激活兜底；⑤ localStorage 用户表为 XORv1 加密格式，禁止明文回写；⑥ localStorage registrationInfo 本地可篡改——「已注册」判定桥（config 账号）优先、registrationInfo 仅兜底。** 生效：离线 App=热更 **2026.10.17-1**（app-local，minAppCode 288 继承）+下次 APK；离线桌面=desktop/local **2026.10.17-1**（index.html）+ login.js/desktop-license-ipc.cjs 主进程域**需 exe 重打包**（可攒批）；云端四端不受影响（云 App v324 真机全链闭环已实证）。遗留：MG3B 码服务端已绑 P40 需后台解绑后复测。
 
 ## 3. 界面保护铁律
 
