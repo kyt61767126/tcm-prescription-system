@@ -2583,6 +2583,8 @@
                 }
 
                 if (ent) {
+                    // ★ 2026-10-17 DEBUG: 屏幕显示 entitlement 返回值（测完即删）
+                    try { alert('[DEBUG verifyLoginGate]\ncode=' + (code || '(空)') + '\nstate=' + ent.state + '\nsuccess=' + ent.success + '\nmsg=' + (ent.message || '') + '\nHTTP=' + entHttpStatus); } catch (_) {}
                     // ★ 2026-09-23 账号删除优先裁决：即使设备授权有效，账号墓碑命中即硬拒。
                     //   落账号级拒绝标记【按用户名集合】（断网也不享受宽限；同机多账号
                     //   互不覆盖；旧版单条记录读入自动迁移）。
