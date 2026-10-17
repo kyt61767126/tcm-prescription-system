@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:1080px; height:1440px; overflow:hidden; }
+  body {
+    font-family:'Segoe UI','Microsoft YaHei','PingFang SC','Hiragino Sans GB',sans-serif;
+    -webkit-font-smoothing:antialiased;
+    text-rendering:optimizeLegibility;
+  }
+  .poster { position:relative; width:1080px; height:1440px; overflow:hidden; background:#6d0a0a; }
+  .bg {
+    position:absolute; inset:0;
+    background-image:url('bg_portrait.jpg');
+    background-size:cover; background-position:center top;
+  }
+  .veil {
+    position:absolute; inset:0;
+    background:linear-gradient(180deg,
+      rgba(60,0,0,0.10) 0%,
+      rgba(60,0,0,0.34) 26%,
+      rgba(48,0,0,0.58) 46%,
+      rgba(40,0,0,0.72) 62%,
+      rgba(34,0,0,0.84) 100%);
+  }
+  .glow {
+    position:absolute; left:50%; top:300px; transform:translateX(-50%);
+    width:900px; height:520px; border-radius:50%;
+    background:radial-gradient(ellipse at center, rgba(40,0,0,0.62) 0%, rgba(40,0,0,0.34) 45%, rgba(40,0,0,0) 72%);
+  }
+  .top-scrim {
+    position:absolute; top:0; left:0; right:0; height:262px;
+    background:linear-gradient(180deg, rgba(48,0,0,0.66) 0%, rgba(48,0,0,0.46) 52%, rgba(48,0,0,0) 100%);
+  }
+  .content { position:relative; z-index:3; height:100%; display:flex; flex-direction:column; align-items:center; padding:44px 62px 40px; }
+
+  .brand {
+    font-size:53px; line-height:1.1; font-weight:900; letter-spacing:5px;
+    background:linear-gradient(180deg,#FFFDF0 0%,#FFE9A8 34%,#FFCF4D 66%,#E9A314 100%);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    filter:drop-shadow(0 3px 10px rgba(0,0,0,.72)) drop-shadow(0 0 26px rgba(255,190,50,.52));
+  }
+  .brand-rule { margin-top:15px; display:flex; align-items:center; justify-content:center; gap:11px; }
+  .brand-rule span { width:120px; height:1.5px; }
+  .brand-rule span:first-child { background:linear-gradient(90deg, rgba(255,215,94,0), #FFD75E); }
+  .brand-rule span:last-child { background:linear-gradient(90deg, #FFD75E, rgba(255,215,94,0)); }
+  .brand-rule i { width:9px; height:9px; background:#FFD75E; transform:rotate(45deg); box-shadow:0 0 11px rgba(255,205,60,.95); }
+  .brand-sub { margin-top:13px; font-size:19px; font-weight:600; color:rgba(255,231,166,.9); letter-spacing:3px; text-shadow:0 2px 8px rgba(0,0,0,.6); }
+
+  .hero {
+    margin-top:38px; font-size:150px; line-height:1.02; font-weight:900; letter-spacing:12px;
+    background:linear-gradient(180deg,#FFFCE6 0%,#FFE38A 40%,#FFC63C 62%,#E79A12 100%);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    filter:drop-shadow(0 6px 16px rgba(0,0,0,.6)) drop-shadow(0 0 30px rgba(255,196,60,.42));
+  }
+  .hero-sub {
+    margin-top:22px; display:inline-block; padding:11px 34px; border-radius:999px;
+    font-size:27px; font-weight:700; color:#5C0A0A; letter-spacing:5px;
+    background:linear-gradient(180deg,#FFE9A8,#F5C64B);
+    box-shadow:0 6px 18px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.7);
+  }
+
+  .discount { margin-top:46px; display:flex; align-items:baseline; justify-content:center;
+    filter:drop-shadow(0 8px 20px rgba(0,0,0,.55)); }
+  .d-pre { font-size:44px; font-weight:800; color:#FFE7A6; letter-spacing:2px; margin-right:14px; }
+  .d-num {
+    font-size:196px; line-height:.86; font-weight:900; font-family:'Segoe UI',sans-serif;
+    background:linear-gradient(180deg,#FFFDF0 0%,#FFE793 38%,#FFC42F 66%,#E08E08 100%);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    text-shadow:none;
+  }
+  .d-unit { font-size:74px; font-weight:900; color:#FFD75E; margin-left:12px; }
+  .d-tag { margin-top:14px; font-size:23px; font-weight:700; color:rgba(255,235,180,.92); letter-spacing:6px; }
+
+  .price-card {
+    margin-top:38px; width:100%;
+    background:linear-gradient(180deg, rgba(58,4,4,.72) 0%, rgba(38,0,0,.82) 100%);
+    border:2px solid rgba(255,205,90,.55); border-radius:22px;
+    padding:26px 30px 30px;
+    box-shadow:0 14px 40px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,220,140,.22);
+  }
+  .pc-title { text-align:center; font-size:24px; font-weight:800; color:#FFD868; letter-spacing:4px; margin-bottom:20px; }
+  .pc-title span { color:#fff; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .item {
+    background:rgba(255,255,255,.07); border:1px solid rgba(255,205,90,.34); border-radius:14px;
+    padding:16px 18px 17px;
+  }
+  .i-name { font-size:23px; font-weight:800; color:#FFF3D2; letter-spacing:1px; }
+  .i-sub { margin-top:5px; font-size:17px; color:rgba(255,231,166,.72); letter-spacing:1px; }
+  .i-price { margin-top:12px; display:flex; align-items:baseline; }
+  .i-new { font-size:46px; font-weight:900; font-family:'Segoe UI',sans-serif;
+    background:linear-gradient(180deg,#FFF6C9,#FFC93F); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .i-unit { font-size:19px; font-weight:700; color:#FFD868; margin-left:5px; }
+  .i-old { margin-left:12px; font-size:21px; color:rgba(255,220,180,.55); text-decoration:line-through; font-family:'Segoe UI',sans-serif; }
+
+  .footer { margin-top:auto; width:100%; text-align:center; }
+  .f-free { display:inline-block; padding:9px 26px; border-radius:999px; font-size:23px; font-weight:800;
+    color:#0B3A20; background:linear-gradient(180deg,#8BF0AE,#22C55E); letter-spacing:2px;
+    box-shadow:0 6px 16px rgba(0,0,0,.4); }
+  .contact {
+    margin-top:20px; width:100%; border-radius:16px;
+    background:rgba(24,0,0,.55); border:1.5px solid rgba(255,205,90,.5);
+    padding:15px 22px; display:flex; flex-direction:column; gap:9px;
+  }
+  .c-row { display:flex; align-items:center; justify-content:center; gap:12px; }
+  .c-tag {
+    flex:0 0 auto; font-size:19px; font-weight:800; color:#5C0A0A; letter-spacing:1px;
+    background:linear-gradient(180deg,#FFE9A8,#F5C64B); border-radius:6px; padding:4px 12px;
+  }
+  .c-val { font-size:26px; font-weight:800; color:#FFF6DA; letter-spacing:0.5px; font-family:'Segoe UI','Microsoft YaHei',sans-serif; }
+  .c-val.hi { color:#7CFFB0; font-size:28px; }
+  .f-date { margin-top:13px; font-size:18px; color:rgba(255,231,166,.6); letter-spacing:3px; }
+</style>
+</head>
+<body>
+<div class="poster">
+  <div class="bg"></div>
+  <div class="veil"></div>
+  <div class="glow"></div>
+  <div class="top-scrim"></div>
+  <div class="content">
+    <div class="brand">惠康中医诊所管理系统</div>
+    <div class="brand-rule"><span></span><i></i><span></span></div>
+    <div class="brand-sub">官方下载中心 · 数据安全 · 持续更新</div>
+
+    <div class="hero">双节同庆</div>
+    <div class="hero-sub">中秋 · 国庆 限时特惠</div>
+
+    <div class="discount">
+      <span class="d-pre">全场</span><span class="d-num">6</span><span class="d-unit">折</span>
+    </div>
+    <div class="d-tag">限时优惠 · 全部版本同享</div>
+
+    <div class="price-card">
+      <div class="pc-title">优惠价目表（<span>6 折</span>）</div>
+      <div class="grid">
+        <div class="item">
+          <div class="i-name">本地标准版</div>
+          <div class="i-sub">离线 · 单用户</div>
+          <div class="i-price"><span class="i-new">￥59</span><span class="i-unit">/年</span><span class="i-old">￥99</span></div>
+        </div>
+        <div class="item">
+          <div class="i-name">本地机构版</div>
+          <div class="i-sub">离线 · 3-5 用户</div>
+          <div class="i-price"><span class="i-new">￥179</span><span class="i-unit">/年</span><span class="i-old">￥299</span></div>
+        </div>
+        <div class="item">
+          <div class="i-name">云端标准版</div>
+          <div class="i-sub">多设备同步 · 单用户</div>
+          <div class="i-price"><span class="i-new">￥119</span><span class="i-unit">/年</span><span class="i-old">￥199</span></div>
+        </div>
+        <div class="item">
+          <div class="i-name">云端机构版</div>
+          <div class="i-sub">多设备同步 · 3-5 用户</div>
+          <div class="i-price"><span class="i-new">￥239</span><span class="i-unit">/年</span><span class="i-old">￥399</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <div class="f-free">永久免费版 ￥0 · 开方不限量</div>
+      <div class="contact">
+        <div class="c-row"><span class="c-tag">官网下载</span><span class="c-val">tcm-prescription-system.pages.dev/download</span></div>
+        <div class="c-row"><span class="c-tag">客服微信</span><span class="c-val hi">hktzy1688</span></div>
+      </div>
+      <div class="f-date">活动时间：2026.09.25 — 2026.10.08</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

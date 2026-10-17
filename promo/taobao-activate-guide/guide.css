@@ -1,0 +1,122 @@
+/* ===== 淘宝激活码 · 四端激活教程卡片共享样式（750px 竖版） ===== */
+* { margin:0; padding:0; box-sizing:border-box; }
+html,body { width:750px; overflow:hidden; background:#eef2f6; }
+body {
+  font-family:'Segoe UI','Microsoft YaHei','PingFang SC','Hiragino Sans GB',sans-serif;
+  -webkit-font-smoothing:antialiased; text-rendering:geometricPrecision;
+}
+.card { width:750px; padding:0 30px 26px; background:linear-gradient(180deg,#f4f8f8 0%,#eef2f6 260px,#eef2f6 100%); }
+
+/* ===== 顶部横幅 ===== */
+.hero {
+  margin:0 -30px 18px; padding:34px 40px 30px;
+  background:linear-gradient(135deg,#0f766e 0%,#0d9488 48%,#14b8a6 100%);
+  border-radius:0 0 30px 30px; color:#fff; position:relative; overflow:hidden;
+}
+.hero::after {
+  content:''; position:absolute; right:-70px; top:-70px; width:250px; height:250px; border-radius:50%;
+  background:radial-gradient(circle,rgba(255,255,255,.16) 0%,rgba(255,255,255,0) 70%);
+}
+.hero .kicker { font-size:17px; font-weight:700; letter-spacing:4px; color:#a7f3d0; }
+.hero h1 { font-size:39px; font-weight:900; margin-top:8px; letter-spacing:1px; line-height:1.25; }
+.hero .sub { font-size:17px; margin-top:10px; color:#d1fae5; line-height:1.6; }
+.badge-row { display:flex; gap:10px; margin-top:16px; flex-wrap:wrap; }
+.badge { font-size:15px; font-weight:700; padding:7px 15px; border-radius:999px; background:rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.35); }
+.badge.gold { background:linear-gradient(135deg,#fbbf24,#f59e0b); border-color:transparent; color:#78350f; }
+
+/* ===== 准备条 ===== */
+.prepare { display:flex; gap:12px; background:#fff; border-radius:16px; padding:16px 18px; margin-bottom:18px;
+  box-shadow:0 3px 14px rgba(15,118,110,.08); border:1px solid #e2e8f0; }
+.prepare .p-item { flex:1; text-align:center; font-size:14.5px; color:#334155; line-height:1.55; font-weight:600; }
+.prepare .p-item .ic { font-size:26px; display:block; margin-bottom:3px; }
+.prepare .p-divider { width:1px; background:#e2e8f0; }
+
+/* ===== 步骤 ===== */
+.step { display:flex; gap:16px; margin-bottom:14px; align-items:stretch; }
+.s-num {
+  flex-shrink:0; width:46px; height:46px; border-radius:50%;
+  background:linear-gradient(135deg,#0d9488,#0f766e); color:#fff;
+  font-size:23px; font-weight:900; display:flex; align-items:center; justify-content:center;
+  box-shadow:0 4px 10px rgba(13,148,136,.35); margin-top:2px;
+}
+.s-body { flex:1; background:#fff; border-radius:16px; padding:16px 18px 18px; border:1px solid #e2e8f0;
+  box-shadow:0 3px 12px rgba(15,23,42,.06); }
+.s-title { font-size:20px; font-weight:800; color:#0f172a; line-height:1.45; }
+.s-title .key { color:#0f766e; }
+.s-hint { font-size:15.5px; color:#475569; line-height:1.7; margin-top:5px; }
+.s-hint b { color:#b45309; font-weight:700; }
+.s-hint .mono { font-family:Consolas,'Courier New',monospace; background:#f1f5f9; padding:1px 6px; border-radius:5px; font-size:14px; color:#0f766e; }
+.s-tag { display:inline-block; font-size:13.5px; font-weight:700; color:#0f766e; background:#ccfbf1; padding:2px 10px; border-radius:6px; margin-top:7px; }
+
+/* ===== 软件界面示意图（通用） ===== */
+.win { width:100%; border-radius:12px; overflow:hidden; margin-top:13px; border:1px solid #cbd5e1;
+  box-shadow:0 6px 16px rgba(15,23,42,.12); background:#fff; position:relative; }
+.win-bar { height:30px; background:#2f3542; display:flex; align-items:center; padding:0 12px; gap:6px; }
+.win-bar i { width:9px; height:9px; border-radius:50%; display:block; }
+.win-bar i:nth-child(1){background:#ff5f57;} .win-bar i:nth-child(2){background:#febc2e;} .win-bar i:nth-child(3){background:#28c840;}
+.win-bar em { font-style:normal; color:#cbd5e1; font-size:12px; margin-left:8px; }
+.win-screen { padding:14px 16px 16px; }
+.tabs { display:flex; border-bottom:2px solid #e2e8f0; margin:-2px -2px 13px; }
+.tabx { flex:1; text-align:center; font-size:13.5px; font-weight:700; color:#94a3b8; padding:9px 2px; border-bottom:3px solid transparent; margin-bottom:-2px; }
+.tabx.on { color:#0f766e; border-bottom-color:#0d9488; }
+.mlabel { font-size:12px; color:#475569; font-weight:700; margin-bottom:5px; }
+.mlabel .req { color:#ef4444; }
+.minput { height:38px; border:2px solid #dbe3ec; border-radius:8px; background:#f8fafc; margin-bottom:11px;
+  display:flex; align-items:center; padding:0 11px; font-size:13px; color:#94a3b8; font-family:Consolas,monospace; }
+.minput.txt { font-family:'Segoe UI','Microsoft YaHei',sans-serif; }
+.mbtn { height:42px; border-radius:9px; color:#fff; font-size:15px; font-weight:800;
+  display:flex; align-items:center; justify-content:center; background:linear-gradient(135deg,#0d9488,#0f766e); }
+.mbtn.gold { background:linear-gradient(135deg,#fbbf24,#f59e0b); color:#78350f; }
+.mbtn.orange { background:linear-gradient(135deg,#fb923c,#ea580c); }
+.mrow2 { display:flex; gap:10px; }
+.mlink { text-align:center; font-size:12.5px; color:#ea580c; font-weight:700; margin-top:10px; }
+.mnote { font-size:11.5px; color:#94a3b8; margin-top:7px; line-height:1.6; }
+.msuccess { background:#f0fdf4; border:1.5px solid #86efac; border-radius:10px; padding:13px; text-align:center; margin-top:12px; }
+.msuccess .big { font-size:27px; }
+.msuccess .t { font-size:15px; font-weight:800; color:#15803d; margin-top:3px; }
+.msuccess .d { font-size:12px; color:#166534; margin-top:3px; }
+
+/* 红圈标注 */
+.mark { position:absolute; border:3px solid #e11d48; border-radius:14px;
+  box-shadow:0 0 0 4px rgba(225,29,72,.13), inset 0 0 0 1px rgba(225,29,72,.25); pointer-events:none; }
+.mark.circle { border-radius:50%; }
+.mark-tag { position:absolute; right:-6px; top:-30px; background:#e11d48; color:#fff; font-size:12.5px; font-weight:800;
+  padding:3px 10px; border-radius:7px; white-space:nowrap; box-shadow:0 3px 8px rgba(225,29,72,.4); }
+.mark-tag.left { right:auto; left:-6px; }
+.mark-tag.below { top:100%; margin-top:8px; }
+.mark-gap { height:34px; }
+.arrow-down { position:absolute; color:#e11d48; font-size:30px; font-weight:900; text-shadow:0 2px 5px rgba(255,255,255,.9); pointer-events:none; }
+
+/* ===== 手机示意图 ===== */
+.phone-wrap { display:flex; justify-content:center; margin-top:13px; }
+.phone { width:292px; background:#1f2937; border-radius:38px; padding:11px; box-shadow:0 10px 26px rgba(15,23,42,.22); position:relative; }
+.phone::before { content:''; position:absolute; left:50%; top:11px; transform:translateX(-50%); width:96px; height:19px;
+  background:#1f2937; border-radius:0 0 13px 13px; z-index:2; }
+.phone-screen { background:#f8fafc; border-radius:29px; overflow:hidden; }
+.p-status { height:34px; background:#0f766e; }
+.p-login { padding:15px 16px 17px; }
+.p-title { font-size:16px; font-weight:900; color:#0f172a; text-align:center; margin:2px 0 12px; }
+.p-field { height:36px; border:1.5px solid #dbe3ec; border-radius:9px; background:#fff; margin-bottom:9px;
+  display:flex; align-items:center; padding:0 11px; font-size:12px; color:#94a3b8; }
+.p-btn { height:40px; border-radius:10px; color:#fff; font-size:14px; font-weight:800; display:flex;
+  align-items:center; justify-content:center; background:linear-gradient(135deg,#0d9488,#0f766e); }
+.p-gold { height:42px; border-radius:10px; font-size:13.5px; font-weight:800; color:#78350f;
+  display:flex; align-items:center; justify-content:center; background:linear-gradient(135deg,#fbbf24,#f59e0b);
+  box-shadow:0 3px 9px rgba(245,158,11,.35); margin-bottom:9px; }
+.p-link { text-align:center; font-size:12px; color:#ea580c; font-weight:700; margin-top:9px; }
+.p-edition { display:flex; gap:8px; margin-bottom:11px; }
+.p-ed { flex:1; border:2px solid #dbe3ec; border-radius:10px; background:#fff; text-align:center; padding:9px 2px; font-size:11.5px; color:#64748b; font-weight:700; }
+.p-ed.sel { border-color:#0d9488; background:#f0fdfa; color:#0f766e; }
+.p-ed .e-ic { font-size:19px; display:block; margin-bottom:2px; }
+.p-regok { text-align:center; padding:6px 2px 2px; }
+.p-regok .g { font-size:34px; }
+.p-regok .t { font-size:15px; font-weight:900; color:#0f172a; margin:3px 0 9px; }
+
+/* ===== 底部提示 ===== */
+.tips { background:linear-gradient(135deg,#fffbeb,#fef3c7); border:1.5px solid #fcd34d; border-radius:16px;
+  padding:16px 20px 16px; margin-top:4px; }
+.tips h3 { font-size:18px; color:#92400e; font-weight:900; margin-bottom:9px; }
+.tips li { list-style:none; font-size:15px; color:#78350f; line-height:1.7; padding-left:24px; position:relative; margin-bottom:4px; }
+.tips li::before { content:'✔'; position:absolute; left:0; top:1px; color:#d97706; font-weight:900; }
+.footer { text-align:center; font-size:13.5px; color:#94a3b8; margin-top:14px; line-height:1.7; }
+.footer b { color:#0f766e; }

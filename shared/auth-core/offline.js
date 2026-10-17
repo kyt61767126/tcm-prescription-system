@@ -5174,6 +5174,19 @@
                 }
             }
         } catch (_) {}
+        // ★ 2026-10-17 P40 真机实证：APP 端 Java 桥判定（桌面 electronAPI 块已过，StorageAdapter/localStorage 无 license:code 写入）
+        //   激活成功后 Java validateLicense 返回 valid=true + type=licensed，但 auth-core 三层判定全空恒 false
+        //   → maybePromptRegistration 误判"未激活"继续弹注册窗（每次重启重弹+关闭自动重弹）
+        try {
+            const bridge = global.NativeBridge || (typeof window !== 'undefined' ? window.NativeBridge : null);
+            if (bridge && typeof bridge.invoke === 'function') {
+                const st = await bridge.invoke('getLicenseStatus');
+                if (st && st.valid === true) {
+                    const t = String(st.licenseType || st.type || '');
+                    if (t && t !== 'trial') return true;
+                }
+            }
+        } catch (_) {}
         try {
             if (typeof StorageAdapter !== 'undefined' && StorageAdapter &&
                 typeof StorageAdapter.getItem === 'function') {
