@@ -16,12 +16,13 @@
 
 ## 当前基线（2026-10-17 晚更新）
 
-- **main HEAD：本次 docs 提交**（代码基线 `a9193675`；其后 push 由 Pages git 构建自动部署）。2026-10-17 P40 收尾：登录闸 NO_LICENSE 码错位自愈 + 热更 **2026.10.17-7** + 令牌幂等台账补写 + Java clinicName 透传入库；P40 真机已激活+登录闭环，仅剩整包攒批（H7）。
+- **main HEAD：本次 docs 提交**（代码基线 `a9193675`；打包版本收纳 `adcd4ee8`；其后 push 由 Pages git 构建自动部署）。2026-10-17 P40 收尾：登录闸 NO_LICENSE 码错位自愈 + 热更 **2026.10.17-7** + 令牌幂等台账补写 + Java clinicName 透传入库；P40 真机已激活+登录闭环；**离线整包已构建（H7：exe 1.0.276 + APK 322，待发布/复测）**。
 - **线上状态（已实测）**：
   - production 部署源=每次 push 的最新提交（**Pages git 构建自动部署已 Active**；本次直传 `0012e7a2` 与 git 构建 `f9e9ea16` 已等价验证，后续无需手动 wrangler）；app-local 热更 **2026.10.17-7**（minAppCode 288 继承；线上 version.json 实测，auth-core.js SHA256 `bb4dede2…45210` 与 manifest 逐字节一致，无 `DEBUG verifyLoginGate` 串）。
   - functions 已随部署更新（activation-token GET 405 / 坏码 POST 400 冒烟通过；令牌幂等台账补写 + validate 诊所名闸台账豁免均在线）。**git 构建配额可用 → 后续静态/functions 随 push 即达，wrangler 直传仅作配额耗尽/大文件超限兜底。**
   - **P40 真机闭环（2026-10-17 晚，已实证）**：-7 热更生效（DEBUG alert 消失）→ 管理员激活框用 `BNZC-MG3B-…` + 手机号重新激活（预设诊所名经 `redeemedDevices` 台账豁免）→ KV 记录 `status=used、devices=[P40 mid]、productClass=offline、clientClass=app`，`entitlement(mid)=LICENSED（institution，永久）` → **登录正常**（license_log 有 `activate machineId=5784b5da...`）。此前 -7 后仍弹激活框的真因=上一会话手工重置码记录造成「本地有 license.dat / 服务端 unused」分裂，非客户端 bug。
-  - desktop/local 热更仍 **-2**（等整包重签）；cloud 热更 -5；三渠道版本表在整包批统一。
+  - **整包批次（2026-10-17 晚，已构建未发布）**：离线桌面 **1.0.276**（Setup/便携，E2E 6/6 + 签名 + fuse + .bnzc 三重 + 7 铁闸全过）、离线 APK **versionCode 322**（aapt2/apksigner 验过，签名哈希与注入期望一致）、desktop/local 热更 **2026.10.17-3**（app 1.0.276）。发布需人工 `--confirm`（硬规则禁止自动上传，见 H7）。
+  - desktop/local 热更 **-3**（等整包发布）；cloud 热更 -5；三渠道版本表在发布时统一。
   - **勿重复实施**：-6 调试 alert 已移除并重签 -7 覆盖；P40 登录闸码错位自愈已上线；令牌 redeemedDevices 台账（首兑写 + 幂等短路补写）已上线；Java `activateLicense` clinicName 透传已入库（待 APK v325 生效）。
   - 完整方案：`.trae/documents/activation-architecture-optimization_plan.md` / `.trae/documents/activation-streamline_plan.md`（P0 方案A 全链已闭环，详见 KNOWLEDGE 2026-10-17 条目）。
 - 工作区有多个**未跟踪文件**（`_verify/`、`_verify-report.md`、`promo/`、`tools/_tmp/*` 等）：非本台账任务产物，**提交时精确 `git add`，禁止 `git add -A`**。
@@ -30,18 +31,21 @@
 
 ## OPEN 遗留任务
 
-### H7 ｜优先级：高｜整包攒批：离线桌面 exe 1.0.276 + 离线 APK v325（P40 收尾最后一步）
-- **状态**：OPEN（代码已入库，仅剩打包/验包；用户 2026-10-17 决定攒批）
-- **背景**（主进程/原生域修复热更带不到，必须整包）：
-  1. **离线桌面 exe**：`login.js`（登录窗冷启动消费 bnzc pending 的方案A编排）+ `shared/desktop-license-ipc.cjs`（多设备授权弹窗 null 主窗修复）已入库（`cf425655` 及之前），但 exe 仍是 **1.0.275（2026-10-14）**；desktop/local 热更仍 **-2**（方案A 页面已发，主进程改动未达）。桌面离线登录闸走主进程 IPC，auth-core 的 NO_LICENSE 自愈需随 exe 整包才生效。
-  2. **离线 APK**：`MainActivity.activateLicense` 诊所名透传（`getLocalClinicName()`，`a9193675` 入库）需重打 APK（建议 **v325**）才生效；JS 侧已由 app-local -7 覆盖。**P40 已于 2026-10-17 用 -7 页面 + 服务端台账豁免完成真实激活/登录（真机闭环）**，Java 透传为下批 APK 的纵深防御，非 P0 阻塞。
-- **范围**：
-  1. 离线桌面 `one-click-pack`（打 1.0.276，签名/验包/分发位）→ **冷启动深链复测**：`bnzc://activate?...` 唤起 → 令牌兑换 → 自动注册/装码 → 登录（重点验登录窗冷启动主窗为 null 的弹窗路径）。
-  2. 离线 APK v325（`build.gradle` versionCode bump + 打包 + aapt2 验 versionCode + 真机安装复测 clinicName 透传激活）。
-  3. 打包后重签 desktop/local 热更（三渠道版本表同步）并发布；下载页 APK/exe 版本随发布闭环。
-- **勿做**：打包期间不并发改代码（源码落定门会拦）；鸿蒙构建**暂停**（用户指示，恢复=DevEco GUI 自动签名一步，见 KNOWLEDGE 2026-10-16 2b 记录）。
-- **验收**：`tools/artifact-locate.js --check` + 打包三重验包过；桌面冷启动深链真机通过；APK 真机预置码激活 200（无「已绑定诊所」）；六端能力矩阵同步更新。
-- **基线 commit**：`a9193675`
+### H7 ｜优先级：高｜整包批次：离线桌面 1.0.276 + 离线 APK 322（✅ 已构建，待发布/复测）
+- **状态**：IN-PROGRESS（2026-10-17 晚：构建+验包完成并已 push `adcd4ee8`；剩「发布」与「桌面冷启动深链真机复测」）
+- **已完成（本批次，全部通过）**：
+  1. **离线桌面 1.0.276**：`dist/惠康中医-本地 Setup 1.0.276.exe` 79,305,920 B / `dist/惠康中医-本地 1.0.276.exe` 79,031,040 B；含 login.js 方案A冷启动编排 + `shared/desktop-license-ipc.cjs` 空主窗弹窗修复；E2E 6/6、fuse 5 项、.bnzc/asar 三重、7 铁闸、真机启动冒烟全过；交付核对单 `交付核对单_V1.0.276_离线桌面版.txt`。
+  2. **离线 APK 322**：`app_project/db-offline/惠康中医-本地.apk` 3,576,866 B（SHA256 `B7D034BA…`）；aapt2 `versionCode=322 / versionName=1.0.0`，apksigner 证书 SHA-256 `e5b2b4b3…` 与注入 LicenseManager 期望一致；含 Java `activateLicense` clinicName 透传（纵深防御）。
+  3. **desktop/local 热更 2026.10.17-3**（app 1.0.276，19 文件，Ed25519 已签；相对 -2 仅 auth-core.js/version.json 变化，含 NO_LICENSE 码错位自愈）。
+  4. 版本副作用自动收纳并 push：`adcd4ee8`（desktop/package.json=1.0.276 + app build.gradle versionCode=322）。
+- **剩余动作**：
+  1. **发布（需人工显式确认；硬规则禁止自动上传官方站）**：`一键发布.bat` 或 `node tools/publish-release.js --changed-only --confirm --push`（更新 hash-manifest + updates/latest.json + GitHub Release + 下载页部署）。
+  2. **桌面冷启动深链真机复测**（装 1.0.276）：`bnzc://activate?...` 冷启动唤起 → 兑换 → 自动注册/装码 → 登录；重点验登录窗冷启动主窗为 null 的弹窗路径。
+  3. P40 继续用 app-local -7；可选覆盖安装 APK 322 验 Java clinicName 透传。
+  4. 收口：六端矩阵/HANDOFF 更新后删除本卡。
+- **勿做**：鸿蒙构建仍暂停（用户指示，恢复=DevEco GUI 自动签名一步，见 KNOWLEDGE 2026-10-16 2b）；发布前不再改源码（打包基线=`adcd4ee8`）。
+- **验收**：发布后下载页/`hash-manifest.json` 版本=1.0.276/322；线上 `hot-update/desktop/local/version.json`=-3；桌面冷启动深链通过。
+- **基线 commit**：`adcd4ee8`
 
 ### H4 ｜优先级：高｜红米改名修复云端 functions 部署 + 真机复验（2026-10-15）
 - **代码已提交推送并上线**：commit `d085f785`——users.js（migratePrescriptionOwnership + formerUsernames 链 + 两改名端点）、prescriptions.js + _lib/auth.js（token `a` 别名签名与读侧别名过滤）、离线 5 副本 index.html（heal 双闸）、热更 2026.10.15-1 双端。双独立审查+安全二查已过，105 断言全绿（rename-cloud 36 / rename-heal-pwd 31 / owner-migrate 回归 38）。
