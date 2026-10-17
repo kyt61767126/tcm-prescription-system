@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>激活诊断 · 惠康中医</title>
+<style>
+  body{margin:0;background:#f5f7fa;font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;color:#1f2937}
+  .wrap{max-width:1000px;margin:0 auto;padding:20px}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{color:#6b7280;font-size:12px;margin-bottom:16px}
+  .card{background:#fff;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.06);padding:16px;margin-bottom:14px}
+  label{display:block;font-size:13px;color:#374151;margin:8px 0 4px;font-weight:600}
+  input{width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px}
+  .row{display:flex;gap:12px;flex-wrap:wrap}
+  .row>div{flex:1;min-width:220px}
+  button{padding:10px 16px;border:0;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;margin:12px 8px 0 0}
+  .primary{background:#26a69a;color:#fff}
+  .danger{background:#e53935;color:#fff}
+  .ghost{background:#eef2f7;color:#374151}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .hint{font-size:12px;color:#6b7280;margin-top:6px}
+  .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:700;margin-right:6px}
+  .b-ok{background:#e8f5e9;color:#1b5e20}
+  .b-bad{background:#ffebee;color:#b71c1c}
+  .b-warn{background:#fff8e1;color:#8d6e00}
+  .b-info{background:#e3f2fd;color:#0d47a1}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{border-bottom:1px solid #e5e7eb;padding:7px 8px;text-align:left;vertical-align:top}
+  th{color:#6b7280;font-weight:600}
+  pre{background:#0f172a;color:#d1fae5;padding:12px;border-radius:8px;overflow:auto;font-size:12px;line-height:1.5;max-height:420px}
+  ol{margin:6px 0 0 18px;padding:0;font-size:13px;line-height:1.8}
+  .muted{color:#9ca3af}
+  a{color:#0f766e}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🔎 激活诊断</h1>
+  <div class="sub">输机码 / 激活码 → 服务端权威对账（entitlement reconcile），含本地状态错位诊断与受控修复。需先在本后台登录（平台管理员）才能做修复。</div>
+
+  <div class="card">
+    <div class="row">
+      <div>
+        <label>机器码 machineId（必填，8-64 位字母数字_-）</label>
+        <input id="mid" placeholder="例：5784b5da162946afdeb89fdf3eebb50d" autocomplete="off">
+      </div>
+      <div>
+        <label>激活码（可选，用于定位码记录与日志）</label>
+        <input id="code" placeholder="BNZC-XXXX-XXXX-XXXX-XXXX" autocomplete="off" style="text-transform:uppercase">
+      </div>
+      <div>
+        <label>客户端本地状态（可选，来自客户端日志/截图）</label>
+        <input id="licStatus" placeholder="valid / invalid / missing（默认未知）" autocomplete="off">
+      </div>
+    </div>
+    <div class="hint">登录令牌：<span id="authState">检测中…</span></div>
+    <button class="primary" id="btnDiag">开始诊断</button>
+    <button class="danger" id="btnRepair" disabled>受控修复（管理员）</button>
+    <button class="ghost" id="btnCopy">复制诊断报告</button>
+    <div class="hint">受控修复仅限两类有证据场景：①重建派生索引 ②凭令牌兑换台账（redeemedDevices）+码未激活+配额未满 补绑；其余一律拒绝并返回原因。修复会写 license_log 审计。</div>
+  </div>
+
+  <div class="card" id="summaryCard" style="display:none">
+    <div style="font-size:14px;font-weight:700;margin-bottom:10px">裁决摘要</div>
+    <div id="summary"></div>
+    <div id="actions" style="margin-top:10px"></div>
+  </div>
+
+  <div class="card" id="detailCard" style="display:none">
+    <div style="font-size:14px;font-weight:700;margin-bottom:10px">服务端记录</div>
+    <div id="detail"></div>
+  </div>
+
+  <div class="card" id="logCard" style="display:none">
+    <div style="font-size:14px;font-weight:700;margin-bottom:10px">激活码时间线（license_log）</div>
+    <div id="logTable"></div>
+  </div>
+
+  <div class="card" id="jsonCard" style="display:none">
+    <div style="font-size:14px;font-weight:700;margin-bottom:10px">原始响应 / 诊断报告</div>
+    <pre id="raw"></pre>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var API = '/api/license';
+  var TOKEN_KEY = 'license_admin_token';
+  var last = null;
+  var lastLogs = null;
+
+  function $(id) { return document.getElementById(id); }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function token() {
+    try { return localStorage.getItem(TOKEN_KEY) || ''; } catch (e) { return ''; }
+  }
+  function authHeaders(extra) {
+    var h = extra || {};
+    var t = token();
+    if (t) h.Authorization = 'Bearer ' + t;
+    return h;
+  }
+  function badge(text, cls) { return '<span class="badge ' + cls + '">' + esc(text) + '</span>'; }
+  function stateBadge(state) {
+    if (state === 'LICENSED') return badge('LICENSED 已授权', 'b-ok');
+    if (state === 'NO_LICENSE') return badge('NO_LICENSE 无授权', 'b-bad');
+    if (state === 'LICENSE_EXPIRED') return badge('EXPIRED 已过期', 'b-warn');
+    if (state === 'LICENSE_REVOKED') return badge('REVOKED 已停用', 'b-bad');
+    return badge(state || '未知', 'b-info');
+  }
+  function actionBadge(a) {
+    var map = {
+      NO_ACTION: ['无需处理', 'b-ok'],
+      CLEAR_STALE_CODE: ['清理本地错位码', 'b-warn'],
+      REINSTALL_LICENSE: ['重装本地 license', 'b-warn'],
+      SERVER_RECORD_MISMATCH: ['本地有效/服务端无授权（分裂）', 'b-bad'],
+      COMPLETE_ACTIVATION: ['码未激活，可完成激活', 'b-info'],
+      REACTIVATE: ['需重新激活', 'b-info'],
+      RENEW: ['需续费', 'b-warn'],
+      CONTACT_SUPPORT: ['需客服处理', 'b-bad']
+    };
+    var v = map[a] || [a, 'b-info'];
+    return badge(v[0], v[1]);
+  }
+  function renderAuth() {
+    $('authState').innerHTML = token()
+      ? '已检测到后台登录令牌（可查看明细/执行受控修复）'
+      : '<span class="muted">未检测到后台登录令牌（仅匿名诊断，明细脱敏、不可修复）——请先在本站 /admin 登录</span>';
+    $('btnRepair').disabled = !token();
+  }
+
+  function renderResult(j) {
+    last = j;
+    $('summaryCard').style.display = 'block';
+    $('jsonCard').style.display = 'block';
+    $('raw').textContent = JSON.stringify(j, null, 2);
+    var L = j.license || null;
+    var html = '';
+    html += '<div style="margin-bottom:8px">' + stateBadge(j.state) +
+      (j.traceId ? '<span class="muted" style="font-size:12px">诊断码 ' + esc(j.traceId) + '</span>' : '') + '</div>';
+    if (L) {
+      html += '<table><tr><th>激活码</th><td>' + esc(L.code) + '</td><th>状态</th><td>' + esc(L.status) + '</td></tr>' +
+        '<tr><th>版本</th><td>' + esc(L.edition) + '（' + esc(L.type) + '）</td><th>到期</th><td>' + esc(L.expiresAt || '永久') + '</td></tr>' +
+        '<tr><th>诊所</th><td>' + esc(L.clinicName || '-') + '</td><th>设备</th><td>' + esc(L.devicesCount) + '/' + esc(L.maxDevices) + '</td></tr></table>';
+    } else {
+      html += '<div class="muted" style="font-size:13px">无「已绑定本机」的授权记录（license 摘要仅对本机绑定记录返回）。</div>';
+    }
+    html += '<div class="hint">码存在：' + (j.codeExists ? '是' : '否') + '；码记录摘要：' + (j.codeRecord ? '已返回（管理员/绑定机）' : '未返回（未绑定或匿名）') + '</div>';
+    $('summary').innerHTML = html;
+
+    var acts = Array.isArray(j.actions) ? j.actions : [];
+    $('actions').innerHTML = '<div style="font-size:13px;font-weight:600;margin-bottom:6px">建议动作</div>' +
+      acts.map(actionBadge).join(' ');
+    if (j.repairDenied) $('actions').innerHTML += '<div class="hint">修复被拒：需平台管理员登录（repairDenied）</div>';
+    if (j.repairFailed) $('actions').innerHTML += '<div class="hint">修复未执行：' + esc(j.repairReason || '不适用') + '</div>';
+    if (Array.isArray(j.repaired) && j.repaired.length) $('actions').innerHTML += '<div class="hint">✅ 已修复：' + esc(j.repaired.join(', ')) + '</div>';
+
+    $('detailCard').style.display = 'block';
+    var rows = '';
+    if (j.codeRecord) {
+      var c = j.codeRecord;
+      rows += '<table><tr><th>码</th><td>' + esc(c.code) + '</td><th>状态</th><td>' + esc(c.status) + '</td></tr>' +
+        '<tr><th>类型</th><td>' + esc(c.type) + '</td><th>版本</th><td>' + esc(c.edition) + '</td></tr>' +
+        '<tr><th>诊所</th><td>' + esc(c.clinicName || '-') + '</td><th>到期</th><td>' + esc(c.expiresAt || '永久') + '</td></tr>' +
+        '<tr><th>设备数</th><td>' + esc(c.devicesCount) + '/' + esc(c.maxDevices) + '</td><th>端形态</th><td>' + esc(c.productClass || '-') + ' / ' + esc(c.clientClass || '-') + '</td></tr></table>';
+    } else {
+      rows = '<div class="muted" style="font-size:13px">本次未返回码记录（匿名或码未绑定本机）。</div>';
+    }
+    $('detail').innerHTML = rows;
+  }
+
+  function renderLogs(j) {
+    lastLogs = j;
+    if (!j || !Array.isArray(j.logs)) { $('logCard').style.display = 'none'; return; }
+    $('logCard').style.display = 'block';
+    var rows = ['<table><tr><th>时间</th><th>action</th><th>操作者</th><th>详情</th></tr>'];
+    j.logs.slice(-80).forEach(function (x) {
+      rows.push('<tr><td style="white-space:nowrap">' + esc(x.time || '') + '</td><td>' + esc(x.action || '') +
+        '</td><td>' + esc(x.operator || '') + '</td><td>' + esc(x.detail || '') + '</td></tr>');
+    });
+    rows.push('</table>');
+    $('logTable').innerHTML = rows.join('');
+  }
+
+  function readForm() {
+    var mid = ($('mid').value || '').trim();
+    var code = ($('code').value || '').trim().toUpperCase();
+    var ls = ($('licStatus').value || '').trim().toLowerCase();
+    if (!mid) { alert('请填写机器码 machineId'); return null; }
+    return { machineId: mid, code: code || undefined, client: { licenseStatus: ls || '', code: code || '' } };
+  }
+
+  function post(url, body) {
+    return fetch(url, { method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(body) })
+      .then(function (r) { return r.text().then(function (t) { var j = null; try { j = JSON.parse(t); } catch (e) {} return { ok: r.ok, status: r.status, json: j, text: t }; }); });
+  }
+
+  function diag(repair) {
+    var b = readForm(); if (!b) return;
+    if (repair) {
+      if (!confirm('确认执行受控修复？仅当满足「重建索引」或「台账证据补绑」条件时才会生效，并写审计日志。')) return;
+      b.repair = true;
+    }
+    $('btnDiag').disabled = true; $('btnRepair').disabled = true;
+    post(API + '/reconcile', b).then(function (res) {
+      $('btnDiag').disabled = false; $('btnRepair').disabled = !token();
+      if (!res.json) { alert('请求失败（HTTP ' + res.status + '）：' + res.text.slice(0, 200)); return; }
+      if (!res.json.success) { alert('诊断失败：' + (res.json.error || res.status)); return; }
+      renderResult(res.json);
+      if (b.code) {
+        fetch(API + '/logs?code=' + encodeURIComponent(b.code), { headers: authHeaders() })
+          .then(function (r) { return r.json().catch(function () { return null; }); })
+          .then(renderLogs).catch(function () {})
+      } else {
+        $('logCard').style.display = 'none';
+      }
+    }).catch(function (e) { $('btnDiag').disabled = false; $('btnRepair').disabled = !token(); alert('网络异常：' + e.message); });
+  }
+
+  function copyReport() {
+    if (!last) { alert('请先执行诊断'); return; }
+    var lines = [];
+    lines.push('【激活诊断报告】' + new Date().toISOString());
+    lines.push('machineId: ' + $('mid').value.trim());
+    if ($('code').value.trim()) lines.push('code: ' + $('code').value.trim().toUpperCase());
+    lines.push('state: ' + last.state);
+    lines.push('actions: ' + (last.actions || []).join(', '));
+    lines.push('traceId: ' + (last.traceId || ''));
+    lines.push('license: ' + JSON.stringify(last.license || null));
+    lines.push('codeRecord: ' + JSON.stringify(last.codeRecord || null));
+    if (lastLogs && lastLogs.logs) {
+      lines.push('license_log(最近20):');
+      lastLogs.logs.slice(-20).forEach(function (x) { lines.push('  ' + x.time + ' | ' + x.action + ' | ' + (x.operator || '') + ' | ' + (x.detail || '')); });
+    }
+    var text = lines.join('\n');
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () { alert('诊断报告已复制'); }, function () { window.prompt('复制失败，请手动复制：', text); });
+      } else { window.prompt('请手动复制诊断报告：', text); }
+    } catch (e) { window.prompt('请手动复制诊断报告：', text); }
+  }
+
+  $('btnDiag').addEventListener('click', function () { diag(false); });
+  $('btnRepair').addEventListener('click', function () { diag(true); });
+  $('btnCopy').addEventListener('click', copyReport);
+  renderAuth();
+})();
+</script>
+</body>
+</html>

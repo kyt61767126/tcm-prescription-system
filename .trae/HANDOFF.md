@@ -49,7 +49,7 @@
 - **基线 commit**：`adcd4ee8`
 
 ### H8 ｜优先级：中（S1 实施中）｜激活流程全端架构收敛
-- **状态**：IN-PROGRESS（5 项决策已拍板；**S1a 代码已落地**（本次提交）：reconcile 端点/密码收紧/客户端登录闸对账自愈 + 29 断言测试；**S1b 剩余**：后台「激活诊断」页、activation-session MVP、云 APP gate token 缓存）。
+- **状态**：IN-PROGRESS（5 项决策已拍板；**S1a 已完成**（reconcile/密码收紧/登录闸自愈 + 29 断言）；**S1b-① 已完成**（后台激活诊断页 + app-local 热更 -8）；**S1b 剩余**：activation-session MVP、云 APP gate token 缓存、真机矩阵）。
 - **已拍板决策**：
   1. **O1 activation-session**：✅ 接受，S1 先做 MVP（令牌核销后移到 claim 成功，幂等可重试）；
   2. **云 APP 本地授权载体**：✅ 补**签名 gate token 缓存**（不引入 license.dat），云端统一为「账号权威 + gate token 离线宽限」；
@@ -61,11 +61,13 @@
   2. `shared/auth-core/offline.js` 登录闸失败自愈：**结构化触发**（仅本地 `status.valid && type=licensed` 且非 free/trial，排除账号删除/吊销/停用/网络类）；对账成功→清错位码/重装 license 后**优先重跑主进程 verifyGate**（桌面 IPC 锚点/回拨/墓碑不被绕过）；P40 型「本地有效/服务端无授权」只追加诊断码文案，不自动修复；同账号每运行期只对账一次。
   3. `admin-account.normalizeActivationPassword` 默认 `fill-empty`（只补无 hash/salt 的历史空账号），审批/轮询/工单不再覆盖已改密码；仅 admin-submit 显式 passwordCred 才 overwrite；无凭据时拒绝回落字面 admin。
   4. 测试 `tools/act-reconcile-test.cjs` **29 PASS/0 FAIL**（含匿名码探测面/管理员诊断面/码错位二次裁决/P40 分裂/repair 三态/频控/封锁设备）。
+  5. **S1b-① 后台「🔎 激活诊断」页已上线**（双副本）：主站 `https://tcm-prescription-system.pages.dev/admin/activation-diagnose.html`、后台站 `https://huikang-admin.pages.dev/admin/activation-diagnose.html`（需先在该站登录后台，令牌读 `license_admin_token`）；功能=机码/激活码/本地状态 → reconcile 摘要 + 建议动作 + license_log 时间线 + 受控修复按钮 + 一键复制诊断报告；页面同源调用 `/api/license/{reconcile,logs}`。
+  6. **app-local 热更 2026.10.17-8 已重签**（minAppCode 288 继承）：APP 端登录闸对账自愈自第 2 次冷启动起生效（桌面登录窗在 asar 内仍需整包 1.0.277）。
 - **生效注意（审查结论，务必遵守）**：
   - 服务端 reconcile 随 push 由 Pages 构建即上线；
   - auth-core 属热更白名单：**APP 需重签 app-local 热更才生效**（minAppCode 288 不抬）；**桌面登录链在 asar 登录窗内**，主窗热更不覆盖登录窗 → 桌面「登录闸自愈」需**整包 1.0.277** 才生效；
   - 自愈仅对「本地授权有效但闸门拒绝」触发；时间回拨/tampered/config_tampered/账号删除**不触发**（防硬拒态变可写修复路径）。
-- **S1b 待做**：① 后台双副本「🔎 激活诊断」页（码/机码/手机号 → 时间线 + repair 按钮）② activation-session MVP（令牌核销后移）③ 云 APP gate token 缓存 + 离线宽限。④ 真机矩阵：码错位/license.dat 损坏/时间回拨/账号删除。
+- **S1b 待做**：① activation-session MVP（令牌核销后移，失败可重试）② 云 APP gate token 缓存 + 离线宽限 ③ 真机矩阵：码错位/license.dat 损坏/时间回拨/账号删除。④ 桌面整包 1.0.277 使登录窗自愈生效。
 - **勿做**：不动 35+ 端点历史语义；不改人工审核铁律/价格/端锁；**禁止手工改 KV 码记录**（业务级重置一律走 reconcile/repair 或 admin 工具）。
 - **验收**：S1b 完成后重现「KV 手改 unused + 本地有 license」→ 后台诊断页可定位并可受控 repair；旧客户端零回归；pre-push 全绿 + act-* mock 入库测试常绿。
 - **基线 commit**：`d042fac6`
