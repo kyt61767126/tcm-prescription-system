@@ -26,6 +26,7 @@
   - desktop/local 热更 **-3**（等整包发布）；cloud 热更 -5；三渠道版本表在发布时统一。
   - **勿重复实施**：-6 调试 alert 已移除并重签 -7 覆盖；P40 登录闸码错位自愈已上线；令牌 redeemedDevices 台账（首兑写 + 幂等短路补写）已上线；Java `activateLicense` clinicName 透传已入库（待 APK v325 生效）。
   - 完整方案：`.trae/documents/activation-architecture-optimization_plan.md` / `.trae/documents/activation-streamline_plan.md`（P0 方案A 全链已闭环，详见 KNOWLEDGE 2026-10-17 条目）。
+- **2026-10-18 构建现场已清理（已决）**：外部会话 09:45 打包因版本基线漂移中止——产物 1.0.277/1.2.269/cloud APK 325 已归档到 `%TEMP%\kyt-build-archive-20261018-102617`，工作区残留已从 `stash@{0}` 丢弃并删 dist 残留；`verify-version-baseline` 复核通过（HEAD 1.0.276/1.2.268/322/324，dist 无残留）。下次打包将按**最新代码**（含 S1b-③ gate token/会话）重新递增到 277/269/325；产物发布仍为独立人工闸。
 - 工作区有多个**未跟踪文件**（`_verify/`、`_verify-report.md`、`promo/`、`tools/_tmp/*` 等）：非本台账任务产物，**提交时精确 `git add`，禁止 `git add -A`**。
 
 ---
