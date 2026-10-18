@@ -14,13 +14,72 @@
 //   - 直接传 env 对象（或已解构的 { request, env }）
 export function getKV(envOrContext) {
     const env = envOrContext?.env || envOrContext;
-    return env?.KV ||
+    const raw = env?.KV ||
            env?.TCM_PRESCRIPTION_KV ||
            env?.['tcm-prescription-kv'] ||
            env?.['TCM-PRESCRIPTION-KV'] ||
            env?.TCM_KV ||
            env?.PRESCRIPTION_KV ||
            env?.LICENSE_KV;
+    return wrapKV(raw);
+}
+
+// ============================================================================
+// ★ 2026-10-18 KV list 429 免费额度治理（用户线上实锤：免费版 1000 list/天 用尽，
+//   控制台 429「KV 请求已被暂时阻止」）。免费额度 UTC 0 点重置（北京时间 08:00）。
+//   在不升级付费套餐的前提下：
+//     · 给所有经 getKV() 拿到的绑定加一层 Proxy：kv.list 自动走 safeListPage
+//       并默认 60s isolate 内存缓存（管理端轮询/切 tab 不再反复消耗 list）；
+//     · 429 后把熔断标记**写进 KV 自身**（sys:kv_list_blocked_until，TTL 到 UTC 重置），
+//       避免多 isolate 各自撞墙（每个 isolate 只 read 一次标记，get 配额 10万/天）；
+//     · 熔断期间优先返回**上一次成功缓存**（旧数据兜底），没有缓存才抛错，
+//       让后台页面从"整页报错"变成"显示上次数据"。
+//   list 已全面索引化的热路径（登录/激活/心跳/开方）不经过这里。
+// ============================================================================
+const LIST_BLOCK_MARKER_KEY = 'sys:kv_list_blocked_until';
+let __markerCheckedAt = 0;
+let __markerBlockedUntil = 0;
+
+function nextUtcMidnightPlus(graceSec) {
+    const now = new Date();
+    const next = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0, 0);
+    return next + (graceSec || 120) * 1000;
+}
+
+async function readPersistedBlockedUntil(kv) {
+    const now = Date.now();
+    if (now - __markerCheckedAt < 30 * 1000) return __markerBlockedUntil;
+    __markerCheckedAt = now;
+    try {
+        const raw = await kv.get(LIST_BLOCK_MARKER_KEY);
+        __markerBlockedUntil = Number(raw) || 0;
+    } catch (_) { /* get 失败不影响主流程 */ }
+    return __markerBlockedUntil;
+}
+
+async function persistBlockedUntil(kv, until) {
+    __markerBlockedUntil = until;
+    __markerCheckedAt = Date.now();
+    const ttl = Math.max(60, Math.ceil((until - Date.now()) / 1000));
+    try { await kv.put(LIST_BLOCK_MARKER_KEY, String(until), { expirationTtl: ttl }); } catch (_) {}
+}
+
+const __kvProxyCache = new WeakMap();
+function wrapKV(raw) {
+    if (!raw || typeof raw.list !== 'function') return raw;
+    if (__kvProxyCache.has(raw)) return __kvProxyCache.get(raw);
+    const proxy = new Proxy(raw, {
+        get(target, prop) {
+            if (prop === '__rawKV') return target;
+            if (prop === 'list') {
+                return (opts) => safeListPage(target, opts, { ttlMs: 60 * 1000 });
+            }
+            const v = Reflect.get(target, prop, target);
+            return typeof v === 'function' ? v.bind(target) : v;
+        }
+    });
+    __kvProxyCache.set(raw, proxy);
+    return proxy;
 }
 
 // ============================================================================
@@ -81,29 +140,48 @@ function gcListCache() {
  */
 export async function safeListPage(kv, opts = {}, o = {}) {
     if (!kv) return null;
+    if (kv.__rawKV) kv = kv.__rawKV;
     const ttlMs = Number(o.ttlMs) > 0 ? Number(o.ttlMs) : 0;
     const cacheKey = ttlMs > 0 ? JSON.stringify(opts) : null;
-    if (cacheKey) {
-        const hit = __pageCache.get(cacheKey);
-        if (hit && hit.until > Date.now()) return hit.page;
-    }
-    if (!o.critical && __listBlockedUntil > Date.now()) {
-        const e = new Error('KV list blocked by local quota circuit breaker');
+    const cached = cacheKey ? __pageCache.get(cacheKey) : null;
+    if (cached && cached.until > Date.now()) return cached.page;
+
+    const staleOrThrow = () => {
+        if (cached && cached.page) {
+            cached.stale = true;
+            return cached.page;
+        }
+        const e = new Error('KV list blocked by quota circuit breaker');
         e.status = 429;
         e.circuit = true;
         throw e;
+    };
+
+    if (!o.critical) {
+        if (__listBlockedUntil > Date.now()) return staleOrThrow();
+        const persisted = await readPersistedBlockedUntil(kv);
+        if (persisted > Date.now()) {
+            __listBlockedUntil = persisted;
+            return staleOrThrow();
+        }
     }
+
     let page;
     try {
         page = await kv.list(opts);
     } catch (e) {
         if (!o.critical && isKvListQuotaError(e)) {
-            __listBlockedUntil = Date.now() + LIST_CIRCUIT_MS;
+            // 免费 list 额度按 UTC 自然日重置 → 熔断到下一个 UTC 0 点（+2min 缓冲）；
+            // 同时写 KV 标记，所有 isolate 共享，不再各自撞 429。
+            const until = Math.max(nextUtcMidnightPlus(120), Date.now() + LIST_CIRCUIT_MS);
+            __listBlockedUntil = until;
+            await persistBlockedUntil(kv, until);
+            if (cached && cached.page) { cached.stale = true; return cached.page; }
         }
         throw e;
     }
     if (cacheKey) {
-        __pageCache.set(cacheKey, { until: Date.now() + ttlMs, page });
+        __pageCache.set(cacheKey, { until: Date.now() + ttlMs, page, stale: false });
         gcListCache();
     }
     return page;
