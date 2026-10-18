@@ -1,3 +1,179 @@
-(function(){
-var D=f,Y=f;(function(b,c){var a1={b:0x20c,c:0x1f2,d:0x1e4,g:0x200,h:0x213,i:0x210},w=f,x=f,d=b();while(!![]){try{var g=parseInt(w(a1.b))/(0x1e41+-0x8c*0x2c+-0x2c*0x24)+-parseInt(w(a1.c))/(-0x21f0+0x199*-0x16+0x4518)+-parseInt(w(0x1f1))/(0x2*0xb90+-0x1fac*-0x1+0x3*-0x1243)+-parseInt(w(a1.d))/(0xf7+0x155*0x9+0xb8*-0x12)*(parseInt(x(0x1f6))/(0x1*-0x1aa2+-0x51b*-0x1+0x158c))+parseInt(x(0x1fc))/(-0x12f*-0x13+-0x1c89+0x612)*(parseInt(x(0x1fb))/(0xf2a+0xe96+-0x1db9))+-parseInt(w(a1.g))/(0x5bf*-0x2+0x119*-0xb+0x7*0x35f)+parseInt(x(a1.h))/(-0x1*0x13e3+-0x710+-0x4*-0x6bf)*(parseInt(w(a1.i))/(0x9d1+-0x186b+0xea4));if(g===c)break;else d['push'](d['shift']());}catch(h){d['push'](d['shift']());}}}(e,-0x7aed9+0x8*-0x3a9a+-0x35*-0x5be6),function(c){var a8={b:0x1ff},a7={b:0x20e},a6={b:0x1fe,c:0x1f8,d:0x208},A=f,d=(function(){var l=!![];return function(m,n){var o=l?function(){if(n){var p=n['apply'](m,arguments);return n=null,p;}}:function(){};return l=![],o;};}()),g=d(this,function(){var y=f,z=f,l;try{var m=Function('return\x20(function()\x20'+'{}.constructor(\x22return\x20this\x22)(\x20)'+');');l=m();}catch(t){l=window;}var n=l[y(a6.b)]=l[z(a6.b)]||{},o=['log','warn','info',y(a6.c),'exception','table','trace'];for(var p=-0xb65+0x73*0x2b+-0x7ec;p<o['length'];p++){var q=d[z(0x1e0)][z(0x1f9)][y(a6.d)](d),r=o[p],s=n[r]||q;q['__proto__']=d[y(a6.d)](d),q[z(0x1f4)]=s['toString'][z(0x208)](s),n[r]=q;}});g();'use strict';const h={'石膏':'先煎','寒水石':'先煎','花蕊石':'先煎','海浮石':'先煎','海蛤壳':'先煎','瓦楞子':'先煎','龙骨':'先煎','龙齿':'先煎','牡蛎':'先煎','石决明':'先煎','珍珠母':'先煎','代赭石':'先煎','磁石':'先煎','紫石英':'先煎','自然铜':'先煎','龟甲':'先煎','鳖甲':'先煎','水牛角':'先煎','川乌':'先煎','草乌':'先煎','附子':'先煎','薄荷':'后下','砂仁':'后下','白豆蔻':'后下','青蒿':'后下','香薷':'后下','钩藤':'后下','大黄':'后下','番泻叶':'后下','沉香':'后下','檀香':'后下','降香':'后下','鱼腥草':'后下','车前子':'包煎','滑石':'包煎','旋覆花':'包煎','辛夷':'包煎','枇杷叶':'包煎','海金沙':'包煎','蒲黄':'包煎','葶苈子':'包煎','蚕沙':'包煎','阿胶':'烊化','鹿角胶':'烊化','龟甲胶':'烊化','鳖甲胶':'烊化','黄明胶':'烊化','饴糖':'烊化','人参':'另煎','红参':'另煎','西洋参':'另煎','羚羊角':'另煎','鹿茸':'另煎','西红花':'另煎','三七':'冲服','琥珀':'冲服','珍珠':'冲服','牛黄':'冲服','麝香':'冲服','冰片':'冲服','芒硝':'冲服','玄明粉':'冲服','竹沥':'冲服','雷丸':'冲服','灶心土':A(a8.b),'伏龙肝':'煎汤代水','姜汁':'兑服'},i=['香附','肉豆蔻'];function j(l){var B=A,C=A;if(!l)return'';const m=String(l)['replace'](/\s+/g,'');if(h[m])return h[m];for(let p=-0x18a9+-0x68e+0x1f37;p<i[B(0x20e)];p++){if(m[B(0x209)](i[p])!==-(-0x7*-0x456+0x168e+-0x34e7))return'';}const o=Object[B(0x207)](h)['sort']((q,r)=>r['length']-q[C(0x20e)]);for(let q=-0x468+-0xc65*-0x3+-0xaed*0x3;q<o[C(a7.b)];q++){if(m['indexOf'](o[q])!==-(-0x1f8a+-0xe27*0x2+0x3bd9))return h[o[q]];}return'';}const k={'getAutoJianfa':j};c['PrescriptionCore']=k;}(typeof window!=='undefined'?window:typeof globalThis!==D(0x1e2)?globalThis:this),function(c){var ax={b:0x1fd},ap={b:0x1fa,c:0x1f0,d:0x1eb,g:0x1e8,h:0x201,i:0x212,j:0x1e1},am={b:0x202,c:0x211},ak={b:0x1f5},aj={b:0x20d,c:0x20d,d:0x20b,g:0x20b},ah={b:0x1e5},W=D,X=D,g=(function(){var a9={b:0x1ea},q=!![];return function(r,s){var t=q?function(){var E=f;if(s){var u=s[E(a9.b)](r,arguments);return s=null,u;}}:function(){};return q=![],t;};}()),h=(function(){var q=!![];return function(r,s){var t=q?function(){if(s){var u=s['apply'](r,arguments);return s=null,u;}}:function(){};return q=![],t;};}());'use strict';if(c['__paperHistoryToggleLoaded'])return;c['__paperHistoryToggleLoaded']=!![];var i='local_paperShowHistory';function j(){var F=f,G=f;try{return!!(c['localStorage']&&c[F(0x20a)][F(ah.b)](i)==='1');}catch(q){return![];}}function k(q){var H=f;try{if(c[H(0x20a)])c['localStorage']['setItem'](i,q?'1':'0');}catch(r){}}function l(){var I=f,J=f,q=document[I(0x1fa)]('paperMedicalHistory');if(!q)return null;if(q[I(aj.b)])return q[I(aj.c)]('div');return q['parentElement']&&q[J(aj.d)][I(aj.g)];}function m(){var K=f,L=f,q=l();if(q)q['style'][K(0x1df)]=j()?'':'none';var r=document[K(0x1fa)]('paperHistoryToggle');if(r&&r['checked']!==j())r[K(ak.b)]=j();}function n(){var M=f,N=f;if(typeof c['printPrescription']===M(am.b)&&!c['printPrescription'][N(0x1ef)]){var q=c['printPrescription'],r=function(){var O=N;return m(),q[O(0x1ea)](this,arguments);};return r[M(0x1ef)]=!![],c['printPrescription']=r,!![];}return typeof c[N(am.c)]==='function';}function o(q){var P=f,Q=f;q=q||0x969*0x2+-0x74f+0xb83*-0x1;var r=l(),s=document['querySelector'](P(0x215));if(!r||!s){if(q<0x57*0xd+0xbfe+-0x56b*0x3)setTimeout(function(){o(q+(0x1779*0x1+0x2*-0x942+0x1*-0x4f4));},0x2*-0x95f+0x2e8*-0x4+0x1f58);return;}if(!document[Q(ap.b)](Q(0x1f7))){var t=document['createElement'](Q(ap.c));t['id']=Q(ap.d),t['style'][P(ap.g)]='margin-left:auto;display:flex;align-items:center;gap:4px;font-size:11px;color:#555;cursor:pointer;white-space:nowrap;padding:2px\x200\x202px\x208px;',t['title']=Q(ap.h);var u=document['createElement']('input');u[P(0x1f3)]=Q(0x1e3),u['id']=P(0x1f7),u['style']['cssText']='width:13px;height:13px;margin:0;cursor:pointer;accent-color:#006400;';var v=document['createElement']('span');v['textContent']='处方签显示病史',t[P(0x212)](u),t[P(ap.i)](v),s['appendChild'](t),u[Q(0x203)](P(ap.j),function(){var R=Q;k(u[R(0x1f5)]),m();});}m();}function p(){var aq={b:0x1f4,c:0x20f};o(-0x1a2b+0x700*-0x2+0x282b),function q(r){var s=g(this,function(){var S=f,T=f;if(s[S(0x208)]()[T(0x1f4)]()['indexOf']('\x0a')!==-(0x2541+0x25d1*-0x1+0x91))return;return s[S(aq.b)]()[T(aq.c)]('(((.+)+)+)+$')[S(0x1f4)]()['constructor'](s)['search'](S(0x204));});s(),(function(){var ar={b:0x1ed};h(this,function(){var U=f,V=f,t=new RegExp('function\x20*\x5c(\x20*\x5c)'),u=new RegExp(U(0x1e9),'i'),v=a(V(0x206));!t[U(0x1ed)](v+'chain')||!u[U(ar.b)](v+'input')?v('0'):a();})();}()),r=r||0xf60+-0x2618+0x16b8;if(n()||r>=0x1bdf+-0x7fd*-0x4+-0x3bab)return;setTimeout(function(){q(r+(-0x942+0x26a3+-0x50*0x5e));},-0x7de*0x2+-0x14b3+-0x1*-0x2569);}(-0x2*-0x107f+-0x25bd+-0x4bf*-0x1);}document['readyState']==='loading'?document['addEventListener'](W(ax.b),p):p(),c[X(0x1ee)]={'isShown':j,'setShown':function(q){k(!!q),m();},'apply':m};}(typeof window!==D(0x1e2)?window:typeof globalThis!==D(0x1e2)?globalThis:this));function e(){var aD=['ndK2nZyWDLDWsM9k','z2v0sxrLBq','C3rHDgvpyMPLy3q','y291BNrLCG','y3nZvgv4Da','xcTCkYaQkd86w2eTEKeTwL8KxvSWltLHlxPblvPFjf0Qkq','yxbWBhK','CgfWzxjiAxn0B3j5vg9Nz2XLv3jHCa','z2DLCG','DgvZDa','ugfWzxjiAxn0B3j5vg9Nz2XL','x19OAxn0v3jHChbLza','BgfIzwW','mJK4mZK1qKrLBKLQ','mtqXodq5ohLcA3ryEq','DhLWzq','Dg9tDhjPBMC','y2HLy2TLza','mtbHwKXZAfa','CgfWzxjiAxn0B3j5vg9Nz2XL','zxjYB3i','ChjVDg90ExbL','z2v0rwXLBwvUDej5swq','oty2ntm5sfD6DKD5','nMntsKvSEa','re9nq29UDgvUDeXVywrLza','y29UC29Szq','54wo5RgK5lUJ5Rc0','otuYmZmXmNv5y21Jra','5yU+6ycjpEwKHoAwUEETVUAyVUEKUUExHEwpSUExH+EkTUAGJ++8IowXJ+w5LEMIHoINIos4JUAjK+wnSos4GoIhTo+8IE+8M+M7MoIUPoMAKoIxJ+oaGEAjK+wnSos4JEI+K+whUG','zNvUy3rPB24','ywrKrxzLBNrmAxn0zw5LCG','kcGOlISPkYKRksSK','ywn0Aw9U','Aw5PDa','A2v5CW','yMLUza','Aw5KzxHpzG','Bg9JywXtDg9YywDL','CgfYzw50rwXLBwvUDa','nJu3otC1rKvkrKj1','y2XVC2vZDa','BgvUz3rO','C2vHCMnO','mtq1mhvpAu9LsW','ChjPBNrqCMvZy3jPChrPB24','yxbWzw5Kq2HPBgq','mti4nZGXqLrdturL','zgvIDq','lNn5Bxb0B20TC2vJDgLVBIaUAgLZDg9YEs10ywjZ','zgLZCgXHEq','y29UC3rYDwn0B3i','y2HHBMDL','Dw5KzwzPBMvK','y2HLy2TIB3G'];e=function(){return aD;};return e();}function f(a,b){a=a-(0x2011+0x2698+0x3*-0x16ee);var c=e();var d=c[a];if(f['RecDEp']===undefined){var g=function(l){var m='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/=';var n='',o='',p=n+g,q=(''+function(){return-0x2485+0x274+0x2211;})['indexOf']('\x0a')!==-(-0x204*-0xf+0xb65*-0x1+-0x12d6);for(var r=-0x18a9+-0x68e+0x1f37,s,t,u=-0x7*-0x456+0x168e+-0x34e8;t=l['charAt'](u++);~t&&(s=r%(-0x468+-0xc65*-0x3+-0x20c3*0x1)?s*(-0x1f8a+-0xe27*0x2+0x3c18)+t:t,r++%(0x969*0x2+-0x74f+0xb7f*-0x1))?n+=q||p['charCodeAt'](u+(0x57*0xd+0xbfe+-0x575*0x3))-(0x1779*0x1+0x2*-0x942+0x1*-0x4eb)!==0x2*-0x95f+0x2e8*-0x4+0x1e5e?String['fromCharCode'](-0x1a2b+0x700*-0x2+0x292a&s>>(-(0x2541+0x25d1*-0x1+0x92)*r&0xf60+-0x2618+0x16be)):r:0x1bdf+-0x7fd*-0x4+-0x3bd3){t=m['indexOf'](t);}for(var v=-0x942+0x26a3+-0x45*0x6d,w=n['length'];v<w;v++){o+='%'+('00'+n['charCodeAt'](v)['toString'](-0x7de*0x2+-0x14b3+-0x1*-0x247f))['slice'](-(-0x2*-0x107f+-0x25bd+-0x4c1*-0x1));}return decodeURIComponent(o);};f['GPHUJP']=g,f['ZzUPun']={},f['RecDEp']=!![];}var h=c[-0x103d*-0x1+-0x14*-0x1c+-0x126d],i=a+h,j=f['ZzUPun'][i];if(!j){var k=function(l){this['kzaDKD']=l,this['RzTJuf']=[0x1db3+-0xb0e+-0x12a4*0x1,-0x16a9+-0x23ef*0x1+0x2ee*0x14,-0xccf*-0x3+0x1da9*-0x1+0x11*-0x84],this['QqXzBG']=function(){return'newState';},this['rSaBos']='\x5c\x77\x2b\x20\x2a\x5c\x28\x5c\x29\x20\x2a\x7b\x5c\x77\x2b\x20\x2a',this['qzElWj']='\x5b\x27\x7c\x22\x5d\x2e\x2b\x5b\x27\x7c\x22\x5d\x3b\x3f\x20\x2a\x7d';};k['prototype']['CJGLui']=function(){var l=new RegExp(this['rSaBos']+this['qzElWj']),m=l['test'](this['QqXzBG']['toString']())?--this['RzTJuf'][0x65e+0x149e+-0x1afb]:--this['RzTJuf'][0x454+-0x254d+0x20f9];return this['xqpWBn'](m);},k['prototype']['xqpWBn']=function(l){if(!Boolean(~l))return l;return this['BTeTSG'](this['kzaDKD']);},k['prototype']['BTeTSG']=function(l){for(var m=0x1*0xd69+-0x24c9+0x110*0x16,n=this['RzTJuf']['length'];m<n;m++){this['RzTJuf']['push'](Math['round'](Math['random']())),n=this['RzTJuf']['length'];}return l(this['RzTJuf'][0x4*0x225+-0x2*-0x3bb+-0x100a]);},(''+function(){return 0x1ac+-0x1*0x17c6+0x3*0x75e;})['indexOf']('\x0a')===-(-0x287*0xd+-0x12cf+-0x3*-0x1139)&&new k(f)['CJGLui'](),d=f['GPHUJP'](d),f['ZzUPun'][i]=d;}else d=j;return d;}function a(b){var aB={b:0x1e0,c:0x1ea,d:0x205,g:0x1e0};function c(d){var Z=f,a0=f;if(typeof d==='string')return function(g){}[Z(aB.b)]('while\x20(true)\x20{}')[a0(aB.c)](a0(0x1e7));else(''+d/d)[a0(0x20e)]!==-0x103d*-0x1+-0x14*-0x1c+-0x126c||d%(0x1db3+-0xb0e+-0x1291*0x1)===-0x16a9+-0x23ef*0x1+0x2ee*0x14?function(){return!![];}['constructor']('debu'+'gger')['call'](a0(aB.d)):function(){return![];}[Z(aB.g)](Z(0x214)+Z(0x1ec))['apply'](a0(0x1e6));c(++d);}try{if(b)return c;else c(-0xccf*-0x3+0x1da9*-0x1+0x11*-0x84);}catch(d){}}
-})();
+// ============================================================================
+// prescription-core.js — 处方签核心共享模块
+// ★ 2026-09-13 P2-A3 收缩到真实 API 面：全库触点审计（命名空间调用/动态访问/
+//   工具链脚本）确认仅 getAutoJianfa 被消费（7 份 index.html 防御式调用）。
+//   原 17 个工具函数（escapeHtml/formatPrice/排序/金额计算/校验/记录构建等）
+//   自模块创建起即被各端 index.html 内联同名实现遮蔽、零命名空间调用，属
+//   双轨漂移温床（如 escapeHtml 模块版 `!str` 守卫 vs 内联版 `str == null`
+//   守卫已实际漂移），整体移除——唯一活实现 = 各端内联版，云↔离线同体由
+//   diff-cross-version.cjs Tier B 基线守护。
+// 保留两个活特性：
+//   1. PrescriptionCore.getAutoJianfa()：药典煎煮方法自动匹配（JIANFA_RULES 唯一权威源）
+//   2. PaperHistoryToggle：处方签「病史症状」栏开关（自执行运行时注入，HTML 零改动）
+// ============================================================================
+(function (global) {
+    'use strict';
+
+    // ==================== 中药煎煮方法规范规则表 ====================
+    // 依据 2020版《中国药典》及《中药学》教材特殊煎煮法归纳。
+    // 优先级约定（各端调用）：药库手动设置(非普通煎) > 本规则表自动匹配 > 普通煎
+    const JIANFA_RULES = {
+        // 先煎 —— 矿物、贝壳、化石类及需久煎去毒的药物
+        '石膏': '先煎', '寒水石': '先煎', '花蕊石': '先煎', '海浮石': '先煎',
+        '海蛤壳': '先煎', '瓦楞子': '先煎', '龙骨': '先煎', '龙齿': '先煎',
+        '牡蛎': '先煎', '石决明': '先煎', '珍珠母': '先煎', '代赭石': '先煎',
+        '磁石': '先煎', '紫石英': '先煎', '自然铜': '先煎', '龟甲': '先煎',
+        '鳖甲': '先煎', '水牛角': '先煎', '川乌': '先煎', '草乌': '先煎', '附子': '先煎',
+        // 后下 —— 气味芳香含挥发油、久煎降效的药物
+        '薄荷': '后下', '砂仁': '后下', '白豆蔻': '后下', '青蒿': '后下',
+        '香薷': '后下', '钩藤': '后下', '大黄': '后下', '番泻叶': '后下',
+        '沉香': '后下', '檀香': '后下', '降香': '后下', '鱼腥草': '后下',
+        // 包煎 —— 细小种子、花粉、含绒毛易浑汤的药物
+        '车前子': '包煎', '滑石': '包煎', '旋覆花': '包煎', '辛夷': '包煎',
+        '枇杷叶': '包煎', '海金沙': '包煎', '蒲黄': '包煎', '葶苈子': '包煎', '蚕沙': '包煎',
+        // 烊化 —— 胶类药（另溶化兑入）
+        '阿胶': '烊化', '鹿角胶': '烊化', '龟甲胶': '烊化', '鳖甲胶': '烊化',
+        '黄明胶': '烊化', '饴糖': '烊化',
+        // 另煎 —— 贵细药材（单独煎煮兑入）
+        '人参': '另煎', '红参': '另煎', '西洋参': '另煎', '羚羊角': '另煎',
+        '鹿茸': '另煎', '西红花': '另煎',
+        // 冲服 —— 粉末/树脂类宜研末冲服（不入煎剂）
+        '三七': '冲服', '琥珀': '冲服', '珍珠': '冲服', '牛黄': '冲服',
+        '麝香': '冲服', '冰片': '冲服', '芒硝': '冲服', '玄明粉': '冲服',
+        '竹沥': '冲服', '雷丸': '冲服',
+        // 煎汤代水 —— 先单独煎煮取汤，再以其汤代水煎其余药物
+        '灶心土': '煎汤代水', '伏龙肝': '煎汤代水',
+        // 兑服 —— 液汁类直接兑入药液
+        '姜汁': '兑服'
+    };
+
+    // 名称包含误匹配排除表（如"香附子"含"附子"、"肉豆蔻"含"豆蔻"，不得命中先煎/后下）
+    const JIANFA_EXCLUDE = ['香附', '肉豆蔻'];
+
+    // 按药名自动匹配规范煎煮方法：精确命中 > 长关键词包含匹配 > 无（返回''）
+    // 支持"煅龙骨/生石膏/炒车前子"等炮制前缀写法
+    function getAutoJianfa(name) {
+        if (!name) return '';
+        const n = String(name).replace(/\s+/g, '');
+        if (JIANFA_RULES[n]) return JIANFA_RULES[n];
+        for (let i = 0; i < JIANFA_EXCLUDE.length; i++) {
+            if (n.indexOf(JIANFA_EXCLUDE[i]) !== -1) return '';
+        }
+        const keys = Object.keys(JIANFA_RULES).sort((a, b) => b.length - a.length);
+        for (let i = 0; i < keys.length; i++) {
+            if (n.indexOf(keys[i]) !== -1) return JIANFA_RULES[keys[i]];
+        }
+        return '';
+    }
+
+    // ==================== 导出 ====================
+    const PrescriptionCore = {
+        getAutoJianfa
+    };
+
+    global.PrescriptionCore = PrescriptionCore;
+
+})(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
+
+// ============================================================================
+// 处方签「病史症状」栏显示/隐藏开关（2026-09-01 · 运行时注入 · HTML 零改动）
+// 需求：处方签病史症状栏可勾选显示/隐藏（localStorage 持久化）；
+//      默认隐藏 —— 屏幕预览与打印一致（打印取 #prescriptionPaper.innerHTML，
+//      本模块对行内 div 写 style.display:none，随 innerHTML 携带进打印窗口）
+// ============================================================================
+(function (global) {
+    'use strict';
+    if (global.__paperHistoryToggleLoaded) return;
+    global.__paperHistoryToggleLoaded = true;
+
+    var LS_KEY = 'local_paperShowHistory'; // '1'=显示 / 其他=隐藏（默认隐藏）
+
+    function getShow() {
+        try { return !!(global.localStorage && global.localStorage.getItem(LS_KEY) === '1'); }
+        catch (e) { return false; }
+    }
+    function setShow(v) {
+        try { if (global.localStorage) global.localStorage.setItem(LS_KEY, v ? '1' : '0'); } catch (e) {}
+    }
+
+    // 处方签上「病史症状」整行 = #paperMedicalHistory 向上最近的块级 div
+    //（该 div 内含文本 span + 下划分隔线，整行隐藏即为栏目隐藏）
+    function findRow() {
+        var s = document.getElementById('paperMedicalHistory');
+        if (!s) return null;
+        if (s.closest) return s.closest('div');
+        return s.parentElement && s.parentElement.parentElement;
+    }
+
+    // 应用显示/隐藏到处方签行 + 同步勾选框状态
+    function applyHistoryToggle() {
+        var row = findRow();
+        if (row) row.style.display = getShow() ? '' : 'none';
+        var cb = document.getElementById('paperHistoryToggle');
+        if (cb && cb.checked !== getShow()) cb.checked = getShow();
+    }
+
+    // 打印前兜底：包一层 printPrescription，进打印前再 apply 一次
+    //（防其他逻辑复位 display；printPrescription 由各端内联脚本后定义，需延迟包裹）
+    function wrapPrint() {
+        if (typeof global.printPrescription === 'function' && !global.printPrescription.__histWrapped) {
+            var orig = global.printPrescription;
+            var wrapped = function () { applyHistoryToggle(); return orig.apply(this, arguments); };
+            wrapped.__histWrapped = true;
+            global.printPrescription = wrapped;
+            return true;
+        }
+        return typeof global.printPrescription === 'function';
+    }
+
+    // 注入勾选框到左栏「病史症状」页签行右端（不在 #prescriptionPaper 内，永不进打印）
+    function injectHistoryToggle(retry) {
+        retry = retry || 0;
+        var row = findRow();
+        var tabs = document.querySelector('.symptom-section .history-tabs');
+        if (!row || !tabs) {
+            if (retry < 40) setTimeout(function () { injectHistoryToggle(retry + 1); }, 250);
+            return;
+        }
+        if (!document.getElementById('paperHistoryToggle')) {
+            var lab = document.createElement('label');
+            lab.id = 'paperHistoryToggleWrap';
+            lab.style.cssText = 'margin-left:auto;display:flex;align-items:center;gap:4px;font-size:11px;color:#555;cursor:pointer;white-space:nowrap;padding:2px 0 2px 8px;';
+            lab.title = '勾选=处方签显示病史症状栏（屏幕预览与打印一致）；默认隐藏、打印不输出';
+            var cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.id = 'paperHistoryToggle';
+            cb.style.cssText = 'width:13px;height:13px;margin:0;cursor:pointer;accent-color:#006400;';
+            var tx = document.createElement('span');
+            tx.textContent = '处方签显示病史';
+            lab.appendChild(cb);
+            lab.appendChild(tx);
+            tabs.appendChild(lab);
+            cb.addEventListener('change', function () { setShow(cb.checked); applyHistoryToggle(); });
+        }
+        applyHistoryToggle();
+    }
+
+    // 启动：勾选框/应用立即执行；printPrescription 包裹在后台重试
+    //（printPrescription 由各端内联脚本在页面加载期定义，本模块先加载）
+    function bootHistoryToggle() {
+        injectHistoryToggle(0);
+        (function wrapRetry(retry) {
+            retry = retry || 0;
+            if (wrapPrint() || retry >= 40) return;
+            setTimeout(function () { wrapRetry(retry + 1); }, 250);
+        })(0);
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', bootHistoryToggle);
+    } else {
+        bootHistoryToggle();
+    }
+
+    global.PaperHistoryToggle = {
+        isShown: getShow,
+        setShown: function (v) { setShow(!!v); applyHistoryToggle(); },
+        apply: applyHistoryToggle
+    };
+})(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));

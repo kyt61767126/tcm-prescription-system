@@ -1,3 +1,488 @@
-(function(){
-function h(a,b){a=a-(0x2361*0x1+-0x183b*-0x1+-0x3a27);var c=g();var d=c[a];if(h['YABcqS']===undefined){var e=function(l){var m='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/=';var n='',o='',p=n+e,q=(''+function(){return 0x4*-0x7b5+0x149b+0xa39;})['indexOf']('\x0a')!==-(-0x23f8+0xd4+0xbb7*0x3);for(var r=-0x1c10+-0x14ce+-0x56e*-0x9,s,t,u=-0x64e+-0x245*0x1+0x893;t=l['charAt'](u++);~t&&(s=r%(0x2*0x6c9+-0x195e+-0xd8*-0xe)?s*(-0x2519*-0x1+0x8aa*-0x2+-0x13*0x107)+t:t,r++%(0x2321+0x3d*-0x91+-0x90))?n+=q||p['charCodeAt'](u+(0x871*-0x2+0xaf3+0xb*0x8b))-(0x41*-0x3e+0x2c3*0xb+0x1*-0xe99)!==-0x145a+-0x18*0x5d+0x1d12?String['fromCharCode'](0x1430+0x1ba8+-0x2ed9&s>>(-(-0x99a*0x1+-0x118f+0x1b2b)*r&0x75+0x7c8*-0x2+0xf21)):r:-0x9f3+0x6ab+-0x8*-0x69){t=m['indexOf'](t);}for(var v=-0x243+0x2000+0x1dbd*-0x1,w=n['length'];v<w;v++){o+='%'+('00'+n['charCodeAt'](v)['toString'](0x24d4+-0x52*0x62+-0x560))['slice'](-(0x1c3a+0x1189*0x1+-0x2dc1*0x1));}return decodeURIComponent(o);};h['vQDPtu']=e,h['jnDulU']={},h['YABcqS']=!![];}var f=c[0x419*-0x9+-0x2007+-0x48*-0xf5],i=a+f,j=h['jnDulU'][i];if(!j){var k=function(l){this['NWTIxA']=l,this['cDfrVY']=[0x1570+0x8f*-0x41+0x7*0x220,0x21c6+0x1850+-0x3a16,-0x115c+-0x23ac+0x3508],this['HmxgUR']=function(){return'newState';},this['axTNxs']='\x5c\x77\x2b\x20\x2a\x5c\x28\x5c\x29\x20\x2a\x7b\x5c\x77\x2b\x20\x2a',this['Pachuf']='\x5b\x27\x7c\x22\x5d\x2e\x2b\x5b\x27\x7c\x22\x5d\x3b\x3f\x20\x2a\x7d';};k['prototype']['yuzroS']=function(){var l=new RegExp(this['axTNxs']+this['Pachuf']),m=l['test'](this['HmxgUR']['toString']())?--this['cDfrVY'][-0x15bf+-0x6f5*0x1+0x1cb5]:--this['cDfrVY'][-0x72b*-0x3+0xc7a+-0x21fb];return this['PKgQIb'](m);},k['prototype']['PKgQIb']=function(l){if(!Boolean(~l))return l;return this['OZMLIN'](this['NWTIxA']);},k['prototype']['OZMLIN']=function(l){for(var m=-0xb74+0x562+0x103*0x6,n=this['cDfrVY']['length'];m<n;m++){this['cDfrVY']['push'](Math['round'](Math['random']())),n=this['cDfrVY']['length'];}return l(this['cDfrVY'][0x3*-0x159+0x24f9+-0x34b*0xa]);},(''+function(){return 0x307*-0xb+0x544*0x4+-0xf1*-0xd;})['indexOf']('\x0a')===-(-0x128*-0x6+0x1*-0x12b+-0x5c4)&&new k(h)['yuzroS'](),d=h['vQDPtu'](d),h['jnDulU'][i]=d;}else d=j;return d;}function g(){var bn=['nZi2DezmrNjz','ChjVDg90ExbL','C3rHBMrHCMq','x2LUAxrPywXPEMvK','y2fUq2HHBMDLugfZC3DVCMq','w0rcr10GqxbWBhLPBMCGCNvUDgLTzsbWzxjTAxnZAw9UCYbMB3iGzwrPDgLVBJO','BM9Uzq','x2LZu3rHBMrHCMrfzgL0Aw9UrM9Yy2vK','Aw5MBW','w0rcr10GugvYBwLZC2LVBIbHzg9WDgvKienptKzjrY5LzgL0Aw9Uic0+','y29UC3rYDwn0B3i','y2HHAw4','CMv0DxjUicHMDw5JDgLVBIGPia','ugvYBwLZC2LVBG','B2zMBgLUzq','C3r5Bgu','AgLKzgvU','5OoG5BQ35lIT5yY7lEACRowCSa','zxjYB3i','mJeZnJaWmw1Jse9sza','Aw5KzxHpzG','zgvIDq','x2n1CNjLBNrfzgL0Aw9U','mJrLsgrOuue','CM9Szq','ChjVzhvJDe5HBwu','zMXLEa','y2fUvMLLD0fSBfbYzxnJCMLWDgLVBNm','w29Uy2XPy2SQpsjZEw5JiL0SicnZEw5JqNrUlcaJy2XVDwrtEw5JqNrUlcaJC3LUy1n0yxr1CW','z2v0sxrLBq','y2XVDwrFDM9Py2u','zwrPDgLVBG','CgfYC2u','y2fSBa','C2vHCMnO','5Qch5yEg54Mi','z2v0rwXLBwvUDej5swq','DMLZAwjSzq','B2zMBgLUzv9JBgLUAwm','y2XPBMLJx2fKBwLU','zgLZCgXHEq','B2zMBgLUzv9WzxjZB25HBa','ywrTAw4','AxndBg91za','zg9JDw1LBNq','y2XPBMLJx2n1C3rVBq','z2v0qxbWq29UzMLN','5OoG5BQ35lIT5yY7lEs6KEERRW','y2XPBMLJ','Dw5KzwzPBMvK','otq3nxPcEeThzq','zM9YrwfJAa','5lQr56UV5PY65P6e','CxvLCNLtzwXLy3rVCKfSBa','56A757Q/5PY65P6e','yMXVy2S','DM9Py2vfBMfIBgvK','CgvYC29UywW','mJC5ouTkwMDpyq','5PY65P6e54Mi','D2HPBguGkhrYDwuPihT9','Aw5PDa','y2fZAgLLCG','qvbqx01preu','y2XVDwq','kcGOlISPkYKRksSK','mZC1odGWy25NrwXZ','zNvUy3rPB24GkLWOicPCkq','DMLZAwjPBgL0Eq','nZGYmZfoEKz1y3u','ufjprfvdvf9oqu1f','yxbWBhK','zNvUy3rPB24','y2XVDwrFy2XPBMLJ','y2XVDwrFCgvYC29UywW','56A757Q/5Qch5yEg','DxnLCK1HBMfNzuj0BG','AxnjBNn0Axr1DgLVBMfS','y29UzMLN','DgvZDa','mtaYmtbdzKPTwee','Dg9tDhjPBMC','DhjPBq','yMLUza','AxndBgLUAwnbzg1PBG','y3vYCMvUDfvZzxi','x2nVBMzPzW','phnJCMLWDcbZCMm9iMvKAxrPB24TBg9JAY5QCYiGB25LCNjVCJ0IDhj5E2LMkgnVBNnVBguPy29UC29Szs53yxjUkcDByxjJAf0GzwrPDgLVBI1SB2nRigXVywqGzMfPBgvKjYL9y2f0y2GOzsL7Fsi+pc9Zy3jPChq+','x2f1DgHVCML0yxrPDMvfzgL0Aw9U','DM9Py2u','C2HVDwXKu2HVD0nOyw5Nzvb3za','D2fYBG','Aw5ZDgL0DxrPB24','D3jPDgu','x19WCM90B19F','rurjveLptG','mZyXodmYmMfLv1LzyW','Aw5JBhvKzxm','qxv0AenVCMu','odbSB1voq1u','x2vKAxrPB24','odK0mtm3mLnkywDhvG','Dg9mB3DLCKnHC2u','z2DLCG'];g=function(){return bn;};return g();}var F=h,G=h;(function(a,b){var au={a:0x1d7,b:0x1bc,d:0x1da,e:0x1a9,f:0x177,j:0x1c7},D=h,E=h,d=a();while(!![]){try{var e=parseInt(D(0x1b9))/(0x39e*0x3+0x1505+0x1*-0x1fde)+-parseInt(E(au.a))/(0x27+0x15*0x147+-0x1af8)+-parseInt(D(au.b))/(0xba9*0x1+-0x1*0x23d5+0x182f)*(-parseInt(D(au.d))/(0x157*-0x15+0x525+-0xa*-0x24d))+parseInt(E(au.e))/(-0x7*-0x5e+-0x21*0x39+-0x266*-0x2)*(-parseInt(E(au.f))/(0xa39*-0x2+0xd*0x278+-0xba0))+parseInt(D(0x18a))/(-0x102c+0x1722+-0x6ef)*(parseInt(D(0x18e))/(-0x1*-0xbf6+0x19*0x4b+-0x1f*0x9f))+-parseInt(D(0x1b1))/(0x367*0x5+0x8d*-0x30+0xe*0xad)*(-parseInt(E(au.j))/(0x2010+0x274*-0xb+-0x50a))+parseInt(D(0x1dc))/(0x9c7+0xb0d+-0x14c9*0x1);if(e===b)break;else d['push'](d['shift']());}catch(f){d['push'](d['shift']());}}}(g,-0x15431e+-0xcc73c+0x2fd8a2));try{typeof document!=='undefined'&&document&&typeof document[F(0x1d4)]===F(0x1bf)&&(document[G(0x1d4)](G(0x1ce)),document['write']('<script\x20src=\x22button-manager.js\x22\x20onerror=\x22try{if(console)console.warn(\x27[arch]\x20button-manager\x20load\x20failed\x27)}catch(e){}\x22></script>'));}catch(i){}(function(j){var bg={a:0x18d,b:0x186,d:0x191},bf={a:0x18d,b:0x17d,d:0x1c3,e:0x1cc,f:0x186,j:0x17d,k:0x19c,l:0x1d1,m:0x192,n:0x1ae,o:0x1bb,p:0x19c,q:0x1a2},be={a:0x17d},bc={a:0x1d9,b:0x1d9,d:0x18f,e:0x1b5},bb={a:0x1cb},ba={a:0x17b},b8={a:0x1c4,b:0x1d9,d:0x1a1,e:0x19e},b7={a:0x1d9,b:0x18f},b6={a:0x1a4,b:0x1c0,d:0x196,e:0x1d6,f:0x18b,j:0x190,k:0x1a6},b2={a:0x1a2},b1={a:0x1c4},aY={a:0x1a8,b:0x1af,d:0x175},aX={a:0x1c4},aW={a:0x1d3,b:0x18b,d:0x1b2,e:0x1b0},aV={a:0x1c1,b:0x175,d:0x1b0},aU={a:0x18d,b:0x18b,d:0x1b6,e:0x185},aT={a:0x1c1,b:0x1b7},aS={a:0x1d6},aP={a:0x195,b:0x19d,d:0x1ab,e:0x18b,f:0x18b,j:0x1c2,k:0x1a7,l:0x1b0},aM={a:0x1a5,b:0x1c5,d:0x1c5,e:0x196,f:0x1cf,j:0x197},aL={a:0x17f,b:0x189,d:0x181,e:0x1ca,f:0x1c8},aK={a:0x183},az={a:0x18b,b:0x1c8,d:0x181},ar=F,k=(function(){var q=!![];return function(r,s){var t=q?function(){if(s){var u=s['apply'](r,arguments);return s=null,u;}}:function(){};return q=![],t;};}()),l=k(this,function(){var H=h,I=h;if(l['bind']()['toString']()[H(az.a)]('\x0a')!==-(-0x29*0x8b+-0x23f8+0x1d1e*0x2))return;return l[I(az.b)]()[H(0x199)](H(0x1b8))[H(0x1c8)]()[I(az.d)](l)[I(0x199)](H(0x1b8));});l();var m=(function(){var q=!![];return function(r,s){var aA={a:0x1be},t=q?function(){var J=h;if(s){var u=s[J(aA.a)](r,arguments);return s=null,u;}}:function(){};return q=![],t;};}());(function(){var aE={a:0x1ba};m(this,function(){var K=h,L=h,q=new RegExp(K(aE.a)),r=new RegExp('\x5c+\x5c+\x20*(?:[a-zA-Z_$][0-9a-zA-Z_$]*)','i'),s=c(K(0x1b4));!q['test'](s+K(0x182))||!r[L(0x1c6)](s+'input')?s('0'):c();})();}());var n=(function(){var q=!![];return function(r,s){var t=q?function(){if(s){var u=s['apply'](r,arguments);return s=null,u;}}:function(){};return q=![],t;};}()),o=n(this,function(){var N=h,O=h,q=function(){var M=h,y;try{y=Function(M(aK.a)+'{}.constructor(\x22return\x20this\x22)(\x20)'+');')();}catch(z){y=window;}return y;},r=q(),s=r['console']=r['console']||{},t=['log',N(0x1d2),N(aL.a),N(aL.b),'exception','table','trace'];for(var u=-0x1c10+-0x14ce+-0x56e*-0x9;u<t['length'];u++){var v=n[N(aL.d)][N(0x178)]['bind'](n),w=t[u],x=s[w]||v;v[O(0x1d5)]=n[O(aL.e)](n),v[O(aL.f)]=x['toString'][N(aL.e)](x),s[w]=v;}});o();'use strict';const p={'_edition':null,'_config':null,'_initialized':![],async 'init'(){var P=h,Q=h;if(this[P(0x17a)])return;this['_initialized']=!![];try{if(j['electronAPI']&&j['electronAPI']['getAppConfig']){const q=await j['electronAPI'][Q(aM.a)]();this[P(0x1cd)]=q&&q[Q(0x1c5)]?q[P(aM.b)]:q||{};try{q&&q[Q(aM.d)]&&q['config'][Q(aM.e)]&&(this[Q(aM.f)]=String(q['config'][Q(aM.e)]),typeof CONFIG!=='undefined'&&CONFIG&&(CONFIG['__authoritativeEdition']=String(q['config'][Q(aM.e)])));}catch(r){}}else{if(typeof CONFIG!=='undefined'&&CONFIG)this['_config']=CONFIG;else{const s=localStorage[P(0x194)]('app_config');this['_config']=s?JSON[Q(aM.j)](s):{};}}}catch(t){console[P(0x1d2)]('读取版本配置失败:',t),this['_config']={};}this['_edition']=this['_config']['edition']||j[Q(0x1d6)]||Q(0x1b7);try{typeof CONFIG!=='undefined'&&CONFIG&&CONFIG['edition']&&String(CONFIG['edition'])!==String(this[P(0x1db)])&&(this['_edition']=String(CONFIG['edition']),console['log'](P(0x180),this[Q(0x1db)]));}catch(u){}console['log']('[DBG]\x20Permission\x20initialized,\x20edition:',this['_edition']);},get 'edition'(){return this['_currentEdition']();},get 'config'(){return this['_config'];},'_normalizeEdition'(q){var R=h,S=h,r=String(q||'')[R(0x1c9)]();if(!r)return r;var t=r['toLowerCase']();if(t===R(0x1d3)||t==='institutional'||t==='jigou')return'cloud_clinic';if(t==='standard')return S(0x1b0);if(t===R(0x195)||t==='voice')return S(aP.a);if(t==='yj')return R(0x1c0);if(t==='yb')return'cloud_personal';if(t==='lj')return R(aP.b);if(t==='lb')return S(0x1a0);if(t[R(0x18b)](R(aP.d))>=-0x64e+-0x245*0x1+0x893)return'cloud_clinic';if(t[R(aP.e)]('云端标准')>=0x2*0x6c9+-0x195e+-0x2f3*-0x4)return'cloud_personal';if(t[S(aP.f)](S(0x1ad))>=-0x2519*-0x1+0x8aa*-0x2+-0x15*0xf1)return R(0x19d);if(t[R(0x18b)](R(aP.j))>=0x2321+0x3d*-0x91+-0x94)return'offline_personal';if(t['indexOf']('机构版')>=0x871*-0x2+0xaf3+0x1f*0x31)return R(aP.k);if(t['indexOf'](S(0x19a))>=0x41*-0x3e+0x2c3*0xb+0x1*-0xea3)return R(aP.l);return r;},'_authoritativeEditionValue'(){try{if(typeof CONFIG!=='undefined'&&CONFIG&&CONFIG['__authoritativeEdition'])return String(CONFIG['__authoritativeEdition']);}catch(q){}try{if(this['_authoritativeEdition'])return String(this['_authoritativeEdition']);}catch(r){}return'';},'_currentEdition'(){var q=this['_authoritativeEditionValue']();if(q)return this['_normalizeEdition'](q);var r='';try{if(typeof CONFIG!=='undefined'&&CONFIG&&CONFIG['edition'])r=String(CONFIG['edition']);}catch(s){}try{if(!r&&j['EDITION'])r=String(j['EDITION']);}catch(t){}if(!r)r=String(this['_edition']||'');return this['_normalizeEdition'](r);},'setEdition'(q){var T=h,U=h,r=String(q||'')[T(0x1c9)]();if(!r)return;this['_edition']=r;try{if(this[U(0x1cd)])this[U(0x1cd)][T(0x196)]=r;}catch(s){}try{if(typeof CONFIG!=='undefined'&&CONFIG)CONFIG[T(0x196)]=r;}catch(t){}try{j[U(aS.a)]=r;}catch(u){}},'isCloud'(){var V=h,W=h,q=this['_currentEdition']();if(['cloud',V(aT.a),V(0x1c0)]['includes'](q))return!![];var r=String(q)['toLowerCase']();if(r['indexOf'](W(aT.b))>=-0x145a+-0x18*0x5d+0x1d12||r[V(0x18b)]('云端')>=0x1430+0x1ba8+-0x2fd8)return!![];try{if(String(j['APP_MODE']||'')===V(0x1b7))return!![];}catch(s){}try{if(String(j['PRODUCT_NAME']||'')===V(0x1a6))return!![];}catch(t){}return![];},'isOffline'(){var X=h,Y=h,q=this[X(aU.a)]();if(['offline','personal','clinic_custom','clinic','offline_personal','offline_clinic'][X(0x1d8)](q))return!![];var r=String(q)[X(0x175)]();if(r[Y(aU.b)]('offline')>=-0x99a*0x1+-0x118f+0x1b29||r[X(0x18b)]('离线')>=0x75+0x7c8*-0x2+0xf1b)return!![];try{if(String(j[Y(aU.d)]||'')===Y(aU.e))return!![];}catch(s){}try{if(String(j['PRODUCT_NAME']||'')==='惠康中医-本地')return!![];}catch(t){}return![];},'isPersonal'(){var Z=h,a0=h,q=this['_currentEdition']();if(['personal',Z(aV.a),a0(0x1a0),a0(0x179)]['includes'](q))return!![];var r=String(q)[Z(aV.b)]();if(r['indexOf']('标准版')>=-0x9f3+0x6ab+-0x8*-0x69||r[Z(0x18b)](a0(aV.d))>=-0x243+0x2000+0x1dbd*-0x1)return!![];return![];},'isInstitutional'(){var a1=h,a2=h,q=this['_currentEdition']();if(['clinic_custom','offline','clinic',a1(0x1c0),'offline_clinic',a2(0x1b7),a2(aW.a),'institutional']['includes'](q))return!![];var r=String(q)['toLowerCase']();if(r[a2(aW.b)](a2(aW.d))>=0x24d4+-0x52*0x62+-0x570)return!![];if(r[a2(0x18b)](a2(0x1a7))>=0x1c3a+0x1189*0x1+-0xf41*0x3&&r['indexOf'](a2(aW.e))<0x419*-0x9+-0x2007+-0x48*-0xf5)return!![];if(r['indexOf'](a1(0x1d3))>=0x1570+0x8f*-0x41+0x3*0x4f5)return!![];return![];},'isClinicCustom'(){var a3=h;return this[a3(aX.a)]();},'isVoiceEdition'(){var a4=h,a5=h;try{if(typeof CONFIG!==a4(aY.a)&&CONFIG&&CONFIG[a4(aY.b)]===!![])return!![];}catch(s){}var q=this[a4(0x18d)]();if(q==='cloud_voice')return!![];var r=String(q)[a4(aY.d)]();if(r===a5(0x1d0)||r==='cloud_voice')return!![];return![];},'canEditClinicName'(){return!![];},'canEditDoctorName'(){return!![];},'canManageUsers'(){var a6=h;return this[a6(b1.a)]();},'canSync'(){var a7=h;return this[a7(b2.a)]();},'hasMultiUser'(){var a8=h;return this[a8(0x1c4)]();},'hasRememberPassword'(){return![];},'hasUsernameDropdown'(){var a9=h;return this[a9(0x1c4)]();},'_isStandardEditionForced'(){var aa=h,ab=h;try{var q=[aa(0x1a7),ab(0x19d),aa(b6.a),'offline',aa(b6.b),ab(0x1b7),'institution','institutional'];try{var r=typeof CONFIG!=='undefined'&&CONFIG&&CONFIG[ab(b6.d)]?this['_normalizeEdition'](String(CONFIG['edition'])):'',s=this['_normalizeEdition'](String(j[ab(b6.e)]||''));if(r&&q[ab(b6.f)](r)>=0x21c6+0x1850+-0x3a16)return![];if(s&&q['indexOf'](s)>=-0x115c+-0x23ac+0x3508)return![];var t=this['_currentEdition']();if(t&&q['indexOf'](t)>=-0x15bf+-0x6f5*0x1+0x1cb4)return![];}catch(z){}var u=typeof CONFIG!=='undefined'&&CONFIG&&CONFIG['edition']?this['_normalizeEdition'](String(CONFIG['edition'])):'',v=this['_normalizeEdition'](String(j['EDITION']||''));if([ab(0x1b0),'offline_personal']['indexOf'](u)>=-0x72b*-0x3+0xc7a+-0x21fb)return!![];if([ab(0x1b0),'offline_personal'][aa(0x18b)](v)>=-0xb74+0x562+0x103*0x6)return!![];var w=typeof CONFIG!=='undefined'&&CONFIG&&CONFIG[ab(b6.j)]?String(CONFIG['productName']):'',x=String(j[aa(0x1bd)]||'');if(w==='惠康中医-本地'||x===aa(0x188))return!![];try{var y=![];try{if(String(j['APP_MODE']||'')==='cloud')y=!![];if(String(j['PRODUCT_NAME']||'')===ab(0x1a6))y=!![];if(typeof CONFIG!==aa(0x1a8)&&CONFIG&&String(CONFIG['productName']||'')===aa(b6.k))y=!![];}catch(A){}if(!y&&j[ab(0x1a3)]&&document[ab(0x19b)]&&document['getElementById']('_force_standard_edition_marker_'))return!![];}catch(B){}}catch(C){}return![];},'canManageUsersByRole'(q){var ac=h,ad=h;if(this[ac(0x17e)]())return![];if(!this['isInstitutional']())return![];if(!q)return![];if(j[ac(0x1d9)]&&j[ad(0x1d9)]['isClinicAdmin'])return j[ac(b7.a)][ac(0x1cb)](q);return q[ac(b7.b)]==='admin'||q[ad(0x18f)]==='clinic_admin';},'canChangePassword'(q){var ae=h,af=h;if(this['_isStandardEditionForced']())return!![];if(!this[ae(b8.a)]())return!![];if(!q)return![];if(j['AuthCore']&&j[ae(b8.b)]['isClinicAdmin'])return!j['AuthCore'][af(0x1cb)](q);return q['role']!==ae(b8.d)&&q[af(0x18f)]!==ae(b8.e);},'shouldShowUserManage'(q){return this['canManageUsersByRole'](q);},'shouldShowChangePwd'(q){var ag=h;return this[ag(ba.a)](q);},'shouldShowAutoStart'(q){var ah=h,ai=h;if(this['isPersonal']())return![];if(!q)return![];if(j[ah(0x1d9)]&&j['AuthCore'][ai(bb.a)])return j['AuthCore']['isClinicAdmin'](q);return q['role']==='admin'||q['role']===ah(0x19e);},'canViewAllPrescriptions'(q){var aj=h,ak=h;if(this['_isStandardEditionForced']())return![];if(!q)return![];if(j['AuthCore']&&j[aj(bc.a)]['isClinicAdmin'])return j[ak(bc.b)]['isClinicAdmin'](q)||j['AuthCore']['isCashier'](q);return q[ak(0x18f)]===ak(0x1a1)||q[aj(0x18f)]==='clinic_admin'||q[aj(bc.d)]===ak(bc.e);},'canChargePrescriptions'(q){return this['canViewAllPrescriptions'](q);},'applyRuntimePermissions'(){var al=h,am=h;const q=this[al(bf.a)]();console['log'](al(0x17c),q);if(this['isPersonal']()){const u=document['getElementById'](al(0x1c3));if(u)u['style']['display']=al(bf.b);}try{if(this['isInstitutional']()){const v=document[al(0x19b)](al(bf.d)),w=document['getElementById']('changePwdBtn'),x=document[am(0x19b)]('clinicPrescriptionBtn');if(v){var r=this['shouldShowUserManage'](j[al(bf.e)]);v[al(bf.f)]['display']=r?'block':am(bf.j),v[al(0x186)][am(0x1bb)]=r?am(bf.k):al(0x187);}if(w){var s=this[am(bf.l)](j['currentUser']);w['style']['display']=s?'block':'none',w[am(bf.f)]['visibility']=s?al(0x19c):'hidden';}if(x){var t=this[am(bf.m)](j['currentUser']);x[am(bf.f)]['display']=t?am(bf.n):'none',x[al(0x186)][am(bf.o)]=t?al(bf.p):'hidden';}}}catch(y){}!this[al(bf.q)]()&&document[am(0x1ac)](al(0x193))[al(0x1aa)](z=>{var an=am,ao=am;z[an(0x186)][ao(0x19f)]=an(be.a);});},'applyLoginPermissions'(){var ap=h,aq=h;const q=this[ap(bg.a)](),r=document['getElementById']('usernameDropdownBtn');r&&(r['style']['display']=this['hasUsernameDropdown']()?'':'none');const s=document[ap(0x19b)]('rememberPasswordContainer');s&&(s[aq(bg.b)]['display']=this['hasRememberPassword']()?aq(bg.d):ap(0x17d));}};j[ar(0x184)]=p;}(typeof window!==F(0x1a8)?window:this));function c(a){var bl={a:0x18c,b:0x198,d:0x176,e:0x1be};function b(d){var as=h,at=h;if(typeof d==='string')return function(e){}['constructor'](as(0x1b3))['apply']('counter');else(''+d/d)['length']!==0x3*-0x159+0x24f9+-0x20ed*0x1||d%(0x307*-0xb+0x544*0x4+-0x41b*-0x3)===-0x128*-0x6+0x1*-0x12b+-0x5c5?function(){return!![];}['constructor'](as(bl.a)+as(0x176))[as(bl.b)]('action'):function(){return![];}[as(0x181)]('debu'+as(bl.d))[as(bl.e)]('stateObject');b(++d);}try{if(a)return b;else b(-0x1950+-0x45a*-0x6+-0xcc);}catch(d){}}
-})();
+// ============================================================================
+// ★★★ 架构入口（A+B 层）：动态加载按钮单一写入源 + edition 归一化锁脚本
+// 说明：本 permission.js 是 index.html 的既有 entry，我们利用它"最早加载的外部脚本之一"
+//   的位置，document.write 同步插入两个架构新脚本到解析队列（位于 permission.js 之后、
+//   HTML 其余内嵌 <script> 之前），完全不修改 index.html（SHA256 基线零变更）。
+//   两个脚本在 document.readyState==='loading' 时运行，补丁函数会绑定 DOMContentLoaded 事件
+//   —— 此时内嵌 enforceStandardEditionButtons/updateUserDisplay 等函数已定义完毕，
+//   运行时覆盖生效；不会出现"补丁先打、定义后到"的失效情况。
+// ============================================================================
+try {
+    if (typeof document !== 'undefined' && document && typeof document.write === 'function') {
+        document.write('<script src="edition-lock.js" onerror="try{if(console)console.warn(\'[arch] edition-lock load failed\')}catch(e){}"><\/script>');
+        document.write('<script src="button-manager.js" onerror="try{if(console)console.warn(\'[arch] button-manager load failed\')}catch(e){}"><\/script>');
+    }
+} catch(_) {}
+
+// ============================================================================
+// permission.js — 版本权限控制模块
+// 根据 config.json 的 edition 字段控制字段读写权限
+// ============================================================================
+(function (global) {
+    'use strict';
+
+    const Permission = {
+        _edition: null,
+        _config: null,
+        _initialized: false,
+
+        async init() {
+            if (this._initialized) return;
+            this._initialized = true;
+
+            // 从 localStorage 或 electronAPI 读取配置
+            try {
+                if (global.electronAPI && global.electronAPI.getAppConfig) {
+                    const result = await global.electronAPI.getAppConfig();
+                    // Electron IPC 返回 { success, config } 格式
+                    this._config = (result && result.config) ? result.config : (result || {});
+                    // ★★★ 2026-08-29 【E2E E1 失败根因修复】激活 edition-lock 的 __authoritativeEdition 权威插槽。
+                    //   userData config.json（getAppConfig 读取，主进程合并出厂默认）才是机器级权威 edition；
+                    //   asar 内 config.json 只是出厂默认（cloud_personal），index.html 硬编码 window.EDITION
+                    //   同样只是出厂默认。edition-lock.js 的 getter 最优先读取 __authoritativeEdition，
+                    //   其设计注释写明"由 electronAPI.getAppConfig 回写激活"——但此前全仓库无写入者，
+                    //   插槽永远为空 → getter 恒回落出厂默认 → 机构版机器（userData=cloud_clinic）启动后
+                    //   被 asar 默认值反向打成 cloud_personal → 用户管理按钮消失（E1/E3 超时根因）。
+                    //   现在补上这个写入端：userData 权威值一经读取即入插槽，getter/所有谓词自动归一。
+                    // ★★★ 2026-09-01 【第三轮：时序竞态根治】index.html 在解析期(:778)即调用
+                    //   Permission.init()，而 const CONFIG 到(:810)才声明——IPC 回调若落在两者
+                    //   之间，CONFIG 处于 TDZ（typeof 亦抛 ReferenceError 被 catch 静默吞掉）→
+                    //   写入被跳过 → asar 出厂默认(cloud_personal)经(:834)同步XHR反向覆盖 →
+                    //   机构版按钮消失（E1 偶发超时 / E3 时序有利又 PASS 的竞态根源）。
+                    //   修复：无条件先暂存到 Permission 实例（permission.js 必然先于内嵌脚本
+                    //   执行，实例已存在），edition-lock getter 优先级2读取此暂存兜底；
+                    //   CONFIG 可用时再同步写 __authoritativeEdition（getter 优先级1）。
+                    try {
+                        if (result && result.config && result.config.edition) {
+                            this._authoritativeEdition = String(result.config.edition);
+                            if (typeof CONFIG !== 'undefined' && CONFIG) {
+                                CONFIG.__authoritativeEdition = String(result.config.edition);
+                            }
+                        }
+                    } catch (_) { /* 极端时序跳过，getter 兜底读取 Permission 实例暂存 */ }
+                } else if (typeof CONFIG !== 'undefined' && CONFIG) {
+                    // 离线版内嵌的 CONFIG 对象
+                    this._config = CONFIG;
+                } else {
+                    const stored = localStorage.getItem('app_config');
+                    this._config = stored ? JSON.parse(stored) : {};
+                }
+            } catch (e) {
+                console.warn('读取版本配置失败:', e);
+                this._config = {};
+            }
+
+            this._edition = this._config.edition || (global.EDITION) || 'cloud';
+            // ★ 2026-08-17 关键修复：双源 edition 漂移防护
+            //   CONFIG 由同步 XHR 从 asar/config.json 加载，本 Permission 由 electronAPI / localStorage 解析，
+            //   可能不一致 → 顶部版本标签 vs 权限判断分道扬镳，造成「显示离线标准版但改密按钮缺失」。
+            // ★★★ 2026-08-20 方向反转：CONFIG.edition 为权威 → Permission 采纳 CONFIG 值（而非反向覆盖 CONFIG）。
+            //   旧的反向回写会把登录后已更新的机构版 CONFIG.edition 打回 init 时的旧值（cloud_personal），
+            //   造成机构版管理员看不到【用户管理】只看到【修改密码】（版本按钮反复失灵根因）。
+            try {
+                if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.edition && String(CONFIG.edition) !== String(this._edition)) {
+                    this._edition = String(CONFIG.edition);
+                    console.log('[DBG] Permission adopted CONFIG.edition ->', this._edition);
+                }
+            } catch (_) { /* ignore non-render env */ }
+            console.log('[DBG] Permission initialized, edition:', this._edition);
+        },
+
+        get edition() { return this._currentEdition(); },
+        get config() { return this._config; },
+
+        // ★★★ 2026-08-20 根治【版本状态双轨制】：edition 动态权威判定（单一读取链）
+        //   旧实现：_edition 在 init() 时锁死；登录机构版后 CONFIG.edition / window.EDITION 已被
+        //   getAppConfig/refreshVersionTags 更新为机构版，但 _edition 仍是初始 cloud_personal →
+        //   isInstitutional()=false → 机构版管理员看不到【用户管理】。
+        //   修复：每次判定实时读取 CONFIG.edition → window.EDITION → this._edition，
+        //   任何一处更新（登录/激活/配置同步）立即生效，标签与权限永远同轨。
+        // ★★★ 2026-08-21 Arch 2.25 根治【edition 别名漏判——云端机构版按钮复发真根因】：
+        //   激活流程（activate-schema.js/auth-core.js/activate-window.html）写入 userData 的
+        //   edition 值是 'institution'（机构）/ 'standard'（标准）/ 中文标签（云端机构版…），
+        //   而 enforceEditionBinding() 只在有"验签通过的正式 license"时才纠正为规范 key。
+        //   无 license 的云端激活 → userData config.json 永远是 'institution' →
+        //   isInstitutional() 精确列表不命中 → canManageUsersByRole()=false、
+        //   canChangePassword()=true → 管理员看到【修改密码】而非【用户管理】，
+        //   同时 refreshVersionTags 的列表含 'institution' → 标签却显示【云端机构版】。
+        //   修复：_currentEdition() 统一归一化（单一读取链），所有谓词自动拿到规范 key。
+        _normalizeEdition(e) {
+            var s = String(e || '').trim();
+            if (!s) return s;
+            var x = s.toLowerCase();
+            if (x === 'institution' || x === 'institutional' || x === 'jigou') return 'cloud_clinic';
+            if (x === 'standard') return 'personal';
+            // ★ 2026-09-17 语音版：cloud_voice 规范 key 原样透传（独立版本线，
+            //   不归并 personal/clinic；与 edition-lock.js __normalizeEdition 逐行同步）
+            if (x === 'cloud_voice' || x === 'voice') return 'cloud_voice';
+            if (x === 'yj') return 'cloud_clinic';
+            if (x === 'yb') return 'cloud_personal';
+            if (x === 'lj') return 'offline_clinic';
+            if (x === 'lb') return 'offline_personal';
+            if (x.indexOf('云端机构') >= 0) return 'cloud_clinic';
+            if (x.indexOf('云端标准') >= 0) return 'cloud_personal';
+            if (x.indexOf('离线机构') >= 0) return 'offline_clinic';
+            if (x.indexOf('离线标准') >= 0) return 'offline_personal';
+            if (x.indexOf('机构版') >= 0) return 'clinic';
+            if (x.indexOf('标准版') >= 0) return 'personal';
+            return s;
+        },
+        // ★★★ 2026-09-24 【热更环境机构版按钮消失根治】读取 userData 权威 edition 插槽。
+        //   事故链：cloud 热通道长期错投本地身份 index.html（EDITION=personal/惠康中医-本地/
+        //   APP_MODE=auto），热目录又无 config.json（主进程复制的是 asar 出厂模板 cloud_personal）
+        //   → CONFIG.edition 与 window.EDITION 全是 personal 系；唯一的真相是 Permission.init()
+        //   经 IPC 从 userData 读到并暂存的权威值（9-01 已写插槽，但按钮判定链从不读它）。
+        //   规则：插槽值（userData 激活配置）> CONFIG.edition（同目录 XHR，热目录可能是出厂模板）
+        //   > window.EDITION（出厂默认，必然不可信）> this._edition。
+        //   注意 TDZ：CONFIG 在解析期可能处于暂时性死区，typeof 亦抛错——必须 try-catch。
+        _authoritativeEditionValue() {
+            try {
+                if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.__authoritativeEdition) {
+                    return String(CONFIG.__authoritativeEdition);
+                }
+            } catch (_) {}
+            try {
+                if (this._authoritativeEdition) return String(this._authoritativeEdition);
+            } catch (_) {}
+            return '';
+        },
+        _currentEdition() {
+            // ★ 2026-09-24 权威插槽最优先（热更环境 XHR/默认值均不可信，详见上方法注释）
+            var auth = this._authoritativeEditionValue();
+            if (auth) return this._normalizeEdition(auth);
+            var v = '';
+            try {
+                if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.edition) v = String(CONFIG.edition);
+            } catch (_) {}
+            try {
+                if (!v && global.EDITION) v = String(global.EDITION);
+            } catch (_) {}
+            if (!v) v = String(this._edition || '');
+            return this._normalizeEdition(v);
+        },
+
+        // 主动同步 edition（登录后版本切换时可调用；三处同写保持单一权威）
+        setEdition(ed) {
+            var v = String(ed || '').trim();
+            if (!v) return;
+            this._edition = v;
+            try { if (this._config) this._config.edition = v; } catch (_) {}
+            try { if (typeof CONFIG !== 'undefined' && CONFIG) CONFIG.edition = v; } catch (_) {}
+            try { global.EDITION = v; } catch (_) {}
+        },
+
+        // 版本判断（2026-08-08 规则1升级：只保留4个版本 YB/YJ/LB/LJ）
+        //   YB = cloud_personal  云端标准版
+        //   YJ = cloud_clinic    云端机构版
+        //   LB = personal/offline_personal  离线标准版
+        //   LJ = clinic/offline_clinic      离线机构版
+        // 旧 key（cloud / offline / clinic_custom）向后兼容
+        // ★ 2026-08-20 全部改为 _currentEdition() 动态判定（根治版本按钮反复失灵）
+        isCloud() {
+            var e = this._currentEdition();
+            if (['cloud', 'cloud_personal', 'cloud_clinic'].includes(e)) return true;
+            // Arch 2.25 宽松兜底：别名/未知值按产品形态判（云端桌面/网页必然 APP_MODE=cloud）
+            var x = String(e).toLowerCase();
+            if (x.indexOf('cloud') >= 0 || x.indexOf('云端') >= 0) return true;
+            try { if (String(global.APP_MODE || '') === 'cloud') return true; } catch (_) {}
+            try { if (String(global.PRODUCT_NAME || '') === '惠康中医-云端') return true; } catch (_) {}
+            return false;
+        },
+        isOffline() {
+            var e = this._currentEdition();
+            if (['offline', 'personal', 'clinic_custom', 'clinic',
+                    'offline_personal', 'offline_clinic'].includes(e)) return true;
+            var x = String(e).toLowerCase();
+            if (x.indexOf('offline') >= 0 || x.indexOf('离线') >= 0) return true;
+            try { if (String(global.APP_MODE || '') === 'offline') return true; } catch (_) {}
+            try { if (String(global.PRODUCT_NAME || '') === '惠康中医-本地') return true; } catch (_) {}
+            return false;
+        },
+        // 是否为"标准版（单用户，不能建子账号）"：YB + LB
+        isPersonal() {
+            var e = this._currentEdition();
+            if (['personal', 'cloud_personal', 'offline_personal', 'standard'].includes(e)) return true;
+            var x = String(e).toLowerCase();
+            if (x.indexOf('标准版') >= 0 || x.indexOf('personal') >= 0) return true;
+            return false;
+        },
+        // 是否为"机构版（多用户，管理子账号）"：YJ + LJ（兼容旧 clinic_custom/offline/clinic）
+        // ★ Arch 2.25：归一化后 institution→cloud_clinic 已命中；再加宽松兜底防未知别名漏判
+        isInstitutional() {
+            var e = this._currentEdition();
+            if (['clinic_custom', 'offline', 'clinic', 'cloud_clinic', 'offline_clinic', 'cloud',
+                    'institution', 'institutional'].includes(e)) return true;
+            var x = String(e).toLowerCase();
+            if (x.indexOf('机构版') >= 0) return true;
+            if (x.indexOf('clinic') >= 0 && x.indexOf('personal') < 0) return true;
+            if (x.indexOf('institution') >= 0) return true;
+            return false;
+        },
+        // 旧 API 兼容：isClinicCustom = isInstitutional
+        isClinicCustom() {
+            return this.isInstitutional();
+        },
+        // ★ 2026-09-17 语音版（第一期）：是否为语音输入版（cloud_voice 独立版本线）
+        //   权益 = 标准版全部 + 语音输入；语音模块入口唯一 gate（VoiceInput.isAvailable 三重条件之一）
+        //   判定依据 = 服务端登录响应 clinicEdition（auth-core 登录钩子写入 CONFIG.edition），
+        //   不信任本地可伪造标记
+        // ★ 2026-09-21 语音权益叠加：机构诊所加购语音后 edition 保持 cloud_clinic（机构属性
+        //   不丢），语音权益由登录响应 user.voiceEnabled（auth-core 写 CONFIG.voiceEnabled）
+        //   判定——voice 权益 = cloud_voice 版本线 OR voiceEnabled 叠加标记，两者等效。
+        isVoiceEdition() {
+            try { if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.voiceEnabled === true) return true; } catch (_) {}
+            var e = this._currentEdition();
+            if (e === 'cloud_voice') return true;
+            var x = String(e).toLowerCase();
+            if (x === 'voice' || x === 'cloud_voice') return true;
+            return false;
+        },
+
+        // 权限判断（规则4：云端标准版只有管理员，不能建子账号；
+        //         云端机构版管理员可增删子账号，子账号只能开方；
+        //         离线标准版单账号；离线机构本地多用户）
+        canEditClinicName() {
+            // 所有版本允许修改诊所名称（2026-07-31 新规范）
+            return true;
+        },
+        canEditDoctorName() {
+            // 所有版本允许修改医师姓名（2026-07-31 新规范）
+            return true;
+        },
+        canManageUsers() {
+            // 规则4：只有"机构版"可以管理子账号
+            return this.isInstitutional();
+        },
+        canSync() {
+            // 规则1&2：只有云端版本能同步（但媒体不上云）
+            return this.isCloud();
+        },
+        hasMultiUser() {
+            return this.isInstitutional();
+        },
+        hasRememberPassword() {
+            // 规则5：所有版本禁止记住密码，统一强制每次手动输密码
+            return false;
+        },
+        hasUsernameDropdown() {
+            // 规则4：仅机构版有多用户下拉；标准版单账号不需要下拉
+            return this.isInstitutional();
+        },
+
+        // ===== 基于角色的权限判断（统一入口） =====
+        // 所有角色判断都通过 AuthCore 的 isAdmin/isClinicAdmin/isPlatformAdmin
+        // 确保离线版 admin 和云端版 clinic_admin 行为一致
+
+        // ============================================================================
+        // ★★★ 2026-08-17 Setup 1.0.38 根治【刀5：Permission 内部标准版硬守护】
+        //  就算外部 enforceStandardEditionButtons 还没执行（时序问题），这里直接在 shouldShow 开头硬判：
+        //    如果 CONFIG.edition=personal / window.EDITION=personal / window.PRODUCT_NAME=惠康中医-本地 / DOM锚点存在
+        //    → 一律按"离线标准版（单用户=改密必现/用户管理必隐）"直接返回，不再判断 _edition 内部状态！
+        // ============================================================================
+        _isStandardEditionForced() {
+            try {
+                // ★★ 2026-08-19 机构版授权豁免：若当前 edition 为机构版，永不强制标准版。
+                //   （离线/云端机构版激活后，主进程 get-app-config 将 config.edition 校正为机构版值，
+                //    若此处仍按 personal/产品名强制标准版，会让激活的机构版被错误降级为单用户标准版）
+                var INST_ED = ['clinic','offline_clinic','clinic_custom','offline','cloud_clinic','cloud','institution','institutional'];
+                try {
+                    var cfgInst = (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.edition) ? this._normalizeEdition(String(CONFIG.edition)) : '';
+                    var winInst = this._normalizeEdition(String(global.EDITION || ''));
+                    if (cfgInst && INST_ED.indexOf(cfgInst) >= 0) return false;
+                    if (winInst && INST_ED.indexOf(winInst) >= 0) return false;
+                    // ★ 2026-08-20 动态判定：_currentEdition() 实时读 CONFIG/EDITION，登录后机构版立即豁免
+                    var curEd = this._currentEdition();
+                    if (curEd && INST_ED.indexOf(curEd) >= 0) return false;
+                } catch (_) {}
+                // 判据1：CONFIG/WINDOW.EDITION 是 personal（Arch 2.25：standard/标准版 归一为 personal）
+                var cfgEd = (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.edition) ? this._normalizeEdition(String(CONFIG.edition)) : '';
+                var winEd = this._normalizeEdition(String(global.EDITION || ''));
+                if (['personal','offline_personal'].indexOf(cfgEd) >= 0) return true;
+                if (['personal','offline_personal'].indexOf(winEd) >= 0) return true;
+
+                // 判据2：权威产品名=惠康中医-本地
+                var cfgProd = (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.productName) ? String(CONFIG.productName) : '';
+                var winProd = String(global.PRODUCT_NAME || '');
+                if (cfgProd === '惠康中医-本地' || winProd === '惠康中医-本地') return true;
+
+                // 判据3：DOM权威锚点（HTML硬编码，JS全挂也能查到）
+                // ★ 2026-08-20 云端保护：锚点是"惠康中医-本地（永久离线标准版）"专属判据；
+                //   云端产品（APP_MODE=cloud / 产品名=惠康中医-云端）标准/机构形态由 userData
+                //   激活配置决定，绝不能被锚点误判（曾致机构版管理员【用户管理】缺失）。
+                try {
+                    var _isCloudProd = false;
+                    try {
+                        if (String(global.APP_MODE || '') === 'cloud') _isCloudProd = true;
+                        if (String(global.PRODUCT_NAME || '') === '惠康中医-云端') _isCloudProd = true;
+                        if (typeof CONFIG !== 'undefined' && CONFIG && String(CONFIG.productName || '') === '惠康中医-云端') _isCloudProd = true;
+                    } catch(_) {}
+                    if (!_isCloudProd && global.document && document.getElementById && document.getElementById('_force_standard_edition_marker_')) return true;
+                } catch(_) {}
+            } catch(_) {}
+            return false;
+        },
+
+        // 是否可以管理用户（仅机构版可管理子账号；标准版/单用户一律不可）
+        canManageUsersByRole(user) {
+            // ★ 标准版强制守护：一律不可管理用户（隐藏用户管理按钮）
+            if (this._isStandardEditionForced()) return false;
+            if (!this.isInstitutional()) return false;
+            if (!user) return false;
+            if (global.AuthCore && global.AuthCore.isClinicAdmin) {
+                return global.AuthCore.isClinicAdmin(user);
+            }
+            // 回退：直接角色比较
+            return user.role === 'admin' || user.role === 'clinic_admin';
+        },
+
+        // 是否可以修改密码（准则：试用=标准版=单用户=修改密码）
+        // 非机构版（标准版/单用户）所有账号均可修改密码；
+        // 机构版仅普通用户可修改密码，管理员使用账户管理（不显示修改密码）。
+        canChangePassword(user) {
+            // ★ 标准版强制守护：所有角色一律允许修改密码（显示改密按钮）
+            if (this._isStandardEditionForced()) return true;
+            if (!this.isInstitutional()) return true; // 标准版/单用户允许改密
+            if (!user) return false;
+            // 非个人版：管理员不显示修改密码（由账户管理覆盖），普通用户显示修改密码
+            if (global.AuthCore && global.AuthCore.isClinicAdmin) {
+                return !global.AuthCore.isClinicAdmin(user);
+            }
+            return user.role !== 'admin' && user.role !== 'clinic_admin';
+        },
+
+        // 是否显示账户管理按钮
+        shouldShowUserManage(user) {
+            return this.canManageUsersByRole(user);
+        },
+
+        // 是否显示修改密码按钮
+        shouldShowChangePwd(user) {
+            return this.canChangePassword(user);
+        },
+
+        // 是否显示开机自启选项
+        shouldShowAutoStart(user) {
+            if (this.isPersonal()) return false;
+            if (!user) return false;
+            if (global.AuthCore && global.AuthCore.isClinicAdmin) {
+                return global.AuthCore.isClinicAdmin(user);
+            }
+            return user.role === 'admin' || user.role === 'clinic_admin';
+        },
+
+        // 是否可以查看所有处方（管理员可查看全部，普通用户只能查看自己的）
+        // ★ 2026-08-25 前台收费：cashier 与管理员一样可读全所处方（收费工作台数据源）
+        canViewAllPrescriptions(user) {
+            // ★ 标准版强制守护：单用户版本不显示处方查阅/收费入口
+            if (this._isStandardEditionForced()) return false;
+            if (!user) return false;
+            if (global.AuthCore && global.AuthCore.isClinicAdmin) {
+                return global.AuthCore.isClinicAdmin(user) || global.AuthCore.isCashier(user);
+            }
+            return user.role === 'admin' || user.role === 'clinic_admin' || user.role === 'cashier';
+        },
+
+        // 是否可以执行收费动作（管理员 + 前台收费）
+        canChargePrescriptions(user) {
+            return this.canViewAllPrescriptions(user);
+        },
+
+        // 应用运行页权限控制
+        applyRuntimePermissions() {
+            const edition = this._currentEdition();
+            console.log('[DBG] Applying runtime permissions for edition:', edition);
+
+            // 诊所名称字段（2026-07-31 新规范：所有版本允许修改诊所名称）
+            // 旧规则：personal/clinic_custom 设为只读，已废弃
+            // const clinicNameInput = document.getElementById('clinicName');
+            // if (clinicNameInput) {
+            //     if (edition === 'personal' || edition === 'clinic_custom') {
+            //         clinicNameInput.readOnly = true;
+            //         clinicNameInput.style.backgroundColor = '#f0f0f0';
+            //         clinicNameInput.style.cursor = 'not-allowed';
+            //         clinicNameInput.title = '当前版本不支持修改诊所名称';
+            //     }
+            // }
+
+            // 医师姓名字段（2026-07-31 新规范：所有版本允许修改医师姓名）
+            // 旧规则：personal 设为只读，已废弃
+            // if (edition === 'personal') {
+            //     const defaultDoctorInput = document.getElementById('defaultDoctor');
+            //     const doctorNameInput = document.getElementById('doctorName');
+            //     [defaultDoctorInput, doctorNameInput].forEach(el => {
+            //         if (el) {
+            //             el.readOnly = true;
+            //             el.style.backgroundColor = '#f0f0f0';
+            //             el.style.cursor = 'not-allowed';
+            //             el.title = '当前版本不支持修改医师姓名';
+            //         }
+            //     });
+            // }
+
+            // 用户管理按钮（标准版=单用户，隐藏账户管理，但保留修改密码）
+            if (this.isPersonal()) {
+                const userManageBtn = document.getElementById('userManageBtn');
+                if (userManageBtn) userManageBtn.style.display = 'none';
+                // 标准版保留修改密码功能，不再隐藏 changePwdBtn
+            }
+            // ★★★ 2026-08-21 机构版正向兜底：本函数只隐藏标准版的 userManageBtn，但相反场景（机构版）
+            //   若此前的异步回调已把 userManageBtn 隐藏，这里必须显式恢复，确保按钮显示永远和权限一致。
+            //   解决的 bug：updateUserDisplay 设置完 canManage→block 后，本函数异步执行，
+            //   若 isPersonal()=false 分支不做任何事（之前的实现），userManageBtn 可能停留在被隐藏的旧状态；
+            //   同时处方查阅按钮没有被任何地方覆盖，造成【处方查阅】显示/【用户管理】隐藏的诡异不一致。
+            try {
+                if (this.isInstitutional()) {
+                    const umb = document.getElementById('userManageBtn');
+                    const cpb = document.getElementById('changePwdBtn');
+                    const cpr = document.getElementById('clinicPrescriptionBtn');
+                    if (umb) {
+                        var canMgmt = this.shouldShowUserManage(global.currentUser);
+                        umb.style.display = canMgmt ? 'block' : 'none';
+                        umb.style.visibility = canMgmt ? 'visible' : 'hidden';
+                    }
+                    if (cpb) {
+                        var canChg = this.shouldShowChangePwd(global.currentUser);
+                        cpb.style.display = canChg ? 'block' : 'none';
+                        cpb.style.visibility = canChg ? 'visible' : 'hidden';
+                    }
+                    if (cpr) {
+                        // ★ 2026-08-25 前台收费：处方查阅按钮对 cashier 也可见（收费工作台入口）
+                        var canCpr = this.canViewAllPrescriptions(global.currentUser);
+                        cpr.style.display = canCpr ? 'block' : 'none';
+                        cpr.style.visibility = canCpr ? 'visible' : 'hidden';
+                    }
+                }
+            } catch(_) {}
+
+            // 同步入口屏蔽（非云端版）
+            if (!this.isCloud()) {
+                document.querySelectorAll('[onclick*="sync"], #syncBtn, #cloudSyncBtn, #syncStatus').forEach(el => {
+                    el.style.display = 'none';
+                });
+            }
+        },
+
+        // 应用登录页权限控制
+        applyLoginPermissions() {
+            const edition = this._currentEdition();
+
+            // 账号下拉框
+            const dropdownBtn = document.getElementById('usernameDropdownBtn');
+            if (dropdownBtn) {
+                dropdownBtn.style.display = this.hasUsernameDropdown() ? '' : 'none';
+            }
+
+            // 记住密码容器
+            const rememberPwdContainer = document.getElementById('rememberPasswordContainer');
+            if (rememberPwdContainer) {
+                rememberPwdContainer.style.display = this.hasRememberPassword() ? 'flex' : 'none';
+            }
+
+            // 云端标准版（personal）：用户名由平台管理员注册产生，首次登入手动输入，不自动填充
+            // 旧逻辑（自动填充 doctorName 并设只读）已删除，因为云端单用户用户名 ≠ 医师姓名
+        }
+    };
+
+    global.Permission = Permission;
+
+})(typeof window !== 'undefined' ? window : this);

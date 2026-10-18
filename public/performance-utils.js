@@ -1,3 +1,541 @@
-(function(){
-(function(a,b){var aV={a:0x244,b:0x1f9,d:0x225,e:0x233,f:0x219,i:0x213},U=h,V=h,d=a();while(!![]){try{var e=-parseInt(U(aV.a))/(-0x126+0x821+-0x6fa)*(-parseInt(U(0x228))/(-0x3a1+0x1d89+-0x451*0x6))+-parseInt(U(0x209))/(0xa4d*0x2+0xc*-0x14e+-0x4ef)+-parseInt(U(0x218))/(0xe1b+-0x1af6+0xcdf)*(-parseInt(V(0x1d8))/(-0x6*0x3f7+0x1ca2+-0x4d3))+parseInt(U(0x205))/(0x248*-0x2+0x24ee+-0x2058)*(-parseInt(U(0x241))/(0xa89*0x2+0x13*0xfb+0x13d6*-0x2))+parseInt(U(aV.b))/(-0x45*0x8f+-0x4e*0x43+-0x3afd*-0x1)*(-parseInt(V(aV.d))/(-0x112a+0x469+0xcca))+-parseInt(U(aV.e))/(-0xc*0xb3+-0x19b4+-0x2*-0x1111)*(-parseInt(V(aV.f))/(-0xf0b+-0x128d+-0x6d*-0x4f))+-parseInt(U(0x235))/(0x1993*0x1+0x6*0x543+-0x3919)*(-parseInt(U(aV.i))/(0x2*0x46c+-0x1e3e+0x1573));if(e===b)break;else d['push'](d['shift']());}catch(f){d['push'](d['shift']());}}}(g,0x898d9+0x15b*-0xc77+0x1*0x1202d8),function(a){var c3={a:0x22a,b:0x217,d:0x22a},c2={a:0x1ea,b:0x217},bV={a:0x1e7,b:0x1cd},bQ={a:0x224,b:0x1eb,d:0x201,e:0x206,f:0x1f4,i:0x1d7},bL={a:0x246,b:0x21e},bK={a:0x1d5,b:0x1e4,d:0x204},bG={a:0x210,b:0x1f6,d:0x1ce,e:0x1ce},bF={a:0x21a},bB={a:0x224,b:0x206,d:0x1e6,e:0x1e6,f:0x227},bA={a:0x1fa},bx={a:0x1df,b:0x23c,d:0x20e},bw={a:0x230},bu={a:0x1dc},bp={a:0x1e4},bo={a:0x1e2,b:0x229,d:0x20e,e:0x1ee},bi={a:0x245,b:0x1d0,d:0x222,e:0x220,f:0x1d0,i:0x20a,j:0x1ec,k:0x1f8,l:0x1d0,m:0x1d2},bg={a:0x1e1,b:0x202},bc={a:0x21d},ap=h,aS=h,e=(function(){var A=!![];return function(B,C){var D=A?function(){if(C){var E=C['apply'](B,arguments);return C=null,E;}}:function(){};return A=![],D;};}()),i=(function(){var A=!![];return function(B,C){var D=A?function(){var W=h;if(C){var E=C[W(0x1d3)](B,arguments);return C=null,E;}}:function(){};return A=![],D;};}()),j=(function(){var A=!![];return function(B,C){var D=A?function(){var X=h;if(C){var E=C[X(0x1d3)](B,arguments);return C=null,E;}}:function(){};return A=![],D;};}());'use strict';function k(A,B){var b8={a:0x1d3},Z=h;let C=null;const D=function(){const E=this,F=arguments;if(C)clearTimeout(C);C=setTimeout(()=>{var Y=h;A[Y(b8.a)](E,F),C=null;},B||-0x9cc*-0x2+0xa66+-0x1d36);};return D['cancel']=function(){C&&(clearTimeout(C),C=null);},D[Z(bc.a)]=function(){C&&(clearTimeout(C),A['apply'](this,arguments),C=null);},D;}function l(A,B){let C=0x581+-0x150b+0xf8a,D=null;return function(){var a0=h;const E=this,F=arguments,G=Date['now'](),H=B-(G-C);if(H<=-0x19e7+-0x9d*-0xe+0x1151)D&&(clearTimeout(D),D=null),C=G,A[a0(0x1d3)](E,F);else!D&&(D=setTimeout(()=>{C=Date['now'](),D=null,A['apply'](E,F);},H));};}function m(A,B){var a1=h,a2=h;if(typeof a[a1(0x202)]===a1(bg.a))return a[a1(bg.b)](A,B||{'timeout':0x3e8});return setTimeout(A,-0x1b3e+-0x209*-0x9+0x91f);}function n(A){var a3=h,a4=h;typeof a['cancelIdleCallback']===a3(0x1e1)?a[a4(0x20d)](A):clearTimeout(A);}function o(A){var a5=h,a6=h;const B=Object['assign']({'container':null,'itemHeight':0x32,'bufferSize':0x5,'render':()=>document['createElement'](a5(0x200)),'onScroll':null},A);if(!B['container'])return console[a6(0x1fb)]('[PerfUtils]\x20createVirtualScroller:\x20container\x20is\x20required'),null;const C={'data':[],'scrollTop':0x0,'visibleCount':0x0,'renderTimer':null},D=B['container'];D[a5(0x1d0)]['overflowY']=a5(0x1ff),D[a6(0x1d0)][a5(bo.a)]=a6(bo.b);const E=document['createElement']('div');E['style']['position']=a5(0x229),D[a5(bo.d)](E);const F=document[a6(bo.e)]('div');F['style']['position']='absolute',F[a6(0x1d0)][a5(0x1f4)]='0',F['style']['left']='0',F['style']['right']='0',E[a5(bo.d)](F);function G(){var a7=a5,a8=a5;const I=D[a7(0x20f)];C[a8(bi.a)]=Math['ceil'](I/B[a7(0x1e9)])+B[a8(0x1d4)]*(-0x1c18+-0x443*0x7+-0x39ef*-0x1);const J=Math['max'](-0xd9c*-0x2+-0xc92+-0x4e2*0x3,Math[a8(0x21b)](C['scrollTop']/B['itemHeight'])-B['bufferSize']),K=Math[a7(0x1fc)](C['data']['length'],J+C[a7(0x245)]);E[a8(bi.b)][a7(0x206)]=C[a8(bi.d)][a7(bi.e)]*B['itemHeight']+'px',F[a7(bi.f)][a7(bi.i)]=a8(bi.j)+J*B[a8(0x1e9)]+'px)',F[a7(bi.k)]='';for(let L=J;L<K;L++){const M=B[a7(0x234)](C['data'][L],L);M&&(M['style']['height']=B['itemHeight']+'px',M[a8(bi.l)]['boxSizing']='border-box',F['appendChild'](M));}if(B['onScroll'])B[a7(bi.m)](J,K);}function H(){C['scrollTop']=D['scrollTop'];if(C['renderTimer'])cancelAnimationFrame(C['renderTimer']);C['renderTimer']=requestAnimationFrame(G);}return D[a5(0x217)]('scroll',l(H,-0x5e6*-0x6+0xd*-0x25e+-0xb*0x6a),{'passive':!![]}),{'setData'(I){var a9=a5;C['data']=I||[],C['scrollTop']=D[a9(0x1d1)]=-0x184*-0xa+-0x1*-0x1a2a+-0x2952,G();},'refresh'(){G();},'scrollToIndex'(I){D['scrollTop']=I*B['itemHeight'];},'destroy'(){var aa=a6,ab=a6;D[aa(0x223)](ab(0x208),H),D['innerHTML']='';}};}let p=null;function q(A){var ac=h,ad=h;if(!A)return;if(p)p[ac(bp.a)](A);else{const B=A['getAttribute'](ac(0x23a));if(B)A['src']=B;}}function r(A){var bs={a:0x226},br={a:0x1e5,b:0x23a,d:0x216},ah=h;if(!A||!A['length'])return;if(!('IntersectionObserver'in a)){A['forEach'](B=>{const C=B['getAttribute']('data-src');if(C)B['src']=C;});return;}!p&&(p=new IntersectionObserver(B=>{var ae=h;B[ae(bs.a)](C=>{var af=ae,ag=ae;if(C['isIntersecting']){const D=C[af(0x207)],E=D[ag(br.a)](af(br.b));E&&(D[af(br.d)]=E,D['removeAttribute'](ag(br.b))),p['unobserve'](D);}});},{'rootMargin':ah(bu.a),'threshold':0.01})),A['forEach'](B=>{B['getAttribute']('data-src')&&p['observe'](B);});}function s(A,B,C){var ai=h,aj=h;if(!A||!B||!B[ai(0x220)])return;const D=document[ai(bw.a)]();B['forEach'](E=>{const F=C(E);if(F)D['appendChild'](F);}),A['appendChild'](D);}function t(A,B){m(()=>{var ak=h,al=h;try{const C=document['createElement']('link');C['rel']=ak(bx.a),C['href']=A,C['as']=B||'fetch',document[ak(bx.b)][ak(bx.d)](C);}catch(D){}});}function u(A,B){var am=h;const C=performance['now'](),D=B(),E=performance['now']()-C;return E>-0x1*0x1168+0x2*-0x485+-0x9*-0x2f2&&console['log']('[Perf]\x20'+A+':\x20'+E[am(0x23d)](0x1268+0x1276+-0x24dc)+'ms'),D;}async function v(A,B){var an=h,ao=h;const C=performance[an(0x1ef)]();try{return await B();}finally{const D=performance['now']()-C;D>0x35*-0x3+0x18f0+-0x1841&&console[an(0x221)](ao(bA.a)+A+':\x20'+D[ao(0x23d)](-0x23f6+-0x23*0x103+0x4761*0x1)+'ms');}}const w={'debounce':k,'throttle':l,'runIdle':m,'cancelIdle':n,'createVirtualScroller':o,'lazyImage':q,'observeLazyImages':r,'batchAppend':s,'prefetch':t,'measure':u,'measureAsync':v};a[ap(0x1ed)]=w;function x(){var aq=ap,ar=ap;return;if(window['innerWidth']>=-0x7*0x325+-0x239e+-0x1e51*-0x2)return;var A=document[aq(bG.a)](ar(bG.b));if(!A){setTimeout(x,-0x1*-0x10d5+-0x1532+0x4d*0x15);return;}function B(){var as=ar,at=ar;if(A['style']['display']!==as(0x236))return;var D=document['activeElement'];if(!D||D['tagName']!==at(0x1cf))return;var E=D['getBoundingClientRect'](),F=window['innerHeight'],G=window[as(bB.a)]?window[as(0x224)][at(bB.b)]:F,H;F-G<0x7*0x181+0x229d+0xb*-0x416?H=F*(-0x1a0f+-0xf*-0x2+-0x1*-0x19f1+0.6):H=G;var I=H-E['bottom'],J=E['top'],K=0x214c+0x921+-0x2973;if(I<0x1f89+0x1e16+-0x1f9*0x1f&&J>I){var L=Math['min'](J-(0x10cb*0x1+-0x1*0x1b41+-0x1*-0xa7a),K);A['style'][at(0x1f4)]=Math[at(bB.d)](0x1716+0x16*-0x17b+0x1*0x97c,E['top']-L-(0x11*0x196+-0x2231*-0x1+-0x3d25))+'px',A[at(0x1d0)]['maxHeight']=L+'px';}else{var M=Math[at(0x1fc)](Math[as(bB.e)](I-(0x2596+0x47c+-0x2a0e),-0x1c62+0x4a*-0x25+0x2750*0x1),K);A['style']['top']=E[at(bB.f)]+(-0x10af*0x1+-0xa74+0x1b25)+'px',A[as(0x1d0)]['maxHeight']=M+'px';}}var C=new MutationObserver(function(D){var bC={a:0x212,b:0x1d0};D['forEach'](function(E){var au=h,av=h;E[au(bC.a)]==='style'&&A[au(bC.b)]['display']==='block'&&(setTimeout(B,-0x3*0xcb3+-0xf3*-0x3+0x1*0x234a),setTimeout(B,-0x79f+-0x137*-0x11+-0x2*0x652),setTimeout(B,0xa89+0x163+-0xac0));});});C[ar(0x1e4)](A,{'attributes':!![],'attributeFilter':[ar(0x1d0)]}),window[aq(0x217)](ar(bG.d),function(){var aw=ar;A[aw(0x1d0)]['display']==='block'&&(setTimeout(B,0x1*0x56c+-0x11*-0x49+-0xa13*0x1),setTimeout(B,0x1*-0x9eb+0x2113+-0x1660));}),window[aq(0x224)]&&window['visualViewport']['addEventListener'](aq(bG.e),function(){var ax=ar;A['style'][ax(bF.a)]==='block'&&(setTimeout(B,0x213e+-0x1dd7+-0x349),setTimeout(B,0x187*-0x13+0x5e*0x53+-0xdf*0x1));});}function y(){var bH={a:0x23f,b:0x1cf,d:0x211,e:0x1de,f:0x22d,i:0x22e,j:0x1e5,k:0x242,l:0x21c,m:0x1de,n:0x1e0,o:0x232},aA=ap,aD=ap;if(window['innerWidth']>=-0xfb3+0x203+0x10b1)return;function A(E){var ay=h,az=h;if(!E||E[ay(bH.a)]!==az(bH.b)&&E[ay(0x23f)]!==ay(0x1e7))return;if(E['__bnAutocompleteOff'])return;E['__bnAutocompleteOff']=!![],E['setAttribute'](ay(bH.d),'off'),E['setAttribute']('autocorrect','off'),E[az(bH.e)](az(bH.f),ay(0x1f1)),E['setAttribute'](az(0x20c),ay(bH.i));var F=E['getAttribute']('type')||'',G=E[ay(bH.j)]('id')||'',H=E['className']||'';if(F==='number'||G[ay(0x1fd)]('Age')>=0x2103+0x1d7b+0x34a*-0x13||G['indexOf']('age')>=-0x308*0x1+-0x1d4a*0x1+0x2052||G[az(0x1fd)](ay(0x214))>=0x5e6*0x5+0x230+0x32b*-0xa||G[ay(0x1fd)]('fee')>=0xa*-0xe2+-0x871+0x1145||G['indexOf'](az(0x1f3))>=-0x11a+-0x1ea6+0x1fc0||G[az(0x1fd)](ay(bH.k))>=-0x37*-0xad+0xf9a*0x1+-0x34c5||G['indexOf'](az(0x23b))>=-0x240c+0x3c3+0x5*0x675||G['indexOf'](az(bH.l))>=0x2*0x3d8+-0xf9a+0x1*0x7ea)E[ay(bH.m)]('inputmode','numeric');else{if(F==='tel'||G[ay(0x1fd)]('Phone')>=-0x74c+-0x20e+0x26*0x3f||G['indexOf'](az(bH.n))>=0x133c+0x1103+-0x243f)E[ay(0x1de)]('inputmode',ay(0x1fe));else F===az(bH.o)&&E[ay(bH.m)](ay(0x1d9),ay(0x246));}}var B=document[aA(bK.a)]('input,textarea');for(var C=-0x17*-0x113+0x1063+-0xa46*0x4;C<B['length'];C++){A(B[C]);}var D=new MutationObserver(function(E){var bI={a:0x22b,b:0x1f5};E['forEach'](function(F){var aB=h,aC=h;if(F[aB(bI.a)])for(var G=0xe*0x11b+-0x15*-0x12+-0xe*0x136;G<F[aB(bI.a)][aC(0x220)];G++){var H=F['addedNodes'][G];if(H[aB(0x215)]===-0xf19+0x698*0x3+-0x4ae*0x1){A(H);var I=H['querySelectorAll'](aC(bI.b));for(var J=0x5eb+-0x2335+-0x1d4a*-0x1;J<I['length'];J++){A(I[J]);}}}});});D[aA(bK.b)](document[aD(bK.d)]||document['documentElement'],{'childList':!![],'subtree':!![]});}function z(){var bW={a:0x204},bP={a:0x237,b:0x1fb,d:0x1f2},aL=ap,aQ=ap,A=e(this,function(){var aE=h,aF=h;if(A[aE(0x1da)]()['toString']()['indexOf']('\x0a')!==-(-0x16*0x187+0x172e+0x11*0x9d))return;return A['toString']()[aF(bL.a)](aE(bL.b))['toString']()['constructor'](A)['search'](aF(0x21e));});A(),(function(){i(this,function(){var aG=h,F=new RegExp('function\x20*\x5c(\x20*\x5c)'),G=new RegExp('\x5c+\x5c+\x20*(?:[a-zA-Z_$][0-9a-zA-Z_$]*)','i'),H=c('init');!F['test'](H+'chain')||!G['test'](H+aG(0x1e3))?H('0'):c();})();}());var B=j(this,function(){var aJ=h,aK=h,F=function(){var aH=h,aI=h,N;try{N=Function(aH(0x1dd)+aH(0x22f)+');')();}catch(O){N=window;}return N;},G=F(),H=G['console']=G[aJ(bP.a)]||{},I=['log',aJ(bP.b),aJ(0x20b),aJ(bP.d),'exception',aK(0x1f0),'trace'];for(var J=0x612+0xe2a+0xb9*-0x1c;J<I['length'];J++){var K=j['constructor']['prototype']['bind'](j),L=I[J],M=H[L]||K;K[aJ(0x239)]=j[aK(0x1da)](j),K['toString']=M['toString']['bind'](M),H[L]=K;}});B();if(window[aL(c2.a)]>=0xa67+-0x43d+-0x329*0x1)return;var C=null;function D(F){var aM=aL,aN=aL;if(!F)return;try{var G=window['visualViewport']?window[aM(bQ.a)]['height']:window[aM(0x22c)],H=0x1f96+0x177d+0x8b*-0x65;F[aN(0x21f)]({'block':aM(bQ.b),'behavior':'smooth'});var I=F['closest']?F['closest']('.medicine-table-container'):null;if(I){var J=F[aN(bQ.d)](),K=I['getBoundingClientRect'](),L=G;if(J[aN(0x227)]>L-H){var M=J['top']+J[aN(bQ.e)]/(-0x3d3*-0x1+0x467*0x5+0x3*-0x89c)-K[aM(bQ.f)],N=K['height']/(-0x714*0x2+0x233d+-0x1513),O=M-N;if(Math[aN(0x240)](O)>-0x2522+-0x8c1+-0x2*-0x16f4){var P=I[aM(0x1d1)]+O,Q=I[aM(0x23e)]-I['clientHeight'];if(P<0x13eb*-0x1+-0x10cf*0x1+0x24ba)P=-0x345+0xe37+-0x1*0xaf2;if(P>Q)P=Q;try{I[aN(bQ.i)]({'top':P,'behavior':'smooth'});}catch(R){I[aM(0x1d1)]=P;}}}}}catch(S){try{F['scrollIntoView'](![]);}catch(T){}}}document['addEventListener']('focusin',function(F){var aO=aL,aP=aL,G=F['target'];if(!G)return;if(G['tagName']!=='INPUT'&&G['tagName']!==aO(bV.a)&&G['tagName']!=='SELECT')return;var H=G['closest']?G['closest'](aO(bV.b)):null;if(!H)return;C=G,setTimeout(function(){D(G);},-0x1ad7+-0x225d+0x3d98),setTimeout(function(){D(G);},0x1*-0x157a+-0x8b+0x1731),setTimeout(function(){D(G);},0xb5*0x22+-0x152*-0x9+-0x21f8),setTimeout(function(){D(G);},-0xf3a+0x88a*0x3+-0x744);},!![]),document[aQ(c2.b)](aQ(0x203),function(){setTimeout(function(){var aR=h;(!document['activeElement']||document['activeElement']===document[aR(bW.a)])&&(C=null);},-0x489*-0x4+-0x3fa+-0x56*0x29);},!![]);function E(){C&&(setTimeout(function(){D(C);},-0x1af9+-0x439+-0x62*-0x52),setTimeout(function(){D(C);},-0x1617+0x1*-0x15bf+0x164f*0x2),setTimeout(function(){D(C);},0x873+-0x12aa*-0x1+-0x198d));}window['visualViewport']&&(window['visualViewport']['addEventListener']('resize',E),window['visualViewport']['addEventListener']('scroll',E));}document[ap(0x1e8)]==='loading'?(document['addEventListener'](ap(c3.a),z),document[ap(c3.b)](ap(c3.a),x),document[ap(c3.b)](ap(c3.d),y)):(z(),x(),y());}(typeof window!=='undefined'?window:typeof globalThis!=='undefined'?globalThis:this));function h(a,b){a=a-(-0x11ff+-0x1c33*0x1+0x2fff);var c=g();var d=c[a];if(h['kSfYOV']===undefined){var e=function(l){var m='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/=';var n='',o='',p=n+e,q=(''+function(){return 0x42*-0x55+-0x476*-0x4+0x2*0x209;})['indexOf']('\x0a')!==-(0x13f9+-0x253b+-0x1eb*-0x9);for(var r=-0x5e0+-0x3ee+-0x4e7*-0x2,s,t,u=0x18b+-0x16c7+-0x1*-0x153c;t=l['charAt'](u++);~t&&(s=r%(0x2065+-0x17f9+-0x868)?s*(-0x2631+-0x1547*-0x1+-0xd*-0x152)+t:t,r++%(0x250e+-0x229f*0x1+-0x26b*0x1))?n+=q||p['charCodeAt'](u+(0x9*0x245+-0x29*0xbf+0x51a*0x2))-(-0x1*-0x26e+-0x195d+0x16f9)!==-0x90a+0x9*0x1b9+-0x1*0x677?String['fromCharCode'](0x1268+0x1276+-0x23df&s>>(-(0x35*-0x3+0x18f0+-0x184f)*r&-0x23f6+-0x23*0x103+0x4765*0x1)):r:-0x7*0x325+-0x239e+-0x39a1*-0x1){t=m['indexOf'](t);}for(var v=-0x1*-0x10d5+-0x1532+0x45d*0x1,w=n['length'];v<w;v++){o+='%'+('00'+n['charCodeAt'](v)['toString'](0x7*0x181+0x229d+0x5*-0x904))['slice'](-(-0x1a0f+-0xf*-0x2+-0x1*-0x19f3));}return decodeURIComponent(o);};h['FXKzrZ']=e,h['eWTzpK']={},h['kSfYOV']=!![];}var f=c[0x214c+0x921+-0x2a6d],i=a+f,j=h['eWTzpK'][i];if(!j){var k=function(l){this['pmnSPG']=l,this['oHhmrn']=[0x1f89+0x1e16+-0x2cd*0x16,0x10cb*0x1+-0x1*0x1b41+-0x1*-0xa76,0x1716+0x16*-0x17b+0x1*0x97c],this['FATnIl']=function(){return'newState';},this['dIMEaV']='\x5c\x77\x2b\x20\x2a\x5c\x28\x5c\x29\x20\x2a\x7b\x5c\x77\x2b\x20\x2a',this['jsXrSG']='\x5b\x27\x7c\x22\x5d\x2e\x2b\x5b\x27\x7c\x22\x5d\x3b\x3f\x20\x2a\x7d';};k['prototype']['cUGZQf']=function(){var l=new RegExp(this['dIMEaV']+this['jsXrSG']),m=l['test'](this['FATnIl']['toString']())?--this['oHhmrn'][0x11*0x196+-0x2231*-0x1+-0x3d26]:--this['oHhmrn'][0x2596+0x47c+-0x2a12];return this['KPOqEo'](m);},k['prototype']['KPOqEo']=function(l){if(!Boolean(~l))return l;return this['KpIGtB'](this['pmnSPG']);},k['prototype']['KpIGtB']=function(l){for(var m=-0x1c62+0x4a*-0x25+0x2714*0x1,n=this['oHhmrn']['length'];m<n;m++){this['oHhmrn']['push'](Math['round'](Math['random']())),n=this['oHhmrn']['length'];}return l(this['oHhmrn'][-0x10af*0x1+-0xa74+0x1b23]);},(''+function(){return-0x3*0xcb3+-0xf3*-0x3+0x1*0x2340;})['indexOf']('\x0a')===-(-0x79f+-0x137*-0x11+-0x5*0x29b)&&new k(h)['cUGZQf'](),d=h['FXKzrZ'](d),h['eWTzpK'][i]=d;}else d=j;return d;}function g(){var c9=['ntbWEcaWChG','CMv0DxjUicHMDw5JDgLVBIGPia','C2v0qxr0CMLIDxrL','ChjLzMv0y2G','CgHVBMu','zNvUy3rPB24','Cg9ZAxrPB24','Aw5WDxq','B2jZzxj2zq','z2v0qxr0CMLIDxrL','Bwf4','vevyvefsrue','CMvHzhLtDgf0zq','AxrLBuHLAwDODa','Aw5UzxjxAwr0Aa','y2vUDgvY','DhjHBNnSyxrLwsG','ugvYzLv0AwXZ','y3jLyxrLrwXLBwvUDa','BM93','DgfIBgu','B2zM','zxjYB3i','y2XPBMLJtM8','Dg9W','Aw5WDxqSDgv4DgfYzwe','BwvKAwnPBMvtzwfYy2HeCM9Wzg93BG','D2HPBguGkhrYDwuPihT9','Aw5Uzxjive1m','mtG0u0X0s2vg','w1bLCMzDia','D2fYBG','BwLU','Aw5KzxHpzG','DgvS','yxv0BW','zgL2','z2v0qM91BMrPBMDdBgLLBNrszwn0','CMvXDwvZDeLKBgvdywXSyMfJAW','zM9JDxnVDxq','yM9KEq','nNvmrM9JzG','AgvPz2H0','DgfYz2v0','C2nYB2XS','mZeZnZiYnLrWruHJCW','DhjHBNnMB3jT','Aw5MBW','C3bLBgXJAgvJAW','y2fUy2vSswrSzunHBgXIywnR','yxbWzw5Kq2HPBgq','y2XPzw50sgvPz2H0','z2v0rwXLBwvUDej5swq','yxv0B2nVBxbSzxrL','yxr0CMLIDxrLtMfTzq','mtiZnwvXyK5osa','rMvL','BM9Kzvr5Cgu','C3jJ','ywrKrxzLBNrmAxn0zw5LCG','nJy0tNjzzM5v','mtfcshfivhm','zgLZCgXHEq','zMXVB3i','q291BNq','zMX1C2G','kcGOlISPkYKRksSK','C2nYB2XSsw50B1zPzxC','BgvUz3rO','Bg9N','zgf0yq','CMvTB3zLrxzLBNrmAxn0zw5LCG','DMLZDwfSvMLLD3bVCNq','mZGWmtqYrMPLvNLV','zM9YrwfJAa','yM90Dg9T','mtiXmdzqy3njt3e','CMvSyxrPDMu','re9nq29UDgvUDeXVywrLza','ywrKzwroB2rLCW','Aw5UzxjizwLNAhq','yxv0B2nHCgL0ywXPEMu','zMfSC2u','E30Uy29UC3rYDwn0B3iOiNjLDhvYBIb0AgLZiIKOicK','y3jLyxrLrg9JDw1LBNrgCMfNBwvUDa','ywn0Aw9U','Dgv4Da','ndC2odmWEw5irxPz','CMvUzgvY','mtC3ndy4uNjruujj','yMXVy2S','y29UC29Szq','z2DLCG','x19WCM90B19F','zgf0ys1ZCMm','rg9Zzq','AgvHza','Dg9gAxHLza','C2nYB2XSsgvPz2H0','DgfNtMfTzq','ywjZ','mZaZnJiYmNvPy3H3tW','zg9Zzq','zgvIDq','mtu0yM5XCgn5','DMLZAwjSzunVDw50','C2vHCMnO','lM1LzgLJAw5LlxrHyMXL','CMvZAxPL','su5qvvq','C3r5Bgu','C2nYB2XSvg9W','B25ty3jVBgW','yxbWBhK','yNvMzMvYu2L6zq','CxvLCNLtzwXLy3rVCKfSBa','y29UC3rYDwn0B3i','C2nYB2XSvg8','mJeXnJvYs0rnBvm','Aw5WDxrTB2rL','yMLUza','y291BNrLCG'];g=function(){return c9;};return g();}function c(a){var c7={a:0x1d3,b:0x1db,d:0x243,e:0x1d3};function b(d){var aT=h,aU=h;if(typeof d==='string')return function(e){}['constructor'](aT(0x1f7))[aT(c7.a)](aT(c7.b));else(''+d/d)[aU(0x220)]!==-0xd6c*0x1+0x7e8+0x1*0x585||d%(0x1*-0x15d2+0x2359+-0x139*0xb)===0x4e*-0x61+0x99d+0x5*0x3fd?function(){return!![];}['constructor'](aU(c7.d)+aU(0x238))['call'](aT(0x231)):function(){return![];}[aT(0x1d6)]('debu'+aT(0x238))[aU(c7.e)]('stateObject');b(++d);}try{if(a)return b;else b(0x1*0x26f5+0x1f3f+-0x4634);}catch(d){}}
-})();
+// ============================================================================
+// performance-utils.js — 性能优化工具模块
+// 提供防抖/节流、空闲回调、虚拟滚动辅助、图片懒加载等工具
+// 各端可渐进式采用，不破坏现有逻辑
+// ============================================================================
+(function (global) {
+    'use strict';
+
+    // ==================== 防抖 (Debounce) ====================
+    // 延迟执行，适合搜索输入、窗口 resize 等高频事件
+    function debounce(fn, wait) {
+        let timer = null;
+        const debounced = function () {
+            const ctx = this, args = arguments;
+            if (timer) clearTimeout(timer);
+            timer = setTimeout(() => {
+                fn.apply(ctx, args);
+                timer = null;
+            }, wait || 200);
+        };
+        debounced.cancel = function () {
+            if (timer) { clearTimeout(timer); timer = null; }
+        };
+        debounced.flush = function () {
+            if (timer) {
+                clearTimeout(timer);
+                fn.apply(this, arguments);
+                timer = null;
+            }
+        };
+        return debounced;
+    }
+
+    // ==================== 节流 (Throttle) ====================
+    // 固定频率执行，适合滚动、拖拽等持续事件
+    function throttle(fn, wait) {
+        let lastTime = 0;
+        let timer = null;
+        return function () {
+            const ctx = this, args = arguments;
+            const now = Date.now();
+            const remaining = wait - (now - lastTime);
+            if (remaining <= 0) {
+                if (timer) { clearTimeout(timer); timer = null; }
+                lastTime = now;
+                fn.apply(ctx, args);
+            } else if (!timer) {
+                timer = setTimeout(() => {
+                    lastTime = Date.now();
+                    timer = null;
+                    fn.apply(ctx, args);
+                }, remaining);
+            }
+        };
+    }
+
+    // ==================== 空闲回调 (requestIdleCallback) ====================
+    // 低优先级任务延后到浏览器空闲时执行，不阻塞用户交互
+    function runIdle(fn, options) {
+        if (typeof global.requestIdleCallback === 'function') {
+            return global.requestIdleCallback(fn, options || { timeout: 1000 });
+        }
+        // 降级：setTimeout 50ms 后执行
+        return setTimeout(fn, 50);
+    }
+
+    function cancelIdle(id) {
+        if (typeof global.cancelIdleCallback === 'function') {
+            global.cancelIdleCallback(id);
+        } else {
+            clearTimeout(id);
+        }
+    }
+
+    // ==================== 简单虚拟滚动辅助 ====================
+    // 适用于长列表（历史处方、药品库等），只渲染可视区域+缓冲区
+    // 用法：
+    //   const vs = PerfUtils.createVirtualScroller({
+    //     container: document.getElementById('list'),
+    //     itemHeight: 60,          // 单项高度
+    //     bufferSize: 5,           // 上下缓冲项数
+    //     render: (item, index) => {  // 返回 HTMLElement
+    //       const el = document.createElement('div');
+    //       el.textContent = item.name;
+    //       return el;
+    //     }
+    //   });
+    //   vs.setData(allItems);
+    function createVirtualScroller(options) {
+        const config = Object.assign({
+            container: null,
+            itemHeight: 50,
+            bufferSize: 5,
+            render: () => document.createElement('div'),
+            onScroll: null
+        }, options);
+
+        if (!config.container) {
+            console.warn('[PerfUtils] createVirtualScroller: container is required');
+            return null;
+        }
+
+        const state = {
+            data: [],
+            scrollTop: 0,
+            visibleCount: 0,
+            renderTimer: null
+        };
+
+        // 创建内部 DOM 结构
+        const viewport = config.container;
+        viewport.style.overflowY = 'auto';
+        viewport.style.position = 'relative';
+
+        const spacer = document.createElement('div');
+        spacer.style.position = 'relative';
+        viewport.appendChild(spacer);
+
+        const content = document.createElement('div');
+        content.style.position = 'absolute';
+        content.style.top = '0';
+        content.style.left = '0';
+        content.style.right = '0';
+        spacer.appendChild(content);
+
+        function render() {
+            const containerHeight = viewport.clientHeight;
+            state.visibleCount = Math.ceil(containerHeight / config.itemHeight) + config.bufferSize * 2;
+            const startIndex = Math.max(0, Math.floor(state.scrollTop / config.itemHeight) - config.bufferSize);
+            const endIndex = Math.min(state.data.length, startIndex + state.visibleCount);
+
+            // 设置总高度撑开滚动条
+            spacer.style.height = (state.data.length * config.itemHeight) + 'px';
+
+            // 设置内容偏移
+            content.style.transform = 'translateY(' + (startIndex * config.itemHeight) + 'px)';
+
+            // 渲染可视项
+            content.innerHTML = '';
+            for (let i = startIndex; i < endIndex; i++) {
+                const el = config.render(state.data[i], i);
+                if (el) {
+                    el.style.height = config.itemHeight + 'px';
+                    el.style.boxSizing = 'border-box';
+                    content.appendChild(el);
+                }
+            }
+
+            if (config.onScroll) config.onScroll(startIndex, endIndex);
+        }
+
+        function onScroll() {
+            state.scrollTop = viewport.scrollTop;
+            if (state.renderTimer) cancelAnimationFrame(state.renderTimer);
+            state.renderTimer = requestAnimationFrame(render);
+        }
+
+        viewport.addEventListener('scroll', throttle(onScroll, 16), { passive: true });
+
+        return {
+            setData(items) {
+                state.data = items || [];
+                state.scrollTop = viewport.scrollTop = 0;
+                render();
+            },
+            refresh() { render(); },
+            scrollToIndex(index) {
+                viewport.scrollTop = index * config.itemHeight;
+            },
+            destroy() {
+                viewport.removeEventListener('scroll', onScroll);
+                viewport.innerHTML = '';
+            }
+        };
+    }
+
+    // ==================== 图片懒加载 (Lazy Image) ====================
+    // 使用 IntersectionObserver 按需加载图片，减少首屏网络请求
+    // 用法：
+    //   PerfUtils.lazyImage(imgElement);  // img 的 data-src 设置真实 URL
+    //   或 <img data-src="real.jpg" class="lazy">
+    //   PerfUtils.observeLazyImages(document.querySelectorAll('img.lazy'));
+    let _lazyObserver = null;
+
+    function lazyImage(img) {
+        if (!img) return;
+        if (_lazyObserver) {
+            _lazyObserver.observe(img);
+        } else {
+            // 降级：直接加载
+            const src = img.getAttribute('data-src');
+            if (src) img.src = src;
+        }
+    }
+
+    function observeLazyImages(images) {
+        if (!images || !images.length) return;
+
+        if (!('IntersectionObserver' in global)) {
+            // 降级：全部直接加载
+            images.forEach(img => {
+                const src = img.getAttribute('data-src');
+                if (src) img.src = src;
+            });
+            return;
+        }
+
+        if (!_lazyObserver) {
+            _lazyObserver = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        const img = entry.target;
+                        const src = img.getAttribute('data-src');
+                        if (src) {
+                            img.src = src;
+                            img.removeAttribute('data-src');
+                        }
+                        _lazyObserver.unobserve(img);
+                    }
+                });
+            }, {
+                rootMargin: '50px 0px',  // 提前 50px 加载
+                threshold: 0.01
+            });
+        }
+
+        images.forEach(img => {
+            if (img.getAttribute('data-src')) {
+                _lazyObserver.observe(img);
+            }
+        });
+    }
+
+    // ==================== DOM 批量更新 ====================
+    // 使用 DocumentFragment 批量插入 DOM，减少重排
+    // 用法：PerfUtils.batchAppend(container, items, (item) => createElement)
+    function batchAppend(container, items, createElement) {
+        if (!container || !items || !items.length) return;
+        const fragment = document.createDocumentFragment();
+        items.forEach(item => {
+            const el = createElement(item);
+            if (el) fragment.appendChild(el);
+        });
+        container.appendChild(fragment);
+    }
+
+    // ==================== 资源预加载 ====================
+    // 空闲时预加载关键资源（如药品库 JSON）
+    function prefetch(url, as) {
+        runIdle(() => {
+            try {
+                const link = document.createElement('link');
+                link.rel = 'prefetch';
+                link.href = url;
+                link.as = as || 'fetch';
+                document.head.appendChild(link);
+            } catch (e) { /* 忽略 */ }
+        });
+    }
+
+    // ==================== 执行耗时测量 ====================
+    // 简单的性能测量工具
+    function measure(name, fn) {
+        const start = performance.now();
+        const result = fn();
+        const duration = performance.now() - start;
+        if (duration > 16) {  // 超过一帧才记录
+            console.log('[Perf] ' + name + ': ' + duration.toFixed(2) + 'ms');
+        }
+        return result;
+    }
+
+    async function measureAsync(name, fn) {
+        const start = performance.now();
+        try {
+            return await fn();
+        } finally {
+            const duration = performance.now() - start;
+            if (duration > 16) {
+                console.log('[Perf] ' + name + ': ' + duration.toFixed(2) + 'ms');
+            }
+        }
+    }
+
+    // ==================== 导出 ====================
+    const PerfUtils = {
+        debounce,
+        throttle,
+        runIdle,
+        cancelIdle,
+        createVirtualScroller,
+        lazyImage,
+        observeLazyImages,
+        batchAppend,
+        prefetch,
+        measure,
+        measureAsync
+    };
+
+    global.PerfUtils = PerfUtils;
+
+    // ==================== 药物候选框防键盘遮挡 ====================
+    // 问题：showSearchDropdown 将候选框固定显示在输入框下方，键盘弹出时下方空间不足被遮挡
+    // 修复：监听候选框显示，动态判断上方/下方空间，空间不足时显示在输入框上方
+    function setupDropdownKeyboardFix() {
+        // ★ 已禁用：此函数会动态重新定位候选框到上方，与云端APP行为不一致
+        // 云端APP没有此函数，候选框始终在输入框下方显示（CSS max-height: 180px 控制高度）
+        return;
+        if (window.innerWidth >= 769) return;
+
+        var dropdown = document.getElementById('medicineSearchDropdown');
+        if (!dropdown) {
+            setTimeout(setupDropdownKeyboardFix, 500);
+            return;
+        }
+
+        function repositionDropdown() {
+            if (dropdown.style.display !== 'block') return;
+            var activeEl = document.activeElement;
+            if (!activeEl || activeEl.tagName !== 'INPUT') return;
+
+            var rect = activeEl.getBoundingClientRect();
+            var winHeight = window.innerHeight;
+            var vvHeight = window.visualViewport ? window.visualViewport.height : winHeight;
+
+            // adjustResize 模式：visualViewport.height = innerHeight = 实际可视高度
+            // adjustPan 模式：visualViewport.height 仍=屏幕高度，需估算
+            var visibleHeight;
+            if (winHeight - vvHeight < 50) {
+                // adjustPan 模式：visualViewport 未检测到键盘，保守估算（键盘占40%）
+                visibleHeight = winHeight * 0.6;
+            } else {
+                // adjustResize 模式：使用实际可视高度
+                visibleHeight = vvHeight;
+            }
+
+            var availableBelow = visibleHeight - rect.bottom;
+            var availableAbove = rect.top;
+            var dropdownMaxHeight = 250;
+
+            // 下方空间不足且上方空间更大时，候选框显示在输入框上方
+            if (availableBelow < 120 && availableAbove > availableBelow) {
+                var aboveHeight = Math.min(availableAbove - 4, dropdownMaxHeight);
+                dropdown.style.top = Math.max(0, rect.top - aboveHeight - 2) + 'px';
+                dropdown.style.maxHeight = aboveHeight + 'px';
+            } else {
+                // 下方显示，限制最大高度不超过可用空间
+                var belowHeight = Math.min(Math.max(availableBelow - 4, 60), dropdownMaxHeight);
+                dropdown.style.top = (rect.bottom + 2) + 'px';
+                dropdown.style.maxHeight = belowHeight + 'px';
+            }
+        }
+
+        // 监听候选框 style 变化（showSearchDropdown 设置 display=block 时触发）
+        var observer = new MutationObserver(function(mutations) {
+            mutations.forEach(function(m) {
+                if (m.attributeName === 'style' && dropdown.style.display === 'block') {
+                    setTimeout(repositionDropdown, 10);
+                    setTimeout(repositionDropdown, 100);
+                    setTimeout(repositionDropdown, 300);
+                }
+            });
+        });
+        observer.observe(dropdown, { attributes: true, attributeFilter: ['style'] });
+
+        // 键盘弹出/收起时重新定位（adjustResize 模式下 innerHeight 变化）
+        window.addEventListener('resize', function() {
+            if (dropdown.style.display === 'block') {
+                setTimeout(repositionDropdown, 50);
+                setTimeout(repositionDropdown, 200);
+            }
+        });
+
+        // visualViewport 变化时重新定位
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', function() {
+                if (dropdown.style.display === 'block') {
+                    setTimeout(repositionDropdown, 30);
+                    setTimeout(repositionDropdown, 150);
+                }
+            });
+        }
+    }
+
+    // ==================== 全局禁用输入法候选词 ====================
+    // 问题：搜狗输入法个人词典记住了旧应用名"本能中医处方系统"，在所有输入框弹出候选词
+    // autocomplete="off" 无法阻止输入法候选词，必须设置 inputmode 切换输入法模式
+    // 修复：为不同输入框设置合适的 inputmode，切换到数字/电话/search 模式，阻止文本候选词
+    function setupInputAutocompleteOff() {
+        if (window.innerWidth >= 769) return;
+
+        function setOff(el) {
+            if (!el || el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA') return;
+            if (el.__bnAutocompleteOff) return;
+            el.__bnAutocompleteOff = true;
+            el.setAttribute('autocomplete', 'off');
+            el.setAttribute('autocorrect', 'off');
+            el.setAttribute('autocapitalize', 'off');
+            el.setAttribute('spellcheck', 'false');
+
+            var type = el.getAttribute('type') || '';
+            var id = el.getAttribute('id') || '';
+            var className = el.className || '';
+
+            if (type === 'number' || id.indexOf('Age') >= 0 || id.indexOf('age') >= 0 ||
+                id.indexOf('Fee') >= 0 || id.indexOf('fee') >= 0 || id.indexOf('clinicNo') >= 0 ||
+                id.indexOf('dose') >= 0 || id.indexOf('Dose') >= 0 || id.indexOf('Count') >= 0) {
+                el.setAttribute('inputmode', 'numeric');
+            } else if (type === 'tel' || id.indexOf('Phone') >= 0 || id.indexOf('phone') >= 0) {
+                el.setAttribute('inputmode', 'tel');
+            } else if (type === 'text') {
+                el.setAttribute('inputmode', 'search');
+            }
+        }
+
+        var inputs = document.querySelectorAll('input,textarea');
+        for (var i = 0; i < inputs.length; i++) {
+            setOff(inputs[i]);
+        }
+
+        var observer = new MutationObserver(function(mutations) {
+            mutations.forEach(function(m) {
+                if (m.addedNodes) {
+                    for (var i = 0; i < m.addedNodes.length; i++) {
+                        var node = m.addedNodes[i];
+                        if (node.nodeType === 1) {
+                            setOff(node);
+                            var children = node.querySelectorAll('input,textarea');
+                            for (var j = 0; j < children.length; j++) {
+                                setOff(children[j]);
+                            }
+                        }
+                    }
+                }
+            });
+        });
+        observer.observe(document.body || document.documentElement, { childList: true, subtree: true });
+    }
+
+    // ==================== 移动端键盘遮挡修复 ====================
+    // adjustNothing 模式下：键盘弹出时WebView高度不变（无重绘闪现），系统不平移（操作快）
+    // JS通过visualViewport.height检测键盘高度，手动滚动焦点元素到可视区域
+    function setupMobileKeyboardScroll() {
+        // 仅在移动端（窄屏）启用，桌面端不需要
+        if (window.innerWidth >= 769) return;
+
+        var lastFocusedInput = null;
+
+        // 滚动焦点元素到可见区域中央（使用visualViewport.height适配adjustNothing模式）
+        function doScroll(target) {
+            if (!target) return;
+            try {
+                // 使用visualViewport.height作为可视区域高度（adjustNothing下键盘弹出时变小）
+                var vvH = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+                var safeMargin = 60;
+
+                target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                // 同时调整容器内部滚动（确保焦点行完全可见）
+                var container = target.closest ? target.closest('.medicine-table-container') : null;
+                if (container) {
+                    var targetRect = target.getBoundingClientRect();
+                    var containerRect = container.getBoundingClientRect();
+                    var vh = vvH; // adjustNothing模式：使用visualViewport高度
+                    if (targetRect.bottom > vh - safeMargin) {
+                        var targetCenterInContainer = targetRect.top + targetRect.height / 2 - containerRect.top;
+                        var containerCenter = containerRect.height / 2;
+                        var scrollDelta = targetCenterInContainer - containerCenter;
+                        if (Math.abs(scrollDelta) > 5) {
+                            var newTop = container.scrollTop + scrollDelta;
+                            var maxScroll = container.scrollHeight - container.clientHeight;
+                            if (newTop < 0) newTop = 0;
+                            if (newTop > maxScroll) newTop = maxScroll;
+                            try {
+                                container.scrollTo({ top: newTop, behavior: 'smooth' });
+                            } catch(e) {
+                                container.scrollTop = newTop;
+                            }
+                        }
+                    }
+                }
+            } catch(err) {
+                try { target.scrollIntoView(false); } catch(e2) {}
+            }
+        }
+
+        // 监听 focusin 事件（捕获阶段，确保最早收到）
+        document.addEventListener('focusin', function(e) {
+            var target = e.target;
+            if (!target) return;
+            if (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA' && target.tagName !== 'SELECT') return;
+
+            // 检查是否在 medicine-table 内（药物输入表格）
+            var table = target.closest ? target.closest('.medicine-table') : null;
+            if (!table) return;
+
+            lastFocusedInput = target;
+
+            // 多次尝试滚动，适配不同设备的键盘弹出速度
+            setTimeout(function() { doScroll(target); }, 100);
+            setTimeout(function() { doScroll(target); }, 300);
+            setTimeout(function() { doScroll(target); }, 500);
+            setTimeout(function() { doScroll(target); }, 800);
+        }, true);
+
+        // 监听 focusout 清除 lastFocusedInput（延迟清除避免快速切换丢失）
+        document.addEventListener('focusout', function() {
+            setTimeout(function() {
+                if (!document.activeElement || document.activeElement === document.body) {
+                    lastFocusedInput = null;
+                }
+            }, 100);
+        }, true);
+
+        // visualViewport.resize 事件触发时重新滚动（键盘弹出/收起时会触发）
+        function onViewportChange() {
+            if (lastFocusedInput) {
+                setTimeout(function() { doScroll(lastFocusedInput); }, 50);
+                setTimeout(function() { doScroll(lastFocusedInput); }, 200);
+                setTimeout(function() { doScroll(lastFocusedInput); }, 400);
+            }
+        }
+
+        // Visual Viewport API（现代浏览器）- 键盘弹出时会触发
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', onViewportChange);
+            window.visualViewport.addEventListener('scroll', onViewportChange);
+        }
+    }
+
+    // 自动初始化
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', setupMobileKeyboardScroll);
+        document.addEventListener('DOMContentLoaded', setupDropdownKeyboardFix);
+        document.addEventListener('DOMContentLoaded', setupInputAutocompleteOff);
+    } else {
+        setupMobileKeyboardScroll();
+        setupDropdownKeyboardFix();
+        setupInputAutocompleteOff();
+    }
+
+})(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));

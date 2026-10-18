@@ -1,3 +1,306 @@
-(function(){
-const a8=i,a9=i;(function(a,b){const ac={a:0x196,b:0x195,d:0x184,e:0x1a2},G=i,H=i,d=a();while(!![]){try{const e=parseInt(G(0x170))/(-0x221f+0x2184+-0x4e*-0x2)*(-parseInt(H(0x176))/(0x137d*-0x1+-0xcb4+0x2033*0x1))+parseInt(G(0x1a4))/(0x7a8+-0xe3f*0x2+0x14d9)*(-parseInt(H(0x16d))/(-0xa03+-0x11b0+0x1bb7))+-parseInt(G(ac.a))/(0x2694+-0x5*-0x2e4+-0x3503*0x1)+parseInt(H(ac.b))/(-0x1edb+-0x698+0x2579)*(parseInt(H(0x179))/(-0x1*0x176c+0xc99+0x1*0xada))+parseInt(G(ac.d))/(-0xecb*0x2+0x1*-0x835+0x25d3)*(parseInt(H(0x186))/(0xa2*0x27+0x12da+-0x2b7f))+parseInt(H(ac.e))/(-0x8*-0x98+0xb46+0x4*-0x3ff)+parseInt(H(0x173))/(0xa15*-0x3+-0x329+0x1*0x2173)*(parseInt(G(0x18f))/(-0x1212+0x3bc*-0x3+0x1d52));if(e===b)break;else d['push'](d['shift']());}catch(f){d['push'](d['shift']());}}}(h,-0x169f*-0x4f+-0xa4b71*0x1+0xc671f),function(a){const aM={a:0x1a5,b:0x16e},aL={a:0x17b},aG={a:0x17b,b:0x16a,d:0x192,e:0x187,f:0x191,g:0x18c,j:0x171,k:0x193,l:0x180},aE={a:0x17e},ax={a:0x17b,b:0x1a7,d:0x198},aw={a:0x17b,b:0x165,d:0x1a6,e:0x169,f:0x17c,g:0x174},au={a:0x17b,b:0x183,d:0x175},ap={a:0x1a3},a6=i,a7=i,f=(function(){let t=!![];return function(u,v){const w=t?function(){if(v){const x=v['apply'](u,arguments);return v=null,x;}}:function(){};return t=![],w;};}()),j=(function(){let t=!![];return function(u,v){const w=t?function(){const I=i;if(v){const x=v[I(0x18a)](u,arguments);return v=null,x;}}:function(){};return t=![],w;};}()),k=(function(){let t=!![];return function(u,v){const w=t?function(){const J=i;if(v){const x=v[J(0x18a)](u,arguments);return v=null,x;}}:function(){};return t=![],w;};}());'use strict';var l=0x848+0x745*0x3+-0x1e15,m=(-0x10d*-0xb+0x854+0x1*-0x1389)*(0x2431+-0x21de+-0x87*-0x3),n=(-0x2*-0x5e6+-0x4*-0x752+0x17*-0x1c9)*(0x932*-0x3+0x14b7*0x1+0x71b)*(0x2193+0x3*0xa57+-0x3cb0),o=(0x1760+-0x91*-0xe+-0x1f44)*(0x253f+-0x49*0x6+0x50b*-0x7)*(-0x6*0x272+0x152f+-0x29b),p=0x1b3e+0x18cd*-0x1+0xaf,q=0x1258+-0x1bd9+0x1*0x1219,r=(-0x14da+-0x1*0x1f13+0x3429)*(0x1299+-0x1a84+0xbd3);const s={'_enabled':!![],'_debuggerDetected':![],'_debuggerDetectionTime':null,'_lastSignalTime':null,'_strongStrikes':0x0,'_devToolsSuspected':![],'_integrityChecked':![],'_guardsInstalled':![],'_lastBlockAlertTime':0x0,'init'(){const as={a:0x182,b:0x18e,d:0x18c,e:0x185,f:0x1a0,g:0x17d,j:0x167,k:0x16f},Q=i,R=i,t=f(this,function(){const K=i,L=i;if(t['bind']()['toString']()['indexOf']('\x0a')!==-(0x1*-0x1aa0+-0x1*-0x22fb+0x42d*-0x2))return;return t[K(0x16f)]()['search']('(((.+)+)+)+$')['toString']()[K(0x199)](t)[L(ap.a)](L(0x1a8));});t(),(function(){const aq={a:0x172,b:0x188};j(this,function(){const M=i,N=i,x=new RegExp(M(0x19c)),y=new RegExp(M(aq.a),'i'),z=c('init');!x['test'](z+'chain')||!y[N(aq.b)](z+N(0x178))?z('0'):c();})();}());const u=k(this,function(){const O=i,P=i;let x;try{const A=Function(O(as.a)+'{}.constructor(\x22return\x20this\x22)(\x20)'+');');x=A();}catch(B){x=window;}const y=x[P(0x166)]=x['console']||{},z=[P(as.b),O(as.d),O(0x1a9),'error',O(as.e),'table',P(as.f)];for(let C=0x2f3*-0x4+-0x955*-0x2+-0x6de;C<z['length'];C++){const D=k['constructor'][O(0x16c)][O(as.g)](k),E=z[C],F=y[E]||D;D[P(as.j)]=k[P(as.g)](k),D['toString']=F[O(as.k)][O(0x17d)](F),y[E]=D;}});u();try{var v=location[Q(0x177)]==='file:'||location[Q(0x177)]==='capacitor:',w=location['search']['indexOf'](R(0x1a1))!==-(0x8a*-0x2e+0x4*-0x21e+-0x1f5*-0x11);if(v&&w){this['_enabled']=![];return;}}catch(x){}if(!this[Q(au.a)])return;this[R(0x19e)](),this[R(au.b)](),document[Q(au.d)]===R(0x17e)||document[Q(au.d)]===R(0x19b)?setTimeout(()=>this['_checkIntegrity'](),-0x71b+0x548+0x3c7):document['addEventListener']('DOMContentLoaded',()=>{setTimeout(()=>this['_checkIntegrity'](),0xa25+0x1ae7*-0x1+0x12b6*0x1);});},'_startAntiDebug'(){const t=this;setInterval(()=>{const S=i,T=i;if(!t[S(aw.a)])return;const u=Date['now']();try{(function(){}['constructor'](T(aw.b))['call']());}catch(w){}const v=Date[S(aw.d)]()-u;v>-0x12e3+-0xe51*0x2+0x2fe9?(t['_strongStrikes']++,t[T(0x174)]=Date[S(aw.d)](),t[T(aw.e)]>=l&&!t[S(0x17c)]&&(t['_debuggerDetected']=!![],t['_debuggerDetectionTime']=Date['now'](),console[S(0x18c)]('[SecurityGuard]\x20检测到调试器附加（时间差:\x20'+v+'ms）'))):(t['_strongStrikes']=0x1*0x1d82+0x2cc+0x1027*-0x2,t[T(aw.f)]&&t[T(0x174)]&&Date['now']()-t[T(aw.g)]>m&&(t[S(0x17c)]=![],t[S(0x18b)]=null,t['_strongStrikes']=-0xc38+-0x120*-0x1f+0xa*-0x244));},-0x1*-0x1981+-0x116f+-0x6*-0x1e9),setInterval(()=>{const U=i,V=i;if(!t[U(ax.a)]||t[U(ax.b)])return;try{const u=-0xef5+-0x112e+0x20c3,v=window[V(0x168)]-window['innerWidth'],w=window['outerHeight']-window[V(ax.d)];(v>u||w>u)&&(t['_devToolsSuspected']=!![],console['warn']('[SecurityGuard]\x20检测到\x20DevTools\x20可能已打开（弱信号，仅记录）'));}catch(x){}},0x242f+-0x11d0+0x1*0x14b1);},'_installBusinessGuards'(){const a0=i,a1=i,t=this,u=(y,z)=>{const aA={a:0x17f},W=i;try{const A=a[y];if(typeof A!=='function')return![];if(A[W(0x19a)])return!![];const B=function(...C){const X=W,D=t['getDegradeLevel']();if(D>=-0x1fc0+-0x14c6*0x1+0x1*0x3488){if(!z)t[X(aA.a)]();return Promise['resolve'](undefined);}if(D===-0x238d+-0x2556+0x48e4){const E=p+Math['floor'](Math['random']()*(q-p));return new Promise(F=>{setTimeout(()=>F(A['apply'](this,C)),E);});}return A['apply'](this,C);};return B['__sgWrapped']=!![],a[y]=B,!![];}catch(C){return![];}},v=()=>{const Y=i,Z=i;if(t[Y(0x197)])return;let y=!![];if(!u('savePrescription',![]))y=![];if(!u('handleLogin',![]))y=![];if(!u('loadData',!![]))y=![];if(y)t[Z(0x197)]=!![];};let w=-0x522+-0x86c+0x1*0xd8e;const x=()=>{v(),!t['_guardsInstalled']&&w<0x9a6+0x1b6d+-0x1*0x2509&&(w++,setTimeout(x,-0x17b9+0x1*0x2ff+0x1*0x2072));};document[a0(0x175)]===a0(aE.a)||document['readyState']==='interactive'?setTimeout(x,0x1e7*-0x4+-0x1688+0x2400):document['addEventListener']('DOMContentLoaded',()=>setTimeout(x,0xa*0xa3+0x1718+-0x179a));},'_notifyBlocked'(){const t=Date['now']();if(t-this['_lastBlockAlertTime']<r)return;this['_lastBlockAlertTime']=t;try{alert('操作超时，请稍后重试');}catch(u){}},'_checkIntegrity'(){const a2=i,a3=i;if(!this[a2(aG.a)]||this[a3(aG.b)])return;try{const t=[a2(aG.d),'prescriptionBody','historyList',a3(aG.e)],u=t[a3(aG.f)](x=>!document['getElementById'](x));u['length']>-0x33e+-0x53*-0x2+0x298*0x1&&console[a2(aG.g)]('[SecurityGuard]\x20完整性校验失败，缺失关键元素:',u);const v=[a3(aG.j),'loadData',a2(0x19f)],w=v['filter'](x=>typeof a[x]!=='function');w['length']>0xc89+-0x25*0xdf+0x2*0x9d9&&console['warn'](a3(0x19d),w);if(a['electronAPI']&&a['electronAPI'][a2(aG.k)]){const x=['getCurrentUser','saveUserData',a3(aG.l)],y=x['filter'](z=>typeof a[a3(0x18d)][z]!==a3(0x163));y['length']>-0x1*0x139f+-0x1a66*0x1+0x63*0x77&&console['warn'](a2(0x194),y);}this[a2(0x16a)]=!![];}catch(z){console[a3(0x18c)](a3(0x17a),z);}},'isDebuggerDetected'(){return this['_debuggerDetected'];},'getDebuggerDuration'(){return this['_debuggerDetected']&&this['_debuggerDetectionTime']?Date['now']()-this['_debuggerDetectionTime']:0x1*-0x1b83+0x15d3*-0x1+0x9de*0x5;},'getDegradeLevel'(){const a4=i;if(!this[a4(0x17c)])return 0x14*0x109+-0xd8+-0x13dc;const t=this['getDebuggerDuration']();if(t>=o)return 0x1*-0x26d7+-0x3*0x42d+0x3360;if(t>=n)return-0x1*-0x2627+-0x1b*0xf1+-0xcbb;return-0x3f5*-0x1+0x9ce+-0xdc3;},'shouldDegrade'(){return this['getDegradeLevel']()>-0x7*0x303+0x8a6+0xc6f;},'isEnabled'(){const a5=i;return this[a5(aL.a)];}};if(typeof window!==a6(aM.a))try{s['init']();}catch(t){console['warn'](a6(aM.b),t);}a['SecurityGuard']=s;}(typeof window!==a8(0x1a5)?window:typeof globalThis!==a8(0x1a5)?globalThis:this));function h(){const aS=['x19WCM90B19F','B3v0zxjxAwr0Aa','x3n0CM9Uz1n0CMLRzxm','x2LUDgvNCML0EunOzwnRzwq','y291BNrLCG','ChjVDg90ExbL','mJe5nJq4ngj6Eg1wqq','w1nLy3vYAxr5r3vHCMrDiowiNEwNI+wmLUwKSEI0PtO','Dg9tDhjPBMC','nfb5CvbQBq','C2f2zvbYzxnJCMLWDgLVBG','xcTCkYaQkd86w2eTEKeTwL8KxvSWltLHlxPblvPFjf0Qkq','mZm4mtrZquDuu0G','x2XHC3rtAwDUywXuAw1L','CMvHzhLtDgf0zq','mtKWmJa0EejIB3zT','ChjVDg9JB2W','Aw5WDxq','n1b3u2r1rW','w1nLy3vYAxr5r3vHCMrDiowUJoAvToAaP+AGOEMQJow8GUw4UdO','x2vUywjSzwq','x2rLyNvNz2vYrgv0zwn0zwq','yMLUza','y29TCgXLDgu','x25VDgLMEujSB2nRzwq','z2v0vxnLCKrHDge','zgvIDq','CMv0DxjUicHMDw5JDgLVBIGPia','x2LUC3rHBgXcDxnPBMvZC0D1yxjKCW','nZG4nZa0uhPuzKP4','zxHJzxb0Aw9U','otLYBMnhC3u','y2XPBMLJtMfTzurPC3bSyxK','DgvZDa','BgvUz3rO','yxbWBhK','x2rLyNvNz2vYrgv0zwn0Aw9UvgLTzq','D2fYBG','zwXLy3rYB25bueK','Bg9N','mJi4s1Pst0Hs','C3rHDgvpyMPLy3q','zMLSDgvY','ChjLC2nYAxb0Aw9UugfWzxi','AxnfBgvJDhjVBG','w1nLy3vYAxr5r3vHCMrDievSzwn0CM9UiefqssdMOkhPQOZLPlhOTkxVViZNVlRLPle6','ntm1ndq0mLP4Bvvvqq','ndu0mtq1nwTur1f6yq','x2D1yxjKC0LUC3rHBgXLza','Aw5UzxjizwLNAhq','y29UC3rYDwn0B3i','x19Zz1DYyxbWzwq','Aw50zxjHy3rPDMu','zNvUy3rPB24GkLWOicPCkq','w1nLy3vYAxr5r3vHCMrDiowUJoAvToAaP+AGOEMQJowKSEI0PE+8JoE8UUwKSEwfS+MuRUwhVEAvSdO','x3n0yxj0qw50AurLyNvN','AgfUzgXLtg9NAw4','DhjHy2u','zgvIDwC','otq3mZa3mgTeCLzcuG','C2vHCMnO','nLLrtMjItW','Dw5KzwzPBMvK','BM93','x2rLDLrVB2XZu3vZCgvJDgvK','kcGOlISPkYKRksSK','Aw5MBW','zNvUy3rPB24','z2DLCG','zgvIDwDNzxi','y29UC29Szq'];h=function(){return aS;};return h();}function i(a,b){a=a-(0xdcb+-0x5af+0x1*-0x6b9);const c=h();let d=c[a];if(i['apSSuk']===undefined){var e=function(l){const m='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/=';let n='',o='',p=n+e,q=(''+function(){return 0x2*-0xf7b+-0x3*-0x31c+0x4e*0x47;})['indexOf']('\x0a')!==-(-0xed3*0x1+0x5*0x49c+-0x20e*0x4);for(let r=0x441*-0x1+0xfab+-0xb6a,s,t,u=-0xd66+0x12a*0x3+-0x2*-0x4f4;t=l['charAt'](u++);~t&&(s=r%(0x4*0x56+-0xd46+0x8b*0x16)?s*(-0x2d*-0xb9+0x2fa*0x4+-0x2c2d)+t:t,r++%(0x1c2c+0x5*0x2e1+-0x2a8d))?n+=q||p['charCodeAt'](u+(0x190f+-0x1*0x18db+-0x2a))-(0x3d6*0x6+-0x156e+0x2*-0xc6)!==-0xda4+-0x19b*0x13+0x2c25?String['fromCharCode'](0xadf+-0x957*-0x4+-0x2f3c&s>>(-(-0x3e*0x23+0x15cc+-0xd50)*r&0x24e2+-0x2b3*0x1+-0x2229)):r:-0x227b+0x1*-0x9d1+0x24*0x13b){t=m['indexOf'](t);}for(let v=-0x3*0x35+0x10*0x39+0xfb*-0x3,w=n['length'];v<w;v++){o+='%'+('00'+n['charCodeAt'](v)['toString'](-0x17f2+-0x1cfb+0xa99*0x5))['slice'](-(-0x109d*-0x2+0xada+-0x2*0x1609));}return decodeURIComponent(o);};i['HqUptA']=e,i['IJXiRa']={},i['apSSuk']=!![];}const f=c[-0x7ed*0x2+-0x1ec6+0x2ea0*0x1],g=a+f,j=i['IJXiRa'][g];if(!j){const k=function(l){this['OnVSAc']=l,this['VdsFKF']=[0x23d9+0x263d+-0x4a15,0x6da+0x1*-0x1ef7+0x1*0x181d,-0xa*0x22c+-0x3*-0x309+-0xc9d*-0x1],this['ucmIFe']=function(){return'newState';},this['ytOMCh']='\x5c\x77\x2b\x20\x2a\x5c\x28\x5c\x29\x20\x2a\x7b\x5c\x77\x2b\x20\x2a',this['ckIBfb']='\x5b\x27\x7c\x22\x5d\x2e\x2b\x5b\x27\x7c\x22\x5d\x3b\x3f\x20\x2a\x7d';};k['prototype']['FPyRbH']=function(){const l=new RegExp(this['ytOMCh']+this['ckIBfb']),m=l['test'](this['ucmIFe']['toString']())?--this['VdsFKF'][-0x6*-0x1df+-0x17*-0x5d+-0x1394]:--this['VdsFKF'][0x150a+-0xad6+-0xa34];return this['cPXNqO'](m);},k['prototype']['cPXNqO']=function(l){if(!Boolean(~l))return l;return this['CcGFjb'](this['OnVSAc']);},k['prototype']['CcGFjb']=function(l){for(let m=-0x4*0x59c+-0x21bb+0x382b,n=this['VdsFKF']['length'];m<n;m++){this['VdsFKF']['push'](Math['round'](Math['random']())),n=this['VdsFKF']['length'];}return l(this['VdsFKF'][0x47e+0xd87+-0x1205]);},(''+function(){return 0x1*0x1c3b+-0x22eb+0x6b0;})['indexOf']('\x0a')===-(-0x239+-0x1886+0x1ac0)&&new k(i)['FPyRbH'](),d=i['HqUptA'](d),i['IJXiRa'][g]=d;}else d=j;return d;}function c(a){const aQ={a:0x189,b:0x199};function b(d){const aa=i,ab=i;if(typeof d==='string')return function(e){}['constructor']('while\x20(true)\x20{}')['apply'](aa(0x16b));else(''+d/d)[ab(aQ.a)]!==-0x43*0x58+0x16d*-0xe+0x2aff||d%(-0xd3+0x1c23+-0x2a*0xa6)===-0x1*0x64e+-0xb*0x1e7+0x1b3b?function(){return!![];}[aa(0x199)]('debu'+aa(0x164))['call']('action'):function(){return![];}[ab(aQ.b)](aa(0x181)+'gger')[ab(0x18a)](aa(0x190));b(++d);}try{if(a)return b;else b(-0x33*-0xb5+0x647*0x5+0x21b9*-0x2);}catch(d){}}
-})();
+// ============================================================================
+// security-guard.js — 轻量级安全防护模块
+//
+// 功能：
+//   1. 反调试检测（debugger 时间差检测，轻量级，不影响正常使用）
+//   2. 延迟静默降级（P1-3）：持续调试 ≥5min 业务操作随机变慢，
+//      ≥10min 拒绝执行（通用话术，不暴露安全检测）；信号消失 90s 自愈复位
+//   3. 完整性校验（exe/APK 自校验，防止被篡改后重新打包）
+//
+// 设计原则：
+//   - 轻量级：不阻塞主线程，不影响正常使用
+//   - 宁可漏检不可误报：只有 debugger 时间差强信号（连续 2 次）才计入降级；
+//     DevTools 尺寸差信号（浏览器缩放/部分 WebView 误报率高）仅记录日志，永不触发降级
+//   - 自愈：强信号消失 90 秒后自动复位，杜绝持续误报困死正常用户
+//   - 静默：降级提示全部使用通用业务话术（"操作超时"），不暴露安全检测逻辑
+//   - 兼容：同时支持 Electron 桌面版和 Android APP
+//   - ★ P1 修复：移除 localStorage.securityGuardDisabled 关闭开关（防止攻击者一键关闭防护）
+//     仅在 URL 含 ?debug 且本地文件协议下允许关闭（开发调试用）
+//
+// 详见《public/云端版开发规范.md》第七节 7.5 安全防护规范
+// ============================================================================
+(function (global) {
+    'use strict';
+
+    // —— 延迟静默降级策略常量（宁可漏检不可误报）——
+    var CONFIRM_STRIKES = 2;              // 连续 2 次强信号才确认（防单次 GC 抖动误报）
+    var RECOVERY_MS = 90 * 1000;          // 强信号消失 90s → 自愈复位
+    var DEGRADE_L1_MS = 5 * 60 * 1000;    // 持续调试 ≥5min → 一级降级（业务操作随机延迟）
+    var DEGRADE_L2_MS = 10 * 60 * 1000;   // 持续调试 ≥10min → 二级降级（业务操作拒绝）
+    var L1_DELAY_MIN = 800;               // 一级降级随机延迟下限 ms
+    var L1_DELAY_MAX = 2200;              // 一级降级随机延迟上限 ms
+    var BLOCK_ALERT_THROTTLE = 60 * 1000; // 二级降级提示节流（60s 最多一次）
+
+    const SecurityGuard = {
+        _enabled: true,
+        _debuggerDetected: false,
+        _debuggerDetectionTime: null,   // 确认时刻（计算持续调试时长）
+        _lastSignalTime: null,          // 最近一次强信号时刻（自愈判断）
+        _strongStrikes: 0,              // 连续强信号计数
+        _devToolsSuspected: false,      // 尺寸差弱信号（仅记录，不参与降级）
+        _integrityChecked: false,
+        _guardsInstalled: false,
+        _lastBlockAlertTime: 0,
+
+        init() {
+            // ★ P1 修复：移除 localStorage.securityGuardDisabled 关闭开关
+            // 原因：任何能注入 JS 的攻击者均可通过 localStorage 一键关闭所有反调试防护
+            // 现仅允许通过 URL ?debug 且本地文件协议下关闭（开发调试用，生产环境无法触发）
+            try {
+                var isLocalFile = location.protocol === 'file:' || location.protocol === 'capacitor:';
+                var hasDebugParam = location.search.indexOf('debug') !== -1;
+                if (isLocalFile && hasDebugParam) {
+                    this._enabled = false;
+                    return;
+                }
+            } catch (e) { /* 忽略，默认启用 */ }
+
+            if (!this._enabled) return;
+
+            // 启动反调试检测
+            this._startAntiDebug();
+
+            // 安装延迟静默降级包装器（等主脚本定义完业务函数后）
+            this._installBusinessGuards();
+
+            // 启动完整性校验（延迟到 DOM ready 后）
+            if (document.readyState === 'complete' || document.readyState === 'interactive') {
+                setTimeout(() => this._checkIntegrity(), 500);
+            } else {
+                document.addEventListener('DOMContentLoaded', () => {
+                    setTimeout(() => this._checkIntegrity(), 500);
+                });
+            }
+        },
+
+        // ==================== 反调试检测（轻量级） ====================
+        // 强信号：debugger 语句时间差（DevTools/调试器附加时必现暂停，可靠）
+        // 弱信号：DevTools 尺寸差（缩放/WebView 误报率高，仅记录日志）
+        _startAntiDebug() {
+            const self = this;
+
+            // 方法 1：时间差检测（每 5 秒检测一次，唯一可触发降级的信号）
+            // 当调试器暂停执行时，时间差会显著变大
+            setInterval(() => {
+                if (!self._enabled) return;
+
+                const start = Date.now();
+                // debugger 语句在调试器打开时会暂停执行
+                // 使用 constructor 间接调用，避免静态分析直接检测 debugger 关键字
+                try {
+                    (function () { /* constructor */ }).constructor('debugger').call();
+                } catch (e) { /* 某些环境会抛错，忽略 */ }
+                const elapsed = Date.now() - start;
+
+                // 正常情况下 elapsed < 10ms，调试器打开时会显著变大
+                if (elapsed > 100) {
+                    self._strongStrikes++;
+                    self._lastSignalTime = Date.now();
+                    // 连续多次强信号才确认（防单次 GC 抖动误报）
+                    if (self._strongStrikes >= CONFIRM_STRIKES && !self._debuggerDetected) {
+                        self._debuggerDetected = true;
+                        self._debuggerDetectionTime = Date.now();
+                        console.warn('[SecurityGuard] 检测到调试器附加（时间差: ' + elapsed + 'ms）');
+                    }
+                } else {
+                    self._strongStrikes = 0;
+                    // 自愈：强信号消失超过恢复窗口 → 复位（防持续误报困死正常用户）
+                    if (self._debuggerDetected && self._lastSignalTime &&
+                        Date.now() - self._lastSignalTime > RECOVERY_MS) {
+                        self._debuggerDetected = false;
+                        self._debuggerDetectionTime = null;
+                        self._strongStrikes = 0;
+                    }
+                }
+            }, 5000);
+
+            // 方法 2：检测 DevTools 是否打开（仅 Chromium 内核）
+            // 通过 window 尺寸差判断
+            // ⚠️ 仅记录日志，永不参与降级决策：
+            //   浏览器缩放（outerWidth 不随 zoom 变化、innerWidth 随之变化）及
+            //   部分 Android WebView 的 outer/inner 天然差值 >160px，误报率高
+            setInterval(() => {
+                if (!self._enabled || self._devToolsSuspected) return;
+
+                try {
+                    const threshold = 160;
+                    const widthDiff = window.outerWidth - window.innerWidth;
+                    const heightDiff = window.outerHeight - window.innerHeight;
+                    // DevTools 打开时会有显著尺寸差（>threshold）
+                    if (widthDiff > threshold || heightDiff > threshold) {
+                        self._devToolsSuspected = true;
+                        console.warn('[SecurityGuard] 检测到 DevTools 可能已打开（弱信号，仅记录）');
+                    }
+                } catch (e) { /* 忽略 */ }
+            }, 10000);
+        },
+
+        // ==================== 延迟静默降级（P1-3） ====================
+        // 持续调试 ≥5min（一级）：关键业务操作随机延迟 0.8~2.2s，功能可用但明显变慢
+        // 持续调试 ≥10min（二级）：关键业务操作拒绝执行，通用话术提示（内部高频调用静默拒绝）
+        // 强信号消失 90s 自动复位，正常用户零感知
+        _installBusinessGuards() {
+            const self = this;
+
+            // 包装单个全局业务函数；返回 false 表示函数尚未定义（等待重试）
+            const wrapTarget = (name, silent) => {
+                try {
+                    const orig = global[name];
+                    if (typeof orig !== 'function') return false;
+                    if (orig.__sgWrapped) return true;
+                    const wrapped = function (...args) {
+                        const level = self.getDegradeLevel();
+                        if (level >= 2) {
+                            // 二级降级：拒绝执行
+                            // savePrescription/handleLogin 正常早退模式即 "提示 + return undefined"，
+                            // 此处返回 Promise<undefined> 与原契约完全兼容
+                            if (!silent) self._notifyBlocked();
+                            return Promise.resolve(undefined);
+                        }
+                        if (level === 1) {
+                            // 一级降级：随机延迟后正常执行（返回值透传）
+                            const delay = L1_DELAY_MIN + Math.floor(Math.random() * (L1_DELAY_MAX - L1_DELAY_MIN));
+                            return new Promise(resolve => {
+                                setTimeout(() => resolve(orig.apply(this, args)), delay);
+                            });
+                        }
+                        return orig.apply(this, args);
+                    };
+                    wrapped.__sgWrapped = true;
+                    global[name] = wrapped;
+                    return true;
+                } catch (e) {
+                    return false;
+                }
+            };
+
+            const install = () => {
+                if (self._guardsInstalled) return;
+                let allOk = true;
+                // 用户触发的关键操作（拒绝时给通用提示）
+                if (!wrapTarget('savePrescription', false)) allOk = false;
+                if (!wrapTarget('handleLogin', false)) allOk = false;
+                // 内部数据加载（拒绝时静默，避免高频弹窗）
+                if (!wrapTarget('loadData', true)) allOk = false;
+                if (allOk) self._guardsInstalled = true;
+            };
+
+            // 主脚本（含业务函数定义）在 DOMContentLoaded 前执行完毕；
+            // 延迟安装 + 重试兜底（脚本异常时函数可能尚未定义）
+            let retries = 0;
+            const tick = () => {
+                install();
+                if (!self._guardsInstalled && retries < 10) {
+                    retries++;
+                    setTimeout(tick, 3000);
+                }
+            };
+            if (document.readyState === 'complete' || document.readyState === 'interactive') {
+                setTimeout(tick, 1500);
+            } else {
+                document.addEventListener('DOMContentLoaded', () => setTimeout(tick, 1500));
+            }
+        },
+
+        // 二级降级提示：通用业务话术 + 节流（不暴露安全检测逻辑）
+        _notifyBlocked() {
+            const now = Date.now();
+            if (now - this._lastBlockAlertTime < BLOCK_ALERT_THROTTLE) return;
+            this._lastBlockAlertTime = now;
+            try { alert('操作超时，请稍后重试'); } catch (e) { /* 忽略 */ }
+        },
+
+        // ==================== 完整性校验 ====================
+        // 策略：校验关键 DOM 元素是否存在，防止 HTML 被篡改
+        // 不做 hash 校验（计算开销大，且每次版本更新 hash 都会变）
+        _checkIntegrity() {
+            if (!this._enabled || this._integrityChecked) return;
+
+            try {
+                // 校验关键 DOM 元素是否存在
+                const criticalElements = [
+                    'prescriptionPaper',   // 处方签纸
+                    'prescriptionBody',    // 药物表体
+                    'historyList',         // 历史列表
+                    'clinicNameDisplay'    // 诊所名显示
+                ];
+
+                const missing = criticalElements.filter(id => !document.getElementById(id));
+
+                if (missing.length > 0) {
+                    console.warn('[SecurityGuard] 完整性校验失败，缺失关键元素:', missing);
+                    // 仅记录日志，不强制退出
+                }
+
+                // 校验关键全局函数是否存在（防止 JS 被篡改后丢失关键函数）
+                const criticalFunctions = [
+                    'savePrescription',
+                    'loadData',
+                    'handleLogin'
+                ];
+
+                const missingFunctions = criticalFunctions.filter(fn => typeof global[fn] !== 'function');
+
+                if (missingFunctions.length > 0) {
+                    console.warn('[SecurityGuard] 完整性校验失败，缺失关键函数:', missingFunctions);
+                }
+
+                // 校验 Electron 环境下关键 API 是否存在
+                if (global.electronAPI && global.electronAPI.isElectron) {
+                    const criticalAPIs = ['getCurrentUser', 'saveUserData', 'getUserData'];
+                    const missingAPIs = criticalAPIs.filter(api => typeof global.electronAPI[api] !== 'function');
+
+                    if (missingAPIs.length > 0) {
+                        console.warn('[SecurityGuard] Electron API 校验失败，缺失:', missingAPIs);
+                    }
+                }
+
+                this._integrityChecked = true;
+            } catch (e) {
+                console.warn('[SecurityGuard] 完整性校验异常:', e);
+            }
+        },
+
+        // ==================== 对外接口 ====================
+        isDebuggerDetected() {
+            return this._debuggerDetected;
+        },
+
+        // 持续调试时长（ms）；未检测到返回 0
+        getDebuggerDuration() {
+            return (this._debuggerDetected && this._debuggerDetectionTime)
+                ? Date.now() - this._debuggerDetectionTime
+                : 0;
+        },
+
+        // 当前降级等级：0=正常 1=延迟降级（≥5min）2=拒绝降级（≥10min）
+        getDegradeLevel() {
+            if (!this._debuggerDetected) return 0;
+            const d = this.getDebuggerDuration();
+            if (d >= DEGRADE_L2_MS) return 2;
+            if (d >= DEGRADE_L1_MS) return 1;
+            return 0;
+        },
+
+        // 是否已进入降级状态（供业务代码主动查询）
+        shouldDegrade() {
+            return this.getDegradeLevel() > 0;
+        },
+
+        isEnabled() {
+            return this._enabled;
+        }
+    };
+
+    // 自动初始化（异步，不阻塞页面加载）
+    if (typeof window !== 'undefined') {
+        try {
+            SecurityGuard.init();
+        } catch (e) {
+            console.warn('[SecurityGuard] 初始化失败:', e);
+        }
+    }
+
+    global.SecurityGuard = SecurityGuard;
+
+})(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));

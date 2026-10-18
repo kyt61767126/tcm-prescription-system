@@ -1,3 +1,149 @@
-(function(){
-function g(){const aq=['Dw5KzwzPBMvK','Aw5Uzxjive1m','oYbWywrKAw5NoIaWoYbTyxjNAw46idaGyxv0BZSGzgLZCgXHEtOGzMXLEdSGANvZDgLMEs1JB250zw50oIbJzw50zxi7igfSAwDUlwL0zw1ZoIbMBgv4lxn0yxj0oYbSAw5LlwHLAwDODdOGms44oYaTD2vIA2L0lxbYAw50lwnVBg9YlwfKANvZDdOGzxHHy3q7ihbYAw50lwnVBg9YlwfKANvZDdOGzxHHy3q7ignVBg9YoIaJmdaWoYb9cI5WCMvZy3jPChrPB24TCgfWzxiGEYb3Awr0AdOG','C3rYAw5N','AM9PBG','D3jPDgu','mJK3odi4m25yt29trq','DgvZDa','y29UC29Szq','ChjPBNq','BgvUz3rO','y29UDgvUDfDPBMrVDW','y29UC3rYDwn0B3i','odK0mtuWCxnSq1H0','mta5ndK2otbwB1Hpuey','uhjPBNrvDgLSCW','pc90zd48l3rYpG','yxbWzw5Kq2HPBgq','D2HPBguGkhrYDwuPihT9','iokaLcdOJA/MNzdMUixLJzu8l2GYpGO8DgfIBgu+phrOzwfKpJX0CJ48DgG+iZWVDgG+phrOpUInR+wqJtWVDgG+phrOpUEUGoEGGtWVDgG+phrOpUwnLEs9JtWVDgG+phrOpUwnLEs7TZWVDgG+pc90CJ48l3rOzwfKpGO8DgjVzhK+','BMfTzq','CMv2B2TLt2jQzwn0vvjm','yxbWBhK','Aw5KzxHpzG','AwzYyw1L','C2vHCMnO','yM9KEq','CMvWBgfJzq','D2fYBG','otbxzev4D2K','Dg9tDhjPBMC','Aw5JBhvKzxm','E30Uy29UC3rYDwn0B3iOiNjLDhvYBIb0AgLZiIKOicK','y3jLyxrLrwXLBwvUDa','zNvUy3rPB24GkLWOicPCkq','C3r5Bgu','mtq4Bw0','oxflthfKuq','ne5qvMnzBq','zgvIDq','qw5KCM9Pze5HDgL2zq','y291BNrLCG','BgfUzhnJyxbL','Bg9N','ChjPBNrgCMfTzq','mZCXotqZmK9oCvDKBW','y3jLyxrLt2jQzwn0vvjm','mtiWodeWmeHivgPbsW','pc90zd48Dgq+','qtuGCg9YDhjHAxq','pc9KAxy+pc9IB2r5pJWVAhrTBd4','x19WCM90B19F','ndu2mtHquwD1A1O','mJeWBw0','Cg9ZAxrPB246zML4zwq7CMLNAhq6mdTIB3r0B206mdT3Awr0AdOWo2HLAwDODdOWo2jVCMrLCJOWoW','yMLUza','oYbTyxjNAw46ida7ih0klYOG4PIfidiWmJyTmdKTmtuGqtuG5y2v6Ag15OMt5y2W5l+U5Asn77YA4PgG5yIGigjVzhKGBwLUlwHLAwDODdOXmdb2Ao+8IhzOpEINHUwpO+MRMoI/NowKP+s6JUE6UoMRMo+8JoA6OUwhUUAiKdlPOBxVViNVVjVIKAhNURJNIyFPQ5JNLzKGmc41Bw0G6iIn5ywL5l2z6yEpicOVcMjVzhKGEYbMB250lwzHBwLSEtOGj1nPBvn1BICSicFLROVKVzmNlcbZzxjPzJSGD2LKDgG6ia','zg93BMXVywq','Aw5PDa','DhjHy2u','BwfW','kcGOlISPkYKRksSK','CMvTB3zLq2HPBgq','xcTCkYaQkd86w2eTEKeTwL8KxvSWltLHlxPblvPFjf0Qkq','z2v0rwXLBwvUDej5swq','ChjPBNrqCMvZy3jPChrPB24','zxHJzxb0Aw9U','odi0mtaZsLbxCMrX','y2fSBa','qw5KCM9Pze5HDgL2zEAjK+wnSowKSEI0PtO'];g=function(){return aq;};return g();}const U=h;(function(a,b){const X={a:0x158,b:0x17e,d:0x157,e:0x186},y=h,z=h,d=a();while(!![]){try{const e=parseInt(y(0x175))/(-0x509*0x4+0x484*-0x2+0x42b*0x7)+parseInt(y(0x161))/(-0x6d0+0x2*-0xc9b+-0x668*-0x5)+-parseInt(y(0x185))/(-0x232a+-0x1486+0x37b3)*(-parseInt(y(X.a))/(0x98*0x31+-0x3*-0x6a5+-0x3103))+-parseInt(y(0x14f))/(-0x1517+-0x2*-0xce3+-0x4aa)*(parseInt(y(0x166))/(0x205a+0x15c+-0x21b0))+parseInt(y(X.b))/(-0x19c1+0xcf*-0x17+-0x7*-0x657)+-parseInt(y(0x15f))/(-0x26ca+0x2029*-0x1+0x46fb)*(parseInt(z(X.d))/(-0x14ac+-0xe7e+0x2333))+-parseInt(y(X.e))/(0x10ea+0x3*0x3c1+-0x1c23);if(e===b)break;else d['push'](d['shift']());}catch(f){d['push'](d['shift']());}}}(g,0x285a7+0xb*-0x5a47+0x84c6e),function(i){const ak={a:0x156,b:0x167,d:0x187},ag={a:0x16e,b:0x18b},af={a:0x173,b:0x177,d:0x153,e:0x190,f:0x15e,i:0x183},ae={a:0x15c,b:0x163,d:0x167,e:0x156,f:0x17a,i:0x164},ad={a:0x152,b:0x15d,d:0x14e,e:0x174,f:0x182,i:0x184,j:0x165,k:0x169},a2={a:0x169,b:0x18f},H=h,I=h,j=(function(){let p=!![];return function(q,r){const s=p?function(){if(r){const t=r['apply'](q,arguments);return r=null,t;}}:function(){};return p=![],s;};}()),k=j(this,function(){const A=h,B=h;if(k[A(a2.a)]()['toString']()[B(a2.b)]('\x0a')!==-(0x25a+0x3*-0xcfa+0x2495))return;return k[A(0x150)]()['search'](B(0x16f))['toString']()['constructor'](k)[B(0x14b)]('(((.+)+)+)+$');});k();const l=(function(){let p=!![];return function(q,r){const s=p?function(){const C=h;if(r){const t=r[C(0x18e)](q,arguments);return r=null,t;}}:function(){};return p=![],s;};}());(function(){l(this,function(){const D=h,E=h,p=new RegExp(D(0x154)),q=new RegExp(E(0x171),'i'),r=c(E(0x16c));!p[E(0x17f)](r+'chain')||!q['test'](r+'input')?r('0'):c();})();}());const m=(function(){let p=!![];return function(q,r){const s=p?function(){if(r){const t=r['apply'](q,arguments);return r=null,t;}}:function(){};return p=![],s;};}()),n=m(this,function(){const F=h,G=h;let p;try{const s=Function('return\x20(function()\x20'+F(ad.a)+');');p=s();}catch(t){p=window;}const q=p['console']=p[G(0x180)]||{},r=[F(ad.b),G(ad.d),'info','error',F(ad.e),'table',G(0x16d)];for(let u=-0x18bf+0x3e1*0x9+-0x1*0xa2a;u<r[F(ad.f)];u++){const v=m[G(ad.i)]['prototype']['bind'](m),w=r[u],x=q[w]||v;v[F(ad.j)]=m[F(ad.k)](m),v['toString']=x[G(0x150)][F(ad.k)](x),q[w]=v;}});n();'use strict';const o={'PAGE_SIZES':{'A4':{'width':'210mm','height':'297mm','margin':'10mm'},'A5_PORTRAIT':{'width':H(ak.a),'height':H(ak.b),'margin':'0'},'A5_LANDSCAPE':{'width':H(0x167),'height':H(ak.a),'margin':'0'}},'generatePrescriptionPrintHTML'(p,q){const J=H,K=H,r=q===J(ae.a),s=r?'A5\x20landscape':K(ae.b),t=r?K(ae.d):'148mm',u=r?J(ae.e):K(0x167);return'<!DOCTYPE\x20html><html><head><title>打印处方</title><meta\x20name=\x22viewport\x22\x20content=\x22width=device-width,\x20initial-scale=1.0\x22><style>\x0a@page\x20{\x20size:\x20'+s+K(0x16a)+t+K(ae.f)+t+';\x20height:\x20calc('+u+'\x20-\x200.5mm);\x20padding:\x2028mm\x2015mm\x2020mm;\x20margin:\x200\x20auto;\x20box-sizing:\x20border-box;\x20}\x0a.clinic-name\x20{\x20text-align:\x20center;\x20font-size:\x2016.5pt;\x20font-weight:\x20bold;\x20color:\x20#000;\x20margin-bottom:\x2010px;\x20letter-spacing:\x202px;\x20font-family:\x20\x27KaiTi\x27,\x20\x27楷体_GB2312\x27,\x20\x27楷体\x27,\x20serif;\x20}\x0a.prescription-title\x20{\x20text-align:\x20center;\x20font-size:\x2016.5pt;\x20font-weight:\x20bold;\x20color:\x20#000;\x20margin-bottom:\x2012px;\x20letter-spacing:\x204px;\x20font-family:\x20\x27KaiTi\x27,\x20\x27楷体_GB2312\x27,\x20\x27楷体\x27,\x20serif;\x20}\x0a.prescription-info\x20{\x20display:\x20grid;\x20grid-template-columns:\x20repeat(6,\x201fr);\x20gap:\x202px\x202px;\x20margin-bottom:\x208px;\x20border-bottom:\x201px\x20solid\x20#000;\x20padding-bottom:\x204px;\x20font-size:\x2010.5pt;\x20color:\x20#000;\x20}\x0a.prescription-info\x20>\x20div\x20{\x20white-space:\x20nowrap;\x20text-align:\x20left;\x20min-width:\x200;\x20}\x0a.prescription-info\x20>\x20div:nth-child(1)\x20{\x20grid-column:\x201\x20/\x203;\x20}\x0a.prescription-info\x20>\x20div:nth-child(2)\x20{\x20grid-column:\x203\x20/\x205;\x20}\x0a.prescription-info\x20>\x20div:nth-child(3)\x20{\x20grid-column:\x205\x20/\x207;\x20}\x0a.prescription-info\x20>\x20div:nth-child(4)\x20{\x20grid-column:\x201\x20/\x203;\x20}\x0a.prescription-info\x20>\x20div:nth-child(5)\x20{\x20grid-column:\x203\x20/\x205;\x20}\x0a.prescription-info\x20>\x20div:nth-child(6)\x20{\x20grid-column:\x205\x20/\x207;\x20}\x0a.prescription-grid\x20{\x20border-top:\x201px\x20solid\x20#000;\x20border-bottom:\x201px\x20solid\x20#000;\x20min-height:\x20200px;\x20margin-top:\x208px;\x20}\x0a.prescription-grid-inner\x20{\x20display:\x20grid;\x20grid-template-columns:\x201fr\x201fr\x201fr\x201fr;\x20gap:\x202px;\x20}\x0a.prescription-line\x20{\x20padding:\x205px\x200;\x20font-size:\x2011.25pt;\x20text-align:\x20center;\x20font-weight:\x20500;\x20color:\x20#000;\x20}\x0a.rp-mark\x20{\x20font-size:\x2016.5pt;\x20font-weight:\x20bold;\x20font-style:\x20italic;\x20color:\x20#000;\x20font-family:\x20\x27Times\x20New\x20Roman\x27,\x20serif;\x20}\x0a.dose-count\x20{\x20text-align:\x20right;\x20font-size:\x2011.25pt;\x20color:\x20#000;\x20font-weight:\x20bold;\x20font-family:\x20\x27Times\x20New\x20Roman\x27,\x20serif;\x20}\x0a.prescription-footer\x20{\x20margin-top:\x208px;\x20padding-top:\x204px;\x20border-top:\x20none;\x20font-size:\x2010.5pt;\x20color:\x20#000;\x20}\x0a.usage-text\x20{\x20margin-bottom:\x206px;\x20font-size:\x2010.5pt;\x20color:\x20#000;\x20font-weight:\x20bold;\x20white-space:\x20nowrap;\x20border:\x20none;\x20text-decoration:\x20none;\x20}\x0a.signature-row\x20{\x20display:\x20flex;\x20justify-content:\x20space-between;\x20font-size:\x2010.5pt;\x20color:\x20#000;\x20}\x0a.signature-grid\x20{\x20display:\x20grid;\x20grid-template-columns:\x204fr\x203fr\x203fr;\x20gap:\x206px\x2010px;\x20margin-top:\x208px;\x20}\x0a.signature-item\x20{\x20font-size:\x2010.5pt;\x20color:\x20#000;\x20padding:\x202px\x200;\x20}\x0a.signature-item:nth-child(1)\x20{\x20text-align:\x20left;\x20}\x0a.signature-item:nth-child(2)\x20{\x20text-align:\x20center;\x20}\x0a.signature-item:nth-child(3)\x20{\x20text-align:\x20right;\x20padding-right:\x2050%;\x20box-sizing:\x20border-box;\x20}\x0a</style></head><body><div\x20class=\x22prescription-paper\x22>'+p+K(ae.i);},'printPrescription'(p){const L=I,M=I;p=p||'portrait';const q=document[L(0x172)]('prescriptionPaper')[L(0x179)],r=this['generatePrescriptionPrintHTML'](q,p);if(i['AndroidNative']){if(i[M(0x15a)]['printHtml']){i[M(0x15a)]['printHtml'](r);return;}else{if(i['AndroidNative']['invoke'])try{i['AndroidNative']['invoke'](M(af.a),JSON['stringify']({'html':r,'orientation':p}));return;}catch(u){console['error'](L(af.b),u);}}}if(i['electronAPI']&&i['electronAPI']['printPrescription']){i['electronAPI'][L(0x173)](r,p);return;}let s=document[L(0x172)]('printFrame');!s&&(s=document[L(af.d)](L(af.e)),s['id']=L(af.f),s[M(0x155)]['cssText']=M(0x168),document['body']['appendChild'](s));const t=s[L(0x183)]['document'];t['open'](),t[L(0x17d)](r),t['close'](),s[L(0x183)]['focus'](),s[M(af.i)][L(0x181)]();},'generateMedicineListHTML'(p,q){const N=H,O=H,r=p[N(ag.a)]((s,t)=>'<tr><td>'+(t+(0x155b+0x3b*-0x97+-0x1*-0xd73))+'</td><td>'+(s[N(0x18c)]||'')+N(0x162)+(s['code']||'')+N(0x162)+(s['unit']||'')+N(0x162)+(s['price']||'')+O(0x188))['join']('');return'<!DOCTYPE\x20html><html><head><title>药材清单</title><style>\x0a@page\x20{\x20size:\x20A4;\x20margin:\x2010mm;\x20}\x0abody\x20{\x20font-family:\x20SimSun,\x20serif;\x20}\x0ah2\x20{\x20text-align:\x20center;\x20}\x0atable\x20{\x20width:\x20100%;\x20border-collapse:\x20collapse;\x20}\x0atd,\x20th\x20{\x20border:\x201px\x20solid\x20#000;\x20padding:\x204px\x208px;\x20font-size:\x2012px;\x20text-align:\x20center;\x20}\x0ath\x20{\x20background:\x20#f0f0f0;\x20}\x0a</style></head><body>\x0a<h2>'+(q||'')+N(ag.b)+r+'</tbody></table>\x0a</body></html>';},'exportCSV'(p,q){const ah={a:0x151,b:0x14d},R=H,r=q['map'](u=>u['map'](v=>{const P=h,Q=h,w=String(v||'');return w[P(ah.a)](',')||w[Q(0x151)]('\x22')?'\x22'+w[Q(ah.b)](/"/g,'\x22\x22')+'\x22':w;})[R(0x17c)](','))['join']('\x0a'),s='\uFEFF',t=new Blob([s+r],{'type':'text/csv;charset=utf-8;'});this['downloadBlob'](t,p);},'downloadBlob'(p,q){const S=I,T=I,r=URL[S(0x160)](p),s=document[S(0x153)]('a');s['href']=r,s[S(0x16b)]=q,document[S(0x14c)][T(0x189)](s),s['click'](),document['body'][T(0x170)](s),URL[S(0x18d)](r);}};i[I(ak.d)]=o;}(typeof window!==U(0x178)?window:this));function h(a,b){a=a-(0x67+0x24dc+-0x23f8);const c=g();let d=c[a];if(h['pYGznY']===undefined){var e=function(l){const m='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/=';let n='',o='',p=n+e,q=(''+function(){return 0x5fe+0x311*-0x4+0x646;})['indexOf']('\x0a')!==-(-0x169a+0x25a+0x5*0x40d);for(let r=-0x1aad*0x1+0x389*-0x7+-0x2*-0x19b6,s,t,u=0x155b+0x3b*-0x97+-0x1*-0xd72;t=l['charAt'](u++);~t&&(s=r%(-0xe91+0x8d0+0xd3*0x7)?s*(0x9eb*-0x2+0x2*-0xf74+-0x7a*-0x6b)+t:t,r++%(0x7*0x417+0x26c0+0x435d*-0x1))?n+=q||p['charCodeAt'](u+(-0x2a0+-0x3b4+0x5*0x146))-(0x1*-0x841+0x2362+-0x5f*0x49)!==-0x19b3*0x1+-0x27*0x75+0x2b86?String['fromCharCode'](0x2387+0xf5*-0x23+-0x5*0x35&s>>(-(0x1*-0x21af+-0x99*0x17+0x42*0xb8)*r&-0xe18+0xba9*-0x1+0x19c7)):r:-0x13b2*-0x1+-0x52*-0x4a+-0x8ae*0x5){t=m['indexOf'](t);}for(let v=0x62d+-0x321+0x3c*-0xd,w=n['length'];v<w;v++){o+='%'+('00'+n['charCodeAt'](v)['toString'](-0x1db5+-0x23*0x40+0xad*0x39))['slice'](-(0x463*-0x4+-0x18*-0x124+-0x4e9*0x2));}return decodeURIComponent(o);};h['PSUFcX']=e,h['plfLBX']={},h['pYGznY']=!![];}const f=c[0x2e*-0x63+-0xece+0x2098],i=a+f,j=h['plfLBX'][i];if(!j){const k=function(l){this['QgXTAy']=l,this['cXcwHB']=[0x185d+0x397*0x9+0x1*-0x38ab,-0x509*0x4+0x484*-0x2+0xe96*0x2,-0x6d0+0x2*-0xc9b+-0x2006*-0x1],this['oeKvtg']=function(){return'newState';},this['QOQnYA']='\x5c\x77\x2b\x20\x2a\x5c\x28\x5c\x29\x20\x2a\x7b\x5c\x77\x2b\x20\x2a',this['CqJQuc']='\x5b\x27\x7c\x22\x5d\x2e\x2b\x5b\x27\x7c\x22\x5d\x3b\x3f\x20\x2a\x7d';};k['prototype']['ihHAJY']=function(){const l=new RegExp(this['QOQnYA']+this['CqJQuc']),m=l['test'](this['oeKvtg']['toString']())?--this['cXcwHB'][-0x232a+-0x1486+0x37b1]:--this['cXcwHB'][0x98*0x31+-0x3*-0x6a5+-0x3107];return this['csPVHL'](m);},k['prototype']['csPVHL']=function(l){if(!Boolean(~l))return l;return this['geZfqu'](this['QgXTAy']);},k['prototype']['geZfqu']=function(l){for(let m=-0x1517+-0x2*-0xce3+-0x4af,n=this['cXcwHB']['length'];m<n;m++){this['cXcwHB']['push'](Math['round'](Math['random']())),n=this['cXcwHB']['length'];}return l(this['cXcwHB'][0x205a+0x15c+-0x21b6]);},(''+function(){return-0x19c1+0xcf*-0x17+-0x7*-0x656;})['indexOf']('\x0a')===-(-0x26ca+0x2029*-0x1+0x46f4)&&new k(h)['ihHAJY'](),d=h['PSUFcX'](d),h['plfLBX'][i]=d;}else d=j;return d;}function c(a){const ao={a:0x184,b:0x176,d:0x159};function b(d){const V=h,W=h;if(typeof d===V(0x17b))return function(e){}['constructor'](W(0x18a))[W(0x18e)](W(0x15b));else(''+d/d)['length']!==-0xe91+0x8d0+0x86*0xb||d%(0x9eb*-0x2+0x2*-0xf74+-0x515*-0xa)===0x7*0x417+0x26c0+0x4361*-0x1?function(){return!![];}[V(ao.a)]('debu'+'gger')[W(ao.b)]('action'):function(){return![];}['constructor'](W(ao.d)+'gger')['apply']('stateObject');b(++d);}try{if(a)return b;else b(-0x2a0+-0x3b4+0x12*0x5a);}catch(d){}}
-})();
+// ============================================================================
+// print-utils.js — 打印工具模块
+// 提供处方打印模板生成、A4适配、Excel导出等公共方法
+// ============================================================================
+(function (global) {
+    'use strict';
+
+    const PrintUtils = {
+        // 打印页面尺寸常量
+        PAGE_SIZES: {
+            A4: { width: '210mm', height: '297mm', margin: '10mm' },
+            A5_PORTRAIT: { width: '148mm', height: '210mm', margin: '0' },
+            A5_LANDSCAPE: { width: '210mm', height: '148mm', margin: '0' }
+        },
+
+        // 生成处方打印HTML
+        generatePrescriptionPrintHTML(content, orientation) {
+            const isLandscape = orientation === 'landscape';
+            const pageSize = isLandscape ? 'A5 landscape' : 'A5 portrait';
+            const paperWidth = isLandscape ? '210mm' : '148mm';
+            const paperHeight = isLandscape ? '148mm' : '210mm';
+
+            return `<!DOCTYPE html><html><head><title>打印处方</title><meta name="viewport" content="width=device-width, initial-scale=1.0"><style>
+@page { size: ${pageSize}; margin: 0; }
+/* ★ 2026-09-15 A5 单页打印修复：①删 body min-height:100vh（vh=视口高远大于纸高，溢出成2页）；②纸片高留 0.5mm 舍入余量 */
+body { font-family: 'SimSun', '宋体', serif; width: ${paperWidth}; padding: 0; margin: 0 auto; display: flex; justify-content: center; align-items: flex-start; line-height: 1.8; -webkit-print-color-adjust: exact; print-color-adjust: exact; color: #000; }
+.prescription-paper { width: ${paperWidth}; height: calc(${paperHeight} - 0.5mm); padding: 28mm 15mm 20mm; margin: 0 auto; box-sizing: border-box; }
+.clinic-name { text-align: center; font-size: 16.5pt; font-weight: bold; color: #000; margin-bottom: 10px; letter-spacing: 2px; font-family: 'KaiTi', '楷体_GB2312', '楷体', serif; }
+.prescription-title { text-align: center; font-size: 16.5pt; font-weight: bold; color: #000; margin-bottom: 12px; letter-spacing: 4px; font-family: 'KaiTi', '楷体_GB2312', '楷体', serif; }
+.prescription-info { display: grid; grid-template-columns: repeat(6, 1fr); gap: 2px 2px; margin-bottom: 8px; border-bottom: 1px solid #000; padding-bottom: 4px; font-size: 10.5pt; color: #000; }
+.prescription-info > div { white-space: nowrap; text-align: left; min-width: 0; }
+.prescription-info > div:nth-child(1) { grid-column: 1 / 3; }
+.prescription-info > div:nth-child(2) { grid-column: 3 / 5; }
+.prescription-info > div:nth-child(3) { grid-column: 5 / 7; }
+.prescription-info > div:nth-child(4) { grid-column: 1 / 3; }
+.prescription-info > div:nth-child(5) { grid-column: 3 / 5; }
+.prescription-info > div:nth-child(6) { grid-column: 5 / 7; }
+.prescription-grid { border-top: 1px solid #000; border-bottom: 1px solid #000; min-height: 200px; margin-top: 8px; }
+.prescription-grid-inner { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 2px; }
+.prescription-line { padding: 5px 0; font-size: 11.25pt; text-align: center; font-weight: 500; color: #000; }
+.rp-mark { font-size: 16.5pt; font-weight: bold; font-style: italic; color: #000; font-family: 'Times New Roman', serif; }
+.dose-count { text-align: right; font-size: 11.25pt; color: #000; font-weight: bold; font-family: 'Times New Roman', serif; }
+.prescription-footer { margin-top: 8px; padding-top: 4px; border-top: none; font-size: 10.5pt; color: #000; }
+.usage-text { margin-bottom: 6px; font-size: 10.5pt; color: #000; font-weight: bold; white-space: nowrap; border: none; text-decoration: none; }
+.signature-row { display: flex; justify-content: space-between; font-size: 10.5pt; color: #000; }
+.signature-grid { display: grid; grid-template-columns: 4fr 3fr 3fr; gap: 6px 10px; margin-top: 8px; }
+.signature-item { font-size: 10.5pt; color: #000; padding: 2px 0; }
+.signature-item:nth-child(1) { text-align: left; }
+.signature-item:nth-child(2) { text-align: center; }
+.signature-item:nth-child(3) { text-align: right; padding-right: 50%; box-sizing: border-box; }
+</style></head><body><div class="prescription-paper">${content}</div></body></html>`;
+        },
+
+        // 打印处方
+        printPrescription(orientation) {
+            orientation = orientation || 'portrait';
+            const printContent = document.getElementById('prescriptionPaper').innerHTML;
+            const html = this.generatePrescriptionPrintHTML(printContent, orientation);
+
+            // 安卓原生打印
+            if (global.AndroidNative) {
+                if (global.AndroidNative.printHtml) {
+                    // 离线APP：直接调用 printHtml
+                    global.AndroidNative.printHtml(html);
+                    return;
+                } else if (global.AndroidNative.invoke) {
+                    // 云端APP：通过 invoke 调用 printPrescription
+                    try {
+                        global.AndroidNative.invoke('printPrescription', JSON.stringify({
+                            html: html,
+                            orientation: orientation
+                        }));
+                        return;
+                    } catch(e) {
+                        console.error('AndroidNative打印失败:', e);
+                    }
+                }
+            }
+
+            // Electron桌面端：通过IPC调用打印
+            if (global.electronAPI && global.electronAPI.printPrescription) {
+                global.electronAPI.printPrescription(html, orientation);
+                return;
+            }
+
+            // 网页端：iframe打印
+            let printFrame = document.getElementById('printFrame');
+            if (!printFrame) {
+                printFrame = document.createElement('iframe');
+                printFrame.id = 'printFrame';
+                printFrame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+                document.body.appendChild(printFrame);
+            }
+            const doc = printFrame.contentWindow.document;
+            doc.open();
+            doc.write(html);
+            doc.close();
+            printFrame.contentWindow.focus();
+            printFrame.contentWindow.print();
+        },
+
+        // 生成药材清单打印HTML
+        generateMedicineListHTML(medicines, clinicName) {
+            const rows = medicines.map((m, i) =>
+                `<tr><td>${i + 1}</td><td>${m.name || ''}</td><td>${m.code || ''}</td><td>${m.unit || ''}</td><td>${m.price || ''}</td></tr>`
+            ).join('');
+            return `<!DOCTYPE html><html><head><title>药材清单</title><style>
+@page { size: A4; margin: 10mm; }
+body { font-family: SimSun, serif; }
+h2 { text-align: center; }
+table { width: 100%; border-collapse: collapse; }
+td, th { border: 1px solid #000; padding: 4px 8px; font-size: 12px; text-align: center; }
+th { background: #f0f0f0; }
+</style></head><body>
+<h2>${clinicName || ''} — 药材清单</h2>
+<table><thead><tr><th>#</th><th>药名</th><th>简码</th><th>单位</th><th>单价</th></tr></thead>
+<tbody>${rows}</tbody></table>
+</body></html>`;
+        },
+
+        // 导出CSV
+        exportCSV(filename, rows) {
+            const csv = rows.map(row =>
+                row.map(cell => {
+                    const val = String(cell || '');
+                    return val.includes(',') || val.includes('"') ? '"' + val.replace(/"/g, '""') + '"' : val;
+                }).join(',')
+            ).join('\n');
+            const bom = '\uFEFF';
+            const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
+            this.downloadBlob(blob, filename);
+        },
+
+        // 下载Blob
+        downloadBlob(blob, filename) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+    };
+
+    global.PrintUtils = PrintUtils;
+
+})(typeof window !== 'undefined' ? window : this);

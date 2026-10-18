@@ -1,3 +1,149 @@
-(function(){
-const X=h;(function(a,b){const a0={a:0x1a4},x=h,y=h,d=a();while(!![]){try{const e=-parseInt(x(0x197))/(-0x25*0x35+0x197*-0x6+0x1134)*(parseInt(x(0x17e))/(-0x1b37+0x547*0x1+0x15f2))+-parseInt(y(0x1b2))/(-0x266*-0x1+-0x1*-0xbdb+-0x2*0x71f)+-parseInt(y(0x1b4))/(-0x2*-0xc68+0x1d*-0x153+0xd9b)+parseInt(y(0x177))/(0x4ae*0x2+0x179d+-0x20f4)+parseInt(x(a0.a))/(-0xd*-0x1f7+-0x9fb+-0xf8a)*(-parseInt(y(0x1b0))/(-0xf21+-0x24ed+0x1*0x3415))+parseInt(x(0x1ae))/(0xbc*-0xa+-0x1d1*0xe+0x20ce)+parseInt(x(0x18e))/(0x21f3*0x1+-0x523+-0x1cc7);if(e===b)break;else d['push'](d['shift']());}catch(f){d['push'](d['shift']());}}}(g,-0x7f*-0x217d+0x5164*-0x25+0x5*0xdaf6),function(i){const ao={a:0x1a8,b:0x1a5,d:0x17f},an={a:0x18a,b:0x184,d:0x180},al={a:0x188},ak={a:0x185,b:0x189},aj={a:0x1b5,b:0x1b1,d:0x191,e:0x174,f:0x174,i:0x1a3,j:0x174,k:0x170,l:0x1b5,m:0x1ac,n:0x1a0,o:0x172},ai={a:0x181,b:0x1a8,d:0x19c,e:0x1ad,f:0x1ab},ah={a:0x196,b:0x19f,d:0x19d,e:0x19e,f:0x186,i:0x193,j:0x186,k:0x175},a5={a:0x1af},J=h,K=h,j=(function(){const a1={a:0x176};let p=!![];return function(q,r){const s=p?function(){const z=h;if(r){const t=r[z(a1.a)](q,arguments);return r=null,t;}}:function(){};return p=![],s;};}()),k=j(this,function(){const A=h,B=h;if(k['bind']()['toString']()[A(0x17b)]('\x0a')!==-(0x1792+-0x10dd+-0x6b4))return;return k[B(0x175)]()['search']('(((.+)+)+)+$')['toString']()['constructor'](k)[A(0x1b6)](B(a5.a));});k();const l=(function(){let p=!![];return function(q,r){const s=p?function(){const C=h;if(r){const t=r[C(0x176)](q,arguments);return r=null,t;}}:function(){};return p=![],s;};}());(function(){const aa={a:0x16e,b:0x1aa};l(this,function(){const D=h,E=h,p=new RegExp(D(aa.a)),q=new RegExp('\x5c+\x5c+\x20*(?:[a-zA-Z_$][0-9a-zA-Z_$]*)','i'),r=c('init');!p['test'](r+'chain')||!q['test'](r+E(aa.b))?r('0'):c();})();}());const m=(function(){let p=!![];return function(q,r){const ac={a:0x176},s=p?function(){const F=h;if(r){const t=r[F(ac.a)](q,arguments);return r=null,t;}}:function(){};return p=![],s;};}()),n=m(this,function(){const H=h,I=h,p=function(){const G=h;let t;try{t=Function(G(0x171)+'{}.constructor(\x22return\x20this\x22)(\x20)'+');')();}catch(u){t=window;}return t;},q=p(),r=q['console']=q[H(0x1a9)]||{},s=[H(ah.a),I(0x194),'info',H(0x170),'exception',H(ah.b),'trace'];for(let t=0x9*0x269+-0x9a9*-0x3+0x11a*-0x2e;t<s[H(ah.d)];t++){const u=m[I(ah.e)]['prototype'][H(ah.f)](m),v=s[t],w=r[v]||u;u[H(ah.i)]=m[H(ah.j)](m),u[H(0x175)]=w[H(ah.k)]['bind'](w),r[v]=u;}});n();'use strict';const o={'PAGE_SIZES':{'A4':{'width':'210mm','height':'297mm','margin':J(0x195)},'A5_PORTRAIT':{'width':K(ao.a),'height':J(ao.b),'margin':'0'},'A5_LANDSCAPE':{'width':K(0x1a5),'height':J(ao.a),'margin':'0'}},'generatePrescriptionPrintHTML'(p,q){const L=K,M=K,r=q===L(0x1a2),s=r?'A5\x20landscape':L(ai.a),t=r?'210mm':M(ai.b),u=r?'148mm':'210mm';return M(ai.d)+s+M(0x1a7)+t+';\x20padding:\x200;\x20margin:\x200\x20auto;\x20display:\x20flex;\x20justify-content:\x20center;\x20align-items:\x20flex-start;\x20line-height:\x201.8;\x20-webkit-print-color-adjust:\x20exact;\x20print-color-adjust:\x20exact;\x20color:\x20#000;\x20}\x0a.prescription-paper\x20{\x20width:\x20'+t+M(ai.e)+u+'\x20-\x200.5mm);\x20padding:\x2028mm\x2015mm\x2020mm;\x20margin:\x200\x20auto;\x20box-sizing:\x20border-box;\x20}\x0a.clinic-name\x20{\x20text-align:\x20center;\x20font-size:\x2016.5pt;\x20font-weight:\x20bold;\x20color:\x20#000;\x20margin-bottom:\x2010px;\x20letter-spacing:\x202px;\x20font-family:\x20\x27KaiTi\x27,\x20\x27楷体_GB2312\x27,\x20\x27楷体\x27,\x20serif;\x20}\x0a.prescription-title\x20{\x20text-align:\x20center;\x20font-size:\x2016.5pt;\x20font-weight:\x20bold;\x20color:\x20#000;\x20margin-bottom:\x2012px;\x20letter-spacing:\x204px;\x20font-family:\x20\x27KaiTi\x27,\x20\x27楷体_GB2312\x27,\x20\x27楷体\x27,\x20serif;\x20}\x0a.prescription-info\x20{\x20display:\x20grid;\x20grid-template-columns:\x20repeat(6,\x201fr);\x20gap:\x202px\x202px;\x20margin-bottom:\x208px;\x20border-bottom:\x201px\x20solid\x20#000;\x20padding-bottom:\x204px;\x20font-size:\x2010.5pt;\x20color:\x20#000;\x20}\x0a.prescription-info\x20>\x20div\x20{\x20white-space:\x20nowrap;\x20text-align:\x20left;\x20min-width:\x200;\x20}\x0a.prescription-info\x20>\x20div:nth-child(1)\x20{\x20grid-column:\x201\x20/\x203;\x20}\x0a.prescription-info\x20>\x20div:nth-child(2)\x20{\x20grid-column:\x203\x20/\x205;\x20}\x0a.prescription-info\x20>\x20div:nth-child(3)\x20{\x20grid-column:\x205\x20/\x207;\x20}\x0a.prescription-info\x20>\x20div:nth-child(4)\x20{\x20grid-column:\x201\x20/\x203;\x20}\x0a.prescription-info\x20>\x20div:nth-child(5)\x20{\x20grid-column:\x203\x20/\x205;\x20}\x0a.prescription-info\x20>\x20div:nth-child(6)\x20{\x20grid-column:\x205\x20/\x207;\x20}\x0a.prescription-grid\x20{\x20border-top:\x201px\x20solid\x20#000;\x20border-bottom:\x201px\x20solid\x20#000;\x20min-height:\x20200px;\x20margin-top:\x208px;\x20}\x0a.prescription-grid-inner\x20{\x20display:\x20grid;\x20grid-template-columns:\x201fr\x201fr\x201fr\x201fr;\x20gap:\x202px;\x20}\x0a.prescription-line\x20{\x20padding:\x205px\x200;\x20font-size:\x2011.25pt;\x20text-align:\x20center;\x20font-weight:\x20500;\x20color:\x20#000;\x20}\x0a.rp-mark\x20{\x20font-size:\x2016.5pt;\x20font-weight:\x20bold;\x20font-style:\x20italic;\x20color:\x20#000;\x20font-family:\x20\x27Times\x20New\x20Roman\x27,\x20serif;\x20}\x0a.dose-count\x20{\x20text-align:\x20right;\x20font-size:\x2011.25pt;\x20color:\x20#000;\x20font-weight:\x20bold;\x20font-family:\x20\x27Times\x20New\x20Roman\x27,\x20serif;\x20}\x0a.prescription-footer\x20{\x20margin-top:\x208px;\x20padding-top:\x204px;\x20border-top:\x20none;\x20font-size:\x2010.5pt;\x20color:\x20#000;\x20}\x0a.usage-text\x20{\x20margin-bottom:\x206px;\x20font-size:\x2010.5pt;\x20color:\x20#000;\x20font-weight:\x20bold;\x20white-space:\x20nowrap;\x20border:\x20none;\x20text-decoration:\x20none;\x20}\x0a.signature-row\x20{\x20display:\x20flex;\x20justify-content:\x20space-between;\x20font-size:\x2010.5pt;\x20color:\x20#000;\x20}\x0a.signature-grid\x20{\x20display:\x20grid;\x20grid-template-columns:\x204fr\x203fr\x203fr;\x20gap:\x206px\x2010px;\x20margin-top:\x208px;\x20}\x0a.signature-item\x20{\x20font-size:\x2010.5pt;\x20color:\x20#000;\x20padding:\x202px\x200;\x20}\x0a.signature-item:nth-child(1)\x20{\x20text-align:\x20left;\x20}\x0a.signature-item:nth-child(2)\x20{\x20text-align:\x20center;\x20}\x0a.signature-item:nth-child(3)\x20{\x20text-align:\x20right;\x20padding-right:\x2050%;\x20box-sizing:\x20border-box;\x20}\x0a</style></head><body><div\x20class=\x22prescription-paper\x22>'+p+M(ai.f);},'printPrescription'(p){const N=K,O=K;p=p||N(0x16c);const q=document[N(aj.a)](N(aj.b))[O(aj.d)],r=this['generatePrescriptionPrintHTML'](q,p);if(i[N(aj.e)]){if(i[N(0x174)]['printHtml']){i['AndroidNative']['printHtml'](r);return;}else{if(i[N(aj.f)][N(aj.i)])try{i[N(aj.j)][N(0x1a3)](O(0x182),JSON['stringify']({'html':r,'orientation':p}));return;}catch(u){console[O(aj.k)](N(0x192),u);}}}if(i['electronAPI']&&i['electronAPI'][N(0x182)]){i['electronAPI']['printPrescription'](r,p);return;}let s=document[N(aj.l)](O(0x17d));!s&&(s=document[O(0x183)](N(0x18d)),s['id']=N(0x17d),s[N(aj.m)][N(aj.n)]='position:fixed;right:0;bottom:0;width:0;height:0;border:0;',document[N(0x1a6)]['appendChild'](s));const t=s['contentWindow'][O(0x179)];t['open'](),t[O(0x1b8)](r),t[N(aj.o)](),s[O(0x198)]['focus'](),s[O(0x198)]['print']();},'generateMedicineListHTML'(p,q){const P=J,Q=J,r=p['map']((s,t)=>P(0x190)+(t+(0x77*0x4+-0x8*0x293+0x12bd))+P(0x17a)+(s[P(0x1a1)]||'')+'</td><td>'+(s[P(0x18b)]||'')+'</td><td>'+(s[P(0x18c)]||'')+P(0x17a)+(s[P(0x17c)]||'')+Q(0x19a))[Q(ak.a)]('');return Q(ak.b)+(q||'')+'\x20—\x20药材清单</h2>\x0a<table><thead><tr><th>#</th><th>药名</th><th>简码</th><th>单位</th><th>单价</th></tr></thead>\x0a<tbody>'+r+'</tbody></table>\x0a</body></html>';},'exportCSV'(p,q){const R=J,U=J,r=q['map'](u=>u[R(0x187)](v=>{const S=R,T=R,w=String(v||'');return w[S(0x16f)](',')||w['includes']('\x22')?'\x22'+w[S(al.a)](/"/g,'\x22\x22')+'\x22':w;})[U(0x185)](','))['join']('\x0a'),s='\uFEFF',t=new Blob([s+r],{'type':R(0x19b)});this['downloadBlob'](t,p);},'downloadBlob'(p,q){const V=K,W=K,r=URL['createObjectURL'](p),s=document['createElement']('a');s[V(0x1b7)]=r,s[V(an.a)]=q,document['body'][W(an.b)](s),s[V(an.d)](),document[V(0x1a6)][V(0x1b3)](s),URL['revokeObjectURL'](r);}};i[K(ao.d)]=o;}(typeof window!==X(0x18f)?window:this));function c(a){const as={a:0x178,b:0x176,d:0x199};function b(d){const Y=h,Z=h;if(typeof d==='string')return function(e){}[Y(0x19e)](Z(as.a))[Z(as.b)](Y(0x173));else(''+d/d)[Z(0x19d)]!==-0xf*0xe5+0x1*-0x10dd+0x1e49||d%(-0xc3c+0x131e+0x1*-0x6ce)===-0x41*-0x72+-0xd*-0xb7+0xcbf*-0x3?function(){return!![];}['constructor']('debu'+'gger')['call'](Z(as.d)):function(){return![];}[Z(0x19e)]('debu'+'gger')['apply'](Z(0x16d));b(++d);}try{if(a)return b;else b(-0x1e4f+-0xb7f*0x3+-0x1*-0x40cc);}catch(d){}}function h(a,b){a=a-(0x7a*0x47+-0x1d*0xb3+-0xc23);const c=g();let d=c[a];if(h['ypdwsZ']===undefined){var e=function(l){const m='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/=';let n='',o='',p=n+e,q=(''+function(){return-0x704+0x3*-0x879+-0x17*-0x169;})['indexOf']('\x0a')!==-(-0x19a5+0x84f*-0x4+0x2*0x1d71);for(let r=0x9a*0xb+-0x8f*0x27+0xf2b*0x1,s,t,u=0x23d6+-0x1097+-0x133f;t=l['charAt'](u++);~t&&(s=r%(0x1*0x311+-0x1040+0xd33)?s*(0x131e+0x1*-0x581+0x1*-0xd5d)+t:t,r++%(-0x1*-0x3df+0x904*-0x2+0xe2d))?n+=q||p['charCodeAt'](u+(-0xb7f*0x3+-0x1*0x2237+-0xb75*-0x6))-(-0x4a8*0x4+0x11*-0x9e+0x1d28)!==-0x8aa+0x1*-0x229d+0x2b47?String['fromCharCode'](-0xb93*0x3+0x1cdd+0x6db&s>>(-(0x48a*0x3+-0x1cbd+-0x3*-0x50b)*r&-0x1704+0xf3*0x3+-0x6bb*-0x3)):r:0xe9e+0x1800+-0x269e){t=m['indexOf'](t);}for(let v=0x254f*-0x1+0x7e1+0x1d6e,w=n['length'];v<w;v++){o+='%'+('00'+n['charCodeAt'](v)['toString'](0xa66+-0x1*0x10ed+0x697))['slice'](-(0xb27+-0x5b*0x3b+0x22*0x4a));}return decodeURIComponent(o);};h['VvCmbP']=e,h['dHBmfR']={},h['ypdwsZ']=!![];}const f=c[-0x1d9b+0x2*0xee1+-0x27],i=a+f,j=h['dHBmfR'][i];if(!j){const k=function(l){this['JpAWrf']=l,this['FzQelo']=[-0x61e+0x53*0x2f+-0x91e,-0x98a+0x2cb*0xb+-0x152f,-0x1b37+0x547*0x1+0x15f0],this['vydNCq']=function(){return'newState';},this['ngrSzY']='\x5c\x77\x2b\x20\x2a\x5c\x28\x5c\x29\x20\x2a\x7b\x5c\x77\x2b\x20\x2a',this['itudMh']='\x5b\x27\x7c\x22\x5d\x2e\x2b\x5b\x27\x7c\x22\x5d\x3b\x3f\x20\x2a\x7d';};k['prototype']['iJcMkI']=function(){const l=new RegExp(this['ngrSzY']+this['itudMh']),m=l['test'](this['vydNCq']['toString']())?--this['FzQelo'][-0x266*-0x1+-0x1*-0xbdb+-0x39*0x40]:--this['FzQelo'][-0x2*-0xc68+0x1d*-0x153+0xd97];return this['yAylyV'](m);},k['prototype']['yAylyV']=function(l){if(!Boolean(~l))return l;return this['bKBemJ'](this['JpAWrf']);},k['prototype']['bKBemJ']=function(l){for(let m=0x4ae*0x2+0x179d+-0x20f9,n=this['FzQelo']['length'];m<n;m++){this['FzQelo']['push'](Math['round'](Math['random']())),n=this['FzQelo']['length'];}return l(this['FzQelo'][-0xd*-0x1f7+-0x9fb+-0xf90]);},(''+function(){return-0xf21+-0x24ed+0x2*0x1a07;})['indexOf']('\x0a')===-(0xbc*-0xa+-0x1d1*0xe+0x20c7)&&new k(h)['iJcMkI'](),d=h['VvCmbP'](d),h['dHBmfR'][i]=d;}else d=j;return d;}function g(){const au=['mJGYnZCYsg1UqMTm','ChjLC2nYAxb0Aw9UugfWzxi','mtCXmdK0ogTcEKDvra','CMvTB3zLq2HPBgq','mti4ndK4mgHkugT0AG','z2v0rwXLBwvUDej5swq','C2vHCMnO','AhjLzG','D3jPDgu','Cg9YDhjHAxq','C3rHDgvpyMPLy3q','zNvUy3rPB24GkLWOicPCkq','Aw5JBhvKzxm','zxjYB3i','CMv0DxjUicHMDw5JDgLVBIGPia','y2XVC2u','y291BNrLCG','qw5KCM9Pze5HDgL2zq','Dg9tDhjPBMC','yxbWBhK','ota4mJbIrKXyz28','D2HPBguGkhrYDwuPihT9','zg9JDw1LBNq','pc90zd48Dgq+','Aw5KzxHpzG','ChjPy2u','ChjPBNrgCMfTzq','mtG2ndi3ogDvvMnuBW','uhjPBNrvDgLSCW','y2XPy2S','qtuGCg9YDhjHAxq','ChjPBNrqCMvZy3jPChrPB24','y3jLyxrLrwXLBwvUDa','yxbWzw5Kq2HPBgq','AM9PBG','yMLUza','BwfW','CMvWBgfJzq','pcfet0nuwvbfigH0BwW+pgH0BwW+pgHLywq+phrPDgXLpUInR+ADKoA4HEwnLtWVDgL0Bgu+phn0EwXLpGPaCgfNzsb7ihnPEMu6iee0oYbTyxjNAw46ideWBw07ih0kyM9KEsb7igzVBNqTzMfTAwX5oIbtAw1tDw4SihnLCMLMoYb9cMGYihSGDgv4Dc1HBgLNBJOGy2vUDgvYoYb9cNrHyMXLihSGD2LKDgG6ideWmcu7igjVCMrLCI1JB2XSyxbZztOGy29SBgfWC2u7ih0kDgqSihrOihSGyM9YzgvYoIaXChGGC29SAwqGiZaWmdSGCgfKzgLUzZOGnhb4idHWEdSGzM9UDc1ZAxPLoIaXmNb4oYb0zxH0lwfSAwDUoIbJzw50zxi7ih0kDgGGEYbIywnRz3jVDw5KoIaJzJbMmgyWoYb9cJWVC3r5Bgu+pc9OzwfKpJXIB2r5pGO8Adi+','zg93BMXVywq','y29Kzq','Dw5PDa','AwzYyw1L','mJCYnZGXotLTDKTTtfi','Dw5KzwzPBMvK','phrYpJX0zd4','Aw5Uzxjive1m','qw5KCM9Pze5HDgL2zEAjK+wnSowKSEI0PtO','x19WCM90B19F','D2fYBG','mtbTBq','Bg9N','mvrtAwHNsG','y29UDgvUDfDPBMrVDW','ywn0Aw9U','pc90zd48l3rYpG','Dgv4Dc9JC3y7y2HHCNnLDd11DgyTodS','pcfet0nuwvbfigH0BwW+pgH0BwW+pgHLywq+phrPDgXLpUAjK+wnSowKHoAwUtWVDgL0Bgu+pg1LDgeGBMfTzt0IDMLLD3bVCNqIignVBNrLBNq9iNDPzhrOpwrLDMLJzs13Awr0AcWGAw5PDgLHBc1Zy2fSzt0XlJaIpJXZDhLSzt4kqhbHz2uGEYbZAxPLoIa','BgvUz3rO','y29UC3rYDwn0B3i','DgfIBgu','y3nZvgv4Da','BMfTzq','BgfUzhnJyxbL','Aw52B2TL','mtm4r29IshP2','mJeWBw0','yM9KEq','oYbTyxjNAw46ida7ih0klYOG4PIfidiWmJyTmdKTmtuGqtuG5y2v6Ag15OMt5y2W5l+U5Asn77YA4PgG5yIGigjVzhKGBwLUlwHLAwDODdOXmdb2Ao+8IhzOpEINHUwpO+MRMoI/NowKP+s6JUE6UoMRMo+8JoA6OUwhUUAiKdlPOBxVViNVVjVIKAhNURJNIyFPQ5JNLzKGmc41Bw0G6iIn5ywL5l2z6yEpicOVcMjVzhKGEYbMB250lwzHBwLSEtOGj1nPBvn1BICSicFLROVKVzmNlcbZzxjPzJSGD2LKDgG6ia','mtq4Bw0','y29UC29Szq','Aw5WDxq','pc9KAxy+pc9IB2r5pJWVAhrTBd4','C3r5Bgu','oYbOzwLNAhq6ignHBgmO','mJqXndCZnKTNvhPsrq','kcGOlISPkYKRksSK'];g=function(){return au;};return g();}
-})();
+// ============================================================================
+// print-utils.js — 打印工具模块
+// 提供处方打印模板生成、A4适配、Excel导出等公共方法
+// ============================================================================
+(function (global) {
+    'use strict';
+
+    const PrintUtils = {
+        // 打印页面尺寸常量
+        PAGE_SIZES: {
+            A4: { width: '210mm', height: '297mm', margin: '10mm' },
+            A5_PORTRAIT: { width: '148mm', height: '210mm', margin: '0' },
+            A5_LANDSCAPE: { width: '210mm', height: '148mm', margin: '0' }
+        },
+
+        // 生成处方打印HTML
+        generatePrescriptionPrintHTML(content, orientation) {
+            const isLandscape = orientation === 'landscape';
+            const pageSize = isLandscape ? 'A5 landscape' : 'A5 portrait';
+            const paperWidth = isLandscape ? '210mm' : '148mm';
+            const paperHeight = isLandscape ? '148mm' : '210mm';
+
+            return `<!DOCTYPE html><html><head><title>打印处方</title><meta name="viewport" content="width=device-width, initial-scale=1.0"><style>
+@page { size: ${pageSize}; margin: 0; }
+/* ★ 2026-09-15 A5 单页打印修复：①删 body min-height:100vh（vh=视口高远大于纸高，溢出成2页）；②纸片高留 0.5mm 舍入余量 */
+body { font-family: 'SimSun', '宋体', serif; width: ${paperWidth}; padding: 0; margin: 0 auto; display: flex; justify-content: center; align-items: flex-start; line-height: 1.8; -webkit-print-color-adjust: exact; print-color-adjust: exact; color: #000; }
+.prescription-paper { width: ${paperWidth}; height: calc(${paperHeight} - 0.5mm); padding: 28mm 15mm 20mm; margin: 0 auto; box-sizing: border-box; }
+.clinic-name { text-align: center; font-size: 16.5pt; font-weight: bold; color: #000; margin-bottom: 10px; letter-spacing: 2px; font-family: 'KaiTi', '楷体_GB2312', '楷体', serif; }
+.prescription-title { text-align: center; font-size: 16.5pt; font-weight: bold; color: #000; margin-bottom: 12px; letter-spacing: 4px; font-family: 'KaiTi', '楷体_GB2312', '楷体', serif; }
+.prescription-info { display: grid; grid-template-columns: repeat(6, 1fr); gap: 2px 2px; margin-bottom: 8px; border-bottom: 1px solid #000; padding-bottom: 4px; font-size: 10.5pt; color: #000; }
+.prescription-info > div { white-space: nowrap; text-align: left; min-width: 0; }
+.prescription-info > div:nth-child(1) { grid-column: 1 / 3; }
+.prescription-info > div:nth-child(2) { grid-column: 3 / 5; }
+.prescription-info > div:nth-child(3) { grid-column: 5 / 7; }
+.prescription-info > div:nth-child(4) { grid-column: 1 / 3; }
+.prescription-info > div:nth-child(5) { grid-column: 3 / 5; }
+.prescription-info > div:nth-child(6) { grid-column: 5 / 7; }
+.prescription-grid { border-top: 1px solid #000; border-bottom: 1px solid #000; min-height: 200px; margin-top: 8px; }
+.prescription-grid-inner { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 2px; }
+.prescription-line { padding: 5px 0; font-size: 11.25pt; text-align: center; font-weight: 500; color: #000; }
+.rp-mark { font-size: 16.5pt; font-weight: bold; font-style: italic; color: #000; font-family: 'Times New Roman', serif; }
+.dose-count { text-align: right; font-size: 11.25pt; color: #000; font-weight: bold; font-family: 'Times New Roman', serif; }
+.prescription-footer { margin-top: 8px; padding-top: 4px; border-top: none; font-size: 10.5pt; color: #000; }
+.usage-text { margin-bottom: 6px; font-size: 10.5pt; color: #000; font-weight: bold; white-space: nowrap; border: none; text-decoration: none; }
+.signature-row { display: flex; justify-content: space-between; font-size: 10.5pt; color: #000; }
+.signature-grid { display: grid; grid-template-columns: 4fr 3fr 3fr; gap: 6px 10px; margin-top: 8px; }
+.signature-item { font-size: 10.5pt; color: #000; padding: 2px 0; }
+.signature-item:nth-child(1) { text-align: left; }
+.signature-item:nth-child(2) { text-align: center; }
+.signature-item:nth-child(3) { text-align: right; padding-right: 50%; box-sizing: border-box; }
+</style></head><body><div class="prescription-paper">${content}</div></body></html>`;
+        },
+
+        // 打印处方
+        printPrescription(orientation) {
+            orientation = orientation || 'portrait';
+            const printContent = document.getElementById('prescriptionPaper').innerHTML;
+            const html = this.generatePrescriptionPrintHTML(printContent, orientation);
+
+            // 安卓原生打印
+            if (global.AndroidNative) {
+                if (global.AndroidNative.printHtml) {
+                    // 离线APP：直接调用 printHtml
+                    global.AndroidNative.printHtml(html);
+                    return;
+                } else if (global.AndroidNative.invoke) {
+                    // 云端APP：通过 invoke 调用 printPrescription
+                    try {
+                        global.AndroidNative.invoke('printPrescription', JSON.stringify({
+                            html: html,
+                            orientation: orientation
+                        }));
+                        return;
+                    } catch(e) {
+                        console.error('AndroidNative打印失败:', e);
+                    }
+                }
+            }
+
+            // Electron桌面端：通过IPC调用打印
+            if (global.electronAPI && global.electronAPI.printPrescription) {
+                global.electronAPI.printPrescription(html, orientation);
+                return;
+            }
+
+            // 网页端：iframe打印
+            let printFrame = document.getElementById('printFrame');
+            if (!printFrame) {
+                printFrame = document.createElement('iframe');
+                printFrame.id = 'printFrame';
+                printFrame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+                document.body.appendChild(printFrame);
+            }
+            const doc = printFrame.contentWindow.document;
+            doc.open();
+            doc.write(html);
+            doc.close();
+            printFrame.contentWindow.focus();
+            printFrame.contentWindow.print();
+        },
+
+        // 生成药材清单打印HTML
+        generateMedicineListHTML(medicines, clinicName) {
+            const rows = medicines.map((m, i) =>
+                `<tr><td>${i + 1}</td><td>${m.name || ''}</td><td>${m.code || ''}</td><td>${m.unit || ''}</td><td>${m.price || ''}</td></tr>`
+            ).join('');
+            return `<!DOCTYPE html><html><head><title>药材清单</title><style>
+@page { size: A4; margin: 10mm; }
+body { font-family: SimSun, serif; }
+h2 { text-align: center; }
+table { width: 100%; border-collapse: collapse; }
+td, th { border: 1px solid #000; padding: 4px 8px; font-size: 12px; text-align: center; }
+th { background: #f0f0f0; }
+</style></head><body>
+<h2>${clinicName || ''} — 药材清单</h2>
+<table><thead><tr><th>#</th><th>药名</th><th>简码</th><th>单位</th><th>单价</th></tr></thead>
+<tbody>${rows}</tbody></table>
+</body></html>`;
+        },
+
+        // 导出CSV
+        exportCSV(filename, rows) {
+            const csv = rows.map(row =>
+                row.map(cell => {
+                    const val = String(cell || '');
+                    return val.includes(',') || val.includes('"') ? '"' + val.replace(/"/g, '""') + '"' : val;
+                }).join(',')
+            ).join('\n');
+            const bom = '\uFEFF';
+            const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
+            this.downloadBlob(blob, filename);
+        },
+
+        // 下载Blob
+        downloadBlob(blob, filename) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+    };
+
+    global.PrintUtils = PrintUtils;
+
+})(typeof window !== 'undefined' ? window : this);
