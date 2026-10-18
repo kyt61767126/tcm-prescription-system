@@ -4627,6 +4627,14 @@
                         if (submittingEl) submittingEl.style.display = 'none';
                         const successEl = document.getElementById('regSuccess');
                         if (successEl) successEl.style.display = 'block';
+                        // ★ 2026-10-18 注册密码持久化（激活时免填复用）：加密存 license:cloudRegInfo
+                        try {
+                            const __encPwd = await encryptSensitive(password) || '';
+                            await StorageAdapter.setItem('license:cloudRegInfo', JSON.stringify({
+                                phone: phone.trim(), adminName: adminName.trim(),
+                                clinicName: clinicName.trim(), passwordEnc: __encPwd, at: Date.now()
+                            }));
+                        } catch (re) { console.warn('[LicenseCheck] 注册信息持久化失败(激活免填密码将失效):', re); }
                         console.log('[LicenseCheck] 注册成功，等待管理员审核，登录账号:', loginAccount);
                     } else {
                         // 失败：返回表单并显示错误
@@ -5181,11 +5189,16 @@
                 // ★ 2026-10-08 二期：买家自设登录密码（选填）。留空 → 服务端生成
                 //   随机初始密码（激活成功页一次性展示+复制），首次登录强制改密。
                 //   换机/老码激活留空即可，云端账号密码不受影响（仅新码首激生效）。
-                '<div style="margin-bottom:12px;">' +
+                // ★ 2026-10-18 已注册用户免填密码：注册时已设密码，激活时自动复用。
+                '<div id="adminCodePwdBox" style="margin-bottom:12px;">' +
                     '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">设置登录密码 <span style="font-size:11px;color:#909399;font-weight:normal;">（选填）</span></label>' +
                     '<input type="password" id="adminCodePassword" placeholder="8-32 位，须含字母和数字" autocomplete="new-password" data-lpignore="true" maxlength="32" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;margin-bottom:8px;">' +
                     '<input type="password" id="adminCodePassword2" placeholder="再次输入登录密码" autocomplete="new-password" data-lpignore="true" maxlength="32" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
                     '<div id="adminCodePwdHint" style="font-size:11px;color:#909399;margin-top:4px;">💡 留空则系统生成随机初始密码，首次登录需修改密码</div>' +
+                '</div>' +
+                // ★ 2026-10-18 已注册用户密码复用提示（默认隐藏，检测到注册密码时显示替代密码框）
+                '<div id="adminCodePwdReuseTip" style="display:none;margin-bottom:12px;background:#e8f5e9;border:1px solid #a5d6a7;border-radius:8px;padding:10px 12px;font-size:12px;color:#2e7d32;line-height:1.6;">' +
+                    '🔑 将使用您注册时设置的登录密码，无需重复填写' +
                 '</div>' +
                 // ★ 2026-09-11 渐进式身份字段（默认隐藏）：needClinicName/
                 //   needActivationInfo 服务端标记触发展开；手机号核验通过的换机场景永不出现
@@ -5614,6 +5627,8 @@
                 } else {
                     setPwdHint('💡 留空则系统生成随机初始密码，首次登录需修改密码', false);
                 }
+                // ★ 2026-10-18 最终密码确定：用户显式填写 > 注册密码复用 > 空串（服务端随机）
+                const effCodePwd = codePwd1 || ((state && state.password) ? String(state.password) : '');
                 // 渐进式身份字段（服务端 needClinicName/needActivationInfo 标记触发展开后填写）
                 let idClinicName = '', idAdminName = '';
                 try {
@@ -5630,7 +5645,7 @@
                     //   pwdCap=v2 换随机初始密码，成功响应一次性回传，本地账号同密码）；
                     //   非空=买家自设密码；旧调用方传 'admin' 保持一期行为不变。
                     res = await global.electronAPI.activate.submit(code, effUser || user,
-                        idClinicName || ((state && state.clinicName) || ''), phoneVal, codePwd1, undefined, '');
+                        idClinicName || ((state && state.clinicName) || ''), phoneVal, effCodePwd, undefined, '');
                     if (res && res.success) {
                         loading.style.display = 'none';
                         successBox.style.display = 'block';
@@ -5689,7 +5704,7 @@
                                 user: effUser,
                                 clinicName: idClinicName || ((state && state.clinicName) || ''),
                                 phone: phoneVal,
-                                password: codePwd1
+                                password: effCodePwd
                             })),
                             signal: controller.signal
                         });
@@ -6437,6 +6452,32 @@
 
         // 预填诊所/医师名（config 提供时）
         if (clinicName) document.getElementById('adminClinicName').value = clinicName;
+
+        // ★ 2026-10-18 注册密码复用：弹窗打开即读 license:cloudRegInfo，解密到 state.password，
+        //   已注册用户隐藏 Tab2 密码框（提交时 codePwd1 留空 → 用 state.password 而非随机密码）
+        (async function () {
+            try {
+                const __raw = await StorageAdapter.getItem('license:cloudRegInfo');
+                if (!__raw) return;
+                const __info = JSON.parse(__raw);
+                if (!__info || !__info.phone) return;
+                if (!state.phone) state.phone = String(__info.phone);
+                if (!state.adminName && __info.adminName) state.adminName = String(__info.adminName);
+                if (!state.clinicName && __info.clinicName) state.clinicName = String(__info.clinicName);
+                if (__info.passwordEnc) {
+                    const __pwd = await decryptSensitive(__info.passwordEnc);
+                    if (__pwd) state.password = String(__pwd);
+                }
+                // 隐藏 Tab2 密码框，显示复用提示
+                const __pwdBox = document.getElementById('adminCodePwdBox');
+                const __pwdTip = document.getElementById('adminCodePwdReuseTip');
+                if (__pwdBox) __pwdBox.style.display = 'none';
+                if (__pwdTip) __pwdTip.style.display = 'block';
+                // 同步预填手机号框
+                const __cp = document.getElementById('adminCodePhone');
+                if (__cp && !__cp.value.trim()) __cp.value = state.phone;
+            } catch (e) { console.warn('[LicenseCheck] 注册密码复用读取失败(不影响):', e); }
+        })();
     }
 
     // ★ 2026-09-03 管理员激活断点续传（云端系）：启动时检测持久化申请是否已审核通过

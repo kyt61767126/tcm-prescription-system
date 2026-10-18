@@ -6482,11 +6482,16 @@
                 '</div>' +
                 // ★ 2026-10-08 二期：登录密码选填（与 cloud.js 同构）。云端码留空 →
                 //   服务端随机初始密码 + 首登强制改密；离线码为本地账户密码（留空默认 admin）。
-                '<div style="margin-bottom:12px;">' +
+                // ★ 2026-10-18 已注册用户免填密码：注册时已设密码，激活时自动复用（__regPrefill 存在时隐藏本框）。
+                '<div id="adminCodePwdBox" style="margin-bottom:12px;">' +
                     '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">设置登录密码 <span style="font-size:11px;color:#909399;font-weight:normal;">（选填）</span></label>' +
                     '<input type="password" id="adminCodePassword" placeholder="8-32 位，须含字母和数字" autocomplete="new-password" data-lpignore="true" maxlength="32" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;margin-bottom:8px;">' +
                     '<input type="password" id="adminCodePassword2" placeholder="再次输入登录密码" autocomplete="new-password" data-lpignore="true" maxlength="32" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
                     '<div id="adminCodePwdHint" style="font-size:11px;color:#909399;margin-top:4px;">💡 云端码留空则系统生成随机初始密码，首次登录需修改密码</div>' +
+                '</div>' +
+                // ★ 2026-10-18 已注册用户密码复用提示（默认隐藏，__regPrefill 存在时显示替代密码框）
+                '<div id="adminCodePwdReuseTip" style="display:none;margin-bottom:12px;background:#e8f5e9;border:1px solid #a5d6a7;border-radius:8px;padding:10px 12px;font-size:12px;color:#2e7d32;line-height:1.6;">' +
+                    '🔑 将使用您注册时设置的登录密码，无需重复填写' +
                 '</div>' +
                 // ★ 2026-09-11 渐进式身份字段（默认隐藏，对齐桌面 activate-window 方案）：
                 //   needClinicName（老码换机手机号未核验通过）/ needActivationInfo（新码
@@ -7817,6 +7822,14 @@
                     const __hint = document.getElementById('adminPhoneHint');
                     if (__hint) __hint.innerHTML = '💡 11位手机号为登录账号，登录密码为注册时设置的密码';
                 } catch (he) {}
+                // ★ 2026-10-18 Tab2 免填密码：已注册用户隐藏密码框，显示复用提示
+                //   （提交逻辑 localPwd = codePwd1 || pwdVal || 'admin' 已自动取 state.password）
+                try {
+                    const __pwdBox = document.getElementById('adminCodePwdBox');
+                    const __pwdTip = document.getElementById('adminCodePwdReuseTip');
+                    if (__pwdBox) __pwdBox.style.display = 'none';
+                    if (__pwdTip) __pwdTip.style.display = 'block';
+                } catch (pe) {}
                 console.log('[LicenseCheck] 检测到已注册，Tab1 表单已预填（手机号登录账号）');
             }
         } catch (re) { console.warn('[LicenseCheck] 注册预填失败(不影响激活):', re); }
