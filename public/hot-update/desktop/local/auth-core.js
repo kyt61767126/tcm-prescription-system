@@ -2851,7 +2851,14 @@
 
     let __loginGatePromise = null;
     let __loginGateUser = '';
-    function resetLoginGateCache() { __loginGatePromise = null; }
+    // ★ 2026-10-17 S1-O3：对账自愈防重入（同一次失败只尝试一次，避免与重跑闸门递归）
+    let __loginGateHealing = false;
+    // 同账号本次运行内只对账一次（失败结果已缓存；避免每次点登录都打一次网络）
+    const __loginGateHealedKeys = Object.create(null);
+    function resetLoginGateCache() {
+        __loginGatePromise = null;
+        try { Object.keys(__loginGateHealedKeys).forEach(function (k) { delete __loginGateHealedKeys[k]; }); } catch (_) {}
+    }
 
     // ★ 2026-09-27 C2 关键时序：指纹功能平台判定【不得】用 isAndroidRuntime()
     //   ——它依赖 electronAPI.license.attestation，而 electronAPI shim 由
@@ -2883,6 +2890,125 @@
         } catch (e) {}
     }
 
+    // ★ 2026-10-17 S1-O3：登录闸失败时的服务端对账自愈（三向自检的服务端半程）。
+    //   POST /api/license/reconcile 返回服务端权威 state + actions：
+    //   · CLEAR_STALE_CODE → 本地 license:code 残留错位，回写服务端权威码；
+    //   · REINSTALL_LICENSE → 本地 license.dat 缺失/失效但服务端 LICENSED，走单一装码入口重装；
+    //   只在授权类失败（NO_LICENSE/已删除/无效）时调用，成功返回 {retry:true} 由调用方重跑一次闸门；
+    //   网络失败/异常一律静默返回 null（绝不改变原裁决，离线使用不阻断红线）。
+    async function __reconcileLoginGate() {
+        try {
+            const licApi = global.electronAPI && global.electronAPI.license;
+            const actApi = global.electronAPI && global.electronAPI.activate;
+            let status = null;
+            try {
+                status = (licApi && typeof licApi.getStatus === 'function') ? await licApi.getStatus() : null;
+            } catch (_) {}
+            let machineId = '';
+            try { machineId = normalizeMachineIdResult(await StorageAdapter.getItem('license:machineId') || ''); } catch (_) {}
+            if (!machineId && licApi && typeof licApi.getMachineId === 'function') {
+                try { machineId = normalizeMachineIdResult(await licApi.getMachineId()); } catch (_) {}
+            }
+            if (!machineId && actApi && typeof actApi.getMachineId === 'function') {
+                try { machineId = normalizeMachineIdResult(await actApi.getMachineId()); } catch (_) {}
+            }
+            if (!machineId) return null;
+            let localCode = '';
+            try { localCode = await getLicenseCode(); } catch (_) {}
+            // 本地码格式损坏时不要把脏值当 code 发给服务端（否则 400 放弃自愈）；
+            // 脏值仅作 client.code 诊断提示，服务端据此返回 CLEAR_STALE_CODE。
+            const __codeFmt = /^BNZC(-[A-Z0-9]{4}){4}$/;
+            const localCodeValid = __codeFmt.test(String(localCode || '').trim().toUpperCase());
+            const body = {
+                machineId: machineId,
+                code: localCodeValid ? String(localCode).trim().toUpperCase() : undefined,
+                client: {
+                    licenseStatus: status ? (status.valid ? 'valid' : 'invalid') : 'missing',
+                    code: localCode || ''
+                }
+            };
+            const ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+            const timer = ctrl ? setTimeout(function () { try { ctrl.abort(); } catch (_) {} }, 5000) : null;
+            let resp = null;
+            try {
+                resp = await fetch('https://tcm-prescription-system.pages.dev/api/license/reconcile', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                    signal: ctrl ? ctrl.signal : undefined
+                });
+            } finally {
+                if (timer) clearTimeout(timer);
+            }
+            if (!resp || !resp.ok) return null;
+            const j = await resp.json().catch(function () { return null; });
+            if (!j || !j.success) return null;
+            const actions = Array.isArray(j.actions) ? j.actions : [];
+            if (j.traceId) {
+                console.info('[LoginGate][reconcile] trace=' + j.traceId +
+                    ' state=' + j.state + ' actions=' + actions.join(','));
+            }
+            let __healedCode = false;
+            if (actions.indexOf('CLEAR_STALE_CODE') !== -1 && j.license && j.license.code) {
+                const __newCode = String(j.license.code).trim().toUpperCase();
+                // 写入前格式校验（服务端权威码理论必合法，纵深防御防脏值落本地）
+                if (/^BNZC(-[A-Z0-9]{4}){4}$/.test(__newCode)) {
+                    try {
+                        await StorageAdapter.setItem('license:code', __newCode);
+                        __healedCode = true;
+                    } catch (_) {}
+                }
+            }
+            if (actions.indexOf('REINSTALL_LICENSE') !== -1) {
+                let inst = null;
+                try {
+                    if (actApi && typeof actApi.installLicenseFromServer === 'function') {
+                        inst = await actApi.installLicenseFromServer(machineId);
+                    } else if (licApi && typeof licApi.installLicenseFromServer === 'function') {
+                        inst = await licApi.installLicenseFromServer(machineId);
+                    }
+                } catch (ie) {
+                    console.warn('[LoginGate][reconcile] 重装授权异常(忽略):', ie && ie.message);
+                }
+                // 桥在 unregistered/pending/phone_mismatch 等场景也返回 success:true（什么都没装），
+                // 只有 installed/already_licensed 才算真正落盘成功。
+                const __instOk = !!(inst && inst.success === true &&
+                    (inst.status === 'installed' || inst.status === 'already_licensed'));
+                if (__instOk) {
+                    console.info('[LoginGate][reconcile] 本地 license 已按服务端权威重装(' + inst.status + ')，重跑登录闸');
+                    return { retry: true, actions: actions, traceId: j.traceId || '' };
+                }
+                if (inst && inst.status) {
+                    console.info('[LoginGate][reconcile] 重装未落盘 status=' + inst.status);
+                }
+            }
+            // 仅错位码被纠正（服务端 LICENSED）→ 重跑闸门即可用权威码通过
+            if (__healedCode && actions.indexOf('CLEAR_STALE_CODE') !== -1) {
+                console.info('[LoginGate][reconcile] 本地残留码已按服务端权威纠正，重跑登录闸');
+                return { retry: true, actions: actions, traceId: j.traceId || '' };
+            }
+            return { retry: false, actions: actions, state: j.state || '', traceId: j.traceId || '' };
+        } catch (e) {
+            console.warn('[LoginGate][reconcile] 对账异常(忽略):', e && e.message);
+            return null;
+        }
+    }
+
+    // 重跑登录闸：桌面端优先再走主进程 IPC（gate.dat 锚点/回拨/accountReject 墓碑全在主进程），
+    // 无 IPC 桥（APP）才退渲染层兜底 inner —— 避免自愈重跑走弱闸。
+    async function __rerunLoginGate(username, opts) {
+        try {
+            const licApi = global.electronAPI && global.electronAPI.license;
+            if (licApi && typeof licApi.verifyGate === 'function') {
+                const rr = await licApi.verifyGate(username);
+                if (rr) return rr;
+            }
+        } catch (e) {
+            console.warn('[LoginGate] 自愈重跑 IPC 异常(退渲染兜底):', e && e.message);
+        }
+        return await __verifyLoginGateInner(username, opts);
+    }
+
     async function verifyLoginGate(usernameInput, opts) {
         const username = String(usernameInput == null ? '' : usernameInput).trim().slice(0,64);
         let r = null;
@@ -2902,6 +3028,48 @@
                 __loginGatePromise = __verifyLoginGateInner(username, opts);
             }
             r = await __loginGatePromise;
+        }
+        // ★ 2026-10-17 S1-O3：授权类失败 → 服务端对账自愈（清本地错位码 / 按权威重装 license）。
+        //   触发改为结构化判定（代码审查修正）：仅「本地授权有效(licensed) 且闸门拒绝」才值得对账；
+        //   tampered/回拨/试用/免费/账号删除/网络类失败一律不介入（避免把硬拒态变成可写修复路径）。
+        //   同账号本次运行只对账一次（__loginGateHealedKeys），失败结果写回缓存。
+        if (r && !r.ok && username && !__loginGateHealing && !__loginGateHealedKeys[username]) {
+            const __msg = String(r.message || '');
+            const __skip = /账号已被删除|吊销|已被停用|默认账户|授权服务暂时不可用|响应异常/.test(__msg);
+            let __st = null;
+            try {
+                const __lic = global.electronAPI && global.electronAPI.license;
+                if (__lic && typeof __lic.getStatus === 'function') __st = await __lic.getStatus();
+            } catch (_) {}
+            const __licenseType = __st ? String(__st.licenseType || __st.type || '') : '';
+            const __locallyLicensed = !!(__st && __st.valid && __st.type === 'licensed' &&
+                __licenseType !== 'free' && __licenseType !== 'trial');
+            if (!__skip && __locallyLicensed) {
+                __loginGateHealedKeys[username] = true;
+                __loginGateHealing = true;
+                try {
+                    const __heal = await __reconcileLoginGate();
+                    if (__heal && __heal.retry) {
+                        r = await __rerunLoginGate(username, opts);
+                    }
+                    if (r && __heal) {
+                        r = Object.assign({}, r, { reconcile: __heal });
+                        // P40 型「本地有效 / 服务端无授权」：不自动修复，但把诊断码并入用户文案
+                        if (!r.ok && __heal.actions && __heal.actions.indexOf('SERVER_RECORD_MISMATCH') !== -1) {
+                            r.message = (r.message || '') + '（本机授权与服务端记录不一致' +
+                                (__heal.traceId ? '，诊断码 ' + __heal.traceId : '') + '；请重新激活或联系客服）';
+                        }
+                    }
+                    if (username) {
+                        __loginGateUser = username;
+                        __loginGatePromise = Promise.resolve(r);
+                    }
+                } catch (_) {
+                    /* 对账失败保留原裁决 */
+                } finally {
+                    __loginGateHealing = false;
+                }
+            }
         }
         // ★ 吊销/删除/停用硬拒 → 同步删指纹凭据（出口收口，登录链与主窗自检
         //   两条调用路径全覆盖；delete 幂等，缓存期重复调用无害）
@@ -6682,7 +6850,7 @@
                 '<div style="margin-bottom:14px;background:linear-gradient(135deg,#fff7ed 0%,#ffedd5 100%);border:1px solid #fdba74;border-radius:8px;padding:10px 12px;">' +
                     '<label style="display:block;font-size:13px;color:#9a3412;margin-bottom:5px;font-weight:bold;">📞 联系电话 <span style="color:#e53935;">*</span></label>' +
                     '<input type="tel" id="editionPhone" placeholder="如：13800138000" autocomplete="off" inputmode="numeric" maxlength="11" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
-                    '<div id="editionPhoneHint" style="font-size:11px;color:#78350f;margin-top:4px;line-height:1.6;">💡 11位手机号将作为登录账号。填好后点击下方版本，<b>自动提交直接付款</b>，无需填写其他信息</div>' +
+                    '<div id="editionPhoneHint" style="font-size:11px;color:#78350f;margin-top:4px;line-height:1.6;">💡 11位手机号将作为登录账号。已有激活码请直接点上方金色按钮激活；需购买请点下方版本卡片前往官网付款</div>' +
                 '</div>' +
                 // ★ 2026-09-06 P0 修复（邀请码入口断裂）：已注册用户「注册→立即激活→选版本→
                 //   自动提交直达付款页」跳过了管理员激活表单——表单里的邀请码输入框
@@ -6694,7 +6862,10 @@
                     '<input type="text" id="editionInviteCode" placeholder="如：7K3F9Q（没有可留空）" autocomplete="off" maxlength="10" spellcheck="false" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;font-family:monospace;letter-spacing:1px;text-transform:uppercase;">' +
                     '<div style="font-size:11px;color:#909399;margin-top:4px;">💡 填好友邀请码，激活后双方都得奖励（好友+90天，您+30天）</div>' +
                 '</div>' +
-                '<div style="font-size:13px;font-weight:bold;color:#555;margin-bottom:8px;">请选择要激活的版本</div>' +
+                // ★ 2026-10-18 淘宝码自带版本，已有码用户主路径：金色按钮上移到版本选择之前
+                '<button type="button" id="adminCodeEntryBtn" style="width:100%;margin-bottom:14px;padding:13px;font-size:15px;font-weight:bold;border:none;border-radius:10px;color:#fff;background:linear-gradient(135deg,#fbbf24 0%,#f59e0b 100%);cursor:pointer;-webkit-tap-highlight-color:transparent;box-shadow:0 2px 6px rgba(245,158,11,0.35);">🔑 已有激活码？点此直接激活</button>' +
+                // ★ 2026-10-18 版本卡片改为跳转官网付款页（本地不再自动建单/提交）
+                '<div style="font-size:13px;font-weight:bold;color:#555;margin-bottom:8px;">前往官网购买激活码</div>' +
                 '<div style="display:flex;gap:10px;">' +
                     '<div id="editionPersonal" data-edition="personal" style="flex:1;padding:14px;border:2px solid #ddd;border-radius:10px;text-align:center;cursor:pointer;background:#26a69a;border-color:#26a69a;color:#fff;">' +
                         '<div style="font-size:24px;">🏥</div><div style="font-size:14px;font-weight:bold;margin-top:2px;">标准版</div><div style="font-size:11px;opacity:0.85;">个人诊所 · 单用户</div>' +
@@ -6703,9 +6874,7 @@
                         '<div style="font-size:24px;">🏨</div><div style="font-size:14px;font-weight:bold;margin-top:2px;color:#333;">机构版</div><div style="font-size:11px;color:#909399;">多人机构 · 多用户管理</div>' +
                     '</div>' +
                 '</div>' +
-                // ★ 2026-10-10 淘宝买家入口强化：原 12px 小字「已有激活码？直接输入」
-                //   升级为全宽金色主按钮，点击直达输码 Tab；留言申请链接保留在按钮下方。
-                '<button type="button" id="adminCodeEntryBtn" style="width:100%;margin-top:14px;padding:13px;font-size:15px;font-weight:bold;border:none;border-radius:10px;color:#fff;background:linear-gradient(135deg,#fbbf24 0%,#f59e0b 100%);cursor:pointer;-webkit-tap-highlight-color:transparent;box-shadow:0 2px 6px rgba(245,158,11,0.35);">🔑 已有激活码？点此直接激活</button>' +
+                '<div style="font-size:11px;color:#909399;margin-top:6px;text-align:center;">💡 点击版本卡片将打开官网付款页面，购买后获得激活码再回来激活</div>' +
                 '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px;font-size:12px;">' +
                     '<span id="adminSkipToTicket" style="color:#07c160;cursor:pointer;-webkit-tap-highlight-color:transparent;">没有激活码？留言申请 →</span>' +
                 '</div>' +
@@ -6744,11 +6913,16 @@
                 '</div>' +
                 // ★ 2026-10-08 二期：登录密码选填（与 cloud.js 同构）。云端码留空 →
                 //   服务端随机初始密码 + 首登强制改密；离线码为本地账户密码（留空默认 admin）。
-                '<div style="margin-bottom:12px;">' +
+                // ★ 2026-10-18 已注册用户免填密码：注册时已设密码，激活时自动复用（__regPrefill 存在时隐藏本框）。
+                '<div id="adminCodePwdBox" style="margin-bottom:12px;">' +
                     '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">设置登录密码 <span style="font-size:11px;color:#909399;font-weight:normal;">（选填）</span></label>' +
                     '<input type="password" id="adminCodePassword" placeholder="8-32 位，须含字母和数字" autocomplete="new-password" data-lpignore="true" maxlength="32" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;margin-bottom:8px;">' +
                     '<input type="password" id="adminCodePassword2" placeholder="再次输入登录密码" autocomplete="new-password" data-lpignore="true" maxlength="32" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
                     '<div id="adminCodePwdHint" style="font-size:11px;color:#909399;margin-top:4px;">💡 云端码留空则系统生成随机初始密码，首次登录需修改密码</div>' +
+                '</div>' +
+                // ★ 2026-10-18 已注册用户密码复用提示（默认隐藏，__regPrefill 存在时显示替代密码框）
+                '<div id="adminCodePwdReuseTip" style="display:none;margin-bottom:12px;background:#e8f5e9;border:1px solid #a5d6a7;border-radius:8px;padding:10px 12px;font-size:12px;color:#2e7d32;line-height:1.6;">' +
+                    '🔑 将使用您注册时设置的登录密码，无需重复填写' +
                 '</div>' +
                 // ★ 2026-09-11 渐进式身份字段（默认隐藏，对齐桌面 activate-window 方案）：
                 //   needClinicName（老码换机手机号未核验通过）/ needActivationInfo（新码
@@ -7289,119 +7463,29 @@
             if (hint) { hint.textContent = '⚠ ' + msg; hint.style.color = '#e53935'; }
         }
 
-        // 版本选择
+        // ★ 2026-10-18 版本卡片：改为跳转官网付款页（淘宝码自带版本，本地不再自动建单）
         ['editionPersonal','editionInstitution'].forEach(function(id) {
-            document.getElementById(id).addEventListener('click', async function() {
+            document.getElementById(id).addEventListener('click', function() {
                 const ed = this.getAttribute('data-edition');
                 state.edition = ed;
                 state.editionChosen = true;
-                // ★ 2026-09-06 邀请码同步：选版本页填的邀请码同步到管理员激活表单框
-                //   （adminInviteCode）——已注册用户自动提交链路（adminToStep2Btn click）
-                //   读取的就是表单框值，同步后自动携带
+                // 邀请码同步到表单框（官网付款页 URL 会携带 iv 参数）
                 try {
                     const __edIv = document.getElementById('editionInviteCode');
                     const __fmIv = document.getElementById('adminInviteCode');
                     if (__edIv && __fmIv && __edIv.value && !__fmIv.value) {
                         __fmIv.value = String(__edIv.value).trim().toUpperCase();
+                        state.inviteCode = __fmIv.value;
                     }
-                } catch (eIv) { /* 同步失败不阻断版本选择 */ }
+                } catch (eIv) {}
+                // 高亮选中卡片
                 document.getElementById('editionPersonal').style.borderColor = (ed === 'personal' ? '#26a69a' : '#ddd');
                 document.getElementById('editionPersonal').style.background = (ed === 'personal' ? '#26a69a' : '#fff');
                 document.getElementById('editionInstitution').style.borderColor = (ed === 'institution' ? '#26a69a' : '#ddd');
                 document.getElementById('editionInstitution').style.background = (ed === 'institution' ? '#26a69a' : '#fff');
-                // ★ 2026-09-05 注册后直达付款（用户反馈：注册完点立即激活，管理员激活框
-                //   还要再次填写信息，不符合逻辑）：已注册用户（Tab1 已预填注册信息）选完
-                //   版本即自动提交激活申请——跳过信息确认步骤直接进付款页。注册时账号+
-                //   密码已建、申请信息=注册信息，无需再人工确认；需核对/修改时从付款页
-                //   「返回上一步」回 Tab1 表单（信息已预填可改）。预填不完整时退回原流程。
-                // ★ 2026-09-06（第四轮回归）async 化 + 桥兜底等待：registrationInfo 丢失
-                //   （localStorage 单点故障）时等待桥 config 注册账号补预填（最长 2s），
-                //   到位后继续自动提交——不再静默落入信息表单页（用户观感"又要填信息/
-                //   卡住不流转"）。
-                try {
-                    let __rg = getLocalRegistrationInfo();
-                    if (!__rg && __bridgePrefillPromise) {
-                        try {
-                            const __bp = await Promise.race([
-                                __bridgePrefillPromise,
-                                new Promise(function (r) { setTimeout(function () { r(null); }, 2000); })
-                            ]);
-                            if (__bp && __bp.phone) __rg = __bp;
-                        } catch (be2) { /* 桥兜底超时/失败退回手动表单 */ }
-                    }
-                    if (__rg && __rg.phone) {
-                        // 桥场景 DOM 兜底补填（预填 then 回调可能尚未完成/竞态）
-                        if (__rg.via === 'bridge') {
-                            const __cn3 = document.getElementById('adminClinicName');
-                            const __an3 = document.getElementById('adminAdminName');
-                            const __ph3 = document.getElementById('adminPhone');
-                            if (__ph3 && !__ph3.value.trim()) __ph3.value = __rg.phone;
-                            if (__an3 && !__an3.value.trim() && __rg.adminName) __an3.value = __rg.adminName;
-                            if (__cn3 && !__cn3.value.trim()) __cn3.value = String(__rg.clinicName || clinicName || '').trim();
-                        }
-                        const __cnv = ((document.getElementById('adminClinicName') || {}).value || '').trim();
-                        const __anv = ((document.getElementById('adminAdminName') || {}).value || '').trim();
-                        const __phv = ((document.getElementById('adminPhone') || {}).value || '').trim();
-                        if (__cnv && __anv && __phv && PHONE_RE.test(__phv)) {
-                            // 复用「确认信息并提交」按钮链路：读 DOM 预填值→校验→
-                            // __regPrefill 匹配→自动提交（含注册密码解密等待）→付款页
-                            document.getElementById('adminToStep2Btn').click();
-                            return;
-                        }
-                    }
-                } catch (re2) { /* 读取失败：已注册走下方封死分支，未注册退回手动表单 */ }
-                // ★ 2026-09-06（第九轮·用户指令）：已注册用户激活全程取消「管理员激活」
-                //   填信息表单（备注及输入框）——注册时信息已收集，预填链失败也不落
-                //   表单，回版本选择页 + 红条提示（重启重试/联系客服），而非让用户
-                //   重复填写。未注册用户（首次激活/存量无账号）维持手动表单。
-                if (__regPrefill && __regPrefill.phone) {
-                    show('adminStepEdition');
-                    try {
-                        const __edBox = document.getElementById('adminStepEdition');
-                        if (__edBox && !document.getElementById('adminEditionErrTip')) {
-                            const __tip = document.createElement('div');
-                            __tip.id = 'adminEditionErrTip';
-                            __tip.style.cssText = 'background:#fdecea;border:1px solid #f5c6cb;border-radius:8px;padding:10px;margin-bottom:12px;font-size:12px;color:#b71c1c;line-height:1.7;';
-                            __tip.innerHTML = '⚠ 注册信息读取失败（诊所名/姓名/手机号未同步）。<br>请完全退出 APP 重新打开后再试；仍有问题请联系客服微信 hktzy1688。';
-                            __edBox.insertBefore(__tip, __edBox.firstChild);
-                        }
-                    } catch (te2) {}
-                    return;
-                }
-                // ★ 2026-09-15 试用到期直通（手机号=直通开关）：未注册用户读版本页
-                //   联系电话，本地自动补齐（诊所名=CONFIG.clinicName、姓名=CONFIG.doctorName，
-                //   试用期已设置过）→ 标记 __editionDirect → 复用 adminToStep2Btn 标准
-                //   校验收集链路直通提交（密码归一 admin）→ 直建订单/申请 → 付款等待视图。
-                //   手机号留空/无效：走原表单流程（原行为不变）；
-                //   诊所名/姓名本地缺失：落入表单补填（手机号已带上，缺失字段标红）。
-                try {
-                    const __epRaw = (document.getElementById('editionPhone') || {}).value || '';
-                    const __epVal = String(__epRaw).trim();
-                    if (__epVal && PHONE_RE.test(__epVal)) {
-                        const __fCn = document.getElementById('adminClinicName');
-                        const __fAn = document.getElementById('adminAdminName');
-                        const __fPh = document.getElementById('adminPhone');
-                        if (__fPh) __fPh.value = __epVal;
-                        if (__fCn && !__fCn.value.trim()) __fCn.value = String(clinicName || '').trim();
-                        if (__fAn && !__fAn.value.trim()) {
-                            try { if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.doctorName) __fAn.value = String(CONFIG.doctorName).trim(); } catch (eCf) {}
-                        }
-                        const __cnOk = !!(__fCn && __fCn.value.trim());
-                        const __anOk = !!(__fAn && __fAn.value.trim());
-                        if (__cnOk && __anOk) {
-                            state.__editionDirect = true;
-                            document.getElementById('adminToStep2Btn').click();
-                            return;
-                        }
-                        show('adminStepForm');
-                        setActiveTab('admin');
-                        if (!__cnOk) showFieldErr('adminClinicName', 'adminClinicNameHint', '请填写诊所名称');
-                        else showFieldErr('adminAdminName', 'adminAdminNameHint', '请填写管理员/医师姓名');
-                        return;
-                    }
-                } catch (edErr) { console.warn('[LicenseCheck] 版本页直通异常，退回原表单流程:', edErr); }
-                show('adminStepForm');
-                setActiveTab('admin');
+                // 构造官网付款 URL（mid + 版本 + 已填信息），用 robust 通路打开
+                const payUrl = buildPayUrl();
+                openPayUrlRobust(payUrl, this);
             });
         });
 
@@ -8169,6 +8253,14 @@
                     const __hint = document.getElementById('adminPhoneHint');
                     if (__hint) __hint.innerHTML = '💡 11位手机号为登录账号，登录密码为注册时设置的密码';
                 } catch (he) {}
+                // ★ 2026-10-18 Tab2 免填密码：已注册用户隐藏密码框，显示复用提示
+                //   （提交逻辑 localPwd = codePwd1 || pwdVal || 'admin' 已自动取 state.password）
+                try {
+                    const __pwdBox = document.getElementById('adminCodePwdBox');
+                    const __pwdTip = document.getElementById('adminCodePwdReuseTip');
+                    if (__pwdBox) __pwdBox.style.display = 'none';
+                    if (__pwdTip) __pwdTip.style.display = 'block';
+                } catch (pe) {}
                 console.log('[LicenseCheck] 检测到已注册，Tab1 表单已预填（手机号登录账号）');
             }
         } catch (re) { console.warn('[LicenseCheck] 注册预填失败(不影响激活):', re); }

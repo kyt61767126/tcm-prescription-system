@@ -213,6 +213,8 @@
 
 * ★ 2026-10-18（S1b-③，决策②）**云 APP gate token 缓存 + 离线宽限**：`shared/auth-core/cloud.js` 在心跳 entitlement=LICENSED 时缓存服务端 ES256 `gateToken` 到 `license:gateToken`，并用 `entitlement.serverTime` 刷新 `license:clockOffsetMs/maxLocalTime` 时钟基线；网络不可达（HTTP 非 ok）/心跳异常/entitlement 不可达三处先 `evaluateOfflineGrace()`：验签 gate token（alg=ES256、kid 公钥 v1/v2、`mid` 绑定、`exp`/`iat` 下界、`licExp`、回拨检测），通过则**离线宽限放行**（网络故障≠授权失效），失败仍回退既有 7 天离线锁定；公钥与 offline.js 同源。改动仅 `cloud.js`（云端 Web/云桌面/云 APP/鸿蒙 8 副本经 sync-auth-core 分发），需 `check-cv-hashes --update` bump `auth-core.js?cv=` 再 `sync-html.ps1` 传播 3 份 index.html（否则 immutable 长缓存下线上不生效）。**铁律：云端离线宽限只信服务端签名 gate token（不引入 license.dat）；网络失败路径必须先验签再决定锁定，避免把断网误判为吊销；gate token 与授权到期绑（licExp），到期/停用不因离线宽限放行。** 云 APP 为在线 WebView 壳 → push 即达；云桌面/鸿蒙随各自分发后复测。
 
+* ★ 2026-10-18（整包批次，最新代码）**四端整包构建+验包完成（待发布，AutoCommit `1ba4fdf1`）**：云桌面 **1.2.269**（Setup 81,882,088B/便携 81,607,168B）、云 APP **versionCode 325**（12,395,941B，SHA256 `C854FD85…`）、离线桌面 **1.0.277**（Setup 79,281,936B/便携 79,006,984B）、离线 APP **versionCode 323**（3,577,707B，SHA256 `6979003F…`）；`artifact-locate --check` → 各源一致可发布；热更重签 desktop/local **2026.10.18-1**（app 1.0.277）、desktop/cloud **2026.10.18-1**（app 1.2.269），app-local 保持 **2026.10.18-2**。**发布仍未执行**：项目硬规则要求人工确认（`一键发布.bat` / `publish-release --changed-only --confirm --push`），打包流程绝不自动上传官方站。发布后需核验下载页/hash-manifest=1.0.277/323/325 与线上 hot version，再做桌面冷启动深链真机复测。
+
 ## 3. 界面保护铁律
 * 优化前必须运行 `check-interface.bat` 建立基线，优化后再运行验证；WARN 立即 git checkout 恢复或经用户确认后重建基线。
 

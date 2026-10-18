@@ -2768,6 +2768,98 @@
     const API_BASE = (global.AuthCore && global.AuthCore.CLOUD_API_BASE) ||
         'https://tcm-prescription-system.pages.dev/api';
 
+    // ★ 2026-10-18 S1b-③（决策②）：云 APP 补「签名 gate token 缓存 + 离线宽限」。
+    //   云端两端口径统一为「账号权威 + gate token 离线宽限」：entitlement LICENSED 时
+    //   缓存服务端 ES256 gateToken 并以 serverTime 校正时钟基线；网络不可达时先验签
+    //   （mid 绑定/exp/iat/licExp/回拨），通过则视为离线宽限放行，否则仍回退既有
+    //   7 天离线锁定。公钥与 offline.js 同源（v1 生产 / v2 轮换预置）。
+    const GATE_VERIFY_PUBKEYS = Object.freeze({
+        v1: 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEzyAyTa5wJL44H5DeyZBLVNlNgyE9'
+          + '2BOqibasK+J69Wh+a58JscqR3pDRZBmQ1M+F3upJYXQQYjV7lOK5f5eCJA==',
+        v2: 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEMBkE0WC4qN3sQkIWi5vtzJTvjvk82'
+          + 'ebTzlVO+EAzpq/OYrxmyZRU7VSvTeETCYK/inABVFfHvvdQo0HGA80I8Q=='
+    });
+    const GATE_CLOCK_SKEW_GRACE_MS = 5 * 60 * 1000;
+    const GATE_MAX_OFFSET_MS = 10 * 60 * 1000;
+
+    function gateB64urlToBytes(s) {
+        s = String(s).replace(/-/g, '+').replace(/_/g, '/');
+        while (s.length % 4) s += '=';
+        const bin = atob(s);
+        const u8 = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+        return u8;
+    }
+    function gateB64urlToStr(s) { return new TextDecoder().decode(gateB64urlToBytes(s)); }
+
+    async function verifyGateToken(token, machineId, adjustedNowMs) {
+        try {
+            const parts = String(token || '').split('.');
+            if (parts.length !== 3) return null;
+            const header = JSON.parse(gateB64urlToStr(parts[0]));
+            const payload = JSON.parse(gateB64urlToStr(parts[1]));
+            if (!header || header.alg !== 'ES256') return null;
+            const pubB64 = GATE_VERIFY_PUBKEYS[header.kid];
+            if (!pubB64) return null;
+            if (!payload || payload.v !== 1 || payload.mid !== machineId) return null;
+            const expMs = Number(payload.exp) * 1000;
+            if (!(expMs > adjustedNowMs)) return null;
+            const iatFloorMs = (Number(payload.iat) - GATE_CLOCK_SKEW_GRACE_MS / 1000) * 1000;
+            if (!(adjustedNowMs >= iatFloorMs)) return null;
+            if (payload.licExp) {
+                const licExpMs = Number(payload.licExp) * 1000;
+                if (!(licExpMs >= adjustedNowMs)) return null;
+            }
+            const key = await global.crypto.subtle.importKey(
+                'spki', gateB64urlToBytes(pubB64),
+                { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
+            const ok = await global.crypto.subtle.verify(
+                { name: 'ECDSA', hash: 'SHA-256' }, key,
+                gateB64urlToBytes(parts[2]),
+                new TextEncoder().encode(parts[0] + '.' + parts[1]));
+            return ok ? payload : null;
+        } catch (e) { return null; }
+    }
+
+    async function gateReadClockOffsetMs() {
+        try {
+            const raw = await StorageAdapter.getItem('license:clockOffsetMs');
+            if (raw == null || raw === '') return null;
+            const n = Number(raw);
+            return Number.isFinite(n) ? n : null;
+        } catch (e) { return null; }
+    }
+    async function gateDetectClockRollback(nowLocal) {
+        try {
+            const maxSeen = Number(await StorageAdapter.getItem('license:maxLocalTime')) || 0;
+            if (nowLocal + GATE_CLOCK_SKEW_GRACE_MS < maxSeen) return true;
+            if (nowLocal > maxSeen) await StorageAdapter.setItem('license:maxLocalTime', String(nowLocal));
+        } catch (e) {}
+        return false;
+    }
+    async function gateRefreshClockBaseline(localNow, serverTime) {
+        try {
+            const serverMs = Date.parse(serverTime);
+            if (!Number.isFinite(serverMs)) return false;
+            await StorageAdapter.setItem('license:clockOffsetMs', String(serverMs - localNow));
+            await StorageAdapter.setItem('license:maxLocalTime', String(serverMs));
+            return true;
+        } catch (e) { return false; }
+    }
+    // 离线宽限裁决：{ok:true,payload} / {ok:false,reason}
+    async function evaluateOfflineGrace(machineId) {
+        const localNow = Date.now();
+        if (await gateDetectClockRollback(localNow)) return { ok: false, reason: 'rollback' };
+        const offsetMs = await gateReadClockOffsetMs();
+        if (offsetMs == null) return { ok: false, reason: 'no-baseline' };
+        if (Math.abs(offsetMs) > GATE_MAX_OFFSET_MS) return { ok: false, reason: 'offset' };
+        let token = '';
+        try { token = await StorageAdapter.getItem('license:gateToken') || ''; } catch (e) {}
+        const payload = await verifyGateToken(token, machineId, localNow + offsetMs);
+        if (!payload) return { ok: false, reason: 'token' };
+        return { ok: true, payload: payload };
+    }
+
     // ★ P1-7 心跳验证：每 24 小时联网验证一次 License，离线超过 7 天锁定
     // 防盗破解：破解版无法通过心跳验证，7 天后自动锁定
     async function performHeartbeatCheck() {
@@ -2805,6 +2897,12 @@
 
             if (!response.ok) {
                 console.warn('[Heartbeat] 网络错误，HTTP', response.status);
+                // ★ S1b-③：先尝试签名 gate token 离线宽限（网络故障≠授权失效）
+                const __grace = await evaluateOfflineGrace(machineId).catch(() => null);
+                if (__grace && __grace.ok) {
+                    console.log('[Heartbeat] 网络不可达，gate token 离线宽限放行 exp=', new Date(__grace.payload.exp * 1000).toISOString());
+                    return;
+                }
                 // 记录离线开始时间
                 const offlineStart = await StorageAdapter.getItem('license:offlineStart');
                 if (!offlineStart) {
@@ -2831,6 +2929,7 @@
             //   真值（与老 status 心跳同语义），本地 license:code 过期错位时仍能
             //   找回本机有效绑定（P1 丢码自愈路径）。
             let entState = null;
+            let entFull = null;
             try {
                 const entResp = await fetch('https://tcm-prescription-system.pages.dev/api/license/entitlement', {
                     method: 'POST',
@@ -2839,7 +2938,7 @@
                 });
                 if (entResp.ok) {
                     const ent = await entResp.json();
-                    if (ent && ent.success) entState = ent.state;
+                    if (ent && ent.success) { entState = ent.state; entFull = ent; }
                 }
             } catch (entE) {
                 console.warn('[Heartbeat] entitlement 裁决不可达，回退心跳判定:', entE && entE.message);
@@ -2848,6 +2947,15 @@
             if (entState === 'LICENSED') {
                 await StorageAdapter.setItem('license:lastHeartbeat', String(now));
                 await StorageAdapter.removeItem('license:offlineStart');
+                // ★ S1b-③：缓存签名 gate token + 以服务端时间校正时钟基线（离线宽限凭据）
+                try {
+                    if (entFull && entFull.gateToken) {
+                        await StorageAdapter.setItem('license:gateToken', String(entFull.gateToken));
+                    }
+                    if (entFull && entFull.serverTime) {
+                        await gateRefreshClockBaseline(now, entFull.serverTime);
+                    }
+                } catch (_) {}
                 console.log('[Heartbeat] 心跳成功（entitlement=LICENSED）');
                 return;
             }
@@ -2871,6 +2979,12 @@
                 await StorageAdapter.removeItem('license:offlineStart');
                 console.log('[Heartbeat] 心跳成功，剩余天数:', data.daysRemaining);
             } else {
+                // ★ S1b-③：entitlement 不可达且老心跳失败 → 先试 gate token 离线宽限
+                const __grace2 = await evaluateOfflineGrace(machineId).catch(() => null);
+                if (__grace2 && __grace2.ok) {
+                    console.log('[Heartbeat] 裁决不可达，gate token 离线宽限放行');
+                    return;
+                }
                 console.error('[Heartbeat] 心跳失败:', data.action);
                 global.__licenseExpired = true;
                 const msg = {
@@ -2883,6 +2997,17 @@
             }
         } catch (e) {
             console.warn('[Heartbeat] 异常:', e.message);
+            // ★ S1b-③：异常（含断网）→ 先试 gate token 离线宽限
+            try {
+                const __mid = await StorageAdapter.getItem('license:machineId');
+                if (__mid) {
+                    const __grace3 = await evaluateOfflineGrace(__mid).catch(() => null);
+                    if (__grace3 && __grace3.ok) {
+                        console.log('[Heartbeat] 异常路径 gate token 离线宽限放行');
+                        return;
+                    }
+                }
+            } catch (_) {}
             // 心跳异常不阻断使用，但记录离线时间
             const now = Date.now();
             const offlineStart = await StorageAdapter.getItem('license:offlineStart');
@@ -4627,6 +4752,14 @@
                         if (submittingEl) submittingEl.style.display = 'none';
                         const successEl = document.getElementById('regSuccess');
                         if (successEl) successEl.style.display = 'block';
+                        // ★ 2026-10-18 注册密码持久化（激活时免填复用）：加密存 license:cloudRegInfo
+                        try {
+                            const __encPwd = await encryptSensitive(password) || '';
+                            await StorageAdapter.setItem('license:cloudRegInfo', JSON.stringify({
+                                phone: phone.trim(), adminName: adminName.trim(),
+                                clinicName: clinicName.trim(), passwordEnc: __encPwd, at: Date.now()
+                            }));
+                        } catch (re) { console.warn('[LicenseCheck] 注册信息持久化失败(激活免填密码将失效):', re); }
                         console.log('[LicenseCheck] 注册成功，等待管理员审核，登录账号:', loginAccount);
                     } else {
                         // 失败：返回表单并显示错误
@@ -5181,11 +5314,16 @@
                 // ★ 2026-10-08 二期：买家自设登录密码（选填）。留空 → 服务端生成
                 //   随机初始密码（激活成功页一次性展示+复制），首次登录强制改密。
                 //   换机/老码激活留空即可，云端账号密码不受影响（仅新码首激生效）。
-                '<div style="margin-bottom:12px;">' +
+                // ★ 2026-10-18 已注册用户免填密码：注册时已设密码，激活时自动复用。
+                '<div id="adminCodePwdBox" style="margin-bottom:12px;">' +
                     '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">设置登录密码 <span style="font-size:11px;color:#909399;font-weight:normal;">（选填）</span></label>' +
                     '<input type="password" id="adminCodePassword" placeholder="8-32 位，须含字母和数字" autocomplete="new-password" data-lpignore="true" maxlength="32" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;margin-bottom:8px;">' +
                     '<input type="password" id="adminCodePassword2" placeholder="再次输入登录密码" autocomplete="new-password" data-lpignore="true" maxlength="32" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
                     '<div id="adminCodePwdHint" style="font-size:11px;color:#909399;margin-top:4px;">💡 留空则系统生成随机初始密码，首次登录需修改密码</div>' +
+                '</div>' +
+                // ★ 2026-10-18 已注册用户密码复用提示（默认隐藏，检测到注册密码时显示替代密码框）
+                '<div id="adminCodePwdReuseTip" style="display:none;margin-bottom:12px;background:#e8f5e9;border:1px solid #a5d6a7;border-radius:8px;padding:10px 12px;font-size:12px;color:#2e7d32;line-height:1.6;">' +
+                    '🔑 将使用您注册时设置的登录密码，无需重复填写' +
                 '</div>' +
                 // ★ 2026-09-11 渐进式身份字段（默认隐藏）：needClinicName/
                 //   needActivationInfo 服务端标记触发展开；手机号核验通过的换机场景永不出现
@@ -5614,6 +5752,8 @@
                 } else {
                     setPwdHint('💡 留空则系统生成随机初始密码，首次登录需修改密码', false);
                 }
+                // ★ 2026-10-18 最终密码确定：用户显式填写 > 注册密码复用 > 空串（服务端随机）
+                const effCodePwd = codePwd1 || ((state && state.password) ? String(state.password) : '');
                 // 渐进式身份字段（服务端 needClinicName/needActivationInfo 标记触发展开后填写）
                 let idClinicName = '', idAdminName = '';
                 try {
@@ -5630,7 +5770,7 @@
                     //   pwdCap=v2 换随机初始密码，成功响应一次性回传，本地账号同密码）；
                     //   非空=买家自设密码；旧调用方传 'admin' 保持一期行为不变。
                     res = await global.electronAPI.activate.submit(code, effUser || user,
-                        idClinicName || ((state && state.clinicName) || ''), phoneVal, codePwd1, undefined, '');
+                        idClinicName || ((state && state.clinicName) || ''), phoneVal, effCodePwd, undefined, '');
                     if (res && res.success) {
                         loading.style.display = 'none';
                         successBox.style.display = 'block';
@@ -5689,7 +5829,7 @@
                                 user: effUser,
                                 clinicName: idClinicName || ((state && state.clinicName) || ''),
                                 phone: phoneVal,
-                                password: codePwd1
+                                password: effCodePwd
                             })),
                             signal: controller.signal
                         });
@@ -6437,6 +6577,32 @@
 
         // 预填诊所/医师名（config 提供时）
         if (clinicName) document.getElementById('adminClinicName').value = clinicName;
+
+        // ★ 2026-10-18 注册密码复用：弹窗打开即读 license:cloudRegInfo，解密到 state.password，
+        //   已注册用户隐藏 Tab2 密码框（提交时 codePwd1 留空 → 用 state.password 而非随机密码）
+        (async function () {
+            try {
+                const __raw = await StorageAdapter.getItem('license:cloudRegInfo');
+                if (!__raw) return;
+                const __info = JSON.parse(__raw);
+                if (!__info || !__info.phone) return;
+                if (!state.phone) state.phone = String(__info.phone);
+                if (!state.adminName && __info.adminName) state.adminName = String(__info.adminName);
+                if (!state.clinicName && __info.clinicName) state.clinicName = String(__info.clinicName);
+                if (__info.passwordEnc) {
+                    const __pwd = await decryptSensitive(__info.passwordEnc);
+                    if (__pwd) state.password = String(__pwd);
+                }
+                // 隐藏 Tab2 密码框，显示复用提示
+                const __pwdBox = document.getElementById('adminCodePwdBox');
+                const __pwdTip = document.getElementById('adminCodePwdReuseTip');
+                if (__pwdBox) __pwdBox.style.display = 'none';
+                if (__pwdTip) __pwdTip.style.display = 'block';
+                // 同步预填手机号框
+                const __cp = document.getElementById('adminCodePhone');
+                if (__cp && !__cp.value.trim()) __cp.value = state.phone;
+            } catch (e) { console.warn('[LicenseCheck] 注册密码复用读取失败(不影响):', e); }
+        })();
     }
 
     // ★ 2026-09-03 管理员激活断点续传（云端系）：启动时检测持久化申请是否已审核通过

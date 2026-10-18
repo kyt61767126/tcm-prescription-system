@@ -22,8 +22,8 @@
   - functions 已随部署更新（activation-token GET 405 / 坏码 POST 400 冒烟通过；令牌幂等台账补写 + validate 诊所名闸台账豁免均在线）。**git 构建配额可用 → 后续静态/functions 随 push 即达，wrangler 直传仅作配额耗尽/大文件超限兜底。**
   - **激活架构评审（2026-10-17）**：`.trae/documents/activation-architecture-review-2026-10-17.md`（六端 × 激活方式 × 版本全景 + P0/P1 问题清单 + O1-O7 优化建议 + S1-S4 路线 + 待拍板 5 项；见 OPEN H8）。
   - **P40 真机闭环（2026-10-17 晚，已实证）**：-7 热更生效（DEBUG alert 消失）→ 管理员激活框用 `BNZC-MG3B-…` + 手机号重新激活（预设诊所名经 `redeemedDevices` 台账豁免）→ KV 记录 `status=used、devices=[P40 mid]、productClass=offline、clientClass=app`，`entitlement(mid)=LICENSED（institution，永久）` → **登录正常**（license_log 有 `activate machineId=5784b5da...`）。此前 -7 后仍弹激活框的真因=上一会话手工重置码记录造成「本地有 license.dat / 服务端 unused」分裂，非客户端 bug。
-  - **整包批次（2026-10-17 晚，已构建并发布）**：离线桌面 **1.0.276**（Setup/便携，E2E 6/6 + 签名 + fuse + .bnzc 三重 + 7 铁闸全过）、离线 APK **versionCode 322**（aapt2/apksigner 验过，签名哈希与注入期望一致）、desktop/local 热更 **2026.10.17-3**（app 1.0.276）。**发布已完成（用户执行，2026-10-17 17:23，`20feeedf`）**：GitHub Release `v2026.10.17-1723`（APK 322 + exe 1.0.276 Setup/便携）+ hash-manifest/updates latest 更新；线上 downloads APK SHA256 与构建一致（见 H7）。
-  - desktop/local 热更 **-3**（等整包发布）；cloud 热更 -5；三渠道版本表在发布时统一。
+  - **整包批次（2026-10-18，最新代码，已构建验包待发布）**：云桌面 **1.2.269**、云APP **versionCode 325**、离线桌面 **1.0.277**、离线APP **versionCode 323**；artifact-locate「各源一致，可发布」；版本副作用 AutoCommit `1ba4fdf1`；热更重签 desktop/local + desktop/cloud 均 **2026.10.18-1**（app 1.0.277/1.2.269）。**发布未执行**（需人工 `一键发布.bat` 或指示执行 `publish-release --changed-only --confirm --push`）。
+  - desktop/local 热更 **2026.10.18-1**、desktop/cloud 热更 **2026.10.18-1**、app-local **2026.10.18-2**（发布时三渠道版本表统一）。
   - **勿重复实施**：-6 调试 alert 已移除并重签 -7 覆盖；P40 登录闸码错位自愈已上线；令牌 redeemedDevices 台账（首兑写 + 幂等短路补写）已上线；Java `activateLicense` clinicName 透传已入库（待 APK v325 生效）。
   - 完整方案：`.trae/documents/activation-architecture-optimization_plan.md` / `.trae/documents/activation-streamline_plan.md`（P0 方案A 全链已闭环，详见 KNOWLEDGE 2026-10-17 条目）。
 - **2026-10-18 构建现场已清理（已决）**：外部会话 09:45 打包因版本基线漂移中止——产物 1.0.277/1.2.269/cloud APK 325 已归档到 `%TEMP%\kyt-build-archive-20261018-102617`，工作区残留已从 `stash@{0}` 丢弃并删 dist 残留；`verify-version-baseline` 复核通过（HEAD 1.0.276/1.2.268/322/324，dist 无残留）。下次打包将按**最新代码**（含 S1b-③ gate token/会话）重新递增到 277/269/325；产物发布仍为独立人工闸。
@@ -33,21 +33,22 @@
 
 ## OPEN 遗留任务
 
-### H7 ｜优先级：高｜整包批次：离线桌面 1.0.276 + 离线 APK 322（✅ 已构建并发布，剩桌面冷启动复测）
-- **状态**：IN-PROGRESS（2026-10-17 晚：构建+验包+发布完成；仅剩「桌面冷启动深链真机复测」与收口）
+### H7 ｜优先级：高｜整包批次（最新代码）：云桌面 1.2.269 + 云APP 325 + 离线桌面 1.0.277 + 离线APP 323（✅ 已构建验包，待发布）
+- **状态**：IN-PROGRESS（2026-10-18 10:41 四端构建/验包完成，AutoCommit `1ba4fdf1`；待发布 + 桌面冷启动深链复测）
 - **已完成（本批次，全部通过）**：
-  1. **离线桌面 1.0.276**：`dist/惠康中医-本地 Setup 1.0.276.exe` 79,305,920 B / `dist/惠康中医-本地 1.0.276.exe` 79,031,040 B；含 login.js 方案A冷启动编排 + `shared/desktop-license-ipc.cjs` 空主窗弹窗修复；E2E 6/6、fuse 5 项、.bnzc/asar 三重、7 铁闸、真机启动冒烟全过；交付核对单 `交付核对单_V1.0.276_离线桌面版.txt`。
-  2. **离线 APK 322**：`app_project/db-offline/惠康中医-本地.apk` 3,576,866 B（SHA256 `B7D034BA…`）；aapt2 `versionCode=322 / versionName=1.0.0`，apksigner 证书 SHA-256 `e5b2b4b3…` 与注入 LicenseManager 期望一致；含 Java `activateLicense` clinicName 透传（纵深防御）。
-  3. **desktop/local 热更 2026.10.17-3**（app 1.0.276，19 文件，Ed25519 已签；相对 -2 仅 auth-core.js/version.json 变化，含 NO_LICENSE 码错位自愈）。
-  4. 版本副作用自动收纳并 push：`adcd4ee8`（desktop/package.json=1.0.276 + app build.gradle versionCode=322）。
-  5. **✅ 发布完成（用户执行，2026-10-17 17:23，commit `20feeedf`）**：GitHub Release **`v2026.10.17-1723`** 已上传离线 APK 322 + 离线桌面 exe 1.0.276（Setup/便携）；`public/hash-manifest.json` 与 `updates/{dingzhi,local}/latest.json`（含 site-official 镜像）已更新；线上核验：`updates/dingzhi/latest.json` version=1.0.276、`downloads/惠康中医-本地.apk` 实测 SHA256=`B7D034BA…36F9` 与构建逐字节一致。
+  1. **云桌面 1.2.269**：Setup 81,882,088 B / 便携 81,607,168 B（FileVersion 1.2.269）。
+  2. **云 APP versionCode 325**：项目根 `惠康中医-云端.apk` 12,395,941 B（SHA256 `C854FD85…`）。
+  3. **离线桌面 1.0.277**：Setup 79,281,936 B / 便携 79,006,984 B（FileVersion 1.0.277）。
+  4. **离线 APP versionCode 323**：`app_project/db-offline/惠康中医-本地.apk` 3,577,707 B（SHA256 `6979003F…`）。
+  5. `artifact-locate.js --check` → 「各源一致，可发布」；版本副作用 AutoCommit 已 push（`1ba4fdf1`，4 个打包基线已记录）。
+  6. 热更重签：desktop/local **2026.10.18-1**（app 1.0.277）、desktop/cloud **2026.10.18-1**（app 1.2.269）；app-local 保持 **2026.10.18-2**。
 - **剩余动作**：
-  1. **桌面冷启动深链真机复测**（装 1.0.276）：`bnzc://activate?...` 冷启动唤起 → 兑换 → 自动注册/装码 → 登录；重点验登录窗冷启动主窗为 null 的弹窗路径。
-  2. P40 继续用 app-local -7；可选覆盖安装 APK 322 验 Java clinicName 透传。
-  3. 收口：六端矩阵/HANDOFF 更新后删除本卡。
-- **勿做**：鸿蒙构建仍暂停（用户指示，恢复=DevEco GUI 自动签名一步，见 KNOWLEDGE 2026-10-16 2b）；发布前不再改源码（打包基线=`adcd4ee8`）。
-- **验收**：发布后下载页/`hash-manifest.json` 版本=1.0.276/322；线上 `hot-update/desktop/local/version.json`=-3；桌面冷启动深链通过。
-- **基线 commit**：`adcd4ee8`
+  1. **发布**（`一键发布.bat` 人工确认；或指示我执行 `node tools/publish-release.js --changed-only --confirm --push`）。
+  2. **桌面冷启动深链真机复测**（装 1.0.277）：`bnzc://activate?...` 冷启动唤起 → 兑换 → 自动注册/装码 → 登录。
+  3. 云 APP 325 真机安装复测（可选，验 Java clinicName 透传 + 最新 JS）。
+- **勿做**：鸿蒙构建暂停；发布前不再改源码（打包基线 `1ba4fdf1`）。
+- **验收**：发布后下载页/`hash-manifest.json`=1.0.277/323/325；线上 `hot-update/desktop/{local,cloud}/version.json` 均 `2026.10.18-1`；桌面冷启动深链通过。
+- **基线 commit**：`1ba4fdf1`
 
 ### H8 ｜优先级：中（S1 实施中）｜激活流程全端架构收敛
 - **状态**：IN-PROGRESS（5 项决策已拍板；**S1a + S1b-①②③ 已完成**；**S1b 剩余**：客户端接入 session、真机矩阵、桌面整包 1.0.277、云端 gate token 分发复测）。**2026-10-18 09:45 另一会话打包因版本基线漂移中止（1.0.277/1.2.269/325 未入库），遗留副作用已 `git stash`（"10-18 09:45 打包遗留副作用…"）待负责人处理，勿直接提交。**
