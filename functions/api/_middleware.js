@@ -1,21 +1,19 @@
 // ============================================================================
-//  functions/api/_middleware.js — 管理端「只读重扫描」响应缓存中间件
+//  functions/api/_middleware.js — 管理端「只读重扫描」响应缓存中间件（D1 主存）
 //
-//  ★ 2026-10-18 KV list 免费额度（1000/天）治理第二步：
-//    管理后台的待办角标/审计/风险/统计页会做 KV list 全表扫描，轮询/切页
-//    会反复消耗 list 额度（2026-10-18 已实测打满触发 429）。这里在 API 入口
-//    对**白名单内的只读管理接口**做响应级缓存（默认 TTL 2~10 分钟）：
-//      · 同一管理员 + 同一参数在 TTL 内只真正执行一次 → list 消耗大幅下降；
-//      · 缓存存 KV 单键（get/put，不走 list；get 配额 10 万/天）；
-//      · 只缓存 200 + JSON 响应；带 Set-Cookie / 非白名单 / 写操作一律透传；
-//      · 支持 `x-no-cache: 1` 或 `?fresh=1` 强制刷新（管理员手动刷新时用）。
-//    注意：这是"减少重复扫描"，不是替代授权/鉴权——缓存 key 含 Authorization
-//    哈希，不同 token 不串数据；鉴权失败（401/403）永不缓存。
+//  ★ 2026-10-18 KV list 免费额度（1000/天）治理：
+//    管理后台待办角标/审计/风险/统计页会做 KV list 全表扫描，轮询/切页反复
+//    消耗 list 额度（当日实锤 429）。这里对白名单只读管理接口做响应缓存：
+//      · 缓存主存 = **D1**（免费 5M 读/10万写/天；本表只存 JSON 快照），
+//        避免把缓存写也压到 KV 的 1000 写/天 上；KV 仅作旧缓存兼容读；
+//      · 同一路径+查询+Authorization 哈希+body 在 TTL 内只真执行一次；
+//      · 只缓存 200 + JSON；401/403/带 Set-Cookie/写操作一律透传；
+//      · `x-no-cache: 1` 或 `?fresh=1` 强制刷新（管理员手动刷新用）。
+//    说明：这是"减少重复扫描"层面，不改变任何授权/鉴权语义。
 // ============================================================================
 
 import { getKV } from './_lib/kv.js';
 
-// 路径 → TTL 秒（仅这些只读接口做响应缓存；写接口/登录/激活绝不在内）
 const CACHEABLE = new Map([
     ['/api/license/admin-list', 120],        // 待办角标（轮询最频繁）
     ['/api/license/admin-data-audit', 600],  // 全量数据审计（list 消耗大户）
@@ -26,6 +24,9 @@ const CACHEABLE = new Map([
 
 const CACHE_PREFIX = 'resp_cache:';
 const MAX_CACHE_BODY = 300 * 1024; // 300KB，超过不缓存
+const D1_CLEAN_EVERY = 20;         // 每 N 次写缓存顺手清一次过期行（D1 写免费额度充足）
+
+let __d1WriteCount = 0;
 
 function hex(buf) {
     return Array.from(new Uint8Array(buf)).map(x => x.toString(16).padStart(2, '0')).join('');
@@ -37,19 +38,58 @@ async function sha256Hex(text) {
     return hex(digest);
 }
 
+function replay(hit) {
+    const headers = new Headers();
+    headers.set('Content-Type', hit.ct || 'application/json; charset=utf-8');
+    headers.set('X-Resp-Cache', 'HIT');
+    if (hit.acao) { headers.set('Access-Control-Allow-Origin', hit.acao); headers.set('Vary', 'Origin'); }
+    else headers.set('Access-Control-Allow-Origin', '*');
+    return new Response(hit.body, { status: hit.status || 200, headers });
+}
+
+function getDB(env) {
+    return (env && env.DB) || null;
+}
+
+async function d1CacheGet(env, key) {
+    const db = getDB(env);
+    if (!db) return null;
+    try {
+        const row = await db.prepare(
+            'SELECT status, ct, acao, body, expires_at FROM admin_resp_cache WHERE cache_key = ?'
+        ).bind(key).first();
+        if (row && Number(row.expires_at) > Date.now() && row.body) {
+            return { status: row.status || 200, ct: row.ct || '', acao: row.acao || '', body: row.body };
+        }
+    } catch (_) { /* D1 不可用 → 走 KV 兼容读 */ }
+    return null;
+}
+
+async function d1CachePut(env, key, payload, ttlSec) {
+    const db = getDB(env);
+    if (!db) return false;
+    try {
+        await db.prepare(
+            'INSERT INTO admin_resp_cache (cache_key, status, ct, acao, body, expires_at) VALUES (?, ?, ?, ?, ?, ?) ' +
+            'ON CONFLICT(cache_key) DO UPDATE SET status=excluded.status, ct=excluded.ct, acao=excluded.acao, body=excluded.body, expires_at=excluded.expires_at'
+        ).bind(key, payload.status || 200, payload.ct || '', payload.acao || '', payload.body, Date.now() + ttlSec * 1000).run();
+        if (++__d1WriteCount % D1_CLEAN_EVERY === 0) {
+            db.prepare('DELETE FROM admin_resp_cache WHERE expires_at < ?').bind(Date.now() - 86400 * 1000).run().catch(() => {});
+        }
+        return true;
+    } catch (_) { return false; }
+}
+
 export async function onRequest(context) {
     const { request } = context;
     const url = new URL(request.url);
     const ttl = CACHEABLE.get(url.pathname);
     const method = request.method;
-    // 只处理白名单路径 + GET/POST；其余（含 OPTIONS 预检）原样透传
     if (!ttl || (method !== 'GET' && method !== 'POST')) return context.next();
     const noCache = request.headers.get('x-no-cache') === '1' || url.searchParams.get('fresh') === '1';
     if (noCache) return context.next();
 
-    const kv = getKV(context);
-    if (!kv) return context.next();
-
+    const env = context.env || {};
     const auth = request.headers.get('Authorization') || '';
     let bodyText = '';
     try {
@@ -62,18 +102,20 @@ export async function onRequest(context) {
         cacheKey = CACHE_PREFIX + hash;
     } catch (_) { return context.next(); }
 
+    // 1) D1 主缓存
     try {
-        const hit = await kv.get(cacheKey, 'json');
-        if (hit && hit.body) {
-            const headers = new Headers();
-            headers.set('Content-Type', hit.ct || 'application/json; charset=utf-8');
-            headers.set('X-Resp-Cache', 'HIT');
-            if (hit.acao) headers.set('Access-Control-Allow-Origin', hit.acao);
-            else headers.set('Access-Control-Allow-Origin', '*');
-            if (hit.acao) headers.set('Vary', 'Origin');
-            return new Response(hit.body, { status: hit.status || 200, headers });
-        }
-    } catch (_) { /* 缓存读失败 → 走真实请求 */ }
+        const hit = await d1CacheGet(env, cacheKey);
+        if (hit) return replay(hit);
+    } catch (_) {}
+
+    // 2) KV 旧缓存兼容读（历史版本写入的 resp_cache:*，自然过期后不再产生）
+    const kv = getKV(context);
+    if (kv) {
+        try {
+            const hit = await kv.get(cacheKey, 'json');
+            if (hit && hit.body) return replay(hit);
+        } catch (_) {}
+    }
 
     const res = await context.next();
     try {
@@ -90,13 +132,20 @@ export async function onRequest(context) {
                         status: res.status,
                         acao: res.headers.get('Access-Control-Allow-Origin') || ''
                     };
-                    const p = kv.put(cacheKey, JSON.stringify(payload), { expirationTtl: ttl + 60 });
-                    if (context.waitUntil) context.waitUntil(p.catch(() => {}));
-                    else await p.catch(() => {});
+                    const ttlSec = ttl + 60;
+                    const write = (async () => {
+                        const ok = await d1CachePut(env, cacheKey, payload, ttlSec);
+                        // D1 不可用（本地/未绑定）才退回 KV 单键缓存
+                        if (!ok && kv) {
+                            try { await kv.put(cacheKey, JSON.stringify(payload), { expirationTtl: ttlSec }); } catch (_) {}
+                        }
+                    })();
+                    if (context.waitUntil) context.waitUntil(write.catch(() => {}));
+                    else await write.catch(() => {});
                 }
             }
         }
-    } catch (_) { /* 写缓存失败不影响响应 */ }
+    } catch (_) {}
 
     try { res.headers.set('X-Resp-Cache', 'MISS'); } catch (_) {}
     return res;

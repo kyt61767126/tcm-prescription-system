@@ -130,3 +130,17 @@ CREATE TABLE IF NOT EXISTS download_uniq (
   PRIMARY KEY (day, file, ip_hash)
 );
 CREATE INDEX IF NOT EXISTS idx_download_uniq_day ON download_uniq(day);
+
+-- ============================================================================
+-- 2026-10-18 管理端只读扫描响应缓存（KV list 免费额度治理；D1 主存）
+--   中间件 functions/api/_middleware.js 读写；只存 JSON 快照，短 TTL，过期可清。
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS admin_resp_cache (
+  cache_key TEXT PRIMARY KEY,
+  status INTEGER NOT NULL DEFAULT 200,
+  ct TEXT,
+  acao TEXT,
+  body TEXT NOT NULL,
+  expires_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_admin_resp_cache_exp ON admin_resp_cache(expires_at);
