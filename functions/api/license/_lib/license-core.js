@@ -2007,11 +2007,15 @@ async function getUsage(kv, code) {
 //   与匿名 IP 桶的 key 空间彻底隔离（默认值保持 ratelimit:license，既有调用零影响）
 async function checkRateLimit(kv, ip, maxPerHour = 5, prefix = 'ratelimit:license') {
     const key = `${prefix}:${ip}:${Math.floor(Date.now() / (60 * 60 * 1000))}`;
-    const current = parseInt(await kv.get(key) || '0', 10);
+    let current = 0;
+    try { current = parseInt(await kv.get(key) || '0', 10); } catch (_) {}
     if (current >= maxPerHour) {
         return { allowed: false, current, max: maxPerHour };
     }
-    await kv.put(key, String(current + 1), { expirationTtl: 3600 });
+    // ★ 2026-10-18 P40 真机测试：KV put 日配额耗尽（免费版 1000/天）时，
+    //   kv.put 抛 "KV put() limit exceeded" 导致整个请求 500。
+    //   写失败降级为放行（限流本身是防滥用，KV 不可用时阻塞合法请求更糟）。
+    try { await kv.put(key, String(current + 1), { expirationTtl: 3600 }); } catch (_) {}
     return { allowed: true, current: current + 1, max: maxPerHour };
 }
 
@@ -2028,7 +2032,8 @@ async function checkCodeRateLimit(kv, code, maxPerHour = 5, prefix = 'ratelimit:
     if (current >= maxPerHour) {
         return { allowed: false, current, max: maxPerHour };
     }
-    await kv.put(key, String(current + 1), { expirationTtl: 3600 });
+    // ★ 2026-10-18：KV put 日配额耗尽时降级放行（同 checkRateLimit）
+    try { await kv.put(key, String(current + 1), { expirationTtl: 3600 }); } catch (_) {}
     return { allowed: true, current: current + 1, max: maxPerHour };
 }
 
