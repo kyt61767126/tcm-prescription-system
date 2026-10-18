@@ -98,9 +98,10 @@ export async function onRequestPost({ request, env }) {
             return json(request, { success: false, error: '服务暂不可用，请稍后再试' }, 503);
         }
 
-        // 速率限制：每 IP 每小时 20 次（与 validate 一致）
+        // 速率限制：每 IP 每小时 60 次（2026-10-18：20→60——邀请码卡会在打开授权区时查询，
+        //   多设备/NAT 共用 IP + 客户重试容易触顶；端点读多写少，60/h 足够防滥用）
         const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
-        const rateLimit = await checkRateLimit(kv, ip, 20);
+        const rateLimit = await checkRateLimit(kv, ip, 60);
         if (!rateLimit.allowed) {
             return json(request, { success: false, error: '请求过于频繁，请稍后再试' }, 429);
         }
