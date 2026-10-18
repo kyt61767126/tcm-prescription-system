@@ -6419,7 +6419,7 @@
                 '<div style="margin-bottom:14px;background:linear-gradient(135deg,#fff7ed 0%,#ffedd5 100%);border:1px solid #fdba74;border-radius:8px;padding:10px 12px;">' +
                     '<label style="display:block;font-size:13px;color:#9a3412;margin-bottom:5px;font-weight:bold;">📞 联系电话 <span style="color:#e53935;">*</span></label>' +
                     '<input type="tel" id="editionPhone" placeholder="如：13800138000" autocomplete="off" inputmode="numeric" maxlength="11" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
-                    '<div id="editionPhoneHint" style="font-size:11px;color:#78350f;margin-top:4px;line-height:1.6;">💡 11位手机号将作为登录账号。填好后点击下方版本，<b>自动提交直接付款</b>，无需填写其他信息</div>' +
+                    '<div id="editionPhoneHint" style="font-size:11px;color:#78350f;margin-top:4px;line-height:1.6;">💡 11位手机号将作为登录账号。已有激活码请直接点上方金色按钮激活；需购买请点下方版本卡片前往官网付款</div>' +
                 '</div>' +
                 // ★ 2026-09-06 P0 修复（邀请码入口断裂）：已注册用户「注册→立即激活→选版本→
                 //   自动提交直达付款页」跳过了管理员激活表单——表单里的邀请码输入框
@@ -6431,7 +6431,10 @@
                     '<input type="text" id="editionInviteCode" placeholder="如：7K3F9Q（没有可留空）" autocomplete="off" maxlength="10" spellcheck="false" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;font-family:monospace;letter-spacing:1px;text-transform:uppercase;">' +
                     '<div style="font-size:11px;color:#909399;margin-top:4px;">💡 填好友邀请码，激活后双方都得奖励（好友+90天，您+30天）</div>' +
                 '</div>' +
-                '<div style="font-size:13px;font-weight:bold;color:#555;margin-bottom:8px;">请选择要激活的版本</div>' +
+                // ★ 2026-10-18 淘宝码自带版本，已有码用户主路径：金色按钮上移到版本选择之前
+                '<button type="button" id="adminCodeEntryBtn" style="width:100%;margin-bottom:14px;padding:13px;font-size:15px;font-weight:bold;border:none;border-radius:10px;color:#fff;background:linear-gradient(135deg,#fbbf24 0%,#f59e0b 100%);cursor:pointer;-webkit-tap-highlight-color:transparent;box-shadow:0 2px 6px rgba(245,158,11,0.35);">🔑 已有激活码？点此直接激活</button>' +
+                // ★ 2026-10-18 版本卡片改为跳转官网付款页（本地不再自动建单/提交）
+                '<div style="font-size:13px;font-weight:bold;color:#555;margin-bottom:8px;">前往官网购买激活码</div>' +
                 '<div style="display:flex;gap:10px;">' +
                     '<div id="editionPersonal" data-edition="personal" style="flex:1;padding:14px;border:2px solid #ddd;border-radius:10px;text-align:center;cursor:pointer;background:#26a69a;border-color:#26a69a;color:#fff;">' +
                         '<div style="font-size:24px;">🏥</div><div style="font-size:14px;font-weight:bold;margin-top:2px;">标准版</div><div style="font-size:11px;opacity:0.85;">个人诊所 · 单用户</div>' +
@@ -6440,9 +6443,7 @@
                         '<div style="font-size:24px;">🏨</div><div style="font-size:14px;font-weight:bold;margin-top:2px;color:#333;">机构版</div><div style="font-size:11px;color:#909399;">多人机构 · 多用户管理</div>' +
                     '</div>' +
                 '</div>' +
-                // ★ 2026-10-10 淘宝买家入口强化：原 12px 小字「已有激活码？直接输入」
-                //   升级为全宽金色主按钮，点击直达输码 Tab；留言申请链接保留在按钮下方。
-                '<button type="button" id="adminCodeEntryBtn" style="width:100%;margin-top:14px;padding:13px;font-size:15px;font-weight:bold;border:none;border-radius:10px;color:#fff;background:linear-gradient(135deg,#fbbf24 0%,#f59e0b 100%);cursor:pointer;-webkit-tap-highlight-color:transparent;box-shadow:0 2px 6px rgba(245,158,11,0.35);">🔑 已有激活码？点此直接激活</button>' +
+                '<div style="font-size:11px;color:#909399;margin-top:6px;text-align:center;">💡 点击版本卡片将打开官网付款页面，购买后获得激活码再回来激活</div>' +
                 '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px;font-size:12px;">' +
                     '<span id="adminSkipToTicket" style="color:#07c160;cursor:pointer;-webkit-tap-highlight-color:transparent;">没有激活码？留言申请 →</span>' +
                 '</div>' +
@@ -7026,119 +7027,29 @@
             if (hint) { hint.textContent = '⚠ ' + msg; hint.style.color = '#e53935'; }
         }
 
-        // 版本选择
+        // ★ 2026-10-18 版本卡片：改为跳转官网付款页（淘宝码自带版本，本地不再自动建单）
         ['editionPersonal','editionInstitution'].forEach(function(id) {
-            document.getElementById(id).addEventListener('click', async function() {
+            document.getElementById(id).addEventListener('click', function() {
                 const ed = this.getAttribute('data-edition');
                 state.edition = ed;
                 state.editionChosen = true;
-                // ★ 2026-09-06 邀请码同步：选版本页填的邀请码同步到管理员激活表单框
-                //   （adminInviteCode）——已注册用户自动提交链路（adminToStep2Btn click）
-                //   读取的就是表单框值，同步后自动携带
+                // 邀请码同步到表单框（官网付款页 URL 会携带 iv 参数）
                 try {
                     const __edIv = document.getElementById('editionInviteCode');
                     const __fmIv = document.getElementById('adminInviteCode');
                     if (__edIv && __fmIv && __edIv.value && !__fmIv.value) {
                         __fmIv.value = String(__edIv.value).trim().toUpperCase();
+                        state.inviteCode = __fmIv.value;
                     }
-                } catch (eIv) { /* 同步失败不阻断版本选择 */ }
+                } catch (eIv) {}
+                // 高亮选中卡片
                 document.getElementById('editionPersonal').style.borderColor = (ed === 'personal' ? '#26a69a' : '#ddd');
                 document.getElementById('editionPersonal').style.background = (ed === 'personal' ? '#26a69a' : '#fff');
                 document.getElementById('editionInstitution').style.borderColor = (ed === 'institution' ? '#26a69a' : '#ddd');
                 document.getElementById('editionInstitution').style.background = (ed === 'institution' ? '#26a69a' : '#fff');
-                // ★ 2026-09-05 注册后直达付款（用户反馈：注册完点立即激活，管理员激活框
-                //   还要再次填写信息，不符合逻辑）：已注册用户（Tab1 已预填注册信息）选完
-                //   版本即自动提交激活申请——跳过信息确认步骤直接进付款页。注册时账号+
-                //   密码已建、申请信息=注册信息，无需再人工确认；需核对/修改时从付款页
-                //   「返回上一步」回 Tab1 表单（信息已预填可改）。预填不完整时退回原流程。
-                // ★ 2026-09-06（第四轮回归）async 化 + 桥兜底等待：registrationInfo 丢失
-                //   （localStorage 单点故障）时等待桥 config 注册账号补预填（最长 2s），
-                //   到位后继续自动提交——不再静默落入信息表单页（用户观感"又要填信息/
-                //   卡住不流转"）。
-                try {
-                    let __rg = getLocalRegistrationInfo();
-                    if (!__rg && __bridgePrefillPromise) {
-                        try {
-                            const __bp = await Promise.race([
-                                __bridgePrefillPromise,
-                                new Promise(function (r) { setTimeout(function () { r(null); }, 2000); })
-                            ]);
-                            if (__bp && __bp.phone) __rg = __bp;
-                        } catch (be2) { /* 桥兜底超时/失败退回手动表单 */ }
-                    }
-                    if (__rg && __rg.phone) {
-                        // 桥场景 DOM 兜底补填（预填 then 回调可能尚未完成/竞态）
-                        if (__rg.via === 'bridge') {
-                            const __cn3 = document.getElementById('adminClinicName');
-                            const __an3 = document.getElementById('adminAdminName');
-                            const __ph3 = document.getElementById('adminPhone');
-                            if (__ph3 && !__ph3.value.trim()) __ph3.value = __rg.phone;
-                            if (__an3 && !__an3.value.trim() && __rg.adminName) __an3.value = __rg.adminName;
-                            if (__cn3 && !__cn3.value.trim()) __cn3.value = String(__rg.clinicName || clinicName || '').trim();
-                        }
-                        const __cnv = ((document.getElementById('adminClinicName') || {}).value || '').trim();
-                        const __anv = ((document.getElementById('adminAdminName') || {}).value || '').trim();
-                        const __phv = ((document.getElementById('adminPhone') || {}).value || '').trim();
-                        if (__cnv && __anv && __phv && PHONE_RE.test(__phv)) {
-                            // 复用「确认信息并提交」按钮链路：读 DOM 预填值→校验→
-                            // __regPrefill 匹配→自动提交（含注册密码解密等待）→付款页
-                            document.getElementById('adminToStep2Btn').click();
-                            return;
-                        }
-                    }
-                } catch (re2) { /* 读取失败：已注册走下方封死分支，未注册退回手动表单 */ }
-                // ★ 2026-09-06（第九轮·用户指令）：已注册用户激活全程取消「管理员激活」
-                //   填信息表单（备注及输入框）——注册时信息已收集，预填链失败也不落
-                //   表单，回版本选择页 + 红条提示（重启重试/联系客服），而非让用户
-                //   重复填写。未注册用户（首次激活/存量无账号）维持手动表单。
-                if (__regPrefill && __regPrefill.phone) {
-                    show('adminStepEdition');
-                    try {
-                        const __edBox = document.getElementById('adminStepEdition');
-                        if (__edBox && !document.getElementById('adminEditionErrTip')) {
-                            const __tip = document.createElement('div');
-                            __tip.id = 'adminEditionErrTip';
-                            __tip.style.cssText = 'background:#fdecea;border:1px solid #f5c6cb;border-radius:8px;padding:10px;margin-bottom:12px;font-size:12px;color:#b71c1c;line-height:1.7;';
-                            __tip.innerHTML = '⚠ 注册信息读取失败（诊所名/姓名/手机号未同步）。<br>请完全退出 APP 重新打开后再试；仍有问题请联系客服微信 hktzy1688。';
-                            __edBox.insertBefore(__tip, __edBox.firstChild);
-                        }
-                    } catch (te2) {}
-                    return;
-                }
-                // ★ 2026-09-15 试用到期直通（手机号=直通开关）：未注册用户读版本页
-                //   联系电话，本地自动补齐（诊所名=CONFIG.clinicName、姓名=CONFIG.doctorName，
-                //   试用期已设置过）→ 标记 __editionDirect → 复用 adminToStep2Btn 标准
-                //   校验收集链路直通提交（密码归一 admin）→ 直建订单/申请 → 付款等待视图。
-                //   手机号留空/无效：走原表单流程（原行为不变）；
-                //   诊所名/姓名本地缺失：落入表单补填（手机号已带上，缺失字段标红）。
-                try {
-                    const __epRaw = (document.getElementById('editionPhone') || {}).value || '';
-                    const __epVal = String(__epRaw).trim();
-                    if (__epVal && PHONE_RE.test(__epVal)) {
-                        const __fCn = document.getElementById('adminClinicName');
-                        const __fAn = document.getElementById('adminAdminName');
-                        const __fPh = document.getElementById('adminPhone');
-                        if (__fPh) __fPh.value = __epVal;
-                        if (__fCn && !__fCn.value.trim()) __fCn.value = String(clinicName || '').trim();
-                        if (__fAn && !__fAn.value.trim()) {
-                            try { if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.doctorName) __fAn.value = String(CONFIG.doctorName).trim(); } catch (eCf) {}
-                        }
-                        const __cnOk = !!(__fCn && __fCn.value.trim());
-                        const __anOk = !!(__fAn && __fAn.value.trim());
-                        if (__cnOk && __anOk) {
-                            state.__editionDirect = true;
-                            document.getElementById('adminToStep2Btn').click();
-                            return;
-                        }
-                        show('adminStepForm');
-                        setActiveTab('admin');
-                        if (!__cnOk) showFieldErr('adminClinicName', 'adminClinicNameHint', '请填写诊所名称');
-                        else showFieldErr('adminAdminName', 'adminAdminNameHint', '请填写管理员/医师姓名');
-                        return;
-                    }
-                } catch (edErr) { console.warn('[LicenseCheck] 版本页直通异常，退回原表单流程:', edErr); }
-                show('adminStepForm');
-                setActiveTab('admin');
+                // 构造官网付款 URL（mid + 版本 + 已填信息），用 robust 通路打开
+                const payUrl = buildPayUrl();
+                openPayUrlRobust(payUrl, this);
             });
         });
 
