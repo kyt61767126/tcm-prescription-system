@@ -217,6 +217,8 @@
 
 * ★ 2026-10-18 **邀请码「激活码不存在」修复（离线桌面实锤）**：现象=授权区显示"✅已激活（机构版）+ 激活码 BNZC-KLPF-…"，但邀请码卡报"加载失败（激活码不存在）"；KV 实证该码记录不存在（本地 license.dat 有效但服务端无该码 = 与 P40 同族"本地/服务端分裂"）。修复：① `invite.js` 在入参码查不到时统一用 `machineId` 反查真实绑定码（`device_version`→`license` 索引按 devices 扫描），命中返回 `resolvedLicenseCode`（仅机码反查场景，同机安全）+ 回填 device_version；② 客户端 `loadInviteInfo` 统一带 `{code, machineId}`，成功且 `resolvedLicenseCode` 与本地不同→自愈 `license:code` 并同步激活码显示；码查不到时文案改"本机授权记录未同步"（不再误报"激活码不存在"）。热更 app-local **2026.10.18-3** / desktop-local **2026.10.18-2**。**铁律：客户端展示的码可能是本地残留；任何"凭码查询"的服务端接口都应以 machineId 反查为兜底并返回权威码供自愈，不可只报 404。** **二次修复（同日）**：客户端热更生效后报 `This operation was aborted`——invite 服务端无 device_version 时逐条 `getLicense` 扫 500 条（>8s），撞桌面主进程 fetch 8s AbortController 超时；改用 `license-core.findLicensesByMachine`（mid_owners O(1)+全扫批量并发回退）+ machineId 过 schema-guard，服务端 1s 内返回；频控 20→60/h 防授权区高频查询误 429。**铁律补充：客户端"凭码查询"接口（invite/lookup 等）的 machineId 反查必须走 O(1)/批量索引，禁止逐条顺序扫 license 索引——桌面主进程 fetch 8s 超时会表现为 "This operation was aborted"。**
 
+* ★ 2026-10-18 **云端桌面「剩余 X 天」在 327 与 1000+ 之间跳变修复/显示优化**：根因=云端账号 `clinicExpiresAt` 与本机 `license.dat` 到期日是两套授权模型、数值可不同，单取任一都会来回跳。`cloud.js → getCloudAccountLicenseHtml` 改为**取两者中较早到期**（保守显示，避免虚报可用期），来自本机授权时补一行小字"以本机授权与账号到期较早者为准"；剩余 >3650 天显示"长期有效"（不展示 3000+ 天）。cv bump `auth-core.js?cv=17c59a31` + 同步 3 份 index.html；desktop/cloud 热更重签 **2026.10.18-2**；云端网页/云 APP 在线壳 push 即达。**铁律：云端授权状态数字必须是单一确定来源或"取较早到期"，禁止两个来源各自渲染造成跳变。**
+
 ## 3. 界面保护铁律
 * 优化前必须运行 `check-interface.bat` 建立基线，优化后再运行验证；WARN 立即 git checkout 恢复或经用户确认后重建基线。
 

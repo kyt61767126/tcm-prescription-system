@@ -4164,19 +4164,46 @@
         const isStd = ['personal', 'cloud_personal', 'offline_personal', 'standard', 'clinic_standard'].indexOf(eLow) >= 0;
         const planLabel = ed ? (isStd ? '标准版' : '机构版') : '';
         let html = '✅ 已激活' + (planLabel ? '（' + planLabel + '）' : '');
-        // ★ 2026-08-25 按钮状态：有效期内（>7天）灰色只读；≤7天/过期恢复正常色提醒续费
+        // ★ 2026-10-18 激活显示优化（云端桌面用户反馈"有时 327 有时 1000+天"）：
+        //   账号 clinicExpiresAt 与本机 license.dat 剩余天数可能不同（两套授权模型），
+        //   单独取任一都会让数字来回跳。此处取**两者中较早到期**（保守显示，避免向客户
+        //   虚报可用期），并在确实来自本机授权时给一句小字说明；超长周期显示"长期有效"。
         let daysLeftForBtn = null;
+        let days = null;
         const expRaw = cu.clinicExpiresAt;
         if (expRaw) {
             const ms = new Date(expRaw).getTime();
-            if (!isNaN(ms)) {
-                const days = Math.ceil((ms - Date.now()) / (24 * 60 * 60 * 1000));
-                daysLeftForBtn = days;
-                if (days > 0) {
-                    html += '<br>剩余 <b style="color:#4caf50;">' + days + '</b> 天';
-                } else {
-                    html += '<br><span style="color:red;">授权已到期，请联系管理员续费</span>';
+            if (!isNaN(ms)) days = Math.ceil((ms - Date.now()) / (24 * 60 * 60 * 1000));
+        }
+        let licDays = null;
+        try {
+            if (global.electronAPI && global.electronAPI.license &&
+                typeof global.electronAPI.license.getStatus === 'function') {
+                const st = await global.electronAPI.license.getStatus();
+                if (st && st.valid && st.type === 'licensed' &&
+                    typeof st.remainingDays === 'number' && st.remainingDays > 0) {
+                    licDays = st.remainingDays;
                 }
+            }
+        } catch (_) {}
+        let effDays = days;
+        let daysFromLicense = false;
+        if (licDays != null && (days == null || licDays < days)) {
+            effDays = licDays;
+            daysFromLicense = true;
+        }
+        if (effDays != null) {
+            daysLeftForBtn = effDays;
+            if (effDays > 3650) {
+                // 超长（>10 年）视为长期授权，避免展示 3000+ 天这种不可读数字
+                html += '<br>有效期：<b style="color:#4caf50;">长期有效</b>';
+            } else if (effDays > 0) {
+                html += '<br>剩余 <b style="color:#4caf50;">' + effDays + '</b> 天';
+                if (daysFromLicense) {
+                    html += '<br><span style="color:#999;font-size:11px;">（以本机授权与账号到期较早者为准）</span>';
+                }
+            } else {
+                html += '<br><span style="color:red;">授权已到期，请联系管理员续费</span>';
             }
         }
         setAdminActivateBtnState(daysLeftForBtn);
