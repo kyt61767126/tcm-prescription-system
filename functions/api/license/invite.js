@@ -36,9 +36,10 @@
 
 import {
     getKV, getLicense, checkRateLimit, getDeviceVersion, setDeviceVersion,
-    ensureInviteCode, KV_LICENSE_INDEX,
+    ensureInviteCode, findLicensesByMachine,
     INVITE_REWARD_DAYS_PER_PERSON, INVITE_MAX_INVITEES
 } from './_lib/license-core.js';
+import { isValidMachineId } from './_lib/schema-guard.js';
 
 const ALLOWED_ORIGINS = [
     'https://tcm-prescription-system.pages.dev',
@@ -105,29 +106,26 @@ export async function onRequestPost({ request, env }) {
         }
 
         const body = await request.json().catch(() => ({}));
-        const mid = (body && body.machineId && typeof body.machineId === 'string') ? body.machineId.trim() : '';
+        const midRaw = (body && body.machineId && typeof body.machineId === 'string') ? body.machineId.trim() : '';
+        // 机器码只接受 schema-guard 白名单（防垃圾 mid 触发全扫；无效当作未提供）
+        const mid = (midRaw && isValidMachineId(midRaw)) ? midRaw : '';
         let code = (body && body.code && typeof body.code === 'string') ? body.code.trim().toUpperCase() : '';
         let recoveredByMachine = false;
 
-        // 本机 machineId → 权威激活码（device_version 优先；缺失/陈旧时按 license 索引 devices 反查）
+        // 本机 machineId → 权威激活码（device_version 优先；缺失/陈旧时用 mid_owners/索引 O(1) 反查，
+        // ★ 2026-10-18：原实现逐条 getLicense 扫描 500 条 → 主进程 8s 超时 abort（"This operation was aborted"），
+        //   改用 license-core.findLicensesByMachine（mid_owners 快路径 + 全扫批量并发回退））
         async function findMachineCode() {
             const binding = await getDeviceVersion(kv, mid).catch(() => null);
             let found = (binding && binding.licenseCode) ? String(binding.licenseCode).trim().toUpperCase() : '';
             if (!found) {
-                const index = (await kv.get(KV_LICENSE_INDEX, 'json')) || [];
-                const scanLimit = Math.min(Array.isArray(index) ? index.length : 0, 500);
+                let hits = [];
+                try { hits = await findLicensesByMachine(kv, mid, { readOnly: true }); } catch (_) { hits = []; }
                 let best = '', bestAt = -1;
-                for (let i = 0; i < scanLimit; i++) {
-                    const c = index[i];
-                    if (!c) continue;
-                    let rec = null;
-                    try { rec = await getLicense(kv, c); } catch (_) { }
-                    if (!rec) continue;
-                    const devices = Array.isArray(rec.devices) ? rec.devices : [];
-                    if (devices.some(d => d && d.machineId === mid)) {
-                        const at = rec.activatedAt ? new Date(rec.activatedAt).getTime() : 0;
-                        if (at >= bestAt) { bestAt = at; best = String(c).trim().toUpperCase(); }
-                    }
+                for (const rec of hits) {
+                    if (!rec || !rec.code) continue;
+                    const at = rec.activatedAt ? new Date(rec.activatedAt).getTime() : 0;
+                    if (at >= bestAt) { bestAt = at; best = String(rec.code).trim().toUpperCase(); }
                 }
                 found = best;
             }
