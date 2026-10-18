@@ -111,7 +111,7 @@
 ### H3 ｜优先级：低（长期观察）｜KV 容量与套餐
 - audit_log 前缀 880 键（2026-10-13 实测，总 1926），接近单页 1000；D1 迁移完成后安排清理。
 - 用户此前决策「先削减不升级」；若 list/write 再触限额，评估 Workers Paid（$5/月）。
-- **2026-10-18 list 429 实锤（免费版 1000 list/天用尽，控制台「KV 请求已被暂时阻止」）**：已上线免费治理——`getKV()` 返回绑定加 Proxy，`kv.list` 自动走 `safeListPage` 并默认 60s isolate 缓存；429 后熔断标记写入 KV（`sys:kv_list_blocked_until`，TTL 到下一个 UTC 0 点），多 isolate 共享；熔断期优先返回上次成功缓存（后台显示旧数据而非整页报错）。测试 `tools/kv-list-fuse-test.cjs` 10 PASS。免费额度 **UTC 0 点重置（北京 08:00）**，无需升级套餐；**长期根治=list 密集的管理端扫描迁 D1（免费 5M 读/10万写每天）或改索引键 get**，下一步可做。
+- **2026-10-18 list 429 实锤（免费版 1000 list/天用尽，控制台「KV 请求已被暂时阻止」）**：已上线免费治理——`getKV()` 返回绑定加 Proxy，`kv.list` 自动走 `safeListPage` 并默认 60s isolate 缓存；429 后熔断标记写入 KV（`sys:kv_list_blocked_until`，TTL 到下一个 UTC 0 点），多 isolate 共享；熔断期优先返回上次成功缓存（后台显示旧数据而非整页报错）。测试 `tools/kv-list-fuse-test.cjs` 10 PASS。免费额度 **UTC 0 点重置（北京 08:00）**，无需升级套餐；**长期根治=list 密集的管理端扫描迁 D1（免费 5M 读/10万写每天）或改索引键 get**，下一步可做。**第二步已上线（2026-10-18）**：新增 `functions/api/_middleware.js` 响应缓存中间件——白名单只读管理接口（admin-list 120s / admin-data-audit 600s / admin-risk 300s / admin-usage 300s / stats-funnel 600s）同 token+同参数 TTL 内只真扫一次，缓存存 KV 单键（不走 list）；401/非白名单/带 Set-Cookie 一律不缓存；`x-no-cache:1` 或 `?fresh=1` 可强制刷新；测试 `tools/api-cache-middleware-test.cjs` 9 PASS。
 
 ---
 
