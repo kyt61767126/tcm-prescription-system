@@ -49,7 +49,7 @@
 - **基线 commit**：`adcd4ee8`
 
 ### H8 ｜优先级：中（S1 实施中）｜激活流程全端架构收敛
-- **状态**：IN-PROGRESS（5 项决策已拍板；**S1a 已完成**；**S1b-①/② 已完成**（后台诊断页、app-local -8、activation-session MVP 服务端）；**S1b 剩余**：云 APP gate token 缓存、客户端接入 session、真机矩阵）。**2026-10-18 09:45 另一会话打包因版本基线漂移中止（1.0.277/1.2.269/325 未入库），遗留副作用已 `git stash`（"10-18 09:45 打包遗留副作用…"）待负责人处理，勿直接提交。**
+- **状态**：IN-PROGRESS（5 项决策已拍板；**S1a + S1b-①②③ 已完成**；**S1b 剩余**：客户端接入 session、真机矩阵、桌面整包 1.0.277、云端 gate token 分发复测）。**2026-10-18 09:45 另一会话打包因版本基线漂移中止（1.0.277/1.2.269/325 未入库），遗留副作用已 `git stash`（"10-18 09:45 打包遗留副作用…"）待负责人处理，勿直接提交。**
 - **已拍板决策**：
   1. **O1 activation-session**：✅ 接受，S1 先做 MVP（令牌核销后移到 claim 成功，幂等可重试）；
   2. **云 APP 本地授权载体**：✅ 补**签名 gate token 缓存**（不引入 license.dat），云端统一为「账号权威 + gate token 离线宽限」；
@@ -64,11 +64,12 @@
   5. **S1b-① 后台「🔎 激活诊断」页已上线**：主站 `https://tcm-prescription-system.pages.dev/admin/activation-diagnose`（Cloudflare Pages 去 .html，用 pretty URL）；功能=机码/激活码/本地状态 → reconcile 摘要 + 建议动作 + license_log 时间线 + 受控修复按钮 + 一键复制诊断报告；令牌读主站 `license_admin_token`。**后台站副本为跳转页**（huikang-admin 未部署 /api Functions，接口固定主域）；需先在主站 /admin 登录平台管理员。
   6. **app-local 热更 2026.10.17-8 已重签**（minAppCode 288 继承）：APP 端登录闸对账自愈自第 2 次冷启动起生效（桌面登录窗在 asar 内仍需整包 1.0.277）。
   7. **S1b-② activation-session MVP（服务端）已上线**：新增 `functions/api/license/activation-session.js`（action=start/complete/status）——令牌 redeem 增加 `deferConsume`（只 `linked` 绑首兑机，不核销）+ 新 `action=consume`（claim 成功后才核销并写台账）；start 返回 sid（30min TTL、绑 machineId、**不向前端泄露裸码**），complete 由服务端调 claim→成功再 consume，claim 失败返回 `retry:true` 且令牌保持 linked（可重试），成功幂等；`tools/act-session-test.cjs` 20 PASS/0 FAIL，旧令牌回归 44 PASS。**客户端尚未接入**（后续新包/热更用 session）；旧 redeem/claim 语义零变化。
+  8. **S1b-③ 云 APP gate token 缓存 + 离线宽限已上线**：`shared/auth-core/cloud.js` 心跳 entitlement=LICENSED 时缓存服务端 ES256 `gateToken` 并以 `serverTime` 校正时钟基线；网络不可达/心跳异常/裁决不可达三处先验签（mid/exp/iat/licExp/回拨，公钥与 offline 同源 v1/v2），通过则离线宽限放行，否则回退既有 7 天离线锁定；cv 已 bump（`auth-core.js?cv=68348e41`）并 sync 云端 8 副本 + 3 份 index.html；云 APP 为在线 WebView 壳，**push 即达**（云桌面/鸿蒙随各自分发）。
 - **生效注意（审查结论，务必遵守）**：
   - 服务端 reconcile 随 push 由 Pages 构建即上线；
   - auth-core 属热更白名单：**APP 需重签 app-local 热更才生效**（minAppCode 288 不抬）；**桌面登录链在 asar 登录窗内**，主窗热更不覆盖登录窗 → 桌面「登录闸自愈」需**整包 1.0.277** 才生效；
   - 自愈仅对「本地授权有效但闸门拒绝」触发；时间回拨/tampered/config_tampered/账号删除**不触发**（防硬拒态变可写修复路径）。
-- **S1b 待做**：① 云 APP gate token 缓存 + 离线宽限 ② 客户端接入 activation-session（新包/热更，需重签 app-local）③ 真机矩阵：码错位/license.dat 损坏/时间回拨/账号删除 ④ 桌面整包 1.0.277 使登录窗自愈生效。
+- **S1b 待做**：① 客户端接入 activation-session（新包/热更，需重签 app-local）② 真机矩阵：码错位/license.dat 损坏/时间回拨/账号删除 ③ 桌面整包 1.0.277 使登录窗自愈生效 ④ 云桌面/鸿蒙 gate token 随各自整包/热更分发后复测。
 - **勿做**：不动 35+ 端点历史语义；不改人工审核铁律/价格/端锁；**禁止手工改 KV 码记录**（业务级重置一律走 reconcile/repair 或 admin 工具）。
 - **验收**：S1b 完成后重现「KV 手改 unused + 本地有 license」→ 后台诊断页可定位并可受控 repair；旧客户端零回归；pre-push 全绿 + act-* mock 入库测试常绿。
 - **基线 commit**：`d042fac6`

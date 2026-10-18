@@ -211,6 +211,8 @@
 
 * ★ 2026-10-18（S1b-②）**activation-session MVP（令牌核销时点后移）**：新增 `functions/api/license/activation-session.js`（action=start/complete/status）——`activation-token.js` 的 redeem 新增 `deferConsume`：只把令牌置 `linked` 并绑首兑机（同机可重入、异机 409），**不核销、不写兑换台账**；新 `action=consume`（仅 linked 同机）才核销 redeemed + 写 audit/`redeemedDevices`。session start 返回 `sid`（CSPRNG 16B、30min TTL、绑 machineId、**不向前端泄露裸码**）；complete 服务端内部调 claim → 成功才 consume；claim 失败返回 `retry:true` 且令牌保持 linked（可重试，根治「令牌已用码未激活」）；claim 成功但 consume 失败 → `consumePending`，重试 complete 只补核销不重复 claim；completed 幂等回执。测试 `tools/act-session-test.cjs` 20 PASS、旧令牌回归 44 PASS；旧 redeem/claim 语义零变化。**铁律：令牌「核销」必须晚于授权「生效」（claim 成功）——禁止在 redeem 阶段核销；session 裸码只在服务端流转，客户端只拿 sid。** **另（10-18 实锤）：打包前版本号副作用未入库（1.0.277/1.2.269/325）会被 `verify-version-baseline` 直接拦停（FATAL 版本基线漂移）——看到该 FATAL 先补提交版本号或 checkout 还原，再重打，勿用 ALLOW_VERSION_DRIFT 硬闯。**
 
+* ★ 2026-10-18（S1b-③，决策②）**云 APP gate token 缓存 + 离线宽限**：`shared/auth-core/cloud.js` 在心跳 entitlement=LICENSED 时缓存服务端 ES256 `gateToken` 到 `license:gateToken`，并用 `entitlement.serverTime` 刷新 `license:clockOffsetMs/maxLocalTime` 时钟基线；网络不可达（HTTP 非 ok）/心跳异常/entitlement 不可达三处先 `evaluateOfflineGrace()`：验签 gate token（alg=ES256、kid 公钥 v1/v2、`mid` 绑定、`exp`/`iat` 下界、`licExp`、回拨检测），通过则**离线宽限放行**（网络故障≠授权失效），失败仍回退既有 7 天离线锁定；公钥与 offline.js 同源。改动仅 `cloud.js`（云端 Web/云桌面/云 APP/鸿蒙 8 副本经 sync-auth-core 分发），需 `check-cv-hashes --update` bump `auth-core.js?cv=` 再 `sync-html.ps1` 传播 3 份 index.html（否则 immutable 长缓存下线上不生效）。**铁律：云端离线宽限只信服务端签名 gate token（不引入 license.dat）；网络失败路径必须先验签再决定锁定，避免把断网误判为吊销；gate token 与授权到期绑（licExp），到期/停用不因离线宽限放行。** 云 APP 为在线 WebView 壳 → push 即达；云桌面/鸿蒙随各自分发后复测。
+
 ## 3. 界面保护铁律
 * 优化前必须运行 `check-interface.bat` 建立基线，优化后再运行验证；WARN 立即 git checkout 恢复或经用户确认后重建基线。
 

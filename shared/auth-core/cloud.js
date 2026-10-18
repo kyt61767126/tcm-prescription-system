@@ -2337,6 +2337,98 @@
     const API_BASE = (global.AuthCore && global.AuthCore.CLOUD_API_BASE) ||
         'https://tcm-prescription-system.pages.dev/api';
 
+    // ★ 2026-10-18 S1b-③（决策②）：云 APP 补「签名 gate token 缓存 + 离线宽限」。
+    //   云端两端口径统一为「账号权威 + gate token 离线宽限」：entitlement LICENSED 时
+    //   缓存服务端 ES256 gateToken 并以 serverTime 校正时钟基线；网络不可达时先验签
+    //   （mid 绑定/exp/iat/licExp/回拨），通过则视为离线宽限放行，否则仍回退既有
+    //   7 天离线锁定。公钥与 offline.js 同源（v1 生产 / v2 轮换预置）。
+    const GATE_VERIFY_PUBKEYS = Object.freeze({
+        v1: 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEzyAyTa5wJL44H5DeyZBLVNlNgyE9'
+          + '2BOqibasK+J69Wh+a58JscqR3pDRZBmQ1M+F3upJYXQQYjV7lOK5f5eCJA==',
+        v2: 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEMBkE0WC4qN3sQkIWi5vtzJTvjvk82'
+          + 'ebTzlVO+EAzpq/OYrxmyZRU7VSvTeETCYK/inABVFfHvvdQo0HGA80I8Q=='
+    });
+    const GATE_CLOCK_SKEW_GRACE_MS = 5 * 60 * 1000;
+    const GATE_MAX_OFFSET_MS = 10 * 60 * 1000;
+
+    function gateB64urlToBytes(s) {
+        s = String(s).replace(/-/g, '+').replace(/_/g, '/');
+        while (s.length % 4) s += '=';
+        const bin = atob(s);
+        const u8 = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+        return u8;
+    }
+    function gateB64urlToStr(s) { return new TextDecoder().decode(gateB64urlToBytes(s)); }
+
+    async function verifyGateToken(token, machineId, adjustedNowMs) {
+        try {
+            const parts = String(token || '').split('.');
+            if (parts.length !== 3) return null;
+            const header = JSON.parse(gateB64urlToStr(parts[0]));
+            const payload = JSON.parse(gateB64urlToStr(parts[1]));
+            if (!header || header.alg !== 'ES256') return null;
+            const pubB64 = GATE_VERIFY_PUBKEYS[header.kid];
+            if (!pubB64) return null;
+            if (!payload || payload.v !== 1 || payload.mid !== machineId) return null;
+            const expMs = Number(payload.exp) * 1000;
+            if (!(expMs > adjustedNowMs)) return null;
+            const iatFloorMs = (Number(payload.iat) - GATE_CLOCK_SKEW_GRACE_MS / 1000) * 1000;
+            if (!(adjustedNowMs >= iatFloorMs)) return null;
+            if (payload.licExp) {
+                const licExpMs = Number(payload.licExp) * 1000;
+                if (!(licExpMs >= adjustedNowMs)) return null;
+            }
+            const key = await global.crypto.subtle.importKey(
+                'spki', gateB64urlToBytes(pubB64),
+                { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
+            const ok = await global.crypto.subtle.verify(
+                { name: 'ECDSA', hash: 'SHA-256' }, key,
+                gateB64urlToBytes(parts[2]),
+                new TextEncoder().encode(parts[0] + '.' + parts[1]));
+            return ok ? payload : null;
+        } catch (e) { return null; }
+    }
+
+    async function gateReadClockOffsetMs() {
+        try {
+            const raw = await StorageAdapter.getItem('license:clockOffsetMs');
+            if (raw == null || raw === '') return null;
+            const n = Number(raw);
+            return Number.isFinite(n) ? n : null;
+        } catch (e) { return null; }
+    }
+    async function gateDetectClockRollback(nowLocal) {
+        try {
+            const maxSeen = Number(await StorageAdapter.getItem('license:maxLocalTime')) || 0;
+            if (nowLocal + GATE_CLOCK_SKEW_GRACE_MS < maxSeen) return true;
+            if (nowLocal > maxSeen) await StorageAdapter.setItem('license:maxLocalTime', String(nowLocal));
+        } catch (e) {}
+        return false;
+    }
+    async function gateRefreshClockBaseline(localNow, serverTime) {
+        try {
+            const serverMs = Date.parse(serverTime);
+            if (!Number.isFinite(serverMs)) return false;
+            await StorageAdapter.setItem('license:clockOffsetMs', String(serverMs - localNow));
+            await StorageAdapter.setItem('license:maxLocalTime', String(serverMs));
+            return true;
+        } catch (e) { return false; }
+    }
+    // 离线宽限裁决：{ok:true,payload} / {ok:false,reason}
+    async function evaluateOfflineGrace(machineId) {
+        const localNow = Date.now();
+        if (await gateDetectClockRollback(localNow)) return { ok: false, reason: 'rollback' };
+        const offsetMs = await gateReadClockOffsetMs();
+        if (offsetMs == null) return { ok: false, reason: 'no-baseline' };
+        if (Math.abs(offsetMs) > GATE_MAX_OFFSET_MS) return { ok: false, reason: 'offset' };
+        let token = '';
+        try { token = await StorageAdapter.getItem('license:gateToken') || ''; } catch (e) {}
+        const payload = await verifyGateToken(token, machineId, localNow + offsetMs);
+        if (!payload) return { ok: false, reason: 'token' };
+        return { ok: true, payload: payload };
+    }
+
     // ★ P1-7 心跳验证：每 24 小时联网验证一次 License，离线超过 7 天锁定
     // 防盗破解：破解版无法通过心跳验证，7 天后自动锁定
     async function performHeartbeatCheck() {
@@ -2374,6 +2466,12 @@
 
             if (!response.ok) {
                 console.warn('[Heartbeat] 网络错误，HTTP', response.status);
+                // ★ S1b-③：先尝试签名 gate token 离线宽限（网络故障≠授权失效）
+                const __grace = await evaluateOfflineGrace(machineId).catch(() => null);
+                if (__grace && __grace.ok) {
+                    console.log('[Heartbeat] 网络不可达，gate token 离线宽限放行 exp=', new Date(__grace.payload.exp * 1000).toISOString());
+                    return;
+                }
                 // 记录离线开始时间
                 const offlineStart = await StorageAdapter.getItem('license:offlineStart');
                 if (!offlineStart) {
@@ -2400,6 +2498,7 @@
             //   真值（与老 status 心跳同语义），本地 license:code 过期错位时仍能
             //   找回本机有效绑定（P1 丢码自愈路径）。
             let entState = null;
+            let entFull = null;
             try {
                 const entResp = await fetch('https://tcm-prescription-system.pages.dev/api/license/entitlement', {
                     method: 'POST',
@@ -2408,7 +2507,7 @@
                 });
                 if (entResp.ok) {
                     const ent = await entResp.json();
-                    if (ent && ent.success) entState = ent.state;
+                    if (ent && ent.success) { entState = ent.state; entFull = ent; }
                 }
             } catch (entE) {
                 console.warn('[Heartbeat] entitlement 裁决不可达，回退心跳判定:', entE && entE.message);
@@ -2417,6 +2516,15 @@
             if (entState === 'LICENSED') {
                 await StorageAdapter.setItem('license:lastHeartbeat', String(now));
                 await StorageAdapter.removeItem('license:offlineStart');
+                // ★ S1b-③：缓存签名 gate token + 以服务端时间校正时钟基线（离线宽限凭据）
+                try {
+                    if (entFull && entFull.gateToken) {
+                        await StorageAdapter.setItem('license:gateToken', String(entFull.gateToken));
+                    }
+                    if (entFull && entFull.serverTime) {
+                        await gateRefreshClockBaseline(now, entFull.serverTime);
+                    }
+                } catch (_) {}
                 console.log('[Heartbeat] 心跳成功（entitlement=LICENSED）');
                 return;
             }
@@ -2440,6 +2548,12 @@
                 await StorageAdapter.removeItem('license:offlineStart');
                 console.log('[Heartbeat] 心跳成功，剩余天数:', data.daysRemaining);
             } else {
+                // ★ S1b-③：entitlement 不可达且老心跳失败 → 先试 gate token 离线宽限
+                const __grace2 = await evaluateOfflineGrace(machineId).catch(() => null);
+                if (__grace2 && __grace2.ok) {
+                    console.log('[Heartbeat] 裁决不可达，gate token 离线宽限放行');
+                    return;
+                }
                 console.error('[Heartbeat] 心跳失败:', data.action);
                 global.__licenseExpired = true;
                 const msg = {
@@ -2452,6 +2566,17 @@
             }
         } catch (e) {
             console.warn('[Heartbeat] 异常:', e.message);
+            // ★ S1b-③：异常（含断网）→ 先试 gate token 离线宽限
+            try {
+                const __mid = await StorageAdapter.getItem('license:machineId');
+                if (__mid) {
+                    const __grace3 = await evaluateOfflineGrace(__mid).catch(() => null);
+                    if (__grace3 && __grace3.ok) {
+                        console.log('[Heartbeat] 异常路径 gate token 离线宽限放行');
+                        return;
+                    }
+                }
+            } catch (_) {}
             // 心跳异常不阻断使用，但记录离线时间
             const now = Date.now();
             const offlineStart = await StorageAdapter.getItem('license:offlineStart');
