@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>淘宝发货卡片工具 · 惠康中医诊所管理系统</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 20px 12px 40px; background: #f5f7fa; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif; color: #303133; }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 19px; margin: 0 0 6px; }
+  .sub { color: #909399; font-size: 13px; line-height: 1.7; margin-bottom: 14px; }
+  .card { background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 14px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+  .card h2 { font-size: 15px; margin: 0 0 10px; }
+  .qr-box { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+  #qrcode { width: 180px; height: 180px; background: #fff; border: 1px solid #ebeef5; border-radius: 8px; padding: 6px; }
+  #qrcode img, #qrcode canvas { width: 168px !important; height: 168px !important; }
+  .link { word-break: break-all; font-family: Consolas, monospace; background: #f4f4f5; border-radius: 6px; padding: 8px 10px; font-size: 13px; color: #409eff; }
+  .btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  button { border: none; border-radius: 8px; padding: 10px 16px; font-size: 14px; cursor: pointer; font-weight: 600; }
+  .primary { background: #07c160; color: #fff; }
+  .secondary { background: #ecf5ff; color: #409eff; }
+  .ghost { background: #f4f4f5; color: #606266; }
+  textarea { width: 100%; min-height: 300px; padding: 12px; border: 1px solid #dcdfe6; border-radius: 8px; font-size: 13px; line-height: 1.8; font-family: inherit; resize: vertical; background: #fafafa; }
+  .tips { background: #fdf6ec; border: 1px solid #faecd8; color: #b88230; border-radius: 8px; padding: 10px 12px; font-size: 12px; line-height: 1.8; margin-top: 10px; }
+  .ok { color: #07c160; font-weight: 700; }
+  @media (max-width: 560px) { #qrcode { width: 160px; height: 160px; } #qrcode img, #qrcode canvas { width: 148px !important; height: 148px !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>📦 淘宝发货卡片工具</h1>
+  <div class="sub">
+    给淘宝/拼多多自动发货工具用：二维码图片可直接下载上传；发货文案已去掉工具不支持的 <code>{qrcode:...}</code> 占位符。<br>
+    链接：<span id="fullLink" class="link"></span>
+  </div>
+
+  <div class="card">
+    <h2>① 下载二维码图片（上传到自动发货工具的图片/卡片位）</h2>
+    <div class="qr-box">
+      <div id="qrcode"></div>
+      <div style="flex:1;min-width:220px;">
+        <div style="font-size:13px;color:#606266;line-height:1.9;">
+          扫码直达：<b>官方下载页</b><br>
+          短链：<a id="shortLink" href="#" target="_blank" rel="noopener" style="color:#07c160;font-weight:700;"></a><br>
+          手机扫码 → 选「Windows 桌面程序」或「安卓 APK」→ 安装 → 填激活码
+        </div>
+        <div class="btns">
+          <button class="primary" id="dlQr">⬇️ 下载二维码 PNG</button>
+          <button class="secondary" id="openPage">🌐 打开下载页</button>
+        </div>
+      </div>
+    </div>
+    <div class="tips">
+      ⚠️ 自动发货工具只支持纯文本、不渲染 <code>{qrcode:链接}</code> 占位符时：<b>二维码请用本页下载的 PNG 上传到「图片/卡片图」位置</b>，文字用下方文案即可（文案里已不含占位符）。
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>② 发货文案（复制到自动发货内容）</h2>
+    <textarea id="cardText" readonly spellcheck="false"></textarea>
+    <div class="btns">
+      <button class="primary" id="copyText">📋 复制发货文案</button>
+      <span id="copyTip" style="align-self:center;font-size:13px;"></span>
+    </div>
+    <div class="tips">
+      提示：卡密变量 <code>{$卡密}</code> 保留原样（由自动发货工具替换成真实激活码）；如果工具不识别 <code>{$卡密}</code>，请把占位符换成工具自己的卡密变量名。
+    </div>
+  </div>
+</div>
+
+<script src="/qrcode.min.js?v=3"></script>
+<script>
+(function () {
+  var origin = location.origin;
+  var shortUrl = origin + '/d';
+  var fullUrl = origin + '/download';
+  document.getElementById('fullLink').textContent = fullUrl;
+  var a = document.getElementById('shortLink');
+  a.textContent = shortUrl;
+  a.href = shortUrl;
+
+  var text = [
+    '扫码或打开链接，一键直达下载页面：',
+    shortUrl,
+    '',
+    '惠康中医诊所管理系统【本地标准版-离线单机版】',
+    '',
+    '下载页：' + fullUrl,
+    '（长按链接复制，粘贴到浏览器打开；也可以扫描卡片上的二维码）',
+    '',
+    '激活码：{$卡密}',
+    '',
+    '使用步骤：',
+    '1、打开下载页，可选【Windows桌面程序】或【安卓APK】二选一，下载安装包',
+    '2、安装并启动软件，进入激活页面',
+    '3、填入上面激活码完成设备绑定授权',
+    '',
+    '⚠重要提示：',
+    '1、本版本为完全离线单机版本，数据保存在本地设备；',
+    '2、激活码绑定设备，一经激活不可退换、不可转移；',
+    '3、仅限单用户使用，授权有效期1年；Windows桌面、安卓APK为两套独立设备，分别占用授权名额。'
+  ].join('\n');
+  document.getElementById('cardText').value = text;
+
+  var qrEl = document.getElementById('qrcode');
+  function makeQr() {
+    qrEl.innerHTML = '';
+    if (typeof QRCode === 'undefined') {
+      qrEl.innerHTML = '<div style="padding:12px;font-size:12px;color:#e6a23c;line-height:1.6;">二维码库加载失败，请刷新；或直接用文字链接发货（文案已提供）。</div>';
+      return;
+    }
+    new QRCode(qrEl, { text: shortUrl, width: 168, height: 168, correctLevel: QRCode.CorrectLevel.M });
+  }
+  if (typeof QRCode === 'undefined') {
+    var s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/davidshimjs-qrcodejs@0.0.2/qrcode.min.js';
+    s.onload = makeQr;
+    s.onerror = makeQr;
+    document.head.appendChild(s);
+  } else { makeQr(); }
+
+  function flash(msg) {
+    var t = document.getElementById('copyTip');
+    t.textContent = msg;
+    t.className = 'ok';
+    setTimeout(function () { t.textContent = ''; }, 2000);
+  }
+  document.getElementById('copyText').addEventListener('click', function () {
+    var ta = document.getElementById('cardText');
+    ta.select(); ta.setSelectionRange(0, ta.value.length);
+    try { document.execCommand('copy'); flash('已复制 ✓'); }
+    catch (e) {
+      if (navigator.clipboard) navigator.clipboard.writeText(ta.value).then(function () { flash('已复制 ✓'); });
+      else flash('请手动全选复制');
+    }
+    if (navigator.clipboard && !document.execCommand) {
+      navigator.clipboard.writeText(ta.value).then(function () { flash('已复制 ✓'); });
+    }
+  });
+  document.getElementById('openPage').addEventListener('click', function () { location.href = fullUrl; });
+  document.getElementById('dlQr').addEventListener('click', function () {
+    var canvas = qrEl.querySelector('canvas');
+    if (!canvas) {
+      var img = qrEl.querySelector('img');
+      if (img) { window.open(img.src, '_blank'); return; }
+      alert('二维码尚未生成，请稍后再点或刷新页面');
+      return;
+    }
+    var link = document.createElement('a');
+    link.download = 'huikang-download-qrcode.png';
+    link.href = canvas.toDataURL('image/png');
+    document.body.appendChild(link); link.click(); document.body.removeChild(link);
+  });
+})();
+</script>
+</body>
+</html>
