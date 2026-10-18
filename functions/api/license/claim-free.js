@@ -87,6 +87,17 @@ export async function onRequest(context) {
         return json({ success: false, error: 'Method not allowed' }, 405);
     }
 
+    // ★ 2026-10-18 产品决策：**取消免费版（停止新发放）**。
+    //   存量已签发的 type=free 授权不受影响（expiresAt=2099 仍有效，登录闸/心跳
+    //   free 豁免与状态卡保留），这里仅关闭自助领取入口；返回 410 + 明确文案，
+    //   老客户端（桌面激活窗/APP 激活页）会把 error 原样提示给用户。
+    //   不再读取 body/KV，避免继续消耗 KV 配额。
+    return json({
+        success: false,
+        error: '免费版已停止发放，请购买正式授权，或先使用 7 天免费试用',
+        code: 'FREE_DISCONTINUED'
+    }, 410);
+
     try {
         const kv = getKV(context);
         if (!kv) {

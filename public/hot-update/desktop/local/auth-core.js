@@ -5886,7 +5886,7 @@
                     '<span id="localRegCloseLink" style="font-size:13px;color:#00796b;cursor:pointer;font-weight:600;background:#e0f2f1;border:1px solid #80cbc4;border-radius:16px;padding:6px 14px;">暂不注册，已有账号登录 ›</span>' +
                 '</div>' +
                 '<div style="background:#f0f7ff;border:1px solid #d6e8ff;border-radius:8px;padding:10px;margin-bottom:14px;font-size:12px;color:#1565c0;line-height:1.7;">' +
-                    '💡 请先完成注册（<b>手机号即登录账号</b>）。<br>注册后两种方式任选：<b>🆓 领取永久免费版</b>（开方不限量、￥0 永久使用），或先 <b>试用 7 天</b> 标准版全功能、随时激活正式版。' +
+                    '💡 请先完成注册（<b>手机号即登录账号</b>）。<br>注册后可先 <b>试用 7 天</b> 标准版全功能，随时输入激活码升级正式版。' +
                 '</div>' +
                 '<div style="margin-bottom:12px;">' +
                     '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">诊所名称 <span style="color:#e53935;">*</span></label>' +
@@ -6892,11 +6892,10 @@
                 '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px;font-size:12px;">' +
                     '<span id="adminSkipToTicket" style="color:#07c160;cursor:pointer;-webkit-tap-highlight-color:transparent;">没有激活码？留言申请 →</span>' +
                 '</div>' +
-                // ★ 2026-09-21 离线免费版：版本选择页一键领取（与桌面激活窗免费卡同语义；
-                //   电话选填——填则建手机号账号(默认密码admin)，留空领取后走本地注册向导）
-                '<div style="margin-top:14px;border-top:1px dashed #ddd;padding-top:12px;">' +
-                    '<button type="button" id="adminClaimFreeBtn" style="width:100%;padding:12px;font-size:15px;font-weight:bold;border:2px solid #16a34a;border-radius:10px;background:#f0fdf4;color:#15803d;cursor:pointer;-webkit-tap-highlight-color:transparent;">🆓 永久免费版（开方不限量）</button>' +
-                    '<div style="font-size:11px;color:#166534;margin-top:5px;line-height:1.6;text-align:center;">开方永久免费；备份/导入导出/拍照录像为标准版功能，可随时输码升级</div>' +
+                // ★ 2026-10-18 产品决策：取消免费版（停止新发放）——版本选择页不再提供
+                //   「🆓 永久免费版」领取按钮；存量已领取的 free 授权继续可用。
+                '<div style="margin-top:14px;border-top:1px dashed #ddd;padding-top:10px;font-size:11px;color:#909399;line-height:1.6;text-align:center;">' +
+                    '免费版已停止发放；新用户可先 <b style="color:#26a69a;">试用 7 天</b> 标准版全功能，或购买正式授权。' +
                 '</div>' +
             '</div>' +
 

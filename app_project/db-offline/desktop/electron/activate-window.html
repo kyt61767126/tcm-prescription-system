@@ -372,8 +372,10 @@ h1 { color: #2c3e50; font-size: 18px; margin-bottom: 3px; }
          签名领取 type=free 正式授权（machineId 绑定，可重装重领），重启生效；
          日后输入付费激活码原地升级，处方数据零迁移。手机号选填（上方电话框），
          留空也能领，进入后按引导注册本地账号。 -->
-    <button class="btn" id="claimFreeBtn" style="margin-top:10px;background:linear-gradient(135deg,#16a34a 0%,#15803d 100%);color:#fff;border:none;">🆓 免费使用（永久免费 · 开方不限量）</button>
-    <div style="font-size:11px;color:#909399;margin-top:6px;text-align:center;line-height:1.7;">免费版含：开方抓药 / 中药库验方 / 处方记录 / 自动更新<br>数据备份、Excel 导出、拍照录像、无水印打印为付费功能</div>
+    <!-- ★ 2026-10-18 产品决策：取消免费版（停止新发放）。保留按钮节点避免旧事件绑定报错，
+         但隐藏并禁用；存量 free 授权不受影响。服务端 claim-free 亦返回 410 兜底。 -->
+    <button class="btn" id="claimFreeBtn" style="display:none;margin-top:10px;background:linear-gradient(135deg,#16a34a 0%,#15803d 100%);color:#fff;border:none;" disabled>🆓 免费使用（已停止发放）</button>
+    <div style="font-size:11px;color:#909399;margin-top:6px;text-align:center;line-height:1.7;">免费版已停止发放；可先「⏳ 立即试用」（7 天标准版），或购买正式授权（激活码激活）</div>
 
     <!-- Tab 切换 + 内容（版本选择后显示） -->
     <div id="tabContainer" style="display:none;">
