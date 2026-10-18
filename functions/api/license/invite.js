@@ -105,27 +105,15 @@ export async function onRequestPost({ request, env }) {
         }
 
         const body = await request.json().catch(() => ({}));
+        const mid = (body && body.machineId && typeof body.machineId === 'string') ? body.machineId.trim() : '';
         let code = (body && body.code && typeof body.code === 'string') ? body.code.trim().toUpperCase() : '';
+        let recoveredByMachine = false;
 
-        // ★ 兜底：无本地激活码（管理员激活/旧版本激活），凭 machineId 找回绑定记录的 licenseCode。
-        //   安全边界：machineId 为设备指纹（激活/心跳时上报），device_version 记录仅本机绑定时才存在；
-        //   返回体不含 code 字段，不泄露激活码本身。
-        if (!code) {
-            const mid = (body && body.machineId && typeof body.machineId === 'string') ? body.machineId.trim() : '';
-            if (!mid) {
-                return json(request, { success: false, error: '缺少激活码参数' }, 400);
-            }
-            const binding = await getDeviceVersion(kv, mid);
-            code = (binding && binding.licenseCode) ? String(binding.licenseCode).trim().toUpperCase() : '';
-
-            // ★ 2026-09-07 fallback 遍历：device_version 无 licenseCode 的两类机器——
-            //   ① 测试机（setDeviceVersion 对白名单机器 early return 刻意不落盘绑定，
-            //     实证：桌面测试机 06eded70 机构版激活后 KV 无 device_version 键，但
-            //     license: 记录 devices[0].machineId 已写入）；
-            //   ② 旧绑定记录缺 licenseCode 字段。
-            //   → 遍历 license 索引按 devices[].machineId 找回本机激活码（status.js
-            //     heartbeat 同模式），多条命中取 activatedAt 最新（测试机反复换码场景）。
-            if (!code) {
+        // 本机 machineId → 权威激活码（device_version 优先；缺失/陈旧时按 license 索引 devices 反查）
+        async function findMachineCode() {
+            const binding = await getDeviceVersion(kv, mid).catch(() => null);
+            let found = (binding && binding.licenseCode) ? String(binding.licenseCode).trim().toUpperCase() : '';
+            if (!found) {
                 const index = (await kv.get(KV_LICENSE_INDEX, 'json')) || [];
                 const scanLimit = Math.min(Array.isArray(index) ? index.length : 0, 500);
                 let best = '', bestAt = -1;
@@ -141,27 +129,51 @@ export async function onRequestPost({ request, env }) {
                         if (at >= bestAt) { bestAt = at; best = String(c).trim().toUpperCase(); }
                     }
                 }
-                if (best) {
-                    code = best;
-                    // 自愈回填：仅"绑定存在但缺 licenseCode"时回填（version 取原值防误改）。
-                    // 绑定不存在（测试机）不回填——避免为测试机新建 standard 版本绑定，
-                    // 干扰"一设备一版本"校验语义。
-                    if (binding && !binding.licenseCode) {
-                        try {
-                            await setDeviceVersion(kv, mid, binding.version || 'standard', { licenseCode: best });
-                        } catch (_) { }
+                found = best;
+            }
+            return { code: found, binding };
+        }
+
+        let record = code ? await getLicense(kv, code) : null;
+
+        // ★ 2026-10-18 修复（离线桌面实锤）：本地 license:code 在服务端不存在（残留旧码/记录被重置/换机错码）
+        //   → 用 machineId 反查真实绑定码；找回后回填 device_version 并返回 resolvedLicenseCode，
+        //   客户端据此自愈本地 license:code（不再显示"邀请码加载失败（激活码不存在）"）。
+        if (!record && mid) {
+            const got = await findMachineCode();
+            if (got.code) {
+                code = got.code;
+                record = await getLicense(kv, code).catch(() => null);
+                if (record) {
+                    recoveredByMachine = true;
+                    if (got.binding && !got.binding.licenseCode) {
+                        try { await setDeviceVersion(kv, mid, got.binding.version || 'standard', { licenseCode: code }); } catch (_) { }
                     }
                 }
             }
+        }
 
+        // 无码路径（管理员激活/旧版本激活，本地无激活码）
+        if (!code && !record) {
+            if (!mid) {
+                return json(request, { success: false, error: '缺少激活码参数' }, 400);
+            }
+            const got = await findMachineCode();
+            code = got.code;
             if (!code) {
                 return json(request, { success: false, error: '本机未找到激活绑定记录' }, 404);
             }
+            record = await getLicense(kv, code).catch(() => null);
+            if (record && got.binding && !got.binding.licenseCode) {
+                try { await setDeviceVersion(kv, mid, got.binding.version || 'standard', { licenseCode: code }); } catch (_) { }
+            }
         }
 
-        const record = await getLicense(kv, code);
         if (!record) {
-            return json(request, { success: false, error: '激活码不存在' }, 404);
+            return json(request, {
+                success: false,
+                error: mid ? '本机授权记录未找到，请联系客服' : '激活码不存在'
+            }, 404);
         }
         if (record.status === 'disabled') {
             return json(request, { success: false, error: '授权已被禁用' }, 403);
@@ -173,6 +185,8 @@ export async function onRequestPost({ request, env }) {
         const rewardLog = Array.isArray(recordWithInvite.inviteRewardLog) ? recordWithInvite.inviteRewardLog : [];
         return json(request, {
             success: true,
+            // ★ 仅当本次由 machineId 反查找回真实码时返回，供客户端自愈本地 license:code（同机安全）
+            resolvedLicenseCode: recoveredByMachine ? code : undefined,
             inviteCode: recordWithInvite.inviteCode,
             inviteCount: recordWithInvite.inviteCount || 0,
             maxInvitees: INVITE_MAX_INVITEES,

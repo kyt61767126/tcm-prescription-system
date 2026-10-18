@@ -4768,35 +4768,37 @@
             //   第一个卡片，其余并发调用在异步等待期间均看不到旧卡片 → 各自 append 造成重复。
             //   改为 querySelectorAll 移除全部同名卡片，确保幂等。
             document.querySelectorAll('#inviteInfoBox').forEach(n => { if (n.parentNode) n.parentNode.removeChild(n); });
+            // ★ 2026-10-18 修复（离线桌面实锤）：邀请码查询统一带 machineId——
+            //   本地 license:code 可能是残留旧码/服务端记录已重置，服务端会凭 machineId
+            //   反查真实绑定码并返回 resolvedLicenseCode 供本地自愈，不再误报"激活码不存在"。
+            let mid = '';
+            try {
+                if (global.electronAPI && global.electronAPI.license &&
+                    typeof global.electronAPI.license.getMachineId === 'function') {
+                    const m = await global.electronAPI.license.getMachineId();
+                    mid = (m && m.machineId) ? String(m.machineId) : String(m || '');
+                }
+            } catch (_) {}
+            if (!mid && global.electronAPI && global.electronAPI.activate &&
+                typeof global.electronAPI.activate.getMachineId === 'function') {
+                try {
+                    const m = await global.electronAPI.activate.getMachineId();
+                    mid = (m && m.machineId) ? String(m.machineId) : String(m || '');
+                } catch (_) {}
+            }
+            mid = String(mid || '').trim();
             const code = await getLicenseCode();
             if (!code || code.length < 4) {
                 // ★ 4) machineId 联网找回（存量管理员激活/旧版本激活设备本地无码）：
                 //    服务端凭 device_version:{machineId} 绑定记录查回邀请信息（不返回码本身），
                 //    每次打开授权状态时自动执行，无需用户干预。
-                try {
-                    let mid = '';
-                    try {
-                        if (global.electronAPI && global.electronAPI.license &&
-                            typeof global.electronAPI.license.getMachineId === 'function') {
-                            const m = await global.electronAPI.license.getMachineId();
-                            mid = (m && m.machineId) ? String(m.machineId) : String(m || '');
-                        }
-                    } catch (_) {}
-                    if (!mid && global.electronAPI && global.electronAPI.activate &&
-                        typeof global.electronAPI.activate.getMachineId === 'function') {
-                        try {
-                            const m = await global.electronAPI.activate.getMachineId();
-                            mid = (m && m.machineId) ? String(m.machineId) : String(m || '');
-                        } catch (_) {}
+                if (mid && mid.length >= 8) {
+                    const md = await postInviteQuery({ machineId: mid });
+                    if (md && md.success && md.inviteCode) {
+                        renderInviteCard(el, md);
+                        return;
                     }
-                    if (mid && String(mid).trim().length >= 8) {
-                        const md = await postInviteQuery({ machineId: String(mid).trim() });
-                        if (md && md.success && md.inviteCode) {
-                            renderInviteCard(el, md);
-                            return;
-                        }
-                    }
-                } catch (_) {}
+                }
                 // ★ 可视提示（不再静默）：无本地激活码且联网找回失败（断网/无绑定记录）
                 //   ★ 2026-09-07 文案修正：旧文案"当前未找到激活记录"与上方"✅ 已激活"直接矛盾，
                 //     用户误以为激活丢失。改为仅描述邀请码获取状态，不涉及"激活记录"字眼。
@@ -4808,18 +4810,30 @@
                 el.appendChild(nb);
                 return;
             }
-            const d = await postInviteQuery({ code: String(code).trim() });
+            const d = await postInviteQuery({ code: String(code).trim(), machineId: mid || undefined });
             if (!d || !d.success || !d.inviteCode) {
                 // ★ 可诊断性：激活码存在但查询失败（网络异常/服务暂不可用/激活码记录缺失）
                 //   显示灰色小提示而非完全静默，便于用户和排查区分失败原因
+                const msg0 = (d && d.error) ? String(d.error) : '网络异常';
+                // 本地残留码/记录已重置场景：不再显示令用户误解的"激活码不存在"
+                const friendly = /激活码不存在|未找到激活绑定记录|未找到/.test(msg0)
+                    ? '邀请码暂不可用（本机授权记录未同步），联网后重试或联系客服'
+                    : msg0;
                 const hb = document.createElement('div');
                 hb.id = 'inviteInfoBox';
                 hb.style.cssText = 'margin-top:8px;padding-top:8px;border-top:1px dashed #ddd;font-size:11px;color:#aaa;line-height:1.6;';
-                hb.textContent = '🎁 邀请码加载失败（' +
-                    ((d && d.error) ? d.error : '网络异常') +
-                    '），联网后重新打开本页重试';
+                hb.textContent = '🎁 邀请码加载失败（' + friendly + '），联网后重新打开本页重试';
                 el.appendChild(hb);
                 return;
+            }
+            // ★ 服务端凭 machineId 反查回真实码 → 自愈本地残留 license:code + 同步激活码显示
+            if (d.resolvedLicenseCode) {
+                const canon = String(d.resolvedLicenseCode).trim().toUpperCase();
+                if (canon && canon !== String(code).trim().toUpperCase()) {
+                    try { await StorageAdapter.setItem('license:code', canon); } catch (_) {}
+                    const el2 = document.getElementById('activationCodeEl');
+                    if (el2) el2.textContent = canon;
+                }
             }
             renderInviteCard(el, d);
         } catch (e) {
