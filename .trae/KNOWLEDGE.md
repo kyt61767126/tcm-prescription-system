@@ -209,6 +209,8 @@
 
 * ★ 2026-10-17（晚，S1b-①）**后台「🔎 激活诊断」页 + app-local 热更 -8**：新增 `public/admin/activation-diagnose.html`（**主站 pretty URL `/admin/activation-diagnose`**；`site-admin/admin` 副本为跳转页——后台站未部署 /api Functions、令牌固定主域）——输入机码/激活码/本地状态 → reconcile 摘要 + 建议动作徽标 + license_log 时间线 + 受控修复按钮（仅管理员 token，`license_admin_token`）+ 一键复制诊断报告；同源调用 `/api/license/{reconcile,logs}`。app-local 热更重签 **2026.10.17-8**（minAppCode 288 继承）使 APP 端登录闸对账自愈生效（第 2 次冷启动；桌面登录窗在 asar 内需整包 1.0.277）。**铁律：诊断页只读/修复都走服务端 reconcile 同一裁决与权限闸——后台页面不得自行拼授权结论；repair 按钮必须二次确认并展示 repaired/reason；后台站无 Functions 时页面必须跳主站而非静默失效。**
 
+* ★ 2026-10-18（S1b-②）**activation-session MVP（令牌核销时点后移）**：新增 `functions/api/license/activation-session.js`（action=start/complete/status）——`activation-token.js` 的 redeem 新增 `deferConsume`：只把令牌置 `linked` 并绑首兑机（同机可重入、异机 409），**不核销、不写兑换台账**；新 `action=consume`（仅 linked 同机）才核销 redeemed + 写 audit/`redeemedDevices`。session start 返回 `sid`（CSPRNG 16B、30min TTL、绑 machineId、**不向前端泄露裸码**）；complete 服务端内部调 claim → 成功才 consume；claim 失败返回 `retry:true` 且令牌保持 linked（可重试，根治「令牌已用码未激活」）；claim 成功但 consume 失败 → `consumePending`，重试 complete 只补核销不重复 claim；completed 幂等回执。测试 `tools/act-session-test.cjs` 20 PASS、旧令牌回归 44 PASS；旧 redeem/claim 语义零变化。**铁律：令牌「核销」必须晚于授权「生效」（claim 成功）——禁止在 redeem 阶段核销；session 裸码只在服务端流转，客户端只拿 sid。** **另（10-18 实锤）：打包前版本号副作用未入库（1.0.277/1.2.269/325）会被 `verify-version-baseline` 直接拦停（FATAL 版本基线漂移）——看到该 FATAL 先补提交版本号或 checkout 还原，再重打，勿用 ALLOW_VERSION_DRIFT 硬闯。**
+
 ## 3. 界面保护铁律
 * 优化前必须运行 `check-interface.bat` 建立基线，优化后再运行验证；WARN 立即 git checkout 恢复或经用户确认后重建基线。
 

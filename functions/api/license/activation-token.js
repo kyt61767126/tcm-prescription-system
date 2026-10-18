@@ -131,6 +131,8 @@ async function readTokenRecord(kv, token) {
 function tokenLiveStatus(rec, nowMs) {
     if (!rec) return 'not_found';
     if (rec.status === 'redeemed') return 'redeemed';
+    // ★ 2026-10-17 S1b-②：linked = 已绑定首兑机但尚未核销（claim 成功前不消耗，失败可重试）
+    if (rec.status === 'linked') return 'linked';
     if (rec.status === 'revoked') return 'revoked';
     if (rec.exp && rec.exp < nowMs) return 'expired';
     return 'active';
@@ -270,6 +272,18 @@ async function handleRedeem(context, kv, body, origin, ip) {
     if (status === 'revoked') {
         return json({ success: false, error: '激活链接已作废，请联系客服重新获取', reason: 'revoked' }, 410, origin);
     }
+    if (status === 'linked') {
+        // 首兑机已绑定但尚未核销（claim 未成功）：同机可重复取回 claim 上下文；
+        // 异机一律拒绝（令牌仍是一次性，只是核销时点后移到 claim 成功）。
+        if (rec.machineId === machineId) {
+            return json({
+                success: true, code: rec.code, clinic: rec.clinic || '',
+                user: rec.user || '', productLock: rec.productLock || null,
+                deferred: true, idempotent: true
+            }, 200, origin);
+        }
+        return json({ success: false, error: '该链接已在其他设备打开，不可转发激活；如需多台设备请联系客服', reason: 'linked_other' }, 409, origin);
+    }
     if (status === 'redeemed') {
         // 幂等：同一设备网络重试/重启恢复 → 原样返码；异机 → 拒绝（一次性）
         if (rec.machineId === machineId) {
@@ -328,6 +342,34 @@ async function handleRedeem(context, kv, body, origin, ip) {
         }, 403, origin);
     }
 
+    // ★ 2026-10-17 S1b-② activation-session MVP：deferConsume=true 时只「绑定首兑机」，
+    //   不核销令牌、不写兑换台账；待 claim 成功后再由 action='consume' 核销。
+    //   失败可重试（token 保持 linked 同机可重入），彻底消除「令牌已用、码未激活」。
+    if (body.deferConsume === true) {
+        const nowLink = Date.now();
+        rec.status = 'linked';
+        rec.machineId = machineId;
+        rec.linkedAt = nowLink;
+        rec.redeemIp = ip;
+        try {
+            await kv.put(KV_TOKEN_PREFIX + token, JSON.stringify(rec),
+                { expirationTtl: KV_TTL_GRACE_SECONDS });
+        } catch (e) {
+            console.error('[activation-token] 链接绑定落盘失败:', e && e.message);
+            return json({ success: false, error: '服务器繁忙，请稍后重试' }, 500, origin);
+        }
+        appendLicenseLog(kv, rec.code, {
+            action: 'activation-token-link',
+            ip, operator: 'anonymous',
+            detail: `mid=${String(machineId).slice(0, 12)} end=${gate.requestEnd || productClassRaw} token=${token.slice(0, 8)}…`
+        }).catch(() => {});
+        return json({
+            success: true, code: rec.code, clinic: rec.clinic || '',
+            user: rec.user || '', productLock: rec.productLock || null,
+            deferred: true
+        }, 200, origin);
+    }
+
     // 标记兑换（KV 无 CAS：双机同刻极端并发下后写覆盖，最终消耗仍由
     // validate/claim 的 maxDevices + 端锁闸兜底；首兑机绑拒绝转发为主防线）
     const nowMs = Date.now();
@@ -374,6 +416,70 @@ async function handleRedeem(context, kv, body, origin, ip) {
         clinic: rec.clinic || '',
         user: rec.user || '',
         productLock: rec.productLock || null
+    }, 200, origin);
+}
+
+// ★ 2026-10-17 S1b-②：令牌核销（claim 成功后调用）。把 redeem 的「标记 redeemed +
+//   兑换台账」时点后移到这里；linked 状态异机拒绝，redeemed 同机幂等成功。
+async function handleConsume(context, kv, body, origin, ip) {
+    const token = String(body.token || '').trim();
+    const machineId = String(body.machineId || '').trim();
+    if (!isValidTokenFormat(token)) return json({ success: false, error: '链接格式不正确' }, 400, origin);
+    if (!machineId || !isValidMachineId(machineId)) return json({ success: false, error: '缺少机器标识，请重启软件后重试' }, 400, origin);
+
+    const rec = await readTokenRecord(kv, token);
+    const status = tokenLiveStatus(rec, Date.now());
+    if (status === 'not_found') return json({ success: false, error: '链接不存在或已失效，请联系客服重新获取' }, 404, origin);
+    if (status === 'expired') return json({ success: false, error: '激活链接已过期，请联系客服重新获取', reason: 'expired' }, 410, origin);
+    if (status === 'revoked') return json({ success: false, error: '激活链接已作废，请联系客服重新获取', reason: 'revoked' }, 410, origin);
+    if (status === 'redeemed') {
+        if (rec.machineId === machineId) {
+            return json({ success: true, code: rec.code, consumed: true, idempotent: true }, 200, origin);
+        }
+        return json({ success: false, error: '该链接已在其他设备使用，不可转发激活', reason: 'redeemed_other' }, 409, origin);
+    }
+    if (status !== 'linked') {
+        return json({ success: false, error: '链接尚未兑换，无法核销', reason: 'not_linked' }, 409, origin);
+    }
+    if (rec.machineId !== machineId) {
+        return json({ success: false, error: '该链接已在其他设备打开，不可转发激活；如需多台设备请联系客服', reason: 'linked_other' }, 409, origin);
+    }
+
+    const licRecord = await getLicense(kv, rec.code).catch(() => null);
+    if (!licRecord || String(licRecord.status) === 'disabled') {
+        return json({ success: false, error: '激活码不存在或已停用，请联系客服' }, 410, origin);
+    }
+
+    const nowMs = Date.now();
+    rec.status = 'redeemed';
+    rec.redeemedAt = nowMs;
+    rec.redeemIp = ip;
+    try {
+        await kv.put(KV_TOKEN_PREFIX + token, JSON.stringify(rec),
+            { expirationTtl: KV_TTL_GRACE_SECONDS });
+    } catch (e) {
+        console.error('[activation-token] 核销落盘失败:', e && e.message);
+        return json({ success: false, error: '服务器繁忙，请稍后重试' }, 500, origin);
+    }
+    appendLicenseLog(kv, rec.code, {
+        action: 'activation-token-redeem',
+        ip, operator: 'anonymous',
+        detail: `mid=${String(machineId).slice(0, 12)} end=${rec.productLock || ''} token=${token.slice(0, 8)}… (consume)`
+    }).catch(() => {});
+    // 兑换设备台账（与 redeem 原逻辑一致，P40 诊所名闸豁免凭据）
+    try {
+        const __rdList = Array.isArray(licRecord.redeemedDevices) ? licRecord.redeemedDevices : [];
+        if (__rdList.indexOf(String(machineId)) === -1) {
+            __rdList.push(String(machineId));
+            licRecord.redeemedDevices = __rdList.slice(-10);
+            await kv.put(KV_LICENSE_PREFIX + rec.code, JSON.stringify(licRecord));
+        }
+    } catch (e) {
+        console.error('[activation-token] 核销台账落盘失败(不阻断):', e && e.message);
+    }
+    return json({
+        success: true, code: rec.code, clinic: rec.clinic || '',
+        user: rec.user || '', productLock: rec.productLock || null, consumed: true
     }, 200, origin);
 }
 
@@ -446,9 +552,9 @@ export async function onRequest(context) {
     const ip = getClientIP(request);
     const body = await request.json().catch(() => ({}));
     const action = String(body.action || '').trim();
-    const ANON = action === 'preview' || action === 'redeem';
+    const ANON = action === 'preview' || action === 'redeem' || action === 'consume';
 
-    if (!['issue', 'preview', 'redeem', 'revoke'].includes(action)) {
+    if (!['issue', 'preview', 'redeem', 'consume', 'revoke'].includes(action)) {
         return json({ success: false, error: '未知操作' }, 400, origin);
     }
 
@@ -460,12 +566,13 @@ export async function onRequest(context) {
 
         // 匿名动作的 IP 频控（令牌空间 256 位不可扫，频控为防滥用/爬落地页）
         if (ANON) {
-            const limit = action === 'redeem' ? 30 : 60;
+            const limit = (action === 'redeem' || action === 'consume') ? 30 : 60;
             const rateOk = await checkRateLimit(kv, `act_token_${action}_${ip}`, limit);
             if (!rateOk.allowed) {
                 return json({ success: false, error: '请求过于频繁，请稍后再试' }, 429, origin);
             }
             if (action === 'preview') return handlePreview(context, kv, body, origin);
+            if (action === 'consume') return handleConsume(context, kv, body, origin, ip);
             return handleRedeem(context, kv, body, origin, ip);
         }
 
