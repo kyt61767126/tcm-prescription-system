@@ -271,6 +271,238 @@ async function deletePrescriptionById(kv, clinicId, id) {
 }
 
 // ============================================================================
+// ★ 2026-10-19 云端版「断网可用 + 联网自动同步」一期：GET ?sync=1 增量拉取
+//
+//   契约：.trae/documents/cloud-offline-sync-mvp.md §2.1（唯一权威）。
+//   · 认证/角色过滤与现有 GET 完全一致（管理员/前台收费读全所，普通用户按
+//     ownerAliasesOf 归属别名集过滤）——复用同一份 currentUser / ownerNames。
+//   · 数据源：D1 开启 → d1LoadPrescriptions(db, clinicId, true)（含墓碑，D1 为空
+//     或读取异常回退 KV）；D1 未启用 → loadAllPrescriptions + 回收站
+//     clinic:{id}:prescriptions_trash（同 id 以删除墓碑为准）。
+//   · changedAt = deletedAt || updatedAt || createdAt || date；升序、同时间按 id 升序。
+//   · since 非空只取 changedAt > since（严格大于）；limit 默认 200、上限 500。
+//   · 删除记录只进 tombstones（不返回正文），未删除记录进 data。
+//   · 时间戳基准统一为 getBeijingTime().toISOString()（伪北京 UTC，与 updatedAt 一致）。
+//   不带 sync 的旧 GET 分支不做任何改动（零回归）。
+// ============================================================================
+const SYNC_DEFAULT_LIMIT = 200;
+const SYNC_MAX_LIMIT = 500;
+
+// 时间值 → 毫秒。兼容 ISO 字符串、纯数字毫秒时间戳（老客户端 updatedAt=Date.now()）、
+// 纯日期串（date 兜底）；无法解析返回 NaN（调用方按"最旧"处理）。
+function syncTimeMs(value) {
+    if (value === undefined || value === null || value === '') return NaN;
+    if (typeof value === 'number') return Number.isFinite(value) ? value : NaN;
+    const s = String(value).trim();
+    if (!s) return NaN;
+    if (/^\d{11,16}$/.test(s)) return Number(s);
+    const t = Date.parse(s);
+    return Number.isNaN(t) ? NaN : t;
+}
+
+// changedAt = deletedAt || updatedAt || createdAt || date（契约 §2.1，按字段真值级联）
+function syncChangedAtOf(p) {
+    if (!p || typeof p !== 'object') return '';
+    return p.deletedAt || p.updatedAt || p.createdAt || p.date || '';
+}
+
+// changedAt 毫秒；无任何可用时间戳的记录视为最旧（全量快照仍可见）
+function syncChangedAtMsOf(p) {
+    const ms = syncTimeMs(syncChangedAtOf(p));
+    return Number.isNaN(ms) ? 0 : ms;
+}
+
+// 同 changedAt 的次级排序键：id 升序（纯数字按数值/长度比较，其余按字符串）
+function syncCompareIdAsc(a, b) {
+    const sa = String(a === undefined || a === null ? '' : a);
+    const sb = String(b === undefined || b === null ? '' : b);
+    const isNumA = /^\d+$/.test(sa);
+    const isNumB = /^\d+$/.test(sb);
+    if (isNumA && isNumB && sa.length !== sb.length) return sa.length - sb.length;
+    return sa < sb ? -1 : (sa > sb ? 1 : 0);
+}
+
+// D1 行经 d1RowToPrescription 后时间列仍是 snake_case（created_at/updated_at，见
+// _lib/prescriptions-store.js），而增量契约要求 changedAt 基于 camelCase 字段。
+// 仅同步路径归一（旧 GET 输出保持不变）；数值型时间戳原样保留，由 syncTimeMs 兼容。
+function syncNormalizeRecord(p) {
+    const out = { ...p };
+    if (out.createdAt === undefined || out.createdAt === null) {
+        if (out.created_at !== undefined && out.created_at !== null) out.createdAt = out.created_at;
+    }
+    if (out.updatedAt === undefined || out.updatedAt === null) {
+        if (out.updated_at !== undefined && out.updated_at !== null) out.updatedAt = out.updated_at;
+    }
+    delete out.created_at;
+    delete out.updated_at;
+    return out;
+}
+
+// ★ 2026-10-19 永久删除墓碑（合规）：永久删除后 D1 行与 KV 回收站项都已删除，增量同步面
+//   没有痕迹 → 离线设备未推送的旧 upsert 可能把"永久删除"的处方复活。这里在 KV 保留
+//   仅含 {id, deletedAt} 的永久墓碑（不含患者信息），供增量下发给所有设备并阻止 POST 重建。
+const PERMANENT_TOMBSTONE_CAP = 5000;
+function permanentTombstoneKey(trashKey) {
+    return String(trashKey || '').replace(/:prescriptions_trash$/, ':prescriptions_permanent');
+}
+async function loadPermanentTombstones(kv, key) {
+    if (!kv || !key) return [];
+    try {
+        const arr = await kv.get(key, 'json');
+        return Array.isArray(arr) ? arr : [];
+    } catch (e) { return []; }
+}
+async function addPermanentTombstone(kv, key, id, deletedAt) {
+    try {
+        if (!kv || !key || id === undefined || id === null) return;
+        const arr = await loadPermanentTombstones(kv, key);
+        const sid = String(id);
+        const next = arr.filter(t => t && String(t.id) !== sid);
+        next.unshift({ id: id, deletedAt: deletedAt || getBeijingTime().toISOString() });
+        await kv.put(key, JSON.stringify(next.slice(0, PERMANENT_TOMBSTONE_CAP)));
+    } catch (e) { console.warn('[prescriptions][sync] 永久墓碑写入失败(忽略):', e && e.message); }
+}
+
+// 读取同步候选集（含删除墓碑，按 id 去重）
+async function loadSyncCandidates(kv, db, d1On, clinicId, trashKey, permanentKey) {
+    let rows = [];
+    if (d1On && db) {
+        try {
+            const d1Rows = await d1LoadPrescriptions(db, clinicId, true);
+            rows = (Array.isArray(d1Rows) ? d1Rows : []).map(syncNormalizeRecord);
+        } catch (e) {
+            console.error('[prescriptions][sync] D1 读取失败，回退 KV:', e && e.message);
+            rows = [];
+        }
+    }
+    const byId = new Map();
+    for (const p of rows) {
+        if (p && typeof p === 'object' && p.id !== undefined && p.id !== null) byId.set(String(p.id), p);
+    }
+
+    // D1 未启用或为空：KV 回退（活跃记录 + 回收站墓碑；同 id 以墓碑为准）
+    if (byId.size === 0) {
+        const active = await loadAllPrescriptions(kv, clinicId);
+        const trash = (await kv.get(trashKey, 'json').catch(() => null)) || [];
+        for (const p of active) {
+            if (p && typeof p === 'object' && p.id !== undefined && p.id !== null) {
+                byId.set(String(p.id), syncNormalizeRecord(p));
+            }
+        }
+        for (const t of trash) {
+            if (t && typeof t === 'object' && t.id !== undefined && t.id !== null) {
+                const tomb = syncNormalizeRecord(t);
+                if (!tomb.deletedAt) tomb.deletedAt = tomb.updatedAt || tomb.createdAt || '';
+                byId.set(String(tomb.id), tomb); // 删除墓碑覆盖活跃记录（去重口径）
+            }
+        }
+    }
+
+    // ★ 永久删除墓碑（KV，独立于 D1/回收站）：覆盖任何本地残留/回退数据，且带 permanent 标记
+    const perms = await loadPermanentTombstones(kv, permanentKey || permanentTombstoneKey(trashKey));
+    for (const t of perms) {
+        if (!t || t.id === undefined || t.id === null) continue;
+        byId.set(String(t.id), { id: t.id, deletedAt: t.deletedAt || '', permanent: true });
+    }
+    return Array.from(byId.values());
+}
+
+// GET ?sync=1 增量拉取主逻辑
+async function handleIncrementalSync({ kv, db, d1On, clinicId, trashKey, permanentKey, currentUser, ownerNames, url, request }) {
+    const rawSince = String(url.searchParams.get('since') || '').trim();
+    let sinceMs = NaN;
+    if (rawSince) {
+        sinceMs = syncTimeMs(rawSince);
+        if (Number.isNaN(sinceMs)) {
+            // 游标损坏时显式报错，避免客户端把"全量"当增量、或静默卡住不同步
+            return json({ success: false, error: 'since 参数格式无效（需 ISO 时间）' }, 400, request);
+        }
+    }
+
+    let limit = parseInt(url.searchParams.get('limit') || '', 10);
+    if (!Number.isInteger(limit) || limit < 1) limit = SYNC_DEFAULT_LIMIT;
+    if (limit > SYNC_MAX_LIMIT) limit = SYNC_MAX_LIMIT;
+
+    const serverTime = getBeijingTime().toISOString();
+
+    let rows = await loadSyncCandidates(kv, db, d1On, clinicId, trashKey, permanentKey);
+
+    // 角色过滤：与现有 GET 完全一致（管理员/前台收费读全所，其余按归属别名）
+    if (!isAdmin(currentUser) && !isCashier(currentUser)) {
+        rows = rows.filter(p => ownerNames.indexOf(p.createdBy) !== -1);
+    }
+    // since 增量（严格大于：客户端游标 = 上一页 nextSince）
+    if (rawSince) {
+        rows = rows.filter(p => syncChangedAtMsOf(p) > sinceMs);
+    }
+
+    // 排序：changedAt 升序、同时间按 id 升序
+    rows.sort((a, b) => {
+        const ta = syncChangedAtMsOf(a);
+        const tb = syncChangedAtMsOf(b);
+        if (ta !== tb) return ta - tb;
+        return syncCompareIdAsc(a.id, b.id);
+    });
+
+    // 分页：常规切片 limit；若切片边界正好把「同一 changedAt 的一组记录」切开，
+    // 严格 `>` 游标会漏掉同刻的剩余记录（医疗数据不可接受）。处理：
+    //   · 组从页中间开始 → 本页收回该组之前（页可能略小于 limit）；
+    //   · 整页都是同刻记录（组从页首开始）→ 扩到组尾（页可能略大于 limit），
+    //     保证 nextSince 一定前进、客户端不会卡死。
+    let page = rows.slice(0, limit);
+    let hasMore = rows.length > page.length;
+    if (hasMore && page.length > 0) {
+        const boundaryMs = syncChangedAtMsOf(page[page.length - 1]);
+        if (boundaryMs === syncChangedAtMsOf(rows[page.length])) {
+            let tieStart = page.length - 1;
+            while (tieStart > 0 && syncChangedAtMsOf(page[tieStart - 1]) === boundaryMs) tieStart--;
+            if (tieStart > 0) {
+                page = page.slice(0, tieStart);
+            } else {
+                let end = page.length;
+                while (end < rows.length && syncChangedAtMsOf(rows[end]) === boundaryMs) end++;
+                page = rows.slice(0, end);
+            }
+            hasMore = rows.length > page.length;
+        }
+    }
+
+    const data = [];
+    const tombstones = [];
+    for (const p of page) {
+        if (p.deletedAt) {
+            const tomb = { id: p.id, deletedAt: p.deletedAt };
+            if (p.permanent) tomb.permanent = true;
+            tombstones.push(tomb);
+        } else {
+            data.push(p);
+        }
+    }
+
+    let nextSince = serverTime;
+    if (page.length > 0) {
+        const last = page[page.length - 1];
+        const lastAt = syncChangedAtOf(last);
+        if (typeof lastAt === 'number') {
+            // 数值时间戳归一为 ISO，保证 nextSince 恒为 ISO 字符串（契约示例）
+            nextSince = new Date(syncChangedAtMsOf(last)).toISOString();
+        } else {
+            nextSince = String(lastAt || serverTime);
+        }
+    }
+
+    return json({
+        success: true,
+        serverTime,
+        nextSince,
+        hasMore,
+        count: page.length, // 本页返回条数 = data.length + tombstones.length
+        data,
+        tombstones
+    }, 200, request);
+}
+
+// ============================================================================
 // ★ 2026-09-10 D1 处方存储层（P0 迁移）
 //
 // 策略：USE_D1=true 时
@@ -324,19 +556,26 @@ async function d1UpsertPrescription(db, clinicId, p) {
 }
 
 // D1 软删除（标记 deleted_at）
-async function d1SoftDelete(db, clinicId, id, deletedBy) {
-    const nowIso = new Date().toISOString();
+// ★ 2026-10-19 时间戳归一（增量同步契约 §2.1）：deleted_at 必须与 updatedAt 同基准
+//   （getBeijingTime() 伪 UTC），否则真 UTC 的 deleted_at 比 updatedAt 慢 8h，
+//   客户端以 serverTime 为游标增量拉取时会永久漏掉这段墓碑。nowIso 由调用方传入，
+//   与 KV 回收站 deletedAt 共用同一个时间戳，保证 D1/KV 两条回退路径看到同一变更时间。
+async function d1SoftDelete(db, clinicId, id, deletedBy, nowIso) {
+    const ts = nowIso || getBeijingTime().toISOString();
     const r = await db.prepare(
         `UPDATE prescriptions SET deleted_at = ?, deleted_by = ? WHERE id = ? AND clinic_id = ?`
-    ).bind(nowIso, deletedBy, String(id), clinicId).run();
+    ).bind(ts, deletedBy, String(id), clinicId).run();
     return r && r.meta && r.meta.changes > 0;
 }
 
 // D1 恢复处方（清除 deleted_at）
-async function d1Restore(db, clinicId, id) {
+// ★ 2026-10-19 时间戳归一：恢复也是「变更」，updated_at 同步前进（nowIso），
+//   否则增量同步（changedAt=updatedAt）拉不到恢复动作。
+async function d1Restore(db, clinicId, id, nowIso) {
+    const ts = nowIso || getBeijingTime().toISOString();
     const r = await db.prepare(
-        `UPDATE prescriptions SET deleted_at = NULL, deleted_by = NULL WHERE id = ? AND clinic_id = ?`
-    ).bind(String(id), clinicId).run();
+        `UPDATE prescriptions SET deleted_at = NULL, deleted_by = NULL, updated_at = ? WHERE id = ? AND clinic_id = ?`
+    ).bind(ts, String(id), clinicId).run();
     return r && r.meta && r.meta.changes > 0;
 }
 
@@ -349,12 +588,13 @@ async function d1PermanentDelete(db, clinicId, id) {
 }
 
 // D1 收费
-async function d1MarkPaid(db, clinicId, id, paidBy, paidByName, payMethod) {
-    const nowIso = new Date().toISOString();
+// ★ 2026-10-19 时间戳归一：收费改写 updated_at = nowIso（前端/增量同步都以 updatedAt 判变更）
+async function d1MarkPaid(db, clinicId, id, paidBy, paidByName, payMethod, nowIso) {
+    const ts = nowIso || getBeijingTime().toISOString();
     const r = await db.prepare(`
-        UPDATE prescriptions SET fee_status='paid', paid_at=?, paid_by=?, pay_method=?
+        UPDATE prescriptions SET fee_status='paid', paid_at=?, paid_by=?, pay_method=?, updated_at=?
         WHERE id=? AND clinic_id=? AND (fee_status IS NULL OR fee_status != 'paid')
-    `).bind(nowIso, paidBy, payMethod, String(id), clinicId).run();
+    `).bind(ts, paidBy, payMethod, ts, String(id), clinicId).run();
     return r && r.meta && r.meta.changes > 0;
 }
 
@@ -439,6 +679,32 @@ export async function onRequest(context) {
         if (method === 'GET') {
             const d1On = isD1Enabled(context.env);
             const db = getDB(context.env);
+
+            // ★ 2026-10-19 云端离线同步：GET ?sync=1 增量拉取（契约 §2.1）。
+            //   放在 trash 分支之前；不带 sync 的旧 GET 走原路径、行为零变化。
+            if (url.searchParams.get('sync') === '1') {
+                // ★ 2026-10-19 运维总开关（KV config:cloud_offline_sync = {"mode":"off"}）：
+                //   紧急停用离线同步无需发版；客户端收到 disabled 后停止本轮同步（outbox 保留）。
+                try {
+                    const __syncCfg = await kv.get('config:cloud_offline_sync', 'json').catch(() => null);
+                    if (__syncCfg && String(__syncCfg.mode || '') === 'off') {
+                        return json({ success: false, disabled: true, error: '离线同步暂未开放，请稍后再试' }, 200, context.request);
+                    }
+                } catch (e) { /* 配置读取失败不阻断（fail-open，便于回滚操作） */ }
+                return await handleIncrementalSync({
+                    kv,
+                    db,
+                    d1On,
+                    clinicId: targetClinicId,
+                    trashKey: KV_TRASH,
+                    permanentKey: permanentTombstoneKey(KV_TRASH),
+                    currentUser,
+                    ownerNames,
+                    url,
+                    request: context.request
+                });
+            }
+
             // 回收站列表
             if (url.searchParams.get('trash') === 'true') {
                 let trash;
@@ -547,10 +813,13 @@ export async function onRequest(context) {
                 target.paidBy = currentUser.username;
                 target.paidByName = (body.paidByName || currentUser.username);
                 target.payMethod = payMethod;
+                // ★ 2026-10-19 时间戳归一：收费也是「变更」，updatedAt 同步前进，
+                //   增量同步（changedAt=updatedAt）才能把收费动作拉到其他端。
+                target.updatedAt = nowIso;
 
-                // ★ D1 双写：D1 UPDATE 收费 + KV 同步
+                // ★ D1 双写：D1 UPDATE 收费 + KV 同步（同一个 nowIso，两条路径同基准）
                 if (d1On && db) {
-                    try { await d1MarkPaid(db, targetClinicId, pid, currentUser.username, body.paidByName, payMethod); }
+                    try { await d1MarkPaid(db, targetClinicId, pid, currentUser.username, body.paidByName, payMethod, nowIso); }
                     catch (e) { console.error('[D1] mark-paid failed:', e.message); }
                 }
                 await upsertToDayKey(kv, targetClinicId, target);
@@ -576,9 +845,11 @@ export async function onRequest(context) {
 
                 const d1On = isD1Enabled(context.env);
                 const db = getDB(context.env);
+                // ★ 2026-10-19 时间戳归一：恢复 = 变更，updatedAt/deleted_at 同基准（伪北京 UTC）
+                const nowIso = getBeijingTime().toISOString();
 
                 if (d1On && db) {
-                    // ★ D1 恢复：UPDATE deleted_at=NULL
+                    // ★ D1 恢复：UPDATE deleted_at=NULL, updated_at=nowIso
                     const existing = await d1GetById(db, targetClinicId, prescriptionId);
                     if (!existing || !existing.deletedAt) {
                         return json({ success: false, error: '回收站中未找到此处方' }, 404);
@@ -586,11 +857,12 @@ export async function onRequest(context) {
                     if (ownerNames.indexOf(existing.createdBy) === -1 && !isAdmin(currentUser)) {
                         return json({ success: false, error: '无权恢复此处方' }, 403);
                     }
-                    await d1Restore(db, targetClinicId, prescriptionId);
+                    await d1Restore(db, targetClinicId, prescriptionId, nowIso);
                     // 同步 KV
                     const restored = { ...existing };
                     delete restored.deletedAt;
                     delete restored.deletedBy;
+                    restored.updatedAt = nowIso;
                     await upsertToDayKey(kv, targetClinicId, restored);
                     // 从 KV 回收站移除
                     let trash = (await kv.get(KV_TRASH, 'json')) || [];
@@ -614,6 +886,9 @@ export async function onRequest(context) {
                 await kv.put(KV_TRASH, JSON.stringify(trash));
 
                 const { deletedAt, deletedBy, ...restored } = prescription;
+                // ★ 2026-10-19 时间戳归一：KV 恢复分支写 updatedAt = nowIso，
+                //   否则增量同步（changedAt=updatedAt）拉不到"从回收站恢复"这一变更。
+                restored.updatedAt = nowIso;
                 // ★ 2026-09-10 按日期分 key：恢复时按处方日期写入对应日期 key
                 await upsertToDayKey(kv, targetClinicId, restored);
 
@@ -633,6 +908,21 @@ export async function onRequest(context) {
             if (!body.prescription) {
                 return json({ success: false, error: 'Missing prescription data' }, 400);
             }
+
+            // ★ 2026-10-19 永久删除不可复活：离线设备恢复后可能重放旧 upsert，若 id 已在
+            //   永久墓碑中则拒绝重建（合规：客户看到的"彻底删除"必须真正不可恢复）。
+            try {
+                const __permKey = permanentTombstoneKey(KV_TRASH);
+                const __perms = await loadPermanentTombstones(kv, __permKey);
+                if (__perms.length) {
+                    const __permSet = new Set(__perms.map(t => String(t && t.id)));
+                    const __list0 = Array.isArray(body.prescription) ? body.prescription : [body.prescription];
+                    const __blocked = __list0.some(p => p && p.id != null && __permSet.has(String(p.id)));
+                    if (__blocked) {
+                        return json({ success: false, code: 'PERMANENTLY_DELETED', error: '该处方已永久删除，不可恢复' }, 409, context.request);
+                    }
+                }
+            } catch (e) { /* 墓碑读取失败不阻断正常保存 */ }
 
             let prescriptions = await loadAllPrescriptions(kv, targetClinicId);
             const now = getBeijingTime();
@@ -773,6 +1063,10 @@ export async function onRequest(context) {
 
             // 永久删除：从回收站彻底删除
             if (isPermanent) {
+                // ★ 2026-10-19 永久删除墓碑：D1 行/回收站项删除后仍留 KV 墓碑（仅 id+时间），
+                //   供增量同步下发、并阻止离线设备重放旧 upsert 复活。
+                const permanentNowIso = getBeijingTime().toISOString();
+                const permanentKey = permanentTombstoneKey(KV_TRASH);
                 if (d1On && db) {
                     const existing = await d1GetById(db, targetClinicId, prescriptionId);
                     if (!existing || !existing.deletedAt) {
@@ -786,6 +1080,7 @@ export async function onRequest(context) {
                     let trash = (await kv.get(KV_TRASH, 'json')) || [];
                     const tIdx = trash.findIndex(p => String(p.id) === String(prescriptionId));
                     if (tIdx >= 0) { trash.splice(tIdx, 1); await kv.put(KV_TRASH, JSON.stringify(trash)); }
+                    await addPermanentTombstone(kv, permanentKey, prescriptionId, permanentNowIso);
                     await writeAuditLog(kv, targetClinicId, currentUser.username, currentUser.role, 'prescription_permanent_delete', prescriptionId, context, { patientName: existing.patientName });
                     return json({ success: true, message: '处方已永久删除' }, 200, context.request);
                 }
@@ -803,6 +1098,7 @@ export async function onRequest(context) {
 
                 trash.splice(idx, 1);
                 await kv.put(KV_TRASH, JSON.stringify(trash));
+                await addPermanentTombstone(kv, permanentKey, prescriptionId, permanentNowIso);
 
                 // P1-2：审计日志
                 await writeAuditLog(kv, targetClinicId, currentUser.username, currentUser.role, 'prescription_permanent_delete', prescriptionId, context, { patientName: prescription.patientName });
@@ -811,9 +1107,12 @@ export async function onRequest(context) {
             }
 
             // 软删除：移入回收站
+            // ★ 2026-10-19 时间戳归一：本次软删的 D1 deleted_at 与 KV 回收站 deletedAt
+            //   共用同一个 nowIso（伪北京 UTC），避免两边差 8h 导致增量同步漏墓碑。
+            const softDeleteNowIso = getBeijingTime().toISOString();
             let prescription;
             if (d1On && db) {
-                // ★ D1 软删除：UPDATE deleted_at
+                // ★ D1 软删除：UPDATE deleted_at = nowIso
                 const existing = await d1GetById(db, targetClinicId, prescriptionId);
                 if (!existing || existing.deletedAt) {
                     return json({ success: false, error: 'Prescription not found' }, 404, context.request);
@@ -821,7 +1120,7 @@ export async function onRequest(context) {
                 if (ownerNames.indexOf(existing.createdBy) === -1 && !isAdmin(currentUser)) {
                     return json({ success: false, error: '无权删除此处方' }, 403, context.request);
                 }
-                await d1SoftDelete(db, targetClinicId, prescriptionId, currentUser.username);
+                await d1SoftDelete(db, targetClinicId, prescriptionId, currentUser.username, softDeleteNowIso);
                 prescription = existing;
                 // 同步 KV：从日期 key 移除 + 加入回收站
                 await deletePrescriptionById(kv, targetClinicId, prescriptionId);
@@ -839,7 +1138,7 @@ export async function onRequest(context) {
             let trash = (await kv.get(KV_TRASH, 'json')) || [];
             trash.unshift({
                 ...prescription,
-                deletedAt: getBeijingTime().toISOString(),
+                deletedAt: softDeleteNowIso,
                 deletedBy: currentUser.username
             });
             if (trash.length > 10000) {

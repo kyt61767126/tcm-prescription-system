@@ -2075,3 +2075,26 @@ ode tools/generate-desktop-hotupdate.cjs -c cloud → **2026.10.19-1**（20 文�
   - **不覆盖本机 license:code**：心跳/登录闸/邀请码共用该 key，多诊所共用电脑覆盖会串号/误判。
   - **匿名面零变化是硬约束**：新增字段仅 authUser 返回，响应键集合用桩做 parity。
 * **残差（HANDOFF H10）**：客户云桌面真机验证（热更生效后 F1 显示）；共用电脑残留他所 license:code 的展示一致性（低优，后版本）。
+## 59. 云端版「断网可用 + 联网自动同步」一期 MVP：处方 outbox + 增量协议 + 永久墓碑（2026-10-19，desktop/cloud 热更 2026.10.19-3）
+
+* **背景**：客户要求「离线/云端在断网情况下正常工作，联网后自动同步云端」。现状核查后确认：云端版只有“云端失败回落 IndexedDB”的读兜底 + 保存后 fire-and-forget 直传，**无 outbox/重试/增量/冲突保护**；且存在实锤缺陷——离线保存的处方带 updatedAt，联网后合并规则把它当“其他端已删除”排除，随后增量落库 syncPrescriptionsDBDiff 从 IndexedDB 删除（丢方）。离线版（本地版）仍为纯本地设计，不在本期范围。
+* **范围（契约 .trae/documents/cloud-offline-sync-mvp.md）**：云端网页/云桌面/云 APP（共用 public/index.html 权威源）；仅处方；药品/方剂/用户仍服务端权威；媒体文件二期。
+* **服务端（functions/api/prescriptions.js）**：
+  - 新增 GET /api/prescriptions?sync=1&since=<ISO>&limit=200：认证/角色过滤与旧 GET 完全一致；D1 d1LoadPrescriptions(db, clinicId, true)（空/异常回退 KV 活跃+回收站）；changedAt=deletedAt||updatedAt||createdAt||date，升序+id 升序；since 严格 >；	ombstones 只含 {id,deletedAt[,permanent]}；返回 serverTime/nextSince/hasMore/count；同 changedAt 跨页边界兜底（不漏不重、游标必前进）。
+  - 时间戳统一伪北京 UTC：d1SoftDelete(…,nowIso)、d1Restore/d1MarkPaid 写 updated_at、KV restore/mark-paid 写 updatedAt（此前 deleted_at 真 UTC 与 updatedAt 差 8h 会漏增量）。
+  - **永久删除墓碑**：DELETE ?permanent=true 后写 KV clinic:{id}:prescriptions_permanent（仅 {id,deletedAt}，cap 5000）；sync 下发 permanent:true 墓碑；POST 命中永久墓碑返回 409 PERMANENTLY_DELETED（防离线旧 upsert 复活已“彻底删除”处方）。
+  - **运维 kill switch**：KV config:cloud_offline_sync={"mode":"off"} → sync=1 返回 {success:false,disabled:true}；旧 GET/POST/DELETE 零影响。
+* **客户端（public/index.html 权威源）**：
+  - IndexedDB v4 新增 outbox（opId/username/type upsert|delete/id/payload/baseVersion/attempts）与 sync_state（cursor:<username>）。
+  - 保存：本地落库 **await 入队** → CloudSync.kick()（修“落库→入队”被杀窗口）；删除/同日覆盖/病历删除均 await 入队 delete；回收站恢复撤同 id delete op 并入队 upsert。
+  - CloudSync：pull（since 回退 2s 安全窗、非法 since 清 cursor 全量重试、分页≤10）→ push（≤20 条/轮，成功回写 savedPrescription/_serverVersion，网络错误退避，401 停，PERMANENTLY_DELETED 直接丢 op）→ 再 pull；online/visibility/登录后/5min 定时触发；状态徽标（已同步/待同步N/离线/同步中）。
+  - 冲突：pull 时同 id 有 pending upsert 且 aseVersion !== 云端 updatedAt → 云端版本落地，本地改动保存为「（冲突副本）」新 id 入队（toast），不静默覆盖；墓碑与 pending upsert 冲突 → 保留冲突副本（永久墓碑除外，合规丢弃）。
+  - 数据保护：getAllUserPrescriptions 合并时 outbox 脏 id / _pendingLocal 一律保留（不再用 updatedAt 判断）；syncPrescriptionsDBDiff(records, protectedIds) 不删不覆盖待推送；pending delete 时忽略云端旧记录；仅 llowedMode='both' 启用（cloud/local 旧行为）。
+* **验证**：服务端自测 124（真实 import + MockKV/MockD1 + 旧接口基线逐字节 parity）；独立验证 179/179（服务端 99 + 客户端 73 + 门禁 6 + 交叉 1）；上线前对抗审查（认证/越权/墓碑泄露/同刻分页/时间戳/旧接口）可放行；Lead 永久墓碑+kill switch 8/8；tester3 套件最终产物复跑 179/179。
+* **部署/灰度**：functions+静态随 push 部署；desktop/cloud 热更 **2026.10.19-3**（20 文件签名、appVersion 1.2.270）。默认 both=全量开启（一期无白名单）；回退用 llowedMode='cloud'（local 在网页/云桌面会被 auth-core 升为 both，不可作回退）或 KV kill switch。
+* **已知限制/后续**：sync 每轮 D1 全表读（大诊所读放大，放量前做 since SQL 下推 + 限频）；客户端 pull 逐条写 IDB；DB v4 升级旧标签页 onblocked 需刷新；媒体文件不同步；冲突副本会作为独立处方进报表（口径待产品确认）；platform_admin 空转。
+* **关键经验**：
+  - 离线写路径必须“本地落库 + 入队”原子化（至少 await 入队），否则进程被杀即丢方；合并/落库同一条规则必须认脏队列，不能靠 updatedAt 有无猜。
+  - 增量协议必须服务端权威时间 + 墓碑 + 严格游标 + 同刻跨页兜底；客户端游标回退 2s 换幂等重放更安全。
+  - “永久删除”在离线同步里必须单独墓碑 + 服务端拒绝重建，否则离线旧操作会复活。
+  - 灰度/回退开关要区分：allowedMode='cloud' 才是云端回退，'local' 会被旧逻辑升级为 both。

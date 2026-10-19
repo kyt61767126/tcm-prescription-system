@@ -29,7 +29,8 @@
   - **2026-10-18 淘宝发货卡片二维码修复工具**：新增 **`/download-card`** 卖家工具页（生成 `/d` 短链二维码、可下载 PNG 上传自动发货工具、一键复制不含 `{qrcode:…}` 占位符的发货文案）；新增 **`/d`** 302 跳转 `/download`。原因：自动发货工具不渲染 `{qrcode:链接}` 占位符 → 卡片只显示一行占位文本、无二维码；以后发货卡片：图片位上传本页 PNG、文字用本页文案。存量卡片把 `{qrcode:…}` 行删掉、保留链接即可。
   - **2026-10-19 离线桌面 1.0.280（激活三项优化，已构建验包，待发布）**：`eeb21f99` 三项优化 + `9f562fc3` 成功页 Tab 可见性修复。①登录页注册入口只留一个（删 login.js 红字入口，仅 auth-core 绿色「📝 注册开通」）；②注册成功页「我有激活码，立即激活」→ 激活窗 `?initialTab=code` 直达激活码输入界面（auth-core→preload→main→activate.js→activate-window 全链，官网付款入口无参保持原样）；③激活成功多设备「确定」框改为以激活窗为父窗 + 弹框期间临时取消 screen-saver 置顶（修「看不到确定框、激活无法完成」）。产物：`app_project/db-offline/desktop/dist/惠康中医-本地 Setup 1.0.280.exe` **79,307,632 B**（SHA256 `F3BA27695EBF67F113686BAA6B841AC71DFE8B1193C9D29C0DF05AB15499BF21`）、便携 `惠康中医-本地 1.0.280.exe` **79,032,752 B**（SHA256 `8E3A8473E8DF96234A2734E192BA72AA06F54F48ACDD1DF3996C58C40F111461`）；构建 7 道铁闸全过（E2E 6/6、铁闸8 26/26、铁闸8c 157/157、签名+smoke launch PASS）；独立验证 27 PASS/0 FAIL。**发布未执行**（人工 `一键发布.bat`）。
   - **2026-10-19 云端最新版「授权状态」不显示激活码/邀请码修复（`b167fd91`；desktop/cloud 热更 2026.10.19-1）**：客户电脑（云桌面 1.2.269）实锤 F1 授权区只显示「✅ 已激活（机构版）剩余 X 天」。根因①云端 auth-core 从未实现激活码常显（离线版 09-15 已有）；②邀请码卡片只认本地 `license:code`/`machineId`，老客户（管理员激活/换机重装/诊所改名/无 device_version）凭据失效且静默。修复：`invite.js` 可选账号态（Bearer 或 body.authToken→verifyToken→clinicId）三层兜底（诊所名索引→admin_phone 生产 JSON→license.phone 全扫）+ 缓存（阳性 1h/阴性 10min）+ 他所在册码归属拦截 + unused 过滤 + 索引安全回填；`cloud.js` 授权区新增「🔑 激活码」(点击复制)+「🎁 我的邀请码」，账号请求带本地码、仅本地无码时回写 license:code，失败回退旧路径。匿名行为逐字节不变。验证：终审 43 服务端+29 客户端+59 热更包全 PASS（0 阻塞）。**随 push 部署 functions + 网页 + 热更文件；客户云桌面下次启动自动拉热更（2026.10.19-1）后生效；旧客户端零回归。**
-  - desktop/local 热更 **2026.10.18-3**、desktop/cloud 热更 **2026.10.19-1**、app-local **2026.10.18-4**（发布时三渠道版本表统一）。
+  - desktop/local 热更 **2026.10.18-3**、desktop/cloud 热更 **2026.10.19-3**、app-local **2026.10.18-4**（发布时三渠道版本表统一）。
+  - **2026-10-19 云端版「断网可用 + 联网自动同步」一期 MVP（desktop/cloud 热更 2026.10.19-3）**：处方本地优先（IndexedDB 先落盘）→ `outbox` 队列 → 联网自动 pull 增量 / push 补传；删除墓碑同步、冲突保留「（冲突副本）」、幂等重试、状态徽标；服务端 `GET /api/prescriptions?sync=1&since=&limit=` 增量（data + tombstones + serverTime/nextSince/hasMore，角色过滤同旧 GET，D1 includeDeleted→KV 回退）；时间戳统一伪北京 UTC；永久删除墓碑（KV `clinic:{id}:prescriptions_permanent`）+ POST 拒绝重建（409 `PERMANENTLY_DELETED`），修「离线旧 upsert 复活永久删除处方」；修复现网「离线保存恢复网络后可能被增量落库清掉」缺陷。**灰度/回退**：默认 both（全量开启，一期无白名单）；回退用后台 `allowedMode='cloud'`（`local` 在网页/云桌面会被 auth-core 升为 both，不可作回退），或写 KV `config:cloud_offline_sync` = `{"mode":"off"}` 紧急总开关。**已知限制**：sync 每轮 D1 全表读（大诊所读放大，放量前建议 since SQL 下推/限频）；DB v4 升级时旧标签页需刷新（onblocked）；媒体文件不在一期。验证：独立验证 179/179 + 服务端自测 124 + 上线前审查（可放行）。
   - **勿重复实施**：-6 调试 alert 已移除并重签 -7 覆盖；P40 登录闸码错位自愈已上线；令牌 redeemedDevices 台账（首兑写 + 幂等短路补写）已上线；Java `activateLicense` clinicName 透传已入库（待 APK v325 生效）。
   - 完整方案：`.trae/documents/activation-architecture-optimization_plan.md` / `.trae/documents/activation-streamline_plan.md`（P0 方案A 全链已闭环，详见 KNOWLEDGE 2026-10-17 条目）。
 - **2026-10-18 构建现场已清理（已决）**：外部会话 09:45 打包因版本基线漂移中止——产物 1.0.277/1.2.269/cloud APK 325 已归档到 `%TEMP%\kyt-build-archive-20261018-102617`，工作区残留已从 `stash@{0}` 丢弃并删 dist 残留；`verify-version-baseline` 复核通过（HEAD 1.0.276/1.2.268/322/324，dist 无残留）。下次打包将按**最新代码**（含 S1b-③ gate token/会话）重新递增到 277/269/325；产物发布仍为独立人工闸。
@@ -78,6 +79,17 @@
 - **勿做**：不建议把 token 写入日志/URL；共用电脑残留他所 license:code 的展示一致性为已知低优项（后版本处理）。
 - **验收**：客户机授权区显示激活码+邀请码；网页/APP 刷新同步显示；匿名/旧客户端零回归。
 - **基线 commit**：`b167fd91`
+
+### H11 ｜优先级：高｜云端版「断网可用+联网自动同步」一期 MVP：试点观察 → 放量（2026-10-19）
+- **状态**：IN-PROGRESS（代码已提交；随 push 部署 functions + 静态 + desktop/cloud 热更 **2026.10.19-3**；一期默认对所有 `allowedMode=both` 用户开启，无白名单）
+- **已完成**：IndexedDB v4 outbox/sync_state；保存/删除本地优先+入队（await 入队修 R1/R2）；CloudSync pull→push→pull、冲突副本、墓碑、幂等重试、状态徽标、online/visibility/5min 定时；getAllUserPrescriptions 脏数据保护 + syncPrescriptionsDBDiff protectedIds（修现网离线保存被清掉缺陷）；服务端 `GET ?sync=1` 增量 + 时间戳归一 + 永久墓碑/409 防复活 + KV kill switch；热更 2026.10.19-3（20 文件验签/hash/cv PASS）。独立验证 179/179、服务端自测 124、上线前审查可放行。
+- **剩余动作**：
+  1. **灰度观察**：先选 1-2 家诊所（把其他用户 `allowedMode` 置 `cloud`，试点保持 `both`）观察 3-5 天：sync 错误率、待同步积压、冲突副本数量、D1 行读量（免费 5M/天；当前 sync 每轮全表读，需按诊所规模评估）。
+  2. **放量前优化（建议）**：`sync=1` 的 since 下推 SQL（D1 `clinic_id+updated_at/deleted_at` 索引）+ 服务端限频；客户端 pull 批量写 IDB；DB v4 onblocked 提示用户刷新旧标签页。
+  3. **已知限制**：媒体文件不同步；回收站恢复已补「撤 delete op + 入队 upsert」；冲突副本会在报表中作为独立处方计数（需产品确认口径）；platform_admin 空转同步。
+  4. **回滚**：后台 `allowedMode='cloud'`（立即停同步、回旧行为）或 KV `config:cloud_offline_sync={"mode":"off"}` 总开关；客户端 `rollback-hotupdate.cjs -c cloud`。
+- **验收**：断网开方→重启→记录在；联网自动上传（云端可见、待同步归零）；断网删除→联网云端软删；双端并发冲突副本不丢；回退 cloud 后零同步请求。
+- **基线 commit**：待记（本次提交）
 
 ### H8 ｜优先级：中（S1 实施中）｜激活流程全端架构收敛
 - **状态**：IN-PROGRESS（5 项决策已拍板；**S1a + S1b-①②③ 已完成**；**S1b 剩余**：客户端接入 session、真机矩阵、桌面整包 1.0.277、云端 gate token 分发复测）。**2026-10-18 09:45 另一会话打包因版本基线漂移中止（1.0.277/1.2.269/325 未入库），遗留副作用已 `git stash`（"10-18 09:45 打包遗留副作用…"）待负责人处理，勿直接提交。**

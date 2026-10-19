@@ -2264,7 +2264,8 @@ let currentUser = null;
         }
 
         const DB_NAME = 'PrescriptionDB';
-        const DB_VERSION = 3;
+        // ★ 2026-10-19 云端离线同步一期：v4 新增 outbox（待同步操作队列）与 sync_state（增量游标）
+        const DB_VERSION = 4;
         let db = null;
 
         function openDB() {
@@ -2287,6 +2288,13 @@ let currentUser = null;
                     // P0-5：新增处方回收站 store（软删除恢复用）
                     if (!database.objectStoreNames.contains('prescriptions_trash')) {
                         database.createObjectStore('prescriptions_trash', { keyPath: 'id' });
+                    }
+                    // ★ 2026-10-19 云端离线同步一期：待同步操作队列 + 同步游标
+                    if (!database.objectStoreNames.contains('outbox')) {
+                        database.createObjectStore('outbox', { keyPath: 'opId' });
+                    }
+                    if (!database.objectStoreNames.contains('sync_state')) {
+                        database.createObjectStore('sync_state', { keyPath: 'key' });
                     }
                 };
                 request.onsuccess = function(event) {
@@ -2450,8 +2458,423 @@ let currentUser = null;
         //     · 删除收敛：入参是"已合并本地未同步 + 已过滤删除墓碑"的权威集，
         //       故仅当某 id 不在其中才删（跨端删除不会在本机复活）
         //     · ★ 任何异常都抛出，由调用方回退到原 clear+全量 put（最坏 = 今天的行为，零回归）
-        async function syncPrescriptionsDBDiff(records) {
+        // ============================================================================
+        // ★ 2026-10-19 云端离线同步一期（MVP）：outbox / 游标 / CloudSync
+        //   设计契约：.trae/documents/cloud-offline-sync-mvp.md
+        //   范围：处方；both 模式启用；cloud/local 模式保持旧行为（灰度/回退）。
+        // ============================================================================
+        function getCloudToken() {
+            let token = '';
+            try { token = window.__FORCE_CLOUD_TOKEN__ || ''; } catch (e) {}
+            if (!token) { try { const u = JSON.parse(localStorage.getItem('auth:currentUser') || '{}'); token = u.token || ''; } catch (e) {} }
+            if (!token) { try { const u = JSON.parse(localStorage.getItem('currentUser') || '{}'); token = u.token || ''; } catch (e) {} }
+            if (!token) { try { token = localStorage.getItem('authToken') || ''; } catch (e) {} }
+            return token || '';
+        }
+        function getSyncMode() {
+            try {
+                if (currentUser && currentUser.allowedMode) return String(currentUser.allowedMode);
+                if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.allowedMode) return String(CONFIG.allowedMode);
+            } catch (e) {}
+            return 'both';
+        }
+        function offlineSyncEnabled() {
+            // 仅 both 模式：离线队列 + 自动同步；cloud=纯云端旧行为，local=纯本地不同步
+            if (!getCloudToken()) return false;
+            const m = getSyncMode();
+            return m !== 'local' && m !== 'cloud';
+        }
+        function newSyncOpId() {
+            return 'op_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+        }
+
+        const SyncOutbox = {
+            async _store(mode) {
+                const database = await openDB();
+                const tx = database.transaction(['outbox'], mode);
+                return { tx, store: tx.objectStore('outbox') };
+            },
+            async add(op) {
+                const database = await openDB();
+                return await new Promise((resolve, reject) => {
+                    const tx = database.transaction(['outbox'], 'readwrite');
+                    tx.objectStore('outbox').put(op);
+                    tx.oncomplete = () => resolve(true);
+                    tx.onerror = () => reject(tx.error);
+                    tx.onabort = () => reject(tx.error || new Error('outbox 事务被中止'));
+                });
+            },
+            async all(username) {
+                const database = await openDB();
+                return await new Promise((resolve, reject) => {
+                    const tx = database.transaction(['outbox'], 'readonly');
+                    const req = tx.objectStore('outbox').getAll();
+                    req.onsuccess = () => {
+                        let list = (req.result || []);
+                        if (username) list = list.filter(op => op && op.username === username);
+                        list.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+                        resolve(list);
+                    };
+                    req.onerror = () => reject(req.error);
+                });
+            },
+            async dirtyIds(username) {
+                const set = new Set();
+                try {
+                    const list = await this.all(username);
+                    for (const op of list) { if (op && op.id != null) set.add(String(op.id)); }
+                } catch (e) {}
+                return set;
+            },
+            async count(username) {
+                try { return (await this.all(username)).length; } catch (e) { return 0; }
+            },
+            async remove(opId) {
+                if (!opId) return;
+                try {
+                    const database = await openDB();
+                    await new Promise((resolve, reject) => {
+                        const tx = database.transaction(['outbox'], 'readwrite');
+                        tx.objectStore('outbox').delete(opId);
+                        tx.oncomplete = () => resolve();
+                        tx.onerror = () => reject(tx.error);
+                    });
+                } catch (e) { console.warn('[SyncOutbox] remove 失败:', e && e.message); }
+            }
+        };
+
+        async function getSyncCursor(username) {
+            try {
+                const database = await openDB();
+                return await new Promise((resolve) => {
+                    const tx = database.transaction(['sync_state'], 'readonly');
+                    const r = tx.objectStore('sync_state').get('cursor:' + username);
+                    r.onsuccess = () => resolve((r.result && r.result.value) || '');
+                    r.onerror = () => resolve('');
+                });
+            } catch (e) { return ''; }
+        }
+        async function setSyncCursor(username, value) {
+            try {
+                const database = await openDB();
+                await new Promise((resolve) => {
+                    const tx = database.transaction(['sync_state'], 'readwrite');
+                    tx.objectStore('sync_state').put({ key: 'cursor:' + username, value: value || '', updatedAt: Date.now() });
+                    tx.oncomplete = () => resolve();
+                    tx.onerror = () => resolve();
+                });
+            } catch (e) {}
+        }
+
+        async function enqueuePrescriptionUpsert(record) {
+            if (!offlineSyncEnabled() || !record || record.id == null) return false;
+            const u = currentUser && currentUser.username;
+            if (!u) return false;
+            try {
+                // 同一 id 只保留最新 upsert，避免重复堆积
+                const ops = await SyncOutbox.all(u);
+                for (const op of ops) {
+                    if (op && op.type === 'upsert' && String(op.id) === String(record.id)) await SyncOutbox.remove(op.opId);
+                }
+                const payload = JSON.parse(JSON.stringify(record));
+                // _serverVersion 仅本地冲突基线，不进云端记录（避免污染 KV/D1 数据）
+                try { delete payload._serverVersion; delete payload._pendingLocal; } catch (e) {}
+                await SyncOutbox.add({
+                    opId: newSyncOpId(), username: u, type: 'upsert', id: record.id,
+                    payload: payload, baseVersion: record._serverVersion || '',
+                    attempts: 0, createdAt: Date.now()
+                });
+                return true;
+            } catch (e) { console.warn('[SyncOutbox] enqueue upsert 失败:', e && e.message); return false; }
+        }
+        async function enqueuePrescriptionDelete(id, permanent) {
+            if (!offlineSyncEnabled() || id == null) return false;
+            const u = currentUser && currentUser.username;
+            if (!u) return false;
+            try {
+                const ops = await SyncOutbox.all(u);
+                for (const op of ops) {
+                    if (op && op.id != null && String(op.id) === String(id)) await SyncOutbox.remove(op.opId);
+                }
+                await SyncOutbox.add({
+                    opId: newSyncOpId(), username: u, type: 'delete', id: id,
+                    permanent: !!permanent, attempts: 0, createdAt: Date.now()
+                });
+                return true;
+            } catch (e) { console.warn('[SyncOutbox] enqueue delete 失败:', e && e.message); return false; }
+        }
+
+        const CloudSync = {
+            _inited: false, _running: false, _timer: null, _debounce: null, _failures: 0,
+            state: { pending: 0, syncing: false, lastSyncAt: 0, lastError: '' },
+            init() {
+                if (this._inited) return;
+                this._inited = true;
+                try { window.addEventListener('online', () => { this._failures = 0; this.kick(800); }); } catch (e) {}
+                try { document.addEventListener('visibilitychange', () => { if (!document.hidden) this.kick(1500); }); } catch (e) {}
+                try { window.addEventListener('app:resume', () => this.kick(500)); } catch (e) {}
+                if (this._timer) clearInterval(this._timer);
+                this._timer = setInterval(() => { try { if (offlineSyncEnabled() && !document.hidden) this.kick(0); } catch (e) {} }, 300000);
+                this.refreshPending();
+                this.kick(1500);
+            },
+            kick(delay) {
+                try {
+                    if (!offlineSyncEnabled()) { this.refreshPending(); return; }
+                    if (this._debounce) clearTimeout(this._debounce);
+                    const d = (typeof delay === 'number') ? delay : 1200;
+                    this._debounce = setTimeout(() => { this._debounce = null; this.run(); }, d);
+                } catch (e) {}
+            },
+            async refreshPending() {
+                try {
+                    const u = currentUser && currentUser.username;
+                    this.state.pending = (u && offlineSyncEnabled()) ? await SyncOutbox.count(u) : 0;
+                } catch (e) { this.state.pending = 0; }
+                this.renderBadge();
+            },
+            async run() {
+                if (this._running) return;
+                if (!offlineSyncEnabled()) { await this.refreshPending(); return; }
+                this._running = true; this.state.syncing = true; this.renderBadge();
+                try {
+                    await this.pull();
+                    await this.push();
+                    await this.pull();
+                    this.state.lastSyncAt = Date.now();
+                    this.state.lastError = '';
+                    this._failures = 0;
+                } catch (e) {
+                    this._failures = (this._failures || 0) + 1;
+                    this.state.lastError = (e && e.message) || '同步失败';
+                    console.warn('[CloudSync] run 失败(' + this._failures + '):', this.state.lastError);
+                } finally {
+                    this._running = false; this.state.syncing = false;
+                    await this.refreshPending();
+                    this.renderBadge();
+                }
+            },
+            async pull() {
+                const token = getCloudToken();
+                const u = currentUser && currentUser.username;
+                if (!token || !u || !window.CLOUD_API_BASE) return;
+                let cursor = await getSyncCursor(u) || '';
+                let pages = 0;
+                let fullRetried = false;
+                while (pages < 10) {
+                    // ★ 游标安全窗口：since 回退 2s（重复应用是幂等 upsert），规避并发写在同毫秒的极小丢取窗口
+                    let sinceParam = cursor;
+                    if (cursor) {
+                        try {
+                            const ms = Date.parse(cursor);
+                            if (!isNaN(ms)) sinceParam = new Date(ms - 2000).toISOString();
+                        } catch (e) {}
+                    }
+                    const url = window.CLOUD_API_BASE + '/prescriptions?sync=1&limit=200' + (sinceParam ? ('&since=' + encodeURIComponent(sinceParam)) : '');
+                    const resp = await cloudFetch(url, { method: 'GET', headers: { 'Authorization': 'Bearer ' + token } });
+                    if (resp && resp.requireAuth) throw new Error('登录已失效，请重新登录后同步');
+                    if (!resp || !resp.success) {
+                        const emsg = String((resp && resp.error) || '同步拉取失败');
+                        // 服务端 since 非法会 400：清游标做一次全量重试（防脏游标卡死）
+                        if (!fullRetried && /since|参数|无效|400/i.test(emsg)) {
+                            fullRetried = true; cursor = ''; await setSyncCursor(u, '');
+                            continue;
+                        }
+                        throw new Error(emsg);
+                    }
+                    const data = Array.isArray(resp.data) ? resp.data : [];
+                    const tombs = Array.isArray(resp.tombstones) ? resp.tombstones : [];
+                    const dirtyMap = new Map();
+                    try { (await SyncOutbox.all(u)).forEach(op => { if (op && op.id != null) dirtyMap.set(String(op.id), op); }); } catch (e) {}
+                    for (const p of data) { await this._applyServerRecord(p, dirtyMap); }
+                    for (const t of tombs) { await this._applyTombstone(t, dirtyMap); }
+                    if (resp.nextSince) { cursor = resp.nextSince; await setSyncCursor(u, cursor); }
+                    if (!resp.hasMore) break;
+                    pages++;
+                }
+                this._refreshHistoryUI();
+            },
+            async push() {
+                const token = getCloudToken();
+                const u = currentUser && currentUser.username;
+                if (!token || !u || !window.CLOUD_API_BASE) return;
+                const ops = await SyncOutbox.all(u);
+                let done = 0;
+                for (const op of ops) {
+                    if (!op || done >= 20) break;
+                    try {
+                        if (op.type === 'upsert') {
+                            const payload = Object.assign({}, op.payload || {});
+                            delete payload._serverVersion;
+                            const resp = await cloudFetch(window.CLOUD_API_BASE + '/prescriptions', {
+                                method: 'POST',
+                                headers: { 'Authorization': 'Bearer ' + token },
+                                body: JSON.stringify({ prescription: payload })
+                            });
+                            if (resp && resp.requireAuth) throw new Error('登录已失效，请重新登录后同步');
+                            // ★ 永久删除不可复活：服务端拒绝重建 → 丢弃该 op（不重试、不提示失败）
+                            if (resp && resp.code === 'PERMANENTLY_DELETED') {
+                                await SyncOutbox.remove(op.opId); done++;
+                                continue;
+                            }
+                            if (!resp || !resp.success) throw new Error((resp && resp.error) || '云端保存失败');
+                            if (resp.savedPrescription) await this._mergePushedRecord(op, resp.savedPrescription);
+                            await SyncOutbox.remove(op.opId); done++;
+                        } else if (op.type === 'delete') {
+                            const url = window.CLOUD_API_BASE + '/prescriptions?id=' + encodeURIComponent(op.id) + (op.permanent ? '&permanent=true' : '');
+                            const resp = await cloudFetch(url, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + token } });
+                            if (resp && resp.requireAuth) throw new Error('登录已失效，请重新登录后同步');
+                            const notFound = resp && (resp.status === 404 || /not found|不存在/i.test(String(resp.error || '')));
+                            if (!resp || (!resp.success && !notFound)) throw new Error((resp && resp.error) || '云端删除失败');
+                            await SyncOutbox.remove(op.opId); done++;
+                        } else {
+                            await SyncOutbox.remove(op.opId);
+                        }
+                    } catch (e) {
+                        op.attempts = (op.attempts || 0) + 1;
+                        op.lastError = (e && e.message) || String(e);
+                        op.lastAttemptAt = Date.now();
+                        await SyncOutbox.add(op);
+                        const msg = String((e && e.message) || '');
+                        const fatal = /登录|授权|401|403|无权限/i.test(msg);
+                        if (fatal || op.attempts >= 5) {
+                            if (fatal) throw e;
+                            console.warn('[CloudSync] 放弃本轮推送（尝试 ' + op.attempts + ' 次）:', op.type, op.id, msg);
+                            break;
+                        }
+                        if (/network|failed to fetch|timeout|abort|load failed|网络/i.test(msg)) throw e;
+                        console.warn('[CloudSync] push 失败（保留待同步）:', op.type, op.id, msg);
+                    }
+                }
+            },
+            async _mergePushedRecord(op, saved) {
+                try {
+                    const local = Object.assign({}, op.payload || {}, saved || {});
+                    local._serverVersion = (saved && saved.updatedAt) || (op.payload && op.payload._serverVersion) || '';
+                    local.updatedAt = local.updatedAt || (saved && saved.updatedAt) || Date.now();
+                    await savePrescriptionToDB(local);
+                    this._upsertHistory(local);
+                } catch (e) { console.warn('[CloudSync] 回写推送结果失败:', e && e.message); }
+            },
+            async _keepConflictCopy(pending) {
+                try {
+                    if (!pending || !pending.payload) return null;
+                    const conflict = Object.assign({}, pending.payload, {
+                        id: Date.now() + '_conflict_' + Math.random().toString(36).slice(2, 6),
+                        prescriptionNo: '', outpatientNo: '',
+                        patientName: (pending.payload.patientName || '') + '（冲突副本）',
+                        createdAt: Date.now(), updatedAt: Date.now(), _serverVersion: ''
+                    });
+                    await savePrescriptionToDB(conflict);
+                    await SyncOutbox.add({
+                        opId: newSyncOpId(), username: currentUser && currentUser.username,
+                        type: 'upsert', id: conflict.id, payload: conflict, baseVersion: '',
+                        attempts: 0, createdAt: Date.now()
+                    });
+                    this._upsertHistory(conflict);
+                    if (typeof showToast === 'function') showToast('检测到云端新版本，本地修改已保留为「冲突副本」');
+                    return conflict;
+                } catch (e) { console.warn('[CloudSync] 冲突副本创建失败:', e && e.message); return null; }
+            },
+            async _applyServerRecord(serverRec, dirtyMap) {
+                if (!serverRec || serverRec.id == null) return;
+                const key = String(serverRec.id);
+                const pending = dirtyMap && dirtyMap.get(key);
+                // ★ 本地有待推送删除：以本地删除为准，忽略本轮云端旧记录（避免暂态复活）
+                if (pending && pending.type === 'delete') return;
+                if (pending) {
+                    const base = pending.baseVersion || '';
+                    const serverVer = serverRec.updatedAt || serverRec.createdAt || '';
+                    if ((base && serverVer && String(base) !== String(serverVer)) || (!base && serverVer)) {
+                        await this._keepConflictCopy(pending);
+                        await SyncOutbox.remove(pending.opId);
+                    } else if (base && serverVer && String(base) === String(serverVer)) {
+                        // 服务端仍是本地基线：保留本地待推送版本，pull 结束后 push 会覆盖
+                        return;
+                    }
+                }
+                const rec = Object.assign({}, serverRec);
+                rec._serverVersion = serverRec.updatedAt || serverRec.createdAt || '';
+                try { await savePrescriptionToDB(rec); } catch (e) {}
+                this._upsertHistory(rec);
+            },
+            async _applyTombstone(t, dirtyMap) {
+                const id = t && t.id;
+                if (id == null) return;
+                const key = String(id);
+                const pending = dirtyMap && dirtyMap.get(key);
+                if (pending && !t.permanent) {
+                    // 软删除：保留本地改动为冲突副本（防数据丢失）
+                    await this._keepConflictCopy(pending);
+                    await SyncOutbox.remove(pending.opId);
+                } else if (pending && t.permanent) {
+                    // ★ 永久删除（合规）：不保留冲突副本，直接丢弃本地待推送改动
+                    await SyncOutbox.remove(pending.opId);
+                }
+                try {
+                    const ops = await SyncOutbox.all(currentUser && currentUser.username);
+                    for (const op of ops) { if (op && op.id != null && String(op.id) === key) await SyncOutbox.remove(op.opId); }
+                } catch (e) {}
+                try { await deletePrescriptionFromDB(id); } catch (e) {}
+                try { addDeletedRxId(id); } catch (e) {}
+                this._removeHistory(id);
+            },
+            _upsertHistory(record) {
+                try {
+                    if (typeof prescriptionHistory === 'undefined' || !Array.isArray(prescriptionHistory) || !record) return;
+                    const i = prescriptionHistory.findIndex(p => p && String(p.id) === String(record.id));
+                    if (i >= 0) prescriptionHistory[i] = record; else prescriptionHistory.unshift(record);
+                } catch (e) {}
+            },
+            _removeHistory(id) {
+                try {
+                    if (Array.isArray(prescriptionHistory)) prescriptionHistory = prescriptionHistory.filter(p => !p || String(p.id) !== String(id));
+                } catch (e) {}
+            },
+            _refreshHistoryUI() {
+                try {
+                    if (typeof renderHistoryList === 'function' && typeof filterPrescriptionsByPermission === 'function' && Array.isArray(prescriptionHistory)) {
+                        let list = prescriptionHistory;
+                        if (typeof sortPrescriptionsByTimeDesc === 'function') list = sortPrescriptionsByTimeDesc(list);
+                        renderHistoryList(filterPrescriptionsByPermission(list).slice(0, 15));
+                    }
+                } catch (e) { console.warn('[CloudSync] 刷新历史列表失败:', e && e.message); }
+            },
+            renderBadge() {
+                try {
+                    let el = document.getElementById('cloudSyncBadge');
+                    if (!offlineSyncEnabled()) { if (el) el.style.display = 'none'; return; }
+                    if (!el) {
+                        el = document.createElement('div');
+                        el.id = 'cloudSyncBadge';
+                        el.style.cssText = 'position:fixed;right:12px;bottom:12px;z-index:99998;padding:6px 10px;border-radius:14px;background:rgba(38,166,154,0.92);color:#fff;font-size:12px;line-height:1;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.2);user-select:none;';
+                        el.title = '点击立即同步云端';
+                        el.addEventListener('click', function () { CloudSync.kick(0); });
+                        document.body.appendChild(el);
+                    }
+                    el.style.display = 'block';
+                    const n = this.state.pending || 0;
+                    const offlineNow = (typeof navigator !== 'undefined' && navigator.onLine === false);
+                    let txt, bg;
+                    if (offlineNow) { txt = '📴 离线' + (n ? (' · 待同步 ' + n) : ''); bg = 'rgba(120,144,156,0.95)'; }
+                    else if (this.state.syncing) { txt = '🔄 同步中…'; bg = 'rgba(38,166,154,0.92)'; }
+                    else if (this.state.lastError) { txt = '⚠️ ' + (n ? ('待同步 ' + n + ' 条') : '同步失败'); bg = 'rgba(229,115,115,0.95)'; }
+                    else if (n) { txt = '⏳ 待同步 ' + n + ' 条'; bg = 'rgba(251,140,0,0.95)'; }
+                    else {
+                        const d = this.state.lastSyncAt ? new Date(this.state.lastSyncAt) : null;
+                        txt = '☁️ 已同步' + (d ? (' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0')) : '');
+                        bg = 'rgba(38,166,154,0.92)';
+                    }
+                    el.textContent = txt;
+                    el.style.background = bg;
+                } catch (e) {}
+            }
+        };
+        try { window.CloudSync = CloudSync; window.SyncOutbox = SyncOutbox; } catch (e) {}
+
+        async function syncPrescriptionsDBDiff(records, protectedIds) {
             const database = await openDB();
+            const protect = (protectedIds instanceof Set) ? protectedIds : new Set();
             const incoming = (records || []).filter(function (r) { return r && r.id != null; });
             const incomingById = new Map();
             incoming.forEach(function (r) { incomingById.set(String(r.id), r); });
@@ -2469,6 +2892,8 @@ let currentUser = null;
                         if (!rec || rec.id == null) return;
                         const k = String(rec.id);
                         existingIds.add(k);
+                        // ★ 2026-10-19 离线同步：outbox 待推送记录受保护（不删、不被云端版本覆盖）
+                        if (protect.has(k)) { stat.kept++; return; }
                         const inc = incomingById.get(k);
                         if (!inc) { stat.del++; store.delete(rec.id); return; }
                         const same = (inc.updatedAt != null && rec.updatedAt != null)
@@ -3208,6 +3633,8 @@ let currentUser = null;
                     const loginData = { user: user, loginTime: Date.now() };
                     localStorage.setItem('user_login_data', JSON.stringify(loginData));
                     saveRememberedUser(username);
+                    // ★ 2026-10-19 登录成功即启动离线同步（补传上次离线操作 + 拉增量）
+                    try { CloudSync.init(); CloudSync.kick(1200); } catch (_) {}
                     // ★ 2026-08-28 修复：登录成功路径漏调 setLoginLoading(false)，
                     //   导致退出登录后登录框按钮残留"登录中..."且输入框被禁用
                     setLoginLoading(false);
@@ -3339,6 +3766,8 @@ let currentUser = null;
                     };
                     localStorage.setItem('user_login_data', JSON.stringify(loginData));
                     saveRememberedUser(username);
+                    // ★ 2026-10-19 登录成功即启动离线同步（补传上次离线操作 + 拉增量）
+                    try { CloudSync.init(); CloudSync.kick(1200); } catch (_) {}
                     // ★ 2026-08-28 修复：登录成功路径漏调 setLoginLoading(false)，
                     //   导致退出登录后登录框按钮残留"登录中..."且输入框被禁用
                     setLoginLoading(false);
@@ -6528,6 +6957,8 @@ let currentUser = null;
 
         async function init() {
             injectRecycleBinButton();
+            // ★ 2026-10-19 云端离线同步一期：初始化自动同步（无 token/非 both 时安全空转）
+            try { CloudSync.init(); } catch (e) { console.warn('[CloudSync] init 失败:', e && e.message); }
             checkLoginStatus();
             // 不在init中调用loadData()，因为用户还没登录
             // loadData()会在handleLogin成功后调用
@@ -8320,7 +8751,8 @@ let currentUser = null;
             await deletePrescriptionFromDB(id);
 
             // ★ 修复"删除处方后刷新再次出现"：同步软删除到云端（非阻塞，失败不影响本地删除）
-            try { deletePrescriptionFromCloud(id); } catch (e) { console.warn('[云端删除] 同步失败:', e); }
+            // ★ 2026-10-19 离线同步（R2）：await 入队，确保删除动作先落 outbox 再继续
+            try { await deletePrescriptionFromCloud(id); } catch (e) { console.warn('[云端删除] 同步失败:', e); }
             // ★ 硬性删除标记：即使云端删除未及时生效/失败，本机刷新也不会让该处方再现
             addDeletedRxId(id);
 
@@ -8410,6 +8842,18 @@ let currentUser = null;
             } catch(e) { console.warn('移除删除标记失败:', e); }
             const newBin = bin.filter(r => String(r.id) !== String(id));
             saveRecycleBin(newBin);
+            // ★ 2026-10-19 离线同步：恢复后撤销同 id 待删除 op 并入队 upsert，
+            //   避免「断网删除→恢复→联网后 delete 仍执行、处方再次消失」。
+            try {
+                if (offlineSyncEnabled()) {
+                    (async () => {
+                        const ops = await SyncOutbox.all(currentUser && currentUser.username);
+                        for (const op of ops) { if (op && op.id != null && String(op.id) === String(id)) await SyncOutbox.remove(op.opId); }
+                        const rec = Object.assign({}, record, { updatedAt: Date.now(), _serverVersion: record._serverVersion || '' });
+                        if (await enqueuePrescriptionUpsert(rec)) CloudSync.kick(800);
+                    })().catch(e => console.warn('[离线同步] 恢复入队失败:', e));
+                }
+            } catch (e) {}
             if (typeof savePrescriptionHistory === 'function') { savePrescriptionHistory(); }
             else if (typeof savePrescriptionToDB === 'function') { savePrescriptionToDB(record).catch(e => console.warn('恢复保存失败:', e)); }
             renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, typeof historyDisplayCount !== 'undefined' ? historyDisplayCount : 15));
@@ -8449,7 +8893,7 @@ let currentUser = null;
                 } catch(e) { console.warn('[同日覆盖] 写入localStorage回收站失败:', e); }
                 await deletePrescriptionFromDB(d.id);
                 addDeletedRxId(d.id);
-                try { deletePrescriptionFromCloud(d.id); } catch (e) { console.warn('[同日覆盖] 云端软删除同步失败:', e); }
+                try { await deletePrescriptionFromCloud(d.id); } catch (e) { console.warn('[同日覆盖] 云端软删除同步失败:', e); }
                 prescriptionHistory = prescriptionHistory.filter(p => String(p.id) !== String(d.id));
                 try { if (window.AuditLog) AuditLog.record('archive_duplicate_rx', (d.patientName || '') + ' [' + (d.prescriptionNo || '') + '] 同日覆盖自动归档'); } catch(e) {}
             } catch (e) {
@@ -8729,6 +9173,17 @@ let currentUser = null;
         // 无 token（本地/离线用户）直接跳过，不阻塞本地保存流程
         async function syncPrescriptionToCloud(record) {
             if (!currentUser || !currentUser.username) return;
+            // ★ 2026-10-19 离线同步（both 模式）：本地已落库 → 入 outbox，由 CloudSync 自动补传；
+            //   不向调用方抛错（离线保存必须成功）。cloud/local 模式走旧直传逻辑。
+            if (offlineSyncEnabled() && record && record.id != null) {
+                try {
+                    const queued = await enqueuePrescriptionUpsert(record);
+                    if (queued) {
+                        try { CloudSync.kick(1000); } catch (e) {}
+                        return { success: true, queued: true };
+                    }
+                } catch (e) { console.warn('[离线同步] 入队失败，回退直传:', e && e.message); }
+            }
             let token = '';
             try { token = window.__FORCE_CLOUD_TOKEN__ || ''; } catch(e) {}
             if (!token) { try { const u = JSON.parse(localStorage.getItem('auth:currentUser') || '{}'); token = u.token || ''; } catch(e) {} }
@@ -8769,6 +9224,16 @@ let currentUser = null;
         // ★ 修复"删除处方后刷新再次出现"：同步软删除到云端 API（非阻塞）
         // 无 token（本地/离线用户）直接跳过；不支持云端同步时仅记日志，不影响本地删除
         async function deletePrescriptionFromCloud(id) {
+            // ★ 2026-10-19 离线同步（both 模式）：删除本地已生效 → 入 outbox，联网自动补发 DELETE
+            if (offlineSyncEnabled() && id != null) {
+                try {
+                    const queued = await enqueuePrescriptionDelete(id, false);
+                    if (queued) {
+                        try { CloudSync.kick(800); } catch (e) {}
+                        return { success: true, queued: true };
+                    }
+                } catch (e) { console.warn('[离线同步] 删除入队失败，回退直传:', e && e.message); }
+            }
             let token = '';
             try { token = window.__FORCE_CLOUD_TOKEN__ || ''; } catch(e) {}
             if (!token) { try { const u = JSON.parse(localStorage.getItem('auth:currentUser') || '{}'); token = u.token || ''; } catch(e) {} }
@@ -8935,7 +9400,9 @@ let currentUser = null;
                 createdByName: todayExisting ? (todayExisting.createdByName || currentUser?.name || '') : (currentUser?.name || ''), // 登录用户姓名
                 updatedAt: now.getTime(), // 覆盖更新时间戳
                 updatedBy: currentUser?.username || '',
-                updatedByName: currentUser?.name || ''
+                updatedByName: currentUser?.name || '',
+                // ★ 2026-10-19 离线同步：保存前服务端基线版本（冲突判定用）
+                _serverVersion: todayExisting ? (todayExisting._serverVersion || todayExisting.updatedAt || '') : ''
             });
             
             // P7: 单条保存到 prescriptions store（O(1) 增量写入，替代全量重写）
@@ -8949,13 +9416,26 @@ let currentUser = null;
             }
 
             // ★ 修复"云端保存处方刷新后消失"：云端用户同步到云端 API
-            // 非阻塞执行，不延迟"保存成功"的UI响应；本地已保存，云端失败不影响本次保存
-            try {
-                syncPrescriptionToCloud(record).catch(function (cloudErr) {
+            // ★ 2026-10-19 离线同步（修复 R1 落库→入队窗口）：both 模式先 await 入 outbox 再触发同步，
+            //   避免「IndexedDB 已落库、outbox 未入队」进程被杀时离线新增丢失（tester3 实测窗口）。
+            let __offlineQueued = false;
+            if (offlineSyncEnabled()) {
+                try { __offlineQueued = await enqueuePrescriptionUpsert(record); }
+                catch (e) { console.warn('[离线同步] 入队失败，回退直传:', e && e.message); }
+                if (__offlineQueued) { try { CloudSync.kick(800); } catch (e) {} }
+            }
+            if (!__offlineQueued) {
+                // ★ 入队失败兜底：标记 _pendingLocal 参与合并保护，避免下次增量落库被清掉
+                if (offlineSyncEnabled()) {
+                    try { record._pendingLocal = true; await savePrescriptionToDB(record); } catch (e) {}
+                }
+                try {
+                    syncPrescriptionToCloud(record).catch(function (cloudErr) {
+                        console.warn('[云端同步] 处方同步云端失败（本地已保存）:', cloudErr && cloudErr.message);
+                    });
+                } catch (cloudErr) {
                     console.warn('[云端同步] 处方同步云端失败（本地已保存）:', cloudErr && cloudErr.message);
-                });
-            } catch (cloudErr) {
-                console.warn('[云端同步] 处方同步云端失败（本地已保存）:', cloudErr && cloudErr.message);
+                }
             }
 
             // 更新内存数组（会话内查询源，按权限保持一致）
@@ -10978,7 +11458,8 @@ let currentUser = null;
             await deletePrescriptionFromDB(id);
 
             // ★ 修复"删除病历后刷新再次出现"：同步软删除到云端（非阻塞，失败不影响本地删除）
-            try { deletePrescriptionFromCloud(id); } catch (e) { console.warn('[云端删除] 同步失败:', e); }
+            // ★ 2026-10-19 离线同步（R2）：await 入队，确保删除动作先落 outbox 再继续
+            try { await deletePrescriptionFromCloud(id); } catch (e) { console.warn('[云端删除] 同步失败:', e); }
             // ★ 硬性删除标记：即使云端删除未及时生效/失败，本机刷新也不会让该病历再现
             addDeletedRxId(id);
 
@@ -11057,6 +11538,10 @@ let currentUser = null;
                     }
                     if (Array.isArray(cloudArr)) {
                         const arr = cloudArr;
+                        // ★ 2026-10-19 离线同步：待推送 id 受保护；服务端记录带 _serverVersion（冲突基线）
+                        let __dirtyIds = new Set();
+                        try { __dirtyIds = await SyncOutbox.dirtyIds(filterUsername || (currentUser && currentUser.username)); } catch (e) {}
+                        arr.forEach(function (p) { if (p && p.id != null) p._serverVersion = p.updatedAt || p.updated_at || p.createdAt || p.created_at || ''; });
                         // ★ 2026-08-23 云端响应即权威（含空数组）：此前仅 arr.length>0 才采用云端数据，
                         //   云端已删光时回落本地缓存导致旧处方残留；现在空数组同样采用并清空本地缓存
                         {
@@ -11072,10 +11557,14 @@ let currentUser = null;
                                         // ★安全修复（2026-08-21）：普通用户合并本地未同步处方时，
                                         // 只并入本人（createdBy === filterUsername）的本地数据，禁止带入其他医生的处方。
                                         if (filterUsername && p.createdBy !== filterUsername) return false;
+                                        // ★ 2026-10-19 离线同步（修复丢数据）：outbox 待推送记录一律保留，
+                                        //   不再用「有 updatedAt 就当云端已删」排除（离线保存必带 updatedAt，
+                                        //   会被误删/从 IndexedDB 清掉 = 丢方）。
+                                        if (__dirtyIds.has(String(p.id))) return true;
+                                        if (p._pendingLocal) return true;
                                         // ★ 2026-08-23 跨端删除修复：带服务端溯源痕迹（updatedAt/userId，
                                         //   由云端保存回写或历史云端拉取写入）的本地记录若已不在云端列表
                                         //   = 已在其他设备删除，禁止合并回来（防止已删处方"复活"）。
-                                        //   无痕迹 = 纯本机离线保存从未同步 → 保留（离线保存保护）。
                                         if (p.updatedAt || p.userId) return false;
                                         return true;
                                     });
@@ -11089,7 +11578,7 @@ let currentUser = null;
                             // ★ 2026-10-10 P1-③：增量落库（只写变更、只删权威集已无的 id）；
                             //   失败则回退"清空 + 全量写"（最坏 = 原行为，零回归）
                             try {
-                                await syncPrescriptionsDBDiff(allPrescriptions);
+                                await syncPrescriptionsDBDiff(allPrescriptions, __dirtyIds);
                             } catch (e) {
                                 console.warn('[getAllUserPrescriptions] 增量落库失败，回退清空+全量写:', e && e.message);
                                 try { await clearPrescriptionsDB(); } catch (e2) {}
