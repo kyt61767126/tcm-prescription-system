@@ -2034,3 +2034,20 @@
 * **验证**：浏览器 mock 实测 8 态全过（无 p 验证盒/错号 403 红字且主区不污染+轮询不带错号/对号出码+验证盒隐藏/URL p 直达/乱序迟到 403 不覆盖/断网红字+按钮恢复+无「正在验证…」残留/验证通过后轮询自动带号）；两独立子代理代码审查（无 Critical/High）+ 安全审查无可利用项（激活码出码仍 100% 由服务端双因子决定，页面只暴露既有查询通道；手机号枚举受 60/h 限流+订单号高熵后缀不可行；新增 DOM 全静态模板/textContent 无 XSS）；node --check/内联脚本编译/双副本 hash 一致/diff-cross-version 四对基线/check-interface 6OK/copy-consistency 100 副本 0 失败。
 * **★ 付款链接三构造点排查清单（改订单/付款/领码链路必须三处同查）**：①`shared/auth-core/cloud.js` openOfficialPayUrl（云端网页/APP/云桌面内嵌场景，有 `if(fd.p)` 追加）；②`shared/auth-core/offline.js` buildPayUrl（离线家族，orderNo 与 mid 两分支，mid 分支早带 p/cn/n/wx）；③**云桌面 electron/activate-window.html payGuideUrl（独立窗自成一套，不经过 cloud.js，无 shared 源，漏改重灾区）**。
 * **生效分层（2026-10-14 晚）**：download.html 修复 push 后随 Pages 部署**立即对全端生效**（核心修复）；shared/auth-core/offline.js 在 APP 热更白名单（generate-app-hotupdate.cjs FILES 含 auth-core.js）+桌面热包，客户端自动带 p 需重签热包/整包（未做，待决策）；云桌面 activate-window.html 非白名单随整包（**当晚 1.2.268/1.0.275 不含本修复**，下一版才带出）——页面手动验证盒对旧包完全兼容，故不紧急。
+
+## 57. 离线桌面激活三项优化：注册入口唯一 / 激活码直达 / 成功确定框置顶（2026-10-19，commits eeb21f99 + 9f562fc3，离线桌面 1.0.280）
+
+* **用户反馈（V1.0.278 截图）**：①登录页同时有红字「尚未注册管理员账户-点击此处立即注册」和绿色「📝 注册开通」两个注册入口；②注册成功页点「我有激活码，立即激活」后激活窗停在版本选择页，需再点小字「已有激活码？直接输入」；③激活成功多设备弹「确定」框被 alwaysOnTop 激活窗遮挡，看不到点不到，激活流程无法收尾。
+* **改法（12 文件）**：
+  1. 注册入口收敛：electron/login.js checkFirstRun 删除红字入口（#clinicSetupHint 恒 hidden、onclick=null）；唯一入口=auth-core injectActivateLinkIntoLogin 绿色「📝 注册开通」（条件：本地桥 + 未激活 + 未注册）。login.html 结构未动（.interface-lock 6 OK）。
+  2. 激活码直达：shared/auth-core/offline.js localRegCodeBtn → ctivate.show({initialTab:'code'}) → preload.js ctivate.show(opts)/showActivationWindow(opts) → main.js showActivationWindow(event,opts) → activate.js showActivateWindow(parent,opts)（新窗 loadFile query.initialTab=code；已开窗 executeJavaScript __activateJumpToTab，isLoading 时挂 once('did-finish-load') 重试）→ activate-window.html __activateJumpToTab 隐藏 #editionSelector、切 #tab-code、聚焦 #activationCode；autoRestore 在 initialTab=code 时不抢面板，但保留「saved.requestId 已 activated → saveAndRestart+showSuccess」自愈。官网付款入口 localRegActivateBtn/版本卡直通提交不带参，行为零变化。
+  3. 确定框置顶：shared/desktop-license-ipc.cjs 新增 esolveDialogParent()（优先 activateManager.getActivateWindow()，回退 getMainWindow()，都没有则无父窗），license:submit-activate 成功且 maxDevices>1 时 isAlwaysOnTop()→setAlwaysOnTop(false)→showMessageBoxSync(父窗,box)→finally setAlwaysOnTop(true,'screen-saver')+focus；license:show-activate 透传 opts。云端无 getActivateWindow 时 typeof 守卫回退主窗=零回归。
+  4. showSuccess() 入口统一切回 admin Tab（#success 在 #tab-admin 内，直达 code 时 active 是 #tab-code，否则成功页/3 秒重启倒计时不可见；reviewer 审查发现，9f562fc3）。
+* **关键经验**：
+  - **Electron 原生 dialog 会被 alwaysOnTop('screen-saver') 窗口压住**：普通无父 showMessageBoxSync 或父窗=主窗都不可靠；正解=owned dialog 父窗设为该置顶窗 + 弹框期间临时降顶、弹后恢复。
+  - **共享 IPC 工厂新增能力必须 typeof 守卫**：desktop-license-ipc.cjs 双桌面共用，云端 activateManager 无 getActivateWindow/单参 showActivateWindow，靠守卫回退保持云行为不变。
+  - **URL query 直达 Tab 必须白名单**：activate.js 只透传 initialTab==='code'，HTML 仅字面量比较，不做 DOM 注入。
+  - **#success 藏坑**：任何「跨 Tab 切成功面板」都要同步 .tab 与 .tab-content 的 active，否则 display:none 静默。
+* **验证**：独立验证 	ools/_tmp/verify-activation-ux/run-all.cjs **28 项 PASS 27/0 FAIL/1 SKIP**（vm 真实脚本直达 / autoRestore 自愈与 pending 不抢面板 / activate.js isLoading / IPC 父窗与置顶序列 / 负向对照补丁前 3/3 失败）；Lead Playwright Chromium 探针 PROBE-PASS（initialTab=code 直达 + 无参回退版本页；登录页 hint hidden + 绿色入口唯一）；desktop-license-smoke 149/149；copy-consistency 100/100；check-interface 6 OK。
+* **构建/生效**：主进程+asar 文件，热更不可达 → 整包重打。pp_project/db-offline/pack-desktop.bat（NO_PAUSE=1 SKIP_CONFIG=1）→ 1.0.278 上一版自动 bump **1.0.280**，耗时 3'22"；E2E 6/6、ASAR integrity、fuses、.bnzc ver=2、签名、NSIS/portable、FINAL IRON GATE、fused smoke launch 全 PASS。产物 Setup 79,307,632 B / 便携 79,032,752 B（SHA256 见 HANDOFF H9）。发布仍为独立人工闸（一键发布.bat）。
+* **残差（HANDOFF H9）**：Windows owned-dialog 真实 z 序需 Win10/11 多设备真机回归；云桌面同款成功框遮挡未修（另开）。

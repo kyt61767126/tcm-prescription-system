@@ -14,7 +14,7 @@
 
 ---
 
-## 当前基线（2026-10-17 晚更新）
+## 当前基线（2026-10-19 更新）
 
 - **main HEAD：本次 docs 提交**（代码基线 `a9193675`；打包版本收纳 `adcd4ee8`；其后 push 由 Pages git 构建自动部署）。2026-10-17 P40 收尾：登录闸 NO_LICENSE 码错位自愈 + 热更 **2026.10.17-7** + 令牌幂等台账补写 + Java clinicName 透传入库；P40 真机已激活+登录闭环；**离线整包已构建（H7：exe 1.0.276 + APK 322，待发布/复测）**。
 - **线上状态（已实测）**：
@@ -27,6 +27,7 @@
   - **2026-10-18 取消免费版（产品决策）**：`claim-free` 端点返回 **410**（停止新发；存量 `type=free` 授权继续可用，登录闸/心跳豁免保留）；离线客户端版本页移除「🆓 永久免费版」按钮（改提示试用/购买）、注册引导去免费版；桌面激活窗 `activate-window.html` 隐藏免费按钮（**asar 内，需整包才生效**，旧包由服务端 410 兜底提示）；`download.html` 下架免费版卡片、功能对比表删除免费列、FAQ 改为"已停止发放/存量不受影响"。热更：app-local **2026.10.18-4**、desktop/local **2026.10.18-3**。
   - **2026-10-18 取消免费版后的离线整包（待发布）**：离线桌面 **1.0.278**（Setup 79,292,280B / 便携 79,017,312B，FileVersion 1.0.278）、离线 APP **versionCode 324**（3,577,561B，SHA256 `63C05F36…`）；`artifact-locate` 各源一致可发布；版本副作用 AutoCommit `c60d4852`。桌面原生激活窗的免费按钮隐藏**只在本包生效**（旧包由服务端 410 兜底）；发布后下载页=1.0.278/324。
   - **2026-10-18 淘宝发货卡片二维码修复工具**：新增 **`/download-card`** 卖家工具页（生成 `/d` 短链二维码、可下载 PNG 上传自动发货工具、一键复制不含 `{qrcode:…}` 占位符的发货文案）；新增 **`/d`** 302 跳转 `/download`。原因：自动发货工具不渲染 `{qrcode:链接}` 占位符 → 卡片只显示一行占位文本、无二维码；以后发货卡片：图片位上传本页 PNG、文字用本页文案。存量卡片把 `{qrcode:…}` 行删掉、保留链接即可。
+  - **2026-10-19 离线桌面 1.0.280（激活三项优化，已构建验包，待发布）**：`eeb21f99` 三项优化 + `9f562fc3` 成功页 Tab 可见性修复。①登录页注册入口只留一个（删 login.js 红字入口，仅 auth-core 绿色「📝 注册开通」）；②注册成功页「我有激活码，立即激活」→ 激活窗 `?initialTab=code` 直达激活码输入界面（auth-core→preload→main→activate.js→activate-window 全链，官网付款入口无参保持原样）；③激活成功多设备「确定」框改为以激活窗为父窗 + 弹框期间临时取消 screen-saver 置顶（修「看不到确定框、激活无法完成」）。产物：`app_project/db-offline/desktop/dist/惠康中医-本地 Setup 1.0.280.exe` **79,307,632 B**（SHA256 `F3BA27695EBF67F113686BAA6B841AC71DFE8B1193C9D29C0DF05AB15499BF21`）、便携 `惠康中医-本地 1.0.280.exe` **79,032,752 B**（SHA256 `8E3A8473E8DF96234A2734E192BA72AA06F54F48ACDD1DF3996C58C40F111461`）；构建 7 道铁闸全过（E2E 6/6、铁闸8 26/26、铁闸8c 157/157、签名+smoke launch PASS）；独立验证 27 PASS/0 FAIL。**发布未执行**（人工 `一键发布.bat`）。
   - desktop/local 热更 **2026.10.18-3**、desktop/cloud 热更 **2026.10.18-1**、app-local **2026.10.18-4**（发布时三渠道版本表统一）。
   - **勿重复实施**：-6 调试 alert 已移除并重签 -7 覆盖；P40 登录闸码错位自愈已上线；令牌 redeemedDevices 台账（首兑写 + 幂等短路补写）已上线；Java `activateLicense` clinicName 透传已入库（待 APK v325 生效）。
   - 完整方案：`.trae/documents/activation-architecture-optimization_plan.md` / `.trae/documents/activation-streamline_plan.md`（P0 方案A 全链已闭环，详见 KNOWLEDGE 2026-10-17 条目）。
@@ -53,6 +54,17 @@
 - **勿做**：鸿蒙构建暂停；发布前不再改源码（打包基线 `1ba4fdf1`）。
 - **验收**：发布后下载页/`hash-manifest.json`=1.0.277/323/325；线上 `hot-update/desktop/{local,cloud}/version.json` 均 `2026.10.18-1`；桌面冷启动深链通过。
 - **基线 commit**：`1ba4fdf1`
+
+### H9 ｜优先级：高｜离线桌面 1.0.280（激活三项优化）发布 + Windows 真机回归（2026-10-19）
+- **状态**：IN-PROGRESS（已构建验包，`dist/惠康中医-本地 Setup 1.0.280.exe` 等 2 产物；源码提交 `eeb21f99`+`9f562fc3`；**发布未执行**）
+- **已完成**：三需求全部落地并通过独立验证（27 PASS/0 FAIL）+ 浏览器级 Playwright 探针（initialTab 直达/登录页唯一入口）+ IPC mock（父窗=激活窗、置顶 true→false→true）；`copy-consistency 100/100`、`check-interface 6 OK`、`desktop-license-smoke 149/149`、构建 E2E 6/6 + FINAL IRON GATE 全 PASS + fused smoke launch PASS。
+- **剩余动作**：
+  1. **发布**（人工 `一键发布.bat`，或指示执行 `node tools/publish-release.js --changed-only --confirm --push`）；发布后下载页应=1.0.280。
+  2. **Windows 真机多设备激活回归（reviewer 指出的唯一残差）**：用机构版多设备码在 Win10/11 实机激活 → 「激活成功 已绑定 X/N 台设备」确定框必须显示在激活窗之上、可点；点确定后激活窗恢复置顶、3 秒重启倒计时可见。
+  3. 真机验证两需求：零账户登录窗只显示 1 个「📝 注册开通」入口；注册成功页点「我有激活码，立即激活」直接落在激活码输入框（不再先显示版本选择页）；点「没有激活码，在线购买正式版」仍进版本选择页。
+- **勿做**：云桌面同款「成功确定框被云激活窗遮挡」未修（云 activate.js 无 getActivateWindow，工厂回退主窗=与改前一致）；要修需另给云 activate.js 加访问器并重打云桌面。
+- **验收**：真机 1/2/3 全过；下载页/hash-manifest 显示 1.0.280。
+- **基线 commit**：`9f562fc3`
 
 ### H8 ｜优先级：中（S1 实施中）｜激活流程全端架构收敛
 - **状态**：IN-PROGRESS（5 项决策已拍板；**S1a + S1b-①②③ 已完成**；**S1b 剩余**：客户端接入 session、真机矩阵、桌面整包 1.0.277、云端 gate token 分发复测）。**2026-10-18 09:45 另一会话打包因版本基线漂移中止（1.0.277/1.2.269/325 未入库），遗留副作用已 `git stash`（"10-18 09:45 打包遗留副作用…"）待负责人处理，勿直接提交。**
