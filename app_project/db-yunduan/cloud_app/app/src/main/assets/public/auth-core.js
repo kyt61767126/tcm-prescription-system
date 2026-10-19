@@ -1285,6 +1285,7 @@
                 const identity = await collectDeviceIdentity();
                 const response = await fetchFn(`${CLOUD_API_BASE}/users?login=true`, {
                     method: 'POST',
+                    timeoutMs: 12000,
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         username,
@@ -1362,6 +1363,39 @@
             }
         }
     };
+
+    // ★ 2026-10-19 登录提速：云端认证 2.5s 未返回且本机有离线登录缓存时，先用缓存让用户秒进
+    //   （离线宽限 7 天是产品策略；密码已在本地解密校验；云端请求继续，失败/401 由后续 API 兜底）。
+    //   真正断网（navigator.onLine=false）直接走离线缓存，不再等网络超时。
+    async function authenticateWithFastFallback(username, password) {
+        const __t0 = Date.now();
+        const __offlinePromise = tryOfflineLogin(username, password).catch(() => ({ success: false }));
+        if (!navigator.onLine) {
+            const off = await __offlinePromise;
+            if (off.success) {
+                console.log('[LoginPerf] offline(no-network) ' + (Date.now() - __t0) + 'ms');
+                return { success: true, user: off.user, offline: true };
+            }
+            // WebView 的 onLine 偶发误报：无缓存时仍继续尝试云端，避免“明明有网却登录失败”
+        }
+        const __cloudPromise = cloudAdapter.authenticate(username, password);
+        const __first = await Promise.race([
+            __cloudPromise.then(r => ({ kind: 'cloud', r: r })),
+            new Promise(resolve => setTimeout(() => resolve({ kind: 'timeout' }), 2500))
+        ]);
+        if (__first.kind === 'cloud') {
+            console.log('[LoginPerf] cloud ' + (Date.now() - __t0) + 'ms');
+            return __first.r;
+        }
+        const off = await __offlinePromise;
+        if (off.success) {
+            console.log('[LoginPerf] offline-fast(2.5s) ' + (Date.now() - __t0) + 'ms');
+            return { success: true, user: off.user, offline: true };
+        }
+        const slow = await __cloudPromise;
+        console.log('[LoginPerf] cloud-slow ' + (Date.now() - __t0) + 'ms');
+        return slow;
+    }
 
     // ★ 优化3：密码错误锁定辅助工具（前4次不锁定，第5次起锁定，登录成功自动清零）
     const LoginLockout = {
@@ -1553,7 +1587,9 @@
 
             // 2. 选择适配器
             const adapter = options.adapter || cloudAdapter;
-            const result = await adapter.authenticate(username, password);
+            const result = (adapter === cloudAdapter)
+                ? await authenticateWithFastFallback(username, password)
+                : await adapter.authenticate(username, password);
 
             if (!result.success || !result.user) {
                 // ★ 优化3：审计日志 - 登录失败
@@ -1888,7 +1924,7 @@
             let __cloudAttempted = false;
             try {
                 __cloudAttempted = true;
-                const cloudResult = await login(username, password, { adapter: cloudAdapter });
+                const cloudResult = await authenticateWithFastFallback(username, password);
                 if (cloudResult && cloudResult.success && cloudResult.user) {
                     // ★ 二期：随机初始密码/客服重置密码账户首登强制改密——未改密绝不
                     //   返回 success（调用方不会写任何登录态/不进主界面）。改密成功后
