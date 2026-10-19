@@ -28,7 +28,8 @@
   - **2026-10-18 取消免费版后的离线整包（待发布）**：离线桌面 **1.0.278**（Setup 79,292,280B / 便携 79,017,312B，FileVersion 1.0.278）、离线 APP **versionCode 324**（3,577,561B，SHA256 `63C05F36…`）；`artifact-locate` 各源一致可发布；版本副作用 AutoCommit `c60d4852`。桌面原生激活窗的免费按钮隐藏**只在本包生效**（旧包由服务端 410 兜底）；发布后下载页=1.0.278/324。
   - **2026-10-18 淘宝发货卡片二维码修复工具**：新增 **`/download-card`** 卖家工具页（生成 `/d` 短链二维码、可下载 PNG 上传自动发货工具、一键复制不含 `{qrcode:…}` 占位符的发货文案）；新增 **`/d`** 302 跳转 `/download`。原因：自动发货工具不渲染 `{qrcode:链接}` 占位符 → 卡片只显示一行占位文本、无二维码；以后发货卡片：图片位上传本页 PNG、文字用本页文案。存量卡片把 `{qrcode:…}` 行删掉、保留链接即可。
   - **2026-10-19 离线桌面 1.0.280（激活三项优化，已构建验包，待发布）**：`eeb21f99` 三项优化 + `9f562fc3` 成功页 Tab 可见性修复。①登录页注册入口只留一个（删 login.js 红字入口，仅 auth-core 绿色「📝 注册开通」）；②注册成功页「我有激活码，立即激活」→ 激活窗 `?initialTab=code` 直达激活码输入界面（auth-core→preload→main→activate.js→activate-window 全链，官网付款入口无参保持原样）；③激活成功多设备「确定」框改为以激活窗为父窗 + 弹框期间临时取消 screen-saver 置顶（修「看不到确定框、激活无法完成」）。产物：`app_project/db-offline/desktop/dist/惠康中医-本地 Setup 1.0.280.exe` **79,307,632 B**（SHA256 `F3BA27695EBF67F113686BAA6B841AC71DFE8B1193C9D29C0DF05AB15499BF21`）、便携 `惠康中医-本地 1.0.280.exe` **79,032,752 B**（SHA256 `8E3A8473E8DF96234A2734E192BA72AA06F54F48ACDD1DF3996C58C40F111461`）；构建 7 道铁闸全过（E2E 6/6、铁闸8 26/26、铁闸8c 157/157、签名+smoke launch PASS）；独立验证 27 PASS/0 FAIL。**发布未执行**（人工 `一键发布.bat`）。
-  - desktop/local 热更 **2026.10.18-3**、desktop/cloud 热更 **2026.10.18-1**、app-local **2026.10.18-4**（发布时三渠道版本表统一）。
+  - **2026-10-19 云端最新版「授权状态」不显示激活码/邀请码修复（`b167fd91`；desktop/cloud 热更 2026.10.19-1）**：客户电脑（云桌面 1.2.269）实锤 F1 授权区只显示「✅ 已激活（机构版）剩余 X 天」。根因①云端 auth-core 从未实现激活码常显（离线版 09-15 已有）；②邀请码卡片只认本地 `license:code`/`machineId`，老客户（管理员激活/换机重装/诊所改名/无 device_version）凭据失效且静默。修复：`invite.js` 可选账号态（Bearer 或 body.authToken→verifyToken→clinicId）三层兜底（诊所名索引→admin_phone 生产 JSON→license.phone 全扫）+ 缓存（阳性 1h/阴性 10min）+ 他所在册码归属拦截 + unused 过滤 + 索引安全回填；`cloud.js` 授权区新增「🔑 激活码」(点击复制)+「🎁 我的邀请码」，账号请求带本地码、仅本地无码时回写 license:code，失败回退旧路径。匿名行为逐字节不变。验证：终审 43 服务端+29 客户端+59 热更包全 PASS（0 阻塞）。**随 push 部署 functions + 网页 + 热更文件；客户云桌面下次启动自动拉热更（2026.10.19-1）后生效；旧客户端零回归。**
+  - desktop/local 热更 **2026.10.18-3**、desktop/cloud 热更 **2026.10.19-1**、app-local **2026.10.18-4**（发布时三渠道版本表统一）。
   - **勿重复实施**：-6 调试 alert 已移除并重签 -7 覆盖；P40 登录闸码错位自愈已上线；令牌 redeemedDevices 台账（首兑写 + 幂等短路补写）已上线；Java `activateLicense` clinicName 透传已入库（待 APK v325 生效）。
   - 完整方案：`.trae/documents/activation-architecture-optimization_plan.md` / `.trae/documents/activation-streamline_plan.md`（P0 方案A 全链已闭环，详见 KNOWLEDGE 2026-10-17 条目）。
 - **2026-10-18 构建现场已清理（已决）**：外部会话 09:45 打包因版本基线漂移中止——产物 1.0.277/1.2.269/cloud APK 325 已归档到 `%TEMP%\kyt-build-archive-20261018-102617`，工作区残留已从 `stash@{0}` 丢弃并删 dist 残留；`verify-version-baseline` 复核通过（HEAD 1.0.276/1.2.268/322/324，dist 无残留）。下次打包将按**最新代码**（含 S1b-③ gate token/会话）重新递增到 277/269/325；产物发布仍为独立人工闸。
@@ -65,6 +66,18 @@
 - **勿做**：云桌面同款「成功确定框被云激活窗遮挡」未修（云 activate.js 无 getActivateWindow，工厂回退主窗=与改前一致）；要修需另给云 activate.js 加访问器并重打云桌面。
 - **验收**：真机 1/2/3 全过；下载页/hash-manifest 显示 1.0.280。
 - **基线 commit**：`9f562fc3`
+
+### H10 ｜优先级：高｜云端授权状态激活码/邀请码修复上线后客户真机验证（2026-10-19）
+- **状态**：IN-PROGRESS（代码 `b167fd91` 已提交；随 push 部署 functions + 静态 + desktop/cloud 热更 2026.10.19-1）
+- **已完成**：服务端账号态三层兜底（诊所索引/admin_phone/phone 全扫 + 归属/缓存/unused 过滤）、客户端授权区激活码+邀请码卡片、8 云端 auth-core 副本 + cv/HTML 同步、热更包 2026.10.19-1（20 文件签名）；独立终审 43+29+59 全 PASS、0 阻塞；门禁全绿。
+- **剩余动作**：
+  1. **客户云桌面验证**：启动 → 等热更静默拉取 → **彻底退出重开**（淡绿横幅）→ 登录 → F1 基础设置-授权状态应显示「🔑 激活码：BNZC-…（点击复制）」+「🎁 我的邀请码：……」。若仍缺：看 `%APPDATA%\惠康中医-云端\hot-update\.hot-version` 是否 2026.10.19-1、wrangler tail 看 `/api/license/invite` 返回。
+  2. **云端网页/云APP**：刷新即达（public/auth-core.js + cv c6ddf377 随 push 部署）。
+  3. **回归抽样**：未激活/试用账号打开授权区应无激活码卡片、无报错；匿名邀请码查询行为与改前一致（服务端匿名字段零变化）。
+- **回滚**：热更客户端 `node tools/rollback-hotupdate.cjs -c cloud`（新增回滚包）或后台旧 version.json；服务端回滚必须与热更同批（旧服务端会忽略新客户端 Authorization/body.authToken，客户端仍走 code/machineId 旧路径，故单回滚服务端不致命但会丢账号态兜底）。
+- **勿做**：不建议把 token 写入日志/URL；共用电脑残留他所 license:code 的展示一致性为已知低优项（后版本处理）。
+- **验收**：客户机授权区显示激活码+邀请码；网页/APP 刷新同步显示；匿名/旧客户端零回归。
+- **基线 commit**：`b167fd91`
 
 ### H8 ｜优先级：中（S1 实施中）｜激活流程全端架构收敛
 - **状态**：IN-PROGRESS（5 项决策已拍板；**S1a + S1b-①②③ 已完成**；**S1b 剩余**：客户端接入 session、真机矩阵、桌面整包 1.0.277、云端 gate token 分发复测）。**2026-10-18 09:45 另一会话打包因版本基线漂移中止（1.0.277/1.2.269/325 未入库），遗留副作用已 `git stash`（"10-18 09:45 打包遗留副作用…"）待负责人处理，勿直接提交。**

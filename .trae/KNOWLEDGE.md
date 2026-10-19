@@ -2051,3 +2051,27 @@
 * **验证**：独立验证 	ools/_tmp/verify-activation-ux/run-all.cjs **28 项 PASS 27/0 FAIL/1 SKIP**（vm 真实脚本直达 / autoRestore 自愈与 pending 不抢面板 / activate.js isLoading / IPC 父窗与置顶序列 / 负向对照补丁前 3/3 失败）；Lead Playwright Chromium 探针 PROBE-PASS（initialTab=code 直达 + 无参回退版本页；登录页 hint hidden + 绿色入口唯一）；desktop-license-smoke 149/149；copy-consistency 100/100；check-interface 6 OK。
 * **构建/生效**：主进程+asar 文件，热更不可达 → 整包重打。pp_project/db-offline/pack-desktop.bat（NO_PAUSE=1 SKIP_CONFIG=1）→ 1.0.278 上一版自动 bump **1.0.280**，耗时 3'22"；E2E 6/6、ASAR integrity、fuses、.bnzc ver=2、签名、NSIS/portable、FINAL IRON GATE、fused smoke launch 全 PASS。产物 Setup 79,307,632 B / 便携 79,032,752 B（SHA256 见 HANDOFF H9）。发布仍为独立人工闸（一键发布.bat）。
 * **残差（HANDOFF H9）**：Windows owned-dialog 真实 z 序需 Win10/11 多设备真机回归；云桌面同款成功框遮挡未修（另开）。
+## 58. 云端最新版「授权状态」不显示激活码/邀请码：账号态三层兜底 + 客户端展示 + 桌面热更（2026-10-19，commit b167fd91，热更 desktop/cloud 2026.10.19-1）
+
+* **客户现象（云桌面 1.2.269 截图）**：F1 基础设置→授权状态只有「✅ 已激活（机构版）剩余 365 天」+「管理员激活」按钮，无激活码、无邀请码。用户补充「老客户本机云端桌面激活状态显示正常」=不是全量回归，而是特定老客户（管理员激活、换机/重装、诊所改名、无 device_version 绑定）失败。
+* **根因（双缺）**：①云端 auth-core updateLicenseStatusText 优先级1 只渲染账号状态，从未实现「激活码常显」（离线版 offline.js 2026-09-15 已有 renderActivationCode，cloud.js 一直没有）；②邀请码卡片 loadCloudInviteInfo 只认「本地 license:code」或「machineId→device_version」，老客户两条凭据均缺失时静默跳过（无任何提示）。服务端 invite.js 也只接受 code/machineId，无账号态入口。
+* **服务端（functions/api/license/invite.js，匿名行为逐字节不变）**：
+  - 可选账号态：Authorization: Bearer 或 body.authToken（云桌面走主进程 IPC 代理无法改 header，token 放 body）→ erifyToken(token, env) fail-closed → 只认 token 内 clinicId。
+  - **三层兜底**：① clinicId→system:clinics 取诊所名→license_clinic_index（缺失/未命中回退 listLicenses 全扫；索引可读时合并回填，索引为 null 绝不回填防单条覆盖）；② token.username/aliases 手机号→dmin_phone:{phone}（**生产值是 JSON {requestId,status}，必须 kv.get(...,'json').requestId**，兼容极旧裸值）→dmin_req:{requestId}.licenseCode，校验 req.phone 归属、status∈{activated,approved}、码归属；③ ①②未命中且 token 含手机号→全扫按 license.record.phone 匹配，命中/阴性均缓存：cct_grant:{clinicId} TTL 1h（取用前 getLicense 复验，失效即删）+cct_grant_miss:{clinicId} TTL 10min。
+  - **归属/展示安全**：egisteredClinicNames+isOwnLicenseForClinic——其他在册诊所的码绝不返回（改名后旧名不在册，允许）；isDisplayableLicense 排除 disabled/unused/过期（防同所预生成库存码压过 used 码）；③ 优先 productClass=cloud。
+  - 响应仅对 authUser 新增 licenseCode/esolvedByAccount；CORS Allow-Headers 加 Authorization；匿名响应键集合与改前完全一致。
+* **客户端（shared/auth-core/cloud.js）**：
+  - 新增 getLocalCloudLicenseCode/enderCloudActivationCode/loadCloudAccountGrantInfo；授权状态优先级1（账号）/优先级2（本机 license）/未知已激活分支均展示「🔑 激活码」(点击复制)+「🎁 我的邀请码」。
+  - 加载顺序：先渲染本地 license:code（不空白）→ 账号态请求**带本地码 {code}**（服务端 1~2 read 快查，不再全扫）→ 权威码覆盖显示；**仅本地无码时回写 license:code**（该 key 被心跳/登录闸消费，覆盖会造成多诊所共用机串号）。
+  - 账号失败/无 token/断网/旧服务端回退旧 code/machineId 路径；卡片幂等（各≤1）且激活码在前；priority1 文案不变。
+* **分发/上线**：sync-auth-core 8 云端副本 + public/index.html cv 重刷（c6ddf377）+ sync-html 4 副本；
+ode tools/generate-desktop-hotupdate.cjs -c cloud → **2026.10.19-1**（20 文件、Ed25519 签名、appVersion 1.2.270、index.html cv 校验）；commit 167fd91 随 git push 由 Pages 自动部署 functions/网页/热更文件；云桌面客户端下次启动静默拉取、彻底退出重开生效（淡绿横幅）。云 APP 为在线壳，刷新/重进即达；离线 APP 不受影响。
+* **验证**：独立终审 43 服务端 + 29 客户端 + 59 热更包全 PASS（0 阻塞，建议 unused 过滤已采纳；admin_req.status 空值兼容/共用电脑一致性为已知低优项）；Lead 自测 16/16（生产 JSON admin_phone、他所在册码不返回、改名/老客户 license.phone、阳性/阴性缓存、unused 过滤）；copy-consistency 100/100、cv-hashes 15/15、check-interface 6 OK、desktop-license-smoke 149/149、热更验签+20/20 哈希+cv PASS。
+* **关键经验**：
+  - **老客户授权三态核对**：本地码（license:code）/设备绑定（device_version）/账号（clinicId）任一失效都要能兜底；只靠前两者必然在老客户换机重装后静默。
+  - **生产数据形态必须按写侧实测**：admin_phone 是 JSON {requestId,status}，用 kv.get(key) 得到字符串再拼 dmin_req:{"requestId"...} 是死代码（reviewer 用生产格式桩复现；Lead 旧测试种子是裸值造成假阳性）。
+  - **全扫必须配缓存**：listLicenses ~340 get/次，阳性 1h（取用前复验）+ 阴性 10min，客户端带本地码走快路径，避免设置页反复全扫撞主进程 8s 超时。
+  - **归属校验不可省**：一号多诊所/历史手机号时只按 phone 匹配会返回其他在册诊所的码；必须排除「其他在册诊所 clinicName」。
+  - **不覆盖本机 license:code**：心跳/登录闸/邀请码共用该 key，多诊所共用电脑覆盖会串号/误判。
+  - **匿名面零变化是硬约束**：新增字段仅 authUser 返回，响应键集合用桩做 parity。
+* **残差（HANDOFF H10）**：客户云桌面真机验证（热更生效后 F1 显示）；共用电脑残留他所 license:code 的展示一致性（低优，后版本）。
