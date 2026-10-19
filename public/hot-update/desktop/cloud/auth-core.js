@@ -1306,6 +1306,21 @@
                     if (data && data.code === 'DEVICE_LIMIT') {
                         return { success: false, error: data.error || '设备数已达上限（最多授权 2 台设备），请先解绑旧设备', code: 'DEVICE_LIMIT' };
                     }
+                    // ★ 2026-10-19 关键修复：cloud-api.js 超时/断网时是【return {success:false,
+                    //   error:'网络较慢或已断开…', fromCloud:false, timedOut:true}】而不是 throw，
+                    //   旧 catch 兜底永远进不去 → 离线登录缓存被跳过。这里对“网络类失败”显式走离线缓存。
+                    const __netErr = data && (
+                        data.fromCloud === false || data.timedOut === true ||
+                        /网络|超时|断开|离线|Failed to fetch|NetworkError|timeout|timed out|ERR_/i.test(String(data.error || ''))
+                    );
+                    if (__netErr) {
+                        const offlineResult = await tryOfflineLogin(username, password);
+                        if (offlineResult.success) {
+                            console.log('[auth] 云端不可达，已用离线登录缓存登录');
+                            return { success: true, user: offlineResult.user, offline: true };
+                        }
+                        return { success: false, error: '网络不可用，' + (offlineResult.error || '离线登录失败') };
+                    }
                     return { success: false, error: (data && data.error) || '手机号/用户名或密码错误' };
                 }
                 // ★ P0 修复：保留 API 返回的 token，附加到 user 对象
@@ -1327,21 +1342,23 @@
                 };
             } catch (e) {
                 console.error('云端登录失败:', e);
-                // ★ 离线登录缓存：网络错误时尝试离线登录
+                const __msg = String((e && e.message) || '');
+                // ★ 2026-10-19 离线登录兜底：cloudFetch 超时抛的是中文文案「网络较慢或已断开…」，
+                //   且 Android WebView 的 navigator.onLine 可能误报 true → 旧判断会跳过离线缓存，
+                //   导致断网时明明有 30 天离线缓存却提示网络超时。这里改为：任何云端认证异常都先
+                //   尝试离线缓存（密码在本地校验，错误密码仍失败），并补充中文超时/网络判定。
                 const isNetworkError = !navigator.onLine ||
-                    (e.message && (e.message.includes('Failed to fetch') ||
-                                   e.message.includes('NetworkError') ||
-                                   e.message.includes('network') ||
-                                   e.message.includes('ERR_')));
+                    /Failed to fetch|NetworkError|network|ERR_|timeout|timed out|超时|断网|网络|离线/i.test(__msg);
+                const offlineResult = await tryOfflineLogin(username, password);
+                if (offlineResult.success) {
+                    console.log('[auth] 云端认证异常，已用离线登录缓存登录');
+                    return { success: true, user: offlineResult.user, offline: true };
+                }
                 if (isNetworkError) {
                     console.log('[auth] 网络不可用，尝试离线登录缓存...');
-                    const offlineResult = await tryOfflineLogin(username, password);
-                    if (offlineResult.success) {
-                        return { success: true, user: offlineResult.user, offline: true };
-                    }
                     return { success: false, error: '网络不可用，' + (offlineResult.error || '离线登录失败') };
                 }
-                return { success: false, error: '登录失败：' + (e.message || '网络错误') };
+                return { success: false, error: '登录失败：' + (__msg || '网络错误') };
             }
         }
     };
@@ -1981,7 +1998,7 @@
     // ==================== 离线登录缓存 ====================
     // 首次在线登录成功后缓存用户凭证（加密存储），断网时可离线登录
     // 安全策略：密码通过 encryptPassword（safeStorage/XOR）加密，不存储明文
-    // 有效期：30天，超时需重新在线登录
+    // 有效期：7天（2026-10-19 产品决策：所有版本取消 30 天离线，统一为 7 天），超时需重新在线登录
 
     async function cacheOfflineLogin(username, password, user) {
         try {
@@ -2021,8 +2038,8 @@
                 return { success: false, error: '该用户无离线缓存，请联网登录' };
             }
 
-            // 检查缓存是否过期（30天）
-            const CACHE_TTL = 30 * 24 * 60 * 60 * 1000;
+            // 检查缓存是否过期（7天，2026-10-19 产品决策：取消 30 天离线）
+            const CACHE_TTL = 7 * 24 * 60 * 60 * 1000;
             if (Date.now() - cacheData.cachedAt > CACHE_TTL) {
                 await StorageAdapter.removeItem('auth:offlineLoginCache');
                 return { success: false, error: '离线登录缓存已过期，请联网登录' };

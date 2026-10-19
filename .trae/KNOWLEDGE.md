@@ -2172,3 +2172,13 @@ avigator.onLine 可能误报 true，导致跳过 	ryOfflineLogin。修复：clou
 * **验证**：Playwright 4/4（中文超时仍离线登录成功/返回缓存用户/错误密码拒绝/无缓存拒绝）；v329 APK 真机离线壳显示成功；v330 APK 构建/签名通过。
 * **教训**：① WebView 远程页离线兜底不能依赖 SW/主文档拦截；loadDataWithBaseURL + 全内联 + 云端 baseUrl 是可靠组合。② 离线登录判定不能只看 
 avigator.onLine 或英文网络关键字，必须“异常即试离线缓存”并由本地密码校验兜底。
+## 66. 所有版本离线宽限统一 7 天（2026-10-19，最终产品决策）
+
+* **背景**：客户验证 331 版离线登录可用后，要求“所有版本取消 30 天离线，设置离线天数为 7 天”（此前曾把离线正式版 48h 放宽到 30 天）。
+* **改动**：
+  1. unctions/api/license/entitlement.js gate token：默认 TTL 720h→168h（7 天），钳制上限 720h→168h；离线桌面/APP 正式版离线登录/心跳宽限最长 7 天，licExp 仍限制不超授权到期，吊销/删除最迟 7 天生效。
+  2. shared/auth-core/cloud.js 离线登录缓存 CACHE_TTL 30d→7d（云网页/云桌面/云 APP）。
+  3. shared/auth-core/offline.js 离线登录缓存 CACHE_TTL 30d→7d（离线端）。
+  4. auth-core sync-all 11 副本，cv 更新 1a5be63b；cloud APP 重打 v332。
+* **验证**：Playwright 5/5：超时错误对象仍离线登录、缓存用户、错误密码拒绝、无缓存拒绝、**8 天前缓存必须拒绝**；entitlement.js/auth-core 语法与门禁通过。
+* **生效**：服务端 gate token 随 push 部署（下一次联网裁决签发 7 天 token）；云 APP 需安装 v332；云桌面需热更（auth-core 变化）；离线桌面/APP 的 gate token 由服务端裁决立即按 7 天，离线缓存 TTL 随下一次客户端更新生效。
