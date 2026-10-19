@@ -2892,6 +2892,25 @@ let currentUser = null;
                     }
                 } catch (e) { console.warn('[CloudSync] 刷新历史列表失败:', e && e.message); }
             },
+            _renderSettingsStatus(txt, n) {
+                // 移动端主界面只留小圆点；完整状态在「F1 基础设置」底部可查（避免误以为同步消失）
+                try {
+                    const body = document.querySelector('#settingsModal .modal-body');
+                    if (!body) return;
+                    let row = document.getElementById('cloudSyncSettingsRow');
+                    if (!row) {
+                        row = document.createElement('div');
+                        row.id = 'cloudSyncSettingsRow';
+                        row.style.cssText = 'margin-top:12px;padding-top:10px;border-top:1px dashed #d0d0d0;font-size:12px;color:#666;line-height:1.7;';
+                        body.appendChild(row);
+                    }
+                    const detail = n > 0
+                        ? '待同步数据已保存在本机，网络恢复后会自动补传，不需要手动操作。'
+                        : '本地与云端数据已一致；离线修改会在联网后自动上传。';
+                    row.innerHTML = '<b>☁️ 云端同步：</b>' + String(txt || '') +
+                        '<br><span style="color:#909399;">' + detail + '</span>';
+                } catch (e) {}
+            },
             renderBadge() {
                 try {
                     let el = document.getElementById('cloudSyncBadge');
@@ -2913,9 +2932,11 @@ let currentUser = null;
                         txt = '☁️ 已同步' + (d ? (' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0')) : '');
                         bg = 'rgba(38,166,154,0.92)'; dotColor = '#26a69a';
                     }
+                    // ★ 移动端只有小圆点时，详细状态放在「F1 基础设置」底部，点圆点也弹提示（防误以为同步消失）
+                    try { this._renderSettingsStatus(txt, n); } catch (e) {}
 
                     // ★ 2026-10-19 移动端/云APP：悬浮胶囊会遮挡底部操作栏（客户实锤截图），
-                    //   改为底部导航「设置」项右上角小圆点（颜色=同步状态，pointer-events:none 不挡点击）。
+                    //   改为底部导航「设置」项右上角小圆点（颜色=同步状态，点一下弹详细状态）。
                     if (isMobileSyncUI()) {
                         if (el) el.style.display = 'none';
                         let dot = oldDot;
@@ -2931,12 +2952,19 @@ let currentUser = null;
                             try { host.style.position = 'relative'; } catch (e) {}
                             dot = document.createElement('span');
                             dot.id = 'cloudSyncDot';
-                            dot.style.cssText = 'position:absolute;top:2px;right:6px;width:8px;height:8px;border-radius:50%;background:#26a69a;pointer-events:none;box-shadow:0 0 0 1.5px #fff;transition:background .2s;';
+                            dot.style.cssText = 'position:absolute;top:1px;right:4px;width:10px;height:10px;border-radius:50%;background:#26a69a;pointer-events:auto;cursor:pointer;box-shadow:0 0 0 1.5px #fff;transition:background .2s;';
+                            dot.addEventListener('click', function (ev) {
+                                try { ev.preventDefault(); ev.stopPropagation(); } catch (e) {}
+                                try {
+                                    if (typeof showToast === 'function') showToast((CloudSync.state.lastStatusText || '☁️ 云端同步') + '（点击「设置」可查看详情）');
+                                } catch (e) {}
+                            });
                             host.appendChild(dot);
                         }
                         dot.style.display = 'block';
                         dot.style.background = dotColor;
                         dot.title = txt;
+                        this.state.lastStatusText = txt;
                         return;
                     }
                     if (oldDot) oldDot.style.display = 'none';
