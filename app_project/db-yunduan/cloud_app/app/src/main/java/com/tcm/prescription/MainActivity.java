@@ -61,6 +61,8 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.ByteArrayOutputStream;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import android.database.Cursor;
 import android.content.ContentUris;
 
@@ -1287,23 +1289,81 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
-    /** 主文档拦截兜底：直接读取 assets/public/index.html 以云端 baseUrl 加载（同源存储） */
-    private void loadOfflineShellViaData(WebView webView) {
+    /** 读取 APK 内置 asset 文本（不存在返回 null） */
+    private String readAssetText(String assetPath) {
+        InputStream is = null;
         try {
-            InputStream is = getAssets().open("public/index.html");
+            is = getAssets().open(assetPath);
             ByteArrayOutputStream bos = new ByteArrayOutputStream();
             byte[] buf = new byte[8192];
             int n;
             while ((n = is.read(buf)) > 0) bos.write(buf, 0, n);
-            is.close();
-            String html = new String(bos.toByteArray(), "UTF-8");
+            return new String(bos.toByteArray(), "UTF-8");
+        } catch (Exception e) {
+            return null;
+        } finally {
+            try { if (is != null) is.close(); } catch (Exception e) {}
+        }
+    }
+
+    /**
+     * ★ 2026-10-19 终极离线壳：把 index.html 引用的同源业务 JS/CSS 直接内联成一个自包含 HTML。
+     *   这样即使个别 WebView 对 shouldInterceptRequest 子资源也不生效，离线壳自身仍能完整运行；
+     *   页面 baseUrl 仍是云端域名（同源 localStorage/IndexedDB 可用），API 请求离线失败由同步队列兜底。
+     */
+    private String buildInlineOfflineHtml() {
+        String html = readAssetText("public/index.html");
+        if (html == null || html.length() == 0) return null;
+        try {
+            Pattern p = Pattern.compile("<script\\b[^>]*\\bsrc=[\"']([^\"']+)[\"'][^>]*>\\s*</script>", Pattern.CASE_INSENSITIVE);
+            Matcher m = p.matcher(html);
+            StringBuffer sb = new StringBuffer(html.length() + 1024 * 1024);
+            while (m.find()) {
+                String src = m.group(1);
+                String clean = src.replaceAll("[?#].*$", "").replaceFirst("^/", "");
+                String js = readAssetText("public/" + clean);
+                if (js == null) {
+                    // 内置缺失的脚本直接去掉，避免发起网络请求（离线必然失败）
+                    m.appendReplacement(sb, Matcher.quoteReplacement(""));
+                    continue;
+                }
+                js = js.replace("</script", "<\\/script");
+                m.appendReplacement(sb, Matcher.quoteReplacement("<script>" + js + "</script>"));
+            }
+            m.appendTail(sb);
+            String out = sb.toString();
+            // 内联外部样式表（当前 index 基本全内联，防御性处理）
+            Pattern lp = Pattern.compile("<link\\b[^>]*\\bhref=[\"']([^\"']+\\.css[^\"']*)[\"'][^>]*>", Pattern.CASE_INSENSITIVE);
+            Matcher lm = lp.matcher(out);
+            StringBuffer sb2 = new StringBuffer(out.length() + 65536);
+            while (lm.find()) {
+                String href = lm.group(1);
+                String clean = href.replaceAll("[?#].*$", "").replaceFirst("^/", "");
+                String css = readAssetText("public/" + clean);
+                if (css == null) { lm.appendReplacement(sb2, Matcher.quoteReplacement("")); continue; }
+                lm.appendReplacement(sb2, Matcher.quoteReplacement("<style>" + css.replace("</style", "<\\/style") + "</style>"));
+            }
+            lm.appendTail(sb2);
+            return sb2.toString();
+        } catch (Exception e) {
+            Log.w(TAG, "[offlineShell] inline bundle fail: " + e.getMessage());
+            return html;
+        }
+    }
+
+    /** 主文档拦截兜底：直接读取 assets/public/index.html 以云端 baseUrl 加载（同源存储） */
+    private void loadOfflineShellViaData(WebView webView) {
+        try {
+            String html = buildInlineOfflineHtml();
+            if (html == null || html.length() == 0) html = readAssetText("public/index.html");
+            if (html == null || html.length() == 0) throw new Exception("内置 index.html 缺失");
             offlineShellMode = true;
             offlineShellServed = false;
             offlineShellLoaded = true;
             offlineShellLoading = false;
             webView.loadDataWithBaseURL(CLOUD_URL + "/", html, "text/html", "UTF-8", null);
             mainHandler.postDelayed(() -> injectOfflineShellHints(webView), 800);
-            Log.d(TAG, "[offlineShell] loadDataWithBaseURL fallback");
+            Log.d(TAG, "[offlineShell] loadDataWithBaseURL(inline bundle) len=" + html.length());
         } catch (Exception e) {
             Log.w(TAG, "[offlineShell] data fallback fail: " + e.getMessage());
             showErrorPage(webView);
