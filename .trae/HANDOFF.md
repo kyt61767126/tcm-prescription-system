@@ -93,7 +93,7 @@
 - **基线 commit**：`fdaa2e98`（跨版本基线重冻结 `7c7d5985`；线上核验：hotVersion=2026.10.19-3、云端 index 含 CloudSync/outbox/PERMANENTLY_DELETED、`/api/prescriptions?sync=1` 未认证 401）
 
 ### H12 ｜优先级：高｜离线正式版 30 天宽限 + 云 APP/网页 Service Worker 离线壳：上线验证（2026-10-19）
-- **状态**：IN-PROGRESS（代码待 push 部署；服务端 functions + 静态 public/sw.js/index.html 同批上线；**无需重打 APK/离线桌面**）
+- **状态**：已上线（commit `0072b931` 已 push；线上核验 `/sw.js` 200+no-cache、index 含 SW 注册；**无需重打 APK/离线桌面**）
 - **已完成**：`entitlement.js` gate token 默认 TTL 720h/上限 720h（48h→30 天）；`public/sw.js` App Shell 缓存 + `index.html` 注册（https 或 localhost）；`/sw.js` no-cache 头；cloud_desktop/cloud_app/harmony index 已 sync-html；Playwright 离线重载 8/8。
 - **剩余动作**：
   1. **验证 30 天宽限真机**：离线正式版设备联网登录一次（服务端签发 30 天 token）→ 断网重启，应可登录；查 `license:gateToken` exp-iat≈720h；超过 30 天或时钟回拨仍 fail-closed。
@@ -101,7 +101,7 @@
   3. **观察**：SW 缓存命中后在线请求仍网络优先（静态），若发现旧 JS 被缓存需 bump `sw.js` 的 SW_VERSION 与文件字节；Cloudflare `_headers` 已给 /sw.js no-cache。
   4. **可选增强**：把云 APP 首次冷启动的原生错误页升级为品牌化离线页/自动重试（需 APK 重打，本期做 SW 后非必须）。
 - **回滚**：无需回滚期（SW 不影响在线网络优先；如需停用可改 index 移除注册或 SW_VERSION 清缓存）；gate TTL 可用环境变量 `GATE_TOKEN_TTL_HOURS` 覆盖（≤720）。
-- **验收**：离线正式版 30 天内断网登录成功；云 APP 联网一次后断网冷启动可用；API 不被 SW 缓存；在线更新不受影响。
+- **验收**：离线正式版 30 天内断网登录成功；云 APP 联网一次后断网冷启动可用；API 不被 SW 缓存；在线更新不受影响。\n- **基线 commit**：`0072b931`（Playwright 本地静态服务离线重载 8/8；线上 `/sw.js` 200/no-cache、index 注册已核验）
 
 ### H8 ｜优先级：中（S1 实施中）｜激活流程全端架构收敛
 - **状态**：IN-PROGRESS（5 项决策已拍板；**S1a + S1b-①②③ 已完成**；**S1b 剩余**：客户端接入 session、真机矩阵、桌面整包 1.0.277、云端 gate token 分发复测）。**2026-10-18 09:45 另一会话打包因版本基线漂移中止（1.0.277/1.2.269/325 未入库），遗留副作用已 `git stash`（"10-18 09:45 打包遗留副作用…"）待负责人处理，勿直接提交。**
