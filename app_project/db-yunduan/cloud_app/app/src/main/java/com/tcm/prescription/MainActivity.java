@@ -7,6 +7,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
+import android.net.ConnectivityManager;
 import android.net.Uri;
 import android.net.http.SslError;
 import android.os.Build;
@@ -90,6 +91,11 @@ public class MainActivity extends BridgeActivity {
     private TextView loadingText;
     private volatile String cachedVideoRecorderScript = null;
     private boolean versionChecked = false;
+    // ★ 2026-10-19 云 APP 本地兜底壳：断网冷启动时，主框架加载失败后改加载云端同源 URL，
+    //   由 shouldInterceptRequest 把静态资源替换为 APK 内置 assets/public（同源 localStorage/
+    //   IndexedDB，因此离线登录缓存、本地处方、待同步队列都可用）。联网后自动退出离线壳。
+    private volatile boolean offlineShellMode = false;
+    private volatile boolean offlineShellLoading = false;
     // ★ 2026-08-23 根治登录三屏闪：原生蓝色标准版Splash遮罩层
     //   揭幕三条件（满足其一即隐藏遮罩）：
     //   1) onPageCommitVisible 云端URL + 延时 280ms（确保HTML首帧完成绘制）
@@ -666,6 +672,39 @@ public class MainActivity extends BridgeActivity {
             private boolean urlChecked = false;
 
             @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                try {
+                    if (request == null || request.getUrl() == null) return null;
+                    Uri uri = request.getUrl();
+                    // 非云端域名不接管（API/管理台/热更等仍走网络，保持在线语义）
+                    if (!"https".equalsIgnoreCase(uri.getScheme())) return null;
+                    if (!CLOUD_HOST.equalsIgnoreCase(uri.getHost())) return null;
+                    String path = uri.getPath();
+                    if (path == null || path.isEmpty() || "/".equals(path)) path = "/index.html";
+                    if (path.startsWith("/api/") || path.startsWith("/hot-update/") || path.startsWith("/admin/")) return null;
+                    // 网络已恢复：退出离线壳，让页面重新走网络
+                    if (offlineShellMode && isNetworkAvailable()) {
+                        offlineShellMode = false;
+                    }
+                    if (!offlineShellMode) return null;
+                    // 防目录穿越：只允许安全字符
+                    if (!path.matches("^/[A-Za-z0-9_./-]+$") || path.contains("..")) return null;
+                    String assetPath = "public" + path;
+                    InputStream is;
+                    try {
+                        is = getAssets().open(assetPath);
+                    } catch (Exception e) {
+                        return null; // 内置资源缺失 → 该请求回退网络（离线时由 WebView 报错）
+                    }
+                    String mime = guessMimeType(path);
+                    return new WebResourceResponse(mime, "UTF-8", is);
+                } catch (Throwable t) {
+                    Log.w(TAG, "[offlineShell] intercept fail: " + t.getMessage());
+                    return null;
+                }
+            }
+
+            @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 // S3 + P1-8: URL 严格 host 校验，非云端域名一律拦截（避免 contains 子串绕过）
                 String url = request.getUrl().toString();
@@ -738,6 +777,11 @@ public class MainActivity extends BridgeActivity {
                 super.onPageFinished(view, url);
                 // ★ 2026-09-28：与 onPageStarted 双保险更新 URL 快照（主线程）
                 if (url != null) lastWebViewUrl = url;
+                // ★ 2026-10-19：离线壳页面加载完成 → 复位加载标记，加离线横幅 + 联网自动重试
+                if (offlineShellMode) {
+                    offlineShellLoading = false;
+                    mainHandler.postDelayed(() -> injectOfflineShellHints(view), 600);
+                }
                 int statusBarHeightPx = getStatusBarHeightPx();
                 float density = getResources().getDisplayMetrics().density;
                 int cssPx = (int) (statusBarHeightPx / density);
@@ -796,7 +840,18 @@ public class MainActivity extends BridgeActivity {
                 super.onReceivedError(view, request, error);
                 // 只处理主框架错误，子资源错误不影响页面整体展示
                 if (request.isForMainFrame()) {
-                    showErrorPage(view);
+                    // ★ 2026-10-19 断网兜底：优先加载 APK 内置离线壳（同源，缓存数据可用），
+                    //   真正加载失败（资源缺失等）再回退原错误页。
+                    if (!offlineShellLoading) {
+                        offlineShellLoading = true;
+                        offlineShellMode = true;
+                        String cur = view.getUrl() == null ? "" : view.getUrl();
+                        if (cur.indexOf("__offline_shell=1") < 0) {
+                            mainHandler.postDelayed(() -> view.loadUrl(CLOUD_URL + "?__offline_shell=1"), 120);
+                        } else {
+                            showErrorPage(view);
+                        }
+                    }
                 }
             }
 
@@ -1150,6 +1205,57 @@ public class MainActivity extends BridgeActivity {
      * T3: 显示本地错误页（网络异常时避免白屏）
      * ★ 2026-08-23：显示错误页前先揭幕遮罩，否则"网络异常"提示被蓝渐变遮罩挡住
      */
+    /** 网络是否可用（用于离线壳自动退出） */
+    private boolean isNetworkAvailable() {
+        try {
+            ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+            if (cm == null) return false;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                android.net.Network n = cm.getActiveNetwork();
+                if (n == null) return false;
+                android.net.NetworkCapabilities caps = cm.getNetworkCapabilities(n);
+                if (caps == null) return false;
+                return caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI)
+                        || caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR)
+                        || caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET);
+            } else {
+                android.net.NetworkInfo ni = cm.getActiveNetworkInfo();
+                return ni != null && ni.isConnected();
+            }
+        } catch (Exception e) { return false; }
+    }
+
+    /** 离线壳资源 MIME 推断 */
+    private String guessMimeType(String path) {
+        String p = path == null ? "" : path.toLowerCase(java.util.Locale.ROOT);
+        if (p.endsWith(".js")) return "application/javascript";
+        if (p.endsWith(".css")) return "text/css";
+        if (p.endsWith(".json")) return "application/json";
+        if (p.endsWith(".html") || p.endsWith(".htm")) return "text/html";
+        if (p.endsWith(".svg")) return "image/svg+xml";
+        if (p.endsWith(".png")) return "image/png";
+        if (p.endsWith(".jpg") || p.endsWith(".jpeg")) return "image/jpeg";
+        if (p.endsWith(".woff2")) return "font/woff2";
+        return "application/octet-stream";
+    }
+
+    /** 离线壳提示：顶部橙色横幅 + 联网后自动回在线页面 */
+    private void injectOfflineShellHints(WebView webView) {
+        try {
+            String js = "(function(){try{" +
+                "if(!window.__OFFLINE_SHELL_BANNER__){window.__OFFLINE_SHELL_BANNER__=1;" +
+                "var d=document.createElement('div');d.id='__offlineShellBanner';" +
+                "d.textContent='📴 离线模式：数据保存在本机，联网后自动同步';" +
+                "d.style.cssText='position:fixed;left:0;right:0;top:0;z-index:99999;background:#ff9800;color:#fff;font-size:12px;text-align:center;padding:3px 0;pointer-events:none;';" +
+                "document.body.appendChild(d);}" +
+                "window.addEventListener('online',function(){try{location.href='" + CLOUD_URL + "?__net_retry='+Date.now();}catch(e){}});" +
+                "}catch(e){}})();";
+            webView.evaluateJavascript(js, null);
+        } catch (Exception e) {
+            Log.w(TAG, "[offlineShell] hint inject fail: " + e.getMessage());
+        }
+    }
+
     private void showErrorPage(WebView webView) {
         unlockSplashCover("error-page");
         String errorHtml = "<!DOCTYPE html><html><head><meta charset='UTF-8'>" +
