@@ -97,6 +97,7 @@ public class MainActivity extends BridgeActivity {
     private volatile boolean offlineShellMode = false;
     private volatile boolean offlineShellLoading = false;
     private volatile boolean offlineShellLoaded = false;
+    private volatile boolean offlineShellServed = false;
     // ★ 2026-08-23 根治登录三屏闪：原生蓝色标准版Splash遮罩层
     //   揭幕三条件（满足其一即隐藏遮罩）：
     //   1) onPageCommitVisible 云端URL + 延时 280ms（确保HTML首帧完成绘制）
@@ -507,11 +508,10 @@ public class MainActivity extends BridgeActivity {
         //   双次加载用户不可见。
         try {
             if (!isNetworkAvailable()) {
-                // ★ 2026-10-19 断网冷启动：直接加载内置离线壳（不再先撞错误页）
-                offlineShellMode = true;
-                offlineShellLoading = true;
-                webView.loadUrl(CLOUD_URL + "?__offline_shell=1");
+                // ★ 2026-10-19 断网冷启动：直接以内置 index.html + 云端 baseUrl 加载，
+                //   不发起任何网络请求、不依赖主文档拦截/错误回调（v327 真机仍报 ERR_FAILED 的修复）。
                 Log.d("TCM-Pres", "冷启动检测到无网络，加载内置离线壳");
+                loadOfflineShellViaData(webView);
             } else {
                 webView.loadUrl(CLOUD_URL + "?_v=" + System.currentTimeMillis());
                 Log.d("TCM-Pres", "冷启动强制拉取最新云端页面(带时间戳绕缓存)");
@@ -704,6 +704,7 @@ public class MainActivity extends BridgeActivity {
                         return null; // 内置资源缺失 → 该请求回退网络（离线时由 WebView 报错）
                     }
                     String mime = guessMimeType(path);
+                    if ("/index.html".equals(path)) offlineShellServed = true;
                     return new WebResourceResponse(mime, "UTF-8", is);
                 } catch (Throwable t) {
                     Log.w(TAG, "[offlineShell] intercept fail: " + t.getMessage());
@@ -791,11 +792,21 @@ public class MainActivity extends BridgeActivity {
                 // ★ 2026-09-28：与 onPageStarted 双保险更新 URL 快照（主线程）
                 if (url != null) lastWebViewUrl = url;
                 // ★ 2026-10-19：离线壳页面加载完成 → 复位加载标记，加离线横幅 + 联网自动重试
-                if (offlineShellMode && url != null &&
-                        (url.indexOf("__offline_shell=1") >= 0 || offlineShellLoaded)) {
-                    offlineShellLoading = false;
-                    offlineShellLoaded = true;
-                    mainHandler.postDelayed(() -> injectOfflineShellHints(view), 600);
+                if (offlineShellMode) {
+                    boolean shellUrl = url != null && url.indexOf("__offline_shell=1") >= 0;
+                    if (shellUrl) {
+                        if (offlineShellServed) {
+                            offlineShellServed = false;
+                            offlineShellLoading = false;
+                            offlineShellLoaded = true;
+                            mainHandler.postDelayed(() -> injectOfflineShellHints(view), 600);
+                        } else if (!offlineShellLoaded) {
+                            // WebView 的错误页也会回调 onPageFinished：主文档未被拦截 → 立刻 data 兜底
+                            loadOfflineShellViaData(view);
+                        }
+                    } else if (offlineShellLoaded) {
+                        mainHandler.postDelayed(() -> injectOfflineShellHints(view), 600);
+                    }
                 }
                 int statusBarHeightPx = getStatusBarHeightPx();
                 float density = getResources().getDisplayMetrics().density;
@@ -1286,6 +1297,8 @@ public class MainActivity extends BridgeActivity {
             while ((n = is.read(buf)) > 0) bos.write(buf, 0, n);
             is.close();
             String html = new String(bos.toByteArray(), "UTF-8");
+            offlineShellMode = true;
+            offlineShellServed = false;
             offlineShellLoaded = true;
             offlineShellLoading = false;
             webView.loadDataWithBaseURL(CLOUD_URL + "/", html, "text/html", "UTF-8", null);
