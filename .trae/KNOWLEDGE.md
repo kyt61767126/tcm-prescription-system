@@ -2182,3 +2182,19 @@ avigator.onLine 或英文网络关键字，必须“异常即试离线缓存”�
   4. auth-core sync-all 11 副本，cv 更新 1a5be63b；cloud APP 重打 v332。
 * **验证**：Playwright 5/5：超时错误对象仍离线登录、缓存用户、错误密码拒绝、无缓存拒绝、**8 天前缓存必须拒绝**；entitlement.js/auth-core 语法与门禁通过。
 * **生效**：服务端 gate token 随 push 部署（下一次联网裁决签发 7 天 token）；云 APP 需安装 v332；云桌面需热更（auth-core 变化）；离线桌面/APP 的 gate token 由服务端裁决立即按 7 天，离线缓存 TTL 随下一次客户端更新生效。
+## 67. 登录提速：断网秒登 + 慢网 2.5s 离线兜底（2026-10-19，cloud APP v333）
+
+* **目标**：客户要求登录“秒开”。
+* **瓶颈**：①原登录 cloudFetch 超时 30s，弱网/断网时用户等超时；②Android WebView 的 
+avigator.onLine 可能误报，离线缓存不能可靠触发。
+* **实现**：
+  1. 登录请求 	imeoutMs 30s→12s（无缓存时也不再等半分钟）。
+  2. uthenticateWithFastFallback：
+     - 
+avigator.onLine===false：立即解密本地离线缓存校验密码（命中即返回，0ms 级；无缓存再继续尝试云端，避免 onLine 误报）；
+     - 在线：云端认证与 2.5s 定时器竞速；云端先回 → 正常云端成功；2.5s 超时且本机有离线缓存 → 先用缓存放行进主界面（密码本地校验；云端请求继续，后续 401 由既有机制兜底）；
+     - 无缓存 → 继续等云端结果（最多 12s）。
+  3. login() 与 loginWithUsernamePassword() 的云端路径统一使用该快速兜底；登录成功后仍先隐藏登录框，再异步 loadData()（数据随后补齐，不阻塞进入）。
+* **验证**：Playwright 4/4：慢网 5s 模拟 → 2505ms 进入；云端快 → 1ms；断网 onLine=false → 0ms；错误密码/无缓存仍拒绝。
+* **发布**：cloud APP v333（12,409,717B，SHA256 BA5C7CB66E21906403E21CC273D79BB6F4E3AE005E1D31DB2BD84CACE5119985）；官网 hash-manifest 双镜像 code=333；desktop/cloud 热更 2026.10.19-6。
+* **边界**：2.5s 快速通道使用本地离线缓存（7 天有效），云端仍会继续请求；若账号在服务端被吊销，后续 API 401 会触发重新登录。在线网络良好时仍是正常云端登录（一般 <1-2s）；APP 冷启动页面加载时间未包含在本优化内（如需“打开即见登录页”可再做本地壳优先启动）。
