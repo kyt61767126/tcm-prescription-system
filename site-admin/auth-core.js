@@ -1306,6 +1306,21 @@
                     if (data && data.code === 'DEVICE_LIMIT') {
                         return { success: false, error: data.error || '设备数已达上限（最多授权 2 台设备），请先解绑旧设备', code: 'DEVICE_LIMIT' };
                     }
+                    // ★ 2026-10-19 关键修复：cloud-api.js 超时/断网时是【return {success:false,
+                    //   error:'网络较慢或已断开…', fromCloud:false, timedOut:true}】而不是 throw，
+                    //   旧 catch 兜底永远进不去 → 离线登录缓存被跳过。这里对“网络类失败”显式走离线缓存。
+                    const __netErr = data && (
+                        data.fromCloud === false || data.timedOut === true ||
+                        /网络|超时|断开|离线|Failed to fetch|NetworkError|timeout|timed out|ERR_/i.test(String(data.error || ''))
+                    );
+                    if (__netErr) {
+                        const offlineResult = await tryOfflineLogin(username, password);
+                        if (offlineResult.success) {
+                            console.log('[auth] 云端不可达，已用离线登录缓存登录');
+                            return { success: true, user: offlineResult.user, offline: true };
+                        }
+                        return { success: false, error: '网络不可用，' + (offlineResult.error || '离线登录失败') };
+                    }
                     return { success: false, error: (data && data.error) || '手机号/用户名或密码错误' };
                 }
                 // ★ P0 修复：保留 API 返回的 token，附加到 user 对象
