@@ -1553,6 +1553,19 @@ async function saveAndRestart(license, phone) {
 }
 
 function showSuccess(phone, isCodeMode, inviteInfo) {
+    // ★ 2026-10-19 成功页可见性修复： #success 在 #tab-admin 容器内，而 .tab-content
+    //   仅 .active 显示。直达到达（initialTab=code）或 Tab2 输码时当前 active 是
+    //   #tab-code；若只 showAdminPanel('success') 不切 Tab 容器，成功页/自动重启倒计时
+    //   会被藏掉（装码与重启仍生效，但用户看不到「激活成功」）。统一在展示前切到
+    //   admin Tab（tab 头与内容同步），覆盖所有 showSuccess 调用方。
+    try {
+        document.querySelectorAll('.tab').forEach(function (t) {
+            t.classList.toggle('active', t.dataset.tab === 'admin');
+        });
+        document.querySelectorAll('.tab-content').forEach(function (c) {
+            c.classList.toggle('active', c.id === 'tab-admin');
+        });
+    } catch (e) { /* Tab 切换失败不影响装码/重启主链 */ }
     document.getElementById('successPhone').textContent = phone || state.phone || codeState.phone;
     // ★ 2026-09-08 注册引导文案更新：成功页密码说明按实际注册密码显示，永不误导——
     //   自定义密码→「您设置的密码」；留空（submit 归一为 admin）→「默认 admin」；
