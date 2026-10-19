@@ -2484,6 +2484,15 @@ let currentUser = null;
             const m = getSyncMode();
             return m !== 'local' && m !== 'cloud';
         }
+        function isMobileSyncUI() {
+            // 移动端/云APP：底部导航+操作栏占满屏宽，悬浮胶囊会遮挡按钮 → 改用导航角标圆点
+            try {
+                if (window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform()) return true;
+                if (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '')) return true;
+                if (typeof window.innerWidth === 'number' && window.innerWidth <= 768) return true;
+            } catch (e) {}
+            return false;
+        }
         function newSyncOpId() {
             return 'op_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
         }
@@ -2627,10 +2636,28 @@ let currentUser = null;
                 } catch (e) {}
             },
             async refreshPending() {
+                const prev = this.state.pending || 0;
+                let next = 0;
                 try {
                     const u = currentUser && currentUser.username;
-                    this.state.pending = (u && offlineSyncEnabled()) ? await SyncOutbox.count(u) : 0;
-                } catch (e) { this.state.pending = 0; }
+                    next = (u && offlineSyncEnabled()) ? await SyncOutbox.count(u) : 0;
+                } catch (e) { next = 0; }
+                this.state.pending = next;
+                // ★ 移动端徽标改为导航小圆点后，补一次轻提示：补传完成 / 失败（失败 5 分钟节流）
+                try {
+                    if (isMobileSyncUI() && typeof showToast === 'function') {
+                        if (prev > 0 && next === 0 && !this.state.lastError) {
+                            showToast('☁️ 云端已同步');
+                        } else if (this.state.lastError) {
+                            if (!this._lastErrToastAt || Date.now() - this._lastErrToastAt > 300000) {
+                                this._lastErrToastAt = Date.now();
+                                showToast('⚠️ 云端同步暂失败，稍后自动重试');
+                            }
+                        } else {
+                            this._lastErrToastAt = 0;
+                        }
+                    }
+                } catch (e) {}
                 this.renderBadge();
             },
             async run() {
@@ -2843,7 +2870,52 @@ let currentUser = null;
             renderBadge() {
                 try {
                     let el = document.getElementById('cloudSyncBadge');
-                    if (!offlineSyncEnabled()) { if (el) el.style.display = 'none'; return; }
+                    const oldDot = document.getElementById('cloudSyncDot');
+                    if (!offlineSyncEnabled()) {
+                        if (el) el.style.display = 'none';
+                        if (oldDot) oldDot.style.display = 'none';
+                        return;
+                    }
+                    const n = this.state.pending || 0;
+                    const offlineNow = (typeof navigator !== 'undefined' && navigator.onLine === false);
+                    let txt, bg, dotColor;
+                    if (offlineNow) { txt = '📴 离线' + (n ? (' · 待同步 ' + n) : ''); bg = 'rgba(120,144,156,0.95)'; dotColor = '#78909c'; }
+                    else if (this.state.syncing) { txt = '🔄 同步中…'; bg = 'rgba(38,166,154,0.92)'; dotColor = '#26a69a'; }
+                    else if (this.state.lastError) { txt = '⚠️ ' + (n ? ('待同步 ' + n + ' 条') : '同步失败'); bg = 'rgba(229,115,115,0.95)'; dotColor = '#e57373'; }
+                    else if (n) { txt = '⏳ 待同步 ' + n + ' 条'; bg = 'rgba(251,140,0,0.95)'; dotColor = '#fb8c00'; }
+                    else {
+                        const d = this.state.lastSyncAt ? new Date(this.state.lastSyncAt) : null;
+                        txt = '☁️ 已同步' + (d ? (' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0')) : '');
+                        bg = 'rgba(38,166,154,0.92)'; dotColor = '#26a69a';
+                    }
+
+                    // ★ 2026-10-19 移动端/云APP：悬浮胶囊会遮挡底部操作栏（客户实锤截图），
+                    //   改为底部导航「设置」项右上角小圆点（颜色=同步状态，pointer-events:none 不挡点击）。
+                    if (isMobileSyncUI()) {
+                        if (el) el.style.display = 'none';
+                        let dot = oldDot;
+                        if (!dot) {
+                            const items = document.querySelectorAll('.mobile-nav-item');
+                            let host = null;
+                            for (let i = 0; i < items.length; i++) {
+                                const oc = items[i].getAttribute('onclick') || '';
+                                if (oc.indexOf('settingsModal') >= 0) { host = items[i]; break; }
+                            }
+                            if (!host && items.length) host = items[items.length - 1];
+                            if (!host) return;
+                            try { host.style.position = 'relative'; } catch (e) {}
+                            dot = document.createElement('span');
+                            dot.id = 'cloudSyncDot';
+                            dot.style.cssText = 'position:absolute;top:2px;right:6px;width:8px;height:8px;border-radius:50%;background:#26a69a;pointer-events:none;box-shadow:0 0 0 1.5px #fff;transition:background .2s;';
+                            host.appendChild(dot);
+                        }
+                        dot.style.display = 'block';
+                        dot.style.background = dotColor;
+                        dot.title = txt;
+                        return;
+                    }
+                    if (oldDot) oldDot.style.display = 'none';
+
                     if (!el) {
                         el = document.createElement('div');
                         el.id = 'cloudSyncBadge';
@@ -2853,18 +2925,6 @@ let currentUser = null;
                         document.body.appendChild(el);
                     }
                     el.style.display = 'block';
-                    const n = this.state.pending || 0;
-                    const offlineNow = (typeof navigator !== 'undefined' && navigator.onLine === false);
-                    let txt, bg;
-                    if (offlineNow) { txt = '📴 离线' + (n ? (' · 待同步 ' + n) : ''); bg = 'rgba(120,144,156,0.95)'; }
-                    else if (this.state.syncing) { txt = '🔄 同步中…'; bg = 'rgba(38,166,154,0.92)'; }
-                    else if (this.state.lastError) { txt = '⚠️ ' + (n ? ('待同步 ' + n + ' 条') : '同步失败'); bg = 'rgba(229,115,115,0.95)'; }
-                    else if (n) { txt = '⏳ 待同步 ' + n + ' 条'; bg = 'rgba(251,140,0,0.95)'; }
-                    else {
-                        const d = this.state.lastSyncAt ? new Date(this.state.lastSyncAt) : null;
-                        txt = '☁️ 已同步' + (d ? (' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0')) : '');
-                        bg = 'rgba(38,166,154,0.92)';
-                    }
                     el.textContent = txt;
                     el.style.background = bg;
                 } catch (e) {}

@@ -2122,3 +2122,14 @@ ode --check sw.js/entitlement.js、sync-html/copy-consistency/check-interface/cv
   - APP 远程壳想离线可用，最省改造成本的是 Service Worker（同源存储天然复用），而不是把远程页面塞进 assets（不同源=两套 localStorage/IndexedDB，离线登录态与数据全丢）。
   - gate token 放宽只改服务端签发 TTL，不动客户端验签逻辑，旧客户端零改造。
 * **残差（HANDOFF H12）**：真机验证 30 天 token 与云 APP SW 冷启动；SW 首装前极冷启动仍为原生错误页（可后续 APK 品牌化）。
+## 61. 云 APP 同步标识遮挡底部操作按钮修复（2026-10-19，客户截图实锤）
+
+* **现象**：云 APP 开方界面右下角悬浮「☁️ 已同步 11:12」胶囊盖住底部导航（门诊/历史/预览/药品/设置/退出）与快捷操作栏，遮挡点击。
+* **原因**：云端离线同步 MVP 的状态徽标用 position:fixed;right:12px;bottom:12px 全端统一渲染；移动端底部导航 z-index:200、操作栏 z-index:150 固定在屏底，悬浮元素必然重叠。
+* **修复（public/index.html CloudSync）**：
+  - 新增 isMobileSyncUI()：Capacitor 原生平台 / Android|iPhone|iPad|iPod|Mobile UA / innerWidth<=768 任一命中即视为移动端。
+  - 移动端：隐藏 #cloudSyncBadge 悬浮胶囊，改为在底部导航「设置」项（onclick 含 settingsModal）右上角注入 #cloudSyncDot 8px 圆点（position:absolute; pointer-events:none，不阻挡原有点击）；颜色：绿=已同步、橙=待同步 N、灰=离线、红=同步失败。
+  - 补一次轻提示：待同步由 >0 变 0 → showToast('☁️ 云端已同步')；同步失败 5 分钟节流 toast。
+  - 桌面/宽屏（>768 且非移动 UA）保留原悬浮胶囊（可点击立即同步）。
+* **验证**：Playwright 双上下文（1280 桌面 / Pixel 7 UA+393 宽）7/7：桌面胶囊可见且无导航点；移动端胶囊隐藏、导航点可见且挂在 .mobile-nav-item、尺寸≤12px、保存按钮不被遮挡。同步功能的 179 项独立验证 A/B 全 PASS（D1 为 server-dev 旧桩的 git 基线查找失效，属工具问题非产品）。
+* **生效**：静态页随 push 部署；云 APP 联网打开一次即拿新 index（SW 网络优先），离线缓存旧页在下次联网刷新后更新。云桌面/网页宽屏不受影响。
