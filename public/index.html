@@ -11770,6 +11770,25 @@ window.addEventListener('load', function () {
     try { setInterval(function(){ __finalEnforce__(); }, 5*60*1000); } catch(_) {}
 })();
 </script>
+<!-- ★ 2026-10-19 云端网页/云 APP 离线兜底壳：注册 Service Worker（仅 https；Electron file:// 自动跳过）。
+     首次在线访问后缓存 App Shell，之后断网冷启动/刷新可打开本地壳（同源 localStorage/IndexedDB，
+     离线登录缓存与本地处方数据可用）；API/热更/管理端不缓存。逻辑见 public/sw.js。 -->
+<script>
+(function(){
+    try {
+        var __swSecure = location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+        if (__swSecure && ('serviceWorker' in navigator)) {
+            window.addEventListener('load', function(){
+                navigator.serviceWorker.register('/sw.js').then(function(reg){
+                    try { console.log('[SW] 离线壳已注册:', reg.scope); } catch(_) {}
+                }).catch(function(e){
+                    try { console.warn('[SW] 注册失败(不影响在线使用):', e && e.message); } catch(_) {}
+                });
+            });
+        }
+    } catch (e) {}
+})();
+</script>
 </body></html>
 
 

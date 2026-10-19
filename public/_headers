@@ -101,3 +101,7 @@
   Cache-Control: public, max-age=604800
 /*.svg
   Cache-Control: public, max-age=604800
+
+# ★ 2026-10-19 离线壳 Service Worker：不缓存脚本本身，确保版本更新及时
+/sw.js
+  Cache-Control: no-cache, must-revalidate

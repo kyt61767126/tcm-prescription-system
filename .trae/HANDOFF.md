@@ -30,6 +30,7 @@
   - **2026-10-19 离线桌面 1.0.280（激活三项优化，已构建验包，待发布）**：`eeb21f99` 三项优化 + `9f562fc3` 成功页 Tab 可见性修复。①登录页注册入口只留一个（删 login.js 红字入口，仅 auth-core 绿色「📝 注册开通」）；②注册成功页「我有激活码，立即激活」→ 激活窗 `?initialTab=code` 直达激活码输入界面（auth-core→preload→main→activate.js→activate-window 全链，官网付款入口无参保持原样）；③激活成功多设备「确定」框改为以激活窗为父窗 + 弹框期间临时取消 screen-saver 置顶（修「看不到确定框、激活无法完成」）。产物：`app_project/db-offline/desktop/dist/惠康中医-本地 Setup 1.0.280.exe` **79,307,632 B**（SHA256 `F3BA27695EBF67F113686BAA6B841AC71DFE8B1193C9D29C0DF05AB15499BF21`）、便携 `惠康中医-本地 1.0.280.exe` **79,032,752 B**（SHA256 `8E3A8473E8DF96234A2734E192BA72AA06F54F48ACDD1DF3996C58C40F111461`）；构建 7 道铁闸全过（E2E 6/6、铁闸8 26/26、铁闸8c 157/157、签名+smoke launch PASS）；独立验证 27 PASS/0 FAIL。**发布未执行**（人工 `一键发布.bat`）。
   - **2026-10-19 云端最新版「授权状态」不显示激活码/邀请码修复（`b167fd91`；desktop/cloud 热更 2026.10.19-1）**：客户电脑（云桌面 1.2.269）实锤 F1 授权区只显示「✅ 已激活（机构版）剩余 X 天」。根因①云端 auth-core 从未实现激活码常显（离线版 09-15 已有）；②邀请码卡片只认本地 `license:code`/`machineId`，老客户（管理员激活/换机重装/诊所改名/无 device_version）凭据失效且静默。修复：`invite.js` 可选账号态（Bearer 或 body.authToken→verifyToken→clinicId）三层兜底（诊所名索引→admin_phone 生产 JSON→license.phone 全扫）+ 缓存（阳性 1h/阴性 10min）+ 他所在册码归属拦截 + unused 过滤 + 索引安全回填；`cloud.js` 授权区新增「🔑 激活码」(点击复制)+「🎁 我的邀请码」，账号请求带本地码、仅本地无码时回写 license:code，失败回退旧路径。匿名行为逐字节不变。验证：终审 43 服务端+29 客户端+59 热更包全 PASS（0 阻塞）。**随 push 部署 functions + 网页 + 热更文件；客户云桌面下次启动自动拉热更（2026.10.19-1）后生效；旧客户端零回归。**
   - desktop/local 热更 **2026.10.18-3**、desktop/cloud 热更 **2026.10.19-3**、app-local **2026.10.18-4**（发布时三渠道版本表统一）。
+  - **2026-10-19 离线正式版宽限 48h→30 天 + 云 APP/网页离线兜底壳**：①`entitlement.js` gate token 默认 TTL 由 48h 放宽到 **720h（30 天）**、钳制上限同步 720h（licExp 仍限制不超授权到期；吊销/删除最迟 30 天后生效——产品决策）；离线桌面/APP 正式版 **30 天内断网可登录操作**（试用/免费规则不变，客户端无需改动/重打包）。②新增 `public/sw.js` + `index.html` 尾部注册：云端网页/云 APP **首次在线访问后**缓存 App Shell（index+业务 JS+vendor），之后断网冷启动/刷新由 SW 回退缓存页——同源 localStorage/IndexedDB，离线登录缓存与本地处方同步队列可直接使用；API（/api/）、热更（/hot-update/）、管理端不缓存；静态资源网络优先、离线回退缓存；`/sw.js` 已加 no-cache 头。**无需重打 APK**（现有云 APP 联网启动一次即安装 SW）；首次安装/从未联网的极冷启动仍显示原生「网络异常-重新加载」页。验证：Playwright 本地静态服务+离线重载 8/8（注册/缓存/断网重载为真实 App Shell/API 不被壳兜底/恢复在线正常）。
   - **2026-10-19 云端版「断网可用 + 联网自动同步」一期 MVP（desktop/cloud 热更 2026.10.19-3）**：处方本地优先（IndexedDB 先落盘）→ `outbox` 队列 → 联网自动 pull 增量 / push 补传；删除墓碑同步、冲突保留「（冲突副本）」、幂等重试、状态徽标；服务端 `GET /api/prescriptions?sync=1&since=&limit=` 增量（data + tombstones + serverTime/nextSince/hasMore，角色过滤同旧 GET，D1 includeDeleted→KV 回退）；时间戳统一伪北京 UTC；永久删除墓碑（KV `clinic:{id}:prescriptions_permanent`）+ POST 拒绝重建（409 `PERMANENTLY_DELETED`），修「离线旧 upsert 复活永久删除处方」；修复现网「离线保存恢复网络后可能被增量落库清掉」缺陷。**灰度/回退**：默认 both（全量开启，一期无白名单）；回退用后台 `allowedMode='cloud'`（`local` 在网页/云桌面会被 auth-core 升为 both，不可作回退），或写 KV `config:cloud_offline_sync` = `{"mode":"off"}` 紧急总开关。**已知限制**：sync 每轮 D1 全表读（大诊所读放大，放量前建议 since SQL 下推/限频）；DB v4 升级时旧标签页需刷新（onblocked）；媒体文件不在一期。验证：独立验证 179/179 + 服务端自测 124 + 上线前审查（可放行）。
   - **勿重复实施**：-6 调试 alert 已移除并重签 -7 覆盖；P40 登录闸码错位自愈已上线；令牌 redeemedDevices 台账（首兑写 + 幂等短路补写）已上线；Java `activateLicense` clinicName 透传已入库（待 APK v325 生效）。
   - 完整方案：`.trae/documents/activation-architecture-optimization_plan.md` / `.trae/documents/activation-streamline_plan.md`（P0 方案A 全链已闭环，详见 KNOWLEDGE 2026-10-17 条目）。
@@ -90,6 +91,17 @@
   4. **回滚**：后台 `allowedMode='cloud'`（立即停同步、回旧行为）或 KV `config:cloud_offline_sync={"mode":"off"}` 总开关；客户端 `rollback-hotupdate.cjs -c cloud`。
 - **验收**：断网开方→重启→记录在；联网自动上传（云端可见、待同步归零）；断网删除→联网云端软删；双端并发冲突副本不丢；回退 cloud 后零同步请求。
 - **基线 commit**：`fdaa2e98`（跨版本基线重冻结 `7c7d5985`；线上核验：hotVersion=2026.10.19-3、云端 index 含 CloudSync/outbox/PERMANENTLY_DELETED、`/api/prescriptions?sync=1` 未认证 401）
+
+### H12 ｜优先级：高｜离线正式版 30 天宽限 + 云 APP/网页 Service Worker 离线壳：上线验证（2026-10-19）
+- **状态**：IN-PROGRESS（代码待 push 部署；服务端 functions + 静态 public/sw.js/index.html 同批上线；**无需重打 APK/离线桌面**）
+- **已完成**：`entitlement.js` gate token 默认 TTL 720h/上限 720h（48h→30 天）；`public/sw.js` App Shell 缓存 + `index.html` 注册（https 或 localhost）；`/sw.js` no-cache 头；cloud_desktop/cloud_app/harmony index 已 sync-html；Playwright 离线重载 8/8。
+- **剩余动作**：
+  1. **验证 30 天宽限真机**：离线正式版设备联网登录一次（服务端签发 30 天 token）→ 断网重启，应可登录；查 `license:gateToken` exp-iat≈720h；超过 30 天或时钟回拨仍 fail-closed。
+  2. **验证云 APP/网页离线壳**：云 APP/浏览器联网打开一次（SW 安装）→ 断网冷启动/刷新，应出现应用壳（登录/缓存数据）；首次安装从未联网仍显示原生重试页（预期）；查 `chrome://serviceworker-internals` 或日志 `[SW] 离线壳已注册`。
+  3. **观察**：SW 缓存命中后在线请求仍网络优先（静态），若发现旧 JS 被缓存需 bump `sw.js` 的 SW_VERSION 与文件字节；Cloudflare `_headers` 已给 /sw.js no-cache。
+  4. **可选增强**：把云 APP 首次冷启动的原生错误页升级为品牌化离线页/自动重试（需 APK 重打，本期做 SW 后非必须）。
+- **回滚**：无需回滚期（SW 不影响在线网络优先；如需停用可改 index 移除注册或 SW_VERSION 清缓存）；gate TTL 可用环境变量 `GATE_TOKEN_TTL_HOURS` 覆盖（≤720）。
+- **验收**：离线正式版 30 天内断网登录成功；云 APP 联网一次后断网冷启动可用；API 不被 SW 缓存；在线更新不受影响。
 
 ### H8 ｜优先级：中（S1 实施中）｜激活流程全端架构收敛
 - **状态**：IN-PROGRESS（5 项决策已拍板；**S1a + S1b-①②③ 已完成**；**S1b 剩余**：客户端接入 session、真机矩阵、桌面整包 1.0.277、云端 gate token 分发复测）。**2026-10-18 09:45 另一会话打包因版本基线漂移中止（1.0.277/1.2.269/325 未入库），遗留副作用已 `git stash`（"10-18 09:45 打包遗留副作用…"）待负责人处理，勿直接提交。**

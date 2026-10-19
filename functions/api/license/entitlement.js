@@ -291,7 +291,7 @@ async function attestationGate(kv, machineId, body, result, config, accountState
 //  P3-A：Gate Token 签名（ES256 / EC P-256）
 //  服务端裁决放行态时签发短周期 token，客户端内置公钥离线验签（见 offline.js）。
 //  私钥仅从环境变量读取：GATE_SIGN_P8_B64=PKCS#8 DER base64（CF secret，不入库）；
-//  GATE_SIGN_KID（默认 v1）支持密钥轮换；GATE_TOKEN_TTL_HOURS（默认 48）。
+//  GATE_SIGN_KID（默认 v1）支持密钥轮换；GATE_TOKEN_TTL_HOURS（默认 720=30 天）。
 // ============================================================================
 
 let _gateSignKeyCache = null;  // { p8, key }（key 为已 import 的 CryptoKey）
@@ -420,10 +420,13 @@ export async function onRequest(context) {
         if (result.state === ENTITLEMENT_STATES.LICENSED
             && !accountState && att.canSign) {
             try {
-                // TTL 合法性：非数/非法配置回退 48h；钳制 [1h,168h]（防错配架空吊销节奏）
+                // TTL 合法性：非数/非法配置回退 720h（30 天）；钳制 [1h,720h]。
+                // ★ 2026-10-19 产品决策：离线正式版 gate token 宽限由 48h 放宽到 30 天
+                //   （客户要求断网可长期登录；离线桌面/APP 凭此 token 离线登录）。
+                //   licExp 仍限制不超授权到期；吊销/删除仍以联网裁决为准（最迟 30 天后生效）。
                 let ttlHours = Number((context.env && context.env.GATE_TOKEN_TTL_HOURS));
-                if (!Number.isFinite(ttlHours) || ttlHours <= 0) ttlHours = 48;
-                ttlHours = Math.min(168, Math.max(1, ttlHours));
+                if (!Number.isFinite(ttlHours) || ttlHours <= 0) ttlHours = 720;
+                ttlHours = Math.min(720, Math.max(1, ttlHours));
                 const iatSec = Math.floor(Date.now() / 1000);
                 // licExp 与 iat/exp 同型 = epoch 秒（result.expiresAt 契约为 ISO，转换；
                 //   永久授权/解析失败 → null，客户端按永久语义放行）

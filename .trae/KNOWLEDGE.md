@@ -2098,3 +2098,27 @@ ode tools/generate-desktop-hotupdate.cjs -c cloud → **2026.10.19-1**（20 文�
   - 增量协议必须服务端权威时间 + 墓碑 + 严格游标 + 同刻跨页兜底；客户端游标回退 2s 换幂等重放更安全。
   - “永久删除”在离线同步里必须单独墓碑 + 服务端拒绝重建，否则离线旧操作会复活。
   - 灰度/回退开关要区分：allowedMode='cloud' 才是云端回退，'local' 会被旧逻辑升级为 both。
+## 60. 离线正式版 gate token 宽限 48h→30 天 + 云 APP/网页 Service Worker 离线兜底壳（2026-10-19）
+
+* **需求**：①「离线正式版 48h」放宽到 30 天（客户断网可长期登录操作）；②给云 APP 加本地兜底壳（断网冷启动/刷新可用，而不是白屏/重试页）。
+* **① 离线正式版 30 天宽限（服务端一行策略）**：
+  - unctions/api/license/entitlement.js gate token：默认 TTL 48h → 720h（30 天），钳制上限 168h → 720h（env GATE_TOKEN_TTL_HOURS 仍可覆盖，范围 1~720h）。
+  - 客户端（离线桌面/APP）无需改动：只验 exp 是否在未来 + licExp 不超授权到期；旧包自动享受新 TTL（下次联网裁决时签发新 token）。
+  - 语义边界：试用/免费规则不变；吊销/删除/停用的离线生效延迟最迟 30 天（产品权衡，已写入 HANDOFF H12）；超过 30 天或系统时钟回拨/偏移仍 fail-closed。
+  - 注意：设备时钟偏移容忍仍为 10 分钟（登录时以服务端时间校正基线），长期离线设备若时钟漂移过大可能被拒——必要时引导联网一次。
+* **② 云 APP/网页 Service Worker 离线壳**：
+  - 新增 public/sw.js：install 预缓存 App Shell（index/config/15 个业务 JS/vendor pinyin+xlsx；单文件失败不阻塞）；activate 清旧版本缓存 + clients.claim；fetch 策略：
+    - 导航：**network-first**，失败回退缓存 /index.html（ignoreSearch，兼容 APP 每次 _v=timestamp）；
+    - 同源静态：**network-first → 失败回退缓存**（在线永远拿最新，避免旧 CV 资源拖更）；API /api/、热更 /hot-update/、管理端 /admin/、/sw.js **不接管/不缓存**。
+  - public/index.html 尾部注册脚本：https 或 localhost/127.0.0.1 且支持 SW 时 egister('/sw.js')；Electron file:// 自动跳过；public/_headers 给 /sw.js 加 
+o-cache, must-revalidate。
+  - 云 APP 无需重打 APK：现有 APK 联网启动一次后由站点安装 SW；之后断网冷启动/刷新加载本地壳，**同源 localStorage/IndexedDB** 使离线登录缓存、本地处方与同步队列可直接使用；首次安装从未联网的极冷启动仍走原生「网络异常-重新加载」错误页（预期兜底）。
+  - 云端网页同样受益：断网刷新可打开缓存的 App Shell（此前无 SW 直接浏览器错误页）。
+* **验证**：Playwright Chromium + 本地静态服务：SW 注册/ready、shell cache、index+auth-core 预缓存、context.setOffline(true) 后 reload 成功且为真实 App Shell（title/正文）、离线 API 不被壳兜底（Failed to fetch）、恢复在线重载正常 —— **8/8 PASS**；
+ode --check sw.js/entitlement.js、sync-html/copy-consistency/check-interface/cv 全绿。
+* **部署**：functions + public/sw.js + index.html + _headers 同一次 push 由 Pages 自动部署；无需 APK/桌面整包（云桌面 file:// 不注册 SW，不受影响）。
+* **关键经验**：
+  - SW 缓存策略必须「导航+静态都网络优先、离线回退」，否则在线用户可能被旧 JS 拖更；API/热更/管理端必须显式排除。
+  - APP 远程壳想离线可用，最省改造成本的是 Service Worker（同源存储天然复用），而不是把远程页面塞进 assets（不同源=两套 localStorage/IndexedDB，离线登录态与数据全丢）。
+  - gate token 放宽只改服务端签发 TTL，不动客户端验签逻辑，旧客户端零改造。
+* **残差（HANDOFF H12）**：真机验证 30 天 token 与云 APP SW 冷启动；SW 首装前极冷启动仍为原生错误页（可后续 APK 品牌化）。
