@@ -420,13 +420,13 @@ export async function onRequest(context) {
         if (result.state === ENTITLEMENT_STATES.LICENSED
             && !accountState && att.canSign) {
             try {
-                // TTL 合法性：非数/非法配置回退 720h（30 天）；钳制 [1h,720h]。
-                // ★ 2026-10-19 产品决策：离线正式版 gate token 宽限由 48h 放宽到 30 天
-                //   （客户要求断网可长期登录；离线桌面/APP 凭此 token 离线登录）。
-                //   licExp 仍限制不超授权到期；吊销/删除仍以联网裁决为准（最迟 30 天后生效）。
+                // TTL 合法性：非数/非法配置回退 168h（7 天）；钳制 [1h,168h]。
+                // ★ 2026-10-19 产品决策（最终）：所有版本离线宽限统一为 7 天（取消 30 天）。
+                //   离线桌面/APP 凭 gate token 离线登录；licExp 仍限制不超授权到期；
+                //   吊销/删除仍以联网裁决为准（最迟 7 天后生效）。
                 let ttlHours = Number((context.env && context.env.GATE_TOKEN_TTL_HOURS));
-                if (!Number.isFinite(ttlHours) || ttlHours <= 0) ttlHours = 720;
-                ttlHours = Math.min(720, Math.max(1, ttlHours));
+                if (!Number.isFinite(ttlHours) || ttlHours <= 0) ttlHours = 168;
+                ttlHours = Math.min(168, Math.max(1, ttlHours));
                 const iatSec = Math.floor(Date.now() / 1000);
                 // licExp 与 iat/exp 同型 = epoch 秒（result.expiresAt 契约为 ISO，转换；
                 //   永久授权/解析失败 → null，客户端按永久语义放行）
