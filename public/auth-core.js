@@ -1327,21 +1327,23 @@
                 };
             } catch (e) {
                 console.error('云端登录失败:', e);
-                // ★ 离线登录缓存：网络错误时尝试离线登录
+                const __msg = String((e && e.message) || '');
+                // ★ 2026-10-19 离线登录兜底：cloudFetch 超时抛的是中文文案「网络较慢或已断开…」，
+                //   且 Android WebView 的 navigator.onLine 可能误报 true → 旧判断会跳过离线缓存，
+                //   导致断网时明明有 30 天离线缓存却提示网络超时。这里改为：任何云端认证异常都先
+                //   尝试离线缓存（密码在本地校验，错误密码仍失败），并补充中文超时/网络判定。
                 const isNetworkError = !navigator.onLine ||
-                    (e.message && (e.message.includes('Failed to fetch') ||
-                                   e.message.includes('NetworkError') ||
-                                   e.message.includes('network') ||
-                                   e.message.includes('ERR_')));
+                    /Failed to fetch|NetworkError|network|ERR_|timeout|timed out|超时|断网|网络|离线/i.test(__msg);
+                const offlineResult = await tryOfflineLogin(username, password);
+                if (offlineResult.success) {
+                    console.log('[auth] 云端认证异常，已用离线登录缓存登录');
+                    return { success: true, user: offlineResult.user, offline: true };
+                }
                 if (isNetworkError) {
                     console.log('[auth] 网络不可用，尝试离线登录缓存...');
-                    const offlineResult = await tryOfflineLogin(username, password);
-                    if (offlineResult.success) {
-                        return { success: true, user: offlineResult.user, offline: true };
-                    }
                     return { success: false, error: '网络不可用，' + (offlineResult.error || '离线登录失败') };
                 }
-                return { success: false, error: '登录失败：' + (e.message || '网络错误') };
+                return { success: false, error: '登录失败：' + (__msg || '网络错误') };
             }
         }
     };
