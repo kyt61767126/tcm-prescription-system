@@ -2160,7 +2160,7 @@
     // ==================== 离线登录缓存 ====================
     // 首次在线登录成功后缓存用户凭证（加密存储），断网时可离线登录
     // 安全策略：密码通过 encryptPassword（safeStorage/XOR）加密，不存储明文
-    // 有效期：30天，超时需重新在线登录
+    // 有效期：7天（2026-10-19 产品决策：所有版本取消 30 天离线，统一为 7 天），超时需重新在线登录
 
     async function cacheOfflineLogin(username, password, user) {
         try {
@@ -2200,8 +2200,8 @@
                 return { success: false, error: '该用户无离线缓存，请联网登录' };
             }
 
-            // 检查缓存是否过期（30天）
-            const CACHE_TTL = 30 * 24 * 60 * 60 * 1000;
+            // 检查缓存是否过期（7天，2026-10-19 产品决策：取消 30 天离线）
+            const CACHE_TTL = 7 * 24 * 60 * 60 * 1000;
             if (Date.now() - cacheData.cachedAt > CACHE_TTL) {
                 await StorageAdapter.removeItem('auth:offlineLoginCache');
                 return { success: false, error: '离线登录缓存已过期，请联网登录' };
