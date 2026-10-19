@@ -2163,3 +2163,12 @@ ode --check sw.js/entitlement.js、sync-html/copy-consistency/check-interface/cv
 * **生效条件**：必须重打云 APP APK（Java 改动 + 内置最新 ssets/public）；云端网页/云桌面不用此逻辑（云桌面 asar 本地页面天然可启动）。
 * **验证**：Gradle 构建通过、包内 assets 资源清单核对；真机需安装新 APK 后飞行模式冷启动验证（登录→开方→联网自动同步）。
 * **教训**：WebView 离线可靠性不能只押 Service Worker；native intercept + 同源本地 assets 才能保证冷启动可用且不丢本地数据。
+## 65. 云 APP 离线壳落地三阶段真机问题与修复（2026-10-19，v329/v330）
+
+* **阶段1（v326/v327）**：shouldInterceptRequest/loadUrl(?__offline_shell=1) 方案真机仍显示 WebView ERR_FAILED——该 Android WebView 对主文档拦截/错误回调不可靠（截图 URL 已带 ?__offline_shell=1）。
+* **阶段2（v329）**：改为无网络启动直接 loadDataWithBaseURL(CLOUD_URL+'/', assets/public/index.html)，且把 index 引用的同源 JS/CSS **全部内联**（uildInlineOfflineHtml），彻底不发起页面网络请求；真机成功显示离线壳+橙色横幅。关键：baseUrl 用云端域名，保留同源 localStorage/IndexedDB。
+* **阶段3（v330）**：离线壳内登录报「网络较慢或已断开，请求超时」——cloud-api.js 的 timeout 抛中文文案，cloud.js 的 isNetworkError 只匹配英文，且 Android WebView 的 
+avigator.onLine 可能误报 true，导致跳过 	ryOfflineLogin。修复：cloudAdapter.authenticate 的 catch 中**任何异常都先尝试离线登录缓存**（缓存密码本地校验；错误密码/无缓存仍拒绝），并补充中文超时/网络关键字。auth-core sync 到 11 副本，cv 6d602478。
+* **验证**：Playwright 4/4（中文超时仍离线登录成功/返回缓存用户/错误密码拒绝/无缓存拒绝）；v329 APK 真机离线壳显示成功；v330 APK 构建/签名通过。
+* **教训**：① WebView 远程页离线兜底不能依赖 SW/主文档拦截；loadDataWithBaseURL + 全内联 + 云端 baseUrl 是可靠组合。② 离线登录判定不能只看 
+avigator.onLine 或英文网络关键字，必须“异常即试离线缓存”并由本地密码校验兜底。
