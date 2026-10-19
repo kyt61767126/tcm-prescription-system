@@ -2151,3 +2151,15 @@ ode --check sw.js/entitlement.js、sync-html/copy-consistency/check-interface/cv
 * **补强**：①圆点可点击（pointer-events:auto + stopPropagation），点击 toast 显示完整状态文案；②「F1 基础设置」底部自动注入 #cloudSyncSettingsRow，显示「☁️ 云端同步：…」+ 待同步处置说明（联网自动补传，无需手动）；③桌面/宽屏仍保留可点击悬浮胶囊（初始隐藏逻辑不变）。
 * **验证**：Playwright 移动端 9/9（圆点可点、设置明细含「云端同步」、不遮挡保存按钮）；同步 A/B 178/179（D1 工具旧桩问题）。
 * **经验**：把文字状态改成纯色点这种“极简指示”必须同时提供可点击的解释/设置页明细，否则用户会误判功能消失。
+## 64. 云 APP 断网冷启动兜底：Service Worker 失败 → 原生 WebView 内置壳（2026-10-19）
+
+* **现象**：云 APP 飞行模式冷启动显示 Chromium 错误页 网页无法打开 … net::ERR_FAILED，Service Worker 方案在真机未生效（离线导航未被 SW 接管）。推断：部分 Android WebView/该 APK 未启用或清除了 Service Worker，远程页面离线壳不可依赖。
+* **原生兜底（MainActivity）**：
+  - onReceivedError 主框架失败 → 设置 offlineShellMode=true，改加载 CLOUD_URL + "?__offline_shell=1"（避免循环，带加载守卫）。
+  - shouldInterceptRequest：当 offlineShellMode 且同源路径（排除 /api/、/hot-update/、/admin/）时，从 ssets/public/<path> 返回 WebResourceResponse（JS/CSS/JSON/HTML/图片 MIME 映射，路径防穿越）；网络恢复（ConnectivityManager 可用）自动置 offlineShellMode=false 回在线。
+  - 离线壳页面加载后注入：顶部橙色固定横幅「📴 离线模式：数据保存在本机，联网后自动同步」（pointer-events:none），并监听 online 自动跳回在线 URL 重试。
+  - 完全保留同源存储：URL 仍是 https://tcm-prescription-system.pages.dev 域 → 离线登录缓存（30 天）、IndexedDB 处方/outbox 可直接使用；这是「塞本地 assets 当普通页面」做不到的关键。
+  - 资源缺失/异常：shouldInterceptRequest 返回 null 回退网络；离线壳页面自身加载失败则回原 showErrorPage 重试页。
+* **生效条件**：必须重打云 APP APK（Java 改动 + 内置最新 ssets/public）；云端网页/云桌面不用此逻辑（云桌面 asar 本地页面天然可启动）。
+* **验证**：Gradle 构建通过、包内 assets 资源清单核对；真机需安装新 APK 后飞行模式冷启动验证（登录→开方→联网自动同步）。
+* **教训**：WebView 离线可靠性不能只押 Service Worker；native intercept + 同源本地 assets 才能保证冷启动可用且不丢本地数据。

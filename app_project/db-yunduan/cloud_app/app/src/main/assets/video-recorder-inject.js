@@ -1,3 +1,1495 @@
-(function(){
-(function(a,b){var cu={a:0x172,b:0xda,d:0x131},aA=h,aB=h,d=a();while(!![]){try{var e=parseInt(aA(0x194))/(-0x1d4d+0x63+0x1ceb)*(-parseInt(aB(cu.a))/(-0x1*-0x2330+-0x22f1+0x1*-0x3d))+parseInt(aB(0x137))/(-0x16e1+0xd34+0x28*0x3e)+parseInt(aA(0x178))/(0xeb*0x4+-0xc32*0x2+0x14bc)+parseInt(aA(0x120))/(-0x1*-0x15ca+0x1*-0x264+-0x79*0x29)+-parseInt(aA(cu.b))/(0x1de2+-0x190f+0x4cd*-0x1)+parseInt(aA(0x19f))/(-0x33*-0x83+0x6ef+-0x1*0x2101)*(-parseInt(aB(cu.d))/(-0x3a*0x7+-0x38*0x1d+-0x3fb*-0x2))+parseInt(aB(0xf9))/(-0xd*0x10b+-0x47*0x89+0x3397);if(e===b)break;else d['push'](d['shift']());}catch(f){d['push'](d['shift']());}}}(g,0x60f3d+-0x1c69*-0x43+-0x7bc0d*0x1),(function(){var ed={a:0x195,b:0x127,d:0x195,e:0x169,f:0x11a,i:0x14e},ec={a:0x124},eb={a:0x134,b:0xe6},e9={a:0xe7,b:0x11d,d:0x132,e:0x163},e8={a:0x1be},e7={a:0xeb,b:0x1a1},e4={a:0x1bd,b:0x192},e3={a:0x14a,b:0x147,d:0x105,e:0x1b0,f:0x147,i:0x11d},e2={a:0xf4,b:0x124,d:0x157,e:0x175,f:0x121,i:0x102,j:0x155,k:0x1b0,l:0x157,m:0x17c},e1={a:0x161,b:0xeb,d:0x14d,e:0x1c0,f:0x147,i:0x141,j:0x11d,k:0x163,l:0x17a},e0={a:0x147,b:0x1af,d:0xfe,e:0x163,f:0x132,i:0x157,j:0x135},dZ={a:0x147,b:0x14a,d:0x118,e:0x169,f:0xfd,i:0x124,j:0xe2,k:0x156,l:0x169,m:0x1ac,n:0xdb,o:0x1c2,p:0x112,q:0x1a5,r:0xfd,s:0xe7,t:0xe9,u:0x104,v:0x129,w:0x11d,x:0x163,y:0x105,z:0x132,A:0x163},dT={a:0x1a2},dS={a:0x15d},dR={a:0x147,b:0x105,d:0x103,e:0x12a,f:0x19a,i:0x16c,j:0x157,k:0xe7,l:0x16c,m:0x112,n:0xf0,o:0xd8,p:0xd8,q:0xec,r:0x124,s:0x1b7},dP={a:0x11a},dL={a:0x10d,b:0x147,d:0x15f,e:0x107,f:0xdc},dJ={a:0x124,b:0x168,d:0x1b0,e:0x1b4,f:0x166,i:0x182,j:0x14b,k:0x144,l:0x126,m:0x157},dF={a:0x12b,b:0x147,d:0x124,e:0x1b0},dE={a:0x140,b:0x1c0},dD={a:0x1b3,b:0xf5,d:0xe7,e:0xde,f:0x124,i:0x147,j:0x19b,k:0x1b0,l:0x14d,m:0x147,n:0x18b},dB={a:0x1c2},dy={a:0x1a2,b:0x1a2,d:0x1b8},dw={a:0x147,b:0x149,d:0x10e,e:0x13d,f:0x188,i:0x157,j:0xd8,k:0x110,l:0x111,m:0x12a},du={a:0x11a,b:0x1aa},dq={a:0x147,b:0xeb,d:0x154,e:0x133,f:0xef,i:0x168,j:0x15f},dn={a:0x1ae,b:0x100,d:0x13f,e:0x1a8,f:0x1bc,i:0x15e,j:0xf6,k:0xe4},dk={a:0x186,b:0x112},dj={a:0x112},di={a:0xe7},dh={a:0x147,b:0x15b,d:0x18e},df={a:0x157},de={a:0x125,b:0xee,d:0xdf,e:0x151,f:0xff,i:0x138,j:0x174,k:0x10b},dd={a:0x13b},cO={a:0xe7},cN={a:0xe7,b:0x16b,d:0x145},cL={a:0x183,b:0x17d},cz={a:0x1c1,b:0xea,d:0xfb},aK=h,aL=h,i=(function(){var a1=!![];return function(a2,a3){var a4=a1?function(){if(a3){var a5=a3['apply'](a2,arguments);return a3=null,a5;}}:function(){};return a1=![],a4;};}()),j=i(this,function(){var aC=h,aD=h;if(j[aC(0x148)]()[aD(cz.a)]()['indexOf']('\x0a')!==-(-0x1e6a+0x1*-0x5fb+0x2466))return;return j[aD(0x1c1)]()[aC(cz.b)]('(((.+)+)+)+$')['toString']()[aD(0x17f)](j)[aD(0xea)](aD(cz.d));});j();var k=(function(){var a1=!![];return function(a2,a3){var a4=a1?function(){var aE=h;if(a3){var a5=a3[aE(0x11e)](a2,arguments);return a3=null,a5;}}:function(){};return a1=![],a4;};}());(function(){k(this,function(){var aF=h,aG=h,a1=new RegExp(aF(0x143)),a2=new RegExp('\x5c+\x5c+\x20*(?:[a-zA-Z_$][0-9a-zA-Z_$]*)','i'),a3=c('init');!a1[aG(0x1a3)](a3+aG(0x128))||!a2['test'](a3+'input')?a3('0'):c();})();}());var l=(function(){var a1=!![];return function(a2,a3){var a4=a1?function(){if(a3){var a5=a3['apply'](a2,arguments);return a3=null,a5;}}:function(){};return a1=![],a4;};}()),m=l(this,function(){var aI=h,aJ=h,a1=function(){var aH=h,a9;try{a9=Function(aH(0x139)+'{}.constructor(\x22return\x20this\x22)(\x20)'+');')();}catch(aa){a9=window;}return a9;},a2=a1(),a3=a2[aI(cL.a)]=a2['console']||{},a4=['log',aI(0x112),'info','error',aJ(0x18f),'table',aJ(0x17e)];for(var a5=-0x145e+0x383+0x10db;a5<a4[aJ(0xe7)];a5++){var a6=l[aJ(0x17f)][aJ(cL.b)][aJ(0x148)](l),a7=a4[a5],a8=a3[a7]||a6;a6['__proto__']=l['bind'](l),a6[aJ(0x1c1)]=a8['toString'][aI(0x148)](a8),a3[a7]=a6;}});m();'use strict';if(window['__videoRecorderInjected'])return;window['__videoRecorderInjected']=!![];var n=window[aK(ed.a)][aK(ed.b)]==='file:'?'[离线APP]':'[云端APP]',o=window[aL(ed.d)][aK(ed.b)]!==aL(0x1b1);function p(){var db={a:0x138},d0={a:0x174},aM=aL,aP=aL,a1=window['electronAPI'],a2=window['AndroidNative'];if(!a2)return console['warn'](n+'\x20AndroidNative\x20桥接未找到'),![];console[aM(de.a)](n+'\x20AndroidNative\x20桥接已找到，开始构建\x20electronAPI\x20shim');function a3(aa){return Promise['resolve'](aa);}function a4(aa,ab){var aN=aM,aO=aM;try{var ac=a2['invoke'](aa,ab||'{}');if(typeof ac!==aN(0x109)||ac[aO(cN.a)]===-0x241b+-0x1be4+0x3fff)return console[aN(0x124)](n+'\x20NativeBridge.'+aa+'\x20返回非字符串:',typeof ac,ac),{'success':![],'error':'NativeBridge\x20返回无效（Java端可能抛异常）'};console[aN(0x125)](n+aO(cN.b)+aa+'\x20返回长度:',ac['length']);var ad=JSON['parse'](ac);if(ad===null||ad===undefined)return console[aN(0x124)](n+'\x20NativeBridge.'+aa+aO(cN.d)),{'success':![],'error':'原生桥\x20'+aa+aN(0x11c)};return ad;}catch(ae){return console[aO(0x124)](n+'\x20NativeBridge.'+aa+'\x20调用异常:',ae),{'success':![],'error':String(ae)};}}var a5=aM(de.b);function a6(aa){var aQ=aP,aR=aP,ab=aa[aQ(cO.a)],ac='',ad=-0x6d4+-0x197a+0x676*0x5;while(ad<ab){var ae=aa[ad++]||0x137+0x1*0x44+-0x1*0x17b,af=ad<ab?aa[ad++]:-0x1ac4+0x1b14+-0x1*0x50,ag=ad<ab?aa[ad++]:0x107b+0xfe2*-0x1+-0x99,ah=ae<<-0x1*-0x1d92+0x12c2+-0x2*0x1822|af<<0x769+-0x22e1+0x1b80|ag;ac+=a5[ah>>0xd46*-0x2+-0x407*0x5+0x2ec1*0x1&0x1c34+-0x6*0xfa+0x1619*-0x1],ac+=a5[ah>>0x26c6+0x3df*0x9+-0x4991&-0xa92+-0x7e4+0x12b5],ac+=a5[ah>>0x1433*0x1+0x2*-0x541+-0x9ab&-0x168f+-0xe8e+-0xc*-0x31d],ac+=a5[ah&-0x14cf+-0x8*-0xa7+-0x7eb*-0x2];}var ai=(0x1f66+0x5d9*-0x1+-0x1*0x198a-ab%(-0x59e+-0x1f3a+0x33*0xb9))%(-0x154d+0x1378+0x1d8);return ai>-0x95a+0x11ce*-0x1+0xb*0x278&&(ac=ac[aQ(0x197)](0x4d*0x4f+-0x281*0xd+0x8ca,ac['length']-ai)+'=='[aQ(0x197)](-0x3f0+-0x4*-0x9ae+-0x22c8,ai)),ac;}var a7=(-0x2581*0x1+-0x1ad9+0x1bf*0x26)*(-0x562+-0x72d+0x1d7*0x9);function a8(aa,ab,ac){var cQ={a:0x162},cP={a:0xd9,b:0x159,d:0x142};return new Promise(function(ad){var aS=h,aT=h,ae=a4('startMediaSession',JSON['stringify']({'fileName':ab}));if(!ae||!ae['success']){ad(ae||{'success':![],'error':'startMediaSession\x20返回无效'});return;}var af=ae[aS(0x15c)],ag=Math[aS(cQ.a)](aa[aS(0xe7)]/a7),ah=0x1*0x2b4+0x20af+0x2363*-0x1;function ai(){var aU=aS,aV=aS;if(ah>=ag){var aj=a4('commitMediaSession',JSON['stringify']({'sessionId':af,'fileName':ab,'type':ac}));ad(aj);return;}var ak=aa[aU(0x197)](ah*a7,(ah+(-0x1*-0x1321+-0x963+0x9bd*-0x1))*a7),al=a4(aV(cP.a),JSON[aU(cP.b)]({'sessionId':af,'chunkBase64':ak,'index':ah,'total':ag}));if(!al||!al['success']){ad(al||{'success':![],'error':aV(cP.d)});return;}ah++,setTimeout(ai,0x1*-0x1d5f+-0xbdd*-0x2+0x55*0x11);}ai();});}window[aP(0x166)]={'__injected':!![],'isElectron':!![],'saveUserData':function(aa,ab){return a3({'success':!![]});},'getUserData':function(aa){return a3({'success':![],'data':null});},'saveBackupFile':function(aa,ab){var cU={a:0x159};return new Promise(function(ac){var aW=h,aX=h;try{var ad=a4(aW(0x1bb),JSON[aW(cU.a)]({'jsonStr':aa,'fileName':ab}));ac(ad);}catch(ae){ac({'success':![],'error':String(ae)});}});},'savePrescriptionImage':function(aa,ab){var cW={a:0x125,b:0xe7,d:0x159};return new Promise(function(ac){var aY=h,aZ=h;try{var ad=aa,ae=ad[aY(0xde)](',');ad['indexOf']('data:')===0x180*-0x8+0x105*-0xb+-0x7*-0x351&&ae>0x17b*-0x11+0x1*0x17bf+0x16c&&ae<0x3a1*-0x7+-0x56d*0x6+0x3a27&&(ad=ad['substring'](ae+(-0x665*0x1+0x1ff5+0x1*-0x198f)));if(ad['length']>=(-0x3d1*-0x1+0x23a9+-0x2*0x12bd)*(0x23e0+0x3*-0x823+-0x3*0x27d))console[aZ(cW.a)](n+'\x20图片分片上传:\x20'+ad[aZ(cW.b)]+'\x20字节'),a8(ad,ab,'image')[aY(0x114)](ac);else{var af=a4('savePrescriptionImage',JSON[aY(cW.d)]({'imageData':aa,'fileName':ab}));ac(af);}}catch(ag){ac({'success':![],'error':String(ag)});}});},'saveVideoFile':function(aa,ab){var cY={a:0x19c,b:0x190};return new Promise(function(ac){var b0=h,b1=h;try{var ad=new Uint8Array(aa),ae=a6(ad);console['log'](n+'\x20视频总大小:\x20'+ae[b0(0xe7)]+b0(cY.a));if(ad[b0(0xe7)]<(-0x20e5+0x323*-0x1+-0x2608*-0x1)*(0x2*0x1147+0x12f2+0xc0*-0x42)){var af=a4('saveVideoFile',JSON['stringify']({'base64Data':ae,'fileName':ab}));ac(af);}else a8(ae,ab,b1(cY.b))['then'](ac);}catch(ag){ac({'success':![],'error':String(ag)});}});},'getVideoDirectory':function(){return new Promise(function(aa){var b2=h;try{var ab=a4(b2(d0.a),'{}');aa(ab);}catch(ac){aa({'success':![],'error':String(ac)});}});},'findMediaFiles':function(aa,ab,ac){return new Promise(function(ad){var b3=h;try{var ae=a4(b3(0x1a6),JSON['stringify']({'patientName':aa,'prescriptionNo':ab,'createdAt':ac||''}));ad(ae);}catch(af){ad({'success':![],'error':String(af),'files':[]});}});},'openFile':function(aa,ab){return new Promise(function(ac){var b4=h;try{var ad=a4('openFile',JSON[b4(0x159)]({'filePath':aa,'mimeType':ab||''}));ac(ad);}catch(ae){ac({'success':![],'error':String(ae)});}});},'readFileAsBase64':function(aa){var d7={a:0x124,b:0x1ab,d:0x158},d6={a:0x159,b:0x16d,d:0x124,e:0x18d,f:0x196,i:0xe7,j:0x165,k:0x10a,l:0x116,m:0xe7,n:0xed,o:0x1bf,p:0x124};return new Promise(function(ab){var b5=h,b6=h;try{var ac=a4('startReadSession',JSON['stringify']({'filePath':aa}));if(!ac||!ac[b5(0x182)]){console['warn'](n+'\x20startReadSession\x20失败，回退原\x20API:',ac&&ac[b6(d7.a)]);var ad=a4(b5(0x170),JSON[b6(0x159)]({'filePath':aa}));ab(ad);return;}var ae=ac['sessionId'],af=ac['mimeType']||b5(d7.b),ag=ac[b5(d7.d)]||-0x245d*0x1+-0x8ed+0x2d4a*0x1;console['log'](n+'\x20分片读取文件:\x20'+aa+',\x20大小='+ag+b6(0x10f)+af);var ah=[],ai=-0x25a5+-0x1a8a+0x402f,aj=-0x28*-0x58+0x3*0x373+-0x1819,ak=-0xbdc+0x109d+-0x4bf;function al(){var b7=b6,b8=b6,am=a4('readNextChunk',JSON['stringify']({'sessionId':ae}));if(!am||!am[b7(0x182)]){if(aj<ak){aj++,console['warn'](n+'\x20readNextChunk\x20失败，重试\x20'+aj+'/'+ak+':',am&&am['error']),setTimeout(al,0xb*0x178+0x4*0x2f9+-0x2*0xded);return;}a4('closeReadSession',JSON[b7(d6.a)]({'sessionId':ae})),console['error'](n+b7(d6.b),am&&am[b7(d6.d)]),ab(am||{'success':![],'error':b8(d6.e)});return;}aj=-0x24bc+-0x81+0x253d;if(am[b8(d6.f)])try{var an=atob(am['chunk']),ao=an[b8(d6.i)],ap=new Uint8Array(ao);for(var aq=0x8*-0x3f3+0x191*-0x17+0x439f;aq<ao;aq++){ap[aq]=an['charCodeAt'](aq);}ah[b7(0xf7)](ap),ai+=ao;}catch(ax){console['error'](n+'\x20base64\x20解码失败:',ax);}if(am['eof']){a4(b7(d6.j),JSON[b7(d6.a)]({'sessionId':ae}));try{var ar=new Uint8Array(ai),as=0x6de+-0x53*-0x2e+-0x15c8;for(var at=0x1*-0x26c3+0xb*-0x13+0x2794;at<ah[b8(0xe7)];at++){ar['set'](ah[at],as),as+=ah[at]['length'];}var au;if(window['__currentBlobUrl']){try{URL[b7(0x177)](window[b8(d6.k)]);}catch(ay){}window[b7(0x10a)]=null;}if(o){var av=new Blob([ar],{'type':af});au=URL[b8(0x171)](av),window[b7(0x10a)]=au,console['log'](n+b8(d6.l)+au+',\x20片数='+ah[b7(d6.i)]+',\x20总字节='+ar[b8(d6.m)]);}else{var aw=a6(ar);au='data:'+af+b8(d6.n)+aw,console['log'](n+'\x20分片读取完成，data\x20URL\x20长度='+au[b8(0xe7)]+b7(d6.o)+ah[b8(0xe7)]+b7(0x12f)+ar[b8(0xe7)]);}ab({'success':!![],'data':au});}catch(az){console[b8(d6.p)](n+b7(0x167),az),ab({'success':![],'error':'创建视频\x20URL\x20失败:\x20'+String(az)});}return;}setTimeout(al,0x15b4+0x2527*0x1+-0x3adb);}al();}catch(am){ab({'success':![],'error':String(am)});}});},'renameMediaFiles':function(aa,ab,ac,ad){return new Promise(function(ae){var b9=h;try{var af=a4('renameMediaFiles',JSON[b9(0x159)]({'oldPatientName':aa,'newPatientName':ab,'oldNo':ac,'newNo':ad}));ae(af);}catch(ag){ae({'success':![],'error':String(ag),'renamed':0x0});}});},'deleteFile':function(aa){return new Promise(function(ab){var ba=h;try{var ac=a4(ba(db.a),JSON['stringify']({'filePath':aa}));ab(ac);}catch(ad){ab({'success':![],'error':String(ad)});}});},'quitApp':function(){var bb=aP;try{if(a2['quitApp'])a2[bb(dd.a)]();}catch(aa){}return a3({'success':!![]});}};if(a1&&(a1[aM(de.d)]||a1[aP(0x1b2)])){console['log'](n+'\x20electronAPI\x20已存在（injectElectronApiShim\x20先注入），覆盖增强版方法到旧对象');var a9=window['electronAPI'];a1['savePrescriptionImage']=a9['savePrescriptionImage'],a1[aP(0x151)]=a9[aP(de.e)],a1['readFileAsBase64']=a9['readFileAsBase64'],a1[aM(0x1a6)]=a9['findMediaFiles'],a1[aP(0xff)]=a9[aM(de.f)],a1[aM(0x138)]=a9[aM(de.i)],a1['renameMediaFiles']=a9['renameMediaFiles'],a1[aM(de.j)]=a9['getVideoDirectory'],a1['saveBackupFile']=a9['saveBackupFile'],a1['__videoRecorderEnhanced']=!![],window['electronAPI']=a1;}return console['log'](n+aM(de.k)),!![];}var q=0x1*0x173f+0xd*0x29f+-0x3916,r=0x2395*0x1+0x24d7+-0x436c*0x1,s=-0x9f9+-0x2*-0x1177+-0x1*0x1625,t=0xb17+0x1*0x1993+-0x248c,u=-0x67*0x7b13+-0x2*0x14af67+0x88aa33,v=null,w=null,x=[],y=null,z=0x115*-0x18+0x225e+-0x2b*0x32,A='environment',B=-0x2139+-0x109d+-0x109d*-0x3,C=[];function D(){var bc=aL,bd=aL;if(document[bc(0x147)]('cloud-video-recorder-styles'))return;var a1=document['createElement'](bd(0x11d));a1['id']='cloud-video-recorder-styles',a1[bd(df.a)]='\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20.cloud-vr-overlay\x20{\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20position:\x20fixed;\x20top:\x200;\x20left:\x200;\x20right:\x200;\x20bottom:\x200;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20background:\x20rgba(0,0,0,0.7);\x20z-index:\x2099998;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20display:\x20flex;\x20align-items:\x20center;\x20justify-content:\x20center;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20}\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20.cloud-vr-modal\x20{\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20background:\x20#fff;\x20border-radius:\x2010px;\x20padding:\x2016px;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20width:\x2090vw;\x20max-width:\x20640px;\x20max-height:\x2090vh;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20box-shadow:\x200\x208px\x2032px\x20rgba(0,0,0,0.3);\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20display:\x20flex;\x20flex-direction:\x20column;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20overflow:\x20hidden;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20}\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20.cloud-vr-modal-header\x20{\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20position:\x20relative;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20margin-bottom:\x2010px;\x20font-size:\x2016px;\x20font-weight:\x20600;\x20color:\x20#333;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20padding-right:\x2040px;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20}\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20.cloud-vr-close-btn\x20{\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20background:\x20rgba(0,0,0,0.5);\x20border:\x20none;\x20font-size:\x2020px;\x20cursor:\x20pointer;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20color:\x20#fff;\x20line-height:\x201;\x20width:\x2032px;\x20height:\x2032px;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20border-radius:\x2050%;\x20display:\x20flex;\x20align-items:\x20center;\x20justify-content:\x20center;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20position:\x20absolute;\x20top:\x208px;\x20right:\x208px;\x20z-index:\x20100;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20}\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20.cloud-vr-preview-wrap\x20{\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20position:\x20relative;\x20width:\x20100%;\x20background:\x20#000;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20border-radius:\x206px;\x20overflow:\x20hidden;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20flex:\x201;\x20min-height:\x200;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20}\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20.cloud-vr-preview-wrap\x20video\x20{\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20width:\x20100%;\x20height:\x20100%;\x20object-fit:\x20contain;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20}\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20.cloud-vr-rec-indicator\x20{\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20position:\x20absolute;\x20top:\x2010px;\x20left:\x2010px;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20display:\x20none;\x20align-items:\x20center;\x20gap:\x206px;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20background:\x20rgba(220,53,69,0.9);\x20color:\x20#fff;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20padding:\x203px\x2010px;\x20border-radius:\x2012px;\x20font-size:\x2013px;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20}\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20.cloud-vr-rec-indicator.active\x20{\x20display:\x20flex;\x20}\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20.cloud-vr-rec-dot\x20{\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20width:\x208px;\x20height:\x208px;\x20background:\x20#fff;\x20border-radius:\x2050%;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20animation:\x20cloud-vr-pulse\x201s\x20infinite;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20}\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20@keyframes\x20cloud-vr-pulse\x20{\x200%,100%{opacity:1}\x2050%{opacity:0.3}\x20}\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20.cloud-vr-timer\x20{\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20position:\x20absolute;\x20top:\x2010px;\x20right:\x2010px;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20background:\x20rgba(0,0,0,0.6);\x20color:\x20#fff;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20padding:\x203px\x2010px;\x20border-radius:\x204px;\x20font-size:\x2014px;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20font-family:\x20monospace;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20}\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20.cloud-vr-switch-btn\x20{\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20position:\x20absolute;\x20bottom:\x2010px;\x20right:\x2010px;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20width:\x2040px;\x20height:\x2040px;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20background:\x20rgba(0,0,0,0.6);\x20color:\x20#fff;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20border:\x20none;\x20border-radius:\x2050%;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20font-size:\x2018px;\x20cursor:\x20pointer;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20display:\x20flex;\x20align-items:\x20center;\x20justify-content:\x20center;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20}\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20.cloud-vr-controls\x20{\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20display:\x20flex;\x20justify-content:\x20center;\x20gap:\x2012px;\x20margin-top:\x2016px;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20}\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20.cloud-vr-ctrl-btn\x20{\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20padding:\x2010px\x2028px;\x20border:\x20none;\x20border-radius:\x206px;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20font-size:\x2015px;\x20cursor:\x20pointer;\x20transition:\x20opacity\x200.2s;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20}\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20.cloud-vr-ctrl-btn:disabled\x20{\x20opacity:\x200.5;\x20cursor:\x20not-allowed;\x20}\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20.cloud-vr-start-btn\x20{\x20background:\x20#dc3545;\x20color:\x20#fff;\x20}\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20.cloud-vr-stop-btn\x20{\x20background:\x20#6c757d;\x20color:\x20#fff;\x20}\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20.cloud-vr-save-btn\x20{\x20background:\x20#28a745;\x20color:\x20#fff;\x20}\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20.cloud-vr-capture-btn\x20{\x20background:\x20#007bff;\x20color:\x20#fff;\x20}\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20.cloud-vr-retake-btn\x20{\x20background:\x20#ffc107;\x20color:\x20#333;\x20}\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20.cloud-vr-status\x20{\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20text-align:\x20center;\x20margin-top:\x2010px;\x20font-size:\x2013px;\x20color:\x20#666;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20}\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20.cloud-vr-status.error\x20{\x20color:\x20#dc3545;\x20}\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20.cloud-vr-status.success\x20{\x20color:\x20#28a745;\x20}\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20.cloud-vr-preview-wrap\x20canvas\x20{\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20width:\x20100%;\x20height:\x20100%;\x20object-fit:\x20contain;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20}\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20.cloud-vr-flash\x20{\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20position:\x20absolute;\x20top:\x200;\x20left:\x200;\x20right:\x200;\x20bottom:\x200;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20background:\x20#fff;\x20opacity:\x200;\x20pointer-events:\x20none;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20transition:\x20opacity\x200.15s;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20}\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20.cloud-vr-flash.active\x20{\x20opacity:\x200.8;\x20transition:\x20none;\x20}\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20.cloud-vr-guide-overlay\x20{\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20position:\x20absolute;\x20top:\x200;\x20left:\x200;\x20right:\x200;\x20bottom:\x200;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20pointer-events:\x20none;\x20z-index:\x20100;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20display:\x20flex;\x20flex-direction:\x20column;\x20align-items:\x20center;\x20justify-content:\x20center;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20}\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20.cloud-vr-guide-svg\x20{\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20width:\x2065%;\x20max-width:\x20280px;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20opacity:\x200.75;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20}\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20.cloud-vr-guide-text\x20{\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20position:\x20absolute;\x20bottom:\x2060px;\x20left:\x2050%;\x20transform:\x20translateX(-50%);\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20background:\x20rgba(0,0,0,0.7);\x20color:\x20#fff;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20padding:\x208px\x2020px;\x20border-radius:\x2020px;\x20font-size:\x2014px;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20pointer-events:\x20none;\x20white-space:\x20nowrap;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20z-index:\x20101;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20}\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20.cloud-vr-step-indicator\x20{\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20display:\x20flex;\x20justify-content:\x20center;\x20gap:\x2016px;\x20margin-top:\x2010px;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20}\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20.cloud-vr-step-item\x20{\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20font-size:\x2013px;\x20color:\x20#999;\x20padding:\x204px\x2012px;\x20border-radius:\x2016px;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20background:\x20#f0f0f0;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20}\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20.cloud-vr-step-item.active\x20{\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20color:\x20#fff;\x20background:\x20#007bff;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20}\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20.cloud-vr-next-btn\x20{\x20background:\x20#28a745;\x20color:\x20#fff;\x20}\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20.cloud-vr-next-btn:hover:not(:disabled)\x20{\x20background:\x20#218838;\x20}\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20.cloud-vr-toast\x20{\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20position:\x20fixed;\x20top:\x2050%;\x20left:\x2050%;\x20transform:\x20translate(-50%,\x20-50%);\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20background:\x20rgba(0,0,0,0.85);\x20color:\x20#fff;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20padding:\x2016px\x2024px;\x20border-radius:\x208px;\x20z-index:\x2099999;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20font-size:\x2014px;\x20max-width:\x2090vw;\x20text-align:\x20center;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20word-break:\x20break-all;\x20line-height:\x201.5;\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20}\x20\x20\x20\x20\x20\x20\x20\x20',document['head']['appendChild'](a1);}function E(a1){var be=aL,bf=aL,a2=document[be(dh.a)]('cloudVrToast');if(a2)a2['remove']();var a3=document[be(0x185)]('div');a3['id']=be(dh.b),a3['className']='cloud-vr-toast',a3[be(0x157)]=a1,document['body'][be(dh.d)](a3),setTimeout(function(){var bg=be,bh=be;if(a3['parentNode'])a3[bg(0x179)][bg(0x199)](a3);},-0x6*-0x141+-0x1025*0x1+0x183f);}function F(){var bk=aL,bm=aL;try{if(typeof getAllUserPrescriptions!=='function')return;getAllUserPrescriptions()['then'](function(a1){var bi=h,bj=h;if(!a1||!a1[bi(di.a)])return;var a2=a1[-0x11e*0x1a+-0x1c92*-0x1+0x7a*0x1];for(var a3=0x1445*-0x1+0x1*0x1a3+0xd*0x16f;a3<a1['length'];a3++){(a1[a3]['createdAt']||-0xde8+0x4*0x71b+-0xe84)>(a2['createdAt']||0x6*0x9a+0xdfd+-0x1199)&&(a2=a1[a3]);}a2[bj(0x198)]&&(window['__latestPrescriptionPatientName']=a2[bi(0x198)]),a2[bj(0x1a0)]&&(window[bi(0x164)]=a2['prescriptionNo']);})[bk(dk.a)](function(a1){var bl=bk;console[bl(dj.a)]('[video-recorder]\x20预查最近处方失败:',a1);});}catch(a1){console[bm(dk.b)](bk(0x11f),a1);}}function G(a1,a2){var bn=aK,bo=aK,a3='',a4='',a5=document['querySelector']('input[name=\x22patientName\x22],\x20#patientName,\x20[data-field=\x22patientName\x22]');a5&&(a3=(a5['value']||a5['textContent']||'')['trim']());if(!a3){var a6=document[bn(dn.a)]('.patient-name,\x20[data-patient-name]');if(a6)a3=(a6['textContent']||'')['trim']();}!a3&&window['__latestPrescriptionPatientName']&&(a3=window[bo(0x130)]);var a7=document['querySelector']('input[name=\x22prescriptionNo\x22],\x20#prescriptionNo,\x20[data-field=\x22prescriptionNo\x22]');a7&&(a4=(a7['value']||a7['textContent']||'')[bo(dn.b)]());!a4&&window['__latestPrescriptionNo']&&(a4=window[bn(0x164)]);var a8=function(af){return(af||'')['trim']()['replace'](/[\/\\:*?"<>|]/g,'_')['replace'](/ /g,'');},a9=a8(a3)||'unknown',aa=a8(a4);if(!aa){var ab=new Date(),ac=function(af){var bp=bn;return String(af)[bp(0x1bd)](-0x21b8+-0xb84+0x2d3e*0x1,'0');};aa=String(ab[bn(dn.d)]())[bn(dn.e)](-(-0xb*0x30a+0x19f7*-0x1+0x3b67))+ac(ab['getMonth']()+(-0x118a+0x3*-0xa8d+-0x3*-0x1066))+ac(ab[bo(dn.f)]())+'_'+ac(ab['getHours']())+ac(ab[bo(0xe8)]())+ac(ab['getSeconds']());}window['__lastUsedMediaIdentifier']=aa,window['__lastUsedMediaPatientName']=a9;try{localStorage['setItem'](bo(0xe0),aa),localStorage[bn(dn.i)](bn(dn.j),a9);}catch(af){}var ad=a1==='video'?window['__currentVideoExt']||bo(dn.k):'jpg',ae=a2?'_'+a2:'';return a9+'_'+aa+'_'+a1+ae+'.'+ad;}window['openRecordingOverlay']=function(){var bq=aL,br=aL;D();var a1=document[bq(dq.a)]('cloudVrOverlay');if(a1)a1[bq(dq.b)]();F();var a2=document['createElement']('div');a2['id']='cloudVrOverlay',a2[br(0x12a)]='cloud-vr-overlay',a2['innerHTML']=bq(dq.d)+q+'\x20秒）\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20</div>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20</div>\x20\x20\x20\x20\x20\x20\x20\x20',document[bq(dq.e)]['appendChild'](a2),document['getElementById'](bq(0x14c))[bq(0x15f)]=W,document['getElementById'](bq(dq.f))[bq(0x15f)]=J,document['getElementById']('cloudVrStopBtn')[br(0x15f)]=K,document['getElementById'](bq(dq.i))[br(dq.j)]=M,document['getElementById']('cloudVrSwitchBtn')[br(dq.j)]=I,a2['onclick']=function(a3){var bs=br;if(a3[bs(0x173)]===a2)W();},H();};async function H(){var dt={a:0x169,b:0x118},bt=aL,bu=aL,a1=document[bt(dw.a)]('cloudVrStatus'),a2=document[bu(0x147)](bt(0xef));try{console['log'](bt(dw.b)+window[bt(dw.d)]+bu(dw.e)+window['location']['href']),console['log']('[视频录制]\x20mediaDevices='+(navigator['mediaDevices']?bu(dw.f):'NO')+'\x20getUserMedia='+(navigator[bt(0x19a)]&&navigator['mediaDevices'][bu(0x16c)]?'yes':'NO')),a1['textContent']='正在请求摄像头权限...',a1['className']='cloud-vr-status';if(!navigator['mediaDevices']||!navigator['mediaDevices'][bu(0x16c)]){a1[bu(dw.i)]='摄像头初始化失败：浏览器不支持\x20getUserMedia',a1[bt(0x12a)]=bu(0x153),a2[bu(0x1b0)]=!![];return;}var a3=[{'video':{'width':{'ideal':r},'height':{'ideal':s},'frameRate':{'ideal':t},'facingMode':A},'audio':{'echoCancellation':![],'noiseSuppression':![],'autoGainControl':![]}},{'video':{'width':{'ideal':r},'height':{'ideal':s},'frameRate':{'ideal':t},'facingMode':A},'audio':![]},{'video':{'width':{'ideal':r},'height':{'ideal':s},'frameRate':{'ideal':t}},'audio':![]},{'video':{'width':{'ideal':0x280},'height':{'ideal':0x1e0},'frameRate':{'ideal':0x1e}},'audio':![]},{'video':!![],'audio':![]}],a4=null,a5=null,a6='';for(var a7=-0xb63+0x1882*-0x1+-0xbf7*-0x3;a7<a3[bu(0xe7)];a7++){try{a4=await navigator['mediaDevices']['getUserMedia'](a3[a7]),a6=a7===-0x1*-0x1ce1+0x1b88*-0x1+-0x159?'高清':a7<0x1c8+0x1abe+-0x1c83?'标准':'兼容',console[bu(0x125)]('[视频录制]\x20使用约束组合',a7+(0xf5a+-0xc8b+0x167*-0x2),'成功');break;}catch(aa){a5=aa,console['warn']('[视频录制]\x20约束组合',a7+(0x1cfd+-0x3d1*0x1+-0x192b),'失败:',aa[bu(0x1c2)]||aa[bu(0xd8)]);}}if(!a4){if(a5&&(a5[bt(dw.j)]===bt(0x1b5)||a5[bt(dw.j)]===bt(0x146)))throw new Error('摄像头权限被拒绝，请在手机设置→应用管理中授予摄像头和麦克风权限');throw a5||new Error(bu(0x14f));}v=a4;var a8=document['getElementById']('cloudVrPreview');a8['srcObject']=v,a1['textContent']=bt(0x113),a2[bt(0x1b0)]=!![],await new Promise(function(ab,ac){var ds={a:0x1aa},bv=bt,bw=bt,ad=setTimeout(function(){ac(new Error('摄像头初始化超时'));},-0x1c7+-0x520+0x65*0x43);a8[bv(du.a)](bv(du.b),function af(){var bx=bw;clearTimeout(ad),a8['removeEventListener'](bx(ds.a),af),ab();},{'once':!![]});var ae=setInterval(function(){var by=bw,bz=bw;a8[by(dt.a)]>=0x177f+0xd*0x23f+-0x34b0&&a8[by(dt.b)]>0x9*-0x24d+-0x1929+-0xf4a*-0x3&&(clearTimeout(ad),clearInterval(ae),ab());},0x2432+0xa66*0x3+-0x4300);}),await new Promise(function(ab){setTimeout(ab,-0x1c56+0x5*-0x287+0x29c1);});var a9=v[bt(0x13e)]()['length']>-0x1da8+0x4*0x8fa+-0x640?'':bu(dw.k);a1[bu(dw.i)]=bu(0x136)+a9+bt(dw.l)+a6+']',a2['disabled']=![];}catch(ab){console['error']('[视频录制]\x20摄像头初始化失败:',ab),a1[bt(0x157)]=bt(0x106)+(ab['message']||ab['name']||'未知错误'),a1[bt(dw.m)]='cloud-vr-status\x20error',a2['disabled']=!![];}}function I(){var bA=aK,bB=aK;A=A===bA(dy.a)?'user':bA(dy.b),v&&(v[bB(dy.d)]()[bB(0xf8)](function(a1){var bC=bB;a1[bC(0x15d)]();}),v=null),H();}function J(){var bD=aL,bE=aL;if(!v){V(bD(dD.a),'error');return;}var a1=['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus',bE(0x193),bE(0xf3),'video/webm',bD(dD.b),bE(0xdd),'video/mp4'],a2='';for(var a3=0xb0*0x13+-0xbb2+-0x15e;a3<a1[bE(dD.d)];a3++){if(MediaRecorder['isTypeSupported'](a1[a3])){a2=a1[a3];break;}}window[bE(0x10c)]=a2[bD(dD.e)]('mp4')>=-0x2558+-0x1289+0xb2d*0x5?bD(0x108):bD(0xe4);try{w=new MediaRecorder(v,{'mimeType':a2||undefined,'videoBitsPerSecond':u,'audioBitsPerSecond':0x1f400});}catch(a4){console['error']('[视频录制]\x20MediaRecorder\x20创建失败:',a4),V('录制器创建失败：'+a4[bE(0x1c2)],bE(dD.f));return;}x=[],w[bD(0x12e)]=function(a5){var bF=bD;a5[bF(0x12d)]&&a5['data']['size']>-0x1760+0x1*-0x1a2f+0x318f&&x['push'](a5['data']);},w[bE(0x1ad)]=function(){L(a2);},w['onerror']=function(a5){var bG=bD,bH=bD;console['error']('[视频录制]\x20MediaRecorder\x20错误:',a5['error']),V(bG(0x16a)+(a5['error']?a5[bH(0x124)][bG(dB.a)]:'未知'),bG(0x124));},w['start'](0x9f7+-0xc7*-0x32+-0x2ced),z=Date['now'](),document[bE(dD.i)](bE(0xef))['disabled']=!![],document['getElementById'](bE(dD.j))[bE(dD.k)]=![],document[bE(dD.i)]('cloudVrRecIndicator')['classList'][bE(dD.l)](bD(0x1c0)),document[bE(dD.m)](bE(dD.n))['style']['display']='block',V(bD(0x1b9),''),y=setInterval(U,-0x233+0x1d00+-0x1*0x1a05),setTimeout(function(){w&&w['state']==='recording'&&K();},q*(-0x1a2b*-0x1+0x551*-0x1+-0x10f2));}function K(){var bI=aK,bJ=aK;w&&w['state']==='recording'&&w[bI(0x15d)](),y&&(clearInterval(y),y=null),document[bJ(0x147)](bI(0x19b))[bI(0x1b0)]=!![],document['getElementById'](bI(0x19d))[bI(dE.a)][bI(0xeb)](bI(dE.b));}function L(a1){var bK=aK,bL=aK;if(!x||x['length']===-0x1d*-0x9a+0x57*0x5c+-0x30b6){V(bK(dF.a),'error');var a2=document[bL(dF.b)]('cloudVrStartBtn');if(a2)a2['disabled']=![];return;}var a3=new Blob(x,{'type':a1||'video/webm'}),a4=(a3['size']/(0x1ec+0x3b*0x87+-0x1d09)/(0x39*-0x39+0x7*0x13+0x102c))[bK(0x16e)](-0x151f*0x1+0x1baf+-0x1*0x68e);if(a3[bL(0x1a9)]<0x3*-0xd9+-0x30*0x7+-0x1*-0x7db){console[bK(dF.d)](bK(0x187)+a3[bK(0x1a9)]+'\x20bytes'),V('录制数据异常（'+a3['size']+bL(0x18a),'error');var a5=document['getElementById']('cloudVrStartBtn');if(a5)a5[bL(dF.e)]=![];return;}var a6=G(bL(0x190));window['__pendingVideoBlob']=a3,window['__pendingVideoFileName']=a6,document[bK(0x147)]('cloudVrSaveBtn')['disabled']=![],V('录制完成，大小\x20'+a4+'\x20MB，正在自动保存...','success'),setTimeout(M,-0x1*0xc66+-0x21d*0x2+0x11cc);}async function M(){var dI={a:0x180},bM=aL,bN=aL,a1=window[bM(0x1a1)],a2=window[bN(0x189)];if(!a1||!a2){V('没有可保存的视频',bM(dJ.a));return;}var a3=document['getElementById'](bM(dJ.b));a3[bM(dJ.d)]=!![],a3[bM(0x157)]='保存中...';try{var a4=await new Promise(function(a7,a8){var bO=bM,bP=bM,a9=new FileReader();a9[bO(0x1b6)]=function(){a7(a9['result']);},a9[bP(dI.a)]=function(){var bQ=bO,bR=bO;a8(a9[bQ(0x124)]||new Error(bR(0x117)));};try{a9['readAsArrayBuffer'](a1);}catch(aa){a8(aa);}});if(!a4||a4['byteLength']===0x1026+-0x1aee+0xac8)throw new Error(bM(dJ.e));console[bM(0x125)]('[视频录制]\x20视频数据读取成功，大小:\x20'+(a4[bM(0xe5)]/(-0x19a*-0x11+-0x2016+0x8dc)/(-0x1529+0x4*0x41b+-0x8bd*-0x1))['toFixed'](-0x2e*0x57+0x382+0x611*0x2)+bN(0xe1));var a5=await window[bN(dJ.f)]['saveVideoFile'](a4,a2);if(a5[bM(dJ.i)]){var a6=a5[bN(dJ.j)]||a5[bN(0x12c)]||'';V(bN(dJ.k)+(a5[bM(dJ.l)]||a2),'success'),E('视频已保存到：'+a6),setTimeout(W,-0xffe+0x2410*0x1+0x71b*-0x2);}else V('保存失败：'+(a5['error']||bM(0x1b7)),'error'),a3[bN(0x1b0)]=![],a3[bN(dJ.m)]=bN(0xf1);}catch(a7){console['error']('[视频录制]\x20保存失败:',a7),V(bM(0x155)+(a7['message']||a7),bM(dJ.a)),a3[bM(0x1b0)]=![],a3['textContent']='保存视频';}}window['openPhotoOverlay']=function(){var bS=aL,bT=aL;D();var a1=document[bS(0x147)]('cloudVrOverlay');if(a1)a1['remove']();F(),B=0x79b+-0x1*0x4a2+-0x5*0x98,C=[];var a2=document[bS(0x185)]('div');a2['id']=bS(dL.a),a2['className']='cloud-vr-overlay',a2[bS(0x184)]='\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<div\x20class=\x22cloud-vr-modal\x22>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<div\x20class=\x22cloud-vr-modal-header\x22>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<span>📷\x20舌诊拍照</span>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<button\x20class=\x22cloud-vr-close-btn\x22\x20id=\x22cloudVrCloseBtn\x22>&times;</button>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20</div>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<div\x20class=\x22cloud-vr-preview-wrap\x22>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<video\x20id=\x22cloudVrPreview\x22\x20autoplay\x20muted\x20playsinline></video>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<button\x20class=\x22cloud-vr-switch-btn\x22\x20id=\x22cloudVrSwitchBtn\x22\x20title=\x22切换摄像头\x22>🔄</button>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<canvas\x20id=\x22cloudVrPhotoCanvas\x22\x20style=\x22display:none;\x22></canvas>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<div\x20class=\x22cloud-vr-flash\x22\x20id=\x22cloudVrFlash\x22></div>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<div\x20class=\x22cloud-vr-guide-overlay\x22\x20id=\x22cloudVrGuideOverlay\x22>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<svg\x20class=\x22cloud-vr-guide-svg\x22\x20id=\x22cloudVrGuideSvg1\x22\x20viewBox=\x220\x200\x20300\x20300\x22\x20preserveAspectRatio=\x22xMidYMid\x20meet\x22\x20xmlns=\x22http://www.w3.org/2000/svg\x22>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<defs>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<linearGradient\x20id=\x22tg1\x22\x20x1=\x220%\x22\x20y1=\x220%\x22\x20x2=\x220%\x22\x20y2=\x22100%\x22>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<stop\x20offset=\x220%\x22\x20style=\x22stop-color:#ffb6c1;stop-opacity:0.6\x22\x20/>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<stop\x20offset=\x22100%\x22\x20style=\x22stop-color:#ff69b4;stop-opacity:0.6\x22\x20/>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20</linearGradient>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20</defs>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<ellipse\x20cx=\x22150\x22\x20cy=\x22180\x22\x20rx=\x2260\x22\x20ry=\x2280\x22\x20fill=\x22url(#tg1)\x22\x20stroke=\x22#fff\x22\x20stroke-width=\x223\x22/>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<line\x20x1=\x22150\x22\x20y1=\x22120\x22\x20x2=\x22150\x22\x20y2=\x22220\x22\x20stroke=\x22#fff\x22\x20stroke-width=\x222\x22\x20stroke-dasharray=\x228,4\x22/>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<circle\x20cx=\x22120\x22\x20cy=\x22160\x22\x20r=\x228\x22\x20fill=\x22#ff4444\x22\x20opacity=\x220.8\x22/>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<circle\x20cx=\x22180\x22\x20cy=\x22160\x22\x20r=\x228\x22\x20fill=\x22#ff4444\x22\x20opacity=\x220.8\x22/>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<circle\x20cx=\x22150\x22\x20cy=\x22200\x22\x20r=\x226\x22\x20fill=\x22#ff8888\x22\x20opacity=\x220.8\x22/>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<text\x20x=\x22150\x22\x20y=\x22270\x22\x20text-anchor=\x22middle\x22\x20fill=\x22#fff\x22\x20font-size=\x2214\x22\x20font-weight=\x22bold\x22>伸出舌头，舌尖朝上</text>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20</svg>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<svg\x20class=\x22cloud-vr-guide-svg\x22\x20id=\x22cloudVrGuideSvg2\x22\x20viewBox=\x220\x200\x20300\x20300\x22\x20preserveAspectRatio=\x22xMidYMid\x20meet\x22\x20xmlns=\x22http://www.w3.org/2000/svg\x22\x20style=\x22display:none;\x22>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<defs>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<linearGradient\x20id=\x22tg2\x22\x20x1=\x220%\x22\x20y1=\x220%\x22\x20x2=\x220%\x22\x20y2=\x22100%\x22>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<stop\x20offset=\x220%\x22\x20style=\x22stop-color:#ffb6c1;stop-opacity:0.6\x22\x20/>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<stop\x20offset=\x22100%\x22\x20style=\x22stop-color:#ff69b4;stop-opacity:0.6\x22\x20/>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20</linearGradient>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<linearGradient\x20id=\x22vg2\x22\x20x1=\x220%\x22\x20y1=\x220%\x22\x20x2=\x22100%\x22\x20y2=\x220%\x22>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<stop\x20offset=\x220%\x22\x20style=\x22stop-color:#ff4444;stop-opacity:0.7\x22\x20/>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<stop\x20offset=\x22100%\x22\x20style=\x22stop-color:#cc0000;stop-opacity:0.7\x22\x20/>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20</linearGradient>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20</defs>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<ellipse\x20cx=\x22150\x22\x20cy=\x22180\x22\x20rx=\x2250\x22\x20ry=\x2270\x22\x20fill=\x22url(#tg2)\x22\x20stroke=\x22#fff\x22\x20stroke-width=\x223\x22/>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<line\x20x1=\x22150\x22\x20y1=\x22130\x22\x20x2=\x22150\x22\x20y2=\x22230\x22\x20stroke=\x22#fff\x22\x20stroke-width=\x222\x22\x20stroke-dasharray=\x228,4\x22/>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<path\x20d=\x22M\x20130\x20150\x20Q\x20150\x20170\x20170\x20150\x22\x20stroke=\x22url(#vg2)\x22\x20stroke-width=\x224\x22\x20fill=\x22none\x22/>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<path\x20d=\x22M\x20125\x20165\x20Q\x20150\x20185\x20175\x20165\x22\x20stroke=\x22url(#vg2)\x22\x20stroke-width=\x223\x22\x20fill=\x22none\x22/>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<path\x20d=\x22M\x20135\x20180\x20Q\x20150\x20195\x20165\x20180\x22\x20stroke=\x22url(#vg2)\x22\x20stroke-width=\x222\x22\x20fill=\x22none\x22/>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<text\x20x=\x22150\x22\x20y=\x22270\x22\x20text-anchor=\x22middle\x22\x20fill=\x22#fff\x22\x20font-size=\x2214\x22\x20font-weight=\x22bold\x22>卷起舌头，展示舌下络脉</text>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20</svg>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<div\x20class=\x22cloud-vr-guide-text\x22\x20id=\x22cloudVrGuideText\x22>请将舌头伸出，对准虚线位置</div>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20</div>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20</div>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<div\x20class=\x22cloud-vr-step-indicator\x22>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<span\x20class=\x22cloud-vr-step-item\x20active\x22\x20id=\x22cloudVrStep1\x22>1.\x20采集舌面图像</span>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<span\x20class=\x22cloud-vr-step-item\x22\x20id=\x22cloudVrStep2\x22>2.\x20采集舌下络脉</span>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20</div>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<div\x20class=\x22cloud-vr-controls\x22>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<button\x20class=\x22cloud-vr-ctrl-btn\x20cloud-vr-capture-btn\x22\x20id=\x22cloudVrCaptureBtn\x22>📷\x20拍照</button>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<button\x20class=\x22cloud-vr-ctrl-btn\x20cloud-vr-next-btn\x22\x20id=\x22cloudVrNextBtn\x22\x20style=\x22display:none;\x22>下一步</button>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<button\x20class=\x22cloud-vr-ctrl-btn\x20cloud-vr-save-btn\x22\x20id=\x22cloudVrPhotoSaveBtn\x22\x20disabled>保存照片</button>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<button\x20class=\x22cloud-vr-ctrl-btn\x20cloud-vr-retake-btn\x22\x20id=\x22cloudVrRetakeBtn\x22\x20disabled>重拍</button>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20</div>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<div\x20class=\x22cloud-vr-status\x22\x20id=\x22cloudVrStatus\x22>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20点击\x22拍照\x22采集舌面图像\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20</div>\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20</div>\x20\x20\x20\x20\x20\x20\x20\x20',document['body']['appendChild'](a2),document[bT(dL.b)](bT(0x14c))['onclick']=W,document['getElementById']('cloudVrCaptureBtn')[bT(dL.d)]=P,document['getElementById']('cloudVrPhotoSaveBtn')['onclick']=S,document['getElementById'](bS(0x17a))[bT(dL.d)]=T,document[bS(0x147)](bS(dL.e))['onclick']=O,document['getElementById'](bS(dL.f))[bS(0x15f)]=R,a2[bT(0x15f)]=function(a3){var bU=bT;if(a3[bU(0x173)]===a2)W();},N();};async function N(){var bV=aK,bW=aK,a1=document[bV(dR.a)]('cloudVrStatus'),a2=document[bW(0x147)](bV(dR.b));try{a1['textContent']=bV(dR.d),a1[bV(dR.e)]='cloud-vr-status';if(!navigator[bV(dR.f)]||!navigator[bV(0x19a)][bV(dR.i)]){a1[bW(dR.j)]='摄像头初始化失败：浏览器不支持\x20getUserMedia',a1['className']='cloud-vr-status\x20error',a2['disabled']=!![];return;}var a3=[{'video':{'width':{'ideal':r},'height':{'ideal':s},'frameRate':{'ideal':t},'facingMode':A},'audio':![]},{'video':{'width':{'ideal':r},'height':{'ideal':s},'frameRate':{'ideal':t}},'audio':![]},{'video':{'width':{'ideal':0x280},'height':{'ideal':0x1e0},'frameRate':{'ideal':0x1e}},'audio':![]},{'video':!![],'audio':![]}],a4=null,a5=null;for(var a6=0xa6*0x35+-0x1115*-0x1+-0x3373;a6<a3[bW(dR.k)];a6++){try{a4=await navigator[bV(dR.f)][bV(dR.l)](a3[a6]),console['log']('[拍照]\x20使用约束组合',a6+(-0x24c7+0x96b*-0x2+0x379e),'成功');break;}catch(a8){a5=a8,console[bW(dR.m)]('[拍照]\x20约束组合',a6+(0xf*0x1fb+0x1*0xf07+-0x2cbb),bW(dR.n),a8['message']||a8[bV(dR.o)]);}}if(!a4){if(a5&&(a5['name']===bV(0x1b5)||a5[bV(dR.p)]===bW(0x146)))throw new Error('摄像头权限被拒绝，请在手机设置→应用管理中授予摄像头权限');throw a5||new Error('无法获取摄像头权限');}v=a4;var a7=document[bV(0x147)](bW(0x141));a7[bV(dR.q)]=v,a1[bW(0x157)]='正在初始化摄像头...',a2['disabled']=!![],await new Promise(function(a9,aa){var dN={a:0x169},bZ=bV,c0=bV,ab=setTimeout(function(){aa(new Error('摄像头初始化超时'));},0x1*0x17b2+-0x1*-0x3cfc+-0x356e*0x1),ac=-0xc7*0xf+0xf*0x129+-0x62*0xf,ad=setInterval(function(){var bX=h,bY=h;a7[bX(dN.a)]>=0x1e56+-0x188a+0x13*-0x4e&&a7[bY(0x118)]>0xd33*-0x2+-0x1d35*-0x1+-0x1*0x2cf&&(ac++,ac>=-0xa89*-0x3+-0x17df+-0x7b9&&(clearTimeout(ab),clearInterval(ad),a9()));},-0x1dbb+0x141*-0x7+0xd*0x2fe);a7[bZ(dP.a)](c0(0x119),function ae(){var c1=bZ;clearTimeout(ab),clearInterval(ad),a7[c1(0x13c)]('playing',ae),setTimeout(a9,-0x1515+0x1d6b+-0x72a);},{'once':!![]});}),await new Promise(function(a9){setTimeout(a9,0x1c28+0x145e+-0x7c3*0x6);}),a1['textContent']='摄像头已就绪，点击\x22拍照\x22',a2['disabled']=![];}catch(a9){console[bW(dR.r)](bV(0x150),a9),a1['textContent']=bW(0x106)+(a9[bV(0x1c2)]||a9['name']||bW(dR.s)),a1[bW(0x12a)]='cloud-vr-status\x20error',a2['disabled']=!![];}}function O(){var c2=aL,c3=aL;A=A===c2(0x1a2)?'user':c3(dT.a),v&&(v['getTracks']()['forEach'](function(a1){var c4=c2;a1[c4(dS.a)]();}),v=null),N();}function P(a1){var c5=aL,c6=aL;a1=a1||0x136f+0x1fab+-0x1*0x331a;var a2=document[c5(dZ.a)](c5(0x141)),a3=document['getElementById'](c5(dZ.b));if(!a2||!a3||!v){V('摄像头未就绪','error');return;}if(!a2[c5(dZ.d)]||!a2[c5(0x15a)]||a2[c5(dZ.e)]<0x3*0x5d1+0x6*-0x416+0x1*0x713){a1<-0x6b6+-0x3a2*-0x5+-0xb6f?(V('视频流正在就绪...\x20('+(a1+(-0xcc5+-0x1*-0x1bdd+-0xf17))+c5(dZ.f),''),setTimeout(function(){P(a1+(0x13c1*-0x1+-0x13ab+0x276d));},-0x1770+-0x21ab+0x397f*0x1)):V('视频流未就绪，请重试',c5(dZ.i));return;}a3[c6(0x156)]=a2['videoWidth'],a3['height']=a2[c5(0x15a)];var a4=a3['getContext']('2d');if(!a4){V(c6(dZ.j),'error');return;}a4[c5(0x122)]='#000',a4[c6(0x1a4)](0x100+0x16c3+-0x17c3,-0x27f+-0x131b+0x159a,a3[c6(dZ.k)],a3['height']);if(a2[c5(dZ.l)]<-0x1f7b+0x2384+0x1*-0x407){if(a1<0x2334+0x31*0xbb+-0x46fa){V('视频帧未就绪，重试中...\x20('+(a1+(-0x2cf*0x5+-0x621+0x142d))+c6(0xfd),''),setTimeout(function(){P(a1+(0x2*-0x1e+-0x8*-0x236+-0x1173));},-0x338+0x8*-0xef+0x2c5*0x4);return;}V(c6(dZ.m),'error');return;}try{a4['drawImage'](a2,-0x1*0xbb0+0x1d*0x55+0x20f,-0x1e6*0x2+-0x6e6+0x559*0x2,a3['width'],a3[c5(dZ.n)]);}catch(a8){console[c6(0x124)]('[拍照]\x20drawImage\x20失败:',a8),V('拍照失败：'+(a8[c5(dZ.o)]||'drawImage异常'),'error');return;}if(X(a4,a3['width'],a3[c6(0xdb)])){if(a1<0x1c1d+0x6ad*0x1+-0x22c5){console[c5(dZ.p)](c5(dZ.q)+(a1+(-0x40f+0x25a1+0x295*-0xd))+'/5)'),V('图像捕获异常，重试中...\x20('+(a1+(0x1b1*0x12+-0xb78+-0x12f9*0x1))+c6(dZ.r),''),setTimeout(function(){P(a1+(0x1e96+-0x2*0x9+0x49*-0x6b));},0x20cb+0x7*0x1a3+-0x2baa);return;}V(c5(0x19e),'error');return;}var a5=a3['toDataURL']('image/jpeg',0x2348+-0xa03+-0x1945+0.8);if(a5['length']<0x5ec+0x1*0xa75+-0xe6d){if(a1<0x943*-0x2+0x1*-0x1493+-0x685*-0x6){console['warn'](c6(0x18c)+a5[c6(dZ.s)]+c6(dZ.t)),V(c5(dZ.u)+(a1+(-0x9*-0x2af+-0x6f1*-0x2+0x982*-0x4))+c6(dZ.f),''),setTimeout(function(){P(a1+(-0x797+0x747+0x51));},0x78+0x1d2a+-0x1d3e);return;}V(c5(0x19e),c6(dZ.i));return;}C[B-(0x25ad+-0x2420+-0x63*0x4)]=a5;var a6=document[c6(0x147)](c5(dZ.v));a6&&(a6['classList']['add'](c5(0x1c0)),setTimeout(function(){var c7=c6;a6['classList'][c7(0xeb)]('active');},0x757*0x4+0x16d8+0x19cf*-0x2));a2[c6(0x11d)]['display']=c5(0x163),a3[c5(dZ.w)]['display']='block';var a7=document['getElementById']('cloudVrGuideOverlay');if(a7)a7[c6(0x11d)][c6(0x132)]=c5(dZ.x);document['getElementById'](c6(dZ.y))['disabled']=!![],document[c6(dZ.a)]('cloudVrRetakeBtn')['disabled']=![],B===-0x1afb*-0x1+-0x2583+0xa89?(document['getElementById']('cloudVrNextBtn')['style'][c6(0x132)]='block',document['getElementById'](c6(0x191))[c6(0x11d)][c6(dZ.z)]='none',V(c5(0xfc),'success')):(document['getElementById']('cloudVrNextBtn')['style']['display']=c5(dZ.A),document['getElementById']('cloudVrPhotoSaveBtn')['style']['display']=c6(0xe3),document[c6(0x147)]('cloudVrPhotoSaveBtn')['disabled']=![],V(c5(0x115),'success'),setTimeout(S,-0x81b+0x1268+-0x921*0x1));}function Q(a1){var c8=aL,c9=aL,a2=document[c8(e0.a)](c9(0x13a)),a3=document[c8(0x147)]('cloudVrGuideSvg2'),a4=document['getElementById'](c8(0x17b)),a5=document[c8(e0.a)](c8(e0.b));if(a5)a5['style']['display']=c9(e0.d);a2&&a3&&(a1===-0x20*0x8c+-0x1a4d*-0x1+-0x8cc*0x1?(a2['style'][c9(0x132)]='',a3['style'][c9(0x132)]='none'):(a2['style']['display']=c9(e0.e),a3['style'][c9(e0.f)]='')),a4&&(a4[c8(e0.i)]=a1===0x1849*-0x1+-0xccb+0x2515?c8(0x1a7):c8(e0.j));}function R(){var ca=aK,cb=aK;B=-0x2164*-0x1+0x28b+-0x23ed;var a1=document['getElementById'](ca(0x123)),a2=document[cb(0x147)](cb(e1.a));if(a1)a1['classList'][ca(e1.b)](cb(0x1c0));if(a2)a2['classList'][ca(e1.d)](cb(e1.e));Q(0xfef+-0x417*0x7+-0x65a*-0x2);var a3=document[ca(e1.f)](ca(e1.i)),a4=document[cb(0x147)](ca(0x14a));if(a3)a3['style']['display']='';if(a4)a4[cb(e1.j)]['display']='none';document['getElementById']('cloudVrCaptureBtn')[cb(0x1b0)]=![],document['getElementById']('cloudVrNextBtn')[ca(e1.j)]['display']=cb(e1.k),document[ca(0x147)](ca(e1.l))['disabled']=!![],V(ca(0x16f),'');}async function S(){var cc=aL,cd=aL;if(C['length']===-0x1b1*-0x5+-0x29*0x41+-0x4*-0x7d){V(cc(e2.a),cc(e2.b));return;}var a1=document['getElementById']('cloudVrPhotoSaveBtn');a1['disabled']=!![],a1[cd(e2.d)]=cd(0x181);try{var a2=-0x21*-0xe1+0xc7a+-0x297b,a3=[cc(0xd7),'tongue_under'];for(var a4=-0x531+-0x480*-0x5+-0x114f;a4<C['length'];a4++){var a5=C[a4],a6=G(cc(e2.e),a3[a4]),a7=await window[cd(0x166)]['savePrescriptionImage'](a5,a6);a7[cd(0x182)]&&a2++;}a2===C[cd(0xe7)]?(V(cc(e2.f),cd(0x182)),E('照片已保存'),setTimeout(W,-0x1893+0x1665+0x31*0x2a)):(V('部分照片保存失败','error'),a1['disabled']=![],a1['textContent']=cc(0x17c));}catch(a8){console[cc(0x124)](cc(e2.i),a8),V(cd(e2.j)+a8['message'],cd(0x124)),a1[cc(e2.k)]=![],a1[cc(e2.l)]=cc(e2.m);}}function T(){var ce=aL,cf=aL,a1=document[ce(0x147)]('cloudVrPreview'),a2=document[cf(0x147)](ce(e3.a));if(a1)a1[ce(0x11d)][ce(0x132)]='';if(a2)a2['style']['display']='none';document[cf(e3.b)](ce(e3.d))[cf(e3.e)]=![],document['getElementById']('cloudVrRetakeBtn')['disabled']=!![],document['getElementById']('cloudVrNextBtn')['style']['display']='none',document[cf(e3.f)]('cloudVrPhotoSaveBtn')[ce(e3.i)]['display']='none',Q(B),B===0x5*-0x5e5+0x16ab+-0x6cf*-0x1?V(ce(0x176),''):V('摄像头已就绪，点击\x22拍照\x22采集舌下络脉图像','');}function U(){var cg=aL,ch=aL,a1=Math['floor']((Date['now']()-z)/(-0x2271+-0x98b+0x994*0x5)),a2=q-a1,a3=String(Math['floor'](a1/(-0xa52*0x1+0x1560+-0xad2)))['padStart'](-0xb*0x1e9+-0xfef+0xdc*0x2b,'0'),a4=String(a1%(-0x26b5+0x1*-0x5ae+0x1*0x2c9f))[cg(e4.a)](-0xfa6+-0x1*-0xcff+-0x1*-0x2a9,'0'),a5=document[cg(0x147)]('cloudVrTimer');a5&&(a5[cg(0x157)]=a3+':'+a4+ch(0xfa)+q+'s',a2<=-0x4eb+-0xb13*-0x1+0x12*-0x57&&(a5['style']['color']=cg(e4.b)));}function V(a1,a2){var ci=aL,a3=document['getElementById']('cloudVrStatus');a3&&(a3['textContent']=a1,a3['className']=ci(0x1ba)+(a2?'\x20'+a2:''));}function W(){var cj=aK,ck=aK;w&&w['state']==='recording'&&K();v&&(v[cj(0x1b8)]()['forEach'](function(a2){a2['stop']();}),v=null);y&&(clearInterval(y),y=null);var a1=document[cj(0x147)]('cloudVrOverlay');if(a1)a1[cj(e7.a)]();window[cj(e7.b)]=null,window[ck(0x189)]=null;}function X(a1,a2,a3){var cl=aL,cm=aL;try{var a4=a1[cl(e8.a)](-0x17e4+0x1d3c+-0x558,0x1d14+-0x1*-0x14b1+-0x31c5,a2,a3),a5=a4[cm(0x12d)],a6=0x13ca+-0x1*-0x2417+-0x37e1,a7=0x2689+0x225e+-0x184d*0x3;for(var a8=0x2427+-0x2444+0x1*0x1d;a8<a5[cm(0xe7)];a8+=0x1dc+0x1216*0x1+-0x2*0x9e5){a6+=(a5[a8]+a5[a8+(-0x13ee+0xbb2*0x1+-0x3*-0x2bf)]+a5[a8+(0xd91+0x2*0x5d2+0x1*-0x1933)])/(0x725+0x1378+-0x1a9a),a7++;}var a9=a6/a7;return a9<0xbce*-0x1+0x1dc1+-0x23*0x83;}catch(aa){return console['error']('[拍照]\x20isBlackFrame\x20检测失败:',aa),![];}}function Y(){var cn=aL,co=aL;try{var a1=['photoCaptureBtn',cn(0x101)];for(var a2=-0x1d3a+0x1*-0x1a77+0x37b1;a2<a1[cn(e9.a)];a2++){var a3=document['getElementById'](a1[a2]);if(a3&&a3[cn(e9.b)][cn(e9.d)]!=='none')a3[cn(0x11d)]['display']=cn(e9.e);}}catch(a4){}}function Z(){var cp=aK,cq=aK;console[cp(0x125)](n+'\x20录像拍照脚本开始初始化');var a1=window['AndroidNative'];if(!a1){console['warn'](n+'\x20AndroidNative\x20桥接未找到，等待500ms重试'),setTimeout(Z,-0x1192+0x7ea+0xb9c);return;}console['log'](n+'\x20AndroidNative\x20桥接已找到，开始注入\x20shim');var a2=p();if(!a2){console['error'](n+cq(eb.a)),setTimeout(Z,-0x4b8+-0x14ca+0x1d6a);return;}Y(),[0x5*-0x617+-0xe87+0x1*0x2eee,-0x12ea+-0xfc8+0x288e,-0x20d3*0x1+-0x1*-0x2b6+-0x29d5*-0x1][cp(0xf8)](function(a3){setTimeout(Y,a3);}),console['log'](n+cq(eb.b));}function a0(){var cr=aK;try{Z();}catch(a1){console[cr(ec.a)](n+'\x20录像拍照脚本初始化异常:',a1),setTimeout(a0,-0xc59*0x3+0x446*0x9+0xd*0x31);}}document[aK(ed.e)]==='loading'?document[aK(ed.f)]('DOMContentLoaded',a0):a0(),console[aK(0x125)](n+aK(ed.i));}()));function h(a,b){a=a-(0x1*-0x14f+0xb5*-0x25+0x1c4f);var c=g();var d=c[a];if(h['flMloi']===undefined){var e=function(l){var m='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/=';var n='',o='',p=n+e,q=(''+function(){return 0xa1a+0x1ec6+-0x51c*0x8;})['indexOf']('\x0a')!==-(0x1*-0x5fb+-0xa01+0xffd);for(var r=0x383+-0x4bb+0x138,s,t,u=-0x1be4+-0x262c+0x4210;t=l['charAt'](u++);~t&&(s=r%(-0x197a+0xc2*-0x29+0x1*0x3890)?s*(0x13*-0x191+0x259a+-0x797)+t:t,r++%(0x1b14+-0x4*0x99c+-0x1c*-0x68))?n+=q||p['charCodeAt'](u+(-0x1*0xfa3+0x19*0xa3+-0x1*0x3e))-(-0x361+-0xe7a*-0x2+-0x1989)!==-0x238d+-0x1606+0x363*0x11?String['fromCharCode'](0x3df*0xa+-0x1*0x18af+-0xd08&s>>(-(0x527*0x1+0x97f*-0x1+0x45a)*r&0x2469+0x184a+-0x3cad)):r:-0x705+-0x2*0x125f+0x293*0x11){t=m['indexOf'](t);}for(var v=0x17e9+0x9be+-0x21a7,w=n['length'];v<w;v++){o+='%'+('00'+n['charCodeAt'](v)['toString'](-0xa*0x1d3+-0x1ae3+-0x1f7*-0x17))['slice'](-(-0x329*-0x7+-0x1*0x12ef+-0x32e));}return decodeURIComponent(o);};h['vgsxYp']=e,h['llXpUb']={},h['flMloi']=!![];}var f=c[-0x1*-0xac1+0x1db8+-0x2879],i=a+f,j=h['llXpUb'][i];if(!j){var k=function(l){this['ogAfuQ']=l,this['iJYDcP']=[0x4*-0x94f+-0x20c0+-0x45fd*-0x1,-0x1d17+-0x731+0x2448,0xc*0x321+-0x111d*-0x2+0x2*-0x23e3],this['QWIMBO']=function(){return'newState';},this['lRCTtI']='\x5c\x77\x2b\x20\x2a\x5c\x28\x5c\x29\x20\x2a\x7b\x5c\x77\x2b\x20\x2a',this['UUWpIs']='\x5b\x27\x7c\x22\x5d\x2e\x2b\x5b\x27\x7c\x22\x5d\x3b\x3f\x20\x2a\x7d';};k['prototype']['eBbiEL']=function(){var l=new RegExp(this['lRCTtI']+this['UUWpIs']),m=l['test'](this['QWIMBO']['toString']())?--this['iJYDcP'][0x896+-0x1971+-0xd*-0x14c]:--this['iJYDcP'][0x1d6a+-0x446+-0x1924];return this['WaWcTK'](m);},k['prototype']['WaWcTK']=function(l){if(!Boolean(~l))return l;return this['AQvmDp'](this['ogAfuQ']);},k['prototype']['AQvmDp']=function(l){for(var m=0x1ddc+0x209*-0x13+0x8cf,n=this['iJYDcP']['length'];m<n;m++){this['iJYDcP']['push'](Math['round'](Math['random']())),n=this['iJYDcP']['length'];}return l(this['iJYDcP'][-0x72d+0x1aad*-0x1+0x10ed*0x2]);},(''+function(){return 0x67+0xf4*0x3+-0x1*0x343;})['indexOf']('\x0a')===-(0xa9d+0x28*-0x1+-0xa74)&&new k(h)['eBbiEL'](),d=h['vgsxYp'](d),h['llXpUb'][i]=d;}else d=j;return d;}function c(a){var eh={a:0xf2,b:0xe7,d:0x11b,e:0x11e};function b(d){var cs=h,ct=h;if(typeof d===cs(0x109))return function(e){}['constructor'](cs(0x152))['apply'](ct(eh.a));else(''+d/d)[ct(eh.b)]!==0x1f2b+-0x1e*-0x8e+-0x3a*0xd3||d%(0xb5b+0x511*-0x5+0xe0e)===-0x837+-0x3f3*-0x1+0x444?function(){return!![];}['constructor'](ct(0x160)+'gger')['call'](ct(eh.d)):function(){return![];}['constructor'](ct(0x160)+'gger')[ct(eh.e)]('stateObject');b(++d);}try{if(a)return b;else b(-0x1ce1+0x653+0x168e);}catch(d){}}function g(){var ej=['D2vIBq','yNL0zuXLBMD0Aa','iow9LEwdJ+AlJEEfP+IeMUACRowiNEwNI+wmLUwUJoAiKo+8IoAGT+w8J+w7TUI/N+wiSoMMLUASOEAjK+w8Gg92zxjSyxNML7BMS6JLHAxVViK','BgvUz3rO','z2v0twLUDxrLCW','igj5DgvZkE+8JoMhJEIVLEs4Rq','C2vHCMnO','CMvTB3zL','C3jJt2jQzwn0','o2jHC2u2ncW','qujdrevgr0HjsKTmtu5puffsu1rvvLDywvPHyMnKzwzNAgLQA2XTBM9WCxjZDhv2D3H5EJaXmJm0nty3odKRlW','y2XVDwrwCLn0yxj0qNrU','5AsX6lsLoG','5l+D5A2y6kEg6Akr','y291BNrLCG','DMLKzw8VD2vIBtTJB2rLy3m9DNa4','5RkH5PYj5y+V5l+D5A2y55Qe54wN54Mh','DMLKzw8VBxa0o2nVzgvJCZ1OmJy0lgfHyW','BgfZDfvZzwrnzwrPyvbHDgLLBNroyw1L','ChvZAa','zM9YrwfJAa','mJi0mtKYn0jdB1zMAW','ic8G','kcGOlISPkYKRksSK','5BEY5O2v6i636iIm6z2I5zU+5yop77Ym54k55yE7iUs4I+s4GoATPslPH4FPM4BOIiZKUiVNU5ZOHiK','lZuP','zMXLEa','B3bLBKzPBgu','DhjPBq','DMLKzw9szwncDg4','w+AlJEEfP10G5l+D5A2y5AsX6lsLoG','5Q2J5zYO6k+35Rgc5Pge5yop5As05P2d6zMqlI4U','5zU+5yop5O2v6i635BYc5BI477Ym6yEn6k+v5lITlI4UicG','y2XVDwrwCKnHChr1CMvcDg4','5Pge5yop5As05yID5AEl5yYw5AsX6lsL77YA','y2XVDwrwCLn3AxrJAej0BG','Bxa0','C3rYAw5N','x19JDxjYzw50qMXVyLvYBa','igvSzwn0CM9UqvbjihnOAw0G5BEY5OIq5yQF5RoO5ywL','x19JDxjYzw50vMLKzw9fEhq','y2XVDwrwCK92zxjSyxK','Axntzwn1CMvdB250zxH0','lcbTAw1Lpq','77Yi5PEG5AoW77Yj','77Ym54k55yE7iUw8GowNI+w9LEwiTIiGwW','D2fYBG','5Q2J5zYO5yID5AEl5yYw5Pge5yop5As0lI4U','DgHLBG','5BEY5O2v6i636iIm5lIl57UC6isj5zU+5yop77Ym5Q2J5zYO6iEQ5yQO5l+D5A2ylI4U','iowiHUEjH+IVU+wpLUwUJoAiKo+8JgjSB2iGvvjmpq','rMLSzvjLywrLCIdOR7VLJ5BLPlhOTku','DMLKzw9xAwr0Aa','CgXHEwLUzW','ywrKrxzLBNrmAxn0zw5LCG','ywn0Aw9U','ioI/LowBNIbUDwXS77YisMf2yEERR+ACQUAnLEIoT+w8GUw4Uo+8Iq','C3r5Bgu','yxbWBhK','w3zPzgvVlxjLy29YzgvYxsbWCMvSB2fKtgf0zxn0uhjLC2nYAxb0Aw9Usw5MBYdLVilLUlG6','mtK1otu2nvnzAxjQza','54wN54Mh5BEY5ywO6yoO5l+D5A2y','zMLSBfn0EwXL','y2XVDwrwCLn0zxaX','zxjYB3i','Bg9N','zMLSzu5HBwu','ChjVDg9JB2W','y2HHAw4','y2XVDwrwCKzSyxnO','y2XHC3noyw1L','5B2v5yI25PwW5O2U5lI656M677Ym6k+36yEn5PAW5B2v5yI2','zMLSzvbHDgG','zgf0yq','B25KyxrHyxzHAwXHyMXL','lcdMGlVLRzFOIOi9','x19SyxrLC3rqCMvZy3jPChrPB25qyxrPzw50tMfTzq','oeffAxbYCW','zgLZCgXHEq','yM9KEq','igvSzwn0CM9UqvbjihnOAw0G5RoO5ywL5AsX6lsL','6k+35y236lw36iIm5As077Ym5A+55yEg6jMA57Q/5l2n572U5OUn5Pge6iIm5lIl','5Pge5yop5As05BEY5BcX57UQ','otC2nJeXEg1XtfLf','zgvSzxrLrMLSzq','CMv0DxjUicHMDw5JDgLVBIGPia','y2XVDwrwCKD1AwrLu3zNmq','CxvPDefWCa','CMvTB3zLrxzLBNrmAxn0zw5LCG','igHYzwy9','z2v0qxvKAw9uCMfJA3m','z2v0rNvSBfLLyxi','y2XHC3nmAxn0','y2XVDwrwCLbYzxzPzxC','yxbWzw5KtwvKAwfdAhvUAYdOV5tLM57ML6dMLyG','zNvUy3rPB24GkLWOicPCkq','6kEg6Akr5BEY5l+D5A2y77YA','ioINO+AEKoE7K+AENos4UIbUDwXS77YisMf2yEERR+ACQUAnLEIoT+w8GUw4Uo+8Iq','u2vJDxjPDhLfCNjVCG','z2v0rwXLBwvUDej5swq','yMLUza','w+INHUMIKEw9LEwiTL0GAw5PDenHBwvYytOGAxntzwn1CMvdB250zxH0pq','y2XVDwrwCLbOB3rVq2fUDMfZ','zgLYzwn0B3j5','y2XVDwrwCKnSB3nLqNrU','ywrK','iow9LEwdJ+AlJEEfP+AZQowfPEIeMUACRow3SUwkOoI9Vq','5PEG5Rov6i635y+w5Pge5yop5As05P2d6zMq','w+AlJEEfP10G5Pge5yop5As05yID5AEl5yYw5AsX6lsLoG','C2f2zvzPzgvVrMLSzq','D2HPBguGkhrYDwuPihT9','y2XVDwqTDNiTC3rHDhvZigvYCM9Y','icaGicaGicaGicaGpgrPDIbJBgfZCZ0Iy2XVDwqTDNiTBw9KywWIpIaGicaGicaGicaGicaGica8zgL2ignSyxnZpsjJBg91zc12CI1TB2rHBc1OzwfKzxiIpIaGicaGicaGicaGicaGicaGicaGphnWyw4+8j+oPsdPL67OR4ROP4BPOPhLVzxLIly8l3nWyw4+icaGicaGicaGicaGicaGicaGica8yNv0Dg9UignSyxnZpsjJBg91zc12CI1JBg9Zzs1IDg4IigLKpsjJBg91zfzYq2XVC2vcDg4IpIz0Aw1LCZS8l2j1DhrVBJ4GicaGicaGicaGicaGicaGpc9KAxy+icaGicaGicaGicaGicaGidXKAxyGy2XHC3m9iMnSB3vKlxzYlxbYzxzPzxCTD3jHCci+icaGicaGicaGicaGicaGicaGica8DMLKzw8GAwq9iMnSB3vKvNjqCMv2Awv3iIbHDxrVCgXHEsbTDxrLzcbWBgf5C2LUBgLUzt48l3zPzgvVpIaGicaGicaGicaGicaGicaGicaGpgj1DhrVBIbJBgfZCZ0Iy2XVDwqTDNiTC3DPDgnOlwj0BIiGAwq9iMnSB3vKvNjtD2L0y2HcDg4IihrPDgXLpslLIiFMJAlMKytLG4/LPlqIpVcFLiq8l2j1DhrVBJ4GicaGicaGicaGicaGicaGicaGidXKAxyGy2XHC3m9iMnSB3vKlxzYlxjLyY1PBMrPy2f0B3iIigLKpsjJBg91zfzYuMvJsw5KAwnHDg9YiJ4GicaGicaGicaGicaGicaGicaGicaGica8C3bHBIbJBgfZCZ0Iy2XVDwqTDNiTCMvJlwrVDci+pc9ZCgfUpUw9LEwiTUs4RsaGicaGicaGicaGicaGicaGicaGpc9KAxy+icaGicaGicaGicaGicaGicaGica8zgL2ignSyxnZpsjJBg91zc12CI10Aw1LCIiGAwq9iMnSB3vKvNjuAw1LCIiGC3r5Bgu9iMrPC3bSyxK6BM9UztSIpJaWoJaWpc9KAxy+icaGicaGicaGicaGicaGidWVzgL2pIaGicaGicaGicaGicaGica8zgL2ignSyxnZpsjJBg91zc12CI1JB250CM9SCYi+icaGicaGicaGicaGicaGicaGica8yNv0Dg9UignSyxnZpsjJBg91zc12CI1JDhjSlwj0BIbJBg91zc12CI1ZDgfYDc1IDg4IigLKpsjJBg91zfzYu3rHCNrcDg4IpUw8GowNI+w9LEwiTJWVyNv0Dg9UpIaGicaGicaGicaGicaGicaGicaGpgj1DhrVBIbJBgfZCZ0Iy2XVDwqTDNiTy3rYBc1IDg4Gy2XVDwqTDNiTC3rVCc1IDg4IigLKpsjJBg91zfzYu3rVCej0BIiGzgLZywjSzwq+5ygC5Q2I5B2v5yI2pc9IDxr0B24+icaGicaGicaGicaGicaGicaGica8yNv0Dg9UignSyxnZpsjJBg91zc12CI1JDhjSlwj0BIbJBg91zc12CI1ZyxzLlwj0BIiGAwq9iMnSB3vKvNjtyxzLqNrUiIbKAxnHyMXLzd7KV53LRzJOP4BPOPe8l2j1DhrVBJ4GicaGicaGicaGicaGicaGpc9KAxy+icaGicaGicaGicaGicaGidXKAxyGy2XHC3m9iMnSB3vKlxzYlxn0yxr1CYiGAwq9iMnSB3vKvNjtDgf0DxmIpIaGicaGicaGicaGicaGicaGicaG54k55yE7iUw8GowNI+w9LEwiTIlLKk/LIQJMKytLG4/LPltVViJMNidPLB8G','5l+D5A2y5AsX6lsL77YA','D2LKDgG','Dgv4DenVBNrLBNq','zMLSzvnPEMu','C3rYAw5NAwz5','DMLKzw9izwLNAhq','y2XVDwrwCLrVyxn0','C2vZC2LVBKLK','C3rVCa','C2v0sxrLBq','B25JBgLJAW','zgvIDq','y2XVDwrwCLn0zxaY','y2vPBa','BM9Uzq','x19SyxrLC3rqCMvZy3jPChrPB25oBW','y2XVC2vszwfKu2vZC2LVBG','zwXLy3rYB25bueK','iowiM+w7UUINHUMIKsbvuKWG5AsX6lsLoG','y2XVDwrwCLnHDMvcDg4','CMvHzhLtDgf0zq','5B2v5yI25yE66zsz77YA','ie5HDgL2zujYAwrNzs4','z2v0vxnLCK1LzgLH','ihjLywrozxH0q2H1BMSG5PYa57Ui5AsX6lsLoG','Dg9gAxHLza','6k+36yEh6zUg6iIm5lIl57UC6isj5zU+5yop77Ym54k55yE7iUAlJEEfPYi','CMvHzezPBgvbC0jHC2u2na','y3jLyxrLt2jQzwn0vvjm','mZaZoeT4DMrpAq','DgfYz2v0','z2v0vMLKzw9eAxjLy3rVCNK','CgHVDg8','5Pge5yop5As05BEY5BcX57UQ77Ym54k55yE7iUAlJEEfPYlPH4FPM4BOIiZPNAlLM77LG48','CMv2B2TLt2jQzwn0vvjm','mJm4ndaYoffesLPRrW','CgfYzw50tM9Kzq','y2XVDwrwCLjLDgfRzuj0BG','y2XVDwrwCKD1AwrLvgv4Da','5l+D5A2y54wN54Mh','ChjVDg90ExbL','DhjHy2u','y29UC3rYDwn0B3i','B25LCNjVCG','5l+D5A2y5lITlI4U','C3vJy2vZCW','y29UC29Szq','Aw5Uzxjive1m','y3jLyxrLrwXLBwvUDa','y2f0y2G','w+INHUMIKEw9LEwiTL0G5B2v5yI25PwW5O2U6l+h5BcpoIa','EwvZ','x19Wzw5KAw5NvMLKzw9gAwXLtMfTzq','iowTL+IkGU+8IE+8JoIVT+MhJEAwSow9LEwiTG','y2XVDwrwCLrPBwvY','w+AlJEEfP10G5O2v6i635zU+5yop6l+h5BcpicG','CMvHze5LEhrdAhvUAYdOV5tLM57ML6dMLyG','yxbWzw5Kq2HPBgq','zxHJzxb0Aw9U','DMLKzw8','y2XVDwrwCLbOB3rVu2f2zuj0BG','i2zMyZeWnW','DMLKzw8VD2vIBtTJB2rLy3m9DNa5','mtK3t3vVq05r','Bg9JyxrPB24','y2H1BMS','C3vIC3rYAw5N','Cgf0AwvUDe5HBwu','CMvTB3zLq2HPBgq','BwvKAwfezxzPy2vZ','y2XVDwrwCLn0B3bcDg4','iowTL+IkGIbIyxnLnJq','y2XVDwrwCLjLy0LUzgLJyxrVCG','5zU+5yop5O2v6i635AsX6lsL77Ym6k+36yEn6k+v','mJKZoda1nerjBLv5zW','ChjLC2nYAxb0Aw9UtM8','x19Wzw5KAw5NvMLKzw9cBg9I','zw52AxjVBM1LBNq','DgvZDa','zMLSBfjLy3q','w+AlJEEfP10G5Qoa5Rwl5yIW6BUr5Bgp5BIN77Ym6yEn6k+v5lITicG','zMLUze1LzgLHrMLSzxm','6k+35Bcg6iIm5As05lY45yE677Ym5A+55yEg6jMA57Q/5l2n572U','C2XPy2u','C2L6zq','Bg9HzgvKzgf0yq','yxbWBgLJyxrPB24VB2n0zxqTC3rYzwfT','6kEg6Akr5BIN5PYQ5BcX57UQ77Ym6k+36yEn6k+v','B25ZDg9W','CxvLCNLtzwXLy3rVCG','y2XVDwrwCKD1AwrLt3zLCMXHEq','zgLZywjSzwq','zMLSztO','x19UyxrPDMvcCMLKz2vqCM94Eq','5Pge5yop5As05PYQ5BcX57UQ77Ym6k+36yEn6k+v','6kEg6Akr5PwW5O2U5lI656M677YiyxjYyxLcDwzMzxiUyNL0zuXLBMD0Aca9iddVViK','tM90qwXSB3DLzevYCM9Y','B25SB2fK','5PYQ55+L6zsz6k+V','z2v0vhjHy2TZ','5B2v5yI25lITlI4U','y2XVDwqTDNiTC3rHDhvZ','C2f2zujHy2T1CezPBgu','z2v0rgf0zq','CgfKu3rHCNq','z2v0sw1Hz2veyxrH','lcdNIyFMLBa9','ywn0AxzL','Dg9tDhjPBMC','BwvZC2fNzq','Dg9Uz3vLx2zYB250','BMfTzq','yxbWzw5KtwvKAwfdAhvUAW','mJC5nJq4mgzqDuzyEG','AgvPz2H0','y2XVDwrwCK5LEhrcDg4','DMLKzw8VBxa0o2nVzgvJCZ1OmJy0','Aw5KzxHpzG','x19PBMPLy3rLza','BgfZDfvZzwrnzwrPyuLKzw50AwzPzxi','ie1c','q2fUDMfZidjeios4IUs4I+AwH+IoT+wpLUwKSEI0Pq','yMXVy2S'];g=function(){return ej;};return g();}
+/**
+ * 云端APP录像拍照注入脚本
+ *
+ * 功能：
+ * 1. 注入 window.electronAPI shim（调用 AndroidNative 桥接）
+ * 2. 注入 CSS 样式（overlay/modal/toast）
+ * 3. 实现录像 overlay（摄像头预览、录制控制、前后摄像头切换）
+ * 4. 实现拍照 overlay
+ * 5. 保存到本地文件系统（按月份分类 YYYY-MM）
+ *
+ * 注意：拍照/录像按钮由 React ActionBar 组件渲染，本脚本仅提供 overlay 和保存功能。
+ * ActionBar 通过 window.openPhotoOverlay() / window.openRecordingOverlay() 调用本脚本。
+ *
+ * 保存路径（图片视频统一目录，方便导出）：
+ *   Pictures/惠康中医处方/YYYY-MM/患者姓名_处方编号_photo.png
+ *   Pictures/惠康中医处方/YYYY-MM/患者姓名_处方编号_video.webm
+ */
+(function () {
+    'use strict';
+    if (window.__videoRecorderInjected) return;
+    window.__videoRecorderInjected = true;
+
+    // ========================================================================
+    // 0. 运行环境检测（同时支持离线APP的file://协议和云端APP的https://协议）
+    // ========================================================================
+    // 动态日志前缀：根据协议自动选择，便于日志中区分运行环境
+    var __VR_LOG_PREFIX = window.location.protocol === 'file:' ? '[离线APP]' : '[云端APP]';
+    // Blob URL 策略：https:// 协议下使用 Blob URL（稳定），file:// 协议下使用 base64 data URL（Blob URL 在 file:// 下不稳定）
+    var __USE_BLOB_URL = window.location.protocol !== 'file:';
+
+    // ========================================================================
+    // 1. 注入 window.electronAPI shim
+    // ========================================================================
+    function injectElectronAPIShim() {
+        // 保存旧引用（如果 injectElectronApiShim 已抢先注入简单版本）
+        // 云端APP同步离线APP策略：覆盖关键方法而非跳过，避免简单版导致大文件读取失败
+        var oldAPI = window.electronAPI;
+
+        var N = window.AndroidNative;
+        if (!N) {
+            console.warn(__VR_LOG_PREFIX + ' AndroidNative 桥接未找到');
+            return false;
+        }
+        
+        console.log(__VR_LOG_PREFIX + ' AndroidNative 桥接已找到，开始构建 electronAPI shim');
+        
+        function P(v) { return Promise.resolve(v); }
+        function callNative(name, json) {
+            try {
+                var result = N.invoke(name, json || '{}');
+                // 防御 undefined/null 返回（Java 端异常时 JavascriptInterface 返回 undefined）
+                if (typeof result !== 'string' || result.length === 0) {
+                    console.error(__VR_LOG_PREFIX + ' NativeBridge.' + name + ' 返回非字符串:', typeof result, result);
+                    return { success: false, error: 'NativeBridge 返回无效（Java端可能抛异常）' };
+                }
+                console.log(__VR_LOG_PREFIX + ' NativeBridge.' + name + ' 返回长度:', result.length);
+                var parsed = JSON.parse(result);
+                // ★ 2026-08-29 一键备份修复：Java 端未捕获 Throwable 时 WebView 返回字面量 "null"，
+                //   JSON.parse 后为 null —— 必须拦截，否则前端 result.success 读 null 崩溃
+                if (parsed === null || parsed === undefined) {
+                    console.error(__VR_LOG_PREFIX + ' NativeBridge.' + name + ' 解析结果为 null（Java端未捕获异常）');
+                    return { success: false, error: '原生桥 ' + name + ' 返回 null（Java端未捕获异常）' };
+                }
+                return parsed;
+            } catch (e) {
+                console.error(__VR_LOG_PREFIX + ' NativeBridge.' + name + ' 调用异常:', e);
+                return { success: false, error: String(e) };
+            }
+        }
+
+        // Uint8Array → base64 编码（与离线APP保持一致，避免 btoa 不支持 >127 字节的问题）
+        // btoa 只支持 ASCII 字符（0-127），视频二进制数据包含 >127 的字节会失败
+        // 该方法直接按位计算，性能优于 btoa + String.fromCharCode.apply 组合
+        var _base64Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+        function _uint8ArrayToBase64(bytes) {
+            var len = bytes.length;
+            var base64 = '';
+            var i = 0;
+            while (i < len) {
+                var b1 = bytes[i++] || 0;
+                var b2 = i < len ? bytes[i++] : 0;
+                var b3 = i < len ? bytes[i++] : 0;
+                var group = (b1 << 16) | (b2 << 8) | b3;
+                base64 += _base64Chars[(group >> 18) & 0x3F];
+                base64 += _base64Chars[(group >> 12) & 0x3F];
+                base64 += _base64Chars[(group >> 6) & 0x3F];
+                base64 += _base64Chars[group & 0x3F];
+            }
+            var padLen = (3 - (len % 3)) % 3;
+            if (padLen > 0) {
+                base64 = base64.substring(0, base64.length - padLen) + '=='.substring(0, padLen);
+            }
+            return base64;
+        }
+
+        // 分片上传：解决 Binder 事务 1MB 限制
+        // 大文件 base64 编码后远超 1MB，必须分片传输
+        // 流程：startMediaSession → 多次 appendMediaChunk → commitMediaSession
+        // ★ 优化：分片大小从 256KB 提升到 512KB，减少分片次数约 50%，提升整体传输速度
+        // 512KB base64 解码后约 384KB，加 JSON 包装仍远低于 1MB Binder 限制，安全可靠
+        var CHUNK_SIZE = 512 * 1024; // 512KB 一片（base64 解码后 384KB，加 JSON 包装远低于 1MB）
+        function chunkedUpload(base64Data, fileName, type) {
+            return new Promise(function (resolve) {
+                var startR = callNative('startMediaSession', JSON.stringify({ fileName: fileName }));
+                if (!startR || !startR.success) {
+                    resolve(startR || { success: false, error: 'startMediaSession 返回无效' });
+                    return;
+                }
+                var sessionId = startR.sessionId;
+                var total = Math.ceil(base64Data.length / CHUNK_SIZE);
+                var idx = 0;
+
+                function nextChunk() {
+                    if (idx >= total) {
+                        var commitR = callNative('commitMediaSession', JSON.stringify({
+                            sessionId: sessionId,
+                            fileName: fileName,
+                            type: type
+                        }));
+                        resolve(commitR);
+                        return;
+                    }
+                    var chunk = base64Data.substring(idx * CHUNK_SIZE, (idx + 1) * CHUNK_SIZE);
+                    var r = callNative('appendMediaChunk', JSON.stringify({
+                        sessionId: sessionId,
+                        chunkBase64: chunk,
+                        index: idx,
+                        total: total
+                    }));
+                    if (!r || !r.success) {
+                        resolve(r || { success: false, error: 'appendMediaChunk 返回无效' });
+                        return;
+                    }
+                    idx++;
+                    // 用 setTimeout 0 让出主线程，避免长视频上传时阻塞 UI
+                    setTimeout(nextChunk, 0);
+                }
+                nextChunk();
+            });
+        }
+        
+        window.electronAPI = {
+            __injected: true,
+            isElectron: true,
+            saveUserData: function (k, d) { return P({ success: true }); },
+            getUserData: function (k) { return P({ success: false, data: null }); },
+            saveBackupFile: function (jsonStr, fileName) {
+                return new Promise(function (resolve) {
+                    try {
+                        var r = callNative('saveBackupFile', JSON.stringify({ jsonStr: jsonStr, fileName: fileName }));
+                        resolve(r);
+                    } catch (e) { resolve({ success: false, error: String(e) }); }
+                });
+            },
+            savePrescriptionImage: function (imageData, fileName) {
+                return new Promise(function (resolve) {
+                    try {
+                        // 剥离 data:image/...;base64, 前缀
+                        var base64 = imageData;
+                        var commaIdx = base64.indexOf(',');
+                        if (base64.indexOf('data:') === 0 && commaIdx > 0 && commaIdx < 50) {
+                            base64 = base64.substring(commaIdx + 1);
+                        }
+                        // 大数据（>= 512KB）走分片上传，小数据走原 API
+                        if (base64.length >= 512 * 1024) {
+                            console.log(__VR_LOG_PREFIX + ' 图片分片上传: ' + base64.length + ' 字节');
+                            chunkedUpload(base64, fileName, 'image').then(resolve);
+                        } else {
+                            var r = callNative('savePrescriptionImage', JSON.stringify({ imageData: imageData, fileName: fileName }));
+                            resolve(r);
+                        }
+                    } catch (e) { resolve({ success: false, error: String(e) }); }
+                });
+            },
+            saveVideoFile: function (arrayBuffer, fileName) {
+                return new Promise(function (resolve) {
+                    try {
+                        var bytes = new Uint8Array(arrayBuffer);
+                        // ★ 优化：用 _uint8ArrayToBase64 代替 btoa
+                        // 1. btoa 不支持 >127 字节，视频二进制数据会失败
+                        // 2. _uint8ArrayToBase64 直接按位计算，省去 String.fromCharCode.apply + btoa 两步开销
+                        var base64Data = _uint8ArrayToBase64(bytes);
+                        console.log(__VR_LOG_PREFIX + ' 视频总大小: ' + base64Data.length + ' 字节 base64');
+                        // ★ 优化：小文件（<512KB 原始，base64 后约 683KB）直接走原生 API，避免分片开销
+                        // 加 JSON 包装后约 700KB，远低于 1MB Binder 限制，安全可靠
+                        if (bytes.length < 512 * 1024) {
+                            var r = callNative('saveVideoFile', JSON.stringify({
+                                base64Data: base64Data,
+                                fileName: fileName
+                            }));
+                            resolve(r);
+                        } else {
+                            // 大视频走分片上传
+                            chunkedUpload(base64Data, fileName, 'video').then(resolve);
+                        }
+                    } catch (e) { resolve({ success: false, error: String(e) }); }
+                });
+            },
+            getVideoDirectory: function () {
+                return new Promise(function (resolve) {
+                    try {
+                        var r = callNative('getVideoDirectory', '{}');
+                        resolve(r);
+                    } catch (e) { resolve({ success: false, error: String(e) }); }
+                });
+            },
+            findMediaFiles: function (patientName, prescriptionNo, createdAt) {
+                return new Promise(function (resolve) {
+                    try {
+                        var r = callNative('findMediaFiles', JSON.stringify({ patientName: patientName, prescriptionNo: prescriptionNo, createdAt: createdAt || '' }));
+                        resolve(r);
+                    } catch (e) { resolve({ success: false, error: String(e), files: [] }); }
+                });
+            },
+            openFile: function (filePath, mimeType) {
+                return new Promise(function (resolve) {
+                    try {
+                        var r = callNative('openFile', JSON.stringify({ filePath: filePath, mimeType: mimeType || '' }));
+                        resolve(r);
+                    } catch (e) { resolve({ success: false, error: String(e) }); }
+                });
+            },
+            readFileAsBase64: function (filePath) {
+                // 统一走分片读取，避免 Binder 1MB 限制和 isCallerAllowed 误拦截
+                // 最终用 Blob URL 代替 data URL，避免大视频 data URL 超出 WebView 限制
+                return new Promise(function (resolve) {
+                    try {
+                        var startR = callNative('startReadSession', JSON.stringify({ filePath: filePath }));
+                        if (!startR || !startR.success) {
+                            // startReadSession 不支持（旧 APK），回退到原 API
+                            console.warn(__VR_LOG_PREFIX + ' startReadSession 失败，回退原 API:', startR && startR.error);
+                            var rFallback = callNative('readFileAsBase64', JSON.stringify({ filePath: filePath }));
+                            resolve(rFallback);
+                            return;
+                        }
+                        var sessionId = startR.sessionId;
+                        var mimeType = startR.mimeType || 'application/octet-stream';
+                        var fileSize = startR.fileSize || 0;
+                        console.log(__VR_LOG_PREFIX + ' 分片读取文件: ' + filePath + ', 大小=' + fileSize + ', mime=' + mimeType);
+                        var uint8Arrays = [];
+                        var totalBytes = 0;
+                        var chunkRetryCount = 0;
+                        var MAX_CHUNK_RETRY = 2;
+
+                        function nextChunk() {
+                            var r = callNative('readNextChunk', JSON.stringify({ sessionId: sessionId }));
+                            if (!r || !r.success) {
+                                // chunk 重试机制（同步离线APP）：弱网/低配机型读取成功率提升
+                                if (chunkRetryCount < MAX_CHUNK_RETRY) {
+                                    chunkRetryCount++;
+                                    console.warn(__VR_LOG_PREFIX + ' readNextChunk 失败，重试 ' + chunkRetryCount + '/' + MAX_CHUNK_RETRY + ':', r && r.error);
+                                    setTimeout(nextChunk, 50);
+                                    return;
+                                }
+                                callNative('closeReadSession', JSON.stringify({ sessionId: sessionId }));
+                                console.error(__VR_LOG_PREFIX + ' readNextChunk 最终失败:', r && r.error);
+                                resolve(r || { success: false, error: 'readNextChunk 返回无效' });
+                                return;
+                            }
+                            chunkRetryCount = 0;
+                            if (r.chunk) {
+                                // 分片解码 base64 → Uint8Array，避免大字符串 atob 内存翻倍
+                                try {
+                                    var binary = atob(r.chunk);
+                                    var len = binary.length;
+                                    var bytes = new Uint8Array(len);
+                                    for (var i = 0; i < len; i++) {
+                                        bytes[i] = binary.charCodeAt(i);
+                                    }
+                                    uint8Arrays.push(bytes);
+                                    totalBytes += len;
+                                } catch (e) {
+                                    console.error(__VR_LOG_PREFIX + ' base64 解码失败:', e);
+                                }
+                            }
+                            if (r.eof) {
+                                callNative('closeReadSession', JSON.stringify({ sessionId: sessionId }));
+                                try {
+                                    // 合并所有分片到一个 Uint8Array（base64 编码需要连续内存）
+                                    var merged = new Uint8Array(totalBytes);
+                                    var mergeOffset = 0;
+                                    for (var ai = 0; ai < uint8Arrays.length; ai++) {
+                                        merged.set(uint8Arrays[ai], mergeOffset);
+                                        mergeOffset += uint8Arrays[ai].length;
+                                    }
+
+                                    var url;
+                                    // 清理旧 blob URL 避免内存泄漏
+                                    if (window.__currentBlobUrl) {
+                                        try { URL.revokeObjectURL(window.__currentBlobUrl); } catch (e) {}
+                                        window.__currentBlobUrl = null;
+                                    }
+                                    if (__USE_BLOB_URL) {
+                                        // https:// 协议下使用 Blob URL（稳定，不占 JS 堆内存）
+                                        var blob = new Blob([merged], { type: mimeType });
+                                        url = URL.createObjectURL(blob);
+                                        window.__currentBlobUrl = url;
+                                        console.log(__VR_LOG_PREFIX + ' 分片读取完成，blob URL=' + url + ', 片数=' + uint8Arrays.length + ', 总字节=' + merged.length);
+                                    } else {
+                                        // file:// 协议下 Blob URL 不稳定，使用 base64 data URL
+                                        var base64DataUrl = _uint8ArrayToBase64(merged);
+                                        url = 'data:' + mimeType + ';base64,' + base64DataUrl;
+                                        console.log(__VR_LOG_PREFIX + ' 分片读取完成，data URL 长度=' + url.length + ', 片数=' + uint8Arrays.length + ', 总字节=' + merged.length);
+                                    }
+                                    resolve({ success: true, data: url });
+                                } catch (e) {
+                                    console.error(__VR_LOG_PREFIX + ' 创建视频 URL 失败:', e);
+                                    resolve({ success: false, error: '创建视频 URL 失败: ' + String(e) });
+                                }
+                                return;
+                            }
+                            setTimeout(nextChunk, 0);
+                        }
+                        nextChunk();
+                    } catch (e) {
+                        resolve({ success: false, error: String(e) });
+                    }
+                });
+            },
+            renameMediaFiles: function (oldPatientName, newPatientName, oldNo, newNo) {
+                return new Promise(function (resolve) {
+                    try {
+                        var r = callNative('renameMediaFiles', JSON.stringify({
+                            oldPatientName: oldPatientName,
+                            newPatientName: newPatientName,
+                            oldNo: oldNo,
+                            newNo: newNo
+                        }));
+                        resolve(r);
+                    } catch (e) { resolve({ success: false, error: String(e), renamed: 0 }); }
+                });
+            },
+            deleteFile: function (filePath) {
+                return new Promise(function (resolve) {
+                    try {
+                        var r = callNative('deleteFile', JSON.stringify({ filePath: filePath }));
+                        resolve(r);
+                    } catch (e) { resolve({ success: false, error: String(e) }); }
+                });
+            },
+            quitApp: function () {
+                try { if (N.quitApp) N.quitApp(); } catch (e) {}
+                return P({ success: true });
+            }
+        };
+
+        // 如果 injectElectronApiShim 已抢先注入了简单版本的 electronAPI，
+        // 用增强版方法覆盖关键方法（readFileAsBase64/savePrescriptionImage/saveVideoFile 等）
+        // 解决"图片无法加载，视频可以播放"的问题：图片走简单版 readFileAsBase64 超出 data URL 限制
+        if (oldAPI && (oldAPI.__injected || oldAPI.__nativeBridgeProxy)) {
+            console.log(__VR_LOG_PREFIX + ' electronAPI 已存在（injectElectronApiShim 先注入），覆盖增强版方法到旧对象');
+            var newAPI = window.electronAPI;
+            oldAPI.savePrescriptionImage = newAPI.savePrescriptionImage;
+            oldAPI.saveVideoFile = newAPI.saveVideoFile;
+            oldAPI.readFileAsBase64 = newAPI.readFileAsBase64;
+            oldAPI.findMediaFiles = newAPI.findMediaFiles;
+            oldAPI.openFile = newAPI.openFile;
+            oldAPI.deleteFile = newAPI.deleteFile;
+            oldAPI.renameMediaFiles = newAPI.renameMediaFiles;
+            oldAPI.getVideoDirectory = newAPI.getVideoDirectory;
+            oldAPI.saveBackupFile = newAPI.saveBackupFile; // ★ 2026-08-29：基础 shim 参数顺序曾写反，统一覆盖为正确版
+            oldAPI.__videoRecorderEnhanced = true;
+            // 恢复旧对象为 electronAPI
+            window.electronAPI = oldAPI;
+        }
+
+        console.log(__VR_LOG_PREFIX + ' electronAPI shim 已成功注入');
+        return true;
+    }
+
+    // ========================================================================
+    // 2. 常量与状态
+    // ========================================================================
+    var MAX_DURATION = 60;
+    var VIDEO_WIDTH = 1280;
+    var VIDEO_HEIGHT = 720;
+    var VIDEO_FPS = 30;
+    var VIDEO_BITRATE = 3000000;
+    var mediaStream = null;
+    var mediaRecorder = null;
+    var recordedChunks = [];
+    var timerInterval = null;
+    var recordingStartTime = 0;
+    var currentFacingMode = 'environment';
+    var currentCaptureStep = 1;
+    var capturedPhotos = [];
+
+    // ========================================================================
+    // 3. CSS 样式注入（仅 overlay/modal/toast，按钮样式由 React 控制）
+    // ========================================================================
+    function injectStyles() {
+        if (document.getElementById('cloud-video-recorder-styles')) return;
+        var style = document.createElement('style');
+        style.id = 'cloud-video-recorder-styles';
+        style.textContent = '\
+            .cloud-vr-overlay {\
+                position: fixed; top: 0; left: 0; right: 0; bottom: 0;\
+                background: rgba(0,0,0,0.7); z-index: 99998;\
+                display: flex; align-items: center; justify-content: center;\
+            }\
+            .cloud-vr-modal {\
+                background: #fff; border-radius: 10px; padding: 16px;\
+                width: 90vw; max-width: 640px; max-height: 90vh;\
+                box-shadow: 0 8px 32px rgba(0,0,0,0.3);\
+                display: flex; flex-direction: column;\
+                overflow: hidden;\
+            }\
+            .cloud-vr-modal-header {\
+                position: relative;\
+                margin-bottom: 10px; font-size: 16px; font-weight: 600; color: #333;\
+                padding-right: 40px;\
+            }\
+            .cloud-vr-close-btn {\
+                background: rgba(0,0,0,0.5); border: none; font-size: 20px; cursor: pointer;\
+                color: #fff; line-height: 1; width: 32px; height: 32px;\
+                border-radius: 50%; display: flex; align-items: center; justify-content: center;\
+                position: absolute; top: 8px; right: 8px; z-index: 100;\
+            }\
+            .cloud-vr-preview-wrap {\
+                position: relative; width: 100%; background: #000;\
+                border-radius: 6px; overflow: hidden;\
+                flex: 1; min-height: 0;\
+            }\
+            .cloud-vr-preview-wrap video {\
+                width: 100%; height: 100%; object-fit: contain;\
+            }\
+            .cloud-vr-rec-indicator {\
+                position: absolute; top: 10px; left: 10px;\
+                display: none; align-items: center; gap: 6px;\
+                background: rgba(220,53,69,0.9); color: #fff;\
+                padding: 3px 10px; border-radius: 12px; font-size: 13px;\
+            }\
+            .cloud-vr-rec-indicator.active { display: flex; }\
+            .cloud-vr-rec-dot {\
+                width: 8px; height: 8px; background: #fff; border-radius: 50%;\
+                animation: cloud-vr-pulse 1s infinite;\
+            }\
+            @keyframes cloud-vr-pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }\
+            .cloud-vr-timer {\
+                position: absolute; top: 10px; right: 10px;\
+                background: rgba(0,0,0,0.6); color: #fff;\
+                padding: 3px 10px; border-radius: 4px; font-size: 14px;\
+                font-family: monospace;\
+            }\
+            .cloud-vr-switch-btn {\
+                position: absolute; bottom: 10px; right: 10px;\
+                width: 40px; height: 40px;\
+                background: rgba(0,0,0,0.6); color: #fff;\
+                border: none; border-radius: 50%;\
+                font-size: 18px; cursor: pointer;\
+                display: flex; align-items: center; justify-content: center;\
+            }\
+            .cloud-vr-controls {\
+                display: flex; justify-content: center; gap: 12px; margin-top: 16px;\
+            }\
+            .cloud-vr-ctrl-btn {\
+                padding: 10px 28px; border: none; border-radius: 6px;\
+                font-size: 15px; cursor: pointer; transition: opacity 0.2s;\
+            }\
+            .cloud-vr-ctrl-btn:disabled { opacity: 0.5; cursor: not-allowed; }\
+            .cloud-vr-start-btn { background: #dc3545; color: #fff; }\
+            .cloud-vr-stop-btn { background: #6c757d; color: #fff; }\
+            .cloud-vr-save-btn { background: #28a745; color: #fff; }\
+            .cloud-vr-capture-btn { background: #007bff; color: #fff; }\
+            .cloud-vr-retake-btn { background: #ffc107; color: #333; }\
+            .cloud-vr-status {\
+                text-align: center; margin-top: 10px; font-size: 13px; color: #666;\
+            }\
+            .cloud-vr-status.error { color: #dc3545; }\
+            .cloud-vr-status.success { color: #28a745; }\
+            .cloud-vr-preview-wrap canvas {\
+                width: 100%; height: 100%; object-fit: contain;\
+            }\
+            .cloud-vr-flash {\
+                position: absolute; top: 0; left: 0; right: 0; bottom: 0;\
+                background: #fff; opacity: 0; pointer-events: none;\
+                transition: opacity 0.15s;\
+            }\
+            .cloud-vr-flash.active { opacity: 0.8; transition: none; }\
+            .cloud-vr-guide-overlay {\
+                position: absolute; top: 0; left: 0; right: 0; bottom: 0;\
+                pointer-events: none; z-index: 100;\
+                display: flex; flex-direction: column; align-items: center; justify-content: center;\
+            }\
+            .cloud-vr-guide-svg {\
+                width: 65%; max-width: 280px;\
+                opacity: 0.75;\
+            }\
+            .cloud-vr-guide-text {\
+                position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%);\
+                background: rgba(0,0,0,0.7); color: #fff;\
+                padding: 8px 20px; border-radius: 20px; font-size: 14px;\
+                pointer-events: none; white-space: nowrap;\
+                z-index: 101;\
+            }\
+            .cloud-vr-step-indicator {\
+                display: flex; justify-content: center; gap: 16px; margin-top: 10px;\
+            }\
+            .cloud-vr-step-item {\
+                font-size: 13px; color: #999; padding: 4px 12px; border-radius: 16px;\
+                background: #f0f0f0;\
+            }\
+            .cloud-vr-step-item.active {\
+                color: #fff; background: #007bff;\
+            }\
+            .cloud-vr-next-btn { background: #28a745; color: #fff; }\
+            .cloud-vr-next-btn:hover:not(:disabled) { background: #218838; }\
+            .cloud-vr-toast {\
+                position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);\
+                background: rgba(0,0,0,0.85); color: #fff;\
+                padding: 16px 24px; border-radius: 8px; z-index: 99999;\
+                font-size: 14px; max-width: 90vw; text-align: center;\
+                word-break: break-all; line-height: 1.5;\
+            }\
+        ';
+        document.head.appendChild(style);
+    }
+
+    // ========================================================================
+    // 4. Toast 提示
+    // ========================================================================
+    function showToast(msg) {
+        var existing = document.getElementById('cloudVrToast');
+        if (existing) existing.remove();
+        var toast = document.createElement('div');
+        toast.id = 'cloudVrToast';
+        toast.className = 'cloud-vr-toast';
+        toast.textContent = msg;
+        document.body.appendChild(toast);
+        setTimeout(function () {
+            if (toast.parentNode) toast.parentNode.removeChild(toast);
+        }, 4000);
+    }
+
+    // ========================================================================
+    // 5. 文件名生成
+    // ========================================================================
+
+    // 预查最近保存处方的患者姓名和编号（支持先拍照后录入姓名的流程）
+    // 异步查询 IndexedDB，结果写入 window.__latestPrescriptionPatientName / __latestPrescriptionNo
+    function preloadLatestPrescriptionInfo() {
+        try {
+            if (typeof getAllUserPrescriptions !== 'function') return;
+            getAllUserPrescriptions().then(function (prescriptions) {
+                if (!prescriptions || !prescriptions.length) return;
+                // 按 createdAt 降序找最近一条
+                var latest = prescriptions[0];
+                for (var i = 1; i < prescriptions.length; i++) {
+                    if ((prescriptions[i].createdAt || 0) > (latest.createdAt || 0)) {
+                        latest = prescriptions[i];
+                    }
+                }
+                if (latest.patientName) {
+                    window.__latestPrescriptionPatientName = latest.patientName;
+                }
+                if (latest.prescriptionNo) {
+                    window.__latestPrescriptionNo = latest.prescriptionNo;
+                }
+            }).catch(function (e) {
+                console.warn('[video-recorder] 预查最近处方失败:', e);
+            });
+        } catch (e) {
+            console.warn('[video-recorder] preloadLatestPrescriptionInfo 异常:', e);
+        }
+    }
+
+    function generateFileName(type, subtype) {
+        var patientName = '';
+        var prescriptionNo = '';
+
+        var nameEl = document.querySelector('input[name="patientName"], #patientName, [data-field="patientName"]');
+        if (nameEl) {
+            patientName = (nameEl.value || nameEl.textContent || '').trim();
+        }
+        if (!patientName) {
+            var nameSpan = document.querySelector('.patient-name, [data-patient-name]');
+            if (nameSpan) patientName = (nameSpan.textContent || '').trim();
+        }
+        // 回退1：表单为空时，使用最近保存处方的患者姓名（支持先拍照后录入姓名的流程）
+        if (!patientName && window.__latestPrescriptionPatientName) {
+            patientName = window.__latestPrescriptionPatientName;
+        }
+
+        var noEl = document.querySelector('input[name="prescriptionNo"], #prescriptionNo, [data-field="prescriptionNo"]');
+        if (noEl) {
+            prescriptionNo = (noEl.value || noEl.textContent || '').trim();
+        }
+        // 回退1：表单为空时，使用最近保存处方的编号
+        if (!prescriptionNo && window.__latestPrescriptionNo) {
+            prescriptionNo = window.__latestPrescriptionNo;
+        }
+
+        var sanitizeStr = function (s) {
+            return (s || '').trim().replace(/[\/\\:*?"<>|]/g, '_').replace(/ /g, '');
+        };
+        var cleanName = sanitizeStr(patientName) || 'unknown';
+
+        var identifier = sanitizeStr(prescriptionNo);
+        if (!identifier) {
+            var now = new Date();
+            var pad = function (n) { return String(n).padStart(2, '0'); };
+            identifier = String(now.getFullYear()).slice(-2) +
+                pad(now.getMonth() + 1) + pad(now.getDate()) + '_' +
+                pad(now.getHours()) + pad(now.getMinutes()) + pad(now.getSeconds());
+        }
+
+        // 存储使用的标识符，供处方保存后重命名使用
+        window.__lastUsedMediaIdentifier = identifier;
+        window.__lastUsedMediaPatientName = cleanName;
+        try {
+            localStorage.setItem('lastUsedMediaIdentifier', identifier);
+            localStorage.setItem('lastUsedMediaPatientName', cleanName);
+        } catch (e) { /* 忽略localStorage写入错误 */ }
+
+        var ext = type === 'video' ? (window.__currentVideoExt || 'webm') : 'jpg';
+        var sub = subtype ? '_' + subtype : '';
+        return cleanName + '_' + identifier + '_' + type + sub + '.' + ext;
+    }
+
+    // ========================================================================
+    // 6. 录像 Overlay
+    // ========================================================================
+    window.openRecordingOverlay = function () {
+        // 懒加载：首次打开overlay时注入样式（避免启动时阻塞页面渲染）
+        injectStyles();
+        var existing = document.getElementById('cloudVrOverlay');
+        if (existing) existing.remove();
+
+        // 预查最近保存处方的患者姓名（支持先拍照后录入姓名的流程）
+        preloadLatestPrescriptionInfo();
+
+        var overlay = document.createElement('div');
+        overlay.id = 'cloudVrOverlay';
+        overlay.className = 'cloud-vr-overlay';
+        overlay.innerHTML = '\
+            <div class="cloud-vr-modal">\
+                <div class="cloud-vr-modal-header">\
+                    <span>🎥 问诊视频录制</span>\
+                    <button class="cloud-vr-close-btn" id="cloudVrCloseBtn">&times;</button>\
+                </div>\
+                <div class="cloud-vr-preview-wrap">\
+                    <video id="cloudVrPreview" autoplay muted playsinline></video>\
+                    <button class="cloud-vr-switch-btn" id="cloudVrSwitchBtn" title="切换摄像头">🔄</button>\
+                    <div class="cloud-vr-rec-indicator" id="cloudVrRecIndicator">\
+                        <span class="cloud-vr-rec-dot"></span>录制中\
+                    </div>\
+                    <div class="cloud-vr-timer" id="cloudVrTimer" style="display:none;">00:00</div>\
+                </div>\
+                <div class="cloud-vr-controls">\
+                    <button class="cloud-vr-ctrl-btn cloud-vr-start-btn" id="cloudVrStartBtn">开始录制</button>\
+                    <button class="cloud-vr-ctrl-btn cloud-vr-stop-btn" id="cloudVrStopBtn" disabled>停止录制</button>\
+                    <button class="cloud-vr-ctrl-btn cloud-vr-save-btn" id="cloudVrSaveBtn" disabled>保存视频</button>\
+                </div>\
+                <div class="cloud-vr-status" id="cloudVrStatus">\
+                    点击"开始录制"启动摄像头（最长 ' + MAX_DURATION + ' 秒）\
+                </div>\
+            </div>\
+        ';
+        document.body.appendChild(overlay);
+
+        document.getElementById('cloudVrCloseBtn').onclick = closeOverlay;
+        document.getElementById('cloudVrStartBtn').onclick = startRecording;
+        document.getElementById('cloudVrStopBtn').onclick = stopRecording;
+        document.getElementById('cloudVrSaveBtn').onclick = saveVideo;
+        document.getElementById('cloudVrSwitchBtn').onclick = switchCamera;
+
+        overlay.onclick = function (e) {
+            if (e.target === overlay) closeOverlay();
+        };
+
+        initCamera();
+    };
+
+    async function initCamera() {
+        var statusEl = document.getElementById('cloudVrStatus');
+        var startBtn = document.getElementById('cloudVrStartBtn');
+
+        try {
+            console.log('[视频录制] initCamera: isSecureContext=' + window.isSecureContext + ' href=' + window.location.href);
+            console.log('[视频录制] mediaDevices=' + (navigator.mediaDevices ? 'yes' : 'NO') + ' getUserMedia=' + (navigator.mediaDevices && navigator.mediaDevices.getUserMedia ? 'yes' : 'NO'));
+            statusEl.textContent = '正在请求摄像头权限...';
+            statusEl.className = 'cloud-vr-status';
+
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                statusEl.textContent = '摄像头初始化失败：浏览器不支持 getUserMedia';
+                statusEl.className = 'cloud-vr-status error';
+                startBtn.disabled = true;
+                return;
+            }
+
+            // 多级分辨率兜底：从高到低尝试不同约束组合，适配不同手机型号
+            var constraintOptions = [
+                // 1. 理想配置：720p + 指定摄像头 + 原始音频
+                {
+                    video: { width: { ideal: VIDEO_WIDTH }, height: { ideal: VIDEO_HEIGHT }, frameRate: { ideal: VIDEO_FPS }, facingMode: currentFacingMode },
+                    audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+                },
+                // 2. 720p + 指定摄像头 + 无音频约束
+                {
+                    video: { width: { ideal: VIDEO_WIDTH }, height: { ideal: VIDEO_HEIGHT }, frameRate: { ideal: VIDEO_FPS }, facingMode: currentFacingMode },
+                    audio: false
+                },
+                // 3. 720p 不指定摄像头（某些手机不支持facingMode）
+                {
+                    video: { width: { ideal: VIDEO_WIDTH }, height: { ideal: VIDEO_HEIGHT }, frameRate: { ideal: VIDEO_FPS } },
+                    audio: false
+                },
+                // 4. 480p 兜底分辨率
+                {
+                    video: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } },
+                    audio: false
+                },
+                // 5. 最简约束（最大兼容性）
+                { video: true, audio: false }
+            ];
+
+            var mediaStreamResult = null;
+            var lastError = null;
+            var usedConfig = '';
+
+            for (var i = 0; i < constraintOptions.length; i++) {
+                try {
+                    mediaStreamResult = await navigator.mediaDevices.getUserMedia(constraintOptions[i]);
+                    usedConfig = i === 0 ? '高清' : (i < 3 ? '标准' : '兼容');
+                    console.log('[视频录制] 使用约束组合', i + 1, '成功');
+                    break;
+                } catch (err) {
+                    lastError = err;
+                    console.warn('[视频录制] 约束组合', i + 1, '失败:', err.message || err.name);
+                }
+            }
+
+            if (!mediaStreamResult) {
+                // 权限被拒绝的特殊提示（同步离线APP：录像需麦克风权限）
+                if (lastError && (lastError.name === 'NotAllowedError' || lastError.name === 'SecurityError')) {
+                    throw new Error('摄像头权限被拒绝，请在手机设置→应用管理中授予摄像头和麦克风权限');
+                }
+                throw lastError || new Error('无法获取摄像头权限');
+            }
+
+            mediaStream = mediaStreamResult;
+
+            var videoEl = document.getElementById('cloudVrPreview');
+            videoEl.srcObject = mediaStream;
+
+            // 等待视频帧数据就绪，确保预览画面正常显示
+            statusEl.textContent = '正在初始化摄像头...';
+            startBtn.disabled = true;
+
+            await new Promise(function (resolve, reject) {
+                var timeout = setTimeout(function () {
+                    reject(new Error('摄像头初始化超时'));
+                }, 5000);
+
+                videoEl.addEventListener('loadeddata', function onLoaded() {
+                    clearTimeout(timeout);
+                    videoEl.removeEventListener('loadeddata', onLoaded);
+                    resolve();
+                }, { once: true });
+
+                var checkReady = setInterval(function () {
+                    if (videoEl.readyState >= 2 && videoEl.videoWidth > 0) {
+                        clearTimeout(timeout);
+                        clearInterval(checkReady);
+                        resolve();
+                    }
+                }, 100);
+            });
+
+            await new Promise(function (r) { setTimeout(r, 200); });
+
+            var audioStatus = mediaStream.getAudioTracks().length > 0 ? '' : '（无声）';
+            statusEl.textContent = '摄像头已就绪' + audioStatus + '，点击"开始录制" [' + usedConfig + ']';
+            startBtn.disabled = false;
+        } catch (err) {
+            console.error('[视频录制] 摄像头初始化失败:', err);
+            statusEl.textContent = '摄像头初始化失败：' + (err.message || err.name || '未知错误');
+            statusEl.className = 'cloud-vr-status error';
+            startBtn.disabled = true;
+        }
+    }
+
+    function switchCamera() {
+        currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
+        if (mediaStream) {
+            mediaStream.getTracks().forEach(function (track) { track.stop(); });
+            mediaStream = null;
+        }
+        initCamera();
+    }
+
+    function startRecording() {
+        if (!mediaStream) {
+            setStatus('摄像头未就绪，请重试', 'error');
+            return;
+        }
+
+        var mimeTypes = [
+            'video/webm;codecs=vp9,opus',
+            'video/webm;codecs=vp8,opus',
+            'video/webm;codecs=vp9',
+            'video/webm;codecs=vp8',
+            'video/webm',
+            'video/mp4;codecs=h264,aac',
+            'video/mp4;codecs=h264',
+            'video/mp4'
+        ];
+        var selectedMime = '';
+        for (var i = 0; i < mimeTypes.length; i++) {
+            if (MediaRecorder.isTypeSupported(mimeTypes[i])) {
+                selectedMime = mimeTypes[i];
+                break;
+            }
+        }
+
+        // 根据实际mimeType设置文件扩展名（webm或mp4）
+        window.__currentVideoExt = selectedMime.indexOf('mp4') >= 0 ? 'mp4' : 'webm';
+
+        try {
+            mediaRecorder = new MediaRecorder(mediaStream, {
+                mimeType: selectedMime || undefined,
+                videoBitsPerSecond: VIDEO_BITRATE,
+                audioBitsPerSecond: 128000
+            });
+        } catch (err) {
+            console.error('[视频录制] MediaRecorder 创建失败:', err);
+            setStatus('录制器创建失败：' + err.message, 'error');
+            return;
+        }
+
+        recordedChunks = [];
+        mediaRecorder.ondataavailable = function (e) {
+            if (e.data && e.data.size > 0) {
+                recordedChunks.push(e.data);
+            }
+        };
+        mediaRecorder.onstop = function () {
+            onRecordingStop(selectedMime);
+        };
+        mediaRecorder.onerror = function (e) {
+            console.error('[视频录制] MediaRecorder 错误:', e.error);
+            setStatus('录制出错：' + (e.error ? e.error.message : '未知'), 'error');
+        };
+
+        mediaRecorder.start(1000);
+        recordingStartTime = Date.now();
+
+        document.getElementById('cloudVrStartBtn').disabled = true;
+        document.getElementById('cloudVrStopBtn').disabled = false;
+        document.getElementById('cloudVrRecIndicator').classList.add('active');
+        document.getElementById('cloudVrTimer').style.display = 'block';
+
+        setStatus('录制中...', '');
+
+        timerInterval = setInterval(updateTimer, 200);
+
+        setTimeout(function () {
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                stopRecording();
+            }
+        }, MAX_DURATION * 1000);
+    }
+
+    function stopRecording() {
+        if (mediaRecorder && mediaRecorder.state === 'recording') {
+            mediaRecorder.stop();
+        }
+        if (timerInterval) {
+            clearInterval(timerInterval);
+            timerInterval = null;
+        }
+
+        document.getElementById('cloudVrStopBtn').disabled = true;
+        document.getElementById('cloudVrRecIndicator').classList.remove('active');
+    }
+
+    function onRecordingStop(mimeType) {
+        // 验证录制数据非空（录制时间过短可能导致 recordedChunks 为空）
+        if (!recordedChunks || recordedChunks.length === 0) {
+            setStatus('录制数据为空，请重新录制', 'error');
+            var startBtn2 = document.getElementById('cloudVrStartBtn');
+            if (startBtn2) startBtn2.disabled = false;
+            return;
+        }
+
+        var blob = new Blob(recordedChunks, { type: mimeType || 'video/webm' });
+        var sizeMB = (blob.size / 1024 / 1024).toFixed(2);
+
+        // 二次验证：blob 大小必须大于 1KB，否则可能是无效数据
+        if (blob.size < 1024) {
+            console.error('[视频录制] 录制数据过小: ' + blob.size + ' bytes');
+            setStatus('录制数据异常（' + blob.size + ' 字节），请重新录制', 'error');
+            var startBtn3 = document.getElementById('cloudVrStartBtn');
+            if (startBtn3) startBtn3.disabled = false;
+            return;
+        }
+
+        var fileName = generateFileName('video');
+
+        window.__pendingVideoBlob = blob;
+        window.__pendingVideoFileName = fileName;
+
+        document.getElementById('cloudVrSaveBtn').disabled = false;
+        setStatus('录制完成，大小 ' + sizeMB + ' MB，正在自动保存...', 'success');
+        setTimeout(saveVideo, 300);
+    }
+
+    async function saveVideo() {
+        var blob = window.__pendingVideoBlob;
+        var fileName = window.__pendingVideoFileName;
+        if (!blob || !fileName) {
+            setStatus('没有可保存的视频', 'error');
+            return;
+        }
+
+        var saveBtn = document.getElementById('cloudVrSaveBtn');
+        saveBtn.disabled = true;
+        saveBtn.textContent = '保存中...';
+
+        try {
+            // 兼容性修复：使用 FileReader 替代 blob.arrayBuffer()
+            // 旧版 Android WebView 不支持 Blob.arrayBuffer()，会抛异常导致视频无法保存
+            var arrayBuffer = await new Promise(function (resolve, reject) {
+                var reader = new FileReader();
+                reader.onload = function () { resolve(reader.result); };
+                reader.onerror = function () { reject(reader.error || new Error('FileReader 读取失败')); };
+                try {
+                    reader.readAsArrayBuffer(blob);
+                } catch (e) {
+                    reject(e);
+                }
+            });
+
+            // 验证 arrayBuffer 有效性
+            if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+                throw new Error('视频数据为空（arrayBuffer.byteLength = 0）');
+            }
+
+            console.log('[视频录制] 视频数据读取成功，大小: ' + (arrayBuffer.byteLength / 1024 / 1024).toFixed(2) + ' MB');
+
+            var result = await window.electronAPI.saveVideoFile(arrayBuffer, fileName);
+
+            if (result.success) {
+                var savePath = result.directory || result.filePath || '';
+                setStatus('视频已保存：' + (result.fileName || fileName), 'success');
+                showToast('视频已保存到：' + savePath);
+                setTimeout(closeOverlay, 1500);
+            } else {
+                setStatus('保存失败：' + (result.error || '未知错误'), 'error');
+                saveBtn.disabled = false;
+                saveBtn.textContent = '保存视频';
+            }
+        } catch (err) {
+            console.error('[视频录制] 保存失败:', err);
+            setStatus('保存失败：' + (err.message || err), 'error');
+            saveBtn.disabled = false;
+            saveBtn.textContent = '保存视频';
+        }
+    }
+
+    // ========================================================================
+    // 7. 拍照 Overlay
+    // ========================================================================
+    window.openPhotoOverlay = function () {
+        // 懒加载：首次打开overlay时注入样式（避免启动时阻塞页面渲染）
+        injectStyles();
+        var existing = document.getElementById('cloudVrOverlay');
+        if (existing) existing.remove();
+
+        // 预查最近保存处方的患者姓名（支持先拍照后录入姓名的流程）
+        preloadLatestPrescriptionInfo();
+
+        currentCaptureStep = 1;
+        capturedPhotos = [];
+
+        var overlay = document.createElement('div');
+        overlay.id = 'cloudVrOverlay';
+        overlay.className = 'cloud-vr-overlay';
+        overlay.innerHTML = '\
+            <div class="cloud-vr-modal">\
+                <div class="cloud-vr-modal-header">\
+                    <span>📷 舌诊拍照</span>\
+                    <button class="cloud-vr-close-btn" id="cloudVrCloseBtn">&times;</button>\
+                </div>\
+                <div class="cloud-vr-preview-wrap">\
+                    <video id="cloudVrPreview" autoplay muted playsinline></video>\
+                    <button class="cloud-vr-switch-btn" id="cloudVrSwitchBtn" title="切换摄像头">🔄</button>\
+                    <canvas id="cloudVrPhotoCanvas" style="display:none;"></canvas>\
+                    <div class="cloud-vr-flash" id="cloudVrFlash"></div>\
+                    <div class="cloud-vr-guide-overlay" id="cloudVrGuideOverlay">\
+                        <svg class="cloud-vr-guide-svg" id="cloudVrGuideSvg1" viewBox="0 0 300 300" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">\
+                            <defs>\
+                                <linearGradient id="tg1" x1="0%" y1="0%" x2="0%" y2="100%">\
+                                    <stop offset="0%" style="stop-color:#ffb6c1;stop-opacity:0.6" />\
+                                    <stop offset="100%" style="stop-color:#ff69b4;stop-opacity:0.6" />\
+                                </linearGradient>\
+                            </defs>\
+                            <ellipse cx="150" cy="180" rx="60" ry="80" fill="url(#tg1)" stroke="#fff" stroke-width="3"/>\
+                            <line x1="150" y1="120" x2="150" y2="220" stroke="#fff" stroke-width="2" stroke-dasharray="8,4"/>\
+                            <circle cx="120" cy="160" r="8" fill="#ff4444" opacity="0.8"/>\
+                            <circle cx="180" cy="160" r="8" fill="#ff4444" opacity="0.8"/>\
+                            <circle cx="150" cy="200" r="6" fill="#ff8888" opacity="0.8"/>\
+                            <text x="150" y="270" text-anchor="middle" fill="#fff" font-size="14" font-weight="bold">伸出舌头，舌尖朝上</text>\
+                        </svg>\
+                        <svg class="cloud-vr-guide-svg" id="cloudVrGuideSvg2" viewBox="0 0 300 300" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style="display:none;">\
+                            <defs>\
+                                <linearGradient id="tg2" x1="0%" y1="0%" x2="0%" y2="100%">\
+                                    <stop offset="0%" style="stop-color:#ffb6c1;stop-opacity:0.6" />\
+                                    <stop offset="100%" style="stop-color:#ff69b4;stop-opacity:0.6" />\
+                                </linearGradient>\
+                                <linearGradient id="vg2" x1="0%" y1="0%" x2="100%" y2="0%">\
+                                    <stop offset="0%" style="stop-color:#ff4444;stop-opacity:0.7" />\
+                                    <stop offset="100%" style="stop-color:#cc0000;stop-opacity:0.7" />\
+                                </linearGradient>\
+                            </defs>\
+                            <ellipse cx="150" cy="180" rx="50" ry="70" fill="url(#tg2)" stroke="#fff" stroke-width="3"/>\
+                            <line x1="150" y1="130" x2="150" y2="230" stroke="#fff" stroke-width="2" stroke-dasharray="8,4"/>\
+                            <path d="M 130 150 Q 150 170 170 150" stroke="url(#vg2)" stroke-width="4" fill="none"/>\
+                            <path d="M 125 165 Q 150 185 175 165" stroke="url(#vg2)" stroke-width="3" fill="none"/>\
+                            <path d="M 135 180 Q 150 195 165 180" stroke="url(#vg2)" stroke-width="2" fill="none"/>\
+                            <text x="150" y="270" text-anchor="middle" fill="#fff" font-size="14" font-weight="bold">卷起舌头，展示舌下络脉</text>\
+                        </svg>\
+                        <div class="cloud-vr-guide-text" id="cloudVrGuideText">请将舌头伸出，对准虚线位置</div>\
+                    </div>\
+                </div>\
+                <div class="cloud-vr-step-indicator">\
+                    <span class="cloud-vr-step-item active" id="cloudVrStep1">1. 采集舌面图像</span>\
+                    <span class="cloud-vr-step-item" id="cloudVrStep2">2. 采集舌下络脉</span>\
+                </div>\
+                <div class="cloud-vr-controls">\
+                    <button class="cloud-vr-ctrl-btn cloud-vr-capture-btn" id="cloudVrCaptureBtn">📷 拍照</button>\
+                    <button class="cloud-vr-ctrl-btn cloud-vr-next-btn" id="cloudVrNextBtn" style="display:none;">下一步</button>\
+                    <button class="cloud-vr-ctrl-btn cloud-vr-save-btn" id="cloudVrPhotoSaveBtn" disabled>保存照片</button>\
+                    <button class="cloud-vr-ctrl-btn cloud-vr-retake-btn" id="cloudVrRetakeBtn" disabled>重拍</button>\
+                </div>\
+                <div class="cloud-vr-status" id="cloudVrStatus">\
+                    点击"拍照"采集舌面图像\
+                </div>\
+            </div>\
+        ';
+        document.body.appendChild(overlay);
+
+        document.getElementById('cloudVrCloseBtn').onclick = closeOverlay;
+        document.getElementById('cloudVrCaptureBtn').onclick = capturePhoto;
+        document.getElementById('cloudVrPhotoSaveBtn').onclick = savePhoto;
+        document.getElementById('cloudVrRetakeBtn').onclick = retakePhoto;
+        document.getElementById('cloudVrSwitchBtn').onclick = switchCameraForPhoto;
+        document.getElementById('cloudVrNextBtn').onclick = nextCaptureStep;
+
+        overlay.onclick = function (e) {
+            if (e.target === overlay) closeOverlay();
+        };
+
+        initCameraForPhoto();
+    };
+
+    async function initCameraForPhoto() {
+        var statusEl = document.getElementById('cloudVrStatus');
+        var captureBtn = document.getElementById('cloudVrCaptureBtn');
+
+        try {
+            statusEl.textContent = '正在请求摄像头权限...';
+            statusEl.className = 'cloud-vr-status';
+
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                statusEl.textContent = '摄像头初始化失败：浏览器不支持 getUserMedia';
+                statusEl.className = 'cloud-vr-status error';
+                captureBtn.disabled = true;
+                return;
+            }
+
+            // 多级分辨率兜底：从高到低尝试不同约束组合，适配不同手机型号
+            var constraintOptions = [
+                { video: { width: { ideal: VIDEO_WIDTH }, height: { ideal: VIDEO_HEIGHT }, frameRate: { ideal: VIDEO_FPS }, facingMode: currentFacingMode }, audio: false },
+                { video: { width: { ideal: VIDEO_WIDTH }, height: { ideal: VIDEO_HEIGHT }, frameRate: { ideal: VIDEO_FPS } }, audio: false },
+                { video: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } }, audio: false },
+                { video: true, audio: false }
+            ];
+
+            var mediaStreamResult = null;
+            var lastError = null;
+
+            for (var i = 0; i < constraintOptions.length; i++) {
+                try {
+                    mediaStreamResult = await navigator.mediaDevices.getUserMedia(constraintOptions[i]);
+                    console.log('[拍照] 使用约束组合', i + 1, '成功');
+                    break;
+                } catch (err) {
+                    lastError = err;
+                    console.warn('[拍照] 约束组合', i + 1, '失败:', err.message || err.name);
+                }
+            }
+
+            if (!mediaStreamResult) {
+                if (lastError && (lastError.name === 'NotAllowedError' || lastError.name === 'SecurityError')) {
+                    throw new Error('摄像头权限被拒绝，请在手机设置→应用管理中授予摄像头权限');
+                }
+                throw lastError || new Error('无法获取摄像头权限');
+            }
+
+            mediaStream = mediaStreamResult;
+
+            var videoEl = document.getElementById('cloudVrPreview');
+            videoEl.srcObject = mediaStream;
+
+            statusEl.textContent = '正在初始化摄像头...';
+            captureBtn.disabled = true;
+
+            await new Promise(function (resolve, reject) {
+                var timeout = setTimeout(function () {
+                    reject(new Error('摄像头初始化超时'));
+                }, 8000);
+
+                var frameCount = 0;
+                var checkFrames = setInterval(function () {
+                    if (videoEl.readyState >= 2 && videoEl.videoWidth > 0) {
+                        frameCount++;
+                        // 等待至少3帧数据就绪，确保第一帧不是黑屏
+                        if (frameCount >= 3) {
+                            clearTimeout(timeout);
+                            clearInterval(checkFrames);
+                            resolve();
+                        }
+                    }
+                }, 100);
+
+                videoEl.addEventListener('playing', function onPlaying() {
+                    clearTimeout(timeout);
+                    clearInterval(checkFrames);
+                    videoEl.removeEventListener('playing', onPlaying);
+                    // 视频开始播放后，再等待一小段时间确保帧数据稳定
+                    setTimeout(resolve, 300);
+                }, { once: true });
+            });
+
+            await new Promise(function (r) { setTimeout(r, 500); });
+
+            statusEl.textContent = '摄像头已就绪，点击"拍照"';
+            captureBtn.disabled = false;
+        } catch (err) {
+            console.error('[拍照] 摄像头初始化失败:', err);
+            statusEl.textContent = '摄像头初始化失败：' + (err.message || err.name || '未知错误');
+            statusEl.className = 'cloud-vr-status error';
+            captureBtn.disabled = true;
+        }
+    }
+
+    function switchCameraForPhoto() {
+        currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
+        if (mediaStream) {
+            mediaStream.getTracks().forEach(function (track) { track.stop(); });
+            mediaStream = null;
+        }
+        initCameraForPhoto();
+    }
+
+    function capturePhoto(retryCount) {
+        retryCount = retryCount || 0;
+        var videoEl = document.getElementById('cloudVrPreview');
+        var canvasEl = document.getElementById('cloudVrPhotoCanvas');
+        if (!videoEl || !canvasEl || !mediaStream) {
+            setStatus('摄像头未就绪', 'error');
+            return;
+        }
+
+        // 检查视频流就绪状态：readyState >= 2 (HAVE_CURRENT_DATA) 才能保证 drawImage 不绘制空帧
+        // videoWidth > 0 不代表帧数据已就绪，必须同时检查 readyState
+        if (!videoEl.videoWidth || !videoEl.videoHeight || videoEl.readyState < 2) {
+            if (retryCount < 5) {
+                setStatus('视频流正在就绪... (' + (retryCount + 1) + '/5)', '');
+                // 等待100ms后重试，让视频帧数据加载到 readyState >= 2
+                setTimeout(function () { capturePhoto(retryCount + 1); }, 100);
+            } else {
+                setStatus('视频流未就绪，请重试', 'error');
+            }
+            return;
+        }
+
+        canvasEl.width = videoEl.videoWidth;
+        canvasEl.height = videoEl.videoHeight;
+
+        var ctx = canvasEl.getContext('2d');
+        if (!ctx) {
+            setStatus('Canvas 2D 上下文获取失败', 'error');
+            return;
+        }
+
+        // 先填充背景色（避免透明区域绘制失败时显示为透明/黑）
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, canvasEl.width, canvasEl.height);
+
+        // 再次确认 readyState >= 2（在重试等待期间状态可能变化）
+        if (videoEl.readyState < 2) {
+            if (retryCount < 5) {
+                setStatus('视频帧未就绪，重试中... (' + (retryCount + 1) + '/5)', '');
+                setTimeout(function () { capturePhoto(retryCount + 1); }, 100);
+                return;
+            }
+            setStatus('视频帧未就绪，请重试', 'error');
+            return;
+        }
+
+        try {
+            ctx.drawImage(videoEl, 0, 0, canvasEl.width, canvasEl.height);
+        } catch (drawErr) {
+            console.error('[拍照] drawImage 失败:', drawErr);
+            setStatus('拍照失败：' + (drawErr.message || 'drawImage异常'), 'error');
+            return;
+        }
+
+        if (isBlackFrame(ctx, canvasEl.width, canvasEl.height)) {
+            if (retryCount < 5) {
+                console.warn('[拍照] 检测到黑屏帧，重试中 (' + (retryCount + 1) + '/5)');
+                setStatus('图像捕获异常，重试中... (' + (retryCount + 1) + '/5)', '');
+                setTimeout(function () { capturePhoto(retryCount + 1); }, 150);
+                return;
+            }
+            setStatus('图像捕获失败，请重试', 'error');
+            return;
+        }
+
+        var dataUrl = canvasEl.toDataURL('image/jpeg', 0.8);
+
+        // 验证捕获的图片非空：JPEG data URL 应远大于几百字节
+        // base64 编码后最小 JPEG 也应有几百字节，过小说明是空白图像
+        if (dataUrl.length < 500) {
+            if (retryCount < 5) {
+                console.warn('[拍照] 捕获图像过小 (' + dataUrl.length + ' bytes)，重试中');
+                setStatus('图像捕获异常，重试中... (' + (retryCount + 1) + '/5)', '');
+                setTimeout(function () { capturePhoto(retryCount + 1); }, 100);
+                return;
+            }
+            setStatus('图像捕获失败，请重试', 'error');
+            return;
+        }
+
+        capturedPhotos[currentCaptureStep - 1] = dataUrl;
+
+        var flash = document.getElementById('cloudVrFlash');
+        if (flash) {
+            flash.classList.add('active');
+            setTimeout(function () { flash.classList.remove('active'); }, 150);
+        }
+
+        videoEl.style.display = 'none';
+        canvasEl.style.display = 'block';
+
+        var guideOverlay = document.getElementById('cloudVrGuideOverlay');
+        if (guideOverlay) guideOverlay.style.display = 'none';
+
+        document.getElementById('cloudVrCaptureBtn').disabled = true;
+        document.getElementById('cloudVrRetakeBtn').disabled = false;
+
+        if (currentCaptureStep === 1) {
+            document.getElementById('cloudVrNextBtn').style.display = 'block';
+            document.getElementById('cloudVrPhotoSaveBtn').style.display = 'none';
+            setStatus('已捕获舌面图像，点击"下一步"采集舌下络脉', 'success');
+        } else {
+            document.getElementById('cloudVrNextBtn').style.display = 'none';
+            document.getElementById('cloudVrPhotoSaveBtn').style.display = 'block';
+            document.getElementById('cloudVrPhotoSaveBtn').disabled = false;
+            setStatus('已捕获舌下络脉图像，正在自动保存...', 'success');
+            setTimeout(savePhoto, 300);
+        }
+    }
+
+    function updatePhotoGuide(step) {
+        var svg1 = document.getElementById('cloudVrGuideSvg1');
+        var svg2 = document.getElementById('cloudVrGuideSvg2');
+        var textEl = document.getElementById('cloudVrGuideText');
+        var overlay = document.getElementById('cloudVrGuideOverlay');
+
+        if (overlay) overlay.style.display = 'flex';
+        if (svg1 && svg2) {
+            if (step === 1) {
+                svg1.style.display = '';
+                svg2.style.display = 'none';
+            } else {
+                svg1.style.display = 'none';
+                svg2.style.display = '';
+            }
+        }
+        if (textEl) {
+            textEl.textContent = (step === 1) ? '请将舌头伸出，对准虚线位置' : '请卷起舌头，对准虚线位置拍摄舌下';
+        }
+    }
+
+    function nextCaptureStep() {
+        currentCaptureStep = 2;
+
+        var step1 = document.getElementById('cloudVrStep1');
+        var step2 = document.getElementById('cloudVrStep2');
+        if (step1) step1.classList.remove('active');
+        if (step2) step2.classList.add('active');
+
+        updatePhotoGuide(2);
+
+        var videoEl = document.getElementById('cloudVrPreview');
+        var canvasEl = document.getElementById('cloudVrPhotoCanvas');
+        if (videoEl) videoEl.style.display = '';
+        if (canvasEl) canvasEl.style.display = 'none';
+
+        document.getElementById('cloudVrCaptureBtn').disabled = false;
+        document.getElementById('cloudVrNextBtn').style.display = 'none';
+        document.getElementById('cloudVrRetakeBtn').disabled = true;
+
+        setStatus('请采集舌下络脉图像，点击"拍照"', '');
+    }
+
+    async function savePhoto() {
+        if (capturedPhotos.length === 0) {
+            setStatus('没有可保存的照片', 'error');
+            return;
+        }
+
+        var saveBtn = document.getElementById('cloudVrPhotoSaveBtn');
+        saveBtn.disabled = true;
+        saveBtn.textContent = '保存中...';
+
+        try {
+            var successCount = 0;
+            var photoTypes = ['tongue_front', 'tongue_under'];
+
+            for (var i = 0; i < capturedPhotos.length; i++) {
+                var dataUrl = capturedPhotos[i];
+                var fileName = generateFileName('photo', photoTypes[i]);
+                var result = await window.electronAPI.savePrescriptionImage(dataUrl, fileName);
+
+                if (result.success) {
+                    successCount++;
+                }
+            }
+
+            if (successCount === capturedPhotos.length) {
+                setStatus('照片已全部保存', 'success');
+                showToast('照片已保存');
+                setTimeout(closeOverlay, 1500);
+            } else {
+                setStatus('部分照片保存失败', 'error');
+                saveBtn.disabled = false;
+                saveBtn.textContent = '保存照片';
+            }
+        } catch (err) {
+            console.error('[拍照] 保存失败:', err);
+            setStatus('保存失败：' + err.message, 'error');
+            saveBtn.disabled = false;
+            saveBtn.textContent = '保存照片';
+        }
+    }
+
+    function retakePhoto() {
+        var videoEl = document.getElementById('cloudVrPreview');
+        var canvasEl = document.getElementById('cloudVrPhotoCanvas');
+        if (videoEl) videoEl.style.display = '';
+        if (canvasEl) canvasEl.style.display = 'none';
+
+        document.getElementById('cloudVrCaptureBtn').disabled = false;
+        document.getElementById('cloudVrRetakeBtn').disabled = true;
+        document.getElementById('cloudVrNextBtn').style.display = 'none';
+        document.getElementById('cloudVrPhotoSaveBtn').style.display = 'none';
+
+        updatePhotoGuide(currentCaptureStep);
+
+        if (currentCaptureStep === 1) {
+            setStatus('摄像头已就绪，点击"拍照"采集舌面图像', '');
+        } else {
+            setStatus('摄像头已就绪，点击"拍照"采集舌下络脉图像', '');
+        }
+    }
+
+    // ========================================================================
+    // 8. 工具函数
+    // ========================================================================
+    function updateTimer() {
+        var elapsed = Math.floor((Date.now() - recordingStartTime) / 1000);
+        var remaining = MAX_DURATION - elapsed;
+        var min = String(Math.floor(elapsed / 60)).padStart(2, '0');
+        var sec = String(elapsed % 60).padStart(2, '0');
+        var timerEl = document.getElementById('cloudVrTimer');
+        if (timerEl) {
+            timerEl.textContent = min + ':' + sec + ' / ' + MAX_DURATION + 's';
+            if (remaining <= 10) {
+                timerEl.style.color = '#ffc107';
+            }
+        }
+    }
+
+    function setStatus(text, type) {
+        var el = document.getElementById('cloudVrStatus');
+        if (el) {
+            el.textContent = text;
+            el.className = 'cloud-vr-status' + (type ? ' ' + type : '');
+        }
+    }
+
+    function closeOverlay() {
+        if (mediaRecorder && mediaRecorder.state === 'recording') {
+            stopRecording();
+        }
+        if (mediaStream) {
+            mediaStream.getTracks().forEach(function (t) { t.stop(); });
+            mediaStream = null;
+        }
+        if (timerInterval) {
+            clearInterval(timerInterval);
+            timerInterval = null;
+        }
+        var overlay = document.getElementById('cloudVrOverlay');
+        if (overlay) overlay.remove();
+        window.__pendingVideoBlob = null;
+        window.__pendingVideoFileName = null;
+    }
+
+    function isBlackFrame(ctx, width, height) {
+        try {
+            var imageData = ctx.getImageData(0, 0, width, height);
+            var data = imageData.data;
+            var totalBrightness = 0;
+            var sampleCount = 0;
+            
+            for (var i = 0; i < data.length; i += 40) {
+                totalBrightness += (data[i] + data[i+1] + data[i+2]) / 3;
+                sampleCount++;
+            }
+            
+            var avgBrightness = totalBrightness / sampleCount;
+            return avgBrightness < 10;
+        } catch (e) {
+            console.error('[拍照] isBlackFrame 检测失败:', e);
+            return false;
+        }
+    }
+
+    // ========================================================================
+// 9. 初始化（仅注入 shim，样式懒加载，按钮由 React ActionBar 渲染）
+// ========================================================================
+// 云端APP专属：隐藏历史栏顶部拍照/录像按钮
+    // 规范21.1：APP端历史栏隐藏这两个按钮（底部快捷操作栏 mobileActionBar 已有拍照/录像入口，避免重复）
+    // 仅云端APP注入本脚本，云端网页版/云端桌面版不注入，按钮保持显示不受影响
+    // 注意：云端APP从 https://tcm-prescription-system.pages.dev/ 加载页面（public/index.html），
+    // 页面源文件同时服务网页版不能直接隐藏，只能在此注入脚本中动态隐藏
+    function hideHistoryMediaButtons() {
+        try {
+            var ids = ['photoCaptureBtn', 'videoRecBtn'];
+            for (var i = 0; i < ids.length; i++) {
+                var btn = document.getElementById(ids[i]);
+                if (btn && btn.style.display !== 'none') btn.style.display = 'none';
+            }
+        } catch (e) { /* 忽略隐藏失败，不影响主流程 */ }
+    }
+
+    function init() {
+        console.log(__VR_LOG_PREFIX + ' 录像拍照脚本开始初始化');
+
+        var nativeBridge = window.AndroidNative;
+        if (!nativeBridge) {
+            console.warn(__VR_LOG_PREFIX + ' AndroidNative 桥接未找到，等待500ms重试');
+            setTimeout(init, 500);
+            return;
+        }
+
+        console.log(__VR_LOG_PREFIX + ' AndroidNative 桥接已找到，开始注入 shim');
+
+        var shimSuccess = injectElectronAPIShim();
+        if (!shimSuccess) {
+            console.error(__VR_LOG_PREFIX + ' electronAPI shim 注入失败');
+            setTimeout(init, 1000);
+            return;
+        }
+
+        // 隐藏历史栏拍照/录像按钮（立即+多次延迟，覆盖DOM晚就绪和页面动态刷新场景）
+        hideHistoryMediaButtons();
+        [500, 1500, 3000].forEach(function (t) { setTimeout(hideHistoryMediaButtons, t); });
+
+        // 样式懒加载：移到 openRecordingOverlay / openPhotoOverlay 内首次调用时注入
+        console.log(__VR_LOG_PREFIX + ' 录像拍照脚本初始化完成（样式延迟到首次打开overlay时注入）');
+    }
+
+function tryInit() {
+    try {
+        init();
+    } catch (e) {
+        console.error(__VR_LOG_PREFIX + ' 录像拍照脚本初始化异常:', e);
+        setTimeout(tryInit, 1000);
+    }
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', tryInit);
+} else {
+    tryInit();
+}
+
+console.log(__VR_LOG_PREFIX + ' 录像拍照注入脚本已加载');
 })();
