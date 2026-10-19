@@ -2133,3 +2133,14 @@ ode --check sw.js/entitlement.js、sync-html/copy-consistency/check-interface/cv
   - 桌面/宽屏（>768 且非移动 UA）保留原悬浮胶囊（可点击立即同步）。
 * **验证**：Playwright 双上下文（1280 桌面 / Pixel 7 UA+393 宽）7/7：桌面胶囊可见且无导航点；移动端胶囊隐藏、导航点可见且挂在 .mobile-nav-item、尺寸≤12px、保存按钮不被遮挡。同步功能的 179 项独立验证 A/B 全 PASS（D1 为 server-dev 旧桩的 git 基线查找失效，属工具问题非产品）。
 * **生效**：静态页随 push 部署；云 APP 联网打开一次即拿新 index（SW 网络优先），离线缓存旧页在下次联网刷新后更新。云桌面/网页宽屏不受影响。
+## 62. 云 APP「每次同步弹库存预警」根因与修复：同步不得走业务保存钩子（2026-10-19，desktop/cloud 热更 2026.10.19-4）
+
+* **现象**：云 APP 每次自动同步都会弹出「⚠ 库存预警：…」，且药品库存被反复扣减（客户反馈"每次都弹"）。
+* **根因**：shared/stock-core.js 在加载后包装全局 savePrescriptionToDB（唯一保存收口）做差值扣库存 + 低库存 toast。云端离线同步 MVP 的 pull 落地为了复用现有逻辑，直接调用 savePrescriptionToDB(rec) → 每轮同步把云端记录当作"本机新保存"：重复扣库存、重复弹预警、可扣成负数；推送回写 _mergePushedRecord、冲突副本 _keepConflictCopy 同样触发。另：D1 只持久化 extra 不保留顶层 __stockApplied，同步后记录丢标记，用户下次编辑还会再扣一遍。
+* **修复**：
+  1. CloudSync 块内新增 savePrescriptionToDBRaw(record)：直接 openDB() + store.put，绕开 stock-core 钩子；pull 落地、推送回写、冲突副本三处全部改用 raw。
+  2. stock-core 扣减后除顶层 __stockApplied 外同时写 ecord.extra.__stockApplied（D1 持久化 extra，KV/离线也随记录保存）；同步落地时 _applyServerRecord 从 extra.__stockApplied 恢复到顶层 → 跨设备/重装/同步后编辑都不会重复扣减；isFirstApply 判定兼容 extra 标记。
+  3. 保持业务保存（新存/改方/同日覆盖/恢复）仍走原钩子，库存只在真实本机保存时变动。
+* **验证**：Playwright 探针 4/4（_applyServerRecord/_mergePushedRecord/_keepConflictCopy 对业务钩子 0 调用、记录落 IDB、extra 标记恢复）；	ests/test-stock-core.cjs 94/94；同步独立验证 178/179（仅 D1 辅助工具旧桩的 git 基线查找失效，非产品）；copy-consistency/cv/interface/内联语法全绿；热更 2026.10.19-4 20 文件验签 PASS。
+* **数据修复提示**：修复前已重复扣减的诊所库存不会自动回滚，需要按「库存流水」核对后手工冲正（流水有 x/rx-adj 记录与时间，可定位同步时点的重复扣减）；药品库存异常客户优先检查此项。
+* **关键经验**：同步/批量导入等"系统写"必须使用 raw 持久化，绝不能复用带业务副作用的保存函数；幂等标记要放在服务端会持久化的字段（D1=extra）里，否则跨端必丢、重复扣减只是时间问题。

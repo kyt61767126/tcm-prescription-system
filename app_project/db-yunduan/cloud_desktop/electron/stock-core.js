@@ -1024,7 +1024,10 @@
             var plan = null, rxNo = '', isFirstApply = false;
             try {
                 if (isEnabled()) {
-                    isFirstApply = !(record && record.__stockApplied);
+                    // ★ 2026-10-19 云端同步幂等：D1 不保留顶层 __stockApplied，但 extra JSON 会随处方
+                    //   持久化/同步；extra 里有标记同样视为“已扣过”，避免同步后编辑时重复扣库存。
+                    var __extraMark = (record && record.extra && record.extra.__stockApplied) || '';
+                    isFirstApply = !(record && (record.__stockApplied || __extraMark));
                     rxNo = (record && (record.prescriptionNo || record.outpatientNo)) || '';
                     plan = planDeduction(record);
                 }
@@ -1033,6 +1036,10 @@
             try {
                 if (plan && plan.hasChanges && record && typeof record === 'object') {
                     record.__stockApplied = plan.marker;      // 幂等标记随处方持久化/云端同步
+                    // ★ 云端 D1 只保留 extra 列：标记同步写一份到 extra，跨端/重装后可恢复，防重复扣减
+                    try {
+                        record.extra = Object.assign({}, record.extra || {}, { __stockApplied: plan.marker });
+                    } catch (e1) {}
                     try { await _saveRx.call(this, record); } catch (e2) {}
                     notifyLowStock(commitDeduction(plan, rxNo, isFirstApply));
                 }
