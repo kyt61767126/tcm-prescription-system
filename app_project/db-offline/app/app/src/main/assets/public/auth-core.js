@@ -5985,10 +5985,13 @@
                 close();
                 try {
                     if (isDesktopLoginPage) {
-                        // 桌面：打开桌面激活窗口（其内含激活码 Tab）
+                        // ★ 2026-10-19 用户要求：选择「我有激活码，立即激活」→ 桌面激活窗口
+                        //   直接跳到「激活码激活」输入界面（initialTab=code 全链透传
+                        //   preload→main→activate.js→activate-window.html），不必先停在
+                        //   版本选择页。官网付款激活（上方 localRegActivateBtn）保持原样。
                         if (window.electronAPI && window.electronAPI.activate &&
                             typeof window.electronAPI.activate.show === 'function') {
-                            window.electronAPI.activate.show();
+                            window.electronAPI.activate.show({ initialTab: 'code' });
                         }
                         reloadLoginPage();
                     } else if (typeof window.openAdminActivate === 'function') {

@@ -428,13 +428,37 @@ async function showExpireAlertAndActivate(parentWindow, message) {
     }
 }
 
-function showActivateWindow(parentWindow) {
+function showActivateWindow(parentWindow, opts) {
+    // ★ 2026-10-19 直达 Tab：opts.initialTab='code' 时窗口加载后直接显示「激活码激活」
+    //   输入界面（注册成功页「🔑 我有激活码，立即激活」链路）。不传 opts / 非 code
+    //   时保持原行为（先版本选择页 → 官网付款激活/管理员激活/工单，零改动）。
+    const __initialTab = (opts && opts.initialTab === 'code') ? 'code' : '';
+
     // 如果已存在，聚焦+置顶
     if (activateWindow && !activateWindow.isDestroyed()) {
         activateWindow.show();
         activateWindow.focus();
         activateWindow.setAlwaysOnTop(true, 'screen-saver');
-        return;
+        // 已开窗口时同样响应直达请求（executeJavaScript 失败不影响窗口显示）
+        if (__initialTab) {
+            const __jumpToTab = function () {
+                try {
+                    activateWindow.webContents.executeJavaScript(
+                        'window.__activateJumpToTab && window.__activateJumpToTab("' + __initialTab + '")'
+                    ).catch(function () {});
+                } catch (e) { console.warn('[Activate] 已开窗口直达 Tab 失败(忽略):', e && e.message); }
+            };
+            try {
+                // 页面尚未加载完时 window.__activateJumpToTab 还不存在，直接执行会静默
+                // no-op → 挂到 did-finish-load 再跳一次（只挂一次，失败不影响窗口显示）
+                if (activateWindow.webContents.isLoading()) {
+                    activateWindow.webContents.once('did-finish-load', __jumpToTab);
+                } else {
+                    __jumpToTab();
+                }
+            } catch (e) { console.warn('[Activate] 已开窗口直达 Tab 调度失败(忽略):', e && e.message); }
+        }
+        return activateWindow;
     }
 
     const machineId = getMachineId();
@@ -488,9 +512,11 @@ function showActivateWindow(parentWindow) {
         }
     });
 
-    // 加载激活窗口 HTML，通过 URL 参数传递机器 ID
+    // 加载激活窗口 HTML，通过 URL 参数传递机器 ID（★ initialTab 可选：直达指定 Tab）
     const htmlPath = path.join(__dirname, 'activate-window.html');
-    activateWindow.loadFile(htmlPath, { query: { machineId: machineId } });
+    const __loadQuery = { machineId: machineId };
+    if (__initialTab) __loadQuery.initialTab = __initialTab;
+    activateWindow.loadFile(htmlPath, { query: __loadQuery });
 
     // ★ DOM和资源就绪后再show，避免白屏
     activateWindow.once('ready-to-show', () => {
@@ -576,6 +602,15 @@ function closeActivateWindow() {
         activateWindow.close();
         activateWindow = null;
     }
+}
+
+// ★ 2026-10-19 激活成功「确定」框被遮挡修复：license IPC 层用本访问器把原生
+//   dialog 的父窗设为激活窗口（alwaysOnTop screen-saver），并在弹框期间临时
+//   取消置顶，确保「确定」按钮可见可点、激活流程能收尾。
+function getActivateWindow() {
+    try {
+        return (activateWindow && !activateWindow.isDestroyed()) ? activateWindow : null;
+    } catch (e) { return null; }
 }
 
 // 重启应用
@@ -1224,6 +1259,7 @@ module.exports = {
     showActivateWindow,
     showExpireAlertAndActivate,
     closeActivateWindow,
+    getActivateWindow,   // ★ 2026-10-19：license IPC 原生弹框父窗（遮挡修复）
     restartApp,
     submitAdminRequest,
     checkAdminStatus,

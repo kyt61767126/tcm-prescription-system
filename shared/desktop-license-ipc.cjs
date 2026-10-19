@@ -97,6 +97,24 @@ function createDesktopLicenseIpc(options) {
         fse, safeStorage, path, getWritableConfigPath, hashPassword  // 仅离线（注册块）
     } = options;
 
+    // ★ 2026-10-19 原生弹框父窗解析：优先「激活窗口」——它由用户刚操作、且是
+    //   alwaysOnTop('screen-saver')，普通无父 dialog 会被它压在后面（用户实测：
+    //   「激活成功 … 确定」框被激活窗遮挡，看不到也点不到，激活流程无法完成）。
+    //   无激活窗时回退主窗；都不可用返回 null（Electron 35 传 null 父窗会抛参数
+    //   异常，故必须由调用方区分带/不带父窗两种 showMessageBoxSync 形态）。
+    function resolveDialogParent() {
+        try {
+            if (activateManager && typeof activateManager.getActivateWindow === 'function') {
+                const aw = activateManager.getActivateWindow();
+                if (aw && !aw.isDestroyed()) return aw;
+            }
+        } catch (e) { /* 取激活窗失败 → 回退主窗 */ }
+        try {
+            const mw = (typeof getMainWindow === 'function') ? getMainWindow() : null;
+            return (mw && !mw.isDestroyed()) ? mw : null;
+        } catch (e) { return null; }
+    }
+
     // —— get-status（端分叉）——
     if (productClass === 'cloud') {
 ipcMain.handle('license:get-status', () => {
@@ -282,9 +300,11 @@ ipcMain.handle('license:show-expire-alert', async (event, message) => {
     }
 });
 
-ipcMain.handle('license:show-activate', () => {
+ipcMain.handle('license:show-activate', (event, opts) => {
     try {
-        activateManager.showActivateWindow(getMainWindow());
+        // ★ 2026-10-19 opts 透传：{ initialTab:'code' } 直达激活码输入界面
+        //   （云端 activateManager.showActivateWindow 忽略第二参，行为零变化）
+        activateManager.showActivateWindow(getMainWindow(), opts);
     } catch (e) {
         console.error('[IPC] show-activate 异常:', e);
     }
@@ -308,7 +328,10 @@ ipcMain.handle('license:submit-activate', async (event, code, user, clinicName, 
                 // ★ 2026-10-17 P1修复：登录窗冷启动激活时主窗未创建（getMainWindow()=null），
                 //   null 父窗在 Electron 35 会抛参数异常 → 激活已成功却 catch 返回 success:false。
                 //   主窗存在才带父窗，否则用无父窗形式（离线 bnzc 登录窗先注册再激活新链首次暴露此路径）。
-                const __parent = (typeof getMainWindow === 'function') ? getMainWindow() : null;
+                // ★ 2026-10-19 遮挡修复：父窗优先取激活窗口（resolveDialogParent），并在弹框
+                //   期间临时取消其 screen-saver 置顶，确保「确定」框显示在激活窗上方、可点，
+                //   弹框返回后恢复置顶，激活窗仍锁在前台。
+                const __parent = resolveDialogParent();
                 const __box = {
                     type: 'info',
                     title: '激活成功',
@@ -317,8 +340,22 @@ ipcMain.handle('license:submit-activate', async (event, code, user, clinicName, 
                     buttons: ['确定'],
                     defaultId: 0
                 };
-                if (__parent && !__parent.isDestroyed()) {
-                    dialog.showMessageBoxSync(__parent, __box);
+                if (__parent) {
+                    let __wasTop = false;
+                    try {
+                        if (typeof __parent.isAlwaysOnTop === 'function' && __parent.isAlwaysOnTop()) {
+                            __wasTop = true;
+                            __parent.setAlwaysOnTop(false);
+                        }
+                    } catch (e) { __wasTop = false; }
+                    try {
+                        dialog.showMessageBoxSync(__parent, __box);
+                    } finally {
+                        if (__wasTop) {
+                            try { __parent.setAlwaysOnTop(true, 'screen-saver'); } catch (e) {}
+                            try { __parent.focus(); } catch (e) {}
+                        }
+                    }
                 } else {
                     dialog.showMessageBoxSync(__box);
                 }

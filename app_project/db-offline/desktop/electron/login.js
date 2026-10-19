@@ -703,10 +703,11 @@
                 try { _users = getUsers(await getAppConfig()); } catch (e) {}
             }
             // ★ 2026-09-22 出厂零账户（admin/admin 已取消）：无账户时不做密码校验。
-            // ★ 2026-09-24 交互修正：不再自动弹注册窗打断——注册入口就近可见（顶部红条
-            //   与提示正上方的【注册开通】按钮均绑定 openLocalRegister），用户主动点才弹；
+            // ★ 2026-09-24 交互修正：不再自动弹注册窗打断——注册入口就近可见，用户主动点才弹；
             //   点确定只留页红字提示，已填手机号/密码保留（按钮由 finally 复位），文案与
             //   主窗/APP 零账户守卫一致。避免老用户或数据暂未读到的场景被强制弹窗。
+            // ★ 2026-10-19 注册入口单一化：顶部红条入口已删除，唯一入口=登录框下方
+            //   绿色「📝 注册开通」按钮（auth-core injectActivateLinkIntoLogin 注入）。
             if (!_users || _users.length === 0) {
                 showError('⚠️ 本机尚未注册管理员账户，请点击【注册开通】完成注册（注册后即可免费试用）');
                 return;
@@ -1264,29 +1265,21 @@
             const wizardDone = localStorage.getItem('firstRunWizardDone');
             const noAdmin = !hasAdminUser(config);
 
-            // ★ 无管理员用户时显示醒目提示（即使向导被跳过也提示）
+            // ★ 2026-10-19 注册入口单一化（用户要求：注册入口保留一个）：
+            //   删除本处红字「尚未注册管理员账户 - 点击此处立即注册」第二入口，
+            //   未注册用户只保留登录框下方 auth-core 动态注入的绿色「📝 注册开通」
+            //   按钮（injectActivateLinkIntoLogin → openLocalRegister）。
+            //   注意：auth-core 注入有「本地桥 + 未激活 + 未注册」三条件，本处不再
+            //   造第二入口，也不改 HTML 结构（.interface-lock 基线不动）。
             const hint = document.getElementById('clinicSetupHint');
             if (hint) {
-                if (noAdmin) {
-                    hint.innerHTML = '⚠️ <b style="color:#e74c3c;">尚未注册管理员账户 - 点击此处立即注册</b>';
-                    hint.style.display = 'block';
-                    hint.style.fontSize = '13px';
-                    hint.style.marginTop = '6px';
-                    hint.style.padding = '6px 10px';
-                    hint.style.background = '#fff5f5';
-                    hint.style.borderRadius = '4px';
-                    hint.style.border = '1px solid #fecaca';
-                    // ★ 2026-09-22：文案说「点击此处」必须能点（此前无绑定=死文案）
-                    hint.style.cursor = 'pointer';
-                    hint.onclick = () => { try { window.openLocalRegister(); } catch (e) {} };
-                } else {
-                    hint.style.display = 'none';
-                }
+                hint.style.display = 'none';
+                hint.onclick = null;
             }
 
             // ★ 2026-09-22 注册入口统一：不再自动弹旧版三步向导（与 auth-core
             //   maybePromptRegistration 的注册弹窗重复）。首启注册由 auth-core 在
-            //   DOMContentLoaded 立即弹窗；上方 hint 保留手动入口（点击即弹注册窗）。
+            //   DOMContentLoaded 统一弹窗；手动入口=登录框绿色「📝 注册开通」按钮。
             if (wizardDone !== '1' && noAdmin) {
                 console.log('[FirstRun] 无注册账户，注册弹窗由 auth-core maybePromptRegistration 统一弹出');
                 return;

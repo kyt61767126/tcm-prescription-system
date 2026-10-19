@@ -1025,10 +1025,8 @@ function switchTab(tab) {
 function bindEditionShortcuts() {
     var skipCode = document.getElementById('skipToCode');
     if (skipCode) skipCode.addEventListener('click', function() {
-        document.getElementById('editionSelector').style.display = 'none';
-        document.getElementById('tabContainer').style.display = 'block';
-        switchTab('code');
-        setTimeout(function() { var i = document.getElementById('codeInput'); if (i) i.focus(); }, 150);
+        // ★ 2026-10-19 收敛到 __activateJumpToTab（同时修正历史无效聚焦 id codeInput）
+        __activateJumpToTab('code');
     });
     var skipTicket = document.getElementById('skipToTicket');
     if (skipTicket) skipTicket.addEventListener('click', function() {
@@ -1038,6 +1036,43 @@ function bindEditionShortcuts() {
     });
 }
 bindEditionShortcuts();
+
+// ============ 直达指定 Tab（?initialTab=code，2026-10-19） ============
+// 场景：注册成功页点「🔑 我有激活码，立即激活」→ auth-core 调 activate.show({initialTab:'code'})
+//   → 主进程 showActivateWindow(...,opts) → loadFile 带 ?initialTab=code →
+//   本函数隐藏版本选择页，直接显示「激活码激活」Step1 并聚焦激活码输入框。
+// 边界：官网付款激活/管理员激活/工单/试用链路不传该参数，仍从版本选择页进入（原样）。
+//   管理员 Tab 依赖版本选择（switchTab('admin') 未选版本会回退版本页）；当前主进程
+//   仅透传 'code'（注册成功页「我有激活码」），ticket 分支为窗口内扩展预留。
+function __activateJumpToTab(tab) {
+    if (tab !== 'code' && tab !== 'ticket') return false;
+    try {
+        document.getElementById('editionSelector').style.display = 'none';
+        document.getElementById('tabContainer').style.display = 'block';
+        var st = document.getElementById('pageSubtitle');
+        if (st && tab === 'code') st.textContent = '输入激活码 · 快速激活';
+        switchTab(tab);
+        window.scrollTo(0, 0);
+        if (tab === 'code') {
+            setTimeout(function() {
+                var i = document.getElementById('activationCode');
+                if (i) { try { i.focus(); } catch (e) {} }
+            }, 150);
+        }
+        return true;
+    } catch (e) {
+        console.warn('[Activate] 直达 Tab 失败:', e);
+        return false;
+    }
+}
+// 主进程对已开窗口 executeJavaScript 调用同一入口
+window.__activateJumpToTab = __activateJumpToTab;
+(function initDirectTab() {
+    try {
+        var __tab = params.get('initialTab');
+        if (__tab === 'code' || __tab === 'ticket') __activateJumpToTab(__tab);
+    } catch (e) { console.warn('[Activate] initialTab 解析失败:', e); }
+})();
 
 // ============ Global error ============
 function showGlobalError(msg) {
@@ -1057,6 +1092,19 @@ function hideGlobalError() {
     try {
         if (!window.electronAPI?.activate?.loadAdminRequestId) return;
         const saved = await window.electronAPI.activate.loadAdminRequestId();
+        // ★ 2026-10-19 显式直达激活码界面（initialTab=code）：不抢用户选择切回管理员面板；
+        //   但保留「服务端已 activated」的装码自愈（否则 pending 期间管理员已审批通过时，
+        //   本次直达会错过装码、用户误以为激活失败）。pending/rejected 不打断输码面板。
+        if (saved && saved.requestId && params.get('initialTab') === 'code') {
+            try {
+                const r0 = await window.electronAPI.activate.checkAdminStatus(saved.requestId, params.get('machineId') || '');
+                if (r0 && r0.success && r0.status === 'activated' && r0.license) {
+                    const ok0 = await saveAndRestart(r0.license, saved.phone || (r0.licenseInfo && r0.licenseInfo.phone) || '');
+                    if (ok0) showSuccess(saved.phone || (r0.licenseInfo && r0.licenseInfo.phone) || '', false, true);
+                }
+            } catch (e0) { console.warn('[Activate] 直达输码时已激活自愈检查失败(忽略):', e0); }
+            return;
+        }
         if (!saved?.requestId) {
             // ★ 兜底：无本地申请记录，但本机可能已激活（记录被取消等待/异常清理）
             try {

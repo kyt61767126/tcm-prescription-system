@@ -1831,10 +1831,11 @@ ipcMain.handle('config:update', async (event, updates) => {
 });
 
 // ===== 打开激活窗口 =====
-ipcMain.handle('showActivationWindow', async () => {
+// ★ 2026-10-19 opts 透传（{ initialTab: 'code' } 直达激活码输入界面；不传=原版本选择页）
+ipcMain.handle('showActivationWindow', async (event, opts) => {
     try {
         if (activateManager && typeof activateManager.showActivateWindow === 'function') {
-            activateManager.showActivateWindow(loginWindow);
+            activateManager.showActivateWindow(loginWindow, opts);
             return { success: true };
         }
         // fallback：通过菜单触发

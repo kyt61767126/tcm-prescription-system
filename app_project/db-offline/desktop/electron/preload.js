@@ -173,7 +173,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     // ★ 激活码激活窗口（云端激活系统，第3周任务）
     activate: {
-        show: () => ipcRenderer.invoke('license:show-activate'),
+        // ★ 2026-10-19 直达 Tab：opts.initialTab='code' 时激活窗口直接打开
+        //   「激活码激活」输入界面（注册成功页「我有激活码，立即激活」）。
+        //   不传 opts 保持原行为（版本选择页 → 官网付款激活流程）。
+        show: (opts) => ipcRenderer.invoke('license:show-activate', opts),
         // ★ 立即试用（2026-08-16）
         startTrial: () => ipcRenderer.invoke('license:start-trial'),
         // ★ 2026-09-21 离线免费版领取（phone 选填；成功后重启进入免费版）
@@ -217,7 +220,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     // ---------- 首次配置向导 ----------
     updateConfig: (updates) => ipcRenderer.invoke('config:update', updates),
-    showActivationWindow: () => ipcRenderer.invoke('showActivationWindow'),
+    // ★ 2026-10-19 opts 透传：{ initialTab: 'code' } = 直达激活码输入界面
+    showActivationWindow: (opts) => ipcRenderer.invoke('showActivationWindow', opts),
     changeUserPassword: (payload) => ipcRenderer.invoke('user:change-password', payload),
     addUser: (payload) => ipcRenderer.invoke('user:add', payload),
 
