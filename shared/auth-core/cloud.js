@@ -3803,8 +3803,8 @@
             if (myReqId !== __licenseStatusReqId) return;
             if (cloudHtml) {
                 el.innerHTML = cloudHtml;
-                // ★ 2026-09-05 云端邀请码卡片：已登录用户异步加载（未命中静默）
-                loadCloudInviteInfo(el);
+                // ★ 2026-10-19 云端账号授权：授权码+邀请码聚合加载（账号态优先，失败回退旧路径）
+                loadCloudAccountGrantInfo(el);
                 return;
             }
 
@@ -3843,14 +3843,16 @@
                         html += '<br>剩余 <b style="color:#4caf50;">' + remainingDays + '</b> 天';
                     }
                     el.innerHTML = html;
-                    // ★ 2026-09-05 邀请码卡片（对齐 offline.js licensed 分支）
-                    loadCloudInviteInfo(el);
+                    // ★ 2026-10-19 激活码+邀请码（账号态优先；本机 license 分支同样展示）
+                    loadCloudAccountGrantInfo(el);
                     // 正式授权：>7天或永久(-1)灰色只读；≤7天恢复正常色提醒续费
                     setAdminActivateBtnState(hasDays ? remainingDays : null);
                 } else {
                     // 未知类型，显示通用已激活
                     el.innerHTML = '✅ 已激活' +
                         (hasDays && remainingDays > 0 ? '<br>剩余 ' + remainingDays + ' 天' : '');
+                    // ★ 2026-10-19 未知授权类型同样显示激活码+邀请码
+                    loadCloudAccountGrantInfo(el);
                     setAdminActivateBtnState(hasDays ? remainingDays : null);
                 }
             } else {
@@ -3874,21 +3876,50 @@
     //   展示专属邀请码+邀请进度+累计奖励（移植离线版 loadInviteInfo 模式）。
     //   查询凭据：①本地 license:code（云桌面激活码激活路径存有）②machineId 兜底
     //   （管理员激活写入 device_version 绑定，invite API 凭它找回）。未命中静默跳过。
+    // ★ 2026-10-19 本地激活码读取（StorageAdapter + localStorage 双源；云桌面激活码路径写入）
+    async function getLocalCloudLicenseCode() {
+        let code = '';
+        try { code = await StorageAdapter.getItem('license:code'); } catch (_) {}
+        if (!code) {
+            try {
+                const ls = (typeof global !== 'undefined' && global.localStorage) ||
+                           (typeof window !== 'undefined' ? window.localStorage : null);
+                if (ls) code = ls.getItem('license:code');
+            } catch (_) {}
+        }
+        code = String(code || '').trim();
+        return code.length >= 4 ? code : '';
+    }
+
     async function postCloudInviteQuery(bodyData) {
+        // ★ 2026-10-19 账号态兜底：云端登录用户本地可能无激活码/机码不匹配（管理员激活后
+        //   换机/重装/旧版设备），带登录 token 让服务端按 token 内 clinicId 取本所授权码 +
+        //   邀请码；无 token 时请求体与匿名语义完全不变。
+        let __authToken = '';
+        try {
+            const cu = await readCloudLoginUser();
+            if (cu && cu.token) __authToken = String(cu.token);
+        } catch (_) {}
         // 云桌面（file:// 渲染进程）直连 fetch 被 CORS 拦截，优先主进程 IPC 代理；
         // 云端网页（同源）/云端APP（http://localhost 白名单）直连。
         if (global.electronAPI && global.electronAPI.license &&
             typeof global.electronAPI.license.queryInvite === 'function') {
             try {
-                const r = await global.electronAPI.license.queryInvite(bodyData);
+                // 主进程代理只透传 JSON body：token 放 body.authToken（服务端同样验签）
+                const payload = __authToken
+                    ? Object.assign({}, bodyData || {}, { authToken: __authToken })
+                    : (bodyData || {});
+                const r = await global.electronAPI.license.queryInvite(payload);
                 if (r && typeof r === 'object') return r;
             } catch (_) {}
         }
         try {
+            const headers = { 'Content-Type': 'application/json' };
+            if (__authToken) headers['Authorization'] = 'Bearer ' + __authToken;
             const r = await global.fetch(API_BASE + '/license/invite', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(bodyData)
+                headers: headers,
+                body: JSON.stringify(bodyData || {})
             });
             return await r.json().catch(() => null);
         } catch (_) { return null; }
@@ -3899,18 +3930,12 @@
             // ★ 2026-09-10 修复「多个邀请码重复渲染」：并发调用时 querySelectorAll 移除全部同名卡片
             document.querySelectorAll('#inviteInfoBox').forEach(n => { if (n.parentNode) n.parentNode.removeChild(n); });
             // 凭据1：本地激活码（云桌面激活码激活成功后存有）
-            let code = '';
-            try { code = await StorageAdapter.getItem('license:code'); } catch (_) {}
-            if (!code) {
-                try {
-                    const ls = (typeof global !== 'undefined' && global.localStorage) ||
-                               (typeof window !== 'undefined' ? window.localStorage : null);
-                    if (ls) code = ls.getItem('license:code');
-                } catch (_) {}
-            }
-            if (code && String(code).trim().length >= 4) {
+            const code = await getLocalCloudLicenseCode();
+            if (code) {
                 const d = await postCloudInviteQuery({ code: String(code).trim() });
                 if (d && d.success && d.inviteCode) {
+                    // ★ 2026-10-19 同步显示激活码（账号/机码找回的权威码优先）
+                    renderCloudActivationCode(el, d.licenseCode || d.resolvedLicenseCode || code);
                     renderCloudInviteCard(el, d);
                     await syncClinicExpiryFromInvite(d);
                     return;
@@ -3923,13 +3948,16 @@
                 if (mid && mid.length >= 8) {
                     const md = await postCloudInviteQuery({ machineId: mid });
                     if (md && md.success && md.inviteCode) {
+                        renderCloudActivationCode(el, md.licenseCode || md.resolvedLicenseCode || code);
                         renderCloudInviteCard(el, md);
                         await syncClinicExpiryFromInvite(md);
                         return;
                     }
                 }
             } catch (_) {}
-            // 未命中：不显示卡片（云端登录用户未必走过激活，静默优于误导）
+            // 未命中：邀请码不渲染（云端登录用户未必走过激活，静默优于误导）；
+            // 但本地有码时仍显示激活码，满足「授权状态显示激活码」。
+            if (code) renderCloudActivationCode(el, code);
         } catch (e) {
             console.warn('[Invite] 云端邀请码加载失败:', e && e.message);
         }
@@ -4019,6 +4047,95 @@
             });
         }
     }
+
+    // ★ 2026-10-19 授权状态区激活码常显（云端版）：客户换机重激活/续费/客服核查均需提供
+    //   激活码，此前云端版只有邀请码卡片、完全没有激活码显示（客户电脑实锤反馈
+    //   「激活状态不显示-激活码-邀请码」）。码来源：①账号态 invite 接口回传 licenseCode
+    //   ②本地 license:code ③机码找回 resolvedLicenseCode。仅已激活分支调用。
+    function renderCloudActivationCode(el, code) {
+        try {
+            const c = String(code || '').trim().toUpperCase();
+            if (!c || c.length < 4) return;
+            document.querySelectorAll('#activationCodeBox').forEach(n => { if (n.parentNode) n.parentNode.removeChild(n); });
+            const box = document.createElement('div');
+            box.id = 'activationCodeBox';
+            box.style.cssText = 'margin-top:8px;padding-top:8px;border-top:1px dashed #ddd;font-size:12px;color:#555;line-height:1.7;';
+            const label = document.createElement('span');
+            label.textContent = '🔑 激活码：';
+            const b = document.createElement('b');
+            b.id = 'activationCodeEl';
+            b.title = '点击复制';
+            b.style.cssText = 'color:#26a69a;font-family:monospace;letter-spacing:1px;font-size:14px;cursor:pointer;user-select:all;';
+            b.textContent = c; // textContent 防注入（码格式 BNZC-XXXX-XXXX-XXXX-XXXX）
+            box.appendChild(label);
+            box.appendChild(b);
+            // 插在邀请码卡片之前（无则直接 append），保持「激活码 → 邀请码」展示顺序
+            const inv = document.getElementById('inviteInfoBox');
+            if (inv && inv.parentNode === el) el.insertBefore(box, inv);
+            else el.appendChild(box);
+            b.addEventListener('click', function (ev) {
+                const txt = (ev.target.textContent || '').trim();
+                try {
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(txt);
+                    } else {
+                        const ta = document.createElement('textarea');
+                        ta.value = txt; document.body.appendChild(ta);
+                        ta.select(); document.execCommand('copy');
+                        document.body.removeChild(ta);
+                    }
+                    alert('激活码已复制：' + txt);
+                } catch (_) {
+                    alert('复制失败，请手动记录：' + txt);
+                }
+            });
+        } catch (e) {
+            console.warn('[ActivationCode] 云端激活码显示失败:', e && e.message);
+        }
+    }
+
+    // ★ 2026-10-19 云端「授权状态」账号态聚合：一次账号 invite 查询同时拿激活码 + 邀请码，
+    //   解决云端最新版授权区不显示激活码/邀请码（客户电脑反馈）。账号查询失败时回退
+    //   旧 code/machineId 路径与本地码显示，断网/未登录/旧服务端下行为不劣化。
+    async function loadCloudAccountGrantInfo(el) {
+        // 未登录/无 token（本地 license 分支）不发账号态请求，直接走本地码+旧路径
+        let cu = null;
+        try { cu = await readCloudLoginUser(); } catch (_) {}
+        if (!cu || !cu.token) {
+            try { const lc = await getLocalCloudLicenseCode(); if (lc) renderCloudActivationCode(el, lc); } catch (_) {}
+            await loadCloudInviteInfo(el);
+            return;
+        }
+        // 本地码先显示（账号接口慢/失败也不空白；服务端命中权威码后覆盖）
+        let localCode = '';
+        try { localCode = await getLocalCloudLicenseCode(); } catch (_) {}
+        if (localCode) renderCloudActivationCode(el, localCode);
+        let d = null;
+        // ★ 2026-10-19 B2：账号请求带本地码——服务端直接按码快查（1~2 read），不再走
+        //   ③ 全扫（本地码残留错码时服务端仍会用账号兜底找回真码）。
+        try { d = await postCloudInviteQuery(localCode ? { code: localCode } : {}); } catch (_) {}
+        try {
+            const codeByAccount = (d && d.success) ? String(d.licenseCode || d.resolvedLicenseCode || '') : '';
+            if (codeByAccount) {
+                renderCloudActivationCode(el, codeByAccount);
+                // ★ B2/S1：仅本地无码时回写 license:code（不覆盖本机已有有效码——该 key
+                //   被心跳/登录闸消费，多诊所共用电脑覆盖会造成串号/误判）。
+                if (!localCode) {
+                    try { await StorageAdapter.setItem('license:code', codeByAccount); } catch (_) {}
+                }
+            }
+            if (d && d.success && d.inviteCode) {
+                renderCloudInviteCard(el, d);
+                await syncClinicExpiryFromInvite(d);
+                return;
+            }
+        } catch (e) {
+            console.warn('[GrantInfo] 云端授权信息渲染失败:', e && e.message);
+        }
+        // 回退：旧 code/machineId 邀请码路径（历史行为保持不变；激活码已在上方本地码/账号码显示）
+        await loadCloudInviteInfo(el);
+    }
+
 
     // ★ 向登录界面（loginOverlay）运行时注入"注册 / 激活"入口（registerEntry 元素）
     // 目的：首次注册用户无需登录即可在登录页找到"设置诊所信息 / 立即激活"入口
