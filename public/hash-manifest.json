@@ -38,17 +38,17 @@
     },
     "cloud": {
         "apk": {
-            "version": "V1.0.0.325",
-            "versionCode": 325,
-            "sha256": "c854fd8551c9de858fa6a162c836871a74588c9f2d550cc0e9efcfa89a11196b",
+            "version": "V1.0.0.326",
+            "versionCode": 326,
+            "sha256": "bd2427e59659b8e8bd582c4d15aaeb927a93ad452072c0c55d409b9f981850b1",
             "url": "/downloads/惠康中医-云端.apk",
-            "releaseUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.10.18-1059/huikang-cloud.apk",
-            "size": 12395941,
-            "updateTime": "2026-10-18T03:04:14.775Z",
+            "releaseUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.10.19-1143/huikang-cloud.apk",
+            "size": 12408942,
+            "updateTime": "2026-10-19T03:43:46.309Z",
             "fileName": "惠康中医-云端.apk",
             "releaseFileName": "huikang-cloud.apk",
-            "releaseTag": "v2026.10.18-1059",
-            "releaseNotes": "✨ 新增:\n  - feat(cloud): 云 APP gate token 缓存 + 离线宽限（S1b-③，决策②）\n  - feat(license): activation-session MVP——令牌核销时点后移到 claim 成功（S1b-②）\n  - feat(auth): 激活时复用注册密码 + 版本卡改跳官网付款页\n  - feat(offline): 注册页版本卡片改跳官网付款页——淘宝码自带版本，已有码用户走金色按钮直激活\n  - feat(admin): 激活诊断页上线 + app-local 热更 -8（S1b-①）\n  - feat(license): 授权对账 reconcile + 密码归一收紧 + 登录闸对账自愈（S1a）\n  - feat(guard): 阶段3——鸿蒙纳入同步链+跨版本第6对基线+KNOWLEDGE六端能力矩阵\n  - feat(license): 阶段2三项优化——phone锚点回带/解绑原因明确化/后台设备友好名\n🐛 修复:\n  - fix(license): checkRateLimit/checkCodeRateLimit的kv.put加try-catch降级——KV日配额耗尽时不再500\n  - fix(admin): 激活诊断页按部署拓扑收口——主站 pretty URL 生效，后台站改跳转\n  - fix(auth-core): P40 登录闸 NO_LICENSE 码错位自愈 + 移除调试 alert（热更 2026.10.17-7）\n  - fix(auth-core): verifyLoginGate用getLicenseCode自愈链替代StorageAdapter直读\n  - fix(auth-core): APP端__isDeviceLicensed加NativeBridge Java桥判定（双权威源同步）\n  - fix(auth-core): APP端__isDeviceLicensed加NativeBridge Java桥判定\n  - fix(license): 诊所预置码 App 端激活死锁根治——redeemedDevices 台账豁免\n  - fix(bnzc): registrationInfo 残留降级为注册窗预填源（P40 真机实证）\n  - fix(license): 离线端bnzc一键激活改先注册再激活（方案A全自动编排）\n  - fix(app): 双安卓 App bnzc 冷启动派发 NPE 修复（真机核验实锤）+ versionCode 321/324\n⚡ 优化:\n  - docs(arch): 激活流程全端架构梳理与优化建议（六端×自动/手动×标准/机构，2026-10-17）\n  - docs(HANDOFF): 阶段3完成（81ba2693），优化建议三阶段全部收官\n  - docs(HANDOFF): 阶段2三项优化完成（3a2ca967），剩阶段3+真机核验\n📋 其他:\n  - build: 一键打包副作用自动收纳\n  - docs(handoff): 清理 10-18 外部打包现场（产物归档+stash 丢弃+dist 残留守卫）\n  - docs(arch): 激活架构 5 项决策已拍板（O1 session/云APP gate token/设备表双写/旧端点 sunset/admin改密）\n  - docs(handoff): 整包批次发布已确认（v2026.10.17-1723），H7 收口为仅剩桌面冷启动复测\n  - build(release): 离线整包 1.0.276 + APK 322 构建完成 + desktop/local 热更 -3（待发布）\n  - build: 一键打包副作用自动收纳\n  - docs(handoff): P40 真机激活+登录闭环实证，H6 收口沉淀 KNOWLEDGE（铁律⑭）\n  - docs(handoff): 刷新部署源为 push 自动构建 f9e9ea16（git 构建配额可用）\n  - docs(handoff): P40 收尾沉淀 KNOWLEDGE + HANDOFF（-7 自愈规则/铁律⑪-⑬、H6/H7 任务卡）\n  - debug(auth-core): verifyLoginGate加alert暴露运行时值"
+            "releaseTag": "v2026.10.19-1143",
+            "releaseNotes": "✨ 新增:\n  - feat(cloud-app): 断网冷启动本地兜底壳（原生 WebView 拦截内置 assets，同源保留离线数据）+ 构建 v326\n  - feat(cloud-app): 断网冷启动本地兜底壳（WebView 拦截内置 assets，同源保留离线数据）\n  - feat(offline+cloud): 离线正式版宽限 48h→30 天 + 云 APP/网页 Service Worker 离线兜底壳\n  - feat(cloud): 云端版断网可用+联网自动同步一期 MVP（处方 outbox + 增量协议 + 永久墓碑）\n  - feat(api): 管理端响应缓存改 D1 主存（KV list 免费额度治理第三步）\n  - feat(api): 管理端只读重扫描响应缓存中间件——KV list 免费额度治理第二步\n  - feat(sales): 淘宝发货卡片二维码工具页 /download-card + /d 短链\n  - feat(product): 取消免费版（停止新发放，存量授权继续可用）\n  - feat(cloud): 云 APP gate token 缓存 + 离线宽限（S1b-③，决策②）\n  - feat(license): activation-session MVP——令牌核销时点后移到 claim 成功（S1b-②）\n🐛 修复:\n  - fix(cloud-app): 同步状态小绿点可点击查看详情 + F1 设置页显示完整同步状态\n  - fix(cloud): 修复同步每次弹「库存预警」并重复扣库存（同步改走 raw 落库 + extra 幂等标记）\n  - fix(cloud-app): 同步标识不再遮挡手机底部操作按钮（改为底部导航角标）\n  - docs(cloud): 云端授权状态激活码/邀请码修复归档（HANDOFF H10 + KNOWLEDGE §58）\n  - fix(cloud): 云端授权状态显示激活码+邀请码（服务端账号态兜底 + 客户端展示 + 桌面热更 2026.10.19-1）\n  - fix(offline-desktop): 激活成功页 Tab 可见性（直达输码自愈/旧兜底不显示成功页）\n  - fix(offline-desktop): 激活三项优化——注册入口收敛/激活码直达/成功确定框置顶\n  - fix(kv): KV list 429 免费治理——Proxy 自动缓存 + 跨 isolate 熔断 + 旧数据兜底\n  - fix(routes): _routes.json include /d，修复短链未进 Functions 被 SPA 兜底\n  - fix(cloud): 授权状态剩余天数取账号与本机授权较早到期，防 327/1000+ 跳变\n⚡ 优化:\n  - docs(arch): 激活流程全端架构梳理与优化建议（六端×自动/手动×标准/机构，2026-10-17）\n  - docs(HANDOFF): 阶段3完成（81ba2693），优化建议三阶段全部收官\n  - docs(HANDOFF): 阶段2三项优化完成（3a2ca967），剩阶段3+真机核验\n📋 其他:\n  - docs(handoff): H12 离线正式版 30 天宽限 + SW 离线壳标记已上线（0072b931）\n  - docs(handoff): H11 云端断网同步 MVP 标记已上线（代码+热更 2026.10.19-3 线上核验）\n  - docs(handoff): 记录取消免费版后的离线整包 1.0.278/324（待发布）\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - docs(handoff): 清理 10-18 外部打包现场（产物归档+stash 丢弃+dist 残留守卫）\n  - docs(arch): 激活架构 5 项决策已拍板（O1 session/云APP gate token/设备表双写/旧端点 sunset/admin改密）\n  - docs(handoff): 整包批次发布已确认（v2026.10.17-1723），H7 收口为仅剩桌面冷启动复测\n  - build(release): 离线整包 1.0.276 + APK 322 构建完成 + desktop/local 热更 -3（待发布）\n  - build: 一键打包副作用自动收纳"
         },
         "exe": {
             "version": "1.2.269",
@@ -76,12 +76,12 @@
     "provenance": {
         "schemaVersion": 1,
         "repo": "https://github.com/kyt61767126/tcm-prescription-system.git",
-        "commit": "7f43efe0e792",
+        "commit": "817bd75f5054",
         "ref": "main",
         "builder": "kyt61767126",
-        "builtAt": "2026-10-19T01:14:54.879Z",
+        "builtAt": "2026-10-19T03:43:46.865Z",
         "buildTool": "publish-release.js@v24.16.0",
-        "releaseTag": "v2026.10.19-0910"
+        "releaseTag": "v2026.10.19-1143"
     },
     "dingzhi": {
         "apk": {
