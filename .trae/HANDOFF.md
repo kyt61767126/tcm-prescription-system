@@ -81,7 +81,7 @@
 - **基线 commit**：`b167fd91`
 
 ### H11 ｜优先级：高｜云端版「断网可用+联网自动同步」一期 MVP：试点观察 → 放量（2026-10-19）
-- **状态**：IN-PROGRESS（代码已提交；随 push 部署 functions + 静态 + desktop/cloud 热更 **2026.10.19-3**；一期默认对所有 `allowedMode=both` 用户开启，无白名单）
+- **状态**：IN-PROGRESS（代码 `fdaa2e98` 已 push 部署；functions+静态+desktop/cloud 热更 **2026.10.19-3** 已上线；一期默认对所有 `allowedMode=both` 用户开启，无白名单）
 - **已完成**：IndexedDB v4 outbox/sync_state；保存/删除本地优先+入队（await 入队修 R1/R2）；CloudSync pull→push→pull、冲突副本、墓碑、幂等重试、状态徽标、online/visibility/5min 定时；getAllUserPrescriptions 脏数据保护 + syncPrescriptionsDBDiff protectedIds（修现网离线保存被清掉缺陷）；服务端 `GET ?sync=1` 增量 + 时间戳归一 + 永久墓碑/409 防复活 + KV kill switch；热更 2026.10.19-3（20 文件验签/hash/cv PASS）。独立验证 179/179、服务端自测 124、上线前审查可放行。
 - **剩余动作**：
   1. **灰度观察**：先选 1-2 家诊所（把其他用户 `allowedMode` 置 `cloud`，试点保持 `both`）观察 3-5 天：sync 错误率、待同步积压、冲突副本数量、D1 行读量（免费 5M/天；当前 sync 每轮全表读，需按诊所规模评估）。
@@ -89,7 +89,7 @@
   3. **已知限制**：媒体文件不同步；回收站恢复已补「撤 delete op + 入队 upsert」；冲突副本会在报表中作为独立处方计数（需产品确认口径）；platform_admin 空转同步。
   4. **回滚**：后台 `allowedMode='cloud'`（立即停同步、回旧行为）或 KV `config:cloud_offline_sync={"mode":"off"}` 总开关；客户端 `rollback-hotupdate.cjs -c cloud`。
 - **验收**：断网开方→重启→记录在；联网自动上传（云端可见、待同步归零）；断网删除→联网云端软删；双端并发冲突副本不丢；回退 cloud 后零同步请求。
-- **基线 commit**：待记（本次提交）
+- **基线 commit**：`fdaa2e98`（跨版本基线重冻结 `7c7d5985`；线上核验：hotVersion=2026.10.19-3、云端 index 含 CloudSync/outbox/PERMANENTLY_DELETED、`/api/prescriptions?sync=1` 未认证 401）
 
 ### H8 ｜优先级：中（S1 实施中）｜激活流程全端架构收敛
 - **状态**：IN-PROGRESS（5 项决策已拍板；**S1a + S1b-①②③ 已完成**；**S1b 剩余**：客户端接入 session、真机矩阵、桌面整包 1.0.277、云端 gate token 分发复测）。**2026-10-18 09:45 另一会话打包因版本基线漂移中止（1.0.277/1.2.269/325 未入库），遗留副作用已 `git stash`（"10-18 09:45 打包遗留副作用…"）待负责人处理，勿直接提交。**
