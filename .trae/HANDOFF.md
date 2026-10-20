@@ -182,18 +182,18 @@
 - **异常回流**：任何一项失败，把现象/机器/版本记入本任务并改 BLOCKED，附 license_log action。
 
 ### H14 ｜优先级：中｜云端处方"假成功"防护上线后客户复验（2026-10-20）
-- **状态**：已上线（代码 `452b1837` + T5 `716d8559` + 云桌面热更 `4371384f` 均已 push；**线上已核验**：`/hot-update/desktop/cloud/version.json` = **2026.10.20-2**（app 1.2.271）⇒ 网页/云 APP/云桌面均已拿到修复；**仅剩客户机人工复验（步骤 1）**
+- **状态**：已上线（`452b1837` 假成功防护 + `716d8559`/`b3a19daa` T5 端间同步开关统一 + `3bf95776` 热更 2026.10.20-3 均已 push；**线上已核验** hotVersion=`2026.10.20-3`）；**仅剩客户机人工复验**
 - **背景（客户实报）**：云桌面新开处方 → 同账号的云端网页/云 APP **看不到该方**；云桌面角标却显示「☁️ 已同步」。用户重登/刷新后恢复正常（偶发、时间相关）。
 - **根因（三条缺陷叠加，已实证）**：①`dualWritePrescription` 吞 D1 写错、POST 仍回 `success:true` → 客户端凭 success 删掉待同步 op、角标转绿；②读路径**D1 优先**（仅 D1 零行才回退 KV、登录预取纯 D1）⇒ **KV 有/D1 无**的处方在所有端永久不可见；③`ensurePrescriptionSchema` 只自愈 2 列、upsert 写 10 列 → 缺列即整条 INSERT 失败。详见 KNOWLEDGE §69。
 - **已完成**：服务端不吞错（返回 `{d1Ok,d1Error}` + 审计 `prescription_d1_write_failed`）+ POST 回传 `storedIn/d1WriteFailed/d1Error`（只增字段）+ `d1UpsertPrescription` 缺列自愈重试一次 + 列清单扩至 10 列；客户端 `CloudSync.push` 收 `d1WriteFailed` 不删 op（保留重试、角标不再谎报）；新增 `tools/cloud-sync-fake-success-test.cjs`（修复前 3/3 红、修复后 6/0 绿）并接入 pre-push **第⑱道门**（两次 push 均十八道全绿）；`sync-all` 分发 6 端副本；`check-interface` 6 OK / `copy-consistency` 100/100 / `check-cv-hashes` 15/15 / `diff-cross-version` 全绿。
-- **云桌面热更（已签发，仅 cloud 通道）**：`2026.10.20-2`（app 1.2.271，含 T5 端间同步开关统一），20 文件 Ed25519 签名；index.html 取 **cloud 身份源** `app_project/db-yunduan/cloud_desktop/index.html`（非 `public/` 网页身份，P0 防呆），SHA256 与清单逐字节一致、包内含 `d1WriteFailed` 与 `EDITION=cloud_personal` 断言。**离线两端不受本修复影响，离线 APP 也不受影响（离线源保留 Capacitor 判定），故未重签。** 线上已核验 hotVersion=`2026.10.20-2`。
+- **云桌面热更（已签发，仅 cloud 通道）**：`2026.10.20-3`（app 1.2.271，含 T5 端间同步开关统一 + cloud 模式升 both），20 文件 Ed25519 签名；index.html 取 **cloud 身份源** `app_project/db-yunduan/cloud_desktop/index.html`。**离线两端与离线 APP 不受影响（离线源保留 Capacitor 判定），未重签。** 线上已核验 hotVersion=`2026.10.20-3`。
 - **剩余动作（人工/复验）**：
-  1. **客户机复验**：云桌面启动 → 静默拉热更（`.hot-version` 应为 `2026.10.20-2`，彻底退出重开）→ 新开一方 → 同账号云端网页刷新、云 APP 重进 → **该方应可见**（本批不消除"读侧当次会话不刷新"，故以重进/刷新为准；症状已自行恢复，属预防性修复）。**T5 额外验证**：云 APP 与云桌面设置页「☁️ 云端同步」明细中 `allowedMode` 均不为 `local`。
-  2. **噪音排查（若再复现）**：`wrangler tail` 搜 `[D1] upsert prescription failed` 与审计 action `prescription_d1_write_failed`，按日志中的处方 id 定位；如确认存在 KV 有/D1 无的遗留处方，再做 T4 一次性回填（见 spec T4）。
+  1. **客户机复验**：云桌面**彻底退出重开** → 自动拉热更 2026.10.20-3 → 打开 F1 基础设置滚到底 → 应出现「☁️ 云端同步」明细行（之前看不到是因为 allowedMode='cloud' 被误判为纯云端模式，本批已统一升 both）。再新开一方 → 同账号云 APP 重进应可见。
+  2. **噪音排查（若再复现）**：`wrangler tail` 搜 `[D1] upsert prescription failed` 与审计 `prescription_d1_write_failed`，按 id 定位；确认有 KV 有/D1 无的遗留处方再做 T4 回填。
 - **未做（另可立项）**：T4 KV→D1 对账回填（本次症状自行恢复、无遗留 id 清单）。
-- **已完成（本批 T5，端间同步开关统一）**：云 APP 与云桌面/云网页 `allowedMode='local'` 统一升为 `both`——`shared/auth-core/cloud.js` 登录归一化去掉 `!global.Capacitor`（离线源 `offline.js` 保留判定不动，离线 APP 仍 local、不产生 outbox）+ `public/index.html` 的 `getSyncMode()` 唯一读出口兜底升 `both`（覆盖已登录缓存态）。验证：`sync-auth-core -VerifyOnly` 11 副本双源一致、`sync-all -VerifyOnly` 全同步、`check-cv-hashes` 15/15、`check-interface` 6 OK、`copy-consistency` 100/0、`cloud-sync-fake-success-test` 6/6。云端网页/云 APP 随 push 刷新即达、无需重打包；云桌面页面部分需热更 `desktop/cloud`（已签发 2026.10.20-2）。
+- **已完成（本批 T5，端间同步开关统一）**：云通道 `allowedMode` 的 `local`/`cloud` 统一升为 `both`——`shared/auth-core/cloud.js` 登录归一化（去掉 `!global.Capacitor`，local+cloud 均升 both）+ `public/index.html#getSyncMode()` 唯一读出口兜底升 both（覆盖已登录缓存态）。离线源 `offline.js` 保留 Capacitor 判定不动。验证：`sync-auth-core -VerifyOnly` 11 副本双源一致、`sync-all/sync-html` 全同步、`check-cv-hashes` 15/15、`check-interface` 6 OK、`copy-consistency` 100/0、`cloud-sync-fake-success-test` 6/6。云端网页/云 APP 随 push 刷新即达、无需重打包；云桌面页面部分需热更（已签发 2026.10.20-3）。
 - **规格文档**：`.trae/specs/cloud-rx-latest-not-visible/{spec.md,tasks.md}`
-- **基线 commit**：`452b1837`（假成功防护） + `ee932969`（热更 2026.10.20-1） + `716d8559`（T5 端间同步开关统一） + `f8894c36`（cv 哈希重刷） + `4371384f`（热更 2026.10.20-2）
+- **基线 commit**：`452b1837`（假成功防护） + `716d8559`（T5 local→both） + `b3a19daa`（T5 cloud→both 补漏） + `3bf95776`（热更 2026.10.20-3）
 
 ### H3 ｜优先级：低（长期观察）｜KV 容量与套餐
 - audit_log 前缀 880 键（2026-10-13 实测，总 1926），接近单页 1000；D1 迁移完成后安排清理。
