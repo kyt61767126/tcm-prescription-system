@@ -21,12 +21,78 @@
 //   F4 备份回环：save-backup-file → list-backup-files 含 → read-backup-file 内容一致
 //   F5 自动备份回环：save → list → delete → 再列已无（userData/backups）
 //   F6 媒体删除：delete-file 白名单正删落盘消失 + 白名单外路径拒绝
+//   F7 ★ 2026-10-20 自动备份新通道：saveLocalBackupToFile → 落「中医处方系统」auto_*.json
+//      + 载荷完整（users/settings/stockLedger/_hmac）
+//   F8 ★ 统一列表 listBackupItems 合并手动/自动 + delete-backup-file 白名单（拒手动/拒穿越）
+//      + cleanupOldBackups 只清过期自动备份（手动备份保留）
+//   F9 ★ 「备份与恢复」面板：入口 JS 注入幂等 + 面板列出行内恢复/删除按钮（手动行无删除）
+//   F10 ★ 自动备份真可恢复：readBackupItemJson → importDataFromJson（账号表/药品库还原）
 //
 // 用法：node e2e\verify-fs-domain.cjs [--keep]
 // 退出码：0 全过；1 任一失败
 // ============================================================================
 const fs = require('fs');
 const path = require('path');
+const Module = require('module');
+
+// ============================================================================
+// ★ 2026-10-20 夹具适配授权链（与 run-e2e.cjs 同款）：
+//   闸门 configUsersProvenAuthentic 对「含 users 但无机器密钥签名 / 无 v2 签名
+//   users-backup」的 config 判 config_tampered（fail-closed，登录窗不出现、
+//   弹「配置文件用户列表已被篡改」）。旧夹具手写无签名 config.json 的捷径已失效。
+//   此处用真实 shared/license-manager 原语 signConfig + proven 写 users-backup。
+//   machineId 基于机器级特征，本运行器进程与被测 exe 同机 → 签名可被验过。
+// ============================================================================
+const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
+let _currentFixtureDir = null;
+const electronStub = {
+    app: {
+        getPath(p) {
+            if (p === 'userData' && _currentFixtureDir) return _currentFixtureDir;
+            return require('os').tmpdir();
+        }
+    },
+    BrowserWindow: function () { return {}; },
+    dialog: { showMessageBox: async () => ({ response: 0 }) },
+    safeStorage: { isEncryptionAvailable: () => false, encryptString: () => Buffer.alloc(0) },
+    shell: {}
+};
+const _origModuleLoad = Module._load;
+Module._load = function (request, ...rest) {
+    if (request === 'electron') return electronStub;
+    return _origModuleLoad.call(this, request, ...rest);
+};
+// 仓库根 "type":"module"：shared/*.js 需在本进程显式按 CJS 编译
+Module._extensions['.js'] = function (mod, filename) {
+    mod._compile(fs.readFileSync(filename, 'utf8'), filename);
+};
+const lm = require(path.join(REPO_ROOT, 'shared', 'license', 'license-manager.js'));
+
+function dismissRegisterOverlay(page) {
+    // 未注册机登录窗被 localRegisterOverlay 覆盖：走真实入口「暂不注册，已有账号登录」
+    return (async () => {
+        let appeared = false;
+        for (let i = 0; i < 8; i++) {
+            if (await page.evaluate(() => !!document.getElementById('localRegisterOverlay'))) { appeared = true; break; }
+            await new Promise(r => setTimeout(r, 100));
+        }
+        if (!appeared) return;
+        for (let i = 0; i < 20; i++) {
+            const gone = await page.evaluate(() => !document.getElementById('localRegisterOverlay'));
+            if (gone) return;
+            const clicked = await page.evaluate(() => {
+                const l = document.getElementById('localRegCloseLink');
+                if (l) { l.click(); return true; }
+                return false;
+            });
+            if (clicked) {
+                await page.waitForFunction(() => !document.getElementById('localRegisterOverlay'), null, { timeout: 5000 }).catch(() => {});
+                return;
+            }
+            await new Promise(r => setTimeout(r, 200));
+        }
+    })();
+}
 
 const ROOT = path.resolve(__dirname, '..');
 const TMP_ROOT = path.join(__dirname, '.tmp');
@@ -76,6 +142,7 @@ function findWindow(app, urlPart, timeoutMs = 30000) {
 
 async function login(page, username, password) {
     await page.waitForSelector('#loginUsername', { timeout: 15000 });
+    await dismissRegisterOverlay(page);
     await page.fill('#loginUsername', username);
     // ★ 反自动填充双保险（main.js dom-ready 注入）：密码框初始 readonly，focus 时才移除。
     //   先 focus 触发移除，确认可编辑后再填（与 run-e2e.cjs 同款修复）。
@@ -147,7 +214,17 @@ function baseConfig() {
     fs.mkdirSync(portable, { recursive: true });
     fs.mkdirSync(userdata, { recursive: true });
     // 便携分支的 config.json（main.js 便携读取点 = PORTABLE_EXECUTABLE_DIR/config.json）
-    fs.writeFileSync(path.join(portable, 'config.json'), JSON.stringify(baseConfig(), null, 2), 'utf8');
+    // ★ 2026-10-20 必须机器密钥签名 + proven 写 users-backup，否则授权闸门 fail-closed
+    const config = baseConfig();
+    if (!config.configIssuedAt) config.configIssuedAt = new Date().toISOString();
+    _currentFixtureDir = userdata;
+    lm.signConfig(config);
+    if (!config.configSignature) { console.error('[FSV][FAIL] 夹具 signConfig 未生成签名，终止'); process.exit(1); }
+    if (lm.backupUserAccounts(config, { proven: true }) !== true) {
+        console.error('[FSV][FAIL] 夹具 users-backup 写入失败，终止'); process.exit(1);
+    }
+    fs.writeFileSync(path.join(portable, 'config.json'), JSON.stringify(config, null, 2), 'utf8');
+    fs.writeFileSync(path.join(userdata, 'config.json'), JSON.stringify(config, null, 2), 'utf8');
 
     fs.writeFileSync(marker, `fs-verify ${new Date().toISOString()}\n`, 'utf8');
 
@@ -256,6 +333,117 @@ function baseConfig() {
         const f6Bad = await mainWin.evaluate((p) => window.electronAPI.deleteFile(p), 'C:\\Windows\\win.ini');
         assert(f6Bad && f6Bad.success === false, '白名单外路径（C:\\Windows\\win.ini）删除被拒绝');
 
+        // ---------- F7 自动备份新通道（★ 2026-10-20：落「中医处方系统/」+ auto_ 前缀 + 可删） ----------
+        log('F7 自动备份改通道：saveLocalBackupToFile → 落中医处方系统 + 载荷完整 + delete-backup-file');
+        const backupDir = path.join(portable, 'downloads', '中医处方系统');
+        const f7Saved = await mainWin.evaluate(async () => await saveLocalBackupToFile());
+        assert(f7Saved === true, 'saveLocalBackupToFile() 返回 true（写文件通道成功）');
+        const autoFiles = fs.readdirSync(backupDir).filter(n => /^auto_\d{8}_\d{6}\.json$/.test(n));
+        // 注意：应用启动时的「每日自动备份」也走同一函数，同秒内会覆盖同一文件名，
+        // 故不做计数断言，改以「文件存在 + mtime 为本次刚写入」判定落盘。
+        assert(autoFiles.length >= 1, `落盘 auto_YYYYMMDD_HHmmss.json（${autoFiles.join(',')}）`);
+        const autoFile = autoFiles.sort().pop();
+        const autoMtime = fs.statSync(path.join(backupDir, autoFile)).mtimeMs;
+        assert(Date.now() - autoMtime < 60000, `最新 auto 文件为本次刚写入（${autoFile}，mtime 距今 ${Math.round((Date.now() - autoMtime) / 1000)}s）`);
+        const autoRaw = JSON.parse(fs.readFileSync(path.join(backupDir, autoFile), 'utf8'));
+        assert(autoRaw.exportInfo && autoRaw.exportInfo.backupKind === 'auto' && autoRaw.exportInfo.exportType === 'auto', '载荷 exportInfo.backupKind=auto（与手动备份同构可辨识）');
+        assert(['medicines', 'formulas', 'prescriptionHistory', 'stockLedger', 'stockMgmtEnabled', 'users', 'settings', 'prescriptionCount'].every(k => k in autoRaw),
+            '载荷含 medicines/formulas/prescriptionHistory/stockLedger/users/settings（自动备份内容完整）');
+        assert(Array.isArray(autoRaw.users) && autoRaw.users.length >= 1, `账号表一并备份（users=${autoRaw.users.length} 条，恢复后可直接登录）`);
+        assert(typeof autoRaw._hmac === 'string' && autoRaw._hmac.length > 0, '保留 _hmac 签名');
+
+        // ---------- F8 统一列表 + 删除白名单 + 保留策略只清自动备份 ----------
+        log('F8 备份与恢复：listBackupItems 合并 + delete 白名单 + cleanup 只清自动');
+        const f8List = await mainWin.evaluate(async () => await listBackupItems());
+        const autoItem = f8List.find(i => i.fileName === autoFile);
+        const manualItem = f8List.find(i => i.fileName === backupName);
+        assert(!!autoItem && autoItem.type === 'auto', 'listBackupItems 含新自动备份且 type=auto');
+        assert(!!manualItem && manualItem.type === 'manual', 'listBackupItems 同时列出手动备份（type=manual）');
+        assert(f8List.every((i, idx) => idx === 0 || f8List[idx - 1].timestamp >= i.timestamp), '列表按时间倒序');
+
+        const f8DelManual = await mainWin.evaluate((n) => window.electronAPI.deleteBackupFile(n), backupName);
+        assert(f8DelManual && f8DelManual.success === false, 'delete-backup-file 拒绝手动备份（本地_*.json / e2e_backup 命名）');
+        assert(fs.existsSync(path.join(backupDir, backupName)), '手动备份文件仍完整存在');
+        const f8DelEvil = await mainWin.evaluate(() => window.electronAPI.deleteBackupFile('../evil.json'));
+        assert(f8DelEvil && f8DelEvil.success === false, 'delete-backup-file 拒绝路径穿越（../evil.json）');
+        const f8Del = await mainWin.evaluate((n) => window.electronAPI.deleteBackupFile(n), autoFile);
+        assert(f8Del && f8Del.success === true, 'delete-backup-file 正删自动备份成功');
+        assert(!fs.existsSync(path.join(backupDir, autoFile)), '自动备份文件落盘已消失');
+
+        // 保留策略：老自动备份（>1年）被清，老手动备份保留
+        const oldAuto = 'auto_20240101_100000.json';
+        const oldManual = '本地_E2E老备份_2024-01-01_10-00-00.json';
+        fs.writeFileSync(path.join(backupDir, oldAuto), '{"exportInfo":{"backupKind":"auto"}}', 'utf8');
+        fs.writeFileSync(path.join(backupDir, oldManual), '{"exportInfo":{"backupKind":"manual"}}', 'utf8');
+        const old = new Date(Date.now() - 400 * 24 * 60 * 60 * 1000);
+        fs.utimesSync(path.join(backupDir, oldAuto), old, old);
+        fs.utimesSync(path.join(backupDir, oldManual), old, old);
+        await mainWin.evaluate(async () => await cleanupOldBackups());
+        assert(!fs.existsSync(path.join(backupDir, oldAuto)), 'cleanupOldBackups 清理过期自动备份（2024）');
+        assert(fs.existsSync(path.join(backupDir, oldManual)), 'cleanupOldBackups 绝不动手动备份（本地_*.json 保留）');
+
+        // ---------- F9 面板入口注入（(JS 注入，未改 HTML 结构) ----------
+        log('F9 备份与恢复面板：入口注入 + 打开列表');
+        await mainWin.evaluate(() => { try { showModal('analyticsModal'); } catch (_) {} });
+        const f9Entry = await mainWin.evaluate(() => {
+            const b = document.getElementById('__backupRestoreEntry');
+            return b ? { text: b.textContent, insideSettings: !!(b.closest && b.closest('#settingsModal')) } : null;
+        });
+        assert(!!f9Entry && /备份与恢复/.test(f9Entry.text), '「🗂️ 备份与恢复」入口按钮已注入');
+        assert(!!f9Entry && f9Entry.insideSettings === false, '入口挂在统计弹窗「🗄️数据管理」按钮组（非设置弹窗）');
+        const f9Dup = await mainWin.evaluate(() => { ensureBackupRestoreEntry(); ensureBackupRestoreEntry(); return document.querySelectorAll('#__backupRestoreEntry').length; });
+        assert(f9Dup === 1, '入口注入幂等（重复调用仅 1 个按钮）');
+        // 先补一份自动备份（F8 已删掉），确保列表同时含自动行与手动行
+        assert((await mainWin.evaluate(async () => await saveLocalBackupToFile())) === true, '补写一份自动备份（供面板行内按钮断言）');
+        await mainWin.evaluate(async () => { await openBackupRestorePanel(); });
+        const f9Panel = await mainWin.evaluate(() => {
+            const p = document.getElementById('__backupRestorePanel');
+            return p ? { rows: p.querySelectorAll('#__bkList tbody tr').length, hasRestore: !!p.querySelector('button[data-act="restore"]'), hasDelete: !!p.querySelector('button[data-act="delete"]') } : null;
+        });
+        assert(!!f9Panel && f9Panel.rows >= 1, `面板打开并列出备份（${f9Panel && f9Panel.rows} 行）`);
+        assert(!!f9Panel && f9Panel.hasRestore === true, '每行「恢复」按钮存在');
+        assert(!!f9Panel && f9Panel.hasDelete === true, '自动备份行「删除」按钮存在');
+        const f9ManualRow = await mainWin.evaluate((manualName) => {
+            const p = document.getElementById('__backupRestorePanel');
+            if (!p) return null;
+            const trs = Array.from(p.querySelectorAll('#__bkList tbody tr'));
+            const tr = trs.find(t => t.textContent.includes(manualName));
+            if (!tr) return null;
+            return { hasDelete: !!tr.querySelector('button[data-act="delete"]'), hasRestore: !!tr.querySelector('button[data-act="restore"]') };
+        }, backupName);
+        assert(!!f9ManualRow && f9ManualRow.hasDelete === false, '手动备份行无「删除」入口（AC-4）');
+        assert(!!f9ManualRow && f9ManualRow.hasRestore === true, '手动备份行可「恢复」');
+        await mainWin.evaluate(() => { const p = document.getElementById('__backupRestorePanel'); if (p) p.remove(); });
+
+        // ---------- F10 自动备份真可恢复（AC-3：账号表一并还原） ----------
+        log('F10 一键恢复：读自动备份 → importDataFromJson → 账号表/药品库还原');
+        const f10Json = await mainWin.evaluate(async () => {
+            const items = await listBackupItems();
+            const auto = items.find(i => i.type === 'auto' && i.source === 'file');
+            return auto ? await readBackupItemJson(auto) : null;
+        });
+        assert(typeof f10Json === 'string' && f10Json.length > 100, 'readBackupItemJson 读出自动备份 JSON（无需原生弹框）');
+        const f10Restored = await mainWin.evaluate(async (json) => {
+            // 模拟重装后空库 + 屏蔽原生同步弹框（alertSync/confirmSync 会阻塞渲染层）
+            const __alert = window.alert, __confirm = window.confirm;
+            window.alert = function () {};
+            window.confirm = function () { return true; };
+            try {
+                localStorage.setItem('local_systemUsers', '[]');
+                localStorage.setItem('local_medicines', '[]');
+                await importDataFromJson(json);
+                let users = [];
+                try { users = JSON.parse(localStorage.getItem('local_systemUsers') || '[]'); } catch (_) {}
+                let meds = [];
+                try { meds = JSON.parse(localStorage.getItem('local_medicines') || '[]'); } catch (_) {}
+                return { users: Array.isArray(users) ? users.length : -1, meds: Array.isArray(meds) ? meds.length : -1 };
+            } finally {
+                window.alert = __alert; window.confirm = __confirm;
+            }
+        }, f10Json);
+        assert(!!f10Restored && f10Restored.users >= 1, `恢复后账号表还原（users=${f10Restored && f10Restored.users} 条 → 重装后原账号可直接登录）`);
+        assert(!!f10Restored && f10Restored.meds >= 0, `恢复后药品库写入 localStorage（medicines=${f10Restored && f10Restored.meds} 条）`);
+
         passed = failures === 0;
         if (!passed && consoleBuf.length) {
             log('失败，最近 console（最多15条）：');
@@ -271,7 +459,7 @@ function baseConfig() {
 
     console.log('══════════════════════════════════════');
     if (passed) {
-        console.log(`[PASS] 文件域专项验证 ALL PASS ✓（F1-F6，共 ${total} 项断言）`);
+        console.log(`[PASS] 文件域专项验证 ALL PASS ✓（F1-F10，共 ${total} 项断言）`);
         console.log('[FSV] 验证对象：shared/desktop-fs-ipc.cjs 经 sync-all 分发后的离线桌面副本');
         process.exit(0);
     } else {

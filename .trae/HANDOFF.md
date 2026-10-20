@@ -41,6 +41,7 @@
   - **2026-10-19 登录提速：断网秒登 + 慢网 2.5s 离线兜底（cloud APP v333 已发布）**：①登录请求超时 30s→12s；②`authenticateWithFastFallback`：`navigator.onLine=false` 直接离线缓存登录（0ms 级），云端 2.5s 未返回且有离线缓存则先放行进主界面（本地密码校验，云端请求继续），云端先回则正常云端登录；③`login()`/`loginWithUsernamePassword` 统一走快速路径；登录成功仍先隐藏登录框再异步 loadData。实测：慢网 5s 模拟 2505ms 进入、断网 0ms、云端快 1ms。cloud APP **v333**（12,409,717B，SHA256 `BA5C7CB6…9985`）已发布官网/Release（v2026.10.19 覆盖更新）+ 热更 2026.10.19-6。
   - **勿重复实施**：-6 调试 alert 已移除并重签 -7 覆盖；P40 登录闸码错位自愈已上线；令牌 redeemedDevices 台账（首兑写 + 幂等短路补写）已上线；Java `activateLicense` clinicName 透传已入库（待 APK v325 生效）。
   - 完整方案：`.trae/documents/activation-architecture-optimization_plan.md` / `.trae/documents/activation-streamline_plan.md`（P0 方案A 全链已闭环，详见 KNOWLEDGE 2026-10-17 条目）。
+- **2026-10-20 自动备份真正可恢复 + 「备份与恢复」面板 + 官网说明（代码已就位，待重打包/发布）**：自动备份改走手动备份同一落盘通道（桌面 `惠康中医媒体\downloads\中医处方系统\`、APP `Download/中医处方系统\`）文件名 `auto_YYYYMMDD_HHmmss.json`；统一载荷 `buildBackupPayload()`（含 users/settings/stockLedger）；JS 注入「🗂️ 备份与恢复」面板（合并列出手动+自动、一键恢复、仅自动可删、清理旧自动备份；**手动备份永不自动删除**）；新增 `delete-backup-file` IPC + preload + Android 双 MainActivity + 离线 APP inject + 鸿蒙 shim/NativeBridge。E2E `verify-fs-domain.cjs` F1-F10 **54 断言 ALL PASS**；门禁（check-interface 6 OK / copy-consistency 100/100 / html-sync-check / diff-cross-version 6 对 / check-ipc-consistency / sync-all -VerifyOnly）全绿。详见 KNOWLEDGE §68；**待办见 H13**。
 - **2026-10-18 构建现场已清理（已决）**：外部会话 09:45 打包因版本基线漂移中止——产物 1.0.277/1.2.269/cloud APK 325 已归档到 `%TEMP%\kyt-build-archive-20261018-102617`，工作区残留已从 `stash@{0}` 丢弃并删 dist 残留；`verify-version-baseline` 复核通过（HEAD 1.0.276/1.2.268/322/324，dist 无残留）。下次打包将按**最新代码**（含 S1b-③ gate token/会话）重新递增到 277/269/325；产物发布仍为独立人工闸。
 - 工作区有多个**未跟踪文件**（`_verify/`、`_verify-report.md`、`promo/`、`tools/_tmp/*` 等）：非本台账任务产物，**提交时精确 `git add`，禁止 `git add -A`**。
 
@@ -109,6 +110,19 @@
   4. **可选增强**：把云 APP 首次冷启动的原生错误页升级为品牌化离线页/自动重试（需 APK 重打，本期做 SW 后非必须）。
 - **回滚**：无需回滚期（SW 不影响在线网络优先；如需停用可改 index 移除注册或 SW_VERSION 清缓存）；gate TTL 可用环境变量 `GATE_TOKEN_TTL_HOURS` 覆盖（≤720）。
 - **验收**：离线正式版 30 天内断网登录成功；云 APP 联网一次后断网冷启动可用；API 不被 SW 缓存；在线更新不受影响。\n- **基线 commit**：`0072b931`（Playwright 本地静态服务离线重载 8/8；线上 `/sw.js` 200/no-cache、index 注册已核验）
+
+### H13 ｜优先级：高｜自动备份可恢复 + 「备份与恢复」面板：重打包与发布（2026-10-20）
+- **状态**：IN-PROGRESS（代码已就位并通过全部门禁 + E2E F1-F10 54 断言；**尚未重打包/发布**）
+- **已完成**：`delete-backup-file` IPC（shared 权威源 + 2 副本）、preload×2、Android 双 `MainActivity.java`、离线 APP `video-recorder-inject.js`、鸿蒙 `cloud-electron-api-shim.js`+`NativeBridge.ets`、两权威源 `index.html`（`buildBackupPayload`/`saveLocalBackupToFile`/`listBackupItems`/`restoreBackupItem`/`deleteBackupItem`/`cleanupOldBackups`/面板注入/`importDataFromJson` 旧结构归一化）、官网 `download.html`×2；`sync-all.ps1` 分发 6 份 index 副本；`diff-cross-version` 基线已重冻结（desk/siteadmin/download）。
+- **剩余动作**：
+  1. **双桌面整包重打**（`desktop-fs-ipc.cjs` + `preload.js` 在 asar 内，热更不覆盖）：云端 + 离线各一，走 `tools/one-click-pack.ps1`；打包阶段会编译 Java，兜底 T3 的编译验证。
+  2. **离线 APP 重打 APK**（`MainActivity.java` 新桥 + `assets/video-recorder-inject.js`）；云 APP 重打（同桥方法）。鸿蒙包暂不构建（近期搁置）。
+  3. **热更重签**：`index.html` 属白名单 → `desktop/local`、`desktop/cloud`、`app-local` 可热更（但**桌面删除能力依赖整包**，热更只带前端面板）。
+  4. **真机/真装实测**：桌面 + APP 触发自动备份 → 目录现 `auto_*.json` → 面板列出 → 恢复（账号+设置+数据齐回归）→ 仅自动可删 → 清理后手动备份仍在；无桥环境（网页）走 IndexedDB 降级不报错。
+  5. **发布**（人工 `一键发布.bat` 或 `node tools/publish-release.js --changed-only --confirm --push`）；发布后 `download.html` 指南随 Pages 自动生效（本批官网文案已含新路径/新入口）。
+- **勿做**：不改 HTML 结构/CSS（守 `check-interface` 6 OK）；不动手动备份命名与通道；鸿蒙不构建。
+- **验收**：四端安装新包后 AC-1..AC-5 全过（见 `.trae/specs/backup-restore-optimize/checklist.md`）；官网文案与客户端路径逐条一致。
+- **基线 commit**：本批提交（见 commit message）；规格文档 `.trae/specs/backup-restore-optimize/`
 
 ### H8 ｜优先级：中（S1 实施中）｜激活流程全端架构收敛
 - **状态**：IN-PROGRESS（5 项决策已拍板；**S1a + S1b-①②③ 已完成**；**S1b 剩余**：客户端接入 session、真机矩阵、桌面整包 1.0.277、云端 gate token 分发复测）。**2026-10-18 09:45 另一会话打包因版本基线漂移中止（1.0.277/1.2.269/325 未入库），遗留副作用已 `git stash`（"10-18 09:45 打包遗留副作用…"）待负责人处理，勿直接提交。**

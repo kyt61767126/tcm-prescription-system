@@ -739,6 +739,32 @@ function createDesktopFileIpc({ ipcMain, app, dialog, shell, BrowserWindow }) {
         }
     });
 
+    // ★ 2026-10-20 自动备份删除（与 list-backup-files 同源目录「中医处方系统/」）
+    //   仅允许新自动备份 auto_YYYYMMDD_HHmmss.json；手动备份（本地_*.json）不可删。
+    ipcMain.handle('delete-backup-file', async (event, fileName) => {
+        try {
+            const safeName = sanitizeFileName(fileName);
+            if (!/^auto_\d{8}_\d{6}\.json$/.test(safeName)) {
+                return { success: false, error: '文件名格式不符（仅允许自动备份 auto_YYYYMMDD_HHmmss.json）' };
+            }
+            const backupDir = path.join(getDownloadsDirectory(), '中医处方系统');
+            const filePath = path.join(backupDir, safeName);
+            // 路径白名单双校验：canonical 相对路径 + 媒体根白名单
+            const rel = path.relative(path.resolve(backupDir), path.resolve(filePath));
+            if (!rel || rel.startsWith('..') || path.isAbsolute(rel) || !isPathAllowed(filePath)) {
+                return { success: false, error: '路径越权已拒绝' };
+            }
+            if (fse.existsSync(filePath)) {
+                await fs.unlink(filePath);
+                return { success: true, fileName: safeName };
+            }
+            return { success: true, message: '文件不存在' };
+        } catch (error) {
+            console.error('删除备份文件失败:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
     // ==================== 导出（main.js 外部使用点）====================
     return {
         getExeDirectory,

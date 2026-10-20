@@ -1648,6 +1648,7 @@ public class MainActivity extends BridgeActivity {
             "    saveBackupFile: function(jsonStr, fileName) { return callNativeAsync('saveBackupFile', {jsonStr: jsonStr, fileName: fileName}); }," +
             "    listBackupFiles: function() { return callNativeAsync('listBackupFiles', {}); }," +
             "    readBackupFile: function(fileName) { return callNativeAsync('readBackupFile', {fileName: fileName}); }," +
+            "    deleteBackupFile: function(fileName) { return callNativeAsync('deleteBackupFile', {fileName: fileName}); }," +
             "    backupMedia: function() { return callNativeAsync('backupMedia', {}); }," +
             "    restoreMedia: function() { return callNativeAsync('restoreMedia', {}); }," +
             "    readFileAsBase64: function(filePath) {" +
@@ -2108,6 +2109,9 @@ public class MainActivity extends BridgeActivity {
                         return listBackupFiles().toString();
                     case "readBackupFile":
                         return readBackupFile(args.optString("fileName", "")).toString();
+                    // ★ 2026-10-20 自动备份删除（仅 auto_*.json，公共 Downloads/中医处方系统/）
+                    case "deleteBackupFile":
+                        return deleteBackupFile(args.optString("fileName", "")).toString();
                     // ★ 2026-08-30 照片视频备份：复制到公共 Downloads/中医处方系统/media/
                     case "backupMedia":
                         return backupMedia().toString();
@@ -2921,6 +2925,52 @@ public class MainActivity extends BridgeActivity {
                 return r;
             } catch (Exception e) {
                 Log.e(TAG, "readBackupFile 失败", e);
+                return fail(e.getMessage());
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // ★ 2026-10-20 自动备份删除：仅允许 auto_YYYYMMDD_HHmmss.json
+        //   白名单：仅公共 Downloads/中医处方系统/ 下自动备份；手动备份（本地_*.json）不可删
+        // ------------------------------------------------------------------
+        private JSONObject deleteBackupFile(String fileName) {
+            try {
+                String safeName = sanitize(fileName);
+                if (safeName == null || safeName.contains("/")
+                        || !safeName.matches("auto_\\d{8}_\\d{6}\\.json")) {
+                    return fail("仅允许删除自动备份（auto_YYYYMMDD_HHmmss.json）");
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    String selection = MediaStore.Downloads.RELATIVE_PATH + " LIKE ? AND "
+                            + MediaStore.Downloads.DISPLAY_NAME + " = ?";
+                    String[] args = new String[]{
+                            Environment.DIRECTORY_DOWNLOADS + "/" + BACKUP_SUB_DIR + "/%", safeName};
+                    try (Cursor cursor = getContentResolver().query(
+                            MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                            new String[]{MediaStore.Downloads._ID},
+                            selection, args, null)) {
+                        if (cursor == null || !cursor.moveToFirst()) {
+                            return fail("备份文件不存在: " + safeName);
+                        }
+                        Uri uri = ContentUris.withAppendedId(
+                                MediaStore.Downloads.EXTERNAL_CONTENT_URI, cursor.getLong(0));
+                        if (getContentResolver().delete(uri, null, null) <= 0) {
+                            return fail("删除失败: " + safeName);
+                        }
+                    }
+                } else {
+                    File dir = new File(Environment.getExternalStoragePublicDirectory(
+                            Environment.DIRECTORY_DOWNLOADS), BACKUP_SUB_DIR);
+                    File file = new File(dir, safeName);
+                    if (!file.exists()) return fail("备份文件不存在: " + safeName);
+                    if (!file.delete()) return fail("删除失败: " + safeName);
+                }
+                JSONObject r = new JSONObject();
+                r.put("success", true);
+                r.put("fileName", safeName);
+                return r;
+            } catch (Exception e) {
+                Log.e(TAG, "deleteBackupFile 失败", e);
                 return fail(e.getMessage());
             }
         }

@@ -97,6 +97,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     readBackupFile: (fileName) => ipcRenderer.invoke('read-backup-file', fileName),
     // ★ 2026-08-31 兜底文件选择：主进程原生 dialog（渲染层 input.click 因用户激活丢失打不开）
     openBackupPicker: () => ipcRenderer.invoke('open-backup-picker'),
+    // ★ 2026-10-20 自动备份删除（仅限 auto_*.json，落「中医处方系统/」目录；手动备份不可删）
+    deleteBackupFile: (fileName) => ipcRenderer.invoke('delete-backup-file', fileName),
 
     // P1-1 自动备份策略：保存/列出/删除（userData/backups/ 目录）
     saveAutoBackup: (jsonStr, fileName) => ipcRenderer.invoke('save-auto-backup', jsonStr, fileName),

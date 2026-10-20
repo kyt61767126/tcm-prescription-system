@@ -192,8 +192,8 @@ module.exports = [
   {
     id: "T32",
     desc: "confirm 文案：「惠康中医媒体\\downloads\\中医处方系统\\」→「备份文件夹：中医处方系统」（Android 实际目录）",
-    find: "                            var ok = confirm('发现 ' + result.files.length + ' 个备份文件（惠康中医媒体\\\\downloads\\\\中医处方系统\\\\）\\n\\n' + fileList + '\\n\\n【确定】用最新备份恢复（第1个）\\n【取消】改为手动选择文件');",
-    replace: "                            var ok = confirm('发现 ' + result.files.length + ' 个备份文件（备份文件夹：中医处方系统）\\n\\n' + fileList + '\\n\\n【确定】用最新备份恢复（第1个）\\n【取消】改为手动选择文件');",
+    find: "                            var ok = confirm('发现 ' + result.files.length + ' 个备份文件（惠康中医媒体\\\\downloads\\\\中医处方系统\\\\）\\n\\n' + fileList + '\\n\\n【确定】用最新备份恢复（第1个：' + __latestTag + '）\\n【取消】改为手动选择文件');",
+    replace: "                            var ok = confirm('发现 ' + result.files.length + ' 个备份文件（备份文件夹：中医处方系统）\\n\\n' + fileList + '\\n\\n【确定】用最新备份恢复（第1个：' + __latestTag + '）\\n【取消】改为手动选择文件');",
   },
   {
     id: "T33",

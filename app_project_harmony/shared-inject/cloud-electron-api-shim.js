@@ -64,6 +64,7 @@
     saveBackupFile: function(jsonStr, fileName) { return callNativeAsync('saveBackupFile', {jsonStr: jsonStr, fileName: fileName}); },
     listBackupFiles: function() { return callNativeAsync('listBackupFiles', {}); },
     readBackupFile: function(fileName) { return callNativeAsync('readBackupFile', {fileName: fileName}); },
+    deleteBackupFile: function(fileName) { return callNativeAsync('deleteBackupFile', {fileName: fileName}); },
     backupMedia: function() { return callNativeAsync('backupMedia', {}); },
     restoreMedia: function() { return callNativeAsync('restoreMedia', {}); },
     readFileAsBase64: function(filePath) {

@@ -173,6 +173,15 @@
                     } catch (e) { resolve({ success: false, error: String(e) }); }
                 });
             },
+            // ★ 2026-10-20 自动备份删除（仅 auto_*.json；手动备份不可删，Java 端再校验一次）
+            deleteBackupFile: function (fileName) {
+                return new Promise(function (resolve) {
+                    try {
+                        var r = callNative('deleteBackupFile', JSON.stringify({ fileName: fileName }));
+                        resolve(r);
+                    } catch (e) { resolve({ success: false, error: String(e) }); }
+                });
+            },
             savePrescriptionImage: function (imageData, fileName) {
                 return new Promise(function (resolve) {
                     try {
@@ -382,6 +391,7 @@
             oldAPI.saveBackupFile = newAPI.saveBackupFile;
             oldAPI.listBackupFiles = newAPI.listBackupFiles;
             oldAPI.readBackupFile = newAPI.readBackupFile;
+            oldAPI.deleteBackupFile = newAPI.deleteBackupFile;
             oldAPI.__videoRecorderEnhanced = true;
             // 恢复旧对象为 electronAPI
             window.electronAPI = oldAPI;

@@ -2442,28 +2442,29 @@
             <div class="card">
                 <div class="card-title"><span class="icon">💾</span>数据备份与恢复指南（数据永不丢失）</div>
                 <p style="font-size:13px;color:var(--text-secondary);margin:6px 0 10px;line-height:1.6;">
-                    💡 系统已内置<strong>全自动备份机制</strong>，正常使用情况下您<strong>无需手动备份</strong>。以下说明供卸载重装、重装系统、更换设备时参考。
+                    💡 系统已内置<strong>自动备份</strong>，日常无需手动操作；备份文件保存在<strong>您能直接看到的文件夹</strong>里，并可在系统内<strong>一键恢复</strong>。以下说明供卸载重装、重装系统、更换设备时参考。
                 </p>
-                <div class="step-title" style="margin-top:6px;">📱 手机 APP：全自动双保险</div>
+                <div class="step-title" style="margin-top:6px;">🤖 自动备份（无需手动，每天都在做）</div>
                 <ol class="install-steps">
-                    <li><strong>处方文字数据</strong>：每天首次打开 APP 自动备份一次 + 切后台/退出时自动备份，文件存到手机「内部存储/Download/中医处方系统/」</li>
-                    <li><strong>照片/录像/处方签</strong>：保存成功的瞬间自动复制一份到「Download/中医处方系统/media/年-月/」，双份存储</li>
-                    <li>以上全部自动完成；如检测到个别文件未及时备份，APP 启动时会提醒您一键补备</li>
+                    <li><strong>备份位置</strong>：桌面版存「<strong>安装盘\惠康中医媒体\downloads\中医处方系统\</strong>」；APP 存「<strong>内部存储/Download/中医处方系统/</strong>」，文件名为 <strong>auto_日期_时间.json</strong></li>
+                    <li><strong>备份内容（完整）</strong>：药品、验方、历史处方、库存台账、诊所设置，以及<strong>离线版账号表</strong>——恢复后原账号密码可直接登录</li>
+                    <li><strong>备份时机</strong>：每天首次打开自动备份一次；切后台/退出时再备份一次；照片、录像、处方签在保存瞬间复制到「中医处方系统/media/年-月/」双份保存</li>
+                    <li><strong>保留策略</strong>：自动备份保留 <strong>7 天每日 + 4 周每周 + 12 月每月</strong>；<strong>手动备份永不自动删除</strong></li>
                 </ol>
-                <div class="step-title" style="margin-top:10px;">📱 APP 卸载重装 / 换手机：数据恢复步骤</div>
+                <div class="step-title" style="margin-top:10px;">🗂️ 手动备份与一键恢复（统一入口）</div>
                 <ol class="install-steps">
-                    <li>正常使用情况下可直接卸载重装（自动备份已完成，无需提前操作）</li>
-                    <li>重新安装 APP 并登录，进入「<strong>统计 → 🗄️数据管理 → 恢复数据</strong>」</li>
-                    <li>选择「<strong>备份列表一键恢复</strong>」，选中最新备份文件，文字数据 + 照片视频自动全部恢复</li>
+                    <li><strong>手动备份</strong>：打开「<strong>统计 → 🗄️数据管理 → 💾 一键备份</strong>」，文件存到与自动备份同一目录（文件名 本地_用户名_日期_时间.json）</li>
+                    <li><strong>查看与管理</strong>：打开「<strong>统计 → 🗄️数据管理 → 🗂️ 备份与恢复</strong>」，<strong>手动备份与自动备份在同一个列表</strong>，显示类型、时间、大小</li>
+                    <li><strong>一键恢复</strong>：点某条右侧「<strong>恢复</strong>」即可还原（药品、验方、处方、库存台账、诊所设置与账号一并恢复）</li>
+                    <li><strong>删除与清理</strong>：自动备份可单独「删除」或点「清理旧自动备份」批量清理；<strong>手动备份不提供删除</strong>，不会被动过</li>
+                </ol>
+                <div class="step-title" style="margin-top:10px;">📱 卸载重装 / 换手机 / 换电脑</div>
+                <ol class="install-steps">
+                    <li>重装后重新登录，打开「<strong>统计 → 🗄️数据管理 → 🗂️ 备份与恢复</strong>」，选最新一条点「恢复」（照片视频自动一并恢复）</li>
                     <li>离线版恢复时<strong>账号也一并恢复</strong>，重装后原账号密码直接登录；云端版账号在服务器，登录即同步，无需恢复</li>
-                    <li>换手机：先用文件管理器把旧手机「Download/中医处方系统/」整个文件夹拷到新手机同位置，再按上述步骤恢复</li>
-                </ol>
-                <div class="step-title" style="margin-top:10px;">💻 桌面版：数据存独立文件夹，重装软件/系统都不丢</div>
-                <ol class="install-steps">
-                    <li>处方数据存「<strong>安装盘\惠康中医媒体\</strong>」文件夹（data/ 文字数据 + downloads/年-月/ 照片视频），与软件安装目录分离</li>
-                    <li><strong>重装软件、覆盖升级、重装 C 盘系统均不影响数据</strong>；重装后登录，数据自动读取原目录</li>
-                    <li>误删数据或想恢复到某天：登录后「<strong>设置 → 恢复数据</strong>」从备份列表一键恢复（备份文件在「惠康中医媒体\downloads\中医处方系统\」）</li>
-                    <li>换电脑：把「<strong>惠康中医媒体</strong>」整个文件夹拷到新电脑相同位置（如 D 盘根目录），安装软件后数据原样恢复</li>
+                    <li>换手机：用文件管理器把旧手机「Download/中医处方系统/」整个文件夹拷到新手机同位置，再打开上述面板点「刷新」→「恢复」</li>
+                    <li>桌面版数据存「<strong>安装盘\惠康中医媒体\</strong>」独立文件夹（与软件安装目录、C 盘分离），<strong>重装软件、覆盖升级、重装 C 盘系统均不丢</strong></li>
+                    <li>换电脑：把「<strong>惠康中医媒体</strong>」整个文件夹拷到新电脑相同位置（如 D 盘根目录），安装软件后打开面板「刷新」→「恢复」</li>
                     <li>建议定期把「惠康中医媒体」文件夹拷贝到 U 盘/移动硬盘做异地备份，防范硬盘物理损坏</li>
                 </ol>
             </div>
@@ -2840,8 +2841,8 @@
                 </div>
                 <div class="faq-answer">
                     <div class="faq-answer-inner">
-                        <strong>手机 APP：</strong>全自动双保险——处方文字数据每天自动备份 + 切后台时自动备份；照片/录像/处方签保存瞬间自动双份存储到手机公共目录（Download/中医处方系统/）。<strong>无需手动备份</strong>，卸载重装、换手机都可完整恢复。<br>
-                        <strong>桌面版：</strong>数据存「安装盘\惠康中医媒体\」独立文件夹，重装软件、覆盖升级、重装 C 盘系统均不影响数据；换电脑拷贝该文件夹即可迁移。<br>
+                        <strong>手机 APP / 桌面版：</strong>每天首次打开自动备份一次、切后台或退出时再备份一次；照片、录像、处方签在保存瞬间自动双份存储到公共目录（中医处方系统）。备份文件保存在<strong>您能直接看到的文件夹</strong>——桌面版「安装盘\惠康中医媒体\downloads\中医处方系统\」、APP「Download/中医处方系统/」，文件名为 auto_日期_时间.json。<strong>内容完整</strong>：药品、验方、历史处方、库存台账、诊所设置，以及<strong>离线版账号表</strong>（恢复后原账号密码可直接登录）。自动备份保留 <strong>7 天每日 + 4 周每周 + 12 月每月</strong>；<strong>手动备份永不自动删除</strong>。<br>
+                        <strong>桌面版数据位置：</strong>存「安装盘\惠康中医媒体\」独立文件夹（与软件安装目录、C 盘分离），重装软件、覆盖升级、重装 C 盘系统均不影响数据；换电脑拷贝该文件夹即可迁移。<br>
                         <strong>云端版：</strong>数据云端+本地双存储，实时同步，多设备共享。<br>
                         <strong>详细操作说明</strong>请查看「<a href="#" onclick="switchTab('install'); return false;" style="color:#2563eb;">📋 安装说明</a>」Tab 的「💾 数据备份与恢复指南」。
                     </div>
@@ -2855,12 +2856,13 @@
                 <div class="faq-answer">
                     <div class="faq-answer-inner">
                         <strong>卸载重装（同一部手机）：</strong><br>
-                        1. 重新安装 APP 并登录<br>
-                        2. 进入「统计 → 🗄️数据管理 → 恢复数据」<br>
-                        3. 选择「备份列表一键恢复」，选中最新备份文件即可——文字数据 + 照片视频自动全部恢复，离线版连账号密码也一并恢复（原账号直接登录）<br><br>
+                        1. 自动备份文件仍在「Download/中医处方系统/」，重装不会删除该文件夹<br>
+                        2. 重新安装 APP 并登录<br>
+                        3. 打开「统计 → 🗄️数据管理 → 🗂️ 备份与恢复」，点最新一条右侧「恢复」——药品、验方、历史处方、库存、诊所设置与账号一并还原，照片视频同时自动恢复<br><br>
                         <strong>换手机：</strong><br>
                         1. 用文件管理器把旧手机「Download/中医处方系统/」整个文件夹拷到新手机同位置<br>
-                        2. 新手机安装 APP 后按上面同样步骤恢复即可<br><br>
+                        2. 新手机安装 APP 后打开「🗂️ 备份与恢复」，点「刷新」→「恢复」即可<br><br>
+                        <strong>桌面版重装 / 换电脑：</strong>备份在「安装盘\惠康中医媒体\downloads\中医处方系统\」，同上用「统计 → 🗄️数据管理 → 🗂️ 备份与恢复」恢复；换电脑把「惠康中医媒体」整个文件夹拷到新电脑相同位置即可。<br><br>
                         💡 云端版无需恢复操作：账号数据在云端服务器，登录即自动同步。
                     </div>
                 </div>
@@ -2876,7 +2878,7 @@
                         • 重装软件 / 覆盖升级 / 重装 C 盘系统：数据原样保留，装好软件登录即读取<br>
                         • 重装系统时只要不格式化数据所在盘（如 D 盘），数据不受任何影响<br>
                         • 换电脑：把「惠康中医媒体」整个文件夹拷到新电脑相同盘符根目录，安装软件后数据原样恢复<br>
-                        • 误删数据：「设置 → 恢复数据」从备份列表一键恢复<br><br>
+                        • 误删数据：「统计 → 🗄️数据管理 → 🗂️ 备份与恢复」从备份列表一键恢复（自动与手动备份同列，自动备份保存 7 天每日 / 4 周每周 / 12 月每月，手动备份不会自动删除）<br><br>
                         💡 唯一无法防范的是硬盘物理损坏，建议定期把「惠康中医媒体」文件夹拷贝到 U 盘/移动硬盘做异地备份。
                     </div>
                 </div>

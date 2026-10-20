@@ -107,6 +107,9 @@ export class NativeBridge {
           return this.listBackupFiles();
         case 'readBackupFile':
           return this.readBackupFile(optStr(args, 'fileName'));
+        // ★ 2026-10-20 自动备份删除（仅 auto_*.json，与安卓端同口径）
+        case 'deleteBackupFile':
+          return this.deleteBackupFile(optStr(args, 'fileName'));
         case 'backupMedia':
           return this.backupMedia();
         case 'restoreMedia':
@@ -584,6 +587,30 @@ export class NativeBridge {
       };
       return JSON.stringify(r);
     } catch (e) {
+      return failJson(`${JSON.stringify(e)}`);
+    }
+  }
+
+  /** ★ 2026-10-20 删除自动备份（白名单：backups 目录内 + 仅 auto_YYYYMMDD_HHmmss.json）
+   *  手动备份（本地_*.json）不可删 —— 与安卓/桌面端同口径 */
+  private deleteBackupFile(fileName: string): string {
+    try {
+      const safeName: string = sanitize(fileName);
+      if (!/^auto_\d{8}_\d{6}\.json$/.test(safeName)) {
+        return failJson('文件名格式不符（仅允许自动备份 auto_YYYYMMDD_HHmmss.json）');
+      }
+      const path: string = `${this.getBackupDir()}/${safeName}`;
+      if (!fs.accessSync(path)) {
+        return failJson(`备份文件不存在: ${safeName}`);
+      }
+      fs.unlinkSync(path);
+      const r: Record<string, Object> = {
+        'success': true,
+        'fileName': safeName
+      };
+      return JSON.stringify(r);
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, 'deleteBackupFile 失败: %{public}s', JSON.stringify(e));
       return failJson(`${JSON.stringify(e)}`);
     }
   }

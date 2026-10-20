@@ -2198,3 +2198,17 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
 * **验证**：Playwright 4/4：慢网 5s 模拟 → 2505ms 进入；云端快 → 1ms；断网 onLine=false → 0ms；错误密码/无缓存仍拒绝。
 * **发布**：cloud APP v333（12,409,717B，SHA256 BA5C7CB66E21906403E21CC273D79BB6F4E3AE005E1D31DB2BD84CACE5119985）；官网 hash-manifest 双镜像 code=333；desktop/cloud 热更 2026.10.19-6。
 * **边界**：2.5s 快速通道使用本地离线缓存（7 天有效），云端仍会继续请求；若账号在服务端被吊销，后续 API 401 会触发重新登录。在线网络良好时仍是正常云端登录（一般 <1-2s）；APP 冷启动页面加载时间未包含在本优化内（如需“打开即见登录页”可再做本地壳优先启动）。
+
+## 68. 自动备份真正可恢复 + 「备份与恢复」面板 + 官网说明（2026-10-20，授权/备份链，双端整包口径）
+
+* **问题**：①自动备份走 IndexedDB/私有目录，文件不可见、载荷缺账号表与设置 → 重装后**不能一键恢复**（手动备份才是唯一活路）；②无删除/管理入口，列表混在系统文件选择器里；③官网备份说明与真实路径/入口不符。
+* **改动（四层同口径）**：
+  1. **主进程新增 `delete-backup-file` IPC**（`shared/desktop-fs-ipc.cjs` 唯一权威源，经 `tools/sync-all.ps1` 分发 2 副本）：`sanitizeFileName` → 白名单 `^auto_\d{8}_\d{6}\.json$` → 目录限 `中医处方系统/` + `isPathAllowed` 双校验 → `fs.unlink`；不接付费墙。`preload.js`×2 暴露 `deleteBackupFile`。
+  2. **统一载荷 `buildBackupPayload({kind:'auto'|'manual'})`**（两权威源 index.html）：顶层 `exportInfo/medicines/formulas/prescriptionHistory/stockLedger/stockMgmtEnabled/users/settings/prescriptionCount/_hmac`。自动备份改为**与手动备份同一落盘通道**（桌面 `安装盘\惠康中医媒体\downloads\中医处方系统\`；APP `Download/中医处方系统/`），文件名 `auto_YYYYMMDD_HHmmss.json`；`exportData()` 改调 `buildBackupPayload({kind:'manual'})`（对外行为不变）。
+  3. **JS 注入「🗂️ 备份与恢复」面板**（禁改 HTML/CSS）：`ensureBackupRestoreEntry()` 在统计弹窗「🗄️数据管理」按钮组（`button[onclick="exportData()"]`）后插按钮；`openBackupRestorePanel()` 于 `showModal('analyticsModal')` 钩子注入遮罩+卡片，`listBackupItems()` 合并手动/自动（打标 `auto_`），支持一键恢复（`restoreBackupItem`）/仅自动行删除（`deleteBackupItem`）/清理旧自动备份（`cleanupOldBackups`）。**手动备份永不自动删除、无删除入口**。
+  4. **桥方法四端补齐**（APP/桌面同 API 契约）：Android 双 `MainActivity.java` + 离线 APP `video-recorder-inject.js`（重建/oldAPI 合并）+ 鸿蒙 `cloud-electron-api-shim.js` 与 `NativeBridge.ets`，统一 `deleteBackupFile(fileName)`，Android Q+ 走 `MediaStore.Downloads`（`RELATIVE_PATH LIKE 'Download/中医处方系统/%'`）否则 `File.delete()`。
+  5. **官网 `public/download.html` + `site-official/download.html`** 就地完善指南卡（🤖自动备份 / 🗂️手动备份与一键恢复 / 📱卸载重装换机）与 FAQ 三处，路径与入口与客户端逐条对应。
+  6. **`importDataFromJson` 旧结构归一化**：顶层无 `medicines` 且存在 `data.data` 时展开（旧 `{timestamp,version:'P1-1',data:{...}}` 自动备份也可一键恢复），`_hmac` 校验顺序保留。
+* **验证**：`app_project/db-offline/desktop/e2e/verify-fs-domain.cjs` 重写为 F1-F10，**54 项断言 ALL PASS**（含 AC-1 落盘+mtime+载荷完整、AC-2 合并列表、AC-3 恢复账号表 users=1/药品 469、AC-4 拒手动+拒 `../evil.json`、AC-5 cleanup 只清自动）。门禁全绿：`check-interface` 6 OK、`copy-consistency` 100/100、`html-sync-check` IN SYNC、`diff-cross-version` 6 对基线全绿、`check-ipc-consistency` 通过、`sync-all -VerifyOnly` 全同步、`node --check` 过。E2E 夹具需走 `shared/license/license-manager.js` 的 `signConfig()`+`backupUserAccounts({proven:true})`（否则 `configUsersProvenAuthentic` fail-closed 弹到期框）。
+* **生效方式**：`index.html` 属热更白名单 → 桌面 `desktop/local`、`desktop/cloud`、APP `app-local` 可**重签热更**；`shared/desktop-fs-ipc.cjs` + `preload.js` 在 asar 内 → **需双桌面整包**；`MainActivity.java`/`NativeBridge.ets` → **需重打 APK/鸿蒙包**；官网两副本随 push（Pages git 构建）即达。
+* **教训**：自动备份必须与手动备份**同通道同载荷**，否则「有备份却不可恢复」；界面新增能力一律 JS 注入，守 `check-interface` 6 OK 红线；同名 auto 文件同秒覆盖 → E2E 断言勿用「新增计数」，改用「存在+mtime<60s」。
