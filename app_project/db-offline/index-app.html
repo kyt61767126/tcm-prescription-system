@@ -2016,6 +2016,18 @@ let currentUser = null;
             } catch(e) {
                 console.warn('[CONFIG] 加载 config.json 失败:', e.message);
             }
+            // ★ 2026-10-20 登录框版本标签修正（与云端对齐）：asar 内置 config.json 出厂
+            //   edition=personal（标准版），机构版激活后 get-app-config 异步校正 CONFIG.edition，
+            //   但首帧已渲染标准版标签→用户看到短暂闪错。此处从 localStorage 缓存的上次校正
+            //   edition 恢复，保证首帧即显示真实版本（机构版/标准版）。
+            try {
+                var __cachedEd = localStorage.getItem('cached_config_edition') || '';
+                if (__cachedEd) {
+                    CONFIG.edition = __cachedEd;
+                    var __inst = ['clinic','offline_clinic','clinic_custom','cloud_clinic','offline'].indexOf(__cachedEd) >= 0;
+                    CONFIG.versionLabel = __inst ? '离线机构版' : '离线标准版';
+                }
+            } catch (_) {}
         })();
 
         window.__APP_VERSION__ = '2026-07-29-v1';
