@@ -2082,6 +2082,22 @@ let currentUser = null;
             //   d) ★已激活客户：无入口 → 首帧即最终态（蓝色 + 无入口）；
             //   e) window.__firstFrameReady__ = true（云端APP原生遮罩轮询此信号才揭幕）。
             try {
+                // ★ 2026-10-20 登录框版本标签修正：config.json 出厂 edition=cloud_personal（标准版），
+                //   机构版客户登录后服务端返回 clinicEdition，但重启后登录框又回到出厂默认
+                //   「云端标准版」，与实际版本不符。此处从上次登录缓存 auth:currentUser 恢复
+                //   权威 edition（clinicEdition 优先），覆盖 CONFIG，保证登录框显示真实版本。
+                try {
+                    var __cachedUser = JSON.parse(localStorage.getItem('auth:currentUser') || 'null');
+                    if (__cachedUser) {
+                        var __cachedEd = __cachedUser.clinicEdition || __cachedUser.edition || '';
+                        if (__cachedEd) {
+                            CONFIG.edition = __cachedEd;
+                            if (__cachedEd === 'cloud_voice' || __cachedEd === 'voice') CONFIG.versionLabel = '云端语音版';
+                            else if (__cachedEd.indexOf('clinic') >= 0 || __cachedEd.indexOf('org') >= 0 || __cachedEd.indexOf('institution') >= 0) CONFIG.versionLabel = '云端机构版';
+                            else CONFIG.versionLabel = '云端标准版';
+                        }
+                    }
+                } catch (_) {}
                 var _root = document.documentElement;
                 var _isStd = false;
                 if (typeof window.isStandardEdition === 'function') _isStd = window.isStandardEdition((CONFIG && CONFIG.edition) || '');
