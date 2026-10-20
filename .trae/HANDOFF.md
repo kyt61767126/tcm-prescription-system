@@ -193,7 +193,7 @@
 - **未做（另可立项）**：T4 KV→D1 对账回填（本次症状自行恢复、无遗留 id 清单）。
 - **已完成（本批 T5，端间同步开关统一）**：云 APP 与云桌面/云网页 `allowedMode='local'` 统一升为 `both`——`shared/auth-core/cloud.js` 登录归一化去掉 `!global.Capacitor`（离线源 `offline.js` 保留判定不动）+ `public/index.html` 的 `getSyncMode()` 唯一读出口兜底升 `both`（覆盖已登录缓存态）。验证：`sync-auth-core -VerifyOnly` 11 副本双源一致、`sync-all -VerifyOnly` 全同步、`check-interface` 6 OK、`copy-consistency` 100/0。云端网页/云 APP 随 push 刷新即达、无需重打包；云桌面页面部分需热更 `desktop/cloud`。
 - **规格文档**：`.trae/specs/cloud-rx-latest-not-visible/{spec.md,tasks.md}`
-- **基线 commit**：`452b1837`（代码） + `ee932969`（热更）
+- **基线 commit**：`452b1837`（假成功防护代码） + `ee932969`（云桌面热更 2026.10.20-1） + `716d8559`（T5 端间同步开关统一）
 
 ### H3 ｜优先级：低（长期观察）｜KV 容量与套餐
 - audit_log 前缀 880 键（2026-10-13 实测，总 1926），接近单页 1000；D1 迁移完成后安排清理。
