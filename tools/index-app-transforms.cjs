@@ -84,8 +84,8 @@ module.exports = [
   {
     id: "T11",
     desc: "登录页版本号直显 + window.__APP_BUILD__ 拼接（防 MainActivity 事后注入的 Build 号被重渲染抹掉的竞态）",
-    find: "tag.innerHTML = '【离线 · 登录后显示版本】'",
-    replace: "// ★ 2026-08-28 优化：登录页直接显示版本号（原「登录后显示版本」占位无信息量）；\n                    //   MainActivity 注入会追加 Build 号 → 【离线机构版】V1.0.0 Build NNN\n                    // ★ 2026-08-30 修复首开/二开版本号不一致：本函数重写 innerHTML 会抹掉 Java 事后\n                    //   注入的 Build 号（竞态），现直接拼接 window.__APP_BUILD__（MainActivity 注入），\n                    //   重渲染多少次 Build 号都不丢。\n                    tag.innerHTML = '【' + label + '】 ' + window.APP_VERSION +\n                        (window.__APP_BUILD__ ? (' ' + window.__APP_BUILD__) : '')",
+    find: "tag.innerHTML = '【' + loginLabel + '】' + metaHtml;",
+    replace: "// ★ 2026-08-28 优化：登录页直接显示版本号；★ 2026-10-20 登录框只显示产品大类（离线版）\n                    //   MainActivity 注入会追加 Build 号 → 【离线版】V1.0.0 Build NNN\n                    // ★ 2026-08-30 修复首开/二开版本号不一致：本函数重写 innerHTML 会抹掉 Java 事后\n                    //   注入的 Build 号（竞态），现直接拼接 window.__APP_BUILD__（MainActivity 注入），\n                    //   重渲染多少次 Build 号都不丢。\n                    tag.innerHTML = '【' + loginLabel + '】 ' + window.APP_VERSION +\n                        (window.__APP_BUILD__ ? (' ' + window.__APP_BUILD__) : '')",
   },
   {
     id: "T12",

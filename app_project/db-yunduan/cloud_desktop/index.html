@@ -2107,15 +2107,14 @@ let currentUser = null;
                     if (_isStd) { _root.classList.remove('edition-org'); _root.classList.add('edition-standard'); }
                     else { _root.classList.add('edition-org'); _root.classList.remove('edition-standard'); }
                 }
-                // 版本标签数据同步（登录框标签已视觉隐藏；仍写textContent供逻辑读取，title显示真实版本）
+                // ★ 2026-10-20 登录框只显示产品大类（云端版/离线版），细分版在登录后顶栏显示
                 var _tag = document.getElementById('loginVersionTag');
+                var _loginLbl = (typeof getProductCategoryLabel === 'function') ? getProductCategoryLabel() : '云端版';
+                if (_tag) _tag.textContent = '【' + _loginLbl + '】';
+                // document.title 保留完整版本（浏览器标签，非登录框视觉元素）
                 var _lbl = (CONFIG && CONFIG.versionLabel) || (_isStd ? '云端标准版' : '云端机构版');
-                // ★ 2026-09-17 语音版：cloud_voice 独立版本线，versionLabel 只是打包默认/
-                //   渲染缓存，edition=voice 时强制派生「云端语音版」（纯字符串判定——
-                //   首帧执行期 isStandardEdition/Permission 均未加载，禁止依赖）。
                 var _eV = String((CONFIG && CONFIG.edition) || '').toLowerCase();
                 if ((_eV === 'cloud_voice' || _eV === 'voice') && String(_lbl).indexOf('语音') < 0) _lbl = '云端语音版';
-                if (_tag) _tag.textContent = '【' + _lbl + '】';
                 document.title = '惠康中医-' + _lbl;
                 // 写诊所名：local_clinicName 优先，次选 CONFIG.clinicName
                 var _cn = document.getElementById('loginClinicName');
@@ -4280,6 +4279,21 @@ let currentUser = null;
         // ★ 2026-08-29 P0-2 版本号单一数据源：本文件所有版本号输出统一引用此常量，升版本只改这一行
         window.APP_VERSION = 'V1.0.0';
 
+        // ★ 2026-10-20 登录框版本显示统一：登录前无法确定标准/机构/语音细分版（易误显），
+        //   登录框只显示产品大类「云端版」/「离线版」；细分版在登录后操作界面顶栏显示。
+        //   权威来源：CONFIG.productName（云端=惠康中医-云端，离线=惠康中医-本地）。
+        function getProductCategoryLabel() {
+            try {
+                var _pn = String((typeof CONFIG !== 'undefined' && CONFIG && CONFIG.productName) || '');
+                if (_pn.indexOf('云端') >= 0) return '云端版';
+                if (_pn.indexOf('本地') >= 0 || _pn.indexOf('离线') >= 0) return '离线版';
+                var _ed = String((typeof CONFIG !== 'undefined' && CONFIG && CONFIG.edition) || '').toLowerCase();
+                if (_ed.indexOf('cloud') >= 0 || _ed === 'personal' || _ed === 'clinic_standard' || _ed === 'voice') return '云端版';
+                if (_ed.indexOf('offline') >= 0) return '离线版';
+            } catch (_) {}
+            return '云端版';
+        }
+
         // ★★★ 2026-08-17 【根治刀2-B：统一版本标签函数】：优先取 CONFIG.versionLabel（Setup 发下来的权威值）
         // ★ 2026-09-13 举一反三【versionLabel/edition 不一致守卫·机构版误显三连防】：
         //   分档唯一权威=运行时 edition（登录 clinicEdition / auth-core 缓存恢复），
@@ -4345,6 +4359,8 @@ let currentUser = null;
 
         function applyEditionTags() {
             var label = getEditionTag();
+            // ★ 2026-10-20 登录框只显示产品大类（云端版/离线版），细分版在登录后顶栏显示
+            var loginLabel = getProductCategoryLabel();
             // ★ 铁闸4两行紧凑三元组（适配 260~360px 窄登录框，不被裁切）
             var shortBuildTime = '';
             var metaTextLine1 = '';
@@ -4363,11 +4379,9 @@ let currentUser = null;
 
             // ★ 挂载点1：.version-tag（紫色header内，登录遮罩层显示）
             var tag = document.querySelector('.version-tag');
-            // ★ 2026-08-23 登录前也展示真实版本标签（不再"登录后显示版本"占位符）
-            //   权威链：getEditionTag() → CONFIG.versionLabel → CONFIG.edition → Permission._edition → __APP_EDITION__ → EDITION
-            //   确保未登录时也能让用户明确知道当前是机构版还是标准版
+            // ★ 2026-10-20 登录框只显示产品大类（云端版/离线版），不显示细分版（标准/机构/语音）
             if (tag) {
-                tag.innerHTML = '【' + label + '】' + metaHtml;
+                tag.innerHTML = '【' + loginLabel + '】' + metaHtml;
             }
             // ★ 挂载点2：.login-security 下方（激活后简化登录框必显示，防止 header-section 被隐藏时丢失）
             var security = document.querySelector('.login-security');
@@ -4457,14 +4471,14 @@ let currentUser = null;
                 // ★ 2026-08-23 根治三屏闪-刀1：默认已蓝（CSS :root），标准版仅需移除机构版类
                 root.classList.remove('edition-org');
                 root.classList.add('edition-standard');
-                if (tagEl && _applyText) tagEl.textContent = '【云端标准版】';
+                // ★ 2026-10-20 登录框只显示产品大类（云端版/离线版）
+                if (tagEl && _applyText) tagEl.textContent = '【' + (typeof getProductCategoryLabel === 'function' ? getProductCategoryLabel() : '云端版') + '】';
             } else {
                 // 机构版：加 edition-org 切紫色（默认是蓝色标准版）
-                // ★ 2026-09-17 语音版：语音版同走紫色主题（不动 CSS 基线），仅文案独立显示「云端语音版」
                 root.classList.add('edition-org');
                 root.classList.remove('edition-standard');
-                var _vEd = String(edition || '').toLowerCase();
-                if (tagEl && _applyText) tagEl.textContent = (_vEd === 'cloud_voice' || _vEd === 'voice') ? '【云端语音版】' : '【云端机构版】';
+                // ★ 2026-10-20 登录框只显示产品大类（云端版/离线版）
+                if (tagEl && _applyText) tagEl.textContent = '【' + (typeof getProductCategoryLabel === 'function' ? getProductCategoryLabel() : '云端版') + '】';
             }
         };
 

@@ -2043,6 +2043,20 @@ let currentUser = null;
         window.APP_VERSION = 'V1.0.0';
 
         // 版本标签统一显示 V1.0.0（与软著申请版本号一致）
+        // ★ 2026-10-20 登录框版本显示统一：登录前只显示产品大类「离线版」/「云端版」，
+        //   细分版（标准/机构/免费）在登录后操作界面顶栏显示。
+        function getProductCategoryLabel() {
+            try {
+                var _pn = String((typeof CONFIG !== 'undefined' && CONFIG && CONFIG.productName) || '');
+                if (_pn.indexOf('云端') >= 0) return '云端版';
+                if (_pn.indexOf('本地') >= 0 || _pn.indexOf('离线') >= 0) return '离线版';
+                var _ed = String((typeof CONFIG !== 'undefined' && CONFIG && CONFIG.edition) || '').toLowerCase();
+                if (_ed.indexOf('cloud') >= 0) return '云端版';
+                if (_ed.indexOf('offline') >= 0 || _ed === 'personal' || _ed.indexOf('clinic') >= 0) return '离线版';
+            } catch (_) {}
+            return '离线版';
+        }
+
         // ★ 统一安装包：运行时按 config.edition 动态显示 标准版/机构版 标签
         // ★ 2026-09-21 离线免费版：free 授权 edition 仍为 personal（单用户形态
         //   不变），版本标签按 window.__licenseType==='free' 细分显示。此函数仅
@@ -2093,11 +2107,13 @@ let currentUser = null;
             var tag = document.querySelector('.version-tag');
             var _loEl = document.getElementById('loginOverlay');
             var _loginVisible = !!(_loEl && _loEl.style.display !== 'none');
+            // ★ 2026-10-20 登录框只显示产品大类（离线版），不显示细分版
+            var loginLabel = (typeof getProductCategoryLabel === 'function') ? getProductCategoryLabel() : '离线版';
             if (tag) {
                 if (!_loginVisible) {
                     tag.innerHTML = '【' + label + '】' + metaHtml;
                 } else {
-                    tag.innerHTML = '【离线 · 登录后显示版本】' + metaHtml;
+                    tag.innerHTML = '【' + loginLabel + '】' + metaHtml;
                 }
             }
             // ★ 挂载点2：.login-security 下方（激活后简化登录框必显示，防止 header-section 被隐藏时丢失）
