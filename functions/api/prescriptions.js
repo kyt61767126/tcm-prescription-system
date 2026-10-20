@@ -512,10 +512,10 @@ async function handleIncrementalSync({ kv, db, d1On, clinicId, trashKey, permane
 // ============================================================================
 
 // 写入/更新单条处方到 D1（upsert by id）
-async function d1UpsertPrescription(db, clinicId, p) {
+async function d1UpsertPrescription(db, clinicId, p, __healed) {
     // ★ 2026-10-06 首次写入前确保新列就位（幂等单飞，见 prescriptions-store.js）
     await ensurePrescriptionSchema(db);
-    await db.prepare(`
+    const __run = () => db.prepare(`
         INSERT INTO prescriptions (id, clinic_id, patient_name, doctor_name, created_by, date,
             prescription_no, outpatient_no, diagnosis, items, total_amount, registration_fee, dose_count,
             fee_status, paid_at, paid_by, pay_method, media_files, extra, created_at, updated_at)
@@ -553,6 +553,19 @@ async function d1UpsertPrescription(db, clinicId, p) {
         p.createdAt || new Date().toISOString(),
         p.updatedAt || null
     ).run();
+    try {
+        await __run();
+    } catch (e) {
+        // ★ 2026-10-20 列缺失自愈重试：历史 D1 表为「增量补列」而来，缺任一写入列会让
+        //   整条 INSERT 失败；旧实现被 dualWritePrescription 吞掉 → 该方只落 KV，
+        //   而读路径 D1 优先 → 所有端永久读不到（客户端却显示"已同步"）。
+        //   检测到缺列即强制重查列并重试一次，从根上消除"假成功"。
+        if (!__healed && /no such column/i.test(String((e && e.message) || ''))) {
+            await ensurePrescriptionSchema(db, true);
+            return d1UpsertPrescription(db, clinicId, p, true);
+        }
+        throw e;
+    }
 }
 
 // D1 软删除（标记 deleted_at）
@@ -627,13 +640,26 @@ async function d1AllocateNos(db, clinicId, count, yymmddStr) {
     return nos;
 }
 
-// 双写：D1 + KV（D1 失败时仅记日志，不阻断 KV 写入）
+// 双写：D1 + KV（D1 失败不阻断 KV 写入，但结果必须回传——见下）
+// ★ 2026-10-20 不再静默：D1 写失败必须回传给调用方（POST 响应带 d1WriteFailed），
+//   否则客户端仅凭 success:true 就删掉待同步记录、角标显示"已同步"，而读路径
+//   D1 优先 → 该处方在所有端永久不可见（客户实报故障的成因之一）。
 async function dualWritePrescription(kv, db, d1On, clinicId, prescription) {
+    let d1Ok = true, d1Error = null;
     if (d1On && db) {
         try { await d1UpsertPrescription(db, clinicId, prescription); }
-        catch (e) { console.error('[D1] upsert prescription failed:', e.message); }
+        catch (e) {
+            d1Ok = false;
+            d1Error = String((e && e.message) || e);
+            console.error('[D1] upsert prescription failed:', d1Error);
+            // 运维告警留痕（含 id，便于按 id 从 KV 回填 D1）
+            await writeAuditLog(kv, clinicId, (prescription && prescription.createdBy) || 'system', 'system',
+                'prescription_d1_write_failed', String((prescription && prescription.id) || ''), null,
+                { error: d1Error });
+        }
     }
     await upsertToDayKey(kv, clinicId, prescription);
+    return { d1Ok, d1Error };
 }
 
 export async function onRequest(context) {
@@ -1020,8 +1046,11 @@ export async function onRequest(context) {
             // ★ D1 双写：逐条写入 D1 + KV（按日期分 key）
             const d1On = isD1Enabled(context.env);
             const db = getDB(context.env);
+            let d1WriteFailed = false;
+            let d1Error = null;
             for (const p of savedPrescriptions) {
-                await dualWritePrescription(kv, db, d1On, targetClinicId, p);
+                const r = await dualWritePrescription(kv, db, d1On, targetClinicId, p);
+                if (r && r.d1Ok === false) { d1WriteFailed = true; d1Error = r.d1Error || d1Error; }
             }
 
             const nextPrescriptionNo = await peekNextPrescriptionNo(kv, targetClinicId, prescriptions);
@@ -1035,7 +1064,12 @@ export async function onRequest(context) {
                 nextClinicNo: nextPrescriptionNo,
                 currentUsername: currentUser.username,
                 isAdmin: currentUser.isAdmin,
-                userRole: currentUser.role
+                userRole: currentUser.role,
+                // ★ 2026-10-20 存储实况回传：D1 写入失败时客户端**不得**把该 op 当成功删除
+                //   （否则角标显示"已同步"，而读路径 D1 优先 → 其它端看不到该方）。
+                storedIn: d1WriteFailed ? 'kv' : (d1On && db ? 'd1+kv' : 'kv'),
+                d1WriteFailed: d1WriteFailed || undefined,
+                d1Error: d1WriteFailed ? d1Error : undefined
             });
         }
 

@@ -70,7 +70,7 @@ export async function d1LoadPrescriptions(db, clinicId, includeDeleted = false, 
 }
 
 // ============================================================================
-// ★ 2026-10-06 在线轻量迁移：确保 prescriptions 具备 registration_fee / dose_count
+// ★ 2026-10-06 在线轻量迁移：确保 prescriptions 具备全部被引用的列（10-20 扩展）
 //
 // 背景：本机 wrangler/workerd 无法启动（Windows 环境崩溃），不能走本地
 // `wrangler d1 execute --file` 加列；且应用层自迁移更稳——部署后任何写请求或
@@ -81,20 +81,33 @@ export async function d1LoadPrescriptions(db, clinicId, includeDeleted = false, 
 // ============================================================================
 let _ensureSchemaPromise = null;
 
-export function ensurePrescriptionSchema(db) {
-    if (_ensureSchemaPromise) return _ensureSchemaPromise;
+// ★ 2026-10-20 补齐全部被 D1 语句引用的列（不只是 06 版的两个）：
+//   线上 prescriptions 表是历史上「增量补列」而来，缺任一列都会让整条 INSERT/SELECT 失败。
+//   写路径缺列尤其致命：旧实现被 dualWritePrescription 吞掉 → 该处方只落 KV，
+//   而读路径 D1 优先 → **所有端永久看不到**（云桌面显示"已同步"、其它端却查不到该方）。
+export const PRESCRIPTION_REQUIRED_COLUMNS = [
+    ['registration_fee', 'REAL DEFAULT 0'],
+    ['dose_count', 'INTEGER DEFAULT 0'],
+    ['extra', 'TEXT'],
+    ['media_files', 'TEXT'],
+    ['fee_status', `TEXT DEFAULT 'unpaid'`],
+    ['paid_at', 'TEXT'],
+    ['paid_by', 'TEXT'],
+    ['pay_method', 'TEXT'],
+    ['deleted_at', 'TEXT'],
+    ['deleted_by', 'TEXT']
+];
+
+// force=true：忽略单飞缓存重新检测（写语句报 "no such column" 时的自愈重试用）
+export function ensurePrescriptionSchema(db, force) {
+    if (!force && _ensureSchemaPromise) return _ensureSchemaPromise;
     _ensureSchemaPromise = (async () => {
         const cols = await db.prepare(`PRAGMA table_info(prescriptions)`).all();
         const names = new Set((cols.results || []).map(r => r.name));
-        if (!names.has('registration_fee')) {
-            await db.prepare(
-                `ALTER TABLE prescriptions ADD COLUMN registration_fee REAL DEFAULT 0`
-            ).run();
-        }
-        if (!names.has('dose_count')) {
-            await db.prepare(
-                `ALTER TABLE prescriptions ADD COLUMN dose_count INTEGER DEFAULT 0`
-            ).run();
+        for (const [col, decl] of PRESCRIPTION_REQUIRED_COLUMNS) {
+            if (!names.has(col)) {
+                await db.prepare(`ALTER TABLE prescriptions ADD COLUMN ${col} ${decl}`).run();
+            }
         }
         return true;
     })().catch(e => {

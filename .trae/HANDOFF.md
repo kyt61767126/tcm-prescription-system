@@ -179,6 +179,19 @@
   7. P3 零行为变化核对（任一版本即可）：抓包 claim body 仍含 productClass/clientClass（云端另含 pwdCap:'v2'）；Tab1 直建订单 order-submit 正常（字段未缺失）。
 - **异常回流**：任何一项失败，把现象/机器/版本记入本任务并改 BLOCKED，附 license_log action。
 
+### H14 ｜优先级：高｜云端处方"假成功"防护上线后客户复验（2026-10-20）
+- **状态**：IN-PROGRESS（代码已实施并通过全部门禁；**本次提交推送后** functions + 静态随 Pages git 构建即时上线；云桌面页面改动需热更 `desktop/cloud`）
+- **背景（客户实报）**：云桌面新开处方 → 同账号的云端网页/云 APP **看不到该方**；云桌面角标却显示「☁️ 已同步」。用户重登/刷新后恢复正常（偶发、时间相关）。
+- **根因（三条缺陷叠加，已实证）**：①`dualWritePrescription` 吞 D1 写错、POST 仍回 `success:true` → 客户端凭 success 删掉待同步 op、角标转绿；②读路径**D1 优先**（仅 D1 零行才回退 KV、登录预取纯 D1）⇒ **KV 有/D1 无**的处方在所有端永久不可见；③`ensurePrescriptionSchema` 只自愈 2 列、upsert 写 10 列 → 缺列即整条 INSERT 失败。详见 KNOWLEDGE §69。
+- **已完成**：服务端不吞错（返回 `{d1Ok,d1Error}` + 审计 `prescription_d1_write_failed`）+ POST 回传 `storedIn/d1WriteFailed/d1Error`（只增字段）+ `d1UpsertPrescription` 缺列自愈重试一次 + 列清单扩至 10 列；客户端 `CloudSync.push` 收 `d1WriteFailed` 不删 op（保留重试、角标不再谎报）；新增 `tools/cloud-sync-fake-success-test.cjs`（修复前 3/3 红、修复后 6/0 绿）并接入 pre-push **第⑱道门**；`sync-all` 分发 6 端副本；`check-interface` 6 OK / `copy-consistency` 100/100。
+- **剩余动作（人工/复验）**：
+  1. **复验云端网页 + 云 APP**：云桌面新开一方 → 同账号云端网页刷新、云 APP 重进 → 该方应立即可见（本批修复不消除"读侧当次会话不刷新"，故以**重进/刷新**为准）。
+  2. **云桌面热更**：`node tools/generate-desktop-hotupdate.cjs -c cloud` 重签 `desktop/cloud`，客户下次启动自动拉取后生效（functions 部分随 push 已即时生效）。
+  3. **噪音排查（若再复现）**：`wrangler tail` 搜 `[D1] upsert prescription failed` 与审计 action `prescription_d1_write_failed`，按日志里的处方 id 定位；如确认有 KV 有/D1 无的遗留处方，再做 T4 一次性回填（见 spec T4）。
+- **未做（另可立项）**：T4 KV→D1 对账回填（本次症状自行恢复、无遗留 id 清单）；T5 端间模式统一（云 APP `allowedMode='local'` 不升级为 `both`）。
+- **规格文档**：`.trae/specs/cloud-rx-latest-not-visible/{spec.md,tasks.md}`
+- **基线 commit**：本批提交（见 commit message）
+
 ### H3 ｜优先级：低（长期观察）｜KV 容量与套餐
 - audit_log 前缀 880 键（2026-10-13 实测，总 1926），接近单页 1000；D1 迁移完成后安排清理。
 - 用户此前决策「先削减不升级」；若 list/write 再触限额，评估 Workers Paid（$5/月）。

@@ -2214,3 +2214,20 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
 * **验证**：`app_project/db-offline/desktop/e2e/verify-fs-domain.cjs` 重写为 F1-F10，**54 项断言 ALL PASS**（含 AC-1 落盘+mtime+载荷完整、AC-2 合并列表、AC-3 恢复账号表 users=1/药品 469、AC-4 拒手动+拒 `../evil.json`、AC-5 cleanup 只清自动）。门禁全绿：`check-interface` 6 OK、`copy-consistency` 100/100、`html-sync-check` IN SYNC、`diff-cross-version` 6 对基线全绿、`check-ipc-consistency` 通过、`sync-all -VerifyOnly` 全同步、`node --check` 过。E2E 夹具需走 `shared/license/license-manager.js` 的 `signConfig()`+`backupUserAccounts({proven:true})`（否则 `configUsersProvenAuthentic` fail-closed 弹到期框）。
 * **生效方式**：`index.html` 属热更白名单 → 桌面 `desktop/local`、`desktop/cloud`、APP `app-local` 可**重签热更**；`shared/desktop-fs-ipc.cjs` + `preload.js` 在 asar 内 → **需双桌面整包**；`MainActivity.java`/`NativeBridge.ets` → **需重打 APK/鸿蒙包**；官网两副本随 push（Pages git 构建）即达。
 * **教训**：自动备份必须与手动备份**同通道同载荷**，否则「有备份却不可恢复」；界面新增能力一律 JS 注入，守 `check-interface` 6 OK 红线；同名 auto 文件同秒覆盖 → E2E 断言勿用「新增计数」，改用「存在+mtime<60s」。
+
+## 69. 云端处方"假成功"防护：D1 写失败不得被静默吞掉（2026-10-20，客户实报「云桌面新方其它端看不到」）
+
+* **现象（客户原文）**：「云端桌面程序最新历史处方，手机 App 云端版无法获取最新历史处方」→ 云桌面新开处方后，**同账号**的云端网页/云 APP 看不到；云桌面角标却显示「☁️ 已同步」。用户重登/刷新后恢复（症状偶发、时间相关）。
+* **根因链（三条缺陷叠加，均已实证）**：
+  1. **写侧吞错**：`functions/api/prescriptions.js` 的 `dualWritePrescription` 对 D1 upsert 异常 `catch` 后**只 `console.error`**，POST 继续 KV 写入并返回 `success:true` ⇒ 客户端 `CloudSync.push` 仅凭 `success` 就 `SyncOutbox.remove(op)`、角标转绿（已同步）。
+  2. **读侧 D1 优先**：全量 GET 只要 D1 返回 ≥1 行就**不再读 KV**；`GET ?sync=1` 增量只在 D1 零行时才回退 KV；登录预取是**纯 D1**。⇒ **KV 有、D1 无**的处方在所有端**永久不可见**（正是本次症状）。
+  3. **列自愈不全**：`ensurePrescriptionSchema` 只保 `registration_fee`/`dose_count` 2 列，而 upsert 写入 10 列；线上 prescriptions 表是历史「增量补列」而来，缺任一列整条 INSERT 失败 → 被缺陷 1 吞掉 → 遇缺陷 2 永久隐身。
+* **修复（本次，仅 T2+T3，最小面）**：
+  * **服务端** `prescriptions-store.js`：`PRESCRIPTION_REQUIRED_COLUMNS` 扩为 10 列（+`extra`/`media_files`/`fee_status`/`paid_at`/`paid_by`/`pay_method`/`deleted_at`/`deleted_by`），`ensurePrescriptionSchema(db, force)` 支持强制重查。
+  * **服务端** `prescriptions.js`：`d1UpsertPrescription` 捕获 `no such column` → `ensurePrescriptionSchema(db,true)` → **递归重试一次**（列缺失自愈，从根上不产生假成功）；`dualWritePrescription` 返回 `{d1Ok,d1Error}` 并写审计 `prescription_d1_write_failed`（含 id，便于按 id 从 KV 回填）；POST 响应新增 `storedIn`/`d1WriteFailed`/`d1Error`（**契约只增字段，旧客户端零影响**）。
+  * **客户端** `public/index.html`：`CloudSync.push` 收到 `d1WriteFailed` 时 **throw → 不删 op**（保留自动重试、角标不再谎报"已同步"）；直传路径 `syncPrescriptionToCloud` 加 `console.warn` 留痕。
+* **守护回归**：新增 `tools/cloud-sync-fake-success-test.cjs`——**从 `public/index.html` 抽取 `CloudSync.push` 本体**（不抄副本）打桩 4 场景。修复前基线 **3 PASS/3 FAIL**（T1 三条全红 = 缺陷证据），修复后 **6 PASS/0 FAIL**。已接入 `.githooks/pre-push` **第⑱道门**（十七道 → 十八道）。
+* **验证**：`node --check` 0/0、`check-interface.bat` 6 OK/0 CHANGED、`sync-all.ps1 -VerifyOnly` 全同步、`copy-consistency.cjs` 100 副本 0 失败。
+* **生效方式**：云端网页/云 APP = 同一份远程页，**随 push 部署、刷新即达，无需重打 APK**；云桌面 = functions 随 push 即时生效 + 页面改动需热更 `desktop/cloud`；离线端不受影响、无需重打包。
+* **教训（举一反三）**：**"双写"必须有回传**——任何"主存储失败但接口仍返回成功"的设计，都会让客户端误判已落库；凡 `success:true` 语义，必须保证权威读路径（此处 D1）确实写入，否则应显式回传部分成功。另：**列自愈清单必须覆盖语句引用的全部列**，不能只列"最近新增的"，否则一次漏列即永久静默失败。
+* **未做（用户选择，另可立项）**：T4 KV→D1 一次性对账回填（本次症状已自行恢复，无遗留 id 清单）；T5 端间模式统一（`allowedMode='local'` 在 Capacitor 云 APP 不升级为 both，云网页/云桌面会升级 —— `shared/auth-core/…` 已 sync 至 `public/auth-core.js`，属既有端间不对称）。

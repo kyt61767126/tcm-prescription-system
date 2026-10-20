@@ -2763,6 +2763,12 @@ let currentUser = null;
                                 continue;
                             }
                             if (!resp || !resp.success) throw new Error((resp && resp.error) || '云端保存失败');
+                            // ★ 2026-10-20 服务端"假成功"防护：服务端明示只落了 KV（D1 写入失败）时
+                            //   不得把该 op 当成功删除——否则角标显示"☁️ 已同步"，而读路径 D1 优先，
+                            //   该处方在所有其它端**永久看不到**（客户实报故障）。保留 op 自动重试。
+                            if (resp.d1WriteFailed) {
+                                throw new Error('云端存储异常（D1 写入失败），数据已保存在本机，将自动重试');
+                            }
                             if (resp.savedPrescription) await this._mergePushedRecord(op, resp.savedPrescription);
                             await SyncOutbox.remove(op.opId); done++;
                         } else if (op.type === 'delete') {
@@ -9313,6 +9319,12 @@ let currentUser = null;
             });
             if (!data || !data.success) {
                 throw new Error((data && data.error) || '云端保存失败');
+            }
+            // ★ 2026-10-20 存储实况留痕：服务端明示只落了 KV（D1 写入失败）时告警，便于定位
+            //   "本机能看、其它端看不到"的处方（云桌面/云 APP 默认走 outbox 补传路径，
+            //   保留待同步记录；此处为 cloud/local 直传模式，记录已落本机与 KV）。
+            if (data.d1WriteFailed) {
+                console.warn('[云端同步] D1 写入失败（仅落 KV），其它端可能看不到该处方:', data.d1Error || '');
             }
             // 服务端可能重新生成处方编号，回写本地记录保持两端一致
             // ★ 2026-08-23 溯源标记回写：同步成功即把服务端 updatedAt/userId 写入本地记录——
