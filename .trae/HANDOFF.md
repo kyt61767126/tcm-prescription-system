@@ -190,7 +190,8 @@
 - **剩余动作（人工/复验）**：
   1. **客户机复验**：云桌面启动 → 静默拉热更（`.hot-version` 应为 `2026.10.20-1`，彻底退出重开）→ 新开一方 → 同账号云端网页刷新、云 APP 重进 → **该方应可见**（本批不消除"读侧当次会话不刷新"，故以重进/刷新为准；症状已自行恢复，属预防性修复）。
   2. **噪音排查（若再复现）**：`wrangler tail` 搜 `[D1] upsert prescription failed` 与审计 action `prescription_d1_write_failed`，按日志中的处方 id 定位；如确认存在 KV 有/D1 无的遗留处方，再做 T4 一次性回填（见 spec T4）。
-- **未做（另可立项）**：T4 KV→D1 对账回填（本次症状自行恢复、无遗留 id 清单）；T5 端间模式统一（云 APP `allowedMode='local'` 不升级为 `both`）。
+- **未做（另可立项）**：T4 KV→D1 对账回填（本次症状自行恢复、无遗留 id 清单）。
+- **已完成（本批 T5，端间同步开关统一）**：云 APP 与云桌面/云网页 `allowedMode='local'` 统一升为 `both`——`shared/auth-core/cloud.js` 登录归一化去掉 `!global.Capacitor`（离线源 `offline.js` 保留判定不动）+ `public/index.html` 的 `getSyncMode()` 唯一读出口兜底升 `both`（覆盖已登录缓存态）。验证：`sync-auth-core -VerifyOnly` 11 副本双源一致、`sync-all -VerifyOnly` 全同步、`check-interface` 6 OK、`copy-consistency` 100/0。云端网页/云 APP 随 push 刷新即达、无需重打包；云桌面页面部分需热更 `desktop/cloud`。
 - **规格文档**：`.trae/specs/cloud-rx-latest-not-visible/{spec.md,tasks.md}`
 - **基线 commit**：`452b1837`（代码） + `ee932969`（热更）
 

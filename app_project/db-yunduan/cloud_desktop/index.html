@@ -2473,8 +2473,14 @@ let currentUser = null;
         }
         function getSyncMode() {
             try {
-                if (currentUser && currentUser.allowedMode) return String(currentUser.allowedMode);
-                if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.allowedMode) return String(CONFIG.allowedMode);
+                var m = null;
+                if (currentUser && currentUser.allowedMode) m = String(currentUser.allowedMode);
+                else if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.allowedMode) m = String(CONFIG.allowedMode);
+                // ★ 2026-10-20 端间一致（T5）：云通道（云网页/云桌面/云 APP）统一把 local 升级为 both。
+                //   auth-core 登录时已归一化，但已登录的缓存态/本地表恢复的 currentUser 可能仍带 local，
+                //   此处为唯一读出口，统一兜底保证两端（云 APP vs 云桌面）离线同步开关一致。
+                if (m === 'local') m = 'both';
+                if (m) return m;
             } catch (e) {}
             return 'both';
         }

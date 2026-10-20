@@ -2230,4 +2230,4 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
 * **验证**：`node --check` 0/0、`check-interface.bat` 6 OK/0 CHANGED、`sync-all.ps1 -VerifyOnly` 全同步、`copy-consistency.cjs` 100 副本 0 失败。
 * **生效方式**：云端网页/云 APP = 同一份远程页，**随 push 部署、刷新即达，无需重打 APK**；云桌面 = functions 随 push 即时生效 + 页面改动需热更 `desktop/cloud`；离线端不受影响、无需重打包。
 * **教训（举一反三）**：**"双写"必须有回传**——任何"主存储失败但接口仍返回成功"的设计，都会让客户端误判已落库；凡 `success:true` 语义，必须保证权威读路径（此处 D1）确实写入，否则应显式回传部分成功。另：**列自愈清单必须覆盖语句引用的全部列**，不能只列"最近新增的"，否则一次漏列即永久静默失败。
-* **未做（用户选择，另可立项）**：T4 KV→D1 一次性对账回填（本次症状已自行恢复，无遗留 id 清单）；T5 端间模式统一（`allowedMode='local'` 在 Capacitor 云 APP 不升级为 both，云网页/云桌面会升级 —— `shared/auth-core/…` 已 sync 至 `public/auth-core.js`，属既有端间不对称）。
+* **T5 端间模式统一（2026-10-20，已实施）**：`allowedMode='local'` 在云通道统一升级为 `both`——双处改动：①`shared/auth-core/cloud.js` 登录归一化去掉 `&& !global.Capacitor`（离线端 `shared/auth-core/offline.js` 保留该判定，离线 APP 仍 local 不产生 outbox）；②`public/index.html` 的 `getSyncMode()` 唯一读出口把 `local` 兜底升 `both`（覆盖已登录缓存态/本地表恢复路径）。验证：`sync-auth-core -VerifyOnly` 11 副本双源一致（3 离线 + 8 云）、`check-interface` 6 OK、`copy-consistency` 100/0、`cloud-sync-fake-success-test` 6/6。效果：云 APP（Capacitor 壳）与云网页/云桌面离线同步开关一致。未做：T4 KV→D1 一次性对账回填（本次症状自行恢复，无遗留 id 清单）。
