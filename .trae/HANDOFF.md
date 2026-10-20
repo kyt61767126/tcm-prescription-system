@@ -112,14 +112,15 @@
 - **验收**：离线正式版 30 天内断网登录成功；云 APP 联网一次后断网冷启动可用；API 不被 SW 缓存；在线更新不受影响。\n- **基线 commit**：`0072b931`（Playwright 本地静态服务离线重载 8/8；线上 `/sw.js` 200/no-cache、index 注册已核验）
 
 ### H13 ｜优先级：高｜自动备份可恢复 + 「备份与恢复」面板：重打包与发布（2026-10-20）
-- **状态**：IN-PROGRESS（代码已就位并通过全部门禁 + E2E F1-F10 54 断言；**尚未重打包/发布**）
+- **状态**：IN-PROGRESS（代码全部门禁 + E2E F1-F10 54 断言通过；**四端整包已重打并完成产物核验 PASS**；待：热更重签 / 真机回归 / 发布）
 - **已完成**：`delete-backup-file` IPC（shared 权威源 + 2 副本）、preload×2、Android 双 `MainActivity.java`、离线 APP `video-recorder-inject.js`、鸿蒙 `cloud-electron-api-shim.js`+`NativeBridge.ets`、两权威源 `index.html`（`buildBackupPayload`/`saveLocalBackupToFile`/`listBackupItems`/`restoreBackupItem`/`deleteBackupItem`/`cleanupOldBackups`/面板注入/`importDataFromJson` 旧结构归一化）、官网 `download.html`×2；`sync-all.ps1` 分发 6 份 index 副本；`diff-cross-version` 基线已重冻结（desk/siteadmin/download）。
-- **剩余动作**：
-  1. **双桌面整包重打**（`desktop-fs-ipc.cjs` + `preload.js` 在 asar 内，热更不覆盖）：云端 + 离线各一，走 `tools/one-click-pack.ps1`；打包阶段会编译 Java，兜底 T3 的编译验证。
-  2. **离线 APP 重打 APK**（`MainActivity.java` 新桥 + `assets/video-recorder-inject.js`）；云 APP 重打（同桥方法）。鸿蒙包暂不构建（近期搁置）。
+- **剩余动作**（第 1-2 项已合成一键脚本：**双击 `重打包四端.bat`**，逻辑源 `tools/repack-four-targets.ps1`，打包委托 `one-click-pack.ps1 -AutoMode 3` 并自动解 asar/APK grep 核验本批标记；`-Force` 忽略增量跳过，`-SkipPack` 只核验）：
+  1. ~~**双桌面整包重打**~~ ✅ **已完成**（2026-10-20 11:08-11:21，`一键打包.bat 3` + `NO_BUILD_SKIP=1` 全量重打）：云端 `惠康中医-云端 Setup 1.2.271.exe`、离线 `惠康中医-本地 Setup 1.0.281.exe`；产物核验 4 端全 PASS（asar 含 `delete-backup-file`/`deleteBackupFile`/`buildBackupPayload`/`备份与恢复`）。
+  2. ~~**双 APP 重打 APK**~~ ✅ **已完成**：云端 `惠康中医-云端.apk`、离线 `惠康中医-本地.apk`（versionCode 325）；核验 APK 内 `assets/public/index.html` 含 `buildBackupPayload`/`备份与恢复`、`classes*.dex` 含 `deleteBackupFile`（Java 编译验证同步完成）。鸿蒙包暂不构建（近期搁置）。
   3. **热更重签**：`index.html` 属白名单 → `desktop/local`、`desktop/cloud`、`app-local` 可热更（但**桌面删除能力依赖整包**，热更只带前端面板）。
   4. **真机/真装实测**：桌面 + APP 触发自动备份 → 目录现 `auto_*.json` → 面板列出 → 恢复（账号+设置+数据齐回归）→ 仅自动可删 → 清理后手动备份仍在；无桥环境（网页）走 IndexedDB 降级不报错。
   5. **发布**（人工 `一键发布.bat` 或 `node tools/publish-release.js --changed-only --confirm --push`）；发布后 `download.html` 指南随 Pages 自动生效（本批官网文案已含新路径/新入口）。
+- **坑记录**：本次打包末尾「副作用自动收纳」因**.git/index.lock 陈旧残留**（11:05:02，无 git 进程）失败，5 个版本号副作用文件（cloud_desktop package.json/build-meta.json、cloud_app build.gradle、offline desktop package.json、offline app build.gradle）未自动提交，已人工清锁并补提交。**教训：打包前先确认无陈旧 index.lock，否则版本基线漂移会静默累积。**
 - **勿做**：不改 HTML 结构/CSS（守 `check-interface` 6 OK）；不动手动备份命名与通道；鸿蒙不构建。
 - **验收**：四端安装新包后 AC-1..AC-5 全过（见 `.trae/specs/backup-restore-optimize/checklist.md`）；官网文案与客户端路径逐条一致。
 - **基线 commit**：本批提交（见 commit message）；规格文档 `.trae/specs/backup-restore-optimize/`

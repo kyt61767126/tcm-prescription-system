@@ -13,8 +13,9 @@ $root = Split-Path $PSScriptRoot -Parent
 #   子进程 stderr 一律渲染红色。本脚本所有子 PowerShell 调用统一降噪渲染。
 . (Join-Path $PSScriptRoot 'noise-reduce.ps1')
 
-# ★ 下游构建 bat 清单（唯一权威源；两个入口 bat 共用）
+# ★ 下游构建 bat 清单（唯一权威源；三个入口 bat 共用）
 $DownstreamBuildBats = @(
+    '重打包四端.bat'                       # ★ 2026-10-20 双桌面+双APK 重打包入口
     'app_project\db-yunduan\pack-desktop.bat'
     'app_project\db-yunduan\build-pack.bat'
     'app_project\db-yunduan\build-app.bat'
