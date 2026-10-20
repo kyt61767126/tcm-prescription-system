@@ -1607,14 +1607,16 @@
             // 3. 权限模式标准化
             user.allowedMode = resolveAllowedMode(user);
 
-            // 4. 云通道统一升级：local → both
+            // 4. 云通道统一升级：local/cloud → both
             //   ★ 2026-10-20 端间一致性修复：原条件 `&& !global.Capacitor` 使**云 APP**（Capacitor 壳）
             //     保持 local ⇒ 同一账号在云网页/云桌面走离线队列+自动同步、在云 APP 却不同步，
             //     两端行为不一致（客户侧表现为"同一账号换端后数据对不上"）。
-            //     云通道（云网页/云桌面/云 APP/鸿蒙云）语义相同，一律升级为 both。
+            //     云通道（云网页/云桌面/云 APP/鸿蒙云）语义相同，local/cloud 一律升级为 both。
             //     离线通道（离线桌面/离线 APP）走 shared/auth-core/offline.js，**保留** Capacitor 判定，
             //     离线 APP 仍为 local、不产生 outbox/同步请求（不受本改动影响）。
-            if (user.allowedMode === 'local') {
+            //   ★ 2026-10-20 补：cloud 模式（纯云端、不存本地）在云通道同样无意义，一并升 both，
+            //     否则云桌面 F1 设置里看不到「☁️ 云端同步」明细、也没有离线队列。
+            if (user.allowedMode === 'local' || user.allowedMode === 'cloud') {
                 user.allowedMode = 'both';
             }
 
