@@ -14,10 +14,10 @@
 
 ---
 
-## 当前基线（2026-10-20 更新）
+## 当前基线（2026-10-21 更新）
 
-- **main HEAD：`ee932969`（云桌面热更 2026.10.20-1）**，前序 `452b1837`（云端处方"假成功"防护，详见 H14 / KNOWLEDGE §69）。工作区干净。
-- **2026-10-21 登录框版本显示全端统一「离线版/云端版」（KNOWLEDGE §70，含晚间第二轮药丸布置统一，已入库）**：第一轮=两份 login.js 标签统一【离线版】/【云端版】+ `public/index.html` 补显示（已重打包并发布 v2026.10.21：云桌面 1.2.273 / 云APP 336 / 离线桌面 1.0.288）；第二轮（用户三截图验收：云APP 三行不居中、离线APP 327 一行式漏细分版）=`public/index.html` 两写入器补 `textAlign:center`+meta 一行式、离线 `desktop/index.html` 同构改造、**变换表 T10/T11 锚点重写**、sync-html+sync-index-app 重新分发。生效：云网页/云 APP 随 push 即达；**离线 APP 需重打 APK（328）→ 待打包**；云桌面/离线桌面登录窗已是目标样式，无需专门重打。
+- **main HEAD：`83554069`（KNOWLEDGE §71 离线端授权分裂态沉淀）**，前序 `95f340e5`（v2026.10.21 Release）。工作区干净。
+- **2026-10-21 登录框版本显示全端统一「离线版/云端版」（KNOWLEDGE §70，含晚间第二轮药丸布置统一，已入库）**：第一轮=两份 login.js 标签统一【离线版】/【云端版】+ `public/index.html` 补显示（已重打包并发布 v2026.10.21：云桌面 1.2.273 / 云APP 336 / 离线桌面 1.0.288）；第二轮（用户三截图验收：云APP 三行不居中、离线APP 327 一行式漏细分版）=`public/index.html` 两写入器补 `textAlign:center`+meta 一行式、离线 `desktop/index.html` 同构改造、**变换表 T10/T11 锚点重写**、sync-html+sync-index-app 重新分发。生效：云网页/云 APP 随 push 即达；**离线 APP 328 已重打并发布官网（v2026.10.21）**；云桌面/离线桌面登录窗已是目标样式，无需专门重打。
 - **线上核验（2026-10-20）**：站点 `/` 的 index.html SHA256 = 本地 `public/index.html`（`3365fef1…`，逐字节一致）→ 网页/云 APP 已含修复、functions 随同次 Pages 原子构建生效；`/hot-update/desktop/cloud/version.json` = **2026.10.20-1（app 1.2.271）**。
 - **2026-10-19 P40 收尾（历史）**：登录闸 NO_LICENSE 码错位自愈 + 热更 **2026.10.17-7** + 令牌幂等台账补写 + Java clinicName 透传入库；P40 真机已激活+登录闭环；**离线整包已构建（H7：exe 1.0.276 + APK 322，待发布/复测）**。
 - **线上状态（已实测）**：
@@ -51,6 +51,22 @@
 ---
 
 ## OPEN 遗留任务
+
+### H15 ｜优先级：高｜注册激活流程统一优化一期（A+D+E）——已批准，未动工（E 调研已完成，可直接开工）
+- **状态**：OPEN（方案获用户批准 2026-10-21；代码零改动，基线 `83554069`）
+- **背景（用户拍板口径）**：三步流=①首次注册仅一次（6字段）②激活码自动激活或官网后台管理员手动激活 ③配额机构 5 台/个人 2 台（电脑手机混算，「同一版本同一配额」）。只做一期 A+D+E，二期三期不做：
+  - **A 注册档案贯穿**：激活框砍掉手机号/密码输入框（只留激活码+邀请码）；手机号/诊所名/医生姓名从本机注册档案自动提交；工单 Tab 字段自动带出、只读展示。
+  - **D 四端流程统一**：删激活框「密码留空默认 admin」历史遗留（登录=注册手机号+注册密码）；字段/文案/样式按三步流统一。
+  - **E 云端配额放宽**：云端机构版账号级配额 1→5 台（个人版保持 2 台），与离线对齐。
+- **E 项调研结论（2026-10-21 本会话完成，直接可用）**：云端配额两层结构——
+  - ①全局层：`license.maxDevices`（登录预检 `functions/api/users.js` ~2534-2597，全所设备总数封口，走 license_clinic_index 投影索引；属购买时商业配额，**勿动**；非正整数 fail-open）。
+  - ②账号层：`bindUserDevice`（`functions/api/users.js:115-130`）机构版默认 **1 台/账号**——E 的真正卡点。个人版默认 2（`:92` `MAX_DEVICES_PER_ACCOUNT=2`）。
+  - 改动点：a) `:92` 附近加机构版默认常量 5；b) `:123` `isInstitution ? 1 : …` 改 5（`:119-120` 注释同步）；c) **存量 KV `user_devices:{username}` 已写死 maxDevices=1 的机构版账号需放宽**：bindUserDevice 内 `isInstitution && record.maxDevices===1` 时升 5（"1"是历史默认值而非管理员手调，误伤风险极低；管理员可后台 set-devices 改回）；d) `:2608-2609` DEVICE_LIMIT 文案「机构版每账号最多 1 台」→ 5 台；e) 离线侧已对齐勿动（`activate-from-ticket.js:201` / `admin-approve.js:208` type=pro 默认 5 台）；f) admin set-devices（`:2894-2955`）机构版走 license.maxDevices 路径不动。
+- **A+D 锚点（`shared/auth-core/offline.js` 权威源，约 57 万字符读不动整文件，按行段处理）**：激活框结构 4119-4180（activateCodeInput/activatePhoneInput/activatePwdInput/activateInviteInput）；提交逻辑 ~3907-3935（actPhone/actPwd → `electronAPI.activate.submit`）；注册弹窗 `__regPrefill` 5106-5153（regClinicName/regAdminName/regUsername/regPhone/regPassword）；`syncSharedFieldsFrom` 7081-7107（Tab 互带）；工单 Tab `ticketClinicName` 等 5984 起；`adminCodeEntryBtn` 7119。A 需注册档案落盘（config.json+localStorage 双写）供激活框/工单 Tab 自动带出。
+- **范围**：仅 A+D+E。**勿动安全红线**：fail-closed、码过期 403、激活后本地自验、单设备单码、换机联系人一致校验、云端账号订阅/离线码+机器码两授权模型不变。
+- **执行顺序（用户已确认分阶段）**：① E 先行（纯 functions，push 即生效零风险）→ ② A+D（auth-core 权威源改造）→ ③ 门禁：`node --check` + `check-interface.bat` 改前后 + `sync-all.ps1` 分发 + `-VerifyOnly` + `copy-consistency.cjs`（auth-core 改动 cv 哈希变，pre-push 会拦，需按流程重刷 cv 并补提交）→ ④ commit+push → ⑤ 五端生效方式说明（云网页/云APP push 即达；离线APP 热包重启生效；桌面激活窗/登录窗在 asar 内的部分需整包才生效）→ ⑥ 完成后结论沉淀 KNOWLEDGE §72 随代码同批提交。
+- **验收**：E——机构版账号第 2 台设备登录不再 DEVICE_LIMIT（存量记录升级生效）；A——激活框无手机号/密码输入框仍激活成功（档案自动提交）；D——激活链路无「默认 admin」路径，登录=注册手机号+注册密码。
+- **基线 commit**：`83554069`
 
 ### H7 ｜优先级：高｜整包批次（最新代码）：云桌面 1.2.269 + 云APP 325 + 离线桌面 1.0.277 + 离线APP 323（✅ 已构建验包，待发布）
 - **状态**：IN-PROGRESS（2026-10-18 10:41 四端构建/验包完成，AutoCommit `1ba4fdf1`；待发布 + 桌面冷启动深链复测）
