@@ -68,12 +68,12 @@ export function compareDualExpiry(clinicExpiresIso, licenseExpiresIso) {
 }
 
 // ============================================================================
-// ★★★ 2026-08-21 账号级设备授权（一个云端管理员最多绑定 2 台设备：桌面/APP）
+// ★★★ 2026-08-21 账号级设备授权（★ 2026-10-21 H15-E：机构版 5 台 / 个人版 2 台，桌面/APP 混算）
 //   KV key: user_devices:{username} -> { maxDevices, devices: [{machineId, clientClass, boundAt, lastSeenAt}] }
 //   规则：
 //     - 仅 clientClass = desktop / app 的真实设备指纹计入绑定（网页版数据全在云端，
 //       不占设备名额，可随时从任意浏览器登录管理）
-//     - 未绑定新设备且已满 2 台 → 拒绝登录（DEVICE_LIMIT），提示解绑后重试
+//     - 未绑定新设备且已达配额上限 → 拒绝登录（DEVICE_LIMIT），提示解绑后重试
 //     - 解绑：本人在任意已登录设备调用 action=unbind-device 自助解绑
 // ============================================================================
 const KV_USER_DEVICES_PREFIX = 'user_devices:';
@@ -90,6 +90,9 @@ function beijingDayStartMs(nowMs) {
     return Math.floor((nowMs + 8 * 60 * 60 * 1000) / DAY_MS) * DAY_MS - 8 * 60 * 60 * 1000;
 }
 const MAX_DEVICES_PER_ACCOUNT = 2;
+// ★ 2026-10-21 H15-E 机构版账号级默认配额：与离线对齐放宽到 5 台（电脑/手机任意组合），
+//   个人版保持 2 台；豁免名单=99 不限
+const MAX_DEVICES_PER_ACCOUNT_CLINIC = 5;
 // 豁免账户的设备配额（99 = 实际不限，避免前端对 -1 显示异常）
 const DEVICE_EXEMPT_MAX = 99;
 // ★ 2026-08-22 特殊账户设备豁免名单：名单内账号不受"每账号 2 台设备"限制（可无限绑定）。
@@ -116,17 +119,24 @@ async function bindUserDevice(kv, username, machineId, clientClass, nowIso, edit
     // ★ 2026-08-22 特殊账户豁免：名单内账号不限制设备数量
     // ★★ 2026-08-22 配额来源：优先保留 KV 中已有 maxDevices（平台管理员后台可调整）；
     //    仅当记录无配额字段时，按豁免名单给默认值（豁免=99 实际不限，普通=2）
-    // ★ 2026-09-10 统一授权口径：机构版（cloud_clinic/offline_clinic）每账号默认 1 台
-    //    桌面/APP 设备；标准版维持 2 台（桌面+APP 各 1）；豁免名单=99 不分版本。
+    // ★ 2026-09-10 统一授权口径 + 2026-10-21 H15-E 放宽：机构版（cloud_clinic/offline_clinic）
+    //    每账号默认 5 台（电脑/手机任意组合，与离线对齐）；个人版维持 2 台；豁免名单=99 不分版本。
     const exempt = DEVICE_LIMIT_EXEMPT_ACCOUNTS.includes(username);
     const isInstitution = edition === 'cloud_clinic' || edition === 'offline_clinic';
-    const defaultMax = exempt ? DEVICE_EXEMPT_MAX : (isInstitution ? 1 : MAX_DEVICES_PER_ACCOUNT);
+    const defaultMax = exempt ? DEVICE_EXEMPT_MAX : (isInstitution ? MAX_DEVICES_PER_ACCOUNT_CLINIC : MAX_DEVICES_PER_ACCOUNT);
     const record = (await kv.get(KV_USER_DEVICES_PREFIX + username, 'json')) || {
         devices: []
     };
     if (!Array.isArray(record.devices)) record.devices = [];
     if (typeof record.maxDevices !== 'number' || !Number.isInteger(record.maxDevices) || record.maxDevices <= 0) {
         record.maxDevices = defaultMax;
+    }
+    // ★ 2026-10-21 H15-E 存量机构版账号升级：历史默认 1 台 → 5 台。
+    //    "1"是旧代码默认值而非管理员手调（管理员手调走 admin-set-device-quota 写的是
+    //    license.maxDevices 全局层，不落 user_devices）；如有极个别确需 1 台的机构版
+    //    账号，可由后台 admin-set-device-quota 重新收紧。非机构版不动。
+    if (isInstitution && record.maxDevices === 1) {
+        record.maxDevices = MAX_DEVICES_PER_ACCOUNT_CLINIC;
     }
 
     const mid = String(machineId || '').trim();
@@ -2522,7 +2532,7 @@ export async function onRequest(context) {
             //   （网页版 clientClass=web 不占名额；旧客户端无 machineId 放行仅互斥）
             // ★ 2026-09-10 统一授权口径：机构版（cloud_clinic）全所设备额度以
             //   license.maxDevices 为唯一权威，登录时先做全局预检（≤N 台），
-            //   再按账号级绑定（机构版每账号 1 台 / 标准版 2 台）。网页不占。
+            //   再按账号级绑定（机构版每账号 5 台 / 个人版 2 台，H15-E）。网页不占。
             const nowIso = getNowISO();
             const effClientClass = ['desktop', 'app', 'web'].includes(clientClass) ? clientClass : 'web';
             const normEdition = normalizeClinicEdition(clinicEdition, clinicStatus);
@@ -2597,7 +2607,7 @@ export async function onRequest(context) {
                     }
                 }
 
-                // ② 账号级设备绑定（机构版每账号 1 台 / 标准版每账号 2 台）
+                // ② 账号级设备绑定（机构版每账号 5 台 / 个人版每账号 2 台，H15-E 2026-10-21）
                 const bind = await bindUserDevice(kv, user.username, machineId, effClientClass, nowIso, normEdition, context.env);
                 if (!bind.ok && bind.code === 'DEVICE_LIMIT') {
                     context.waitUntil(writeAuditLog(kv, clinicId, user.username, user.role, 'login_failed', 'device_limit', context, {
@@ -2607,7 +2617,7 @@ export async function onRequest(context) {
                     }));
                     return json({
                         success: false,
-                        error: '设备数已达上限（机构版每账号最多 1 台、标准版 2 台：桌面/APP）。请先在已绑定设备上解绑，或联系管理员处理',
+                        error: '设备数已达上限（机构版每账号最多 5 台、个人版 2 台：桌面/APP 混算）。请先在已绑定设备上解绑，或联系管理员处理',
                         code: 'DEVICE_LIMIT',
                         devices: sanitizeDevices(bind.record)
                     }, 403, context.request);
