@@ -2555,16 +2555,16 @@ async function showDevices(code) {
 // ★ 2026-10-16 阶段2：设备友好名徽标（纯展示层推导，不引入存储/请求）。
 // 口径（与各端 machineId 生成端一致）：and-=安卓APP（云/离线APP MainActivity）；
 // browser-=网页（auth-core 网页端指纹兜底、网页版申请）；ios-=iOS APP（预留，当前无生成端）；
-// 其他=桌面/离线（auth-core 硬件指纹哈希，无前缀）。同机跨端各自计数，徽标仅辅助识别。
+// 其他=桌面端（auth-core 硬件指纹哈希，无前缀；徽标层无法区分云/离线桌面，统称「桌面端」，勿再写成「桌面/离线」引发「离线状态」误读）。同机跨端各自计数，徽标仅辅助识别。
 function deviceFriendlyName(mid) {
     const m = String(mid || '');
     if (m.indexOf('and-') === 0) return '安卓APP';
     if (m.indexOf('browser-') === 0) return '网页';
     if (m.indexOf('ios-') === 0) return 'iOS APP';
-    return '桌面/离线';
+    return '桌面端';
 }
 function deviceTagHtml(mid) {
-    return '<span class="tag dev-tag" title="按 machineId 前缀推导：and-=安卓APP / browser-=网页 / 其他=桌面或离线；同机跨端各自计数">' + deviceFriendlyName(mid) + '</span>';
+    return '<span class="tag dev-tag" title="按 machineId 前缀推导：and-=安卓APP / browser-=网页与云桌面 / 其他=桌面端（云/离线桌面统称）；同机跨端各自计数">' + deviceFriendlyName(mid) + '</span>';
 }
 // 日志明细文本内 machineId=xxx 处前插友好名徽标（其余文本照常转义，零注入面）
 function logDetailHtml(detail) {
