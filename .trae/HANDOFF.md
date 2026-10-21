@@ -17,6 +17,7 @@
 ## 当前基线（2026-10-20 更新）
 
 - **main HEAD：`ee932969`（云桌面热更 2026.10.20-1）**，前序 `452b1837`（云端处方"假成功"防护，详见 H14 / KNOWLEDGE §69）。工作区干净。
+- **2026-10-21 登录框版本显示全端统一「离线版/云端版」（KNOWLEDGE §70，代码已入库待重打包）**：根因=桌面登录框物理载体是 `electron/login.html+login.js`（2026-10-20 修复只改了 index.html 漏掉它）+ 云网页/云 APP 标签元素 display:none 无人 unhide。修复：两份 login.js 标签统一【离线版】/【云端版】+ `public/index.html` 两写入器补显示。生效：云网页/云 APP 随 push 即达；**云桌面/离线桌面需整包重打（login.js 在 asar 内，热更不覆盖登录窗）→ 重打包进行中，产物待发布**。
 - **线上核验（2026-10-20）**：站点 `/` 的 index.html SHA256 = 本地 `public/index.html`（`3365fef1…`，逐字节一致）→ 网页/云 APP 已含修复、functions 随同次 Pages 原子构建生效；`/hot-update/desktop/cloud/version.json` = **2026.10.20-1（app 1.2.271）**。
 - **2026-10-19 P40 收尾（历史）**：登录闸 NO_LICENSE 码错位自愈 + 热更 **2026.10.17-7** + 令牌幂等台账补写 + Java clinicName 透传入库；P40 真机已激活+登录闭环；**离线整包已构建（H7：exe 1.0.276 + APK 322，待发布/复测）**。
 - **线上状态（已实测）**：

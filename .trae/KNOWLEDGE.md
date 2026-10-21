@@ -2231,3 +2231,18 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
 * **生效方式**：云端网页/云 APP = 同一份远程页，**随 push 部署、刷新即达，无需重打 APK**；云桌面 = functions 随 push 即时生效 + 页面改动需热更 `desktop/cloud`；离线端不受影响、无需重打包。
 * **教训（举一反三）**：**"双写"必须有回传**——任何"主存储失败但接口仍返回成功"的设计，都会让客户端误判已落库；凡 `success:true` 语义，必须保证权威读路径（此处 D1）确实写入，否则应显式回传部分成功。另：**列自愈清单必须覆盖语句引用的全部列**，不能只列"最近新增的"，否则一次漏列即永久静默失败。
 * **T5 端间模式统一（2026-10-20，已实施）**：`allowedMode='local'` 在云通道统一升级为 `both`——双处改动：①`shared/auth-core/cloud.js` 登录归一化去掉 `&& !global.Capacitor`（离线端 `shared/auth-core/offline.js` 保留该判定，离线 APP 仍 local 不产生 outbox）；②`public/index.html` 的 `getSyncMode()` 唯一读出口把 `local` 兜底升 `both`（覆盖已登录缓存态/本地表恢复路径）。验证：`sync-auth-core -VerifyOnly` 11 副本双源一致（3 离线 + 8 云）、`check-interface` 6 OK、`copy-consistency` 100/0、`cloud-sync-fake-success-test` 6/6。效果：云 APP（Capacitor 壳）与云网页/云桌面离线同步开关一致。未做：T4 KV→D1 一次性对账回填（本次症状自行恢复，无遗留 id 清单）。
+
+## 70. 登录框版本显示全端统一「离线版/云端版」（2026-10-21）
+
+* **用户要求**：四端登录框版本显示不一（截图实锤：云 APP 无标签、离线 APP【离线机构版】、离线桌面【离线标准版】实为机构版、云桌面【云端标准版】实为机构版）→ 统一只显示产品大类【离线版】/【云端版】，细分版（标准/机构/语音）只在登录后操作界面顶栏显示。
+* **根因（两条独立缺陷，2026-10-20 的统一修复只改了 index.html，漏了它们）**：
+  1. **桌面端登录框根本不是 index.html**——是独立 `electron/login.html + login.js`（`desktop-windows.cjs: loadFile(login.html)`），`login.js` 的 `applyEditionTag` 用 `versionLabel`/`edition` 拼细分版标签（离线标准版/离线机构版/云端标准版/云端机构版），2026-10-20 修复未触及 → 桌面端照旧显示旧细分版。
+  2. **云网页/云 APP 的标签元素是 `display:none` 且无人 unhide**——`public/index.html` 两处写入器（`__applyFirstFrame`/`applyEditionTags`）只写内容不改显示，桌面端由 login.js 显式 `display='inline-block'`，网页端没有任何人做这一步 → 登录框干脆无标签。
+* **修复**：
+  * `app_project/db-offline/desktop/electron/login.js`：`applyEditionTag` 标签写入统一为 `【离线版】+ metaHtml`（删 `vl/e/inst` 细分逻辑）。
+  * `app_project/db-yunduan/cloud_desktop/electron/login.js`：同上统一为 `【云端版】+ metaHtml`。
+  * `public/index.html`：两处写入器补 `tag.style.display='inline-block'`（云网页/云 APP 补显示）。
+  * 离线 APP（APK 内 index.html）：2026-10-20 修复已含 `getProductCategoryLabel + loginLabel + T10 display`，**无需再改**（截图旧样 = 用户手机装的还是旧 APK，新包即正确）。
+* **验证**：`node --check` 两份 login.js 0/0、`sync-all.ps1` 分发 + `-VerifyOnly` 全同步、`check-interface.bat` 6 OK/0 CHANGED、`copy-consistency.cjs` 100 副本 0 失败。
+* **生效方式**：云网页/云 APP 随 push 部署刷新即达（无需重打 APK）；**云桌面/离线桌面 = login.js 在 asar 内，需整包重打**（热更不覆盖登录窗）；离线 APP 装新包即正确。
+* **教训（举一反三）**：**同一 UI 在不同端可能有不同物理载体**（桌面=独立 login.html/login.js，网页/APP=index.html 遮罩）——"统一显示"类需求必须先列出每端的**渲染文件清单**再动手，只改权威源 index.html 会漏桌面端；反之"改了没生效"时第一反应应是查该端实际加载的文件，而非反复改同一文件。

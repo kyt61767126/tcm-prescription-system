@@ -246,18 +246,10 @@
             //   默认 text-align:start 使首行【云端标准版】靠左 ~22px，视觉不居中；
             //   版本三元组同步改白色 10px（原 9px #888 灰叠紫色渐变看不清楚）
             tag.style.textAlign = 'center';
-            if (!_loggedIn && !forceShow) {
-                tag.innerHTML = '【登录后显示版本】' + metaHtml;
-            } else {
-                var vl = (_configForTag && _configForTag.versionLabel) ? String(_configForTag.versionLabel) : '';
-                if (vl && vl.indexOf('云端') >= 0) {
-                    tag.innerHTML = '【' + vl + '】' + metaHtml;
-                } else {
-                    var e = (_configForTag && _configForTag.edition) || '';
-                    var inst = ['clinic_custom', 'cloud', 'clinic', 'cloud_clinic', 'offline_clinic', 'institution'].indexOf(e) >= 0;
-                    tag.innerHTML = '【' + (inst ? '云端机构版' : '云端标准版') + '】' + metaHtml;
-                }
-            }
+            // ★ 2026-10-21 登录框版本显示统一（用户要求「登录框只显示：离线版/云端版」）：
+            //   不再显示细分版（标准/机构/语音）——细分版易与实际授权不符（用户实报
+            //   登录框「云端标准版」实为机构版），细分版在登录后操作界面顶栏 editionTag 显示。
+            tag.innerHTML = '【云端版】' + metaHtml;
         }
 
         // ★ 2026-08-24 去除底部重复版本号：原「挂载点2」（.login-security 下方三元组）

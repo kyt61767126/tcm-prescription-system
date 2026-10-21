@@ -2110,7 +2110,9 @@ let currentUser = null;
                 // ★ 2026-10-20 登录框只显示产品大类（云端版/离线版），细分版在登录后顶栏显示
                 var _tag = document.getElementById('loginVersionTag');
                 var _loginLbl = (typeof getProductCategoryLabel === 'function') ? getProductCategoryLabel() : '云端版';
-                if (_tag) _tag.textContent = '【' + _loginLbl + '】';
+                // ★ 2026-10-21 云网页/云APP 补显示：静态元素 display:none 且网页端无人 unhide
+                //   （桌面端由 electron/login.js 显式 unhide）→ 登录框无版本标签（用户截图实锤）。
+                if (_tag) { _tag.style.display = 'inline-block'; _tag.textContent = '【' + _loginLbl + '】'; }
                 // document.title 保留完整版本（浏览器标签，非登录框视觉元素）
                 var _lbl = (CONFIG && CONFIG.versionLabel) || (_isStd ? '云端标准版' : '云端机构版');
                 var _eV = String((CONFIG && CONFIG.edition) || '').toLowerCase();
@@ -4381,6 +4383,8 @@ let currentUser = null;
             var tag = document.querySelector('.version-tag');
             // ★ 2026-10-20 登录框只显示产品大类（云端版/离线版），不显示细分版（标准/机构/语音）
             if (tag) {
+                // ★ 2026-10-21 云网页/云APP 补显示（静态 display:none，此前无人 unhide → 登录框无标签）
+                tag.style.display = 'inline-block';
                 tag.innerHTML = '【' + loginLabel + '】' + metaHtml;
             }
             // ★ 挂载点2：.login-security 下方（激活后简化登录框必显示，防止 header-section 被隐藏时丢失）
