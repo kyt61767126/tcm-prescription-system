@@ -2001,6 +2001,18 @@ let currentUser = null;
             } catch(e) {
                 console.warn('[CONFIG] 加载 config.json 失败:', e.message);
             }
+            // ★ 2026-10-20 登录框版本标签修正（与云端对齐）：asar 内置 config.json 出厂
+            //   edition=personal（标准版），机构版激活后 get-app-config 异步校正 CONFIG.edition，
+            //   但首帧已渲染标准版标签→用户看到短暂闪错。此处从 localStorage 缓存的上次校正
+            //   edition 恢复，保证首帧即显示真实版本（机构版/标准版）。
+            try {
+                var __cachedEd = localStorage.getItem('cached_config_edition') || '';
+                if (__cachedEd) {
+                    CONFIG.edition = __cachedEd;
+                    var __inst = ['clinic','offline_clinic','clinic_custom','cloud_clinic','offline'].indexOf(__cachedEd) >= 0;
+                    CONFIG.versionLabel = __inst ? '离线机构版' : '离线标准版';
+                }
+            } catch (_) {}
         })();
 
         window.__APP_VERSION__ = '2026-07-29-v1';
@@ -2031,6 +2043,20 @@ let currentUser = null;
         window.APP_VERSION = 'V1.0.0';
 
         // 版本标签统一显示 V1.0.0（与软著申请版本号一致）
+        // ★ 2026-10-20 登录框版本显示统一：登录前只显示产品大类「离线版」/「云端版」，
+        //   细分版（标准/机构/免费）在登录后操作界面顶栏显示。
+        function getProductCategoryLabel() {
+            try {
+                var _pn = String((typeof CONFIG !== 'undefined' && CONFIG && CONFIG.productName) || '');
+                if (_pn.indexOf('云端') >= 0) return '云端版';
+                if (_pn.indexOf('本地') >= 0 || _pn.indexOf('离线') >= 0) return '离线版';
+                var _ed = String((typeof CONFIG !== 'undefined' && CONFIG && CONFIG.edition) || '').toLowerCase();
+                if (_ed.indexOf('cloud') >= 0) return '云端版';
+                if (_ed.indexOf('offline') >= 0 || _ed === 'personal' || _ed.indexOf('clinic') >= 0) return '离线版';
+            } catch (_) {}
+            return '离线版';
+        }
+
         // ★ 统一安装包：运行时按 config.edition 动态显示 标准版/机构版 标签
         // ★ 2026-09-21 离线免费版：free 授权 edition 仍为 personal（单用户形态
         //   不变），版本标签按 window.__licenseType==='free' 细分显示。此函数仅
@@ -2081,11 +2107,21 @@ let currentUser = null;
             var tag = document.querySelector('.version-tag');
             var _loEl = document.getElementById('loginOverlay');
             var _loginVisible = !!(_loEl && _loEl.style.display !== 'none');
+            // ★ 2026-10-20 登录框只显示产品大类（离线版），不显示细分版
+            var loginLabel = (typeof getProductCategoryLabel === 'function') ? getProductCategoryLabel() : '离线版';
             if (tag) {
+                // ★ 2026-10-21 药丸布置与桌面 electron/login.js 完全统一：文字居中 + meta 仅一行
+                //   （V·Arch；Build 时间内部保留不对外展示。离线APP 截图实锤：一行式不居中。
+                //   APP 无构建期 build-meta.json → 回落 window.APP_VERSION 兜底第二行）
+                tag.style.textAlign = 'center';
+                var metaLine1Tag = metaTextLine1 || (window.APP_VERSION ? String(window.APP_VERSION) : '');
+                var metaHtmlTag = metaLine1Tag ?
+                    ('<br><span style="font-size:10px;color:rgba(255,255,255,0.95);font-weight:normal;line-height:1.3;">' +
+                     metaLine1Tag + '</span>') : '';
                 if (!_loginVisible) {
-                    tag.innerHTML = '【' + label + '】' + metaHtml;
+                    tag.innerHTML = '【' + label + '】' + metaHtmlTag;
                 } else {
-                    tag.innerHTML = '【离线 · 登录后显示版本】' + metaHtml;
+                    tag.innerHTML = '【' + loginLabel + '】' + metaHtmlTag;
                 }
             }
             // ★ 挂载点2：.login-security 下方（激活后简化登录框必显示，防止 header-section 被隐藏时丢失）
@@ -2244,6 +2280,9 @@ let currentUser = null;
                             if (cfg.configIssuedAt) CONFIG.configIssuedAt = cfg.configIssuedAt;
                         }
                         applyEditionTags();
+                        // ★ 2026-10-20 缓存校正后 edition 到 localStorage，供下次启动首帧恢复
+                        //   （避免 asar 出厂 config.json 标准版首帧闪错）
+                        try { if (cfg.edition) localStorage.setItem('cached_config_edition', cfg.edition); } catch (_) {}
                         console.log('[CONFIG] 已从 userData 同步配置，版本:', CONFIG.edition, '产品:', CONFIG.productName);
                         // ★ 强制 enforce（最关键！上一版漏了这里的 enforce，导致同步回来后按钮还是机构版行为！）
                         if (typeof enforceStandardEditionButtons === 'function') {
@@ -9483,6 +9522,8 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
             if (id === 'formulaModal') renderFormulaList();
             if (id === 'caseModal') renderCaseList(prescriptionHistory);
             if (id === 'analyticsModal') refreshAnalytics();
+            // ★ 2026-10-20 「备份与恢复」入口按需补注入（统计弹窗内，不改 HTML 结构）
+            if (id === 'analyticsModal') ensureBackupRestoreEntry();
             if (id === 'settingsModal') {
                 document.getElementById('defaultDoctor').value = document.getElementById('doctorName').value;
                 // APP 端隐藏设置弹窗内备份/恢复/清除数据按钮（user_profile.md 规范）
@@ -9779,30 +9820,131 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
             } catch (e) { console.warn('[Backup] 退场备份失败(静默):', e); }
         };
 
+        // ★ 2026-10-20 统一备份载荷（手动/自动共用）：账号表 + 基础设置 + 库存台账一并纳入，
+        //   保证自动备份与手动备份同结构、同恢复通道 —— 自动备份从此真正可恢复。
+        async function buildBackupPayload(opts) {
+            const kind = (opts && opts.kind === 'auto') ? 'auto' : 'manual';
+            const now = new Date();
+            const pad = n => String(n).padStart(2, '0');
+            const dateStr = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
+            const timeStr = pad(now.getHours()) + '-' + pad(now.getMinutes()) + '-' + pad(now.getSeconds());
+
+            let userObj = (typeof currentUser !== 'undefined') ? currentUser : null;
+            if (!userObj) {
+                try {
+                    const s = localStorage.getItem('local_currentUser');
+                    if (s) userObj = JSON.parse(s);
+                } catch (e) { userObj = null; }
+            }
+            const exportUserName = userObj?.name || userObj?.username || '未知用户';
+            const userRoleDisplay = (userObj && typeof AuthCore !== 'undefined' && AuthCore.isAdmin(userObj)) ? '管理员' : '普通用户';
+
+            const editionTag = (typeof getEditionTag === 'function') ? getEditionTag()
+                : ((typeof getCloudEditionTag === 'function') ? window.getCloudEditionTag() : '');
+
+            let clinicNameVal = '', doctorNameVal = '';
+            try { clinicNameVal = await getUserItem('clinicName'); } catch (e) {}
+            try { doctorNameVal = await getUserItem('clinicDoctor'); } catch (e) {}
+            const clinicNameEl = document.getElementById('clinicName');
+            const doctorNameEl = document.getElementById('defaultDoctor');
+            const clinicName = (clinicNameEl && clinicNameEl.value) || clinicNameVal || '未知诊所';
+            const doctorName = (doctorNameEl && doctorNameEl.value) || doctorNameVal || '未知医师';
+
+            const meds = (typeof medicines !== 'undefined' && medicines) ? medicines : [];
+            const forms = (typeof formulas !== 'undefined' && formulas) ? formulas : [];
+            const history = (typeof prescriptionHistory !== 'undefined' && prescriptionHistory) ? prescriptionHistory : [];
+
+            const data = {
+                exportInfo: {
+                    version: '惠康中医-' + editionTag,
+                    versionCode: window.APP_VERSION,
+                    versionType: '本地',
+                    exportTime: now.toLocaleString('zh-CN'),
+                    exportTimeUTC: now.toISOString(),
+                    exportDate: dateStr,
+                    exportTimeOnly: timeStr,
+                    exportUser: (kind === 'auto') ? '自动备份' : exportUserName,
+                    userInfo: {
+                        username: userObj?.username || '未知',
+                        name: userObj?.name || exportUserName,
+                        role: userObj?.role || 'user',
+                        roleDisplay: userRoleDisplay
+                    },
+                    clinicName: clinicName,
+                    doctorName: doctorName,
+                    exportType: (kind === 'auto') ? 'auto' : 'full',
+                    backupKind: kind,
+                    formatVersion: '1.0',
+                    dataStatistics: {
+                        medicinesCount: meds.length,
+                        formulasCount: forms.length,
+                        prescriptionCount: history.length
+                    },
+                    systemInfo: {
+                        platform: 'standalone',
+                        platformType: '本地',
+                        lastModified: localStorage.getItem('local_lastModified') || now.toISOString()
+                    }
+                },
+                medicines: meds,
+                formulas: forms,
+                prescriptionHistory: history,
+                stockLedger: (window.StockCore ? StockCore.getLedger() : []),
+                stockMgmtEnabled: (window.StockCore ? StockCore.isEnabled() : false),
+                // ★ 2026-08-28 重装数据安全：账号表 + 基础设置（换机/重装可完整还原）
+                // ★ 2026-08-30 修复：local_systemUsers 是 XORv1 加密串，直接 JSON.parse 必抛异常
+                //   → 备份 users 恒为 []（重装恢复救不回原账号密码）。先 simpleDecrypt 再 parse。
+                users: (() => { try { var __raw = localStorage.getItem('local_systemUsers') || '[]'; var __dec = (typeof simpleDecrypt === 'function') ? simpleDecrypt(__raw) : __raw; var __arr = JSON.parse(__dec); return Array.isArray(__arr) ? __arr : []; } catch (e) { return []; } })(),
+                settings: {
+                    clinicName: localStorage.getItem('local_clinicName') || '',
+                    clinicDoctor: localStorage.getItem('local_clinicDoctor') || '',
+                    defaultRegFee: localStorage.getItem('local_defaultRegFee') || '0',
+                    defaultDose: localStorage.getItem('local_defaultDose') || '7'
+                },
+                prescriptionCount: history.length
+            };
+
+            // 计算备份文件 HMAC 签名（基于紧凑 JSON，避免格式化影响）
+            const hmac = await computeBackupHmac(JSON.stringify(data));
+            if (hmac) data._hmac = hmac;
+
+            return {
+                kind: kind,
+                data: data,
+                fileName: (kind === 'auto')
+                    ? ('auto_' + dateStr.replace(/-/g, '') + '_' + timeStr.replace(/-/g, '') + '.json')
+                    : ('本地_' + exportUserName + '_' + dateStr + '_' + timeStr + '.json')
+            };
+        }
+
         async function saveLocalBackupToFile() {
             try {
-                const now = new Date();
-                const ts = now.toISOString();
-                const pad = n => String(n).padStart(2, '0');
-                const fileName = `backup_${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.json`;
-                const data = {
-                    timestamp: ts,
-                    version: 'P1-1',
-                    data: {
-                        medicines: medicines || [],
-                        formulas: formulas || [],
-                        prescriptionHistory: prescriptionHistory || []
-                    },
-                    prescriptionCount: (prescriptionHistory || []).length
-                };
-                const jsonStr = JSON.stringify(data, null, 2);
+                // ★ 2026-10-20 自动备份改走手动备份同一通道（落用户可见的「中医处方系统/」目录），
+                //   载荷与手动备份同构（含账号表/设置/库存台账），故自动备份可被「备份与恢复」一键恢复。
+                const built = await buildBackupPayload({ kind: 'auto' });
+                const fileName = built.fileName;
+                const jsonStr = JSON.stringify(built.data, null, 2);
 
-                if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.saveAutoBackup === 'function') {
-                    const result = await window.electronAPI.saveAutoBackup(jsonStr, fileName);
-                    return !!(result && result.success);
+                // ① 桌面 Electron：save-backup-file IPC → 惠康中医媒体\downloads\中医处方系统\
+                if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.saveBackupFile === 'function') {
+                    try {
+                        const result = await window.electronAPI.saveBackupFile(jsonStr, fileName);
+                        if (result && result.success) return true;
+                    } catch (e) { console.warn('[Backup] 自动备份写文件失败，尝试降级:', e); }
                 }
+                // ② APP 原生桥：saveBackupFile → Download/中医处方系统/
+                try {
+                    if (window.AndroidNative && typeof window.AndroidNative.invoke === 'function') {
+                        const raw = window.AndroidNative.invoke('saveBackupFile', JSON.stringify({ jsonStr: jsonStr, fileName: fileName }));
+                        if (typeof raw === 'string' && raw.length > 5 && raw !== 'null') {
+                            const r = JSON.parse(raw);
+                            if (r && r.success) return true;
+                        }
+                    }
+                } catch (e) { console.warn('[Backup] 桥自动备份失败，尝试降级:', e); }
+                // ③ 无桥环境（网页）：IndexedDB 降级
                 if (typeof indexedDB !== 'undefined') {
-                    return await saveBackupToIndexedDB(fileName, data);
+                    return await saveBackupToIndexedDB(fileName, built.data);
                 }
                 return false;
             } catch (e) {
@@ -9834,6 +9976,46 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
             });
         }
 
+        // ★ 2026-10-20 自动备份条目汇总（新 auto_*.json 走 list-backup-files；
+        //   旧版 backup_*.json 走 list-auto-backups / IndexedDB）
+        async function listAutoBackupItems() {
+            const items = [];
+            const seen = new Set();
+            try {
+                if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.listBackupFiles === 'function') {
+                    const r = await window.electronAPI.listBackupFiles();
+                    if (r && r.success) {
+                        (r.files || []).forEach(f => {
+                            if (/^auto_\d{8}_\d{6}\.json$/.test(f.fileName) && !seen.has(f.fileName)) {
+                                seen.add(f.fileName);
+                                items.push({ fileName: f.fileName, type: 'auto', timestamp: f.lastModified || 0, size: f.size || 0, source: 'file' });
+                            }
+                        });
+                    }
+                }
+                if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.listAutoBackups === 'function') {
+                    const r2 = await window.electronAPI.listAutoBackups();
+                    if (r2 && r2.success) {
+                        (r2.files || []).forEach(f => {
+                            if (!seen.has(f.fileName)) {
+                                seen.add(f.fileName);
+                                items.push({ fileName: f.fileName, type: 'auto', timestamp: f.timestamp || 0, size: f.size || 0, source: 'legacy' });
+                            }
+                        });
+                    }
+                } else if (typeof indexedDB !== 'undefined') {
+                    const list = await listIndexedDBBackups();
+                    list.forEach(f => {
+                        if (!seen.has(f.fileName)) {
+                            seen.add(f.fileName);
+                            items.push({ fileName: f.fileName, type: 'auto', timestamp: f.timestamp || 0, size: 0, source: 'idb' });
+                        }
+                    });
+                }
+            } catch (e) { console.warn('[Backup] 列出自动备份失败:', e); }
+            return items;
+        }
+
         async function cleanupOldBackups() {
             try {
                 const now = Date.now();
@@ -9842,20 +10024,16 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
                 const keep4Weeks = 28 * DAY;
                 const keep12Months = 365 * DAY;
 
-                let backups = [];
-                if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.listAutoBackups === 'function') {
-                    const result = await window.electronAPI.listAutoBackups();
-                    if (result && result.success) backups = result.files || [];
-                } else if (typeof indexedDB !== 'undefined') {
-                    backups = await listIndexedDBBackups();
-                }
-                if (backups.length === 0) return;
+                // ★ 2026-10-20 只清理自动备份（auto_*.json + 旧版 backup_*.json）；
+                //   手动备份（本地_*.json）永不自动删除。
+                const items = await listAutoBackupItems();
+                if (items.length === 0) return;
 
-                backups.sort((a, b) => b.timestamp - a.timestamp);
+                items.sort((a, b) => b.timestamp - a.timestamp);
 
                 const toDelete = [];
                 let last7Day = 0, last4Week = 0;
-                for (const b of backups) {
+                for (const b of items) {
                     const age = now - b.timestamp;
                     if (age <= keep7Days) continue;
                     else if (age <= keep4Weeks) {
@@ -9868,13 +10046,9 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
                 }
 
                 for (const b of toDelete) {
-                    if (window.electronAPI && typeof window.electronAPI.deleteAutoBackup === 'function') {
-                        await window.electronAPI.deleteAutoBackup(b.fileName);
-                    } else if (typeof indexedDB !== 'undefined') {
-                        await deleteIndexedDBBackup(b.fileName);
-                    }
+                    await deleteBackupItem(b, { silent: true });
                 }
-                if (toDelete.length > 0) console.log(`[Backup] 清理过期备份: ${toDelete.length} 个`);
+                if (toDelete.length > 0) console.log(`[Backup] 清理过期自动备份: ${toDelete.length} 个`);
             } catch (e) {
                 console.warn('[Backup] 清理备份失败:', e);
             }
@@ -9926,135 +10100,242 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
             });
         }
 
-        async function restoreFromBackup(backupIndex) {
+        // ★ 2026-10-20 统一备份列表：手动（本地_*.json）+ 自动（auto_*.json / 旧 backup_*.json）
+        async function listBackupItems() {
+            const items = [];
+            const seen = new Set();
+            const push = (it) => {
+                if (!it || !it.fileName || seen.has(it.fileName)) return;
+                seen.add(it.fileName);
+                items.push(it);
+            };
             try {
-                const backups = JSON.parse(localStorage.getItem('localBackups') || '[]');
-                if (backupIndex < 0 || backupIndex >= backups.length) {
-                    alert('无效的备份索引'); return;
+                if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.listBackupFiles === 'function') {
+                    const r = await window.electronAPI.listBackupFiles();
+                    if (r && r.success) {
+                        (r.files || []).forEach(f => push({
+                            fileName: f.fileName,
+                            type: /^auto_\d{8}_\d{6}\.json$/.test(f.fileName) ? 'auto' : 'manual',
+                            timestamp: f.lastModified || 0,
+                            size: f.size || 0,
+                            source: 'file'
+                        }));
+                    }
+                } else if (typeof indexedDB !== 'undefined') {
+                    const list = await listIndexedDBBackups();
+                    list.forEach(f => push({ fileName: f.fileName, type: 'auto', timestamp: f.timestamp || 0, size: 0, source: 'idb' }));
                 }
-                const backup = backups[backupIndex];
-                const dateStr = new Date(backup.timestamp).toLocaleString('zh-CN');
-                if (!confirm(`确定要恢复 ${dateStr} 的备份吗？\n\n处方数量: ${backup.prescriptionCount || 0} 条\n\n注意：恢复将覆盖当前数据！`)) return;
-                // ★ P0-2 数据加密：如果备份已加密，先解密（密钥绑定设备，换设备无法解密）
-                let backupData = backup.data;
-                if (backup.encrypted && typeof backupData === 'string') {
-                    if (window.electronAPI && window.electronAPI.decryptData) {
-                        const result = await window.electronAPI.decryptData(backupData);
-                        if (result && result.success) {
-                            backupData = JSON.parse(result.data);
-                        } else {
-                            showToast('❌ 解密失败，此备份可能来自其他设备');
-                            return;
-                        }
-                    } else {
-                        showToast('❌ 加密备份无法解密（APP版本过低）');
-                        return;
+                // 旧版自动备份（userData/backups/backup_*.json；旧包升级后仅剩存量）
+                if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.listAutoBackups === 'function') {
+                    const r2 = await window.electronAPI.listAutoBackups();
+                    if (r2 && r2.success) {
+                        (r2.files || []).forEach(f => push({ fileName: f.fileName, type: 'auto', timestamp: f.timestamp || 0, size: f.size || 0, source: 'legacy' }));
                     }
                 }
-                if (backupData) {
-                    if (backupData.medicines) { medicines = backupData.medicines; localStorage.setItem('local_medicines', JSON.stringify(medicines)); }
-                    if (backupData.formulas) { formulas = backupData.formulas; localStorage.setItem('local_formulas', JSON.stringify(formulas)); }
-                    if (backupData.prescriptionHistory) { prescriptionHistory = backupData.prescriptionHistory; }
-                }
-                renderMedicineList();
-                // ★ 2026-08-20 修复：原调用的 renderPrescriptionHistory()/updateStats() 本文件从未定义，
-                //   恢复备份后触发 ReferenceError 中断后续流程。改用实际存在的 renderHistoryList 刷新历史列表
-                if (typeof renderHistoryList === 'function' && Array.isArray(prescriptionHistory)) {
-                    renderHistoryList(prescriptionHistory);
-                }
-                showToast('✅ 已从备份恢复 ' + (backup.prescriptionCount || 0) + ' 条处方');
-            } catch (error) {
-                console.error('恢复备份失败:', error);
-                showToast('❌ 恢复备份失败: ' + error.message);
-            }
+            } catch (e) { console.warn('[Backup] 列出备份失败:', e); }
+            items.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+            return items;
         }
+
+        function typeLabelOf(item) {
+            if (!item || item.type !== 'auto') return '手动';
+            return item.source === 'legacy' ? '自动·旧' : '自动';
+        }
+
+        // 读取指定备份内容（桌面/APP 桥 → IndexedDB 降级）
+        async function readBackupItemJson(item) {
+            try {
+                if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.readBackupFile === 'function'
+                        && item.source !== 'legacy' && item.source !== 'idb') {
+                    const r = await window.electronAPI.readBackupFile(item.fileName);
+                    if (r && r.success && r.json) return r.json;
+                    return null;
+                }
+            } catch (e) { console.warn('[Backup] 读取备份失败:', e); }
+            if (typeof indexedDB !== 'undefined') {
+                const json = await getIndexedDBBackupJson(item.fileName);
+                if (json) return json;
+            }
+            return null;
+        }
+
+        function getIndexedDBBackupJson(fileName) {
+            return new Promise((resolve) => {
+                try {
+                    const request = indexedDB.open('PrescriptionBackupDB', 1);
+                    request.onupgradeneeded = (e) => {
+                        const db = e.target.result;
+                        if (!db.objectStoreNames.contains('backups')) {
+                            db.createObjectStore('backups', { keyPath: 'fileName' });
+                        }
+                    };
+                    request.onsuccess = (e) => {
+                        const db = e.target.result;
+                        if (!db.objectStoreNames.contains('backups')) { resolve(null); return; }
+                        const tx = db.transaction(['backups'], 'readonly');
+                        const req = tx.objectStore('backups').get(fileName);
+                        req.onsuccess = () => {
+                            const rec = req.result;
+                            if (!rec) { resolve(null); return; }
+                            resolve((typeof rec.data === 'string') ? rec.data : JSON.stringify(rec.data));
+                        };
+                        req.onerror = () => resolve(null);
+                    };
+                    request.onerror = () => resolve(null);
+                } catch (e) { resolve(null); }
+            });
+        }
+
+        // 一键恢复指定备份（取代旧的 localStorage localBackups 死代码路径）
+        async function restoreBackupItem(item) {
+            if (!item) return;
+            const ts = item.timestamp ? new Date(item.timestamp).toLocaleString('zh-CN') : '未知时间';
+            if (!confirm(`确定用【${typeLabelOf(item)}】${item.fileName} 恢复吗？\n\n备份时间：${ts}\n\n注意：恢复将合并/覆盖当前数据！`)) return;
+            const json = await readBackupItemJson(item);
+            if (!json) {
+                alert('读取备份失败：' + item.fileName + '\n（旧版自动备份或文件已被删除时无法读取）');
+                return;
+            }
+            await importDataFromJson(json);
+        }
+
+        // 删除备份（★ 仅自动备份可删；手动备份不提供删除）
+        async function deleteBackupItem(item, opts) {
+            const silent = !!(opts && opts.silent);
+            if (!item || item.type !== 'auto') return false;
+            try {
+                if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.deleteBackupFile === 'function' && item.source === 'file') {
+                    const r = await window.electronAPI.deleteBackupFile(item.fileName);
+                    return !!(r && r.success);
+                }
+                if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.deleteAutoBackup === 'function' && item.source === 'legacy') {
+                    const r2 = await window.electronAPI.deleteAutoBackup(item.fileName);
+                    return !!(r2 && r2.success);
+                }
+                if (typeof indexedDB !== 'undefined' && item.source === 'idb') {
+                    return await deleteIndexedDBBackup(item.fileName);
+                }
+            } catch (e) {
+                if (!silent) console.warn('[Backup] 删除备份失败:', e);
+            }
+            return false;
+        }
+
+        // ============================================================================
+        //  ★ 2026-10-20 「备份与恢复」面板：全部 JS 运行时注入（不改 HTML 结构与 CSS）
+        //  入口挂在「统计 → 🗄️ 数据管理」既有按钮组内（设置弹窗的同名按钮在 APP 端被隐藏）
+        // ============================================================================
+        function ensureBackupRestoreEntry() {
+            try {
+                if (document.getElementById('__backupRestoreEntry')) return;
+                var btns = document.querySelectorAll('button[onclick="exportData()"]');
+                var anchor = null;
+                for (var i = 0; i < btns.length; i++) {
+                    if (!(btns[i].closest && btns[i].closest('#settingsModal'))) { anchor = btns[i]; break; }
+                }
+                if (!anchor && btns.length) anchor = btns[0];
+                if (!anchor || !anchor.parentNode) return;
+                var b = document.createElement('button');
+                b.id = '__backupRestoreEntry';
+                b.type = 'button';
+                b.className = anchor.className || 'action-btn';
+                b.textContent = '🗂️ 备份与恢复';
+                b.style.cssText = 'background:#4a148c;color:#fff;';
+                b.onclick = function () { openBackupRestorePanel(); };
+                anchor.parentNode.insertBefore(b, anchor.nextSibling);
+            } catch (e) { console.warn('[Backup] 注入备份入口失败:', e); }
+        }
+
+        async function openBackupRestorePanel() {
+            var old = document.getElementById('__backupRestorePanel');
+            if (old && old.parentNode) old.parentNode.removeChild(old);
+            var wrap = document.createElement('div');
+            wrap.id = '__backupRestorePanel';
+            wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:99999;';
+            var box = document.createElement('div');
+            box.style.cssText = 'background:#fff;border-radius:10px;width:min(680px,92vw);max-height:82vh;overflow:auto;padding:16px 18px;box-shadow:0 8px 30px rgba(0,0,0,.3);font-size:13px;';
+            box.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">'
+                + '<strong style="font-size:15px;">🗂️ 备份与恢复</strong>'
+                + '<span style="white-space:nowrap;">'
+                + '<button type="button" id="__bkRefresh" class="action-btn" style="background:#2196F3;color:#fff;">刷新</button> '
+                + '<button type="button" id="__bkClean" class="action-btn" style="background:#ff9800;color:#fff;">清理旧自动备份</button> '
+                + '<button type="button" id="__bkClose" class="action-btn" style="background:#9e9e9e;color:#fff;">关闭</button>'
+                + '</span></div>'
+                + '<div id="__bkList" style="margin-top:12px;">加载中…</div>';
+            wrap.appendChild(box);
+            document.body.appendChild(wrap);
+            wrap.addEventListener('click', function (e) { if (e.target === wrap) wrap.remove(); });
+            box.querySelector('#__bkClose').onclick = function () { wrap.remove(); };
+            box.querySelector('#__bkRefresh').onclick = function () { renderBackupRestoreList(box); };
+            box.querySelector('#__bkClean').onclick = function () { cleanupOldBackups().then(function () { renderBackupRestoreList(box); }); };
+            await renderBackupRestoreList(box);
+        }
+
+        async function renderBackupRestoreList(box) {
+            var host = box.querySelector('#__bkList');
+            if (!host) return;
+            host.innerHTML = '加载中…';
+            var items = await listBackupItems();
+            if (!items.length) {
+                host.innerHTML = '<div style="padding:14px;color:#666;line-height:1.8;">未找到备份文件。<br>'
+                    + '备份文件夹：<b>中医处方系统</b>（桌面端在「惠康中医媒体\\downloads\\」下，手机端在「Download/」下）。<br>'
+                    + '把该文件夹整体拷到新设备同一位置，点「刷新」即可恢复。<br>'
+                    + '自动备份保留：7 天每日 + 4 周每周 + 12 月每月；手动备份不自动删除。</div>';
+                return;
+            }
+            var html = '<table style="width:100%;border-collapse:collapse;"><thead><tr style="background:#f5f5f5;">'
+                + '<th style="padding:6px;border:1px solid #ddd;">类型</th>'
+                + '<th style="padding:6px;border:1px solid #ddd;">文件 / 时间</th>'
+                + '<th style="padding:6px;border:1px solid #ddd;">大小</th>'
+                + '<th style="padding:6px;border:1px solid #ddd;">操作</th></tr></thead><tbody>';
+            for (var i = 0; i < items.length; i++) {
+                var it = items[i];
+                var t = it.timestamp ? new Date(it.timestamp).toLocaleString('zh-CN') : '未知';
+                var size = it.size ? (it.size / 1024).toFixed(1) + ' KB' : '-';
+                html += '<tr data-i="' + i + '">'
+                    + '<td style="padding:6px;border:1px solid #ddd;text-align:center;">' + typeLabelOf(it) + '</td>'
+                    + '<td style="padding:6px;border:1px solid #ddd;">' + it.fileName + '<br><span style="color:#888;">' + t + '</span></td>'
+                    + '<td style="padding:6px;border:1px solid #ddd;text-align:right;">' + size + '</td>'
+                    + '<td style="padding:6px;border:1px solid #ddd;text-align:center;white-space:nowrap;">'
+                    + '<button type="button" class="action-btn" style="background:#2196F3;color:#fff;" data-act="restore">恢复</button>'
+                    + (it.type === 'auto' ? ' <button type="button" class="action-btn" style="background:#e53935;color:#fff;" data-act="delete">删除</button>' : '')
+                    + '</td></tr>';
+            }
+            html += '</tbody></table>';
+            host.innerHTML = html;
+            host.onclick = async function (e) {
+                var btn = e.target.closest ? e.target.closest('button[data-act]') : null;
+                if (!btn) return;
+                var tr = btn.closest('tr');
+                var idx = parseInt(tr.getAttribute('data-i'), 10);
+                var it = items[idx];
+                if (!it) return;
+                if (btn.getAttribute('data-act') === 'restore') {
+                    await restoreBackupItem(it);
+                } else if (btn.getAttribute('data-act') === 'delete') {
+                    if (!confirm('确定删除【自动备份】' + it.fileName + ' 吗？此操作不可恢复。')) return;
+                    var okDel = await deleteBackupItem(it);
+                    alert(okDel ? '已删除：' + it.fileName : '删除失败：' + it.fileName);
+                    await renderBackupRestoreList(box);
+                }
+            };
+        }
+
+        // 首屏注入入口（本脚本块位于 body 之后，DOM 已就绪）
+        (function () {
+            try {
+                if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ensureBackupRestoreEntry);
+                else ensureBackupRestoreEntry();
+            } catch (e) { console.warn('[Backup] 入口注入异常:', e); }
+        })();
 
         async function exportData() {
             // ★ 2026-09-21 免费版付费墙：一键备份（feature=backup，主进程 save-backup-file 双拦）
             if (!await window.requireFeature('backup')) return;
-            const now = new Date();
-            const dateStr = now.getFullYear() + '-' + 
-                           String(now.getMonth() + 1).padStart(2, '0') + '-' + 
-                           String(now.getDate()).padStart(2, '0');
-            const timeStr = String(now.getHours()).padStart(2, '0') + '-' + 
-                           String(now.getMinutes()).padStart(2, '0') + '-' +
-                           String(now.getSeconds()).padStart(2, '0');
-            
-            let userObj = currentUser;
-            if (!userObj) {
-                const currentUserStr = localStorage.getItem('local_currentUser');
-                if (currentUserStr) {
-                    try {
-                        userObj = JSON.parse(currentUserStr);
-                    } catch {
-                        userObj = null;
-                    }
-                }
-            }
-            
-            const exportUserName = userObj?.name || userObj?.username || '未知用户';
-            const userRoleDisplay = (userObj && AuthCore.isAdmin(userObj)) ? '管理员' : '普通用户';
-            
-            const fileName = `本地_${exportUserName}_${dateStr}_${timeStr}.json`;
-            
-            const clinicNameVal = await getUserItem('clinicName');
-            const doctorNameVal = await getUserItem('clinicDoctor');
-            const clinicName = document.getElementById('clinicName')?.value || clinicNameVal || '未知诊所';
-            const doctorName = document.getElementById('defaultDoctor')?.value || doctorNameVal || '未知医师';
-            
-            const data = {
-                exportInfo: {
-                    version: '惠康中医-' + getEditionTag(),
-                    versionCode: window.APP_VERSION,
-                    versionType: '本地',
-                    exportTime: now.toLocaleString('zh-CN'),
-                    exportTimeUTC: now.toISOString(),
-                    exportDate: dateStr,
-                    exportTimeOnly: timeStr,
-                    exportUser: exportUserName,
-                    userInfo: {
-                        username: userObj?.username || '未知',
-                        name: userObj?.name || exportUserName,
-                        role: userObj?.role || 'user',
-                        roleDisplay: userRoleDisplay
-                    },
-                    clinicName: clinicName,
-                    doctorName: doctorName,
-                    exportType: 'full',
-                    formatVersion: '1.0',
-                    dataStatistics: {
-                        medicinesCount: medicines.length,
-                        formulasCount: formulas.length,
-                        prescriptionCount: prescriptionHistory.length
-                    },
-                    systemInfo: {
-                        platform: 'standalone',
-                        platformType: '本地',
-                        lastModified: localStorage.getItem('local_lastModified') || now.toISOString()
-                    }
-                },
-                medicines: medicines,
-                formulas: formulas,
-                prescriptionHistory: prescriptionHistory,
-                stockLedger: (window.StockCore ? StockCore.getLedger() : []),
-                stockMgmtEnabled: (window.StockCore ? StockCore.isEnabled() : false),
-                // ★ 2026-08-28 重装数据安全（与离线APP统一）：手动备份也带上账号表+基础设置（换机/重装可完整还原）
-                // ★ 2026-08-30 修复：local_systemUsers 是 XORv1 加密串，直接 JSON.parse 必抛异常
-                //   → 备份 users 恒为 []（重装恢复救不回原账号密码）。先 simpleDecrypt 再 parse。
-                users: (() => { try { var __raw = localStorage.getItem('local_systemUsers') || '[]'; var __dec = (typeof simpleDecrypt === 'function') ? simpleDecrypt(__raw) : __raw; var __arr = JSON.parse(__dec); return Array.isArray(__arr) ? __arr : []; } catch (e) { return []; } })(),
-                settings: {
-                    clinicName: localStorage.getItem('local_clinicName') || '',
-                    clinicDoctor: localStorage.getItem('local_clinicDoctor') || '',
-                    defaultRegFee: localStorage.getItem('local_defaultRegFee') || '0',
-                    defaultDose: localStorage.getItem('local_defaultDose') || '7'
-                }
-            };
-            
-            // 计算备份文件 HMAC 签名（基于紧凑 JSON，避免格式化影响）
-            const hmac = await computeBackupHmac(JSON.stringify(data));
-            if (hmac) {
-                data._hmac = hmac;
-            }
+            // ★ 2026-10-20 统一载荷（与自动备份同构）：账号表/设置/库存台账一并导出
+            const built = await buildBackupPayload({ kind: 'manual' });
+            const data = built.data;
+            const fileName = built.fileName;
 
             // 生成 JSON 字符串
             const jsonStr = JSON.stringify(data, null, 2);
@@ -10122,6 +10403,14 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
         async function importDataFromJson(jsonStr) {
             try {
                 const data = JSON.parse(jsonStr);
+
+                // ★ 2026-10-20 兼容旧版自动备份结构（{timestamp,version:'P1-1',data:{medicines,...}}）
+                //   → 展开为顶层结构后再走既有导入流程，旧自动备份从此也能被一键恢复
+                if (data && !data.medicines && data.data && typeof data.data === 'object') {
+                    const legacy = data.data;
+                    delete data.data;
+                    for (const k in legacy) { if (!(k in data)) data[k] = legacy[k]; }
+                }
 
                 // 验证 HMAC 签名（如果有）
                 if (data._hmac) {
@@ -10201,9 +10490,12 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
                         if (result && result.success && Array.isArray(result.files) && result.files.length > 0) {
                             var latest = result.files[0];
                             var fileList = result.files.slice(0, 5).map(function (f, i) {
-                                return (i + 1) + '. ' + f.fileName + ' (' + (f.size / 1024).toFixed(1) + 'KB)';
+                                // ★ 2026-10-20 类型标识：auto_* 为自动备份，本地_* 为手动备份
+                                var __tag = /^auto_\d{8}_\d{6}\.json$/.test(f.fileName) ? '【自动备份】' : '【手动备份】';
+                                return (i + 1) + '. ' + __tag + f.fileName + ' (' + (f.size / 1024).toFixed(1) + 'KB)';
                             }).join('\n');
-                            var ok = confirm('发现 ' + result.files.length + ' 个备份文件（惠康中医媒体\\downloads\\中医处方系统\\）\n\n' + fileList + '\n\n【确定】用最新备份恢复（第1个）\n【取消】改为手动选择文件');
+                            var __latestTag = /^auto_\d{8}_\d{6}\.json$/.test(latest.fileName) ? '【自动备份】' : '【手动备份】';
+                            var ok = confirm('发现 ' + result.files.length + ' 个备份文件（惠康中医媒体\\downloads\\中医处方系统\\）\n\n' + fileList + '\n\n【确定】用最新备份恢复（第1个：' + __latestTag + '）\n【取消】改为手动选择文件');
                             if (ok) {
                                 window.electronAPI.readBackupFile(latest.fileName).then(function (r) {
                                     if (r && r.success && r.json) {

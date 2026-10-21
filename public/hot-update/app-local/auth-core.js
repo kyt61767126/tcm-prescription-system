@@ -2160,7 +2160,7 @@
     // ==================== 离线登录缓存 ====================
     // 首次在线登录成功后缓存用户凭证（加密存储），断网时可离线登录
     // 安全策略：密码通过 encryptPassword（safeStorage/XOR）加密，不存储明文
-    // 有效期：30天，超时需重新在线登录
+    // 有效期：7天（2026-10-19 产品决策：所有版本取消 30 天离线，统一为 7 天），超时需重新在线登录
 
     async function cacheOfflineLogin(username, password, user) {
         try {
@@ -2200,8 +2200,8 @@
                 return { success: false, error: '该用户无离线缓存，请联网登录' };
             }
 
-            // 检查缓存是否过期（30天）
-            const CACHE_TTL = 30 * 24 * 60 * 60 * 1000;
+            // 检查缓存是否过期（7天，2026-10-19 产品决策：取消 30 天离线）
+            const CACHE_TTL = 7 * 24 * 60 * 60 * 1000;
             if (Date.now() - cacheData.cachedAt > CACHE_TTL) {
                 await StorageAdapter.removeItem('auth:offlineLoginCache');
                 return { success: false, error: '离线登录缓存已过期，请联网登录' };
@@ -4331,7 +4331,8 @@
                     user = localStorage.getItem('auth:rememberedUsername') || '';
                 }
             } catch (e) {}
-            // ★ 2026-08-26 重装激活登录修复：激活弹窗填写的手机号即登录账号。
+            // ★ 2026-08-26 重装激活登录修复 + 2026-10-21 H15-A/D：手机号即登录账号；
+            //   已注册用户手机号/密码由激活框自动取注册档案（modalResult 带出）。
             //   APP端：Java activateLicense 解析"姓名/手机号"（正则提取 1[3-9] 开头 11 位数字），第3参=password；
             //   桌面端：preload submit 签名为 (code, user, clinicName, phone, password)，手机号走独立 phone 参数。
             //   故按端区分组装与传参，避免密码被桌面端误当 clinicName。
@@ -4396,7 +4397,7 @@
                 // ★ 2026-08-26 重装激活登录修复：成功提示明确展示登录账号+密码，用户不再猜
                 showHtmlAlert('✅ 激活成功！\n' + (result.message || '') +
                     (actPhone ? ('\n\n📱 登录账号：' + actPhone +
-                                 '\n🔑 登录密码：' + (actPwd ? actPwd : 'admin（默认）') +
+                                 '\n🔑 登录密码：' + (actPwd ? actPwd : '您注册时设置的密码') +
                                  '\n\n请牢记以上账号密码，登录后可在设置中修改密码。') : '') +
                     inviteMsg +
                     '\n\n点击确定后应用将重启');
@@ -4499,6 +4500,21 @@
 
     function showActivateModal(machineId, clinicName) {
         return new Promise(function(resolve) {
+            // ★ 2026-10-21 H15-A 注册档案贯穿：本机已注册 → 激活框不再出现手机号/密码
+            //   输入框，登录账号/密码自动复用注册档案（手机号同步提交主进程）；密码
+            //   passwordEnc 后台解密，解密失败传空由主进程「已注册不覆盖密码」兜底。
+            //   未注册（换机新装无档案）时保留手机号输入 + 密码必填（H15-D：删除
+            //   「留空默认 admin」历史路径，登录=注册手机号+注册密码）。
+            const regInfo = getLocalRegistrationInfo();
+            const useRegProfile = !!(regInfo && regInfo.phone);
+            const __regProfEsc = function (s) {
+                return String(s || '').replace(/[<>&"']/g, function (c) {
+                    return { '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' }[c];
+                });
+            };
+            const regPwdPromise = (useRegProfile && regInfo.passwordEnc)
+                ? decryptSensitive(regInfo.passwordEnc).catch(function () { return ''; })
+                : Promise.resolve('');
             // ★ 2026-09-10 防御：移除已存在的同 id overlay（防并发调用叠加弹窗）
             document.querySelectorAll('#activateModalOverlay').forEach(n => n.remove());
             const overlay = document.createElement('div');
@@ -4561,15 +4577,26 @@
                 // ★ 2026-08-29 重装自愈提示条（默认隐藏）：识别到本机原激活信息后显示
                 '<div id="autoFillHint" style="display:none;background:#e8f5e9;border:1px solid #a5d6a7;border-radius:8px;padding:8px 10px;font-size:12px;color:#2e7d32;line-height:1.6;margin-bottom:12px;"></div>' +
 
-                // ★ 2026-08-26 重装激活登录修复：手机号即登录账号；密码选填（默认 admin）
-                '<div style="font-size:12px;color:#666;margin-bottom:6px;">📱 手机号（激活后作为登录账号）<span style="color:#e53935;">*</span></div>' +
-                '<input type="tel" id="activatePhoneInput" ' +
-                'style="width:100%;padding:12px 14px;font-size:16px;border:2px solid #ddd;border-radius:8px;outline:none;margin-bottom:12px;box-sizing:border-box;" ' +
-                'placeholder="请输入手机号" maxlength="11" autocomplete="off" data-lpignore="true" />' +
-                '<div style="font-size:12px;color:#666;margin-bottom:6px;">🔑 登录密码（选填，默认 admin）</div>' +
-                '<input type="password" id="activatePwdInput" ' +
-                'style="width:100%;padding:12px 14px;font-size:16px;border:2px solid #ddd;border-radius:8px;outline:none;margin-bottom:12px;box-sizing:border-box;" ' +
-                'placeholder="请输入登录密码（留空则为 admin）" maxlength="32" autocomplete="new-password" data-lpignore="true" />' +
+                // ★ 2026-10-21 H15-A：已注册 → 手机号/密码输入框整体替换为注册档案只读条；
+                //   未注册 → 手机号必填 + 密码必填（H15-D：密码不再「留空默认 admin」）。
+                (useRegProfile ?
+                    '<div style="background:#e8f5e9;border:1px solid #a5d6a7;border-radius:8px;padding:10px 12px;font-size:12px;color:#2e7d32;line-height:1.6;margin-bottom:12px;">' +
+                        '📱 登录账号：' + __regProfEsc(regInfo.phone) +
+                        (regInfo.clinicName ? '<br>🏥 诊所：' + __regProfEsc(regInfo.clinicName) : '') +
+                        (regInfo.adminName ? '　👤 ' + __regProfEsc(regInfo.adminName) : '') +
+                        '<br>✅ 注册信息自动带出，登录账号/密码无需重复填写' +
+                    '</div>'
+                :
+                    // ★ 2026-08-26 重装激活登录修复：手机号即登录账号（未注册档案场景）
+                    '<div style="font-size:12px;color:#666;margin-bottom:6px;">📱 手机号（激活后作为登录账号）<span style="color:#e53935;">*</span></div>' +
+                    '<input type="tel" id="activatePhoneInput" ' +
+                    'style="width:100%;padding:12px 14px;font-size:16px;border:2px solid #ddd;border-radius:8px;outline:none;margin-bottom:12px;box-sizing:border-box;" ' +
+                    'placeholder="请输入手机号" maxlength="11" autocomplete="off" data-lpignore="true" />' +
+                    '<div style="font-size:12px;color:#666;margin-bottom:6px;">🔑 登录密码 <span style="color:#e53935;">*</span>（激活后与手机号配套登录）</div>' +
+                    '<input type="password" id="activatePwdInput" ' +
+                    'style="width:100%;padding:12px 14px;font-size:16px;border:2px solid #ddd;border-radius:8px;outline:none;margin-bottom:12px;box-sizing:border-box;" ' +
+                    'placeholder="请设置登录密码（8-32位，建议字母+数字）" maxlength="32" autocomplete="new-password" data-lpignore="true" />'
+                ) +
 
                 // ★ 2026-08-28 推广奖励：邀请码（选填，填好友邀请码双方得奖励天数）
                 '<div style="font-size:12px;color:#666;margin-bottom:6px;">🎁 邀请码（选填，好友推荐）</div>' +
@@ -4707,10 +4734,17 @@
 
             async function submitCode() {
                 const val = input.value;
-                // ★ 2026-08-26 重装激活登录修复：激活时即设定手机号（登录账号）+密码，
-                //   避免重装后账号密码被静默重置为默认 admin、用户不知情无法登录
-                let phoneVal = phoneInput ? phoneInput.value.trim() : '';
-                const pwdVal = pwdInput ? pwdInput.value : '';
+                // ★ 2026-08-26 重装激活登录修复 + 2026-10-21 H15-A/D：
+                //   已注册 → 手机号/密码自动取注册档案（用户只输激活码）；
+                //   未注册 → 手机号+密码双必填（彻底删除「留空默认 admin」路径）。
+                let phoneVal, pwdVal;
+                if (useRegProfile) {
+                    phoneVal = String(regInfo.phone).trim();
+                    pwdVal = (await regPwdPromise) || '';
+                } else {
+                    phoneVal = phoneInput ? phoneInput.value.trim() : '';
+                    pwdVal = pwdInput ? pwdInput.value : '';
+                }
                 // ★ 2026-08-28 推广奖励：读取邀请码（选填）
                 const inviteInputEl = card.querySelector('#activateInviteInput');
                 const inviteVal = inviteInputEl ? inviteInputEl.value.trim().toUpperCase() : '';
@@ -4718,9 +4752,14 @@
                 // 仅当有输入时才显示 loading
                 if (val && val.trim()) {
                     // 手机号必填校验（登录账号=手机号）
-                    // ★ 2026-08-29 重装自愈：未填手机号时先联网识别本机原激活信息，
-                    //   识别成功自动补填并继续激活（用户只输激活码即可，"直接输入一键恢复"）
                     if (!/^1[3-9]\d{9}$/.test(phoneVal)) {
+                        if (useRegProfile) {
+                            // 注册档案手机号异常（理论不可能，注册时已校验）
+                            try { alert('本机注册档案异常（手机号格式错误），请联系客服处理。'); } catch (e) {}
+                            return;
+                        }
+                        // ★ 2026-08-29 重装自愈：未填手机号时先联网识别本机原激活信息，
+                        //   识别成功自动补填并继续激活（用户只输激活码即可，"直接输入一键恢复"）
                         const d = await lookupBoundActivationInfo(val.trim(), machineId);
                         if (d && d.phone) {
                             phoneVal = d.phone;
@@ -4735,14 +4774,13 @@
                             return;
                         }
                     }
-                    // ★ 2026-08-30 修复：密码留空被静默重置为 admin，重装一键恢复后用户用原密码登录失败
-                    //   （自愈只自动填手机号不填密码）。提交前明确告知，杜绝"激活成功却登录不上"的困惑。
-                    if (!pwdVal) {
-                        const goOn = confirm('未填写登录密码。\n\n激活后登录密码将为默认 admin。\n（登录后可在「修改密码」中改回原密码）\n\n【确定】继续激活\n【取消】返回填写密码');
-                        if (!goOn) {
-                            if (pwdInput) pwdInput.focus();
-                            return;
-                        }
+                    // ★ 2026-10-21 H15-D：密码必填（未注册场景）——激活即设定登录密码，
+                    //   登录=注册手机号+注册密码。已注册场景 pwdVal 为空=档案解密失败，
+                    //   传空由主进程「已注册不覆盖密码」兜底，绝不回落默认 admin。
+                    if (!useRegProfile && !pwdVal) {
+                        try { alert('请设置登录密码。\n激活后使用「手机号 + 密码」登录，本密码即您的注册密码。'); } catch (e) {}
+                        if (pwdInput) pwdInput.focus();
+                        return;
                     }
                     submitBtn.disabled = true;
                     cancelBtn.disabled = true;
@@ -5985,10 +6023,13 @@
                 close();
                 try {
                     if (isDesktopLoginPage) {
-                        // 桌面：打开桌面激活窗口（其内含激活码 Tab）
+                        // ★ 2026-10-19 用户要求：选择「我有激活码，立即激活」→ 桌面激活窗口
+                        //   直接跳到「激活码激活」输入界面（initialTab=code 全链透传
+                        //   preload→main→activate.js→activate-window.html），不必先停在
+                        //   版本选择页。官网付款激活（上方 localRegActivateBtn）保持原样。
                         if (window.electronAPI && window.electronAPI.activate &&
                             typeof window.electronAPI.activate.show === 'function') {
-                            window.electronAPI.activate.show();
+                            window.electronAPI.activate.show({ initialTab: 'code' });
                         }
                         reloadLoginPage();
                     } else if (typeof window.openAdminActivate === 'function') {
@@ -6473,6 +6514,27 @@
         if (clinicName) {
             try { document.getElementById('ticketClinicName').value = clinicName; } catch (e) {}
         }
+        // ★ 2026-10-21 H15-A 工单 Tab 注册档案自动带出（只读）：诊所名/联系人姓名/
+        //   联系电话从本机注册档案预填并锁定（管理员审批按手机号自动匹配）；
+        //   无档案（老用户/新机）保持手填不变。
+        try {
+            var __tkReg = getLocalRegistrationInfo();
+            if (__tkReg) {
+                var __tkMap = [
+                    ['ticketClinicName', __tkReg.clinicName || clinicName || ''],
+                    ['ticketContactName', __tkReg.adminName || ''],
+                    ['ticketContactPhone', __tkReg.phone || '']
+                ];
+                for (var __ti = 0; __ti < __tkMap.length; __ti++) {
+                    var __tkEl = document.getElementById(__tkMap[__ti][0]);
+                    if (__tkEl && __tkMap[__ti][1]) {
+                        __tkEl.value = String(__tkMap[__ti][1]);
+                        __tkEl.readOnly = true;
+                        __tkEl.style.background = '#f5f5f5';
+                    }
+                }
+            }
+        } catch (e) {}
 
         function cleanup() {
             // ★ 2026-08-23 同步：关闭工单弹窗前，把工单中已填的诊所名/姓名/电话灌回 Tab1 管理员激活
@@ -6924,14 +6986,14 @@
                     '<input type="tel" id="adminCodePhone" placeholder="如：13800138000" autocomplete="off" data-lpignore="true" inputmode="numeric" maxlength="11" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
                     '<div id="adminCodePhoneHint" style="font-size:11px;color:#909399;margin-top:4px;">💡 换机/重装请填原绑定手机号，可自动恢复授权</div>' +
                 '</div>' +
-                // ★ 2026-10-08 二期：登录密码选填（与 cloud.js 同构）。云端码留空 →
-                //   服务端随机初始密码 + 首登强制改密；离线码为本地账户密码（留空默认 admin）。
-                // ★ 2026-10-18 已注册用户免填密码：注册时已设密码，激活时自动复用（__regPrefill 存在时隐藏本框）。
+                // ★ 2026-10-08 二期 + 2026-10-21 H15-D：登录密码（8-32 字母数字）。
+                //   已注册 → 本框隐藏自动复用注册密码（2026-10-18 机制，H15-A 延续）；
+                //   未注册 → 必填（彻底删除「离线码留空默认 admin」路径）。
                 '<div id="adminCodePwdBox" style="margin-bottom:12px;">' +
-                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">设置登录密码 <span style="font-size:11px;color:#909399;font-weight:normal;">（选填）</span></label>' +
+                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">设置登录密码 <span style="color:#e53935;">*</span> <span style="font-size:11px;color:#909399;font-weight:normal;">（激活后与手机号配套登录）</span></label>' +
                     '<input type="password" id="adminCodePassword" placeholder="8-32 位，须含字母和数字" autocomplete="new-password" data-lpignore="true" maxlength="32" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;margin-bottom:8px;">' +
                     '<input type="password" id="adminCodePassword2" placeholder="再次输入登录密码" autocomplete="new-password" data-lpignore="true" maxlength="32" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
-                    '<div id="adminCodePwdHint" style="font-size:11px;color:#909399;margin-top:4px;">💡 云端码留空则系统生成随机初始密码，首次登录需修改密码</div>' +
+                    '<div id="adminCodePwdHint" style="font-size:11px;color:#909399;margin-top:4px;">💡 激活后使用「手机号 + 密码」登录，本密码即您的注册密码</div>' +
                 '</div>' +
                 // ★ 2026-10-18 已注册用户密码复用提示（默认隐藏，__regPrefill 存在时显示替代密码框）
                 '<div id="adminCodePwdReuseTip" style="display:none;margin-bottom:12px;background:#e8f5e9;border:1px solid #a5d6a7;border-radius:8px;padding:10px 12px;font-size:12px;color:#2e7d32;line-height:1.6;">' +
@@ -6999,7 +7061,7 @@
                     '<input type="text" id="adminInviteCode" placeholder="如：7K3F9Q（没有可留空）" autocomplete="off" maxlength="10" spellcheck="false" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;font-family:monospace;letter-spacing:1px;text-transform:uppercase;">' +
                     '<div class="admin-field-hint" id="adminInviteCodeHint" style="font-size:11px;color:#909399;margin-top:4px;">💡 填好友邀请码，管理员审核通过后双方都得奖励（好友+90天，您+30天）</div>' +
                 '</div>' +
-                '<button id="adminToStep2Btn" style="width:100%;padding:12px;font-size:15px;border:none;border-radius:8px;color:#fff;background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);cursor:pointer;font-weight:bold;">下一步：确认密码（可留空=默认 admin）→</button>' +
+                '<button id="adminToStep2Btn" style="width:100%;padding:12px;font-size:15px;border:none;border-radius:8px;color:#fff;background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);cursor:pointer;font-weight:bold;">下一步：设置登录密码 →</button>' +
             '</div>' +
 
             // 第二步：密码（默认隐藏）
@@ -7010,13 +7072,13 @@
                     '<span style="width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,#26a69a,#00897b);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;">2</span>' +
                 '</div>' +
                 '<div style="margin-bottom:12px;">' +
-                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">登录密码（首次激活可留空＝默认 admin）</label>' +
-                    '<input type="password" id="adminPassword" placeholder="首次激活设置密码；新设备激活请输入原登录密码" autocomplete="new-password" data-lpignore="true" maxlength="32" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
-                    '<div class="admin-field-hint" id="adminPwdHint" style="font-size:11px;color:#909399;margin-top:4px;">💡 首次激活：至少8位含字母和数字，留空＝默认密码 admin（登入后可改）。已有机构版在新电脑/手机激活：请输入该账号【当前登录密码】，核验通过且未超 5 台时自动绑定本机，无需联系客服</div>' +
+                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">设置登录密码 <span style="color:#e53935;">*</span></label>' +
+                    '<input type="password" id="adminPassword" placeholder="8-32位，须含字母和数字" autocomplete="new-password" data-lpignore="true" maxlength="32" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
+                    '<div class="admin-field-hint" id="adminPwdHint" style="font-size:11px;color:#909399;margin-top:4px;">💡 至少8位含字母和数字（激活后与手机号配套登录）。已有机构版在新电脑/手机激活：请输入该账号【当前登录密码】，核验通过且未超 5 台时自动绑定本机，无需联系客服</div>' +
                 '</div>' +
                 '<div style="margin-bottom:14px;">' +
-                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">确认密码（自定义时需再输一次）</label>' +
-                    '<input type="password" id="adminPassword2" placeholder="自定义密码时再次输入" autocomplete="new-password" data-lpignore="true" maxlength="32" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
+                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">确认密码 <span style="color:#e53935;">*</span>（再输一次）</label>' +
+                    '<input type="password" id="adminPassword2" placeholder="再次输入登录密码" autocomplete="new-password" data-lpignore="true" maxlength="32" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
                     '<div class="admin-field-hint" id="adminPwd2Hint"></div>' +
                 '</div>' +
                 '<div style="display:flex;gap:10px;">' +
@@ -7062,7 +7124,7 @@
                 '<div id="adminSuccessDesc" style="font-size:13px;color:#555;margin-top:8px;line-height:1.7;"></div>' +
                 '<div style="font-size:12px;color:#333;margin-top:12px;line-height:1.9;">' +
                     '<div>✅ 登录账号：<b id="adminSuccessPhone">--</b></div>' +
-                    '<div>✅ 密码：<b id="adminSuccessPwd" style="color:#2e7d32;">（默认 admin，登入后请修改）</b></div>' +
+                    '<div>✅ 密码：<b id="adminSuccessPwd" style="color:#2e7d32;">您设置的登录密码（登入后可修改）</b></div>' +
                 '</div>' +
                 '<button id="adminSuccessBtn" style="width:100%;margin-top:16px;padding:12px;font-size:15px;border:none;border-radius:8px;color:#fff;background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);cursor:pointer;font-weight:bold;">✅ 关闭窗口</button>' +
             '</div>' +
@@ -7771,9 +7833,14 @@
                     } catch (e) {}
                     return;
                 }
+                // ★ 2026-10-21 H15-A：已注册用户先等注册密码解密完成再读（消除秒点竞态，
+                //   防解密未完成 state.password 为空误入下方必填拦截）
+                if (!(state && state.password) && __regPwdPromise) {
+                    try { await Promise.race([__regPwdPromise, new Promise(function (r) { setTimeout(r, 1500); })]); } catch (e2) {}
+                }
                 const pwdVal = (state && state.password) ? String(state.password).trim() : '';
-                // ★ 二期 Tab2 登录密码：自设（8-32 字母数字）或留空
-                //   （云端码 → 服务端随机初始密码；离线码 → 本地默认 admin）
+                // ★ 二期 Tab2 登录密码 + 2026-10-21 H15-D：自设（8-32 字母数字）；
+                //   已注册自动复用注册密码；未注册必填（不再有「留空默认 admin」路径）
                 let codePwd1 = '', codePwd2 = '';
                 try {
                     const __cp1 = document.getElementById('adminCodePassword');
@@ -7806,11 +7873,31 @@
                     }
                     setPwdHint('✓ 将使用您设置的登录密码', false);
                     pwdHintEl.style.color = '#26a69a';
+                } else if (pwdVal) {
+                    // ★ H15-A：已注册 → 密码复用注册密码
+                    setPwdHint('✓ 将使用您注册时设置的登录密码', false);
                 } else {
-                    setPwdHint('💡 云端码留空则系统生成随机初始密码，首次登录需修改密码', false);
+                    // ★ 2026-10-21 H15-D：未注册且未填密码 → 必填拦截（彻底删除
+                    //   「离线码留空默认 admin」历史路径，登录=注册手机号+注册密码）。
+                    //   已注册但档案解密失败（密码框被隐藏）→ 恢复显示密码框让用户自设。
+                    try {
+                        const __pb = document.getElementById('adminCodePwdBox');
+                        const __pt = document.getElementById('adminCodePwdReuseTip');
+                        if (__pb && __pb.style.display === 'none') {
+                            __pb.style.display = 'block';
+                            if (__pt) __pt.style.display = 'none';
+                        }
+                    } catch (pe3) {}
+                    btn.disabled = false;
+                    btn.textContent = '🚀 立即激活';
+                    loading.style.display = 'none';
+                    setPwdHint('⚠ 请设置登录密码（激活后使用「手机号 + 密码」登录，本密码即您的注册密码）', true);
+                    try { document.getElementById('adminCodePassword').focus(); } catch (e) {}
+                    return;
                 }
                 // 本地账户生效密码（离线 APP 装码/addLocalActivationUser 用）
-                const localPwd = codePwd1 || pwdVal || 'admin';
+                // ★ H15-D：删除 'admin' 兜底——上方必填拦截保证 codePwd1/pwdVal 至少一项非空
+                const localPwd = codePwd1 || pwdVal;
                 // 渐进式身份字段（服务端 needClinicName/needActivationInfo 标记触发展开后填写）
                 let idClinicName = '', idAdminName = '';
                 try {
@@ -7902,7 +7989,7 @@
                                 successBox.style.display = 'block';
                                 document.getElementById('adminCodeSuccessDesc').innerHTML =
                                     '授权已安装到本机' + (instClinic ? '（' + instClinic + '）' : '') + '<br>📱 登录账号：' + phoneVal +
-                                    '<br>🔑 登录密码：' + ((codePwd1 || pwdVal) ? '您在激活时设置的密码' : 'admin（默认）') +
+                                    '<br>🔑 登录密码：' + ((codePwd1 || pwdVal) ? (pwdVal && !codePwd1 ? '您注册时设置的密码' : '您在激活时设置的密码') : '') +
                                     '<br>点击确定后应用将重启，请使用手机号登录';
                                 btn.disabled = false;
                                 btn.textContent = '🔄 重启应用';
@@ -7945,7 +8032,7 @@
                         // ★ 二期：桌面云端码留空 → 一次性随机初始密码块；自设 → 仅提示
                         const __pwdSuffix = (res && res.initialPassword)
                             ? buildInitialPasswordBlock(res.initialPassword, phoneVal)
-                            : '<br>🔑 登录密码：' + ((codePwd1 || pwdVal) ? '您在激活时设置的密码' : 'admin（默认）');
+                            : '<br>🔑 登录密码：' + (pwdVal && !codePwd1 ? '您注册时设置的密码' : '您在激活时设置的密码');
                         document.getElementById('adminCodeSuccessDesc').innerHTML =
                             '授权已安装到本机<br>📱 登录账号：' + phoneVal +
                             __pwdSuffix +
@@ -8266,14 +8353,26 @@
                     const __hint = document.getElementById('adminPhoneHint');
                     if (__hint) __hint.innerHTML = '💡 11位手机号为登录账号，登录密码为注册时设置的密码';
                 } catch (he) {}
-                // ★ 2026-10-18 Tab2 免填密码：已注册用户隐藏密码框，显示复用提示
-                //   （提交逻辑 localPwd = codePwd1 || pwdVal || 'admin' 已自动取 state.password）
+                // ★ 2026-10-18 Tab2 免填密码 + 2026-10-21 H15-A 手机号档案带出：
+                //   已注册用户隐藏密码框显示复用提示（提交逻辑 localPwd = codePwd1 || pwdVal）；
+                //   绑定手机号从注册档案预填并锁定（登录=注册手机号，服务端联系人
+                //   一致校验按此号匹配）。
                 try {
                     const __pwdBox = document.getElementById('adminCodePwdBox');
                     const __pwdTip = document.getElementById('adminCodePwdReuseTip');
                     if (__pwdBox) __pwdBox.style.display = 'none';
                     if (__pwdTip) __pwdTip.style.display = 'block';
                 } catch (pe) {}
+                try {
+                    const __cpEl = document.getElementById('adminCodePhone');
+                    if (__cpEl && state && state.phone && PHONE_RE.test(String(state.phone))) {
+                        __cpEl.value = String(state.phone);
+                        __cpEl.readOnly = true;
+                        __cpEl.style.background = '#f5f5f5';
+                        const __cpHint = document.getElementById('adminCodePhoneHint');
+                        if (__cpHint) __cpHint.innerHTML = '📱 登录账号已从注册档案自动带出';
+                    }
+                } catch (pe2) {}
                 console.log('[LicenseCheck] 检测到已注册，Tab1 表单已预填（手机号登录账号）');
             }
         } catch (re) { console.warn('[LicenseCheck] 注册预填失败(不影响激活):', re); }
@@ -8339,11 +8438,15 @@
                     } else {
                         console.warn('[LicenseCheck] 直通已注册用户密码缺失/不合规，回退默认 admin');
                     }
+                    // 已注册（含解密异常回退，防线：主进程已注册不覆盖密码）维持直通提交
+                    if (!__keepRegPwd) state.password = '';
+                    show('adminSubmitting');
+                    document.getElementById('adminSubmitBtn').click();
+                    return;
                 }
-                if (!__keepRegPwd) state.password = '';
-                show('adminSubmitting');
-                document.getElementById('adminSubmitBtn').click();
-                return;
+                // ★ 2026-10-21 H15-D：未注册用户不再「密码归一 admin 直通提交」，
+                //   走正常密码步骤必填（登录=注册手机号+注册密码），fall through。
+                console.log('[LicenseCheck] 直通未注册用户 → 进入密码步骤（H15-D 密码必填）');
             }
             // ★ 2026-09-04 方案B：已注册用户跳过密码步骤（账号+密码注册时已建，
             //   激活不收密码）——直接进入提交。密码一致性由注册时校验保证。
@@ -8385,15 +8488,22 @@
         // 提交
         document.getElementById('adminSubmitBtn').addEventListener('click', async function() {
             const pwdRaw = state.password;
-            const pwd = (pwdRaw && pwdRaw.trim()) ? pwdRaw.trim() : 'admin';
-            const pwd2 = document.getElementById('adminPassword2').value.trim();
-            if (pwd !== 'admin') {
-                if (pwd.length < 8) { showFieldErr('adminPassword','adminPwdHint','若自定义密码，需至少8位'); return; }
-                if (!/[a-zA-Z]/.test(pwd)) { showFieldErr('adminPassword','adminPwdHint','若自定义密码，需包含字母'); return; }
-                if (!/\d/.test(pwd)) { showFieldErr('adminPassword','adminPwdHint','若自定义密码，需包含数字'); return; }
-                if (!pwd2) { showFieldErr('adminPassword2','adminPwd2Hint','请再次输入自定义密码'); return; }
-                if (pwd !== pwd2) { showFieldErr('adminPassword2','adminPwd2Hint','两次密码输入不一致'); return; }
+            // ★ 2026-10-21 H15-D：删除「密码留空默认 admin」路径——密码必填。
+            //   已注册用户 state.password 由方案B预填注册密码；空=未注册（或档案
+            //   解密异常）→ 拦截回密码步骤让用户设置（本地登录密码以注册档案为准）。
+            if (!pwdRaw || !pwdRaw.trim()) {
+                showFieldErr('adminPassword', 'adminPwdHint', '请设置登录密码（8-32位，须含字母和数字）');
+                show('adminStepPwd');
+                setTimeout(function(){ var p = document.getElementById('adminPassword'); if (p) p.focus(); }, 200);
+                return;
             }
+            const pwd = pwdRaw.trim();
+            const pwd2 = document.getElementById('adminPassword2').value.trim();
+            if (pwd.length < 8) { showFieldErr('adminPassword','adminPwdHint','登录密码需至少8位'); return; }
+            if (!/[a-zA-Z]/.test(pwd)) { showFieldErr('adminPassword','adminPwdHint','登录密码需包含字母'); return; }
+            if (!/\d/.test(pwd)) { showFieldErr('adminPassword','adminPwdHint','登录密码需包含数字'); return; }
+            if (!pwd2) { showFieldErr('adminPassword2','adminPwd2Hint','请再次输入登录密码'); return; }
+            if (pwd !== pwd2) { showFieldErr('adminPassword2','adminPwd2Hint','两次密码输入不一致'); return; }
             state.password = pwd;
             const btn = document.getElementById('adminSubmitBtn');
             btn.disabled = true;

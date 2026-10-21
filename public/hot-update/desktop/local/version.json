@@ -1,18 +1,18 @@
 {
   "format": 1,
   "channel": "local",
-  "hotVersion": "2026.10.18-3",
-  "appVersion": "1.0.277",
+  "hotVersion": "2026.10.21-1",
+  "appVersion": "1.0.288",
   "files": [
     {
       "name": "index.html",
-      "sha256": "ae00bcf317626d118d601451a694b11dbc980631fa4deb024ec99c7cc5ec0592",
-      "size": 739699
+      "sha256": "eed5ea2eaf1e1aebe6268b21d13c7e8dc3b3fde1c16c69da81bb37b0ed7c0e1b",
+      "size": 758913
     },
     {
       "name": "auth-core.js",
-      "sha256": "dc6d4620175d7256fb603544946dc54d6a50524b51f7b50a306416101a353ad4",
-      "size": 606225
+      "sha256": "702f643b7bc3aea25ed117add521781b5fcbeb384b333aaba7709a1f7b61c682",
+      "size": 614310
     },
     {
       "name": "permission.js",
@@ -66,8 +66,8 @@
     },
     {
       "name": "stock-core.js",
-      "sha256": "16feb778fa953f11f4043410ee9925ec997efea6f0169a2e649f379d4d5b72ef",
-      "size": 70209
+      "sha256": "1cabd457ca9c3195d02c7716d0ddd91794447d74e02199ec377e63b9a05bfea8",
+      "size": 70894
     },
     {
       "name": "analytics-core.js",
@@ -100,6 +100,6 @@
       "size": 881727
     }
   ],
-  "signedAt": 1792306001463,
-  "signature": "ST/9XNHwV4Ke0c5VRG1GtWfq75/mGLCBv8CHzHNwRJdTD3CM0S6+1tWv9gguM2aN4WU81/xTcHN1NGYI1taPCg=="
+  "signedAt": 1792567732766,
+  "signature": "HySfP0DdP5hBlxXS2lOXJGC2232GowvLbZlw9WdXph8ueiuYyx2erFIcVNCRcKXYSsill3DxtRgEj81BsdLgDQ=="
 }
