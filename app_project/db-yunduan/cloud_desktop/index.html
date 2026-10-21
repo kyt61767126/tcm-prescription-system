@@ -2112,7 +2112,8 @@ let currentUser = null;
                 var _loginLbl = (typeof getProductCategoryLabel === 'function') ? getProductCategoryLabel() : '云端版';
                 // ★ 2026-10-21 云网页/云APP 补显示：静态元素 display:none 且网页端无人 unhide
                 //   （桌面端由 electron/login.js 显式 unhide）→ 登录框无版本标签（用户截图实锤）。
-                if (_tag) { _tag.style.display = 'inline-block'; _tag.textContent = '【' + _loginLbl + '】'; }
+                // ★ 2026-10-21 药丸文字居中（对齐桌面 electron/login.js 布置，用户截图实锤云APP不居中）
+                if (_tag) { _tag.style.display = 'inline-block'; _tag.style.textAlign = 'center'; _tag.textContent = '【' + _loginLbl + '】'; }
                 // document.title 保留完整版本（浏览器标签，非登录框视觉元素）
                 var _lbl = (CONFIG && CONFIG.versionLabel) || (_isStd ? '云端标准版' : '云端机构版');
                 var _eV = String((CONFIG && CONFIG.edition) || '').toLowerCase();
@@ -4385,7 +4386,13 @@ let currentUser = null;
             if (tag) {
                 // ★ 2026-10-21 云网页/云APP 补显示（静态 display:none，此前无人 unhide → 登录框无标签）
                 tag.style.display = 'inline-block';
-                tag.innerHTML = '【' + loginLabel + '】' + metaHtml;
+                // ★ 2026-10-21 药丸布置与桌面 electron/login.js 完全统一：文字居中 + meta 仅一行
+                //   （V·Arch；Build 时间内部保留不对外展示。用户截图实锤：云APP 药丸三行且不居中）
+                tag.style.textAlign = 'center';
+                var metaHtmlTag = metaTextLine1 ?
+                    ('<br><span style="font-size:10px;color:rgba(255,255,255,0.95);font-weight:normal;line-height:1.3;">' +
+                     metaTextLine1 + '</span>') : '';
+                tag.innerHTML = '【' + loginLabel + '】' + metaHtmlTag;
             }
             // ★ 挂载点2：.login-security 下方（激活后简化登录框必显示，防止 header-section 被隐藏时丢失）
             var security = document.querySelector('.login-security');

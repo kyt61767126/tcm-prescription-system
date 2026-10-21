@@ -2110,10 +2110,18 @@ let currentUser = null;
             // ★ 2026-10-20 登录框只显示产品大类（离线版），不显示细分版
             var loginLabel = (typeof getProductCategoryLabel === 'function') ? getProductCategoryLabel() : '离线版';
             if (tag) {
+                // ★ 2026-10-21 药丸布置与桌面 electron/login.js 完全统一：文字居中 + meta 仅一行
+                //   （V·Arch；Build 时间内部保留不对外展示。离线APP 截图实锤：一行式不居中。
+                //   APP 无构建期 build-meta.json → 回落 window.APP_VERSION 兜底第二行）
+                tag.style.textAlign = 'center';
+                var metaLine1Tag = metaTextLine1 || (window.APP_VERSION ? String(window.APP_VERSION) : '');
+                var metaHtmlTag = metaLine1Tag ?
+                    ('<br><span style="font-size:10px;color:rgba(255,255,255,0.95);font-weight:normal;line-height:1.3;">' +
+                     metaLine1Tag + '</span>') : '';
                 if (!_loginVisible) {
-                    tag.innerHTML = '【' + label + '】' + metaHtml;
+                    tag.innerHTML = '【' + label + '】' + metaHtmlTag;
                 } else {
-                    tag.innerHTML = '【' + loginLabel + '】' + metaHtml;
+                    tag.innerHTML = '【' + loginLabel + '】' + metaHtmlTag;
                 }
             }
             // ★ 挂载点2：.login-security 下方（激活后简化登录框必显示，防止 header-section 被隐藏时丢失）

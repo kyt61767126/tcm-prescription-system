@@ -77,15 +77,15 @@ module.exports = [
   },
   {
     id: "T10",
-    desc: "版本标签 tag.style.display = ''（登录页直接显示版本号）",
-    find: "            if (tag) {\n                if (!_loginVisible) {",
-    replace: "            if (tag) {\n                tag.style.display = '';\n                if (!_loginVisible) {",
+    desc: "版本标签 tag.style.display = ''（登录页直接显示版本号）；★ 2026-10-21 锚点随权威源药丸重构更新",
+    find: "            if (tag) {\n                // ★ 2026-10-21 药丸布置与桌面 electron/login.js 完全统一：文字居中 + meta 仅一行",
+    replace: "            if (tag) {\n                tag.style.display = '';\n                // ★ 2026-10-21 药丸布置与桌面 electron/login.js 完全统一：文字居中 + meta 仅一行",
   },
   {
     id: "T11",
-    desc: "登录页版本号直显 + window.__APP_BUILD__ 拼接（防 MainActivity 事后注入的 Build 号被重渲染抹掉的竞态）",
-    find: "tag.innerHTML = '【' + loginLabel + '】' + metaHtml;",
-    replace: "// ★ 2026-08-28 优化：登录页直接显示版本号；★ 2026-10-20 登录框只显示产品大类（离线版）\n                    //   MainActivity 注入会追加 Build 号 → 【离线版】V1.0.0 Build NNN\n                    // ★ 2026-08-30 修复首开/二开版本号不一致：本函数重写 innerHTML 会抹掉 Java 事后\n                    //   注入的 Build 号（竞态），现直接拼接 window.__APP_BUILD__（MainActivity 注入），\n                    //   重渲染多少次 Build 号都不丢。\n                    tag.innerHTML = '【' + loginLabel + '】 ' + window.APP_VERSION +\n                        (window.__APP_BUILD__ ? (' ' + window.__APP_BUILD__) : '')",
+    desc: "★ 2026-10-21 重写：药丸与桌面布置统一（居中两行）+ 两分支统一只显产品大类【离线版】（旧327包实锤 !loginVisible 分支漏细分版【离线机构版】）+ meta=APP_VERSION·Build（保留 MainActivity 注入竞态防护：直接拼接 __APP_BUILD__，重渲染不丢）",
+    find: "                if (!_loginVisible) {\n                    tag.innerHTML = '【' + label + '】' + metaHtmlTag;\n                } else {\n                    tag.innerHTML = '【' + loginLabel + '】' + metaHtmlTag;\n                }",
+    replace: "                // ★ 2026-10-21 APP 变体：两分支统一只显产品大类【离线版】（细分版仅登录后顶栏显示）；\n                //   meta = APP_VERSION·Build 号（MainActivity 注入 __APP_BUILD__ 竞态防护：直接拼接防重渲染抹掉）\n                var __appMeta = String(window.APP_VERSION || 'V1.0.0') +\n                    (window.__APP_BUILD__ ? ('.' + window.__APP_BUILD__) : '');\n                tag.innerHTML = '【' + loginLabel + '】<br><span style=\"font-size:10px;color:rgba(255,255,255,0.95);font-weight:normal;line-height:1.3;\">' +\n                    __appMeta + '</span>';",
   },
   {
     id: "T12",

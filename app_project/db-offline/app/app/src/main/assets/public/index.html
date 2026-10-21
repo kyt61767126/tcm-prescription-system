@@ -2126,17 +2126,20 @@ let currentUser = null;
             var loginLabel = (typeof getProductCategoryLabel === 'function') ? getProductCategoryLabel() : '离线版';
             if (tag) {
                 tag.style.display = '';
-                if (!_loginVisible) {
-                    tag.innerHTML = '【' + label + '】' + metaHtml;
-                } else {
-                    // ★ 2026-08-28 优化：登录页直接显示版本号；★ 2026-10-20 登录框只显示产品大类（离线版）
-                    //   MainActivity 注入会追加 Build 号 → 【离线版】V1.0.0 Build NNN
-                    // ★ 2026-08-30 修复首开/二开版本号不一致：本函数重写 innerHTML 会抹掉 Java 事后
-                    //   注入的 Build 号（竞态），现直接拼接 window.__APP_BUILD__（MainActivity 注入），
-                    //   重渲染多少次 Build 号都不丢。
-                    tag.innerHTML = '【' + loginLabel + '】 ' + window.APP_VERSION +
-                        (window.__APP_BUILD__ ? (' ' + window.__APP_BUILD__) : '')
-                }
+                // ★ 2026-10-21 药丸布置与桌面 electron/login.js 完全统一：文字居中 + meta 仅一行
+                //   （V·Arch；Build 时间内部保留不对外展示。离线APP 截图实锤：一行式不居中。
+                //   APP 无构建期 build-meta.json → 回落 window.APP_VERSION 兜底第二行）
+                tag.style.textAlign = 'center';
+                var metaLine1Tag = metaTextLine1 || (window.APP_VERSION ? String(window.APP_VERSION) : '');
+                var metaHtmlTag = metaLine1Tag ?
+                    ('<br><span style="font-size:10px;color:rgba(255,255,255,0.95);font-weight:normal;line-height:1.3;">' +
+                     metaLine1Tag + '</span>') : '';
+                // ★ 2026-10-21 APP 变体：两分支统一只显产品大类【离线版】（细分版仅登录后顶栏显示）；
+                //   meta = APP_VERSION·Build 号（MainActivity 注入 __APP_BUILD__ 竞态防护：直接拼接防重渲染抹掉）
+                var __appMeta = String(window.APP_VERSION || 'V1.0.0') +
+                    (window.__APP_BUILD__ ? ('.' + window.__APP_BUILD__) : '');
+                tag.innerHTML = '【' + loginLabel + '】<br><span style="font-size:10px;color:rgba(255,255,255,0.95);font-weight:normal;line-height:1.3;">' +
+                    __appMeta + '</span>';
             }
             // ★ 挂载点2：.login-security 下方（激活后简化登录框必显示，防止 header-section 被隐藏时丢失）
             var security = document.querySelector('.login-security');
