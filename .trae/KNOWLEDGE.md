@@ -2275,3 +2275,14 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
 * **门禁**：node --check 双文件、check-interface 6 OK、copy-consistency 100/0、pre-push 十八道门全绿。生效方式：**云端网页=push 即生效（E）**；云端APP/云桌面=无 cloud.js 改动不受影响；**离线桌面/离线 APP=auth-core 属热包清单文件**。**热包已于同日签发（commit `c00d6595`）**：desktop/local 与 app-local 双通道均 `2026.10.21-1`（D5 独立评审 PASS：0 新桥接口/三界面拦截无死角/无 fail-open/ES5 兼容；minAppCode 继承 288 未抬升），push 后线上 version.json 双通道核验通过（auth-core.js 哈希 `702f643b…` 两通道一致），客户端联网启动即静默送达。
 * **教训（举一反三）**：①「删默认密码」类改动要区分**用户可见路径**（必填拦截，必改）与**深层建号防线**（旧数据恢复链路的兜底，保留防破坏存量）；②激活框预填链有多写者（注册预填/身份预填/重装自愈），锁定字段的顺序安全性靠「空才填」约定保证——新增预填写者必须遵守该约定；③存量配额升级落库不必强制立即写 KV：绑定路径 needWrite=true 的自然落点足够，同机只读路径内存值即正确值。
 
+
+## 73. 跨码转绑运维实录：7f5e4f79 双绑清理（2026-10-21，惠康堂/惠康康两码）
+
+**背景**：两家诊所（惠康堂=码A cloud、惠康康=码B offline）——惠康康的桌面 7f5e4f79 曾 10-10 误绑入惠康堂码A（cloud 维度），与码B 的 offline 绑定形成跨码双绑（跨产品维度允许，但占错码的配额位）。服务端已从码A 解绑（5→4 台），码B 的 09-24 绑定保留，桌面重激活码B 归位（设备已在码B devices，validate 直接放行不占新位）。
+
+**可复用铁律**：
+* **解绑端点**：`POST /api/license/status`，body 必须含 `{"action":"unbind","code":"…","machineId":"…"}` —— **action 从 body 读，不在 URL query**（注释头 `?action=unbind` 是误导；body 无 action+带 machineId 会落入无需认证的心跳分支，返回 `{"revoked":false} 假成功，识别特征=响应无 success 字段）。
+* **脱敏 machineId 可直接用于管理操作**：解绑/reveal 支持 `前8位+...` 前缀回退匹配（status.js L251-263），前 8 位 hex 单码内唯一；无需先 reveal 完整 mid。
+* **跨产品维度双绑是合法状态**：同机可同时持 cloud+offline 两产品授权（mid_owners 双维度），排查「设备绑了两个码」先看 productClass 是否不同再定性为事故。
+* **转绑安全序**：先解绑旧码（腾位+防单设备多码拦截）→ 客户端重激活新码（validate 认到设备已在目标码 devices 即放行，服务端/本地一步归位）→ 回滚预案=重激活旧码。**不要在客户端未重激活前判定完成**（本地 license.dat 仍指旧码，心跳 mismatch 弹激活属预期 fail-closed）。
+* 侦察入口排序：admin-device-reset 演练（target=手机号，扫申请单/码/索引全貌）→ `GET status?code=` 看两码 devices → 注意它只扫手机号名下申请单链，**另一码若无申请单（淘宝码/官网订单他购）不会出现**，必须按码分别查。
