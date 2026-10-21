@@ -2247,3 +2247,20 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
 * **生效方式**：云网页/云 APP 随 push 部署刷新即达（无需重打 APK）；**云桌面/离线桌面 = login.js 在 asar 内，需整包重打**（热更不覆盖登录窗）；离线 APP 装新包即正确。
 * **教训（举一反三）**：**同一 UI 在不同端可能有不同物理载体**（桌面=独立 login.html/login.js，网页/APP=index.html 遮罩）——"统一显示"类需求必须先列出每端的**渲染文件清单**再动手，只改权威源 index.html 会漏桌面端；反之"改了没生效"时第一反应应是查该端实际加载的文件，而非反复改同一文件。
 * **第二轮·药丸布置统一（2026-10-21 晚，用户三截图验收）**：桌面正常（基准）后，云 APP 药丸三行不居中（`index.html` 写入器无 `textAlign:center` 且 metaHtml 带 Build 行）、离线 APP 327 一行式且漏【离线机构版】（**用户实机的 327 包构建早于 10-20 loginLabel 改动入库**；且离线权威源 `!_loginVisible` 分支本就保留细分版 `label`，APP 上解析期遮罩未显示时走该分支 → 细分版漏出）。修复：①`public/index.html` 两写入器补 `textAlign='center'` + 挂载点1 meta 改一行式（V·Arch，Build 不对外，对齐桌面 login.js 08-26 既有形态）；②离线 `desktop/index.html` 挂载点1 同构改造 + `window.APP_VERSION` 兜底第二行；③**变换表 T10/T11 锚点随权威源重构同步重写**（T11 重写为：两分支统一 loginLabel + meta=APP_VERSION·Build 保留竞态防护）——改权威源内被变换表锚定的代码块时，变换表必须同批更新，否则生成器大声失败；④`sync-html.ps1` + `sync-index-app.cjs`（32 条变换全命中）重新分发。生效：云网页/云 APP 随 push 即达；**离线 APP 需重打 APK**（versionCode 328）；云桌面/离线桌面登录窗已是目标样式（login.js 上轮已改），主窗药丸仅登录遮罩期可见、随下次热更/整包自然带上，无需专门重打。
+
+## 71. 离线端「本地有 license、服务端无绑定」分裂态（2026-10-21，离线 APP 328 升级后弹管理员激活框）
+
+* **现象**：用户升级离线 APP 327→328 后弹管理员激活框；点「已有激活码」输入原码提示「已激活」；退出重启仍弹；再过一会儿弹框自动消失。
+* **根因**：设备的 `machineId` 在服务端激活码 `devices` 列表中**不存在**，`entitlement` 接口返回 `state: NO_LICENSE`。但本地 `license.dat` 仍有效（启动闸 `validateLicense` 纯本地校验通过 → 不弹框）；心跳每 10 分钟调 `entitlement`，`NO_LICENSE` → `global.__licenseExpired=true` → `showExpireAlertAndActivate` 弹框。即「本地有码、服务端不认」分裂态。
+* **为什么手动激活没解决**：`claim` 接口对已激活码 + 新设备走换机激活路径，返回 license 写入本地，但服务端 `devices` 写入竞态/幂等回滚导致本机未被加入 `devices` 列表，分裂依旧。
+* **为什么弹框会自动消失**：原生领码自愈 `syncLicenseFromServer` 后台从 `admin-status` 拉取 license 重装，或启动闸本地校验通过暂不弹；但只要服务端 `devices` 没本机，心跳一跑必复发。
+* **验证方法**：
+  * 查服务端绑定：`POST /api/license/entitlement {machineId, productClass, clientClass}` → `state` 应为 `LICENSED`，`NO_LICENSE` 即分裂。
+  * 推 machineId：`SHA256(androidId + "|" + packageName + "|" + versionName + "|" + manufacturer + "|" + model).substring(0,32)`（`getMachineId()` 实现）。`versionName` 在 build.gradle 固定（如 `1.0.0`），不随 versionCode 变，所以覆盖安装 machineId 不变。
+  * 后台「激活码管理」查看该码 `devices` 列表，确认本机 machineId 是否在内。
+* **修复**：用本机 machineId + 原激活码调 `POST /api/license/claim`（配额未满时自动加入 devices），再 `entitlement` 核验 `state=LICENSED`。或后台手动添加设备绑定。
+* **教训（举一反三）**：
+  1. **离线端授权是「双源校验」**：启动闸本地校验 license.dat（防断网）+ 心跳在线校验服务端 devices 绑定（防吊销/换机）。两者任一失败都会弹框，但触发时机不同——本地失败=启动即弹，服务端失败=启动正常、心跳后弹。
+  2. **测试期间任何激活码设备绑定变更（转移/清理/删除），必须同步核验所有原绑定设备的 entitlement 状态**，否则会留下「本地 license 有效但服务端 devices 无该机」的定时炸弹（心跳触发）。
+  3. **手动激活提示成功但问题未解决时**，第一反应应是查 `entitlement` 确认服务端是否真绑定，而非反复让用户重装/重输码。本地 `license.dat` 存在不等于服务端认可。
+  4. `getMachineId()` 输入含 `versionName`（build.gradle 固定值），覆盖安装不变；**只有卸载重装才会改变 ANDROID_ID** 从而改变 machineId。升级后 license.dat 解密失败若发生，优先查 `versionName` 是否被改、而非怀疑覆盖安装。
