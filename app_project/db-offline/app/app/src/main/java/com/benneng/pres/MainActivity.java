@@ -1167,16 +1167,14 @@ public class MainActivity extends BridgeActivity {
                         : "\\u6062\\u590D\\u5185\\u7F6E\\u7248\\u672C";    // 恢复内置版本
                     String code = "(function(){try{" +
                         "var o=document.getElementById('loginOverlay');if(!o)return;" +
+                        "var box=o.querySelector('.login-box');if(!box)return;" +
+                        "var old=document.getElementById('__hotRollbackLink');if(old&&old.parentNode)old.parentNode.removeChild(old);" +
                         "var d=document.createElement('div');" +
                         "d.id='__hotRollbackLink';" +
-                        // ★ 2026-10-22 荣耀等全面屏手势机型：原 bottom:6px 落在系统手势区内，
-                        //   点击被系统返回/主页手势吞掉 → 上移 + 避开安全区，保证可点。
-                        "d.style.cssText='position:absolute;left:0;right:0;z-index:999999;pointer-events:auto;" +
-                        "bottom:84px;bottom:calc(84px + env(safe-area-inset-bottom,0px));text-align:center;" +
-                        "font-size:12px;font-family:sans-serif;padding:10px 0;';" +
+                        // ★ 2026-10-22 用户要求：放在登录框内「关闭指纹登录」正下方（正常文档流，不再浮在手势区）
+                        "d.style.cssText='margin-top:10px;text-align:center;font-size:12px;font-family:sans-serif;';" +
                         "var a=document.createElement('span');" +
-                        "a.style.cssText='display:inline-block;color:#1565c0;text-decoration:underline;cursor:pointer;" +
-                        "padding:12px 18px;background:rgba(255,255,255,0.92);border-radius:16px;pointer-events:auto;';" +
+                        "a.style.cssText='display:inline-block;color:#1565c0;text-decoration:underline;cursor:pointer;padding:10px 16px;';" +
                         "a.textContent='" + label + "';" +
                         "a.onclick=function(ev){try{ev.preventDefault();ev.stopPropagation();}catch(_){}" +
                         "a.textContent='\\u56DE\\u9000\\u4E2D\\u2026';" +
@@ -1185,7 +1183,14 @@ public class MainActivity extends BridgeActivity {
                         "  try{var o2=JSON.parse(r);if(o2&&o2.ok===false){a.textContent='" + label + "';alert('回退失败：'+(o2.reason||o2.error||'请重启APP后重试'));}}catch(_2){}" +
                         "}catch(e){a.textContent='" + label + "';alert('无法调用本地回退，请重启APP后重试');}" +
                         "};" +
-                        "d.appendChild(a);o.appendChild(d);" +
+                        "d.appendChild(a);" +
+                        // 指纹行由 auth-core 动态创建：优先插到 #bioUnlockRow 之后；未就绪先挂 box 末尾并用
+                        // MutationObserver 在指纹行出现后重排，保证永久位于「关闭指纹登录」下方。
+                        "function place(){try{var bio=document.getElementById('bioUnlockRow');" +
+                        "if(bio&&bio.parentNode){if(bio.nextSibling===d)return true;bio.parentNode.insertBefore(d,bio.nextSibling);return true;}}catch(e){}return false;}" +
+                        "if(!place()){box.appendChild(d);}" +
+                        "try{if(!window.__hotRollbackObserver){window.__hotRollbackObserver=new MutationObserver(function(){try{place();}catch(e){}});" +
+                        "window.__hotRollbackObserver.observe(box,{childList:true,subtree:true});}}catch(e){}" +
                         "}catch(e){}})();";
                     webView.evaluateJavascript(code, null);
                 } catch (Throwable ignored) {}
