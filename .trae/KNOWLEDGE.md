@@ -2332,3 +2332,15 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
 * 全页扫描无任何「双源不一致」文本。
 
 **生效方式**：纯服务端改动——push 部署即生效（API 返回值变化），五端客户端零改动零重打包；后台管理页强刷即可。
+
+## 76. 登录页管理员激活入口隐藏 + 离线APP热回退入口荣耀机型可点（2026-10-22，云APP v337/离线APP v329）
+
+* **问题1**：云 APP 机构版新设备激活后，登录框仍显示「📋 管理员激活」。
+  - 根因：injectActivateLinkIntoLogin 只认 uth:activationDone 标记；若激活是在后台/管理端/另一台设备完成，本机无此标记，入口残留。
+  - 修复：isCloudActivationDone 扩展为任一本地持久证据即视为已开通：uth:activationDone、license:code、license:gateToken、本机 UserStore 管理员/诊所账号、已记住的登录账号（local_rememberedUsers）。登录成功后仍照旧写标记。
+* **问题2**：离线 APP 登录页底部「恢复内置版本」点击无反应（荣耀500 实测）。
+  - 根因：回退入口注入在 ottom:6px，落在全面屏手势/系统导航区内，点击被系统手势吞掉。
+  - 修复：上移 ottom:84px + env(safe-area-inset-bottom)、z-index:999999、点击热区 padding 12/18；点击立即原生 Toast「正在恢复内置版本…」；AndroidNative.invoke 异常或返回 ok:false 时 alert 失败原因，不再静默。
+  - 「恢复内置版本」语义：离线 APP 有热更新机制；出现该入口说明当前跑的是热更新版本，点击=拉黑当前热版本、回退到 APK 内置 assets（有 previous 则回上一版），重启后生效；不影响本地数据/授权。
+* **发布**：云APP **v337**（12,415,266B，SHA256 134A4128…8822）、离线APP **v329**（3,584,408B，SHA256 34803753…65B8）已上传官网/Release（v2026.10.22）；cloud 热更 **2026.10.22-1**；官网 manifest 双镜像 cloud=337/local=329。
+* **验证**：Gradle 构建/签名通过；线上 hash-manifest 已核验（延迟部署后 cloud 337/local 329 生效）。
