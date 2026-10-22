@@ -4294,8 +4294,35 @@
 
     function isCloudActivationDone() {
         try {
-            return global.localStorage && global.localStorage.getItem('auth:activationDone') === '1';
-        } catch (e) { return false; }
+            if (global.localStorage) {
+                if (global.localStorage.getItem('auth:activationDone') === '1') return true;
+                // ★ 2026-10-22：已激活设备绝不再显示“管理员激活”入口。
+                //   除激活完成标记外，再看本机持久证据：激活码/离线 gate token/已登录过的记住账号。
+                try { if (global.localStorage.getItem('license:code')) return true; } catch (e) {}
+                try { if (global.localStorage.getItem('license:gateToken')) return true; } catch (e) {}
+                try {
+                    const rem = global.localStorage.getItem('local_rememberedUsers') ||
+                                global.localStorage.getItem('local_rememberedUsername');
+                    if (rem) {
+                        const s = String(rem).trim();
+                        if (s && s !== '[]' && s !== '""') return true;
+                    }
+                } catch (e) {}
+            }
+            // 本机已落地管理员/诊所账号（注册/激活成功后建号）同样是“已开通”的持久事实
+            try {
+                const list = (global.UserStore && typeof global.UserStore.get === 'function')
+                    ? global.UserStore.get()
+                    : (typeof CONFIG !== 'undefined' && CONFIG && Array.isArray(CONFIG.users) ? CONFIG.users : null);
+                if (Array.isArray(list)) {
+                    for (let i = 0; i < list.length; i++) {
+                        const u = list[i];
+                        if (u && (u.role === 'admin' || u.role === 'clinic_admin' || u.role === 'platform_admin')) return true;
+                    }
+                }
+            } catch (e) {}
+        } catch (e) {}
+        return false;
     }
 
     function setCloudActivationDone() {

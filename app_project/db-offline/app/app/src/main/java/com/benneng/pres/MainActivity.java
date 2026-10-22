@@ -1169,12 +1169,22 @@ public class MainActivity extends BridgeActivity {
                         "var o=document.getElementById('loginOverlay');if(!o)return;" +
                         "var d=document.createElement('div');" +
                         "d.id='__hotRollbackLink';" +
-                        "d.style.cssText='position:absolute;bottom:6px;left:0;right:0;text-align:center;font-size:11px;font-family:sans-serif;';" +
+                        // ★ 2026-10-22 荣耀等全面屏手势机型：原 bottom:6px 落在系统手势区内，
+                        //   点击被系统返回/主页手势吞掉 → 上移 + 避开安全区，保证可点。
+                        "d.style.cssText='position:absolute;left:0;right:0;z-index:999999;pointer-events:auto;" +
+                        "bottom:84px;bottom:calc(84px + env(safe-area-inset-bottom,0px));text-align:center;" +
+                        "font-size:12px;font-family:sans-serif;padding:10px 0;';" +
                         "var a=document.createElement('span');" +
-                        "a.style.cssText='color:#1565c0;text-decoration:underline;cursor:pointer;padding:8px;';" +
+                        "a.style.cssText='display:inline-block;color:#1565c0;text-decoration:underline;cursor:pointer;" +
+                        "padding:12px 18px;background:rgba(255,255,255,0.92);border-radius:16px;pointer-events:auto;';" +
                         "a.textContent='" + label + "';" +
-                        "a.onclick=function(){a.textContent='\\u56DE\\u9000\\u4E2D\\u2026';" +
-                        "try{AndroidNative.invoke('hotRollback','{}');}catch(e){}};" +
+                        "a.onclick=function(ev){try{ev.preventDefault();ev.stopPropagation();}catch(_){}" +
+                        "a.textContent='\\u56DE\\u9000\\u4E2D\\u2026';" +
+                        "try{" +
+                        "  var r=AndroidNative.invoke('hotRollback','{}');" +
+                        "  try{var o2=JSON.parse(r);if(o2&&o2.ok===false){a.textContent='" + label + "';alert('回退失败：'+(o2.reason||o2.error||'请重启APP后重试'));}}catch(_2){}" +
+                        "}catch(e){a.textContent='" + label + "';alert('无法调用本地回退，请重启APP后重试');}" +
+                        "};" +
                         "d.appendChild(a);o.appendChild(d);" +
                         "}catch(e){}})();";
                     webView.evaluateJavascript(code, null);
@@ -2153,6 +2163,11 @@ public class MainActivity extends BridgeActivity {
                     //   JavascriptInterface 默认后台线程（文件 IO 安全），UI/重载回主线程。
                     case "hotRollback": {
                         try {
+                            // ★ 2026-10-22：点击立刻给原生反馈（荣耀等机型若因手势区/桥异常无响应，
+                            //   用户至少能看到反馈；失败原因也会 Toast 出来）
+                            mainHandler.post(() -> {
+                                try { Toast.makeText(MainActivity.this, "正在恢复内置版本…", Toast.LENGTH_SHORT).show(); } catch (Throwable ignored) {}
+                            });
                             File hotDir = new File(getFilesDir(), "hot-update");
                             HotUpdateManager.RollbackResult r =
                                     HotUpdateManager.rollbackLocal(hotDir, "manual-login-rollback");
