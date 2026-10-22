@@ -2366,8 +2366,16 @@ function renderList(records) {
         // ★ v4 新增：机器ID + 设备数显示
         const maxDev = r.maxDevices || 1;
         const devCount = r.devicesCount || 0;
+        // ★ 2026-10-21 方案R：云端码（预置 cloud 或在册设备含 cloud 端）设备配额按
+        //   账号计（users.js 设备配额：云桌面/APP 计入机构5/个人2，网页不计）——
+        //   码维度 N/M 不再展示（devices 仅授权痕迹，不参与拦截），
+        //   真实设备管理看「用户管理」的设备配额弹窗（账号维度）。
+        const __cloudCode = (r.productClass === 'cloud') ||
+            (Array.isArray(r.devices) && r.devices.some(d => d && d.productClass === 'cloud'));
         let machineCell = '<span style="font-family:Courier New,monospace;">' + escapeHtml(r.machineId || '-') + '</span>';
-        if (maxDev > 1 || devCount > 0) {
+        if (__cloudCode) {
+            machineCell += '<div class="dev-count" title="云端码设备配额按账号维度计（网页/云桌面指纹不占码位）">设备：按账号计配额</div>';
+        } else if (maxDev > 1 || devCount > 0) {
             machineCell += '<div class="dev-count">设备：<strong>' + devCount + '</strong>/' + maxDev + '</div>';
         }
 
@@ -2536,9 +2544,17 @@ async function showDevices(code) {
             const r = data.data;
             const maxDev = r.maxDevices || 1;
             const devices = r.devices || [];
-            document.getElementById('devicesModalMax').textContent = maxDev;
-            document.getElementById('devicesModalUsed').textContent = devices.length;
-            renderDevicesList(code, devices);
+            // ★ 2026-10-21 方案R：云端码设备配额按账号计——弹窗过滤 browser- 网页/
+            //   云桌面指纹（仅授权痕迹，不占码位、不参与任何拦截），只列真实桌面/APP
+            //   绑定；配额口径看账号维度（用户管理→设备配额）。
+            const __cloudCode = (r.productClass === 'cloud') ||
+                devices.some(d => d && d.productClass === 'cloud');
+            const shownDevices = __cloudCode
+                ? devices.filter(d => !(d && String(d.machineId || '').indexOf('browser-') === 0))
+                : devices;
+            document.getElementById('devicesModalMax').textContent = __cloudCode ? '按账号计' : maxDev;
+            document.getElementById('devicesModalUsed').textContent = shownDevices.length;
+            renderDevicesList(code, shownDevices);
         } else {
             if (res.status === 403) {
                 showAlert('devicesModalAlert', '登录已过期，请重新登录', 'error');

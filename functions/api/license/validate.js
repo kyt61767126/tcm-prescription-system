@@ -512,7 +512,16 @@ export async function onRequest(context) {
         //   （激活成功时随 updates.lastUnboundDevice 落库），该设备下次 validate
         //   撞配额且无身份凭证时据此返回明确的「已被新设备解绑」提示
         let __lastUnboundDevice = null;
-        if (record.status === 'used' && !existingDevice) {
+        // ★ 2026-10-21 方案R（KNOWLEDGE §74）：云端码（锁端=cloud）设备配额完全
+        //   移交账号维度——users.js bindUserDevice 为唯一配额权威（云桌面/APP 计入
+        //   机构5/个人2，网页不计，H15-E 已上线）；码维度 devices 不再做配额拦截。
+        //   根治网页浏览器换指纹/清缓存无限刷设备位漏洞（browser- 指纹客户端可自造，
+        //   码维度拦不住，只会误伤真实客户）；防盗分享靠码-账号一对一绑定+账号密码。
+        //   仅锁端=cloud 的码生效：offline 码与未锁端通用码（locked=null）配额逻辑
+        //   零改动；本豁免只跳过「新设备数≥上限拒绝/auto-unbind」，其余全部不动
+        //   （过期 403、码-账号绑定、端闸、本地自验等 fail-closed 红线不受影响）。
+        const __cloudQuotaExempt = (__pcGate.locked === 'cloud');
+        if (!__cloudQuotaExempt && record.status === 'used' && !existingDevice) {
             // 新设备激活：检查是否还有配额
             if (devices.length >= maxDevices) {
                 // ★ P1 修复：换机解绑二次校验
@@ -826,6 +835,12 @@ export async function onRequest(context) {
             if (!existingDevice.productClass && pClass) existingDevice.productClass = pClass;
         } else {
             // 新设备激活：添加到数组
+            // ★ 2026-10-21 方案R注意：云端码的 browser- 条目【继续写入】——它是
+            //   entitlement.js 裁决（网页/云桌面 LICENSED 判定）与 P1 丢码自愈
+            //   （machineId 反查找回绑定）的服役凭据，停写会令网页/云桌面每次心跳
+            //   被 NO_LICENSE 弹重新激活（fail-closed 红线）。配额豁免（上方
+            //   __cloudQuotaExempt）已保证这些条目永远不参与拦截，仅作数据痕迹；
+            //   后台展示层按方案R过滤 browser- 不计入「已用 N」。
             newDevices.push({
                 machineId: machineId,
                 activatedAt: getNowISO(),
