@@ -2183,6 +2183,19 @@ let currentUser = null;
                         if (!__isClientEnv) return; // 纯网页端：无注册入口（请下载桌面版/APP注册）
                         var _done = false;
                         try { _done = localStorage.getItem('auth:activationDone') === '1'; } catch(_) {}
+                        // ★ 2026-10-22 与 auth-core isCloudActivationDone 同口径：已激活设备
+                        //   （后台/他机激活、本机有激活码/gate token/记住账号）首帧也不再注入。
+                        try {
+                            if (!_done && localStorage.getItem('license:code')) _done = true;
+                            if (!_done && localStorage.getItem('license:gateToken')) _done = true;
+                            if (!_done) {
+                                var _remRaw = localStorage.getItem('local_rememberedUsers') || localStorage.getItem('local_rememberedUsername');
+                                if (_remRaw) {
+                                    var _remS = String(_remRaw).trim();
+                                    if (_remS && _remS !== '[]' && _remS !== '""') _done = true;
+                                }
+                            }
+                        } catch(_) {}
                         if (_done) return; // 已激活：无入口（最终态）
                         // config已有管理员账户=注册已完成（与auth-core兜底一致，即使localStorage标记丢失）
                         if (typeof CONFIG !== 'undefined' && CONFIG && Array.isArray(CONFIG.users)) {
