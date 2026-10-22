@@ -3372,6 +3372,11 @@ export async function onRequest(context) {
                 const isOfflineEdition = /^offline_/.test(String(clinic.edition || ''));
                 let licenseCodes = [];
                 let licenseExpiresAt = null;
+                // ★ 2026-10-22 双源一致性修复：绑定码中存在永久码（expiresAt=null）时，
+                //   授权码维度视为永久有效，不再用有期码的最晚到期日与诊所有效期对比——
+                //   否则会出现「诊所 2029 / 授权码最晚 2027」的误报 mismatch（如惠康康
+                //   绑了 2 个永久码 + 1 个 2027 到期码，实际 2027 后永久码仍兜底）。
+                let hasPermanentLicense = false;
                 if (isOfflineEdition) {
                     licenseCodes = (licenseByClinic.get(clinic.name) || []).slice().sort((a, b) => {
                         const ta = a.expiresAt ? new Date(a.expiresAt).getTime() : 0;
@@ -3379,11 +3384,17 @@ export async function onRequest(context) {
                         return (Number.isNaN(ta) ? 0 : ta) - (Number.isNaN(tb) ? 0 : tb);
                     });
                     for (const lc of licenseCodes) {
-                        const t = lc.expiresAt ? new Date(lc.expiresAt).getTime() : NaN;
+                        if (!lc.expiresAt) {
+                            hasPermanentLicense = true;
+                            break;
+                        }
+                        const t = new Date(lc.expiresAt).getTime();
                         if (!Number.isNaN(t) && (licenseExpiresAt === null || t > new Date(licenseExpiresAt).getTime())) {
                             licenseExpiresAt = lc.expiresAt;
                         }
                     }
+                    // 有永久码 → 授权码维度永久，licenseExpiresAt 归零（前端逐码展示仍正常）
+                    if (hasPermanentLicense) licenseExpiresAt = null;
                 }
 
                 result.push({
@@ -3428,7 +3439,7 @@ export async function onRequest(context) {
                     licenseCodes: isOfflineEdition ? licenseCodes : null,
                     licenseExpiresAt: isOfflineEdition ? licenseExpiresAt : null,
                     dualCompare: isOfflineEdition
-                        ? compareDualExpiry(clinic.expiresAt, licenseExpiresAt)
+                        ? (hasPermanentLicense ? 'match' : compareDualExpiry(clinic.expiresAt, licenseExpiresAt))
                         : null
                 });
             }
