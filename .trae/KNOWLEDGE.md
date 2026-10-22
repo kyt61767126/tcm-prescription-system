@@ -2043,7 +2043,8 @@
 * **改法（12 文件）**：
   1. 注册入口收敛：electron/login.js checkFirstRun 删除红字入口（#clinicSetupHint 恒 hidden、onclick=null）；唯一入口=auth-core injectActivateLinkIntoLogin 绿色「📝 注册开通」（条件：本地桥 + 未激活 + 未注册）。login.html 结构未动（.interface-lock 6 OK）。
   2. 激活码直达：shared/auth-core/offline.js localRegCodeBtn → ctivate.show({initialTab:'code'}) → preload.js ctivate.show(opts)/showActivationWindow(opts) → main.js showActivationWindow(event,opts) → activate.js showActivateWindow(parent,opts)（新窗 loadFile query.initialTab=code；已开窗 executeJavaScript __activateJumpToTab，isLoading 时挂 once('did-finish-load') 重试）→ activate-window.html __activateJumpToTab 隐藏 #editionSelector、切 #tab-code、聚焦 #activationCode；autoRestore 在 initialTab=code 时不抢面板，但保留「saved.requestId 已 activated → saveAndRestart+showSuccess」自愈。官网付款入口 localRegActivateBtn/版本卡直通提交不带参，行为零变化。
-  3. 确定框置顶：shared/desktop-license-ipc.cjs 新增 esolveDialogParent()（优先 activateManager.getActivateWindow()，回退 getMainWindow()，都没有则无父窗），license:submit-activate 成功且 maxDevices>1 时 isAlwaysOnTop()→setAlwaysOnTop(false)→showMessageBoxSync(父窗,box)→finally setAlwaysOnTop(true,'screen-saver')+focus；license:show-activate 透传 opts。云端无 getActivateWindow 时 typeof 守卫回退主窗=零回归。
+  3. 确定框置顶：shared/desktop-license-ipc.cjs 新增 
+esolveDialogParent()（优先 activateManager.getActivateWindow()，回退 getMainWindow()，都没有则无父窗），license:submit-activate 成功且 maxDevices>1 时 isAlwaysOnTop()→setAlwaysOnTop(false)→showMessageBoxSync(父窗,box)→finally setAlwaysOnTop(true,'screen-saver')+focus；license:show-activate 透传 opts。云端无 getActivateWindow 时 typeof 守卫回退主窗=零回归。
   4. showSuccess() 入口统一切回 admin Tab（#success 在 #tab-admin 内，直达 code 时 active 是 #tab-code，否则成功页/3 秒重启倒计时不可见；reviewer 审查发现，9f562fc3）。
 * **关键经验**：
   - **Electron 原生 dialog 会被 alwaysOnTop('screen-saver') 窗口压住**：普通无父 showMessageBoxSync 或父窗=主窗都不可靠；正解=owned dialog 父窗设为该置顶窗 + 弹框期间临时降顶、弹后恢复。
@@ -2060,10 +2061,13 @@
 * **服务端（functions/api/license/invite.js，匿名行为逐字节不变）**：
   - 可选账号态：Authorization: Bearer 或 body.authToken（云桌面走主进程 IPC 代理无法改 header，token 放 body）→ erifyToken(token, env) fail-closed → 只认 token 内 clinicId。
   - **三层兜底**：① clinicId→system:clinics 取诊所名→license_clinic_index（缺失/未命中回退 listLicenses 全扫；索引可读时合并回填，索引为 null 绝不回填防单条覆盖）；② token.username/aliases 手机号→dmin_phone:{phone}（**生产值是 JSON {requestId,status}，必须 kv.get(...,'json').requestId**，兼容极旧裸值）→dmin_req:{requestId}.licenseCode，校验 req.phone 归属、status∈{activated,approved}、码归属；③ ①②未命中且 token 含手机号→全扫按 license.record.phone 匹配，命中/阴性均缓存：cct_grant:{clinicId} TTL 1h（取用前 getLicense 复验，失效即删）+cct_grant_miss:{clinicId} TTL 10min。
-  - **归属/展示安全**：egisteredClinicNames+isOwnLicenseForClinic——其他在册诊所的码绝不返回（改名后旧名不在册，允许）；isDisplayableLicense 排除 disabled/unused/过期（防同所预生成库存码压过 used 码）；③ 优先 productClass=cloud。
-  - 响应仅对 authUser 新增 licenseCode/esolvedByAccount；CORS Allow-Headers 加 Authorization；匿名响应键集合与改前完全一致。
+  - **归属/展示安全**：
+egisteredClinicNames+isOwnLicenseForClinic——其他在册诊所的码绝不返回（改名后旧名不在册，允许）；isDisplayableLicense 排除 disabled/unused/过期（防同所预生成库存码压过 used 码）；③ 优先 productClass=cloud。
+  - 响应仅对 authUser 新增 licenseCode/
+esolvedByAccount；CORS Allow-Headers 加 Authorization；匿名响应键集合与改前完全一致。
 * **客户端（shared/auth-core/cloud.js）**：
-  - 新增 getLocalCloudLicenseCode/enderCloudActivationCode/loadCloudAccountGrantInfo；授权状态优先级1（账号）/优先级2（本机 license）/未知已激活分支均展示「🔑 激活码」(点击复制)+「🎁 我的邀请码」。
+  - 新增 getLocalCloudLicenseCode/
+enderCloudActivationCode/loadCloudAccountGrantInfo；授权状态优先级1（账号）/优先级2（本机 license）/未知已激活分支均展示「🔑 激活码」(点击复制)+「🎁 我的邀请码」。
   - 加载顺序：先渲染本地 license:code（不空白）→ 账号态请求**带本地码 {code}**（服务端 1~2 read 快查，不再全扫）→ 权威码覆盖显示；**仅本地无码时回写 license:code**（该 key 被心跳/登录闸消费，覆盖会造成多诊所共用机串号）。
   - 账号失败/无 token/断网/旧服务端回退旧 code/machineId 路径；卡片幂等（各≤1）且激活码在前；priority1 文案不变。
 * **分发/上线**：sync-auth-core 8 云端副本 + public/index.html cv 重刷（c6ddf377）+ sync-html 4 副本；
@@ -2112,7 +2116,8 @@ ode tools/generate-desktop-hotupdate.cjs -c cloud → **2026.10.19-1**（20 文�
   - 新增 public/sw.js：install 预缓存 App Shell（index/config/15 个业务 JS/vendor pinyin+xlsx；单文件失败不阻塞）；activate 清旧版本缓存 + clients.claim；fetch 策略：
     - 导航：**network-first**，失败回退缓存 /index.html（ignoreSearch，兼容 APP 每次 _v=timestamp）；
     - 同源静态：**network-first → 失败回退缓存**（在线永远拿最新，避免旧 CV 资源拖更）；API /api/、热更 /hot-update/、管理端 /admin/、/sw.js **不接管/不缓存**。
-  - public/index.html 尾部注册脚本：https 或 localhost/127.0.0.1 且支持 SW 时 egister('/sw.js')；Electron file:// 自动跳过；public/_headers 给 /sw.js 加 
+  - public/index.html 尾部注册脚本：https 或 localhost/127.0.0.1 且支持 SW 时 
+egister('/sw.js')；Electron file:// 自动跳过；public/_headers 给 /sw.js 加 
 o-cache, must-revalidate。
   - 云 APP 无需重打 APK：现有 APK 联网启动一次后由站点安装 SW；之后断网冷启动/刷新加载本地壳，**同源 localStorage/IndexedDB** 使离线登录缓存、本地处方与同步队列可直接使用；首次安装从未联网的极冷启动仍走原生「网络异常-重新加载」错误页（预期兜底）。
   - 云端网页同样受益：断网刷新可打开缓存的 App Shell（此前无 SW 直接浏览器错误页）。
@@ -2141,10 +2146,12 @@ ode --check sw.js/entitlement.js、sync-html/copy-consistency/check-interface/cv
 * **根因**：shared/stock-core.js 在加载后包装全局 savePrescriptionToDB（唯一保存收口）做差值扣库存 + 低库存 toast。云端离线同步 MVP 的 pull 落地为了复用现有逻辑，直接调用 savePrescriptionToDB(rec) → 每轮同步把云端记录当作"本机新保存"：重复扣库存、重复弹预警、可扣成负数；推送回写 _mergePushedRecord、冲突副本 _keepConflictCopy 同样触发。另：D1 只持久化 extra 不保留顶层 __stockApplied，同步后记录丢标记，用户下次编辑还会再扣一遍。
 * **修复**：
   1. CloudSync 块内新增 savePrescriptionToDBRaw(record)：直接 openDB() + store.put，绕开 stock-core 钩子；pull 落地、推送回写、冲突副本三处全部改用 raw。
-  2. stock-core 扣减后除顶层 __stockApplied 外同时写 ecord.extra.__stockApplied（D1 持久化 extra，KV/离线也随记录保存）；同步落地时 _applyServerRecord 从 extra.__stockApplied 恢复到顶层 → 跨设备/重装/同步后编辑都不会重复扣减；isFirstApply 判定兼容 extra 标记。
+  2. stock-core 扣减后除顶层 __stockApplied 外同时写 
+ecord.extra.__stockApplied（D1 持久化 extra，KV/离线也随记录保存）；同步落地时 _applyServerRecord 从 extra.__stockApplied 恢复到顶层 → 跨设备/重装/同步后编辑都不会重复扣减；isFirstApply 判定兼容 extra 标记。
   3. 保持业务保存（新存/改方/同日覆盖/恢复）仍走原钩子，库存只在真实本机保存时变动。
 * **验证**：Playwright 探针 4/4（_applyServerRecord/_mergePushedRecord/_keepConflictCopy 对业务钩子 0 调用、记录落 IDB、extra 标记恢复）；	ests/test-stock-core.cjs 94/94；同步独立验证 178/179（仅 D1 辅助工具旧桩的 git 基线查找失效，非产品）；copy-consistency/cv/interface/内联语法全绿；热更 2026.10.19-4 20 文件验签 PASS。
-* **数据修复提示**：修复前已重复扣减的诊所库存不会自动回滚，需要按「库存流水」核对后手工冲正（流水有 x/rx-adj 记录与时间，可定位同步时点的重复扣减）；药品库存异常客户优先检查此项。
+* **数据修复提示**：修复前已重复扣减的诊所库存不会自动回滚，需要按「库存流水」核对后手工冲正（流水有 
+x/rx-adj 记录与时间，可定位同步时点的重复扣减）；药品库存异常客户优先检查此项。
 * **关键经验**：同步/批量导入等"系统写"必须使用 raw 持久化，绝不能复用带业务副作用的保存函数；幂等标记要放在服务端会持久化的字段（D1=extra）里，否则跨端必丢、重复扣减只是时间问题。
 ## 63. 移动端同步状态小圆点说明与可发现性补强（2026-10-19）
 
@@ -2306,3 +2313,22 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
 **验证（stub 测试 8/8，tools/_tmp 用完即删）**：①cloud 码 5/5 满新 browser- 设备放行且写入 devices、原 5 条不丢；②offline 裸码 1/1 满 + 身份不匹配仍 403 已达上限；③offline 码本人（user 全等）满配额换机 auto-unbind 放行+踢旧上新（旧行为分毫不差）；④cloud 码无凭证超配额也放行；⑤未锁端通用码满配额仍拒绝（豁免不外溢）。注：offline 拒绝分支只在「无诊所名绑定（裸码）且 user 不匹配」时可达——有 clinicName 绑定的码先被 L454 诊所名一致性守卫拦下（clinicName 匹配=身份核验通过=走 auto-unbind），配额块的三凭证判定是第二道保险。
 
 **生效方式**：纯服务端+后台改动——push 部署即生效，五端客户端（云端网页/云桌面/云端APP/离线桌面/离线APP）零改动零重打包；后台管理页强刷即可。
+
+## §75 诊所管理「双源不一致」误报修复（永久码+有期码混合场景，2026-10-22，commit 39c02a19）
+
+**背景**：惠康康中医诊所绑定了 2 个永久码（expiresAt=null）+ 1 个 2027-09-10 到期码，诊所自身有效期到 2029-09-09。原 §38 双源比对逻辑取「多码最晚到期日」=2027-09-10，与诊所 2029-09-09 比对 → 误报 `mismatch`（红底「⚠ 双源不一致」）。实际语义：只要存在永久码，授权码维度即永久有效，2027 后期码到期不影响诊所使用。
+
+**改动（functions/api/users.js，诊所列表读取分支）**：
+* 新增 `hasPermanentLicense` 标志：遍历 licenseCodes 时，任一码 `expiresAt` 为空/null → 置 true 并 break。
+* 有永久码时：`licenseExpiresAt = null`（授权码维度视为永久），`dualCompare` 直接返回 `'match'`，**跳过 compareDualExpiry**。
+* 无永久码时：行为不变（取最晚到期日与诊所 expiresAt 走五分支比对）。
+* 前端逐码展示行不受影响（licenseCodes 数组原样返回，永久码显示「无到期日」、有期码显示具体日期）。
+
+**口径铁律**：永久码（expiresAt=null）的语义是「该诊所授权维度永不过期」，与诊所有效期（源A）天然一致 → 双源比对应判 match，而非用有期码的最晚到期日去比。**任何「永久+有期」混合绑定场景都适用此规则**。
+
+**验证**：
+* API 实测：惠康康中医诊所 `dualCompare` 由 `mismatch` → `match`，`licenseExpiresAt` 由 `2027-09-10` → `null`；其余 13 家诊所 dualCompare 全部不变（多为 match）。
+* 浏览器实测：诊所管理页惠康康卡片显示「●正常」，无「⚠ 双源不一致」红标；授权码到期行正常展示「无到期日 (机构)，无到期日 (机构)，剩 324 天（2027-09-10） (机构)」。
+* 全页扫描无任何「双源不一致」文本。
+
+**生效方式**：纯服务端改动——push 部署即生效（API 返回值变化），五端客户端零改动零重打包；后台管理页强刷即可。

@@ -16,8 +16,9 @@
 
 ## 当前基线（2026-10-22 更新）
 
-- **main HEAD：`e32435a1`（方案R：云端码设备配额移交账号维度）**，前序 `c490a41f`（后台设备徽标「桌面端」文案修正）。工作区干净。
+- **main HEAD：`39c02a19`（诊所管理「双源不一致」误报修复）**，前序 `e32435a1`（方案R）。工作区干净。
 - **2026-10-22 方案R：云端码（锁端=cloud）设备配额完全移交账号维度（KNOWLEDGE §74）**：`validate.js` 配额块对 cloud 码整段豁免（拒绝/auto-unbind 均跳过，offline 码与未锁端通用码零改动）；**★ browser- 条目继续写入 devices 不停写**（entitlement 四态裁决与 P1 丢码自愈的服役凭据，仅不参与拦截——停写会让网页/云桌面每次心跳被弹重新激活）；admin 双副本 cloud 码徽标改「设备：按账号计配额」、查看设备弹窗过滤 browser-。全量扫描 104 云端码无重复指纹脏数据，码A 单条活跃 browser- 保留。stub 测试 8/8、check-interface 6 OK、copy-consistency 100/100。**生效：push 即达（纯服务端+后台），五端客户端零改动零重打包，后台管理页强刷。**
+- **2026-10-22 诊所管理「双源不一致」误报修复（KNOWLEDGE §75，commit 39c02a19）**：惠康康中医诊所绑 2 永久码 + 1 有期码（2027-09-10），原逻辑取「多码最晚到期日」与诊所 2029 比对误报 mismatch。修复：users.js 新增 `hasPermanentLicense`，任一码 expiresAt=null → licenseExpiresAt=null + dualCompare='match'（跳过 compareDualExpiry）。无永久码时行为不变。API+浏览器双验证：惠康康 mismatch→match，其余 13 家无变化。**生效：push 即达（纯服务端 API 返回值），五端零改动，后台强刷。**
 - **2026-10-21 H15 一期（A+D+E）已完成**：commit `c71c33d3` + 热包 `c00d6595`（desktop/local + app-local 双通道 2026.10.21-1，D5 评审 PASS 已上线）；结论沉淀 KNOWLEDGE §72；码A 转绑清理与 §73 已归档；二期 B、三期 C 未开工待用户另立任务。
 - **2026-10-21 登录框版本显示全端统一「离线版/云端版」（KNOWLEDGE §70，含晚间第二轮药丸布置统一，已入库）**：第一轮=两份 login.js 标签统一【离线版】/【云端版】+ `public/index.html` 补显示（已重打包并发布 v2026.10.21：云桌面 1.2.273 / 云APP 336 / 离线桌面 1.0.288）；第二轮（用户三截图验收：云APP 三行不居中、离线APP 327 一行式漏细分版）=`public/index.html` 两写入器补 `textAlign:center`+meta 一行式、离线 `desktop/index.html` 同构改造、**变换表 T10/T11 锚点重写**、sync-html+sync-index-app 重新分发。生效：云网页/云 APP 随 push 即达；**离线 APP 328 已重打并发布官网（v2026.10.21）**；云桌面/离线桌面登录窗已是目标样式，无需专门重打。
 - **线上核验（2026-10-20）**：站点 `/` 的 index.html SHA256 = 本地 `public/index.html`（`3365fef1…`，逐字节一致）→ 网页/云 APP 已含修复、functions 随同次 Pages 原子构建生效；`/hot-update/desktop/cloud/version.json` = **2026.10.20-1（app 1.2.271）**。
