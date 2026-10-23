@@ -5147,26 +5147,34 @@
         //   postInviteQuery 凭 machineId 反查绑定记录，返回 resolvedLicenseCode 即权威码。
         if (!code) {
             try {
+                // ★ 2026-10-23 修复（290 真机实锤）：mid 获取对齐 loadInviteInfo——实时硬件指纹
+                //   （activate.getMachineId）优先；原实现 StorageAdapter 存档优先，残留旧值/
+                //   异常格式会误导反查（服务端按 mid 精确匹配，旧 mid 查不到绑定 → 码恒空，
+                //   而邀请码查询用实时 mid 成功，两卡片表现分裂）。
                 let mid = '';
                 try {
-                    const savedMid = await StorageAdapter.getItem('license:machineId');
-                    if (savedMid) mid = normalizeMachineIdResult(savedMid);
+                    if (global.electronAPI && global.electronAPI.activate &&
+                        typeof global.electronAPI.activate.getMachineId === 'function') {
+                        const m = await global.electronAPI.activate.getMachineId();
+                        mid = (m && m.machineId) ? String(m.machineId) : String(m || '');
+                    }
                 } catch (_) {}
-                if (!mid && global.electronAPI && global.electronAPI.license &&
+                mid = String(mid || '').trim();
+                if ((!mid || mid.length < 8) && global.electronAPI && global.electronAPI.license &&
                     typeof global.electronAPI.license.getMachineId === 'function') {
                     try {
                         const m = await global.electronAPI.license.getMachineId();
-                        mid = normalizeMachineIdResult(m);
+                        const v = (m && m.machineId) ? String(m.machineId) : String(m || '');
+                        if (v && v.length >= 8) mid = v.trim();
                     } catch (_) {}
                 }
-                if (!mid && global.electronAPI && global.electronAPI.activate &&
-                    typeof global.electronAPI.activate.getMachineId === 'function') {
+                if ((!mid || mid.length < 8)) {
                     try {
-                        const m = await global.electronAPI.activate.getMachineId();
-                        mid = normalizeMachineIdResult(m);
+                        const savedMid = await StorageAdapter.getItem('license:machineId');
+                        if (savedMid) mid = normalizeMachineIdResult(savedMid);
                     } catch (_) {}
                 }
-                if (mid) {
+                if (mid && mid.length >= 8) {
                     const r = await postInviteQuery({ machineId: mid });
                     if (r && r.success) {
                         const found = (r.resolvedLicenseCode || r.licenseCode ||
@@ -5200,6 +5208,52 @@
             } catch (_) { /* 查询失败不影响原有激活码展示逻辑 */ }
             // 幂等：与邀请码卡片同款防重复策略（多路径并发调用时先清旧卡片）
             document.querySelectorAll('#activationCodeBox').forEach(n => { if (n.parentNode) n.parentNode.removeChild(n); });
+            // ★ 2026-10-23 修复（290 真机实锤）：机器码显示改在激活码 early-return 之前——
+            //   激活码取不到（本地无码且联网找回失败）时原实现直接 return，机器码块
+            //   也不渲染，同机双装解绑场景拿不到机器码对比。机器码与激活码独立展示。
+            try {
+                document.querySelectorAll('#machineIdBox').forEach(n => { if (n.parentNode) n.parentNode.removeChild(n); });
+                let mid = '';
+                // 与 loadInviteInfo 同链：实时硬件指纹优先（StorageAdapter 存档可能是残留旧值）
+                try {
+                    if (global.electronAPI && global.electronAPI.activate &&
+                        typeof global.electronAPI.activate.getMachineId === 'function') {
+                        const m = await global.electronAPI.activate.getMachineId();
+                        mid = (m && m.machineId) ? String(m.machineId) : String(m || '');
+                    }
+                } catch (_) {}
+                mid = String(mid || '').trim();
+                if ((!mid || mid.length < 8) && global.electronAPI && global.electronAPI.license &&
+                    typeof global.electronAPI.license.getMachineId === 'function') {
+                    try {
+                        const m = await global.electronAPI.license.getMachineId();
+                        const v = (m && m.machineId) ? String(m.machineId) : String(m || '');
+                        if (v && v.length >= 8) mid = v.trim();
+                    } catch (_) {}
+                }
+                if (mid && mid.length >= 8) {
+                    const midBox = document.createElement('div');
+                    midBox.id = 'machineIdBox';
+                    midBox.style.cssText = 'margin-top:6px;font-size:12px;color:#555;line-height:1.7;';
+                    const midLabel = document.createElement('span');
+                    midLabel.textContent = '🖥️ 本机机器码：';
+                    const midB = document.createElement('b');
+                    midB.title = '点击复制（用于后台解绑时对比）';
+                    midB.style.cssText = 'color:#78909c;font-family:monospace;letter-spacing:0.5px;font-size:12px;cursor:pointer;user-select:all;word-break:break-all;';
+                    midB.textContent = mid;
+                    midBox.appendChild(midLabel);
+                    midBox.appendChild(midB);
+                    el.appendChild(midBox);
+                    midB.addEventListener('click', function (ev) {
+                        const txt = (ev.target.textContent || '').trim();
+                        try {
+                            if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt);
+                            else { const ta = document.createElement('textarea'); ta.value = txt; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); }
+                            alert('机器码已复制：' + txt);
+                        } catch (_) { alert('复制失败，请手动记录：' + txt); }
+                    });
+                }
+            } catch (_) { /* 机器码获取失败不影响授权区其他内容 */ }
             const code = await getLicenseCode();
             if (!code || code.length < 4) return;
             const box = document.createElement('div');
@@ -5231,39 +5285,7 @@
                     alert('复制失败，请手动记录：' + txt);
                 }
             });
-            // ★ 2026-10-23 显示本机机器码：便于同机双装时与后台设备列表 machineId 对比，
-            //   精准区分云端/离线桌面后解绑指定端。
-            try {
-                document.querySelectorAll('#machineIdBox').forEach(n => { if (n.parentNode) n.parentNode.removeChild(n); });
-                let mid = '';
-                if (global.electronAPI && global.electronAPI.license &&
-                    typeof global.electronAPI.license.getMachineId === 'function') {
-                    const m = await global.electronAPI.license.getMachineId();
-                    mid = (m && m.machineId) ? String(m.machineId) : String(m || '');
-                }
-                if (mid) {
-                    const midBox = document.createElement('div');
-                    midBox.id = 'machineIdBox';
-                    midBox.style.cssText = 'margin-top:6px;font-size:12px;color:#555;line-height:1.7;';
-                    const midLabel = document.createElement('span');
-                    midLabel.textContent = '🖥️ 本机机器码：';
-                    const midB = document.createElement('b');
-                    midB.title = '点击复制（用于后台解绑时对比）';
-                    midB.style.cssText = 'color:#78909c;font-family:monospace;letter-spacing:0.5px;font-size:12px;cursor:pointer;user-select:all;word-break:break-all;';
-                    midB.textContent = mid;
-                    midBox.appendChild(midLabel);
-                    midBox.appendChild(midB);
-                    el.appendChild(midBox);
-                    midB.addEventListener('click', function (ev) {
-                        const txt = (ev.target.textContent || '').trim();
-                        try {
-                            if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt);
-                            else { const ta = document.createElement('textarea'); ta.value = txt; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); }
-                            alert('机器码已复制：' + txt);
-                        } catch (_) { alert('复制失败，请手动记录：' + txt); }
-                    });
-                }
-            } catch (_) { /* 机器码获取失败不影响授权区其他内容 */ }
+            // 机器码显示已前移至 getLicenseCode 之前（激活码取不到也显示），此处不再重复渲染
         } catch (e) {
             console.warn('[ActivationCode] 激活码显示失败:', e && e.message);
         }
