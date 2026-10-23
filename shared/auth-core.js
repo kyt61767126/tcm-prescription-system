@@ -4725,6 +4725,21 @@
                 (typeof global.Capacitor !== 'undefined') ||
                 (global.location && String(global.location.href).indexOf('android_asset') >= 0);
             if (!__isClientEnv) return; // 纯网页端：无注册入口（请下载桌面版/APP注册）
+            // ★ 2026-10-23 老用户加设备引导：已开通账号在新设备直接登录即自动绑定（机构版5台），
+            //   不再走“重新注册/管理员激活”表单；该提示与是否显示激活入口无关，始终展示一次。
+            try {
+                if (!document.getElementById('loginExistingAccountHint')) {
+                    const _box = overlay.querySelector('.login-box');
+                    const _btns = overlay.querySelector('.login-buttons');
+                    if (_box && _btns) {
+                        const _hint = document.createElement('div');
+                        _hint.id = 'loginExistingAccountHint';
+                        _hint.style.cssText = 'margin-top:10px;font-size:11px;color:#909399;line-height:1.6;text-align:center;';
+                        _hint.textContent = '已开通账号请直接登录；新设备登录即自动绑定（机构版最多 5 台），无需重复注册/激活。';
+                        _btns.parentNode.insertBefore(_hint, _btns.nextSibling);
+                    }
+                }
+            } catch (e) {}
             // ★ 2026-08-20 注册完成后自动隐藏：已登录/已注册过则不再显示"注册开通"入口
             if (isCloudActivationDone()) return;
             // ★ 2026-08-22 兜底（对齐桌面版 injectAdminActivateEntry 双条件）：
@@ -5644,7 +5659,7 @@
                 '<div style="margin-bottom:12px;">' +
                     '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">联系电话 <span style="color:#e53935;">*</span>（将作为登录账号）</label>' +
                     '<input type="text" id="adminPhone" placeholder="如：13800138000" autocomplete="new-password" data-lpignore="true" inputmode="numeric" maxlength="11" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
-                    '<div class="admin-field-hint" id="adminPhoneHint" style="font-size:11px;color:#909399;margin-top:4px;">💡 11位手机号为登录账号，默认密码 admin（登入后请自行修改）</div>' +
+                    '<div class="admin-field-hint" id="adminPhoneHint" style="font-size:11px;color:#909399;margin-top:4px;">💡 11位手机号为登录账号；请填真实手机号（用于接收短信验证/找回账号）。已开通账号在新设备请直接登录，登录即自动绑定（机构版最多 5 台）。</div>' +
                 '</div>' +
                 // ★ 2026-09-07 移除「备注（可选）」输入框（对齐 offline.js，用户要求精简激活表单）：
                 //   原 adminRemark 输入框 + 提示「机构版管理员可在系统中注册生成5个普通用户（只读权限）」已删。
@@ -5666,9 +5681,9 @@
                     '<span style="width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,#26a69a,#00897b);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;">2</span>' +
                 '</div>' +
                 '<div style="margin-bottom:12px;">' +
-                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">登录密码（首次激活可留空＝默认 admin）</label>' +
+                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">登录密码 <span style="color:#e53935;">*</span>（必填）</label>' +
                     '<input type="password" id="adminPassword" placeholder="首次激活设置密码；新设备激活请输入原登录密码" autocomplete="new-password" data-lpignore="true" maxlength="32" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
-                    '<div class="admin-field-hint" id="adminPwdHint" style="font-size:11px;color:#e53935;margin-top:4px;">💡 首次激活：至少8位含字母和数字，留空＝默认 admin（登入后请自行修改）。已有机构版在新设备激活：输入该账号【当前登录密码】即可自动绑定本机（限 5 台，无需客服）</div>' +
+                    '<div class="admin-field-hint" id="adminPwdHint" style="font-size:11px;color:#e53935;margin-top:4px;">💡 首次开通：8-32 位且含字母和数字；已有机构版在新设备激活：输入该账号【当前登录密码】即可自动绑定（限 5 台，无需客服）</div>' +
                 '</div>' +
                 '<div style="margin-bottom:14px;">' +
                     '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">确认密码（自定义时需再输一次）</label>' +
@@ -6236,7 +6251,7 @@
             state.phone = v;
             const hint = document.getElementById('adminPhoneHint');
             if (!v) {
-                hint.textContent = '💡 11位手机号为登录账号，默认密码 admin（登入后请自行修改）';
+                hint.textContent = '💡 11位手机号为登录账号；请填真实手机号（用于接收短信验证/找回账号）。已开通账号在新设备请直接登录，登录即自动绑定（机构版最多 5 台）。';
                 hint.style.color = '#909399';
             } else if (!PHONE_RE.test(v)) {
                 hint.textContent = '⚠ 请输入正确的11位手机号';
@@ -6303,14 +6318,16 @@
 
         // 提交
         document.getElementById('adminSubmitBtn').addEventListener('click', async function() {
-            const pwdRaw = state.password;
-            const pwd = (pwdRaw && pwdRaw.trim()) ? pwdRaw.trim() : 'admin';
+            const pwdRaw = (state.password || '').trim();
+            if (!pwdRaw) { showFieldErr('adminPassword','adminPwdHint','请填写登录密码（首次开通请设置密码；已有账号加设备请输入原登录密码）'); return; }
+            if (pwdRaw.toLowerCase() === 'admin') { showFieldErr('adminPassword','adminPwdHint','请设置/输入真实登录密码，不能使用默认 admin'); return; }
+            const pwd = pwdRaw;
             const pwd2 = document.getElementById('adminPassword2').value.trim();
-            if (pwd !== 'admin') {
-                if (pwd.length < 8) { showFieldErr('adminPassword','adminPwdHint','若自定义密码，需至少8位'); return; }
-                if (!/[a-zA-Z]/.test(pwd)) { showFieldErr('adminPassword','adminPwdHint','若自定义密码，需包含字母'); return; }
-                if (!/\d/.test(pwd)) { showFieldErr('adminPassword','adminPwdHint','若自定义密码，需包含数字'); return; }
-                if (!pwd2) { showFieldErr('adminPassword2','adminPwd2Hint','请再次输入自定义密码'); return; }
+            // 首次开通会填“再次输入密码”；已有账号加设备只填当前密码即可（pwd2 可空）。
+            if (pwd2) {
+                if (pwd.length < 8) { showFieldErr('adminPassword','adminPwdHint','自定义密码需至少8位'); return; }
+                if (!/[a-zA-Z]/.test(pwd)) { showFieldErr('adminPassword','adminPwdHint','自定义密码需包含字母'); return; }
+                if (!/\d/.test(pwd)) { showFieldErr('adminPassword','adminPwdHint','自定义密码需包含数字'); return; }
                 if (pwd !== pwd2) { showFieldErr('adminPassword2','adminPwd2Hint','两次密码输入不一致'); return; }
             }
             state.password = pwd;

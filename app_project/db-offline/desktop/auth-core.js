@@ -4588,7 +4588,7 @@
                     '</div>'
                 :
                     // ★ 2026-08-26 重装激活登录修复：手机号即登录账号（未注册档案场景）
-                    '<div style="font-size:12px;color:#666;margin-bottom:6px;">📱 手机号（激活后作为登录账号）<span style="color:#e53935;">*</span></div>' +
+                    '<div style="font-size:12px;color:#666;margin-bottom:6px;">📱 手机号（请填真实手机号，用于短信验证/找回账号，激活后作为登录账号）<span style="color:#e53935;">*</span></div>' +
                     '<input type="tel" id="activatePhoneInput" ' +
                     'style="width:100%;padding:12px 14px;font-size:16px;border:2px solid #ddd;border-radius:8px;outline:none;margin-bottom:12px;box-sizing:border-box;" ' +
                     'placeholder="请输入手机号" maxlength="11" autocomplete="off" data-lpignore="true" />' +
@@ -5666,7 +5666,7 @@
                 '<div style="margin-bottom:12px;">' +
                     '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">手机号 <span style="color:#e53935;">*</span>（登录账号/联系）</label>' +
                     '<input type="text" id="regPhone" placeholder="如：13800138000" autocomplete="off" inputmode="numeric" maxlength="11" style="' + INPUT_STYLE + '">' +
-                    '<div style="font-size:11px;color:#909399;margin-top:4px;">💡 11位手机号，用于管理员审核联系；未填用户名时即登录账号</div>' +
+                    '<div style="font-size:11px;color:#909399;margin-top:4px;">💡 请填写真实 11 位手机号：用于接收短信验证/找回账号，未填用户名时即登录账号</div>' +
                 '</div>' +
                 '<div style="margin-bottom:12px;">' +
                     '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">登录密码 <span style="color:#e53935;">*</span></label>' +
