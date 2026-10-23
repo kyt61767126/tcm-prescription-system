@@ -338,6 +338,10 @@ h1 { color: #2c3e50; font-size: 18px; margin-bottom: 3px; }
         </div>
     </div>
 
+    <!-- ★ 2026-10-23 淘宝码/官网付款统一激活入口：官网付款/审批用户无需激活码，一键检测本机授权 -->
+    <button id="detectPaidBtn" style="width:100%;margin-top:14px;padding:12px;font-size:14px;font-weight:bold;border:none;border-radius:9px;color:#fff;background:linear-gradient(135deg,#0ea5e9 0%,#2563eb 100%);cursor:pointer;">🔍 官网已付款/已申请？一键检测激活</button>
+    <div id="detectPaidHint" style="font-size:11px;color:#909399;margin-top:6px;text-align:center;line-height:1.6;">凭本机设备码自动检测官网付款/审批结果，无需激活码</div>
+
     <!-- ★ 2026-08-23 简化：版本选择页直达链接——手里已有激活码/想留言申请的用户跳过版本选择 -->
     <div class="edition-shortcuts" style="display:flex;justify-content:space-between;gap:12px;margin-top:14px;font-size:12px;">
         <span id="skipToCode" style="color:var(--primary-1);cursor:pointer;user-select:none;text-decoration:none;">已有激活码？直接输入 →</span>
@@ -883,7 +887,40 @@ function switchTab(tab) {
 }
 
 // ============ 直达链接（跳过版本选择，直接进入 Tab2/Tab3） ============
+// ★ 2026-10-23 统一激活：官网付款/审批用户一键检测（machineId-only admin-status），命中即装授权。
+async function detectOfficialPaid() {
+    var btn = document.getElementById('detectPaidBtn');
+    var hint = document.getElementById('detectPaidHint');
+    if (!btn) return;
+    var old = btn.textContent;
+    try {
+        if (!window.electronAPI?.activate?.checkAdminStatus) {
+            if (hint) hint.textContent = '当前版本不支持自动检测，请用激活码激活或联系客服。';
+            return;
+        }
+        btn.disabled = true;
+        btn.textContent = '🔍 正在检测官网付款/审批结果…';
+        if (hint) { hint.textContent = '正在连接官网核对本机授权…'; hint.style.color = '#909399'; }
+        const r = await window.electronAPI.activate.checkAdminStatus(null);
+        if (r && r.success && r.status === 'activated' && r.license) {
+            if (hint) { hint.textContent = '✅ 检测到已激活授权，正在完成本机激活…'; hint.style.color = '#2e7d32'; }
+            const ok = await saveAndRestart(r.license, (r.licenseInfo && r.licenseInfo.phone) || '');
+            if (ok) showSuccess((r.licenseInfo && r.licenseInfo.phone) || '', false, true);
+        } else {
+            btn.disabled = false;
+            btn.textContent = old;
+            if (hint) { hint.textContent = '未检测到已付款/已通过授权。请确认已在官网完成付款（设备码已携带），或稍后管理员审批后再点一次。'; hint.style.color = '#e53935'; }
+        }
+    } catch (e) {
+        btn.disabled = false;
+        btn.textContent = old;
+        if (hint) { hint.textContent = '检测失败：' + ((e && e.message) || '网络异常') + '，请稍后重试。'; hint.style.color = '#e53935'; }
+    }
+}
+
 function bindEditionShortcuts() {
+    var detectBtn = document.getElementById('detectPaidBtn');
+    if (detectBtn) detectBtn.addEventListener('click', detectOfficialPaid);
     var skipCode = document.getElementById('skipToCode');
     if (skipCode) skipCode.addEventListener('click', function() {
         document.getElementById('editionSelector').style.display = 'none';
