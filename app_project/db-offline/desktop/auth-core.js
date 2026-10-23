@@ -5986,7 +5986,7 @@
                     '<span id="localRegCloseLink" style="font-size:13px;color:#00796b;cursor:pointer;font-weight:600;background:#e0f2f1;border:1px solid #80cbc4;border-radius:16px;padding:6px 14px;">暂不注册，已有账号登录 ›</span>' +
                 '</div>' +
                 '<div style="background:#f0f7ff;border:1px solid #d6e8ff;border-radius:8px;padding:10px;margin-bottom:14px;font-size:12px;color:#1565c0;line-height:1.7;">' +
-                    '💡 请先完成注册（<b>手机号即登录账号</b>）。<br>注册后可先 <b>试用 7 天</b> 标准版全功能，随时输入激活码升级正式版。' +
+                    '💡 请先完成注册（<b>手机号即登录账号</b>）。<br>请填写真实手机号（用于短信验证/找回账号）；注册后可先 <b>试用 7 天</b> 标准版全功能，随时输入激活码升级正式版。' +
                 '</div>' +
                 '<div style="margin-bottom:12px;">' +
                     '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">诊所名称 <span style="color:#e53935;">*</span></label>' +
@@ -5999,7 +5999,7 @@
                 '<div style="margin-bottom:12px;">' +
                     '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">手机号 <span style="color:#e53935;">*</span>（登录账号）</label>' +
                     '<input type="text" id="localRegPhone" placeholder="如：13800138000" autocomplete="off" inputmode="numeric" maxlength="11" style="' + INPUT_STYLE + '">' +
-                    '<div id="localRegPhoneHint" style="font-size:11px;color:#909399;margin-top:4px;">💡 11位手机号，注册后用「手机号+密码」登录</div>' +
+                    '<div id="localRegPhoneHint" style="font-size:11px;color:#909399;margin-top:4px;">💡 请填写真实手机号（用于短信验证/找回账号），注册后用「手机号+密码」登录</div>' +
                 '</div>' +
                 '<div style="margin-bottom:12px;">' +
                     '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">设置登录密码 <span style="color:#e53935;">*</span></label>' +
@@ -6046,7 +6046,7 @@
                 const hint = document.getElementById('localRegPhoneHint');
                 if (!hint) return;
                 const v = String(this.value || '').trim();
-                if (!v) { hint.textContent = '💡 11位手机号，注册后用「手机号+密码」登录'; hint.style.color = '#909399'; }
+                if (!v) { hint.textContent = '💡 请填写真实手机号（用于短信验证/找回账号），注册后用「手机号+密码」登录'; hint.style.color = '#909399'; }
                 else if (!PHONE_RE.test(v)) { hint.textContent = '⚠ 请输入正确的11位手机号'; hint.style.color = '#e53935'; }
                 else { hint.textContent = '✓ 手机号格式正确'; hint.style.color = '#26a69a'; }
             });
