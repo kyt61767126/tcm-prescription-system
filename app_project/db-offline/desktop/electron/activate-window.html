@@ -525,6 +525,11 @@ h1 { color: #2c3e50; font-size: 18px; margin-bottom: 3px; }
 
     <!-- ====== 激活码激活 ====== -->
     <div id="tab-code" class="tab-content">
+        <!-- ★ 2026-10-23 统一激活：官网付款/已申请用户无需激活码，在此页直接一键检测 -->
+        <div style="margin:14px 0;padding:12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;">
+            <button id="detectPaidBtnCode" style="width:100%;padding:12px;font-size:14px;font-weight:bold;border:none;border-radius:8px;color:#fff;background:linear-gradient(135deg,#0ea5e9 0%,#2563eb 100%);cursor:pointer;">🔍 官网已付款/已申请？一键检测激活</button>
+            <div id="detectPaidHintCode" style="font-size:11px;color:#64748b;margin-top:6px;text-align:center;line-height:1.6;">官网付款用户点这里，凭本机设备码自动核对；淘宝/官网发码用户请在下方输入激活码</div>
+        </div>
         <div class="progress-bar" id="progressBarCode" style="display:none;">
             <div class="progress-step active" data-step="1">
                 <div class="dot">1</div>
@@ -1028,9 +1033,9 @@ function switchTab(tab) {
 // ============ 直达链接（跳过版本选择，直接进入 Tab2/Tab3） ============
 // ★ 2026-10-23 统一激活：官网付款/审批用户一键检测（machineId-only admin-status），
 //   命中后补一次手机号+密码（官网付款账号）→ installAdminLicense 装码建号。
-async function detectOfficialPaid() {
-    var btn = document.getElementById('detectPaidBtn');
-    var hint = document.getElementById('detectPaidHint');
+async function detectOfficialPaid(triggerBtn) {
+    var btn = triggerBtn || document.getElementById('detectPaidBtn');
+    var hint = document.getElementById(btn && btn.id === 'detectPaidBtnCode' ? 'detectPaidHintCode' : 'detectPaidHint');
     if (!btn) return;
     var old = btn.textContent;
     try {
@@ -1089,7 +1094,9 @@ async function detectOfficialPaid() {
 
 function bindEditionShortcuts() {
     var detectBtn = document.getElementById('detectPaidBtn');
-    if (detectBtn) detectBtn.addEventListener('click', detectOfficialPaid);
+    if (detectBtn) detectBtn.addEventListener('click', function(){ detectOfficialPaid(detectBtn); });
+    var detectBtnCode = document.getElementById('detectPaidBtnCode');
+    if (detectBtnCode) detectBtnCode.addEventListener('click', function(){ detectOfficialPaid(detectBtnCode); });
     var skipCode = document.getElementById('skipToCode');
     if (skipCode) skipCode.addEventListener('click', function() {
         // ★ 2026-10-19 收敛到 __activateJumpToTab（同时修正历史无效聚焦 id codeInput）
