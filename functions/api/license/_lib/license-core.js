@@ -1181,6 +1181,18 @@ async function detachDeviceFromOtherLicenses(kv, targetCode, machineId) {
     const detached = [];
     try {
         if (!kv || !targetCode || !machineId) return detached;
+        // ★ 2026-10-23 跨端共存：同一设备可同时绑定 1 个离线码 + 1 个云端码
+        //   （不同产品、分别付费，合法场景如诊所内离线开方+云端移动端查方）。
+        //   解绑只在【同一 productClass 内】执行——目标码 cloud 只踢他 cloud 码、
+        //   offline 只踢他 offline 码；跨端（cloud↔offline）保留双方绑定，
+        //   避免后激活的云端码把先激活的离线码设备踢掉导致离线版心跳失效。
+        //   目标码无 productClass（历史裸码）→ 维持旧行为（全部解绑），不改变存量语义。
+        let targetPc = null;
+        try {
+            const __tRec = await getLicense(kv, targetCode);
+            targetPc = normalizeCodeProductClass(__tRec && __tRec.productClass);
+            if (targetPc === 'INVALID') targetPc = null;
+        } catch (_) { targetPc = null; }
         // ★ P2-5：跨码清理必须"穷尽所有属主码"（双审 M1）——不能用 O(1) 直查：
         //   审批/工单通道是先 saveLicense(target) 后 detach，索引可能已指向 target，
         //   直查短路会让他码残留永不清理（回归 09-23 单设备单码保障）。故激活路径
@@ -1195,6 +1207,10 @@ async function detachDeviceFromOtherLicenses(kv, targetCode, machineId) {
         for (const other of owners) {
             const otherCode = other.code;
             if (!otherCode || otherCode === targetCode) continue;
+            // 跨端隔离：目标码与他码 productClass 不同（且均非空）→ 不解绑
+            const otherPc = normalizeCodeProductClass(other.productClass);
+            if (otherPc === 'INVALID') otherPc = null;
+            if (targetPc && otherPc && targetPc !== otherPc) continue;
             let dirty = false;
             if (Array.isArray(other.devices)) {
                 const before = other.devices.length;

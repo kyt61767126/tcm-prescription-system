@@ -1968,6 +1968,13 @@
   - **热更**：generate-app-hotupdate 签发 **2026.10.13-1，minAppCode 288 不抬**（纯 JS 无新桥依赖）；旧 APK 启动静默拉包→**彻底退出重开第 2 次生效**（淡绿横幅）。本次改纯 JS innerHTML 无 HTML 结构/CSS 变更，check-interface 6 OK；cv hash 幂等零改动（13/15 参数本就最新）。
   - **客户处置**：码 unused 无副作用，让买家**直接再点一次「立即激活」**即可（服务端已秒级；万一仍超 12s，等热更生效或多试一次，重激很快）。
   - **回归**：e2e/.tmp/first-activation-perf-test.mjs 15 断言全过（保序/过滤、owners 回填[]但单值不回填、detach+saveLicense 只扫一遍、端到端新机器 claim、重激零全扫）；mid-owners-index 30、kv-list-quota-round2 22、license-clinic-index 25 全过。**test-mid-index C2「在册设备索引已指他码时不抢写」改动前即失败（stash 对拍 45/46 证实存量问题），勿修勿追。**
+* **★ 2026-10-23 跨端共存：单设备可同时绑定离线码+云端码（license-core.js detachDeviceFromOtherLicenses）**：
+  - **背景**：诊所内离线开方+云端移动端查方是合法双产品场景，但原「单设备单码」解绑逻辑会让后激活的云端码把先激活的离线码设备踢掉，导致离线版心跳失效。
+  - **改动**：detachDeviceFromOtherLicenses 内新增 productClass 隔离——解绑只在【同一 productClass 内】执行（cloud 只踢 cloud、offline 只踢 offline）；跨端（cloud↔offline）保留双方绑定；历史裸码（无 productClass）维持旧行为全部解绑。5 个激活入口（validate/admin-approve/admin-submit/export-license/activate-from-ticket）全走此函数，改动一处全覆盖。
+  - **前置约束**：跨端共存的两码须同版本类型（standard/institution/voice），否则 checkDeviceVersion 拒绝（版本绑定设计，非本次改动引入）；配额不受影响（每码独立 maxDevices）。
+  - **fail-safe**：entitlement 带 code 快路径只认本码；丢码自愈路径（mid_idx 指向最后激活码）跨端共存后可能取到非本端码 → 降级 NO_LICENSE 需重激活，低概率且 fail-safe。
+  - **测试**：tools/detach-cross-product-test.cjs 7 场景 12 断言全过（同端解绑/跨端双向保留/裸码全解绑/三码只解同端/local 别称归一）。
+  - **生效方式**：纯服务端 functions 改动，push 即生效，五端零重打包。
 * **★★ 2026-10-18 KV list 免费额度（1000/天）用尽实锤 + 免费治理（不升级套餐）**：用户控制台报「KV 请求已被暂时阻止（超过 Workers KV 免费套餐每日 list 限制 1000 次）」。额度画像：list 1000/天，**UTC 0 点（北京 8 点）重置**——当天用尽无法提前恢复，等重置即可，不必升级。已上线治理：① `functions/api/_lib/kv.js` 的 `getKV()` 返回绑定加 Proxy，`kv.list` 自动走 `safeListPage` 且默认 **60s isolate 内存缓存**（管理端轮询/切 tab 不再反复消耗 list）；② 429 后熔断标记写入 KV 自身 `sys:kv_list_blocked_until`（TTL 到下一个 UTC 0 点+2min），**多 isolate 共享**，每个 isolate 只 read 一次标记（get 10 万/天），不再各自撞 429；③ 熔断期优先返回**上次成功缓存**（后台显示旧数据/空表而非整页 429 报错）；④ 回归测试 `tools/kv-list-fuse-test.cjs` 10 PASS。**铁律：免费额度内优先"索引化/缓存/降级"，不要为一个 429 直接升级付费；list 密集的管理端扫描长期应迁 D1（免费 5M 读/10万写/天）或改索引键 get。** **第二步（2026-10-18）**：新增 `functions/api/_middleware.js` 响应缓存——白名单只读管理接口（admin-list 120s、admin-data-audit 600s、admin-risk/admin-usage 300s、stats/funnel 600s）按「路径+查询+Authorization 哈希+body」缓存到 KV 单键，TTL 内同参数只真扫一次（不走 list）；只缓存 200+JSON、401/带 Set-Cookie 不缓存；`x-no-cache:1`/`?fresh=1` 强制刷新；测试 9 PASS。**铁律：管理端只读扫描的响应缓存必须含鉴权哈希隔离、只缓存成功 JSON、提供强制刷新口，避免"缓存挡住管理员修复操作/跨账号串数据"。** **第三步（2026-10-18，D1 主存）**：响应缓存改存 D1 新表 `admin_resp_cache`（`functions/api/_lib/schema.sql` 已补 DDL，remote 已建表），因 KV 免费写仅 1000/天，缓存写不该再压 KV；KV 只保留旧缓存兼容读，D1 不可用时自动回退 KV；测试 12 PASS。 旧处理：commit 6601c943 曾只做告警根治，未覆盖全部裸 `kv.list`。
 
 * **★★ 2026-10-13 KV list 免费额度（1000/天）告警根治（commit 6601c943；2026-10-09 曾收 CF「KV 请求已被暂时阻止」警报邮件）**：
