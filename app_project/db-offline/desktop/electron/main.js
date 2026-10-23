@@ -1283,6 +1283,27 @@ app.whenReady().then(async () => {
     sharedSession = session.fromPartition(SESSION_PARTITION);
     installCSP(sharedSession);
 
+    // ★ 2026-10-23 登录前网络闸门（用户要求：离线桌面登入后才可联网）：
+    //   未登录（currentLoggedInUser 为空）时，仅放行“用户主动触发”的注册/激活/官网付款相关 API；
+    //   其余后台请求（热更、授权心跳、entitlement 轮询、邀请码、业务同步）一律取消。
+    //   登录成功后 currentLoggedInUser 由 login-success/saveLoginState 写入，闸门自动放行。
+    //   ★ 不在登录前放行 entitlement/heartbeat：避免登录窗后台联网与频控误伤。
+    try {
+        const PRE_LOGIN_ALLOW_RE = /^https:\/\/tcm-prescription-system\.pages\.dev\/api\/(?:(?:license\/(?:validate|admin-submit|admin-status|activation-session|activation-token|order-submit|order-status|order-paid|attestation|export-license|claim|trial|register))|users)(?:[/?]|$)/i;
+        sharedSession.webRequest.onBeforeRequest({ urls: ['*://*/*'] }, (details, callback) => {
+            try {
+                if (currentLoggedInUser) return callback({ cancel: false });
+                const u = String(details.url || '');
+                if (/^(file|data|blob|devtools|chrome-extension):/i.test(u)) return callback({ cancel: false });
+                if (PRE_LOGIN_ALLOW_RE.test(u)) return callback({ cancel: false });
+                console.log('[NetGate] 登录前拦截后台联网:', u);
+                return callback({ cancel: true });
+            } catch (e) {
+                return callback({ cancel: false });
+            }
+        });
+    } catch (e) { console.warn('[NetGate] 安装登录前网络闸门失败:', e && e.message); }
+
     // ★ 授予 camera/microphone 权限
     sharedSession.setPermissionRequestHandler((webContents, permission, callback) => {
         if (permission === 'media' || permission === 'camera' || permission === 'microphone') {
