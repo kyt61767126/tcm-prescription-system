@@ -4588,7 +4588,7 @@
                     '</div>'
                 :
                     // ★ 2026-08-26 重装激活登录修复：手机号即登录账号（未注册档案场景）
-                    '<div style="font-size:12px;color:#666;margin-bottom:6px;">📱 手机号（激活后作为登录账号）<span style="color:#e53935;">*</span></div>' +
+                    '<div style="font-size:12px;color:#666;margin-bottom:6px;">📱 手机号（请填真实手机号，用于短信验证/找回账号，激活后作为登录账号）<span style="color:#e53935;">*</span></div>' +
                     '<input type="tel" id="activatePhoneInput" ' +
                     'style="width:100%;padding:12px 14px;font-size:16px;border:2px solid #ddd;border-radius:8px;outline:none;margin-bottom:12px;box-sizing:border-box;" ' +
                     'placeholder="请输入手机号" maxlength="11" autocomplete="off" data-lpignore="true" />' +
@@ -5142,33 +5142,47 @@
             } catch (_) {}
         }
         // 来源4：机器码联网找回（桌面激活窗口激活 / 旧版本激活的存量设备）
+        //   ★ 2026-10-23 改用 postInviteQuery（与 loadInviteInfo 同源）：原 _queryAdminStatus
+        //   仅对管理员激活链路返回 activated，激活码直接激活的设备查不到 → 激活码常显空白。
+        //   postInviteQuery 凭 machineId 反查绑定记录，返回 resolvedLicenseCode 即权威码。
         if (!code) {
             try {
+                // ★ 2026-10-23 修复（290 真机实锤）：mid 获取对齐 loadInviteInfo——实时硬件指纹
+                //   （activate.getMachineId）优先；原实现 StorageAdapter 存档优先，残留旧值/
+                //   异常格式会误导反查（服务端按 mid 精确匹配，旧 mid 查不到绑定 → 码恒空，
+                //   而邀请码查询用实时 mid 成功，两卡片表现分裂）。
                 let mid = '';
                 try {
-                    const savedMid = await StorageAdapter.getItem('license:machineId');
-                    if (savedMid) mid = normalizeMachineIdResult(savedMid);
+                    if (global.electronAPI && global.electronAPI.activate &&
+                        typeof global.electronAPI.activate.getMachineId === 'function') {
+                        const m = await global.electronAPI.activate.getMachineId();
+                        mid = (m && m.machineId) ? String(m.machineId) : String(m || '');
+                    }
                 } catch (_) {}
-                if (!mid && global.electronAPI && global.electronAPI.license &&
+                mid = String(mid || '').trim();
+                if ((!mid || mid.length < 8) && global.electronAPI && global.electronAPI.license &&
                     typeof global.electronAPI.license.getMachineId === 'function') {
                     try {
                         const m = await global.electronAPI.license.getMachineId();
-                        mid = normalizeMachineIdResult(m);
+                        const v = (m && m.machineId) ? String(m.machineId) : String(m || '');
+                        if (v && v.length >= 8) mid = v.trim();
                     } catch (_) {}
                 }
-                if (!mid && global.electronAPI && global.electronAPI.activate &&
-                    typeof global.electronAPI.activate.getMachineId === 'function') {
+                if ((!mid || mid.length < 8)) {
                     try {
-                        const m = await global.electronAPI.activate.getMachineId();
-                        mid = normalizeMachineIdResult(m);
+                        const savedMid = await StorageAdapter.getItem('license:machineId');
+                        if (savedMid) mid = normalizeMachineIdResult(savedMid);
                     } catch (_) {}
                 }
-                if (mid) {
-                    const r = await _queryAdminStatus('', mid);
-                    if (r && r.success && r.status === 'activated' &&
-                        r.licenseInfo && r.licenseInfo.licenseCode) {
-                        code = String(r.licenseInfo.licenseCode).trim();
-                        try { await StorageAdapter.setItem('license:code', code); } catch (_) {}
+                if (mid && mid.length >= 8) {
+                    const r = await postInviteQuery({ machineId: mid });
+                    if (r && r.success) {
+                        const found = (r.resolvedLicenseCode || r.licenseCode ||
+                            (r.licenseInfo && r.licenseInfo.licenseCode) || '');
+                        code = String(found).trim();
+                        if (code && code.length >= 4) {
+                            try { await StorageAdapter.setItem('license:code', code); } catch (_) {}
+                        }
                     }
                 }
             } catch (_) {}
@@ -5194,6 +5208,52 @@
             } catch (_) { /* 查询失败不影响原有激活码展示逻辑 */ }
             // 幂等：与邀请码卡片同款防重复策略（多路径并发调用时先清旧卡片）
             document.querySelectorAll('#activationCodeBox').forEach(n => { if (n.parentNode) n.parentNode.removeChild(n); });
+            // ★ 2026-10-23 修复（290 真机实锤）：机器码显示改在激活码 early-return 之前——
+            //   激活码取不到（本地无码且联网找回失败）时原实现直接 return，机器码块
+            //   也不渲染，同机双装解绑场景拿不到机器码对比。机器码与激活码独立展示。
+            try {
+                document.querySelectorAll('#machineIdBox').forEach(n => { if (n.parentNode) n.parentNode.removeChild(n); });
+                let mid = '';
+                // 与 loadInviteInfo 同链：实时硬件指纹优先（StorageAdapter 存档可能是残留旧值）
+                try {
+                    if (global.electronAPI && global.electronAPI.activate &&
+                        typeof global.electronAPI.activate.getMachineId === 'function') {
+                        const m = await global.electronAPI.activate.getMachineId();
+                        mid = (m && m.machineId) ? String(m.machineId) : String(m || '');
+                    }
+                } catch (_) {}
+                mid = String(mid || '').trim();
+                if ((!mid || mid.length < 8) && global.electronAPI && global.electronAPI.license &&
+                    typeof global.electronAPI.license.getMachineId === 'function') {
+                    try {
+                        const m = await global.electronAPI.license.getMachineId();
+                        const v = (m && m.machineId) ? String(m.machineId) : String(m || '');
+                        if (v && v.length >= 8) mid = v.trim();
+                    } catch (_) {}
+                }
+                if (mid && mid.length >= 8) {
+                    const midBox = document.createElement('div');
+                    midBox.id = 'machineIdBox';
+                    midBox.style.cssText = 'margin-top:6px;font-size:12px;color:#555;line-height:1.7;';
+                    const midLabel = document.createElement('span');
+                    midLabel.textContent = '🖥️ 本机机器码：';
+                    const midB = document.createElement('b');
+                    midB.title = '点击复制（用于后台解绑时对比）';
+                    midB.style.cssText = 'color:#78909c;font-family:monospace;letter-spacing:0.5px;font-size:12px;cursor:pointer;user-select:all;word-break:break-all;';
+                    midB.textContent = mid;
+                    midBox.appendChild(midLabel);
+                    midBox.appendChild(midB);
+                    el.appendChild(midBox);
+                    midB.addEventListener('click', function (ev) {
+                        const txt = (ev.target.textContent || '').trim();
+                        try {
+                            if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt);
+                            else { const ta = document.createElement('textarea'); ta.value = txt; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); }
+                            alert('机器码已复制：' + txt);
+                        } catch (_) { alert('复制失败，请手动记录：' + txt); }
+                    });
+                }
+            } catch (_) { /* 机器码获取失败不影响授权区其他内容 */ }
             const code = await getLicenseCode();
             if (!code || code.length < 4) return;
             const box = document.createElement('div');
@@ -5225,6 +5285,7 @@
                     alert('复制失败，请手动记录：' + txt);
                 }
             });
+            // 机器码显示已前移至 getLicenseCode 之前（激活码取不到也显示），此处不再重复渲染
         } catch (e) {
             console.warn('[ActivationCode] 激活码显示失败:', e && e.message);
         }
@@ -5605,7 +5666,7 @@
                 '<div style="margin-bottom:12px;">' +
                     '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">手机号 <span style="color:#e53935;">*</span>（登录账号/联系）</label>' +
                     '<input type="text" id="regPhone" placeholder="如：13800138000" autocomplete="off" inputmode="numeric" maxlength="11" style="' + INPUT_STYLE + '">' +
-                    '<div style="font-size:11px;color:#909399;margin-top:4px;">💡 11位手机号，用于管理员审核联系；未填用户名时即登录账号</div>' +
+                    '<div style="font-size:11px;color:#909399;margin-top:4px;">💡 请填写真实 11 位手机号：用于接收短信验证/找回账号，未填用户名时即登录账号</div>' +
                 '</div>' +
                 '<div style="margin-bottom:12px;">' +
                     '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">登录密码 <span style="color:#e53935;">*</span></label>' +
@@ -6939,7 +7000,10 @@
                     '<div style="font-size:11px;color:#909399;margin-top:4px;">💡 填好友邀请码，激活后双方都得奖励（好友+90天，您+30天）</div>' +
                 '</div>' +
                 // ★ 2026-10-18 淘宝码自带版本，已有码用户主路径：金色按钮上移到版本选择之前
-                '<button type="button" id="adminCodeEntryBtn" style="width:100%;margin-bottom:14px;padding:13px;font-size:15px;font-weight:bold;border:none;border-radius:10px;color:#fff;background:linear-gradient(135deg,#fbbf24 0%,#f59e0b 100%);cursor:pointer;-webkit-tap-highlight-color:transparent;box-shadow:0 2px 6px rgba(245,158,11,0.35);">🔑 已有激活码？点此直接激活</button>' +
+                '<button type="button" id="adminCodeEntryBtn" style="width:100%;margin-bottom:10px;padding:13px;font-size:15px;font-weight:bold;border:none;border-radius:10px;color:#fff;background:linear-gradient(135deg,#fbbf24 0%,#f59e0b 100%);cursor:pointer;-webkit-tap-highlight-color:transparent;box-shadow:0 2px 6px rgba(245,158,11,0.35);">🔑 已有激活码？点此直接激活</button>' +
+                // ★ 2026-10-23 淘宝码/官网付款统一激活：官网付款/审批用户一键检测（machineId），命中后补一次手机号+密码确认即装码建号
+                '<button type="button" id="adminDetectPaidBtn" style="width:100%;margin-bottom:14px;padding:13px;font-size:15px;font-weight:bold;border:none;border-radius:10px;color:#fff;background:linear-gradient(135deg,#0ea5e9 0%,#2563eb 100%);cursor:pointer;-webkit-tap-highlight-color:transparent;">🔍 官网已付款/已申请？一键检测激活</button>' +
+                '<div id="adminDetectPaidHint" style="font-size:11px;color:#909399;margin:-8px 0 12px;text-align:center;line-height:1.6;">凭本机设备码自动检测官网付款/审批结果，无需激活码</div>' +
                 // ★ 2026-10-18 版本卡片改为跳转官网付款页（本地不再自动建单/提交）
                 '<div style="font-size:13px;font-weight:bold;color:#555;margin-bottom:8px;">前往官网购买激活码</div>' +
                 '<div style="display:flex;gap:10px;">' +
@@ -7615,6 +7679,60 @@
         var skipTicketLink = document.getElementById('adminSkipToTicket');
         if (skipTicketLink) skipTicketLink.addEventListener('click', function() {
             showTicketFormModal(machineId, (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.clinicName) || '');
+        });
+        // ★ 2026-10-23 官网付款/审批一键检测：machineId 自查 → 命中后按本机注册档案装码；
+        //   无注册档案时要求补一次手机号+密码（官网付款账号），用于本地建号/装码，之后自动提示登录。
+        var detectPaidBtn = document.getElementById('adminDetectPaidBtn');
+        if (detectPaidBtn) detectPaidBtn.addEventListener('click', async function() {
+            var hint = document.getElementById('adminDetectPaidHint');
+            var oldTxt = detectPaidBtn.textContent;
+            if (!machineId) {
+                if (hint) { hint.textContent = '⚠ 未获取到本机设备码，无法检测；请使用激活码或联系客服。'; hint.style.color = '#e53935'; }
+                return;
+            }
+            detectPaidBtn.disabled = true;
+            detectPaidBtn.textContent = '🔍 正在检测官网付款/审批结果…';
+            if (hint) { hint.textContent = '正在连接官网核对本机授权…'; hint.style.color = '#909399'; }
+            try {
+                var r = await _queryAdminStatus('', machineId);
+                if (!(r && r.success && r.status === 'activated')) {
+                    detectPaidBtn.disabled = false;
+                    detectPaidBtn.textContent = oldTxt;
+                    if (hint) { hint.textContent = '未检测到已付款/已通过授权。请确认已在官网完成付款（设备码已携带），或稍后管理员审批后再点一次。'; hint.style.color = '#e53935'; }
+                    return;
+                }
+                var saved = getLocalRegistrationInfo() || {};
+                var phone = String(saved.phone || (r.licenseInfo && r.licenseInfo.phone) || '').trim();
+                var pwd = '';
+                if (phone) {
+                    phone = String(prompt('请确认官网付款时使用的手机号：', phone) || '').trim();
+                } else {
+                    phone = String(prompt('请输入官网付款时使用的手机号：', '') || '').trim();
+                }
+                if (!PHONE_RE.test(phone)) {
+                    detectPaidBtn.disabled = false;
+                    detectPaidBtn.textContent = oldTxt;
+                    if (hint) { hint.textContent = '已检测到授权，但未填写有效手机号，激活未完成；可重试或使用激活码。'; hint.style.color = '#e53935'; }
+                    return;
+                }
+                if (saved.passwordEnc) {
+                    try { pwd = await decryptSensitive(saved.passwordEnc); } catch (e) { pwd = ''; }
+                }
+                if (!pwd) pwd = String(prompt('请输入该账号的登录密码（用于本机自动建号）：', '') || '');
+                if (!pwd) {
+                    detectPaidBtn.disabled = false;
+                    detectPaidBtn.textContent = oldTxt;
+                    if (hint) { hint.textContent = '已检测到授权，但未填写登录密码，激活未完成；可重试或使用激活码。'; hint.style.color = '#e53935'; }
+                    return;
+                }
+                if (hint) { hint.textContent = '✅ 已检测到授权，正在完成本机激活…'; hint.style.color = '#2e7d32'; }
+                await _resumeCompleteActivation(r, { phone: phone, password: pwd, machineId: machineId });
+                try { cleanup(); } catch (e) {}
+            } catch (e) {
+                detectPaidBtn.disabled = false;
+                detectPaidBtn.textContent = oldTxt;
+                if (hint) { hint.textContent = '检测失败：' + ((e && e.message) || '网络异常') + '，请稍后重试。'; hint.style.color = '#e53935'; }
+            }
         });
 
         // ★ 2026-10-10 注册成功页「我有激活码，立即激活」：开窗即停在输码 Tab
