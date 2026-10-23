@@ -5225,6 +5225,39 @@
                     alert('复制失败，请手动记录：' + txt);
                 }
             });
+            // ★ 2026-10-23 显示本机机器码：便于同机双装时与后台设备列表 machineId 对比，
+            //   精准区分云端/离线桌面后解绑指定端。
+            try {
+                document.querySelectorAll('#machineIdBox').forEach(n => { if (n.parentNode) n.parentNode.removeChild(n); });
+                let mid = '';
+                if (global.electronAPI && global.electronAPI.license &&
+                    typeof global.electronAPI.license.getMachineId === 'function') {
+                    const m = await global.electronAPI.license.getMachineId();
+                    mid = (m && m.machineId) ? String(m.machineId) : String(m || '');
+                }
+                if (mid) {
+                    const midBox = document.createElement('div');
+                    midBox.id = 'machineIdBox';
+                    midBox.style.cssText = 'margin-top:6px;font-size:12px;color:#555;line-height:1.7;';
+                    const midLabel = document.createElement('span');
+                    midLabel.textContent = '🖥️ 本机机器码：';
+                    const midB = document.createElement('b');
+                    midB.title = '点击复制（用于后台解绑时对比）';
+                    midB.style.cssText = 'color:#78909c;font-family:monospace;letter-spacing:0.5px;font-size:12px;cursor:pointer;user-select:all;word-break:break-all;';
+                    midB.textContent = mid;
+                    midBox.appendChild(midLabel);
+                    midBox.appendChild(midB);
+                    el.appendChild(midBox);
+                    midB.addEventListener('click', function (ev) {
+                        const txt = (ev.target.textContent || '').trim();
+                        try {
+                            if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt);
+                            else { const ta = document.createElement('textarea'); ta.value = txt; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); }
+                            alert('机器码已复制：' + txt);
+                        } catch (_) { alert('复制失败，请手动记录：' + txt); }
+                    });
+                }
+            } catch (_) { /* 机器码获取失败不影响授权区其他内容 */ }
         } catch (e) {
             console.warn('[ActivationCode] 激活码显示失败:', e && e.message);
         }

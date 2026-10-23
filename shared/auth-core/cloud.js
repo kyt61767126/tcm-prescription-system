@@ -4113,7 +4113,7 @@
     //   激活码，此前云端版只有邀请码卡片、完全没有激活码显示（客户电脑实锤反馈
     //   「激活状态不显示-激活码-邀请码」）。码来源：①账号态 invite 接口回传 licenseCode
     //   ②本地 license:code ③机码找回 resolvedLicenseCode。仅已激活分支调用。
-    function renderCloudActivationCode(el, code) {
+    async function renderCloudActivationCode(el, code) {
         try {
             const c = String(code || '').trim().toUpperCase();
             if (!c || c.length < 4) return;
@@ -4150,6 +4150,44 @@
                     alert('复制失败，请手动记录：' + txt);
                 }
             });
+            // ★ 2026-10-23 显示本机机器码：便于同机双装时与后台设备列表 machineId 对比，
+            //   精准区分云端/离线桌面后解绑指定端。
+            try {
+                document.querySelectorAll('#machineIdBox').forEach(n => { if (n.parentNode) n.parentNode.removeChild(n); });
+                let mid = '';
+                const ea = global.electronAPI;
+                if (ea && ea.license && typeof ea.license.getMachineId === 'function') {
+                    const m = await ea.license.getMachineId();
+                    mid = (m && m.machineId) ? String(m.machineId) : String(m || '');
+                } else if (ea && ea.activate && typeof ea.activate.getMachineId === 'function') {
+                    const m = await ea.activate.getMachineId();
+                    mid = (m && m.machineId) ? String(m.machineId) : String(m || '');
+                }
+                if (mid) {
+                    const midBox = document.createElement('div');
+                    midBox.id = 'machineIdBox';
+                    midBox.style.cssText = 'margin-top:6px;font-size:12px;color:#555;line-height:1.7;';
+                    const midLabel = document.createElement('span');
+                    midLabel.textContent = '🖥️ 本机机器码：';
+                    const midB = document.createElement('b');
+                    midB.title = '点击复制（用于后台解绑时对比）';
+                    midB.style.cssText = 'color:#78909c;font-family:monospace;letter-spacing:0.5px;font-size:12px;cursor:pointer;user-select:all;word-break:break-all;';
+                    midB.textContent = mid;
+                    midBox.appendChild(midLabel);
+                    midBox.appendChild(midB);
+                    const inv2 = document.getElementById('inviteInfoBox');
+                    if (inv2 && inv2.parentNode === el) el.insertBefore(midBox, inv2);
+                    else el.appendChild(midBox);
+                    midB.addEventListener('click', function (ev) {
+                        const txt = (ev.target.textContent || '').trim();
+                        try {
+                            if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt);
+                            else { const ta = document.createElement('textarea'); ta.value = txt; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); }
+                            alert('机器码已复制：' + txt);
+                        } catch (_) { alert('复制失败，请手动记录：' + txt); }
+                    });
+                }
+            } catch (_) { /* 机器码获取失败不影响授权区其他内容 */ }
         } catch (e) {
             console.warn('[ActivationCode] 云端激活码显示失败:', e && e.message);
         }
