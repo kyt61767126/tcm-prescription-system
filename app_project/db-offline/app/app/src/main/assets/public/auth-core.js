@@ -7000,7 +7000,10 @@
                     '<div style="font-size:11px;color:#909399;margin-top:4px;">💡 填好友邀请码，激活后双方都得奖励（好友+90天，您+30天）</div>' +
                 '</div>' +
                 // ★ 2026-10-18 淘宝码自带版本，已有码用户主路径：金色按钮上移到版本选择之前
-                '<button type="button" id="adminCodeEntryBtn" style="width:100%;margin-bottom:14px;padding:13px;font-size:15px;font-weight:bold;border:none;border-radius:10px;color:#fff;background:linear-gradient(135deg,#fbbf24 0%,#f59e0b 100%);cursor:pointer;-webkit-tap-highlight-color:transparent;box-shadow:0 2px 6px rgba(245,158,11,0.35);">🔑 已有激活码？点此直接激活</button>' +
+                '<button type="button" id="adminCodeEntryBtn" style="width:100%;margin-bottom:10px;padding:13px;font-size:15px;font-weight:bold;border:none;border-radius:10px;color:#fff;background:linear-gradient(135deg,#fbbf24 0%,#f59e0b 100%);cursor:pointer;-webkit-tap-highlight-color:transparent;box-shadow:0 2px 6px rgba(245,158,11,0.35);">🔑 已有激活码？点此直接激活</button>' +
+                // ★ 2026-10-23 淘宝码/官网付款统一激活：官网付款/审批用户一键检测（machineId），命中后补一次手机号+密码确认即装码建号
+                '<button type="button" id="adminDetectPaidBtn" style="width:100%;margin-bottom:14px;padding:13px;font-size:15px;font-weight:bold;border:none;border-radius:10px;color:#fff;background:linear-gradient(135deg,#0ea5e9 0%,#2563eb 100%);cursor:pointer;-webkit-tap-highlight-color:transparent;">🔍 官网已付款/已申请？一键检测激活</button>' +
+                '<div id="adminDetectPaidHint" style="font-size:11px;color:#909399;margin:-8px 0 12px;text-align:center;line-height:1.6;">凭本机设备码自动检测官网付款/审批结果，无需激活码</div>' +
                 // ★ 2026-10-18 版本卡片改为跳转官网付款页（本地不再自动建单/提交）
                 '<div style="font-size:13px;font-weight:bold;color:#555;margin-bottom:8px;">前往官网购买激活码</div>' +
                 '<div style="display:flex;gap:10px;">' +
@@ -7676,6 +7679,60 @@
         var skipTicketLink = document.getElementById('adminSkipToTicket');
         if (skipTicketLink) skipTicketLink.addEventListener('click', function() {
             showTicketFormModal(machineId, (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.clinicName) || '');
+        });
+        // ★ 2026-10-23 官网付款/审批一键检测：machineId 自查 → 命中后按本机注册档案装码；
+        //   无注册档案时要求补一次手机号+密码（官网付款账号），用于本地建号/装码，之后自动提示登录。
+        var detectPaidBtn = document.getElementById('adminDetectPaidBtn');
+        if (detectPaidBtn) detectPaidBtn.addEventListener('click', async function() {
+            var hint = document.getElementById('adminDetectPaidHint');
+            var oldTxt = detectPaidBtn.textContent;
+            if (!machineId) {
+                if (hint) { hint.textContent = '⚠ 未获取到本机设备码，无法检测；请使用激活码或联系客服。'; hint.style.color = '#e53935'; }
+                return;
+            }
+            detectPaidBtn.disabled = true;
+            detectPaidBtn.textContent = '🔍 正在检测官网付款/审批结果…';
+            if (hint) { hint.textContent = '正在连接官网核对本机授权…'; hint.style.color = '#909399'; }
+            try {
+                var r = await _queryAdminStatus('', machineId);
+                if (!(r && r.success && r.status === 'activated')) {
+                    detectPaidBtn.disabled = false;
+                    detectPaidBtn.textContent = oldTxt;
+                    if (hint) { hint.textContent = '未检测到已付款/已通过授权。请确认已在官网完成付款（设备码已携带），或稍后管理员审批后再点一次。'; hint.style.color = '#e53935'; }
+                    return;
+                }
+                var saved = getLocalRegistrationInfo() || {};
+                var phone = String(saved.phone || (r.licenseInfo && r.licenseInfo.phone) || '').trim();
+                var pwd = '';
+                if (phone) {
+                    phone = String(prompt('请确认官网付款时使用的手机号：', phone) || '').trim();
+                } else {
+                    phone = String(prompt('请输入官网付款时使用的手机号：', '') || '').trim();
+                }
+                if (!PHONE_RE.test(phone)) {
+                    detectPaidBtn.disabled = false;
+                    detectPaidBtn.textContent = oldTxt;
+                    if (hint) { hint.textContent = '已检测到授权，但未填写有效手机号，激活未完成；可重试或使用激活码。'; hint.style.color = '#e53935'; }
+                    return;
+                }
+                if (saved.passwordEnc) {
+                    try { pwd = await decryptSensitive(saved.passwordEnc); } catch (e) { pwd = ''; }
+                }
+                if (!pwd) pwd = String(prompt('请输入该账号的登录密码（用于本机自动建号）：', '') || '');
+                if (!pwd) {
+                    detectPaidBtn.disabled = false;
+                    detectPaidBtn.textContent = oldTxt;
+                    if (hint) { hint.textContent = '已检测到授权，但未填写登录密码，激活未完成；可重试或使用激活码。'; hint.style.color = '#e53935'; }
+                    return;
+                }
+                if (hint) { hint.textContent = '✅ 已检测到授权，正在完成本机激活…'; hint.style.color = '#2e7d32'; }
+                await _resumeCompleteActivation(r, { phone: phone, password: pwd, machineId: machineId });
+                try { cleanup(); } catch (e) {}
+            } catch (e) {
+                detectPaidBtn.disabled = false;
+                detectPaidBtn.textContent = oldTxt;
+                if (hint) { hint.textContent = '检测失败：' + ((e && e.message) || '网络异常') + '，请稍后重试。'; hint.style.color = '#e53935'; }
+            }
         });
 
         // ★ 2026-10-10 注册成功页「我有激活码，立即激活」：开窗即停在输码 Tab
