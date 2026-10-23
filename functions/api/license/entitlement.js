@@ -361,11 +361,12 @@ export async function onRequest(context) {
             return json({ success: false, error: 'KV binding not found' }, 500);
         }
 
-        // 速率限制：每 IP 每小时 60 次（启动 1 次 + 24h 轮询，远宽裕）
+        // 速率限制：每 IP 每小时 300 次（启动 1 次 + 24h 轮询，诊所需多设备共用出口 IP；
+        // 原 60 次在多设备/反复激活测试时会被误伤 429）
         const ip = getClientIP(context);
-        const rateOk = await checkRateLimit(kv, `ent_${ip}`, 60);
+        const rateOk = await checkRateLimit(kv, `ent_${ip}`, 300);
         if (!rateOk.allowed) {
-            return json({ success: false, error: '请求过于频繁，请稍后再试' }, 429);
+            return json({ success: false, error: '授权服务请求过于频繁，请稍后再试；已激活设备可断网使用' }, 429);
         }
 
         const body = await context.request.json().catch(() => ({}));

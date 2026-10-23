@@ -2737,10 +2737,11 @@
                     else if (entHttpStatus !== 200 && entHttpStatus !== 0) {
                         // ★ S2 修复：其他 HTTP 错误（429/500…）不是断网，
                         //   fail-closed，绝不落入宽限 fail-open。
-                        // ★ 2026-09-27 紧急回归修复（P3-B 引入）：200=裁决成功
-                        //   ——register 被 429 限流时，observe 模式下 entitlement
-                        //   仍返回 200 LICENSED；此前条件把 200 也误判失败，导致
-                        //   登录页冷启动弹管理员激活框+登录报「HTTP 200」红字。
+                        // ★ 2026-10-23 429 专属文案：多设备共用出口 IP 可能触发频控，
+                        //   已激活设备可断网使用，稍后自动恢复。
+                        if (entHttpStatus === 429) {
+                            return fail('授权服务请求过于频繁，请稍后再试；已激活设备可断网使用');
+                        }
                         return fail('授权服务暂时不可用（HTTP ' + entHttpStatus + '），请稍后重试或联系客服');
                     }
                 } catch (e) { /* 仅真·网络不可达（httpStatus=0）才走下方宽限 */ }
