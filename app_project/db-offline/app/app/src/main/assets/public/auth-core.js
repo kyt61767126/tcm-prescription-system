@@ -5142,6 +5142,9 @@
             } catch (_) {}
         }
         // 来源4：机器码联网找回（桌面激活窗口激活 / 旧版本激活的存量设备）
+        //   ★ 2026-10-23 改用 postInviteQuery（与 loadInviteInfo 同源）：原 _queryAdminStatus
+        //   仅对管理员激活链路返回 activated，激活码直接激活的设备查不到 → 激活码常显空白。
+        //   postInviteQuery 凭 machineId 反查绑定记录，返回 resolvedLicenseCode 即权威码。
         if (!code) {
             try {
                 let mid = '';
@@ -5164,11 +5167,14 @@
                     } catch (_) {}
                 }
                 if (mid) {
-                    const r = await _queryAdminStatus('', mid);
-                    if (r && r.success && r.status === 'activated' &&
-                        r.licenseInfo && r.licenseInfo.licenseCode) {
-                        code = String(r.licenseInfo.licenseCode).trim();
-                        try { await StorageAdapter.setItem('license:code', code); } catch (_) {}
+                    const r = await postInviteQuery({ machineId: mid });
+                    if (r && r.success) {
+                        const found = (r.resolvedLicenseCode || r.licenseCode ||
+                            (r.licenseInfo && r.licenseInfo.licenseCode) || '');
+                        code = String(found).trim();
+                        if (code && code.length >= 4) {
+                            try { await StorageAdapter.setItem('license:code', code); } catch (_) {}
+                        }
                     }
                 }
             } catch (_) {}
