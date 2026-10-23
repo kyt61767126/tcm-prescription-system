@@ -1206,7 +1206,7 @@ async function detachDeviceFromOtherLicenses(kv, targetCode, machineId) {
             const otherCode = other.code;
             if (!otherCode || otherCode === targetCode) continue;
             // 跨端隔离：目标码与他码 productClass 不同（且均非空）→ 不解绑
-            const otherPc = normalizeCodeProductClass(other.productClass);
+            let otherPc = normalizeCodeProductClass(other.productClass);
             if (otherPc === 'INVALID') otherPc = null;
             if (targetPc && otherPc && targetPc !== otherPc) continue;
             let dirty = false;
