@@ -141,10 +141,8 @@ function getLicenseProductLock(record) {
 // 端锁定闸权威评估（三个激活端点共用，禁止各端点自造判定）：
 //   · source='preset'（码记录预置，淘宝库存码）→ 调用方必须硬拦：check 不通过
 //     即 403（请求端缺失/非法同样 fail-closed，防删字段/旧客户端套利）；
-//   · source='device'（无预置、从在册设备派生的历史码/官网码）→ 观察期只审计
-//     不拦截：09-14 前旧 exe 永不上报端、历史存在合法的跨端混合部署，硬拦会
-//     误伤付费老客户（双审中-2 结论）；待观察日志 product-class-derived-observe
-//     证明覆盖率与跨端规模后，再参照 config:platform-check 先例加 KV 开关切硬；
+//   · source='device'（无预置、从在册设备派生的历史码/官网码）→ ★ 2026-10-23
+//     取消观察期，与 preset 同口径硬拦截（激活码严格区分云端/离线）；
 //   · source=null → check.ok 恒 true。
 //   安全口径（安全二查结论）：端形态为客户端自报，本闸防普通买家误用/套利，非
 //   密码学隔离；云端权益的独立护城河是云账号开通链（仅付费订单/人工审批/admin
@@ -2141,7 +2139,7 @@ export {
     normalizeCodeProductClass,  // 入参归一（'local'→'offline'，非法→'INVALID'）
     getLicenseProductLock,      // 码有效锁定端字符串（预置优先，否则从在册设备派生）
     getLicenseProductLockInfo,  // {value, source:'preset'|'device'|null}
-    evaluateProductClassGate,   // 三激活端点共用闸评估（preset 硬拦 / device 观察）
+    evaluateProductClassGate,   // 三激活端点共用闸评估（preset/device 均硬拦 / null 放行）
     checkProductClassMatch,     // 端锁定闸（缺失/不符 fail-closed）
     ACTIVATION_CODE_CHARS,
     KV_LICENSE_PREFIX,

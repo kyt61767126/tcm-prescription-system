@@ -249,37 +249,25 @@ export async function onRequest(context) {
         //      不上报）一律 403 并提示升级（fail-closed，防删字段套利）。99 本地码
         //      无法在 199 云端软件激活；经济兜底：validate 不开通云端账号（云账号仅
         //      付费订单/人工审批/admin-submit 支付前置产生），改包谎报端也拿不到云端权益；
-        //   ② 无预置的历史码/官网订单码（source='device'，09-08 后新签码与 09-14 后
-        //      客户端已在 devices 落端形态，存量面很大）：观察期只记审计不拦截——
-        //      旧 exe 重装、历史合法跨端混合部署的付费客户行为零变化；
+        //   ② 无预置的历史码/官网订单码（source='device'，从在册设备派生锁端）：
+        //      ★ 2026-10-23 取消观察期，改为硬拦截——激活码严格区分云端/离线，
+        //      派生锁端与请求端不一致即 403（与 preset 同口径）；
         //   ③ 无预置且无在册端形态（source=null）→ 直接放行。
         //   位置铁律：本块先于一切写库/签发（checkDeviceVersion/配额/devices.shift/
         //   updateLicense/buildLicenseData）。
         const __pcGate = evaluateProductClassGate(record, productClass);
         if (!__pcGate.check.ok) {
             const __reqEndDesc = __pcGate.requestEnd || '(缺失/无法识别)';
-            if (__pcGate.source === 'preset') {
-                await appendLicenseLog(kv, code, {
-                    action: 'product-class-denied',
-                    time: new Date().toISOString(),
-                    ip: ip,
-                    operator: user || record.user || 'unknown',
-                    detail: '端锁定拒绝：码锁端=' + __pcGate.locked + '，请求端=' + __reqEndDesc +
-                        '，machineId=' + machineId.substring(0, 8) + '...，原因=' + __pcGate.check.code
-                }).catch(() => {});
-                return json({ success: false, code: __pcGate.check.code, error: __pcGate.check.error }, 403);
-            }
-            // 派生锁观察期（双审中-2 裁定）：留证据不拦截，为后续 KV 开关切硬积累数据
-            const __isReactivate = getDevices(record).some(d => d.machineId === machineId);
             await appendLicenseLog(kv, code, {
-                action: 'product-class-derived-observe',
+                action: 'product-class-denied',
                 time: new Date().toISOString(),
                 ip: ip,
                 operator: user || record.user || 'unknown',
-                detail: '派生端不一致观察（不拦截）：在册锁端=' + __pcGate.locked +
-                    '，请求端=' + __reqEndDesc + '，machineId=' + machineId.substring(0, 8) + '...，' +
-                    (__isReactivate ? '同设备重激活' : '新设备激活') + '，原因=' + __pcGate.check.code
+                detail: '端锁定拒绝：码锁端=' + __pcGate.locked + '，请求端=' + __reqEndDesc +
+                    '，machineId=' + machineId.substring(0, 8) + '...，source=' + __pcGate.source +
+                    '，原因=' + __pcGate.check.code
             }).catch(() => {});
+            return json({ success: false, code: __pcGate.check.code, error: __pcGate.check.error }, 403);
         }
 
         // ★ 设备-版本绑定校验：同一台设备只能注册一个版本

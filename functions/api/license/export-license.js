@@ -228,30 +228,20 @@ export async function onRequest(context) {
 
         // ★ 2026-10-07 码-端锁定闸（方案B）：离线文件通道服务的客户恒在【本地版】
         //   软件上（云端版必须联网使用，不存在离线导入场景），故请求端恒为 offline。
-        //   预置云端锁端码走本通道 = 跨版签发，硬拒 403 并审计；无预置的历史码/
-        //   官网码即使在册端为 cloud（派生来源），观察期仅审计不拦截，维持老客户
-        //   客服文件通道历史可用口径（双审中-2 裁定）。
+        //   预置云端锁端码走本通道 = 跨版签发，硬拒 403 并审计；★ 2026-10-23 取消
+        //   观察期，派生锁端（source='device'）与 offline 不符也硬拒。
         const __pcGate = evaluateProductClassGate(record, 'offline');
         if (!__pcGate.check.ok) {
-            if (__pcGate.source === 'preset') {
-                await appendLicenseLog(kv, code, {
-                    action: 'product-class-denied',
-                    time: new Date().toISOString(),
-                    ip: ip,
-                    operator: auth.operator,
-                    detail: `[export] 离线文件通道端锁定拒绝：码锁端=${__pcGate.locked}，请求端=offline，` +
-                        `machineId=${machineId.substring(0, 8)}...，authMethod=${auth.method}，原因=${__pcGate.check.code}`
-                }).catch(() => {});
-                return json({ success: false, code: __pcGate.check.code, error: __pcGate.check.error }, 403);
-            }
             await appendLicenseLog(kv, code, {
-                action: 'product-class-derived-observe',
+                action: 'product-class-denied',
                 time: new Date().toISOString(),
                 ip: ip,
                 operator: auth.operator,
-                detail: `[export] 派生端不一致观察（不拦截）：在册锁端=${__pcGate.locked}，请求端=offline，` +
-                    `machineId=${machineId.substring(0, 8)}...，authMethod=${auth.method}，原因=${__pcGate.check.code}`
+                detail: `[export] 离线文件通道端锁定拒绝：码锁端=${__pcGate.locked}，请求端=offline，` +
+                    `machineId=${machineId.substring(0, 8)}...，source=${__pcGate.source}，` +
+                    `authMethod=${auth.method}，原因=${__pcGate.check.code}`
             }).catch(() => {});
+            return json({ success: false, code: __pcGate.check.code, error: __pcGate.check.error }, 403);
         }
 
         // 诊所名绑定校验（与 validate.js 一致）

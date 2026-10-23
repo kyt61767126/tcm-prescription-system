@@ -323,10 +323,10 @@ async function handleRedeem(context, kv, body, origin, ip) {
     if (String(licRecord.status) === 'disabled') {
         return json({ success: false, error: '激活码已停用，请联系客服' }, 410, origin);
     }
-    // 端锁定闸：口径与 validate.js 一致——preset（预置库存码）不匹配硬拦；
-    // device（历史码派生，观察期）/ null（无锁）放行，最终仍由 validate 复核。
+    // 端锁定闸：口径与 validate.js 一致——preset（预置库存码）与 device（派生锁端）
+    // 不匹配均硬拦；null（无锁）放行，最终仍由 validate 复核。★ 2026-10-23 取消观察期。
     const gate = evaluateProductClassGate(licRecord, productClassRaw);
-    if (gate.source === 'preset' && !gate.check.ok) {
+    if (!gate.check.ok) {
         appendLicenseLog(kv, rec.code, {
             action: 'activation-token-redeem-denied',
             ip, operator: 'anonymous',

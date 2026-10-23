@@ -443,36 +443,23 @@ export async function onRequest(context) {
                         //   分层信息（与既有⑤"配额先于密码"同原则）。
                         //   · 预置锁端码（淘宝库存码，source='preset'）：必须同端加机；
                         //     旧客户端未上报端 → fail-closed 403 提示升级；同设备重激活同过闸；
-                        //   · 派生锁（无预置历史码/官网码，source='device'）：观察期只审计
-                        //     不拦截（双审中-2：旧客户端与历史混合端诊所零误伤）。
+                        //   · 派生锁（无预置历史码/官网码，source='device'）：★ 2026-10-23
+                        //     取消观察期，硬拦截（与 preset 同口径）。
                         const __pcGate = evaluateProductClassGate(__licRec, __pClass);
                         if (!__pcGate.check.ok) {
                             const __reqEndDesc = __pcGate.requestEnd || '(缺失/无法识别)';
-                            if (__pcGate.source === 'preset') {
-                                await appendLicenseLog(kv, __code, {
-                                    action: 'product-class-denied',
-                                    time: new Date().toISOString(),
-                                    ip: ip,
-                                    operator: phone.trim(),
-                                    detail: '自动加机/重激活端锁定拒绝：码锁端=' + __pcGate.locked +
-                                        '，请求端=' + __reqEndDesc +
-                                        '，machineId=' + __midStr.slice(0, 8) + '...，' +
-                                        (__existingDev ? '同设备重激活' : '新设备加机') +
-                                        '，原因=' + __pcGate.check.code
-                                }).catch(() => {});
-                                return json({ success: false, code: __pcGate.check.code, error: __pcGate.check.error }, 403);
-                            }
                             await appendLicenseLog(kv, __code, {
-                                action: 'product-class-derived-observe',
+                                action: 'product-class-denied',
                                 time: new Date().toISOString(),
                                 ip: ip,
                                 operator: phone.trim(),
-                                detail: '自动加机/重激活派生端不一致观察（不拦截）：在册锁端=' + __pcGate.locked +
+                                detail: '自动加机/重激活端锁定拒绝：码锁端=' + __pcGate.locked +
                                     '，请求端=' + __reqEndDesc +
-                                    '，machineId=' + __midStr.slice(0, 8) + '...，' +
-                                    (__existingDev ? '同设备重激活' : '新设备加机') +
+                                    '，machineId=' + __midStr.slice(0, 8) + '...，source=' + __pcGate.source +
+                                    '，' + (__existingDev ? '同设备重激活' : '新设备加机') +
                                     '，原因=' + __pcGate.check.code
                             }).catch(() => {});
+                            return json({ success: false, code: __pcGate.check.code, error: __pcGate.check.error }, 403);
                         }
 
                         let __newDevices;
