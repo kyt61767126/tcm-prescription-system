@@ -2554,7 +2554,7 @@ async function showDevices(code) {
                 : devices;
             document.getElementById('devicesModalMax').textContent = __cloudCode ? '按账号计' : maxDev;
             document.getElementById('devicesModalUsed').textContent = shownDevices.length;
-            renderDevicesList(code, shownDevices);
+            renderDevicesList(code, shownDevices, r.productClass);
         } else {
             if (res.status === 403) {
                 showAlert('devicesModalAlert', '登录已过期，请重新登录', 'error');
@@ -2590,7 +2590,7 @@ function logDetailHtml(detail) {
     return escapeHtml(s.slice(0, m.index)) + deviceTagHtml(m[1]) + ' ' + escapeHtml(s.slice(m.index));
 }
 
-function renderDevicesList(code, devices) {
+function renderDevicesList(code, devices, codeProductClass) {
     const el = document.getElementById('devicesList');
     if (!devices || devices.length === 0) {
         el.innerHTML = '<div class="empty">暂无已绑定设备</div>';
@@ -2599,11 +2599,21 @@ function renderDevicesList(code, devices) {
     el.innerHTML = devices.map((d, i) => {
         const activatedAt = d.activatedAt ? new Date(d.activatedAt).toLocaleString('zh-CN') : '-';
         const maskedMid = d.machineId || '-';
-        // ★ 2026-10-23 端形态标识：区分云端/离线桌面，便于同机双装时精准解绑
+        // ★ 2026-10-23 端形态标识（兜底推断链）：
+        //   1. 设备自带 productClass（cloud/offline）
+        //   2. machineId 前缀 browser- → 云端（网页/云桌面指纹）
+        //   3. 码预置 productClass（锁端码整码同端）
+        //   4. 兜底显示「未知端」并提示点「显示」对比本机机器码
+        const __inferPc = (function() {
+            if (d.productClass === 'cloud' || d.productClass === 'offline') return d.productClass;
+            if (String(maskedMid).indexOf('browser-') === 0) return 'cloud';
+            if (codeProductClass === 'cloud' || codeProductClass === 'offline') return codeProductClass;
+            return null;
+        })();
         const pcTag = (function() {
-            if (d.productClass === 'cloud') return '<span class="tag" style="background:#e3f2fd;color:#1565c0;font-size:11px;padding:1px 6px;border-radius:3px;">☁️ 云端</span>';
-            if (d.productClass === 'offline') return '<span class="tag" style="background:#fff3e0;color:#e65100;font-size:11px;padding:1px 6px;border-radius:3px;">💻 离线</span>';
-            return '';
+            if (__inferPc === 'cloud') return '<span class="tag" style="background:#e3f2fd;color:#1565c0;font-size:11px;padding:1px 6px;border-radius:3px;" title="端形态：云端（设备数据或推断）">☁️ 云端</span>';
+            if (__inferPc === 'offline') return '<span class="tag" style="background:#fff3e0;color:#e65100;font-size:11px;padding:1px 6px;border-radius:3px;" title="端形态：离线（设备数据或推断）">💻 离线</span>';
+            return '<span class="tag" style="background:#f5f5f5;color:#909399;font-size:11px;padding:1px 6px;border-radius:3px;" title="老设备无 productClass，点「显示」对比本机机器码区分云端/离线">❓ 未知端</span>';
         })();
         return '<div class="device-row" style="padding:10px;border-bottom:1px solid #ebeef5;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">' +
             '<div style="flex:1;min-width:200px;">' +
