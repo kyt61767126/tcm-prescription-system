@@ -5135,6 +5135,8 @@
                 // ★ 2026-10-10 淘宝买家入口强化：原 12px 小字「已有激活码？直接输入」
                 //   升级为全宽金色主按钮，点击直达输码 Tab；留言申请链接保留在按钮下方。
                 '<button type="button" id="adminCodeEntryBtn" style="width:100%;margin-top:14px;padding:13px;font-size:15px;font-weight:bold;border:none;border-radius:10px;color:#fff;background:linear-gradient(135deg,#fbbf24 0%,#f59e0b 100%);cursor:pointer;-webkit-tap-highlight-color:transparent;box-shadow:0 2px 6px rgba(245,158,11,0.35);">🔑 已有激活码？点此直接激活</button>' +
+                '<button type="button" id="adminDetectPaidBtn" style="width:100%;margin-top:10px;padding:13px;font-size:15px;font-weight:bold;border:none;border-radius:10px;color:#fff;background:linear-gradient(135deg,#0ea5e9 0%,#2563eb 100%);cursor:pointer;-webkit-tap-highlight-color:transparent;">🔍 官网已付款/已申请？一键检测激活</button>' +
+                '<div id="adminDetectPaidHint" style="font-size:11px;color:#909399;margin-top:6px;text-align:center;line-height:1.6;">凭本机设备码自动检测官网付款/审批结果，无需激活码</div>' +
                 '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px;font-size:12px;">' +
                     '<span id="adminSkipToTicket" style="color:#07c160;cursor:pointer;-webkit-tap-highlight-color:transparent;">没有激活码？留言申请 →</span>' +
                 '</div>' +
@@ -5458,6 +5460,36 @@
         if (codeEntryBtn) codeEntryBtn.addEventListener('click', function() {
             show('adminTabCode'); setActiveTab('code');
             setTimeout(function() { var i = document.getElementById('adminCodeInput'); if (i) i.focus(); }, 200);
+        });
+        // ★ 2026-10-23 淘宝/官网付款统一激活：官网付款/审批用户无需激活码，凭本机 machineId
+        //   一键检测 admin-status（machineId-only 自救），命中即安装授权并提示登录。
+        var detectPaidBtn = document.getElementById('adminDetectPaidBtn');
+        if (detectPaidBtn) detectPaidBtn.addEventListener('click', function() {
+            var hint = document.getElementById('adminDetectPaidHint');
+            var oldTxt = detectPaidBtn.textContent;
+            if (!machineId) {
+                if (hint) { hint.textContent = '⚠ 未获取到本机设备码，无法检测；请用手机号+密码直接登录或联系客服。'; hint.style.color = '#e53935'; }
+                return;
+            }
+            detectPaidBtn.disabled = true;
+            detectPaidBtn.textContent = '🔍 正在检测官网付款/审批结果…';
+            if (hint) { hint.textContent = '正在连接官网核对本机授权…'; hint.style.color = '#909399'; }
+            _cloudQueryAdminStatus('', machineId).then(function(r) {
+                if (r && r.success && r.status === 'activated') {
+                    if (hint) { hint.textContent = '✅ 检测到已激活授权，正在完成本机激活…'; hint.style.color = '#2e7d32'; }
+                    _cloudResumeCompleteActivation(r, { phone: (r.licenseInfo && r.licenseInfo.phone) || '' }).then(function() {
+                        try { cleanup(); } catch (e) {}
+                    });
+                } else {
+                    detectPaidBtn.disabled = false;
+                    detectPaidBtn.textContent = oldTxt;
+                    if (hint) { hint.textContent = '未检测到已付款/已通过授权。请确认已在官网完成付款（设备码已携带），或稍后管理员审批后再点一次。'; hint.style.color = '#e53935'; }
+                }
+            }).catch(function(e) {
+                detectPaidBtn.disabled = false;
+                detectPaidBtn.textContent = oldTxt;
+                if (hint) { hint.textContent = '检测失败：' + ((e && e.message) || '网络异常') + '，请稍后重试。'; hint.style.color = '#e53935'; }
+            });
         });
         var skipTicketLink = document.getElementById('adminSkipToTicket');
         if (skipTicketLink) skipTicketLink.addEventListener('click', function() {
