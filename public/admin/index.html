@@ -2599,9 +2599,15 @@ function renderDevicesList(code, devices) {
     el.innerHTML = devices.map((d, i) => {
         const activatedAt = d.activatedAt ? new Date(d.activatedAt).toLocaleString('zh-CN') : '-';
         const maskedMid = d.machineId || '-';
+        // ★ 2026-10-23 端形态标识：区分云端/离线桌面，便于同机双装时精准解绑
+        const pcTag = (function() {
+            if (d.productClass === 'cloud') return '<span class="tag" style="background:#e3f2fd;color:#1565c0;font-size:11px;padding:1px 6px;border-radius:3px;">☁️ 云端</span>';
+            if (d.productClass === 'offline') return '<span class="tag" style="background:#fff3e0;color:#e65100;font-size:11px;padding:1px 6px;border-radius:3px;">💻 离线</span>';
+            return '';
+        })();
         return '<div class="device-row" style="padding:10px;border-bottom:1px solid #ebeef5;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">' +
             '<div style="flex:1;min-width:200px;">' +
-                '<div class="device-mid" style="font-family:Courier New,monospace;color:#2c3e50;font-weight:600;word-break:break-all;">' + deviceTagHtml(maskedMid) + escapeHtml(maskedMid) + '</div>' +
+                '<div class="device-mid" style="font-family:Courier New,monospace;color:#2c3e50;font-weight:600;word-break:break-all;">' + deviceTagHtml(maskedMid) + pcTag + escapeHtml(maskedMid) + '</div>' +
                 '<div style="font-size:12px;color:#909399;margin-top:4px;">激活时间：' + activatedAt + (d.clinicName ? ' · 诊所：' + escapeHtml(d.clinicName) : '') + '</div>' +
             '</div>' +
             '<button class="btn btn-sm btn-primary" data-shown="0" onclick="revealMachineId(\'' + code + '\',\'' + escapeHtml(maskedMid) + '\',this)">👁 显示</button>' +
