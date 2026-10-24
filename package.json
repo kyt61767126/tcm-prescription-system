@@ -1,20 +1,11 @@
 {
-  "name": "kyt-zy",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
-  "scripts": {
-    "build": "echo 'Build not required - using public/index.html directly'"
-  },
+  "name": "tcm-prescription",
+  "version": "1.0.294",
+  "description": "惠康中医-本地",
+  "main": "electron/main.js",
+  "author": "惠康中医",
+  "license": "MIT",
   "dependencies": {
-    "@capacitor-community/sqlite": "^8.1.0",
-    "@capacitor/android": "^8.4.1",
-    "@capacitor/cli": "^8.4.1",
-    "@capacitor/core": "^8.4.1",
-    "@capacitor/preferences": "^8.0.1",
-    "puppeteer-core": "^25.8.0"
-  },
-  "devDependencies": {
-    "javascript-obfuscator": "^5.4.7"
+    "fs-extra": "^11.3.5"
   }
 }
