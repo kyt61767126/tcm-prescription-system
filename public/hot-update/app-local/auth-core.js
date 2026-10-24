@@ -6283,6 +6283,23 @@
             const __regGate = __getSyncRegGate();
             // 已激活的存量设备不打扰（可能无手机号账号，维持现状，铁律 1-5 不破坏）
             if (__regGate ? !!__regGate.licensed : (await __isDeviceLicensed())) return;
+            // ★ 2026-10-24 升级保护：已激活设备即使账号表/授权校验异常也绝不自动弹注册页。
+            //   依据本机持久激活证据（激活码/完成标记/gate token）判定为老设备；
+            //   用户仍可手动点「注册开通」补回本地账号，但不会被升级强弹注册。
+            try {
+                if (typeof localStorage !== 'undefined' && (
+                    localStorage.getItem('license:code') ||
+                    localStorage.getItem('auth:activationDone') ||
+                    localStorage.getItem('license:gateToken'))) {
+                    return;
+                }
+            } catch (_) {}
+            // ★ 云端版桌面不弹本地注册（账号在服务器，直接手机号+密码登录）
+            try {
+                if (typeof CONFIG !== 'undefined' && CONFIG && (
+                    String(CONFIG.appMode || '') === 'cloud' ||
+                    /云端/.test(String(CONFIG.versionLabel || '')))) return;
+            } catch (_) {}
             // 本地桥判定：云端APP/纯网页无 getActivationUsers/registerLocalUser 桥 → 跳过
             const api = global.electronAPI || (typeof window !== 'undefined' ? window.electronAPI : null);
             const hasLocalBridge = !!(api && api.activate &&
