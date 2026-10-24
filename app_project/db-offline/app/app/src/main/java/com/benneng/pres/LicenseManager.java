@@ -3339,7 +3339,7 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
     // ★ P1-9 代码完整性校验：检测 auth-core.js / license-manager.js 是否被篡改
     public boolean verifyJsIntegrity() {
         try {
-            String[] criticalFiles = {"public/auth-core.js", "public/license/license-manager.js"};
+            String[] criticalFiles = {"public/auth-core.js", "public/license/license-manager.js", "public/security-guard.js", "public/index.html"};
             StringBuilder combined = new StringBuilder();
             for (String assetPath : criticalFiles) {
                 try {

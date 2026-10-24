@@ -435,6 +435,12 @@ public class MainActivity extends BridgeActivity {
             //   有网云端判重裁决；断网 trial_need_network fail-closed。
             if ("trial_first_check".equals(reason)) {
                 Log.i(TAG, "[StartupCheck] 全新态：放行 WebView，首次试用由 JS 门在线裁决");
+                // ★ 2026-10-24 安全加固：试用首检分支同样必须通过 JS 完整性校验，
+                //   防止攻击者删除 license/trial 回到“全新态”绕过关键文件篡改检测。
+                if (!awaitJsIntegrityVerified()) {
+                    showFatalLicenseErrorAndExit("检测到关键代码文件已被篡改，软件无法启动。\n请从官方渠道重新下载安装。");
+                    return false;
+                }
                 return true;
             }
             Log.e(TAG, "[StartupCheck] 授权校验失败：type=" + reason + " msg=" + message);
