@@ -37,6 +37,52 @@ import {
     normalizeCodeProductClass
 } from './_lib/license-core.js';
 import { punchLogin } from '../_lib/login-punch.js';
+import { getDB, isD1Enabled } from '../_lib/d1.js';
+
+// ★ 2026-10-24 心跳迁 D1：免费 KV 1000 写/天经不起每设备 10 分钟一次心跳。
+//   心跳在线状态改写入 D1（免费 10 万写/天），KV 只在端形态变化/7 天审计/24h 汇总时写。
+let __hbSchemaReady = false;
+async function ensureD1HeartbeatSchema(db) {
+    if (__hbSchemaReady) return;
+    await db.prepare(`
+        CREATE TABLE IF NOT EXISTS license_heartbeats (
+            license_code TEXT NOT NULL,
+            clinic_name TEXT,
+            machine_id TEXT NOT NULL,
+            client_class TEXT,
+            product_class TEXT,
+            last_heartbeat TEXT,
+            updated_at TEXT,
+            PRIMARY KEY (license_code, machine_id)
+        )
+    `).run();
+    __hbSchemaReady = true;
+}
+async function upsertD1Heartbeat(env, record, code, machineId, found, serverTime) {
+    const db = getDB(env);
+    if (!db) return false;
+    await ensureD1HeartbeatSchema(db);
+    await db.prepare(`
+        INSERT INTO license_heartbeats
+            (license_code, clinic_name, machine_id, client_class, product_class, last_heartbeat, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(license_code, machine_id) DO UPDATE SET
+            clinic_name=excluded.clinic_name,
+            client_class=excluded.client_class,
+            product_class=excluded.product_class,
+            last_heartbeat=excluded.last_heartbeat,
+            updated_at=excluded.updated_at
+    `).bind(
+        String(code || ''),
+        record.clinicName || null,
+        String(machineId || ''),
+        (found && found.clientClass) || null,
+        (found && found.productClass) || null,
+        serverTime,
+        serverTime
+    ).run();
+    return true;
+}
 
 // ★ 2026-09-24 P1-B KV 降写：纯心跳（端形态无变化、无需补审计）整记录写近重复节流阈值。
 //   客户端正常周期 10 分钟，在线判定窗口 15 分钟（users.js ONLINE_ACTIVE_MS）；
@@ -260,21 +306,48 @@ export async function onRequest(context) {
                 }
             }
             if (found) {
-                // 在线统计数据源：KV 中本设备上次心跳年龄（不在内存预改，保证节流判据准确）
-                const prevDevHbMs = found.lastHeartbeat ? Date.parse(found.lastHeartbeat) : NaN;
-                const hbAgeMs = Number.isFinite(prevDevHbMs) ? (now.getTime() - prevDevHbMs) : Infinity;
                 const topPrevMs = record.lastHeartbeat ? Date.parse(record.lastHeartbeat) : NaN;
                 const needAudit = !Number.isFinite(topPrevMs) ||
                     (now.getTime() - topPrevMs) >= 7 * 24 * 60 * 60 * 1000;
-                const skipLicenseWrite = !metaChanged && !needAudit &&
-                    Number.isFinite(hbAgeMs) && hbAgeMs < HB_WRITE_MIN_MS;
-                if (!skipLicenseWrite) {
-                    // 7 天审计与本次唯一一次整记录写同批（原匹配路径每 7 天会二次 updateLicense）
-                    if (needAudit) {
-                        try {
-                            await appendLicenseLog(kv, code, { action: 'heartbeat', ip, detail: `machine:${machineId.substring(0, 8)}` });
-                        } catch (e) { /* 审计失败不阻断心跳 */ }
+                // ★ 2026-10-24 心跳迁 D1：在线心跳每次写 D1（免费 10 万/天）；
+                //   KV 只在 ①端形态变化 ②7 天审计 ③距上次 KV 汇总≥24h 时写一次。
+                //   D1 写失败才回退旧 KV 路径（保证在线统计不中断）。
+                let d1HbOk = false;
+                try {
+                    if (isD1Enabled(context.env)) {
+                        d1HbOk = await upsertD1Heartbeat(context.env, record, code, machineId, found, serverTime);
                     }
+                } catch (e) {
+                    console.warn('[Heartbeat] D1 心跳写入失败，回退 KV:', e.message);
+                }
+                if (needAudit) {
+                    try {
+                        await appendLicenseLog(kv, code, { action: 'heartbeat', ip, detail: `machine:${machineId.substring(0, 8)}` });
+                    } catch (e) { /* 审计失败不阻断心跳 */ }
+                }
+                const needKvSummary = metaChanged || needAudit || !Number.isFinite(topPrevMs) ||
+                    (now.getTime() - topPrevMs) >= 24 * 60 * 60 * 1000;
+                if (!d1HbOk) {
+                    const prevDevHbMs = found.lastHeartbeat ? Date.parse(found.lastHeartbeat) : NaN;
+                    const hbAgeMs = Number.isFinite(prevDevHbMs) ? (now.getTime() - prevDevHbMs) : Infinity;
+                    const skipLicenseWrite = !metaChanged && !needAudit &&
+                        Number.isFinite(hbAgeMs) && hbAgeMs < HB_WRITE_MIN_MS;
+                    if (!skipLicenseWrite) {
+                        try {
+                            await updateLicense(kv, code, {
+                                lastHeartbeat: serverTime,
+                                maxDevices: maxDevices,
+                                __devicePatch: {
+                                    machineId: machineId,
+                                    lastHeartbeat: serverTime,
+                                    productClass: found.productClass || null,
+                                    clientClass: found.clientClass || null
+                                }
+                            });
+                        } catch (e) { console.warn('[Heartbeat] 设备心跳/端形态写入失败:', e.message); }
+                    }
+                } else if (needKvSummary) {
+                    // D1 心跳已成功：KV 仅做低频汇总（在线统计读 D1，不依赖此值）
                     try {
                         await updateLicense(kv, code, {
                             lastHeartbeat: serverTime,
@@ -286,7 +359,7 @@ export async function onRequest(context) {
                                 clientClass: found.clientClass || null
                             }
                         });
-                    } catch (e) { console.warn('[Heartbeat] 设备心跳/端形态写入失败:', e.message); }
+                    } catch (e) { console.warn('[Heartbeat] KV 心跳汇总写入失败（不影响 D1 在线）:', e.message); }
                 }
             }
             // 设备-版本绑定端形态同步（上报/嗅探后的最终值）：语义字段全等则跳过写

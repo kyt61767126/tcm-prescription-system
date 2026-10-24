@@ -3228,6 +3228,8 @@ export async function onRequest(context) {
             //   云端端不调用 /api/license/heartbeat（cloud.js 链路），与 user_session 口径无重叠。
             //   读取失败不影响诊所列表（按无在线处理）。
             const offlineOnlineMap = new Map(); // clinicName -> { desktop, app }
+            // ★ 2026-10-24 心跳迁 D1：KV/D1 双源去重（同一个 machineId 只计一次在线）
+            const offlineSeen = new Set();
             // ★ 2026-10-05 今日登录（离线端）：clinicName -> { desktop:Set(machineId),
             //   app:Set(machineId) }，Set 按 machineId 去重（换机续期同机绑多码也不重复计）
             const offlineLoginMap = new Map();
@@ -3285,6 +3287,9 @@ export async function onRequest(context) {
                             if (!d || !d.lastHeartbeat) continue;
                             const hbTs = Date.parse(d.lastHeartbeat);
                             if (!Number.isFinite(hbTs)) continue;
+                            const __seenKey = rec.clinicName + '|' + (d.machineId || '');
+                            if (offlineSeen.has(__seenKey)) continue;
+                            offlineSeen.add(__seenKey);
                             // ★ 2026-10-05 今日登录（日活口径）：今天有心跳即视为今日登录使用，
                             //   Set 按 machineId 去重（未知端形态兜底计桌面，离线端无网页形态）
                             if (hbTs >= todayStartTs) {
@@ -3308,6 +3313,48 @@ export async function onRequest(context) {
                 }
                 if (__needBackfill) await putLicenseClinicIndex(kv, __backfillMap);
             } catch (e) { /* 离线端在线聚合读取失败按无在线处理 */ }
+
+            // ★ 2026-10-24 心跳迁 D1 后的在线/今日登录聚合（与 KV 旧数据去重合并）。
+            //   heartbeat.js 新心跳只写 D1 license_heartbeats，不再每 10 分钟写 KV。
+            try {
+                if (isD1Enabled(context.env)) {
+                    const db = getDB(context.env);
+                    if (db) {
+                        const __todayIso = new Date(todayStartTs).toISOString();
+                        const rs = await db.prepare(
+                            `SELECT clinic_name, machine_id, client_class, last_heartbeat
+                               FROM license_heartbeats WHERE last_heartbeat >= ?`
+                        ).bind(__todayIso).all();
+                        for (const row of (rs && rs.results ? rs.results : [])) {
+                            const clinicName = row.clinic_name;
+                            const mid = row.machine_id;
+                            const hbTs = Date.parse(row.last_heartbeat);
+                            if (!clinicName || !mid || !Number.isFinite(hbTs)) continue;
+                            const seenKey = clinicName + '|' + mid;
+                            if (offlineSeen.has(seenKey)) continue;
+                            offlineSeen.add(seenKey);
+                            if (hbTs >= todayStartTs) {
+                                if (!offlineLoginMap.has(clinicName)) {
+                                    offlineLoginMap.set(clinicName, { desktop: new Set(), app: new Set() });
+                                }
+                                const lb = offlineLoginMap.get(clinicName);
+                                if (row.client_class === 'app') lb.app.add(mid);
+                                else lb.desktop.add(mid);
+                            }
+                            if ((nowTs - hbTs) > ONLINE_ACTIVE_MS) continue;
+                            if (!offlineOnlineMap.has(clinicName)) {
+                                offlineOnlineMap.set(clinicName, { desktop: 0, app: 0 });
+                            }
+                            const bucket = offlineOnlineMap.get(clinicName);
+                            if (row.client_class === 'app') bucket.app++;
+                            else bucket.desktop++;
+                        }
+                    }
+                }
+            } catch (e) {
+                // D1 表未建/未启用时静默回退 KV 聚合，不影响诊所列表
+                console.warn('[online] D1 heartbeat 聚合失败，回退 KV:', e && e.message);
+            }
 
             // ★ 2026-10-05 历史累计登录（KNOWLEDGE §53）：全量取一次，循环内按
             //   encodeURIComponent(clinic.name) 取用。内部含跨月懒归档（每月仅一次），

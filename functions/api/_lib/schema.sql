@@ -116,6 +116,22 @@ CREATE TABLE IF NOT EXISTS user_devices (
 );
 CREATE INDEX IF NOT EXISTS idx_devices_user ON user_devices(username);
 
+-- ★ 2026-10-24 心跳迁 D1（免费 KV 1000 写/天治理）：
+--   每设备 10 分钟心跳写本表（D1 免费 10 万写/天），KV 仅保留低频汇总；
+--   后台「在线设备」按 last_heartbeat ≤15 分钟聚合本表。
+CREATE TABLE IF NOT EXISTS license_heartbeats (
+  license_code   TEXT NOT NULL,
+  clinic_name    TEXT,
+  machine_id     TEXT NOT NULL,
+  client_class   TEXT,
+  product_class  TEXT,
+  last_heartbeat TEXT,
+  updated_at     TEXT,
+  PRIMARY KEY (license_code, machine_id)
+);
+CREATE INDEX IF NOT EXISTS idx_hb_last ON license_heartbeats(last_heartbeat);
+CREATE INDEX IF NOT EXISTS idx_hb_clinic ON license_heartbeats(clinic_name);
+
 -- ★ 2026-09-28 P1 官网实际下载埋点（口径：按 IP+文件+UTC自然日去重的下载发起次数·估算）
 --   写入点：functions/api/dl.js（代理 GET 200/206）+ functions/downloads/[[path]].js（静态直链透传）
 --   读取方：functions/api/stats/funnel.js（platform_admin 聚合）
