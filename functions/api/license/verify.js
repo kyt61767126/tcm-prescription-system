@@ -38,6 +38,8 @@ import { blockDevice, getDeviceBlock } from './_lib/license-core.js';
 import { getKV } from '../_lib/kv.js';
 
 const VERIFY_RATE_LIMIT_PER_MIN = 10;
+// ★ 2026-10-24 免费 KV 写配额优化：verify 限流改 Isolate 内存桶，零 KV 写
+const __verifyRateBuckets = new Map();
 
 // ★ P1-1：客户端完整性状态语义表（与离线APP LicenseManager.java 常量对齐）
 const INTEGRITY_LABELS = {
@@ -114,18 +116,23 @@ export async function onRequestPost({ request, env }) {
             }), { status: 503, headers: corsHeaders(request) });
         }
 
-        // 速率限制
+        // 速率限制（★ 2026-10-24 免费 KV 配额优化：内存桶，零 KV 写）
         const clientIP = request.headers.get('CF-Connecting-IP') || 'unknown';
         const rateLimitKey = `verify_rate:${clientIP}`;
-        const rateLimitCount = parseInt(await kv.get(rateLimitKey) || '0', 10);
-        if (rateLimitCount >= VERIFY_RATE_LIMIT_PER_MIN) {
+        const __minute = Math.floor(Date.now() / 60000);
+        const __key = rateLimitKey + ':' + __minute;
+        const __rec = __verifyRateBuckets.get(__key) || { minute: __minute, count: 0 };
+        if (__rec.count >= VERIFY_RATE_LIMIT_PER_MIN) {
             return new Response(JSON.stringify({
                 success: false,
                 error: '请求过于频繁，请稍后再试'
             }), { status: 429, headers: corsHeaders(request) });
         }
-        // 更新速率限制计数（60秒过期）
-        await kv.put(rateLimitKey, String(rateLimitCount + 1), { expirationTtl: 60 });
+        __rec.count += 1;
+        __verifyRateBuckets.set(__key, __rec);
+        if (__verifyRateBuckets.size > 2000) {
+            for (const [k, v] of __verifyRateBuckets) if (!v || v.minute !== __minute) __verifyRateBuckets.delete(k);
+        }
 
         // 解析请求体
         const body = await request.json();
@@ -289,23 +296,9 @@ export async function onRequestPost({ request, env }) {
             }), { status: 403, headers: corsHeaders(request) });
         }
 
-        // ★ 记录验证日志到KV（追溯盗版泄露源）
-        if (codeHash && codeHash.length === 64) {
-            const logKey = `verify_log:${codeHash}`;
-            const logData = {
-                machineId: machineId || '',
-                user: user || '',
-                verifyTime: verifyTime,
-                expiresAt: expiresAt || '',
-                ip: clientIP,
-                timestamp: new Date(now).toISOString(),
-                integrityState: integrityState,
-                integrityLabel: integrityLabel,
-                verifiedCode: resolvedCode ? resolvedCode.substring(0, 12) + '...' : 'unknown'  // 记录已验证的激活码前缀
-            };
-            // 保留最近30天的验证日志
-            await kv.put(logKey, JSON.stringify(logData), { expirationTtl: 30 * 24 * 60 * 60 });
-        }
+        // ★ 2026-10-24 免费 KV 写配额优化：成功验证不再每次写 verify_log（旧实现每次 put，
+        //   多设备每天数百次会话即可打满 1000 次/天免费额度）。仅在设备不匹配/找不到授权时留痕。
+        //   （成功验证由 license 记录自身 heartbeat/usage 维护，不依赖此日志。）
 
         // ★ 2026-08-26 推广奖励自动下推（纯增量字段，旧客户端忽略不影响）：
         //   serverExpiresAt = 服务端权威到期日（含邀请奖励天数）。若客户端本地 license.dat
