@@ -687,18 +687,12 @@
             //   在登录框（实测：维生素诊所 KV 已 activated 但 license.dat/users 均未落盘，
             //   点确定只弹"请先激活"死循环）。改为二选一：打开激活窗口（推荐，自动续传装号）
             //   或继续用云端账户登录（AuthCore 云端兜底认证，走通后离线缓存自建）。
+            // ★ 2026-10-24 云端桌面升级优化：本地 users 为空时不再 confirm 弹激活窗，
+            //   直接走云端账号认证（AuthCore.loginWithUsernamePassword cloud:true）。
+            //   云端账号在服务器，本机没有本地账号表属于正常升级/重装场景，
+            //   不应因此把已开通客户弹去激活；只有云端认证失败后才提示激活/恢复。
             if (!_users || _users.length === 0) {
-                const goActivate = confirm('ℹ️ 本机还没有本地管理员账户。\n\n' +
-                    '若您已完成注册付款（审核通过后软件会自动装号建账户，网络波动可能中断该过程），\n' +
-                    '推荐点「确定」打开激活窗口自动续传；\n\n' +
-                    '若您的账户已在云端开通，点「取消」直接用手机号+密码登录\n' +
-                    '（密码为您注册时设置的；未设置过则初始密码为 admin）。');
-                if (goActivate) {
-                    openActivationWindow();
-                    return;
-                }
-                // 继续走下方认证流程（本地表空 → AuthCore 云端兜底）
-                console.log('[login] 本地无账户，继续云端认证（断链自愈路径）');
+                console.log('[login] 本地无账户，直接云端认证（不弹激活窗）');
             }
 
             // ★ P2 登录统一路由（2026-09-03）：本地表校验（username/phone 双模式 + verifyPassword
