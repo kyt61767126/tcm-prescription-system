@@ -704,24 +704,24 @@ async function verifyCodeIntegrity() {
         return true;
     }
 
-    console.warn('[Integrity] 代码完整性校验不匹配，自动重建基线（版本升级或重新打包场景）');
+    // ★ 2026-10-24 防破解加固：同版本内哈希不匹配 = 程序文件被篡改，禁止自动重建基线。
+    //   旧实现“自动重建并放行”等于完整性校验形同虚设（攻击者改 JS 后基线自动洗白）。
+    //   合法升级会换 appVersion → 使用新的 integrity-v{version}.dat，不会命中此分支。
+    console.warn('[Integrity] 代码完整性校验不匹配：拒绝启动（疑似程序文件被篡改）');
     console.warn('[Integrity] 基线:', baseline.substring(0, 16) + '...');
     console.warn('[Integrity] 当前:', combinedHash.substring(0, 16) + '...');
-    try {
-        if (safeStorage.isEncryptionAvailable()) {
-            const encrypted = safeStorage.encryptString(combinedHash);
-            await fs.writeFile(baselinePath, 'ENC:' + encrypted.toString('base64'), 'utf8');
-        } else {
-            await fs.writeFile(baselinePath, combinedHash, 'utf8');
-        }
-        console.log('[Integrity] 基线已自动重建');
-    } catch (e) {
-        console.warn('[Integrity] 无法重建基线:', e.message);
-    }
-    return true;
+    return false;
 }
 
 app.whenReady().then(async () => {
+    // ★ 2026-10-24 防破解加固：关键 JS 完整性校验失败 → 拒绝启动
+    try {
+        if (!(await verifyCodeIntegrity())) {
+            try { dialog.showErrorBox('程序文件异常', '检测到程序文件被修改或损坏，为保护数据安全已停止启动。\n请重新安装官方最新版本。'); } catch (_) {}
+            app.quit();
+            return;
+        }
+    } catch (e) { console.warn('[Integrity] 校验异常（跳过，不误杀）:', e && e.message); }
     // ★ P0-③ exe 签名/完整性自校验（非阻塞，仅记录，不影响启动流程）
     selfCheck.runSelfCheck();
     // ★ 2026-09-11 P1 完整性上报：延迟 25s 等三路校验落定后聚合上报（篡改证据
