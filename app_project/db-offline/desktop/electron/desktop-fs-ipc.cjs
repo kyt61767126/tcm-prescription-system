@@ -788,6 +788,21 @@ function createDesktopFileIpc({ ipcMain, app, dialog, shell, BrowserWindow }) {
         getUserData,
         migrateLegacyDataToCentral
     };
+
+    // ============================================================================
+    //  ★ 2026-10-24 临时诊断日志：排查 renderActivationCode 不显示（用完即删）
+    //   安全边界：只写 userData 目录下固定文件名，路径硬编码不可改
+    // ============================================================================
+    const USER_DATA_PATH = (() => { try { return require('electron').app.getPath('userData'); } catch (_) { return ''; } })();
+    const DEBUG_LOG_PATH = USER_DATA_PATH ? path.join(USER_DATA_PATH, 'render-debug.log') : null;
+    ipcMain.handle('desktop:write-debug-log', (event, tag, msg) => {
+        if (!DEBUG_LOG_PATH) return { ok: false, error: 'no userData' };
+        try {
+            const line = `[${new Date().toISOString()}] [${tag || ''}] ${msg || ''}\n`;
+            require('fs').appendFileSync(DEBUG_LOG_PATH, line, 'utf8');
+            return { ok: true };
+        } catch (e) { return { ok: false, error: String(e) }; }
+    });
 }
 
 module.exports = { createDesktopFileIpc };
