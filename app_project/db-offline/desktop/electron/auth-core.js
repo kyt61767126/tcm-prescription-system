@@ -5196,9 +5196,6 @@
     //   瞬间可见，之后无处可查只能找管理员。本地无码（旧版激活设备）静默跳过。
     async function renderActivationCode(el) {
         try {
-            // ★ 2026-10-24 临时诊断日志（用完即删）
-            const _dbg = (tag, msg) => { try { if (global.electronAPI && global.electronAPI.debugLog) global.electronAPI.debugLog(tag, msg); } catch (_) {} };
-            _dbg('renderActivationCode', 'ENTER el=' + (el ? 'present' : 'NULL') + ' g.eA=' + !!(global.electronAPI));
             // ★ 2026-09-21 v297 真机复测：免费版（领取制，本就没有激活码）不渲染此卡片。
             //   否则 getLicenseCode 的「机器码联网找回」会把该机器历史机构版付费码翻出来
             //   显示给免费用户（实测全新领取后显示 BNZC-CA73-...），严重误导。
@@ -5207,7 +5204,7 @@
                     typeof global.electronAPI.license.getStatus === 'function') {
                     const __freeCodeSt = await global.electronAPI.license.getStatus();
                     if (__freeCodeSt && __freeCodeSt.type === 'licensed' &&
-                        __freeCodeSt.licenseType === 'free') { _dbg('renderActivationCode', 'FREE_RETURN'); return; }
+                        __freeCodeSt.licenseType === 'free') return;
                 }
             } catch (_) { /* 查询失败不影响原有激活码展示逻辑 */ }
             // 幂等：与邀请码卡片同款防重复策略（多路径并发调用时先清旧卡片）
@@ -5236,7 +5233,6 @@
                     } catch (_) {}
                 }
                 if (mid && mid.length >= 8) {
-                    _dbg('renderActivationCode', 'MID_OK mid=' + mid.slice(0,8) + '...');
                     const midBox = document.createElement('div');
                     midBox.id = 'machineIdBox';
                     midBox.style.cssText = 'margin-top:6px;font-size:12px;color:#555;line-height:1.7;';
@@ -5260,8 +5256,7 @@
                 }
             } catch (_) { /* 机器码获取失败不影响授权区其他内容 */ }
             const code = await getLicenseCode();
-            _dbg('renderActivationCode', 'CODE_RESULT code=' + (code ? code.slice(0,8)+'...' : 'EMPTY') + ' len=' + (code ? code.length : 0));
-            if (!code || code.length < 4) { _dbg('renderActivationCode', 'CODE_RETURN'); return; }
+            if (!code || code.length < 4) return;
             const box = document.createElement('div');
             box.id = 'activationCodeBox';
             box.style.cssText = 'margin-top:8px;padding-top:8px;border-top:1px dashed #ddd;font-size:12px;color:#555;line-height:1.7;';
