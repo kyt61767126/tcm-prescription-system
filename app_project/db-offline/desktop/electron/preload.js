@@ -138,12 +138,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // 兼容：业务代码需用 `await prompt(...)`，同步调用会得到 Promise 对象
     prompt: (message, defaultValue) => ipcRenderer.invoke('dialog:prompt', String(message || ''), String(defaultValue || '')),
 
-    // ★ 2026-10-24 临时诊断日志通道（排查 renderActivationCode 不显示）
-    // 用完即删，不碰 security-guard
-    debugLog: (tag, msg) => {
-        try { ipcRenderer.invoke('desktop:write-debug-log', String(tag||''), String(msg||'')); } catch (_) {}
-    },
-
     // ★ License 授权管理
     license: {
         getStatus: () => ipcRenderer.invoke('license:get-status'),
