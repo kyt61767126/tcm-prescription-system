@@ -658,9 +658,13 @@ async function dualWritePrescription(kv, db, d1On, clinicId, prescription) {
                 { error: d1Error });
         }
     }
-    await upsertToDayKey(kv, clinicId, prescription);
-    return { d1Ok, d1Error };
-}
+    // ★ 2026-10-24 免费 KV 1000 写/天治理：D1 写入成功时不再写 KV 日键备份。
+    //   读路径本就 D1 优先；每张处方原来固定 1 次 kv.put，30 人次/天诊所很快打满。
+    //   仅 D1 写失败时才落 KV 兜底（同时已有 audit 留痕，可事后回填 D1）。
+    if (!(d1On && db && d1Ok)) {
+        await upsertToDayKey(kv, clinicId, prescription);
+    }
+    return { d1Ok, d1Error };}
 
 export async function onRequest(context) {
     const url = new URL(context.request.url);
