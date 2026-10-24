@@ -5569,7 +5569,7 @@
                 '<button type="button" id="adminDetectPaidBtn" style="width:100%;margin-top:10px;padding:13px;font-size:15px;font-weight:bold;border:none;border-radius:10px;color:#fff;background:linear-gradient(135deg,#0ea5e9 0%,#2563eb 100%);cursor:pointer;-webkit-tap-highlight-color:transparent;">🔍 官网已付款/已申请？一键检测激活</button>' +
                 '<div id="adminDetectPaidHint" style="font-size:11px;color:#909399;margin-top:6px;text-align:center;line-height:1.6;">凭本机设备码自动检测官网付款/审批结果，无需激活码</div>' +
                 '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px;font-size:12px;">' +
-                    '<span id="adminSkipToTicket" style="color:#07c160;cursor:pointer;-webkit-tap-highlight-color:transparent;">没有激活码？留言申请 →</span>' +
+                    '<span id="adminSkipToTicket" style="display:none;">没有激活码？留言申请 →</span>' +
                 '</div>' +
             '</div>' +
 
@@ -5577,13 +5577,13 @@
             '<div id="adminTabBar" style="display:none;border-bottom:1px solid #eee;background:#fafcfb;">' +
                 '<div id="adminTabBtnAdmin" data-tab="admin" style="flex:1;text-align:center;padding:12px 2px;font-size:13px;font-weight:bold;color:#26a69a;border-bottom:2.5px solid #26a69a;cursor:pointer;-webkit-tap-highlight-color:transparent;">📋 管理员激活</div>' +
                 '<div id="adminTabBtnCode" data-tab="code" style="flex:1;text-align:center;padding:12px 2px;font-size:13px;font-weight:bold;color:#909399;border-bottom:2.5px solid transparent;cursor:pointer;-webkit-tap-highlight-color:transparent;">🔑 激活码激活</div>' +
-                '<div id="adminTabBtnTicket" data-tab="ticket" style="flex:1;text-align:center;padding:12px 2px;font-size:13px;font-weight:bold;color:#909399;border-bottom:2.5px solid transparent;cursor:pointer;-webkit-tap-highlight-color:transparent;">📨 工单申请</div>' +
+                '<div id="adminTabBtnTicket" style="display:none;" data-tab="ticket" style="flex:1;text-align:center;padding:12px 2px;font-size:13px;font-weight:bold;color:#909399;border-bottom:2.5px solid transparent;cursor:pointer;-webkit-tap-highlight-color:transparent;">📨 工单申请</div>' +
             '</div>' +
 
             // ★ Tab2：激活码激活面板（默认隐藏；对齐桌面 activate-window 的 tab-code）
             '<div id="adminTabCode" style="display:none;padding:16px;">' +
                 '<div id="adminCodeTip" style="background:#f0f7ff;border:1px solid #d6e8ff;border-radius:8px;padding:10px;margin-bottom:14px;font-size:12px;color:#1565c0;line-height:1.7;">' +
-                    '💡 输入客服提供给您的激活码完成激活<br>还没有激活码？切换到「📨 工单申请」提交申请' +
+                    '💡 输入客服提供给您的激活码完成激活；官网付款用户请点「🔍 一键检测激活」；没有码可去官网购买' +
                 '</div>' +
                 '<div style="margin-bottom:12px;">' +
                     '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">激活码 <span style="color:#e53935;">*</span></label>' +

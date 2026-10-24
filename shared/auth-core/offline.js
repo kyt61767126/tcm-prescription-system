@@ -6584,7 +6584,7 @@
                 '</div>' +
                 '<div style="font-size:11px;color:#909399;margin-top:6px;text-align:center;">💡 点击版本卡片将打开官网付款页面，购买后获得激活码再回来激活</div>' +
                 '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px;font-size:12px;">' +
-                    '<span id="adminSkipToTicket" style="color:#07c160;cursor:pointer;-webkit-tap-highlight-color:transparent;">没有激活码？留言申请 →</span>' +
+                    '<span id="adminSkipToTicket" style="display:none;">没有激活码？留言申请 →</span>' +
                 '</div>' +
                 // ★ 2026-10-18 产品决策：取消免费版（停止新发放）——版本选择页不再提供
                 //   「🆓 永久免费版」领取按钮；存量已领取的 free 授权继续可用。
@@ -6597,13 +6597,13 @@
             '<div id="adminTabBar" style="display:none;border-bottom:1px solid #eee;background:#fafcfb;">' +
                 '<div id="adminTabBtnAdmin" data-tab="admin" style="flex:1;text-align:center;padding:12px 2px;font-size:13px;font-weight:bold;color:#26a69a;border-bottom:2.5px solid #26a69a;cursor:pointer;-webkit-tap-highlight-color:transparent;">📋 管理员激活</div>' +
                 '<div id="adminTabBtnCode" data-tab="code" style="flex:1;text-align:center;padding:12px 2px;font-size:13px;font-weight:bold;color:#909399;border-bottom:2.5px solid transparent;cursor:pointer;-webkit-tap-highlight-color:transparent;">🔑 激活码激活</div>' +
-                '<div id="adminTabBtnTicket" data-tab="ticket" style="flex:1;text-align:center;padding:12px 2px;font-size:13px;font-weight:bold;color:#909399;border-bottom:2.5px solid transparent;cursor:pointer;-webkit-tap-highlight-color:transparent;">📨 工单申请</div>' +
+                '<div id="adminTabBtnTicket" style="display:none;" data-tab="ticket" style="flex:1;text-align:center;padding:12px 2px;font-size:13px;font-weight:bold;color:#909399;border-bottom:2.5px solid transparent;cursor:pointer;-webkit-tap-highlight-color:transparent;">📨 工单申请</div>' +
             '</div>' +
 
             // ★ Tab2：激活码激活面板（默认隐藏；对齐桌面 activate-window 的 tab-code）
             '<div id="adminTabCode" style="display:none;padding:16px;">' +
                 '<div style="background:#f0f7ff;border:1px solid #d6e8ff;border-radius:8px;padding:10px;margin-bottom:14px;font-size:12px;color:#1565c0;line-height:1.7;">' +
-                    '💡 输入客服提供给您的激活码完成激活<br>还没有激活码？切换到「📨 工单申请」提交申请' +
+                    '💡 输入客服提供给您的激活码完成激活；官网付款用户请点「🔍 一键检测激活」；没有码可去官网购买' +
                 '</div>' +
                 '<div style="margin-bottom:12px;">' +
                     '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">激活码 <span style="color:#e53935;">*</span></label>' +

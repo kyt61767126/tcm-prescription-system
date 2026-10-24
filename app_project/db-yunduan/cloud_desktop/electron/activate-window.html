@@ -345,7 +345,7 @@ h1 { color: #2c3e50; font-size: 18px; margin-bottom: 3px; }
     <!-- ★ 2026-08-23 简化：版本选择页直达链接——手里已有激活码/想留言申请的用户跳过版本选择 -->
     <div class="edition-shortcuts" style="display:flex;justify-content:space-between;gap:12px;margin-top:14px;font-size:12px;">
         <span id="skipToCode" style="color:var(--primary-1);cursor:pointer;user-select:none;text-decoration:none;">已有激活码？直接输入 →</span>
-        <span id="skipToTicket" style="color:var(--success, #07c160);cursor:pointer;user-select:none;text-decoration:none;">留言申请激活码 →</span>
+        <span id="skipToTicket" style="display:none;">留言申请激活码 →</span>
     </div>
 
     <!-- Tab 切换 + 内容（版本选择后显示） -->
@@ -353,7 +353,7 @@ h1 { color: #2c3e50; font-size: 18px; margin-bottom: 3px; }
     <div class="tabs">
         <div class="tab active" data-tab="admin" onclick="switchTab('admin')">📋 管理员激活</div>
         <div class="tab" data-tab="code" onclick="switchTab('code')">🔑 激活码激活</div>
-        <div class="tab" data-tab="ticket" onclick="switchTab('ticket')">📨 工单申请</div>
+        <div class="tab" data-tab="ticket" style="display:none;" onclick="switchTab('ticket')">📨 工单申请</div>
     </div>
 
     <!-- ====== 管理员一键激活 ====== -->
