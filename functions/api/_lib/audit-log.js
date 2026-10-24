@@ -53,6 +53,7 @@ export async function writeAuditLog(kv, clinicId, username, role, action, target
         };
 
         // ★ P1：D1 双写（传入 context 且 USE_D1=true 时写 D1）
+        let d1Written = false;
         if (env && isD1Enabled(env)) {
             const db = getDB(env);
             if (db) {
@@ -71,16 +72,20 @@ export async function writeAuditLog(kv, clinicId, username, role, action, target
                         extra && Object.keys(extra).length ? JSON.stringify(extra) : null,
                         nowIso
                     ).run();
+                    d1Written = true;
                 } catch (e) {
                     console.error('writeAuditLog D1 error:', e.message);
                 }
             }
         }
 
-        // KV 独立记录 key（始终写入，作为备份）
-        const suffix = now.getTime() + '-' + Math.random().toString(36).slice(2, 10);
-        const key = `audit_log:${clinicKey}:${date}:${suffix}`;
-        await kv.put(key, JSON.stringify(entry), { expirationTtl: AUDIT_LOG_TTL_SECONDS });
+        // ★ 2026-10-24 免费 KV 写配额优化：D1 已成功落库时不再写 KV 副本
+        //   （生产 USE_D1=true），避免审计日志把 1000 次/天写满。
+        if (!d1Written) {
+            const suffix = now.getTime() + '-' + Math.random().toString(36).slice(2, 10);
+            const key = `audit_log:${clinicKey}:${date}:${suffix}`;
+            await kv.put(key, JSON.stringify(entry), { expirationTtl: AUDIT_LOG_TTL_SECONDS });
+        }
     } catch (e) {
         console.error('writeAuditLog error:', e);
     }

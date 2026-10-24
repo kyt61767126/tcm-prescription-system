@@ -2013,24 +2013,31 @@ async function getUsage(kv, code) {
     }
 }
 
-// ============================================================================
-//  速率限制（简单 KV 实现，防止暴力破解）
-// ============================================================================
-// 记录 IP 的校验请求次数
+// ★ 2026-10-24 免费 KV 配额优化：限流不再每次请求 kv.put（1000 次/天极易打满）。
+//   改为 Isolate 内存滑动窗口（每小时桶）；Cloudflare 免费套餐下避免 KV 写报警。
+//   安全性：限流从“全局共享”降级为“单 Isolate 尽力而为”，其余 fail-closed 授权链不变。
+const __RATE_BUCKETS = new Map();
+function __rateHit(bucketKey, maxPerHour) {
+    const hour = Math.floor(Date.now() / (60 * 60 * 1000));
+    const k = bucketKey + ':' + hour;
+    const rec = __RATE_BUCKETS.get(k);
+    const current = rec && rec.hour === hour ? rec.count : 0;
+    if (current >= maxPerHour) return { allowed: false, current, max: maxPerHour };
+    __RATE_BUCKETS.set(k, { hour, count: current + 1 });
+    // 防 Map 无限增长：超过 5000 桶清一次过期桶
+    if (__RATE_BUCKETS.size > 5000) {
+        for (const [kk, vv] of __RATE_BUCKETS) {
+            if (!vv || vv.hour !== hour) __RATE_BUCKETS.delete(kk);
+        }
+    }
+    return { allowed: true, current: current + 1, max: maxPerHour };
+}
+
+// 记录 IP 的校验请求次数（内存桶，零 KV 写）
 // ★ 2026-09-24 C批双审：prefix 可选参——员工账号桶等非 IP 维度须传独立前缀，
 //   与匿名 IP 桶的 key 空间彻底隔离（默认值保持 ratelimit:license，既有调用零影响）
 async function checkRateLimit(kv, ip, maxPerHour = 5, prefix = 'ratelimit:license') {
-    const key = `${prefix}:${ip}:${Math.floor(Date.now() / (60 * 60 * 1000))}`;
-    let current = 0;
-    try { current = parseInt(await kv.get(key) || '0', 10); } catch (_) {}
-    if (current >= maxPerHour) {
-        return { allowed: false, current, max: maxPerHour };
-    }
-    // ★ 2026-10-18 P40 真机测试：KV put 日配额耗尽（免费版 1000/天）时，
-    //   kv.put 抛 "KV put() limit exceeded" 导致整个请求 500。
-    //   写失败降级为放行（限流本身是防滥用，KV 不可用时阻塞合法请求更糟）。
-    try { await kv.put(key, String(current + 1), { expirationTtl: 3600 }); } catch (_) {}
-    return { allowed: true, current: current + 1, max: maxPerHour };
+    return __rateHit(`${prefix}:${ip}`, maxPerHour);
 }
 
 // ★ P0-1 安全补强：激活码级短时频控（防对单一合法激活码做换机试探/暴力爆破）
@@ -2041,14 +2048,7 @@ async function checkRateLimit(kv, ip, maxPerHour = 5, prefix = 'ratelimit:licens
 async function checkCodeRateLimit(kv, code, maxPerHour = 5, prefix = 'ratelimit:code') {
     const normalized = String(code || '').toUpperCase();
     if (!normalized) return { allowed: false, current: 0, max: maxPerHour };
-    const key = `${prefix}:${normalized}:${Math.floor(Date.now() / (60 * 60 * 1000))}`;
-    const current = parseInt(await kv.get(key) || '0', 10);
-    if (current >= maxPerHour) {
-        return { allowed: false, current, max: maxPerHour };
-    }
-    // ★ 2026-10-18：KV put 日配额耗尽时降级放行（同 checkRateLimit）
-    try { await kv.put(key, String(current + 1), { expirationTtl: 3600 }); } catch (_) {}
-    return { allowed: true, current: current + 1, max: maxPerHour };
+    return __rateHit(`${prefix}:${normalized}`, maxPerHour);
 }
 
 // ============================================================================
