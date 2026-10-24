@@ -223,6 +223,12 @@
 
 * ★ 2026-10-18 **淘宝发货卡片"二维码不显示"修复**：现象=客户收到的发货卡片直接露出 `{qrcode:https://…/download}` 占位符文本、无二维码。根因=**自动发货工具（有卡密宝贝/阿奇索等）只做文本渲染，不支持 `{qrcode:链接}` 占位符**（该语法不是淘宝标准）。处置：① 新增卖家工具页 **`/download-card`**：客户端生成 `/d` 短链二维码（`/qrcode.min.js` 本地库，CDN 兜底），可**下载二维码 PNG** 上传到自动发货工具的图片/卡片图位；提供一键复制文案（已去掉占位符，保留 `{$卡密}` 工具变量）；② 新增 **`/d`** 302 → `/download` 短链（二维码更疏、卡片可读）。**铁律：面向第三方工具的发货内容只能使用对方支持的语法；不确定时用"图片位上传 PNG + 纯文本链接"双保险，禁止把未验证的占位符语法写进模板。**
 
+* ★ 2026-10-23~24 **跨端共存——同机同时绑离线码+云端码**：① `license-core.detachDeviceFromOtherLicenses` 解绑跨端隔离——同端解绑（cloud 码踢 cloud 设备、offline 码踢 offline 设备）、跨端保留（cloud/offline 互不踢）、裸码（无 productClass）退旧行为全解绑；5 个激活入口（validate/admin-approve/admin-submit/export-license/activate-from-ticket）都走此函数，改动一处全生效。② 取消派生锁端观察期——`source='device'`（首个在册设备派生的 productClass）原只写审计不拦截，现与 `preset` 同口径硬拦截（403）；`source=null`（无锁端）仍放行。③ 后台设备列表端形态徽标——☁️云端/💻离线/❓未知端，`normalizeCodeProductClass` 归一后按 productClass/browser- 前缀/码预置端推断。**版本约束**：同机两码须同版本类型（standard→institution 可升级，institution→standard 降级被 checkDeviceVersion 拒绝）。**commit**：`0a2ce51c`（detach）+ `293c5c1e`（取消观察期）+ `98751595`（后台徽标）。**生效**：纯服务端/Functions 改动 push 即生效，五端零重打包。
+
+* ★ 2026-10-24 **auth-core getLicenseCode 来源4 真机修复**：现象=290/291 离线桌面 F1 授权区已激活但激活码不显示、机器码也不显示。根因链：① 机器码块写在激活码查询之后，激活码取不到时 early-return 连坐跳过——机器码也不渲染；② 来源4「机器码联网找回」优先读 StorageAdapter 存档 machineId（残留旧值服务端查不到绑定），而邀请码查询 `loadInviteInfo` 用实时硬件指纹成功，两卡片分裂。修复：① 机器码块**前移至 getLicenseCode 之前**独立渲染；② 来源4 的 mid 链对齐 loadInviteInfo——`activate.getMachineId`（实时指纹）优先，`license.getMachineId` 次选，存档值降为第三兜底；③ 找回接口从 `_queryAdminStatus`（管理员激活轮询，直接激活设备返回非 activated）改为 `postInviteQuery({machineId})`（与邀请码同源，返回 resolvedLicenseCode）。**commit**：`b1499dcb` + `416ff50e`。**生效**：auth-core 不在热更白名单，需重打包离线桌面 exe。
+
+* ★ 2026-10-24 **临时诊断代码必须进 shared 权威源 + 客户端 security-guard 让 CDP 不可用**：① sync-all 会从云端覆盖离线端副本——手改 `db-offline/desktop/electron/desktop-fs-ipc.cjs` 加 debug handler，下次 sync-all 即被云端干净版覆盖死循环。根治：**把临时 IPC handler 加进 `shared/desktop-fs-ipc.cjs` 权威源**，sync-all 自然分发到两端；云端 preload 没调用该 IPC → check-ipc-consistency 不报缺失（只检查 preload 实际调用的）。② 客户端有三处 security-guard（main.js L167/desktop-windows.cjs L112/license-manager.js L2447）——启动时检测 `--remote-debugging-port`/`--inspect` 参数即退出，CDP 探针完全不可用。诊断通道：preload.js 加 `debugLog(tag, msg)` → IPC `desktop:write-debug-log` → 主进程 `appendFileSync` 到 `%APPDATA%\tcm-prescription\render-debug.log`（安全边界：只写固定文件名，路径硬编码）。跑完删掉三处临时代码重打包即可。**铁律：临时插桩也必须进权威源再 sync，禁止手改副本后忘记权威源；客户端有 security-guard 时 CDP 探针不可用，用 preload→IPC→主进程写文件的诊断通道替代。**
+
 ## 3. 界面保护铁律
 * 优化前必须运行 `check-interface.bat` 建立基线，优化后再运行验证；WARN 立即 git checkout 恢复或经用户确认后重建基线。
 
