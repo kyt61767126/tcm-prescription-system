@@ -58,12 +58,11 @@
 
 ## OPEN 遗留任务
 
-### H16 ｜优先级：高｜四端 2026-10-25 批次发布（云桌面 1.2.279 / 云APP 341 / 离线桌面 1.0.302 / 离线APP 335）
-- **状态**：OPEN（四端产物已构建且审计 PASS；发布前 2 个阻断未处理，见 KNOWLEDGE §78 与基准条目）
-- **必做顺序**：①`node tools/generate-desktop-hotupdate.cjs -c local` 重签 desktop/local 热更（现 2026.10.23-2 的 auth-core 落后当前源码，不签会让新装客户端运行时降级）并 push；②**走 一键发布.bat 的「仅发布」菜单**（勿选「打包+发布全流程」：`.build-cache/last-run.json` built=[] 会被误判「无源码更新」而跳过发布），或 `node tools/auto-publish.js --publish`；③`verify-release` 核验 URL/hash，官网 hash-manifest/updates/download 页应显示 1.2.279/341/1.0.302/335。
-- **发布前体检**：`node tools/check-release-readiness.cjs`（目标：0 BLOCK / 4 PENDING；重签后 desktop/local 应转为绿）。
-- **注意**：离线 APP 335 与已发布 334 内容完全一致（纯 versionCode +1），可按需发布；云 APP 341 含 10-25 同步小圆点。发布后补 KNOWLEDGE 上线核验与版本号。
-- **基线 commit**：`2df7d763`（一键打包 AutoCommit 版本副作用）+ 本批入口脚本加固提交。
+### H16 ｜优先级：高｜四端 2026-10-25 批次发布（云桌面 1.2.279 / 云APP 341 / 离线桌面 1.0.302 / 离线APP 335）——✅ 已发布并验收（2026-10-25 17:00）
+- **状态**：DONE（人工一键发布 tag `v2026.10.25-1651`/commit `5339cf65`；验收报告见 KNOWLEDGE §78「发布后验收」；发布后已补 2 处修复：desktop/local 热更重签 `2026.10.25-1`(app 1.0.302) + 官网直传/CSP 修复）
+- **已验收**：GitHub Release 6 资产 size+sha256 digest 全对；主站 manifest/updates/download 页均为 1.2.279/341/1.0.302/335（浏览器实测）；verify-release 9/9 URL 通过；APK 下载 sha256 与 manifest 一致；`check-release-readiness` = 0 BLOCK / 0 PENDING / 1 WARN。
+- **残留（非阻断，后续处理）**：①cloud 热更 appVersion 元数据 1.2.278（内容已是最新，可 `generate-desktop-hotupdate.cjs -c cloud` 刷新）；②`huikang-official` Git 构建仍 Failure（本次直传兜底，需后台修 build 配置/配额）；③`huikang-admin/hash-manifest.json` 为老数据（不影响其运行）。
+- **基线 commit**：发布 `5339cf65`；热更 `bc81f1d4`；官网 CSP 修复随本批文档提交。
 
 ### H15 ｜优先级：高｜注册激活流程统一优化一期（A+D+E）——✅ 已完成（2026-10-21，commit `c71c33d3` 已 push）
 - **状态**：DONE（一期 A+D+E 代码已入库 `c71c33d3`；**热包已签发 `c00d6595`：desktop/local + app-local 双通道 2026.10.21-1**，D5 评审 PASS，线上 version.json 核验通过，离线端联网重启即生效；验收待真机：机构版第 2 台登录不再 DEVICE_LIMIT、激活框档案自动提交、「默认 admin」路径消失。结论已沉淀 KNOWLEDGE §72。二期 B、三期 C 未开工，待用户另立任务）
