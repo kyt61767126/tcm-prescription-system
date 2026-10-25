@@ -2370,3 +2370,26 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
 * **验证（真实 Chromium，Playwright，1280×800 + 393×852 iPhone UA）31/31 PASS**：boundingBox 10×10、border-radius 50%、textContent 空、右下距 14px、四色（待同步/离线/失败/恢复）、点击 kick(0)+toast、hover 1.3×、F1 明细行在、无 token 时隐藏、移动端不出现胶囊且角标 10×10；截图 `_verify/syncui/desktop-dot.png`、`dot-zoom-5x.png`、`mobile.png`（本地未跟踪）。注意：圆点 background 有 0.2s CSS 过渡，状态切换后需 ~320ms 再读 computed style，否则读到插值色（首轮验证即因此误报 4 项，已在验证脚本加等待）。
 * **门禁**：check_syntax（4 副本各 21 script 块）、check-interface 6 OK（改动在 `<script>` 内，界面锁无需重签）、html-sync-check IN SYNC、copy-consistency 100/100、diff-cross-version 6 对全绿。
 * **生效/残差**：云网页/云 APP 随 push 部署即达；云桌面客户端页面来自热更目录 → 已重签 `desktop/cloud` 热更 **2026.10.25-1**（app 1.2.278，20 文件 + Ed25519 签名，manifest 哈希复验 0 mismatch），**已 push 部署（commit `89fa6697`）并线上核验**：线上 `/` 与本地 public/index.html SHA256 一致（`2F5DE9C5…41FE2`，812,362B）、线上 `version.json` = 2026.10.25-1，pre-push 十八道门禁全过；云桌面客户端下次启动后台拉取、再下次启动生效。⚠ 该热包 = 当前 public 前端全量，会连带 10.22-2 之后已提交的 auth-core 变更（本机机器码显示、心跳 D1 等）一起下发（与网页端当前线上代码一致）。
+
+## 78. 一键打包产物审计 + 入口 bat 加固 + 发布前体检工具（2026-10-25）
+
+* **背景**：用户要求检查根目录 `一键打包.bat` / `一键发布.bat`，并审计 2026-10-25 15:49–16:08 那批「一键打包」产物是否合规、与当时官网版本是否冲突。
+* **产物审计结论（四端全部 PASS，版本严格 +1，可发布）**：
+  - 云端桌面 **1.2.279**（Setup 81,897,568B sha256 `EB3558FF…`；便携 81,622,664B sha256 `34945478…`）vs 官网 1.2.278；asar sha256 `3740E211…`（与交付核对单一致）、build-meta/package.json=1.2.279、asar 内 index.html 含新同步小圆点且无旧胶囊、身份 `cloud_personal`/`惠康中医-云端`/`cloud`、无 DEBUG/`__verify`/localhost 调试串。
+  - 云端 APP **versionCode 341**（12,417,333B sha256 `5640CD0D…`）vs 官网 340；`assets/public/index.html` sha256 `2F5DE9C5…` = 当前 public/index.html（含小圆点）、认证核心/配置齐备；APK v2+v3 签名通过，证书 SHA256 `e5b2e4b3…`（与 SIGN_FRAGMENTS 一致）。
+  - 离线桌面 **1.0.302**（Setup 79,311,576B sha256 `6E1660FD…`；便携 79,036,704B sha256 `8831A2EE…`）vs 官网 1.0.301；asar `310687EF…`、build-meta=1.0.302、auth-core `7548A86C…` = 当前源码（含 10-24 注册/升级保护修复）、身份 `personal`/`惠康中医-本地`/`offline`。
+  - 离线 APP **versionCode 335**（3,586,945B sha256 `F69EC05A…`）vs 官网 334；`assets/public/index.html` sha256 `0461AD00…` 与已发布 334 完全一致（本轮无代码变化，纯 versionCode 递增）。
+  - 门禁：FINAL IRON GATE 7 道全过（铁闸8 26/26、8c 157/157）、fuse+smoke launch PASS、交付核对单哈希与实际产物逐字节一致；版本基线/版本一致性/版本展示/manifest SSOT 均 PASS。
+  - 既有现象（非本批引入）：APK 内存在 7–8 个 `*.bak`（已发布 334/340 同样有，基线如此）；exe 为自签证书无时间戳（`sign-exe.ps1` 明确「自签不需要时间戳，证书 2031-08-26 到期」）。
+* **与官网的冲突（2 个阻断，发布前必须处理）**：
+  1. **desktop/local 热更内容落后**：线上热更仍是 `2026.10.23-2`（app 1.0.292），其中 auth-core.js 与当前源码不一致（热 `419DD305…` / 源 `7548A86C…`，差 15 行：10-24 注册页改版「注册/首次开通」、已激活设备升级不弹注册、云端版不弹本地注册、隐藏工单/留言申请入口）。若直接发布 1.0.302，新装/升级客户端启动后会拉到旧热包，把上述修复在运行时**降级回旧版**。→ 发布前重签：`node tools/generate-desktop-hotupdate.cjs -c local`。
+     桌面两通道 index.html 与整包 asar 完全一致（cloud hot 2026.10.25-1 = asar index `06BFFAE1…`；local hot index = asar `245478D0…`），故仅 auth-core 这一处落后；cloud 通道仅 appVersion 元数据 1.2.278<1.2.279（非阻断，可重签刷新）；app-local 内容与当前 assets 一致（minAppCode 288<335 正常）。
+  2. **全流程会误跳过发布**：一键打包第二次进入菜单时四端全 SKIP，`.build-cache/last-run.json` 写入 `built: []`（本次 16:08:02 即如此）；`release-menu.ps1` 的 `Invoke-FullFlow` 读到 built=[] 即「没有检测到任何源码更新 → 自动跳过发布与验证」并 `return 0`——而实际四端产物比官网新。→ 必须走「仅发布」菜单，或设 `NO_BUILD_SKIP=1` 强制重打包后再走全流程。
+  - 版本号本身无冲突：四端均严格 +1（1.2.279>1.2.278、341>340、1.0.302>1.0.301、335>334），无回退；官网 v2026.10.24 后无 v2026.10.25 tag。
+  - 建议发布顺序：重签 desktop/local 热更并 push（客户端下次启动拉取）→ 走「仅发布」（auto-publish 按 hash 仅上传变化产物）→ verify-release；官网 manifest/updates/latest.json/download 页由发布脚本统一重写。
+* **入口脚本加固（本次改动）**：
+  - `一键打包.bat`：新增构建前/构建后 git 同步态体检（落后/领先/未提交 → WARN，不改退出码）；`entry-selfheal.ps1` 缺失降级为 WARN（原会直接判失败）；修正过期注释（one-click-publish.bat）。
+  - `一键发布.bat`：发布前 git 同步态门——**落后上游直接红字硬停**（push 会被拒/站点可能回退），领先/工作区脏仅 INFO（发布 `--push` 会推本地提交，脏树由 release-menu 源码落定门兜底）；接入只读发布体检；`entry-selfheal` 缺失降级。
+* **新增 `tools/check-release-readiness.cjs`（只读/不联网）**：对比本地产物版本 vs `public/hash-manifest.json` 已发布版本（PENDING/回退 BLOCK）；检测上述 built=[] 全流程陷阱；逐文件对比三个热更通道 vs 当前源码（文本 LF 归一，落后给出重签命令）；hot `minAppCode` vs 离线 APP versionCode；`--strict` 时存在 BLOCK 才 exit 1。已接入 `一键发布.bat` 预检（仅报告，不阻断）。
+* **验证**：`node --check` 通过；入口 bat 保持 ASCII-only + CRLF（pack-gate preflight 4/4 PASS：ps1 语法/BOM、bat CRLF、编码完整性含 bat ASCII 检查）；隔离测试副本验证 4 条分支（preflight 告警、落后硬停 exit 1、self-heal 缺失降级、体检输出）；实际体检=2 BLOCK + 4 PENDING + 1 WARN，与人工审计一致。
+
