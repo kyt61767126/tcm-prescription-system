@@ -4544,7 +4544,7 @@
     //   激活码，此前云端版只有邀请码卡片、完全没有激活码显示（客户电脑实锤反馈
     //   「激活状态不显示-激活码-邀请码」）。码来源：①账号态 invite 接口回传 licenseCode
     //   ②本地 license:code ③机码找回 resolvedLicenseCode。仅已激活分支调用。
-    function renderCloudActivationCode(el, code) {
+    async function renderCloudActivationCode(el, code) {
         try {
             const c = String(code || '').trim().toUpperCase();
             if (!c || c.length < 4) return;
@@ -4581,6 +4581,44 @@
                     alert('复制失败，请手动记录：' + txt);
                 }
             });
+            // ★ 2026-10-23 显示本机机器码：便于同机双装时与后台设备列表 machineId 对比，
+            //   精准区分云端/离线桌面后解绑指定端。
+            try {
+                document.querySelectorAll('#machineIdBox').forEach(n => { if (n.parentNode) n.parentNode.removeChild(n); });
+                let mid = '';
+                const ea = global.electronAPI;
+                if (ea && ea.license && typeof ea.license.getMachineId === 'function') {
+                    const m = await ea.license.getMachineId();
+                    mid = (m && m.machineId) ? String(m.machineId) : String(m || '');
+                } else if (ea && ea.activate && typeof ea.activate.getMachineId === 'function') {
+                    const m = await ea.activate.getMachineId();
+                    mid = (m && m.machineId) ? String(m.machineId) : String(m || '');
+                }
+                if (mid) {
+                    const midBox = document.createElement('div');
+                    midBox.id = 'machineIdBox';
+                    midBox.style.cssText = 'margin-top:6px;font-size:12px;color:#555;line-height:1.7;';
+                    const midLabel = document.createElement('span');
+                    midLabel.textContent = '🖥️ 本机机器码：';
+                    const midB = document.createElement('b');
+                    midB.title = '点击复制（用于后台解绑时对比）';
+                    midB.style.cssText = 'color:#78909c;font-family:monospace;letter-spacing:0.5px;font-size:12px;cursor:pointer;user-select:all;word-break:break-all;';
+                    midB.textContent = mid;
+                    midBox.appendChild(midLabel);
+                    midBox.appendChild(midB);
+                    const inv2 = document.getElementById('inviteInfoBox');
+                    if (inv2 && inv2.parentNode === el) el.insertBefore(midBox, inv2);
+                    else el.appendChild(midBox);
+                    midB.addEventListener('click', function (ev) {
+                        const txt = (ev.target.textContent || '').trim();
+                        try {
+                            if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt);
+                            else { const ta = document.createElement('textarea'); ta.value = txt; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); }
+                            alert('机器码已复制：' + txt);
+                        } catch (_) { alert('复制失败，请手动记录：' + txt); }
+                    });
+                }
+            } catch (_) { /* 机器码获取失败不影响授权区其他内容 */ }
         } catch (e) {
             console.warn('[ActivationCode] 云端激活码显示失败:', e && e.message);
         }
@@ -4687,6 +4725,21 @@
                 (typeof global.Capacitor !== 'undefined') ||
                 (global.location && String(global.location.href).indexOf('android_asset') >= 0);
             if (!__isClientEnv) return; // 纯网页端：无注册入口（请下载桌面版/APP注册）
+            // ★ 2026-10-23 老用户加设备引导：已开通账号在新设备直接登录即自动绑定（机构版5台），
+            //   不再走“重新注册/管理员激活”表单；该提示与是否显示激活入口无关，始终展示一次。
+            try {
+                if (!document.getElementById('loginExistingAccountHint')) {
+                    const _box = overlay.querySelector('.login-box');
+                    const _btns = overlay.querySelector('.login-buttons');
+                    if (_box && _btns) {
+                        const _hint = document.createElement('div');
+                        _hint.id = 'loginExistingAccountHint';
+                        _hint.style.cssText = 'margin-top:10px;font-size:11px;color:#909399;line-height:1.6;text-align:center;';
+                        _hint.textContent = '已开通账号请直接登录；新设备登录即自动绑定（机构版最多 5 台），无需重复注册/激活。';
+                        _btns.parentNode.insertBefore(_hint, _btns.nextSibling);
+                    }
+                }
+            } catch (e) {}
             // ★ 2026-08-20 注册完成后自动隐藏：已登录/已注册过则不再显示"注册开通"入口
             if (isCloudActivationDone()) return;
             // ★ 2026-08-22 兜底（对齐桌面版 injectAdminActivateEntry 双条件）：
@@ -5513,8 +5566,10 @@
                 // ★ 2026-10-10 淘宝买家入口强化：原 12px 小字「已有激活码？直接输入」
                 //   升级为全宽金色主按钮，点击直达输码 Tab；留言申请链接保留在按钮下方。
                 '<button type="button" id="adminCodeEntryBtn" style="width:100%;margin-top:14px;padding:13px;font-size:15px;font-weight:bold;border:none;border-radius:10px;color:#fff;background:linear-gradient(135deg,#fbbf24 0%,#f59e0b 100%);cursor:pointer;-webkit-tap-highlight-color:transparent;box-shadow:0 2px 6px rgba(245,158,11,0.35);">🔑 已有激活码？点此直接激活</button>' +
+                '<button type="button" id="adminDetectPaidBtn" style="width:100%;margin-top:10px;padding:13px;font-size:15px;font-weight:bold;border:none;border-radius:10px;color:#fff;background:linear-gradient(135deg,#0ea5e9 0%,#2563eb 100%);cursor:pointer;-webkit-tap-highlight-color:transparent;">🔍 官网已付款/已申请？一键检测激活</button>' +
+                '<div id="adminDetectPaidHint" style="font-size:11px;color:#909399;margin-top:6px;text-align:center;line-height:1.6;">凭本机设备码自动检测官网付款/审批结果，无需激活码</div>' +
                 '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px;font-size:12px;">' +
-                    '<span id="adminSkipToTicket" style="color:#07c160;cursor:pointer;-webkit-tap-highlight-color:transparent;">没有激活码？留言申请 →</span>' +
+                    '<span id="adminSkipToTicket" style="display:none;">没有激活码？留言申请 →</span>' +
                 '</div>' +
             '</div>' +
 
@@ -5522,13 +5577,13 @@
             '<div id="adminTabBar" style="display:none;border-bottom:1px solid #eee;background:#fafcfb;">' +
                 '<div id="adminTabBtnAdmin" data-tab="admin" style="flex:1;text-align:center;padding:12px 2px;font-size:13px;font-weight:bold;color:#26a69a;border-bottom:2.5px solid #26a69a;cursor:pointer;-webkit-tap-highlight-color:transparent;">📋 管理员激活</div>' +
                 '<div id="adminTabBtnCode" data-tab="code" style="flex:1;text-align:center;padding:12px 2px;font-size:13px;font-weight:bold;color:#909399;border-bottom:2.5px solid transparent;cursor:pointer;-webkit-tap-highlight-color:transparent;">🔑 激活码激活</div>' +
-                '<div id="adminTabBtnTicket" data-tab="ticket" style="flex:1;text-align:center;padding:12px 2px;font-size:13px;font-weight:bold;color:#909399;border-bottom:2.5px solid transparent;cursor:pointer;-webkit-tap-highlight-color:transparent;">📨 工单申请</div>' +
+                '<div id="adminTabBtnTicket" style="display:none;" data-tab="ticket" style="flex:1;text-align:center;padding:12px 2px;font-size:13px;font-weight:bold;color:#909399;border-bottom:2.5px solid transparent;cursor:pointer;-webkit-tap-highlight-color:transparent;">📨 工单申请</div>' +
             '</div>' +
 
             // ★ Tab2：激活码激活面板（默认隐藏；对齐桌面 activate-window 的 tab-code）
             '<div id="adminTabCode" style="display:none;padding:16px;">' +
                 '<div id="adminCodeTip" style="background:#f0f7ff;border:1px solid #d6e8ff;border-radius:8px;padding:10px;margin-bottom:14px;font-size:12px;color:#1565c0;line-height:1.7;">' +
-                    '💡 输入客服提供给您的激活码完成激活<br>还没有激活码？切换到「📨 工单申请」提交申请' +
+                    '💡 输入客服提供给您的激活码完成激活；官网付款用户请点「🔍 一键检测激活」；没有码可去官网购买' +
                 '</div>' +
                 '<div style="margin-bottom:12px;">' +
                     '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">激活码 <span style="color:#e53935;">*</span></label>' +
@@ -5606,7 +5661,7 @@
                 '<div style="margin-bottom:12px;">' +
                     '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">联系电话 <span style="color:#e53935;">*</span>（将作为登录账号）</label>' +
                     '<input type="text" id="adminPhone" placeholder="如：13800138000" autocomplete="new-password" data-lpignore="true" inputmode="numeric" maxlength="11" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
-                    '<div class="admin-field-hint" id="adminPhoneHint" style="font-size:11px;color:#909399;margin-top:4px;">💡 11位手机号为登录账号，默认密码 admin（登入后请自行修改）</div>' +
+                    '<div class="admin-field-hint" id="adminPhoneHint" style="font-size:11px;color:#909399;margin-top:4px;">💡 11位手机号为登录账号；请填真实手机号（用于接收短信验证/找回账号）。已开通账号在新设备请直接登录，登录即自动绑定（机构版最多 5 台）。</div>' +
                 '</div>' +
                 // ★ 2026-09-07 移除「备注（可选）」输入框（对齐 offline.js，用户要求精简激活表单）：
                 //   原 adminRemark 输入框 + 提示「机构版管理员可在系统中注册生成5个普通用户（只读权限）」已删。
@@ -5628,9 +5683,9 @@
                     '<span style="width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,#26a69a,#00897b);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;">2</span>' +
                 '</div>' +
                 '<div style="margin-bottom:12px;">' +
-                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">登录密码（首次激活可留空＝默认 admin）</label>' +
+                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">登录密码 <span style="color:#e53935;">*</span>（必填）</label>' +
                     '<input type="password" id="adminPassword" placeholder="首次激活设置密码；新设备激活请输入原登录密码" autocomplete="new-password" data-lpignore="true" maxlength="32" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
-                    '<div class="admin-field-hint" id="adminPwdHint" style="font-size:11px;color:#e53935;margin-top:4px;">💡 首次激活：至少8位含字母和数字，留空＝默认 admin（登入后请自行修改）。已有机构版在新设备激活：输入该账号【当前登录密码】即可自动绑定本机（限 5 台，无需客服）</div>' +
+                    '<div class="admin-field-hint" id="adminPwdHint" style="font-size:11px;color:#e53935;margin-top:4px;">💡 首次开通：8-32 位且含字母和数字；已有机构版在新设备激活：输入该账号【当前登录密码】即可自动绑定（限 5 台，无需客服）</div>' +
                 '</div>' +
                 '<div style="margin-bottom:14px;">' +
                     '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">确认密码（自定义时需再输一次）</label>' +
@@ -5836,6 +5891,36 @@
         if (codeEntryBtn) codeEntryBtn.addEventListener('click', function() {
             show('adminTabCode'); setActiveTab('code');
             setTimeout(function() { var i = document.getElementById('adminCodeInput'); if (i) i.focus(); }, 200);
+        });
+        // ★ 2026-10-23 淘宝/官网付款统一激活：官网付款/审批用户无需激活码，凭本机 machineId
+        //   一键检测 admin-status（machineId-only 自救），命中即安装授权并提示登录。
+        var detectPaidBtn = document.getElementById('adminDetectPaidBtn');
+        if (detectPaidBtn) detectPaidBtn.addEventListener('click', function() {
+            var hint = document.getElementById('adminDetectPaidHint');
+            var oldTxt = detectPaidBtn.textContent;
+            if (!machineId) {
+                if (hint) { hint.textContent = '⚠ 未获取到本机设备码，无法检测；请用手机号+密码直接登录或联系客服。'; hint.style.color = '#e53935'; }
+                return;
+            }
+            detectPaidBtn.disabled = true;
+            detectPaidBtn.textContent = '🔍 正在检测官网付款/审批结果…';
+            if (hint) { hint.textContent = '正在连接官网核对本机授权…'; hint.style.color = '#909399'; }
+            _cloudQueryAdminStatus('', machineId).then(function(r) {
+                if (r && r.success && r.status === 'activated') {
+                    if (hint) { hint.textContent = '✅ 检测到已激活授权，正在完成本机激活…'; hint.style.color = '#2e7d32'; }
+                    _cloudResumeCompleteActivation(r, { phone: (r.licenseInfo && r.licenseInfo.phone) || '' }).then(function() {
+                        try { cleanup(); } catch (e) {}
+                    });
+                } else {
+                    detectPaidBtn.disabled = false;
+                    detectPaidBtn.textContent = oldTxt;
+                    if (hint) { hint.textContent = '未检测到已付款/已通过授权。请确认已在官网完成付款（设备码已携带），或稍后管理员审批后再点一次。'; hint.style.color = '#e53935'; }
+                }
+            }).catch(function(e) {
+                detectPaidBtn.disabled = false;
+                detectPaidBtn.textContent = oldTxt;
+                if (hint) { hint.textContent = '检测失败：' + ((e && e.message) || '网络异常') + '，请稍后重试。'; hint.style.color = '#e53935'; }
+            });
         });
         var skipTicketLink = document.getElementById('adminSkipToTicket');
         if (skipTicketLink) skipTicketLink.addEventListener('click', function() {
@@ -6198,7 +6283,7 @@
             state.phone = v;
             const hint = document.getElementById('adminPhoneHint');
             if (!v) {
-                hint.textContent = '💡 11位手机号为登录账号，默认密码 admin（登入后请自行修改）';
+                hint.textContent = '💡 11位手机号为登录账号；请填真实手机号（用于接收短信验证/找回账号）。已开通账号在新设备请直接登录，登录即自动绑定（机构版最多 5 台）。';
                 hint.style.color = '#909399';
             } else if (!PHONE_RE.test(v)) {
                 hint.textContent = '⚠ 请输入正确的11位手机号';
@@ -6265,14 +6350,16 @@
 
         // 提交
         document.getElementById('adminSubmitBtn').addEventListener('click', async function() {
-            const pwdRaw = state.password;
-            const pwd = (pwdRaw && pwdRaw.trim()) ? pwdRaw.trim() : 'admin';
+            const pwdRaw = (state.password || '').trim();
+            if (!pwdRaw) { showFieldErr('adminPassword','adminPwdHint','请填写登录密码（首次开通请设置密码；已有账号加设备请输入原登录密码）'); return; }
+            if (pwdRaw.toLowerCase() === 'admin') { showFieldErr('adminPassword','adminPwdHint','请设置/输入真实登录密码，不能使用默认 admin'); return; }
+            const pwd = pwdRaw;
             const pwd2 = document.getElementById('adminPassword2').value.trim();
-            if (pwd !== 'admin') {
-                if (pwd.length < 8) { showFieldErr('adminPassword','adminPwdHint','若自定义密码，需至少8位'); return; }
-                if (!/[a-zA-Z]/.test(pwd)) { showFieldErr('adminPassword','adminPwdHint','若自定义密码，需包含字母'); return; }
-                if (!/\d/.test(pwd)) { showFieldErr('adminPassword','adminPwdHint','若自定义密码，需包含数字'); return; }
-                if (!pwd2) { showFieldErr('adminPassword2','adminPwd2Hint','请再次输入自定义密码'); return; }
+            // 首次开通会填“再次输入密码”；已有账号加设备只填当前密码即可（pwd2 可空）。
+            if (pwd2) {
+                if (pwd.length < 8) { showFieldErr('adminPassword','adminPwdHint','自定义密码需至少8位'); return; }
+                if (!/[a-zA-Z]/.test(pwd)) { showFieldErr('adminPassword','adminPwdHint','自定义密码需包含字母'); return; }
+                if (!/\d/.test(pwd)) { showFieldErr('adminPassword','adminPwdHint','自定义密码需包含数字'); return; }
                 if (pwd !== pwd2) { showFieldErr('adminPassword2','adminPwd2Hint','两次密码输入不一致'); return; }
             }
             state.password = pwd;

@@ -2150,7 +2150,7 @@ ode --check sw.js/entitlement.js、sync-html/copy-consistency/check-interface/cv
   - 新增 isMobileSyncUI()：Capacitor 原生平台 / Android|iPhone|iPad|iPod|Mobile UA / innerWidth<=768 任一命中即视为移动端。
   - 移动端：隐藏 #cloudSyncBadge 悬浮胶囊，改为在底部导航「设置」项（onclick 含 settingsModal）右上角注入 #cloudSyncDot 8px 圆点（position:absolute; pointer-events:none，不阻挡原有点击）；颜色：绿=已同步、橙=待同步 N、灰=离线、红=同步失败。
   - 补一次轻提示：待同步由 >0 变 0 → showToast('☁️ 云端已同步')；同步失败 5 分钟节流 toast。
-  - 桌面/宽屏（>768 且非移动 UA）保留原悬浮胶囊（可点击立即同步）。
+  - 桌面/宽屏（>768 且非移动 UA）保留原悬浮胶囊（可点击立即同步）。（★2026-10-25 已统一改为右下角 10px 小圆点，见 §77）
 * **验证**：Playwright 双上下文（1280 桌面 / Pixel 7 UA+393 宽）7/7：桌面胶囊可见且无导航点；移动端胶囊隐藏、导航点可见且挂在 .mobile-nav-item、尺寸≤12px、保存按钮不被遮挡。同步功能的 179 项独立验证 A/B 全 PASS（D1 为 server-dev 旧桩的 git 基线查找失效，属工具问题非产品）。
 * **生效**：静态页随 push 部署；云 APP 联网打开一次即拿新 index（SW 网络优先），离线缓存旧页在下次联网刷新后更新。云桌面/网页宽屏不受影响。
 ## 62. 云 APP「每次同步弹库存预警」根因与修复：同步不得走业务保存钩子（2026-10-19，desktop/cloud 热更 2026.10.19-4）
@@ -2170,7 +2170,7 @@ x/rx-adj 记录与时间，可定位同步时点的重复扣减）；药品库�
 
 * **客户疑问**：「同步消失！小绿点是什么情况」——此前为避免遮挡底部操作栏，把悬浮「☁️已同步 11:12」胶囊换成了底部导航「设置」右上角的 10px 圆点；客户不知道圆点含义，以为同步功能没了。
 * **圆点含义**：绿=已同步（待同步 0）；橙=待同步 N 条；灰=离线；红=同步失败。同步本身全自动（登录后/联网/回前台/5 分钟），无需手动操作。
-* **补强**：①圆点可点击（pointer-events:auto + stopPropagation），点击 toast 显示完整状态文案；②「F1 基础设置」底部自动注入 #cloudSyncSettingsRow，显示「☁️ 云端同步：…」+ 待同步处置说明（联网自动补传，无需手动）；③桌面/宽屏仍保留可点击悬浮胶囊（初始隐藏逻辑不变）。
+* **补强**：①圆点可点击（pointer-events:auto + stopPropagation），点击 toast 显示完整状态文案；②「F1 基础设置」底部自动注入 #cloudSyncSettingsRow，显示「☁️ 云端同步：…」+ 待同步处置说明（联网自动补传，无需手动）；③桌面/宽屏仍保留可点击悬浮胶囊（初始隐藏逻辑不变）。（★2026-10-25 桌面/宽屏胶囊也已改为右下角 10px 小圆点，见 §77）
 * **验证**：Playwright 移动端 9/9（圆点可点、设置明细含「云端同步」、不遮挡保存按钮）；同步 A/B 178/179（D1 工具旧桩问题）。
 * **经验**：把文字状态改成纯色点这种“极简指示”必须同时提供可点击的解释/设置页明细，否则用户会误判功能消失。
 ## 64. 云 APP 断网冷启动兜底：Service Worker 失败 → 原生 WebView 内置壳（2026-10-19）
@@ -2357,3 +2357,16 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
   - 「恢复内置版本」语义：离线 APP 有热更新机制；出现该入口说明当前跑的是热更新版本，点击=拉黑当前热版本、回退到 APK 内置 assets（有 previous 则回上一版），重启后生效；不影响本地数据/授权。
 * **发布**：云APP **v337**（12,415,266B，SHA256 134A4128…8822）、离线APP **v329**（3,584,408B，SHA256 34803753…65B8）已上传官网/Release（v2026.10.22）；cloud 热更 **2026.10.22-1**；官网 manifest 双镜像 cloud=337/local=329。
 * **验证**：Gradle 构建/签名通过；线上 hash-manifest 已核验（延迟部署后 cloud 337/local 329 生效）。
+
+## 77. 云桌面同步标识由悬浮胶囊改为「小圆点」（2026-10-25，客户截图要求与云桌面/云 APP 一致）
+
+* **诉求**：客户截图（云桌面机构版）右下角「☁️ 已同步 14:42」绿色胶囊体积大，遮挡右侧处方历史列表滚动条/删除按钮，且与云 APP 端的小圆点形态不一致 → 要求云桌面也改小圆点（位置：右下角原位）。
+* **实现（public/index.html 权威源 → CloudSync.renderBadge() 桌面分支）**：
+  - #cloudSyncBadge 由 padding+文字胶囊改为 `position:fixed;right:14px;bottom:14px;width/height:10px;border-radius:50%` 的圆点；不再设置 textContent（圆点内无文字）；白色 2px 外描边 + 轻投影；`role=status`。
+  - 颜色沿用状态色：绿 #26a69a 已同步 / 橙 #fb8c00 待同步 N / 灰 #78909c 离线 / 红 #e57373 失败；hover `scale(1.3)`。
+  - 可发现性不降级：`title` 与 `aria-label` 均为「完整状态 +（点击立即同步）」；点击 = `showToast(完整状态)` + `CloudSync.kick(0)`；「F1 基础设置」底部 `#cloudSyncSettingsRow` 明细保持不变（§63 教训：极简指示必须保留解释入口）。
+  - 移动端（isMobileSyncUI 为真）导航「设置」右上角圆点分支**未改**；同步周期/outbox/pull-push 逻辑零改动。
+* **分发**：`tools/sync-html.ps1` 生成 cloud_desktop / cloud_app assets / harmony rawfile 三副本（端配置块保留），`-VerifyOnly` 三副本 12270 行一致。
+* **验证（真实 Chromium，Playwright，1280×800 + 393×852 iPhone UA）31/31 PASS**：boundingBox 10×10、border-radius 50%、textContent 空、右下距 14px、四色（待同步/离线/失败/恢复）、点击 kick(0)+toast、hover 1.3×、F1 明细行在、无 token 时隐藏、移动端不出现胶囊且角标 10×10；截图 `_verify/syncui/desktop-dot.png`、`dot-zoom-5x.png`、`mobile.png`（本地未跟踪）。注意：圆点 background 有 0.2s CSS 过渡，状态切换后需 ~320ms 再读 computed style，否则读到插值色（首轮验证即因此误报 4 项，已在验证脚本加等待）。
+* **门禁**：check_syntax（4 副本各 21 script 块）、check-interface 6 OK（改动在 `<script>` 内，界面锁无需重签）、html-sync-check IN SYNC、copy-consistency 100/100、diff-cross-version 6 对全绿。
+* **生效/残差**：云网页/云 APP 随 push 部署即达；云桌面客户端页面来自热更目录 → 已重签 `desktop/cloud` 热更 **2026.10.25-1**（app 1.2.278，20 文件 + Ed25519 签名，manifest 哈希复验 0 mismatch），**待 push 部署**（Pages 自动发；客户端下次启动后台拉取、再下次启动生效）。⚠ 该热包 = 当前 public 前端全量，会连带 10.22-2 之后已提交的 auth-core 变更（本机机器码显示、心跳 D1 等）一起下发（与网页端当前线上代码一致）。

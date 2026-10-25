@@ -2966,15 +2966,15 @@ let currentUser = null;
                     }
                     const n = this.state.pending || 0;
                     const offlineNow = (typeof navigator !== 'undefined' && navigator.onLine === false);
-                    let txt, bg, dotColor;
-                    if (offlineNow) { txt = '📴 离线' + (n ? (' · 待同步 ' + n) : ''); bg = 'rgba(120,144,156,0.95)'; dotColor = '#78909c'; }
-                    else if (this.state.syncing) { txt = '🔄 同步中…'; bg = 'rgba(38,166,154,0.92)'; dotColor = '#26a69a'; }
-                    else if (this.state.lastError) { txt = '⚠️ ' + (n ? ('待同步 ' + n + ' 条') : '同步失败'); bg = 'rgba(229,115,115,0.95)'; dotColor = '#e57373'; }
-                    else if (n) { txt = '⏳ 待同步 ' + n + ' 条'; bg = 'rgba(251,140,0,0.95)'; dotColor = '#fb8c00'; }
+                    let txt, dotColor;
+                    if (offlineNow) { txt = '📴 离线' + (n ? (' · 待同步 ' + n) : ''); dotColor = '#78909c'; }
+                    else if (this.state.syncing) { txt = '🔄 同步中…'; dotColor = '#26a69a'; }
+                    else if (this.state.lastError) { txt = '⚠️ ' + (n ? ('待同步 ' + n + ' 条') : '同步失败'); dotColor = '#e57373'; }
+                    else if (n) { txt = '⏳ 待同步 ' + n + ' 条'; dotColor = '#fb8c00'; }
                     else {
                         const d = this.state.lastSyncAt ? new Date(this.state.lastSyncAt) : null;
                         txt = '☁️ 已同步' + (d ? (' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0')) : '');
-                        bg = 'rgba(38,166,154,0.92)'; dotColor = '#26a69a';
+                        dotColor = '#26a69a';
                     }
                     // ★ 移动端只有小圆点时，详细状态放在「F1 基础设置」底部，点圆点也弹提示（防误以为同步消失）
                     try { this._renderSettingsStatus(txt, n); } catch (e) {}
@@ -3013,17 +3013,30 @@ let currentUser = null;
                     }
                     if (oldDot) oldDot.style.display = 'none';
 
+                    // ★ 2026-10-25 云桌面同步标识统一为「小圆点」（客户要求：与云桌面/云 APP 的小圆点形态一致）：
+                    //   原右下角悬浮胶囊「☁️ 已同步 14:42」体积大，遮挡右侧处方历史列表滚动条与删除按钮，
+                    //   且与移动端角标圆点形态不一致。桌面端保留右下角悬浮位，只把形态改为 10px 状态圆点：
+                    //   颜色=同步状态（绿=已同步 / 橙=待同步 N / 灰=离线 / 红=失败）；
+                    //   点击=立即同步 + toast 完整状态，悬停 title/无障碍 aria-label=完整状态，
+                    //   明细仍在「F1 基础设置」底部 #cloudSyncSettingsRow（避免误以为同步消失）。
                     if (!el) {
                         el = document.createElement('div');
                         el.id = 'cloudSyncBadge';
-                        el.style.cssText = 'position:fixed;right:12px;bottom:12px;z-index:99998;padding:6px 10px;border-radius:14px;background:rgba(38,166,154,0.92);color:#fff;font-size:12px;line-height:1;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.2);user-select:none;';
-                        el.title = '点击立即同步云端';
-                        el.addEventListener('click', function () { CloudSync.kick(0); });
+                        el.style.cssText = 'position:fixed;right:14px;bottom:14px;z-index:99998;width:10px;height:10px;border-radius:50%;background:#26a69a;cursor:pointer;box-shadow:0 0 0 2px rgba(255,255,255,0.92),0 1px 3px rgba(0,0,0,0.28);transition:background .2s,transform .15s;user-select:none;';
+                        el.setAttribute('role', 'status');
+                        el.addEventListener('mouseenter', function () { try { el.style.transform = 'scale(1.3)'; } catch (e) {} });
+                        el.addEventListener('mouseleave', function () { try { el.style.transform = 'scale(1)'; } catch (e) {} });
+                        el.addEventListener('click', function () {
+                            try { if (typeof showToast === 'function') showToast((CloudSync.state.lastStatusText || '☁️ 云端同步') + '（点击后立即同步）'); } catch (e) {}
+                            try { CloudSync.kick(0); } catch (e) {}
+                        });
                         document.body.appendChild(el);
                     }
                     el.style.display = 'block';
-                    el.textContent = txt;
-                    el.style.background = bg;
+                    el.title = txt + '（点击立即同步）';
+                    el.setAttribute('aria-label', txt + '（点击立即同步）');
+                    el.style.background = dotColor;
+                    this.state.lastStatusText = txt;
                 } catch (e) {}
             }
         };
