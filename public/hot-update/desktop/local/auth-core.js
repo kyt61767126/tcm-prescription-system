@@ -5972,33 +5972,23 @@
             'background:white;border-radius:14px;width:100%;max-width:400px;box-shadow:0 10px 30px rgba(0,0,0,0.3);max-height:92vh;overflow-y:auto;';
 
         card.innerHTML =
-            // 标题（注册开通 · 绿色主题，对齐既有弹窗视觉）
+            // 标题（统一注册 · 绿色主题，对齐既有弹窗视觉）
             '<div style="background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);padding:18px;border-radius:14px 14px 0 0;text-align:center;">' +
-                '<div style="font-size:19px;font-weight:bold;color:white;">📝 注册开通</div>' +
-                '<div style="font-size:12px;color:rgba(255,255,255,0.9);margin-top:4px;">惠康中医诊所管理系统 · 本地版</div>' +
+                '<div style="font-size:19px;font-weight:bold;color:white;">📝 注册 / 首次开通</div>' +
+                '<div style="font-size:12px;color:rgba(255,255,255,0.9);margin-top:4px;">手机号 + 密码 · 注册只填一次</div>' +
             '</div>' +
 
-            // 表单（一页式）
+            // 表单（一页式 · 先账号后诊所）
             '<div id="localRegForm" style="padding:16px;">' +
-                // ★ 2026-09-24 「已有账号登录」入口置顶：老用户不必滚到表单底部找，
-                //   弹窗一打开即见（id/文案/绑定逻辑不变，仅位置从提交按钮下方上移）。
                 '<div style="display:flex;justify-content:flex-end;margin-bottom:12px;">' +
                     '<span id="localRegCloseLink" style="font-size:13px;color:#00796b;cursor:pointer;font-weight:600;background:#e0f2f1;border:1px solid #80cbc4;border-radius:16px;padding:6px 14px;">暂不注册，已有账号登录 ›</span>' +
                 '</div>' +
                 '<div style="background:#f0f7ff;border:1px solid #d6e8ff;border-radius:8px;padding:10px;margin-bottom:14px;font-size:12px;color:#1565c0;line-height:1.7;">' +
-                    '💡 请先完成注册（<b>手机号即登录账号</b>）。<br>请填写真实手机号（用于短信验证/找回账号）；注册后可先 <b>试用 7 天</b> 标准版全功能，随时输入激活码升级正式版。' +
-                '</div>' +
-                '<div style="margin-bottom:12px;">' +
-                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">诊所名称 <span style="color:#e53935;">*</span></label>' +
-                    '<input type="text" id="localRegClinicName" placeholder="如：惠康中医诊所" autocomplete="off" spellcheck="false" maxlength="50" style="' + INPUT_STYLE + '">' +
-                '</div>' +
-                '<div style="margin-bottom:12px;">' +
-                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">管理员/医师姓名 <span style="color:#e53935;">*</span></label>' +
-                    '<input type="text" id="localRegAdminName" placeholder="如：王医生" autocomplete="off" spellcheck="false" maxlength="30" style="' + INPUT_STYLE + '">' +
+                    '💡 <b>第 1 步：注册本机档案</b> → 第 2 步：激活（已有激活码 / 官网付款均可）。<br>手机号即登录账号，请填写真实手机号（用于短信验证/找回账号）。' +
                 '</div>' +
                 '<div style="margin-bottom:12px;">' +
                     '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">手机号 <span style="color:#e53935;">*</span>（登录账号）</label>' +
-                    '<input type="text" id="localRegPhone" placeholder="如：13800138000" autocomplete="off" inputmode="numeric" maxlength="11" style="' + INPUT_STYLE + '">' +
+                    '<input type="text" id="localRegPhone" placeholder="请输入真实手机号" autocomplete="off" inputmode="numeric" maxlength="11" style="' + INPUT_STYLE + '">' +
                     '<div id="localRegPhoneHint" style="font-size:11px;color:#909399;margin-top:4px;">💡 请填写真实手机号（用于短信验证/找回账号），注册后用「手机号+密码」登录</div>' +
                 '</div>' +
                 '<div style="margin-bottom:12px;">' +
@@ -6009,8 +5999,16 @@
                     '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">确认密码 <span style="color:#e53935;">*</span></label>' +
                     '<input type="password" id="localRegPassword2" placeholder="请再次输入登录密码" autocomplete="new-password" data-lpignore="true" maxlength="32" style="' + INPUT_STYLE + '">' +
                 '</div>' +
+                '<div style="margin-bottom:12px;">' +
+                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">诊所名称 <span style="color:#e53935;">*</span></label>' +
+                    '<input type="text" id="localRegClinicName" placeholder="如：惠康中医诊所" autocomplete="off" spellcheck="false" maxlength="50" style="' + INPUT_STYLE + '">' +
+                '</div>' +
+                '<div style="margin-bottom:12px;">' +
+                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">管理员/医师姓名 <span style="color:#e53935;">*</span></label>' +
+                    '<input type="text" id="localRegAdminName" placeholder="如：王医生" autocomplete="off" spellcheck="false" maxlength="30" style="' + INPUT_STYLE + '">' +
+                '</div>' +
                 '<div id="localRegError" style="display:none;margin-bottom:12px;padding:10px 12px;border-radius:8px;background:#fdecea;color:#c0392b;font-size:13px;"></div>' +
-                '<button id="localRegSubmitBtn" style="width:100%;padding:12px;font-size:15px;border:none;border-radius:8px;color:#fff;background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);cursor:pointer;font-weight:bold;">✅ 完成注册</button>' +
+                '<button id="localRegSubmitBtn" style="width:100%;padding:12px;font-size:15px;border:none;border-radius:8px;color:#fff;background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);cursor:pointer;font-weight:bold;">✅ 完成注册，去激活</button>' +
             '</div>' +
 
             // 提交中（默认隐藏）
@@ -6285,6 +6283,23 @@
             const __regGate = __getSyncRegGate();
             // 已激活的存量设备不打扰（可能无手机号账号，维持现状，铁律 1-5 不破坏）
             if (__regGate ? !!__regGate.licensed : (await __isDeviceLicensed())) return;
+            // ★ 2026-10-24 升级保护：已激活设备即使账号表/授权校验异常也绝不自动弹注册页。
+            //   依据本机持久激活证据（激活码/完成标记/gate token）判定为老设备；
+            //   用户仍可手动点「注册开通」补回本地账号，但不会被升级强弹注册。
+            try {
+                if (typeof localStorage !== 'undefined' && (
+                    localStorage.getItem('license:code') ||
+                    localStorage.getItem('auth:activationDone') ||
+                    localStorage.getItem('license:gateToken'))) {
+                    return;
+                }
+            } catch (_) {}
+            // ★ 云端版桌面不弹本地注册（账号在服务器，直接手机号+密码登录）
+            try {
+                if (typeof CONFIG !== 'undefined' && CONFIG && (
+                    String(CONFIG.appMode || '') === 'cloud' ||
+                    /云端/.test(String(CONFIG.versionLabel || '')))) return;
+            } catch (_) {}
             // 本地桥判定：云端APP/纯网页无 getActivationUsers/registerLocalUser 桥 → 跳过
             const api = global.electronAPI || (typeof window !== 'undefined' ? window.electronAPI : null);
             const hasLocalBridge = !!(api && api.activate &&
@@ -7017,7 +7032,7 @@
                 '</div>' +
                 '<div style="font-size:11px;color:#909399;margin-top:6px;text-align:center;">💡 点击版本卡片将打开官网付款页面，购买后获得激活码再回来激活</div>' +
                 '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px;font-size:12px;">' +
-                    '<span id="adminSkipToTicket" style="color:#07c160;cursor:pointer;-webkit-tap-highlight-color:transparent;">没有激活码？留言申请 →</span>' +
+                    '<span id="adminSkipToTicket" style="display:none;">没有激活码？留言申请 →</span>' +
                 '</div>' +
                 // ★ 2026-10-18 产品决策：取消免费版（停止新发放）——版本选择页不再提供
                 //   「🆓 永久免费版」领取按钮；存量已领取的 free 授权继续可用。
@@ -7030,13 +7045,13 @@
             '<div id="adminTabBar" style="display:none;border-bottom:1px solid #eee;background:#fafcfb;">' +
                 '<div id="adminTabBtnAdmin" data-tab="admin" style="flex:1;text-align:center;padding:12px 2px;font-size:13px;font-weight:bold;color:#26a69a;border-bottom:2.5px solid #26a69a;cursor:pointer;-webkit-tap-highlight-color:transparent;">📋 管理员激活</div>' +
                 '<div id="adminTabBtnCode" data-tab="code" style="flex:1;text-align:center;padding:12px 2px;font-size:13px;font-weight:bold;color:#909399;border-bottom:2.5px solid transparent;cursor:pointer;-webkit-tap-highlight-color:transparent;">🔑 激活码激活</div>' +
-                '<div id="adminTabBtnTicket" data-tab="ticket" style="flex:1;text-align:center;padding:12px 2px;font-size:13px;font-weight:bold;color:#909399;border-bottom:2.5px solid transparent;cursor:pointer;-webkit-tap-highlight-color:transparent;">📨 工单申请</div>' +
+                '<div id="adminTabBtnTicket" style="display:none;" data-tab="ticket" style="flex:1;text-align:center;padding:12px 2px;font-size:13px;font-weight:bold;color:#909399;border-bottom:2.5px solid transparent;cursor:pointer;-webkit-tap-highlight-color:transparent;">📨 工单申请</div>' +
             '</div>' +
 
             // ★ Tab2：激活码激活面板（默认隐藏；对齐桌面 activate-window 的 tab-code）
             '<div id="adminTabCode" style="display:none;padding:16px;">' +
                 '<div style="background:#f0f7ff;border:1px solid #d6e8ff;border-radius:8px;padding:10px;margin-bottom:14px;font-size:12px;color:#1565c0;line-height:1.7;">' +
-                    '💡 输入客服提供给您的激活码完成激活<br>还没有激活码？切换到「📨 工单申请」提交申请' +
+                    '💡 输入客服提供给您的激活码完成激活；官网付款用户请点「🔍 一键检测激活」；没有码可去官网购买' +
                 '</div>' +
                 '<div style="margin-bottom:12px;">' +
                     '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">激活码 <span style="color:#e53935;">*</span></label>' +
