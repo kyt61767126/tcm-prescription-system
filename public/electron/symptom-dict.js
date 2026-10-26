@@ -902,7 +902,9 @@
     function initDD(){
         var input=document.getElementById('diagnosis');if(!input||input.__diagBound)return;
         _ddInput=input;input.__diagBound=true;ensureDD();
-        input.addEventListener('input',_onInput);input.addEventListener('focus',_onInput);input.addEventListener('keydown',_onKey);
+        // ★ 2026-10-26 用户要求取消“点进诊断框就自动弹候选框”：不再绑定 focus → 只保留
+        //   输入时（input 事件）才出现候选；Alt+D / 诊断按钮仍可手动打开快速录入面板。
+        input.addEventListener('input',_onInput);input.addEventListener('keydown',_onKey);
         input.addEventListener('blur',function(){setTimeout(_hideDD,150);});
         document.addEventListener('scroll',function(){if(_ddEl&&_ddEl.style.display!=='none')_posDD();},true);
         // ★ 2026-09-01 冒烟沙箱兼容：smoke-runtime 的 window 桩无 addEventListener（document 桩有），

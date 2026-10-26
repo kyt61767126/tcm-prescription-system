@@ -2412,6 +2412,12 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
   - 登录自愈补 365 天处加 `&& !clinics[idx].permanent`，否则永久诊所下次登录会被改回有期。
   - 验证：`node --check users.js` 0；admin 内联脚本 `new Function` 解析通过；diff-cross-version 6 对全绿；check-interface 6 OK。
 
+* ★ 2026-10-26 取消「点进诊断框就自动弹候选框」（shared/symptom-dict.js，8 副本）：
+  - 改动：`initDD()` 删除 `input.addEventListener('focus',_onInput)`，只保留 `input` 事件触发；Alt+D / 诊断按钮手动面板不变。
+  - 同步盲区：sync-all 的 BusinessJs 组**不含** `cloud_app assets` 与鸿蒙 `rawfile` 两副本（同 stock-core 盲区），需手工改；改完 8 副本 SHA256 必须一致（06A705FA715F）。
+  - 流程铁律：改 shared → `sync-all.ps1` → `check-cv-hashes.cjs --update` → `sync-html.ps1` → push（cv 变了不改 HTML 副本会被第⑪道门拦）。
+  - 验证：Edge 无头真跑 8 断言（点进不弹 / 输入弹 / Esc 关 / 已填内容再点也不弹 / 手动入口可用）；`smoke-runtime --html public/index.html` 26/26；copy-consistency 100 副本 0 失败。
+
 * ★ 2026-10-26 `tools/login-gate-smoke.cjs` 修复（由 5/7 → 7/7，回归既有门禁，与永久时长无关）：
   - 根因一（用例 ④）：2026-10-23 起 429 改为专属用户文案「授权服务请求过于频繁，请稍后再试；已激活设备可断网使用」，断言仍写 `/HTTP 429/` → 已改为 `/请求过于频繁/` 并反向断言不含「响应异常」。
   - 根因二（用例 ④/⑤）：2026-10-17 登录门「服务端对账自愈」上线后，闸门失败会额外请求 `/api/license/reconcile`；原 harness 只拦 `/entitlement`、把 reconcile **放行到真实生产服务**且计入同一个 `fetches` 计数器 → 计数 4/5 漂移、结果受线上数据影响（还会在真机触发重装授权副作用）。已改为：reconcile 等非授权入口一律桩化 503 并单独计数（`others`），断言统一改用只统计授权入口的 `ents`。
