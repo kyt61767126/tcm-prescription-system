@@ -47,7 +47,7 @@ const harnessHtml =
     // 场景环境安装
     const install = (mode) => page.evaluate((m) => {
         localStorage.clear();
-        window.__scn = { mode: m, fetches: 0 };
+        window.__scn = { mode: m, fetches: 0, ents: 0, others: 0 };
         window.electronAPI = {
             license: {
                 getStatus: async () => ({
@@ -57,11 +57,16 @@ const harnessHtml =
                 // 故意不提供 verifyGate → 渲染兜底
             }
         };
-        const origFetch = window.fetch;
         window.fetch = function (url) {
             window.__scn.fetches++;
-            if (String(url).indexOf('/api/license/entitlement') < 0)
-                return origFetch.apply(this, arguments);
+            // ★ 2026-10-26 白盒修正：只统计授权入口请求（ents），其余（reconcile 等
+            //   登录门对账）一律桩化 503，绝不真连生产服务——原实现把 reconcile 也计入
+            //   fetches 并放行到真实网络，导致用例 4/5 计数漂移且受线上状态影响。
+            if (String(url).indexOf('/api/license/entitlement') < 0) {
+                window.__scn.others++;
+                return Promise.resolve({ ok: false, status: 503, json: async () => ({ success: false }) });
+            }
+            window.__scn.ents++;
             if (m === 'malformed')
                 return Promise.resolve({
                     ok: true, status: 200,
@@ -84,15 +89,18 @@ const harnessHtml =
 
     const gate = async (username) => page.evaluate(async (u) => {
         const r = await AuthCore.verifyLoginGate(u);
-        return { ok: !!r.ok, message: r.message || '', fetches: window.__scn.fetches };
+        return {
+            ok: !!r.ok, message: r.message || '',
+            fetches: window.__scn.fetches, ents: window.__scn.ents
+        };
     }, username);
 
-    // ① 畸形 200 → 硬拒响应异常，一次请求
+    // ① 畸形 200 → 硬拒响应异常，一次授权请求
     {
         await install('malformed');
         const r = await gate('doctor1');
         check('1 畸形200: fail-closed「响应异常」',
-            !r.ok && /响应异常/.test(r.message) && r.fetches === 1, r.message);
+            !r.ok && /响应异常/.test(r.message) && r.ents === 1, r.message + ' | ents=' + r.ents);
     }
     // ② 白盒钩子：requestEntitlement 直出 malformed
     {
@@ -109,18 +117,21 @@ const harnessHtml =
         const r = await gate('doctor3');
         check('3 LICENSED 放行（回归）', r.ok, r.message);
     }
-    // ④ 429 → 硬拒 HTTP 429
+    // ④ 429 → 硬拒（★ 2026-10-23 起为 429 专属用户文案，含“请求过于频繁”）
     {
         await install('h429');
         const r = await gate('doctor4');
-        check('4 HTTP429 fail-closed', !r.ok && /HTTP 429/.test(r.message), r.message);
+        check('4 HTTP429 fail-closed（专属文案）',
+            !r.ok && /请求过于频繁/.test(r.message) && !/响应异常/.test(r.message) && r.ents === 1,
+            r.message + ' | ents=' + r.ents);
     }
     // ⑤ 真断网无 token → 离线门拒绝，文案不同于畸形
     {
         await install('nethrow');
         const r = await gate('doctor5');
         check('5 真断网: 离线门拒绝且≠畸形口径',
-            !r.ok && !/响应异常/.test(r.message) && r.fetches === 1, r.message);
+            !r.ok && !/响应异常/.test(r.message) && r.ents === 1,
+            r.message + ' | ents=' + r.ents);
     }
     // ⑥ 403 → 离线门路径，不按畸形处理
     {

@@ -2412,3 +2412,9 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
   - 登录自愈补 365 天处加 `&& !clinics[idx].permanent`，否则永久诊所下次登录会被改回有期。
   - 验证：`node --check users.js` 0；admin 内联脚本 `new Function` 解析通过；diff-cross-version 6 对全绿；check-interface 6 OK。
 
+* ★ 2026-10-26 `tools/login-gate-smoke.cjs` 修复（由 5/7 → 7/7，回归既有门禁，与永久时长无关）：
+  - 根因一（用例 ④）：2026-10-23 起 429 改为专属用户文案「授权服务请求过于频繁，请稍后再试；已激活设备可断网使用」，断言仍写 `/HTTP 429/` → 已改为 `/请求过于频繁/` 并反向断言不含「响应异常」。
+  - 根因二（用例 ④/⑤）：2026-10-17 登录门「服务端对账自愈」上线后，闸门失败会额外请求 `/api/license/reconcile`；原 harness 只拦 `/entitlement`、把 reconcile **放行到真实生产服务**且计入同一个 `fetches` 计数器 → 计数 4/5 漂移、结果受线上数据影响（还会在真机触发重装授权副作用）。已改为：reconcile 等非授权入口一律桩化 503 并单独计数（`others`），断言统一改用只统计授权入口的 `ents`。
+  - 铁律：白盒 harness 必须拦截**全部**出站请求，禁止让被测页面真连生产接口；计数口径要按「被测入口」建独立计数器，不能共用总 fetch 数。
+  - 验证：`node tools/login-gate-smoke.cjs` = 7/7。
+
