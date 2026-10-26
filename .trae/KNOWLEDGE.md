@@ -2420,9 +2420,10 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
 
 * ★ 2026-10-26 修复「数据统计→刷新数据，图表不断变大」（shared/analytics-core.js `createChart`）：
   - 根因：三个 canvas 无 CSS 宽度约束，`width/height` **属性**反向决定布局盒尺寸；旧代码每次把属性写成 `rect.width*dpr`（dpr 任意值、含四舍五入），测量值随之增长 → 每点一次刷新按比例膨胀（缩放记忆叠加）。
-  - 对策（幂等绘制）：每次绘制前先复位——`style.width='100%'`、`style.height=''`、`width=1`、`height=__baseH`（首帧缓存原始 height 属性，兜住 CSS 媒体查询），再测量；随后把 CSS 盒锁成测量值，属性写 `round(w*dpr)`，并用 `ctx.setTransform(dpr,0,0,dpr,0,0)` 显式设缩放（替代 `ctx.scale`，避免未重置时累积）。
-  - 铁律：**canvas 的 width/height 属性绝不能由上一次布局测得的值反推**；必须"先复位到与内容无关的基准 → 再测量 → 再锁定"，否则任何重绘入口（刷新/tab 切换/onresize）都会膨胀。
-  - 验证：Edge 无头 deviceScaleFactor=1.25，16/16（三图连续刷 6 次尺寸不变、属性=CSS×dpr、内容非空、窄屏<768 高回 130、宽屏回 200、窄屏再刷 3 次稳定）；smoke-runtime 26/26；copy-consistency 0 失败；check-interface 6 OK；cv 15 项一致（analytics-core cv 60dad9ce→758af35f）。
+  - 对策（幂等绘制，最终版）：每次绘制前复位 → `style.width='100%'`、`style.height=baseH+'px'`（**显式 px**）、`width=1`、`height=baseH`，再测量；随后把 CSS 盒锁成测量值，属性写 `round(w*dpr)`，并用 `ctx.setTransform(dpr,0,0,dpr,0,0)` 显式设缩放（替代 `ctx.scale`，避免未重置时累积）。
+  - ★★ 中间踩坑（已上线又回滚，务必记住）：第二版复位写成「`style.height=''`（auto）+ 属性 1×baseH」，浏览器按 canvas **内在宽高比 1:200** 推导高度 → 实际渲染出 493×98500（高度=宽度×200）；超过 16384 后 canvas 失效，页面显示“破图”图标（用户反馈"图表不显示"）。`baseH` 必须显式 px，绝不能让高度走 auto/aspect-ratio 推导；并加 16384 上限降采样防御。
+  - ★★★ 验证方法论铁律：**白盒 harness 必须加载真实页面的 CSS/DOM**。第一版 harness 自己写了 `#visitTrendChart{height:200px}`，掩盖了"桌面端无 CSS 高度、高度来自 attribute"的真实条件，导致假绿。正确做法：`file:///public/index.html` 真页 + Playwright 无头，`openModal` 后连刷 N 次数值断言（尺寸/属性/painted 像素）+ 截图肉眼确认。
+  - 验证：真实页 3 场景 28/28——桌面 dpr=1 连刷 8 次（493×200 / 492×200 / 1032×200 恒定、已绘制）、dpr=1.25（属性=CSS×1.25）、手机 420 dpr=2（媒体查询 130px 生效、宽度跟随容器）；截图确认柱状/饼图/条形图正常；smoke-runtime 26/26；copy-consistency 100 副本 0 失败；check-interface 6 OK；cv 15 项一致（analytics-core cv 758af35f→ea491ca9）。
 
 * ★ 2026-10-26 `tools/login-gate-smoke.cjs` 修复（由 5/7 → 7/7，回归既有门禁，与永久时长无关）：
   - 根因一（用例 ④）：2026-10-23 起 429 改为专属用户文案「授权服务请求过于频繁，请稍后再试；已激活设备可断网使用」，断言仍写 `/HTTP 429/` → 已改为 `/请求过于频繁/` 并反向断言不含「响应异常」。

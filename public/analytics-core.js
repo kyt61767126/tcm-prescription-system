@@ -159,22 +159,26 @@
 
             const ctx = canvas.getContext('2d');
 
-            const dpr = window.devicePixelRatio || 1;
-
-            // ★ 2026-10-26 修复「数据统计→刷新数据，图表不断变大」：
-            //   根因——三个 canvas 无 CSS 宽度约束，width/height 属性会反向决定布局尺寸；
-            //   旧代码每次把属性写成 rect.width*dpr（dpr 任意值 + 四舍五入），元素随之变大，
-            //   下次 getBoundingClientRect 又更大 → 每点一次刷新就按比例膨胀。
-            //   对策——绘制前先把盒子还原成「宽度跟随容器、高度回落到 CSS 媒体查询/原始
-            //   height 属性」，用还原后的布局测量，再把 CSS 盒与设备像素属性一次性锁定。
-            if (!canvas.__baseH) {
-                const attrH = parseInt(canvas.getAttribute('height'), 10);
-                canvas.__baseH = attrH > 0 ? attrH : 200;
+            // ★ 2026-10-26 修复「数据统计→刷新数据，图表不断变大 / 图表不显示」：
+            //   根因一：三个 canvas 无 CSS 宽度约束，width/height 属性会反向决定布局尺寸，
+            //     旧代码把属性写成 rect.width*dpr → 元素变大 → 下次测量更大（每次刷新按比例膨胀）。
+            //   根因二（复位方案的反噬）：把属性设成 1×baseH 后若把 height 留空（auto），
+            //     浏览器按 canvas 内在宽高比 1:200 推导高度 → 高度=宽度×200（实测 98500px），
+            //     超过 16384 上限后 canvas 直接失效，渲染成“破图”图标（图表不显示）。
+            //   最终对策：高度一律写成显式 px（baseH，首次调用时按 CSS 计算值捕获，含移动端
+            //     130px 媒体查询），宽度跟随容器；属性只承载设备像素，绝不参与布局推导。
+            if (!(canvas.__baseH > 0)) {
+                const ch = parseFloat(window.getComputedStyle(canvas).height);
+                if (ch > 0) canvas.__baseH = Math.round(ch); // 只在可见时捕获，避免隐藏态取到 0
             }
+            const baseH = canvas.__baseH > 0
+                ? canvas.__baseH
+                : (parseFloat(canvas.getAttribute('height')) || 200);
+
             canvas.style.width = '100%';
-            canvas.style.height = '';
+            canvas.style.height = baseH + 'px';
             canvas.width = 1;
-            canvas.height = canvas.__baseH;
+            canvas.height = baseH;
 
             const rect = canvas.getBoundingClientRect();
 
@@ -185,15 +189,22 @@
                 return null;
             }
 
-            const width = Math.round(rect.width);
-            const height = Math.round(rect.height);
+            const width = Math.max(1, Math.round(rect.width));
+            const height = Math.max(1, Math.round(rect.height));
+
+            // 防御：设备像素超过 16384 会让 canvas 失效（破图），按比例降采样保住画面
+            const MAX_DIM = 16384;
+            let dpr = window.devicePixelRatio || 1;
+            if (width * dpr > MAX_DIM || height * dpr > MAX_DIM) {
+                dpr = Math.min(MAX_DIM / width, MAX_DIM / height) || 1;
+            }
 
             // 锁定 CSS 盒尺寸（宽高都用测量值），再写设备像素属性——两者解耦后布局不再随
             // 属性回写变化；窗口尺寸变化时 refreshAnalytics 会重走本函数重新测量。
             canvas.style.width = width + 'px';
             canvas.style.height = height + 'px';
-            canvas.width = Math.round(width * dpr);
-            canvas.height = Math.round(height * dpr);
+            canvas.width = Math.max(1, Math.round(width * dpr));
+            canvas.height = Math.max(1, Math.round(height * dpr));
             // 设置 width/height 属性会重置上下文状态（含变换矩阵），显式一次性设定缩放，
             // 避免旧 ctx.scale 在未重置时累积放大。
             ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
