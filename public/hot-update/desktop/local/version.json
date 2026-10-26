@@ -1,7 +1,7 @@
 {
   "format": 1,
   "channel": "local",
-  "hotVersion": "2026.10.26-1",
+  "hotVersion": "2026.10.26-2",
   "appVersion": "1.0.302",
   "files": [
     {
@@ -71,8 +71,8 @@
     },
     {
       "name": "analytics-core.js",
-      "sha256": "60dad9ceafaae1cd1be0a368f7f0b69920e03de7859c394336f3caca50478093",
-      "size": 33461
+      "sha256": "758af35f4df25fe6051ee83ee0e2f5b58af3124217c10bb165e657a2d19b9063",
+      "size": 35046
     },
     {
       "name": "security-guard.js",
@@ -100,6 +100,6 @@
       "size": 881727
     }
   ],
-  "signedAt": 1793002565903,
-  "signature": "wejRvKN9O5t6ODIgFVtjJ25baIkw7D3w70/hXWVqbxHyhjxKiY/fjCabqL3U3Q3oKG7hunpvzLIfwm6MM1fOAA=="
+  "signedAt": 1793003531023,
+  "signature": "AMwD1pvZoenwHhtMW6qBYuWGbl5Ci/tFPOq9FHTcohMcAFbox+pCRqTlKenQjX+DlP6spp/nw0UfR3HLcAwwCQ=="
 }

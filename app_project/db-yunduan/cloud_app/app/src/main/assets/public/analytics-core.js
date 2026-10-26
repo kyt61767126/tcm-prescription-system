@@ -160,6 +160,22 @@
             const ctx = canvas.getContext('2d');
 
             const dpr = window.devicePixelRatio || 1;
+
+            // ★ 2026-10-26 修复「数据统计→刷新数据，图表不断变大」：
+            //   根因——三个 canvas 无 CSS 宽度约束，width/height 属性会反向决定布局尺寸；
+            //   旧代码每次把属性写成 rect.width*dpr（dpr 任意值 + 四舍五入），元素随之变大，
+            //   下次 getBoundingClientRect 又更大 → 每点一次刷新就按比例膨胀。
+            //   对策——绘制前先把盒子还原成「宽度跟随容器、高度回落到 CSS 媒体查询/原始
+            //   height 属性」，用还原后的布局测量，再把 CSS 盒与设备像素属性一次性锁定。
+            if (!canvas.__baseH) {
+                const attrH = parseInt(canvas.getAttribute('height'), 10);
+                canvas.__baseH = attrH > 0 ? attrH : 200;
+            }
+            canvas.style.width = '100%';
+            canvas.style.height = '';
+            canvas.width = 1;
+            canvas.height = canvas.__baseH;
+
             const rect = canvas.getBoundingClientRect();
 
             if (rect.width === 0 || rect.height === 0) {
@@ -169,12 +185,18 @@
                 return null;
             }
 
-            canvas.width = rect.width * dpr;
-            canvas.height = rect.height * dpr;
-            ctx.scale(dpr, dpr);
+            const width = Math.round(rect.width);
+            const height = Math.round(rect.height);
 
-            const width = rect.width;
-            const height = rect.height;
+            // 锁定 CSS 盒尺寸（宽高都用测量值），再写设备像素属性——两者解耦后布局不再随
+            // 属性回写变化；窗口尺寸变化时 refreshAnalytics 会重走本函数重新测量。
+            canvas.style.width = width + 'px';
+            canvas.style.height = height + 'px';
+            canvas.width = Math.round(width * dpr);
+            canvas.height = Math.round(height * dpr);
+            // 设置 width/height 属性会重置上下文状态（含变换矩阵），显式一次性设定缩放，
+            // 避免旧 ctx.scale 在未重置时累积放大。
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
             ctx.clearRect(0, 0, width, height);
 

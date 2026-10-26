@@ -2418,6 +2418,12 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
   - 流程铁律：改 shared → `sync-all.ps1` → `check-cv-hashes.cjs --update` → `sync-html.ps1` → push（cv 变了不改 HTML 副本会被第⑪道门拦）。
   - 验证：Edge 无头真跑 8 断言（点进不弹 / 输入弹 / Esc 关 / 已填内容再点也不弹 / 手动入口可用）；`smoke-runtime --html public/index.html` 26/26；copy-consistency 100 副本 0 失败。
 
+* ★ 2026-10-26 修复「数据统计→刷新数据，图表不断变大」（shared/analytics-core.js `createChart`）：
+  - 根因：三个 canvas 无 CSS 宽度约束，`width/height` **属性**反向决定布局盒尺寸；旧代码每次把属性写成 `rect.width*dpr`（dpr 任意值、含四舍五入），测量值随之增长 → 每点一次刷新按比例膨胀（缩放记忆叠加）。
+  - 对策（幂等绘制）：每次绘制前先复位——`style.width='100%'`、`style.height=''`、`width=1`、`height=__baseH`（首帧缓存原始 height 属性，兜住 CSS 媒体查询），再测量；随后把 CSS 盒锁成测量值，属性写 `round(w*dpr)`，并用 `ctx.setTransform(dpr,0,0,dpr,0,0)` 显式设缩放（替代 `ctx.scale`，避免未重置时累积）。
+  - 铁律：**canvas 的 width/height 属性绝不能由上一次布局测得的值反推**；必须"先复位到与内容无关的基准 → 再测量 → 再锁定"，否则任何重绘入口（刷新/tab 切换/onresize）都会膨胀。
+  - 验证：Edge 无头 deviceScaleFactor=1.25，16/16（三图连续刷 6 次尺寸不变、属性=CSS×dpr、内容非空、窄屏<768 高回 130、宽屏回 200、窄屏再刷 3 次稳定）；smoke-runtime 26/26；copy-consistency 0 失败；check-interface 6 OK；cv 15 项一致（analytics-core cv 60dad9ce→758af35f）。
+
 * ★ 2026-10-26 `tools/login-gate-smoke.cjs` 修复（由 5/7 → 7/7，回归既有门禁，与永久时长无关）：
   - 根因一（用例 ④）：2026-10-23 起 429 改为专属用户文案「授权服务请求过于频繁，请稍后再试；已激活设备可断网使用」，断言仍写 `/HTTP 429/` → 已改为 `/请求过于频繁/` 并反向断言不含「响应异常」。
   - 根因二（用例 ④/⑤）：2026-10-17 登录门「服务端对账自愈」上线后，闸门失败会额外请求 `/api/license/reconcile`；原 harness 只拦 `/entitlement`、把 reconcile **放行到真实生产服务**且计入同一个 `fetches` 计数器 → 计数 4/5 漂移、结果受线上数据影响（还会在真机触发重装授权副作用）。已改为：reconcile 等非授权入口一律桩化 503 并单独计数（`others`），断言统一改用只统计授权入口的 `ents`。
