@@ -2489,7 +2489,8 @@ export async function onRequest(context) {
                 try {
                     const clinics = (await kv.get(KV_SYSTEM_CLINICS, 'json')) || [];
                     const idx = clinics.findIndex(c => c && c.id === clinicId);
-                    if (idx >= 0 && !clinics[idx].expiresAt) {
+                    // ★ 2026-10-26 永久时长诊所（permanent=true）不补 365 天，保持永久
+                    if (idx >= 0 && !clinics[idx].expiresAt && !clinics[idx].permanent) {
                         const newExp = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
                         clinics[idx].expiresAt = newExp;
                         clinics[idx].updatedAt = getNowISO();
@@ -3450,6 +3451,8 @@ export async function onRequest(context) {
                     name: clinic.name,
                     status: clinic.status,
                     expiresAt: clinic.expiresAt || null,
+                    // ★ 2026-10-26 永久时长标记：后台诊所列表/收费弹窗据此显示"永久有效"
+                    permanent: clinic.permanent === true,
                     source: clinic.source || null,
                     // ★ 2026-09-07 版本类型：与 sanitizeUser 的 clinicEdition 用同一归一化，
                     //   供后台「诊所管理」列表直接展示版本类型（云端/离线 × 机构/标准）
@@ -3619,15 +3622,20 @@ export async function onRequest(context) {
             }
 
             const now = getNowISO();
-            const oldClinic = clinics[clinicIdx];
+            // ★ 2026-10-26 修复：旧值必须是快照（此前直接引用 clinics[clinicIdx]，
+            //   写入 expiresAt 后 oldClinic 同步变化，导致 __expChanged 恒为 false，
+            //   离线版续费的 license 同步块与双源警示永不触发）
+            const oldClinic = { ...clinics[clinicIdx] };
             const changes = [];
             let expiresSetByApproval = false;
 
             // ★ P0 2026-08-20 收费动作复核：待审核转正（test→active）与续费（renewDays>0）是收费动作，
             //   必须携带管理员密码复核（confirmPassword）+ 收款备注（payNote，≥4字符），
             //   防误操作、留痕审计。停用/设为待审核（非收费）必填 reason 说明原因。
+            // ★ 2026-10-26 永久时长（permanent=true）同属收费动作，同样需复核+备注。
             const isFeeAction = (status === 'active' && oldClinic.status === 'test') ||
-                (typeof renewDays === 'number' && renewDays > 0);
+                (typeof renewDays === 'number' && renewDays > 0) ||
+                body.permanent === true;
             if (isFeeAction) {
                 const payNote = String(body.payNote || '').trim();
                 const confirmPassword = String(body.confirmPassword || '');
@@ -3657,6 +3665,18 @@ export async function onRequest(context) {
                 changes.push('reason: ' + reason);
             }
 
+            // ★ 2026-10-26 永久时长（续费/开通）：permanent=true 时清空 expiresAt 并按永久处理。
+            //   与「永久激活码 = expiresAt 为 null」（2026-10-22 双源口径）保持一致；
+            //   登录闸门对 null 有效期放行，登录自愈补 365 天时需跳过 permanent 诊所。
+            const wantPermanent = body.permanent === true;
+            if (wantPermanent) {
+                changes.push(`有效期: ${(oldClinic.expiresAt || '-').slice(0, 10)} → 永久有效`);
+                clinics[clinicIdx].permanent = true;
+                delete clinics[clinicIdx].expiresAt;
+                // 阻止后面的「转正默认 365 天」「renewDays 叠加」覆盖永久设置
+                expiresSetByApproval = true;
+            }
+
             // 更新诊所状态或名称
             if (status !== undefined && status !== oldClinic.status) {
                 // ★ 优化：支持 active/test/disabled 三种状态
@@ -3680,7 +3700,8 @@ export async function onRequest(context) {
 
                 // ★ 2026-08-20 审核通过即收费开通：test → active 首次转正时自动写入 365 天有效期
                 //   （未设置或已过期的有效期才写入，避免"停用→启用"误续期）
-                if (status === 'active') {
+                // ★ 2026-10-26 永久时长不写 365 天（否则会把 permanent 覆盖成有期）
+                if (status === 'active' && !wantPermanent) {
                     const cur = clinics[clinicIdx].expiresAt ? new Date(clinics[clinicIdx].expiresAt).getTime() : 0;
                     if (!cur || cur < Date.now()) {
                         const days = (typeof renewDays === 'number' && renewDays > 0 && renewDays <= 3650) ? renewDays : 365;
@@ -3703,6 +3724,12 @@ export async function onRequest(context) {
             // ★ 2026-08-20 续费：对已生效诊所叠加有效期（从当前到期日或今天起 +renewDays 天，默认365）
             //   （转正时已写入有效期的不再叠加，避免同请求重复计算）
             if (typeof renewDays === 'number' && renewDays > 0 && renewDays <= 3650 && !expiresSetByApproval) {
+                // ★ 2026-10-26 由「永久」改回按天续费：清除 permanent 标记，
+                //   expiresAt 为空 → computeRenewedExpiresAt 以今天为锚点，不会从 2099 顺延
+                if (oldClinic.permanent) {
+                    delete clinics[clinicIdx].permanent;
+                    changes.push('有效期: 永久有效 → 按天续费');
+                }
                 // ★ 2026-09-25 P2-2：数学收口 computeRenewedExpiresAt（锚点取晚者，biz-smoke 有单测）
                 const newExp = computeRenewedExpiresAt(clinics[clinicIdx].expiresAt, renewDays);
                 if (newExp !== clinics[clinicIdx].expiresAt) {
@@ -3720,6 +3747,8 @@ export async function onRequest(context) {
                 }
                 const newExp = expDate.toISOString();
                 changes.push(`expiresAt: ${(oldClinic.expiresAt || '-').slice(0, 10)} → ${newExp.slice(0, 10)}（管理员直填）`);
+                // ★ 2026-10-26 直填到期日即退出永久态
+                delete clinics[clinicIdx].permanent;
                 clinics[clinicIdx].expiresAt = newExp;
             }
             if (name !== undefined && name !== oldClinic.name) {
@@ -3869,7 +3898,9 @@ export async function onRequest(context) {
                     const syncIp = context.request.headers.get('CF-Connecting-IP') ||
                                    context.request.headers.get('X-Forwarded-For') || 'unknown';
                     for (const lic of matches) {
-                        const updates = { expiresAt: __newClinicExp };
+                        // ★ 2026-10-26 永久时长：授权码 expiresAt 置 null（既有"永久码"口径），
+                        //   客户端 admin-status/validate 按无到期日放行，不再过期。
+                        const updates = wantPermanent ? { expiresAt: null } : { expiresAt: __newClinicExp };
                         if (!isNaN(newExpMs) && newExpMs > Date.now() && lic.status === 'expired') {
                             updates.status = 'used';
                         }
@@ -3880,15 +3911,16 @@ export async function onRequest(context) {
                                 time: new Date().toISOString(),
                                 ip: syncIp,
                                 operator: currentUser.username,
-                                detail: `auto-sync from clinic renewal: oldExpiresAt=${lic.expiresAt || 'null'}, newExpiresAt=${__newClinicExp}` +
+                                detail: `auto-sync from clinic renewal: oldExpiresAt=${lic.expiresAt || 'null'}, newExpiresAt=${wantPermanent ? 'permanent(null)' : __newClinicExp}` +
                                         (updates.status ? ', status: expired→used (auto-recovered)' : '')
                             });
                         } catch (e) { /* 审计日志失败不影响同步 */ }
                         syncedCodes.push(lic.code);
                     }
                     if (syncedCodes.length > 0) {
-                        changes.push(`license 同步延期: ${syncedCodes.join(', ')} → ${String(__newClinicExp).slice(0, 10)}（离线版一处续费两端同步）`);
-                        __licenseSync = { synced: syncedCodes.length, codes: syncedCodes, expiresAt: String(__newClinicExp).slice(0, 10) };
+                        const __syncLabel = wantPermanent ? '永久有效' : String(__newClinicExp).slice(0, 10);
+                        changes.push(`license 同步: ${syncedCodes.join(', ')} → ${__syncLabel}（离线版一处续费两端同步）`);
+                        __licenseSync = { synced: syncedCodes.length, codes: syncedCodes, expiresAt: wantPermanent ? null : String(__newClinicExp).slice(0, 10) };
                     }
                 } catch (e) {
                     console.warn('[clinic=update] 离线授权同步延期失败（不阻断诊所更新）:', e.message);

@@ -1350,7 +1350,11 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
         <div class="form-group">
             <label>时长（天）</label>
             <input type="number" id="feeDays" value="365" min="1" max="3650">
-            <small style="color:#909399;">审核通过=开通天数；续费=在当前有效期上顺延天数</small>
+            <label style="display:flex;align-items:center;gap:6px;margin-top:8px;cursor:pointer;font-weight:normal;">
+                <input type="checkbox" id="feePermanent" onchange="onFeePermanentChange()" style="width:auto;margin:0;">
+                <span>永久时长（不设到期日，适用于买断客户）</span>
+            </label>
+            <small style="color:#909399;">审核通过=开通天数；续费=在当前有效期上顺延天数；勾选永久则忽略天数</small>
         </div>
         <div class="form-group">
             <label>收款备注 *（金额 / 支付单号，至少4字符）</label>
@@ -4237,8 +4241,10 @@ async function loadClinicsList() {
                     return '剩 ' + days + ' 天（' + dateStr + '）';
                 };
                 // ★ 2026-08-20 有效期显示：正常诊所显示到期日与剩余天数
+                // ★ 2026-10-26 永久时长：显示"永久有效"而非 2099 哨兵日期
                 let expiryHtml = '长期有效';
-                if (c.expiresAt) expiryHtml = expiryColored(c.expiresAt);
+                if (c.permanent) expiryHtml = '<span style="color:#27ae60;font-weight:bold;">永久有效</span>';
+                else if (c.expiresAt) expiryHtml = expiryColored(c.expiresAt);
 
                 // ★ 2026-09-25 P2-4 双源有效期视图（仅离线诊所，后端 dualCompare 非 null）：
                 //   逐码展示授权码到期（悬停看完整码），与上方「诊所有效期」并列；
@@ -4676,12 +4682,15 @@ function clearClinicForm() {
 let _feeCtx = null;      // { clinic, mode: 'approve' | 'renew' }
 let _reasonCtx = null;   // { clinic, newStatus }
 
+// ★ 2026-10-26 永久时长：后端 permanent=true 且 expiresAt 为空，后台统一显示"永久有效"
 function findClinicById(id) {
     return _clinicsCache.find(c => c.id === id) || null;
 }
 
 function clinicExpiryHtml(c) {
-    if (!c || !c.expiresAt) return '长期有效';
+    if (!c) return '长期有效';
+    if (c.permanent) return '<span style="color:#27ae60;font-weight:bold;">永久有效</span>';
+    if (!c.expiresAt) return '长期有效';
     return c.expiresAt.slice(0, 10);
 }
 
@@ -4720,6 +4729,9 @@ function openFeeModal(clinic, mode) {
             ? '<div class="warn">⚠ 审核通过即正式开通，请确认已完成线下收款。</div>'
             : '<div class="warn">⚠ 续费在当前有效期基础上顺延，请确认已完成线下收款。</div>');
     document.getElementById('feeDays').value = 365;
+    document.getElementById('feeDays').disabled = false;
+    document.getElementById('feePermanent').checked = !!clinic.permanent;
+    onFeePermanentChange();
     document.getElementById('feePayNote').value = '';
     document.getElementById('feeConfirmPassword').value = '';
     document.getElementById('feeModalAlert').className = 'alert';
@@ -4732,19 +4744,36 @@ function closeFeeModal() {
     _feeCtx = null;
 }
 
+// ★ 2026-10-26 永久时长勾选联动：勾选后禁用天数输入（天数不参与计算）
+function onFeePermanentChange() {
+    const on = document.getElementById('feePermanent').checked;
+    const daysEl = document.getElementById('feeDays');
+    daysEl.disabled = on;
+    if (on) {
+        if (!daysEl.dataset.prevValue) daysEl.dataset.prevValue = daysEl.value;
+        daysEl.value = '';
+        daysEl.placeholder = '永久有效';
+    } else {
+        daysEl.value = daysEl.dataset.prevValue || '365';
+        daysEl.placeholder = '';
+    }
+}
+
 async function submitFeeAction() {
     if (!_feeCtx) return;
     const { clinic, mode } = _feeCtx;
+    const permanent = document.getElementById('feePermanent').checked;
     const days = parseInt(document.getElementById('feeDays').value, 10);
     const payNote = document.getElementById('feePayNote').value.trim();
     const confirmPassword = document.getElementById('feeConfirmPassword').value;
-    if (!Number.isFinite(days) || days < 1 || days > 3650) { showAlert('feeModalAlert', '时长须为 1-3650 天', 'error'); return; }
+    if (!permanent && (!Number.isFinite(days) || days < 1 || days > 3650)) { showAlert('feeModalAlert', '时长须为 1-3650 天，或勾选永久时长', 'error'); return; }
     if (payNote.length < 4) { showAlert('feeModalAlert', '请填写收款备注（金额/支付单号，至少4字符）', 'error'); return; }
     if (!confirmPassword) { showAlert('feeModalAlert', '请输入管理员密码复核', 'error'); return; }
     const btn = document.getElementById('feeSubmitBtn');
     btn.disabled = true;
     try {
-        const body = { clinicId: clinic.id, payNote, confirmPassword, renewDays: days };
+        const body = { clinicId: clinic.id, payNote, confirmPassword };
+        if (permanent) body.permanent = true; else body.renewDays = days;
         if (mode === 'approve') body.status = 'active';
         const res = await fetch(API_BASE + '/users?clinic=update', {
             method: 'POST',
@@ -4754,7 +4783,8 @@ async function submitFeeAction() {
         const data = await res.json();
         if (data.success) {
             closeFeeModal();
-            const exp = data.clinic && data.clinic.expiresAt ? '，有效期至：' + data.clinic.expiresAt.slice(0, 10) : '';
+            const isPermanent = !!(data.clinic && data.clinic.permanent);
+            const exp = isPermanent ? '，永久有效' : (data.clinic && data.clinic.expiresAt ? '，有效期至：' + data.clinic.expiresAt.slice(0, 10) : '');
             // ★ 2026-09-11 离线版双源有效期警示：改诊所有效期不联动离线端 license
             if (data.warning) {
                 const el = document.getElementById('clinicAlert');
@@ -4762,7 +4792,9 @@ async function submitFeeAction() {
             } else {
                 let msg = (mode === 'approve' ? '审核通过，已正式开通' : '续费成功') + exp;
                 // ★ 2026-09-12 一处续费两端同步：离线版关联激活码已自动延期，客户端联网自动生效
-                if (data.licenseSync) msg += '；离线授权已同步延期至 ' + data.licenseSync.expiresAt + '（' + data.licenseSync.synced + ' 个激活码，客户端联网自动生效）';
+                if (data.licenseSync) msg += isPermanent
+                    ? '；离线授权已同步为永久有效（' + data.licenseSync.synced + ' 个激活码，客户端联网自动生效）'
+                    : '；离线授权已同步延期至 ' + data.licenseSync.expiresAt + '（' + data.licenseSync.synced + ' 个激活码，客户端联网自动生效）';
                 showAlert('clinicAlert', msg, 'success');
             }
             loadClinicsList();

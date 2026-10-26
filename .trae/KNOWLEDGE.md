@@ -2404,3 +2404,11 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
   - 铁律：`license.clinicName` 是激活时绑定的名字，**诊所改名不追溯**（users.js 续费同步注释亦如此）→ 禁止用"clinicName 不在 system:clinics 即孤儿"的扫描式清理，会误删改名诊所的在用码；只认 `clinic=delete` 这一个删除动作。
   - 验证：`node --check` 两文件 0；`check-interface.bat` 6 OK；`node tools/diff-cross-version.cjs` 6 对全绿。生效方式：Cloudflare Functions 随 push 部署，五端零重打包。
 
+* ★ 2026-10-26 后台「诊所管理 → 续费/开通」新增**永久时长**选项（纯 Functions + 后台页改动，五端零重打包，push 即生效）：
+  - 口径：`clinic.permanent = true` + `expiresAt` 清空（与既有「永久激活码 = expiresAt 为 null」2026-10-22 双源口径一致）；`permanent=false` 时按天。
+  - 前端（两份 admin 副本必须字节镜像）：收费弹窗新增 `#feePermanent` 勾选框，勾选禁用 `#feeDays`，提交改为 `permanent: true`（不传 renewDays）；诊所列表/收费弹窗/成功提示按 `permanent` 显示「永久有效」。
+  - 后端 `users.js clinic=update`：`permanent=true` 纳入收费动作复核（备注+密码），置 permanent 并删除 expiresAt，且置 `expiresSetByApproval=true` 阻止转正默认 365 天/续费叠加覆盖；按天续费或直填 expiresAt 时删 permanent（从"今天"起算）；离线版 license 同步把 `expiresAt` 置 null（永久码）。
+  - ★ 同批修复潜伏 bug：`const oldClinic = clinics[clinicIdx]` 是同一引用，写 expiresAt 后旧值同步变化 → `__expChanged` 恒 false，离线版续费的 license 同步与双源警示**从未触发**。已改为浅拷贝快照 `{ ...clinics[clinicIdx] }`。
+  - 登录自愈补 365 天处加 `&& !clinics[idx].permanent`，否则永久诊所下次登录会被改回有期。
+  - 验证：`node --check users.js` 0；admin 内联脚本 `new Function` 解析通过；diff-cross-version 6 对全绿；check-interface 6 OK。
+
