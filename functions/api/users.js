@@ -20,6 +20,7 @@ import { listLicenses, getDevices, updateLicense, appendLicenseLog,
     getDeviceVersion, getDeviceBlock, getAccountTombstone, checkRateLimit,
     findLicensesByMachine, getLicense,
     KV_LICENSE_PREFIX, KV_LICENSE_INDEX,
+    deleteLicense, deleteLicenseLogs, removeDeviceVersion, KV_LICENSE_CLINIC_INDEX,
     getLicenseCodesByClinic, putLicenseClinicIndex } from './license/_lib/license-core.js';
 // ★ 2026-09-24 P1-2 客户全景聚合：查询类型判定走 schema-guard 权威正则（禁内联）
 import { isValidPhone, isValidMachineId } from './license/_lib/schema-guard.js';
@@ -3991,6 +3992,30 @@ export async function onRequest(context) {
             const deletedKeys = [];
             const users = (await kv.get(`clinic:${clinicId}:users`, 'json')) || [];
 
+            // ★ 2026-10-26 删除诊所连带清除其激活码（后台各模块统一消失）
+            //   背景：此前只删业务键/账号/激活申请，license:{code} 仍留在 system:license_index
+            //   与 license_clinic_index，导致「激活码管理 / 设备管理 / 风控告警 / 用量监控」
+            //   继续显示已删除诊所的码。现按 clinicName（记录字段 + 设备槽位）反查，
+            //   纳入备份后逐个走 deleteLicense 物理删除（连带码总索引/mid 索引/邀请索引/
+            //   诊所授权索引），并解除仍指向这些码的设备-版本绑定。
+            const __clinicLicenseCodes = [];
+            try {
+                const __idxMap = await getLicenseCodesByClinic(kv);
+                const __indexed = __idxMap && __idxMap.get(clinic.name);
+                if (Array.isArray(__indexed)) __clinicLicenseCodes.push(...__indexed);
+                const __all = await listLicenses(kv).catch(() => []);
+                for (const r of __all) {
+                    if (!r || !r.code) continue;
+                    const __cn = r.clinicName || r.activatedClinicName || '';
+                    const __devHit = getDevices(r).some(d => d && d.clinicName === clinic.name);
+                    if ((__cn && __cn === clinic.name) || __devHit) __clinicLicenseCodes.push(r.code);
+                }
+            } catch (e) {
+                console.warn('[DeleteClinic] 关联激活码反查失败（不阻断删除）:', e && e.message);
+            }
+            const __licenseCodeSet = [...new Set(__clinicLicenseCodes)];
+            const __licenseKeys = __licenseCodeSet.map(c => 'license:' + c);
+
             // 1) 诊所业务数据
             const businessKeys = [
                 `clinic:${clinicId}:users`,
@@ -4015,7 +4040,7 @@ export async function onRequest(context) {
             //   备份键：clinic_backup_{clinicId}_{timestamp}，包含所有即将删除的 KV 值
             let backupKey = '';
             try {
-                const allKeysToBackup = [...businessKeys, ...prescriptionDayKeys, ...seqKeys, ...userSeqKeys, ...accountKeys];
+                const allKeysToBackup = [...businessKeys, ...prescriptionDayKeys, ...seqKeys, ...userSeqKeys, ...accountKeys, ...__licenseKeys];
                 const backupData = {
                     timestamp: new Date().toISOString(),
                     clinicId: clinicId,
@@ -4042,6 +4067,35 @@ export async function onRequest(context) {
                     await kv.delete(k);
                     deletedKeys.push(k);
                 } catch (e) { /* 单键删除失败不阻断整体，最终留痕 */ }
+            }
+
+            // ★ 2026-10-26 关联激活码物理清除（让已删除诊所的码在后台所有模块消失）
+            let purgedLicenses = 0;
+            const __purgedMids = new Set();
+            for (const code of __licenseCodeSet) {
+                try {
+                    const __rec = await getLicense(kv, code).catch(() => null);
+                    if (__rec) {
+                        for (const d of getDevices(__rec)) {
+                            if (d && d.machineId) __purgedMids.add(d.machineId);
+                        }
+                    }
+                    await deleteLicense(kv, code);
+                    await deleteLicenseLogs(kv, code).catch(() => {});
+                    purgedLicenses++;
+                } catch (e) {
+                    console.warn('[DeleteClinic] 激活码清除失败（不阻断删除）:', code, e && e.message);
+                }
+            }
+            // 设备管理列表读 device_version:{mid}，仅当绑定仍指向本次已删码时移除，
+            // 防止同一设备后来转绑的其它有效码被误伤。
+            for (const mid of __purgedMids) {
+                try {
+                    const __bind = await getDeviceVersion(kv, mid);
+                    if (__bind && __bind.licenseCode && __licenseCodeSet.includes(__bind.licenseCode)) {
+                        await removeDeviceVersion(kv, mid);
+                    }
+                } catch (e) { /* 单设备清理失败不阻断 */ }
             }
 
             // ★ 2026-09-06 P0 修复「删除诊所后客户端仍可登录」：激活申请残留导致诊所复活。
@@ -4114,16 +4168,19 @@ export async function onRequest(context) {
                 cleanedRequests: cleanedRequests,
                 revokedAccounts: revokedAccounts,
                 tombstonedAccounts: tombstonedAccounts,
+                purgedLicenses: purgedLicenses,
+                purgedLicenseCodes: __licenseCodeSet.slice(0, 50),
                 backupKey: backupKey || null,
                 source: 'platform-admin'
             });
 
             return json({
                 success: true,
-                message: `诊所「${clinic.name}」已删除（账号 ${users.length} 个，清理数据键 ${deletedKeys.length} 个，关联激活申请 ${cleanedRequests} 条，撤销在线会话 ${revokedAccounts} 个）`,
+                message: `诊所「${clinic.name}」已删除（账号 ${users.length} 个，清理数据键 ${deletedKeys.length} 个，关联激活码 ${purgedLicenses} 条，关联激活申请 ${cleanedRequests} 条，撤销在线会话 ${revokedAccounts} 个）`,
                 deletedClinic: { id: clinic.id, name: clinic.name },
                 deletedUserCount: users.length,
                 deletedKeyCount: deletedKeys.length,
+                purgedLicenseCount: purgedLicenses,
                 cleanedRequestCount: cleanedRequests,
                 revokedAccountCount: revokedAccounts,
                 backupKey: backupKey || null,
@@ -4164,14 +4221,43 @@ export async function onRequest(context) {
             // 恢复所有备份的 KV 键（键名中的 clinicId 替换为目标诊所ID）
             let restored = 0, skipped = 0;
             const restoredUsers = [];
+            // ★ 2026-10-26 删除诊所现在会连带备份并清除激活码；恢复时必须把码重新挂回
+            //   system:license_index 与 license_clinic_index，否则列表/诊所视图看不到这些码。
+            const __restoredLicenseCodes = [];
             for (const [srcKey, value] of Object.entries(backupData.keys || {})) {
                 try {
                     // 将备份键中的原 clinicId 替换为目标 clinicId
                     const destKey = srcKey.replace(new RegExp(`^clinic:${backupData.clinicId}:`), `clinic:${targetClinicId}:`);
+                    if (srcKey.startsWith('license:') && value && typeof value === 'object' && !Array.isArray(value)) {
+                        __restoredLicenseCodes.push(srcKey.slice('license:'.length));
+                        // 源诊所名 → 目标诊所名（空值或仍为源名时才改写，避免覆盖已转绑码）
+                        if (!value.clinicName || value.clinicName === backupData.clinicName) {
+                            value.clinicName = targetClinic.name;
+                        }
+                    }
                     await kv.put(destKey, JSON.stringify(value));
                     if (/^clinic:[^:]+:users$/.test(destKey) && Array.isArray(value)) restoredUsers.push(...value);
                     restored++;
                 } catch (e) { skipped++; }
+            }
+            if (__restoredLicenseCodes.length) {
+                try {
+                    const idx = (await kv.get(KV_LICENSE_INDEX, 'json')) || [];
+                    for (const c of __restoredLicenseCodes) {
+                        if (!idx.includes(c)) idx.push(c);
+                    }
+                    await kv.put(KV_LICENSE_INDEX, JSON.stringify(idx));
+                    const cidx = await kv.get(KV_LICENSE_CLINIC_INDEX, 'json');
+                    if (cidx && typeof cidx === 'object' && !Array.isArray(cidx)) {
+                        if (!Array.isArray(cidx[targetClinic.name])) cidx[targetClinic.name] = [];
+                        for (const c of __restoredLicenseCodes) {
+                            if (!cidx[targetClinic.name].includes(c)) cidx[targetClinic.name].push(c);
+                        }
+                        await kv.put(KV_LICENSE_CLINIC_INDEX, JSON.stringify(cidx));
+                    }
+                } catch (e) {
+                    console.warn('[RestoreClinic] 激活码索引重建失败（下次全扫回填）:', e && e.message);
+                }
             }
             // ★ 2026-09-23 恢复即真实重新开通：备份恢复出的用户必须清除删除墓碑
             //   （含手机号别名双键同清），否则恢复后全员在线登录即被账号吊销拦截。

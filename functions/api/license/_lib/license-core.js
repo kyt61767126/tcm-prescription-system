@@ -1032,6 +1032,26 @@ async function deleteLicense(kv, code) {
             if (cur === code) await kv.delete(ik);
         } catch (_) { /* 残留索引读侧会按"码不存在"自愈删除 */ }
     }
+
+    // ★ 2026-10-26 清理诊所授权索引：把本码从所有 clinicName 桶中移除，
+    //   避免"删码后 license_clinic_index 仍挂着孤儿码"——诊所管理全量视图
+    //   会按索引取码，孤儿码会让已删除诊所的码继续出现在后台。
+    try {
+        const cidx = await kv.get(KV_LICENSE_CLINIC_INDEX, 'json');
+        if (cidx && typeof cidx === 'object' && !Array.isArray(cidx)) {
+            let changed = false;
+            for (const name of Object.keys(cidx)) {
+                const arr = cidx[name];
+                if (!Array.isArray(arr)) continue;
+                const next = arr.filter(c => c !== code);
+                if (next.length !== arr.length) {
+                    if (next.length) cidx[name] = next; else delete cidx[name];
+                    changed = true;
+                }
+            }
+            if (changed) await kv.put(KV_LICENSE_CLINIC_INDEX, JSON.stringify(cidx));
+        }
+    } catch (_) { /* 索引缺失/脏值时由读侧全扫回填，不阻断删码 */ }
 }
 
 // 从 KV 读取激活码

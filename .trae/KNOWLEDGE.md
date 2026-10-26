@@ -2398,3 +2398,9 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
   - **残留（非阻断）**：①`desktop/cloud` 热更 appVersion 仍 1.2.278（内容与源码一致，仅元数据，可重签刷新为 1.2.279）；②`huikang-official` 的 Git 构建仍会 Failure（本次靠直传兜底），需在 Cloudflare 后台修项目 build 配置/配额，否则每次 push 需重复直传；③`huikang-admin` 站点的 `site-admin/hash-manifest.json` 为 1.2.36 老数据（该站实际是云端网页壳，manifest 不参与其运行；如后续要作下载渠道再单独刷新）。
   - **体检终态**：`node tools/check-release-readiness.cjs` = 0 BLOCK / 0 PENDING / 1 WARN（即 cloud 热更 appVersion 元数据）。
 
+* ★ 2026-10-26 后台「删除诊所连带清除激活码」（已删除诊所的码不再出现在后台任何模块；纯 Functions 改动，五端零重打包，push 即部署）：
+  - 根因：`users.js` 的 `clinic=delete` 只清业务键/账号/激活申请，从未动 `license:{code}`；孤儿码仍留在 `system:license_index` 与 `license_clinic_index`，于是激活码管理（list.js）、设备管理（`device_version:{mid}`）、风控告警、用量监控继续显示。
+  - 修复（users.js 删诊所流程）：删除前按 clinicName（码记录 + `devices[].clinicName`）反查关联码，纳入既有 `clinic_backup_{clinicId}_{ts}` 备份；随后 `deleteLicense` 逐个物理删除（连带 `system:license_index` / `mid_idx` / 邀请索引 / `license_clinic_index`）+ `deleteLicenseLogs` 清日志；`device_version` 仅在绑定 `licenseCode` 仍指向本次已删码时才移除，防误伤后来转绑的设备。诊所 `clinic=restore` 时重建两套 license 索引并把 clinicName 改写到目标诊所。
+  - 铁律：`license.clinicName` 是激活时绑定的名字，**诊所改名不追溯**（users.js 续费同步注释亦如此）→ 禁止用"clinicName 不在 system:clinics 即孤儿"的扫描式清理，会误删改名诊所的在用码；只认 `clinic=delete` 这一个删除动作。
+  - 验证：`node --check` 两文件 0；`check-interface.bat` 6 OK；`node tools/diff-cross-version.cjs` 6 对全绿。生效方式：Cloudflare Functions 随 push 部署，五端零重打包。
+
