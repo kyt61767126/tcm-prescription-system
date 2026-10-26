@@ -1,7 +1,7 @@
 {
   "format": 1,
   "channel": "local",
-  "hotVersion": "2026.10.25-1",
+  "hotVersion": "2026.10.26-1",
   "appVersion": "1.0.302",
   "files": [
     {
@@ -51,8 +51,8 @@
     },
     {
       "name": "symptom-dict.js",
-      "sha256": "9e07465bbf1bdcd23d536a6bab10bfd22d9e2ec42471734a136be137b5043236",
-      "size": 73130
+      "sha256": "06a705fa715f1d16fd2cb67ba8e6193805f7b52cddc3e72dad3c2694738e7e74",
+      "size": 73329
     },
     {
       "name": "performance-utils.js",
@@ -100,6 +100,6 @@
       "size": 881727
     }
   ],
-  "signedAt": 1792918871812,
-  "signature": "hcTX2xC/rWcDiKRe6SOdTUzcc2qkhmnlRxkoKbNEX9jNfI3PjgRUzD7vnoFm/mhuIunpdvpN8gZFUzmgFwtSCg=="
+  "signedAt": 1793002565903,
+  "signature": "wejRvKN9O5t6ODIgFVtjJ25baIkw7D3w70/hXWVqbxHyhjxKiY/fjCabqL3U3Q3oKG7hunpvzLIfwm6MM1fOAA=="
 }

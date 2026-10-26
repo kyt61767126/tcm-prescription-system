@@ -1,12 +1,12 @@
 {
   "format": 1,
   "channel": "cloud",
-  "hotVersion": "2026.10.25-1",
-  "appVersion": "1.2.278",
+  "hotVersion": "2026.10.26-1",
+  "appVersion": "1.2.279",
   "files": [
     {
       "name": "index.html",
-      "sha256": "06bffae1cecdd950b6e56e20b71342c978b9db445fc13ac6edb2ba5ec5cb8bae",
+      "sha256": "b9f602d7566c123fa94d58dcebbbf30f6ddd1d8a6f6625aaf7fee1fabfc4d166",
       "size": 812311
     },
     {
@@ -51,8 +51,8 @@
     },
     {
       "name": "symptom-dict.js",
-      "sha256": "9e07465bbf1bdcd23d536a6bab10bfd22d9e2ec42471734a136be137b5043236",
-      "size": 73130
+      "sha256": "06a705fa715f1d16fd2cb67ba8e6193805f7b52cddc3e72dad3c2694738e7e74",
+      "size": 73329
     },
     {
       "name": "cloud-api.js",
@@ -105,6 +105,6 @@
       "size": 881727
     }
   ],
-  "signedAt": 1792912192196,
-  "signature": "JKJgL8BfUGtSS5Vla67CvJAB+i5Qmypk1NlNvorA1hpX4Pd2x64zZ7zDJX35NDOibMGZIBKj5r1RxEiRqam3BQ=="
+  "signedAt": 1793002572864,
+  "signature": "LKXma6UomDB04RvZ8+XyQx7c+dJwpVW4No4kq+X8w2aHl7CNFlkXeDTWigxwDhUHT4DKe8axb+rmJFeuiWKaAQ=="
 }
