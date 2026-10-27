@@ -306,3 +306,44 @@
         apply: applyAmountToggle
     };
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
+
+// ============================================================================
+// 处方笺「用法/剂数」行贴底横线（2026-07-22 · 运行时注入 · HTML 零改动）
+// 需求：处方网格内「剂数:…水煎服…」用法行紧贴底部横线上方——药品少时不再悬在
+//      网格中间、与底部横线之间留一大段空白。
+// 做法：处方网格改纵向 flex，药品行容器 #prescriptionLines 占满剩余空间（flex:1），
+//      用法行底距归零，自然被推到底部横线正上方。
+//      仅写内联样式（随 #prescriptionPaper.innerHTML 带入打印窗口，屏幕/打印一致）。
+// ============================================================================
+(function (global) {
+    'use strict';
+    if (global.__paperUsageLayoutLoaded) return;
+    global.__paperUsageLayoutLoaded = true;
+
+    function applyUsageLayout() {
+        var grid = document.querySelector('.prescription-grid');
+        if (!grid) return false; // 处方网格未就绪，稍后重试
+        var usage = grid.querySelector('.usage-text');
+        if (!usage) return false; // 用法行未就绪，稍后重试
+        grid.style.display = 'flex';
+        grid.style.flexDirection = 'column';
+        var lines = grid.querySelector('#prescriptionLines');
+        if (lines) { lines.style.flex = '1 1 auto'; lines.style.minHeight = '0'; }
+        usage.style.marginBottom = '0';
+        return true;
+    }
+
+    function bootUsageLayout() {
+        (function retry(n) {
+            if (applyUsageLayout()) return;
+            if (n >= 40) return;
+            setTimeout(function () { retry(n + 1); }, 250);
+        })(0);
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', bootUsageLayout);
+    } else {
+        bootUsageLayout();
+    }
+})(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
