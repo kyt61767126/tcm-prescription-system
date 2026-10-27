@@ -177,3 +177,173 @@
         apply: applyHistoryToggle
     };
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
+
+// ============================================================================
+// 处方签「金额」显示/隐藏开关（2026-07-22 · 运行时注入 · HTML 零改动）
+// 需求：处方笺底部「金额:」栏是否显示实际金额（总计）可勾选（localStorage 持久化）；
+//      默认隐藏（金额:留空供手写）；勾选后显示「金额:<总计>元」。
+//      勾选框注入到操作区价格行（总计:xxx元 右侧空位），不在 #prescriptionPaper 内，
+//      永不进打印；打印取 #prescriptionPaper.innerHTML，金额文本随 innerHTML 携带。
+// ============================================================================
+(function (global) {
+    'use strict';
+    if (global.__paperAmountToggleLoaded) return;
+    global.__paperAmountToggleLoaded = true;
+
+    var LS_KEY = 'local_paperShowAmount'; // '1'=显示金额 / 其他=隐藏（默认隐藏）
+
+    function getShow() {
+        try { return !!(global.localStorage && global.localStorage.getItem(LS_KEY) === '1'); }
+        catch (e) { return false; }
+    }
+    function setShow(v) {
+        try { if (global.localStorage) global.localStorage.setItem(LS_KEY, v ? '1' : '0'); } catch (e) {}
+    }
+
+    // 处方笺底部 «金额:» 项 = prescription-footer 内 signature-item（文本以「金额」开头）
+    function findAmountEl() {
+        var paper = document.getElementById('prescriptionPaper');
+        if (!paper) return null;
+        var items = paper.querySelectorAll('.prescription-footer .signature-item');
+        for (var i = 0; i < items.length; i++) {
+            var txt = (items[i].textContent || '').replace(/\s+/g, '');
+            if (txt.indexOf('金额') === 0) return items[i];
+        }
+        return null;
+    }
+
+    // 读取操作区「总计」当前金额（纯数字，去掉「元」等符号）
+    function getGrandTotal() {
+        var el = document.getElementById('grandTotal2') || document.getElementById('grandTotal');
+        if (!el) return '';
+        return (el.textContent || '').replace(/[^\d.\-]/g, '').trim();
+    }
+
+    // 应用显示/隐藏到处方笺金额栏 + 同步勾选框状态
+    function applyAmountToggle() {
+        var el = findAmountEl();
+        if (!el) return;
+        var cb = document.getElementById('paperAmountToggle');
+        if (cb && cb.checked !== getShow()) cb.checked = getShow();
+        if (getShow()) {
+            var v = getGrandTotal();
+            el.textContent = '金额:' + (v ? v + '元' : '');
+        } else {
+            el.textContent = '金额:';
+        }
+    }
+
+    // 打印前兜底：包一层 printPrescription，进打印前再 apply 一次
+    function wrapPrint() {
+        if (typeof global.printPrescription === 'function' && !global.printPrescription.__amountWrapped) {
+            var orig = global.printPrescription;
+            var wrapped = function () { applyAmountToggle(); return orig.apply(this, arguments); };
+            wrapped.__amountWrapped = true;
+            global.printPrescription = wrapped;
+            return true;
+        }
+        return typeof global.printPrescription === 'function';
+    }
+
+    // 注入勾选框到操作区价格行（「总计:xxx元」右侧空位；不在 #prescriptionPaper 内，永不进打印）
+    function injectAmountToggle(retry) {
+        retry = retry || 0;
+        var row = document.querySelector('.action-buttons-section > div');
+        if (!row) {
+            if (retry < 40) setTimeout(function () { injectAmountToggle(retry + 1); }, 250);
+            return;
+        }
+        if (!document.getElementById('paperAmountToggle')) {
+            var lab = document.createElement('label');
+            lab.id = 'paperAmountToggleWrap';
+            lab.style.cssText = 'margin-left:auto;display:flex;align-items:center;gap:4px;font-size:11px;color:#555;cursor:pointer;white-space:nowrap;padding:2px 0 2px 8px;flex:0 0 auto;';
+            lab.title = '勾选=处方签显示金额（金额:总计元）；默认隐藏、打印不输出金额';
+            var cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.id = 'paperAmountToggle';
+            cb.style.cssText = 'width:13px;height:13px;margin:0;cursor:pointer;accent-color:#006400;';
+            var tx = document.createElement('span');
+            tx.textContent = '处方签显示金额';
+            lab.appendChild(cb);
+            lab.appendChild(tx);
+            row.appendChild(lab);
+            cb.addEventListener('change', function () { setShow(cb.checked); applyAmountToggle(); });
+        }
+        applyAmountToggle();
+    }
+
+    // 监听「总计」数值变化，实时同步处方笺金额（勾选状态下）
+    function watchGrandTotal() {
+        var el = document.getElementById('grandTotal2') || document.getElementById('grandTotal');
+        if (!el) { setTimeout(watchGrandTotal, 250); return; }
+        if (el.__amountObserver) return;
+        try {
+            var mo = new MutationObserver(function () { if (getShow()) applyAmountToggle(); });
+            mo.observe(el, { childList: true, characterData: true, subtree: true });
+            el.__amountObserver = mo;
+        } catch (e) {}
+    }
+
+    function bootAmountToggle() {
+        injectAmountToggle(0);
+        watchGrandTotal();
+        (function wrapRetry(retry) {
+            retry = retry || 0;
+            if (wrapPrint() || retry >= 40) return;
+            setTimeout(function () { wrapRetry(retry + 1); }, 250);
+        })(0);
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', bootAmountToggle);
+    } else {
+        bootAmountToggle();
+    }
+
+    global.PaperAmountToggle = {
+        isShown: getShow,
+        setShown: function (v) { setShow(!!v); applyAmountToggle(); },
+        apply: applyAmountToggle
+    };
+})(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
+
+// ============================================================================
+// 处方笺「用法/剂数」行贴底横线（2026-07-22 · 运行时注入 · HTML 零改动）
+// 需求：处方网格内「剂数:…水煎服…」用法行紧贴底部横线上方——药品少时不再悬在
+//      网格中间、与底部横线之间留一大段空白。
+// 做法：处方网格改纵向 flex，药品行容器 #prescriptionLines 占满剩余空间（flex:1），
+//      用法行底距归零，自然被推到底部横线正上方。
+//      仅写内联样式（随 #prescriptionPaper.innerHTML 带入打印窗口，屏幕/打印一致）。
+// ============================================================================
+(function (global) {
+    'use strict';
+    if (global.__paperUsageLayoutLoaded) return;
+    global.__paperUsageLayoutLoaded = true;
+
+    function applyUsageLayout() {
+        var grid = document.querySelector('.prescription-grid');
+        if (!grid) return false; // 处方网格未就绪，稍后重试
+        var usage = grid.querySelector('.usage-text');
+        if (!usage) return false; // 用法行未就绪，稍后重试
+        grid.style.display = 'flex';
+        grid.style.flexDirection = 'column';
+        var lines = grid.querySelector('#prescriptionLines');
+        if (lines) { lines.style.flex = '1 1 auto'; lines.style.minHeight = '0'; }
+        usage.style.marginBottom = '0';
+        return true;
+    }
+
+    function bootUsageLayout() {
+        (function retry(n) {
+            if (applyUsageLayout()) return;
+            if (n >= 40) return;
+            setTimeout(function () { retry(n + 1); }, 250);
+        })(0);
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', bootUsageLayout);
+    } else {
+        bootUsageLayout();
+    }
+})(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));

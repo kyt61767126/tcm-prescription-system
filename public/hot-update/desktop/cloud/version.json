@@ -1,13 +1,13 @@
 {
   "format": 1,
   "channel": "cloud",
-  "hotVersion": "2026.10.26-3",
-  "appVersion": "1.2.279",
+  "hotVersion": "2026.10.27-1",
+  "appVersion": "1.2.280",
   "files": [
     {
       "name": "index.html",
-      "sha256": "280832b23f43b17cc7e31610b364036237611cbea10f604f1c57f84dfe793d53",
-      "size": 812311
+      "sha256": "0a4520017ba7c762cc733406a57c9f4e915e3577e780826924e7e47c3349bf2a",
+      "size": 812679
     },
     {
       "name": "auth-core.js",
@@ -66,8 +66,8 @@
     },
     {
       "name": "prescription-core.js",
-      "sha256": "a5f1b432ab8d8357ec1f03b9e9fb51b7290cc09bdc121828296cd730155f2763",
-      "size": 9719
+      "sha256": "cf088795c7c8ecf3552da29722faa9a32bf900488a65013a16299c8a21398662",
+      "size": 17619
     },
     {
       "name": "stock-core.js",
@@ -105,6 +105,6 @@
       "size": 881727
     }
   ],
-  "signedAt": 1793012535503,
-  "signature": "hjMTumAAsLyZSv6o3PkLZRoHNlsKpO0FGAc3eVFnzKUct4AcY5Xe9JuNSwnMD7+RPPOtGx9pcqyMvW5VFFhjAQ=="
+  "signedAt": 1793105362151,
+  "signature": "1dVYrowh/xFzn+fi6tOBL+nonX2aixDsTPRhxaosIPl4hF8ShYJ1dDF2e216vOvyzIHtTF9/cbPv3YFeXvjGDg=="
 }
