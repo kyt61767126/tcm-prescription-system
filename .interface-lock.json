@@ -1,18 +1,18 @@
 ﻿{
-    "generated_at":  "2026-10-24 14:59:21 +08:00",
+    "generated_at":  "2026-10-27 19:40:56 +08:00",
     "description":  "Interface structure fingerprint. SHA256 of HTML body (before first \u003cscript\u003e). Changes to \u003cscript\u003e blocks do NOT affect fingerprint.",
     "files":  {
                   "app_project/db-yunduan/cloud_desktop/index.html":  {
-                                                                          "sha256":  "957d9c81be35b19c562ce3dcd23a4ee2b178e56d77fe1dffdbe646d60a5cc656",
-                                                                          "html_length":  26230
+                                                                          "sha256":  "ef6e1f4ecccd3bf3d0ba96b5883f0831d50222f602266d570b5b1823229faead",
+                                                                          "html_length":  26255
                                                                       },
                   "public/index.html":  {
-                                            "sha256":  "957d9c81be35b19c562ce3dcd23a4ee2b178e56d77fe1dffdbe646d60a5cc656",
-                                            "html_length":  26230
+                                            "sha256":  "ef6e1f4ecccd3bf3d0ba96b5883f0831d50222f602266d570b5b1823229faead",
+                                            "html_length":  26255
                                         },
                   "app_project/db-offline/desktop/index.html":  {
-                                                                    "sha256":  "7f2a1bcadd798bab8a5432ff64895a2e0e2f54bce4a6b1bf62f1d9449ba847a0",
-                                                                    "html_length":  25233
+                                                                    "sha256":  "5a186d0b011f181e86d03e64b333b15cc7a05d6605e92d8b0e51a1c9c52ac770",
+                                                                    "html_length":  25258
                                                                 },
                   "app_project/db-yunduan/cloud_desktop/electron/login.html":  {
                                                                                    "sha256":  "c58f2d7c993878c767ea8fc46cffa3367ddc5e916112325e9a4ec44accc9ec69",
