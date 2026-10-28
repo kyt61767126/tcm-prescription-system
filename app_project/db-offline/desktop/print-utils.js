@@ -10,19 +10,22 @@
         PAGE_SIZES: {
             A4: { width: '210mm', height: '297mm', margin: '10mm' },
             A5_PORTRAIT: { width: '148mm', height: '210mm', margin: '0' },
-            A5_LANDSCAPE: { width: '210mm', height: '148mm', margin: '0' }
+            A5_LANDSCAPE: { width: '210mm', height: '148mm', margin: '0' },
+            B5_PORTRAIT: { width: '176mm', height: '250mm', margin: '0' },
+            B5_LANDSCAPE: { width: '250mm', height: '176mm', margin: '0' }
         },
 
         // 生成处方打印HTML
         generatePrescriptionPrintHTML(content, orientation) {
             const isLandscape = orientation === 'landscape';
-            const pageSize = isLandscape ? 'A5 landscape' : 'A5 portrait';
-            const paperWidth = isLandscape ? '210mm' : '148mm';
-            const paperHeight = isLandscape ? '148mm' : '210mm';
+            const pageSize = isLandscape ? this.PAGE_SIZES.B5_LANDSCAPE.width + ' ' + this.PAGE_SIZES.B5_LANDSCAPE.height
+                : this.PAGE_SIZES.B5_PORTRAIT.width + ' ' + this.PAGE_SIZES.B5_PORTRAIT.height;
+            const paperWidth = isLandscape ? '250mm' : '176mm';
+            const paperHeight = isLandscape ? '176mm' : '250mm';
 
             return `<!DOCTYPE html><html><head><title>惠康中医诊所管理系统 V1.0.0-打印预览</title><meta name="viewport" content="width=device-width, initial-scale=1.0"><style>
 @page { size: ${pageSize}; margin: 0; }
-/* ★ 2026-09-15 A5 单页打印修复：①删 body min-height:100vh（vh=视口高远大于纸高，溢出成2页）；②纸片高留 0.5mm 舍入余量 */
+/* ★ 2026-10-28 B5 整页打印（原 A5）：纸型 ISO B5 176×250mm，边距固定 上28/左右15/下20mm；纸片高留 0.5mm 舍入余量 */
 body { font-family: 'SimSun', '宋体', serif; width: ${paperWidth}; padding: 0; margin: 0 auto; display: flex; justify-content: center; align-items: flex-start; line-height: 1.8; -webkit-print-color-adjust: exact; print-color-adjust: exact; color: #000; }
 .prescription-paper { width: ${paperWidth}; height: calc(${paperHeight} - 0.5mm); padding: 28mm 15mm 20mm; margin: 0 auto; box-sizing: border-box; }
 .clinic-name { text-align: center; font-size: 16.5pt; font-weight: bold; color: #000; margin-bottom: 10px; letter-spacing: 2px; font-family: 'KaiTi', '楷体_GB2312', '楷体', serif; }

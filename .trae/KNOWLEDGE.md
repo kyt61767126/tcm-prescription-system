@@ -2431,3 +2431,12 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
   - 铁律：白盒 harness 必须拦截**全部**出站请求，禁止让被测页面真连生产接口；计数口径要按「被测入口」建独立计数器，不能共用总 fetch 数。
   - 验证：`node tools/login-gate-smoke.cjs` = 7/7。
 
+* ★ 2026-10-28 处方笺改 ISO B5（176×250mm）+「中药末位行→用法行」斜线自适应（五端 + 网页 + 桌面 + 安卓 + 鸿蒙）：
+  - 纸型/边距：所有打印模板 `@page{size:176mm 250mm}`（横向 250×176），纸面 padding 固定 `上28/左右15/下20mm`（即"页边距固定"），纸片高 `calc(250mm - 0.5mm)` 防亚像素甩空白页。同步改桌面 `desktop-print.cjs` 隐藏窗 720×1000（横向 1000×720；原 600 宽装不下 B5 665.2px 会触发滚动条导致 fit 缩放）、Electron `pageSize:{width:176000,height:250000}`（**单位微米**）、网页打印弹窗 `window.open` 同尺寸、安卓 `PrintAttributes.MediaSize.ISO_B5`（横向 `.asLandscape()`）、鸿蒙 `printHtml` 注入 `@page{size:176mm 250mm}`。
+  - 斜线实现（`shared/prescription-core.js` 新增独立 IIFE，HTML 零改动）：`.prescription-paper` 与 `.prescription-grid` 改纵向 flex，纸面子项除网格外 `flex:0 0 auto`、网格 `flex:1 1 auto;min-height:0` → **表头/用法行/签名栏位置恒定**；`#prescriptionLines` 尾部追加 `#rxEndSlash`（`flex:1`，内联 SVG `/`，起点左下 `(0,100)` → 终点右上 `(100,0)`，`preserveAspectRatio=none` + `vector-effect=non-scaling-stroke`），高度=末位药行下方剩余空间，**随药味行数自动伸缩**；药味 0 行时 `display:none`。移动端 `matchMedia('(max-width:768px)')` 命中时纸面为 `width:100%/height:auto`（无固定纸高），`resetEndSlash()` 清空行内 flex、删除斜线块并恢复 `.prescription-grid` 自身 `min-height`，`resize/orientationchange` 去抖重算，避免桌面↔移动切换残留。
+  - 重写兜底：`updatePrescriptionPaper` 会整段重写 `#prescriptionLines.innerHTML`，用 `MutationObserver(childList)` 实时补回斜线块；再包一层 `printPrescription` 打印前 `applyEndSlash()`，保证同一任务内改行数后立即打印也带斜线。全部内联样式随 `#prescriptionPaper.innerHTML` 进打印窗，屏幕/打印一致。
+  - 分发：`prescription-core.js` 9 副本 + `print-utils.js`（云 5/离线 2/site-admin/harmony，PAGE_SIZES 增 B5_PORTRAIT/B5_LANDSCAPE）+ 3 份 index.html 权威源 → `tools/check-cv-hashes.cjs --update` → `sync-html.ps1` → `sync-index-app.cjs`。
+  - 验证（真实页 `file:///public/index.html` + Playwright，非自建 harness）：纸面实测 665.2×944.9px（=176×250mm）；药味 1/16/24/32/48/64 时表头 top(105.8)、用法 top(763.8)、签名栏 bottom(867.4) 全恒定，斜线高 390.6→317.2→268.3→219.3→121.5→23.6px（打印模板实测；80 味时归零且仍单页）；重写后 `#rxEndSlash` 恒 1 个；打印 HTML 含斜线与 flex；PDF `@page` 实测 MediaBox=176.0×250.1mm 且页数 1；桌面↔420px 移动端切换后斜线可正确增删且移动端 `grid min-height` 恢复 60px；`check-interface` 6 OK、`copy-consistency` 100 副本 0 失败、`diff-cross-version` 6 对全绿、`sync-siteadmin --check` 63 函数无漂移、`check-cv-hashes` 15 项一致。
+  - 铁律：改纸型必须同时核对 ①CSS `@page`+padding ②Electron 隐藏窗尺寸（须 > 纸宽/高 px）③Electron pageSize 微米值 ④网页弹窗尺寸 ⑤安卓 ISO 常量 ⑥鸿蒙注入 @page；漏一处会出现"打印被缩放/多一页/纸张不对"。
+
+

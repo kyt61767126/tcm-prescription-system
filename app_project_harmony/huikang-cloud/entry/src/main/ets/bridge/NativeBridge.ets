@@ -191,10 +191,10 @@ export class NativeBridge {
   }
 
   /**
-   * printHtml：安卓端为"调起系统打印"入口（orientation: portrait/landscape，A5 纸张）。
+   * printHtml：安卓端为"调起系统打印"入口（orientation: portrait/landscape，B5 纸张）。
    * 鸿蒙 print.print 不支持 .html（仅 pdf/图片/office/txt/xml），
    * Week2 降级：HTML 注入 @page 方向样式后写临时文件 + viewData 调系统应用打开
-   *   （浏览器/WPS 打开后用户点打印，@page size 控制 A5 纵/横向，对齐安卓纸张设置）。
+   *   （浏览器/WPS 打开后用户点打印，@page size 控制 B5 纵/横向，对齐安卓纸张设置）。
    * Week3 真机验证后评估 PrintDocumentAdapter + PDF 渲染方案。
    */
   printHtml(html: string, orientation: string = 'portrait'): string {
@@ -203,8 +203,8 @@ export class NativeBridge {
         return failJson('打印内容为空');
       }
       const isLandscape: boolean = orientation === 'landscape';
-      // 注入 @page 规则：A5 + 纵/横向 + 无边距（对齐安卓 PrintAttributes ISO_A5/NO_MARGINS）
-      const pageCss: string = `<style>@page{size:A5 ${isLandscape ? 'landscape' : 'portrait'};margin:0;}</style>`;
+      // 注入 @page 规则：ISO B5 176×250mm + 纵/横向 + 无边距（对齐安卓 PrintAttributes ISO_B5/NO_MARGINS）
+      const pageCss: string = `<style>@page{size:${isLandscape ? '250mm 176mm' : '176mm 250mm'};margin:0;}</style>`;
       let htmlWithCss: string = html;
       if (htmlWithCss.toLowerCase().includes('</head>')) {
         htmlWithCss = htmlWithCss.replace(/<\/head>/i, `${pageCss}</head>`);

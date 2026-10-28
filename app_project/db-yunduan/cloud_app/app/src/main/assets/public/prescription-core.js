@@ -347,3 +347,173 @@
         bootUsageLayout();
     }
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
+
+// ============================================================================
+// 处方笺「中药末位行 → 用法行」斜线封口（2026-10-28 · 运行时注入 · HTML 零改动）
+// 需求：B5 纸面下药品末位行与「用法：」行之间常留一段空白，用左下→右上斜线
+//      封口（参考手写处方笺习惯），既填补空白也防止空白区被误加药。
+// 做法：#prescriptionLines 改纵向 flex，末尾放一个 flex:1 的占位块，块内内联 SVG
+//      斜线按实际剩余高度自适应（preserveAspectRatio=none / 非缩放描边）。
+//      全部写内联样式，随 #prescriptionPaper.innerHTML 同步进打印窗口，屏幕/打印一致。
+// ============================================================================
+(function (global) {
+    'use strict';
+    if (global.__paperEndSlashLoaded) return;
+    global.__paperEndSlashLoaded = true;
+
+    var SLASH_ID = 'rxEndSlash';
+    var SLASH_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 100 100"' +
+        ' preserveAspectRatio="none" aria-hidden="true" style="display:block;width:100%;height:100%;">' +
+        '<line x1="0" y1="100" x2="100" y2="0" stroke="#000" stroke-width="1.2"' +
+        ' vector-effect="non-scaling-stroke" stroke-linecap="butt"></line></svg>';
+
+    function ensureSlash(lines) {
+        var filler = document.getElementById(SLASH_ID);
+        if (!filler) {
+            filler = document.createElement('div');
+            filler.id = SLASH_ID;
+            filler.setAttribute('aria-hidden', 'true');
+            // line-height/overflow 归零：斜线块只占剩余空白，不额外撑高纸面
+            filler.style.cssText = 'flex:1 1 auto;min-height:0;align-self:stretch;pointer-events:none;line-height:0;overflow:hidden;';
+            filler.innerHTML = SLASH_SVG;
+        }
+        // updatePrescriptionPaper 会整段重写 #prescriptionLines.innerHTML，每次重新压到末位
+        if (lines.lastElementChild !== filler) lines.appendChild(filler);
+        return filler;
+    }
+
+    // 移动端预览：纸面 width:100%/height:auto，没有「固定纸高下的剩余空白」，
+    // 此时清掉桌面态的行内 flex 与斜线块，恢复 .prescription-grid 自身的 min-height。
+    function resetEndSlash(grid, lines, usage, paper, inner) {
+        var filler = document.getElementById(SLASH_ID);
+        if (filler && filler.parentNode) filler.parentNode.removeChild(filler);
+        if (paper) {
+            for (var i = 0; i < paper.children.length; i++) paper.children[i].style.flex = '';
+        }
+        grid.style.display = '';
+        grid.style.flexDirection = '';
+        grid.style.flex = '';
+        grid.style.minHeight = '';
+        var rp = grid.querySelector('.prescription-line');
+        if (rp) rp.style.flex = '';
+        usage.style.flex = '';
+        usage.style.marginBottom = '';
+        lines.style.display = '';
+        lines.style.flexDirection = '';
+        lines.style.flex = '';
+        lines.style.minHeight = '';
+        if (inner) inner.style.flex = '';
+    }
+
+    function applyEndSlash() {
+        var grid = document.querySelector('.prescription-grid');
+        if (!grid) return false; // 处方网格未就绪，稍后重试
+        var lines = grid.querySelector('#prescriptionLines');
+        var usage = grid.querySelector('.usage-text');
+        var paper = document.getElementById('prescriptionPaper');
+        if (!lines || !usage) return false; // 药品行/用法行未就绪
+
+        var inner = lines.querySelector('.prescription-grid-inner');
+
+        // ≤768px 走移动端布局：CSS 把纸面改为 width:100%/height:auto（无固定纸高），
+        // 此时没有「剩余空白」，不生成斜线并恢复 .prescription-grid 自身 min-height。
+        var isAutoPaper = false;
+        try {
+            isAutoPaper = !!(global.matchMedia && global.matchMedia('(max-width: 768px)').matches);
+        } catch (e) {
+            isAutoPaper = false;
+        }
+        if (isAutoPaper) {
+            resetEndSlash(grid, lines, usage, paper, inner);
+            return true;
+        }
+
+        // 纸面纵向 flex：表头(诊所名/标题/患者信息/病史/诊断)高度按内容固定，
+        // 网格占满剩余空间 → 结尾区(用法行+签名栏)被压到纸面底部，位置不随药味数浮动。
+        if (paper) {
+            for (var i = 0; i < paper.children.length; i++) {
+                var ch = paper.children[i];
+                if (ch !== grid) ch.style.flex = '0 0 auto';
+            }
+        }
+        grid.style.flex = '1 1 auto';
+        grid.style.minHeight = '0'; // 覆盖 .prescription-grid 的 min-height，药味多时允许压缩
+        grid.style.display = 'flex';
+        grid.style.flexDirection = 'column';
+
+        // 网格内：RP 行 / 用法行固定高度，药品行容器占满中段
+        var rp = grid.querySelector('.prescription-line');
+        if (rp) rp.style.flex = '0 0 auto';
+        usage.style.flex = '0 0 auto';
+        lines.style.display = 'flex';
+        lines.style.flexDirection = 'column';
+        lines.style.flex = '1 1 auto';
+        lines.style.minHeight = '0';
+        if (inner) inner.style.flex = '0 0 auto'; // 药品行按内容高度，不参与拉伸
+        usage.style.marginBottom = '0';
+
+        // 斜线块 flex:1：高度 = 纸面剩余高度 − 已用药味行高度，随药味行数自动伸缩
+        var filler = ensureSlash(lines);
+        // 无药味时不出斜线（空网格整页斜线无意义）；有药味即按末位行下方剩余高度生成
+        var rowCount = inner ? inner.querySelectorAll('.prescription-line').length : 0;
+        filler.style.display = rowCount > 0 ? 'block' : 'none';
+        return true;
+    }
+
+    // 监听药品渲染重写，实时补回斜线块（否则每次输入都会被 innerHTML 清掉）
+    function watchLines() {
+        var lines = document.querySelector('#prescriptionLines');
+        if (!lines) return false;
+        if (lines.__rxEndSlashObserver) return true;
+        try {
+            var mo = new MutationObserver(function () { applyEndSlash(); });
+            mo.observe(lines, { childList: true });
+            lines.__rxEndSlashObserver = mo;
+            return true;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    // 打印前兜底：确保 updatePrescriptionPaper 与 printPrescription 同一任务内执行时斜线也已就位
+    function wrapPrint() {
+        if (typeof global.printPrescription === 'function' && !global.printPrescription.__endSlashWrapped) {
+            var orig = global.printPrescription;
+            var wrapped = function () { applyEndSlash(); return orig.apply(this, arguments); };
+            wrapped.__endSlashWrapped = true;
+            global.printPrescription = wrapped;
+            return true;
+        }
+        return typeof global.printPrescription === 'function';
+    }
+
+    function bootEndSlash() {
+        (function retry(n) {
+            if (applyEndSlash()) {
+                watchLines();
+                (function wrapRetry(k) {
+                    if (wrapPrint() || k >= 40) return;
+                    setTimeout(function () { wrapRetry(k + 1); }, 250);
+                })(0);
+                return;
+            }
+            if (n >= 40) return;
+            setTimeout(function () { retry(n + 1); }, 250);
+        })(0);
+
+        // 桌面↔移动端媒体查询切换（≤768px 纸面变 auto 高）后重算
+        var resizeTimer = null;
+        var onResize = function () {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(function () { applyEndSlash(); }, 120);
+        };
+        global.addEventListener('resize', onResize);
+        global.addEventListener('orientationchange', onResize);
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', bootEndSlash);
+    } else {
+        bootEndSlash();
+    }
+})(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));

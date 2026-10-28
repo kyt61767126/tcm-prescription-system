@@ -5,7 +5,7 @@
 //    （print-prescription 单个 handler + 隐藏打印窗实现，双端 115 行字节级
 //    同体，改前 SHA256 一致：cd537a37...，逐行 diff=0 终验）。
 //    方案：隐藏 BrowserWindow 加载处方 HTML dataURL → 等字体就绪 →
-//    webContents.print 弹系统打印对话框（默认 A5/无边距/手动选打印机）→ 关闭。
+//    webContents.print 弹系统打印对话框（默认 B5/无边距/手动选打印机）→ 关闭。
 //
 //  依赖注入（与 desktop-fs-ipc.cjs / desktop-dialog.cjs 同款工厂模式）：
 //    createDesktopPrintIpc({ ipcMain, BrowserWindow })。
@@ -35,14 +35,13 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
         const isLandscape = orientation === 'landscape';
 
         // 隐藏窗口（用户不可见）
-        // ★ 修复字体偏大根因2：窗口宽度从559px改为600px（>148mm=559.37px@96dpi）
-        //   原559px比body宽度(559.37px)少0.37px，触发水平滚动条→连锁触发垂直滚动条→
-        //   有效视口缩至~544px，webContents.print()按559.37/544≈1.028放大内容
-        //   600px与网页版window.open('width=600')完全一致，body(559.37px)在视口内无滚动条
+        // ★ 2026-10-28 纸型改 B5（176×250mm）：隐藏窗须大于 176mm=665.2px@96dpi，
+        //   否则 body 宽度超出视口触发滚动条，webContents.print() 会按视口宽度缩放内容。
+        //   取 720px（纵向）/1000px（横向），与网页版预览窗口宽度一致。
         const printWin = new BrowserWindow({
             show: false,
-            width: isLandscape ? 820 : 600,
-            height: isLandscape ? 600 : 850,
+            width: isLandscape ? 1000 : 720,
+            height: isLandscape ? 720 : 1000,
             webPreferences: {
                 contextIsolation: true,
                 nodeIntegration: false,
@@ -93,31 +92,23 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
                             'document.body.offsetHeight; document.fonts ? document.fonts.ready : Promise.resolve()'
                         );
                         await new Promise(r => setTimeout(r, 200));
-                        // ★ 修复字体偏大根因1（主因）：改用 window.print() 代替 webContents.print()
+                        // ★ 修复字体偏大（2026-09-25 起沿用）：CSS @page 与 pageSize/margins 双通道必须一致
                         //
-                        // 原因：webContents.print({ pageSize:'A5', margins:{marginType:'none'} }) 选项
-                        //   与 CSS @page { size:A5; margin:0 } 规则形成【双重指定】：
-                        //   - Blink布局引擎按 CSS @page 布局内容（通道A）
-                        //   - Chrome打印后端按 pageSize/margins 选项设置打印参数（通道B）
-                        //   两通道对A5尺寸的内部表示存在微小差异（浮点精度/DPI假设/舍入），
-                        //   触发 fit-to-page 缩放算法，缩放因子略>1.0，内容被放大。
+                        // 原因：webContents.print({ pageSize, margins }) 选项与 CSS @page { size:176mm 250mm; margin:0 }
+                        //   形成【双重指定】：
+                        //   - Blink 布局引擎按 CSS @page 布局内容（通道A）
+                        //   - Chrome 打印后端按 pageSize/margins 选项设置打印参数（通道B）
+                        //   两者对纸张尺寸的内部表示不一致（浮点精度/DPI假设/舍入）会触发 fit-to-page 缩放，
+                        //   缩放因子略>1.0，内容被放大。
                         //
-                        // 网页版 window.print() 无 pageSize/margins 选项，仅依赖 CSS @page，
-                        //   打印后端直接使用CSS布局尺寸，不触发fit-to-page缩放，1:1渲染。
-                        //
-                        // 修复方案：桌面版也改用 window.print()，与网页版完全一致。
-                        //   CSS @page { size:A5; margin:0 } 是唯一的页面参数来源，
-                        //   纸张大小和边距均由CSS控制，无双重指定冲突。
-                        //
-                        // 时序：window.print()异步打开系统打印对话框，onafterprint在对话框关闭后触发。
-                        //   等待onafterprint后再safeResolve，避免在用户还在操作打印对话框时关闭窗口。
-                        // ★ 默认纸张A5 + 手动选打印机（2026-08-17）
-                        //   客户端打印机不固定，不做自动匹配；始终弹打印对话框由用户手动选择打印机，
-                        //   pageSize:'A5' 作为对话框默认纸张，无需每次手动切换纸张
+                        // 做法：pageSize 用「微米」写死成与 CSS 完全相同的 B5（176000×250000），
+                        //   margins:none 与 @page margin:0 对齐；隐藏窗宽度大于纸宽，避免滚动条引发缩放。
+                        //   客户端打印机不固定，不做自动匹配：始终弹系统打印对话框，由用户手动选打印机，
+                        //   pageSize 仅作为对话框默认纸张。
                         const printOptions = {
                             silent: false,
                             printBackground: true,
-                            pageSize: 'A5',
+                            pageSize: { width: 176000, height: 250000 }, // ISO B5 176×250mm
                             landscape: isLandscape,
                             margins: { marginType: 'none' }
                         };

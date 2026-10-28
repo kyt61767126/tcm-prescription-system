@@ -60,16 +60,16 @@
             --login-version-icon: '🏥';
         }
         
-        @page { size: A5; margin: 0; }
+        @page { size: 176mm 250mm; margin: 0; }
         @media print {
             body { background: white; margin: 0; padding: 0; }
             .top-tabs, .left-panel, .right-panel, .bottom-bar, .tab-left-item, .action-buttons-section, .section-hint, .patient-section, .symptom-section, .diagnosis-section, .action-buttons-section, .mobile-nav, .mobile-action-bar { display: none !important; }
             .main-container { display: block !important; height: auto !important; width: 100% !important; overflow: visible !important; }
-            .center-panel { background: white !important; padding: 0 !important; margin: 0 auto !important; width: 148mm !important; max-width: 148mm !important; display: block !important; min-width: auto !important; }
-            .prescription-paper { width: 148mm !important; height: 210mm !important; padding: 28mm 15mm 20mm !important; margin: 0 auto !important; box-shadow: none !important; page-break-after: always !important; transform: none !important; }
-            @page { size: A5; margin: 0; }
+            .center-panel { background: white !important; padding: 0 !important; margin: 0 auto !important; width: 176mm !important; max-width: 176mm !important; display: block !important; min-width: auto !important; }
+            .prescription-paper { display: flex; flex-direction: column; width: 176mm !important; height: calc(250mm - 0.5mm) !important; padding: 28mm 15mm 20mm !important; margin: 0 auto !important; box-shadow: none !important; page-break-after: always !important; transform: none !important; }
+            @page { size: 176mm 250mm; margin: 0; }
             .no-print, .history-header, .modal, .login-overlay { display: none !important; }
-            .prescription-paper { page-break-inside: avoid; max-width: 148mm !important; border: none !important; }
+            .prescription-paper { page-break-inside: avoid; max-width: 176mm !important; border: none !important; }
             table { page-break-inside: auto; }
             tr { page-break-inside: avoid; }
             thead { display: table-header-group; }
@@ -128,7 +128,7 @@
         .search-item { padding: 5px 10px; cursor: pointer; font-size: 11px; }
         .search-item:hover, .search-item.selected { background: #000080; color: white; }
         .center-panel { flex: 1; background: #b0b0b0; padding: 10px; overflow: auto; display: flex; justify-content: center; align-items: flex-start; min-width: 350px; }
-        .prescription-paper { background: white; width: 148mm; height: 210mm; padding: 28mm 15mm 20mm; box-shadow: 3px 3px 10px rgba(0,0,0,0.3); font-family: 'SimSun', '宋体', serif; box-sizing: border-box; position: relative; overflow: hidden; line-height: 1.8; }
+        .prescription-paper { display: flex; flex-direction: column; background: white; width: 176mm; height: 250mm; padding: 28mm 15mm 20mm; box-shadow: 3px 3px 10px rgba(0,0,0,0.3); font-family: 'SimSun', '宋体', serif; box-sizing: border-box; position: relative; overflow: hidden; line-height: 1.8; }
         .clinic-name { text-align: center; font-size: 22px; font-weight: bold; color: #000; margin-bottom: 10px; letter-spacing: 2px; font-family: 'KaiTi', '楷体_GB2312', '楷体', serif; }
         .prescription-title { text-align: center; font-size: 22px; font-weight: bold; color: #000; margin-bottom: 12px; letter-spacing: 4px; font-family: 'KaiTi', '楷体_GB2312', '楷体', serif; }
         .prescription-info { display: grid; grid-template-columns: repeat(6, 1fr); gap: 2px 2px; margin-bottom: 8px; border-bottom: 1px solid #000; padding-bottom: 4px; font-size: 14px; color: #000; }
@@ -585,7 +585,6 @@
             .left-panel { width: 35%; max-width: 500px; }
             .right-panel { width: 25%; max-width: 380px; }
             .center-panel { padding: 20px; }
-            .prescription-paper { padding: 20mm; }
         }
 
         /* 统计分析图表响应式优化 */
@@ -7512,9 +7511,9 @@ if (window.Permission) {
         function printPrescription(orientation = 'portrait') {
             const printContent = document.getElementById('prescriptionPaper').innerHTML;
             const isLandscape = orientation === 'landscape';
-            const pageSize = isLandscape ? 'A5 landscape' : 'A5 portrait';
-            const paperWidth = isLandscape ? '210mm' : '148mm';
-            const paperHeight = isLandscape ? '148mm' : '210mm';
+            const pageSize = isLandscape ? '250mm 176mm' : '176mm 250mm';
+            const paperWidth = isLandscape ? '250mm' : '176mm';
+            const paperHeight = isLandscape ? '176mm' : '250mm';
             // 改用 iframe 打印方案：绕过 Electron setWindowOpenHandler 拦截（P1-1 修复）
             // 旧实现 window.open('', '_blank') 会被 main.js 第442行拦截返回 null，导致 .document.write 抛异常
             const htmlContent = `<!DOCTYPE html>
@@ -7524,9 +7523,9 @@ if (window.Permission) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         @page { size: ${pageSize}; margin: 0; }
-        /* ★ 2026-09-15 A5 单页打印修复：①删 body min-height:100vh（vh=视口高远大于纸高，溢出成2页）；②纸片高留 0.5mm 舍入余量 */
+        /* ★ 2026-10-28 B5 整页打印（原 A5）：纸型 ISO B5 176×250mm，边距固定 上28/左右15/下20mm；纸片高留 0.5mm 舍入余量 */
         body { font-family: 'SimSun', '宋体', serif; width: ${paperWidth}; padding: 0; margin: 0 auto; display: flex; justify-content: center; align-items: flex-start; line-height: 1.8; -webkit-print-color-adjust: exact; print-color-adjust: exact; color: #000; }
-        .prescription-paper { width: ${paperWidth}; height: calc(${paperHeight} - 0.5mm); padding: 28mm 15mm 20mm; margin: 0 auto; box-sizing: border-box; }
+        .prescription-paper { display: flex; flex-direction: column; width: ${paperWidth}; height: calc(${paperHeight} - 0.5mm); padding: 28mm 15mm 20mm; margin: 0 auto; box-sizing: border-box; }
         .clinic-name { text-align: center; font-size: 16.5pt; font-weight: bold; color: #000; margin-bottom: 10px; letter-spacing: 2px; font-family: 'KaiTi', '楷体_GB2312', '楷体', serif; }
         .prescription-title { text-align: center; font-size: 16.5pt; font-weight: bold; color: #000; margin-bottom: 12px; letter-spacing: 4px; font-family: 'KaiTi', '楷体_GB2312', '楷体', serif; }
         .prescription-info { display: grid; grid-template-columns: repeat(6, 1fr); gap: 2px 2px; margin-bottom: 8px; border-bottom: 1px solid #000; padding-bottom: 4px; font-size: 10.5pt; color: #000; }
@@ -7578,7 +7577,7 @@ if (window.Permission) {
                 return;
             }
             // 网页端：window.open() 打开新窗口写入独立HTML打印（与桌面Electron方案一致，避免当前页面CSS干扰）
-            const printWin = window.open('', '_blank', 'width=600,height=850');
+            const printWin = window.open('', '_blank', isLandscape ? 'width=1000,height=720' : 'width=720,height=1000');
             if (!printWin) {
                 alert('打印窗口被浏览器拦截，请允许此站点弹窗后重试');
                 return;
@@ -7826,7 +7825,7 @@ if (window.Permission) {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
             
-            // 设置画布尺寸 (A5 148mm x 210mm at 150 DPI)
+            // 设置画布尺寸 (B5 比例 176mm x 250mm，保持原像素坐标体系)
             const width = 870;
             const height = 1240;
             canvas.width = width;
