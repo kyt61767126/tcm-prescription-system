@@ -362,10 +362,24 @@
     global.__paperEndSlashLoaded = true;
 
     var SLASH_ID = 'rxEndSlash';
+    var SLASH_SETTING_KEY = 'local_rxEndSlashVisible';
     var SLASH_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 100 100"' +
         ' preserveAspectRatio="none" aria-hidden="true" style="display:block;width:100%;height:100%;">' +
         '<line x1="0" y1="100" x2="100" y2="0" stroke="#000" stroke-width="1.2"' +
         ' vector-effect="non-scaling-stroke" stroke-linecap="butt"></line></svg>';
+
+    // 斜线显示开关（默认开）：F1 基础设置里勾选/取消，值存 localStorage，多端各自记忆
+    function slashEnabled() {
+        try {
+            return global.localStorage.getItem(SLASH_SETTING_KEY) !== '0';
+        } catch (e) {
+            return true;
+        }
+    }
+    global.setRxEndSlashEnabled = function (on) {
+        try { global.localStorage.setItem(SLASH_SETTING_KEY, on ? '1' : '0'); } catch (e) {}
+        applyEndSlash();
+    };
 
     function ensureSlash(lines) {
         var filler = document.getElementById(SLASH_ID);
@@ -396,8 +410,7 @@
         grid.style.minHeight = '';
         var rp = grid.querySelector('.prescription-line');
         if (rp) rp.style.flex = '';
-        usage.style.flex = '';
-        usage.style.marginBottom = '';
+        if (usage) { usage.style.flex = ''; usage.style.marginBottom = ''; }
         lines.style.display = '';
         lines.style.flexDirection = '';
         lines.style.flex = '';
@@ -409,8 +422,9 @@
         var grid = document.querySelector('.prescription-grid');
         if (!grid) return false; // 处方网格未就绪，稍后重试
         var lines = grid.querySelector('#prescriptionLines');
-        var usage = grid.querySelector('.usage-text');
         var paper = document.getElementById('prescriptionPaper');
+        // 用法行位置有两种版式：云/离线正文用法行在网格内（site-admin 在页脚内）→ 兜底全局查找
+        var usage = grid.querySelector('.usage-text') || (paper ? paper.querySelector('.usage-text') : null);
         if (!lines || !usage) return false; // 药品行/用法行未就绪
 
         var inner = lines.querySelector('.prescription-grid-inner');
@@ -444,19 +458,57 @@
         // 网格内：RP 行 / 用法行固定高度，药品行容器占满中段
         var rp = grid.querySelector('.prescription-line');
         if (rp) rp.style.flex = '0 0 auto';
-        usage.style.flex = '0 0 auto';
+        // 用法行仅在网格内（云/离线版式）时参与网格 flex；site-admin 版式在页脚内，跳过
+        if (usage.parentNode === grid) {
+            usage.style.flex = '0 0 auto';
+            usage.style.marginBottom = '0';
+        }
         lines.style.display = 'flex';
         lines.style.flexDirection = 'column';
         lines.style.flex = '1 1 auto';
         lines.style.minHeight = '0';
         if (inner) inner.style.flex = '0 0 auto'; // 药品行按内容高度，不参与拉伸
-        usage.style.marginBottom = '0';
 
         // 斜线块 flex:1：高度 = 纸面剩余高度 − 已用药味行高度，随药味行数自动伸缩
         var filler = ensureSlash(lines);
-        // 无药味时不出斜线（空网格整页斜线无意义）；有药味即按末位行下方剩余高度生成
+        // 无药味时不出斜线（空网格整页斜线无意义）；F1 设置未勾选时也不显示
         var rowCount = inner ? inner.querySelectorAll('.prescription-line').length : 0;
-        filler.style.display = rowCount > 0 ? 'block' : 'none';
+        filler.style.display = (rowCount > 0 && slashEnabled()) ? 'block' : 'none';
+        return true;
+    }
+
+    // F1 基础设置里注入「处方笺斜线」勾选框（运行时注入，不改 HTML 静态结构）
+    function injectSettingsToggle() {
+        var modal = document.getElementById('settingsModal');
+        if (!modal) return false;
+        if (document.getElementById('rxEndSlashSettingRow')) return true;
+        var body = modal.querySelector('.modal-body');
+        if (!body) return false;
+
+        var row = document.createElement('div');
+        row.id = 'rxEndSlashSettingRow';
+        row.style.cssText = 'margin-bottom:12px;';
+
+        var label = document.createElement('label');
+        label.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;';
+        var cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.id = 'rxEndSlashToggle';
+        cb.style.cssText = 'width:18px;height:18px;';
+        cb.checked = slashEnabled();
+        cb.addEventListener('change', function () { global.setRxEndSlashEnabled(cb.checked); });
+        var txt = document.createElement('span');
+        txt.textContent = '处方笺显示中药末行斜线';
+        label.appendChild(cb);
+        label.appendChild(txt);
+
+        var hint = document.createElement('div');
+        hint.style.cssText = 'font-size:11px;color:#666;margin-top:4px;';
+        hint.textContent = '勾选后，中药末位行到「用法」之间自动画斜线，防止空白处被误加药；取消勾选即不显示。';
+
+        row.appendChild(label);
+        row.appendChild(hint);
+        body.appendChild(row);
         return true;
     }
 
@@ -487,12 +539,39 @@
         return typeof global.printPrescription === 'function';
     }
 
+    // 打开基础设置时同步勾选状态（多标签页/其他入口改过 localStorage 也不跑偏）
+    function syncToggleState() {
+        var cb = document.getElementById('rxEndSlashToggle');
+        if (cb) cb.checked = slashEnabled();
+    }
+
+    function wrapShowModal() {
+        if (typeof global.showModal === 'function' && !global.showModal.__rxEndSlashWrapped) {
+            var orig = global.showModal;
+            var wrapped = function (id) {
+                var ret = orig.apply(this, arguments);
+                if (id === 'settingsModal') {
+                    injectSettingsToggle();
+                    syncToggleState();
+                }
+                return ret;
+            };
+            wrapped.__rxEndSlashWrapped = true;
+            global.showModal = wrapped;
+            return true;
+        }
+        return typeof global.showModal === 'function';
+    }
+
     function bootEndSlash() {
         (function retry(n) {
             if (applyEndSlash()) {
                 watchLines();
+                injectSettingsToggle();
                 (function wrapRetry(k) {
-                    if (wrapPrint() || k >= 40) return;
+                    var printed = wrapPrint();
+                    var modalWrapped = wrapShowModal();
+                    if ((printed && modalWrapped) || k >= 40) return;
                     setTimeout(function () { wrapRetry(k + 1); }, 250);
                 })(0);
                 return;
