@@ -2432,6 +2432,7 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
   - 验证：`node tools/login-gate-smoke.cjs` = 7/7。
 
 * ★ 2026-10-28 处方笺改 ISO B5（176×250mm）+「中药末位行→用法行」斜线自适应（五端 + 网页 + 桌面 + 安卓 + 鸿蒙）：
+  - ⚠️ **2026-10-28 当日晚间已作废并改回 A5（148×210mm）**——用户实际打印用纸是 **A5**（打印机纸张也选 A5），按 B5 排版的 176mm 内容打在 148mm 纸上被 fit 缩放，正是「实际打印左右边距不等」的根因。本节仅保留斜线实现与"纸型六处联改"铁律，**尺寸/边距以下方「第七轮」A5 结论为准，勿再改回 B5**。
   - 纸型/边距：所有打印模板 `@page{size:176mm 250mm}`（横向 250×176），纸面 padding 固定 `上28/左右15/下20mm`（即"页边距固定"），纸片高 `calc(250mm - 0.5mm)` 防亚像素甩空白页。同步改桌面 `desktop-print.cjs` 隐藏窗 720×1000（横向 1000×720；原 600 宽装不下 B5 665.2px 会触发滚动条导致 fit 缩放）、Electron `pageSize:{width:176000,height:250000}`（**单位微米**）、网页打印弹窗 `window.open` 同尺寸、安卓 `PrintAttributes.MediaSize.ISO_B5`（横向 `.asLandscape()`）、鸿蒙 `printHtml` 注入 `@page{size:176mm 250mm}`。
   - 斜线实现（`shared/prescription-core.js` 新增独立 IIFE，HTML 零改动）：`.prescription-paper` 与 `.prescription-grid` 改纵向 flex，纸面子项除网格外 `flex:0 0 auto`、网格 `flex:1 1 auto;min-height:0` → **表头/用法行/签名栏位置恒定**；`#prescriptionLines` 尾部追加 `#rxEndSlash`（`flex:1`，内联 SVG `/`，起点左下 `(0,100)` → 终点右上 `(100,0)`，`preserveAspectRatio=none` + `vector-effect=non-scaling-stroke`），高度=末位药行下方剩余空间，**随药味行数自动伸缩**；药味 0 行时 `display:none`。移动端 `matchMedia('(max-width:768px)')` 命中时纸面为 `width:100%/height:auto`（无固定纸高），`resetEndSlash()` 清空行内 flex、删除斜线块并恢复 `.prescription-grid` 自身 `min-height`，`resize/orientationchange` 去抖重算，避免桌面↔移动切换残留。
   - 重写兜底：`updatePrescriptionPaper` 会整段重写 `#prescriptionLines.innerHTML`，用 `MutationObserver(childList)` 实时补回斜线块；再包一层 `printPrescription` 打印前 `applyEndSlash()`，保证同一任务内改行数后立即打印也带斜线。全部内联样式随 `#prescriptionPaper.innerHTML` 进打印窗，屏幕/打印一致。
@@ -2472,5 +2473,15 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
   - 若纸张上**仍**左右不等，只剩物理因素：打印机按"可打印区域"缩放或进纸偏移 → 让用户设「实际大小 100%（非适应页面）」+ 纸张选 B5 + 导板夹紧，这不是代码问题。
   - 验证：`tools/_tmp/rx-print-parity.cjs` 10/10（直接抽取 `printPrescription` 模板、Playwright `emulateMedia('print')` 量真实打印 DOM；含长用法不溢出、左右对称、相对纸面 x 一致、PDF 单页）；`rx-jianfa-verify` 14/14；`rx-other-ends-check` 20/20（新增离线桌面/site-admin 签名对齐断言）。
   - 铁律：**任何"预览与打印不一致"排查，第一步先抽 `printPrescription` 的内联模板跑 print media 量 DOM，不要只信屏幕截图**；签名页脚只允许三等分 + 左对齐；`white-space:nowrap` 不得用于可能超长的用法/医嘱行。
+
+* ★ 2026-10-28（同日第七轮）**处方笺纸型由 B5 改回 A5（148×210mm）——「实际打印左右边距不等」的真根因**
+  - 真根因：用户打印机里选的纸张是 **A5**（148×210mm），而我们的模板按 **B5**（176×250mm）排版。176mm 宽的内容落在 148mm 纸上，打印后端做 fit-to-page 缩放/居中裁切 → 左 15mm 的边距被压、右边被吃掉，表现为**左右不等**（Windows 预览里"看起来正常"是因为预览按纸缩放）。**这不是 CSS 不对，是纸型不对**。
+  - 终局口径（后续一切以此为准）：纸型 **ISO A5 148×210mm**（横向 210×148）；页边距 **上 15mm / 左右 13mm / 下 15mm（左右严格对称）**；纸片高 `calc(210mm - 0.5mm)`。
+  - 屏幕 CSS（3 份权威源 × 屏幕+打印）：`.prescription-paper{width:148mm;height:210mm;padding:15mm 13mm}`；`@page{size:148mm 210mm;margin:0}`；打印模板常量 `${pageSize}` / `${paperWidth}` / `${paperHeight}` 全部换 148/210（横向 210/148）；`.prescription-grid-inner` 列距 `6mm→4mm`（内容宽 122mm，3 列各 40.7mm，4mm 列距刚好）；`.prescription-info` 由 6 列改 **3 列 ×2 行**并删除 `nth-child(1..6)` 的 `grid-column` 覆盖（A5 窄纸下 6 列会把「门诊号/日期」挤爆）。
+  - 打印链路：`shared/print-utils.js` / `print-utils-offline.js` 的 `generatePrescriptionPrintHTML` 一并换成 A5 + 新字号规范（原模板还留着 16.5pt/4 列/11.25pt/`nth-child` 对齐旧值，与 index.html 内联模板不一致）；桌面 `shared/desktop-print.cjs` 隐藏窗 720×1000→**640×940**（148mm=559.4px@96dpi，留余量）、`pageSize:{width:148000,height:210000}`（微米）；安卓 `MediaSize.ISO_B5`→**`ISO_A5`**（云/离 MainActivity 各 3 处，含 `.asLandscape()`）；鸿蒙 `printHtml` 注入 `@page{size:148mm 210mm}`（横向 210/148）。**Electron/安卓的默认纸张也跟着变 A5，用户不必再手改纸张**。
+  - 分发：5 份 index.html 副本（public/离线桌面/site-admin/cloud_desktop/index-app/harmony rawfile）经 `sync-html.ps1`、`sync-index-app.cjs`、`sync-siteadmin.cjs` 全部 A5（审计：每份 `148mm`=12 处、`176mm`=0）；`print-utils.js` 云 7 份←`shared/print-utils.js`、离线 2 份←`shared/print-utils-offline.js`；`desktop-print.cjs` 2 份←shared。改完须 `check-cv-hashes --update`（print-utils 内容变→cv 必须 bump），再传播副本，否则线上长缓存读到旧模板。
+  - 验证：`tools/_tmp/rx-a5-verify.cjs` **20/20**（屏幕纸面 148×210mm、左右间隙 49.1/49.1px 对称、上下 padding 15mm、标题 22pt/正文 10.5pt/煎法 9pt、3 味 8 行、药名剂量间隙 0、前记 6 项不被裁、长用法 0 溢出、签名 20mm 且金额/核对同列、24/36/48 味均不溢出纸面、打印同规格、PDF 单页 **MediaBox 148.2×209.9mm**）；`rx-print-parity` 10/10（金额/核对相对纸面 x 屏幕=打印=206.2、审核/发药 363.2，全左对齐）；`rx-jianfa-verify` 14/14；`rx-other-ends-check` **22/22**（新增 [离线桌面]/[site-admin] 纸面 = A5 148×210 断言）；门禁 check-interface 6 OK / copy-consistency 100 副本 0 失败 / diff-cross-version 6 对全绿 / sync-siteadmin 0 漂移 / cv 15 项一致。
+  - 铁律：**改纸型前先问/确认用户打印机里实际放的是哪种纸**（本项目=A5）。纸型六处必须同时改：①各 index.html 屏幕 CSS+`@page`+打印模板常量 ②`print-utils*.js` ③`desktop-print.cjs` 隐藏窗&微米 pageSize ④安卓 `MediaSize` 常量 ⑤鸿蒙注入 `@page` ⑥`check-cv-hashes --update`+三脚本传播。**只改 CSS 不改纸型必出"左右不等/被缩放"**。
+  - 测试脚本自身也要跟着改：`rx-*` 里硬编码的 `176mm/250mm` 替换与 `MediaBox` 断言必须同步成 148/210，否则会出现"假绿"（测试把模板强行替换成旧纸型仍判通过）。
 
 

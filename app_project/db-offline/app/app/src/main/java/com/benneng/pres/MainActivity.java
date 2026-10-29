@@ -2063,7 +2063,7 @@ public class MainActivity extends BridgeActivity {
                         PrintDocumentAdapter printAdapter = printWebView.createPrintDocumentAdapter();
 
                         PrintAttributes attrs = new PrintAttributes.Builder()
-                            .setMediaSize(PrintAttributes.MediaSize.ISO_B5)
+                            .setMediaSize(PrintAttributes.MediaSize.ISO_A5)
                             .setResolution(new PrintAttributes.Resolution("res", "pdf", 300, 300))
                             .setMinMargins(PrintAttributes.Margins.NO_MARGINS)
                             .build();
@@ -2497,7 +2497,7 @@ public class MainActivity extends BridgeActivity {
                             PrintDocumentAdapter printAdapter = printWebView.createPrintDocumentAdapter();
 
                             PrintAttributes attrs = new PrintAttributes.Builder()
-                                .setMediaSize(isLandscape ? PrintAttributes.MediaSize.ISO_B5.asLandscape() : PrintAttributes.MediaSize.ISO_B5)
+                                .setMediaSize(isLandscape ? PrintAttributes.MediaSize.ISO_A5.asLandscape() : PrintAttributes.MediaSize.ISO_A5)
                                 .setResolution(new PrintAttributes.Resolution("res", "pdf", 300, 300))
                                 .setMinMargins(PrintAttributes.Margins.NO_MARGINS)
                                 .build();

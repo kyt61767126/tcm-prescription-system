@@ -35,13 +35,13 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
         const isLandscape = orientation === 'landscape';
 
         // 隐藏窗口（用户不可见）
-        // ★ 2026-10-28 纸型改 B5（176×250mm）：隐藏窗须大于 176mm=665.2px@96dpi，
+        // ★ 2026-10-28 纸型改 A5（148×210mm，用户实际用纸）：隐藏窗须大于 148mm=559.4px@96dpi，
         //   否则 body 宽度超出视口触发滚动条，webContents.print() 会按视口宽度缩放内容。
-        //   取 720px（纵向）/1000px（横向），与网页版预览窗口宽度一致。
+        //   取 640px（纵向）/940px（横向），留足余量且与网页版预览窗口宽度一致。
         const printWin = new BrowserWindow({
             show: false,
-            width: isLandscape ? 1000 : 720,
-            height: isLandscape ? 720 : 1000,
+            width: isLandscape ? 940 : 640,
+            height: isLandscape ? 640 : 940,
             webPreferences: {
                 contextIsolation: true,
                 nodeIntegration: false,
@@ -94,21 +94,21 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
                         await new Promise(r => setTimeout(r, 200));
                         // ★ 修复字体偏大（2026-09-25 起沿用）：CSS @page 与 pageSize/margins 双通道必须一致
                         //
-                        // 原因：webContents.print({ pageSize, margins }) 选项与 CSS @page { size:176mm 250mm; margin:0 }
+                        // 原因：webContents.print({ pageSize, margins }) 选项与 CSS @page { size:148mm 210mm; margin:0 }
                         //   形成【双重指定】：
                         //   - Blink 布局引擎按 CSS @page 布局内容（通道A）
                         //   - Chrome 打印后端按 pageSize/margins 选项设置打印参数（通道B）
                         //   两者对纸张尺寸的内部表示不一致（浮点精度/DPI假设/舍入）会触发 fit-to-page 缩放，
                         //   缩放因子略>1.0，内容被放大。
                         //
-                        // 做法：pageSize 用「微米」写死成与 CSS 完全相同的 B5（176000×250000），
+                        // 做法：pageSize 用「微米」写死成与 CSS 完全相同的 A5（148000×210000），
                         //   margins:none 与 @page margin:0 对齐；隐藏窗宽度大于纸宽，避免滚动条引发缩放。
                         //   客户端打印机不固定，不做自动匹配：始终弹系统打印对话框，由用户手动选打印机，
                         //   pageSize 仅作为对话框默认纸张。
                         const printOptions = {
                             silent: false,
                             printBackground: true,
-                            pageSize: { width: 176000, height: 250000 }, // ISO B5 176×250mm
+                            pageSize: { width: 148000, height: 210000 }, // ISO A5 148×210mm
                             landscape: isLandscape,
                             margins: { marginType: 'none' }
                         };
