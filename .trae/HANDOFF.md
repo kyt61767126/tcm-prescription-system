@@ -16,7 +16,7 @@
 
 ## 当前基线（2026-10-30 更新）
 
-- **2026-10-29 20:38 P9 完整发版已上线（`full all all --yes` rc=0；发版提交 `4b19f72e` + `0c00a631`）**：四端 **云端桌面 1.2.284 / 云端 APP vc346 / 离线桌面 1.0.307 / 离线 APP vc340**；Release `v2026.10.29-2024`（6 附件）；热更双桌面色 `2026.10.29-4 → -5`（appVersion 1.2.284 / 1.0.307），`app-local` 未变仍 `-2`。复验：线上 `version.json` 三通道正确、`verify-release.js` 9/9、`check-release-readiness.cjs --strict` = 待发布 0 / 阻断 0 / 警告 0。**结论：线上与源码已一致，无待发布项。** 详见 KNOWLEDGE 末章 P9。观察项：首次 `Start-Process -RedirectStandardOutput` 启动 bat 曾静默退出（0 字节/无日志），原样重试即正常——再遇到先重试并核对 `publish-*.log` 是否新建。
+- **2026-10-29 20:38 P9 完整发版已上线（`full all all --yes` rc=0；发版提交 `4b19f72e` + `0c00a631`）**：四端 **云端桌面 1.2.284 / 云端 APP vc346 / 离线桌面 1.0.307 / 离线 APP vc340**；Release `v2026.10.29-2024`（6 附件）；热更双桌面色 `2026.10.29-4 → -5`（appVersion 1.2.284 / 1.0.307），`app-local` 未变仍 `-2`。复验：线上 `version.json` 三通道正确、`verify-release.js` 9/9、`check-release-readiness.cjs --strict` = 待发布 0 / 阻断 0 / 警告 0。**结论：线上与源码已一致，无待发布项。** 详见 KNOWLEDGE 末章 P9。观察项：首次 `Start-Process -RedirectStandardOutput` 启动 bat 曾静默退出（0 字节/无日志），原样重试即正常——再遇到先重试并核对 `publish-*.log` 是否新建。文档已同步：`.trae/documents` 4 处补注当前线上基线（回滚 SOP / H2 回归清单 / 打包优化 / 云端指纹计划）。
 
 - **2026-10-30 P8 修「打包完成但菜单像死机」（commit `a32ae313`）**：`tools/noise-reduce.ps1:Invoke-QuietProcess` 直连模式去掉 `Start-Process -Wait`（PS 5.1 会连后代一起等，gradle 常驻 daemon 让全流程打包后挂 10+ 分钟），改 `-PassThru` + `$null=$proc.Handle`（必须缓存句柄否则 `.ExitCode` 变 `$null`）+ `WaitForExit()`。探针实测 14.2s→0.2s 且退出码透传。**2026-10-29 20:14 那次「非正常手动退出」的真实原因就是它**：四端打包 20:04:18 已全部完成并自动提交推送 `39e55c9d`，父流程却卡在等 daemon，用户关窗 → 热更签发/体检/发布/验证四步未执行（已于 P9 补齐发版）。
 

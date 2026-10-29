@@ -2,7 +2,7 @@
 
 ## 一、需求与范围（已与用户确认）
 
-- **仅云端安卓 APP**（applicationId `com.tcm.prescription`，Capacitor 壳，当前 versionCode 307）。
+- **仅云端安卓 APP**（applicationId `com.tcm.prescription`，Capacitor 壳；**本计划立案时 versionCode 307，2026-10-29 已发版至 vc346**）。
 - 云端桌面（Windows Hello）、云端网页（WebAuthn）**本期不做**。
 - 安全口径与离线版**完全一致**：指纹只解密原密码 → 回填后走原始云端登录链（`AuthCore.loginWithUsernamePassword`，本地表 + 云端 `/users?login=true` 权威认证），**不新增任何放行路径、不写登录态**。
 - 权威方法论全部复用 KNOWLEDGE.md 第 47 章（权限 C1 / 时序 C2 / 错误码 H1-M1 / 异常分类 / enroll 复用密钥 / M3 精确文案 / probe 重探 / 遮罩收口 / versionCode 基线坑）。

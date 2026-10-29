@@ -3,6 +3,18 @@
 > 工具：`tools/rollback-hotupdate.cjs` ｜ 一键入口：`一键回滚热包.bat`
 > 适用人：管理员/开发 ｜ 版本：2026-09-16 ｜ 详细背景见 KNOWLEDGE.md「热更新一键回滚」条目
 
+> **当前线上热更基线（2026-10-29 20:38 完整发版后实测，`full all all --yes` rc=0）**
+>
+> | 渠道 | 线上 hotVersion | appVersion | 说明 |
+> |---|---|---|---|
+> | `desktop/cloud` | **2026.10.29-5** | 1.2.284 | 20 文件 |
+> | `desktop/local` | **2026.10.29-5** | 1.0.307 | 19 文件 |
+> | `app-local` | **2026.10.29-2** | 1.0.0 | 15 文件（离线 APP 未变，本轮自动跳过） |
+>
+> 同批整包：Release `v2026.10.29-2024`（云端桌面 1.2.284 / 云端 APP vc346 / 离线桌面 1.0.307 / 离线 APP vc340）。
+> **对回滚的影响**：客户端只认「更高版本号」，所以现在做回滚必须签到 **`-6` 或更高**（`-5` 及以下会被全部在装客户端忽略）。发版记录见 KNOWLEDGE 末章 P9，线上核对命令：
+> `Invoke-RestMethod https://tcm-prescription-system.pages.dev/hot-update/desktop/cloud/version.json`（另两条换 `desktop/local`、`app-local`）。
+
 ---
 
 ## 1. 这是什么、什么时候用

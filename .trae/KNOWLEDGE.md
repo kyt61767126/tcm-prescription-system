@@ -2645,6 +2645,7 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
   - 复验证据（发版后独立再查，非流程自证）：线上 `version.json` 三通道 = `hot=2026.10.29-5 / appVersion=1.2.284`、`-5 / 1.0.307`、`app-local -2 / 1.0.0`；`node tools/verify-release.js` 9/9 URL 通过（含新 exe 大小 77.9/75.4MB 全对）；`check-release-readiness.cjs --strict` = **待发布 0 端 / 阻断 0 / 警告 0**。
   - 告知用户口径：桌面/APP 新版需**下载安装整包**；仅 JS 修复可走热更——**联网打开一次客户端、彻底退出再进**才生效；手机端 Java 修复必须装新 APK。
   - 观察项（低置信，未复现）：首次以 `Start-Process -RedirectStandardOutput` 方式启动同一 bat 时，进程 78s 后静默退出（`out`/`err` 均 0 字节、未生成 publish 日志、无副作用提交）；同参数立即重试即正常跑完。**再遇到"零输出即退出"不要急着加参数，先原样重试一次并核对 `.build-cache/logs/publish-*.log` 是否新建**。
+  - 文档同步（发版后）：`.trae/documents` 4 处补注——`热更新一键回滚SOP.md` 顶部加「当前线上热更基线」表（并点明**回滚必须签到 `-6` 或更高**，否则被在装客户端忽略）、`h2-real-device-regression-checklist.md` 标注 §0 版本表是 2026-10-14 历史基线并给出当前值、`优化手动打包文件-提高打包速度.md` 补最近发版产物、`云端安卓指纹登录_plan.md` 的"当前 vc307"改为"立案时 307 / 已发版 vc346"。**原则**：只给"操作上会被当真的当前状态"补注，dated 计划/评审文档保留当年数字（属历史事实）。
 
 
 
