@@ -1,6 +1,23 @@
 ﻿# release-menu.ps1 - 交互式发布菜单（支持选择单个版本发布）
 # 用 PowerShell 替代 release-all.bat，避免 .bat 中文 GBK 编码问题
 # 支持选择单个版本（云端/定制/个人 × 桌面/APP/全部）进行发布
+#
+# ★ 2026-10-30 P2：新增非交互「阶段」入口（一键构建发布.bat 透传），菜单仍是默认行为。
+#   -Stage menu      默认：交互菜单（原行为，一键发布.bat 无参即此）
+#   -Stage pack      仅打包（all/cloud/dingzhi × desktop/app/all）+ 按需热更签发
+#   -Stage publish   发布（需 -Yes 显式确认）→ 先过 readiness 严格门
+#   -Stage full      全流程 打包→热更签发→体检→发布→验证（需 -Yes）
+#   -Stage hot       热更检查；配 -Yes 则落后时直接重签并推送
+#   -Stage verify    仅验证线上产物
+param(
+    [ValidateSet('menu', 'pack', 'publish', 'full', 'hot', 'verify')]
+    [string]$Stage = 'menu',
+    [ValidateSet('all', 'cloud', 'dingzhi')]
+    [string]$Version = 'all',
+    [ValidateSet('all', 'desktop', 'app')]
+    [string]$Mode = 'all',
+    [switch]$Yes
+)
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::InputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
@@ -608,6 +625,96 @@ function Invoke-FullFlow {
     Write-Host "  Cloudflare Pages 将在 1-2 分钟内自动部署"
     Write-Host "========================================" -ForegroundColor Green
     return 0
+}
+
+# ============ 非交互阶段入口（★ 2026-10-30 P2）============
+# 供 一键构建发布.bat 透传：同一份内核、同一套门禁，只是省掉菜单交互。
+# ★ HARD 规则保持：凡「上传官网」的阶段（publish / full）必须 -Yes 显式确认；
+#   hot 无 -Yes 只做只读检查，有 -Yes 才重签并推送。
+if ($Stage -ne 'menu') {
+    Write-Host ""
+    Write-Host "============================================" -ForegroundColor Cyan
+    Write-Host ("  惠康中医 · 非交互阶段: {0}" -f $Stage) -ForegroundColor Cyan
+    Write-Host ("  版本={0}  范围={1}  显式确认={2}" -f $Version, $Mode, $(if ($Yes) { '是' } else { '否' })) -ForegroundColor Cyan
+    Write-Host "============================================" -ForegroundColor Cyan
+    Write-Host "  日志: $script:LogFile" -ForegroundColor DarkGray
+
+    $rc = 0
+    switch ($Stage) {
+        'pack' {
+            if ($Version -eq 'all') { $rc = Invoke-Pack -Target 'all' }
+            else { $rc = Invoke-SinglePack -Version $Version -Mode $Mode }
+            if ($rc -is [array]) { $rc = [int]$rc[-1] }
+            if ($rc -eq 0) {
+                $rcH = Invoke-HotUpdateSign -Scope $Version -Commit
+                if ($rcH -is [array]) { $rcH = [int]$rcH[-1] }
+                $rc = $rcH
+            }
+            Show-FinalSummary -ActionLabel "仅打包（非交互）"
+        }
+        'publish' {
+            if (-not $Yes) {
+                Write-Host ""
+                Write-Host "[BLOCK] 发布是人工确认动作：请加 --yes 显式确认" -ForegroundColor Yellow
+                Write-Host "  例: 一键构建发布.bat publish all all --yes" -ForegroundColor Yellow
+                Write-Host "  只想体检不改动: 一键构建发布.bat verify" -ForegroundColor Yellow
+                $rc = 2
+            } else {
+                $rc = Invoke-ReadinessGate
+                if ($rc -is [array]) { $rc = [int]$rc[-1] }
+                if ($rc -eq 0) {
+                    if ($Version -eq 'all') {
+                        $autoPublishJs = "$script:RootDir\tools\auto-publish.js"
+                        $rc = Invoke-NodeScript -ScriptPath $autoPublishJs -Arguments @('--publish')
+                        if ($rc -is [array]) { $rc = [int]$rc[-1] }
+                        if ($rc -eq 3) { Write-Host "[OK] 官网已是最新，本次未上传" -ForegroundColor Cyan; $rc = 0 }
+                    } else {
+                        $rc = Invoke-Publish -Target $Version -Mode $Mode
+                        if ($rc -is [array]) { $rc = [int]$rc[-1] }
+                    }
+                }
+                if ($rc -eq 0) { Show-PublishResult -ExitCode 0 -Label ("发布（$Version / $Mode）") }
+                else { Write-Host "  完整日志: $script:LogFile" -ForegroundColor Yellow }
+            }
+        }
+        'full' {
+            if (-not $Yes) {
+                Write-Host ""
+                Write-Host "[BLOCK] 全流程含上传官网：请加 --yes 显式确认" -ForegroundColor Yellow
+                Write-Host "  例: 一键构建发布.bat full --yes" -ForegroundColor Yellow
+                $rc = 2
+            } else {
+                $rc = Invoke-FullFlow -Version $Version -Mode $Mode
+                if ($rc -is [array]) { $rc = [int]$rc[-1] }
+                Show-FinalSummary -ActionLabel "打包 + 发布 + 验证全流程（非交互）"
+            }
+        }
+        'hot' {
+            $rc = Invoke-HotUpdateSign -Scope $Version -CheckOnly
+            if ($rc -is [array]) { $rc = [int]$rc[-1] }
+            if ($rc -eq 2 -and $Yes) {
+                Write-Host "[签发] 检测到内容落后且已显式确认 → 重签并推送" -ForegroundColor Cyan
+                $rc = Invoke-HotUpdateSign -Scope $Version -Commit
+                if ($rc -is [array]) { $rc = [int]$rc[-1] }
+            } elseif ($rc -eq 2) {
+                Write-Host "[提示] 只做检查未改动；加 --yes 才会重签并推送" -ForegroundColor Yellow
+            }
+        }
+        'verify' {
+            $rc = Invoke-Verify
+            if ($rc -is [array]) { $rc = [int]$rc[-1] }
+        }
+    }
+
+    if ($rc -eq 0) {
+        Write-Host ""
+        Write-Host ("[OK] 阶段完成: {0}" -f $Stage) -ForegroundColor Green
+    } else {
+        Write-Host ""
+        Write-Host ("[ERROR] 阶段 {0} 退出码: {1}" -f $Stage, $rc) -ForegroundColor Red
+        Write-Host "  完整日志: $script:LogFile" -ForegroundColor Yellow
+    }
+    exit $rc
 }
 
 # ============ 主菜单 ============

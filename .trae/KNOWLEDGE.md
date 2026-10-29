@@ -2559,5 +2559,14 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
   - 坑2（本轮实测踩到）：`powershell -File x.ps1 -Channels a b c` **不能**给 `[string[]]` 参数传空格分隔多值，会报 `PositionalParameterNotFound`。改为单字符串 + `-split ','`（`-Channels 'desktop/cloud,desktop/local'`）。菜单冒烟测试（`"7"`=`0` 管道喂 Read-MenuChoice）已验证可选到"需签发"并保持 `public/hot-update` 零改动。
   - 体检口径（已核对 `check-release-readiness.cjs`）：`HOT-STALE-<通道>` 在**内容**哈希落后时本来就是 `BLOCK`（现在由 `[1.8] --strict` 真正消费，不再"报了没人拦"）；仅 `appVersion` 元数据落后则只出 `OK/WARN`（提示可重签刷新），不会误拦正常发布。`HOT-MINAPP` 同为 BLOCK。
 
+* ★ 2026-10-30（P2：**单一非交互入口** `一键构建发布.bat` —— 合并入口形态，内核与 HARD 规则不变）：
+  - 结论：日常两条路径并存——`一键打包.bat`（纯打包菜单，可离线、不需要上传授权）+ `一键构建发布.bat`（无参=发布交互菜单；带 stage=脚本化）。`一键发布.bat` 降级为 **~30 行别名**（`call "%~dp0一键构建发布.bat" %*`，退出码透传），旧手册/快捷方式全部继续有效。**禁止**在新入口 bat 里写业务逻辑。
+  - 新入口用法：`（无参）`→交互菜单；`full --yes`→打包→`[1.5]` 热更签发→`[1.8]` readiness `--strict`→智能发布→验证；`pack [all|cloud|dingzhi] [all|desktop|app]`→仅打包（内容落后时按需热更签发），不上传；`publish [...] --yes`→readiness 硬门+发布（`all` 走 `auto-publish.js --publish`，单版本走 `publish-release.js`）；`hot [...] [--yes]`→只读 `--check`，加 `--yes` 才重签并推送；`verify`→仅验证线上产物。
+  - HARD 规则下沉到内核：`release-menu.ps1 -Stage publish|full` 无 `-Yes` → 打印 `[BLOCK]` 并 `exit 2`（提示加 `--yes`），与菜单人工点选同等级；`hot` 无 `-Yes` 只检查。脚本化无法绕过「上传官网必须人工确认」。
+  - 实现要点：`release-menu.ps1` 顶部 `param(-Stage menu|pack|publish|full|hot|verify, -Version all|cloud|dingzhi, -Mode all|desktop|app, -Yes)`（`ValidateSet` 拦非法值，必须写在所有可执行语句之前）；非交互块插在函数定义之后、主菜单 `while` 之前，末尾 `exit $rc`；所有阶段返回值统一 `if ($rc -is [array]) { $rc = [int]$rc[-1] }` 提取（防子进程输出污染返回数组）。bat 只做参数解析（`--yes`/`-y`）、stage 白名单、入口预检（publish/full 用 `-Mode publish` 保留 behind 硬停）、codepage 恢复与退出码透传。
+  - 坑：`Write` 新建的 `.bat` 是 LF，必须 `tools/fix-bat-crlf.ps1` 归一（CJK bat 被 LF 破坏时 cmd 解析期中止、窗口闪退）；`Start-Process -RedirectStandardOutput` 落盘是 UTF-8，回读必须 `Get-Content -Encoding UTF8`，否则中文乱码易被误判成脚本编码坏了。
+  - 验证：`pack-gate preflight` 5/5（P3 bat CRLF 32 文件、P5 三通道热更完整）；AST 解析 7 个 ps1 全 `[OK]`；冒烟：`bogus` rc=2、`publish` 无 `--yes` rc=2、`full` 无 `--yes` rc=2、`hot` rc=2（报 desktop 两通道 appVersion 元数据落后）且 `git status public/hot-update` 前后一致、`一键发布.bat verify` rc=0（9/9 URL 通过）、无参菜单在 stdin 关闭时 rc=1（防僵尸）。
+  - 遗留：desktop 两通道热包 `appVersion`（1.2.282/1.0.305）仍落后整包（1.2.283/1.0.306），仅元数据非门禁；`hot --yes` 或下次全流程 `[1.5]` 会自动刷新。
+
 
 
