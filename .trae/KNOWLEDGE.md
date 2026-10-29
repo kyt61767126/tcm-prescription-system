@@ -2463,4 +2463,14 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
   - 验证：`tools/_tmp/rx-jianfa-verify.cjs` 14/14（含间隙 <1px、列起点等距 ±1px、煎法在 `.rx-dose` 内且 9pt 宋体、打印同规格、PDF 单页 176×250.1mm）；`rx-other-ends-check.cjs` 18/18（离线桌面 + site-admin 同样紧挨）；门禁 `check-interface` 6 OK / `copy-consistency` 100 副本 0 失败 / `diff-cross-version` 6 对全绿 / `sync-siteadmin --check` 0 漂移 / `check-cv-hashes` 15 项一致。
   - 铁律：**同类排版需求反复时先确认「列内对齐 vs 紧挨连写」这两种风格**——用户要「紧密、少空白」就用 `flex-start + gap:0`（药名剂量连写、三列均布）；要「表格感」才用 `space-between`（剂量右对齐）。两种互斥，不可同时满足；改动必须成对改屏幕 CSS 与打印模板 CSS，并用 Playwright 量间隙与列起点差。
 
+* ★ 2026-10-28（同日第五轮）**「屏幕预览 vs 实际打印不一致」问题的定位与修法（签名页脚 + 右侧页边距）**：
+  - **关键认知**：打印用的 HTML 是 `printPrescription()` 内联模板字符串（`const html = \`<!DOCTYPE html>...`），**不是** `shared/print-utils.js`（后者虽被 `<script>` 引入，但页面打印不调用它）。因此打印 CSS 在每个 index.html 里各有一份，改屏幕 CSS 必须同步改这份内联模板，否则「预览好看、打印跑版」。
+  - 症状1「核对/金额不对齐」根因：内联打印模板残留旧规则 `.signature-item:nth-child(2){text-align:center}` / `nth-child(3){text-align:right;padding-right:50%}`，与屏幕的左对齐不一致；文本等宽时看似正常，一旦「金额」后面带数值就错位。修法：**删除全部 nth-child 对齐规则**，`.signature-grid` 三端统一 `repeat(3, minmax(0,1fr))`（原 4fr 3fr 3fr），`.signature-item` 一律左对齐。实测屏幕/打印相对纸面 x 完全一致（金额/核对 244.0、审核/发药 431.2）。
+  - 症状2「右侧页边距小于左侧」根因：`.usage-text` 用 `white-space: nowrap`，真实处方「用法与用量：水煎服，每日1剂，分早晚两次温服，忌生冷油腻…」超出内容宽（551px）后向右溢出，被裁掉 → 左边距始终 15mm、右边距被吃掉。修法：桌面/打印改 `white-space: normal; overflow-wrap: anywhere`，移动端媒体查询同样改（12px/10px 版），打印模板 `.prescription-paper` 加 `overflow: hidden` 兜底。
+  - 次要修法：打印模板 `body` 由 `display:flex; justify-content:center`（与纸面 `margin:0 auto` 形成双层居中，窗口宽≠纸宽时会有微偏移）改为 `display:block; margin:0 auto`；`line-height:1.8` 改 `1.2` 与屏幕一致。
+  - 三端纸张参数已核：桌面 `margins:{marginType:'none'}` + `pageSize:{width:176000,height:250000}`（微米）；安卓 `ISO_B5 + Margins.NO_MARGINS`；鸿蒙注入 `@page{size:176mm 250mm;margin:0}` → 系统层零边距，模板左右 padding 15mm 天然对称（实测内容左右间隙 56.7/56.7px，PDF 单页 176×250.1mm）。
+  - 若纸张上**仍**左右不等，只剩物理因素：打印机按"可打印区域"缩放或进纸偏移 → 让用户设「实际大小 100%（非适应页面）」+ 纸张选 B5 + 导板夹紧，这不是代码问题。
+  - 验证：`tools/_tmp/rx-print-parity.cjs` 10/10（直接抽取 `printPrescription` 模板、Playwright `emulateMedia('print')` 量真实打印 DOM；含长用法不溢出、左右对称、相对纸面 x 一致、PDF 单页）；`rx-jianfa-verify` 14/14；`rx-other-ends-check` 20/20（新增离线桌面/site-admin 签名对齐断言）。
+  - 铁律：**任何"预览与打印不一致"排查，第一步先抽 `printPrescription` 的内联模板跑 print media 量 DOM，不要只信屏幕截图**；签名页脚只允许三等分 + 左对齐；`white-space:nowrap` 不得用于可能超长的用法/医嘱行。
+
 
