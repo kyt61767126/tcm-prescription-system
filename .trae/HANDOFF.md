@@ -16,8 +16,8 @@
 
 ## 当前基线（2026-10-30 更新）
 
-- **2026-10-30 一键打包/一键发布 P0+P1 重构（commit `29e1312b`，结论见 KNOWLEDGE 末章）**：新增共享内核 `tools/build-bat-list.ps1`（下游 bat 清单单源）、`tools/entry-preflight.ps1`（入口 git 预检+自愈，publish 仍对 behind 硬停）、`tools/pack-core.ps1`（skip/last-run 基线单源）、`tools/hotupdate-stage.ps1`（热更 Check/Sign/Verify）、`tools/verify-hotupdate.cjs`；`release-menu.ps1` 删 144 行 `Invoke-SinglePack` 副本改委托 `one-click-pack -AutoMode`，两个入口 bat 各删 ~60 行重复块；热更 `--check` 只读比对（无需私钥）并接入发布链 `[1.5] 热更签发`、`[1.8] readiness --strict 硬门`、菜单 `[7] 热更签发`；`pack-gate` 新增 `[P5] 热更包完整性`。验证：pack-gate 5/5 PASS、entry-preflight 三模式 rc=0、verify-hotupdate 三通道 PASS。**生效：本机工具链改动，push 即达；下次运行任一入口即用新链。**
-  - 遗留提示：desktop 两通道热包 `appVersion`（1.2.282/1.0.305）落后整包（1.2.283/1.0.306），属元数据非门禁；下次全流程会自动重签刷新（`--check` 现会报 rc=2 提示签发）。
+- **2026-10-30 一键打包/一键发布 P0+P1 重构（commit `29e1312b`，后续修复 `05b9f390`；结论见 KNOWLEDGE 末章）**：新增共享内核 `tools/build-bat-list.ps1`（下游 bat 清单单源）、`tools/entry-preflight.ps1`（入口 git 预检+自愈，publish 仍对 behind 硬停）、`tools/pack-core.ps1`（skip/last-run 基线单源）、`tools/hotupdate-stage.ps1`（热更 Check/Sign/Verify，`-Channels` 逗号分隔）、`tools/verify-hotupdate.cjs`；`release-menu.ps1` 删 144 行 `Invoke-SinglePack` 副本改委托 `one-click-pack -AutoMode`，两个入口 bat 各删 ~60 行重复块；热更 `--check` 只读比对（无需私钥）并接入发布链 `[1.5] 热更签发`、`[1.8] readiness --strict 硬门`、菜单 `[7] 热更签发`；`pack-gate` 新增 `[P5] 热更包完整性`。验证：pack-gate 5/5 PASS、entry-preflight 三模式 rc=0、verify-hotupdate 三通道 PASS、release-menu `[7]` 冒烟通过（`public/hot-update` 零改动）、两个入口 bat 冒烟通过（打包入口退出码正确透传）。**生效：本机工具链改动，push 即达；下次运行任一入口即用新链。**
+  - 遗留提示：desktop 两通道热包 `appVersion`（1.2.282/1.0.305）落后整包（1.2.283/1.0.306），属元数据非门禁（readiness 仅 WARN）；下次全流程 `[1.5]` 会自动重签刷新（`--check` 现报 rc=2 提示签发）。
 
 - **2026-10-22 基线 main HEAD：`39c02a19`（诊所管理「双源不一致」误报修复）**，前序 `e32435a1`（方案R）。
 - **2026-10-22 方案R：云端码（锁端=cloud）设备配额完全移交账号维度（KNOWLEDGE §74）**：`validate.js` 配额块对 cloud 码整段豁免（拒绝/auto-unbind 均跳过，offline 码与未锁端通用码零改动）；**★ browser- 条目继续写入 devices 不停写**（entitlement 四态裁决与 P1 丢码自愈的服役凭据，仅不参与拦截——停写会让网页/云桌面每次心跳被弹重新激活）；admin 双副本 cloud 码徽标改「设备：按账号计配额」、查看设备弹窗过滤 browser-。全量扫描 104 云端码无重复指纹脏数据，码A 单条活跃 browser- 保留。stub 测试 8/8、check-interface 6 OK、copy-consistency 100/100。**生效：push 即达（纯服务端+后台），五端客户端零改动零重打包，后台管理页强刷。**
