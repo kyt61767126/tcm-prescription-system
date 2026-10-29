@@ -129,7 +129,7 @@
         .search-item:hover, .search-item.selected { background: #000080; color: white; }
         .center-panel { flex: 1; background: #b0b0b0; padding: 10px; overflow: auto; display: flex; justify-content: center; align-items: flex-start; min-width: 350px; }
         /* ★ 2026-10-28 处方笺字体规范：标题/Rp 二号22pt、前记与后记五号10.5pt、中药正文五号10.5pt 行距1.2、
-           煎服法小五号9pt 行距1.1；中药 3 味一行，行内药名左、剂量右自动分配间距 */
+           煎服法小五号9pt 行距1.1；中药 3 味一行均布，药名与剂量紧挨连写（如 黄柏15g）*/
         .prescription-paper { display: flex; flex-direction: column; background: white; width: 176mm; height: 250mm; padding: 28mm 15mm 20mm; box-shadow: 3px 3px 10px rgba(0,0,0,0.3); font-family: 'SimSun', '宋体', serif; font-size: 10.5pt; box-sizing: border-box; position: relative; overflow: hidden; line-height: 1.2; }
         .clinic-name { text-align: center; font-size: 22pt; font-weight: bold; color: #000; margin-bottom: 10px; letter-spacing: 2px; font-family: 'KaiTi', '楷体_GB2312', '楷体', serif; }
         .prescription-title { text-align: center; font-size: 22pt; font-weight: bold; color: #000; margin-bottom: 12px; letter-spacing: 4px; font-family: 'KaiTi', '楷体_GB2312', '楷体', serif; }
@@ -143,8 +143,8 @@
         .prescription-info > div:nth-child(6) { grid-column: 5 / 7; }
         .prescription-grid { border-top: 1px solid #000; border-bottom: 1px solid #000; min-height: 200px; }
         .prescription-grid-inner { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 6mm; row-gap: 0; }
-        .prescription-line { display: flex; justify-content: space-between; align-items: baseline; gap: 2mm; padding: 1mm 0; font-size: 10.5pt; font-weight: 400; color: #000; line-height: 1.2; white-space: nowrap; }
-        .rx-herb { flex: 0 1 auto; min-width: 0; }
+        .prescription-line { display: flex; justify-content: flex-start; align-items: baseline; gap: 0; padding: 1mm 0; font-size: 10.5pt; font-weight: 400; color: #000; line-height: 1.2; white-space: nowrap; }
+        .rx-herb { flex: 0 0 auto; }
         .rx-dose { flex: 0 0 auto; font-family: 'Times New Roman', serif; }
         .prescription-jianfa { font-size: 9pt; line-height: 1.1; font-family: 'SimSun', '宋体', serif; margin-left: 0.5mm; }
         .rp-mark { font-size: 22pt; font-weight: bold; font-style: italic; color: #000; font-family: 'Times New Roman', serif; }
@@ -6612,8 +6612,8 @@ if (window.Permission) {
 
             let html = '<div class="prescription-grid-inner">';
             items.forEach(item =>{
-                // ★ 中药 3 味一行：药名靠左，「剂量+（煎法）」靠右，行内 space-between 自动分配间距
-                //   （煎法跟在克数后面，不占药名列，保证三列克数右边界对齐）
+                // ★ 中药 3 味一行均布：药名与剂量紧挨连写（如「黄柏15g」），取消列内中间空白
+                //   （煎法跟在克数后面，不占药名列）
                 const jianfa = item.jianfa && item.jianfa !== '普通煎' ? '<span class="prescription-jianfa">（' + escapeHtml(item.jianfa) + '）</span>' : '';
                 html += `<div class="prescription-line"><span class="rx-herb">${escapeHtml(item.name)}</span><span class="rx-dose">${escapeHtml(item.dosage)}${escapeHtml(item.unit)}${jianfa}</span></div>`;
             });
@@ -7550,8 +7550,8 @@ if (window.Permission) {
         .prescription-info > div:nth-child(6) { grid-column: 5 / 7; }
         .prescription-grid { border-top: 1px solid #000; border-bottom: 1px solid #000; min-height: 200px; margin-top: 8px; }
         .prescription-grid-inner { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 6mm; row-gap: 0; }
-        .prescription-line { display: flex; justify-content: space-between; align-items: baseline; gap: 2mm; padding: 1mm 0; font-size: 10.5pt; font-weight: 400; color: #000; line-height: 1.2; white-space: nowrap; border-left: none; }
-        .rx-herb { flex: 0 1 auto; min-width: 0; }
+        .prescription-line { display: flex; justify-content: flex-start; align-items: baseline; gap: 0; padding: 1mm 0; font-size: 10.5pt; font-weight: 400; color: #000; line-height: 1.2; white-space: nowrap; border-left: none; }
+        .rx-herb { flex: 0 0 auto; }
         .rx-dose { flex: 0 0 auto; font-family: 'Times New Roman', serif; }
         .prescription-jianfa { font-size: 9pt; line-height: 1.1; font-family: 'SimSun', '宋体', serif; margin-left: 0.5mm; }
         .rp-mark { font-size: 22pt; font-weight: bold; font-style: italic; color: #000; font-family: 'Times New Roman', serif; }

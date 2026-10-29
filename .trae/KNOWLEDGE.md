@@ -2455,4 +2455,12 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
   - 分发与验证：`public/index.html` + `db-offline/desktop/index.html` 改生成器与 6 处 CSS → `site-admin` 由 `sync-siteadmin.cjs` 同步函数体（CSS 手改）→ cv 刷（幂等零改）→ `sync-siteadmin` / `sync-index-app` / `sync-html.ps1`。`tools/_tmp/rx-jianfa-verify.cjs` 13/13（含 `9g（后下）` 在 `.rx-dose` 内、煎法 12px=9pt、宋体、右边界 0 偏差、打印 PDF 单页 176×250.1mm），`rx-other-ends-check.cjs` 18/18（离线桌面 + site-admin 各自「后下」在剂量后）。
   - 铁律：中药处方笺中药名、克数、煎法三者的 DOM 顺序固定为「药名 → 克数 →（煎法）」；煎法只允许作为剂量内的后缀小字，禁止进入药名容器（会破坏列对齐）；任何处方笺排版改动都要用 Playwright 同时校验屏幕与打印两套 CSS 的列右边界 spread≈0。
 
+* ★ 2026-10-28（同日第四轮，**推翻第三轮的「列内右对齐」策略**）中药 3 味一行改为**药名与剂量紧挨连写 + 三列均布**：
+  - 用户要求：`黄柏     15g` 改成 `黄柏15g`，取消列内中间空白，三味在一行内均布。
+  - 改法（6 处 CSS，屏幕+打印 × public/离线桌面/site-admin）：`.prescription-line` 由 `justify-content: space-between; gap: 2mm` 改为 `justify-content: flex-start; gap: 0`；`.rx-herb` 由 `flex: 0 1 auto; min-width: 0` 改为 `flex: 0 0 auto`（药名不压缩）。`.prescription-grid-inner` 保持 `repeat(3, minmax(0,1fr)) + column-gap:6mm` → 三列等距均布。
+  - 效果实测：`柴胡9g / 黄芩9g / 砂仁9g（后下）`，药名右边界与剂量左边界**间隙 0px**；每行三列起点差 191.5/191.5px（列宽 168.8 + 列距 22.7，完全均布）；剂量不再右对齐（配合连写风格，列内随药名长度自然浮动，属预期）。
+  - 移动端无需另改：三个媒体查询只覆盖 padding/font-size，未重置 `justify-content/gap`，自动继承桌面紧挨规则。
+  - 验证：`tools/_tmp/rx-jianfa-verify.cjs` 14/14（含间隙 <1px、列起点等距 ±1px、煎法在 `.rx-dose` 内且 9pt 宋体、打印同规格、PDF 单页 176×250.1mm）；`rx-other-ends-check.cjs` 18/18（离线桌面 + site-admin 同样紧挨）；门禁 `check-interface` 6 OK / `copy-consistency` 100 副本 0 失败 / `diff-cross-version` 6 对全绿 / `sync-siteadmin --check` 0 漂移 / `check-cv-hashes` 15 项一致。
+  - 铁律：**同类排版需求反复时先确认「列内对齐 vs 紧挨连写」这两种风格**——用户要「紧密、少空白」就用 `flex-start + gap:0`（药名剂量连写、三列均布）；要「表格感」才用 `space-between`（剂量右对齐）。两种互斥，不可同时满足；改动必须成对改屏幕 CSS 与打印模板 CSS，并用 Playwright 量间隙与列起点差。
+
 
