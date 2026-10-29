@@ -2508,4 +2508,14 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
   - 验签自检（不依赖客户端）：用 `shared/hot-update-core.cjs` 的 `buildSignMessage` + `HOT_PUBLIC_KEY_PEM` 对 `version.json` 做 `crypto.verify`，并复算每个 `files[].sha256`；两通道均 `sig=VALID / hashMismatch=0` 才算签好。
   - 顺序铁律：**先重签推热包 → 等 Cloudflare Pages 部署 → 再发整包**；热更优先级高于整包，旧热包会中和整包内闸门修复。
 
+* ★ 2026-10-29（桌面打印默认 A5，不再每次手选）实测结论与实现：
+  - 现场：`webContents.print` 传 `pageSize:{width:148000,height:210000}`，Windows 弹出的「打印首选项」仍是 `A4 / 210×297`，用户每次打印都要手动改 A5。
+  - 实测（Electron 35.7.5 + Win11，探针 `tools/_tmp/printer-probe`，UIA 读对话框文本取证）：
+    1. Electron 35 在 Windows 走的是**原生「Windows 打印」对话框**（界面提示「此应用不支持打印预览」`NoPreviewAvailableText`），**此路径下 `pageSize` 选项对对话框纸张无效**。
+    2. 对话框纸张实际取自 **Windows 每用户打印首选项（User Print Ticket，HKCU）**：把该打印机 per-user 纸张设为 `ISOA5` 后，同一段代码弹出的首选项立刻变为 `A5 / 148×210`；全流程**无需管理员权限**，重启后保留。
+    3. `pageSize` 仍不可省：不传时 Chromium 报 `Printer settings invalid ... page size is empty` 并中止打印（对话框不弹）。
+  - 实现（`shared/desktop-print.cjs` 唯一权威源）：新增 `ensureDefaultPrinterA5(webContents)`——`getPrintersAsync()` 取默认打印机 → `powershell -NoProfile -NonInteractive -Command` 跑 ASCII-only 脚本（`System.Printing`：幂等判断 `PageMediaSizeName -eq ISOA5`，否则 `PageMediaSize=PageMediaSize(ISOA5)` + `PrintQueue.Commit()`），打印机名走环境变量 `HKZY_PRINTER_NAME`（避免中文驱动名被 GBK 破坏）；每打印机每进程只做一次，8s 兜底，失败仅 WARN 不影响打印。打印流程与页面加载**并行**启动、弹对话框前 await。
+  - 验证：v1（仅 pageSize）→ 首选项 A4；重置 user ticket=ISOA4 后跑 app 路径 → 日志 `A5-SET`、首选项变 `148 x 210 毫米 / A5`（UIA 取证）。`node --check` 三份副本、`sync-all -VerifyOnly` exit 0、`copy-consistency` 100 副本 0 失败。
+  - 铁律：**Windows 桌面端纸张只能靠 per-user 打印首选项**（pageSize 只管任务参数/布局，不管对话框默认纸）；改纸张默认逻辑只改 `shared/desktop-print.cjs` 再 sync 两副本，且**主进程域不可热更，必须重打双桌面 exe**。诊断同类问题用「UIA 读对话框 + 重置 ticket 做 A/B 对照」，不要靠肉眼猜。
+
 

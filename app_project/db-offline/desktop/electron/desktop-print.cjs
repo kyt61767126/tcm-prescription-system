@@ -5,7 +5,7 @@
 //    （print-prescription 单个 handler + 隐藏打印窗实现，双端 115 行字节级
 //    同体，改前 SHA256 一致：cd537a37...，逐行 diff=0 终验）。
 //    方案：隐藏 BrowserWindow 加载处方 HTML dataURL → 等字体就绪 →
-//    webContents.print 弹系统打印对话框（默认 B5/无边距/手动选打印机）→ 关闭。
+//    webContents.print 弹 Windows 系统打印对话框（A5/无边距/手动选打印机）→ 关闭。
 //
 //  依赖注入（与 desktop-fs-ipc.cjs / desktop-dialog.cjs 同款工厂模式）：
 //    createDesktopPrintIpc({ ipcMain, BrowserWindow })。
@@ -16,6 +16,82 @@
 //  注意：主进程域热更不可达，改动需双桌面重打 exe（可攒一批一起发）。
 // ============================================================================
 'use strict';
+
+// ★ 2026-10-29 打印机默认纸张 A5（根治「每次打印都要在打印机设置里手动选 A5」）：
+//   实测（Electron 35.7.5 + Windows 11 系统打印对话框）：
+//     - 该对话框是 Windows 原生「Windows 打印」，界面明确提示「此应用不支持打印预览」；
+//       此路径下 webContents.print 的 pageSize 选项【不生效】——传 A5 微米对象，对话框
+//       的「打印首选项」仍显示 A4 / 210×297（驱动默认）。
+//     - 对话框纸张实际取自 **Windows 每用户打印首选项（User Print Ticket，存 HKCU）**：
+//       把该打印机 per-user 纸张设为 ISOA5 后，同一段代码弹出的首选项立刻变成
+//       A5 / 148×210，且无需管理员权限、重启后仍保留。
+//   做法：每次打印前（每台打印机每进程仅一次）用 PowerShell + System.Printing 把
+//     「默认打印机」的 per-user 纸张校正为 ISOA5；失败（驱动不支持/策略限制）静默降级，
+//     不影响打印本身。设置幂等：已是 ISOA5 直接返回，不写注册表。
+//   注意：只改默认打印机；对话框里临时换别的打印机仍以那台机器自身默认值为准。
+const a5EnsuredPrinters = new Set();
+
+// ASCII-only 脚本（PowerShell 5.1 对 -Command 的中文/引号极敏感），打印机名走环境变量传参，
+// 避免中文打印机名（如「导出为WPS PDF」）在命令行里被 GBK 破坏。
+const ENSURE_A5_PS = [
+    '$ErrorActionPreference="Stop"',
+    'Add-Type -AssemblyName System.Printing',
+    '$name=$env:HKZY_PRINTER_NAME',
+    'if (-not $name) { "SKIP-NO-NAME"; exit 0 }',
+    '$q=(New-Object System.Printing.LocalPrintServer).GetPrintQueue($name)',
+    '$t=$q.UserPrintTicket',
+    'if ($t -and $t.PageMediaSize -and $t.PageMediaSize.PageMediaSizeName -eq "ISOA5") { "A5-ALREADY"; exit 0 }',
+    '$t.PageMediaSize=New-Object System.Printing.PageMediaSize([System.Printing.PageMediaSizeName]::ISOA5)',
+    '$q.UserPrintTicket=$t',
+    '$q.Commit()',
+    '"A5-SET"'
+].join('; ');
+
+function ensureDefaultPrinterA5(webContents) {
+    return new Promise((resolve) => {
+        if (process.platform !== 'win32') { resolve(false); return; }
+        let done = false;
+        const finish = (val) => { if (!done) { done = true; resolve(val); } };
+        // 8 秒兜底：PowerShell/打印后台异常时不能拖住打印流程
+        const timer = setTimeout(() => finish(false), 8000);
+
+        webContents.getPrintersAsync().then((printers) => {
+            const def = (printers || []).find((p) => p.isDefault) || (printers || [])[0];
+            if (!def || !def.name) {
+                clearTimeout(timer); finish(false); return;
+            }
+            if (a5EnsuredPrinters.has(def.name)) {
+                clearTimeout(timer); finish(true); return;
+            }
+            const { execFile } = require('child_process');
+            execFile('powershell.exe', [
+                '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+                '-Command', ENSURE_A5_PS
+            ], {
+                env: Object.assign({}, process.env, { HKZY_PRINTER_NAME: def.name }),
+                timeout: 7000,
+                windowsHide: true
+            }, (err, stdout) => {
+                clearTimeout(timer);
+                const out = String(stdout || '');
+                if (!err && /A5-(SET|ALREADY)/.test(out)) {
+                    a5EnsuredPrinters.add(def.name);
+                    console.log('[print] 默认打印机纸张已确认为 A5:', def.name, out.trim());
+                    finish(true);
+                } else {
+                    // 非致命：驱动不支持 A5 / 策略禁止写 PrintTicket / PowerShell 被禁用
+                    console.warn('[print] 默认打印机纸张设置 A5 失败(不影响打印):',
+                        def.name, err ? String(err.message || '').slice(0, 200) : out.trim());
+                    finish(false);
+                }
+            });
+        }).catch((e) => {
+            clearTimeout(timer);
+            console.warn('[print] getPrintersAsync 失败:', e && e.message);
+            finish(false);
+        });
+    });
+}
 
 function createDesktopPrintIpc({ ipcMain, BrowserWindow }) {
 // ★ 打印处方（直接打印）
@@ -83,6 +159,11 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
 
             printWin.loadURL(dataUrl);
 
+            // ★ 2026-10-29 与页面加载并行：先把默认打印机 per-user 纸张校正为 A5，
+            //   这样弹系统打印对话框时「打印首选项」默认就是 A5/148×210，用户无需每次手改。
+            //   （pageSize 选项在该原生对话框路径下不生效，实测见文件头注释）
+            const a5Ready = ensureDefaultPrinterA5(printWin.webContents);
+
             // 页面加载完成后，等待布局和字体就绪，再调用打印
             printWin.webContents.once('did-finish-load', () => {
                 setTimeout(async () => {
@@ -92,6 +173,12 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
                             'document.body.offsetHeight; document.fonts ? document.fonts.ready : Promise.resolve()'
                         );
                         await new Promise(r => setTimeout(r, 200));
+                        // ★ 2026-10-29 等 A5 校正完成（最多 8s，失败也放行）再弹对话框，
+                        //   否则用户可能先看到 A4 首选项。
+                        const a5Ok = await a5Ready;
+                        if (!a5Ok) {
+                            console.warn('[print] A5 默认纸张未确认，按打印机自身默认纸张继续打印');
+                        }
                         // ★ 修复字体偏大（2026-09-25 起沿用）：CSS @page 与 pageSize/margins 双通道必须一致
                         //
                         // 原因：webContents.print({ pageSize, margins }) 选项与 CSS @page { size:148mm 210mm; margin:0 }
@@ -103,8 +190,10 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
                         //
                         // 做法：pageSize 用「微米」写死成与 CSS 完全相同的 A5（148000×210000），
                         //   margins:none 与 @page margin:0 对齐；隐藏窗宽度大于纸宽，避免滚动条引发缩放。
-                        //   客户端打印机不固定，不做自动匹配：始终弹系统打印对话框，由用户手动选打印机，
-                        //   pageSize 仅作为对话框默认纸张。
+                        //   客户端打印机不固定，不做自动匹配：始终弹系统打印对话框，由用户手动选打印机。
+                        //   ★ 2026-10-29 实测：Windows 原生对话框不读 pageSize，纸张由 per-user
+                        //   打印首选项决定（见文件头 ensureDefaultPrinterA5）；pageSize 仍保留，
+                        //   供未来 silent 直打/非 Windows 路径使用。
                         const printOptions = {
                             silent: false,
                             printBackground: true,
@@ -147,4 +236,4 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
 });
 }
 
-module.exports = { createDesktopPrintIpc };
+module.exports = { createDesktopPrintIpc, ensureDefaultPrinterA5 };
