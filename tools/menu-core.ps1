@@ -69,13 +69,16 @@ function Show-VersionMenu {
             "publish" { "发布" }
             "full"    { "打包 + 发布 + 验证" }
         }
+        # ★ 2026-10-30 P6：全流程的「全部」走智能打包（AutoMode 4），菜单文案须如实标注，
+        #   否则用户以为仍是全量重打（文案与实际行为漂移是历史误报源）。
+        $allLabel = if ($Action -eq 'full') { "全部2个版本（智能打包：自动检测需重打的端）" } else { "全部2个版本" }
         Write-Host ""
         Write-Host "========================================" -ForegroundColor Cyan
         Write-Host "  选择版本 - $actionLabel" -ForegroundColor Cyan
         Write-Host "========================================" -ForegroundColor Cyan
         Write-Host "  [1] 云端版"
         Write-Host "  [2] 本地版"
-        Write-Host "  [3] 全部2个版本"
+        Write-Host "  [3] $allLabel"
         Write-Host "  [0] 返回主菜单"
         Write-Host ""
         $choice = Read-MenuChoice "请选择 [0-3]"

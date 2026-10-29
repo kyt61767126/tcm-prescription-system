@@ -2597,5 +2597,14 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
   - 维护铁律：①新增打包端/组合**只加 `PackPlanMap` 一行**；②发布相关文案/体检/rc=3 处理**只改 `Invoke-SmartPublish` / `Invoke-PublishSelection`**，菜单/阶段禁止再内联；③`Complete-PackRun` 是唯一收尾，任何新执行路径都必须调用它（否则版本副作用与 `last-run.json` 失真）；④`-AutoMode` 非法值必须 rc=1（脚本化调用方依赖退出码）。
   - 坑（沿用/本轮相关）：局部变量不得与带 `ValidateSet` 的 param 同名（`release-menu` 的 `$Version/$Mode` → `$selVersion/$selMode2`）；函数参数不得命名 `$Args`；`Start-Process -ArgumentList` 必须"路径 + 每个参数"独立元素。
 
+* ★ 2026-10-30（P6：**一键全流程补上智能打包** —— 「全部」默认走 AutoMode 4，缺能力补齐）：
+  - 缺陷：`release-menu.ps1` 的 `Invoke-Pack` 写死 `-AutoMode 3`，于是菜单 `[1]` 一键全流程（及 `一键构建发布.bat full all --yes`）只能全量走两个版本组——即使四端产物全是最新，也会进 `Build-Cloud`/`Build-Offline` 跑配置同步与步骤横幅，看不到「重打/跳过」计划。智能打包（AutoMode 4）只存在于「一键打包.bat 菜单 [4]」，全流程缺失。
+  - 修法（**一个参数打通，不做第二套编排**）：`Invoke-Pack` 新增 `-Strategy all|smart`（默认 `all`，老调用点零改动），`smart → -AutoMode 4`、其余 `→ 3`；`Invoke-FullFlow` 的「全部」分支固定传 `-Strategy smart`，其余（cloud/dingzhi 单版本）仍走 `Invoke-SinglePack`。智能打包的子进程仍带 `-AutoCommit`，副作用收纳与 `last-run.json` 与 P0/P5 一致。
+  - 文案同步（防"行为变了但菜单没说"的老毛病）：`menu-core.ps1` 的 `Show-VersionMenu -Action full` 把 `[3]` 标注为「全部2个版本（智能打包：自动检测需重打的端）」；全流程 Step1 横幅改「智能打包全部版本」。`Show-VersionMenu -Action pack/publish` 文案保持不变。
+  - 保险丝：`FULLFLOW_PACK_ALL=1` 强制全流程回到 AutoMode 3 全量（仅在怀疑增量基线 `last-run.json`/`build-skip` 失真时使用；横幅会显式标注"FULLFLOW_PACK_ALL=1 强制全量"）。
+  - 语义未变（重要）：智能打包"四端全 SKIP"只代表本次不重打，**不**等于官网已最新——全流程后续仍以 `auto-publish.js --check` 为客观依据决定是否发布（2026-10-29 的修复保持有效，勿把 built=[] 当成"跳过发布"的依据）。
+  - 验证：`pack-gate preflight` 5/5（ps1 59 / BOM 59 / bat CRLF 33 / 编码 117 / 热更三通道）；AST 10 个 ps1 全 `[OK]`；`smoke-p5.ps1` 扩到 **45/45**（新增 E 段：静态 5 项 + AST 抽 `Invoke-Pack` 注入 `Invoke-QuietProcess` 桩，实测 `-Strategy smart → -AutoMode 4 + -AutoCommit`、不传默认 `3`、`-Strategy all → 3`）；菜单冒烟 22/22、阶段冒烟 11/11 无回归。
+  - 坑（本轮新增）：冒烟桩脚手架必须"先 setup + 函数定义、后用例"顺序拼接——把用例写在函数定义之前，`Invoke-Pack` 未定义时 PowerShell 只报非终止错误（脚本退出码仍 0、用例输出全空），会把"没测到"误当"通过"；断言须同时校验桩输出内容而非只看 rc。
+
 
 

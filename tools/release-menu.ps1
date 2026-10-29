@@ -65,20 +65,28 @@ Repair-DownstreamBats -RootDir $script:RootDir
 
 # ============ 打包 ============
 function Invoke-Pack {
-    param([string]$Target)
+    param(
+        [string]$Target,
+        # all  = 全部2个版本（AutoMode 3：四端各自增量跳过）
+        # smart= 智能打包（AutoMode 4：先打印「重打/跳过」四端计划，整组无改动连配置同步都不跑）
+        [ValidateSet('all', 'smart')][string]$Strategy = 'all'
+    )
     $packScript = "$script:RootDir\tools\one-click-pack.ps1"
     if (-not (Test-Path $packScript)) {
         Write-Host "[ERROR] 未找到打包脚本: $packScript" -ForegroundColor Red
         return 1
     }
-    # ★ 2026-08-23 优化：传 -AutoMode 3 非交互执行"全部版本"打包（云端+本地顺序构建），
+    # ★ 2026-08-23 优化：传 -AutoMode 非交互执行（云端+本地顺序构建），
     #   完成后自动返回本菜单。原直接调用会弹出 one-click-pack 的嵌套交互菜单（菜单套菜单），
     #   用户需在子菜单选完再退出才能回到发布菜单，体验混乱。
+    # ★ 2026-10-30 P6：新增 -Strategy smart（AutoMode 4）——全流程此前只有 AutoMode 3，
+    #   缺「智能打包」能力：四端全无改动时仍会进入两个版本组跑配置同步/步骤横幅。
     # ★ 2026-09-08 改 Invoke-QuietProcess：stdout 直连控制台不混入返回值（原管道方案颜色丢失），
     #   stderr 在 cmd 层合并进 stdout（PS host 不再染红）
     # ★ 2026-10-30 P0 去重：加 -AutoCommit，让子进程独占收纳版本副作用 + 写增量基线
     #   （.build-cache/last-run.json）。父进程不再事后 CollectSideEffectsOnly（会覆盖基线）。
-    $packArgs = @('-NoProfile','-ExecutionPolicy','Bypass','-File',$packScript,'-AutoMode','3')
+    $autoMode = if ($Strategy -eq 'smart') { '4' } else { '3' }
+    $packArgs = @('-NoProfile','-ExecutionPolicy','Bypass','-File',$packScript,'-AutoMode',$autoMode)
     if ($env:NO_AUTOCOMMIT -ne '1') { $packArgs += '-AutoCommit' }
     return Invoke-QuietProcess -FilePath 'powershell' -ArgumentList $packArgs
 }
@@ -299,12 +307,22 @@ function Invoke-FullFlow {
         [string]$Mode       # desktop / app / all
     )
     # Step 1: 打包
+    # ★ 2026-10-30 P6：全流程「全部」默认改用**智能打包**（AutoMode 4）——先检测四端改动
+    #   并打印「重打/跳过」计划，整组无改动直接跳过（连配置同步都不跑），与一键打包菜单
+    #   [4] 智能打包 行为一致。此前只走 AutoMode 3，全流程缺智能打包能力。
+    #   保险丝：FULLFLOW_PACK_ALL=1 强制全量（AutoMode 3）——仅当怀疑增量基线失真时使用。
     if ($Version -eq "all") {
+        $packStrategy = 'smart'
+        if ($env:FULLFLOW_PACK_ALL -eq '1') { $packStrategy = 'all' }
         Write-Host ""
         Write-Host "========================================" -ForegroundColor Cyan
-        Write-Host "  [1/4] 打包全部版本 (云端+本地，自动执行)" -ForegroundColor Cyan
+        if ($packStrategy -eq 'smart') {
+            Write-Host "  [1/4] 智能打包全部版本 (云端+本地，自动检测需重打的端)" -ForegroundColor Cyan
+        } else {
+            Write-Host "  [1/4] 打包全部版本 (云端+本地，FULLFLOW_PACK_ALL=1 强制全量)" -ForegroundColor Cyan
+        }
         Write-Host "========================================" -ForegroundColor Cyan
-        $rc = Invoke-Pack -Target "all"
+        $rc = Invoke-Pack -Target "all" -Strategy $packStrategy
     } else {
         Write-Host ""
         Write-Host "========================================" -ForegroundColor Cyan
@@ -651,7 +669,7 @@ while ($true) {
     Write-Host "  [0] 退出"
     Write-Host ""
     Write-Host "  说明:" -ForegroundColor DarkGray
-    Write-Host "  - [1] 全流程: 增量打包(无改动端自动跳过) → 热更签发 → 智能发布 → 验证" -ForegroundColor DarkGray
+    Write-Host "  - [1] 全流程: 智能打包(先检测四端改动，无改动整组跳过) → 热更签发 → 智能发布 → 验证" -ForegroundColor DarkGray
     Write-Host "  - [2] 仅打包: 先选版本(云端/本地/全部)，单版本再选范围(桌面/APP/全部)；完成后按需重签热更" -ForegroundColor DarkGray
     Write-Host "  - [7] 热更签发: 比对源码与线上热更清单，内容落后才重签(幂等)；云桌面/离线桌面/离线APP 三通道" -ForegroundColor DarkGray
     Write-Host "  - 发布双通道: [3]智能发布=比对hash仅上传变化产物(推荐日常)" -ForegroundColor DarkGray
