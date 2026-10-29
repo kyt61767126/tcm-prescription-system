@@ -16,6 +16,9 @@
 
 ## 当前基线（2026-10-30 更新）
 
+- **2026-10-30 P3+P4 菜单/启动壳单源（commit `e2f119b4`；结论见 KNOWLEDGE 末章）**：新增 `tools/menu-core.ps1`（`Read-MenuChoice`/`Enable-CnPause`/`Show-VersionMenu`/`Show-PackModeMenu`/`Show-VersionPicker`/`Show-PublishResult`/`Show-FinalSummary`/`Show-NextStepHint`/`$global:HKZY_OfficialUrls`）与 `tools/run-shell.ps1`（`Start-RunLog`/`Invoke-PackGate`/`Invoke-VersionDriftGate`/`Repair-DownstreamBats`/`Get-ExitCode`）；`one-click-pack.ps1` 净 -73 行、`release-menu.ps1` 净 -153 行，12 处官方 URL 硬编码收敛为常量；`fix-release-bat.ps1` 改为幂等（不再把 `一键发布.bat` 覆盖成旧直连版）。验证：pack-gate 5/5、AST 10 文件全 OK、菜单冒烟 6 条 + 阶段冒烟 8 条全绿（含 `[1]/[2]/[4]` 的 `$Version` ValidateSet 崩溃回归点）。**生效：本机工具链改动，push 即达；下次运行任一入口即用新链。**
+  - 后续可选（方案 B / P5，未做）：`AutoMode` 8 分支表驱动、`Show-PickVersionMenu` 内联编排抽 `Invoke-PackUnit`、智能发布两条路径合一（阶段 `publish` 与菜单 `[3]` 文案已轻微不一致）。
+
 - **2026-10-30 P2 单一非交互入口（commit `b27e0002`；结论见 KNOWLEDGE 末章）**：新增 `一键构建发布.bat`（`full|pack|publish|hot|verify` + `[all|cloud|dingzhi]` + `[all|desktop|app]` + `--yes`），透传 `tools/release-menu.ps1 -Stage/-Version/-Mode/-Yes`（`ValidateSet` 校验）；`一键发布.bat` 改为 ~30 行别名转发（退出码透传），`一键打包.bat` 不动；publish/full 无 `--yes` → `[BLOCK]` + rc=2（HARD 规则在内核层，脚本化绕不过），hot 无 `--yes` 只做只读 `--check`。验证：pack-gate 5/5、AST 7 文件全 OK、冒烟 invalid-stage/publish/full 均 rc=2、hot rc=2 且 `public/hot-update` 零改动、`一键发布.bat verify` rc=0（9/9 URL）、菜单无参 stdin 关闭 rc=1。**生效：本机工具链改动，push 即达；双击新旧入口同一行为。**
   - 已收尾：`一键构建发布.bat hot --yes` 已把 desktop 两通道重签为 `2026.10.29-4`（appVersion 对齐整包 1.2.283 / 1.0.306，commit `2da0e461`）；只读复检 rc=0、本地 `verify-hotupdate` 三通道 PASS、客户端同款 fetch 线上复验 ALL MATCH。**当前三通道：desktop/cloud 2026.10.29-4、desktop/local 2026.10.29-4、app-local 2026.10.29-2。**
 
