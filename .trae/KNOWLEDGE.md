@@ -2636,5 +2636,15 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
   - 验证：`pack-gate -Mode preflight` 5/5（ps1 58 / BOM 58 / bat 31 / 编码 / 热更三通道）、AST 全 OK、`smoke-p5` bad=0、探针 C/D（0.2s + rc 透传）。
   - 坑：`Start-Process -PassThru` 返回的进程对象在**未缓存句柄**的前提下，`WaitForExit()` 之后 `.ExitCode` 为空；`-Wait` 版本反而有值——所以"去掉 -Wait"必须同时补 `.Handle`，只改一半会造成退出码静默丢失（比卡死更危险）。
 
+* ★ 2026-10-29 20:38（P9：**首次用「唯一入口 + P6 智能打包 + P8 修复」跑完整发版，全绿**。发版记录，供下次对照）：
+  - 命令：`一键构建发布.bat full all all --yes`，退出码 **0**，总耗时约 16 分钟（20:22:33→20:38:30；打包四端全 SKIP 仅 3 分钟，其余为上传 6 个附件）。
+  - 分段实况：`[1/4] 智能打包全部版本`（四端产物已是最新 → 全 SKIP）→ `[1.5/4] 热更签发`（按需重签 **2 个通道**）→ `[2/4] 发布`（合规 13 项通过 → 建 Release → 传 6 附件）→ `[3/4] 验证`（9/9 URL）。
+  - 发版版本：云端桌面 **1.2.284** / 云端 APP vc**346** / 离线桌面 **1.0.307** / 离线 APP vc**340**；Release `v2026.10.29-2024`（6 附件：双端 portable+setup exe、双端 apk），下载页 `public/downloads/*.apk` 同步并 sha256 校验。
+  - 热更：`desktop/cloud`、`desktop/local` 由 `2026.10.29-4` 重签为 **`2026.10.29-5`**（appVersion 分别 1.2.284 / 1.0.307）；`app-local` 因离线 APP 未变、内容一致**自动跳过**，仍为 `2026.10.29-2`。提交 `4b19f72e`（热更）+ `0c00a631`（Release 元数据），均已推送。
+  - **重要判据（本次实证）**：热更「内容逐文件哈希一致」但 `appVersion` 元数据落后，`hotupdate-stage -Mode Check` 仍判「建议重签」并**自动递增当日序号**（-4→-5，同号重签才需 `--force`）。这是正确行为——客户端拿 `appVersion` 判断"是否需要重新下载整包"，元数据不刷会一直提示旧版。
+  - 复验证据（发版后独立再查，非流程自证）：线上 `version.json` 三通道 = `hot=2026.10.29-5 / appVersion=1.2.284`、`-5 / 1.0.307`、`app-local -2 / 1.0.0`；`node tools/verify-release.js` 9/9 URL 通过（含新 exe 大小 77.9/75.4MB 全对）；`check-release-readiness.cjs --strict` = **待发布 0 端 / 阻断 0 / 警告 0**。
+  - 告知用户口径：桌面/APP 新版需**下载安装整包**；仅 JS 修复可走热更——**联网打开一次客户端、彻底退出再进**才生效；手机端 Java 修复必须装新 APK。
+  - 观察项（低置信，未复现）：首次以 `Start-Process -RedirectStandardOutput` 方式启动同一 bat 时，进程 78s 后静默退出（`out`/`err` 均 0 字节、未生成 publish 日志、无副作用提交）；同参数立即重试即正常跑完。**再遇到"零输出即退出"不要急着加参数，先原样重试一次并核对 `.build-cache/logs/publish-*.log` 是否新建**。
+
 
 
