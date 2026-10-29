@@ -21,7 +21,8 @@ REM  Old entries stay valid aliases: one-click-pack.bat (pack menu),
 REM  one-click-publish.bat (forwards here).
 REM
 REM  Env knobs: NO_PAUSE=1 skip final pause, NO_AUTOCOMMIT=1 opt out of side-effect
-REM  auto-commit, SKIP_HOTUPDATE=1 skip hot signing, READINESS_SOFT=1 soft readiness.
+REM  auto-commit, SKIP_HOTUPDATE=1 skip hot signing, READINESS_SOFT=1 soft readiness,
+REM  PACK_FORCE_ALL=1 force full rebuild for "all" (default = smart pack, changed ends skipped).
 REM ============================================================================
 for /f "tokens=2 delims=:" %%c in ('chcp') do set "OLD_CP=%%c"
 chcp 65001 >nul

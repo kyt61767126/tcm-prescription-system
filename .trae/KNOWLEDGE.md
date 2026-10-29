@@ -2599,11 +2599,11 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
 
 * ★ 2026-10-30（P6：**一键全流程补上智能打包** —— 「全部」默认走 AutoMode 4，缺能力补齐）：
   - 缺陷：`release-menu.ps1` 的 `Invoke-Pack` 写死 `-AutoMode 3`，于是菜单 `[1]` 一键全流程（及 `一键构建发布.bat full all --yes`）只能全量走两个版本组——即使四端产物全是最新，也会进 `Build-Cloud`/`Build-Offline` 跑配置同步与步骤横幅，看不到「重打/跳过」计划。智能打包（AutoMode 4）只存在于「一键打包.bat 菜单 [4]」，全流程缺失。
-  - 修法（**一个参数打通，不做第二套编排**）：`Invoke-Pack` 新增 `-Strategy all|smart`（默认 `all`，老调用点零改动），`smart → -AutoMode 4`、其余 `→ 3`；`Invoke-FullFlow` 的「全部」分支固定传 `-Strategy smart`，其余（cloud/dingzhi 单版本）仍走 `Invoke-SinglePack`。智能打包的子进程仍带 `-AutoCommit`，副作用收纳与 `last-run.json` 与 P0/P5 一致。
-  - 文案同步（防"行为变了但菜单没说"的老毛病）：`menu-core.ps1` 的 `Show-VersionMenu -Action full` 把 `[3]` 标注为「全部2个版本（智能打包：自动检测需重打的端）」；全流程 Step1 横幅改「智能打包全部版本」。`Show-VersionMenu -Action pack/publish` 文案保持不变。
-  - 保险丝：`FULLFLOW_PACK_ALL=1` 强制全流程回到 AutoMode 3 全量（仅在怀疑增量基线 `last-run.json`/`build-skip` 失真时使用；横幅会显式标注"FULLFLOW_PACK_ALL=1 强制全量"）。
+  - 修法（**一个参数打通，不做第二套编排**）：`Invoke-Pack` 新增 `-Strategy all|smart`（默认 `all`，老调用点零改动），`smart → -AutoMode 4`、其余 `→ 3`；`Resolve-PackStrategy`（单一判定点）默认返回 `smart`；调用方：`Invoke-FullFlow` 的「全部」分支（`-Strategy $packStrategy`）**与非交互阶段 `pack all`**（`-Strategy (Resolve-PackStrategy)`）——菜单 `[1]`→全部 与 `一键构建发布.bat pack all` / `full all --yes` 三入口行为一致；单版本（cloud/dingzhi）仍走 `Invoke-SinglePack`。智能打包的子进程仍带 `-AutoCommit`，副作用收纳与 `last-run.json` 与 P0/P5 一致。
+  - 文案同步（防"行为变了但菜单没说"的老毛病）：`menu-core.ps1` 的 `Show-VersionMenu -Action full` 把 `[3]` 标注为「全部2个版本（智能打包：自动检测需重打的端）」；全流程 Step1 横幅改「智能打包全部版本」；`一键构建发布.bat` 头部 Env knobs 增补 `PACK_FORCE_ALL=1`。`Show-VersionMenu -Action pack/publish` 文案与 `release-menu` 菜单 `[2]`（显式"全部 = 全量打包"，留作全量逃生口）保持不变。
+  - 保险丝：`PACK_FORCE_ALL=1` 强制全流程/`pack all` 回到 AutoMode 3 全量（旧名 `FULLFLOW_PACK_ALL=1` 保留兼容）；仅在怀疑增量基线 `last-run.json`/`build-skip` 失真时使用（横幅会显式标注"PACK_FORCE_ALL=1 强制全量"）。
   - 语义未变（重要）：智能打包"四端全 SKIP"只代表本次不重打，**不**等于官网已最新——全流程后续仍以 `auto-publish.js --check` 为客观依据决定是否发布（2026-10-29 的修复保持有效，勿把 built=[] 当成"跳过发布"的依据）。
-  - 验证：`pack-gate preflight` 5/5（ps1 59 / BOM 59 / bat CRLF 33 / 编码 117 / 热更三通道）；AST 10 个 ps1 全 `[OK]`；`smoke-p5.ps1` 扩到 **45/45**（新增 E 段：静态 5 项 + AST 抽 `Invoke-Pack` 注入 `Invoke-QuietProcess` 桩，实测 `-Strategy smart → -AutoMode 4 + -AutoCommit`、不传默认 `3`、`-Strategy all → 3`）；菜单冒烟 22/22、阶段冒烟 11/11 无回归。
+  - 验证：`pack-gate preflight` 5/5（ps1 59 / BOM 59 / bat CRLF 33 / 编码 117 / 热更三通道）；AST 10 个 ps1 全 `[OK]`；`smoke-p5.ps1` 扩到 **51/51**（E 段：静态 7 项 + 进程内直测 `Resolve-PackStrategy`（默认 smart / `PACK_FORCE_ALL=1`→all / 旧名兼容→all）+ AST 抽 `Invoke-Pack` 注入 `Invoke-QuietProcess` 桩，实测 `-Strategy smart → -AutoMode 4 + -AutoCommit`、不传默认 `3`、`-Strategy all → 3`）；真实链路只读验证 `one-click-pack.ps1 -AutoMode 4 -SmartPlanOnly` 输出四端「[跳过] 产物已是最新」并 rc=0；菜单冒烟 22/22、阶段冒烟 11/11 无回归（`pack all` 未真跑——会触发真实打包，故用桩+静态覆盖其参数接线）。
   - 坑（本轮新增）：冒烟桩脚手架必须"先 setup + 函数定义、后用例"顺序拼接——把用例写在函数定义之前，`Invoke-Pack` 未定义时 PowerShell 只报非终止错误（脚本退出码仍 0、用例输出全空），会把"没测到"误当"通过"；断言须同时校验桩输出内容而非只看 rc。
 
 

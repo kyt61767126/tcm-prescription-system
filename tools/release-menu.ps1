@@ -91,6 +91,15 @@ function Invoke-Pack {
     return Invoke-QuietProcess -FilePath 'powershell' -ArgumentList $packArgs
 }
 
+# ============ 「全部版本」打包策略（单一判定点，★ 2026-10-30 P6b）============
+# 默认 smart（AutoMode 4：先检测四端改动、整组无改动跳过）；保险丝强制全量：
+#   PACK_FORCE_ALL=1（通用）/ FULLFLOW_PACK_ALL=1（P6 旧名，保留兼容）
+# 使用方：Invoke-FullFlow「全部」Step1、非交互阶段 pack all —— 两处文案/行为由此统一。
+function Resolve-PackStrategy {
+    if ($env:PACK_FORCE_ALL -eq '1' -or $env:FULLFLOW_PACK_ALL -eq '1') { return 'all' }
+    return 'smart'
+}
+
 # ============ 单个版本打包（★ 2026-10-30 P0 去重：委托 one-click-pack -AutoMode）============
 #   原 144 行自实现（编辑配置 / 源码落定门 / 增量检测 / 子 bat 调用）是 one-click-pack
 #   -AutoMode 的第二份副本，且不写 .build-cache/last-run.json → 打包菜单摘要失真。
@@ -310,16 +319,15 @@ function Invoke-FullFlow {
     # ★ 2026-10-30 P6：全流程「全部」默认改用**智能打包**（AutoMode 4）——先检测四端改动
     #   并打印「重打/跳过」计划，整组无改动直接跳过（连配置同步都不跑），与一键打包菜单
     #   [4] 智能打包 行为一致。此前只走 AutoMode 3，全流程缺智能打包能力。
-    #   保险丝：FULLFLOW_PACK_ALL=1 强制全量（AutoMode 3）——仅当怀疑增量基线失真时使用。
+    #   保险丝：PACK_FORCE_ALL=1（或旧名 FULLFLOW_PACK_ALL=1）强制全量（AutoMode 3）。
     if ($Version -eq "all") {
-        $packStrategy = 'smart'
-        if ($env:FULLFLOW_PACK_ALL -eq '1') { $packStrategy = 'all' }
+        $packStrategy = Resolve-PackStrategy
         Write-Host ""
         Write-Host "========================================" -ForegroundColor Cyan
         if ($packStrategy -eq 'smart') {
             Write-Host "  [1/4] 智能打包全部版本 (云端+本地，自动检测需重打的端)" -ForegroundColor Cyan
         } else {
-            Write-Host "  [1/4] 打包全部版本 (云端+本地，FULLFLOW_PACK_ALL=1 强制全量)" -ForegroundColor Cyan
+            Write-Host "  [1/4] 打包全部版本 (云端+本地，PACK_FORCE_ALL=1 强制全量)" -ForegroundColor Cyan
         }
         Write-Host "========================================" -ForegroundColor Cyan
         $rc = Invoke-Pack -Target "all" -Strategy $packStrategy
@@ -584,7 +592,9 @@ if ($Stage -ne 'menu') {
     $rc = 0
     switch ($Stage) {
         'pack' {
-            if ($Version -eq 'all') { $rc = Invoke-Pack -Target 'all' }
+            # ★ 2026-10-30 P6b：非交互 pack all 也默认智能打包（AutoMode 4），与
+            #   full all / 菜单 [1] 完全一致；PACK_FORCE_ALL=1 强制全量（脚本化重建场景）。
+            if ($Version -eq 'all') { $rc = Invoke-Pack -Target 'all' -Strategy (Resolve-PackStrategy) }
             else { $rc = Invoke-SinglePack -Version $Version -Mode $Mode }
             if ($rc -is [array]) { $rc = [int]$rc[-1] }
             if ($rc -eq 0) {
