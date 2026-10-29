@@ -10,44 +10,42 @@
         PAGE_SIZES: {
             A4: { width: '210mm', height: '297mm', margin: '10mm' },
             A5_PORTRAIT: { width: '148mm', height: '210mm', margin: '0' },
-            A5_LANDSCAPE: { width: '210mm', height: '148mm', margin: '0' }
+            A5_LANDSCAPE: { width: '210mm', height: '148mm', margin: '0' },
+            B5_PORTRAIT: { width: '176mm', height: '250mm', margin: '0' },
+            B5_LANDSCAPE: { width: '250mm', height: '176mm', margin: '0' }
         },
 
         // 生成处方打印HTML
         generatePrescriptionPrintHTML(content, orientation) {
             const isLandscape = orientation === 'landscape';
-            const pageSize = isLandscape ? 'A5 landscape' : 'A5 portrait';
+            const pageSize = isLandscape ? this.PAGE_SIZES.A5_LANDSCAPE.width + ' ' + this.PAGE_SIZES.A5_LANDSCAPE.height
+                : this.PAGE_SIZES.A5_PORTRAIT.width + ' ' + this.PAGE_SIZES.A5_PORTRAIT.height;
             const paperWidth = isLandscape ? '210mm' : '148mm';
             const paperHeight = isLandscape ? '148mm' : '210mm';
 
-            return `<!DOCTYPE html><html><head><title>惠康中医诊所管理系统 V1.0.0-打印预览</title><meta name="viewport" content="width=device-width, initial-scale=1.0"><style>
+            return `<!DOCTYPE html><html><head><title>打印处方</title><meta name="viewport" content="width=device-width, initial-scale=1.0"><style>
 @page { size: ${pageSize}; margin: 0; }
-/* ★ 2026-09-15 A5 单页打印修复：①删 body min-height:100vh（vh=视口高远大于纸高，溢出成2页）；②纸片高留 0.5mm 舍入余量 */
-body { font-family: 'SimSun', '宋体', serif; width: ${paperWidth}; padding: 0; margin: 0 auto; display: flex; justify-content: center; align-items: flex-start; line-height: 1.8; -webkit-print-color-adjust: exact; print-color-adjust: exact; color: #000; }
-.prescription-paper { width: ${paperWidth}; height: calc(${paperHeight} - 0.5mm); padding: 28mm 15mm 20mm; margin: 0 auto; box-sizing: border-box; }
-.clinic-name { text-align: center; font-size: 16.5pt; font-weight: bold; color: #000; margin-bottom: 10px; letter-spacing: 2px; font-family: 'KaiTi', '楷体_GB2312', '楷体', serif; }
-.prescription-title { text-align: center; font-size: 16.5pt; font-weight: bold; color: #000; margin-bottom: 12px; letter-spacing: 4px; font-family: 'KaiTi', '楷体_GB2312', '楷体', serif; }
-.prescription-info { display: grid; grid-template-columns: repeat(6, 1fr); gap: 2px 2px; margin-bottom: 8px; border-bottom: 1px solid #000; padding-bottom: 4px; font-size: 10.5pt; color: #000; }
+/* ★ 2026-10-28 A5 整页打印（与 index.html printPrescription 内联模板同一规格）：
+   纸型 ISO A5 148×210mm（用户实际用纸，非 B5），页边距 上15/左右13/下15mm（左右严格对称），纸片高留 0.5mm 舍入余量 */
+body { font-family: 'SimSun', '宋体', serif; width: ${paperWidth}; padding: 0; margin: 0 auto; display: block; line-height: 1.2; -webkit-print-color-adjust: exact; print-color-adjust: exact; color: #000; }
+.prescription-paper { display: flex; flex-direction: column; width: ${paperWidth}; height: calc(${paperHeight} - 0.5mm); padding: 15mm 13mm; margin: 0 auto; box-sizing: border-box; font-size: 10.5pt; line-height: 1.2; overflow: hidden; }
+.clinic-name { text-align: center; font-size: 22pt; font-weight: bold; color: #000; margin-bottom: 10px; letter-spacing: 2px; font-family: 'KaiTi', '楷体_GB2312', '楷体', serif; }
+.prescription-title { text-align: center; font-size: 22pt; font-weight: bold; color: #000; margin-bottom: 12px; letter-spacing: 4px; font-family: 'KaiTi', '楷体_GB2312', '楷体', serif; }
+.prescription-info { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px 2px; margin-bottom: 8px; border-bottom: 1px solid #000; padding-bottom: 4px; font-size: 10.5pt; color: #000; }
 .prescription-info > div { white-space: nowrap; text-align: left; min-width: 0; }
-.prescription-info > div:nth-child(1) { grid-column: 1 / 3; }
-.prescription-info > div:nth-child(2) { grid-column: 3 / 5; }
-.prescription-info > div:nth-child(3) { grid-column: 5 / 7; }
-.prescription-info > div:nth-child(4) { grid-column: 1 / 3; }
-.prescription-info > div:nth-child(5) { grid-column: 3 / 5; }
-.prescription-info > div:nth-child(6) { grid-column: 5 / 7; }
 .prescription-grid { border-top: 1px solid #000; border-bottom: 1px solid #000; min-height: 200px; margin-top: 8px; }
-.prescription-grid-inner { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 2px; }
-.prescription-line { padding: 5px 0; font-size: 11.25pt; text-align: center; font-weight: 500; color: #000; }
-.rp-mark { font-size: 16.5pt; font-weight: bold; font-style: italic; color: #000; font-family: 'Times New Roman', serif; }
-.dose-count { text-align: right; font-size: 11.25pt; color: #000; font-weight: bold; font-family: 'Times New Roman', serif; }
-.prescription-footer { margin-top: 8px; padding-top: 4px; border-top: none; font-size: 10.5pt; color: #000; }
-.usage-text { margin-bottom: 6px; font-size: 10.5pt; color: #000; font-weight: bold; white-space: nowrap; border: none; text-decoration: none; }
+.prescription-grid-inner { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 4mm; row-gap: 0; }
+.prescription-line { display: flex; justify-content: flex-start; align-items: baseline; gap: 0; padding: 1mm 0; font-size: 10.5pt; font-weight: 400; color: #000; line-height: 1.2; white-space: nowrap; border-left: none; }
+.rx-herb { flex: 0 0 auto; }
+.rx-dose { flex: 0 0 auto; font-family: 'Times New Roman', serif; }
+.prescription-jianfa { font-size: 9pt; line-height: 1.1; font-family: 'SimSun', '宋体', serif; margin-left: 0.5mm; }
+.rp-mark { font-size: 22pt; font-weight: bold; font-style: italic; color: #000; font-family: 'Times New Roman', serif; }
+.dose-count { text-align: right; font-size: 10.5pt; color: #000; font-weight: bold; font-family: 'Times New Roman', serif; }
+.prescription-footer { display: flex; flex-direction: column; justify-content: space-between; min-height: 20mm; margin-top: 8px; padding-top: 4px; border-top: none; font-size: 10.5pt; color: #000; }
+.usage-text { margin-bottom: 6px; font-size: 9pt; line-height: 1.1; color: #000; font-weight: normal; white-space: normal; overflow-wrap: anywhere; border: none; text-decoration: none; }
 .signature-row { display: flex; justify-content: space-between; font-size: 10.5pt; color: #000; }
-.signature-grid { display: grid; grid-template-columns: 4fr 3fr 3fr; gap: 6px 10px; margin-top: 8px; }
-.signature-item { font-size: 10.5pt; color: #000; padding: 2px 0; }
-.signature-item:nth-child(1) { text-align: left; }
-.signature-item:nth-child(2) { text-align: center; }
-.signature-item:nth-child(3) { text-align: right; padding-right: 50%; box-sizing: border-box; }
+.signature-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px 10px; margin-top: 8px; }
+.signature-item { font-size: 10.5pt; color: #000; padding: 2px 0; text-align: left; }
 </style></head><body><div class="prescription-paper">${content}</div></body></html>`;
         },
 

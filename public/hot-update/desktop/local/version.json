@@ -1,13 +1,13 @@
 {
   "format": 1,
   "channel": "local",
-  "hotVersion": "2026.10.27-1",
+  "hotVersion": "2026.10.29-1",
   "appVersion": "1.0.303",
   "files": [
     {
       "name": "index.html",
-      "sha256": "15e25d5695123ca545eed312fab5183c6ac534aaf18bb6d3c5b58e12ec9ae923",
-      "size": 759498
+      "sha256": "e980e3268e46e5e1f72f91a47c1bcb7edc12427d47ec52fbadca83ea94a047a1",
+      "size": 760668
     },
     {
       "name": "auth-core.js",
@@ -41,8 +41,8 @@
     },
     {
       "name": "print-utils.js",
-      "sha256": "c3e147b38a9c678a2b5ec6f115d05c9c70afe1be976c5686cd7dea9e086b8168",
-      "size": 8191
+      "sha256": "afb12d66c27a8632348d6dc0e97e1de31fa403056693b5c14ed06cf373cb22f1",
+      "size": 8525
     },
     {
       "name": "medicine-dict.js",
@@ -61,8 +61,8 @@
     },
     {
       "name": "prescription-core.js",
-      "sha256": "cf088795c7c8ecf3552da29722faa9a32bf900488a65013a16299c8a21398662",
-      "size": 17619
+      "sha256": "5ffe5adf5cf4345e1d5479ef6889076314618ffb40abc388abbef1121d93fcee",
+      "size": 29277
     },
     {
       "name": "stock-core.js",
@@ -100,6 +100,6 @@
       "size": 881727
     }
   ],
-  "signedAt": 1793105362667,
-  "signature": "CywvweD3a6Y5z8SZEaduOFH81QReXKa2pLG0dtug6SsKK4cyBTzJnMQRJJ11hOUbRz5wC9oQmw3coQ0Y0q0CCw=="
+  "signedAt": 1793237584088,
+  "signature": "lsHI+L4k32+thXjp9luisO7KpvJXxgXSbWaZ6seuXt8qAZtJLih4Z8SaQLiYTp/YvNhKxVpXI5bL0EdE7CgoAw=="
 }
