@@ -5,11 +5,15 @@ REM
 REM  Why:  one-click-pack.bat (menu) and one-click-publish.bat (menu) were two
 REM        interactive entries with duplicated boilerplate. Since 2026-10-30 both
 REM        share one kernel (entry-preflight / pack-core / hotupdate-stage), and
-REM        this entry exposes that same kernel NON-interactively:
+REM        this entry exposes that same kernel BOTH interactively and
+REM        NON-interactively:
 REM
-REM    one-click-build-release.bat                     -> interactive menu (same as publish entry)
+REM    one-click-build-release.bat                     -> interactive menu
+REM                                                       [2] pack (incl. [4] smart pack)
+REM                                                       [3] smart publish / [4] full publish
+REM                                                       [8] standalone pack entries
 REM    ... full                          --yes        -> pack + hot-sign + readiness + publish + verify
-REM    ... pack [all|cloud|dingzhi] [all|desktop|app] -> pack only, then hot-sign when stale
+REM    ... pack [all|cloud|dingzhi] [all|desktop|app] -> pack only, then hot-update CHECK (read-only)
 REM    ... publish [all|cloud|dingzhi] [all|desktop|app] --yes
 REM                                                    -> readiness gate + publish
 REM    ... hot [all|cloud|dingzhi] [--yes]             -> hot-update check only; --yes also re-signs
@@ -17,12 +21,15 @@ REM    ... verify                                      -> verify published artif
 REM
 REM  HARD RULE preserved: uploading to the official download site is always an
 REM  explicit human action -> publish / full refuse to run without --yes.
-REM  Old entries stay valid aliases: one-click-pack.bat (pack menu),
-REM  one-click-publish.bat (forwards here).
+REM  2026-10-30 P7: this is now the ONLY root entry. 一键打包.bat (pack menu) and
+REM  一键发布.bat (alias forwarder) were deleted; their capabilities live in the
+REM  interactive menu above (pack / smart pack / standalone entries).
 REM
 REM  Env knobs: NO_PAUSE=1 skip final pause, NO_AUTOCOMMIT=1 opt out of side-effect
-REM  auto-commit, SKIP_HOTUPDATE=1 skip hot signing, READINESS_SOFT=1 soft readiness,
-REM  PACK_FORCE_ALL=1 force full rebuild for "all" (default = smart pack, changed ends skipped).
+REM  auto-commit, SKIP_HOTUPDATE=1 skip hot update entirely, READINESS_SOFT=1 soft
+REM  readiness, PACK_FORCE_ALL=1 force full rebuild for "all" (default = smart pack,
+REM  changed ends skipped), PACK_HOT_SIGN=1 also re-sign hot packages after packing
+REM  (default = read-only check, never writes git).
 REM ============================================================================
 for /f "tokens=2 delims=:" %%c in ('chcp') do set "OLD_CP=%%c"
 chcp 65001 >nul

@@ -139,7 +139,7 @@ try {
         $i = 0
         foreach ($d in $drifts) { $i++; Write-Host ("  {0}. {1}" -f $i, $d) -ForegroundColor Yellow }
         Write-Host ''
-        Write-Host '  常规修复（推荐）：双击 一键打包.bat 正常打包会自动 -AutoCommit 收纳版本号；' -ForegroundColor Yellow
+        Write-Host '  常规修复（推荐）：双击 一键构建发布.bat → 菜单 [2] 正常打包会自动 -AutoCommit 收纳版本号；' -ForegroundColor Yellow
         Write-Host '    若版本号已被还原而产物保留：按上面各条提示补提交或归档旧产物后重打。' -ForegroundColor Yellow
         Write-Host '  确认要强制继续（自担重名覆盖风险）：set ALLOW_VERSION_DRIFT=1 后重跑。' -ForegroundColor DarkGray
         exit 2

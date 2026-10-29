@@ -11,7 +11,7 @@
 //   auto-publish.js 依赖 manifest 记录"已发布哈希"做变更检测，被构建期改写后检测
 //   静默失效；one-click-pack.ps1 -AutoCommit 还会把被改写的 manifest 自动提交上线。
 //   现改为只读：manifest 仅由发布工具（publish-release.js /
-//   auto-update-downloads.js --confirm / 一键发布.bat）在真正发布时写入。
+//   auto-update-downloads.js --confirm / 一键构建发布.bat）在真正发布时写入。
 //
 // 功能：
 //   1. 查找各APP的APK/exe输出文件并计算 SHA-256（打印到构建日志）
@@ -111,7 +111,7 @@ function comparePublished(label, sha256, manifest) {
     if (entry.sha256 === sha256) {
         return '（与已发布版本一致）';
     }
-    return '（本地新构建，尚未发布——下载页继续提供已发布旧版属正常；人工核验后经 一键发布.bat / auto-update-downloads.js --confirm 发布）';
+    return '（本地新构建，尚未发布——下载页继续提供已发布旧版属正常；人工核验后经 一键构建发布.bat / auto-update-downloads.js --confirm 发布）';
 }
 
 function main() {

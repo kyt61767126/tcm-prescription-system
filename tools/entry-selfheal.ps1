@@ -1,4 +1,4 @@
-﻿# entry-selfheal.ps1 - 一键打包.bat / 一键发布.bat 入口共享自检（单一权威源）
+﻿# entry-selfheal.ps1 - 一键构建发布.bat 入口共享自检（单一权威源，2026-10-30 P7 起唯一根入口）
 # 2026-09-05 架构收敛：原两个 bat 各自硬编码同一份 8 个下游 bat 的 CRLF 自检列表
 #   （双源漂移：新增下游 bat 需改两处，漏一处即隐患）。现统一收口到本脚本：
 #   ★ 2026-10-30 下游清单再收敛到 tools\build-bat-list.ps1（本脚本与 one-click-pack /

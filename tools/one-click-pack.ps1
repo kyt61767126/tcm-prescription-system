@@ -1,5 +1,7 @@
 ﻿# one-click-pack.ps1 - One-click packaging tool for all 4 versions
-# All Chinese menu logic moved here from 一键打包.bat to avoid cmd GBK encoding issues
+# All Chinese menu logic moved here from 一键打包.bat (deleted 2026-10-30 P7 when the
+# root entry converged to 一键构建发布.bat; this script is now invoked BOTH by that
+# entry as a child process (-AutoMode) and directly for the standalone pack menu).
 # .ps1 with BOM can correctly handle UTF-8 Chinese display
 param(
     [string]$AutoMode = "",   # 非空时跳过菜单直接执行：1=云端 2=本地 3=全部 4=智能；单端组合 1a=云端APP 1d=云端桌面 2a=本地APP 2d=本地桌面，全程不暂停，完成后自动退出
@@ -158,7 +160,7 @@ function Show-PackResult {
     Show-LatestApk -Dir "$script:RootDir\app_project\db-yunduan" -GradleFile "$script:RootDir\app_project\db-yunduan\cloud_app\app\build.gradle" -Label "  云端APP"
     Show-LatestExe -Dir "$script:RootDir\app_project\db-offline\desktop\dist" -Label "  离线桌面"
     Show-LatestApk -Dir "$script:RootDir\app_project\db-offline" -GradleFile "$script:RootDir\app_project\db-offline\app\app\build.gradle" -Label "  离线APP"
-    Write-Host "  提示: 仅打包不上传; 如需发布到官网请运行 一键发布.bat" -ForegroundColor Yellow
+    Write-Host "  提示: 仅打包不上传; 如需发布请用 一键构建发布.bat → 菜单 [3] 智能发布" -ForegroundColor Yellow
     pause
 }
 
@@ -717,25 +719,7 @@ function Show-PickVersionMenu {
 
 
 # ============ Show Standalone Usage ============
-function Show-StandaloneUsage {
-    Write-Host ""
-    Write-Host "========================================" -ForegroundColor Cyan
-    Write-Host "  各版本独立打包入口" -ForegroundColor Cyan
-    Write-Host "========================================" -ForegroundColor Cyan
-    Write-Host ""
-    Write-Host "  云端版 (app_project/db-yunduan):" -ForegroundColor Yellow
-    Write-Host "    pack-desktop.bat       打包桌面版"
-    Write-Host "    pack-app.bat           打包手机APP (严格模式)"
-    Write-Host ""
-    Write-Host "  本地版 (app_project/db-offline):" -ForegroundColor Yellow
-    Write-Host "    pack-desktop.bat       打包桌面版"
-    Write-Host "    pack-app.bat           打包手机APP (严格模式)"
-    Write-Host ""
-    Write-Host "  提示: 直接双击对应目录下的 bat 文件即可" -ForegroundColor DarkGray
-    Write-Host "========================================" -ForegroundColor Cyan
-    Write-Host ""
-    pause
-}
+# Show-StandaloneUsage 已迁到 tools/menu-core.ps1（★ 2026-10-30 P7 入口收敛：两个菜单共用）
 
 # ============ Main Menu ============
 $menuStart = Get-TimeStamp
@@ -810,7 +794,7 @@ while ($true) {
     Write-Host "  - 离线版默认使用配置(XXX中医诊所/XXX)直接打包, 不弹配置编辑"
     Write-Host "  - 全部打包全自动顺序执行, 手机APP默认严格模式(签名校验+混淆)"
     Write-Host "  - 耗时统计会在结束时显示"
-    Write-Host "  - ★ 仅打包不上传; 如需发布到下载页/GitHub Release 请运行 一键发布.bat" -ForegroundColor Yellow
+    Write-Host "  - ★ 仅打包不上传; 如需发布到下载页/GitHub Release 请用 一键构建发布.bat → 菜单 [3]" -ForegroundColor Yellow
     Write-Host "--------------------------------------------"
     $choice = Read-MenuChoice "请选择 [0-4, 5-7]"
     switch ($choice) {

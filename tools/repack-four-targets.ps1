@@ -28,7 +28,7 @@
 param(
     [switch]$Force,      # 强制重打：置 NO_BUILD_SKIP=1，忽略增量跳过（默认尊重跳过）
     [switch]$SkipPack,   # 跳过打包，只做产物核验（打包后单独复核 / CI 用）
-    [switch]$NoCommit    # 不自动收纳打包副作用（默认 -AutoCommit，与 一键打包.bat 同口径）
+    [switch]$NoCommit    # 不自动收纳打包副作用（默认 -AutoCommit，与 一键构建发布.bat 同口径）
 )
 
 $ErrorActionPreference = 'Continue'
@@ -288,7 +288,7 @@ if ($failed.Count -eq 0 -and $packRc -eq 0) {
     Write-Host '  下一步（按需，人工闸）：' -ForegroundColor Yellow
     Write-Host '   - 热更重签：index.html 改动可出热包（桌面 desktop/local、desktop/cloud；APP app-local）' -ForegroundColor Yellow
     Write-Host '   - 真机回归：桌面装机 + APK 装机，验「自动备份落盘 → 面板列出 → 一键恢复 → 删自动/保手动」' -ForegroundColor Yellow
-    Write-Host '   - 发布：一键发布.bat（打包产物禁止自动上传官网，须人工检查后上传）' -ForegroundColor Yellow
+    Write-Host '   - 发布：一键构建发布.bat 菜单 [3] 智能发布（打包产物禁止自动上传官网，须人工检查后上传）' -ForegroundColor Yellow
     Write-Host '============================================================' -ForegroundColor Green
     exit 0
 }

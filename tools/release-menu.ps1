@@ -2,9 +2,14 @@
 # 用 PowerShell 替代 release-all.bat，避免 .bat 中文 GBK 编码问题
 # 支持选择单个版本（云端/定制/个人 × 桌面/APP/全部）进行发布
 #
+# ★ 2026-10-30 P7：根目录入口收敛为唯一一个 —— 一键构建发布.bat。
+#   原 一键打包.bat（纯打包菜单）与 一键发布.bat（别名转发）已删除，能力并入本菜单：
+#     打包：菜单 [2]（版本 [1]云端/[2]本地/[3]全部/[4]智能打包）
+#     发布：菜单 [3] 智能发布 / [4] 指定发布
+#     独立打包入口说明：菜单 [8]（原一键打包.bat [7]）
 # ★ 2026-10-30 P2：新增非交互「阶段」入口（一键构建发布.bat 透传），菜单仍是默认行为。
-#   -Stage menu      默认：交互菜单（原行为，一键发布.bat 无参即此）
-#   -Stage pack      仅打包（all/cloud/dingzhi × desktop/app/all）+ 按需热更签发
+#   -Stage menu      默认：交互菜单
+#   -Stage pack      仅打包（all/cloud/dingzhi × desktop/app/all）+ 热更「只读检查」（不写 git）
 #   -Stage publish   发布（需 -Yes 显式确认）→ 先过 readiness 严格门
 #   -Stage full      全流程 打包→热更签发→体检→发布→验证（需 -Yes）
 #   -Stage hot       热更检查；配 -Yes 则落后时直接重签并推送
@@ -98,6 +103,35 @@ function Invoke-Pack {
 function Resolve-PackStrategy {
     if ($env:PACK_FORCE_ALL -eq '1' -or $env:FULLFLOW_PACK_ALL -eq '1') { return 'all' }
     return 'smart'
+}
+
+# ============ 打包后的热更处理策略（★ 2026-10-30 P7 单一判定点）============
+# 背景：原 P1 在「仅打包」路径打包成功后直接 Invoke-HotUpdateSign -Commit（重签+提交+推送），
+#   而根目录唯一入口叫「构建发布」，用户点 [2] 仅打包的预期是"只出产物、不动 git"。
+#   入口收敛后必须区分清楚，否则"只打包却推了热更提交"是最难排查的意外副作用。
+#   策略：SKIP_HOTUPDATE=1 → 跳过；PACK_HOT_SIGN=1 → 打包即重签（原 P1 行为，需显式开启）；
+#         默认 → 只读检查，落后仅提示去执行 hot --yes（不写工作区）。
+function Invoke-PostPackHotCheck {
+    param([string]$Scope = 'all')
+    if ($env:SKIP_HOTUPDATE -eq '1') { return 0 }
+    if ($env:PACK_HOT_SIGN -eq '1') {
+        $rcS = Get-ExitCode (Invoke-HotUpdateSign -Scope $Scope -Commit)
+        return [int]$rcS
+    }
+    $rcC = Get-ExitCode (Invoke-HotUpdateSign -Scope $Scope -CheckOnly)
+    if ($rcC -eq 2) {
+        Write-Host ""
+        Write-Host "  [提示] 热更包内容落后于源码 —— 本次仅打包，未自动重签（不改 git）" -ForegroundColor Yellow
+        Write-Host "         发布前请执行: 一键构建发布.bat hot --yes   （或菜单 [7]）" -ForegroundColor Yellow
+        Write-Host "         希望打包即重签: 设 PACK_HOT_SIGN=1 再运行" -ForegroundColor DarkGray
+        return 0
+    }
+    if ($rcC -ne 0) {
+        # 非预期错误（如 hotupdate-stage 异常）只提示，不把打包判为失败
+        Write-Host "  [WARN] 热更只读检查退出码 $rcC（打包本身成功，完整日志: $script:LogFile）" -ForegroundColor Yellow
+        return 0
+    }
+    return 0
 }
 
 # ============ 单个版本打包（★ 2026-10-30 P0 去重：委托 one-click-pack -AutoMode）============
@@ -479,7 +513,7 @@ function Invoke-FullFlow {
         #   代理抖动时 curl rc=6/35/超时）。上传已成功，验证仅"无法判定"。
         Write-Host ""
         Write-Host "[WARN] 验证受阻：部分 URL 因网络不可达无法判定（上传已完成，并非发布失败）" -ForegroundColor Yellow
-        Write-Host "  网络恢复后重跑 一键发布.bat 选 [5] 验证 复核即可" -ForegroundColor Yellow
+        Write-Host "  网络恢复后重跑 一键构建发布.bat 选 [5] 验证 复核即可" -ForegroundColor Yellow
         Write-Host "  完整日志: $script:LogFile" -ForegroundColor DarkGray
         Write-Host ""
         Write-Host "========================================" -ForegroundColor Yellow
@@ -598,9 +632,9 @@ if ($Stage -ne 'menu') {
             else { $rc = Invoke-SinglePack -Version $Version -Mode $Mode }
             if ($rc -is [array]) { $rc = [int]$rc[-1] }
             if ($rc -eq 0) {
-                $rcH = Invoke-HotUpdateSign -Scope $Version -Commit
-                if ($rcH -is [array]) { $rcH = [int]$rcH[-1] }
-                $rc = $rcH
+                # ★ 2026-10-30 P7：打包阶段默认只做热更「只读检查」（不写 git、不推送）；
+                #   需要打包即重签时显式设 PACK_HOT_SIGN=1。
+                $null = Invoke-PostPackHotCheck -Scope $Version
             }
             Show-FinalSummary -ActionLabel "仅打包（非交互）"
         }
@@ -676,11 +710,13 @@ while ($true) {
     Write-Host "  [5] 验证发布结果 (verify-release.js)"
     Write-Host "  [6] 合规检查 (compliance-check，发布前可自查)"
     Write-Host "  [7] 热更签发 - 检查三通道并按需重签 (不打包/不发布)"
+    Write-Host "  [8] 查看各版本独立打包入口 (不进菜单也能单端打包)"
     Write-Host "  [0] 退出"
     Write-Host ""
     Write-Host "  说明:" -ForegroundColor DarkGray
     Write-Host "  - [1] 全流程: 智能打包(先检测四端改动，无改动整组跳过) → 热更签发 → 智能发布 → 验证" -ForegroundColor DarkGray
-    Write-Host "  - [2] 仅打包: 先选版本(云端/本地/全部)，单版本再选范围(桌面/APP/全部)；完成后按需重签热更" -ForegroundColor DarkGray
+    Write-Host "  - [2] 仅打包: 选版本(云端/本地/全部/智能)；全部=全量重打，智能=只打有改动的端；" -ForegroundColor DarkGray
+    Write-Host "        完成后热更只读检查（落后仅提示；设 PACK_HOT_SIGN=1 才打包即重签）" -ForegroundColor DarkGray
     Write-Host "  - [7] 热更签发: 比对源码与线上热更清单，内容落后才重签(幂等)；云桌面/离线桌面/离线APP 三通道" -ForegroundColor DarkGray
     Write-Host "  - 发布双通道: [3]智能发布=比对hash仅上传变化产物(推荐日常)" -ForegroundColor DarkGray
     Write-Host "               [4]指定发布=全量上传所选版本+范围产物(补传/修复)" -ForegroundColor DarkGray
@@ -688,14 +724,14 @@ while ($true) {
     Write-Host "    系统绝不自动上传产物到官方下载网站(必守HARD规则)" -ForegroundColor Yellow
     Write-Host "  - git push 后 Cloudflare Pages 自动部署下载页" -ForegroundColor DarkGray
     Write-Host "--------------------------------------------"
-    $choice = Read-MenuChoice "请选择 [0-7]"
+    $choice = Read-MenuChoice "请选择 [0-8]"
     switch ($choice) {
         "2" {
             # 仅打包 - 选版本和范围 (选"全部"= 全量打包，原[4]打包全部已并入本项)
             # ★ 2026-10-30 P3 修复：局部变量禁止叫 $version/$mode —— 与 param 的
             #   $Version/$Mode（带 ValidateSet）大小写不敏感同变量，选项返回 "" 会触发
             #   ValidateSetFailure（菜单选 [0] 返回就崩）。统一用 $selVersion/$selMode。
-            $selVersion = Show-VersionMenu -Action "pack"
+            $selVersion = Show-VersionMenu -Action "pack" -AllowSmart
             if ($selVersion -eq "") { break }
             # ★ 2026-08-24 修复：选"全部2个版本"原误入 Invoke-SinglePack，拼出不存在的
             #   db-all 目录直接 [ERROR] 中止。改走 Invoke-Pack（one-click-pack -AutoMode 3
@@ -704,6 +740,21 @@ while ($true) {
             #   修复原[4]打包全部后副作用滞留工作区的问题（P1）。
             # ★ 2026-10-30 P0 去重：副作用/增量基线均已由子进程（-AutoCommit）完成，
             #   父进程不再 CollectSideEffectsOnly / Record-BuiltUnits（会以空值覆盖 last-run.json）。
+            if ($selVersion -eq "smart") {
+                # ★ 2026-10-30 P7：并入原「一键打包.bat 菜单 [4] 智能打包」
+                #   （AutoMode 4：先打印四端「重打/跳过」计划，整组无改动连配置同步都不跑）
+                $rcS = Get-ExitCode (Invoke-Pack -Target "all" -Strategy 'smart')
+                if ($rcS -ne 0) {
+                    Write-Host ""
+                    Write-Host "[ERROR] 智能打包失败，退出码: $rcS（详见上方日志）" -ForegroundColor Red
+                } else {
+                    $null = Invoke-PostPackHotCheck -Scope 'all'
+                }
+                Show-FinalSummary -ActionLabel "智能打包（仅打包，未发布）"
+                Write-Host ""
+                pause
+                break
+            }
             if ($selVersion -eq "all") {
                 $rcA = Invoke-Pack -Target "all"
                 if ($rcA -is [array]) { $rcA = [int]$rcA[-1] }
@@ -711,8 +762,8 @@ while ($true) {
                     Write-Host ""
                     Write-Host "[ERROR] 打包全部版本失败，退出码: $rcA（详见上方日志）" -ForegroundColor Red
                 } else {
-                    # ★ 2026-10-30 P1：打包成功后按需重签热更（内容一致自动跳过）
-                    $null = Invoke-HotUpdateSign -Scope $selVersion -Commit
+                    # ★ 2026-10-30 P7：默认热更「只读检查」，不再自动重签（PACK_HOT_SIGN=1 才重签）
+                    $null = Invoke-PostPackHotCheck -Scope $selVersion
                 }
                 Write-Host ""
                 pause
@@ -727,8 +778,8 @@ while ($true) {
                 Write-Host ""
                 Write-Host "[ERROR] 单版本打包失败，退出码: $rc1（详见上方日志）" -ForegroundColor Red
             } else {
-                # ★ 2026-10-30 P1：打包成功后按需重签热更（内容一致自动跳过）
-                $null = Invoke-HotUpdateSign -Scope $selVersion -Commit
+                # ★ 2026-10-30 P7：默认热更「只读检查」，不再自动重签（PACK_HOT_SIGN=1 才重签）
+                $null = Invoke-PostPackHotCheck -Scope $selVersion
             }
             # ★ 2026-09-01 最终结果汇总（明确中文提示）
             Show-FinalSummary -ActionLabel "仅打包（未发布）"
@@ -828,6 +879,10 @@ while ($true) {
             }
             Write-Host ""
             pause
+        }
+        "8" {
+            # ★ 2026-10-30 P7：原「一键打包.bat 菜单 [7] 查看各版本独立打包入口」并入本菜单。
+            Show-StandaloneUsage
         }
         "0" {
             Write-Host ""

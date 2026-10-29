@@ -61,7 +61,10 @@ function Enable-CnPause {
 
 # ============ 版本选择（发布/全流程：打包 / 发布 / 打包+发布+验证）============
 function Show-VersionMenu {
-    param([string]$Action)   # pack / publish / full
+    param(
+        [string]$Action,        # pack / publish / full
+        [switch]$AllowSmart     # ★ 2026-10-30 P7：打包动作额外给「智能打包」项（返回 smart）
+    )
     while ($true) {
         Clear-Host
         $actionLabel = switch ($Action) {
@@ -79,13 +82,20 @@ function Show-VersionMenu {
         Write-Host "  [1] 云端版"
         Write-Host "  [2] 本地版"
         Write-Host "  [3] $allLabel"
+        if ($AllowSmart) {
+            # ★ 2026-10-30 P7：原「一键打包.bat 菜单 [4] 智能打包」并入统一入口，
+            #   语义 = AutoMode 4（先打印四端「重打/跳过」计划，整组无改动连配置同步都不跑）。
+            Write-Host "  [4] 智能打包（自动检测需重打的端，推荐日常）" -ForegroundColor Yellow
+        }
         Write-Host "  [0] 返回主菜单"
         Write-Host ""
-        $choice = Read-MenuChoice "请选择 [0-3]"
+        $prompt = if ($AllowSmart) { "请选择 [0-4]" } else { "请选择 [0-3]" }
+        $choice = Read-MenuChoice $prompt
         switch ($choice) {
             "1" { return "cloud" }
             "2" { return "dingzhi" }
             "3" { return "all" }
+            "4" { if ($AllowSmart) { return "smart" } }
             "0" { return "" }
             default { Write-Host "无效选择" -ForegroundColor Red; Start-Sleep -Seconds 1 }
         }
@@ -148,6 +158,29 @@ function Show-VersionPicker {
     }
 }
 
+# ============ 各版本独立打包入口说明 ============
+# ★ 2026-10-30 P7：原在 one-click-pack.ps1 内部；入口收敛后两个菜单都要用，迁到共享内核。
+function Show-StandaloneUsage {
+    Write-Host ""
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host "  各版本独立打包入口" -ForegroundColor Cyan
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "  云端版 (app_project/db-yunduan):" -ForegroundColor Yellow
+    Write-Host "    pack-desktop.bat       打包桌面版"
+    Write-Host "    pack-app.bat           打包手机APP (严格模式)"
+    Write-Host ""
+    Write-Host "  本地版 (app_project/db-offline):" -ForegroundColor Yellow
+    Write-Host "    pack-desktop.bat       打包桌面版"
+    Write-Host "    pack-app.bat           打包手机APP (严格模式)"
+    Write-Host ""
+    Write-Host "  提示: 直接双击对应目录下的 bat 文件即可" -ForegroundColor DarkGray
+    Write-Host "  提示: 也可用统一入口单端打包 —— 一键构建发布.bat pack cloud app" -ForegroundColor DarkGray
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host ""
+    pause
+}
+
 # ============ 统一发布结果汇总（明确中文提示）============
 # ★ 2026-09-01 新增：发布环节结束后统一输出成败大字块 + 产物入口 + 生效提示，
 #   替代原先"只有下一步指引、成败要回翻日志"的弱提示。
@@ -192,7 +225,7 @@ function Show-FinalSummary {
     Write-Host "    离线桌面 exe : app_project\db-offline\desktop\dist\"
     Write-Host "    离线手机 APP : app_project\db-offline\惠康中医-本地.apk"
     Write-Host "  发布状态: 打包产物不会自动上传官网（安全规范，需人工确认）" -ForegroundColor Yellow
-    Write-Host "  如需发布 : 双击 一键发布.bat → 选 [3] 智能发布（仅上传有变化的产物）"
+    Write-Host "  如需发布 : 双击 一键构建发布.bat → 选 [3] 智能发布（仅上传有变化的产物）"
     Write-Host "  下载页   : $($global:HKZY_OfficialUrls.Download)"
     Write-Host "============================================" -ForegroundColor Cyan
 }

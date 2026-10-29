@@ -2606,5 +2606,23 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
   - 验证：`pack-gate preflight` 5/5（ps1 59 / BOM 59 / bat CRLF 33 / 编码 117 / 热更三通道）；AST 10 个 ps1 全 `[OK]`；`smoke-p5.ps1` 扩到 **51/51**（E 段：静态 7 项 + 进程内直测 `Resolve-PackStrategy`（默认 smart / `PACK_FORCE_ALL=1`→all / 旧名兼容→all）+ AST 抽 `Invoke-Pack` 注入 `Invoke-QuietProcess` 桩，实测 `-Strategy smart → -AutoMode 4 + -AutoCommit`、不传默认 `3`、`-Strategy all → 3`）；真实链路只读验证 `one-click-pack.ps1 -AutoMode 4 -SmartPlanOnly` 输出四端「[跳过] 产物已是最新」并 rc=0；菜单冒烟 22/22、阶段冒烟 11/11 无回归（`pack all` 未真跑——会触发真实打包，故用桩+静态覆盖其参数接线）。
   - 坑（本轮新增）：冒烟桩脚手架必须"先 setup + 函数定义、后用例"顺序拼接——把用例写在函数定义之前，`Invoke-Pack` 未定义时 PowerShell 只报非终止错误（脚本退出码仍 0、用例输出全空），会把"没测到"误当"通过"；断言须同时校验桩输出内容而非只看 rc。
 
+* ★ 2026-10-30（P7：**根目录入口收敛为一个** —— 删 `一键打包.bat`/`一键发布.bat`，能力并入统一菜单）：
+  - 决策依据（回答"能否只留一个入口"）：可以，但**直接删会丢 3 项能力**——①智能打包（AutoMode 4）只存在于 `一键打包.bat` 菜单 `[4]`；②各版本独立打包入口说明 `[7]`；③纯打包不动 git（阶段 `pack` 原会自动 `Invoke-HotUpdateSign -Commit` = 重签 + 提交 + 推送）。故采用"先补齐再删"。
+  - 能力承接（`tools/release-menu.ps1` + `tools/menu-core.ps1`）：
+    - 打包菜单 `[2]` → `Show-VersionMenu -Action pack -AllowSmart`：新增 `[4] 智能打包（自动检测需重打的端，推荐日常）` → `Invoke-Pack -Strategy smart`（AutoMode 4）。`[3] 全部2个版本` 仍是**全量**（显式逃生口，不做智能）。
+    - 主菜单新增 `[8] 查看各版本独立打包入口` → `Show-StandaloneUsage`（函数由 `one-click-pack.ps1` 迁入 `menu-core.ps1`，两菜单共用）。
+    - **打包后的热更语义改为"默认只读"**：新增单一判定点 `Invoke-PostPackHotCheck`（`SKIP_HOTUPDATE=1` 跳过 / `PACK_HOT_SIGN=1` 打包即重签并推送（原 P1 行为）/ 默认 `CheckOnly`，落后仅提示去执行 `hot --yes`，**不写 git**）。阶段 `pack`、菜单 `[2]` 全部/单端 三条打包路径统一走它——避免"名字叫构建发布、点仅打包却推了热更提交"。
+  - 连带清理（不改会反噬的点）：
+    - `tools/fix-release-bat.ps1` **整文件删除**——它唯一的职责是在 `一键发布.bat` 缺失/变旧时重建别名，文件删了它就是"自动复活器"。
+    - 6 副本提示语（`shared/calculate-hash.js` + 离线 JS + `app_project/db-offline/app/.../public/calculate-hash.js`）：`一键发布.bat` → `一键构建发布.bat`；**必须跑 `tools/sync-all.ps1`**，否则 pre-push 的 `sync-all -VerifyOnly` 判漂移。
+    - 其余 live 文案：`tools/auto-update-downloads.js`、`verify-version-baseline.ps1`、`verify-packaging.ps1`、`reinstall-offline-apk.ps1`、`repack-four-targets.ps1`、`emergency-rollback.bat`、`entry-preflight.ps1`/`entry-selfheal.ps1`/`one-click-pack.ps1` 首行注释、`app_project/项目文档/功能特性与优化清单.md`。
+    - **不改**：`.trae/documents/*.md` 与 `software_copyright/evidence/git-commit-history.txt` 属历史记录（前者为当时方案文档，后者为版权证据），保留旧名是正确状态。
+  - 边界（P7 后仍成立）：`tools/one-click-pack.ps1` **不删**——它是打包执行层唯一实现，被统一入口以子进程 `-AutoMode` 调用，也仍可直接运行（独立打包菜单）。"删入口"≠"删脚本"，把两者混为一谈会连带删掉打包内核。
+  - 验证（本轮，全绿）：`pack-gate preflight` 5/5（ps1 **58** / BOM 58 / bat CRLF **31** / 编码 114 / 热更三通道）；`sync-all -VerifyOnly` ALL PASS；AST 9 个 ps1 全 `[OK]`；`smoke-p5`（含新增 F 段）全绿——静态（旧入口与 `fix-release-bat` 必须不存在、`Invoke-PostPackHotCheck` 存在、打包分支无无条件 `-Commit`）+ 桩实测热更三态（默认 `check=True commit=False` 且 rc 归一 0、`PACK_HOT_SIGN=1` → `commit=True`、`SKIP_HOTUPDATE=1` → 完全不调用）；菜单冒烟全绿（含 `[8]` 独立入口说明、`[2]`→`[4]` 菜单项渲染、`[1]/[2]/[4]⇒[0]⇒[0]`、`[7]` 热更只读零改动、旧入口不存在）；阶段冒烟全绿（`publish`/`full` 无 `--yes` rc=2、`hot` rc=0、非法 stage rc=2、唯一入口 `verify` rc=0）。
+  - 坑（本轮新增）：
+    - **`pause` 在重定向 stdin 下会吃掉一行输入**：冒烟喂 `[8]` 时只给 `8 ⏎ 0 ⏎`，`0` 被 pause 消费，主菜单读到 EOF → `[FATAL]` + rc=1。带 `pause` 的分支必须多喂一行（`8 ⏎ 0 ⏎ 0 ⏎`），与历史 `[7]` 用例一致。
+    - **`Read-MenuChoice` 的提示语不落 stdout**（`Read-Host` 的 prompt 直接写控制台），冒烟断言不能校验"请选择 [0-4]"这类提示，只能断言菜单项文本。
+    - 删文件后要同步清理**临时/辅助脚本里对它的引用**（如 `tools/_tmp/parse-check.ps1` 的文件清单），否则门禁会报"文件读不到"而误判语法失败。
+
 
 

@@ -68,7 +68,7 @@ if (-not $apk) {
     Err "未找到离线APP APK"
     Info "路径1: $($APK_CANDIDATES[0])"
     Info "路径2: $($APK_CANDIDATES[1])"
-    Info "请先双击 一键打包.bat 打包（选项 2 = 离线端）"
+    Info "请先双击 一键构建发布.bat → 菜单 [2] 仅打包 → 本地版 → 手机 APP"
     exit 1
 }
 $f = Get-Item $apk

@@ -1,4 +1,4 @@
-﻿# entry-preflight.ps1 - 一键打包.bat / 一键发布.bat 入口预检（单一权威源）
+﻿# entry-preflight.ps1 - 一键构建发布.bat 入口预检（单一权威源，2026-10-30 P7 起唯一根入口）
 # ★ 2026-10-30 P0 去重：原两个入口 bat 各自硬编码同一份 git 状态检查 + entry-selfheal
 #   调用块（约 60 行/份，唯一实质差异 = 发布对 behind upstream 硬停）。现统一到本脚本：
 #     Mode=pack      构建前：git 状态仅提示（不阻断）+ 入口自愈（BOM/CRLF 修复）
