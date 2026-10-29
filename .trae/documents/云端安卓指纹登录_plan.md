@@ -60,7 +60,7 @@
    - 老 vc307 兼容性静态确认（unknown method no-op，无需真机降级）。
 8. 发布：
    - JS：cloud.js 随 `public/` push → Cloudflare Pages 部署，线上拉取核验（网页/桌面/鸿蒙无桥 no-op）；
-   - Java：release vc308 APK 走「一键发布.bat」（智能发布/指定发布云端 APP），同步 hash-manifest 的 cloud.apk（version V1.0.0.308、sha256、url）——按 HARD 规则上传动作需用户在发布菜单确认或明确指示；
+   - Java：release vc308 APK 走「一键构建发布.bat」（菜单 [3] 智能发布 / [4] 指定发布云端 APP），同步 hash-manifest 的 cloud.apk（version V1.0.0.308、sha256、url）——按 HARD 规则上传动作需用户在发布菜单确认或明确指示；
    - KNOWLEDGE 第 47 章追加云端移植条目（含云端在线页无热更/8 副本 no-op/华为线程同修），提交推送（pre-push 十三道校验）。
 
 ## 五、依赖与注意

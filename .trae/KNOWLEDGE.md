@@ -2616,7 +2616,7 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
     - `tools/fix-release-bat.ps1` **整文件删除**——它唯一的职责是在 `一键发布.bat` 缺失/变旧时重建别名，文件删了它就是"自动复活器"。
     - 6 副本提示语（`shared/calculate-hash.js` + 离线 JS + `app_project/db-offline/app/.../public/calculate-hash.js`）：`一键发布.bat` → `一键构建发布.bat`；**必须跑 `tools/sync-all.ps1`**，否则 pre-push 的 `sync-all -VerifyOnly` 判漂移。
     - 其余 live 文案：`tools/auto-update-downloads.js`、`verify-version-baseline.ps1`、`verify-packaging.ps1`、`reinstall-offline-apk.ps1`、`repack-four-targets.ps1`、`emergency-rollback.bat`、`entry-preflight.ps1`/`entry-selfheal.ps1`/`one-click-pack.ps1` 首行注释、`app_project/项目文档/功能特性与优化清单.md`。
-    - **不改**：`.trae/documents/*.md` 与 `software_copyright/evidence/git-commit-history.txt` 属历史记录（前者为当时方案文档，后者为版权证据），保留旧名是正确状态。
+    - `.trae/documents/*.md` 历史文档：**已按用户要求更新文件名**（2026-10-30 追加）——3 处真实文件名引用改为唯一入口（`P3-A-桌面主进程操作层集中收口方案.md` 的"双端打包"验收项、`云端安卓指纹登录_plan.md` 的发布步骤、`优化手动打包文件-提高打包速度.md` 的体系图），并在受影响文档加"文件名更新（P7 入口收敛）"说明，避免读者误以为旧文件仍可双击。**唯一不改**：`software_copyright/evidence/git-commit-history.txt`（版权证据，属不可变历史记录）。
   - 边界（P7 后仍成立）：`tools/one-click-pack.ps1` **不删**——它是打包执行层唯一实现，被统一入口以子进程 `-AutoMode` 调用，也仍可直接运行（独立打包菜单）。"删入口"≠"删脚本"，把两者混为一谈会连带删掉打包内核。
   - 验证（本轮，全绿）：`pack-gate preflight` 5/5（ps1 **58** / BOM 58 / bat CRLF **31** / 编码 114 / 热更三通道）；`sync-all -VerifyOnly` ALL PASS；AST 9 个 ps1 全 `[OK]`；`smoke-p5`（含新增 F 段）全绿——静态（旧入口与 `fix-release-bat` 必须不存在、`Invoke-PostPackHotCheck` 存在、打包分支无无条件 `-Commit`）+ 桩实测热更三态（默认 `check=True commit=False` 且 rc 归一 0、`PACK_HOT_SIGN=1` → `commit=True`、`SKIP_HOTUPDATE=1` → 完全不调用）；菜单冒烟全绿（含 `[8]` 独立入口说明、`[2]`→`[4]` 菜单项渲染、`[1]/[2]/[4]⇒[0]⇒[0]`、`[7]` 热更只读零改动、旧入口不存在）；阶段冒烟全绿（`publish`/`full` 无 `--yes` rc=2、`hot` rc=0、非法 stage rc=2、唯一入口 `verify` rc=0）。
   - 坑（本轮新增）：

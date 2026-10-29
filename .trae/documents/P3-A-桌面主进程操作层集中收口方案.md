@@ -69,7 +69,7 @@ function createDesktopCrashGuard({ app, dialog, logger,
 2. 门禁：`sync-all.ps1`（Group 16/17 全绿）→ `copy-consistency.cjs` 0 失败 → `check-interface.bat` 6 OK（渲染层零改动应零漂移）
 3. 双端开发模式 `electron .` 手测：alert（退出确认）、confirm（删除确认）、prompt（用户管理编辑：title 文案正确 + 提交/取消/X 三路径）
 4. 崩溃韧性（不需真崩溃）：E2E 旁路（BNZC_E2E=1）下 `executeJavaScript('process.crash()')` 注入 → 验证自动重建、app.log 落 CRASH 记录、3 次触发熔断弹窗；正常关窗日志无 CRASH 误报
-5. 双端"一键打包.bat"严格模式全绿 + 装包冒烟
+5. 双端严格模式打包全绿 + 装包冒烟（原"一键打包.bat"已并入唯一入口，现为 `一键构建发布.bat` → 菜单 [2] 仅打包 → 版本 → 范围）
 6. 收尾：KNOWLEDGE.md 沉淀条目二十一 + commit/push（十道门）
 
 ## 生效方式
