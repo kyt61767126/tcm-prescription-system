@@ -356,7 +356,8 @@ function listAssetsViaApi(token, owner, repo, releaseId) {
 function uploadAssetViaCurl(token, owner, repo, releaseId, filePath, fileName) {
     const uploadUrl = `https://uploads.github.com/repos/${owner}/${repo}/releases/${releaseId}/assets?name=${encodeURIComponent(fileName)}`;
     const result = spawnSync('curl.exe', [
-        '-s',                     // 静默模式
+        '-sS',                    // ★ 2026-10-29 -s→-sS：保留错误信息（原来失败时 stderr 被吞，
+                                  //   只能报 "curl.exe failed: unknown"，无法定位代理/TLS/断流）
         '--ssl-no-revoke',        // ★ 跳过证书吊销检查（Windows Schannel 默认会检查 CRL/OCSP，国内网络常失败）
         '-X', 'POST',
         '-H', `Authorization: Bearer ${token}`,
@@ -367,11 +368,18 @@ function uploadAssetViaCurl(token, owner, repo, releaseId, filePath, fileName) {
         '--max-time', '600',      // 最多 10 分钟
         '--retry', '3',           // 失败自动重试 3 次
         '--retry-delay', '5',     // 每次重试间隔 5 秒
+        '--retry-all-errors',     // ★ 2026-10-29 传输层错误(55/56/35/6/7)也重试；
+                                  //   78MB 大文件经本地代理偶发断流，旧参数只对 5xx 重试
+        '--retry-connrefused',
         uploadUrl
     ], { encoding: 'utf8', timeout: 660000, cwd: PROJECT_ROOT, maxBuffer: 10 * 1024 * 1024 });
 
     if (result.status !== 0) {
-        return { error: 'curl.exe failed: ' + (result.stderr || result.stdout || 'unknown') };
+        const detail = (result.stderr || result.stdout || '').trim() || '无输出';
+        return {
+            error: `curl.exe 退出码 ${result.status}: ${detail.substring(0, 500)}` +
+                   `（网络/代理问题可重跑本工具，已上传成功的 asset 会自动跳过）`
+        };
     }
     // 输出格式：JSON + 换行 + HTTP 状态码
     const output = result.stdout.trim();

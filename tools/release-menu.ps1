@@ -18,6 +18,19 @@ if (-not (Test-Path "$script:RootDir\tools\publish-release.js")) {
 
 $env:NO_PAUSE = '1'
 
+# ★ 2026-10-29 发布日志持久化（对齐 one-click-pack 的 Start-Transcript）：
+#   背景：用户「一键发布失败」时窗口一关即无任何取证材料（发布菜单此前不落盘），
+#   无法判断是打包跳过、上传失败还是验证网络问题。现全程转录到
+#   .build-cache\logs\publish-<时间戳>.log（保留最近 20 份），失败横幅回显路径。
+$script:LogDir = Join-Path $script:RootDir '.build-cache\logs'
+if (-not (Test-Path $script:LogDir)) { New-Item -ItemType Directory -Path $script:LogDir -Force | Out-Null }
+$script:LogFile = Join-Path $script:LogDir ("publish-{0}.log" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
+$env:PUBLISH_LOG_FILE = $script:LogFile
+try { Start-Transcript -Path $script:LogFile -ErrorAction Stop | Out-Null } catch { Write-Host "[WARN] 发布日志转录启动失败(不影响发布): $_" -ForegroundColor Yellow }
+Write-Host "[LOG] 本次发布日志: $script:LogFile" -ForegroundColor DarkGray
+Get-ChildItem $script:LogDir -Filter 'publish-*.log' -File -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTime -Descending | Select-Object -Skip 20 | Remove-Item -Force -ErrorAction SilentlyContinue
+
 # ★ 2026-09-01 中文暂停提示：覆盖内置 pause（英文 "Press Enter to continue..."），
 #   本脚本所有 pause 调用点自动变为中文提示，无需逐处修改。
 Remove-Item alias:pause -ErrorAction SilentlyContinue
@@ -492,32 +505,55 @@ function Invoke-FullFlow {
     Write-Host ""
     Write-Host "[OK] 打包完成" -ForegroundColor Green
 
-    # ★ 2026-08-25 更新检测：读取 one-click-pack 写入的 .build-cache/last-run.json
-    #   built 空 = 四端全部 SKIP（无源码更新）→ 自动跳过发布与验证
-    #   部分更新 → 显示明细提示后继续发布（产物已是最新的一并幂等覆盖，无副作用）
+    # ★ 2026-10-29 修复「打包全 SKIP → 全流程误跳过发布」：
+    #   旧逻辑：last-run.json 的 built=[]（本次无端重打）→ 判定"无源码更新，跳过发布"。
+    #   但 built=[] 只说明"本次没重打"，不代表官网已最新：09:54 构建完成、10:07 再跑一次
+    #   智能打包（四端全 SKIP）就会把 built 覆盖为 []，此时官网仍落后 4 端，
+    #   发布被错误跳过（check-release-readiness 已以 [BLOCK] 警示该陷阱）。
+    #   新逻辑：以 auto-publish.js --check（本地产物 hash vs hash-manifest）为客观依据：
+    #     rc=2 → 有待发布产物 → 继续发布；rc=0 → 官网已最新 → 才允许跳过；其他 → WARN 继续。
     $builtUnits = $null
     $stateFile = "$script:RootDir\.build-cache\last-run.json"
     if (Test-Path $stateFile) {
         try { $builtUnits = (Get-Content $stateFile -Raw -Encoding UTF8 | ConvertFrom-Json).built } catch { $builtUnits = $null }
     }
+    $allUnitLabels = @{ 'cloud-desktop' = '云端桌面'; 'cloud-app' = '云端APP'; 'local-desktop' = '本地桌面'; 'local-app' = '本地APP' }
     if ($Version -eq "all" -and $null -ne $builtUnits) {
         $builtArr = @($builtUnits)
-        $allUnitLabels = @{ 'cloud-desktop' = '云端桌面'; 'cloud-app' = '云端APP'; 'local-desktop' = '本地桌面'; 'local-app' = '本地APP' }
         if ($builtArr.Count -eq 0) {
             Write-Host ""
-            Write-Host "========================================" -ForegroundColor Yellow
-            Write-Host "  [提示] 没有检测到任何源码更新" -ForegroundColor Yellow
-            Write-Host "  四端产物均已是最新，自动跳过发布与验证" -ForegroundColor Yellow
-            Write-Host "  （上一次发布即为最新版本，无需重复上传）" -ForegroundColor DarkGray
-            Write-Host "  强制重新打包: 设 NO_BUILD_SKIP=1 后重跑" -ForegroundColor DarkGray
-            Write-Host "========================================" -ForegroundColor Yellow
-            return 0
-        }
-        if ($builtArr.Count -lt 4) {
+            Write-Host "[提示] 本次打包四端全 SKIP（产物已是最新），继续核对官网是否需要发布..." -ForegroundColor Yellow
+        } elseif ($builtArr.Count -lt 4) {
             $builtNames = ($builtArr | ForEach-Object { $allUnitLabels[$_] }) -join '、'
             $skippedNames = (@('cloud-desktop','cloud-app','local-desktop','local-app') | Where-Object { $builtArr -notcontains $_ } | ForEach-Object { $allUnitLabels[$_] }) -join '、'
             Write-Host ""
             Write-Host "[提示] 本次更新 $($builtArr.Count) 端（$builtNames），跳过 $(4-$builtArr.Count) 端（$skippedNames）已是最新" -ForegroundColor Yellow
+        }
+    }
+    if ($Version -eq "all") {
+        $pendingPublish = $true
+        $autoPublishCheckJs = "$script:RootDir\tools\auto-publish.js"
+        if (Test-Path $autoPublishCheckJs) {
+            Write-Host ""
+            Write-Host "[检查] 比对本地产物与官网 manifest（auto-publish.js --check）..." -ForegroundColor Cyan
+            $chkRc = Invoke-NodeScript -ScriptPath $autoPublishCheckJs -Arguments @('--check')
+            if ($chkRc -is [array]) { $chkRc = [int]$chkRc[-1] }
+            if ($chkRc -eq 0 -or $chkRc -eq 3) {
+                $pendingPublish = $false
+            } else {
+                if ($chkRc -ne 2) {
+                    Write-Host "[WARN] 发布体检退出码 $chkRc（非预期），按待发布继续；发布工具会再次校验" -ForegroundColor Yellow
+                }
+                $pendingPublish = $true
+            }
+        }
+        if ($pendingPublish -eq $false) {
+            Write-Host ""
+            Write-Host "========================================" -ForegroundColor Cyan
+            Write-Host "  [无需发布] 官网已是最新版本" -ForegroundColor Cyan
+            Write-Host "  本地产物与官网 hash-manifest 完全一致，自动跳过上传与验证" -ForegroundColor Cyan
+            Write-Host "========================================" -ForegroundColor Cyan
+            return 0
         }
     }
 
@@ -554,6 +590,7 @@ function Invoke-FullFlow {
     if ($rc -ne 0) {
         Write-Host ""
         Write-Host "[ERROR] 发布失败，流程中止" -ForegroundColor Red
+        Write-Host "  完整日志: $script:LogFile" -ForegroundColor Yellow
         return $rc
     }
     Write-Host ""
@@ -565,9 +602,26 @@ function Invoke-FullFlow {
     Write-Host "  [3/3] 验证 (verify-release.js)" -ForegroundColor Cyan
     Write-Host "========================================" -ForegroundColor Cyan
     $rc = Invoke-Verify
+    if ($rc -is [array]) { $rc = [int]$rc[-1] }
+    if ($rc -eq 2) {
+        # ★ 2026-10-29 网络不可达 ≠ 发布失败（本机 hosts 把 github 域名指向本地代理，
+        #   代理抖动时 curl rc=6/35/超时）。上传已成功，验证仅"无法判定"。
+        Write-Host ""
+        Write-Host "[WARN] 验证受阻：部分 URL 因网络不可达无法判定（上传已完成，并非发布失败）" -ForegroundColor Yellow
+        Write-Host "  网络恢复后重跑 一键发布.bat 选 [5] 验证 复核即可" -ForegroundColor Yellow
+        Write-Host "  完整日志: $script:LogFile" -ForegroundColor DarkGray
+        Write-Host ""
+        Write-Host "========================================" -ForegroundColor Yellow
+        Write-Host "  发布已完成（验证待网络恢复复核）" -ForegroundColor Yellow
+        Write-Host "========================================" -ForegroundColor Yellow
+        Write-Host "  下载页: https://tcm-prescription-system.pages.dev/download"
+        Write-Host "  Release: https://github.com/kyt61767126/tcm-prescription-system/releases"
+        return 0
+    }
     if ($rc -ne 0) {
         Write-Host ""
         Write-Host "[ERROR] 验证失败，请检查 URL 是否可访问" -ForegroundColor Red
+        Write-Host "  完整日志: $script:LogFile" -ForegroundColor Yellow
         return $rc
     }
     Write-Host ""
@@ -761,7 +815,11 @@ while ($true) {
             # ★ 2026-08-23 复核修复：原 | Out-Null 丢弃退出码，失败静默无提示
             $rc6 = Invoke-Verify
             if ($rc6 -is [array]) { $rc6 = [int]$rc6[-1] }
-            if ($rc6 -ne 0) {
+            if ($rc6 -eq 2) {
+                Write-Host ""
+                Write-Host "[WARN] 部分 URL 因网络不可达无法判定（已重试；上传可能已成功）" -ForegroundColor Yellow
+                Write-Host "  这不是发布失败，网络恢复后重跑本项即可" -ForegroundColor Yellow
+            } elseif ($rc6 -ne 0) {
                 Write-Host ""
                 Write-Host "[ERROR] 验证失败，退出码: $rc6（详见上方日志）" -ForegroundColor Red
             }

@@ -16,7 +16,11 @@
 //
 // 退出码：
 //   0 = 全部通过（或没有匹配的条目）
-//   1 = 有失败（网络错误、超时、非 200、Content-Length 不匹配、manifest 解析失败）
+//   1 = 有硬失败（非 200、Content-Length 不匹配、manifest 解析失败等）
+//   2 = 仅"网络不可达/超时/TLS"这类无法判定项（上传可能已成功）——调用方应视为 WARN，
+//       不得据此判定"发布失败"（★ 2026-10-29：本机 hosts 把 github 域名指向本地代理，
+//       Schannel 吊销检查/代理抖动会周期性 rc=6/35/超时，旧逻辑一律 exit 1 导致
+//       「上传成功 + 验证网络失败」被误报成发布失败）
 //
 // URL 处理：
 //   - GitHub Release URL（绝对 URL）直接验证
@@ -44,8 +48,9 @@ const { spawnSync } = require('child_process');
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const MANIFEST_PATH = path.join(PROJECT_ROOT, 'public', 'hash-manifest.json');
 const CLOUDFLARE_BASE = 'https://tcm-prescription-system.pages.dev';
-const TIMEOUT_MS = 15000;
+const TIMEOUT_MS = 20000;   // ★ 2026-10-29 15s→20s：Cloudflare Pages 经本地代理常 5-7s，抖动时 15s 不够
 const MAX_REDIRECTS = 5;
+const RETRIES = 2;          // ★ 网络级失败重试次数（硬失败 404/大小不符不重试）
 
 // ANSI 颜色码
 const C = {
@@ -126,12 +131,27 @@ function isGitHubReleaseUrl(url) {
     return url.indexOf('://github.com/') !== -1 && url.indexOf('/releases/download/') !== -1;
 }
 
+// ★ 2026-10-29 网络级错误判定：只有"不可达/超时/TLS/DNS/连接被重置"这类无法判定项，
+//   才降级为 exit 2（WARN）；HTTP 404/403/5xx、Content-Length 不符仍是硬失败。
+function isNetworkError(msg) {
+    if (!msg) return false;
+    const m = String(msg);
+    return /请求超时|timed? ?out|ETIMEDOUT|ECONNRESET|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|EHOSTUNREACH|ENETUNREACH|socket hang up|certificate|SSL|TLS|curl\.exe 退出码 (6|7|28|35|52|56)/i.test(m);
+}
+
+function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 // 用 curl.exe 验证 GitHub Release URL（规避 Node.js SSL 证书问题）
 // 自动跟随重定向，返回 { statusCode, headers, error, finalUrl }
 function verifyWithCurl(url, timeoutMs) {
     const result = spawnSync('curl.exe', [
         '-s',                       // 静默模式
         '--ssl-no-revoke',          // 跳过证书吊销检查
+        '--retry', '2',             // ★ 2026-10-29 网络抖动自动重试
+        '--retry-delay', '2',
+        '--retry-all-errors',       // 连接/DNS/TLS 错误也重试（curl 7.71+）
         '-L',                       // 自动跟随重定向
         // ★ 2026-08-26 修复：去掉 '-o NUL'——它会把 -I 的响应头也写入 NUL，
         //   导致解析不到 Content-Length（每次发布必出 4 条 WARN 跳过 size 校验）。
@@ -185,17 +205,32 @@ async function verifyEntry(appKey, type, entry, versionFilter) {
 
     // GitHub Release URL 用 curl.exe 验证（规避 Node.js SSL 证书问题）
     // Cloudflare Pages URL 用 Node.js https 验证
+    // ★ 2026-10-29：网络级失败重试 RETRIES 次（指数退避），避免代理抖动/瞬时 DNS 失败
+    //   把"上传成功"误判为"发布失败"；硬失败（404/大小不符）不重试。
     let result;
-    if (isGitHubReleaseUrl(fullUrl)) {
-        result = verifyWithCurl(fullUrl, TIMEOUT_MS);
-    } else {
-        result = await fetchHead(fullUrl, TIMEOUT_MS, MAX_REDIRECTS);
+    for (let attempt = 0; attempt <= RETRIES; attempt++) {
+        result = isGitHubReleaseUrl(fullUrl)
+            ? verifyWithCurl(fullUrl, TIMEOUT_MS)
+            : await fetchHead(fullUrl, TIMEOUT_MS, MAX_REDIRECTS);
+        const retryable = result.error && isNetworkError(result.error);
+        if (!retryable || attempt === RETRIES) break;
+        logWarn('网络不可达，' + (attempt + 1) + '/' + RETRIES + ' 次重试: ' + fullUrl + '（' + result.error + '）');
+        await sleep(1500 * (attempt + 1));
     }
 
     if (result.error) {
         return {
             skipped: false, appKey, type, url: fullUrl,
             ok: false, reason: result.error,
+            network: isNetworkError(result.error),
+        };
+    }
+    if (!result.statusCode) {
+        // 无错误但状态码 0：同样视为无法判定（连接中断/空响应）
+        return {
+            skipped: false, appKey, type, url: fullUrl,
+            ok: false, reason: '无有效响应（状态码 0）',
+            network: true,
         };
     }
     if (result.statusCode !== 200) {
@@ -278,6 +313,7 @@ async function main() {
     // 输出每个结果
     let passCount = 0;
     let failCount = 0;
+    let netCount = 0;   // ★ 2026-10-29 网络不可达/超时（无法判定，非发布失败）
     let skipCount = 0;
 
     for (const r of results) {
@@ -292,6 +328,11 @@ async function main() {
             if (r.warn) {
                 logWarn('  ' + r.warn);
             }
+        } else if (r.network) {
+            netCount++;
+            logWarn('[' + r.appKey + '/' + r.type + '] ' + r.url);
+            console.log('       ' + C.yellow + '无法判定（网络不可达/超时）: ' + r.reason + C.reset);
+            console.log('       ' + C.gray + '提示: 上传可能已成功，稍后重跑 [5] 验证即可；不视为发布失败' + C.reset);
         } else {
             failCount++;
             logFail('[' + r.appKey + '/' + r.type + '] ' + r.url);
@@ -305,10 +346,11 @@ async function main() {
     console.log(C.bold + '============================================' + C.reset);
     console.log('  通过: ' + C.green + passCount + C.reset);
     console.log('  失败: ' + (failCount > 0 ? C.red : C.reset) + failCount + C.reset);
+    console.log('  无法判定(网络): ' + (netCount > 0 ? C.yellow : C.reset) + netCount + C.reset);
     console.log('  跳过: ' + C.gray + skipCount + C.reset);
     console.log();
 
-    if (passCount + failCount === 0) {
+    if (passCount + failCount + netCount === 0) {
         logWarn('没有匹配的条目需要验证');
         process.exit(0);
     }
@@ -316,6 +358,10 @@ async function main() {
     if (failCount > 0) {
         console.log(C.red + '❌ 有 ' + failCount + ' 个 URL 验证失败' + C.reset);
         process.exit(1);
+    } else if (netCount > 0) {
+        console.log(C.yellow + '⚠️  ' + netCount + ' 个 URL 因网络不可达无法判定（已重试 ' + RETRIES + ' 次）' + C.reset);
+        console.log(C.gray + '   这不是发布失败：上传多已成功，网络恢复后重跑本工具复核即可' + C.reset);
+        process.exit(2);
     } else {
         console.log(C.green + '✅ 全部 ' + passCount + ' 个 URL 验证通过' + C.reset);
         process.exit(0);

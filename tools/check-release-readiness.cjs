@@ -103,13 +103,13 @@ for (const k of Object.keys(localVersions)) {
     else add('BLOCK', 'REGRESS-' + k, labels[k] + ' 版本低于官网：官网 ' + old + ' > 本地 ' + cur, '禁止发布回退版本');
 }
 
-// ---- 3. last-run.json 全 SKIP 陷阱 ----
+// ---- 3. last-run.json 全 SKIP 陷阱（★ 2026-10-29 已在 release-menu 修复，降级为 WARN 提示）----
 const lastRun = readJson('.build-cache/last-run.json');
 const builtArr = lastRun && Array.isArray(lastRun.built) ? lastRun.built : null;
 if (pending > 0 && builtArr && builtArr.length === 0) {
-    add('BLOCK', 'FULLFLOW-TRAP',
+    add('WARN', 'FULLFLOW-SKIPPED-PACK',
         '存在 ' + pending + ' 端待发布，但 .build-cache/last-run.json 的 built=[]（上次打包四端全 SKIP）',
-        '一键发布「打包+发布全流程」会因此判定「无源码更新」自动跳过发布！请改用「仅发布」菜单，或设 NO_BUILD_SKIP=1 强制重打包后再走全流程。');
+        '已修复：全流程不再据此跳过发布，release-menu 会用 auto-publish.js --check 复核官网 manifest；仍待发布就照常上传。');
 }
 
 // ---- 4. 热更包一致性（内容 vs 当前源码，按生成器同规则：文本文件 LF 归一）----

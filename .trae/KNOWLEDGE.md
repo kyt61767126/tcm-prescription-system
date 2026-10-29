@@ -2490,4 +2490,15 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
   - 验证：负向测试（副本追加一行真实内容）→ `[DIFF] ... (src=AFB12D66 dst=B0AF3C41)` 仍拦截；恢复后 `sync-all.ps1 -VerifyOnly` 退出码 0、各分组 In sync；`pack-gate -Mode preflight` 4/4 PASS（52 ps1 语法+BOM、31 bat CRLF、编码 102 OK）。
   - 铁律：**同步校验只对内容负责、不对行尾负责**——Git 已由 `.gitattributes` 归一化行尾，任何用字节哈希比对副本的脚本（sync-all / copy-consistency 等）都必须先做 CRLF→LF 归一化，否则 PowerShell 写出的 CRLF 副本会让 pre-push 门与打包末尾反复红字。`: `git add` 后 `git status` 仍显示 M 而 `git diff` 为空，是索引 stat 缓存，`git add -- <文件>` 刷新即可（内容零差异）。
 
+* ★ 2026-10-29（一键发布"发布失败"根治）根因是 **`built=[]` 被当成"无源码更新"→ 全流程静默跳过发布**，不是上传失败：
+  - 现场：09:54 完成四端构建；10:07 再跑一次智能打包把 `.build-cache/last-run.json` 覆盖成 `built=[]`；随后 `一键发布.bat` → [1] 全流程读到 `built=[]` 直接 `return 0`（黄字"没有检测到任何源码更新，跳过发布与验证"）→ 官网仍 1.2.280/342/1.0.303/336，本地已 1.2.281/343/1.0.304/337。用户视角即"发布失败"。
+  - 修复（`tools/release-menu.ps1`）：删除以 `built=[]` 直接跳过的旧判定，改为**客观依据** `auto-publish.js --check`（本地产物 sha256 vs `public/hash-manifest.json`）：rc=2 有待发布→继续上传；rc=0/3 官网已最新→才允许跳过；其他→WARN 后继续（发布工具会再校验）。`built` 仅用于展示"本次重打了哪几端"。
+  - 同批加固：
+    - `tools/release-menu.ps1` 新增 `Start-Transcript` → `.build-cache/logs/publish-<时间戳>.log`（保留 20 份，失败横幅回显路径）；此前发布菜单不落盘，用户报"发布失败"却无任何取证材料。
+    - `tools/verify-release.js`：网络级失败（超时/ECONNRESET/TLS/curl rc=6·7·28·35·52·56）重试 2 次 + curl `--retry-all-errors`；新增第三态 **退出码 2 = 无法判定（网络不可达）**，仅在 HTTP 非 200/大小不符时才是硬失败 1。旧逻辑把"本机 hosts 把 github 域名指向本地代理 + 代理抖动"一律判 exit 1 → `[ERROR] 验证失败` 红字误报。`release-menu` 对 rc=2 只打 `[WARN] 发布已完成（验证待网络恢复复核）` 并返回 0。
+    - `tools/publish-release.js`：上传 curl 由 `-s` 改 `-sS` 并加 `--retry-all-errors/--retry-connrefused`，78MB exe 经代理断流(55/56)也能自动重试；失败信息带退出码+stderr，不再只有 "unknown"。
+    - `tools/check-release-readiness.cjs`：`FULLFLOW-TRAP` 由 BLOCK 降级为 WARN（陷阱已修，避免误导用户去强制重打包）。
+  - 验证：`auto-publish.js --check` rc=2（6 个产物待发布）；`verify-release.js` 9/9 通过、退出码 0；`publish-release.js --dry-run --changed-only` 全绿（token/gh/curl/6 文件）；`release-menu.ps1` 语法+BOM 通过、菜单可启动并生成 publish 日志；`pack-gate preflight` 4/4 PASS。
+  - 铁律：**"本次没重打"≠"官网已最新"**。任何依赖增量构建状态的发布判断，都必须用"产物 vs 已发布 manifest"的哈希比对复核；`last-run.json` 的 `built` 只反映本次构建动作，不能作为发布依据。发布菜单必须落盘日志；验证工具必须区分"硬失败"与"网络无法判定"，后者不得红字报"发布失败"。
+
 
