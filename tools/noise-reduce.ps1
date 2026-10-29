@@ -59,7 +59,19 @@ function Invoke-QuietProcess {
     }
     # 直连模式：尾参 2>&1 由 cmd 在子进程外层把 stderr 合并进 stdout（cmd 层渲染白色）；
     # Start-Process -NoNewWindow 直连控制台：彩色输出保留、实时输出无管道缓冲、返回值干净。
+    # ★ 2026-10-30 P8 修复「打包已完成、流程却一直卡着」：
+    #   原用 Start-Process **-Wait**，而 PS 5.1 的 -Wait 会连**后代进程**一起等
+    #   （实测探针：bat 里 start /b 起一个 12s 的孙进程 → -Wait 实耗 14.2s，而非 1.1s）。
+    #   gradle 常驻 daemon（空闲 3 小时才退）正是打包链的后代 → 打包进程 20:04 已退出，
+    #   父流程（release-menu 全流程）却挂着不打印「[OK] 打包完成」，用户看到的是"菜单死机"
+    #   （2026-10-29 19:44 实测：java.exe 打点启动于 20:00:58，父进程此后 20 分钟无输出）。
+    #   改为只等**直接子进程**：WaitForExit() 不追踪后代；退出码仍取该子进程（cmd /c 透传）。
     $procArgs = @('/c', $FilePath) + $ArgumentList + @('2>&1')
-    $proc = Start-Process -FilePath "$env:ComSpec" -ArgumentList $procArgs -Wait -NoNewWindow -PassThru
+    $proc = Start-Process -FilePath "$env:ComSpec" -ArgumentList $procArgs -NoNewWindow -PassThru
+    # ★ 必须先摸一次 .Handle 把进程句柄缓存下来：Start-Process -PassThru 返回的对象在进程退出后
+    #   若句柄未缓存，读 .ExitCode 会得到 $null（实测：WaitForExit() 后直接读为空，-Wait 却有值），
+    #   退出码丢失会让所有调用方（打包/发布/门禁）把失败当成功。Refresh() 反而会丢掉句柄，不能用。
+    $null = $proc.Handle
+    $proc.WaitForExit()
     return $proc.ExitCode
 }

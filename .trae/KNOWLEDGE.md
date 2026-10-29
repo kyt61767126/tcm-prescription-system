@@ -2624,5 +2624,17 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
     - **`Read-MenuChoice` 的提示语不落 stdout**（`Read-Host` 的 prompt 直接写控制台），冒烟断言不能校验"请选择 [0-4]"这类提示，只能断言菜单项文本。
     - 删文件后要同步清理**临时/辅助脚本里对它的引用**（如 `tools/_tmp/parse-check.ps1` 的文件清单），否则门禁会报"文件读不到"而误判语法失败。
 
+* ★ 2026-10-30（P8：**修「打包已完成、菜单却像死机」** —— `Start-Process -Wait` 会等后代进程）：
+  - 症状（2026-10-29 19:44–20:14 实测）：`一键构建发布.bat` 选 `[1] 全流程 → [3] 全部`，四端打包在 20:04:18 全部完成（`last-run.json` built 4 端、副作用已自动提交推送 `39e55c9d`），但窗口此后 10 分钟没有任何新输出，用户判定"卡死"**手动关窗 = 非正常退出**，后续三步（热更签发 / 体检 / 发布 / 验证）全部没跑。
+  - 根因：`tools/noise-reduce.ps1` 的 `Invoke-QuietProcess` 直连模式用了 `Start-Process ... -Wait`。**PS 5.1 的 `-Wait` 不只等直接子进程，还会等它的全部后代**；打包链里 gradle 常驻 daemon（`java.exe`，空闲 3 小时才退）就是后代 → 打包进程已退出，父进程仍被 `-Wait` 挂着。
+    实测探针（`start /b` 起一个 12s 的孙进程）：`-Wait` 实耗 **14.2s**，`WaitForExit()` 实耗 **0.2s**。
+  - 修法（唯一调用点，一处修复全链受益）：`-PassThru` 起 cmd → **先 `$null = $proc.Handle` 缓存句柄** → `$proc.WaitForExit()` → `return $proc.ExitCode`。
+    - 为什么必须摸 `.Handle`：进程退出后若句柄未缓存，读 `.ExitCode` 得到 `$null`（`Refresh()` 同样会丢句柄）→ 所有调用方（打包/发布/热更/门禁）会把**失败当成功**。修复后探针实测退出码 3 正确透传。
+    - `-Capture` 管道模式（`cmd /c ... 2>&1 | Write-HostLine`）不涉及 `-Wait`，行为不变。
+  - 影响面：打包（`Invoke-Pack`/`Invoke-SinglePack`）、发布（`Invoke-Publish`）、热更签发、`Invoke-NodeScript` 等全部直连调用。
+  - 运维口径（症状再出现时的 3 步取证）：①看 `.build-cache/logs/pack-*.log` 尾部是否已 `[transcript end]`（是=子进程其实跑完了）；②`Get-CimInstance Win32_Process` 查 `java.exe` 常驻 daemon（它是"等不完的后代"）；③`git log -1`/`git status` 判断副作用是否已收纳。**本次结论：打包与收尾提交都成功，缺的只是父流程的后三步。**
+  - 验证：`pack-gate -Mode preflight` 5/5（ps1 58 / BOM 58 / bat 31 / 编码 / 热更三通道）、AST 全 OK、`smoke-p5` bad=0、探针 C/D（0.2s + rc 透传）。
+  - 坑：`Start-Process -PassThru` 返回的进程对象在**未缓存句柄**的前提下，`WaitForExit()` 之后 `.ExitCode` 为空；`-Wait` 版本反而有值——所以"去掉 -Wait"必须同时补 `.Handle`，只改一半会造成退出码静默丢失（比卡死更危险）。
+
 
 
