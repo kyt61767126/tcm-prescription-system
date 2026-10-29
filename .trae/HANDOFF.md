@@ -16,6 +16,8 @@
 
 ## 当前基线（2026-10-30 更新）
 
+- **2026-10-30 P6 一键全流程补上智能打包（commit `75a53be3`；结论见 KNOWLEDGE 末章）**：`Invoke-Pack` 新增 `-Strategy all|smart`（默认 `all`，`smart → -AutoMode 4`，其余 `→ 3`）；`Invoke-FullFlow` 的「全部」分支改为 `-Strategy smart`，`Show-VersionMenu -Action full` 的 `[3]` 与 Step1 横幅同步标注「智能打包」；保险丝 `FULLFLOW_PACK_ALL=1` 强制全量。`full all --yes` 与菜单 `[1]`→全部 均生效。验证：pack-gate 5/5、AST 10 文件全 OK、`smoke-p5` 45/45（新增 E 段：桩实测 smart→AutoMode 4、默认→3）、菜单冒烟 22/22、阶段冒烟 11/11。**生效：本机工具链改动，push 即达。**
+
 - **2026-10-30 P5 打包编排表驱动 + 发布文案合一（commit `9086aa73`；结论见 KNOWLEDGE 末章）**：`one-click-pack.ps1` 新增 `$script:PackPlanMap`（8 键 → `Kind/Target/Label`）+ 唯一执行器 `Invoke-PackUnit`（`cloud/offline/both/all/smart`）+ 唯一收尾 `Complete-PackRun`（副作用收纳 + `last-run.json`）+ 菜单 `[1]~[4]` 一行化 `Invoke-MenuPackAction`；`-AutoMode` 由 8 段 switch 改查表，非法值 `rc=1`；`Show-PickVersionMenu`（`[5]/[6]`）收敛为选版本 + `Invoke-PackUnit`。`release-menu.ps1` 新增 `Invoke-SmartPublish`（体检→auto-publish→rc=3「无需发布」文案→结果横幅）与 `Invoke-PublishSelection`（`Target=all` 分流智能发布；单版本体检硬门+全量上传+中文标签），阶段 `publish`、菜单 `[3]`、菜单 `[4]` 三处旧内联代码全部替换（`Invoke-FullFlow` 保留自有分段发布，避免重复体检）。验证：pack-gate 5/5、AST 10 文件全 OK、`smoke-p5` 35/35（含 `-AutoMode 9/1x` rc=1；AST 抽函数注入桩验证发布分流/文案，零网络零副作用）、菜单冒烟 22/22、阶段冒烟 11/11。**生效：本机工具链改动，push 即达；下次运行任一入口即用新链。**
   - 后续可选（方案 B 剩余项均已完成）：P0~P5 分期到此收口；后续仅"新增端/组合"按表加行维护。
 
