@@ -2554,7 +2554,7 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
     - 菜单新增 `[7] 热更签发 - 检查三通道并按需重签`（不打包/不发布）；`[2] 仅打包` 成功后也按需重签。
     - pack-gate 新增 `[P5] 热更包完整性`（只验包自身签名/哈希，不验内容是否落后，避免日常打包被开发中改动拦住）。
   - 保险丝：`SKIP_HOTUPDATE=1` 跳过签发；`READINESS_SOFT=1` 跳体检；`ALLOW_DIRTY_BUILD=1` / `NO_AUTOCOMMIT=1` 沿用。
-  - 验证：`pack-gate preflight` 5/5 PASS（P1 语法 53 文件、P2 BOM、P3 bat CRLF、P4 编码、P5 热更完整性）；`entry-preflight` 三模式 rc=0 且 `pack-post` 确不自愈；`hotupdate-stage -Mode Verify` 三通道 PASS；`--check` 正确报 `rc=2`（当时 desktop 两通道 appVersion 元数据落后 1.2.283/1.0.306）；`-Mode Sign` 实测可自动递增并签发（测试后已 `git checkout` 还原，未污染线上版本）；`SKIP_HOTUPDATE=1` 生效且无副作用。
+  - 验证：`pack-gate preflight` 5/5 PASS（P1 语法 53 文件、P2 BOM、P3 bat CRLF、P4 编码、P5 热更完整性）；`entry-preflight` 三模式 rc=0 且 `pack-post` 确不自愈；`hotupdate-stage -Mode Verify` 三通道 PASS；`--check` 正确报 `rc=2`（当时热包 appVersion 1.2.282/1.0.305 落后整包 1.2.283/1.0.306，属元数据落后即需重签）；`-Mode Sign` 实测可自动递增并签发（测试后已 `git checkout` 还原，未污染线上版本）；`SKIP_HOTUPDATE=1` 生效且无副作用。
   - 坑：PowerShell 5.1 对**无 BOM 的中文注释 .ps1** 会按 GBK 误读并抛"Unexpected token ')'"等假语法错 → 临时脚本要么 ASCII-only，要么先 `tools/fix-ps1-bom.ps1`。`Write` 写出的 bat 是 LF，必须 `tools/fix-bat-crlf.ps1` 修（否则双击闪退）。
 
 
