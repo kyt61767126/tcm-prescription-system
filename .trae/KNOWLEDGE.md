@@ -2501,4 +2501,11 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
   - 验证：`auto-publish.js --check` rc=2（6 个产物待发布）；`verify-release.js` 9/9 通过、退出码 0；`publish-release.js --dry-run --changed-only` 全绿（token/gh/curl/6 文件）；`release-menu.ps1` 语法+BOM 通过、菜单可启动并生成 publish 日志；`pack-gate preflight` 4/4 PASS。
   - 铁律：**"本次没重打"≠"官网已最新"**。任何依赖增量构建状态的发布判断，都必须用"产物 vs 已发布 manifest"的哈希比对复核；`last-run.json` 的 `built` 只反映本次构建动作，不能作为发布依据。发布菜单必须落盘日志；验证工具必须区分"硬失败"与"网络无法判定"，后者不得红字报"发布失败"。
 
+* ★ 2026-10-29（桌面热更 appVersion 对齐）整包 bump 后**必须随整包重签桌面热包**，否则 `check-release-readiness` 报 `appVersion` 落后（如热包 `2026.10.29-1` appVersion=1.2.280/1.0.303，整包已 1.2.281/1.0.304）：
+  - 命令：`node tools/generate-desktop-hotupdate.cjs -c cloud` / `-c local`（不传 `-n` 会自动把当日序号 +1 → `2026.10.29-2`，绝不覆盖已发布序号；同号重签才需 `--force`）。`appVersion` 由各端 `package.json` 的 `version` 自动读取（信息字段，非门禁）。
+  - 内容未变时重签只改 `version.json`（hotVersion/signedAt/signature/appVersion）；客户端只判 hotVersion 相等或 signedAt 新旧，并跳过 sha256 未变文件，故不会产生重复流量。
+  - `app-local` 通道的 `appVersion` 恒为 `1.0.0`（软著 versionName 常量，见 `generate-app-hotupdate.cjs`），**不要**当漂移去改；APP 侧门禁是 `minAppCode`。
+  - 验签自检（不依赖客户端）：用 `shared/hot-update-core.cjs` 的 `buildSignMessage` + `HOT_PUBLIC_KEY_PEM` 对 `version.json` 做 `crypto.verify`，并复算每个 `files[].sha256`；两通道均 `sig=VALID / hashMismatch=0` 才算签好。
+  - 顺序铁律：**先重签推热包 → 等 Cloudflare Pages 部署 → 再发整包**；热更优先级高于整包，旧热包会中和整包内闸门修复。
+
 

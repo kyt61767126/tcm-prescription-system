@@ -1,8 +1,8 @@
 {
   "format": 1,
   "channel": "cloud",
-  "hotVersion": "2026.10.29-1",
-  "appVersion": "1.2.280",
+  "hotVersion": "2026.10.29-2",
+  "appVersion": "1.2.281",
   "files": [
     {
       "name": "index.html",
@@ -105,6 +105,6 @@
       "size": 881727
     }
   ],
-  "signedAt": 1793237578861,
-  "signature": "1/KOBp6IGmgCqG9lD83bfO1kpIhMRQgm908M+hIeCNy7iAvNxP9qUHhctCDx925wqw2HKKEHKYXin0NA2mgQDQ=="
+  "signedAt": 1793241578751,
+  "signature": "iPjbOzT8vcLqmwr6sxqgsyKkMQ2VBFDy9e3hBmLzRXaAn/wq6lR7MQnPWoo/6mqJmexDFnFGP5J0iWUJx+VTAQ=="
 }
