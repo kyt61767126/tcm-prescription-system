@@ -67,27 +67,11 @@ if (Test-Path $gateToolRm) {
     }
 }
 
-# ★ 2026-08-24 打包增量检测（tools/build-skip.ps1）：
-#   源码自上次打包后未变化+产物完好 → 跳过重复打包；打包成功且副作用AutoCommit后记录基线
-$script:BuiltUnits = @()
-function Test-BuildSkip([string]$unit) {
-    if ($env:NO_BUILD_SKIP -eq '1') { return $false }
-    $skipTool = Join-Path $PSScriptRoot 'build-skip.ps1'
-    if (-not (Test-Path $skipTool)) { return $false }
-    & $env:ComSpec /c "powershell -NoProfile -ExecutionPolicy Bypass -File $skipTool -Check -Unit $unit 2>&1" | ForEach-Object { Write-HostLine $_ -Indent '  ' }
-    return ($LASTEXITCODE -eq 0)
-}
-function Record-BuiltUnits {
-    if (-not $script:BuiltUnits -or $script:BuiltUnits.Count -eq 0) { return }
-    $skipTool = Join-Path $PSScriptRoot 'build-skip.ps1'
-    if (-not (Test-Path $skipTool)) { return }
-    Write-Host ""
-    Write-Host "--- 打包增量基线记录 ---" -ForegroundColor Cyan
-    foreach ($u in $script:BuiltUnits) {
-        & $env:ComSpec /c "powershell -NoProfile -ExecutionPolicy Bypass -File $skipTool -Record -Unit $u 2>&1" | ForEach-Object { Write-HostLine $_ -Indent '  ' }
-    }
-    $script:BuiltUnits = @()
-}
+# ★ 2026-10-30 P0 去重：打包增量基线/时间戳统一到 tools/pack-core.ps1（单一权威源）。
+#   本菜单不再自带 Test-BuildSkip/Record-BuiltUnits：打包一律走子进程 one-click-pack.ps1
+#   -AutoMode，基线（含 .build-cache/last-run.json）由子进程写入；父进程若再调用 Record
+#   会用空 built 覆盖真值，导致打包菜单摘要失真。
+. (Join-Path $PSScriptRoot 'pack-core.ps1')
 
 # ★ [SELF-HEAL 2026-08-23] Fix LF line endings in ALL downstream build .bat files
 # BEFORE invoking them. This script calls build-app.bat directly (bypassing
@@ -95,21 +79,10 @@ function Record-BuiltUnits {
 # LF-corrupted Chinese .bat aborts cmd at parse time (window flash-close).
 $fixTool = Join-Path $PSScriptRoot 'fix-bat-crlf.ps1'
 if (Test-Path $fixTool) {
-    $buildBats = @(
-        'app_project\db-yunduan\pack-desktop.bat',
-        'app_project\db-yunduan\build-pack.bat',
-        'app_project\db-yunduan\build-app.bat',
-        'app_project\db-yunduan\cloud_desktop\build.bat',
-        'app_project\db-offline\pack-desktop.bat',
-        'app_project\db-offline\build-pack.bat',
-        'app_project\db-offline\app\build-app.bat',
-        'app_project\db-offline\desktop\build.bat'
-    ) | ForEach-Object { Join-Path $script:RootDir $_ }
+    # ★ 2026-10-30 P0 去重：下游 bat 清单单一权威源 tools/build-bat-list.ps1
+    . (Join-Path $PSScriptRoot 'build-bat-list.ps1')
+    $buildBats = @($DownstreamBuildBats | ForEach-Object { Join-Path $script:RootDir $_ } | Where-Object { Test-Path $_ })
     $null = Invoke-QuietProcess -FilePath 'powershell' -ArgumentList (@('-NoProfile','-ExecutionPolicy','Bypass','-File',$fixTool) + $buildBats)
-}
-
-function Get-TimeStamp {
-    return (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
 }
 
 # ============ 打包 ============
@@ -125,154 +98,49 @@ function Invoke-Pack {
     #   用户需在子菜单选完再退出才能回到发布菜单，体验混乱。
     # ★ 2026-09-08 改 Invoke-QuietProcess：stdout 直连控制台不混入返回值（原管道方案颜色丢失），
     #   stderr 在 cmd 层合并进 stdout（PS host 不再染红）
-    return Invoke-QuietProcess -FilePath 'powershell' -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',$packScript,'-AutoMode','3')
+    # ★ 2026-10-30 P0 去重：加 -AutoCommit，让子进程独占收纳版本副作用 + 写增量基线
+    #   （.build-cache/last-run.json）。父进程不再事后 CollectSideEffectsOnly（会覆盖基线）。
+    $packArgs = @('-NoProfile','-ExecutionPolicy','Bypass','-File',$packScript,'-AutoMode','3')
+    if ($env:NO_AUTOCOMMIT -ne '1') { $packArgs += '-AutoCommit' }
+    return Invoke-QuietProcess -FilePath 'powershell' -ArgumentList $packArgs
 }
 
-# ============ 单个版本打包（直接调用对应项目脚本，绕过 one-click-pack 菜单）============
+# ============ 单个版本打包（★ 2026-10-30 P0 去重：委托 one-click-pack -AutoMode）============
+#   原 144 行自实现（编辑配置 / 源码落定门 / 增量检测 / 子 bat 调用）是 one-click-pack
+#   -AutoMode 的第二份副本，且不写 .build-cache/last-run.json → 打包菜单摘要失真。
+#   现统一委托（source-settled / pack-gate / skip / 副作用 / 基线 全部回归单一实现）。
 function Invoke-SinglePack {
     param(
         [string]$Version,   # cloud / dingzhi
         [string]$Mode       # desktop / app / all
     )
-    $verLabel = switch ($Version) {
-        "cloud"    { "云端" }
-        "dingzhi"  { "本地" }
-        default    { $Version }
-    }
-    $modeLabel = switch ($Mode) {
-        "desktop" { "桌面exe" }
-        "app"     { "手机APP" }
-        "all"     { "桌面+APP" }
-        default   { $Mode }
-    }
-
-    $startTime = Get-TimeStamp
-    Write-Host ""
-    Write-Host "========================================" -ForegroundColor Cyan
-    Write-Host "  开始打包 $verLabel 版 ($modeLabel)..." -ForegroundColor Cyan
-    Write-Host "  开始: $startTime" -ForegroundColor Cyan
-    Write-Host "========================================" -ForegroundColor Cyan
-
-    # ★ 2026-08-23 修复：dingzhi（本地版）目录映射缺失
-    #   原代码仅映射 cloud→db-yunduan，选"本地版"时拼成不存在的 db-dingzhi，
-    #   导致 [ERROR] 版本目录不存在，打包流程中止。
-    #   实际本地版目录为 app_project\db-offline（下有 pack-desktop.bat/build-app.bat/edit-config.ps1，
-    #   与 db-yunduan 调用接口一致，见 db-offline\build-app.bat 头注释）。
-    $verDir = "$script:RootDir\app_project\db-$Version"
-    if ($Version -eq "cloud")   { $verDir = "$script:RootDir\app_project\db-yunduan" }
-    if ($Version -eq "dingzhi") { $verDir = "$script:RootDir\app_project\db-offline" }
-
-    if (-not (Test-Path $verDir)) {
-        Write-Host "[ERROR] 版本目录不存在: $verDir" -ForegroundColor Red
+    $packScript = "$script:RootDir\tools\one-click-pack.ps1"
+    if (-not (Test-Path $packScript)) {
+        Write-Host "[ERROR] 未找到打包脚本: $packScript" -ForegroundColor Red
         return 1
     }
-
-    # ★ 2026-08-31 源码落定门前置（1.2.194 事故防呆，与 ensure-build-env Step 1.5 同源）：
-    #   发布链路在"开始打包"前先查 git 工作区——有未提交的源码修改立即中止，
-    #   杜绝两件事：①白跑几分钟打包才被下游 ensure-build-env 门禁拦住（发布流程
-    #   还有后续步骤，浪费更明显）；②发布出"无法追溯版本"的产物。
-    #   检测逻辑单一权威源 tools/source-settled.ps1（三处共用，白名单含
-    #   build.gradle 纯 versionCode/versionName 递增）。
-    #   保险丝：ALLOW_DIRTY_BUILD=1 跳过。
-    if ($env:ALLOW_DIRTY_BUILD -ne '1') {
-        . (Join-Path $PSScriptRoot 'source-settled.ps1')
-        $dirty = @(Get-SourceSettledBlockers)
-        if ($dirty.Count -gt 0) {
-            Write-Host "[ERROR] 源码未落定：检测到 $($dirty.Count) 个未提交修改，发布中止（先 commit 再发布）" -ForegroundColor Red
-            Write-Host "  （1.2.194 事故防呆：AI 修改中打包=装走半成品代码）" -ForegroundColor Yellow
-            $dirty | Select-Object -First 10 | ForEach-Object { Write-Host "    $_" -ForegroundColor Yellow }
-            return 1
-        }
+    $autoMode = switch ("$Version/$Mode") {
+        "cloud/desktop"   { '1d' }
+        "cloud/app"       { '1a' }
+        "cloud/all"       { '1' }
+        "dingzhi/desktop" { '2d' }
+        "dingzhi/app"     { '2a' }
+        "dingzhi/all"     { '2' }
+        default           { $null }
     }
-
-    # 离线版使用 config.json 默认值（XXX中医诊所/XXX医生），跳过配置编辑窗口
-    # 设置 SKIP_CONFIG=1，使桌面 build.bat 与 APP build-app.bat 整轮跳过后台配置编辑
-    # ★ 2026-08-23 三轮复核修复：SKIP_CONFIG 环境变量泄漏——菜单会话中先打本地版再打
-    #   云端版时，残留变量导致云端版 build-app.bat 的 edit-config -AutoConfirm 配置
-    #   同步被跳过（本函数对云端不做 Step1 同步，子进程 AutoConfirm 是唯一同步途径）。
-    #   云端版进入时显式清除（对齐 pack.ps1:963 的清理模式）。
-    if ($Version -ne "cloud") {
-        $env:SKIP_CONFIG = "1"
-    } else {
-        Remove-Item Env:\SKIP_CONFIG -ErrorAction SilentlyContinue
+    if (-not $autoMode) {
+        Write-Host "[ERROR] 不支持的版本/范围组合: $Version / $Mode" -ForegroundColor Red
+        return 1
     }
-
-    # 离线版同步默认配置（跳过交互编辑）
-    if ($Version -ne "cloud" -and ($Mode -eq "all" -or $Mode -eq "app")) {
-        Write-Host ""
-        Write-Host "[配置] 同步 $verLabel 版默认配置 (跳过编辑)..." -ForegroundColor Yellow
-        Push-Location $verDir
-        try {
-            # ★ 2026-08-23 修复：防子进程stdout混入返回值（返回值污染导致误报"打包失败"）。
-            # ★ 2026-09-08 改 Invoke-QuietProcess：同时白化 stderr（PS host 不再染红）。
-            #   注意：Start-Process 不更新 $LASTEXITCODE，退出码必须用返回值
-            $cfgRc = Invoke-QuietProcess -FilePath 'powershell' -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path (Get-Location) 'edit-config.ps1'),'-SkipConfig')
-        } finally {
-            Pop-Location
-        }
-        if ($cfgRc -ne 0) {
-            Write-Host "[WARN] 配置同步出现警告(继续打包)" -ForegroundColor Yellow
-        }
-    }
-
-    $rc = 0
-    if ($Mode -eq "all" -or $Mode -eq "desktop") {
-        Write-Host ""
-        Write-Host "[桌面] 打包 $verLabel 桌面 exe..." -ForegroundColor Yellow
-        $desktopBat = "$verDir\pack-desktop.bat"
-        if (Test-Path $desktopBat) {
-            # ★ 2026-08-24 增量检测：源码与产物指纹一致则跳过重复打包
-            $skipUnit = if ($Version -eq "cloud") { 'cloud-desktop' } else { 'local-desktop' }
-            if (Test-BuildSkip $skipUnit) {
-                Write-Host "  [SKIP] $verLabel 桌面产物已是最新，跳过打包" -ForegroundColor Green
-            } else {
-                # ★ 2026-09-08 改 Invoke-QuietProcess：stderr 在 cmd 层合并（PS host 不再染红），
-                #   子 bat 彩色输出直连控制台保留，退出码取返回值
-                $rc = Invoke-QuietProcess -FilePath $desktopBat
-                if ($rc -ne 0) {
-                    Write-Host "[ERROR] $verLabel 桌面打包失败，退出码: $rc" -ForegroundColor Red
-                    return $rc
-                }
-                $script:BuiltUnits += $skipUnit
-            }
-        } else {
-            Write-Host "[WARN] 未找到桌面打包脚本: $desktopBat" -ForegroundColor Yellow
-        }
-    }
-
-    if ($Mode -eq "all" -or $Mode -eq "app") {
-        Write-Host ""
-        Write-Host "[APP] 打包 $verLabel 手机 APP (严格模式)..." -ForegroundColor Yellow
-        $appBat = "$verDir\build-app.bat"
-        if (Test-Path $appBat) {
-            # ★ 2026-08-24 增量检测：源码与产物指纹一致则跳过重复打包
-            $skipUnit2 = if ($Version -eq "cloud") { 'cloud-app' } else { 'local-app' }
-            if (Test-BuildSkip $skipUnit2) {
-                Write-Host "  [SKIP] $verLabel APP产物已是最新，跳过打包" -ForegroundColor Green
-            } else {
-                # 与 one-click-pack.ps1 的 app-strict 一致，APP 统一走严格模式（签名哈希+Java混淆+签名校验）
-                # ★ 2026-09-08 改 Invoke-QuietProcess（同桌面段：stderr 白化 + 彩色直连 + 返回值即退出码）
-                $rc = Invoke-QuietProcess -FilePath $appBat -ArgumentList @('standard')
-                if ($rc -ne 0) {
-                    Write-Host "[ERROR] $verLabel APP打包失败，退出码: $rc" -ForegroundColor Red
-                    return $rc
-                }
-                $script:BuiltUnits += $skipUnit2
-            }
-        } else {
-            Write-Host "[WARN] 未找到APP打包脚本: $appBat" -ForegroundColor Yellow
-        }
-    }
-
-    $endTime = Get-TimeStamp
+    $packArgs = @('-NoProfile','-ExecutionPolicy','Bypass','-File',$packScript,'-AutoMode',$autoMode)
+    if ($env:NO_AUTOCOMMIT -ne '1') { $packArgs += '-AutoCommit' }
     Write-Host ""
-    Write-Host "========================================" -ForegroundColor Green
-    Write-Host "  $verLabel 版 ($modeLabel) 打包完成！" -ForegroundColor Green
-    Write-Host "  开始: $startTime" -ForegroundColor Green
-    Write-Host "  结束: $endTime" -ForegroundColor Green
-    Write-Host "========================================" -ForegroundColor Green
-    return $rc
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host "  打包 $Version / $Mode（委托 one-click-pack -AutoMode $autoMode）..." -ForegroundColor Cyan
+    Write-Host "========================================" -ForegroundColor Cyan
+    return Invoke-QuietProcess -FilePath 'powershell' -ArgumentList $packArgs
 }
+
 
 # ============ 发布 ============
 function Invoke-Publish {
@@ -330,6 +198,60 @@ function Invoke-NodeScript {
     }
 }
 
+# ============ 热更签发（阶段 1.5，★ 2026-10-30 P1 新增）============
+# 背景：此前发布链全流程不生成热更包（one-click-pack / publish-release / auto-publish 均无），
+#   全靠人工记得重签；漏签 → 线上 hotVersion 未变 → 客户端判定"已是最新"，不下载、无横幅
+#   （2026-10-29 实测）。本函数把「检查→按需重签→校验→提交推送」固化进流程，幂等：
+#   内容一致即跳过，不留无意义提交。
+# 保险丝：SKIP_HOTUPDATE=1 跳过（仅限明确知道线上已最新时）。
+function Invoke-HotUpdateSign {
+    param(
+        [string]$Scope = "all",   # all / cloud / dingzhi
+        [switch]$CheckOnly,
+        [switch]$Commit
+    )
+    if ($env:SKIP_HOTUPDATE -eq '1') {
+        Write-Host "[SKIP] SKIP_HOTUPDATE=1 —— 跳过热更签发" -ForegroundColor Yellow
+        return 0
+    }
+    $stage = "$script:RootDir\tools\hotupdate-stage.ps1"
+    if (-not (Test-Path $stage)) {
+        Write-Host "[WARN] 未找到 tools\hotupdate-stage.ps1，跳过热更签发（不阻断）" -ForegroundColor Yellow
+        return 0
+    }
+    $channelArgs = switch ($Scope) {
+        "cloud"   { @('desktop/cloud') }
+        "dingzhi" { @('desktop/local', 'app-local') }
+        default   { @('desktop/cloud', 'desktop/local', 'app-local') }
+    }
+    $hotArgs = @('-Mode', $(if ($CheckOnly) { 'Check' } else { 'Sign' }), '-Channels') + $channelArgs
+    if ($Commit -and -not $CheckOnly) { $hotArgs += '-Commit' }
+
+    Write-Host ""
+    Write-Host "========================================" -ForegroundColor Cyan
+    if ($CheckOnly) {
+        Write-Host "  热更包检查（只读，判断是否需要重签）" -ForegroundColor Cyan
+    } else {
+        Write-Host "  热更签发（按需重签三通道 + 校验 + 推送）" -ForegroundColor Cyan
+    }
+    Write-Host "  范围: $Scope    通道: $($channelArgs -join ', ')" -ForegroundColor Cyan
+    Write-Host "========================================" -ForegroundColor Cyan
+    $rc = Invoke-QuietProcess -FilePath 'powershell' -ArgumentList (@('-NoProfile','-ExecutionPolicy','Bypass','-File',$stage) + $hotArgs)
+    if ($rc -is [array]) { $rc = [int]$rc[-1] }
+    if ($CheckOnly) {
+        if ($rc -eq 0) { Write-Host "[OK] 热更包已是最新，无需重签" -ForegroundColor Green }
+        elseif ($rc -eq 2) { Write-Host "[需签发] 热更内容落后于源码（全流程会自动重签）" -ForegroundColor Yellow }
+        else { Write-Host "[WARN] 热更检查退出码 $rc（非预期）" -ForegroundColor Yellow }
+        return $rc
+    }
+    if ($rc -ne 0) {
+        Write-Host "[ERROR] 热更签发失败，退出码 $rc —— 继续发布会让客户端收不到本次更新" -ForegroundColor Red
+        return $rc
+    }
+    Write-Host "[OK] 热更签发完成" -ForegroundColor Green
+    return 0
+}
+
 # ============ 验证 ============
 function Invoke-Verify {
     $verifyScript = "$script:RootDir\tools\verify-release.js"
@@ -342,6 +264,27 @@ function Invoke-Verify {
     Write-Host "  验证发布结果..." -ForegroundColor Cyan
     Write-Host "========================================" -ForegroundColor Cyan
     return Invoke-NodeScript -ScriptPath $verifyScript
+}
+
+# ============ 发布前体检（严格模式；★ 2026-10-30 P1 新增）============
+# 背景：check-release-readiness.cjs 一直只在入口 bat 里 informational 跑（从不阻断），
+#   而它本身会把「热更内容落后于源码（HOT-STALE）」「版本回退（REGRESS）」
+#   「热更 minAppCode 高于 APK（HOT-MINAPP）」判为 BLOCK。发布链此前不消费这个判定，
+#   于是能看到"热更包降级却照常发布"。此处作为上传前的硬门（--strict）。
+# 保险丝：READINESS_SOFT=1 降级为提示（仅限已人工确认阻断项可接受时）。
+function Invoke-ReadinessGate {
+    if ($env:READINESS_SOFT -eq '1') {
+        Write-Host "[SKIP] READINESS_SOFT=1 —— 体检降级为提示（阻断项不会中止流程）" -ForegroundColor Yellow
+        return 0
+    }
+    $readiness = "$script:RootDir\tools\check-release-readiness.cjs"
+    if (-not (Test-Path $readiness)) {
+        Write-Host "[WARN] 未找到 tools\check-release-readiness.cjs，跳过发布前体检" -ForegroundColor Yellow
+        return 0
+    }
+    $rc = Invoke-NodeScript -ScriptPath $readiness -Arguments @('--strict')
+    if ($rc -is [array]) { $rc = [int]$rc[-1] }
+    return $rc
 }
 
 # ============ 发布前合规检查（必守HARD规则）============
@@ -484,13 +427,13 @@ function Invoke-FullFlow {
     if ($Version -eq "all") {
         Write-Host ""
         Write-Host "========================================" -ForegroundColor Cyan
-        Write-Host "  [1/3] 打包全部版本 (云端+本地，自动执行)" -ForegroundColor Cyan
+        Write-Host "  [1/4] 打包全部版本 (云端+本地，自动执行)" -ForegroundColor Cyan
         Write-Host "========================================" -ForegroundColor Cyan
         $rc = Invoke-Pack -Target "all"
     } else {
         Write-Host ""
         Write-Host "========================================" -ForegroundColor Cyan
-        Write-Host "  [1/3] 打包单个版本" -ForegroundColor Cyan
+        Write-Host "  [1/4] 打包单个版本" -ForegroundColor Cyan
         Write-Host "========================================" -ForegroundColor Cyan
         $rc = Invoke-SinglePack -Version $Version -Mode $Mode
     }
@@ -504,6 +447,18 @@ function Invoke-FullFlow {
     }
     Write-Host ""
     Write-Host "[OK] 打包完成" -ForegroundColor Green
+
+    # Step 1.5: 热更签发（★ 2026-10-30 P1：把漏签缺口固化进流程；内容一致自动跳过）
+    Write-Host ""
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host "  [1.5/4] 热更签发（按需重签三通道 + 校验 + 推送）" -ForegroundColor Cyan
+    Write-Host "========================================" -ForegroundColor Cyan
+    $rc = Invoke-HotUpdateSign -Scope $Version -Commit
+    if ($rc -is [array]) { $rc = [int]$rc[-1] }
+    if ($rc -ne 0) {
+        Write-Host "[ERROR] 热更签发失败，流程中止（避免发布后客户端收不到更新）" -ForegroundColor Red
+        return $rc
+    }
 
     # ★ 2026-10-29 修复「打包全 SKIP → 全流程误跳过发布」：
     #   旧逻辑：last-run.json 的 built=[]（本次无端重打）→ 判定"无源码更新，跳过发布"。
@@ -557,10 +512,25 @@ function Invoke-FullFlow {
         }
     }
 
+    # Step 1.8: 发布前体检（★ 2026-10-30 P1：热更/版本回退/产物缺失等阻断项升级为硬门）
+    #   此前 check-release-readiness 只在入口 bat 里 informational 跑一遍，BLOCK 项无人拦。
+    #   现值此签发后、上传前严格复核（--strict：有 BLOCK 即 exit 1），避免"带着降级热包发布"。
+    Write-Host ""
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host "  [1.8/4] 发布前体检（严格模式，阻断项即中止）" -ForegroundColor Cyan
+    Write-Host "========================================" -ForegroundColor Cyan
+    $rc = Invoke-ReadinessGate
+    if ($rc -is [array]) { $rc = [int]$rc[-1] }
+    if ($rc -ne 0) {
+        Write-Host "[ERROR] 发布前体检存在阻断项，流程中止（详见上方 → 行提示）" -ForegroundColor Red
+        Write-Host "  仅在确认要跳过体检时设置 READINESS_SOFT=1 重跑" -ForegroundColor Yellow
+        return $rc
+    }
+
     # Step 2: 发布
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Cyan
-    Write-Host "  [2/3] 发布" -ForegroundColor Cyan
+    Write-Host "  [2/4] 发布" -ForegroundColor Cyan
     Write-Host "========================================" -ForegroundColor Cyan
     # ★ 2026-08-28 优化打包与发布的关系：Version=all 走智能发布（auto-publish.js
     #   比对 hash 仅上传有变化的产物，publish-release.js --changed-only 过滤），
@@ -599,7 +569,7 @@ function Invoke-FullFlow {
     # Step 3: 验证
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Cyan
-    Write-Host "  [3/3] 验证 (verify-release.js)" -ForegroundColor Cyan
+    Write-Host "  [3/4] 验证 (verify-release.js)" -ForegroundColor Cyan
     Write-Host "========================================" -ForegroundColor Cyan
     $rc = Invoke-Verify
     if ($rc -is [array]) { $rc = [int]$rc[-1] }
@@ -655,18 +625,20 @@ while ($true) {
     Write-Host "  [4] 指定发布 - 选版本和范围全量上传 (补传/修复用)"
     Write-Host "  [5] 验证发布结果 (verify-release.js)"
     Write-Host "  [6] 合规检查 (compliance-check，发布前可自查)"
+    Write-Host "  [7] 热更签发 - 检查三通道并按需重签 (不打包/不发布)"
     Write-Host "  [0] 退出"
     Write-Host ""
     Write-Host "  说明:" -ForegroundColor DarkGray
-    Write-Host "  - [1] 全流程: 增量打包(无改动端自动跳过) → 副作用自动收纳 → 智能发布 → 验证" -ForegroundColor DarkGray
-    Write-Host "  - [2] 仅打包: 先选版本(云端/本地/全部)，单版本再选范围(桌面/APP/全部)" -ForegroundColor DarkGray
+    Write-Host "  - [1] 全流程: 增量打包(无改动端自动跳过) → 热更签发 → 智能发布 → 验证" -ForegroundColor DarkGray
+    Write-Host "  - [2] 仅打包: 先选版本(云端/本地/全部)，单版本再选范围(桌面/APP/全部)；完成后按需重签热更" -ForegroundColor DarkGray
+    Write-Host "  - [7] 热更签发: 比对源码与线上热更清单，内容落后才重签(幂等)；云桌面/离线桌面/离线APP 三通道" -ForegroundColor DarkGray
     Write-Host "  - 发布双通道: [3]智能发布=比对hash仅上传变化产物(推荐日常)" -ForegroundColor DarkGray
     Write-Host "               [4]指定发布=全量上传所选版本+范围产物(补传/修复)" -ForegroundColor DarkGray
     Write-Host "  - ★发布规范: 所有发布均为人工确认发布(菜单手动触发+内置合规门禁)" -ForegroundColor Yellow
     Write-Host "    系统绝不自动上传产物到官方下载网站(必守HARD规则)" -ForegroundColor Yellow
     Write-Host "  - git push 后 Cloudflare Pages 自动部署下载页" -ForegroundColor DarkGray
     Write-Host "--------------------------------------------"
-    $choice = Read-MenuChoice "请选择 [0-6]"
+    $choice = Read-MenuChoice "请选择 [0-7]"
     switch ($choice) {
         "2" {
             # 仅打包 - 选版本和范围 (选"全部"= 全量打包，原[4]打包全部已并入本项)
@@ -677,21 +649,18 @@ while ($true) {
             #   双端全量），与 Invoke-FullFlow 的 all 分支保持一致；all 为全量打包，无需再选范围。
             # ★ 2026-08-28 合并原菜单[4]：all 路径已含副作用 AutoCommit 收纳，
             #   修复原[4]打包全部后副作用滞留工作区的问题（P1）。
+            # ★ 2026-10-30 P0 去重：副作用/增量基线均已由子进程（-AutoCommit）完成，
+            #   父进程不再 CollectSideEffectsOnly / Record-BuiltUnits（会以空值覆盖 last-run.json）。
             if ($version -eq "all") {
                 $rcA = Invoke-Pack -Target "all"
                 if ($rcA -is [array]) { $rcA = [int]$rcA[-1] }
                 if ($rcA -ne 0) {
                     Write-Host ""
                     Write-Host "[ERROR] 打包全部版本失败，退出码: $rcA（详见上方日志）" -ForegroundColor Red
+                } else {
+                    # ★ 2026-10-30 P1：打包成功后按需重签热更（内容一致自动跳过）
+                    $null = Invoke-HotUpdateSign -Scope $version -Commit
                 }
-                # all 走子进程 one-click-pack -AutoMode 3（内部不带 -AutoCommit），
-                # 打包副作用由本进程统一收纳提交（与菜单[1] all 分支之后的处理一致）
-                $packPs1A = "$script:RootDir\tools\one-click-pack.ps1"
-                if (Test-Path $packPs1A) {
-                    $null = Invoke-QuietProcess -FilePath 'powershell' -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',$packPs1A,'-CollectSideEffectsOnly','-AutoCommit')
-                }
-                # Version=all 子进程已在内部记录基线，本处 BuiltUnits 为空自动跳过
-                Record-BuiltUnits
                 Write-Host ""
                 pause
                 break
@@ -704,16 +673,10 @@ while ($true) {
             if ($rc1 -ne 0) {
                 Write-Host ""
                 Write-Host "[ERROR] 单版本打包失败，退出码: $rc1（详见上方日志）" -ForegroundColor Red
+            } else {
+                # ★ 2026-10-30 P1：打包成功后按需重签热更（内容一致自动跳过）
+                $null = Invoke-HotUpdateSign -Scope $version -Commit
             }
-            # ★ 2026-08-23 四轮复核修复：Invoke-SinglePack 直链子 bat（绕过 one-click-pack），
-            #   打包完成后需手动调 SideEffectCollect 收纳 versionCode/version 副作用
-            #   （[3][4] 发布不打包，无需收纳）
-            $packPs1 = "$script:RootDir\tools\one-click-pack.ps1"
-            if (Test-Path $packPs1) {
-                $null = Invoke-QuietProcess -FilePath 'powershell' -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',$packPs1,'-CollectSideEffectsOnly','-AutoCommit')
-            }
-            # ★ 2026-08-24 打包增量基线记录（必须在副作用 AutoCommit 之后，HEAD 才稳定）
-            Record-BuiltUnits
             # ★ 2026-09-01 最终结果汇总（明确中文提示）
             Show-FinalSummary -ActionLabel "仅打包（未发布）"
             Write-Host ""
@@ -728,6 +691,15 @@ while ($true) {
             #   选"本地版"后该版本 dist/ 里上次构建的旧桌面 exe 也被一并上传。
             $mode2 = Show-PackModeMenu -ScopeTitle "发布"
             if ($mode2 -eq "") { break }
+            # ★ 2026-10-30 P1：全量补传前仍先过发布前体检（热更降级/版本回退不放过）
+            $rcG = Invoke-ReadinessGate
+            if ($rcG -is [array]) { $rcG = [int]$rcG[-1] }
+            if ($rcG -ne 0) {
+                Write-Host "[ERROR] 发布前体检存在阻断项，指定发布已中止（READINESS_SOFT=1 可跳过）" -ForegroundColor Red
+                Write-Host ""
+                pause
+                break
+            }
             # ★ 2026-08-23 复核修复：原 | Out-Null 丢弃退出码，失败静默无提示
             $rc2 = Invoke-Publish -Target $version -Mode $mode2
             if ($rc2 -is [array]) { $rc2 = [int]$rc2[-1] }
@@ -755,15 +727,9 @@ while ($true) {
                 Write-Host ""
                 Write-Host "[ERROR] 打包+发布+验证 流程失败，退出码: $rc3（详见上方日志）" -ForegroundColor Red
             }
-            # ★ 2026-08-23 四轮复核修复：Step1 打包同样产生副作用，打包成功与否均列示收纳
-            #   （FullFlow走 Invoke-SinglePack 或 Invoke-Pack-AutoMode 3）
-            $packPs1 = "$script:RootDir\tools\one-click-pack.ps1"
-            if (Test-Path $packPs1) {
-                & $env:ComSpec /c "powershell -NoProfile -ExecutionPolicy Bypass -File $packPs1 -CollectSideEffectsOnly -AutoCommit 2>&1" | ForEach-Object { Write-HostLine $_ }
-            }
-            # ★ 2026-08-24 打包增量基线记录（必须在副作用 AutoCommit 之后，HEAD 才稳定；
-            #   Version=all 走子进程 one-click-pack -AutoMode 3 已在内部记录，本处 BuiltUnits 为空自动跳过）
-            Record-BuiltUnits
+            # ★ 2026-10-30 P0 去重：Step1 打包的副作用收纳与增量基线均由子进程
+            #   （one-click-pack -AutoCommit）完成；热更签发在 FullFlow Step1.5 内部完成。
+            #   父进程不再 CollectSideEffectsOnly / Record-BuiltUnits（会以空值覆盖 last-run.json）。
             # ★ 2026-09-01 最终结果汇总（明确中文提示）
             Show-FinalSummary -ActionLabel "打包 + 发布 + 验证全流程"
             Write-Host ""
@@ -779,6 +745,15 @@ while ($true) {
                 Write-Host "  智能发布 (auto-publish.js --publish)" -ForegroundColor Cyan
                 Write-Host "  仅上传有变化的产物；发布前自动跑合规检查" -ForegroundColor Cyan
                 Write-Host "========================================" -ForegroundColor Cyan
+                # ★ 2026-10-30 P1：智能发布前先过发布前体检（阻断项即中止）
+                $rcG = Invoke-ReadinessGate
+                if ($rcG -is [array]) { $rcG = [int]$rcG[-1] }
+                if ($rcG -ne 0) {
+                    Write-Host "[ERROR] 发布前体检存在阻断项，智能发布已中止（READINESS_SOFT=1 可跳过）" -ForegroundColor Red
+                    Write-Host ""
+                    pause
+                    break
+                }
                 # ★ 2026-08-23 复核修复：原 | Out-Null 丢弃退出码，失败静默无提示
                 $rc5 = Invoke-NodeScript -ScriptPath $autoPublish -Arguments @('--publish')
                 if ($rc5 -is [array]) { $rc5 = [int]$rc5[-1] }
@@ -834,6 +809,27 @@ while ($true) {
             if ($rc7 -ne 0) {
                 Write-Host ""
                 Write-Host "[ERROR] 合规检查未通过，退出码: $rc7（详见上方日志）" -ForegroundColor Red
+            }
+            Write-Host ""
+            pause
+        }
+        "7" {
+            # 热更签发（不打包/不发布）：先只读检查，落后才询问是否签发
+            # ★ 2026-10-30 P1：给"已打好包、只想补热更"的场景一个独立入口
+            Write-Host ""
+            $rcH = Invoke-HotUpdateSign -Scope "all" -CheckOnly
+            if ($rcH -is [array]) { $rcH = [int]$rcH[-1] }
+            if ($rcH -eq 2) {
+                $ans = Read-MenuChoice "是否立即重签并提交推送热更包 [1=是 0=否]"
+                if ($ans -eq "1") {
+                    $rcS = Invoke-HotUpdateSign -Scope "all" -Commit
+                    if ($rcS -is [array]) { $rcS = [int]$rcS[-1] }
+                    if ($rcS -ne 0) {
+                        Write-Host "[ERROR] 热更签发失败，退出码: $rcS（详见上方日志）" -ForegroundColor Red
+                    }
+                }
+            } elseif ($rcH -ne 0) {
+                Write-Host "[WARN] 热更检查异常（退出码 $rcH），未做任何改动" -ForegroundColor Yellow
             }
             Write-Host ""
             pause

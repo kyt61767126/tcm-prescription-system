@@ -1,7 +1,8 @@
 ﻿# entry-selfheal.ps1 - 一键打包.bat / 一键发布.bat 入口共享自检（单一权威源）
 # 2026-09-05 架构收敛：原两个 bat 各自硬编码同一份 8 个下游 bat 的 CRLF 自检列表
 #   （双源漂移：新增下游 bat 需改两处，漏一处即隐患）。现统一收口到本脚本：
-#   新增/删除下游构建 bat 只改 $DownstreamBuildBats 这一处。
+#   ★ 2026-10-30 下游清单再收敛到 tools\build-bat-list.ps1（本脚本与 one-click-pack /
+#     release-menu 三处共用），新增/删除下游构建 bat 只改 build-bat-list.ps1 一处。
 # 自检项：
 #   1. 下游构建 .bat 行尾 CRLF 修复（Git/IDE 可能转 LF 导致 cmd 解析异常）
 #   2. 全量 .ps1 UTF-8 BOM 修复（IDE 编辑可能剥 BOM，PS5.1 按 GBK 误读中文崩脚本）
@@ -13,18 +14,9 @@ $root = Split-Path $PSScriptRoot -Parent
 #   子进程 stderr 一律渲染红色。本脚本所有子 PowerShell 调用统一降噪渲染。
 . (Join-Path $PSScriptRoot 'noise-reduce.ps1')
 
-# ★ 下游构建 bat 清单（唯一权威源；三个入口 bat 共用）
-$DownstreamBuildBats = @(
-    '重打包四端.bat'                       # ★ 2026-10-20 双桌面+双APK 重打包入口
-    'app_project\db-yunduan\pack-desktop.bat'
-    'app_project\db-yunduan\build-pack.bat'
-    'app_project\db-yunduan\build-app.bat'
-    'app_project\db-yunduan\cloud_desktop\build.bat'
-    'app_project\db-offline\pack-desktop.bat'
-    'app_project\db-offline\build-pack.bat'
-    'app_project\db-offline\app\build-app.bat'
-    'app_project\db-offline\desktop\build.bat'
-)
+# ★ 2026-10-30 P0 去重：下游 bat 清单收敛到 tools\build-bat-list.ps1（单一权威源，
+#   entry-selfheal / one-click-pack / release-menu 共用；新增下游 bat 只改那一处）
+. (Join-Path $PSScriptRoot 'build-bat-list.ps1')
 
 # 1. CRLF 自愈
 $crlfTool = Join-Path $PSScriptRoot 'fix-bat-crlf.ps1'

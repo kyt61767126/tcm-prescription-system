@@ -8,6 +8,7 @@
 #   [P2] ps1 BOM 全检   ← 2026-08-24 Edit剥BOM → PowerShell5.1按GBK读 → 中文乱码解析崩
 #   [P3] bat CRLF 检查+自动修复 ← Edit/并行会话引入LF行尾 → 双击闪退（自动修复防死锁）
 #   [P4] 编码完整性     ← verify-packaging.ps1（index.html禁BOM/bat编码/gradle禁BOM）
+#   [P5] 热更包完整性   ← verify-hotupdate.cjs（签名+清单+逐文件哈希；防半写/静默丢弃）
 #   [F1] 合规9项编排    ← compliance-check.ps1（版本一致性/副本一致性/界面基线/IPC/
 #                          AUTH_SECRET/桌面JS完整性/硬编码扫描/shared分发一致）
 #
@@ -133,6 +134,24 @@ $vp = Join-Path $PSScriptRoot 'verify-packaging.ps1'
 & powershell -NoProfile -ExecutionPolicy Bypass -File $vp 2>&1 | ForEach-Object { Write-Host "  $_" }
 if ($LASTEXITCODE -eq 0) { Add-Pass "编码完整性: verify-packaging 通过" }
 else { Add-Fail "编码完整性: verify-packaging 未通过 (exit $LASTEXITCODE)" }
+
+# ---------------------------------------------------------------------------
+# [P5] 热更包完整性（★ 2026-10-30 P1：签名 + 清单 + 逐文件哈希）
+#   热更包一旦半写/清单与文件不符/签名对不上，客户端会静默丢弃整个更新（无横幅、无报错），
+#   属于"发不出去还看不出来"的隐性事故。此处按通道逐文件复核，秒级完成。
+#   注意：本项只验"包自身完整"，不验"内容是否落后于源码"（后者由 hotupdate-stage -Mode Check
+#   / check-release-readiness 负责，避免日常打包被未签发的开发中改动拦住）。
+# ---------------------------------------------------------------------------
+Write-Host ""
+Write-Host "[P5] 热更包完整性 (verify-hotupdate)..." -ForegroundColor Cyan
+$hotVerify = Join-Path $PSScriptRoot 'verify-hotupdate.cjs'
+if (-not (Test-Path $hotVerify)) {
+    Add-Fail "热更完整性: 缺少 tools\verify-hotupdate.cjs"
+} else {
+    & node $hotVerify 2>&1 | ForEach-Object { Write-Host "  $_" }
+    if ($LASTEXITCODE -eq 0) { Add-Pass "热更完整性: 三通道签名与逐文件哈希一致" }
+    else { Add-Fail "热更完整性: 热更包校验未通过 (exit $LASTEXITCODE)" }
+}
 
 # ---------------------------------------------------------------------------
 # [F1] full 模式：合规 9 项编排（版本/副本/界面基线/IPC/AUTH_SECRET/桌面JS/硬编码/shared）

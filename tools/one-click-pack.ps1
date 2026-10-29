@@ -115,37 +115,9 @@ if ($env:ALLOW_VERSION_DRIFT -ne '1') {
     }
 }
 
-# 检查某端是否可跳过打包（指纹=git HEAD+源码干净+产物哈希 三者一致 → true）
-function Test-BuildSkip([string]$unit) {
-    if ($env:NO_BUILD_SKIP -eq '1') { return $false }
-    $skipTool = Join-Path $PSScriptRoot 'build-skip.ps1'
-    if (-not (Test-Path $skipTool)) { return $false }
-    & $env:ComSpec /c "powershell -NoProfile -ExecutionPolicy Bypass -File $skipTool -Check -Unit $unit 2>&1" | ForEach-Object { Write-HostLine $_ -Indent '  ' }
-    return ($LASTEXITCODE -eq 0)
-}
-# 记录本次已打包单元的基线（供下次 Check 跳过）。必须在"打包成功+副作用AutoCommit后"调用（HEAD 才稳定）
-function Record-BuiltUnits {
-    # ★ 2026-08-25 更新摘要状态：写入 .build-cache/last-run.json（built 数组，空=全部SKIP无更新），
-    #   release-menu.ps1 Invoke-FullFlow 读取后实现"无更新自动跳过发布 / 部分更新明细提示"
-    $stateDir = Join-Path $script:RootDir '.build-cache'
-    if (-not (Test-Path $stateDir)) { New-Item -ItemType Directory -Path $stateDir -Force | Out-Null }
-    $stateFile = Join-Path $stateDir 'last-run.json'
-    try {
-        $payload = @{ time = (Get-TimeStamp); built = @($script:BuiltUnits) }
-        ConvertTo-Json -InputObject $payload | Out-File -FilePath $stateFile -Encoding utf8
-    } catch {
-        Write-Host "  [WARN] 更新摘要状态写入失败(不影响打包): $_" -ForegroundColor Yellow
-    }
-    if (-not $script:BuiltUnits -or $script:BuiltUnits.Count -eq 0) { return }
-    $skipTool = Join-Path $PSScriptRoot 'build-skip.ps1'
-    if (-not (Test-Path $skipTool)) { return }
-    Write-Host ""
-    Write-Host "--- 打包增量基线记录 ---" -ForegroundColor Cyan
-    foreach ($u in $script:BuiltUnits) {
-        & $env:ComSpec /c "powershell -NoProfile -ExecutionPolicy Bypass -File $skipTool -Record -Unit $u 2>&1" | ForEach-Object { Write-HostLine $_ -Indent '  ' }
-    }
-    $script:BuiltUnits = @()
-}
+# ★ 2026-10-30 P0 去重：打包增量基线/时间戳统一到 tools/pack-core.ps1（单一权威源，
+#   与 release-menu 共用；last-run.json 只由真正执行打包的本进程写入一次）
+. (Join-Path $PSScriptRoot 'pack-core.ps1')
 
 # ★ [SELF-HEAL 2026-08-23] Fix LF line endings in ALL downstream build .bat files
 # BEFORE invoking them. This script calls build-pack.bat directly (bypassing
@@ -153,16 +125,9 @@ function Record-BuiltUnits {
 # LF-corrupted Chinese .bat aborts cmd at parse time (window flash-close).
 $fixTool = Join-Path $PSScriptRoot 'fix-bat-crlf.ps1'
 if (Test-Path $fixTool) {
-    $buildBats = @(
-        'app_project\db-yunduan\pack-desktop.bat',
-        'app_project\db-yunduan\build-pack.bat',
-        'app_project\db-yunduan\build-app.bat',
-        'app_project\db-yunduan\cloud_desktop\build.bat',
-        'app_project\db-offline\pack-desktop.bat',
-        'app_project\db-offline\build-pack.bat',
-        'app_project\db-offline\app\build-app.bat',
-        'app_project\db-offline\desktop\build.bat'
-    ) | ForEach-Object { Join-Path $script:RootDir $_ }
+    # ★ 2026-10-30 P0 去重：下游 bat 清单单一权威源 tools/build-bat-list.ps1
+    . (Join-Path $PSScriptRoot 'build-bat-list.ps1')
+    $buildBats = @($DownstreamBuildBats | ForEach-Object { Join-Path $script:RootDir $_ } | Where-Object { Test-Path $_ })
     $null = Invoke-QuietProcess -FilePath 'powershell' -ArgumentList (@('-NoProfile','-ExecutionPolicy','Bypass','-File',$fixTool) + $buildBats) -Capture
 }
 
@@ -191,9 +156,7 @@ function Invoke-BatFile {
     }
 }
 
-function Get-TimeStamp {
-    return (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
-}
+# Get-TimeStamp 已上移到 tools/pack-core.ps1（★ 2026-10-30 P0 去重）
 
 # 显示最新 APK 实际信息（文件名/版本号/versionCode/文件时间），供一键打包总结记录
 # 直接在打包完成后读取产物文件时间，确保展示的是"最新一次打包"的真实记录

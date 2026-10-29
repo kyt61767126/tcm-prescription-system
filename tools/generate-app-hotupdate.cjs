@@ -112,6 +112,13 @@ function buildSignMessage(channel, hotVersion, signedAt, files) {
     return SIGN_PREFIX + '|' + channel + '|' + hotVersion + '|' + signedAt + '|' + parts.join('|');
 }
 
+// 公钥常量（模块级）：签发自检 + tools/verify-hotupdate.cjs 离线校验共用（单一权威源）。
+// 与 HotUpdateManager.Ed25519 公钥、桌面热更公钥同一信任根（轮换时三处同步）。
+const PUB_PEM = `-----BEGIN PUBLIC KEY-----
+MCowBQYDK2VwAyEAIsLN/+7riDHGQj8GAJBeU9kuSGXgVEiUYqvTlrbP2rw=
+-----END PUBLIC KEY-----`;
+
+
 // 读 build.gradle versionCode（minAppCode 兜底——本热包要求的最低 APK versionCode）
 function readVersionCode() {
     const text = fs.readFileSync(BUILD_GRADLE, 'utf8');
@@ -179,21 +186,22 @@ function fail(msg) {
 function main() {
     // ---- 参数 ----
     const argv = process.argv.slice(2);
-    let explicitSeq = 0, minAppCode = 0, outRoot = ROOT, force = false;
+    let explicitSeq = 0, minAppCode = 0, outRoot = ROOT, force = false, checkOnly = false;
     for (let i = 0; i < argv.length; i++) {
         if (argv[i] === '-n') explicitSeq = Math.max(1, parseInt(argv[i + 1], 10) || 1);
         if (argv[i] === '-m') minAppCode = parseInt(argv[i + 1], 10) || 0;
         if (argv[i] === '-o') outRoot = path.resolve(argv[i + 1] || '.');
         if (argv[i] === '--force') force = true;
+        if (argv[i] === '--check') checkOnly = true;
     }
 
     // ---- 序号决策（在任何哈希/写盘/签名之前）：自动递增或校验显式 -n ----
     const prevOut = readPrevManifest(outRoot);
     const seqInfo = resolveSeq(explicitSeq, force, prevOut);
     const seq = seqInfo.seq;
-    if (seqInfo.auto) {
+    if (!checkOnly && seqInfo.auto) {
         console.log('[AppHotGen] 序号自动递增：当日已签发 -' + (seq - 1) + ' → 本次 -' + seq + '（显式 -n 可指定；同号重签需 --force）');
-    } else if (force && explicitSeq) {
+    } else if (!checkOnly && force && explicitSeq) {
         console.warn('[AppHotGen][WARN] --force 同序号重签 ' + seqInfo.datePart + '-' + seq + '：已拉到该版本的客户端不会再更新，请确认该版本尚未发布到客户。');
     }
 
@@ -201,14 +209,15 @@ function main() {
         // 防呆默认：继承上一包 → 无上一包才读 build.gradle（详见 readPrevManifest 注释）
         const prevMin = (prevOut && typeof prevOut.minAppCode === 'number' && prevOut.minAppCode >= 1) ? prevOut.minAppCode : 0;
         minAppCode = prevMin || readVersionCode();
-        console.log('[AppHotGen] 未传 -m：minAppCode ' + (prevMin ? '继承上一包=' + prevMin : '取 build.gradle=' + minAppCode) + '（显式 -m 可覆盖；抬升须确认热包含新桥依赖）');
+        if (!checkOnly) console.log('[AppHotGen] 未传 -m：minAppCode ' + (prevMin ? '继承上一包=' + prevMin : '取 build.gradle=' + minAppCode) + '（显式 -m 可覆盖；抬升须确认热包含新桥依赖）');
     }
 
     // ---- 前置校验 ----
     const overlap = FILES.filter((f) => FORBIDDEN.indexOf(f) >= 0);
     if (overlap.length) fail('清单与排除表冲突（license 链铁律）: ' + overlap.join(', '));
     if (minAppCode < 1) fail('minAppCode 非法: ' + minAppCode);
-    if (!fs.existsSync(PRIVATE_KEY_PATH)) {
+    // ★ 2026-10-30 P1：--check 只读比对，无需私钥（发布链在任意机器上都能判断是否需要重签）
+    if (!checkOnly && !fs.existsSync(PRIVATE_KEY_PATH)) {
         console.error('[AppHotGen] 私钥缺失: ' + PRIVATE_KEY_PATH);
         console.error('  私钥不入库（gitignore）。请从 Cloudflare Secrets / 离线备份恢复后重试。');
         process.exit(1);
@@ -241,6 +250,29 @@ function main() {
     }
     if (files.length === 0 || files.length > MAX_FILES) fail('文件数越界（1..' + MAX_FILES + '）: ' + files.length);
     if (!files.some((f) => f.name === 'index.html')) fail('index.html 必须在清单（resolveEntry 入口）');
+
+    // ★ 2026-10-30 P1：--check 只读比对（发布链判断是否需要重签；不写盘、不签名、不占序号）
+    //   退出码：0=与已发布清单一致；2=内容落后需重签（或尚无清单）；1=其他错误
+    if (checkOnly) {
+        if (!prevOut || !Array.isArray(prevOut.files)) {
+            console.log('[AppHotCheck] 未找到已发布清单 → 需签发');
+            process.exit(2);
+        }
+        const prevMap = new Map(prevOut.files.map((f) => [f.name, f]));
+        const changed = [];
+        for (const f of files) {
+            const p = prevMap.get(f.name);
+            if (!p || p.sha256 !== f.sha256 || p.size !== f.size) changed.push(f.name);
+        }
+        const curNames = new Set(files.map((f) => f.name));
+        for (const f of prevOut.files) if (!curNames.has(f.name)) changed.push(f.name + '(已移除)');
+        if (changed.length) {
+            console.log('[AppHotCheck] 内容落后 ' + changed.length + ' 项：' + changed.slice(0, 6).join(', ') + (changed.length > 6 ? ' …' : '') + ' → 需重签');
+            process.exit(2);
+        }
+        console.log('[AppHotCheck] 已是最新（' + prevOut.hotVersion + '，' + files.length + ' 文件）');
+        process.exit(0);
+    }
 
     // ---- 2. 版本号 YYYY.MM.DD-N（与桌面热更同格式；N 由序号决策得出）----
     const hotVersion = seqInfo.datePart + '-' + seq;
@@ -277,10 +309,7 @@ function main() {
     };
     fs.writeFileSync(path.join(outDir, 'version.json'), JSON.stringify(version, null, 2));
 
-    // ---- 6. 自检①：Node 公钥自验签名（防密钥对不一致）----
-    const PUB_PEM = `-----BEGIN PUBLIC KEY-----
-MCowBQYDK2VwAyEAIsLN/+7riDHGQj8GAJBeU9kuSGXgVEiUYqvTlrbP2rw=
------END PUBLIC KEY-----`;
+    // ---- 6. 自检①：Node 公钥自验签名（防密钥对不一致；PUB_PEM 已上移模块级）----
     if (!crypto.verify(null, Buffer.from(msg, 'utf8'), crypto.createPublicKey(PUB_PEM), Buffer.from(signature, 'base64'))) {
         fail('签名自验失败（私钥与 Java 公钥常量不匹配）');
     }
@@ -341,4 +370,17 @@ MCowBQYDK2VwAyEAIsLN/+7riDHGQj8GAJBeU9kuSGXgVEiUYqvTlrbP2rw=
     }
 }
 
-main();
+// ★ 2026-10-30 P1：导出公钥/清单/签名消息构造，供 tools/verify-hotupdate.cjs 离线校验复用
+//   （公钥单一权威源，避免校验脚本里再抄一份导致轮换时漏改）
+module.exports = {
+    APP_HOT_PUBLIC_KEY_PEM: PUB_PEM,
+    CHANNEL: CHANNEL,
+    SIGN_PREFIX: SIGN_PREFIX,
+    FILES: FILES,
+    buildSignMessage: buildSignMessage
+};
+
+// 仅在直接执行时跑主流程（被 require 时只取导出常量）
+if (require.main === module) {
+    main();
+}

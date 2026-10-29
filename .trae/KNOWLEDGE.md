@@ -2540,4 +2540,22 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
   - 坑：Cloudflare Pages 对 `*.html` 做 pretty-URL **308** 重定向（`/hot-update/desktop/cloud/index.html` → `.../cloud/`）。客户端 `fetch` 默认跟随重定向所以正常；**手工核验必须用 `fetch` 或 `curl -L`**，否则拿到 0 字节/回退页面而误判"线上文件不对"。
   - 范围：云网页与云 APP（在线 WebView 壳）**不需要**热更包，刷新即达；只有云桌面、离线桌面、离线 APP 走热更。
 
+* ★ 2026-10-30（一键打包 / 一键发布 **P0 去重 + P1 热更签发入流程**）——构建发布链单一内核：
+  - 结论：**合并的是内核，不是入口**。两个入口职责分层保留（打包可独立、不需上传授权；发布必须人工确认+合规闸+源码落定）。`重打包四端.bat` 早已是"薄壳委托"范式，本次把同样做法推广到发布菜单。
+  - 新增 4 个共享内核（全部 BOM+CRLF，纳入 pack-gate 检查）：
+    - `tools/build-bat-list.ps1`：下游 9 个构建 bat 清单**唯一权威源**（原 entry-selfheal / one-click-pack / release-menu 三处各写一份，新增端要改三处）。
+    - `tools/entry-preflight.ps1`：入口预检（git ahead/behind/dirty + 调 `entry-selfheal`）。`-Mode pack` 仅提示、`pack-post` 构建后再提示（不再重复自愈）、`publish` 对 **behind upstream 硬停 exit 2**，其余仅 INFO。
+    - `tools/pack-core.ps1`：`Get-TimeStamp` / `Test-BuildSkip` / `Record-BuiltUnits`（含 `.build-cache/last-run.json`）。**铁律：last-run.json 只由真正执行打包的进程写一次**；发布菜单通过子进程 `one-click-pack -AutoMode` 打包，父进程再调 `Record-BuiltUnits` 会用空 built 覆盖真值（这正是旧版"打包摘要失真"的根因，已移除调用点）。
+    - `tools/hotupdate-stage.ps1` + `tools/verify-hotupdate.cjs`：热更 `Check`（rc 0=最新 / 2=需签发）/ `Sign`（按需重签+验签+只 `git add public/hot-update` 提交推送）/ `Verify`（三通道签名+清单+逐文件哈希，供 pack-gate [P5] 复用）。
+  - 去重成果：`release-menu.ps1` 删除 144 行 `Invoke-SinglePack` 自实现，改委托 `one-click-pack.ps1 -AutoMode 1d/1a/2d/2a/1/2`（映射与原实现一一对应）+ `-AutoCommit`；两个入口 bat 各删 ~60 行重复 git 检查/自愈块，改为 `call :run_preflight` 调 `entry-preflight.ps1`。净效果：约 300 行重复消失，skip/副作用/last-run/日志/预检单一口径。
+  - P1 热更签发（补"cv bump ≠ 热更已发布"缺口）：`generate-desktop-hotupdate.cjs` / `generate-app-hotupdate.cjs` 新增 `--check` 只读比对（**无需私钥**，任意机器可判定；桌面额外比对 appVersion 元数据，落后也提示重签）；`app` 生成器导出 `APP_HOT_PUBLIC_KEY_PEM`，`verify-hotupdate.cjs` 直接复用不内联公钥（轮换只改一处）。发布链新增阶段：
+    - 全流程 `[1.5/4] 热更签发`：打包后按 `Version` 范围签发（all→三通道 / cloud→desktop.cloud / dingzhi→desktop.local+app-local），内容一致自动跳过（幂等，不留垃圾提交）。
+    - 全流程 `[1.8/4] 发布前体检`：`check-release-readiness.cjs --strict` 升级为**硬门**（此前只在入口 bat informational 跑，BLOCK 项无人拦）；`[3] 智能发布` / `[4] 指定发布` 同样先过此门。保险丝 `READINESS_SOFT=1`。
+    - 菜单新增 `[7] 热更签发 - 检查三通道并按需重签`（不打包/不发布）；`[2] 仅打包` 成功后也按需重签。
+    - pack-gate 新增 `[P5] 热更包完整性`（只验包自身签名/哈希，不验内容是否落后，避免日常打包被开发中改动拦住）。
+  - 保险丝：`SKIP_HOTUPDATE=1` 跳过签发；`READINESS_SOFT=1` 跳体检；`ALLOW_DIRTY_BUILD=1` / `NO_AUTOCOMMIT=1` 沿用。
+  - 验证：`pack-gate preflight` 5/5 PASS（P1 语法 53 文件、P2 BOM、P3 bat CRLF、P4 编码、P5 热更完整性）；`entry-preflight` 三模式 rc=0 且 `pack-post` 确不自愈；`hotupdate-stage -Mode Verify` 三通道 PASS；`--check` 正确报 `rc=2`（当时 desktop 两通道 appVersion 元数据落后 1.2.283/1.0.306）；`-Mode Sign` 实测可自动递增并签发（测试后已 `git checkout` 还原，未污染线上版本）；`SKIP_HOTUPDATE=1` 生效且无副作用。
+  - 坑：PowerShell 5.1 对**无 BOM 的中文注释 .ps1** 会按 GBK 误读并抛"Unexpected token ')'"等假语法错 → 临时脚本要么 ASCII-only，要么先 `tools/fix-ps1-bom.ps1`。`Write` 写出的 bat 是 LF，必须 `tools/fix-bat-crlf.ps1` 修（否则双击闪退）。
+
+
 

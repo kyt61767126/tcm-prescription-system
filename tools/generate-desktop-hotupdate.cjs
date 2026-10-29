@@ -181,13 +181,16 @@ function main() {
     let channel = '';
     let explicitSeq = 0;
     let force = false;
+    let checkOnly = false;
     for (let i = 0; i < argv.length; i++) {
         if (argv[i] === '-c') channel = String(argv[i + 1] || '').toLowerCase();
         if (argv[i] === '-n') explicitSeq = Math.max(1, parseInt(argv[i + 1], 10) || 1);
         if (argv[i] === '--force') force = true;
+        if (argv[i] === '--check') checkOnly = true;
     }
     if (!CHANNELS[channel]) {
-        console.error('用法: node tools/generate-desktop-hotupdate.cjs -c cloud|local [-n 同日序号] [--force]');
+        console.error('用法: node tools/generate-desktop-hotupdate.cjs -c cloud|local [-n 同日序号] [--force] [--check]');
+        console.error('  --check 只读比对已发布清单 vs 当前源码（0=最新 / 2=需重签），不写盘不签名');
         process.exit(1);
     }
     const conf = CHANNELS[channel];
@@ -195,13 +198,14 @@ function main() {
     // 序号决策（在任何写盘/签名之前）：自动递增或校验显式 -n
     const seqInfo = resolveSeq(explicitSeq, force, readPrevManifest(channel));
     const seq = seqInfo.seq;
-    if (seqInfo.auto) {
+    if (!checkOnly && seqInfo.auto) {
         console.log('[HotUpdateGen] 序号自动递增：当日已签发 -' + (seq - 1) + ' → 本次 -' + seq + '（显式 -n 可指定；同号重签需 --force）');
-    } else if (force && explicitSeq) {
+    } else if (!checkOnly && force && explicitSeq) {
         console.warn('[HotUpdateGen][WARN] --force 同序号重签 ' + seqInfo.datePart + '-' + seq + '：已拉到该版本的客户端不会再更新，请确认该版本尚未发布到客户。');
     }
 
-    if (!fs.existsSync(PRIVATE_KEY_PATH)) {
+    // ★ 2026-10-30 P1：--check 只读比对，无需私钥（发布链在任意机器上都能判断是否需要重签）
+    if (!checkOnly && !fs.existsSync(PRIVATE_KEY_PATH)) {
         console.error('[HotUpdateGen] 私钥缺失: ' + PRIVATE_KEY_PATH);
         console.error('  私钥不入库（gitignore）。请从 Cloudflare Secrets / 离线备份恢复后重试。');
         process.exit(1);
@@ -258,6 +262,34 @@ function main() {
             }
         }
         console.log('[HotUpdateGen] 身份断言通过 (' + channel + '): ' + asserts.map(function (a) { return a.label; }).join(' / '));
+    }
+
+    // ★ 2026-10-30 P1：--check 只读比对（发布链判断是否需要重签；不写盘、不签名、不占序号）
+    //   退出码：0=与已发布清单一致；2=内容落后需重签（或尚无清单）；1=其他错误
+    if (checkOnly) {
+        const prev = readPrevManifest(channel);
+        if (!prev || !Array.isArray(prev.files)) {
+            console.log('[HotUpdateCheck] ' + channel + ' 未找到已发布清单 → 需签发');
+            process.exit(2);
+        }
+        const prevMap = new Map(prev.files.map(function (f) { return [f.name, f]; }));
+        const changed = [];
+        for (const f of files) {
+            const p = prevMap.get(f.name);
+            if (!p || p.sha256 !== f.sha256 || p.size !== f.size) changed.push(f.name);
+        }
+        const curNames = new Set(files.map(function (f) { return f.name; }));
+        for (const f of prev.files) if (!curNames.has(f.name)) changed.push(f.name + '(已移除)');
+        if (changed.length) {
+            console.log('[HotUpdateCheck] ' + channel + ' 内容落后 ' + changed.length + ' 项：' + changed.slice(0, 6).join(', ') + (changed.length > 6 ? ' …' : '') + ' → 需重签');
+            process.exit(2);
+        }
+        if (String(prev.appVersion) !== String(conf.appVersion)) {
+            console.log('[HotUpdateCheck] ' + channel + ' 内容一致，appVersion ' + prev.appVersion + ' → ' + conf.appVersion + '（元数据落后，建议重签）');
+            process.exit(2);
+        }
+        console.log('[HotUpdateCheck] ' + channel + ' 已是最新（' + prev.hotVersion + '，' + files.length + ' 文件）');
+        process.exit(0);
     }
 
     // 2. 版本号：YYYY.MM.DD-N（N 由序号决策得出：自动递增或显式 -n）
