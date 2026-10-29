@@ -1,8 +1,8 @@
 {
   "format": 1,
   "channel": "local",
-  "hotVersion": "2026.10.29-3",
-  "appVersion": "1.0.305",
+  "hotVersion": "2026.10.29-4",
+  "appVersion": "1.0.306",
   "files": [
     {
       "name": "index.html",
@@ -100,6 +100,6 @@
       "size": 881727
     }
   ],
-  "signedAt": 1793258045569,
-  "signature": "GeoM6JC5pzJwVgLOp1fnn4cMYjqP7dgpHPgWeluBYLgABMCr3boGycmfBOe002XpL4BIGkGxLaFYTTHgMQbSAg=="
+  "signedAt": 1793264590568,
+  "signature": "TmUowl2QpyRJUJgB4sj//30+uRR4JMuTYylGQx7mZcBcizyoDPgWmSvHzensByx2jhmgTOFG0Pq0dMyW31FaBg=="
 }
