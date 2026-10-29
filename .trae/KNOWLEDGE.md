@@ -2566,7 +2566,7 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
   - 实现要点：`release-menu.ps1` 顶部 `param(-Stage menu|pack|publish|full|hot|verify, -Version all|cloud|dingzhi, -Mode all|desktop|app, -Yes)`（`ValidateSet` 拦非法值，必须写在所有可执行语句之前）；非交互块插在函数定义之后、主菜单 `while` 之前，末尾 `exit $rc`；所有阶段返回值统一 `if ($rc -is [array]) { $rc = [int]$rc[-1] }` 提取（防子进程输出污染返回数组）。bat 只做参数解析（`--yes`/`-y`）、stage 白名单、入口预检（publish/full 用 `-Mode publish` 保留 behind 硬停）、codepage 恢复与退出码透传。
   - 坑：`Write` 新建的 `.bat` 是 LF，必须 `tools/fix-bat-crlf.ps1` 归一（CJK bat 被 LF 破坏时 cmd 解析期中止、窗口闪退）；`Start-Process -RedirectStandardOutput` 落盘是 UTF-8，回读必须 `Get-Content -Encoding UTF8`，否则中文乱码易被误判成脚本编码坏了。
   - 验证：`pack-gate preflight` 5/5（P3 bat CRLF 32 文件、P5 三通道热更完整）；AST 解析 7 个 ps1 全 `[OK]`；冒烟：`bogus` rc=2、`publish` 无 `--yes` rc=2、`full` 无 `--yes` rc=2、`hot` rc=2（报 desktop 两通道 appVersion 元数据落后）且 `git status public/hot-update` 前后一致、`一键发布.bat verify` rc=0（9/9 URL 通过）、无参菜单在 stdin 关闭时 rc=1（防僵尸）。
-  - 遗留：desktop 两通道热包 `appVersion`（1.2.282/1.0.305）仍落后整包（1.2.283/1.0.306），仅元数据非门禁；`hot --yes` 或下次全流程 `[1.5]` 会自动刷新。
+  - 元数据刷新（同日已完成，commit `2da0e461`）：`一键构建发布.bat hot --yes` 一次签发 desktop 两通道 → `2026.10.29-4`（appVersion 已对齐整包 **cloud 1.2.283 / local 1.0.306**），app-local 内容未变保持 `2026.10.29-2`；随后只读复检 `hot` rc=0（幂等）、`verify-hotupdate.cjs` 三通道 PASS、**客户端同款 fetch 全量复验线上** `ALL MATCH`（三通道 signature VALID + 逐文件 size/sha256 一致，Pages 部署已完成）。铁律不变：热更签发只 `git add public/hot-update` 单独提交，不与业务改动混批。
 
 
 
