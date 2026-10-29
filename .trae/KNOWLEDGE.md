@@ -2517,5 +2517,10 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
   - 实现（`shared/desktop-print.cjs` 唯一权威源）：新增 `ensureDefaultPrinterA5(webContents)`——`getPrintersAsync()` 取默认打印机 → `powershell -NoProfile -NonInteractive -Command` 跑 ASCII-only 脚本（`System.Printing`：幂等判断 `PageMediaSizeName -eq ISOA5`，否则 `PageMediaSize=PageMediaSize(ISOA5)` + `PrintQueue.Commit()`），打印机名走环境变量 `HKZY_PRINTER_NAME`（避免中文驱动名被 GBK 破坏）；每打印机每进程只做一次，8s 兜底，失败仅 WARN 不影响打印。打印流程与页面加载**并行**启动、弹对话框前 await。
   - 验证：v1（仅 pageSize）→ 首选项 A4；重置 user ticket=ISOA4 后跑 app 路径 → 日志 `A5-SET`、首选项变 `148 x 210 毫米 / A5`（UIA 取证）。`node --check` 三份副本、`sync-all -VerifyOnly` exit 0、`copy-consistency` 100 副本 0 失败。
   - 铁律：**Windows 桌面端纸张只能靠 per-user 打印首选项**（pageSize 只管任务参数/布局，不管对话框默认纸）；改纸张默认逻辑只改 `shared/desktop-print.cjs` 再 sync 两副本，且**主进程域不可热更，必须重打双桌面 exe**。诊断同类问题用「UIA 读对话框 + 重置 ticket 做 A/B 对照」，不要靠肉眼猜。
+  - 巡诊工具（已入库，可拷到任意诊所机器，免管理员、只读优先）：`检查打印机纸张A5.bat`（ASCII 启动器）+ `tools/printer-paper-a5.ps1`：
+    - 双击 bat = 只读检查：逐台列出「对话框默认纸 / 每用户首选项 / 打印机默认纸 / 驱动是否支持 A5 / 结论」，退出码 `0`=默认打印机已 A5、`2`=需修复、`3`=驱动无 A5、`1`=脚本错。
+    - `-Fix` = 把默认打印机设为 A5；`-Fix -All` = 所有支持 A5 的本地打印机；`-Fix -Printer "名称"` = 指定一台；`-SaveReport` = 额外落 `打印机纸张报告_<机器名>_<时间>.txt`（已 gitignore），便于各机器跑完回收比对。
+    - 已实测：本机 7 台打印机中 HP LaserJet 1020 为 `A5 (ISOA5)` → [OK]；虚拟打印机里 Foxit / Print to Evernote 驱动**无 A5 选项**（只能人工选纸或换驱动）；`-Fix -Printer` 单台设置→回读 ISOA5→再还原，验证通过；已是 A5 时 -Fix 幂等不再写注册表。
+    - 注意纸张名两种命名必须归一比较（System.Printing 用 `ISOA5`，`Get-PrintConfiguration` 用 `A5`），否则会把已是 A5 的机器误判为"需设置"。
 
 

@@ -170,3 +170,5 @@ app_project_harmony/**/sign-materials/
 *.csr
 *.cer
 *.p7b
+# 打印机纸张检查报告（每台诊所机器本地产物，不入库）
+打印机纸张报告_*.txt
