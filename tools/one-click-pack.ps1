@@ -610,63 +610,111 @@ function Invoke-SmartPack {
     return 0
 }
 
+# ============ ★ 2026-10-30 P5 打包编排表 + 单一执行路径 ============
+# 背景：-AutoMode 的 8 个取值各复制 4 行收尾（取值/副作用收纳/记录基线/exit），菜单
+#   [1]~[4] 又复制一遍，新增一端或新增一种组合就得改 4 处且极易漏掉
+#   Invoke-PackSideEffectCollect / Record-BuiltUnits（漏了会导致版本副作用滞留工作区
+#   或 .build-cache/last-run.json 失真）。
+# 现结构：**计划表（数据）→ Invoke-PackUnit（唯一执行）→ 统一收尾**。
+#   新增端 = 在表里加一行；禁止再写 if/switch 复制执行分支。
+$script:PackPlanMap = @{
+    '1'  = @{ Kind = 'cloud';   Target = 'all';     Label = '云端版打包（桌面+APP）' }
+    '1d' = @{ Kind = 'cloud';   Target = 'desktop'; Label = '云端桌面打包' }
+    '1a' = @{ Kind = 'cloud';   Target = 'app';     Label = '云端 APP 打包' }
+    '2'  = @{ Kind = 'offline'; Target = 'all';     Label = '本地版打包（桌面+APP）' }
+    '2d' = @{ Kind = 'offline'; Target = 'desktop'; Label = '本地桌面打包' }
+    '2a' = @{ Kind = 'offline'; Target = 'app';     Label = '本地 APP 打包' }
+    '3'  = @{ Kind = 'all';     Target = 'all';     Label = '全部2个版本打包' }
+    '4'  = @{ Kind = 'smart';   Target = 'all';     Label = '智能打包（自动检测需重打的端）' }
+}
+
+# 执行一个打包单元并返回真实退出码（Kind: cloud/offline/both/all/smart）
+#   cloud/offline：单版本（-Target all|desktop|app）
+#   both        ：同一范围打两个版本（菜单 [5]/[6] 选"云端+本地"用）
+#   all         ：两版本 × 两端全量（Build-All 聚合）
+#   smart       ：先检测四端改动再只打有变化的组
+function Invoke-PackUnit {
+    param(
+        [Parameter(Mandatory = $true)][ValidateSet('cloud', 'offline', 'both', 'all', 'smart')][string]$Kind,
+        [ValidateSet('all', 'desktop', 'app')][string]$Target = 'all'
+    )
+    $rc = 0
+    switch ($Kind) {
+        'cloud'   { $rc = Build-Cloud -Target $Target }
+        'offline' { $rc = Build-Offline -Version "dingzhi" -Target $Target }
+        'both' {
+            # 云端失败仍继续打本地（与 Build-All 聚合策略一致），各自报错
+            $rcCloud = Get-ExitCode (Build-Cloud -Target $Target)
+            $rcLocal = Get-ExitCode (Build-Offline -Version "dingzhi" -Target $Target)
+            if ($rcCloud -ne 0) {
+                Write-Host ""
+                Write-Host "[ERROR] 云端打包失败，退出码: $rcCloud（完整日志: $script:LogFile）" -ForegroundColor Red
+            }
+            if ($rcLocal -ne 0) {
+                Write-Host ""
+                Write-Host "[ERROR] 本地打包失败，退出码: $rcLocal（完整日志: $script:LogFile）" -ForegroundColor Red
+            }
+            if ($rcCloud -ne 0) { return [int]$rcCloud }
+            if ($rcLocal -ne 0) { return [int]$rcLocal }
+            return 0
+        }
+        'all'     { $rc = Build-All }
+        'smart'   { $rc = Invoke-SmartPack }
+    }
+    $rc = Get-ExitCode $rc
+    if ($null -eq $rc) { $rc = 0 }
+    return [int]$rc
+}
+
+# 统一收尾：副作用收纳 + 增量基线记录（★ 唯一实现，AutoMode 与菜单共用）
+function Complete-PackRun {
+    Invoke-PackSideEffectCollect -Commit:$AutoCommit
+    Record-BuiltUnits
+}
+
+# 菜单 [1]~[4] 的单一实现：查表 → 执行 → 收尾 → 结果横幅（★ 唯一实现）
+function Invoke-MenuPackAction {
+    param([Parameter(Mandatory = $true)][string]$Key)
+    $plan = $script:PackPlanMap[$Key]
+    if (-not $plan) {
+        Write-Host "[ERROR] 未知打包计划键: $Key" -ForegroundColor Red
+        return
+    }
+    $rc = Invoke-PackUnit -Kind $plan.Kind -Target $plan.Target
+    Complete-PackRun
+    Show-PackResult -Label $plan.Label -ExitCode $rc
+}
+
 # ============ Pick Version Menu ============
+# 菜单 [5]/[6]（单独打包某一版本）用：只负责"选版本"，执行一律走 Invoke-PackUnit。
 function Show-PickVersionMenu {
     param([string]$Mode)
     $modeLabel = if ($Mode -eq "desktop") { "桌面" } else { "APP" }
-    # ★ 2026-10-30 P3：选择 UI 统一到 menu-core 的 Show-VersionPicker（只选不执行），
-    #   打包编排仍留在本脚本（保持 AutoMode 与菜单共用同一执行层）。
+    # ★ 2026-10-30 P3：选择 UI 统一到 menu-core 的 Show-VersionPicker（只选不执行）。
+    # ★ 2026-10-30 P5：三个分支的重复执行/报错/收纳逻辑收敛为 Invoke-PackUnit + Complete-PackRun。
     $version = Show-VersionPicker -Title ("请选择版本 - 打$modeLabel") -AllLabel '云端+本地'
-    switch ($version) {
-        # ★ 2026-08-23 四轮复核修复：原 $null=Build-XXX 同时吞掉①失败退出码(打包失败用户
-        #   看不到任何失败提示)②不调用 SideEffectCollect(versionCode/version 副作用
-        #   不被收纳, 回到主菜单后也不再展示, 与 [1][2][3] 行为不一致)
-        "cloud" {
-            $prc = Build-Cloud -Target $Mode
-            if ($prc -is [array]) { $prc = [int]$prc[-1] }
-            if ($prc -ne 0) {
-                Write-Host ""
-                Write-Host "[ERROR] 云端$modeLabel打包失败，退出码: $prc（完整日志: $script:LogFile）" -ForegroundColor Red
-                pause
-            }
-            Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits
-            return
-        }
-        "dingzhi" {
-            $prc = Build-Offline -Version "dingzhi" -Target $Mode
-            if ($prc -is [array]) { $prc = [int]$prc[-1] }
-            if ($prc -ne 0) {
-                Write-Host ""
-                Write-Host "[ERROR] 本地$modeLabel打包失败，退出码: $prc（完整日志: $script:LogFile）" -ForegroundColor Red
-                pause
-            }
-            Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits
-            return
-        }
-        # ★ 云端+本地 组合：先云端后本地，云端失败仍继续打本地（与 Build-All 聚合策略一致）
-        "all" {
-            $rcCloud = Build-Cloud -Target $Mode
-            if ($rcCloud -is [array]) { $rcCloud = [int]$rcCloud[-1] }
-            if (-not $rcCloud) { $rcCloud = 0 }
-            $rcOffline = Build-Offline -Version "dingzhi" -Target $Mode
-            if ($rcOffline -is [array]) { $rcOffline = [int]$rcOffline[-1] }
-            if (-not $rcOffline) { $rcOffline = 0 }
-            if ($rcCloud -ne 0) {
-                Write-Host ""
-                Write-Host "[ERROR] 云端$modeLabel打包失败，退出码: $rcCloud（完整日志: $script:LogFile）" -ForegroundColor Red
-                pause
-            }
-            if ($rcOffline -ne 0) {
-                Write-Host ""
-                Write-Host "[ERROR] 本地$modeLabel打包失败，退出码: $rcOffline（完整日志: $script:LogFile）" -ForegroundColor Red
-                pause
-            }
-            Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits
-            return
-        }
-        default { return }
+    $kind = switch ($version) {
+        "cloud"   { 'cloud' }
+        "dingzhi" { 'offline' }
+        "all"     { 'both' }
+        default   { return }
     }
+    $verLabel = switch ($version) {
+        "cloud"   { '云端' }
+        "dingzhi" { '本地' }
+        default   { '云端+本地' }
+    }
+    # ★ 2026-08-23 四轮复核修复（保留）：失败必须可见（原 $null=Build-XXX 吞掉退出码），
+    #   且必须执行 Complete-PackRun（原漏 SideEffectCollect 会让 versionCode/version 滞留工作区）。
+    $rc = Invoke-PackUnit -Kind $kind -Target $Mode
+    if ($rc -ne 0) {
+        Write-Host ""
+        Write-Host "[ERROR] $verLabel$modeLabel打包失败，退出码: $rc（完整日志: $script:LogFile）" -ForegroundColor Red
+        pause
+    }
+    Complete-PackRun
 }
+
 
 # ============ Show Standalone Usage ============
 function Show-StandaloneUsage {
@@ -721,73 +769,18 @@ if ($AutoMode) {
             exit 1
         }
     }
-    # ★ 2026-08-23 复核修复：携带真实退出码退出（原先恒 exit 0，
+    # ★ 2026-08-23 复核修复（保留）：携带真实退出码退出（原先恒 exit 0，
     #   release-menu Invoke-Pack / Invoke-FullFlow 无法感知打包失败）
-    #   防御性取值：返回值若被子进程输出污染成数组，取末元素=真实退出码
-    switch ($AutoMode) {
-        "1" {
-            $rc = Build-Cloud -Target "all"
-            if ($rc -is [array]) { $rc = [int]$rc[-1] }
-            if (-not $rc) { $rc = 0 }
-            Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits
-            exit $rc
-        }
-        # ★ 2026-09-14 单端组合模式：仅一端源码真实变化时缩围重打（先例：云APP 提速重打，
-        #   云桌面 file:// 无 HTTP 缓存，无谓重打=versionCode 递增假更新）。门禁链与组模式同源。
-        "1a" {
-            $rc = Build-Cloud -Target "app"
-            if ($rc -is [array]) { $rc = [int]$rc[-1] }
-            if (-not $rc) { $rc = 0 }
-            Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits
-            exit $rc
-        }
-        "1d" {
-            $rc = Build-Cloud -Target "desktop"
-            if ($rc -is [array]) { $rc = [int]$rc[-1] }
-            if (-not $rc) { $rc = 0 }
-            Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits
-            exit $rc
-        }
-        "2a" {
-            $rc = Build-Offline -Version "dingzhi" -Target "app"
-            if ($rc -is [array]) { $rc = [int]$rc[-1] }
-            if (-not $rc) { $rc = 0 }
-            Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits
-            exit $rc
-        }
-        "2d" {
-            $rc = Build-Offline -Version "dingzhi" -Target "desktop"
-            if ($rc -is [array]) { $rc = [int]$rc[-1] }
-            if (-not $rc) { $rc = 0 }
-            Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits
-            exit $rc
-        }
-        "2" {
-            $rc = Build-Offline -Version "dingzhi" -Target "all"
-            if ($rc -is [array]) { $rc = [int]$rc[-1] }
-            if (-not $rc) { $rc = 0 }
-            Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits
-            exit $rc
-        }
-        "3" {
-            $rc = Build-All
-            if ($rc -is [array]) { $rc = [int]$rc[-1] }
-            if (-not $rc) { $rc = 0 }
-            Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits
-            exit $rc
-        }
-        "4" {
-            $rc = Invoke-SmartPack
-            if ($rc -is [array]) { $rc = [int]$rc[-1] }
-            if (-not $rc) { $rc = 0 }
-            Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits
-            exit $rc
-        }
-        default {
-            Write-Host "[ERROR] 无效自动模式: $AutoMode（应为 1=云端 2=本地 3=全部 4=智能；单端：1a=云端APP 1d=云端桌面 2a=本地APP 2d=本地桌面）" -ForegroundColor Red
-            exit 1
-        }
+    # ★ 2026-10-30 P5：8 个取值不再各写一段，统一查 $script:PackPlanMap → Invoke-PackUnit。
+    $planKey = "$AutoMode".ToLower()
+    if (-not $script:PackPlanMap.ContainsKey($planKey)) {
+        Write-Host "[ERROR] 无效自动模式: $AutoMode（应为 1=云端 2=本地 3=全部 4=智能；单端：1a=云端APP 1d=云端桌面 2a=本地APP 2d=本地桌面）" -ForegroundColor Red
+        exit 1
     }
+    $plan = $script:PackPlanMap[$planKey]
+    $rc = Invoke-PackUnit -Kind $plan.Kind -Target $plan.Target
+    Complete-PackRun
+    exit $rc
 }
 
 while ($true) {
@@ -824,38 +817,16 @@ while ($true) {
         # ★ 2026-09-01 结果确认：原 $null = Build-... 丢弃退出码且直接循环回菜单
         #   （Clear-Host 清屏），成败一闪而过。改为捕获退出码 + 显示结果确认块
         #   + 中文暂停（按回车键继续），确认后才返回菜单。
-        "1" {
-            $rc = Build-Cloud -Target "all"
-            if ($rc -is [array]) { $rc = [int]$rc[-1] }
-            if (-not $rc) { $rc = 0 }
-            Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits
-            Show-PackResult -Label "云端版打包（桌面+APP）" -ExitCode $rc
-        }
-        "2" {
-            $rc = Build-Offline -Version "dingzhi" -Target "all"
-            if ($rc -is [array]) { $rc = [int]$rc[-1] }
-            if (-not $rc) { $rc = 0 }
-            Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits
-            Show-PackResult -Label "本地版打包（桌面+APP）" -ExitCode $rc
-        }
-        "3" {
-            $rc = Build-All
-            if ($rc -is [array]) { $rc = [int]$rc[-1] }
-            if (-not $rc) { $rc = 0 }
-            Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits
-            Show-PackResult -Label "全部2个版本打包" -ExitCode $rc
-        }
-        "4" {
-            $rc = Invoke-SmartPack
-            if ($rc -is [array]) { $rc = [int]$rc[-1] }
-            if (-not $rc) { $rc = 0 }
-            Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits
-            Show-PackResult -Label "智能打包（自动检测需重打的端）" -ExitCode $rc
-        }
-        # ★ 2026-08-23 三轮复核修复：[5][6] 单独打包同样产生 versionCode/package.json 副作用，
-        #   补 SideEffectCollect 与 [1][2][3] 行为一致（否则单独打包的副作用靠人工提交易遗漏）
-        "5" { Show-PickVersionMenu -Mode "desktop"; Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits; pause }
-        "6" { Show-PickVersionMenu -Mode "app"; Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits; pause }
+        # ★ 2026-10-30 P5：分支体收敛为一行（计划表 → Invoke-PackUnit → Complete-PackRun），
+        #   标签也来自表，新增端只改表不改菜单。
+        "1" { Invoke-MenuPackAction -Key '1' }
+        "2" { Invoke-MenuPackAction -Key '2' }
+        "3" { Invoke-MenuPackAction -Key '3' }
+        "4" { Invoke-MenuPackAction -Key '4' }
+        # ★ 2026-08-23 三轮复核修复（保留）：[5][6] 单独打包同样产生 versionCode/package.json
+        #   副作用，由 Show-PickVersionMenu 内部 Complete-PackRun 收纳，与 [1][2][3] 一致。
+        "5" { Show-PickVersionMenu -Mode "desktop"; pause }
+        "6" { Show-PickVersionMenu -Mode "app"; pause }
         "7" { Show-StandaloneUsage }
         "0" { exit 0 }
         default { Write-Host "无效选择，请重试" -ForegroundColor Red; Start-Sleep -Seconds 1 }

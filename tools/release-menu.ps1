@@ -483,6 +483,74 @@ function Invoke-FullFlow {
     return 0
 }
 
+# ============ 智能发布（★ 2026-10-30 P5：阶段 publish 与菜单 [3] 共用单一路径）============
+# 背景：同一件事（体检 → auto-publish --publish → rc=3 文案 → 结果横幅）在阶段分支和
+#   菜单 [3] 各写一遍，且文案已漂移（阶段只打一行"官网已是最新"，菜单打整块"无需发布"）。
+#   现统一到本函数；pause 由调用方决定（菜单 pause，阶段不 pause）。
+# 返回值：0=成功或无需发布 / 2=体检阻断 / 其它=发布失败。
+function Invoke-SmartPublish {
+    param([switch]$ShowHint)
+    $autoPublish = "$script:RootDir\tools\auto-publish.js"
+    Write-Host ""
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host "  智能发布 (auto-publish.js --publish)" -ForegroundColor Cyan
+    Write-Host "  仅上传有变化的产物；发布前自动跑合规检查" -ForegroundColor Cyan
+    Write-Host "========================================" -ForegroundColor Cyan
+    # ★ 2026-10-30 P1：智能发布前先过发布前体检（阻断项即中止）
+    $rcG = Get-ExitCode (Invoke-ReadinessGate)
+    if ($rcG -ne 0) {
+        Write-Host "[ERROR] 发布前体检存在阻断项，智能发布已中止（READINESS_SOFT=1 可跳过）" -ForegroundColor Red
+        Write-Host "  完整日志: $script:LogFile" -ForegroundColor Yellow
+        return 2
+    }
+    if (-not (Test-Path $autoPublish)) {
+        Write-Host "[WARN] auto-publish.js 缺失，回退为全量发布（publish-release.js --confirm --push）" -ForegroundColor Yellow
+        $rc = Get-ExitCode (Invoke-Publish -Target "all")
+        Show-PublishResult -ExitCode $rc -Label "发布全部版本（auto-publish 缺失回退）"
+        if ($ShowHint) { Show-NextStepHint }
+        return $rc
+    }
+    $rc = Get-ExitCode (Invoke-NodeScript -ScriptPath $autoPublish -Arguments @('--publish'))
+    if ($rc -eq 3) {
+        # 退出码 3 = 无需发布（官网已是最新）——显示信息块而非"发布成功"，
+        # 杜绝"没传任何东西却报成功 + Cloudflare 将部署"的误导。
+        Write-Host ""
+        Write-Host "========================================" -ForegroundColor Cyan
+        Write-Host "  [无需发布] 官网已是最新版本" -ForegroundColor Cyan
+        Write-Host "========================================" -ForegroundColor Cyan
+        Write-Host "  本地产物与官网 hash 完全一致，未上传任何文件"
+        Write-Host "  下载页: $($global:HKZY_OfficialUrls.Download)"
+        $rc = 0
+    } else {
+        Show-PublishResult -ExitCode $rc -Label "智能发布（仅上传有变化的产物）"
+    }
+    if ($ShowHint) { Show-NextStepHint }
+    return [int]$rc
+}
+
+# ============ 指定发布（★ 2026-10-30 P5：阶段 publish 单版本 与 菜单 [4] 共用）============
+# 语义：先过体检硬门 → 按所选版本+范围全量上传（publish-release.js --confirm --push）。
+function Invoke-PublishSelection {
+    param(
+        [ValidateSet('all', 'cloud', 'dingzhi')][string]$Target = 'all',
+        [ValidateSet('all', 'desktop', 'app')][string]$Scope = 'all'
+    )
+    # Target=all = 「全部版本」发布：沿用智能发布（仅上传有变化的产物），
+    # 与阶段 publish / 菜单 [3] 完全同一条路径，不再各写一份。
+    if ($Target -eq 'all') { return (Invoke-SmartPublish) }
+    $rcG = Get-ExitCode (Invoke-ReadinessGate)
+    if ($rcG -ne 0) {
+        Write-Host "[ERROR] 发布前体检存在阻断项，指定发布已中止（READINESS_SOFT=1 可跳过）" -ForegroundColor Red
+        Write-Host "  完整日志: $script:LogFile" -ForegroundColor Yellow
+        return 2
+    }
+    $verLabel = switch ($Target) { 'cloud' { '云端' } 'dingzhi' { '本地' } default { '全部' } }
+    $scopeLabel = switch ($Scope) { 'desktop' { '桌面' } 'app' { 'APP' } default { '全部' } }
+    $rc = Get-ExitCode (Invoke-Publish -Target $Target -Mode $Scope)
+    Show-PublishResult -ExitCode $rc -Label "指定发布（$verLabel / $scopeLabel）"
+    return [int]$rc
+}
+
 # ============ 非交互阶段入口（★ 2026-10-30 P2）============
 # 供 一键构建发布.bat 透传：同一份内核、同一套门禁，只是省掉菜单交互。
 # ★ HARD 规则保持：凡「上传官网」的阶段（publish / full）必须 -Yes 显式确认；
@@ -516,21 +584,10 @@ if ($Stage -ne 'menu') {
                 Write-Host "  只想体检不改动: 一键构建发布.bat verify" -ForegroundColor Yellow
                 $rc = 2
             } else {
-                $rc = Invoke-ReadinessGate
-                if ($rc -is [array]) { $rc = [int]$rc[-1] }
-                if ($rc -eq 0) {
-                    if ($Version -eq 'all') {
-                        $autoPublishJs = "$script:RootDir\tools\auto-publish.js"
-                        $rc = Invoke-NodeScript -ScriptPath $autoPublishJs -Arguments @('--publish')
-                        if ($rc -is [array]) { $rc = [int]$rc[-1] }
-                        if ($rc -eq 3) { Write-Host "[OK] 官网已是最新，本次未上传" -ForegroundColor Cyan; $rc = 0 }
-                    } else {
-                        $rc = Invoke-Publish -Target $Version -Mode $Mode
-                        if ($rc -is [array]) { $rc = [int]$rc[-1] }
-                    }
-                }
-                if ($rc -eq 0) { Show-PublishResult -ExitCode 0 -Label ("发布（$Version / $Mode）") }
-                else { Write-Host "  完整日志: $script:LogFile" -ForegroundColor Yellow }
+                # ★ 2026-10-30 P5：与菜单 [3]/[4] 共用同一发布路径与文案
+                #   Target=all → Invoke-SmartPublish（智能发布）；单版本 → 体检 + 全量上传
+                $rc = Invoke-PublishSelection -Target $Version -Scope $Mode
+                if ($rc -ne 0) { Write-Host "  完整日志: $script:LogFile" -ForegroundColor Yellow }
             }
         }
         'full' {
@@ -659,20 +716,9 @@ while ($true) {
             #   选"本地版"后该版本 dist/ 里上次构建的旧桌面 exe 也被一并上传。
             $selMode2 = Show-PackModeMenu -ScopeTitle "发布"
             if ($selMode2 -eq "") { break }
-            # ★ 2026-10-30 P1：全量补传前仍先过发布前体检（热更降级/版本回退不放过）
-            $rcG = Invoke-ReadinessGate
-            if ($rcG -is [array]) { $rcG = [int]$rcG[-1] }
-            if ($rcG -ne 0) {
-                Write-Host "[ERROR] 发布前体检存在阻断项，指定发布已中止（READINESS_SOFT=1 可跳过）" -ForegroundColor Red
-                Write-Host ""
-                pause
-                break
-            }
-            # ★ 2026-08-23 复核修复：原 | Out-Null 丢弃退出码，失败静默无提示
-            $rc2 = Invoke-Publish -Target $selVersion -Mode $selMode2
-            if ($rc2 -is [array]) { $rc2 = [int]$rc2[-1] }
-            # ★ 2026-09-01 统一结果汇总（明确中文提示）
-            Show-PublishResult -ExitCode $rc2 -Label "指定发布（$selVersion / $selMode2）"
+            # ★ 2026-10-30 P5：体检硬门 + 全量上传 + 结果横幅统一到 Invoke-PublishSelection
+            #   （原内联体检/上传/横幅三份代码与阶段 publish 漂移）
+            $rc2 = Invoke-PublishSelection -Target $selVersion -Scope $selMode2
             Show-NextStepHint
             pause
         }
@@ -700,45 +746,10 @@ while ($true) {
         "3" {
             # 智能发布 - 仅上传有变化的产物（auto-publish.js --publish；内置合规门禁）
             #   "智能"= 自动比对 hash 检测变化，上传动作仍由本菜单人工触发（HARD规则）
-            $autoPublish = "$script:RootDir\tools\auto-publish.js"
-            if (Test-Path $autoPublish) {
-                Write-Host ""
-                Write-Host "========================================" -ForegroundColor Cyan
-                Write-Host "  智能发布 (auto-publish.js --publish)" -ForegroundColor Cyan
-                Write-Host "  仅上传有变化的产物；发布前自动跑合规检查" -ForegroundColor Cyan
-                Write-Host "========================================" -ForegroundColor Cyan
-                # ★ 2026-10-30 P1：智能发布前先过发布前体检（阻断项即中止）
-                $rcG = Invoke-ReadinessGate
-                if ($rcG -is [array]) { $rcG = [int]$rcG[-1] }
-                if ($rcG -ne 0) {
-                    Write-Host "[ERROR] 发布前体检存在阻断项，智能发布已中止（READINESS_SOFT=1 可跳过）" -ForegroundColor Red
-                    Write-Host ""
-                    pause
-                    break
-                }
-                # ★ 2026-08-23 复核修复：原 | Out-Null 丢弃退出码，失败静默无提示
-                $rc5 = Invoke-NodeScript -ScriptPath $autoPublish -Arguments @('--publish')
-                if ($rc5 -is [array]) { $rc5 = [int]$rc5[-1] }
-                # ★ 2026-09-01 统一结果汇总（明确中文提示；auto-publish.js 内部已列
-                #   上传产物清单，此处菜单层给成败大字块兜底）
-                #   退出码 3 = 无需发布（官网已是最新）——显示信息块而非"发布成功"，
-                #   杜绝"没传任何东西却报成功+Cloudflare 将部署"的误导。
-                if ($rc5 -eq 3) {
-                    Write-Host ""
-                    Write-Host "========================================" -ForegroundColor Cyan
-                    Write-Host "  [无需发布] 官网已是最新版本" -ForegroundColor Cyan
-                    Write-Host "========================================" -ForegroundColor Cyan
-                    Write-Host "  本地产物与官网 hash 完全一致，未上传任何文件"
-                    Write-Host "  下载页: $($global:HKZY_OfficialUrls.Download)"
-                } else {
-                    Show-PublishResult -ExitCode $rc5 -Label "智能发布（仅上传有变化的产物）"
-                }
-            } else {
-                $rc5 = Invoke-Publish -Target "all"
-                if ($rc5 -is [array]) { $rc5 = [int]$rc5[-1] }
-                Show-PublishResult -ExitCode $rc5 -Label "发布全部版本"
-            }
-            Show-NextStepHint
+            # ★ 2026-10-30 P5：体检 + auto-publish + rc=3「无需发布」文案 + 结果横幅
+            #   统一到 Invoke-SmartPublish（与阶段 publish all 同一份实现，不再文案漂移）
+            $rc5 = Invoke-SmartPublish -ShowHint
+            Write-Host ""
             pause
         }
         "5" {

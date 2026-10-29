@@ -2578,5 +2578,24 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
   - 验证：`pack-gate preflight` 5/5（P1 语法 57 文件、P2 BOM、P3 bat CRLF 33、P4 编码 115 项、P5 热更三通道）；AST 解析 10 个 ps1 全 `[OK]`；菜单冒烟（管道喂 choice）：打包菜单 `[0]` rc=0、发布菜单 `[1]/[2]/[4]→[0]→[0]` 均 rc=0 且版本菜单由 menu-core 渲染、`[7]` 热更只读 rc=0 且 `public/hot-update` 零改动、`Show-VersionPicker` 选 `[0]` 返回空串、stdin 关闭打印 FATAL+自定义指引并 rc=1；阶段冒烟：`publish`/`full` 无 `--yes` rc=2 且打印 `[BLOCK]`、`hot` rc=0（三通道已最新）、非法 stage rc=2、别名 `一键发布.bat verify` rc=0（9/9 URL）、`fix-release-bat.ps1` 识别别名版且**未改动** bat 内容（幂等）。
   - 边界（不要再合并）：打包执行层（`Build-*`）仍只在 `one-click-pack.ps1` 一份；不要把两个 ps1 合成单文件（离线打包不能绑死发布合规模块）；不要在 bat 层抽公共函数（cmd 无跨文件 `call :label`）；横幅视觉样式保持现状（161 处 `====` 属习惯，不改）。
 
+* ★ 2026-10-30（P5：**打包编排表驱动 + 发布文案合一** —— 数据与执行分离，新增端只改表）：
+  - 背景：`one-click-pack.ps1` 的 `-AutoMode` 8 个取值各复制"执行 + 副作用收纳 + 记录基线 + exit"，菜单 `[1]~[4]` 再复制一遍（新增端/新增组合要改 4 处，漏 `Invoke-PackSideEffectCollect` 会让 versionCode/version 滞留工作区，漏 `Record-BuiltUnits` 会让 `last-run.json` 失真）；`release-menu.ps1` 的"体检 → auto-publish → 无需发布文案 → 结果横幅"在阶段 `publish`、菜单 `[3]`、菜单 `[4]` 各写一份，文案已漂移（阶段只打一行"官网已是最新"，菜单打整块）。
+  - `one-click-pack.ps1` 新结构（**计划表 = 数据，执行器 = 唯一代码，收尾 = 唯一代码**）：
+    - `$script:PackPlanMap`（键 → `@{Kind; Target; Label}`）：`1`=cloud/all、`1d`=cloud/desktop、`1a`=cloud/app、`2`=offline/all、`2d`=offline/desktop、`2a`=offline/app、`3`=all/all、`4`=smart/all。**新增端/新组合 = 表里加一行 + 菜单加一行调用，禁止再写 if/switch 复制执行分支。**
+    - `Invoke-PackUnit -Kind cloud|offline|both|all|smart -Target all|desktop|app`：唯一执行器；`both` 供菜单 `[5]/[6]` 选"云端+本地"（两端都打、各自报错，返回首个非零码）；内部统一 `Get-ExitCode` 提取数组（防子进程输出污染返回值）。
+    - `Complete-PackRun`：`Invoke-PackSideEffectCollect -Commit:$AutoCommit` + `Record-BuiltUnits`（AutoMode 与菜单共用**同一份收尾**）。
+    - `Invoke-MenuPackAction -Key`：菜单 `[1]~[4]` 一行化（查表 → 执行 → 收尾 → `Show-PackResult`）；`Show-PickVersionMenu`（`[5]/[6]`）只负责"选版本"（`Show-VersionPicker` → cloud/dingzhi/all 映射 cloud/offline/both），执行与收尾同样走 `Invoke-PackUnit` + `Complete-PackRun`。
+    - `-AutoMode` 改为 `"$AutoMode".ToLower()` 查表：未命中打印 `[ERROR] 无效自动模式` 并 `exit 1`（不再静默落到某分支）；命中则执行 → 收尾 → `exit $rc`（真实退出码）。
+  - `release-menu.ps1` 两个统一发布函数（阶段与菜单共用同一实现/文案）：
+    - `Invoke-SmartPublish [-ShowHint]`：banner → `Invoke-ReadinessGate`（阻断 rc=2）→ `auto-publish.js --publish`（缺失时回退全量发布）→ `rc=3` 打整块「[无需发布] 官网已是最新版本」并归一为 0 → 否则 `Show-PublishResult`；`-ShowHint` 仅菜单路径加下一步提示。阶段 `publish`（all）与菜单 `[3]` 均走它。
+    - `Invoke-PublishSelection -Target all|cloud|dingzhi -Scope all|desktop|app`：**`Target=all` 直接分流到 `Invoke-SmartPublish`**；单版本先过体检硬门（阻断 rc=2，不调用上传）→ `Invoke-Publish -Target -Mode` 全量上传 → 中文标签横幅「指定发布（云端/本地/全部 · 桌面/APP/全部）」。阶段 `publish` 与菜单 `[4]` 均走它。
+    - `Invoke-FullFlow` 的 Step 2 **有意保留**独立发布段：全流程有自己的 1.8 体检与 `[2/4]` 编号，改调统一函数会重复跑一次体检并打乱分段提示；其行为与统一函数一致（all→auto-publish、单版本→指定发布）。
+  - 验证（本轮）：
+    - `pack-gate -Mode preflight` **5/5 PASS**（P1 ps1 语法 59 文件、P2 BOM、P3 bat CRLF 33、P4 编码完整性、P5 三通道热更签名/哈希）；`tools/_tmp/parse-check.ps1` AST 10 个 ps1 全 `[OK]`。
+    - 新增 `tools/_tmp/smoke-p5.ps1` **35/35**：静态（表 8 键、无 `switch ($AutoMode)`、菜单 4 分支一行化、`Build-Cloud -Target` 4 处业务调用、阶段/菜单 `[3]`/`[4]` 均走统一函数、`auto-publish --publish` 调用点唯一）+ 动态（`-AutoMode 9`/`1x` → rc=1 且打印「无效自动模式」）+ **AST 抽函数注入桩**（`Target=all` → 智能发布且 rc=3 归一 0；体检阻断 rc=2 且不上传；单版本透传版本+范围并出中文标签；失败码原样透传）——发布路径无法在冒烟里真跑（会真上传），故用 AST 抽 `Invoke-SmartPublish`/`Invoke-PublishSelection` 注入桩，零网络零副作用。
+    - 菜单冒烟 22/22（含 `[1]/[2]/[4]→[0]→[0]`、`[7]` 热更只读零改动、`fix-release-bat` 幂等）；阶段冒烟 11/11（`publish`/`full` 无 `--yes` rc=2、`hot` rc=0、非法 stage rc=2、别名 `一键发布.bat verify` rc=0）。
+  - 维护铁律：①新增打包端/组合**只加 `PackPlanMap` 一行**；②发布相关文案/体检/rc=3 处理**只改 `Invoke-SmartPublish` / `Invoke-PublishSelection`**，菜单/阶段禁止再内联；③`Complete-PackRun` 是唯一收尾，任何新执行路径都必须调用它（否则版本副作用与 `last-run.json` 失真）；④`-AutoMode` 非法值必须 rc=1（脚本化调用方依赖退出码）。
+  - 坑（沿用/本轮相关）：局部变量不得与带 `ValidateSet` 的 param 同名（`release-menu` 的 `$Version/$Mode` → `$selVersion/$selMode2`）；函数参数不得命名 `$Args`；`Start-Process -ArgumentList` 必须"路径 + 每个参数"独立元素。
+
 
 
