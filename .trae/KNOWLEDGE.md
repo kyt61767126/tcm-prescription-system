@@ -2448,4 +2448,11 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
   - 验证（`tools/_tmp/rx-font-verify.cjs` 28/28、`rx-other-ends-check.cjs` 16/16）：屏幕 14px=10.5pt、标题 29.33px=22pt、煎服法 12px=9pt、剂量 Times New Roman、3 列 2 行、药名左剂量右零重叠、签名区 min-height 75.59px=20mm；设置弹窗勾选框已注入且默认勾选，取消/恢复即时生效；打印对象内实测纸面 665.2×943px、3 列 2 行、签名空白 83.6px、斜线随 innerHTML 输出、PDF 单页 MediaBox 176.0×250.1mm、关斜线后仍单页且无斜线；375px 移动端纸面 auto、斜线零残留、页脚 `display:block;min-height:0`；门禁 `check-interface` 6 OK / `copy-consistency` 100 副本 0 失败 / `diff-cross-version` 6 对全绿 / `sync-siteadmin --check` 63 函数 0 漂移 / `check-cv-hashes` 15 项一致。官网 download.html 无需改（无纸型/字号表述）。
   - 铁律：处方笺版式改动**屏幕 CSS 与 `printPrescription` 内联打印 CSS 必须成对改**（打印取 `#prescriptionPaper.innerHTML` + 自带模板 CSS，改单边=屏幕/打印不一致）；字号用 pt 定义（打印固定物理尺寸），移动端媒体查询内再转 px 并 `display:block` 复位页脚 flex/min-height；新增设置项一律运行时注入（禁改 HTML 静态结构，否则 `check-interface` 红灯）。
 
+* ★ 2026-10-28（同日第三轮）煎法（后下/先煎）位置修正：**必须跟在克数后面**，不得插在药名与剂量之间：
+  - 现象（用户截图红框）：`砂仁（后下） 9g` 让煎法占据药名列，该行克数被顶到列右外侧、与相邻列药名贴在一起，且同列克数右边界不齐。
+  - 改法：生成器由 `<span class="rx-herb">药名${jianfa}</span><span class="rx-dose">克数</span>` 改为 `<span class="rx-herb">药名</span><span class="rx-dose">克数${jianfa}</span>`，即煎法挂在 `.rx-dose` 内、紧接单位之后 → 渲染为 `砂仁    9g（后下）`，三列克数右边界仍严格对齐（实测 3 列 spread=0/0/0），药名与剂量不重叠。
+  - 字体：`.prescription-jianfa` 增 `font-family:'SimSun','宋体',serif`（它在 Times New Roman 的 `.rx-dose` 内，中文括号必须显式回落宋体，否则括号字形随系统漂）+ `margin-left:0.5mm`；屏幕/打印 `9pt`、移动端 `0.8em`，共 3 文件 × 2 处桌面 + 3/3/2 处移动端。
+  - 分发与验证：`public/index.html` + `db-offline/desktop/index.html` 改生成器与 6 处 CSS → `site-admin` 由 `sync-siteadmin.cjs` 同步函数体（CSS 手改）→ cv 刷（幂等零改）→ `sync-siteadmin` / `sync-index-app` / `sync-html.ps1`。`tools/_tmp/rx-jianfa-verify.cjs` 13/13（含 `9g（后下）` 在 `.rx-dose` 内、煎法 12px=9pt、宋体、右边界 0 偏差、打印 PDF 单页 176×250.1mm），`rx-other-ends-check.cjs` 18/18（离线桌面 + site-admin 各自「后下」在剂量后）。
+  - 铁律：中药处方笺中药名、克数、煎法三者的 DOM 顺序固定为「药名 → 克数 →（煎法）」；煎法只允许作为剂量内的后缀小字，禁止进入药名容器（会破坏列对齐）；任何处方笺排版改动都要用 Playwright 同时校验屏幕与打印两套 CSS 的列右边界 spread≈0。
+
 

@@ -106,7 +106,7 @@
         .prescription-line { display: flex; justify-content: space-between; align-items: baseline; gap: 2mm; padding: 1mm 0; font-size: 10.5pt; font-weight: 400; color: #000; line-height: 1.2; white-space: nowrap; border-left: none; }
         .rx-herb { flex: 0 1 auto; min-width: 0; }
         .rx-dose { flex: 0 0 auto; font-family: 'Times New Roman', serif; }
-        .prescription-jianfa { font-size: 9pt; line-height: 1.1; }
+        .prescription-jianfa { font-size: 9pt; line-height: 1.1; font-family: 'SimSun', '宋体', serif; margin-left: 0.5mm; }
         .rp-mark { font-size: 22pt; font-weight: bold; font-style: italic; color: #000; font-family: 'Times New Roman', serif; }
         .dose-count { text-align: right; font-size: 10.5pt; color: #000; font-weight: bold; font-family: 'Times New Roman', serif; }
         .prescription-footer { display: flex; flex-direction: column; justify-content: space-between; min-height: 20mm; margin-top: 8px; padding-top: 4px; border-top: none; font-size: 10.5pt; color: #000; }
@@ -303,7 +303,7 @@
             .prescription-grid { min-height: 80px; padding: 3px 0; }
             .prescription-grid-inner { gap: 1px 3px; }
             .prescription-line { padding: 4px 3px; font-size: 11.5px; white-space: nowrap; }
-            .prescription-jianfa { font-size: 0.8em; }
+            .prescription-jianfa { font-size: 0.8em; font-family: 'SimSun', '宋体', serif; }
             .rp-mark { font-size: 20px; }
             .dose-count { font-size: 13px; }
             .prescription-footer { display: block; min-height: 0; margin-top: 6px; padding-top: 3px; font-size: 12px; }
@@ -520,7 +520,7 @@
             .prescription-grid { min-height: 60px; padding: 2px 0; }
             .prescription-grid-inner { gap: 1px 2px; }
             .prescription-line { padding: 3px 3px; font-size: 9.5px; white-space: nowrap; line-height: 1.3; }
-            .prescription-jianfa { font-size: 0.8em; }
+            .prescription-jianfa { font-size: 0.8em; font-family: 'SimSun', '宋体', serif; }
             .rp-mark { font-size: 17px; }
             .dose-count { font-size: 11px; }
             .prescription-footer { display: block; min-height: 0; margin-top: 4px; padding-top: 2px; font-size: 10px; }
@@ -586,7 +586,7 @@
             .medicine-table th { font-size: 11px; padding: 4px; }
             .medicine-table input { font-size: 12px; padding: 4px; }
             .prescription-line { padding: 3px 3px; font-size: 9px; white-space: nowrap; line-height: 1.3; }
-            .prescription-jianfa { font-size: 0.8em; }
+            .prescription-jianfa { font-size: 0.8em; font-family: 'SimSun', '宋体', serif; }
             .prescription-info { font-size: 12px; }
         }
 
@@ -7501,10 +7501,10 @@ let currentUser = null;
 
             let html = '<div class="prescription-grid-inner">';
             items.forEach(item =>{
-                // ★ 中药 3 味一行：药名靠左、剂量靠右，行内 space-between 自动分配间距
-                //   （药名较长时自动压缩中间留白，打印时列宽不会互相挤压）
+                // ★ 中药 3 味一行：药名靠左，「剂量+（煎法）」靠右，行内 space-between 自动分配间距
+                //   （煎法跟在克数后面，不占药名列，保证三列克数右边界对齐）
                 const jianfa = item.jianfa && item.jianfa !== '普通煎' ? '<span class="prescription-jianfa">（' + escapeHtml(item.jianfa) + '）</span>' : '';
-                html += `<div class="prescription-line"><span class="rx-herb">${escapeHtml(item.name)}${jianfa}</span><span class="rx-dose">${escapeHtml(item.dosage)}${escapeHtml(item.unit)}</span></div>`;
+                html += `<div class="prescription-line"><span class="rx-herb">${escapeHtml(item.name)}</span><span class="rx-dose">${escapeHtml(item.dosage)}${escapeHtml(item.unit)}${jianfa}</span></div>`;
             });
             html += '</div>';
             linesDiv.innerHTML = html;
@@ -9077,7 +9077,7 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
         .prescription-line { display: flex; justify-content: space-between; align-items: baseline; gap: 2mm; padding: 1mm 0; font-size: 10.5pt; font-weight: 400; color: #000; line-height: 1.2; white-space: nowrap; border-left: none; }
         .rx-herb { flex: 0 1 auto; min-width: 0; }
         .rx-dose { flex: 0 0 auto; font-family: 'Times New Roman', serif; }
-        .prescription-jianfa { font-size: 9pt; line-height: 1.1; }
+        .prescription-jianfa { font-size: 9pt; line-height: 1.1; font-family: 'SimSun', '宋体', serif; margin-left: 0.5mm; }
         .rp-mark { font-size: 22pt; font-weight: bold; font-style: italic; color: #000; font-family: 'Times New Roman', serif; }
         .dose-count { text-align: right; font-size: 10.5pt; color: #000; font-weight: bold; font-family: 'Times New Roman', serif; }
         .prescription-footer { display: flex; flex-direction: column; justify-content: space-between; min-height: 20mm; margin-top: 8px; padding-top: 4px; border-top: none; font-size: 10.5pt; color: #000; }
