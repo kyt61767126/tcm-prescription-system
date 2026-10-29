@@ -2523,4 +2523,12 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
     - 已实测：本机 7 台打印机中 HP LaserJet 1020 为 `A5 (ISOA5)` → [OK]；虚拟打印机里 Foxit / Print to Evernote 驱动**无 A5 选项**（只能人工选纸或换驱动）；`-Fix -Printer` 单台设置→回读 ISOA5→再还原，验证通过；已是 A5 时 -Fix 幂等不再写注册表。
     - 注意纸张名两种命名必须归一比较（System.Printing 用 `ISOA5`，`Get-PrintConfiguration` 用 `A5`），否则会把已是 A5 的机器误判为"需设置"。
 
+* ★ 2026-10-29（处方笺上边距 15mm → 22.5mm，用户要求"上边距增大二分之一"）— 终局口径：
+  - 页边距 = **上 22.5mm / 左右 13mm / 下 15mm**（`padding: 22.5mm 13mm 15mm`）。纸型仍 A5 148×210mm、纸高 `calc(210mm - 0.5mm)`、字号（22pt/10.5pt/9pt）、3 味一行、签名 20mm 一律不动。
+  - 必改 6 处（每份 index.html 3 处，**只看 CSS 会漏打印模板**）：①`@media print` 内的 `.prescription-paper{... padding: 22.5mm 13mm 15mm !important}`；②屏幕 `.prescription-paper{... padding: 22.5mm 13mm 15mm }`；③`printPrescription()` 内联模板 `.prescription-paper{padding: 22.5mm 13mm 15mm}`。另加 `shared/print-utils.js` 与 `shared/print-utils-offline.js` 各 1 处（打印工具链模板）。
+  - 改法/顺序：只改权威源（`public/index.html`、`app_project/db-offline/desktop/index.html`、`site-admin/index.html`、`shared/print-utils*.js`）→ `tools/sync-html.ps1`、`node tools/sync-index-app.cjs`、`tools/sync-all.ps1` → `node tools/check-cv-hashes.cjs --update`（本次 `7eb9461f → 1d0c5a2b`）→ **再跑一遍 sync-html/sync-index-app 传播 cv**。
+  - 容量影响（Playwright 实测 A/B，溢出像素）：上边距 15mm 时可容至 60 味（64 味溢出 31px）；22.5mm 后 56 味仍 0 溢出，**60 味溢出 9px（≈2.4mm，会被 overflow:hidden 裁）**。常规处方 ≤40 味，48 味基线仍 0 溢出（14/14 通过），故可接受；若将来出现 60 味以上处方需再压行距或恢复较小上边距。
+  - 验证：`tools/_tmp/rx-top-pad-verify.cjs` 14/14（实测 padding top=22.5/left=right=13/bottom=15、诊所名距纸顶 22.5mm、左右内容各 49.1px 对称、24/36/48 味 0 溢出、打印单页 MediaBox 148.2×209.9、无 JS 错误）；`check-interface` 6 OK、`sync-all -VerifyOnly` 0、`copy-consistency` 100 副本 0 失败、`diff-cross-version` 6 对全绿、`check-cv-hashes` 15 项一致。
+  - 铁律：改页边距**必须 CSS 三处同改 + 共享 print-utils 双权威同改**；改完必须 bump cv 并二次传播；验证脚本里硬编码旧边距（如 `15mm`）的断言要同步更新，否则"假绿/假红"。
+
 

@@ -66,7 +66,7 @@
             .top-tabs, .left-panel, .right-panel, .bottom-bar, .tab-left-item, .action-buttons-section, .section-hint, .patient-section, .symptom-section, .diagnosis-section, .action-buttons-section, .mobile-nav, .mobile-action-bar { display: none !important; }
             .main-container { display: block !important; height: auto !important; width: 100% !important; overflow: visible !important; }
             .center-panel { background: white !important; padding: 0 !important; margin: 0 auto !important; width: 148mm !important; max-width: 148mm !important; display: block !important; min-width: auto !important; }
-            .prescription-paper { display: flex; flex-direction: column; width: 148mm !important; height: calc(210mm - 0.5mm) !important; padding: 15mm 13mm !important; margin: 0 auto !important; box-shadow: none !important; page-break-after: always !important; transform: none !important; }
+            .prescription-paper { display: flex; flex-direction: column; width: 148mm !important; height: calc(210mm - 0.5mm) !important; padding: 22.5mm 13mm 15mm !important; margin: 0 auto !important; box-shadow: none !important; page-break-after: always !important; transform: none !important; }
             @page { size: 148mm 210mm; margin: 0; }
             .no-print, .history-header, .modal, .login-overlay { display: none !important; }
             .prescription-paper { page-break-inside: avoid; max-width: 148mm !important; border: none !important; }
@@ -130,7 +130,7 @@
         .center-panel { flex: 1; background: #b0b0b0; padding: 10px; overflow: auto; display: flex; justify-content: center; align-items: flex-start; min-width: 350px; }
         /* ★ 2026-10-28 处方笺字体规范：标题/Rp 二号22pt、前记与后记五号10.5pt、中药正文五号10.5pt 行距1.2、
            煎服法小五号9pt 行距1.1；中药 3 味一行均布，药名与剂量紧挨连写（如 黄柏15g）*/
-        .prescription-paper { display: flex; flex-direction: column; background: white; width: 148mm; height: 210mm; padding: 15mm 13mm; box-shadow: 3px 3px 10px rgba(0,0,0,0.3); font-family: 'SimSun', '宋体', serif; font-size: 10.5pt; box-sizing: border-box; position: relative; overflow: hidden; line-height: 1.2; }
+        .prescription-paper { display: flex; flex-direction: column; background: white; width: 148mm; height: 210mm; padding: 22.5mm 13mm 15mm; box-shadow: 3px 3px 10px rgba(0,0,0,0.3); font-family: 'SimSun', '宋体', serif; font-size: 10.5pt; box-sizing: border-box; position: relative; overflow: hidden; line-height: 1.2; }
         .clinic-name { text-align: center; font-size: 22pt; font-weight: bold; color: #000; margin-bottom: 10px; letter-spacing: 2px; font-family: 'KaiTi', '楷体_GB2312', '楷体', serif; }
         .prescription-title { text-align: center; font-size: 22pt; font-weight: bold; color: #000; margin-bottom: 12px; letter-spacing: 4px; font-family: 'KaiTi', '楷体_GB2312', '楷体', serif; }
         .prescription-info { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px 2px; margin-bottom: 8px; border-bottom: 1px solid #000; padding-bottom: 4px; font-size: 10.5pt; color: #000; }
@@ -7528,7 +7528,7 @@ if (window.Permission) {
         body { font-family: 'SimSun', '宋体', serif; width: ${paperWidth}; padding: 0; margin: 0 auto; display: block; line-height: 1.2; -webkit-print-color-adjust: exact; print-color-adjust: exact; color: #000; }
         /* ★ 2026-10-28 处方笺字体规范（与屏幕预览同一套）：标题/Rp 二号22pt、前记与后记五号10.5pt、
            中药正文五号10.5pt 行距1.2（3 味一行、药名左剂量右）、煎服法小五号9pt 行距1.1、签名区预留≥20mm */
-        .prescription-paper { display: flex; flex-direction: column; width: ${paperWidth}; height: calc(${paperHeight} - 0.5mm); padding: 15mm 13mm; margin: 0 auto; box-sizing: border-box; font-size: 10.5pt; line-height: 1.2; overflow: hidden; }
+        .prescription-paper { display: flex; flex-direction: column; width: ${paperWidth}; height: calc(${paperHeight} - 0.5mm); padding: 22.5mm 13mm 15mm; margin: 0 auto; box-sizing: border-box; font-size: 10.5pt; line-height: 1.2; overflow: hidden; }
         .clinic-name { text-align: center; font-size: 22pt; font-weight: bold; color: #000; margin-bottom: 10px; letter-spacing: 2px; font-family: 'KaiTi', '楷体_GB2312', '楷体', serif; }
         .prescription-title { text-align: center; font-size: 22pt; font-weight: bold; color: #000; margin-bottom: 12px; letter-spacing: 4px; font-family: 'KaiTi', '楷体_GB2312', '楷体', serif; }
         .prescription-info { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px 2px; margin-bottom: 8px; border-bottom: 1px solid #000; padding-bottom: 4px; font-size: 10.5pt; color: #000; }

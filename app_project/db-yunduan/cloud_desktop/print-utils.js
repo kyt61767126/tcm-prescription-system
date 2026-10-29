@@ -28,7 +28,7 @@
 /* ★ 2026-10-28 A5 整页打印（与 index.html printPrescription 内联模板同一规格）：
    纸型 ISO A5 148×210mm（用户实际用纸，非 B5），页边距 上15/左右13/下15mm（左右严格对称），纸片高留 0.5mm 舍入余量 */
 body { font-family: 'SimSun', '宋体', serif; width: ${paperWidth}; padding: 0; margin: 0 auto; display: block; line-height: 1.2; -webkit-print-color-adjust: exact; print-color-adjust: exact; color: #000; }
-.prescription-paper { display: flex; flex-direction: column; width: ${paperWidth}; height: calc(${paperHeight} - 0.5mm); padding: 15mm 13mm; margin: 0 auto; box-sizing: border-box; font-size: 10.5pt; line-height: 1.2; overflow: hidden; }
+.prescription-paper { display: flex; flex-direction: column; width: ${paperWidth}; height: calc(${paperHeight} - 0.5mm); padding: 22.5mm 13mm 15mm; margin: 0 auto; box-sizing: border-box; font-size: 10.5pt; line-height: 1.2; overflow: hidden; }
 .clinic-name { text-align: center; font-size: 22pt; font-weight: bold; color: #000; margin-bottom: 10px; letter-spacing: 2px; font-family: 'KaiTi', '楷体_GB2312', '楷体', serif; }
 .prescription-title { text-align: center; font-size: 22pt; font-weight: bold; color: #000; margin-bottom: 12px; letter-spacing: 4px; font-family: 'KaiTi', '楷体_GB2312', '楷体', serif; }
 .prescription-info { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px 2px; margin-bottom: 8px; border-bottom: 1px solid #000; padding-bottom: 4px; font-size: 10.5pt; color: #000; }
