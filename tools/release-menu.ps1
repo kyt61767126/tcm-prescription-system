@@ -224,7 +224,9 @@ function Invoke-HotUpdateSign {
         "dingzhi" { @('desktop/local', 'app-local') }
         default   { @('desktop/cloud', 'desktop/local', 'app-local') }
     }
-    $hotArgs = @('-Mode', $(if ($CheckOnly) { 'Check' } else { 'Sign' }), '-Channels') + $channelArgs
+    # ★ 注意：hotupdate-stage 的 -Channels 用**逗号分隔单字符串**（powershell -File 模式
+    #   不接受空格分隔的 [string[]] 多值，会报 PositionalParameterNotFound）
+    $hotArgs = @('-Mode', $(if ($CheckOnly) { 'Check' } else { 'Sign' }), '-Channels', ($channelArgs -join ','))
     if ($Commit -and -not $CheckOnly) { $hotArgs += '-Commit' }
 
     Write-Host ""

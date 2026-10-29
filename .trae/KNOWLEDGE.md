@@ -2556,6 +2556,8 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
   - 保险丝：`SKIP_HOTUPDATE=1` 跳过签发；`READINESS_SOFT=1` 跳体检；`ALLOW_DIRTY_BUILD=1` / `NO_AUTOCOMMIT=1` 沿用。
   - 验证：`pack-gate preflight` 5/5 PASS（P1 语法 53 文件、P2 BOM、P3 bat CRLF、P4 编码、P5 热更完整性）；`entry-preflight` 三模式 rc=0 且 `pack-post` 确不自愈；`hotupdate-stage -Mode Verify` 三通道 PASS；`--check` 正确报 `rc=2`（当时热包 appVersion 1.2.282/1.0.305 落后整包 1.2.283/1.0.306，属元数据落后即需重签）；`-Mode Sign` 实测可自动递增并签发（测试后已 `git checkout` 还原，未污染线上版本）；`SKIP_HOTUPDATE=1` 生效且无副作用。
   - 坑：PowerShell 5.1 对**无 BOM 的中文注释 .ps1** 会按 GBK 误读并抛"Unexpected token ')'"等假语法错 → 临时脚本要么 ASCII-only，要么先 `tools/fix-ps1-bom.ps1`。`Write` 写出的 bat 是 LF，必须 `tools/fix-bat-crlf.ps1` 修（否则双击闪退）。
+  - 坑2（本轮实测踩到）：`powershell -File x.ps1 -Channels a b c` **不能**给 `[string[]]` 参数传空格分隔多值，会报 `PositionalParameterNotFound`。改为单字符串 + `-split ','`（`-Channels 'desktop/cloud,desktop/local'`）。菜单冒烟测试（`"7"`=`0` 管道喂 Read-MenuChoice）已验证可选到"需签发"并保持 `public/hot-update` 零改动。
+  - 体检口径（已核对 `check-release-readiness.cjs`）：`HOT-STALE-<通道>` 在**内容**哈希落后时本来就是 `BLOCK`（现在由 `[1.8] --strict` 真正消费，不再"报了没人拦"）；仅 `appVersion` 元数据落后则只出 `OK/WARN`（提示可重签刷新），不会误拦正常发布。`HOT-MINAPP` 同为 BLOCK。
 
 
 

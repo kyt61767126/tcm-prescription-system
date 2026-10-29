@@ -10,9 +10,13 @@
 #   app-local      离线 APP    generate-app-hotupdate.cjs
 #
 # 用法：
-#   -Mode Check  [-Channels ...]            只读比对，只判断是否需要重签（不写文件）
-#   -Mode Sign   [-Channels ...] [-Commit]  按需重签（内容一致则跳过），-Commit 自动提交并推送
-#   -Mode Verify                            校验磁盘三通道签名 + 清单 + 逐文件哈希
+#   -Mode Check  [-Channels 'desktop/cloud,desktop/local']   只读比对（逗号分隔；省略=三通道）
+#   -Mode Sign   [-Channels ...] [-Commit]                    按需重签，-Commit 自动提交并推送
+#   -Mode Verify                                              校验三通道签名 + 清单 + 逐文件哈希
+#
+# ★ 2026-10-30 坑：powershell -File 模式下 [string[]] 参数**不接受空格分隔多值**
+#   （会报 PositionalParameterNotFound），因此 Channels 用单字符串 + 逗号分隔，
+#   内部再 split。调用方（release-menu）统一传 ($arr -join ',')。
 #
 # 退出码：Check  0=三通道都已最新 / 2=有落后通道需签发 / 1=检查失败
 #          Sign   0=签发成功或无需签发 / 1=签发、校验或提交失败
@@ -22,7 +26,7 @@
 param(
     [ValidateSet('Check', 'Sign', 'Verify')]
     [string]$Mode = 'Check',
-    [string[]]$Channels = @(),
+    [string]$Channels = '',
     [switch]$Commit
 )
 
@@ -38,10 +42,12 @@ $hotDefs = [ordered]@{
     'app-local'     = @{ Label = '离线 APP'; Gen = 'generate-app-hotupdate.cjs';     GenArgs = @() }
 }
 
-if (-not $Channels -or $Channels.Count -eq 0) {
-    $Channels = @('desktop/cloud', 'desktop/local', 'app-local')
+# 逗号分隔 → 通道数组（-File 模式不能传空格分隔多值）
+$channelList = @($Channels -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' })
+if ($channelList.Count -eq 0) {
+    $channelList = @('desktop/cloud', 'desktop/local', 'app-local')
 }
-$unknown = @($Channels | Where-Object { -not $hotDefs.Contains($_) })
+$unknown = @($channelList | Where-Object { -not $hotDefs.Contains($_) })
 if ($unknown.Count -gt 0) {
     Write-Host ("[ERROR] 未知热更通道: {0}" -f ($unknown -join ', ')) -ForegroundColor Red
     exit 1
@@ -103,7 +109,7 @@ $fresh = @()
 $checkError = $false
 Write-Host ""
 Write-Host "--- 热更包检查（比对线上签名清单 vs 当前源码）---" -ForegroundColor Cyan
-foreach ($key in $Channels) {
+foreach ($key in $channelList) {
     $rc = Invoke-HotGenCheck $key
     if ($rc -eq 0) {
         $fresh += $key
