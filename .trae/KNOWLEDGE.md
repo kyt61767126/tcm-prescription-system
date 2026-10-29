@@ -2531,4 +2531,13 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
   - 验证：`tools/_tmp/rx-top-pad-verify.cjs` 14/14（实测 padding top=22.5/left=right=13/bottom=15、诊所名距纸顶 22.5mm、左右内容各 49.1px 对称、24/36/48 味 0 溢出、打印单页 MediaBox 148.2×209.9、无 JS 错误）；`check-interface` 6 OK、`sync-all -VerifyOnly` 0、`copy-consistency` 100 副本 0 失败、`diff-cross-version` 6 对全绿、`check-cv-hashes` 15 项一致。
   - 铁律：改页边距**必须 CSS 三处同改 + 共享 print-utils 双权威同改**；改完必须 bump cv 并二次传播；验证脚本里硬编码旧边距（如 `15mm`）的断言要同步更新，否则"假绿/假红"。
 
+* ★ 2026-10-29（补：**cv bump ≠ 热更已发布**）改 `index.html` / `print-utils.js` 后必须重签三通道热包并**同批 push**，否则客户端"没看到热更提示"：
+  - 现象：处方笺上边距改动已 bump cv、源码已 push，但云/离桌面与离线 APP 打开**没有淡绿横幅**，仍是旧版面。
+  - 根因：`?cv=` 只是浏览器缓存参数（云网页/云 APP 刷新即达）；桌面与离线 APP 的热更包是 `public/hot-update/{desktop/cloud,desktop/local,app-local}` 下**独立签名产物**，不会随源码 push 自动生成。当时新版包已重签但**留在工作区未提交**（线上仍是 desktop `2026.10.29-2` / app-local `2026.10.29-1`），客户端比较 hotVersion 相等 → 判定"已是最新"，不下载、无横幅。
+  - 正确顺序：改权威源 → sync + `check-cv-hashes --update` 再传播 → `node tools/generate-desktop-hotupdate.cjs -c cloud` / `-c local` + `node tools/generate-app-hotupdate.cjs` → 验签与逐文件哈希 → `git add public/hot-update/...` 与源码**同批 commit + push** → 等 Pages 部署（约 20-60s）→ 用**客户端同款 fetch** 全量复验线上每个文件的 sha256/size。
+  - 验签口径：desktop 通道用 `shared/hot-update-core.cjs` 的 `buildSignMessage`（前缀 `desktop-hotupdate-v1`）+ `HOT_PUBLIC_KEY_PEM`；app-local 用前缀 `app-hotupdate-v1` + `tools/generate-app-hotupdate.cjs` 内的 `PUB_PEM`（两把公钥不同，用错会误判 FAIL）。
+  - 客户端语义：热更为**静默下载**；新版就绪时登录窗顶部弹淡绿横幅「✅ 新版 <hotVersion> 已就绪，重启后自动生效」6s 自动消失，**彻底退出重开**才生效。桌面快检 `%APPDATA%\惠康中医-云端\hot-update\.hot-version`（离线为 `惠康中医\...`）；APP 侧另有 `minAppCode` 门禁（当前 288）。
+  - 坑：Cloudflare Pages 对 `*.html` 做 pretty-URL **308** 重定向（`/hot-update/desktop/cloud/index.html` → `.../cloud/`）。客户端 `fetch` 默认跟随重定向所以正常；**手工核验必须用 `fetch` 或 `curl -L`**，否则拿到 0 字节/回退页面而误判"线上文件不对"。
+  - 范围：云网页与云 APP（在线 WebView 壳）**不需要**热更包，刷新即达；只有云桌面、离线桌面、离线 APP 走热更。
+
 
