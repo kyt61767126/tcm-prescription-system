@@ -372,6 +372,43 @@ function Get-FileSha256 {
     } catch { return $null }
 }
 
+# ★ 2026-10-29 行尾归一化比较（根治「内容一致但行尾 CRLF/LF 不同 → 误报 DIFF →
+#   pre-push ② 拦 push → 一键打包末尾红字」）：
+#   背景：.gitattributes 已约定 *.js/*.cjs/*.json/*.xml 等文本 eol=lf，Git 入库前会把
+#   工作区 CRLF 归一成 LF，所以 git status 是干净的；但本脚本用字节 SHA256 比较，
+#   历史被 PowerShell Set-Content/Out-File 写成 CRLF 的副本（如 2026-10-29 print-utils
+#   7 副本）就会被判 DIFF，实际内容零差异。
+#   策略：文本文件比较时先做 CRLF -> LF 归一化再算哈希——内容漂移照样拦截，
+#   行尾差异不再误报；非校验模式额外用权威源字节覆盖，顺手把工作区行尾对齐到 LF。
+$script:TextExtensions = @(
+    '.js','.mjs','.cjs','.ts','.json','.json5','.html','.htm','.css','.scss',
+    '.xml','.md','.txt','.ps1','.yml','.yaml','.gradle','.java','.kt','.c','.cpp',
+    '.h','.sh','.sql','.ini','.toml'
+)
+
+function Test-TextFile {
+    param([string]$Path)
+    $ext = [System.IO.Path]::GetExtension($Path).ToLowerInvariant()
+    return ($script:TextExtensions -contains $ext)
+}
+
+function Get-NormalizedSha256 {
+    param([string]$Path)
+    if (-not (Test-Path $Path)) { return $null }
+    try {
+        $bytes = [System.IO.File]::ReadAllBytes($Path)
+        $ms = New-Object System.IO.MemoryStream
+        for ($i = 0; $i -lt $bytes.Length; $i++) {
+            if ($bytes[$i] -eq 13 -and ($i + 1) -lt $bytes.Length -and $bytes[$i + 1] -eq 10) { continue }
+            $ms.WriteByte($bytes[$i])
+        }
+        $sha = [System.Security.Cryptography.SHA256]::Create()
+        try { $hash = $sha.ComputeHash($ms.ToArray()) }
+        finally { $sha.Dispose(); $ms.Dispose() }
+        return ([System.BitConverter]::ToString($hash) -replace '-', '')
+    } catch { return $null }
+}
+
 # ============================================================================
 # Helper: Sync a single file with SHA256 comparison
 # ============================================================================
@@ -407,8 +444,26 @@ function Sync-File {
         return $true
     }
 
+    # ★ 2026-10-29 二次勾兑：内容一致、仅 CRLF/LF 不同 → 不算漂移（Git 入库同体）
+    if ((Test-TextFile $Source) -and (Test-TextFile $Target)) {
+        $ns = Get-NormalizedSha256 $Source
+        $nt = Get-NormalizedSha256 $Target
+        if ($ns -and $ns -eq $nt) {
+            if ($VerifyOnly) {
+                Write-Host "  [OK-EOL] $Label (only CRLF/LF differs; content identical)" -ForegroundColor DarkGray
+                return $true
+            }
+            # 非校验模式：以权威源字节覆盖，顺手把工作区行尾对齐到 LF
+            Copy-Item -Path $Source -Destination $Target -Force
+            Write-Host "  [EOL-FIX] $Label (CRLF -> LF aligned)" -ForegroundColor DarkGray
+            return $true
+        }
+    }
+
     if ($VerifyOnly) {
-        Write-Host "  [DIFF] $Label" -ForegroundColor Yellow
+        $srcLabel = if ($sourceHash) { $sourceHash.Substring(0, 8) } else { 'missing' }
+        $dstLabel = if ($targetHash) { $targetHash.Substring(0, 8) } else { 'missing' }
+        Write-Host "  [DIFF] $Label (src=$srcLabel dst=$dstLabel)" -ForegroundColor Yellow
         return $false
     }
 

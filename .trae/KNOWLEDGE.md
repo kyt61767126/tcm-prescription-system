@@ -2484,4 +2484,10 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
   - 铁律：**改纸型前先问/确认用户打印机里实际放的是哪种纸**（本项目=A5）。纸型六处必须同时改：①各 index.html 屏幕 CSS+`@page`+打印模板常量 ②`print-utils*.js` ③`desktop-print.cjs` 隐藏窗&微米 pageSize ④安卓 `MediaSize` 常量 ⑤鸿蒙注入 `@page` ⑥`check-cv-hashes --update`+三脚本传播。**只改 CSS 不改纸型必出"左右不等/被缩放"**。
   - 测试脚本自身也要跟着改：`rx-*` 里硬编码的 `176mm/250mm` 替换与 `MediaBox` 断言必须同步成 148/210，否则会出现"假绿"（测试把模板强行替换成旧纸型仍判通过）。
 
+* ★ 2026-10-29（打包红字根治）`一键打包.bat` 末尾红字 = **pre-push ② `sync-all.ps1 -VerifyOnly` 误报 7 份 print-utils 副本 DIFF**，打包四端本身全绿：
+  - 真因：`.gitattributes` 约定 `*.js eol=lf`，Git 入库前把工作区 CRLF 归一成 LF，所以 `git status` 干净；但 `sync-all.ps1` 用**字节 SHA256** 比较，副本被历史 PowerShell `Set-Content/Out-File` 写成 CRLF（本机工作区共 139 个 tracked 文件为 CRLF），权威源 `shared/print-utils*.js` 是 LF → 字节不同、内容相同 → `[DIFF]` → `[FAIL] Some files out of sync` → `error: failed to push some refs` → `[WARN] push 失败`。提交本身无差异，故表现为"偶发红字"。
+  - 修复（`tools/sync-all.ps1` 的 `Sync-File`）：新增 `Test-TextFile` + `Get-NormalizedSha256`（文本扩展名先 CRLF→LF 归一化再算哈希）。内容不一致仍 `[DIFF]` 且打印 `src=xxxxxxxx dst=xxxxxxxx` 便于定位；仅行尾差异判 `[OK-EOL]` 不计失败；非校验模式额外 `Copy-Item` 对齐工作区行尾并打印 `[EOL-FIX]`。
+  - 验证：负向测试（副本追加一行真实内容）→ `[DIFF] ... (src=AFB12D66 dst=B0AF3C41)` 仍拦截；恢复后 `sync-all.ps1 -VerifyOnly` 退出码 0、各分组 In sync；`pack-gate -Mode preflight` 4/4 PASS（52 ps1 语法+BOM、31 bat CRLF、编码 102 OK）。
+  - 铁律：**同步校验只对内容负责、不对行尾负责**——Git 已由 `.gitattributes` 归一化行尾，任何用字节哈希比对副本的脚本（sync-all / copy-consistency 等）都必须先做 CRLF→LF 归一化，否则 PowerShell 写出的 CRLF 副本会让 pre-push 门与打包末尾反复红字。`: `git add` 后 `git status` 仍显示 M 而 `git diff` 为空，是索引 stat 缓存，`git add -- <文件>` 刷新即可（内容零差异）。
+
 
