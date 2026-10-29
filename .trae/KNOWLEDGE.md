@@ -2568,5 +2568,15 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
   - 验证：`pack-gate preflight` 5/5（P3 bat CRLF 32 文件、P5 三通道热更完整）；AST 解析 7 个 ps1 全 `[OK]`；冒烟：`bogus` rc=2、`publish` 无 `--yes` rc=2、`full` 无 `--yes` rc=2、`hot` rc=2（报 desktop 两通道 appVersion 元数据落后）且 `git status public/hot-update` 前后一致、`一键发布.bat verify` rc=0（9/9 URL 通过）、无参菜单在 stdin 关闭时 rc=1（防僵尸）。
   - 元数据刷新（同日已完成，commit `2da0e461`）：`一键构建发布.bat hot --yes` 一次签发 desktop 两通道 → `2026.10.29-4`（appVersion 已对齐整包 **cloud 1.2.283 / local 1.0.306**），app-local 内容未变保持 `2026.10.29-2`；随后只读复检 `hot` rc=0（幂等）、`verify-hotupdate.cjs` 三通道 PASS、**客户端同款 fetch 全量复验线上** `ALL MATCH`（三通道 signature VALID + 逐文件 size/sha256 一致，Pages 部署已完成）。铁律不变：热更签发只 `git add public/hot-update` 单独提交，不与业务改动混批。
 
+* ★ 2026-10-30（P3+P4：**菜单/启动壳单一权威源** —— 两个入口脚本不再各养一份 UI/门禁）：
+  - 结论：`tools/menu-core.ps1`（菜单/横幅/官方链接）与 `tools/run-shell.ps1`（日志转录/验收门/漂移门/下游 bat 自愈/`Get-ExitCode`）成为唯一实现；`one-click-pack.ps1`（净 -73 行）与 `release-menu.ps1`（净 -153 行）只保留"编排"。**新增交互控件或启动门禁只改这两个模块**，禁止再往入口脚本内联复制。
+  - `menu-core.ps1` 提供：`Read-MenuChoice -Prompt [-Hint]`（EOF 打印各场景非交互指引后 `exit 1`，指引由 `$global:HKZY_MenuUsageHint` 按入口注入）、`Enable-CnPause [-Skip]`（AutoMode 下变空操作）、`Show-VersionMenu -Action pack|publish|full`、`Show-PackModeMenu [-ScopeTitle]`、`Show-VersionPicker`（纯选择，不含打包编排）、`Show-PublishResult`、`Show-FinalSummary`、`Show-NextStepHint`、`$global:HKZY_OfficialUrls`（下载页/Release 唯一来源，替代 12 处硬编码）。**铁律：本模块只做显示/选择/退出，禁止放打包/发布/写盘逻辑。**
+  - `run-shell.ps1` 提供：`Start-RunLog -Prefix pack|publish [-Keep 20]`（写 `PACK_LOG_FILE`/`PUBLISH_LOG_FILE` 并返回日志路径）、`Invoke-PackGate [-Capture] [-LogFile] [-FailHint] [-PauseOnFail]`、`Invoke-VersionDriftGate [-SkipPause]`（rc2 拦/rc1 WARN/`ALLOW_VERSION_DRIFT=1` 放行）、`Repair-DownstreamBats [-Capture]`（清单仍来自 `build-bat-list.ps1`）、`Get-ExitCode $v`（数组末元素提取）。
+  - 顺带修掉真实回退风险：`tools/fix-release-bat.ps1` 旧模板会把 `一键发布.bat` 重写成"直连 release-menu"的英文引导版，**覆盖掉 P2 的别名转发**（丢 `--yes`/stage 透传、入口预检、codepage 恢复、退出码透传）。现改为幂等：识别到别名标记只做 CRLF 归一（绝不重写），仅当文件缺失或仍是旧直连版才重建别名版。
+  - **坑1（本轮实测，务必记牢）**：`release-menu.ps1` 已有 `param(-Version/-Mode)`，分支内局部变量**绝不能**叫 `$version`/`$mode`——PowerShell 变量名大小写不敏感，菜单选 `[0]` 返回 `""` 会写进带 `ValidateSet` 的 param 并抛 `ValidateSetFailure`（`[1]/[2]/[4]` 都会崩）。统一改用 `$selVersion/$selMode/$selMode2`。
+  - **坑2（测试脚本踩到）**：PowerShell 函数参数名**不能叫 `$Args`**——它是自动变量，`-Args 'publish'` 会静默绑成空数组（表现为 bat 收不到参数、`STAGE=menu`、退出码 1）；改名即可。另：`Start-Process -ArgumentList @('/c', '"bat" publish')` 会把含空格的元素整体加引号导致参数全丢，必须把 bat 路径与每个参数作为**独立元素**传入。
+  - 验证：`pack-gate preflight` 5/5（P1 语法 57 文件、P2 BOM、P3 bat CRLF 33、P4 编码 115 项、P5 热更三通道）；AST 解析 10 个 ps1 全 `[OK]`；菜单冒烟（管道喂 choice）：打包菜单 `[0]` rc=0、发布菜单 `[1]/[2]/[4]→[0]→[0]` 均 rc=0 且版本菜单由 menu-core 渲染、`[7]` 热更只读 rc=0 且 `public/hot-update` 零改动、`Show-VersionPicker` 选 `[0]` 返回空串、stdin 关闭打印 FATAL+自定义指引并 rc=1；阶段冒烟：`publish`/`full` 无 `--yes` rc=2 且打印 `[BLOCK]`、`hot` rc=0（三通道已最新）、非法 stage rc=2、别名 `一键发布.bat verify` rc=0（9/9 URL）、`fix-release-bat.ps1` 识别别名版且**未改动** bat 内容（幂等）。
+  - 边界（不要再合并）：打包执行层（`Build-*`）仍只在 `one-click-pack.ps1` 一份；不要把两个 ps1 合成单文件（离线打包不能绑死发布合规模块）；不要在 bat 层抽公共函数（cmd 无跨文件 `call :label`）；横幅视觉样式保持现状（161 处 `====` 属习惯，不改）。
+
 
 

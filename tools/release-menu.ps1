@@ -35,54 +35,22 @@ if (-not (Test-Path "$script:RootDir\tools\publish-release.js")) {
 
 $env:NO_PAUSE = '1'
 
-# ★ 2026-10-29 发布日志持久化（对齐 one-click-pack 的 Start-Transcript）：
-#   背景：用户「一键发布失败」时窗口一关即无任何取证材料（发布菜单此前不落盘），
-#   无法判断是打包跳过、上传失败还是验证网络问题。现全程转录到
-#   .build-cache\logs\publish-<时间戳>.log（保留最近 20 份），失败横幅回显路径。
-$script:LogDir = Join-Path $script:RootDir '.build-cache\logs'
-if (-not (Test-Path $script:LogDir)) { New-Item -ItemType Directory -Path $script:LogDir -Force | Out-Null }
-$script:LogFile = Join-Path $script:LogDir ("publish-{0}.log" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
-$env:PUBLISH_LOG_FILE = $script:LogFile
-try { Start-Transcript -Path $script:LogFile -ErrorAction Stop | Out-Null } catch { Write-Host "[WARN] 发布日志转录启动失败(不影响发布): $_" -ForegroundColor Yellow }
-Write-Host "[LOG] 本次发布日志: $script:LogFile" -ForegroundColor DarkGray
-Get-ChildItem $script:LogDir -Filter 'publish-*.log' -File -ErrorAction SilentlyContinue |
-    Sort-Object LastWriteTime -Descending | Select-Object -Skip 20 | Remove-Item -Force -ErrorAction SilentlyContinue
+# ★ 2026-10-30 P4 去重：日志转录/验收门/下游 bat 自愈统一到 tools/run-shell.ps1。
+#   ★ 2026-10-29 发布日志持久化（背景）：用户「一键发布失败」时窗口一关即无任何取证
+#   材料（发布菜单此前不落盘），无法判断是打包跳过、上传失败还是验证网络问题。
+#   现全程转录到 .build-cache\logs\publish-<时间戳>.log（保留最近 20 份），失败横幅回显路径。
+. (Join-Path $PSScriptRoot 'run-shell.ps1')
+$script:LogFile = Start-RunLog -Prefix publish -RootDir $script:RootDir
 
-# ★ 2026-09-01 中文暂停提示：覆盖内置 pause（英文 "Press Enter to continue..."），
-#   本脚本所有 pause 调用点自动变为中文提示，无需逐处修改。
-Remove-Item alias:pause -ErrorAction SilentlyContinue
-function global:pause {
-    $null = Read-Host '按回车键继续...'
-}
+# ★ 2026-10-30 P3 去重：菜单读入口（EOF 防僵尸）/中文 pause/版本与范围选择/结果横幅
+#   统一到 tools/menu-core.ps1（此前与本文件各一份，文案已出现漂移）。
+. (Join-Path $PSScriptRoot 'menu-core.ps1')
+$global:HKZY_MenuUsageHint = "  非交互发布请用: 一键构建发布.bat publish|full|hot|verify [all|cloud|dingzhi] [all|desktop|app] --yes`n  非交互打包请用: one-click-pack.ps1 -AutoMode 1|2|3|4 （1=云端 2=本地 3=全部 4=智能）"
+Enable-CnPause
 
-# ★ 2026-09-05 防僵尸菜单（15:40 事故根因架构修复）：
-#   非交互环境（stdin 被管道/重定向/自动化宿主关闭）调用交互菜单时，Read-Host 恒返回
-#   $null → switch default → 死循环 Clear-Host+Read-Host，每秒刷一屏产生 170MB+ 僵尸日志。
-#   统一菜单读入口：EOF 即明确报错退出并指引非交互入口。
-#   注意：用户直接按回车返回 ""（空串，正常重显菜单）；EOF 才是 $null，二者严格区分。
-function Read-MenuChoice([string]$Prompt) {
-    $c = Read-Host $Prompt
-    if ($null -eq $c) {
-        Write-Host ""
-        Write-Host "[FATAL] 标准输入已关闭：交互菜单在非交互环境（管道/自动化调用）中运行。" -ForegroundColor Red
-        Write-Host "  非交互发布请用: node tools\publish-release.js --confirm --push --changed-only" -ForegroundColor Yellow
-        Write-Host "  非交互打包请用: one-click-pack.ps1 -AutoMode 1|2|3|4 （1=云端 2=本地 3=全部 4=智能）" -ForegroundColor Yellow
-        exit 1
-    }
-    return $c
-}
-# ★ 2026-08-24 打包验收门（tools/pack-gate.ps1）：语法/BOM/CRLF/编码 四道快检，
+# ★ 2026-08-24 打包验收门（tools/pack-gate.ps1）：语法/BOM/CRLF/编码/热更完整性 五道快检，
 #   任一失败直接阻断（历史事故：本文件 BOM 丢失被 GBK 误读解析崩 / 打包链脚本语法错无人发现）
-$gateToolRm = Join-Path $PSScriptRoot 'pack-gate.ps1'
-if (Test-Path $gateToolRm) {
-    $gateRc = Invoke-QuietProcess -FilePath 'powershell' -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',$gateToolRm,'-Mode','preflight')
-    if ($gateRc -ne 0) {
-        Write-Host ""
-        Write-Host "[FATAL] 打包验收门未通过，发布/打包中止。请修复上述问题后重试。" -ForegroundColor Red
-        pause
-        exit 1
-    }
-}
+Invoke-PackGate -FailHint '打包验收门未通过，发布/打包中止。请修复上述问题后重试。' -PauseOnFail
 
 # ★ 2026-10-30 P0 去重：打包增量基线/时间戳统一到 tools/pack-core.ps1（单一权威源）。
 #   本菜单不再自带 Test-BuildSkip/Record-BuiltUnits：打包一律走子进程 one-click-pack.ps1
@@ -90,17 +58,10 @@ if (Test-Path $gateToolRm) {
 #   会用空 built 覆盖真值，导致打包菜单摘要失真。
 . (Join-Path $PSScriptRoot 'pack-core.ps1')
 
-# ★ [SELF-HEAL 2026-08-23] Fix LF line endings in ALL downstream build .bat files
-# BEFORE invoking them. This script calls build-app.bat directly (bypassing
-# pack-app-strict.bat entries), so the entry-level self-heal does NOT cover us.
-# LF-corrupted Chinese .bat aborts cmd at parse time (window flash-close).
-$fixTool = Join-Path $PSScriptRoot 'fix-bat-crlf.ps1'
-if (Test-Path $fixTool) {
-    # ★ 2026-10-30 P0 去重：下游 bat 清单单一权威源 tools/build-bat-list.ps1
-    . (Join-Path $PSScriptRoot 'build-bat-list.ps1')
-    $buildBats = @($DownstreamBuildBats | ForEach-Object { Join-Path $script:RootDir $_ } | Where-Object { Test-Path $_ })
-    $null = Invoke-QuietProcess -FilePath 'powershell' -ArgumentList (@('-NoProfile','-ExecutionPolicy','Bypass','-File',$fixTool) + $buildBats)
-}
+# ★ [SELF-HEAL 2026-08-23] 下游构建 bat 换行自愈（★ 2026-10-30 P4 去重到 run-shell.ps1）
+#   本脚本直接调用 build-app.bat（绕过 pack-app-strict.bat 入口），入口级自愈覆盖不到；
+#   LF 破坏的中文 bat 会让 cmd 解析期直接中止（窗口闪退）。
+Repair-DownstreamBats -RootDir $script:RootDir
 
 # ============ 打包 ============
 function Invoke-Pack {
@@ -328,113 +289,8 @@ function Invoke-ComplianceCheck {
     }
 }
 
-# ============ 统一发布结果汇总（明确中文提示）============
-# ★ 2026-09-01 新增：发布环节结束后统一输出成败大字块 + 产物入口 + 生效提示，
-#   替代原先"只有下一步指引、成败要回翻日志"的弱提示。
-function Show-PublishResult {
-    param(
-        [int]$ExitCode,
-        [string]$Label = "发布"
-    )
-    Write-Host ""
-    if ($ExitCode -eq 0) {
-        Write-Host "========================================" -ForegroundColor Green
-        Write-Host "  [发布成功] $Label" -ForegroundColor Green
-        Write-Host "========================================" -ForegroundColor Green
-        Write-Host "  下载页: https://tcm-prescription-system.pages.dev/download"
-        Write-Host "  Release: https://github.com/kyt61767126/tcm-prescription-system/releases"
-        Write-Host "  Cloudflare Pages 将在 1-2 分钟内自动部署下载页" -ForegroundColor Yellow
-    } else {
-        Write-Host "========================================" -ForegroundColor Red
-        Write-Host "  [发布失败] $Label （退出码: $ExitCode）" -ForegroundColor Red
-        Write-Host "========================================" -ForegroundColor Red
-        Write-Host "  完整原因与补救方法见上方 [ERROR] 明细块；常见原因:"
-        Write-Host "  - 网络超时（上传 75MB exe 需 5-10 分钟，可重跑恢复）"
-        Write-Host "  - 源码未落定（先 commit 再发布）"
-        Write-Host "  - 合规检查未通过（按提示修复后重试）"
-        Write-Host "  重跑入口: 本菜单 [3] 智能发布（产物 hash 未变会自动续传）"
-    }
-}
-
-# ============ 最终结果汇总（结束前明确中文提示）============
-# ★ 2026-09-01 新增：菜单动作结束后、返回菜单/暂停前，统一输出最终汇总块——
-#   产物位置 + 发布状态 + 下一步指引，用户不需回翻日志即知"结果如何、东西在哪、
-#   接下来做什么"（此前副作用收纳后直接 Press Enter，结果提示弱）。
-function Show-FinalSummary {
-    param([string]$ActionLabel = "本次操作")
-    Write-Host ""
-    Write-Host "============================================" -ForegroundColor Cyan
-    Write-Host "  $ActionLabel 已结束" -ForegroundColor Cyan
-    Write-Host "============================================" -ForegroundColor Cyan
-    Write-Host "  产物位置（本机最新打包版本）:"
-    Write-Host "    云端桌面 exe : app_project\db-yunduan\cloud_desktop\dist\"
-    Write-Host "    云端手机 APP : app_project\db-yunduan\惠康中医-云端.apk"
-    Write-Host "    离线桌面 exe : app_project\db-offline\desktop\dist\"
-    Write-Host "    离线手机 APP : app_project\db-offline\惠康中医-本地.apk"
-    Write-Host "  发布状态: 打包产物不会自动上传官网（安全规范，需人工确认）" -ForegroundColor Yellow
-    Write-Host "  如需发布 : 双击 一键发布.bat → 选 [3] 智能发布（仅上传有变化的产物）"
-    Write-Host "  下载页   : https://tcm-prescription-system.pages.dev/download"
-    Write-Host "============================================" -ForegroundColor Cyan
-}
-
-# ============ 显示版本选择菜单 ============
-function Show-VersionMenu {
-    param(
-        [string]$Action,   # pack / publish / full
-        [string]$Mode      # desktop / app / all （仅 pack 和 full 用）
-    )
-    while ($true) {
-        Clear-Host
-        $actionLabel = switch ($Action) {
-            "pack"    { "打包" }
-            "publish" { "发布" }
-            "full"    { "打包 + 发布 + 验证" }
-        }
-        Write-Host ""
-        Write-Host "========================================" -ForegroundColor Cyan
-        Write-Host "  选择版本 - $actionLabel" -ForegroundColor Cyan
-        Write-Host "========================================" -ForegroundColor Cyan
-        Write-Host "  [1] 云端版"
-        Write-Host "  [2] 本地版"
-        Write-Host "  [3] 全部2个版本"
-        Write-Host "  [0] 返回主菜单"
-        Write-Host ""
-        $choice = Read-MenuChoice "请选择 [0-3]"
-        switch ($choice) {
-            "1" { return "cloud" }
-            "2" { return "dingzhi" }
-            "3" { return "all" }
-            "0" { return "" }
-            default { Write-Host "无效选择" -ForegroundColor Red; Start-Sleep -Seconds 1 }
-        }
-    }
-}
-
-# ============ 显示打包模式菜单 ============
-# $ScopeTitle: "打包" / "发布" —— 同一菜单复用于打包与发布范围选择（返回值语义一致：desktop/app/all）
-function Show-PackModeMenu {
-    param([string]$ScopeTitle = "打包")
-    while ($true) {
-        Clear-Host
-        Write-Host ""
-        Write-Host "========================================" -ForegroundColor Cyan
-        Write-Host "  选择$ScopeTitle范围" -ForegroundColor Cyan
-        Write-Host "========================================" -ForegroundColor Cyan
-        Write-Host "  [1] 桌面 exe"
-        Write-Host "  [2] 手机 APP"
-        Write-Host "  [3] 桌面 + APP (全部)"
-        Write-Host "  [0] 返回主菜单"
-        Write-Host ""
-        $choice = Read-MenuChoice "请选择 [0-3]"
-        switch ($choice) {
-            "1" { return "desktop" }
-            "2" { return "app" }
-            "3" { return "all" }
-            "0" { return "" }
-            default { Write-Host "无效选择" -ForegroundColor Red; Start-Sleep -Seconds 1 }
-        }
-    }
-}
+# ★ 2026-10-30 P3 去重：Show-PublishResult / Show-FinalSummary / Show-VersionMenu /
+#   Show-PackModeMenu 已上移到 tools/menu-core.ps1（单一权威源，两个入口共用）。
 
 # ============ 执行打包+发布+验证完整流程 ============
 function Invoke-FullFlow {
@@ -603,8 +459,8 @@ function Invoke-FullFlow {
         Write-Host "========================================" -ForegroundColor Yellow
         Write-Host "  发布已完成（验证待网络恢复复核）" -ForegroundColor Yellow
         Write-Host "========================================" -ForegroundColor Yellow
-        Write-Host "  下载页: https://tcm-prescription-system.pages.dev/download"
-        Write-Host "  Release: https://github.com/kyt61767126/tcm-prescription-system/releases"
+        Write-Host "  下载页: $($global:HKZY_OfficialUrls.Download)"
+        Write-Host "  Release: $($global:HKZY_OfficialUrls.Release)"
         return 0
     }
     if ($rc -ne 0) {
@@ -620,8 +476,8 @@ function Invoke-FullFlow {
     Write-Host "========================================" -ForegroundColor Green
     Write-Host "  全流程完成！" -ForegroundColor Green
     Write-Host "========================================" -ForegroundColor Green
-    Write-Host "  下载页: https://tcm-prescription-system.pages.dev/download"
-    Write-Host "  Release: https://github.com/kyt61767126/tcm-prescription-system/releases"
+    Write-Host "  下载页: $($global:HKZY_OfficialUrls.Download)"
+    Write-Host "  Release: $($global:HKZY_OfficialUrls.Release)"
     Write-Host "  Cloudflare Pages 将在 1-2 分钟内自动部署"
     Write-Host "========================================" -ForegroundColor Green
     return 0
@@ -751,8 +607,11 @@ while ($true) {
     switch ($choice) {
         "2" {
             # 仅打包 - 选版本和范围 (选"全部"= 全量打包，原[4]打包全部已并入本项)
-            $version = Show-VersionMenu -Action "pack"
-            if ($version -eq "") { break }
+            # ★ 2026-10-30 P3 修复：局部变量禁止叫 $version/$mode —— 与 param 的
+            #   $Version/$Mode（带 ValidateSet）大小写不敏感同变量，选项返回 "" 会触发
+            #   ValidateSetFailure（菜单选 [0] 返回就崩）。统一用 $selVersion/$selMode。
+            $selVersion = Show-VersionMenu -Action "pack"
+            if ($selVersion -eq "") { break }
             # ★ 2026-08-24 修复：选"全部2个版本"原误入 Invoke-SinglePack，拼出不存在的
             #   db-all 目录直接 [ERROR] 中止。改走 Invoke-Pack（one-click-pack -AutoMode 3
             #   双端全量），与 Invoke-FullFlow 的 all 分支保持一致；all 为全量打包，无需再选范围。
@@ -760,7 +619,7 @@ while ($true) {
             #   修复原[4]打包全部后副作用滞留工作区的问题（P1）。
             # ★ 2026-10-30 P0 去重：副作用/增量基线均已由子进程（-AutoCommit）完成，
             #   父进程不再 CollectSideEffectsOnly / Record-BuiltUnits（会以空值覆盖 last-run.json）。
-            if ($version -eq "all") {
+            if ($selVersion -eq "all") {
                 $rcA = Invoke-Pack -Target "all"
                 if ($rcA -is [array]) { $rcA = [int]$rcA[-1] }
                 if ($rcA -ne 0) {
@@ -768,23 +627,23 @@ while ($true) {
                     Write-Host "[ERROR] 打包全部版本失败，退出码: $rcA（详见上方日志）" -ForegroundColor Red
                 } else {
                     # ★ 2026-10-30 P1：打包成功后按需重签热更（内容一致自动跳过）
-                    $null = Invoke-HotUpdateSign -Scope $version -Commit
+                    $null = Invoke-HotUpdateSign -Scope $selVersion -Commit
                 }
                 Write-Host ""
                 pause
                 break
             }
-            $mode = Show-PackModeMenu
-            if ($mode -eq "") { break }
+            $selMode = Show-PackModeMenu
+            if ($selMode -eq "") { break }
             # ★ 2026-08-23 复核修复：原 | Out-Null 丢弃退出码，失败静默无提示
-            $rc1 = Invoke-SinglePack -Version $version -Mode $mode
+            $rc1 = Invoke-SinglePack -Version $selVersion -Mode $selMode
             if ($rc1 -is [array]) { $rc1 = [int]$rc1[-1] }
             if ($rc1 -ne 0) {
                 Write-Host ""
                 Write-Host "[ERROR] 单版本打包失败，退出码: $rc1（详见上方日志）" -ForegroundColor Red
             } else {
                 # ★ 2026-10-30 P1：打包成功后按需重签热更（内容一致自动跳过）
-                $null = Invoke-HotUpdateSign -Scope $version -Commit
+                $null = Invoke-HotUpdateSign -Scope $selVersion -Commit
             }
             # ★ 2026-09-01 最终结果汇总（明确中文提示）
             Show-FinalSummary -ActionLabel "仅打包（未发布）"
@@ -794,12 +653,12 @@ while ($true) {
         "4" {
             # 指定发布 - 选版本和范围全量上传（补传/修复用；与[3]智能发布的区别：
             #   不论产物是否有变化，所选版本+范围的全部产物一律重新上传）
-            $version = Show-VersionMenu -Action "publish"
-            if ($version -eq "") { break }
+            $selVersion = Show-VersionMenu -Action "publish"
+            if ($selVersion -eq "") { break }
             # ★ 2026-08-23 修复：发布也需选范围（桌面/APP/全部）。原实现只选版本，
             #   选"本地版"后该版本 dist/ 里上次构建的旧桌面 exe 也被一并上传。
-            $mode2 = Show-PackModeMenu -ScopeTitle "发布"
-            if ($mode2 -eq "") { break }
+            $selMode2 = Show-PackModeMenu -ScopeTitle "发布"
+            if ($selMode2 -eq "") { break }
             # ★ 2026-10-30 P1：全量补传前仍先过发布前体检（热更降级/版本回退不放过）
             $rcG = Invoke-ReadinessGate
             if ($rcG -is [array]) { $rcG = [int]$rcG[-1] }
@@ -810,27 +669,21 @@ while ($true) {
                 break
             }
             # ★ 2026-08-23 复核修复：原 | Out-Null 丢弃退出码，失败静默无提示
-            $rc2 = Invoke-Publish -Target $version -Mode $mode2
+            $rc2 = Invoke-Publish -Target $selVersion -Mode $selMode2
             if ($rc2 -is [array]) { $rc2 = [int]$rc2[-1] }
             # ★ 2026-09-01 统一结果汇总（明确中文提示）
-            Show-PublishResult -ExitCode $rc2 -Label "指定发布（$version / $mode2）"
-            Write-Host ""
-            Write-Host "--------------------------------------------"
-            Write-Host "  下一步指引:" -ForegroundColor Yellow
-            Write-Host "  - 建议运行 [5] 验证 URL"
-            Write-Host "  - 下载页: https://tcm-prescription-system.pages.dev/download"
-            Write-Host "  - Release: https://github.com/kyt61767126/tcm-prescription-system/releases"
-            Write-Host "--------------------------------------------"
+            Show-PublishResult -ExitCode $rc2 -Label "指定发布（$selVersion / $selMode2）"
+            Show-NextStepHint
             pause
         }
         "1" {
             # 一键全流程: 打包 + 发布 + 验证 (推荐日常，可选全部/云端/本地)
-            $version = Show-VersionMenu -Action "full"
-            if ($version -eq "") { break }
-            $mode = Show-PackModeMenu
-            if ($mode -eq "") { break }
+            $selVersion = Show-VersionMenu -Action "full"
+            if ($selVersion -eq "") { break }
+            $selMode = Show-PackModeMenu
+            if ($selMode -eq "") { break }
             # ★ 2026-08-23 复核修复：原 | Out-Null 丢弃退出码，失败静默无提示
-            $rc3 = Invoke-FullFlow -Version $version -Mode $mode
+            $rc3 = Invoke-FullFlow -Version $selVersion -Mode $selMode
             if ($rc3 -is [array]) { $rc3 = [int]$rc3[-1] }
             if ($rc3 -ne 0) {
                 Write-Host ""
@@ -876,7 +729,7 @@ while ($true) {
                     Write-Host "  [无需发布] 官网已是最新版本" -ForegroundColor Cyan
                     Write-Host "========================================" -ForegroundColor Cyan
                     Write-Host "  本地产物与官网 hash 完全一致，未上传任何文件"
-                    Write-Host "  下载页: https://tcm-prescription-system.pages.dev/download"
+                    Write-Host "  下载页: $($global:HKZY_OfficialUrls.Download)"
                 } else {
                     Show-PublishResult -ExitCode $rc5 -Label "智能发布（仅上传有变化的产物）"
                 }
@@ -885,13 +738,7 @@ while ($true) {
                 if ($rc5 -is [array]) { $rc5 = [int]$rc5[-1] }
                 Show-PublishResult -ExitCode $rc5 -Label "发布全部版本"
             }
-            Write-Host ""
-            Write-Host "--------------------------------------------"
-            Write-Host "  下一步指引:" -ForegroundColor Yellow
-            Write-Host "  - 建议运行 [5] 验证 URL"
-            Write-Host "  - 下载页: https://tcm-prescription-system.pages.dev/download"
-            Write-Host "  - Release: https://github.com/kyt61767126/tcm-prescription-system/releases"
-            Write-Host "--------------------------------------------"
+            Show-NextStepHint
             pause
         }
         "5" {

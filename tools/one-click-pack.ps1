@@ -17,33 +17,11 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 $script:SkipPause = $false
 if ($AutoMode) { $script:SkipPause = $true }
 
-# 自动模式下覆盖 pause：移除内置别名并定义空函数，使所有 pause 调用变为空操作
-if ($script:SkipPause) {
-    Remove-Item alias:pause -ErrorAction SilentlyContinue
-    function global:pause {}
-} else {
-    # ★ 2026-09-01 中文暂停提示：交互模式下覆盖内置 pause（英文 "Press Enter to continue..."）
-    Remove-Item alias:pause -ErrorAction SilentlyContinue
-    function global:pause {
-        $null = Read-Host '按回车键继续...'
-    }
-}
-
-# ★ 2026-09-05 防僵尸菜单（15:40 事故根因架构修复）：
-#   非交互环境（stdin 被管道/重定向/自动化宿主关闭）调用交互菜单时，Read-Host 恒返回
-#   $null → switch 不匹配 → default 提示后继续循环 → Clear-Host+Read-Host 死循环，
-#   每秒刷一屏产生 170MB+ 僵尸日志。统一菜单读入口：EOF 即明确报错退出并指引非交互参数。
-#   注意：用户直接按回车返回 ""（空串，正常重显菜单）；EOF 才是 $null，二者严格区分。
-function Read-MenuChoice([string]$Prompt) {
-    $c = Read-Host $Prompt
-    if ($null -eq $c) {
-        Write-Host ""
-        Write-Host "[FATAL] 标准输入已关闭：交互菜单在非交互环境（管道/自动化调用）中运行。" -ForegroundColor Red
-        Write-Host "  非交互打包请用: one-click-pack.ps1 -AutoMode 1|2|3|4 （1=云端 2=本地 3=全部 4=智能；单端：1a=云端APP 1d=云端桌面 2a=本地APP 2d=本地桌面）" -ForegroundColor Yellow
-        exit 1
-    }
-    return $c
-}
+# ★ 2026-10-30 P3 去重：菜单读入口（EOF 防僵尸）与中文 pause 统一到 tools/menu-core.ps1。
+#   -Skip = AutoMode 下把所有 pause 变空操作；-Hint = stdin 关闭时的非交互指引。
+. (Join-Path $PSScriptRoot 'menu-core.ps1')
+$global:HKZY_MenuUsageHint = '  非交互打包请用: one-click-pack.ps1 -AutoMode 1|2|3|4 （1=云端 2=本地 3=全部 4=智能；单端：1a=云端APP 1d=云端桌面 2a=本地APP 2d=本地桌面）'
+Enable-CnPause -Skip:$script:SkipPause
 # 脚本位于 <仓库根>\tools\，仓库根 = $PSScriptRoot 的上级
 $script:RootDir = Split-Path $PSScriptRoot -Parent
 # 若该层无 app_project（脚本被移动/复制），向上找包含 app_project 的目录
@@ -56,80 +34,38 @@ if ($probe) { $script:RootDir = $probe }
 # Set NO_PAUSE=1 so child build.bat / build-app.bat don't pause at end
 $env:NO_PAUSE = '1'
 
-# ★ 2026-08-29 打包全流程日志持久化：Start-Transcript 落盘到 .build-cache\logs\
-#   背景：build-pack.bat 失败横幅只报退出码不含根因，控制台一关根因即丢失
-#   （2026-08-29 14:37 一键打包 6→1 出现红色 === 横幅，事后无从回溯的教训）
-#   子进程 cmd/gradle 输出同控制台，全部被转录；子 bat 通过 PACK_LOG_FILE 环境变量
-#   在失败横幅处回显日志路径，实现"任何失败均可事后取证"
-$script:LogDir = Join-Path $script:RootDir '.build-cache\logs'
-if (-not (Test-Path $script:LogDir)) { New-Item -ItemType Directory -Path $script:LogDir -Force | Out-Null }
-$script:LogFile = Join-Path $script:LogDir ("pack-{0}.log" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
-$env:PACK_LOG_FILE = $script:LogFile
-try { Start-Transcript -Path $script:LogFile -ErrorAction Stop | Out-Null } catch { Write-Host "[WARN] 打包日志转录启动失败(不影响打包): $_" -ForegroundColor Yellow }
-Write-Host "[LOG] 本次打包日志: $script:LogFile" -ForegroundColor DarkGray
-# 只保留最近 20 份日志，避免无限膨胀
-Get-ChildItem $script:LogDir -Filter 'pack-*.log' -File -ErrorAction SilentlyContinue |
-    Sort-Object LastWriteTime -Descending | Select-Object -Skip 20 | Remove-Item -Force -ErrorAction SilentlyContinue
-
-# ★ 2026-08-24 打包增量检测（tools/build-skip.ps1）：
-#   本次会话实际执行了打包的单元（SKIP 的不计入），副作用 AutoCommit 后统一记录基线
-$script:BuiltUnits = @()
-
 # ★ 2026-09-08 红字降噪（单一权威源 tools/noise-reduce.ps1）：PS 5.1 host 把未捕获的
 #   子进程 stderr 一律渲染红色（小白高频误报"打包失败"）。本脚本所有子 PowerShell /
 #   cmd / node 调用统一经 Write-HostLine / Invoke-QuietProcess 渲染，stderr 转黄/白，
 #   真失败仍由 [ERROR]/[FATAL] 显式标红。
 . (Join-Path $PSScriptRoot 'noise-reduce.ps1')
 
-# ★ 2026-08-24 打包验收门（tools/pack-gate.ps1）：语法/BOM/CRLF/编码 四道快检，
+# ★ 2026-08-29 打包全流程日志持久化（★ 2026-10-30 P4 去重：策略统一到 tools/run-shell.ps1）
+#   背景：build-pack.bat 失败横幅只报退出码不含根因，控制台一关根因即丢失
+#   （2026-08-29 14:37 一键打包 6→1 出现红色 === 横幅，事后无从回溯的教训）
+#   子进程 cmd/gradle 输出同控制台，全部被转录；子 bat 通过 PACK_LOG_FILE 环境变量
+#   在失败横幅处回显日志路径，实现"任何失败均可事后取证"。
+. (Join-Path $PSScriptRoot 'run-shell.ps1')
+$script:LogFile = Start-RunLog -Prefix pack -RootDir $script:RootDir
+
+# ★ 2026-08-24 打包增量检测（tools/build-skip.ps1）：
+#   本次会话实际执行了打包的单元（SKIP 的不计入），副作用 AutoCommit 后统一记录基线
+$script:BuiltUnits = @()
+
+# ★ 2026-08-24 打包验收门（tools/pack-gate.ps1）：语法/BOM/CRLF/编码/热更完整性 五道快检，
 #   任一失败直接阻断（历史事故：release-menu.ps1 BOM丢失解析崩 / 双重替换语法错无人发现）
-$gateTool = Join-Path $PSScriptRoot 'pack-gate.ps1'
-if (Test-Path $gateTool) {
-    $gateRc = Invoke-QuietProcess -FilePath 'powershell' -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',$gateTool,'-Mode','preflight') -Capture
-    if ($gateRc -ne 0) {
-        Write-Host ""
-        Write-Host "[FATAL] 打包验收门未通过，打包中止。请修复上述问题后重试。" -ForegroundColor Red
-        Write-Host "  完整日志: $script:LogFile" -ForegroundColor Yellow
-        if (-not $env:NO_PAUSE) { pause }
-        exit 1
-    }
-}
-# ★ 2026-09-23 版本基线漂移门（1.0.253/254 重名覆盖事故防呆）：
-#   上次打包版本号副作用未入库 / 被还原时，HEAD 基线落后于现存产物，
-#   本次 bump 会与旧产物同名覆盖且版本号错位。4 单元（2 桌面+2 APP）预检。
-#   保险丝 ALLOW_VERSION_DRIFT=1。退出码 2=漂移必拦；1=工具自身异常→WARN 放行。
-if ($env:ALLOW_VERSION_DRIFT -ne '1') {
-    $vbTool = Join-Path $PSScriptRoot 'verify-version-baseline.ps1'
-    if (Test-Path $vbTool) {
-        & $env:ComSpec /c "powershell -NoProfile -ExecutionPolicy Bypass -File `"$vbTool`" 2>&1" | ForEach-Object { Write-HostLine $_ }
-        $vbRc = $LASTEXITCODE
-        if ($vbRc -eq 2) {
-            Write-Host ""
-            Write-Host "[FATAL] 版本基线漂移，打包中止（修复指引见上方）。" -ForegroundColor Red
-            if (-not $script:SkipPause) { pause }
-            exit 2
-        }
-        if ($vbRc -eq 1) {
-            Write-Host "[WARN] 版本基线检测工具异常，已跳过（不阻断打包）" -ForegroundColor Yellow
-        }
-    }
-}
+Invoke-PackGate -Capture -LogFile $script:LogFile -PauseOnFail
+
+Invoke-VersionDriftGate -SkipPause:$script:SkipPause
 
 # ★ 2026-10-30 P0 去重：打包增量基线/时间戳统一到 tools/pack-core.ps1（单一权威源，
 #   与 release-menu 共用；last-run.json 只由真正执行打包的本进程写入一次）
 . (Join-Path $PSScriptRoot 'pack-core.ps1')
 
-# ★ [SELF-HEAL 2026-08-23] Fix LF line endings in ALL downstream build .bat files
-# BEFORE invoking them. This script calls build-pack.bat directly (bypassing
-# pack-app-strict.bat entries), so the entry-level self-heal does NOT cover us.
-# LF-corrupted Chinese .bat aborts cmd at parse time (window flash-close).
-$fixTool = Join-Path $PSScriptRoot 'fix-bat-crlf.ps1'
-if (Test-Path $fixTool) {
-    # ★ 2026-10-30 P0 去重：下游 bat 清单单一权威源 tools/build-bat-list.ps1
-    . (Join-Path $PSScriptRoot 'build-bat-list.ps1')
-    $buildBats = @($DownstreamBuildBats | ForEach-Object { Join-Path $script:RootDir $_ } | Where-Object { Test-Path $_ })
-    $null = Invoke-QuietProcess -FilePath 'powershell' -ArgumentList (@('-NoProfile','-ExecutionPolicy','Bypass','-File',$fixTool) + $buildBats) -Capture
-}
+# ★ [SELF-HEAL 2026-08-23] 下游构建 bat 换行自愈（★ 2026-10-30 P4 去重到 run-shell.ps1）
+#   本脚本直接调用 build-pack.bat（绕过 pack-app-strict.bat 入口），入口级自愈覆盖不到，
+#   LF 破坏的中文 bat 会让 cmd 解析期直接中止（窗口闪退）。
+Repair-DownstreamBats -RootDir $script:RootDir -Capture
 
 # Run external .bat file and return exit code
 function Invoke-BatFile {
@@ -678,66 +614,57 @@ function Invoke-SmartPack {
 function Show-PickVersionMenu {
     param([string]$Mode)
     $modeLabel = if ($Mode -eq "desktop") { "桌面" } else { "APP" }
-    while ($true) {
-        Clear-Host
-        Write-Host ""
-        Write-Host "========================================" -ForegroundColor Cyan
-        Write-Host "  请选择版本 - 打$modeLabel" -ForegroundColor Cyan
-        Write-Host "========================================" -ForegroundColor Cyan
-        Write-Host "  [1] 云端版"
-        Write-Host "  [2] 本地版"
-        Write-Host "  [3] 云端+本地"
-        Write-Host "  [0] 返回主菜单"
-        $choice = Read-MenuChoice "请选择 [0-3]"
-        switch ($choice) {
-            # ★ 2026-08-23 四轮复核修复：原 $null=Build-XXX 同时吞掉①失败退出码(打包失败用户
-            #   看不到任何失败提示)②不调用 SideEffectCollect(versionCode/version 副作用
-            #   不被收纳, 回到主菜单后也不再展示, 与 [1][2][3] 行为不一致)
-            "1" {
-                $prc = Build-Cloud -Target $Mode
-                if ($prc -is [array]) { $prc = [int]$prc[-1] }
-                if ($prc -ne 0) {
-                    Write-Host ""
-                    Write-Host "[ERROR] 云端$modeLabel打包失败，退出码: $prc（完整日志: $script:LogFile）" -ForegroundColor Red
-                    pause
-                }
-                Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits
-                return
+    # ★ 2026-10-30 P3：选择 UI 统一到 menu-core 的 Show-VersionPicker（只选不执行），
+    #   打包编排仍留在本脚本（保持 AutoMode 与菜单共用同一执行层）。
+    $version = Show-VersionPicker -Title ("请选择版本 - 打$modeLabel") -AllLabel '云端+本地'
+    switch ($version) {
+        # ★ 2026-08-23 四轮复核修复：原 $null=Build-XXX 同时吞掉①失败退出码(打包失败用户
+        #   看不到任何失败提示)②不调用 SideEffectCollect(versionCode/version 副作用
+        #   不被收纳, 回到主菜单后也不再展示, 与 [1][2][3] 行为不一致)
+        "cloud" {
+            $prc = Build-Cloud -Target $Mode
+            if ($prc -is [array]) { $prc = [int]$prc[-1] }
+            if ($prc -ne 0) {
+                Write-Host ""
+                Write-Host "[ERROR] 云端$modeLabel打包失败，退出码: $prc（完整日志: $script:LogFile）" -ForegroundColor Red
+                pause
             }
-            "2" {
-                $prc = Build-Offline -Version "dingzhi" -Target $Mode
-                if ($prc -is [array]) { $prc = [int]$prc[-1] }
-                if ($prc -ne 0) {
-                    Write-Host ""
-                    Write-Host "[ERROR] 本地$modeLabel打包失败，退出码: $prc（完整日志: $script:LogFile）" -ForegroundColor Red
-                    pause
-                }
-                Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits
-                return
-            }
-            # ★ 云端+本地 组合：先云端后本地，云端失败仍继续打本地（与 Build-All 聚合策略一致）
-            "3" {
-                $rcCloud = Build-Cloud -Target $Mode
-                if ($rcCloud -is [array]) { $rcCloud = [int]$rcCloud[-1] }
-                if (-not $rcCloud) { $rcCloud = 0 }
-                $rcOffline = Build-Offline -Version "dingzhi" -Target $Mode
-                if ($rcOffline -is [array]) { $rcOffline = [int]$rcOffline[-1] }
-                if (-not $rcOffline) { $rcOffline = 0 }
-                if ($rcCloud -ne 0) {
-                    Write-Host ""
-                    Write-Host "[ERROR] 云端$modeLabel打包失败，退出码: $rcCloud（完整日志: $script:LogFile）" -ForegroundColor Red
-                    pause
-                }
-                if ($rcOffline -ne 0) {
-                    Write-Host ""
-                    Write-Host "[ERROR] 本地$modeLabel打包失败，退出码: $rcOffline（完整日志: $script:LogFile）" -ForegroundColor Red
-                    pause
-                }
-                Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits
-                return
-            }
-            "0" { return }
+            Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits
+            return
         }
+        "dingzhi" {
+            $prc = Build-Offline -Version "dingzhi" -Target $Mode
+            if ($prc -is [array]) { $prc = [int]$prc[-1] }
+            if ($prc -ne 0) {
+                Write-Host ""
+                Write-Host "[ERROR] 本地$modeLabel打包失败，退出码: $prc（完整日志: $script:LogFile）" -ForegroundColor Red
+                pause
+            }
+            Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits
+            return
+        }
+        # ★ 云端+本地 组合：先云端后本地，云端失败仍继续打本地（与 Build-All 聚合策略一致）
+        "all" {
+            $rcCloud = Build-Cloud -Target $Mode
+            if ($rcCloud -is [array]) { $rcCloud = [int]$rcCloud[-1] }
+            if (-not $rcCloud) { $rcCloud = 0 }
+            $rcOffline = Build-Offline -Version "dingzhi" -Target $Mode
+            if ($rcOffline -is [array]) { $rcOffline = [int]$rcOffline[-1] }
+            if (-not $rcOffline) { $rcOffline = 0 }
+            if ($rcCloud -ne 0) {
+                Write-Host ""
+                Write-Host "[ERROR] 云端$modeLabel打包失败，退出码: $rcCloud（完整日志: $script:LogFile）" -ForegroundColor Red
+                pause
+            }
+            if ($rcOffline -ne 0) {
+                Write-Host ""
+                Write-Host "[ERROR] 本地$modeLabel打包失败，退出码: $rcOffline（完整日志: $script:LogFile）" -ForegroundColor Red
+                pause
+            }
+            Invoke-PackSideEffectCollect -Commit:$AutoCommit; Record-BuiltUnits
+            return
+        }
+        default { return }
     }
 }
 
