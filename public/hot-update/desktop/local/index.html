@@ -9924,7 +9924,7 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
                 const fileName = built.fileName;
                 const jsonStr = JSON.stringify(built.data, null, 2);
 
-                // ① 桌面 Electron：save-backup-file IPC → 惠康中医媒体\downloads\中医处方系统\
+                // ① 桌面 Electron：save-backup-file IPC → 惠康中医媒体\<产品名>\downloads\中医处方系统\（2026-10-31 按产品隔离）
                 if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.saveBackupFile === 'function') {
                     try {
                         const result = await window.electronAPI.saveBackupFile(jsonStr, fileName);
@@ -10277,7 +10277,7 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
             var items = await listBackupItems();
             if (!items.length) {
                 host.innerHTML = '<div style="padding:14px;color:#666;line-height:1.8;">未找到备份文件。<br>'
-                    + '备份文件夹：<b>中医处方系统</b>（桌面端在「惠康中医媒体\\downloads\\」下，手机端在「Download/」下）。<br>'
+                    + '备份文件夹：<b>中医处方系统</b>（桌面端在「惠康中医媒体\\<产品版本名>\\downloads\\」下，手机端在「Download/」下）。<br>'
                     + '把该文件夹整体拷到新设备同一位置，点「刷新」即可恢复。<br>'
                     + '自动备份保留：7 天每日 + 4 周每周 + 12 月每月；手动备份不自动删除。</div>';
                 return;
@@ -10481,7 +10481,7 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
             // ★ 2026-09-21 免费版付费墙：一键恢复（feature=backup；list/read/picker 主进程全拦）
             if (!await window.requireFeature('backup')) return;
             // ★ 2026-08-29 一键备份第三步：优先走"备份列表一键恢复"（与云桌面/APP端一致）
-            //   列出 惠康中医媒体\downloads\中医处方系统\ 的备份文件，确认后直接用最新备份恢复
+            //   列出 惠康中医媒体\<产品名>\downloads\中医处方系统\ 的备份文件，确认后直接用最新备份恢复
             //   （小白一键恢复，不用翻文件管理器）；取消/无备份再走系统文件选择器
             if (window.electronAPI && window.electronAPI.listBackupFiles) {
                 window.electronAPI.listBackupFiles().then(function (result) {
@@ -10494,7 +10494,7 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
                                 return (i + 1) + '. ' + __tag + f.fileName + ' (' + (f.size / 1024).toFixed(1) + 'KB)';
                             }).join('\n');
                             var __latestTag = /^auto_\d{8}_\d{6}\.json$/.test(latest.fileName) ? '【自动备份】' : '【手动备份】';
-                            var ok = confirm('发现 ' + result.files.length + ' 个备份文件（惠康中医媒体\\downloads\\中医处方系统\\）\n\n' + fileList + '\n\n【确定】用最新备份恢复（第1个：' + __latestTag + '）\n【取消】改为手动选择文件');
+                            var ok = confirm('发现 ' + result.files.length + ' 个备份文件（惠康中医媒体\\<产品版本名>\\downloads\\中医处方系统\\）\n\n' + fileList + '\n\n【确定】用最新备份恢复（第1个：' + __latestTag + '）\n【取消】改为手动选择文件');
                             if (ok) {
                                 window.electronAPI.readBackupFile(latest.fileName).then(function (r) {
                                     if (r && r.success && r.json) {
@@ -10508,7 +10508,7 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
                                 return;
                             }
                         } else {
-                            alert('备份目录（惠康中医媒体\\downloads\\中医处方系统\\）中未找到备份文件' + (result && result.error ? '（原因：' + result.error + '）' : '') + '。\n将打开文件选择器，请手动选择备份文件。');
+                            alert('备份目录（惠康中医媒体\\<产品版本名>\\downloads\\中医处方系统\\）中未找到备份文件' + (result && result.error ? '（原因：' + result.error + '）' : '') + '。\n将打开文件选择器，请手动选择备份文件。');
                         }
                     } catch (e) {
                         console.warn('备份列表读取异常，回退文件选择器:', e);
