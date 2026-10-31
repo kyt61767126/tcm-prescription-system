@@ -14,7 +14,9 @@
 
 ---
 
-## 当前基线（2026-10-30 更新）
+## 当前基线（2026-10-31 更新）
+
+- **2026-10-31 P10 移动端处方笺预览改「A5 整页等比缩放」（本轮 commit 见 `git log -1`；规格 `.trae/specs/app-rx-a5-preview/`）**：删除 ≤768/≤480 两档把纸压成流式窄版的 px 规则，`.prescription-paper` 在 ≤768 固定 `148mm×210mm + padding 22.5/13/15mm` 并 `zoom: var(--rx-zoom,1)`；新增 IIFE `_fitPrescriptionPaper()`（按容器宽度算比例，resize/orientationchange/进入预览 tab 重算）写入 `--rx-zoom`；`@media print` 与 `printPrescription()` 模板**一字未改**。三处权威源同改（`public/index.html`、`db-offline/desktop/index.html`、`site-admin/index.html`）+ `sync-index-app` / `sync-html` / `sync-siteadmin` 分发；cv 幂等零改；`diff-cross-version` 基线已重冻结（desk/siteadmin）；`.interface-lock.json` 已重建；三通道热包重签 **2026.10.31-2**（desktop cloud/local + app-local，minAppCode 288）。验证：Playwright 375/412/768/1280（375px zoom 0.6525→364.98×517.88，比例 210/148、无横滚；768/1280 zoom=1）、打印块内无 zoom、`check-interface` 6 OK、`sync-all -VerifyOnly` ALL PASS、pack-gate preflight 5/5、`sync-index-app --verify-only` PASS。**是否重打 APK/exe 未做**（JS/CSS 修复热更即达；需整包时另跑一键构建发布）。
 
 - **2026-10-29 20:38 P9 完整发版已上线（`full all all --yes` rc=0；发版提交 `4b19f72e` + `0c00a631`）**：四端 **云端桌面 1.2.284 / 云端 APP vc346 / 离线桌面 1.0.307 / 离线 APP vc340**；Release `v2026.10.29-2024`（6 附件）；热更双桌面色 `2026.10.29-4 → -5`（appVersion 1.2.284 / 1.0.307），`app-local` 未变仍 `-2`。复验：线上 `version.json` 三通道正确、`verify-release.js` 9/9、`check-release-readiness.cjs --strict` = 待发布 0 / 阻断 0 / 警告 0。**结论：线上与源码已一致，无待发布项。** 详见 KNOWLEDGE 末章 P9。观察项：首次 `Start-Process -RedirectStandardOutput` 启动 bat 曾静默退出（0 字节/无日志），原样重试即正常——再遇到先重试并核对 `publish-*.log` 是否新建。文档已同步：`.trae/documents` 4 处补注当前线上基线（回滚 SOP / H2 回归清单 / 打包优化 / 云端指纹计划）。
 

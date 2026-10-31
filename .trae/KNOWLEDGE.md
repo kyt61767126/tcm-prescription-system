@@ -2454,7 +2454,7 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
   - 版式差异兜底：云/离线版式 `.usage-text` 在网格内，site-admin 版式在 `.prescription-footer` 内 → `applyEndSlash` 的用法行查找改 `grid.querySelector('.usage-text') || paper.querySelector('.usage-text')`，`resetEndSlash` 用法行改可空守卫，仅在 `usage.parentNode === grid` 时才写网格 flex（否则 site-admin 斜线撑不满/逻辑直接放弃）。
   - 分发：3 份权威源（`public/index.html` 屏幕 CSS + 移动端媒体查询 + 生成器 + 打印模板 CSS；`db-offline/desktop/index.html` 同 4 处；`site-admin/index.html` 屏幕/移动端/打印 CSS，生成器由 `sync-siteadmin.cjs` 自动同步）+ `shared/prescription-core.js` → 9 副本 → `check-cv-hashes.cjs --update` → `sync-html.ps1` → `sync-index-app.cjs` → `sync-siteadmin.cjs`。
   - 验证（`tools/_tmp/rx-font-verify.cjs` 28/28、`rx-other-ends-check.cjs` 16/16）：屏幕 14px=10.5pt、标题 29.33px=22pt、煎服法 12px=9pt、剂量 Times New Roman、3 列 2 行、药名左剂量右零重叠、签名区 min-height 75.59px=20mm；设置弹窗勾选框已注入且默认勾选，取消/恢复即时生效；打印对象内实测纸面 665.2×943px、3 列 2 行、签名空白 83.6px、斜线随 innerHTML 输出、PDF 单页 MediaBox 176.0×250.1mm、关斜线后仍单页且无斜线；375px 移动端纸面 auto、斜线零残留、页脚 `display:block;min-height:0`；门禁 `check-interface` 6 OK / `copy-consistency` 100 副本 0 失败 / `diff-cross-version` 6 对全绿 / `sync-siteadmin --check` 63 函数 0 漂移 / `check-cv-hashes` 15 项一致。官网 download.html 无需改（无纸型/字号表述）。
-  - 铁律：处方笺版式改动**屏幕 CSS 与 `printPrescription` 内联打印 CSS 必须成对改**（打印取 `#prescriptionPaper.innerHTML` + 自带模板 CSS，改单边=屏幕/打印不一致）；字号用 pt 定义（打印固定物理尺寸），移动端媒体查询内再转 px 并 `display:block` 复位页脚 flex/min-height；新增设置项一律运行时注入（禁改 HTML 静态结构，否则 `check-interface` 红灯）。
+  - 铁律：处方笺版式改动**屏幕 CSS 与 `printPrescription` 内联打印 CSS 必须成对改**（打印取 `#prescriptionPaper.innerHTML` + 自带模板 CSS，改单边=屏幕/打印不一致）；字号用 pt 定义（打印固定物理尺寸）；**移动端不再「转 px + 压 padding 成流式窄版」**，改为 A5 固定纸 + 整页等比缩放（见 2026-10-31 条）；新增设置项一律运行时注入（禁改 HTML 静态结构，否则 `check-interface` 红灯）。
 
 * ★ 2026-10-28（同日第三轮）煎法（后下/先煎）位置修正：**必须跟在克数后面**，不得插在药名与剂量之间：
   - 现象（用户截图红框）：`砂仁（后下） 9g` 让煎法占据药名列，该行克数被顶到列右外侧、与相邻列药名贴在一起，且同列克数右边界不齐。
@@ -2546,6 +2546,16 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
   - 客户端语义：热更为**静默下载**；新版就绪时登录窗顶部弹淡绿横幅「✅ 新版 <hotVersion> 已就绪，重启后自动生效」6s 自动消失，**彻底退出重开**才生效。桌面快检 `%APPDATA%\惠康中医-云端\hot-update\.hot-version`（离线为 `惠康中医\...`）；APP 侧另有 `minAppCode` 门禁（当前 288）。
   - 坑：Cloudflare Pages 对 `*.html` 做 pretty-URL **308** 重定向（`/hot-update/desktop/cloud/index.html` → `.../cloud/`）。客户端 `fetch` 默认跟随重定向所以正常；**手工核验必须用 `fetch` 或 `curl -L`**，否则拿到 0 字节/回退页面而误判"线上文件不对"。
   - 范围：云网页与云 APP（在线 WebView 壳）**不需要**热更包，刷新即达；只有云桌面、离线桌面、离线 APP 走热更。
+
+* ★ 2026-10-31 **移动端处方笺屏幕预览改「A5 整页等比缩放」**（App/手机网页预览与打印版式一致，打印链路零改动）：
+  - 问题：`≤768px` 媒体查询把纸压成 `width:100%;height:auto;padding:16px` + `≤480px` 再压 `padding:12px`，并把 22pt/10.5pt 降成 16~18px/9.5~11.5px → 手机预览是流式窄版，与 A5 打印版式完全不一致。
+  - 改法：删掉 ≤768/≤480/二次覆盖三组处方笺 px 压缩规则（含 `.prescription-line`、`.prescription-info`、`.rp-mark`、`.dose-count`、`.prescription-footer`、`.usage-text`、`.signature-row`），≤768 只保留 `.prescription-paper{width:148mm;height:210mm;padding:22.5mm 13mm 15mm; zoom: var(--rx-zoom,1)}`。**纸面尺寸/字号/pt 全回归 base，不再有任何 px 覆盖。**
+  - 缩放实现：新增 IIFE `_fitPrescriptionPaper()`（两处权威源 + site-admin 同文）按容器可用宽度算 `scale = min(1, avail / (148*96/25.4))`（148mm≈559.37px），写元素内联 `--rx-zoom`；`resize`/`orientationchange`/进入预览 tab（`switchTab case 'preview'` 在 `_previewZoomReset` 后追加调用）重算；`panel.clientWidth<=0`（预览 tab 未激活）直接跳过，避免 0 比例。用 `zoom` 而非 `transform`：`zoom` 参与父容器布局（滚动高度正确，无需补偿占位），且与既有双指捏合 transform 模块天然叠加（`resetZoom` 只清 transform → 回落到 A5 适配比例）。桌面 >768px 不声明 `zoom`，比例写了也无效，零影响。
+  - 打印隔离：`printPrescription()` 用独立 printWin 且只复制 `#prescriptionPaper.innerHTML`，主窗口元素的内联 `--rx-zoom`/zoom 不会进打印；`@media print` 三处 `padding: 22.5mm 13mm 15mm` 一字未动（断言打印块内无 `zoom`）。
+  - 局面同步：`public/index.html` / `db-offline/desktop/index.html` / `site-admin/index.html` 三处权威源同改（否则 `diff-cross-version` 的 siteadmin Tier A 红灯）→ `sync-index-app.cjs` + `sync-html.ps1` + `sync-siteadmin.cjs`（`switchMobileTab` 属共享函数层，自动同步）→ `check-cv-hashes --update`（本次幂等零改）→ `diff-cross-version --update-baseline --pair desk/siteadmin`（新函数 fitPrescriptionPaper/schedule 入 Tier B）→ 重建 `.interface-lock.json`（CSS 在首个 `<script>` 前，必须重建）→ 三通道热包重签 `-2`（2026.10.31-2）。
+  - 实测（Playwright 375/412/768/1280，本地静态服务）：375px zoom 0.6525 → 纸 364.98×517.88（宽高比 210/148，无横向滚动）；412px 0.7187 → 402×570.4；768px zoom 1（纸 559.36 宽放得下）；1280px 桌面 zoom=1 不缩放（桌面窄窗时纸仍按旧行为被 flex 收缩，属既有表现）。375px 下 `font-size 14px=10.5pt`、标题 29.33px=22pt、padding 比例 0.152/0.0878（=22.5mm/13mm）保持。静态断言三份 index.html 各 4 处 `padding: 22.5mm 13mm 15mm`、`@media print` 块内无 `zoom`、App 副本含 `_fitPrescriptionPaper` 与 `zoom: var(--rx-zoom, 1)`。
+  - 铁律：**移动端处方笺只允许「整页缩放」，禁止再压字号/padding 成流式版式**；新增缩放逻辑必须走 `--rx-zoom` + `zoom`，不得用 `transform: scale()`（会破坏滚动高度且与捏合模块争抢 inline transform）；改完必须重建 interface-lock 并重签三通道热包。
+
 
 * ★ 2026-10-30（一键打包 / 一键发布 **P0 去重 + P1 热更签发入流程**）——构建发布链单一内核：
   - 结论：**合并的是内核，不是入口**。两个入口职责分层保留（打包可独立、不需上传授权；发布必须人工确认+合规闸+源码落定）。`重打包四端.bat` 早已是"薄壳委托"范式，本次把同样做法推广到发布菜单。

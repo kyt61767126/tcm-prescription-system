@@ -281,28 +281,18 @@
             }
             .center-panel.active { display: flex; }
             
-            /* 处方纸缩放 */
+            /* ★ 2026-10-31 移动端处方纸 A5 版式：纸固定 148×210mm，整页按容器宽度等比缩放
+               （不再压 padding/字号成流式窄版），比例由 _fitPrescriptionPaper() 写入 --rx-zoom；
+               打印不受影响（@media print 已用 !important 锁定 148mm×210mm）。 */
             .prescription-paper {
-                width: 100%;
-                height: auto;
-                min-height: auto;
-                padding: 16px;
+                width: 148mm;
+                height: 210mm;
+                min-height: 210mm;
+                padding: 22.5mm 13mm 15mm;
                 transform: none;
                 box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+                zoom: var(--rx-zoom, 1);
             }
-            
-            .clinic-name { font-size: 18px; margin-bottom: 4px; letter-spacing: 2px; }
-            .prescription-title { font-size: 18px; margin-bottom: 8px; letter-spacing: 4px; }
-            .prescription-info { font-size: 12px; gap: 1px 2px; margin-bottom: 6px; padding-bottom: 3px; }
-            .prescription-grid { min-height: 80px; padding: 3px 0; }
-            .prescription-grid-inner { gap: 1px 3px; }
-            .prescription-line { padding: 4px 3px; font-size: 11.5px; white-space: nowrap; }
-            .prescription-jianfa { font-size: 0.8em; font-family: 'SimSun', '宋体', serif; }
-            .rp-mark { font-size: 20px; }
-            .dose-count { font-size: 13px; }
-            .prescription-footer { display: block; min-height: 0; margin-top: 6px; padding-top: 3px; font-size: 12px; }
-            .usage-text { margin-bottom: 4px; font-size: 12px; white-space: normal; overflow-wrap: anywhere; border: none; text-decoration: none; }
-            .signature-row { font-size: 12px; }
             
             /* 患者信息区紧凑化 */
             .patient-section, .symptom-section, .diagnosis-section, .action-buttons-section {
@@ -503,24 +493,6 @@
         
         /* 小屏手机优化 */
         @media screen and (max-width: 480px) {
-            .prescription-paper {
-                transform: none;
-                padding: 12px;
-            }
-            
-            .clinic-name { font-size: 16px; margin-bottom: 3px; letter-spacing: 1px; }
-            .prescription-title { font-size: 16px; margin-bottom: 6px; letter-spacing: 3px; }
-            .prescription-info { font-size: 11px; gap: 1px 2px; margin-bottom: 4px; padding-bottom: 2px; }
-            .prescription-grid { min-height: 60px; padding: 2px 0; }
-            .prescription-grid-inner { gap: 1px 2px; }
-            .prescription-line { padding: 3px 3px; font-size: 9.5px; white-space: nowrap; line-height: 1.3; }
-            .prescription-jianfa { font-size: 0.8em; font-family: 'SimSun', '宋体', serif; }
-            .rp-mark { font-size: 17px; }
-            .dose-count { font-size: 11px; }
-            .prescription-footer { display: block; min-height: 0; margin-top: 4px; padding-top: 2px; font-size: 10px; }
-            .usage-text { margin-bottom: 3px; font-size: 10px; white-space: normal; overflow-wrap: anywhere; border: none; text-decoration: none; }
-            .signature-row { font-size: 10px; flex-wrap: wrap; gap: 2px; }
-            
             .mobile-nav-item {
                 font-size: 10px;
                 padding: 6px 2px;
@@ -579,9 +551,6 @@
             .medicine-table { font-size: 12px; }
             .medicine-table th { font-size: 11px; padding: 4px; }
             .medicine-table input { font-size: 12px; padding: 4px; }
-            .prescription-line { padding: 3px 3px; font-size: 9px; white-space: nowrap; line-height: 1.3; }
-            .prescription-jianfa { font-size: 0.8em; font-family: 'SimSun', '宋体', serif; }
-            .prescription-info { font-size: 12px; }
         }
 
         @media screen and (max-width: 360px) {
@@ -3143,6 +3112,7 @@ let currentUser = null;
                     // ★ 2026-09-15 预览缩放：进入预览复位上次缩放状态 + 首次使用提示
                     //   （防御式调用：无预览缩放模块的副本如 site-admin 静默跳过）
                     if (typeof window._previewZoomReset === 'function') window._previewZoomReset();
+                    if (typeof window._fitPrescriptionPaper === 'function') window._fitPrescriptionPaper();
                     if (typeof window._previewZoomEnterHint === 'function') window._previewZoomEnterHint();
                     break;
             }
@@ -7478,6 +7448,36 @@ let currentUser = null;
             if (DOM_CACHE.totalPrice2) DOM_CACHE.totalPrice2.textContent = totalText;
             if (DOM_CACHE.grandTotal2) DOM_CACHE.grandTotal2.textContent = grandText;
         }
+
+        // ★ 2026-10-31 移动端处方纸 A5 等比缩放：预览保持 A5（148×210mm）版式——
+        //   纸按 CSS mm 固定，整页 zoom 到容器宽度；仅 ≤768px 的 @media 声明 zoom，
+        //   桌面 (>768px) 不读该变量零影响；打印走独立 printWin（复制 innerHTML），版式不变。
+        (function () {
+            var MM_TO_PX = 96 / 25.4;             // CSS 规范：1mm = 96px/25.4
+            var PAPER_W_PX = 148 * MM_TO_PX;      // A5 纸宽 ≈559.37px
+            function fitPrescriptionPaper() {
+                var panel = document.querySelector('.center-panel');
+                var paper = document.getElementById('prescriptionPaper');
+                if (!panel || !paper) return;
+                if (panel.clientWidth <= 0) return; // 预览 tab 未激活（display:none）
+                var cs = window.getComputedStyle(panel);
+                var avail = panel.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
+                if (avail <= 0) return;
+                var scale = Math.min(1, avail / PAPER_W_PX);
+                if (Math.floor(PAPER_W_PX * scale) > Math.floor(avail)) scale = Math.max(0.1, (avail - 2) / PAPER_W_PX);
+                paper.style.setProperty('--rx-zoom', scale.toFixed(4));
+            }
+            window._fitPrescriptionPaper = fitPrescriptionPaper;
+            var rafId = 0;
+            function schedule() {
+                if (rafId) return;
+                rafId = window.requestAnimationFrame(function () { rafId = 0; fitPrescriptionPaper(); });
+            }
+            if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', schedule);
+            else schedule();
+            window.addEventListener('resize', schedule);
+            window.addEventListener('orientationchange', schedule);
+        })();
 
         function updatePrescriptionPaper() {
             const get = document.getElementById.bind(document);

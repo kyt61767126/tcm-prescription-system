@@ -1,5 +1,5 @@
 {
-  "frozenAt": "2026-10-20T10:30:34.930Z",
+  "frozenAt": "2026-10-31T11:32:01.895Z",
   "pair": "public/index.html <-> site-admin/index.html",
   "mode": "normalized",
   "note": "Tier B→C 迁移（同体→分叉）与 Tier A/C 新增必须人工确认后重冻结；Tier C 收敛（分叉对齐）属改进，重冻结即可",
@@ -318,6 +318,7 @@
     "deriveCurrentAgeFromHistory",
     "escapeJs",
     "exportMedicines",
+    "fitPrescriptionPaper",
     "formatPrice",
     "getEffectiveJianfa",
     "getMedicineByName",
@@ -344,6 +345,7 @@
     "resetCaseSearch",
     "safeParseJSON",
     "saveRecycleBin",
+    "schedule",
     "searchCases",
     "selectFormula",
     "selectMedicine",
