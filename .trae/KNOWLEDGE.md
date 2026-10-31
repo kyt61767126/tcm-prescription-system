@@ -404,7 +404,7 @@
 
 **备份/恢复（已验证正常，2026-08-29 用户确认）**：
 
-* APP：原生 saveBackupFile → `Downloads/中医处方系统/`；恢复优先「备份列表一键恢复」（listBackupFiles/readBackupFile），离线APP恢复含账号表 local\_systemUsers+基础设置（重装后原账号直接登录），云端版不含（账号在服务器）。
+* APP：原生 saveBackupFile → `Downloads/中医处方系统/<产品名>/`（★ 2026-10-31 方案C 按产品隔离：离线APP=`惠康中医-本地`、云端APP=`惠康中医-云端`；旧版共用根目录仍兼容列出/读取/删除，同名去重）；恢复优先「备份列表一键恢复」（listBackupFiles/readBackupFile），离线APP恢复含账号表 local\_systemUsers+基础设置（重装后原账号直接登录），云端版不含（账号在服务器）。
 
 * 桌面：IPC save-backup-file → `惠康中医媒体\<产品名>\downloads\中医处方系统\` 子目录；list-backup-files/read-backup-file IPC 一键恢复（旧版共用目录备份启动时自动复制到本产品目录，仅列本产品目录）。
 
@@ -865,7 +865,7 @@
 ## 13. APP 照片视频备份（2026-08-30 已实现）
 
 **动机**：APP 媒体存应用专属目录 getExternalFilesDir（卸载即清空），用户选择照片视频纳入一键备份防止丢失。
-**存储位置**：媒体备份到公共 `Downloads/中医处方系统/media/YYYY-MM/`（与 JSON 文本备份同在「中医处方系统」文件夹，整个文件夹一起拷走即可换机）。文字 JSON 备份仍在 `Downloads/中医处方系统/` 根。
+**存储位置**：媒体备份到公共 `Downloads/中医处方系统/<产品名>/media/YYYY-MM/`（★ 2026-10-31 方案C：云端/离线两个APP同机安装时各自独立；旧版共用 `中医处方系统/media` 仅作兼容读取/恢复兜底）。文字 JSON 备份在 `Downloads/中医处方系统/<产品名>/` 根。
 **原生桥（离线 com.benneng.pres + 云端 com.tcm.prescription MainActivity 双份一致）**：
 
 * `backupMedia()`：遍历 getAllMediaDirs()（图片+视频目录，含新旧命名兼容），按 YYYY-MM 子目录复制；Android 10+ 走 MediaStore.Downloads（RELATIVE\_PATH），Android 9- 直接文件复制；同名同大小去重（mediaFileExistsInDownloads）。返回 {success,copied,skipped,totalBytes}。

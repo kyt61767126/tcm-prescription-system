@@ -65,6 +65,12 @@ public class MainActivity extends BridgeActivity {
     // ★ 2026-08-24 重装数据安全：备份文件公共目录名（Downloads/中医处方系统/，
     //   卸载APP不清除公共下载目录，重装后凭此目录备份可恢复全部数据）
     private static final String BACKUP_SUB_DIR = "中医处方系统";
+    // ★ 2026-10-31 产品隔离（与桌面端方案C一致）：同一手机安装云端/离线两个APP时，
+    //   备份 JSON 与媒体备份各自落在 Download/中医处方系统/<产品名>/ 下，互不混放；
+    //   旧版共用目录 Download/中医处方系统/ 仍兼容读取，新文件只写产品目录。
+    private static final String BACKUP_PRODUCT_DIR = "惠康中医-本地";
+    private static final String BACKUP_DIR_REL = Environment.DIRECTORY_DOWNLOADS + "/" + BACKUP_SUB_DIR;
+    private static final String BACKUP_PRODUCT_REL = BACKUP_DIR_REL + "/" + BACKUP_PRODUCT_DIR;
     private static final int REQ_CAMERA = 1003;
     private static final int REQ_STORAGE = 1001;
     // ★ WebView 就绪轮询（参考云端APP）：BridgeActivity 初始化时 WebView 可能未就绪
@@ -2782,14 +2788,13 @@ public class MainActivity extends BridgeActivity {
                     safeName = "backup_" + System.currentTimeMillis() + ".json";
                 }
 
-                String subDir = "中医处方系统";
+                String subDir = BACKUP_SUB_DIR + "/" + BACKUP_PRODUCT_DIR;
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     ContentValues values = new ContentValues();
                     values.put(MediaStore.Downloads.DISPLAY_NAME, safeName);
                     values.put(MediaStore.Downloads.MIME_TYPE, "application/json");
-                    values.put(MediaStore.Downloads.RELATIVE_PATH,
-                            Environment.DIRECTORY_DOWNLOADS + "/" + subDir + "/");
+                    values.put(MediaStore.Downloads.RELATIVE_PATH, BACKUP_PRODUCT_REL + "/");
                     Uri uri = getContentResolver().insert(
                             MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
                     if (uri == null) {
@@ -2808,9 +2813,9 @@ public class MainActivity extends BridgeActivity {
                 } else {
                     File downloads = Environment.getExternalStoragePublicDirectory(
                             Environment.DIRECTORY_DOWNLOADS);
-                    File dir = new File(downloads, subDir);
+                    File dir = new File(new File(downloads, BACKUP_SUB_DIR), BACKUP_PRODUCT_DIR);
                     if (!dir.exists() && !dir.mkdirs()) {
-                        dir = new File(getFilesDir(), "backups");
+                        dir = new File(new File(getFilesDir(), "backups"), BACKUP_PRODUCT_DIR);
                         if (!dir.exists()) dir.mkdirs();
                     }
                     File file = new File(dir, safeName);
@@ -2836,53 +2841,75 @@ public class MainActivity extends BridgeActivity {
         //   （按修改时间倒序，最多 20 个；APP 卸载重装后本地数据清空，
         //    凭每日自动备份到公共目录的文件可完整恢复）
         // ------------------------------------------------------------------
+        // ★ 2026-10-31 产品隔离：按 RELATIVE_PATH 收集备份（新目录优先，旧版共用目录兜底）
+        private void collectBackupFilesByRelPath(java.util.List<JSONObject> files,
+                                                 java.util.Set<String> seen,
+                                                 String relLike, int limit) throws Exception {
+            String selection = MediaStore.Downloads.RELATIVE_PATH + " LIKE ?";
+            String[] selectionArgs = new String[]{relLike};
+            String sortOrder = MediaStore.Downloads.DATE_MODIFIED + " DESC";
+            try (Cursor cursor = getContentResolver().query(
+                    MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                    new String[]{
+                            MediaStore.Downloads.DISPLAY_NAME,
+                            MediaStore.Downloads.DATE_MODIFIED,
+                            MediaStore.Downloads.SIZE},
+                    selection, selectionArgs, sortOrder)) {
+                if (cursor != null) {
+                    while (cursor.moveToNext() && files.size() < limit) {
+                        String name = cursor.getString(0);
+                        if (name == null || !name.endsWith(".json")) continue;
+                        if (!seen.add(name)) continue;
+                        JSONObject f = new JSONObject();
+                        f.put("fileName", name);
+                        f.put("lastModified", cursor.getLong(1) * 1000L);
+                        f.put("size", cursor.getLong(2));
+                        files.add(f);
+                    }
+                }
+            }
+        }
+
+        // Android 9 及以下：直接读目录（新目录优先，旧版共用目录兜底）
+        private void collectBackupFilesFromDir(java.util.List<JSONObject> files,
+                                               java.util.Set<String> seen,
+                                               File dir, int limit) throws Exception {
+            File[] list = dir == null ? null : dir.listFiles();
+            if (list == null) return;
+            java.util.Arrays.sort(list, (a, b) -> Long.compare(b.lastModified(), a.lastModified()));
+            for (File f : list) {
+                if (files.size() >= limit) break;
+                if (!f.isFile() || !f.getName().endsWith(".json")) continue;
+                if (!seen.add(f.getName())) continue;
+                JSONObject o = new JSONObject();
+                o.put("fileName", f.getName());
+                o.put("lastModified", f.lastModified());
+                o.put("size", f.length());
+                files.add(o);
+            }
+        }
+
         private JSONObject listBackupFiles() {
             try {
                 // ★ 2026-09-21 免费版数据恢复付费墙（列文件即恢复入口，fail-closed）
                 JSONObject deny = freeWallDeny("数据恢复");
                 if (deny != null) return deny;
                 java.util.List<JSONObject> files = new java.util.ArrayList<>();
+                java.util.Set<String> seen = new java.util.HashSet<>();
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    String selection = MediaStore.Downloads.RELATIVE_PATH + " LIKE ?";
-                    String[] selectionArgs = new String[]{
-                            Environment.DIRECTORY_DOWNLOADS + "/" + BACKUP_SUB_DIR + "/%"};
-                    String sortOrder = MediaStore.Downloads.DATE_MODIFIED + " DESC";
-                    try (Cursor cursor = getContentResolver().query(
-                            MediaStore.Downloads.EXTERNAL_CONTENT_URI,
-                            new String[]{
-                                    MediaStore.Downloads.DISPLAY_NAME,
-                                    MediaStore.Downloads.DATE_MODIFIED,
-                                    MediaStore.Downloads.SIZE},
-                            selection, selectionArgs, sortOrder)) {
-                        if (cursor != null) {
-                            int shown = 0;
-                            while (cursor.moveToNext() && shown < 20) {
-                                String name = cursor.getString(0);
-                                if (name == null || !name.endsWith(".json")) continue;
-                                JSONObject f = new JSONObject();
-                                f.put("fileName", name);
-                                f.put("lastModified", cursor.getLong(1) * 1000L);
-                                f.put("size", cursor.getLong(2));
-                                files.add(f);
-                                shown++;
-                            }
-                        }
+                    // 本产品目录优先；不足 20 个时再补旧版共用目录（同名去重）
+                    collectBackupFilesByRelPath(files, seen, BACKUP_PRODUCT_REL + "/%", 20);
+                    if (files.size() < 20) {
+                        collectBackupFilesByRelPath(files, seen, BACKUP_DIR_REL + "/%", 20);
                     }
                 } else {
-                    File dir = new File(Environment.getExternalStoragePublicDirectory(
-                            Environment.DIRECTORY_DOWNLOADS), BACKUP_SUB_DIR);
-                    File[] list = dir.listFiles();
-                    if (list != null) {
-                        java.util.Arrays.sort(list, (a, b) -> Long.compare(b.lastModified(), a.lastModified()));
-                        for (int i = 0; i < list.length && files.size() < 20; i++) {
-                            File f = list[i];
-                            if (!f.isFile() || !f.getName().endsWith(".json")) continue;
-                            JSONObject o = new JSONObject();
-                            o.put("fileName", f.getName());
-                            o.put("lastModified", f.lastModified());
-                            o.put("size", f.length());
-                            files.add(o);
-                        }
+                    File downloads = Environment.getExternalStoragePublicDirectory(
+                            Environment.DIRECTORY_DOWNLOADS);
+                    collectBackupFilesFromDir(files, seen,
+                            new File(new File(downloads, BACKUP_SUB_DIR), BACKUP_PRODUCT_DIR), 20);
+                    if (files.size() < 20) {
+                        collectBackupFilesFromDir(files, seen,
+                                new File(downloads, BACKUP_SUB_DIR), 20);
                     }
                 }
                 JSONObject r = new JSONObject();
@@ -2899,6 +2926,35 @@ public class MainActivity extends BridgeActivity {
         // ★ 2026-08-24 重装数据安全：读取指定备份文件内容
         //   （白名单：仅 Downloads/中医处方系统/ 下 .json，防任意文件读取）
         // ------------------------------------------------------------------
+        // ★ 2026-10-31 产品隔离：先查本产品目录，再兼容旧版共用目录
+        private Uri findBackupUri(String safeName) {
+            String[] sources = new String[]{BACKUP_PRODUCT_REL + "/%", BACKUP_DIR_REL + "/%"};
+            for (String relLike : sources) {
+                String selection = MediaStore.Downloads.RELATIVE_PATH + " LIKE ? AND "
+                        + MediaStore.Downloads.DISPLAY_NAME + " = ?";
+                String[] args = new String[]{relLike, safeName};
+                try (Cursor cursor = getContentResolver().query(
+                        MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                        new String[]{MediaStore.Downloads._ID},
+                        selection, args, null)) {
+                    if (cursor != null && cursor.moveToFirst()) {
+                        return ContentUris.withAppendedId(
+                                MediaStore.Downloads.EXTERNAL_CONTENT_URI, cursor.getLong(0));
+                    }
+                } catch (Exception ignored) { /* 继续尝试下一个位置 */ }
+            }
+            return null;
+        }
+
+        private File findBackupFile(String safeName) {
+            File downloads = Environment.getExternalStoragePublicDirectory(
+                    Environment.DIRECTORY_DOWNLOADS);
+            File productFile = new File(new File(downloads, BACKUP_SUB_DIR), BACKUP_PRODUCT_DIR + "/" + safeName);
+            if (productFile.exists()) return productFile;
+            File legacyFile = new File(new File(downloads, BACKUP_SUB_DIR), safeName);
+            return legacyFile.exists() ? legacyFile : null;
+        }
+
         private JSONObject readBackupFile(String fileName) {
             try {
                 // ★ 2026-09-21 免费版数据恢复付费墙（读文件执行点，fail-closed）
@@ -2910,33 +2966,19 @@ public class MainActivity extends BridgeActivity {
                 }
                 byte[] content;
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    String selection = MediaStore.Downloads.RELATIVE_PATH + " LIKE ? AND "
-                            + MediaStore.Downloads.DISPLAY_NAME + " = ?";
-                    String[] args = new String[]{
-                            Environment.DIRECTORY_DOWNLOADS + "/" + BACKUP_SUB_DIR + "/%", safeName};
-                    try (Cursor cursor = getContentResolver().query(
-                            MediaStore.Downloads.EXTERNAL_CONTENT_URI,
-                            new String[]{MediaStore.Downloads._ID},
-                            selection, args, null)) {
-                        if (cursor == null || !cursor.moveToFirst()) {
-                            return fail("备份文件不存在: " + safeName);
-                        }
-                        Uri uri = ContentUris.withAppendedId(
-                                MediaStore.Downloads.EXTERNAL_CONTENT_URI, cursor.getLong(0));
-                        try (InputStream is = getContentResolver().openInputStream(uri)) {
-                            if (is == null) return fail("无法打开备份文件");
-                            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                            byte[] buf = new byte[8192];
-                            int len;
-                            while ((len = is.read(buf)) > 0) baos.write(buf, 0, len);
-                            content = baos.toByteArray();
-                        }
+                    Uri uri = findBackupUri(safeName);
+                    if (uri == null) return fail("备份文件不存在: " + safeName);
+                    try (InputStream is = getContentResolver().openInputStream(uri)) {
+                        if (is == null) return fail("无法打开备份文件");
+                        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                        byte[] buf = new byte[8192];
+                        int len;
+                        while ((len = is.read(buf)) > 0) baos.write(buf, 0, len);
+                        content = baos.toByteArray();
                     }
                 } else {
-                    File dir = new File(Environment.getExternalStoragePublicDirectory(
-                            Environment.DIRECTORY_DOWNLOADS), BACKUP_SUB_DIR);
-                    File file = new File(dir, safeName);
-                    if (!file.exists()) return fail("备份文件不存在: " + safeName);
+                    File file = findBackupFile(safeName);
+                    if (file == null) return fail("备份文件不存在: " + safeName);
                     try (InputStream fis = new java.io.FileInputStream(file)) {
                         ByteArrayOutputStream baos = new ByteArrayOutputStream();
                         byte[] buf = new byte[8192];
@@ -2967,28 +3009,14 @@ public class MainActivity extends BridgeActivity {
                     return fail("仅允许删除自动备份（auto_YYYYMMDD_HHmmss.json）");
                 }
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    String selection = MediaStore.Downloads.RELATIVE_PATH + " LIKE ? AND "
-                            + MediaStore.Downloads.DISPLAY_NAME + " = ?";
-                    String[] args = new String[]{
-                            Environment.DIRECTORY_DOWNLOADS + "/" + BACKUP_SUB_DIR + "/%", safeName};
-                    try (Cursor cursor = getContentResolver().query(
-                            MediaStore.Downloads.EXTERNAL_CONTENT_URI,
-                            new String[]{MediaStore.Downloads._ID},
-                            selection, args, null)) {
-                        if (cursor == null || !cursor.moveToFirst()) {
-                            return fail("备份文件不存在: " + safeName);
-                        }
-                        Uri uri = ContentUris.withAppendedId(
-                                MediaStore.Downloads.EXTERNAL_CONTENT_URI, cursor.getLong(0));
-                        if (getContentResolver().delete(uri, null, null) <= 0) {
-                            return fail("删除失败: " + safeName);
-                        }
+                    Uri uri = findBackupUri(safeName);
+                    if (uri == null) return fail("备份文件不存在: " + safeName);
+                    if (getContentResolver().delete(uri, null, null) <= 0) {
+                        return fail("删除失败: " + safeName);
                     }
                 } else {
-                    File dir = new File(Environment.getExternalStoragePublicDirectory(
-                            Environment.DIRECTORY_DOWNLOADS), BACKUP_SUB_DIR);
-                    File file = new File(dir, safeName);
-                    if (!file.exists()) return fail("备份文件不存在: " + safeName);
+                    File file = findBackupFile(safeName);
+                    if (file == null) return fail("备份文件不存在: " + safeName);
                     if (!file.delete()) return fail("删除失败: " + safeName);
                 }
                 JSONObject r = new JSONObject();
@@ -3107,17 +3135,16 @@ public class MainActivity extends BridgeActivity {
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     String selection = MediaStore.Downloads.RELATIVE_PATH + " LIKE ?";
-                    String[] args = new String[]{
-                            Environment.DIRECTORY_DOWNLOADS + "/" + BACKUP_SUB_DIR + "/media/%"};
+                    String[] args = new String[]{BACKUP_PRODUCT_REL + "/media/%"};
                     try (Cursor c = getContentResolver().query(
                             MediaStore.Downloads.EXTERNAL_CONTENT_URI,
                             new String[]{MediaStore.Downloads.DISPLAY_NAME}, selection, args, null)) {
                         return c == null ? 0 : c.getCount();
                     }
                 } else {
-                    File base = new File(new File(
+                    File base = new File(new File(new File(
                             Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-                            BACKUP_SUB_DIR), "media");
+                            BACKUP_SUB_DIR), BACKUP_PRODUCT_DIR), "media");
                     return countFilesRecursive(base);
                 }
             } catch (Exception e) {
@@ -3149,7 +3176,7 @@ public class MainActivity extends BridgeActivity {
                     values.put(MediaStore.Downloads.DISPLAY_NAME, fileName);
                     values.put(MediaStore.Downloads.MIME_TYPE, mimeForFile(fileName));
                     values.put(MediaStore.Downloads.RELATIVE_PATH,
-                            Environment.DIRECTORY_DOWNLOADS + "/" + BACKUP_SUB_DIR + "/media/" + relDir);
+                            BACKUP_PRODUCT_REL + "/media/" + relDir);
                     Uri uri = getContentResolver().insert(
                             MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
                     if (uri == null) return -1;
@@ -3163,9 +3190,9 @@ public class MainActivity extends BridgeActivity {
                     }
                     return 1;
                 } else {
-                    File dir = new File(new File(new File(
+                    File dir = new File(new File(new File(new File(
                             Environment.getExternalStoragePublicDirectory(
-                                    Environment.DIRECTORY_DOWNLOADS), BACKUP_SUB_DIR), "media"), relDir);
+                                    Environment.DIRECTORY_DOWNLOADS), BACKUP_SUB_DIR), BACKUP_PRODUCT_DIR), "media"), relDir);
                     if (!dir.exists() && !dir.mkdirs()) return -1;
                     File dst = new File(dir, fileName);
                     if (dst.exists() && dst.length() == src.length()) return 0;
@@ -3190,7 +3217,7 @@ public class MainActivity extends BridgeActivity {
                 String selection = MediaStore.Downloads.RELATIVE_PATH + " = ? AND "
                         + MediaStore.Downloads.DISPLAY_NAME + " = ?";
                 String[] args = new String[]{
-                        Environment.DIRECTORY_DOWNLOADS + "/" + BACKUP_SUB_DIR + "/media/" + relDir,
+                        BACKUP_PRODUCT_REL + "/media/" + relDir,
                         fileName};
                 try (Cursor c = getContentResolver().query(
                         MediaStore.Downloads.EXTERNAL_CONTENT_URI,
@@ -3213,9 +3240,16 @@ public class MainActivity extends BridgeActivity {
             try {
                 int restored = 0;
                 int skipped = 0;
-                File mediaRoot = new File(Environment.getExternalStoragePublicDirectory(
-                        Environment.DIRECTORY_DOWNLOADS), BACKUP_SUB_DIR + "/media");
-                if (!mediaRoot.isDirectory()) {
+                File downloads = Environment.getExternalStoragePublicDirectory(
+                        Environment.DIRECTORY_DOWNLOADS);
+                // ★ 2026-10-31 产品隔离：优先恢复本产品媒体目录，旧版共用 media 作为兜底
+                java.util.List<File> mediaRoots = new java.util.ArrayList<>();
+                File productRoot = new File(new File(new File(downloads, BACKUP_SUB_DIR),
+                        BACKUP_PRODUCT_DIR), "media");
+                if (productRoot.isDirectory()) mediaRoots.add(productRoot);
+                File legacyRoot = new File(new File(downloads, BACKUP_SUB_DIR), "media");
+                if (legacyRoot.isDirectory()) mediaRoots.add(legacyRoot);
+                if (mediaRoots.isEmpty()) {
                     JSONObject r = new JSONObject();
                     r.put("success", true);
                     r.put("restored", 0);
@@ -3223,16 +3257,19 @@ public class MainActivity extends BridgeActivity {
                     r.put("message", "备份中无媒体文件");
                     return r;
                 }
-                File[] monthDirs = mediaRoot.listFiles();
-                if (monthDirs != null) {
+                java.util.Set<String> handled = new java.util.HashSet<>();
+                for (File mediaRoot : mediaRoots) {
+                    File[] monthDirs = mediaRoot.listFiles();
+                    if (monthDirs == null) continue;
                     for (File md : monthDirs) {
                         if (!md.isDirectory()) continue;
                         File[] files = md.listFiles();
                         if (files == null) continue;
                         for (File f : files) {
                             if (!f.isFile()) continue;
+                            if (!handled.add(md.getName() + "/" + f.getName())) continue;
                             // ★ 2026-08-30 按扩展名路由恢复目录：视频→视频目录，其余→图片目录
-                            //   （备份时照片/视频统一进 Downloads/中医处方系统/media/YYYY-MM/，恢复时还原到各自目录）
+                            //   （备份时照片/视频统一进产品 media/YYYY-MM/，恢复时还原到各自目录）
                             boolean isVideo = f.getName().endsWith(".webm") || f.getName().endsWith(".mp4");
                             File base = isVideo ? getVideoDir() : getImageDir();
                             if (base == null) continue;
