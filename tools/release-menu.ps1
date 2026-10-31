@@ -51,6 +51,10 @@ $script:LogFile = Start-RunLog -Prefix publish -RootDir $script:RootDir
 #   统一到 tools/menu-core.ps1（此前与本文件各一份，文案已出现漂移）。
 . (Join-Path $PSScriptRoot 'menu-core.ps1')
 $global:HKZY_MenuUsageHint = "  非交互发布请用: 一键构建发布.bat publish|full|hot|verify [all|cloud|dingzhi] [all|desktop|app] --yes`n  非交互打包请用: one-click-pack.ps1 -AutoMode 1|2|3|4 （1=云端 2=本地 3=全部 4=智能）"
+# ★ 2026-10-31 全流程真实发布状态（none/published/unverified/failed）：
+#   Invoke-FullFlow 各阶段实时写入，Show-FinalSummary 据此输出，避免"验证通过后又
+#   提示未上传"的自相矛盾文案。
+$script:HKZY_LastPublishState = 'none'
 Enable-CnPause
 
 # ★ 2026-08-24 打包验收门（tools/pack-gate.ps1）：语法/BOM/CRLF/编码/热更完整性 五道快检，
@@ -349,6 +353,8 @@ function Invoke-FullFlow {
         [string]$Version,   # cloud / dingzhi / all
         [string]$Mode       # desktop / app / all
     )
+    # ★ 2026-10-31：进入即复位本轮发布状态，后续各阶段按真实结果覆盖。
+    $script:HKZY_LastPublishState = 'none'
     # Step 1: 打包
     # ★ 2026-10-30 P6：全流程「全部」默认改用**智能打包**（AutoMode 4）——先检测四端改动
     #   并打印「重打/跳过」计划，整组无改动直接跳过（连配置同步都不跑），与一键打包菜单
@@ -378,6 +384,7 @@ function Invoke-FullFlow {
     if ($rc -ne 0) {
         Write-Host ""
         Write-Host "[ERROR] 打包失败，流程中止" -ForegroundColor Red
+        $script:HKZY_LastPublishState = 'failed'
         return $rc
     }
     Write-Host ""
@@ -392,6 +399,7 @@ function Invoke-FullFlow {
     if ($rc -is [array]) { $rc = [int]$rc[-1] }
     if ($rc -ne 0) {
         Write-Host "[ERROR] 热更签发失败，流程中止（避免发布后客户端收不到更新）" -ForegroundColor Red
+        $script:HKZY_LastPublishState = 'failed'
         return $rc
     }
 
@@ -496,10 +504,14 @@ function Invoke-FullFlow {
         Write-Host ""
         Write-Host "[ERROR] 发布失败，流程中止" -ForegroundColor Red
         Write-Host "  完整日志: $script:LogFile" -ForegroundColor Yellow
+        $script:HKZY_LastPublishState = 'failed'
         return $rc
     }
     Write-Host ""
     Write-Host "[OK] 发布完成" -ForegroundColor Green
+    # ★ 2026-10-31：上传已成功（rc=3「官网已最新」同样算已发布）——先把状态置为
+    #   published，随后验证结果再按实际覆盖为 unverified / failed。
+    $script:HKZY_LastPublishState = 'published'
 
     # Step 3: 验证
     Write-Host ""
@@ -519,6 +531,7 @@ function Invoke-FullFlow {
         Write-Host "========================================" -ForegroundColor Yellow
         Write-Host "  发布已完成（验证待网络恢复复核）" -ForegroundColor Yellow
         Write-Host "========================================" -ForegroundColor Yellow
+        $script:HKZY_LastPublishState = 'unverified'
         Write-Host "  下载页: $($global:HKZY_OfficialUrls.Download)"
         Write-Host "  Release: $($global:HKZY_OfficialUrls.Release)"
         return 0
@@ -527,6 +540,7 @@ function Invoke-FullFlow {
         Write-Host ""
         Write-Host "[ERROR] 验证失败，请检查 URL 是否可访问" -ForegroundColor Red
         Write-Host "  完整日志: $script:LogFile" -ForegroundColor Yellow
+        $script:HKZY_LastPublishState = 'failed'
         return $rc
     }
     Write-Host ""
@@ -661,7 +675,7 @@ if ($Stage -ne 'menu') {
             } else {
                 $rc = Invoke-FullFlow -Version $Version -Mode $Mode
                 if ($rc -is [array]) { $rc = [int]$rc[-1] }
-                Show-FinalSummary -ActionLabel "打包 + 发布 + 验证全流程（非交互）"
+                Show-FinalSummary -ActionLabel "打包 + 发布 + 验证全流程（非交互）" -PublishState $script:HKZY_LastPublishState
             }
         }
         'hot' {
@@ -818,7 +832,7 @@ while ($true) {
             #   （one-click-pack -AutoCommit）完成；热更签发在 FullFlow Step1.5 内部完成。
             #   父进程不再 CollectSideEffectsOnly / Record-BuiltUnits（会以空值覆盖 last-run.json）。
             # ★ 2026-09-01 最终结果汇总（明确中文提示）
-            Show-FinalSummary -ActionLabel "打包 + 发布 + 验证全流程"
+            Show-FinalSummary -ActionLabel "打包 + 发布 + 验证全流程" -PublishState $script:HKZY_LastPublishState
             Write-Host ""
             pause
         }

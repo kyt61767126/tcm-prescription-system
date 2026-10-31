@@ -214,7 +214,14 @@ function Show-PublishResult {
 #   产物位置 + 发布状态 + 下一步指引，用户不需回翻日志即知"结果如何、东西在哪、
 #   接下来做什么"（此前副作用收纳后直接 Press Enter，结果提示弱）。
 function Show-FinalSummary {
-    param([string]$ActionLabel = "本次操作")
+    param(
+        [string]$ActionLabel = "本次操作",
+        # ★ 2026-10-31：发布状态显式化。原实现固定输出「不会自动上传官网」，
+        #   在全流程（[1]/full）发布并验证成功后仍照打，与上方「[OK] 验证通过」
+        #   直接矛盾，用户无法判断到底发没发。现由调用方传入真实状态。
+        [ValidateSet('none', 'published', 'unverified', 'failed')]
+        [string]$PublishState = 'none'
+    )
     Write-Host ""
     Write-Host "============================================" -ForegroundColor Cyan
     Write-Host "  $ActionLabel 已结束" -ForegroundColor Cyan
@@ -224,8 +231,26 @@ function Show-FinalSummary {
     Write-Host "    云端手机 APP : app_project\db-yunduan\惠康中医-云端.apk"
     Write-Host "    离线桌面 exe : app_project\db-offline\desktop\dist\"
     Write-Host "    离线手机 APP : app_project\db-offline\惠康中医-本地.apk"
-    Write-Host "  发布状态: 打包产物不会自动上传官网（安全规范，需人工确认）" -ForegroundColor Yellow
-    Write-Host "  如需发布 : 双击 一键构建发布.bat → 选 [3] 智能发布（仅上传有变化的产物）"
+    switch ($PublishState) {
+        'published' {
+            Write-Host "  发布状态: [已发布] 上传成功且 URL 验证通过（本机产物 hash = 官网 hash）" -ForegroundColor Green
+            Write-Host "  生效时间: Cloudflare Pages 约 1-2 分钟自动部署下载页（客户端整包需重新下载安装；仅 JS 改动可走热更）"
+            Write-Host "  复核入口: 本菜单 [5] 验证发布结果"
+        }
+        'unverified' {
+            Write-Host "  发布状态: [已上传] 上传成功，但 URL 验证因网络不可达未能判定（非发布失败）" -ForegroundColor Yellow
+            Write-Host "  下一步  : 网络恢复后本菜单 [5] 验证发布结果复核，无需重新上传"
+        }
+        'failed' {
+            Write-Host "  发布状态: [未确认] 流程中途失败，产物是否已上传未经确认" -ForegroundColor Red
+            Write-Host "  排查方式: 见上方 [ERROR]/[WARN] 明细块；修复后本菜单 [1] 或 [3] 重跑"
+            Write-Host "  完整日志: $script:LogFile" -ForegroundColor DarkGray
+        }
+        default {
+            Write-Host "  发布状态: [未发布] 仅打包，未上传官网（发布需人工确认，安全规范）" -ForegroundColor Yellow
+            Write-Host "  如需发布: 本菜单 [3] 智能发布（仅上传有变化的产物）"
+        }
+    }
     Write-Host "  下载页   : $($global:HKZY_OfficialUrls.Download)"
     Write-Host "============================================" -ForegroundColor Cyan
 }

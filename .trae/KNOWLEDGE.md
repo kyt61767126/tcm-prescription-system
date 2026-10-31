@@ -2654,5 +2654,11 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
   - 观察项（低置信，未复现）：首次以 `Start-Process -RedirectStandardOutput` 方式启动同一 bat 时，进程 78s 后静默退出（`out`/`err` 均 0 字节、未生成 publish 日志、无副作用提交）；同参数立即重试即正常跑完。**再遇到"零输出即退出"不要急着加参数，先原样重试一次并核对 `.build-cache/logs/publish-*.log` 是否新建**。
   - 文档同步（发版后）：`.trae/documents` 4 处补注——`热更新一键回滚SOP.md` 顶部加「当前线上热更基线」表（并点明**回滚必须签到 `-6` 或更高**，否则被在装客户端忽略）、`h2-real-device-regression-checklist.md` 标注 §0 版本表是 2026-10-14 历史基线并给出当前值、`优化手动打包文件-提高打包速度.md` 补最近发版产物、`云端安卓指纹登录_plan.md` 的"当前 vc307"改为"立案时 307 / 已发版 vc346"。**原则**：只给"操作上会被当真的当前状态"补注，dated 计划/评审文档保留当年数字（属历史事实）。
 
+* ★ 2026-10-31（P10：**全流程结束提示自相矛盾修复** —— 发布状态改为真实结果驱动）：
+  - 症状：`[1] 一键全流程` 成功（`[OK] 验证通过` + `全流程完成！`）后，`Show-FinalSummary` 仍固定打印「发布状态: 打包产物不会自动上传官网（需人工确认）」「如需发布 → [3] 智能发布」，同屏两段结论互斥，用户无法判断到底发没发（本次 17:55 发版即触发）。
+  - 结论：`tools/menu-core.ps1` 的 `Show-FinalSummary` 新增 `-PublishState none|published|unverified|failed`；`release-menu.ps1` 用 `$script:HKZY_LastPublishState` 由 `Invoke-FullFlow` 各阶段实时写入（打包/热更/上传失败→failed，上传成功→published，验证 rc=2 网络受阻→unverified，验证失败→failed），仅 `[1]` 与 `full` 两个全流程调用点传入；仅打包路径默认 none，原文案不变。
+  - 生效方式：纯脚本文案，下次运行 `一键构建发布.bat` 即生效，无需打包/发版。
+  - 验证：AST 解析两文件 OK；`pack-gate` 5/5 放行；四种状态渲染抽样正确。
+
 
 
