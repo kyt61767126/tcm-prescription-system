@@ -52,6 +52,29 @@ function createDesktopFileIpc({ ipcMain, app, dialog, shell, BrowserWindow }) {
         return process.env.PORTABLE_EXECUTABLE_DIR || path.dirname(app.getPath('exe'));
     }
 
+    // ★ 2026-10-31 产品级目录隔离（方案C）：
+    //   同一设备安装多个版本（云端/本地、机构版/标准版）时，媒体、备份、业务数据
+    //   统一落到「安装盘\惠康中医媒体\<产品名>\」下，各版本互不混杂。
+    //   产品名取安装包 exe 文件名（惠康中医-本地 / 惠康中医-云端 / 惠康中医-机构版…），
+    //   开发态按 package.json name 映射。便携版保持 exe 同级目录（拷目录即迁移），
+    //   由各便携副本自身目录天然隔离，不叠加产品子目录。
+    const PRODUCT_DIR_NAME = (function () {
+        try {
+            if (app.isPackaged) {
+                const exeBase = path.basename(app.getPath('exe')).replace(/\.exe$/i, '');
+                if (exeBase && exeBase.toLowerCase() !== 'electron') {
+                    return String(exeBase).replace(/[\\/:*?"<>|]/g, '_');
+                }
+            }
+        } catch (e) { /* 取 exe 名失败走下方兜底 */ }
+        try {
+            const n = String(app.getName() || '');
+            if (n.indexOf('cloud') >= 0) return '惠康中医-云端';
+            if (n) return '惠康中医-本地';
+        } catch (e) { /* 取 name 失败走最终兜底 */ }
+        return '惠康中医';
+    })();
+
     // 通用目录创建：优先 exe 同级，失败回退到 userData
     // name 参数支持绝对路径或相对路径
     function ensureDirWithFallback(name, { rethrow = false } = {}) {
@@ -69,7 +92,8 @@ function createDesktopFileIpc({ ipcMain, app, dialog, shell, BrowserWindow }) {
     }
 
     function getDataDirectory() {
-        // ★ 2026-08-29 v3 数据集中：与媒体同根（安装盘\惠康中医媒体\data），备份/换机只拷一个文件夹
+        // ★ 2026-08-29 v3 数据集中：与媒体同根（安装盘\惠康中医媒体\<产品名>\data）
+        // ★ 2026-10-31 方案C：再按产品隔离，备份/换机只需拷本产品目录，同机多版本互不串读
         return getCentralDataDir();
     }
 
@@ -77,6 +101,8 @@ function createDesktopFileIpc({ ipcMain, app, dialog, shell, BrowserWindow }) {
         // ★ 2026-08-29 修复重装丢媒体（v2 按用户要求改安装盘）：媒体保存到「安装盘根目录\惠康中医媒体\downloads」。
         //   演进史：v0 存安装目录（重装软件被 NSIS 清空 → 照片丢失）；v1 存 %APPDATA%（防住重装软件，
         //   但重装系统格 C 盘会丢）；v2 存安装盘根目录专属文件夹（重装软件✅不丢 + 重装C系统✅不丢 + 打开盘符即见易备份）。
+        //   ★ 2026-10-31 方案C：v3 再按产品隔离 →「安装盘根目录\惠康中医媒体\<产品名>\downloads」，
+        //   同机安装云端/本地/机构版/标准版时媒体与备份互不混杂。
         //   创建失败（如无权限）自动回退 %APPDATA%（保证可用性优先）。
         //   便携版（PORTABLE_EXECUTABLE_DIR）保持 exe 同级——便携特性：拷目录即迁移。
         if (process.env.PORTABLE_EXECUTABLE_DIR) {
@@ -85,18 +111,17 @@ function createDesktopFileIpc({ ipcMain, app, dialog, shell, BrowserWindow }) {
         try {
             const exeDir = getExeDirectory();
             const driveRoot = path.parse(exeDir).root; // 如 D:\
-            return ensureDirWithFallback(path.join(driveRoot, '惠康中医媒体', 'downloads'), { rethrow: true });
+            return ensureDirWithFallback(path.join(driveRoot, '惠康中医媒体', PRODUCT_DIR_NAME, 'downloads'), { rethrow: true });
         } catch (e) {
             console.warn('[Media] 安装盘根目录不可写，回退 userData/downloads:', e.message);
             return ensureDirWithFallback(path.join(app.getPath('userData'), 'downloads'));
         }
     }
 
-    // ★ 全部媒体根目录（读取/扫描兼容历代位置）：
-    //   v2 安装盘\惠康中医媒体\downloads + v1 userData/downloads + v0 exe 同级 downloads（存量旧文件仍可查可读）
-    function getAllMediaRoots() {
+    // ★ 存量媒体位置（旧版不区分产品、直接放安装盘根目录）：
+    //   仅用于读取/扫描兼容与迁移，不再写入新文件。
+    function getLegacyMediaRoots() {
         const roots = [];
-        try { roots.push(path.resolve(getDownloadsDirectory())); } catch(e) {}
         try {
             const driveRoot = path.parse(getExeDirectory()).root;
             roots.push(path.resolve(driveRoot, '惠康中医媒体', 'downloads'));
@@ -106,10 +131,21 @@ function createDesktopFileIpc({ ipcMain, app, dialog, shell, BrowserWindow }) {
         return Array.from(new Set(roots));
     }
 
+    // ★ 全部媒体根目录（读取/扫描兼容历代位置）：
+    //   新产品目录 + 旧安装盘\惠康中医媒体\downloads + 旧 userData/downloads + 旧 exe 同级 downloads
+    function getAllMediaRoots() {
+        const roots = [];
+        try { roots.push(path.resolve(getDownloadsDirectory())); } catch(e) {}
+        getLegacyMediaRoots().forEach(r => roots.push(r));
+        return Array.from(new Set(roots));
+    }
+
     // ★ 2026-08-29 数据集中 v3（用户要求"所有信息都在 D 盘一处"）：
     //   处方文字数据（save-user-data 的 data/*.json）同样保存到「安装盘根目录\惠康中医媒体\data」。
     //   与媒体同根 → 备份/换机只需拷贝一个「惠康中医媒体」文件夹。
-    //   - NSIS 安装版：安装盘\惠康中医媒体\data；创建失败回退 userData/data（可用性优先）
+    //   ★ 2026-10-31 方案C：v4 按产品隔离 →「安装盘根目录\惠康中医媒体\<产品名>\data」，
+    //   云端/本地/机构版/标准版同机安装时业务数据互不串读。
+    //   - NSIS 安装版：安装盘\惠康中医媒体\<产品名>\data；创建失败回退 userData/data（可用性优先）
     //   - 便携版：保持 exe 同级 data（便携特性：拷目录即迁移）
     //   ★ 兼容读取：getAppDataDirs（下）返回候选目录数组，读数据时旧位置仍可读（自动迁移在 whenReady）
     let _centralDataDir = null; // 缓存实际选定的数据目录（保存/迁移目标）
@@ -120,7 +156,7 @@ function createDesktopFileIpc({ ipcMain, app, dialog, shell, BrowserWindow }) {
         } else {
             try {
                 const driveRoot = path.parse(getExeDirectory()).root;
-                _centralDataDir = ensureDirWithFallback(path.join(driveRoot, '惠康中医媒体', 'data'), { rethrow: true });
+                _centralDataDir = ensureDirWithFallback(path.join(driveRoot, '惠康中医媒体', PRODUCT_DIR_NAME, 'data'), { rethrow: true });
             } catch (e) {
                 console.warn('[Data] 安装盘根目录不可写，回退 userData/data:', e.message);
                 _centralDataDir = ensureDirWithFallback(path.join(app.getPath('userData'), 'data'));
@@ -129,12 +165,24 @@ function createDesktopFileIpc({ ipcMain, app, dialog, shell, BrowserWindow }) {
         return _centralDataDir;
     }
 
-    // 数据目录候选（读取兼容：新集中目录 + 旧 exe 同级 data + 旧 userData/data）
+    // ★ 存量数据位置（旧版不区分产品、直接放安装盘根目录）：
+    //   仅用于读取兼容与迁移，不再写入新文件。
+    function getLegacyDataDirs() {
+        const dirs = [];
+        try {
+            const driveRoot = path.parse(getExeDirectory()).root;
+            dirs.push(path.resolve(driveRoot, '惠康中医媒体', 'data'));
+        } catch(e) {}
+        try { dirs.push(path.resolve(getExeDirectory(), 'data')); } catch(e) {}
+        try { dirs.push(path.resolve(app.getPath('userData'), 'data')); } catch(e) {}
+        return Array.from(new Set(dirs));
+    }
+
+    // 数据目录候选（读取兼容：新集中目录 + 旧安装盘共用 data + 旧 exe 同级 data + 旧 userData/data）
     function getAppDataDirs() {
         const dirs = [];
         try { dirs.push(path.resolve(getCentralDataDir())); } catch(e) {}
-        try { dirs.push(path.resolve(getExeDirectory(), 'data')); } catch(e) {}
-        try { dirs.push(path.resolve(app.getPath('userData'), 'data')); } catch(e) {}
+        getLegacyDataDirs().forEach(d => dirs.push(d));
         return Array.from(new Set(dirs));
     }
 
@@ -312,7 +360,33 @@ function createDesktopFileIpc({ ipcMain, app, dialog, shell, BrowserWindow }) {
         }
     }
 
+    // ★ 2026-10-31 方案C：把旧版共用目录里的备份 JSON 复制到本产品备份目录
+    //   （只拷贝不删除，旧目录保留；目标已存在则跳过，避免覆盖新版备份）
+    async function migrateLegacyBackupsToProduct(backupDir) {
+        let migrated = 0;
+        for (const legacyRoot of getLegacyMediaRoots()) {
+            if (path.resolve(legacyRoot) === path.resolve(getDownloadsDirectory())) continue;
+            // 旧备份既可能在「中医处方系统/」子目录，也可能在 downloads 根
+            for (const srcDir of [path.join(legacyRoot, '中医处方系统'), legacyRoot]) {
+                if (!(await fse.pathExists(srcDir))) continue;
+                let entries = [];
+                try { entries = await fse.readdir(srcDir, { withFileTypes: true }); } catch (e) { continue; }
+                for (const entry of entries) {
+                    if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
+                    const dst = path.join(backupDir, entry.name);
+                    if (await fse.pathExists(dst)) continue;
+                    try {
+                        await fse.copy(path.join(srcDir, entry.name), dst);
+                        migrated++;
+                    } catch (e) { /* 单文件失败不影响整体 */ }
+                }
+            }
+        }
+        return migrated;
+    }
+
     // ★ 2026-08-29 v3 存量数据自动迁移：启动时把旧位置 data/*.json 拷到新集中目录
+    //   ★ 2026-10-31 方案C：同时把旧版共用目录的备份 JSON 拷到本产品备份目录
     //   （不删除旧文件，保守起见保留双份；新写入只进新目录，旧目录自然废弃）
     async function migrateLegacyDataToCentral() {
         try {
@@ -336,6 +410,18 @@ function createDesktopFileIpc({ ipcMain, app, dialog, shell, BrowserWindow }) {
             }
             if (migrated > 0) {
                 console.log(`[Data] 已迁移 ${migrated} 个旧数据文件到集中目录: ${centralDir}`);
+            }
+            // 备份文件同样迁到本产品目录（旧版备份散落在共用 downloads 根/中医处方系统）
+            let migratedBackups = 0;
+            try {
+                const backupDir = path.join(getDownloadsDirectory(), '中医处方系统');
+                await fse.ensureDir(backupDir);
+                migratedBackups = await migrateLegacyBackupsToProduct(backupDir);
+                if (migratedBackups > 0) {
+                    console.log(`[Backup] 已迁移 ${migratedBackups} 个旧备份到本产品目录: ${backupDir}`);
+                }
+            } catch (e) {
+                console.warn('[Backup] 旧备份迁移失败（不影响运行）:', e.message);
             }
             return migrated;
         } catch (e) {
@@ -563,7 +649,8 @@ function createDesktopFileIpc({ ipcMain, app, dialog, shell, BrowserWindow }) {
     // ============================================================================
     //  备份 IPC
     // ============================================================================
-    // 备份文件保存：写入「惠康中医媒体\downloads\中医处方系统\」子目录（与APP端命名一致，2026-08-29）
+    // 备份文件保存：写入「惠康中医媒体\<产品名>\downloads\中医处方系统\」子目录
+    //   （与APP端命名一致；★ 2026-10-31 方案C：按产品隔离，同机多版本备份不混放）
     ipcMain.handle('save-backup-file', async (event, jsonStr, fileName) => {
         try {
             const __deny = freeWallReason('数据备份');

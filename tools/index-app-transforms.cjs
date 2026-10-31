@@ -186,19 +186,19 @@ module.exports = [
   {
     id: "T31",
     desc: "注释措辞：APP/桌面端优先走备份列表一键恢复（路径分隔符统一为正斜杠）",
-    find: "优先走\"备份列表一键恢复\"（与云桌面/APP端一致）\n            //   列出 惠康中医媒体\\downloads\\中医处方系统\\",
+    find: "优先走\"备份列表一键恢复\"（与云桌面/APP端一致）\n            //   列出 惠康中医媒体\\<产品名>\\downloads\\中医处方系统\\",
     replace: "APP/桌面端优先走\"备份列表一键恢复\"\n            //   列出 Downloads/中医处方系统/",
   },
   {
     id: "T32",
     desc: "confirm 文案：「惠康中医媒体\\downloads\\中医处方系统\\」→「备份文件夹：中医处方系统」（Android 实际目录）",
-    find: "                            var ok = confirm('发现 ' + result.files.length + ' 个备份文件（惠康中医媒体\\\\downloads\\\\中医处方系统\\\\）\\n\\n' + fileList + '\\n\\n【确定】用最新备份恢复（第1个：' + __latestTag + '）\\n【取消】改为手动选择文件');",
+    find: "                            var ok = confirm('发现 ' + result.files.length + ' 个备份文件（惠康中医媒体\\\\<产品版本名>\\\\downloads\\\\中医处方系统\\\\）\\n\\n' + fileList + '\\n\\n【确定】用最新备份恢复（第1个：' + __latestTag + '）\\n【取消】改为手动选择文件');",
     replace: "                            var ok = confirm('发现 ' + result.files.length + ' 个备份文件（备份文件夹：中医处方系统）\\n\\n' + fileList + '\\n\\n【确定】用最新备份恢复（第1个：' + __latestTag + '）\\n【取消】改为手动选择文件');",
   },
   {
     id: "T33",
     desc: "提示文案：「目录（惠康中医媒体\\downloads\\中医处方系统\\」→「文件夹（中医处方系统」（同 T32 动机）",
-    find: "目录（惠康中医媒体\\\\downloads\\\\中医处方系统\\\\",
+    find: "目录（惠康中医媒体\\\\<产品版本名>\\\\downloads\\\\中医处方系统\\\\",
     replace: "文件夹（中医处方系统",
   },
   {

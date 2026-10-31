@@ -375,19 +375,24 @@
 
 * ★ 2026-09-23（晚）**一键打包/发布入口审查 + 版本基线漂移门禁（verify-version-baseline.ps1）**：1.0.254 实战踩坑机制化——直接调 `one-click-pack.ps1 -AutoMode 2`（未走入口 bat=无 -AutoCommit）打出的 253 副作用未入库且事后工作区被还原，晚上再打时 HEAD 基线停在 252、dist 现存 253 产物，bump 后只出 253 与旧产物**同名覆盖**，预期 254 消失白跑 10 分钟。新增 [verify-version-baseline.ps1](file:///d:/trae_projects/kyt-zy/tools/verify-version-baseline.ps1)，接入点=one-click-pack.ps1 pack-gate 之后（交互菜单与 AutoMode 都经过）：**形态B** 工作区 package.json version / build.gradle versionCode 与 git HEAD 不一致（上次 bump 未入库）→ FAIL；**形态A**（仅桌面，APP 产物名不含 versionCode 且不依赖 aapt）dist exe 文件名最高版本 > HEAD 基线 → FAIL，文案直接算出"本次只会重新生成 X 同名覆盖，不会得到 X+1"并给两条修复路径（补提交对齐 / 归档旧产物重打）。退出码契约：2=漂移必拦、1=工具自身异常→WARN 放行（工具故障不得阻断打包）、0=通过；保险丝 `ALLOW_VERSION_DRIFT=1`；未跟踪文件不拦（与 source-settled 同口径）；4 单元=本地/云端桌面（package.json+dist）+本地/云端 APP（build.gradle 只检形态B）。**入口 bat 同步加固**：①两入口保存原代码页（`for /f "tokens=2 delims=:" %%c in ('chcp')`）并在统一 `:do_exit` 标签恢复（goto 传 EXIT_CODE 变量，**不能用 call——call 返回后会继续执行主流程**），CI/终端链式调用不再遗留 65001；②一键打包.bat 防 `-AutoCommit` 重复（`echo %* | findstr /i /c:"-AutoCommit"`，PowerShell 重复绑定命名 switch 直接报错）。**铁律：①"必须记得做 X"的人记防呆复发一次就工具化——版本号入库靠 -AutoCommit 自觉不够，必须打包前机器比对 HEAD 与现存产物；②门禁脚本自身异常一律降级 WARN 放行，检测工具不能成为比被防事故更高频的阻断源；③入口/工具类 .bat 必须 ASCII-only+CRLF（Write 工具默认写 LF，落盘后用 Node 转 CRLF；这两个根入口不在 entry-selfheal 的 8 个下游 bat 自愈清单内）；④PowerShell 嵌套调 powershell -Command 时 `$` 变量会被外层吞，AST 校验直接在当前 shell 内联 ParseFile 或落地临时 .ps1**。发布链审查结论（无需改）：publish-release.js 默认强制 compliance-check（L707 `if(!skipCompliance)`，菜单永不传 --skip-compliance）、--confirm 人工确认、auto-publish 默认只检查、--artifact/--target 双维防旧产物误传、复制后 SHA256 逐字节校验——"产物禁止自动上传官网"在工具层是闭合的。
 
-## 6. 数据存储布局（现行 v3，2026-08-29 定稿）
+## 6. 数据存储布局（现行 v4，2026-10-31 方案C 产品隔离）
 
 **桌面版（离线/云端同布局）**：
 
-* 媒体（拍照录像）：`安装盘根目录\惠康中医媒体\downloads\YYYY-MM\`。重装软件/重装C盘均不丢；根目录无权限自动回退 %APPDATA%；便携版 exe 同级。
+* 媒体（拍照录像）：`安装盘根目录\惠康中医媒体\<产品名>\downloads\YYYY-MM\`。重装软件/重装C盘均不丢；根目录无权限自动回退 %APPDATA%；便携版 exe 同级。
+* 产品名 = 安装包 exe 文件名（`惠康中医-本地` / `惠康中医-云端` / `惠康中医-机构版`…），由 `shared/desktop-fs-ipc.cjs` 的 `PRODUCT_DIR_NAME` 自动取；开发态按 package.json name 映射。**同机安装多个版本时媒体/备份/数据全部按产品子目录隔离**。
 
-* 处方文字数据：`安装盘\惠康中医媒体\data\`（data/\*.json）。备份/换机只拷「惠康中医媒体」一个文件夹。
+* 处方文字数据：`安装盘\惠康中医媒体\<产品名>\data\`（data/\*.json）。备份/换机只拷本产品目录。
 
-* getUserData() 用候选数组兼容读旧位置；migrateLegacyDataToCentral() 启动自动迁移（不覆盖不删旧）。
+* 备份文件：`安装盘\惠康中医媒体\<产品名>\downloads\中医处方系统\`（手动 `本地_*.json` + 自动 `auto_*.json`）。
+
+* getUserData() 用候选数组兼容读旧位置；migrateLegacyDataToCentral() 启动自动迁移数据 + 备份（不覆盖不删旧）；旧版共用目录 `惠康中医媒体\downloads` / `惠康中医媒体\data` 仅作兼容读取来源。
+
+* ★ 便携版**不叠加产品子目录**（保持 exe 同级 downloads/data，拷目录即迁移；不同便携副本放不同文件夹天然隔离）。
 
 * ★ getCentralDataDir 用模块级 let 缓存，只能在运行时（IPC/whenReady）调用，禁止模块顶层调用。
 
-* 排查桌面媒体问题顺序：安装盘\惠康中医媒体\downloads → %APPDATA%\userData\downloads → 安装目录 downloads。
+* 排查桌面媒体问题顺序：安装盘\惠康中医媒体\<产品名>\downloads → 安装盘\惠康中医媒体\downloads（旧） → %APPDATA%\userData\downloads → 安装目录 downloads。
 
 * 云端版处方主存在服务器，data 是本地缓存。
 
@@ -401,7 +406,7 @@
 
 * APP：原生 saveBackupFile → `Downloads/中医处方系统/`；恢复优先「备份列表一键恢复」（listBackupFiles/readBackupFile），离线APP恢复含账号表 local\_systemUsers+基础设置（重装后原账号直接登录），云端版不含（账号在服务器）。
 
-* 桌面：IPC save-backup-file → `惠康中医媒体\downloads\中医处方系统\` 子目录；list-backup-files/read-backup-file IPC 一键恢复（兼容存量根目录备份）。
+* 桌面：IPC save-backup-file → `惠康中医媒体\<产品名>\downloads\中医处方系统\` 子目录；list-backup-files/read-backup-file IPC 一键恢复（旧版共用目录备份启动时自动复制到本产品目录，仅列本产品目录）。
 
 **★ 数据安全与备份全景（2026-09-09 定稿，诊所删除不再丢数据）**：
 
