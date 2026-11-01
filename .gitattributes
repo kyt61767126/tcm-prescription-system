@@ -35,6 +35,12 @@
 *.c            text eol=lf
 *.h            text eol=lf
 *.sh           text eol=lf
+# ★ 2026-11-01 PowerShell 脚本：仓库/工作区统一 LF（根因：脚本重写文件后变 LF，
+#   而历史 blob 存的是 CRLF → git status 恒显示“已修改”、diff 内容为空，
+#   曾让「源码未落定」防呆门误拦整个发布流程 9 个 tools/*.ps1）
+*.ps1          text eol=lf
+*.psm1         text eol=lf
+*.psd1         text eol=lf
 *.sql          text eol=lf
 *.toml         text eol=lf
 *.ini          text eol=lf

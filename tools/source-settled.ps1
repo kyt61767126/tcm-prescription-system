@@ -65,6 +65,17 @@ $script:SnapshotRevertAutoRestore = @(
     '.trae/skill-optimize.md'
 )
 
+# ★ 2026-11-01 纯换行符噪声识别（根治 9 个 tools/*.ps1 误拦发布，2026-11-01 实证）：
+#   git status 报 M，但 relative HEAD 的 numstat 为空 —— 内容零变化，只是换行符
+#   被脚本重写（CRLF→LF）。这不是半成品代码，不应拦打包；只放行不修改文件，
+#   真正的源码改动 numstat 必有增删行，仍会被下面逻辑拦截。
+function Test-IsEolNoise {
+    param([string]$RepoRoot, [string]$Path)
+    $numstat = @(Invoke-GitQuiet -RepoRoot $RepoRoot -GitArgs @('diff', 'HEAD', '--numstat', '--', $Path) |
+        Where-Object { $_ -match '^(\d+\t\d+\t|-\t-\t)' })
+    return ($numstat.Count -eq 0)
+}
+
 # 判定单个文件相对 HEAD 是否为「纯删除」diff（会话快照回退签名）。
 # numstat 行格式：<增行数>TAB<删行数>TAB<路径>；二进制为 -TAB- 不匹配（按普通 blocker 处理）。
 function Test-IsSnapshotRevert {
@@ -129,6 +140,12 @@ function Get-SourceSettledBlockers {
             $diff = Invoke-GitQuiet -RepoRoot $RepoRoot -GitArgs @('diff', 'HEAD', '--', $path)
         }
         if (Test-IsPackSideEffect -GitPath $path -DiffLines $diff) { continue }
+
+        # ★ 纯换行符噪声（内容零变化，如脚本重写 ps1 的 CRLF→LF）→ 放行（见 Test-IsEolNoise）
+        if (Test-IsEolNoise -RepoRoot $RepoRoot -Path $path) {
+            Write-Host "[跳过] 纯换行符差异（内容零变化）: $path" -ForegroundColor DarkGray
+            continue
+        }
 
         # ★ 会话快照回退自动愈合（详见文件头注释）：纯删除 diff = 旧快照覆盖签名
         if (Test-IsSnapshotRevert -RepoRoot $RepoRoot -Path $path) {
