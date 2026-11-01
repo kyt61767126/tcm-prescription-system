@@ -1,5 +1,5 @@
 {
-  "frozenAt": "2026-10-31T11:32:01.895Z",
+  "frozenAt": "2026-11-01T03:13:14.071Z",
   "pair": "public/index.html <-> site-admin/index.html",
   "mode": "normalized",
   "note": "Tier B→C 迁移（同体→分叉）与 Tier A/C 新增必须人工确认后重冻结；Tier C 收敛（分叉对齐）属改进，重冻结即可",
@@ -336,7 +336,9 @@
     "markGenderManual",
     "mediaLabelOf",
     "mediaViewerNav",
+    "openPrinterSettings",
     "parseMedicineRow",
+    "refreshPrinterSection",
     "removeDuplicateMedicines",
     "renderMediaViewerSingle",
     "renderPrescriptionTable",

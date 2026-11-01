@@ -81,6 +81,23 @@
 
 ## OPEN 遗留任务
 
+### P12 ｜优先级：高｜App 内置热敏打印（锁 A5 / WiFi 9100 / 蓝牙 SPP / 自动切纸）——代码双 APK 已就绪，**待真机验收 + 发布**（2026-11-01）
+- **状态**：IN-PROGRESS（代码、双 APK、三通道热更 `2026.11.01-3` 已就绪；**未发布、未真机验证**；Java 改动无法热更，必须装新 APK）
+- **已完成**：
+  1. `PrinterManager.java` 双份（离线 `com.benneng.pres` / 云端 `com.tcm.prescription`，仅 package 行不同）：配置记忆 `hkzy_printer`、WiFi TCP 9100、蓝牙经典 SPP、ESC/POS `GS v 0` 位图 + `ESC d` 走纸 + `GS V 66 0` 切纸、测试打印页、渲染 12s 超时兜底。
+  2. 渲染：隐藏 WebView 按 `纸宽mm×8`(203dpi) 定尺 + `setInitialScale` + 软件层 `wv.draw`；**渲染前剔除页面 viewport meta**（否则 initial-scale 覆盖原生缩放致右侧裁切）。
+  3. 路由：`printHtml` / `invoke('printPrescription')` 保留授权门 → 已绑定直出，未绑定/失败自动回退原系统打印（ISO_A5，PDF 能力保留）。
+  4. JS：设置弹窗「🖨 内置打印机（WiFi / 蓝牙）」区块 + `openPrinterSettings()`/`refreshPrinterSection()`，8 份同源副本一致，桌面/网页自动隐藏。
+  5. 权限三件套 + `bluetooth required=false`；离线 versionCode **342** / 云端 **348**（APK 已 BUILD SUCCESSFUL，dex 含打印模块）。
+  6. 门禁全绿：check-interface 6 OK、sync-all -VerifyOnly、sync-index-app、copy-consistency 100/100、diff-cross-version 6 对（desk+siteadmin 基线重冻结）、pack-gate preflight 5/5、hotupdate-stage Sign→三通道 `2026.11.01-3`。
+- **剩余动作**：
+  1. **真机**：装 vc342 / vc348 → 设置「打印机设置」→ WiFi 填 IP(9100) 或选已配对蓝牙小票机 → 测试打印；确认一键直出不弹系统面板、自动切纸、断连失败能回退。
+  2. **纸宽校准**：默认 148mm（A5 原尺寸）；若实为 110mm 纸（可打宽约 104mm），把纸宽调到 104–110，否则右侧裁切/整页缩小。
+  3. **发布**（人工 `一键构建发布.bat` / `publish-release`）：官网 APK + 下载页 + hash-manifest 同步到 342/348。
+- **勿做**：不要为此改处方模板 CSS/HTML（模板三端共用，改则需全链重验）。
+- **验收**：默认 A5 纸张、无系统打印面板、WiFi/蓝牙双通道出纸、切纸正常、失败可回退系统打印。
+- **基线 commit**：（本批提交 hash 待填）
+
 ### H16 ｜优先级：高｜四端 2026-10-25 批次发布（云桌面 1.2.279 / 云APP 341 / 离线桌面 1.0.302 / 离线APP 335）——✅ 已发布并验收（2026-10-25 17:00）
 - **状态**：DONE（人工一键发布 tag `v2026.10.25-1651`/commit `5339cf65`；验收报告见 KNOWLEDGE §78「发布后验收」；发布后已补 2 处修复：desktop/local 热更重签 `2026.10.25-1`(app 1.0.302) + 官网直传/CSP 修复）
 - **已验收**：GitHub Release 6 资产 size+sha256 digest 全对；主站 manifest/updates/download 页均为 1.2.279/341/1.0.302/335（浏览器实测）；verify-release 9/9 URL 通过；APK 下载 sha256 与 manifest 一致；`check-release-readiness` = 0 BLOCK / 0 PENDING / 1 WARN。

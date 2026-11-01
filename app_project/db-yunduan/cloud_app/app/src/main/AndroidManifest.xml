@@ -88,4 +88,14 @@
     <uses-feature android:name="android.hardware.camera.front" android:required="false" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
     <uses-feature android:name="android.hardware.fingerprint" android:required="false" />
+
+    <!-- ★ 2026-11-01 内置热敏打印机（蓝牙经典 SPP）：API30 及以下用旧蓝牙权限，
+         API31+ 需运行时 BLUETOOTH_CONNECT（仅连接已配对设备，不做扫描发现）。
+         required=false 保证无蓝牙设备仍可安装（WiFi 打印不受影响）。 -->
+    <uses-permission android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN"
+        android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
 </manifest>

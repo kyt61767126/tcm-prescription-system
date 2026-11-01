@@ -1157,6 +1157,11 @@
                     <button class="action-btn mobile-hide" onclick="restoreData()" style="background:#9C27B0;color:white;">📤 恢复数据</button>
                     <button class="action-btn mobile-hide" onclick="clearAllData()" style="background:#f44336;color:white;">🗑️ 清空数据</button>
                 </div>
+                <div id="printerSettingsSection" style="margin-top:12px;padding-top:12px;border-top:1px solid #eee;display:none;">
+                    <label style="display:block;margin-bottom:6px;">🖨 内置打印机（WiFi / 蓝牙）</label>
+                    <div id="printerSettingsHint" style="font-size:12px;color:#666;margin-bottom:6px;"></div>
+                    <button class="action-btn" onclick="openPrinterSettings()" style="width:100%;">打印机设置 / 测试打印</button>
+                </div>
             </div>
             <div class="modal-footer">
                 <button class="action-btn" onclick="closeModal('settingsModal')">取消</button>
@@ -7510,6 +7515,28 @@ if (window.Permission) {
             setUserItem('formulas', JSON.stringify(formulas));
         }
 
+        // ★ 2026-11-01 App 内置热敏打印：仅在 Android 原生桥存在时显示设置入口
+        function openPrinterSettings() {
+            if (window.AndroidNative && typeof window.AndroidNative.openPrinterSettings === 'function') {
+                window.AndroidNative.openPrinterSettings();
+                return;
+            }
+            alert('内置打印机仅支持手机 App（离线版 / 云端版）。桌面端请使用系统打印 / 导出 PDF。');
+        }
+        function refreshPrinterSection() {
+            var sec = document.getElementById('printerSettingsSection');
+            if (!sec) return;
+            var ok = !!(window.AndroidNative && typeof window.AndroidNative.openPrinterSettings === 'function');
+            sec.style.display = ok ? 'block' : 'none';
+            if (!ok) return;
+            try {
+                var info = window.AndroidNative.printerInfo ? window.AndroidNative.printerInfo() : '';
+                var d = info ? JSON.parse(info) : {};
+                document.getElementById('printerSettingsHint').textContent = d.bound
+                    ? ('已绑定 ' + (d.type === 'bt' ? '蓝牙' : 'WiFi') + '：' + d.label + '（' + d.widthMm + 'mm，' + (d.autoCut ? '自动切纸' : '不切纸') + '）')
+                    : '未绑定：打印仍走系统打印面板（可导出 PDF）';
+            } catch (e) {}
+        }
         function printPrescription(orientation = 'portrait') {
             const printContent = document.getElementById('prescriptionPaper').innerHTML;
             const isLandscape = orientation === 'landscape';
@@ -10666,6 +10693,7 @@ IconFile=${scriptPath}`;
 
         function showModal(modalId) {
             document.getElementById(modalId).style.display = 'flex';
+            if (modalId === 'settingsModal') { try { refreshPrinterSection(); } catch (e) {} }
             if (modalId === 'syndromeModal') renderSyndromeList();
             if (modalId === 'medicineModal') {
                 // 仅管理员可访问药品管理（普通医师隐藏 tab + 拦截 F2/手机端入口）

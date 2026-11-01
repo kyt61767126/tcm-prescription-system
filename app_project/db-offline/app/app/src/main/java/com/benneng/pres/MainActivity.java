@@ -2058,6 +2058,34 @@ public class MainActivity extends BridgeActivity {
             } catch (Exception e) {
                 Log.w(TAG, "printHtml 授权检查异常(放行): " + e.getMessage());
             }
+            // ★ 2026-11-01 内置热敏打印：已绑定打印机走 ESC/POS 直出，否则/失败回退系统打印
+            printPrescriptionHtml(html);
+        }
+
+        /** 打印路由：内置打印机直出（失败自动回退系统打印面板） */
+        private void printPrescriptionHtml(final String html) {
+            PrinterManager pm = PrinterManager.get(MainActivity.this);
+            if (!pm.isBound()) {
+                printViaSystem(html);
+                return;
+            }
+            pm.printHtml(MainActivity.this, html, new PrinterManager.Callback() {
+                @Override
+                public void done(boolean ok, String message) {
+                    if (ok) {
+                        Toast.makeText(MainActivity.this, "已发送到打印机，正在出纸", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    Log.w(TAG, "内置打印失败: " + message);
+                    Toast.makeText(MainActivity.this,
+                            "内置打印失败：" + message + "，已改用系统打印", Toast.LENGTH_LONG).show();
+                    printViaSystem(html);
+                }
+            });
+        }
+
+        /** 系统打印（原逻辑不变，供未绑定/直出失败回退） */
+        private void printViaSystem(final String html) {
             mainHandler.post(new Runnable() {
                 @Override
                 public void run() {
@@ -2076,13 +2104,29 @@ public class MainActivity extends BridgeActivity {
 
                         String jobName = "惠康中医处方 " + new java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.CHINA).format(new java.util.Date());
                         printManager.print(jobName, printAdapter, attrs);
-                        Log.d(TAG, "printHtml 已调起系统打印: " + jobName);
+                        Log.d(TAG, "printViaSystem 已调起系统打印: " + jobName);
                     } catch (Exception e) {
-                        Log.e(TAG, "printHtml 失败", e);
+                        Log.e(TAG, "printViaSystem 失败", e);
                         Toast.makeText(MainActivity.this, "打印失败：" + e.getMessage(), Toast.LENGTH_LONG).show();
                     }
                 }
             });
+        }
+
+        // ★ 2026-11-01 内置热敏打印机：设置入口 / 配置查询
+        @JavascriptInterface
+        public void openPrinterSettings() {
+            mainHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    PrinterManager.get(MainActivity.this).showSettingsDialog(MainActivity.this, null);
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public String printerInfo() {
+            return PrinterManager.get(MainActivity.this).configJson();
         }
 
         // ★ 保留 quitApp 作为 @JavascriptInterface，供 index.html 直接调用 AndroidNative.quitApp()

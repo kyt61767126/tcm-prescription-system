@@ -1972,31 +1972,83 @@ public class MainActivity extends BridgeActivity {
 
         @JavascriptInterface
         public void printHtml(final String html) {
+            // ★ 2026-11-01 内置热敏打印：已绑定打印机走 ESC/POS 直出，否则/失败回退系统打印
+            printPrescriptionHtml(html);
+        }
+
+        /** 打印路由：内置打印机直出（失败自动回退系统打印面板） */
+        private void printPrescriptionHtml(final String html) {
+            printPrescriptionHtml(html, false);
+        }
+
+        private void printPrescriptionHtml(final String html, final boolean isLandscape) {
+            PrinterManager pm = PrinterManager.get(MainActivity.this);
+            if (!pm.isBound()) {
+                printViaSystem(html, isLandscape);
+                return;
+            }
+            pm.printHtml(MainActivity.this, html, new PrinterManager.Callback() {
+                @Override
+                public void done(boolean ok, String message) {
+                    if (ok) {
+                        Toast.makeText(MainActivity.this, "已发送到打印机，正在出纸", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    Log.w("TCM-Pres", "内置打印失败: " + message);
+                    Toast.makeText(MainActivity.this,
+                            "内置打印失败：" + message + "，已改用系统打印", Toast.LENGTH_LONG).show();
+                    printViaSystem(html, isLandscape);
+                }
+            });
+        }
+
+        /** 系统打印（原逻辑不变，供未绑定/直出失败回退） */
+        private void printViaSystem(final String html) {
+            printViaSystem(html, false);
+        }
+
+        private void printViaSystem(final String htmlContent, final boolean isLandscape) {
             mainHandler.post(new Runnable() {
                 @Override
                 public void run() {
                     try {
                         WebView printWebView = new WebView(MainActivity.this);
-                        printWebView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null);
+                        printWebView.loadDataWithBaseURL(null, htmlContent, "text/html", "UTF-8", null);
 
                         PrintManager printManager = (PrintManager) getSystemService(Context.PRINT_SERVICE);
                         PrintDocumentAdapter printAdapter = printWebView.createPrintDocumentAdapter();
 
                         PrintAttributes attrs = new PrintAttributes.Builder()
-                            .setMediaSize(PrintAttributes.MediaSize.ISO_A5)
+                            .setMediaSize(isLandscape ? PrintAttributes.MediaSize.ISO_A5.asLandscape() : PrintAttributes.MediaSize.ISO_A5)
                             .setResolution(new PrintAttributes.Resolution("res", "pdf", 300, 300))
                             .setMinMargins(PrintAttributes.Margins.NO_MARGINS)
                             .build();
 
                         String jobName = "惠康中医处方 " + new java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.CHINA).format(new java.util.Date());
                         printManager.print(jobName, printAdapter, attrs);
-                        Log.d("TCM-Pres", "printHtml 已调起系统打印: " + jobName);
+                        Log.d("TCM-Pres", "printViaSystem 已调起系统打印: " + jobName);
                     } catch (Exception e) {
-                        Log.e("TCM-Pres", "printHtml 失败", e);
+                        Log.e("TCM-Pres", "printViaSystem 失败", e);
                         Toast.makeText(MainActivity.this, "打印失败：" + e.getMessage(), Toast.LENGTH_LONG).show();
                     }
                 }
             });
+        }
+
+        // ★ 2026-11-01 内置热敏打印机：设置入口 / 配置查询
+        @JavascriptInterface
+        public void openPrinterSettings() {
+            mainHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    PrinterManager.get(MainActivity.this).showSettingsDialog(MainActivity.this, null);
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public String printerInfo() {
+            return PrinterManager.get(MainActivity.this).configJson();
         }
 
         @JavascriptInterface
@@ -2293,39 +2345,14 @@ public class MainActivity extends BridgeActivity {
                 if (html == null || html.isEmpty()) {
                     return fail("打印内容为空");
                 }
-                // 必须在主线程创建 WebView 和调用 PrintManager
+                // ★ 2026-11-01 与 printHtml 同一路由：已绑定内置打印机直出，否则/失败回退系统打印
                 final String htmlContent = html;
                 final boolean isLandscape = "landscape".equals(orientation);
-                final String jobName = "惠康中医处方 " + new java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.CHINA).format(new java.util.Date());
-
-                mainHandler.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        try {
-                            WebView printWebView = new WebView(MainActivity.this);
-                            printWebView.loadDataWithBaseURL(null, htmlContent, "text/html", "UTF-8", null);
-
-                            PrintManager printManager = (PrintManager) getSystemService(Context.PRINT_SERVICE);
-                            PrintDocumentAdapter printAdapter = printWebView.createPrintDocumentAdapter();
-
-                            PrintAttributes attrs = new PrintAttributes.Builder()
-                                .setMediaSize(isLandscape ? PrintAttributes.MediaSize.ISO_A5.asLandscape() : PrintAttributes.MediaSize.ISO_A5)
-                                .setResolution(new PrintAttributes.Resolution("res", "pdf", 300, 300))
-                                .setMinMargins(PrintAttributes.Margins.NO_MARGINS)
-                                .build();
-
-                            printManager.print(jobName, printAdapter, attrs);
-                            Log.d("TCM-Pres", "printPrescription 已调起系统打印: " + jobName);
-                        } catch (Exception e) {
-                            Log.e("TCM-Pres", "printPrescription 调起打印失败", e);
-                            Toast.makeText(MainActivity.this, "打印失败：" + e.getMessage(), Toast.LENGTH_LONG).show();
-                        }
-                    }
-                });
+                printPrescriptionHtml(htmlContent, isLandscape);
 
                 JSONObject r = new JSONObject();
                 r.put("success", true);
-                r.put("message", "已调起系统打印对话框");
+                r.put("message", "已发送打印任务");
                 return r;
             } catch (Exception e) {
                 Log.e("TCM-Pres", "printPrescription 失败", e);

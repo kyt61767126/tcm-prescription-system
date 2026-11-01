@@ -2677,5 +2677,16 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
   - 生效方式：纯脚本文案，下次运行 `一键构建发布.bat` 即生效，无需打包/发版。
   - 验证：AST 解析两文件 OK；`pack-gate` 5/5 放行；四种状态渲染抽样正确。
 
+* ★ 2026-11-01（P12：**App 内置热敏打印直出** —— 锁 A5、WiFi 9100 / 蓝牙经典 SPP、ESC/POS 位图、自动切纸，不弹系统面板）：
+  - 结论：新增 `PrinterManager.java` 两份（`com.benneng.pres` / `com.tcm.prescription`，仅 package 行不同）：SharedPreferences `hkzy_printer` 记忆配置（type/host/port/mac/widthMm/autoCut）；WiFi `Socket→host:9100`；蓝牙经典 SPP `00001101-0000-1000-8000-00805F9B34FB`（连 3 次重试，仅系统已配对设备）；ESC/POS 出图 `ESC @` + 逐带 `GS v 0`（`0x1D 0x76 0x30 0x00`，每带 ≤255 行、MSB 在前、亮度<160 记黑）+ 走纸 `ESC d` + 切纸 `GS V 66 0`。
+  - **渲染方案（关键坑）**：原计划 WebView→PDF(`PrintDocumentAdapter`)→`PdfRenderer`，但 SDK 里 `LayoutResultCallback`/`WriteResultCallback` 构造器是**包内可见**（javap android-36 实证），App 侧无法实例化 → 改为隐藏 WebView 按 `dots = 纸宽mm×8`（203dpi）定尺寸、`setInitialScale((dots/CSS宽px)/density×100)`、`LAYER_TYPE_SOFTWARE` + `wv.draw(canvas)` 直绘 Bitmap。
+  - **第二个坑（本轮实修）**：处方模板自带 `<meta name="viewport" content="width=device-width, initial-scale=1.0">`，Chromium WebView 会优先采用页面级 `initial-scale` 而让 `setInitialScale` 失效 → 版面按 148mm 定尺后被横向裁切（右半页丢失）。修法：渲染前用 `replaceAll("(?i)<meta[^>]+name=[\"']viewport[\"'][^>]*>", "")` 剔除该标签（只作用于隐藏渲染 WebView，模板本身与各端不受影响）。
+  - 路由与回退：原生 `printHtml` / 云端 `invoke('printPrescription')` **保留授权/试用只读门** → 已绑定打印机走直出；未绑定、无蓝牙权限、渲染超时(12s) 或发送失败一律 Toast 提示后自动回退**原系统打印**（`MediaSize.ISO_A5`，云端保留 `asLandscape()`），PDF 能力不丢。
+  - JS 入口（8 份同源副本一致）：设置弹窗底部新增 `#printerSettingsSection`（按钮「打印机设置 / 测试打印」）+ `openPrinterSettings()` / `refreshPrinterSection()`，仅在 `AndroidNative.openPrinterSettings` 存在时显示（桌面/网页自动隐藏，点击提示仅手机 App 支持）。
+  - 权限：`BLUETOOTH`/`BLUETOOTH_ADMIN`(maxSdkVersion=30) + `BLUETOOTH_CONNECT`（API31+ 运行时请求）+ `<uses-feature bluetooth required="false">`。
+  - **生效分层（必记）**：Java 改动**无法热更，必须装新 APK**（离线 vc342 / 云端 vc348）；index.html 改动随三条热更通道 `2026.11.01-3` 覆盖老包，老 APK 因缺 `openPrinterSettings` 自动隐藏入口 → 兼容安全。
+  - 纸宽口径：默认 `148mm`（A5 原尺寸，用户确认打印机可打 148mm）；若实际是 110mm 纸（可打宽约 104mm），须在设置里把纸宽调到 104–110，否则右侧裁切 / 整页缩小。高度按 `210/148` 等比换算。
+  - 验证（本轮）：`check-interface` 6 OK、`sync-all -VerifyOnly` / `sync-index-app --verify-only` PASS、`copy-consistency` 100 副本 0 失败、`diff-cross-version` 6 对全绿（desk+siteadmin 基线已重冻结）、`pack-gate preflight` 5/5、`hotupdate-stage -Mode Sign` → 三通道 `2026.11.01-3` 且离线校验通过、双 APK `BUILD SUCCESSFUL` 且 dex 内含打印模块字符串。**真机项（蓝牙配对连接 / WiFi 出纸 / 纸宽校准 / 切纸）尚未验证**。
+
 
 
