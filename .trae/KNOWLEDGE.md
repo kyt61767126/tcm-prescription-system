@@ -2556,6 +2556,13 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
   - 实测（Playwright 375/412/768/1280，本地静态服务）：375px zoom 0.6525 → 纸 364.98×517.88（宽高比 210/148，无横向滚动）；412px 0.7187 → 402×570.4；768px zoom 1（纸 559.36 宽放得下）；1280px 桌面 zoom=1 不缩放（桌面窄窗时纸仍按旧行为被 flex 收缩，属既有表现）。375px 下 `font-size 14px=10.5pt`、标题 29.33px=22pt、padding 比例 0.152/0.0878（=22.5mm/13mm）保持。静态断言三份 index.html 各 4 处 `padding: 22.5mm 13mm 15mm`、`@media print` 块内无 `zoom`、App 副本含 `_fitPrescriptionPaper` 与 `zoom: var(--rx-zoom, 1)`。
   - 铁律：**移动端处方笺只允许「整页缩放」，禁止再压字号/padding 成流式版式**；新增缩放逻辑必须走 `--rx-zoom` + `zoom`，不得用 `transform: scale()`（会破坏滚动高度且与捏合模块争抢 inline transform）；改完必须重建 interface-lock 并重签三通道热包。
 
+* ★ 2026-11-01 **手机/APP 处方笺补齐「中药末行 → 用法行」斜线（与桌面同版式）**：
+  - 根因：斜线由 `shared/prescription-core.js` 运行时注入（`#rxEndSlash` flex 占位 + 内联 SVG），但 `applyEndSlash()` 里有一段 2026-10-28 的旧分支——`matchMedia('(max-width: 768px)')` 命中即走 `resetEndSlash()`（清 flex、删斜线块）。那是「手机纸面 `width:100%/height:auto`、没有剩余空白」时代的判断；10-31 改 A5 固定纸 + 整页缩放后纸高固定、剩余空白同样存在，旧分支却仍按视口宽度把斜线清掉 → App/手机网页预览缺斜线且页脚不贴底。
+  - 改法：删除 `isAutoPaper` 早退分支与 `resetEndSlash()`（唯一调用点，已无死代码），手机与桌面走同一套「纸面纵向 flex + `#rxEndSlash` flex:1」；注释明确 11-01 起不再按视口宽度跳过。
+  - 传播：改 `shared/prescription-core.js` → `tools/sync-all.ps1`（Business JS 组只覆盖 7 处）+ `node tools/copy-consistency.cjs --fix` 补齐 `site-admin/`、`cloud_app assets`、鸿蒙 `rawfile`（共 **9 副本**，pre-push 铁闸 1 硬哈希）；因 prescription-core.js 内容变，云端 `index.html` 的 `?cv=` 必须 `check-cv-hashes.cjs --update` 再 `sync-html.ps1` 传播，**且 cv 改动会改云端 index.html 哈希 → 热更包要在 cv 之后再签一次**（本轮先签 -1 后因 cv bump 重签 -2）。
+  - 实测（Playwright 本地静态服务，注 16 味药）：375px `#rxEndSlash` 存在且 display:block、高 129.9px（= 桌面 195.8 × 0.6525），用法行距纸底 89.3px（≈ 桌面 136.3 × 0.6525）；1280px 仍 195.8px。打印链路零改动（斜线块本就在 `#prescriptionPaper.innerHTML` 内，桌面打印一直带斜线）。
+  - 铁律：**斜线开关只在 F1 基础设置（`local_rxEndSlashVisible`）控制，禁止再按屏幕宽度/端类型自动关闭**；改 `prescription-core.js` 必须同步 9 副本 + 重刷 cv + 重签三通道。
+
 
 * ★ 2026-10-30（一键打包 / 一键发布 **P0 去重 + P1 热更签发入流程**）——构建发布链单一内核：
   - 结论：**合并的是内核，不是入口**。两个入口职责分层保留（打包可独立、不需上传授权；发布必须人工确认+合规闸+源码落定）。`重打包四端.bat` 早已是"薄壳委托"范式，本次把同样做法推广到发布菜单。

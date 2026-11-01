@@ -396,28 +396,6 @@
         return filler;
     }
 
-    // 移动端预览：纸面 width:100%/height:auto，没有「固定纸高下的剩余空白」，
-    // 此时清掉桌面态的行内 flex 与斜线块，恢复 .prescription-grid 自身的 min-height。
-    function resetEndSlash(grid, lines, usage, paper, inner) {
-        var filler = document.getElementById(SLASH_ID);
-        if (filler && filler.parentNode) filler.parentNode.removeChild(filler);
-        if (paper) {
-            for (var i = 0; i < paper.children.length; i++) paper.children[i].style.flex = '';
-        }
-        grid.style.display = '';
-        grid.style.flexDirection = '';
-        grid.style.flex = '';
-        grid.style.minHeight = '';
-        var rp = grid.querySelector('.prescription-line');
-        if (rp) rp.style.flex = '';
-        if (usage) { usage.style.flex = ''; usage.style.marginBottom = ''; }
-        lines.style.display = '';
-        lines.style.flexDirection = '';
-        lines.style.flex = '';
-        lines.style.minHeight = '';
-        if (inner) inner.style.flex = '';
-    }
-
     function applyEndSlash() {
         var grid = document.querySelector('.prescription-grid');
         if (!grid) return false; // 处方网格未就绪，稍后重试
@@ -429,20 +407,9 @@
 
         var inner = lines.querySelector('.prescription-grid-inner');
 
-        // ≤768px 走移动端布局：CSS 把纸面改为 width:100%/height:auto（无固定纸高），
-        // 此时没有「剩余空白」，不生成斜线并恢复 .prescription-grid 自身 min-height。
-        var isAutoPaper = false;
-        try {
-            isAutoPaper = !!(global.matchMedia && global.matchMedia('(max-width: 768px)').matches);
-        } catch (e) {
-            isAutoPaper = false;
-        }
-        if (isAutoPaper) {
-            resetEndSlash(grid, lines, usage, paper, inner);
-            return true;
-        }
-
-        // 纸面纵向 flex：表头(诊所名/标题/患者信息/病史/诊断)高度按内容固定，
+        // ★ 2026-11-01：手机端预览已改为 A5 固定纸 + 整页等比缩放（与桌面同一套纸面），
+        //   固定纸高下的「剩余空白」同样存在，故不再按视口宽度跳过斜线，手机与桌面一致。
+        //   纸面纵向 flex：表头(诊所名/标题/患者信息/病史/诊断)高度按内容固定，
         // 网格占满剩余空间 → 结尾区(用法行+签名栏)被压到纸面底部，位置不随药味数浮动。
         if (paper) {
             for (var i = 0; i < paper.children.length; i++) {
@@ -580,7 +547,7 @@
             setTimeout(function () { retry(n + 1); }, 250);
         })(0);
 
-        // 桌面↔移动端媒体查询切换（≤768px 纸面变 auto 高）后重算
+        // 纸面尺寸变化（桌面窗口缩放 / 手机横竖屏整页等比缩放）后重算斜线占位高度
         var resizeTimer = null;
         var onResize = function () {
             clearTimeout(resizeTimer);

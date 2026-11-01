@@ -1,7 +1,7 @@
 {
   "format": 1,
   "channel": "local",
-  "hotVersion": "2026.10.31-2",
+  "hotVersion": "2026.11.01-2",
   "appVersion": "1.0.308",
   "files": [
     {
@@ -61,8 +61,8 @@
     },
     {
       "name": "prescription-core.js",
-      "sha256": "5ffe5adf5cf4345e1d5479ef6889076314618ffb40abc388abbef1121d93fcee",
-      "size": 29277
+      "sha256": "a4de258cd326e8be6e8342b671ea5a6f1619f5f3ff3e7f1e8d978ae9c9c66ee5",
+      "size": 27966
     },
     {
       "name": "stock-core.js",
@@ -100,6 +100,6 @@
       "size": 881727
     }
   ],
-  "signedAt": 1793446348188,
-  "signature": "Hja+MktmAExHzBZlMDdB17kS3cKwFUTkg5KNxy2jLimB90Ov8p1FTW3Ky22IzFVioC27n/Tg7j5hox4WqXBLCg=="
+  "signedAt": 1793492097672,
+  "signature": "9/aQo5UtV7MAXug/YuGiHYw1zG7n2risChhZmUNPQo/oJMLvkee0O01uldtjq8rgXSIgbtJVVHa+o09/GtZYCA=="
 }
