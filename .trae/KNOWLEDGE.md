@@ -2710,5 +2710,15 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
   - **新增题库标准步骤**：①放 `public/quiz/data/<id>.js`（id 小写 ASCII，`window.QUIZ_BANK_<ID>`）；②`manifest.js` 追加一条（id/name/category/count/file?v/global/version/sha256/enabled/order）；③`check-quiz-data.cjs` 首发校验；④`sync-all.ps1` 分发五端 + `copy-consistency` 复验；⑤两个热更生成器 `FILES` 各登记 `quiz/data/<id>.js`（含 app 通道）；⑥`hotupdate-stage.ps1 -Mode Check` 预演（0=最新 / 2=待签 / 1=失败）；⑦`-Mode Sign` 签发 + `verify-hotupdate.cjs`；⑧浏览器回归（加载/抽题/评分/错题本/导出/pageerror=0）。
   - **生效分层**：云桌面 / 离线桌面 / 离线 APP 走热更 `2026.11.02-2`；云端 APP 无热更机制、鸿蒙 rawfile 需重打包；网页端随 push 部署。**未重打整包**（exe/APK/HAP 未动）。
 
+* ★ 2026-11-02（P7：**手机端顶部栏「题库」入口：运行时注入 + 角色例外 + 热包 2026.11.02-3**）：
+  - **三套导航别混**：`.top-tabs-left`（左栏操作条，≤768px 变成手机顶部按钮行，本轮唯一改动处）/ `.mobile-nav`（底部 6 项页面切换：门诊/历史/预览/药品/设置/退出）/ `.mobile-action-bar`（底部 5 项快捷操作：录像/拍照/保存/清空/改密）。改顶部栏不等于改底部 nav。
+  - **实现（两端同法、运行时注入）**：题库 IIFE 内新增 `ensureMobileTopBtn()`（按钮 id `__quizMobileTopBtn`），不改静态 body → `check-interface` 6 OK，**未重建 `.interface-lock.json`**。云端在当前 6 个按钮末尾追加（≤768px 共 7 个，>768px 隐藏防与顶部【题库】tab 重复）；离线插入到「保存」之后并占用其位置（≤768px 仍 6 个）。样式复用 `action-btn` + 相邻按钮同款 `flex:1;padding:2px 8px;font-size:12px`，无新配色。角色判定复用同文件题库入口的 `isCashier()` 闭包（AuthCore 优先、localStorage 回退），resize + 2s 轮询刷新。
+  - **角色例外（离线必守）**：收费员看不到题库时，必须把「保存」原按钮 `display:''` 还原，**杜绝“既没保存也没题库”的空档**；云端收费员直接不显示题库。离线「保存」另有底部 `💾 保存` 与 F9 可达，顶部让位无功能损失。
+  - **同步链**：离线只改权威源 `db-offline/desktop/index.html` → `sync-index-app.cjs` 生成 `index-app.html` + assets（32 条变换唯一命中、双写 SHA 一致）；云端只改 `public/index.html` → `sync-html.ps1` 三副本。**禁止手改生成副本。**
+  - **同名函数平台分叉处置**：`ensureMobileTopBtn` 云端“追加”、离线“替换保存”属有意分叉 → `diff-cross-version --update-baseline --pair desk` 归档；site-admin 无题库整块（历史已按单侧归档）→ 同法 `--pair siteadmin` 归档。**以后同名不同体的合法平台差异一律归档基线，禁止为了门禁绿而强行改成同体。**
+  - **验证**：Playwright 12 组合（云端 / 离线 APP assets / 离线桌面 × 医生·收费员 × 375·768）**164/164**：数量顺序、无溢出/不换行、点击开关题库、关闭回原页、底部 6 项 nav 与药品/设置/预览/统计回归、`pageerror=0`。
+  - **热更 2026.11.02-3**：cloud 24 / local 23 / app-local 19 文件，**仅 `index.html` 变化**；quiz 数据未动，`by-426` v1.0.1（199,848 B）与 `sb-1200` 仍在清单且哈希一致（三通道相同）。
+  - **生效分层**：网页 push 即达；云桌面/离线桌面/离线 APP 走热更；云端 APP 无热更、鸿蒙 rawfile 需重打包。**本轮未重打整包**（exe/APK/HAP 未动）。未验证：asar/APK/HAP 内是否含新版 index、真机冒烟、旧装机（versionCode < 288）兼容。
+
 
 
