@@ -2700,5 +2700,15 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
   - **siteadmin 决策**：管理台不需要题库入口，**不移植**；`site-admin/index.html` grep 确认零 quiz 代码，仅重冻结该对 `diff-cross-version` 基线（其他 5 对基线零改动）。
   - **生效分层**：云桌面 / 离线桌面 / 离线 APP 走热更（`2026.11.02-1`）；**云端 APP 无 HotUpdateManager、鸿蒙 rawfile 无热更机制，必须重打包**；网页端随 push 部署。未验证项：asar/APK/HAP 内是否含题库、真机冒烟、旧装机（versionCode < 288）兼容。
 
+* ★ 2026-11-02（P6：**本能论题库正式上线：文本→题库流水线 + 426 题 1.0.1 + 热包 2026.11.02-2**）：
+  - **流水线**：`tools/build-quiz-from-text.cjs` 两种模式——蓝图策展（`--source <txt> --blueprint <json>`）与全量挖掘（`--mine --config tools/quiz-source/<bank>.json --source <txt>`）。编码自动识别 UTF-8(BOM) → UTF-8 → GBK；按「第X篇 / 一、小节」切分。蓝图字段：`bankId/global/name/category/version/partSize/outFile/seed/targetCount/quota/formulaWhitelist` + `blueprints[]`（每项 `chapter/section/q/answer/distractors[3]/note/quote/anchor`）。**忠实原文校验**：`quote`/`anchor` 去空白后必须在该章节区间命中，否则**整批失败、不写文件**（宁可不生成，也不编题）。**跳过策略**：段落 <8 字、无可考据单元（无数字/定义/方剂/对比/关键表述）、题干或引文与既有单元重复、超出分篇 quota，一律跳过并写入审计 JSON（`tools/_tmp/benneng-full-audit.json`）。
+  - **426 题上限成因**：原文 6 篇 18 节共 **599 个可出题段落**（剔除 <8 字、纯标题、重复段落），**同一段落只出一题**；最终跳过 144 段（其中 quotaCapped 29），产出 426。`targetCount` 是**硬截断上限**而非配额总量（分篇 quota 235/200/65/45/25/70 仅为候选上限），故取 426 与真实题量一致。
+  - **引文引号规范（生成器强制）**：外层统一 `“”`，内层/被表述词用 `「」`；**禁止空引号对 `“”`、落单的左/右引号、深度 >1 的弯引号嵌套**。实现：`mineQuoteBroken()` 判瑕疵 → 仅瑕疵引文走 `mineBalanceQuotes()`（栈配对、删空对、丢落单）→ 外层 `“”`、内层 `「」`；题干用的 `mineCite()` **不动**，保证题面零变化。本轮据此修 24 条 explain（`HARD_DIFFS=0`、`NON_PUNCT_CHANGED=0`），修后全库复扫 0 命中。
+  - **版本纪律**：数据修订必须 `version` +1（1.0.0 → 1.0.1），同批同步三处：数据文件 `window.QUIZ_BANK_*` 内 `version`、`public/quiz/manifest.js` 的 `version` 与 `file:'data/<id>.js?v=<ver>'`、`sha256`（重算）；随后 `node tools/check-quiz-data.cjs --update-baseline` 刷新 `tools/quiz-version-baseline.json`。**只改解析排版也必须 bump**（客户端 `?v` 缓存键依赖它）。
+  - **本轮数据**：`by-426` 1.0.1，426 题 / 199,848 B / sha256 `0e28b97b…`；题型 number 28 / definition 166 / term 171 / contrast 6 / formula 52 / quote 3；答案 A107/B107/C106/D106。
+  - **热更余量（2026.11.02-2）**：cloud **24/50**、local **23/50**、app-local **19/50**（50 是验签硬门）→ 余量 26/27/31；每通道较 -1 增 **+200,295 B**（首次纳入 `quiz/data/by-426.js` 199,848 B + manifest 登记 447 B），包体 3470/3591/3503 KB。
+  - **新增题库标准步骤**：①放 `public/quiz/data/<id>.js`（id 小写 ASCII，`window.QUIZ_BANK_<ID>`）；②`manifest.js` 追加一条（id/name/category/count/file?v/global/version/sha256/enabled/order）；③`check-quiz-data.cjs` 首发校验；④`sync-all.ps1` 分发五端 + `copy-consistency` 复验；⑤两个热更生成器 `FILES` 各登记 `quiz/data/<id>.js`（含 app 通道）；⑥`hotupdate-stage.ps1 -Mode Check` 预演（0=最新 / 2=待签 / 1=失败）；⑦`-Mode Sign` 签发 + `verify-hotupdate.cjs`；⑧浏览器回归（加载/抽题/评分/错题本/导出/pageerror=0）。
+  - **生效分层**：云桌面 / 离线桌面 / 离线 APP 走热更 `2026.11.02-2`；云端 APP 无热更机制、鸿蒙 rawfile 需重打包；网页端随 push 部署。**未重打整包**（exe/APK/HAP 未动）。
+
 
 

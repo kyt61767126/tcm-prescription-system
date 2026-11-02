@@ -99,7 +99,8 @@ const FILES = [
     //   quiz-core 按 manifest.file 懒加载数据，三件缺一即入口白屏/做题 404）
     'quiz/manifest.js',
     'quiz/quiz-core.js',
-    'quiz/data/sb-1200.js'
+    'quiz/data/sb-1200.js',
+    'quiz/data/by-426.js'
 ];
 
 // 绝不进清单（工具级硬断言：清单与排除表若有交集立即报错，防手滑加回）

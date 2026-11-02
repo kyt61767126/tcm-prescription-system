@@ -19,7 +19,7 @@
 //  ★ 授权：题库不挂 license-manager features 授权位（P4 明确）。存量激活码不含新位，
 //    按授权位拦截会误伤老客户；离线端无法补授权。入口显隐只按角色，见 quiz-core.js 头注。
 //
-//  ★ id 稳定性：题目 id = `<bankId>:<三位题号>`，修订题库时保持题号不变；确需改题号时
+//  ★ id 稳定性：题目 id = `<bankId>:<4 位题号>`，修订题库时保持题号不变；确需改题号时
 //    旧 id 会在客户端下次加载时被静默清理（见 quiz-core.js migrateBankRecords）。
 // ============================================================================
 window.QUIZ_MANIFEST = [
@@ -34,5 +34,18 @@ window.QUIZ_MANIFEST = [
         sha256: '71f997c8d55ede236f6715b93a0d3eaa010ec3887460ec5c032d8243913bcff5',
         enabled: true,
         order: 1
+    },
+    // 本能论正式库（2026-11-02 校审通过后启用；数据/哈希见 tools/check-quiz-data.cjs）
+    {
+        id: 'by-426',
+        name: '本能论',
+        category: '本能论',
+        count: 426,
+        file: 'data/by-426.js?v=1.0.1',
+        global: 'QUIZ_BANK_BY426',
+        version: '1.0.1',
+        sha256: '0e28b97b9c7fdbff3d13c17a7caf042249590acc24fd0f2380c59e4273c5dab9',
+        enabled: true,
+        order: 90
     }
 ];
