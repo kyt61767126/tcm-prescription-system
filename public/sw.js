@@ -13,7 +13,7 @@
 // ============================================================================
 'use strict';
 
-const SW_VERSION = '2026-10-19-1';
+const SW_VERSION = '2026-11-02-1';
 const CACHE_NAME = 'hkzy-shell-' + SW_VERSION;
 const CACHE_PREFIX = 'hkzy-shell-';
 
@@ -40,7 +40,12 @@ const PRECACHE = [
     '/edition-lock.js',
     '/electron/video-recorder.js',
     '/vendor/pinyin-pro.min.js',
-    '/xlsx.full.min.js'
+    '/xlsx.full.min.js',
+    // ★ 2026-11-02 题库地基：只预缓存 manifest + 引擎；题库数据（含大体积
+    //   data/*.js）按需首次加载后由本 SW 的 fetch 缓存自动纳入，避免装机时
+    //   把全部题库拉一遍。
+    '/quiz/manifest.js',
+    '/quiz/quiz-core.js'
 ];
 
 self.addEventListener('install', (event) => {

@@ -107,6 +107,21 @@ if ($Mode -eq 'Verify') {
 $stale = @()
 $fresh = @()
 $checkError = $false
+
+# ★ 2026-11-02 P5（评审 S1）：题库数据/版本基线前置门禁。
+#   check-quiz-data.cjs 非 0（分布/sha256/?v 与 version 不符，或 manifest version
+#   回退/未 bump）→ Check 判失败退出 1，Sign 在签发前中止（不写盘、不占序号）。
+#   纯只读：不修改题库、不写基线（基线刷新仍须显式 --update-baseline）。
+Write-Host ""
+Write-Host "--- 题库数据前置校验（分布 / sha256 / ?v / 版本单调）---" -ForegroundColor Cyan
+$quizRc = Invoke-QuietProcess -FilePath 'node' -ArgumentList @((Join-Path $PSScriptRoot 'check-quiz-data.cjs')) -Capture
+if ($quizRc -ne 0) {
+    $checkError = $true
+    Write-Host ("[ERROR] 题库数据校验未通过（退出码 {0}），中止热更检查/签发" -f $quizRc) -ForegroundColor Red
+} else {
+    Write-Host "[OK] 题库数据与版本基线校验通过" -ForegroundColor Green
+}
+
 Write-Host ""
 Write-Host "--- 热更包检查（比对线上签名清单 vs 当前源码）---" -ForegroundColor Cyan
 foreach ($key in $channelList) {

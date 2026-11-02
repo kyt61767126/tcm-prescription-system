@@ -1,13 +1,13 @@
 {
   "format": 1,
   "channel": "local",
-  "hotVersion": "2026.11.01-4",
+  "hotVersion": "2026.11.02-1",
   "appVersion": "1.0.309",
   "files": [
     {
       "name": "index.html",
-      "sha256": "d2f0f887733e98654bb399f2b47d94d15bf3b122f1ff91827243c5cabe6796cf",
-      "size": 762616
+      "sha256": "7cd19eb4bf5b60b8b87a5d02b68cdec8d2069b39ba743c67e68cbbfa4cf8b732",
+      "size": 766736
     },
     {
       "name": "auth-core.js",
@@ -98,8 +98,23 @@
       "name": "vendor/xlsx.full.min.js",
       "sha256": "c9506197caf809a075b6dee1da0d36fb19da7158ffe8a88e7b0c96c5d8623c99",
       "size": 881727
+    },
+    {
+      "name": "quiz/manifest.js",
+      "sha256": "ed357514f01864e4f9c2c08266db023803d49a3beb119ef8b1e9d10785c70f5b",
+      "size": 1996
+    },
+    {
+      "name": "quiz/quiz-core.js",
+      "sha256": "d148cb000b931778ece67d5fd5c4898892393728a822cd3b99b9dc63b9a82b39",
+      "size": 71930
+    },
+    {
+      "name": "quiz/data/sb-1200.js",
+      "sha256": "71f997c8d55ede236f6715b93a0d3eaa010ec3887460ec5c032d8243913bcff5",
+      "size": 397347
     }
   ],
-  "signedAt": 1793504767117,
-  "signature": "ao3LEk//zt8/bTBgl96t2InMT0UBV/4ZHdQ6tgvDQ0usmq0+zX4kvJ+CruBKYEXML/5/EJOcslGW713bc+5rAw=="
+  "signedAt": 1793609931311,
+  "signature": "N3XAka031J+h6BBwWHew5PnZFFnKtCKGkdH8yJuRfwYcdS8im4l7FeEMDAvOyAngzqMgENSsYL9jToKV1+9ZCw=="
 }

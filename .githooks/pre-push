@@ -229,5 +229,16 @@ node tools/cloud-sync-fake-success-test.cjs || {
     exit 1
 }
 
-echo "[pre-push] 十八道主校验全部通过，允许推送"
+# ★ 2026-11-02 P5 十九道门补强：check-quiz-data.cjs（题库数据与版本基线）。
+#   缺口：题库数据（quiz/data/*.js）与 manifest 的 version/?v/sha256 不一致，或
+#   manifest version 回退/未 bump 时，热更脚本会把旧内容或错误哈希签进热包——
+#   客户端逐文件 SHA256 门禁 fail-closed 拒收（整包失效）或加库不生效。
+#   本门秒级只读（397KB 数据哈希 + 分布统计 + 版本基线比对），失败仅拦 push。
+echo "[pre-push] ⑲ 题库数据与版本基线校验..."
+node tools/check-quiz-data.cjs || {
+    echo "[pre-push] FAIL: 题库数据/版本基线未通过——数据 sha256、?v 与 version 不一致或 manifest version 回退/未 bump；修复后运行 node tools/check-quiz-data.cjs --update-baseline 重冻结，再重推"
+    exit 1
+}
+
+echo "[pre-push] 十九道主校验全部通过，允许推送"
 exit 0

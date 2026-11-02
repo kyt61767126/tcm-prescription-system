@@ -94,7 +94,12 @@ const FILES = [
     'analytics-core.js',
     'voice-input.js',                        // ★ 2026-09-18 阶段二：语音免费层（highlight/ensurePinyin 依赖）
     'vendor/pinyin-pro.min.js',              // voice-input ensurePinyin 动态加载（同音字归一匹配）
-    'vendor/xlsx.full.min.js'                // loadXlsxLibrary() 按需加载（Excel 导入）
+    'vendor/xlsx.full.min.js',               // loadXlsxLibrary() 按需加载（Excel 导入）
+    // ★ 2026-11-02 P5：题库三件套（assets/public/index.html 已有 script 引用；
+    //   quiz-core 按 manifest.file 懒加载数据，三件缺一即入口白屏/做题 404）
+    'quiz/manifest.js',
+    'quiz/quiz-core.js',
+    'quiz/data/sb-1200.js'
 ];
 
 // 绝不进清单（工具级硬断言：清单与排除表若有交集立即报错，防手滑加回）

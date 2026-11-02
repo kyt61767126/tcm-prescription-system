@@ -29,6 +29,7 @@
             "electron/**/*",
             "index.html",
             "config.json",
+            "quiz/**/*",
             "vendor/**/*",
             "package.json",
             "auth-core.js",

@@ -215,6 +215,20 @@ $VideoRecorderWebTargets = @(
     'site-admin'
 )
 
+# Group 25: quiz/ 题库目录（★ 2026-11-02 多题库 P1 地基）
+#   权威源 public/quiz（manifest.js + quiz-core.js + data/*.js），递归分发到 4 端：
+#   云桌面（asar 打包源 + 后续热更源）、云APP assets（离线兜底壳）、
+#   离线桌面（离线权威源）、离线APP assets（离线打包源）。
+#   目录内容随题库增加而变化，故用目录级同步（非固定文件清单），
+#   新增题库只需丢文件 + 改 manifest.js，本脚本零改动。
+$QuizDirTargets = @(
+    'app_project/db-yunduan/cloud_desktop',
+    'app_project/db-yunduan/cloud_app/app/src/main/assets/public',
+    'app_project/db-offline/desktop',
+    'app_project/db-offline/app/app/src/main/assets/public',
+    'app_project_harmony/huikang-cloud/entry/src/main/resources/rawfile'
+)
+
 # Group 9: electron-logger.cjs (P0-[6.3] 主进程滚动日志) -> 2 个 electron 目录
 # 与 main.js 配套使用：main.js 里 require('./electron-logger.cjs')
 # .cjs 后缀确保在根目录 type:module 作用域下仍按 CommonJS 解析
@@ -513,6 +527,55 @@ function Sync-Group {
 }
 
 # ============================================================================
+# Helper: 目录级同步（递归；用于题库等「文件数随内容增长」的目录）
+# ============================================================================
+function Sync-DirGroup {
+    param(
+        [string]$GroupName,
+        [string]$SourceDir,
+        [string[]]$Targets,
+        [bool]$VerifyOnly
+    )
+
+    Write-Host "--- [$GroupName] ---" -ForegroundColor Cyan
+
+    $srcRoot = Join-Path $ProjectRoot $SourceDir
+    if (-not (Test-Path $srcRoot)) {
+        Write-Host "  [WARN] Source dir not found (skipped): $srcRoot" -ForegroundColor Yellow
+        return $true
+    }
+
+    $leaf = Split-Path $srcRoot -Leaf
+    $srcFiles = @(Get-ChildItem -Path $srcRoot -Recurse -File)
+    $allInSync = $true
+    $totalChecked = 0
+    $syncedCount = 0
+
+    foreach ($target in $Targets) {
+        $dstRoot = Join-Path (Join-Path $ProjectRoot $target) $leaf
+        foreach ($f in $srcFiles) {
+            $rel = $f.FullName.Substring($srcRoot.Length).TrimStart('\', '/')
+            $relLabel = $rel -replace '\\', '/'
+            $totalChecked++
+            $result = Sync-File -Source $f.FullName -Target (Join-Path $dstRoot $rel) -Label "$target/$leaf/$relLabel" -VerifyOnly $VerifyOnly
+            if ($result) { $syncedCount++ } else { $allInSync = $false }
+        }
+        # 目标端多为源端没有的文件：仅提示（不回删，避免误删）
+        if (Test-Path $dstRoot) {
+            foreach ($d in @(Get-ChildItem -Path $dstRoot -Recurse -File)) {
+                $rel = $d.FullName.Substring($dstRoot.Length).TrimStart('\', '/')
+                if (-not (Test-Path (Join-Path $srcRoot $rel))) {
+                    Write-Host "  [ORPHAN] $target/$leaf/$($rel -replace '\\','/')" -ForegroundColor Yellow
+                }
+            }
+        }
+    }
+
+    Write-Host "  Checked: $totalChecked, In sync: $syncedCount"
+    return $allInSync
+}
+
+# ============================================================================
 # Main
 # ============================================================================
 Write-Host "========================================" -ForegroundColor Cyan
@@ -670,6 +733,11 @@ Write-Host ""
 
 # Group 24: credential-vault.ps1 -> 2 electron dirs (★ 2026-09-26 M-2 凭据管理器锚点)
 $result = Sync-Group -GroupName 'credential-vault.ps1 -> 2 electron dirs' -Files @('credential-vault.ps1') -Targets $CredVaultTargets -VerifyOnly $VerifyOnly
+if (-not $result) { $allInSync = $false }
+Write-Host ""
+
+# Group 25: quiz/ 题库目录递归分发（★ 2026-11-02 多题库 P1 地基）
+$result = Sync-DirGroup -GroupName 'quiz/ (manifest + quiz-core + data, recursive -> 5 dirs)' -SourceDir 'public/quiz' -Targets $QuizDirTargets -VerifyOnly $VerifyOnly
 if (-not $result) { $allInSync = $false }
 Write-Host ""
 

@@ -78,7 +78,11 @@ function verifyHotManifest(manifest) {
         if (!Array.isArray(manifest.files) || manifest.files.length === 0 || manifest.files.length > 50) return false;
         for (let i = 0; i < manifest.files.length; i++) {
             const f = manifest.files[i];
-            if (!f || typeof f.name !== 'string' || !SAFE_NAME_RE.test(f.name) || f.name.indexOf('..') >= 0) return false;
+            // ★ 2026-11-02 P5（评审 T2）：显式拒绝前导 '/'（与 Java HotUpdateManager
+            //   safeName 校验语义对齐）；SAFE_NAME_RE 本身允许 '/' 作为目录分隔符，
+            //   故须单独拦绝对路径，防止 path.join 被引导到热目录之外。
+            if (!f || typeof f.name !== 'string' || !SAFE_NAME_RE.test(f.name)
+                || f.name.charAt(0) === '/' || f.name.indexOf('..') >= 0) return false;
             if (!/^[0-9a-f]{64}$/.test(String(f.sha256))) return false;
             if (typeof f.size !== 'number' || f.size <= 0 || f.size > 20 * 1048576) return false;
         }

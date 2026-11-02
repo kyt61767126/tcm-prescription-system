@@ -69,6 +69,19 @@
 /voice-input.js
   Cache-Control: public, max-age=31536000, immutable
 
+# ★ 2026-11-02 题库（多题库地基）
+#   manifest.js / quiz-core.js 是“活文件”：新增题库 = 改 manifest，改引擎 = 改 quiz-core，
+#   两者均无内容哈希 URL，必须每次重新校验，否则加库不生效/旧引擎滞留。
+/quiz/manifest.js
+  Cache-Control: no-cache, must-revalidate
+/quiz/quiz-core.js
+  Cache-Control: no-cache, must-revalidate
+#   题库数据文件体积大且几乎不变：URL 带 ?v=<version>（manifest 同名版本），
+#   内容变 → 版本变 → URL 变 → 缓存键变，immutable 安全。
+#   tools/check-quiz-data.cjs 强制 ?v 与 version 一致 + sha256 一致。
+/quiz/data/*
+  Cache-Control: public, max-age=31536000, immutable
+
 # 其余 JS（/electron/ 目录副本、/hot-update/** 热包产物、admin 资源等）：304 校验兜底。
 #   ★ 2026-09-14 线上实测修正：CF Pages 对未命中规则的静态资源默认即
 #   Cache-Control: public, max-age=0, must-revalidate（version.json 实证），

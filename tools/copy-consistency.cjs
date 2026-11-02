@@ -310,6 +310,32 @@ const GROUPS = [
         copies: [
             'site-admin/video-recorder.js'
         ]
+    },
+    {
+        // ★ 2026-11-02 多题库 P1 地基：题库引擎（通用、零硬编码）5 端硬哈希门。
+        //   权威 public/quiz/quiz-core.js；sync-all Group 25 目录级分发。
+        //   数据文件 data/*.js 不入本组（体量大且随题库增长，由 manifest sha256
+        //   + tools/check-quiz-data.cjs 逐库校验）。
+        authority: 'public/quiz/quiz-core.js',
+        copies: [
+            'app_project/db-yunduan/cloud_desktop/quiz/quiz-core.js',
+            'app_project/db-yunduan/cloud_app/app/src/main/assets/public/quiz/quiz-core.js',
+            'app_project/db-offline/desktop/quiz/quiz-core.js',
+            'app_project/db-offline/app/app/src/main/assets/public/quiz/quiz-core.js',
+            'app_project_harmony/huikang-cloud/entry/src/main/resources/rawfile/quiz/quiz-core.js'
+        ]
+    },
+    {
+        // ★ 2026-11-02 多题库 P1 地基：题库注册表（唯一登记点）5 端硬哈希门。
+        //   新增题库只改权威源 manifest.js 一行，副本由 sync-all Group 25 递归分发。
+        authority: 'public/quiz/manifest.js',
+        copies: [
+            'app_project/db-yunduan/cloud_desktop/quiz/manifest.js',
+            'app_project/db-yunduan/cloud_app/app/src/main/assets/public/quiz/manifest.js',
+            'app_project/db-offline/desktop/quiz/manifest.js',
+            'app_project/db-offline/app/app/src/main/assets/public/quiz/manifest.js',
+            'app_project_harmony/huikang-cloud/entry/src/main/resources/rawfile/quiz/manifest.js'
+        ]
     }
 ];
 

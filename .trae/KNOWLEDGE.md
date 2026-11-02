@@ -2690,5 +2690,15 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
   - 纸宽口径：默认 `148mm`（A5 原尺寸，用户确认打印机可打 148mm）；若实际是 110mm 纸（可打宽约 104mm），须在设置里把纸宽调到 104–110，否则右侧裁切 / 整页缩小。高度按 `210/148` 等比换算。
   - 验证（本轮）：`check-interface` 6 OK、`sync-all -VerifyOnly` / `sync-index-app --verify-only` PASS、`copy-consistency` 100 副本 0 失败、`diff-cross-version` 6 对全绿（desk+siteadmin 基线已重冻结）、`pack-gate preflight` 5/5、`hotupdate-stage -Mode Sign` → 三通道 `2026.11.01-3` 且离线校验通过、双 APK `BUILD SUCCESSFUL` 且 dex 内含打印模块字符串。**真机项（蓝牙配对连接 / WiFi 出纸 / 纸宽校准 / 切纸）尚未验证**。
 
+* ★ 2026-11-02（P0–P5：**伤寒题库 1200 题接入：运行时注入 + manifest 多题库 + 三通道热更**）：
+  - **接入方式**：`public/quiz/`（`manifest.js` + `quiz-core.js` v1.3.0 + `data/sb-1200.js`）经 `sync-all` 分发五端；入口由 `index.html` **尾部追加脚本**注入（顶部【题库】+ 移动端设置二级入口），`<body>` 与 `.interface-lock` 基线零改动。两处权威源（`public/index.html`、`db-offline/desktop/index.html`）的注入注释必须**同句**，否则 `diff-cross-version` 严格跨版本哈希把整对判红（本次即踩到：功能代码相同、仅注释不同 → desk Tier C 红；已统一文案修掉，**没有用更新基线掩盖**）。
+  - **多题库约定**：引擎完全 **manifest 驱动**（`listBanks()` 只读 `window.QUIZ_MANIFEST`，不扫描目录，引擎零硬编码）；加题库 = 源 JSON 走 `tools/build-quiz-data.cjs` 产出 `data/<bankId>.js` + manifest 一条登记。**`id` 必须小写 ASCII（letters/digits/hyphen），`file` 必须 `data/<ASCII>.js`**；`_headers` 的 `/quiz/data/*` 规则已覆盖新库，无需改缓存头。
+  - **数据纪律（四方一致）**：`manifest.version` = 数据 URL 的 `?v=` = manifest 内 `sha256` = 实测文件哈希（LF 归一化后），且 `tools/quiz-version-baseline.json` 随发版更新；数据变更必须 bump version 并跑 `node tools/check-quiz-data.cjs --update-baseline`，否则门禁 FAIL（版本回退与“数据变了但版本没变”都阻断）。
+  - **清洗规则**（`build-quiz-data.cjs`）：题干去“数字.”前缀、选项去“A.”前缀；`ansIndex` 只存 0–3；正确项按种子随机重排到 A–D **每档各 300**（重排后逐题自证答案文本不变）；解析中“选X/答案X/X项/选项X/(X)”严格命中按重排映射安全改写，仅当独立字母**全部**指向原正确答案才整体改写，其余进挂起清单人工确认（不猜）。
+  - **热更**：`generate-desktop-hotupdate.cjs` 的 cloud/local 与 `generate-app-hotupdate.cjs` 均已加入 quiz 三件套；签发 **2026.11.02-1**（cloud 23/50、local 22/50、app 18/50，约 3.2–3.3 MiB；客户端 current+previous 各占一份）。**50 文件上限是验签硬门**（`hot-update-core.cjs` 中 `files.length > 50` 即验签失败）；余量 cloud 27 / local 28 / app 32。**继续加库的分包时机**：文件数 >45 或题库数据 >2 MB 时改为“引擎/manifest 热更、数据按需独立拉取”，否则每加一库都撑大整包。
+  - **门禁补强**：`check-quiz-data.cjs` 已接入 `hotupdate-stage.ps1` 的 Check 前置（非 0 直接中止 Sign，且不写盘不占序号），并成为 `.githooks/pre-push` **第 ⑲ 道门**（秒级只读，失败仅拦 push，由 18→19 道）。桌面 `shared/hot-update-core.cjs` 路径校验新增**前导 `/` 拒绝**，与 Java `safeName` 的 `startsWith("/")` 对齐；合法子路径（`quiz/data/x.js`）逐字节不受影响。
+  - **siteadmin 决策**：管理台不需要题库入口，**不移植**；`site-admin/index.html` grep 确认零 quiz 代码，仅重冻结该对 `diff-cross-version` 基线（其他 5 对基线零改动）。
+  - **生效分层**：云桌面 / 离线桌面 / 离线 APP 走热更（`2026.11.02-1`）；**云端 APP 无 HotUpdateManager、鸿蒙 rawfile 无热更机制，必须重打包**；网页端随 push 部署。未验证项：asar/APK/HAP 内是否含题库、真机冒烟、旧装机（versionCode < 288）兼容。
+
 
 

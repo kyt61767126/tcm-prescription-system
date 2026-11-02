@@ -56,7 +56,10 @@ const CHANNELS = {
             'stock-core.js', 'analytics-core.js', 'security-guard.js',
             'electron/video-recorder.js',
             'voice-input.js', 'vendor/pinyin-pro.min.js',
-            'xlsx.full.min.js'
+            'xlsx.full.min.js',
+            // ★ 2026-11-02 P5：题库三件套（index.html 尾部 script 引用 manifest/quiz-core；
+            //   quiz-core 按 manifest.file 懒加载 data/sb-1200.js —— 缺任一即入口白屏/做题 404）
+            'quiz/manifest.js', 'quiz/quiz-core.js', 'quiz/data/sb-1200.js'
         ],
         // ★★★ 2026-09-24 【P0 事故防呆】cloud 通道 index.html 绝不能取 public/ 的网页默认身份
         //   （public/index.html = EDITION personal / 惠康中医-本地 / APP_MODE auto）。
@@ -92,7 +95,9 @@ const CHANNELS = {
             'stock-core.js', 'analytics-core.js', 'security-guard.js',
             'electron/video-recorder.js',
             'voice-input.js', 'vendor/pinyin-pro.min.js',
-            'vendor/xlsx.full.min.js'
+            'vendor/xlsx.full.min.js',
+            // ★ 2026-11-02 P5：题库三件套（同上，index.html 直接引用 + 数据懒加载）
+            'quiz/manifest.js', 'quiz/quiz-core.js', 'quiz/data/sb-1200.js'
         ],
         identityAsserts: [
             { re: /^\s*window\.EDITION\s*=\s*'personal'\s*;/m, label: "独立声明 window.EDITION = 'personal'" },

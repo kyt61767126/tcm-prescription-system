@@ -164,6 +164,13 @@ if exist "%CLOUD_DIR%\cloud_desktop\config.json" (
 ) else (
     echo [WARN] cloud_desktop\config.json not found
 )
+REM 2026-11-02 Add: sync quiz data directory (offline shell fallback of cloud APP)
+if exist "%CLOUD_DIR%\cloud_desktop\quiz" (
+    xcopy /E /I /Y "%CLOUD_DIR%\cloud_desktop\quiz" "%ASSETS_PUBLIC%\quiz" >nul
+    echo [OK] quiz synced to assets
+) else (
+    echo [WARN] cloud_desktop\quiz not found
+)
 echo.
 
 echo [3/10] Sync APP version code + increment versionCode...

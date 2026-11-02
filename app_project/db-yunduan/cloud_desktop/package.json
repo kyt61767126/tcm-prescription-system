@@ -35,6 +35,7 @@
             "electron/**/*",
             "index.html",
             "config.json",
+            "quiz/**/*",
             "xlsx.full.min.js",
             "package.json",
             "**/node_modules/better-sqlite3/**/*",

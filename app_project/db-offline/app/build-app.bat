@@ -132,6 +132,11 @@ for %%m in (%MODULES%) do (
  if errorlevel 1 ( echo [] %%m ) else ( echo [OK] %%m )
  ) else ( echo [SKIP] %%m )
 )
+echo [4.5/5] Sync quiz data directory...
+if exist "..\desktop\quiz" (
+    xcopy /E /I /Y "..\desktop\quiz" "%ANDROID_PUBLIC%\quiz" >nul
+    if errorlevel 1 ( echo [ERROR] quiz sync failed ) else ( echo [OK] quiz synced )
+) else ( echo [SKIP] quiz not found )
 echo [5/5] Verify video-recorder-inject.js...
 if exist "%ANDROID_ASSETS%\video-recorder-inject.js" (
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] video-recorder-inject.js already exists in assets'"

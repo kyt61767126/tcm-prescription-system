@@ -11709,6 +11709,106 @@ window.addEventListener('load', function () {
     try { setInterval(function(){ __finalEnforce__(); }, 5*60*1000); } catch(_) {}
 })();
 </script>
+<!-- ★ 2026-11-02 题库（多题库地基 P2）：注册表 + 通用引擎；题库数据按需懒加载，不阻塞首屏 -->
+<script src="quiz/manifest.js"></script>
+<script src="quiz/quiz-core.js"></script>
+<script>
+(function () {
+    'use strict';
+    var TAB_ID = '__quizTopTab';
+    var SET_ID = '__quizSettingsEntry';
+
+    // 角色判定只认 permission.js / AuthCore（收费员隐藏，其余全角色可见）
+    function isCashier() {
+        try {
+            if (typeof currentUser !== 'undefined' && currentUser) {
+                if (window.AuthCore && typeof AuthCore.isCashier === 'function') return !!AuthCore.isCashier(currentUser);
+                return String(currentUser.role || '') === 'cashier';
+            }
+        } catch (e) {}
+        try {
+            var u = JSON.parse(localStorage.getItem('auth:currentUser') || localStorage.getItem('currentUser') || 'null');
+            if (u && u.role) return String(u.role) === 'cashier';
+        } catch (e) {}
+        return false;
+    }
+
+    function openQuiz() {
+        try {
+            if (!window.QuizCore || typeof QuizCore.open !== 'function') {
+                alert('题库模块未加载完成，请稍后重试');
+                return;
+            }
+            QuizCore.open();
+        } catch (e) {
+            alert('题库打开失败：' + (e && e.message ? e.message : e));
+        }
+    }
+
+    // 运行时注入入口（不改 HTML 结构，界面锁基线零变更）
+    function ensureEntry() {
+        if (!window.QuizCore) return;
+        var hidden = isCashier();
+
+        var tabs = document.querySelector('.top-tabs');
+        var tab = document.getElementById(TAB_ID);
+        if (tabs && !tab) {
+            tab = document.createElement('div');
+            tab.id = TAB_ID;
+            tab.className = 'tab-item';
+            tab.textContent = '【题库】';
+            tab.onclick = openQuiz;
+            var anchor = null;
+            for (var i = 0; i < tabs.children.length; i++) {
+                var c = tabs.children[i];
+                if (c.className && c.className.indexOf('tab-item') >= 0 && c.textContent.indexOf('系统帮助') >= 0) {
+                    anchor = c;
+                    break;
+                }
+            }
+            if (anchor) tabs.insertBefore(tab, anchor); else tabs.appendChild(tab);
+        }
+        if (tab) tab.style.display = hidden ? 'none' : '';
+
+        // 移动端底部导航不新增项：入口放进「设置」二级菜单
+        var modal = document.getElementById('settingsModal');
+        var entry = document.getElementById(SET_ID);
+        if (modal && !entry) {
+            var body = modal.querySelector('.modal-body');
+            if (body) {
+                entry = document.createElement('div');
+                entry.id = SET_ID;
+                entry.style.cssText = 'margin-top:12px;padding-top:12px;border-top:1px solid #808080;';
+                var cap = document.createElement('div');
+                cap.style.cssText = 'font-size:12px;color:#555;margin-bottom:6px;';
+                cap.textContent = '学习';
+                entry.appendChild(cap);
+                var b = document.createElement('button');
+                b.type = 'button';
+                b.className = 'action-btn';
+                b.style.cssText = 'width:100%;';
+                b.textContent = '📚 题库练习';
+                b.onclick = function () {
+                    try { if (typeof closeModal === 'function') closeModal('settingsModal'); } catch (e) {}
+                    openQuiz();
+                };
+                entry.appendChild(b);
+                body.appendChild(entry);
+            }
+        }
+        if (entry) entry.style.display = hidden ? 'none' : '';
+    }
+
+    window.openQuizModule = openQuiz;
+    function boot() {
+        ensureEntry();
+        // 登录/切号会改变当前角色；2s 轮询让入口随角色自动显隐
+        try { setInterval(ensureEntry, 2000); } catch (e) {}
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+    else boot();
+})();
+</script>
 </body></html>
 
 
