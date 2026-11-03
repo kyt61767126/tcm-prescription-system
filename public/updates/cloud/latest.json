@@ -1,9 +1,9 @@
 {
-    "version": "1.2.286",
-    "releaseDate": "2026-11-01",
-    "releaseNotes": "✨ 新增:\n  - feat(print): App 内置热敏打印直出（锁 A5 / WiFi 9100 / 蓝牙 SPP / 自动切纸）\n  - feat(rx): 移动端处方笺预览改 A5 整页等比缩放（打印版式不动）\n🐛 修复:\n  - fix(rx): 手机/APP 处方笺补齐中药末行斜线（与桌面同版式）\n  - fix(release): 全流程结束提示改用真实发布状态，消除「验证通过后又提示未上传」矛盾\n📋 其他:\n  - build: 一键打包副作用自动收纳\n  - docs(handoff): P12 内置打印基线 commit e1ae0db1\n  - docs(history): 历史文档基线同步至 2026.11.01-2 热更\n  - docs(rx): 补齐 P10 处方笺 A5 预览的验收清单",
-    "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.01-1146/huikang-cloud-setup-1.2.286.exe",
-    "portableUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.01-1146/huikang-cloud-1.2.286.exe",
+    "version": "1.2.287",
+    "releaseDate": "2026-11-03",
+    "releaseNotes": "✨ 新增:\n  - feat(quiz): 手机端顶部栏新增题库入口（云端追加/离线替换保存，收费员回退保存），重签三通道热包 2026.11.02-3\n  - feat(quiz): 上线本能论题库（426 题 v1.0.1）并重签三通道热包 2026.11.02-2\n  - feat(quiz): 接入伤寒题库并纳入三通道热更（P0–P5）\n  - feat(print): App 内置热敏打印直出（锁 A5 / WiFi 9100 / 蓝牙 SPP / 自动切纸）\n  - feat(rx): 移动端处方笺预览改 A5 整页等比缩放（打印版式不动）\n🐛 修复:\n  - fix(gate): 根治 EOL 伪改动误拦打包（ps1 统一 LF + 落定门忽略零内容差异）\n  - fix(rx): 手机/APP 处方笺补齐中药末行斜线（与桌面同版式）\n  - fix(release): 全流程结束提示改用真实发布状态，消除「验证通过后又提示未上传」矛盾\n📋 其他:\n  - release: 重签热包 2026.11.03-1，appVersion 对齐新整包\n  - release: 五端整包重打并锁定新版本号（题库入口进入内置包）\n  - docs(knowledge): 沉淀 EOL 伪改动误拦发布的根因与双重根治\n  - docs(handoff): P12 内置打印已发布 v2026.11.01-1146（vc349/343，仅剩真机验收）\n  - build: 一键打包副作用自动收纳\n  - docs(handoff): P12 内置打印基线 commit e1ae0db1\n  - docs(history): 历史文档基线同步至 2026.11.01-2 热更\n  - docs(rx): 补齐 P10 处方笺 A5 预览的验收清单",
+    "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.03-1051/huikang-cloud-setup-1.2.287.exe",
+    "portableUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.03-1051/huikang-cloud-1.2.287.exe",
     "forceUpdate": false,
     "minVersion": "1.0.0",
     "rolloutPercentage": 100
