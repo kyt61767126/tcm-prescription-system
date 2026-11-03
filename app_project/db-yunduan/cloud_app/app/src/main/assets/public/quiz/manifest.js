@@ -48,17 +48,19 @@ window.QUIZ_MANIFEST = [
         enabled: true,
         order: 90
     },
-    // 说白伤寒论正式库（2026-11-03 由 docx 转录稿全量挖掘，剔除复核可疑题后定稿 65）
-    // 题型：定义/方剂/判断/短答；引文均为完整句，答案 ≤20 字且落在词边界
+    // 说白伤寒论正式库（2026-11-03 由 docx 转录稿全量挖掘 95 题，救回 24 条被复核剔除题 + 新增 20 条
+    // 原文可解析方剂/定义题，定稿 109；定义+方剂占比 45.9%）
+    // 题型：定义 23 / 方剂 27 / 判断 24 / 短答 35；引文均为完整句，答案 ≤20 字且落在词边界
+    // 2026-11-03 已启用：替换线上旧版伤寒库，旧库数据与登记均已下线
     {
-        id: 'sb-shanghan-65',
-        name: '说白伤寒论·全量65',
+        id: 'sb-shanghan-109',
+        name: '说白伤寒论·优化109',
         category: '伤寒',
-        count: 65,
-        file: 'data/sb-shanghan-65.js?v=1.0.0',
-        global: 'QUIZ_BANK_SB_SHANGHAN_65',
+        count: 109,
+        file: 'data/sb-shanghan-109.js?v=1.0.0',
+        global: 'QUIZ_BANK_SB_SHANGHAN_109',
         version: '1.0.0',
-        sha256: '1eea5ec985f30005ff6bbd11bd7fb291f5149b0e770586372b199d8057d8fde3',
+        sha256: 'b04a8e4aada10ca456d851fdca34c1b05556ff976e4777aa875c97e14a8cfe9b',
         enabled: true,
         order: 92
     },

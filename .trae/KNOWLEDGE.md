@@ -2758,6 +2758,17 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
 * **分发/热更**：`copy-consistency` 110/110、`sync-all` 30 文件全在；三通道重签 **cloud 26 / local 25 / app-local 21 文件**，`hotVersion` 分别 `2026.11.03-3`、`2026.11.03-3`、`2026.11.03-2`（app-local appVersion 固定 1.0.0）；`bx-50n.js` 三通道热包哈希与源码逐字节一致（`f135ad8c…`），`verify-hotupdate` exit 0。
 * **遗留**：整包未含新库（需下次打包才随包分发）；真机未验；方剂独立库（方案 C）待用户排期。
 
+## 81. 说白伤寒论题库「sb-shanghan-109」替换上线（2026-11-03，热包 2026.11.03-4 / app-local 2026.11.03-3）
+
+* **结论**：上轮从 95 题删到 65 题的 30 条可疑题，本轮**救回 24 条、放弃 6 条**，另新增 20 条干净方剂/定义题，定稿 **109 题**并直接替换线上 `sb-shanghan-65`（旧库数据/配置/登记/基线全部下线）；整包 exe/APK/HAP 未重打，仅热更生效。
+* **题库口径**：定义 23 / 方剂 27 / 判断 24 / 短答 35；定义+方剂 **50/109 = 45.87%**（达到 ≥45%）；答案 A28/B27/C27/D27；id `sb-shanghan-109:0001–0109` 连续；数据 55,557 B / sha256 `b04a8e4aada10ca456d851fdca34c1b05556ff976e4777aa875c97e14a8cfe9b`。
+* **30 条处置**：救回 24（干扰项字面化换同范畴同粒度 **18 条 / 61 token**；引文截断或答案含判断词修复 **6 条**），放弃 6（轶事 2、口语承接/弱上下文 1、课堂感慨长句 1、组成加减排除或重复 2）；救回后 5 条按最终引文重判题型。处置逐条写入配置 `recoveryLog`（before/after 引文、答案、选项、`replacedDistractorTokens`），可复现。
+* **新机制（生成器）**：`build-quiz-from-text.cjs --mine` 新增 `pins`（人工 pin 题：quote/type/answer/opts/stem/note/sourceId），逐条校验引文完整、答案 ≤20 字/词边界/引文内唯一、四选项唯一且无包含关系/字母引用/不出现在引文内，合并时不受 quota/typeMax 限制；`recoveryLog` 仅作账目，二者需与 `onlyQuotes`/`carryOptions`/`exclude` 同步维护，否则重建会 `exit(1)`。
+* **旧库下线**：public 与五端 `quiz/data/sb-shanghan-65.js` 已删，6 份 manifest 无旧库登记（仅历史注释已改为「旧版伤寒库」），三通道 `version.json.files` 只有 `quiz/data/sb-shanghan-109.js`、无旧文件名；旧 URL 404 属正常。
+* **分发/热更**：`copy-consistency --fix` 110/110、`sync-all` 全绿（VerifyOnly 0 失败，无 orphan）；三通道重签 **cloud 26 / local 25 / app-local 21 文件**，`hotVersion` `2026.11.03-4` / `2026.11.03-4` / `2026.11.03-3`；新库与 manifest 哈希三通道逐字节一致，`verify-hotupdate` exit 0。
+* **门禁**：`check-quiz-data` PASS 0 告警（`sb-1200` 1 条提示）；`hotupdate-stage -Mode Check` 三通道最新；`check-interface` 6 OK、`check-cv-hashes` 15/15、`verify-packaging` 0 失败、`diff-cross-version` 全绿、`pre-build-check` 两端全绿；pre-push 十九道全绿。
+* **遗留**：整包未含 109（新装包需下次打包才随包分发）；真机与联网热更下载链路未验；校审 HTML 有 9 条「同句含其他方剂」advisory，非硬规则违规，留人工复核。
+
 
 
 

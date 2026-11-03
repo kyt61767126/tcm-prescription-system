@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-03T09:04:37.566Z",
+  "updatedAt": "2026-11-03T09:55:53.600Z",
   "banks": {
     "sb-1200": {
       "version": "1.0.0",
@@ -9,9 +9,9 @@
       "version": "1.0.1",
       "sha256": "0e28b97b9c7fdbff3d13c17a7caf042249590acc24fd0f2380c59e4273c5dab9"
     },
-    "sb-shanghan-65": {
+    "sb-shanghan-109": {
       "version": "1.0.0",
-      "sha256": "1eea5ec985f30005ff6bbd11bd7fb291f5149b0e770586372b199d8057d8fde3"
+      "sha256": "b04a8e4aada10ca456d851fdca34c1b05556ff976e4777aa875c97e14a8cfe9b"
     },
     "bx-50n": {
       "version": "1.0.0",

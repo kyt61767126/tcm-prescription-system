@@ -1001,6 +1001,68 @@ function runMineMode() {
         }
     }
 
+    // ------------------------------------------------------------------
+    // 人工 pin 题（救回/新增）：显式 quote/answer/opts，过与硬规矩同口径的校验
+    //   · 不受 onlyQuotes / quota / typeMax 限制，合并后与自动选题统一排序
+    //   · 引文、答案、选项、解析逐条自检，任一违规即整批拒绝落盘
+    // ------------------------------------------------------------------
+    const pinDefs = Array.isArray(cfg.pins) ? cfg.pins : [];
+    const pinCandidates = [];
+    const pinErrors = [];
+    pinDefs.forEach((p, idx) => {
+        const tag = 'pin#' + (idx + 1) + (p.sourceId ? '(' + p.sourceId + ')' : '');
+        const quote = String(p.quote == null ? '' : p.quote).trim();
+        const answer = String(p.answer == null ? '' : p.answer).trim();
+        const opts = Array.isArray(p.opts) ? p.opts.map((x) => String(x).trim()) : [];
+        if (!quote || !answer || opts.length !== 3) { pinErrors.push(tag + ' 缺 quote/answer/opts(3)'); return; }
+        if (!mineQuoteComplete(quote)) { pinErrors.push(tag + ' 引文非完整句'); return; }
+        if (!mineAnswerLenOk(answer)) { pinErrors.push(tag + ' 答案长度非法'); return; }
+        if (!mineAnswerBounded(quote, answer)) { pinErrors.push(tag + ' 答案未落词边界'); return; }
+        if (mineCount(norm(quote), norm(answer)) !== 1) { pinErrors.push(tag + ' 答案在引文出现次数≠1'); return; }
+        const allOpts = [answer, ...opts];
+        if (new Set(allOpts.map(norm)).size !== 4) { pinErrors.push(tag + ' 四选项不唯一'); return; }
+        allOpts.forEach((o) => {
+            if (STRICT_LETTER_RE.test(o)) pinErrors.push(tag + ' 选项含字母引用');
+            if (/^(?:以上都|以上均|都不对|都不正确|全部正确|全部错误)/.test(o)) pinErrors.push(tag + ' 无效选项');
+        });
+        opts.forEach((o) => {
+            if (norm(quote).indexOf(norm(o)) >= 0) pinErrors.push(tag + ' 干扰项出现在引文内');
+            if (norm(o).indexOf(norm(answer)) >= 0 || norm(answer).indexOf(norm(o)) >= 0) pinErrors.push(tag + ' 选项包含关系');
+        });
+        const stem = String(p.stem || '');
+        if (!stem || !stem.includes('____')) { pinErrors.push(tag + ' 题干缺失/无填空位'); return; }
+        if (STRICT_LETTER_RE.test(stem)) pinErrors.push(tag + ' 题干含字母引用');
+        const note = String(p.note || '');
+        if (!note || !norm(note).includes(norm(answer))) { pinErrors.push(tag + ' 解析缺失/未含正确项'); return; }
+        if (STRICT_LETTER_RE.test(note)) pinErrors.push(tag + ' 解析含字母引用');
+        let start = 0, end = lines.length - 1;
+        if (p.chapter) {
+            const ch = chapters.find((c) => norm(c.title).indexOf(norm(p.chapter)) === 0);
+            if (!ch) { pinErrors.push(tag + ' 章节不存在'); return; }
+            start = ch.start; end = ch.end;
+        }
+        const ql = locate(lines, start, end, quote);
+        if (!ql) { pinErrors.push(tag + ' 引文未在原文命中'); return; }
+        const ch = mineChapterAt(ql.line - 1, chapters);
+        if (!ch) { pinErrors.push(tag + ' 无法定位章节'); return; }
+        const sec = ch.sections.find((s) => ql.line - 1 >= s.start && ql.line - 1 <= s.end) || null;
+        pinCandidates.push({
+            type: p.type || 'shortanswer',
+            answer, quote, stem, note, score: 1000, pin: true, opts,
+            chapter: mineChapterShort(ch),
+            section: sec ? sec.title : '',
+            line: ql.line,
+            regionStart: ch.start,
+            regionEnd: ch.end,
+            chIndex: chapters.indexOf(ch)
+        });
+    });
+    if (pinErrors.length) {
+        console.error('[FAIL] pin 题校验失败 ' + pinErrors.length + ' 条：');
+        pinErrors.slice(0, 20).forEach((e) => console.error('  - ' + e));
+        process.exit(1);
+    }
+
     // 干扰项池（用全部候选，扩大可选范围）
     const pools = { formula: [], number: [], definition: [], shortanswer: [], judge: [], contrast: [], term: [] };
     const poolSeen = {};
@@ -1114,6 +1176,19 @@ function runMineMode() {
         });
     });
 
+    // pin 题不受配额限制：合并进定稿集，统一按篇章+行号排序；同引文重复直接拒绝
+    pinCandidates.forEach((c) => {
+        if (selected.some((x) => norm(x.quote) === norm(c.quote))) {
+            pinErrors.push('pin 与已选题引文重复: ' + c.quote.slice(0, 20));
+        }
+        selected.push(c);
+    });
+    if (pinErrors.length) {
+        console.error('[FAIL] pin 题合并失败：');
+        pinErrors.slice(0, 20).forEach((e) => console.error('  - ' + e));
+        process.exit(1);
+    }
+
     // 按篇章顺序 + 原文行号排序
     selected.sort((a, b) => a.chIndex - b.chIndex || a.line - b.line);
 
@@ -1146,9 +1221,11 @@ function runMineMode() {
         const carryOk = Array.isArray(carry) && carry.length === 4 &&
             new Set(carry.map(norm)).size === 4 &&
             carry.some((o) => norm(o) === norm(c.answer));
-        const ds = carryOk
-            ? carry.filter((o) => norm(o) !== norm(c.answer))
-            : shuffle(pickDistractors(c, true), mulberry32(seed + c.line));
+        const ds = c.pin
+            ? c.opts.slice()
+            : (carryOk
+                ? carry.filter((o) => norm(o) !== norm(c.answer))
+                : shuffle(pickDistractors(c, true), mulberry32(seed + c.line)));
         let k = 0;
         for (let p = 0; p < 4; p++) if (p !== positions[i]) opts[p] = ds[k++];
         const locLabel = c.chapter + (c.section ? '·' + c.section : noSectionLabel);
@@ -1171,7 +1248,8 @@ function runMineMode() {
             _originLine: c.line,
             _quote: c.quote,
             _anchor: c.anchor,
-            _answer: c.answer
+            _answer: c.answer,
+            _pin: !!c.pin
         });
     });
 
@@ -1310,7 +1388,8 @@ function runMineMode() {
             chapters: chapters.length, paragraphs: paragraphs.length, selectedParagraphs: questions.length,
             targetCount: target, seed, sha256, bytes, quota, answerBoundedDropped,
             answerDenied, optionRepairedTokens, optionRepairQuestions,
-            excludeCount: (cfg.exclude || []).length, excludeHitCount: excludeHit.size
+            excludeCount: (cfg.exclude || []).length, excludeHitCount: excludeHit.size,
+            pinCount: pinCandidates.length
         },
         stats: {
             count: questions.length,
@@ -1326,7 +1405,8 @@ function runMineMode() {
             chapter: q._chapter, section: q._section,
             line: q._line, endLine: q._endLine, originLine: q._originLine,
             quote: q._quote, anchor: q._anchor, answer: q._answer,
-            stem: q.q, opts: q.opts, ansIndex: q.ansIndex, explain: q.explain
+            stem: q.q, opts: q.opts, ansIndex: q.ansIndex, explain: q.explain,
+            pin: !!q._pin
         })),
         suspicious,
         skipped,
