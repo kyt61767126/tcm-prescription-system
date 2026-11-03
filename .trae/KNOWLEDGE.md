@@ -2731,5 +2731,12 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
   - **真机受阻待办**：本轮 `adb devices` 与 `hdc list targets` 均为空 → Android/鸿蒙真机安装、蓝牙/WiFi 出纸、联网热更下载链路**均未验证**，不得以模拟结论替代。
   - **鸿蒙 rawfile 生成副本**：`copy-assets.cjs` 会把云端 assets 同步到 rawfile（本轮带入 `deleteBackupFile` 桥与 A5 打印边距），属生成链正常收敛；不要当“无关配置漂移”回退。
 
+* ★ 2026-11-03（P14：**热包 appVersion 与新整包对齐重签 `2026.11.03-1`**）：
+  - **触发**：整包重打后 `package.json`/APK 版本变化，热更生成器从 `package.json` 读取 `appVersion`，因此只需重签即可把清单的 appVersion 对齐，无需改内容。
+  - **Check 判据**：`hotupdate-stage.ps1 -Mode Check` 输出「内容一致，appVersion X → Y（元数据落后，建议重签）」即表示**只有元数据落后**，可直接签发；若同时报内容差异，必须先查真因，不得盲签。
+  - **签发结果**：三通道中 `desktop/cloud`（24 文件，appVersion 1.2.287）与 `desktop/local`（23 文件，appVersion 1.0.310）签为 **`2026.11.03-1`**；`app-local` 的 appVersion 口径固定为 `1.0.0`（与整包版本无关），Check 判为最新，保持 `2026.11.02-3` / 19 文件**不重签**。`git status public/hot-update` 仅 2 个 `version.json` 变化，`index.html`、quiz 数据零漂移。
+  - **验证**：`verify-hotupdate.cjs` 三通道 PASS（签名 + 清单 + 逐文件哈希）；线上三通道 hotVersion/appVersion/文件数与本地一致，首页哈希未变。
+  - **仍未验证**：真机安装、联网热更下载链路（无设备/未发布）。
+
 
 
