@@ -61,5 +61,18 @@ window.QUIZ_MANIFEST = [
         sha256: '1eea5ec985f30005ff6bbd11bd7fb291f5149b0e770586372b199d8057d8fde3',
         enabled: true,
         order: 92
+    },
+    // 本能系统论试点库（2026-11-03 由 docx 转录稿试挖 50 题；剔除方剂题型，校审通过后启用）
+    {
+        id: 'bx-50n',
+        name: '本能系统论·试点50（无方剂）',
+        category: '本能',
+        count: 50,
+        file: 'data/bx-50n.js?v=1.0.0',
+        global: 'QUIZ_BANK_BX_50N',
+        version: '1.0.0',
+        sha256: 'f135ad8c595a51a0d7fbe54c663ded0c305f3be2798e45abb8c0f9e982760a7d',
+        enabled: true,
+        order: 93
     }
 ];

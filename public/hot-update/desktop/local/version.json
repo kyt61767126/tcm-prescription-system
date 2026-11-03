@@ -1,7 +1,7 @@
 {
   "format": 1,
   "channel": "local",
-  "hotVersion": "2026.11.03-2",
+  "hotVersion": "2026.11.03-3",
   "appVersion": "1.0.310",
   "files": [
     {
@@ -101,8 +101,8 @@
     },
     {
       "name": "quiz/manifest.js",
-      "sha256": "0541001a2d3777b677883c080d2be5d9d6bc26e3bcfdeb8994287153bc1b298d",
-      "size": 3039
+      "sha256": "8483e49eaf04eae1d4f5f686a17163a7e70d70faf5447c718b4c03aff3112cbd",
+      "size": 3531
     },
     {
       "name": "quiz/quiz-core.js",
@@ -123,8 +123,13 @@
       "name": "quiz/data/sb-shanghan-65.js",
       "sha256": "1eea5ec985f30005ff6bbd11bd7fb291f5149b0e770586372b199d8057d8fde3",
       "size": 33396
+    },
+    {
+      "name": "quiz/data/bx-50n.js",
+      "sha256": "f135ad8c595a51a0d7fbe54c663ded0c305f3be2798e45abb8c0f9e982760a7d",
+      "size": 28364
     }
   ],
-  "signedAt": 1793691852944,
-  "signature": "bDvzlftspnkEsZaVv+V+FKHrh+Lny9+c8c4NUN8i64HLrSVs5EOAgW0BkMMFWAOWnTTIcO3WR2hvLogd1BLEAA=="
+  "signedAt": 1793697277209,
+  "signature": "PuYORSePIP0qmNf+2vn4fN4j/u7yDK0TipOvAfCNtDjnjuvXq5+Zkm9Unzp5u3QB+S3XjgadeBHmhjm2RmtwCQ=="
 }

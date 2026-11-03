@@ -16,6 +16,8 @@
 
 ## 当前基线（2026-11-03 更新）
 
+- **2026-11-03 P16 本能系统论试点题库 `bx-50n` 上线（热包 `2026.11.03-3` / app-local `2026.11.03-2`，提交见 `git log -1`）**：50 题（定义 29 / 判断 8 / 短答 13，**无方剂**；答案 A13/B13/C12/D12），覆盖 30/47 讲，`enabled:true`、manifest order 93、数据 28,364 B / sha256 `f135ad8c…60a7d`；`copy-consistency` 110/110、`sync-all` 30 文件在，三通道重签 cloud 26 / local 25 / app-local 21 文件，`verify-hotupdate` exit 0；旧 `bx-50` 数据/配置/登记已不存在。**整包 exe/APK/HAP 未重打**，新装包内暂无该库。方剂独立库（方案 C）见 OPEN P17。
+
 - **2026-11-03 P15 说白伤寒论题库 `sb-shanghan-65` 上线（热包 `2026.11.03-2` / app-local `2026.11.03-1`，提交见 `git log -1`）**：从 docx 转录稿挖掘并人工剔除 30 条可疑题后定稿 **65 题**（短答 34 / 判断 21 / 定义 5 / 方剂 5，答案 A17/B16/C16/D16），`enabled:true`、manifest order 92、数据 33,396 B / sha256 `1eea5ec9…fde3`；旧 `sb-shanghan-95` 数据/配置/登记/基线已删；`sb-1200`、`by-426` 未动。三通道重签 **cloud 25 / local 24 / app-local 20** 文件，`verify-hotupdate` exit 0；**整包 exe/APK/HAP 未重打**，新装包内暂无该库。题型偏重短答/判断 → OPEN P15 后续优化。
 
 - **2026-11-03 P14 热包 appVersion 对齐重签（`2026.11.03-1`，提交见 `git log -1`）**：`desktop/cloud` 24 文件 / appVersion **1.2.287**、`desktop/local` 23 文件 / appVersion **1.0.310** 均签为 `2026.11.03-1`；`app-local` 口径固定 appVersion 1.0.0，沿用 `2026.11.02-3` / 19 文件未重签。仅 2 份 `version.json` 变化，`index.html` 与 quiz 数据零漂移；`verify-hotupdate` 三通道 PASS。仍挂起：真机安装、联网热更下载链路、整包产物 Release 分发。
@@ -94,6 +96,14 @@
 - **目标**：在不降忠实原文门槛的前提下，提高定义/方剂题型占比；可评估补充「方名 ↔ 主治」配对题与术语定义题。
 - **约束**：生成器配置 `exclude`/`onlyQuotes`/`carryOptions` 必须同步维护；改题库后重跑 `check-quiz-data`、忠实原文校验、校审 HTML 与功能回归；按实际题量重命名 bankId，并同步 manifest/基线/热更清单。
 - **勿做**：不得为凑数降低 `minScore` 或放宽引文完整句/答案≤20 字/词边界门槛。
+
+### P17 ｜优先级：中｜方案 C：方剂独立库（`bankId` 如 `bx-formula`，含覆盖计划）
+- **状态**：OPEN（用户本轮明确拍板「记为后续待办，本轮不做」）
+- **背景**：`bx-50n` 试点按用户决定剔除方剂题型（定义 29 / 判断 8 / 短答 13，无方剂），方剂知识在本能系统论题库中零覆盖；定义类候选已用满 29 条，回填本库会造成 id 语义漂移。
+- **目标**：新开独立方剂库（`bankId` 如 `bx-formula`，纯 ASCII、永不复用），覆盖方名、组成、主治、加减、煎服法等；建议先出「方剂知识点清单 + 讲次/行号映射 + 配额（方剂题占比目标）」再挖掘，避免为凑数放宽门槛。
+- **约束**：①不得回填 `bx-50n`；②沿用 `build-quiz-from-text.cjs` 全部门槛（引文完整句、答案 ≤20 字、词边界、禁字母引用、逐字命中、`fidelity_bad=0`）；③新增库需同步 manifest/基线/热更清单（`generate-desktop-hotupdate.cjs` 两处 + `generate-app-hotupdate.cjs`）与五端分发；④与 OPEN P15（`sb-shanghan-65` 题型优化）中的方剂题取向保持一致，避免两个库重复出题。
+- **验收**：`check-quiz-data` PASS 0 告警；校审 HTML 无可疑；无头功能回归 `pageerror=0`；三通道热包 `verify-hotupdate` exit 0。
+- **勿做**：本轮（2026-11-03 上线批）不实现、不签包、不改 `bx-50n`。
 
 ### P12 ｜优先级：高｜App 内置热敏打印（锁 A5 / WiFi 9100 / 蓝牙 SPP / 自动切纸）——✅ 已发布，仅剩真机验收（2026-11-01）
 - **状态**：IN-PROGRESS（**已发布**：`v2026.11.01-1146`，云端 APP **vc349** / 离线 APP **vc343**，官网四端版本一致、9/9 URL 验证通过；**仅剩真机验收**）

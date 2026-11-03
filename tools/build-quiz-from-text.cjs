@@ -910,6 +910,14 @@ function runMineMode() {
     const onlyHit = new Set();
     // 选项沿用（可选）：定稿库保留原选项文字，只按新 ansIndex 重排位置
     const carryOptions = new Map((cfg.carryOptions || []).map((x) => [norm(x.quote), x.opts]));
+    // 答案质量拒绝规则（可选）：命中即整条候选不进入选项池（配置驱动，可复现）
+    const answerDeny = (cfg.answerDenyPatterns || []).map((s) => new RegExp(s));
+    // 干扰项质量规则（可选）：同范畴/同粒度/不荒谬，不达标就从池中换一条，换不到才丢题
+    const optionDeny = (cfg.optionDenyPatterns || []).map((s) => new RegExp(s));
+    const dRules = Object.assign({ requireDomain: false, maxLenDelta: 8, minLen: 1 }, cfg.distractorRules || {});
+    let answerDenied = 0;
+    let optionRepairedTokens = 0;
+    let optionRepairQuestions = 0;
 
     // 每段保留最多 3 个候选，便于首选选项池不足时回退
     const allCandidates = [];
@@ -925,6 +933,7 @@ function runMineMode() {
             if (onlyQuotes.size && !onlyQuotes.has(qk)) return;
             if (onlyQuotes.size) onlyHit.add(qk);
             if (!mineAnswerBounded(c.quote, c.answer)) { answerBoundedDropped++; return; }
+            if (answerDeny.some((re) => re.test(norm(c.answer)))) { answerDenied++; return; }
             if (!disableTypes.has(c.type)) cands.push(c);
         };
         // 方名清单项（如「（2）葛根汤：桂枝、芍药…」）：整行首句作为引文，只考方剂名
@@ -1007,8 +1016,24 @@ function runMineMode() {
         if (pools[k] && !poolSeen[k].has(key)) { poolSeen[k].add(key); pools[k].push(c.answer); }
     });
 
+    // 干扰项质量判定：同范畴（中医术语/书名）、同粒度（长度接近）、不荒谬（黑名单/口语碎片）
+    function optionOk(x, c) {
+        const n = norm(x);
+        if (!n) return false;
+        if (n.length < (dRules.minLen || 1)) return false;
+        if (optionDeny.some((re) => re.test(n))) return false;
+        if (Math.abs(n.length - norm(c.answer).length) > dRules.maxLenDelta) return false;
+        if (dRules.requireDomain && c.type !== 'number' && c.type !== 'formula') {
+            if (!MINE_TCM_TERM.test(n) && !/《[^》]+》/.test(n)) return false;
+        }
+        if (Array.isArray(dRules.requireDomainTypes) && dRules.requireDomainTypes.indexOf(c.type) >= 0) {
+            if (!MINE_TCM_TERM.test(n) && !/《[^》]+》/.test(n)) return false;
+        }
+        return true;
+    }
+
     const rnd = mulberry32(seed >>> 0);
-    function pickDistractors(c) {
+    function pickDistractors(c, track) {
         const quoteNorm = norm(c.quote);
         const answerNorm = norm(c.answer);
         let list;
@@ -1023,6 +1048,12 @@ function runMineMode() {
             const close = list.filter((x) => Math.abs(x.length - c.answer.length) <= maxDiff);
             if (close.length >= 3) list = close;
         }
+        let repaired = 0;
+        list = list.filter((x) => {
+            if (optionOk(x, c)) return true;
+            repaired++;
+            return false;
+        });
         list = shuffle(list, rnd);
         const out = [];
         list.forEach((x) => {
@@ -1032,13 +1063,22 @@ function runMineMode() {
             if (c.type !== 'number' && (n.indexOf(answerNorm) >= 0 || answerNorm.indexOf(n) >= 0)) return;
             if (out.length < 3) out.push(x);
         });
-        return out.length === 3 ? out : null;
+        if (out.length !== 3) return null;
+        if (track) {
+            optionRepairedTokens += repaired;
+            if (repaired > 0) optionRepairQuestions++;
+        }
+        return out;
     }
 
     // 按篇配额选取；先保证每个小节至少 1 题
     const chapterOrder = chapters.map((c) => mineChapterShort(c));
     const selected = [];
     const maxPerParagraph = cfg.maxPerParagraph || 1;
+    const typeMax = Object.assign({}, cfg.typeMax || {});
+    const typeCount = {};
+    const answerMax = Object.assign({}, cfg.answerMax || {});
+    const answerCount = {};
     const quotaCapped = [];
     chapterOrder.forEach((ch) => {
         const q = typeof quota[ch] === 'number' ? quota[ch] : 999;
@@ -1057,8 +1097,13 @@ function runMineMode() {
             if (pickedSet.has(c)) return;
             if (c.score < (cfg.minScore || 0)) return;
             if ((lineUse.get(c.line) || 0) >= maxPerParagraph) return;
+            if (typeof typeMax[c.type] === 'number' && (typeCount[c.type] || 0) >= typeMax[c.type]) return;
+            const an = norm(c.answer);
+            if (typeof answerMax[an] === 'number' && (answerCount[an] || 0) >= answerMax[an]) return;
             if (!pickDistractors(c)) return;
             picked.push(c); pickedSet.add(c);
+            typeCount[c.type] = (typeCount[c.type] || 0) + 1;
+            answerCount[an] = (answerCount[an] || 0) + 1;
             lineUse.set(c.line, (lineUse.get(c.line) || 0) + 1);
         };
         sectionFirst.forEach((c) => pick(c));
@@ -1103,7 +1148,7 @@ function runMineMode() {
             carry.some((o) => norm(o) === norm(c.answer));
         const ds = carryOk
             ? carry.filter((o) => norm(o) !== norm(c.answer))
-            : shuffle(pickDistractors(c), mulberry32(seed + c.line));
+            : shuffle(pickDistractors(c, true), mulberry32(seed + c.line));
         let k = 0;
         for (let p = 0; p < 4; p++) if (p !== positions[i]) opts[p] = ds[k++];
         const locLabel = c.chapter + (c.section ? '·' + c.section : noSectionLabel);
@@ -1264,6 +1309,7 @@ function runMineMode() {
             encoding: decoded.encoding, sourceBytes: decoded.bytes, sourceLines: lines.length,
             chapters: chapters.length, paragraphs: paragraphs.length, selectedParagraphs: questions.length,
             targetCount: target, seed, sha256, bytes, quota, answerBoundedDropped,
+            answerDenied, optionRepairedTokens, optionRepairQuestions,
             excludeCount: (cfg.exclude || []).length, excludeHitCount: excludeHit.size
         },
         stats: {
@@ -1272,7 +1318,8 @@ function runMineMode() {
             answerDist: { A: ansDist[0], B: ansDist[1], C: ansDist[2], D: ansDist[3] },
             avgStemLength: avgQ, avgExplainLength: avgExplain,
             suspiciousCount, skippedCount, quotaCappedCount: quotaCapped.length,
-            rules, fidelityBad: 0
+            rules, fidelityBad: 0,
+            answerDenied, optionRepairedTokens, optionRepairQuestions
         },
         questions: questions.map((q) => ({
             no: q.no, id: q.id, type: q._type,
@@ -1298,6 +1345,7 @@ function runMineMode() {
     console.log('ANSWERS  = A' + ansDist[0] + ' B' + ansDist[1] + ' C' + ansDist[2] + ' D' + ansDist[3]);
     console.log('LENGTHS  = avgQ=' + avgQ + '  avgExplain=' + avgExplain);
     console.log('RULES    = ' + Object.keys(rules).map((k) => k + ':' + rules[k]).join('  ') + '  fidelity_bad=0');
+    console.log('REPAIR   = answerDenied=' + answerDenied + '  optionRepairedTokens=' + optionRepairedTokens + '  optionRepairQuestions=' + optionRepairQuestions);
     console.log('SUSPICIOUS=' + suspicious.length + '  ' + Object.keys(suspiciousCount).map((k) => k + ':' + suspiciousCount[k]).join('  '));
     console.log('SKIPPED  = ' + skipped.length + '  ' + Object.keys(skippedCount).map((k) => k + ':' + skippedCount[k]).join('  ') + '  quotaCapped=' + quotaCapped.length);
     console.log('AUDIT    = ' + auditPath);

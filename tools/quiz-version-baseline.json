@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-03T07:32:28.741Z",
+  "updatedAt": "2026-11-03T09:04:37.566Z",
   "banks": {
     "sb-1200": {
       "version": "1.0.0",
@@ -12,6 +12,10 @@
     "sb-shanghan-65": {
       "version": "1.0.0",
       "sha256": "1eea5ec985f30005ff6bbd11bd7fb291f5149b0e770586372b199d8057d8fde3"
+    },
+    "bx-50n": {
+      "version": "1.0.0",
+      "sha256": "f135ad8c595a51a0d7fbe54c663ded0c305f3be2798e45abb8c0f9e982760a7d"
     }
   }
 }

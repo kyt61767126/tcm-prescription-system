@@ -101,7 +101,8 @@ const FILES = [
     'quiz/quiz-core.js',
     'quiz/data/sb-1200.js',
     'quiz/data/by-426.js',
-    'quiz/data/sb-shanghan-65.js'
+    'quiz/data/sb-shanghan-65.js',
+    'quiz/data/bx-50n.js'
 ];
 
 // 绝不进清单（工具级硬断言：清单与排除表若有交集立即报错，防手滑加回）
