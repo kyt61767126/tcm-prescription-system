@@ -2720,5 +2720,16 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
   - **热更 2026.11.02-3**：cloud 24 / local 23 / app-local 19 文件，**仅 `index.html` 变化**；quiz 数据未动，`by-426` v1.0.1（199,848 B）与 `sb-1200` 仍在清单且哈希一致（三通道相同）。
   - **生效分层**：网页 push 即达；云桌面/离线桌面/离线 APP 走热更；云端 APP 无热更、鸿蒙 rawfile 需重打包。**本轮未重打整包**（exe/APK/HAP 未动）。未验证：asar/APK/HAP 内是否含新版 index、真机冒烟、旧装机（versionCode < 288）兼容。
 
+* ★ 2026-11-03（P13：**整包重打 + 解包抽查 + 本机冒烟**）：
+  - **五端范围与唯一入口**：云桌面 `app_project/db-yunduan/cloud_desktop`、离线桌面 `app_project/db-offline/desktop`（均 `tools/one-click-pack.ps1 -AutoMode 1d/2d`）；云端 APP `db-yunduan/cloud_app`、离线 APP `db-offline/app`（`-AutoMode 1a/2a`）；鸿蒙 `app_project_harmony/huikang-cloud`（`hvigor assembleHap` + `hap-sign-tool sign-app -mode localSign`，SDK=`DevEco Studio/sdk`）。**不要逐端手敲打包命令**，走 AutoMode 以复用 build-skip、门禁、签名与烟测链路。
+  - **构建前必查**：`pre-build-check.js` 两桌面端、`sync-all -VerifyOnly`、`check-interface`、`copy-consistency`、`check-cv-hashes`；并确认五端源目录均有 `quiz/manifest.js`、`quiz-core.js`、`data/sb-1200.js`、`data/by-426.js` 与新 `index.html`。
+  - **解包抽查方法（不能只看源目录）**：桌面用 `@electron/asar` 的 `extractAll()` 解包 `resources/app.asar` 后逐文件 SHA-256；APK/HAP 是 zip，用 `System.IO.Compression.ZipFile` 直接读 `assets/public/**` 与 `resources/rawfile/**` 条目哈希；同时断言 `index.html` 含 `__quizMobileTopBtn`。**`asar.extractFile` 对含 `data/` 的深路径在本机实测会取不到，改用 `extractAll` 更稳。**
+  - **抽查结论（2026-11-03）**：五端全部含 `index.html`(821,208 B) + `quiz/manifest.js`(2,443) + `quiz/quiz-core.js`(71,930) + `quiz/data/sb-1200.js`(397,347) + `quiz/data/by-426.js`(199,848)，哈希与源目录逐字节一致，注入逻辑全为 True。
+  - **appVersion 与热包版本号对齐规则**：热更核心（`shared/hot-update-core.cjs`）**不按 `appVersion` 拦截**，旧热包仍会应用到新整包；但为了发布一致性，重打整包后应**按新 appVersion 重签三通道热包**（本轮新版本 云端桌面 1.2.287 / 离线桌面 1.0.310；当前热包 `2026.11.02-3` 仍是 1.2.286 / 1.0.309，未重签）。
+  - **版本漂移门禁**：整包构建会自增桌面 `package.json` 与 APK `versionCode`（本轮 1.2.287 / 1.0.310 / vc350 / vc344）。**若按要求暂不提交**，第二次构建会被版本漂移门拦住 → 用既有逃生口 `ALLOW_VERSION_DRIFT=1`（只跳过提示、不改配置）；提交后自然恢复常态。`build-meta.json` 仅云桌面入库，离线桌面该文件为构建产物（git 忽略）。
+  - **冒烟口径**：①源页面 12 组合 164/164（375/768 × 云端/离线 × 医生/收费员，含按钮数量顺序/不换行/收费员回退保存/pageerror=0）；②dev Electron 实启（`BNZC_E2E=1` + marker + `BNZC_E2E_DATA` 隔离 userData，预置 `hot-update/current` 含 `manifest.json`）16/16：窗口 URL 命中 hot 入口、两库 1200/426、抽卷全对=100 全错=0、`by-426.js?v=1.0.1`、375/768 顶栏可点、pageerror/console error/404 全 0；③新包 `file://`（asar 解包目录，无 hot-update）18/18；④回退 `smoke-hot-update.cjs` 39/39（previous 恢复、坏版本拉黑、无 previous 回落 asar）。**headless Chromium 对 `file://` 的 `config.json` XHR 有 CORS 限制属浏览器行为，不是包缺陷（Electron 实测 console error=0）。**
+  - **真机受阻待办**：本轮 `adb devices` 与 `hdc list targets` 均为空 → Android/鸿蒙真机安装、蓝牙/WiFi 出纸、联网热更下载链路**均未验证**，不得以模拟结论替代。
+  - **鸿蒙 rawfile 生成副本**：`copy-assets.cjs` 会把云端 assets 同步到 rawfile（本轮带入 `deleteBackupFile` 桥与 A5 打印边距），属生成链正常收敛；不要当“无关配置漂移”回退。
+
 
 
