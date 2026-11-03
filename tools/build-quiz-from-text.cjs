@@ -882,24 +882,51 @@ function runMineMode() {
     const configPath = path.resolve(ROOT, arg('config', 'tools/quiz-source/benneng-full.json'));
     if (!fs.existsSync(configPath)) { console.error('[FAIL] 配置不存在: ' + configPath); process.exit(1); }
     const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    const sourcePath = arg('source', '');
-    if (!sourcePath) { console.error('[FAIL] 缺少 --source <原文路径>'); process.exit(1); }
-    const srcFile = path.resolve(sourcePath);
-    if (!fs.existsSync(srcFile)) { console.error('[FAIL] 原文不存在: ' + srcFile); process.exit(1); }
-
-    const decoded = decodeText(srcFile);
-    const lines = decoded.text.split(/\r?\n/);
-    const chapters = parseDoc(lines);
-    if (!chapters.length) { console.error('[FAIL] 未识别到任何「第X篇」章节'); process.exit(1); }
+    // 多源支持：config.sources[] 优先；否则沿用单一 --source
+    const cfgSources = Array.isArray(cfg.sources) && cfg.sources.length ? cfg.sources : null;
+    const srcUnits = [];
+    if (cfgSources) {
+        cfgSources.forEach((s, i) => {
+            const p = path.resolve(ROOT, String(s.path || s.file || ''));
+            if (!p || !fs.existsSync(p)) { console.error('[FAIL] 源文件不存在: ' + p); process.exit(1); }
+            const decoded = decodeText(p);
+            const lines = decoded.text.split(/\r?\n/);
+            const chapters = parseDoc(lines);
+            if (!chapters.length) { console.error('[FAIL] 未识别到任何「第X篇/讲」章节: ' + p); process.exit(1); }
+            srcUnits.push({
+                key: String(s.key || ('src' + i)), name: String(s.name || s.key || ('源' + (i + 1))),
+                doc: String(s.doc || ''), path: p, decoded, lines, chapters
+            });
+        });
+    } else {
+        const sourcePath = arg('source', '');
+        if (!sourcePath) { console.error('[FAIL] 缺少 --source <原文路径>'); process.exit(1); }
+        const srcFile = path.resolve(sourcePath);
+        if (!fs.existsSync(srcFile)) { console.error('[FAIL] 原文不存在: ' + srcFile); process.exit(1); }
+        const decoded = decodeText(srcFile);
+        const lines = decoded.text.split(/\r?\n/);
+        const chapters = parseDoc(lines);
+        if (!chapters.length) { console.error('[FAIL] 未识别到任何「第X篇/讲」章节'); process.exit(1); }
+        srcUnits.push({ key: 'main', name: String(cfg.sourceName || '原文'), doc: srcFile, path: srcFile, decoded, lines, chapters });
+    }
+    const firstSrc = srcUnits[0];
 
     const outPath = path.resolve(ROOT, arg('out', cfg.outFile || ('public/quiz/data/' + cfg.bankId + '.js')));
     const seed = parseInt(arg('seed', String(cfg.seed || 20261102)), 10);
     const target = cfg.targetCount || 600;
     const quota = cfg.quota || {};
     const skipped = [];
-    const paragraphs = mineParagraphs(lines, chapters, cfg.skipPatterns || [], skipped, cfg.denyLines || []);
+    const paragraphs = [];
+    srcUnits.forEach((u, si) => {
+        const before = skipped.length;
+        const pgs = mineParagraphs(u.lines, u.chapters, cfg.skipPatterns || [], skipped, cfg.denyLines || []);
+        pgs.forEach((p) => { p.srcIdx = si; paragraphs.push(p); });
+        for (let k = before; k < skipped.length; k++) skipped[k].source = u.name;
+    });
     const termPool = mineBuildTermPool(paragraphs);
-    const formulaNames = mineFormulaPool(decoded.text, cfg.formulaWhitelist);
+    const formulaNames = (cfg.formulaWhitelist || [])
+        .filter((f) => f && srcUnits.some((u) => u.decoded.text.indexOf(f) >= 0))
+        .sort((a, b) => b.length - a.length);
     const noSectionLabel = cfg.noSectionLabel == null ? '（篇首导论）' : String(cfg.noSectionLabel);
     const disableTypes = new Set(cfg.disableTypes || []);
     // 人工复核剔除：按引文（去空白）锁定，配置里同时留 id 与原因，保证重生成不再复现
@@ -971,6 +998,10 @@ function runMineMode() {
             c.regionStart = p.regionStart;
             c.regionEnd = p.regionEnd;
             c.chIndex = p.chIndex;
+            c.srcIdx = p.srcIdx;
+            c.source = srcUnits[p.srcIdx] ? srcUnits[p.srcIdx].name : '';
+            c.sourceKey = srcUnits[p.srcIdx] ? srcUnits[p.srcIdx].key : '';
+            if (!c.focus) c.focus = c.type === 'formula' ? '方名' : '';
             const qkey = norm(c.quote);
             if (seenQuote.has(qkey)) return;
             const key = norm(c.stem);
@@ -1035,26 +1066,40 @@ function runMineMode() {
         const note = String(p.note || '');
         if (!note || !norm(note).includes(norm(answer))) { pinErrors.push(tag + ' 解析缺失/未含正确项'); return; }
         if (STRICT_LETTER_RE.test(note)) pinErrors.push(tag + ' 解析含字母引用');
-        let start = 0, end = lines.length - 1;
-        if (p.chapter) {
-            const ch = chapters.find((c) => norm(c.title).indexOf(norm(p.chapter)) === 0);
-            if (!ch) { pinErrors.push(tag + ' 章节不存在'); return; }
-            start = ch.start; end = ch.end;
-        }
-        const ql = locate(lines, start, end, quote);
-        if (!ql) { pinErrors.push(tag + ' 引文未在原文命中'); return; }
-        const ch = mineChapterAt(ql.line - 1, chapters);
+        const wantSrc = String(p.source || '');
+        const srcPick = srcUnits.filter((u) => !wantSrc || u.key === wantSrc || u.name === wantSrc);
+        if (!srcPick.length) { pinErrors.push(tag + ' source 不存在'); return; }
+        let hit = null;
+        srcPick.forEach((u) => {
+            if (hit) return;
+            let start = 0, end = u.lines.length - 1;
+            if (p.chapter) {
+                const ch0 = u.chapters.find((c) => norm(c.title).indexOf(norm(p.chapter)) === 0);
+                if (!ch0) return;
+                start = ch0.start; end = ch0.end;
+            }
+            const ql = locate(u.lines, start, end, quote);
+            if (ql) hit = { u, ql, start, end };
+        });
+        if (!hit) { pinErrors.push(tag + ' 引文未在原文命中'); return; }
+        const u = hit.u;
+        const ql = hit.ql;
+        const ch = mineChapterAt(ql.line - 1, u.chapters);
         if (!ch) { pinErrors.push(tag + ' 无法定位章节'); return; }
         const sec = ch.sections.find((s) => ql.line - 1 >= s.start && ql.line - 1 <= s.end) || null;
         pinCandidates.push({
-            type: p.type || 'shortanswer',
+            type: p.type || 'formula',
             answer, quote, stem, note, score: 1000, pin: true, opts,
+            focus: String(p.focus || ''),
+            source: u.name,
+            sourceKey: u.key,
             chapter: mineChapterShort(ch),
             section: sec ? sec.title : '',
             line: ql.line,
             regionStart: ch.start,
             regionEnd: ch.end,
-            chIndex: chapters.indexOf(ch)
+            chIndex: u.chapters.indexOf(ch),
+            srcIdx: srcUnits.indexOf(u)
         });
     });
     if (pinErrors.length) {
@@ -1134,7 +1179,10 @@ function runMineMode() {
     }
 
     // 按篇配额选取；先保证每个小节至少 1 题
-    const chapterOrder = chapters.map((c) => mineChapterShort(c));
+    const chapterOrder = [];
+    srcUnits.forEach((u, si) => {
+        u.chapters.forEach((c) => chapterOrder.push({ srcIdx: si, chapter: mineChapterShort(c) }));
+    });
     const selected = [];
     const maxPerParagraph = cfg.maxPerParagraph || 1;
     const typeMax = Object.assign({}, cfg.typeMax || {});
@@ -1142,9 +1190,10 @@ function runMineMode() {
     const answerMax = Object.assign({}, cfg.answerMax || {});
     const answerCount = {};
     const quotaCapped = [];
-    chapterOrder.forEach((ch) => {
+    chapterOrder.forEach((ck) => {
+        const ch = ck.chapter;
         const q = typeof quota[ch] === 'number' ? quota[ch] : 999;
-        const cands = allCandidates.filter((c) => c.chapter === ch)
+        const cands = allCandidates.filter((c) => c.srcIdx === ck.srcIdx && c.chapter === ch)
             .sort((a, b) => b.score - a.score || a.line - b.line);
         const sectionFirst = new Map();
         cands.forEach((c) => {
@@ -1190,16 +1239,17 @@ function runMineMode() {
     }
 
     // 按篇章顺序 + 原文行号排序
-    selected.sort((a, b) => a.chIndex - b.chIndex || a.line - b.line);
+    selected.sort((a, b) => a.srcIdx - b.srcIdx || a.chIndex - b.chIndex || a.line - b.line);
 
     if (!selected.length) { console.error('[FAIL] 无可用候选，拒绝生成'); process.exit(1); }
 
     // 整批原文定位校验，失败即整批中止
     const locateErrors = [];
     selected.forEach((c) => {
+        const u = srcUnits[c.srcIdx];
         const anchor = c.quote.indexOf(c.answer) >= 0 ? c.answer : c.quote.slice(0, Math.min(8, c.quote.length));
-        const ql = locate(lines, c.regionStart, c.regionEnd, c.quote);
-        const al = locate(lines, c.regionStart, c.regionEnd, anchor);
+        const ql = locate(u.lines, c.regionStart, c.regionEnd, c.quote);
+        const al = locate(u.lines, c.regionStart, c.regionEnd, anchor);
         if (!ql || !al) locateErrors.push('#' + (selected.indexOf(c) + 1) + ' 行' + c.line + ' quote/anchor 未命中');
         c.sourceLine = ql ? ql.line : null;
         c.sourceEndLine = ql ? ql.endLine : null;
@@ -1229,8 +1279,9 @@ function runMineMode() {
         let k = 0;
         for (let p = 0; p < 4; p++) if (p !== positions[i]) opts[p] = ds[k++];
         const locLabel = c.chapter + (c.section ? '·' + c.section : noSectionLabel);
+        const srcLabel = srcUnits.length > 1 ? c.source + '·' : '';
         const cited = mineCiteOuter(c.quote);
-        const explain = c.note + '原文：' + cited + '（' + locLabel + '）';
+        const explain = c.note + '原文：' + cited + '（' + srcLabel + locLabel + '）';
         questions.push({
             id: cfg.bankId + ':' + String(i + 1).padStart(4, '0'),
             no: i + 1,
@@ -1240,6 +1291,10 @@ function runMineMode() {
             ansIndex: positions[i],
             explain,
             tags: [],
+            source: c.source,
+            sourceKey: c.sourceKey,
+            sourceChapter: c.chapter + (c.section ? ' ' + c.section : ''),
+            focus: c.focus || '',
             _type: c.type,
             _chapter: c.chapter,
             _section: c.section,
@@ -1249,6 +1304,7 @@ function runMineMode() {
             _quote: c.quote,
             _anchor: c.anchor,
             _answer: c.answer,
+            _srcIdx: c.srcIdx,
             _pin: !!c.pin
         });
     });
@@ -1282,7 +1338,7 @@ function runMineMode() {
         if (!/[。！]$/.test(String(q._quote).trim())) rules.quoteIncomplete++;
         if (STRICT_LETTER_RE.test(q.q) || STRICT_LETTER_RE.test(q.explain)) rules.letterRef++;
         if (!mineAnswerBounded(q._quote, q._answer)) rules.answerFragment++;
-        const lineText = lines[q._line - 1] || '';
+        const lineText = (srcUnits[q._srcIdx] ? srcUnits[q._srcIdx].lines[q._line - 1] : '') || '';
         if (norm(lineText).indexOf(norm(q._quote)) < 0) fidelityBad.push(q.id + ' 引文未逐字命中标注行 L' + q._line);
         if (norm(q._quote).indexOf(norm(q._answer)) < 0) fidelityBad.push(q.id + ' 答案不在引文内');
         if (new Set(q.opts.map(norm)).size !== 4) fidelityBad.push(q.id + ' 四选项不唯一');
@@ -1319,6 +1375,7 @@ function runMineMode() {
     });
     for (let i = 0; i < questions.length; i++) {
         for (let j = i + 1; j < questions.length; j++) {
+            if (questions[i].sourceKey !== questions[j].sourceKey) continue;
             if (questions[i]._chapter !== questions[j]._chapter) continue;
             if (mineJaccard(bigrams[i], bigrams[j]) >= 0.85) {
                 suspicious.push({ no: questions[i].no, id: questions[i].id, types: ['近似题干'], detail: '与 ' + questions[j].id + ' 高度相似' });
@@ -1339,13 +1396,14 @@ function runMineMode() {
     const metaStr = JSON.stringify(meta).slice(0, -1);
     const publicQ = questions.map((q) => ({
         id: q.id, no: q.no, part: q.part, q: q.q, opts: q.opts,
-        ansIndex: q.ansIndex, explain: q.explain, tags: []
+        ansIndex: q.ansIndex, explain: q.explain, tags: [],
+        source: q.source, sourceChapter: q.sourceChapter, focus: q.focus
     }));
     const body = ',"questions":[\n' + publicQ.map((q) => JSON.stringify(q)).join(',\n') + '\n]}';
     const header = [
         '// ============================================================================',
         '//  ' + path.basename(outPath) + ' — ' + cfg.name + '（全量挖掘，自动生成，请勿手工编辑）',
-        '//  来源: ' + cfg.sourceName + '（' + decoded.encoding + '，' + lines.length + ' 行）',
+        '//  来源: ' + srcUnits.map((u) => u.name + '（' + u.decoded.encoding + '，' + u.lines.length + ' 行）').join(' + '),
         '//  生成: node tools/build-quiz-from-text.cjs --mine（config=' + path.relative(ROOT, configPath).replace(/\\/g, '/') + ', seed=' + seed + '）',
         '//  格式: window.' + cfg.global + ' = { schema, bankId, name, category, version, questions[] }',
         '//  约定: opts 不带字母前缀；ansIndex 为 0-3；id = <bankId>:<4位序号>',
@@ -1366,10 +1424,12 @@ function runMineMode() {
 
     const sha256 = crypto.createHash('sha256').update(fs.readFileSync(outPath)).digest('hex');
     const bytes = fs.statSync(outPath).size;
-    const chapterDist = {}, typeDist = {}, ansDist = [0, 0, 0, 0];
+    const chapterDist = {}, typeDist = {}, focusDist = {}, sourceDist = {}, ansDist = [0, 0, 0, 0];
     questions.forEach((q) => {
         chapterDist[q._chapter] = (chapterDist[q._chapter] || 0) + 1;
         typeDist[q._type] = (typeDist[q._type] || 0) + 1;
+        focusDist[q.focus || '未标'] = (focusDist[q.focus || '未标'] || 0) + 1;
+        sourceDist[q.source || '未标'] = (sourceDist[q.source || '未标'] || 0) + 1;
         ansDist[q.ansIndex]++;
     });
     const avgQ = Math.round(questions.reduce((s, q) => s + q.q.length, 0) / questions.length * 10) / 10;
@@ -1380,20 +1440,25 @@ function runMineMode() {
     skipped.forEach((s) => { skippedCount[s.reason] = (skippedCount[s.reason] || 0) + 1; });
 
     const auditPath = path.resolve(ROOT, arg('audit', 'tools/_tmp/benneng-full-audit.json'));
+    const sourceNameJoined = srcUnits.map((u) => u.name).join(' + ');
     const audit = {
         meta: {
             bankId: cfg.bankId, global: cfg.global, name: cfg.name, category: cfg.category,
-            version: cfg.version, updatedAt: cfg.updatedAt, sourceName: cfg.sourceName,
-            encoding: decoded.encoding, sourceBytes: decoded.bytes, sourceLines: lines.length,
-            chapters: chapters.length, paragraphs: paragraphs.length, selectedParagraphs: questions.length,
+            version: cfg.version, updatedAt: cfg.updatedAt, sourceName: sourceNameJoined,
+            encoding: firstSrc.decoded.encoding, sourceBytes: firstSrc.decoded.bytes, sourceLines: firstSrc.lines.length,
+            chapters: firstSrc.chapters.length, paragraphs: paragraphs.length, selectedParagraphs: questions.length,
             targetCount: target, seed, sha256, bytes, quota, answerBoundedDropped,
             answerDenied, optionRepairedTokens, optionRepairQuestions,
             excludeCount: (cfg.exclude || []).length, excludeHitCount: excludeHit.size,
-            pinCount: pinCandidates.length
+            pinCount: pinCandidates.length,
+            sources: srcUnits.map((u) => ({
+                key: u.key, name: u.name, doc: u.doc, encoding: u.decoded.encoding,
+                bytes: u.decoded.bytes, lines: u.lines.length, chapters: u.chapters.length
+            }))
         },
         stats: {
             count: questions.length,
-            chapterDist, typeDist,
+            chapterDist, typeDist, sourceDist, focusDist,
             answerDist: { A: ansDist[0], B: ansDist[1], C: ansDist[2], D: ansDist[3] },
             avgStemLength: avgQ, avgExplainLength: avgExplain,
             suspiciousCount, skippedCount, quotaCappedCount: quotaCapped.length,
@@ -1402,6 +1467,7 @@ function runMineMode() {
         },
         questions: questions.map((q) => ({
             no: q.no, id: q.id, type: q._type,
+            source: q.source, sourceKey: q.sourceKey, focus: q.focus, sourceChapter: q.sourceChapter,
             chapter: q._chapter, section: q._section,
             line: q._line, endLine: q._endLine, originLine: q._originLine,
             quote: q._quote, anchor: q._anchor, answer: q._answer,
@@ -1415,11 +1481,14 @@ function runMineMode() {
     fs.mkdirSync(path.dirname(auditPath), { recursive: true });
     fs.writeFileSync(auditPath, JSON.stringify(audit, null, 1), 'utf8');
 
-    console.log('SOURCE   = ' + srcFile);
-    console.log('ENCODING = ' + decoded.encoding + '  BYTES=' + decoded.bytes + '  LINES=' + lines.length + '  CHAPTERS=' + chapters.length);
+    srcUnits.forEach((u) => {
+        console.log('SOURCE   = ' + u.name + '  ' + u.path + '  BYTES=' + u.decoded.bytes + '  LINES=' + u.lines.length + '  CHAPTERS=' + u.chapters.length);
+    });
     console.log('OUT      = ' + outPath + '  BYTES=' + bytes);
     console.log('SHA256   = ' + sha256);
     console.log('COUNT    = ' + questions.length + ' / target ' + target);
+    console.log('SOURCES  = ' + Object.keys(sourceDist).map((k) => k + ':' + sourceDist[k]).join('  '));
+    console.log('FOCUS    = ' + Object.keys(focusDist).map((k) => k + ':' + focusDist[k]).join('  '));
     console.log('CHAPTERS = ' + Object.keys(chapterDist).map((k) => k + ':' + chapterDist[k]).join('  '));
     console.log('TYPES    = ' + Object.keys(typeDist).map((k) => k + ':' + typeDist[k]).join('  '));
     console.log('ANSWERS  = A' + ansDist[0] + ' B' + ansDist[1] + ' C' + ansDist[2] + ' D' + ansDist[3]);

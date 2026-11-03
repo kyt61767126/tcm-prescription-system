@@ -2772,3 +2772,15 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
 
 
 
+
+## 82. 方剂独立库「bx-formula」上线（2026-11-03，热包 2026.11.03-5 / app-local 2026.11.03-4）
+
+* **结论**：双源全量挖掘的 `bx-formula`（41 题，纯方剂题池）已启用并签发热更；整包 exe/APK/HAP 未重打，新装包内仍无该库，只对已装客户端通过热更生效。
+* **题库口径**：考点 = 方名 13 / 主治 13 / 禁忌 5 / 鉴别 4 / 系列归属 6；来源 = 本能系统论 **35**（15 讲）/ 说白伤寒论 **6**（5 讲），数据内以 `source`/`sourceKey`/`sourceChapter`/`focus` 区分；答案 A11/B10/C10/D10；id `bx-formula:0001–0041` 连续；33,221 B / sha256 `24bcdd78d7fe0a4a6f5a4fdfe1a9d2c83f6437e74596820a4d3d63eaf4b32aa2`；manifest `enabled:true`、order 94、`?v=1.0.0`。
+* **题池边界（写进配置，不靠人工）**：`disableTypes` 关掉定义/判断/短答/术语/数字/原句/对比，只出 `formula`；不考剂量、煎服法、组成比例与加减，只考方名、主治、适应证、禁忌、同类方鉴别、方剂系列归属；原文只提方名而无实质信息不出题。
+* **放弃 22 条原因分布**：同方同考点重复 4、组成边界 3、组成/加减边界 2、引文以问句收尾 3、跨库同引文 2、剂量边界 1、煎服法边界 1、同句多方可判性弱 1、引文过长且信息密度低 1、引文过长 1、考点重复 1、同引文拆分 1、口误/残句 1。干扰项先修后删：采用 123 个、候选池拒收 3 个（均为「出现在引文内」或「与答案包含关系」）。
+* **同句多方名 9 题判定口径**：`#7/14/18/26/29/31/36/38/40`。判定规则 = 空白处必须是唯一的方名/系列名/证候条件；句中其它方名若为系统成员、并列对照或已有主治描述，则不参与填空；正确项在引文中唯一出现且不与干扰项冲突。每题判定依据写入配置 pin.note，并在校审 HTML 卡片内展示，未靠事后剔除掩盖。
+* **生成器扩展（可复现）**：`build-quiz-from-text.cjs --mine` 新增 `cfg.sources[]`（key/name/doc/path），按源独立解析段落/篇章并给候选打 `srcIdx`；输出题对象新增 `source/sourceKey/sourceChapter/focus`（`quiz-core` 忽略未知字段）。`tools/quiz-source/bx-formula.json` 为唯一权威配置（41 条 pin + `skippedUnits` 22 条处置账目 + `buildLog.distractorDetails`）。
+* **分发/热更**：6 份 manifest（public + 五端）均 `enabled:true` 且哈希一致；`copy-consistency` 110/110、`sync-all` 全绿且 quiz 目录无 orphan；三通道重签 **cloud 27 / local 26 / app-local 22 文件**，`hotVersion` `2026.11.03-5` / `2026.11.03-5` / `2026.11.03-4`；新库与 manifest 三通道逐字节一致，`verify-hotupdate` exit 0。
+* **门禁**：`check-quiz-data` PASS 0 告警；`check-interface` 6 OK / 0 CHANGED；`check-cv-hashes` 15/15；`verify-packaging` 115 OK / 0 失败；`diff-cross-version` 6 对全绿；`pre-build-check` 云端/离线两端全绿；pre-push 十九道全绿。
+* **遗留**：整包未含 `bx-formula`（新装包需下次打包才随包分发）；真机未验；联网热更下载链路待推送后线上核验。

@@ -76,5 +76,20 @@ window.QUIZ_MANIFEST = [
         sha256: 'f135ad8c595a51a0d7fbe54c663ded0c305f3be2798e45abb8c0f9e982760a7d',
         enabled: true,
         order: 93
+    },
+    // 方剂专题独立库（2026-11-03 双源全量挖掘 41 题：方名 13 / 主治 13 / 禁忌 5 / 鉴别 4 / 系列归属 6）
+    // 主源 本能系统论 35 题，补充源 说白伤寒论 6 题；只出方剂题，不考剂量/煎服法/组成比例与加减
+    // 2026-11-03 用户确认上线：enabled=true（数据/版本/哈希均不变，不 bump）
+    {
+        id: 'bx-formula',
+        name: '本能方剂·双源专题库',
+        category: '本能',
+        count: 41,
+        file: 'data/bx-formula.js?v=1.0.0',
+        global: 'QUIZ_BANK_BX_FORMULA',
+        version: '1.0.0',
+        sha256: '24bcdd78d7fe0a4a6f5a4fdfe1a9d2c83f6437e74596820a4d3d63eaf4b32aa2',
+        enabled: true,
+        order: 94
     }
 ];
