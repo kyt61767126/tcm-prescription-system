@@ -16,6 +16,8 @@
 
 ## 当前基线（2026-11-03 更新）
 
+- **2026-11-03 P15 说白伤寒论题库 `sb-shanghan-65` 上线（热包 `2026.11.03-2` / app-local `2026.11.03-1`，提交见 `git log -1`）**：从 docx 转录稿挖掘并人工剔除 30 条可疑题后定稿 **65 题**（短答 34 / 判断 21 / 定义 5 / 方剂 5，答案 A17/B16/C16/D16），`enabled:true`、manifest order 92、数据 33,396 B / sha256 `1eea5ec9…fde3`；旧 `sb-shanghan-95` 数据/配置/登记/基线已删；`sb-1200`、`by-426` 未动。三通道重签 **cloud 25 / local 24 / app-local 20** 文件，`verify-hotupdate` exit 0；**整包 exe/APK/HAP 未重打**，新装包内暂无该库。题型偏重短答/判断 → OPEN P15 后续优化。
+
 - **2026-11-03 P14 热包 appVersion 对齐重签（`2026.11.03-1`，提交见 `git log -1`）**：`desktop/cloud` 24 文件 / appVersion **1.2.287**、`desktop/local` 23 文件 / appVersion **1.0.310** 均签为 `2026.11.03-1`；`app-local` 口径固定 appVersion 1.0.0，沿用 `2026.11.02-3` / 19 文件未重签。仅 2 份 `version.json` 变化，`index.html` 与 quiz 数据零漂移；`verify-hotupdate` 三通道 PASS。仍挂起：真机安装、联网热更下载链路、整包产物 Release 分发。
 - **2026-11-03 P13 五端整包重打完成、未发布（提交见 `git log -1`）**：云端桌面 **1.2.287**、离线桌面 **1.0.310**、云端 APP **vc350**、离线 APP **vc344**、鸿蒙 HAP（versionCode 1000000 未上调，签名版 3,041,346 B）。五端解包抽查均含新 `index.html`（含 `__quizMobileTopBtn`）与 `quiz` 四件套，哈希与源一致；本机冒烟 164/164 + 16/16 + 18/18 + 39/39 全过。**未发布、未改热更清单**；当前热包仍 `2026.11.02-3`（appVersion 1.2.286 / 1.0.309），与新整包版本不一致。**待办：①按新版本重签三通道热包；②Android/鸿蒙真机安装与联网热更下载链路（无设备/未发布，受阻）；③决定是否上传 Release 分发。**
 - **2026-11-02 P7 手机端顶部栏「题库」入口上线（热包 `2026.11.02-3`，提交见 `git log -1`）**：两端均运行时注入 `#__quizMobileTopBtn`（未改静态 body，`check-interface` 6 OK、界面锁零变更）。云端在现有 **6** 个按钮末尾追加（≤768px 共 7，桌面隐藏）；离线占用「保存」位置（≤768px 仍 6，收费员自动还原「保存」不留空档）。角色判定复用题库 `isCashier()`，与桌面入口同源；底部 `mobile-nav` 6 项与 `mobile-action-bar` 未动。同步：`sync-index-app.cjs` 生成离线 APP 双副本、`sync-html.ps1` 三云端副本；`ensureMobileTopBtn` 同名不同体属有意分叉，已归档 `diff-cross-version` 的 desk/siteadmin 基线。Playwright 12 组合 164/164、`pageerror=0`；门禁 sync-all/check-interface/copy-consistency/check-cv-hashes/html-sync-check/diff-cross-version 全绿。热更三通道 **cloud 24 / local 23 / app-local 19** 文件，仅 `index.html` 变化，quiz 数据哈希不变。**未重打整包**（exe/APK/HAP 未动）。
@@ -85,6 +87,13 @@
 ---
 
 ## OPEN 遗留任务
+
+### P15 ｜优先级：低｜说白伤寒论题库题型结构优化（65 题已上线，2026-11-03）
+- **状态**：OPEN
+- **现状**：`sb-shanghan-65` 短答 34 / 判断 21 / 定义 5 / 方剂 5，方剂与定义占比偏低；判断题干扰项来自同库候选池，个别偏字面。
+- **目标**：在不降忠实原文门槛的前提下，提高定义/方剂题型占比；可评估补充「方名 ↔ 主治」配对题与术语定义题。
+- **约束**：生成器配置 `exclude`/`onlyQuotes`/`carryOptions` 必须同步维护；改题库后重跑 `check-quiz-data`、忠实原文校验、校审 HTML 与功能回归；按实际题量重命名 bankId，并同步 manifest/基线/热更清单。
+- **勿做**：不得为凑数降低 `minScore` 或放宽引文完整句/答案≤20 字/词边界门槛。
 
 ### P12 ｜优先级：高｜App 内置热敏打印（锁 A5 / WiFi 9100 / 蓝牙 SPP / 自动切纸）——✅ 已发布，仅剩真机验收（2026-11-01）
 - **状态**：IN-PROGRESS（**已发布**：`v2026.11.01-1146`，云端 APP **vc349** / 离线 APP **vc343**，官网四端版本一致、9/9 URL 验证通过；**仅剩真机验收**）

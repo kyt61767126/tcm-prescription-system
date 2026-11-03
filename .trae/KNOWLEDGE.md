@@ -2738,5 +2738,16 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
   - **验证**：`verify-hotupdate.cjs` 三通道 PASS（签名 + 清单 + 逐文件哈希）；线上三通道 hotVersion/appVersion/文件数与本地一致，首页哈希未变。
   - **仍未验证**：真机安装、联网热更下载链路（无设备/未发布）。
 
+## 79. 说白伤寒论题库「sb-shanghan-65」上线（2026-11-03，热包 2026.11.03-2 / app-local 2026.11.03-1）
+
+* **结论**：从 docx 转录稿挖掘的 `sb-shanghan-65`（65 题）已签发并推送热更；整包 exe/APK/HAP 未重打，故新装包内仍无该库，只对已装客户端通过热更生效。
+* **题库口径**：题型 = 短答 34 / 判断 21 / 定义 5 / 方剂 5；答案 A17/B16/C16/D16；id `sb-shanghan-65:0001–0065` 连续；数据 sha256 `1eea5ec9…fde3`（33396B）。
+* **可行复现**：`tools/quiz-source/sb-shanghan-65.json` 三件套——`exclude`（30 条旧 id + 原因 + 引文，重生成不复现）、`onlyQuotes`（65 条白名单，杜绝补位）、`carryOptions`（沿用原选项文字）。改题库必须保持这三项同步，否则 `build-quiz-from-text.cjs --mine` 会 `exit(1)`。
+* **硬门槛**：答案 ≤20 字、引文为完整陈述/感叹句、答案落词边界（`mineAnswerBounded`）、禁字母引用；落盘前 `fidelity_bad=0` 才写文件。
+* **登记**：manifest 单条 `enabled:true`、`?v=1.0.0`、order 92；旧 `sb-shanghan-95` 数据/配置/登记/基线条目已删；sb-1200、by-426 未动。
+* **热更**：三通道重签（cloud 25 / local 24 / app-local 20 文件），`hotVersion` 分别为 `2026.11.03-2`、`2026.11.03-2`、`2026.11.03-1`；`sb-shanghan-65.js` 已进包且哈希与源码一致。
+* **遗留**：整包未含新库（需下次打包才随包分发）；真机未验；题型偏重短答/判断，后续迭代优化。
+
+
 
 

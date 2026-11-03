@@ -49,7 +49,8 @@ const LETTERS = ['A', 'B', 'C', 'D'];
 const STRICT_LETTER_RE = /选\s*[A-D]|答案\s*[A-D]|[A-D]\s*项|选项\s*[A-D]|[（(]\s*[A-D]\s*[)）]/;
 const LOOSE_LETTER_RE = /(?<![A-Za-z])[A-D](?![A-Za-z])/;
 const OPT_PREFIX_RE = /^\s*[A-DＡ-Ｄ][\s.．、:：]/;
-const CHAPTER_RE = /^(第[一二三四五六七八九十百千]+篇)\s*(\S.*)?$/;
+// 篇章标题：兼容「第X篇」（旧源）与「第X讲」（讲座转录稿）
+const CHAPTER_RE = /^(第[一二三四五六七八九十百千]+(?:篇|讲))\s*(\S.*)?$/;
 const SECTION_RE = /^([一二三四五六七八九十]+、)\s*(.*)$/;
 
 function arg(name, fallback) {
@@ -183,6 +184,14 @@ const MINE_STOP_TERMS = new Set([
     '于是', '然后', '现在', '今天', '一种', '一切', '生命', '人体', '以上', '以下'
 ]);
 const MINE_STOP_CHARS = /[的了是在有和与就也都而并或不为以之其这那我你他它们个些种样么呢吧啊着过又很更里中上下大小多少]/;
+// ★ 硬规矩常量（须在 --mine 分支执行前初始化）
+const ANSWER_MAX = 20;
+const MINE_FRAG_START = /^[个些种样是的了着过和与而就也都还又才便]/;
+const MINE_BAD_ANSWER_START = /^(?:个|些|那么|很|不|没|太|是|这|那|你|我|他|她|它|咱|大家|你们|我们|什么|怎么|为什么|一个|一种|有些|有的|所有|每|各|其|此|还|也|就|都|又|才|便|只|有|多|少|向|往|朝|从|在|把|被|给|让|沿)/;
+const MINE_PERSONAL = /我|你|咱|大家|你们|我们|他|她/;
+const MINE_TCM_TERM = /病|证|症|汤|丸|散|方|法|气|血|阴|阳|表|里|寒|热|汗|脉|脏|腑|经络|本能|排异|调节|发热|恶寒|下利|呕|咳|喘|痛|医|药|诊|治|虚|实|补|泻|升|降|温|清/;
+const ANSWER_BEFORE_WORD = /^(?:是|为|叫|称|作|做|谓|指|的|个|些|有|又|也|都|就|还|则|即|乃|曰|这|那|和|与|及|或|在|到|用|要|给|把|让|使|被|一)$/;
+const MINE_CONV = /我|你|咱|大家|说|想|知道|觉得|看|来|去|给|让|把|被|就|也|都|还|又|才|很|太|更|最|啊|呀|吧|呢|吗|这|那|个|们|告诉|问|听|讲|充其量|意味着|实际上|基本上|差不多|好几十|几十|多少|一些|一点|一下|嘛|么|呗|啦|没|不|先生|教授|大夫|老师|考验|研究|证明|认为|相信|希望/;
 
 // ----------------------------------------------------------------------------
 // 全量挖掘模式（--mine）：不读蓝图，按原文段落单元自动出题
@@ -448,7 +457,7 @@ if (flag('json')) {
 //  全量挖掘模式实现
 // ============================================================================
 function mineChapterShort(c) {
-    const m = /^(第[一二三四五六七八九十百千]+篇)/.exec(c.title);
+    const m = /^(第[一二三四五六七八九十百千]+(?:篇|讲))/.exec(c.title);
     return m ? m[1] : c.title;
 }
 function mineChapterAt(i, chapters) {
@@ -487,6 +496,65 @@ function mineQuoteOk(quote, answer, minLen) {
     if (q.length - norm(answer).length < 5) return false;
     if (/^（?\d+）/.test(q)) return false;
     return true;
+}
+
+// 引文尾部标点清理：填空引文若以逗号/顿号/分号结尾，拼接后会出现「……方法，」的断裂感
+function mineTrimQuoteTail(s) {
+    return String(s == null ? '' : s).replace(/[，、；,;]+$/, '').trim();
+}
+
+// ★ 硬规矩 1：答案不超过 20 字（按去空白字符数计）
+function mineAnswerLenOk(s) {
+    const n = norm(s).length;
+    return n >= 2 && n <= ANSWER_MAX;
+}
+
+// ★ 硬规矩 2：引文必须是完整的陈述句/感叹句，禁止从词中截断的片段
+function mineQuoteComplete(s) {
+    const q = String(s == null ? '' : s).trim();
+    if (q.length < 10) return false;
+    if (!/[。！]$/.test(q)) return false;                      // 必须以句末标点收尾
+    if (/^[，。、；：？！]/.test(q)) return false;               // 不能以标点开头
+    if (MINE_FRAG_START.test(q)) return false;                  // 不能从词中截断
+    if (/^[“”「」]/.test(q)) return false;
+    return true;
+}
+function mineQuoteStartsFragment(s) {
+    const q = String(s == null ? '' : s).trim();
+    return /^[，。、；：？！]/.test(q) || MINE_FRAG_START.test(q);
+}
+
+// 答案质量门槛：排除口语碎片、人称代述、形容词残段，只保留可独立作答的概念/判断
+function mineAnswerQuality(ans, opts) {
+    const a = norm(ans);
+    const o = opts || {};
+    const minLen = (o && o.minLen) || 3;
+    if (!a || a.length < minLen || a.length > ANSWER_MAX) return false;
+    if (MINE_BAD_ANSWER_START.test(a)) return false;
+    if (MINE_PERSONAL.test(a)) return false;
+    if (MINE_CONV.test(a)) return false;
+    if (/[的了着过地得只都也还又就才便嘛么呗啦所被把让给在从向对和与或而并最更很太不没无非未]$/.test(a)) return false;
+    if (/^[0-9]+$/.test(a)) return false;
+    if (/^[，。、；：？！]/.test(a)) return false;
+    // 定义/短答必须是中医概念或书名；判断题允许短判断短语
+    if (!o.allowNonTcm && !MINE_TCM_TERM.test(a) && !/《[^》]+》/.test(a)) return false;
+    return true;
+}
+// ★ 硬规矩 2 的答案侧：挖空处必须是完整词/句（不能从词中间截断，如「中医复兴」只取「医复兴」）
+function mineAnswerBounded(quote, answer) {
+    const q = norm(quote);
+    const a = norm(answer);
+    if (!a || q.indexOf(a) < 0) return false;
+    const i = q.indexOf(a);
+    if (i === 0) return true;
+    const before = q.charAt(i - 1);
+    if (/[，。；：、！？""''「」《》（）()]/.test(before)) return true;
+    return ANSWER_BEFORE_WORD.test(before);
+}
+
+// 讲课人标签剥离：引文不携带「郭老：」，仍为原文行内的逐字子串
+function mineStripSpeaker(s) {
+    return String(s == null ? '' : s).replace(/^(?:郭老|学生)[：:]\s*/, '').trim();
 }
 
 // 引号内已有中文引号时改用「」，避免出现 “……“X”……” 的嵌套
@@ -565,8 +633,10 @@ function mineStemCore(stem) {
     return norm(m ? m[1] : stem);
 }
 
-function mineParagraphs(lines, chapters) {
+function mineParagraphs(lines, chapters, skipRules, skippedOut, denyLines) {
     const out = [];
+    const rules = (skipRules || []).map((r) => ({ reason: r.reason, re: new RegExp(r.pattern) }));
+    const deny = new Set((denyLines || []).map((n) => Number(n)));
     lines.forEach((raw, i) => {
         const t = raw.trim();
         if (!t || t.length < 8) return;
@@ -575,6 +645,24 @@ function mineParagraphs(lines, chapters) {
         if (/^[①-⑳]/.test(t) && t.length <= 12) return;
         const ch = mineChapterAt(i, chapters);
         if (!ch) return;
+        // 人工复核剔除（行号级 deny 清单）
+        if (deny.has(i + 1)) {
+            if (skippedOut) skippedOut.push({
+                line: i + 1, chapter: mineChapterShort(ch), section: '',
+                reason: '人工复核剔除（弱信息/歧义/轶事）'
+            });
+            return;
+        }
+        // 跳过清单（配置驱动）：命中即记录原因，不进入候选
+        for (const r of rules) {
+            if (r.re.test(t)) {
+                if (skippedOut) skippedOut.push({
+                    line: i + 1, chapter: mineChapterShort(ch), section: '',
+                    reason: r.reason
+                });
+                return;
+            }
+        }
         const sec = ch.sections.filter((s) => i >= s.start && i <= s.end).pop() || null;
         out.push({
             line: i + 1,
@@ -619,122 +707,133 @@ function mineFormulaPool(text, whitelist) {
 
 function mineSentenceCandidates(sen, p, formulaNames, termPool) {
     const out = [];
-    if (sen.length > 170) return out;
+    // ★ 整句即引文：截断片段、疑问句、超长句一律不出题（引用必须完整可回查）
+    const quote = mineStripSpeaker(String(sen == null ? '' : sen).trim());
+    if (!mineQuoteComplete(quote)) return out;
+    if (quote.length > 120) return out;
 
-    // 方剂名
+    // 方剂名（只考方名；剂量/煎服法/组成比例/加减由配置 skipPatterns 整段排除；
+    //   并要求句内有主治/证候语境，避免把方名清单当题目）
+    const ctxRe = /治|主之|证|症|病|发热|恶寒|汗出|脉/;
     for (let i = 0; i < formulaNames.length; i++) {
         const name = formulaNames[i];
-        const idx = sen.indexOf(name);
-        if (idx < 0) continue;
-        const quote = mineClauseAround(sen, idx, name.length);
-        if (!quote || quote.length > 140 || mineCount(quote, name) !== 1 || !mineQuoteOk(quote, name)) continue;
+        if (mineCount(quote, name) !== 1) continue;
+        if (!mineAnswerLenOk(name) || !ctxRe.test(quote)) continue;
         out.push({
             type: 'formula', answer: name, quote,
-            stem: '原文说：' + mineCite(quote.replace(name, '____')) + '空缺处的方剂是？',
-            note: '原文此处列出的方剂是' + name + '。',
-            score: 62 - Math.max(0, (quote.length - 70) / 12)
+            stem: '原文说：' + mineCiteOuter(quote.replace(name, '____')) + '空缺处的方剂是？',
+            note: '原文此处提到的方剂是' + name + '。',
+            score: 64 - Math.max(0, (quote.length - 70) / 12)
         });
         break;
     }
 
-    // 关键数字（★ 方剂边界：克数/毫升/斤/升等剂量单位一律不出题）
-    const DOSAGE_UNITS = new Set(['克', 'g', '毫升', '斤', '升', '枚']);
-    const numRe = /(\d+(?:\.\d+)?|[零一二三四五六七八九十百千万两]{2,})(年|次|天|月|岁|克|g|%|倍|种|项|例|度|厘米|毫米|小时|分钟|斤|升|毫升|枚)/g;
-    let nm;
-    while ((nm = numRe.exec(sen))) {
-        const token = nm[1], unit = nm[2];
-        if (DOSAGE_UNITS.has(unit)) continue;
-        if (unit === '年' && /^\d{3,4}$/.test(token) && Number(token) > 1800) continue;
-        const idx = nm.index;
-        const quote = mineClauseAround(sen, idx, nm[0].length);
-        if (!quote || quote.length > 140 || mineCount(quote, token) !== 1 || !mineQuoteOk(quote, token, 10)) continue;
-        out.push({
-            type: 'number', answer: token, unit, quote,
-            stem: '原文说：' + mineCite(quote.replace(token, '____')) + '空缺处的数值是？',
-            note: '原文给出的数值是' + token + unit + '。',
-            score: 60 - Math.max(0, (quote.length - 70) / 12)
-        });
-        break;
+    // 判断（一）：正误判断「不是……而是……」
+    const jm = /不是([^，。；]{2,16})[，]?而是([^。；]{2,18})/.exec(quote);
+    if (jm) {
+        const ans = jm[2].split(/[，,、；]/)[0].replace(/[。！].*$/, '').trim();
+        if (mineAnswerQuality(ans, { allowNonTcm: true }) && mineCount(quote, ans) === 1) {
+            out.push({
+                type: 'judge', answer: ans, quote,
+                stem: '判断：原文说：' + mineCiteOuter(quote.replace(ans, '____')) + '下列哪一项符合原文的判断？',
+                note: '原文的判断是“不是' + jm[1] + '，而是' + ans + '”。',
+                score: 60 - Math.max(0, (quote.length - 70) / 12)
+            });
+        }
     }
 
-    // 定义 / 判断
-    const dm = /(所谓|就是|便是|是指|即是|也就是|称为|叫做|是)/.exec(sen);
+    // 判断（二）：归类判断「……属于/称为/并非……」
+    const km = /([^，。；]{2,20})(?:属于|归于|归入|称为|叫做|并非)([^，。；]{2,18})/.exec(quote);
+    if (km) {
+        const ans = km[2].split(/[，,、；]/)[0].replace(/[。！].*$/, '').trim();
+        if (mineAnswerQuality(ans, { allowNonTcm: true }) && mineCount(quote, ans) === 1) {
+            out.push({
+                type: 'judge', answer: ans, quote,
+                stem: '判断：原文说：' + mineCiteOuter(quote.replace(ans, '____')) + '下列哪一项符合原文的归类判断？',
+                note: '原文的归类判断是“' + km[1] + km[0].slice(km[1].length, km[0].length - km[2].length) + ans + '”。',
+                score: 56 - Math.max(0, (quote.length - 70) / 12)
+            });
+        }
+    }
+
+    // 判断（三）：否定判断「不是/并非……」
+    if (!jm) {
+        const ng = /(?:不是|并非)([^，。；]{2,18})/.exec(quote);
+        if (ng) {
+            const ans = ng[1].split(/[，,、；]/)[0].replace(/[。！].*$/, '').trim();
+            if (mineAnswerQuality(ans, { allowNonTcm: true }) && mineCount(quote, ans) === 1) {
+                out.push({
+                    type: 'judge', answer: ans, quote,
+                    stem: '判断：原文说：' + mineCiteOuter(quote.replace(ans, '____')) + '下列哪一项是原文所否定的判断？',
+                    note: '原文否定的是“不是' + ans + '”。',
+                    score: 55 - Math.max(0, (quote.length - 70) / 12)
+                });
+            }
+        }
+    }
+
+    // 定义 / 短答：陈述句 + 判断动词
+    const dm = /(所谓|就是|便是|是指|即是|也就是|称为|叫做|是)/.exec(quote);
     if (dm) {
-        let marker = dm[0], subject = '', pred = '', qStart = dm.index, qEnd = sen.length;
+        let marker = dm[0], subject = '', pred = '', markerEnd = dm.index + marker.length;
         if (marker === '所谓') {
             const rest = dm.index + marker.length;
-            const m2 = /(就是|便是|是指|即是|也就是|称为|叫做|是)/.exec(sen.slice(rest));
+            const m2 = /(就是|便是|是指|即是|也就是|称为|叫做|是)/.exec(quote.slice(rest));
             if (m2) {
-                subject = sen.slice(rest, rest + m2.index).replace(/[，。；：]/g, '').trim();
+                subject = quote.slice(rest, rest + m2.index).replace(/[，。；：]/g, '').trim();
                 marker = m2[0];
-                pred = sen.slice(rest + m2.index + marker.length).replace(/[。！？；].*$/, '').trim();
-                qStart = dm.index;
-                qEnd = rest + m2.index + marker.length + pred.length;
+                markerEnd = rest + m2.index + marker.length;
+                pred = quote.slice(markerEnd).replace(/[。！？；].*$/, '').trim();
             } else {
                 marker = '';
             }
         } else {
-            const before = sen.slice(0, dm.index);
+            const before = quote.slice(0, dm.index);
             subject = mineStripLead(before.split(/[，。；：]/).pop().trim());
-            pred = sen.slice(dm.index + marker.length).replace(/[。！？；].*$/, '').trim();
-            qStart = dm.index - subject.length;
-            qEnd = dm.index + marker.length + pred.length;
+            pred = quote.slice(markerEnd).replace(/[。！？；].*$/, '').trim();
         }
-        if (marker && pred) {
-            subject = mineStripLead(subject).replace(/^所谓/, '').trim();
-            const badSubject = !subject || subject.length < 2 || subject.length > 24 ||
-                /[，。；：？！]/.test(subject) ||
-                /^(?:这|那|它|他|她|此|其|我们|我|你|谁|什么|怎么|为什么)/.test(subject) ||
-                /(?:如果|因为|所以|虽然|但是|可是|然而|应该|必须|可以|能够|不能)/.test(subject);
-            const badPred = !pred || pred.length < 4 || pred.length > 30 || pred.indexOf('？') >= 0 ||
-                /^(?:什么|怎么|为什么|是否)/.test(pred);
-            if (!badSubject && !badPred && qStart >= 0 && qEnd <= sen.length) {
-                const quote = sen.slice(qStart, qEnd).trim();
-                if (quote.length <= 140 && quote.indexOf(pred) >= 0 && mineQuoteOk(quote, pred)) {
-                    out.push({
-                        type: 'definition', answer: pred, quote,
-                        stem: '原文说：' + mineCite(subject + marker + '____') + '空缺处的表述是？',
-                        note: '原文以' + mineCiteLabel(pred) + '表述' + mineCiteField(subject) + '。',
-                        score: 52 - Math.max(0, (quote.length - 70) / 12)
-                    });
-                }
-            }
+        // 只取首个句读段，保证答案 ≤20 字且语义完整（引文本身仍为整句）
+        const ans = pred.split(/[，,、；]/)[0].replace(/[。！].*$/, '').trim();
+        // 判断动词后紧跟标点 = 主语被从词中截断（如「实事求」+「是，…」），整句弃用
+        if (/[，。；：、]/.test(quote.charAt(markerEnd))) marker = '';
+        subject = mineStripLead(subject).replace(/^所谓/, '').trim();
+        const badSubject = !subject || subject.length < 2 || subject.length > 12 ||
+            /[，。；：？！]/.test(subject) || /[和与或及、]/.test(subject) ||
+            /一定|必须|应该|已经|仍然|同样|就是|也是|还是/.test(subject) || MINE_CONV.test(subject) ||
+            /[的了着过地得只都也还又就才便嘛么呗啦所被把让给在从向对和与或而并最更很太]$/.test(subject) ||
+            /^(?:这|那|它|他|她|此|其|谁|什么|怎么|为什么)/.test(subject) ||
+            /(?:如果|因为|所以|虽然|但是|可是|然而|应该|必须|可以|能够|不能)/.test(subject);
+        const ansOk = mineAnswerQuality(ans) && mineCount(quote, ans) === 1;
+        if (marker && !badSubject && ansOk) {
+            const type = (marker === '是指' || marker === '即是' || marker === '也就是') ? 'shortanswer' : 'definition';
+            const tail = type === 'shortanswer' ? '该处所指的表述是什么？' : '空缺处的表述是？';
+            out.push({
+                type, answer: ans, quote,
+                stem: '原文说：' + mineCiteOuter(quote.replace(ans, '____')) + tail,
+                note: '原文指出，' + mineCiteLabel(subject) + '是指' + mineCiteLabel(ans) + '。',
+                score: (type === 'shortanswer' ? 54 : 52) + (MINE_TCM_TERM.test(ans) ? 6 : 0) - Math.max(0, (quote.length - 70) / 12)
+            });
         }
     }
 
-    // 对比（不是……而是……）
-    const cm = /不是([^，。；]{2,25})[，]?而是([^。；]{4,35})/.exec(sen);
-    if (cm && mineQuoteOk(cm[0], cm[2])) {
-        const quote = cm[0];
-        out.push({
-            type: 'contrast', answer: cm[2], quote,
-            stem: '原文说：' + mineCite(quote.replace(cm[2], '____')) + '空缺处的表述是？',
-            note: '原文以“不是' + cm[1] + '，而是' + cm[2] + '”对举。',
-            score: 50 - Math.max(0, (quote.length - 70) / 12)
-        });
-    }
-
-    // 经典引文：挖出引号内的关键表述
-    const qm = /“([^”]{6,40})”/.exec(sen);
-    if (qm) {
-        const inner = qm[1];
-        let pick = null;
+    // 短答：关键术语回忆（整句引文 + 术语挖空；仅在本句尚无其他题型时启用）
+    if (!out.length) {
         for (let i = 0; i < termPool.length; i++) {
             const t = termPool[i];
-            if (t.count > 60 || t.term.length < 3 || t.term.length > 6) continue;
-            if (inner.indexOf(t.term) < 0) continue;
-            if (mineCount(sen, t.term) !== 1) continue;
-            pick = t; break;
-        }
-        if (pick) {
-            if (mineQuoteOk(inner, pick.term)) {
-                out.push({
-                    type: 'quote', answer: pick.term, quote: inner,
-                    stem: '原文有言：' + mineCite(inner.replace(pick.term, '____')) + '空缺处的表述是？',
-                    note: '原文原句为' + mineCite(inner) + '。',
-                    score: 44 - Math.max(0, (inner.length - 40) / 6)
-                });
-            }
+            if (!t || t.count < 3 || t.count > 80) continue;
+            if (t.term.length < 2 || t.term.length > 10) continue;
+            if (!MINE_TCM_TERM.test(t.term) && !/《[^》]+》/.test(t.term)) continue;
+            if (/张方子|方子|方儿|事儿|东西|毛病/.test(t.term)) continue;
+            if (mineCount(quote, t.term) !== 1) continue;
+            if (!mineAnswerQuality(t.term, { allowNonTcm: true, minLen: 2 })) continue;
+            if (formulaNames.indexOf(t.term) >= 0) continue;
+            out.push({
+                type: 'shortanswer', answer: t.term, quote,
+                stem: '原文说：' + mineCiteOuter(quote.replace(t.term, '____')) + '空缺处的关键表述是？',
+                note: '原文此处的关键表述是“' + t.term + '”。',
+                score: 46 + Math.min(6, t.count / 5) - Math.max(0, (quote.length - 70) / 12)
+            });
+            break;
         }
     }
 
@@ -745,17 +844,18 @@ function mineTermFallback(p, termPool) {
     let best = null;
     mineSplitSentences(p.text).forEach((sen) => {
         if (sen.length < 12 || sen.length > 120) return;
+        if (/[？?]/.test(sen)) return;
         for (let i = 0; i < termPool.length; i++) {
             const t = termPool[i];
             if (t.count < 3 || t.count > 50 || t.term.length < 3 || t.term.length > 6) continue;
             if (mineCount(sen, t.term) !== 1) continue;
-            const quote = mineClauseAround(sen, sen.indexOf(t.term), t.term.length);
+            const quote = mineTrimQuoteTail(mineClauseAround(sen, sen.indexOf(t.term), t.term.length));
             if (!quote || quote.length < 10 || quote.length > 120 || mineCount(quote, t.term) !== 1 || !mineQuoteOk(quote, t.term)) continue;
             const score = 32 + t.term.length - Math.max(0, (quote.length - 70) / 12);
             if (!best || score > best.score) {
                 best = {
                     type: 'term', answer: t.term, quote,
-                    stem: '原文说：' + mineCite(quote.replace(t.term, '____')) + '空缺处的表述是？',
+                    stem: '原文说：' + mineCiteOuter(quote.replace(t.term, '____')) + '空缺处的表述是？',
                     note: '原文的关键表述为“' + t.term + '”。',
                     score
                 };
@@ -796,16 +896,37 @@ function runMineMode() {
     const seed = parseInt(arg('seed', String(cfg.seed || 20261102)), 10);
     const target = cfg.targetCount || 600;
     const quota = cfg.quota || {};
-    const paragraphs = mineParagraphs(lines, chapters);
+    const skipped = [];
+    const paragraphs = mineParagraphs(lines, chapters, cfg.skipPatterns || [], skipped, cfg.denyLines || []);
     const termPool = mineBuildTermPool(paragraphs);
     const formulaNames = mineFormulaPool(decoded.text, cfg.formulaWhitelist);
+    const noSectionLabel = cfg.noSectionLabel == null ? '（篇首导论）' : String(cfg.noSectionLabel);
+    const disableTypes = new Set(cfg.disableTypes || []);
+    // 人工复核剔除：按引文（去空白）锁定，配置里同时留 id 与原因，保证重生成不再复现
+    const excludeQuotes = new Set((cfg.exclude || []).map((x) => norm(x.quote)));
+    const excludeHit = new Set();
+    // 白名单（可选）：只允许这些引文出题，用于「剔除后不再补新题」的定稿库
+    const onlyQuotes = new Set((cfg.onlyQuotes || []).map((x) => norm(x)));
+    const onlyHit = new Set();
+    // 选项沿用（可选）：定稿库保留原选项文字，只按新 ansIndex 重排位置
+    const carryOptions = new Map((cfg.carryOptions || []).map((x) => [norm(x.quote), x.opts]));
 
     // 每段保留最多 3 个候选，便于首选选项池不足时回退
     const allCandidates = [];
-    const skipped = [];
     const seenStem = new Set();
+    const seenQuote = new Set(); // 同一句原文只出一题（不同题型不重复消费同一句）
+    let answerBoundedDropped = 0;
     paragraphs.forEach((p) => {
         const cands = [];
+        const accept = (c) => {
+            if (!c) return;
+            const qk = norm(c.quote);
+            if (excludeQuotes.has(qk)) { excludeHit.add(qk); return; }
+            if (onlyQuotes.size && !onlyQuotes.has(qk)) return;
+            if (onlyQuotes.size) onlyHit.add(qk);
+            if (!mineAnswerBounded(c.quote, c.answer)) { answerBoundedDropped++; return; }
+            if (!disableTypes.has(c.type)) cands.push(c);
+        };
         // 方名清单项（如「（2）葛根汤：桂枝、芍药…」）：整行首句作为引文，只考方剂名
         const em = /^（[0-9一二三四五六七八九十]+）([^：]{2,16})：/.exec(p.text);
         if (em) {
@@ -814,9 +935,9 @@ function runMineMode() {
                 const quote = p.text.split('。')[0].trim() + '。';
                 const stripped = quote.replace(/^（[0-9一二三四五六七八九十]+）/, '');
                 if (mineCount(quote, candName) === 1 && mineQuoteOk(stripped, candName)) {
-                    cands.push({
+                    accept({
                         type: 'formula', answer: candName, quote,
-                        stem: '原文说：' + mineCite(quote.replace(candName, '____')) + '空缺处的方剂是？',
+                        stem: '原文说：' + mineCiteOuter(quote.replace(candName, '____')) + '空缺处的方剂是？',
                         note: '原文在方剂清单中列出的方剂是' + candName + '。',
                         score: 70
                     });
@@ -824,10 +945,10 @@ function runMineMode() {
             }
         }
         mineSplitSentences(p.text).forEach((sen) => {
-            mineSentenceCandidates(sen, p, formulaNames, termPool).forEach((c) => cands.push(c));
+            mineSentenceCandidates(sen, p, formulaNames, termPool).forEach(accept);
         });
         const fallback = mineTermFallback(p, termPool);
-        if (fallback) cands.push(fallback);
+        accept(fallback);
         cands.sort((a, b) => b.score - a.score);
         if (!cands.length) {
             skipped.push({ line: p.line, chapter: p.chapter, section: p.section, reason: '未命中五类题型（无可考据单元）' });
@@ -841,8 +962,11 @@ function runMineMode() {
             c.regionStart = p.regionStart;
             c.regionEnd = p.regionEnd;
             c.chIndex = p.chIndex;
+            const qkey = norm(c.quote);
+            if (seenQuote.has(qkey)) return;
             const key = norm(c.stem);
             if (seenStem.has(key)) return;
+            seenQuote.add(qkey);
             seenStem.add(key);
             if (kept.length < 3) kept.push(c);
         });
@@ -853,8 +977,23 @@ function runMineMode() {
         kept.forEach((c) => allCandidates.push(c));
     });
 
+    // 剔除清单必须条条命中原文，否则视为配置失效（防止改稿后静默漏剔除）
+    const missingExclude = (cfg.exclude || []).filter((x) => !excludeHit.has(norm(x.quote)));
+    if (missingExclude.length) {
+        console.error('[FAIL] 剔除清单有 ' + missingExclude.length + ' 条未在原文候选命中：' +
+            missingExclude.map((x) => x.id).join(', '));
+        process.exit(1);
+    }
+    if (onlyQuotes.size) {
+        const missingOnly = Array.from(onlyQuotes).filter((q) => !onlyHit.has(q));
+        if (missingOnly.length) {
+            console.error('[FAIL] 白名单有 ' + missingOnly.length + ' 条未在原文候选命中：' + missingOnly.slice(0, 5).join(' | '));
+            process.exit(1);
+        }
+    }
+
     // 干扰项池（用全部候选，扩大可选范围）
-    const pools = { formula: [], number: [], definition: [], contrast: [], term: [] };
+    const pools = { formula: [], number: [], definition: [], shortanswer: [], judge: [], contrast: [], term: [] };
     const poolSeen = {};
     Object.keys(pools).forEach((k) => { poolSeen[k] = new Set(); });
     allCandidates.forEach((c) => {
@@ -899,7 +1038,7 @@ function runMineMode() {
     // 按篇配额选取；先保证每个小节至少 1 题
     const chapterOrder = chapters.map((c) => mineChapterShort(c));
     const selected = [];
-    const usedLines = new Set();
+    const maxPerParagraph = cfg.maxPerParagraph || 1;
     const quotaCapped = [];
     chapterOrder.forEach((ch) => {
         const q = typeof quota[ch] === 'number' ? quota[ch] : 999;
@@ -911,16 +1050,22 @@ function runMineMode() {
             if (!sectionFirst.has(k)) sectionFirst.set(k, c);
         });
         const picked = [];
+        const pickedSet = new Set();
+        const lineUse = new Map();
         const pick = (c) => {
-            if (usedLines.has(c.line) || picked.length >= q) return;
+            if (picked.length >= q) return;
+            if (pickedSet.has(c)) return;
+            if (c.score < (cfg.minScore || 0)) return;
+            if ((lineUse.get(c.line) || 0) >= maxPerParagraph) return;
             if (!pickDistractors(c)) return;
-            picked.push(c); usedLines.add(c.line);
+            picked.push(c); pickedSet.add(c);
+            lineUse.set(c.line, (lineUse.get(c.line) || 0) + 1);
         };
         sectionFirst.forEach((c) => pick(c));
         cands.forEach((c) => pick(c));
         picked.forEach((c) => selected.push(c));
         cands.forEach((c) => {
-            if (!usedLines.has(c.line)) quotaCapped.push({ line: c.line, chapter: ch, section: c.section });
+            if (!pickedSet.has(c)) quotaCapped.push({ line: c.line, chapter: ch, section: c.section });
         });
     });
 
@@ -952,10 +1097,16 @@ function runMineMode() {
     selected.forEach((c, i) => {
         const opts = new Array(4);
         opts[positions[i]] = c.answer;
-        const ds = shuffle(pickDistractors(c), mulberry32(seed + c.line));
+        const carry = carryOptions.get(norm(c.quote));
+        const carryOk = Array.isArray(carry) && carry.length === 4 &&
+            new Set(carry.map(norm)).size === 4 &&
+            carry.some((o) => norm(o) === norm(c.answer));
+        const ds = carryOk
+            ? carry.filter((o) => norm(o) !== norm(c.answer))
+            : shuffle(pickDistractors(c), mulberry32(seed + c.line));
         let k = 0;
         for (let p = 0; p < 4; p++) if (p !== positions[i]) opts[p] = ds[k++];
-        const locLabel = c.chapter + (c.section ? '·' + c.section : '（篇首导论）');
+        const locLabel = c.chapter + (c.section ? '·' + c.section : noSectionLabel);
         const cited = mineCiteOuter(c.quote);
         const explain = c.note + '原文：' + cited + '（' + locLabel + '）';
         questions.push({
@@ -972,6 +1123,7 @@ function runMineMode() {
             _section: c.section,
             _line: c.sourceLine,
             _endLine: c.sourceEndLine,
+            _originLine: c.line,
             _quote: c.quote,
             _anchor: c.anchor,
             _answer: c.answer
@@ -984,6 +1136,10 @@ function runMineMode() {
     questions.forEach((q, i) => {
         if (q.no !== i + 1) fails.push(q.id + ' no 不连续');
         if (q.opts.length !== 4 || new Set(q.opts.map(norm)).size !== 4) fails.push(q.id + ' 选项不唯一/不足 4 项');
+        const carry = carryOptions.get(norm(q._quote));
+        if (carry && JSON.stringify(carry.map(norm).sort()) !== JSON.stringify(q.opts.map(norm).sort())) {
+            fails.push(q.id + ' 沿用选项与实际选项不一致');
+        }
         if (q.ansIndex < 0 || q.ansIndex > 3) fails.push(q.id + ' ansIndex 非法');
         if (!q.explain || STRICT_LETTER_RE.test(q.explain)) fails.push(q.id + ' 解析为空或含字母引用');
         q.opts.forEach((o) => { if (invalidOpt.test(o)) fails.push(q.id + ' 含无效选项: ' + o); });
@@ -991,6 +1147,26 @@ function runMineMode() {
     if (fails.length) {
         console.error('[FAIL] 生成结果自检失败：');
         fails.slice(0, 20).forEach((f) => console.error('  - ' + f));
+        process.exit(1);
+    }
+
+    // ★ 四条硬规矩 + 忠实原文硬校验：任一违规即拒绝落盘
+    const rules = { answerOver20: 0, quoteTruncated: 0, quoteIncomplete: 0, letterRef: 0, answerFragment: 0 };
+    const fidelityBad = [];
+    questions.forEach((q) => {
+        if (norm(q._answer).length > ANSWER_MAX) rules.answerOver20++;
+        if (mineQuoteStartsFragment(q._quote)) rules.quoteTruncated++;
+        if (!/[。！]$/.test(String(q._quote).trim())) rules.quoteIncomplete++;
+        if (STRICT_LETTER_RE.test(q.q) || STRICT_LETTER_RE.test(q.explain)) rules.letterRef++;
+        if (!mineAnswerBounded(q._quote, q._answer)) rules.answerFragment++;
+        const lineText = lines[q._line - 1] || '';
+        if (norm(lineText).indexOf(norm(q._quote)) < 0) fidelityBad.push(q.id + ' 引文未逐字命中标注行 L' + q._line);
+        if (norm(q._quote).indexOf(norm(q._answer)) < 0) fidelityBad.push(q.id + ' 答案不在引文内');
+        if (new Set(q.opts.map(norm)).size !== 4) fidelityBad.push(q.id + ' 四选项不唯一');
+    });
+    if (fidelityBad.length || Object.keys(rules).some((k) => rules[k] > 0)) {
+        console.error('[FAIL] 硬规矩/忠实原文校验未通过：rules=' + JSON.stringify(rules) + ' fidelity_bad=' + fidelityBad.length);
+        fidelityBad.slice(0, 20).forEach((e) => console.error('  - ' + e));
         process.exit(1);
     }
 
@@ -1087,19 +1263,21 @@ function runMineMode() {
             version: cfg.version, updatedAt: cfg.updatedAt, sourceName: cfg.sourceName,
             encoding: decoded.encoding, sourceBytes: decoded.bytes, sourceLines: lines.length,
             chapters: chapters.length, paragraphs: paragraphs.length, selectedParagraphs: questions.length,
-            targetCount: target, seed, sha256, bytes, quota
+            targetCount: target, seed, sha256, bytes, quota, answerBoundedDropped,
+            excludeCount: (cfg.exclude || []).length, excludeHitCount: excludeHit.size
         },
         stats: {
             count: questions.length,
             chapterDist, typeDist,
             answerDist: { A: ansDist[0], B: ansDist[1], C: ansDist[2], D: ansDist[3] },
             avgStemLength: avgQ, avgExplainLength: avgExplain,
-            suspiciousCount, skippedCount, quotaCappedCount: quotaCapped.length
+            suspiciousCount, skippedCount, quotaCappedCount: quotaCapped.length,
+            rules, fidelityBad: 0
         },
         questions: questions.map((q) => ({
             no: q.no, id: q.id, type: q._type,
             chapter: q._chapter, section: q._section,
-            line: q._line, endLine: q._endLine,
+            line: q._line, endLine: q._endLine, originLine: q._originLine,
             quote: q._quote, anchor: q._anchor, answer: q._answer,
             stem: q.q, opts: q.opts, ansIndex: q.ansIndex, explain: q.explain
         })),
@@ -1119,6 +1297,7 @@ function runMineMode() {
     console.log('TYPES    = ' + Object.keys(typeDist).map((k) => k + ':' + typeDist[k]).join('  '));
     console.log('ANSWERS  = A' + ansDist[0] + ' B' + ansDist[1] + ' C' + ansDist[2] + ' D' + ansDist[3]);
     console.log('LENGTHS  = avgQ=' + avgQ + '  avgExplain=' + avgExplain);
+    console.log('RULES    = ' + Object.keys(rules).map((k) => k + ':' + rules[k]).join('  ') + '  fidelity_bad=0');
     console.log('SUSPICIOUS=' + suspicious.length + '  ' + Object.keys(suspiciousCount).map((k) => k + ':' + suspiciousCount[k]).join('  '));
     console.log('SKIPPED  = ' + skipped.length + '  ' + Object.keys(skippedCount).map((k) => k + ':' + skippedCount[k]).join('  ') + '  quotaCapped=' + quotaCapped.length);
     console.log('AUDIT    = ' + auditPath);

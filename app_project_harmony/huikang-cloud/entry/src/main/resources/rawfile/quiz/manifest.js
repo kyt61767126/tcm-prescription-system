@@ -47,5 +47,19 @@ window.QUIZ_MANIFEST = [
         sha256: '0e28b97b9c7fdbff3d13c17a7caf042249590acc24fd0f2380c59e4273c5dab9',
         enabled: true,
         order: 90
+    },
+    // 说白伤寒论正式库（2026-11-03 由 docx 转录稿全量挖掘，剔除复核可疑题后定稿 65）
+    // 题型：定义/方剂/判断/短答；引文均为完整句，答案 ≤20 字且落在词边界
+    {
+        id: 'sb-shanghan-65',
+        name: '说白伤寒论·全量65',
+        category: '伤寒',
+        count: 65,
+        file: 'data/sb-shanghan-65.js?v=1.0.0',
+        global: 'QUIZ_BANK_SB_SHANGHAN_65',
+        version: '1.0.0',
+        sha256: '1eea5ec985f30005ff6bbd11bd7fb291f5149b0e770586372b199d8057d8fde3',
+        enabled: true,
+        order: 92
     }
 ];
