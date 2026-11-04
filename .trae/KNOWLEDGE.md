@@ -2804,5 +2804,5 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
 * **结果**：云桌面 **1.2.288**、离线桌面 **1.0.311**、云 APP **versionCode 351**、离线 APP **versionCode 345**；全量 15 分 29 秒（09:07:40→09:23:09）。版本身份门禁、copy-consistency 110/110、asar 覆盖、Smoke launch、离线 E2E 全跑，无跳过。
 * **7 库随包（本轮核心目的）**：云/离线桌面 `app.asar` 与两个 APK 内均含 `quiz/manifest.js` + `quiz-core.js` + 7 个 `quiz/data/*.js`，sha256 与源码逐一一致（含 `bn-method-60`、`dyc2-51`）；此前这些新库只靠热更覆盖，整包内没有。
 * **副作用**：打包确定性修改 5 个版本文件（两 `build.gradle`、两 `package.json`、`build-meta.json`）；不加 `-AutoCommit` 时留待人工提交。
-* **鸿蒙**：`assembleHap` 36.3 s（`entry-default-unsigned.hap` 3,195,648 B）+ `hap-sign-tool localSign` 出签名包 3,238,399 B；用户决定**本轮暂停发布**，不改鸿蒙打包链、不剔除 `ets/sourceMaps.map`（DevEco 标准产物，与旧签名包同尺寸）。
+* **鸿蒙**：`assembleHap` 36.3 s（`entry-default-unsigned.hap` 3,195,648 B）+ `hap-sign-tool localSign` 出签名包 3,238,399 B；用户确认 **鸿蒙项目暂停开发（2026-11-04，无限期）**：HAP 留档构建目录、不投放、不改鸿蒙打包链、不剔除 `ets/sourceMaps.map`（DevEco 标准产物，与旧签名包同尺寸）。恢复开发须用户重新决策。
 * **下载页投放口径**：APK 走 Pages `/downloads/`（当前两份均 <25 MiB），exe 超 Pages 25 MiB 上限只挂 GitHub Release；`/downloads` 由 `public/hash-manifest.json` 驱动，版本号/文件名/链接均来自 manifest，不手改 HTML。发布 tag 沿用 `v<日期>-<HHMM>` 本地时间口径（参考 `v2026.11.03-1051`）。
