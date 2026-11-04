@@ -2797,3 +2797,12 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
 * **门禁**：`check-quiz-data` PASS 0 告警、`check-interface` 6 OK / 0 CHANGED、`check-cv-hashes` 15/15、`verify-packaging` 115 OK、`diff-cross-version` 6 对全绿、两端 `pre-build-check` 全绿、`sync-all -VerifyOnly` 与 `copy-consistency` 全绿；`hotupdate-stage -Mode Check` 签发前后均为最新。
 * **生效**：云端网页 push 即达；云桌面/离线桌面/离线 APP 联网重启拉热更；鸿蒙 rawfile 需重打包。`public/index.html`、`quiz-core.js`、`sw.js`、`_headers` 本轮零改动（入口按 manifest 渲染，新增库无需改界面）。
 * **遗留**：整包未含两新库（累计 bx-50n / sb-shanghan-109 / bx-formula / bn-method-60 / dyc2-51 五个新库均待下次打包随包分发）；真机与联网热更下载链路未验；`sb-shanghan-109` 校审 9 条 advisory 仍待人工复核。
+
+## 84. 四端整包重打（2026-11-04，7 库随包）与下载页投放
+
+* **入口**：仓库**没有** `一键构建.bat`；唯一主入口为 `一键构建发布.bat`（P7 收敛，`pack all all` 只打包不发布）。`重打包四端.bat` 是旧脚本，仅 4 端、无版本与门禁链，勿混用。
+* **结果**：云桌面 **1.2.288**、离线桌面 **1.0.311**、云 APP **versionCode 351**、离线 APP **versionCode 345**；全量 15 分 29 秒（09:07:40→09:23:09）。版本身份门禁、copy-consistency 110/110、asar 覆盖、Smoke launch、离线 E2E 全跑，无跳过。
+* **7 库随包（本轮核心目的）**：云/离线桌面 `app.asar` 与两个 APK 内均含 `quiz/manifest.js` + `quiz-core.js` + 7 个 `quiz/data/*.js`，sha256 与源码逐一一致（含 `bn-method-60`、`dyc2-51`）；此前这些新库只靠热更覆盖，整包内没有。
+* **副作用**：打包确定性修改 5 个版本文件（两 `build.gradle`、两 `package.json`、`build-meta.json`）；不加 `-AutoCommit` 时留待人工提交。
+* **鸿蒙**：`assembleHap` 36.3 s（`entry-default-unsigned.hap` 3,195,648 B）+ `hap-sign-tool localSign` 出签名包 3,238,399 B；用户决定**本轮暂停发布**，不改鸿蒙打包链、不剔除 `ets/sourceMaps.map`（DevEco 标准产物，与旧签名包同尺寸）。
+* **下载页投放口径**：APK 走 Pages `/downloads/`（当前两份均 <25 MiB），exe 超 Pages 25 MiB 上限只挂 GitHub Release；`/downloads` 由 `public/hash-manifest.json` 驱动，版本号/文件名/链接均来自 manifest，不手改 HTML。发布 tag 沿用 `v<日期>-<HHMM>` 本地时间口径（参考 `v2026.11.03-1051`）。
