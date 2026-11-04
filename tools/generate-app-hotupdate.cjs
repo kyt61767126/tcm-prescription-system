@@ -103,7 +103,10 @@ const FILES = [
     'quiz/data/by-426.js',
     'quiz/data/sb-shanghan-109.js',
     'quiz/data/bx-50n.js',
-    'quiz/data/bx-formula.js'
+    'quiz/data/bx-formula.js',
+    // ★ 2026-11-04：bn-method-60 / dyc2-51 上线（数据同批进三通道白名单）
+    'quiz/data/bn-method-60.js',
+    'quiz/data/dyc2-51.js'
 ];
 
 // 绝不进清单（工具级硬断言：清单与排除表若有交集立即报错，防手滑加回）

@@ -2784,3 +2784,16 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
 * **分发/热更**：6 份 manifest（public + 五端）均 `enabled:true` 且哈希一致；`copy-consistency` 110/110、`sync-all` 全绿且 quiz 目录无 orphan；三通道重签 **cloud 27 / local 26 / app-local 22 文件**，`hotVersion` `2026.11.03-5` / `2026.11.03-5` / `2026.11.03-4`；新库与 manifest 三通道逐字节一致，`verify-hotupdate` exit 0。
 * **门禁**：`check-quiz-data` PASS 0 告警；`check-interface` 6 OK / 0 CHANGED；`check-cv-hashes` 15/15；`verify-packaging` 115 OK / 0 失败；`diff-cross-version` 6 对全绿；`pre-build-check` 云端/离线两端全绿；pre-push 十九道全绿。
 * **遗留**：整包未含 `bx-formula`（新装包需下次打包才随包分发）；真机未验；联网热更下载链路待推送后线上核验。
+
+## 83. 本能方法论「bn-method-60」+ 大医传承二期「dyc2-51」双库上线（2026-11-04，热包三通道 `2026.11.04-1`）
+
+* **结论**：两本文档讲稿各自独立成库并一次性上线，题库由 5 个增至 **7 个**；整包 exe/APK/HAP 未重打，新装包内仍无这两库，只对已装客户端通过热更生效。
+* **`bn-method-60`（本能方法论）**：60 题 = 方剂 35 / 判断 13 / 定义 12；答案 A15/B15/C15/D15；`order 95`、`?v=1.0.0`、`28fa33ed…9095e`（数据与基线同值）。**12 道判断题全部走人工 `pins`**：机器候选的干扰项字面化（「手术刀」「石字边」类）不可用，人工按同范畴同粒度重策展，**换掉 36 个干扰项**；放弃 5 条（源行 L1735/L2020/L2126/L2832/L3138）。
+* **`dyc2-51`（大医传承二期）**：51 题 = 判断 19 / 方剂 17 / 短答 11 / 定义 4；答案 A13/B13/C13/D12；`order 96`、`?v=1.0.0`、`b08945d8…f27932`。**纠正 2 处题型误标**（L225 formula→judge、L1387 formula→definition 后重判答案与干扰项）；**同讲重复段去重 1 条**（L2399）；放弃 3 条（L2116/L3301/L880）。
+* **跨库查重**：两新库对已上线五库（sb-1200/by-426/sb-shanghan-109/bx-50n/bx-formula）**题干重复 0、同引文 0**；脚本检出的 11 组重复全部落在 `sb-1200` 库内部（历史遗留，本轮不动）。
+* **跳过分布（为什么题量不是讲稿行数）**：`bn` 共跳 2821 单元（学生提问 260 / 纯口语 239 / 个案轶事 100 / 剂量 58 / 组成 24 / 煎服法 20 / 未命中出题模式 2120）；`dyc2` 共跳 2898（学生提问 1472 / 纯口语 416 / 个案 53 / 剂量 63 / 组成 13 / 煎服法 16 / 未命中 865 + 同考点配额封顶 3）。**反凑数优先**：宁可少出，不出轶事、口语承接与信息密度过低题。
+* **分发**：6 端（public + 云桌面 + 云 APP + 离线桌面 + 离线 APP + 鸿蒙 rawfile）各 **7 个** quiz 数据文件（五库 + 两新库），无 orphan；`copy-consistency` 110 副本、`sync-all -VerifyOnly` 均 0 失败。
+* **热更**：三通道 **cloud 29 / local 28 / app-local 24 文件**（3,660 / 3,782 / 3,693 KB），`hotVersion` 三通道同为 **`2026.11.04-1`**；`version.json.files` 含两新库且登记哈希 = 本地 sha256 = manifest 值，热包内 manifest 两库 `enabled:true`，`verify-hotupdate` exit 0。
+* **门禁**：`check-quiz-data` PASS 0 告警、`check-interface` 6 OK / 0 CHANGED、`check-cv-hashes` 15/15、`verify-packaging` 115 OK、`diff-cross-version` 6 对全绿、两端 `pre-build-check` 全绿、`sync-all -VerifyOnly` 与 `copy-consistency` 全绿；`hotupdate-stage -Mode Check` 签发前后均为最新。
+* **生效**：云端网页 push 即达；云桌面/离线桌面/离线 APP 联网重启拉热更；鸿蒙 rawfile 需重打包。`public/index.html`、`quiz-core.js`、`sw.js`、`_headers` 本轮零改动（入口按 manifest 渲染，新增库无需改界面）。
+* **遗留**：整包未含两新库（累计 bx-50n / sb-shanghan-109 / bx-formula / bn-method-60 / dyc2-51 五个新库均待下次打包随包分发）；真机与联网热更下载链路未验；`sb-shanghan-109` 校审 9 条 advisory 仍待人工复核。

@@ -49,8 +49,8 @@ const LETTERS = ['A', 'B', 'C', 'D'];
 const STRICT_LETTER_RE = /选\s*[A-D]|答案\s*[A-D]|[A-D]\s*项|选项\s*[A-D]|[（(]\s*[A-D]\s*[)）]/;
 const LOOSE_LETTER_RE = /(?<![A-Za-z])[A-D](?![A-Za-z])/;
 const OPT_PREFIX_RE = /^\s*[A-DＡ-Ｄ][\s.．、:：]/;
-// 篇章标题：兼容「第X篇」（旧源）与「第X讲」（讲座转录稿）
-const CHAPTER_RE = /^(第[一二三四五六七八九十百千]+(?:篇|讲))\s*(\S.*)?$/;
+// 篇章标题：兼容「第X篇」（旧源）与「第X讲」（讲座转录稿，允许阿拉伯数字编号）
+const CHAPTER_RE = /^(第[0-9一二三四五六七八九十百千]+(?:篇|讲))\s*(\S.*)?$/;
 const SECTION_RE = /^([一二三四五六七八九十]+、)\s*(.*)$/;
 
 function arg(name, fallback) {
@@ -457,7 +457,7 @@ if (flag('json')) {
 //  全量挖掘模式实现
 // ============================================================================
 function mineChapterShort(c) {
-    const m = /^(第[一二三四五六七八九十百千]+(?:篇|讲))/.exec(c.title);
+    const m = /^(第[0-9一二三四五六七八九十百千]+(?:篇|讲))/.exec(c.title);
     return m ? m[1] : c.title;
 }
 function mineChapterAt(i, chapters) {
@@ -951,6 +951,7 @@ function runMineMode() {
     const seenStem = new Set();
     const seenQuote = new Set(); // 同一句原文只出一题（不同题型不重复消费同一句）
     let answerBoundedDropped = 0;
+    let quoteShapeDropped = 0;
     paragraphs.forEach((p) => {
         const cands = [];
         const accept = (c) => {
@@ -959,6 +960,8 @@ function runMineMode() {
             if (excludeQuotes.has(qk)) { excludeHit.add(qk); return; }
             if (onlyQuotes.size && !onlyQuotes.has(qk)) return;
             if (onlyQuotes.size) onlyHit.add(qk);
+            // ★ 硬规矩 2：引文必须是完整陈述句/感叹句（句末 。！，且不得从词中截断）
+            if (!/[。！]$/.test(String(c.quote).trim()) || mineQuoteStartsFragment(c.quote)) { quoteShapeDropped++; return; }
             if (!mineAnswerBounded(c.quote, c.answer)) { answerBoundedDropped++; return; }
             if (answerDeny.some((re) => re.test(norm(c.answer)))) { answerDenied++; return; }
             if (!disableTypes.has(c.type)) cands.push(c);
@@ -1447,8 +1450,9 @@ function runMineMode() {
             version: cfg.version, updatedAt: cfg.updatedAt, sourceName: sourceNameJoined,
             encoding: firstSrc.decoded.encoding, sourceBytes: firstSrc.decoded.bytes, sourceLines: firstSrc.lines.length,
             chapters: firstSrc.chapters.length, paragraphs: paragraphs.length, selectedParagraphs: questions.length,
-            targetCount: target, seed, sha256, bytes, quota, answerBoundedDropped,
+            targetCount: target, seed, sha256, bytes, quota,
             answerDenied, optionRepairedTokens, optionRepairQuestions,
+            answerBoundedDropped, quoteShapeDropped,
             excludeCount: (cfg.exclude || []).length, excludeHitCount: excludeHit.size,
             pinCount: pinCandidates.length,
             sources: srcUnits.map((u) => ({

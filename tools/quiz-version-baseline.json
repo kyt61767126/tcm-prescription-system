@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-03T11:39:32.631Z",
+  "updatedAt": "2026-11-03T12:55:11.392Z",
   "banks": {
     "sb-1200": {
       "version": "1.0.0",
@@ -20,6 +20,14 @@
     "bx-formula": {
       "version": "1.0.0",
       "sha256": "24bcdd78d7fe0a4a6f5a4fdfe1a9d2c83f6437e74596820a4d3d63eaf4b32aa2"
+    },
+    "bn-method-60": {
+      "version": "1.0.0",
+      "sha256": "28fa33ed07fc816bc8ca5f0907cb4ca94f73d6db2d94dc4dcffaa55b7969095e"
+    },
+    "dyc2-51": {
+      "version": "1.0.0",
+      "sha256": "b08945d8b7c47f3a99ebe910831ae40e443f172e5646b4412b9f802fdaf27932"
     }
   }
 }

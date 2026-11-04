@@ -91,5 +91,33 @@ window.QUIZ_MANIFEST = [
         sha256: '24bcdd78d7fe0a4a6f5a4fdfe1a9d2c83f6437e74596820a4d3d63eaf4b32aa2',
         enabled: true,
         order: 94
+    },
+    // 本能方法论独立库（2026-11-03 由 docx 讲稿全量挖掘，判断题干扰项同范畴重策展后 60 题）
+    // 2026-11-04 用户确认上线：enabled=true（数据/版本/哈希均不变，不 bump）
+    {
+        id: 'bn-method-60',
+        name: '本能方法论·全量60',
+        category: '本能',
+        count: 60,
+        file: 'data/bn-method-60.js?v=1.0.0',
+        global: 'QUIZ_BANK_BN_METHOD_60',
+        version: '1.0.0',
+        sha256: '28fa33ed07fc816bc8ca5f0907cb4ca94f73d6db2d94dc4dcffaa55b7969095e',
+        enabled: true,
+        order: 95
+    },
+    // 大医传承二期独立库（2026-11-03 由 docx 讲稿全量挖掘，去重后 51 题）
+    // 2026-11-04 用户确认上线：enabled=true（数据/版本/哈希均不变，不 bump）
+    {
+        id: 'dyc2-51',
+        name: '大医传承二期·全量51',
+        category: '本能',
+        count: 51,
+        file: 'data/dyc2-51.js?v=1.0.0',
+        global: 'QUIZ_BANK_DYC2_51',
+        version: '1.0.0',
+        sha256: 'b08945d8b7c47f3a99ebe910831ae40e443f172e5646b4412b9f802fdaf27932',
+        enabled: true,
+        order: 96
     }
 ];

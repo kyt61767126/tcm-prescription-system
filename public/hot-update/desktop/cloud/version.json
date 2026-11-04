@@ -1,7 +1,7 @@
 {
   "format": 1,
   "channel": "cloud",
-  "hotVersion": "2026.11.03-5",
+  "hotVersion": "2026.11.04-1",
   "appVersion": "1.2.287",
   "files": [
     {
@@ -106,8 +106,8 @@
     },
     {
       "name": "quiz/manifest.js",
-      "sha256": "30cce88204b8bc5966f5c41a10ed3a9b8a5c315701ac6cd70283ca06368a173f",
-      "size": 4485
+      "sha256": "785a6165f225de280b721d45eb95efa1ec7ace8a800619b12ebc7ee9cd60dc1f",
+      "size": 5632
     },
     {
       "name": "quiz/quiz-core.js",
@@ -138,8 +138,18 @@
       "name": "quiz/data/bx-formula.js",
       "sha256": "24bcdd78d7fe0a4a6f5a4fdfe1a9d2c83f6437e74596820a4d3d63eaf4b32aa2",
       "size": 33221
+    },
+    {
+      "name": "quiz/data/bn-method-60.js",
+      "sha256": "28fa33ed07fc816bc8ca5f0907cb4ca94f73d6db2d94dc4dcffaa55b7969095e",
+      "size": 40972
+    },
+    {
+      "name": "quiz/data/dyc2-51.js",
+      "sha256": "b08945d8b7c47f3a99ebe910831ae40e443f172e5646b4412b9f802fdaf27932",
+      "size": 32049
     }
   ],
-  "signedAt": 1793707164567,
-  "signature": "ymVT/EV9CUMn9ETMsv6YQjcWDHD0JoqPFp4Cc6/7yWQSoYl/mkSAeHjxgqnkOo6K2O6jcqBoadCY4Yqm/kwtDQ=="
+  "signedAt": 1793750082303,
+  "signature": "0uVc1pVXCBArktfhaPt8KH5obiYLzDOwVMB9dN4odfaeANs4YjlTkXHycMS9Y0GF6Oq+s+/PcG+wMqVD+u/lBw=="
 }
