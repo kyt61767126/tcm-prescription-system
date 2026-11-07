@@ -381,23 +381,36 @@ public class MainActivity extends BridgeActivity {
             return;
         }
 
-        // ★ 适配状态栏（与离线APP一致方案，解决 Android 16 edge-to-edge 强制模式）
-        // Capacitor BridgeActivity 内部管理 WebView 布局，但 Android 15+ targetSdk=36
-        // 强制 edge-to-edge，WebView 内容会延伸到状态栏下方。
-        // 通过 WindowInsetsListener + 资源 ID 双保险设置 WebView 顶部 padding。
-        final int statusBarHeight = getStatusBarHeightPx();
-        webView.setPadding(0, statusBarHeight, 0, 0);
-        ViewCompat.setOnApplyWindowInsetsListener(webView, (v, insets) -> {
-            Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
-            Insets cutout = insets.getInsets(WindowInsetsCompat.Type.displayCutout());
-            int insetTop = Math.max(systemBars.top, cutout.top);
-            int finalTop = Math.max(insetTop, statusBarHeight);
-            if (v.getPaddingTop() != finalTop) {
-                v.setPadding(0, finalTop, 0, 0);
+        // ★ 2026-11-07 安全区适配（云端 APP edge-to-edge 四边 insets）
+        // 根因：Android 15+ / targetSdk 36 强制 edge-to-edge；Capacitor 8 的 SystemBars 插件默认
+        //   insetsHandling=css，页面 <meta viewport> 声明了 viewport-fit=cover 时插件会「透传」
+        //   系统栏 insets（父容器 padding 置 0）交给页面 CSS env() 消费。而本页主壳体没有消费
+        //   env(safe-area-inset-*)，于是顶部按钮行压住状态栏、底部 .mobile-nav /
+        //   .mobile-action-bar（position:fixed;bottom:0/52px）压住系统导航栏。
+        // 修法：在 WebView 的父容器上统一消费四边 insets（含刘海 displayCutout；软键盘可见时
+        //   bottom 用 IME 高度）→ WebView 视口真实缩小 → 页面 fixed 底部条自然落在导航栏之上。
+        //   不写死像素、不是整体下推；手势导航/三键导航/刘海屏由系统 insets 自适应。
+        // 影响面：只在 APP 容器层生效——浏览器/桌面端不经过此 Activity；离线 APP 未改动。
+        // 系统版本护栏：edge-to-edge 强制只在 Android 15(API 35)+ 生效；低版本窗口本就未延伸
+        //   到系统栏，若仍加 padding 会凭空多出空白，故仅在 API>=35 注册监听（与 Capacitor 一致）。
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+            final View webViewParent = (View) webView.getParent();
+            if (webViewParent != null) {
+                ViewCompat.setOnApplyWindowInsetsListener(webViewParent, (v, insets) -> {
+                    Insets bars = insets.getInsets(
+                            WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
+                    boolean keyboardVisible = insets.isVisible(WindowInsetsCompat.Type.ime());
+                    Insets ime = insets.getInsets(WindowInsetsCompat.Type.ime());
+                    int bottom = keyboardVisible ? ime.bottom : bars.bottom;
+                    if (v.getPaddingLeft() != bars.left || v.getPaddingTop() != bars.top
+                            || v.getPaddingRight() != bars.right || v.getPaddingBottom() != bottom) {
+                        v.setPadding(bars.left, bars.top, bars.right, bottom);
+                    }
+                    return insets;
+                });
+                ViewCompat.requestApplyInsets(webViewParent);
             }
-            return insets;
-        });
-        ViewCompat.requestApplyInsets(webView);
+        }
 
         // ★★★ 2026-08-23 根治登录三屏闪（图片1→图片3）★★★
         // 真相：capacitor.config.json 已配 server.url，APP启动直接加载云端URL（不加载本地assets）。
