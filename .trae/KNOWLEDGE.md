@@ -2806,3 +2806,32 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
 * **副作用**：打包确定性修改 5 个版本文件（两 `build.gradle`、两 `package.json`、`build-meta.json`）；不加 `-AutoCommit` 时留待人工提交。
 * **鸿蒙**：`assembleHap` 36.3 s（`entry-default-unsigned.hap` 3,195,648 B）+ `hap-sign-tool localSign` 出签名包 3,238,399 B；用户确认 **鸿蒙项目暂停开发（2026-11-04，无限期）**：HAP 留档构建目录、不投放、不改鸿蒙打包链、不剔除 `ets/sourceMaps.map`（DevEco 标准产物，与旧签名包同尺寸）。恢复开发须用户重新决策。
 * **下载页投放口径**：APK 走 Pages `/downloads/`（当前两份均 <25 MiB），exe 超 Pages 25 MiB 上限只挂 GitHub Release；`/downloads` 由 `public/hash-manifest.json` 驱动，版本号/文件名/链接均来自 manifest，不手改 HTML。发布 tag 沿用 `v<日期>-<HHMM>` 本地时间口径（参考 `v2026.11.03-1051`）。
+
+## 85. 软著补正 PDF 材料制作与 WPS 排版铁律（2026-11-07，三轮独立复审沉淀）
+
+* **材料目录**：`软著补正_20261106_v2/`（含演示患者截图，沿旧例**不入 git、不主动 commit**）；终版只交两份 PDF——源程序 60 页 + 说明书 33 张纸（封面 + 页眉编号 1–32）。改动记录看该目录 `README_本次改动说明.md`（十二节时间线），上传看 `09_提交操作指引_V2.md`，自检看 `08_提交前自检清单_V2.md`。
+* **工具链**：python-docx 只有 DSH 解释器有（`C:\Users\61767\.dsh\dsh-runtimes\dsh-primary-runtime\dependencies\python\python.exe`）；pymupdf 在系统 `python`。WPS 导 PDF 用 KWPS COM（`tools/update-export.ps1`；ProgID `KWPS.Application`，ExportAsFixedFormat 格式号 17）。**坑**：`powershell.exe -File` 子进程偶发 RPC 0x800706BA（尤其 WPS 异常退出后的恢复期），在宿主 PowerShell 会话内联执行 COM 调用可绕过；先 `New-Object -ComObject KWPS.Application` 预热一次再批量导。
+* **说明书重出固定 5 步**：md2docx(field 测页) → WPS 更新 TOC 域另存 → extract_toc 提 toc.json → md2docx(manual) → WPS 导 PDF。**33 张纸是硬线**：md 每加几十字都可能把附录 F 末版权行顶到第 34 张纸（页眉"第33页/共32页"矛盾）；防线：行18等长文本不要加长、附录 F 版权行必须并在注释 `>` quote 段内且段内不留 `>` 空行。改后必跑全文页数+页眉+逐页 diff（与上一版差异页应全部可解释）。
+* **源程序 emoji 豆腐块修复（仅改 `build/make-source-docx.py`，JSON/分页/代码逐字不动）**：
+  1. 非 BMP emoji（U+1F000–1FAFF）单独成 run，rFonts 四属性（ascii/hAnsi/eastAsia/cs）全设 `Segoe UI Emoji`（Win7+ 自带，导出单色字形）；BMP 符号 ★⚠（U+2600–27BF）宋体本有字形，**不要**纳入，保持普通 run。
+  2. 带变体选择符 U+FE0F 的 emoji 被中文前后夹挤时（如「表头🗑️清空」）即使显式指定字体仍回退方框；该 run 文本首尾各加一个零宽空格 U+200B 即可（零宽不可见、不影响语义/版心/分页）。普通 emoji（🎤🔑👥）无需 ZWSP。
+  3. **Python 布尔陷阱**：状态机首字符时 `buf_is_emoji=None`，写 `em = f(ch) or (buf_is_emoji and …)` 会得到 `None` 而非 `False`，导致全部普通 run 丢失、docx 只剩空段落、WPS 导出"只有页眉的空白 PDF"。必须 `em = bool(...)`。
+  4. **改完排版脚本先验 docx 再导 PDF**：解压 docx 数 `<w:t>` 数与关键字（如 DOM_CACHE），确认正文在；导出后查 PDF 大小是否与上版同量级。
+  5. WPS 对 Segoe UI Emoji 的 ToUnicode 缺失，PDF 文本提取 emoji 为 U+FFFD（改前改后都一样）；逐行核对用归一化口径（去空白/零宽符，emoji 与 FFFD 同归一）。
+* **事实核对铁律**：附录 F 页码列只能写节选 18 段（build-source-v2.cjs SEGMENTS）里真实出现的文件；main.js、license-manager.js 等不在节选的只能写"见完整程序集"。每轮复审必须把"功能—实现文件—节选页码"三方重新对齐，不能沿用上轮文字。
+* **模板化指控敏感**：说明书全文扫 `<…>` 尖括号占位符（如 `<产品名>`），必须替换为真实实例（产品目录名取数：`desktop-fs-ipc.cjs` 的 PRODUCT_DIR_NAME = 惠康中医-本地 / 惠康中医-云端）。
+* **真实性验证基线**：用当前仓库源码重跑 `build/build-source-v2.cjs`，输出 JSON 必须与在档 `build/_build/source_v2_pages.json` 字节一致（2026-11-07 sha `8d10a1f534e1dfdd`），这是"节选 100% 源自真实代码"的最强证据；截图只允许演示账号/演示患者/演示数据，舌诊图不得露人脸。
+
+## 86. 云端 APP 安全区（Android 15/16 edge-to-edge）修复 + vc352 投放（2026-11-07）
+
+* **现象**：云端 APP（`loadUrl` 加载云端页面）顶部按钮行被状态栏压住、底部 `.mobile-nav` / `.mobile-action-bar` 被系统导航栏压住，竖屏可用行数变少；离线 APP 同源 HTML/CSS 却正常。
+* **根因（定论，非猜测）**：① `targetSdk 36` → Android 15+ 强制 edge-to-edge；② Capacitor 8 `SystemBars` 默认 `insetsHandling=css`，页面 `<meta name="viewport" content="...,viewport-fit=cover">` 时插件把系统栏 insets **透传**给页面（父容器 padding 置 0）交给 CSS `env(safe-area-inset-*)` 消费；③ 页面主壳体（`.mobile-nav` / `.mobile-action-bar` / 顶部按钮行）不消费 `env()`；④ 旧原生实现只给 **WebView 自身** `setPadding(0, 状态栏固定像素, 0, 0)` —— 改 WebView 自身 padding 不缩小其视口，对 `position:fixed;bottom` 元素完全无效，且写死像素不自适应。
+* **修法**（仅改 `app_project/db-yunduan/cloud_app/app/src/main/java/com/tcm/prescription/MainActivity.java` 的 `configureWebView()`，API≥35 护栏）：给 WebView **父容器** 注册 `ViewCompat.setOnApplyWindowInsetsListener`，消费 `systemBars() | displayCutout()` 四边 insets；`insets.isVisible(ime())` 时 bottom 用 IME 高度；值变化才 `setPadding`；末尾 `requestApplyInsets(webViewParent)`。**零 HTML/CSS 改动** → 界面锁、6 份 HTML 副本、热更白名单均未动。
+* **影响面**：浏览器/桌面端不经过该 Activity；离线 APP 未改；API<35 不注册监听（低版本窗口本就没延伸到系统栏，避免凭空多留白）。
+* **打包口径**：官方链 `app_project/db-yunduan/build-app.bat`（严格模式；工作区有未提交改动时用 `ALLOW_DIRTY_BUILD=1`）；`versionCode 351→352`，`versionName` 固定 `1.0.0`（显示 V1.0.0.352）。裸 `assembleRelease` 不可用——会跳过 JS 混淆/版本自增/签名哈希刷新。
+* **产物与取证**：`app_project/db-yunduan/惠康中医-云端.apk`，12,661,983 B，sha256 `C60E98A2…76AEA`；签名 v2/v3 通过、证书与上一版相同。dex 取证：`apkanalyzer dex code --class com.tcm.prescription.MainActivity --method 'l()V'` 含 `const/16 v5, 0x23`（=35）与 `View;->getParent()`；合成 lambda `b.v1.b(Landroid/view/View;Lb/zv;)Lb/zv;` 含 `getInsets(0x287 = systemBars|displayCutout)`、`isVisible(0x8 = ime)`、四参 `setPadding(IIII)`；mapping `lambda$configureWebView$3:400-407`。**方法名必须带完整 JVM 描述符**（`l()V`），否则 apkanalyzer 报 not found。
+* **与上一版 vc351 的包内差异**（450 条目 = 450 条目）：`AndroidManifest.xml`、`classes.dex`、`META-INF/{CERT.RSA,CERT.SF,MANIFEST.MF}`、`assets/dexopt/baseline.prof(m)`、8 个混淆白名单 JS（`tools/obfuscate.js` 每次随机化，源码 `git status` 未变）；`assets/public/index.html` sha256 与源码一致（`AA06F4D7…CA7FBC`）。
+* **投放（2026-11-07）**：Release `v2026.11.07-1816`（6 附件：2 APK + 4 exe，桌面端沿用 1.2.288 / 1.0.311 **未重打**）；APK 主源 Pages `/downloads/惠康中医-云端.apk`，备份源 Release `huikang-cloud.apk`；`public/hash-manifest.json` 四卡 = cloud.apk **V1.0.0.352** / local.apk V1.0.0.345 / 云桌面 1.2.288 / 离线桌面 1.0.311；`site-official` 双权威源镜像已同步；provenance commit `990cf500`。
+* **门禁**：pre-push 十九道全部通过（html-sync / sync-all / check-interface / copy-consistency / check-manifest-version / check-cv-hashes / check-quiz-data 等），发布前 `compliance-check` 13/13 PASS。
+* **生效方式**：已推送 `main`（Cloudflare Pages 自动部署）；客户端旧包需覆盖安装 vc352 才生效（APP 原生层修复，热更无法覆盖）。
+* **未做**：未重打离线 APP / 桌面端 / 鸿蒙 HAP；未签发新热更（页面未变）。真机验收：用户已确认真机生效（2026-11-07）。

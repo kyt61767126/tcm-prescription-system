@@ -5,83 +5,83 @@
             "versionCode": 345,
             "sha256": "4fc89ab352550d9663b0b7cafdad5b2720716b7270ed3ee14f9cf8c8e9a176e0",
             "url": "/downloads/惠康中医-本地.apk",
-            "releaseUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.04-1058/huikang-local.apk",
+            "releaseUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.07-1816/huikang-local.apk",
             "size": 3814543,
-            "updateTime": "2026-11-04T03:10:51.162Z",
+            "updateTime": "2026-11-07T10:18:28.085Z",
             "fileName": "惠康中医-本地.apk",
             "releaseFileName": "huikang-local.apk",
-            "releaseTag": "v2026.11.04-1058",
-            "releaseNotes": "✨ 新增:\n  - 新增题库「本能方法论 60 题」与「大医传承二期 51 题」并签发热更\n  - 新增方剂独立库 bx-formula：补齐本能系方剂知识并签发热更\n  - feat(quiz): 上线本能系统论试点题库 bx-50n（无方剂 50 题）并重签三通道热更\n  - feat(quiz): 上线说白伤寒论 65 题并重签三通道热更\n📋 其他:\n  - release: 四端整包重打，让 7 个题库随安装包分发\n  - 题库：用 sb-shanghan-109 替换线上 sb-shanghan-65"
+            "releaseTag": "v2026.11.07-1816",
+            "releaseNotes": "✨ 新增:\n  - 新增题库「本能方法论 60 题」与「大医传承二期 51 题」并签发热更\n  - 新增方剂独立库 bx-formula：补齐本能系方剂知识并签发热更\n  - feat(quiz): 上线本能系统论试点题库 bx-50n（无方剂 50 题）并重签三通道热更\n  - feat(quiz): 上线说白伤寒论 65 题并重签三通道热更\n🐛 修复:\n  - fix(cloud-app): 修复 Android 15/16 安全区遮挡（vc352）\n📋 其他:\n  - docs: 记录鸿蒙项目暂停开发（无限期）\n  - release: 四端整包重打，让 7 个题库随安装包分发\n  - 题库：用 sb-shanghan-109 替换线上 sb-shanghan-65"
         },
         "portable": {
             "version": "1.0.311",
             "sha256": "75864077d0b24b76f9e0cda1714ab9357a2821d603530987fb40ae7841483ebb",
-            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.04-1058/huikang-local-1.0.311.exe",
+            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.07-1816/huikang-local-1.0.311.exe",
             "size": 79192704,
-            "updateTime": "2026-11-04T03:10:51.162Z",
+            "updateTime": "2026-11-07T10:18:28.085Z",
             "fileName": "惠康中医-本地 1.0.311.exe",
             "releaseFileName": "huikang-local-1.0.311.exe",
-            "releaseTag": "v2026.11.04-1058",
-            "releaseNotes": "✨ 新增:\n  - 新增题库「本能方法论 60 题」与「大医传承二期 51 题」并签发热更\n  - 新增方剂独立库 bx-formula：补齐本能系方剂知识并签发热更\n  - feat(quiz): 上线本能系统论试点题库 bx-50n（无方剂 50 题）并重签三通道热更\n  - feat(quiz): 上线说白伤寒论 65 题并重签三通道热更\n📋 其他:\n  - release: 四端整包重打，让 7 个题库随安装包分发\n  - 题库：用 sb-shanghan-109 替换线上 sb-shanghan-65"
+            "releaseTag": "v2026.11.07-1816",
+            "releaseNotes": "✨ 新增:\n  - 新增题库「本能方法论 60 题」与「大医传承二期 51 题」并签发热更\n  - 新增方剂独立库 bx-formula：补齐本能系方剂知识并签发热更\n  - feat(quiz): 上线本能系统论试点题库 bx-50n（无方剂 50 题）并重签三通道热更\n  - feat(quiz): 上线说白伤寒论 65 题并重签三通道热更\n🐛 修复:\n  - fix(cloud-app): 修复 Android 15/16 安全区遮挡（vc352）\n📋 其他:\n  - docs: 记录鸿蒙项目暂停开发（无限期）\n  - release: 四端整包重打，让 7 个题库随安装包分发\n  - 题库：用 sb-shanghan-109 替换线上 sb-shanghan-65"
         },
         "exe": {
             "version": "1.0.311",
             "sha256": "33c672d7966e2d9a6fff6a9c7b824dc0bfd5e15db2ef6debc9d1db79ff12efd0",
-            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.04-1058/huikang-local-setup-1.0.311.exe",
+            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.07-1816/huikang-local-setup-1.0.311.exe",
             "size": 79467592,
-            "updateTime": "2026-11-04T03:10:51.162Z",
+            "updateTime": "2026-11-07T10:18:28.085Z",
             "fileName": "惠康中医-本地 Setup 1.0.311.exe",
             "releaseFileName": "huikang-local-setup-1.0.311.exe",
-            "releaseTag": "v2026.11.04-1058",
-            "releaseNotes": "✨ 新增:\n  - 新增题库「本能方法论 60 题」与「大医传承二期 51 题」并签发热更\n  - 新增方剂独立库 bx-formula：补齐本能系方剂知识并签发热更\n  - feat(quiz): 上线本能系统论试点题库 bx-50n（无方剂 50 题）并重签三通道热更\n  - feat(quiz): 上线说白伤寒论 65 题并重签三通道热更\n📋 其他:\n  - release: 四端整包重打，让 7 个题库随安装包分发\n  - 题库：用 sb-shanghan-109 替换线上 sb-shanghan-65"
+            "releaseTag": "v2026.11.07-1816",
+            "releaseNotes": "✨ 新增:\n  - 新增题库「本能方法论 60 题」与「大医传承二期 51 题」并签发热更\n  - 新增方剂独立库 bx-formula：补齐本能系方剂知识并签发热更\n  - feat(quiz): 上线本能系统论试点题库 bx-50n（无方剂 50 题）并重签三通道热更\n  - feat(quiz): 上线说白伤寒论 65 题并重签三通道热更\n🐛 修复:\n  - fix(cloud-app): 修复 Android 15/16 安全区遮挡（vc352）\n📋 其他:\n  - docs: 记录鸿蒙项目暂停开发（无限期）\n  - release: 四端整包重打，让 7 个题库随安装包分发\n  - 题库：用 sb-shanghan-109 替换线上 sb-shanghan-65"
         }
     },
     "cloud": {
         "apk": {
-            "version": "V1.0.0.351",
-            "versionCode": 351,
-            "sha256": "0363ef4d0effb53823c015993e6b38ea83f67bafbbd536c3c49a95de4741c1f0",
+            "version": "V1.0.0.352",
+            "versionCode": 352,
+            "sha256": "c60e98a2b6deca8cba38f20731fa3e5c8bcde336bacb7fc26309bec96e676aea",
             "url": "/downloads/惠康中医-云端.apk",
-            "releaseUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.04-1058/huikang-cloud.apk",
-            "size": 12659903,
-            "updateTime": "2026-11-04T03:10:51.162Z",
+            "releaseUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.07-1816/huikang-cloud.apk",
+            "size": 12661983,
+            "updateTime": "2026-11-07T10:18:28.085Z",
             "fileName": "惠康中医-云端.apk",
             "releaseFileName": "huikang-cloud.apk",
-            "releaseTag": "v2026.11.04-1058",
-            "releaseNotes": "✨ 新增:\n  - 新增题库「本能方法论 60 题」与「大医传承二期 51 题」并签发热更\n  - 新增方剂独立库 bx-formula：补齐本能系方剂知识并签发热更\n  - feat(quiz): 上线本能系统论试点题库 bx-50n（无方剂 50 题）并重签三通道热更\n  - feat(quiz): 上线说白伤寒论 65 题并重签三通道热更\n📋 其他:\n  - release: 四端整包重打，让 7 个题库随安装包分发\n  - 题库：用 sb-shanghan-109 替换线上 sb-shanghan-65"
+            "releaseTag": "v2026.11.07-1816",
+            "releaseNotes": "✨ 新增:\n  - 新增题库「本能方法论 60 题」与「大医传承二期 51 题」并签发热更\n  - 新增方剂独立库 bx-formula：补齐本能系方剂知识并签发热更\n  - feat(quiz): 上线本能系统论试点题库 bx-50n（无方剂 50 题）并重签三通道热更\n  - feat(quiz): 上线说白伤寒论 65 题并重签三通道热更\n🐛 修复:\n  - fix(cloud-app): 修复 Android 15/16 安全区遮挡（vc352）\n📋 其他:\n  - docs: 记录鸿蒙项目暂停开发（无限期）\n  - release: 四端整包重打，让 7 个题库随安装包分发\n  - 题库：用 sb-shanghan-109 替换线上 sb-shanghan-65"
         },
         "exe": {
             "version": "1.2.288",
             "sha256": "96acc919d2c39b3130e8683988171c6833e71bf8387108701f725819975b783d",
-            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.04-1058/huikang-cloud-setup-1.2.288.exe",
+            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.07-1816/huikang-cloud-setup-1.2.288.exe",
             "size": 82059064,
-            "updateTime": "2026-11-04T03:10:51.162Z",
+            "updateTime": "2026-11-07T10:18:28.085Z",
             "fileName": "惠康中医-云端 Setup 1.2.288.exe",
             "releaseFileName": "huikang-cloud-setup-1.2.288.exe",
-            "releaseTag": "v2026.11.04-1058",
-            "releaseNotes": "✨ 新增:\n  - 新增题库「本能方法论 60 题」与「大医传承二期 51 题」并签发热更\n  - 新增方剂独立库 bx-formula：补齐本能系方剂知识并签发热更\n  - feat(quiz): 上线本能系统论试点题库 bx-50n（无方剂 50 题）并重签三通道热更\n  - feat(quiz): 上线说白伤寒论 65 题并重签三通道热更\n📋 其他:\n  - release: 四端整包重打，让 7 个题库随安装包分发\n  - 题库：用 sb-shanghan-109 替换线上 sb-shanghan-65"
+            "releaseTag": "v2026.11.07-1816",
+            "releaseNotes": "✨ 新增:\n  - 新增题库「本能方法论 60 题」与「大医传承二期 51 题」并签发热更\n  - 新增方剂独立库 bx-formula：补齐本能系方剂知识并签发热更\n  - feat(quiz): 上线本能系统论试点题库 bx-50n（无方剂 50 题）并重签三通道热更\n  - feat(quiz): 上线说白伤寒论 65 题并重签三通道热更\n🐛 修复:\n  - fix(cloud-app): 修复 Android 15/16 安全区遮挡（vc352）\n📋 其他:\n  - docs: 记录鸿蒙项目暂停开发（无限期）\n  - release: 四端整包重打，让 7 个题库随安装包分发\n  - 题库：用 sb-shanghan-109 替换线上 sb-shanghan-65"
         },
         "portable": {
             "version": "1.2.288",
             "sha256": "05f3c72938300fe87ffe4737298ea38f5a2a7931b12c5b27e2852c4099d668ac",
-            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.04-1058/huikang-cloud-1.2.288.exe",
+            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.07-1816/huikang-cloud-1.2.288.exe",
             "size": 81784160,
-            "updateTime": "2026-11-04T03:10:51.162Z",
+            "updateTime": "2026-11-07T10:18:28.085Z",
             "fileName": "惠康中医-云端 1.2.288.exe",
             "releaseFileName": "huikang-cloud-1.2.288.exe",
-            "releaseTag": "v2026.11.04-1058",
-            "releaseNotes": "✨ 新增:\n  - 新增题库「本能方法论 60 题」与「大医传承二期 51 题」并签发热更\n  - 新增方剂独立库 bx-formula：补齐本能系方剂知识并签发热更\n  - feat(quiz): 上线本能系统论试点题库 bx-50n（无方剂 50 题）并重签三通道热更\n  - feat(quiz): 上线说白伤寒论 65 题并重签三通道热更\n📋 其他:\n  - release: 四端整包重打，让 7 个题库随安装包分发\n  - 题库：用 sb-shanghan-109 替换线上 sb-shanghan-65"
+            "releaseTag": "v2026.11.07-1816",
+            "releaseNotes": "✨ 新增:\n  - 新增题库「本能方法论 60 题」与「大医传承二期 51 题」并签发热更\n  - 新增方剂独立库 bx-formula：补齐本能系方剂知识并签发热更\n  - feat(quiz): 上线本能系统论试点题库 bx-50n（无方剂 50 题）并重签三通道热更\n  - feat(quiz): 上线说白伤寒论 65 题并重签三通道热更\n🐛 修复:\n  - fix(cloud-app): 修复 Android 15/16 安全区遮挡（vc352）\n📋 其他:\n  - docs: 记录鸿蒙项目暂停开发（无限期）\n  - release: 四端整包重打，让 7 个题库随安装包分发\n  - 题库：用 sb-shanghan-109 替换线上 sb-shanghan-65"
         }
     },
     "provenance": {
         "schemaVersion": 1,
         "repo": "https://github.com/kyt61767126/tcm-prescription-system.git",
-        "commit": "2180e36e12b1",
+        "commit": "990cf500982e",
         "ref": "main",
         "builder": "kyt61767126",
-        "builtAt": "2026-11-04T03:10:51.899Z",
+        "builtAt": "2026-11-07T10:18:28.699Z",
         "buildTool": "publish-release.js@v24.16.0",
-        "releaseTag": "v2026.11.04-1058"
+        "releaseTag": "v2026.11.07-1816"
     },
     "dingzhi": {
         "apk": {
@@ -89,35 +89,35 @@
             "versionCode": 345,
             "sha256": "4fc89ab352550d9663b0b7cafdad5b2720716b7270ed3ee14f9cf8c8e9a176e0",
             "url": "/downloads/惠康中医-本地.apk",
-            "releaseUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.04-1058/huikang-local.apk",
+            "releaseUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.07-1816/huikang-local.apk",
             "size": 3814543,
-            "updateTime": "2026-11-04T03:10:51.162Z",
+            "updateTime": "2026-11-07T10:18:28.085Z",
             "fileName": "惠康中医-本地.apk",
             "releaseFileName": "huikang-local.apk",
-            "releaseTag": "v2026.11.04-1058",
-            "releaseNotes": "✨ 新增:\n  - 新增题库「本能方法论 60 题」与「大医传承二期 51 题」并签发热更\n  - 新增方剂独立库 bx-formula：补齐本能系方剂知识并签发热更\n  - feat(quiz): 上线本能系统论试点题库 bx-50n（无方剂 50 题）并重签三通道热更\n  - feat(quiz): 上线说白伤寒论 65 题并重签三通道热更\n📋 其他:\n  - release: 四端整包重打，让 7 个题库随安装包分发\n  - 题库：用 sb-shanghan-109 替换线上 sb-shanghan-65"
+            "releaseTag": "v2026.11.07-1816",
+            "releaseNotes": "✨ 新增:\n  - 新增题库「本能方法论 60 题」与「大医传承二期 51 题」并签发热更\n  - 新增方剂独立库 bx-formula：补齐本能系方剂知识并签发热更\n  - feat(quiz): 上线本能系统论试点题库 bx-50n（无方剂 50 题）并重签三通道热更\n  - feat(quiz): 上线说白伤寒论 65 题并重签三通道热更\n🐛 修复:\n  - fix(cloud-app): 修复 Android 15/16 安全区遮挡（vc352）\n📋 其他:\n  - docs: 记录鸿蒙项目暂停开发（无限期）\n  - release: 四端整包重打，让 7 个题库随安装包分发\n  - 题库：用 sb-shanghan-109 替换线上 sb-shanghan-65"
         },
         "portable": {
             "version": "1.0.311",
             "sha256": "75864077d0b24b76f9e0cda1714ab9357a2821d603530987fb40ae7841483ebb",
-            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.04-1058/huikang-local-1.0.311.exe",
+            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.07-1816/huikang-local-1.0.311.exe",
             "size": 79192704,
-            "updateTime": "2026-11-04T03:10:51.162Z",
+            "updateTime": "2026-11-07T10:18:28.085Z",
             "fileName": "惠康中医-本地 1.0.311.exe",
             "releaseFileName": "huikang-local-1.0.311.exe",
-            "releaseTag": "v2026.11.04-1058",
-            "releaseNotes": "✨ 新增:\n  - 新增题库「本能方法论 60 题」与「大医传承二期 51 题」并签发热更\n  - 新增方剂独立库 bx-formula：补齐本能系方剂知识并签发热更\n  - feat(quiz): 上线本能系统论试点题库 bx-50n（无方剂 50 题）并重签三通道热更\n  - feat(quiz): 上线说白伤寒论 65 题并重签三通道热更\n📋 其他:\n  - release: 四端整包重打，让 7 个题库随安装包分发\n  - 题库：用 sb-shanghan-109 替换线上 sb-shanghan-65"
+            "releaseTag": "v2026.11.07-1816",
+            "releaseNotes": "✨ 新增:\n  - 新增题库「本能方法论 60 题」与「大医传承二期 51 题」并签发热更\n  - 新增方剂独立库 bx-formula：补齐本能系方剂知识并签发热更\n  - feat(quiz): 上线本能系统论试点题库 bx-50n（无方剂 50 题）并重签三通道热更\n  - feat(quiz): 上线说白伤寒论 65 题并重签三通道热更\n🐛 修复:\n  - fix(cloud-app): 修复 Android 15/16 安全区遮挡（vc352）\n📋 其他:\n  - docs: 记录鸿蒙项目暂停开发（无限期）\n  - release: 四端整包重打，让 7 个题库随安装包分发\n  - 题库：用 sb-shanghan-109 替换线上 sb-shanghan-65"
         },
         "exe": {
             "version": "1.0.311",
             "sha256": "33c672d7966e2d9a6fff6a9c7b824dc0bfd5e15db2ef6debc9d1db79ff12efd0",
-            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.04-1058/huikang-local-setup-1.0.311.exe",
+            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.07-1816/huikang-local-setup-1.0.311.exe",
             "size": 79467592,
-            "updateTime": "2026-11-04T03:10:51.162Z",
+            "updateTime": "2026-11-07T10:18:28.085Z",
             "fileName": "惠康中医-本地 Setup 1.0.311.exe",
             "releaseFileName": "huikang-local-setup-1.0.311.exe",
-            "releaseTag": "v2026.11.04-1058",
-            "releaseNotes": "✨ 新增:\n  - 新增题库「本能方法论 60 题」与「大医传承二期 51 题」并签发热更\n  - 新增方剂独立库 bx-formula：补齐本能系方剂知识并签发热更\n  - feat(quiz): 上线本能系统论试点题库 bx-50n（无方剂 50 题）并重签三通道热更\n  - feat(quiz): 上线说白伤寒论 65 题并重签三通道热更\n📋 其他:\n  - release: 四端整包重打，让 7 个题库随安装包分发\n  - 题库：用 sb-shanghan-109 替换线上 sb-shanghan-65"
+            "releaseTag": "v2026.11.07-1816",
+            "releaseNotes": "✨ 新增:\n  - 新增题库「本能方法论 60 题」与「大医传承二期 51 题」并签发热更\n  - 新增方剂独立库 bx-formula：补齐本能系方剂知识并签发热更\n  - feat(quiz): 上线本能系统论试点题库 bx-50n（无方剂 50 题）并重签三通道热更\n  - feat(quiz): 上线说白伤寒论 65 题并重签三通道热更\n🐛 修复:\n  - fix(cloud-app): 修复 Android 15/16 安全区遮挡（vc352）\n📋 其他:\n  - docs: 记录鸿蒙项目暂停开发（无限期）\n  - release: 四端整包重打，让 7 个题库随安装包分发\n  - 题库：用 sb-shanghan-109 替换线上 sb-shanghan-65"
         }
     }
 }

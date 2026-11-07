@@ -1,9 +1,9 @@
 {
     "version": "1.0.311",
-    "releaseDate": "2026-11-04",
-    "releaseNotes": "✨ 新增:\n  - 新增题库「本能方法论 60 题」与「大医传承二期 51 题」并签发热更\n  - 新增方剂独立库 bx-formula：补齐本能系方剂知识并签发热更\n  - feat(quiz): 上线本能系统论试点题库 bx-50n（无方剂 50 题）并重签三通道热更\n  - feat(quiz): 上线说白伤寒论 65 题并重签三通道热更\n📋 其他:\n  - release: 四端整包重打，让 7 个题库随安装包分发\n  - 题库：用 sb-shanghan-109 替换线上 sb-shanghan-65",
-    "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.04-1058/huikang-local-setup-1.0.311.exe",
-    "portableUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.04-1058/huikang-local-1.0.311.exe",
+    "releaseDate": "2026-11-07",
+    "releaseNotes": "✨ 新增:\n  - 新增题库「本能方法论 60 题」与「大医传承二期 51 题」并签发热更\n  - 新增方剂独立库 bx-formula：补齐本能系方剂知识并签发热更\n  - feat(quiz): 上线本能系统论试点题库 bx-50n（无方剂 50 题）并重签三通道热更\n  - feat(quiz): 上线说白伤寒论 65 题并重签三通道热更\n🐛 修复:\n  - fix(cloud-app): 修复 Android 15/16 安全区遮挡（vc352）\n📋 其他:\n  - docs: 记录鸿蒙项目暂停开发（无限期）\n  - release: 四端整包重打，让 7 个题库随安装包分发\n  - 题库：用 sb-shanghan-109 替换线上 sb-shanghan-65",
+    "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.07-1816/huikang-local-setup-1.0.311.exe",
+    "portableUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.07-1816/huikang-local-1.0.311.exe",
     "forceUpdate": false,
     "minVersion": "1.0.0",
     "rolloutPercentage": 100
