@@ -9229,8 +9229,31 @@ let currentUser = null;
             renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
         }
 
-        async function clearPrescription() {
-            // 直接清空，不显示确认弹窗
+        // ★ 2026-11-11 F7 清空处方加二次确认：处方有内容才弹，空处方不打扰；
+        //   F7 是全局监听，确认期间用标志位忽略重复触发，用户取消则什么都不动。
+        let _clearRxConfirming = false;
+        function hasPrescriptionContent() {
+            const ids = ['patientName', 'patientAge', 'patientPhone', 'patientAddress', 'medicalHistory', 'diagnosis', 'registrationFee', 'registrationFee2'];
+            for (let i = 0; i < ids.length; i++) {
+                const el = document.getElementById(ids[i]);
+                if (el && String(el.value || '').trim()) return true;
+            }
+            return prescriptionItems.some(item => item && String(item.name || '').trim());
+        }
+
+        async function clearPrescription(skipConfirm) {
+            if (_clearRxConfirming) return;
+            if (!skipConfirm && hasPrescriptionContent()) {
+                _clearRxConfirming = true;
+                let confirmed = false;
+                try {
+                    confirmed = confirm('确定清空当前处方？\n\n将清空患者信息、诊断和全部药味，且无法撤销。');
+                } finally {
+                    _clearRxConfirming = false;
+                }
+                if (!confirmed) return;
+            }
+            // 已在上方完成二次确认（空处方直接清），此处开始清空
             document.getElementById('patientName').value = '';
             document.getElementById('patientAge').value = '';
             document.getElementById('patientPhone').value = '';
@@ -9693,7 +9716,7 @@ let currentUser = null;
             // ★ 防重复点击：保存核心完成，显式解锁（并清除超时兜底定时器）
             clearTimeout(__autoUnlockRx);
             window.__savingRxBusy = false;
-            try { clearPrescription(); } catch (e) { console.warn('清空表单失败:', e); }
+            try { clearPrescription(true); } catch (e) { console.warn('清空表单失败:', e); }
             try { showToast(todayExisting ? ('处方已更新（覆盖当天原处方）：' + newPrescriptionNo) : ('处方保存成功：' + newPrescriptionNo)); } catch (e) {}
 
             // ★ 优化：辅助操作异步化，不阻塞用户操作
@@ -10017,8 +10040,23 @@ let currentUser = null;
             }
         }
 
+        // ★ 2026-11-11 帮助弹窗改为运行时真实版本，不再写死：
+        //   桌面端（Electron）UA 自带「产品名/版本」，直接取该版本号；
+        //   APP 端取壳注入的构建号 __APP_BUILD__；网页端无安装包版本，回退版本常量。
+        function getRuntimeVersionText() {
+            try {
+                const ua = navigator.userAgent || '';
+                if (ua.indexOf('Electron/') >= 0) {
+                    const m = /([^\s\/()]+)\/([0-9][0-9.]*)\s+Chrome\//.exec(ua);
+                    if (m && m[2]) return 'V' + m[2];
+                }
+                if (window.__APP_BUILD__) return (window.APP_VERSION || '') + ' ' + window.__APP_BUILD__;
+            } catch (e) { /* 取不到则回退版本常量 */ }
+            return window.APP_VERSION || '';
+        }
+
         function showHelp() {
-            alert('惠康中医-' + window.getCloudEditionTag() + ' ' + window.APP_VERSION + '\n\n' +
+            alert('惠康中医-' + window.getCloudEditionTag() + ' ' + getRuntimeVersionText() + '\n\n' +
                   '【版本说明】机构版：含用户管理+修改密码\n\n' +
                   '【功能列表】\n' +
                   '✓ 处方录入与打印\n✓ 药品管理\n✓ 验方设置\n' +
@@ -10027,7 +10065,10 @@ let currentUser = null;
                   '【快捷键】\n' +
                   'F1 - 基础设置\nF2 - 药品管理\nF3 - 验方设置\n' +
                   'F5 - 存为验方\nF7 - 重输方药\nF8 - 打印处方\n' +
-                  'F9 - 保存录入\nAlt+1 - 辨证选方\nAlt+9 - 复诊直调');
+                  'F9 - 保存录入\nAlt+1 - 辨证选方\nAlt+9 - 复诊直调\n' +
+                  'Ctrl+P - 打印（纵向，仅安装版）\nCtrl+Shift+P - 打印（横向，仅安装版）\n' +
+                  'Alt+S - 症状快速录入\nAlt+D - 诊断快速录入\n' +
+                  'Esc - 关闭智能文本浮层\nEnter - 患者信息栏依次跳转');
         }
 
         // ============ 处方查阅 / 前台收费工作台 ============
