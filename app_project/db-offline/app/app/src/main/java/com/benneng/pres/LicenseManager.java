@@ -291,6 +291,14 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
     private static final String VERIFY_API_URL = "https://tcm-prescription-system.pages.dev/api/license/verify";
     // ★ 2026-08-15 防重复试用：试用注册 API（硬件指纹判重）
     private static final String TRIAL_REGISTER_API_URL = "https://tcm-prescription-system.pages.dev/api/trial/register";
+    // ★ 2026-11-12 P1-3 远端兜底：试用起点锚点 API（与桌面端同一端点、同一字段）
+    //   只在试用分支、且本地从未成功上报（或本地起点明显变晚）时请求一次；
+    //   离线/超时/5xx/DNS 失败一律静默，不阻塞启动、不重试轰炸、不弹窗。
+    private static final String TRIAL_ANCHOR_API_URL = "https://tcm-prescription-system.pages.dev/api/trial/anchor";
+    private static final String PREF_KEY_TRIAL_ANCHOR_REPORTED_START = "trial_anchor_reported_start";
+    private static final String PREF_KEY_TRIAL_ANCHOR_REPORTED_AT = "trial_anchor_reported_at";
+    private static final long TRIAL_ANCHOR_RESET_TOLERANCE_MS = 60L * 60 * 1000; // 1 小时
+    private static final int TRIAL_ANCHOR_TIMEOUT_MS = 3000;
     // ★ 2026-09-06 原生领码自愈：管理员激活状态查询 API（machineId 兜底查询，
     //   服务端语义：仅返回绑定该 machineId 的 license，无账号写操作，安全边界不变）
     private static final String ADMIN_STATUS_API_URL = "https://tcm-prescription-system.pages.dev/api/license/admin-status";
@@ -461,6 +469,147 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
             return TRIAL_REG_NETWORK;
         } finally {
             if (conn != null) conn.disconnect();
+        }
+    }
+
+    // ========================================================================
+    //  ★ 2026-11-12 P1-3 远端兜底：试用起点上报 + 远端起点并入（与桌面端同一契约）
+    //  端点：POST /api/trial/anchor
+    //  请求：{ mid: 32hex machineId 哈希, ts: 本地最早试用起点(epoch ms), v: 版本, ed: "local-app" }
+    //  返回：{ success: true, trialStartAt, serverTime }
+    //  规则：
+    //    · 只传机器指纹哈希 + 试用起点 + 版本 + 端类型，不含患者/诊所业务数据；
+    //    · 正常每台机器只上报一次（SharedPreferences 记已上报起点），本地起点变晚
+    //      超过 1 小时（疑似本地痕迹被重置）才补报；
+    //    · 任何异常（离线/DNS/超时/5xx/429/解析失败）静默返回 0，不影响试用与启动；
+    //    · 远端起点只用于「取最早」收紧，不会延长试用。
+    // ========================================================================
+    private long readTrialAnchorReportedStart() {
+        try {
+            SharedPreferences prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+            return prefs.getLong(PREF_KEY_TRIAL_ANCHOR_REPORTED_START, 0);
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    // ★ 进程内节流：validateLicense 在会话中会被多次调用（onResume/桥校验），
+    //   断网时每次 3s 连接会拖慢多次校验。10 分钟内最多尝试一次；
+    //   成功上报后另由 SharedPreferences 标记做跨重启节流。
+    private static volatile long sLastTrialAnchorAttemptAt = 0;
+    private static final long TRIAL_ANCHOR_ATTEMPT_THROTTLE_MS = 10L * 60 * 1000;
+
+    private void writeTrialAnchorReport(long trialStartAt) {
+        try {
+            SharedPreferences prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+            prefs.edit()
+                    .putLong(PREF_KEY_TRIAL_ANCHOR_REPORTED_START, trialStartAt)
+                    .putLong(PREF_KEY_TRIAL_ANCHOR_REPORTED_AT, System.currentTimeMillis())
+                    .apply();
+        } catch (Exception e) {
+            Log.w(TAG, "记录试用起点上报状态失败（非致命）: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 上报本地试用起点，返回服务端认定的起点（失败返回 0）。
+     * 调用方需保证不在主线程（与 registerTrialOnline 同口径：仅 allowNetworkTrial=true 路径）。
+     */
+    public long reportTrialAnchorWithServer(long localStartAt) {
+        long localStart = localStartAt;
+        try {
+            if (!(localStart > 0)) return 0;
+            String mid = getMachineId();
+            // 与服务端 schema 同口径：fallback 机器码含下划线，直接跳过（fail-open）
+            if (mid == null || !mid.matches("[0-9A-Za-z]{16,128}")) return 0;
+            // 已成功上报过且本地起点没有变晚 → 不再请求（防止每次校验都打服务端）
+            long prevReported = readTrialAnchorReportedStart();
+            if (prevReported > 0 && !(localStart > prevReported + TRIAL_ANCHOR_RESET_TOLERANCE_MS)) {
+                return 0;
+            }
+            // 进程内节流：断网/超时场景下多次 validateLicense 不重复打服务端
+            long attemptNow = System.currentTimeMillis();
+            if (sLastTrialAnchorAttemptAt > 0
+                    && attemptNow - sLastTrialAnchorAttemptAt < TRIAL_ANCHOR_ATTEMPT_THROTTLE_MS) {
+                return 0;
+            }
+            sLastTrialAnchorAttemptAt = attemptNow;
+            if (prevReported > 0) {
+                Log.w(TAG, "本地试用起点晚于已上报记录，按本地痕迹被重置处理并重新上报");
+            }
+
+            HttpURLConnection conn = null;
+            try {
+                URL url = new URL(TRIAL_ANCHOR_API_URL);
+                conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("POST");
+                conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
+                conn.setRequestProperty("Accept", "application/json");
+                conn.setConnectTimeout(TRIAL_ANCHOR_TIMEOUT_MS);
+                conn.setReadTimeout(TRIAL_ANCHOR_TIMEOUT_MS);
+                conn.setDoOutput(true);
+
+                JSONObject reqBody = new JSONObject();
+                reqBody.put("mid", mid);
+                reqBody.put("ts", localStart);
+                reqBody.put("v", versionName == null ? "" : versionName);
+                reqBody.put("ed", "local-app");
+
+                try (OutputStream os = conn.getOutputStream()) {
+                    os.write(reqBody.toString().getBytes(StandardCharsets.UTF_8));
+                    os.flush();
+                }
+
+                int codeResp = conn.getResponseCode();
+                if (codeResp < 200 || codeResp >= 300) {
+                    // 5xx / 429 / 边缘拦截：静默，下次启动再补报（不重试轰炸）
+                    Log.w(TAG, "试用起点上报未成功（静默，下次启动补报）: HTTP " + codeResp);
+                    return 0;
+                }
+                String response = readStream(conn.getInputStream());
+                JSONObject respJson = new JSONObject(response);
+                if (!respJson.optBoolean("success", false)) {
+                    Log.w(TAG, "试用起点上报返回异常（静默，下次启动补报）");
+                    return 0;
+                }
+                long remoteStart = respJson.optLong("trialStartAt", 0);
+                if (!(remoteStart > 0)) return 0;
+                writeTrialAnchorReport(remoteStart);
+                Log.i(TAG, "试用起点上报成功：local=" + localStart + " remote=" + remoteStart);
+                return remoteStart;
+            } finally {
+                if (conn != null) conn.disconnect();
+            }
+        } catch (Exception e) {
+            // 离线 / DNS 失败 / 超时 / 解析失败：完全静默，fail-open
+            Log.w(TAG, "试用起点上报失败（静默，下次启动补报）: " + e.getMessage());
+            return 0;
+        }
+    }
+
+    /**
+     * 把远端起点并入本地 trial（单调取最早），到期判定随后自然收紧。
+     * fail-open：任何异常都不影响调用方继续按本地起点判定。
+     */
+    private void mergeRemoteTrialStart(JSONObject trial, long remoteStartAt) {
+        try {
+            long remoteStart = remoteStartAt;
+            if (trial == null || !(remoteStart > 0)) return;
+            int days = getTrialDays();
+            long localStart = trial.optLong("startTime", 0);
+            long eff = (localStart > 0) ? Math.min(localStart, remoteStart) : remoteStart;
+            if (!(eff > 0)) return;
+            long expectedExpiresAt = (days > 0)
+                    ? eff + (long) days * 24 * 60 * 60 * 1000
+                    : eff;   // 0 天=立即到期，与既有测试语义一致
+            boolean changed = (localStart != eff) || (trial.optLong("expiresAt", 0) != expectedExpiresAt);
+            if (!changed) return;
+            trial.put("startTime", eff);
+            trial.put("expiresAt", expectedExpiresAt);
+            writeTrial(trial);
+            Log.w(TAG, "远端试用起点并入：startTime=" + eff + "（本地原起点=" + localStart + "）");
+        } catch (Exception e) {
+            Log.w(TAG, "远端试用起点并入失败（非致命）: " + e.getMessage());
         }
     }
 
@@ -3693,6 +3842,12 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
                 trial.put("startTime", now);
                 trial.put("expiresAt", now + (long) currentTrialDays * 24 * 60 * 60 * 1000);
                 writeTrial(trial);
+                // ★ 2026-11-12 P1-3：首次试用起点上报服务端锚点（fail-open 静默）。
+                //   正常每台机器只上报一次；失败不影响本次试用，下次启动补报。
+                try {
+                    long remoteStart = reportTrialAnchorWithServer(now);
+                    if (remoteStart > 0) mergeRemoteTrialStart(trial, remoteStart);
+                } catch (Exception ignored) {}
                 // ★ 试用版默认版本：标准版（首次启动时设置）
                 try {
                     JSONObject cfg = readConfigJSON();
@@ -3711,6 +3866,14 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
                 if (trial.optLong("expiresAt", 0) != expectedExpiresAt) {
                     trial.put("expiresAt", expectedExpiresAt);
                     writeTrial(trial);
+                }
+                // ★ 2026-11-12 P1-3：已上报过且本地起点未变晚 → 零请求；
+                //   远端记录更早时当场并入并收紧（不白给 7 天）。主线程闸门禁网。
+                if (allowNetworkTrial) {
+                    try {
+                        long remoteStart = reportTrialAnchorWithServer(trial.optLong("startTime", 0));
+                        if (remoteStart > 0) mergeRemoteTrialStart(trial, remoteStart);
+                    } catch (Exception ignored) {}
                 }
             }
 
