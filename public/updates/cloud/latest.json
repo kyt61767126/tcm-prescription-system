@@ -1,9 +1,9 @@
 {
-    "version": "1.2.288",
-    "releaseDate": "2026-11-07",
-    "releaseNotes": "✨ 新增:\n  - 新增题库「本能方法论 60 题」与「大医传承二期 51 题」并签发热更\n  - 新增方剂独立库 bx-formula：补齐本能系方剂知识并签发热更\n  - feat(quiz): 上线本能系统论试点题库 bx-50n（无方剂 50 题）并重签三通道热更\n  - feat(quiz): 上线说白伤寒论 65 题并重签三通道热更\n🐛 修复:\n  - fix(cloud-app): 修复 Android 15/16 安全区遮挡（vc352）\n📋 其他:\n  - docs: 记录鸿蒙项目暂停开发（无限期）\n  - release: 四端整包重打，让 7 个题库随安装包分发\n  - 题库：用 sb-shanghan-109 替换线上 sb-shanghan-65",
-    "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.07-1816/huikang-cloud-setup-1.2.288.exe",
-    "portableUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.07-1816/huikang-cloud-1.2.288.exe",
+    "version": "1.2.289",
+    "releaseDate": "2026-11-12",
+    "releaseNotes": "🐛 修复:\n  - fix(build): build-meta 生成顺序移到 versionCode +1 之后\n  - fix(build): 修正 strip-e2e-bypass 目录参数尾反斜杠导致路径带引号\n  - fix(license): 离线 APP 接入试用起点远端锚点（与服务端/桌面同契约）\n  - fix(license): 试用起点服务端锚点，堵「删光本地痕迹重开 7 天试用」\n  - fix(license): 试用起点双锚点，堵断网 + 删 trial.dat 无限重开试用\n  - fix(security): 主进程调试面收口 + E2E 旁路构建期剥离 + 签名二次阻断\n  - 补入说明书可编辑母版 DOCX 并修正 zip 清单口径\n  - fix(shortcuts): 补齐系统帮助快捷键并给 F7 清空处方加二次确认\n  - 修正陈述意见的每页代码行数口径为实测 51-55 行\n📋 其他:\n  - 提交版留档：软著补正 V2 已提交官网，固化交付件与口径基线\n  - 软著补正材料：统一术语为「诊断录入」「语音录入」并同步终版校验值",
+    "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.12-1740/huikang-cloud-setup-1.2.289.exe",
+    "portableUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.12-1740/huikang-cloud-1.2.289.exe",
     "forceUpdate": false,
     "minVersion": "1.0.0",
     "rolloutPercentage": 100
