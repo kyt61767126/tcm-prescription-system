@@ -2059,13 +2059,10 @@ function readTrialStartFromUnified() {
     } catch (e) { return 0; }
 }
 
-// 每进程最多执行一次（异步、不阻塞启动）：把试用起点并入统一态，单调取最早。
-let _trialUnifiedEnsured = false;
-function ensureTrialStartUnifiedAsync(startTime) {
-    if (_trialUnifiedEnsured) return;
+// 把试用起点并入统一态（异步、不阻塞启动），单调取最早。fail-open。
+function mergeTrialStartUnifiedAsync(startTime) {
     const st = Number(startTime) || 0;
     if (!(st > 0)) return;
-    _trialUnifiedEnsured = true;
     try {
         const mid = getMachineId();
         if (!mid) return;
@@ -2079,6 +2076,76 @@ function ensureTrialStartUnifiedAsync(startTime) {
             })
             .catch(() => { /* fail-open */ });
     } catch (e) { /* fail-open */ }
+}
+
+// 每进程最多执行一次（异步、不阻塞启动）：把试用起点并入统一态，单调取最早。
+let _trialUnifiedEnsured = false;
+function ensureTrialStartUnifiedAsync(startTime) {
+    if (_trialUnifiedEnsured) return;
+    const st = Number(startTime) || 0;
+    if (!(st > 0)) return;
+    _trialUnifiedEnsured = true;
+    mergeTrialStartUnifiedAsync(st);
+}
+
+// ============================================================================
+// ★ 2026-11-12 P1-3 远端兜底：试用起点上报 + 远端起点并入
+//   远端记录（/api/trial/anchor）是「删光本地痕迹」场景的最后一道锚点：
+//   · getLocalTrialStart：本机当前能取到的最早起点（trial.dat → 双文件锚点 →
+//     统一态），供首次在线启动上报；读不到返回 0（fail-open）。
+//   · applyRemoteTrialStart：把远端起点并入本地，全链路 Math.min 单调取最早，
+//     并回写 trial.dat / 双文件锚点 / 统一态，供后续离线启动直接生效。
+//   付费用户（存在 license.dat）永远不进试用分支，本函数也做防御性短路。
+// ============================================================================
+function getLocalTrialStart() {
+    let minStart = 0;
+    try {
+        const t = readTrial();
+        if (t && Number(t.startTime) > 0) minStart = Number(t.startTime);
+    } catch (e) { /* fail-open */ }
+    try {
+        const a = readTrialStartAnchor();
+        if (a.startTime > 0) minStart = minStart > 0 ? Math.min(minStart, a.startTime) : a.startTime;
+    } catch (e) { /* fail-open */ }
+    if (!(minStart > 0)) {
+        try { minStart = readTrialStartFromUnified(); } catch (e) { minStart = 0; }
+    }
+    return minStart;
+}
+
+function applyRemoteTrialStart(remoteStartAt) {
+    const rs = Number(remoteStartAt) || 0;
+    const days = getTrialDays();
+    if (!(rs > 0) || !(days > 0)) {
+        return { applied: false, trialStartAt: 0, expired: false };
+    }
+    try {
+        // 防御：付费用户即使被误调用也不动本地试用文件
+        let hasLicense = false;
+        try { hasLicense = !!readLicense(); } catch (e) { hasLicense = false; }
+        if (hasLicense) return { applied: false, trialStartAt: 0, expired: false };
+
+        let eff = rs;
+        const t = readTrial();
+        if (t && Number(t.startTime) > 0) eff = Math.min(eff, Number(t.startTime));
+        const anchor = readTrialStartAnchor();
+        if (anchor.startTime > 0) eff = Math.min(eff, anchor.startTime);
+        const unifiedStart = readTrialStartFromUnified();
+        if (unifiedStart > 0) eff = Math.min(eff, unifiedStart);
+
+        const trial = (t && typeof t === 'object') ? t : {};
+        trial.startTime = eff;
+        trial.expiresAt = eff + days * 24 * 60 * 60 * 1000;
+        _trialUnifiedEnsured = true;   // 已显式并入，避免 ensure 再用更晚值覆盖/重复查询
+        writeTrial(trial);
+        writeTrialStartAnchor(eff);
+        mergeTrialStartUnifiedAsync(eff);
+
+        return { applied: true, trialStartAt: eff, expired: Date.now() > trial.expiresAt };
+    } catch (e) {
+        console.warn('[License] 远端试用起点并入失败（非致命）:', e && e.message);
+        return { applied: false, trialStartAt: 0, expired: false };
+    }
 }
 
 function readLastRun() {
@@ -5921,6 +5988,8 @@ module.exports = {
     DEFAULT_TRIAL_DAYS,   // 默认试用期 7 天
     getTrialDays,         // ★ 获取试用期天数（可配置）
     setTrialDays,         // ★ 设置试用期天数（持久化）
+    getLocalTrialStart,   // ★ 2026-11-12 P1-3：本机最早试用起点（首启在线上报用）
+    applyRemoteTrialStart,// ★ 2026-11-12 P1-3：远端起点并入本地（单调取最早）
     // ★ v3 新增：绑定校验相关
     generateSignatureV3,  // v3 签名生成（含绑定字段）
     checkLicenseBinding,  // 三因子绑定校验

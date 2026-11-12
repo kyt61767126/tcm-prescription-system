@@ -556,6 +556,97 @@ async function registerTrialWithServer() {
     }
 }
 
+// ============================================================================
+//  试用起点远端锚点：POST /api/trial/anchor（正常每台机器只上报一次）
+//  作用：把本机最早试用起点落到服务端；本地痕迹被全删后，下次联网启动可
+//       按远端起点恢复（不再白给 7 天）。隐私：只传 machineId 哈希 + 试用
+//        起点 + 版本号 + 端类型，不含患者/诊所业务数据。
+//  失败（离线/超时/5xx/DNS）一律静默，不重试轰炸、不阻塞启动、不弹窗。
+// ============================================================================
+const TRIAL_ANCHOR_API = 'https://tcm-prescription-system.pages.dev/api/trial/anchor';
+const TRIAL_ANCHOR_REPORTED_FILE = 'trial-anchor-reported.dat';
+// 本地起点比已上报起点晚超过该阈值 → 判定本地试用痕迹被重置，必须重新上报
+const TRIAL_ANCHOR_RESET_TOLERANCE_MS = 60 * 60 * 1000;
+
+function getTrialAnchorReportedPath() {
+    try {
+        return require('path').join(licenseManager.getWritableDir(), TRIAL_ANCHOR_REPORTED_FILE);
+    } catch (e) {
+        return require('path').join(app.getPath('userData'), TRIAL_ANCHOR_REPORTED_FILE);
+    }
+}
+function readTrialAnchorReport() {
+    try {
+        const raw = require('fs').readFileSync(getTrialAnchorReportedPath(), 'utf8');
+        const obj = JSON.parse(raw);
+        return (obj && typeof obj === 'object') ? obj : null;
+    } catch (e) { return null; }
+}
+function writeTrialAnchorReport(trialStartAt) {
+    try {
+        require('fs').writeFileSync(getTrialAnchorReportedPath(),
+            JSON.stringify({ trialStartAt: Number(trialStartAt) || 0, reportedAt: Date.now() }), 'utf8');
+    } catch (e) {}
+}
+
+async function reportTrialAnchorWithServer() {
+    try {
+        /* BNZC_E2E_GUARD_BEGIN（构建期整块移除，勿手改标记行） */
+        // E2E 不向生产锚点服务端写真实记录（避免构建机指纹污染线上试用起点）
+        if (global.__BNZC_E2E_BYPASS === true) {
+            console.warn('[E2E] 跳过试用起点上报');
+            return null;
+        }
+        /* BNZC_E2E_GUARD_END */
+        const mid = (activateManager && activateManager.getMachineId)
+            ? activateManager.getMachineId()
+            : (licenseManager.getMachineId ? licenseManager.getMachineId() : '');
+        if (!mid) return null;
+        const localStart = Number(licenseManager.getLocalTrialStart && licenseManager.getLocalTrialStart()) || 0;
+        // 正常启动：已上报过且本地起点没有变晚 → 不重复请求。
+        // 本地起点明显变晚（trial.dat/锚点/统一态被清后重建）→ 重新上报让远端收紧。
+        const prevReport = readTrialAnchorReport();
+        if (prevReport && Number(prevReport.trialStartAt) > 0
+            && !(localStart > Number(prevReport.trialStartAt) + TRIAL_ANCHOR_RESET_TOLERANCE_MS)) {
+            return null;
+        }
+        if (prevReport && Number(prevReport.trialStartAt) > 0) {
+            console.warn('[Trial] 本地试用起点晚于已上报记录，按本地痕迹被重置处理并重新上报');
+        }
+        const body = {
+            mid: String(mid),
+            ts: localStart,
+            v: app.getVersion(),
+            ed: 'local-desktop'
+        };
+        const controller = new AbortController();
+        const t = setTimeout(() => controller.abort(), 3000);
+        try {
+            const res = await fetch(TRIAL_ANCHOR_API, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+                signal: controller.signal
+            });
+            if (!res || !res.ok) {
+                console.warn('[Trial] 试用起点上报未成功（静默，下次启动补报）:', res && res.status);
+                return null;
+            }
+            const data = await res.json().catch(() => null);
+            if (!data || !data.success) {
+                console.warn('[Trial] 试用起点上报返回异常（静默，下次启动补报）');
+                return null;
+            }
+            writeTrialAnchorReport(data.trialStartAt);
+            return { trialStartAt: Number(data.trialStartAt) || 0 };
+        } finally { clearTimeout(t); }
+    } catch (e) {
+        // 离线 / DNS 失败 / 超时 / 5xx：完全静默，下次启动再试一次
+        console.warn('[Trial] 试用起点上报失败（静默，下次启动补报）:', e && e.message);
+        return null;
+    }
+}
+
 async function saveLoginState(hasLoggedIn, user = null) {
     if (user) currentLoggedInUser = user;
     if (!hasLoggedIn) currentLoggedInUser = null;
@@ -1246,6 +1337,8 @@ app.whenReady().then(async () => {
                 };
                 _isLicensed = false;
             } else {
+                // 与试用登记并行（不额外拉长启动等待；失败已内部静默）
+                const trialAnchorPromise = reportTrialAnchorWithServer();
                 const reg = await registerTrialWithServer();
                 if (reg && reg.denied) {
                     writeTrialDeniedMarker();
@@ -1256,6 +1349,25 @@ app.whenReady().then(async () => {
                         type: 'trial_limit_reached'
                     };
                     _isLicensed = false;
+                } else if (_isLicensed) {
+                    // ★ 2026-11-12 P1-3 远端兜底：首次在线启动上报试用起点。
+                    //   远端记录更早时当场收紧（典型：本地痕迹被全删后重建了新起点），
+                    //   不再白给 7 天；任何失败静默，不影响本次试用。
+                    const anchor = await trialAnchorPromise;
+                    if (anchor && anchor.trialStartAt > 0) {
+                        const applied = licenseManager.applyRemoteTrialStart(anchor.trialStartAt);
+                        if (applied && applied.expired) {
+                            const days = licenseManager.getTrialDays();
+                            console.warn('[Trial] 远端试用起点已到期，收紧为 trial_expired:',
+                                new Date(applied.trialStartAt).toISOString());
+                            licenseResult = {
+                                valid: false,
+                                message: `试用期已到期（${days} 天）。\n请联系客服购买正式授权。`,
+                                type: 'trial_expired'
+                            };
+                            _isLicensed = false;
+                        }
+                    }
                 }
             }
         } catch (e) {

@@ -620,7 +620,7 @@ ipcMain.handle('license:install-admin-license', async (event, args) => {
         // E2E 用临时 userData 构造出厂态，需与开发机真实授权记录隔离
         if (global.__BNZC_E2E_BYPASS === true) {
             console.warn('[E2E] install-admin-license 已拦截');
-            return { success: false, error: 'blocked' };
+            return { success: false, error: 'E2E: install-admin-license blocked' };
         }
         /* BNZC_E2E_GUARD_END */
         return await activateManager.installAdminLicenseDesktop(args || {});
@@ -643,7 +643,7 @@ ipcMain.handle('license:install-from-server', async (event, machineId) => {
     try {
         /* BNZC_E2E_GUARD_BEGIN（构建期整块移除，勿手改标记行） */
         if (global.__BNZC_E2E_BYPASS === true) {
-            return { success: false, error: 'blocked' };
+            return { success: false, error: 'E2E: install-from-server blocked' };
         }
         /* BNZC_E2E_GUARD_END */
         return await activateManager.installLicenseFromServer(machineId);
