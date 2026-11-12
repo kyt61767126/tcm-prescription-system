@@ -144,17 +144,6 @@ if exist "%ANDROID_ASSETS%\video-recorder-inject.js" (
     copy /Y "..\video-recorder-inject.js" "%ANDROID_ASSETS%\video-recorder-inject.js" >nul
  if errorlevel 1 ( echo [] video-recorder-inject.js ) else ( echo [OK] video-recorder-inject.js )
 ) else ( echo [SKIP] video-recorder-inject.js )
-REM ★ 2026-09-06 版本自证三元组（防"同 versionCode 多次打包无法区分"）：生成
-REM   assets/public/build-meta.json —— 登录页 loadBuildMeta() 自动渲染
-REM   V1.0.0.246 / APK 246 / Build 打包时间。用户核对 Build 时间即可确认
-REM   手机上装的是哪一次打包的 APK（微信传手机安装场景的排查刚需）。
-echo [5.5/5] Generate build-meta.json (version-triple for login page)...
-node "%~dp0..\..\..\tools\write-apk-buildmeta.cjs" "%ANDROID_PUBLIC%" "%~dp0app\build.gradle"
-if errorlevel 1 (
-    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] build-meta.json 生成失败（non-fatal，登录页不显示三元组）'"
-) else (
-    echo [OK] build-meta.json
-)
 echo.
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Verifying APP index.html integrity (5-button top menu)...'"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; $f='%ANDROID_PUBLIC%\index.html'; $c=[System.IO.File]::ReadAllText($f,[System.Text.Encoding]::UTF8); if($c.Length -lt 50000){ Write-Host '[ERROR] APP index.html too small'; exit 1 }; if(-not ($c -match 'showModal\(.analyticsModal.')){ Write-Host '[ERROR] APP index.html missing analyticsModal - not 5-button version'; exit 1 }; Write-Host '[OK] APP index.html verification passed (5-button)'"
@@ -312,6 +301,22 @@ echo.
 echo [6/10] Increment versionCode...
 REM P0-3: build-app.bat
 powershell -NoProfile -ExecutionPolicy Bypass -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; $f='app\build.gradle'; $c=[System.IO.File]::ReadAllText($f); if($c -match 'versionCode\s+(\d+)'){ $old=[int]$matches[1]; $new=$old+1; $nc=$c -replace 'versionCode\s+\d+', \"versionCode $new\"; [System.IO.File]::WriteAllText($f,$nc,(New-Object System.Text.UTF8Encoding($false))); Set-Content -Path '%~dp0.build_vcode_prev' -Value $old -Encoding ASCII -NoNewline; Write-Host ('  [OK] versionCode: '+$old+' -> '+$new+' (old value saved)') } else { Write-Host '  [WARN] versionCode not found in build.gradle' }"
+echo.
+
+REM ★ 2026-11-12 生成顺序修复：build-meta 必须在 versionCode +1 之后生成。
+REM   旧顺序（在 +1 之前）会让登录页三元组永远比真实 versionCode 落后 1，
+REM   破坏「装完核对 V/Build 判断是否旧包」的用途（本次 346 包曾显示 345）。
+REM   ★ 2026-09-06 版本自证三元组（防"同 versionCode 多次打包无法区分"）：
+REM   assets/public/build-meta.json —— 登录页 loadBuildMeta() 自动渲染
+REM   V1.0.0.346 / APK 346 / Build 打包时间。用户核对 Build 时间即可确认
+REM   手机上装的是哪一次打包的 APK（微信传手机安装场景的排查刚需）。
+echo [6.5/10] Generate build-meta.json (version-triple for login page)...
+node "%~dp0..\..\..\tools\write-apk-buildmeta.cjs" "%ANDROID_PUBLIC%" "%~dp0app\build.gradle"
+if errorlevel 1 (
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] build-meta.json 生成失败（non-fatal，登录页不显示三元组）'"
+) else (
+    echo [OK] build-meta.json
+)
 echo.
 
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[7/10] Code obfuscation (target=%FLAVOR_TARGET%) + Java pre-compile check...'"
