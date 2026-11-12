@@ -1,8 +1,14 @@
 // ============================================================================
 //  惠康中医 - 主进程 exe 签名/完整性自校验（P0-③，2026-08-17）
 //
-//  原则：★非阻塞★——只记录日志，绝不弹窗退出，符合项目"宁可漏检不可误报、
-//       不允许正常用户闪退"的硬性红线。
+//  原则（2026-11-12 P1-4 修订）：★签名异常改为「首次告警、二次阻断」★——
+//       原策略为「只记录日志、绝不弹窗退出」；实测可被「解包 app.asar → 改
+//       license-manager.js → 重封 → 重算 .bnzc → 自签证书重签」绕过，
+//       因此对【确定的篡改证据】（指纹不符 / 未签名 / 哈希失配）改为：
+//         第 1 次：弹窗告警后放行（给杀软剥签名、证书轮换留缓冲）；
+//         第 2 次起：阻断启动，并给出可操作的恢复路径（重装 / 加信任 / 升级证书）。
+//       「unavailable」（PowerShell 不可用等环境原因）永不计入、永不阻断，
+//       守住"宁可漏检不可误报"的红线。
 //  → 仅在 app.isPackaged（正式打包）时执行；开发环境直接跳过。
 //  → 用 PowerShell Get-AuthenticodeSignature 读取当前 exe(process.execPath) 的
 //    签名状态：Valid(已入信任根) / UnknownError(自签未入信任根，预期) /
@@ -55,6 +61,8 @@ function getIntegrityState() {
 }
 
 let initialized = false;
+// runSelfCheck({ downloadUrl }) 传入，用于阻断弹窗里的「打开官方下载页」按钮
+let _selfCheckOpts = {};
 
 function log(tag, message) {
     console.log('[SelfCheck] [' + tag + '] ' + message);
@@ -64,7 +72,8 @@ function log(tag, message) {
  * 异步检测 exe 签名状态，fire-and-forget，绝不阻碍启动。
  * 所有异常/未知状态仅记录，不弹窗、不退出。
  */
-function runSelfCheck() {
+function runSelfCheck(options) {
+    _selfCheckOpts = options || {};
     if (initialized) return;
     initialized = true;
 
@@ -107,17 +116,21 @@ function runSelfCheck() {
                     // 哈希失配优先判定：签名后字节被改，即使指纹匹配也是被篡改
                     _integrity.exeSignature = 'tampered_hash';
                     log('WARN', 'exe 签名哈希失配，文件可能在签名后被篡改/重打包。' + detail);
+                    enforceSignatureMismatch(detail);
                 } else if (info.Thumbprint && info.Thumbprint.toUpperCase() === expectedUp) {
                     // 指纹匹配发布证书：Valid（证书已入信任根）或 UnknownError
                     // （自签证书未入信任根的预期状态）均视为通过
                     _integrity.exeSignature = 'ok';
+                    resetMismatchCount();
                     log('debug', 'exe 签名指纹匹配发布证书（自签），自校验通过。' + detail);
                 } else if (status === 'NotSigned') {
                     _integrity.exeSignature = 'tampered';
                     log('WARN', 'exe 未签名（发布产物应带自签证书签名），可能被剥签名/重打包。' + detail);
+                    enforceSignatureMismatch(detail);
                 } else {
                     _integrity.exeSignature = 'tampered';
                     log('WARN', 'exe 已签名但指纹与发布证书不符，可能被重新签名/重打包。' + detail);
+                    enforceSignatureMismatch(detail);
                 }
             } catch (e) {
                 _integrity.exeSignature = 'unavailable';
@@ -233,6 +246,123 @@ function runAsarIntegrityCheck(expectedAsarSha) {
             app.exit(1);
         }
     });
+}
+
+// ============================================================================
+//  ★ 2026-11-12 P1-4：exe 签名异常「首次告警、二次阻断」
+//
+//  被防的攻击路径：解包 app.asar → 修改 license-manager.js 去掉授权校验 →
+//  重封 asar → 重算 .bnzc 区段 → 用任意自签证书重新签名 exe。
+//  此时 Authenticode 指纹必然与发布证书不符；若只 WARN，前述整套 asar 哈希
+//  校验会被一次性绕过，因此必须升级为阻断。
+//
+//  误伤控制：
+//   · 只在「确定的篡改证据」（tampered / tampered_hash）计数；
+//     'unavailable'（PowerShell 不可用、超时、解析失败）永不计数、永不阻断；
+//   · 第 1 次仅告警放行，覆盖杀软剥签名、证书轮换等一次性场景；
+//   · 签名恢复为发布证书后自动清零计数（覆盖安装即可恢复）；
+//   · 计数写 userData + exe 目录两处并取最大值，只删一个文件无法清零。
+// ============================================================================
+const MISMATCH_FLAG_FILE = '.sig-mismatch';
+
+function getMismatchFlagPaths() {
+    const list = [];
+    try {
+        const ud = app.getPath('userData');
+        if (ud) list.push(path.join(ud, MISMATCH_FLAG_FILE));
+    } catch (e) { /* 忽略 */ }
+    try {
+        const exeDir = path.dirname(process.execPath || '');
+        if (exeDir) {
+            const p = path.join(exeDir, MISMATCH_FLAG_FILE);
+            if (list.indexOf(p) < 0) list.push(p);
+        }
+    } catch (e) { /* 忽略 */ }
+    return list;
+}
+
+function readMismatchCount() {
+    let max = 0;
+    for (const p of getMismatchFlagPaths()) {
+        try {
+            if (!rawFs.existsSync(p)) continue;
+            const n = parseInt(String(rawFs.readFileSync(p, 'utf8')).trim(), 10);
+            if (!isNaN(n) && n > max) max = n;
+        } catch (e) { /* 忽略单个位置 */ }
+    }
+    return max;
+}
+
+function writeMismatchCount(n) {
+    const val = String(n);
+    for (const p of getMismatchFlagPaths()) {
+        try { rawFs.writeFileSync(p, val, 'utf8'); } catch (e) { /* 无写权限的位置忽略 */ }
+    }
+}
+
+function resetMismatchCount() {
+    for (const p of getMismatchFlagPaths()) {
+        try { if (rawFs.existsSync(p)) rawFs.unlinkSync(p); } catch (e) { /* 忽略 */ }
+    }
+}
+
+function enforceSignatureMismatch(detail) {
+    /* BNZC_E2E_GUARD_BEGIN（构建期整块移除，勿手改标记行） */
+    // E2E 的 win-unpacked exe 尚未签名，属预期状态，不计入、不弹窗
+    if (global.__BNZC_E2E_BYPASS === true) return;
+    /* BNZC_E2E_GUARD_END */
+
+    let count = 0;
+    try { count = readMismatchCount() + 1; writeMismatchCount(count); } catch (e) { /* 计数失败不阻断 */ }
+
+    if (count <= 1) {
+        // 第 1 次：告警放行
+        try {
+            dialog.showMessageBox({
+                type: 'warning',
+                title: '程序完整性提示',
+                message: '程序文件的数字签名校验未通过（第 1 次告警）',
+                detail: '可能原因：\n' +
+                    '· 程序文件被替换或重新打包；\n' +
+                    '· 杀毒软件修改/隔离了安装目录中的文件；\n' +
+                    '· 程序不是从官方渠道获取的。\n\n' +
+                    '本次仍可正常使用；若再次出现此提示，程序将拒绝启动。\n' +
+                    '建议从官方渠道覆盖安装（处方与药材数据不会丢失）。\n\n' +
+                    '检测详情：' + detail,
+                buttons: ['我知道了'],
+                noLink: true
+            });
+        } catch (e) { /* 弹窗失败不阻断 */ }
+        return;
+    }
+
+    // 第 2 次起：阻断，并给出可操作的恢复路径（避免把合法用户锁死）
+    const url = (_selfCheckOpts && _selfCheckOpts.downloadUrl) ? String(_selfCheckOpts.downloadUrl) : '';
+    const buttons = url ? ['退出程序', '打开官方下载页'] : ['退出程序'];
+    let choice = 0;
+    try {
+        choice = dialog.showMessageBoxSync({
+            type: 'error',
+            title: '程序文件校验未通过',
+            message: '程序文件已被修改或重新打包，程序已停止启动（第 ' + count + ' 次检测）',
+            detail: '这不是账号或授权问题，您的处方与药材数据没有丢失。\n\n' +
+                '恢复方法（任选其一）：\n' +
+                '1) 从官方下载最新安装包，覆盖安装到原目录，数据会保留；\n' +
+                '2) 若杀毒软件拦截/隔离了程序文件，请先把安装目录加入信任，再重新安装；\n' +
+                '3) 若刚更换过代码签名证书，请升级到官网最新版本。\n\n' +
+                '重新安装后签名恢复正常，程序会自动清零本次计数并正常启动。\n' +
+                '如需协助请联系客服。\n\n' +
+                '检测详情：' + detail,
+            buttons: buttons,
+            defaultId: 0,
+            cancelId: 0,
+            noLink: true
+        });
+    } catch (e) { /* 弹窗失败仍退出 */ }
+    if (url && choice === 1) {
+        try { require('electron').shell.openExternal(url); } catch (e) { /* 忽略 */ }
+    }
+    app.exit(1);
 }
 
 module.exports = { runSelfCheck, getIntegrityState, EXPECTED_EXE_SIGNER_THUMBPRINT };

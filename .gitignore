@@ -28,6 +28,11 @@ build_new/
 # 构建互斥锁（tools/build-lock.ps1，运行时产物）
 .build.lock
 
+# ★ 2026-11-12 P1-1：E2E 旁路模块由 build.bat 从 e2e/e2e-bypass.template.cjs 临时生成，
+#   E2E 通过后即删除；正式包必须不含它，禁止提交。
+app_project/*/desktop/electron/e2e-bypass.cjs
+app_project/*/*/electron/e2e-bypass.cjs
+
 # 打包增量检测基线（tools/build-skip.ps1，运行时产物，不入库）
 .build-cache/
 

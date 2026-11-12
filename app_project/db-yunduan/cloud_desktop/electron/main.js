@@ -118,37 +118,27 @@ app.commandLine.appendSwitch('allow-file-access-from-files');
 //  修复：检测到调试参数立即退出程序
 // ============================================================================
 (function blockRemoteDebugging() {
-    // ★ E2E 专用旁路（2026-08-21 T4）：放行远程调试需【同时】满足两个条件：
-    //   ① 环境变量 BNZC_E2E=1（外部攻击者无法在用户机器上预设）
-    //   ② exe 同级目录存在 e2e-enabled.marker 文件（仅本地构建管线在 dist\win-unpacked
-    //      跑 e2e 前临时写入、跑完即删；NSIS Setup / portable 产物永不携带此文件）
-    //   任一条件缺失都按原逻辑阻断 —— 生产包的远程调试防护保持 100% 生效。
-    try {
-        if (process.env.BNZC_E2E === '1') {
-            const fsSync = require('fs');
-            const markerPath = path.join(path.dirname(process.execPath), 'e2e-enabled.marker');
-            if (fsSync.existsSync(markerPath)) {
-                console.warn('[E2E] 命中 e2e 旁路（BNZC_E2E=1 + marker），放行远程调试');
-                // ★ 全局旁路标志：license 的 debugger 检测据此跳过
-                //   （标志置位前提 = 双条件已校验通过，攻击者需同时控制环境变量+exe 目录写权限）
-                global.__BNZC_E2E_BYPASS = true;
-                // 顺带隔离 userData，避免 e2e 读写污染开发者/用户真实数据目录
-                if (process.env.BNZC_E2E_DATA) {
-                    try {
-                        fsSync.mkdirSync(process.env.BNZC_E2E_DATA, { recursive: true });
-                        app.setPath('userData', process.env.BNZC_E2E_DATA);
-                        console.warn('[E2E] userData 已隔离至: ' + process.env.BNZC_E2E_DATA);
-                    } catch (e) { console.warn('[E2E] userData 隔离失败:', e.message); }
-                }
-                return;
-            }
-        }
-    } catch (e) { /* 旁路检查异常则按原逻辑继续阻断 */ }
+    /* BNZC_E2E_GUARD_BEGIN（构建期整块移除，勿手改标记行） */
+    // E2E 专用旁路安装点：模块不存在时 require 抛错被吞，管道继续走完整拦截。
+    try { require('./e2e-bypass.cjs')(app); } catch (e) { /* 无该模块即正常路径 */ }
+    if (global.__BNZC_E2E_BYPASS === true) return;
+    /* BNZC_E2E_GUARD_END */
+    // ★ 2026-11-12 安全加固：清理可把正式 exe 变成 Node/调试宿主的进程环境。
+    //   ① ELECTRON_RUN_AS_NODE=1 → 当前 exe 直接进 Node 运行时，可 require 到
+    //      app.asar 内部模块、复算 machineId 派生密钥、改写本地授权态；
+    //   ② NODE_OPTIONS=--inspect* → 主进程挂调试器，绕过下面的参数拦截。
+    //   正常用户从不设置这两个变量，删除对业务零影响（E2E 旁路已在上方 return）。
+    try { delete process.env.ELECTRON_RUN_AS_NODE; } catch (e) { /* 只读环境，忽略 */ }
+    try { delete process.env.NODE_OPTIONS; } catch (e) { /* 只读环境，忽略 */ }
+
     const argv = process.argv.join(' ').toLowerCase();
     const debugPatterns = [
         '--inspect',           // Node.js Inspector
         '--inspect-brk',       // 断点调试
-        '--remote-debugging-port',  // Chrome 远程调试端口
+        '--inspect-port',      // Inspector 端口（可配合 NODE_OPTIONS 生效）
+        '--remote-debugging-port',    // Chrome 远程调试端口
+        '--remote-debugging-pipe',    // Chrome 远程调试管道（无需端口，原名单漏项）
+        '--remote-debugging-address', // 调试监听地址
         '--debug',             // 旧版调试
         '--debug-brk'          // 旧版断点调试
     ];
@@ -571,12 +561,11 @@ const INTEGRITY_REPORT_URL = 'https://tcm-prescription-system.pages.dev/api/lice
 async function reportDesktopIntegrity() {
     try {
         if (!app.isPackaged) return;
-        // ★ 2026-09-24 P1 对齐离线版（离线端 2026-09-23 事故同险）：E2E/打包链路
-        //   （[7.8/9] pre-fuse）跑的是签名前的 win-unpacked exe，self-check 必然判
-        //   NotSigned=tampered → state=2，若用例活到 ready+25s 就会把【构建机自己的
-        //   machineId】上报封锁，导致正式包登录时 entitlement 403。E2E 环境信号无意义，
-        //   直接跳过（BNZC_E2E=1 由 smoke-launch.cjs spawn 注入）。
-        if (process.env.BNZC_E2E === '1') return;
+        /* BNZC_E2E_GUARD_BEGIN（构建期整块移除，勿手改标记行） */
+        // E2E 跑的是签名前的 win-unpacked exe，完整性状态无意义；若上报会把构建机
+        // machineId 封锁，导致正式包登录 entitlement 403。
+        if (global.__BNZC_E2E_BYPASS === true) return;
+        /* BNZC_E2E_GUARD_END */
         const state = (selfCheck && selfCheck.getIntegrityState) ? selfCheck.getIntegrityState() : null;
         if (typeof state !== 'number') return;
         let mid = '';
@@ -723,7 +712,7 @@ app.whenReady().then(async () => {
         }
     } catch (e) { console.warn('[Integrity] 校验异常（跳过，不误杀）:', e && e.message); }
     // ★ P0-③ exe 签名/完整性自校验（非阻塞，仅记录，不影响启动流程）
-    selfCheck.runSelfCheck();
+    selfCheck.runSelfCheck({ downloadUrl: UPDATE_DOWNLOAD_URL });
     // ★ 2026-09-11 P1 完整性上报：延迟 25s 等三路校验落定后聚合上报（篡改证据
     //   优先于未完成——getIntegrityState 聚合逻辑保证 strong 信号不等 PowerShell）
     setTimeout(reportDesktopIntegrity, 25000);

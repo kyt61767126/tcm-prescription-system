@@ -2835,3 +2835,15 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
 * **门禁**：pre-push 十九道全部通过（html-sync / sync-all / check-interface / copy-consistency / check-manifest-version / check-cv-hashes / check-quiz-data 等），发布前 `compliance-check` 13/13 PASS。
 * **生效方式**：已推送 `main`（Cloudflare Pages 自动部署）；客户端旧包需覆盖安装 vc352 才生效（APP 原生层修复，热更无法覆盖）。
 * **未做**：未重打离线 APP / 桌面端 / 鸿蒙 HAP；未签发新热更（页面未变）。真机验收：用户已确认真机生效（2026-11-07）。
+
+## 87. 安全防破解二次加固批（2026-11-12，主进程域，需双桌面重打 exe）
+
+> 触发：客户要求对现有防护面做一轮复审计。结论：授权主链（V7 Ed25519 → V5 ECDSA → HMAC 日落）不可伪造；licence 绑定 machineId+硬件指纹；config/users fail-closed；时间回拨走 gate+anchor 双高水位；热更 Ed25519 签名覆盖 `channel|hotVersion|signedAt|每文件 sha256`；asar 全文件 SHA256 失配 `app.exit(1)`。**真问题集中在运行时调试面与本地试探性状态**，本批修 5 项。
+
+* **P0-1 调试参数黑名单补全**（`db-offline` / `db-yunduan` 各 `electron/main.js`）：原名单仅 5 项，漏 `--remote-debugging-pipe`（不占端口却能挂 CDP）、`--inspect-port`、`--remote-debugging-address`。攻击路径：`exe --remote-debugging-pipe` → 运行时改渲染层状态绕过 UI 闸。修法：补 3 项（共 8 项）。
+* **P0-2 危险进程环境清理**（同上两文件）：`ELECTRON_RUN_AS_NODE=1` 可让正式 exe 退化为 Node 宿主、`require` app.asar 内模块并复算 machineId 派生密钥；`NODE_OPTIONS=--inspect*` 可给主进程挂调试器。修法：E2E 旁路 return 之后立即 `delete process.env.ELECTRON_RUN_AS_NODE / NODE_OPTIONS`（正常用户不设，零业务影响）。
+* **P1-1 E2E 旁路构建期剥离**（`build.bat` ×2 + `electron/main.js` ×2 + `e2e/e2e-bypass.template.cjs` ×2 + `.gitignore`）：原 `BNZC_E2E=1 + exe 同级 e2e-enabled.marker` 双条件判定内联在 `main.js`，便携版目录可写 → 外部可构造旁路，关闭远程调试拦截/debugger 检测/试用登记。修法：判定逻辑整体收进 `e2e-bypass.cjs`（模板不在 build.files 白名单），build.bat 在 Phase 1 前复制、E2E 通过后删除并**重新打包 asar**（offline 重跑 `electron-builder --dir`，cloud 重跑 `prepare-win-unpacked.js`），之后才 fuse/.bnzc/签名。**残留的 6 处 `if (global.__BNZC_E2E_BYPASS === true)` 死分支同样不交付**：源码用 `BNZC_E2E_GUARD_BEGIN/END` 标记包裹，`tools/strip-e2e-bypass.cjs --dir` 在重新打包前整块移除（备份在系统临时目录、`node --check` + 残留扫描自检、失败自动还原；`--restore` 在打包后还原源码，所有 abort 分支也带 `--restore` 自愈），打包后再用 `--check-asar` 断言产物内 `BNZC_E2E / e2e-enabled.marker / e2e-bypass` 三串零命中，命中即中止构建。**正式包 asar 内已无可搜到的旁路判定代码**，E2E 构建行为不变。
+* **P1-2 试用月计数防重置**（`shared/license/prescription-counter.js`）：原单文件删除 / machineId 变化即 `readCounts()` 返回 `{}`，30 张/月试用额度归零。修法：主文件 + 冗余锚点（`exeDir/.pc-anchor` 与 `userData/.pc-anchor`）双写，按月取 max，缺失回填；全部 fail-open（读失败绝不阻断开方，最坏只是计数回旧值）。
+* **P1-4 exe 签名「首次告警、二次阻断」**（`self-check.js` ×2 + `main.js` 传 downloadUrl）：原指纹不符仅 WARN → 可「解包 asar 改 license-manager → 重算 .bnzc → 自签证书重签」绕过整套 asar 哈希。修法：仅对确定证据（`tampered`/`tampered_hash`）计数，`unavailable` 永不计数；第 1 次弹窗告警放行，第 2 次起阻断并给出「覆盖安装 / 杀软加信任 / 升级证书」恢复路径与官网下载按钮；签名恢复后自动清零。计数写 `userData/.sig-mismatch` + exe 目录取 max。
+* **未做（单独排期）**：P1-3 断网 + 删 `trial.dat` 无限重开试用（需改授权核心 gate/anchor，风险高）；P2 本地对称密钥可推导（config v1 静态键、HKDF(machineId)）无法根治，只能提成本；SQLite 用本机派生密钥加密，可读可改但**不影响授权**。
+* **门禁**：sync-all -VerifyOnly 全同步、copy-consistency 110/0、check-interface 6 OK、pre-build-check 双端 IPC 一致、`node --check` 全通过。**需双桌面重打 exe 生效**，已装客户端不受影响（不强制更新、不引入任何联网启动校验、未动界面/题库/热更白名单）。

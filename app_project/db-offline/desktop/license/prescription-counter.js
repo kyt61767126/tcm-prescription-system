@@ -112,40 +112,101 @@ function getCountPath() {
     return path.join(app.getPath('userData'), COUNT_FILE);
 }
 
-function readCounts() {
-    try {
-        const countPath = getCountPath();
-        if (!fs.existsSync(countPath)) return {};
-        const content = fs.readFileSync(countPath, 'utf8').trim();
+// ★ 2026-11-12 安全加固（防「删计数文件重置试用月额度」）：
+//   原实现只有一个 prescription-count.dat，删除（或 machineId 变化导致解密失败）
+//   后 readCounts 返回 {}，当月已开处方数直接归零，30 张/月试用额度可无限重置。
+//   现改为「主文件 + 冗余锚点」双位置落盘，读取时按月份取两者最大值：
+//     · 主文件：userData/prescription-count.dat（原路径不变，向后兼容）
+//     · 锚点：exe 目录/.pc-anchor（便携版可写）+ userData/.pc-anchor
+//   只删其中一个无法回退计数；两处都被换成旧副本时，按月取 max 仍挡住单边回滚。
+//   任何读失败一律 fail-open（返回已有值或 {}），绝不阻断开方。
+const COUNT_ANCHOR_FILE = '.pc-anchor';
+let _anchorExeDirUnwritable = false;   // exe 目录不可写（Program Files 安装版）后不再重试
 
-        // ★ v3：优先尝试 AES 解密
-        const machineId = getMachineId();
+function getAnchorPaths() {
+    const list = [];
+    if (!_anchorExeDirUnwritable) {
+        try {
+            const exeDir = path.dirname(process.execPath || '');
+            if (exeDir) list.push(path.join(exeDir, COUNT_ANCHOR_FILE));
+        } catch (e) { /* 忽略 */ }
+    }
+    try {
+        const ud = app.getPath('userData');
+        if (ud) {
+            const p = path.join(ud, COUNT_ANCHOR_FILE);
+            if (list.indexOf(p) < 0) list.push(p);
+        }
+    } catch (e) { /* 忽略 */ }
+    return list;
+}
+
+function decodeCountPayload(content, machineId) {
+    if (!content) return null;
+    try {
         if (machineId && content.startsWith(ENC2_PREFIX)) {
             const json = aesDecrypt(content, machineId);
-            if (json) {
-                const data = JSON.parse(json);
-                return (data && typeof data === 'object') ? data : {};
-            }
-            // AES 解密失败（可能是 machineId 变化或文件损坏），返回空
-            console.error('[PrescriptionCounter] AES 解密失败，计数文件可能被篡改');
-            return {};
+            if (!json) return null;
+            const data = JSON.parse(json);
+            return (data && typeof data === 'object') ? data : null;
         }
-
-        // ★ 迁移：旧 XOR 格式 → 新 AES 格式
         const oldJson = xorDecrypt(content, COUNT_KEY);
-        if (oldJson) {
-            try {
-                const data = JSON.parse(oldJson);
-                if (data && typeof data === 'object') {
+        if (!oldJson) return null;
+        const data = JSON.parse(oldJson);
+        return (data && typeof data === 'object') ? data : null;
+    } catch (e) {
+        return null;
+    }
+}
+
+function mergeCountsMax(base, extra) {
+    const out = Object.assign({}, base || {});
+    Object.keys(extra || {}).forEach(function (k) {
+        const ev = Number(extra[k]) || 0;
+        const ov = Number(out[k]) || 0;
+        if (ev > ov) out[k] = ev;
+    });
+    return out;
+}
+
+function readCounts() {
+    try {
+        const machineId = getMachineId();
+        const countPath = getCountPath();
+        let merged = {};
+        let primaryUsable = false;
+
+        if (fs.existsSync(countPath)) {
+            const raw = fs.readFileSync(countPath, 'utf8').trim();
+            const primary = decodeCountPayload(raw, machineId);
+            if (primary) {
+                merged = mergeCountsMax(merged, primary);
+                primaryUsable = true;
+                // 旧 XOR 格式 → 顺手迁移为 AES 并补写锚点
+                if (!(machineId && raw.startsWith(ENC2_PREFIX))) {
                     console.log('[PrescriptionCounter] 检测到旧 XOR 格式，自动迁移到 AES');
-                    // 用新格式重新保存
-                    writeCounts(data);
-                    return data;
+                    writeCounts(merged);
                 }
-            } catch (e) { /* JSON 解析失败，继续 */ }
+            } else {
+                console.error('[PrescriptionCounter] 主计数文件解密失败（可能被删除后伪造），尝试锚点回填');
+            }
         }
 
-        return {};
+        for (const p of getAnchorPaths()) {
+            try {
+                if (!fs.existsSync(p)) continue;
+                const anchor = decodeCountPayload(fs.readFileSync(p, 'utf8').trim(), machineId);
+                if (anchor) merged = mergeCountsMax(merged, anchor);
+            } catch (e) { /* 单个锚点异常不影响主流程 */ }
+        }
+
+        // 主文件缺失/损坏但锚点可用 → 回填主文件，保证下次走正常路径
+        if (!primaryUsable && Object.keys(merged).length > 0) {
+            console.warn('[PrescriptionCounter] 主计数文件缺失/损坏，已按锚点回填');
+            writeCounts(merged);
+        }
+
+        return merged;
     } catch (e) {
         console.error('[PrescriptionCounter] 读取计数失败:', e.message);
         return {};
@@ -154,18 +215,25 @@ function readCounts() {
 
 function writeCounts(counts) {
     try {
-        const countPath = getCountPath();
         const json = JSON.stringify(counts);
-
-        // ★ v3：使用 AES 加密
         const machineId = getMachineId();
-        if (machineId) {
-            const encrypted = aesEncrypt(json, machineId);
-            fs.writeFileSync(countPath, encrypted, 'utf8');
-        } else {
-            // 极端降级：machineId 不可用时使用 XOR（向后兼容）
-            const encrypted = xorEncrypt(json, COUNT_KEY);
-            fs.writeFileSync(countPath, encrypted, 'utf8');
+        // ★ v3：使用 AES 加密
+        const encrypted = machineId ? aesEncrypt(json, machineId) : xorEncrypt(json, COUNT_KEY);
+        const targets = [getCountPath()].concat(getAnchorPaths());
+        for (const p of targets) {
+            try {
+                fs.writeFileSync(p, encrypted, 'utf8');
+            } catch (e) {
+                if (p.indexOf(getCountPath()) !== 0) {
+                    // 锚点写不进（exe 目录只读）：删掉可能存在的陈旧副本，
+                    // 避免读取时用旧的高计数覆盖合法递减；删不掉也无害（fail-open）。
+                    try { fs.unlinkSync(p); } catch (e2) { /* 忽略 */ }
+                    if (p === path.join(path.dirname(process.execPath || ''), COUNT_ANCHOR_FILE)) {
+                        _anchorExeDirUnwritable = true;
+                    }
+                }
+                console.warn('[PrescriptionCounter] 计数副本写入失败（不影响开方）:', p, e && e.message);
+            }
         }
     } catch (e) {
         console.error('[PrescriptionCounter] 写入计数失败:', e.message);

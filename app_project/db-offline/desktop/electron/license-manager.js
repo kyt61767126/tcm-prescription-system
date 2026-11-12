@@ -2434,10 +2434,10 @@ function selfHealConfigFromLicense(license, inspection) {
 // ============================================================================
 function isDebuggerAttached() {
     try {
-        // ★ E2E 旁路（2026-08-22 恢复：原 ca5ae735 修复被 22ee942c 自动同步覆盖丢失）：
-        //   构建管线 e2e 双条件（BNZC_E2E=1 环境变量 + exe 同级 marker，main.js 已校验置位）
-        //   放行调试参数；生产环境无 marker，检测保持 100% 生效。
+        /* BNZC_E2E_GUARD_BEGIN（构建期整块移除，勿手改标记行） */
+        // E2E 专用状态位：仅测试构建存在置位者
         if (global.__BNZC_E2E_BYPASS === true) return false;
+        /* BNZC_E2E_GUARD_END */
         // 仅在打包后启用检测（开发模式下跳过，避免误报）
         if (!app.isPackaged) return false;
 

@@ -616,15 +616,13 @@ ipcMain.handle('license:gate-failed', async (event, message) => {
 
 ipcMain.handle('license:install-admin-license', async (event, args) => {
     try {
-        // ★ 2026-09-05 E2E 隔离守卫：E2E 用 BNZC_E2E_DATA 临时 userData 构造出厂态/试用态，
-        //   但开发机自身在授权服务器可能有激活记录（实测本机记录"离标脑"已 activated）——
-        //   登录页 auth-core 存量自愈 heal 会查 admin-status 命中后把真实 license.dat +
-        //   管理员账号写进 E2E 临时目录，污染 E6 出厂态（__isDeviceLicensed=true → 注册
-        //   入口不注入 → 25s 超时失败）。E2E 旁路模式下拒绝落盘，保持用例状态确定性。
+        /* BNZC_E2E_GUARD_BEGIN（构建期整块移除，勿手改标记行） */
+        // E2E 用临时 userData 构造出厂态，需与开发机真实授权记录隔离
         if (global.__BNZC_E2E_BYPASS === true) {
-            console.warn('[E2E] install-admin-license 已拦截（出厂态与生产授权记录隔离）');
-            return { success: false, error: 'E2E bypass: install-admin-license blocked' };
+            console.warn('[E2E] install-admin-license 已拦截');
+            return { success: false, error: 'blocked' };
         }
+        /* BNZC_E2E_GUARD_END */
         return await activateManager.installAdminLicenseDesktop(args || {});
     } catch (e) {
         console.error('[IPC] install-admin-license 异常:', e);
@@ -643,9 +641,11 @@ ipcMain.handle('license:query-order-status', async (event, orderNo, phone) => {
 
 ipcMain.handle('license:install-from-server', async (event, machineId) => {
     try {
+        /* BNZC_E2E_GUARD_BEGIN（构建期整块移除，勿手改标记行） */
         if (global.__BNZC_E2E_BYPASS === true) {
-            return { success: false, error: 'E2E bypass: install-from-server blocked' };
+            return { success: false, error: 'blocked' };
         }
+        /* BNZC_E2E_GUARD_END */
         return await activateManager.installLicenseFromServer(machineId);
     } catch (e) {
         console.error('[IPC] install-from-server 异常:', e);
