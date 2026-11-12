@@ -1959,6 +1959,128 @@ function writeTrial(data) {
     }
 }
 
+// ============================================================================
+// ★ 2026-11-12 P1-3：试用起点双锚点（防「断网 + 删 trial.dat」重置 7 天）
+//   攻击路径：删除 trial.dat（或破坏其内容）后重启 → 旧实现按 now 重新起算 7 天，
+//   断网时无服务端兜底，可无限重开试用。
+//   修法：试用起点另存双位置锚点（exe 目录 + userData，machineId 派生 AES 加密，
+//   与试用月计数 P1-2 同思路）。读取取两者【最早】起点；单删任一文件不失效，
+//   跨机复制无法解密。
+//   约束（用户明确要求）：
+//     · 全链路 fail-open —— 任何读写异常只记日志，绝不阻断已付费用户
+//       （付费用户带有效 license.dat，根本不会进入试用分支）；
+//     · 锚点存在但【全部】解不开（换机/密钥变化）→ 按「已用过试用」处理并日志留痕，
+//       走既有到期流程（可激活），不做硬阻断；
+//     · 取最早起点：宁可沿用更早的原起点，也不出现「试用期被延长后再收紧」。
+// ============================================================================
+const TRIAL_ANCHOR_FILE = '.trial-anchor';
+let _trialAnchorExeDirUnwritable = false;
+
+function getTrialAnchorPaths() {
+    const list = [];
+    if (!_trialAnchorExeDirUnwritable) {
+        try {
+            const exeDir = getExeDirectory();
+            if (exeDir) list.push(path.join(exeDir, TRIAL_ANCHOR_FILE));
+        } catch (e) { /* 忽略 */ }
+    }
+    try {
+        const ud = app.getPath('userData');
+        if (ud) {
+            const p = path.join(ud, TRIAL_ANCHOR_FILE);
+            if (list.indexOf(p) < 0) list.push(p);
+        }
+    } catch (e) { /* 忽略 */ }
+    return list;
+}
+
+function readTrialStartAnchor() {
+    let minStart = 0, found = false, unreadable = 0;
+    try {
+        const mid = getMachineId();
+        for (const p of getTrialAnchorPaths()) {
+            let raw;
+            try {
+                if (!fs.existsSync(p)) continue;
+                raw = fs.readFileSync(p, 'utf8');
+            } catch (e) { continue; }
+            found = true;
+            let json = null;
+            try { json = mid ? decryptTrialContent(raw, mid) : null; } catch (e) { json = null; }
+            if (!json) { unreadable++; continue; }
+            try {
+                const st = Number(JSON.parse(json).startTime) || 0;
+                if (st > 0) minStart = minStart > 0 ? Math.min(minStart, st) : st;
+            } catch (e) { unreadable++; }
+        }
+    } catch (e) { /* fail-open：读不了按「无锚点」处理 */ }
+    return { startTime: minStart, allCorrupt: found && minStart === 0 && unreadable > 0 };
+}
+
+function writeTrialStartAnchor(startTime) {
+    const st = Number(startTime) || 0;
+    if (!(st > 0)) return false;
+    try {
+        const mid = getMachineId();
+        if (!mid) return false;
+        const payload = encryptTrialContent(JSON.stringify({ startTime: st, v: 1 }), mid);
+        if (!payload) return false;
+        let ok = false;
+        for (const p of getTrialAnchorPaths()) {
+            try {
+                fs.writeFileSync(p, payload, { mode: 0o600 });
+                ok = true;
+            } catch (e) {
+                // exe 目录不可写（Program Files 安装版）：后续不再重试，userData 一份仍生效
+                try {
+                    let exeDir = '';
+                    try { exeDir = getExeDirectory(); } catch (e2) { exeDir = ''; }
+                    if (exeDir && path.dirname(p) === exeDir) _trialAnchorExeDirUnwritable = true;
+                } catch (e3) { /* 忽略 */ }
+            }
+        }
+        if (ok) ensureTrialStartUnifiedAsync(st);
+        return ok;
+    } catch (e) {
+        console.warn('[License] 试用起点锚点写入失败（非致命）:', e && e.message);
+        return false;
+    }
+}
+
+// 统一态（vault / gate+anchor）里的试用起点：作为第三处锚点，
+// 防「trial.dat + 两个 .trial-anchor 一起删」。读不到一律返回 0（fail-open）。
+function readTrialStartFromUnified() {
+    try {
+        const mid = getMachineId();
+        if (!mid) return 0;
+        const u = readUnifiedState(mid);
+        if (!u || !u.state) return 0;
+        return Number(u.state.trialStartAt) || 0;
+    } catch (e) { return 0; }
+}
+
+// 每进程最多执行一次（异步、不阻塞启动）：把试用起点并入统一态，单调取最早。
+let _trialUnifiedEnsured = false;
+function ensureTrialStartUnifiedAsync(startTime) {
+    if (_trialUnifiedEnsured) return;
+    const st = Number(startTime) || 0;
+    if (!(st > 0)) return;
+    _trialUnifiedEnsured = true;
+    try {
+        const mid = getMachineId();
+        if (!mid) return;
+        Promise.resolve()
+            .then(() => readUnifiedStateAsync(mid))
+            .then((r) => {
+                const prev = r && r.state ? Number(r.state.trialStartAt) || 0 : 0;
+                const next = prev > 0 ? Math.min(prev, st) : st;
+                if (prev > 0 && next === prev) return null;
+                return patchUnifiedStateAsync({ trialStartAt: next }, mid);
+            })
+            .catch(() => { /* fail-open */ });
+    } catch (e) { /* fail-open */ }
+}
+
 function readLastRun() {
     try {
         const lastRunPath = getLastRunPath();
@@ -2754,19 +2876,54 @@ function validateLicense(options) {
     // 3. 没有 license 文件，进入试用模式
     let trial = readTrial();
     const currentTrialDays = getTrialDays();   // ★ 当前配置的试用期天数
+    const TRIAL_DAY_MS = 24 * 60 * 60 * 1000;
     if (!trial) {
-        trial = {
-            startTime: now,
-            expiresAt: now + currentTrialDays * 24 * 60 * 60 * 1000
-        };
-        writeTrial(trial);
+        // ★ 2026-11-12 P1-3：trial.dat 缺失/损坏不再重新起算，按锚点原起点恢复；
+        //   优先级：双文件锚点 → 统一态（vault / gate+anchor）锚点；
+        //   锚点全部解不开（换机/密钥变化）→ 视为已用过试用（正常到期流程，不硬阻断）。
+        const anchor = readTrialStartAnchor();
+        let restored = anchor.startTime;
+        if (!(restored > 0) && !anchor.allCorrupt) {
+            // 双文件锚点都没了：再查统一态。仅「非首次启动」才付这一次同步读成本
+            // （新装首启无 last-run 历史，直接按新装处理，不为一次冷读阻塞首启）。
+            try {
+                if (lastRun && lastRun.timestamp) restored = readTrialStartFromUnified();
+            } catch (e) { /* fail-open */ }
+        }
+        if (restored > 0) {
+            trial = { startTime: restored };
+            writeTrialStartAnchor(restored);   // 文件锚点自愈（含统一态并入）
+            console.warn(anchor.startTime > 0
+                ? '[License] trial.dat 缺失或损坏，按锚点原起点恢复（不重新起算）'
+                : '[License] trial.dat 与文件锚点均缺失，按统一态原起点恢复（不重新起算）');
+        } else if (anchor.allCorrupt) {
+            trial = { startTime: 0, trialUsedUnreadable: true };
+            console.warn('[License] 试用锚点解密失败（疑似换机/密钥变化），按已用过试用处理');
+        } else {
+            trial = { startTime: now };
+            writeTrialStartAnchor(now);
+        }
+        trial.expiresAt = trial.startTime > 0 ? trial.startTime + currentTrialDays * TRIAL_DAY_MS : 0;
+        if (!trial.trialUsedUnreadable) writeTrial(trial);
     } else if (currentTrialDays === 0) {
         // ★ 配置为 0 天时，立即过期（测试用）
         trial.expiresAt = trial.startTime;
         writeTrial(trial);
     } else {
+        // ★ 2026-11-12 P1-3：同步取「trial.dat 起点」与「双文件锚点最早起点」中的最早者
+        //   （只读两个小文件，无 PowerShell/网络，不引入启动阻塞）。
+        const anchor = readTrialStartAnchor();
+        if (anchor.startTime > 0 && anchor.startTime < trial.startTime) {
+            trial.startTime = anchor.startTime;
+            console.warn('[License] 试用起点锚点早于 trial.dat，已按最早起点收紧');
+        }
+        if (!anchor.allCorrupt && anchor.startTime !== trial.startTime) {
+            writeTrialStartAnchor(trial.startTime);   // 锚点缺失/更晚 → 补写为最早
+        } else if (anchor.startTime > 0) {
+            ensureTrialStartUnifiedAsync(trial.startTime);   // 每进程一次，异步不阻塞
+        }
         // ★ 配置变化时，重新计算 expiresAt（保留 startTime）
-        const expectedExpiresAt = trial.startTime + currentTrialDays * 24 * 60 * 60 * 1000;
+        const expectedExpiresAt = trial.startTime + currentTrialDays * TRIAL_DAY_MS;
         if (trial.expiresAt !== expectedExpiresAt) {
             trial.expiresAt = expectedExpiresAt;
             writeTrial(trial);
@@ -2791,7 +2948,9 @@ function validateLicense(options) {
     if (now > trialExpiresAtMs) {
         return {
             valid: false,
-            message: `试用期已到期（${currentTrialDays} 天）。\n请联系客服购买正式授权。`,
+            message: trial.trialUsedUnreadable
+                ? '试用记录无法校验（可能更换过硬件或试用标记损坏），试用期视为已结束。\n如需继续使用，请联系客服开通正式授权。'
+                : `试用期已到期（${currentTrialDays} 天）。\n请联系客服购买正式授权。`,
             type: 'trial_expired',
             trial: trial
         };
@@ -3937,6 +4096,8 @@ function mergeUnifiedStates(a, b) {
     // 若当次 vault 写失败导致旧键残留，并集期间该用户离线仍被拒（fail-closed，
     // 下次在线 LICENSED 重试清除）。
     const authVerify = Math.max(va, vb);
+    // ★ 2026-11-12 P1-3：试用起点单调取最早（两侧任一存在即保留，绝不回升）
+    const tsA = Number(a.trialStartAt) || 0, tsB = Number(b.trialStartAt) || 0;
     return {
         everActivated: !!(a.everActivated || b.everActivated),
         lastReject: auth.lastReject || null,
@@ -3944,6 +4105,7 @@ function mergeUnifiedStates(a, b) {
         lastVerify: authVerify,
         offlineStart: Number(auth.offlineStart) || null,
         lastSeenHigh: Math.max(Number(a.lastSeenHigh) || 0, Number(b.lastSeenHigh) || 0),
+        trialStartAt: (tsA && tsB) ? Math.min(tsA, tsB) : (tsA || tsB || null),
         accountReject: mergeRejectMaps(
             normalizeRejectMap(a.accountReject),
             normalizeRejectMap(b.accountReject)),
@@ -3977,6 +4139,8 @@ function mergeLegacyState(gate, anchor) {
     // 拒绝落补丁——锚点永久停在污染值。故此处绝不读 users-backup.json。
     const genV2Map = mergeDomainGenMaps(gate.usersBackupGenV2, anchor.usersBackupGenV2);
     const retiredV2Map = mergeDomainRetiredMaps(gate.usersLegacyRetiredV2, anchor.usersLegacyRetiredV2);
+    // ★ 2026-11-12 P1-3：试用起点单调取最早
+    const gts = Number(gate.trialStartAt) || 0, ats = Number(anchor.trialStartAt) || 0;
     return {
         everActivated: !!(gate.everActivated || anchor.everActivated),
         lastReject: gate.lastReject || anchor.lastReject || null,
@@ -3984,6 +4148,7 @@ function mergeLegacyState(gate, anchor) {
         lastVerify: Math.max(Number(gate.lastVerify) || 0, Number(anchor.lastVerify) || 0),
         offlineStart: (gs && as) ? Math.min(gs, as) : (gs || as || null),
         lastSeenHigh: Math.max(Number(gate.lastSeenHigh) || 0, Number(anchor.lastSeenHigh) || 0),
+        trialStartAt: (gts && ats) ? Math.min(gts, ats) : (gts || ats || null),
         accountReject: mergeRejectMaps(
             normalizeRejectMap(gate.accountReject),
             normalizeRejectMap(anchor.accountReject)),
