@@ -166,7 +166,7 @@ if errorlevel 1 (
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] Code obfuscation failed'"
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Restoring original files...'"
     del /f /q "%~dp0electron\e2e-bypass.cjs" >nul 2>&1
-    node "%~dp0..\..\..\tools\strip-e2e-bypass.cjs" --dir "%~dp0" --restore >nul 2>&1
+    node "%~dp0..\..\..\tools\strip-e2e-bypass.cjs" --dir "%~dp0." --restore >nul 2>&1
     node "%~dp0..\..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
     if not defined NO_PAUSE pause
     exit /b 1
@@ -234,7 +234,7 @@ if not "%BUILD_RC%"=="0" (
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] Phase 1 (--dir) build failed, see logs above'"
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Restoring original JavaScript code...'"
     del /f /q "%~dp0electron\e2e-bypass.cjs" >nul 2>&1
-    node "%~dp0..\..\..\tools\strip-e2e-bypass.cjs" --dir "%~dp0" --restore >nul 2>&1
+    node "%~dp0..\..\..\tools\strip-e2e-bypass.cjs" --dir "%~dp0." --restore >nul 2>&1
     node "%~dp0..\..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
     if not defined NO_PAUSE pause
     exit /b 1
@@ -249,7 +249,7 @@ if "%MAIN_EXE%"=="" (
     set NODE_TLS_REJECT_UNAUTHORIZED=
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] Main exe not found in %OUTPUT_DIR%\win-unpacked'"
     del /f /q "%~dp0electron\e2e-bypass.cjs" >nul 2>&1
-    node "%~dp0..\..\..\tools\strip-e2e-bypass.cjs" --dir "%~dp0" --restore >nul 2>&1
+    node "%~dp0..\..\..\tools\strip-e2e-bypass.cjs" --dir "%~dp0." --restore >nul 2>&1
     node "%~dp0..\..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
     if not defined NO_PAUSE pause
     exit /b 1
@@ -271,7 +271,7 @@ if not "%E2E_RC%"=="0" (
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] E2E 回归失败（pre-fuse）- build aborted'"
     del /q "%OUTPUT_DIR%\win-unpacked\e2e-enabled.marker" >nul 2>&1
     del /f /q "%~dp0electron\e2e-bypass.cjs" >nul 2>&1
-    node "%~dp0..\..\..\tools\strip-e2e-bypass.cjs" --dir "%~dp0" --restore >nul 2>&1
+    node "%~dp0..\..\..\tools\strip-e2e-bypass.cjs" --dir "%~dp0." --restore >nul 2>&1
     node "%~dp0..\..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
     if not defined NO_PAUSE pause
     exit /b 1
@@ -290,18 +290,18 @@ if exist "%~dp0electron\e2e-bypass.cjs" (
     set NODE_TLS_REJECT_UNAUTHORIZED=
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] e2e-bypass.cjs 删除失败（文件被占用？）- build aborted'"
     del /f /q "%~dp0electron\e2e-bypass.cjs" >nul 2>&1
-    node "%~dp0..\..\..\tools\strip-e2e-bypass.cjs" --dir "%~dp0" --restore >nul 2>&1
+    node "%~dp0..\..\..\tools\strip-e2e-bypass.cjs" --dir "%~dp0." --restore >nul 2>&1
     node "%~dp0..\..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
     if not defined NO_PAUSE pause
     exit /b 1
 )
 REM 剥离源码中的旁路判定块（BNZC_E2E_GUARD_* 标记整块移除；失败自动还原源码）
-node "%~dp0..\..\..\tools\strip-e2e-bypass.cjs" --dir "%~dp0"
+node "%~dp0..\..\..\tools\strip-e2e-bypass.cjs" --dir "%~dp0."
 if errorlevel 1 (
     set NODE_TLS_REJECT_UNAUTHORIZED=
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] 旁路判定块剥离失败 - build aborted'"
     del /f /q "%~dp0electron\e2e-bypass.cjs" >nul 2>&1
-    node "%~dp0..\..\..\tools\strip-e2e-bypass.cjs" --dir "%~dp0" --restore >nul 2>&1
+    node "%~dp0..\..\..\tools\strip-e2e-bypass.cjs" --dir "%~dp0." --restore >nul 2>&1
     node "%~dp0..\..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
     if not defined NO_PAUSE pause
     exit /b 1
@@ -311,7 +311,7 @@ if errorlevel 1 (
     set NODE_TLS_REJECT_UNAUTHORIZED=
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] 剥离旁路后重新打包失败 - build aborted'"
     del /f /q "%~dp0electron\e2e-bypass.cjs" >nul 2>&1
-    node "%~dp0..\..\..\tools\strip-e2e-bypass.cjs" --dir "%~dp0" --restore >nul 2>&1
+    node "%~dp0..\..\..\tools\strip-e2e-bypass.cjs" --dir "%~dp0." --restore >nul 2>&1
     node "%~dp0..\..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
     if not defined NO_PAUSE pause
     exit /b 1
@@ -320,20 +320,20 @@ if not exist "%OUTPUT_DIR%\win-unpacked\resources\app.asar" (
     set NODE_TLS_REJECT_UNAUTHORIZED=
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] 重新打包后 app.asar 缺失 - build aborted'"
     del /f /q "%~dp0electron\e2e-bypass.cjs" >nul 2>&1
-    node "%~dp0..\..\..\tools\strip-e2e-bypass.cjs" --dir "%~dp0" --restore >nul 2>&1
+    node "%~dp0..\..\..\tools\strip-e2e-bypass.cjs" --dir "%~dp0." --restore >nul 2>&1
     node "%~dp0..\..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
     if not defined NO_PAUSE pause
     exit /b 1
 )
 REM 还原源码（剥离只作用于本次正式包产物，源码必须回到含标记块的原始状态）
-node "%~dp0..\..\..\tools\strip-e2e-bypass.cjs" --dir "%~dp0" --restore
+node "%~dp0..\..\..\tools\strip-e2e-bypass.cjs" --dir "%~dp0." --restore
 REM ★ 产物验收：正式包 asar 内必须搜不到旁路判定字符串，命中即中止（绝不交付带旁路的包）
 node "%~dp0..\..\..\tools\strip-e2e-bypass.cjs" --check-asar "%OUTPUT_DIR%\win-unpacked\resources\app.asar"
 if errorlevel 1 (
     set NODE_TLS_REJECT_UNAUTHORIZED=
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] 正式包 asar 内仍含旁路判定代码 - build aborted'"
     del /f /q "%~dp0electron\e2e-bypass.cjs" >nul 2>&1
-    node "%~dp0..\..\..\tools\strip-e2e-bypass.cjs" --dir "%~dp0" --restore >nul 2>&1
+    node "%~dp0..\..\..\tools\strip-e2e-bypass.cjs" --dir "%~dp0." --restore >nul 2>&1
     node "%~dp0..\..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
     if not defined NO_PAUSE pause
     exit /b 1
@@ -352,7 +352,7 @@ if errorlevel 1 (
     set NODE_TLS_REJECT_UNAUTHORIZED=
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] ASAR 完整性资源嵌入失败 - build aborted'"
     del /f /q "%~dp0electron\e2e-bypass.cjs" >nul 2>&1
-    node "%~dp0..\..\..\tools\strip-e2e-bypass.cjs" --dir "%~dp0" --restore >nul 2>&1
+    node "%~dp0..\..\..\tools\strip-e2e-bypass.cjs" --dir "%~dp0." --restore >nul 2>&1
     node "%~dp0..\..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
     if not defined NO_PAUSE pause
     exit /b 1
@@ -366,7 +366,7 @@ if errorlevel 1 (
     set NODE_TLS_REJECT_UNAUTHORIZED=
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] Electron Fuses 写入失败 - build aborted'"
     del /f /q "%~dp0electron\e2e-bypass.cjs" >nul 2>&1
-    node "%~dp0..\..\..\tools\strip-e2e-bypass.cjs" --dir "%~dp0" --restore >nul 2>&1
+    node "%~dp0..\..\..\tools\strip-e2e-bypass.cjs" --dir "%~dp0." --restore >nul 2>&1
     node "%~dp0..\..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
     if not defined NO_PAUSE pause
     exit /b 1
@@ -384,7 +384,7 @@ if errorlevel 1 (
     set NODE_TLS_REJECT_UNAUTHORIZED=
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] .bnzc final embed failed - build aborted'"
     del /f /q "%~dp0electron\e2e-bypass.cjs" >nul 2>&1
-    node "%~dp0..\..\..\tools\strip-e2e-bypass.cjs" --dir "%~dp0" --restore >nul 2>&1
+    node "%~dp0..\..\..\tools\strip-e2e-bypass.cjs" --dir "%~dp0." --restore >nul 2>&1
     node "%~dp0..\..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
     if not defined NO_PAUSE pause
     exit /b 1
@@ -394,7 +394,7 @@ if errorlevel 1 (
     set NODE_TLS_REJECT_UNAUTHORIZED=
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] .bnzc verify gate failed - build aborted'"
     del /f /q "%~dp0electron\e2e-bypass.cjs" >nul 2>&1
-    node "%~dp0..\..\..\tools\strip-e2e-bypass.cjs" --dir "%~dp0" --restore >nul 2>&1
+    node "%~dp0..\..\..\tools\strip-e2e-bypass.cjs" --dir "%~dp0." --restore >nul 2>&1
     node "%~dp0..\..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
     if not defined NO_PAUSE pause
     exit /b 1
@@ -434,7 +434,7 @@ if "%SIGN_RC%"=="1" (
     set NODE_TLS_REJECT_UNAUTHORIZED=
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] 主 exe 签名失败（证书缺失/指纹不符/签名后 .bnzc 失配）- build aborted'"
     del /f /q "%~dp0electron\e2e-bypass.cjs" >nul 2>&1
-    node "%~dp0..\..\..\tools\strip-e2e-bypass.cjs" --dir "%~dp0" --restore >nul 2>&1
+    node "%~dp0..\..\..\tools\strip-e2e-bypass.cjs" --dir "%~dp0." --restore >nul 2>&1
     node "%~dp0..\..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
     if not defined NO_PAUSE pause
     exit /b 1
@@ -448,7 +448,7 @@ if "%SIGN_RC%"=="0" (
     set NODE_TLS_REJECT_UNAUTHORIZED=
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] 签名返回非 0（证书材料缺失/指纹不符等），发布构建禁止未签名产物 - build aborted'"
     del /f /q "%~dp0electron\e2e-bypass.cjs" >nul 2>&1
-    node "%~dp0..\..\..\tools\strip-e2e-bypass.cjs" --dir "%~dp0" --restore >nul 2>&1
+    node "%~dp0..\..\..\tools\strip-e2e-bypass.cjs" --dir "%~dp0." --restore >nul 2>&1
     node "%~dp0..\..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
     if not defined NO_PAUSE pause
     exit /b 1
@@ -478,7 +478,7 @@ if not "%BUILD_RC%"=="0" (
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] Phase 3 (--prepackaged) build failed, see logs above'"
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Restoring original JavaScript code...'"
     del /f /q "%~dp0electron\e2e-bypass.cjs" >nul 2>&1
-    node "%~dp0..\..\..\tools\strip-e2e-bypass.cjs" --dir "%~dp0" --restore >nul 2>&1
+    node "%~dp0..\..\..\tools\strip-e2e-bypass.cjs" --dir "%~dp0." --restore >nul 2>&1
     node "%~dp0..\..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
     if not defined NO_PAUSE pause
     exit /b 1
@@ -550,7 +550,7 @@ if not "%BUILD_RC%"=="0" (
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] Build failed, see logs above'"
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Restoring original JavaScript code...'"
     del /f /q "%~dp0electron\e2e-bypass.cjs" >nul 2>&1
-    node "%~dp0..\..\..\tools\strip-e2e-bypass.cjs" --dir "%~dp0" --restore >nul 2>&1
+    node "%~dp0..\..\..\tools\strip-e2e-bypass.cjs" --dir "%~dp0." --restore >nul 2>&1
     node "%~dp0..\..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
     if not defined NO_PAUSE pause
     exit /b 1
@@ -683,7 +683,7 @@ if not "%FINAL_VERIFY_RC%"=="0" (
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] FINAL IRON GATE 验证失败，真 asar 未通过校验。已自动删除所有 exe，杜绝假包'"
     REM 确保源码还原（失败路径上可能仍处于混淆态）
     del /f /q "%~dp0electron\e2e-bypass.cjs" >nul 2>&1
-    node "%~dp0..\..\..\tools\strip-e2e-bypass.cjs" --dir "%~dp0" --restore >nul 2>&1
+    node "%~dp0..\..\..\tools\strip-e2e-bypass.cjs" --dir "%~dp0." --restore >nul 2>&1
     node "%~dp0..\..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
     if not defined NO_PAUSE pause
     exit /b 1
