@@ -8503,7 +8503,8 @@ let currentUser = null;
                 let files = (result && result.success && Array.isArray(result.files)) ? result.files.slice() : [];
                 // ★ 2026-11-13 换端同步后本机没有处方签 PNG（图片只存保存设备本地）：
                 //   用同步来的药物明细现场渲染并落盘，再重新扫描展示，用户无需任何手动保存。
-                if (rxSheetIsApp() && rec && !rxSheetHasSheet(files)) {
+                //   App / 云桌面均生效（网页端按原逻辑走 IndexedDB）。
+                if (rxSheetHost() !== 'web' && rec && !rxSheetHasSheet(files)) {
                     try { await rxGenerateSheet(rec, prescriptionNo); } catch (e) { console.warn('[rxSheet] 查看时生成失败:', e); }
                     try {
                         const again = await searchFn(patientName, prescriptionNo, createdAt || '');
@@ -8521,7 +8522,9 @@ let currentUser = null;
                         // 误当可读项会渲染出打不开的「处方」页签，挡住本机按明细生成的处方签。
                         files = rec.mediaFiles.filter(m => {
                             if (isWeb) return (!m.path || m.path.startsWith('http')) || !!m.dataUrl;
-                            return !!m.path && (!rxSheetIsApp() || String(m.path).charAt(0) === '/');
+                            // APP 端只接受本机可读路径（跨端同步来的他机绝对路径读不到）
+                            if (rxSheetHost() === 'app') return !!m.path && String(m.path).charAt(0) === '/';
+                            return !!m.path;
                         });
                     }
                 }
@@ -9973,13 +9976,15 @@ let currentUser = null;
         }
 
         // ====================================================================
-        // ★ 2026-11-13 同步后自动补生成处方签（仅 App 端）
-        //   根因：处方签 PNG 只在「保存那台设备」本地生成、从不上云；同步到 App 的
+        // ★ 2026-11-13 同步后自动补生成处方签（App 端 + 云桌面端）
+        //   根因：处方签 PNG 只在「保存那台设备」本地生成、从不上云；同步到目标端的
         //   只有药物明细（items）。历史「录像拍照」入口只认本机文件，所以换端后
         //   显示“未找到相关拍照或录像文件”。
         //   方案：同步汇聚点 getAllUserPrescriptions 返回前触发 → 用 items 本机渲染
         //   → 经原生桥落盘为 患者_编号_prescription.png（与保存时同名）→ 入口直接可见。
-        //   只落本机、不上云；桌面/网页不触发。
+        //   只落本机、不上云；网页端不触发（沿用 IndexedDB 手动保存行为）。
+        //   ★ 2026-11-13 反向同步：云 APP 新增处方同步到云桌面后同样自动生成，
+        //   桌面宿主判定 = electronAPI.isElectron + savePrescriptionImage 可用。
         // ====================================================================
         var RX_SHEET_MARK_KEY = 'rx_sheet_gen_v1';
         var __rxSheetQueue = [];
@@ -9987,8 +9992,12 @@ let currentUser = null;
         var __rxSheetRunning = false;
         var __rxSheetGenInflight = new Map();
 
-        function rxSheetIsApp() {
-            return typeof window.AndroidNative !== 'undefined';
+        // 宿主判定：app（Android WebView）/ desktop（Electron 云桌面）/ web（浏览器，不触发）
+        function rxSheetHost() {
+            if (typeof window.AndroidNative !== 'undefined') return 'app';
+            if (window.electronAPI && window.electronAPI.isElectron === true &&
+                typeof window.electronAPI.savePrescriptionImage === 'function') return 'desktop';
+            return 'web';
         }
 
         function rxSheetMarkerLoad() {
@@ -10021,7 +10030,7 @@ let currentUser = null;
 
         // 渲染并落盘一张处方签；同一记录并发调用时复用同一个任务，返回 true=成功
         function rxGenerateSheet(rec, no) {
-            if (!rxSheetIsApp() || !rec) return Promise.resolve(false);
+            if (rxSheetHost() === 'web' || !rec) return Promise.resolve(false);
             if (!Array.isArray(rec.items) || rec.items.length === 0) return Promise.resolve(false);
             if (!rec.patientName || !(no || rec.prescriptionNo)) return Promise.resolve(false);
             if (!window.electronAPI || typeof window.electronAPI.savePrescriptionImage !== 'function') return Promise.resolve(false);
@@ -10072,7 +10081,7 @@ let currentUser = null;
 
         // 同步完成后调用：最近 200 条先补；更老的记录在打开「录像拍照」时即时生成
         function ensureLocalRxSheets(list) {
-            if (!rxSheetIsApp() || !Array.isArray(list) || list.length === 0) return;
+            if (rxSheetHost() === 'web' || !Array.isArray(list) || list.length === 0) return;
             var markers = rxSheetMarkerLoad();
             var recent = list.slice(0, 200);
             for (var i = 0; i < recent.length; i++) {
