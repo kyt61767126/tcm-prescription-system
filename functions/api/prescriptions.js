@@ -515,6 +515,17 @@ async function handleIncrementalSync({ kv, db, d1On, clinicId, trashKey, permane
 async function d1UpsertPrescription(db, clinicId, p, __healed) {
     // ★ 2026-10-06 首次写入前确保新列就位（幂等单飞，见 prescriptions-store.js）
     await ensurePrescriptionSchema(db);
+    // ★ 2026-11-13 同步补齐患者字段：D1 无 patient_gender/patient_age/medical_history 列，
+    //   原实现直接丢弃 → 换端后处方签缺性别/年龄/病史。统一并入 extra，读取端回填。
+    let __extra = p.extra;
+    if (typeof __extra === 'string') {
+        try { __extra = JSON.parse(__extra); } catch (e) { __extra = {}; }
+    }
+    __extra = (__extra && typeof __extra === 'object') ? Object.assign({}, __extra) : {};
+    if (p.patientGender != null) __extra.patientGender = p.patientGender;
+    if (p.patientAge != null) __extra.patientAge = p.patientAge;
+    if (p.medicalHistory != null) __extra.medicalHistory = p.medicalHistory;
+    const __extraJson = Object.keys(__extra).length ? JSON.stringify(__extra) : null;
     const __run = () => db.prepare(`
         INSERT INTO prescriptions (id, clinic_id, patient_name, doctor_name, created_by, date,
             prescription_no, outpatient_no, diagnosis, items, total_amount, registration_fee, dose_count,
@@ -549,7 +560,7 @@ async function d1UpsertPrescription(db, clinicId, p, __healed) {
         p.paidBy || null,
         p.payMethod || null,
         p.mediaFiles ? JSON.stringify(p.mediaFiles) : null,
-        p.extra ? JSON.stringify(p.extra) : null,
+        __extraJson,
         p.createdAt || new Date().toISOString(),
         p.updatedAt || null
     ).run();

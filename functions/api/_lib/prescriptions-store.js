@@ -38,6 +38,13 @@ export function d1RowToPrescription(row) {
     p.mediaFiles = row.media_files ? safeJsonParse(row.media_files, []) : [];
     p.items = row.items ? safeJsonParse(row.items, []) : [];
     p.extra = row.extra ? safeJsonParse(row.extra, {}) : {};
+    // ★ 2026-11-13 患者字段回填：D1 无对应列，写入时并入 extra（见 prescriptions.js d1UpsertPrescription），
+    //   读取时恢复为一等字段，供历史预览/按明细生成处方签使用。
+    if (p.extra && typeof p.extra === 'object') {
+        if (p.patientGender == null && p.extra.patientGender != null) p.patientGender = p.extra.patientGender;
+        if (p.patientAge == null && p.extra.patientAge != null) p.patientAge = p.extra.patientAge;
+        if (p.medicalHistory == null && p.extra.medicalHistory != null) p.medicalHistory = p.extra.medicalHistory;
+    }
     p.deletedAt = row.deleted_at;
     p.deletedBy = row.deleted_by;
     p.clinicId = row.clinic_id;

@@ -8493,26 +8493,39 @@ let currentUser = null;
             if (!overlay || !content) return;
             content.innerHTML = '<div style="text-align:center;padding:20px;color:#999;">正在查找处方文件...</div>';
             overlay.style.display = 'flex';
+            // 当前记录：用于 App 端按同步来的药物明细现场生成处方签
+            let rec = null;
             try {
-                const result = await searchFn(patientName, prescriptionNo, createdAt || '');
-                if (!result.success || !result.files || result.files.length === 0) {
+                rec = prescriptionHistory.find(p => p.patientName === patientName && String(p.prescriptionNo || '') === String(prescriptionNo || ''));
+            } catch (e) { /* 忽略查询异常 */ }
+            try {
+                let result = await searchFn(patientName, prescriptionNo, createdAt || '');
+                let files = (result && result.success && Array.isArray(result.files)) ? result.files.slice() : [];
+                // ★ 2026-11-13 换端同步后本机没有处方签 PNG（图片只存保存设备本地）：
+                //   用同步来的药物明细现场渲染并落盘，再重新扫描展示，用户无需任何手动保存。
+                if (rxSheetIsApp() && rec && !rxSheetHasSheet(files)) {
+                    try { await rxGenerateSheet(rec, prescriptionNo); } catch (e) { console.warn('[rxSheet] 查看时生成失败:', e); }
+                    try {
+                        const again = await searchFn(patientName, prescriptionNo, createdAt || '');
+                        if (again && again.success && Array.isArray(again.files) && again.files.length) {
+                            result = again;
+                            files = again.files.slice();
+                        }
+                    } catch (e) { /* 保留首次扫描结果 */ }
+                }
+                if (files.length === 0) {
                     // ★ 兜底：原生扫描未找到时，使用处方记录中保存的媒体文件元数据（collectAndUpdateMediaFiles 写入）
                     // 覆盖场景：文件名绑定异常/扫描遗漏，但保存处方时已成功收集过文件列表
-                    let fallbackFiles = [];
-                    try {
-                        const rec = prescriptionHistory.find(p => p.patientName === patientName && String(p.prescriptionNo || '') === String(prescriptionNo || ''));
-                        if (rec && Array.isArray(rec.mediaFiles) && rec.mediaFiles.length > 0) {
-                            // APP端必须有本地path才能读取文件；网页端用无path元数据或http地址
-                            fallbackFiles = rec.mediaFiles.filter(m => isWeb ? (!m.path || m.path.startsWith('http')) : !!m.path);
-                        }
-                    } catch (e) { /* 忽略兜底查询异常 */ }
-                    if (fallbackFiles.length > 0) {
-                        window.__currentMediaFiles = fallbackFiles;
-                        window.__currentMediaIndex = 0;
-                        window.__mediaIsWeb = isWeb;
-                        renderMediaViewerSingle(0);
-                        return;
+                    if (rec && Array.isArray(rec.mediaFiles) && rec.mediaFiles.length > 0) {
+                        // APP端只接受本机可读的本地路径：跨端同步来的他机绝对路径（如 C:\...）读不到，
+                        // 误当可读项会渲染出打不开的「处方」页签，挡住本机按明细生成的处方签。
+                        files = rec.mediaFiles.filter(m => {
+                            if (isWeb) return (!m.path || m.path.startsWith('http')) || !!m.dataUrl;
+                            return !!m.path && (!rxSheetIsApp() || String(m.path).charAt(0) === '/');
+                        });
                     }
+                }
+                if (files.length === 0) {
                     // 显示诊断信息（扫描目录与文件样例），便于定位"文件已保存但查不到"类问题
                     let diagHtml = '<div style="text-align:center;padding:20px;color:#999;">未找到相关拍照或录像文件</div>';
                     if (result && result.debug) {
@@ -8521,7 +8534,7 @@ let currentUser = null;
                     content.innerHTML = diagHtml;
                     return;
                 }
-                const sorted = result.files.sort((a,b) => {
+                const sorted = files.sort((a,b) => {
                     const order = (f) => {
                         var n = f.name || '';
                         if (n.indexOf('prescription') >= 0 || (n.indexOf('photo') >= 0 && n.indexOf('tongue') < 0)) return 0;
@@ -9788,7 +9801,9 @@ let currentUser = null;
             return currentY;
         }
 
-        function savePrescriptionAsImage(record, currentPrescriptionNo) {
+        // ★ 2026-11-13 处方签渲染抽离（纯渲染，不落盘）：保存时落盘与历史「录像拍照」
+        //   自动补图共用同一份版式（药名/剂量/剂数/医师/日期全部来自同步的 record）。
+        function renderPrescriptionSheetDataUrl(record, currentPrescriptionNo) {
             // 创建处方签图片 - 样式与预览一致，字体适合手机端
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
@@ -9902,7 +9917,12 @@ let currentUser = null;
             ctx.fillText('发药:', 600, lastY + 90);
             
             // 生成图片数据
-            const imageData = canvas.toDataURL('image/png');
+            return canvas.toDataURL('image/png');
+        }
+
+        // 保存处方签图片（文件名规则 + Electron/浏览器分支，保持原行为不变）
+        function savePrescriptionAsImage(record, currentPrescriptionNo) {
+            const imageData = renderPrescriptionSheetDataUrl(record, currentPrescriptionNo);
             const patientName = (record.patientName || '未知').replace(/[\\/:*?"<>|]/g, '_');
             const prescriptionNo = currentPrescriptionNo || record.prescriptionNo || '';
             const fileName = patientName + '_' + prescriptionNo + '_prescription.png';
@@ -9950,6 +9970,123 @@ let currentUser = null;
                     }).catch(function(e) { console.warn('处方签存IndexedDB失败:', e); });
                 }
             }
+        }
+
+        // ====================================================================
+        // ★ 2026-11-13 同步后自动补生成处方签（仅 App 端）
+        //   根因：处方签 PNG 只在「保存那台设备」本地生成、从不上云；同步到 App 的
+        //   只有药物明细（items）。历史「录像拍照」入口只认本机文件，所以换端后
+        //   显示“未找到相关拍照或录像文件”。
+        //   方案：同步汇聚点 getAllUserPrescriptions 返回前触发 → 用 items 本机渲染
+        //   → 经原生桥落盘为 患者_编号_prescription.png（与保存时同名）→ 入口直接可见。
+        //   只落本机、不上云；桌面/网页不触发。
+        // ====================================================================
+        var RX_SHEET_MARK_KEY = 'rx_sheet_gen_v1';
+        var __rxSheetQueue = [];
+        var __rxSheetQueued = new Set();
+        var __rxSheetRunning = false;
+        var __rxSheetGenInflight = new Map();
+
+        function rxSheetIsApp() {
+            return typeof window.AndroidNative !== 'undefined';
+        }
+
+        function rxSheetMarkerLoad() {
+            try {
+                var m = JSON.parse(localStorage.getItem(RX_SHEET_MARK_KEY) || '{}');
+                return (m && typeof m === 'object') ? m : {};
+            } catch (e) { return {}; }
+        }
+
+        // 去重键：记录 id + updatedAt（记录被编辑后 updatedAt 变化 → 重新生成并覆盖同名文件）
+        function rxSheetKey(rec) {
+            var stamp = rec.updatedAt || rec.updated_at || rec.createdAt || rec.created_at || '';
+            return String(rec.id) + ':' + String(stamp);
+        }
+
+        function rxSheetFileName(rec, no) {
+            var name = String(rec.patientName || '未知').replace(/[\\/:*?"<>|]/g, '_');
+            var num = String(no || rec.prescriptionNo || '').replace(/[\\/:*?"<>|]/g, '_');
+            return name + '_' + num + '_prescription.png';
+        }
+
+        // 已有同名处方签（本机扫描结果）则不再生成
+        function rxSheetHasSheet(files) {
+            if (!Array.isArray(files)) return false;
+            for (var i = 0; i < files.length; i++) {
+                if (files[i] && String(files[i].name || '').indexOf('prescription') >= 0) return true;
+            }
+            return false;
+        }
+
+        // 渲染并落盘一张处方签；同一记录并发调用时复用同一个任务，返回 true=成功
+        function rxGenerateSheet(rec, no) {
+            if (!rxSheetIsApp() || !rec) return Promise.resolve(false);
+            if (!Array.isArray(rec.items) || rec.items.length === 0) return Promise.resolve(false);
+            if (!rec.patientName || !(no || rec.prescriptionNo)) return Promise.resolve(false);
+            if (!window.electronAPI || typeof window.electronAPI.savePrescriptionImage !== 'function') return Promise.resolve(false);
+            var key = rxSheetKey(rec);
+            if (__rxSheetGenInflight.has(key)) return __rxSheetGenInflight.get(key);
+            var task = (async function() {
+                try {
+                    var dataUrl = renderPrescriptionSheetDataUrl(rec, no || rec.prescriptionNo);
+                    if (!dataUrl) return false;
+                    var res = await window.electronAPI.savePrescriptionImage(dataUrl, rxSheetFileName(rec, no));
+                    if (!res || !res.success) {
+                        console.warn('[rxSheet] 处方签保存失败:', res && res.error);
+                        return false;
+                    }
+                    var m = rxSheetMarkerLoad();
+                    m[key] = Date.now();
+                    var keys = Object.keys(m);
+                    if (keys.length > 3000) {
+                        keys.sort(function(a, b) { return (m[b] || 0) - (m[a] || 0); });
+                        var trimmed = {};
+                        keys.slice(0, 2000).forEach(function(k) { trimmed[k] = m[k]; });
+                        m = trimmed;
+                    }
+                    try { localStorage.setItem(RX_SHEET_MARK_KEY, JSON.stringify(m)); } catch (e) {}
+                    return true;
+                } catch (e) {
+                    console.warn('[rxSheet] 生成处方签异常:', e);
+                    return false;
+                }
+            })();
+            __rxSheetGenInflight.set(key, task);
+            task.then(function() { __rxSheetGenInflight.delete(key); }, function() { __rxSheetGenInflight.delete(key); });
+            return task;
+        }
+
+        function rxDrainSheetQueue() {
+            if (__rxSheetRunning) return;
+            var task = __rxSheetQueue.shift();
+            if (!task) return;
+            __rxSheetRunning = true;
+            var done = function() {
+                __rxSheetQueued.delete(task.key);
+                __rxSheetRunning = false;
+                if (__rxSheetQueue.length) setTimeout(rxDrainSheetQueue, 200);
+            };
+            rxGenerateSheet(task.rec, task.no).then(done, done);
+        }
+
+        // 同步完成后调用：最近 200 条先补；更老的记录在打开「录像拍照」时即时生成
+        function ensureLocalRxSheets(list) {
+            if (!rxSheetIsApp() || !Array.isArray(list) || list.length === 0) return;
+            var markers = rxSheetMarkerLoad();
+            var recent = list.slice(0, 200);
+            for (var i = 0; i < recent.length; i++) {
+                var rec = recent[i];
+                if (!rec || rec.id == null) continue;
+                if (!Array.isArray(rec.items) || rec.items.length === 0) continue;
+                var no = rec.prescriptionNo || rec.outpatientNo || '';
+                if (!rec.patientName || !no) continue;
+                var key = rxSheetKey(rec);
+                if (markers[key] || __rxSheetQueued.has(key) || __rxSheetGenInflight.has(key)) continue;
+                __rxSheetQueued.add(key);
+                __rxSheetQueue.push({ rec: rec, no: no, key: key });
+            }
+            rxDrainSheetQueue();
         }
 
         function showModal(id) {
@@ -12244,6 +12381,10 @@ let currentUser = null;
 
             // ★ 硬性删除标记过滤（兜底）：无论来自云端/本地/回退缓存，已删除处方一律不返回
             allPrescriptions = filterOutDeleted(allPrescriptions);
+
+            // ★ 2026-11-13 同步完成即触发：App 端按同步来的药物明细自动补生成处方签
+            //   （最近 200 条先补；更老的记录在打开「录像拍照」时即时生成）
+            try { ensureLocalRxSheets(allPrescriptions); } catch (e) { console.warn('[rxSheet] 自动补生成调度失败:', e); }
 
             return allPrescriptions;
         }
