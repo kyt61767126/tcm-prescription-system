@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory = $true)][string]$Docx,
     [string]$SaveAs = "",
     [string]$Pdf = ""
