@@ -48,7 +48,7 @@ android {
         applicationId "com.tcm.prescription"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 352 // ★ 2026-11-07 云端 APP 安全区修复（容器四边 insets：顶部不压状态栏、底部不压系统导航栏）；351 已随 v2026.11.04 分发不可复用
+        versionCode 353 // ★ 2026-11-07 云端 APP 安全区修复（容器四边 insets：顶部不压状态栏、底部不压系统导航栏）；351 已随 v2026.11.04 分发不可复用
         versionName "1.0.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
