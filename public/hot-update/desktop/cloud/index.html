@@ -719,7 +719,7 @@
     <label style="display:block;margin-bottom:6px;">🖨 内置打印机（WiFi / 蓝牙）</label>
     <div id="printerSettingsHint" style="font-size:12px;color:#666;margin-bottom:6px;"></div>
     <button class="action-btn" onclick="openPrinterSettings()" style="width:100%;">打印机设置 / 测试打印</button>
-</div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('settingsModal')">取消</button><button class="action-btn primary" onclick="saveSettings()">保存</button></div></div></div><div class="modal" id="syndromeModal"><div class="modal-content"><div class="modal-header"><h3>Alt+1 中医辨证选方</h3><span class="close-btn" onclick="closeModal('syndromeModal')">&times;</span></div><div class="modal-body"><div id="syndromeList" style="display:flex;flex-direction:column;gap:8px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('syndromeModal')">关闭</button></div></div></div><div class="modal" id="medicineModal"><div class="modal-content"><div class="modal-header"><h3>F2 药品管理</h3><span class="close-btn" onclick="closeModal('medicineModal')">&times;</span></div><div class="modal-body"><div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;"><input type="text" id="medicineSearch" placeholder="搜索药品" style="flex:1;min-width:150px;padding:6px;" oninput="renderMedicineListDebounced()"><button class="action-btn" onclick="showAddMedicineForm()">新增药品</button><button class="action-btn" onclick="exportMedicines()">导出药品</button><button class="action-btn" onclick="document.getElementById('importMedicineFile').click()">导入药品</button><button class="action-btn" style="background:#ff6b6b;color:white;" onclick="clearMedicineLibrary()">清空药物库</button><input type="file" id="importMedicineFile" accept=".csv,.json,.xlsx,.xls" style="display:none;" onchange="importMedicines(event)"></div><div id="medicineList" style="overflow:auto;max-height:350px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('medicineModal')">关闭</button></div></div></div><div class="modal" id="formulaModal"><div class="modal-content"><div class="modal-header"><h3>F3 验方设置</h3><span class="close-btn" onclick="closeModal('formulaModal')">&times;</span></div><div class="modal-body"><div style="margin-bottom:12px;display:flex;gap:8px;"><input type="text" id="formulaSearch" placeholder="搜索验方" style="flex:1;padding:6px;"><button class="action-btn" onclick="showAddFormulaForm()">新增验方</button></div><div id="formulaList" style="overflow:auto;max-height:350px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('formulaModal')">关闭</button></div></div></div><div class="modal" id="caseModal"><div class="modal-content"><div class="modal-header"><h3>病例管理</h3><span class="close-btn" onclick="closeModal('caseModal')">&times;</span></div><div class="modal-body"><div style="margin-bottom:12px;padding:10px;background:#f0f0f0;"><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;"><input type="text" id="caseNameSearch" placeholder="患者姓名"><input type="date" id="caseDateStart"><input type="date" id="caseDateEnd"></div><div style="margin-top:8px;display:flex;gap:8px;"><button class="action-btn" onclick="searchCases()">搜索</button><button class="action-btn" onclick="resetCaseSearch()">重置</button></div></div><div id="caseList" style="overflow:auto;max-height:350px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('caseModal')">关闭</button></div></div></div><div class="modal" id="clinicPrescriptionModal"><div class="modal-content" style="max-width:900px;width:95%;max-height:90vh;"><div class="modal-header"><h3>📋 处方查阅</h3><span class="close-btn" onclick="closeModal('clinicPrescriptionModal')">&times;</span></div><div class="modal-body"><div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;"><input type="text" id="filterText" placeholder="搜索姓名/门诊号/诊断" oninput="filterClinicPrescriptions()" style="flex:1;min-width:150px;padding:6px;"><select id="filterDoctor" onchange="filterClinicPrescriptions()" style="padding:6px;"><option value="">全部医师</option></select><button class="action-btn" onclick="loadClinicPrescriptionList()">🔄 刷新</button></div><div id="clinicPrescriptionStats" style="margin-bottom:10px;font-size:12px;color:#666;"></div><div id="clinicPrescriptionList" style="overflow:auto;max-height:400px;border:1px solid #ddd;border-radius:4px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('clinicPrescriptionModal')">关闭</button></div></div></div><div class="modal" id="analyticsModal"><div class="modal-content" style="max-width:1100px;width:95%;max-height:90vh;"><div class="modal-header"><h3>📊 数据统计</h3><span class="close-btn" onclick="closeModal('analyticsModal')">&times;</span></div><div class="modal-body"><div style="display:flex;gap:15px;flex-wrap:wrap;margin-bottom:15px;"><div><label>统计范围:</label><select id="analyticsRange" onchange="refreshAnalytics()"><option value="today">今日</option><option value="week">本周</option><option value="month" selected>本月</option><option value="quarter">本季度</option><option value="year">本年</option><option value="all">全部</option></select></div><div><label>就诊次数筛选:</label><select id="visitCountFilter" onchange="refreshAnalytics()"><option value="all">全部</option><option value="1">1诊</option><option value="2">2诊</option><option value="3">3诊</option><option value="4">4诊及以上</option></select></div><div><label>排序:</label><select id="analyticsSort" onchange="refreshAnalytics()"><option value="visitCount-desc">就诊次数(降序)</option><option value="visitCount-asc">就诊次数(升序)</option><option value="lastVisit-desc">最近就诊(降序)</option><option value="lastVisit-asc">最近就诊(升序)</option></select></div><button class="action-btn" onclick="refreshAnalytics()" style="margin-top:20px;">🔄 刷新数据</button></div><div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:20px;"><div style="background:#e8f5e9;border:1px solid #4caf50;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#4caf50;" id="statTotalPatients">-</div><div style="font-size:12px;color:#666;">总就诊人数</div></div><div style="background:#fff3e0;border:1px solid #ff9800;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#ff9800;" id="statNewPatients">-</div><div style="font-size:12px;color:#666;">初诊人数</div></div><div style="background:#e3f2fd;border:1px solid #2196f3;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#2196f3;" id="statReturnPatients">-</div><div style="font-size:12px;color:#666;">复诊人数</div></div><div style="background:#fce4ec;border:1px solid #e91e63;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#e91e63;" id="statReturnRate">-</div><div style="font-size:12px;color:#666;">复诊率</div></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:20px;"><div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><h4 style="margin-bottom:12px;color:#333;">📈 就诊趋势</h4><canvas id="visitTrendChart" height="200"></canvas></div><div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><h4 style="margin-bottom:12px;color:#333;">🩺 病种分布</h4><canvas id="diseaseChart" height="200"></canvas></div></div><div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><h4 style="color:#333;">💊 常用药材 Top 10</h4><button class="action-btn" onclick="exportStats()" style="font-size:12px;padding:4px 8px;">导出报表</button></div><canvas id="medicineChart" height="200"></canvas></div><div style="margin-top:20px;background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><h4 style="margin-bottom:12px;color:#333;">👥 患者就诊列表</h4><div style="max-height:300px;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f5f5f5;"><th style="border:1px solid #ddd;padding:8px;text-align:left;">患者姓名</th><th style="border:1px solid #ddd;padding:8px;text-align:center;">就诊次数</th><th style="border:1px solid #ddd;padding:8px;text-align:center;">初诊日期</th><th style="border:1px solid #ddd;padding:8px;text-align:center;">最近就诊</th><th style="border:1px solid #ddd;padding:8px;text-align:center;">操作</th></tr></thead><tbody id="patientVisitList"><tr><td colspan="5" style="text-align:center;padding:20px;color:#999;">暂无数据</td></tr></tbody></table></div></div><div style="margin-top:20px;background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><h4 style="margin-bottom:12px;color:#333;">📅 月度统计报表</h4><div style="max-height:250px;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f5f5f5;"><th style="border:1px solid #ddd;padding:6px;text-align:center;">月份</th><th style="border:1px solid #ddd;padding:6px;text-align:center;">门诊人次</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">总收入</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">总诊疗费</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">总成本</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">总利润</th><th style="border:1px solid #ddd;padding:6px;text-align:center;">总剂数</th></tr></thead><tbody id="monthlyStatsTable"><tr><td colspan="7" style="text-align:center;padding:20px;color:#999;">暂无数据</td></tr></tbody></table></div></div></div><div style="margin-top:20px;padding-top:15px;border-top:2px solid #008000;"><h4 style="margin-bottom:10px;">🗄️ 数据管理</h4><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="action-btn" onclick="exportData()" style="background:#4CAF50;color:white;">💾 一键备份</button><button class="action-btn" onclick="importData()" style="background:#2196F3;color:white;">📂 恢复数据</button><button class="action-btn" onclick="clearAllData()" style="background:#f44336;color:white;">🗑️ 清空数据</button></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('analyticsModal')">关闭</button></div></div></div><script src="auth-core.js?cv=7598d4a6"></script><script src="permission.js?cv=c3c70ff3"></script><script src="normalize-config.js?cv=af0243d4"></script><script src="debug-logger.js?cv=05a2fb2f"></script><script src="print-utils.js?cv=1d0c5a2b"></script><script src="medicine-dict.js?cv=8427c75f"></script><script src="symptom-dict.js?cv=06a705fa"></script><!-- 舌脉体征快捷录入（运行时注入，HTML结构零改动；cv 参数破 86400 缓存：诊断行恢复单行） --><script src="cloud-api.js?cv=638ab84a"></script><script src="performance-utils.js?cv=c4f8143a"></script><script src="prescription-core.js?cv=a4de258c"></script><script src="stock-core.js?cv=1cabd457"></script><script src="analytics-core.js?cv=ea491ca9"></script>
+</div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('settingsModal')">取消</button><button class="action-btn primary" onclick="saveSettings()">保存</button></div></div></div><div class="modal" id="syndromeModal"><div class="modal-content"><div class="modal-header"><h3>Alt+1 中医辨证选方</h3><span class="close-btn" onclick="closeModal('syndromeModal')">&times;</span></div><div class="modal-body"><div id="syndromeList" style="display:flex;flex-direction:column;gap:8px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('syndromeModal')">关闭</button></div></div></div><div class="modal" id="medicineModal"><div class="modal-content"><div class="modal-header"><h3>F2 药品管理</h3><span class="close-btn" onclick="closeModal('medicineModal')">&times;</span></div><div class="modal-body"><div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;"><input type="text" id="medicineSearch" placeholder="搜索药品" style="flex:1;min-width:150px;padding:6px;" oninput="renderMedicineListDebounced()"><button class="action-btn" id="medAddBtn" onclick="showAddMedicineForm()">新增药品</button><button class="action-btn" onclick="exportMedicines()">导出药品</button><button class="action-btn" id="medImportBtn" onclick="document.getElementById('importMedicineFile').click()">导入药品</button><button class="action-btn" id="medClearBtn" style="background:#ff6b6b;color:white;" onclick="clearMedicineLibrary()">清空药物库</button><input type="file" id="importMedicineFile" accept=".csv,.json,.xlsx,.xls" style="display:none;" onchange="importMedicines(event)"><span id="medReadonlyHint" style="display:none;align-self:center;font-size:12px;color:#999;">仅管理员可修改药材设置</span></div><div id="medicineList" style="overflow:auto;max-height:350px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('medicineModal')">关闭</button></div></div></div><div class="modal" id="formulaModal"><div class="modal-content"><div class="modal-header"><h3>F3 验方设置</h3><span class="close-btn" onclick="closeModal('formulaModal')">&times;</span></div><div class="modal-body"><div style="margin-bottom:12px;display:flex;gap:8px;"><input type="text" id="formulaSearch" placeholder="搜索验方" style="flex:1;padding:6px;"><button class="action-btn" onclick="showAddFormulaForm()">新增验方</button></div><div id="formulaList" style="overflow:auto;max-height:350px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('formulaModal')">关闭</button></div></div></div><div class="modal" id="caseModal"><div class="modal-content"><div class="modal-header"><h3>病例管理</h3><span class="close-btn" onclick="closeModal('caseModal')">&times;</span></div><div class="modal-body"><div style="margin-bottom:12px;padding:10px;background:#f0f0f0;"><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;"><input type="text" id="caseNameSearch" placeholder="患者姓名"><input type="date" id="caseDateStart"><input type="date" id="caseDateEnd"></div><div style="margin-top:8px;display:flex;gap:8px;"><button class="action-btn" onclick="searchCases()">搜索</button><button class="action-btn" onclick="resetCaseSearch()">重置</button></div></div><div id="caseList" style="overflow:auto;max-height:350px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('caseModal')">关闭</button></div></div></div><div class="modal" id="clinicPrescriptionModal"><div class="modal-content" style="max-width:900px;width:95%;max-height:90vh;"><div class="modal-header"><h3>📋 处方查阅</h3><span class="close-btn" onclick="closeModal('clinicPrescriptionModal')">&times;</span></div><div class="modal-body"><div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;"><input type="text" id="filterText" placeholder="搜索姓名/门诊号/诊断" oninput="filterClinicPrescriptions()" style="flex:1;min-width:150px;padding:6px;"><select id="filterDoctor" onchange="filterClinicPrescriptions()" style="padding:6px;"><option value="">全部医师</option></select><button class="action-btn" onclick="loadClinicPrescriptionList()">🔄 刷新</button></div><div id="clinicPrescriptionStats" style="margin-bottom:10px;font-size:12px;color:#666;"></div><div id="clinicPrescriptionList" style="overflow:auto;max-height:400px;border:1px solid #ddd;border-radius:4px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('clinicPrescriptionModal')">关闭</button></div></div></div><div class="modal" id="analyticsModal"><div class="modal-content" style="max-width:1100px;width:95%;max-height:90vh;"><div class="modal-header"><h3>📊 数据统计</h3><span class="close-btn" onclick="closeModal('analyticsModal')">&times;</span></div><div class="modal-body"><div style="display:flex;gap:15px;flex-wrap:wrap;margin-bottom:15px;"><div><label>统计范围:</label><select id="analyticsRange" onchange="refreshAnalytics()"><option value="today">今日</option><option value="week">本周</option><option value="month" selected>本月</option><option value="quarter">本季度</option><option value="year">本年</option><option value="all">全部</option></select></div><div><label>就诊次数筛选:</label><select id="visitCountFilter" onchange="refreshAnalytics()"><option value="all">全部</option><option value="1">1诊</option><option value="2">2诊</option><option value="3">3诊</option><option value="4">4诊及以上</option></select></div><div><label>排序:</label><select id="analyticsSort" onchange="refreshAnalytics()"><option value="visitCount-desc">就诊次数(降序)</option><option value="visitCount-asc">就诊次数(升序)</option><option value="lastVisit-desc">最近就诊(降序)</option><option value="lastVisit-asc">最近就诊(升序)</option></select></div><button class="action-btn" onclick="refreshAnalytics()" style="margin-top:20px;">🔄 刷新数据</button></div><div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:20px;"><div style="background:#e8f5e9;border:1px solid #4caf50;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#4caf50;" id="statTotalPatients">-</div><div style="font-size:12px;color:#666;">总就诊人数</div></div><div style="background:#fff3e0;border:1px solid #ff9800;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#ff9800;" id="statNewPatients">-</div><div style="font-size:12px;color:#666;">初诊人数</div></div><div style="background:#e3f2fd;border:1px solid #2196f3;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#2196f3;" id="statReturnPatients">-</div><div style="font-size:12px;color:#666;">复诊人数</div></div><div style="background:#fce4ec;border:1px solid #e91e63;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#e91e63;" id="statReturnRate">-</div><div style="font-size:12px;color:#666;">复诊率</div></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:20px;"><div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><h4 style="margin-bottom:12px;color:#333;">📈 就诊趋势</h4><canvas id="visitTrendChart" height="200"></canvas></div><div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><h4 style="margin-bottom:12px;color:#333;">🩺 病种分布</h4><canvas id="diseaseChart" height="200"></canvas></div></div><div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><h4 style="color:#333;">💊 常用药材 Top 10</h4><button class="action-btn" onclick="exportStats()" style="font-size:12px;padding:4px 8px;">导出报表</button></div><canvas id="medicineChart" height="200"></canvas></div><div style="margin-top:20px;background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><h4 style="margin-bottom:12px;color:#333;">👥 患者就诊列表</h4><div style="max-height:300px;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f5f5f5;"><th style="border:1px solid #ddd;padding:8px;text-align:left;">患者姓名</th><th style="border:1px solid #ddd;padding:8px;text-align:center;">就诊次数</th><th style="border:1px solid #ddd;padding:8px;text-align:center;">初诊日期</th><th style="border:1px solid #ddd;padding:8px;text-align:center;">最近就诊</th><th style="border:1px solid #ddd;padding:8px;text-align:center;">操作</th></tr></thead><tbody id="patientVisitList"><tr><td colspan="5" style="text-align:center;padding:20px;color:#999;">暂无数据</td></tr></tbody></table></div></div><div style="margin-top:20px;background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><h4 style="margin-bottom:12px;color:#333;">📅 月度统计报表</h4><div style="max-height:250px;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f5f5f5;"><th style="border:1px solid #ddd;padding:6px;text-align:center;">月份</th><th style="border:1px solid #ddd;padding:6px;text-align:center;">门诊人次</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">总收入</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">总诊疗费</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">总成本</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">总利润</th><th style="border:1px solid #ddd;padding:6px;text-align:center;">总剂数</th></tr></thead><tbody id="monthlyStatsTable"><tr><td colspan="7" style="text-align:center;padding:20px;color:#999;">暂无数据</td></tr></tbody></table></div></div></div><div style="margin-top:20px;padding-top:15px;border-top:2px solid #008000;"><h4 style="margin-bottom:10px;">🗄️ 数据管理</h4><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="action-btn" onclick="exportData()" style="background:#4CAF50;color:white;">💾 一键备份</button><button class="action-btn" onclick="importData()" style="background:#2196F3;color:white;">📂 恢复数据</button><button class="action-btn" onclick="clearAllData()" style="background:#f44336;color:white;">🗑️ 清空数据</button></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('analyticsModal')">关闭</button></div></div></div><script src="auth-core.js?cv=7598d4a6"></script><script src="permission.js?cv=c3c70ff3"></script><script src="normalize-config.js?cv=af0243d4"></script><script src="debug-logger.js?cv=05a2fb2f"></script><script src="print-utils.js?cv=1d0c5a2b"></script><script src="medicine-dict.js?cv=8427c75f"></script><script src="symptom-dict.js?cv=06a705fa"></script><!-- 舌脉体征快捷录入（运行时注入，HTML结构零改动；cv 参数破 86400 缓存：诊断行恢复单行） --><script src="cloud-api.js?cv=638ab84a"></script><script src="performance-utils.js?cv=c4f8143a"></script><script src="prescription-core.js?cv=a4de258c"></script><script src="stock-core.js?cv=1cabd457"></script><script src="analytics-core.js?cv=ea491ca9"></script>
 <script src="security-guard.js?cv=907c07f3"></script>
 <!-- ★ 双重保障：通过 [script] 标签加载 video-recorder.js，防止 main.js injectVideoRecorder 注入失败 -->
 <!-- IIFE 有 window.__videoRecorderInjected 防重复检查，不会与 main.js 注入冲突 -->
@@ -3329,6 +3329,353 @@ let currentUser = null;
                 await window.electronAPI.saveUserData('local_medicines', medicines);
             }
         }
+
+        // ========================================================================
+        // ★ 2026-11-13 药材设置云端同步（云桌面 ↔ 云 App）
+        //   存储：localStorage 'local_medicines'（桌面额外镜像 userData 同名键）
+        //   同步元数据：'local_medicines_sync' = { rev, boot, dirty:[id], tombs:{id:ts} }
+        //   规则：记录级 LWW（updatedAt 毫秒）；删除用墓碑；应用远端不改 updatedAt、不标脏
+        //   服务端：/api/medicines?sync=1（GET 增量 / POST 合并写，仅管理员可写）
+        //   MED-SYNC-CORE 为纯函数区，供离线验证脚本抽取执行（勿在其中引用 DOM）
+        // ========================================================================
+        /* MED-SYNC-CORE:BEGIN */
+        function medSyncHash36(s) {
+            let h = 0x811c9dc5;
+            const str = String(s || '');
+            for (let i = 0; i < str.length; i++) {
+                h ^= str.charCodeAt(i);
+                h = (h * 0x01000193) >>> 0;
+            }
+            return h.toString(36);
+        }
+        // 稳定 id：同名药在任意设备得到相同 id（老库首次同步可收敛）
+        function medStableId(name) {
+            return 'm' + medSyncHash36(String(name || '').trim());
+        }
+        function medNormalizeRecord(m, ts) {
+            if (!m || !m.name) return null;
+            const r = Object.assign({}, m);
+            delete r._dirty;
+            delete r._serverRev;
+            r.name = String(r.name).trim();
+            if (!r.id) r.id = medStableId(r.name);
+            r.updatedAt = Number(r.updatedAt) || 0;
+            if (ts && !r.updatedAt) r.updatedAt = ts;
+            return r;
+        }
+        function medNormalizeList(list, ts) {
+            const out = [];
+            const pos = {};
+            (Array.isArray(list) ? list : []).forEach(function (m) {
+                const r = medNormalizeRecord(m, ts);
+                if (!r) return;
+                if (pos[r.id] !== undefined) {
+                    if (r.updatedAt > out[pos[r.id]].updatedAt) out[pos[r.id]] = r;
+                    return;
+                }
+                pos[r.id] = out.length;
+                out.push(r);
+            });
+            return out;
+        }
+        // 应用远端：仅 updatedAt 更新的生效；墓碑 >= 本地版本才删
+        function medMergeRemote(localList, localTombs, remoteItems) {
+            const map = new Map();
+            medNormalizeList(localList, 0).forEach(function (m) { map.set(m.id, m); });
+            const tombs = Object.assign({}, localTombs || {});
+            const appliedIds = [];
+            (Array.isArray(remoteItems) ? remoteItems : []).forEach(function (raw) {
+                const it = medNormalizeRecord(raw, 0);
+                if (!it) return;
+                const cur = map.get(it.id);
+                const localTs = cur ? cur.updatedAt : (Number(tombs[it.id]) || 0);
+                if (it.updatedAt < localTs) return;
+                if (it.deleted) {
+                    if (cur) map.delete(it.id);
+                    tombs[it.id] = it.updatedAt;
+                    appliedIds.push(it.id);
+                    return;
+                }
+                if (tombs[it.id] !== undefined && Number(tombs[it.id]) >= it.updatedAt) return;
+                if (!cur || it.updatedAt > cur.updatedAt) {
+                    map.set(it.id, it);
+                    appliedIds.push(it.id);
+                }
+            });
+            return { list: Array.from(map.values()), tombs: tombs, appliedIds: appliedIds };
+        }
+        // 首次接通：云端优先；本地独有的进待上传队列
+        function medMergeBootstrap(localList, remoteItems) {
+            const remote = (Array.isArray(remoteItems) ? remoteItems : []).filter(function (x) { return x && !x.deleted; });
+            if (!remote.length) {
+                const list = medNormalizeList(localList, Date.now());
+                return { list: list, toPush: list.map(function (m) { return m.id; }) };
+            }
+            const res = medMergeRemote(localList, {}, remote);
+            const remoteIds = {};
+            remote.forEach(function (x) { remoteIds[x.id || medStableId(x.name)] = 1; });
+            const list = res.list.map(function (m) {
+                if (remoteIds[m.id]) return m;
+                return Object.assign({}, m, { updatedAt: m.updatedAt || Date.now() });
+            });
+            return { list: list, toPush: list.filter(function (m) { return !remoteIds[m.id]; }).map(function (m) { return m.id; }) };
+        }
+        // 导入：append/overwrite/merge 统一收敛（overwrite 对被替换项生成墓碑）
+        function medApplyImport(currentList, importedList, method, now) {
+            const nowTs = Number(now) || Date.now();
+            const cur = medNormalizeList(currentList, 0);
+            const imp = medNormalizeList(importedList, nowTs);
+            const upsertIds = [];
+            const tombs = {};
+            if (method === 'overwrite') {
+                const impIds = {};
+                imp.forEach(function (m) { m.updatedAt = nowTs; impIds[m.id] = 1; upsertIds.push(m.id); });
+                cur.forEach(function (m) { if (!impIds[m.id]) tombs[m.id] = nowTs; });
+                return { list: imp, upsertIds: upsertIds, tombs: tombs };
+            }
+            const map = new Map();
+            cur.forEach(function (m) { map.set(m.id, m); });
+            imp.forEach(function (m) {
+                const rec = Object.assign({}, m, { updatedAt: nowTs });
+                map.set(rec.id, rec);
+                upsertIds.push(rec.id);
+            });
+            return { list: Array.from(map.values()), upsertIds: upsertIds, tombs: tombs };
+        }
+        /* MED-SYNC-CORE:END */
+
+        function medSyncGetMeta() {
+            try {
+                const raw = localStorage.getItem('local_medicines_sync');
+                const o = raw ? JSON.parse(raw) : {};
+                if (!Array.isArray(o.dirty)) o.dirty = [];
+                if (!o.tombs || typeof o.tombs !== 'object') o.tombs = {};
+                // ownTombs：仅本地产生、待上报的删除墓碑。远端下发的墓碑只进 tombs，
+                // 不回推，否则两端会互相把同一墓碑反复上传（rev 无限增长）。
+                if (!o.ownTombs || typeof o.ownTombs !== 'object') o.ownTombs = {};
+                o.rev = Number(o.rev) || 0;
+                o.boot = Number(o.boot) || 0;
+                return o;
+            } catch (e) {
+                return { rev: 0, boot: 0, dirty: [], tombs: {}, ownTombs: {} };
+            }
+        }
+        function medSyncSetMeta(meta) {
+            try { localStorage.setItem('local_medicines_sync', JSON.stringify(meta)); } catch (e) { }
+            if (IS_ELECTRON && window.electronAPI && typeof window.electronAPI.saveUserData === 'function') {
+                try { window.electronAPI.saveUserData('local_medicines_sync', meta); } catch (e) { }
+            }
+        }
+        async function medSyncHydrateMeta() {
+            if (!IS_ELECTRON || !window.electronAPI || typeof window.electronAPI.getUserData !== 'function') return;
+            try {
+                const res = await window.electronAPI.getUserData('local_medicines_sync');
+                if (!res || !res.success || !res.data || typeof res.data !== 'object') return;
+                const local = medSyncGetMeta();
+                const disk = res.data;
+                const merged = {
+                    rev: Math.max(local.rev || 0, Number(disk.rev) || 0),
+                    boot: local.boot || Number(disk.boot) || 0,
+                    dirty: Array.from(new Set([].concat(local.dirty || [], Array.isArray(disk.dirty) ? disk.dirty : []))),
+                    tombs: Object.assign({}, disk.tombs || {}, local.tombs || {}),
+                    ownTombs: Object.assign({}, disk.ownTombs || {}, local.ownTombs || {})
+                };
+                medSyncSetMeta(merged);
+            } catch (e) { }
+        }
+
+        // 管理员权限（仅管理员可编辑药材；医生只读）
+        function canEditMedicines() {
+            try {
+                if (!currentUser) return false;
+                if (typeof isAdminLevel === 'function') return !!isAdminLevel(currentUser);
+                return false;
+            } catch (e) { return false; }
+        }
+        function ensureMedEditPermission() {
+            if (canEditMedicines()) return true;
+            showToast('仅管理员可修改药材设置');
+            return false;
+        }
+        function applyMedicinePermissionUI() {
+            const editable = canEditMedicines();
+            ['medAddBtn', 'medImportBtn', 'medClearBtn'].forEach(function (id) {
+                const el = document.getElementById(id);
+                if (el) el.style.display = editable ? '' : 'none';
+            });
+            const hint = document.getElementById('medReadonlyHint');
+            if (hint) hint.style.display = editable ? 'none' : '';
+        }
+
+        function medSyncMarkDirty(ids, tombs) {
+            const meta = medSyncGetMeta();
+            const dirty = new Set(meta.dirty || []);
+            (Array.isArray(ids) ? ids : [ids]).forEach(function (id) {
+                if (!id) return;
+                dirty.add(id);
+                // 删除后又被重新写入：撤销待上报墓碑（服务端按 updatedAt 取新）
+                if (meta.ownTombs[id] !== undefined) delete meta.ownTombs[id];
+            });
+            if (tombs) {
+                Object.keys(tombs).forEach(function (id) {
+                    meta.tombs[id] = tombs[id];
+                    meta.ownTombs[id] = tombs[id];
+                    dirty.delete(id);
+                });
+            }
+            meta.dirty = Array.from(dirty);
+            medSyncSetMeta(meta);
+            MedSync.kick();
+        }
+
+        function medSyncApplyRemote(remoteItems) {
+            const meta = medSyncGetMeta();
+            const before = JSON.stringify(medicines);
+            const res = medMergeRemote(medicines, meta.tombs, remoteItems);
+            medicines = res.list;
+            meta.tombs = res.tombs;
+            if (res.appliedIds.length) {
+                const dirty = new Set(meta.dirty || []);
+                res.appliedIds.forEach(function (id) { dirty.delete(id); });
+                meta.dirty = Array.from(dirty);
+            }
+            medSyncSetMeta(meta);
+            const changed = JSON.stringify(medicines) !== before;
+            if (changed) {
+                try { localStorage.setItem('local_medicines', JSON.stringify(medicines)); } catch (e) { }
+                try { saveMedicinesToDisk(); } catch (e) { }
+                buildMedicineMap();
+                renderMedicineList();
+                try { updatePrescriptionPaper(); } catch (e) { }
+            }
+            return changed;
+        }
+
+        const MedSync = {
+            _timer: null,
+            _busy: false,
+            _started: false,
+            enabled() {
+                try { return typeof offlineSyncEnabled === 'function' && !!offlineSyncEnabled(); } catch (e) { return false; }
+            },
+            ready() {
+                try { return !!(getCloudToken() && currentUser && window.CLOUD_API_BASE); } catch (e) { return false; }
+            },
+            async fetchRemote(since) {
+                const token = getCloudToken();
+                if (!token || !window.CLOUD_API_BASE) return null;
+                const url = window.CLOUD_API_BASE + '/medicines?sync=1' + (since ? ('&since=' + encodeURIComponent(since)) : '');
+                const resp = await cloudFetch(url, { method: 'GET', headers: { 'Authorization': 'Bearer ' + token } });
+                if (!resp || !resp.success || !Array.isArray(resp.items)) return null;
+                return resp;
+            },
+            async pull() {
+                const meta = medSyncGetMeta();
+                const resp = await this.fetchRemote(meta.rev ? String(meta.rev) : '');
+                if (!resp) return false;
+                if (resp.items.length) medSyncApplyRemote(resp.items);
+                const m2 = medSyncGetMeta();
+                m2.rev = Math.max(m2.rev || 0, Number(resp.rev) || 0);
+                medSyncSetMeta(m2);
+                return true;
+            },
+            async push() {
+                const meta = medSyncGetMeta();
+                const dirty = new Set(meta.dirty || []);
+                const tombIds = Object.keys(meta.ownTombs || {});
+                if (!dirty.size && !tombIds.length) return true;
+                const upserts = medicines.filter(function (m) { return dirty.has(m.id); }).map(function (m) {
+                    return Object.assign({}, m, { updatedAt: m.updatedAt || Date.now() });
+                });
+                const tombstones = tombIds.map(function (id) {
+                    return { id: id, deleted: true, updatedAt: Number(meta.ownTombs[id]) || Date.now() };
+                });
+                if (!upserts.length && !tombstones.length) return true;
+                const token = getCloudToken();
+                if (!token || !window.CLOUD_API_BASE) return false;
+                const resp = await cloudFetch(window.CLOUD_API_BASE + '/medicines?sync=1', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        op: 'sync',
+                        baseRev: meta.rev || 0,
+                        clientId: (currentUser && currentUser.username) || '',
+                        upserts: upserts,
+                        tombstones: tombstones
+                    })
+                });
+                if (!resp || !resp.success) return false;
+                const m2 = medSyncGetMeta();
+                const pushedIds = upserts.map(function (u) { return u.id; });
+                m2.dirty = (m2.dirty || []).filter(function (id) { return pushedIds.indexOf(id) < 0; });
+                tombstones.forEach(function (t) {
+                    // 仅清理本次成功上报的本地墓碑；期间若又产生更新的删除则留待下次
+                    if (m2.ownTombs[t.id] !== undefined && Number(m2.ownTombs[t.id]) <= t.updatedAt) delete m2.ownTombs[t.id];
+                });
+                m2.rev = Math.max(Number(resp.rev) || 0, Number(m2.rev) || 0);
+                medSyncSetMeta(m2);
+                if (Array.isArray(resp.items) && resp.items.length) medSyncApplyRemote(resp.items);
+                return true;
+            },
+            async sync() {
+                if (this._busy || !this.enabled() || !this.ready()) return;
+                this._busy = true;
+                try {
+                    if (await this.pull()) await this.push();
+                } catch (e) {
+                    // 静默：下次可见性/联网/定时再试，不打断业务
+                } finally {
+                    this._busy = false;
+                }
+            },
+            async bootstrap() {
+                const meta = medSyncGetMeta();
+                if (meta.boot) { await this.sync(); return; }
+                const resp = await this.fetchRemote('');
+                if (!resp) return;
+                const boot = medMergeBootstrap(medicines, resp.items);
+                const before = JSON.stringify(medicines);
+                medicines = boot.list;
+                const m2 = medSyncGetMeta();
+                m2.rev = Number(resp.rev) || 0;
+                m2.boot = 1;
+                m2.dirty = canEditMedicines() ? boot.toPush : [];
+                m2.tombs = {};
+                m2.ownTombs = {};
+                medSyncSetMeta(m2);
+                // 首次同步后 local_medicines 与桌面 userData 一并回写（消除两处不一致）
+                try { localStorage.setItem('local_medicines', JSON.stringify(medicines)); } catch (e) { }
+                if (JSON.stringify(medicines) !== before) {
+                    try { saveMedicinesToDisk(); } catch (e) { }
+                    buildMedicineMap();
+                    renderMedicineList();
+                    try { updatePrescriptionPaper(); } catch (e) { }
+                }
+                if (canEditMedicines()) await this.push();
+            },
+            kick(ms) {
+                if (!this.enabled() || !canEditMedicines()) return;
+                const self = this;
+                if (this._timer) clearTimeout(this._timer);
+                this._timer = setTimeout(function () { self.sync(); }, ms || 1500);
+            },
+            start() {
+                if (this._started || !this.enabled()) return;
+                this._started = true;
+                const self = this;
+                setTimeout(async function () {
+                    await medSyncHydrateMeta();
+                    try { await self.bootstrap(); } catch (e) { }
+                    document.addEventListener('visibilitychange', function () {
+                        if (document.visibilityState === 'visible') self.sync();
+                    });
+                    window.addEventListener('online', function () { self.sync(); });
+                    setInterval(function () {
+                        if (document.visibilityState === 'visible') self.sync();
+                    }, 300000);
+                }, 800);
+            }
+        };
 
         const PASSWORD_SALT = 'bnzc_prescription_salt_v1';
 
@@ -6859,7 +7206,7 @@ let currentUser = null;
             ];
             try {
                 const appliedPatch = parseInt(localStorage.getItem('local_medicines_patch_version') || '0', 10);
-                if (appliedPatch < MEDICINE_PATCH_VERSION && medicines.length > 0) {
+                if (appliedPatch < MEDICINE_PATCH_VERSION && medicines.length > 0 && !MedSync.enabled()) {
                     let patchAdded = 0;
                     for (const pm of MEDICINE_PATCH_ADDS) {
                         if (!medicines.some(m => m && m.name === pm.name)) {
@@ -6892,6 +7239,13 @@ let currentUser = null;
                     m.costPrice = Math.round((m.price || 0) * 0.8 * 100) / 100;
                 }
             });
+
+            // ★ 2026-11-13 药材同步：补稳定 id / updatedAt（不改写 updatedAt），再启动云端同步
+            //   同步启用时跳过增量补丁（否则会把用户删掉的药补回来）
+            medicines = medNormalizeList(medicines, 0);
+            buildMedicineMap();
+            applyMedicinePermissionUI();
+            MedSync.start();
         }
 
         // ★★★ 2026-10-10 P1-④：处方号生成**唯一收口点**（generatePrescriptionNo /
@@ -11492,20 +11846,28 @@ let currentUser = null;
                   )
                 : medicines;
 
+            const editable = canEditMedicines();
             list.innerHTML = filteredMedicines.map((m,i) => {
                 const idx = medicines.indexOf(m);
-                return `<div style="display:flex;justify-content:space-between;padding:8px;border-bottom:1px solid #d0d0d0;"><div style="flex:1;"><div style="font-weight:bold;">${escapeHtml(m.name)}</div><div style="font-size:11px;color:#666;">简码：${escapeHtml(m.code)} | 进价：${formatPrice(m.costPrice)}元 | 单价：${formatPrice(m.price)}元/${escapeHtml(m.unit)}</div><div style="font-size:10px;color:#999;">用量：${m.dosage || '10'}${escapeHtml(m.unit)} | 库存：${(window.StockCore && StockCore.stockText) ? StockCore.stockText(m) : (m.stock || '0')} | 煎法：${escapeHtml(getEffectiveJianfa(m, m.name))}</div></div><div style="display:flex;gap:4px;"><button class="small-btn" onclick="editMedicine(${idx})">编辑</button><button class="small-btn" onclick="deleteMedicine(${idx})">删除</button></div></div>`;
+                const ops = editable
+                    ? `<div style="display:flex;gap:4px;"><button class="small-btn" onclick="editMedicine(${idx})">编辑</button><button class="small-btn" onclick="deleteMedicine(${idx})">删除</button></div>`
+                    : '';
+                return `<div style="display:flex;justify-content:space-between;padding:8px;border-bottom:1px solid #d0d0d0;"><div style="flex:1;"><div style="font-weight:bold;">${escapeHtml(m.name)}</div><div style="font-size:11px;color:#666;">简码：${escapeHtml(m.code)} | 进价：${formatPrice(m.costPrice)}元 | 单价：${formatPrice(m.price)}元/${escapeHtml(m.unit)}</div><div style="font-size:10px;color:#999;">用量：${m.dosage || '10'}${escapeHtml(m.unit)} | 库存：${(window.StockCore && StockCore.stockText) ? StockCore.stockText(m) : (m.stock || '0')} | 煎法：${escapeHtml(getEffectiveJianfa(m, m.name))}</div></div>${ops}</div>`;
             }).join('');
 
             if (filteredMedicines.length === 0) {
                 list.innerHTML = '<div style="text-align:center;color:#999;padding:20px;">未找到匹配的药品</div>';
             }
+            applyMedicinePermissionUI();
         }
         const renderMedicineListDebounced = debounce(renderMedicineList, 200);
 
         function deleteMedicine(index) {
+            if (!ensureMedEditPermission()) return;
             if (!confirm('确定删除该药品？')) return;
-            const deletedName = medicines[index].name;
+            const target = medicines[index];
+            const deletedName = target.name;
+            const nowTs = Date.now();
             medicines.splice(index, 1);
             prescriptionItems = prescriptionItems.filter(item =>item.name !== deletedName);
             localStorage.setItem('local_medicines', JSON.stringify(medicines));
@@ -11513,6 +11875,9 @@ let currentUser = null;
             buildMedicineMap();
             renderMedicineList();
             updatePrescriptionPaper();
+            const tomb = {};
+            tomb[target.id || medStableId(deletedName)] = nowTs;
+            medSyncMarkDirty([], tomb);
         }
 
         let editingMedicineIndex = -1;
@@ -11590,6 +11955,7 @@ let currentUser = null;
         }
 
         function saveMedicineEdit() {
+            if (!ensureMedEditPermission()) return;
             const name = document.getElementById('medEditName').value.trim();
             const code = document.getElementById('medEditCode').value.trim();
             if (!name) { alert('请输入药品名称'); return; }
@@ -11600,7 +11966,12 @@ let currentUser = null;
             const dosage = parseFloat(document.getElementById('medEditDosage').value) || 10;
             const stock = parseInt(document.getElementById('medEditStock').value) || 0;
             const jianfa = document.getElementById('medEditJianfa').value || '普通煎';
-            const data = {name, code, costPrice, price, unit, dosage, stock, jianfa};
+            const prev = editingMedicineIndex >= 0 ? medicines[editingMedicineIndex] : null;
+            const data = {
+                id: (prev && prev.id) || medStableId(name),
+                name, code, costPrice, price, unit, dosage, stock, jianfa,
+                updatedAt: Date.now()
+            };
             if (editingMedicineIndex >= 0) {
                 medicines[editingMedicineIndex] = data;
             } else {
@@ -11610,6 +11981,7 @@ let currentUser = null;
             saveMedicinesToDisk();
             buildMedicineMap();
             renderMedicineList();
+            medSyncMarkDirty(data.id);
             closeMedicineEditModal();
         }
 
@@ -11720,12 +12092,18 @@ let currentUser = null;
         }
 
         function clearMedicineLibrary() {
+            if (!ensureMedEditPermission()) return;
             if (!confirm('确定要完全清空所有药物吗？包括系统默认药物！此操作不可撤销！清空后请重新导入您的药物库！')) return;
+            const nowTs = Date.now();
+            const tombs = {};
+            medicines.forEach(function (m) { tombs[m.id || medStableId(m.name)] = nowTs; });
             medicines = [];
             localStorage.setItem('local_medicines', '[]');
             localStorage.removeItem('local_clearDefaultMedicines');
+            saveMedicinesToDisk();
             buildMedicineMap();
             renderMedicineList();
+            medSyncMarkDirty([], tombs);
             showToast('药物库已完全清空，请重新导入您的药物库');
         }
 
@@ -11933,6 +12311,7 @@ let currentUser = null;
         }
 
         function executeImportMethod(method) {
+            if (!ensureMedEditPermission()) { cancelImportMethod(); return; }
             const modal = document.getElementById('importMethodModal');
             if (modal) modal.style.display = 'none';
             const importedMedicines = pendingImportedMedicines;
@@ -11946,27 +12325,27 @@ let currentUser = null;
             if (missingCount > 0) {
                 statsSuffix = `\n进价缺失：${missingCount} 条\n异常药材名单（进价空白或格式错误）：\n${missingPriceMedicines.join('、')}`;
             }
-            if (method === 'append') {
-                medicines = [...medicines, ...importedMedicines];
-                alert(`导入成功！共导入 ${importedMedicines.length} 种药品` + statsSuffix);
-            } else if (method === 'overwrite') {
-                if (confirm('确定要覆盖现有药品库吗？导入的药品价格与库存将完全替换现有数据！未填库存列的药品库存将归零')) {
-                    medicines = [...importedMedicines];
-                    localStorage.removeItem('local_clearDefaultMedicines');
-                    alert(`导入成功！共导入 ${importedMedicines.length} 种药品，已覆盖原有数据` + statsSuffix);
-                } else { return; }
-            } else if (method === 'merge') {
-                let addCount = 0, updateCount = 0;
-                importedMedicines.forEach(importMed =>{
-                    const existIndex = medicines.findIndex(m =>m.name === importMed.name);
-                    if (existIndex >= 0) { medicines[existIndex] = importMed; updateCount++; }
-                    else { medicines.push(importMed); addCount++; }
-                });
-                alert(`导入完成！新增：${addCount} 种，更新：${updateCount} 种，更新的药品以导入价格为准` + statsSuffix);
-            } else { return; }
+            if (method === 'overwrite') {
+                if (!confirm('确定要覆盖现有药品库吗？导入的药品价格与库存将完全替换现有数据！未填库存列的药品库存将归零')) return;
+                localStorage.removeItem('local_clearDefaultMedicines');
+            }
+            const beforeCount = medicines.length;
+            const result = medApplyImport(medicines, importedMedicines, method, Date.now());
+            medicines = result.list;
             localStorage.setItem('local_medicines', JSON.stringify(medicines));
+            // ★ 修复：此前导入只写 localStorage、漏落盘，桌面重启后按 userData 旧数据加载导致导入"丢失"
+            saveMedicinesToDisk();
             buildMedicineMap();
             renderMedicineList();
+            medSyncMarkDirty(result.upsertIds, result.tombs);
+            if (method === 'append') {
+                alert(`导入成功！共导入 ${importedMedicines.length} 种药品` + statsSuffix);
+            } else if (method === 'overwrite') {
+                alert(`导入成功！共导入 ${importedMedicines.length} 种药品，已覆盖原有数据` + statsSuffix);
+            } else {
+                const afterCount = medicines.length;
+                alert(`导入完成！新增：${Math.max(0, afterCount - beforeCount)} 种，更新：${Math.max(0, importedMedicines.length - Math.max(0, afterCount - beforeCount))} 种，更新的药品以导入价格为准` + statsSuffix);
+            }
         }
         
         function parseCSVLine(line) {
