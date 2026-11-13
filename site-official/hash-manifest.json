@@ -14,26 +14,26 @@
             "releaseNotes": "🐛 修复:\n  - fix(build): build-meta 生成顺序移到 versionCode +1 之后\n  - fix(build): 修正 strip-e2e-bypass 目录参数尾反斜杠导致路径带引号\n  - fix(license): 离线 APP 接入试用起点远端锚点（与服务端/桌面同契约）\n  - fix(license): 试用起点服务端锚点，堵「删光本地痕迹重开 7 天试用」\n  - fix(license): 试用起点双锚点，堵断网 + 删 trial.dat 无限重开试用\n  - fix(security): 主进程调试面收口 + E2E 旁路构建期剥离 + 签名二次阻断\n  - 补入说明书可编辑母版 DOCX 并修正 zip 清单口径\n  - fix(shortcuts): 补齐系统帮助快捷键并给 F7 清空处方加二次确认\n  - 修正陈述意见的每页代码行数口径为实测 51-55 行\n📋 其他:\n  - 提交版留档：软著补正 V2 已提交官网，固化交付件与口径基线\n  - 软著补正材料：统一术语为「诊断录入」「语音录入」并同步终版校验值"
         },
         "portable": {
-            "version": "1.0.312",
-            "sha256": "41674f71e09f9da4ed740e732aeeef092ba89d2082289dff3df79c9587ba342b",
-            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.12-1740/huikang-local-1.0.312.exe",
-            "size": 79200120,
-            "updateTime": "2026-11-12T09:51:16.935Z",
-            "fileName": "惠康中医-本地 1.0.312.exe",
-            "releaseFileName": "huikang-local-1.0.312.exe",
-            "releaseTag": "v2026.11.12-1740",
-            "releaseNotes": "🐛 修复:\n  - fix(build): build-meta 生成顺序移到 versionCode +1 之后\n  - fix(build): 修正 strip-e2e-bypass 目录参数尾反斜杠导致路径带引号\n  - fix(license): 离线 APP 接入试用起点远端锚点（与服务端/桌面同契约）\n  - fix(license): 试用起点服务端锚点，堵「删光本地痕迹重开 7 天试用」\n  - fix(license): 试用起点双锚点，堵断网 + 删 trial.dat 无限重开试用\n  - fix(security): 主进程调试面收口 + E2E 旁路构建期剥离 + 签名二次阻断\n  - 补入说明书可编辑母版 DOCX 并修正 zip 清单口径\n  - fix(shortcuts): 补齐系统帮助快捷键并给 F7 清空处方加二次确认\n  - 修正陈述意见的每页代码行数口径为实测 51-55 行\n📋 其他:\n  - 提交版留档：软著补正 V2 已提交官网，固化交付件与口径基线\n  - 软著补正材料：统一术语为「诊断录入」「语音录入」并同步终版校验值"
+            "version": "1.0.314",
+            "sha256": "c0f48ca01d18171f20c440015b267c6ac2775f75a89b630c5b8116926eaac9d6",
+            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.13-1231/huikang-local-1.0.314.exe",
+            "size": 79174600,
+            "updateTime": "2026-11-13T04:33:08.550Z",
+            "fileName": "惠康中医-本地 1.0.314.exe",
+            "releaseFileName": "huikang-local-1.0.314.exe",
+            "releaseTag": "v2026.11.13-1231",
+            "releaseNotes": "✨ 新增:\n  - feat(desktop): 云桌面按同步药物明细自动生成处方签\n  - feat(app): App 端按同步药物明细自动生成处方签，同步补齐性别/年龄/病史\n🐛 修复:\n  - fix(desktop): 患者姓名含空格时处方签扫描不到（匹配规则改为空白不敏感）\n  - fix(build): build-meta 生成顺序移到 versionCode +1 之后\n  - fix(build): 修正 strip-e2e-bypass 目录参数尾反斜杠导致路径带引号\n  - fix(license): 离线 APP 接入试用起点远端锚点（与服务端/桌面同契约）\n  - fix(license): 试用起点服务端锚点，堵「删光本地痕迹重开 7 天试用」\n  - fix(license): 试用起点双锚点，堵断网 + 删 trial.dat 无限重开试用\n  - fix(security): 主进程调试面收口 + E2E 旁路构建期剥离 + 签名二次阻断\n  - 补入说明书可编辑母版 DOCX 并修正 zip 清单口径\n  - fix(shortcuts): 补齐系统帮助快捷键并给 F7 清空处方加二次确认\n  - 修正陈述意见的每页代码行数口径为实测 51-55 行\n📋 其他:\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - 提交版留档：软著补正 V2 已提交官网，固化交付件与口径基线\n  - 软著补正材料：统一术语为「诊断录入」「语音录入」并同步终版校验值"
         },
         "exe": {
-            "version": "1.0.312",
-            "sha256": "2c5f73749d5a03acb9a696d050d6553f8903af9a3df0de181a899a1073622ff4",
-            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.12-1740/huikang-local-setup-1.0.312.exe",
-            "size": 79475016,
-            "updateTime": "2026-11-12T09:51:16.935Z",
-            "fileName": "惠康中医-本地 Setup 1.0.312.exe",
-            "releaseFileName": "huikang-local-setup-1.0.312.exe",
-            "releaseTag": "v2026.11.12-1740",
-            "releaseNotes": "🐛 修复:\n  - fix(build): build-meta 生成顺序移到 versionCode +1 之后\n  - fix(build): 修正 strip-e2e-bypass 目录参数尾反斜杠导致路径带引号\n  - fix(license): 离线 APP 接入试用起点远端锚点（与服务端/桌面同契约）\n  - fix(license): 试用起点服务端锚点，堵「删光本地痕迹重开 7 天试用」\n  - fix(license): 试用起点双锚点，堵断网 + 删 trial.dat 无限重开试用\n  - fix(security): 主进程调试面收口 + E2E 旁路构建期剥离 + 签名二次阻断\n  - 补入说明书可编辑母版 DOCX 并修正 zip 清单口径\n  - fix(shortcuts): 补齐系统帮助快捷键并给 F7 清空处方加二次确认\n  - 修正陈述意见的每页代码行数口径为实测 51-55 行\n📋 其他:\n  - 提交版留档：软著补正 V2 已提交官网，固化交付件与口径基线\n  - 软著补正材料：统一术语为「诊断录入」「语音录入」并同步终版校验值"
+            "version": "1.0.314",
+            "sha256": "48b9011b8a43a14db3d646f743268637d57654a405e947f18958a39cbe2aec75",
+            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.13-1231/huikang-local-setup-1.0.314.exe",
+            "size": 79449576,
+            "updateTime": "2026-11-13T04:33:08.550Z",
+            "fileName": "惠康中医-本地 Setup 1.0.314.exe",
+            "releaseFileName": "huikang-local-setup-1.0.314.exe",
+            "releaseTag": "v2026.11.13-1231",
+            "releaseNotes": "✨ 新增:\n  - feat(desktop): 云桌面按同步药物明细自动生成处方签\n  - feat(app): App 端按同步药物明细自动生成处方签，同步补齐性别/年龄/病史\n🐛 修复:\n  - fix(desktop): 患者姓名含空格时处方签扫描不到（匹配规则改为空白不敏感）\n  - fix(build): build-meta 生成顺序移到 versionCode +1 之后\n  - fix(build): 修正 strip-e2e-bypass 目录参数尾反斜杠导致路径带引号\n  - fix(license): 离线 APP 接入试用起点远端锚点（与服务端/桌面同契约）\n  - fix(license): 试用起点服务端锚点，堵「删光本地痕迹重开 7 天试用」\n  - fix(license): 试用起点双锚点，堵断网 + 删 trial.dat 无限重开试用\n  - fix(security): 主进程调试面收口 + E2E 旁路构建期剥离 + 签名二次阻断\n  - 补入说明书可编辑母版 DOCX 并修正 zip 清单口径\n  - fix(shortcuts): 补齐系统帮助快捷键并给 F7 清空处方加二次确认\n  - 修正陈述意见的每页代码行数口径为实测 51-55 行\n📋 其他:\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - 提交版留档：软著补正 V2 已提交官网，固化交付件与口径基线\n  - 软著补正材料：统一术语为「诊断录入」「语音录入」并同步终版校验值"
         }
     },
     "cloud": {
@@ -51,37 +51,37 @@
             "releaseNotes": "✨ 新增:\n  - 新增题库「本能方法论 60 题」与「大医传承二期 51 题」并签发热更\n  - 新增方剂独立库 bx-formula：补齐本能系方剂知识并签发热更\n  - feat(quiz): 上线本能系统论试点题库 bx-50n（无方剂 50 题）并重签三通道热更\n  - feat(quiz): 上线说白伤寒论 65 题并重签三通道热更\n🐛 修复:\n  - fix(cloud-app): 修复 Android 15/16 安全区遮挡（vc352）\n📋 其他:\n  - docs: 记录鸿蒙项目暂停开发（无限期）\n  - release: 四端整包重打，让 7 个题库随安装包分发\n  - 题库：用 sb-shanghan-109 替换线上 sb-shanghan-65"
         },
         "exe": {
-            "version": "1.2.289",
-            "sha256": "e36b7799be23120cfcb8bba4d8a970aade2268cfc6aba6e3813d6c20c059ce83",
-            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.12-1740/huikang-cloud-setup-1.2.289.exe",
-            "size": 82084416,
-            "updateTime": "2026-11-12T09:51:16.935Z",
-            "fileName": "惠康中医-云端 Setup 1.2.289.exe",
-            "releaseFileName": "huikang-cloud-setup-1.2.289.exe",
-            "releaseTag": "v2026.11.12-1740",
-            "releaseNotes": "🐛 修复:\n  - fix(build): build-meta 生成顺序移到 versionCode +1 之后\n  - fix(build): 修正 strip-e2e-bypass 目录参数尾反斜杠导致路径带引号\n  - fix(license): 离线 APP 接入试用起点远端锚点（与服务端/桌面同契约）\n  - fix(license): 试用起点服务端锚点，堵「删光本地痕迹重开 7 天试用」\n  - fix(license): 试用起点双锚点，堵断网 + 删 trial.dat 无限重开试用\n  - fix(security): 主进程调试面收口 + E2E 旁路构建期剥离 + 签名二次阻断\n  - 补入说明书可编辑母版 DOCX 并修正 zip 清单口径\n  - fix(shortcuts): 补齐系统帮助快捷键并给 F7 清空处方加二次确认\n  - 修正陈述意见的每页代码行数口径为实测 51-55 行\n📋 其他:\n  - 提交版留档：软著补正 V2 已提交官网，固化交付件与口径基线\n  - 软著补正材料：统一术语为「诊断录入」「语音录入」并同步终版校验值"
+            "version": "1.2.291",
+            "sha256": "7204fd91be4ddf31a09dd7680b8020cee234174988522758051810b2e5e977c3",
+            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.13-1231/huikang-cloud-setup-1.2.291.exe",
+            "size": 82072488,
+            "updateTime": "2026-11-13T04:33:08.550Z",
+            "fileName": "惠康中医-云端 Setup 1.2.291.exe",
+            "releaseFileName": "huikang-cloud-setup-1.2.291.exe",
+            "releaseTag": "v2026.11.13-1231",
+            "releaseNotes": "✨ 新增:\n  - feat(desktop): 云桌面按同步药物明细自动生成处方签\n  - feat(app): App 端按同步药物明细自动生成处方签，同步补齐性别/年龄/病史\n🐛 修复:\n  - fix(desktop): 患者姓名含空格时处方签扫描不到（匹配规则改为空白不敏感）\n  - fix(build): build-meta 生成顺序移到 versionCode +1 之后\n  - fix(build): 修正 strip-e2e-bypass 目录参数尾反斜杠导致路径带引号\n  - fix(license): 离线 APP 接入试用起点远端锚点（与服务端/桌面同契约）\n  - fix(license): 试用起点服务端锚点，堵「删光本地痕迹重开 7 天试用」\n  - fix(license): 试用起点双锚点，堵断网 + 删 trial.dat 无限重开试用\n  - fix(security): 主进程调试面收口 + E2E 旁路构建期剥离 + 签名二次阻断\n  - 补入说明书可编辑母版 DOCX 并修正 zip 清单口径\n  - fix(shortcuts): 补齐系统帮助快捷键并给 F7 清空处方加二次确认\n  - 修正陈述意见的每页代码行数口径为实测 51-55 行\n📋 其他:\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - 提交版留档：软著补正 V2 已提交官网，固化交付件与口径基线\n  - 软著补正材料：统一术语为「诊断录入」「语音录入」并同步终版校验值"
         },
         "portable": {
-            "version": "1.2.289",
-            "sha256": "85e298121f9b1466f2cb571a3a0b8d9d3da44b73ee58cd80200f39c80f3f559f",
-            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.12-1740/huikang-cloud-1.2.289.exe",
-            "size": 81809488,
-            "updateTime": "2026-11-12T09:51:16.935Z",
-            "fileName": "惠康中医-云端 1.2.289.exe",
-            "releaseFileName": "huikang-cloud-1.2.289.exe",
-            "releaseTag": "v2026.11.12-1740",
-            "releaseNotes": "🐛 修复:\n  - fix(build): build-meta 生成顺序移到 versionCode +1 之后\n  - fix(build): 修正 strip-e2e-bypass 目录参数尾反斜杠导致路径带引号\n  - fix(license): 离线 APP 接入试用起点远端锚点（与服务端/桌面同契约）\n  - fix(license): 试用起点服务端锚点，堵「删光本地痕迹重开 7 天试用」\n  - fix(license): 试用起点双锚点，堵断网 + 删 trial.dat 无限重开试用\n  - fix(security): 主进程调试面收口 + E2E 旁路构建期剥离 + 签名二次阻断\n  - 补入说明书可编辑母版 DOCX 并修正 zip 清单口径\n  - fix(shortcuts): 补齐系统帮助快捷键并给 F7 清空处方加二次确认\n  - 修正陈述意见的每页代码行数口径为实测 51-55 行\n📋 其他:\n  - 提交版留档：软著补正 V2 已提交官网，固化交付件与口径基线\n  - 软著补正材料：统一术语为「诊断录入」「语音录入」并同步终版校验值"
+            "version": "1.2.291",
+            "sha256": "3ab06d757ff08bdeeee33accee75e6ad4955528fc8ba35542fd4c0f993887f57",
+            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.13-1231/huikang-cloud-1.2.291.exe",
+            "size": 81797584,
+            "updateTime": "2026-11-13T04:33:08.550Z",
+            "fileName": "惠康中医-云端 1.2.291.exe",
+            "releaseFileName": "huikang-cloud-1.2.291.exe",
+            "releaseTag": "v2026.11.13-1231",
+            "releaseNotes": "✨ 新增:\n  - feat(desktop): 云桌面按同步药物明细自动生成处方签\n  - feat(app): App 端按同步药物明细自动生成处方签，同步补齐性别/年龄/病史\n🐛 修复:\n  - fix(desktop): 患者姓名含空格时处方签扫描不到（匹配规则改为空白不敏感）\n  - fix(build): build-meta 生成顺序移到 versionCode +1 之后\n  - fix(build): 修正 strip-e2e-bypass 目录参数尾反斜杠导致路径带引号\n  - fix(license): 离线 APP 接入试用起点远端锚点（与服务端/桌面同契约）\n  - fix(license): 试用起点服务端锚点，堵「删光本地痕迹重开 7 天试用」\n  - fix(license): 试用起点双锚点，堵断网 + 删 trial.dat 无限重开试用\n  - fix(security): 主进程调试面收口 + E2E 旁路构建期剥离 + 签名二次阻断\n  - 补入说明书可编辑母版 DOCX 并修正 zip 清单口径\n  - fix(shortcuts): 补齐系统帮助快捷键并给 F7 清空处方加二次确认\n  - 修正陈述意见的每页代码行数口径为实测 51-55 行\n📋 其他:\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - 提交版留档：软著补正 V2 已提交官网，固化交付件与口径基线\n  - 软著补正材料：统一术语为「诊断录入」「语音录入」并同步终版校验值"
         }
     },
     "provenance": {
         "schemaVersion": 1,
         "repo": "https://github.com/kyt61767126/tcm-prescription-system.git",
-        "commit": "915686350033",
+        "commit": "b82baf56de10",
         "ref": "main",
         "builder": "kyt61767126",
-        "builtAt": "2026-11-12T09:51:17.832Z",
+        "builtAt": "2026-11-13T04:33:09.283Z",
         "buildTool": "publish-release.js@v24.16.0",
-        "releaseTag": "v2026.11.12-1740"
+        "releaseTag": "v2026.11.13-1231"
     },
     "dingzhi": {
         "apk": {
@@ -98,26 +98,26 @@
             "releaseNotes": "🐛 修复:\n  - fix(build): build-meta 生成顺序移到 versionCode +1 之后\n  - fix(build): 修正 strip-e2e-bypass 目录参数尾反斜杠导致路径带引号\n  - fix(license): 离线 APP 接入试用起点远端锚点（与服务端/桌面同契约）\n  - fix(license): 试用起点服务端锚点，堵「删光本地痕迹重开 7 天试用」\n  - fix(license): 试用起点双锚点，堵断网 + 删 trial.dat 无限重开试用\n  - fix(security): 主进程调试面收口 + E2E 旁路构建期剥离 + 签名二次阻断\n  - 补入说明书可编辑母版 DOCX 并修正 zip 清单口径\n  - fix(shortcuts): 补齐系统帮助快捷键并给 F7 清空处方加二次确认\n  - 修正陈述意见的每页代码行数口径为实测 51-55 行\n📋 其他:\n  - 提交版留档：软著补正 V2 已提交官网，固化交付件与口径基线\n  - 软著补正材料：统一术语为「诊断录入」「语音录入」并同步终版校验值"
         },
         "portable": {
-            "version": "1.0.312",
-            "sha256": "41674f71e09f9da4ed740e732aeeef092ba89d2082289dff3df79c9587ba342b",
-            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.12-1740/huikang-local-1.0.312.exe",
-            "size": 79200120,
-            "updateTime": "2026-11-12T09:51:16.935Z",
-            "fileName": "惠康中医-本地 1.0.312.exe",
-            "releaseFileName": "huikang-local-1.0.312.exe",
-            "releaseTag": "v2026.11.12-1740",
-            "releaseNotes": "🐛 修复:\n  - fix(build): build-meta 生成顺序移到 versionCode +1 之后\n  - fix(build): 修正 strip-e2e-bypass 目录参数尾反斜杠导致路径带引号\n  - fix(license): 离线 APP 接入试用起点远端锚点（与服务端/桌面同契约）\n  - fix(license): 试用起点服务端锚点，堵「删光本地痕迹重开 7 天试用」\n  - fix(license): 试用起点双锚点，堵断网 + 删 trial.dat 无限重开试用\n  - fix(security): 主进程调试面收口 + E2E 旁路构建期剥离 + 签名二次阻断\n  - 补入说明书可编辑母版 DOCX 并修正 zip 清单口径\n  - fix(shortcuts): 补齐系统帮助快捷键并给 F7 清空处方加二次确认\n  - 修正陈述意见的每页代码行数口径为实测 51-55 行\n📋 其他:\n  - 提交版留档：软著补正 V2 已提交官网，固化交付件与口径基线\n  - 软著补正材料：统一术语为「诊断录入」「语音录入」并同步终版校验值"
+            "version": "1.0.314",
+            "sha256": "c0f48ca01d18171f20c440015b267c6ac2775f75a89b630c5b8116926eaac9d6",
+            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.13-1231/huikang-local-1.0.314.exe",
+            "size": 79174600,
+            "updateTime": "2026-11-13T04:33:08.550Z",
+            "fileName": "惠康中医-本地 1.0.314.exe",
+            "releaseFileName": "huikang-local-1.0.314.exe",
+            "releaseTag": "v2026.11.13-1231",
+            "releaseNotes": "✨ 新增:\n  - feat(desktop): 云桌面按同步药物明细自动生成处方签\n  - feat(app): App 端按同步药物明细自动生成处方签，同步补齐性别/年龄/病史\n🐛 修复:\n  - fix(desktop): 患者姓名含空格时处方签扫描不到（匹配规则改为空白不敏感）\n  - fix(build): build-meta 生成顺序移到 versionCode +1 之后\n  - fix(build): 修正 strip-e2e-bypass 目录参数尾反斜杠导致路径带引号\n  - fix(license): 离线 APP 接入试用起点远端锚点（与服务端/桌面同契约）\n  - fix(license): 试用起点服务端锚点，堵「删光本地痕迹重开 7 天试用」\n  - fix(license): 试用起点双锚点，堵断网 + 删 trial.dat 无限重开试用\n  - fix(security): 主进程调试面收口 + E2E 旁路构建期剥离 + 签名二次阻断\n  - 补入说明书可编辑母版 DOCX 并修正 zip 清单口径\n  - fix(shortcuts): 补齐系统帮助快捷键并给 F7 清空处方加二次确认\n  - 修正陈述意见的每页代码行数口径为实测 51-55 行\n📋 其他:\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - 提交版留档：软著补正 V2 已提交官网，固化交付件与口径基线\n  - 软著补正材料：统一术语为「诊断录入」「语音录入」并同步终版校验值"
         },
         "exe": {
-            "version": "1.0.312",
-            "sha256": "2c5f73749d5a03acb9a696d050d6553f8903af9a3df0de181a899a1073622ff4",
-            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.12-1740/huikang-local-setup-1.0.312.exe",
-            "size": 79475016,
-            "updateTime": "2026-11-12T09:51:16.935Z",
-            "fileName": "惠康中医-本地 Setup 1.0.312.exe",
-            "releaseFileName": "huikang-local-setup-1.0.312.exe",
-            "releaseTag": "v2026.11.12-1740",
-            "releaseNotes": "🐛 修复:\n  - fix(build): build-meta 生成顺序移到 versionCode +1 之后\n  - fix(build): 修正 strip-e2e-bypass 目录参数尾反斜杠导致路径带引号\n  - fix(license): 离线 APP 接入试用起点远端锚点（与服务端/桌面同契约）\n  - fix(license): 试用起点服务端锚点，堵「删光本地痕迹重开 7 天试用」\n  - fix(license): 试用起点双锚点，堵断网 + 删 trial.dat 无限重开试用\n  - fix(security): 主进程调试面收口 + E2E 旁路构建期剥离 + 签名二次阻断\n  - 补入说明书可编辑母版 DOCX 并修正 zip 清单口径\n  - fix(shortcuts): 补齐系统帮助快捷键并给 F7 清空处方加二次确认\n  - 修正陈述意见的每页代码行数口径为实测 51-55 行\n📋 其他:\n  - 提交版留档：软著补正 V2 已提交官网，固化交付件与口径基线\n  - 软著补正材料：统一术语为「诊断录入」「语音录入」并同步终版校验值"
+            "version": "1.0.314",
+            "sha256": "48b9011b8a43a14db3d646f743268637d57654a405e947f18958a39cbe2aec75",
+            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.13-1231/huikang-local-setup-1.0.314.exe",
+            "size": 79449576,
+            "updateTime": "2026-11-13T04:33:08.550Z",
+            "fileName": "惠康中医-本地 Setup 1.0.314.exe",
+            "releaseFileName": "huikang-local-setup-1.0.314.exe",
+            "releaseTag": "v2026.11.13-1231",
+            "releaseNotes": "✨ 新增:\n  - feat(desktop): 云桌面按同步药物明细自动生成处方签\n  - feat(app): App 端按同步药物明细自动生成处方签，同步补齐性别/年龄/病史\n🐛 修复:\n  - fix(desktop): 患者姓名含空格时处方签扫描不到（匹配规则改为空白不敏感）\n  - fix(build): build-meta 生成顺序移到 versionCode +1 之后\n  - fix(build): 修正 strip-e2e-bypass 目录参数尾反斜杠导致路径带引号\n  - fix(license): 离线 APP 接入试用起点远端锚点（与服务端/桌面同契约）\n  - fix(license): 试用起点服务端锚点，堵「删光本地痕迹重开 7 天试用」\n  - fix(license): 试用起点双锚点，堵断网 + 删 trial.dat 无限重开试用\n  - fix(security): 主进程调试面收口 + E2E 旁路构建期剥离 + 签名二次阻断\n  - 补入说明书可编辑母版 DOCX 并修正 zip 清单口径\n  - fix(shortcuts): 补齐系统帮助快捷键并给 F7 清空处方加二次确认\n  - 修正陈述意见的每页代码行数口径为实测 51-55 行\n📋 其他:\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - 提交版留档：软著补正 V2 已提交官网，固化交付件与口径基线\n  - 软著补正材料：统一术语为「诊断录入」「语音录入」并同步终版校验值"
         }
     }
 }
