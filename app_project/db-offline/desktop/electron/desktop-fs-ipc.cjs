@@ -468,6 +468,15 @@ function createDesktopFileIpc({ ipcMain, app, dialog, shell, BrowserWindow }) {
         return { success: true, directory: dir };
     });
 
+    // ★ 2026-11-13 空白不敏感匹配（修复患者姓名含空格时处方签扫不到）：
+    //   写入侧存在两套命名规则——拍照/录像文件名去空格（video-recorder.js 的 sanitizeStr），
+    //   处方签/门诊签文件名保留姓名内部空格（index.html savePrescriptionAsImage）。
+    //   读取侧此前单方面去空格构造前缀、再拿原始文件名做 includes，含空格姓名永远对不上。
+    //   修法：比较前双方都去空白（含全角空格），只改匹配、不改文件名，历史文件无需迁移/改名。
+    function normalizeMediaMatch(s) {
+        return String(s || '').replace(/[\s\u3000]+/g, '');
+    }
+
     // ★ 查找处方文件
     ipcMain.handle('find-media-files', async (event, patientName, prescriptionNo, createdAt) => {
         try {
@@ -508,7 +517,8 @@ function createDesktopFileIpc({ ipcMain, app, dialog, shell, BrowserWindow }) {
                 for (const fe of fileEntries) {
                     if (!fe.isFile()) continue;
                     const fileName = fe.name;
-                    if (!fileName.includes(prefix1) && !fileName.includes(prefix2)) continue;
+                    const matchKey = normalizeMediaMatch(fileName);
+                    if (!matchKey.includes(normalizeMediaMatch(prefix1)) && !matchKey.includes(normalizeMediaMatch(prefix2))) continue;
                     const filePath = path.join(monthDir, fileName);
                     if (foundPaths.has(filePath)) continue;
                     foundPaths.add(filePath);
@@ -540,7 +550,7 @@ function createDesktopFileIpc({ ipcMain, app, dialog, shell, BrowserWindow }) {
                         if (!fe.isFile()) continue;
                         const fileName = fe.name;
                         const ext = path.extname(fileName).toLowerCase();
-                        if (!fileName.includes(cleanName)) continue;
+                        if (!normalizeMediaMatch(fileName).includes(normalizeMediaMatch(cleanName))) continue;
                         if (!validExtensions.includes(ext)) continue;
                         if (!mediaKeywords.some(k => fileName.includes(k))) continue;
                         const filePath = path.join(monthDir, fileName);
