@@ -3488,7 +3488,12 @@ let currentUser = null;
         function canEditMedicines() {
             try {
                 if (!currentUser) return false;
-                if (typeof isAdminLevel === 'function') return !!isAdminLevel(currentUser);
+                // ★ 2026-11-13 修复：isAdminLevel 是 user-admin 块内的私有函数，只以
+                //   window.UserAdmin.isAdminLevel 导出；此前的 typeof 判断恒为 undefined，
+                //   导致管理员也被判为只读、新增/导入/清空入口全部隐藏。
+                if (window.UserAdmin && typeof window.UserAdmin.isAdminLevel === 'function') {
+                    return !!window.UserAdmin.isAdminLevel(currentUser);
+                }
                 return false;
             } catch (e) { return false; }
         }
