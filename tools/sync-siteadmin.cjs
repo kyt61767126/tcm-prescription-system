@@ -65,13 +65,13 @@ const TARGET_REL = 'site-admin/index.html';
 //   新增条目流程：把函数移植到两侧规范化同体 → 在此登记函数名 → 跑同步。
 const SYNCED_FNS = [
     '__medicineTableFirewall', '_isGenericLoginName',
-    'applyFormula', 'buildMedicineMap',
+    'applyFormula', 'autoFillPatientInfoFromHistory', 'buildMedicineMap',
     'clearRecycleBin', 'closeMediaViewer', 'closeModal', 'computeBackupHmac',
     'createEmptyMedicine', 'debounce', 'deleteFromRecycleBin', 'deleteRow', 'deriveCurrentAgeFromHistory',
     'escapeJs', 'exportMedicines', 'formatPrice',
     'getEffectiveJianfa', 'getMedicineByName', 'getPinyinCode',
     'getRecycleBin', 'handleInput', 'handleKeyboard', 'handleSearchKey',
-    'handleSearchKeyDown', 'handleSearchKeyPress', 'hidePatientNameDropdown', 'historyRecordYear', 'injectRecycleBinButton',
+    'handleSearchKeyDown', 'handleSearchKeyPress', 'hidePatientNameDropdown', 'historyRecordDate', 'injectRecycleBinButton',
     'loadLastHistory', 'markGenderManual', 'mediaLabelOf',
     'mediaViewerNav', 'parseMedicineRow', 'removeDuplicateMedicines', 'renderMediaViewerSingle', 'renderPrescriptionTable',
     'renderRememberedUsers', 'renderSyndromeList', 'resetCaseSearch', 'safeParseJSON',
@@ -80,7 +80,7 @@ const SYNCED_FNS = [
     'showToast', 'smartMatchGender', 'sortPrescriptionsByTimeDesc', 'startSearch',
     'switchMobileTab', 'toggleGender', 'toggleUsernameDropdown', 'tryHideSearch',
     'updateDosage', 'updateMedicineFrequency', 'updatePrescriptionPaper', 'updateSearchSelection',
-    'updateUnit', 'wrapText',
+    'updateUnit', 'validatePatientBasics', 'wrapText',
 ];
 
 // —— 与 diff-cross-version.cjs 完全同款 normalizeSpan（字符串感知剔空白+注释）——

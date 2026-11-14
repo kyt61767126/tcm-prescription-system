@@ -936,6 +936,7 @@
                     <input type="text" id="prescriptionNo" class="patient-input name-input" readonly>
                     <span class="patient-label">性别</span>
                     <select id="patientGender" class="patient-input x-small" onclick="toggleGender()" onchange="markGenderManual();updatePrescriptionPaper()">
+                        <option value="">请选择</option>
                         <option value="男">男</option>
                         <option value="女">女</option>
                     </select>
@@ -6736,11 +6737,13 @@ if (window.Permission) {
                 if (maleChars.includes(char)) maleScore++;
             }
             
-            // 女性得分 >= 男性得分，则选女；否则选男
+            // 女性得分 >= 男性得分，则选女；否则选男；都推测不出则留空，由医生选择
             if (femaleScore >= maleScore && femaleScore >0) {
                 genderSelect.value = '女';
             } else if (maleScore >0) {
                 genderSelect.value = '男';
+            } else if (genderSelect.dataset.manual !== 'true') {
+                genderSelect.value = '';
             }
         }
         // <<< SYNCED-FN-END smartMatchGender ===
@@ -6842,60 +6845,146 @@ if (window.Permission) {
         }
         // <<< SYNCED-FN-END hidePatientNameDropdown ===
 
-        // ★ 患者年龄按历史记录自动更新（2026-09-30）
-        //   数据模型无「出生日期」，历史处方只存开方当时的年龄。此处反推出生年：
-        //       出生年 = 记录年份 − 当时年龄
-        //   记录年份优先取处方日期 date（补录历史处方以所录日期为准），退回
-        //   visitDate，再退回 createdAt；异常值（年龄 ≤0 或 >150、年份越界）剔除。
-        //   取出现次数最多的出生年（并列时取距今最近的记录），
-        //   当前年龄 = 当前年份 − 出生年。例：2023-05-01 记 45 岁 → 2026 年得 48 岁。
-        //   说明：仅年份粒度，当年未过生日的患者会提前 1 岁；推算不出时由调用方回退旧值。
-        // >>> SYNCED-FN historyRecordYear (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
-        function historyRecordYear(rec) {
-            if (!rec) return 0;
-            var m = String(rec.date || rec.visitDate || '').match(/(\d{4})/);
+        // ★ 患者年龄按历史记录自动更新（2026-11-14 修订）
+        //   数据模型无「出生日期」，历史处方只存开方当时的年龄。规则：
+        //   取最近一条「年龄可用（0–120 整数）且日期可解析」的记录，
+        //   用「记录年龄 + 记录日期到今天经过的整年数」推算当前年龄；
+        //   0 岁视为合法（新生儿）；推算不出时返回 ''，由调用方留空并提示补录。
+        // >>> SYNCED-FN historyRecordDate (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
+        function historyRecordDate(rec) {
+            if (!rec) return null;
+            var raw = String(rec.date || rec.visitDate || '').trim();
+            var m = raw.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
             if (m) {
-                var y = parseInt(m[1], 10);
-                if (y >= 1900 && y <= 2200) return y;
+                var d1 = new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10));
+                if (!isNaN(d1.getTime())) return d1;
+            }
+            m = raw.match(/^(\d{4})[-/.](\d{1,2})$/);
+            if (m) {
+                var d2 = new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, 1);
+                if (!isNaN(d2.getTime())) return d2;
             }
             if (rec.createdAt) {
-                var y2 = new Date(rec.createdAt).getFullYear();
-                if (isFinite(y2) && y2 >= 1900 && y2 <= 2200) return y2;
+                var d3 = new Date(rec.createdAt);
+                if (!isNaN(d3.getTime())) return d3;
             }
-            return 0;
+            return null;
         }
-        // <<< SYNCED-FN-END historyRecordYear ===
+        // <<< SYNCED-FN-END historyRecordDate ===
 
-        // >>> SYNCED-FN deriveCurrentAgeFromHistory (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
-        function deriveCurrentAgeFromHistory(records, refYear) {
-            if (!records || !records.length) return '';
-            var nowYear = parseInt(refYear, 10) || new Date().getFullYear();
-            var tally = {}, best = null, k;
-            for (var i = 0; i < records.length; i++) {
-                var rec = records[i];
-                if (!rec) continue;
-                var age = parseInt(rec.patientAge, 10);
-                if (!isFinite(age) || age <= 0 || age > 150) continue;
-                var ry = historyRecordYear(rec);
-                if (!ry || ry > nowYear) continue;
-                var birthYear = ry - age;
-                if (birthYear < 1900 || birthYear > nowYear) continue;
-                if (!tally[birthYear]) tally[birthYear] = { n: 0, gap: Infinity };
-                tally[birthYear].n++;
-                var gap = Math.abs(nowYear - ry);
-                if (gap < tally[birthYear].gap) tally[birthYear].gap = gap;
-            }
-            for (k in tally) {
-                if (!Object.prototype.hasOwnProperty.call(tally, k)) continue;
-                var cur = tally[k];
-                if (!best || cur.n > best.n || (cur.n === best.n && cur.gap < best.gap)) {
-                    best = { birthYear: parseInt(k, 10), n: cur.n, gap: cur.gap };
+        // ★ 2026-11-14 选中历史患者自动补全：
+        //   性别取该患者最近一条有性别的记录，其次按姓名用字推测，都没有则留空；
+        //   年龄按最近一条可用记录推算到今天；电话/住址/病史仅在表单为空时回填。
+        // >>> SYNCED-FN autoFillPatientInfoFromHistory (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
+        function autoFillPatientInfoFromHistory(name) {
+            var target = String(name || '').trim();
+            if (!target) return;
+            var recs = filterPrescriptionsByPermission(prescriptionHistory).filter(function (p) {
+                return p && String(p.patientName || '').trim() === target;
+            });
+            recs.sort(function (a, b) {
+                var da = historyRecordDate(a), db = historyRecordDate(b);
+                return (db ? db.getTime() : 0) - (da ? da.getTime() : 0);
+            });
+
+            var genderEl = document.getElementById('patientGender');
+            if (genderEl) {
+                var g = '';
+                for (var i = 0; i < recs.length; i++) {
+                    var gv = String(recs[i].patientGender || '').trim();
+                    if (gv === '男' || gv === '女') { g = gv; break; }
+                }
+                if (g) {
+                    genderEl.value = g;
+                    // 历史性别视为已填，防止输姓名时被用字推测覆盖；仍可手动修改
+                    genderEl.dataset.manual = 'true';
+                } else {
+                    genderEl.dataset.manual = 'false';
+                    genderEl.value = '';
+                    smartMatchGender(target);
                 }
             }
-            if (!best) return '';
-            var nowAge = nowYear - best.birthYear;
-            if (!isFinite(nowAge) || nowAge <= 0 || nowAge > 150) return '';
-            return String(nowAge);
+
+            var ageEl = document.getElementById('patientAge');
+            if (ageEl) {
+                var derived = deriveCurrentAgeFromHistory(recs);
+                if (derived === '') {
+                    for (var k = 0; k < recs.length; k++) {
+                        var av = parseInt(recs[k].patientAge, 10);
+                        if (isFinite(av) && av >= 0 && av <= 120) { derived = String(av); break; }
+                    }
+                }
+                ageEl.value = derived;
+            }
+
+            var fillIfEmpty = function (id, key) {
+                var el = document.getElementById(id);
+                if (!el || String(el.value || '').trim() !== '') return;
+                for (var j = 0; j < recs.length; j++) {
+                    var v = recs[j][key];
+                    if (v != null && String(v).trim() !== '') { el.value = v; return; }
+                }
+            };
+            fillIfEmpty('patientPhone', 'patientPhone');
+            fillIfEmpty('patientAddress', 'patientAddress');
+            fillIfEmpty('medicalHistory', 'medicalHistory');
+        }
+        // <<< SYNCED-FN-END autoFillPatientInfoFromHistory ===
+
+        // ★ 2026-11-14 患者基本信息保存校验（姓名/性别/年龄）
+        //   block=true：不通过则提示并聚焦、阻止保存；
+        //   block=false：只提示不阻断（用于打印/存图片等历史场景）。
+        // >>> SYNCED-FN validatePatientBasics (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
+        function validatePatientBasics(block) {
+            var nameEl = document.getElementById('patientName');
+            var genderEl = document.getElementById('patientGender');
+            var ageEl = document.getElementById('patientAge');
+            var name = String((nameEl && nameEl.value) || '').trim();
+            var gender = String((genderEl && genderEl.value) || '').trim();
+            var ageRaw = String((ageEl && ageEl.value) || '').trim()
+                .replace(/岁$/, '')
+                .replace(/[０-９]/g, function (ch) { return String.fromCharCode(ch.charCodeAt(0) - 0xFEE0); })
+                .trim();
+            var message = '', field = null;
+            if (!name) { message = '请输入患者姓名！'; field = nameEl; }
+            else if (name.length > 30) { message = '患者姓名过长（最多 30 个字）'; field = nameEl; }
+            else if (gender !== '男' && gender !== '女') { message = '请选择患者性别（男/女）！'; field = genderEl; }
+            else if (ageRaw === '') { message = '请输入患者年龄！'; field = ageEl; }
+            else if (!/^\d{1,3}$/.test(ageRaw) || parseInt(ageRaw, 10) > 120) { message = '患者年龄请输入 0–120 的整数'; field = ageEl; }
+            if (!message) return { ok: true, name: name, age: String(parseInt(ageRaw, 10)) };
+            if (block) {
+                alert(message);
+                if (field && field.focus) field.focus();
+            } else if (typeof showToast === 'function') {
+                showToast('提示：' + message + '（仅提示，不阻断）');
+            }
+            return { ok: false, message: message };
+        }
+        // <<< SYNCED-FN-END validatePatientBasics ===
+
+        // >>> SYNCED-FN deriveCurrentAgeFromHistory (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
+        function deriveCurrentAgeFromHistory(records) {
+            if (!records || !records.length) return '';
+            var list = records.slice().sort(function (a, b) {
+                var da = historyRecordDate(a), db = historyRecordDate(b);
+                return (db ? db.getTime() : 0) - (da ? da.getTime() : 0);
+            });
+            var now = new Date();
+            for (var i = 0; i < list.length; i++) {
+                var rec = list[i];
+                if (!rec) continue;
+                var age = parseInt(rec.patientAge, 10);
+                if (!isFinite(age) || age < 0 || age > 120) continue;
+                var d = historyRecordDate(rec);
+                if (!d) return String(age);
+                var years = now.getFullYear() - d.getFullYear();
+                if (now.getMonth() < d.getMonth() || (now.getMonth() === d.getMonth() && now.getDate() < d.getDate())) years--;
+                if (years < 0) years = 0;
+                var cur = age + years;
+                if (cur < 0 || cur > 120) continue;
+                return String(cur);
+            }
+            return '';
         }
         // <<< SYNCED-FN-END deriveCurrentAgeFromHistory ===
 
@@ -6904,49 +6993,8 @@ if (window.Permission) {
             document.getElementById('patientName').value = name;
             hidePatientNameDropdown();
             
-            // 找到该患者的最新记录，自动填充电话、地址、年龄
-            const patientRecords = filterPrescriptionsByPermission(prescriptionHistory).filter(p => 
-                p.patientName && p.patientName.includes(name)
-            );
-            
-            if (patientRecords.length > 0) {
-                // 按时间排序，获取最新的记录
-                patientRecords.sort((a, b) => {
-                    const timeA = new Date(a.createdAt || a.date || 0).getTime();
-                    const timeB = new Date(b.createdAt || b.date || 0).getTime();
-                    return timeB - timeA;
-                });
-                
-                const latestRecord = patientRecords[0];
-                // ★ 患者年龄按历史记录自动更新（2026-09-30）：不再原样沿用历史记录里的
-                //   旧年龄，改用全部同名历史记录反推出生年，再按当前年份算出当前年龄。
-                //   精确同名优先，避免「王明」被「王明华」的记录污染年龄（电话/地址维持原逻辑）。
-                const exactRecs = filterPrescriptionsByPermission(prescriptionHistory).filter(p =>
-                    p && p.patientName && String(p.patientName).trim() === String(name).trim()
-                );
-                const derivedAge = deriveCurrentAgeFromHistory(exactRecs.length ? exactRecs : patientRecords);
-                if (derivedAge !== '') {
-                    document.getElementById('patientAge').value = derivedAge;
-                    // 仅在推算值与历史记录原值不一致时提示，避免无变化时打扰
-                    if (String(latestRecord.patientAge || '') !== String(derivedAge)) {
-                        showToast('年龄已按历史记录自动更新为 ' + derivedAge + ' 岁');
-                    }
-                } else if (latestRecord.patientAge) {
-                    document.getElementById('patientAge').value = latestRecord.patientAge;
-                }
-                if (latestRecord.patientPhone) {
-                    document.getElementById('patientPhone').value = latestRecord.patientPhone;
-                }
-                if (latestRecord.patientAddress) {
-                    document.getElementById('patientAddress').value = latestRecord.patientAddress;
-                }
-                if (latestRecord.patientGender) {
-                    document.getElementById('patientGender').value = latestRecord.patientGender;
-                    // ★ 2026-09-15 历史患者性别=权威：填充后置手动标记，防后续编辑
-                    //   姓名时 smartMatchGender 用字表猜测覆盖真实性别
-                    markGenderManual();
-                }
-            }
+            // ★ 2026-11-14：选中历史患者后自动补全性别、年龄与空着的患者信息
+            autoFillPatientInfoFromHistory(name);
             
             // 触发搜索以加载该患者的历史记录
             searchPatientsQuick({target: {value: name}});
@@ -7402,7 +7450,8 @@ if (window.Permission) {
             const record = prescriptionHistory.find(p => p.id === id);
             if (!record) return;
             document.getElementById('patientName').value = record.patientName;
-            document.getElementById('patientGender').value = record.patientGender || '男';
+            // ★ 2026-11-14：历史缺性别时不再强补「男」，留空由医生补选（保存时校验）
+            document.getElementById('patientGender').value = (record.patientGender === '男' || record.patientGender === '女') ? record.patientGender : '';
             document.getElementById('patientAge').value = record.patientAge;
             document.getElementById('patientPhone').value = record.patientPhone;
             document.getElementById('patientAddress').value = record.patientAddress;
@@ -7479,6 +7528,9 @@ if (window.Permission) {
             };
             safeSet('patientName', '');
             safeSet('patientAge', '');
+            // ★ 2026-11-14：性别一并重置，不沿用上一位患者；恢复自动推测状态
+            safeSet('patientGender', '');
+            try { const _ge = document.getElementById('patientGender'); if (_ge) _ge.dataset.manual = 'false'; } catch(e) {}
             safeSet('patientPhone', '');
             safeSet('patientAddress', '');
             safeSet('clinicNo', '');
@@ -7538,6 +7590,8 @@ if (window.Permission) {
             } catch (e) {}
         }
         function printPrescription(orientation = 'portrait') {
+            // ★ 2026-11-14：打印属历史浏览场景，患者信息不全只提示不阻断
+            validatePatientBasics(false);
             const printContent = document.getElementById('prescriptionPaper').innerHTML;
             const isLandscape = orientation === 'landscape';
             const pageSize = isLandscape ? '210mm 148mm' : '148mm 210mm';
@@ -7644,8 +7698,12 @@ if (window.Permission) {
                 return;
             }
             
-            const name = document.getElementById('patientName').value;
-            if (!name) {alert('请输入患者姓名！'); document.getElementById('patientName').focus(); return;}
+            // ★ 2026-11-14 患者姓名/性别/年龄必填校验（不通过不保存，提示并聚焦）
+            const _patientCheck = validatePatientBasics(true);
+            if (!_patientCheck.ok) return;
+            const name = _patientCheck.name;
+            document.getElementById('patientName').value = name;
+            document.getElementById('patientAge').value = _patientCheck.age;
             const currentDate = new Date().toISOString().split('T')[0].replace(/-/g, '/');
             document.getElementById('visitDate').value = currentDate;
             document.getElementById('paperDate').textContent = currentDate;
@@ -7846,6 +7904,13 @@ if (window.Permission) {
         }
 
         function savePrescriptionAsImage(record, currentPrescriptionNo) {
+            // ★ 2026-11-14：历史处方可能缺性别/年龄，存图片只提示不阻断
+            var _imgName = String((record && record.patientName) || '').trim();
+            var _imgGender = String((record && record.patientGender) || '').trim();
+            var _imgAge = String(record && record.patientAge != null ? record.patientAge : '').trim();
+            if (!_imgName || (_imgGender !== '男' && _imgGender !== '女') || _imgAge === '') {
+                if (typeof showToast === 'function') showToast('提示：该处方患者姓名/性别/年龄不完整（仅提示，不阻断）');
+            }
             // 创建处方签图片 - 样式与预览一致，字体适合手机端
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
