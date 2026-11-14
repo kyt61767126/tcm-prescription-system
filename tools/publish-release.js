@@ -1017,6 +1017,8 @@ function main() {
             [path.join(PROJECT_ROOT, 'public', 'hash-manifest.json'), path.join(PROJECT_ROOT, 'site-official', 'hash-manifest.json')],
             [path.join(PROJECT_ROOT, 'public', 'build-meta.json'), path.join(PROJECT_ROOT, 'site-official', 'build-meta.json')],
             [path.join(PROJECT_ROOT, 'public', 'build-meta.json'), path.join(PROJECT_ROOT, 'site-admin', 'build-meta.json')],
+            // ★ 2026-11-14：鸿蒙 rawfile 兜底页也读 build-meta.json，漏镜像会导致 sync-all -VerifyOnly DRIFT（发布合规 5/8 失败）
+            [path.join(PROJECT_ROOT, 'public', 'build-meta.json'), path.join(PROJECT_ROOT, 'app_project_harmony', 'huikang-cloud', 'entry', 'src', 'main', 'resources', 'rawfile', 'build-meta.json')],
             [path.join(PROJECT_ROOT, 'public', 'updates'), path.join(PROJECT_ROOT, 'site-official', 'updates')]
         ];
         let mirrored = 0;
