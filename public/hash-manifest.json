@@ -38,17 +38,17 @@
     },
     "cloud": {
         "apk": {
-            "version": "V1.0.0.353",
-            "versionCode": 353,
-            "sha256": "9c0997ee43ddd5b3b1ffbd6849169fd2e5491c97452160c33571a328627cf289",
+            "version": "V1.0.0.354",
+            "versionCode": 354,
+            "sha256": "3d506905b3eddbecc0dc8b3fdfe7365aee91a23b20040de59e7a6c634596228b",
             "url": "/downloads/惠康中医-云端.apk",
-            "releaseUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.13-1231/huikang-cloud.apk",
-            "size": 12668683,
-            "updateTime": "2026-11-13T07:55:14.460Z",
+            "releaseUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.14/huikang-cloud.apk",
+            "size": 12670401,
+            "updateTime": "2026-11-14T01:36:49.496Z",
             "fileName": "惠康中医-云端.apk",
             "releaseFileName": "huikang-cloud.apk",
-            "releaseTag": "v2026.11.13-1231",
-            "releaseNotes": "✨ 新增:\n  - feat(medicines): 云桌面/云 App 药材设置同步\n  - feat(desktop): 云桌面按同步药物明细自动生成处方签\n  - feat(app): App 端按同步药物明细自动生成处方签，同步补齐性别/年龄/病史\n🐛 修复:\n  - fix(desktop): 患者姓名含空格时处方签扫描不到（匹配规则改为空白不敏感）\n  - fix(build): build-meta 生成顺序移到 versionCode +1 之后\n  - fix(build): 修正 strip-e2e-bypass 目录参数尾反斜杠导致路径带引号\n  - fix(license): 离线 APP 接入试用起点远端锚点（与服务端/桌面同契约）\n  - fix(license): 试用起点服务端锚点，堵「删光本地痕迹重开 7 天试用」\n  - fix(license): 试用起点双锚点，堵断网 + 删 trial.dat 无限重开试用\n  - fix(security): 主进程调试面收口 + E2E 旁路构建期剥离 + 签名二次阻断\n  - 补入说明书可编辑母版 DOCX 并修正 zip 清单口径\n  - fix(shortcuts): 补齐系统帮助快捷键并给 F7 清空处方加二次确认\n  - 修正陈述意见的每页代码行数口径为实测 51-55 行\n📋 其他:\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - 提交版留档：软著补正 V2 已提交官网，固化交付件与口径基线\n  - 软著补正材料：统一术语为「诊断录入」「语音录入」并同步终版校验值"
+            "releaseTag": "v2026.11.14",
+            "releaseNotes": "✨ 新增:\n  - feat(patient): 姓名/性别/年龄必填与历史患者信息自动补全\n  - fix(medicines): 修复管理员被误判只读导致新增/导入/清空入口消失的回归\n  - feat(medicines): 云桌面/云 App 药材设置同步\n  - feat(desktop): 云桌面按同步药物明细自动生成处方签\n  - feat(app): App 端按同步药物明细自动生成处方签，同步补齐性别/年龄/病史\n🐛 修复:\n  - fix(desktop): 患者姓名含空格时处方签扫描不到（匹配规则改为空白不敏感）\n  - fix(build): build-meta 生成顺序移到 versionCode +1 之后\n  - fix(build): 修正 strip-e2e-bypass 目录参数尾反斜杠导致路径带引号\n  - fix(license): 离线 APP 接入试用起点远端锚点（与服务端/桌面同契约）\n  - fix(license): 试用起点服务端锚点，堵「删光本地痕迹重开 7 天试用」\n  - fix(license): 试用起点双锚点，堵断网 + 删 trial.dat 无限重开试用\n  - fix(security): 主进程调试面收口 + E2E 旁路构建期剥离 + 签名二次阻断\n  - 补入说明书可编辑母版 DOCX 并修正 zip 清单口径\n  - fix(shortcuts): 补齐系统帮助快捷键并给 F7 清空处方加二次确认\n  - 修正陈述意见的每页代码行数口径为实测 51-55 行\n📋 其他:\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - 提交版留档：软著补正 V2 已提交官网，固化交付件与口径基线\n  - 软著补正材料：统一术语为「诊断录入」「语音录入」并同步终版校验值"
         },
         "exe": {
             "version": "1.2.292",
@@ -76,10 +76,10 @@
     "provenance": {
         "schemaVersion": 1,
         "repo": "https://github.com/kyt61767126/tcm-prescription-system.git",
-        "commit": "1cb7030b8768",
+        "commit": "1771820c5ecf",
         "ref": "main",
         "builder": "kyt61767126",
-        "builtAt": "2026-11-14T01:35:15.811Z",
+        "builtAt": "2026-11-14T01:36:50.158Z",
         "buildTool": "publish-release.js@v24.16.0",
         "releaseTag": "v2026.11.14"
     },
