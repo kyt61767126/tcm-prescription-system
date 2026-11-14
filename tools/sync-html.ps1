@@ -188,6 +188,31 @@ foreach ($target in $Targets) {
     }
 }
 
+# ★ 2026-11-14 登录页版本显示统一（方案A）：鸿蒙 rawfile 兜底页也需要 build-meta.json
+#   才能显示真实版本（rawfile 主页面实际加载线上页，此处仅断网兜底）。
+#   版本号由发布脚本写入 public/build-meta.json，这里只做副本同步，不另立版本源。
+$metaSrc = Join-Path $root 'public/build-meta.json'
+$metaDst = Join-Path $root 'app_project_harmony/huikang-cloud/entry/src/main/resources/rawfile/build-meta.json'
+if (Test-Path -LiteralPath $metaSrc) {
+    $metaDstDir = Split-Path -Parent $metaDst
+    if (-not (Test-Path -LiteralPath $metaDstDir)) {
+        Write-Host "[MISS] rawfile 目录不存在: $metaDstDir" -ForegroundColor Red
+        $allOk = $false
+    } else {
+        $srcHash = (Get-FileHash -LiteralPath $metaSrc -Algorithm SHA256).Hash
+        $dstHash = if (Test-Path -LiteralPath $metaDst) { (Get-FileHash -LiteralPath $metaDst -Algorithm SHA256).Hash } else { '' }
+        if ($srcHash -eq $dstHash) {
+            Write-Host "[ OK ] rawfile/build-meta.json (已是权威源副本)" -ForegroundColor Green
+        } elseif ($VerifyOnly) {
+            Write-Host "[DRIFT] rawfile/build-meta.json" -ForegroundColor Red
+            $allOk = $false
+        } else {
+            Copy-Item -LiteralPath $metaSrc -Destination $metaDst -Force
+            Write-Host "[SYNC] rawfile/build-meta.json (从 public/build-meta.json 复制)" -ForegroundColor Green
+        }
+    }
+}
+
 Write-Host ""
 if ($allOk) {
     Write-Host "[OK] HTML 副本与权威源一致" -ForegroundColor Green

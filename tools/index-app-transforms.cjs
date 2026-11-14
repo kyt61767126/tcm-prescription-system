@@ -83,15 +83,15 @@ module.exports = [
   },
   {
     id: "T11",
-    desc: "★ 2026-10-21 重写：药丸与桌面布置统一（居中两行）+ 两分支统一只显产品大类【离线版】（旧327包实锤 !loginVisible 分支漏细分版【离线机构版】）+ meta=APP_VERSION·Build（保留 MainActivity 注入竞态防护：直接拼接 __APP_BUILD__，重渲染不丢）",
+    desc: "★ 2026-11-14 重写（方案A 版本显示统一）：药丸居中两行 + 两分支统一只显产品大类【离线版】+ 第二行=真实版本·Arch（getLoginDisplayVersion 优先取壳注入 V1.0.0.NNN，与云端 App 基准同格式）",
     find: "                if (!_loginVisible) {\n                    tag.innerHTML = '【' + label + '】' + metaHtmlTag;\n                } else {\n                    tag.innerHTML = '【' + loginLabel + '】' + metaHtmlTag;\n                }",
-    replace: "                // ★ 2026-10-21 APP 变体：两分支统一只显产品大类【离线版】（细分版仅登录后顶栏显示）；\n                //   meta = APP_VERSION·Build 号（MainActivity 注入 __APP_BUILD__ 竞态防护：直接拼接防重渲染抹掉）\n                var __appMeta = String(window.APP_VERSION || 'V1.0.0') +\n                    (window.__APP_BUILD__ ? ('.' + window.__APP_BUILD__) : '');\n                tag.innerHTML = '【' + loginLabel + '】<br><span style=\"font-size:10px;color:rgba(255,255,255,0.95);font-weight:normal;line-height:1.3;\">' +\n                    __appMeta + '</span>';",
+    replace: "                // ★ 2026-11-14 统一（方案A）：APP 变体与云端 App 基准同格式——\n                //   第二行 = 真实版本 · Arch（getLoginDisplayVersion 优先取壳注入 V1.0.0.NNN）\n                var __appVerLine = (typeof getLoginDisplayVersion === 'function')\n                    ? (getLoginDisplayVersion() + ' · ' + getLoginArchMarker())\n                    : String(window.APP_VERSION || 'V1.0.0');\n                tag.innerHTML = '【' + loginLabel + '】<br><span style=\"font-size:10px;color:rgba(255,255,255,0.95);font-weight:normal;line-height:1.3;\">' +\n                    __appVerLine + '</span>';",
   },
   {
     id: "T12",
-    desc: "document.title 拼 __APP_BUILD__（同 T11 竞态修复）",
+    desc: "document.title 拼真实版本（同 T11；2026-11-14 起取 getLoginDisplayVersion，不再用旧 __APP_BUILD__）",
     find: "document.title = '惠康中医-' + label",
-    replace: "// ★ 2026-08-30 同竞态修复：标题拼接 __APP_BUILD__，防 applyEditionTags 重写抹掉 Build 号\n            document.title = '惠康中医-' + label +\n                (window.__APP_BUILD__ ? (' ' + window.__APP_BUILD__) : '')",
+    replace: "// ★ 2026-11-14 统一：标题拼接真实版本（与登录页胶囊/底部版本行同源）\n            document.title = '惠康中医-' + label +\n                ((typeof getLoginDisplayVersion === 'function') ? (' ' + getLoginDisplayVersion()) : (window.__APP_BUILD__ ? (' ' + window.__APP_BUILD__) : ''))",
   },
   {
     id: "T13",

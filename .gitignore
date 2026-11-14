@@ -129,6 +129,12 @@ android/local.properties
 **/_backup_asar/
 # 桌面版构建元数据（每次打包更新，仅本地构建产物）
 **/build-meta.json
+# ★ 2026-11-14 登录页版本显示统一（方案A）：以下三份是「站点发布用」版本文件，
+#   由发布脚本按当前桌面版写入，必须随站点/后台/鸿蒙兜底页一起部署 → 纳入版本库
+!public/build-meta.json
+!site-official/build-meta.json
+!site-admin/build-meta.json
+!app_project_harmony/huikang-cloud/entry/src/main/resources/rawfile/build-meta.json
 
 # Gradle 构建产物（覆盖子项目）
 .gradle/

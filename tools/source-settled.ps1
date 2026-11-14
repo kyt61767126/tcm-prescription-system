@@ -102,7 +102,10 @@ function Get-ReleaseDeployPatterns {
     return @(
         '^public/downloads/'
         '^public/updates/'
+        '^public/build-meta\.json$'
+        '^site-admin/build-meta\.json$'
         '^site-official/hash-manifest\.json$'
+        '^site-official/build-meta\.json$'
         '^site-official/updates/'
     )
 }
@@ -111,7 +114,10 @@ function Get-ReleaseDeployGitAddPaths {
         'public/hash-manifest.json'
         'public/downloads/'
         'public/updates/'
+        'public/build-meta.json'
+        'site-admin/build-meta.json'
         'site-official/hash-manifest.json'
+        'site-official/build-meta.json'
         'site-official/updates/'
     )
 }

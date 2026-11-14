@@ -2027,6 +2027,23 @@ let currentUser = null;
         // ★ 2026-08-29 P0-2 版本号单一数据源：本文件所有版本号输出统一引用此常量，升版本只改这一行
         window.APP_VERSION = 'V1.0.0';
 
+        // ★ 2026-11-14 登录页版本显示统一（方案A）：顶部胶囊与底部「版本:」行同源同格式
+        //   真实版本优先级：① 壳注入完整版本（APP：V1.0.0.348）② build-meta.json ③ 常量兜底
+        //   Arch 水印统一取 build-meta.archMarker；APK 的 'APK 348' 不是水印 → 回落 Arch 2.26。
+        function getLoginDisplayVersion() {
+            var av = String(window.APP_VERSION || '');
+            if (/^V\d+(\.\d+){3,}$/.test(av)) return av;
+            if (_buildMeta && _buildMeta.version) {
+                var bv = String(_buildMeta.version);
+                return /^V/i.test(bv) ? bv : ('V' + bv);
+            }
+            return av || 'V1.0.0';
+        }
+        function getLoginArchMarker() {
+            var am = String((_buildMeta && _buildMeta.archMarker) || '');
+            return /^Arch\b/.test(am) ? am : 'Arch 2.26';
+        }
+
         // 版本标签统一显示 V1.0.0（与软著申请版本号一致）
         // ★ 2026-10-20 登录框版本显示统一：登录前只显示产品大类「离线版」/「云端版」，
         //   细分版（标准/机构/免费）在登录后操作界面顶栏显示。
@@ -2100,16 +2117,18 @@ let currentUser = null;
                 //   （V·Arch；Build 时间内部保留不对外展示。离线APP 截图实锤：一行式不居中。
                 //   APP 无构建期 build-meta.json → 回落 window.APP_VERSION 兜底第二行）
                 tag.style.textAlign = 'center';
-                var metaLine1Tag = metaTextLine1 || (window.APP_VERSION ? String(window.APP_VERSION) : '');
-                var metaHtmlTag = metaLine1Tag ?
+                // ★ 2026-11-14 统一：第二行始终为「真实版本 · Arch」（与云端 App 基准一致）
+                var _verLine = getLoginDisplayVersion() + ' · ' + getLoginArchMarker();
+                var metaHtmlTag = _verLine ?
                     ('<br><span style="font-size:10px;color:rgba(255,255,255,0.95);font-weight:normal;line-height:1.3;">' +
-                     metaLine1Tag + '</span>') : '';
-                // ★ 2026-10-21 APP 变体：两分支统一只显产品大类【离线版】（细分版仅登录后顶栏显示）；
-                //   meta = APP_VERSION·Build 号（MainActivity 注入 __APP_BUILD__ 竞态防护：直接拼接防重渲染抹掉）
-                var __appMeta = String(window.APP_VERSION || 'V1.0.0') +
-                    (window.__APP_BUILD__ ? ('.' + window.__APP_BUILD__) : '');
+                     _verLine + '</span>') : '';
+                // ★ 2026-11-14 统一（方案A）：APP 变体与云端 App 基准同格式——
+                //   第二行 = 真实版本 · Arch（getLoginDisplayVersion 优先取壳注入 V1.0.0.NNN）
+                var __appVerLine = (typeof getLoginDisplayVersion === 'function')
+                    ? (getLoginDisplayVersion() + ' · ' + getLoginArchMarker())
+                    : String(window.APP_VERSION || 'V1.0.0');
                 tag.innerHTML = '【' + loginLabel + '】<br><span style="font-size:10px;color:rgba(255,255,255,0.95);font-weight:normal;line-height:1.3;">' +
-                    __appMeta + '</span>';
+                    __appVerLine + '</span>';
             }
             // ★ 挂载点2：.login-security 下方（激活后简化登录框必显示，防止 header-section 被隐藏时丢失）
             var security = document.querySelector('.login-security');
@@ -2144,16 +2163,16 @@ let currentUser = null;
             //   杜绝注入脚本"事后正则追加"式重复拼接 Build 号（用户实报 Build 203 ×3）。
             var lf = document.querySelector('.login-footer');
             if (lf) {
-                lf.textContent = '微信号: hktzy1688 | 版本: ' + (window.APP_VERSION || 'V1.0.0') +
-                    (window.__APP_BUILD__ ? (' ' + window.__APP_BUILD__) : '');
+                // ★ 2026-11-14 统一：与顶部胶囊同源（真实版本），不再拼接旧 __APP_BUILD__
+                lf.textContent = '微信号: hktzy1688 | 版本: ' + getLoginDisplayVersion();
             }
             var et = document.getElementById('editionTag');
             if (et) et.textContent = '【' + label + '】';
             // ★ 2026-08-27 与云端对齐：主窗口标题 = 惠康中医 + 部署版本（离线机构版/离线标准版）
             //   原软著截图期间统一为全称"惠康中医诊所管理系统 V1.0.0"，现恢复动态版本展示
-            // ★ 2026-08-30 同竞态修复：标题拼接 __APP_BUILD__，防 applyEditionTags 重写抹掉 Build 号
+            // ★ 2026-11-14 统一：标题拼接真实版本（与登录页胶囊/底部版本行同源）
             document.title = '惠康中医-' + label +
-                (window.__APP_BUILD__ ? (' ' + window.__APP_BUILD__) : '');
+                ((typeof getLoginDisplayVersion === 'function') ? (' ' + getLoginDisplayVersion()) : (window.__APP_BUILD__ ? (' ' + window.__APP_BUILD__) : ''));
             var logText = '惠康中医' + label + ' ' + window.APP_VERSION +
                 (_buildMeta ? ('  |  构建: ' + metaTextLine1 + (metaTextLine2 ? (' | ' + metaTextLine2) : '')) : '');
             console.log('%c' + logText, 'color:#667eea;font-size:14px;font-weight:bold');

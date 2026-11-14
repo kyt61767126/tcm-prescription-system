@@ -228,8 +228,9 @@
             var bt = _buildMeta.buildTimeLocal || '';
             var m = bt.match(/(\d{4}\/\d{1,2}\/\d{1,2})\s+(\d{1,2}:\d{1,2})/);
             shortBuildTime = m ? (m[1] + ' ' + m[2]) : bt;
-            // 对外仅展示：版本 + Arch
-            metaTextLine1 = 'V' + _buildMeta.version + ' · ' + (_buildMeta.archMarker || '');
+            // 对外仅展示：版本 + Arch（★ 2026-11-14 统一：Arch 水印缺失/非 Arch 格式时回落 Arch 2.26）
+            metaTextLine1 = 'V' + String(_buildMeta.version).replace(/^V/i, '') + ' · ' +
+                (/^Arch\b/.test(String(_buildMeta.archMarker || '')) ? _buildMeta.archMarker : 'Arch 2.26');
         }
         var metaHtml = metaTextLine1 ?
             ('<br><span style="font-size:10px;color:rgba(255,255,255,0.95);font-weight:normal;line-height:1.3;">' +
@@ -255,6 +256,13 @@
         // ★ 2026-08-24 去除底部重复版本号：原「挂载点2」（.login-security 下方三元组）
         //    与顶部 .version-tag 药丸内容完全重复，用户确认冗余 → 删除。
         //    版本三元组（Vx.x.xx | Build 时间 | Arch 水印）唯一显示位 = 顶部药丸挂载点1。
+
+        // ★ 2026-11-14 版本显示统一（方案A）：页脚「版本:」行与顶部胶囊同源（真实版本）
+        var verText = (_buildMeta && _buildMeta.version)
+            ? ('V' + String(_buildMeta.version).replace(/^V/i, ''))
+            : 'V1.0.0';
+        var verEl = document.getElementById('loginVersionText');
+        if (verEl) verEl.textContent = '版本: ' + verText;
     }
 
     let _users = [];

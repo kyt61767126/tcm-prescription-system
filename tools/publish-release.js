@@ -51,7 +51,7 @@ function getReleaseDeployPaths(assertScript) {
         if (p) return p;
     } catch (e) { /* 回退内置列表 */ }
     console.warn('  [WARN] 发布部署路径单源获取失败，回退内置路径列表');
-    return 'public/hash-manifest.json public/downloads/ public/updates/ site-official/hash-manifest.json site-official/updates/';
+    return 'public/hash-manifest.json public/downloads/ public/updates/ public/build-meta.json site-official/hash-manifest.json site-official/build-meta.json site-official/updates/';
 }
 const { execSync, spawnSync } = require('child_process');
 
@@ -923,6 +923,31 @@ function main() {
     console.log('  [OK] hash-manifest.json 已更新');
     console.log('  [OK] provenance: repo=' + (manifest.provenance.repo || '-') + ' commit=' + (manifest.provenance.commit || '-') + ' builder=' + (manifest.provenance.builder || '-'));
 
+    // ★ 2026-11-14 登录页版本显示统一（方案A）：发布时把「当前云端桌面真实版本」写入
+    //   public/build-meta.json，根治登录页胶囊读到 2026-08-23 的陈旧 V1.0.0。
+    //   仅当 manifest.cloud 有桌面节点时更新；APP-only 发布会保留上一次桌面版本。
+    try {
+        const bmPath = path.join(PROJECT_ROOT, 'public', 'build-meta.json');
+        let bm = {};
+        try { bm = JSON.parse(fs.readFileSync(bmPath, 'utf8')) || {}; } catch (e) { bm = {}; }
+        const cloudNode = manifest.cloud || {};
+        const desktopNode = cloudNode.exe || cloudNode.portable || null;
+        if (desktopNode && desktopNode.version) {
+            const bj = new Date(Date.now() + 8 * 3600 * 1000);
+            bm.version = String(desktopNode.version).replace(/^V/i, '');
+            bm.archMarker = 'Arch 2.26';
+            bm.buildTime = bj.toISOString();
+            bm.buildTimeLocal = bj.getUTCFullYear() + '/' + (bj.getUTCMonth() + 1) + '/' + bj.getUTCDate() +
+                ' ' + String(bj.getUTCHours()).padStart(2, '0') + ':' + String(bj.getUTCMinutes()).padStart(2, '0') +
+                ':' + String(bj.getUTCSeconds()).padStart(2, '0');
+            fs.writeFileSync(bmPath, JSON.stringify(bm, null, 2) + '\n', 'utf8');
+            console.log('  [OK] build-meta.json 已同步桌面版本: ' + bm.version + ' · ' + bm.archMarker);
+        }
+    } catch (e) {
+        console.error('  [ERROR] build-meta.json 写入失败: ' + e.message);
+        process.exit(1);
+    }
+
     // 更新 latest.json（桌面版自动更新用）
     // ★ 2026-09-13 SSOT 收口（P0-3）：latest.json 不再「读旧文件→改字段→写回」，
     //   改为 hash-manifest 节点的纯投影（单一事实源派生）。根治两点：
@@ -990,6 +1015,8 @@ function main() {
         }
         const mirrorPairs = [
             [path.join(PROJECT_ROOT, 'public', 'hash-manifest.json'), path.join(PROJECT_ROOT, 'site-official', 'hash-manifest.json')],
+            [path.join(PROJECT_ROOT, 'public', 'build-meta.json'), path.join(PROJECT_ROOT, 'site-official', 'build-meta.json')],
+            [path.join(PROJECT_ROOT, 'public', 'build-meta.json'), path.join(PROJECT_ROOT, 'site-admin', 'build-meta.json')],
             [path.join(PROJECT_ROOT, 'public', 'updates'), path.join(PROJECT_ROOT, 'site-official', 'updates')]
         ];
         let mirrored = 0;
