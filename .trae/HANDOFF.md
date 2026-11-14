@@ -14,7 +14,21 @@
 
 ---
 
-## 当前基线（2026-11-07 更新）
+## 当前基线（2026-11-14 更新）
+
+- **2026-11-14 三端发版 + 逐链接实下核验（云端桌面 1.2.292 / 离线桌面 1.0.316 / 云端 APP vc355 / 离线 APP vc348；Release `v2026.11.14`，清单 provenance commit `9c22854c`）**
+  - **发布面**：6 个附件已上传 Release `v2026.11.14`；两个 APK 同时投 Pages `/downloads/`。`public/hash-manifest.json` 与 `site-official/hash-manifest.json` 互为镜像（本机 SHA256 相同），下载页与首页扫旧版本号 346/347/354/1.0.314/1.0.315 零命中；热更双桌面色按新 appVersion 重签 `2026.11.14-2`（cloud 1.2.292 / local 1.0.316，`verify-hotupdate` 通过）。Release 附件名与大小：`huikang-cloud.apk` 12,619,619 B、`huikang-local.apk` 3,785,756 B、`huikang-cloud-setup-1.2.292.exe` 82,088,984 B、`huikang-cloud-1.2.292.exe` 81,814,040 B、`huikang-local-setup-1.0.316.exe` 79,456,824 B、`huikang-local-1.0.316.exe` 79,181,936 B。
+  - **实下哈希已核验通过（6/8）**：以下每条均为「完整字节流落临时目录 → 本机算 sha256 → 与期望值逐字节一致」，不是用大小或服务端 digest 推断。
+    1. Pages 云端 APK vc355 `https://tcm-prescription-system.pages.dev/downloads/惠康中医-云端.apk` — 12,619,619 B / `b02fb8cdf9da9200cd8c7912d29611cd948a458a6eefc613afc4f1a433a0a22c`
+    2. Pages 离线 APK vc348 `https://tcm-prescription-system.pages.dev/downloads/惠康中医-本地.apk` — 3,785,756 B / `609abdd850a8c5aa4e53e14b5c74d48d658b111936c1b66fb42f54a7f45308e9`
+    3. Release 云端 APK vc355 `https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.14/huikang-cloud.apk` — 12,619,619 B / 同第 1 条
+    4. Release 离线 APK vc348 `…/v2026.11.14/huikang-local.apk` — 3,785,756 B / 同第 2 条
+    5. Release 云端便携 1.2.292 `…/v2026.11.14/huikang-cloud-1.2.292.exe` — 81,814,040 B / `c4be165feab4fe1cea45172b4f06782578648a9459423f172e72ccacfdca9016`
+    6. Release 离线 Setup 1.0.316 `…/v2026.11.14/huikang-local-setup-1.0.316.exe` — 79,456,824 B / `e85c61311867492798df3ee215c830ac67c7e791bab67b121bacff19fa4c5150`
+  - **按证据收尾、未取得实下证据（2 项，不算通过）**：本机到 `release-assets.githubusercontent.com` 的长传输被反复中断，这两条只核到「Release 附件大小 + 服务端 digest」与本地产物一致，**没有拿到完整字节流、没有算 sha256**。
+    - Release 云端 Setup 1.2.292 `…/v2026.11.14/huikang-cloud-setup-1.2.292.exe`：期望 82,088,984 B；断点续传依次 18,234,689 → 36,909,203 → **49,967,251 B（60.9%）** 后不再增长；curl 错误码 `28`（超时）/`56`（接收失败）。
+    - Release 离线便携 1.0.316 `…/v2026.11.14/huikang-local-1.0.316.exe`：期望 79,181,936 B；多次从 0 B 起不来，curl 错误码 `28`；系统 DNS 与固定 IP 两组出口均失败（另有 `35` SSL 连接错）。累计 18 次尝试后按用户要求停止，未再补跑。
+  - **补齐方式**：换一个网络出口（手机热点 / VPN / 海外节点）各完整下载一次，本机 sha256 与上面期望值比对即可闭环；日常判断线上文件是否被替换，直接看 Release `digest` 与 `hash-manifest.json` 的 sha256 是否一致（一致=未被替换，但这只是清单证据，不等于「实下可用」）。
 
 - **2026-11-07 云端 APP 安全区修复上线（vc352，commit `990cf500`，Release `v2026.11.07-1816`）**：云端 APP 在 Android 15/16 上顶部按钮行被状态栏压、底部导航条被系统导航栏压（离线 APP 正常）。根因 = targetSdk 36 强制 edge-to-edge + Capacitor SystemBars 默认把 insets 透传给页面，而页面主壳体不消费 `env(safe-area-inset-*)`，旧原生实现只给 WebView 自身补顶部固定像素（对 fixed 底部条无效）。修法只在 `MainActivity.configureWebView()`：给 WebView **父容器**消费 `systemBars|displayCutout` 四边 insets（键盘可见时用 IME 高度），API≥35 护栏，零 HTML/CSS 改动。APK 12,661,983 B / sha256 `C60E98A2…76AEA`，已投 Pages `/downloads/` + Release 6 附件（桌面端沿用 1.2.288 / 1.0.311 未重打），官网四卡 = V1.0.0.352 / V1.0.0.345 / 1.2.288 / 1.0.311。pre-push 十九道 + 发布前合规 13/13 全绿。详见 KNOWLEDGE §86。**未重打离线 APP/桌面端/HAP，未签发热更。**
 
