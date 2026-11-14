@@ -4631,6 +4631,28 @@ let currentUser = null;
         // ★ 2026-08-29 P0-2 版本号单一数据源：本文件所有版本号输出统一引用此常量，升版本只改这一行
         window.APP_VERSION = 'V1.0.0';
 
+        // ★ 2026-11-14 登录页版本显示统一（方案A）：顶部胶囊与底部「版本:」行同源同格式
+        //   真实版本优先级：
+        //     ① 壳注入的完整版本 —— APP 端 MainActivity 注入 window.APP_VERSION='V1.0.0.NNN'
+        //        （形如 V1.0.0.NNN，四段；桌面/网页恒为常量 'V1.0.0'，两段，不会误判）
+        //     ② build-meta.json —— 桌面打包期写入；网页由发布脚本按当前桌面版写入
+        //     ③ 常量兜底 'V1.0.0'
+        //   Arch 水印统一取 build-meta.archMarker（形如 Arch 2.26）；APK 的 archMarker
+        //   形如 'APK 348' 不是水印 → 回落统一水印 Arch 2.26。
+        function getLoginDisplayVersion() {
+            var av = String(window.APP_VERSION || '');
+            if (/^V\d+(\.\d+){3,}$/.test(av)) return av;
+            if (_buildMeta && _buildMeta.version) {
+                var bv = String(_buildMeta.version);
+                return /^V/i.test(bv) ? bv : ('V' + bv);
+            }
+            return av || 'V1.0.0';
+        }
+        function getLoginArchMarker() {
+            var am = String((_buildMeta && _buildMeta.archMarker) || '');
+            return /^Arch\b/.test(am) ? am : 'Arch 2.26';
+        }
+
         // ★ 2026-10-20 登录框版本显示统一：登录前无法确定标准/机构/语音细分版（易误显），
         //   登录框只显示产品大类「云端版」/「离线版」；细分版在登录后操作界面顶栏显示。
         //   权威来源：CONFIG.productName（云端=惠康中医-云端，离线=惠康中医-本地）。
@@ -4738,9 +4760,11 @@ let currentUser = null;
                 // ★ 2026-10-21 药丸布置与桌面 electron/login.js 完全统一：文字居中 + meta 仅一行
                 //   （V·Arch；Build 时间内部保留不对外展示。用户截图实锤：云APP 药丸三行且不居中）
                 tag.style.textAlign = 'center';
-                var metaHtmlTag = metaTextLine1 ?
+                // ★ 2026-11-14 统一：第二行始终为「真实版本 · Arch」，不再依赖 build-meta 是否可用
+                var _verLine = getLoginDisplayVersion() + ' · ' + getLoginArchMarker();
+                var metaHtmlTag = (_verLine ?
                     ('<br><span style="font-size:10px;color:rgba(255,255,255,0.95);font-weight:normal;line-height:1.3;">' +
-                     metaTextLine1 + '</span>') : '';
+                     _verLine + '</span>') : '');
                 tag.innerHTML = '【' + loginLabel + '】' + metaHtmlTag;
             }
             // ★ 挂载点2：.login-security 下方（激活后简化登录框必显示，防止 header-section 被隐藏时丢失）
@@ -4776,8 +4800,8 @@ let currentUser = null;
             //   杜绝注入脚本"事后正则追加"式重复拼接 Build 号（用户实报 Build 255 ×3）。
             var lf = document.querySelector('.login-footer');
             if (lf) {
-                lf.textContent = '微信号: hktzy1688 | 版本: ' + (window.APP_VERSION || 'V1.0.0') +
-                    (window.__APP_BUILD__ ? (' ' + window.__APP_BUILD__) : '');
+                // ★ 2026-11-14 统一：与顶部胶囊同源（真实版本），不再拼接旧 __APP_BUILD__
+                lf.textContent = '微信号: hktzy1688 | 版本: ' + getLoginDisplayVersion();
             }
             var tv = document.getElementById('topVersionTag');
             if (tv) tv.textContent = '【' + label + '】';
