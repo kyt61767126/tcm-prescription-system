@@ -262,7 +262,7 @@
             ? ('V' + String(_buildMeta.version).replace(/^V/i, ''))
             : 'V1.0.0';
         var verEl = document.getElementById('loginVersionText');
-        if (verEl) verEl.textContent = '版本: ' + verText;
+        if (verEl) verEl.textContent = '微信号: hktzy1688 | 版本: ' + verText;
     }
 
     let _users = [];
