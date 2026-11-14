@@ -4633,8 +4633,8 @@ let currentUser = null;
 
         // ★ 2026-11-14 登录页版本显示统一（方案A）：顶部胶囊与底部「版本:」行同源同格式
         //   真实版本优先级：
-        //     ① 壳注入的完整版本 —— APP 端 MainActivity 注入 window.APP_VERSION='V1.0.0.355'
-        //        （形如 V1.0.0.355，四段；桌面/网页恒为常量 'V1.0.0'，两段，不会误判）
+        //     ① 壳注入的完整版本 —— APP 端 MainActivity 注入 window.APP_VERSION='V1.0.0.NNN'
+        //        （形如 V1.0.0.NNN，四段；桌面/网页恒为常量 'V1.0.0'，两段，不会误判）
         //     ② build-meta.json —— 桌面打包期写入；网页由发布脚本按当前桌面版写入
         //     ③ 常量兜底 'V1.0.0'
         //   Arch 水印统一取 build-meta.archMarker（形如 Arch 2.26）；APK 的 archMarker

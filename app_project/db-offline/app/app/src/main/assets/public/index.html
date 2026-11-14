@@ -2028,7 +2028,7 @@ let currentUser = null;
         window.APP_VERSION = 'V1.0.0';
 
         // ★ 2026-11-14 登录页版本显示统一（方案A）：顶部胶囊与底部「版本:」行同源同格式
-        //   真实版本优先级：① 壳注入完整版本（APP：V1.0.0.348）② build-meta.json ③ 常量兜底
+        //   真实版本优先级：① 壳注入完整版本（APP：V1.0.0.NNN）② build-meta.json ③ 常量兜底
         //   Arch 水印统一取 build-meta.archMarker；APK 的 'APK 348' 不是水印 → 回落 Arch 2.26。
         function getLoginDisplayVersion() {
             var av = String(window.APP_VERSION || '');
