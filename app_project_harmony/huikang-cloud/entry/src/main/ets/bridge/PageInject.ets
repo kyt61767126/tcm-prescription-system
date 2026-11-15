@@ -113,10 +113,12 @@ export class PageInject {
         bundleManager.getBundleInfoForSelfSync(bundleManager.BundleFlag.GET_BUNDLE_INFO_DEFAULT);
       const vn: string = info.versionName ?? '1.0.0';
       const vc: number = info.versionCode ?? 1000000;
-      return `window.__HK_APP_VERSION__ = '${vn}'; window.__HK_APP_CODE__ = ${vc};`;
+      // 2026-11-15 版本口径统一（方案A）：APP_VERSION 使用四段「1.0.0.构建号」，
+      // 与安卓/网页登录页显示同源；__HK_APP_* 保留供旧注入脚本读取。
+      return `window.__HK_APP_VERSION__ = '${vn}'; window.__HK_APP_CODE__ = ${vc}; window.APP_VERSION = 'V${vn}.${vc}';`;
     } catch (e) {
       hilog.warn(DOMAIN, TAG, '读取 bundleInfo 失败: %{public}s', JSON.stringify(e));
-      return 'window.__HK_APP_VERSION__ = \'1.0.0\'; window.__HK_APP_CODE__ = 1000000;';
+      return 'window.__HK_APP_VERSION__ = \'1.0.0\'; window.__HK_APP_CODE__ = 1000002; window.APP_VERSION = \'V1.0.0.1000002\';';
     }
   }
 
