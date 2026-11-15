@@ -307,6 +307,9 @@ function Invoke-Verify {
 #   「热更 minAppCode 高于 APK（HOT-MINAPP）」判为 BLOCK。发布链此前不消费这个判定，
 #   于是能看到"热更包降级却照常发布"。此处作为上传前的硬门（--strict）。
 # 保险丝：READINESS_SOFT=1 降级为提示（仅限已人工确认阻断项可接受时）。
+# ★ 2026-11-15 一次性放行版本回退：显式设置 ALLOW_REGRESS_REASON="原因" 才把
+#   REGRESS（版本回退）降级为 WARN 并写 .build-cache/release-audit.log 留档；
+#   不设置则行为不变（REGRESS 仍是硬阻断），其他阻断项始终拦截。
 function Invoke-ReadinessGate {
     if ($env:READINESS_SOFT -eq '1') {
         Write-Host "[SKIP] READINESS_SOFT=1 —— 体检降级为提示（阻断项不会中止流程）" -ForegroundColor Yellow
@@ -317,7 +320,13 @@ function Invoke-ReadinessGate {
         Write-Host "[WARN] 未找到 tools\check-release-readiness.cjs，跳过发布前体检" -ForegroundColor Yellow
         return 0
     }
-    $rc = Invoke-NodeScript -ScriptPath $readiness -Arguments @('--strict')
+    $readinessArgs = @('--strict')
+    if (-not [string]::IsNullOrWhiteSpace($env:ALLOW_REGRESS_REASON)) {
+        $readinessArgs += @('--allow-regress', "--regress-reason=$($env:ALLOW_REGRESS_REASON)")
+        Write-Host "[WARN] ALLOW_REGRESS_REASON 已显式设置 —— 本次仅放行版本回退(REGRESS)项" -ForegroundColor Yellow
+        Write-Host "       原因: $($env:ALLOW_REGRESS_REASON)（留档 .build-cache/release-audit.log）" -ForegroundColor Yellow
+    }
+    $rc = Invoke-NodeScript -ScriptPath $readiness -Arguments $readinessArgs
     if ($rc -is [array]) { $rc = [int]$rc[-1] }
     return $rc
 }

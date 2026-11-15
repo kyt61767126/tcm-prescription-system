@@ -20,6 +20,10 @@
 //    [OK]/[WARN] 版本严格 +1、产物存在性、热更 minAppCode 等
 //  退出码：0 = 无阻断（仅提示）；1 = --strict 模式下存在阻断项。
 //  用法：node tools/check-release-readiness.cjs [--strict] [--json]
+//        [--allow-regress --regress-reason="原因"]
+//        一次性放行版本回退（2026-11-15 新增）：仅把 REGRESS-* 由 BLOCK 降为 WARN，
+//        并把原因写入 .build-cache/release-audit.log 留档；判定阈值不变、默认仍阻断，
+//        其他 BLOCK（HOT-STALE / HOT-MINAPP 等）照旧拦截。
 // ============================================================================
 'use strict';
 const fs = require('fs');
@@ -30,6 +34,17 @@ const ROOT = path.join(__dirname, '..');
 const ARGS = process.argv.slice(2);
 const STRICT = ARGS.indexOf('--strict') >= 0;
 const JSON_OUT = ARGS.indexOf('--json') >= 0;
+// ★ 2026-11-15 一次性放行版本回退（只是把 REGRESS 降级为 WARN，不改判定阈值）。
+const ALLOW_REGRESS = ARGS.indexOf('--allow-regress') >= 0;
+let REGRESS_REASON = '';
+{
+    const eqArg = ARGS.filter(a => a.indexOf('--regress-reason=') === 0)[0];
+    const idxArg = ARGS.indexOf('--regress-reason');
+    if (eqArg) REGRESS_REASON = eqArg.slice('--regress-reason='.length).trim();
+    else if (idxArg >= 0 && ARGS[idxArg + 1] && ARGS[idxArg + 1].indexOf('--') !== 0) REGRESS_REASON = String(ARGS[idxArg + 1]).trim();
+    // 供 release-menu.ps1 以环境变量透传（仍是显式设置才生效，无默认值）
+    if (!REGRESS_REASON && process.env.ALLOW_REGRESS_REASON) REGRESS_REASON = String(process.env.ALLOW_REGRESS_REASON).trim();
+}
 
 const findings = [];
 function add(level, id, msg, detail) {
@@ -167,13 +182,56 @@ for (const ch of Object.keys(HOT_CHANNELS)) {
     }
 }
 
+// ---- 4.5 一次性放行 REGRESS（显式开关 + 原因留档；判定逻辑本身不变）----
+//  2026-11-15：云端桌面版本线重置 1.2.293 → 1.0.x（无外部客户），本地号必然低于官网
+//  manifest。只允许用显式 --allow-regress + --regress-reason 放行 REGRESS-* 这一条，
+//  其他 BLOCK（HOT-STALE / HOT-MINAPP / 热更 minAppCode）不受影响，仍会中止发布。
+const allowedRegress = [];
+let regressAuditLog = '';
+if (ALLOW_REGRESS) {
+    if (!REGRESS_REASON) {
+        add('WARN', 'REGRESS-NO-REASON',
+            '指定了 --allow-regress 但未提供 --regress-reason，放行不生效（REGRESS 仍为阻断）',
+            '补全放行原因后重跑，例如：--allow-regress --regress-reason="原因"');
+    } else {
+        for (const f of findings) {
+            if (f.level === 'BLOCK' && f.id.indexOf('REGRESS-') === 0) {
+                const origMsg = f.msg;
+                f.level = 'WARN';
+                f.msg = origMsg + '（已按一次性开关放行）';
+                f.detail = (f.detail ? f.detail + '；' : '') + '一次性放行原因: ' + REGRESS_REASON;
+                allowedRegress.push({ id: f.id, finding: origMsg, detail: f.detail });
+            }
+        }
+        if (allowedRegress.length) {
+            regressAuditLog = path.join('.build-cache', 'release-audit.log');
+            try {
+                fs.mkdirSync(path.join(ROOT, '.build-cache'), { recursive: true });
+                fs.appendFileSync(path.join(ROOT, regressAuditLog), JSON.stringify({
+                    ts: new Date().toISOString(),
+                    tool: 'check-release-readiness.cjs',
+                    action: 'ALLOW_REGRESS',
+                    reason: REGRESS_REASON,
+                    argv: ARGS,
+                    regress: allowedRegress,
+                    localVersions: localVersions,
+                    publishedVersions: pub
+                }) + '\n', 'utf8');
+            } catch (e) {
+                regressAuditLog = '';
+                add('WARN', 'REGRESS-AUDIT-FAILED', '放行审计写入失败：' + e.message, '放行仍生效，但请手工记录原因');
+            }
+        }
+    }
+}
+
 // ---- 5. 输出 ----
 const order = { BLOCK: 0, PENDING: 1, WARN: 2, OK: 3 };
 findings.sort((a, b) => order[a.level] - order[b.level]);
 const blockers = findings.filter(f => f.level === 'BLOCK');
 const pend = findings.filter(f => f.level === 'PENDING');
 if (JSON_OUT) {
-    console.log(JSON.stringify({ ts: new Date().toISOString(), localVersions, publishedVersions: pub, pending, findings }, null, 2));
+    console.log(JSON.stringify({ ts: new Date().toISOString(), localVersions, publishedVersions: pub, pending, allowRegress: { enabled: ALLOW_REGRESS, reason: REGRESS_REASON, allowed: allowedRegress, auditLog: regressAuditLog }, findings }, null, 2));
 } else {
     console.log('============================================');
     console.log('  发布前体检（只读 / 不联网 / 不改文件）');
@@ -185,6 +243,12 @@ if (JSON_OUT) {
         const tag = '[' + f.level + '] ';
         console.log(tag + f.msg);
         if (f.detail) console.log('        → ' + f.detail);
+    }
+    if (allowedRegress.length) {
+        console.log('');
+        console.log('[ALLOW-REGRESS] 已放行 ' + allowedRegress.length + ' 条版本回退（一次性开关）');
+        console.log('        原因: ' + REGRESS_REASON);
+        console.log('        审计留档: ' + (regressAuditLog || '（写入失败，需人工留档）'));
     }
     console.log('');
     console.log('============================================');
