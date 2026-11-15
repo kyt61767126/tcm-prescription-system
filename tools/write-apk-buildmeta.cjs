@@ -28,7 +28,10 @@ if (!fs.existsSync(gradlePath)) { console.error('[write-apk-buildmeta] build.gra
 const g = fs.readFileSync(gradlePath, 'utf8');
 const vn = (g.match(/versionName\s+"([^"]+)"/) || [])[1] || '1.0.0';
 const vc = (g.match(/versionCode\s+(\d+)/) || [])[1] || '0';
-const displayVersion = vn + '.' + vc; // 1.0.0.246 —— 与 MainActivity SSOT 注入 V1.0.0.246 同源
+// ★ 2026-11-15 显示三段化：versionName(1.0.0) 只取前两段 + versionCode → 1.0.246（与桌面同形）
+const vnSegs = String(vn).split('.');
+const shortVn = vnSegs.length >= 2 ? vnSegs[0] + '.' + vnSegs[1] : String(vn);
+const displayVersion = shortVn + '.' + vc; // 与 MainActivity SSOT 注入 V1.0.246 同源
 
 var meta = {
     version: displayVersion,

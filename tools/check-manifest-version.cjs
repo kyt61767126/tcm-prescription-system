@@ -9,8 +9,8 @@
 //   （一键写 V1.0.0.283、手动写裸 1.0.0）。本门禁强制：
 //
 //   规则（针对 {channel}.apk 节点，channel = cloud / local / dingzhi）：
-//     ① version 必须匹配 ^V\d+\.\d+\.\d+\.\d+$（带 V 前缀、四段式，
-//        尾段即 versionCode）
+//     ① version 必须匹配 ^V\d+\.\d+\.\d+$（带 V 前缀、三段式 V1.0.<versionCode>，
+//        与桌面 1.0.<构建号> 同形；过渡期兼容旧四段 V1.0.0.<versionCode>）
 //     ② versionCode 必须为正整数，且与 version 尾段一致
 //     ③ sha256/size/url/fileName/updateTime 五要素必须齐备
 //
@@ -61,10 +61,10 @@ for (const ch of APP_CHANNELS) {
     }
 
     const v = String(node.version || '');
-    // ① 四段式带 V 前缀
-    if (!/^V\d+\.\d+\.\d+\.\d+$/.test(v)) {
-        fail(ch + '.apk.version "' + v + '" 不符合 SSOT 格式 V{versionName}.{versionCode}（如 V1.0.0.283）——'
-            + '发布脚本漏拼 versionCode，参考 tools/auto-update-downloads.js L218-225');
+    // ① 三段式（兼容旧四段）带 V 前缀
+    if (!/^V\d+\.\d+\.\d+(\.\d+)?$/.test(v)) {
+        fail(ch + '.apk.version "' + v + '" 不符合 SSOT 格式 V{主版}.{次版}.{versionCode}（如 V1.0.356）——'
+            + '发布脚本漏拼 versionCode，参考 tools/auto-update-downloads.js');
         continue;
     }
     // ② versionCode 一致性
@@ -76,7 +76,7 @@ for (const ch of APP_CHANNELS) {
     } else if (vc !== tail) {
         fail(ch + '.apk.version 尾段(' + tail + ') ≠ versionCode(' + vc + ')——两字段必须同源同值');
     } else {
-        ok(ch + ': V 格式四段式 + versionCode=' + vc + ' 一致');
+        ok(ch + ': V 格式三段式 + versionCode=' + vc + ' 一致');
     }
     // ③ 要素完整性
     for (const k of REQUIRED_KEYS) {

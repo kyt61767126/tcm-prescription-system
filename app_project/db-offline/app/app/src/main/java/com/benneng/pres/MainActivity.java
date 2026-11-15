@@ -1579,7 +1579,11 @@ public class MainActivity extends BridgeActivity {
             android.content.pm.PackageInfo pi = getPackageManager().getPackageInfo(getPackageName(), 0);
             String vn = pi.versionName == null ? "1.0.0" : pi.versionName;
             int vc = android.os.Build.VERSION.SDK_INT >= 28 ? (int) pi.getLongVersionCode() : pi.versionCode;
-            final String display = "V" + vn + "." + vc;
+            // ★ 2026-11-15 显示三段化：versionName 恒 "1.0.0"（软著要求 + 参与 machineId 指纹，不可改），
+            //   显示只取前两段再拼 versionCode → V1.0.<versionCode>，与桌面 V1.0.357 同形。
+            String[] vnSegs = vn.split("\\.");
+            String shortVn = vnSegs.length >= 2 ? vnSegs[0] + "." + vnSegs[1] : vn;
+            final String display = "V" + shortVn + "." + vc;
             final String esc = display.replace("'", "\\'").replace("\"", "\\\"");
             final String js = "(function(){try{" +
                 "window.APP_VERSION='" + esc + "';" +

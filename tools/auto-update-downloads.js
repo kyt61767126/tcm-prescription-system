@@ -222,7 +222,10 @@ function updateDownloads(target) {
         //   （如 V1.0.0.283）。此前手动发布只写裸 versionName（1.0.0），与一键发布的
         //   V1.0.0.283 双轨不一致 → 下载页 APP 卡片显示"v1.0.0"不完整。
         //   双轨写同一 manifest 必须字节级同格式（第八道门禁 check-manifest-version.cjs 强制）。
-        const version = versionCode > 0 ? 'V' + versionName + '.' + versionCode : versionName;
+        // ★ 2026-11-15 显示三段化：versionName(1.0.0) 只取前两段 + versionCode → V1.0.<code>
+        const vnSegs = String(versionName).split('.');
+        const shortVn = vnSegs.length >= 2 ? vnSegs[0] + '.' + vnSegs[1] : String(versionName);
+        const version = versionCode > 0 ? 'V' + shortVn + '.' + versionCode : versionName;
 
         // 更新 manifest
         if (!manifest[key]) manifest[key] = {};

@@ -19,11 +19,11 @@
   try {
     var vn = window.__HK_APP_VERSION__ || '1.0.0';
     var vc = window.__HK_APP_CODE__ || 0;
-    // 2026-11-15 版本口径统一（方案A）：原生已注入四段 APP_VERSION（如 V1.0.0.1000002），
+    // 2026-11-15 版本口径统一（三段）：原生已注入「V1.0.<构建号>」（如 V1.0.1000002），
     // 此时直接采用，避免再拼接「Build N」产生第二个版本口径。
     var av = String(window.APP_VERSION || '');
-    var hasBuild = /^V\d+(\.\d+){3,}$/.test(av);
-    // 四段号已含构建号，__APP_BUILD__ 置空，避免标题/帮助弹窗再拼一次「Build N」
+    var hasBuild = /^V\d+(\.\d+){2,}$/.test(av);
+    // 三段号已含构建号，__APP_BUILD__ 置空，避免标题/帮助弹窗再拼一次「Build N」
     window.__APP_BUILD__ = hasBuild ? '' : ('Build ' + vc);
     if (typeof applyEditionTags === 'function') { try { applyEditionTags(); } catch (e0) {} }
     var t = document.querySelector('title');

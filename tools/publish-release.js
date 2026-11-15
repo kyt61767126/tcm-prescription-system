@@ -117,8 +117,11 @@ function readAppDisplayVersion(gradlePath) {
     const codeM = content.match(/versionCode\s+(\d+)/);
     const vn = nameM ? nameM[1] : '1.0.0';
     const vc = codeM ? codeM[1] : '0';
+    // ★ 2026-11-15 显示三段化：versionName(1.0.0) 只取前两段，拼 versionCode → V1.0.<code>（与桌面同形）
+    const vnSegs = String(vn).split('.');
+    const shortVn = vnSegs.length >= 2 ? vnSegs[0] + '.' + vnSegs[1] : String(vn);
     // 加 versionCode 进 hash-manifest，便于 startApkUpdateCheck 比对（2026-08-28 已加，这里显式带上）
-    return { display: 'V' + vn + '.' + vc, versionName: vn, versionCode: parseInt(vc, 10) || 0 };
+    return { display: 'V' + shortVn + '.' + vc, versionName: vn, versionCode: parseInt(vc, 10) || 0 };
 }
 
 function calculateSHA256(filePath) {
