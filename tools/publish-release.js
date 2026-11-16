@@ -488,6 +488,73 @@ function formatSize(bytes) {
     return (bytes / 1024 / 1024).toFixed(2) + ' MB';
 }
 
+// ★ 2026-11-16 官网镜像 URL 绝对化（根因修复，非一次性补丁）
+//   site-official 部署在独立域名 huikang-official.pages.dev，清单里的根相对 URL
+//   （如 "url": "/downloads/惠康中医-本地.apk"）在该域名下会命中 _routes.json 的
+//   SPA 兜底，返回 index.html（200 + HTML），直连清单取 APK 的程序会拿到网页。
+//   故镜像到 site-official 时统一改写为主站绝对地址；public/ 权威清单保持根相对。
+const MAIN_SITE_ORIGIN = 'https://tcm-prescription-system.pages.dev';
+
+function absolutizeManifestUrls(jsonText) {
+    // 只改写 JSON 值里以 "/" 开头的根相对 URL，跳过协议相对 "//host/path"；
+    // 替换仅动前缀，缩进/中文/字段顺序等其余字节原样保留。
+    return jsonText.replace(/(:\s*)"\/(?!\/)/g, '$1"' + MAIN_SITE_ORIGIN + '/');
+}
+
+function mirrorSiteOfficial() {
+    try {
+        // ★ 2026-09-25 P1-6：legacy updates/dingzhi 跳板续期（非独立通道，禁止再手工维护）。
+        //   2026-08-23 桌面更新 URL 由 updates/dingzhi 改名 updates/local，此前构建的极老
+        //   桌面 EXE 仍硬编码旧 URL；若该文件停在旧版（曾停 1.0.172 三周无人更新），老客户
+        //   只能升到中间旧版，删除则静默永久收不到更新提示。故每次发布把 local 权威投影
+        //   原样复制到 dingzhi 路径：老客户端一跳直上最新版，新版 main.js 改读 local 永久归队。
+        //   撤销条件：确认无 2026-08-23 前构建的桌面端在网（或满一个大版本周期）后删除。
+        const legacySpringboard = path.join(PROJECT_ROOT, 'public', 'updates', 'dingzhi', 'latest.json');
+        const localLatest = path.join(PROJECT_ROOT, 'public', 'updates', 'local', 'latest.json');
+        if (fs.existsSync(localLatest)) {
+            fs.mkdirSync(path.dirname(legacySpringboard), { recursive: true });
+            fs.copyFileSync(localLatest, legacySpringboard);
+            console.log('  [OK] legacy updates/dingzhi 跳板已对齐 local/latest.json');
+        } else {
+            console.warn('  [WARN] public/updates/local/latest.json 不存在，legacy dingzhi 跳板本次未续期（请检查 local 投影是否异常）');
+        }
+        const mirrorPairs = [
+            [path.join(PROJECT_ROOT, 'public', 'hash-manifest.json'), path.join(PROJECT_ROOT, 'site-official', 'hash-manifest.json')],
+            [path.join(PROJECT_ROOT, 'public', 'build-meta.json'), path.join(PROJECT_ROOT, 'site-official', 'build-meta.json')],
+            [path.join(PROJECT_ROOT, 'public', 'build-meta.json'), path.join(PROJECT_ROOT, 'site-admin', 'build-meta.json')],
+            // ★ 2026-11-14：鸿蒙 rawfile 兜底页也读 build-meta.json，漏镜像会导致 sync-all -VerifyOnly DRIFT（发布合规 5/8 失败）
+            [path.join(PROJECT_ROOT, 'public', 'build-meta.json'), path.join(PROJECT_ROOT, 'app_project_harmony', 'huikang-cloud', 'entry', 'src', 'main', 'resources', 'rawfile', 'build-meta.json')],
+            [path.join(PROJECT_ROOT, 'public', 'updates'), path.join(PROJECT_ROOT, 'site-official', 'updates')]
+        ];
+        const officialManifestDst = path.join(PROJECT_ROOT, 'site-official', 'hash-manifest.json');
+        let mirrored = 0;
+        for (const [msrc, mdst] of mirrorPairs) {
+            if (!fs.existsSync(msrc)) continue;
+            if (fs.statSync(msrc).isDirectory()) {
+                fs.cpSync(msrc, mdst, { recursive: true });
+            } else if (mdst === officialManifestDst) {
+                // 官网清单：根相对 URL 绝对化后再落盘（见上方 absolutizeManifestUrls 说明）
+                fs.mkdirSync(path.dirname(mdst), { recursive: true });
+                const raw = fs.readFileSync(msrc, 'utf8');
+                const rewritten = absolutizeManifestUrls(raw);
+                const count = (raw.match(/(:\s*)"\/(?!\/)/g) || []).length;
+                fs.writeFileSync(mdst, rewritten, 'utf8');
+                console.log('  [OK] site-official/hash-manifest.json 根相对 URL 已绝对化 (' + count + ' 处 -> ' + MAIN_SITE_ORIGIN + ')');
+            } else {
+                fs.mkdirSync(path.dirname(mdst), { recursive: true });
+                fs.copyFileSync(msrc, mdst);
+            }
+            mirrored++;
+        }
+        console.log('  [OK] site-official 双权威源镜像已同步（' + mirrored + ' 项）');
+    } catch (e) {
+        console.error('  [ERROR] site-official 镜像同步失败: ' + e.message);
+        console.error('  处理：手动镜像后重跑发布（产物 hash 未变会自动续传）：');
+        console.error('    Copy-Item public\\hash-manifest.json site-official\\ -Force; Copy-Item public\\updates site-official\\ -Recurse -Force');
+        process.exit(1);
+    }
+}
+
 function main() {
     console.log('============================================');
     console.log('  惠康中医 · GitHub Release 纯终端发布工具');
@@ -504,6 +571,7 @@ function main() {
     let confirmed = false;
     let skipCompliance = false;
     let changedOnly = false;
+    let mirrorOnly = false;
 
     for (const arg of args) {
         if (arg.startsWith('--target=')) {
@@ -525,6 +593,10 @@ function main() {
             confirmed = true;
         } else if (arg === '--skip-compliance') {
             skipCompliance = true;
+        } else if (arg === '--mirror-only') {
+            // ★ 2026-11-16 仅重建 site-official 元数据镜像（不发版、不碰 GitHub、不 push），
+            //   用于清单/镜像生成逻辑变更后的产物重建与门禁校验。
+            mirrorOnly = true;
         } else if (!arg.startsWith('-')) {
             versionTag = arg;
         }
@@ -539,6 +611,14 @@ function main() {
     if (!validArtifacts.includes(artifact)) {
         console.error(`[ERROR] 未知 artifact: ${artifact}，可选: ${validArtifacts.join('/')}`);
         process.exit(1);
+    }
+
+    // ★ 2026-11-16 --mirror-only：只重建 site-official 镜像后退出（不取 token/不上传/不 push）
+    if (mirrorOnly) {
+        console.log('[mirror-only] 重建 site-official 元数据镜像...');
+        mirrorSiteOfficial();
+        console.log('\n[OK] 镜像重建完成（未发版、未 push）');
+        return;
     }
 
     // 1. 获取 token
@@ -996,52 +1076,9 @@ function main() {
     //   镜像落后：脚本只写 public/，site-official/ 停留旧版 → Pages 双入口之一渲染
     //   旧版本号/旧更新时间）。发布时自动镜像 public 元数据到 site-official；
     //   镜像失败 = 发布失败（exit 1），绝不带漂移状态 push。
-    try {
-        // ★ 2026-09-25 P1-6：legacy updates/dingzhi 跳板续期（非独立通道，禁止再手工维护）。
-        //   2026-08-23 桌面更新 URL 由 updates/dingzhi 改名 updates/local，此前构建的极老
-        //   桌面 EXE 仍硬编码旧 URL；若该文件停在旧版（曾停 1.0.172 三周无人更新），老客户
-        //   只能升到中间旧版，删除则静默永久收不到更新提示。故每次发布把 local 权威投影
-        //   原样复制到 dingzhi 路径：老客户端一跳直上最新版，新版 main.js 改读 local 永久归队。
-        //   随后随下方 updates 目录递归镜像同步到 site-official。撤销条件：确认无 2026-08-23
-        //   前构建的桌面端在网（或满一个大版本周期）后，删除两处 dingzhi 目录及本复制逻辑。
-        //   残余风险（已评估接受，见 KNOWLEDGE §30）：≤1.0.24 旧 notifier 消费本 JSON 的 url
-        //   无 host 白名单、无 sha256 即不校验，但可写本文件=已具 main 推送权=分发链全面失守，
-        //   不构成独立入口；故不为此单字段加 sha256（会误伤存量便携版老客户端）。
-        const legacySpringboard = path.join(PROJECT_ROOT, 'public', 'updates', 'dingzhi', 'latest.json');
-        const localLatest = path.join(PROJECT_ROOT, 'public', 'updates', 'local', 'latest.json');
-        if (fs.existsSync(localLatest)) {
-            fs.mkdirSync(path.dirname(legacySpringboard), { recursive: true });
-            fs.copyFileSync(localLatest, legacySpringboard);
-            console.log('  [OK] legacy updates/dingzhi 跳板已对齐 local/latest.json');
-        } else {
-            console.warn('  [WARN] public/updates/local/latest.json 不存在，legacy dingzhi 跳板本次未续期（请检查 local 投影是否异常）');
-        }
-        const mirrorPairs = [
-            [path.join(PROJECT_ROOT, 'public', 'hash-manifest.json'), path.join(PROJECT_ROOT, 'site-official', 'hash-manifest.json')],
-            [path.join(PROJECT_ROOT, 'public', 'build-meta.json'), path.join(PROJECT_ROOT, 'site-official', 'build-meta.json')],
-            [path.join(PROJECT_ROOT, 'public', 'build-meta.json'), path.join(PROJECT_ROOT, 'site-admin', 'build-meta.json')],
-            // ★ 2026-11-14：鸿蒙 rawfile 兜底页也读 build-meta.json，漏镜像会导致 sync-all -VerifyOnly DRIFT（发布合规 5/8 失败）
-            [path.join(PROJECT_ROOT, 'public', 'build-meta.json'), path.join(PROJECT_ROOT, 'app_project_harmony', 'huikang-cloud', 'entry', 'src', 'main', 'resources', 'rawfile', 'build-meta.json')],
-            [path.join(PROJECT_ROOT, 'public', 'updates'), path.join(PROJECT_ROOT, 'site-official', 'updates')]
-        ];
-        let mirrored = 0;
-        for (const [msrc, mdst] of mirrorPairs) {
-            if (!fs.existsSync(msrc)) continue;
-            if (fs.statSync(msrc).isDirectory()) {
-                fs.cpSync(msrc, mdst, { recursive: true });
-            } else {
-                fs.mkdirSync(path.dirname(mdst), { recursive: true });
-                fs.copyFileSync(msrc, mdst);
-            }
-            mirrored++;
-        }
-        console.log('  [OK] site-official 双权威源镜像已同步（' + mirrored + ' 项）');
-    } catch (e) {
-        console.error('  [ERROR] site-official 镜像同步失败: ' + e.message);
-        console.error('  处理：手动镜像后重跑发布（产物 hash 未变会自动续传）：');
-        console.error('    Copy-Item public\\hash-manifest.json site-official\\ -Force; Copy-Item public\\updates site-official\\ -Recurse -Force');
-        process.exit(1);
-    }
+    //   ★ 2026-11-16 逻辑抽到 mirrorSiteOfficial()（同时被 --mirror-only 复用），
+    //     并在此处对 site-official 清单做根相对 URL → 主站绝对地址改写。
+    mirrorSiteOfficial();
     console.log();
 
     // 清理临时目录
