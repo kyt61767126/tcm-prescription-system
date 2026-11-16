@@ -179,17 +179,26 @@ function createDesktopUpdateManager(opts) {
     }
 
     // 单分片流式落盘：数据到达即按偏移写 fd（内存占用极小），看门狗 + 指数退避重试
+    // ★ 2026-11-16 断点续传：written 提到重试循环外，重试从 start+written 续请求、
+    //   按绝对偏移续写，抖动一次不再丢掉该分片已下进度（原实现每次重试归零重下整片，
+    //   6 分片各 ~13MB，一次抽风即白下十几 MB）。分片完成校验口径不变。
     async function fetchUpdateRange(url, fd, start, end, onChunk) {
         let attempt = 0;
+        let written = 0;
         for (;;) {
             try {
                 const ctl = new AbortController();
                 let dog = setTimeout(function () { ctl.abort(); }, UPDATE_DL_WATCHDOG_MS);
                 const feed = function () { clearTimeout(dog); dog = setTimeout(function () { ctl.abort(); }, UPDATE_DL_WATCHDOG_MS); };
-                const res = await net.fetch(url, { headers: { Range: 'bytes=' + start + '-' + end }, signal: ctl.signal });
+                const res = await net.fetch(url, { headers: { Range: 'bytes=' + (start + written) + '-' + end }, signal: ctl.signal });
                 if (res.status !== 206 && res.status !== 200) throw new Error('HTTP ' + res.status);
+                // 上游忽略 Range 回 200：body 从 0 开始 —— 分片场景无法对齐，直接重试；
+                // 单分片（start=0）场景把进度归零从头写，避免错位覆盖
+                if (res.status === 200) {
+                    if (start > 0) throw new Error('服务器忽略 Range（HTTP 200）');
+                    written = 0;
+                }
                 const reader = res.body.getReader();
-                let written = 0;
                 for (;;) {
                     const r = await reader.read();
                     if (r.done) break;

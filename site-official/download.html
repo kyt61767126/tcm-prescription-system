@@ -4270,6 +4270,19 @@
                     fail('下载多次中断，请检查网络后重试');
                 });
         }
+        // ★ 2026-11-16 下载代理基址运行时自适应：/api/dl 是 Pages Functions，只存在于主站项目。
+        //   镜像站（huikang-official.pages.dev 等纯静态项目）没有 Functions，同源 /api/dl
+        //   会被 SPA 兜底成 200 的 HTML（静默坏下载）。故按当前主机名判定：
+        //   主站（含 *.tcm-prescription-system.pages.dev 预览部署）→ 同源相对路径；
+        //   其他域（镜像站/自定义域）→ 主站绝对地址（代理已带 CORS *，跨域可用）。
+        //   ★ 本函数必须在 public 与 site-official 两份副本中逐字节一致（跨版本门禁）。
+        var DL_PROXY_ORIGIN = 'https://tcm-prescription-system.pages.dev';
+        function dlProxyUrl(targetUrl) {
+            var host = '';
+            try { host = String(location.hostname || '').toLowerCase(); } catch (e) { host = ''; }
+            var isMainSite = /(^|\.)tcm-prescription-system\.pages\.dev$/.test(host);
+            return (isMainSite ? '' : DL_PROXY_ORIGIN) + '/api/dl?f=' + encodeURIComponent(targetUrl);
+        }
         function safeDownload(url, btn) {
             if (!url || url === '#') {
                 showToast('安装包尚未上传，请联系客服获取');
@@ -4293,7 +4306,7 @@
             //   → 优先走同域 Cloudflare 加速代理 /api/dl（用户→CF边缘→GitHub），
             //     用断点续传下载器（中断自动恢复），代理彻底失败才回退 GitHub 直连
             if (url.indexOf('https://github.com/') === 0 && url.indexOf('/releases/download/') > 0) {
-                var proxyUrl = '/api/dl?f=' + encodeURIComponent(url);
+                var proxyUrl = dlProxyUrl(url);
                 // ★ 保存文件名用友好中文名（惠康中医-云端 安装版 1.2.195.exe），
                 //   避免用户看到 huikang-cloud-setup-xxx.exe 不知道是什么程序
                 var ext = /\.(exe|apk)$/i.test(fileName) ? fileName.replace(/^.*\./, '.') : '';
