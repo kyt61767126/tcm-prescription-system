@@ -119,6 +119,13 @@ Invoke-Check -Name "4b/9 版本展示一致性(8处标识)" -ArgsList @(
     (Join-Path $scriptDir 'verify-version-display.ps1')
 )
 
+# --- 4c 离线桌面与离线 APP 同号（单计数器：桌面 version == APP versionCode，2026-11-16 方案B） ---
+Invoke-Check -Name "4c/9 离线桌面与APP同号" -ArgsList @(
+    (Join-Path $scriptDir 'sync-offline-desktop-version.ps1'),
+    '-Check',
+    '-RepoRoot', $root
+)
+
 # --- 5 shared/ 模块分发一致性（VerifyOnly 只检不改） ---
 Invoke-Check -Name "5/8 shared/ 模块一致性" -ArgsList @(
     (Join-Path $scriptDir 'sync-all.ps1'),

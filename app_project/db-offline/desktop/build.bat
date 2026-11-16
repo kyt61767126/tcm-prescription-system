@@ -156,8 +156,15 @@ if errorlevel 1 (
 )
 echo.
 
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[6/9] Auto-bump version (triggers integrity baseline rebuild)...'"
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\..\tools\bump-version.ps1" -PackagePath "%CD%\package.json"
+REM 2026-11-16 方案B：离线桌面不再 patch+1，改为跟随离线 APP 的 versionCode（单计数器，两端同号）
+REM   真源 app/build.gradle versionCode -> 桌面 "1.0.<code>"；App 的 versionName 恒 1.0.0 不受影响
+powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[6/9] Sync version from offline APP versionCode (single counter, triggers integrity baseline rebuild)...'"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\..\tools\sync-offline-desktop-version.ps1" -RepoRoot "%~dp0..\..\.."
+if errorlevel 1 (
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] Version sync failed - offline desktop must match APP versionCode'"
+    if not defined NO_PAUSE pause
+    exit /b 1
+)
 echo.
 
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[7/9] Code obfuscation (target=dingzhi, may take 1-2 min)...'"
