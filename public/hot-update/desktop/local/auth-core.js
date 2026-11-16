@@ -3903,6 +3903,12 @@
     // 上次失败的消息（用于兜底弹窗显示）
     let lastFailMessage = '授权已失效，请激活';
 
+    // ★ 2026-11-16 方案A：心跳取码的「服务端按 machineId 反查」节流状态
+    //   失败后 30 分钟内不再外呼（成功的回写后 license:code 已存在，自然不再进入）；
+    //   失败不改变授权状态，只在本次 tick 维持原「跳过心跳」。
+    const CODE_REVERSE_LOOKUP_THROTTLE_MS = 30 * 60 * 1000;
+    let __codeReverseLookupAt = 0;
+
     // ★ P1-7 心跳验证：联网验证 License，离线超过 7 天锁定（防盗破解）
     // ★ 2026-09-14 在线统计上报：周期从 24 小时缩短为 10 分钟——服务端按
     //   devices[].lastHeartbeat ≤15 分钟窗口计「在线」（后台诊所管理
@@ -3987,6 +3993,36 @@
             }
             if (__needHealMid && machineId) {
                 try { await StorageAdapter.setItem('license:machineId', machineId); } catch (_) {}
+            }
+
+            // ★ 2026-11-16 方案A：取码最后兜底——服务端按 machineId 反查持久化激活记录
+            //   背景（本机实测）：桌面激活码只随渲染层 localStorage 保存（激活窗口/主窗口
+            //   同分区），一旦主窗口取不到（旧版清键/两窗口隔离残留），本地三来源与
+            //   invite 反查都会拿空码，心跳便永久停在下面的「跳过心跳」——服务端因此收不到
+            //   该设备的心跳与打卡，后台「今日登录」恒为 0。
+            //   做法：沿用既有 entitlement 裁决（code 为空时 adjudicate 走
+            //   findLicensesByMachine 的 machineId 自愈分支），LICENSED 返回权威 licenseCode
+            //   即回写标准存储，后续 tick 直接命中；该接口本就是心跳后段的状态裁决源，
+            //   此处仅提前一次调用，不新增判定语义。
+            //   fail-safe：网络失败 / 非 200 / 非 LICENSED / 畸形响应一律忽略（catch 吞掉），
+            //   维持原「跳过心跳」，不抛错、不阻塞登录、不发空心跳、不改授权状态。
+            //   节流：失败后 30 分钟内不再外呼，避免每个 10 分钟 tick 都触发全扫反查。
+            if (!licenseCode && machineId && __maySelfHeal) {
+                const __lookupAt = Date.now();
+                if (__lookupAt - __codeReverseLookupAt >= CODE_REVERSE_LOOKUP_THROTTLE_MS) {
+                    __codeReverseLookupAt = __lookupAt;
+                    try {
+                        const __rq = await requestEntitlement({ mid: machineId });
+                        const __ent = __rq && __rq.ent;
+                        if (__rq && __rq.httpStatus === 200 && __ent && __ent.success &&
+                            __ent.state === 'LICENSED' && __ent.licenseCode) {
+                            licenseCode = String(__ent.licenseCode).trim();
+                            try { await StorageAdapter.setItem('license:code', licenseCode); } catch (_) {}
+                            __codeReverseLookupAt = 0; // 成功：后续 tick 不再外呼
+                            console.log('[Heartbeat] 已按 machineId 反查回写权威激活码');
+                        }
+                    } catch (_) { /* fail-safe：维持原跳过心跳行为 */ }
+                }
             }
 
             if (!licenseCode || !machineId) {
