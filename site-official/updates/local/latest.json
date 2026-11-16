@@ -1,9 +1,9 @@
 {
-    "version": "1.0.350",
+    "version": "1.0.351",
     "releaseDate": "2026-11-16",
-    "releaseNotes": "✨ 新增:\n  - feat(version): 离线桌面版本号改为跟随 APP versionCode（单计数器，两端同号）\n🐛 修复:\n  - fix(version): APP/HAP 版本显示统一三段 V1.0.<构建号>，与桌面同形",
-    "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.16/huikang-local-setup-1.0.350.exe",
-    "portableUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.16/huikang-local-1.0.350.exe",
+    "releaseNotes": "🐛 修复:\n  - fix(download): 更新器分片断点续传 + 下载页代理基址按域名自适应\n  - fix(login-stats): 修复离线诊所登录统计为 0：心跳补写打卡、客户端心跳取码自愈\n  - fix(release): 官网镜像清单补 URL 编码提示，避免程序化下载中文路径回落首页\n  - fix(release): 官网镜像清单根相对 URL 绝对化，避免官网域名下 apk 链接回退首页\n  - fix(release): 发布链提交鸿蒙 rawfile build-meta 镜像，根治 CI 统一模块校验 DRIFT\n  - fix(pages): huikang-official 使用就近 wrangler 配置，输出目录改为本目录",
+    "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.16-1645/huikang-local-setup-1.0.351.exe",
+    "portableUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.16-1645/huikang-local-1.0.351.exe",
     "forceUpdate": false,
     "minVersion": "1.0.0",
     "rolloutPercentage": 100
