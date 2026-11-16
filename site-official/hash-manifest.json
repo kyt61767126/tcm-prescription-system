@@ -1,4 +1,5 @@
 {
+    "_urlEncodingNote": "本清单的 apk.url 为含中文字符的原始路径；程序化下载前请按标准做百分号编码（如 JavaScript encodeURI）后再请求，否则部分 CDN 可能回落到首页 HTML。浏览器直接点击不受影响。",
     "local": {
         "apk": {
             "version": "V1.0.350",

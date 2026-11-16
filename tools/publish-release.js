@@ -501,6 +501,20 @@ function absolutizeManifestUrls(jsonText) {
     return jsonText.replace(/(:\s*)"\/(?!\/)/g, '$1"' + MAIN_SITE_ORIGIN + '/');
 }
 
+// ★ 2026-11-16 方案 A：只加编码提示，不改任何 URL。
+//   清单里的 apk.url 含中文字符（原始路径），程序化下载前必须按标准做百分号编码
+//   （如 encodeURI），否则部分 CDN 会回落到首页 HTML。该字段只进官网镜像清单，
+//   public/ 权威清单不加；幂等实现（先删旧字段再插入），重复重建不会叠加。
+const URL_ENCODING_NOTE = '本清单的 apk.url 为含中文字符的原始路径；程序化下载前请按标准做百分号编码（如 JavaScript encodeURI）后再请求，否则部分 CDN 可能回落到首页 HTML。浏览器直接点击不受影响。';
+
+function withUrlEncodingNote(jsonText) {
+    // 先移除已存在的同名字段（含行尾逗号），保证多次重建结果逐字节稳定
+    const stripped = jsonText.replace(/^[ \t]*"_urlEncodingNote"[ \t]*:[ \t]*"(?:[^"\\]|\\.)*",?[ \t]*\r?\n/m, '');
+    // 插到根对象首个字段位置，缩进与文件一致的 4 空格
+    const line = '    "_urlEncodingNote": ' + JSON.stringify(URL_ENCODING_NOTE) + ',\n';
+    return stripped.replace(/^\{\r?\n/, (m) => m + line);
+}
+
 function mirrorSiteOfficial() {
     try {
         // ★ 2026-09-25 P1-6：legacy updates/dingzhi 跳板续期（非独立通道，禁止再手工维护）。
@@ -533,13 +547,15 @@ function mirrorSiteOfficial() {
             if (fs.statSync(msrc).isDirectory()) {
                 fs.cpSync(msrc, mdst, { recursive: true });
             } else if (mdst === officialManifestDst) {
-                // 官网清单：根相对 URL 绝对化后再落盘（见上方 absolutizeManifestUrls 说明）
+                // 官网清单：根相对 URL 绝对化后再落盘（见上方 absolutizeManifestUrls 说明）；
+                // 另注入 _urlEncodingNote 顶层提示（方案 A：只提示编码，不改 URL）
                 fs.mkdirSync(path.dirname(mdst), { recursive: true });
                 const raw = fs.readFileSync(msrc, 'utf8');
-                const rewritten = absolutizeManifestUrls(raw);
+                const rewritten = withUrlEncodingNote(absolutizeManifestUrls(raw));
+                JSON.parse(rewritten); // 结构自检：注入后必须仍是合法 JSON
                 const count = (raw.match(/(:\s*)"\/(?!\/)/g) || []).length;
                 fs.writeFileSync(mdst, rewritten, 'utf8');
-                console.log('  [OK] site-official/hash-manifest.json 根相对 URL 已绝对化 (' + count + ' 处 -> ' + MAIN_SITE_ORIGIN + ')');
+                console.log('  [OK] site-official/hash-manifest.json 根相对 URL 已绝对化 (' + count + ' 处 -> ' + MAIN_SITE_ORIGIN + ')，并注入 _urlEncodingNote');
             } else {
                 fs.mkdirSync(path.dirname(mdst), { recursive: true });
                 fs.copyFileSync(msrc, mdst);
