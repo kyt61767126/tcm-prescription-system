@@ -51,7 +51,7 @@ function getReleaseDeployPaths(assertScript) {
         if (p) return p;
     } catch (e) { /* 回退内置列表 */ }
     console.warn('  [WARN] 发布部署路径单源获取失败，回退内置路径列表');
-    return 'public/hash-manifest.json public/downloads/ public/updates/ public/build-meta.json site-official/hash-manifest.json site-official/build-meta.json site-official/updates/';
+    return 'public/hash-manifest.json public/downloads/ public/updates/ public/build-meta.json site-official/hash-manifest.json site-official/build-meta.json site-official/updates/ app_project_harmony/huikang-cloud/entry/src/main/resources/rawfile/build-meta.json';
 }
 const { execSync, spawnSync } = require('child_process');
 

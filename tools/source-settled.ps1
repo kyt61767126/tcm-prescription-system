@@ -107,6 +107,9 @@ function Get-ReleaseDeployPatterns {
         '^site-official/hash-manifest\.json$'
         '^site-official/build-meta\.json$'
         '^site-official/updates/'
+        # ★ 2026-11-16：发布链会镜像写鸿蒙 rawfile/build-meta.json（sync-all -VerifyOnly 会比对），
+        #   此前只写不提交 → 提交态与 public 漂移，CI「Verify Unified Modules」2/5 直接 FAIL。
+        '^app_project_harmony/huikang-cloud/entry/src/main/resources/rawfile/build-meta\.json$'
     )
 }
 function Get-ReleaseDeployGitAddPaths {
@@ -119,6 +122,7 @@ function Get-ReleaseDeployGitAddPaths {
         'site-official/hash-manifest.json'
         'site-official/build-meta.json'
         'site-official/updates/'
+        'app_project_harmony/huikang-cloud/entry/src/main/resources/rawfile/build-meta.json'
     )
 }
 
