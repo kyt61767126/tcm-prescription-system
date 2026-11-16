@@ -3231,7 +3231,13 @@ export async function onRequest(context) {
             //   读取失败不影响诊所列表（按无在线处理）。
             const offlineOnlineMap = new Map(); // clinicName -> { desktop, app }
             // ★ 2026-10-24 心跳迁 D1：KV/D1 双源去重（同一个 machineId 只计一次在线）
-            const offlineSeen = new Set();
+            // ★ 2026-11-16 P1：只在「该行确实计了在线」时才登记去重键。迁 D1 后
+            //   KV devices[].lastHeartbeat 仅每 24h 汇总刷新，常停在昨天；旧逻辑
+            //   无条件登记会让同一设备当天的 D1 新心跳被跳过（今日登录/在线被压成 0）。
+            //   今日登录用独立 Set 按 machineId 跨源去重（同机只计一次，避免两端
+            //   clientClass 不一致时 app/desktop 各计一次）。
+            const offlineOnlineSeen = new Set();
+            const offlineLoginSeen = new Set();
             // ★ 2026-10-05 今日登录（离线端）：clinicName -> { desktop:Set(machineId),
             //   app:Set(machineId) }，Set 按 machineId 去重（换机续期同机绑多码也不重复计）
             const offlineLoginMap = new Map();
@@ -3290,11 +3296,10 @@ export async function onRequest(context) {
                             const hbTs = Date.parse(d.lastHeartbeat);
                             if (!Number.isFinite(hbTs)) continue;
                             const __seenKey = rec.clinicName + '|' + (d.machineId || '');
-                            if (offlineSeen.has(__seenKey)) continue;
-                            offlineSeen.add(__seenKey);
                             // ★ 2026-10-05 今日登录（日活口径）：今天有心跳即视为今日登录使用，
                             //   Set 按 machineId 去重（未知端形态兜底计桌面，离线端无网页形态）
-                            if (hbTs >= todayStartTs) {
+                            if (hbTs >= todayStartTs && !offlineLoginSeen.has(__seenKey)) {
+                                offlineLoginSeen.add(__seenKey);
                                 if (!offlineLoginMap.has(rec.clinicName)) {
                                     offlineLoginMap.set(rec.clinicName, { desktop: new Set(), app: new Set() });
                                 }
@@ -3303,6 +3308,8 @@ export async function onRequest(context) {
                                 else loginBucket.desktop.add(d.machineId);
                             }
                             if ((nowTs - hbTs) > ONLINE_ACTIVE_MS) continue;
+                            if (offlineOnlineSeen.has(__seenKey)) continue;
+                            offlineOnlineSeen.add(__seenKey);
                             if (!offlineOnlineMap.has(rec.clinicName)) {
                                 offlineOnlineMap.set(rec.clinicName, { desktop: 0, app: 0 });
                             }
@@ -3333,9 +3340,8 @@ export async function onRequest(context) {
                             const hbTs = Date.parse(row.last_heartbeat);
                             if (!clinicName || !mid || !Number.isFinite(hbTs)) continue;
                             const seenKey = clinicName + '|' + mid;
-                            if (offlineSeen.has(seenKey)) continue;
-                            offlineSeen.add(seenKey);
-                            if (hbTs >= todayStartTs) {
+                            if (hbTs >= todayStartTs && !offlineLoginSeen.has(seenKey)) {
+                                offlineLoginSeen.add(seenKey);
                                 if (!offlineLoginMap.has(clinicName)) {
                                     offlineLoginMap.set(clinicName, { desktop: new Set(), app: new Set() });
                                 }
@@ -3344,6 +3350,8 @@ export async function onRequest(context) {
                                 else lb.desktop.add(mid);
                             }
                             if ((nowTs - hbTs) > ONLINE_ACTIVE_MS) continue;
+                            if (offlineOnlineSeen.has(seenKey)) continue;
+                            offlineOnlineSeen.add(seenKey);
                             if (!offlineOnlineMap.has(clinicName)) {
                                 offlineOnlineMap.set(clinicName, { desktop: 0, app: 0 });
                             }

@@ -76,7 +76,10 @@ function createDesktopUpdateManager(opts) {
         hotManager = hotCore.createHotManager({
             fetchImpl: function (u, o) { return net.fetch(u, o); },
             dataDir: app.getPath('userData'),
-            baseUrl: opts.hotUpdateUrl
+            baseUrl: opts.hotUpdateUrl,
+            // ★ 2026-11-16 P0：当前运行版本（唯一来源 app.getVersion()），
+            //   hot-update-core 用它拦「appVersion 低于当前应用的旧热包」
+            appVersion: app.getVersion()
         });
     }
 

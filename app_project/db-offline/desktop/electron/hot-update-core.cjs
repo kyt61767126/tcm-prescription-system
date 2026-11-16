@@ -37,6 +37,15 @@
 //   自动回退（previous 复验通过→晋升 current；否则回 asar 打包版）+ 登录窗
 //   「回退上一版」入口（login.html 属 asar 域，不依赖热版本页面存活）。
 //
+// ★ 2026-11-16 P0 热包 appVersion 门槛（治「旧热包遮挡新安装包」）：
+//   现场事故：1.0.351 安装包启动后仍加载 2026.11.16-1（appVersion=1.0.350）
+//   的旧热包，asar 里的心跳修复被旧 auth-core 覆盖。规则：manifest.appVersion
+//   必须 >= 当前运行版本才加载/下载；低于则忽略并回退 asar。appVersion 缺失或
+//   格式异常同样忽略（fail-safe，仅告警不抛错，绝不影响启动）。当前版本由
+//   update-manager 以 app.getVersion() 注入，不引入第二来源。
+//   ★ 刻意保持「>=」放行（2026-11-16 用户确认，不收紧为「必须相等」）：
+//     允许同一热包覆盖当前及更早的小版本，避免每个小版本重复签发热包。
+//
 // 分发链：shared/ 权威源 → sync-all.ps1 Group 12（与 update-manager.cjs 同组）
 // → 两个 electron/ 目录；copy-consistency.cjs 同组硬哈希门；build.files
 // electron/**/* 已覆盖。改动本文件必须跑 sync-all.ps1 同步双端副本。
@@ -101,6 +110,36 @@ function sha256FileSync(fp) {
     return h.digest('hex');
 }
 
+// ---- 版本号解析/比较（★ 2026-11-16 P0 热包 appVersion 门槛）----
+// 仅接受 1~4 段纯数字（1.0 / 1.0.351 / 1.0.351.2）；空、非字符串、含后缀
+//（如 1.0.351-beta）一律视为格式异常 → 调用方按「忽略热更」处理。
+function parseAppVersion(v) {
+    if (typeof v !== 'string') return null;
+    const s = v.trim();
+    if (!/^\d+(\.\d+){0,3}$/.test(s)) return null;
+    const parts = s.split('.').map(function (x) { return parseInt(x, 10); });
+    while (parts.length < 4) parts.push(0);
+    return parts;
+}
+
+function compareAppVersion(a, b) {
+    for (let i = 0; i < 4; i++) {
+        if (a[i] < b[i]) return -1;
+        if (a[i] > b[i]) return 1;
+    }
+    return 0;
+}
+
+// 热包是否适用于当前运行版本：ok=true 才允许加载/下载。
+// 当前版本无法判定或热包 appVersion 缺失/异常 → ok=false（fail-safe 回退 asar）。
+function checkHotAppVersion(manifest, currentParts) {
+    if (!currentParts) return { ok: false, reason: 'current-version-unknown' };
+    const hotParts = parseAppVersion(manifest && manifest.appVersion);
+    if (!hotParts) return { ok: false, reason: 'manifest-appVersion-missing-or-invalid' };
+    if (compareAppVersion(hotParts, currentParts) < 0) return { ok: false, reason: 'older-than-app' };
+    return { ok: true, reason: 'ok' };
+}
+
 // ---------------------------------------------------------------------------
 // 热更新管理器（依赖全部注入：fetchImpl / dataDir / baseUrl）
 // ---------------------------------------------------------------------------
@@ -109,8 +148,15 @@ function createHotManager(deps) {
     const fetchImpl = deps.fetchImpl;          // (url, opts) => Promise<Response>
     const dataDir = deps.dataDir;              // userData 绝对路径
     const baseUrl = String(deps.baseUrl || '').replace(/\/+$/, ''); // …/hot-update/desktop/<channel>
+    // ★ 2026-11-16 P0：当前运行版本（update-manager 以 app.getVersion() 注入），
+    //   用于热包 appVersion 门槛；缺失/非法时忽略热更但不阻断启动。
+    const appVersion = typeof deps.appVersion === 'string' ? deps.appVersion.trim() : '';
+    const appVersionParts = parseAppVersion(appVersion);
     if (typeof fetchImpl !== 'function' || !dataDir) {
         throw new Error('[hot-update] fetchImpl / dataDir 必填');
+    }
+    if (!appVersionParts) {
+        console.warn('[hot-update] 当前 appVersion 缺失/非法（' + JSON.stringify(deps.appVersion) + '），本轮忽略热更目录并回退 asar');
     }
 
     const hotDir = path.join(dataDir, 'hot-update');
@@ -201,6 +247,15 @@ function createHotManager(deps) {
                 if (r && r.ok && r.restored === 'previous') return resolveEntry();
                 return null;
             }
+            // ★ 2026-11-16 P0：旧热包不得遮挡新安装包（不隔离、不删文件，仅本次忽略）
+            const __appGate = checkHotAppVersion(manifest, appVersionParts);
+            if (!__appGate.ok) {
+                console.warn('[hot-update] 忽略 current ' + manifest.hotVersion
+                    + '（热包 appVersion=' + String(manifest.appVersion)
+                    + '，当前=' + (appVersion || '未知') + '，' + __appGate.reason
+                    + '），回退 asar 打包版');
+                return null;
+            }
             if (!verifyHotDir(currentDir, manifest)) {
                 quarantineCurrent('hash-mismatch');
                 return null;
@@ -269,6 +324,9 @@ function createHotManager(deps) {
             if (!fsSync.existsSync(manifestPath)) return { active: false };
             const manifest = JSON.parse(fsSync.readFileSync(manifestPath, 'utf8'));
             if (!verifyHotManifest(manifest) || isBlacklisted(manifest.hotVersion)) return { active: false };
+            // ★ 2026-11-16 P0：被 appVersion 门槛忽略的热包不算「在效」，避免登录窗
+            //   出现无意义的「回退上一版」入口
+            if (!checkHotAppVersion(manifest, appVersionParts).ok) return { active: false };
             return {
                 active: true,
                 hotVersion: manifest.hotVersion,
@@ -294,6 +352,16 @@ function createHotManager(deps) {
             //   Layer 0 服务端回滚=旧内容重签新版本号，不命中黑名单，两通道零冲突。
             if (isBlacklisted(manifest.hotVersion)) {
                 console.warn('[hot-update] 线上版本 ' + manifest.hotVersion + ' 已被本机拉黑，跳过下载');
+                return;
+            }
+
+            // ★ 2026-11-16 P0：线上热包不适用于当前应用版本 → 不下载（避免白拉
+            //   3MB 后又因 resolveEntry 门槛被忽略；旧包/缺 appVersion 一律跳过）
+            const __onlineGate = checkHotAppVersion(manifest, appVersionParts);
+            if (!__onlineGate.ok) {
+                console.warn('[hot-update] 线上热版本 ' + manifest.hotVersion
+                    + ' 不适用于当前应用版本 ' + (appVersion || '未知')
+                    + '（' + __onlineGate.reason + '），跳过下载');
                 return;
             }
 
