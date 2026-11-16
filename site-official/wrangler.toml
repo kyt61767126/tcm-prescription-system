@@ -1,0 +1,7 @@
+# 官网镜像项目（Cloudflare Pages: huikang-official）专属构建配置。
+# 该项目根目录设为 /site-official，若无本文件，Pages 会继承仓库根 wrangler.toml 的
+# pages_build_output_dir = "public"，在 v2 root directory strategy 下被解析成
+# ../public（仓库之外）→ 构建失败 "build output directory is outside of the repository"。
+# 本文件声明输出目录为当前目录本身（纯静态站点，无构建命令）。
+name = "huikang-official"
+pages_build_output_dir = "."
