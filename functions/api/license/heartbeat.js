@@ -418,6 +418,32 @@ export async function onRequest(context) {
         //   整记录写同批完成（含首次心跳顶层 lastHeartbeat 为空的情况），此处仅保留
         //   "设备未匹配"（未绑定设备的心跳）路径的旧行为：只刷顶层时间戳，不动 devices。
         if (!deviceMatched) {
+            // ★ 2026-11-16 离线端登录次数恒 0 修复（取数被跳过）：
+            //   devices 槽位未登记（重装/换机/后台重置授权后未回填）但未达设备上限时，
+            //   上方绑定校验仍判 valid:true，客户端照常可用；原实现此分支只刷顶层时间戳，
+            //   既不写 D1 心跳也不打卡 → 后台「今日登录 / 累计登录」对该设备恒为 0
+            //   （云端走 user_session 口径不受影响，故表现为"云端有、离线没有"）。
+            //   此处按与设备匹配分支一致的统计口径补记；不改 devices、不自动绑定，
+            //   "换机走客服解绑"的授权策略不变。
+            const __repPcNorm2 = normalizeCodeProductClass(body.productClass);
+            const __repPc2 = (__repPcNorm2 && __repPcNorm2 !== 'INVALID') ? __repPcNorm2 : null;
+            const __repCc2 = (typeof body.clientClass === 'string' && body.clientClass.trim())
+                ? body.clientClass.trim() : null;
+            try {
+                if (isD1Enabled(context.env)) {
+                    await upsertD1Heartbeat(context.env, record, code, machineId,
+                        { clientClass: __repCc2, productClass: __repPc2 }, serverTime);
+                }
+            } catch (e) { console.warn('[Heartbeat] 未绑定设备 D1 心跳写入失败:', e.message); }
+            try {
+                await punchLogin(kv, {
+                    clinicName: record.clinicName,
+                    // 口径与今日登录聚合严格一致：离线端只有显式 app 才计 APP，
+                    // 未知/省略形态兜底计桌面（本端点无网页形态）
+                    clientClass: __repCc2 === 'app' ? 'app' : 'desktop',
+                    uid: machineId
+                });
+            } catch (e) { console.warn('[Heartbeat] 未绑定设备登录打卡失败:', e && e.message); }
             const topPrevMs = record.lastHeartbeat ? Date.parse(record.lastHeartbeat) : NaN;
             const needAudit = !Number.isFinite(topPrevMs) ||
                 (now.getTime() - topPrevMs) >= 7 * 24 * 60 * 60 * 1000;

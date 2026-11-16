@@ -3492,28 +3492,76 @@
                 }
             }
 
+            // ★ 2026-09-21 离线免费版豁免：free 是"永久免费、离线可用"产品档（v7 签名
+            //   expiresAt=2099），不参与在线心跳/entitlement 裁决，更不能被 7 天离线锁定
+            //   或 90 天降级（Java validateLicense 侧亦有豁免）。
+            // ★ 2026-11-16：豁免前移到"取码/自愈"之前——免费/试用设备本地无码属正常形态，
+            //   不应在下面的联网自救里每 10 分钟反查一次权威码。
+            let __licStatus = null;
+            try {
+                if (global.electronAPI && global.electronAPI.license &&
+                    typeof global.electronAPI.license.getStatus === 'function') {
+                    __licStatus = await global.electronAPI.license.getStatus();
+                }
+            } catch (fe) { /* 查询失败不阻断原心跳流程 */ }
+            if (__licStatus && __licStatus.licenseType === 'free') {
+                console.log('[Heartbeat] 离线免费版(free)跳过心跳与离线锁定');
+                return;
+            }
+
             // 获取 license code 和 machineId
-            const licenseCode = await StorageAdapter.getItem('license:code');
-            const machineId = await StorageAdapter.getItem('license:machineId');
+            // ★ 2026-11-16 离线端「今日登录/累计登录」不上报修复（逻辑缺口）：
+            //   原实现只读 StorageAdapter 裸值，桌面激活窗口激活（两窗口 localStorage
+            //   物理隔离，主窗口本地无码）/旧版本残留缺机码时，每轮心跳都在这里直接
+            //   return —— 客户端本地一切正常，但服务端永远收不到该设备的心跳与打卡，
+            //   后台诊所卡片只能显示 0（云端走 user_session 口径不受影响）。
+            //   改为与登录闸门同源的自愈链路：命中即回写标准存储，后续轮次直接命中。
+            let licenseCode = '';
+            let machineId = '';
+            try { licenseCode = (await StorageAdapter.getItem('license:code')) || ''; } catch (_) {}
+            try {
+                machineId = normalizeMachineIdResult(await StorageAdapter.getItem('license:machineId')) || '';
+            } catch (_) {}
+            const __needHealCode = !licenseCode;
+            const __needHealMid = !machineId;
+            // 仅"确实是已激活设备"才做联网自救：试用/未激活设备本地无码属正常形态，
+            // 保持原行为（直接跳过心跳），避免每次心跳多打一次反查接口。
+            const __maySelfHeal = !__licStatus ||
+                (!!__licStatus.licenseType &&
+                 __licStatus.licenseType !== 'trial' && __licStatus.licenseType !== 'none');
+            if (!licenseCode && __maySelfHeal) {
+                try { licenseCode = (await getLicenseCode()) || ''; } catch (_) {}
+            }
+            if (!machineId) {
+                try {
+                    const __actApi = global.electronAPI && global.electronAPI.activate;
+                    if (__actApi && typeof __actApi.getMachineId === 'function') {
+                        machineId = normalizeMachineIdResult(await __actApi.getMachineId()) || '';
+                    }
+                    if (!machineId && global.electronAPI && global.electronAPI.license &&
+                        typeof global.electronAPI.license.getMachineId === 'function') {
+                        machineId = normalizeMachineIdResult(await global.electronAPI.license.getMachineId()) || '';
+                    }
+                    if (!machineId && global.electronAPI && global.electronAPI.license &&
+                        typeof global.electronAPI.license.getStatus === 'function') {
+                        const __st = await global.electronAPI.license.getStatus();
+                        if (__st && __st.machineId) {
+                            machineId = normalizeMachineIdResult(__st.machineId) || '';
+                        }
+                    }
+                } catch (_) {}
+            }
+            if (__needHealCode && licenseCode) {
+                try { await StorageAdapter.setItem('license:code', licenseCode); } catch (_) {}
+            }
+            if (__needHealMid && machineId) {
+                try { await StorageAdapter.setItem('license:machineId', machineId); } catch (_) {}
+            }
 
             if (!licenseCode || !machineId) {
                 console.log('[Heartbeat] 无 license code 或 machineId，跳过心跳');
                 return;
             }
-
-            // ★ 2026-09-21 离线免费版豁免：free 是"永久免费、离线可用"产品档（v7 签名
-            //   expiresAt=2099），不参与在线心跳/entitlement 裁决，更不能被 7 天离线锁定
-            //   或 90 天降级（Java validateLicense 侧亦有豁免）。
-            try {
-                if (global.electronAPI && global.electronAPI.license &&
-                    typeof global.electronAPI.license.getStatus === 'function') {
-                    const _fs = await global.electronAPI.license.getStatus();
-                    if (_fs && _fs.licenseType === 'free') {
-                        console.log('[Heartbeat] 离线免费版(free)跳过心跳与离线锁定');
-                        return;
-                    }
-                }
-            } catch (fe) { /* 查询失败不阻断原心跳流程 */ }
 
             console.log('[Heartbeat] 开始心跳验证...');
 
