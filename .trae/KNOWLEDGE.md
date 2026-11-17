@@ -2919,4 +2919,10 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
 * **使用文档**：`docs/打包队列使用手册.md`（页面操作、API 动作与错误码、状态机、PowerShell/Node 打包机接入示例、环境变量、排障）。
 * **§89.1 轮询降载（2026-11-17）**：后端 `list` 增加 isolate 内 5 秒结果缓存（写操作 create/claim/update/cancel/retry 立即失效，create 查重与 claim 强制读最新）；前端空闲（无 queued/building）时轮询从 20 秒降到约 2 分钟，有活动任务时保持 20 秒，页面隐藏暂停。
 
+### 90. 系统维护重扫描端点降载（2026-11-17）
+
+* **admin-usage（用量监控）**：接入 `withAdminResponseCache('admin-usage')` 300 秒响应缓存，与 `admin-risk` / `admin-data-audit` 对齐；诊所扫描由逐家串行改为 5 家/批 `Promise.all`，状态与排序语义不变。
+* **admin-risk（风控告警）**：`license_log:{code}` 由逐码串行读取改为 20 码/批并发预读 + `Map` 同步分析；过期激活码在预读前整体过滤，不再产生日志读取。判定逻辑、告警排序、统计口径未变。
+* **验证**：10 项端点逻辑测试全 PASS（高危多 IP、完整性标记、过期码不读日志、诊所处方/垃圾箱/邀请汇总）；`node --check` 通过。生效方式：push 后 Pages Functions 自动部署，五端零重打包。
+
 

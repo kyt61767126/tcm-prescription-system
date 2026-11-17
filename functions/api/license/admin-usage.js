@@ -28,6 +28,9 @@ import { listAllKeys } from '../_lib/kv.js';
 // ★ 2026-10-09 KV list 配额治理：逐诊所统计原本每诊所打一条 list（N 家 = N 条），
 //   改用显式索引（1 次 get），详见 _lib/prescriptions-store.js
 import { getPrescriptionDayKeys } from '../_lib/prescriptions-store.js';
+// ★ 2026-11-17 与 admin-risk/admin-data-audit 对齐：全量扫描端点加 300 秒响应缓存，
+//   避免后台反复点击/切换页签重复扫描所有诊所与处方分片。
+import { withAdminResponseCache } from '../_lib/admin-cache.js';
 
 function corsHeaders() {
     return {
@@ -56,6 +59,16 @@ const ACTIVE_WRITE_ESTIMATE_PER_CLINIC = 30;   // 每活跃诊所估算 30 写/�
 const WRITE_WARN_CLINICS = Math.floor(KV_FREE_LIMITS.writesPerDay / ACTIVE_WRITE_ESTIMATE_PER_CLINIC); // ≈33家
 
 export async function onRequest(context) {
+    return withAdminResponseCache(
+        context.env && context.env.KV,
+        'admin-usage',
+        context.request,
+        (context.request.headers.get('Authorization') || ''),
+        () => onRequestInner(context)
+    );
+}
+
+async function onRequestInner(context) {
     const method = context.request.method;
 
     if (method === 'OPTIONS') {
@@ -87,8 +100,8 @@ export async function onRequest(context) {
         let totalBytes = 0;
         let maxBlockClinic = null;
 
-        for (const clinic of clinics) {
-            if (!clinic || !clinic.id) continue;
+        // ★ 2026-11-17 逐诊所读取改 5 家/批并发：原串行在诊所较多时延迟随 N 线性增长
+        async function scanClinic(clinic) {
             const entry = {
                 clinicId: clinic.id,
                 clinicName: clinic.name || clinic.clinicName || ('诊所' + clinic.id),
@@ -134,9 +147,17 @@ export async function onRequest(context) {
                     entry.sizeKB += Math.round(trashRaw.length * 2 / 1024);
                 }
             } catch (e) { /* 单诊所读取失败不影响整体 */ }
-            totalBytes += entry.sizeKB * 1024;
-            clinicDetails.push(entry);
-            if (!maxBlockClinic || entry.sizeKB > maxBlockClinic.sizeKB) maxBlockClinic = entry;
+            return entry;
+        }
+
+        const validClinics = clinics.filter(c => c && c.id);
+        for (let i = 0; i < validClinics.length; i += 5) {
+            const entries = await Promise.all(validClinics.slice(i, i + 5).map(scanClinic));
+            for (const entry of entries) {
+                totalBytes += entry.sizeKB * 1024;
+                clinicDetails.push(entry);
+                if (!maxBlockClinic || entry.sizeKB > maxBlockClinic.sizeKB) maxBlockClinic = entry;
+            }
         }
         if (maxBlockClinic) maxBlockClinic.largest = true;
 

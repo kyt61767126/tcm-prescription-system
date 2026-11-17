@@ -208,17 +208,22 @@ async function onRequestInner(context) {
         const records = await listLicenses(kv);
         stats.licenses = records.length;
 
-        for (const record of records) {
+        // ★ 2026-11-17 先 20 码/批并发预读日志，再同步分析：原逐码串行 get
+        //   在激活码较多时扫描耗时随 N 线性增长。
+        const activeRecords = records.filter(r => r.code && effectiveExpiryMs(r) > now);
+        const logMap = new Map();
+        for (let i = 0; i < activeRecords.length; i += 20) {
+            const chunk = activeRecords.slice(i, i + 20);
+            const values = await Promise.all(chunk.map(r =>
+                kv.get('license_log:' + r.code, 'json').catch(() => [])));
+            chunk.forEach((r, idx) => logMap.set(r.code, values[idx] || []));
+        }
+
+        for (const record of activeRecords) {
             const code = record.code;
-            if (!code) continue;
 
-            // --- 已过期激活码整体跳过（服务已停无风控价值，避免历史告警噪音） ---
-            if (effectiveExpiryMs(record) <= now) continue;
-
-            let logs = [];
-            try {
-                logs = (await kv.get('license_log:' + code, 'json')) || [];
-            } catch (e) { /* 单码日志读取失败不影响整体扫描 */ }
+            // 日志已在上方批量预读
+            const logs = logMap.get(code) || [];
 
             // 近 30 天、带有效 IP 与时间的客户设备日志条目（排除管理端动作）
             const entries = [];
