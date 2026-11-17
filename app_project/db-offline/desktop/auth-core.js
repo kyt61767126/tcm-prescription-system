@@ -5361,6 +5361,60 @@
         return code ? String(code).trim() : '';
     }
 
+    // ★ 2026-11-17 登录即上报：登录成功立刻打一次卡，后台「今日登录」不再依赖
+    //   10 分钟心跳推断（桌面主窗/APP 登录后即可见，最长不再等一拍）。
+    //   · 一天一次：本地 license:loginPunchDay 先挡（避免重复请求），服务端
+    //     lp:{day}:{encClinic}:{t}:{mid} 键 GET 命中即跳过（稳态 1 写/端/天），
+    //     与心跳打卡同一套键与去重，不新增第二套计数。
+    //   · 失败静默：任何异常都不抛出、不弹窗、不改 UI、不阻塞登录；失败不写本地
+    //     日标记，下次登录自动重试。
+    //   · 不写 D1 heartbeat、不刷新 lastHeartbeat，在线判定语义零影响。
+    async function reportLoginPunch() {
+        try {
+            const beijingDay = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+            let done = '';
+            try { done = await StorageAdapter.getItem('license:loginPunchDay') || ''; } catch (_) {}
+            if (done === beijingDay) return;
+
+            let machineId = '';
+            try {
+                machineId = normalizeMachineIdResult(await StorageAdapter.getItem('license:machineId') || '');
+            } catch (_) {}
+            const licApi = global.electronAPI && global.electronAPI.license;
+            const actApi = global.electronAPI && global.electronAPI.activate;
+            if (!machineId && licApi && typeof licApi.getMachineId === 'function') {
+                try { machineId = normalizeMachineIdResult(await licApi.getMachineId()); } catch (_) {}
+            }
+            if (!machineId && actApi && typeof actApi.getMachineId === 'function') {
+                try { machineId = normalizeMachineIdResult(await actApi.getMachineId()); } catch (_) {}
+            }
+            if (!machineId) return;
+
+            let code = '';
+            try { code = await getLicenseCode(); } catch (_) {}
+            if (!code) {
+                try { code = await StorageAdapter.getItem('license:code') || ''; } catch (_) {}
+            }
+
+            const isApp = !!(global.Capacitor) ||
+                /Android|iPhone|iPad|iPod/i.test(String(navigator.userAgent || ''));
+            const resp = await fetch(API_BASE + '/license/login-punch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    machineId: machineId,
+                    code: code || '',
+                    clientClass: isApp ? 'app' : 'desktop'
+                }),
+                cache: 'no-store'
+            });
+            if (resp && resp.ok) {
+                try { await StorageAdapter.setItem('license:loginPunchDay', beijingDay); } catch (_) {}
+            }
+        } catch (_) { /* 纯统计增益，任何异常静默 */ }
+    }
+    try { if (global.AuthCore) global.AuthCore.__reportLoginPunch = reportLoginPunch; } catch (_) {}
+
     // ★ 2026-09-15 激活码常显：已激活用户在授权状态区显示激活码（点击复制）。
     //   客户换机重激活/到期续费/授权找回/客服核查均需提供激活码，此前仅激活成功
     //   瞬间可见，之后无处可查只能找管理员。本地无码（旧版激活设备）静默跳过。
@@ -10037,6 +10091,33 @@
             });
         }
     }
+
+    // ★ 2026-11-17 登录即上报接线：
+    //   ① 包装两个登录入口，成功即触发（fire-and-forget，绝不 await，登录耗时零变化）
+    //   ② 已登录状态下页面加载（桌面登录窗→主窗切换、APP 冷启动恢复会话）再兜一次
+    //   两者共用 reportLoginPunch 的本地日标记与服务端日键去重，一天最多记一次。
+    try {
+        const __ac = global.AuthCore;
+        if (__ac && typeof __ac.__reportLoginPunch === 'function') {
+            const __wrapLoginPunch = function (name) {
+                const fn = __ac[name];
+                if (typeof fn !== 'function') return;
+                __ac[name] = async function () {
+                    const r = await fn.apply(this, arguments);
+                    try { if (r && r.success) __ac.__reportLoginPunch(); } catch (_) {}
+                    return r;
+                };
+            };
+            __wrapLoginPunch('login');
+            __wrapLoginPunch('loginWithUsernamePassword');
+            Promise.resolve().then(async function () {
+                try {
+                    const v = await StorageAdapter.getItem('auth:isLoggedIn');
+                    if (v === 'true') __ac.__reportLoginPunch();
+                } catch (_) {}
+            });
+        }
+    } catch (_) {}
 
     if (document.readyState === 'complete' || document.readyState === 'interactive') {
         setupKeyboardAdapter();

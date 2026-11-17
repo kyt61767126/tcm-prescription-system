@@ -3323,6 +3323,38 @@ export async function onRequest(context) {
                 if (__needBackfill) await putLicenseClinicIndex(kv, __backfillMap);
             } catch (e) { /* 离线端在线聚合读取失败按无在线处理 */ }
 
+            // ★ 2026-11-17 登录即上报：今日打卡键并入「今日登录」。
+            //   此前今日登录只认 D1 heartbeat / KV devices.lastHeartbeat（10 分钟心跳），
+            //   登录后最长 10 分钟才出现；APP 定时器被系统挂起时永远为 0。
+            //   新端点 /api/license/login-punch 在登录成功瞬间写
+            //   lp:{day}:{encClinic}:{t}:{mid}（与心跳打卡同一键结构、同一天一键天然去重），
+            //   这里按同一键结构并入今日登录集合；与上方心跳口径用 offlineLoginSeen 去重，
+            //   不新增计数器、不影响在线判定。
+            try {
+                const __lpDay = new Date(todayStartTs + 8 * 3600 * 1000).toISOString().slice(0, 10);
+                const __lpKeys = await listAllKeys(kv, `lp:${__lpDay}:`, { ttlMs: 30000 });
+                for (const __k of (__lpKeys || [])) {
+                    const __parts = String(__k).split(':');
+                    if (__parts.length !== 5) continue;
+                    const __t = __parts[3];
+                    if (__t !== 'd' && __t !== 'a') continue;
+                    let __clinic = '';
+                    let __uid = '';
+                    try { __clinic = decodeURIComponent(__parts[2]); } catch (_) { continue; }
+                    try { __uid = decodeURIComponent(__parts[4]); } catch (_) { continue; }
+                    if (!__clinic || !__uid) continue;
+                    const __seen = __clinic + '|' + __uid;
+                    if (offlineLoginSeen.has(__seen)) continue;
+                    offlineLoginSeen.add(__seen);
+                    if (!offlineLoginMap.has(__clinic)) {
+                        offlineLoginMap.set(__clinic, { desktop: new Set(), app: new Set() });
+                    }
+                    const __lb = offlineLoginMap.get(__clinic);
+                    if (__t === 'a') __lb.app.add(__uid);
+                    else __lb.desktop.add(__uid);
+                }
+            } catch (_) { /* 打卡键并入失败不影响心跳口径 */ }
+
             // ★ 2026-10-24 心跳迁 D1 后的在线/今日登录聚合（与 KV 旧数据去重合并）。
             //   heartbeat.js 新心跳只写 D1 license_heartbeats，不再每 10 分钟写 KV。
             try {
