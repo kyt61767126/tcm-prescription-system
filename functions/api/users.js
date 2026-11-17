@@ -788,11 +788,14 @@ async function migratePrescriptionOwnership(kv, env, clinicId, oldName, newName,
 //   无行 → 用户管理永远搜不到，诊所管理却可见（诊所管理直读 KV）。
 //   现与「诊所管理」同源遍历 KV（单一权威源），D1 降级为索引副本：缺失行自动
 //   UPSERT 回填，一次列表加载即完成自愈，无需等用户登录、无需人工数据迁移。
-async function getAllClinicUsers(kv, env = null) {
+async function getAllClinicUsers(kv, env = null, opts = {}) {
+    // ★ 2026-11-17 trend=1 轻量模式：后台趋势图只需要账号 createdAt，
+    //   跳过设备表读取与 D1 回填扫描，避免每次进待办页的 M 次额外 KV 读 + 全表 SELECT。
+    const light = !!(opts && opts.light);
     const clinics = await kv.get(KV_SYSTEM_CLINICS, 'json');
     if (!clinics || !Array.isArray(clinics)) return [];
 
-    const d1On = isD1Enabled(env);
+    const d1On = isD1Enabled(env) && !light;
     const db = d1On ? getDB(env) : null;
 
     // D1 现存行索引（clinic_id|username），仅用于判定哪些账号需要回填，不作数据源。
@@ -842,16 +845,18 @@ async function getAllClinicUsers(kv, env = null) {
     //     desktop=离线桌面 / app=离线APP）。
     //   读取失败静默跳过（列表展示非关键路径，不影响主数据）。
     const cloudEntries = entries.filter(e => String(e.clinic.edition || '').indexOf('cloud') === 0);
-    for (let i = 0; i < cloudEntries.length; i += KV_BATCH) {
-        const batch = cloudEntries.slice(i, i + KV_BATCH);
-        const devs = await Promise.all(batch.map(e =>
-            kv.get(KV_USER_DEVICES_PREFIX + e.u.username, 'json').catch(() => null)));
-        devs.forEach((dev, idx) => {
-            if (dev && Array.isArray(dev.devices) && dev.devices.length) {
-                const classes = [...new Set(dev.devices.map(d => d && d.clientClass).filter(Boolean))];
-                if (classes.length) batch[idx].su.deviceClasses = classes;
-            }
-        });
+    if (!light) {
+        for (let i = 0; i < cloudEntries.length; i += KV_BATCH) {
+            const batch = cloudEntries.slice(i, i + KV_BATCH);
+            const devs = await Promise.all(batch.map(e =>
+                kv.get(KV_USER_DEVICES_PREFIX + e.u.username, 'json').catch(() => null)));
+            devs.forEach((dev, idx) => {
+                if (dev && Array.isArray(dev.devices) && dev.devices.length) {
+                    const classes = [...new Set(dev.devices.map(d => d && d.clientClass).filter(Boolean))];
+                    if (classes.length) batch[idx].su.deviceClasses = classes;
+                }
+            });
+        }
     }
 
     const result = [];
@@ -861,8 +866,8 @@ async function getAllClinicUsers(kv, env = null) {
             su.deviceClasses = [clinic.offlineCarrier];
         }
         result.push(su);
-        // ★ 2026-09-19 D1 缺行回填（自愈）：登录不再是唯一回填点
-        if (db && !d1Existing.has(clinic.id + '|' + u.username)) {
+        // ★ 2026-09-19 D1 缺行回填（自愈）：登录不再是唯一回填点；trend 轻量模式跳过
+        if (!light && db && !d1Existing.has(clinic.id + '|' + u.username)) {
             backfills.push(syncUserToD1(db, clinic.id, u).catch(e =>
                 console.error('[D1] backfill user failed:', u.username, e.message)));
         }
@@ -3180,7 +3185,8 @@ export async function onRequest(context) {
             //   user_session: + 全部 license:（127 个 key）+ 每诊所 clinic:{id}:users，
             //   一次调用上百次 KV 读。lite 仅读诊所总表 1 个 key（0 额外读），
             //   聚合字段给默认值；在线/今日登录/授权码视图等仅全量模式（诊所管理页/待办页）返回。
-            if (url.searchParams.get('lite') === '1') {
+            const liteMode = url.searchParams.get('lite');
+            if (liteMode === '1' || liteMode === '2') {
                 const liteData = clinics.map(c => ({
                     id: c.id,
                     name: c.name,
@@ -3212,6 +3218,23 @@ export async function onRequest(context) {
                     licenseExpiresAt: null,
                     dualCompare: null
                 }));
+                // ★ 2026-11-17 lite=2：待办页交叉提示要对比「待审核注册」的登录账号（手机号），
+                //   仅为 status=test 的少量诊所补读账号表；lite=1（角标轮询）仍保持零额外读。
+                if (liteMode === '2') {
+                    const testItems = clinics.filter(c => c.status === 'test');
+                    const adminLists = await Promise.all(testItems.map(c =>
+                        kv.get(`clinic:${c.id}:users`, 'json').catch(() => null)));
+                    testItems.forEach((c, i) => {
+                        const item = liteData.find(x => x.id === c.id);
+                        const list = adminLists[i] || [];
+                        const admin = list.find(u => u && u.role === ROLE_CLINIC_ADMIN) || list[0];
+                        if (item && admin) {
+                            item.adminUsername = admin.username || '-';
+                            item.adminName = admin.name || '-';
+                            item.adminPhone = admin.phone || '';
+                        }
+                    });
+                }
                 return json({ success: true, data: liteData, loginStatsStart: null, lite: true });
             }
 
@@ -4387,8 +4410,9 @@ export async function onRequest(context) {
             }
 
             if (isPlatformAdmin(currentUser)) {
-                // platform_admin 看所有用户
-                const allUsers = await getAllClinicUsers(kv, context.env);
+                // platform_admin 看所有用户（trend=1：趋势图只需 createdAt，跳过设备/D1 读）
+                const lightTrend = url.searchParams.get('trend') === '1';
+                const allUsers = await getAllClinicUsers(kv, context.env, { light: lightTrend });
                 const admins = (await kv.get(KV_SYSTEM_PLATFORM_ADMINS, 'json')) || [];
                 const platformAdmins = admins.map(a => sanitizeUser(a, null, null));
                 return json({ success: true, data: [...platformAdmins, ...allUsers], count: platformAdmins.length + allUsers.length });

@@ -2283,7 +2283,7 @@ async function loadList() {
                 showAlert('mainAlert', '登录已过期，请重新登录', 'error');
                 setTimeout(doLogout, 1500);
             } else {
-                document.getElementById('listBody').innerHTML = '<tr><td colspan="12" class="empty">' + (data.error || '加载失败') + '</td></tr>';
+                document.getElementById('listBody').innerHTML = '<tr><td colspan="12" class="empty">' + escapeHtml(data.error || '加载失败') + '</td></tr>';
             }
         }
     } catch (e) {
@@ -3211,10 +3211,12 @@ async function loadTodoCenter() {
     if (box && box.innerHTML.indexOf('加载中') === -1) box.innerHTML = '<div class="loading">加载中...</div>';
     try {
         // 并行：诊所列表（统计+趋势）+ 激活申请（待办数+交叉提示）+ 用户列表（趋势）+ 待付款订单
+        // ★ 2026-11-17 读放大治理：待办页只需展示字段 → clinics 用 lite=2（仅待审核诊所补读账号，
+        //   不再全量扫 session/license/每诊所用户）；users 用 trend=1（趋势图只要 createdAt，跳过设备表/D1）。
         const [clinicsRes, actRes, usersRes, payRes] = await Promise.all([
-            fetch(API_BASE + '/users?clinics=true', { headers: { 'Authorization': 'Bearer ' + token } }),
+            fetch(API_BASE + '/users?clinics=true&lite=2', { headers: { 'Authorization': 'Bearer ' + token } }),
             fetch(API_BASE + '/license/admin-list?status=all&limit=500', { headers: { 'Authorization': 'Bearer ' + token } }),
-            fetch(API_BASE + '/users', { headers: { 'Authorization': 'Bearer ' + token } }),
+            fetch(API_BASE + '/users?trend=1', { headers: { 'Authorization': 'Bearer ' + token } }),
             // ★ 2026-09-03 待付款订单（官网下单未付款，不在 admin_req_index，需单独枚举）
             fetch(API_BASE + '/license/admin-list?status=pending_payment&limit=50', { headers: { 'Authorization': 'Bearer ' + token } })
         ]);
@@ -3225,7 +3227,7 @@ async function loadTodoCenter() {
         const clinics = (cd.success && Array.isArray(cd.data)) ? cd.data : [];
         const acts = (ad.success && Array.isArray(ad.requests)) ? ad.requests : [];
         const users = (ud.success && Array.isArray(ud.data)) ? ud.data : [];
-        _clinicsCache = clinics;
+        // ★ 2026-11-17 注意：lite 数据字段不全，不得覆盖 _clinicsCache（诊所管理弹窗依赖全量明细）
 
         // ===== 三张待办卡 =====
         const pendingReg = clinics.filter(c => c.status === 'test');
@@ -3293,6 +3295,8 @@ async function loadTodoCenter() {
     } catch (e) {
         const el = document.getElementById('trendChart');
         if (el) el.innerHTML = '<div class="empty">加载失败：' + escapeHtml(e.message) + '</div>';
+        // ★ 2026-11-17 失败可见化：不再只让趋势图显示错误，顶部同步提示（网络/鉴权失败时管理员可感知）
+        showAlert('todoAlert', '待办数据加载失败：' + (e.message || '网络异常') + '，请稍后切换页签重试', 'error');
     }
 }
 

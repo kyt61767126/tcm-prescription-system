@@ -2868,3 +2868,14 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
 * **验证**：`node --check` 两端点通过；内联脚本 `new Function` 解析 0 错；`diff-cross-version --pair adminconsole` 绿（public/admin ↔ site-admin/admin 字节一致，SHA256 同）；`check-interface 6 OK / 0 CHANGED`；`kv-list-fuse-test 10 PASS`；`api-cache-middleware-test 12 PASS`；escapeJs 载荷实测 `x');alert(1)//` → `x\');alert(1)//`。
 * **生效**：纯静态页 + Pages Functions，push 即部署，管理后台刷新即生效；桌面/APP/离线包零改动、无需热更或重打包。
 * **遗留（未做，按需排期）**：待办趋势仍依赖 `/users` 全量（可加服务端聚合端点）；激活码/用户/诊所列表无分页与服务端搜索；site-admin 缺 `service.html` 且 `ticket-approval.html` 与 public 版存在「客服工作台」链接漂移；打包队列功能未实现。
+
+### 88.1 第二批（2026-11-17 同日）：待办页全量读取收口 + 双副本补齐 + 错误可见化
+
+* **待办页不再全量扫 KV**（原 `loadTodoCenter` 拉 `clinics=true` 全量：每诊所用户表 + 全部 session/license + 全量 `/users` 逐账号读设备表）：
+  - 后端 `GET /users?clinics=true&lite=2`：在 lite=1 零额外读基础上，**仅为 status=test 的少量待审核诊所**补读账号表填 `adminUsername/adminName/adminPhone`（待办交叉提示要用手机号对比）；lite=1 语义不变供角标轮询。
+  - 后端 `GET /users?trend=1`：`getAllClinicUsers(kv, env, {light:true})` 跳过设备表读取与 D1 全表 SELECT/回填（趋势图只要 createdAt）。
+  - 前端待办页改用 `lite=2` + `trend=1`；**lite 数据禁止写入 `_clinicsCache`**（诊所管理弹窗依赖全量字段）。
+* **错误可见化**：`loadTodoCenter` 失败除趋势图外同步 `showAlert('todoAlert', …, 'error')`（4s 自动隐藏）；激活码列表 `data.error` 补 `escapeHtml`。
+* **双副本补齐**（消除 site-admin 漂移）：`service.html` 补入 `site-admin/admin/`，`ticket-approval.html` 以 public 版覆盖对齐；`service.html` 导航同步移除占位「打包队列」链接。
+* **验证**：`node --check users.js`、两端内联脚本 0 错、`diff-cross-version --pair adminconsole` 绿、`api-cache-middleware-test 12 PASS`、`check-interface 6 OK/0 CHANGED`。
+* **生效**：Functions + 静态页 push 即部署，后台强刷生效；零重打包。

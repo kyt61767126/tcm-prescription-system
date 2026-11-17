@@ -281,7 +281,7 @@ tr:hover{background:#f9fafc}
     $('whoName').textContent=(state.name||state.username)+'（'+state.username+'）';
     var isAdmin=state.role==='platform_admin';
     $('whoBadge').innerHTML=isAdmin?'<span class="badge badge-admin">平台总管理员</span>':'<span class="badge badge-service">客服</span>';
-    $('adminNav').innerHTML=isAdmin?'<a href="index.html" style="color:#606266">激活码管理</a> · <a href="ticket-approval.html" style="color:#606266">旧版工单页</a> · <a href="build-queue.html" style="color:#606266">打包队列</a>':'';
+    $('adminNav').innerHTML=isAdmin?'<a href="index.html" style="color:#606266">激活码管理</a> · <a href="ticket-approval.html" style="color:#606266">旧版工单页</a>':'';
     $('tabStaff').classList.toggle('hidden',!isAdmin);
     switchTab('ticket');
     loadTickets();
