@@ -3903,6 +3903,32 @@
     // 上次失败的消息（用于兜底弹窗显示）
     let lastFailMessage = '授权已失效，请激活';
 
+    // ★ 2026-11-16 方案A：心跳取码的「服务端按 machineId 反查」节流状态
+    //   失败后 30 分钟内不再外呼（成功的回写后 license:code 已存在，自然不再进入）；
+    //   失败不改变授权状态，只在本次 tick 维持原「跳过心跳」。
+    const CODE_REVERSE_LOOKUP_THROTTLE_MS = 30 * 60 * 1000;
+    let __codeReverseLookupAt = 0;
+
+    // ★ 2026-11-17 双装护栏：mid 反查回来的权威码必须与"本机配置诊所名"一致才允许回写，
+    //   否则同机先后激活过两家诊所（mid_idx 指向旧绑定）时会把心跳/打卡错记到另一家。
+    //   取值顺序与登录框诊所名同步一致：local_clinicName（设置里保存的）→ 打包 CONFIG.clinicName。
+    function readLocalClinicName() {
+        try {
+            const ls = (typeof global !== 'undefined' && global.localStorage) ||
+                       (typeof window !== 'undefined' ? window.localStorage : null);
+            if (ls) {
+                const saved = ls.getItem('local_clinicName');
+                if (saved && String(saved).trim()) return String(saved).trim();
+            }
+        } catch (_) {}
+        try {
+            if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.clinicName) {
+                return String(CONFIG.clinicName).trim();
+            }
+        } catch (_) {}
+        return '';
+    }
+
     // ★ P1-7 心跳验证：联网验证 License，离线超过 7 天锁定（防盗破解）
     // ★ 2026-09-14 在线统计上报：周期从 24 小时缩短为 10 分钟——服务端按
     //   devices[].lastHeartbeat ≤15 分钟窗口计「在线」（后台诊所管理
@@ -3957,11 +3983,18 @@
             const __needHealMid = !machineId;
             // 仅"确实是已激活设备"才做联网自救：试用/未激活设备本地无码属正常形态，
             // 保持原行为（直接跳过心跳），避免每次心跳多打一次反查接口。
+            // ★ 2026-11-17：取码来源与授权状态卡片（renderActivationCode）完全同源——
+            //   卡片用的是 getLicenseCode()（标准存储 → localStorage 直读 → APP 激活记录
+            //   → 主进程 IPC 邀请码反查）。心跳原来只在 licenseType 字段存在时才调用，
+            //   字段缺失时会跳过，出现"卡片有码、心跳无码"的分裂；这里改为
+            //   licenseType 缺失时回退读 type，已激活设备一律复用同一函数取码。
+            //   全程客户端直连/主进程 IPC，不经网页或浏览器中转。
+            const __licType = String((__licStatus && (__licStatus.licenseType || __licStatus.type)) || '');
             const __maySelfHeal = !__licStatus ||
-                (!!__licStatus.licenseType &&
-                 __licStatus.licenseType !== 'trial' && __licStatus.licenseType !== 'none');
+                (!!__licType && __licType !== 'trial' && __licType !== 'none' && __licType !== 'free');
             if (!licenseCode && __maySelfHeal) {
                 try { licenseCode = (await getLicenseCode()) || ''; } catch (_) {}
+                if (licenseCode) console.log('[Heartbeat] 已复用授权卡片同源取码');
             }
             if (!machineId) {
                 try {
@@ -3988,6 +4021,64 @@
             if (__needHealMid && machineId) {
                 try { await StorageAdapter.setItem('license:machineId', machineId); } catch (_) {}
             }
+
+            // ★ 2026-11-16 方案A：取码最后兜底——服务端按 machineId 反查持久化激活记录
+            //   背景（本机实测）：桌面激活码只随渲染层 localStorage 保存（激活窗口/主窗口
+            //   同分区），一旦主窗口取不到（旧版清键/两窗口隔离残留），本地三来源与
+            //   invite 反查都会拿空码，心跳便永久停在下面的「跳过心跳」——服务端因此收不到
+            //   该设备的心跳与打卡，后台「今日登录」恒为 0。
+            //   做法：沿用既有 entitlement 裁决（code 为空时 adjudicate 走
+            //   findLicensesByMachine 的 machineId 自愈分支），LICENSED 返回权威 licenseCode
+            //   即回写标准存储，后续 tick 直接命中；该接口本就是心跳后段的状态裁决源，
+            //   此处仅提前一次调用，不新增判定语义。
+            //   fail-safe：网络失败 / 非 200 / 非 LICENSED / 畸形响应一律忽略（catch 吞掉），
+            //   维持原「跳过心跳」，不抛错、不阻塞登录、不发空心跳、不改授权状态。
+            //   节流：失败后 30 分钟内不再外呼，避免每个 10 分钟 tick 都触发全扫反查。
+            if (!licenseCode && machineId && __maySelfHeal) {
+                const __lookupAt = Date.now();
+                if (__lookupAt - __codeReverseLookupAt >= CODE_REVERSE_LOOKUP_THROTTLE_MS) {
+                    __codeReverseLookupAt = __lookupAt;
+                    try {
+                        const __rq = await requestEntitlement({ mid: machineId });
+                        const __ent = __rq && __rq.ent;
+                        if (__rq && __rq.httpStatus === 200 && __ent && __ent.success &&
+                            __ent.state === 'LICENSED' && __ent.licenseCode) {
+                            // ★ 2026-11-17 双装护栏：服务端 mid_idx 可能指向同机更早绑定的
+                            //   另一家诊所（本机实测：mid 反查返回的是另一诊所的码）。
+                            //   归属诊所与本机配置不一致时拒绝回写，宁可本轮跳过心跳，
+                            //   也不能把心跳/登录打卡错记到别家诊所名下。
+                            const __entClinic = String(__ent.clinicName || '').trim();
+                            const __localClinic = readLocalClinicName();
+                            if (__entClinic && __localClinic && __entClinic !== __localClinic) {
+                                console.warn('[Heartbeat] 反查码归属诊所与本机配置不一致，已拒绝回写：',
+                                    __entClinic, '≠', __localClinic);
+                            } else {
+                                licenseCode = String(__ent.licenseCode).trim();
+                                try { await StorageAdapter.setItem('license:code', licenseCode); } catch (_) {}
+                                __codeReverseLookupAt = 0; // 成功：后续 tick 不再外呼
+                                console.log('[Heartbeat] 已按 machineId 反查回写权威激活码');
+                            }
+                        }
+                    } catch (_) { /* fail-safe：维持原跳过心跳行为 */ }
+                }
+            }
+
+            // ★ 2026-11-17 诊断键（仅定位，不参与任何判定）：落在取码闸门之前，
+            //   记录本轮 tick 的实际执行环境与取码实况。
+            //   背景：本机 last-run.dat 每 10 分钟一拍却无服务端心跳记录——getStatus()
+            //   在取码闸门之前就会写 last-run.dat，故节拍只能证明"定时器在跑"，无法
+            //   区分是哪个渲染器、也看不出取到的是空码还是非空码。该键只写不读，
+            //   不改心跳/授权任何判定，不改 UI，定位完成后随下个版本移除。
+            try {
+                await StorageAdapter.setItem('license:hbDiag', JSON.stringify({
+                    ts: Date.now(),
+                    href: (typeof location !== 'undefined' && location.href) || '',
+                    hasBridge: !!(global.electronAPI && global.electronAPI.license),
+                    codeLen: String(licenseCode || '').length,
+                    midLen: String(machineId || '').length,
+                    licType: __licType
+                }));
+            } catch (_) { /* 诊断写失败不影响心跳 */ }
 
             if (!licenseCode || !machineId) {
                 console.log('[Heartbeat] 无 license code 或 machineId，跳过心跳');
@@ -4033,6 +4124,16 @@
             // ★ 低-2：区分真断网与 HTTP 错误——只有 fetch 抛异常（网络不可达）
             //   才播种 offlineStart；HTTP 非 200（服务异常）不播种、不锁定。
             let response;
+            // ★ 2026-11-17 诊断键二（仅定位，不参与任何判定）：记录心跳 POST 的
+            //   发出 / 响应 / 异常三态。上一轮 license:hbDiag 已证实取码正常
+            //   （codeLen=24、midLen=32），但服务端零写入，需区分「请求没发出」
+            //   与「响应非 2xx 被拒」。只写不读，不改心跳/授权判定，不改 UI。
+            try {
+                await StorageAdapter.setItem('license:hbDiagPost', JSON.stringify({
+                    ts: Date.now(), phase: 'send',
+                    href: (typeof location !== 'undefined' && location.href) || ''
+                }));
+            } catch (_) { /* 诊断写失败不影响心跳 */ }
             try {
                 response = await fetch('https://tcm-prescription-system.pages.dev/api/license/heartbeat', {
                     method: 'POST',
@@ -4043,6 +4144,13 @@
                     ))
                 });
             } catch (netE) {
+                try {
+                    await StorageAdapter.setItem('license:hbDiagPost', JSON.stringify({
+                        ts: Date.now(), phase: 'exception',
+                        name: String((netE && netE.name) || ''),
+                        error: String((netE && netE.message) || netE || '')
+                    }));
+                } catch (_) { /* 诊断写失败不影响心跳 */ }
                 console.warn('[Heartbeat] 网络不可达:', netE && netE.message);
                 // ★ P3-A：gate token 离线裁决（取代旧 offlineStart+7天 宽限）
                 const gate = await evaluateOfflineGate(machineId);
@@ -4057,6 +4165,20 @@
                     OFFLINE_GATE_REASON_MSG[gate.reason] || OFFLINE_GATE_REASON_MSG.expired);
                 return;
             }
+
+            // ★ 2026-11-17 诊断键二：成功与非 2xx 都落一条响应记录（非 2xx 附带
+            //   响应体前 300 字，用于区分 CORS/限流/业务拒绝）。只写不读。
+            try {
+                let __bodyPreview = '';
+                if (!response.ok) {
+                    try { __bodyPreview = String(await response.clone().text()).slice(0, 300); } catch (_) {}
+                }
+                await StorageAdapter.setItem('license:hbDiagPost', JSON.stringify({
+                    ts: Date.now(), phase: 'response',
+                    httpStatus: response.status, ok: response.ok,
+                    body: __bodyPreview
+                }));
+            } catch (_) { /* 诊断写失败不影响心跳 */ }
 
             if (!response.ok) {
                 console.warn('[Heartbeat] 服务返回错误，HTTP', response.status);
@@ -5239,6 +5361,60 @@
         return code ? String(code).trim() : '';
     }
 
+    // ★ 2026-11-17 登录即上报：登录成功立刻打一次卡，后台「今日登录」不再依赖
+    //   10 分钟心跳推断（桌面主窗/APP 登录后即可见，最长不再等一拍）。
+    //   · 一天一次：本地 license:loginPunchDay 先挡（避免重复请求），服务端
+    //     lp:{day}:{encClinic}:{t}:{mid} 键 GET 命中即跳过（稳态 1 写/端/天），
+    //     与心跳打卡同一套键与去重，不新增第二套计数。
+    //   · 失败静默：任何异常都不抛出、不弹窗、不改 UI、不阻塞登录；失败不写本地
+    //     日标记，下次登录自动重试。
+    //   · 不写 D1 heartbeat、不刷新 lastHeartbeat，在线判定语义零影响。
+    async function reportLoginPunch() {
+        try {
+            const beijingDay = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+            let done = '';
+            try { done = await StorageAdapter.getItem('license:loginPunchDay') || ''; } catch (_) {}
+            if (done === beijingDay) return;
+
+            let machineId = '';
+            try {
+                machineId = normalizeMachineIdResult(await StorageAdapter.getItem('license:machineId') || '');
+            } catch (_) {}
+            const licApi = global.electronAPI && global.electronAPI.license;
+            const actApi = global.electronAPI && global.electronAPI.activate;
+            if (!machineId && licApi && typeof licApi.getMachineId === 'function') {
+                try { machineId = normalizeMachineIdResult(await licApi.getMachineId()); } catch (_) {}
+            }
+            if (!machineId && actApi && typeof actApi.getMachineId === 'function') {
+                try { machineId = normalizeMachineIdResult(await actApi.getMachineId()); } catch (_) {}
+            }
+            if (!machineId) return;
+
+            let code = '';
+            try { code = await getLicenseCode(); } catch (_) {}
+            if (!code) {
+                try { code = await StorageAdapter.getItem('license:code') || ''; } catch (_) {}
+            }
+
+            const isApp = !!(global.Capacitor) ||
+                /Android|iPhone|iPad|iPod/i.test(String(navigator.userAgent || ''));
+            const resp = await fetch(API_BASE + '/license/login-punch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    machineId: machineId,
+                    code: code || '',
+                    clientClass: isApp ? 'app' : 'desktop'
+                }),
+                cache: 'no-store'
+            });
+            if (resp && resp.ok) {
+                try { await StorageAdapter.setItem('license:loginPunchDay', beijingDay); } catch (_) {}
+            }
+        } catch (_) { /* 纯统计增益，任何异常静默 */ }
+    }
+    try { if (global.AuthCore) global.AuthCore.__reportLoginPunch = reportLoginPunch; } catch (_) {}
+
     // ★ 2026-09-15 激活码常显：已激活用户在授权状态区显示激活码（点击复制）。
     //   客户换机重激活/到期续费/授权找回/客服核查均需提供激活码，此前仅激活成功
     //   瞬间可见，之后无处可查只能找管理员。本地无码（旧版激活设备）静默跳过。
@@ -5473,24 +5649,51 @@
     global.updateLicenseStatusText = updateLicenseStatusText;
 
     // ★★★ 2026-08-25 管理员激活按钮状态（全局统一规范，与 cloud.js 一致）：
-    //   激活有效期内（剩余 > 7 天，或 -1 永久授权）→ 按钮灰色只读（无需激活）
-    //   剩余 ≤ 7 天（临期提醒续费）/ 未激活 / 已过期 / 试用 / 无到期信息 → 按钮正常颜色可点击
+    //   激活有效期内（剩余 > 7 天，或 -1 永久授权）→ 收起满宽主按钮，仅保留低调小入口
+    //   剩余 ≤ 7 天（临期提醒续费）/ 未激活 / 已过期 / 试用 / 无到期信息 → 满宽按钮可点击
+    // ★ 2026-11-17：原「有效期内按钮灰显但仍满宽可见」会让已激活用户误以为还要再激活
+    //   （云端/离线两端同款问题）。有效期内改为 display:none 收起，右下角给一个
+    //   「更换 / 续费激活码」小字入口复用原按钮点击逻辑（隐藏元素仍可 .click()）。
     function setAdminActivateBtnState(daysLeft) {
         const btn = document.getElementById('adminActivateSettingsBtn');
         if (!btn) return;
         const inValidPeriod = (typeof daysLeft === 'number' && !isNaN(daysLeft)) &&
             (daysLeft === -1 || daysLeft > 7);
+        let mini = document.getElementById('adminActivateMiniLink');
         if (inValidPeriod) {
-            btn.disabled = true;
-            btn.style.background = '#b0bec5';
-            btn.style.cursor = 'not-allowed';
+            mini = ensureAdminActivateMiniLink(btn, mini);
+            mini.style.display = '';
+            btn.style.display = 'none';
+            btn.disabled = false;
+            btn.style.background = '#26a69a';
+            btn.style.cursor = 'pointer';
             btn.title = '激活有效期内无需激活';
         } else {
+            if (mini) mini.style.display = 'none';
+            btn.style.display = '';
             btn.disabled = false;
             btn.style.background = '#26a69a';
             btn.style.cursor = 'pointer';
             btn.title = '';
         }
+    }
+
+    // 有效期内替代满宽按钮的低调小入口（懒创建，点击复用原按钮的打开激活窗口逻辑）
+    function ensureAdminActivateMiniLink(btn, mini) {
+        if (mini) return mini;
+        const box = document.createElement('div');
+        box.id = 'adminActivateMiniLink';
+        box.style.cssText = 'text-align:right;margin-top:2px;';
+        const a = document.createElement('a');
+        a.href = 'javascript:void(0)';
+        a.textContent = '更换 / 续费激活码';
+        a.style.cssText = 'font-size:12px;color:#90a4ae;text-decoration:underline;cursor:pointer;';
+        a.addEventListener('click', function () {
+            try { btn.click(); } catch (_) {}
+        });
+        box.appendChild(a);
+        if (btn.parentNode) btn.parentNode.insertBefore(box, btn.nextSibling);
+        return box;
     }
 
     // ★ 向登录界面（loginOverlay）运行时注入"注册 / 激活"入口（registerEntry 元素）
@@ -9888,6 +10091,33 @@
             });
         }
     }
+
+    // ★ 2026-11-17 登录即上报接线：
+    //   ① 包装两个登录入口，成功即触发（fire-and-forget，绝不 await，登录耗时零变化）
+    //   ② 已登录状态下页面加载（桌面登录窗→主窗切换、APP 冷启动恢复会话）再兜一次
+    //   两者共用 reportLoginPunch 的本地日标记与服务端日键去重，一天最多记一次。
+    try {
+        const __ac = global.AuthCore;
+        if (__ac && typeof __ac.__reportLoginPunch === 'function') {
+            const __wrapLoginPunch = function (name) {
+                const fn = __ac[name];
+                if (typeof fn !== 'function') return;
+                __ac[name] = async function () {
+                    const r = await fn.apply(this, arguments);
+                    try { if (r && r.success) __ac.__reportLoginPunch(); } catch (_) {}
+                    return r;
+                };
+            };
+            __wrapLoginPunch('login');
+            __wrapLoginPunch('loginWithUsernamePassword');
+            Promise.resolve().then(async function () {
+                try {
+                    const v = await StorageAdapter.getItem('auth:isLoggedIn');
+                    if (v === 'true') __ac.__reportLoginPunch();
+                } catch (_) {}
+            });
+        }
+    } catch (_) {}
 
     if (document.readyState === 'complete' || document.readyState === 'interactive') {
         setupKeyboardAdapter();
