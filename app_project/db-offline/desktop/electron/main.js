@@ -1389,8 +1389,12 @@ app.whenReady().then(async () => {
     //   其余后台请求（热更、授权心跳、entitlement 轮询、邀请码、业务同步）一律取消。
     //   登录成功后 currentLoggedInUser 由 login-success/saveLoginState 写入，闸门自动放行。
     //   ★ 不在登录前放行 entitlement/heartbeat：避免登录窗后台联网与频控误伤。
+    //   ★ 2026-11-17 修正：heartbeat / entitlement 为「取码成功后必须上报」的授权链
+    //     端点（心跳 10 分钟一拍，登录窗/主窗切换时也会命中）。此前漏项会导致
+    //     渲染器 fetch 被 cancel，表现为 TypeError: Failed to fetch、服务端零写入。
+    //     仅放开这两个只读/上报端点，其余后台联网（业务同步、邀请码、热更）仍拦截。
     try {
-        const PRE_LOGIN_ALLOW_RE = /^https:\/\/tcm-prescription-system\.pages\.dev\/api\/(?:(?:license\/(?:validate|admin-submit|admin-status|activation-session|activation-token|order-submit|order-status|order-paid|attestation|export-license|claim|trial|register))|users)(?:[/?]|$)/i;
+        const PRE_LOGIN_ALLOW_RE = /^https:\/\/tcm-prescription-system\.pages\.dev\/api\/(?:(?:license\/(?:validate|admin-submit|admin-status|activation-session|activation-token|order-submit|order-status|order-paid|attestation|export-license|claim|trial|register|heartbeat|entitlement))|users)(?:[/?]|$)/i;
         sharedSession.webRequest.onBeforeRequest({ urls: ['*://*/*'] }, (details, callback) => {
             try {
                 if (currentLoggedInUser) return callback({ cancel: false });
