@@ -1,18 +1,18 @@
 {
   "format": 1,
   "channel": "cloud",
-  "hotVersion": "2026.11.15-1",
+  "hotVersion": "2026.11.17-1",
   "appVersion": "1.0.357",
   "files": [
     {
       "name": "index.html",
-      "sha256": "635cf06d2f42836001483c3d97e14ffba8bac0f716344ede3eb001eb37c265f7",
+      "sha256": "5f5311b19488a63f1213641ba0857abdd65a6de59dbad98a00bbbf2523f49f2c",
       "size": 856804
     },
     {
       "name": "auth-core.js",
-      "sha256": "7598d4a6b9c6004eeeddfcca509e3171708f00166f83dc6c18b9536770c91621",
-      "size": 437216
+      "sha256": "1cc85542ff6f9bbf52cc626555d1484cbf3fc0cc3fc0ae6aa49e08c4abde1012",
+      "size": 438567
     },
     {
       "name": "permission.js",
@@ -150,6 +150,6 @@
       "size": 32049
     }
   ],
-  "signedAt": 1794725682843,
-  "signature": "4G1qvU/GdLreaOXah1vNsmBsJNxxIg6lhIrkBZATT7gHNSFunKR6oa09duceHGvOEz2y7PIIFPMXcBm3OcY5DA=="
+  "signedAt": 1794895938958,
+  "signature": "1QFV70qe3yKzRTI0fyaTIfWHc2E7J0hX6ikVve+RONdj9sDzCuWAKXl4V6pnnkJHlkoYhRf5dPtjKnoLEdc8Cw=="
 }
