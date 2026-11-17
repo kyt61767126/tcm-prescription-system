@@ -2851,3 +2851,20 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
 * **P1-3 离线 APP（Java）接入远端锚点**（`app_project/db-offline/app/.../LicenseManager.java`）：与桌面**同一端点、同一字段**（`{mid, ts, v, ed:'local-app'}`），仅走 `allowNetworkTrial=true` 的 binder 线程（主线程启动闸 `allowNetworkTrial=false` 永不发请求）；`trial==null` 首次创建与已有 trial 两条路径都上报，回包 `trialStartAt` 经 `mergeRemoteTrialStart` 与本地 `startTime` **Math.min 取最早**，重算 `expiresAt` 并回写 trial.dat，到期即走既有 `trial_expired`。节流：SharedPreferences 记已上报起点（正常每机一次，本地起点晚 >1h 才补报）+ 进程内 10 分钟最多一次（断网时不反复 3s 连接）；`fallback_` 非 schema 机器码直接跳过。fail-open：离线/DNS/超时(3s)/5xx/429/解析失败全部静默返回 0，不影响试用与启动。隐私字段与桌面一致（无患者/诊所数据）。
 * **未做（单独排期）**：P2 本地对称密钥可推导（config v1 静态键、HKDF(machineId)）无法根治，只能提成本；SQLite 用本机派生密钥加密，可读可改但**不影响授权**。
 * **门禁**：sync-all -VerifyOnly 全同步、copy-consistency 110/0、check-interface 6 OK、pre-build-check 双端 IPC 一致、`node --check` 全通过。**需双桌面重打 exe 生效**，已装客户端不受影响（不强制更新、不引入任何联网启动校验、未动界面/题库/热更白名单）。
+## 88. 平台管理后台功能审计与 P0/P1 优化（2026-11-17，纯 admin 静态页 + functions，五端零重打包）
+
+> 触发：用户要求对「官方后台」8 个模块做功能优化检查。审计 5917 行控制台（166 函数 / 59 fetch）+ admin-list/users 等端点，按 P0 安全 → P1 读放大落地。
+
+* **P0 存储型 XSS（诊所名注入内联 onclick）**：`public/admin/index.html` 的激活审核/用户列表/设备列表共 17 处把 `escapeHtml(字段)` 拼进 `onclick="fn('...')"`；`escapeHtml` 输出的 `&#39;` 会被 HTML 属性解析**解码回单引号**从而闭合 JS 字符串。服务端 `admin-submit.js` 对 clinicName 仅拦截 `|` 与超长 → 任意客户提交带 `'` 的诊所名即可在管理员打开激活审核时执行脚本、窃取 sessionStorage 管理员 token。
+  - 修法：新增 `escapeJs()`（转义 `\ ' " \r \n < > &`），所有「内联事件 JS 字符串参数」改用 `escapeJs`：r.clinicName、u.clinicName、c.adminUsername、d.machineId、maskedMid、b.machineId、m.machineId。HTML 文本/属性上下文仍用 `escapeHtml`，不可互换。删除确认框改用原文（不再显示 `&#39;` 实体）。
+  - **铁律**：`escapeHtml` 只解 HTML 上下文；进入 `onclick`/`onerror` 等内联事件的字符串参数必须 `escapeJs`（或改用 addEventListener + dataset）。
+* **P1 激活审核重复全量请求**：`loadAdminActivateList` 每次成功都调 `refreshAdminActivateStats()` 再拉一次 `status=all&limit=500`（filter=all 时是 100% 重复），自动刷新每 60s 触发双请求。
+  - 修法：抽出 `applyAdminActivateStats(all)`；`filter=all` 时直接复用主列表数据（零额外请求）；其他筛选走 10s 内存缓存 + `_aaStatsInFlight` 并发去重，避免重复拉取。
+* **P1 待办轮询瘦身**：原 `pollOnce` 在待办页时每 5 分钟执行 `loadTodoCenter`（全量 `/users?clinics=true` + `/users` 全量用户 + `admin-list?status=all`），其中 `/users` 只是趋势图用。改成轮询一律 `refreshTodoBadges()`（`lite=1` 单键诊所 + 索引读），并用同一份 lite 数据同步刷新 4 张待办卡 + 6 张运营统计卡；趋势图/下载漏斗/交叉提示只在切回待办页时全量加载。
+  - 顺带修：`refreshTodoBadges` 原把 lite 数据写入 `_clinicsCache`，会覆盖诊所管理弹窗依赖的完整字段 → 已移除，缓存只由全量加载写入。
+* **P1 切页短 TTL 缓存**：`switchTab` 原每次点击都全量重拉。改为 30s 内同页签不重复加载（`TAB_LOAD_TTL`）；操作后的显式 `load*()` 强刷不受影响，System 页仍手动触发。
+* **P1 后端串行 KV 读 → 分批并发**：`getAllClinicUsers`（`functions/api/users.js`）原逐诊所 `await` 用户表 + 逐账号 `await` 设备表，改为 20 条/批 `Promise.all`，顺序与降级语义不变；`admin-list.js` 三条读取路径（pending_payment / admin_req_index / order 兜底）同样 20 条/批并发，读取总量与 2000 条安全上限不变，只降时延。
+* **P2 顺手修**：顶部「📦 打包队列」占位页未实现 → 改为不可点「（建设中）」标注；自动刷新文案「每10秒」实为 60s → 更正。
+* **验证**：`node --check` 两端点通过；内联脚本 `new Function` 解析 0 错；`diff-cross-version --pair adminconsole` 绿（public/admin ↔ site-admin/admin 字节一致，SHA256 同）；`check-interface 6 OK / 0 CHANGED`；`kv-list-fuse-test 10 PASS`；`api-cache-middleware-test 12 PASS`；escapeJs 载荷实测 `x');alert(1)//` → `x\');alert(1)//`。
+* **生效**：纯静态页 + Pages Functions，push 即部署，管理后台刷新即生效；桌面/APP/离线包零改动、无需热更或重打包。
+* **遗留（未做，按需排期）**：待办趋势仍依赖 `/users` 全量（可加服务端聚合端点）；激活码/用户/诊所列表无分页与服务端搜索；site-admin 缺 `service.html` 且 `ticket-approval.html` 与 public 版存在「客服工作台」链接漂移；打包队列功能未实现。

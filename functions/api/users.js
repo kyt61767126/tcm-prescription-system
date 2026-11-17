@@ -811,40 +811,60 @@ async function getAllClinicUsers(kv, env = null) {
         }
     }
 
-    const result = [];
-    const backfills = [];
-    for (const clinic of clinics) {
-        const users = await kv.get(`clinic:${clinic.id}:users`, 'json');
+    // ★ 2026-11-17 时延优化：诊所用户表并发分批读（原逐个 await 串行，诊所越多越慢）
+    const KV_BATCH = 20;
+    const perClinicUsers = [];
+    for (let i = 0; i < clinics.length; i += KV_BATCH) {
+        const batch = clinics.slice(i, i + KV_BATCH);
+        const vals = await Promise.all(batch.map(c =>
+            kv.get(`clinic:${c.id}:users`, 'json').catch(() => null)));
+        batch.forEach((c, idx) => perClinicUsers.push([c, vals[idx]]));
+    }
+
+    // 先按诊所/账号原始顺序建条目，载体设备读取统一并发分批，保持列表顺序稳定
+    const entries = [];
+    for (const [clinic, users] of perClinicUsers) {
         if (!users || !Array.isArray(users)) continue;
         for (const u of users) {
             if (!u || !u.username) continue;
             // ★ 2026-08-23 修复：补传 clinic.status / clinic.edition，用户管理列表才能显示
             //   真实版本类型（云端机构版/云端标准版）与诊所待审核徽章（原漏传导致全部兜底 active/cloud_clinic）
             const su = sanitizeUser(u, clinic.id, clinic.name, clinic.status, clinic.edition);
-            // ★ 2026-09-03 载体信息：
-            //   云端版——读取账号绑定的设备（user_devices 存 desktop/app，网页版不占名额），
-            //     供后台用户管理显示"🖥️桌面·云端标准版 / 📱APP·云端机构版"。
-            //   离线版——账号不经云端登录（无 user_devices），载体取诊所记录的
-            //     offlineCarrier（激活审核时 provisionCloudAccount 从申请记录写入：
-            //     desktop=离线桌面 / app=离线APP）。
-            //   读取失败静默跳过（列表展示非关键路径，不影响主数据）。
-            try {
-                if (String(clinic.edition || '').indexOf('cloud') === 0) {
-                    const dev = await kv.get(KV_USER_DEVICES_PREFIX + u.username, 'json');
-                    if (dev && Array.isArray(dev.devices) && dev.devices.length) {
-                        const classes = [...new Set(dev.devices.map(d => d && d.clientClass).filter(Boolean))];
-                        if (classes.length) su.deviceClasses = classes;
-                    }
-                } else if (String(clinic.edition || '').indexOf('offline_') === 0 && clinic.offlineCarrier) {
-                    su.deviceClasses = [clinic.offlineCarrier];
-                }
-            } catch (e) { /* 载体读取失败按未知处理 */ }
-            result.push(su);
-            // ★ 2026-09-19 D1 缺行回填（自愈）：登录不再是唯一回填点
-            if (db && !d1Existing.has(clinic.id + '|' + u.username)) {
-                backfills.push(syncUserToD1(db, clinic.id, u).catch(e =>
-                    console.error('[D1] backfill user failed:', u.username, e.message)));
+            entries.push({ clinic, u, su });
+        }
+    }
+
+    // ★ 2026-09-03 载体信息：
+    //   云端版——读取账号绑定的设备（user_devices 存 desktop/app，网页版不占名额），
+    //     供后台用户管理显示"🖥️桌面·云端标准版 / 📱APP·云端机构版"。
+    //   离线版——账号不经云端登录（无 user_devices），载体取诊所记录的
+    //     offlineCarrier（激活审核时 provisionCloudAccount 从申请记录写入：
+    //     desktop=离线桌面 / app=离线APP）。
+    //   读取失败静默跳过（列表展示非关键路径，不影响主数据）。
+    const cloudEntries = entries.filter(e => String(e.clinic.edition || '').indexOf('cloud') === 0);
+    for (let i = 0; i < cloudEntries.length; i += KV_BATCH) {
+        const batch = cloudEntries.slice(i, i + KV_BATCH);
+        const devs = await Promise.all(batch.map(e =>
+            kv.get(KV_USER_DEVICES_PREFIX + e.u.username, 'json').catch(() => null)));
+        devs.forEach((dev, idx) => {
+            if (dev && Array.isArray(dev.devices) && dev.devices.length) {
+                const classes = [...new Set(dev.devices.map(d => d && d.clientClass).filter(Boolean))];
+                if (classes.length) batch[idx].su.deviceClasses = classes;
             }
+        });
+    }
+
+    const result = [];
+    const backfills = [];
+    for (const { clinic, u, su } of entries) {
+        if (String(clinic.edition || '').indexOf('offline_') === 0 && clinic.offlineCarrier) {
+            su.deviceClasses = [clinic.offlineCarrier];
+        }
+        result.push(su);
+        // ★ 2026-09-19 D1 缺行回填（自愈）：登录不再是唯一回填点
+        if (db && !d1Existing.has(clinic.id + '|' + u.username)) {
+            backfills.push(syncUserToD1(db, clinic.id, u).catch(e =>
+                console.error('[D1] backfill user failed:', u.username, e.message)));
         }
     }
     if (backfills.length) await Promise.all(backfills);

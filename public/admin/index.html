@@ -280,7 +280,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
             <div>
                 <span class="user-info">已登录：<strong id="currentAdmin"></strong></span>
                 <button class="btn btn-sm" onclick="switchTab('Todo')" style="margin-left:10px;" title="回到待办中心">🏠 待办</button>
-                <a href="build-queue.html" target="_blank" class="btn btn-sm" style="margin-left:6px;text-decoration:none;display:inline-block;" title="打开客户端打包队列">📦 打包队列</a>
+                <span class="btn btn-sm" style="margin-left:6px;display:inline-block;opacity:.55;cursor:not-allowed;" title="打包队列建设中：任务回执接口尚未接入，暂不可用">📦 打包队列（建设中）</span>
                 <a href="ticket-approval.html" class="btn btn-sm" style="margin-left:6px;text-decoration:none;display:inline-block;" title="打开工单审批（同标签页打开，保留登录会话）">🎫 工单审批</a>
                 <button class="btn btn-sm" onclick="openAccountModal()" style="margin-left:6px;" title="修改本账号登录用户名/密码">🔑 账户</button>
                 <button class="btn btn-sm logout-btn" onclick="doLogout()" style="margin-left:10px;">退出</button>
@@ -850,7 +850,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                 <button class="btn btn-sm" onclick="loadAdminActivateList()">刷新</button>
                 <button class="btn btn-sm" style="background:#7c3aed;border-color:#7c3aed;color:#fff;" onclick="adminDeviceResetFlow()" title="输入手机号/机器码/试用指纹，扫描该测试设备的全部线上记录，确认后一键清理（复用设备后台关系：申请/license/试用指纹/诊所账号/索引）">🧹 测试设备清理</button>
                 <label style="font-size:12px;color:#909399;display:flex;align-items:center;gap:4px;">
-                    <input type="checkbox" id="adminActivateAutoRefresh" onchange="toggleAdminActivateAutoRefresh()"> 每10秒自动刷新
+                    <input type="checkbox" id="adminActivateAutoRefresh" onchange="toggleAdminActivateAutoRefresh()"> 每60秒自动刷新
                 </label>
             </div>
             <div class="table-box">
@@ -2499,6 +2499,22 @@ function escapeHtml(str) {
     return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+// ★ 2026-11-17 P0：内联 onclick 的 JS 字符串参数必须用 escapeJs。
+//   escapeHtml 会把单引号转成 &#39;，但 HTML 属性解析时又解码回 '，反而闭合 JS 字符串，
+//   客户可提交带单引号的诊所名 → 管理员打开激活审核即执行脚本（存储型 XSS）。
+function escapeJs(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'")
+        .replace(/"/g, '\\"')
+        .replace(/\r/g, '\\r')
+        .replace(/\n/g, '\\n')
+        .replace(/</g, '\\x3c')
+        .replace(/>/g, '\\x3e')
+        .replace(/&/g, '\\x26');
+}
+
 function copyCode(code) {
     if (navigator.clipboard) {
         navigator.clipboard.writeText(code).then(() => {
@@ -2624,8 +2640,8 @@ function renderDevicesList(code, devices, codeProductClass) {
                 '<div class="device-mid" style="font-family:Courier New,monospace;color:#2c3e50;font-weight:600;word-break:break-all;">' + deviceTagHtml(maskedMid) + pcTag + escapeHtml(maskedMid) + '</div>' +
                 '<div style="font-size:12px;color:#909399;margin-top:4px;">激活时间：' + activatedAt + (d.clinicName ? ' · 诊所：' + escapeHtml(d.clinicName) : '') + '</div>' +
             '</div>' +
-            '<button class="btn btn-sm btn-primary" data-shown="0" onclick="revealMachineId(\'' + code + '\',\'' + escapeHtml(maskedMid) + '\',this)">👁 显示</button>' +
-            '<button class="btn btn-sm btn-warning" onclick="unbindDevice(\'' + code + '\',\'' + escapeHtml(d.machineId) + '\',' + i + ')">解绑</button>' +
+            '<button class="btn btn-sm btn-primary" data-shown="0" onclick="revealMachineId(\'' + code + '\',\'' + escapeJs(maskedMid) + '\',this)">👁 显示</button>' +
+            '<button class="btn btn-sm btn-warning" onclick="unbindDevice(\'' + code + '\',\'' + escapeJs(d.machineId) + '\',' + i + ')">解绑</button>' +
         '</div>';
     }).join('');
 }
@@ -2901,6 +2917,10 @@ function clearFilter() {
 }
 
 // ===== 标签页切换 =====
+// ★ 2026-11-17 读放大治理：切页 30s 内不重复全量拉取（操作后的显式刷新不受影响，
+//   各操作处理函数仍直接调用对应 load* 强刷）。
+const TAB_LOAD_TTL = 30000;
+const _tabLoadedAt = {};
 function switchTab(tabName) {
     // 隐藏所有标签页内容
     document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
@@ -2911,6 +2931,10 @@ function switchTab(tabName) {
     if (tabContent) tabContent.classList.add('active');
     if (tabBtn) tabBtn.classList.add('active');
     // 按需加载数据（★ 2026-09-08 版块重组：Device=测试机+绑定合并；System=体检/用量/日志均手动触发）
+    if (tabName === 'System') return;
+    const now = Date.now();
+    if (now - (_tabLoadedAt[tabName] || 0) < TAB_LOAD_TTL) return;
+    _tabLoadedAt[tabName] = now;
     if (tabName === 'Todo') loadTodoCenter();
     else if (tabName === 'Clinics') loadClinicsList();
     else if (tabName === 'Users') loadUsersList();
@@ -2918,7 +2942,6 @@ function switchTab(tabName) {
     else if (tabName === 'AdminActivate') loadAdminActivateList();
     else if (tabName === 'Device') { loadTestMachines(); loadDeviceBindings(); }
     else if (tabName === 'Risk') loadRiskAlerts();
-    else if (tabName === 'System') { /* 体检/用量/日志均按需手动触发，不自动拉 */ }
 }
 
 // ============================================================================
@@ -3093,9 +3116,9 @@ function startTodoPolling() {
     //   间隔 60s→300s；页面隐藏（最小化/切到其他标签）时不刷，恢复可见立即刷一次。
     const pollOnce = () => {
         if (!token || document.hidden) return;
-        // 当前在待办页 → 全量刷新；否则仅轻量更新角标数字
-        const onTodo = document.getElementById('tabTodo').classList.contains('active');
-        if (onTodo) loadTodoCenter(); else refreshTodoBadges();
+        // ★ 2026-11-17 读放大治理：轮询只走轻量角标/统计（lite=1 单键读 + 索引读）；
+        //   趋势图 / 下载漏斗 / 交叉提示等全量数据仅在切回待办页或手动刷新时加载。
+        refreshTodoBadges();
     };
     _todoPollTimer = setInterval(pollOnce, 300000);
     document.addEventListener('visibilitychange', () => {
@@ -3135,7 +3158,8 @@ async function refreshTodoBadges() {
         try { payData = payRes && (await payRes.json()); } catch (e) {}
         if (clinicsRes.status === 401 || actRes.status === 401) return; // 静默，具体操作时再提示重登
         const clinics = (cd.success && Array.isArray(cd.data)) ? cd.data : [];
-        _clinicsCache = clinics;
+        // ★ 2026-11-17 注意：lite 模式字段不全（无 adminUsername/licenseCodes），
+        //   不得覆盖 _clinicsCache（诊所管理弹窗依赖完整数据）；缓存只由全量加载写入。
         const pendingReg = clinics.filter(c => c.status === 'test').length;
         const pendingActCount = (ad.success && Array.isArray(ad.requests)) ? ad.requests.length : 0;
         const payCount = (payData && payData.success && typeof payData.count === 'number') ? payData.count : 0;
@@ -3146,8 +3170,32 @@ async function refreshTodoBadges() {
         _todoPendingActivate = pendingActTotal;
         setTabBadge('badgeClinics', pendingReg);
         setTabBadge('badgeActivate', pendingActTotal);
-        const ppEl = document.getElementById('todoPendingPayment');
-        if (ppEl) ppEl.textContent = payCount;
+        // ★ 2026-11-17 轮询瘦身：用同一份 lite 数据顺带刷新待办卡与运营统计卡，
+        //   替代原先每 5 分钟一次 loadTodoCenter 全量三连拉取。
+        const now = Date.now();
+        let expiring = 0, expired = 0;
+        for (const c of clinics) {
+            if (!c.expiresAt || c.status === 'disabled') continue;
+            const days = Math.ceil((new Date(c.expiresAt).getTime() - now) / 86400000);
+            if (days < 0) expired++; else if (days <= 30) expiring++;
+        }
+        const setNum = (id, v, glow) => {
+            const el = document.getElementById(id);
+            if (el) { el.textContent = v; const card = el.closest('.stat-card'); if (card) card.classList.toggle('pending-glow', !!glow && v > 0); }
+        };
+        setNum('todoPendingReg', pendingReg, true);
+        setNum('todoPendingActivate', pendingActTotal, true);
+        setNum('todoPendingPayment', payCount, payCount > 0);
+        setNum('todoExpiring', expiring + expired, expiring + expired > 0);
+        const stats = {
+            csTotal: clinics.length,
+            csActive: clinics.filter(c => c.status === 'active' && (!c.expiresAt || new Date(c.expiresAt).getTime() > now)).length,
+            csTest: pendingReg,
+            csDisabled: clinics.filter(c => c.status === 'disabled').length,
+            csExpiring: expiring,
+            csExpired: expired
+        };
+        for (const k of Object.keys(stats)) { const el = document.getElementById(k); if (el) el.textContent = stats[k]; }
     } catch (e) { /* 网络抖动静默 */ }
 }
 
@@ -3387,38 +3435,68 @@ async function loadAdminActivateList() {
 }
 
 // 后台拉取全部状态用于统计卡片（不影响主列表显示）
-async function refreshAdminActivateStats() {
-    try {
-        const res = await fetch(API_BASE + '/license/admin-list?status=all&limit=500', {
-            headers: { 'Authorization': 'Bearer ' + token }
-        });
-        const data = await res.json();
-        if (data.success && Array.isArray(data.requests)) {
-            const all = data.requests;
-            // ★ 2026-09-04 兼容状态别名 pending_approval：必须与后端 admin-list.js L154 / Dashboard 统计 L2521 三口径一致
-            const pending = all.filter(r => r.status === 'pending' || r.status === 'pending_approval').length;
-            const activated = all.filter(r => r.status === 'activated').length;
-            const rejected = all.filter(r => r.status === 'rejected').length;
-            const cancelled = all.filter(r => r.status === 'cancelled').length;
-            const el = id => document.getElementById(id);
-            if (el('aaStatPending')) el('aaStatPending').textContent = pending;
-            if (el('aaStatActivated')) el('aaStatActivated').textContent = activated;
-            if (el('aaStatRejected')) el('aaStatRejected').textContent = rejected;
-            if (el('aaStatCancelled')) el('aaStatCancelled').textContent = cancelled;
-            if (el('aaStatTotal')) el('aaStatTotal').textContent = all.length;
-            // 待审核数 > 0 时高亮
-            const pendingCard = document.querySelector('#adminActivateStats .stat-card.unused');
-            if (pendingCard) {
-                pendingCard.style.animation = pending > 0 ? 'pulse 2s infinite' : 'none';
-            }
-        }
-    } catch (e) {
-        console.warn('统计刷新失败:', e.message);
+// ★ 2026-11-17 读放大治理：
+//   1) filter=all 时主列表已含全量，直接复用，不再重复请求一次 status=all&limit=500；
+//   2) 其他筛选的统计走 10s 内存缓存 + 并发去重，避免自动刷新时重复全量拉取。
+let _aaStatsCacheAt = 0;
+let _aaStatsCacheData = null;
+let _aaStatsInFlight = null;
+
+function applyAdminActivateStats(all) {
+    if (!Array.isArray(all)) return;
+    // ★ 2026-09-04 兼容状态别名 pending_approval：必须与后端 admin-list.js L154 / Dashboard 统计 L2521 三口径一致
+    const pending = all.filter(r => r.status === 'pending' || r.status === 'pending_approval').length;
+    const activated = all.filter(r => r.status === 'activated').length;
+    const rejected = all.filter(r => r.status === 'rejected').length;
+    const cancelled = all.filter(r => r.status === 'cancelled').length;
+    const el = id => document.getElementById(id);
+    if (el('aaStatPending')) el('aaStatPending').textContent = pending;
+    if (el('aaStatActivated')) el('aaStatActivated').textContent = activated;
+    if (el('aaStatRejected')) el('aaStatRejected').textContent = rejected;
+    if (el('aaStatCancelled')) el('aaStatCancelled').textContent = cancelled;
+    if (el('aaStatTotal')) el('aaStatTotal').textContent = all.length;
+    // 待审核数 > 0 时高亮
+    const pendingCard = document.querySelector('#adminActivateStats .stat-card.unused');
+    if (pendingCard) {
+        pendingCard.style.animation = pending > 0 ? 'pulse 2s infinite' : 'none';
     }
 }
 
+async function refreshAdminActivateStats(force) {
+    if (!force && _aaStatsCacheData && Date.now() - _aaStatsCacheAt < 10000) {
+        applyAdminActivateStats(_aaStatsCacheData);
+        return;
+    }
+    if (_aaStatsInFlight) return _aaStatsInFlight;
+    _aaStatsInFlight = (async () => {
+        try {
+            const res = await fetch(API_BASE + '/license/admin-list?status=all&limit=500', {
+                headers: { 'Authorization': 'Bearer ' + token }
+            });
+            const data = await res.json();
+            if (data.success && Array.isArray(data.requests)) {
+                _aaStatsCacheData = data.requests;
+                _aaStatsCacheAt = Date.now();
+                applyAdminActivateStats(data.requests);
+            }
+        } catch (e) {
+            console.warn('统计刷新失败:', e.message);
+        } finally {
+            _aaStatsInFlight = null;
+        }
+    })();
+    return _aaStatsInFlight;
+}
+
 function updateAdminActivateStats(requests, filter) {
-    // 立即用当前数据更新统计（粗略），后台再拉全量精确刷新
+    if (filter === 'all') {
+        // 主列表即全量，直接算统计（零额外请求）
+        _aaStatsCacheData = requests;
+        _aaStatsCacheAt = Date.now();
+        applyAdminActivateStats(requests);
+        return;
+    }
+    // 其他筛选列表不完整，后台拉全量精确统计（10s 缓存内不重复请求）
     refreshAdminActivateStats();
 }
 
@@ -3459,10 +3537,10 @@ function renderAdminActivateTable() {
         // 电话可点击拨号（移动端友好）
         const phoneDisplay = r.phone ? '<a href="tel:' + escapeHtml(r.phone) + '" style="color:#409eff;">' + escapeHtml(r.phone) + '</a>' : '-';
         const actions = r.status === 'pending'
-            ? '<div style="display:flex;gap:4px;"><button class="btn btn-sm btn-success" onclick="openAdminApproveModal(\'' + r.requestId + '\')">审核</button><button class="btn btn-sm" style="background:#ff4d4f;color:#fff;" onclick="deleteAdminActivateRequest(\'' + r.requestId + '\',\'' + escapeHtml(r.clinicName || '') + '\')" title="删除此请求">🗑</button></div>'
+            ? '<div style="display:flex;gap:4px;"><button class="btn btn-sm btn-success" onclick="openAdminApproveModal(\'' + r.requestId + '\')">审核</button><button class="btn btn-sm" style="background:#ff4d4f;color:#fff;" onclick="deleteAdminActivateRequest(\'' + r.requestId + '\',\'' + escapeJs(r.clinicName || '') + '\')" title="删除此请求">🗑</button></div>'
             : (r.status === 'pending_payment'
-                ? '<div style="display:flex;gap:4px;align-items:center;"><span style="color:#b45309;font-size:12px;" title="客户已在官网下单但未完成付款，可电话指导：保存收款码→微信扫一扫→相册选图">💳 未付款</span><button class="btn btn-sm btn-success" style="padding:2px 6px;" onclick="confirmPayReceived(\'' + r.requestId + '\')" title="核对微信/支付宝收款账单确认到账后，标记为已付款进入待审核">✅已付款</button><button class="btn btn-sm" style="background:#ff4d4f;color:#fff;padding:2px 6px;" onclick="deleteAdminActivateRequest(\'' + r.requestId + '\',\'' + escapeHtml(r.clinicName || '') + '\')" title="删除此订单">🗑</button></div>'
-                : '<div style="display:flex;gap:4px;align-items:center;"><span style="color:#909399;font-size:12px;">' + escapeHtml(r.licenseCode || '已处理') + '</span><button class="btn btn-sm" style="background:#ff4d4f;color:#fff;padding:2px 6px;" onclick="deleteAdminActivateRequest(\'' + r.requestId + '\',\'' + escapeHtml(r.clinicName || '') + '\')" title="删除此请求">🗑</button></div>');
+                ? '<div style="display:flex;gap:4px;align-items:center;"><span style="color:#b45309;font-size:12px;" title="客户已在官网下单但未完成付款，可电话指导：保存收款码→微信扫一扫→相册选图">💳 未付款</span><button class="btn btn-sm btn-success" style="padding:2px 6px;" onclick="confirmPayReceived(\'' + r.requestId + '\')" title="核对微信/支付宝收款账单确认到账后，标记为已付款进入待审核">✅已付款</button><button class="btn btn-sm" style="background:#ff4d4f;color:#fff;padding:2px 6px;" onclick="deleteAdminActivateRequest(\'' + r.requestId + '\',\'' + escapeJs(r.clinicName || '') + '\')" title="删除此订单">🗑</button></div>'
+                : '<div style="display:flex;gap:4px;align-items:center;"><span style="color:#909399;font-size:12px;">' + escapeHtml(r.licenseCode || '已处理') + '</span><button class="btn btn-sm" style="background:#ff4d4f;color:#fff;padding:2px 6px;" onclick="deleteAdminActivateRequest(\'' + r.requestId + '\',\'' + escapeJs(r.clinicName || '') + '\')" title="删除此请求">🗑</button></div>');
         // ★ 版本信息渲染：区分离线/云端、机构版/标准版（官网订单加 💰 标记，白名单免费加 🎫 标记）
         const versionDisplay = renderVersionInfo(r)
             + (r.orderSource === 'website' ? ' <span style="background:#fffbeb;border:1px solid #fcd34d;color:#92400e;border-radius:4px;padding:0 4px;font-size:11px;" title="官网订单，请核对付款信息">💰官网订单</span>' : '')
@@ -3487,7 +3565,8 @@ let _adminActivateCache = [];
 
 // ★ 删除激活请求（仅平台总管理员可操作）
 async function deleteAdminActivateRequest(requestId, clinicName) {
-    const displayName = clinicName ? escapeHtml(clinicName) : '未知诊所';
+    // confirm/alert 是纯文本上下文，直接用原文（escapeHtml 会把单引号显示成 &#39;）
+    const displayName = clinicName ? String(clinicName) : '未知诊所';
     if (!confirm('确定删除此激活请求？\n\n请求编号：' + requestId + '\n诊所名称：' + displayName + '\n\n⚠ 此操作不可恢复！')) {
         return;
     }
@@ -4318,7 +4397,7 @@ async function loadClinicsList() {
                 })();
                 // 管理员账号可点击 → 跳用户管理并定位该账号（账号操作统一收口到用户管理）
                 const adminLink = c.adminUsername
-                    ? '<a href="javascript:void(0)" onclick="jumpToUser(\'' + escapeHtml(c.adminUsername) + '\')" style="color:#3498db;text-decoration:underline;" title="到用户管理处理该账号">' + escapeHtml(c.adminUsername) + '</a>'
+                    ? '<a href="javascript:void(0)" onclick="jumpToUser(\'' + escapeJs(c.adminUsername) + '\')" style="color:#3498db;text-decoration:underline;" title="到用户管理处理该账号">' + escapeHtml(c.adminUsername) + '</a>'
                     : '-';
                 // ★ 2026-09-26 多管理员手机号并列显示（同名诊所并存多个管理员时，
                 //   手机: A、B 全部可见；无 adminPhones 时回落旧单字段）
@@ -5118,7 +5197,7 @@ function renderUsersTable() {
             let clinicBadge = '';
             if (u.clinicStatus === 'test') clinicBadge = ' <span class="tag tag-trial">诊所待审核</span>';
             else if (u.clinicStatus === 'disabled') clinicBadge = ' <span class="tag tag-disabled">诊所停用</span>';
-            clinicHtml = '<a href="javascript:void(0)" onclick="filterUsersByClinic(\'' + escapeHtml(u.clinicName) + '\')" style="color:#3498db;" title="筛选该诊所全部账号">' + escapeHtml(u.clinicName) + '</a>' + clinicBadge;
+            clinicHtml = '<a href="javascript:void(0)" onclick="filterUsersByClinic(\'' + escapeJs(u.clinicName) + '\')" style="color:#3498db;" title="筛选该诊所全部账号">' + escapeHtml(u.clinicName) + '</a>' + clinicBadge;
         }
         const created = u.createdAt ? new Date(u.createdAt).toLocaleString('zh-CN') : '-';
         // 平台管理员不给操作按钮（后端也拒绝，防止锁死管理入口）
@@ -5459,7 +5538,7 @@ async function loadDeviceBindings() {
             const test = testSet[b.machineId];
             const testTag = test ? '<span class="tag tag-trial" title="测试机：' + escapeHtml((test.note || '') + ' ' + (test.addedAt || '')) + '">🖥 测试机</span>' : '';
             const ops =
-                '<button class="btn btn-sm" style="background:#ff4d4f;color:#fff;" onclick="unbindDeviceBinding(\'' + escapeHtml(b.machineId) + '\')">解除绑定</button>';
+                '<button class="btn btn-sm" style="background:#ff4d4f;color:#fff;" onclick="unbindDeviceBinding(\'' + escapeJs(b.machineId) + '\')">解除绑定</button>';
             return '<div class="license-card">' +
                 '<div class="license-card-top"><span class="code" style="font-size:14px;">' + escapeHtml(b.machineId || '-') + '</span>' +
                     versionTag(b) + testTag + '</div>' +
@@ -5493,7 +5572,7 @@ function renderSingleDeviceBindingCard(b) {
     else if (b.clientClass === 'desktop') carrier = '🖥️桌面·';
     else if (b.clientClass === 'app') carrier = '📱APP·';
     const versionTag = '<span class="tag ' + tagClass + '">' + carrier + edText + '</span>';
-    const ops = '<button class="btn btn-sm" style="background:#ff4d4f;color:#fff;" onclick="unbindDeviceBinding(\'' + escapeHtml(b.machineId) + '\')">解除绑定</button>';
+    const ops = '<button class="btn btn-sm" style="background:#ff4d4f;color:#fff;" onclick="unbindDeviceBinding(\'' + escapeJs(b.machineId) + '\')">解除绑定</button>';
     return '<div class="license-card">' +
         '<div class="license-card-top"><span class="code" style="font-size:14px;">' + escapeHtml(b.machineId || '-') + '</span>' + versionTag + '</div>' +
         '<div class="license-card-meta">' +
@@ -5581,7 +5660,7 @@ async function loadTestMachines() {
             '<td style="font-family:Courier New,monospace;font-size:11px;">' + escapeHtml(m.machineId || '-') + '</td>' +
             '<td>' + escapeHtml(m.note || '-') + '</td>' +
             '<td>' + escapeHtml(m.addedAt || '-') + '</td>' +
-            '<td><button class="btn btn-sm" style="background:#ff4d4f;color:#fff;" onclick="removeTestMachine(\'' + escapeHtml(m.machineId) + '\')">移除</button></td>' +
+            '<td><button class="btn btn-sm" style="background:#ff4d4f;color:#fff;" onclick="removeTestMachine(\'' + escapeJs(m.machineId) + '\')">移除</button></td>' +
             '</tr>'
         ).join('');
     } catch (e) {
