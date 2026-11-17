@@ -14,26 +14,26 @@
             "releaseNotes": "🐛 修复:\n  - fix(download): 更新器分片断点续传 + 下载页代理基址按域名自适应\n  - fix(login-stats): 修复离线诊所登录统计为 0：心跳补写打卡、客户端心跳取码自愈\n  - fix(release): 官网镜像清单补 URL 编码提示，避免程序化下载中文路径回落首页\n  - fix(release): 官网镜像清单根相对 URL 绝对化，避免官网域名下 apk 链接回退首页\n  - fix(release): 发布链提交鸿蒙 rawfile build-meta 镜像，根治 CI 统一模块校验 DRIFT\n  - fix(pages): huikang-official 使用就近 wrangler 配置，输出目录改为本目录"
         },
         "portable": {
-            "version": "1.0.351",
-            "sha256": "3d823e4c1d729af64f3c9a081598b3306b56a7cf5f6fe32ab2159ab6b3f87e2b",
-            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.16-1645/huikang-local-1.0.351.exe",
-            "size": 79175528,
-            "updateTime": "2026-11-16T08:52:46.349Z",
-            "fileName": "惠康中医-本地 1.0.351.exe",
-            "releaseFileName": "huikang-local-1.0.351.exe",
-            "releaseTag": "v2026.11.16-1645",
-            "releaseNotes": "🐛 修复:\n  - fix(download): 更新器分片断点续传 + 下载页代理基址按域名自适应\n  - fix(login-stats): 修复离线诊所登录统计为 0：心跳补写打卡、客户端心跳取码自愈\n  - fix(release): 官网镜像清单补 URL 编码提示，避免程序化下载中文路径回落首页\n  - fix(release): 官网镜像清单根相对 URL 绝对化，避免官网域名下 apk 链接回退首页\n  - fix(release): 发布链提交鸿蒙 rawfile build-meta 镜像，根治 CI 统一模块校验 DRIFT\n  - fix(pages): huikang-official 使用就近 wrangler 配置，输出目录改为本目录"
+            "version": "1.0.352",
+            "sha256": "caea9eb3191cbd3cd3a4adb29cdfaef796f15631a5aa1d06a6634d2ee0c69c40",
+            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.17/huikang-local-1.0.352.exe",
+            "size": 79186456,
+            "updateTime": "2026-11-17T02:40:10.596Z",
+            "fileName": "惠康中医-本地 1.0.352.exe",
+            "releaseFileName": "huikang-local-1.0.352.exe",
+            "releaseTag": "v2026.11.17",
+            "releaseNotes": "🐛 修复:\n  - fix(desktop): 离线桌面主进程 CSP 放行本项目 API 域名（心跳 Failed to fetch 根因）\n  - fix(desktop): 登录前 NetGate 放行 heartbeat/entitlement 授权链端点\n  - fix(license): 授权有效时收起管理员激活按钮，心跳取码复用卡片同源并加双装护栏\n  - fix(offline-license): 心跳取码兜底到 machineId 反查，修复后台无桌面登录记录\n  - fix(online-stats): 热更 appVersion 门槛 + 今日登录双源去重修正\n  - fix(download): 更新器分片断点续传 + 下载页代理基址按域名自适应\n  - fix(login-stats): 修复离线诊所登录统计为 0：心跳补写打卡、客户端心跳取码自愈\n  - fix(release): 官网镜像清单补 URL 编码提示，避免程序化下载中文路径回落首页\n  - fix(release): 官网镜像清单根相对 URL 绝对化，避免官网域名下 apk 链接回退首页\n  - fix(release): 发布链提交鸿蒙 rawfile build-meta 镜像，根治 CI 统一模块校验 DRIFT"
         },
         "exe": {
-            "version": "1.0.351",
-            "sha256": "bce90e9d14b674827d094c0dfcdfd53cf5090885046c9fe6062450557fa9ceb2",
-            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.16-1645/huikang-local-setup-1.0.351.exe",
-            "size": 79450408,
-            "updateTime": "2026-11-16T08:52:46.349Z",
-            "fileName": "惠康中医-本地 Setup 1.0.351.exe",
-            "releaseFileName": "huikang-local-setup-1.0.351.exe",
-            "releaseTag": "v2026.11.16-1645",
-            "releaseNotes": "🐛 修复:\n  - fix(download): 更新器分片断点续传 + 下载页代理基址按域名自适应\n  - fix(login-stats): 修复离线诊所登录统计为 0：心跳补写打卡、客户端心跳取码自愈\n  - fix(release): 官网镜像清单补 URL 编码提示，避免程序化下载中文路径回落首页\n  - fix(release): 官网镜像清单根相对 URL 绝对化，避免官网域名下 apk 链接回退首页\n  - fix(release): 发布链提交鸿蒙 rawfile build-meta 镜像，根治 CI 统一模块校验 DRIFT\n  - fix(pages): huikang-official 使用就近 wrangler 配置，输出目录改为本目录"
+            "version": "1.0.352",
+            "sha256": "34572a5f713756238e0bde0a16c32dffcd9a93069ea7352017b790b47ab794c0",
+            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.17/huikang-local-setup-1.0.352.exe",
+            "size": 79461432,
+            "updateTime": "2026-11-17T02:40:10.596Z",
+            "fileName": "惠康中医-本地 Setup 1.0.352.exe",
+            "releaseFileName": "huikang-local-setup-1.0.352.exe",
+            "releaseTag": "v2026.11.17",
+            "releaseNotes": "🐛 修复:\n  - fix(desktop): 离线桌面主进程 CSP 放行本项目 API 域名（心跳 Failed to fetch 根因）\n  - fix(desktop): 登录前 NetGate 放行 heartbeat/entitlement 授权链端点\n  - fix(license): 授权有效时收起管理员激活按钮，心跳取码复用卡片同源并加双装护栏\n  - fix(offline-license): 心跳取码兜底到 machineId 反查，修复后台无桌面登录记录\n  - fix(online-stats): 热更 appVersion 门槛 + 今日登录双源去重修正\n  - fix(download): 更新器分片断点续传 + 下载页代理基址按域名自适应\n  - fix(login-stats): 修复离线诊所登录统计为 0：心跳补写打卡、客户端心跳取码自愈\n  - fix(release): 官网镜像清单补 URL 编码提示，避免程序化下载中文路径回落首页\n  - fix(release): 官网镜像清单根相对 URL 绝对化，避免官网域名下 apk 链接回退首页\n  - fix(release): 发布链提交鸿蒙 rawfile build-meta 镜像，根治 CI 统一模块校验 DRIFT"
         }
     },
     "cloud": {
@@ -76,12 +76,12 @@
     "provenance": {
         "schemaVersion": 1,
         "repo": "https://github.com/kyt61767126/tcm-prescription-system.git",
-        "commit": "575e43f50414",
+        "commit": "0bef0cf34941",
         "ref": "main",
         "builder": "kyt61767126",
-        "builtAt": "2026-11-16T08:52:47.268Z",
+        "builtAt": "2026-11-17T02:40:11.233Z",
         "buildTool": "publish-release.js@v24.16.0",
-        "releaseTag": "v2026.11.16-1645"
+        "releaseTag": "v2026.11.17"
     },
     "dingzhi": {
         "apk": {
@@ -98,26 +98,26 @@
             "releaseNotes": "🐛 修复:\n  - fix(download): 更新器分片断点续传 + 下载页代理基址按域名自适应\n  - fix(login-stats): 修复离线诊所登录统计为 0：心跳补写打卡、客户端心跳取码自愈\n  - fix(release): 官网镜像清单补 URL 编码提示，避免程序化下载中文路径回落首页\n  - fix(release): 官网镜像清单根相对 URL 绝对化，避免官网域名下 apk 链接回退首页\n  - fix(release): 发布链提交鸿蒙 rawfile build-meta 镜像，根治 CI 统一模块校验 DRIFT\n  - fix(pages): huikang-official 使用就近 wrangler 配置，输出目录改为本目录"
         },
         "portable": {
-            "version": "1.0.351",
-            "sha256": "3d823e4c1d729af64f3c9a081598b3306b56a7cf5f6fe32ab2159ab6b3f87e2b",
-            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.16-1645/huikang-local-1.0.351.exe",
-            "size": 79175528,
-            "updateTime": "2026-11-16T08:52:46.349Z",
-            "fileName": "惠康中医-本地 1.0.351.exe",
-            "releaseFileName": "huikang-local-1.0.351.exe",
-            "releaseTag": "v2026.11.16-1645",
-            "releaseNotes": "🐛 修复:\n  - fix(download): 更新器分片断点续传 + 下载页代理基址按域名自适应\n  - fix(login-stats): 修复离线诊所登录统计为 0：心跳补写打卡、客户端心跳取码自愈\n  - fix(release): 官网镜像清单补 URL 编码提示，避免程序化下载中文路径回落首页\n  - fix(release): 官网镜像清单根相对 URL 绝对化，避免官网域名下 apk 链接回退首页\n  - fix(release): 发布链提交鸿蒙 rawfile build-meta 镜像，根治 CI 统一模块校验 DRIFT\n  - fix(pages): huikang-official 使用就近 wrangler 配置，输出目录改为本目录"
+            "version": "1.0.352",
+            "sha256": "caea9eb3191cbd3cd3a4adb29cdfaef796f15631a5aa1d06a6634d2ee0c69c40",
+            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.17/huikang-local-1.0.352.exe",
+            "size": 79186456,
+            "updateTime": "2026-11-17T02:40:10.596Z",
+            "fileName": "惠康中医-本地 1.0.352.exe",
+            "releaseFileName": "huikang-local-1.0.352.exe",
+            "releaseTag": "v2026.11.17",
+            "releaseNotes": "🐛 修复:\n  - fix(desktop): 离线桌面主进程 CSP 放行本项目 API 域名（心跳 Failed to fetch 根因）\n  - fix(desktop): 登录前 NetGate 放行 heartbeat/entitlement 授权链端点\n  - fix(license): 授权有效时收起管理员激活按钮，心跳取码复用卡片同源并加双装护栏\n  - fix(offline-license): 心跳取码兜底到 machineId 反查，修复后台无桌面登录记录\n  - fix(online-stats): 热更 appVersion 门槛 + 今日登录双源去重修正\n  - fix(download): 更新器分片断点续传 + 下载页代理基址按域名自适应\n  - fix(login-stats): 修复离线诊所登录统计为 0：心跳补写打卡、客户端心跳取码自愈\n  - fix(release): 官网镜像清单补 URL 编码提示，避免程序化下载中文路径回落首页\n  - fix(release): 官网镜像清单根相对 URL 绝对化，避免官网域名下 apk 链接回退首页\n  - fix(release): 发布链提交鸿蒙 rawfile build-meta 镜像，根治 CI 统一模块校验 DRIFT"
         },
         "exe": {
-            "version": "1.0.351",
-            "sha256": "bce90e9d14b674827d094c0dfcdfd53cf5090885046c9fe6062450557fa9ceb2",
-            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.16-1645/huikang-local-setup-1.0.351.exe",
-            "size": 79450408,
-            "updateTime": "2026-11-16T08:52:46.349Z",
-            "fileName": "惠康中医-本地 Setup 1.0.351.exe",
-            "releaseFileName": "huikang-local-setup-1.0.351.exe",
-            "releaseTag": "v2026.11.16-1645",
-            "releaseNotes": "🐛 修复:\n  - fix(download): 更新器分片断点续传 + 下载页代理基址按域名自适应\n  - fix(login-stats): 修复离线诊所登录统计为 0：心跳补写打卡、客户端心跳取码自愈\n  - fix(release): 官网镜像清单补 URL 编码提示，避免程序化下载中文路径回落首页\n  - fix(release): 官网镜像清单根相对 URL 绝对化，避免官网域名下 apk 链接回退首页\n  - fix(release): 发布链提交鸿蒙 rawfile build-meta 镜像，根治 CI 统一模块校验 DRIFT\n  - fix(pages): huikang-official 使用就近 wrangler 配置，输出目录改为本目录"
+            "version": "1.0.352",
+            "sha256": "34572a5f713756238e0bde0a16c32dffcd9a93069ea7352017b790b47ab794c0",
+            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.17/huikang-local-setup-1.0.352.exe",
+            "size": 79461432,
+            "updateTime": "2026-11-17T02:40:10.596Z",
+            "fileName": "惠康中医-本地 Setup 1.0.352.exe",
+            "releaseFileName": "huikang-local-setup-1.0.352.exe",
+            "releaseTag": "v2026.11.17",
+            "releaseNotes": "🐛 修复:\n  - fix(desktop): 离线桌面主进程 CSP 放行本项目 API 域名（心跳 Failed to fetch 根因）\n  - fix(desktop): 登录前 NetGate 放行 heartbeat/entitlement 授权链端点\n  - fix(license): 授权有效时收起管理员激活按钮，心跳取码复用卡片同源并加双装护栏\n  - fix(offline-license): 心跳取码兜底到 machineId 反查，修复后台无桌面登录记录\n  - fix(online-stats): 热更 appVersion 门槛 + 今日登录双源去重修正\n  - fix(download): 更新器分片断点续传 + 下载页代理基址按域名自适应\n  - fix(login-stats): 修复离线诊所登录统计为 0：心跳补写打卡、客户端心跳取码自愈\n  - fix(release): 官网镜像清单补 URL 编码提示，避免程序化下载中文路径回落首页\n  - fix(release): 官网镜像清单根相对 URL 绝对化，避免官网域名下 apk 链接回退首页\n  - fix(release): 发布链提交鸿蒙 rawfile build-meta 镜像，根治 CI 统一模块校验 DRIFT"
         }
     }
 }
