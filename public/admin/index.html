@@ -521,6 +521,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                     <tr><td colspan="12" class="loading">加载中...</td></tr>
                 </tbody>
             </table>
+            <div id="licensePager" style="display:flex;gap:8px;align-items:center;justify-content:flex-end;padding:8px 0;"></div>
         </div>
         </div><!-- /tabLicense -->
 
@@ -601,6 +602,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                         <tr><td colspan="9" class="loading">加载中...</td></tr>
                     </tbody>
                 </table>
+                <div id="usersPager" style="display:flex;gap:8px;align-items:center;justify-content:flex-end;padding:8px 0;"></div>
             </div>
             <p style="margin-top:12px;color:#909399;font-size:12px;">提示：重置密码/启停/角色调整/解锁均会记入操作日志（⚙️ 系统维护 Tab 可查）。平台总管理员不在此启停。</p>
         </div>
@@ -874,6 +876,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                         <tr><td colspan="11" class="loading">加载中...</td></tr>
                     </tbody>
                 </table>
+                <div id="adminActivatePager" style="display:flex;gap:8px;align-items:center;justify-content:flex-end;padding:8px 0;"></div>
             </div>
             <p style="margin-top:12px;color:#909399;font-size:12px;">说明：客户端激活窗口选择"管理员激活"模式提交的请求会出现在此列表。点击"审核"查看客户完整信息并一键通过/拒绝。通过后客户端将在 5 秒内自动获取 license 并重启。</p>
 
@@ -2276,7 +2279,10 @@ async function loadList() {
         const res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token } });
         const data = await res.json();
         if (data.success) {
-            renderList(data.data);
+            // ★ 2026-11-17 分页：缓存全量，只渲染当前页；筛选/刷新回到第 1 页
+            _licenseCache = Array.isArray(data.data) ? data.data : [];
+            _pagers.license = 1;
+            renderList(_licenseCache);
             renderStats(data.stats);
         } else {
             if (res.status === 403) {
@@ -2304,12 +2310,14 @@ function renderList(records) {
     const tbody = document.getElementById('listBody');
     if (!records || records.length === 0) {
         tbody.innerHTML = '<tr><td colspan="12" class="empty">暂无激活码</td></tr>';
+        renderPager('licensePager', 'license', 0, 1);
         return;
     }
+    const paged = pageSlice('license', records);
     const typeNames = { trial: '试用版', personal: '标准版', pro: '机构版', voice: '语音版' };
     const statusNames = { unused: '未使用', used: '已激活', expired: '已过期', disabled: '已禁用' };
 
-    tbody.innerHTML = records.map(r => {
+    tbody.innerHTML = paged.rows.map(r => {
         // ★ 2026-09-08 版本标签统一：与用户管理/诊所管理/激活审核同款复合标签
         //   载体前缀取自绑定设备（productClass=cloud/offline + clientClass=desktop/app）：
         //   🌐网页·云端机构版 / 🖥️桌面·离线标准版 / 📱APP·离线机构版 / 🖥️📱双端·...
@@ -2416,6 +2424,7 @@ function renderList(records) {
             '<td style="white-space:nowrap;">' + actions + '</td>' +
             '</tr>';
     }).join('');
+    renderPager('licensePager', 'license', records.length, paged.totalPages);
 }
 
 // ★ 任务5：查看操作日志
@@ -2944,6 +2953,36 @@ function switchTab(tabName) {
     else if (tabName === 'Risk') loadRiskAlerts();
 }
 
+// ===== ★ 2026-11-17 列表分页（只渲染当前页，避免一次插入数百行 DOM）=====
+const PAGE_SIZE = 50;
+const _pagers = { license: 1, users: 1, adminActivate: 1 };
+let _licenseCache = [];
+let _userFilterSig = '';
+function pageSlice(key, list) {
+    const totalPages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+    if (!_pagers[key] || _pagers[key] < 1) _pagers[key] = 1;
+    if (_pagers[key] > totalPages) _pagers[key] = totalPages;
+    const page = _pagers[key];
+    return { rows: list.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), page, totalPages };
+}
+function renderPager(boxId, key, total, totalPages) {
+    const box = document.getElementById(boxId);
+    if (!box) return;
+    if (total <= PAGE_SIZE) { box.innerHTML = ''; return; }
+    const p = _pagers[key];
+    box.innerHTML =
+        '<span style="color:#909399;font-size:12px;margin-right:8px;">共 ' + total + ' 条 · 第 ' + p + '/' + totalPages + ' 页</span>' +
+        '<button class="btn btn-sm" ' + (p <= 1 ? 'disabled ' : '') + 'onclick="gotoListPage(\'' + key + '\',-1)">上一页</button>' +
+        '<button class="btn btn-sm" ' + (p >= totalPages ? 'disabled ' : '') + 'onclick="gotoListPage(\'' + key + '\',1)">下一页</button>';
+}
+function gotoListPage(key, delta) {
+    _pagers[key] = Math.max(1, (_pagers[key] || 1) + delta);
+    if (key === 'license') renderLicensePage();
+    else if (key === 'users') renderUsersTable();
+    else if (key === 'adminActivate') renderAdminActivateTable();
+}
+function renderLicensePage() { renderList(_licenseCache); }
+
 // ============================================================================
 // ★ 2026-08-28 用量监控：云端 KV 免费额度预警 + 推广奖励观察（admin-usage API）
 //   2026-09-08 版块重组：自开发副本移植上线，纳入「系统维护」Tab
@@ -3421,6 +3460,7 @@ async function loadAdminActivateList() {
         const data = await res.json();
         if (data.success && Array.isArray(data.requests)) {
             _adminActivateCache = data.requests;
+            _pagers.adminActivate = 1;
             // 更新统计卡片（基于当前拉取的数据 + 估算，精确统计需另拉 all）
             updateAdminActivateStats(data.requests, filter);
             // 渲染列表（带搜索过滤）
@@ -3506,6 +3546,7 @@ function updateAdminActivateStats(requests, filter) {
 
 // 根据搜索框过滤并渲染列表
 function filterAdminActivateList() {
+    _pagers.adminActivate = 1;
     renderAdminActivateTable();
 }
 
@@ -3533,9 +3574,11 @@ function renderAdminActivateTable() {
         const filterLabels = { pending: '待审核', pending_payment: '待付款', activated: '已通过', rejected: '已拒绝', cancelled: '已取消', all: '' };
         const emptyText = search ? '没有匹配的记录' : '暂无' + (filterLabels[filter] || filter) + '请求';
         tbody.innerHTML = '<tr><td colspan="11" class="empty">' + escapeHtml(emptyText) + '</td></tr>';
+        renderPager('adminActivatePager', 'adminActivate', 0, 1);
         return;
     }
-    tbody.innerHTML = list.map(r => {
+    const paged = pageSlice('adminActivate', list);
+    tbody.innerHTML = paged.rows.map(r => {
         const submitTime = r.submittedAt ? new Date(r.submittedAt).toLocaleString('zh-CN') : '-';
         const statusBadge = renderAdminActivateStatus(r.status);
         // 电话可点击拨号（移动端友好）
@@ -3563,6 +3606,7 @@ function renderAdminActivateTable() {
             '<td style="white-space:nowrap;">' + actions + '</td>' +
         '</tr>';
     }).join('');
+    renderPager('adminActivatePager', 'adminActivate', list.length, paged.totalPages);
 }
 
 let _adminActivateCache = [];
@@ -5152,9 +5196,14 @@ function renderUsersTable() {
     });
     if (list.length === 0) {
         tbody.innerHTML = '<tr><td colspan="9" class="empty">' + (_usersCache.length ? '无匹配用户' : '暂无用户') + '</td></tr>';
+        renderPager('usersPager', 'users', 0, 1);
         return;
     }
-    tbody.innerHTML = list.map(u => {
+    // ★ 2026-11-17 分页：筛选条件变化时回到第 1 页
+    const _sig = q + '|' + clinic + '|' + role;
+    if (_sig !== _userFilterSig) { _userFilterSig = _sig; _pagers.users = 1; }
+    const paged = pageSlice('users', list);
+    tbody.innerHTML = paged.rows.map(u => {
         // ★ 2026-08-23 版本类型列（替代历史遗留"允许模式"列——该字段后端登录无任何拦截、
         //   本地版账号存设备本地不经云端，"云端+本地"显示纯属误导。改按诊所实际版本显示）
         //   ★ 2026-09-03 显示具体版本：组合设备载体（user_devices 绑定的 desktop/app）
@@ -5208,11 +5257,11 @@ function renderUsersTable() {
         const actions = u.role === 'platform_admin'
             ? '<span style="color:#c0c4cc;font-size:12px;">—</span>'
             : '<div style="display:flex;gap:4px;flex-wrap:wrap;">' +
-              '<button class="btn btn-sm" onclick="openUserResetPwdModal(\'' + escapeHtml(u.username) + '\')">🔓/🔑 解锁重置</button>' +
-              '<button class="btn btn-sm" onclick="toggleUserStatus(\'' + escapeHtml(u.username) + '\',' + (u.disabled !== true) + ')">' + (u.disabled === true ? '✅ 启用' : '🚫 停用') + '</button>' +
-              '<button class="btn btn-sm" onclick="cycleUserRole(\'' + escapeHtml(u.username) + '\')">🔁 角色</button>' +
-              '<button class="btn btn-sm" onclick="openDeviceQuotaModal(\'' + escapeHtml(u.username) + '\')">📱 设备配额</button>' +
-              '<button class="btn btn-sm btn-danger" onclick="deleteUserAccount(\'' + escapeHtml(u.username) + '\')">🗑 删除</button>' +
+              '<button class="btn btn-sm" onclick="openUserResetPwdModal(\'' + escapeJs(u.username) + '\')">🔓/🔑 解锁重置</button>' +
+              '<button class="btn btn-sm" onclick="toggleUserStatus(\'' + escapeJs(u.username) + '\',' + (u.disabled !== true) + ')">' + (u.disabled === true ? '✅ 启用' : '🚫 停用') + '</button>' +
+              '<button class="btn btn-sm" onclick="cycleUserRole(\'' + escapeJs(u.username) + '\')">🔁 角色</button>' +
+              '<button class="btn btn-sm" onclick="openDeviceQuotaModal(\'' + escapeJs(u.username) + '\')">📱 设备配额</button>' +
+              '<button class="btn btn-sm btn-danger" onclick="deleteUserAccount(\'' + escapeJs(u.username) + '\')">🗑 删除</button>' +
               '</div>';
         return '<tr' + (u.disabled === true ? ' style="opacity:0.6;"' : '') + '>' +
             '<td class="code">' + escapeHtml(u.username) + '</td>' +
@@ -5226,6 +5275,7 @@ function renderUsersTable() {
             '<td>' + actions + '</td>' +
         '</tr>';
     }).join('');
+    renderPager('usersPager', 'users', list.length, paged.totalPages);
 }
 
 // ---- 统一账号救援弹窗（解锁 / 重置密码）----

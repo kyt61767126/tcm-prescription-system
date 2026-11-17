@@ -2879,3 +2879,13 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
 * **双副本补齐**（消除 site-admin 漂移）：`service.html` 补入 `site-admin/admin/`，`ticket-approval.html` 以 public 版覆盖对齐；`service.html` 导航同步移除占位「打包队列」链接。
 * **验证**：`node --check users.js`、两端内联脚本 0 错、`diff-cross-version --pair adminconsole` 绿、`api-cache-middleware-test 12 PASS`、`check-interface 6 OK/0 CHANGED`。
 * **生效**：Functions + 静态页 push 即部署，后台强刷生效；零重打包。
+
+### 88.2 第三批（2026-11-17 同日）：后台列表分页（激活码 / 用户 / 激活审核）
+
+* 新增通用分页助手（`PAGE_SIZE=50`、`pageSlice`、`renderPager`、`gotoListPage`），三个高频列表只渲染当前页：
+  - 激活码管理：`_licenseCache` 缓存全量 + `renderLicensePage()` 翻页；筛选/刷新回第 1 页。
+  - 用户管理：筛选签名（搜索词|诊所|角色）变化自动回第 1 页，避免停在不存在的页码。
+  - 激活审核：搜索/筛选/自动刷新回第 1 页。
+* 分页条容器 `licensePager/usersPager/adminActivatePager` 用内联样式（不改 CSS/基线）；统计卡仍按全量计算。
+* 顺手：用户管理 5 个操作按钮的 username 参数由 `escapeHtml` 改 `escapeJs`（与 88 节铁律一致，username 虽受服务端白名单约束，仍按上下文用对函数）。
+* **验证**：内联脚本 0 错、adminconsole 门禁绿、`check-interface 6 OK/0 CHANGED`；未登录无法做真实数据浏览验证，翻页逻辑为纯前端切片。
