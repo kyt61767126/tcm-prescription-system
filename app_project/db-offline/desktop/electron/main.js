@@ -684,7 +684,13 @@ function installCSP(sess) {
             "img-src 'self' data:",
             "media-src 'self' blob:",          // 新增：允许 blob: 视频源
             "font-src 'self' data:",
-            "connect-src 'self'",
+            // ★ 2026-11-17 修复（与云端桌面 6f4e0265 同一根因）：本响应头会注入到
+            //   渲染层所有文档响应（含 file:// 主窗/登录窗）。connect-src 仅 'self'
+            //   时，file:// 页面里 fetch(https://…pages.dev/api/…) 被 CSP 直接拒绝，
+            //   表现为瞬时 TypeError: Failed to fetch（不产生任何服务端记录）。
+            //   离线桌面 auth-core 的授权心跳/entitlement 正是渲染层 fetch，故长期
+            //   发不出去；仅放行本项目 API 域名，其余外联仍由 CSP 拦截。
+            "connect-src 'self' https://tcm-prescription-system.pages.dev https://*.tcm-prescription-system.pages.dev",
             "object-src 'none'",
             "base-uri 'self'"
         ].join('; ');
