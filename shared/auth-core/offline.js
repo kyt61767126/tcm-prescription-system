@@ -3693,6 +3693,16 @@
             // ★ 低-2：区分真断网与 HTTP 错误——只有 fetch 抛异常（网络不可达）
             //   才播种 offlineStart；HTTP 非 200（服务异常）不播种、不锁定。
             let response;
+            // ★ 2026-11-17 诊断键二（仅定位，不参与任何判定）：记录心跳 POST 的
+            //   发出 / 响应 / 异常三态。上一轮 license:hbDiag 已证实取码正常
+            //   （codeLen=24、midLen=32），但服务端零写入，需区分「请求没发出」
+            //   与「响应非 2xx 被拒」。只写不读，不改心跳/授权判定，不改 UI。
+            try {
+                await StorageAdapter.setItem('license:hbDiagPost', JSON.stringify({
+                    ts: Date.now(), phase: 'send',
+                    href: (typeof location !== 'undefined' && location.href) || ''
+                }));
+            } catch (_) { /* 诊断写失败不影响心跳 */ }
             try {
                 response = await fetch('https://tcm-prescription-system.pages.dev/api/license/heartbeat', {
                     method: 'POST',
@@ -3703,6 +3713,13 @@
                     ))
                 });
             } catch (netE) {
+                try {
+                    await StorageAdapter.setItem('license:hbDiagPost', JSON.stringify({
+                        ts: Date.now(), phase: 'exception',
+                        name: String((netE && netE.name) || ''),
+                        error: String((netE && netE.message) || netE || '')
+                    }));
+                } catch (_) { /* 诊断写失败不影响心跳 */ }
                 console.warn('[Heartbeat] 网络不可达:', netE && netE.message);
                 // ★ P3-A：gate token 离线裁决（取代旧 offlineStart+7天 宽限）
                 const gate = await evaluateOfflineGate(machineId);
@@ -3717,6 +3734,20 @@
                     OFFLINE_GATE_REASON_MSG[gate.reason] || OFFLINE_GATE_REASON_MSG.expired);
                 return;
             }
+
+            // ★ 2026-11-17 诊断键二：成功与非 2xx 都落一条响应记录（非 2xx 附带
+            //   响应体前 300 字，用于区分 CORS/限流/业务拒绝）。只写不读。
+            try {
+                let __bodyPreview = '';
+                if (!response.ok) {
+                    try { __bodyPreview = String(await response.clone().text()).slice(0, 300); } catch (_) {}
+                }
+                await StorageAdapter.setItem('license:hbDiagPost', JSON.stringify({
+                    ts: Date.now(), phase: 'response',
+                    httpStatus: response.status, ok: response.ok,
+                    body: __bodyPreview
+                }));
+            } catch (_) { /* 诊断写失败不影响心跳 */ }
 
             if (!response.ok) {
                 console.warn('[Heartbeat] 服务返回错误，HTTP', response.status);
