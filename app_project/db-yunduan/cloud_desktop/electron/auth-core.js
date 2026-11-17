@@ -3916,24 +3916,50 @@
     }
 
     // ★★★ 2026-08-25 管理员激活按钮状态（全局统一规范）：
-    //   激活有效期内（剩余 > 7 天，或 -1 永久授权）→ 按钮灰色只读（无需激活）
-    //   剩余 ≤ 7 天（临期提醒续费）/ 未激活 / 已过期 / 试用 / 无到期信息 → 按钮正常颜色可点击
+    //   激活有效期内（剩余 > 7 天，或 -1 永久授权）→ 收起满宽主按钮，仅保留低调小入口
+    //   剩余 ≤ 7 天（临期提醒续费）/ 未激活 / 已过期 / 试用 / 无到期信息 → 满宽按钮可点击
+    // ★ 2026-11-17：与离线端同一口径——有效期内不再显示满宽「管理员激活」，
+    //   改为右下角「更换 / 续费激活码」小字入口（复用原按钮点击逻辑）。
     function setAdminActivateBtnState(daysLeft) {
         const btn = document.getElementById('adminActivateSettingsBtn');
         if (!btn) return;
         const inValidPeriod = (typeof daysLeft === 'number' && !isNaN(daysLeft)) &&
             (daysLeft === -1 || daysLeft > 7);
+        let mini = document.getElementById('adminActivateMiniLink');
         if (inValidPeriod) {
-            btn.disabled = true;
-            btn.style.background = '#b0bec5';
-            btn.style.cursor = 'not-allowed';
+            mini = ensureAdminActivateMiniLink(btn, mini);
+            mini.style.display = '';
+            btn.style.display = 'none';
+            btn.disabled = false;
+            btn.style.background = '#26a69a';
+            btn.style.cursor = 'pointer';
             btn.title = '激活有效期内无需激活';
         } else {
+            if (mini) mini.style.display = 'none';
+            btn.style.display = '';
             btn.disabled = false;
             btn.style.background = '#26a69a';
             btn.style.cursor = 'pointer';
             btn.title = '';
         }
+    }
+
+    // 有效期内替代满宽按钮的低调小入口（懒创建，点击复用原按钮的打开激活窗口逻辑）
+    function ensureAdminActivateMiniLink(btn, mini) {
+        if (mini) return mini;
+        const box = document.createElement('div');
+        box.id = 'adminActivateMiniLink';
+        box.style.cssText = 'text-align:right;margin-top:2px;';
+        const a = document.createElement('a');
+        a.href = 'javascript:void(0)';
+        a.textContent = '更换 / 续费激活码';
+        a.style.cssText = 'font-size:12px;color:#90a4ae;text-decoration:underline;cursor:pointer;';
+        a.addEventListener('click', function () {
+            try { btn.click(); } catch (_) {}
+        });
+        box.appendChild(a);
+        if (btn.parentNode) btn.parentNode.insertBefore(box, btn.nextSibling);
+        return box;
     }
 
     // ★★★ 2026-08-25 旧缓存自愈：免密拉取云端用户资料（GET /users?action=get-profile，Bearer token）。
