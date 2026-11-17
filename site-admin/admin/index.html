@@ -710,6 +710,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                         <tr><td colspan="8" class="empty">点击「重新扫描」分析风控告警</td></tr>
                     </tbody>
                 </table>
+                <div id="riskPager" style="display:flex;gap:8px;align-items:center;justify-content:flex-end;padding:8px 12px;"></div>
             </div>
         </div>
 
@@ -2955,7 +2956,7 @@ function switchTab(tabName) {
 
 // ===== ★ 2026-11-17 列表分页（只渲染当前页，避免一次插入数百行 DOM）=====
 const PAGE_SIZE = 50;
-const _pagers = { license: 1, users: 1, adminActivate: 1 };
+const _pagers = { license: 1, users: 1, adminActivate: 1, clinic: 1, risk: 1, device: 1 };
 let _licenseCache = [];
 let _userFilterSig = '';
 function pageSlice(key, list) {
@@ -2980,6 +2981,9 @@ function gotoListPage(key, delta) {
     if (key === 'license') renderLicensePage();
     else if (key === 'users') renderUsersTable();
     else if (key === 'adminActivate') renderAdminActivateTable();
+    else if (key === 'clinic') renderClinicsPage();
+    else if (key === 'risk') renderRiskAlerts();
+    else if (key === 'device') renderDeviceBindingsPage();
 }
 function renderLicensePage() { renderList(_licenseCache); }
 
@@ -3058,6 +3062,7 @@ async function loadUsageMonitor() {
 //   2026-09-08 版块重组：自开发副本移植上线，独立「风控告警」Tab
 // ============================================================================
 let _riskAlertsCache = [];
+let _riskFilterSig = '';
 
 async function loadRiskAlerts() {
     const el = document.getElementById('riskListBody');
@@ -3072,6 +3077,7 @@ async function loadRiskAlerts() {
         const data = await res.json();
         if (!data.success) throw new Error(data.error || '扫描失败');
         _riskAlertsCache = data.alerts || [];
+        _pagers.risk = 1;
         const s = data.stats || {};
         const setNum = function (id, v) {
             const n = document.getElementById(id);
@@ -3104,9 +3110,14 @@ function renderRiskAlerts() {
     const list = _riskAlertsCache.filter(a =>
         (!sevFilter || a.severity === sevFilter) && (!typeFilter || a.type === typeFilter));
 
+    // ★ 2026-11-17 筛选条件变化回第 1 页，避免停留在超出范围的页码
+    const sig = sevFilter + '|' + typeFilter;
+    if (sig !== _riskFilterSig) { _riskFilterSig = sig; _pagers.risk = 1; }
+
     if (list.length === 0) {
         el.innerHTML = '<tr><td colspan="8" class="empty">' +
             (_riskAlertsCache.length === 0 ? '暂无风控告警' : '当前筛选条件下无告警') + '</td></tr>';
+        renderPager('riskPager', 'risk', 0, 1);
         return;
     }
 
@@ -3119,7 +3130,8 @@ function renderRiskAlerts() {
         ? '<span class="tag tag-disabled">高危</span>'
         : '<span class="tag tag-expired">中危</span>';
 
-    el.innerHTML = list.map(function (a) {
+    const paged = pageSlice('risk', list);
+    el.innerHTML = paged.rows.map(function (a) {
         const ips = (a.ips || []).map(function (ip) { return escapeHtml(ip); }).join('<br>');
         const usage = a.usage
             ? '<br><span style="font-size:11px;color:#909399;">计数上报：' +
@@ -3139,6 +3151,7 @@ function renderRiskAlerts() {
             '<td style="font-size:12px;">' + (a.lastSeen ? new Date(a.lastSeen).toLocaleString() : '-') + '</td>' +
             '</tr>';
     }).join('');
+    renderPager('riskPager', 'risk', list.length, paged.totalPages);
 }
 
 // ============================================================================
@@ -4322,6 +4335,20 @@ function copyResultLicense() {
 }
 
 // ===== 诊所管理 =====
+let _clinicRowHtmlCache = [];
+function renderClinicsPage() {
+    const listEl = document.getElementById('clinicList');
+    if (!listEl) return;
+    if (!_clinicRowHtmlCache.length) {
+        listEl.innerHTML = '<div class="empty">暂无诊所</div>';
+        return;
+    }
+    const paged = pageSlice('clinic', _clinicRowHtmlCache);
+    listEl.innerHTML = paged.rows.join('') +
+        '<div id="clinicPager" style="display:flex;gap:8px;align-items:center;justify-content:flex-end;padding:8px 0;"></div>';
+    renderPager('clinicPager', 'clinic', _clinicRowHtmlCache.length, paged.totalPages);
+}
+
 async function loadClinicsList() {
     const listEl = document.getElementById('clinicList');
     if (!listEl) return;
@@ -4335,10 +4362,11 @@ async function loadClinicsList() {
             _clinicsCache = data.data;
             _loginStatsStart = data.loginStatsStart || null;
             if (data.data.length === 0) {
+                _clinicRowHtmlCache = [];
                 listEl.innerHTML = '<div class="empty">暂无诊所</div>';
                 return;
             }
-            listEl.innerHTML = data.data.map(c => {
+            _clinicRowHtmlCache = data.data.map(c => {
                 // ★ 优化：支持三种状态显示（test=自助注册待审核）
                 let statusBadge, nextStatus, toggleText;
                 if (c.status === 'active') {
@@ -4466,7 +4494,9 @@ async function loadClinicsList() {
                     '</div>' +
                     '<div style="white-space:nowrap;">' + editBtn + ' ' + testBtn + ' ' + toggleBtn + ' ' + renewBtn + ' ' + deleteBtn + '</div>' +
                 '</div>';
-            }).join('');
+            });
+            _pagers.clinic = 1;
+            renderClinicsPage();
         } else {
             if (res.status === 401) {
                 showAlert('mainAlert', '登录已过期，请重新登录', 'error');
@@ -5536,39 +5566,53 @@ async function cycleUserRole(username) {
 
 // 端形态格式化（云端/离线 × 桌面/APP）→ 中文徽章
 // ===== 设备版本绑定管理 =====
+let _deviceBindingRows = [];
+function renderDeviceBindingsPage() {
+    const el = document.getElementById('deviceVersionListBody');
+    if (!el) return;
+    if (!_deviceBindingRows.length) {
+        el.innerHTML = '<div class="empty">暂无设备版本绑定</div>';
+        return;
+    }
+    const paged = pageSlice('device', _deviceBindingRows);
+    el.innerHTML = paged.rows.join('') +
+        '<div id="devicePager" style="display:flex;gap:8px;align-items:center;justify-content:flex-end;padding:8px 0;"></div>';
+    renderPager('devicePager', 'device', _deviceBindingRows.length, paged.totalPages);
+}
+
 async function loadDeviceBindings() {
     const el = document.getElementById('deviceVersionListBody');
     if (!el) return;
     el.innerHTML = '<div class="empty">加载中...</div>';
     try {
-        const listRes = await fetch(API_BASE + '/license/admin-device-version', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-            body: JSON.stringify({ action: 'list' })
-        });
-        const listData = await listRes.json();
-        if (!listData.success) throw new Error(listData.error || '加载失败');
-        const bindings = listData.bindings || [];
-
-        // 测试机白名单（标记同一台设备）
-        let testSet = {};
-        try {
-            const tRes = await fetch(API_BASE + '/license/admin-test-machine', {
+        // ★ 2026-11-17 两个列表并行请求（原先串行，白等一个 RTT）
+        const [listData, tData] = await Promise.all([
+            fetch(API_BASE + '/license/admin-device-version', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
                 body: JSON.stringify({ action: 'list' })
-            });
-            const tData = await tRes.json();
-            if (tData.success) {
-                (tData.machines || []).forEach(function (m) { testSet[m.machineId] = m; });
-            }
-        } catch (e) { /* 测试机列表加载失败不影响主列表 */ }
+            }).then(r => r.json()),
+            fetch(API_BASE + '/license/admin-test-machine', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                body: JSON.stringify({ action: 'list' })
+            }).then(r => r.json()).catch(() => ({ success: false }))
+        ]);
+        if (!listData.success) throw new Error(listData.error || '加载失败');
+        const bindings = listData.bindings || [];
+
+        // 测试机白名单（标记同一台设备；加载失败不影响主列表）
+        const testSet = {};
+        if (tData.success) {
+            (tData.machines || []).forEach(function (m) { testSet[m.machineId] = m; });
+        }
 
         const alertEl = document.getElementById('deviceVersionAlert');
         if (alertEl) alertEl.style.display = 'none';
 
         if (bindings.length === 0) {
-            el.innerHTML = '<div class="empty">暂无设备版本绑定</div>';
+            _deviceBindingRows = [];
+            renderDeviceBindingsPage();
             return;
         }
         // ★ 2026-09-07 统一版本标签：与用户管理同款（emoji·产品·版本，单一 tag）
@@ -5588,7 +5632,7 @@ async function loadDeviceBindings() {
             else if (b.clientClass === 'app') carrier = '📱APP·';
             return '<span class="tag ' + tagClass + '">' + carrier + edText + '</span>';
         };
-        el.innerHTML = bindings.map((b) => {
+        _deviceBindingRows = bindings.map((b) => {
             const test = testSet[b.machineId];
             const testTag = test ? '<span class="tag tag-trial" title="测试机：' + escapeHtml((test.note || '') + ' ' + (test.addedAt || '')) + '">🖥 测试机</span>' : '';
             const ops =
@@ -5603,7 +5647,9 @@ async function loadDeviceBindings() {
                 '</div>' +
                 '<div class="card-actions">' + ops + '</div>' +
             '</div>';
-        }).join('');
+        });
+        _pagers.device = 1;
+        renderDeviceBindingsPage();
     } catch (e) {
         el.innerHTML = '<div class="empty" style="color:#ff4d4f;">' + escapeHtml(e.message) + '</div>';
     }

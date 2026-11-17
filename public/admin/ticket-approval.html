@@ -73,7 +73,7 @@ tr:hover{background:#f9fafc}
     if(s==='processing') return '<span class="tag tag-pending">⏳处理中</span>';
     if(s==='approved') return '<span class="tag tag-approved">已通过</span>';
     if(s==='rejected') return '<span class="tag tag-rejected">已拒绝</span>';
-    return '<span class="tag">'+s+'</span>';
+    return '<span class="tag">'+esc(s)+'</span>';
   }
   function render(list){
     if(!list||!list.length){
@@ -82,8 +82,8 @@ tr:hover{background:#f9fafc}
     }
     tbody.innerHTML=list.map(function(t){
       return '<tr>'+
-        '<td class="mono">'+(t.ticketNo||'-')+'</td>'+
-        '<td>'+(t.submittedAt||'-')+'</td>'+
+        '<td class="mono">'+esc(t.ticketNo)+'</td>'+
+        '<td>'+esc(t.submittedAt)+'</td>'+
         '<td>'+esc(t.clinicName)+'</td>'+
         '<td>'+esc(t.edition)+'</td>'+
         '<td>'+esc(t.contactName)+'</td>'+
@@ -92,9 +92,9 @@ tr:hover{background:#f9fafc}
         '<td>'+tagHTML(t.status)+'</td>'+
         '<td>'+
           ((t.status==='submitted'||t.status==='pending')
-            ? '<button class="btn btn-approve" data-no="'+t.ticketNo+'" data-action="approve">✅ 一键通过并生成激活码</button>'+
-              '<button class="btn btn-reject" data-no="'+t.ticketNo+'" data-action="reject">❌ 拒绝</button>'
-            : '<button class="btn btn-code" data-no="'+t.ticketNo+'" data-action="detail">📋 详情</button>')+
+            ? '<button class="btn btn-approve" data-no="'+esc(t.ticketNo)+'" data-action="approve">✅ 一键通过并生成激活码</button>'+
+              '<button class="btn btn-reject" data-no="'+esc(t.ticketNo)+'" data-action="reject">❌ 拒绝</button>'
+            : '<button class="btn btn-code" data-no="'+esc(t.ticketNo)+'" data-action="detail">📋 详情</button>')+
         '</td></tr>';
     }).join('');
   }
@@ -108,13 +108,13 @@ tr:hover{background:#f9fafc}
       var r=await fetch(LIST,{credentials:'same-origin',headers:authHeaders()});
       if(r.status===401||r.status===403){
         var d0=await r.json().catch(function(){return {};});
-        tbody.innerHTML='<tr><td colspan="9" style="text-align:center;color:#e67e22;padding:40px">鉴权失败：'+(d0.error||('HTTP '+r.status))+'，请重新登录后台</td></tr>';
+        tbody.innerHTML='<tr><td colspan="9" style="text-align:center;color:#e67e22;padding:40px">鉴权失败：'+esc(d0.error||('HTTP '+r.status))+'，请重新登录后台</td></tr>';
         return;
       }
       var d=await r.json();
       render(d&&d.list?d.list:[]);
     }catch(e){
-      tbody.innerHTML='<tr><td colspan="9" style="text-align:center;color:#e74c3c;padding:40px">工单列表加载失败：'+e.message+'</td></tr>';
+      tbody.innerHTML='<tr><td colspan="9" style="text-align:center;color:#e74c3c;padding:40px">工单列表加载失败：'+esc(e.message)+'</td></tr>';
     }
   }
   tbody.addEventListener('click', async function(e){

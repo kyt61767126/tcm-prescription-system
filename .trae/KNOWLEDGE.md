@@ -2889,3 +2889,14 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
 * 分页条容器 `licensePager/usersPager/adminActivatePager` 用内联样式（不改 CSS/基线）；统计卡仍按全量计算。
 * 顺手：用户管理 5 个操作按钮的 username 参数由 `escapeHtml` 改 `escapeJs`（与 88 节铁律一致，username 虽受服务端白名单约束，仍按上下文用对函数）。
 * **验证**：内联脚本 0 错、adminconsole 门禁绿、`check-interface 6 OK/0 CHANGED`；未登录无法做真实数据浏览验证，翻页逻辑为纯前端切片。
+
+### 88.3 第四批（2026-11-17 同日）：剩余模块分页 + 设备列表并行 + 旧工单页转义
+
+* 诊所管理：新增 `_clinicRowHtmlCache` 缓存行 HTML 与 `renderClinicsPage()`，只渲染当前 50 条；`_clinicsCache` 仍保存全量（编辑/续费/删除弹窗依赖），分页容器 `clinicPager` 追加在 `clinicList` 内。
+* 风控告警：`renderRiskAlerts()` 分页（`riskPager`），筛选签名（级别|类型）变化自动回第 1 页，重新扫描也回第 1 页；统计卡仍按全量。
+* 设备管理：`_deviceBindingRows` 缓存卡片 HTML + `renderDeviceBindingsPage()` 分页（`devicePager`）；绑定列表与测试机列表由串行改 `Promise.all` 并行，测试机请求失败不阻断主列表。
+* 系统维护：数据体检服务端已限 200 条，且勾选清理依赖全量渲染（分页会破坏全选/清理），故不分页；用量监控/操作日志均手动触发，无轮询。
+* 客服工作台 `service.html` 审计结论：无 `setInterval` 轮询、渲染全部走 `esc()`、提示用 `textContent`——不留改动。
+* 旧工单页 `ticket-approval.html`：`ticketNo/submittedAt`、`data-no` 属性、鉴权与网络错误文案补 `esc()`，消除潜在注入面。
+* **验证**：内联脚本 0 错、`diff-cross-version --pair adminconsole` 绿、`check-interface 6 OK/0 CHANGED`。生效方式：仅 admin 静态页，push 即部署；五端零重打包。
+
