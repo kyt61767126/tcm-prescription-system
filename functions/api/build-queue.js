@@ -38,7 +38,21 @@ const TARGETS = {
     'hot-update': '热更新包'
 };
 
-const STATUSES = ['queued', 'building', 'success', 'failed', 'cancelled'];
+// ★ 2026-11-17 列表短缓存：页面轮询 20 秒，同一 isolate 内 5 秒内复用结果，
+//   避免每次 list 都读取最多 100 条任务；写操作后立即失效。
+let _listCacheAt = 0;
+let _listCacheData = null;
+const LIST_CACHE_MS = 5000;
+function invalidateListCache() { _listCacheAt = 0; _listCacheData = null; }
+async function getTasks(kv, force) {
+    if (!force && _listCacheData && Date.now() - _listCacheAt < LIST_CACHE_MS) {
+        return _listCacheData;
+    }
+    const tasks = await listTasks(kv);
+    _listCacheData = tasks;
+    _listCacheAt = Date.now();
+    return tasks;
+}
 
 function corsHeaders() {
     return {
@@ -120,7 +134,7 @@ export async function onRequest(context) {
         }
 
         if (action === 'list') {
-            const tasks = await listTasks(kv);
+            const tasks = await getTasks(kv);
             return json({ success: true, tasks, stats: statsOf(tasks), targets: TARGETS });
         }
 
@@ -130,8 +144,8 @@ export async function onRequest(context) {
             const version = cleanStr(body.version, 40);
             const note = cleanStr(body.note, 200);
 
-            // 同目标同版本已在排队/打包中则拒绝重复入队
-            const existing = await listTasks(kv);
+            // 同目标同版本已在排队/打包中则拒绝重复入队（强制读最新，避免 5 秒缓存漏判）
+            const existing = await getTasks(kv, true);
             const dup = existing.find(t =>
                 t.target === target && (t.version || '') === version &&
                 (t.status === 'queued' || t.status === 'building'));
@@ -156,17 +170,19 @@ export async function onRequest(context) {
                 message: ''
             };
             await kv.put(KV_BUILD_TASK_PREFIX + task.id, JSON.stringify(task), { expirationTtl: TASK_TTL_SECONDS });
+            invalidateListCache();
             return json({ success: true, task });
         }
 
         if (action === 'claim') {
-            const tasks = await listTasks(kv);
+            const tasks = await getTasks(kv, true);
             const next = tasks.filter(t => t.status === 'queued').sort((a, b) => a.createdAt - b.createdAt)[0];
             if (!next) return json({ success: true, task: null, message: '队列为空' });
             next.status = 'building';
             next.startedAt = Date.now();
             next.claimedBy = agentOk ? 'build-agent' : ((currentUser && currentUser.username) || 'admin');
             await kv.put(KV_BUILD_TASK_PREFIX + next.id, JSON.stringify(next), { expirationTtl: TASK_TTL_SECONDS });
+            invalidateListCache();
             return json({ success: true, task: next });
         }
 
@@ -197,6 +213,7 @@ export async function onRequest(context) {
             task.downloadUrl = cleanStr(body.downloadUrl, 500) || task.downloadUrl;
             task.message = cleanStr(body.message, 300);
             await kv.put(KV_BUILD_TASK_PREFIX + task.id, JSON.stringify(task), { expirationTtl: TASK_TTL_SECONDS });
+            invalidateListCache();
             return json({ success: true, task });
         }
 
@@ -225,6 +242,7 @@ export async function onRequest(context) {
                 task.message = '';
             }
             await kv.put(KV_BUILD_TASK_PREFIX + task.id, JSON.stringify(task), { expirationTtl: TASK_TTL_SECONDS });
+            invalidateListCache();
             return json({ success: true, task });
         }
 

@@ -106,7 +106,7 @@ details pre{background:#f7f9fc;border:1px solid #ebeef5;border-radius:4px;paddin
     <h2>任务列表 <span id="listUpdatedAt" class="muted" style="font-weight:400;margin-left:8px;"></span></h2>
     <div class="row" style="margin-bottom:10px;">
       <button class="btn btn-ghost" id="refreshBtn">刷新</button>
-      <span class="muted">自动刷新 20 秒（页面隐藏时暂停）</span>
+      <span class="muted">有排队/打包任务时 20 秒刷新，空闲时约 2 分钟；页面隐藏暂停</span>
     </div>
     <div class="table-box">
       <table>
@@ -153,6 +153,8 @@ details pre{background:#f7f9fc;border:1px solid #ebeef5;border-radius:4px;paddin
   var token = sessionStorage.getItem('admin_console_token') || localStorage.getItem('license_admin_token') || '';
   var user = sessionStorage.getItem('admin_console_user') || '';
   var timer = null;
+  var hasActive = false;   // 有 queued/building 任务时保持 20 秒轮询
+  var idleSkips = 0;       // 空闲时每 6 个 tick 才真正请求一次（约 2 分钟）
 
   function $(id) { return document.getElementById(id); }
   function esc(s) {
@@ -249,6 +251,8 @@ details pre{background:#f7f9fc;border:1px solid #ebeef5;border-radius:4px;paddin
       $('stSuccess').textContent = s.success || 0;
       $('stFailed').textContent = s.failed || 0;
       $('stTotal').textContent = s.total || 0;
+      hasActive = ((s.queued || 0) + (s.building || 0)) > 0;
+      if (hasActive) idleSkips = 0;
       render(d.tasks || []);
       var now = new Date();
       var hint = '更新于 ' + now.toLocaleTimeString('zh-CN', { hour12: false });
@@ -307,18 +311,27 @@ details pre{background:#f7f9fc;border:1px solid #ebeef5;border-radius:4px;paddin
     if (!btn) return;
     act(btn.getAttribute('data-id'), btn.getAttribute('data-act'));
   });
+  function pollTick() {
+    if (document.hidden) return;
+    // 无排队/打包任务时降低轮询频率，减少 KV 读
+    if (!hasActive) {
+      idleSkips++;
+      if (idleSkips % 6 !== 0) return;
+    }
+    load(true);
+  }
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) {
       clearInterval(timer); timer = null;
     } else if (!timer) {
       load(true);
-      timer = setInterval(function () { load(true); }, 20000);
+      timer = setInterval(pollTick, 20000);
     }
   });
 
   $('whoName').textContent = user ? ('当前：' + user) : '未登录';
   load(false);
-  if (token) timer = setInterval(function () { load(true); }, 20000);
+  if (token) timer = setInterval(pollTick, 20000);
 })();
 </script>
 </body>

@@ -2917,5 +2917,6 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
 * **列表最后更新时间**：`markLoaded(key)` 统一写入 `key+'UpdatedAt'` span（更新于 HH:mm:ss，title 含完整日期）。已接入：待办、激活码、诊所、用户、激活审核、测试机、设备绑定、操作日志；轻量轮询刷新待办时同步刷新提示。翻页/本地筛选不刷新提示（提示代表最近一次服务端拉取）。
 * **生效方式**：push 后 Pages Functions 与静态页自动部署；打包机接入前在 Pages 环境变量配置 `BUILD_QUEUE_TOKEN`。五端客户端零重打包。
 * **使用文档**：`docs/打包队列使用手册.md`（页面操作、API 动作与错误码、状态机、PowerShell/Node 打包机接入示例、环境变量、排障）。
+* **§89.1 轮询降载（2026-11-17）**：后端 `list` 增加 isolate 内 5 秒结果缓存（写操作 create/claim/update/cancel/retry 立即失效，create 查重与 claim 强制读最新）；前端空闲（无 queued/building）时轮询从 20 秒降到约 2 分钟，有活动任务时保持 20 秒，页面隐藏暂停。
 
 
