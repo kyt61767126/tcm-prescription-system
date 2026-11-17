@@ -2900,3 +2900,10 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
 * 旧工单页 `ticket-approval.html`：`ticketNo/submittedAt`、`data-no` 属性、鉴权与网络错误文案补 `esc()`，消除潜在注入面。
 * **验证**：内联脚本 0 错、`diff-cross-version --pair adminconsole` 绿、`check-interface 6 OK/0 CHANGED`。生效方式：仅 admin 静态页，push 即部署；五端零重打包。
 
+### 88.4 第五批（2026-11-17 同日）：操作日志分页 + 分页条空态清理
+
+* 系统维护「操作日志查询」单次最多返回 1000 条，原先一次插入全部行——改为 `_auditLogsCache` 缓存 + `renderAuditLogsPage()` 只渲染当前 50 条，新增 `logsPager`；每次查询回第 1 页。角色名/诊所名映射移入渲染函数，翻页时复用。
+* 风控告警、操作日志在「扫描中/查询中/失败/空结果」时清空旧分页条（`renderPager(...,0,1)`），避免残留可点页码指向过期数据。
+* **验证**：内联脚本 0 错、`diff-cross-version --pair adminconsole` 绿、`check-interface 6 OK/0 CHANGED`。生效方式：仅 admin 静态页，push 即部署；五端零重打包。
+
+

@@ -819,6 +819,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                         <tr><td colspan="8" class="empty">选择日期后点击「查询」</td></tr>
                     </tbody>
                 </table>
+                <div id="logsPager" style="display:flex;gap:8px;align-items:center;justify-content:flex-end;padding:8px 12px;"></div>
             </div>
             <p style="margin-top:12px;color:#909399;font-size:12px;">说明：日志保留 90 天，单次查询跨度 ≤31 天。登录/收费复核/审核通过/续费/改密/启停/解锁等关键动作均有记录。</p>
         </div>
@@ -2956,7 +2957,7 @@ function switchTab(tabName) {
 
 // ===== ★ 2026-11-17 列表分页（只渲染当前页，避免一次插入数百行 DOM）=====
 const PAGE_SIZE = 50;
-const _pagers = { license: 1, users: 1, adminActivate: 1, clinic: 1, risk: 1, device: 1 };
+const _pagers = { license: 1, users: 1, adminActivate: 1, clinic: 1, risk: 1, device: 1, logs: 1 };
 let _licenseCache = [];
 let _userFilterSig = '';
 function pageSlice(key, list) {
@@ -2984,6 +2985,7 @@ function gotoListPage(key, delta) {
     else if (key === 'clinic') renderClinicsPage();
     else if (key === 'risk') renderRiskAlerts();
     else if (key === 'device') renderDeviceBindingsPage();
+    else if (key === 'logs') renderAuditLogsPage();
 }
 function renderLicensePage() { renderList(_licenseCache); }
 
@@ -3068,6 +3070,7 @@ async function loadRiskAlerts() {
     const el = document.getElementById('riskListBody');
     if (!el) return;
     el.innerHTML = '<tr><td colspan="8" class="loading">扫描中（分析全部激活码日志，稍候）...</td></tr>';
+    renderPager('riskPager', 'risk', 0, 1);
     try {
         const res = await fetch(API_BASE + '/license/admin-risk', {
             method: 'POST',
@@ -3098,6 +3101,7 @@ async function loadRiskAlerts() {
         renderRiskAlerts();
     } catch (e) {
         el.innerHTML = '';
+        renderPager('riskPager', 'risk', 0, 1);
         showAlert('riskAlert', '风控扫描失败：' + e.message, 'error');
     }
 }
@@ -5827,6 +5831,40 @@ function setLogDates(days) {
     loadAuditLogs();
 }
 
+let _auditLogsCache = [];
+function renderAuditLogsPage() {
+    const tbody = document.getElementById('logsListBody');
+    if (!tbody) return;
+    if (!_auditLogsCache.length) {
+        tbody.innerHTML = '<tr><td colspan="8" class="empty">该条件下暂无日志</td></tr>';
+        renderPager('logsPager', 'logs', 0, 1);
+        return;
+    }
+    const roleNames = { platform_admin: '平台管理员', clinic_admin: '诊所管理员', doctor: '医师' };
+    const clinicNameOf = (cid) => {
+        if (!cid || cid === 'platform') return '平台';
+        const c = _clinicsCache.find(x => x.id === cid);
+        return c ? c.name : cid.slice(0, 8);
+    };
+    const paged = pageSlice('logs', _auditLogsCache);
+    tbody.innerHTML = paged.rows.map(l => {
+        const t = l.timestamp ? new Date(l.timestamp).toLocaleString('zh-CN') : '-';
+        const extraStr = Object.entries(l.extra || {}).slice(0, 3)
+            .map(([k, v]) => escapeHtml(k) + '=' + escapeHtml(String(v).slice(0, 40))).join('　');
+        return '<tr>' +
+            '<td style="white-space:nowrap;">' + escapeHtml(t) + '</td>' +
+            '<td class="code">' + escapeHtml(l.username) + '</td>' +
+            '<td>' + escapeHtml(roleNames[l.role] || l.role || '-') + '</td>' +
+            '<td class="code">' + escapeHtml(l.action) + '</td>' +
+            '<td>' + escapeHtml(l.target || '-') + '</td>' +
+            '<td>' + escapeHtml(clinicNameOf(l.clinicId)) + '</td>' +
+            '<td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + extraStr.replace(/"/g, '&quot;') + '">' + (extraStr || '-') + '</td>' +
+            '<td class="code">' + escapeHtml(l.ip || '-') + '</td>' +
+        '</tr>';
+    }).join('');
+    renderPager('logsPager', 'logs', _auditLogsCache.length, paged.totalPages);
+}
+
 async function loadAuditLogs() {
     const tbody = document.getElementById('logsListBody');
     const summary = document.getElementById('logsSummary');
@@ -5836,6 +5874,7 @@ async function loadAuditLogs() {
     const action = document.getElementById('logActionFilter').value.trim();
     const username = document.getElementById('logUserFilter').value.trim();
     tbody.innerHTML = '<tr><td colspan="8" class="loading">查询中...</td></tr>';
+    renderPager('logsPager', 'logs', 0, 1);
     summary.textContent = '';
     try {
         const qs = new URLSearchParams({ dateFrom, dateTo, limit: '1000' });
@@ -5861,31 +5900,9 @@ async function loadAuditLogs() {
         summary.textContent = '区间 ' + data.dateFrom + ' ~ ' + data.dateTo +
             ' · 命中 ' + data.total + ' 条' + (data.total > data.shown ? '（显示前 ' + data.shown + ' 条）' : '') +
             ' · 扫描分片 ' + data.scannedKeys + ' 个';
-        if (logs.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="8" class="empty">该条件下暂无日志</td></tr>';
-            return;
-        }
-        const roleNames = { platform_admin: '平台管理员', clinic_admin: '诊所管理员', doctor: '医师' };
-        const clinicNameOf = (cid) => {
-            if (!cid || cid === 'platform') return '平台';
-            const c = _clinicsCache.find(x => x.id === cid);
-            return c ? c.name : cid.slice(0, 8);
-        };
-        tbody.innerHTML = logs.map(l => {
-            const t = l.timestamp ? new Date(l.timestamp).toLocaleString('zh-CN') : '-';
-            const extraStr = Object.entries(l.extra || {}).slice(0, 3)
-                .map(([k, v]) => escapeHtml(k) + '=' + escapeHtml(String(v).slice(0, 40))).join('　');
-            return '<tr>' +
-                '<td style="white-space:nowrap;">' + escapeHtml(t) + '</td>' +
-                '<td class="code">' + escapeHtml(l.username) + '</td>' +
-                '<td>' + escapeHtml(roleNames[l.role] || l.role || '-') + '</td>' +
-                '<td class="code">' + escapeHtml(l.action) + '</td>' +
-                '<td>' + escapeHtml(l.target || '-') + '</td>' +
-                '<td>' + escapeHtml(clinicNameOf(l.clinicId)) + '</td>' +
-                '<td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + extraStr.replace(/"/g, '&quot;') + '">' + (extraStr || '-') + '</td>' +
-                '<td class="code">' + escapeHtml(l.ip || '-') + '</td>' +
-            '</tr>';
-        }).join('');
+        _auditLogsCache = logs;
+        _pagers.logs = 1;
+        renderAuditLogsPage();
     } catch (e) {
         tbody.innerHTML = '<tr><td colspan="8" class="empty">网络错误：' + escapeHtml(e.message) + '</td></tr>';
     }
