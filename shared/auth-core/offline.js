@@ -3632,6 +3632,23 @@
                 }
             }
 
+            // ★ 2026-11-17 诊断键（仅定位，不参与任何判定）：落在取码闸门之前，
+            //   记录本轮 tick 的实际执行环境与取码实况。
+            //   背景：本机 last-run.dat 每 10 分钟一拍却无服务端心跳记录——getStatus()
+            //   在取码闸门之前就会写 last-run.dat，故节拍只能证明"定时器在跑"，无法
+            //   区分是哪个渲染器、也看不出取到的是空码还是非空码。该键只写不读，
+            //   不改心跳/授权任何判定，不改 UI，定位完成后随下个版本移除。
+            try {
+                await StorageAdapter.setItem('license:hbDiag', JSON.stringify({
+                    ts: Date.now(),
+                    href: (typeof location !== 'undefined' && location.href) || '',
+                    hasBridge: !!(global.electronAPI && global.electronAPI.license),
+                    codeLen: String(licenseCode || '').length,
+                    midLen: String(machineId || '').length,
+                    licType: __licType
+                }));
+            } catch (_) { /* 诊断写失败不影响心跳 */ }
+
             if (!licenseCode || !machineId) {
                 console.log('[Heartbeat] 无 license code 或 machineId，跳过心跳');
                 return;
