@@ -2906,4 +2906,15 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
 * 风控告警、操作日志在「扫描中/查询中/失败/空结果」时清空旧分页条（`renderPager(...,0,1)`），避免残留可点页码指向过期数据。
 * **验证**：内联脚本 0 错、`diff-cross-version --pair adminconsole` 绿、`check-interface 6 OK/0 CHANGED`。生效方式：仅 admin 静态页，push 即部署；五端零重打包。
 
+### 89. 打包队列与列表最后更新时间（2026-11-17）
+
+* **打包队列后端** `functions/api/build-queue.js` → `POST /api/build-queue`：
+  * KV 键 `build_task:{id}`，30 天 TTL；动作 `list/create/claim/update/cancel/retry`。
+  * 管理动作需 platform_admin Bearer token；打包机 `claim/update` 可用请求头 `X-Build-Token` 命中 Pages 环境变量 `BUILD_QUEUE_TOKEN`（未配置则只能管理员操作）。
+  * `create` 拒绝「同目标+同版本」重复排队；`claim` 取最早 queued → building（KV 最终一致，非强并发锁）；`update` 回执 success/failed 并写 sha256/size/downloadUrl/message；`retry` 把 failed/cancelled 重新入队。
+  * Cloudflare Pages 不能执行本地打包，队列只做任务登记 + 状态回执，打包机轮询接入（页面底部有 PowerShell 示例）。
+* **打包队列前端** `public/admin/build-queue.html`（替换原占位页）：新建任务、状态统计、任务表（任务号/目标/状态/时间/产物 SHA/下载/备注）、取消/重试、20 秒自动刷新且页面隐藏暂停；后台顶部入口由不可点占位改为链接。
+* **列表最后更新时间**：`markLoaded(key)` 统一写入 `key+'UpdatedAt'` span（更新于 HH:mm:ss，title 含完整日期）。已接入：待办、激活码、诊所、用户、激活审核、测试机、设备绑定、操作日志；轻量轮询刷新待办时同步刷新提示。翻页/本地筛选不刷新提示（提示代表最近一次服务端拉取）。
+* **生效方式**：push 后 Pages Functions 与静态页自动部署；打包机接入前在 Pages 环境变量配置 `BUILD_QUEUE_TOKEN`。五端客户端零重打包。
+
 

@@ -1,10 +1,325 @@
 <!DOCTYPE html>
-<html lang="zh-CN"><head><meta charset="UTF-8"><title>打包队列 · 惠康中医平台管理后台</title>
-<style>body{font-family:sans-serif;padding:40px;max-width:720px;margin:0 auto;line-height:1.8;color:#2c3e50}
-code{background:#f6f8fa;padding:2px 6px;border-radius:4px}a{color:#3498db}</style></head>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>打包队列 · 惠康中医平台</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"PingFang SC","Microsoft YaHei",sans-serif;background:#f5f7fa;color:#333;padding:24px;font-size:14px;line-height:1.7}
+.wrap{max-width:1200px;margin:0 auto}
+.top-bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px}
+.top-bar h1{font-size:22px;color:#2c3e50}
+.top-bar .who{color:#606266;font-size:13px}
+.top-bar a{color:#3498db;text-decoration:none;margin-left:10px}
+.top-bar a:hover{text-decoration:underline}
+.card{background:#fff;border:1px solid #dcdfe6;border-radius:8px;padding:18px;box-shadow:0 1px 4px rgba(0,0,0,.06);margin-bottom:16px}
+.card h2{font-size:16px;margin-bottom:12px;color:#2c3e50}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:16px}
+.stat{background:#fff;border:1px solid #ebeef5;border-radius:8px;text-align:center;padding:12px}
+.stat .num{font-size:22px;font-weight:700;color:#3498db}
+.stat .label{font-size:12px;color:#909399}
+.stat.queued .num{color:#e67e22}.stat.building .num{color:#3498db}
+.stat.success .num{color:#27ae60}.stat.failed .num{color:#e74c3c}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+label.fld{display:flex;flex-direction:column;gap:4px;font-size:12px;color:#909399}
+input,select{padding:7px 10px;border:1px solid #dcdfe6;border-radius:4px;font-size:13px;min-width:170px}
+input:focus,select:focus{outline:none;border-color:#3498db}
+.btn{padding:7px 16px;border:none;border-radius:4px;cursor:pointer;font-size:13px}
+.btn-primary{background:#3498db;color:#fff}.btn-primary:hover{background:#2980b9}
+.btn-ghost{background:#eee;color:#555}.btn-ghost:hover{background:#e0e0e0}
+.btn-danger{background:#e74c3c;color:#fff}.btn-danger:hover{background:#c0392b}
+.btn-sm{padding:4px 10px;font-size:12px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.table-box{overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:900px}
+th,td{padding:9px 10px;text-align:left;border-bottom:1px solid #ebeef5;font-size:13px;vertical-align:top}
+th{background:#f5f7fa;color:#606266;font-weight:600;white-space:nowrap}
+tr:hover{background:#f9fafc}
+.mono{font-family:"Courier New",monospace;color:#2c3e50;word-break:break-all}
+.muted{color:#909399;font-size:12px}
+.tag{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:500;white-space:nowrap}
+.tag-queued{background:#fff3cd;color:#856404}
+.tag-building{background:#e8f0fe;color:#1a56db}
+.tag-success{background:#d4edda;color:#155724}
+.tag-failed{background:#f8d7da;color:#721c24}
+.tag-cancelled{background:#f0f0f0;color:#777}
+.msg{padding:9px 14px;border-radius:5px;margin:8px 0;font-size:13px;white-space:pre-wrap}
+.msg-ok{background:#d4edda;color:#155724;border:1px solid #c3e6cb}
+.msg-err{background:#f8d7da;color:#721c24;border:1px solid #f5c6cb}
+.msg-info{background:#d1ecf1;color:#0c5460;border:1px solid #bee5eb}
+.warn-box{background:#fff8e1;border:1px solid #ffe082;color:#8d6e00;padding:9px 14px;border-radius:5px;font-size:12px;margin-bottom:14px}
+.hidden{display:none}
+details summary{cursor:pointer;color:#3498db;font-size:12px}
+details pre{background:#f7f9fc;border:1px solid #ebeef5;border-radius:4px;padding:10px;margin-top:8px;font-size:12px;overflow-x:auto;white-space:pre-wrap}
+</style>
+</head>
 <body>
-<h1>📦 打包队列</h1>
-<p>本页接入 4 版本（YB/YJ/LB/LJ）打包流水线，展示当前打包任务、版本号、SHA-256 校验值。</p>
-<p>后续接入：<code>pack-app-*.bat</code> / <code>pack-desktop-*.bat</code> 任务完成回调 → <code>/api/build/update</code>。</p>
-<p><a href="./index.html">← 返回激活码管理</a> · <a href="ticket-approval.html">工单审批 →</a></p>
-</body></html>
+<div class="wrap">
+  <div class="top-bar">
+    <h1>📦 打包队列</h1>
+    <div class="who">
+      <span id="whoName">-</span>
+      <a href="index.html">← 返回管理后台</a>
+      <a href="ticket-approval.html">工单审批</a>
+    </div>
+  </div>
+
+  <div class="warn-box">
+    队列只登记任务与回执，不自动触发本地打包。打包机使用 <b>X-Build-Token</b> 轮询 claim 认领任务，完成后 update 回执（见页面底部说明）。
+  </div>
+
+  <div id="alertBox"></div>
+
+  <div class="stats">
+    <div class="stat queued"><div class="num" id="stQueued">0</div><div class="label">排队中</div></div>
+    <div class="stat building"><div class="num" id="stBuilding">0</div><div class="label">打包中</div></div>
+    <div class="stat success"><div class="num" id="stSuccess">0</div><div class="label">成功</div></div>
+    <div class="stat failed"><div class="num" id="stFailed">0</div><div class="label">失败</div></div>
+    <div class="stat"><div class="num" id="stTotal">0</div><div class="label">总任务</div></div>
+  </div>
+
+  <div class="card">
+    <h2>新建打包任务</h2>
+    <div class="row">
+      <label class="fld">打包目标
+        <select id="newTarget">
+          <option value="cloud-desktop">云桌面</option>
+          <option value="cloud-app">云 APP</option>
+          <option value="offline-desktop">离线桌面</option>
+          <option value="offline-app">离线 APP</option>
+          <option value="cloud-web">云端网页</option>
+          <option value="hot-update">热更新包</option>
+        </select>
+      </label>
+      <label class="fld">版本号
+        <input id="newVersion" type="text" maxlength="40" placeholder="如 2026.11.17-1">
+      </label>
+      <label class="fld" style="flex:1;min-width:240px">备注
+        <input id="newNote" type="text" maxlength="200" placeholder="本次打包内容 / 变更点（选填）">
+      </label>
+      <button class="btn btn-primary" id="createBtn">加入队列</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>任务列表 <span id="listUpdatedAt" class="muted" style="font-weight:400;margin-left:8px;"></span></h2>
+    <div class="row" style="margin-bottom:10px;">
+      <button class="btn btn-ghost" id="refreshBtn">刷新</button>
+      <span class="muted">自动刷新 20 秒（页面隐藏时暂停）</span>
+    </div>
+    <div class="table-box">
+      <table>
+        <thead>
+          <tr>
+            <th>任务号 / 版本</th><th>目标</th><th>状态</th><th>创建</th><th>完成</th>
+            <th>产物</th><th>备注 / 回执</th><th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="taskBody">
+          <tr><td colspan="8" class="muted" style="text-align:center;padding:30px">加载中…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <details>
+      <summary>打包机如何接入（局域网/本机脚本）</summary>
+      <pre>1) Cloudflare Pages 环境变量配置 BUILD_QUEUE_TOKEN（随机长字符串）。
+2) 打包机轮询认领（PowerShell 示例）：
+   $h = @{ 'X-Build-Token' = $env:BUILD_QUEUE_TOKEN; 'Content-Type' = 'application/json' }
+   $r = Invoke-RestMethod -Method Post -Uri 'https://tcm-prescription-system.pages.dev/api/build-queue' `
+        -Headers $h -Body '{"action":"claim"}'
+   $r.task   # 为空表示队列空
+3) 打包完成后回执：
+   $body = @{ action='update'; taskId=$r.task.id; status='success'; version='2026.11.17-1';
+              sha256='&lt;64位十六进制&gt;'; sizeBytes=12345678;
+              downloadUrl='https://.../file.exe'; message='打包完成' } | ConvertTo-Json
+   Invoke-RestMethod -Method Post -Uri 'https://tcm-prescription-system.pages.dev/api/build-queue' `
+        -Headers $h -Body $body
+4) 失败回执：status='failed'，message 写失败原因；后台可点「重试」重新入队。</pre>
+    </details>
+  </div>
+</div>
+
+<script>
+(function () {
+  var API = '/api/build-queue';
+  var TARGETS = {
+    'cloud-desktop': '云桌面', 'cloud-app': '云 APP', 'offline-desktop': '离线桌面',
+    'offline-app': '离线 APP', 'cloud-web': '云端网页', 'hot-update': '热更新包'
+  };
+  var token = sessionStorage.getItem('admin_console_token') || localStorage.getItem('license_admin_token') || '';
+  var user = sessionStorage.getItem('admin_console_user') || '';
+  var timer = null;
+
+  function $(id) { return document.getElementById(id); }
+  function esc(s) {
+    if (s == null || s === '') return '-';
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function headers(extra) {
+    var h = extra || {};
+    if (token) h['Authorization'] = 'Bearer ' + token;
+    return h;
+  }
+  function showMsg(text, kind) {
+    var box = $('alertBox');
+    if (!text) { box.innerHTML = ''; return; }
+    box.innerHTML = '<div class="msg msg-' + (kind || 'info') + '">' + esc(text) + '</div>';
+    if (kind === 'ok') setTimeout(function () { if (box.textContent === text) box.innerHTML = ''; }, 5000);
+  }
+  function fmt(ts) {
+    if (!ts) return '-';
+    try { return new Date(ts).toLocaleString('zh-CN', { hour12: false }); } catch (e) { return '-'; }
+  }
+  function humanSize(n) {
+    if (n == null || !isFinite(n)) return '-';
+    if (n < 1024) return n + ' B';
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+    return (n / 1024 / 1024).toFixed(1) + ' MB';
+  }
+  function statusTag(s) {
+    var map = {
+      queued: ['tag-queued', '排队中'], building: ['tag-building', '打包中'],
+      success: ['tag-success', '成功'], failed: ['tag-failed', '失败'], cancelled: ['tag-cancelled', '已取消']
+    };
+    var m = map[s] || ['tag-cancelled', s || '-'];
+    return '<span class="tag ' + m[0] + '">' + esc(m[1]) + '</span>';
+  }
+  function render(tasks) {
+    var body = $('taskBody');
+    if (!tasks || !tasks.length) {
+      body.innerHTML = '<tr><td colspan="8" class="muted" style="text-align:center;padding:30px">暂无打包任务</td></tr>';
+      return;
+    }
+    body.innerHTML = tasks.map(function (t) {
+      var artifact = '-';
+      if (t.sha256) {
+        artifact = '<span class="mono" title="' + esc(t.sha256) + '">' + esc(t.sha256.slice(0, 12)) + '…</span>' +
+          '<div class="muted">' + humanSize(t.sizeBytes) + '</div>';
+      }
+      if (t.downloadUrl && /^https?:\/\//i.test(t.downloadUrl)) {
+        artifact += '<div><a href="' + esc(t.downloadUrl) + '" target="_blank" rel="noopener">下载</a></div>';
+      }
+      var ops = '';
+      if (t.status === 'queued' || t.status === 'building') {
+        ops = '<button class="btn btn-danger btn-sm" data-id="' + esc(t.id) + '" data-act="cancel">取消</button>';
+      } else if (t.status === 'failed' || t.status === 'cancelled') {
+        ops = '<button class="btn btn-ghost btn-sm" data-id="' + esc(t.id) + '" data-act="retry">重试</button>';
+      }
+      return '<tr>' +
+        '<td><span class="mono">' + esc(t.id) + '</span><div class="muted">' + esc(t.version || '未填写版本') + '</div></td>' +
+        '<td>' + esc(TARGETS[t.target] || t.target) + '</td>' +
+        '<td>' + statusTag(t.status) + '</td>' +
+        '<td class="muted">' + esc(t.createdBy) + '<br>' + fmt(t.createdAt) + '</td>' +
+        '<td class="muted">' + fmt(t.finishedAt) + '</td>' +
+        '<td>' + artifact + '</td>' +
+        '<td class="muted" style="max-width:220px;">' + esc(t.note) + (t.message ? '<div>' + esc(t.message) + '</div>' : '') + '</td>' +
+        '<td>' + ops + '</td>' +
+        '</tr>';
+    }).join('');
+  }
+  async function load(silent) {
+    if (!token) {
+      $('taskBody').innerHTML = '<tr><td colspan="8" style="text-align:center;color:#e67e22;padding:30px">未登录：请先在 <a href="index.html">管理后台</a> 登录平台管理员</td></tr>';
+      clearInterval(timer); timer = null;
+      return;
+    }
+    try {
+      var r = await fetch(API, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: headers({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ action: 'list' })
+      });
+      if (r.status === 401 || r.status === 403) {
+        $('taskBody').innerHTML = '<tr><td colspan="8" style="text-align:center;color:#e67e22;padding:30px">鉴权失败，请重新登录管理后台</td></tr>';
+        clearInterval(timer); timer = null;
+        return;
+      }
+      var d = await r.json();
+      if (!d.success) throw new Error(d.error || '加载失败');
+      var s = d.stats || {};
+      $('stQueued').textContent = s.queued || 0;
+      $('stBuilding').textContent = s.building || 0;
+      $('stSuccess').textContent = s.success || 0;
+      $('stFailed').textContent = s.failed || 0;
+      $('stTotal').textContent = s.total || 0;
+      render(d.tasks || []);
+      var now = new Date();
+      var hint = '更新于 ' + now.toLocaleTimeString('zh-CN', { hour12: false });
+      var el = $('listUpdatedAt');
+      el.textContent = hint;
+      el.title = now.toLocaleString('zh-CN');
+      if (!silent) showMsg('');
+    } catch (e) {
+      if (!silent) showMsg('加载失败：' + e.message, 'err');
+    }
+  }
+  async function act(id, action) {
+    if (action === 'cancel' && !confirm('确认取消任务 ' + id + '？')) return;
+    try {
+      var r = await fetch(API, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: headers({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ action: action, taskId: id })
+      });
+      var d = await r.json();
+      if (!d.success) throw new Error(d.error || '操作失败');
+      showMsg(action === 'cancel' ? '已取消' : '已重新入队', 'ok');
+      load(true);
+    } catch (e) {
+      showMsg('操作失败：' + e.message, 'err');
+    }
+  }
+  $('createBtn').addEventListener('click', async function () {
+    var target = $('newTarget').value;
+    var version = $('newVersion').value.trim();
+    var note = $('newNote').value.trim();
+    this.disabled = true;
+    try {
+      var r = await fetch(API, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: headers({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ action: 'create', target: target, version: version, note: note })
+      });
+      var d = await r.json();
+      if (!d.success) throw new Error(d.error || '入队失败');
+      $('newVersion').value = '';
+      $('newNote').value = '';
+      showMsg('已加入队列：' + d.task.id, 'ok');
+      load(true);
+    } catch (e) {
+      showMsg('入队失败：' + e.message, 'err');
+    } finally {
+      this.disabled = false;
+    }
+  });
+  $('refreshBtn').addEventListener('click', function () { load(false); });
+  $('taskBody').addEventListener('click', function (e) {
+    var btn = e.target.closest('button[data-act]');
+    if (!btn) return;
+    act(btn.getAttribute('data-id'), btn.getAttribute('data-act'));
+  });
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) {
+      clearInterval(timer); timer = null;
+    } else if (!timer) {
+      load(true);
+      timer = setInterval(function () { load(true); }, 20000);
+    }
+  });
+
+  $('whoName').textContent = user ? ('当前：' + user) : '未登录';
+  load(false);
+  if (token) timer = setInterval(function () { load(true); }, 20000);
+})();
+</script>
+</body>
+</html>

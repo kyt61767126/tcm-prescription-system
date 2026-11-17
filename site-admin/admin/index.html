@@ -280,7 +280,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
             <div>
                 <span class="user-info">已登录：<strong id="currentAdmin"></strong></span>
                 <button class="btn btn-sm" onclick="switchTab('Todo')" style="margin-left:10px;" title="回到待办中心">🏠 待办</button>
-                <span class="btn btn-sm" style="margin-left:6px;display:inline-block;opacity:.55;cursor:not-allowed;" title="打包队列建设中：任务回执接口尚未接入，暂不可用">📦 打包队列（建设中）</span>
+                <a class="btn btn-sm" href="build-queue.html" style="margin-left:6px;display:inline-block;text-decoration:none;" title="查看打包任务队列与产物回执">📦 打包队列</a>
                 <a href="ticket-approval.html" class="btn btn-sm" style="margin-left:6px;text-decoration:none;display:inline-block;" title="打开工单审批（同标签页打开，保留登录会话）">🎫 工单审批</a>
                 <button class="btn btn-sm" onclick="openAccountModal()" style="margin-left:6px;" title="修改本账号登录用户名/密码">🔑 账户</button>
                 <button class="btn btn-sm logout-btn" onclick="doLogout()" style="margin-left:10px;">退出</button>
@@ -304,7 +304,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
         <!-- ★ P0-1 待办中心标签页 -->
         <div id="tabTodo" class="tab-content active">
             <div id="todoAlert" class="alert"></div>
-            <h2>待办事项</h2>
+            <h2>待办事项 <span id="todoUpdatedAt" style="font-size:12px;font-weight:400;color:#909399;margin-left:8px;"></span></h2>
             <div class="stats" id="todoCards">
                 <div class="stat-card todo-card" style="cursor:pointer;" onclick="gotoTodo('Clinics')" title="点击去诊所管理处理">
                     <div class="num" id="todoPendingReg" style="color:#f39c12;">0</div>
@@ -477,7 +477,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
         </div>
 
         <!-- 激活码列表 -->
-        <h2>激活码列表</h2>
+        <h2>激活码列表 <span id="licenseUpdatedAt" style="font-size:12px;font-weight:400;color:#909399;margin-left:8px;"></span></h2>
         <div class="filter-bar">
             <select id="filterStatus" onchange="loadList()">
                 <option value="">全部状态</option>
@@ -560,7 +560,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                 </div>
             </div>
 
-            <h2>诊所列表</h2>
+            <h2>诊所列表 <span id="clinicUpdatedAt" style="font-size:12px;font-weight:400;color:#909399;margin-left:8px;"></span></h2>
             <div id="clinicList" class="table-box" style="padding: 10px;">
                 <div class="loading">加载中...</div>
             </div>
@@ -581,6 +581,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                     <option value="clinic_admin">诊所管理员</option>
                     <option value="doctor">医师</option>
                 </select>
+                <span id="usersUpdatedAt" style="font-size:12px;color:#909399;margin-left:auto;"></span>
                 <button class="btn btn-sm" onclick="loadUsersList()">刷新</button>
             </div>
             <div class="table-box">
@@ -610,7 +611,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
         <!-- ★ 设备管理标签页（2026-09-08 版块重组：测试机标记 + 版本绑定解除 合并） -->
         <div id="tabDevice" class="tab-content">
             <p style="color:#909399;font-size:13px;margin:0 0 12px;">本页为<b>设备支持工具</b>：测试机标记（放开一机一版限制）/ 版本绑定查询解除（客户换机、降级）。操作均仅限总管理员。</p>
-            <h2>🖥 测试机标记</h2>
+            <h2>🖥 测试机标记 <span id="testMachineUpdatedAt" style="font-size:12px;font-weight:400;color:#909399;margin-left:8px;"></span></h2>
             <div id="testMachineAlert" class="alert"></div>
             <p style="color:#606266;font-size:13px;line-height:1.8;">
                 标记为测试机的设备<span style="color:#e67e22;font-weight:600;">仅放开"一台设备一个版本"绑定校验</span>，
@@ -638,7 +639,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                     </tbody>
                 </table>
             </div>
-            <h2 style="margin-top:24px;">🔓 版本绑定查询 / 解除</h2>
+            <h2 style="margin-top:24px;">🔓 版本绑定查询 / 解除 <span id="deviceUpdatedAt" style="font-size:12px;font-weight:400;color:#909399;margin-left:8px;"></span></h2>
             <div id="deviceVersionAlert" class="alert"></div>
             <p style="color:#606266;font-size:13px;line-height:1.8;">
                 查询/解除某台设备的<b>版本绑定</b>。解除后该设备可重新激活<b>任意版本</b>，
@@ -799,6 +800,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                 <button class="btn btn-sm btn-primary" onclick="loadAuditLogs()">查询</button>
                 <button class="btn btn-sm" onclick="setLogDates(1)">今天</button>
                 <button class="btn btn-sm" onclick="setLogDates(7)">近7天</button>
+                <span id="logsUpdatedAt" style="font-size:12px;color:#909399;margin-left:auto;"></span>
             </div>
             <div style="margin-bottom:8px;font-size:12px;color:#909399;" id="logsSummary"></div>
             <div class="table-box">
@@ -840,7 +842,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
             </div>
 
             <!-- 筛选栏 -->
-            <h2>未激活客户列表</h2>
+            <h2>未激活客户列表 <span id="adminActivateUpdatedAt" style="font-size:12px;font-weight:400;color:#909399;margin-left:8px;"></span></h2>
             <div class="filter-bar">
                 <select id="adminActivateFilter" onchange="loadAdminActivateList()">
                     <option value="pending">待审核（未激活）</option>
@@ -2286,6 +2288,7 @@ async function loadList() {
             _pagers.license = 1;
             renderList(_licenseCache);
             renderStats(data.stats);
+            markLoaded('license');
         } else {
             if (res.status === 403) {
                 showAlert('mainAlert', '登录已过期，请重新登录', 'error');
@@ -2960,6 +2963,16 @@ const PAGE_SIZE = 50;
 const _pagers = { license: 1, users: 1, adminActivate: 1, clinic: 1, risk: 1, device: 1, logs: 1 };
 let _licenseCache = [];
 let _userFilterSig = '';
+// ★ 2026-11-17 列表最后更新时间提示：key + 'UpdatedAt' 的 span 显示本页最近一次拉取时间
+const _lastLoadedAt = {};
+function markLoaded(key) {
+    const now = new Date();
+    _lastLoadedAt[key] = now.getTime();
+    const el = document.getElementById(key + 'UpdatedAt');
+    if (!el) return;
+    el.textContent = '更新于 ' + now.toLocaleTimeString('zh-CN', { hour12: false });
+    el.title = now.toLocaleString('zh-CN');
+}
 function pageSlice(key, list) {
     const totalPages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
     if (!_pagers[key] || _pagers[key] < 1) _pagers[key] = 1;
@@ -3252,6 +3265,7 @@ async function refreshTodoBadges() {
             csExpired: expired
         };
         for (const k of Object.keys(stats)) { const el = document.getElementById(k); if (el) el.textContent = stats[k]; }
+        markLoaded('todo');
     } catch (e) { /* 网络抖动静默 */ }
 }
 
@@ -3345,6 +3359,7 @@ async function loadTodoCenter() {
 
         // ===== 近14天趋势（纯SVG柱状，无外部依赖）=====
         renderTrendChart(clinics, users);
+        markLoaded('todo');
 
         // ===== 下载转化漏斗（fire-and-forget：失败静默，不影响后台主流程）=====
         loadFunnelStats(token);
@@ -3482,6 +3497,7 @@ async function loadAdminActivateList() {
             updateAdminActivateStats(data.requests, filter);
             // 渲染列表（带搜索过滤）
             renderAdminActivateTable();
+            markLoaded('adminActivate');
         } else {
             if (res.status === 401) {
                 showAlert('adminActivateAlert', '登录已过期，请重新登录', 'error');
@@ -4365,6 +4381,7 @@ async function loadClinicsList() {
         if (data.success && Array.isArray(data.data)) {
             _clinicsCache = data.data;
             _loginStatsStart = data.loginStatsStart || null;
+            markLoaded('clinic');
             if (data.data.length === 0) {
                 _clinicRowHtmlCache = [];
                 listEl.innerHTML = '<div class="empty">暂无诊所</div>';
@@ -5193,6 +5210,7 @@ async function loadUsersList() {
             _usersCache = data.data;
             fillUserClinicFilter();
             renderUsersTable();
+            markLoaded('users');
         } else {
             tbody.innerHTML = '<tr><td colspan="9" class="empty">' + escapeHtml(data.error || '加载失败') + '</td></tr>';
         }
@@ -5604,6 +5622,7 @@ async function loadDeviceBindings() {
         ]);
         if (!listData.success) throw new Error(listData.error || '加载失败');
         const bindings = listData.bindings || [];
+        markLoaded('device');
 
         // 测试机白名单（标记同一台设备；加载失败不影响主列表）
         const testSet = {};
@@ -5753,6 +5772,7 @@ async function loadTestMachines() {
         const data = await res.json();
         if (!data.success) throw new Error(data.error || '加载失败');
         const machines = data.machines || [];
+        markLoaded('testMachine');
         const alertEl = document.getElementById('testMachineAlert');
         if (alertEl) alertEl.style.display = 'none';
         if (machines.length === 0) {
@@ -5903,6 +5923,7 @@ async function loadAuditLogs() {
         _auditLogsCache = logs;
         _pagers.logs = 1;
         renderAuditLogsPage();
+        markLoaded('logs');
     } catch (e) {
         tbody.innerHTML = '<tr><td colspan="8" class="empty">网络错误：' + escapeHtml(e.message) + '</td></tr>';
     }
