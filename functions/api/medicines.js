@@ -1,5 +1,6 @@
 import { parseAuthHeader, isPlatformAdmin, isClinicAdmin, isAdmin, KV_SYSTEM_PLATFORM_MEDICINES, userMustChangePassword } from './_lib/auth.js';
 import { getKV } from './_lib/kv.js';
+import { getDB, isD1Enabled } from './_lib/d1.js';
 
 // P1-6 安全增强：CORS 白名单
 function corsHeaders(request) {
@@ -54,6 +55,53 @@ function getDefaultMedicines() {
 //   冲突：记录级 LWW（updatedAt 毫秒）；删除为墓碑（deleted:true）。
 // ============================================================================
 const MED_V2_SUFFIX = ':medicines_v2';
+
+// ============================================================================
+//  ★ 2026-11-18 云端在线 presence（后台「云端桌面在线恒 0」修复）
+//  根因：后台云端在线只认 user_session.loginAt（登录瞬间写一次，≤15 分钟判在线），
+//        云端桌面/网页/APP 登录 15 分钟后必然变离线；离线端有 heartbeat，云端没有。
+//  方案：云端三端在窗口可见时每 5 分钟会调 /api/medicines?sync=1（MedSync 定时器），
+//        把该请求当作在线心跳写入 D1 user_presence（免费 10 万写/天，不占 KV 写配额）。
+//        users.js 诊所列表把 presence 与 session 去重合并，得到持续的在线/今日登录。
+//  说明：只写统计表，不参与任何授权/设备/会话判定；D1 未启用或异常时静默跳过。
+// ============================================================================
+let __presenceSchemaReady = false;
+async function ensurePresenceSchema(db) {
+    if (__presenceSchemaReady) return;
+    await db.prepare(`
+        CREATE TABLE IF NOT EXISTS user_presence (
+            username TEXT NOT NULL,
+            client_class TEXT NOT NULL,
+            clinic_id TEXT,
+            last_seen TEXT,
+            PRIMARY KEY (username, client_class)
+        )
+    `).run();
+    __presenceSchemaReady = true;
+}
+async function touchUserPresence(env, user, clientClass) {
+    try {
+        if (!user || !user.username) return;
+        if (!isD1Enabled(env)) return;
+        const db = getDB(env);
+        if (!db) return;
+        await ensurePresenceSchema(db);
+        const cc = (clientClass === 'desktop' || clientClass === 'app') ? clientClass : 'web';
+        await db.prepare(`
+            INSERT INTO user_presence (username, client_class, clinic_id, last_seen)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(username, client_class) DO UPDATE SET
+                clinic_id=excluded.clinic_id,
+                last_seen=excluded.last_seen
+        `).bind(
+            String(user.username),
+            cc,
+            user.clinicId || null,
+            new Date().toISOString()
+        ).run();
+    } catch (e) { /* presence 失败绝不影响药库同步 */ }
+}
+
 
 function medSyncHash36(s) {
     let h = 0x811c9dc5;
@@ -160,6 +208,9 @@ export async function onRequest(context) {
             if (!currentUser.clinicId || isPlatformAdmin(currentUser)) {
                 return json({ success: false, error: '同步通道仅适用于诊所账号' }, 400);
             }
+            // ★ 2026-11-18 在线 presence：药库同步是云端三端最稳定的周期请求（可见时 5 分钟一次），
+            //   在此落 D1 供后台「在线」聚合；失败静默，不阻断同步。
+            await touchUserPresence(context.env, currentUser, currentUser.clientClass);
             const clinicKey = `clinic:${currentUser.clinicId}:medicines`;
 
             if (method === 'GET') {

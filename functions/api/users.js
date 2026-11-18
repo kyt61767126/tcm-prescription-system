@@ -3441,6 +3441,32 @@ export async function onRequest(context) {
                 console.warn('[online] D1 heartbeat 聚合失败，回退 KV:', e && e.message);
             }
 
+            // ★ 2026-11-18 云端在线 presence 聚合（后台「云端桌面在线恒 0」修复）：
+            //   user_session.loginAt 只在登录瞬间写一次，云端桌面/网页/APP 登录 15 分钟后
+            //   必然被判离线（离线端有 heartbeat，云端没有持续信号）。云端三端窗口可见时
+            //   每 5 分钟调 /api/medicines?sync=1，medicines.js 已把该请求落 D1 user_presence。
+            //   这里与 session 口径用同一 15 分钟窗口/北京今日日界合并，并做 username|端 去重。
+            //   D1 未启用/表未建时静默（药库同步首次请求会自动建表）。
+            const presenceByUser = new Map(); // username -> [{ cc, ts }]
+            try {
+                if (isD1Enabled(context.env)) {
+                    const db = getDB(context.env);
+                    if (db) {
+                        const rs = await db.prepare(
+                            `SELECT username, client_class, last_seen FROM user_presence WHERE last_seen >= ?`
+                        ).bind(new Date(todayStartTs).toISOString()).all();
+                        for (const row of (rs && rs.results ? rs.results : [])) {
+                            const uname = row.username;
+                            const ts = Date.parse(row.last_seen);
+                            if (!uname || !Number.isFinite(ts)) continue;
+                            const cc = (row.client_class === 'desktop' || row.client_class === 'app') ? row.client_class : 'web';
+                            if (!presenceByUser.has(uname)) presenceByUser.set(uname, []);
+                            presenceByUser.get(uname).push({ cc, ts });
+                        }
+                    }
+                }
+            } catch (e) { /* presence 读取失败按无在线处理，不影响诊所列表 */ }
+
             // ★ 2026-10-05 历史累计登录（KNOWLEDGE §53）：全量取一次，循环内按
             //   encodeURIComponent(clinic.name) 取用。内部含跨月懒归档（每月仅一次），
             //   失败按无历史处理，不影响诊所列表。
@@ -3460,6 +3486,9 @@ export async function onRequest(context) {
                 //   （旧键 user_session:{u} 与新键 user_session:{u}:{cc} 可能并存，避免双计）
                 let loginDesktop = 0, loginApp = 0, loginWeb = 0;
                 const loginSeen = new Set();
+                // ★ 2026-11-18 在线双源去重：session（登录时瞬间信号）+ presence（周期请求信号）
+                //   按 账号|端 只计一次，避免云端登录后 15 分钟内被算成两个在线。
+                const onlineSeen = new Set();
                 for (const u of (Array.isArray(users) ? users : [])) {
                     if (!u || !u.username) continue;
                     const sessions = onlineMap.get(u.username) || [];
@@ -3467,9 +3496,9 @@ export async function onRequest(context) {
                         if (!s || !s.loginAt) continue;
                         const loginTs = Date.parse(s.loginAt);
                         if (!Number.isFinite(loginTs)) continue;
+                        const cc = (s.clientClass === 'desktop' || s.clientClass === 'app') ? s.clientClass : 'web';
                         // 今日登录桶（先于 15 分钟在线判定，互不影响）
                         if (loginTs >= todayStartTs) {
-                            const cc = (s.clientClass === 'desktop' || s.clientClass === 'app') ? s.clientClass : 'web';
                             const dedupKey = u.username + '|' + cc;
                             if (!loginSeen.has(dedupKey)) {
                                 loginSeen.add(dedupKey);
@@ -3479,8 +3508,31 @@ export async function onRequest(context) {
                             }
                         }
                         if ((nowTs - loginTs) > ONLINE_ACTIVE_MS) continue;
-                        if (s.clientClass === 'desktop') onlineDesktop++;
-                        else if (s.clientClass === 'app') onlineApp++;
+                        const onKey = u.username + '|' + cc;
+                        if (onlineSeen.has(onKey)) continue;
+                        onlineSeen.add(onKey);
+                        if (cc === 'desktop') onlineDesktop++;
+                        else if (cc === 'app') onlineApp++;
+                        else onlineWeb++;
+                    }
+                    // ★ 2026-11-18 presence：云端周期请求（药库同步）带来的持续在线信号，
+                    //   与 session 同口径合并去重；跨北京午夜继续工作也能补上「今日登录」。
+                    for (const p of (presenceByUser.get(u.username) || [])) {
+                        if (p.ts >= todayStartTs) {
+                            const dedupKey = u.username + '|' + p.cc;
+                            if (!loginSeen.has(dedupKey)) {
+                                loginSeen.add(dedupKey);
+                                if (p.cc === 'desktop') loginDesktop++;
+                                else if (p.cc === 'app') loginApp++;
+                                else loginWeb++;
+                            }
+                        }
+                        if ((nowTs - p.ts) > ONLINE_ACTIVE_MS) continue;
+                        const onKey = u.username + '|' + p.cc;
+                        if (onlineSeen.has(onKey)) continue;
+                        onlineSeen.add(onKey);
+                        if (p.cc === 'desktop') onlineDesktop++;
+                        else if (p.cc === 'app') onlineApp++;
                         else onlineWeb++;
                     }
                 }

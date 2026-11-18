@@ -370,6 +370,9 @@ export async function verifyToken(token, env) {
             username: payload.u,
             role: payload.r,
             clinicId: payload.c || null,
+            // ★ 2026-11-18 端类型透出（签名体内的 k）——云端在线 presence 落库分桶用；
+            //   旧 token 无 k 时按 web 兜底，仅用于统计，不参与任何授权判定。
+            clientClass: (payload.k === 'desktop' || payload.k === 'app') ? payload.k : 'web',
             isAdmin: payload.r === ROLE_PLATFORM_ADMIN || payload.r === ROLE_CLINIC_ADMIN,
             // ★ 2026-10-15：服务端签名的处方归属别名（手机号/曾用名），读侧据此放行本人旧名数据
             aliases: Array.isArray(payload.a) ? payload.a : []

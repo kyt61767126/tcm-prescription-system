@@ -160,3 +160,19 @@ CREATE TABLE IF NOT EXISTS admin_resp_cache (
   expires_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_admin_resp_cache_exp ON admin_resp_cache(expires_at);
+
+-- ============================================================================
+-- 2026-11-18 云端在线 presence（后台「云端桌面在线恒 0」修复）
+--   写：functions/api/medicines.js 的 sync 通道（云端三端可见时 5 分钟一次）；
+--   读：functions/api/users.js 诊所列表在线/今日登录聚合（与 user_session 去重合并）。
+--   为什么不用 KV：KV 免费版仅 1000 写/天，心跳早已迁 D1；presence 每端每天约 288 写。
+--   只做统计：不参与任何授权/设备/会话裁决。
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS user_presence (
+  username     TEXT NOT NULL,
+  client_class TEXT NOT NULL,           -- desktop / app / web
+  clinic_id    TEXT,
+  last_seen    TEXT,                    -- ISO 时间（UTC），读侧按北京日界/15 分钟窗口过滤
+  PRIMARY KEY (username, client_class)
+);
+CREATE INDEX IF NOT EXISTS idx_user_presence_seen ON user_presence(last_seen);
