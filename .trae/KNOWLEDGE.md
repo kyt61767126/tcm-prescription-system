@@ -2988,3 +2988,11 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
 * **生效方式**：服务端 push 后立即生效（新签发试用码只能 7 天）；后台页面刷新即可看到新口径；客户端试用天数上限需随下一次桌面/APP 版本发布（热更不覆盖 license-manager 主进程/Java 类，必须重打包）。
 
 
+
+## 89. 打包冒烟「单实例锁」误杀修复（2026-11-18）
+
+* **症状**：一键打包在最后一步 [9.5/9] Fuse check + smoke launch 报 [smoke][FAIL] 进程未存活到检查点（exited=true, code=0），随后红线删除 exe、整条发布流程中止；产物手工重跑冒烟却 PASS。
+* **根因**：	ools/smoke-launch.cjs 以为设 BNZC_E2E_DATA 就能隔离 userData，但正式 fused 包在构建期已用 BNZC_E2E_GUARD 整块移除 e2e-bypass（main.js:121-125），该环境变量不生效 → 冒烟进程与真实客户端共用单实例锁；打包期间客户端若在运行，冒烟进程被 pp.requestSingleInstanceLock() 判定为第二实例并 quit()，退出码 0、无窗口。
+* **修复**：冒烟启动改为传 Chromium 参数 --user-data-dir=<临时目录>（已实测可隔离单实例锁，客户端开着也能正常冒烟）；同步修正脚本头注释与日志措辞，避免误导。
+* **验证**：先启动一个正常客户端，再对同一 fused exe 跑冒烟 → 存活 + 主窗口（登录窗）→ PASS（exit 0）。
+* **教训**：冒烟失败先看退出码：code=0 且瞬间退出 优先怀疑单实例锁/已有实例，而不是产物损坏；不要只凭"userData 隔离"日志文案判断已隔离。

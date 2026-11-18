@@ -11,9 +11,12 @@
 //     ③ 主窗口创建成功（MainWindowHandle ≠ 0，标题不是错误对话框）
 //   同时满足 KNOWLEDGE 铁律「PE 区段嵌入类修改必须实际启动被嵌入的 exe」。
 //
-// 隔离设计（与 run-e2e.cjs 同款）：
-//   - exe 同级临时写 e2e-enabled.marker + env BNZC_E2E=1 → userData 隔离到临时目录
-//     （不传任何调试参数，main.js 的远程调试拦截本来就不会触发）
+// 隔离设计（★ 2026-11-18 修正）：
+//   - 通过 Chromium 启动参数 --user-data-dir=<临时目录> 真正隔离 userData。
+//     旧实现只设 BNZC_E2E_DATA，而正式 fused 包在构建期已移除 e2e-bypass 块，
+//     该环境变量不生效 → 冒烟进程与真实客户端共用单实例锁，客户端开着就必然
+//     立即 quit（exit code 0），导致打包误判失败。
+//   - exe 同级临时写 e2e-enabled.marker + env BNZC_E2E=1（仅开发构建生效，正式包无副作用）
 //   - 跑完删除 marker（NSIS 在本步骤之前已打包，产物永不携带 marker）
 //
 // 用法：
@@ -71,11 +74,11 @@ function getWinInfo(pid) {
 
 async function main() {
     console.log(`[smoke] 冒烟启动测试 -> ${exeAbs}`);
-    console.log(`[smoke] userData 隔离目录: ${userData}`);
+    console.log(`[smoke] userData 隔离目录（--user-data-dir）: ${userData}`);
 
     fs.writeFileSync(markerPath, String(Date.now()), 'utf8');
 
-    const child = spawn(exeAbs, [], {
+    const child = spawn(exeAbs, [`--user-data-dir=${userData}`], {
         cwd: exeDir,
         env: { ...process.env, BNZC_E2E: '1', BNZC_E2E_DATA: userData },
         stdio: 'ignore',
