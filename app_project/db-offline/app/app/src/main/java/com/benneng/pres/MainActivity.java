@@ -1212,20 +1212,23 @@ public class MainActivity extends BridgeActivity {
 
     /**
      * ★ 2026-09-09 下载转化统计：匿名启动心跳（管理后台「下载转化统计」数据源）。
-     *   隐私设计：ANDROID_ID 客户端 SHA-256 后上报（服务端再见不到原始值，且二次哈希存 KV），
-     *   不含 IP/手机号/任何个人信息，仅用于安装设备数去重。无需新增任何权限
-     *   （Settings.Secure.ANDROID_ID 读取不需要权限）。失败静默跳过，绝不影响主流程。
+     *   ★ 2026-11-18 口径修正：心跳 mid 必须与激活记录同口径（LicenseManager.getMachineId），
+     *     旧实现用 ANDROID_ID 直接哈希，与激活机器码不同源，导致后台「已转正/机器码」永远匹配不上。
+     *     隐私设计不变：原始机器码不出设备，仅上报 SHA-256 后的 mid。
+     *   失败静默跳过，绝不影响主流程。
      */
     private void sendStartupHeartbeat() {
         try {
-            String androidId = android.provider.Settings.Secure.getString(
-                    getContentResolver(), android.provider.Settings.Secure.ANDROID_ID);
-            if (androidId == null || androidId.isEmpty()) {
-                Log.d(TAG, "[telemetry] 心跳跳过: 无 ANDROID_ID");
+            String machineId = "";
+            try {
+                machineId = new LicenseManager(MainActivity.this).getMachineId();
+            } catch (Throwable ignored) {}
+            if (machineId == null || machineId.isEmpty()) {
+                Log.d(TAG, "[telemetry] 心跳跳过: 无机器码");
                 return;
             }
             java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
-            byte[] digest = md.digest(("local-app:" + androidId).getBytes("UTF-8"));
+            byte[] digest = md.digest(("local-app:" + machineId).getBytes("UTF-8"));
             StringBuilder sb = new StringBuilder();
             for (byte b : digest) sb.append(String.format("%02x", b));
             String midHash = sb.toString();
