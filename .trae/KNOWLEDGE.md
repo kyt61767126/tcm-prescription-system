@@ -2944,6 +2944,7 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
     * `renderFormulaList()` 增加过滤：名称/简码/功效/主治/组成药材，任一命中即显示；无结果显示「没有匹配的验方」。
   * **索引防错位铁律**：过滤用 `formulas.map((f,i)=>({f,i})).filter(...)` 携带原始下标，模板仍用 `${i}` 绑定「调用/编辑/删除」——按筛选结果操作不会误删/误调其它验方。
 * **验证**：7 份 index.html 的 `renderFormulaList` 提取后 `new Function` 解析 0 错；纯函数夹具测试（空搜索 3 条、搜药材「黄芪」命中且下标 0、搜主治「失眠」下标 2、无结果提示、清空恢复）全通过；`sync-index-app` 32 条变换唯一命中；`html-sync-check` IN SYNC；`copy-consistency` 110 副本 0 失败；`diff-cross-version` 6 对全绿；`check-interface` 如预期 3 份页面变更后重建 `.interface-lock.json`（6 OK）。
-* **生效方式**：云端网页 push 即生效可强刷；云桌面/离线桌面/云 APP/离线 APP 已装设备需重发热更新包或重打包，否则仍跑旧 `index.html`。hot-update 目录属发版产物，本次未改（发版时由 `generate-*-hotupdate` 重新生成）。
+* **生效方式**：云端网页 push 即生效可强刷；云桌面/离线桌面/云 APP/离线 APP 已装设备需重发热更新包或重打包，否则仍跑旧 `index.html`。
+* **热包签发（2026-11-18 同日）**：`generate-desktop-hotupdate.cjs -c cloud`（`2026.11.18-2`，含云端 `public/index.html` 且身份断言通过）、`-c local`（`2026.11.18-1`）、`generate-app-hotupdate.cjs`（`app-local 2026.11.18-1`，minAppCode 继承 288）；三通道 Ed25519 签名 + 逐文件 SHA256 已重算，push 后线上 `version.json` 轮询核验三通道 hotVersion 均更新。客户端联网启动一次静默拉取，**彻底退出重进后生效**（桌面下次启动生效；APP 划掉重进）。
 
 
