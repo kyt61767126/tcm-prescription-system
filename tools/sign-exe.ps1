@@ -144,6 +144,37 @@ $peZoneSign = Join-Path $PSScriptRoot 'pe-zone-sign.cjs'
 $failed = $false
 $signedCount = 0
 
+# 2026-11-18: freshly built installers (portable SFX / Setup) can be briefly
+# locked by antivirus/Defender real-time scan, making Set-AuthenticodeSignature
+# fail with IOException "being used by another process". Retry with backoff
+# before treating it as a signing failure (observed intermittent on 1.0.360).
+function Invoke-SignWithRetry {
+    param(
+        [string]$Path,
+        [System.Security.Cryptography.X509Certificates.X509Certificate2]$Cert,
+        [string]$TsServer = ''
+    )
+    $maxAttempts = 6
+    for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+        try {
+            if ($TsServer) {
+                return Set-AuthenticodeSignature -FilePath $Path -Certificate $Cert -HashAlgorithm SHA256 -TimestampServer $TsServer
+            }
+            return Set-AuthenticodeSignature -FilePath $Path -Certificate $Cert -HashAlgorithm SHA256
+        } catch {
+            $isLock = ($_.Exception -is [System.IO.IOException]) -or
+                      ($_.Exception.InnerException -is [System.IO.IOException]) -or
+                      ($_.Exception -is [System.UnauthorizedAccessException])
+            if ($isLock -and $attempt -lt $maxAttempts) {
+                Write-Host ('[SIGN][WARN] file busy, retry ' + $attempt + '/' + $maxAttempts + ' in 3s: ' + $Path) -ForegroundColor Yellow
+                Start-Sleep -Seconds 3
+                continue
+            }
+            throw
+        }
+    }
+}
+
 foreach ($p in $ExePath) {
     $files = @()
     if ($p.Contains('*') -or $p.Contains('?')) {
@@ -162,7 +193,7 @@ foreach ($p in $ExePath) {
             # PS 5.1 does NOT throw on timestamp failure - it returns a result
             # object with null SignerCertificate, so detect that and retry bare.
             try {
-                $sig = Set-AuthenticodeSignature -FilePath $f.FullName -Certificate $cert -HashAlgorithm SHA256 -TimestampServer $TimestampServer
+                $sig = Invoke-SignWithRetry -Path $f.FullName -Cert $cert -TsServer $TimestampServer
             } catch {
                 $sig = $null
             }
@@ -173,7 +204,7 @@ foreach ($p in $ExePath) {
         }
         if ($null -eq $sig) {
             try {
-                $sig = Set-AuthenticodeSignature -FilePath $f.FullName -Certificate $cert -HashAlgorithm SHA256
+                $sig = Invoke-SignWithRetry -Path $f.FullName -Cert $cert
             } catch {
                 Write-Host ('[SIGN][ERROR] ' + $f.FullName + ' : ' + $_.Exception.Message) -ForegroundColor Red
                 $failed = $true

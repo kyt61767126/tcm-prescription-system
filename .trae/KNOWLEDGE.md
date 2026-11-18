@@ -2996,3 +2996,4 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
 * **修复**：冒烟启动改为传 Chromium 参数 --user-data-dir=<临时目录>（已实测可隔离单实例锁，客户端开着也能正常冒烟）；同步修正脚本头注释与日志措辞，避免误导。
 * **验证**：先启动一个正常客户端，再对同一 fused exe 跑冒烟 → 存活 + 主窗口（登录窗）→ PASS（exit 0）。
 * **教训**：冒烟失败先看退出码：code=0 且瞬间退出 优先怀疑单实例锁/已有实例，而不是产物损坏；不要只凭"userData 隔离"日志文案判断已隔离。
+* **追加（同日 16:12 失败）**：签名阶段对便携版 exe 报 `being used by another process`（Defender 实时扫描新建 SFX 的瞬时锁，事后复查已解锁）。已在 `tools/sign-exe.ps1` 增加 `Invoke-SignWithRetry`：IOException/UnauthorizedAccessException 时 3 秒 × 最多 6 次重试，仍失败才 abort；时间戳分支同样走重试。已用实际 1.0.360 便携包复签验证 exit 0。
