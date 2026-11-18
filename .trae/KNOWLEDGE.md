@@ -2934,4 +2934,16 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
 * **§91.1 心跳设备配额已满时仍记录在线（2026-11-18）**：`heartbeat.js` 的 `device_mismatch` 分支原先在写 D1 前直接 return，而 `login-punch` 不做设备配额校验，导致后台出现「今日登录 1、在线 0」的自相矛盾。现该分支在返回 `device_mismatch` 前补写 `punchLogin` + `upsertD1Heartbeat`（`clientClass` 取请求声明），仅补运营可见性，不授权、不改设备配额与绑定列表；客户端仍按 `device_mismatch` 走激活/锁定流程。若仍显示离线，则说明心跳请求未到达服务端（断网/被拦截/旧客户端无心跳），需查客户端 `license:hbDiagPost`。
 * **生效方式**：push 后 admin 静态页自动部署，五端零重打包。若仍为 0，先确认离线端能联网，并重启客户端以加载 `2026.11.17-4` 及之后的 auth-core 热更新（登录即时上报 `login-punch`；否则最多等 10 分钟心跳）。
 
+### 92. F3 验方设置搜索失效修复（2026-11-18）
+
+* **现象**：软件「F3 验方设置」弹窗有搜索框，录入关键字列表无任何变化。
+* **根因**：`#formulaSearch` 只有 placeholder，没有绑定任何输入事件；`renderFormulaList()` 直接 `formulas.map(...)` 全量渲染，从不读取输入值。
+* **改动**（两处权威源，副本由生成器传播，禁止手改副本）：
+  * `public/index.html`（云端权威源，同步 cloud_desktop / 云APP assets / 鸿蒙 rawfile）与 `app_project/db-offline/desktop/index.html`（离线权威源，经 `sync-index-app.cjs` 生成 index-app.html + 离线 APP assets）：
+    * 输入框补 `oninput="renderFormulaList()"`，placeholder 改为「搜索验方（名称/功效/主治/药材）」。
+    * `renderFormulaList()` 增加过滤：名称/简码/功效/主治/组成药材，任一命中即显示；无结果显示「没有匹配的验方」。
+  * **索引防错位铁律**：过滤用 `formulas.map((f,i)=>({f,i})).filter(...)` 携带原始下标，模板仍用 `${i}` 绑定「调用/编辑/删除」——按筛选结果操作不会误删/误调其它验方。
+* **验证**：7 份 index.html 的 `renderFormulaList` 提取后 `new Function` 解析 0 错；纯函数夹具测试（空搜索 3 条、搜药材「黄芪」命中且下标 0、搜主治「失眠」下标 2、无结果提示、清空恢复）全通过；`sync-index-app` 32 条变换唯一命中；`html-sync-check` IN SYNC；`copy-consistency` 110 副本 0 失败；`diff-cross-version` 6 对全绿；`check-interface` 如预期 3 份页面变更后重建 `.interface-lock.json`（6 OK）。
+* **生效方式**：云端网页 push 即生效可强刷；云桌面/离线桌面/云 APP/离线 APP 已装设备需重发热更新包或重打包，否则仍跑旧 `index.html`。hot-update 目录属发版产物，本次未改（发版时由 `generate-*-hotupdate` 重新生成）。
+
 
