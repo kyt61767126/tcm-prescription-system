@@ -2845,7 +2845,8 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
         try {
             SharedPreferences prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
             int days = prefs.getInt(PREF_KEY_TRIAL_DAYS, -1);
-            if (days >= 0 && days <= 365) {
+            // ★ 2026-11-18 业务铁律：试用固定 7 天，配置只能缩短（0-7）不能延长
+            if (days >= 0 && days <= DEFAULT_TRIAL_DAYS) {
                 // ★ P1-2 修复：签名校验，不通过（明文被篡改/旧版无签名）回退默认值
                 String expectSig = computeTrialDaysSignature(days);
                 String savedSig = prefs.getString(PREF_KEY_TRIAL_DAYS_SIG, "");
@@ -2864,9 +2865,9 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
     public JSONObject setTrialDays(int days) {
         JSONObject result = new JSONObject();
         try {
-            if (days < 0 || days > 365) {
+            if (days < 0 || days > DEFAULT_TRIAL_DAYS) {
                 result.put("success", false);
-                result.put("error", "试用期天数必须在 0-365 之间");
+                result.put("error", "试用期天数必须在 0-" + DEFAULT_TRIAL_DAYS + " 之间（试用固定 7 天，只能缩短）");
                 return result;
             }
             String sig = computeTrialDaysSignature(days);

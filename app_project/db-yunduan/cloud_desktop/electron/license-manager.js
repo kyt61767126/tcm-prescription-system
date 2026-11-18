@@ -895,13 +895,14 @@ function loadUserAccountBackup() {
     return inspectUsersBackup();
 }
 
-// ★ 获取试用期天数（可配置，默认 7 天，测试时可设为 0 天立即触发激活）
+// ★ 获取试用期天数（默认 7 天；测试可设 0 天立即触发激活）
+// ★ 2026-11-18 业务铁律：试用固定 7 天，配置只能缩短（0-7）不能延长，防改 trial-config.json 延长试用
 function getTrialDays() {
     try {
         const configPath = getTrialConfigPath();
         if (fs.existsSync(configPath)) {
             const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-            if (typeof config.trialDays === 'number' && config.trialDays >= 0 && config.trialDays <= 365) {
+            if (typeof config.trialDays === 'number' && config.trialDays >= 0 && config.trialDays <= DEFAULT_TRIAL_DAYS) {
                 return config.trialDays;
             }
         }
@@ -915,8 +916,8 @@ function getTrialDays() {
 function setTrialDays(days) {
     try {
         const parsed = parseInt(days, 10);
-        if (isNaN(parsed) || parsed < 0 || parsed > 365) {
-            return { success: false, error: '试用期天数必须在 0-365 之间' };
+        if (isNaN(parsed) || parsed < 0 || parsed > DEFAULT_TRIAL_DAYS) {
+            return { success: false, error: '试用期天数必须在 0-' + DEFAULT_TRIAL_DAYS + ' 之间（试用固定 7 天，只能缩短）' };
         }
         const configPath = getTrialConfigPath();
         const config = { trialDays: parsed, updatedAt: new Date().toISOString() };

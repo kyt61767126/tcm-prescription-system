@@ -17,10 +17,11 @@
 //      installs:  { total, active7, active30, byEdition: { ed: {total, active7, active30} }, new14d: [...] },
 //      activation:{ total, pending, activated, rejected, cancelled },
 //      activatedMachines: n,
-//      trialNotActivated: n,      // ★P2 心跳机器码集合 − 四端盐展开的激活机器码集合（估算）
+//      trialNotActivated: n,      // ★P2 心跳机器码集合 − 四端盐展开的激活机器码集合（仅离线本地版·估算）
 //      trialCoverage: { withMid, missing },  // 老心跳记录缺 mid 的条数（35 天 TTL 内逐步补齐）
 //      trialFingerprints: { total, todayNew, last7New, activeTrials, expiredTrials, repeatTrials, avgFirstToLastDays },
-//      trialUsage: { deviceCount, totalActiveDays, avgActiveDays, ge3, ge7, distribution, devices[≤200] },
+//      trialUsage: { deviceCount, totalActiveDays, avgActiveDays, ge3, ge7, beyondTrialTotal, maxTrialDays, distribution, devices[≤200] },
+//        ↑ 仅离线本地版（local-desktop/local-app）；云端版无试用；使用天数按首用起 7 天窗口，恒 ≤7
 //      downloadTrend: [{ date, desktop, app, total }],   // 近14天官网下载（D1）
 //      conversion: { downloadToInstall, installToRequest, installToActivated } }
 // ============================================================================
@@ -35,6 +36,10 @@ const GH_CACHE_TTL = 60 * 60 * 1000; // 1 小时
 
 const TL_DEV_PREFIX = 'tl_dev:';
 const EDITIONS = ['local-desktop', 'cloud-desktop', 'cloud-app', 'local-app'];
+// ★ 2026-11-18 试用业务铁律：只有离线本地版（离线桌面/离线APP）有试用，固定 7 天；
+//   云端桌面/云端APP 无试用。试用统计只纳入这两个端，云端设备一律不计入试用口径。
+const TRIAL_EDITIONS = ['local-desktop', 'local-app'];
+const TRIAL_DAYS = 7;
 
 function corsHeaders() {
     return {
@@ -248,13 +253,16 @@ async function getInstallStats(kv) {
                 const slot = new14d.find(x => x.date === firstDay);
                 if (slot) slot.count++; else new14d.push({ date: firstDay, count: 1 });
             }
-            if (typeof rec.mid === 'string' && rec.mid) midSet.add(rec.mid);
-            else midMissing++;
+            if (TRIAL_EDITIONS.includes(ed)) {
+                if (typeof rec.mid === 'string' && rec.mid) midSet.add(rec.mid);
+                else midMissing++;
+            }
             devices.push({
                 ed,
                 first: rec.first || 0,
                 last: rec.last || 0,
                 activeDays: rec.days ? Object.keys(rec.days).length : 0,
+                days: rec.days || {},
                 version: rec.v || '',
                 mid: (typeof rec.mid === 'string' ? rec.mid : '')
             });
@@ -270,30 +278,48 @@ async function getInstallStats(kv) {
         active7 += byEdition[ed].active7;
         active30 += byEdition[ed].active30;
     }
-    // ★ 2026-11-18 使用天数汇总/分布（近30天口径）
-    let totalActiveDays = 0, ge3 = 0, ge7 = 0;
-    const buckets = [0, 0, 0, 0]; // 1天以内 / 2-3天 / 4-7天 / 8天以上
-    for (const d of devices) {
-        const n = d.activeDays;
-        totalActiveDays += n;
-        if (n >= 3) ge3++;
-        if (n >= 7) ge7++;
-        if (n <= 1) buckets[0]++;
-        else if (n <= 3) buckets[1]++;
-        else if (n <= 7) buckets[2]++;
+    // ★ 2026-11-18 试用使用天数（仅离线本地版，试用固定 7 天）：
+    //   ① 云端版无试用，cloud-desktop / cloud-app 不进入试用口径；
+    //   ② 每台设备只统计「首次使用起 7 个自然日内」的心跳活跃日（days 的键为 UTC 日），
+    //      超窗口的天数记入 beyondTrialDays，不计入试用使用天数 → 试用天数恒 ≤7；
+    //   ③ 分布按试用天数分档，避免出现"试用 20 天/27 天"的错误语义。
+    const utcDay = ts => new Date(ts).toISOString().slice(0, 10);
+    const trialDevices = devices.filter(d => TRIAL_EDITIONS.includes(d.ed));
+    let totalActiveDays = 0, ge3 = 0, ge7 = 0, beyondTrialTotal = 0;
+    const buckets = [0, 0, 0, 0]; // 1天以内 / 2-3天 / 4-6天 / 满7天
+    for (const d of trialDevices) {
+        const firstDay = utcDay(d.first || now);
+        const lastTrialDay = utcDay((d.first || now) + TRIAL_DAYS * 24 * 60 * 60 * 1000 - 1);
+        let trialDays = 0;
+        for (const key of Object.keys(d.days || {})) {
+            if (key >= firstDay && key <= lastTrialDay) trialDays++;
+        }
+        trialDays = Math.min(trialDays, TRIAL_DAYS);
+        d.trialDays = trialDays;
+        d.beyondTrialDays = Math.max(0, (d.activeDays || 0) - trialDays);
+        d.inTrial = (now - (d.first || now)) <= TRIAL_DAYS * 24 * 60 * 60 * 1000;
+        totalActiveDays += trialDays;
+        beyondTrialTotal += d.beyondTrialDays;
+        if (trialDays >= 3) ge3++;
+        if (trialDays >= 7) ge7++;
+        if (trialDays <= 1) buckets[0]++;
+        else if (trialDays <= 3) buckets[1]++;
+        else if (trialDays <= 6) buckets[2]++;
         else buckets[3]++;
     }
     const usage = {
-        deviceCount: devices.length,
+        deviceCount: trialDevices.length,
         totalActiveDays,
-        avgActiveDays: devices.length ? Math.round((totalActiveDays / devices.length) * 10) / 10 : 0,
-        ge3,
-        ge7,
+        avgActiveDays: trialDevices.length ? Math.round((totalActiveDays / trialDevices.length) * 10) / 10 : 0,
+        ge3, ge7,
+        beyondTrialTotal,
+        maxTrialDays: TRIAL_DAYS,
+        editions: TRIAL_EDITIONS.slice(),
         distribution: [
             { label: '1天以内', count: buckets[0] },
             { label: '2-3天', count: buckets[1] },
-            { label: '4-7天', count: buckets[2] },
-            { label: '8天以上', count: buckets[3] }
+            { label: '4-6天', count: buckets[2] },
+            { label: '满7天', count: buckets[3] }
         ]
     };
     return { total, active7, active30, byEdition, new14d, midSet, midMissing, devices, usage };
@@ -405,14 +431,18 @@ async function onRequestInner(context) {
 
         const pct = (num, den) => (den > 0 ? Math.round((num / den) * 1000) / 10 : 0);
 
-        // ★ 2026-11-18 试用设备使用明细：按最近使用倒序，最多 200 台；
-        //   activated 用已展开的盐化 mid 与授权机器码集合比对。
+        // ★ 2026-11-18 试用设备使用明细：仅离线本地版（云端无试用），按最近使用倒序，最多 200 台；
+        //   使用天数按「首用起 7 天窗口」统计（恒 ≤7），beyondTrialDays 为窗口外的活跃天数。
         const trialDevices = devices
+            .filter(d => TRIAL_EDITIONS.includes(d.ed))
             .map(d => ({
                 ed: d.ed,
                 first: d.first,
                 last: d.last,
                 activeDays: d.activeDays,
+                trialDays: d.trialDays || 0,
+                beyondTrialDays: d.beyondTrialDays || 0,
+                inTrial: !!d.inTrial,
                 version: d.version,
                 activated: d.mid ? activatedSalted.has(d.mid) : false
             }))

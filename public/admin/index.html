@@ -341,16 +341,16 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                 <div class="stat-card" title="GitHub Release 资产官方计数：含更新器拉取与全部历史版本；缓存1小时，抓取失败沿用上次成功值，从未成功显示暂不可用"><div class="num" id="fnDownloads">-</div><div class="label">GitHub 展示下载量（次）</div></div>
                 <div class="stat-card" title="2026-09-28 起积累：同 IP 同文件当天去重的下载发起次数（估算，HEAD探测/断点分片/重复点击不重复计）"><div class="num" id="fnSiteDownloads">-</div><div class="label">官网实际下载（次·估算）</div></div>
                 <div class="stat-card used"><div class="num" id="fnInstalls">-</div><div class="label">安装启动设备（台）</div></div>
-                <div class="stat-card unused" title="机器码集合差：有启动心跳但未激活的设备；2026-09-28 前的老心跳记录 35 天 TTL 内逐步补齐，数字为估算"><div class="num" id="fnTrial">-</div><div class="label">试用未激活（台·估算）</div></div>
+                <div class="stat-card unused" title="机器码集合差：仅统计离线本地版（离线桌面/离线APP）有启动心跳但未激活的设备；云端版无试用，不纳入。老心跳记录 35 天 TTL 内逐步补齐，数字为估算"><div class="num" id="fnTrial">-</div><div class="label">试用未激活（离线本地·台·估算）</div></div>
                 <div class="stat-card"><div class="num" id="fnRequests">-</div><div class="label">提交激活申请（累计）</div></div>
                 <div class="stat-card used"><div class="num" id="fnActivated">-</div><div class="label">已激活设备（台）</div></div>
                 <div class="stat-card"><div class="num" id="fnActive7">-</div><div class="label">近7天活跃设备（台）</div></div>
-                <div class="stat-card" title="trial_fp 硬件指纹去重（长期保留，一个指纹=一台设备/一位使用者）"><div class="num" id="fnTrialFp">-</div><div class="label">试用登记人数（台）</div></div>
+                <div class="stat-card" title="trial_fp 硬件指纹去重（离线 7 天试用登记，长期保留；一个指纹=一台设备/一位使用者）"><div class="num" id="fnTrialFp">-</div><div class="label">试用登记人数（台）</div></div>
                 <div class="stat-card"><div class="num" id="fnTrialToday">-</div><div class="label">今日新增试用（台）</div></div>
                 <div class="stat-card"><div class="num" id="fnTrial7">-</div><div class="label">近7天新增试用（台）</div></div>
-                <div class="stat-card"><div class="num" id="fnActive30">-</div><div class="label">近30天活跃设备（台）</div></div>
-                <div class="stat-card used" title="近30天每台设备有心跳的自然日数求和；心跳记录仅保留35天，更早历史不计入"><div class="num" id="fnUsageDays">-</div><div class="label">近30天总使用天数</div></div>
-                <div class="stat-card used"><div class="num" id="fnAvgDays">-</div><div class="label">平均每台使用天数</div></div>
+                <div class="stat-card"><div class="num" id="fnActive30">-</div><div class="label">近30天活跃设备（全端·台）</div></div>
+                <div class="stat-card used" title="仅离线本地版（离线桌面/离线APP）；每台设备只统计「首次使用起 7 个自然日内」的心跳活跃日，单台恒 ≤7 天"><div class="num" id="fnUsageDays">-</div><div class="label">试用期总使用天数（≤7/台）</div></div>
+                <div class="stat-card used" title="试用期总使用天数 ÷ 试用设备数；单台上限 7 天"><div class="num" id="fnAvgDays">-</div><div class="label">平均每台试用天数</div></div>
             </div>
             <div id="funnelConversion" style="margin-top:8px;font-size:13px;color:#606266;"></div>
             <div id="funnelEditions" style="margin-top:4px;font-size:12px;color:#909399;"></div>
@@ -368,13 +368,13 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                 </div>
             </div>
 
-            <!-- ★ 2026-11-18 试用使用统计：人数（trial_fp）+ 使用天数（心跳 days，近30天口径） -->
-            <h2 style="margin-top:24px;">试用使用统计 <span style="font-size:12px;color:#909399;font-weight:normal;">（使用天数=近30天有心跳的自然日数；心跳记录保留35天，历史更早数据不累计）</span></h2>
+            <!-- ★ 2026-11-18 试用使用统计：仅离线本地版（云端版无试用），试用固定 7 天 -->
+            <h2 style="margin-top:24px;">试用使用统计 <span style="font-size:12px;color:#909399;font-weight:normal;">（口径：仅离线本地版「离线桌面/离线APP」；试用固定 7 天，单台使用天数恒 ≤7；云端桌面/云端APP 无试用，不纳入统计）</span></h2>
             <div id="trialUsageSummary" style="font-size:13px;color:#606266;margin-bottom:10px;"></div>
             <div class="gen-box">
                 <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-                    <div style="font-weight:600;font-size:13px;">试用设备使用明细</div>
-                    <div style="font-size:12px;color:#909399;">按最近使用倒序，最多显示 200 台；「已转正」表示同一机器码已激活正式版</div>
+                    <div style="font-weight:600;font-size:13px;">离线本地版使用明细（试用口径）</div>
+                    <div style="font-size:12px;color:#909399;">按最近使用倒序，最多显示 200 台；「试用天数」只计首次使用起 7 天内的活跃日；「近30天活跃」含试用期外天数；首次使用超过 35 天的设备早期心跳已回收，试用天数可能偏低</div>
                 </div>
                 <div id="trialUsageTable" style="margin-top:10px;overflow:auto;max-height:420px;"><div class="loading">加载中...</div></div>
             </div>
@@ -407,7 +407,6 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
             <div class="tpl-bar">
                 <span class="tpl-label">快捷模板：</span>
                 <button class="tpl-btn" data-tpl="trial7" onclick="applyTemplate('trial7')">试用 · 7天</button>
-                <button class="tpl-btn" data-tpl="trial30" onclick="applyTemplate('trial30')">试用 · 30天</button>
                 <button class="tpl-btn" data-tpl="personal1y" onclick="applyTemplate('personal1y')">个人 · 1年</button>
                 <button class="tpl-btn" data-tpl="personal3y" onclick="applyTemplate('personal3y')">个人 · 3年</button>
                 <button class="tpl-btn" data-tpl="personalForever" onclick="applyTemplate('personalForever')">个人 · 永久</button>
@@ -1713,7 +1712,6 @@ async function loadClinicNames() {
 // 预设模板（系统内置，永久版用 36500 天 = 100 年模拟）
 const PRESET_TEMPLATES = {
     trial7:           { name: '试用 · 7天',           type: 'trial',    days: 7,     maxDevices: 1  },
-    trial30:          { name: '试用 · 30天',          type: 'trial',    days: 30,    maxDevices: 1  },
     personal1y:       { name: '个人 · 1年',           type: 'personal', days: 365,   maxDevices: 1  },
     personal3y:       { name: '个人 · 3年',           type: 'personal', days: 1095,  maxDevices: 1  },
     personalForever:  { name: '个人 · 永久',          type: 'personal', days: 36500, maxDevices: 1  },
@@ -3415,7 +3413,7 @@ async function loadFunnelStats(token) {
         set('fnActive7', d.installs ? d.installs.active7 : 0);
         // ★ 2026-09-28 P1：官网实际下载（D1 去重·估算），埋点上线前/无 D1 时显示"积累中"
         set('fnSiteDownloads', (d.siteDownloads && d.siteDownloads.available) ? d.siteDownloads.total : '积累中');
-        // ★ 2026-11-18 试用人数/使用天数（trial_fp 指纹 + 心跳 days 近30天口径）
+        // ★ 2026-11-18 试用人数/使用天数（trial_fp 指纹 + 心跳 days；仅离线本地版，试用固定 7 天）
         set('fnActive30', d.installs ? d.installs.active30 : 0);
         const tf = d.trialFingerprints || {};
         set('fnTrialFp', tf.total != null ? tf.total : 0);
@@ -3511,13 +3509,13 @@ function renderTrendChart(clinics, users) {
     el.innerHTML = svg;
 }
 
-// ★ 2026-11-18 试用使用统计：汇总行 + 每台设备使用明细（近30天使用天数）
+// ★ 2026-11-18 试用使用统计：仅离线本地版（云端无试用），试用固定 7 天（单台使用天数恒 ≤7）
 function renderTrialUsage(tu, tf) {
     const sumEl = document.getElementById('trialUsageSummary');
     const dist = ((tu && tu.distribution) || []).map(x => x.label + ' ' + x.count + ' 台').join(' · ');
     if (sumEl) {
-        sumEl.innerHTML = '设备数：<b>' + ((tu && tu.deviceCount) || 0) + '</b> 台 ｜ 使用 ≥3 天：<b>' + ((tu && tu.ge3) || 0)
-            + '</b> 台 ｜ ≥7 天：<b>' + ((tu && tu.ge7) || 0) + '</b> 台'
+        sumEl.innerHTML = '试用设备（离线本地）：<b>' + ((tu && tu.deviceCount) || 0) + '</b> 台 ｜ 试用 ≥3 天：<b>' + ((tu && tu.ge3) || 0)
+            + '</b> 台 ｜ 满 7 天：<b>' + ((tu && tu.ge7) || 0) + '</b> 台'
             + ' ｜ 分布：' + (dist || '—')
             + ' ｜ 试用期内：' + ((tf && tf.activeTrials) || 0) + ' 台 ｜ 试用过期：' + ((tf && tf.expiredTrials) || 0)
             + ' 台 ｜ 重复试用：' + ((tf && tf.repeatTrials) || 0) + ' 台';
@@ -3526,10 +3524,10 @@ function renderTrialUsage(tu, tf) {
     if (!el) return;
     const rows = (tu && Array.isArray(tu.devices)) ? tu.devices : [];
     if (!rows.length) {
-        el.innerHTML = '<div style="font-size:12px;color:#909399;padding:6px 0;">暂无数据（客户端心跳上报后开始积累）</div>';
+        el.innerHTML = '<div style="font-size:12px;color:#909399;padding:6px 0;">暂无数据（离线本地版客户端心跳上报后开始积累）</div>';
         return;
     }
-    const names = { 'cloud-desktop': '云桌面', 'local-desktop': '离线桌面', 'cloud-app': '云端APP', 'local-app': '离线APP' };
+    const names = { 'local-desktop': '离线桌面', 'local-app': '离线APP' };
     const fmtDay = ts => { if (!ts) return '—'; const d = new Date(ts + 8 * 3600000); return d.toISOString().slice(0, 10); };
     const td = 'padding:6px 8px;border-bottom:1px solid #f2f6fc;';
     let html = '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f5f7fa;color:#606266;">'
@@ -3537,18 +3535,23 @@ function renderTrialUsage(tu, tf) {
         + '<th style="text-align:left;padding:6px 8px;border-bottom:1px solid #ebeef5;">版本</th>'
         + '<th style="text-align:left;padding:6px 8px;border-bottom:1px solid #ebeef5;">首次使用</th>'
         + '<th style="text-align:left;padding:6px 8px;border-bottom:1px solid #ebeef5;">最近使用</th>'
-        + '<th style="text-align:right;padding:6px 8px;border-bottom:1px solid #ebeef5;">近30天使用天数</th>'
+        + '<th style="text-align:right;padding:6px 8px;border-bottom:1px solid #ebeef5;">试用天数（≤7）</th>'
+        + '<th style="text-align:right;padding:6px 8px;border-bottom:1px solid #ebeef5;">近30天活跃</th>'
         + '<th style="text-align:left;padding:6px 8px;border-bottom:1px solid #ebeef5;">状态</th></tr></thead><tbody>';
     rows.forEach(r => {
+        const status = r.activated
+            ? '<span style="color:#27ae60;">已转正</span>'
+            : (r.inTrial
+                ? '<span style="color:#e6a23c;">试用中（首用未满7天）</span>'
+                : '<span style="color:#909399;">试用已到期（未转正）</span>');
         html += '<tr>'
             + '<td style="' + td + '">' + escapeHtml(names[r.ed] || r.ed || '—') + '</td>'
             + '<td style="' + td + 'color:#909399;">' + escapeHtml(r.version || '—') + '</td>'
             + '<td style="' + td + '">' + fmtDay(r.first) + '</td>'
             + '<td style="' + td + '">' + fmtDay(r.last) + '</td>'
-            + '<td style="' + td + 'text-align:right;font-weight:600;">' + (r.activeDays || 0) + '</td>'
-            + '<td style="' + td + '">' + (r.activated
-                ? '<span style="color:#27ae60;">已转正</span>'
-                : '<span style="color:#e6a23c;">试用/未激活</span>') + '</td>'
+            + '<td style="' + td + 'text-align:right;font-weight:600;">' + (r.trialDays || 0) + '</td>'
+            + '<td style="' + td + 'text-align:right;color:#909399;">' + (r.activeDays || 0) + '</td>'
+            + '<td style="' + td + '">' + status + '</td>'
             + '</tr>';
     });
     el.innerHTML = html + '</tbody></table>';

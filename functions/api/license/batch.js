@@ -145,6 +145,10 @@ export async function onRequest(context) {
         if (!days && !expiresAt) {
             return json({ success: false, error: '请提供 days 或 expiresAt' }, 400);
         }
+        // ★ 2026-11-18 业务铁律：试用只有「离线本地标准版」且固定 7 天，禁止签发其它时长 trial 码
+        if (type === 'trial' && (parseInt(days, 10) !== 7 || expiresAt)) {
+            return json({ success: false, error: '试用版固定 7 天：请使用 days=7 生成（不支持自定义到期日）' }, 400);
+        }
         // clinicName 校验
         if (clinicName !== undefined && clinicName !== null) {
             if (typeof clinicName !== 'string' || clinicName.trim().length === 0) {

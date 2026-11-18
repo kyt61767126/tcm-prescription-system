@@ -2969,4 +2969,20 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
 * **验证**：`node --check functions/api/stats/funnel.js` OK；admin 内联脚本 `new Function` 解析 0 失败；`copy-consistency` 110 副本 0 失败；`diff-cross-version --pair adminconsole` 0 差异；`check-interface` 6 OK。
 * **生效方式**：push 后 Pages 部署即生效，后台首页刷新可见（缓存 ≤5 分钟）。数据未变化时优先核对 `trial_fp:` / `tl_dev:` 的实际写入量，再排查 API 返回。
 
+### 95. 试用口径纠偏：仅离线本地版 + 固定 7 天（2026-11-18）
+
+* **业务铁律（用户明确）**：试用只给**离线本地标准版**（离线桌面 / 离线APP），**云端桌面 / 云端APP 无试用**；试用期**固定 7 天**。
+* **检查结论**：
+  * 客户端：云端桌面 `main.js` 明确「无 license 直接未激活，云端版无试用」；trial 登记接口只被离线桌面 `main.js` 与离线 APP `LicenseManager.java` 调用；试用期强制 `edition=personal`（标准版）。主链路符合铁律。
+  * 偏差 1：后台「生成激活码」提供「试用 · 30天」模板，`/api/license/generate|batch` 对 `type=trial` 不限制 days → 可签发 30 天试用码。**已删模板 + 服务端强制 `trial` 必须 `days=7` 且不允许 `expiresAt`**（400 提示）。
+  * 偏差 2：桌面 `getTrialDays()` / 安卓 `getTrialDays()` 允许 trial-config/偏好 0-365 天，改文件即可延长试用。**已收紧为只能 0-7 天（默认 7），`setTrialDays` 同步拒绝 >7**；`shared/license/license-manager.js` 为权威源，已 `sync-all.ps1` 分发 4 个桌面/APP 副本。
+  * 偏差 3：后台「试用使用统计」把四端全部未激活设备都标成「试用/未激活」，导致云桌面/云端APP（本无试用）和已使用 20+ 天的设备出现在试用明细里。**已改为仅统计 `local-desktop` / `local-app`**。
+* **统计口径修正**（`functions/api/stats/funnel.js`）：
+  * `getInstallStats` 的 `midSet/midMissing` 只收离线本地版 → 「试用未激活」「试用覆盖率」不再混入云端设备。
+  * `trialUsage` 每台设备只计「首次使用起 7 个自然日内」的心跳活跃日（`days` 键为 UTC 日），单台恒 ≤7；窗口外天数记 `beyondTrialDays`，仅作参考；分布改为 1天以内 / 2-3天 / 4-6天 / 满7天。
+  * 明细新增 `trialDays`、`beyondTrialDays`、`inTrial`；后台列改为「试用天数（≤7）/ 近30天活跃 / 状态（已转正·试用中·试用已到期）」。
+  * 限制：心跳 `days` 仅留 30 天、记录 TTL 35 天 → 首次使用超过 35 天的设备早期试用日已回收，试用天数可能偏低（界面已注明）。
+* **验证**：`node --check`（funnel/generate/batch/license-manager）通过；admin 内联脚本 `new Function` 解析 0 失败；`sync-all.ps1` 全组一致；`copy-consistency` 110 副本 0 失败；`diff-cross-version --pair adminconsole` 0 差异；`check-interface` 6 OK。
+* **生效方式**：服务端 push 后立即生效（新签发试用码只能 7 天）；后台页面刷新即可看到新口径；客户端试用天数上限需随下一次桌面/APP 版本发布（热更不覆盖 license-manager 主进程/Java 类，必须重打包）。
+
 
