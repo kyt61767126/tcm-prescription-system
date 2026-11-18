@@ -2947,4 +2947,14 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
 * **生效方式**：云端网页 push 即生效可强刷；云桌面/离线桌面/云 APP/离线 APP 已装设备需重发热更新包或重打包，否则仍跑旧 `index.html`。
 * **热包签发（2026-11-18 同日）**：`generate-desktop-hotupdate.cjs -c cloud`（`2026.11.18-2`，含云端 `public/index.html` 且身份断言通过）、`-c local`（`2026.11.18-1`）、`generate-app-hotupdate.cjs`（`app-local 2026.11.18-1`，minAppCode 继承 288）；三通道 Ed25519 签名 + 逐文件 SHA256 已重算，push 后线上 `version.json` 轮询核验三通道 hotVersion 均更新。客户端联网启动一次静默拉取，**彻底退出重进后生效**（桌面下次启动生效；APP 划掉重进）。
 
+### 93. 云端「在线」恒 0 修复：presence 双源聚合（2026-11-18）
+
+* **现象**：后台诊所列表「今日登录：桌面 2」，但「在线：离线（桌面 0 · APP 0 · 网页 0）」；离线桌面修复过（§91.1），云端桌面仍不显示在线。
+* **根因**：云端在线只认 `user_session:{user}:{cc}` 的 `loginAt`，它**只在登录瞬间写一次**，而在线窗口是 ≤15 分钟。离线端有 10 分钟 heartbeat 持续刷新，云端三端（桌面/网页/APP）没有心跳 → 登录 15 分钟后必判离线。
+* **修复（纯服务端，无需客户端改动）**：
+  * 写：`functions/api/medicines.js` sync 通道（`/api/medicines?sync=1`，云端三端窗口可见时每 5 分钟一次，`MedSync` 定时器）在鉴权通过后 upsert D1 `user_presence(username, client_class, clinic_id, last_seen)`。用 D1 不占 KV 1000 写/天配额（约 288 写/端/天）；建表 `CREATE TABLE IF NOT EXISTS` 首次请求兜底，`schema.sql` 同步登记。
+  * 读：`functions/api/users.js` 诊所列表聚合新增 presence 源，与 session 同口径（15 分钟在线窗 + 北京今日日界）合并，按 `账号|端` 去重，避免登录后 15 分钟内双计。
+  * `functions/api/_lib/auth.js`：`verifyToken` 返回值透出签名体 `k` 的 `clientClass`（仅统计用，不参与授权/设备/会话裁决）。
+* **生效方式**：服务端部署即生效；已登录的云端端等待下一次药库同步（≤5 分钟）后，后台刷新诊所列表即可看到在线。若超过 10 分钟仍为 0，先确认该端 `allowedMode=both`（云端强制 both，见 auth-core）且窗口未最小化（定时器仅在 `visibilityState==='visible'` 时跑）。
+
 
