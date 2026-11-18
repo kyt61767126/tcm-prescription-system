@@ -2925,4 +2925,12 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
 * **admin-risk（风控告警）**：`license_log:{code}` 由逐码串行读取改为 20 码/批并发预读 + `Map` 同步分析；过期激活码在预读前整体过滤，不再产生日志读取。判定逻辑、告警排序、统计口径未变。
 * **验证**：10 项端点逻辑测试全 PASS（高危多 IP、完整性标记、过期码不读日志、诊所处方/垃圾箱/邀请汇总）；`node --check` 通过。生效方式：push 后 Pages Functions 自动部署，五端零重打包。
 
+### 91. 诊所列表「在线状态」与刷新可见性（2026-11-18）
+
+* **现象**：离线桌面已登录（惠康康），后台诊所卡仍显示「今日登录 0 / 今日未登录」。
+* **排查结论**：① 诊所卡原先只渲染今日/累计登录，未渲染后端已返回的 `onlineDesktop/onlineApp/onlineWeb`，运营看不到在线状态；② `loadClinicsList` 的 GET 未指定 `cache`，浏览器可能复用旧响应；③ 诊所页无手动刷新入口，30 秒页签 TTL 内切换页签也会看到旧数据；④ 离线端断网或未重启加载热更新时，心跳/登录上报到不了云端，后台必然为 0（这是离线版固有限制，不是展示 bug）。
+* **改动**：`public/admin/index.html` 诊所卡新增「在线：●在线 N / ○离线（桌面/APP/网页）」；标题栏新增「刷新」按钮并调用 `loadClinicsList({preservePage:true})` 保留当前页；诊所 GET 增加 `cache:'no-store'`。
+* **验证**：内联脚本 0 错；`diff-cross-version --pair adminconsole` 绿；`check-interface` 6 OK/0 CHANGED。
+* **生效方式**：push 后 admin 静态页自动部署，五端零重打包。若仍为 0，先确认离线端能联网，并重启客户端以加载 `2026.11.17-4` 及之后的 auth-core 热更新（登录即时上报 `login-punch`；否则最多等 10 分钟心跳）。
+
 

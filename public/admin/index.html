@@ -560,7 +560,9 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                 </div>
             </div>
 
-            <h2>诊所列表 <span id="clinicUpdatedAt" style="font-size:12px;font-weight:400;color:#909399;margin-left:8px;"></span></h2>
+            <h2>诊所列表 <span id="clinicUpdatedAt" style="font-size:12px;font-weight:400;color:#909399;margin-left:8px;"></span>
+                <button class="btn btn-sm" onclick="loadClinicsList({preservePage:true})" style="float:right;font-weight:400;">刷新</button>
+            </h2>
             <div id="clinicList" class="table-box" style="padding: 10px;">
                 <div class="loading">加载中...</div>
             </div>
@@ -4369,13 +4371,17 @@ function renderClinicsPage() {
     renderPager('clinicPager', 'clinic', _clinicRowHtmlCache.length, paged.totalPages);
 }
 
-async function loadClinicsList() {
+async function loadClinicsList(opts) {
+    const preservePage = !!(opts && opts.preservePage);
     const listEl = document.getElementById('clinicList');
     if (!listEl) return;
     listEl.innerHTML = '<div class="loading">加载中...</div>';
     try {
         const res = await fetch(API_BASE + '/users?clinics=true', {
-            headers: { 'Authorization': 'Bearer ' + token }
+            headers: { 'Authorization': 'Bearer ' + token },
+            // ★ 2026-11-18 离线端登录后刷新仍显示旧「今日登录 0」：
+            //   GET 默认允许浏览器复用缓存，这里强制绕过，保证刷新即取最新统计。
+            cache: 'no-store'
         });
         const data = await res.json();
         if (data.success && Array.isArray(data.data)) {
@@ -4510,13 +4516,20 @@ async function loadClinicsList() {
                         '<div style="font-size:12px;color:#909399;margin-top:4px;">ID: ' + escapeHtml(c.id) + ' | 管理员: <strong>' + adminLink + '</strong>（' + escapeHtml(c.adminName || '-') + '）' + adminPhoneText + ' | 医师: ' + c.doctorCount + ' | 总账号: ' + c.userCount + ' | 创建: ' + escapeHtml(created) + '</div>' +
                         '<div style="font-size:12px;color:#909399;margin-top:2px;">有效期: ' + expiryHtml + '</div>' +
                         licenseRowHtml +
+                        '<div style="font-size:12px;margin-top:2px;" title="最近 15 分钟内有心跳/登录会话即算在线；离线端需联网上报，断网时后台无法感知">' +
+                            '在线：' + ((c.onlineTotal || 0) > 0
+                                ? '<span style="color:#27ae60;font-weight:600;">●在线 ' + c.onlineTotal + '</span>'
+                                : '<span style="color:#909399;">○离线</span>') +
+                            ' <span style="color:#909399;">（🖥️桌面 ' + (c.onlineDesktop || 0) + ' · 📱APP ' + (c.onlineApp || 0) + ' · 🌐网页 ' + (c.onlineWeb || 0) + '）</span>' +
+                        '</div>' +
                         '<div style="font-size:12px;color:#3498db;margin-top:2px;" title="同一账号/设备当天多次登录只计1次（北京时间每日0点重置；离线端以当日心跳为准）">今日登录：🖥️桌面 ' + (c.loginDesktop || 0) + ' · 📱APP ' + (c.loginApp || 0) + ' · 🌐网页 ' + (c.loginWeb || 0) + ((c.loginTotal || 0) > 0 ? '' : '（今日未登录）') + '</div>' +
                         '<div style="font-size:12px;color:#e6a23c;margin-top:2px;" title="自 ' + (_loginStatsStart || '统计日') + ' 起累计：同一账号/设备每个自然日登录计1次（含今日），离线端以当日心跳为准">累计登录：🖥️桌面 ' + (c.histDesktop || 0) + ' · 📱APP ' + (c.histApp || 0) + ' · 🌐网页 ' + (c.histWeb || 0) + '（共' + (c.histTotal || 0) + '次）</div>' +
                     '</div>' +
                     '<div style="white-space:nowrap;">' + editBtn + ' ' + testBtn + ' ' + toggleBtn + ' ' + renewBtn + ' ' + deleteBtn + '</div>' +
                 '</div>';
             });
-            _pagers.clinic = 1;
+            // 手动刷新/状态回写保留当前页，避免翻到第 3 页点刷新被弹回第 1 页
+            if (!preservePage) _pagers.clinic = 1;
             renderClinicsPage();
         } else {
             if (res.status === 401) {
