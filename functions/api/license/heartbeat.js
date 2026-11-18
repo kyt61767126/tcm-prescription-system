@@ -237,6 +237,18 @@ export async function onRequest(context) {
         if (!deviceMatched) {
             // 设备不匹配
             if (devices.length >= maxDevices) {
+                // ★ 2026-11-18 设备配额已满但仍持有效码心跳：仍记录「今日登录 + 在线」。
+                //   背景：登录即上报（login-punch）不做设备配额校验，能正常写入；
+                //   而心跳在此提前 return，导致后台「今日登录 1、在线 0」自相矛盾。
+                //   这里只补运营可见性，不改变授权裁决——响应仍是 device_mismatch，
+                //   客户端照旧走激活/锁定流程，设备配额与绑定列表一律不动。
+                try {
+                    const __cc = (body && body.clientClass === 'app') ? 'app' : 'desktop';
+                    await punchLogin(kv, { clinicName: record.clinicName, clientClass: __cc, uid: machineId });
+                    await upsertD1Heartbeat(context.env, record, code, machineId, { clientClass: __cc }, serverTime);
+                } catch (e) {
+                    console.warn('[heartbeat] device_mismatch 在线记录失败:', e && e.message);
+                }
                 return json({
                     success: true, valid: false, action: 'device_mismatch',
                     serverTime

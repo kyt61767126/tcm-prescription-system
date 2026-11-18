@@ -2931,6 +2931,7 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
 * **排查结论**：① 诊所卡原先只渲染今日/累计登录，未渲染后端已返回的 `onlineDesktop/onlineApp/onlineWeb`，运营看不到在线状态；② `loadClinicsList` 的 GET 未指定 `cache`，浏览器可能复用旧响应；③ 诊所页无手动刷新入口，30 秒页签 TTL 内切换页签也会看到旧数据；④ 离线端断网或未重启加载热更新时，心跳/登录上报到不了云端，后台必然为 0（这是离线版固有限制，不是展示 bug）。
 * **改动**：`public/admin/index.html` 诊所卡新增「在线：●在线 N / ○离线（桌面/APP/网页）」；标题栏新增「刷新」按钮并调用 `loadClinicsList({preservePage:true})` 保留当前页；诊所 GET 增加 `cache:'no-store'`。
 * **验证**：内联脚本 0 错；`diff-cross-version --pair adminconsole` 绿；`check-interface` 6 OK/0 CHANGED。
+* **§91.1 心跳设备配额已满时仍记录在线（2026-11-18）**：`heartbeat.js` 的 `device_mismatch` 分支原先在写 D1 前直接 return，而 `login-punch` 不做设备配额校验，导致后台出现「今日登录 1、在线 0」的自相矛盾。现该分支在返回 `device_mismatch` 前补写 `punchLogin` + `upsertD1Heartbeat`（`clientClass` 取请求声明），仅补运营可见性，不授权、不改设备配额与绑定列表；客户端仍按 `device_mismatch` 走激活/锁定流程。若仍显示离线，则说明心跳请求未到达服务端（断网/被拦截/旧客户端无心跳），需查客户端 `license:hbDiagPost`。
 * **生效方式**：push 后 admin 静态页自动部署，五端零重打包。若仍为 0，先确认离线端能联网，并重启客户端以加载 `2026.11.17-4` 及之后的 auth-core 热更新（登录即时上报 `login-punch`；否则最多等 10 分钟心跳）。
 
 
