@@ -2957,4 +2957,16 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
   * `functions/api/_lib/auth.js`：`verifyToken` 返回值透出签名体 `k` 的 `clientClass`（仅统计用，不参与授权/设备/会话裁决）。
 * **生效方式**：服务端部署即生效；已登录的云端端等待下一次药库同步（≤5 分钟）后，后台刷新诊所列表即可看到在线。若超过 10 分钟仍为 0，先确认该端 `allowedMode=both`（云端强制 both，见 auth-core）且窗口未最小化（定时器仅在 `visibilityState==='visible'` 时跑）。
 
+### 94. 试用版统计：下载量 / 试用人数 / 使用天数（2026-11-18）
+
+* **需求**：统计试用版下载数量、使用人数与使用天数。全部复用既有采集，未新增客户端埋点。
+* **三个数据源与口径**（后台首页「下载转化统计」区块下方）：
+  1. **下载量**：`GET /api/stats/funnel` 的 `downloads`（GitHub Release 资产累计，KV 缓存 1h）+ `siteDownloads`（D1 `download_uniq`，按 IP+文件+自然日去重，估算）+ **`downloadTrend`**（新增，D1 近 14 天 `.exe`/`.apk` 分列，按北京时间日界 `beijingDay` 归日）。
+  2. **试用人数**：新增 `getTrialFingerprintStats(kv)` 分页扫 `trial_fp:*`（离线 7 天试用登记，无 TTL 长期保留）。产出 `total/todayNew/last7New/activeTrials/expiredTrials/repeatTrials/avgFirstToLastDays`。**一个 hwFp 指纹 = 一台设备 ≈ 一位试用者**；`trialCount>1` 记重复试用。
+  3. **使用天数**：新增 `trialUsage`，来自遥测心跳 `tl_dev:{ed}:{midHash}` 的 `first/last/days{}`。产出设备数、总活跃天数、平均天数、≥3 天/≥7 天台数、四档分布（1天以内 / 2-3 / 4-7 / 8天以上），以及最多 200 台明细（含是否已转正 `activatedSalted.has(mid)`）。
+* **口径限制（必须如实告知用户）**：`tl_dev` 心跳 **TTL 35 天**、`days` 仅保留最近 30 天 → 「使用天数」只能统计**近 30 天**，更早历史不可回溯；历史「试用总人数」由 `trial_fp` 长期保留可给全量。`trial_fp` 只覆盖「离线 7 天试用登记」路径，纯云端账号试用不在其中。
+* **后台 UI**（`public/admin/index.html`，双副本同步 `site-admin/admin/index.html`）：新增 6 张统计卡（试用登记人数/今日新增/近7天新增/近30天活跃设备/近30天总使用天数/平均每台使用天数）、「试用使用统计」（汇总行 + 明细表）、「近 14 天官网下载趋势」（双色 SVG 柱状图）；渲染函数 `renderTrialUsage(tu, tf)`、`renderDownloadTrend(list)`。后端 `stats/funnel` 有 300 秒响应缓存，刷新后台不必频繁重算。
+* **验证**：`node --check functions/api/stats/funnel.js` OK；admin 内联脚本 `new Function` 解析 0 失败；`copy-consistency` 110 副本 0 失败；`diff-cross-version --pair adminconsole` 0 差异；`check-interface` 6 OK。
+* **生效方式**：push 后 Pages 部署即生效，后台首页刷新可见（缓存 ≤5 分钟）。数据未变化时优先核对 `trial_fp:` / `tl_dev:` 的实际写入量，再排查 API 返回。
+
 
