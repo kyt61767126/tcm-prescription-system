@@ -150,6 +150,9 @@ async function getTrialFingerprintStats(kv) {
         activeTrials: 0, expiredTrials: 0, repeatTrials: 0,
         avgFirstToLastDays: 0
     };
+    // ★ 2026-11-18 后台明细需要原始机器码：trial_fp 里存有登记时上报的 machineId（32位hex），
+    //   按「端盐」算出与心跳一致的 mid 映射，返回前剥离（仅服务端使用，不随 JSON 输出）。
+    const machineBySalted = new Map();
     const now = Date.now();
     const today = beijingDay(now);
     const cut7 = beijingDay(now - 6 * 24 * 60 * 60 * 1000);
@@ -163,6 +166,12 @@ async function getTrialFingerprintStats(kv) {
             if (!rec) continue;
             out.total++;
             if ((rec.trialCount || 0) > 1) out.repeatTrials++;
+            const machineId = (typeof rec.machineId === 'string' ? rec.machineId.trim() : '');
+            if (/^[0-9a-f]{32}$/i.test(machineId)) {
+                for (const ed of TRIAL_EDITIONS) {
+                    machineBySalted.set(await sha256Hex(ed + ':' + machineId), machineId);
+                }
+            }
             const firstAt = Date.parse(rec.firstTrialAt || '');
             if (Number.isFinite(firstAt)) {
                 const firstDay = beijingDay(firstAt);
@@ -182,6 +191,7 @@ async function getTrialFingerprintStats(kv) {
         complete = page.list_complete;
     }
     out.avgFirstToLastDays = spanN ? Math.round((spanSum / spanN) * 10) / 10 : 0;
+    out.machineBySalted = machineBySalted;
     return out;
 }
 
@@ -394,6 +404,8 @@ async function onRequestInner(context) {
         ]);
         // midSet/devices 仅服务端集合差/明细用，不随 JSON 原样输出（Set 会序列化成空对象）
         const { midSet, midMissing, devices, usage, ...installs } = installsRaw;
+        // machineBySalted 为 trial_fp 的机器码反查映射，仅服务端拼明细用
+        const { machineBySalted: trialMachineBySalted, ...trialFp } = trialFingerprints;
 
         // 已激活设备：admin_req(activated) ∪ license 已绑定 devices 的 machineId
         const machines = new Set(activation.activatedMachines);
@@ -418,8 +430,17 @@ async function onRequestInner(context) {
         //   同机装多端（mid 因端盐不同有多条）只要任一端激活即正确排除；
         //   旧口径 installs.total - activatedMachines 会把多端安装重复计数，已废弃。
         const activatedSalted = new Set();
+        // ★ 2026-11-18 盐化 mid → 原始机器码（激活记录优先，其次试用登记），供后台明细展示可核对的机器码
+        const machineBySalted = new Map();
         for (const m of machines) {
-            for (const ed of EDITIONS) activatedSalted.add(await sha256Hex(ed + ':' + m));
+            for (const ed of EDITIONS) {
+                const h = await sha256Hex(ed + ':' + m);
+                activatedSalted.add(h);
+                machineBySalted.set(h, String(m));
+            }
+        }
+        for (const [h, mid] of trialMachineBySalted) {
+            if (!machineBySalted.has(h)) machineBySalted.set(h, mid);
         }
         let trialNotActivated = 0;
         for (const mid of midSet) {
@@ -444,6 +465,7 @@ async function onRequestInner(context) {
                 beyondTrialDays: d.beyondTrialDays || 0,
                 inTrial: !!d.inTrial,
                 version: d.version,
+                machineId: d.mid ? (machineBySalted.get(d.mid) || '') : '',
                 activated: d.mid ? activatedSalted.has(d.mid) : false
             }))
             .sort((a, b) => (b.last || 0) - (a.last || 0))
@@ -461,7 +483,7 @@ async function onRequestInner(context) {
             trialNotActivated,
             trialCoverage: { withMid: midSet.size, missing: midMissing },
             // ★ 2026-11-18：试用登记人数（trial_fp 长期保留）与近30天使用天数（心跳 days）
-            trialFingerprints,
+            trialFingerprints: trialFp,
             trialUsage: { ...usage, devices: trialDevices },
             conversion: {
                 // GitHub 下载量不可用时该转化率无分母 → null（前端显示"—"），不能拿 0 当分母

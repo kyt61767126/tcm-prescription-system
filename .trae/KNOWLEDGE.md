@@ -2982,6 +2982,7 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
   * `trialUsage` 每台设备只计「首次使用起 7 个自然日内」的心跳活跃日（`days` 键为 UTC 日），单台恒 ≤7；窗口外天数记 `beyondTrialDays`，仅作参考；分布改为 1天以内 / 2-3天 / 4-6天 / 满7天。
   * 明细新增 `trialDays`、`beyondTrialDays`、`inTrial`；后台列改为「试用天数（≤7）/ 近30天活跃 / 状态（已转正·试用中·试用已到期）」。
   * 限制：心跳 `days` 仅留 30 天、记录 TTL 35 天 → 首次使用超过 35 天的设备早期试用日已回收，试用天数可能偏低（界面已注明）。
+  * **机器码列（同日追加）**：心跳只存加盐 `mid`（无法逆推）。用 `trial_fp.machineId`（32位hex，试用登记上报）+ 激活记录 `machineId` 按四端盐 `sha256(ed+':'+machineId)` 建立反查映射，明细输出 `machineId`；后台默认脱敏，点「显示」展开完整码，可直接复制到「激活码管理 → 版本绑定查询」核对。未上报原始码的老设备显示「—」。该映射仅服务端使用，`trialFingerprints` 返回前已剥离 Map。
 * **验证**：`node --check`（funnel/generate/batch/license-manager）通过；admin 内联脚本 `new Function` 解析 0 失败；`sync-all.ps1` 全组一致；`copy-consistency` 110 副本 0 失败；`diff-cross-version --pair adminconsole` 0 差异；`check-interface` 6 OK。
 * **生效方式**：服务端 push 后立即生效（新签发试用码只能 7 天）；后台页面刷新即可看到新口径；客户端试用天数上限需随下一次桌面/APP 版本发布（热更不覆盖 license-manager 主进程/Java 类，必须重打包）。
 
