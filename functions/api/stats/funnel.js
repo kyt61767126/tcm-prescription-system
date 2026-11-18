@@ -19,6 +19,9 @@
 //      activatedMachines: n,
 //      trialNotActivated: n,      // ★P2 心跳机器码集合 − 四端盐展开的激活机器码集合（估算）
 //      trialCoverage: { withMid, missing },  // 老心跳记录缺 mid 的条数（35 天 TTL 内逐步补齐）
+//      trialFingerprints: { total, todayNew, last7New, activeTrials, expiredTrials, repeatTrials, avgFirstToLastDays },
+//      trialUsage: { deviceCount, totalActiveDays, avgActiveDays, ge3, ge7, distribution, devices[≤200] },
+//      downloadTrend: [{ date, desktop, app, total }],   // 近14天官网下载（D1）
 //      conversion: { downloadToInstall, installToRequest, installToActivated } }
 // ============================================================================
 
@@ -131,6 +134,77 @@ function beijingDay(ts) {
     return new Date(ts + 8 * 3600 * 1000).toISOString().slice(0, 10);
 }
 
+// ---------------------------------------------------------------------------
+// ★ 2026-11-18 试用登记人数：trial_fp:* 指纹（离线 7 天试用一次登记，长期保留）
+//   口径：一个硬件指纹=一台设备/一位使用者；重复试用按 trialCount>1 计。
+//   注意：这里只能给出「试用登记/试用期」数据，真实使用天数靠心跳 tl_dev（近30天）。
+// ---------------------------------------------------------------------------
+async function getTrialFingerprintStats(kv) {
+    const out = {
+        total: 0, todayNew: 0, last7New: 0,
+        activeTrials: 0, expiredTrials: 0, repeatTrials: 0,
+        avgFirstToLastDays: 0
+    };
+    const now = Date.now();
+    const today = beijingDay(now);
+    const cut7 = beijingDay(now - 6 * 24 * 60 * 60 * 1000);
+    let spanSum = 0, spanN = 0, cursor;
+    let complete = false;
+    while (!complete) {
+        const page = await kv.list({ prefix: 'trial_fp:', cursor }).catch(() => null);
+        if (!page || !page.keys || !page.keys.length) break;
+        for (const k of page.keys) {
+            const rec = await kv.get(k.name, 'json').catch(() => null);
+            if (!rec) continue;
+            out.total++;
+            if ((rec.trialCount || 0) > 1) out.repeatTrials++;
+            const firstAt = Date.parse(rec.firstTrialAt || '');
+            if (Number.isFinite(firstAt)) {
+                const firstDay = beijingDay(firstAt);
+                if (firstDay === today) out.todayNew++;
+                if (firstDay >= cut7) out.last7New++;
+                const lastAt = Date.parse(rec.lastTrialAt || '');
+                if (Number.isFinite(lastAt) && lastAt >= firstAt) {
+                    spanSum += Math.round((lastAt - firstAt) / (24 * 60 * 60 * 1000));
+                    spanN++;
+                }
+            }
+            const exp = Date.parse(rec.activeTrialExpiresAt || '');
+            if (Number.isFinite(exp) && exp > now) out.activeTrials++;
+            else out.expiredTrials++;
+        }
+        cursor = page.cursor;
+        complete = page.list_complete;
+    }
+    out.avgFirstToLastDays = spanN ? Math.round((spanSum / spanN) * 10) / 10 : 0;
+    return out;
+}
+
+// ---------------------------------------------------------------------------
+// ★ 2026-11-18 近 14 天官网下载趋势（D1 download_uniq 按北京日归日）
+// ---------------------------------------------------------------------------
+async function getDownloadTrend(env) {
+    const db = getDB(env);
+    if (!db) return [];
+    try {
+        const cut = beijingDay(Date.now() - 13 * 24 * 60 * 60 * 1000);
+        const rs = await db.prepare(
+            "SELECT day, " +
+            "SUM(CASE WHEN LOWER(file) LIKE '%.exe' THEN 1 ELSE 0 END) AS desktop, " +
+            "SUM(CASE WHEN LOWER(file) LIKE '%.apk' THEN 1 ELSE 0 END) AS app, " +
+            "COUNT(*) AS total " +
+            "FROM download_uniq WHERE day >= ? GROUP BY day"
+        ).bind(cut).all();
+        return (rs.results || [])
+            .map(r => ({ date: r.day, desktop: r.desktop || 0, app: r.app || 0, total: r.total || 0 }))
+            .filter(r => r.date)
+            .sort((a, b) => a.date < b.date ? -1 : 1);
+    } catch (e) {
+        console.warn('[funnel] 下载趋势读取失败: ' + (e && e.message));
+        return [];
+    }
+}
+
 // 与客户端/心跳端同款 sha256 hex（客户端 mid = sha256(ed + ':' + 原始机器码)）
 async function sha256Hex(s) {
     const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(s)));
@@ -146,6 +220,9 @@ async function getInstallStats(kv) {
     const new14d = []; // 近14天每日首次见到的新设备（北京时间归日）
     const midSet = new Set(); // 心跳记录中的客户端加盐 mid（机器码集合差用）
     let midMissing = 0;       // 老记录无 mid 字段（2026-09-28 前写入），无法参与集合差
+    // ★ 2026-11-18 使用天数统计：心跳记录 days 只保留最近 30 天，故「使用天数」为近30天口径。
+    //   明细在输出前截断到 200 台，避免响应过大。
+    const devices = [];
     const now = Date.now();
     const day7 = now - 7 * 24 * 60 * 60 * 1000;
     const day30 = now - 30 * 24 * 60 * 60 * 1000;
@@ -173,6 +250,14 @@ async function getInstallStats(kv) {
             }
             if (typeof rec.mid === 'string' && rec.mid) midSet.add(rec.mid);
             else midMissing++;
+            devices.push({
+                ed,
+                first: rec.first || 0,
+                last: rec.last || 0,
+                activeDays: rec.days ? Object.keys(rec.days).length : 0,
+                version: rec.v || '',
+                mid: (typeof rec.mid === 'string' ? rec.mid : '')
+            });
         }
         cursor = page.cursor;
         complete = page.list_complete;
@@ -185,7 +270,33 @@ async function getInstallStats(kv) {
         active7 += byEdition[ed].active7;
         active30 += byEdition[ed].active30;
     }
-    return { total, active7, active30, byEdition, new14d, midSet, midMissing };
+    // ★ 2026-11-18 使用天数汇总/分布（近30天口径）
+    let totalActiveDays = 0, ge3 = 0, ge7 = 0;
+    const buckets = [0, 0, 0, 0]; // 1天以内 / 2-3天 / 4-7天 / 8天以上
+    for (const d of devices) {
+        const n = d.activeDays;
+        totalActiveDays += n;
+        if (n >= 3) ge3++;
+        if (n >= 7) ge7++;
+        if (n <= 1) buckets[0]++;
+        else if (n <= 3) buckets[1]++;
+        else if (n <= 7) buckets[2]++;
+        else buckets[3]++;
+    }
+    const usage = {
+        deviceCount: devices.length,
+        totalActiveDays,
+        avgActiveDays: devices.length ? Math.round((totalActiveDays / devices.length) * 10) / 10 : 0,
+        ge3,
+        ge7,
+        distribution: [
+            { label: '1天以内', count: buckets[0] },
+            { label: '2-3天', count: buckets[1] },
+            { label: '4-7天', count: buckets[2] },
+            { label: '8天以上', count: buckets[3] }
+        ]
+    };
+    return { total, active7, active30, byEdition, new14d, midSet, midMissing, devices, usage };
 }
 
 // ---------------------------------------------------------------------------
@@ -247,14 +358,16 @@ async function onRequestInner(context) {
             return json({ success: false, error: '仅平台总管理员可查看统计数据' }, 403);
         }
 
-        const [downloads, installsRaw, activation, siteDownloads] = await Promise.all([
+        const [downloads, installsRaw, activation, siteDownloads, trialFingerprints, downloadTrend] = await Promise.all([
             getDownloadCounts(kv, context.env),
             getInstallStats(kv),
             getActivationStats(kv),
-            getSiteDownloadStats(context.env)
+            getSiteDownloadStats(context.env),
+            getTrialFingerprintStats(kv),
+            getDownloadTrend(context.env)
         ]);
-        // midSet 仅服务端集合差用，不随 JSON 输出（Set 会序列化成空对象）
-        const { midSet, midMissing, ...installs } = installsRaw;
+        // midSet/devices 仅服务端集合差/明细用，不随 JSON 原样输出（Set 会序列化成空对象）
+        const { midSet, midMissing, devices, usage, ...installs } = installsRaw;
 
         // 已激活设备：admin_req(activated) ∪ license 已绑定 devices 的 machineId
         const machines = new Set(activation.activatedMachines);
@@ -292,16 +405,34 @@ async function onRequestInner(context) {
 
         const pct = (num, den) => (den > 0 ? Math.round((num / den) * 1000) / 10 : 0);
 
+        // ★ 2026-11-18 试用设备使用明细：按最近使用倒序，最多 200 台；
+        //   activated 用已展开的盐化 mid 与授权机器码集合比对。
+        const trialDevices = devices
+            .map(d => ({
+                ed: d.ed,
+                first: d.first,
+                last: d.last,
+                activeDays: d.activeDays,
+                version: d.version,
+                activated: d.mid ? activatedSalted.has(d.mid) : false
+            }))
+            .sort((a, b) => (b.last || 0) - (a.last || 0))
+            .slice(0, 200);
+
         return json({
             success: true,
             downloads,
             siteDownloads,
+            downloadTrend,
             installs,
             activation: { total: requestsTotal, ...activation.counts },
             activatedMachines,
             // 估算口径：机器码集合差；老心跳记录 35 天 TTL 内缺 mid（missing），随心跳逐步补齐
             trialNotActivated,
             trialCoverage: { withMid: midSet.size, missing: midMissing },
+            // ★ 2026-11-18：试用登记人数（trial_fp 长期保留）与近30天使用天数（心跳 days）
+            trialFingerprints,
+            trialUsage: { ...usage, devices: trialDevices },
             conversion: {
                 // GitHub 下载量不可用时该转化率无分母 → null（前端显示"—"），不能拿 0 当分母
                 downloadToInstall: downloads.available ? pct(installs.total, downloads.total) : null,

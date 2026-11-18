@@ -345,6 +345,12 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                 <div class="stat-card"><div class="num" id="fnRequests">-</div><div class="label">提交激活申请（累计）</div></div>
                 <div class="stat-card used"><div class="num" id="fnActivated">-</div><div class="label">已激活设备（台）</div></div>
                 <div class="stat-card"><div class="num" id="fnActive7">-</div><div class="label">近7天活跃设备（台）</div></div>
+                <div class="stat-card" title="trial_fp 硬件指纹去重（长期保留，一个指纹=一台设备/一位使用者）"><div class="num" id="fnTrialFp">-</div><div class="label">试用登记人数（台）</div></div>
+                <div class="stat-card"><div class="num" id="fnTrialToday">-</div><div class="label">今日新增试用（台）</div></div>
+                <div class="stat-card"><div class="num" id="fnTrial7">-</div><div class="label">近7天新增试用（台）</div></div>
+                <div class="stat-card"><div class="num" id="fnActive30">-</div><div class="label">近30天活跃设备（台）</div></div>
+                <div class="stat-card used" title="近30天每台设备有心跳的自然日数求和；心跳记录仅保留35天，更早历史不计入"><div class="num" id="fnUsageDays">-</div><div class="label">近30天总使用天数</div></div>
+                <div class="stat-card used"><div class="num" id="fnAvgDays">-</div><div class="label">平均每台使用天数</div></div>
             </div>
             <div id="funnelConversion" style="margin-top:8px;font-size:13px;color:#606266;"></div>
             <div id="funnelEditions" style="margin-top:4px;font-size:12px;color:#909399;"></div>
@@ -361,9 +367,27 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                     <div id="deviceTrendChart" style="width:100%;overflow-x:auto;"></div>
                 </div>
             </div>
-        </div>
 
-        <!-- 激活码管理标签页（原有内容） -->
+            <!-- ★ 2026-11-18 试用使用统计：人数（trial_fp）+ 使用天数（心跳 days，近30天口径） -->
+            <h2 style="margin-top:24px;">试用使用统计 <span style="font-size:12px;color:#909399;font-weight:normal;">（使用天数=近30天有心跳的自然日数；心跳记录保留35天，历史更早数据不累计）</span></h2>
+            <div id="trialUsageSummary" style="font-size:13px;color:#606266;margin-bottom:10px;"></div>
+            <div class="gen-box">
+                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+                    <div style="font-weight:600;font-size:13px;">试用设备使用明细</div>
+                    <div style="font-size:12px;color:#909399;">按最近使用倒序，最多显示 200 台；「已转正」表示同一机器码已激活正式版</div>
+                </div>
+                <div id="trialUsageTable" style="margin-top:10px;overflow:auto;max-height:420px;"><div class="loading">加载中...</div></div>
+            </div>
+
+            <h2 style="margin-top:24px;">近 14 天官网下载趋势 <span style="font-size:12px;color:#909399;font-weight:normal;">（同 IP 同文件当天去重·估算）</span></h2>
+            <div class="gen-box">
+                <div id="downloadTrendChart" style="width:100%;overflow-x:auto;"><div class="loading">加载中...</div></div>
+                <div style="display:flex;gap:16px;margin-top:8px;font-size:12px;color:#606266;">
+                    <span><span style="display:inline-block;width:10px;height:10px;background:#3498db;border-radius:2px;margin-right:4px;"></span>桌面 .exe</span>
+                    <span><span style="display:inline-block;width:10px;height:10px;background:#e67e22;border-radius:2px;margin-right:4px;"></span>手机 .apk</span>
+                </div>
+            </div>
+        </div>
         <div id="tabLicense" class="tab-content">
         <p style="color:#909399;font-size:13px;margin:0 0 12px;">本页管<b>激活码</b>：生成 / 查询 / 延期 / 禁用 / 导出激活文件。客户提交的开通申请请去「激活审核」处理。</p>
         <!-- 统计 -->
@@ -3391,6 +3415,17 @@ async function loadFunnelStats(token) {
         set('fnActive7', d.installs ? d.installs.active7 : 0);
         // ★ 2026-09-28 P1：官网实际下载（D1 去重·估算），埋点上线前/无 D1 时显示"积累中"
         set('fnSiteDownloads', (d.siteDownloads && d.siteDownloads.available) ? d.siteDownloads.total : '积累中');
+        // ★ 2026-11-18 试用人数/使用天数（trial_fp 指纹 + 心跳 days 近30天口径）
+        set('fnActive30', d.installs ? d.installs.active30 : 0);
+        const tf = d.trialFingerprints || {};
+        set('fnTrialFp', tf.total != null ? tf.total : 0);
+        set('fnTrialToday', tf.todayNew || 0);
+        set('fnTrial7', tf.last7New || 0);
+        const tu = d.trialUsage || {};
+        set('fnUsageDays', tu.totalActiveDays || 0);
+        set('fnAvgDays', tu.avgActiveDays != null ? tu.avgActiveDays : 0);
+        renderTrialUsage(tu, tf);
+        renderDownloadTrend(d.downloadTrend);
         const conv = d.conversion || {};
         const cEl = document.getElementById('funnelConversion');
         if (cEl) {
@@ -3474,6 +3509,83 @@ function renderTrendChart(clinics, users) {
     });
     svg += '</svg>';
     el.innerHTML = svg;
+}
+
+// ★ 2026-11-18 试用使用统计：汇总行 + 每台设备使用明细（近30天使用天数）
+function renderTrialUsage(tu, tf) {
+    const sumEl = document.getElementById('trialUsageSummary');
+    const dist = ((tu && tu.distribution) || []).map(x => x.label + ' ' + x.count + ' 台').join(' · ');
+    if (sumEl) {
+        sumEl.innerHTML = '设备数：<b>' + ((tu && tu.deviceCount) || 0) + '</b> 台 ｜ 使用 ≥3 天：<b>' + ((tu && tu.ge3) || 0)
+            + '</b> 台 ｜ ≥7 天：<b>' + ((tu && tu.ge7) || 0) + '</b> 台'
+            + ' ｜ 分布：' + (dist || '—')
+            + ' ｜ 试用期内：' + ((tf && tf.activeTrials) || 0) + ' 台 ｜ 试用过期：' + ((tf && tf.expiredTrials) || 0)
+            + ' 台 ｜ 重复试用：' + ((tf && tf.repeatTrials) || 0) + ' 台';
+    }
+    const el = document.getElementById('trialUsageTable');
+    if (!el) return;
+    const rows = (tu && Array.isArray(tu.devices)) ? tu.devices : [];
+    if (!rows.length) {
+        el.innerHTML = '<div style="font-size:12px;color:#909399;padding:6px 0;">暂无数据（客户端心跳上报后开始积累）</div>';
+        return;
+    }
+    const names = { 'cloud-desktop': '云桌面', 'local-desktop': '离线桌面', 'cloud-app': '云端APP', 'local-app': '离线APP' };
+    const fmtDay = ts => { if (!ts) return '—'; const d = new Date(ts + 8 * 3600000); return d.toISOString().slice(0, 10); };
+    const td = 'padding:6px 8px;border-bottom:1px solid #f2f6fc;';
+    let html = '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f5f7fa;color:#606266;">'
+        + '<th style="text-align:left;padding:6px 8px;border-bottom:1px solid #ebeef5;">客户端</th>'
+        + '<th style="text-align:left;padding:6px 8px;border-bottom:1px solid #ebeef5;">版本</th>'
+        + '<th style="text-align:left;padding:6px 8px;border-bottom:1px solid #ebeef5;">首次使用</th>'
+        + '<th style="text-align:left;padding:6px 8px;border-bottom:1px solid #ebeef5;">最近使用</th>'
+        + '<th style="text-align:right;padding:6px 8px;border-bottom:1px solid #ebeef5;">近30天使用天数</th>'
+        + '<th style="text-align:left;padding:6px 8px;border-bottom:1px solid #ebeef5;">状态</th></tr></thead><tbody>';
+    rows.forEach(r => {
+        html += '<tr>'
+            + '<td style="' + td + '">' + escapeHtml(names[r.ed] || r.ed || '—') + '</td>'
+            + '<td style="' + td + 'color:#909399;">' + escapeHtml(r.version || '—') + '</td>'
+            + '<td style="' + td + '">' + fmtDay(r.first) + '</td>'
+            + '<td style="' + td + '">' + fmtDay(r.last) + '</td>'
+            + '<td style="' + td + 'text-align:right;font-weight:600;">' + (r.activeDays || 0) + '</td>'
+            + '<td style="' + td + '">' + (r.activated
+                ? '<span style="color:#27ae60;">已转正</span>'
+                : '<span style="color:#e6a23c;">试用/未激活</span>') + '</td>'
+            + '</tr>';
+    });
+    el.innerHTML = html + '</tbody></table>';
+}
+
+// ★ 2026-11-18 近14天官网下载趋势（桌面/APP 分组柱状）
+function renderDownloadTrend(list) {
+    const el = document.getElementById('downloadTrendChart');
+    if (!el) return;
+    const map = new Map((Array.isArray(list) ? list : []).map(x => [x.date, x]));
+    const bjNow = new Date(Date.now() + 8 * 3600000);
+    const days = [];
+    for (let i = 13; i >= 0; i--) {
+        const d = new Date(bjNow.getTime() - i * 86400000);
+        const key = d.toISOString().slice(0, 10);
+        const row = map.get(key) || {};
+        days.push({
+            key,
+            label: Number(key.slice(5, 7)) + '/' + Number(key.slice(8, 10)),
+            desktop: row.desktop || 0,
+            app: row.app || 0,
+            total: row.total || 0
+        });
+    }
+    const max = Math.max(1, ...days.map(d => d.total));
+    const step = 30, barW = 9, gap = 3, W = 14 * step, H = 130, base = H - 24;
+    let svg = '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" style="min-width:' + W + 'px;">';
+    days.forEach((d, i) => {
+        const x = i * step + (step - (barW * 2 + gap)) / 2;
+        const hd = d.desktop ? Math.max(2, Math.round(d.desktop / max * (base - 24))) : 0;
+        const ha = d.app ? Math.max(2, Math.round(d.app / max * (base - 24))) : 0;
+        if (hd) svg += '<rect x="' + x + '" y="' + (base - hd) + '" width="' + barW + '" height="' + hd + '" fill="#3498db" rx="2"><title>' + d.key + ' 桌面 ' + d.desktop + '</title></rect>';
+        if (ha) svg += '<rect x="' + (x + barW + gap) + '" y="' + (base - ha) + '" width="' + barW + '" height="' + ha + '" fill="#e67e22" rx="2"><title>' + d.key + ' APP ' + d.app + '</title></rect>';
+        svg += '<text x="' + (i * step + step / 2) + '" y="' + (H - 8) + '" font-size="9" fill="#909399" text-anchor="middle">' + d.label + '</text>';
+        if (d.total) svg += '<text x="' + (i * step + step / 2) + '" y="' + (base - Math.max(hd, ha) - 3) + '" font-size="9" fill="#606266" text-anchor="middle">' + d.total + '</text>';
+    });
+    el.innerHTML = svg + '</svg>';
 }
 
 // ===== ★ 管理员激活审核 =====
