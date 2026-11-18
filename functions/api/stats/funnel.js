@@ -28,6 +28,7 @@
 
 import { parseAuthHeader, isPlatformAdmin } from '../_lib/auth.js';
 import { getKV, listLicenses } from '../license/_lib/license-core.js';
+import { isValidMachineId } from '../license/_lib/schema-guard.js';
 import { getDB } from '../_lib/d1.js';
 
 const GITHUB_REPO_API = 'https://api.github.com/repos/kyt61767126/tcm-prescription-system/releases?per_page=100';
@@ -167,7 +168,9 @@ async function getTrialFingerprintStats(kv) {
             out.total++;
             if ((rec.trialCount || 0) > 1) out.repeatTrials++;
             const machineId = (typeof rec.machineId === 'string' ? rec.machineId.trim() : '');
-            if (/^[0-9a-f]{32}$/i.test(machineId)) {
+            // ★ 2026-11-18 机器码长度放宽：统一用 schema-guard（8-64 位字母/数字/_-），
+            //   兼容云端APP 的 and-/uid- 前缀码；显式拒 unknown/undefined 垃圾字面量。
+            if (isValidMachineId(machineId)) {
                 for (const ed of TRIAL_EDITIONS) {
                     machineBySalted.set(await sha256Hex(ed + ':' + machineId), machineId);
                 }

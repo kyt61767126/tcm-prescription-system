@@ -2982,7 +2982,7 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
   * `trialUsage` 每台设备只计「首次使用起 7 个自然日内」的心跳活跃日（`days` 键为 UTC 日），单台恒 ≤7；窗口外天数记 `beyondTrialDays`，仅作参考；分布改为 1天以内 / 2-3天 / 4-6天 / 满7天。
   * 明细新增 `trialDays`、`beyondTrialDays`、`inTrial`；后台列改为「试用天数（≤7）/ 近30天活跃 / 状态（已转正·试用中·试用已到期）」。
   * 限制：心跳 `days` 仅留 30 天、记录 TTL 35 天 → 首次使用超过 35 天的设备早期试用日已回收，试用天数可能偏低（界面已注明）。
-  * **机器码列（同日追加）**：心跳只存加盐 `mid`（无法逆推）。用 `trial_fp.machineId`（32位hex，试用登记上报）+ 激活记录 `machineId` 按四端盐 `sha256(ed+':'+machineId)` 建立反查映射，明细输出 `machineId`；后台默认脱敏，点「显示」展开完整码，可直接复制到「激活码管理 → 版本绑定查询」核对。未上报原始码的老设备显示「—」。该映射仅服务端使用，`trialFingerprints` 返回前已剥离 Map。
+  * **机器码列（同日追加）**：心跳只存加盐 `mid`（无法逆推）。用 `trial_fp.machineId`（试用登记上报，统一经 `isValidMachineId` 校验，8–64 位，兼容 32 位 hex 与云APP `and-/uid-` 前缀码）+ 激活记录 `machineId` 按四端盐 `sha256(ed+':'+machineId)` 建立反查映射，明细输出 `machineId`；后台默认脱敏，点「显示」展开完整码，可直接复制到「激活码管理 → 版本绑定查询」核对。未上报原始码的老设备显示「—」。该映射仅服务端使用，`trialFingerprints` 返回前已剥离 Map。
   * **APP 心跳口径修复（同日追加）**：原 APP 心跳把 `ANDROID_ID` 直接哈希（`sha256('local-app:'+ANDROID_ID)` / `sha256('cloud-app:'+ANDROID_ID)`），与激活机器码（离线APP=`sha256(ANDROID_ID|包名|版本|厂商|型号)[:32]`，云APP=`and-`+`sha256('cloud-mid:'+ANDROID_ID)[:32]`）不同源 → APP 设备永远匹配不上激活记录、机器码列恒为「—」。已改为用激活同口径机器码再加盐哈希：离线APP 用 `LicenseManager.getMachineId()`，云APP 把 `getStableMachineId()` 从 `NativeBridge` 提升到 Activity 级供心跳复用。**需随下次 APK 重打包生效**；旧心跳 35 天内仍不匹配，无法回溯。
 * **验证**：`node --check`（funnel/generate/batch/license-manager）通过；admin 内联脚本 `new Function` 解析 0 失败；`sync-all.ps1` 全组一致；`copy-consistency` 110 副本 0 失败；`diff-cross-version --pair adminconsole` 0 差异；`check-interface` 6 OK。
 * **生效方式**：服务端 push 后立即生效（新签发试用码只能 7 天）；后台页面刷新即可看到新口径；客户端试用天数上限需随下一次桌面/APP 版本发布（热更不覆盖 license-manager 主进程/Java 类，必须重打包）。
