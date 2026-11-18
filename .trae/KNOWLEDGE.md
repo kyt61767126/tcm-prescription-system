@@ -2997,3 +2997,5 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
 * **验证**：先启动一个正常客户端，再对同一 fused exe 跑冒烟 → 存活 + 主窗口（登录窗）→ PASS（exit 0）。
 * **教训**：冒烟失败先看退出码：code=0 且瞬间退出 优先怀疑单实例锁/已有实例，而不是产物损坏；不要只凭"userData 隔离"日志文案判断已隔离。
 * **追加（同日 16:12 失败）**：签名阶段对便携版 exe 报 `being used by another process`（Defender 实时扫描新建 SFX 的瞬时锁，事后复查已解锁）。已在 `tools/sign-exe.ps1` 增加 `Invoke-SignWithRetry`：IOException/UnauthorizedAccessException 时 3 秒 × 最多 6 次重试，仍失败才 abort；时间戳分支同样走重试。已用实际 1.0.360 便携包复签验证 exit 0。
+* **追加（同日 16:32 发布失败）**：发布前 `compliance-check` 报「离线桌面与APP不同号」——桌面 1.0.353 / APP versionCode 354。根因是本地版打包顺序颠倒：`Build-Offline -Target all` 先打桌面（读旧 versionCode 同步），后打 APP（再自增）→ 必然差一号。已在 `tools/one-click-pack.ps1` 将离线 APP 调整到桌面之前执行，并说明 versionCode 是唯一计数源；同时用 `sync-offline-desktop-version.ps1` 把桌面 source version 同步到 1.0.354。
+* **教训**：离线端任何打包组合都必须「APP 先、桌面后」；发布失败先跑 `sync-offline-desktop-version.ps1 -Check` 定位同号问题，而不是盲目重发。

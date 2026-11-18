@@ -406,11 +406,39 @@ function Build-Offline {
         }
     }
 
-    # Step 2: Desktop
+    # Step 2: APP
+    # ★ 2026-11-18 顺序修正：APP 必须先于桌面打包。
+    #   APP 构建会自增 versionCode（离线端唯一版本计数器），桌面打包前会读取它同步
+    #   "1.0.<versionCode>"；旧顺序（桌面→APP）会打出 1.0.353 vs 354 的不同号，
+    #   发布前 compliance-check 直接失败。
+    if ($Target -eq "all" -or $Target -eq "app") {
+        Write-Host ""
+        if ($Target -eq "all") {
+            Write-Host "[Step 2/3] 打包离线${verLabel} 手机 APP (严格模式)..." -ForegroundColor Yellow
+        } else {
+            Write-Host "[Step 1/1] 打包离线${verLabel} 手机 APP (严格模式)..." -ForegroundColor Yellow
+        }
+        # ★ 2026-08-24 增量检测：源码与产物指纹一致则跳过重复打包
+        if (Test-BuildSkip 'local-app') {
+            Write-Host "  [SKIP] 本地APP产物已是最新，跳过打包" -ForegroundColor Green
+        } else {
+            $rc = Invoke-BatFile "$verDir\build-pack.bat" $verDir "offline $verLabel app build" "app-strict"
+            if ($rc -ne 0) {
+                Write-Host ""
+                Write-Host "[ERROR] 离线$verLabel APP打包失败，退出码: $rc" -ForegroundColor Red
+                Write-Host "  完整日志: $script:LogFile" -ForegroundColor Yellow
+                pause
+                return $rc
+            }
+            $script:BuiltUnits += 'local-app'
+        }
+    }
+
+    # Step 3: Desktop
     if ($Target -eq "all" -or $Target -eq "desktop") {
         Write-Host ""
         if ($Target -eq "all") {
-            Write-Host "[Step 2/3] 打包离线$verLabel 桌面 exe..." -ForegroundColor Yellow
+            Write-Host "[Step 3/3] 打包离线$verLabel 桌面 exe..." -ForegroundColor Yellow
         } else {
             Write-Host "[Step 1/1] 打包离线$verLabel 桌面 exe..." -ForegroundColor Yellow
         }
@@ -427,30 +455,6 @@ function Build-Offline {
                 return $rc
             }
             $script:BuiltUnits += 'local-desktop'
-        }
-    }
-
-    # Step 3: APP
-    if ($Target -eq "all" -or $Target -eq "app") {
-        Write-Host ""
-        if ($Target -eq "all") {
-            Write-Host "[Step 3/3] 打包离线${verLabel} 手机 APP (严格模式)..." -ForegroundColor Yellow
-        } else {
-            Write-Host "[Step 2/2] 打包离线${verLabel} 手机 APP (严格模式)..." -ForegroundColor Yellow
-        }
-        # ★ 2026-08-24 增量检测：源码与产物指纹一致则跳过重复打包
-        if (Test-BuildSkip 'local-app') {
-            Write-Host "  [SKIP] 本地APP产物已是最新，跳过打包" -ForegroundColor Green
-        } else {
-            $rc = Invoke-BatFile "$verDir\build-pack.bat" $verDir "offline $verLabel app build" "app-strict"
-            if ($rc -ne 0) {
-                Write-Host ""
-                Write-Host "[ERROR] 离线$verLabel APP打包失败，退出码: $rc" -ForegroundColor Red
-                Write-Host "  完整日志: $script:LogFile" -ForegroundColor Yellow
-                pause
-                return $rc
-            }
-            $script:BuiltUnits += 'local-app'
         }
     }
 
