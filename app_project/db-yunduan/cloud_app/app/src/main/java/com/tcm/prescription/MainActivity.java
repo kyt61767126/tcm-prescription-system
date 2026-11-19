@@ -1696,16 +1696,20 @@ public class MainActivity extends BridgeActivity {
             "#formulaList>div>div[style*=\"justify-content:space-between\"]>div:last-child{width:100%;display:flex;gap:6px;margin-top:8px}" +
             "#formulaList>div>div[style*=\"justify-content:space-between\"]>div:last-child .small-btn{flex:1;height:32px;font-size:12px;padding:0 4px;margin:0}';" +
             "document.head.appendChild(__fc);}" +
+            // ★ 2026-11-19 顶部工具栏与离线 APP 统一：不再整体重建按钮，
+            //   只把「存验方」改为「验方设置」（打开完整验方管理）；
+            //   语音录入（隐藏横向打印）、清空→统计、保存→题库由页面自身
+            //   移动端适配完成，保持与离线 APP 完全一致的 6 按钮顺序。
             "var topTabs=document.querySelector('.top-tabs-left');" +
-            "if(topTabs&&!topTabs.getAttribute('data-app-modified')){" +
-            "topTabs.setAttribute('data-app-modified','true');" +
-            "topTabs.style.display='flex';" +
-            "topTabs.innerHTML=" +
-            "'<div class=\"tab-left-item active\" style=\"flex:1;text-align:center;\">填资料</div>'+" +
-            "'<button class=\"action-btn\" onclick=\"showModal(\\'formulaModal\\')\" style=\"flex:1;padding:4px 0;font-size:12px;\">验方设置</button>'+" +
-            "'<button class=\"action-btn\" onclick=\"showModal(\\'analyticsModal\\')\" style=\"flex:1;padding:4px 0;font-size:12px;\">统计</button>'+" +
-            "'<button class=\"action-btn\" onclick=\"printPrescription(\\'portrait\\')\" style=\"flex:1;padding:4px 0;font-size:12px;\">纵向打印</button>'+" +
-            "'<button class=\"action-btn\" onclick=\"printPrescription(\\'landscape\\')\" style=\"flex:1;padding:4px 0;font-size:12px;\">横向打印</button>';" +
+            "if(topTabs){" +
+            "var __tb=topTabs.querySelectorAll('button');" +
+            "for(var i=0;i<__tb.length;i++){" +
+            "if(String(__tb[i].getAttribute('onclick')||'').indexOf('saveAsFormula')>=0){" +
+            "__tb[i].textContent='验方设置';" +
+            "__tb[i].setAttribute('onclick','showModal(\\'formulaModal\\')');" +
+            "break;" +
+            "}" +
+            "}" +
             "}" +
             "var actionBar=document.getElementById('mobileActionBar');" +
             "if(actionBar&&!actionBar.getAttribute('data-app-modified')){" +
