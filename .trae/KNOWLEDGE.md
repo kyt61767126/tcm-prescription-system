@@ -3029,3 +3029,4 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
 * **实现**：`tools/index-app-transforms.cjs` 新增 **T37**（仅作用于离线 APP 产物）：名称/功效/主治/组成占满整行，底部 `调用/编辑/删除` 三等分一行（`flex:1;height:32px;font-size:12px;gap:6px`）。桌面与网页权威源零改动。
 * **验证**：`sync-index-app.cjs` 34 条变换全部唯一命中、双写 SHA256 `bb438844...`；模板 div 5 开 5 闭；`check-interface.ps1` 6 OK。
 * **生效**：已随离线 APP 355 整包内置；并签发 `app-local` **2026.11.19-2**（minAppCode 288）覆盖旧包 2026.11.19-1，避免已装客户端被旧热包回退成旧布局。
+* **云端/鸿蒙同步**：云端安卓 APP 在 `MainActivity.injectAppButtonLayout` 注入 `#appFormulaCss`（仅 APP 生效，网页/桌面不变）；鸿蒙在 `shared-inject/cloud-app-buttons.js` 注入同一段 CSS。云端 APK **361**、鸿蒙 HAP **1000004** 已内置。
