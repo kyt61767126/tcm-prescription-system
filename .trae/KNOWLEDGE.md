@@ -3033,3 +3033,4 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
 * **生效**：已随离线 APP 355 整包内置；并签发 `app-local` **2026.11.19-2**（minAppCode 288）覆盖旧包 2026.11.19-1，避免已装客户端被旧热包回退成旧布局。
 * **云端/鸿蒙同步**：云端安卓 APP 在 `MainActivity.injectAppButtonLayout` 注入 `#appFormulaCss`（仅 APP 生效，网页/桌面不变）；鸿蒙在 `shared-inject/cloud-app-buttons.js` 注入同一段 CSS。云端 APK **361**、鸿蒙 HAP **1000004** 已内置。
 * **顶部工具栏统一（2026-11-19）**：云端/鸿蒙 APP 不再整体重建 `.top-tabs-left`，只把「存验方」改为「验方设置」（`showModal('formulaModal')`）；语音录入（隐藏横向打印）、清空→统计、保存→题库由页面自身移动端适配生成，最终 6 按钮顺序与离线 APP 完全一致。云端 APK **362**、鸿蒙 HAP **1000005** 已内置。
+* **顶栏高度对齐（2026-11-19）**：云端版 `ensureMobileTopBtn` 只 append 题库、**未隐藏保存**，导致顶栏同时出现「保存+题库」7 个按钮，文字换行使栏体比离线（6 按钮）偏高。修复：云端安卓 `MainActivity.injectAppButtonLayout` 与鸿蒙 `shared-inject/cloud-app-buttons.js` 增加 `__appSyncTopQuiz`（每 500ms 校验）：题库可见时把题库移到保存之后并隐藏保存，题库不可见（收费员/桌面）时恢复保存——与离线 `ensureMobileTopBtn` 同款逻辑。实测 390dp 两端栏高均 42px、360dp 均 49px，按钮宽度逐项一致。云端 APK **363**、鸿蒙 HAP **1000006** 已内置。
