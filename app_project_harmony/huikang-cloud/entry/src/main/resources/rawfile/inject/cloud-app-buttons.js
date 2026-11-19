@@ -4,6 +4,18 @@
  * 注入时机：onPageEnd 立即一次 + 1500ms 重试一次（应对 React 异步渲染）
  */
 (function() {
+  // ★ 2026-11-19 验方列表按钮布局与离线 APP 同步（仅 APP 注入，网页/桌面不变）
+  var __fc = document.getElementById('appFormulaCss');
+  if (!__fc) {
+    __fc = document.createElement('style');
+    __fc.id = 'appFormulaCss';
+    __fc.textContent =
+      '#formulaList>div>div[style*="justify-content:space-between"]{flex-wrap:wrap}' +
+      '#formulaList>div>div[style*="justify-content:space-between"]>div:first-child{width:100%}' +
+      '#formulaList>div>div[style*="justify-content:space-between"]>div:last-child{width:100%;display:flex;gap:6px;margin-top:8px}' +
+      '#formulaList>div>div[style*="justify-content:space-between"]>div:last-child .small-btn{flex:1;height:32px;font-size:12px;padding:0 4px;margin:0}';
+    document.head.appendChild(__fc);
+  }
   var topTabs = document.querySelector('.top-tabs-left');
   if (topTabs && !topTabs.getAttribute('data-app-modified')) {
     topTabs.setAttribute('data-app-modified', 'true');
