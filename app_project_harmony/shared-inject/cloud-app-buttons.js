@@ -30,6 +30,24 @@
       }
     }
   }
+  // ★ 2026-11-19 顶栏高度与离线 APP 一致：「题库」占用「保存」的位置，
+  //   题库可见时隐藏「保存」（离线 ensureMobileTopBtn 同款逻辑），
+  //   否则「保存+题库」7 个按钮挤在一行，文字换行导致栏体偏高。
+  var __appSyncTopQuiz = function() {
+    var bar = document.querySelector('.top-tabs-left');
+    if (!bar) return;
+    var saveBtn = null, quiz = document.getElementById('__quizMobileTopBtn');
+    var bs = bar.querySelectorAll('button.action-btn');
+    for (var j = 0; j < bs.length; j++) {
+      if (String(bs[j].getAttribute('onclick') || '').indexOf('savePrescription') >= 0) { saveBtn = bs[j]; break; }
+    }
+    if (!quiz || !saveBtn || saveBtn.parentNode !== bar) return;
+    if (quiz.previousElementSibling !== saveBtn) bar.insertBefore(quiz, saveBtn.nextSibling);
+    var showQuiz = window.innerWidth <= 768 && quiz.style.display !== 'none';
+    saveBtn.style.display = showQuiz ? 'none' : '';
+  };
+  __appSyncTopQuiz();
+  setInterval(__appSyncTopQuiz, 500);
   var actionBar = document.getElementById('mobileActionBar');
   if (actionBar && !actionBar.getAttribute('data-app-modified')) {
     actionBar.setAttribute('data-app-modified', 'true');
