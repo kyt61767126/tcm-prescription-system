@@ -219,4 +219,10 @@ module.exports = [
     find: "<button class=\"action-btn\" onclick=\"saveAsFormula()\" style=\"flex:1;padding:2px 8px;font-size:12px;\">存验方</button>",
     replace: "<button class=\"action-btn\" onclick=\"showModal('formulaModal')\" style=\"flex:1;padding:2px 8px;font-size:12px;\">验方设置</button>",
   },
+  {
+    id: "T37",
+    desc: "APP 验方列表操作区：调用/编辑/删除改为信息下方三等分整行按钮（修复窄屏挤压换行）",
+    find: "<div style=\"padding:8px;background:#f0f0f0;border-radius:3px;margin-bottom:8px;\"><div style=\"display:flex;justify-content:space-between;\"><div><div style=\"font-weight:bold;\">${escapeHtml(f.name)}</div><div style=\"font-size:11px;color:#666;\">功效：${escapeHtml(f.effect || '未知')}${f.indication ? ' | 主治：' + escapeHtml(f.indication) : ''}</div></div><div><button class=\"small-btn\" onclick=\"applyFormula(${i})\">调用</button><button class=\"small-btn\" onclick=\"editFormula(${i})\">编辑</button><button class=\"small-btn\" onclick=\"deleteFormula(${i})\">删除</button></div></div><div style=\"font-size:10px;color:#999;margin-top:4px;\">组成：${(f.composition || []).map(c =>escapeHtml(c.name) + escapeHtml(String(c.dosage || '')) + 'g').join('、')}</div></div>",
+    replace: "<div style=\"padding:8px;background:#f0f0f0;border-radius:3px;margin-bottom:8px;\"><div style=\"font-weight:bold;\">${escapeHtml(f.name)}</div><div style=\"font-size:11px;color:#666;\">功效：${escapeHtml(f.effect || '未知')}${f.indication ? ' | 主治：' + escapeHtml(f.indication) : ''}</div><div style=\"font-size:10px;color:#999;margin-top:4px;\">组成：${(f.composition || []).map(c =>escapeHtml(c.name) + escapeHtml(String(c.dosage || '')) + 'g').join('、')}</div><div style=\"display:flex;gap:6px;margin-top:8px;\"><button class=\"small-btn\" style=\"flex:1;height:32px;font-size:12px;\" onclick=\"applyFormula(${i})\">调用</button><button class=\"small-btn\" style=\"flex:1;height:32px;font-size:12px;\" onclick=\"editFormula(${i})\">编辑</button><button class=\"small-btn\" style=\"flex:1;height:32px;font-size:12px;\" onclick=\"deleteFormula(${i})\">删除</button></div></div>",
+  },
 ];

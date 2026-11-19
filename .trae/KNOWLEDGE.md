@@ -3022,3 +3022,10 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
   * 鸿蒙云端 APP：`app_project_harmony/shared-inject/cloud-app-buttons.js` 与 rawfile 副本 `huikang-cloud/.../rawfile/inject/cloud-app-buttons.js` 双改保持一致。
 * **验证**：`check-interface.ps1` 6 OK / 0 CHANGED；全仓 `*.{java,ets,js,cjs}` 已无「存验方」代码残留（仅历史注释）。
 * **生效方式**：离线 APP 已签发 `app-local` 热包 **2026.11.19-1**（minAppCode 继承 288，含 index.html + auth-core.js），已装 APK 启动 2s 后静默拉取、下次启动生效；重打 APK 则直接内置。云端 APP 的 Java 注入与鸿蒙 inject 属原生/资源，必须重打包，热更不覆盖。
+
+### 98. 手机APP 验方设置列表按钮布局（2026-11-19）
+
+* **问题**：窄屏下验方卡片右侧两列按钮导致「删除」换行、卡片过高（用户截图）。
+* **实现**：`tools/index-app-transforms.cjs` 新增 **T37**（仅作用于离线 APP 产物）：名称/功效/主治/组成占满整行，底部 `调用/编辑/删除` 三等分一行（`flex:1;height:32px;font-size:12px;gap:6px`）。桌面与网页权威源零改动。
+* **验证**：`sync-index-app.cjs` 34 条变换全部唯一命中、双写 SHA256 `bb438844...`；模板 div 5 开 5 闭；`check-interface.ps1` 6 OK。
+* **生效**：按用户决定**不单独发热更**，随下一次云端/离线 APP 整包重打内置生效。
