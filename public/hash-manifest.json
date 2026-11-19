@@ -38,17 +38,17 @@
     },
     "cloud": {
         "apk": {
-            "version": "V1.0.362",
-            "versionCode": 362,
-            "sha256": "6c70662693b78fa9cdfa38f87f5519c4204f7dd3dccc33960bafa8f7585455fb",
+            "version": "V1.0.363",
+            "versionCode": 363,
+            "sha256": "2a5731381b7eeed331bdbc0df407b4241ad826d0e722c0aeee18df3e1f870b4d",
             "url": "/downloads/惠康中医-云端.apk",
-            "releaseUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.19-1524/huikang-cloud.apk",
-            "size": 12621760,
-            "updateTime": "2026-11-19T07:25:13.236Z",
+            "releaseUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.19-1548/huikang-cloud.apk",
+            "size": 12620929,
+            "updateTime": "2026-11-19T07:48:46.086Z",
             "fileName": "惠康中医-云端.apk",
             "releaseFileName": "huikang-cloud.apk",
-            "releaseTag": "v2026.11.19-1524",
-            "releaseNotes": "✨ 新增:\n  - feat(app): 云端/鸿蒙APP顶部工具栏与离线APP统一（含语音录入/统计/题库）\n  - feat(app): 云端APP与鸿蒙APP验方列表按钮布局同步离线版\n  - feat(app): 手机APP顶部「存验方」改为「验方设置」，复用桌面验方管理弹窗\n  - feat(license): 正式授权到期前 1-7 天顶部横幅提醒（离线/云端双通道）\n  - feat(admin): 试用明细新增机器码列（脱敏可展开）\n  - feat(admin): 试用版统计（下载量/试用人数/近30天使用天数）\n  - feat(admin): 打包队列 API 与工作台，列表显示最后更新时间\n  - feat(license): 登录即上报——后台「今日登录」不再依赖 10 分钟心跳\n🐛 修复:\n  - fix(build): 离线版打包改为 APP 先于桌面，修复两端版本号差一导致发布门禁失败\n  - fix(tools): 安装包签名增加文件占用重试，避免杀软扫描瞬锁导致打包中止\n  - fix(tools): 冒烟用 --user-data-dir 真正隔离单实例锁，避免客户端运行导致打包误判失败\n  - fix(stats): 试用机器码反查放宽为 schema-guard 口径（8-64位，兼容云APP前缀码）\n  - fix(app): 心跳改用激活同口径机器码，修复APP设备永远匹配不上激活记录\n  - fix(trial): 试用仅离线本地版且固定7天，试用统计剔除云端\n  - docs(knowledge): §93 云端在线 presence 双源聚合修复记录\n  - fix(admin): 云端桌面/网页/APP 在线状态恒离线修复\n  - fix(ui): F3 验方设置搜索框接通实时过滤\n  - fix(license): 心跳设备配额已满时仍记录在线状态\n⚡ 优化:\n  - style(app): 优化验方设置列表按钮布局为三等分整行\n  - perf(admin): 风控与用量扫描并发化并补用量缓存\n  - perf(build-queue): 列表短缓存 + 空闲轮询降载\n  - perf(admin): 操作日志列表分页，分页条空态清理\n  - perf(admin): 诊所/风控/设备列表分页，设备列表并行请求，旧工单页转义\n  - perf(admin): 激活码/用户/激活审核列表分页，单页渲染 50 条\n  - perf(admin): 待办页全量读取收口（lite=2 + trend=1）并补齐 site-admin 双副本\n📋 其他:\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - docs(knowledge): §94 试用统计口径（下载量/试用人数/近30天使用天数）\n  - docs(knowledge): §92 补记三通道热包签发版本与生效方式\n  - build: 一键打包副作用自动收纳\n  - docs: 补充打包队列使用手册"
+            "releaseTag": "v2026.11.19-1548",
+            "releaseNotes": "✨ 新增:\n  - docs(knowledge): §5 新增鸿蒙版本只打包不发布规范\n  - feat(app): 云端/鸿蒙APP顶部工具栏与离线APP统一（含语音录入/统计/题库）\n  - feat(app): 云端APP与鸿蒙APP验方列表按钮布局同步离线版\n  - feat(app): 手机APP顶部「存验方」改为「验方设置」，复用桌面验方管理弹窗\n  - feat(license): 正式授权到期前 1-7 天顶部横幅提醒（离线/云端双通道）\n  - feat(admin): 试用明细新增机器码列（脱敏可展开）\n  - feat(admin): 试用版统计（下载量/试用人数/近30天使用天数）\n  - feat(admin): 打包队列 API 与工作台，列表显示最后更新时间\n  - feat(license): 登录即上报——后台「今日登录」不再依赖 10 分钟心跳\n🐛 修复:\n  - fix(cloud-app): 顶栏题库占用保存位置，高度与离线APP一致\n  - fix(build): 离线版打包改为 APP 先于桌面，修复两端版本号差一导致发布门禁失败\n  - fix(tools): 安装包签名增加文件占用重试，避免杀软扫描瞬锁导致打包中止\n  - fix(tools): 冒烟用 --user-data-dir 真正隔离单实例锁，避免客户端运行导致打包误判失败\n  - fix(stats): 试用机器码反查放宽为 schema-guard 口径（8-64位，兼容云APP前缀码）\n  - fix(app): 心跳改用激活同口径机器码，修复APP设备永远匹配不上激活记录\n  - fix(trial): 试用仅离线本地版且固定7天，试用统计剔除云端\n  - docs(knowledge): §93 云端在线 presence 双源聚合修复记录\n  - fix(admin): 云端桌面/网页/APP 在线状态恒离线修复\n  - fix(ui): F3 验方设置搜索框接通实时过滤\n⚡ 优化:\n  - style(app): 优化验方设置列表按钮布局为三等分整行\n  - perf(admin): 风控与用量扫描并发化并补用量缓存\n  - perf(build-queue): 列表短缓存 + 空闲轮询降载\n  - perf(admin): 操作日志列表分页，分页条空态清理\n  - perf(admin): 诊所/风控/设备列表分页，设备列表并行请求，旧工单页转义\n  - perf(admin): 激活码/用户/激活审核列表分页，单页渲染 50 条\n  - perf(admin): 待办页全量读取收口（lite=2 + trend=1）并补齐 site-admin 双副本\n📋 其他:\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - docs(knowledge): §94 试用统计口径（下载量/试用人数/近30天使用天数）\n  - docs(knowledge): §92 补记三通道热包签发版本与生效方式\n  - build: 一键打包副作用自动收纳\n  - docs: 补充打包队列使用手册"
         },
         "exe": {
             "version": "1.0.361",
@@ -76,12 +76,12 @@
     "provenance": {
         "schemaVersion": 1,
         "repo": "https://github.com/kyt61767126/tcm-prescription-system.git",
-        "commit": "92c5293a3c5e",
+        "commit": "41ccfc017f04",
         "ref": "main",
         "builder": "kyt61767126",
-        "builtAt": "2026-11-19T07:25:14.481Z",
+        "builtAt": "2026-11-19T07:48:47.101Z",
         "buildTool": "publish-release.js@v24.16.0",
-        "releaseTag": "v2026.11.19-1524"
+        "releaseTag": "v2026.11.19-1548"
     },
     "dingzhi": {
         "apk": {
