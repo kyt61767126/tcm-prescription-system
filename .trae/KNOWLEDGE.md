@@ -272,6 +272,8 @@
 
 ## 5. 打包规范
 
+* ★ 2026-11-19 **鸿蒙版本只打包、不发布（用户明确规范）**：鸿蒙云端 HAP 可按需构建并本地签名留档（`app_project_harmony/huikang-cloud/entry/build/default/outputs/default/huikang-cloud-release-signed.hap`），但**禁止**通过 `publish-release.js` 上传 GitHub Release / 官方下载页，也不得纳入任何 `--target=all` 的发布产物清单；需要分发时由人工单独拷出 HAP 或上传 AGC。安卓云端/离线 APK 与桌面端发布流程不变。如需恢复鸿蒙发布，必须得到用户明确指令并在本条目记录变更日期。
+
 * APK 输出路径统一到项目根目录（离线APP→db-offline 根，云端APP→db-yunduan 根）；一键打包默认严格模式（Java 混淆+签名哈希硬校验），无需回车确认。
 
 * 桌面版打包前必须检查所有桌面版 package.json 的 build.files 是否包含新增脚本文件（cloud\_desktop/cloud\_desktop\_geren/db-offline desktop/db-offline/desktop\_geren），漏了=exe 缺脚本函数未定义。
