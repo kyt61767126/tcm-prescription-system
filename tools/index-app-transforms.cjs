@@ -213,4 +213,10 @@ module.exports = [
     find: "                        const __gate = await AuthCore.verifyLoginGate(user.username || loginUsername);",
     replace: "                        const __gate = await AuthCore.verifyLoginGate(user.username || loginUsername, {\n                            // P3-B：设备证明公钥重置被拒时，在线登录本账号取 sessionToken 完成恢复\n                            getResetAuth: async () => {\n                                try {\n                                    const __lr = await fetch('https://tcm-prescription-system.pages.dev/api/users?login=true', {\n                                        method: 'POST',\n                                        headers: { 'Content-Type': 'application/json' },\n                                        body: JSON.stringify({\n                                            username: user.username || loginUsername,\n                                            password: password\n                                        })\n                                    });\n                                    const __lj = await __lr.json().catch(() => null);\n                                    return (__lr.ok && __lj && __lj.token) ? String(__lj.token) : '';\n                                } catch (e) { return ''; }\n                            }\n                        });",
   },
+  {
+    id: "T36",
+    desc: "APP 顶部操作栏：「存验方」→「验方设置」，直接打开与桌面程序 F3 相同的验方管理弹窗（手机端无键盘场景）",
+    find: "<button class=\"action-btn\" onclick=\"saveAsFormula()\" style=\"flex:1;padding:2px 8px;font-size:12px;\">存验方</button>",
+    replace: "<button class=\"action-btn\" onclick=\"showModal('formulaModal')\" style=\"flex:1;padding:2px 8px;font-size:12px;\">验方设置</button>",
+  },
 ];

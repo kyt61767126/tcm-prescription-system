@@ -1681,7 +1681,7 @@ public class MainActivity extends BridgeActivity {
 
     /**
      * ★ 注入APP专属按钮布局（与离线APP一致）
-     * 顶部5按钮：填资料、存验方、统计、纵向打印、横向打印
+     * 顶部5按钮：填资料、验方设置、统计、纵向打印、横向打印
      * 底部5按钮：录像、拍照、保存、清空、用户/改密
      * 网页版保持不变，仅云端APP动态修改
      */
@@ -1693,7 +1693,7 @@ public class MainActivity extends BridgeActivity {
             "topTabs.style.display='flex';" +
             "topTabs.innerHTML=" +
             "'<div class=\"tab-left-item active\" style=\"flex:1;text-align:center;\">填资料</div>'+" +
-            "'<button class=\"action-btn\" onclick=\"saveAsFormula()\" style=\"flex:1;padding:4px 0;font-size:12px;\">存验方</button>'+" +
+            "'<button class=\"action-btn\" onclick=\"showModal(\\'formulaModal\\')\" style=\"flex:1;padding:4px 0;font-size:12px;\">验方设置</button>'+" +
             "'<button class=\"action-btn\" onclick=\"showModal(\\'analyticsModal\\')\" style=\"flex:1;padding:4px 0;font-size:12px;\">统计</button>'+" +
             "'<button class=\"action-btn\" onclick=\"printPrescription(\\'portrait\\')\" style=\"flex:1;padding:4px 0;font-size:12px;\">纵向打印</button>'+" +
             "'<button class=\"action-btn\" onclick=\"printPrescription(\\'landscape\\')\" style=\"flex:1;padding:4px 0;font-size:12px;\">横向打印</button>';" +

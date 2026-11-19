@@ -3011,3 +3011,14 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
 * **时间回拨核验结论（无需新增代码）**：四端均已有 24h 阈值回拨检测，`validateLicense` 在读取 license 之前即用 `readLastRun().timestamp` 比较（`shared/license/license-manager.js` L2814-2825，返回 `type:'tampered'` 并硬阻断；云桌面同源副本一致）；离线APP `LicenseManager.java` 同口径（L3667-3676）；云桌面另有 gate/anchor 双写 `lastSeenHigh` 高水位 + 在线 `serverTime` 自愈（L4785-4796），云APP 由服务端 entitlement 实时裁决。故本次仅做核查，未重复实现。
 * **验证**：`node --check` 对 `shared/auth-core/offline.js`、`shared/auth-core/cloud.js` 及同步后的 `shared/auth-core.js`、`public/auth-core.js`、离线桌面 `auth-core.js` 全部通过；`tools/sync-auth-core.ps1` 同步 3 离线 + 8 云端共 11 副本，`-VerifyOnly` 全绿。
 * **生效方式**：`shared/auth-core/*.js` 属 auth-core 体系，需经 `tools/sync-auth-core.ps1` 分发（已执行）。云端网页 push 即生效；云桌面/离线桌面/云APP/离线APP 已装设备可走 auth-core 热更（白名单文件）或随下次重打包生效，热更须彻底退出重进。
+
+### 97. 手机APP 顶部「存验方」→「验方设置」（2026-11-19）
+
+* **需求**：手机 APP 顶部按钮「存验方」改名「验方设置」，功能与桌面程序（F3 验方设置弹窗）一致。
+* **实现口径**：统一改为 `onclick="showModal('formulaModal')"`，复用桌面同一套 `#formulaModal`（搜索/列表/新增/编辑/删除），不再走 `saveAsFormula()` 的「预填当前处方」路径。
+* **三处按钮来源（必须同步）**：
+  * 离线 APP：`app_project/db-offline/index-app.html` 由 `tools/sync-index-app.cjs` 从离线桌面权威源 + 变换表生成 → 新增 **T36**（`tools/index-app-transforms.cjs`），改权威源之外不手改产物；改后运行 `node tools/sync-index-app.cjs`（已跑，双写 SHA256 一致；`--verify-only` PASS）。
+  * 云端 APP：`app_project/db-yunduan/cloud_app/.../MainActivity.injectAppButtonLayout()` 的顶部按钮 JS 字符串（桌面/网页 HTML 不动）。
+  * 鸿蒙云端 APP：`app_project_harmony/shared-inject/cloud-app-buttons.js` 与 rawfile 副本 `huikang-cloud/.../rawfile/inject/cloud-app-buttons.js` 双改保持一致。
+* **验证**：`check-interface.ps1` 6 OK / 0 CHANGED；全仓 `*.{java,ets,js,cjs}` 已无「存验方」代码残留（仅历史注释）。
+* **生效方式**：离线 APP 需重打 APK（assets 已更新，可另生成 app-local 热包）；云端 APP 的 Java 注入与鸿蒙 inject 属原生/资源，必须重打包，热更不覆盖。
