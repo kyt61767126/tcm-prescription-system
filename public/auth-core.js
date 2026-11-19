@@ -3018,6 +3018,8 @@
                     }
                 } catch (_) {}
                 console.log('[Heartbeat] 心跳成功（entitlement=LICENSED）');
+                // ★ 2026-11-19 到期前提醒：剩余 1–7 天 → 顶部横幅（每日一次）
+                try { maybeShowCloudExpiryBanner(entFull || {}); } catch (_) {}
                 return;
             }
             if (entState) {
@@ -3078,6 +3080,63 @@
         }
     }
 
+    // ★ 2026-11-19 到期前提醒（7/3/1 天）：云端授权剩余 1–7 天（entitlement 的
+    //   daysRemaining）时，主界面顶部注入琥珀色横幅提示续费。JS 幂等注入（不改
+    //   HTML 结构/CSS），按北京日期每日最多一次；daysRemaining=-1 永久授权不提醒。
+    function maybeShowCloudExpiryBanner(data) {
+        try {
+            if (!data) return;
+            const days = Number(data.daysRemaining != null ? data.daysRemaining : data.remainingDays);
+            const type = String(data.licenseType || data.type || '');
+            const isPaid = type !== 'trial' && type !== 'free';
+            const inWindow = Number.isFinite(days) && days >= 1 && days <= 7;
+            if (!inWindow || !isPaid) {
+                const old = document.getElementById('cloudExpiryBanner');
+                if (old && old.parentNode) old.parentNode.removeChild(old);
+                return;
+            }
+            if (!document.body || !document.getElementById('patientName')) return;
+            if (document.getElementById('cloudExpiryBanner')) return;
+
+            const bd = new Date(Date.now() + 8 * 3600e3);
+            const dayKey = bd.toISOString().slice(0, 10);
+            const LS_KEY = 'cloud:expiryBannerDay';
+            try {
+                if (global.localStorage && global.localStorage.getItem(LS_KEY) === dayKey) return;
+            } catch (e) {}
+
+            let expText = '';
+            try {
+                const expRaw = data.expiresAt || (data.license && data.license.expiresAt);
+                const ms = expRaw ? new Date(expRaw).getTime() : NaN;
+                if (!isNaN(ms)) {
+                    const e8 = new Date(ms + 8 * 3600e3);
+                    const p2 = function (n) { return (n < 10 ? '0' : '') + n; };
+                    expText = '（到期时间 ' + e8.getUTCFullYear() + '-' + p2(e8.getUTCMonth() + 1) + '-' + p2(e8.getUTCDate()) + '）';
+                }
+            } catch (e) {}
+
+            const banner = document.createElement('div');
+            banner.id = 'cloudExpiryBanner';
+            banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9001;background:#b45309;color:#fff;font-size:13px;padding:7px 34px 7px 10px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.35);font-family:system-ui,-apple-system,sans-serif;line-height:1.6;';
+            banner.innerHTML = '⏳ 授权将于 <b>' + days + '</b> 天后到期' + expText + '，请及时续费' +
+                '<button id="cloudExpiryActivateBtn" style="margin-left:8px;padding:3px 14px;border:none;border-radius:5px;background:#fff;color:#b45309;font-weight:600;cursor:pointer;font-size:12px;vertical-align:middle;">前往续费</button>' +
+                '<button id="cloudExpiryCloseBtn" title="关闭" style="position:absolute;top:50%;right:8px;transform:translateY(-50%);border:none;background:transparent;color:#fff;font-size:18px;line-height:1;cursor:pointer;padding:2px 6px;">×</button>';
+            document.body.appendChild(banner);
+            const __act = document.getElementById('cloudExpiryActivateBtn');
+            if (__act) __act.addEventListener('click', function () {
+                try { if (typeof global.openAdminActivate === 'function') global.openAdminActivate(); } catch (e) {}
+            });
+            const __cls = document.getElementById('cloudExpiryCloseBtn');
+            if (__cls) __cls.addEventListener('click', function () {
+                try { if (banner.parentNode) banner.parentNode.removeChild(banner); } catch (e) {}
+            });
+            try { if (global.localStorage) global.localStorage.setItem(LS_KEY, dayKey); } catch (e) {}
+        } catch (e) {
+            console.warn('[Heartbeat] 到期提醒横幅注入失败:', e);
+        }
+    }
+
     async function checkLicenseAndShowActivate() {
         try {
             // 检查 license API 是否存在（APP 端无 window.electronAPI 时自动跳过）
@@ -3092,6 +3151,8 @@
                 // ★ 兼容逻辑：授权有效时清除失效标志
                 global.__licenseExpired = false;
                 global.__licenseActivating = false;
+                // ★ 2026-11-19 到期前提醒：正式授权剩余 1–7 天 → 顶部横幅（每日一次）
+                maybeShowCloudExpiryBanner(result);
                 // ★ P1-7 心跳验证：异步执行，不阻断使用（24小时验证一次，7天离线锁定）
                 performHeartbeatCheck();
                 // ★ P1-1 在线验证：如果需要在线验证，自动触发（不阻断使用）

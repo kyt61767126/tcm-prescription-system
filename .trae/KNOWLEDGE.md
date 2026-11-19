@@ -3000,3 +3000,14 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
 * **追加（同日 16:32 发布失败）**：发布前 `compliance-check` 报「离线桌面与APP不同号」——桌面 1.0.353 / APP versionCode 354。根因是本地版打包顺序颠倒：`Build-Offline -Target all` 先打桌面（读旧 versionCode 同步），后打 APP（再自增）→ 必然差一号。已在 `tools/one-click-pack.ps1` 将离线 APP 调整到桌面之前执行，并说明 versionCode 是唯一计数源；同时用 `sync-offline-desktop-version.ps1` 把桌面 source version 同步到 1.0.354。
 * **教训**：离线端任何打包组合都必须「APP 先、桌面后」；发布失败先跑 `sync-offline-desktop-version.ps1 -Check` 定位同号问题，而不是盲目重发。
 * **追加（同日，需求变更）**：用户确认「版本号可以不同」——已从 `compliance-check.ps1` 移除 4c「离线桌面与APP同号」门禁；保留各端内部版本一致性（4/8、4b/9）。桌面打包前的 `sync-offline-desktop-version.ps1` 仍保留（只在该端重打时对齐，不影响两端异步发布）。合规检查复跑：13 通过 / 0 失败。
+
+### 96. 到期前提醒（7/3/1 天）+ 正式授权时间回拨核验（2026-11-19）
+
+* **需求**：正式授权到期前主动提醒续费；并核查正式授权是否可被"改系统时间"绕过。
+* **到期前提醒（新增，纯 JS 幂等注入，0 HTML/CSS 改动）**：
+  * 离线端（离线桌面 + 离线APP）：`shared/auth-core/offline.js` 新增 `maybeShowExpiryBanner(data)`，在 `checkLicenseAndShowActivate()` 授权有效分支（启动即判定）与 `updateLicenseStatusText()` 正式授权分支各调一次。仅当 `remainingDays` 为 1–7 且 `licenseType` 非 trial/free 时，在 `#patientName` 存在的主界面顶部注入琥珀色横幅 `#licenseExpiryBanner`（z-index 9001），含到期日期（北京时间）、「前往续费」（走 `global.openAdminActivate`）与关闭按钮。
+  * 云端端（云桌面/云网页/云APP）：`shared/auth-core/cloud.js` 新增 `maybeShowCloudExpiryBanner(data)`，在 `performHeartbeatCheck()` 的 `entState==='LICENSED'` 分支消费 `entitlement.daysRemaining`，以及 `checkLicenseAndShowActivate()` 有效分支调用；横幅 id `#cloudExpiryBanner`。
+  * 频控：`localStorage['license:expiryBannerDay']` / `['cloud:expiryBannerDay']` 按北京时间日期记忆，同一自然日最多注入一次（用户关闭后当天不再打扰）；已续费/超出窗口时自动移除残留横幅。登录小窗（无 `#patientName`）不注入。
+* **时间回拨核验结论（无需新增代码）**：四端均已有 24h 阈值回拨检测，`validateLicense` 在读取 license 之前即用 `readLastRun().timestamp` 比较（`shared/license/license-manager.js` L2814-2825，返回 `type:'tampered'` 并硬阻断；云桌面同源副本一致）；离线APP `LicenseManager.java` 同口径（L3667-3676）；云桌面另有 gate/anchor 双写 `lastSeenHigh` 高水位 + 在线 `serverTime` 自愈（L4785-4796），云APP 由服务端 entitlement 实时裁决。故本次仅做核查，未重复实现。
+* **验证**：`node --check` 对 `shared/auth-core/offline.js`、`shared/auth-core/cloud.js` 及同步后的 `shared/auth-core.js`、`public/auth-core.js`、离线桌面 `auth-core.js` 全部通过；`tools/sync-auth-core.ps1` 同步 3 离线 + 8 云端共 11 副本，`-VerifyOnly` 全绿。
+* **生效方式**：`shared/auth-core/*.js` 属 auth-core 体系，需经 `tools/sync-auth-core.ps1` 分发（已执行）。云端网页 push 即生效；云桌面/离线桌面/云APP/离线APP 已装设备可走 auth-core 热更（白名单文件）或随下次重打包生效，热更须彻底退出重进。
