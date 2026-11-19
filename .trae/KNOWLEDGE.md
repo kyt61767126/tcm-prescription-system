@@ -3021,4 +3021,4 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
   * 云端 APP：`app_project/db-yunduan/cloud_app/.../MainActivity.injectAppButtonLayout()` 的顶部按钮 JS 字符串（桌面/网页 HTML 不动）。
   * 鸿蒙云端 APP：`app_project_harmony/shared-inject/cloud-app-buttons.js` 与 rawfile 副本 `huikang-cloud/.../rawfile/inject/cloud-app-buttons.js` 双改保持一致。
 * **验证**：`check-interface.ps1` 6 OK / 0 CHANGED；全仓 `*.{java,ets,js,cjs}` 已无「存验方」代码残留（仅历史注释）。
-* **生效方式**：离线 APP 需重打 APK（assets 已更新，可另生成 app-local 热包）；云端 APP 的 Java 注入与鸿蒙 inject 属原生/资源，必须重打包，热更不覆盖。
+* **生效方式**：离线 APP 已签发 `app-local` 热包 **2026.11.19-1**（minAppCode 继承 288，含 index.html + auth-core.js），已装 APK 启动 2s 后静默拉取、下次启动生效；重打 APK 则直接内置。云端 APP 的 Java 注入与鸿蒙 inject 属原生/资源，必须重打包，热更不覆盖。
