@@ -4641,7 +4641,7 @@ let currentUser = null;
         //   形如 'APK 348' 不是水印 → 回落统一水印 Arch 2.26。
         function getLoginDisplayVersion() {
             var av = String(window.APP_VERSION || '');
-            if (/^V\d+(\.\d+){3,}$/.test(av)) return av;
+            if (/^V\d+(\.\d+){3,}$/.test(av) || /^V\d+\.\d+\.[1-9]\d*$/.test(av)) return av;
             if (_buildMeta && _buildMeta.version) {
                 var bv = String(_buildMeta.version);
                 return /^V/i.test(bv) ? bv : ('V' + bv);
