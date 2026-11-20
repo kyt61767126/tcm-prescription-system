@@ -5545,23 +5545,86 @@
                     });
                 }
             } catch (_) { /* 机器码获取失败不影响授权区其他内容 */ }
-            const code = await getLicenseCode();
-            if (!code || code.length < 4) return;
-            const box = document.createElement('div');
-            box.id = 'activationCodeBox';
-            box.style.cssText = 'margin-top:8px;padding-top:8px;border-top:1px dashed #ddd;font-size:12px;color:#555;line-height:1.7;';
-            const label = document.createElement('span');
-            label.textContent = '🔑 激活码：';
-            const b = document.createElement('b');
-            b.id = 'activationCodeEl';
-            b.title = '点击复制';
-            b.style.cssText = 'color:#26a69a;font-family:monospace;letter-spacing:1px;font-size:14px;cursor:pointer;user-select:all;';
-            b.textContent = code; // textContent 写码防注入（码格式 BNZC-XXXX-XXXX-XXXX-XXXX）
-            box.appendChild(label);
-            box.appendChild(b);
-            el.appendChild(box);
-            b.addEventListener('click', function (ev) {
-                const txt = (ev.target.textContent || '').trim();
+            // ★ 2026-11-20 激活码防泄露：默认脱敏展示，点「显示」需验证当前管理员登录密码，
+            //   验证通过后展示完整码 60 秒（到期自动重新脱敏），复制仅在已解锁状态可用。
+            function maskCode(s) {
+                const str = String(s || '').trim();
+                if (str.length <= 8) return '****';
+                const m = str.match(/^([A-Z]{2,6}-)/);
+                return (m ? m[1] : '') + '****-****-****-' + str.slice(-4);
+            }
+            function askRevealPassword() {
+                return new Promise(function (resolve) {
+                    const old = document.getElementById('codeRevealMask');
+                    if (old && old.parentNode) old.parentNode.removeChild(old);
+                    const mask = document.createElement('div');
+                    mask.id = 'codeRevealMask';
+                    mask.style.cssText = 'position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.45);z-index:10050;display:flex;align-items:center;justify-content:center;';
+                    const card = document.createElement('div');
+                    card.style.cssText = 'background:#fff;border-radius:10px;padding:20px 22px;width:300px;max-width:86vw;box-shadow:0 10px 30px rgba(0,0,0,.25);font-size:14px;color:#333;';
+                    const title = document.createElement('div');
+                    title.textContent = '🔐 验证管理员密码';
+                    title.style.cssText = 'font-weight:bold;margin-bottom:8px;';
+                    const hint = document.createElement('div');
+                    hint.textContent = '显示完整激活码需要验证当前登录账号密码';
+                    hint.style.cssText = 'font-size:12px;color:#888;margin-bottom:10px;';
+                    const inp = document.createElement('input');
+                    inp.type = 'password';
+                    inp.placeholder = '请输入登录密码';
+                    inp.autocomplete = 'off';
+                    inp.style.cssText = 'width:100%;box-sizing:border-box;padding:10px;border:1px solid #ccc;border-radius:6px;font-size:14px;outline:none;';
+                    const row = document.createElement('div');
+                    row.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;margin-top:14px;';
+                    const cancel = document.createElement('button');
+                    cancel.textContent = '取消';
+                    cancel.style.cssText = 'padding:8px 16px;border:1px solid #ddd;background:#fafafa;border-radius:6px;cursor:pointer;';
+                    const ok = document.createElement('button');
+                    ok.textContent = '确定';
+                    ok.style.cssText = 'padding:8px 16px;border:none;background:#26a69a;color:#fff;border-radius:6px;cursor:pointer;';
+                    row.appendChild(cancel); row.appendChild(ok);
+                    card.appendChild(title); card.appendChild(hint); card.appendChild(inp); card.appendChild(row);
+                    mask.appendChild(card);
+                    document.body.appendChild(mask);
+                    setTimeout(function () { try { inp.focus(); } catch (_) {} }, 30);
+                    function close(v) {
+                        if (mask.parentNode) mask.parentNode.removeChild(mask);
+                        resolve(v);
+                    }
+                    cancel.addEventListener('click', function () { close(null); });
+                    ok.addEventListener('click', function () {
+                        const v = String(inp.value || '');
+                        if (!v) { inp.style.borderColor = '#f56c6c'; return; }
+                        close(v);
+                    });
+                    inp.addEventListener('keydown', function (e) {
+                        if (e.key === 'Enter') ok.click();
+                        if (e.key === 'Escape') close(null);
+                    });
+                });
+            }
+            async function verifyRevealPassword(pwd) {
+                try {
+                    let cu = null;
+                    try { cu = JSON.parse((await StorageAdapter.getItem('auth:currentUser')) || 'null'); } catch (_) {}
+                    const uname = (cu && cu.username) ? String(cu.username) : '';
+                    if (!uname) return { ok: false, msg: '无法确认当前登录账户，请重新登录后再试' };
+                    let users = null;
+                    try { if (global.UserStore && typeof global.UserStore.get === 'function') users = global.UserStore.get(); } catch (_) {}
+                    if ((!users || !users.length) && global.CONFIG && Array.isArray(global.CONFIG.users)) users = global.CONFIG.users;
+                    if (!users || !users.length) return { ok: false, msg: '无法读取本机账户信息，暂不能显示激活码' };
+                    const user = users.find(function (u) { return u && (u.username === uname || u.phone === uname); });
+                    if (!user) return { ok: false, msg: '未找到当前账户，请重新登录后再试' };
+                    // 仅管理员可查看完整码（收费员/医生即使知道自己的密码也不放行）
+                    if (global.AuthCore && typeof global.AuthCore.isAdmin === 'function' && !global.AuthCore.isAdmin(user)) {
+                        return { ok: false, msg: '仅管理员可查看完整激活码' };
+                    }
+                    const pass = await verifyPassword(String(pwd || ''), user.password || '', user.username);
+                    return pass ? { ok: true } : { ok: false, msg: '密码错误，请重试' };
+                } catch (e) {
+                    return { ok: false, msg: '校验异常：' + ((e && e.message) || '未知错误') };
+                }
+            }
+            function copyText(txt) {
                 try {
                     if (navigator.clipboard && navigator.clipboard.writeText) {
                         navigator.clipboard.writeText(txt);
@@ -5575,6 +5638,43 @@
                 } catch (_) {
                     alert('复制失败，请手动记录：' + txt);
                 }
+            }
+            const code = await getLicenseCode();
+            if (!code || code.length < 4) return;
+            const box = document.createElement('div');
+            box.id = 'activationCodeBox';
+            box.style.cssText = 'margin-top:8px;padding-top:8px;border-top:1px dashed #ddd;font-size:12px;color:#555;line-height:1.7;';
+            const label = document.createElement('span');
+            label.textContent = '🔑 激活码：';
+            const b = document.createElement('b');
+            b.id = 'activationCodeEl';
+            b.title = '点击显示完整激活码（需管理员密码）';
+            b.style.cssText = 'color:#26a69a;font-family:monospace;letter-spacing:1px;font-size:14px;cursor:pointer;user-select:all;';
+            b.textContent = maskCode(code);
+            box.appendChild(label);
+            box.appendChild(b);
+            el.appendChild(box);
+            let revealed = false;
+            let hideTimer = null;
+            function remask() {
+                revealed = false;
+                b.textContent = maskCode(code);
+                b.title = '点击显示完整激活码（需管理员密码）';
+            }
+            b.addEventListener('click', async function () {
+                if (!revealed) {
+                    const pwd = await askRevealPassword();
+                    if (!pwd) return;
+                    const vr = await verifyRevealPassword(pwd);
+                    if (!vr.ok) { alert(vr.msg || '密码错误'); return; }
+                    revealed = true;
+                    b.textContent = code;
+                    b.title = '点击复制（60 秒后自动隐藏）';
+                    clearTimeout(hideTimer);
+                    hideTimer = setTimeout(remask, 60000);
+                    return;
+                }
+                copyText(code);
             });
             // 机器码显示已前移至 getLicenseCode 之前（激活码取不到也显示），此处不再重复渲染
         } catch (e) {

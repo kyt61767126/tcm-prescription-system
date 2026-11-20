@@ -46,6 +46,51 @@ import { getDeviceBlock } from './_lib/license-core.js';
 import { provisionCloudAccount, preflightTaobaoCloudAuto, commitTaobaoCloudAuto, attachLicenseToAutoRequest, renewClinicForRepeatPurchase } from './_lib/admin-account.js';
 import { hashPassword } from '../_lib/auth.js';
 
+// ============================================================================
+//  ★ 2026-11-20 激活码撞码防护（防泄露后被人扫描/试码）
+//  规则：同一 IP 或同一机器 1 小时内累计 10 次“无效码”（格式错/不存在）
+//        → KV 写锁定键 1 小时，期间激活请求直接 429，不再进入业务判定。
+//  成本：KV 读 2 次/激活请求（可忽略）；写只在“首次触阈”发生 1 次，
+//        连续撞码不会把免费写额度打满。命中锁定仅记 console，不写审计日志。
+//  注意：只统计无效码，正常换机/诊所名不匹配等业务拒绝不计入，避免误伤。
+// ============================================================================
+const INVALID_CODE_MAX_PER_HOUR = 10;
+const INVALID_CODE_LOCK_TTL = 3600;
+const _invalidAttempts = new Map(); // key -> { hour, count }
+
+function _invalidLockKeys(ip, machineId) {
+    const out = [];
+    if (ip && ip !== 'unknown') out.push({ mem: 'ip:' + ip, kv: 'lockout:invalid-code:ip:' + ip });
+    if (machineId) out.push({ mem: 'mid:' + machineId, kv: 'lockout:invalid-code:mid:' + machineId });
+    return out;
+}
+
+async function checkInvalidCodeLock(kv, ip, machineId) {
+    for (const item of _invalidLockKeys(ip, machineId)) {
+        try { if (await kv.get(item.kv)) return true; } catch (_) {}
+    }
+    return false;
+}
+
+async function noteInvalidCodeAttempt(kv, ip, machineId) {
+    const hour = Math.floor(Date.now() / 3600000);
+    for (const item of _invalidLockKeys(ip, machineId)) {
+        const prev = _invalidAttempts.get(item.mem);
+        const count = (prev && prev.hour === hour) ? prev.count + 1 : 1;
+        _invalidAttempts.set(item.mem, { hour, count });
+        if (count === INVALID_CODE_MAX_PER_HOUR) {
+            try { await kv.put(item.kv, '1', { expirationTtl: INVALID_CODE_LOCK_TTL }); } catch (_) {}
+        }
+    }
+    // 内存清理：桶过多时丢掉上一小时及更早的计数，防 isolate 长驻膨胀
+    if (_invalidAttempts.size > 500) {
+        for (const [k, v] of _invalidAttempts) {
+            if (v.hour < hour - 1) _invalidAttempts.delete(k);
+        }
+    }
+}
+
+
 // ★ P2 安全修复：收紧 CORS，仅允许合法 Origin
 const ALLOWED_ORIGINS = [
     'https://tcm-prescription-system.pages.dev',
@@ -167,8 +212,18 @@ export async function onRequest(context) {
         if (!machineId) {
             return json({ success: false, error: '请提供机器 ID' }, 400);
         }
+        // ★ 2026-11-20 撞码锁定：触阈后 1 小时内不再受理该 IP/机器的激活请求
+        if (await checkInvalidCodeLock(kv, ip, machineId)) {
+            return json({
+                success: false,
+                error: '激活码连续输入错误次数过多，请 1 小时后再试',
+                rateLimited: true,
+                invalidCodeLock: true
+            }, 429);
+        }
         if (!isValidCodeFormat(code)) {
-            return json({ success: false, error: '激活码格式错误' }, 400);
+            await noteInvalidCodeAttempt(kv, ip, machineId);
+            return json({ success: false, error: '激活码格式错误，请核对后重试' }, 400);
         }
         // ★ P0-1 安全补强：激活码级短时频控（防对单一合法激活码做换机试探/暴力爆破）
         // 与上面的 IP 限流（每 IP 每小时 20 次）叠加，从"激活码"维度再限一层
@@ -231,7 +286,9 @@ export async function onRequest(context) {
         //   两次读取之间只有纯读操作，无写→无 TOCTOU 变化）
         const record = recordForRate;
         if (!record) {
-            return json({ success: false, error: '激活码不存在' }, 404);
+            // ★ 2026-11-20 计入撞码次数；文案统一为“无效或不存在”，避免枚举探测
+            await noteInvalidCodeAttempt(kv, ip, machineId);
+            return json({ success: false, error: '激活码无效或不存在，请核对后重试' }, 404);
         }
 
         // 状态校验
