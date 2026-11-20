@@ -683,6 +683,63 @@
     <!-- XLSX 库改为按需加载（loadXLSX 函数在导入 Excel 时动态加载），避免 881KB 阻塞首屏渲染 -->
 </head>
 <body>
+<script>
+/* ★ 2026-11-20 云端App 手机顶端绿色更新提示条（性能优化版：body 首部即执行）：
+   原实现放在 </body> 前，须等整页解析与业务 JS 跑完才发请求 → 出现慢。
+   现改为 body 首部执行：fetch 立即发起（与页面解析并行），body 已存在可立即插入，
+   版本号返回即显示；DOMContentLoaded/100ms 轮询兜底，消失计时从页面可交互起算 8 秒。
+   仅云端App环境（AndroidNative/AndroidAppExit 桥存在）显示；
+   拉取桌面云通道 hotVersion（每次热包必变号）与本机记录比对，首次或变化才提示。
+   运行时注入 DOM，不改 HTML 结构与 CSS 文件。 */
+(function () {
+    'use strict';
+    if (!((typeof window.AndroidNative !== 'undefined') || (typeof window.AndroidAppExit !== 'undefined'))) return;
+    var KEY = 'cloudapp:lastSeenHotVersion';
+    try {
+        fetch('/hot-update/desktop/cloud/version.json?ts=' + Date.now(), { cache: 'no-store' })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (v) {
+                var hot = v ? String(v.hotVersion || v.version || '') : '';
+                if (!hot) return;
+                var last = null;
+                try { last = localStorage.getItem(KEY); } catch (e) {}
+                if (last === hot) return;
+                var done = false;
+                function insert() {
+                    if (done) return true;
+                    try {
+                        if (!document.body) return false;
+                        var old = document.getElementById('__cloudAppUpdateBanner');
+                        if (old && old.parentNode) old.parentNode.removeChild(old);
+                        var el = document.createElement('div');
+                        el.id = '__cloudAppUpdateBanner';
+                        el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;'
+                            + 'background:linear-gradient(135deg,#43a047,#66bb6a);color:#fff;'
+                            + 'padding:10px 16px;font-size:13px;box-shadow:0 2px 8px rgba(0,0,0,.25);'
+                            + 'display:flex;align-items:center;gap:8px;';
+                        el.innerHTML = '<span style="font-size:15px;">✅</span>'
+                            + '<span style="flex:1;">系统已更新至 ' + hot + '，新功能已自动生效</span>';
+                        document.body.appendChild(el);
+                        function arm() {
+                            setTimeout(function () {
+                                try { if (el && el.parentNode) el.parentNode.removeChild(el); } catch (e) {}
+                            }, 8000);
+                        }
+                        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', arm, { once: true });
+                        else arm();
+                        try { localStorage.setItem(KEY, hot); } catch (e) {}
+                        done = true;
+                        return true;
+                    } catch (e) { return false; }
+                }
+                if (insert()) return;
+                try { document.addEventListener('DOMContentLoaded', function () { insert(); }, { once: true }); } catch (e) {}
+                var n = 0, t = setInterval(function () { if (insert() || (++n) > 50) { try { clearInterval(t); } catch (e) {} } }, 100);
+            })
+            .catch(function () {});
+    } catch (e) {}
+})();
+</script>
     <div id="loginOverlay" class="login-overlay" style="display: flex;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="system-title">惠康中医诊所管理系统</div><div class="version-tag" id="loginVersionTag">【云端机构版】</div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name" id="loginClinicName">本能堂中医诊所</div></div><div class="login-field"><label>手机号/用户名:</label><div class="username-input-wrapper"><input type="text" id="loginUsername" placeholder="请输入手机号或用户名" onkeypress="if(event.key==='Enter')handleLogin()"><button id="usernameDropdownBtn" class="username-dropdown-btn" onclick="toggleUsernameDropdown()" style="display:none;">▼</button><div id="usernameDropdownMenu" class="username-dropdown-menu"></div></div></div><div class="login-field"><label>密码:</label><div class="password-input-wrapper"><input type="password" id="loginPassword" onkeypress="if(event.key==='Enter')handleLogin()"><button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility()" title="显示/隐藏密码">👁️</button></div></div><div class="login-buttons"><button class="login-btn" id="loginBtn" onclick="handleLogin()">确定</button><button class="login-btn cancel" onclick="exitApp()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-security"><span class="login-security-icon">🛡️</span><span>安全登录 · 数据加密保护</span></div><div class="login-footer">微信号: hktzy1688 | 版本: V1.0.0</div><div class="copyright">© 2026 惠康中医 · 保留所有权利</div></div></div></div></div>
 
     <!-- 注册功能已封禁：账号只能由管理员在云端创建，禁止自助注册 -->
@@ -10940,54 +10997,6 @@ IconFile=${scriptPath}`;
         window.updateModeStatus();
     });
     </script>
-<script>
-/* ★ 2026-11-20 云端App 手机顶端绿色更新提示条（用户需求恢复）：
-   云端App = WebView 实载线上站（?_v=时间戳强制最新），站点部署即更新——
-   提示条的意义是"后台发了新版，告知用户已自动生效"。
-   机制：拉取桌面云通道热版本号（每次热包必变号）与本机记录比对，首次或变化则
-   顶端绿色提示 6 秒后自动消失；仅云端App环境（AndroidNative/AndroidAppExit 桥存在）
-   显示，网页/云端桌面/离线壳断网不显示。运行时注入 DOM，界面锁基线零变更。 */
-(function () {
-    'use strict';
-    function isCloudAppEnv() {
-        return (typeof window.AndroidNative !== 'undefined') || (typeof window.AndroidAppExit !== 'undefined');
-    }
-    function showGreenBanner(ver) {
-        try {
-            var old = document.getElementById('__cloudAppUpdateBanner');
-            if (old && old.parentNode) old.parentNode.removeChild(old);
-            var el = document.createElement('div');
-            el.id = '__cloudAppUpdateBanner';
-            el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;'
-                + 'background:linear-gradient(135deg,#43a047,#66bb6a);color:#fff;'
-                + 'padding:10px 16px;font-size:13px;box-shadow:0 2px 8px rgba(0,0,0,.25);'
-                + 'display:flex;align-items:center;gap:8px;';
-            el.innerHTML = '<span style="font-size:15px;">✅</span>'
-                + '<span style="flex:1;">系统已更新至 ' + ver + '，新功能已自动生效</span>';
-            document.body.appendChild(el);
-            setTimeout(function () {
-                try { if (el && el.parentNode) el.parentNode.removeChild(el); } catch (e) {}
-            }, 6000);
-        } catch (e) {}
-    }
-    if (!isCloudAppEnv()) return;
-    try {
-        fetch('/hot-update/desktop/cloud/version.json?ts=' + Date.now())
-            .then(function (r) { return r.ok ? r.json() : null; })
-            .then(function (v) {
-                if (!v) return;
-                var hot = String(v.hotVersion || v.version || '');
-                if (!hot) return;
-                var KEY = 'cloudapp:lastSeenHotVersion';
-                var last = null;
-                try { last = localStorage.getItem(KEY); } catch (e) {}
-                if (last !== hot) showGreenBanner(hot);
-                try { localStorage.setItem(KEY, hot); } catch (e) {}
-            })
-            .catch(function () {});
-    } catch (e) {}
-})();
-</script>
 <div id="mediaViewerOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:99998;align-items:center;justify-content:center;" onclick="if(event.target===this)closeMediaViewer()"><div style="background:#fff;border-radius:10px;padding:12px;width:92%;max-width:600px;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-shrink:0;"><span style="font-size:14px;font-weight:600;color:#333;">拍照录像查看</span><button onclick="closeMediaViewer()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#999;line-height:1;">&times;</button></div><div id="mediaViewerContent" style="flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:0;"></div></div></div>
 </body>
 </html>
