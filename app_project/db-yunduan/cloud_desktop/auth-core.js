@@ -4697,13 +4697,18 @@
                 });
             }
             async function verifyCloudRevealPassword(pwd) {
+                // ★ 2026-11-20 四修（脱敏解锁三级/四级链第三轮返修）：
+                //   a) cacheOfflineLogin 存的 username=登录时输入的标识符（可能是手机号），
+                //      与 user.username 恒不等 → ② 级缓存比对恒 miss。改为命中
+                //      uname/手机号/缓存内 user.username 任一即比对（离线 App 同病同修）。
+                //   b) ④ 级联网复核失败原因原样透传——服务端「失败次数过多锁定/设备超限」
+                //      此前被吞成「密码错误」，掩盖真实原因且诱导用户反复重试加重锁定。
+                //   c) 全链阶段标记：catch 文案带阶段名，下次报错可精确定位。
+                let stage = '初始化';
                 try {
                     const input = String(pwd || '');
-                    // ★ 2026-11-20 三级修复「无法确认当前登录账户/密码错误/复核异常」：
-                    //   ① 当前登录人 = user_login_data（页面 handleLogin 每次登录必写）
-                    //   ② 凭据优先用登录时加密缓存的密码（auth:offlineLoginCache，
-                    //      login() 云端登录路径每次成功都刷新；解密直接比对，零网络零哈希）
-                    //   ③ 再退回本地表哈希校验 → 最后云端联网复核
+                    // ① 当前登录人 = user_login_data（页面 handleLogin 每次登录必写）
+                    stage = '识别账户';
                     let loginUser = null;
                     try {
                         const raw = global.localStorage.getItem('user_login_data');
@@ -4723,18 +4728,29 @@
                     }
                     const uname = (loginUser && loginUser.username) ? String(loginUser.username)
                         : ((loginUser && loginUser.phone) ? String(loginUser.phone) : '');
-                    if (!uname) return { ok: false, msg: '无法确认当前登录账户，请重新登录后再试' };
+                    const uphone = (loginUser && loginUser.phone) ? String(loginUser.phone) : '';
+                    if (!uname && !uphone) return { ok: false, msg: '无法确认当前登录账户，请重新登录后再试' };
                     const roleUser = loginUser || null;
 
-                    // ② 登录时缓存的加密密码（最可靠：云端登录成功即刷新）
+                    // ② 登录时缓存的加密密码（最可靠：云端登录成功即刷新；解密直接比对）
+                    stage = '比对登录缓存';
                     try {
                         const cached = await StorageAdapter.getItem('auth:offlineLoginCache');
                         if (cached) {
                             const cd = JSON.parse(cached);
-                            if (cd && String(cd.username) === uname && cd.encryptedPassword) {
+                            const cdName = (cd && cd.username) ? String(cd.username) : '';
+                            const cdUname = (cd && cd.user && cd.user.username) ? String(cd.user.username) : '';
+                            // 手机号登录时缓存 username=手机号 → 容忍命中任一标识
+                            const idHit = cdName && (
+                                cdName === uname ||
+                                (uphone && cdName === uphone) ||
+                                (uname && cdName === uname) ||
+                                (uname && cdUname === uname)
+                            );
+                            if (idHit && cd && cd.encryptedPassword) {
                                 const real = await decryptPassword(cd.encryptedPassword);
                                 if (real && real === input) {
-                                    const ru = roleUser || cd.user || null;
+                                    const ru = roleUser || (cd && cd.user) || null;
                                     if (global.AuthCore && typeof global.AuthCore.isAdmin === 'function'
                                         && ru && !global.AuthCore.isAdmin(ru)) {
                                         return { ok: false, msg: '仅管理员可查看完整激活码' };
@@ -4745,13 +4761,14 @@
                         }
                     } catch (_) {}
 
-                    // ③ 本地表哈希校验（云端镜像用户可能不带 password，找不到就走联网复核）
+                    // ③ 本地表哈希校验（云端镜像用户 password 留空，对不上就走联网复核）
+                    stage = '本地哈希校验';
                     let users = null;
                     let user = null;
                     try { if (global.UserStore && typeof global.UserStore.get === 'function') users = global.UserStore.get(); } catch (_) {}
                     if ((!users || !users.length) && global.CONFIG && Array.isArray(global.CONFIG.users)) users = global.CONFIG.users;
                     if (users && users.length) {
-                        user = users.find(function (u) { return u && (u.username === uname || u.phone === uname); }) || null;
+                        user = users.find(function (u) { return u && (u.username === uname || u.phone === uname || u.phone === uphone); }) || null;
                     }
                     if (user && global.AuthCore && typeof global.AuthCore.isAdmin === 'function' && !global.AuthCore.isAdmin(user)) {
                         return { ok: false, msg: '仅管理员可查看完整激活码' };
@@ -4762,8 +4779,9 @@
                     }
 
                     // ④ 云端联网权威复核（本地对不上：改过云端密码/镜像缺人）
+                    stage = '云端联网复核';
                     try {
-                        const cloudResult = await cloudAdapter.authenticate(uname, input);
+                        const cloudResult = await cloudAdapter.authenticate(uname || uphone, input);
                         if (cloudResult && cloudResult.success && cloudResult.user) {
                             const cu2 = cloudResult.user;
                             if (global.AuthCore && typeof global.AuthCore.isAdmin === 'function' && !global.AuthCore.isAdmin(cu2)) {
@@ -4776,14 +4794,14 @@
                         if (isNetErr) {
                             return { ok: false, msg: '本地校验未通过，联网复核失败，请检查网络后重试' };
                         }
+                        // 服务端失败原因原样透传（账号锁定/设备超限等不再误报「密码错误」）
+                        if (cerr) return { ok: false, msg: '云端复核未通过：' + cerr };
                         return { ok: false, msg: '密码错误，请重试' };
                     } catch (e2) {
-                        return { ok: false, msg: (user
-                            ? '密码错误，且云端复核异常：' : '本机未保存可校验的账户密码，联网复核异常：')
-                            + ((e2 && e2.message) || '未知错误') };
+                        return { ok: false, msg: '云端复核异常：' + ((e2 && e2.message) || '未知错误') };
                     }
                 } catch (e) {
-                    return { ok: false, msg: '校验异常：' + ((e && e.message) || '未知错误') };
+                    return { ok: false, msg: '校验异常（' + stage + '）：' + ((e && e.message) || '未知错误') };
                 }
             }
             const c = String(code || '').trim().toUpperCase();

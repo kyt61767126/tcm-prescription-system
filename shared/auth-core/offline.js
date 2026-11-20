@@ -5172,13 +5172,17 @@
                 });
             }
             async function verifyRevealPassword(pwd) {
+                // ★ 2026-11-20 四修（离线端同病同修，与 cloud.js verifyCloudRevealPassword 对齐）：
+                //   a) ② 级缓存比对容忍 username/手机号任一命中（cacheOfflineLogin 存的是
+                //      登录时输入的标识符，手机号登录时与 user.username 恒不等 → 恒 miss）。
+                //   b) ③ 级 isAdmin/verifyPassword 包进独立 try（旧版裸奔，抛错即外层
+                //      「校验异常」无法定位）。
+                //   c) 全链阶段标记：catch 文案带阶段名，下次报错可精确定位。
+                let stage = '初始化';
                 try {
                     const input = String(pwd || '');
-                    // ★ 2026-11-20 三级修复「无法确认当前登录账户/密码错误」：
-                    //   登录实际走 loginWithUsernamePassword 快路径，不写 auth:currentUser。
-                    //   ① 当前登录人 = user_login_data（页面 handleLogin 每次登录必写）
-                    //   ② 凭据优先用登录时加密缓存的密码（auth:offlineLoginCache，解密直接比对）
-                    //   ③ 再退回哈希校验：登录对象自带 password / UserStore / CONFIG.users
+                    // ① 当前登录人 = user_login_data（页面 handleLogin 每次登录必写）
+                    stage = '识别账户';
                     let loginUser = null;
                     try {
                         const raw = global.localStorage.getItem('user_login_data');
@@ -5198,19 +5202,29 @@
                     }
                     const uname = (loginUser && loginUser.username) ? String(loginUser.username)
                         : ((loginUser && loginUser.phone) ? String(loginUser.phone) : '');
-                    if (!uname) return { ok: false, msg: '无法确认当前登录账户，请重新登录后再试' };
+                    const uphone = (loginUser && loginUser.phone) ? String(loginUser.phone) : '';
+                    if (!uname && !uphone) return { ok: false, msg: '无法确认当前登录账户，请重新登录后再试' };
                     const roleUser = loginUser || null;
 
-                    // ② 登录时缓存的加密密码（login() 每次联网登录都刷新；离线快路径
+                    // ② 登录时缓存的加密密码（login() 联网登录路径刷新；离线快路径
                     //    登录不写，走 ③ 哈希校验）
+                    stage = '比对登录缓存';
                     try {
                         const cached = await StorageAdapter.getItem('auth:offlineLoginCache');
                         if (cached) {
                             const cd = JSON.parse(cached);
-                            if (cd && String(cd.username) === uname && cd.encryptedPassword) {
+                            const cdName = (cd && cd.username) ? String(cd.username) : '';
+                            const cdUname = (cd && cd.user && cd.user.username) ? String(cd.user.username) : '';
+                            // 手机号登录时缓存 username=手机号 → 容忍命中任一标识
+                            const idHit = cdName && (
+                                cdName === uname ||
+                                (uphone && cdName === uphone) ||
+                                (uname && cdUname === uname)
+                            );
+                            if (idHit && cd && cd.encryptedPassword) {
                                 const real = await decryptPassword(cd.encryptedPassword);
                                 if (real && real === input) {
-                                    const ru = roleUser || cd.user || null;
+                                    const ru = roleUser || (cd && cd.user) || null;
                                     if (global.AuthCore && typeof global.AuthCore.isAdmin === 'function'
                                         && ru && !global.AuthCore.isAdmin(ru)) {
                                         return { ok: false, msg: '仅管理员可查看完整激活码' };
@@ -5223,28 +5237,33 @@
 
                     // ③ 哈希校验：登录对象自带 password（离线版 user 来自 CONFIG.users，
                     //    user_login_data 里就有完整哈希，无需再查 UserStore）
+                    stage = '本地哈希校验';
                     let hashUser = (loginUser && loginUser.password) ? loginUser : null;
                     if (!hashUser) {
                         let users = null;
                         try { if (global.UserStore && typeof global.UserStore.get === 'function') users = global.UserStore.get(); } catch (_) {}
                         if ((!users || !users.length) && global.CONFIG && Array.isArray(global.CONFIG.users)) users = global.CONFIG.users;
                         if (users && users.length) {
-                            hashUser = users.find(function (u) { return u && (u.username === uname || u.phone === uname); }) || null;
+                            hashUser = users.find(function (u) { return u && (u.username === uname || u.phone === uname || (uphone && u.phone === uphone)); }) || null;
                         }
                     }
                     if (hashUser) {
-                        // 仅管理员可查看完整码（收费员/医生即使知道自己的密码也不放行）
-                        const ru2 = roleUser || hashUser;
-                        if (global.AuthCore && typeof global.AuthCore.isAdmin === 'function' && !global.AuthCore.isAdmin(ru2)) {
-                            return { ok: false, msg: '仅管理员可查看完整激活码' };
+                        try {
+                            // 仅管理员可查看完整码（收费员/医生即使知道自己的密码也不放行）
+                            const ru2 = roleUser || hashUser;
+                            if (global.AuthCore && typeof global.AuthCore.isAdmin === 'function' && !global.AuthCore.isAdmin(ru2)) {
+                                return { ok: false, msg: '仅管理员可查看完整激活码' };
+                            }
+                            const pass = await verifyPassword(input, hashUser.password || '', hashUser.username || uname);
+                            if (pass) return { ok: true };
+                            return { ok: false, msg: '密码错误，请重试' };
+                        } catch (e3) {
+                            return { ok: false, msg: '校验异常（' + stage + '）：' + ((e3 && e3.message) || '未知错误') };
                         }
-                        const pass = await verifyPassword(input, hashUser.password || '', hashUser.username || uname);
-                        if (pass) return { ok: true };
-                        return { ok: false, msg: '密码错误，请重试' };
                     }
                     return { ok: false, msg: '无法读取本机账户信息，暂不能显示激活码' };
                 } catch (e) {
-                    return { ok: false, msg: '校验异常：' + ((e && e.message) || '未知错误') };
+                    return { ok: false, msg: '校验异常（' + stage + '）：' + ((e && e.message) || '未知错误') };
                 }
             }
             function copyText(txt) {
