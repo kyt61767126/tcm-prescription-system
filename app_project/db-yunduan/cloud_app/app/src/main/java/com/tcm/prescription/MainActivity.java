@@ -2147,7 +2147,15 @@ public class MainActivity extends BridgeActivity {
                             }
                         });
 
-                        printWebView.loadDataWithBaseURL(null, htmlContent, "text/html", "UTF-8", null);
+                        // ★ 2026-11-20 内置开源字体：打印页需从 assets/public/fonts 读取
+                        //   HKKai/HKSong.woff2（CSS 用 android_asset 绝对地址），故 baseUrl 指向
+                        //   assets/public，并放开 file:// 子资源访问。仅此临时打印 WebView 生效，
+                        //   页面内容为本地生成的静态 HTML，无外部脚本注入面。
+                        android.webkit.WebSettings printSettings = printWebView.getSettings();
+                        printSettings.setAllowFileAccess(true);
+                        printSettings.setAllowFileAccessFromFileURLs(true);
+                        printSettings.setAllowUniversalAccessFromFileURLs(false);
+                        printWebView.loadDataWithBaseURL("file:///android_asset/public/index.html", htmlContent, "text/html", "UTF-8", null);
                     } catch (Exception e) {
                         Log.e("TCM-Pres", "printViaSystem 失败", e);
                         Toast.makeText(MainActivity.this, "打印失败：" + e.getMessage(), Toast.LENGTH_LONG).show();

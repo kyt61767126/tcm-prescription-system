@@ -3065,3 +3065,20 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
 * **-12 再修正（用户要求空白行"可编辑"）**：DOM 视觉空行（colspan、无输入框）无法录入 → 改为**数据层补行**：`renderPrescriptionTable()` 开头若 `prescriptionItems` 末尾行有 `name` 则 `push(createEmptyMedicine())`（幂等，只在末尾为数据行时补 1 行）。该行是真实可编辑行（简码/药名/数量/单位全为 input，走原有 startSearch/handleInput/Tab/deleteRow 全链路），**不进保存/打印/同步**（已验证全部出口用 `filter(item => item.name)`，5 处：8229/9589/9738/10063/11961）。原 -11 DOM 注入脚本已整体删除。6 副本 renderPrescriptionTable 逐字一致（public/离线桌面/index-app/site-admin + sync-html 3 副本）。**铁律：要"能编辑"的行必须落在数据源，DOM 影子行只适合纯展示。**
 * **-13「更换 / 续费激活码」改为到期前 7 天显示（用户 2026-11-20 要求：默认不显示）**：`setAdminActivateBtnState(daysLeft)`（cloud.js L3553 / offline.js L5486 同构）重构为三态——① `showMini = 1~7 天`：显示 mini 续费入口 + 收起满宽；② `inValidPeriod`（-1 永久 / >7 天）：mini 也隐藏 + 满宽收起（**默认无入口**，这是本次行为变化）；③ 其余（未激活/试用/过期/null 无到期信息）：mini 隐藏 + 满宽「📋 管理员激活」显示。改后必须跑 `sync-auth-core.ps1`（11 副本）+ `check-cv-hashes.cjs --update` + `sync-html.ps1`（cv→d0685c2c）。**注意 daysLeft=null 与 -1 语义不同：null 是"未知/需激活"，-1 是"永久有效"，二者不可合并判断。**
 * **-14 绿条显示慢优化（用户反馈"没有与登录框同时出现"）**：旧实现放在 **`</body>` 前**，须等 12000+ 行 HTML 解析 + 全部业务 JS 执行完才开始 fetch → 明显滞后。新实现移到 **`<body>` 首部**：① fetch 立即发起，与页面解析并行；② body 已存在可立即 append；③ `DOMContentLoaded` + 100ms×50 轮询双兜底；④ 消失计时改为"页面可交互（DOMContentLoaded）后 8 秒"，避免白屏吃掉提示时长。**铁律：首屏提示类 UI（更新条/横幅/Toast）一律 body 首部执行，禁止放 `</body>` 前；否则被业务 JS 阻塞。** 位置变化会触发 check-interface 结构差异 → 跑 `generate-interface-lock.ps1` 重冻结（本次 6 OK）；新增同体函数 arm/insert → `diff-cross-version --update-baseline` 重冻结。
+
+## 86. App 打印内置开源字体：处方笺与桌面像素级统一（2026-11-20）
+
+* **问题本质**：Android WebView 无 SimSun/KaiTi，中文回退 Noto Serif CJK 后同字号观感偏大偏粗；此前用「App 端 0.80 缩放 + 标题 400 字重」硬补偿（commit 4b3ff3aa），属临时补丁。
+* **方案**：内置开源字体子集，按桌面基准 10.5/22/9pt 原样输出，删除全部补偿。
+  - 楷体 = 霞鹜文楷 LXGW WenKai Regular（OFL-1.1）→ `public/fonts/HKKai.woff2`（1.53MB）
+  - 宋体 = 思源宋体 Noto Serif SC Regular（OFL-1.1）→ `public/fonts/HKSong.woff2`（1.45MB）
+  - 子集 = GB2312 全表 + ASCII + 项目代码/词典出现字符，共 7556 字；生成脚本用 fonttools `pyftsubset --flavor=woff2`（含 `--layout-features=` `--no-hinting`）。
+  - 授权原文本地留存：`public/fonts/OFL-LXGWWenKai.txt`、`OFL-NotoSerifSC.txt`。
+* **分发 4 份**（字体二进制约 3MB/份，合计 +9MB 仓库/包体）：`public/fonts/`（网页/Cloudflare）、离线 APP `assets/public/fonts/`、云 APP `assets/public/fonts/`、鸿蒙 `rawfile/fonts/`。桌面不装字体（Windows 自带 KaiTi/SimSun，CSS 优先命中系统字体，@font-face 惰性加载不产生请求）。
+* **CSS 接入只改打印模板**（屏幕 CSS 不动，避免网页端无谓下载 3MB）：
+  - `font-family: 'KaiTi','楷体_GB2312','楷体','HKKai',serif`（标题）/ `'SimSun','宋体','HKSong',serif`（正文、煎服法）。
+  - **标题必须显式 `line-height:1.125`**：KaiTi normal=1.125em，霞鹜文楷 normal≈1.296em，不锁定会让两条标题多出 4mm 位移。
+  - 字体地址在模板内计算：`__fontBase` = App（`window.AndroidNative`）用 `file:///android_asset/public/fonts/` 绝对路径（热更新目录下也有效），网页/桌面用 `new URL('fonts/', document.baseURI)`。
+* **Android 侧（两 APK 的 printViaSystem）**：临时打印 WebView 需 `setAllowFileAccess(true)` + `setAllowFileAccessFromFileURLs(true)`（+ `setAllowUniversalAccessFromFileURLs(false)`），baseUrl 由 `null` 改为 `file:///android_asset/public/index.html`。仅打印 WebView 放开，主 WebView 安全策略不变。
+* **实测依据**（Windows 本机 Edge headless，强制只挂内置字体）：6 字标题 22pt 宽度 KaiTi=HKKai=1046.0px；40 字正文 10.5pt 宽度 SimSun=HKSong=1046.0px；A5 整页纸面高/药材区高/签名区顶 三项左右完全一致，无溢出。
+* **铁律**：① 打印域字号改动一律以桌面为唯一基准，App 端禁止再用缩放系数补偿；② 新增字体族必须同时进打印模板与 assets 四份，漏一份=该端静默回退；③ 更换字体必须先量「标题字宽 + 正文行宽 + 标题 line-height」，三项对齐再发版。
