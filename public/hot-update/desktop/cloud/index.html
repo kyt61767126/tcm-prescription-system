@@ -9858,9 +9858,13 @@ let currentUser = null;
                     return new URL('fonts/', document.baseURI).href;
                 } catch (e) { return 'fonts/'; }
             })();
-            const __pFont = '10.5';
-            const __pTitle = '22';
-            const __pSmall = '9';
+            // ★ 2026-11-20 二轮真机反馈「App 打印字体偏大」：字体度量已与桌面一致，仅做比例微调（仅 App 生效）。
+            //   桌面恒为 1；App 0.94 → 正文 10.5→9.87pt、标题 22→20.68pt、煎服法 9→8.46pt。
+            const __isApp = (typeof window !== 'undefined') && !!window.AndroidNative;
+            const __pScale = __isApp ? 0.94 : 1;
+            const __pFont = (10.5 * __pScale).toFixed(2);
+            const __pTitle = (22 * __pScale).toFixed(2);
+            const __pSmall = (9 * __pScale).toFixed(2);
             const __pTitleWeight = 'bold';
             const html = `<!DOCTYPE html><html><head><title>打印处方</title><meta name="viewport" content="width=device-width, initial-scale=1.0"><style>@page { size: ${pageSize}; margin: 0; }
         @font-face { font-family: 'HKKai'; src: url('${__fontBase}HKKai.woff2') format('woff2'); font-weight: normal; font-style: normal; }
