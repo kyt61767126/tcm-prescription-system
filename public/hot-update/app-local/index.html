@@ -9371,26 +9371,33 @@ let currentUser = null;
             const paperWidth = isLandscape ? '210mm' : '148mm';
             const paperHeight = isLandscape ? '148mm' : '210mm';
             // ★ 2026-11-20 P0 处方签全局统一：以桌面程序为唯一基准（正文10.5pt/标题22pt/煎服法9pt）。
-            //   但 Android WebView 无宋体/楷体，回退 Noto Serif 后同字号实测显示约大 25%、笔画偏粗，
-            //   故仅 App 端做 0.80 等比视觉补偿 + 标题降为常规字重；桌面/网页保持桌面基准不变。
-            const __isApp = (typeof window !== 'undefined') && !!window.AndroidNative;
-            const __pScale = __isApp ? 0.80 : 1;
-            const __pFont = (10.5 * __pScale).toFixed(2);
-            const __pTitle = (22 * __pScale).toFixed(2);
-            const __pSmall = (9 * __pScale).toFixed(2);
-            const __pTitleWeight = __isApp ? '400' : 'bold';
+            //   App 端已内置开源字体（楷体=霞鹜文楷 / 宋体=思源宋体 GB2312 子集，随 APK assets 分发），
+            //   字号与桌面 SimSun/KaiTi 完全一致，故取消原「0.80 视觉补偿 + 标题 400 字重」临时补丁。
+            //   字体地址：App 用 android_asset 绝对路径（热更新目录下同样可取到）；网页/桌面用文档相对路径。
+            const __fontBase = (function () {
+                try {
+                    if (window.AndroidNative) return 'file:///android_asset/public/fonts/';
+                    return new URL('fonts/', document.baseURI).href;
+                } catch (e) { return 'fonts/'; }
+            })();
+            const __pFont = '10.5';
+            const __pTitle = '22';
+            const __pSmall = '9';
+            const __pTitleWeight = 'bold';
             const html = `<!DOCTYPE html><html><head><title>惠康中医诊所管理系统 ${window.APP_VERSION}-打印预览</title><meta name="viewport" content="width=device-width, initial-scale=1.0"><style>@page { size: ${pageSize}; margin: 0; }
+        @font-face { font-family: 'HKKai'; src: url('${__fontBase}HKKai.woff2') format('woff2'); font-weight: normal; font-style: normal; }
+        @font-face { font-family: 'HKSong'; src: url('${__fontBase}HKSong.woff2') format('woff2'); font-weight: normal; font-style: normal; }
         /* ★ 2026-10-28 A5 整页打印（用户实际用纸 ISO A5 148×210mm，非 B5）：
            ①纸型 A5，页边距固定 上15/左右13/下15mm（左右严格对称，杜绝"右边距偏小"）；
            ②删 body min-height:100vh——Android WebView 打印时 vh=手机屏幕高（约2200px）远大于 A5 纸高
            （210mm≈794px），body 被撑高溢出成 2 页；③纸片高留 0.5mm 舍入余量——内容高==页高时
            亚像素舍入会甩出空白第 2 页 */
-        body { font-family: 'SimSun', '宋体', serif; width: ${paperWidth}; padding: 0; margin: 0 auto; display: block; line-height: 1.2; -webkit-print-color-adjust: exact; print-color-adjust: exact; color: #000; }
+        body { font-family: 'SimSun', '宋体', 'HKSong', serif; width: ${paperWidth}; padding: 0; margin: 0 auto; display: block; line-height: 1.2; -webkit-print-color-adjust: exact; print-color-adjust: exact; color: #000; }
         /* ★ 2026-10-28 处方笺字体规范（与屏幕预览同一套）：标题/Rp 二号22pt、前记与后记五号10.5pt、
            中药正文五号10.5pt 行距1.2（3 味一行、药名左剂量右）、煎服法小五号9pt 行距1.1、签名区预留≥20mm */
         .prescription-paper { display: flex; flex-direction: column; position: relative; width: ${paperWidth}; height: calc(${paperHeight} - 0.5mm); padding: 22.5mm 13mm 15mm; margin: 0 auto; box-sizing: border-box; font-size: ${__pFont}pt; line-height: 1.2; overflow: hidden; }
-        .clinic-name { text-align: center; font-size: ${__pTitle}pt; font-weight: ${__pTitleWeight}; color: #000; margin-bottom: 10px; letter-spacing: 2px; font-family: 'KaiTi', '楷体_GB2312', '楷体', serif; }
-        .prescription-title { text-align: center; font-size: ${__pTitle}pt; font-weight: ${__pTitleWeight}; color: #000; margin-bottom: 12px; letter-spacing: 4px; font-family: 'KaiTi', '楷体_GB2312', '楷体', serif; }
+        .clinic-name { text-align: center; font-size: ${__pTitle}pt; font-weight: ${__pTitleWeight}; line-height: 1.125; color: #000; margin-bottom: 10px; letter-spacing: 2px; font-family: 'KaiTi', '楷体_GB2312', '楷体', 'HKKai', serif; }
+        .prescription-title { text-align: center; font-size: ${__pTitle}pt; font-weight: ${__pTitleWeight}; line-height: 1.125; color: #000; margin-bottom: 12px; letter-spacing: 4px; font-family: 'KaiTi', '楷体_GB2312', '楷体', 'HKKai', serif; }
         .prescription-info { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px 2px; margin-bottom: 8px; border-bottom: 1px solid #000; padding-bottom: 4px; font-size: ${__pFont}pt; color: #000; }
         .prescription-info > div { white-space: nowrap; text-align: left; min-width: 0; }
         .prescription-grid { border-top: 1px solid #000; border-bottom: 1px solid #000; min-height: 200px; margin-top: 8px; }
@@ -9398,7 +9405,7 @@ let currentUser = null;
         .prescription-line { display: flex; justify-content: flex-start; align-items: baseline; gap: 0; padding: 1mm 0; font-size: ${__pFont}pt; font-weight: 400; color: #000; line-height: 1.2; white-space: nowrap; border-left: none; }
         .rx-herb { flex: 0 0 auto; }
         .rx-dose { flex: 0 0 auto; font-family: 'Times New Roman', serif; }
-        .prescription-jianfa { font-size: ${__pSmall}pt; line-height: 1.1; font-family: 'SimSun', '宋体', serif; margin-left: 0.5mm; }
+        .prescription-jianfa { font-size: ${__pSmall}pt; line-height: 1.1; font-family: 'SimSun', '宋体', 'HKSong', serif; margin-left: 0.5mm; }
         .rp-mark { font-size: ${__pTitle}pt; font-weight: bold; font-style: italic; color: #000; font-family: 'Times New Roman', serif; }
         .dose-count { text-align: right; font-size: ${__pFont}pt; color: #000; font-weight: bold; font-family: 'Times New Roman', serif; }
         .prescription-footer { display: flex; flex-direction: column; justify-content: space-between; min-height: 20mm; margin-top: 8px; padding-top: 4px; border-top: none; font-size: ${__pFont}pt; color: #000; }
