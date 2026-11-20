@@ -3553,25 +3553,31 @@
     function setAdminActivateBtnState(daysLeft) {
         const btn = document.getElementById('adminActivateSettingsBtn');
         if (!btn) return;
-        const inValidPeriod = (typeof daysLeft === 'number' && !isNaN(daysLeft)) &&
-            (daysLeft === -1 || daysLeft > 7);
+        const hasDays = (typeof daysLeft === 'number') && !isNaN(daysLeft);
+        const inValidPeriod = hasDays && (daysLeft === -1 || daysLeft > 7);
+        // ★ 2026-11-20 用户要求：「更换 / 续费激活码」仅到期前 7 天（1~7 天）显示，默认隐藏
+        const showMini = hasDays && daysLeft > 0 && daysLeft <= 7;
         let mini = document.getElementById('adminActivateMiniLink');
-        if (inValidPeriod) {
+        if (showMini) {
+            // 临期：只留续费入口，收起满宽按钮
             mini = ensureAdminActivateMiniLink(btn, mini);
             mini.style.display = '';
             btn.style.display = 'none';
-            btn.disabled = false;
-            btn.style.background = '#26a69a';
-            btn.style.cursor = 'pointer';
+            btn.title = '授权即将到期，可点击续费';
+        } else if (inValidPeriod) {
+            // 永久/长期有效：无任何激活入口（默认隐藏 mini）
+            if (mini) mini.style.display = 'none';
+            btn.style.display = 'none';
             btn.title = '激活有效期内无需激活';
         } else {
+            // 未激活/试用/已过期/无到期信息：显示满宽管理员激活
             if (mini) mini.style.display = 'none';
             btn.style.display = '';
-            btn.disabled = false;
-            btn.style.background = '#26a69a';
-            btn.style.cursor = 'pointer';
             btn.title = '';
         }
+        btn.disabled = false;
+        btn.style.background = '#26a69a';
+        btn.style.cursor = 'pointer';
     }
 
     // 有效期内替代满宽按钮的低调小入口（懒创建，点击复用原按钮的打开激活窗口逻辑）
