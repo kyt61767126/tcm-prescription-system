@@ -2069,9 +2069,7 @@ public class MainActivity extends BridgeActivity {
 
         /** 打印路由：内置打印机直出（失败自动回退系统打印面板） */
         private void printPrescriptionHtml(final String html) {
-            // ★ 2026-11-20 处方纸为 A5 横放（210×148mm），系统打印默认走横向，
-            //   与桌面程序输出一致；显式传 orientation 的调用仍可指定方向。
-            printPrescriptionHtml(html, true);
+            printPrescriptionHtml(html, false);
         }
 
         private void printPrescriptionHtml(final String html, final boolean isLandscape) {

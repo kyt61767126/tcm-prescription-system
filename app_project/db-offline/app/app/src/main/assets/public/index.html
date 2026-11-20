@@ -9314,10 +9314,7 @@ let currentUser = null;
                     : '未绑定：打印仍走系统打印面板（可导出 PDF）';
             } catch (e) {}
         }
-        async function printPrescription(orientation) {
-            // ★ 2026-11-20 手机 App 默认横向打印：诊所处方纸为 A5 横放（210×148mm），
-            //   原默认纵向导致打印机报"缺纸 A5"/内容只占上半张。桌面端保持纵向默认不变。
-            if (!orientation) orientation = (window.AndroidNative ? 'landscape' : 'portrait');
+        async function printPrescription(orientation = 'portrait') {
             // ★安全防护：关键 API 校验，防止绕过登录直接调用
             // ★修复：currentUser 可能在 init() 异步时序中未被设置，尝试恢复
             if (!currentUser || !currentUser.username) {
@@ -9375,7 +9372,7 @@ let currentUser = null;
             const paperHeight = isLandscape ? '148mm' : '210mm';
             // ★ 2026-11-20 App（Android WebView）打印字号整体收一档（0.85），与桌面程序打印视觉统一；
             //   桌面/网页（无 AndroidNative）保持原字号不变。
-            const __pScale = (typeof window !== 'undefined' && window.AndroidNative) ? 0.85 : 1;
+            const __pScale = (typeof window !== 'undefined' && window.AndroidNative) ? 0.80 : 1;
             const __pFont = (10.5 * __pScale).toFixed(2);
             const __pTitle = (22 * __pScale).toFixed(2);
             const __pSmall = (9 * __pScale).toFixed(2);
