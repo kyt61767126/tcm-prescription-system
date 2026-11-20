@@ -1,13 +1,13 @@
 {
   "format": 1,
   "channel": "app-local",
-  "hotVersion": "2026.11.20-21",
+  "hotVersion": "2026.11.20-22",
   "minAppCode": 288,
   "appVersion": "1.0.0",
   "files": [
     {
       "name": "index.html",
-      "sha256": "cb034f160a35ea41df33978c6316989582b0cb5f1351891b9ec70fdb3f22daa7",
+      "sha256": "99fbfe8914287b4adb6a95e32701a4eb4c6f5ba2ec8aa381d1468ab856321cd1",
       "size": 795038
     },
     {
@@ -126,6 +126,6 @@
       "size": 32049
     }
   ],
-  "signedAt": 1795179042679,
-  "signature": "1IHWPVhACttgcu+cmiRsH0G/c8petS1lPHIsfz9zA8eA9l+HR2FA5X1ob57S0c5n89jHz4yM8Nq17bK1IuXACw=="
+  "signedAt": 1795179341019,
+  "signature": "GnqBJAI4tnsg6jGpiaJARxJb+6VDlkiU2HfHG3ZJib3XOjoNGp5H6uLYsoFiw7E11iNWrmH/RJevzRNn9w2RCw=="
 }

@@ -1,12 +1,12 @@
 {
   "format": 1,
   "channel": "cloud",
-  "hotVersion": "2026.11.20-22",
+  "hotVersion": "2026.11.20-23",
   "appVersion": "1.0.367",
   "files": [
     {
       "name": "index.html",
-      "sha256": "f002c243d55031549419cec7f4e072c2fd617c89017157efd102d0b48ffda525",
+      "sha256": "1158e3a8fae4b5679c2ad54b8cc4fbfb3601fbddc843c2288d7dfedf32e2a510",
       "size": 862794
     },
     {
@@ -150,6 +150,6 @@
       "size": 32049
     }
   ],
-  "signedAt": 1795179042003,
-  "signature": "0M+Oo0zGKxK/9lmzIvSXm9rMmeWyl/nJSlJqHfe4NY5aYT9Mncpvh7TAO4CuhVgUWeQYJL6gHPYf71pyaj+9CA=="
+  "signedAt": 1795179340446,
+  "signature": "W0baFqp0iKFW0tDNp2ZME21oXg/Y1mo1fX7EI4pIciJh5SUT2bGK/1x/Ts3km4ie2oTewioxdx7zzcNduEb7BA=="
 }
