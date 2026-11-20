@@ -5604,9 +5604,35 @@
             }
             async function verifyRevealPassword(pwd) {
                 try {
-                    let cu = null;
-                    try { cu = JSON.parse((await StorageAdapter.getItem('auth:currentUser')) || 'null'); } catch (_) {}
-                    const uname = (cu && cu.username) ? String(cu.username) : '';
+                    // ★ 2026-11-20 修复「无法确认当前登录账户」：离线登录走
+                    //   loginWithUsernamePassword 本地表快路径，**从不写 auth:currentUser**
+                    //   （页面 handleLogin 每次登录写的是 user_login_data）。必须多源读取：
+                    //   ① user_login_data（最新鲜，每次登录必写）② auth:currentUser
+                    //   （AuthCore.login 云端路径写入，可能缺失或过期）③ 记住的登录名
+                    let uname = '';
+                    try {
+                        const raw = global.localStorage.getItem('user_login_data');
+                        if (raw) {
+                            const d = JSON.parse(raw);
+                            const u = (d && d.user) ? d.user : d;
+                            if (u && u.username) uname = String(u.username);
+                        }
+                    } catch (_) {}
+                    if (!uname) {
+                        try {
+                            const raw2 = await StorageAdapter.getItem('auth:currentUser');
+                            if (raw2) {
+                                const u2 = JSON.parse(raw2);
+                                if (u2 && u2.username) uname = String(u2.username);
+                            }
+                        } catch (_) {}
+                    }
+                    if (!uname) {
+                        try {
+                            const rn = await StorageAdapter.getItem('auth:rememberedUsername');
+                            if (rn) uname = String(rn);
+                        } catch (_) {}
+                    }
                     if (!uname) return { ok: false, msg: '无法确认当前登录账户，请重新登录后再试' };
                     let users = null;
                     try { if (global.UserStore && typeof global.UserStore.get === 'function') users = global.UserStore.get(); } catch (_) {}

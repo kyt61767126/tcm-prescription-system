@@ -4354,6 +4354,12 @@
                 html += '<br><span style="color:red;">授权已到期，请联系管理员续费</span>';
             }
         }
+        // ★ 2026-11-20 永久授权修复：账号已确认 active 且无到期日 → 按长期授权
+        //   收起满宽「管理员激活」按钮（原 daysLeftForBtn=null 会让已激活的永久
+        //   账号一直显示满宽按钮，用户误以为未激活）
+        if (daysLeftForBtn == null && String(cu.clinicStatus || '') === 'active' && !expRaw) {
+            daysLeftForBtn = -1;
+        }
         setAdminActivateBtnState(daysLeftForBtn);
         return html;
     }
@@ -4692,22 +4698,66 @@
             }
             async function verifyCloudRevealPassword(pwd) {
                 try {
-                    let cu = null;
-                    try { cu = JSON.parse((await StorageAdapter.getItem('auth:currentUser')) || 'null'); } catch (_) {}
-                    const uname = (cu && cu.username) ? String(cu.username) : '';
+                    // ★ 2026-11-20 修复「无法确认当前登录账户」：云端桌面/APP 登录走
+                    //   loginWithUsernamePassword 快路径时**不写 auth:currentUser**（页面
+                    //   handleLogin 每次登录写的是 user_login_data），必须多源读取。
+                    let uname = '';
+                    try {
+                        const raw = global.localStorage.getItem('user_login_data');
+                        if (raw) {
+                            const d = JSON.parse(raw);
+                            const u = (d && d.user) ? d.user : d;
+                            if (u && u.username) uname = String(u.username);
+                        }
+                    } catch (_) {}
+                    if (!uname) {
+                        try {
+                            const raw2 = await StorageAdapter.getItem('auth:currentUser');
+                            if (raw2) {
+                                const u2 = JSON.parse(raw2);
+                                if (u2 && u2.username) uname = String(u2.username);
+                            }
+                        } catch (_) {}
+                    }
                     if (!uname) return { ok: false, msg: '无法确认当前登录账户，请重新登录后再试' };
                     let users = null;
                     try { if (global.UserStore && typeof global.UserStore.get === 'function') users = global.UserStore.get(); } catch (_) {}
                     if ((!users || !users.length) && global.CONFIG && Array.isArray(global.CONFIG.users)) users = global.CONFIG.users;
-                    if (!users || !users.length) return { ok: false, msg: '云端网页版不保存本地密码，请联系管理员在后台查看完整激活码' };
-                    const user = users.find(function (u) { return u && (u.username === uname || u.phone === uname); });
-                    if (!user) return { ok: false, msg: '未找到当前账户，请重新登录后再试' };
+                    let user = null;
+                    if (users && users.length) {
+                        user = users.find(function (u) { return u && (u.username === uname || u.phone === uname); }) || null;
+                    }
                     // 仅管理员可查看完整码（收费员/医生即使知道自己的密码也不放行）
-                    if (global.AuthCore && typeof global.AuthCore.isAdmin === 'function' && !global.AuthCore.isAdmin(user)) {
+                    if (user && global.AuthCore && typeof global.AuthCore.isAdmin === 'function' && !global.AuthCore.isAdmin(user)) {
                         return { ok: false, msg: '仅管理员可查看完整激活码' };
                     }
-                    const pass = await verifyPassword(String(pwd || ''), user.password || '', user.username);
-                    return pass ? { ok: true } : { ok: false, msg: '密码错误，请重试' };
+                    // ① 本地表能对上 → 本地哈希校验（常规路径，零网络）
+                    if (user && user.password) {
+                        const pass = await verifyPassword(String(pwd || ''), user.password, user.username);
+                        if (pass) return { ok: true };
+                    }
+                    // ② 本地对不上（改过云端密码/本地表缺人）→ 云端权威复核一次
+                    //    （避免管理员改密后永远无法在本机解锁显示激活码）
+                    try {
+                        const cloudResult = await cloudAdapter.authenticate(uname, String(pwd || ''));
+                        if (cloudResult && cloudResult.success && cloudResult.user) {
+                            const cu2 = cloudResult.user;
+                            if (global.AuthCore && typeof global.AuthCore.isAdmin === 'function' && !global.AuthCore.isAdmin(cu2)) {
+                                return { ok: false, msg: '仅管理员可查看完整激活码' };
+                            }
+                            return { ok: true };
+                        }
+                        const cerr = (cloudResult && cloudResult.error) || '';
+                        const isNetErr = /网络|超时|断开|离线|Failed to fetch|NetworkError|timeout|timed out|ERR_/i.test(cerr);
+                        if (isNetErr) {
+                            return { ok: false, msg: '本地校验未通过，联网复核失败，请检查网络后重试' };
+                        }
+                        return { ok: false, msg: '密码错误，请重试' };
+                    } catch (e2) {
+                        return { ok: false, msg: user
+                            ? '密码错误，且云端复核异常：' + ((e2 && e2.message) || '未知错误')
+                            : '云端网页版不保存本地密码，且联网复核失败：' + ((e2 && e2.message) || '未知错误') };
+                    }
                 } catch (e) {
                     return { ok: false, msg: '校验异常：' + ((e && e.message) || '未知错误') };
                 }
