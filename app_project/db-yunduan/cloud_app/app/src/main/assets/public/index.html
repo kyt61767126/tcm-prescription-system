@@ -13061,6 +13061,27 @@ window.addEventListener('load', function () {
 })();
 </script>
 <script>
+/* ★ 2026-11-20 处方明细列表底部留一行空白（用户反馈「下拉条没有空行」）：
+   .medicine-table-container 为 flex:1 滚动区，最后一行紧贴底边、视觉上"没有空行"。
+   运行时补 padding-bottom（约一行高度），滚到底可见完整留白；
+   不改 HTML 结构与 CSS 文件，界面锁基线零变更。 */
+(function () {
+    'use strict';
+    function padMedicineListTail() {
+        try {
+            var list = document.querySelectorAll('.medicine-table-container');
+            for (var i = 0; i < list.length; i++) {
+                if (list[i].style.paddingBottom !== '26px') list[i].style.paddingBottom = '26px';
+            }
+        } catch (e) {}
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', padMedicineListTail);
+    else padMedicineListTail();
+    // 页面切换/表格重建后补一次（幂等，已设则跳过）
+    try { setInterval(padMedicineListTail, 3000); } catch (e) {}
+})();
+</script>
+<script>
 /* ★ 2026-11-20 云端App 手机顶端绿色更新提示条（用户需求恢复）：
    云端App = WebView 实载线上站（?_v=时间戳强制最新），站点部署即更新——
    提示条的意义是"后台发了新版，告知用户已自动生效"。
