@@ -3018,6 +3018,8 @@
                     }
                 } catch (_) {}
                 console.log('[Heartbeat] 心跳成功（entitlement=LICENSED）');
+                // ★ 2026-11-19 到期前提醒：剩余 1–7 天 → 顶部横幅（每日一次）
+                try { maybeShowCloudExpiryBanner(entFull || {}); } catch (_) {}
                 return;
             }
             if (entState) {
@@ -3078,6 +3080,63 @@
         }
     }
 
+    // ★ 2026-11-19 到期前提醒（7/3/1 天）：云端授权剩余 1–7 天（entitlement 的
+    //   daysRemaining）时，主界面顶部注入琥珀色横幅提示续费。JS 幂等注入（不改
+    //   HTML 结构/CSS），按北京日期每日最多一次；daysRemaining=-1 永久授权不提醒。
+    function maybeShowCloudExpiryBanner(data) {
+        try {
+            if (!data) return;
+            const days = Number(data.daysRemaining != null ? data.daysRemaining : data.remainingDays);
+            const type = String(data.licenseType || data.type || '');
+            const isPaid = type !== 'trial' && type !== 'free';
+            const inWindow = Number.isFinite(days) && days >= 1 && days <= 7;
+            if (!inWindow || !isPaid) {
+                const old = document.getElementById('cloudExpiryBanner');
+                if (old && old.parentNode) old.parentNode.removeChild(old);
+                return;
+            }
+            if (!document.body || !document.getElementById('patientName')) return;
+            if (document.getElementById('cloudExpiryBanner')) return;
+
+            const bd = new Date(Date.now() + 8 * 3600e3);
+            const dayKey = bd.toISOString().slice(0, 10);
+            const LS_KEY = 'cloud:expiryBannerDay';
+            try {
+                if (global.localStorage && global.localStorage.getItem(LS_KEY) === dayKey) return;
+            } catch (e) {}
+
+            let expText = '';
+            try {
+                const expRaw = data.expiresAt || (data.license && data.license.expiresAt);
+                const ms = expRaw ? new Date(expRaw).getTime() : NaN;
+                if (!isNaN(ms)) {
+                    const e8 = new Date(ms + 8 * 3600e3);
+                    const p2 = function (n) { return (n < 10 ? '0' : '') + n; };
+                    expText = '（到期时间 ' + e8.getUTCFullYear() + '-' + p2(e8.getUTCMonth() + 1) + '-' + p2(e8.getUTCDate()) + '）';
+                }
+            } catch (e) {}
+
+            const banner = document.createElement('div');
+            banner.id = 'cloudExpiryBanner';
+            banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9001;background:#b45309;color:#fff;font-size:13px;padding:7px 34px 7px 10px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.35);font-family:system-ui,-apple-system,sans-serif;line-height:1.6;';
+            banner.innerHTML = '⏳ 授权将于 <b>' + days + '</b> 天后到期' + expText + '，请及时续费' +
+                '<button id="cloudExpiryActivateBtn" style="margin-left:8px;padding:3px 14px;border:none;border-radius:5px;background:#fff;color:#b45309;font-weight:600;cursor:pointer;font-size:12px;vertical-align:middle;">前往续费</button>' +
+                '<button id="cloudExpiryCloseBtn" title="关闭" style="position:absolute;top:50%;right:8px;transform:translateY(-50%);border:none;background:transparent;color:#fff;font-size:18px;line-height:1;cursor:pointer;padding:2px 6px;">×</button>';
+            document.body.appendChild(banner);
+            const __act = document.getElementById('cloudExpiryActivateBtn');
+            if (__act) __act.addEventListener('click', function () {
+                try { if (typeof global.openAdminActivate === 'function') global.openAdminActivate(); } catch (e) {}
+            });
+            const __cls = document.getElementById('cloudExpiryCloseBtn');
+            if (__cls) __cls.addEventListener('click', function () {
+                try { if (banner.parentNode) banner.parentNode.removeChild(banner); } catch (e) {}
+            });
+            try { if (global.localStorage) global.localStorage.setItem(LS_KEY, dayKey); } catch (e) {}
+        } catch (e) {
+            console.warn('[Heartbeat] 到期提醒横幅注入失败:', e);
+        }
+    }
+
     async function checkLicenseAndShowActivate() {
         try {
             // 检查 license API 是否存在（APP 端无 window.electronAPI 时自动跳过）
@@ -3092,6 +3151,8 @@
                 // ★ 兼容逻辑：授权有效时清除失效标志
                 global.__licenseExpired = false;
                 global.__licenseActivating = false;
+                // ★ 2026-11-19 到期前提醒：正式授权剩余 1–7 天 → 顶部横幅（每日一次）
+                maybeShowCloudExpiryBanner(result);
                 // ★ P1-7 心跳验证：异步执行，不阻断使用（24小时验证一次，7天离线锁定）
                 performHeartbeatCheck();
                 // ★ P1-1 在线验证：如果需要在线验证，自动触发（不阻断使用）
@@ -4572,6 +4633,85 @@
     //   ②本地 license:code ③机码找回 resolvedLicenseCode。仅已激活分支调用。
     async function renderCloudActivationCode(el, code) {
         try {
+            // ★ 2026-11-20 激活码防泄露：默认脱敏，点「显示」需验证当前管理员登录密码，
+            //   通过后展示完整码 60 秒；云端网页无本地密码时提示改由后台查看。
+            function maskCloudCode(s) {
+                const str = String(s || '').trim();
+                if (str.length <= 8) return '****';
+                const m = str.match(/^([A-Z]{2,6}-)/);
+                return (m ? m[1] : '') + '****-****-****-' + str.slice(-4);
+            }
+            function askCloudRevealPassword() {
+                return new Promise(function (resolve) {
+                    const old = document.getElementById('codeRevealMask');
+                    if (old && old.parentNode) old.parentNode.removeChild(old);
+                    const mask = document.createElement('div');
+                    mask.id = 'codeRevealMask';
+                    mask.style.cssText = 'position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.45);z-index:10050;display:flex;align-items:center;justify-content:center;';
+                    const card = document.createElement('div');
+                    card.style.cssText = 'background:#fff;border-radius:10px;padding:20px 22px;width:300px;max-width:86vw;box-shadow:0 10px 30px rgba(0,0,0,.25);font-size:14px;color:#333;';
+                    const title = document.createElement('div');
+                    title.textContent = '🔐 验证管理员密码';
+                    title.style.cssText = 'font-weight:bold;margin-bottom:8px;';
+                    const hint = document.createElement('div');
+                    hint.textContent = '显示完整激活码需要验证当前登录账号密码';
+                    hint.style.cssText = 'font-size:12px;color:#888;margin-bottom:10px;';
+                    const inp = document.createElement('input');
+                    inp.type = 'password';
+                    inp.placeholder = '请输入登录密码';
+                    inp.autocomplete = 'off';
+                    inp.style.cssText = 'width:100%;box-sizing:border-box;padding:10px;border:1px solid #ccc;border-radius:6px;font-size:14px;outline:none;';
+                    const row = document.createElement('div');
+                    row.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;margin-top:14px;';
+                    const cancel = document.createElement('button');
+                    cancel.textContent = '取消';
+                    cancel.style.cssText = 'padding:8px 16px;border:1px solid #ddd;background:#fafafa;border-radius:6px;cursor:pointer;';
+                    const ok = document.createElement('button');
+                    ok.textContent = '确定';
+                    ok.style.cssText = 'padding:8px 16px;border:none;background:#26a69a;color:#fff;border-radius:6px;cursor:pointer;';
+                    row.appendChild(cancel); row.appendChild(ok);
+                    card.appendChild(title); card.appendChild(hint); card.appendChild(inp); card.appendChild(row);
+                    mask.appendChild(card);
+                    document.body.appendChild(mask);
+                    setTimeout(function () { try { inp.focus(); } catch (_) {} }, 30);
+                    function close(v) {
+                        if (mask.parentNode) mask.parentNode.removeChild(mask);
+                        resolve(v);
+                    }
+                    cancel.addEventListener('click', function () { close(null); });
+                    ok.addEventListener('click', function () {
+                        const v = String(inp.value || '');
+                        if (!v) { inp.style.borderColor = '#f56c6c'; return; }
+                        close(v);
+                    });
+                    inp.addEventListener('keydown', function (e) {
+                        if (e.key === 'Enter') ok.click();
+                        if (e.key === 'Escape') close(null);
+                    });
+                });
+            }
+            async function verifyCloudRevealPassword(pwd) {
+                try {
+                    let cu = null;
+                    try { cu = JSON.parse((await StorageAdapter.getItem('auth:currentUser')) || 'null'); } catch (_) {}
+                    const uname = (cu && cu.username) ? String(cu.username) : '';
+                    if (!uname) return { ok: false, msg: '无法确认当前登录账户，请重新登录后再试' };
+                    let users = null;
+                    try { if (global.UserStore && typeof global.UserStore.get === 'function') users = global.UserStore.get(); } catch (_) {}
+                    if ((!users || !users.length) && global.CONFIG && Array.isArray(global.CONFIG.users)) users = global.CONFIG.users;
+                    if (!users || !users.length) return { ok: false, msg: '云端网页版不保存本地密码，请联系管理员在后台查看完整激活码' };
+                    const user = users.find(function (u) { return u && (u.username === uname || u.phone === uname); });
+                    if (!user) return { ok: false, msg: '未找到当前账户，请重新登录后再试' };
+                    // 仅管理员可查看完整码（收费员/医生即使知道自己的密码也不放行）
+                    if (global.AuthCore && typeof global.AuthCore.isAdmin === 'function' && !global.AuthCore.isAdmin(user)) {
+                        return { ok: false, msg: '仅管理员可查看完整激活码' };
+                    }
+                    const pass = await verifyPassword(String(pwd || ''), user.password || '', user.username);
+                    return pass ? { ok: true } : { ok: false, msg: '密码错误，请重试' };
+                } catch (e) {
+                    return { ok: false, msg: '校验异常：' + ((e && e.message) || '未知错误') };
+                }
+            }
             const c = String(code || '').trim().toUpperCase();
             if (!c || c.length < 4) return;
             document.querySelectorAll('#activationCodeBox').forEach(n => { if (n.parentNode) n.parentNode.removeChild(n); });
@@ -4582,29 +4722,47 @@
             label.textContent = '🔑 激活码：';
             const b = document.createElement('b');
             b.id = 'activationCodeEl';
-            b.title = '点击复制';
+            b.title = '点击显示完整激活码（需管理员密码）';
             b.style.cssText = 'color:#26a69a;font-family:monospace;letter-spacing:1px;font-size:14px;cursor:pointer;user-select:all;';
-            b.textContent = c; // textContent 防注入（码格式 BNZC-XXXX-XXXX-XXXX-XXXX）
+            b.textContent = maskCloudCode(c);
             box.appendChild(label);
             box.appendChild(b);
             // 插在邀请码卡片之前（无则直接 append），保持「激活码 → 邀请码」展示顺序
             const inv = document.getElementById('inviteInfoBox');
             if (inv && inv.parentNode === el) el.insertBefore(box, inv);
             else el.appendChild(box);
-            b.addEventListener('click', function (ev) {
-                const txt = (ev.target.textContent || '').trim();
+            let cloudRevealed = false;
+            let cloudHideTimer = null;
+            function cloudRemask() {
+                cloudRevealed = false;
+                b.textContent = maskCloudCode(c);
+                b.title = '点击显示完整激活码（需管理员密码）';
+            }
+            b.addEventListener('click', async function () {
+                if (!cloudRevealed) {
+                    const pwd = await askCloudRevealPassword();
+                    if (!pwd) return;
+                    const vr = await verifyCloudRevealPassword(pwd);
+                    if (!vr.ok) { alert(vr.msg || '密码错误'); return; }
+                    cloudRevealed = true;
+                    b.textContent = c;
+                    b.title = '点击复制（60 秒后自动隐藏）';
+                    clearTimeout(cloudHideTimer);
+                    cloudHideTimer = setTimeout(cloudRemask, 60000);
+                    return;
+                }
                 try {
                     if (navigator.clipboard && navigator.clipboard.writeText) {
-                        navigator.clipboard.writeText(txt);
+                        navigator.clipboard.writeText(c);
                     } else {
                         const ta = document.createElement('textarea');
-                        ta.value = txt; document.body.appendChild(ta);
+                        ta.value = c; document.body.appendChild(ta);
                         ta.select(); document.execCommand('copy');
                         document.body.removeChild(ta);
                     }
-                    alert('激活码已复制：' + txt);
+                    alert('激活码已复制：' + c);
                 } catch (_) {
-                    alert('复制失败，请手动记录：' + txt);
+                    alert('复制失败，请手动记录：' + c);
                 }
             });
             // ★ 2026-10-23 显示本机机器码：便于同机双装时与后台设备列表 machineId 对比，
