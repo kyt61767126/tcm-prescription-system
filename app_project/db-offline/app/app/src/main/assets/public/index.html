@@ -7356,6 +7356,7 @@ let currentUser = null;
                         onfocus="startSearch(event,${index},'name')"
                         onblur="tryHideSearch()"
                         onkeyup="handleSearchKey(event,${index},'name')"
+                        oninput="handleNameInput(${index},this.value)"
                         style="padding:2px;text-align:left;"></td><td><input type="number" value="${item.name ? escapeHtml(item.dosage) : ''}" oninput="updateDosage(${index},this.value)" style="padding:2px;"></td><td><input type="text" value="${item.name ? escapeHtml(item.unit) : ''}" onchange="updateUnit(${index},this.value);calculateAmount()" style="padding:2px;"></td><td><input type="text" value="${item.name ? escapeHtml(formatPrice(item.price)) : ''}" readonly style="padding:2px;"></td><td><input type="text" value="${item.name ? escapeHtml(formatPrice(item.total)) : ''}" readonly style="padding:2px;"></td><td><button class="small-btn" style="padding:1px 6px;font-size:10px;background:#ffdddd;" onclick="deleteRow(${index})">删</button></td></tr>`).join('');
         }
 
@@ -7403,6 +7404,18 @@ let currentUser = null;
                 if (event._handled) return;
                 event.preventDefault();
             }
+        }
+
+        // ★ 2026-11-20 手动输入/粘贴药名（未从下拉点选）也写入数据源：
+        //   原 name 输入框只绑 onfocus/onkeyup，直接打字不进 prescriptionItems，
+        //   导致屏幕有药名但保存/打印为空（用户实测：手机打印处方药品明细整片空白）。
+        function handleNameInput(index, value) {
+            try {
+                const item = prescriptionItems[index];
+                if (!item) return;
+                item.name = String(value == null ? '' : value);
+                if (item.name && !item.unit) item.unit = 'g';
+            } catch (e) {}
         }
 
         function handleInput(event, index, column) {
@@ -9332,6 +9345,28 @@ let currentUser = null;
             }
             // ★ 2026-11-14：打印属历史浏览场景，患者信息不全只提示不阻断
             validatePatientBasics(false);
+            // ★ 2026-11-20 打印前强制同步（用户实测：打印处方药品明细空白）：
+            //   ① 屏幕药名框 → 数据源（覆盖手动输入/粘贴/旧数据漏同步）
+            //   ② 重刷处方纸 DOM，确保打印内容与当前处方一致
+            //   ③ 无有效药品时明确提示，不再打印空白处方纸
+            try {
+                const rows = document.querySelectorAll('#prescriptionBody tr');
+                for (let i = 0; i < rows.length; i++) {
+                    const el = rows[i].querySelector('input[id^="name-input-"]');
+                    if (el && prescriptionItems[i] && el.value && el.value !== prescriptionItems[i].name) {
+                        prescriptionItems[i].name = el.value;
+                        if (!prescriptionItems[i].unit) prescriptionItems[i].unit = 'g';
+                    }
+                }
+            } catch (e) {}
+            try { updatePrescriptionPaper(); } catch (e) {}
+            try {
+                const hasMed = prescriptionItems.some(function (it) { return it && String(it.name || '').trim(); });
+                if (!hasMed) {
+                    alert('当前处方没有药品，无法打印');
+                    return;
+                }
+            } catch (e) {}
             // ★ 2026-09-21 离线免费版：仅在送印 HTML 内加水印覆盖层（屏幕处方笺 DOM/CSS 零改动、
             //   不改 HTML 基线）；标准版/机构版/试用 不注入，打印结果与历史完全一致；纵横两版
             //   同一绝对定位覆盖层随纸面尺寸自适应。授权状态查询失败时 fail-open（打印本就是
