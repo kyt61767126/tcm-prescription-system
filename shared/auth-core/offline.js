@@ -5235,30 +5235,46 @@
                         }
                     } catch (_) {}
 
-                    // ③ 哈希校验：登录对象自带 password（离线版 user 来自 CONFIG.users，
-                    //    user_login_data 里就有完整哈希，无需再查 UserStore）
+                    // ③ 哈希校验 —— ★ 2026-11-20 五修：改用与登录页完全同款路径
+                    //    loginWithUsernamePassword（本地路径纯校验无副作用、含改名盐回退），
+                    //    环境兼容性已被"登录成功"实证——-4 版直调 verifyPassword 仍在
+                    //    离线 APP 抛「校验异常（本地哈希校验）」，而登录同环境可用，
+                    //    故收敛到登录同款链路，并细分权限/密码比对子阶段标签。
                     stage = '本地哈希校验';
-                    let hashUser = (loginUser && loginUser.password) ? loginUser : null;
-                    if (!hashUser) {
-                        let users = null;
-                        try { if (global.UserStore && typeof global.UserStore.get === 'function') users = global.UserStore.get(); } catch (_) {}
-                        if ((!users || !users.length) && global.CONFIG && Array.isArray(global.CONFIG.users)) users = global.CONFIG.users;
-                        if (users && users.length) {
-                            hashUser = users.find(function (u) { return u && (u.username === uname || u.phone === uname || (uphone && u.phone === uphone)); }) || null;
-                        }
-                    }
-                    if (hashUser) {
+                    let candUsers = [];
+                    try {
+                        if (global.UserStore && typeof global.UserStore.get === 'function') candUsers = global.UserStore.get() || [];
+                    } catch (_) {}
+                    try {
+                        if ((!candUsers || !candUsers.length) && global.CONFIG && Array.isArray(global.CONFIG.users)) candUsers = global.CONFIG.users;
+                    } catch (_) {}
+                    try {
+                        if (loginUser && loginUser.password && candUsers.indexOf(loginUser) === -1) candUsers = [loginUser].concat(candUsers);
+                    } catch (_) {}
+                    if (candUsers && candUsers.length) {
+                        // 仅管理员可查看完整码（收费员/医生即使知道自己的密码也不放行）
+                        stage = '本地哈希校验-权限判定';
                         try {
-                            // 仅管理员可查看完整码（收费员/医生即使知道自己的密码也不放行）
-                            const ru2 = roleUser || hashUser;
-                            if (global.AuthCore && typeof global.AuthCore.isAdmin === 'function' && !global.AuthCore.isAdmin(ru2)) {
+                            const ru2 = roleUser || null;
+                            if (global.AuthCore && typeof global.AuthCore.isAdmin === 'function' && ru2 && !global.AuthCore.isAdmin(ru2)) {
                                 return { ok: false, msg: '仅管理员可查看完整激活码' };
                             }
-                            const pass = await verifyPassword(input, hashUser.password || '', hashUser.username || uname);
-                            if (pass) return { ok: true };
+                        } catch (ePerm) {
+                            return { ok: false, msg: '校验异常（管理员权限判定）：' + ((ePerm && ePerm.message) || '未知错误') };
+                        }
+                        stage = '本地哈希校验-密码比对';
+                        try {
+                            const route = await loginWithUsernamePassword(uname || uphone, input, { users: candUsers });
+                            if (route && route.success && route.user) {
+                                const ru3 = route.user || null;
+                                if (global.AuthCore && typeof global.AuthCore.isAdmin === 'function' && !global.AuthCore.isAdmin(ru3)) {
+                                    return { ok: false, msg: '仅管理员可查看完整激活码' };
+                                }
+                                return { ok: true };
+                            }
                             return { ok: false, msg: '密码错误，请重试' };
-                        } catch (e3) {
-                            return { ok: false, msg: '校验异常（' + stage + '）：' + ((e3 && e3.message) || '未知错误') };
+                        } catch (eHash) {
+                            return { ok: false, msg: '校验异常（密码比对·登录同款）：' + ((eHash && eHash.message) || '未知错误') };
                         }
                     }
                     return { ok: false, msg: '无法读取本机账户信息，暂不能显示激活码' };
