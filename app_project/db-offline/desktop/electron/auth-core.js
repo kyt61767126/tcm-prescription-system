@@ -5604,48 +5604,76 @@
             }
             async function verifyRevealPassword(pwd) {
                 try {
-                    // ★ 2026-11-20 修复「无法确认当前登录账户」：离线登录走
-                    //   loginWithUsernamePassword 本地表快路径，**从不写 auth:currentUser**
-                    //   （页面 handleLogin 每次登录写的是 user_login_data）。必须多源读取：
-                    //   ① user_login_data（最新鲜，每次登录必写）② auth:currentUser
-                    //   （AuthCore.login 云端路径写入，可能缺失或过期）③ 记住的登录名
-                    let uname = '';
+                    const input = String(pwd || '');
+                    // ★ 2026-11-20 三级修复「无法确认当前登录账户/密码错误」：
+                    //   登录实际走 loginWithUsernamePassword 快路径，不写 auth:currentUser。
+                    //   ① 当前登录人 = user_login_data（页面 handleLogin 每次登录必写）
+                    //   ② 凭据优先用登录时加密缓存的密码（auth:offlineLoginCache，解密直接比对）
+                    //   ③ 再退回哈希校验：登录对象自带 password / UserStore / CONFIG.users
+                    let loginUser = null;
                     try {
                         const raw = global.localStorage.getItem('user_login_data');
                         if (raw) {
                             const d = JSON.parse(raw);
-                            const u = (d && d.user) ? d.user : d;
-                            if (u && u.username) uname = String(u.username);
+                            loginUser = (d && d.user) ? d.user : null;
                         }
                     } catch (_) {}
-                    if (!uname) {
+                    if (!loginUser || !loginUser.username) {
                         try {
                             const raw2 = await StorageAdapter.getItem('auth:currentUser');
                             if (raw2) {
                                 const u2 = JSON.parse(raw2);
-                                if (u2 && u2.username) uname = String(u2.username);
+                                if (u2 && u2.username) loginUser = u2;
                             }
                         } catch (_) {}
                     }
-                    if (!uname) {
-                        try {
-                            const rn = await StorageAdapter.getItem('auth:rememberedUsername');
-                            if (rn) uname = String(rn);
-                        } catch (_) {}
-                    }
+                    const uname = (loginUser && loginUser.username) ? String(loginUser.username)
+                        : ((loginUser && loginUser.phone) ? String(loginUser.phone) : '');
                     if (!uname) return { ok: false, msg: '无法确认当前登录账户，请重新登录后再试' };
-                    let users = null;
-                    try { if (global.UserStore && typeof global.UserStore.get === 'function') users = global.UserStore.get(); } catch (_) {}
-                    if ((!users || !users.length) && global.CONFIG && Array.isArray(global.CONFIG.users)) users = global.CONFIG.users;
-                    if (!users || !users.length) return { ok: false, msg: '无法读取本机账户信息，暂不能显示激活码' };
-                    const user = users.find(function (u) { return u && (u.username === uname || u.phone === uname); });
-                    if (!user) return { ok: false, msg: '未找到当前账户，请重新登录后再试' };
-                    // 仅管理员可查看完整码（收费员/医生即使知道自己的密码也不放行）
-                    if (global.AuthCore && typeof global.AuthCore.isAdmin === 'function' && !global.AuthCore.isAdmin(user)) {
-                        return { ok: false, msg: '仅管理员可查看完整激活码' };
+                    const roleUser = loginUser || null;
+
+                    // ② 登录时缓存的加密密码（login() 每次联网登录都刷新；离线快路径
+                    //    登录不写，走 ③ 哈希校验）
+                    try {
+                        const cached = await StorageAdapter.getItem('auth:offlineLoginCache');
+                        if (cached) {
+                            const cd = JSON.parse(cached);
+                            if (cd && String(cd.username) === uname && cd.encryptedPassword) {
+                                const real = await decryptPassword(cd.encryptedPassword);
+                                if (real && real === input) {
+                                    const ru = roleUser || cd.user || null;
+                                    if (global.AuthCore && typeof global.AuthCore.isAdmin === 'function'
+                                        && ru && !global.AuthCore.isAdmin(ru)) {
+                                        return { ok: false, msg: '仅管理员可查看完整激活码' };
+                                    }
+                                    return { ok: true };
+                                }
+                            }
+                        }
+                    } catch (_) {}
+
+                    // ③ 哈希校验：登录对象自带 password（离线版 user 来自 CONFIG.users，
+                    //    user_login_data 里就有完整哈希，无需再查 UserStore）
+                    let hashUser = (loginUser && loginUser.password) ? loginUser : null;
+                    if (!hashUser) {
+                        let users = null;
+                        try { if (global.UserStore && typeof global.UserStore.get === 'function') users = global.UserStore.get(); } catch (_) {}
+                        if ((!users || !users.length) && global.CONFIG && Array.isArray(global.CONFIG.users)) users = global.CONFIG.users;
+                        if (users && users.length) {
+                            hashUser = users.find(function (u) { return u && (u.username === uname || u.phone === uname); }) || null;
+                        }
                     }
-                    const pass = await verifyPassword(String(pwd || ''), user.password || '', user.username);
-                    return pass ? { ok: true } : { ok: false, msg: '密码错误，请重试' };
+                    if (hashUser) {
+                        // 仅管理员可查看完整码（收费员/医生即使知道自己的密码也不放行）
+                        const ru2 = roleUser || hashUser;
+                        if (global.AuthCore && typeof global.AuthCore.isAdmin === 'function' && !global.AuthCore.isAdmin(ru2)) {
+                            return { ok: false, msg: '仅管理员可查看完整激活码' };
+                        }
+                        const pass = await verifyPassword(input, hashUser.password || '', hashUser.username || uname);
+                        if (pass) return { ok: true };
+                        return { ok: false, msg: '密码错误，请重试' };
+                    }
+                    return { ok: false, msg: '无法读取本机账户信息，暂不能显示激活码' };
                 } catch (e) {
                     return { ok: false, msg: '校验异常：' + ((e && e.message) || '未知错误') };
                 }

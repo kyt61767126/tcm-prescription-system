@@ -4698,48 +4698,72 @@
             }
             async function verifyCloudRevealPassword(pwd) {
                 try {
-                    // ★ 2026-11-20 修复「无法确认当前登录账户」：云端桌面/APP 登录走
-                    //   loginWithUsernamePassword 快路径时**不写 auth:currentUser**（页面
-                    //   handleLogin 每次登录写的是 user_login_data），必须多源读取。
-                    let uname = '';
+                    const input = String(pwd || '');
+                    // ★ 2026-11-20 三级修复「无法确认当前登录账户/密码错误/复核异常」：
+                    //   ① 当前登录人 = user_login_data（页面 handleLogin 每次登录必写）
+                    //   ② 凭据优先用登录时加密缓存的密码（auth:offlineLoginCache，
+                    //      login() 云端登录路径每次成功都刷新；解密直接比对，零网络零哈希）
+                    //   ③ 再退回本地表哈希校验 → 最后云端联网复核
+                    let loginUser = null;
                     try {
                         const raw = global.localStorage.getItem('user_login_data');
                         if (raw) {
                             const d = JSON.parse(raw);
-                            const u = (d && d.user) ? d.user : d;
-                            if (u && u.username) uname = String(u.username);
+                            loginUser = (d && d.user) ? d.user : null;
                         }
                     } catch (_) {}
-                    if (!uname) {
+                    if (!loginUser || !loginUser.username) {
                         try {
                             const raw2 = await StorageAdapter.getItem('auth:currentUser');
                             if (raw2) {
                                 const u2 = JSON.parse(raw2);
-                                if (u2 && u2.username) uname = String(u2.username);
+                                if (u2 && u2.username) loginUser = u2;
                             }
                         } catch (_) {}
                     }
+                    const uname = (loginUser && loginUser.username) ? String(loginUser.username)
+                        : ((loginUser && loginUser.phone) ? String(loginUser.phone) : '');
                     if (!uname) return { ok: false, msg: '无法确认当前登录账户，请重新登录后再试' };
+                    const roleUser = loginUser || null;
+
+                    // ② 登录时缓存的加密密码（最可靠：云端登录成功即刷新）
+                    try {
+                        const cached = await StorageAdapter.getItem('auth:offlineLoginCache');
+                        if (cached) {
+                            const cd = JSON.parse(cached);
+                            if (cd && String(cd.username) === uname && cd.encryptedPassword) {
+                                const real = await decryptPassword(cd.encryptedPassword);
+                                if (real && real === input) {
+                                    const ru = roleUser || cd.user || null;
+                                    if (global.AuthCore && typeof global.AuthCore.isAdmin === 'function'
+                                        && ru && !global.AuthCore.isAdmin(ru)) {
+                                        return { ok: false, msg: '仅管理员可查看完整激活码' };
+                                    }
+                                    return { ok: true };
+                                }
+                            }
+                        }
+                    } catch (_) {}
+
+                    // ③ 本地表哈希校验（云端镜像用户可能不带 password，找不到就走联网复核）
                     let users = null;
+                    let user = null;
                     try { if (global.UserStore && typeof global.UserStore.get === 'function') users = global.UserStore.get(); } catch (_) {}
                     if ((!users || !users.length) && global.CONFIG && Array.isArray(global.CONFIG.users)) users = global.CONFIG.users;
-                    let user = null;
                     if (users && users.length) {
                         user = users.find(function (u) { return u && (u.username === uname || u.phone === uname); }) || null;
                     }
-                    // 仅管理员可查看完整码（收费员/医生即使知道自己的密码也不放行）
                     if (user && global.AuthCore && typeof global.AuthCore.isAdmin === 'function' && !global.AuthCore.isAdmin(user)) {
                         return { ok: false, msg: '仅管理员可查看完整激活码' };
                     }
-                    // ① 本地表能对上 → 本地哈希校验（常规路径，零网络）
                     if (user && user.password) {
-                        const pass = await verifyPassword(String(pwd || ''), user.password, user.username);
+                        const pass = await verifyPassword(input, user.password, user.username);
                         if (pass) return { ok: true };
                     }
-                    // ② 本地对不上（改过云端密码/本地表缺人）→ 云端权威复核一次
-                    //    （避免管理员改密后永远无法在本机解锁显示激活码）
+
+                    // ④ 云端联网权威复核（本地对不上：改过云端密码/镜像缺人）
                     try {
-                        const cloudResult = await cloudAdapter.authenticate(uname, String(pwd || ''));
+                        const cloudResult = await cloudAdapter.authenticate(uname, input);
                         if (cloudResult && cloudResult.success && cloudResult.user) {
                             const cu2 = cloudResult.user;
                             if (global.AuthCore && typeof global.AuthCore.isAdmin === 'function' && !global.AuthCore.isAdmin(cu2)) {
@@ -4754,9 +4778,9 @@
                         }
                         return { ok: false, msg: '密码错误，请重试' };
                     } catch (e2) {
-                        return { ok: false, msg: user
-                            ? '密码错误，且云端复核异常：' + ((e2 && e2.message) || '未知错误')
-                            : '云端网页版不保存本地密码，且联网复核失败：' + ((e2 && e2.message) || '未知错误') };
+                        return { ok: false, msg: (user
+                            ? '密码错误，且云端复核异常：' : '本机未保存可校验的账户密码，联网复核异常：')
+                            + ((e2 && e2.message) || '未知错误') };
                     }
                 } catch (e) {
                     return { ok: false, msg: '校验异常：' + ((e && e.message) || '未知错误') };
