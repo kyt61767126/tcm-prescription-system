@@ -1,14 +1,14 @@
 {
   "format": 1,
   "channel": "app-local",
-  "hotVersion": "2026.11.20-17",
+  "hotVersion": "2026.11.20-18",
   "minAppCode": 288,
   "appVersion": "1.0.0",
   "files": [
     {
       "name": "index.html",
-      "sha256": "3263e03c8af13d4ebc5b337360d9d956c4bebc2c562c9324a9e9aa45174fa69e",
-      "size": 793757
+      "sha256": "53f392741f0a6ce7ac2f0bb043685f311ab47ee4b5409f08a61af04a13089c1e",
+      "size": 793361
     },
     {
       "name": "auth-core.js",
@@ -126,6 +126,6 @@
       "size": 32049
     }
   ],
-  "signedAt": 1795161708486,
-  "signature": "ipgSKwoBL846OaAUDhLtW6UHqGEJ/uitbz5obIMkXtttqmBQYOTCmpiVrquZQN1w5LHiHmLsE2QJYUrRMBhLAw=="
+  "signedAt": 1795165942476,
+  "signature": "A1XyKIXz3iNrR1qZa+IIZ2k0KCNjwylf4LThYgqmLypQyvTUT8qgLOdJK/xu64qQ764c5gT2dr5omw7C6HhjAw=="
 }
