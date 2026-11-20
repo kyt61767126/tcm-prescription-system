@@ -3082,3 +3082,10 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
 * **Android 侧（两 APK 的 printViaSystem）**：临时打印 WebView 需 `setAllowFileAccess(true)` + `setAllowFileAccessFromFileURLs(true)`（+ `setAllowUniversalAccessFromFileURLs(false)`），baseUrl 由 `null` 改为 `file:///android_asset/public/index.html`。仅打印 WebView 放开，主 WebView 安全策略不变。
 * **实测依据**（Windows 本机 Edge headless，强制只挂内置字体）：6 字标题 22pt 宽度 KaiTi=HKKai=1046.0px；40 字正文 10.5pt 宽度 SimSun=HKSong=1046.0px；A5 整页纸面高/药材区高/签名区顶 三项左右完全一致，无溢出。
 * **铁律**：① 打印域字号改动一律以桌面为唯一基准，App 端禁止再用缩放系数补偿；② 新增字体族必须同时进打印模板与 assets 四份，漏一份=该端静默回退；③ 更换字体必须先量「标题字宽 + 正文行宽 + 标题 line-height」，三项对齐再发版。
+
+### 2026-11-20 补：App 打印「字号偏大 / 边距不符」的真正根因（三次踩坑结论）
+* **现象**：内置开源字体后，App 打印仍比桌面大 ~20%，页边距也不同；把 CSS 字号从 10.5 降到 9.03pt（0.86）依旧"没变化"。
+* **根因**：`printViaSystem` 用 `createPrintDocumentAdapter` 打印时，打印适配器会按自己的规则重排/缩放页面；模板里的 `<meta viewport width=device-width>` 又让 WebView 忽略 `setInitialScale`，导致按 mm 定尺的版面（148mm 宽 / 22.5mm 上边距）在纸上被整体放大，CSS 的 pt/mm 落不到纸上。热更新对离线手机不生效（需联网 + 下次启动）也掩盖了前两轮小改动的效果。
+* **正解（已落地）**：两 APK 改为「A5@300dpi 精确栅格化 + ISO A5 原尺寸送印」：`scalePercent = (dots/cssWidthPx)/density*100`、`setInitialScale`、隐藏 WebView 按 1748×2480 布局并 `draw(Canvas)`，再用自定义 `PrintDocumentAdapter`（PrintedPdfDocument, 300dpi, NO_MARGINS）输出位图。1 CSS px = 300/96 设备像素，纸面几何与桌面逐毫米一致；同时剔除模板 viewport meta；失败自动回退旧适配器。
+* **配套**：CSS 字号回归桌面基准 10.5/22/9pt，**删除所有 App 比例补偿**（`__pScale` 已移除）。
+* **铁律**：App 打印出现"整体偏大/边距不对"时，先查打印链路是否二次缩放，禁止再用缩小字号的方式凑；离线设备验证必须装 APK，不能只发热更。

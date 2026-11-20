@@ -9237,13 +9237,11 @@ async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
                     return new URL('fonts/', document.baseURI).href;
                 } catch (e) { return 'fonts/'; }
             })();
-            // ★ 2026-11-20 二轮真机反馈「App 打印字体偏大」：字体度量已与桌面一致，仅做比例微调（仅 App 生效）。
-            //   桌面恒为 1；App 0.86 → 正文 10.5→9.03pt、标题 22→18.92pt、煎服法 9→7.74pt。
-            const __isApp = (typeof window !== 'undefined') && !!window.AndroidNative;
-            const __pScale = __isApp ? 0.86 : 1;
-            const __pFont = (10.5 * __pScale).toFixed(2);
-            const __pTitle = (22 * __pScale).toFixed(2);
-            const __pSmall = (9 * __pScale).toFixed(2);
+            // ★ 2026-11-20 三轮定稿：App 端改为「A5@300dpi 精确几何」打印（见 MainActivity.printBitmapA5），
+            //   纸面尺寸由原生换算保证，故字号回归桌面基准 10.5/22/9pt，不再需要任何比例补偿。
+            const __pFont = '10.5';
+            const __pTitle = '22';
+            const __pSmall = '9';
             const __pTitleWeight = 'bold';
             const html = `<!DOCTYPE html><html><head><title>惠康中医诊所管理系统 ${window.APP_VERSION}-打印预览</title><meta name="viewport" content="width=device-width, initial-scale=1.0"><style>@page { size: ${pageSize}; margin: 0; }
         @font-face { font-family: 'HKKai'; src: url('${__fontBase}HKKai.woff2') format('woff2'); font-weight: normal; font-style: normal; }

@@ -2097,44 +2097,70 @@ public class MainActivity extends BridgeActivity {
                 @Override
                 public void run() {
                     try {
+                        // ★ 2026-11-20 三轮纠偏「App 字号偏大、页边距与桌面不同」根治：
+                        //   原实现把 HTML 交给 WebView 自带打印适配器，适配器会按自己的规则重排/缩放
+                        //   （页面 viewport 与打印版面不一致时最明显），故 CSS 里的 10.5pt/22.5mm 落不到纸上。
+                        //   改为与内置热敏打印同源的确定性换算：按 A5@300dpi 精确定尺渲染成位图，
+                        //   再按 ISO A5 原尺寸送系统打印 —— 1 CSS px = 300/96 设备像素，
+                        //   字号与页边距和桌面（10.5pt / 22.5-13-15mm）逐毫米一致。
+                        final int dots = Math.round(148f / 25.4f * 300f);       // A5 宽 1748 dots
+                        final int heightDots = Math.round(210f / 25.4f * 300f); // A5 高 2480 dots
+                        final float cssWidthPx = 148f * 96f / 25.4f;            // 148mm ≈ 559.37 CSS px
                         final WebView printWebView = new WebView(MainActivity.this);
-                        // ★ 2026-11-20 手机打印只出上半页根治：
-                        //   ① WebView 未 attach/未测量时打印适配器拿不到完整高度 → 按 A5 尺寸显式布局；
-                        //   ② loadData 后立即 createPrintDocumentAdapter 会只打印已渲染部分
-                        //      → 改为等 onPageFinished（+400ms 排版缓冲）后再调起打印。
-                        //   桌面端走 Chromium 打印无此问题，故仅手机 App 异常。
-                        int pw = Math.round(148f / 25.4f * 96f); // 148mm @96dpi ≈ 559px
-                        int ph = Math.round(210f / 25.4f * 96f); // 210mm @96dpi ≈ 794px
-                        printWebView.setLayoutParams(new android.widget.FrameLayout.LayoutParams(pw, ph));
-                        printWebView.measure(
-                            android.view.View.MeasureSpec.makeMeasureSpec(pw, android.view.View.MeasureSpec.EXACTLY),
-                            android.view.View.MeasureSpec.makeMeasureSpec(ph, android.view.View.MeasureSpec.EXACTLY));
-                        printWebView.layout(0, 0, pw, ph);
-
                         final String jobName = "惠康中医处方 " + new java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.CHINA).format(new java.util.Date());
+
+                        WebSettings printSettings = printWebView.getSettings();
+                        printSettings.setJavaScriptEnabled(false);
+                        printSettings.setTextZoom(100);
+                        printSettings.setAllowFileAccess(true);
+                        printSettings.setAllowFileAccessFromFileURLs(true);
+                        printSettings.setAllowUniversalAccessFromFileURLs(false);
+                        printWebView.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
+
+                        float density = getResources().getDisplayMetrics().density;
+                        if (density <= 0f) density = 1f;
+                        int scalePercent = Math.round((dots / cssWidthPx) / density * 100f);
+                        if (scalePercent > 0) printWebView.setInitialScale(scalePercent);
+
+                        android.view.ViewGroup printRoot = (android.view.ViewGroup) findViewById(android.R.id.content);
+                        if (printRoot == null) {
+                            Toast.makeText(MainActivity.this, "打印失败：页面容器不可用", Toast.LENGTH_LONG).show();
+                            printWebView.destroy();
+                            return;
+                        }
+                        printRoot.addView(printWebView, new android.widget.FrameLayout.LayoutParams(dots, heightDots));
+                        printWebView.setVisibility(View.INVISIBLE);
 
                         printWebView.setWebViewClient(new android.webkit.WebViewClient() {
                             @Override
                             public void onPageFinished(WebView view, String url) {
                                 super.onPageFinished(view, url);
+                                // 字体（woff2）解码与水印排版留 400ms 余量
                                 mainHandler.postDelayed(new Runnable() {
                                     @Override
                                     public void run() {
                                         try {
-                                            PrintManager printManager = (PrintManager) getSystemService(Context.PRINT_SERVICE);
-                                            PrintDocumentAdapter printAdapter = printWebView.createPrintDocumentAdapter(jobName);
-
-                                            PrintAttributes attrs = new PrintAttributes.Builder()
-                                                .setMediaSize(PrintAttributes.MediaSize.ISO_A5)
-                                                .setResolution(new PrintAttributes.Resolution("res", "pdf", 300, 300))
-                                                .setMinMargins(PrintAttributes.Margins.NO_MARGINS)
-                                                .build();
-
-                                            printManager.print(jobName, printAdapter, attrs);
-                                            Log.d(TAG, "printViaSystem 已调起系统打印: " + jobName);
+                                            android.graphics.Bitmap bmp = android.graphics.Bitmap.createBitmap(dots, heightDots, android.graphics.Bitmap.Config.ARGB_8888);
+                                            android.graphics.Canvas cv = new android.graphics.Canvas(bmp);
+                                            cv.drawColor(android.graphics.Color.WHITE);
+                                            printWebView.draw(cv);
+                                            printRoot.removeView(printWebView);
+                                            printBitmapA5(bmp, jobName, true);
                                         } catch (Exception e) {
-                                            Log.e(TAG, "printViaSystem 打印失败", e);
-                                            Toast.makeText(MainActivity.this, "打印失败：" + e.getMessage(), Toast.LENGTH_LONG).show();
+                                            Log.e(TAG, "printViaSystem 栅格化失败，回退系统打印", e);
+                                            try {
+                                                PrintManager printManager = (PrintManager) getSystemService(Context.PRINT_SERVICE);
+                                                PrintDocumentAdapter printAdapter = printWebView.createPrintDocumentAdapter(jobName);
+                                                PrintAttributes attrs = new PrintAttributes.Builder()
+                                                    .setMediaSize(PrintAttributes.MediaSize.ISO_A5)
+                                                    .setResolution(new PrintAttributes.Resolution("res", "pdf", 300, 300))
+                                                    .setMinMargins(PrintAttributes.Margins.NO_MARGINS)
+                                                    .build();
+                                                printManager.print(jobName, printAdapter, attrs);
+                                            } catch (Exception e2) {
+                                                Log.e(TAG, "printViaSystem 打印失败", e2);
+                                                Toast.makeText(MainActivity.this, "打印失败：" + e2.getMessage(), Toast.LENGTH_LONG).show();
+                                            }
                                         }
                                     }
                                 }, 400);
@@ -2145,17 +2171,75 @@ public class MainActivity extends BridgeActivity {
                         //   HKKai/HKSong.woff2（CSS 用 android_asset 绝对地址），故 baseUrl 指向
                         //   assets/public，并放开 file:// 子资源访问。仅此临时打印 WebView 生效，
                         //   页面内容为本地生成的静态 HTML，无外部脚本注入面。
-                        WebSettings printSettings = printWebView.getSettings();
-                        printSettings.setAllowFileAccess(true);
-                        printSettings.setAllowFileAccessFromFileURLs(true);
-                        printSettings.setAllowUniversalAccessFromFileURLs(false);
-                        printWebView.loadDataWithBaseURL("file:///android_asset/public/index.html", html, "text/html", "UTF-8", null);
+                        //   ★ 同时剔除模板里的 viewport meta：它会让 WebView 忽略 setInitialScale，
+                        //     导致按 mm 定尺的版面被重新缩放（与内置打印同一处理）。
+                        String renderHtml = html.replaceAll("(?i)<meta[^>]+name=[\"']viewport[\"'][^>]*>", "");
+                        printWebView.loadDataWithBaseURL("file:///android_asset/public/index.html", renderHtml, "text/html", "UTF-8", null);
                     } catch (Exception e) {
                         Log.e(TAG, "printViaSystem 失败", e);
                         Toast.makeText(MainActivity.this, "打印失败：" + e.getMessage(), Toast.LENGTH_LONG).show();
                     }
                 }
             });
+        }
+
+        /**
+         * ★ 2026-11-20 把 A5@300dpi 位图按 ISO A5 原尺寸送系统打印（绕开 WebView 打印适配器的二次缩放）。
+         * 位图已按 1 CSS px = 300/96 设备像素渲染，故纸上字号与页边距与桌面 CSS（10.5pt / 22.5-13-15mm）一致。
+         */
+        private void printBitmapA5(final android.graphics.Bitmap bmp, final String jobName, final boolean releaseAfter) {
+            try {
+                PrintManager printManager = (PrintManager) getSystemService(Context.PRINT_SERVICE);
+                final PrintAttributes attrs = new PrintAttributes.Builder()
+                    .setMediaSize(PrintAttributes.MediaSize.ISO_A5)
+                    .setResolution(new PrintAttributes.Resolution("res", "pdf", 300, 300))
+                    .setMinMargins(PrintAttributes.Margins.NO_MARGINS)
+                    .build();
+
+                PrintDocumentAdapter adapter = new PrintDocumentAdapter() {
+                    @Override
+                    public void onLayout(PrintAttributes oldAttrs, PrintAttributes newAttrs,
+                                         android.os.CancellationSignal signal, LayoutResultCallback callback, Bundle extras) {
+                        android.print.PrintDocumentInfo info = new android.print.PrintDocumentInfo.Builder(jobName + ".pdf")
+                            .setContentType(android.print.PrintDocumentInfo.CONTENT_TYPE_DOCUMENT)
+                            .setPageCount(1)
+                            .build();
+                        callback.onLayoutFinished(info, !attrs.equals(newAttrs));
+                    }
+
+                    @Override
+                    public void onWrite(android.print.PageRange[] pages, android.os.ParcelFileDescriptor destination,
+                                        android.os.CancellationSignal signal, WriteResultCallback callback) {
+                        android.print.pdf.PrintedPdfDocument pdf = null;
+                        FileOutputStream fos = null;
+                        try {
+                            pdf = new android.print.pdf.PrintedPdfDocument(MainActivity.this, attrs);
+                            android.graphics.pdf.PdfDocument.Page page = pdf.startPage(0);
+                            android.graphics.Rect dst = new android.graphics.Rect(0, 0,
+                                page.getCanvas().getWidth(), page.getCanvas().getHeight());
+                            page.getCanvas().drawBitmap(bmp, null, dst,
+                                new android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG));
+                            pdf.finishPage(page);
+                            fos = new FileOutputStream(destination.getFileDescriptor());
+                            pdf.writeTo(fos);
+                            fos.flush();
+                            callback.onWriteFinished(new android.print.PageRange[]{ android.print.PageRange.ALL_PAGES });
+                        } catch (Exception e) {
+                            Log.e(TAG, "printBitmapA5 写入失败", e);
+                            callback.onWriteFailed(e.getMessage());
+                        } finally {
+                            try { if (fos != null) fos.close(); } catch (Exception ignore) { /* 忽略 */ }
+                            if (pdf != null) pdf.close();
+                            if (releaseAfter && bmp != null && !bmp.isRecycled()) bmp.recycle();
+                        }
+                    }
+                };
+                printManager.print(jobName, adapter, attrs);
+                Log.d(TAG, "printViaSystem 已调起系统打印(A5 精确几何): " + jobName);
+            } catch (Exception e) {
+                Log.e(TAG, "printBitmapA5 失败", e);
+                Toast.makeText(MainActivity.this, "打印失败：" + e.getMessage(), Toast.LENGTH_LONG).show();
+            }
         }
 
         // ★ 2026-11-01 内置热敏打印机：设置入口 / 配置查询
