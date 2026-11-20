@@ -2125,7 +2125,9 @@ public class MainActivity extends BridgeActivity {
                                             PrintDocumentAdapter printAdapter = printWebView.createPrintDocumentAdapter(jobName);
 
                                             PrintAttributes attrs = new PrintAttributes.Builder()
-                                                .setMediaSize(PrintAttributes.MediaSize.ISO_A5)
+                                                // ★ 2026-11-20 处方纸为 A5 横放（210×148mm），任务纸张同步横向，
+                                                //   与桌面程序输出一致；纵向会导致打印机报"缺纸 A5"。
+                                                .setMediaSize(PrintAttributes.MediaSize.ISO_A5.asLandscape())
                                                 .setResolution(new PrintAttributes.Resolution("res", "pdf", 300, 300))
                                                 .setMinMargins(PrintAttributes.Margins.NO_MARGINS)
                                                 .build();
