@@ -2103,21 +2103,51 @@ public class MainActivity extends BridgeActivity {
                 @Override
                 public void run() {
                     try {
-                        WebView printWebView = new WebView(MainActivity.this);
+                        final WebView printWebView = new WebView(MainActivity.this);
+                        // ★ 2026-11-20 手机打印只出上半页根治：
+                        //   ① WebView 未 attach/未测量时打印适配器拿不到完整高度 → 按 A5 尺寸显式布局；
+                        //   ② loadData 后立即 createPrintDocumentAdapter 会只打印已渲染部分
+                        //      → 改为等 onPageFinished（+400ms 排版缓冲）后再调起打印。
+                        //   桌面端走 Chromium 打印无此问题，故仅手机 App 异常。
+                        int pw = Math.round(148f / 25.4f * 96f); // 148mm @96dpi ≈ 559px
+                        int ph = Math.round(210f / 25.4f * 96f); // 210mm @96dpi ≈ 794px
+                        printWebView.setLayoutParams(new android.widget.FrameLayout.LayoutParams(pw, ph));
+                        printWebView.measure(
+                            android.view.View.MeasureSpec.makeMeasureSpec(pw, android.view.View.MeasureSpec.EXACTLY),
+                            android.view.View.MeasureSpec.makeMeasureSpec(ph, android.view.View.MeasureSpec.EXACTLY));
+                        printWebView.layout(0, 0, pw, ph);
+
+                        final String jobName = "惠康中医处方 " + new java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.CHINA).format(new java.util.Date());
+
+                        printWebView.setWebViewClient(new android.webkit.WebViewClient() {
+                            @Override
+                            public void onPageFinished(WebView view, String url) {
+                                super.onPageFinished(view, url);
+                                mainHandler.postDelayed(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        try {
+                                            PrintManager printManager = (PrintManager) getSystemService(Context.PRINT_SERVICE);
+                                            PrintDocumentAdapter printAdapter = printWebView.createPrintDocumentAdapter(jobName);
+
+                                            PrintAttributes attrs = new PrintAttributes.Builder()
+                                                .setMediaSize(isLandscape ? PrintAttributes.MediaSize.ISO_A5.asLandscape() : PrintAttributes.MediaSize.ISO_A5)
+                                                .setResolution(new PrintAttributes.Resolution("res", "pdf", 300, 300))
+                                                .setMinMargins(PrintAttributes.Margins.NO_MARGINS)
+                                                .build();
+
+                                            printManager.print(jobName, printAdapter, attrs);
+                                            Log.d("TCM-Pres", "printViaSystem 已调起系统打印: " + jobName);
+                                        } catch (Exception e) {
+                                            Log.e("TCM-Pres", "printViaSystem 打印失败", e);
+                                            Toast.makeText(MainActivity.this, "打印失败：" + e.getMessage(), Toast.LENGTH_LONG).show();
+                                        }
+                                    }
+                                }, 400);
+                            }
+                        });
+
                         printWebView.loadDataWithBaseURL(null, htmlContent, "text/html", "UTF-8", null);
-
-                        PrintManager printManager = (PrintManager) getSystemService(Context.PRINT_SERVICE);
-                        PrintDocumentAdapter printAdapter = printWebView.createPrintDocumentAdapter();
-
-                        PrintAttributes attrs = new PrintAttributes.Builder()
-                            .setMediaSize(isLandscape ? PrintAttributes.MediaSize.ISO_A5.asLandscape() : PrintAttributes.MediaSize.ISO_A5)
-                            .setResolution(new PrintAttributes.Resolution("res", "pdf", 300, 300))
-                            .setMinMargins(PrintAttributes.Margins.NO_MARGINS)
-                            .build();
-
-                        String jobName = "惠康中医处方 " + new java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.CHINA).format(new java.util.Date());
-                        printManager.print(jobName, printAdapter, attrs);
-                        Log.d("TCM-Pres", "printViaSystem 已调起系统打印: " + jobName);
                     } catch (Exception e) {
                         Log.e("TCM-Pres", "printViaSystem 失败", e);
                         Toast.makeText(MainActivity.this, "打印失败：" + e.getMessage(), Toast.LENGTH_LONG).show();
