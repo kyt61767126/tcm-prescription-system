@@ -5172,14 +5172,15 @@
                 });
             }
             async function verifyRevealPassword(pwd) {
-                // ★ 2026-11-20 四修（离线端同病同修，与 cloud.js verifyCloudRevealPassword 对齐）：
-                //   a) ② 级缓存比对容忍 username/手机号任一命中（cacheOfflineLogin 存的是
-                //      登录时输入的标识符，手机号登录时与 user.username 恒不等 → 恒 miss）。
-                //   b) ③ 级 isAdmin/verifyPassword 包进独立 try（旧版裸奔，抛错即外层
-                //      「校验异常」无法定位）。
-                //   c) 全链阶段标记：catch 文案带阶段名，下次报错可精确定位。
+                // ★ 2026-11-20 六修（根因终版）：offline.js 与 cloud.js 同为【多 IIFE】结构
+                //   —— 登录认证核心（StorageAdapter/decryptPassword/verifyPassword/
+                //   loginWithUsernamePassword）在 IIFE#1，本授权区渲染代码在后面的独立
+                //   IIFE，作用域互不可见！四修/五修裸引用这些函数全是 ReferenceError
+                //   （②级被 catch 静默吞掉恒跳过、③级报「校验异常（本地哈希校验）」）。
+                //   修复=全部改走 global.AuthCore.*（导出清单齐全，L3236 起）。
                 let stage = '初始化';
                 try {
+                    const AC = global.AuthCore || {};
                     const input = String(pwd || '');
                     // ① 当前登录人 = user_login_data（页面 handleLogin 每次登录必写）
                     stage = '识别账户';
@@ -5193,7 +5194,7 @@
                     } catch (_) {}
                     if (!loginUser || !loginUser.username) {
                         try {
-                            const raw2 = await StorageAdapter.getItem('auth:currentUser');
+                            const raw2 = await (AC.StorageAdapter ? AC.StorageAdapter.getItem('auth:currentUser') : null);
                             if (raw2) {
                                 const u2 = JSON.parse(raw2);
                                 if (u2 && u2.username) loginUser = u2;
@@ -5210,26 +5211,27 @@
                     //    登录不写，走 ③ 哈希校验）
                     stage = '比对登录缓存';
                     try {
-                        const cached = await StorageAdapter.getItem('auth:offlineLoginCache');
-                        if (cached) {
-                            const cd = JSON.parse(cached);
-                            const cdName = (cd && cd.username) ? String(cd.username) : '';
-                            const cdUname = (cd && cd.user && cd.user.username) ? String(cd.user.username) : '';
-                            // 手机号登录时缓存 username=手机号 → 容忍命中任一标识
-                            const idHit = cdName && (
-                                cdName === uname ||
-                                (uphone && cdName === uphone) ||
-                                (uname && cdUname === uname)
-                            );
-                            if (idHit && cd && cd.encryptedPassword) {
-                                const real = await decryptPassword(cd.encryptedPassword);
-                                if (real && real === input) {
-                                    const ru = roleUser || (cd && cd.user) || null;
-                                    if (global.AuthCore && typeof global.AuthCore.isAdmin === 'function'
-                                        && ru && !global.AuthCore.isAdmin(ru)) {
-                                        return { ok: false, msg: '仅管理员可查看完整激活码' };
+                        if (AC.StorageAdapter && AC.decryptPassword) {
+                            const cached = await AC.StorageAdapter.getItem('auth:offlineLoginCache');
+                            if (cached) {
+                                const cd = JSON.parse(cached);
+                                const cdName = (cd && cd.username) ? String(cd.username) : '';
+                                const cdUname = (cd && cd.user && cd.user.username) ? String(cd.user.username) : '';
+                                // 手机号登录时缓存 username=手机号 → 容忍命中任一标识
+                                const idHit = cdName && (
+                                    cdName === uname ||
+                                    (uphone && cdName === uphone) ||
+                                    (uname && cdUname === uname)
+                                );
+                                if (idHit && cd && cd.encryptedPassword) {
+                                    const real = await AC.decryptPassword(cd.encryptedPassword);
+                                    if (real && real === input) {
+                                        const ru = roleUser || (cd && cd.user) || null;
+                                        if (AC.isAdmin && ru && !AC.isAdmin(ru)) {
+                                            return { ok: false, msg: '仅管理员可查看完整激活码' };
+                                        }
+                                        return { ok: true };
                                     }
-                                    return { ok: true };
                                 }
                             }
                         }
@@ -5264,7 +5266,10 @@
                         }
                         stage = '本地哈希校验-密码比对';
                         try {
-                            const route = await loginWithUsernamePassword(uname || uphone, input, { users: candUsers });
+                            if (!AC.loginWithUsernamePassword) {
+                                return { ok: false, msg: '本机登录组件未就绪，请彻底退出应用后重试' };
+                            }
+                            const route = await AC.loginWithUsernamePassword(uname || uphone, input, { users: candUsers });
                             if (route && route.success && route.user) {
                                 const ru3 = route.user || null;
                                 if (global.AuthCore && typeof global.AuthCore.isAdmin === 'function' && !global.AuthCore.isAdmin(ru3)) {

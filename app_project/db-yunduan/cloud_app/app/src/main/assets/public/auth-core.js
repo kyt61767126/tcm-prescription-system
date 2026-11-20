@@ -4697,15 +4697,16 @@
                 });
             }
             async function verifyCloudRevealPassword(pwd) {
-                // ★ 2026-11-20 四修（脱敏解锁三级/四级链第三轮返修）：
-                //   a) cacheOfflineLogin 存的 username=登录时输入的标识符（可能是手机号），
-                //      与 user.username 恒不等 → ② 级缓存比对恒 miss。改为命中
-                //      uname/手机号/缓存内 user.username 任一即比对（离线 App 同病同修）。
-                //   b) ④ 级联网复核失败原因原样透传——服务端「失败次数过多锁定/设备超限」
-                //      此前被吞成「密码错误」，掩盖真实原因且诱导用户反复重试加重锁定。
-                //   c) 全链阶段标记：catch 文案带阶段名，下次报错可精确定位。
+                // ★ 2026-11-20 六修（根因终版）：cloud.js 是【三个独立 IIFE】结构——
+                //   IIFE#1(L6-2366)=登录认证核心（cloudAdapter/verifyPassword/decryptPassword/
+                //   StorageAdapter 都在里面），IIFE#2(L2380-6930)=账号授权区渲染（本函数所在），
+                //   作用域互不可见！四修/五修裸引用 cloudAdapter/verifyPassword/decryptPassword
+                //   全是 ReferenceError（②级被 catch 静默吞掉恒跳过、④级报
+                //   「云端复核异常：cloudAdapter is not defined」）。修复=全部改走
+                //   global.AuthCore.*（L2175 起已导出全套）。
                 let stage = '初始化';
                 try {
+                    const AC = global.AuthCore || {};
                     const input = String(pwd || '');
                     // ① 当前登录人 = user_login_data（页面 handleLogin 每次登录必写）
                     stage = '识别账户';
@@ -4719,7 +4720,7 @@
                     } catch (_) {}
                     if (!loginUser || !loginUser.username) {
                         try {
-                            const raw2 = await StorageAdapter.getItem('auth:currentUser');
+                            const raw2 = await (AC.StorageAdapter ? AC.StorageAdapter.getItem('auth:currentUser') : null);
                             if (raw2) {
                                 const u2 = JSON.parse(raw2);
                                 if (u2 && u2.username) loginUser = u2;
@@ -4735,27 +4736,27 @@
                     // ② 登录时缓存的加密密码（最可靠：云端登录成功即刷新；解密直接比对）
                     stage = '比对登录缓存';
                     try {
-                        const cached = await StorageAdapter.getItem('auth:offlineLoginCache');
-                        if (cached) {
-                            const cd = JSON.parse(cached);
-                            const cdName = (cd && cd.username) ? String(cd.username) : '';
-                            const cdUname = (cd && cd.user && cd.user.username) ? String(cd.user.username) : '';
-                            // 手机号登录时缓存 username=手机号 → 容忍命中任一标识
-                            const idHit = cdName && (
-                                cdName === uname ||
-                                (uphone && cdName === uphone) ||
-                                (uname && cdName === uname) ||
-                                (uname && cdUname === uname)
-                            );
-                            if (idHit && cd && cd.encryptedPassword) {
-                                const real = await decryptPassword(cd.encryptedPassword);
-                                if (real && real === input) {
-                                    const ru = roleUser || (cd && cd.user) || null;
-                                    if (global.AuthCore && typeof global.AuthCore.isAdmin === 'function'
-                                        && ru && !global.AuthCore.isAdmin(ru)) {
-                                        return { ok: false, msg: '仅管理员可查看完整激活码' };
+                        if (AC.StorageAdapter && AC.decryptPassword) {
+                            const cached = await AC.StorageAdapter.getItem('auth:offlineLoginCache');
+                            if (cached) {
+                                const cd = JSON.parse(cached);
+                                const cdName = (cd && cd.username) ? String(cd.username) : '';
+                                const cdUname = (cd && cd.user && cd.user.username) ? String(cd.user.username) : '';
+                                // 手机号登录时缓存 username=手机号 → 容忍命中任一标识
+                                const idHit = cdName && (
+                                    cdName === uname ||
+                                    (uphone && cdName === uphone) ||
+                                    (uname && cdUname === uname)
+                                );
+                                if (idHit && cd && cd.encryptedPassword) {
+                                    const real = await AC.decryptPassword(cd.encryptedPassword);
+                                    if (real && real === input) {
+                                        const ru = roleUser || (cd && cd.user) || null;
+                                        if (AC.isAdmin && ru && !AC.isAdmin(ru)) {
+                                            return { ok: false, msg: '仅管理员可查看完整激活码' };
+                                        }
+                                        return { ok: true };
                                     }
-                                    return { ok: true };
                                 }
                             }
                         }
@@ -4773,15 +4774,16 @@
                     if (user && global.AuthCore && typeof global.AuthCore.isAdmin === 'function' && !global.AuthCore.isAdmin(user)) {
                         return { ok: false, msg: '仅管理员可查看完整激活码' };
                     }
-                    if (user && user.password) {
-                        const pass = await verifyPassword(input, user.password, user.username);
+                    if (user && user.password && AC.verifyPassword) {
+                        const pass = await AC.verifyPassword(input, user.password, user.username);
                         if (pass) return { ok: true };
                     }
 
                     // ④ 云端联网权威复核（本地对不上：改过云端密码/镜像缺人）
                     stage = '云端联网复核';
                     try {
-                        const cloudResult = await cloudAdapter.authenticate(uname || uphone, input);
+                        if (!AC.cloudAdapter) return { ok: false, msg: '本机登录组件未就绪，请彻底退出应用后重试' };
+                        const cloudResult = await AC.cloudAdapter.authenticate(uname || uphone, input);
                         if (cloudResult && cloudResult.success && cloudResult.user) {
                             const cu2 = cloudResult.user;
                             if (global.AuthCore && typeof global.AuthCore.isAdmin === 'function' && !global.AuthCore.isAdmin(cu2)) {
