@@ -6211,6 +6211,13 @@ if (window.Permission) {
 
         // >>> SYNCED-FN renderPrescriptionTable (由 public/index.html 权威源自动同步 via tools/sync-siteadmin.cjs — 勿手改，改 public 后跑同步) ===
         function renderPrescriptionTable() {
+            // ★ 2026-11-20 末尾始终保留一个可编辑空行（用户要求"比最后一行添加一行显示"）：
+            //   仅在末尾已是药品数据行时补一个空对象，幂等；空行不进保存/打印（各处均 filter(item.name)）。
+            try {
+                if (prescriptionItems.length > 0 && prescriptionItems[prescriptionItems.length - 1].name) {
+                    prescriptionItems.push(createEmptyMedicine());
+                }
+            } catch (e0) {}
             if (!DOM_CACHE.prescriptionBody) {
                 DOM_CACHE.init();
             }
@@ -10933,46 +10940,6 @@ IconFile=${scriptPath}`;
         window.updateModeStatus();
     });
     </script>
-<script>
-/* ★ 2026-11-20 处方明细列表末尾多显示一行空白（用户要求「比最后一行添加一行显示」）：
-   renderPrescriptionTable 每次全量重建 tbody，故用幂等注入 + MutationObserver
-   在真实最后一行之后常驻一个空白表格行（纯视觉，不进入 prescriptionItems，
-   不影响录入/删除/Tab 逻辑）；4 副本逐字一致，不改 HTML 结构与 CSS 文件。 */
-(function () {
-    'use strict';
-    var TAIL_ID = '__medicineTailBlankRow';
-    function padMedicineListTail() {
-        try {
-            var tables = document.querySelectorAll('table.medicine-table');
-            for (var i = 0; i < tables.length; i++) {
-                var tb = tables[i].tBodies && tables[i].tBodies[0];
-                if (!tb) continue;
-                if (!tb.querySelector('tr[id="' + TAIL_ID + '"]')) {
-                    var cols = 8;
-                    try { if (tables[i].tHead && tables[i].tHead.rows[0]) cols = tables[i].tHead.rows[0].cells.length; } catch (e1) {}
-                    var tr = document.createElement('tr');
-                    tr.id = TAIL_ID;
-                    var td = document.createElement('td');
-                    td.colSpan = cols;
-                    td.style.cssText = 'height:22px;';
-                    td.innerHTML = '&nbsp;';
-                    tr.appendChild(td);
-                    tb.appendChild(tr);
-                }
-                if (!tb.__tailObserver) {
-                    try {
-                        tb.__tailObserver = new MutationObserver(padMedicineListTail);
-                        tb.__tailObserver.observe(tb, { childList: true });
-                    } catch (e2) {}
-                }
-            }
-        } catch (e) {}
-    }
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', padMedicineListTail);
-    else padMedicineListTail();
-    try { setInterval(padMedicineListTail, 3000); } catch (e) {}
-})();
-</script>
 <script>
 /* ★ 2026-11-20 云端App 手机顶端绿色更新提示条（用户需求恢复）：
    云端App = WebView 实载线上站（?_v=时间戳强制最新），站点部署即更新——
