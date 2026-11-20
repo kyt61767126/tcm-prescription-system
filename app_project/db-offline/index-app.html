@@ -11942,7 +11942,7 @@ window.addEventListener('load', function () {
         if (tab) tab.style.display = hidden ? 'none' : '';
 
         // ★ 2026-11-20 按用户要求移除「基础设置 → 学习（题库练习）」入口：
-        //   顶部工具栏已有题库入口，设置弹窗内不再重复注入。
+        //   顶部工具栏已有题库入口（tab + 移动端顶栏按钮），设置弹窗内不再重复注入。
 
         ensureMobileTopBtn();
     }
@@ -11956,6 +11956,54 @@ window.addEventListener('load', function () {
     }
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
     else boot();
+})();
+</script>
+<script>
+/* ★ 2026-11-20 云端App 手机顶端绿色更新提示条（用户需求恢复）：
+   云端App = WebView 实载线上站（?_v=时间戳强制最新），站点部署即更新——
+   提示条的意义是"后台发了新版，告知用户已自动生效"。
+   机制：拉取桌面云通道热版本号（每次热包必变号）与本机记录比对，变化则顶端
+   绿色提示 6 秒后自动消失；仅云端App环境（AndroidNative/AndroidAppExit 桥存在）
+   显示，网页/云端桌面/离线壳断网不显示。运行时注入 DOM，界面锁基线零变更。 */
+(function () {
+    'use strict';
+    function isCloudAppEnv() {
+        return (typeof window.AndroidNative !== 'undefined') || (typeof window.AndroidAppExit !== 'undefined');
+    }
+    function showGreenBanner(ver) {
+        try {
+            var old = document.getElementById('__cloudAppUpdateBanner');
+            if (old && old.parentNode) old.parentNode.removeChild(old);
+            var el = document.createElement('div');
+            el.id = '__cloudAppUpdateBanner';
+            el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;'
+                + 'background:linear-gradient(135deg,#43a047,#66bb6a);color:#fff;'
+                + 'padding:10px 16px;font-size:13px;box-shadow:0 2px 8px rgba(0,0,0,.25);'
+                + 'display:flex;align-items:center;gap:8px;';
+            el.innerHTML = '<span style="font-size:15px;">✅</span>'
+                + '<span style="flex:1;">系统已更新至 ' + ver + '，新功能已自动生效</span>';
+            document.body.appendChild(el);
+            setTimeout(function () {
+                try { if (el && el.parentNode) el.parentNode.removeChild(el); } catch (e) {}
+            }, 6000);
+        } catch (e) {}
+    }
+    if (!isCloudAppEnv()) return;
+    try {
+        fetch('/hot-update/desktop/cloud/version.json?ts=' + Date.now())
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (v) {
+                if (!v) return;
+                var hot = String(v.hotVersion || v.version || '');
+                if (!hot) return;
+                var KEY = 'cloudapp:lastSeenHotVersion';
+                var last = null;
+                try { last = localStorage.getItem(KEY); } catch (e) {}
+                if (last && last !== hot) showGreenBanner(hot);
+                try { localStorage.setItem(KEY, hot); } catch (e) {}
+            })
+            .catch(function () {});
+    } catch (e) {}
 })();
 </script>
 </body></html>
