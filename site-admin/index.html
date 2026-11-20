@@ -10937,8 +10937,8 @@ IconFile=${scriptPath}`;
 /* ★ 2026-11-20 云端App 手机顶端绿色更新提示条（用户需求恢复）：
    云端App = WebView 实载线上站（?_v=时间戳强制最新），站点部署即更新——
    提示条的意义是"后台发了新版，告知用户已自动生效"。
-   机制：拉取桌面云通道热版本号（每次热包必变号）与本机记录比对，变化则顶端
-   绿色提示 6 秒后自动消失；仅云端App环境（AndroidNative/AndroidAppExit 桥存在）
+   机制：拉取桌面云通道热版本号（每次热包必变号）与本机记录比对，首次或变化则
+   顶端绿色提示 6 秒后自动消失；仅云端App环境（AndroidNative/AndroidAppExit 桥存在）
    显示，网页/云端桌面/离线壳断网不显示。运行时注入 DOM，界面锁基线零变更。 */
 (function () {
     'use strict';
@@ -10974,7 +10974,7 @@ IconFile=${scriptPath}`;
                 var KEY = 'cloudapp:lastSeenHotVersion';
                 var last = null;
                 try { last = localStorage.getItem(KEY); } catch (e) {}
-                if (last && last !== hot) showGreenBanner(hot);
+                if (last !== hot) showGreenBanner(hot);
                 try { localStorage.setItem(KEY, hot); } catch (e) {}
             })
             .catch(function () {});
