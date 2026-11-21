@@ -30,20 +30,32 @@ $stateFile = Join-Path $stateDir 'build-state.json'
 #     （2026-08-24 误判实测：11:11 桌面登录框修复被误判为 local-app/cloud-app 需重打）
 $unitDefs = @{
     'cloud-desktop' = @{ kind='exe'; artifactDir='app_project\db-yunduan\cloud_desktop\dist'; label='云端桌面exe';
-                         sources=@('app_project/db-yunduan/cloud_desktop','public','shared') }
+                         sources=@('app_project/db-yunduan/cloud_desktop','public','shared');
+                         # ★ 2026-11-21 第五轮：e2e 测试与手动辅助脚本不在 build.files 白名单、
+                         #   不进 asar（build.bat 只是运行测试，模板不入包），改动不应触发 exe 重打。
+                         excludes=@('app_project/db-yunduan/cloud_desktop/e2e'
+                                    'app_project/db-yunduan/cloud_desktop/verify-dist.js'
+                                    'app_project/db-yunduan/cloud_desktop/sync-and-push.bat'
+                                    'app_project/db-yunduan/cloud_desktop/find-locker.ps1') }
     'cloud-app'     = @{ kind='apk'; artifact='app_project\db-yunduan\惠康中医-云端.apk'; label='云端APP';
                          sources=@('app_project/db-yunduan','public','shared');
                          # ★ 2026-11-21：排除桌面端构建脚本（build.bat/ps1 不是 APK 输入），
                          #   否则改一次桌面打包脚本会连带误重打云端 APK。
+                         # ★ 第五轮：e2e 测试/verify-dist 同理（*.bat/*.ps1 已被通配覆盖）。
                          excludes=@('app_project/db-yunduan/cloud_desktop/electron'
+                                    'app_project/db-yunduan/cloud_desktop/e2e'
+                                    'app_project/db-yunduan/cloud_desktop/verify-dist.js'
                                     'app_project/db-yunduan/cloud_desktop/*.bat'
                                     'app_project/db-yunduan/cloud_desktop/*.ps1') }
     'local-desktop' = @{ kind='exe'; artifactDir='app_project\db-offline\desktop\dist'; label='本地桌面exe';
-                         sources=@('app_project/db-offline/desktop','shared') }
+                         sources=@('app_project/db-offline/desktop','shared');
+                         # ★ 2026-11-21 第五轮：e2e 测试不进 build.files 白名单，不触发 exe 重打。
+                         excludes=@('app_project/db-offline/desktop/e2e') }
     'local-app'     = @{ kind='apk'; artifact='app_project\db-offline\惠康中医-本地.apk'; label='本地APP';
                          sources=@('app_project/db-offline','shared');
                          # ★ 2026-11-21：同上，桌面端构建脚本改动不应触发离线 APK 重打。
                          excludes=@('app_project/db-offline/desktop/electron'
+                                    'app_project/db-offline/desktop/e2e'
                                     'app_project/db-offline/desktop/*.bat'
                                     'app_project/db-offline/desktop/*.ps1') }
 }
@@ -223,6 +235,67 @@ function Test-CloudAppOnlineCovered([string]$path) {
     }
     return $false
 }
+
+# ---------- ★ 2026-11-21 第五轮：与本端产物无关的改动（既不算覆盖也不算需重打）----------
+# 目的：消灭三类假 [BUILD]（连带版本号无谓递增）：
+#   ① 纯官网 public/ 文件（download.html/admin/fonts/images…）误触发云端桌面重打——
+#      exe 只按 build.files 白名单打包 cloud_desktop/ 内文件，public/ 仅经 sync-html 同步
+#      index.html（+build-meta 副作用）进入，清单外且 cloud_desktop 无同名副本=不进 exe 不进热包；
+#   ② shared 中 Electron 主进程专属文件（desktop-*.cjs/user-store/pe-guard…）误触发离线 APP
+#      重打——APK 无任何消费副本（build-app.bat 不引用 shared，assets/res 里没有对应文件）；
+#   ③ 工区脏检查与提交判定不对称：未提交的官网文件曾把 [HOT-ONLY] 降级成 [BUILD]。
+# 铁律：只忽略"已证实本端不消费"的路径；判不准的一律照旧计入（宁可多打不漏打）；
+#       双保险——一旦将来出现消费副本（assets/res/cloud_desktop 同名文件落地），立即恢复计入。
+$script:HotSetCache = @{}
+function Get-CachedHotSet([string]$u) {
+    if (-not $script:HotSetCache.ContainsKey($u)) {
+        $hs = $null
+        if ($hotChannelDefs.ContainsKey($u)) { $hs = Get-HotFileSet $hotChannelDefs[$u] }
+        $script:HotSetCache[$u] = $hs
+    }
+    return $script:HotSetCache[$u]
+}
+function Test-CloudDesktopIrrelevant([string]$path) {
+    $p = ($path -replace '\\', '/')
+    if (-not $p.StartsWith('public/')) { return $false }
+    $rel = $p.Substring('public/'.Length)
+    if (-not $rel) { return $false }
+    $hotSet = Get-CachedHotSet 'cloud-desktop'
+    if ($hotSet -and $hotSet.ContainsKey($rel)) { return $false }   # 热包清单内→走覆盖/重打判定
+    $counterpart = Join-Path $root ('app_project\db-yunduan\cloud_desktop\' + ($rel -replace '/', '\'))
+    return -not (Test-Path -LiteralPath $counterpart)
+}
+$localAppElectronOnlyPatterns = @(
+    '^shared/desktop-[^/]+\.cjs$'
+    '^shared/(electron-logger|hot-update-core|pe-guard|update-manager)\.cjs$'
+    '^shared/prompt-(modal\.html|preload\.js)$'
+    '^shared/user-(store|admin)\.js$'
+    '^shared/(local-db|sync-engine)\.js$'
+    '^shared/service/activation-observer\.js$'
+    '^shared/credential-vault\.ps1$'
+)
+function Test-LocalAppIrrelevant([string]$path) {
+    $p = ($path -replace '\\', '/')
+    $hit = $false
+    foreach ($pat in $localAppElectronOnlyPatterns) { if ($p -match $pat) { $hit = $true; break } }
+    if (-not $hit) { return $false }
+    $rel = $p -replace '^shared/', ''
+    $base = Split-Path $rel -Leaf
+    $assets = 'app_project/db-offline/app/app/src/main/assets/public'
+    if (Test-Path -LiteralPath "$assets/$rel")   { return $false }
+    if (Test-Path -LiteralPath "$assets/$base")  { return $false }
+    if (Test-Path -LiteralPath "app_project/db-offline/app/app/src/main/$rel") { return $false }
+    return $true
+}
+# 统一入口：committed 判定与工作区脏检查共用同一套"无关"口径（消除不对称）
+function Test-IrrelevantChange([string]$path) {
+    switch ($Unit) {
+        'cloud-desktop' { return Test-CloudDesktopIrrelevant $path }
+        'cloud-app'     { return Test-CloudAppOnlineCovered ($path -replace '\\', '/') }
+        'local-app'     { return Test-LocalAppIrrelevant $path }
+        default         { return $false }
+    }
+}
 # ★ 2026-08-31 产物形态黑名单（build_output 残留事故举一反三）：
 #   未跟踪(??)的"构建产物形态"目录/文件不算源码脏——按设计新增源码应触发重打，
 #   但打包中断残留的产物目录（win-unpacked/dist 等）既非源码也不会被产物构建消费，
@@ -262,13 +335,23 @@ function Get-DirtySources($def) {
             foreach ($pat in $productShapePatterns) { if ($top -match $pat) { $isProduct = $true; break } }
             if ($isProduct) { continue }
         }
+        # ★ 2026-11-21 第五轮：与本端产物无关的改动（官网文件/纯测试/Electron 专属）不算源码脏——
+        #   与 committed 判定共用 Test-IrrelevantChange 同一口径，消除"提交了不重打、
+        #   没提交反而重打"的不对称（曾把 [HOT-ONLY] 降级成 [BUILD]）。
+        if (Test-IrrelevantChange $pathNoQuote) { continue }
         # ★ 2026-08-24 修复：stat 幻影复核——入口 self-heal 脚本(fix-bat-crlf/fix-ps1-bom)
         #   重写 bat/ps1（内容不变仅 mtime 变）会让 git status 持续报 modified（eol 属性 +
         #   stat 缓存过期），git diff 却为空。对"已跟踪且非新增"文件用内容级 diff 复核：
         #   与 HEAD 无真实差异 = 幻影，不算脏；untracked(??) 无 HEAD 可比，直接算脏。
+        #   ★ 第五轮加固：git stderr 警告（CRLF→LF 提示等）在 EAP=Stop 下会变成终止错误，
+        #     令整个检查无结论中断 → 调用期临时降级 EAP，警告按真实改动处理（保守 BUILD）。
         if ($xy -notmatch '\?') {
+            $eapPrev = $ErrorActionPreference
+            $ErrorActionPreference = 'SilentlyContinue'
             & git -C $root diff --quiet HEAD -- $path 2>$null
-            if ($LASTEXITCODE -eq 0) { continue }
+            $diffRc = $LASTEXITCODE
+            $ErrorActionPreference = $eapPrev
+            if ($diffRc -eq 0) { continue }
         }
         $dirty += $path
     }
@@ -324,7 +407,9 @@ if ($Check) {
     $realChanges = @($realChanges | Select-Object -Unique)
     if ($realChanges.Count -gt 0) {
         # ★ 2026-11-21：先判定是否全部可由热更覆盖（能热更的不打包）
-        $covered = @(); $notCovered = @()
+        # ★ 第五轮：$ignored = 与本端产物无关的改动（纯官网文件/纯测试/Electron 专属）——
+        #   既不算覆盖也不算需重打；全部无关时落回工作区检查（视同无相关变化）。
+        $covered = @(); $notCovered = @(); $ignored = @()
         $hotDef = $hotChannelDefs[$Unit]
         if ($hotDef) {
             $hotSet = Get-HotFileSet $hotDef
@@ -332,7 +417,9 @@ if ($Check) {
                 $changedSet = @{}
                 foreach ($f in $realChanges) { $changedSet[($f -replace '\\', '/')] = $true }
                 foreach ($f in $realChanges) {
-                    if (Test-HotCovered $f $hotDef $hotSet $changedSet) { $covered += $f } else { $notCovered += $f }
+                    if (Test-HotCovered $f $hotDef $hotSet $changedSet) { $covered += $f }
+                    elseif (Test-IrrelevantChange $f) { $ignored += $f }
+                    else { $notCovered += $f }
                 }
             } else { $notCovered = $realChanges }
         } elseif ($Unit -eq 'cloud-app') {
@@ -354,14 +441,20 @@ if ($Check) {
             Write-Host "[HOT-ONLY] $Unit 本次 $($covered.Count) 个改动全部可由热更覆盖，跳过整包（无需重新打包）"
             foreach ($f in ($covered | Select-Object -First 6)) { Write-Host "        $f" }
             if ($covered.Count -gt 6) { Write-Host "        ... 共 $($covered.Count) 个文件" }
+            if ($ignored.Count -gt 0) { Write-Host "        另忽略 $($ignored.Count) 个与本端产物无关的改动" -ForegroundColor DarkGray }
             Write-Host "        下一步: 一键构建发布.bat hot --yes （重签热包并推送）"
             exit 0
         }
 
-        Write-Host "[BUILD] $Unit 源码有新提交(基线 $($rec.commit.Substring(0,8)) 后 $($realChanges.Count) 个文件变化，其中 $($notCovered.Count) 个不可热更):"
-        foreach ($f in ($notCovered | Select-Object -First 6)) { Write-Host "        $f" }
-        if ($notCovered.Count -gt 6) { Write-Host "        ... 共 $($notCovered.Count) 个不可热更文件" }
-        exit 1
+        if ($notCovered.Count -gt 0) {
+            Write-Host "[BUILD] $Unit 源码有新提交(基线 $($rec.commit.Substring(0,8)) 后 $($realChanges.Count) 个文件变化，其中 $($notCovered.Count) 个不可热更):"
+            foreach ($f in ($notCovered | Select-Object -First 6)) { Write-Host "        $f" }
+            if ($notCovered.Count -gt 6) { Write-Host "        ... 共 $($notCovered.Count) 个不可热更文件" }
+            exit 1
+        }
+        # 第五轮：notCovered=0 且 covered=0 → 本次提交全部是与本端产物无关的改动
+        # （如纯官网 download.html/admin/fonts…）→ 视同无相关变化，继续走工作区脏检查。
+        $script:IgnoredChanges = $ignored
     }
 
     $dirty = Get-DirtySources $def
@@ -372,6 +465,11 @@ if ($Check) {
         exit 1
     }
     Write-Host "[SKIP] $Unit 源码与产物指纹一致，产物已是最新(基线: $($rec.time))" -ForegroundColor Green
+    if ($script:IgnoredChanges -and $script:IgnoredChanges.Count -gt 0) {
+        $ig = @($script:IgnoredChanges)
+        Write-Host "        与本端产物无关已忽略 $($ig.Count) 个: $((@($ig | Select-Object -First 5)) -join ', ')" -ForegroundColor DarkGray
+        if ($ig.Count -gt 5) { Write-Host "        ... 共 $($ig.Count) 个" -ForegroundColor DarkGray }
+    }
     exit 0
 }
 
