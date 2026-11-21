@@ -2205,11 +2205,14 @@ public class MainActivity extends BridgeActivity {
          *   桌面走 Chromium→Windows GDI，会把整张 A5 页按打印机**可打印区**做 fit（同一处方，桌面纸上
          *   内容宽实测 105mm，而设计值 122mm，即整体缩到 0.86，四边留白同比放大）。App 若按 1:1 原大
          *   输出（122mm），就会比桌面「偏大」——这正是用户反馈的现象，与字号无关。
-         *   做法：onLayout 读取打印机回报的 minMargins，PDF 页直接建成「A5 减去不可打印边」的可打印区，
-         *   onWrite 把**整张位图等比缩放进该页**。插件/驱动再把该页铺到可打印区（缩放=1.0），
-         *   其物理结果与桌面 GDI 的 fit-to-printable-area 完全同构（内容 105mm、留白等比放大）。
-         *   打印机回报 0 边距（borderless）或用户临时换纸（非 A5）时按整页 A5 输出（1:1，同旧版）。
+         *   ★ 实测（374 版）：Android 打印插件拿到 A5 页后**不会**再做 fit，1:1 落纸（所以 374 出来
+         *   就是 122mm），因此 fit 必须在本方法内主动完成。
+         *   做法：PDF 页保持整张 A5，onWrite 把整张位图按 DESKTOP_PRINT_FIT 等比缩小并居中画入 ——
+         *   插件 1:1 落纸后，内容宽 122×0.86≈105mm、四边留白同比放大，与桌面纸面完全同构。
+         *   该比例是「A5 纸 + 诊所打印机」实测值（105/122），换打印机需重新实测。
          */
+        private static final float DESKTOP_PRINT_FIT = 0.86f;
+
         private void printBitmapA5(final android.graphics.Bitmap bmp, final String jobName, final boolean releaseAfter) {
             try {
                 PrintManager printManager = (PrintManager) getSystemService(Context.PRINT_SERVICE);
@@ -2220,7 +2223,7 @@ public class MainActivity extends BridgeActivity {
                     .build();
 
                 PrintDocumentAdapter adapter = new PrintDocumentAdapter() {
-                    // onLayout 得出的 PDF 页尺寸（pt，= 可打印区）；
+                    // PDF 页固定为整张 A5（插件实测 1:1 落纸）；
                     // onLayout/onWrite 不保证同线程，故用 volatile 传递。
                     private volatile int pageWpt = Math.round(attrs.getMediaSize().getWidthMils() / 1000f * 72f);
                     private volatile int pageHpt = Math.round(attrs.getMediaSize().getHeightMils() / 1000f * 72f);
@@ -2228,7 +2231,7 @@ public class MainActivity extends BridgeActivity {
                     @Override
                     public void onLayout(PrintAttributes oldAttrs, PrintAttributes newAttrs,
                                          android.os.CancellationSignal signal, LayoutResultCallback callback, Bundle extras) {
-                        computePaperRect(newAttrs);
+                        logFit(newAttrs);
                         android.print.PrintDocumentInfo info = new android.print.PrintDocumentInfo.Builder(jobName + ".pdf")
                             .setContentType(android.print.PrintDocumentInfo.CONTENT_TYPE_DOCUMENT)
                             .setPageCount(1)
@@ -2236,32 +2239,18 @@ public class MainActivity extends BridgeActivity {
                         callback.onLayoutFinished(info, !attrs.equals(newAttrs));
                     }
 
-                    /** 按打印机可打印区计算 PDF 页尺寸（非 A5 或无线索时回退整页 A5） */
-                    private void computePaperRect(PrintAttributes newAttrs) {
+                    /** 只打日志（打印机回报的边距仅供排查；缩放用的是实测常量，保证与桌面同构） */
+                    private void logFit(PrintAttributes newAttrs) {
                         PrintAttributes.MediaSize media = (newAttrs != null) ? newAttrs.getMediaSize() : null;
                         PrintAttributes.Margins margins = (newAttrs != null) ? newAttrs.getMinMargins() : null;
-                        int mw = (media != null) ? media.getWidthMils() : 0;
-                        int mh = (media != null) ? media.getHeightMils() : 0;
-                        // A5 竖版（148×210）±1.5mm 且方向与位图一致才套用可打印区，避免用户临时换纸后错位
-                        boolean isA5 = media != null && mw < mh
-                            && Math.abs(mw - 5827) <= 60 && Math.abs(mh - 8268) <= 60;
-
-                        PrintAttributes.MediaSize base = attrs.getMediaSize();
-                        pageWpt = Math.round(base.getWidthMils() / 1000f * 72f);
-                        pageHpt = Math.round(base.getHeightMils() / 1000f * 72f);
-                        if (!isA5 || margins == null || bmp == null || bmp.isRecycled()) return;
-
-                        int ml = Math.max(0, margins.getLeftMils());
-                        int mt = Math.max(0, margins.getTopMils());
-                        int mr = Math.max(0, margins.getRightMils());
-                        int mb = Math.max(0, margins.getBottomMils());
-                        if (mw - ml - mr < 1000 || mh - mt - mb < 1000) return;
-                        pageWpt = Math.max(1, Math.round((mw - ml - mr) / 1000f * 72f));
-                        pageHpt = Math.max(1, Math.round((mh - mt - mb) / 1000f * 72f));
-                        Log.i(TAG, "A5 可打印区(与桌面同构缩放) media=" + mw + "x" + mh
-                            + "mils margins=" + ml + "/" + mt + "/" + mr + "/" + mb + "mils page="
-                            + pageWpt + "x" + pageHpt + "pt 缩放="
-                            + String.format(java.util.Locale.US, "%.4f", (float) pageWpt / (base.getWidthMils() / 1000f * 72f)));
+                        Log.i(TAG, "A5 fit 打印(与桌面同构) 缩放="
+                            + String.format(java.util.Locale.US, "%.4f", DESKTOP_PRINT_FIT)
+                            + " media=" + (media != null ? media.getWidthMils() + "x" + media.getHeightMils() : "?")
+                            + "mils printerMargins=" + (margins != null
+                                ? margins.getLeftMils() + "/" + margins.getTopMils() + "/"
+                                  + margins.getRightMils() + "/" + margins.getBottomMils()
+                                : "?")
+                            + "mils page=" + pageWpt + "x" + pageHpt + "pt");
                     }
 
                     @Override
@@ -2278,13 +2267,11 @@ public class MainActivity extends BridgeActivity {
                             android.graphics.pdf.PdfDocument.PageInfo pageInfo =
                                 new android.graphics.pdf.PdfDocument.PageInfo.Builder(pageWpt, pageHpt, 1).create();
                             android.graphics.pdf.PdfDocument.Page page = pdf.startPage(pageInfo);
-                            // 整张 A5 位图等比缩放进「可打印区页」——与桌面 GDI 的 fit 行为一致
-                            // （等比 + 居中，禁止拉伸：可打印区纵横比≈0.67 与 A5 0.705 不同）
+                            // 整张 A5 位图按桌面实测 fit 比例缩小并居中（等比、不拉伸）
                             int pw = page.getCanvas().getWidth();
                             int ph = page.getCanvas().getHeight();
-                            float scale = Math.min((float) pw / bmp.getWidth(), (float) ph / bmp.getHeight());
-                            int dw = Math.max(1, Math.round(bmp.getWidth() * scale));
-                            int dh = Math.max(1, Math.round(bmp.getHeight() * scale));
+                            int dw = Math.max(1, Math.round(bmp.getWidth() * DESKTOP_PRINT_FIT));
+                            int dh = Math.max(1, Math.round(bmp.getHeight() * DESKTOP_PRINT_FIT));
                             int left = (pw - dw) / 2;
                             int top = (ph - dh) / 2;
                             android.graphics.Rect dst = new android.graphics.Rect(left, top, left + dw, top + dh);
