@@ -2287,9 +2287,16 @@ public class MainActivity extends BridgeActivity {
                             android.graphics.pdf.PdfDocument.PageInfo pageInfo =
                                 new android.graphics.pdf.PdfDocument.PageInfo.Builder(pageWpt, pageHpt, 1).create();
                             android.graphics.pdf.PdfDocument.Page page = pdf.startPage(pageInfo);
-                            // 整张 A5 位图等比例缩放进「可打印区页」——与桌面 GDI 的 fit 行为一致
-                            android.graphics.Rect dst = new android.graphics.Rect(0, 0,
-                                page.getCanvas().getWidth(), page.getCanvas().getHeight());
+                            // 整张 A5 位图等比缩放进「可打印区页」——与桌面 GDI 的 fit 行为一致
+                            // （等比 + 居中，禁止拉伸：可打印区纵横比≈0.67 与 A5 0.705 不同）
+                            int pw = page.getCanvas().getWidth();
+                            int ph = page.getCanvas().getHeight();
+                            float scale = Math.min((float) pw / bmp.getWidth(), (float) ph / bmp.getHeight());
+                            int dw = Math.max(1, Math.round(bmp.getWidth() * scale));
+                            int dh = Math.max(1, Math.round(bmp.getHeight() * scale));
+                            int left = (pw - dw) / 2;
+                            int top = (ph - dh) / 2;
+                            android.graphics.Rect dst = new android.graphics.Rect(left, top, left + dw, top + dh);
                             page.getCanvas().drawBitmap(bmp, null, dst,
                                 new android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG));
                             pdf.finishPage(page);
