@@ -283,10 +283,12 @@ function Test-LocalAppIrrelevant([string]$path) {
     if (-not $hit) { return $false }
     $rel = $p -replace '^shared/', ''
     $base = Split-Path $rel -Leaf
-    $assets = 'app_project/db-offline/app/app/src/main/assets/public'
-    if (Test-Path -LiteralPath "$assets/$rel")   { return $false }
-    if (Test-Path -LiteralPath "$assets/$base")  { return $false }
-    if (Test-Path -LiteralPath "app_project/db-offline/app/app/src/main/$rel") { return $false }
+    # ★ 复核加固：一律用 $root 绝对路径，禁止依赖 cwd（从 tools/ 或任意目录调用时
+    #   相对路径会全部落空 → 误判"无副本"→ 大范围漏打）
+    $assets = Join-Path $root 'app_project/db-offline/app/app/src/main/assets/public'
+    if (Test-Path -LiteralPath (Join-Path $assets $rel))  { return $false }
+    if (Test-Path -LiteralPath (Join-Path $assets $base)) { return $false }
+    if (Test-Path -LiteralPath (Join-Path $root ('app_project/db-offline/app/app/src/main/' + ($rel -replace '/', '\')))) { return $false }
     return $true
 }
 # 统一入口：committed 判定与工作区脏检查共用同一套"无关"口径（消除不对称）
@@ -387,18 +389,31 @@ $unitArtifactRoots = @{
         'app_project/db-offline/app/app/src/main/assets/public/vendor'
         'app_project/db-offline/app/app/src/main/res/xml')
 }
-function Test-SharedIrrelevant([string]$p) {
-    if (Test-SharedBuildInput $p) { return $false }
+# 内联权威源未同步提示：改 user-store/user-admin/activation-observer 后若没跑同步工具，
+#   index.html / auth-core.js 仍是旧内容 → 此时整包重打也是白打一次。显式提示，
+#   引导先同步（同步后这些文件会被热包覆盖，转为 [HOT-ONLY]，连整包都省了）。
+function Write-InlineSyncHint([string[]]$files) {
+    $hit = @($files | Where-Object { $sharedInlineAuthorities -contains ($_ -replace '\\', '/') })
+    if ($hit.Count -gt 0) {
+        Write-Host "        [HINT] 含内联权威源 $($hit.Count) 个：先跑 tools\sync-all.ps1 重新生成 index.html / auth-core.js" -ForegroundColor Yellow
+        Write-Host "               否则本次重打的产物仍是旧内容；同步后通常转为 [HOT-ONLY]，无需整包" -ForegroundColor Yellow
+    }
+}
+function Test-SharedIrrelevant([string]$p) {    if (Test-SharedBuildInput $p) { return $false }
     if ($sharedInlineAuthorities -contains $p) { return $false }
     $roots = $unitArtifactRoots[$Unit]
     if (-not $roots) { return $false }
+    # ★ 复核加固①：源文件已被删除（D/重命名旧路径）时保守计入——删除源往往同时删除
+    #   产物副本，此时"副本不存在"不代表"不消费"，而是产物需要重建。
+    if (-not (Test-Path -LiteralPath (Join-Path $root ($p -replace '/', '\')))) { return $false }
     $rel = $p.Substring('shared/'.Length)
     $base = Split-Path $rel -Leaf
     $names = @($rel, $base)
     if ($sharedNameAliases.ContainsKey($rel)) { $names += $sharedNameAliases[$rel] }
+    # ★ 复核加固②：搜索根一律拼 $root 绝对路径（不依赖 cwd）
     foreach ($r in $roots) {
         foreach ($n in $names) {
-            if (Test-Path -LiteralPath (Join-Path $r $n)) { return $false }
+            if (Test-Path -LiteralPath (Join-Path (Join-Path $root $r) ($n -replace '/', '\'))) { return $false }
         }
     }
     return $true
@@ -546,6 +561,7 @@ if ($Check) {
                 Write-Host "[BUILD] $Unit 除可热更提交外，工作区还有未提交源码改动:"
                 foreach ($d in ($dirty | Select-Object -First 8)) { Write-Host "        $d" }
                 if ($dirty.Count -gt 8) { Write-Host "        ... 共 $($dirty.Count) 个文件" }
+                Write-InlineSyncHint $dirty
                 exit 1
             }
             Write-Host "[HOT-ONLY] $Unit 本次 $($covered.Count) 个改动全部可由热更覆盖，跳过整包（无需重新打包）"
@@ -560,6 +576,7 @@ if ($Check) {
             Write-Host "[BUILD] $Unit 源码有新提交(基线 $($rec.commit.Substring(0,8)) 后 $($realChanges.Count) 个文件变化，其中 $($notCovered.Count) 个不可热更):"
             foreach ($f in ($notCovered | Select-Object -First 6)) { Write-Host "        $f" }
             if ($notCovered.Count -gt 6) { Write-Host "        ... 共 $($notCovered.Count) 个不可热更文件" }
+            Write-InlineSyncHint $notCovered
             exit 1
         }
         # 第五轮：notCovered=0 且 covered=0 → 本次提交全部是与本端产物无关的改动
@@ -572,6 +589,7 @@ if ($Check) {
         Write-Host "[BUILD] $Unit 工作区有未提交源码改动:"
         foreach ($d in ($dirty | Select-Object -First 8)) { Write-Host "        $d" }
         if ($dirty.Count -gt 8) { Write-Host "        ... 共 $($dirty.Count) 个文件" }
+        Write-InlineSyncHint $dirty
         exit 1
     }
     Write-Host "[SKIP] $Unit 源码与产物指纹一致，产物已是最新(基线: $($rec.time))" -ForegroundColor Green
