@@ -2063,37 +2063,11 @@ public class MainActivity extends BridgeActivity {
 
         @JavascriptInterface
         public void printHtml(final String html) {
-            // ★ 2026-11-01 内置热敏打印：已绑定打印机走 ESC/POS 直出，否则/失败回退系统打印
-            printPrescriptionHtml(html);
+            // ★ 2026-11-21 内置热敏打印机已下线：打印统一走系统打印面板（可导出 PDF）
+            printViaSystem(html);
         }
 
-        /** 打印路由：内置打印机直出（失败自动回退系统打印面板） */
-        private void printPrescriptionHtml(final String html) {
-            printPrescriptionHtml(html, false);
-        }
-
-        private void printPrescriptionHtml(final String html, final boolean isLandscape) {
-            PrinterManager pm = PrinterManager.get(MainActivity.this);
-            if (!pm.isBound()) {
-                printViaSystem(html, isLandscape);
-                return;
-            }
-            pm.printHtml(MainActivity.this, html, new PrinterManager.Callback() {
-                @Override
-                public void done(boolean ok, String message) {
-                    if (ok) {
-                        Toast.makeText(MainActivity.this, "已发送到打印机，正在出纸", Toast.LENGTH_SHORT).show();
-                        return;
-                    }
-                    Log.w("TCM-Pres", "内置打印失败: " + message);
-                    Toast.makeText(MainActivity.this,
-                            "内置打印失败：" + message + "，已改用系统打印", Toast.LENGTH_LONG).show();
-                    printViaSystem(html, isLandscape);
-                }
-            });
-        }
-
-        /** 系统打印（原逻辑不变，供未绑定/直出失败回退） */
+        /** 系统打印（唯一打印路径） */
         private void printViaSystem(final String html) {
             printViaSystem(html, false);
         }
@@ -2319,22 +2293,6 @@ public class MainActivity extends BridgeActivity {
                 Log.e("TCM-Pres", "printBitmapA5 失败", e);
                 Toast.makeText(MainActivity.this, "打印失败：" + e.getMessage(), Toast.LENGTH_LONG).show();
             }
-        }
-
-        // ★ 2026-11-01 内置热敏打印机：设置入口 / 配置查询
-        @JavascriptInterface
-        public void openPrinterSettings() {
-            mainHandler.post(new Runnable() {
-                @Override
-                public void run() {
-                    PrinterManager.get(MainActivity.this).showSettingsDialog(MainActivity.this, null);
-                }
-            });
-        }
-
-        @JavascriptInterface
-        public String printerInfo() {
-            return PrinterManager.get(MainActivity.this).configJson();
         }
 
         @JavascriptInterface
@@ -2585,10 +2543,10 @@ public class MainActivity extends BridgeActivity {
                 if (html == null || html.isEmpty()) {
                     return fail("打印内容为空");
                 }
-                // ★ 2026-11-01 与 printHtml 同一路由：已绑定内置打印机直出，否则/失败回退系统打印
+                // ★ 2026-11-21 内置热敏打印机已下线：统一走系统打印面板
                 final String htmlContent = html;
                 final boolean isLandscape = "landscape".equals(orientation);
-                printPrescriptionHtml(htmlContent, isLandscape);
+                printViaSystem(htmlContent, isLandscape);
 
                 JSONObject r = new JSONObject();
                 r.put("success", true);
