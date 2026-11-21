@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>App 内置字体方案评估报告（处方签）</title>
+<style>
+  :root{--ink:#1f2328;--muted:#57606a;--line:#d0d7de;--bg:#f6f8fa;--accent:#0b6bcb;--good:#116329;--bad:#b42318;--warn:#9a6700}
+  *{box-sizing:border-box}
+  body{margin:0;background:#fff;color:var(--ink);font:15px/1.75 "Microsoft YaHei","PingFang SC",system-ui,sans-serif}
+  .wrap{max-width:980px;margin:0 auto;padding:48px 32px 72px}
+  h1{font-size:26px;margin:0 0 6px}
+  .sub{color:var(--muted);font-size:13px;margin-bottom:28px}
+  h2{font-size:19px;margin:38px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+  h3{font-size:15px;margin:22px 0 8px}
+  p{margin:8px 0}
+  .card{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:16px 18px;margin:14px 0}
+  .lead{border-left:4px solid var(--accent)}
+  .lead b{color:var(--accent)}
+  ul,ol{margin:8px 0 8px 22px;padding:0}
+  li{margin:5px 0}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:14px}
+  th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+  th{background:var(--bg);font-weight:600}
+  code{background:#eef1f4;border-radius:4px;padding:1px 5px;font:13px/1.5 Consolas,ui-monospace,monospace}
+  .good{color:var(--good);font-weight:600}
+  .bad{color:var(--bad);font-weight:600}
+  .warn{color:var(--warn);font-weight:600}
+  .bar{display:flex;height:22px;border-radius:4px;overflow:hidden;border:1px solid var(--line);margin:10px 0 4px}
+  .bar span{display:block;font-size:12px;color:#fff;text-align:center;line-height:20px}
+  .b1{background:#0b6bcb;width:80%}
+  .b2{background:#54aeff;width:20%}
+  .small{font-size:13px;color:var(--muted)}
+  .tag{display:inline-block;font-size:12px;border:1px solid var(--line);border-radius:999px;padding:1px 9px;color:var(--muted);margin-right:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>App 内置字体方案评估报告</h1>
+<div class="sub">惠康中医 · 处方签打印字体 · 2026-11-21 · 仅评估，未改动任何代码</div>
+
+<div class="card lead">
+  <p><b>一句话结论：</b>内置字体解决的是「不同手机打印结果不一样」，解决不了「App 与桌面一模一样」。当前「惠康堂中医诊所 / 处方笺」与桌面不同，根因不是字号、也不是内置字体的缺陷，而是<b>两款不同字体</b>：桌面命中 Windows 楷体（KaiTi），App 命中内置的霞鹜文楷（HKKai）。</p>
+  <p>内置字体这份投入<b>值得保留</b>（换来跨机型稳定），但要达到与桌面逐笔一致，必须让桌面也使用同一份字体文件；否则只能做到"接近"。</p>
+</div>
+
+<h2>一、现状与实测数据</h2>
+
+<h3>1. 字体来源</h3>
+<table>
+  <tr><th style="width:26%">端</th><th>标题字体（诊所名 / 处方笺）</th><th>正文字体</th></tr>
+  <tr><td>Windows 桌面</td><td>系统楷体 <code>KaiTi / simkai.ttf</code></td><td>系统宋体 <code>SimSun</code></td></tr>
+  <tr><td>Android App</td><td>内置 <code>HKKai.woff2</code>＝霞鹜文楷（OFL-1.1）</td><td>内置 <code>HKSong.woff2</code>＝思源宋体（OFL-1.1）</td></tr>
+  <tr><td>网页版</td><td>命中系统楷体则用系统，否则用内置</td><td>同左</td></tr>
+</table>
+<p class="small">模板字体栈：<code>'KaiTi','楷体_GB2312','楷体','HKKaiAscii','HKKai',serif</code>；Android 没有前三个，必然落到 HKKai。</p>
+
+<h3>2. 体积代价</h3>
+<div class="bar"><span class="b1">其余内容 11.95MB（80%）</span><span class="b2">字体 2.98MB</span></div>
+<table>
+  <tr><th>项目</th><th>数值</th></tr>
+  <tr><td>HKKai.woff2 / HKSong.woff2</td><td>1.53MB / 1.45MB（woff2 已压缩，塞进 APK 压不动，合计 <b>2.98MB</b>）</td></tr>
+  <tr><td>云端 APK 总体积</td><td>14.93MB，字体占 <b>20.0%</b></td></tr>
+  <tr><td>影响面</td><td>云端 APK + 离线 APK 各 +3MB；网页/桌面也各带一份（不占 APK）</td></tr>
+</table>
+
+<h3>3. 字形覆盖（决定"会不会突然变字体"）</h3>
+<table>
+  <tr><th>字符集</th><th>HKKai</th><th>HKSong</th><th>后果</th></tr>
+  <tr><td>GB2312（6763 字，常用字全覆盖）</td><td class="good">100%（缺 0）</td><td class="good">100%（缺 0）</td><td>日常处方正文、常见药名无问题</td></tr>
+  <tr><td>GBK（21791 字，含人名/生僻药名）</td><td class="bad">34.2%（缺 14334）</td><td class="bad">34.2%（缺 14333）</td><td>缺字自动回退安卓系统字体 → 同一个名字/药名在 App 与桌面会不一样</td></tr>
+</table>
+<p>实测缺失示例：<code>䗪</code>（䗪虫）、<code>蟅</code>、<code>萹</code>（萹蓄）、<code>蛴螬</code> 等药名用字，以及人名常用字 <code>珺 燚 龑 垚 喆 昇 堃 赟 婳 骉 犇</code>。桌面有系统大字库，这些字照常显示；App 会局部换字体、字宽也可能不同。</p>
+
+<h3>4. 打印链路里的时间点（风险项）</h3>
+<p>App 打印是「隐藏 WebView 渲染 → 抓成 300dpi 位图 → 送系统打印」。抓图时机是 <code>onPageFinished + 400ms</code> 固定延时，<b>没有等待字体加载完成</b>（<code>document.fonts.ready</code>）。冷启动首打、低端机解析 1.5MB woff2 较慢时，存在「字体还没生效就抓图」的偶发风险：表现为某一次打印的标题回退成系统字体（字形/字宽变化）。这条与本次反馈无关，但属于内置字体方案必须补的安全垫。</p>
+
+<h2>二、使用 App 自带字体的优点</h2>
+<table>
+  <tr><th style="width:32%">优点</th><th>说明</th></tr>
+  <tr><td class="good">跨机型输出稳定</td><td>不依赖手机是否装了楷体/宋体。华为、小米、vivo 的默认衬线字体各不相同，不内置就必然"一机一样"。</td></tr>
+  <tr><td class="good">尺寸可精确校准</td><td>内置字体是固定文件，汉字宽度与桌面实测差 0.8%，西文/数字已用 <code>size-adjust</code> 校准（数字 89.5%、字母 85%），剂量、年龄、编号不再偏大。</td></tr>
+  <tr><td class="good">离线可用</td><td>字体随 APK 分发，断网、纯本地处方照常打印，不依赖 CDN。</td></tr>
+  <tr><td class="good">授权合规</td><td>霞鹜文楷、思源宋体均为 OFL-1.1，可商用、可随包分发（许可文本已随包）；而 Windows 楷体/宋体属微软字体，<b>不能</b>打包分发。</td></tr>
+  <tr><td class="good">与网页/桌面同源</td><td>同一份 <code>public/fonts</code> 三端共用，后续若统一字体源，改动集中在一处。</td></tr>
+</table>
+
+<h2>三、使用 App 自带字体的缺点与风险</h2>
+<table>
+  <tr><th style="width:32%">缺点 / 风险</th><th>说明</th></tr>
+  <tr><td class="bad">仍然与桌面字体不同</td><td>霞鹜文楷 ≠ Windows 楷体（中易楷体）。同为楷体，但起笔收笔、横竖比例、结体不同，22pt 加粗后差异被放大——就是你现在看到的「惠康堂中医诊所 / 处方笺」不一致。<b>内置字体只统一了安卓各机型，没有统一桌面。</b></td></tr>
+  <tr><td class="bad">生僻字回退</td><td>GBK 覆盖仅 34%：患者姓名（珺、垚、喆、昇、堃、赟等）或药名（䗪虫、萹蓄等）会局部回退系统字体，出现"一行里两种字体"。</td></tr>
+  <tr><td class="warn">体积 +2.98MB（20%）</td><td>安装包变大，弱网更新更慢；且字体在 <code>assets</code> 内，<b>不能热更</b>，每次调整字体都要整包重打、重新分发。</td></tr>
+  <tr><td class="warn">标题伪加粗</td><td>内置楷体只有 Regular 一个字重，<code>font-weight:bold</code> 由系统"描边加粗"，笔画会发糊；桌面系统楷体同样无粗体，两者伪粗算法还不完全一致，进一步放大差异。</td></tr>
+  <tr><td class="warn">抓图抢跑风险</td><td>见上文 400ms 固定延时；字体未就绪时会打印出系统字体，属偶发性故障，且目前无日志可查。</td></tr>
+  <tr><td class="warn">维护成本</td><td>字体文件、子集范围、西文度量、字号联动，任一处改动都要三端同步验证（网页/桌面/云端 App/离线 App）。</td></tr>
+</table>
+
+<h2>四、可选方案对比</h2>
+<table>
+  <tr><th style="width:18%">方案</th><th>做法</th><th>与桌面一致性</th><th>代价</th></tr>
+  <tr><td><b>A. 保持现状</b></td><td>App 用内置字体，桌面用系统字体</td><td class="bad">不同（当前问题）</td><td>无</td></tr>
+  <tr><td><b>B. 三端统一用内置字体</b></td><td>打印模板把 HKKai/HKSong 排到系统字体之前，桌面/网页/App 全用同一份字体文件</td><td class="good">逐笔一致（同一字体文件 + 同一 Chromium 渲染）</td><td>桌面打印观感由「系统楷体/宋体」变为「霞鹜文楷/思源宋体」；屏幕显示可保持不变</td></tr>
+  <tr><td><b>C. App 换更接近系统楷体的开源字体</b></td><td>用文鼎 PL 楷体 / FandolKai 等替换 HKKai，桌面不动</td><td class="warn">接近，但不保证逐笔一致</td><td>需新字体文件 + 子集化 + 重新校准西文度量 + 重打；仍有观感差异</td></tr>
+  <tr><td><b>D. 不内置字体</b></td><td>回归安卓系统字体</td><td class="bad">差异最大，且各机型互不相同</td><td>省 3MB，但打印结果不可控（不建议）</td></tr>
+</table>
+
+<h2>五、建议</h2>
+<ol>
+  <li><b>保留内置字体</b>（方案 D 不可取）——它保证了安卓各机型打印结果稳定，这是目前唯一可控的基础。</li>
+  <li>若要「与桌面逐笔一致」，走 <b>方案 B</b>：仅打印模板把内置字体排到系统字体之前，桌面日常屏幕显示不变。这是唯一能做到真正一致的路径。</li>
+  <li>无论选 A 还是 B，补齐两处安全垫：
+    <ul>
+      <li>抓图前等待 <code>document.fonts.ready</code>（替代 400ms 固定延时），并在日志里打印字体是否就绪；</li>
+      <li>字体子集从 GB2312 扩到 GBK 常用字（至少覆盖人名与中药名），缺字时写日志，避免"悄悄换字体"。</li>
+    </ul>
+  </li>
+  <li>若坚持桌面保持 Windows 楷体，则只能接受「接近但不完全一致」（方案 C），且需要先取到可商用楷体文件再评估观感，属于新增工作量与不确定结果。</li>
+</ol>
+
+<p class="small" style="margin-top:26px">数据来源：<code>public/fonts</code>（HKKai/HKSong woff2 实测字表）、云端 APK 374/376/377 包内容、<code>public/index.html</code> 打印模板字体栈、<code>MainActivity.printViaSystem</code> 抓图时序。本报告未修改任何代码。</p>
+
+</div>
+</body>
+</html>
