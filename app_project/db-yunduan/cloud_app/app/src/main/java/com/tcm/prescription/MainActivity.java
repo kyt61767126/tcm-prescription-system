@@ -2276,10 +2276,12 @@ public class MainActivity extends BridgeActivity {
                                 new android.graphics.pdf.PdfDocument.PageInfo.Builder(pageWpt, pageHpt, 1).create();
                             android.graphics.pdf.PdfDocument.Page page = pdf.startPage(pageInfo);
                             // 整张 A5 位图按桌面实测 fit 比例缩小并居中（等比、不拉伸）
+                            // ★ 注意：dst 必须是「PDF 页面单位(pt)」，不能用位图像素宽高——
+                            //   位图是 300dpi（1748×2480px），页面只有 420×595pt，混用会让内容放大 4 倍被裁掉。
                             int pw = page.getCanvas().getWidth();
                             int ph = page.getCanvas().getHeight();
-                            int dw = Math.max(1, Math.round(bmp.getWidth() * DESKTOP_PRINT_FIT));
-                            int dh = Math.max(1, Math.round(bmp.getHeight() * DESKTOP_PRINT_FIT));
+                            int dw = Math.max(1, Math.round(pw * DESKTOP_PRINT_FIT));
+                            int dh = Math.max(1, Math.round(ph * DESKTOP_PRINT_FIT));
                             int left = (pw - dw) / 2;
                             int top = (ph - dh) / 2;
                             android.graphics.Rect dst = new android.graphics.Rect(left, top, left + dw, top + dh);
