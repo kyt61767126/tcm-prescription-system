@@ -3107,3 +3107,11 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
 * **验证**：Edge(Chromium) 实测 `0` 宽 69.8 vs SimSun 70（原 78）；`10g` 196.2（原 223.2，桌面 Times 210）；中文 1120=1120；桌面命中系统字体时不下载字形。
 * **限制**：`size-adjust` 需 Chromium/WebView ≥92；旧内核自动按原样渲染（无回归）。
 * **铁律**：跨端用开源字体替换 Windows 系统字体时，必须单独校验**西文/数字**度量（汉字等宽容易掩盖问题），否则剂量、编号、年龄会系统性偏大并连带排版漂移。
+
+### 2026-11-21 补：处方签"代码边距相同但实际打印不一致"——Android 插件 fit 可打印区
+* **现象**：CSS 同为 A5/`padding: 22.5mm 13mm 15mm`/字号 10.5pt，桌面打印正确，APP 打出来四边留白都更大、内容整体略小（约 96%）。
+* **根因**：桌面 Electron 走 Windows 驱动，PDF/页 = 纸型时按 1:1 **裁切**；Android 打印插件拿到「整张 A5 页」后按打印机**可打印区**（常见四周 3~5mm 不可打印）做 fit-to-page 缩放，于是整页缩小、留白等比放大。代码边距值本身没问题。
+* **修复（两处 `MainActivity.printBitmapA5`）**：`onLayout` 读 `newAttrs.getMinMargins()`（打印机回报的不可打印边，mils），PDF 页改为用 **`PdfDocument` + `PageInfo(A5 - 上下左右 minMargins, 72dpi pt)`** 建「可打印区页」，`onWrite` 用 `src` 裁掉位图外围等宽白边（mils→位图像素按 `mils×位图宽/media宽mils` 换算）、`dst` 铺满整页。插件再按可打印区落纸时缩放=1.0，内容物理坐标回到 13/22.5/15mm，与桌面逐毫米一致。
+* **回退条件**：`newAttrs` 非 A5（用户临时换纸）或 `minMargins` 全 0（borderless 驱动）时保持整页 A5 输出，行为同旧版，无回归风险。
+* **日志取证**：`Log.i("TCM-Pres", "A5 可打印区 media=… margins=… page=… crop=…")`（离线为 `TAG`），真机 logcat 可直接看到该打印机实际回报的边距。
+* **铁律**：Android 打印 PDF 时，**页尺寸必须等于打印机可打印区**才能得到 1:1 落纸；页尺寸等于整张纸型时必然被插件 fit 缩放。改落纸几何只改 `printBitmapA5`，不要再动 CSS 的 22.5/13/15mm。
