@@ -311,6 +311,8 @@
   ④ **构建脚本不再跨端误伤**（`build-skip.ps1` 单元 excludes）：`cloud-app`/`local-app` 的 sources 覆盖整棵产品目录，桌面端 `build.bat`（及 cloud_desktop 的 `*.ps1`）改动会误判为 APK 需重打。现追加 `:(exclude)…/cloud_desktop/*.bat|*.ps1`、`…/desktop/*.bat|*.ps1`（已实测 git pathspec 通配生效）；桌面自身单元的 build.bat 仍计入（构建脚本确会影响 exe，保留保守判定）。
   生效方式：本轮只改打包/版本脚本（tools + db-offline/desktop/build.bat），五端产物零变化；下次真实打包即按新机制自增桌面版本号。
 
+* ★ 2026-11-21 **第三轮收尾核查（无新增解绑点，结论固化）**：①云端侧已确认无同号耦合——`db-yunduan/sync-app-version.ps1` 同步的是网页层 `__APP_VERSION__` 展示标识（public/index.html 真源 → 桌面 HTML + APK MainActivity 三要素一致，属端内展示一致性必须保留），云端桌面 build.bat 早已是 `bump-version.ps1` 独立自增；②APP versionCode 只在真实构建时 +1 且 gradle 失败自动回滚（`.build_vcode_prev`），测试打包 skip 时不递增，无版本噪音；③`check-manifest-version.cjs` 的 local/dingzhi 镜像校验是**同一 APK 的双 manifest key**（download.html 读 local key），非跨端耦合，保留；④`Build-Offline` 过时注释已修正（同号机制废弃，APP 先/桌面后仅为稳定顺序非硬约束）。四轮链路（能热更不打包 → 自动重签 → 版本解绑 → 精准到端）至此收敛完毕，无已知剩余不必要重打源。
+
 * 云端APP tools/obfuscate.js 会混淆 assets JS——解包 APK 后 grep 找不到 ≠ 没打进（index.html 未混淆可 grep 验证，其他 JS 需按混淆与否区分）。
 
 * 安全优化后必须验证 4 端 APP 打包流程：预编译→非严格打包→严格模式打包→APK 签名哈希。

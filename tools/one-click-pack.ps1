@@ -407,10 +407,10 @@ function Build-Offline {
     }
 
     # Step 2: APP
-    # ★ 2026-11-18 顺序修正：APP 必须先于桌面打包。
-    #   APP 构建会自增 versionCode（离线端唯一版本计数器），桌面打包前会读取它同步
-    #   "1.0.<versionCode>"；旧顺序（桌面→APP）会打出 1.0.353 vs 354 的不同号，
-    #   发布前 compliance-check 直接失败。
+    # ★ 2026-11-18 顺序修正（历史）：APP 先于桌面打包。
+    #   ★ 2026-11-21 更新：离线桌面已改为 bump-version 独立自增（sync-offline-desktop-version
+    #   已删除、同号机制废弃），"APP 先桌面后"不再是硬约束，仅为保持既有稳定顺序而保留，
+    #   两端版本计数器完全独立、可任意组合打包。
     if ($Target -eq "all" -or $Target -eq "app") {
         Write-Host ""
         if ($Target -eq "all") {
