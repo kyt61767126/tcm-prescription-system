@@ -269,11 +269,13 @@ $localAppElectronOnlyPatterns = @(
     '^shared/desktop-[^/]+\.cjs$'
     '^shared/(electron-logger|hot-update-core|pe-guard|update-manager)\.cjs$'
     '^shared/prompt-(modal\.html|preload\.js)$'
-    '^shared/user-(store|admin)\.js$'
     '^shared/(local-db|sync-engine)\.js$'
     '^shared/service/activation-observer\.js$'
     '^shared/credential-vault\.ps1$'
 )
+# ★ 2026-11-21 第六轮纠正：user-store.js / user-admin.js 曾被列入本表（判为 Electron 专属）
+#   属误判——它们是 sync-shared-blocks.cjs 的内联权威源，6 份 index.html 全部含
+#   USER-STORE / USER-ADMIN 标记块，改源必须重新生成 index.html 才生效。
 function Test-LocalAppIrrelevant([string]$path) {
     $p = ($path -replace '\\', '/')
     $hit = $false
@@ -289,12 +291,117 @@ function Test-LocalAppIrrelevant([string]$path) {
 }
 # 统一入口：committed 判定与工作区脏检查共用同一套"无关"口径（消除不对称）
 function Test-IrrelevantChange([string]$path) {
+    $p = ($path -replace '\\', '/')
+    # ★ 2026-11-21 第六轮：构建期输入既不算覆盖也不算无关（cloud-app 的 shared 全量
+    #   在线覆盖会把它一起放行 → 改 APK 混淆脚本却不重打，属漏打，必须先短路）
+    if (Test-SharedBuildInput $p) { return $false }
+    # ★ 2026-11-21 第六轮：shared 分端消费矩阵（数据驱动，见下）
+    if ($p.StartsWith('shared/')) {
+        if (Test-SharedIrrelevant $p) { return $true }
+    }
     switch ($Unit) {
         'cloud-desktop' { return Test-CloudDesktopIrrelevant $path }
-        'cloud-app'     { return Test-CloudAppOnlineCovered ($path -replace '\\', '/') }
+        'cloud-app'     { return Test-CloudAppOnlineCovered $p }
         'local-app'     { return Test-LocalAppIrrelevant $path }
         default         { return $false }
     }
+}
+# ---------- ★ 2026-11-21 第六轮：shared 分端"无消费副本"判定 ----------
+# 背景：四端 build-skip 的 sources 都含 shared/，但 sync-all 的分发矩阵显示大量
+#   shared 文件只发往单侧产物（实证）：
+#     res/xml/*.xml        -> 仅离线 APP app/src/main/res/xml（两个桌面 + 云端 APP 不消费）
+#     calculate-hash.js    -> 仅 db-offline（两个云端不消费）
+#     print-utils-offline.js -> 仅离线（分发为 print-utils.js，云端不消费）
+#     local-db.js/sync-engine.js -> 仅 cloud_desktop（离线两端不消费）
+#     license/*.js         -> 双桌面 electron + 离线 assets（云端 APP 用 Java LicenseManager，无 JS 副本）
+#     vendor/xlsx.full.min.js -> 仅离线（云端用根 xlsx.full.min.js）
+#     desktop-*.cjs/update-manager/hot-update-core/pe-guard/electron-logger/prompt-*
+#     credential-vault.ps1/service/activation-observer.js -> 仅双桌面 electron（两个 APP 不消费）
+#   历史表现：改一次 Android 权限 XML → 双桌面 exe 重打+版本号递增；改一次离线 license
+#   → 云端双端重打。全部是纯噪音。
+# 判定方式（数据驱动而非手写矩阵）：shared/<rel> 在本端产物搜索根下既无 rel 副本、
+#   也无 basename 副本、也无分发别名副本 → 本端不消费 → 无关。将来某端新增副本，
+#   自动恢复计入（双保险，永不因"忘了改清单"而漏打）。
+# 铁律：热包清单内的文件优先走覆盖判定（covered），本判定只在"不覆盖"分支生效。
+$sharedNameAliases = @{
+    'print-utils-offline.js' = @('print-utils.js')   # sync-all Group 1c TargetLeafName
+    'auth-core/cloud.js'     = @('auth-core.js')     # sync-auth-core 权威源合并为单文件
+    'auth-core/offline.js'   = @('auth-core.js')
+    'voice/voice-input.js'   = @('voice-input.js')   # copy-consistency 根目录命名
+}
+# 构建期输入（按端：即使本端产物无副本也绝不忽略——改它必须重打该端；
+#   对其他端仍按副本判定，如 minify-js.js 只服务 APK 打包链，不该触发桌面重打）
+$sharedBuildInputs = @{
+    'shared/minify-js.js' = @('cloud-app', 'local-app')
+}
+function Test-SharedBuildInput([string]$p) {
+    $bi = $sharedBuildInputs[($p -replace '\\', '/')]
+    return [bool]($bi -and ($bi -contains $Unit))
+}
+# 内联权威源：内容被拼进其他产物（改源必须跑同步工具 + 重新生成才生效）→
+#   任何端都不得判"无关"：
+#   · user-store.js / user-admin.js —— sync-shared-blocks.cjs 注入 6 份 index.html 标记块
+#   · service/activation-observer.js —— sync-auth-core.ps1 PREPEND 到各份 auth-core.js
+#   与 $sharedBuildInputs 的区别：本表不短路 cloud-app 的"在线即达"语义
+#   （云端 APP 实载线上 index.html，重新生成 push 即生效，无需重打 APK）。
+$sharedInlineAuthorities = @(
+    'shared/user-store.js'
+    'shared/user-admin.js'
+    'shared/service/activation-observer.js'
+)
+$unitArtifactRoots = @{
+    # 端内会真正打进产物的搜索目录（相对仓库根）。必须显式列出子目录：
+    #   license/ 副本在 electron/license/、Android 资源在 res/xml/、库在 vendor/——
+    #   只查根目录会把"实际消费"误判成无关（宁可枚举，不做全树递归：dist/ 产物
+    #   目录动辄数万文件，递归搜索既慢又会命中构建残留噪音）。
+    'cloud-desktop' = @(
+        'app_project/db-yunduan/cloud_desktop'
+        'app_project/db-yunduan/cloud_desktop/electron'
+        'app_project/db-yunduan/cloud_desktop/electron/license'
+        'app_project/db-yunduan/cloud_desktop/electron/service'
+        'app_project/db-yunduan/cloud_desktop/license'
+        'app_project/db-yunduan/cloud_desktop/vendor'
+        'public'
+        'public/electron'
+        'public/license'
+        'public/vendor')
+    'cloud-app'     = @(
+        'app_project/db-yunduan/cloud_app/app/src/main'
+        'app_project/db-yunduan/cloud_app/app/src/main/assets'
+        'app_project/db-yunduan/cloud_app/app/src/main/assets/public'
+        'app_project/db-yunduan/cloud_app/app/src/main/assets/public/license'
+        'app_project/db-yunduan/cloud_app/app/src/main/assets/public/vendor'
+        'app_project/db-yunduan/cloud_app/app/src/main/res/xml')
+    'local-desktop' = @(
+        'app_project/db-offline/desktop'
+        'app_project/db-offline/desktop/electron'
+        'app_project/db-offline/desktop/electron/license'
+        'app_project/db-offline/desktop/electron/service'
+        'app_project/db-offline/desktop/license'
+        'app_project/db-offline/desktop/vendor')
+    'local-app'     = @(
+        'app_project/db-offline/app/app/src/main'
+        'app_project/db-offline/app/app/src/main/assets'
+        'app_project/db-offline/app/app/src/main/assets/public'
+        'app_project/db-offline/app/app/src/main/assets/public/license'
+        'app_project/db-offline/app/app/src/main/assets/public/vendor'
+        'app_project/db-offline/app/app/src/main/res/xml')
+}
+function Test-SharedIrrelevant([string]$p) {
+    if (Test-SharedBuildInput $p) { return $false }
+    if ($sharedInlineAuthorities -contains $p) { return $false }
+    $roots = $unitArtifactRoots[$Unit]
+    if (-not $roots) { return $false }
+    $rel = $p.Substring('shared/'.Length)
+    $base = Split-Path $rel -Leaf
+    $names = @($rel, $base)
+    if ($sharedNameAliases.ContainsKey($rel)) { $names += $sharedNameAliases[$rel] }
+    foreach ($r in $roots) {
+        foreach ($n in $names) {
+            if (Test-Path -LiteralPath (Join-Path $r $n)) { return $false }
+        }
+    }
+    return $true
 }
 # ★ 2026-08-31 产物形态黑名单（build_output 残留事故举一反三）：
 #   未跟踪(??)的"构建产物形态"目录/文件不算源码脏——按设计新增源码应触发重打，
@@ -424,7 +531,10 @@ if ($Check) {
             } else { $notCovered = $realChanges }
         } elseif ($Unit -eq 'cloud-app') {
             foreach ($f in $realChanges) {
-                if (Test-CloudAppOnlineCovered $f) { $covered += $f } else { $notCovered += $f }
+                # 构建期输入（如 minify-js.js）不受"在线即达"放行，必须重打
+                if (Test-SharedBuildInput $f) { $notCovered += $f }
+                elseif (Test-CloudAppOnlineCovered $f) { $covered += $f }
+                else { $notCovered += $f }
             }
         } else { $notCovered = $realChanges }
 
