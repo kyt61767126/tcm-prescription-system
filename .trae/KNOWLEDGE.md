@@ -3116,5 +3116,6 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
 * **禁止**：用 minMargins 反推缩放（该插件实测报不可靠）；用改 CSS 字号/边距去凑（用户明令禁止缩字号凑）。
 * **回退条件**：后端若把 `DESKTOP_PRINT_FIT` 改回 1.0f 即恢复 122mm 原大输出（旧行为），无其他耦合。
 * **踩坑（375 打印预览截图发现）**：`drawBitmap` 的 `dst` 必须是 **PDF 页单位 pt（A5 竖版 420×595）**；位图是 300dpi（1748×2480px），若用 `bmp.getWidth()*0.86` 当 dst 宽，等于把内容放大 4.16 倍、只露出中部一窄条（预览表现为「页面顶端一条横线 + 一列药名 + 大片空白 + 一条斜线残影」）。正确写法：`dw=round(pageW*FIT)`、`dh=round(pageH*FIT)`、居中。
+* **踩坑（376 真机）：纸上右侧/底部各多一条细线**（距纸边约 1mm、贯穿整页、灰色 3~4px）＝ **WebView 滚动条被 `View.draw()` 一起抓进位图**。根因：viewport 取整 `ceil(559.37)=560` 比纸面 559.37px 宽 0.7px → 触发横向滚动条，纵向同理。修法（双端 MainActivity 打印 WebView）：`setVerticalScrollBarEnabled(false)` + `setHorizontalScrollBarEnabled(false)` + `SCROLLBARS_INSIDE_OVERLAY` + `OVER_SCROLL_NEVER`，并给注入的打印 HTML 追加 `html,body{overflow:hidden!important}`。教训：**打印用隐藏 WebView 抓位图时，任何"UI 装饰"（滚动条/光标/选区/水印层边缘）都会被印上纸**，务必逐项关掉。
 * **日志取证**：`Log.i` 关键字 `A5 fit 打印(与桌面同构) 缩放=`（离线为 `TAG`），真机 logcat 可读到缩放比与打印机回报边距。
 * **铁律**：APP 与桌面打印对齐，对齐的是**最终落纸几何**而非 CSS 边距值——桌面会 fit 就**禁止**用实测 0.86 去改 CSS 字号/边距（用户明令禁止缩字号凑）；改落纸几何只改 `printBitmapA5`，CSS 的 22.5/13/15mm 不动。

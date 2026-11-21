@@ -2140,6 +2140,13 @@ public class MainActivity extends BridgeActivity {
                         //   会只剩层边缘（纸上出现一条斜线/横线，且"免费版"文字丢失）。强制软件层
                         //   渲染，旋转水印与文字按 Chromium 光栅结果完整落入 A5 位图。
                         printWebView.setLayerType(android.view.View.LAYER_TYPE_SOFTWARE, null);
+                        // ★ 2026-11-21 真机 376 取证：右/下各多一条细线（距纸边约 1mm、贯穿整页）。
+                        //   View.draw() 会把 WebView 的滚动条一起画进位图（viewport 取整比纸面宽 0.7px
+                        //   即触发横向滚动条，纵向同理）。打印页是固定 A5 整页，本就不该滚动。
+                        printWebView.setVerticalScrollBarEnabled(false);
+                        printWebView.setHorizontalScrollBarEnabled(false);
+                        printWebView.setScrollBarStyle(WebView.SCROLLBARS_INSIDE_OVERLAY);
+                        printWebView.setOverScrollMode(View.OVER_SCROLL_NEVER);
 
                         printWebView.setWebViewClient(new android.webkit.WebViewClient() {
                             @Override
@@ -2189,6 +2196,9 @@ public class MainActivity extends BridgeActivity {
                         final int viewportCssW = (int) Math.ceil(cssWidthPx);
                         String renderHtml = html.replaceAll("(?i)<meta[^>]+name=[\"']viewport[\"'][^>]*>",
                             "<meta name=\"viewport\" content=\"width=" + viewportCssW + ", initial-scale=1.0, maximum-scale=1.0, user-scalable=no\">");
+                        // ★ 固定 A5 整页，禁止任何滚动：viewport 取整后多出的 0.7px 会触发滚动条，
+                        //   而滚动条会被 View.draw() 抓进纸面（右侧/底部各一条线）。
+                        renderHtml = renderHtml.replace("</head>", "<style>html,body{overflow:hidden !important;}</style></head>");
                         printWebView.loadDataWithBaseURL("file:///android_asset/public/index.html", renderHtml, "text/html", "UTF-8", null);
                     } catch (Exception e) {
                         Log.e(TAG, "printViaSystem 失败", e);
