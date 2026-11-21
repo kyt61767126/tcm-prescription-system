@@ -2,17 +2,17 @@
     "_urlEncodingNote": "本清单的 apk.url 为含中文字符的原始路径；程序化下载前请按标准做百分号编码（如 JavaScript encodeURI）后再请求，否则部分 CDN 可能回落到首页 HTML。浏览器直接点击不受影响。",
     "local": {
         "apk": {
-            "version": "V1.0.364",
-            "versionCode": 364,
-            "sha256": "78bad3f4ec0af664667f0cbda14df785eb3e02f7b1607a336dc245257533a085",
+            "version": "V1.0.367",
+            "versionCode": 367,
+            "sha256": "aa78979abc1afe094bc540e12b3a1d9d96c4b89dc2fe7df814cf7849a9ae3bf6",
             "url": "https://tcm-prescription-system.pages.dev/downloads/惠康中医-本地.apk",
-            "releaseUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.21-0836/huikang-local.apk",
-            "size": 6922713,
-            "updateTime": "2026-11-21T01:39:14.127Z",
+            "releaseUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.21-1258/huikang-local.apk",
+            "size": 6939900,
+            "updateTime": "2026-11-21T05:06:02.012Z",
             "fileName": "惠康中医-本地.apk",
             "releaseFileName": "huikang-local.apk",
-            "releaseTag": "v2026.11.21-0836",
-            "releaseNotes": "✨ 新增:\n  - feat(print): App 内置开源楷体/宋体，处方笺与桌面像素级统一\n  - feat(license): 「更换/续费激活码」仅到期前 7 天显示，永久/长期有效默认隐藏（auth-core 双源 11 副本 + cv 指纹 + 热包 2026.11.20-13）\n  - feat(ui): 取消基础设置「学习（题库练习）」重复入口 + 云端App手机顶端绿色更新提示条（hotVersion 部署标记比对；脚本移植 4 副本消除跨版本漂移，基线已重冻结）（热包 2026.11.20-8）\n  - feat(ui): 取消基础设置「学习（题库练习）」重复入口（工具栏已有题库入口）+ 云端App手机顶端绿色更新提示条（hotVersion 部署标记比对，仅App环境显示）（热包 2026.11.20-7）\n  - feat(license): 激活码脱敏展示（管理员密码解锁）+ 无效码撞码防护\n  - docs(knowledge): §5 新增鸿蒙版本只打包不发布规范\n  - feat(app): 云端/鸿蒙APP顶部工具栏与离线APP统一（含语音录入/统计/题库）\n  - feat(app): 云端APP与鸿蒙APP验方列表按钮布局同步离线版\n  - feat(app): 手机APP顶部「存验方」改为「验方设置」，复用桌面验方管理弹窗\n  - feat(license): 正式授权到期前 1-7 天顶部横幅提醒（离线/云端双通道）\n🐛 修复:\n  - fix(app-print): 改用画布显式缩放(useWideViewPort+CSS 1:1 布局)，修复 setInitialScale 未生效导致内容只占左上 1/3\n  - fix(app-print): 改为 A5@300dpi 精确几何打印，字号/页边距对齐桌面 10.5/22/9pt 与 22.5-13-15mm\n  - fix(app): 处方签字号按真机反馈降至 0.86（桌面保持 1.0 不变）\n  - fix(print): App端处方签按桌面基准视觉补偿（0.80缩放+标题常规字重），修复Android无宋楷字体导致的偏大偏粗\n  - fix(print): 处方签字体字号布局全局统一（App取消0.80缩放，恢复桌面基准10.5/22/9pt，静态CSS插值修复）\n  - fix(print): 处方签恢复纵向默认；App 打印字号按桌面程序再收一档（0.80）\n  - fix(print): App 打印字号整体收一档（0.85）与桌面程序处方签统一，桌面/网页不变\n  - fix(print): 离线 App 默认横向打印（改权威源 desktop/index.html 后重新生成 index-app 及 APK assets）\n  - fix(print): 手机 App 处方打印默认横向（A5 横放 210x148），与桌面输出一致；修复打印机报缺纸/只印上半张\n  - fix(print): 手机 App 系统打印只出上半页——WebView 按 A5 显式布局并等 onPageFinished 后再调起打印（桌面端正常，无需改）\n⚡ 优化:\n  - perf(cloudapp): 绿条迁移至 body 首部提前预取（fetch 与解析并行，DOM 兜底，可交互后停留 8 秒）；重建界面锁与跨版本基线（热包 2026.11.20-14）\n  - style(app): 优化验方设置列表按钮布局为三等分整行\n  - perf(admin): 风控与用量扫描并发化并补用量缓存\n  - perf(build-queue): 列表短缓存 + 空闲轮询降载\n  - perf(admin): 操作日志列表分页，分页条空态清理\n  - perf(admin): 诊所/风控/设备列表分页，设备列表并行请求，旧工单页转义\n  - perf(admin): 激活码/用户/激活审核列表分页，单页渲染 50 条\n  - perf(admin): 待办页全量读取收口（lite=2 + trend=1）并补齐 site-admin 双副本\n📋 其他:\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - docs(knowledge): 沉淀手机 App 打印只出上半页根因（Android WebView 需等 onPageFinished）与重打 APK 流程\n  - build: 一键打包副作用自动收纳"
+            "releaseTag": "v2026.11.21-1258",
+            "releaseNotes": "✨ 新增:\n  - feat(pack): 能热更的不整包重打，范围打包不再顺带另一端口，清理发布副作用误判\n🐛 修复:\n  - fix(print): 打印 WebView 关滚动条，消除纸上右侧/底部两条细线\n  - fix(print): 修正 375 位图像素当 PDF 点导致的 4 倍放大（预览只见中部窄条）\n  - fix(print): APP 处方签落纸按桌面实测 0.86 等比居中缩放\n  - fix(print): 可打印区 fit 改为等比居中缩放（禁止纵横拉伸）\n  - fix(print): APP 处方签按打印机可打印区同构 fit，与桌面实际落纸尺寸一致\n  - fix(print): 处方签落纸几何按打印机可打印区 1:1 对齐（APP 与桌面逐毫米一致）\n  - fix(app-print): 处方签西文/数字字号按桌面实测度量校准\n  - fix(app-print): 修复 A5 打印右侧裁切与旋转水印斜线残影\n  - fix(app-print): 改用画布显式缩放(useWideViewPort+CSS 1:1 布局)，修复 setInitialScale 未生效导致内容只占左上 1/3\n📋 其他:\n  - build: 一键打包副作用自动收纳\n  - docs: App 内置字体方案评估报告（结论：保留内置字体，方案A）\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - docs(knowledge): 记录处方签字体度量校准与西文偏大根因\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳"
         },
         "portable": {
             "version": "1.0.363",
@@ -39,64 +39,64 @@
     },
     "cloud": {
         "apk": {
-            "version": "V1.0.372",
-            "versionCode": 372,
-            "sha256": "a8e1bd81f12737ce9c79dfac5fd8078a7b48792af0753e44d690fbd6829a447b",
+            "version": "V1.0.377",
+            "versionCode": 377,
+            "sha256": "597ae64c169eed357e23e63cf095ebb12d7700a0d78d029baba65e7a5c767d15",
             "url": "https://tcm-prescription-system.pages.dev/downloads/惠康中医-云端.apk",
-            "releaseUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.21-0836/huikang-cloud.apk",
-            "size": 15750551,
-            "updateTime": "2026-11-21T01:39:14.127Z",
+            "releaseUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.21-1258/huikang-cloud.apk",
+            "size": 15752059,
+            "updateTime": "2026-11-21T05:06:02.012Z",
             "fileName": "惠康中医-云端.apk",
             "releaseFileName": "huikang-cloud.apk",
-            "releaseTag": "v2026.11.21-0836",
-            "releaseNotes": "✨ 新增:\n  - feat(print): App 内置开源楷体/宋体，处方笺与桌面像素级统一\n  - feat(license): 「更换/续费激活码」仅到期前 7 天显示，永久/长期有效默认隐藏（auth-core 双源 11 副本 + cv 指纹 + 热包 2026.11.20-13）\n  - feat(ui): 取消基础设置「学习（题库练习）」重复入口 + 云端App手机顶端绿色更新提示条（hotVersion 部署标记比对；脚本移植 4 副本消除跨版本漂移，基线已重冻结）（热包 2026.11.20-8）\n  - feat(ui): 取消基础设置「学习（题库练习）」重复入口（工具栏已有题库入口）+ 云端App手机顶端绿色更新提示条（hotVersion 部署标记比对，仅App环境显示）（热包 2026.11.20-7）\n  - feat(license): 激活码脱敏展示（管理员密码解锁）+ 无效码撞码防护\n  - docs(knowledge): §5 新增鸿蒙版本只打包不发布规范\n  - feat(app): 云端/鸿蒙APP顶部工具栏与离线APP统一（含语音录入/统计/题库）\n  - feat(app): 云端APP与鸿蒙APP验方列表按钮布局同步离线版\n  - feat(app): 手机APP顶部「存验方」改为「验方设置」，复用桌面验方管理弹窗\n  - feat(license): 正式授权到期前 1-7 天顶部横幅提醒（离线/云端双通道）\n🐛 修复:\n  - fix(app-print): 改用画布显式缩放(useWideViewPort+CSS 1:1 布局)，修复 setInitialScale 未生效导致内容只占左上 1/3\n  - fix(app-print): 改为 A5@300dpi 精确几何打印，字号/页边距对齐桌面 10.5/22/9pt 与 22.5-13-15mm\n  - fix(app): 处方签字号按真机反馈降至 0.86（桌面保持 1.0 不变）\n  - fix(print): App端处方签按桌面基准视觉补偿（0.80缩放+标题常规字重），修复Android无宋楷字体导致的偏大偏粗\n  - fix(print): 处方签字体字号布局全局统一（App取消0.80缩放，恢复桌面基准10.5/22/9pt，静态CSS插值修复）\n  - fix(print): 处方签恢复纵向默认；App 打印字号按桌面程序再收一档（0.80）\n  - fix(print): App 打印字号整体收一档（0.85）与桌面程序处方签统一，桌面/网页不变\n  - fix(print): 离线 App 默认横向打印（改权威源 desktop/index.html 后重新生成 index-app 及 APK assets）\n  - fix(print): 手机 App 处方打印默认横向（A5 横放 210x148），与桌面输出一致；修复打印机报缺纸/只印上半张\n  - fix(print): 手机 App 系统打印只出上半页——WebView 按 A5 显式布局并等 onPageFinished 后再调起打印（桌面端正常，无需改）\n⚡ 优化:\n  - perf(cloudapp): 绿条迁移至 body 首部提前预取（fetch 与解析并行，DOM 兜底，可交互后停留 8 秒）；重建界面锁与跨版本基线（热包 2026.11.20-14）\n  - style(app): 优化验方设置列表按钮布局为三等分整行\n  - perf(admin): 风控与用量扫描并发化并补用量缓存\n  - perf(build-queue): 列表短缓存 + 空闲轮询降载\n  - perf(admin): 操作日志列表分页，分页条空态清理\n  - perf(admin): 诊所/风控/设备列表分页，设备列表并行请求，旧工单页转义\n  - perf(admin): 激活码/用户/激活审核列表分页，单页渲染 50 条\n  - perf(admin): 待办页全量读取收口（lite=2 + trend=1）并补齐 site-admin 双副本\n📋 其他:\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - docs(knowledge): 沉淀手机 App 打印只出上半页根因（Android WebView 需等 onPageFinished）与重打 APK 流程\n  - build: 一键打包副作用自动收纳"
+            "releaseTag": "v2026.11.21-1258",
+            "releaseNotes": "✨ 新增:\n  - feat(pack): 能热更的不整包重打，范围打包不再顺带另一端口，清理发布副作用误判\n🐛 修复:\n  - fix(print): 打印 WebView 关滚动条，消除纸上右侧/底部两条细线\n  - fix(print): 修正 375 位图像素当 PDF 点导致的 4 倍放大（预览只见中部窄条）\n  - fix(print): APP 处方签落纸按桌面实测 0.86 等比居中缩放\n  - fix(print): 可打印区 fit 改为等比居中缩放（禁止纵横拉伸）\n  - fix(print): APP 处方签按打印机可打印区同构 fit，与桌面实际落纸尺寸一致\n  - fix(print): 处方签落纸几何按打印机可打印区 1:1 对齐（APP 与桌面逐毫米一致）\n  - fix(app-print): 处方签西文/数字字号按桌面实测度量校准\n  - fix(app-print): 修复 A5 打印右侧裁切与旋转水印斜线残影\n  - fix(app-print): 改用画布显式缩放(useWideViewPort+CSS 1:1 布局)，修复 setInitialScale 未生效导致内容只占左上 1/3\n📋 其他:\n  - build: 一键打包副作用自动收纳\n  - docs: App 内置字体方案评估报告（结论：保留内置字体，方案A）\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - docs(knowledge): 记录处方签字体度量校准与西文偏大根因\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳"
         },
         "exe": {
-            "version": "1.0.369",
-            "sha256": "18707aa50b41480f6f59fa338467b03eaeb2745f4306ddf975b5df0158cfdfb9",
-            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.21-0752/huikang-cloud-setup-1.0.369.exe",
-            "size": 82091216,
-            "updateTime": "2026-11-21T00:02:08.955Z",
-            "fileName": "惠康中医-云端 Setup 1.0.369.exe",
-            "releaseFileName": "huikang-cloud-setup-1.0.369.exe",
-            "releaseTag": "v2026.11.21-0752",
-            "releaseNotes": "✨ 新增:\n  - feat(print): App 内置开源楷体/宋体，处方笺与桌面像素级统一\n  - feat(license): 「更换/续费激活码」仅到期前 7 天显示，永久/长期有效默认隐藏（auth-core 双源 11 副本 + cv 指纹 + 热包 2026.11.20-13）\n  - feat(ui): 取消基础设置「学习（题库练习）」重复入口 + 云端App手机顶端绿色更新提示条（hotVersion 部署标记比对；脚本移植 4 副本消除跨版本漂移，基线已重冻结）（热包 2026.11.20-8）\n  - feat(ui): 取消基础设置「学习（题库练习）」重复入口（工具栏已有题库入口）+ 云端App手机顶端绿色更新提示条（hotVersion 部署标记比对，仅App环境显示）（热包 2026.11.20-7）\n  - feat(license): 激活码脱敏展示（管理员密码解锁）+ 无效码撞码防护\n  - docs(knowledge): §5 新增鸿蒙版本只打包不发布规范\n  - feat(app): 云端/鸿蒙APP顶部工具栏与离线APP统一（含语音录入/统计/题库）\n  - feat(app): 云端APP与鸿蒙APP验方列表按钮布局同步离线版\n  - feat(app): 手机APP顶部「存验方」改为「验方设置」，复用桌面验方管理弹窗\n  - feat(license): 正式授权到期前 1-7 天顶部横幅提醒（离线/云端双通道）\n🐛 修复:\n  - fix(app-print): 改为 A5@300dpi 精确几何打印，字号/页边距对齐桌面 10.5/22/9pt 与 22.5-13-15mm\n  - fix(app): 处方签字号按真机反馈降至 0.86（桌面保持 1.0 不变）\n  - fix(print): App端处方签按桌面基准视觉补偿（0.80缩放+标题常规字重），修复Android无宋楷字体导致的偏大偏粗\n  - fix(print): 处方签字体字号布局全局统一（App取消0.80缩放，恢复桌面基准10.5/22/9pt，静态CSS插值修复）\n  - fix(print): 处方签恢复纵向默认；App 打印字号按桌面程序再收一档（0.80）\n  - fix(print): App 打印字号整体收一档（0.85）与桌面程序处方签统一，桌面/网页不变\n  - fix(print): 离线 App 默认横向打印（改权威源 desktop/index.html 后重新生成 index-app 及 APK assets）\n  - fix(print): 手机 App 处方打印默认横向（A5 横放 210x148），与桌面输出一致；修复打印机报缺纸/只印上半张\n  - fix(print): 手机 App 系统打印只出上半页——WebView 按 A5 显式布局并等 onPageFinished 后再调起打印（桌面端正常，无需改）\n  - fix(print): 手机打印处方药品明细空白根治——药名框补 oninput 同步数据源 + 打印前 DOM 回填/重刷纸面/空处方拦截（4 副本同体，热包 2026.11.20-15）\n⚡ 优化:\n  - perf(cloudapp): 绿条迁移至 body 首部提前预取（fetch 与解析并行，DOM 兜底，可交互后停留 8 秒）；重建界面锁与跨版本基线（热包 2026.11.20-14）\n  - style(app): 优化验方设置列表按钮布局为三等分整行\n  - perf(admin): 风控与用量扫描并发化并补用量缓存\n  - perf(build-queue): 列表短缓存 + 空闲轮询降载\n  - perf(admin): 操作日志列表分页，分页条空态清理\n  - perf(admin): 诊所/风控/设备列表分页，设备列表并行请求，旧工单页转义\n  - perf(admin): 激活码/用户/激活审核列表分页，单页渲染 50 条\n  - perf(admin): 待办页全量读取收口（lite=2 + trend=1）并补齐 site-admin 双副本\n📋 其他:\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - docs(knowledge): 沉淀手机 App 打印只出上半页根因（Android WebView 需等 onPageFinished）与重打 APK 流程\n  - build: 一键打包副作用自动收纳\n  - Revert \"fix(print): 手机打印处方药品明细空白根治——药名框补 oninput 同步数据源 + 打印前 DOM 回填/重刷纸面/空处方拦截（4 副本同体，热包 2026.11.20-15）\""
+            "version": "1.0.370",
+            "sha256": "522861654f2d99010349f7c6f78db57c0f2fa2464682c816592ac7766900f7c3",
+            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.21-1258/huikang-cloud-setup-1.0.370.exe",
+            "size": 82079816,
+            "updateTime": "2026-11-21T05:06:02.012Z",
+            "fileName": "惠康中医-云端 Setup 1.0.370.exe",
+            "releaseFileName": "huikang-cloud-setup-1.0.370.exe",
+            "releaseTag": "v2026.11.21-1258",
+            "releaseNotes": "✨ 新增:\n  - feat(pack): 能热更的不整包重打，范围打包不再顺带另一端口，清理发布副作用误判\n🐛 修复:\n  - fix(print): 打印 WebView 关滚动条，消除纸上右侧/底部两条细线\n  - fix(print): 修正 375 位图像素当 PDF 点导致的 4 倍放大（预览只见中部窄条）\n  - fix(print): APP 处方签落纸按桌面实测 0.86 等比居中缩放\n  - fix(print): 可打印区 fit 改为等比居中缩放（禁止纵横拉伸）\n  - fix(print): APP 处方签按打印机可打印区同构 fit，与桌面实际落纸尺寸一致\n  - fix(print): 处方签落纸几何按打印机可打印区 1:1 对齐（APP 与桌面逐毫米一致）\n  - fix(app-print): 处方签西文/数字字号按桌面实测度量校准\n  - fix(app-print): 修复 A5 打印右侧裁切与旋转水印斜线残影\n  - fix(app-print): 改用画布显式缩放(useWideViewPort+CSS 1:1 布局)，修复 setInitialScale 未生效导致内容只占左上 1/3\n📋 其他:\n  - build: 一键打包副作用自动收纳\n  - docs: App 内置字体方案评估报告（结论：保留内置字体，方案A）\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - docs(knowledge): 记录处方签字体度量校准与西文偏大根因\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳"
         },
         "portable": {
-            "version": "1.0.369",
-            "sha256": "adb1847f28725582910a30870de211abd4638db6cb3ce3cbaaa77d1d1cb983f5",
-            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.21-0752/huikang-cloud-1.0.369.exe",
-            "size": 81816312,
-            "updateTime": "2026-11-21T00:02:08.955Z",
-            "fileName": "惠康中医-云端 1.0.369.exe",
-            "releaseFileName": "huikang-cloud-1.0.369.exe",
-            "releaseTag": "v2026.11.21-0752",
-            "releaseNotes": "✨ 新增:\n  - feat(print): App 内置开源楷体/宋体，处方笺与桌面像素级统一\n  - feat(license): 「更换/续费激活码」仅到期前 7 天显示，永久/长期有效默认隐藏（auth-core 双源 11 副本 + cv 指纹 + 热包 2026.11.20-13）\n  - feat(ui): 取消基础设置「学习（题库练习）」重复入口 + 云端App手机顶端绿色更新提示条（hotVersion 部署标记比对；脚本移植 4 副本消除跨版本漂移，基线已重冻结）（热包 2026.11.20-8）\n  - feat(ui): 取消基础设置「学习（题库练习）」重复入口（工具栏已有题库入口）+ 云端App手机顶端绿色更新提示条（hotVersion 部署标记比对，仅App环境显示）（热包 2026.11.20-7）\n  - feat(license): 激活码脱敏展示（管理员密码解锁）+ 无效码撞码防护\n  - docs(knowledge): §5 新增鸿蒙版本只打包不发布规范\n  - feat(app): 云端/鸿蒙APP顶部工具栏与离线APP统一（含语音录入/统计/题库）\n  - feat(app): 云端APP与鸿蒙APP验方列表按钮布局同步离线版\n  - feat(app): 手机APP顶部「存验方」改为「验方设置」，复用桌面验方管理弹窗\n  - feat(license): 正式授权到期前 1-7 天顶部横幅提醒（离线/云端双通道）\n🐛 修复:\n  - fix(app-print): 改为 A5@300dpi 精确几何打印，字号/页边距对齐桌面 10.5/22/9pt 与 22.5-13-15mm\n  - fix(app): 处方签字号按真机反馈降至 0.86（桌面保持 1.0 不变）\n  - fix(print): App端处方签按桌面基准视觉补偿（0.80缩放+标题常规字重），修复Android无宋楷字体导致的偏大偏粗\n  - fix(print): 处方签字体字号布局全局统一（App取消0.80缩放，恢复桌面基准10.5/22/9pt，静态CSS插值修复）\n  - fix(print): 处方签恢复纵向默认；App 打印字号按桌面程序再收一档（0.80）\n  - fix(print): App 打印字号整体收一档（0.85）与桌面程序处方签统一，桌面/网页不变\n  - fix(print): 离线 App 默认横向打印（改权威源 desktop/index.html 后重新生成 index-app 及 APK assets）\n  - fix(print): 手机 App 处方打印默认横向（A5 横放 210x148），与桌面输出一致；修复打印机报缺纸/只印上半张\n  - fix(print): 手机 App 系统打印只出上半页——WebView 按 A5 显式布局并等 onPageFinished 后再调起打印（桌面端正常，无需改）\n  - fix(print): 手机打印处方药品明细空白根治——药名框补 oninput 同步数据源 + 打印前 DOM 回填/重刷纸面/空处方拦截（4 副本同体，热包 2026.11.20-15）\n⚡ 优化:\n  - perf(cloudapp): 绿条迁移至 body 首部提前预取（fetch 与解析并行，DOM 兜底，可交互后停留 8 秒）；重建界面锁与跨版本基线（热包 2026.11.20-14）\n  - style(app): 优化验方设置列表按钮布局为三等分整行\n  - perf(admin): 风控与用量扫描并发化并补用量缓存\n  - perf(build-queue): 列表短缓存 + 空闲轮询降载\n  - perf(admin): 操作日志列表分页，分页条空态清理\n  - perf(admin): 诊所/风控/设备列表分页，设备列表并行请求，旧工单页转义\n  - perf(admin): 激活码/用户/激活审核列表分页，单页渲染 50 条\n  - perf(admin): 待办页全量读取收口（lite=2 + trend=1）并补齐 site-admin 双副本\n📋 其他:\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - docs(knowledge): 沉淀手机 App 打印只出上半页根因（Android WebView 需等 onPageFinished）与重打 APK 流程\n  - build: 一键打包副作用自动收纳\n  - Revert \"fix(print): 手机打印处方药品明细空白根治——药名框补 oninput 同步数据源 + 打印前 DOM 回填/重刷纸面/空处方拦截（4 副本同体，热包 2026.11.20-15）\""
+            "version": "1.0.370",
+            "sha256": "4d38daebb990db9a586269b55a394d451fda8e87fdca0feb56f1a019011fa09a",
+            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.21-1258/huikang-cloud-1.0.370.exe",
+            "size": 81804904,
+            "updateTime": "2026-11-21T05:06:02.012Z",
+            "fileName": "惠康中医-云端 1.0.370.exe",
+            "releaseFileName": "huikang-cloud-1.0.370.exe",
+            "releaseTag": "v2026.11.21-1258",
+            "releaseNotes": "✨ 新增:\n  - feat(pack): 能热更的不整包重打，范围打包不再顺带另一端口，清理发布副作用误判\n🐛 修复:\n  - fix(print): 打印 WebView 关滚动条，消除纸上右侧/底部两条细线\n  - fix(print): 修正 375 位图像素当 PDF 点导致的 4 倍放大（预览只见中部窄条）\n  - fix(print): APP 处方签落纸按桌面实测 0.86 等比居中缩放\n  - fix(print): 可打印区 fit 改为等比居中缩放（禁止纵横拉伸）\n  - fix(print): APP 处方签按打印机可打印区同构 fit，与桌面实际落纸尺寸一致\n  - fix(print): 处方签落纸几何按打印机可打印区 1:1 对齐（APP 与桌面逐毫米一致）\n  - fix(app-print): 处方签西文/数字字号按桌面实测度量校准\n  - fix(app-print): 修复 A5 打印右侧裁切与旋转水印斜线残影\n  - fix(app-print): 改用画布显式缩放(useWideViewPort+CSS 1:1 布局)，修复 setInitialScale 未生效导致内容只占左上 1/3\n📋 其他:\n  - build: 一键打包副作用自动收纳\n  - docs: App 内置字体方案评估报告（结论：保留内置字体，方案A）\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - docs(knowledge): 记录处方签字体度量校准与西文偏大根因\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳"
         }
     },
     "provenance": {
         "schemaVersion": 1,
         "repo": "https://github.com/kyt61767126/tcm-prescription-system.git",
-        "commit": "14953a653918",
+        "commit": "17cf6ec7943d",
         "ref": "main",
         "builder": "kyt61767126",
-        "builtAt": "2026-11-21T01:39:14.866Z",
+        "builtAt": "2026-11-21T05:06:03.288Z",
         "buildTool": "publish-release.js@v24.16.0",
-        "releaseTag": "v2026.11.21-0836"
+        "releaseTag": "v2026.11.21-1258"
     },
     "dingzhi": {
         "apk": {
-            "version": "V1.0.364",
-            "versionCode": 364,
-            "sha256": "78bad3f4ec0af664667f0cbda14df785eb3e02f7b1607a336dc245257533a085",
+            "version": "V1.0.367",
+            "versionCode": 367,
+            "sha256": "aa78979abc1afe094bc540e12b3a1d9d96c4b89dc2fe7df814cf7849a9ae3bf6",
             "url": "https://tcm-prescription-system.pages.dev/downloads/惠康中医-本地.apk",
-            "releaseUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.21-0836/huikang-local.apk",
-            "size": 6922713,
-            "updateTime": "2026-11-21T01:39:14.127Z",
+            "releaseUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.21-1258/huikang-local.apk",
+            "size": 6939900,
+            "updateTime": "2026-11-21T05:06:02.012Z",
             "fileName": "惠康中医-本地.apk",
             "releaseFileName": "huikang-local.apk",
-            "releaseTag": "v2026.11.21-0836",
-            "releaseNotes": "✨ 新增:\n  - feat(print): App 内置开源楷体/宋体，处方笺与桌面像素级统一\n  - feat(license): 「更换/续费激活码」仅到期前 7 天显示，永久/长期有效默认隐藏（auth-core 双源 11 副本 + cv 指纹 + 热包 2026.11.20-13）\n  - feat(ui): 取消基础设置「学习（题库练习）」重复入口 + 云端App手机顶端绿色更新提示条（hotVersion 部署标记比对；脚本移植 4 副本消除跨版本漂移，基线已重冻结）（热包 2026.11.20-8）\n  - feat(ui): 取消基础设置「学习（题库练习）」重复入口（工具栏已有题库入口）+ 云端App手机顶端绿色更新提示条（hotVersion 部署标记比对，仅App环境显示）（热包 2026.11.20-7）\n  - feat(license): 激活码脱敏展示（管理员密码解锁）+ 无效码撞码防护\n  - docs(knowledge): §5 新增鸿蒙版本只打包不发布规范\n  - feat(app): 云端/鸿蒙APP顶部工具栏与离线APP统一（含语音录入/统计/题库）\n  - feat(app): 云端APP与鸿蒙APP验方列表按钮布局同步离线版\n  - feat(app): 手机APP顶部「存验方」改为「验方设置」，复用桌面验方管理弹窗\n  - feat(license): 正式授权到期前 1-7 天顶部横幅提醒（离线/云端双通道）\n🐛 修复:\n  - fix(app-print): 改用画布显式缩放(useWideViewPort+CSS 1:1 布局)，修复 setInitialScale 未生效导致内容只占左上 1/3\n  - fix(app-print): 改为 A5@300dpi 精确几何打印，字号/页边距对齐桌面 10.5/22/9pt 与 22.5-13-15mm\n  - fix(app): 处方签字号按真机反馈降至 0.86（桌面保持 1.0 不变）\n  - fix(print): App端处方签按桌面基准视觉补偿（0.80缩放+标题常规字重），修复Android无宋楷字体导致的偏大偏粗\n  - fix(print): 处方签字体字号布局全局统一（App取消0.80缩放，恢复桌面基准10.5/22/9pt，静态CSS插值修复）\n  - fix(print): 处方签恢复纵向默认；App 打印字号按桌面程序再收一档（0.80）\n  - fix(print): App 打印字号整体收一档（0.85）与桌面程序处方签统一，桌面/网页不变\n  - fix(print): 离线 App 默认横向打印（改权威源 desktop/index.html 后重新生成 index-app 及 APK assets）\n  - fix(print): 手机 App 处方打印默认横向（A5 横放 210x148），与桌面输出一致；修复打印机报缺纸/只印上半张\n  - fix(print): 手机 App 系统打印只出上半页——WebView 按 A5 显式布局并等 onPageFinished 后再调起打印（桌面端正常，无需改）\n⚡ 优化:\n  - perf(cloudapp): 绿条迁移至 body 首部提前预取（fetch 与解析并行，DOM 兜底，可交互后停留 8 秒）；重建界面锁与跨版本基线（热包 2026.11.20-14）\n  - style(app): 优化验方设置列表按钮布局为三等分整行\n  - perf(admin): 风控与用量扫描并发化并补用量缓存\n  - perf(build-queue): 列表短缓存 + 空闲轮询降载\n  - perf(admin): 操作日志列表分页，分页条空态清理\n  - perf(admin): 诊所/风控/设备列表分页，设备列表并行请求，旧工单页转义\n  - perf(admin): 激活码/用户/激活审核列表分页，单页渲染 50 条\n  - perf(admin): 待办页全量读取收口（lite=2 + trend=1）并补齐 site-admin 双副本\n📋 其他:\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - docs(knowledge): 沉淀手机 App 打印只出上半页根因（Android WebView 需等 onPageFinished）与重打 APK 流程\n  - build: 一键打包副作用自动收纳"
+            "releaseTag": "v2026.11.21-1258",
+            "releaseNotes": "✨ 新增:\n  - feat(pack): 能热更的不整包重打，范围打包不再顺带另一端口，清理发布副作用误判\n🐛 修复:\n  - fix(print): 打印 WebView 关滚动条，消除纸上右侧/底部两条细线\n  - fix(print): 修正 375 位图像素当 PDF 点导致的 4 倍放大（预览只见中部窄条）\n  - fix(print): APP 处方签落纸按桌面实测 0.86 等比居中缩放\n  - fix(print): 可打印区 fit 改为等比居中缩放（禁止纵横拉伸）\n  - fix(print): APP 处方签按打印机可打印区同构 fit，与桌面实际落纸尺寸一致\n  - fix(print): 处方签落纸几何按打印机可打印区 1:1 对齐（APP 与桌面逐毫米一致）\n  - fix(app-print): 处方签西文/数字字号按桌面实测度量校准\n  - fix(app-print): 修复 A5 打印右侧裁切与旋转水印斜线残影\n  - fix(app-print): 改用画布显式缩放(useWideViewPort+CSS 1:1 布局)，修复 setInitialScale 未生效导致内容只占左上 1/3\n📋 其他:\n  - build: 一键打包副作用自动收纳\n  - docs: App 内置字体方案评估报告（结论：保留内置字体，方案A）\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - docs(knowledge): 记录处方签字体度量校准与西文偏大根因\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳"
         },
         "portable": {
             "version": "1.0.363",
