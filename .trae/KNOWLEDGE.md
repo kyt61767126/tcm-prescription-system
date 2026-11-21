@@ -3099,3 +3099,11 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
 * **根因②（斜线残影）**：离线免费版打印水印是 `transform:rotate(-25deg)` + `overflow:hidden` 的 8% 灰文字网格。硬件合成层经 `printWebView.draw(cv)` 抓取时只剩层边缘（斜线/横线），文字丢失。**修复：打印 WebView `setLayerType(View.LAYER_TYPE_SOFTWARE, null)`**，让旋转层由 Chromium 软件光栅完整落入 A5 位图（云端线上打印模板无水印层，此改动对云端无副作用）。
 * **生效方式**：Java 改动不可热更 → 两 APK 必须重打包（versionCode 递增）后分发；网页/桌面零影响。
 * **铁律**：`useWideViewPort` 不等于固定布局视口；任何"抓 WebView 成图"的链路都要显式给 viewport 宽度，且旋转/透明度合成层一律先切软件层再抓图。
+
+### 2026-11-21 补：处方签"字体字号/布局仍与桌面不同"——根因是内置字体西文字面偏大
+* **实测（同 pt，PIL 字体度量 + Chromium 渲染双测）**：汉字 SimSun↔HKSong 完全一致（高/宽 1:1，1em 等宽），HKKai↔KaiTi 汉字 1.008；但**西文明显偏大**——数字高 1.10×、宽 1.11×，小写字母高 1.18×、宽 1.13×。
+* **表现**：剂量 `10g`、门诊号、年龄等比桌面更粗大，行宽被撑开 → "3 味一行"随之偏移，用户看到的是"字号和布局都不一样"（实际中文和 pt 完全正确）。
+* **修复**：用同一 woff2 按 `unicode-range` 拆出**仅西文字面**再用 `size-adjust` 校准到桌面实测度量——`HKSongNum`（U+0030-0039，89.5%）、`HKSongAscii`/`HKKaiAscii`（字母，85%）；中文字面、字号（10.5/22/9pt）、版心、行距一律不动。字体栈：`'SimSun','宋体','HKSongNum','HKSongAscii','HKSong',serif`；`'Times New Roman','HKSongNum','HKSongAscii','HKSong',serif`。
+* **验证**：Edge(Chromium) 实测 `0` 宽 69.8 vs SimSun 70（原 78）；`10g` 196.2（原 223.2，桌面 Times 210）；中文 1120=1120；桌面命中系统字体时不下载字形。
+* **限制**：`size-adjust` 需 Chromium/WebView ≥92；旧内核自动按原样渲染（无回归）。
+* **铁律**：跨端用开源字体替换 Windows 系统字体时，必须单独校验**西文/数字**度量（汉字等宽容易掩盖问题），否则剂量、编号、年龄会系统性偏大并连带排版漂移。
