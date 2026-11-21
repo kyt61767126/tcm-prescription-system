@@ -46,6 +46,26 @@ let REGRESS_REASON = '';
     if (!REGRESS_REASON && process.env.ALLOW_REGRESS_REASON) REGRESS_REASON = String(process.env.ALLOW_REGRESS_REASON).trim();
 }
 
+// ---- ★ 2026-11-21 第四轮：发布目标作用域收窄 ----
+//   单版本发布（如只发云端）时，无关版本的 HOT-STALE / REGRESS 不应硬阻断本次发布，
+//   否则会被迫重签/重打与本次无关的通道。--scope 默认 all（= 原全量体检行为不变）。
+//   cloud   → 仅检查 cloud-desktop / cloud-app + desktop/cloud 通道
+//   dingzhi → 仅检查 local-desktop / local-app + desktop/local / app-local 通道
+let SCOPE = 'all';
+{
+    const eqArg = ARGS.filter(a => a.indexOf('--scope=') === 0)[0];
+    const idxArg = ARGS.indexOf('--scope');
+    if (eqArg) SCOPE = eqArg.slice('--scope='.length).trim();
+    else if (idxArg >= 0 && ARGS[idxArg + 1] && ARGS[idxArg + 1].indexOf('--') !== 0) SCOPE = String(ARGS[idxArg + 1]).trim();
+    if (['all', 'cloud', 'dingzhi'].indexOf(SCOPE) < 0) SCOPE = 'all';
+}
+const SCOPE_UNITS = SCOPE === 'cloud' ? ['cloud-desktop', 'cloud-app']
+    : SCOPE === 'dingzhi' ? ['local-desktop', 'local-app']
+    : ['cloud-desktop', 'cloud-app', 'local-desktop', 'local-app'];
+const SCOPE_CHANNELS = SCOPE === 'cloud' ? ['desktop/cloud']
+    : SCOPE === 'dingzhi' ? ['desktop/local', 'app-local']
+    : ['desktop/cloud', 'desktop/local', 'app-local'];
+
 const findings = [];
 function add(level, id, msg, detail) {
     findings.push({ level: level, id: id, msg: msg, detail: detail || '' });
@@ -106,9 +126,13 @@ const pub = {
     'local-app': manifest.local && manifest.local.apk ? manifest.local.apk.versionCode : null
 };
 const labels = { 'cloud-desktop': '云端桌面', 'cloud-app': '云端 APP', 'local-desktop': '离线桌面', 'local-app': '离线 APP' };
+// 作用域视图：单版本发布只看相关端/通道，避免无关 HOT-STALE/REGRESS 阻断本次发布
+const scopeLocalVersions = {};
+const scopePub = {};
+for (const k of SCOPE_UNITS) { scopeLocalVersions[k] = localVersions[k]; scopePub[k] = pub[k]; }
 
 let pending = 0;
-for (const k of Object.keys(localVersions)) {
+for (const k of SCOPE_UNITS) {
     const cur = localVersions[k], old = pub[k];
     if (cur == null) { add('WARN', 'ARTIFACT-MISSING', labels[k] + ' 未找到本地构建产物', '请先执行打包'); continue; }
     if (old == null) { add('WARN', 'PUBLISHED-MISSING', labels[k] + ' 官网 manifest 缺少对应条目', ''); continue; }
@@ -151,7 +175,7 @@ const HOT_CHANNELS = {
         resignCmd: 'node tools/generate-app-hotupdate.cjs'
     }
 };
-for (const ch of Object.keys(HOT_CHANNELS)) {
+for (const ch of SCOPE_CHANNELS) {
     const cfg = HOT_CHANNELS[ch];
     const vp = path.join(ROOT, cfg.dir, 'version.json');
     if (!fs.existsSync(vp)) { add('WARN', 'HOT-MISSING-' + ch, '热更包缺失：' + cfg.dir + '/version.json', ''); continue; }
@@ -177,7 +201,7 @@ for (const ch of Object.keys(HOT_CHANNELS)) {
             '热更 ' + hot.hotVersion + ' 内容与当前源码一致' + (mismatch ? '，但 appVersion=' + hot.appVersion + ' 落后于整包 ' + appV + '（元数据，可重签刷新）' : ''),
             mismatch ? '建议随整包重签刷新 appVersion：' + cfg.resignCmd : '');
     }
-    if (hot.minAppCode && localVersions['local-app'] && hot.minAppCode > localVersions['local-app']) {
+    if (SCOPE_UNITS.indexOf('local-app') >= 0 && hot.minAppCode && localVersions['local-app'] && hot.minAppCode > localVersions['local-app']) {
         add('BLOCK', 'HOT-MINAPP-' + ch, '热更 minAppCode=' + hot.minAppCode + ' > 离线 APP versionCode=' + localVersions['local-app'], '旧 APK 装新热包会调不存在的桥方法');
     }
 }
@@ -231,13 +255,13 @@ findings.sort((a, b) => order[a.level] - order[b.level]);
 const blockers = findings.filter(f => f.level === 'BLOCK');
 const pend = findings.filter(f => f.level === 'PENDING');
 if (JSON_OUT) {
-    console.log(JSON.stringify({ ts: new Date().toISOString(), localVersions, publishedVersions: pub, pending, allowRegress: { enabled: ALLOW_REGRESS, reason: REGRESS_REASON, allowed: allowedRegress, auditLog: regressAuditLog }, findings }, null, 2));
+    console.log(JSON.stringify({ ts: new Date().toISOString(), scope: SCOPE, localVersions: scopeLocalVersions, publishedVersions: scopePub, pending, allowRegress: { enabled: ALLOW_REGRESS, reason: REGRESS_REASON, allowed: allowedRegress, auditLog: regressAuditLog }, findings }, null, 2));
 } else {
     console.log('============================================');
-    console.log('  发布前体检（只读 / 不联网 / 不改文件）');
+    console.log('  发布前体检（只读 / 不联网 / 不改文件）' + (SCOPE !== 'all' ? '  [scope=' + SCOPE + ']' : ''));
     console.log('============================================');
-    console.log('本地: ' + Object.keys(localVersions).map(k => labels[k] + '=' + localVersions[k]).join('  '));
-    console.log('官网: ' + Object.keys(pub).map(k => labels[k] + '=' + pub[k]).join('  '));
+    console.log('本地: ' + SCOPE_UNITS.map(k => labels[k] + '=' + scopeLocalVersions[k]).join('  '));
+    console.log('官网: ' + SCOPE_UNITS.map(k => labels[k] + '=' + scopePub[k]).join('  '));
     console.log('');
     for (const f of findings) {
         const tag = '[' + f.level + '] ';

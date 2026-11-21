@@ -370,6 +370,7 @@ function Invoke-Verify {
 #   REGRESS（版本回退）降级为 WARN 并写 .build-cache/release-audit.log 留档；
 #   不设置则行为不变（REGRESS 仍是硬阻断），其他阻断项始终拦截。
 function Invoke-ReadinessGate {
+    param([string]$Scope = 'all')   # ★ 2026-11-21 第四轮：按发布目标收窄体检范围（单版本发布不被无关通道阻断）
     if ($env:READINESS_SOFT -eq '1') {
         Write-Host "[SKIP] READINESS_SOFT=1 —— 体检降级为提示（阻断项不会中止流程）" -ForegroundColor Yellow
         return 0
@@ -379,7 +380,7 @@ function Invoke-ReadinessGate {
         Write-Host "[WARN] 未找到 tools\check-release-readiness.cjs，跳过发布前体检" -ForegroundColor Yellow
         return 0
     }
-    $readinessArgs = @('--strict')
+    $readinessArgs = @('--strict', "--scope=$Scope")
     if (-not [string]::IsNullOrWhiteSpace($env:ALLOW_REGRESS_REASON)) {
         $readinessArgs += @('--allow-regress', "--regress-reason=$($env:ALLOW_REGRESS_REASON)")
         Write-Host "[WARN] ALLOW_REGRESS_REASON 已显式设置 —— 本次仅放行版本回退(REGRESS)项" -ForegroundColor Yellow
@@ -530,7 +531,7 @@ function Invoke-FullFlow {
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host "  [1.8/4] 发布前体检（严格模式，阻断项即中止）" -ForegroundColor Cyan
     Write-Host "========================================" -ForegroundColor Cyan
-    $rc = Invoke-ReadinessGate
+    $rc = Invoke-ReadinessGate -Scope $Version
     if ($rc -is [array]) { $rc = [int]$rc[-1] }
     if ($rc -ne 0) {
         Write-Host "[ERROR] 发布前体检存在阻断项，流程中止（详见上方 → 行提示）" -ForegroundColor Red
@@ -687,7 +688,7 @@ function Invoke-PublishSelection {
     # ★ 2026-11-21 链路深度优化：体检前先自动重签落后热更通道（按版本范围只签相关通道）
     $rcH = Get-ExitCode (Invoke-PrePublishHotSign -Scope $Target)
     if ($rcH -ne 0) { return [int]$rcH }
-    $rcG = Get-ExitCode (Invoke-ReadinessGate)
+    $rcG = Get-ExitCode (Invoke-ReadinessGate -Scope $Target)
     if ($rcG -ne 0) {
         Write-Host "[ERROR] 发布前体检存在阻断项，指定发布已中止（READINESS_SOFT=1 可跳过）" -ForegroundColor Red
         Write-Host "  完整日志: $script:LogFile" -ForegroundColor Yellow
