@@ -131,12 +131,15 @@ function Resolve-PackStrategy {
     return 'smart'
 }
 
-# ============ 打包后的热更处理策略（★ 2026-10-30 P7 单一判定点）============
+# ============ 打包后的热更处理策略（★ 2026-10-30 P7 单一判定点；★ 2026-11-21 深度优化）============
 # 背景：原 P1 在「仅打包」路径打包成功后直接 Invoke-HotUpdateSign -Commit（重签+提交+推送），
 #   而根目录唯一入口叫「构建发布」，用户点 [2] 仅打包的预期是"只出产物、不动 git"。
 #   入口收敛后必须区分清楚，否则"只打包却推了热更提交"是最难排查的意外副作用。
-#   策略：SKIP_HOTUPDATE=1 → 跳过；PACK_HOT_SIGN=1 → 打包即重签（原 P1 行为，需显式开启）；
-#         默认 → 只读检查，落后仅提示去执行 hot --yes（不写工作区）。
+# ★ 2026-11-21 深度优化：打包默认已带 -AutoCommit（副作用自动收纳+提交+推送，git 本就
+#   会被动），热更落后时也一并自动重签+提交+推送，消灭"打包完还要记得手动 hot --yes"
+#   的机械摩擦（与发布前自动重签同一条链）。逃生舱不变：
+#     SKIP_HOTUPDATE=1 → 跳过；PACK_HOT_SIGN=1 → 强制重签；
+#     NO_AUTOCOMMIT=1 → 明确"只出产物不动 git"，热更落后仅提示不重签（P7 原语义）。
 function Invoke-PostPackHotCheck {
     param([string]$Scope = 'all')
     if ($env:SKIP_HOTUPDATE -eq '1') { return 0 }
@@ -146,10 +149,18 @@ function Invoke-PostPackHotCheck {
     }
     $rcC = Get-ExitCode (Invoke-HotUpdateSign -Scope $Scope -CheckOnly)
     if ($rcC -eq 2) {
+        if ($env:NO_AUTOCOMMIT -ne '1') {
+            Write-Host "[AUTO] 热更内容落后于源码 —— 打包后自动重签（范围: $Scope）..." -ForegroundColor Yellow
+            $rcS = Get-ExitCode (Invoke-HotUpdateSign -Scope $Scope -Commit)
+            if ($rcS -ne 0) {
+                # 不把打包判为失败；发布阶段 Invoke-PrePublishHotSign 会再自动重签兜底
+                Write-Host "  [WARN] 热更自动重签失败（退出码 $rcS），发布阶段会再次自动重签" -ForegroundColor Yellow
+            }
+            return 0
+        }
         Write-Host ""
-        Write-Host "  [提示] 热更包内容落后于源码 —— 本次仅打包，未自动重签（不改 git）" -ForegroundColor Yellow
-        Write-Host "         发布前请执行: 一键构建发布.bat hot --yes   （或菜单 [7]）" -ForegroundColor Yellow
-        Write-Host "         希望打包即重签: 设 PACK_HOT_SIGN=1 再运行" -ForegroundColor DarkGray
+        Write-Host "  [提示] 热更包内容落后于源码 —— NO_AUTOCOMMIT=1 仅出产物，未自动重签（不改 git）" -ForegroundColor Yellow
+        Write-Host "         发布阶段会自动重签；或手动执行: 一键构建发布.bat hot --yes" -ForegroundColor Yellow
         return 0
     }
     if ($rcC -ne 0) {
@@ -306,6 +317,32 @@ function Invoke-HotUpdateSign {
         return $rc
     }
     Write-Host "[OK] 热更签发完成" -ForegroundColor Green
+    return 0
+}
+
+# ============ 发布前自动重签（★ 2026-11-21 链路深度优化）============
+# 背景：此前 publish 体检门（check-release-readiness HOT-STALE）发现热更落后会硬阻断，
+#   要求人工跑 generate-*-hotupdate 重签再重试发布（2026-11-21 实际发生：三通道各 1 个
+#   index.html 不一致 → 手动重签 2026.11.21-2 才放行），摩擦大且纯机械操作。
+# 语义：发布前先只读检查；内容落后(rc=2) → 自动重签+提交+推送后继续；重签失败仍阻断
+#   （体检门兜底仍在，P5 签名校验链不减弱）。仅元数据落后(rc=0+WARN，2026-11-21 起放行)
+#   不触发重签。SKIP_HOTUPDATE=1 由 Invoke-HotUpdateSign 内部短路（等同跳过本步）。
+function Invoke-PrePublishHotSign {
+    param([string]$Scope = 'all')
+    $rcC = Get-ExitCode (Invoke-HotUpdateSign -Scope $Scope -CheckOnly)
+    if ($rcC -eq 0) { return 0 }
+    if ($rcC -eq 2) {
+        Write-Host "[AUTO] 热更内容落后于源码 —— 发布前自动重签（范围: $Scope）..." -ForegroundColor Yellow
+        $rcS = Get-ExitCode (Invoke-HotUpdateSign -Scope $Scope -Commit)
+        if ($rcS -ne 0) {
+            Write-Host "[ERROR] 发布前热更自动重签失败（退出码 $rcS），中止发布" -ForegroundColor Red
+            Write-Host "  完整日志: $script:LogFile" -ForegroundColor Yellow
+            return [int]$rcS
+        }
+        Write-Host "[OK] 热更已自动重签并推送，继续发布流程" -ForegroundColor Green
+        return 0
+    }
+    Write-Host "[WARN] 热更检查退出码 $rcC（非预期），交由发布体检门复核" -ForegroundColor Yellow
     return 0
 }
 
@@ -601,6 +638,10 @@ function Invoke-SmartPublish {
     Write-Host "  智能发布 (auto-publish.js --publish)" -ForegroundColor Cyan
     Write-Host "  仅上传有变化的产物；发布前自动跑合规检查" -ForegroundColor Cyan
     Write-Host "========================================" -ForegroundColor Cyan
+    # ★ 2026-11-21 链路深度优化：体检前先自动重签落后热更通道（此前 HOT-STALE 硬阻断
+    #   需人工重签再重跑，纯机械摩擦）；重签失败仍中止，体检门兜底不减弱。
+    $rcH = Get-ExitCode (Invoke-PrePublishHotSign -Scope 'all')
+    if ($rcH -ne 0) { return [int]$rcH }
     # ★ 2026-10-30 P1：智能发布前先过发布前体检（阻断项即中止）
     $rcG = Get-ExitCode (Invoke-ReadinessGate)
     if ($rcG -ne 0) {
@@ -643,6 +684,9 @@ function Invoke-PublishSelection {
     # Target=all = 「全部版本」发布：沿用智能发布（仅上传有变化的产物），
     # 与阶段 publish / 菜单 [3] 完全同一条路径，不再各写一份。
     if ($Target -eq 'all') { return (Invoke-SmartPublish) }
+    # ★ 2026-11-21 链路深度优化：体检前先自动重签落后热更通道（按版本范围只签相关通道）
+    $rcH = Get-ExitCode (Invoke-PrePublishHotSign -Scope $Target)
+    if ($rcH -ne 0) { return [int]$rcH }
     $rcG = Get-ExitCode (Invoke-ReadinessGate)
     if ($rcG -ne 0) {
         Write-Host "[ERROR] 发布前体检存在阻断项，指定发布已中止（READINESS_SOFT=1 可跳过）" -ForegroundColor Red

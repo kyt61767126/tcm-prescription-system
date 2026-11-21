@@ -25,15 +25,22 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 
 # 全部界面副本(展示版本可能出现的文件)。缺文件只 WARN，不误报。
-$files = @(
-    'public\index.html',
-    'public\electron\login.html',
-    'app_project\db-yunduan\cloud_desktop\index.html',
-    'app_project\db-yunduan\cloud_desktop\electron\login.html',
-    'app_project\db-offline\index-app.html',
-    'app_project\db-offline\desktop\index.html',
-    'app_project\db-offline\desktop\electron\login.html'
-)
+# ★ 2026-11-21 链路深度优化：按产品分组判定（跨端版本号不要求统一）。
+#   云端组（cloud）与离线组（offline）各自独立；组内不一致仍 FATAL（端内一致性，
+#   防止单产品界面显示错乱）；跨组版本不同降为 WARN 放行（各端独立递增属预期）。
+$groups = [ordered]@{
+    'cloud' = @(
+        'public\index.html',
+        'public\electron\login.html',
+        'app_project\db-yunduan\cloud_desktop\index.html',
+        'app_project\db-yunduan\cloud_desktop\electron\login.html'
+    )
+    'offline' = @(
+        'app_project\db-offline\index-app.html',
+        'app_project\db-offline\desktop\index.html',
+        'app_project\db-offline\desktop\electron\login.html'
+    )
+}
 
 Write-Host "============================================" -ForegroundColor Cyan
 Write-Host "  版本展示一致性检查 (8 处版本标识自动化)" -ForegroundColor Cyan
@@ -44,6 +51,10 @@ $tokenRe = 'V\d+(\.\d+)+'
 
 $fileTokens = @{}   # 文件 -> 有序去重 token 列表
 $missing = @()
+
+# 展开分组为平铺清单（扫描用；分组判定见下方）
+$files = @()
+foreach ($g in $groups.Keys) { $files += $groups[$g] }
 
 foreach ($rel in $files) {
     $path = Join-Path $root $rel
@@ -66,31 +77,64 @@ foreach ($rel in $files) {
 }
 
 Write-Host ""
+Write-Host "--- 按产品分组判定（组内必须一致；跨组不要求统一）---" -ForegroundColor Cyan
 
-# 汇总所有文件 token，判定是否"确定矛盾"
-$all = @()
-foreach ($rel in $files) { foreach ($t in $fileTokens[$rel]) { if ($all -notcontains $t) { $all += $t } } }
-
-if ($all.Count -le 1) {
-    Write-Host ("[PASS] 版本展示一致性 OK（全局唯一 token: {0}）" -f $(if ($all.Count -eq 1) { $all[0] } else { '无/单值' })) -ForegroundColor Green
-    if ($missing.Count -gt 0) {
-        Write-Host ("  (提示: {0} 个副本未纳入，模板差异，属预期)" -f $missing.Count) -ForegroundColor Yellow
+$groupTokens = [ordered]@{}   # 组名 -> 该组全部 token（有序去重）
+$groupFileTokens = [ordered]@{}   # 组名 -> 文件 -> token 列表
+foreach ($g in $groups.Keys) {
+    $gAll = @()
+    $gFiles = @{}
+    foreach ($rel in $groups[$g]) {
+        $tokens = $fileTokens[$rel]
+        if ($null -eq $tokens) { continue }
+        $gFiles[$rel] = $tokens
+        foreach ($t in $tokens) { if ($gAll -notcontains $t) { $gAll += $t } }
     }
-    exit 0
+    $groupTokens[$g] = $gAll
+    $groupFileTokens[$g] = $gFiles
+    $gLabel = switch ($g) { 'cloud' { '云端' } 'offline' { '离线' } default { $g } }
+    if ($gAll.Count -le 1) {
+        Write-Host ("  [PASS] {0}组 版本唯一: {1}" -f $gLabel, $(if ($gAll.Count -eq 1) { $gAll[0] } else { '无/单值' })) -ForegroundColor Green
+    } else {
+        Write-Host ("  [FATAL] {0}组 版本展示不一致！检出 {1} 种版本: {2}" -f $gLabel, $gAll.Count, ($gAll -join ' / ')) -ForegroundColor Red
+        foreach ($rel in $gFiles.Keys) {
+            $tokens = $gFiles[$rel]
+            if ($tokens.Count -gt 1) {
+                Write-Host ("     X <{0}> 文件内部版本不一致: {1}(改了一处漏了另一处)" -f $rel, ($tokens -join ' / ')) -ForegroundColor Red
+            }
+        }
+    }
 }
 
-# 存在 ≥2 种版本 token → 确定矛盾，FATAL
-Write-Host ("[FATAL] 版本展示不一致！检出 {0} 种版本: {1}" -f $all.Count, ($all -join ' / ')) -ForegroundColor Red
-foreach ($rel in $files) {
-    $tokens = $fileTokens[$rel]
-    if ($tokens.Count -gt 1) {
-        Write-Host ("   X <{0}> 文件内部版本不一致: {1}(改了一处漏了另一处)" -f $rel, ($tokens -join ' / ')) -ForegroundColor Red
+# 组内 FATAL 判定（任一组内 ≥2 种 token 即失败）
+foreach ($g in $groupTokens.Keys) {
+    if ($groupTokens[$g].Count -gt 1) {
+        Write-Host ""
+        Write-Host "[FATAL] 存在组内版本展示不一致（见上方 X 行）——先修复组内一致性再打包" -ForegroundColor Red
+        Write-Host "  修复指引(唯一权威源)：以各组真源先行修改（云端 public\index.html / 离线 desktop\index.html）" -ForegroundColor Yellow
+        Write-Host "  再用 sync 脚本统一同步到组内副本，重跑本脚本确认组内 [PASS]。" -ForegroundColor Yellow
+        exit 1
     }
 }
-Write-Host "" -ForegroundColor Red
-Write-Host "  修复指引(唯一权威源)：" -ForegroundColor Yellow
-Write-Host "   1) 确定目标版本值(如 V1.0.0 → V1.1.0)，以云端 public\index.html 为真源先行修改；" -ForegroundColor Yellow
-Write-Host "   2) 用 sync/拷贝脚本统一同步到离线副本(desktop、app 各 assets\public 下)；" -ForegroundColor Yellow
-Write-Host "   3) 逐个核对 8 处(version-tag/tab-hint/textContent/console.log/alert/exportInfo.version/login 版本tag/<title>)；" -ForegroundColor Yellow
-Write-Host "   4) 重跑本脚本确认 [PASS] 后再打包。" -ForegroundColor Yellow
-exit 1
+
+# 跨组版本不同 → WARN 放行（2026-11-21 起各端独立递增属预期，不再要求统一）
+$crossAll = @()
+foreach ($g in $groupTokens.Keys) {
+    foreach ($t in $groupTokens[$g]) { if ($crossAll -notcontains $t) { $crossAll += $t } }
+}
+if ($crossAll.Count -gt 1) {
+    $parts = @()
+    foreach ($g in $groupTokens.Keys) {
+        $gLabel = switch ($g) { 'cloud' { '云端' } 'offline' { '离线' } default { $g } }
+        $parts += ("{0}组={1}" -f $gLabel, ($groupTokens[$g] -join '/'))
+    }
+    Write-Host ""
+    Write-Host ("[WARN] 跨产品版本号不同（不要求统一，放行）: {0}" -f ($parts -join '  ')) -ForegroundColor Yellow
+}
+
+Write-Host ""
+Write-Host "[PASS] 版本展示组内一致性 OK" -ForegroundColor Green
+if ($missing.Count -gt 0) {
+    Write-Host ("  (提示: {0} 个副本未纳入，模板差异，属预期)" -f $missing.Count) -ForegroundColor Yellow
+}
+exit 0

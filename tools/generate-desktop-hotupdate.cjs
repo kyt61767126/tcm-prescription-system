@@ -277,6 +277,7 @@ function main() {
 
     // ★ 2026-10-30 P1：--check 只读比对（发布链判断是否需要重签；不写盘、不签名、不占序号）
     //   退出码：0=与已发布清单一致；2=内容落后需重签（或尚无清单）；1=其他错误
+    //   ★ 2026-11-21 链路深度优化：3=内容一致仅 appVersion 元数据落后（不阻断发布链，可随下次整包顺带刷新）
     if (checkOnly) {
         const prev = readPrevManifest(channel);
         if (!prev || !Array.isArray(prev.files)) {
@@ -296,8 +297,8 @@ function main() {
             process.exit(2);
         }
         if (String(prev.appVersion) !== String(conf.appVersion)) {
-            console.log('[HotUpdateCheck] ' + channel + ' 内容一致，appVersion ' + prev.appVersion + ' → ' + conf.appVersion + '（元数据落后，建议重签）');
-            process.exit(2);
+            console.log('[HotUpdateCheck] ' + channel + ' 内容一致，appVersion ' + prev.appVersion + ' → ' + conf.appVersion + '（仅元数据落后，不阻断发布）');
+            process.exit(3);
         }
         console.log('[HotUpdateCheck] ' + channel + ' 已是最新（' + prev.hotVersion + '，' + files.length + ' 文件）');
         process.exit(0);

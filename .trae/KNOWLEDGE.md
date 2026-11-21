@@ -298,6 +298,12 @@
 
 * ★ 2026-11-21 **打包规则优化：能热更的不整包重打（build-skip 热更覆盖判定）**：`tools/build-skip.ps1` 新增 `$hotChannelDefs`——四端增量检测发现源码新提交后，先判定改动是否**全部**落在对应热更通道清单（直接读已发布 `public/hot-update/*/version.json` 的 `files[].name`，避免与生成器白名单二次维护漂移），且各权威副本（shared→分发副本、desktop→APP assets、public→cloud_desktop 覆盖件）与热包签名源**逐字节一致**；全部覆盖时输出 `[HOT-ONLY]` 并退出码 0（跳过整包，只重签热包），任一不可覆盖则照旧 `[BUILD]`（宁可多打不漏打）。`cloud-app` 为在线 WebView 壳：`public/**`、`cloud_app/assets/public/**`、`shared/**`、`cloud_desktop/**` 网页层改动一律 push 即达、无需重打 APK。`public/build-meta.json` 补入发布副作用排除（发布脚本回写桌面版本号，非源码）。保险丝 `NO_BUILD_SKIP=1` 仍强制全量重打。**旧版本一次跳到最新已具备**：三通道 `version.json` 始终是“最新完整文件清单”，客户端逐文件比对本机哈希只拉变化文件（不是逐级补丁）；桌面 `appVersion` 门槛只拒“热包比本机旧”；APP 本机 `versionCode < minAppCode`（288）时转 APK 整包通道并按 versionCode 拉最新 APK，同样一次到位。
 
+* ★ 2026-11-21 **版本/热更/发布链路深度优化（三件事：自动重签 + 元数据落后放行 + 跨端版本解绑）**：
+  ① **发布前自动重签**（`tools/release-menu.ps1` 新增 `Invoke-PrePublishHotSign`）：此前 publish 体检门 HOT-STALE 硬阻断、要求人工跑 `generate-*-hotupdate` 重签再重试（2026-11-21 实际发生：三通道各 1 个 index.html 不一致 → 手动重签 2026.11.21-2 才放行）。现在智能发布/指定发布在体检门**之前**先只读检查，内容落后(rc=2)→自动重签+提交+推送后继续；重签失败仍中止（体检门兜底不减弱）。打包后处理（`Invoke-PostPackHotCheck`）同步升级：AutoCommit 场景（git 本就被动）热更落后也自动重签，消灭"打包完还要记得手动 hot --yes"；`NO_AUTOCOMMIT=1` 保留 P7"只出产物不动 git"语义、仅提示。
+  ② **元数据落后放行**（`tools/generate-desktop-hotupdate.cjs` --check 退出码 3）：内容一致仅 appVersion 落后曾是"假落后"（exit 2 触发重签占序号）；现在 exit 3，`hotupdate-stage.ps1` Check 归 WARN 不阻断、Sign 默认不签（`-IncludeMetaOnly` 才连签）。app 生成器无 appVersion 比较无需改。`check-release-readiness.cjs` 的 HOT-STALE 本就只对内容真落后 BLOCK、元数据落后原为 WARN，无需改。
+  ③ **跨端版本解绑**（`tools/verify-version-display.ps1` 产品分组）：7 个展示文件按云端组/离线组分开判定——组内 ≥2 种 token 仍 FATAL（端内一致性防显示错乱），跨组版本不同降 WARN 放行（各端独立递增属预期，用户明确"不要求版本号统一"）。端内校验全部保留：verify-app-version-consistency（云端三要素/离线两要素）、check-manifest-version（local/dingzhi 双 key 镜像）、check-release-readiness 的 REGRESS-*/HOT-MINAPP、verify-version-baseline。
+  铁律：**序号只在真正签发时递增**（--check 永不占序号）；自动重签幂等（内容一致时 Check exit 0 不再重签、序号不空转）；改 `verify-version-display.ps1` 后组内 FATAL 语义不得再放宽。
+
 * 云端APP tools/obfuscate.js 会混淆 assets JS——解包 APK 后 grep 找不到 ≠ 没打进（index.html 未混淆可 grep 验证，其他 JS 需按混淆与否区分）。
 
 * 安全优化后必须验证 4 端 APP 打包流程：预编译→非严格打包→严格模式打包→APK 签名哈希。

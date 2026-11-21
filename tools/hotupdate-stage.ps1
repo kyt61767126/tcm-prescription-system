@@ -18,16 +18,20 @@
 #   （会报 PositionalParameterNotFound），因此 Channels 用单字符串 + 逗号分隔，
 #   内部再 split。调用方（release-menu）统一传 ($arr -join ',')。
 #
-# 退出码：Check  0=三通道都已最新 / 2=有落后通道需签发 / 1=检查失败
+# 退出码：Check  0=三通道都已最新（或仅元数据落后）/ 2=有通道内容落后需签发 / 1=检查失败
 #          Sign   0=签发成功或无需签发 / 1=签发、校验或提交失败
 #          Verify 0=全部通过 / 1=有不通过项
+# ★ 2026-11-21 链路深度优化：生成器 --check 退出码 3=内容一致仅 appVersion 元数据落后，
+#   Check 归入 WARN 不再阻断；Sign 默认只签内容真落后通道，-IncludeMetaOnly 才连同
+#   元数据落后通道一起签（有意刷新 appVersion 场景）。
 # 保险丝：SKIP_HOTUPDATE=1 跳过签发（打印提示，退出 0）
 [CmdletBinding()]
 param(
     [ValidateSet('Check', 'Sign', 'Verify')]
     [string]$Mode = 'Check',
     [string]$Channels = '',
-    [switch]$Commit
+    [switch]$Commit,
+    [switch]$IncludeMetaOnly
 )
 
 $ErrorActionPreference = 'Continue'
@@ -105,6 +109,7 @@ if ($Mode -eq 'Verify') {
 
 # ------------------------- Check -------------------------
 $stale = @()
+$metaStale = @()
 $fresh = @()
 $checkError = $false
 
@@ -129,6 +134,9 @@ foreach ($key in $channelList) {
     if ($rc -eq 0) {
         $fresh += $key
         Write-Host ("  [最新] {0}（{1}）" -f $hotDefs[$key].Label, (Get-HotVersion $key)) -ForegroundColor Green
+    } elseif ($rc -eq 3) {
+        $metaStale += $key
+        Write-Host ("  [元数据] {0} 内容一致，仅 appVersion 落后（不阻断）" -f $hotDefs[$key].Label) -ForegroundColor Yellow
     } elseif ($rc -eq 2) {
         $stale += $key
     } else {
@@ -143,7 +151,10 @@ if ($Mode -eq 'Check') {
         Write-Host ("[需签发] {0} 个通道内容落后: {1}" -f $stale.Count, ($stale -join ', ')) -ForegroundColor Yellow
         exit 2
     }
-    Write-Host "[OK] 所有热更通道都已是最新，无需重签" -ForegroundColor Green
+    if ($metaStale.Count -gt 0) {
+        Write-Host ("[WARN] {0} 个通道仅元数据落后（内容一致，放行）: {1}" -f $metaStale.Count, ($metaStale -join ', ')) -ForegroundColor Yellow
+    }
+    Write-Host "[OK] 所有热更通道内容已是最新，无需重签" -ForegroundColor Green
     exit 0
 }
 
@@ -155,6 +166,11 @@ if ($env:SKIP_HOTUPDATE -eq '1') {
 if ($checkError) {
     Write-Host "[ERROR] 热更检查失败，中止签发" -ForegroundColor Red
     exit 1
+}
+# -IncludeMetaOnly：连同仅元数据落后的通道一起签（有意刷新 appVersion 场景）
+if ($IncludeMetaOnly -and $metaStale.Count -gt 0) {
+    Write-Host ("[INFO] -IncludeMetaOnly：连同元数据落后通道一起签发: {0}" -f ($metaStale -join ', ')) -ForegroundColor Yellow
+    $stale += $metaStale
 }
 if ($stale.Count -eq 0) {
     Write-Host "[OK] 热更包已是最新，本次无需重签" -ForegroundColor Green
