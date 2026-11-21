@@ -3091,3 +3091,11 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
 * **正解（已落地）**：两 APK 改为「A5@300dpi 精确栅格化 + ISO A5 原尺寸送印」：`scalePercent = (dots/cssWidthPx)/density*100`、`setInitialScale`、隐藏 WebView 按 1748×2480 布局并 `draw(Canvas)`，再用自定义 `PrintDocumentAdapter`（PrintedPdfDocument, 300dpi, NO_MARGINS）输出位图。1 CSS px = 300/96 设备像素，纸面几何与桌面逐毫米一致；同时剔除模板 viewport meta；失败自动回退旧适配器。
 * **配套**：CSS 字号回归桌面基准 10.5/22/9pt，**删除所有 App 比例补偿**（`__pScale` 已移除）。
 * **铁律**：App 打印出现"整体偏大/边距不对"时，先查打印链路是否二次缩放，禁止再用缩小字号的方式凑；离线设备验证必须装 APK，不能只发热更。
+
+### 2026-11-21 补：372 真机打印「右侧被裁 + 纸上斜线」（对上一版「剔除 viewport」的纠偏）
+* **现象**（372 预览截图）：纸面左侧约 39% 空白、右侧内容被裁掉；空白处有约 -25° 斜线与底部横线"水印残影"，"免费版"文字不见。
+* **根因①（偏移裁切）**：上一版"剔除模板 viewport meta"是错解。`setUseWideViewPort(true)` **只启用 meta 解析**，不等于布局视口=控件宽；meta 缺失时 WebView 退回 **980px 默认布局视口**，148mm（559px）纸面在 980px 中居中（左侧约 210px 空白），而视图/抓图只取左侧 559px → 右侧约 40% 被裁。截图比例与 980px 视口精确吻合。
+* **正解**：不再删 meta，改为**显式注入 `width=<纸面 CSS 宽>`**（纵向 559 / 横向 794，`ceil(纸宽mm*96/25.4)`），`initial-scale=1`，布局视口与纸面逐 CSS px 对齐。两 APK 同一改法（离线 `View`/云端 `htmlContent`）。
+* **根因②（斜线残影）**：离线免费版打印水印是 `transform:rotate(-25deg)` + `overflow:hidden` 的 8% 灰文字网格。硬件合成层经 `printWebView.draw(cv)` 抓取时只剩层边缘（斜线/横线），文字丢失。**修复：打印 WebView `setLayerType(View.LAYER_TYPE_SOFTWARE, null)`**，让旋转层由 Chromium 软件光栅完整落入 A5 位图（云端线上打印模板无水印层，此改动对云端无副作用）。
+* **生效方式**：Java 改动不可热更 → 两 APK 必须重打包（versionCode 递增）后分发；网页/桌面零影响。
+* **铁律**：`useWideViewPort` 不等于固定布局视口；任何"抓 WebView 成图"的链路都要显式给 viewport 宽度，且旋转/透明度合成层一律先切软件层再抓图。

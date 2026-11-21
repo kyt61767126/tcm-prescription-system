@@ -2115,14 +2115,13 @@ public class MainActivity extends BridgeActivity {
                         printSettings.setAllowFileAccess(true);
                         printSettings.setAllowFileAccessFromFileURLs(true);
                         printSettings.setAllowUniversalAccessFromFileURLs(false);
-                        printWebView.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
 
                         float density = getResources().getDisplayMetrics().density;
                         if (density <= 0f) density = 1f;
                         // ★ 2026-11-21 真机预览取证：setInitialScale 在 WebView 上未生效（内容只占左上 1/3），
                         //   故改为「按 CSS 尺寸 1:1 布局 + 画布显式放大到 A5@300dpi」，不再依赖 zoom。
-                        //   useWideViewPort 保证布局视口 = 控件宽（CSS px = 物理像素/density），
-                        //   否则默认 980px 布局视口会让版面再被缩放一次。
+                        //   useWideViewPort 仅启用 meta viewport 解析；布局视口由下方注入的
+                        //   width=<纸面 CSS 宽> 决定，缺失 meta 时会退回 980px 默认视口。
                         printSettings.setUseWideViewPort(true);
                         printSettings.setLoadWithOverviewMode(false);
                         final int cssHeightPx = Math.round(210f * 96f / 25.4f);
@@ -2137,6 +2136,10 @@ public class MainActivity extends BridgeActivity {
                         }
                         printRoot.addView(printWebView, new android.widget.FrameLayout.LayoutParams(viewW, viewH));
                         printWebView.setVisibility(View.INVISIBLE);
+                        // ★ 2026-11-21 真机 372 取证修复：硬件合成层经 View.draw() 抓取时，旋转水印层
+                        //   会只剩层边缘（纸上出现一条斜线/横线，且"免费版"文字丢失）。强制软件层
+                        //   渲染，旋转水印与文字按 Chromium 光栅结果完整落入 A5 位图。
+                        printWebView.setLayerType(android.view.View.LAYER_TYPE_SOFTWARE, null);
 
                         printWebView.setWebViewClient(new android.webkit.WebViewClient() {
                             @Override
@@ -2179,9 +2182,13 @@ public class MainActivity extends BridgeActivity {
                         //   HKKai/HKSong.woff2（CSS 用 android_asset 绝对地址），故 baseUrl 指向
                         //   assets/public，并放开 file:// 子资源访问。仅此临时打印 WebView 生效，
                         //   页面内容为本地生成的静态 HTML，无外部脚本注入面。
-                        //   ★ 同时剔除模板里的 viewport meta：它会让 WebView 忽略 setInitialScale，
-                        //     导致按 mm 定尺的版面被重新缩放（与内置打印同一处理）。
-                        String renderHtml = html.replaceAll("(?i)<meta[^>]+name=[\"']viewport[\"'][^>]*>", "");
+                        //   ★ 2026-11-21 真机 372 取证修复：剔除 viewport meta 会让 WebView 退回
+                        //     980px 默认布局视口（useWideViewPort 只是启用 meta 解析，并不等于
+                        //     布局视口=控件宽），148mm 纸面在 980px 里居中 → 右侧整体被裁、
+                        //     签名线斜出纸面。现显式注入 width=<A5 CSS 宽>，布局视口与纸面逐 CSS px 对齐。
+                        final int viewportCssW = (int) Math.ceil(cssWidthPx);
+                        String renderHtml = html.replaceAll("(?i)<meta[^>]+name=[\"']viewport[\"'][^>]*>",
+                            "<meta name=\"viewport\" content=\"width=" + viewportCssW + ", initial-scale=1.0, maximum-scale=1.0, user-scalable=no\">");
                         printWebView.loadDataWithBaseURL("file:///android_asset/public/index.html", renderHtml, "text/html", "UTF-8", null);
                     } catch (Exception e) {
                         Log.e(TAG, "printViaSystem 失败", e);
