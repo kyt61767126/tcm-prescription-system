@@ -9389,27 +9389,36 @@ let currentUser = null;
             const html = `<!DOCTYPE html><html><head><title>惠康中医诊所管理系统 ${window.APP_VERSION}-打印预览</title><meta name="viewport" content="width=device-width, initial-scale=1.0"><style>@page { size: ${pageSize}; margin: 0; }
         @font-face { font-family: 'HKKai'; src: url('${__fontBase}HKKai.woff2') format('woff2'); font-weight: normal; font-style: normal; }
         @font-face { font-family: 'HKSong'; src: url('${__fontBase}HKSong.woff2') format('woff2'); font-weight: normal; font-style: normal; }
+        /* ★ 2026-11-21 与桌面处方签字体度量对齐（Android 无 SimSun/KaiTi/Times New Roman）：
+           内置 HKSong/HKKai 的汉字度量与 SimSun/KaiTi 完全一致（高/宽 1:1），但西文字面偏大
+           （数字高 1.10×、宽 1.11×；小写字母高 1.18×、宽 1.13×），导致剂量、门诊号、年龄更粗大，
+           行宽被撑开、3 味一行的排版随之偏移。此处用同一 woff2 按 unicode-range 拆出「数字」「字母」
+           两个仅西文字面，以 size-adjust 缩到桌面实测度量（数字 89.5%、字母 85%）；中文字面零改动。
+           桌面/网页命中前面的 SimSun/KaiTi/Times 时不会下载这两个字面。 */
+        @font-face { font-family: 'HKSongNum'; src: url('${__fontBase}HKSong.woff2') format('woff2'); unicode-range: U+0030-0039; size-adjust: 89.5%; font-weight: normal; font-style: normal; }
+        @font-face { font-family: 'HKSongAscii'; src: url('${__fontBase}HKSong.woff2') format('woff2'); unicode-range: U+0020-002F, U+003A-007E; size-adjust: 85%; font-weight: normal; font-style: normal; }
+        @font-face { font-family: 'HKKaiAscii'; src: url('${__fontBase}HKKai.woff2') format('woff2'); unicode-range: U+0020-007E; size-adjust: 85%; font-weight: normal; font-style: normal; }
         /* ★ 2026-10-28 A5 整页打印（用户实际用纸 ISO A5 148×210mm，非 B5）：
            ①纸型 A5，页边距固定 上15/左右13/下15mm（左右严格对称，杜绝"右边距偏小"）；
            ②删 body min-height:100vh——Android WebView 打印时 vh=手机屏幕高（约2200px）远大于 A5 纸高
            （210mm≈794px），body 被撑高溢出成 2 页；③纸片高留 0.5mm 舍入余量——内容高==页高时
            亚像素舍入会甩出空白第 2 页 */
-        body { font-family: 'SimSun', '宋体', 'HKSong', serif; width: ${paperWidth}; padding: 0; margin: 0 auto; display: block; line-height: 1.2; -webkit-print-color-adjust: exact; print-color-adjust: exact; color: #000; }
+        body { font-family: 'SimSun', '宋体', 'HKSongNum', 'HKSongAscii', 'HKSong', serif; width: ${paperWidth}; padding: 0; margin: 0 auto; display: block; line-height: 1.2; -webkit-print-color-adjust: exact; print-color-adjust: exact; color: #000; }
         /* ★ 2026-10-28 处方笺字体规范（与屏幕预览同一套）：标题/Rp 二号22pt、前记与后记五号10.5pt、
            中药正文五号10.5pt 行距1.2（3 味一行、药名左剂量右）、煎服法小五号9pt 行距1.1、签名区预留≥20mm */
         .prescription-paper { display: flex; flex-direction: column; position: relative; width: ${paperWidth}; height: calc(${paperHeight} - 0.5mm); padding: 22.5mm 13mm 15mm; margin: 0 auto; box-sizing: border-box; font-size: ${__pFont}pt; line-height: 1.2; overflow: hidden; }
-        .clinic-name { text-align: center; font-size: ${__pTitle}pt; font-weight: ${__pTitleWeight}; line-height: 1.125; color: #000; margin-bottom: 10px; letter-spacing: 2px; font-family: 'KaiTi', '楷体_GB2312', '楷体', 'HKKai', serif; }
-        .prescription-title { text-align: center; font-size: ${__pTitle}pt; font-weight: ${__pTitleWeight}; line-height: 1.125; color: #000; margin-bottom: 12px; letter-spacing: 4px; font-family: 'KaiTi', '楷体_GB2312', '楷体', 'HKKai', serif; }
+        .clinic-name { text-align: center; font-size: ${__pTitle}pt; font-weight: ${__pTitleWeight}; line-height: 1.125; color: #000; margin-bottom: 10px; letter-spacing: 2px; font-family: 'KaiTi', '楷体_GB2312', '楷体', 'HKKaiAscii', 'HKKai', serif; }
+        .prescription-title { text-align: center; font-size: ${__pTitle}pt; font-weight: ${__pTitleWeight}; line-height: 1.125; color: #000; margin-bottom: 12px; letter-spacing: 4px; font-family: 'KaiTi', '楷体_GB2312', '楷体', 'HKKaiAscii', 'HKKai', serif; }
         .prescription-info { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px 2px; margin-bottom: 8px; border-bottom: 1px solid #000; padding-bottom: 4px; font-size: ${__pFont}pt; color: #000; }
         .prescription-info > div { white-space: nowrap; text-align: left; min-width: 0; }
         .prescription-grid { border-top: 1px solid #000; border-bottom: 1px solid #000; min-height: 200px; margin-top: 8px; }
         .prescription-grid-inner { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 4mm; row-gap: 0; }
         .prescription-line { display: flex; justify-content: flex-start; align-items: baseline; gap: 0; padding: 1mm 0; font-size: ${__pFont}pt; font-weight: 400; color: #000; line-height: 1.2; white-space: nowrap; border-left: none; }
         .rx-herb { flex: 0 0 auto; }
-        .rx-dose { flex: 0 0 auto; font-family: 'Times New Roman', serif; }
-        .prescription-jianfa { font-size: ${__pSmall}pt; line-height: 1.1; font-family: 'SimSun', '宋体', 'HKSong', serif; margin-left: 0.5mm; }
-        .rp-mark { font-size: ${__pTitle}pt; font-weight: bold; font-style: italic; color: #000; font-family: 'Times New Roman', serif; }
-        .dose-count { text-align: right; font-size: ${__pFont}pt; color: #000; font-weight: bold; font-family: 'Times New Roman', serif; }
+        .rx-dose { flex: 0 0 auto; font-family: 'Times New Roman', 'HKSongNum', 'HKSongAscii', 'HKSong', serif; }
+        .prescription-jianfa { font-size: ${__pSmall}pt; line-height: 1.1; font-family: 'SimSun', '宋体', 'HKSongNum', 'HKSongAscii', 'HKSong', serif; margin-left: 0.5mm; }
+        .rp-mark { font-size: ${__pTitle}pt; font-weight: bold; font-style: italic; color: #000; font-family: 'Times New Roman', 'HKSongAscii', 'HKSong', serif; }
+        .dose-count { text-align: right; font-size: ${__pFont}pt; color: #000; font-weight: bold; font-family: 'Times New Roman', 'HKSongNum', 'HKSongAscii', 'HKSong', serif; }
         .prescription-footer { display: flex; flex-direction: column; justify-content: space-between; min-height: 20mm; margin-top: 8px; padding-top: 4px; border-top: none; font-size: ${__pFont}pt; color: #000; }
         .usage-text { margin-bottom: 6px; font-size: ${__pSmall}pt; line-height: 1.1; color: #000; font-weight: normal; white-space: normal; overflow-wrap: anywhere; border: none; text-decoration: none; }
         .signature-row { display: flex; justify-content: space-between; font-size: ${__pFont}pt; color: #000; }
