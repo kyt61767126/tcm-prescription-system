@@ -3108,10 +3108,11 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
 * **限制**：`size-adjust` 需 Chromium/WebView ≥92；旧内核自动按原样渲染（无回归）。
 * **铁律**：跨端用开源字体替换 Windows 系统字体时，必须单独校验**西文/数字**度量（汉字等宽容易掩盖问题），否则剂量、编号、年龄会系统性偏大并连带排版漂移。
 
-### 2026-11-21 补：处方签"代码边距相同但实际打印不一致"——Android 插件 fit 可打印区
-* **现象**：CSS 同为 A5/`padding: 22.5mm 13mm 15mm`/字号 10.5pt，桌面打印正确，APP 打出来四边留白都更大、内容整体略小（约 96%）。
-* **根因**：桌面 Electron 走 Windows 驱动，PDF/页 = 纸型时按 1:1 **裁切**；Android 打印插件拿到「整张 A5 页」后按打印机**可打印区**（常见四周 3~5mm 不可打印）做 fit-to-page 缩放，于是整页缩小、留白等比放大。代码边距值本身没问题。
-* **修复（两处 `MainActivity.printBitmapA5`）**：`onLayout` 读 `newAttrs.getMinMargins()`（打印机回报的不可打印边，mils），PDF 页改为用 **`PdfDocument` + `PageInfo(A5 - 上下左右 minMargins, 72dpi pt)`** 建「可打印区页」，`onWrite` 用 `src` 裁掉位图外围等宽白边（mils→位图像素按 `mils×位图宽/media宽mils` 换算）、`dst` 铺满整页。插件再按可打印区落纸时缩放=1.0，内容物理坐标回到 13/22.5/15mm，与桌面逐毫米一致。
-* **回退条件**：`newAttrs` 非 A5（用户临时换纸）或 `minMargins` 全 0（borderless 驱动）时保持整页 A5 输出，行为同旧版，无回归风险。
-* **日志取证**：`Log.i("TCM-Pres", "A5 可打印区 media=… margins=… page=… crop=…")`（离线为 `TAG`），真机 logcat 可直接看到该打印机实际回报的边距。
-* **铁律**：Android 打印 PDF 时，**页尺寸必须等于打印机可打印区**才能得到 1:1 落纸；页尺寸等于整张纸型时必然被插件 fit 缩放。改落纸几何只改 `printBitmapA5`，不要再动 CSS 的 22.5/13/15mm。
+### 2026-11-21 补：处方签"APP 实际打印比桌面大"——桌面是 fit 缩放，APP 必须同构 fit
+* **现象（374 已修复裁切/水印后仍复现）**：同一张 A5 纸并排两张同数据处方签，App 右侧那张明显更大；用户连续两轮反馈「APP 比桌面处方签偏大」。
+* **照片实测（决定性证据，非目测）**：用 OpenCV 在原图测「处方横线长度 ÷ 纸张宽度」——桌面（左）424/598px = **105mm**（= 设计 122mm × **0.86**）；App（右）495/600px = **122.1mm**（= 设计值 1:1）。透视校正到 10px/mm 后量右侧：上留白 21.7（设计 22.5）、右留白 13.2（设计 13）、标题字高 7.7mm（22pt）→ App 已是严格 1:1。
+* **根因**：桌面 Chromium→Windows GDI 打印链路把**整张 A5 页按打印机可打印区 fit 缩放**（该诊所打印机等效约四周 10mm 不可打印 → 0.86）；App 却按 1:1 原大输出 → 显得偏大。**与字号无关**（历史 `__pScale=0.86` 补偿正是为这件事，97c380ae 删除后暴露）。
+* **修复（两处 `MainActivity.printBitmapA5` 同构）**：`onLayout` 读 `newAttrs.getMinMargins()`（mils），PDF 页建成 `PdfDocument`+`PageInfo(A5 − minMargins)` 的「可打印区页」；`onWrite` 把**整张 A5 位图等比缩放进该页**（`drawBitmap(bmp, null, dst, FILTER_BITMAP)`），不裁剪。插件/驱动按可打印区落纸时缩放=1.0，物理结果与桌面 GDI fit 同构（内容≈105mm、留白等比放大）。
+* **回退条件**：`newAttrs` 非 A5（用户临时换纸）或 minMargins 全 0 / 可打印区异常小时输出整页 A5 1:1，行为同旧版，无回归风险。
+* **日志取证**：`Log.i` 关键字 `A5 可打印区(与桌面同构缩放) … 缩放=`（离线为 `TAG`），真机 logcat 可直接读到该打印机回报的边距与缩放比。
+* **铁律**：APP 与桌面打印对齐，对齐的是**最终落纸几何**而非 CSS 边距值——桌面会 fit 就**禁止**用实测 0.86 去改 CSS 字号/边距（用户明令禁止缩字号凑）；改落纸几何只改 `printBitmapA5`，CSS 的 22.5/13/15mm 不动。
