@@ -296,6 +296,8 @@
 
 * 打包增量跳过（build-skip 指纹）可能误判「已是最新」→ 打包后必须解包 grep 验证关键修复标记；可疑时 `NO_BUILD_SKIP=1` 强制重打。
 
+* ★ 2026-11-21 **打包规则优化：能热更的不整包重打（build-skip 热更覆盖判定）**：`tools/build-skip.ps1` 新增 `$hotChannelDefs`——四端增量检测发现源码新提交后，先判定改动是否**全部**落在对应热更通道清单（直接读已发布 `public/hot-update/*/version.json` 的 `files[].name`，避免与生成器白名单二次维护漂移），且各权威副本（shared→分发副本、desktop→APP assets、public→cloud_desktop 覆盖件）与热包签名源**逐字节一致**；全部覆盖时输出 `[HOT-ONLY]` 并退出码 0（跳过整包，只重签热包），任一不可覆盖则照旧 `[BUILD]`（宁可多打不漏打）。`cloud-app` 为在线 WebView 壳：`public/**`、`cloud_app/assets/public/**`、`shared/**`、`cloud_desktop/**` 网页层改动一律 push 即达、无需重打 APK。`public/build-meta.json` 补入发布副作用排除（发布脚本回写桌面版本号，非源码）。保险丝 `NO_BUILD_SKIP=1` 仍强制全量重打。**旧版本一次跳到最新已具备**：三通道 `version.json` 始终是“最新完整文件清单”，客户端逐文件比对本机哈希只拉变化文件（不是逐级补丁）；桌面 `appVersion` 门槛只拒“热包比本机旧”；APP 本机 `versionCode < minAppCode`（288）时转 APK 整包通道并按 versionCode 拉最新 APK，同样一次到位。
+
 * 云端APP tools/obfuscate.js 会混淆 assets JS——解包 APK 后 grep 找不到 ≠ 没打进（index.html 未混淆可 grep 验证，其他 JS 需按混淆与否区分）。
 
 * 安全优化后必须验证 4 端 APP 打包流程：预编译→非严格打包→严格模式打包→APK 签名哈希。

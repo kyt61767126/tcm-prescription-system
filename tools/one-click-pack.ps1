@@ -508,13 +508,14 @@ function Build-All {
     $skipped = @($allUnits | Where-Object { $built -notcontains $_ })
     Write-Host ""
     if ($built.Count -eq 0) {
-        Write-Host "  [提示] 没有检测到源码更新：四端产物均已是最新，无需重新打包/上传" -ForegroundColor Yellow
+        Write-Host "  [提示] 四端无需重打：无源码更新，或本次改动全部可由热更覆盖" -ForegroundColor Yellow
+        Write-Host "         若有热更改动，请执行: 一键构建发布.bat hot --yes （重签热包并推送）" -ForegroundColor Yellow
     } else {
         $builtNames = ($built | ForEach-Object { $unitLabel[$_] }) -join '、'
         if ($skipped.Count -gt 0) {
             $skippedNames = ($skipped | ForEach-Object { $unitLabel[$_] }) -join '、'
             Write-Host "  [提示] 部分更新：本次重打 $($built.Count) 端（$builtNames）" -ForegroundColor Yellow
-            Write-Host "         跳过 $($skipped.Count) 端（$skippedNames）产物已是最新" -ForegroundColor Yellow
+            Write-Host "         跳过 $($skipped.Count) 端（$skippedNames）无需重打（无改动或可热更覆盖）" -ForegroundColor Yellow
         } else {
             Write-Host "  [提示] 四端全部重新打包（$builtNames）" -ForegroundColor Yellow
         }
@@ -550,7 +551,7 @@ function Get-SmartBuildPlan {
         } catch { $rc = 1 }
         $info = @($lines | ForEach-Object { "$_".Trim() } | Where-Object { $_ })
         $reason = ($info | Select-Object -First 1)
-        if ($reason) { $reason = ($reason -replace '^\[(BUILD|SKIP)\]\s*\S+\s*', '') }
+        if ($reason) { $reason = ($reason -replace '^\[(BUILD|SKIP|HOT-ONLY)\]\s*\S*\s*', '') }
         $detail = @($info | Select-Object -Skip 1 -First 3)
         $plan += [PSCustomObject]@{
             Unit = $u.Unit; Label = $u.Label
@@ -581,7 +582,8 @@ function Invoke-SmartPack {
     }
     Write-Host ""
     if ($toBuild.Count -eq 0) {
-        Write-Host "  [OK] 四端产物均已是最新，无需打包" -ForegroundColor Green
+        Write-Host "  [OK] 四端无需打包：无源码更新，或改动全部可由热更覆盖" -ForegroundColor Green
+        Write-Host "  若有热更改动，请执行: 一键构建发布.bat hot --yes （重签热包并推送）" -ForegroundColor Green
         return 0
     }
     if ($PlanOnly) {
@@ -592,7 +594,7 @@ function Invoke-SmartPack {
     Write-Host "  本次将重打 $($toBuild.Count) 端: $buildNames" -ForegroundColor Yellow
     if ($toSkip.Count -gt 0) {
         $skipNames = ($toSkip | ForEach-Object { $_.Label }) -join '、'
-        Write-Host "  自动跳过 $($toSkip.Count) 端: $skipNames（源码与产物均无变化）" -ForegroundColor Green
+        Write-Host "  自动跳过 $($toSkip.Count) 端: $skipNames（无改动或可热更覆盖）" -ForegroundColor Green
     }
     Write-Host ""
     if (-not $script:SkipPause) { pause }

@@ -64,6 +64,7 @@ $sideEffectPatterns = @(
     '^app_project/db-(offline/desktop|yunduan/cloud_desktop)/package\.json$',
     '^app_project/db-(offline/desktop|yunduan/cloud_desktop)/build-meta\.json$',
     '^public/hash-manifest\.json$',
+    '^public/build-meta\.json$',   # ★ 2026-11-21：发布脚本回写桌面版本号（非源码）
     '^public/downloads/',
     '^public/updates/',
     '^public/hot-update/'
@@ -106,6 +107,114 @@ function Get-SourceSpec($def) {
     $spec = @($def.sources)
     if ($def.excludes) { foreach ($e in $def.excludes) { $spec += ":(exclude)$e" } }
     return ,$spec
+}
+
+# ---------- ★ 2026-11-21 热更覆盖判定（能热更的不打包）----------
+# 规则：本次源码改动若「全部」能被已签发热包通道覆盖（改动即签名源，或分发副本与签名源同批更新），
+#       则跳过整包重打（只重签热包）；任何未覆盖/无法确认的改动一律 BUILD（宁可多打不漏打）。
+# 热包文件清单直接读已发布 version.json 的 files[].name，避免与生成器白名单二次维护漂移。
+$hotChannelDefs = @{
+    # 云桌面：热包源 public/，index.html 与 button-manager.js 用 cloud_desktop 覆盖版
+    'cloud-desktop' = @{
+        manifest  = 'public/hot-update/desktop/cloud/version.json'
+        srcRoot   = 'public'
+        overrides = @{
+            'index.html'        = 'app_project/db-yunduan/cloud_desktop/index.html'
+            'button-manager.js' = 'app_project/db-yunduan/cloud_desktop/button-manager.js'
+        }
+        mapRoots  = @('shared', 'app_project/db-yunduan/cloud_desktop')
+    }
+    # 离线桌面：热包源 db-offline/desktop/
+    'local-desktop' = @{
+        manifest = 'public/hot-update/desktop/local/version.json'
+        srcRoot  = 'app_project/db-offline/desktop'
+        mapRoots = @('shared')
+    }
+    # 离线 APP：热包源 assets/public（desktop 同名文件须与 assets 同批更新才算覆盖）
+    'local-app' = @{
+        manifest = 'public/hot-update/app-local/version.json'
+        srcRoot  = 'app_project/db-offline/app/app/src/main/assets/public'
+        mapRoots = @('shared', 'app_project/db-offline/desktop')
+        # APP index.html 真源（build-app.bat 每次从它复制到 assets/public）
+        mapFiles = @{ 'app_project/db-offline/index-app.html' = 'index.html' }
+    }
+}
+# 云端 APP 为在线 WebView 壳：网页层 push 即达（assets 仅离线兜底），改动无需重打 APK。
+$cloudAppOnlineRoots = @(
+    'public',
+    'app_project/db-yunduan/cloud_app/app/src/main/assets/public',
+    'app_project/db-yunduan/cloud_desktop',
+    'shared'
+)
+# shared 源 → 分发名映射（auth-core 双权威源 / print-utils 云离双版）
+function Get-SharedHotRel([string]$rel) {
+    switch -Regex ($rel) {
+        '^auth-core/(offline|cloud)\.js$' { return 'auth-core.js' }
+        '^auth-core\.js$'                 { return 'auth-core.js' }
+        '^print-utils(-offline)?\.js$'    { return 'print-utils.js' }
+        default                           { return $rel }
+    }
+}
+# 读某通道热包清单（files[].name → 集合）；缺失/损坏返回 $null（调用方按 BUILD 处理）
+function Get-HotFileSet($def) {
+    $p = Join-Path $root $def.manifest
+    if (-not (Test-Path -LiteralPath $p)) { return $null }
+    try {
+        $m = Get-Content -LiteralPath $p -Raw -Encoding UTF8 | ConvertFrom-Json
+        $set = @{}
+        foreach ($f in @($m.files)) { if ($f -and $f.name) { $set[[string]$f.name] = $true } }
+        if ($set.Count -eq 0) { return $null }
+        return $set
+    } catch { return $null }
+}
+# 单文件是否被热更覆盖：
+#   ①改动就是热包签名源 → 覆盖；
+#   ②改动是分发副本（shared→auth-core、desktop→APP assets、cloud_desktop→public）→
+#     必须本次同批改动了签名源（证明同步脚本已跑），否则热包会签出旧内容 → 整包才可靠。
+#   注：签名源里 index.html/button-manager.js 的覆盖版与 public 版按设计不同内容
+#   （Electron/APP 专属块），不能按字节比对；public 侧被覆盖版取代 → 视为与整包无关。
+function Test-HotCovered([string]$path, $def, $hotSet, $changedSet) {
+    $p = $path -replace '\\', '/'
+    $candidates = @()   # @{ rel = ...; isSrc = $true/$false }
+    $src = $def.srcRoot
+    if ($p -ieq $src -or $p.StartsWith("$src/")) {
+        $candidates += @{ rel = $p.Substring($src.Length).TrimStart('/'); isSrc = $true }
+    }
+    foreach ($mr in @($def.mapRoots)) {
+        if ($p -ieq $mr -or $p.StartsWith("$mr/")) {
+            $rel = $p.Substring($mr.Length).TrimStart('/')
+            if ($mr -eq 'shared') { $rel = Get-SharedHotRel $rel }
+            $candidates += @{ rel = $rel; isSrc = $false }
+        }
+    }
+    if ($def.mapFiles) {
+        foreach ($k in $def.mapFiles.Keys) {
+            if ($p -ieq ($k -replace '\\', '/')) {
+                $candidates += @{ rel = $def.mapFiles[$k]; isSrc = $false }
+            }
+        }
+    }
+    foreach ($c in $candidates) {
+        $rel = $c.rel
+        if (-not $rel -or -not $hotSet.ContainsKey($rel)) { continue }
+        $hasOverride = ($def.overrides -and $def.overrides.ContainsKey($rel))
+        if ($c.isSrc) {
+            # 被覆盖的 public 侧文件（如 public/index.html）不参与桌面包 → 与整包无关
+            return $true
+        }
+        $targetRel = if ($hasOverride) { $def.overrides[$rel] } else { "$src/$rel" }
+        $targetRel = $targetRel -replace '\\', '/'
+        if ($changedSet.ContainsKey($targetRel)) { return $true }
+        if ($p -ieq $targetRel) { return $true }
+    }
+    return $false
+}
+# 云端 APP：网页层路径（在线即达）视为无需重打
+function Test-CloudAppOnlineCovered([string]$path) {
+    foreach ($r in $cloudAppOnlineRoots) {
+        if ($path -ieq $r -or $path.StartsWith("$r/")) { return $true }
+    }
+    return $false
 }
 # ★ 2026-08-31 产物形态黑名单（build_output 残留事故举一反三）：
 #   未跟踪(??)的"构建产物形态"目录/文件不算源码脏——按设计新增源码应触发重打，
@@ -204,9 +313,38 @@ if ($Check) {
         foreach ($pat in $sideEffectPatterns) { if ($f -match $pat) { $isSide = $true; break } }
         if (-not $isSide) { $realChanges += $f }
     }
+    # git log --name-only 会按提交重复列同一文件 → 去重（避免"文件数"虚高、同一文件重复打印）
+    $realChanges = @($realChanges | Select-Object -Unique)
     if ($realChanges.Count -gt 0) {
-        Write-Host "[BUILD] $Unit 源码有新提交(基线 $($rec.commit.Substring(0,8)) 后 $($realChanges.Count) 个文件变化):"
-        foreach ($f in ($realChanges | Select-Object -First 6)) { Write-Host "        $f" }
+        # ★ 2026-11-21：先判定是否全部可由热更覆盖（能热更的不打包）
+        $covered = @(); $notCovered = @()
+        $hotDef = $hotChannelDefs[$Unit]
+        if ($hotDef) {
+            $hotSet = Get-HotFileSet $hotDef
+            if ($hotSet) {
+                $changedSet = @{}
+                foreach ($f in $realChanges) { $changedSet[($f -replace '\\', '/')] = $true }
+                foreach ($f in $realChanges) {
+                    if (Test-HotCovered $f $hotDef $hotSet $changedSet) { $covered += $f } else { $notCovered += $f }
+                }
+            } else { $notCovered = $realChanges }
+        } elseif ($Unit -eq 'cloud-app') {
+            foreach ($f in $realChanges) {
+                if (Test-CloudAppOnlineCovered $f) { $covered += $f } else { $notCovered += $f }
+            }
+        } else { $notCovered = $realChanges }
+
+        if ($notCovered.Count -eq 0 -and $covered.Count -gt 0) {
+            Write-Host "[HOT-ONLY] $Unit 本次 $($covered.Count) 个改动全部可由热更覆盖，跳过整包（无需重新打包）"
+            foreach ($f in ($covered | Select-Object -First 6)) { Write-Host "        $f" }
+            if ($covered.Count -gt 6) { Write-Host "        ... 共 $($covered.Count) 个文件" }
+            Write-Host "        下一步: 一键构建发布.bat hot --yes （重签热包并推送）"
+            exit 0
+        }
+
+        Write-Host "[BUILD] $Unit 源码有新提交(基线 $($rec.commit.Substring(0,8)) 后 $($realChanges.Count) 个文件变化，其中 $($notCovered.Count) 个不可热更):"
+        foreach ($f in ($notCovered | Select-Object -First 6)) { Write-Host "        $f" }
+        if ($notCovered.Count -gt 6) { Write-Host "        ... 共 $($notCovered.Count) 个不可热更文件" }
         exit 1
     }
 

@@ -78,12 +78,34 @@ function Invoke-Pack {
         [string]$Target,
         # all  = 全部2个版本（AutoMode 3：四端各自增量跳过）
         # smart= 智能打包（AutoMode 4：先打印「重打/跳过」四端计划，整组无改动连配置同步都不跑）
-        [ValidateSet('all', 'smart')][string]$Strategy = 'all'
+        [ValidateSet('all', 'smart')][string]$Strategy = 'all',
+        # ★ 2026-11-21 非必要不打包：范围=app/desktop 时只打该端，不再顺带重建另一端
+        #   （历史缺陷：full all app 也会重打双桌面 exe 并递增版本号）
+        [ValidateSet('all', 'desktop', 'app')][string]$Mode = 'all'
     )
     $packScript = "$script:RootDir\tools\one-click-pack.ps1"
     if (-not (Test-Path $packScript)) {
         Write-Host "[ERROR] 未找到打包脚本: $packScript" -ForegroundColor Red
         return 1
+    }
+    if ($Mode -ne 'all') {
+        $unitModes = if ($Mode -eq 'app') {
+            @(@('1a','云端 APP'), @('2a','本地 APP'))
+        } else {
+            @(@('1d','云端桌面'), @('2d','本地桌面'))
+        }
+        foreach ($um in $unitModes) {
+            Write-Host ""
+            Write-Host "========================================" -ForegroundColor Cyan
+            Write-Host "  打包 $($um[1])（范围=$Mode，仅该端）..." -ForegroundColor Cyan
+            Write-Host "========================================" -ForegroundColor Cyan
+            $a = @('-NoProfile','-ExecutionPolicy','Bypass','-File',$packScript,'-AutoMode',$um[0])
+            if ($env:NO_AUTOCOMMIT -ne '1') { $a += '-AutoCommit' }
+            $rc = Invoke-QuietProcess -FilePath 'powershell' -ArgumentList $a
+            if ($rc -is [array]) { $rc = [int]$rc[-1] }
+            if ($rc -ne 0) { return $rc }
+        }
+        return 0
     }
     # ★ 2026-08-23 优化：传 -AutoMode 非交互执行（云端+本地顺序构建），
     #   完成后自动返回本菜单。原直接调用会弹出 one-click-pack 的嵌套交互菜单（菜单套菜单），
@@ -379,7 +401,7 @@ function Invoke-FullFlow {
             Write-Host "  [1/4] 打包全部版本 (云端+本地，PACK_FORCE_ALL=1 强制全量)" -ForegroundColor Cyan
         }
         Write-Host "========================================" -ForegroundColor Cyan
-        $rc = Invoke-Pack -Target "all" -Strategy $packStrategy
+        $rc = Invoke-Pack -Target "all" -Strategy $packStrategy -Mode $Mode
     } else {
         Write-Host ""
         Write-Host "========================================" -ForegroundColor Cyan
@@ -651,7 +673,7 @@ if ($Stage -ne 'menu') {
         'pack' {
             # ★ 2026-10-30 P6b：非交互 pack all 也默认智能打包（AutoMode 4），与
             #   full all / 菜单 [1] 完全一致；PACK_FORCE_ALL=1 强制全量（脚本化重建场景）。
-            if ($Version -eq 'all') { $rc = Invoke-Pack -Target 'all' -Strategy (Resolve-PackStrategy) }
+            if ($Version -eq 'all') { $rc = Invoke-Pack -Target 'all' -Strategy (Resolve-PackStrategy) -Mode $Mode }
             else { $rc = Invoke-SinglePack -Version $Version -Mode $Mode }
             if ($rc -is [array]) { $rc = [int]$rc[-1] }
             if ($rc -eq 0) {
