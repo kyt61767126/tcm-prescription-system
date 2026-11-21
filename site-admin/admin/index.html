@@ -3541,7 +3541,7 @@ function renderTrialUsage(tu, tf) {
         + '<th style="text-align:left;padding:6px 8px;border-bottom:1px solid #ebeef5;">状态</th></tr></thead><tbody>';
     rows.forEach(r => {
         const status = r.activated
-            ? '<span style="color:#27ae60;">已转正</span>'
+            ? ''
             : (r.inTrial
                 ? '<span style="color:#e6a23c;">试用中（首用未满7天）</span>'
                 : '<span style="color:#909399;">试用已到期（未转正）</span>');
