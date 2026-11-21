@@ -2119,8 +2119,15 @@ public class MainActivity extends BridgeActivity {
 
                         float density = getResources().getDisplayMetrics().density;
                         if (density <= 0f) density = 1f;
-                        int scalePercent = Math.round((dots / cssWidthPx) / density * 100f);
-                        if (scalePercent > 0) printWebView.setInitialScale(scalePercent);
+                        // ★ 2026-11-21 真机预览取证：setInitialScale 在 WebView 上未生效（内容只占左上 1/3），
+                        //   故改为「按 CSS 尺寸 1:1 布局 + 画布显式放大到 A5@300dpi」，不再依赖 zoom。
+                        //   useWideViewPort 保证布局视口 = 控件宽（CSS px = 物理像素/density），
+                        //   否则默认 980px 布局视口会让版面再被缩放一次。
+                        printSettings.setUseWideViewPort(true);
+                        printSettings.setLoadWithOverviewMode(false);
+                        final int cssHeightPx = Math.round(210f * 96f / 25.4f);
+                        final int viewW = Math.round(cssWidthPx * density);
+                        final int viewH = Math.round(cssHeightPx * density);
 
                         android.view.ViewGroup printRoot = (android.view.ViewGroup) findViewById(android.R.id.content);
                         if (printRoot == null) {
@@ -2128,7 +2135,7 @@ public class MainActivity extends BridgeActivity {
                             printWebView.destroy();
                             return;
                         }
-                        printRoot.addView(printWebView, new android.widget.FrameLayout.LayoutParams(dots, heightDots));
+                        printRoot.addView(printWebView, new android.widget.FrameLayout.LayoutParams(viewW, viewH));
                         printWebView.setVisibility(View.INVISIBLE);
 
                         printWebView.setWebViewClient(new android.webkit.WebViewClient() {
@@ -2143,6 +2150,7 @@ public class MainActivity extends BridgeActivity {
                                             android.graphics.Bitmap bmp = android.graphics.Bitmap.createBitmap(dots, heightDots, android.graphics.Bitmap.Config.ARGB_8888);
                                             android.graphics.Canvas cv = new android.graphics.Canvas(bmp);
                                             cv.drawColor(android.graphics.Color.WHITE);
+                                            cv.scale((float) dots / viewW, (float) heightDots / viewH);
                                             printWebView.draw(cv);
                                             printRoot.removeView(printWebView);
                                             printBitmapA5(bmp, jobName, true);
