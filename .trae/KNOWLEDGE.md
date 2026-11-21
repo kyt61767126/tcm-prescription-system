@@ -304,6 +304,13 @@
   ③ **跨端版本解绑**（`tools/verify-version-display.ps1` 产品分组）：7 个展示文件按云端组/离线组分开判定——组内 ≥2 种 token 仍 FATAL（端内一致性防显示错乱），跨组版本不同降 WARN 放行（各端独立递增属预期，用户明确"不要求版本号统一"）。端内校验全部保留：verify-app-version-consistency（云端三要素/离线两要素）、check-manifest-version（local/dingzhi 双 key 镜像）、check-release-readiness 的 REGRESS-*/HOT-MINAPP、verify-version-baseline。
   铁律：**序号只在真正签发时递增**（--check 永不占序号）；自动重签幂等（内容一致时 Check exit 0 不再重签、序号不空转）；改 `verify-version-display.ps1` 后组内 FATAL 语义不得再放宽。
 
+* ★ 2026-11-21 **第二轮深度优化（版本彻底解绑 + 智能打包精准到端）**：
+  ① **离线桌面版本独立自增**（`app_project/db-offline/desktop/build.bat` 第 [6/9] 步）：原 `sync-offline-desktop-version.ps1` 强制桌面跟随离线 APP 的 versionCode（同号）。该方案在「只重打桌面、APP 未重打」时版本原地不动 → `latest.json` 版本不变 → 已装桌面客户端判定"已是最新"永远收不到修复（桌面更新只比版本号）。现改为 `bump-version.ps1 -PackagePath package.json`（与云端桌面同机制），每次真实重打必前进，同时触发 `integrity-v{version}.dat` 基线重建；`tools/sync-offline-desktop-version.ps1` 已删除，`compliance-check.ps1` 早已无同号门禁（4c 已取消）。
+  ② **智能打包精准到端**（`tools/one-click-pack.ps1` `Invoke-SmartPack`）：原检测出「仅 cloud-app 有改动」仍调用 `Build-Cloud -Target all`（会进桌面分支做配置同步/跳过判定）。现按 `$toBuild` 实际命中单元推导目标：只命中桌面→`-Target desktop`、只命中 APP→`-Target app`、两端都命中才 `all`；本地组同理。整组无改动仍整组跳过。与 `-AutoMode 1d/1a/2d/2a` 的"仅该端"语义对齐。
+  ③ **热更放行不再漏打工作区改动**（`tools/build-skip.ps1` HOT-ONLY 分支）：原逻辑一旦「提交区间改动全部可热更」就直接 exit 0，**不检查未提交脏文件** → 若同时存在未提交的必须重打改动会被静默漏打。现 HOT-ONLY 前先跑 `Get-DirtySources`，有脏改动则降级 `[BUILD]` 并列出文件。
+  ④ **构建脚本不再跨端误伤**（`build-skip.ps1` 单元 excludes）：`cloud-app`/`local-app` 的 sources 覆盖整棵产品目录，桌面端 `build.bat`（及 cloud_desktop 的 `*.ps1`）改动会误判为 APK 需重打。现追加 `:(exclude)…/cloud_desktop/*.bat|*.ps1`、`…/desktop/*.bat|*.ps1`（已实测 git pathspec 通配生效）；桌面自身单元的 build.bat 仍计入（构建脚本确会影响 exe，保留保守判定）。
+  生效方式：本轮只改打包/版本脚本（tools + db-offline/desktop/build.bat），五端产物零变化；下次真实打包即按新机制自增桌面版本号。
+
 * 云端APP tools/obfuscate.js 会混淆 assets JS——解包 APK 后 grep 找不到 ≠ 没打进（index.html 未混淆可 grep 验证，其他 JS 需按混淆与否区分）。
 
 * 安全优化后必须验证 4 端 APP 打包流程：预编译→非严格打包→严格模式打包→APK 签名哈希。
@@ -3008,8 +3015,8 @@ avigator.onLine===false：立即解密本地离线缓存校验密码（命中即
 * **教训**：冒烟失败先看退出码：code=0 且瞬间退出 优先怀疑单实例锁/已有实例，而不是产物损坏；不要只凭"userData 隔离"日志文案判断已隔离。
 * **追加（同日 16:12 失败）**：签名阶段对便携版 exe 报 `being used by another process`（Defender 实时扫描新建 SFX 的瞬时锁，事后复查已解锁）。已在 `tools/sign-exe.ps1` 增加 `Invoke-SignWithRetry`：IOException/UnauthorizedAccessException 时 3 秒 × 最多 6 次重试，仍失败才 abort；时间戳分支同样走重试。已用实际 1.0.360 便携包复签验证 exit 0。
 * **追加（同日 16:32 发布失败）**：发布前 `compliance-check` 报「离线桌面与APP不同号」——桌面 1.0.353 / APP versionCode 354。根因是本地版打包顺序颠倒：`Build-Offline -Target all` 先打桌面（读旧 versionCode 同步），后打 APP（再自增）→ 必然差一号。已在 `tools/one-click-pack.ps1` 将离线 APP 调整到桌面之前执行，并说明 versionCode 是唯一计数源；同时用 `sync-offline-desktop-version.ps1` 把桌面 source version 同步到 1.0.354。
-* **教训**：离线端任何打包组合都必须「APP 先、桌面后」；发布失败先跑 `sync-offline-desktop-version.ps1 -Check` 定位同号问题，而不是盲目重发。
-* **追加（同日，需求变更）**：用户确认「版本号可以不同」——已从 `compliance-check.ps1` 移除 4c「离线桌面与APP同号」门禁；保留各端内部版本一致性（4/8、4b/9）。桌面打包前的 `sync-offline-desktop-version.ps1` 仍保留（只在该端重打时对齐，不影响两端异步发布）。合规检查复跑：13 通过 / 0 失败。
+* **教训（已过时，仅历史参考）**：旧「离线桌面=离线 APP 同号」方案已整体废弃，见下方「需求变更」。
+* **需求变更（2026-11-18 起，2026-11-21 完成彻底解绑）**：用户确认「版本号可以不同 / 不要求统一」——已从 `compliance-check.ps1` 移除 4c 同号门禁；保留各端内部版本一致性（4/8、4b/9）。**2026-11-21 进一步删除 `tools/sync-offline-desktop-version.ps1`**，离线桌面 `build.bat` 改为与云端桌面一致的 `bump-version.ps1` 独立 patch 自增：仅重打桌面时版本必然前进，`latest.json` 才能推动已装客户端升级（旧同号逻辑在 APP 未重打时版本原地不动，桌面修复永远发不出去）；APP 先/桌面后的打包顺序不再必要，但保留无害。合规检查复跑：13 通过 / 0 失败。
 
 ### 96. 到期前提醒（7/3/1 天）+ 正式授权时间回拨核验（2026-11-19）
 

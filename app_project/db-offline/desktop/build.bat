@@ -156,15 +156,13 @@ if errorlevel 1 (
 )
 echo.
 
-REM 2026-11-16 方案B：离线桌面不再 patch+1，改为跟随离线 APP 的 versionCode（单计数器，两端同号）
-REM   真源 app/build.gradle versionCode -> 桌面 "1.0.<code>"；App 的 versionName 恒 1.0.0 不受影响
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[6/9] Sync version from offline APP versionCode (single counter, triggers integrity baseline rebuild)...'"
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\..\tools\sync-offline-desktop-version.ps1" -RepoRoot "%~dp0..\..\.."
-if errorlevel 1 (
-    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] Version sync failed - offline desktop must match APP versionCode'"
-    if not defined NO_PAUSE pause
-    exit /b 1
-)
+REM ★ 2026-11-21 版本解绑：离线桌面不再强制跟随离线 APP 的 versionCode，改为与云端桌面一致的
+REM   独立 patch 自增（用户确认「跨端版本号不要求统一」）。
+REM   关键收益：仅重打桌面时版本必然前进，latest.json 才能推动已装客户端升级；旧「同号」逻辑
+REM   在 APP 未重打时版本原地不动 → 桌面修复永远发不出去（update-manager 只比版本号）。
+REM   bump 同时触发 integrity 基线（integrity-v{version}.dat）重建，避免升级后误报篡改。
+powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[6/9] Auto-bump version (triggers integrity baseline rebuild)...'"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\..\tools\bump-version.ps1" -PackagePath "%CD%\package.json"
 echo.
 
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[7/9] Code obfuscation (target=dingzhi, may take 1-2 min)...'"

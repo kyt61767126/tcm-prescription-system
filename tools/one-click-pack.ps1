@@ -599,15 +599,25 @@ function Invoke-SmartPack {
     Write-Host ""
     if (-not $script:SkipPause) { pause }
     $rcCloud = 0; $rcLocal = 0
-    if (@($toBuild | Where-Object { $_.Unit -like 'cloud-*' }).Count -gt 0) {
-        $rcCloud = Build-Cloud -Target "all"
+    # ★ 2026-11-21 精准重打：按检测结果只跑真正需要的端，不再整组 Build-*-Target all。
+    #   （只改 APP 时不进桌面分支的配置同步/打包步骤；只改桌面时不进 APP 分支）
+    $cloudUnits = @($toBuild | Where-Object { $_.Unit -like 'cloud-*' })
+    $localUnits = @($toBuild | Where-Object { $_.Unit -like 'local-*' })
+    if ($cloudUnits.Count -gt 0) {
+        $cloudTarget = if ($cloudUnits.Count -ge 2) { 'all' }
+                       elseif ($cloudUnits[0].Unit -eq 'cloud-desktop') { 'desktop' }
+                       else { 'app' }
+        $rcCloud = Build-Cloud -Target $cloudTarget
         if ($rcCloud -is [array]) { $rcCloud = [int]$rcCloud[-1] }
         if (-not $rcCloud) { $rcCloud = 0 }
     } else {
         Write-Host "  [SKIP] 云端版两端均无改动，整组跳过" -ForegroundColor Green
     }
-    if (@($toBuild | Where-Object { $_.Unit -like 'local-*' }).Count -gt 0) {
-        $rcLocal = Build-Offline -Version "dingzhi" -Target "all"
+    if ($localUnits.Count -gt 0) {
+        $localTarget = if ($localUnits.Count -ge 2) { 'all' }
+                       elseif ($localUnits[0].Unit -eq 'local-desktop') { 'desktop' }
+                       else { 'app' }
+        $rcLocal = Build-Offline -Version "dingzhi" -Target $localTarget
         if ($rcLocal -is [array]) { $rcLocal = [int]$rcLocal[-1] }
         if (-not $rcLocal) { $rcLocal = 0 }
     } else {

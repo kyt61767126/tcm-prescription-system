@@ -33,12 +33,19 @@ $unitDefs = @{
                          sources=@('app_project/db-yunduan/cloud_desktop','public','shared') }
     'cloud-app'     = @{ kind='apk'; artifact='app_project\db-yunduan\惠康中医-云端.apk'; label='云端APP';
                          sources=@('app_project/db-yunduan','public','shared');
-                         excludes=@('app_project/db-yunduan/cloud_desktop/electron') }
+                         # ★ 2026-11-21：排除桌面端构建脚本（build.bat/ps1 不是 APK 输入），
+                         #   否则改一次桌面打包脚本会连带误重打云端 APK。
+                         excludes=@('app_project/db-yunduan/cloud_desktop/electron'
+                                    'app_project/db-yunduan/cloud_desktop/*.bat'
+                                    'app_project/db-yunduan/cloud_desktop/*.ps1') }
     'local-desktop' = @{ kind='exe'; artifactDir='app_project\db-offline\desktop\dist'; label='本地桌面exe';
                          sources=@('app_project/db-offline/desktop','shared') }
     'local-app'     = @{ kind='apk'; artifact='app_project\db-offline\惠康中医-本地.apk'; label='本地APP';
                          sources=@('app_project/db-offline','shared');
-                         excludes=@('app_project/db-offline/desktop/electron') }
+                         # ★ 2026-11-21：同上，桌面端构建脚本改动不应触发离线 APK 重打。
+                         excludes=@('app_project/db-offline/desktop/electron'
+                                    'app_project/db-offline/desktop/*.bat'
+                                    'app_project/db-offline/desktop/*.ps1') }
 }
 
 # ---------- 打包流程自身会改写的被跟踪文件（不算"源码变化"，正则匹配 status 路径）----------
@@ -335,6 +342,15 @@ if ($Check) {
         } else { $notCovered = $realChanges }
 
         if ($notCovered.Count -eq 0 -and $covered.Count -gt 0) {
+            # ★ 2026-11-21 修正：先复核工作区脏改动，避免「已提交热更改动 + 未提交需重打改动」
+            #   被 HOT-ONLY 提前放行漏打（宁可多打不漏打）。
+            $dirty = Get-DirtySources $def
+            if ($dirty.Count -gt 0) {
+                Write-Host "[BUILD] $Unit 除可热更提交外，工作区还有未提交源码改动:"
+                foreach ($d in ($dirty | Select-Object -First 8)) { Write-Host "        $d" }
+                if ($dirty.Count -gt 8) { Write-Host "        ... 共 $($dirty.Count) 个文件" }
+                exit 1
+            }
             Write-Host "[HOT-ONLY] $Unit 本次 $($covered.Count) 个改动全部可由热更覆盖，跳过整包（无需重新打包）"
             foreach ($f in ($covered | Select-Object -First 6)) { Write-Host "        $f" }
             if ($covered.Count -gt 6) { Write-Host "        ... 共 $($covered.Count) 个文件" }
