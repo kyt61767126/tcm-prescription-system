@@ -420,7 +420,13 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
     public static final int TRIAL_REG_LIMIT = 1;
     public static final int TRIAL_REG_NETWORK = 2;
 
+    // ★ 2026-11-21 防重装：服务端登记返回的试用起点（epoch ms，0=未返回）。
+    //   判重口径是 hwFp（硬件指纹，重装不变）；本地痕迹被删后新建的 7 天
+    //   由调用方 mergeRemoteTrialStart 收紧到该起点，堵住「期内重装 = 重新 7 天」。
+    private volatile long lastTrialRegStartAt = 0;
+
     public int registerTrialOnline() {
+        lastTrialRegStartAt = 0;
         HttpURLConnection conn = null;
         try {
             URL url = new URL(TRIAL_REGISTER_API_URL);
@@ -454,6 +460,7 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
             JSONObject respJson = new JSONObject(response);
 
             if (respJson.optBoolean("success", false)) {
+                lastTrialRegStartAt = respJson.optLong("trialStartAt", 0);
                 return respJson.optBoolean("allowed", false) ? TRIAL_REG_OK : TRIAL_REG_LIMIT;
             }
             // success=false 且服务端明确语义：保守按网络失败（引导重试，不一次锁死）
@@ -3843,6 +3850,11 @@ private static final String[] SIGN_FRAGMENTS = { "e732e1ff809370a3", "5a8ef1c7e8
                 trial.put("startTime", now);
                 trial.put("expiresAt", now + (long) currentTrialDays * 24 * 60 * 60 * 1000);
                 writeTrial(trial);
+                // ★ 2026-11-21 防重装：服务端登记已按 hwFp 判重并返回原起点，
+                //   本地新建的 7 天在此收紧（重装/清数据不会重新起算）。
+                if (lastTrialRegStartAt > 0) {
+                    mergeRemoteTrialStart(trial, lastTrialRegStartAt);
+                }
                 // ★ 2026-11-12 P1-3：首次试用起点上报服务端锚点（fail-open 静默）。
                 //   正常每台机器只上报一次；失败不影响本次试用，下次启动补报。
                 try {

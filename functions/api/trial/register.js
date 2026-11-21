@@ -147,6 +147,7 @@ export async function onRequest(context) {
             return json({
                 success: true, allowed: true,
                 trialCount: 1, maxTrials: MAX_TRIALS, trialDays: TRIAL_DAYS,
+                trialStartAt: now,
                 serverTime
             });
         }
@@ -154,6 +155,10 @@ export async function onRequest(context) {
         // 已有记录：检查是否在有效试用期内（幂等）
         const activeExpires = record.activeTrialExpiresAt ? new Date(record.activeTrialExpiresAt) : null;
         const inActiveTrial = activeExpires && now <= activeExpires.getTime();
+        // ★ 2026-11-21 防重装：回传服务端认定的试用起点（epoch ms）。
+        //   客户端本地痕迹被删/主机名变化导致 machineId 漂移时，据此收紧到原起点，
+        //   堵住「期内重装 = 重新 7 天」的窗口。判重口径始终是 hwFp，与 machineId 无关。
+        const activeStartMs = record.activeTrialStart ? new Date(record.activeTrialStart).getTime() : 0;
 
         if (inActiveTrial) {
             // 有效试用期内重复调用 → 同一用户，不增加次数
@@ -161,6 +166,7 @@ export async function onRequest(context) {
             return json({
                 success: true, allowed: true,
                 trialCount: record.trialCount || 1, maxTrials: MAX_TRIALS, trialDays: TRIAL_DAYS,
+                trialStartAt: activeStartMs > 0 ? activeStartMs : now,
                 serverTime
             });
         }
@@ -171,6 +177,7 @@ export async function onRequest(context) {
             return json({
                 success: true, allowed: false,
                 trialCount: record.trialCount || 0, maxTrials: MAX_TRIALS, trialDays: TRIAL_DAYS,
+                trialStartAt: activeStartMs > 0 ? activeStartMs : 0,
                 message: `该设备试用次数已达上限（${MAX_TRIALS} 次），请激活正式版`,
                 serverTime
             });
@@ -193,6 +200,7 @@ export async function onRequest(context) {
         return json({
             success: true, allowed: true,
             trialCount, maxTrials: MAX_TRIALS, trialDays: TRIAL_DAYS,
+            trialStartAt: now,
             serverTime
         });
 

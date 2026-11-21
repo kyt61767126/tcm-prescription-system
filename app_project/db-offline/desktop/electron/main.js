@@ -548,7 +548,13 @@ async function registerTrialWithServer() {
         if (data && data.success && data.allowed === false) {
             return { denied: true, message: data.message || '该设备试用次数已达上限，请激活正式版' };
         }
-        return { allowed: true, trialCount: data && data.trialCount };
+        // ★ 2026-11-21 防重装：带上服务端认定的试用起点（按 hwFp 判重，与 machineId 无关）。
+        //   调用方据此把本地新起点收紧到原起点，堵住「期内重装/改主机名 = 重新 7 天」。
+        return {
+            allowed: true,
+            trialCount: data && data.trialCount,
+            trialStartAt: Number(data && data.trialStartAt) || 0
+        };
     } catch (e) {
         // 无网/服务异常 → 宽限本地试用，联网后下次启动自动补报
         console.warn('[Trial] 试用登记失败（宽限本地试用）:', e.message);
@@ -1356,10 +1362,29 @@ app.whenReady().then(async () => {
                     };
                     _isLicensed = false;
                 } else if (_isLicensed) {
+                    // ★ 2026-11-21 防重装：服务端登记返回的起点优先（判重口径 = hwFp，
+                    //   与 machineId/主机名无关）。本地痕迹被删后新建的 7 天，在此收紧到原起点；
+                    //   收紧后已到期则直接拒绝，不再白给试用。
+                    let startDenied = false;
+                    if (reg && Number(reg.trialStartAt) > 0) {
+                        const appliedByReg = licenseManager.applyRemoteTrialStart(Number(reg.trialStartAt));
+                        if (appliedByReg && appliedByReg.expired) {
+                            const days = licenseManager.getTrialDays();
+                            console.warn('[Trial] 服务端登记起点已到期，收紧为 trial_expired:',
+                                new Date(appliedByReg.trialStartAt).toISOString());
+                            licenseResult = {
+                                valid: false,
+                                message: `试用期已到期（${days} 天）。\n请联系客服购买正式授权。`,
+                                type: 'trial_expired'
+                            };
+                            _isLicensed = false;
+                            startDenied = true;
+                        }
+                    }
                     // ★ 2026-11-12 P1-3 远端兜底：首次在线启动上报试用起点。
                     //   远端记录更早时当场收紧（典型：本地痕迹被全删后重建了新起点），
                     //   不再白给 7 天；任何失败静默，不影响本次试用。
-                    const anchor = await trialAnchorPromise;
+                    const anchor = startDenied ? null : await trialAnchorPromise;
                     if (anchor && anchor.trialStartAt > 0) {
                         const applied = licenseManager.applyRemoteTrialStart(anchor.trialStartAt);
                         if (applied && applied.expired) {
