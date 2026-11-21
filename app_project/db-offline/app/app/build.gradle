@@ -47,7 +47,7 @@ android {
         applicationId "com.benneng.pres.dingzhi"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 363 // ★ 2026-11-17 离线桌面 1.0.352 重打包（授权链 CSP/NetGate 修复）；只增计数，未重打 APK，versionName 不动
+        versionCode 364 // ★ 2026-11-17 离线桌面 1.0.352 重打包（授权链 CSP/NetGate 修复）；只增计数，未重打 APK，versionName 不动
         versionName "1.0.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
