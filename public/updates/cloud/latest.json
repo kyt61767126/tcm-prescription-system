@@ -1,9 +1,9 @@
 {
-    "version": "1.0.370",
+    "version": "1.0.371",
     "releaseDate": "2026-11-21",
-    "releaseNotes": "✨ 新增:\n  - feat(pack): 能热更的不整包重打，范围打包不再顺带另一端口，清理发布副作用误判\n🐛 修复:\n  - fix(print): 打印 WebView 关滚动条，消除纸上右侧/底部两条细线\n  - fix(print): 修正 375 位图像素当 PDF 点导致的 4 倍放大（预览只见中部窄条）\n  - fix(print): APP 处方签落纸按桌面实测 0.86 等比居中缩放\n  - fix(print): 可打印区 fit 改为等比居中缩放（禁止纵横拉伸）\n  - fix(print): APP 处方签按打印机可打印区同构 fit，与桌面实际落纸尺寸一致\n  - fix(print): 处方签落纸几何按打印机可打印区 1:1 对齐（APP 与桌面逐毫米一致）\n  - fix(app-print): 处方签西文/数字字号按桌面实测度量校准\n  - fix(app-print): 修复 A5 打印右侧裁切与旋转水印斜线残影\n  - fix(app-print): 改用画布显式缩放(useWideViewPort+CSS 1:1 布局)，修复 setInitialScale 未生效导致内容只占左上 1/3\n📋 其他:\n  - build: 一键打包副作用自动收纳\n  - docs: App 内置字体方案评估报告（结论：保留内置字体，方案A）\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - docs(knowledge): 记录处方签字体度量校准与西文偏大根因\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳",
-    "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.21-1258/huikang-cloud-setup-1.0.370.exe",
-    "portableUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.21-1258/huikang-cloud-1.0.370.exe",
+    "releaseNotes": "✨ 新增:\n  - 第五轮：build-skip 新增与本端产物无关改动三态判定，消灭三类假重打\n  - 新增技能 pack-chain-optimize：打包/热更/版本/发布链路去冗余排查验证流程\n  - feat(build): 版本/热更/发布链路深度优化——自动重签+元数据放行+跨端版本解绑\n  - feat(pack): 能热更的不整包重打，范围打包不再顺带另一端口，清理发布副作用误判\n🐛 修复:\n  - 第六轮：build-skip 增加 shared 分端消费矩阵，消除跨端假重打并修复两处漏打\n  - 打包链第三轮收尾核查：修正过时同号注释 + 固化四轮结论\n  - 打包链第二轮深度优化：版本解绑 + 增量误判修复 + 智能打包精准到端\n  - docs(knowledge): 处方签打印问题真机结案（377/367 已发布，右侧/底部线与尺寸均已修复）\n  - fix(print): 打印 WebView 关滚动条，消除纸上右侧/底部两条细线\n  - fix(print): 修正 375 位图像素当 PDF 点导致的 4 倍放大（预览只见中部窄条）\n  - fix(print): APP 处方签落纸按桌面实测 0.86 等比居中缩放\n  - fix(print): 可打印区 fit 改为等比居中缩放（禁止纵横拉伸）\n  - fix(print): APP 处方签按打印机可打印区同构 fit，与桌面实际落纸尺寸一致\n  - fix(print): 处方签落纸几何按打印机可打印区 1:1 对齐（APP 与桌面逐毫米一致）\n🔒 安全:\n  - 安全：堵住试用期内重装/改主机名重获7天的漏洞\n📋 其他:\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - 后台试用明细：未激活设备排前 + 试用未激活/已激活数量统计\n  - 后台试用明细：已激活设备状态列留空（不再显示「已转正」）\n  - 发布：同步 site-official 清单（cloud v378 / dingzhi v368）\n  - build: 一键打包副作用自动收纳\n  - build: 一键打包副作用自动收纳\n  - 文档：内置热敏打印机下线结论沉淀（KNOWLEDGE P12 标注已下线 + HANDOFF P12 关闭）\n  - 下线 App 内置热敏打印机（设置入口 + 原生实现 + 权限）彻底移除\n  - 复核加固：build-skip 消除 cwd 依赖与删除边界漏打，补无效重打提示",
+    "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.21/huikang-cloud-setup-1.0.371.exe",
+    "portableUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.11.21/huikang-cloud-1.0.371.exe",
     "forceUpdate": false,
     "minVersion": "1.0.0",
     "rolloutPercentage": 100
