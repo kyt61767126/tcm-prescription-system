@@ -3513,16 +3513,20 @@ function renderTrendChart(clinics, users) {
 function renderTrialUsage(tu, tf) {
     const sumEl = document.getElementById('trialUsageSummary');
     const dist = ((tu && tu.distribution) || []).map(x => x.label + ' ' + x.count + ' 台').join(' · ');
+    const rows = (tu && Array.isArray(tu.devices)) ? tu.devices : [];
+    // ★ 2026-11-21 试用未激活/已激活数量（口径=当前明细列表，与下方表格一致）
+    const trialNotActivated = rows.filter(r => !r.activated).length;
+    const trialActivated = rows.length - trialNotActivated;
     if (sumEl) {
         sumEl.innerHTML = '试用设备（离线本地）：<b>' + ((tu && tu.deviceCount) || 0) + '</b> 台 ｜ 试用 ≥3 天：<b>' + ((tu && tu.ge3) || 0)
             + '</b> 台 ｜ 满 7 天：<b>' + ((tu && tu.ge7) || 0) + '</b> 台'
+            + ' ｜ 试用未激活：<b>' + trialNotActivated + '</b> 台 ｜ 试用已激活：<b>' + trialActivated + '</b> 台'
             + ' ｜ 分布：' + (dist || '—')
             + ' ｜ 试用期内：' + ((tf && tf.activeTrials) || 0) + ' 台 ｜ 试用过期：' + ((tf && tf.expiredTrials) || 0)
             + ' 台 ｜ 重复试用：' + ((tf && tf.repeatTrials) || 0) + ' 台';
     }
     const el = document.getElementById('trialUsageTable');
     if (!el) return;
-    const rows = (tu && Array.isArray(tu.devices)) ? tu.devices : [];
     if (!rows.length) {
         el.innerHTML = '<div style="font-size:12px;color:#909399;padding:6px 0;">暂无数据（离线本地版客户端心跳上报后开始积累）</div>';
         return;
@@ -3539,7 +3543,8 @@ function renderTrialUsage(tu, tf) {
         + '<th style="text-align:right;padding:6px 8px;border-bottom:1px solid #ebeef5;">试用天数（≤7）</th>'
         + '<th style="text-align:right;padding:6px 8px;border-bottom:1px solid #ebeef5;">近30天活跃</th>'
         + '<th style="text-align:left;padding:6px 8px;border-bottom:1px solid #ebeef5;">状态</th></tr></thead><tbody>';
-    rows.forEach(r => {
+    // ★ 2026-11-21 试用未激活排前、已激活在后（稳定排序，组内保持原顺序）
+    rows.slice().sort((a, b) => (a.activated ? 1 : 0) - (b.activated ? 1 : 0)).forEach(r => {
         const status = r.activated
             ? ''
             : (r.inTrial
